@@ -115,7 +115,7 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
 
 /-! ### `number` against the store (§1)
 
-The other side of `decimal`'s answer, and the reason §1 states the condition as an inclusion
+The other side of `decimalCodec`'s answer, and the reason §1 states the condition as an inclusion
 rather than as an equality. -/
 
 /-! **~~survivesStore_numberCodec~~ is retired, and what killed it is worth stating.** It said
@@ -226,17 +226,14 @@ theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
 theorem lawful_baseCodec : ∀ k : GroundKind, Lawful (baseCodec k)
   | .string  => lawful_stringCodec
   | .number  => lawful_numberCodec
-  | .decimal => lawful_decimalCodec
   | .boolean => lawful_booleanCodec
   | .binary  => lawful_binaryCodec
   | .null    => lawful_nullCodec
 
-/-- …and so is each set base's element pair. `decimal` is the one that is not a
-    `GroundKind`, which is why this is a second table rather than a composition. -/
+/-- …and so is each set base's element pair. -/
 theorem lawful_setBase : ∀ b : SetBase, Lawful b.elem
   | .string  => lawful_stringCodec
   | .number  => lawful_numberCodec
-  | .decimal => lawful_decimalCodec
   | .binary  => lawful_binaryCodec
 
 /-! ### The literal codec is lawful because its base is

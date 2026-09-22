@@ -12,8 +12,8 @@ Mechanization of the specification, `docs/blueprint/src/content.tex`. Modelling 
 
 * `Numeral` is `String` — the *raw text a parser sees*. The carrier is not: `Attr.n`
   carries `WFNumeral`, the subtype `Numeral.WF` picks out, so `⟨N, "abc"⟩` is
-  unrepresentable rather than merely unwritten. `decimal` still gates, at `Stored`, which
-  is a narrower question than well-formedness.
+  unrepresentable rather than merely unwritten. `decimalCodec` still gates, at `Stored`,
+  which is a narrower question than well-formedness.
 * Wire sets (`SS`/`NS`/`BS`) are `NEFinset` of a *concrete element type* — `NEFinset
   String`, `NEFinset WFNumeral`, `NEFinset Bytes`, and the same three on `Value`. Maps
   (`M`) are a `Finset Name` with a function on it. Unordered, unique and non-empty are
@@ -565,9 +565,9 @@ it and `g ground` is unsayable-otherwise; the alternative is one inhabitant of *
 carrier, so `ℓ ⊆ T` is the type. A literal carries one value; several values are a certified
 `union` of singletons, and `Calculus/LiteralArity1.lean` derives that rule. -/
 
-/-- The five bases a literal can sit at — `Kind` minus the three container kinds. -/
+/-- The five bases a literal can sit at: `Kind` minus the three container kinds. -/
 inductive GroundKind where
-  | string | number | decimal | boolean | binary | null
+  | string | number | boolean | binary | null
 deriving DecidableEq, Repr
 
 /-- What each base's held set is drawn from. `Unit` at `.null` is not a degenerate case: `Unit`
@@ -583,9 +583,6 @@ deriving DecidableEq, Repr
   -- §3's `ℓ ⊆ D` is this base's carrier and not a premise beside it. ~~LiteralD~~ was that
   -- premise and is deleted. `D` IS the well-formed numerals now, so the carrier says so.
   | .number  => WFNumeral
-  -- §1's stored numerals, as a subtype. See `StoredNumeral`: the gate `number` carries as a
-  -- premise is this base's carrier, which is the whole point of having the base.
-  | .decimal => StoredNumeral
   | .boolean => Bool
   | .binary  => Bytes
   | .null    => Unit
@@ -595,8 +592,6 @@ deriving DecidableEq, Repr
   | .string,  s => .str s
   -- `number` is now the IDENTITY at its carrier: the alternative is already an `N`
   | .number,  x => .num x
-  -- and `decimal` is the same value, at the narrower `Stored` alternative
-  | .decimal, x => .num ⟨x.1, Numeral.stored_wf x.2⟩
   | .boolean, b => .bool b
   | .binary,  b => .bin b
   | .null,    _ => .null
@@ -607,7 +602,6 @@ deriving DecidableEq, Repr
 @[simp] def GroundKind.member : GroundKind → Member
   | .string  => .S
   | .number  => .N
-  | .decimal => .N
   | .boolean => .BOOL
   | .binary  => .B
   | .null    => .NULL
@@ -616,9 +610,6 @@ deriving DecidableEq, Repr
 @[simp] def GroundKind.kind : GroundKind → Kind
   | .string  => .string
   | .number  => .number
-  -- the *value*'s kind, and a decimal literal's values are strings — so it shares `κ` with
-  -- `string` and is told apart from it by the member, not the kind.
-  | .decimal => .string
   | .boolean => .boolean
   | .binary  => .binary
   | .null    => .null
@@ -662,32 +653,26 @@ structure BodySpec where
 
 /-! ## The set bases (§3 `(set)`'s payload)
 
-§3's `(set)` rule reads a member off its element term and refuses when there is none. Four
-element terms have one — `string`, `number`, `decimal`, `binary` — and every other element
-term the constructor accepted was either underivable (`setMember` is partial) or unreachable
-in `src/`. `SetBase` is those four as an index, so the rule's member premise becomes a
-function of the index and `set(union(…))` is unstatable rather than merely underivable.
+§3's `(set)` rule reads a member off its element term and refuses when there is none. Three
+element terms have one: `string`, `number` and `binary`. Every other element term the
+constructor accepted was either underivable (`setMember` is partial) or unreachable in `src/`.
+`SetBase` is those three as an index, so the rule's member premise becomes a function of the
+index and `set(union(…))` is unstatable rather than merely underivable.
 
-**Four bases onto three wire members.** `number` and `decimal` both store `NS`; they are not
-the same base and neither is redundant. `number` is a caller's platform number — §1's `D`
-reached through the host's decimal spelling — and `decimal` is the host-independent spelling, carried as a
-`Numerals` string on the value side. Collapsing them would delete the only base whose value
-side is exact, and `Member` cannot tell them apart (both `NS`), which is why the index is
-neither `Member` nor `GroundKind`: `GroundKind` **indexes value carriers**, and `set(decimal)`
-is a `strSet` there while it is an `NS` on the wire. -/
+**One base for each wire member.** The number base carries `WFNumeral`, which is exact, so the
+value side of a number set is exact with no second base. A set of decimal text is the number
+set under the text adapter, which is a `held` term and not a base. -/
 
-/-- The four bases a set's elements may sit at. -/
+/-- The three bases a set's elements may sit at. -/
 inductive SetBase where
-  | string | number | decimal | binary
+  | string | number | binary
 deriving DecidableEq, Repr
 
 /-- The wire member a set at this base stores as — §3 `(set)`'s `μS`, now a total function
-    of the index where it was a premise (`setMember μ = some μS`). Not injective: `number`
-    and `decimal` share `NS`. -/
+    of the index where it was a premise (`setMember μ = some μS`). Injective. -/
 @[simp] def SetBase.member : SetBase → Member
   | .string  => .SS
   | .number  => .NS
-  | .decimal => .NS
   | .binary  => .BS
 
 end Calculus

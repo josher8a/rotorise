@@ -1311,7 +1311,6 @@ const MEET_LEMMAS = [
     'meetSRightL',
     'famString',
     'famNumber',
-    'famDecimal',
     'famBoolean',
     'famBinary',
     'famNull',

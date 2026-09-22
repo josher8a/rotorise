@@ -98,7 +98,6 @@ def μSyn : Term → Option Member
   | .string => some .S
   | .literal k _ => some k.member
   | .number => some .N
-  | .decimal => some .N
   | .boolean => some .BOOL
   | .null => some .NULL
   | .binary => some .B
@@ -168,7 +167,6 @@ mutual
 def denote : Term → Codec
   | .string => stringCodec
   | .number => numberCodec
-  | .decimal => decimalCodec
   | .boolean => booleanCodec
   | .null => nullCodec
   | .binary => binaryCodec
@@ -317,7 +315,7 @@ mutual
 
 theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .literal k ls => literalCodec_μ k ls
-  | .string | .number | .decimal | .boolean | .binary | .null => rfl
+  | .string | .number | .boolean | .binary | .null => rfl
   | .set b => SetBase.setCodec_μ b
   | .list _ _ _ => rfl
   | .held t' _ _ => denote_μ t'

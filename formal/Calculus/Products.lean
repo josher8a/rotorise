@@ -368,22 +368,21 @@ noncomputable def setCodec (c : Codec) : Codec :=
 
 /-! ### `setCodec` at a base, and the restriction that survives the re-indexing -/
 
-/-- The set's member is the base's, by computation at each of the four. This is §3
+/-- The set's member is the base's, by computation at each of the three. This is §3
     `(set)`'s premise `setMember μ = some μS` discharged once and for all — there is no
     element term left for it to be a premise about. -/
 @[simp] theorem SetBase.setCodec_μ : ∀ b : SetBase, (setCodec b.elem).μ = some b.member
-  | .string | .number | .decimal | .binary => rfl
+  | .string | .number | .binary => rfl
 
 /-- The member a base's *elements* store as, as against `SetBase.member`, which is the
-    member the **set** stores as. `number` and `decimal` are both `.N` here and both `.NS`
-    there. -/
+    member the **set** stores as. -/
 @[simp] def SetBase.elemMember : SetBase → Member
   | .string  => .S
-  | .number | .decimal => .N
+  | .number  => .N
   | .binary  => .B
 
 @[simp] theorem SetBase.elem_μ : ∀ b : SetBase, b.elem.μ = some b.elemMember
-  | .string | .number | .decimal | .binary => rfl
+  | .string | .number | .binary => rfl
 
 /-- …and `setMember` takes the one to the other, which is the premise `(set)` carried.
 
@@ -395,15 +394,13 @@ noncomputable def setCodec (c : Codec) : Codec :=
     (`encSet_isSome_of`, below), which is why the dead attribute cost nothing and hid. -/
 theorem SetBase.setMember_elemMember :
     ∀ b : SetBase, setMember b.elemMember = some b.member
-  | .string | .number | .decimal | .binary => rfl
+  | .string | .number | .binary => rfl
 
-/-- **What a set base writes, element by element.** The four ground rows of `Adm`, indexed:
-    `string` and `binary` accept their whole carrier, `number` is §1's `D` and `decimal`
-    §1's `Stored`. -/
+/-- **What a set base writes, element by element.** The three ground rows of `Adm`, indexed:
+    `string` and `binary` accept their whole carrier, and `number` is §1's `D`. -/
 noncomputable def SetBase.adm : SetBase → Value → Bool
   | .string  => fun v => match v with | .str _ => true | _ => false
   | .number  => inD
-  | .decimal => isStored
   | .binary  => fun v => match v with | .bin _ => true | _ => false
 
 /-- …and it is exactly the base pair's write domain. -/

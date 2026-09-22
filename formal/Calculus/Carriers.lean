@@ -152,7 +152,6 @@ theorem carrier_restrict {c : Codec} (hc : Carrier c) (q : Value → Bool) :
 theorem carrier_baseCodec : ∀ k : GroundKind, Carrier (baseCodec k)
   | .string  => carrier_stringCodec
   | .number  => carrier_numberCodec
-  | .decimal => carrier_decimalCodec
   | .boolean => carrier_booleanCodec
   | .binary  => carrier_binaryCodec
   | .null    => carrier_nullCodec
@@ -161,7 +160,6 @@ theorem carrier_baseCodec : ∀ k : GroundKind, Carrier (baseCodec k)
 theorem carrier_setBase : ∀ b : SetBase, Carrier b.elem
   | .string  => carrier_stringCodec
   | .number  => carrier_numberCodec
-  | .decimal => carrier_decimalCodec
   | .binary  => carrier_binaryCodec
 
 /-! ### The refinement ground codecs, on their carriers -/

@@ -53,7 +53,7 @@ mutual
     `ObligationsList` is. -/
 def Obligations : Term → Prop
   -- `set` joins the leaves: its base is an index, so there is no subterm to carry premises.
-  | .string | .number | .decimal | .boolean | .binary | .null
+  | .string | .number | .boolean | .binary | .null
   | .literal _ _ | .opaq _ | .set _ | .never => True
   | .refine t' _ => Obligations t'
   | .list pre sp suf => ObligationsList pre ∧ ObligationsOpt sp ∧ ObligationsList suf
@@ -160,9 +160,6 @@ theorem lawful_null : Lawful (denote .null) := by
 theorem lawful_binary : Lawful (denote .binary) := by
   simp only [denote]; exact lawful_binaryCodec
 
-theorem lawful_decimal : Lawful (denote .decimal) := by
-  simp only [denote]; exact lawful_decimalCodec
-
 theorem lawful_number : Lawful (denote .number) := by
   simp only [denote]; exact lawful_numberCodec
 
@@ -227,7 +224,6 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .literal _ _ => rfl
   | _, _, _, .string => rfl
   | _, _, _, .number => rfl
-  | _, _, _, .decimal => rfl
   | _, _, _, .boolean => rfl
   | _, _, _, .null => rfl
   | _, _, _, .binary => rfl
@@ -285,7 +281,6 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
     | never => exact sound_ground Lawful.empty
     | string => exact sound_ground lawful_stringCodec
     | number => exact sound_ground lawful_numberCodec
-    | decimal => exact sound_ground lawful_decimalCodec
     | boolean => exact sound_ground lawful_booleanCodec
     | null => exact sound_ground lawful_nullCodec
     | binary => exact sound_ground lawful_binaryCodec
@@ -692,7 +687,7 @@ set_option linter.unreachableTactic false in
 theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T v
   | t, T, μ, h, v, hv => by
     cases h with
-    | string | number | decimal | boolean | binary | null => exact hv
+    | string | number | boolean | binary | null => exact hv
     -- `exact hv`, where this was a five-way split guarding against `simp` unfolding
     -- `numberCodec` into `Numeral.WF`'s decision procedure. The denotation's held set and the
     -- rule's are the same expression now — `HLit k ls` — so there is nothing to prove.
@@ -786,7 +781,6 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
     | never => exact Carrier.empty
     | string => exact carrier_stringCodec
     | number => exact carrier_numberCodec
-    | decimal => exact carrier_decimalCodec
     | boolean => exact carrier_booleanCodec
     | null => exact carrier_nullCodec
     | binary => exact carrier_binaryCodec

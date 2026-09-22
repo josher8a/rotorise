@@ -60,19 +60,17 @@ def HSet (T : Held) : Held := fun v =>
 
 /-- The held set of a set's **base** — §3 `(set)`'s `T` premise, now a function of the
     index. Each is the ground rule's conclusion at that base, verbatim: `string` holds every
-    string, `number` §1's `D`, which the carrier now IS, `decimal` the narrower `Stored`
-    numerals over the same carrier, `binary` every byte string. -/
+    string, `number` §1's `D`, which the carrier now IS, and `binary` every byte string. -/
 def SetBase.held : SetBase → Held
   | .string  => fun v => ∃ s, v = .str s
   | .number  => fun v => ∃ x : WFNumeral, v = .num x
-  | .decimal => fun v => ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true
   | .binary  => fun v => ∃ b, v = .bin b
 
-/-- The base's held set **is** its codec's, at every base — the four rows were transcribed
-    from the four ground rules, and those rules' codecs carry the same condition. `rfl`, so
+/-- The base's held set **is** its codec's, at every base — the three rows were transcribed
+    from the three ground rules, and those rules' codecs carry the same condition. `rfl`, so
     `(set)`'s subset obligation reduces to nothing. -/
 theorem SetBase.elem_T : ∀ b : SetBase, b.elem.T = b.held
-  | .string | .number | .decimal | .binary => rfl
+  | .string | .number | .binary => rfl
 
 /-- `T*` (§3 `(array)`). -/
 def HStar (T : Held) : Held :=
@@ -224,10 +222,6 @@ inductive Typed : Term → Held → Option Member → Prop where
       concluded `⊢ number : D ⇝ N`; until `numberCodec` gated, the model's judgement said
       something weaker than the rule it was transcribing. -/
   | number  : Typed .number (fun v => ∃ x : WFNumeral, v = .num x) (some .N)
-  /-- `decimal` holds the `Stored` numerals, the narrower half of `N` (§1) — and `Numerals` is §1's
-      grammar, not every string. -/
-  | decimal : Typed .decimal
-      (fun v => ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true) (some .N)
   | boolean : Typed .boolean (fun v => ∃ b, v = .bool b) (some .BOOL)
   /-- §3 `(null)`: the point held set `{null}`, stored as `⟨NULL, ∗⟩`. -/
   | null : Typed .null (fun v => v = .null) (some .NULL)

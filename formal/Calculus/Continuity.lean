@@ -224,9 +224,10 @@ theorem optBad_not_confluent : ¬ ConfluentAt [optBad, optLit] (.str "A") := by
         Codec.restrict, inL, stringCodec] at this
 
 /-! **The ground-term witness is gone, and it was the decimal conflation.** ~~string_decimal_not_confluent~~
-took `string` and `decimal` both writing `.str "1.5"` and storing it differently. They no longer
-share a value: `decimal` carries a `Value.num`, an exact numeral, and `string` a `Value.str`.
-The pair is disjoint, so it is confluent vacuously and the theorem is false rather than unproved.
+took `string` and a decimal base both writing `.str "1.5"` and storing it differently. The model
+has no decimal base now, and no ground term writes text and stores `N`. The host's decimal is
+`held` over `number`, and `held` is not a ground term. So no ground pair is a witness, and
+the theorem is false rather than unproved.
 
 What the section still records is `optBad_not_confluent` above, which uses a codec built to break
 the obligation. So confluence is still not automatic, and is still an invariant the unrolling must

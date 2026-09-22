@@ -182,7 +182,7 @@ set_option linter.unreachableTactic false in
 theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T v
   | t, T, μ, h, v, hv => by
     cases h with
-    | string | number | decimal | boolean | binary | null => exact hv
+    | string | number | boolean | binary | null => exact hv
     -- the carrier is gated, so the rule's `HLit k ls` and the denotation's are one
     -- expression — the same fact that removed `typed_TSub`'s five-way split here
     | literal _ _ => exact hv
@@ -299,7 +299,7 @@ theorem not_TIsDomE_unionLiteralString : ¬ TIsDomE unionLiteralString := by
 /-! ## §1's numeral domain, checked
 
 `Numeral := String` was a standing gap: the grammar, the 38
-significant digits and the magnitude range were unmodelled, so `decimal` held
+significant digits and the magnitude range were unmodelled, so `decimalCodec` held
 every string", with the note that once the predicate is tightened `typed_e_mem` reports
 whether the codec respects it. `Domain.lean` now carries §1's predicate and
 `decimalCodec` gates on it, so here is that report.
@@ -312,17 +312,16 @@ partiality is a fact about the port's types, not the model's. -/
 
 /-- `decimal`'s held set is exactly §1's `Numerals`. -/
 theorem decimal_T (v : Value) :
-    (denote .decimal).T v ↔ ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true := Iff.rfl
+    decimalCodec.T v ↔ ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true := Iff.rfl
 
-/-- **The report.** A derivable `decimal` writes only well-formed numerals — the tightened
+/-- **The report.** `decimalCodec` writes only well-formed numerals — the tightened
     `: T` index, cashed on the attribute side. -/
 theorem decimal_writes_stored {v : Value} {a : Attr}
-    (he : (denote .decimal).e v = some a) :
+    (he : decimalCodec.e v = some a) :
     ∃ x : WFNumeral, a = .n x ∧ Numeral.Stored x.1 = true := by
   cases v with
   | num x =>
-    rw [show (denote .decimal).e (.num x) = decimalCodec.e (.num x) from rfl,
-      decimalCodec_e_num] at he
+    rw [decimalCodec_e_num] at he
     by_cases hw : Numeral.Stored x.1 = true
     · rw [if_pos hw] at he; cases he; exact ⟨_, rfl, hw⟩
     · rw [if_neg hw] at he; exact nomatch he
@@ -333,7 +332,7 @@ theorem decimal_writes_stored {v : Value} {a : Attr}
 /-- Dually, it reads only well-formed numerals — which is not a nicety: a `p` accepting an
     ill-formed `N` would name a value `e` then refuses, and that is **(C)** failing. -/
 theorem decimal_reads_stored {a : Attr} {v : Value}
-    (hp : (denote .decimal).p a = some v) :
+    (hp : decimalCodec.p a = some v) :
     ∃ x : WFNumeral, a = .n x ∧ Numeral.Stored x.1 = true := by
   cases a with
   | n x =>
@@ -359,7 +358,7 @@ identity on the digits — so the round trip fails at the one point §2 cannot s
 `e` and `p`. `Numeral.Stored` is that set, and the measurements it is read off are in
 `src/codec/spec/surface/codec.dynamodb.spec.ts`. -/
 
-theorem decimal_refuses_nonNumeral : (denote .decimal).e (.str "abc") = none := rfl
+theorem decimal_refuses_nonNumeral : decimalCodec.e (.str "abc") = none := rfl
 
 /-- Magnitude, isolated at the `WF` level, where notation is not also in play. -/
 theorem wf_refuses_overMagnitude : Numeral.WF "1e130" = false := by decide
@@ -368,18 +367,18 @@ theorem wf_refuses_39_digits :
     Numeral.WF "123456789012345678901234567890123456789" = false := by decide
 
 theorem decimal_refuses_39_digits :
-    (denote .decimal).e (.str "123456789012345678901234567890123456789") = none := rfl
+    decimalCodec.e (.str "123456789012345678901234567890123456789") = none := rfl
 
 /-- §1's own example, at the level it was written about: the service accepts an exponent. -/
 theorem wf_accepts_exponent : Numeral.WF "1e+21" = true := by decide
 
 /-- `decimal` does not, and the reason is the store rather than the grammar. -/
 theorem decimal_refuses_exponent :
-    (denote .decimal).e (.num (.of "1e+21")) = none := rfl
+    decimalCodec.e (.num (.of "1e+21")) = none := rfl
 
 /-- The same number, spelled the way it comes back. -/
 theorem decimal_accepts_expanded :
-    (denote .decimal).e (.num (.of "1000000000000000000000"))
+    decimalCodec.e (.num (.of "1000000000000000000000"))
       = some (.n (.of "1000000000000000000000")) := rfl
 
 end Calculus

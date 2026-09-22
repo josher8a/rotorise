@@ -14,21 +14,11 @@ refuses where its closed form cannot be compared with an exact held set, and `re
 `closure`. A pair that admits a common value and stores it at two members has no meet either, and
 that is a refusal and not an empty one.
 
-**`string` and `decimal` were that pair, and they are no longer.** `decimal` wrote text while its
-carrier was a string, so the two shared every value and `never` would have been wrong about them.
-`decimal` carries a numeral now and writes `N`, so the two share nothing: `Orth1` answers `true`
-for the pair and for the set bases over it. `famSet` and `famLit` still answer `none` there. That
-refusal is conservative rather than necessary, and turning it into the bottom is a change to
-`Term.meet` and so a ruling rather than a repair.
-
 **The same on the read side, and `never` is the empty intersection of BOTH halves.** A pair
 disjoint on one half only is not disjoint, which is why `Orth1` conjoins the two occupancies;
 `never` is for a pair disjoint on both, and everything else refuses.
 
-`number` and `decimal` are the surviving refusal, and they now share BOTH halves: one carrier
-serves both, `decimal` admitting the stored numerals inside it, so the two occupy `.num` and `N`
-together. The bottom is wrong about them on either half. Among the ground and set terms no pair is
-disjoint on one half alone, so the conjunction has no witness left there. It keeps one elsewhere:
+Among the ground and set terms no pair is disjoint on one half alone, so the conjunction has no witness left there. It keeps one elsewhere:
 `occV` of a `held` is the top while `occA` of a `held` is its inner term's, so two adapters over
 disjoint natives separate on the read half and not on the write half.
 
@@ -205,7 +195,6 @@ def Pred.meetAlt (k : GroundKind) [DecidableEq k.Carrier]
     because nothing reads a caller's function. -/
 def Pred.meetM : Pred → Pred → Option (Option Pred)
   | .members .string A,  .members .string B  => Pred.meetAlt .string A B
-  | .members .decimal A, .members .decimal B => Pred.meetAlt .decimal A B
   | .members .boolean A, .members .boolean B => Pred.meetAlt .boolean A B
   | .members .binary A,  .members .binary B  => Pred.meetAlt .binary A B
   | _, _ => none
@@ -284,7 +273,6 @@ theorem meetM_eval {q p r : Pred} (h : Pred.meetM q p = some (some r)) (v : Valu
   case _ => exact meetAlt_eval h v
   case _ => exact meetAlt_eval h v
   case _ => exact meetAlt_eval h v
-  case _ => exact meetAlt_eval h v
   case _ => exact absurd h (by simp)
 
 /-- Where the two share no alternative, nothing satisfies both. -/
@@ -292,7 +280,6 @@ theorem meetM_empty {q p : Pred} (h : Pred.meetM q p = some none) (v : Value) :
     (Pred.eval q v && Pred.eval p v) = false := by
   unfold Pred.meetM at h
   split at h
-  case _ => exact meetAlt_empty h v
   case _ => exact meetAlt_empty h v
   case _ => exact meetAlt_empty h v
   case _ => exact meetAlt_empty h v
@@ -325,25 +312,15 @@ mutual
 /-- Two literals: the same value at the same base, or nothing.
 
     `number` refuses, and the reason it used to carry is gone: its equality came from an
-    axiomatised host, and the exact carrier decides, in the shape `decimal`'s row beside it
-    already uses. The refusal stands with no stated reason, and a row would be a change to the
+    axiomatised host, and the exact carrier decides. The refusal stands with no stated reason, and a row would be a change to the
     meet rather than a repair. -/
 def Term.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.Carrier → Option Term
   | .string, v, .string, v' => if v = v' then some (.literal .string v) else some .never
-  | .decimal, v, .decimal, v' => if v = v' then some (.literal .decimal v) else some .never
   | .boolean, v, .boolean, v' => if v = v' then some (.literal .boolean v) else some .never
   | .binary, v, .binary, v' => if v = v' then some (.literal .binary v) else some .never
   -- `Unit` has one inhabitant, so two null literals name the same value
   | .null, v, .null, _ => some (.literal .null v)
   | .number, _, .number, _ => none
-  -- the same shared pairs as the rows above, with both sides pinned. `number` shares `N` AND
-  -- the value carrier with `decimal`, which is the one genuine sharing left. `string` shared
-  -- values with `decimal` while `decimal` was text; the two are orthogonal now and these two
-  -- rows are conservative.
-  | .string, _, .decimal, _ => none
-  | .decimal, _, .string, _ => none
-  | .number, _, .decimal, _ => none
-  | .decimal, _, .number, _ => none
   | _, _, _, _ => some .never
 
 
@@ -379,28 +356,16 @@ end
 /-! ### The families: one per left constructor, flat and non-recursive. -/
 def famString : Term → Option Term
   | .string => some .string
-  | .decimal => none
   | .literal k v => match k, v with
-      | .string, v => some (.literal .string v) | .decimal, _ => none | _, _ => some .never
+      | .string, v => some (.literal .string v) | _, _ => some .never
   | .opaq _ => some .string
   | _ => some .never
 
 def famNumber : Term → Option Term
   | .number => some .number
-  | .decimal => none
   | .literal k v => match k, v with
-      | .number, v => some (.literal .number v) | .decimal, _ => none | _, _ => some .never
+      | .number, v => some (.literal .number v) | _, _ => some .never
   | .opaq l => if l then some .number else some .never
-  | _ => some .never
-
-def famDecimal : Term → Option Term
-  | .decimal => some .decimal
-  | .string => none
-  | .number => none
-  | .literal k v => match k, v with
-      | .decimal, v => some (.literal .decimal v) | .string, _ => none | .number, _ => none
-      | _, _ => some .never
-  | .opaq _ => none
   | _ => some .never
 
 def famBoolean : Term → Option Term
@@ -423,12 +388,9 @@ def famNull : Term → Option Term
 
 def famLit (k : GroundKind) (v : k.Carrier) : Term → Option Term
   | .string => match k, v with
-      | .string, v => some (.literal .string v) | .decimal, _ => none | _, _ => some .never
+      | .string, v => some (.literal .string v) | _, _ => some .never
   | .number => match k, v with
-      | .number, v => some (.literal .number v) | .decimal, _ => none | _, _ => some .never
-  | .decimal => match k, v with
-      | .decimal, v => some (.literal .decimal v) | .string, _ => none | .number, _ => none
-      | _, _ => some .never
+      | .number, v => some (.literal .number v) | _, _ => some .never
   | .boolean => if k = .boolean then some (.literal k v) else some .never
   | .binary => if k = .binary then some (.literal k v) else some .never
   | .null => if k = .null then some (.literal k v) else some .never
@@ -437,9 +399,7 @@ def famLit (k : GroundKind) (v : k.Carrier) : Term → Option Term
   | _ => some .never
 
 def famSet (b : SetBase) : Term → Option Term
-  | .set b' => match b, b' with
-      | .string, .decimal | .decimal, .string | .number, .decimal | .decimal, .number => none
-      | _, _ => if b = b' then some (.set b) else some .never
+  | .set b' => if b = b' then some (.set b) else some .never
   | .opaq _ => none
   | _ => some .never
 
@@ -1129,7 +1089,6 @@ def Term.meet : Term → Term → Option Term
       (fun zs => Term.ofOptionsGuarded os (zs.filter (fun z => !z.isNever)))
   | .string, y => meetSRight famString y
   | .number, y => meetSRight famNumber y
-  | .decimal, y => meetSRight famDecimal y
   | .boolean, y => meetSRight famBoolean y
   | .binary, y => meetSRight famBinary y
   | .null, y => meetSRight famNull y
@@ -1183,52 +1142,8 @@ example : Term.meet (.literal .string "a") .string = some (.literal .string "a")
 /-- …and against another value of the same base, nothing. -/
 example : Term.meet (.literal .string "a") (.literal .string "b") = some .never := by rfl
 
-/-- `Term.meet` still refuses `string` against `decimal`, and **the reason it was given for is
-    gone**. The refusal was justified by the pair admitting the same text and storing it at
-    different members. They share no value now: a `decimal` admits a `.num` and a `string` a
-    `.str`, and the two `Adm` rows below say so. The refusal is conservative rather than
-    necessary here, and turning it into the bottom is a change to `Term.meet` and so a decision
-    rather than a repair. -/
-example : Term.meet .string .decimal = none := by rfl
-
-/-- The same refusal reaches a literal at either base, and with the same standing. -/
-example : Term.meet (.literal .decimal ⟨"1", by decide⟩) .string = none := by rfl
-
-example : Term.meet (.literal .string "1") .decimal = none := by rfl
-
-example : Term.meet (.literal .string "1") (.literal .decimal ⟨"1", by decide⟩) = none := by rfl
-
-/-- **The pair no longer shares a value**, which is what the refusal above was about. The
-    decimal literal admits the numeral and refuses the text; `string` is the other way. -/
-example : Adm (.literal .decimal ⟨"1", by decide⟩) (.num ⟨"1", by decide⟩) = true := by
-  simp [Adm, AdmLit, inL]
-  decide
-
-example : Adm (.literal .decimal ⟨"1", by decide⟩) (.str "1") = false := by
-  simp [Adm, AdmLit, inL]
-
-example : Adm Term.string (.str "1") = true := by simp [Adm]
-
 /-- A literal at a base that shares nothing with the partner is still the bottom. -/
 example : Term.meet (.literal .string "1") .boolean = some .never := by rfl
-
-/-- A refinement carries the cell, and so does a container: `none` survives `.map`. -/
-example : Term.meet (.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩))
-    .decimal = none := by rfl
-
-example : Term.meet (.array .string) (.array .decimal) = none := by rfl
-
-/-- **`number` and `decimal` refuse too, and for the other half of the rule.** They write
-    different value kinds, so the bottom is right about what they store together — nothing. They
-    read the same member `N`, so the bottom is wrong about what they read together: a stored
-    numeral the host re-reads is an attribute both admit. A pair that shares an attribute has no
-    meet, for the reason a pair that shares a value has none. -/
-example : Term.meet .number .decimal = none := by rfl
-
-example : Term.meet (.set .number) (.set .decimal) = none := by rfl
-
-/-- The attribute the refusal is about: both terms read it, and the bottom reads nothing. -/
-example (x : WFNumeral) (h : Numeral.Stored x.1 = true) : AdmA Term.decimal (.n x) = true := h
 
 /-- **The null point needs no row of its own.** A null point is the null term joined by a union,
     so the union rows distribute over it and the ground rows answer each cell. This is the pair
@@ -1238,17 +1153,6 @@ example : Term.meet (.union [.string, .null]) (.opaq true) = some (.union [.stri
 
 /-- …and against the null term alone the string cell is the bottom, so one option survives. -/
 example : Term.meet (.union [.string, .null]) .null = some .null := by rfl
-
-/-- …and the same refusal one container out, with the same standing: `Term.meet` refuses, and
-    the shared value it refused for is gone. A `set decimal` admits a `.numSet` and a
-    `set string` a `.strSet`. -/
-example : Term.meet (.set .string) (.set .decimal) = none := by rfl
-
-example : Adm (.set .string) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩) = true := by
-  simp [Adm, SetBase.adm]
-
-example : Adm (.set .decimal) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩) = false := by
-  simp [Adm, SetBase.adm, isStored]
 
 /-- **Two open factors meet pointwise.** The left body requires `x` and the right does not
     declare it, so `x` meets the right body's open block and stays required. `y` meets the left
@@ -2220,7 +2124,6 @@ theorem Adm_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmFam x fa
       exact union_meet_free v (Adm_meetSRightL hf os _ hF)
   | .string, _, h, v => hf .string _ trivial h v
   | .number, _, h, v => hf .number _ trivial h v
-  | .decimal, _, h, v => hf .decimal _ trivial h v
   | .boolean, _, h, v => hf .boolean _ trivial h v
   | .binary, _, h, v => hf .binary _ trivial h v
   | .null, _, h, v => hf .null _ trivial h v
@@ -2273,10 +2176,10 @@ theorem Adm_famBoolean : AdmFam Term.boolean famBoolean := by
       next hk =>
         subst hk
         simp only [Option.some.injEq] at h; subst h
-        cases v <;> simp [Adm, AdmLit, inL, inD, isStored]
+        cases v <;> simp [Adm, AdmLit, inL, inD]
       next hk =>
         simp only [Option.some.injEq] at h; subst h
-        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD, isStored]
+        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD]
   case opaq l =>
       simp only [famBoolean, Option.some.injEq] at h; subst h
       cases v <;> (try simp only [Adm_opaq_bool]) <;> simp [Adm]
@@ -2293,10 +2196,10 @@ theorem Adm_famBinary : AdmFam Term.binary famBinary := by
       next hk =>
         subst hk
         simp only [Option.some.injEq] at h; subst h
-        cases v <;> simp [Adm, AdmLit, inL, inD, isStored]
+        cases v <;> simp [Adm, AdmLit, inL, inD]
       next hk =>
         simp only [Option.some.injEq] at h; subst h
-        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD, isStored]
+        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD]
   case opaq l =>
       simp only [famBinary, Option.some.injEq] at h; subst h
       cases v <;> (try simp only [Adm_opaq_bin]) <;> simp [Adm]
@@ -2313,26 +2216,25 @@ theorem Adm_famNull : AdmFam Term.null famNull := by
       next hk =>
         subst hk
         simp only [Option.some.injEq] at h; subst h
-        cases v <;> simp [Adm, AdmLit, inL, inD, isStored]
+        cases v <;> simp [Adm, AdmLit, inL, inD]
       next hk =>
         simp only [Option.some.injEq] at h; subst h
-        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD, isStored]
+        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD]
   case opaq l =>
       simp only [famNull, Option.some.injEq] at h; subst h
       cases v <;> (try simp only [Adm_opaq_null]) <;> simp [Adm]
   all_goals fam_never famNull
 
-/-- `string` meets its own literals and `opaque`, and refuses the `decimal` family. -/
+/-- `string` meets its own literals and `opaque`. -/
 theorem Adm_famString : AdmFam Term.string famString := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
   case string => simp only [famString, Option.some.injEq] at h; subst h; simp
-  case decimal => simp [famString] at h
   case literal k v' =>
       cases k <;> simp only [famString, Option.some.injEq, reduceCtorEq] at h <;>
         (try subst h) <;>
         first
-          | (cases v <;> simp [Adm, AdmLit, inL, inD, isStored] <;>
+          | (cases v <;> simp [Adm, AdmLit, inL, inD] <;>
               (try (intro hs _; exact hs)))
           | exact Adm_never_orth (by rfl) v
   case opaq l =>
@@ -2340,17 +2242,16 @@ theorem Adm_famString : AdmFam Term.string famString := by
       cases v <;> (try simp only [Adm_opaq_str]) <;> simp [Adm]
   all_goals fam_never famString
 
-/-- `number` meets its own literals and a lossy `opaque`, and refuses `decimal`. -/
+/-- `number` meets its own literals and a lossy `opaque`. -/
 theorem Adm_famNumber : AdmFam Term.number famNumber := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
   case number => simp only [famNumber, Option.some.injEq] at h; subst h; simp
-  case decimal => simp [famNumber] at h
   case literal k v' =>
       cases k <;> simp only [famNumber, Option.some.injEq, reduceCtorEq] at h <;>
         (try subst h) <;>
         first
-          | (cases v <;> simp [Adm, AdmLit, inL, inD, isStored] <;>
+          | (cases v <;> simp [Adm, AdmLit, inL, inD] <;>
               (try (intro hs _; exact hs)))
           | exact Adm_never_orth (by rfl) v
   case opaq l =>
@@ -2366,33 +2267,15 @@ theorem Adm_famNumber : AdmFam Term.number famNumber := by
         cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
   all_goals fam_never famNumber
 
-/-- `decimal` meets its own literals alone: it shares values with `string` and the
-    member `N` with `number`, so both refuse. -/
-theorem Adm_famDecimal : AdmFam Term.decimal famDecimal := by
-  intro y z hd h v
-  cases y <;> first | exact hd.elim | skip
-  case decimal => simp only [famDecimal, Option.some.injEq] at h; subst h; simp
-  case string => simp [famDecimal] at h
-  case number => simp [famDecimal] at h
-  case opaq l => simp [famDecimal] at h
-  case literal k v' =>
-      cases k <;> simp only [famDecimal, Option.some.injEq, reduceCtorEq] at h <;>
-        (try subst h) <;>
-        first
-          | (cases v <;> simp [Adm, AdmLit, inL, inD, isStored] <;>
-              (try (intro hs _; exact hs)))
-          | exact Adm_never_orth (by rfl) v
-  all_goals fam_never famDecimal
-
 /-- A literal meets its own base and an equal literal, and is the bottom elsewhere. -/
 theorem Adm_famLit (k : GroundKind) (lv : k.Carrier) : AdmFam (.literal k lv) (famLit k lv) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
-  case string | number | decimal =>
+  case string | number =>
       cases k <;> simp only [famLit, Option.some.injEq, reduceCtorEq] at h <;>
         (try subst h) <;>
         first
-          | (cases v <;> simp [Adm, AdmLit, inL, inD, isStored] <;>
+          | (cases v <;> simp [Adm, AdmLit, inL, inD] <;>
               (try (intro hs _; exact hs)))
           | exact Adm_never_orth (by rfl) v
   case boolean | binary | null =>
@@ -2401,17 +2284,17 @@ theorem Adm_famLit (k : GroundKind) (lv : k.Carrier) : AdmFam (.literal k lv) (f
       next hk =>
         subst hk
         simp only [Option.some.injEq] at h; subst h
-        cases v <;> simp [Adm, AdmLit, inL, inD, isStored]
+        cases v <;> simp [Adm, AdmLit, inL, inD]
       next hk =>
         simp only [Option.some.injEq] at h; subst h
-        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD, isStored]
+        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD]
   case literal k' v' =>
       simp only [famLit] at h
       cases k <;> cases k' <;> simp only [Term.meetLit, reduceCtorEq] at h <;>
         (try split at h) <;>
         (try (simp only [Option.some.injEq] at h
               subst h
-              cases v <;> simp_all [Adm, AdmLit, inL, isStored, inD]))
+              cases v <;> simp_all [Adm, AdmLit, inL, inD]))
   case opaq l => simp [famLit] at h
   all_goals fam_never famLit
 
@@ -3128,7 +3011,6 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
         exact union_meet_free v (Adm_meetL os _ _ hF)
   | .string, y, z, h, v => Adm_meetSRight Adm_famString y z h v
   | .number, y, z, h, v => Adm_meetSRight Adm_famNumber y z h v
-  | .decimal, y, z, h, v => Adm_meetSRight Adm_famDecimal y z h v
   | .boolean, y, z, h, v => Adm_meetSRight Adm_famBoolean y z h v
   | .binary, y, z, h, v => Adm_meetSRight Adm_famBinary y z h v
   | .null, y, z, h, v => Adm_meetSRight Adm_famNull y z h v
@@ -3286,7 +3168,6 @@ theorem writes_meetSRight {x : Term} {fam : Term → Option Term} (hf : WritesFa
       exact ⟨ih.1, fun my hmy => ih.2 my (μSyn_union_mem hmy o ho)⟩
   | .string, _, h, m, hz => hf .string _ trivial h m hz
   | .number, _, h, m, hz => hf .number _ trivial h m hz
-  | .decimal, _, h, m, hz => hf .decimal _ trivial h m hz
   | .boolean, _, h, m, hz => hf .boolean _ trivial h m hz
   | .binary, _, h, m, hz => hf .binary _ trivial h m hz
   | .null, _, h, m, hz => hf .null _ trivial h m hz
@@ -3357,28 +3238,6 @@ theorem writes_famNumber : WritesFam Term.number famNumber := by
   all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
   all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
 
-/-- `decimal` names `N`, and so does every term it meets. -/
-theorem writes_famDecimal : WritesFam Term.decimal famDecimal := by
-  intro y z hd h m hz
-  cases y <;> first | exact hd.elim | skip
-  case literal k lv =>
-      cases k <;> (try simp_all [famDecimal, μSyn, Term.meetLit]) <;>
-        (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-      all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
-  all_goals (try simp_all [famDecimal, μSyn, Term.meetLit])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
 
 /-- `boolean` names `BOOL`, and so does every term it meets. -/
 theorem writes_famBoolean : WritesFam Term.boolean famBoolean := by
@@ -3606,7 +3465,6 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
         exact ⟨fun mx hmx => ih.1 mx (μSyn_union_mem hmx o ho), ih.2⟩
   | .string, y, z, h, m, hz => writes_meetSRight writes_famString y z h m hz
   | .number, y, z, h, m, hz => writes_meetSRight writes_famNumber y z h m hz
-  | .decimal, y, z, h, m, hz => writes_meetSRight writes_famDecimal y z h m hz
   | .boolean, y, z, h, m, hz => writes_meetSRight writes_famBoolean y z h m hz
   | .binary, y, z, h, m, hz => writes_meetSRight writes_famBinary y z h m hz
   | .null, y, z, h, m, hz => writes_meetSRight writes_famNull y z h m hz
@@ -4025,7 +3883,7 @@ theorem literal_inL {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
 
 
 /-- **Two literals at one base and two values read nothing together.** Simp on `AdmALit` and
-    `inL` does not reach the `decimal` and `number` rows; exactness does. -/
+    `inL` does not reach the `number` row; exactness does. -/
 theorem AdmALit_never_of_ne {k : GroundKind} {x y : k.Carrier} (hne : ¬ (x = y)) (a : Attr) :
     AdmA (.never : Term) a = (AdmA (Term.literal k x) a && AdmA (Term.literal k y) a) := by
   cases hx : AdmA (Term.literal k x) a with
@@ -4890,7 +4748,6 @@ theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x 
         exact ⟨(hwP a hta ha).2, (hwP a hta ha).1⟩
   | .string, _, h => hf .string _ trivial h
   | .number, _, h => hf .number _ trivial h
-  | .decimal, _, h => hf .decimal _ trivial h
   | .boolean, _, h => hf .boolean _ trivial h
   | .binary, _, h => hf .binary _ trivial h
   | .null, _, h => hf .null _ trivial h
@@ -4944,7 +4801,6 @@ theorem admA_famString : AdmAFam Term.string famString := by
   intro y z hd h
   cases y <;> first | exact hd.elim | skip
   case string => simp only [famString, Option.some.injEq] at h; subst h; exact admA_same _
-  case decimal => simp [famString] at h
   case literal k lv =>
       cases k <;> simp only [famString, Option.some.injEq, reduceCtorEq] at h <;>
         (try subst h) <;>
@@ -4954,8 +4810,8 @@ theorem admA_famString : AdmAFam Term.string famString := by
              | false => simp
              | true => rw [AdmA_base_of_literal rfl hx]; simp)
           | (refine bottom_row (fun a => ?_)
-             cases a <;> simp_all [AdmA, AdmALit, inL, inD, isStored, literalCodec,
-               Codec.restrict, baseCodec, decimalCodec])
+             cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
+               Codec.restrict, baseCodec])
   case opaq l =>
       simp only [famString, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
@@ -4984,8 +4840,8 @@ theorem admA_famBoolean : AdmAFam Term.boolean famBoolean := by
       next hk =>
         simp only [Option.some.injEq] at h; subst h
         refine bottom_row (fun a => ?_)
-        cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, isStored, literalCodec,
-          Codec.restrict, baseCodec, decimalCodec]
+        cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
+          Codec.restrict, baseCodec]
   case opaq l =>
       simp only [famBoolean, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
@@ -5014,8 +4870,8 @@ theorem admA_famBinary : AdmAFam Term.binary famBinary := by
       next hk =>
         simp only [Option.some.injEq] at h; subst h
         refine bottom_row (fun a => ?_)
-        cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, isStored, literalCodec,
-          Codec.restrict, baseCodec, decimalCodec]
+        cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
+          Codec.restrict, baseCodec]
   case opaq l =>
       simp only [famBinary, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
@@ -5044,8 +4900,8 @@ theorem admA_famNull : AdmAFam Term.null famNull := by
       next hk =>
         simp only [Option.some.injEq] at h; subst h
         refine bottom_row (fun a => ?_)
-        cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, isStored, literalCodec,
-          Codec.restrict, baseCodec, decimalCodec]
+        cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
+          Codec.restrict, baseCodec]
   case opaq l =>
       simp only [famNull, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
@@ -5056,12 +4912,11 @@ theorem admA_famNull : AdmAFam Term.null famNull := by
           simp_all [AdmA, opaq_p_string, opaq_p_boolean, opaq_p_binary, opaq_p_null]
   all_goals admA_never famNull
 
-/-- `number` reads a stored double, and refuses the `decimal` family. -/
+/-- `number` reads a stored numeral. -/
 theorem admA_famNumber : AdmAFam Term.number famNumber := by
   intro y z hd h
   cases y <;> first | exact hd.elim | skip
   case number => simp only [famNumber, Option.some.injEq] at h; subst h; exact admA_same _
-  case decimal => simp [famNumber] at h
   case literal k lv =>
       cases k <;> simp only [famNumber, Option.some.injEq, reduceCtorEq] at h <;>
         (try subst h) <;>
@@ -5071,8 +4926,8 @@ theorem admA_famNumber : AdmAFam Term.number famNumber := by
              | false => simp
              | true => rw [AdmA_base_of_literal rfl hx]; simp)
           | (refine bottom_row (fun a => ?_)
-             cases a <;> simp_all [AdmA, AdmALit, inL, inD, isStored, literalCodec,
-               Codec.restrict, baseCodec, decimalCodec])
+             cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
+               Codec.restrict, baseCodec])
   case opaq l =>
       simp only [famNumber] at h
       split at h
@@ -5090,27 +4945,6 @@ theorem admA_famNumber : AdmAFam Term.number famNumber := by
         refine bottom_row (fun a => ?_)
         cases a <;> (try simp only [AdmA_opaq_num]) <;> simp [AdmA, inD]
   all_goals admA_never famNumber
-
-/-- `decimal` reads a stored numeral, and refuses `string` and `number`. -/
-theorem admA_famDecimal : AdmAFam Term.decimal famDecimal := by
-  intro y z hd h
-  cases y <;> first | exact hd.elim | skip
-  case decimal => simp only [famDecimal, Option.some.injEq] at h; subst h; exact admA_same _
-  case string => simp [famDecimal] at h
-  case number => simp [famDecimal] at h
-  case opaq l => simp [famDecimal] at h
-  case literal k lv =>
-      cases k <;> simp only [famDecimal, Option.some.injEq, reduceCtorEq] at h <;>
-        (try subst h) <;>
-        first
-          | (refine ⟨fun a => ?_, fun a ha hb => ⟨literal_denote_agree hb, rfl⟩⟩
-             cases hx : AdmA (Term.literal _ _) a with
-             | false => simp
-             | true => rw [AdmA_base_of_literal rfl hx]; simp)
-          | (refine bottom_row (fun a => ?_)
-             cases a <;> simp_all [AdmA, AdmALit, inL, inD, isStored, literalCodec,
-               Codec.restrict, baseCodec, decimalCodec])
-  all_goals admA_never famDecimal
 
 /-- A literal reads its own value and nothing else, and its base reads it too. -/
 theorem admA_famLit (k : GroundKind) (lv : k.Carrier) :
@@ -5130,7 +4964,7 @@ theorem admA_famLit (k : GroundKind) (lv : k.Carrier) :
                    first
                      | exact AdmALit_never_of_ne (by assumption) a
                      | exact Eq.trans rfl (AdmA_and_false (by first | rfl | decide) a).symm)))
-  case string | number | decimal | boolean | binary | null =>
+  case string | number | boolean | binary | null =>
       cases k <;>
         simp only [famLit, reduceCtorEq, reduceIte, Option.some.injEq] at h <;>
         (try subst h) <;>
@@ -5155,7 +4989,7 @@ theorem admA_famSet (b : SetBase) : AdmAFam (.set b) (famSet b) := by
         first
           | exact admA_same _
           | (refine bottom_row (fun a => ?_)
-             cases a <;> simp_all [AdmA, AdmASet, isStored])
+             cases a <;> simp_all [AdmA, AdmASet])
   case opaq l => simp [famSet] at h
   all_goals admA_never famSet
 
@@ -5839,7 +5673,6 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
           exact hwP a hta hb
   | .string, y, z, h => admA_meetSRight admA_famString y z h
   | .number, y, z, h => admA_meetSRight admA_famNumber y z h
-  | .decimal, y, z, h => admA_meetSRight admA_famDecimal y z h
   | .boolean, y, z, h => admA_meetSRight admA_famBoolean y z h
   | .binary, y, z, h => admA_meetSRight admA_famBinary y z h
   | .null, y, z, h => admA_meetSRight admA_famNull y z h
@@ -6304,7 +6137,6 @@ theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam 
       sorry
   | .string, _, h, hx, hy => hf .string _ trivial h hx hy
   | .number, _, h, hx, hy => hf .number _ trivial h hx hy
-  | .decimal, _, h, hx, hy => hf .decimal _ trivial h hx hy
   | .boolean, _, h, hx, hy => hf .boolean _ trivial h hx hy
   | .binary, _, h, hx, hy => hf .binary _ trivial h hx hy
   | .null, _, h, hx, hy => hf .null _ trivial h hx hy
@@ -6352,9 +6184,6 @@ theorem typed_famString : TypedFam Term.string famString := by typed_fam famStri
 
 /-- `number` likewise. -/
 theorem typed_famNumber : TypedFam Term.number famNumber := by typed_fam famNumber
-
-/-- `decimal` likewise. -/
-theorem typed_famDecimal : TypedFam Term.decimal famDecimal := by typed_fam famDecimal
 
 /-- `boolean` likewise. -/
 theorem typed_famBoolean : TypedFam Term.boolean famBoolean := by typed_fam famBoolean
@@ -6619,7 +6448,6 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
         sorry
   | .string, y, z, h, hx, hy => typed_meetSRight typed_famString y z h hx hy
   | .number, y, z, h, hx, hy => typed_meetSRight typed_famNumber y z h hx hy
-  | .decimal, y, z, h, hx, hy => typed_meetSRight typed_famDecimal y z h hx hy
   | .boolean, y, z, h, hx, hy => typed_meetSRight typed_famBoolean y z h hx hy
   | .binary, y, z, h, hx, hy => typed_meetSRight typed_famBinary y z h hx hy
   | .null, y, z, h, hx, hy => typed_meetSRight typed_famNull y z h hx hy

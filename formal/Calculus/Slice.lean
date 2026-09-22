@@ -11,7 +11,7 @@ options in the same order, and fewer of them.
 
 **The clause carries an `Alts` at each name it speaks about, and not a set of text.** A union
 option is told apart by the meet: `OrthS` separates two objects at `boolean` and `binary` as well
-as at `string` and `decimal`, so a clause over text could not slice a union the classifier
+as at `string`, so a clause over text could not slice a union the classifier
 certifies. Non-emptiness is `Alts`'s own, so the record below declares no such field.
 
 **(D) is certificate-preserving on its own, and (U) is not.** Well-formedness of a union is a
@@ -35,13 +35,12 @@ namespace Calculus
     replaces existed only while a literal held a set. Selecting several alternatives is
     selecting with one clause per alternative, which `mem_extract_or` below states.
 
-    Four rows, and they are `altsDisj`'s four for `altsDisj`'s reasons: `number` declines because
+    Three rows, and they are `altsDisj`'s rows for `altsDisj`'s reasons: `number` declines because
     the numeric carrier's equality came from an axiomatised host, and `null` because its carrier has one
     inhabitant, so a clause there would keep every member rather than select among them. A name
     pinned at one base against a clause at another is no match, which is the `_` row. -/
 def altsSub : Option Alts → Alts → Bool
   | some ⟨.string, x⟩,  ⟨.string, c⟩  => decide (x = c)
-  | some ⟨.decimal, x⟩, ⟨.decimal, c⟩ => decide (x = c)
   | some ⟨.boolean, x⟩, ⟨.boolean, c⟩ => decide (x = c)
   | some ⟨.binary, x⟩,  ⟨.binary, c⟩  => decide (x = c)
   | _, _ => false

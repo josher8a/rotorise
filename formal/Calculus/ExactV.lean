@@ -191,7 +191,6 @@ noncomputable def Adm : Term → Value → Bool
   | .binary   => fun v => match v with | .bin _ => true | _ => false
   | .null     => fun v => match v with | .null => true | _ => false
   | .number   => inD
-  | .decimal  => isStored
   | .literal k ls => AdmLit k ls
   -- the bottom admits nothing, and the row is that sentence
   | .never => fun _ => false
@@ -937,10 +936,6 @@ theorem ExactV_union {opts : List Term} (h : ∀ t ∈ opts, ExactV t) : ExactV 
       simpa [optionSemOf_c] using ht v
     | cons t2 r2 => simp
 
--- `unnecessarySeqFocus` fires on `Adm_exact`'s `literal` case and is wrong there: `try split`
--- leaves two goals at `decimal`, and the `;` it suggests would reach only the first.
--- Suppressed at the block, as the three `term_depth_wf` recursions already do.
-set_option linter.unnecessarySeqFocus false in
 mutual
 /-- **Every row is exact.** Not a bound on `dom(e)` — `dom(e)`, at every constructor and
     with no hypothesis.
@@ -977,18 +972,13 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   | .binary => by intro v; cases v <;> simp [Adm, denote, denote, binaryCodec]
   | .null => by intro v; cases v <;> simp [Adm, denote, denote, nullCodec]
   | .number => by intro v; cases v <;> simp [Adm, denote, denote, inD]
-  | .decimal => by intro v; cases v <;> simp [Adm, denote, denote, isStored]
   -- three rows into one, and `numberCodec` is read through `numberCodec_e_isSome` rather
   -- than unfolded: its `dite` is a string parser, and `simp` inside it runs out of heartbeats.
-  --
-  -- `unnecessarySeqFocus` fires on the `<;>` before `simp_all` below and is wrong: `try split`
-  -- leaves two goals at `decimal` and `;` would reach only the first. Suppressed at the
-  -- declaration rather than restructured, the way the `term_depth_wf` recursions already do.
   | .literal k ls => by
       intro v
       cases k <;> cases v <;>
         simp [AdmLit, denote, denote, literalCodec, baseCodec, inL,
-              stringCodec, booleanCodec, binaryCodec, nullCodec, inD, decimalCodec]
+              stringCodec, booleanCodec, binaryCodec, nullCodec, inD]
   | .refine c p => by
       have hc := Adm_exact c
       intro v; cases hq : p.eval v <;> simp [Adm, denote, denote, Codec.restrict, hq, hc v]
