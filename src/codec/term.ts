@@ -298,7 +298,7 @@ export type Term =
 export type Body = {
     readonly fields: Readonly<Record<string, Field>>
     /**
-     * **The open block**, the model's `Option (KeyPat × Term)`: the term every undeclared name
+     * **The open block**, the model's `Option Term`: the term every undeclared name
      * holds. A body is a partition of the key space, so a name is declared, or it falls in the
      * block, or the body refuses it. Absent is the one closed state.
      */

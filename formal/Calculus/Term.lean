@@ -50,24 +50,6 @@ inductive Pred where
   | each    (p : Pred)
   | closure (q : Value → Bool)
 
-/-- **A key block's pattern.** §4's object is a *partition* of the key space: every name falls in
-    exactly one block, and a name in no block is refused. `any` is the one open block: every
-    name the body does not declare. The declared names are therefore subtracted *structurally*,
-    and no well-formedness premise travels with a body.
-
-    **An open block needs no ban list.** A name an open body must refuse is a *declared* name at
-    `optional never`: the key may be absent, and nothing admits it when it is present. So
-    `object({c}, exclude d)` is `{c, d : optional never}` with `any`, and the exclusion needs no
-    second place to live.
-
-    One constructor, no fields, and it is a wrapper rather than nothing on purpose. A key pattern
-    that is not "every undeclared name" — a template or a regular expression — is a second
-    constructor here and no table over bodies moves. `Name` is `String` and so infinite, which is
-    why two open blocks always intersect, and why one block is all a body can ever carry. -/
-inductive KeyPat where
-  | any
-  deriving DecidableEq
-
 mutual
 
 inductive Term where
@@ -155,9 +137,20 @@ inductive Term where
     **A body is a partition of the key space.** The declared names are one block each, `wild`
     is the single open block, and every remaining name is refused. There is no policy that
     silently drops a name: an undeclared name a body does not claim is a name the body refuses,
-    on the way in and on the way out. -/
+    on the way in and on the way out. The declared names are subtracted *structurally*, so no
+    well-formedness premise travels with a body.
+
+    **An open block needs no ban list.** A name an open body must refuse is a *declared* name at
+    `optional never`: the key may be absent, and nothing admits it when it is present. So
+    `object({c}, exclude d)` is `{c, d : optional never}` with an open block, and the exclusion
+    needs no second place to live.
+
+    **The open block is a term and no pattern.** It holds every undeclared name. `Name` is
+    `String` and so infinite, which is why two open blocks always intersect, and why one block
+    is all a body can ever carry. A key pattern other than "every undeclared name", a template
+    or a regular expression, is a change to this constructor. -/
 inductive Body where
-  | mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot) (wild : Option (KeyPat × Term))
+  | mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot) (wild : Option Term)
 
 /-- §4's current-schema slot. A required name is required on both current-schema sides. -/
 inductive ObjectSlot where
@@ -208,7 +201,7 @@ def Term.tuple (elems : List Term) (tail : Option Term) : Term := .list elems ta
     being a constructor when the open block became a block like any other, and
     `objectCodec_empty_codec` is the equation that keeps the two readings one. -/
 def Term.record (val : Term) : Term :=
-  .object (.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (.any, val)))
+  .object (.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some val))
 
 
 
@@ -230,17 +223,17 @@ def Body.fields : Body → Finset Name
 def Body.at : (b : Body) → {k // k ∈ b.fields} → ObjectSlot
   | .mk _ f _ => f
 
-def Body.wild : Body → Option (KeyPat × Term)
+def Body.wild : Body → Option Term
   | .mk _ _ wild => wild
 
 @[simp] theorem Body.fields_mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
-    (wild : Option (KeyPat × Term)) : (Body.mk fields f wild).fields = fields := rfl
+    (wild : Option Term) : (Body.mk fields f wild).fields = fields := rfl
 
 @[simp] theorem Body.wild_mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
-    (wild : Option (KeyPat × Term)) : (Body.mk fields f wild).wild = wild := rfl
+    (wild : Option Term) : (Body.mk fields f wild).wild = wild := rfl
 
 @[simp] theorem Body.at_mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
-    (wild : Option (KeyPat × Term)) : (Body.mk fields f wild).at = f := rfl
+    (wild : Option Term) : (Body.mk fields f wild).at = f := rfl
 
 /-- An **open object**: one that carries the open block, so a name it does not declare is held
     rather than refused.
@@ -307,9 +300,9 @@ def Body.depth : Body → Nat
 def ObjectSlot.depth : ObjectSlot → Nat
   | .req t | .optional t => Term.depth t + 1
 
-def Body.wildDepth : Option (KeyPat × Term) → Nat
+def Body.wildDepth : Option Term → Nat
   | none => 1
-  | some (_, t) => Term.depth t + 1
+  | some t => Term.depth t + 1
 
 def Term.depthL : List Term → Nat
   | [] => 1
@@ -348,9 +341,9 @@ theorem Body.depth_lt_field : ∀ (b : Body) (k : {k // k ∈ b.fields}),
       omega
 
 /-- …and the open block's codec, the other half of the payload. -/
-theorem Body.depth_lt_rest : ∀ (b : Body) {p : KeyPat} {t : Term}, b.wild = some (p, t) →
+theorem Body.depth_lt_rest : ∀ (b : Body) {t : Term}, b.wild = some t →
     Term.depth t < Body.depth b
-  | .mk _ _ _, _, _, h => by
+  | .mk _ _ _, _, h => by
       simp only [Body.wild] at h
       subst h
       simp only [Body.depth, Body.wildDepth]
@@ -382,7 +375,7 @@ theorem Term.depth_lt_object_opt {b : Body} (k : {k // k ∈ b.fields}) {t : Ter
   rw [h] at h1; simp only [ObjectSlot.depth] at h1; omega
 
 /-- The open block's codec against the object's layer, for the same reason. -/
-theorem Term.depth_lt_object_rest {b : Body} {p : KeyPat} {t : Term} (h : b.wild = some (p, t)) :
+theorem Term.depth_lt_object_rest {b : Body} {t : Term} (h : b.wild = some t) :
     Term.depth t < Term.depth (.object b) :=
   lt_trans (Body.depth_lt_rest b h) (Term.depth_lt_object_body b)
 

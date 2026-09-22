@@ -172,14 +172,14 @@ theorem tuple_pair :
 
 /-- `open_of_string` -/
 theorem open_of_string :
-    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (KeyPat.any, Term.string))))).e
+    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.string))))).e
       (Value.map {"a", "b"} (fun k => if k.1 = "a" then Value.str "x" else Value.str "y"))
     = some (Attr.m {"a", "b"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.s "y")) := by
   vector
 
 /-- `open_empty` -/
 theorem open_empty :
-    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (KeyPat.any, Term.string))))).e
+    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.string))))).e
       (Value.map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)))
     = some (Attr.m ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1))) := by
   vector
@@ -200,7 +200,7 @@ theorem object_optional_absent :
 
 /-- `object_open` -/
 theorem object_open :
-    (denote (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) (some (KeyPat.any, Term.boolean))))).e
+    (denote (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) (some (Term.boolean))))).e
       (Value.map {"a", "z"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true))
     = some (Attr.m {"a", "z"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true)) := by
   vector
@@ -214,21 +214,21 @@ theorem object_nested :
 
 /-- `open_of_restricted_set` -/
 theorem open_of_restricted_set :
-    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (KeyPat.any, Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"})))))))).e
+    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"})))))))).e
       (Value.map {"a"} (fun k => Value.strSet (NEFinset.of "a" ∅)))
     = some (Attr.m {"a"} (fun k => Attr.ss (NEFinset.of "a" ∅))) := by
   vector
 
 /-- `object_restricted_rest` -/
 theorem object_restricted_rest :
-    (denote (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"}))))) (some (KeyPat.any, Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"})))))))).e
+    (denote (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"}))))) (some (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"})))))))).e
       (Value.map {"a", "z"} (fun k => if k.1 = "a" then Value.strSet (NEFinset.of "b" ∅) else Value.strSet (NEFinset.of "c" ∅)))
     = some (Attr.m {"a", "z"} (fun k => if k.1 = "a" then Attr.ss (NEFinset.of "b" ∅) else Attr.ss (NEFinset.of "c" ∅))) := by
   vector
 
 /-- `map_inside_a_list` -/
 theorem map_inside_a_list :
-    (denote (Term.array (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (KeyPat.any, Term.string)))))).e
+    (denote (Term.array (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.string)))))).e
       (Value.arr [Value.map {"a"} (fun k => Value.str "x")])
     = some (Attr.l [Attr.m {"a"} (fun k => Attr.s "x")]) := by
   vector
@@ -397,12 +397,12 @@ theorem tuple_pair__refuses__scalar_string :
 
 /-- `open_of_string__refuses__scalar_string` — refused on both sides -/
 theorem open_of_string__refuses__scalar_string :
-    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (KeyPat.any, Term.string))))).e
+    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.string))))).e
       (Value.str "hello") = none := rfl
 
 /-- `open_empty__refuses__scalar_string` — refused on both sides -/
 theorem open_empty__refuses__scalar_string :
-    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (KeyPat.any, Term.string))))).e
+    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.string))))).e
       (Value.str "hello") = none := rfl
 
 /-- `object_two_fields__refuses__scalar_string` — refused on both sides -/
@@ -417,7 +417,7 @@ theorem object_optional_absent__refuses__scalar_string :
 
 /-- `object_open__refuses__scalar_string` — refused on both sides -/
 theorem object_open__refuses__scalar_string :
-    (denote (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) (some (KeyPat.any, Term.boolean))))).e
+    (denote (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) (some (Term.boolean))))).e
       (Value.str "hello") = none := rfl
 
 /-- `object_nested__refuses__scalar_string` — refused on both sides -/
@@ -427,17 +427,17 @@ theorem object_nested__refuses__scalar_string :
 
 /-- `open_of_restricted_set__refuses__scalar_string` — refused on both sides -/
 theorem open_of_restricted_set__refuses__scalar_string :
-    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (KeyPat.any, Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"})))))))).e
+    (denote (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"})))))))).e
       (Value.str "hello") = none := rfl
 
 /-- `object_restricted_rest__refuses__scalar_string` — refused on both sides -/
 theorem object_restricted_rest__refuses__scalar_string :
-    (denote (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"}))))) (some (KeyPat.any, Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"})))))))).e
+    (denote (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"}))))) (some (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"})))))))).e
       (Value.str "hello") = none := rfl
 
 /-- `map_inside_a_list__refuses__scalar_string` — refused on both sides -/
 theorem map_inside_a_list__refuses__scalar_string :
-    (denote (Term.array (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (KeyPat.any, Term.string)))))).e
+    (denote (Term.array (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.string)))))).e
       (Value.str "hello") = none := rfl
 
 /-- `union_of_two__refuses__scalar_binary` — refused on both sides -/

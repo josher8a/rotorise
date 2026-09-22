@@ -221,7 +221,7 @@ describe('terms', () => {
             'Term.array (Term.string)',
         )
         expect(leanTermOf(erase(object([string, optional(boolean)])))).toBe(
-            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (KeyPat.any, Term.boolean)))',
+            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.boolean)))',
         )
         expect(leanTermOf(erase(list(string, boolean)))).toBe(
             'Term.tuple [Term.string, Term.boolean] none',
@@ -371,7 +371,7 @@ describe('terms', () => {
                 erase(object({ a: string }, [string, optional(boolean)])),
             ),
         ).toBe(
-            'Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) (some (KeyPat.any, Term.boolean)))',
+            'Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) (some (Term.boolean)))',
         )
     })
 

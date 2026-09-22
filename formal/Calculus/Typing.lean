@@ -313,9 +313,9 @@ inductive TypedField : ObjectSlot → Held → Bool → Option Member → Prop w
 
 /-- §4's `⊢ ρ : wild`, carrying `R(ρ)` — `∅` (here `none`) where the body carries no open
     block, the open block's held set otherwise. -/
-inductive TypedWild : Option (KeyPat × Term) → Option Held → Prop where
+inductive TypedWild : Option Term → Option Held → Prop where
   | none : TypedWild none none
-  | some {pat t T μ} (h : Typed t T μ) : TypedWild (some (pat, t)) (some T)
+  | some {t T μ} (h : Typed t T μ) : TypedWild (some t) (some T)
 
 end
 

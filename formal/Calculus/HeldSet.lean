@@ -230,7 +230,7 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
           simp only [objEntryT, MapOf.at, dif_neg hk]
           cases hrest with
           | none => exact nomatch hR
-          | @some pat t' T''' μ'' hty' =>
+          | @some t' T''' μ'' hty' =>
             obtain rfl : T''' = T'' := Option.some.inj hR
             exact ⟨denote t', rfl, typed_T_eq hty' _ hT''⟩
     | @union opts Ts μs h' hD =>

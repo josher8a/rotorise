@@ -984,7 +984,7 @@ theorem famList_isList {fpre : List (Term → Option Term)}
 def Body.block (b : Body) : Term :=
   match b.wild with
   | none => .never
-  | some (_, t) => t
+  | some t => t
 
 /-- A closed traversal and a traversal through a block that admits nothing agree. -/
 theorem objAdmV_none_never (fs : MapOf VP) (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
@@ -1000,7 +1000,7 @@ theorem objAdmA_none_never (fs : MapOf AP) (keys : Finset Name) (g : {k // k ∈
 
 /-- **The closed body is the open body whose block is `never`**, on the write side. -/
 theorem Adm_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → ObjectSlot) :
-    Adm (.object (.mk D f none)) = Adm (.object (.mk D f (some (.any, .never)))) := by
+    Adm (.object (.mk D f none)) = Adm (.object (.mk D f (some .never))) := by
   funext v
   cases v with
   | map keys g =>
@@ -1011,7 +1011,7 @@ theorem Adm_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → Obje
 
 /-- …and on the read side. -/
 theorem AdmA_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → ObjectSlot) :
-    AdmA (.object (.mk D f none)) = AdmA (.object (.mk D f (some (.any, .never)))) := by
+    AdmA (.object (.mk D f none)) = AdmA (.object (.mk D f (some .never))) := by
   funext a
   cases a with
   | m keys g =>
@@ -1065,7 +1065,7 @@ def objObj (a : Body) (g : {k // k ∈ a.fields} → ObjectSlot → Option Objec
         some (.object (.mk ((a.fields ∪ b.fields).filter (fun k => keep k = true))
           (fun k => (objSlot a b g mw ⟨k.1, (Finset.mem_filter.mp k.2).1⟩).getD
             (.optional .never))
-          (if zb.isNever then none else some (.any, zb))))
+          (if zb.isNever then none else some zb)))
       else none
 
 def famObj (a : Body) (g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot)
@@ -1101,7 +1101,7 @@ def Term.meet : Term → Term → Option Term
         (Term.meetSTs suf)) y
   | .object (.mk fs f w), y =>
       meetSRight (famObj (.mk fs f w) (fun k => ObjectSlot.meet (f k))
-        (match w with | none => fun _ => some .never | some (_, t) => Term.meet t)) y
+        (match w with | none => fun _ => some .never | some t => Term.meet t)) y
 termination_by structural x _ => x
 def Term.meetSL : List Term → Term → List (Option Term)
   | [], _ => [] | x :: xs, y => Term.meet x y :: Term.meetSL xs y
@@ -1160,20 +1160,20 @@ example : Term.meet (.union [.string, .null]) .null = some .null := by rfl
     a value both admit, which the meet admits too. -/
 example :
     (Term.meet
-        (.object (.mk {"x"} (fun _ => .req .string) (some (.any, .string))))
-        (.object (.mk {"y"} (fun _ => .optional .string) (some (.any, .string))))).map
+        (.object (.mk {"x"} (fun _ => .req .string) (some .string)))
+        (.object (.mk {"y"} (fun _ => .optional .string) (some .string)))).map
       (fun z => match z with
         | .object b => (decide ("x" ∈ b.fields), decide ("y" ∈ b.fields), b.wild.isSome)
         | _ => (false, false, false))
       = some (true, true, true) := by rfl
 
 /-- The left body admits `{x := "1"}` through its declared slot… -/
-example : Adm (.object (.mk {"x"} (fun _ => .req .string) (some (.any, .string))))
+example : Adm (.object (.mk {"x"} (fun _ => .req .string) (some .string)))
     (.map {"x"} (fun _ => .str "1")) = true := by
   simp [Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at, AdmField]
 
 /-- …and the right body admits it through its open block, at a name it does not declare. -/
-example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (some (.any, .string))))
+example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (some .string)))
     (.map {"x"} (fun _ => .str "1")) = true := by
   simp [Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at, AdmField, AdmWild]
   apply decide_eq_true
@@ -1248,7 +1248,7 @@ example : unionOk [.object (.mk {"x"} (fun _ => .req .string) none)]
     an undeclared name the top, so no name meets at the bottom. `unionOk` admits the open
     object, because the structural lemmas read the block, so a singleton union admits every
     value the option admits. -/
-example : unionOk [.object (.mk {"a"} (fun _ => .req .string) (some (.any, .string)))]
+example : unionOk [.object (.mk {"a"} (fun _ => .req .string) (some .string))]
     = true := by
   simp [unionOk, orthAll]
 
@@ -2678,7 +2678,7 @@ def Term.optionAt : Term → Nat → Option Term
 
 /-- A term's open block, where the term is an object: `none` inside for a closed body. -/
 def Term.blockOf : Term → Option (Option Term)
-  | .object b => some (b.wild.map Prod.snd)
+  | .object b => some b.wild
   | _ => none
 
 /-- The required names, read over the whole key space: an undeclared name is `optional`. -/
@@ -2709,7 +2709,7 @@ theorem AdmBody_map_slots (c : Body) (keys : Finset Name) (g : {k // k ∈ keys}
   · rw [dif_neg hk, Body.slotAt_neg hk]
     cases hw : c.wild with
     | none => simp [AdmWild, Body.block, hw, AdmField, Adm]
-    | some p => obtain ⟨_, t⟩ := p; simp [AdmWild, Body.block, hw, AdmField]
+    | some t => simp [AdmWild, Body.block, hw, AdmField]
 
 /-- **Two bodies conjoined at every name are conjoined as bodies.** -/
 theorem AdmBody_of_slots {a b z : Body}
@@ -2855,13 +2855,13 @@ theorem objObj_slots {a b : Body} {g : {k // k ∈ a.fields} → ObjectSlot → 
             !(zb.isNever && ObjectSlot.isAbsentOpt (objSlot a b g mw ⟨k, h⟩))
           else false) = true))
         (fun k => (objSlot a b g mw ⟨k.1, (Finset.mem_filter.mp k.2).1⟩).getD (.optional .never))
-        (if zb.isNever then none else some (.any, zb))) k) := by
+        (if zb.isNever then none else some zb)) k) := by
   have hblock : Body.block (.mk ((a.fields ∪ b.fields).filter (fun k =>
           (if h : k ∈ a.fields ∪ b.fields then
             !(zb.isNever && ObjectSlot.isAbsentOpt (objSlot a b g mw ⟨k, h⟩))
           else false) = true))
         (fun k => (objSlot a b g mw ⟨k.1, (Finset.mem_filter.mp k.2).1⟩).getD (.optional .never))
-        (if zb.isNever then none else some (.any, zb))) = (if zb.isNever then .never else zb) := by
+        (if zb.isNever then none else some zb)) = (if zb.isNever then .never else zb) := by
     cases zb.isNever <;> rfl
   rcases Decidable.em (k ∈ (a.fields ∪ b.fields).filter (fun k =>
       (if h : k ∈ a.fields ∪ b.fields then
@@ -3032,8 +3032,8 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
         (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
         (fun _ _ _ hm => isReq_Field_meet hm)
         (fun _ _ hz _ => by simp only [Option.some.injEq] at hz; subst hz; rfl)) y z h v
-  | .object (.mk fs f (some (p, t))), y, z, h, v =>
-      Adm_meetSRight (Adm_famObj (a := .mk fs f (some (p, t)))
+  | .object (.mk fs f (some t)), y, z, h, v =>
+      Adm_meetSRight (Adm_famObj (a := .mk fs f (some t))
         (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
         (fun _ _ _ hm => isReq_Field_meet hm)
         (fun u w hw => Adm_meet t u w hw)) y z h v
@@ -3484,8 +3484,8 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
   | .object (.mk fs f none), y, z, h, m, hz =>
       writes_meetSRight (writes_famObj (a := .mk fs f none)
         (g := fun k => ObjectSlot.meet (f k)) (mw := fun _ => some .never)) y z h m hz
-  | .object (.mk fs f (some (p, t))), y, z, h, m, hz =>
-      writes_meetSRight (writes_famObj (a := .mk fs f (some (p, t)))
+  | .object (.mk fs f (some t)), y, z, h, m, hz =>
+      writes_meetSRight (writes_famObj (a := .mk fs f (some t))
         (g := fun k => ObjectSlot.meet (f k)) (mw := Term.meet t)) y z h m hz
 termination_by structural x => x
 
@@ -5360,7 +5360,7 @@ theorem AdmABody_map_slots (c : Body) (keys : Finset Name) (g : {k // k ∈ keys
   · rw [dif_neg hk, Body.slotAt_neg hk]
     cases hw : c.wild with
     | none => simp [AdmAWild, Body.block, hw, AdmAField, AdmA]
-    | some p => obtain ⟨_, t⟩ := p; simp [AdmAWild, Body.block, hw, AdmAField]
+    | some t => simp [AdmAWild, Body.block, hw, AdmAField]
 
 /-- **Two bodies conjoined at every name are conjoined as bodies**, read side. -/
 theorem AdmABody_of_slots {a b z : Body}
@@ -5399,7 +5399,7 @@ theorem entryCodec_slotAt (c : Body) (k : Name) (x : Attr) :
   · rw [dif_neg hk, Body.slotAt_neg hk]
     cases hw : c.wild with
     | none => simp [wildSem, rcOf, Body.block, hw, fieldSem, FieldSem.codec, denote, Codec.empty]
-    | some p => obtain ⟨_, t⟩ := p; simp [wildSem, rcOf, Body.block, hw, fieldSem, FieldSem.codec]
+    | some t => simp [wildSem, rcOf, Body.block, hw, fieldSem, FieldSem.codec]
 
 /-- **Two bodies that read every present name alike read the map alike.** -/
 theorem bodySem_p_congr {c d : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
@@ -5408,7 +5408,7 @@ theorem bodySem_p_congr {c d : Body} {keys : Finset Name} {g : {k // k ∈ keys}
     (he : ∀ k (hk : k ∈ keys), (fieldSem (c.slotAt k)).codec.p (g ⟨k, hk⟩)
       = (fieldSem (d.slotAt k)).codec.p (g ⟨k, hk⟩)) :
     (bodySem c).p (.m keys g) = (bodySem d).p (.m keys g) := by
-  have hkc : ∀ w : Option (KeyPat × Term), ∀ sems : MapOf FieldSem,
+  have hkc : ∀ w : Option Term, ∀ sems : MapOf FieldSem,
       keepB (wildSem w) sems = fun _ => true := by
     intro w sems; cases w <;> rfl
   cases c with
@@ -5696,8 +5696,8 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
         (fun _ _ hz => by
           simp only [Option.some.injEq] at hz; subst hz
           exact ⟨fun _ => rfl, fun _ ha _ => absurd ha (by simp [Body.block, AdmA])⟩)) y z h
-  | .object (.mk fs f (some (p, t))), y, z, h =>
-      admA_meetSRight (admA_famObj (a := .mk fs f (some (p, t)))
+  | .object (.mk fs f (some t)), y, z, h =>
+      admA_meetSRight (admA_famObj (a := .mk fs f (some t))
         (fun k fl fm hm => admA_Field_meet (f k) fl fm hm)
         (fun _ _ _ hm => isReq_Field_meet hm)
         (fun u w hw => AdmA_meet_both t u w hw)) y z h
@@ -6070,7 +6070,7 @@ theorem typed_object_inv {b : Body} (h : ∃ T μ, Typed (.object b) T μ) :
   | object hf hr => exact ⟨fun k => typedField_termOf (hf k), _, hr⟩
 
 /-- A body with no open block has no open part in its held set. -/
-theorem typedWild_none_of_closed {w : Option (KeyPat × Term)} {R : Option Held}
+theorem typedWild_none_of_closed {w : Option Term} {R : Option Held}
     (hw : w = none) (h : TypedWild w R) : R = none := by
   cases h <;> simp_all
 
@@ -6095,7 +6095,7 @@ def TypedFam (x : Term) (fam : Term → Option Term) : Prop :=
 /-- An object is derivable where every declared slot's term is and the open block is typed: the
     indices are written down as functions of each slot's own term rather than chosen. -/
 theorem typed_object_of {fs : Finset Name} {F : {k // k ∈ fs} → ObjectSlot}
-    {w : Option (KeyPat × Term)}
+    {w : Option Term}
     {R : Option Held} (hf : ∀ k, ∃ T μ, Typed (ObjectSlot.termOf (F k)) T μ)
     (hr : TypedWild w R) :
     ∃ T μ, Typed (.object (.mk fs F w)) T μ :=
@@ -6469,8 +6469,8 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
         (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)
         (fun _ _ hz _ _ => by
           simp only [Option.some.injEq] at hz; subst hz; exact ⟨_, _, Typed.never⟩)) y z h hx hy
-  | .object (.mk fs f (some (p, t))), y, z, h, hx, hy =>
-      typed_meetSRight (typed_famObj (a := .mk fs f (some (p, t)))
+  | .object (.mk fs f (some t)), y, z, h, hx, hy =>
+      typed_meetSRight (typed_famObj (a := .mk fs f (some t))
         (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)
         (fun u w hw => typed_meet t u w hw)) y z h hx hy
 termination_by structural x => x

@@ -59,11 +59,11 @@ def Body.spec : Body → BodySpec
   | .mk fields f wild =>
       { names := ⟨fields, fun k =>
           ⟨(f k).presence, altsOfField (f k)⟩⟩
-        wild := wild.map (fun w => altsOfTerm w.2) }
+        wild := wild.map (fun w => altsOfTerm w) }
 
 /-- The spec's name table, read off the constructor. -/
 @[simp] theorem Body.spec_names_mk (fields : Finset Name)
-    (f : {k // k ∈ fields} → ObjectSlot) (wild : Option (KeyPat × Term)) :
+    (f : {k // k ∈ fields} → ObjectSlot) (wild : Option Term) :
     (Body.mk fields f wild).spec.names =
       ⟨fields, fun k => ⟨(f k).presence, altsOfField (f k)⟩⟩ := rfl
 
@@ -204,9 +204,9 @@ def fieldSem : ObjectSlot → FieldSem
     **A body with no open block refuses.** There is no third answer: the policy that read an
     undeclared name and wrote nothing back is gone, so a name the body does not claim is a name
     the body refuses, in both directions. -/
-def wildSem : Option (KeyPat × Term) → RestSem
+def wildSem : Option Term → RestSem
   | none => .refuse
-  | some (_, t) => .codec (denote t)
+  | some t => .codec (denote t)
 
 def denoteList : List Term → List Codec
   | [] => []
@@ -397,7 +397,7 @@ theorem denote_opaq (lossy : Bool) : denote (.opaq lossy) = opaqCodecω lossy :=
 
 /-- `object` denotes `objectCodec`. -/
 theorem denote_object_table (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
-    (wild : Option (KeyPat × Term)) :
+    (wild : Option Term) :
     denote (.object (.mk fields f wild)) = objectCodec (fieldTable fields f) (wildSem wild) :=
   rfl
 
