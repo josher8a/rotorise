@@ -1018,10 +1018,9 @@ export const arbitraryOf = (
              * authority on a name it declares, and an undeclared value standing in for one would test
              * the wrong codec.
              */
-            // only a rest *codec* puts undeclared names in the entity; `drop` and `refuse` both
-            // leave nothing to generate, and are now told apart from a codec rather than guessed
-            const restCodec =
-                typeof rest === 'string' ? undefined : codecOfTerm(rest.t)
+            // only an open block puts undeclared names in the entity; a closed body leaves
+            // nothing to generate
+            const restCodec = rest && codecOfTerm(rest)
             if (restCodec) {
                 for (let extra = Math.floor(rng() * 3); extra > 0; extra--) {
                     out[`rest${extra}`] = arbitraryOf(
@@ -1292,8 +1291,7 @@ export const shrinkOf = (
             const out: Record<string, unknown>[] = []
             // a name the open block holds is optional, so it drops and it shrinks through the block
             const open = Object.keys(held).filter((name) => !(name in fields))
-            const restCodec =
-                typeof rest === 'string' ? undefined : codecOfTerm(rest.t)
+            const restCodec = rest && codecOfTerm(rest)
             // dropping a whole attribute is the bigger reduction, so try it first
             if (restCodec) {
                 for (const name of open) {
@@ -1981,9 +1979,7 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 Object.values(fields).forEach((field) =>
                     inner(codecOfTerm(field.t)),
                 )
-                return inner(
-                    typeof rest === 'string' ? undefined : codecOfTerm(rest.t),
-                )
+                return inner(rest && codecOfTerm(rest))
             }
             case 'refine':
             case 'held':

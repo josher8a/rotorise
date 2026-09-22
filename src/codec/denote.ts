@@ -422,7 +422,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                     : undefined,
         })
     }
-    const restCodec = typeof rest === 'string' ? undefined : codecOfTerm(rest.t)
+    const restCodec = rest && codecOfTerm(rest)
     return {
         encode: (held) => {
             const out: Record<string, AttributeValue> = {}
@@ -484,7 +484,6 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                 if (failed(read)) return read.under(name)
                 out[name] = read
             }
-            if (rest === 'drop') return out
             for (const name in item) {
                 if (name in of) continue
                 if (!restCodec) {
@@ -1913,7 +1912,7 @@ export const optionOfTerm = (def: Term): Option => {
             ...[...declares].map((name) =>
                 alwaysWritten(fields[name] as Field) ? name : `${name}?`,
             ),
-            ...(typeof def.body.rest === 'string' ? [] : ['...']),
+            ...(def.body.rest === undefined ? [] : ['...']),
         ].join(', ')} }`,
     }
 }

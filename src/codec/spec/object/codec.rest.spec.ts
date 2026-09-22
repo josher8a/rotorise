@@ -148,7 +148,7 @@ describe('a strict object', () => {
     })
 
     it('is what the member law is told, rather than left to infer', () => {
-        // the attribute is gone from the re-encode, and under 'drop' that is correct
+        // the undeclared attribute refuses on the way in, so no re-encode can lose it
         expect(() =>
             checkMembersStable(Closed, [
                 { id: { S: 'w1' }, retired: { S: 'x' } },
@@ -163,8 +163,7 @@ describe("'refuse', for a service that owns its table", () => {
     /**
      * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
      * it; what the regex adds is the diagnostic, which is this test's subject. Here it is that `'refuse'`
-     * says the schema and the data have *drifted*, which is the whole difference between this
-     * policy and `'drop'` — both refuse nothing silently, and only one explains why.
+     * says the schema and the data have *drifted*.
      */
     it('reports drift instead of ignoring it', () => {
         expect(() =>
@@ -185,14 +184,8 @@ describe("'refuse', for a service that owns its table", () => {
  * **The policy, in the term.**
  *
  * `Term` is this library's own abstract syntax, and `src/codec/lean.ts` reads it to reconstruct the
- * equivalent term in `formal/`. The definition it replaced used to record the rest *codec* alone —
- * `undefined` for both
- * `'drop'` and `'refuse'` — on the argument that neither contributes an attribute to generate. That
- * argument covers the write half and only the write half: the two policies disagree about whether an
- * undeclared name is an error, which is the read half, so two codecs that behave differently had
- * byte-identical definitions and every consumer reading one was guessing. The emitter guessed
- * `Rest.drop`, which is right for the encode vectors it writes and would have been silently wrong
- * for a decode vector.
+ * equivalent term in `formal/`. The body records the model's open block: absent for the closed
+ * body, and the block's term where the body is open.
  *
  * `.item.rest` did carry the policy the whole time, so this was reachable from a *top-level* codec.
  * It is not reachable from a definition walk, which is the only surface a consumer has once it has
@@ -201,18 +194,17 @@ describe("'refuse', for a service that owns its table", () => {
  */
 describe('the rest policy a definition records', () => {
     it('records the strict policy', () => {
-        expect(object({ id: string }).def).toMatchObject({
-            kind: 'object',
-            body: { rest: 'refuse' },
-        })
+        const def = object({ id: string }).def
+        expect(def.kind).toBe('object')
+        expect(def.kind === 'object' && def.body.rest).toBe(undefined)
     })
 
     /**
      * The policy is recorded as the rest codec's **term**, and identity is what is asserted.
      *
      * A definition's children are terms, so the third policy is `scalar`'s term rather than
-     * `scalar`. What the rule needs is unchanged and is what this checks: the three policies are
-     * three values, and the third is enough to rebuild the codec a consumer must run. `codecOfTerm`
+     * `scalar`. What the rule needs is unchanged and is what this checks: the two states are
+     * two values, and the open one is enough to rebuild the codec a consumer must run. `codecOfTerm`
      * memoises on the frozen term, so rebuilding it runs what was declared.
      *
      * The rebuilt codec is not `scalar` itself, and that is the design rather than a loss:
@@ -225,14 +217,7 @@ describe('the rest policy a definition records', () => {
             optional(scalar),
         ]).def
         expect(def).toMatchObject({ kind: 'object' })
-        expect(def.kind === 'object' && def.body.rest).toMatchObject({
-            kind: 'codec',
-        })
-        expect(
-            def.kind === 'object' &&
-                typeof def.body.rest !== 'string' &&
-                def.body.rest.t,
-        ).toBe(scalar.def)
+        expect(def.kind === 'object' && def.body.rest).toBe(scalar.def)
         expect(codecOfTerm(termOf(scalar)).encode('x' as never)).toEqual(
             scalar.encode('x'),
         )
@@ -262,18 +247,22 @@ describe('the rest policy a definition records', () => {
     })
 
     it('agrees with the policy the item codec reports', () => {
-        const built = object({ id: string })
-        expect(built.def.kind === 'object' && built.def.body.rest).toBe(
-            built.item.rest,
+        const closed = object({ id: string })
+        expect(closed.item.rest).toBe('refuse')
+        expect(closed.def.kind === 'object' && closed.def.body.rest).toBe(
+            undefined,
+        )
+        const open = object({ id: string }, [string, optional(string)])
+        expect(open.def.kind === 'object' && open.def.body.rest).toBe(
+            termOf(open.item.rest),
         )
     })
 
     /**
      * The defect, as a consumer would have met it: two specs differing only in a *nested* policy.
      *
-     * Before the fix both definitions walked to the same value, so nothing downstream could choose
-     * between `Rest.drop` and `Rest.refuse` — and reaching for `.item` is not available here,
-     * because a definition walk hands out a term, and a term has no `.item`.
+     * A definition walk hands out a term, and a term has no `.item`, so the term alone must say
+     * whether the nested body is closed.
      *
      * The walk is one step shorter than it was: a field holds the child's *term*, so descending
      * into a nested object is a field lookup rather than a field lookup and then a `.def` read.
@@ -288,7 +277,7 @@ describe('the rest policy a definition records', () => {
         }
 
         expect(restOfNested(object({ inner: object({ id: string }) }))).toBe(
-            'refuse',
+            undefined,
         )
     })
 })
