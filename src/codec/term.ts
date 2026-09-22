@@ -1131,13 +1131,26 @@ const objectMembers = (
  * {@link clauseForm} is the descent, so an adapter that declares no `writes` pins nothing here and
  * is never certified.
  */
-const carrierDisjoint = (x: Term, y: Term): boolean => {
+const carrierDisjoint = (x: Term, y: Term): boolean =>
+    sharedLiterals(x, y)?.length === 0
+
+/**
+ * **The values two pinned options both carry**, or `undefined` where one of them pins none.
+ *
+ * `union` asks again on the path it is about to throw on, so a refusal can name the values that
+ * caused it rather than the slot they happen to share. That is the same walk {@link meet} is asked
+ * to repeat for the same reason.
+ */
+export const sharedLiterals = (
+    x: Term,
+    y: Term,
+): readonly LiteralValue[] | undefined => {
     const xs = clauseForm(x)
     const ys = clauseForm(y)
-    if (!xs || !ys) return false
+    if (!xs || !ys) return undefined
     const theirs = ys.alts.ls as readonly LiteralValue[]
-    return (xs.alts.ls as readonly LiteralValue[]).every(
-        (one) => !theirs.some((other) => sameLiteral(one, other)),
+    return (xs.alts.ls as readonly LiteralValue[]).filter((one) =>
+        theirs.some((other) => sameLiteral(one, other)),
     )
 }
 
@@ -1149,9 +1162,15 @@ const carrierDisjoint = (x: Term, y: Term): boolean => {
  * A caller's value reaches those sets through `f`, so two *different* `f`s could carry one value
  * into both sets and disjointness would certify nothing. Every `number(…)` shares one `asFloat` and
  * every `decimal(…)` one `storedOnly`, so the identity is the reference.
+ *
+ * **Two bare terms share the identity**, which is one conversion by the same argument: `string('a')`
+ * and `string('b')` carry the caller's value to itself, so disjoint alternatives are disjoint
+ * admissions. A bare term beside an adapter does not, because the identity and `f` are two.
  */
 const sameConversion = (x: Term, y: Term): boolean =>
-    x.kind === 'held' && y.kind === 'held' && x.f === y.f
+    x.kind === 'held' || y.kind === 'held'
+        ? x.kind === 'held' && y.kind === 'held' && x.f === y.f
+        : true
 
 export const separable = (x: Term, y: Term): boolean => {
     // **Containment before the object exemption.** The three {@link restricts} rows name a literal,
@@ -1164,26 +1183,39 @@ export const separable = (x: Term, y: Term): boolean => {
         return xs.every((a) => ys.every((b) => !structuralMeet(a, b)))
     }
     if (x.kind === 'object' || y.kind === 'object') return true
-    if (identifies(x) || identifies(y)) return true
     const writable = meet(occV(x), occV(y))
     const readable = meet(occA(x), occA(y))
     if (writable === undefined && readable === undefined) return true
     /**
-     * **Two options pinned to disjoint values under one carrier.** `decimal` is an adapter over
-     * `number` since `8a2eed9`, so a numeric literal and a decimal literal share a stored
-     * attribute and `occA` meets for every such pair. The occupancies are the right answer about
-     * *where* the two write and read, and the wrong answer about *what*: the values decide, and
-     * {@link carrierDisjoint} is what the model's `Orth` asks of them.
+     * **Where both options pin a set of values, the values decide.**
      *
-     * The two sides part company. A stored attribute lies in at most one of two disjoint sets, so
-     * disjointness alone settles the read side. The write side reaches those sets through `f`, so
-     * it settles only where one `f` runs for both.
+     * The occupancies answer *where* two options write and read, which is right, and they are
+     * silent about *what*, which is the question `Orth` asks. Two options that each name their own
+     * values meet exactly where those value sets meet, so a pair sharing a slot is separable when
+     * the sets are disjoint and is separable by nothing when they are not. That holds under an
+     * adapter and over a bare base alike: `number(0, 1)` and `decimal('2', '3')` are
+     * `dynamoNumber(0, 1)` and `dynamoNumber(2, 3)` beneath one carrier, and `string('a')` and
+     * `string('b')` are already themselves.
+     *
+     * **The two sides part company, and only the write side needs the conversion.** A stored
+     * attribute lies in at most one of two disjoint sets whatever `g` does. A caller's value
+     * reaches those sets through `f`, so two different conversions could carry one value into both
+     * and disjointness would certify nothing.
+     *
+     * This runs ahead of {@link identifies}, which is the unary reading of the same idea and
+     * cannot state it: "each option knows its own values" does not say the two sets differ. The
+     * short-circuit stays for the rows below it, where an option decides its own values through a
+     * closure or a subterm and names no set to compare.
      */
-    const disjoint = carrierDisjoint(x, y)
-    return (
-        (writable === undefined || (sameConversion(x, y) && disjoint)) &&
-        (readable === undefined || disjoint)
-    )
+    const pinned = clauseForm(x) && clauseForm(y)
+    if (pinned) {
+        const disjoint = carrierDisjoint(x, y)
+        return (
+            (writable === undefined || (sameConversion(x, y) && disjoint)) &&
+            (readable === undefined || disjoint)
+        )
+    }
+    return identifies(x) || identifies(y)
 }
 
 /**
