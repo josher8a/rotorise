@@ -26,7 +26,7 @@ import type {
     AttributeValue,
     StoredItem,
 } from './attribute'
-import { memberOf } from './attribute'
+import { DynamoNumber, memberOf } from './attribute'
 import type { LiteralValue, Option, Shape } from './codec'
 import type { Result } from './result'
 import { CodecError, failed } from './result'
@@ -155,13 +155,22 @@ export const expect = <K extends AttributeName>(
         : (carried as AttributeCarriesOf<K>)
 }
 
-/** Two alternatives, compared the way the base compares them: bytes for `binary`, `===` otherwise. */
+/**
+ * Two alternatives, compared the way the base compares them: bytes for `binary`, digits for
+ * `number`, `===` otherwise.
+ *
+ * The two object carriers need a case each, because `===` on them is reference identity and an
+ * alternative a caller wrote is never the same object as the value that arrives. `DynamoNumber`
+ * normalises at construction, so comparing the digits is comparing the numbers.
+ */
 export const sameLiteral = (one: LiteralValue, other: unknown): boolean =>
     one instanceof Uint8Array
         ? other instanceof Uint8Array &&
           one.length === other.length &&
           one.every((byte, at) => byte === other[at])
-        : one === other
+        : one instanceof DynamoNumber
+          ? other instanceof DynamoNumber && one.digits === other.digits
+          : one === other
 
 /**
  * An alternative as a message names it: text in quotes, digits bare, bytes in hex.
@@ -176,7 +185,9 @@ export const namedLiteral = (one: unknown): string =>
         ? `'${one}'`
         : one instanceof Uint8Array
           ? `0x${[...one].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
-          : rendered(one)
+          : one instanceof DynamoNumber
+            ? one.digits
+            : rendered(one)
 
 /**
  * Whether this stand-in has to be *copied* on each read that uses it, decided once.

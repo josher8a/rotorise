@@ -407,11 +407,16 @@ const shippedPredicates: ReadonlyMap<unknown, ShippedPredicate> = new Map<
  */
 const writesOnlyStrings = (t: Term | undefined): boolean => {
     if (!t) return false
-    if (t.kind === 'string' || t.kind === 'decimal') return true
-    // read off the base rather than off the values, which is the same change the definition made:
-    // a `decimal` literal's alternatives are text, and so is what it writes
+    if (t.kind === 'string') return true
+    // an adapter answers from what it declared: `decimal` hands the caller text, so a refinement
+    // outside it tests a string even though the base beneath writes a numeral
+    if (t.kind === 'held') {
+        return t.writes?.every((slot) => slot === 'string') ?? false
+    }
+    // read off the base rather than off the values. `decimal` was the second base writing text
+    // and is an adapter over `number` now, so `string` is the only one left
     if (t.kind === 'literal') {
-        return t.base === 'string' || t.base === 'decimal'
+        return t.base === 'string'
     }
     if (t.kind === 'refine') return writesOnlyStrings(t.inner)
     // `string('1', '2')` is a union of literals, and a union writes only strings exactly where
@@ -490,29 +495,24 @@ export const leanTermOf = (
  * membership predicate over exactly the pair the term carries, which is what makes a `members`
  * predicate printable where a closure never will be.
  */
-const leanAlternative = (
-    base: Literal['base'],
-    one: unknown,
-    at: string,
-): string => {
+const leanAlternative = (base: Literal['base'], one: unknown): string => {
+    // **A numeric literal is emittable, and it was not.** `GroundKind.number` carried an axiom
+    // with no closed terms, so no alternative at it could be written down. It carries
+    // `WFNumeral` now, which is a numeral text with its own well-formedness proof, and
+    // `WFNumeral.of` discharges that proof by `decide` at elaboration.
     if (base === 'number') {
-        return refuse(
-            at,
-            'a numeric literal sits at `GroundKind.number`, whose carrier is `Double`',
-        )
+        return `(WFNumeral.of ${leanString(String(one))})`
     }
     return base === 'boolean'
         ? String(one)
         : base === 'binary'
           ? leanBytes(one as Uint8Array)
-          : base === 'decimal'
-            ? `⟨${leanString(one as string)}, by decide⟩`
-            : leanString(one as string)
+          : leanString(one as string)
 }
 
 /** One literal, as the base and the one inhabitant of its carrier. */
-const leanLiteral = (literal: Literal, at: string): string =>
-    `GroundKind.${literal.base} ${leanAlternative(literal.base, literal.v, at)}`
+const leanLiteral = (literal: Literal): string =>
+    `GroundKind.${literal.base} ${leanAlternative(literal.base, literal.v)}`
 
 /**
  * …and a set of alternatives, which `Pred.members` still carries.
@@ -526,7 +526,7 @@ const leanGround = (alts: Alternatives, at: string): string => {
     // the checker can do on its own, and `as` here would only hide it doing so
     const alternatives: readonly LiteralValue[] = alts.ls
     return `GroundKind.${base} (${leanNonEmptySet(
-        [...new Set(alternatives)].map((one) => leanAlternative(base, one, at)),
+        [...new Set(alternatives)].map((one) => leanAlternative(base, one)),
         at,
     )})`
 }
@@ -603,8 +603,6 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
     switch (t.kind) {
         case 'string':
             return 'Term.string'
-        case 'decimal':
-            return 'Term.decimal'
         case 'boolean':
             return 'Term.boolean'
         case 'binary':
@@ -621,7 +619,7 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
         case 'number':
             return 'Term.number'
         case 'literal':
-            return `Term.literal ${leanLiteral(t, at)}`
+            return `Term.literal ${leanLiteral(t)}`
         /**
          * `Term.set` is indexed by a **`SetBase`**, and by the time the printer sees one it holds a
          * base rather than an element term.
@@ -726,11 +724,22 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
             }
             return `Term.refine (${leanTermOfTerm(t.inner, `${at}.inner`, forced)}) ${q}`
         }
+        /**
+         * **An adapter this library ships is printed by name**, the way a recognised predicate
+         * is. `decimal` is `number` under the text adapter now, so refusing every `held` would
+         * take every decimal vector with it.
+         *
+         * A caller's pair is still refused, and so is the float adapter, for a reason that is not
+         * about closures: `Value` carries no float, so the conversion would be numeral to numeral
+         * and its content is binary64 rounding. That is the host axiom this development deleted.
+         */
         case 'held':
-            return refuse(
-                at,
-                '`Term.held` carries two `Value → Value` functions; this one carries a pair of closures, and this library ships no adapters of its own to recognise — `held` is a combinator callers reach for and `codec.ts` never uses',
-            )
+            return t.via === 'decimalText'
+                ? `(Term.held ${leanTermOfTerm(t.inner, at, forced)} numeralOfStoredText textOfNumeral)`
+                : refuse(
+                      at,
+                      "`Term.held` carries two `Value → Value` functions. The library ships one pair the model names, `numeralOfStoredText`/`textOfNumeral`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted",
+                  )
         case 'legacy':
             return refuse(
                 at,

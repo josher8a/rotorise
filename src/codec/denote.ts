@@ -21,8 +21,8 @@
 import type { AttributeMap, AttributeName, AttributeValue } from './attribute'
 import {
     carrying,
+    DynamoNumber,
     isNumeral,
-    isStoredNumeral,
     memberOf,
     tooDeeplyNested,
 } from './attribute'
@@ -47,9 +47,9 @@ import type { Body, Field, Literal, NameLiteral, Predicate, Term } from './term'
 import {
     alternativesTerm,
     alwaysWritten,
-    literalAlternatives,
     literalsOf,
     occV,
+    storedAlternatives,
     member as termMember,
 } from './term'
 import {
@@ -68,14 +68,12 @@ import {
 /**
  * Which member each base stores a literal in.
  *
- * Not injective: `number` and `decimal` both store `N`. That is exactly why the base has to be
- * recorded — the member cannot recover it, and neither can the JS type of the values, since a
- * `decimal` literal's alternatives are text.
+ * Injective again. `decimal` was the second base at `N`, and it is an adapter over `number` now
+ * rather than a base of its own, so the member recovers the base.
  */
 export const literalMember: { readonly [B in LiteralBase]: AttributeName } = {
     string: 'S',
     number: 'N',
-    decimal: 'N',
     boolean: 'BOOL',
     binary: 'B',
 }
@@ -83,9 +81,8 @@ export const literalMember: { readonly [B in LiteralBase]: AttributeName } = {
 /** Which kind of JS value each base's alternatives are — the mirror, and not the same partition. */
 export const literalShape: { readonly [B in LiteralBase]: Shape } = {
     string: 'string',
+    // a numeric alternative is a `DynamoNumber`, which is what the carrier is
     number: 'number',
-    // a decimal is held as a string and stored as `N`, which is the whole point of it
-    decimal: 'string',
     boolean: 'boolean',
     binary: 'binary',
 }
@@ -109,50 +106,17 @@ export const literalCodec = <T extends LiteralValue>(
     base: LiteralBase,
     allowed: readonly T[],
 ): AttributeCodec<T, AttributeValue> => {
-    const term = literalTermOf(base, allowed)
-
     /**
-     * **`ℓ ⊆ D`** — the premise on the numeric bases, and the defect that made it more than
+     * **`ℓ ⊆ D`** — the premise on the numeric base, and the defect that made it more than
      * bookkeeping. `literal(NaN)` produced `{ N: 'NaN' }` and `literal(1e400)` produced
      * `{ N: 'Infinity' }`, both reachable with no cast and both rejected by the service.
+     *
+     * **The carrier discharges it, and there is nothing left to check here.** A numeric
+     * alternative is a `DynamoNumber`, which cannot be built from a value the service refuses, so
+     * the refusal happens where the value is made. The `decimal` premise went the same way, and it
+     * was narrower still: a stored spelling is what the carrier normalises to.
      */
-    if (base === 'number') {
-        const outside = (allowed as readonly number[]).filter(
-            (one) => !isNumeral(String(one)),
-        )
-        if (outside.length) {
-            throw new CodecError(
-                `a numeric literal is stored as 'N', and ${outside
-                    .map(namedLiteral)
-                    .join(
-                        ', ',
-                    )} ${outside.length === 1 ? 'is not a number' : 'are not numbers'} DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
-            )
-        }
-    }
-
-    /**
-     * The same premise at `decimal`, and it is *narrower* than `number`'s, for the reason
-     * {@link decimal} gives: the service normalises what it accepts, and this codec's read side is
-     * the identity on the digits, so an alternative in any other form is one that could be written
-     * and would come back as a different string.
-     */
-    if (base === 'decimal') {
-        const outside = (allowed as readonly string[]).filter(
-            (one) => !isStoredNumeral(one),
-        )
-        if (outside.length) {
-            throw new CodecError(
-                `a decimal literal is stored as 'N' in the form DynamoDB returns, and ${outside
-                    .map(namedLiteral)
-                    .join(
-                        ', ',
-                    )} ${outside.length === 1 ? 'is' : 'are'} not: it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
-            )
-        }
-    }
-
-    return codecOfTerm<T, AttributeValue>(term)
+    return codecOfTerm<T, AttributeValue>(literalTermOf(base, allowed))
 }
 
 /**
@@ -191,12 +155,11 @@ const literalTerm = (base: LiteralBase, value: LiteralValue): Literal => {
     }
     switch (base) {
         case 'string':
-        case 'decimal':
             return typeof value === 'string'
                 ? { kind: 'literal', base, v: value }
                 : wrong()
         case 'number':
-            return typeof value === 'number'
+            return value instanceof DynamoNumber
                 ? { kind: 'literal', base, v: value }
                 : wrong()
         case 'boolean':
@@ -270,13 +233,12 @@ const refusedBy = (q: Predicate, value: unknown): CodecError => {
     }
 }
 
-/** The wire set and the element member a set base stores — four bases onto three wire sets. */
+/** The wire set and the element member a set base stores — three bases onto three wire sets. */
 const setWire: {
     readonly [B in SetBase]: readonly ['S' | 'N' | 'B', 'SS' | 'NS' | 'BS']
 } = {
     string: ['S', 'SS'],
     number: ['N', 'NS'],
-    decimal: ['N', 'NS'],
     binary: ['B', 'BS'],
 }
 
@@ -318,7 +280,7 @@ export const assignmentOf = (
         }
         // a union of same-base literals is what `string('a', 'b')` builds, and it names as many
         // tags as it has options — which the arity refusal below is what answers
-        const alts = literalAlternatives(field.t)
+        const alts = storedAlternatives(field.t)
         if (
             alts === undefined ||
             alts.base === 'boolean' ||
@@ -1364,38 +1326,6 @@ export const denote = (def: Term): Pair => {
             }
         }
         /**
-         * §3 `(decimal)`. The held set is §1's `Numerals` and not every string: the grammar, the
-         * 38 significant digits and the magnitude range are checked on **both** halves.
-         * `lawful_decimalCodec` is its own lemma, and the model gives the read side's check the
-         * same reason this one has — an ill-formed numeral admitted by `p` would name a value `e`
-         * then refuses, and that is **(C)** failing.
-         *
-         * This is the term whose *value* is text and whose *member* is `N`, which is why §5 has it
-         * writing `.str` while storing `N`, and why the write occupancy of `set(decimal)` is a set
-         * of strings. The row carries the value across unchanged; only the member differs.
-         *
-         * `isStoredNumeral` stringifies what it is given — `isStoredNumeral(['1'])` is `true` — so
-         * the kind is checked first, which is what the term's `decimal` row says and what this row
-         * did not say before it moved here.
-         */
-        case 'decimal':
-            return {
-                encode: (value: unknown) =>
-                    typeof value === 'string' && isStoredNumeral(value)
-                        ? carrying('N', value)
-                        : new CodecError(
-                              `'${rendered(value)}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
-                          ),
-                decode: (attribute) =>
-                    andThen(expect('N', attribute), (carried) =>
-                        isStoredNumeral(carried)
-                            ? carried
-                            : new CodecError(
-                                  `'${carried}' is not a numeral in the form DynamoDB stores, so this attribute was not written by it`,
-                              ),
-                    ),
-            }
-        /**
          * §3 `(number)`. The held set is `D` — §1's numeral domain — and not every double, so
          * both halves gate. `lawful_numberCodec` is its own lemma rather than the ground one's,
          * and the model's row is written out for the same reason this one is.
@@ -1408,31 +1338,24 @@ export const denote = (def: Term): Pair => {
          */
         case 'number':
             return {
-                // `value.toString()` is defined on everything, so the numeral gate alone accepted
-                // the *string* `'5'` as readily as the number `5`. The `number` row asks the
-                // kind first; so does this
-                // annotated `unknown` rather than left to infer `never` from {@link Pair}: the
-                // erased pair says a caller may pass anything, and this row narrows what it is
+                // **The carrier is `DynamoNumber`**, which proves the numeral gate at construction
+                // and is already in the spelling the store returns, so this row asks the kind and
+                // nothing else. It is DynamoDB's own `N` and the one native numeric term;
+                // `number` and `decimal` are adapters over it and carry their own conversions
                 encode: (value: unknown) =>
-                    typeof value === 'number' && isNumeral(value.toString())
-                        ? carrying('N', value.toString())
+                    value instanceof DynamoNumber
+                        ? carrying('N', value.digits)
                         : new CodecError(
-                              `${rendered(value)} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
+                              `${rendered(value)} is not a DynamoNumber; build one with DynamoNumber.from or DynamoNumber.fromNumber`,
                           ),
                 decode: (attribute) =>
-                    andThen(expect('N', attribute), (carried) => {
-                        if (!isNumeral(carried)) {
-                            return new CodecError(
-                                `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
-                            )
-                        }
-                        const read = Number(carried)
-                        return isNumeral(read.toString())
-                            ? read
+                    andThen(expect('N', attribute), (carried) =>
+                        isNumeral(carried)
+                            ? DynamoNumber.from(carried)
                             : new CodecError(
-                                  `'${carried}' reads back as ${read}, which is outside the range DynamoDB stores`,
-                              )
-                    }),
+                                  `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
+                              ),
+                    ),
             }
         /**
          * **The `NULL` point, and it is not a {@link groundCodec} here.** The reason is this
