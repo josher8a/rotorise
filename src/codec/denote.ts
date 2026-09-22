@@ -1769,11 +1769,13 @@ export const readsBack = (
 const namedKind = (t: Term): string =>
     t.kind === 'opaq'
         ? 'opaque'
-        : t.kind !== 'held' || t.writes === undefined
-          ? t.kind
-          : (heldBase(t.inner) ?? undefined) !== undefined
-            ? literalForm(heldBase(t.inner) as LiteralBase, t.writes)
-            : t.writes.join(' | ')
+        : t.kind === 'literal'
+          ? `${literalForm(t.base, undefined)}(${namedLiteral(t.v)})`
+          : t.kind !== 'held' || t.writes === undefined
+            ? t.kind
+            : (heldBase(t.inner) ?? undefined) !== undefined
+              ? literalForm(heldBase(t.inner) as LiteralBase, t.writes)
+              : t.writes.join(' | ')
 
 /** The ground base a declared adapter carries, where it carries one. @see {@link namedKind} */
 const heldBase = (t: Term): LiteralBase | undefined =>

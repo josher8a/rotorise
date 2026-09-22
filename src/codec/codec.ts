@@ -62,6 +62,7 @@ import {
     restricts,
     separable,
     setBaseOf,
+    sharedLiterals,
 } from './term'
 
 /**
@@ -5184,6 +5185,16 @@ export const union = <const Options extends readonly AnyCodec[]>(
             if (narrow) {
                 throw new CodecError(
                     `${narrow[0].describe} admits only values that ${narrow[1].describe} also admits, so no value can ever select it and the option can never be chosen. Remove it; a discriminator does not fix this`,
+                )
+            }
+            // **The values, before the slots.** Where both options pin a set of values, the
+            // values are what refused them and the slot they share is incidental — two `string`
+            // literals always share `S`, and that says nothing about whether they are resolvable.
+            // So this names what actually meets.
+            const shared = sharedLiterals(x, y)
+            if (shared?.length) {
+                throw new CodecError(
+                    `${first.describe} and ${second.describe} both carry ${shared.map(namedLiteral).join(', ')}, so no value and no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,
                 )
             }
             // the label the refusal names, asked again on the path that is about to throw:
