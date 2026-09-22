@@ -1396,19 +1396,8 @@ theorem Adm_and_false {x y : Term} (h : Orth1 x y = true) (v : Value) :
 /-! The four whose admission is a function. On the left they refuse at every partner but the
     bottom; on the right the same, and the left rows fire first so only `never` needs naming. -/
 
-/-- …in the form the set rows leave, where the element is what refutes the vacuous reading. -/
-theorem NEFinset.not_forall_notMem {α : Type} (S : NEFinset α) : ¬ ∀ a, a ∉ S.1 :=
-  fun hall => S.2.elim (fun a ha => hall a ha)
-
-/-- **A row that admits nothing cannot pass a nonempty carrier.** Stated as a `simp` lemma
-    rather than left to a tactic: the set rows reduce to exactly this shape whenever two bases
-    occupy different wire slots, and since the numeric carriers merged that is most of them. -/
-theorem decide_forall_false {α : Type} (S : NEFinset α) :
-    decide (∀ a ∈ S.1, (false : Bool) = true) = false :=
-  decide_eq_false fun hall =>
-    absurd (fun a ha => Bool.noConfusion (hall a ha)) (NEFinset.not_forall_notMem S)
-
-/-- …and a key set the same way. -/
+/-- **A key set's row splits where its body is a conjunction**, which is the shape the object
+    rows leave. Named rather than left to a tactic, for the reason the set rows give. -/
 theorem decide_forall_and {α : Sort*} {p q r : α → Bool}
     [Decidable (∀ k, r k = true)] [Decidable (∀ k, p k = true)] [Decidable (∀ k, q k = true)]
     (h : ∀ k, r k = (p k && q k)) :
@@ -2394,7 +2383,9 @@ theorem Adm_famLit (k : GroundKind) (lv : k.Carrier) : AdmFam (.literal k lv) (f
   case opaq l => simp [famLit] at h
   all_goals fam_never famLit
 
-/-- Two set bases meet where they are equal, refusing the three that share a wire slot. -/
+/-- Two set bases meet where they are equal, and at the bottom wherever they occupy different
+    wire slots. `famSet` refuses the rest, so every unequal row that reaches here has disjoint
+    occupancy and `Adm_never_orth` is the whole argument, as it is for every other family. -/
 theorem Adm_famSet (b : SetBase) : AdmFam (.set b) (famSet b) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
@@ -2404,9 +2395,7 @@ theorem Adm_famSet (b : SetBase) : AdmFam (.set b) (famSet b) := by
         (try subst h) <;>
         first
           | simp
-          | (cases v <;>
-              simp_all [Adm, SetBase.adm, isStored, inD, -Classical.not_forall] <;>
-              (intros; exact NEFinset.not_forall_notMem _))
+          | exact Adm_never_orth (by decide) v
   case opaq l => simp [famSet] at h
   all_goals fam_never famSet
 
@@ -5291,9 +5280,7 @@ theorem admA_famLit (k : GroundKind) (lv : k.Carrier) :
                 | (refine bottom_row (fun a => ?_)
                    first
                      | exact AdmALit_never_of_ne (by assumption) a
-                     | (cases a <;> simp_all [AdmA, AdmALit, inL, inD, isStored,
-                          literalCodec_p_restrict, Codec.restrict, baseCodec, decimalCodec,
-                          numberCodec, stringCodec, booleanCodec, binaryCodec, nullCodec]))))
+                     | exact Eq.trans rfl (AdmA_and_false (by first | rfl | decide) a).symm)))
   case string | number | decimal | boolean | binary | null =>
       cases k <;>
         simp only [famLit, reduceCtorEq, reduceIte, Option.some.injEq] at h <;>
@@ -5304,8 +5291,7 @@ theorem admA_famLit (k : GroundKind) (lv : k.Carrier) :
              | false => simp
              | true => rw [AdmA_base_of_literal rfl hx]; simp)
           | (refine bottom_row (fun a => ?_)
-             cases a <;> simp_all [AdmA, AdmALit, inL, inD, isStored, literalCodec,
-               Codec.restrict, baseCodec, decimalCodec])
+             exact Eq.trans rfl (AdmA_and_false (by first | rfl | decide) a).symm)
   case opaq l => simp [famLit] at h
   all_goals admA_never famLit
 
