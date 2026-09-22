@@ -90,28 +90,65 @@ attribute that is absent and an attribute holding an undefined value are differe
 
 ---
 
-## Known: the differential corpus pins no numeric value, and the emitter still writes a decimal as text
+## Partially mitigated: the corpus pins a numeric set and no scalar numeric value
 
-**Observation.** The obstruction this entry used to record is gone. `Value.num` carries a
-`WFNumeral`, the numeric host axiom is deleted, and the advertised base is Lean's own three. A
-closed numeric value is one literal: `Value.num (WFNumeral.of "1.5")`. `Adm .number` on it, and the
-three read-side rows this entry called stuck, all answer by `decide`.
+**Observation.** This entry recorded an obstruction and then outlived it. `Value.num` carried the
+deleted host float type, an axiom with no closed terms, so no numeric value could appear in a
+vector at all. It carries a `WFNumeral` now: the digits are the value, so a numeral is a closed
+term and `leanValueOf` emits `Value.num (WFNumeral.of "1.5")` for a `DynamoNumber`.
 
-**Effect.** The blind spot survives its cause. The emitted corpus holds 37 `Term.number` rows and
-every one is a refusal; no vector carries a `Value.num` or a `.numSet`, so nothing pins the numeric
-write path. That is now a gap in the emitter rather than a consequence of the calculus.
+**What closed.** The set half. A set vector at `dynamoNumber.set()` joined `sampleVectors`, and
+`Value.numSet` appears in five gate artifacts — twice in each committed sample, 37 times in
+`.vectors.full.lean`, once in `.readvectors.lean` and twelve times in `.resolutions.lean`.
+`leanValueOf` also stopped emitting `Value.map {"digits"}` for a `DynamoNumber`, which the record
+row did because it read the carrier's own field; that would have put a false vector in front of
+the kernel had any corpus value reached it.
 
-**And the emitter still carries the conflation the calculus closed.** `src/codec/lean.ts` writes a
-`decimal` scalar as text, so the row pairing `number` against `decimal` feeds `Value.str "1.5"`.
-Its prose says `Value.num` has no closed inhabitant and can never appear in a vector, and its
-refusal message names the deleted host type. So the corpus tests the pre-merge model at every
-decimal row, and the refusals it records pass for a reason the calculus no longer gives.
+**Effect, and it is the scalar half.** `Value.num` appears **zero** times in every gate artifact.
+The numeric entry in the four corpus lists that cross codecs against each other is `dynamoNumber`,
+and it is not in `sampleVectors`, so no *write* vector carries a scalar numeric value. The read
+side is covered — `Attr.n` appears 182 times in `.readverdicts.lean` — so what is unpinned is one
+direction of one shape.
 
-**What remains.** Emitting a numeric value, and re-deciding the decimal rows against the merged
-carrier. Both change the corpus, so both are rulings rather than repairs.
+**Not the `decimal` conflation, which closed.** The emitter writes a `decimal` vector with
+`Value.str "1.5"`, and that is now correct rather than a conflation: `decimal` is `held` over the
+native with the text pair the model names, so the caller's value *is* text and the term says so.
+The refusal message that named the deleted host type says what is true instead.
 
-**Pin.** The 37 refusal rows are in the vector artifact the gate elaborates. The disproof of the
-old entry is `memory/probe_defect_numeric_stuck-2026-09-22.lean`.
+**Pin.** The set half is pinned by the set vector in `sampleVectors`, which the gate elaborates.
+The scalar half has no pin, and closing it means putting a scalar `dynamoNumber` vector in
+`sampleVectors` rather than only in the crossing lists.
+
+---
+
+## Known: three of the gate's eight vector artifacts do not elaborate
+
+**Observation.** `formal/scripts/gate.sh`'s vector-bridge step elaborates eight generated files and
+fails if any produces output. Five are clean: `lean.sample.check.lean`, `lean.sample.lean`,
+`.vectors.full.lean`, `.readverdicts.lean` and `.resolutions.lean`. Three are not, and the three
+fail for three different reasons.
+
+- `.meets.lean`, 101 errors, naming three declarations the model replaced: the rest-merge
+  function and the two object recursors the meet emitter still writes. `Meet.lean` records that
+  where the development read the first there is now a nine-cell table over three cases. This is
+  name drift in the meet emitter, the same class the object body carried until `ObjectSlot` was
+  written.
+- `.separations.lean`, 17 errors, all "Expected type must not contain free variables".
+- `.readvectors.lean`, 8 errors, "Type mismatch" and "Not a definitional equality".
+
+**Effect.** The bridge is dark for the meet, the separations and the read vectors. A generated
+theorem that does not elaborate proves nothing, so a change to any of the three goes unchecked —
+and this tree has recorded that failure before, where two sample files typechecked against no
+`Calculus/` for ten commits. `docs/roadmap.md` names this as the reason the term language is not
+yet rebuilt: while the artifacts do not elaborate, a change to the constructor set lands unchecked.
+
+**Not measured at a baseline.** The meet drift is established: `Rest.merge` entered
+`src/codec/lean.ts` at `8b637b8` and no later pass touched it. The other two are recorded as
+observed today; nobody has measured whether their error counts moved, so this entry does not claim
+they are unchanged.
+
+**Pin.** The vector-bridge step of `gate.sh`, which gates on the exit code and reports every check
+rather than the first failure.
 
 ---
 
@@ -202,16 +239,29 @@ type answers no. Nothing in a codec's type says which constructor built it, so t
 question to ask there. Admission at run time reads the term instead, and a term is a literal only
 where a literal constructor made it.
 
-**Effect.** The two disagree on one shape. An adapter — a held codec, or a custom one — whose
-decode narrows to a literal type reads as pinning a literal at the type level and pins none at the
-term. Two object options with the same names, told apart only by such an adapter, pass the
-declaration gate and are then ambiguous on the first item, which is the failure the gate exists to
-move to the declaration. The refinement case is closed: the term reader walks through a refinement
-to the literal underneath, because a refinement of a literal admits a subset of that literal's
-alternatives.
+**Effect, and it runs the other way from what this entry used to say.** The two disagree on one
+shape. An adapter — a held codec, or a custom one — whose decode narrows to a literal type reads
+as pinning a literal at the type level and pins none at the term. This entry recorded the
+consequence as ambiguity on the first item. Measured, it is the opposite: the pair **typechecks
+and then refuses at construction**, with the message a pair carrying no discriminator gets.
 
-**Pin.** None. No test declares such a pair, and the disagreement is written at the type-level
-predicate rather than asserted anywhere.
+    union([object({ k: tagA, v: string }), object({ k: tagB, v: string })])
+      type checker: accepted
+      runtime:      refused, "{ k, v } and { k, v } both take the same kind of value — map"
+
+Both halves of the disagreement were checked: the type checker refuses the same shape written
+with a bare `string` at `k`, so the type-level gate is discriminating and simply reads the wrong
+thing; and the same pair told apart by two `decimal` literals — a *library* adapter, which
+declares its write slots — refuses at construction too, so descending a declared adapter in the clause readers did
+not reach this path. `structuralMeet` asks `literalsOf`, which answers at the caller's level and
+pins nothing under any adapter.
+
+So the failure is an over-refusal against the type rather than an under-refusal against the item:
+a caller gets a green typecheck and a throw. The refinement case is closed, because the term
+reader walks through a refinement to the literal underneath.
+
+**Pin.** None. No test declares such a pair. The disagreement is written at the type-level
+predicate, and the runtime half is stated by no assertion.
 
 **Fix direction.** The type-level test has to read the constructor rather than the decoded type,
 which needs a codec's type to carry which constructor built it. It does not today. Widening the
