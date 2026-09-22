@@ -1312,8 +1312,16 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
     if (x.kind === 'literal') return literalAgainstBase(x, y)
     if (y.kind === 'literal') return literalAgainstBase(y, x)
     if (x.kind === 'list' && y.kind === 'list') return meetLists(x, y)
-    if (x.kind === 'record' && y.kind === 'record')
-        return mapped(x.val, y.val, valueOf)
+    // **A record against a body refuses.** The model's `record` is an object whose open block holds
+    // every name, and `objObj` refuses a pair unless both open blocks are absent: an open factor
+    // holds an undeclared name through its own codec, and a product would hold it through both.
+    // A record against a body that is not an object falls through to the bottom, as `famObj` does
+    if (
+        (x.kind === 'record' || y.kind === 'record') &&
+        (x.kind === 'record' || x.kind === 'object') &&
+        (y.kind === 'record' || y.kind === 'object')
+    )
+        return undefined
     if (x.kind === 'set' && y.kind === 'set') {
         // every set base is disjoint from every other on both halves now, so two unequal ones
         // meet at the bottom and none of them refuses. `set string` against `set decimal` was the
@@ -1322,12 +1330,6 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
     }
     if (x.kind === 'opaq' && y.kind === 'opaq')
         return { kind: 'opaq', lossy: x.lossy && y.lossy }
-    // an object against a record holds every name through one codec on one side and through a
-    // declared field on the other, so only a `codec` rest meets a record
-    if (x.kind === 'object' && y.kind === 'record')
-        return meetBodyRecord(x.body, y.val, false)
-    if (y.kind === 'object' && x.kind === 'record')
-        return meetBodyRecord(y.body, x.val, true)
     if (x.kind === 'object' && y.kind === 'object')
         return meetBodies(x.body, y.body)
     // **`opaque` against a ground base.** It admits every value of every self-identifying kind, so
@@ -1385,17 +1387,6 @@ const ofOptions = (ts: readonly Term[]): Term =>
         : ts.length === 1
           ? (ts[0] as Term)
           : { kind: 'union', options: ts }
-
-const valueOf = (val: Term): Term => ({ kind: 'record', val })
-
-const mapped = (
-    a: Term,
-    b: Term,
-    of: (inner: Term) => Term,
-): Term | undefined => {
-    const z = meetTerms(a, b)
-    return z === undefined ? undefined : of(z)
-}
 
 const overRefinement = (
     inner: Term,
@@ -1710,37 +1701,6 @@ const meetBodies = (a: Body, b: Body): Term | undefined => {
         : { kind: 'object', body: { fields, rest } }
 }
 
-/**
- * **An object against a record.** Only a `codec` rest reads an undeclared name the way a record
- * does, so the other two refuse; the record's value term meets every declared field and the rest's
- * own codec. The mark survives, because the value term says what every name holds and says nothing
- * about whether a name is present.
- *
- * `valLeft` says which of the two terms the caller had on the left, and every cell puts that one
- * on the left of `meetTerms`. A refinement nests in argument order, so the two orders build
- * different terms out of the same pair.
- */
-const meetBodyRecord = (
-    body: Body,
-    val: Term,
-    valLeft: boolean,
-): Term | undefined => {
-    const rest = body.rest
-    if (typeof rest !== 'object') return undefined
-    const held = valLeft ? meetTerms(val, rest.t) : meetTerms(rest.t, val)
-    if (held === undefined) return undefined
-    const fields: Record<string, Field> = {}
-    for (const [name, field] of Object.entries(body.fields)) {
-        if (field.mark === 'fallback' || field.mark === 'undefinable')
-            return undefined
-        const met = valLeft ? meetTerms(val, field.t) : meetTerms(field.t, val)
-        if (met === undefined) return undefined
-        fields[name] = { mark: field.mark, t: met }
-    }
-    return Object.values(fields).some(isBottomField)
-        ? never
-        : { kind: 'object', body: { fields, rest: { kind: 'codec', t: held } } }
-}
 /**
  * Which of the four set bases a term's values sit at, or `undefined` where the term is not one.
  *

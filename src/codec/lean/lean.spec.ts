@@ -856,13 +856,9 @@ export const sampleVectors: readonly Vector[] = [
         value: { a: { b: 'x' } },
     },
     /**
-     * **The record∧object cell, with a refinement on either side.** Every row of the meet keeps
-     * the left operand on the left, and `Term.refineOf z p` is `z.refine p`, so two refinements
-     * nest in argument order: the pair answers `refine (refine z q') q` one way and the two
-     * predicates the other way round the other. These two vectors are the only pair in the corpus
-     * that reaches that cell with a refinement on both sides. The two predicates differ on
-     * purpose: with one predicate on both sides the two nestings are the same term and the bridge
-     * sees nothing, which is how the first version of this pair was found to assert nothing.
+     * **A record and an open object, each with a refinement.** Both meet a record or an object at
+     * `none`, because the model's `objObj` refuses a pair unless both open blocks are absent. The
+     * bridge asserts that refusal in both orders.
      */
     {
         name: 'record_of_restricted_set',
