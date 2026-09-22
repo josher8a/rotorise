@@ -68,18 +68,18 @@ theorem lawful_nullCodec : Lawful nullCodec :=
 
 /-- `e` and `p` gate on the *same* predicate applied to the *same* text, so each law
     reduces to that one decision. -/
-theorem decimalCodec_e_dec (x : WFNumeral) :
-    decimalCodec.e (.dec x) = if Numeral.Stored x.1 then some (.n x) else none := rfl
+theorem decimalCodec_e_num (x : WFNumeral) :
+    decimalCodec.e (.num x) = if Numeral.Stored x.1 then some (.n x) else none := rfl
 
 theorem decimalCodec_p_n (x : WFNumeral) :
-    decimalCodec.p (.n x) = if Numeral.Stored x.1 then some (.dec x) else none := rfl
+    decimalCodec.p (.n x) = if Numeral.Stored x.1 then some (.num x) else none := rfl
 
 theorem lawful_decimalCodec : Lawful decimalCodec := by
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro t a he
     cases t with
-    | dec x =>
-      rw [decimalCodec_e_dec] at he
+    | num x =>
+      rw [decimalCodec_e_num] at he
       by_cases hw : Numeral.Stored x.1 = true
       · rw [if_pos hw] at he; cases he; rw [decimalCodec_p_n, if_pos hw]
       · rw [if_neg hw] at he; exact nomatch he
@@ -89,13 +89,13 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
     | n x =>
       rw [decimalCodec_p_n] at hp
       by_cases hw : Numeral.Stored x.1 = true
-      · rw [if_pos hw] at hp; cases hp; rw [decimalCodec_e_dec, if_pos hw]; rfl
+      · rw [if_pos hw] at hp; cases hp; rw [decimalCodec_e_num, if_pos hw]; rfl
       · rw [if_neg hw] at hp; exact nomatch hp
     | _ => exact nomatch hp
   · intro μ hμ t a he
     cases t with
-    | dec x =>
-      rw [decimalCodec_e_dec] at he
+    | num x =>
+      rw [decimalCodec_e_num] at he
       by_cases hw : Numeral.Stored x.1 = true
       · rw [if_pos hw] at he; cases he; cases hμ; rfl
       · rw [if_neg hw] at he; exact nomatch he
@@ -107,7 +107,7 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
       by_cases hw : Numeral.Stored x.1 = true
       · rw [if_pos hw] at hp
         cases hp
-        rw [decimalCodec_e_dec, if_pos hw] at he
+        rw [decimalCodec_e_num, if_pos hw] at he
         cases he
         exact .n ..
       · rw [if_neg hw] at hp; exact nomatch hp
@@ -118,29 +118,17 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
 The other side of `decimal`'s answer, and the reason §1 states the condition as an inclusion
 rather than as an equality. -/
 
-/-- §1: `number` survives the store for free. Its `p` factors through `ofDec`, so the digits
-    may be rewritten freely — the contrast with `ker_decimalCodec`, whose kernel is equality. -/
-theorem survivesStore_numberCodec {η : Attr → Attr}
-    (hη : ∀ x : WFNumeral, ∃ y : WFNumeral, η (.n x) = .n y ∧
-      Double.ofDec y.1 = Double.ofDec x.1) :
-    SurvivesStore numberCodec η := by
-  rintro a ⟨v, hv⟩
-  cases v with
-  | num d =>
-    rw [numberCodec_e_num] at hv
-    by_cases hw : Numeral.WF d.toDec = true
-    · rw [dif_pos hw] at hv
-      cases hv
-      obtain ⟨y, hy, hofd⟩ := hη ⟨d.toDec, hw⟩
-      show numberCodec.p (η (.n ⟨d.toDec, hw⟩)) = numberCodec.p (.n ⟨d.toDec, hw⟩)
-      rw [hy, numberCodec_p_n, numberCodec_p_n, hofd]
-    · rw [dif_neg hw] at hv; exact nomatch hv
-  | _ => exact nomatch hv
+/-! **~~survivesStore_numberCodec~~ is retired, and what killed it is worth stating.** It said
+`number` survives a normalising store for free, because its `p` factored through the host's
+`ofDec`: the store could rewrite the digits and the double read back the same. That was a
+property of the DOUBLE CARRIER, not of `number`. Carrying `N` exactly makes `numberCodec.p` a
+constructor wrapper, so its kernel is equality and a store that rewrites `"1.500"` to `"1.5"`
+moves the value.
 
-/-! ### `decimal` against the store (§1)
-
-`SurvivesStore` is the premise; these two are `decimal`'s answer to it, and together they say
-that narrowing the held set to `Numeral.Stored` was not merely *a* fix but the whole of one. -/
+So the two numeric terms no longer differ in how they meet the store. They differ in one thing,
+which is the thing they were always for: `decimal` gates at `Stored`, the store's own fixpoint,
+and `survivesStore_decimalCodec` below is that. `number` accepts everything §1 accepts and makes
+no promise about what comes back. -/
 
 /-- §1: `decimal`'s `ker p` is equality — its `p` is the identity on the digits. -/
 theorem ker_decimalCodec {x y : WFNumeral} (h : decimalCodec.Ker (.n x) (.n y))
@@ -149,7 +137,7 @@ theorem ker_decimalCodec {x y : WFNumeral} (h : decimalCodec.Ker (.n x) (.n y))
   rw [decimalCodec_p_n, decimalCodec_p_n, if_pos hx] at h'
   by_cases hy : Numeral.Stored y.1 = true
   · rw [if_pos hy] at h'
-    exact congrArg Subtype.val (Value.dec.inj (Option.some.inj h'))
+    exact congrArg Subtype.val (Value.num.inj (Option.some.inj h'))
   · rw [if_neg hy] at h'; exact nomatch h'
 
 /-- §1: `Can(decimal)` is the normal forms and a normalisation fixes its own, so `Stored`
@@ -159,8 +147,8 @@ theorem survivesStore_decimalCodec {η : Attr → Attr}
     SurvivesStore decimalCodec η := by
   rintro a ⟨v, hv⟩
   cases v with
-  | dec x =>
-    rw [decimalCodec_e_dec] at hv
+  | num x =>
+    rw [decimalCodec_e_num] at hv
     by_cases hs : Numeral.Stored x.1 = true
     · rw [if_pos hs] at hv
       cases hv
@@ -169,58 +157,27 @@ theorem survivesStore_decimalCodec {η : Attr → Attr}
     · rw [if_neg hs] at hv; exact nomatch hv
   | _ => exact nomatch hv
 
-/-- The `(number)` case — the one consuming the shortest-text axiom. -/
+/-- **The `(number)` case, and it no longer consumes an axiom.** `e` and `p` are mutually
+    inverse constructor wrappers over one carrier, so all four laws are `rfl` at the only
+    inhabited row. The shortest-text round trip this used to spend is not needed, because
+    there is no host spelling to round-trip through. -/
 theorem lawful_numberCodec : Lawful numberCodec := by
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro t a he
     cases t with
-    | num d =>
-      rw [numberCodec_e_num] at he
-      by_cases hw : Numeral.WF d.toDec = true
-      · rw [dif_pos hw] at he; cases he
-        rw [numberCodec_p_n]
-        show ((Double.ofDec (⟨d.toDec, hw⟩ : WFNumeral).1).bind
-          (fun e => if Numeral.WF e.toDec then some (Value.num e) else none)) = some (.num d)
-        rw [Double.roundtrip, Option.bind_some, if_pos hw]
-      · rw [dif_neg hw] at he; exact nomatch he
+    | num x => cases he; rfl
     | _ => exact nomatch he
   · intro a t hp
     cases a with
-    | n x =>
-      rw [numberCodec_p_n] at hp
-      cases hx : Double.ofDec x.1 with
-      | none => rw [hx] at hp; exact nomatch hp
-      | some d =>
-        rw [hx] at hp
-        replace hp : (if Numeral.WF d.toDec then some (Value.num d) else none) = some t := hp
-        by_cases hw : Numeral.WF d.toDec = true
-        · rw [if_pos hw] at hp; cases hp
-          rw [numberCodec_e_num, dif_pos hw]; rfl
-        · rw [if_neg hw] at hp; exact nomatch hp
+    | n x => cases hp; rfl
     | _ => exact nomatch hp
   · intro μ hμ t a he
     cases t with
-    | num d =>
-      rw [numberCodec_e_num] at he
-      by_cases hw : Numeral.WF d.toDec = true
-      · rw [dif_pos hw] at he; cases he; cases hμ; rfl
-      · rw [dif_neg hw] at he; exact nomatch he
+    | num x => cases he; cases hμ; rfl
     | _ => exact nomatch he
   · intro a t a' hp he
     cases a with
-    | n x =>
-      rw [numberCodec_p_n] at hp
-      cases hx : Double.ofDec x.1 with
-      | none => rw [hx] at hp; exact nomatch hp
-      | some d =>
-        rw [hx] at hp
-        replace hp : (if Numeral.WF d.toDec then some (Value.num d) else none) = some t := hp
-        by_cases hw : Numeral.WF d.toDec = true
-        · rw [if_pos hw] at hp; cases hp
-          rw [numberCodec_e_num, dif_pos hw] at he
-          cases he
-          exact .n ..
-        · rw [if_neg hw] at hp; exact nomatch hp
+    | n x => cases hp; cases he; exact .n ..
     | _ => exact nomatch hp
 
 theorem LawfulCore.through {c : Codec} (h : LawfulCore c) {f g : Value → Value}

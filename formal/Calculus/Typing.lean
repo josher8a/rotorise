@@ -55,18 +55,17 @@ abbrev Held := Value → Prop
 /-- `℘⁺fin(T)` — the nonempty finite subsets of `T` (§3 `(set)`). -/
 def HSet (T : Held) : Held := fun v =>
   (∃ S : NEFinset String, v = .strSet S ∧ ∀ s ∈ S.1, T (.str s)) ∨
-  (∃ S : NEFinset Double, v = .numSet S ∧ ∀ d ∈ S.1, T (.num d)) ∨
-  (∃ S : NEFinset WFNumeral, v = .decSet S ∧ ∀ x ∈ S.1, T (.dec x)) ∨
+  (∃ S : NEFinset WFNumeral, v = .numSet S ∧ ∀ d ∈ S.1, T (.num d)) ∨
   (∃ S : NEFinset Bytes,  v = .binSet S ∧ ∀ b ∈ S.1, T (.bin b))
 
 /-- The held set of a set's **base** — §3 `(set)`'s `T` premise, now a function of the
     index. Each is the ground rule's conclusion at that base, verbatim: `string` holds every
-    string, `number` §1's `D`, `decimal` §1's `Numerals` carried as strings, `binary` every
-    byte string. -/
+    string, `number` §1's `D`, which the carrier now IS, `decimal` the narrower `Stored`
+    numerals over the same carrier, `binary` every byte string. -/
 def SetBase.held : SetBase → Held
   | .string  => fun v => ∃ s, v = .str s
-  | .number  => fun v => ∃ d, v = .num d ∧ Numeral.WF d.toDec = true
-  | .decimal => fun v => ∃ x : WFNumeral, v = .dec x ∧ Numeral.Stored x.1 = true
+  | .number  => fun v => ∃ x : WFNumeral, v = .num x
+  | .decimal => fun v => ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true
   | .binary  => fun v => ∃ b, v = .bin b
 
 /-- The base's held set **is** its codec's, at every base — the four rows were transcribed
@@ -196,9 +195,10 @@ inductive HOpaque (lossy : Bool) : Value → Prop where
   | bool (b)  : HOpaque lossy (.bool b)
   | bin  (b)  : HOpaque lossy (.bin b)
   | null      : HOpaque lossy .null
-  /-- The `D` premise, for the reason `set` carries non-emptiness: a double `opaque` cannot
-      **write** has no `N` for its member to be recoverable from. -/
-  | num  (d) (h : lossy = true) (hw : Numeral.WF d.toDec = true) : HOpaque lossy (.num d)
+  /-- The `D` premise is GONE: the carrier is the well-formed numerals, so there is no
+      numeral `opaque` cannot write and nothing for a premise to exclude. The `lossy` flag
+      stays and is now the whole of the numeric row's content. -/
+  | num  (d) (h : lossy = true) : HOpaque lossy (.num d)
   /-- Non-emptiness carried no premise here any more, because `℘⁺fin` is the type. The
       argument for it stands and is worth keeping: an empty wire set is not writable, and
       its member would not be recoverable from the value anyway — you cannot tell `SS`
@@ -207,7 +207,7 @@ inductive HOpaque (lossy : Bool) : Value → Prop where
       and that witness is now unstatable. -/
   | strSet (S : NEFinset String)
       (h : ∀ s ∈ S.1, HOpaque lossy (.str s)) : HOpaque lossy (.strSet S)
-  | numSet (S : NEFinset Double)
+  | numSet (S : NEFinset WFNumeral)
       (h : ∀ d ∈ S.1, HOpaque lossy (.num d)) : HOpaque lossy (.numSet S)
   | binSet (S : NEFinset Bytes)
       (h : ∀ b ∈ S.1, HOpaque lossy (.bin b)) : HOpaque lossy (.binSet S)
@@ -223,12 +223,11 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- `number` holds `D` — §1's numeral domain — and not every double. The rule always
       concluded `⊢ number : D ⇝ N`; until `numberCodec` gated, the model's judgement said
       something weaker than the rule it was transcribing. -/
-  | number  : Typed .number (fun v => ∃ d, v = .num d ∧ Numeral.WF d.toDec = true) (some .N)
-  /-- `decimal` holds `Numerals`, carried as `dec` values, their own carrier and not the
-      wire's string (§1) — and `Numerals` is §1's
+  | number  : Typed .number (fun v => ∃ x : WFNumeral, v = .num x) (some .N)
+  /-- `decimal` holds the `Stored` numerals, the narrower half of `N` (§1) — and `Numerals` is §1's
       grammar, not every string. -/
   | decimal : Typed .decimal
-      (fun v => ∃ x : WFNumeral, v = .dec x ∧ Numeral.Stored x.1 = true) (some .N)
+      (fun v => ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true) (some .N)
   | boolean : Typed .boolean (fun v => ∃ b, v = .bool b) (some .BOOL)
   /-- §3 `(null)`: the point held set `{null}`, stored as `⟨NULL, ∗⟩`. -/
   | null : Typed .null (fun v => v = .null) (some .NULL)

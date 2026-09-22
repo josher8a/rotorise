@@ -35,17 +35,16 @@ open Lean Elab Command
 
 namespace Calculus
 
-/-- The sanctioned base: Lean's two propositional axioms, plus §1's numeric host, which is
-    axiomatized deliberately (IEEE-754 facts are not this calculus's theorems).
+/-- **The sanctioned base is Lean's own, and nothing else.** There is no numeric host axiom
+    here any more, because there is no host in the calculus: `N` is carried exactly, as
+    `WFNumeral`, so nothing is assumed about binary64 or about any other numeric type.
 
-    Four names where there were seven, and the shrinkage is not the point. `Double.toDec`,
-    `Double.ofDec`, `Double.roundtrip` and `Double.decEq` are now *theorems and definitions*
-    projecting out of `numericHost : NumericHost Double` (`Domain.lean`), so what this list
-    sanctions is one interface rather than five assertions that happen to fit together. That
-    it is an interface and not a disguised claim about binary64 is itself checked:
-    `numericHostWFNumeral` and `numericHostUnit` inhabit `NumericHost` at two types with
-    provably different decimal images (`numericHost_images_differ`), and the first is built
-    with no `Double` axiom at all.
+    ~~Calculus.Double~~ and ~~Calculus.numericHost~~ were the last two entries and both are
+    gone with the carrier they served. `NumericHost` survives in `Domain.lean` as the PORT's
+    obligation rather than this development's assumption, and `numericHostWFNumeral` inhabits
+    it at the exact carrier with no axiom at all. A target language that hands its own numeric
+    type to a caller adapts through that interface, and the adaptation is the implementor's
+    tradeoff rather than the calculus's.
 
     `Classical.choice` is here by more than one route. Mathlib resolves `k ∈ (s : Finset α)`
     through `Finset.instSetLike`, whose injectivity field is proved classically, and core
@@ -53,7 +52,7 @@ namespace Calculus
     `scripts/classical_gateways.txt` is the set of routes and `gate.sh` holds it. The axiom is
     computationally inert and the guard reads axioms transitively. -/
 def sanctionedAxioms : List Lean.Name :=
-  [``propext, ``Classical.choice, ``Quot.sound, `Calculus.Double, `Calculus.numericHost]
+  [``propext, ``Classical.choice, ``Quot.sound]
 
 /-- `#assert_axioms c` errors unless every axiom `c` depends on is in
     `Calculus.sanctionedAxioms`. -/

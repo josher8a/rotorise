@@ -547,12 +547,12 @@ exists only to carry the two theorems below — which is why it is here and not 
 `Prisms.lean` with the codecs the calculus uses. -/
 
 /-- `(literal)`'s prism at base `number`, over an ungated `ℓ` — §3's, not ours. -/
-noncomputable def inLNRule (ls : NEFinset Double) : Value → Bool
+noncomputable def inLNRule (ls : NEFinset WFNumeral) : Value → Bool
   | .num d => decide (d ∈ ls.1)
   | _ => false
 
 /-- §3's `(literal)` at `number`, transcribed with the rule's ungated `ℓ`. Not a `Term`. -/
-noncomputable def literalNRule (ls : NEFinset Double) : Codec :=
+noncomputable def literalNRule (ls : NEFinset WFNumeral) : Codec :=
   { numberCodec.restrict (inLNRule ls) with T := fun v => ∃ d ∈ ls.1, v = .num d }
 
 /-- **Drop `ℓᵢ ∈ T` and `(literal)` stops refining `number`.** An alternative outside `D` is

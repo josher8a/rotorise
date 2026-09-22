@@ -36,7 +36,7 @@ namespace Calculus
     selecting with one clause per alternative, which `mem_extract_or` below states.
 
     Four rows, and they are `altsDisj`'s four for `altsDisj`'s reasons: `number` declines because
-    `WFDouble`'s equality is a field of `numericHost`, and `null` because its carrier has one
+    the numeric carrier's equality came from an axiomatised host, and `null` because its carrier has one
     inhabitant, so a clause there would keep every member rather than select among them. A name
     pinned at one base against a clause at another is no match, which is the `_` row. -/
 def altsSub : Option Alts → Alts → Bool

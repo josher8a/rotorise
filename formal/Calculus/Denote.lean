@@ -152,9 +152,8 @@ noncomputable def inLs (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : 
 /-- **What a `Pred` means.** The type is in `Term.lean`, and the meaning is here, because `inL`
     is in `Prisms.lean` and `liftQ` in `Products.lean`, and `Term.lean` imports neither.
 
-    `noncomputable`, because `inL` is: the numeric base's carrier gate reaches `numericHost`.
-    That costs nothing new. `denote` is noncomputable for the same reason, and `Orth` never
-    calls this — a classifier reads a `Pred`'s constructors, which are data.
+    `noncomputable`, because `inL` is. `denote` is noncomputable for the same reason, and
+    `Orth` never calls this: a classifier reads a `Pred`'s constructors, which are data.
 
     **`members` keeps its `Finset`, and a literal no longer has one.** A refinement predicate is
     data over a set of alternatives; a literal is one value. `inLs` is the set form, built from

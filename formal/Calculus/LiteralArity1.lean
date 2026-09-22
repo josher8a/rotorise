@@ -58,16 +58,16 @@ theorem typedListμ_map_literal_str : ∀ (l : List String),
       show Typed (Term.literal .string s) (fun v => v = Value.str s) (some .S)
       exact Typed.literal .string s
 
-/-- …and of a numeric one, at `N`, with no premise: the list is a `List WFDouble`, so each
+/-- …and of a numeric one, at `N`, with no premise: the list is a `List WFNumeral`, so each
     element carries its own gate. -/
-theorem typedListμ_map_literal_num : ∀ (l : List WFDouble),
+theorem typedListμ_map_literal_num : ∀ (l : List WFNumeral),
     TypedListμ (l.map fun d => .literal .number d)
-      (l.map fun d => fun v => v = Value.num d.1)
+      (l.map fun d => fun v => v = Value.num d)
       (l.map fun _ => some Member.N)
   | [] => .nil
   | d :: rest => by
       refine .cons ?_ (typedListμ_map_literal_num rest)
-      show Typed (Term.literal .number d) (fun v => v = Value.num d.1) (some .N)
+      show Typed (Term.literal .number d) (fun v => v = Value.num d) (some .N)
       exact Typed.literal .number d
 
 /-! ## The member, the held set, and (D) -/
@@ -89,9 +89,9 @@ theorem hunion_map_literal_str (l : List String) :
   · rintro ⟨s, hs, rfl⟩; exact ⟨_, ⟨s, hs, rfl⟩, rfl⟩
 
 /-- …and at the numeric base. -/
-theorem hunion_map_literal_num (l : List WFDouble) :
-    HUnion (l.map fun d => fun v => v = Value.num d.1)
-      = fun v => ∃ d, d ∈ l ∧ v = .num d.1 := by
+theorem hunion_map_literal_num (l : List WFNumeral) :
+    HUnion (l.map fun d => fun v => v = Value.num d)
+      = fun v => ∃ d, d ∈ l ∧ v = .num d := by
   funext v
   simp only [HUnion, List.mem_map, eq_iff_iff]
   constructor
@@ -113,8 +113,8 @@ theorem dincomp_map_literal_str {l : List String} (hnd : l.Nodup) :
     exact (by simpa using h' : b = a).symm
 
 /-- …and the same at the numeric base. -/
-theorem dincomp_map_literal_num {l : List WFDouble} (hnd : l.Nodup) :
-    DIncomp (l.map fun d => fun v => v = Value.num d.1) := by
+theorem dincomp_map_literal_num {l : List WFNumeral} (hnd : l.Nodup) :
+    DIncomp (l.map fun d => fun v => v = Value.num d) := by
   rw [DIncomp, List.pairwise_map]
   refine hnd.imp ?_
   intro a b hab
@@ -163,7 +163,7 @@ theorem uAtCan_map_literal_str {l : List String} (hnd : l.Nodup) :
 
 /-- …and at the numeric base, by the same shared-base route: `n`-ary and both sides in one
     step, which is what this route buys over a pairwise separation read off the table. -/
-theorem uAtCan_map_literal_num {l : List WFDouble} (hnd : l.Nodup) :
+theorem uAtCan_map_literal_num {l : List WFNumeral} (hnd : l.Nodup) :
     UAtCan (l.map fun d => .literal .number d) := by
   show UniqueAdmission (semsOf _)
   have hs : semsOf (l.map fun d => .literal .number d)
@@ -212,9 +212,9 @@ theorem typed_literalsS {l : List String} (hnd : l.Nodup) (hne : l ≠ []) :
   exact h
 
 /-- **`(literal-N)` is derivable**, and §3's `ℓ ⊆ D` is the list's element type. -/
-theorem typed_literalsN {l : List WFDouble} (hnd : l.Nodup) (hne : l ≠ []) :
+theorem typed_literalsN {l : List WFNumeral} (hnd : l.Nodup) (hne : l ≠ []) :
     Typed (.union (l.map fun d => .literal .number d))
-      (fun v => ∃ d, d ∈ l ∧ v = .num d.1) (some .N) := by
+      (fun v => ∃ d, d ∈ l ∧ v = .num d) (some .N) := by
   have h := Typed.union (typedListμ_map_literal_num l) (dincomp_map_literal_num hnd)
   rw [hunion_map_literal_num, unanimous_map_const _ hne] at h
   exact h

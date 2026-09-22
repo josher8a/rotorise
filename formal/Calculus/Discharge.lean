@@ -492,7 +492,7 @@ theorem uAtCan_boolLiterals :
     Which is the honest reading of what a numeric literal set *is*: options told apart by
     the value a read produces, never by the text the store holds. That reading is now
     available to the table as well, because the table's row asks the same codec. -/
-theorem uAtCan_of_literalN_disjoint {xs : List WFDouble}
+theorem uAtCan_of_literalN_disjoint {xs : List WFNumeral}
     (hdisj : List.Pairwise (fun x y => x ≠ y) xs) :
     UAtCan (xs.map (Term.literal .number)) := by
   show UniqueAdmission (semsOf (xs.map (Term.literal .number)))
@@ -509,13 +509,11 @@ theorem uAtCan_of_literalN_disjoint {xs : List WFDouble}
     refine hdisj.imp fun h v hv => ?_
     cases v
     case num d =>
-      -- the gate is now inside `inL`'s `number` row, so the split names the subtype
-      cases hw : Numeral.WF d.toDec with
-      | false => simp [inL, hw] at hv
-      | true =>
-        simp only [inL, hw, dite_true, decide_eq_true_eq] at hv
-        simp only [inL, hw, dite_true, decide_eq_false_iff_not]
-        exact fun hy => h (hv ▸ hy ▸ rfl)
+      -- `inL`'s `number` row is ungated now, so there is no split: the payload IS the
+      -- alternative and the row reads like `string`'s beside it
+      simp only [inL, decide_eq_true_eq] at hv
+      simp only [inL, decide_eq_false_iff_not]
+      exact fun hy => h (hv ▸ hy ▸ rfl)
     all_goals exact Bool.noConfusion hv
 
 /-! ## The other two rows of §5's table
@@ -667,8 +665,8 @@ theorem literalCodec_string_e (x : String) : ∀ v : Value,
     (literalCodec .string x).e v
       = (match v with | .str s => if s = x then some (Attr.s s) else none | _ => none)
   | .str _ => by simp [literalCodec, baseCodec, Codec.restrict, inL, stringCodec]
-  | .num _ | .dec _ | .bool _ | .bin _ | .null | .strSet _ | .numSet _ | .decSet _
-  | .binSet _ | .arr _ | .map _ _ => rfl
+  | .num _ | .bool _ | .bin _ | .null | .strSet _ | .numSet _ | .binSet _
+  | .arr _ | .map _ _ => rfl
 
 theorem literalCodec_string_p (x : String) : ∀ a : Attr,
     (literalCodec .string x).p a
