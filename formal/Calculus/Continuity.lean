@@ -223,20 +223,16 @@ theorem optBad_not_confluent : ¬ ConfluentAt [optBad, optLit] (.str "A") := by
   simp [optBad, optLit, OptionSem.byAttempt, cBad, ceBad, literalCodec, baseCodec,
         Codec.restrict, inL, stringCodec] at this
 
-/-- **Nor is the obligation automatic at ground terms.** `string` and `decimal` both take the
-    value `.str "1.5"` and store it *differently*. Neither is an escape hatch. So confluence has
-    to be an **invariant of the unrolling**, which is the residue this section leaves: it holds
-    vacuously wherever the options are pairwise disjoint, and a syntactic disjointness check
-    (`Orth`, `Orthogonality.lean`) is what would license that. -/
-theorem string_decimal_not_confluent :
-    ¬ ConfluentAt [.byAttempt (denote .string), .byAttempt (denote .decimal)] (.str "1.5") := by
-  intro h
-  have hs : (OptionSem.byAttempt (denote .string)).admitV (.str "1.5") = true := by
-    simp [OptionSem.byAttempt, denote, stringCodec]
-  have hd : (OptionSem.byAttempt (denote .decimal)).admitV (.str "1.5") = true := by
-    simp [OptionSem.byAttempt, denote, decimalCodec]; decide
-  have := h _ (by simp) _ (by simp) hs hd
-  simp [OptionSem.byAttempt, denote, stringCodec, decimalCodec] at this
+/-! **The ground-term witness is gone, and it was the decimal conflation.** ~~string_decimal_not_confluent~~
+took `string` and `decimal` both writing `.str "1.5"` and storing it differently. They no longer
+share a value: `decimal` carries `Value.dec`, an exact numeral, and `string` carries `Value.str`.
+The pair is disjoint, so it is confluent vacuously and the theorem is false rather than unproved.
+
+What the section still records is `optBad_not_confluent` above, which uses a codec built to break
+the obligation. So confluence is still not automatic, and is still an invariant the unrolling must
+carry. What is no longer true is that a pair of ORDINARY GROUND TERMS witnesses the failure. That
+is a consequence of separating the carrier from the wire, not an argument that no ground witness
+remains; none is claimed here. -/
 
 /-! ### The two obligations a least fixpoint discharges -/
 
@@ -404,8 +400,8 @@ file deliberately does not define, while `denote` is structural and does not sta
 carries a plain `Term` rather than a thunk *because* the refutation was believed. Reopening
 recursion means staging `denote` again, which is a larger change than these theorems.
 
-**And the residue is one thing:** the obligation must be an invariant of the unrolling
-(`string_decimal_not_confluent`). It is vacuous where the options are pairwise disjoint, so the
-syntactic disjointness check is what would license it. -/
+**And the residue is one thing:** the obligation must be an invariant of the unrolling, which
+`optBad_not_confluent` above is the surviving witness for. It is vacuous where the options are
+pairwise disjoint, so the syntactic disjointness check is what would license it. -/
 
 end Calculus

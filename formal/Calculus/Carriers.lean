@@ -41,19 +41,19 @@ theorem carrier_decimalCodec : Carrier decimalCodec := by
   refine ⟨?_, ?_⟩
   · intro v a h
     cases v with
-    | str s =>
-      replace h : (if hh : Numeral.Stored s = true then some (Attr.n ⟨s, Numeral.stored_wf hh⟩) else none) = some a := h
-      by_cases hw : Numeral.Stored s = true
-      · exact ⟨s, rfl, hw⟩
-      · rw [dif_neg hw] at h; exact nomatch h
+    | dec x =>
+      replace h : (if Numeral.Stored x.1 = true then some (Attr.n x) else none) = some a := h
+      cases hw : Numeral.Stored x.1
+      · rw [hw, if_neg (by simp)] at h; exact nomatch h
+      · exact ⟨x, rfl, hw⟩
     | _ => exact nomatch h
   · intro a v h
     cases a with
     | n x =>
-      replace h : (if Numeral.Stored x.1 = true then some (Value.str x.1) else none) = some v := h
-      by_cases hw : Numeral.Stored x.1 = true
-      · rw [if_pos hw] at h; cases h; exact ⟨x.1, rfl, hw⟩
-      · rw [if_neg hw] at h; exact nomatch h
+      replace h : (if Numeral.Stored x.1 = true then some (Value.dec x) else none) = some v := h
+      cases hw : Numeral.Stored x.1
+      · rw [hw, if_neg (by simp)] at h; exact nomatch h
+      · rw [hw, if_pos (by simp)] at h; cases h; exact ⟨x, rfl, hw⟩
     | _ => exact nomatch h
 
 theorem carrier_booleanCodec : Carrier booleanCodec :=
@@ -208,13 +208,13 @@ theorem carrier_extendRead {c : Codec} {r : Attr → Option Value} (hc : Carrier
     are no longer conditions at all — the `Finset` carries them. -/
 theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) where
   domE he := by
-    rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
+    rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
       refine fun x hx => ?_ <;>
       · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (encSet_elem hE x hx)
         exact hc.domE hb
   ranP hp := by
     rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
-      · rcases decSet_mem hD with ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ <;>
+      · rcases decSet_mem hD with ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ <;>
         · refine fun y hy => ?_
           obtain ⟨x, -, hx⟩ := hm y hy
           exact hc.ranP hx

@@ -116,23 +116,27 @@ namespace Calculus
 `Attr.member` is already the constructor tag there.
 
 `Slot` is *not* `Member` with the names changed, and reusing `Member` for both sides would be
-the bug this module exists to avoid: `decimal` writes a `.str` and stores an `N`, and
-`set decimal` writes a `.strSet` and stores an `NS`, so the two tags disagree exactly where
-the separation argument needs them to. -/
+the bug this module exists to avoid. The map from a slot to a member is **not injective**:
+`number` and `decimal` are two value carriers of the one wire member `N`, and `numSet` and
+`decSet` are two carriers of the one `NS`. A host approximation and an exact numeral are
+different values and the same attribute, so the two tags disagree exactly where the separation
+argument needs them to. -/
 
 inductive Slot where
-  | str | num | bool | bin | null | strSet | numSet | binSet | arr | map
+  | str | num | dec | bool | bin | null | strSet | numSet | decSet | binSet | arr | map
 deriving DecidableEq, Repr
 
-/-- The constructor a value is built with. Ten of them, where `Value.kind` has eight. -/
+/-- The constructor a value is built with. Twelve of them, where `Value.kind` has eight. -/
 def Value.slot : Value → Slot
   | .str _    => .str
   | .num _    => .num
+  | .dec _    => .dec
   | .bool _   => .bool
   | .bin _    => .bin
   | .null     => .null
   | .strSet _ => .strSet
   | .numSet _ => .numSet
+  | .decSet _ => .decSet
   | .binSet _ => .binSet
   | .arr _    => .arr
   | .map _ _  => .map
@@ -140,7 +144,7 @@ def Value.slot : Value → Slot
 /-- Enumerations, so the disjointness test is a `List.all` rather than a `Fintype` instance —
     `decide` over these is the whole of what makes `Orth` checkable by `by decide`. -/
 def Slot.all : List Slot :=
-  [.str, .num, .bool, .bin, .null, .strSet, .numSet, .binSet, .arr, .map]
+  [.str, .num, .dec, .bool, .bin, .null, .strSet, .numSet, .decSet, .binSet, .arr, .map]
 
 theorem Slot.mem_all (s : Slot) : s ∈ Slot.all := by cases s <;> simp [Slot.all]
 
@@ -166,7 +170,7 @@ def GroundKind.slot : GroundKind → Slot
 def SetBase.slot : SetBase → Slot
   | .string  => .strSet
   | .number  => .numSet
-  | .decimal => .strSet
+  | .decimal => .decSet
   | .binary  => .binSet
 
 /-! ## Occupancy

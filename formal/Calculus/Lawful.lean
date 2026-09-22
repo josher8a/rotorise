@@ -68,38 +68,37 @@ theorem lawful_nullCodec : Lawful nullCodec :=
 
 /-- `e` and `p` gate on the *same* predicate applied to the *same* text, so each law
     reduces to that one decision. -/
-theorem decimalCodec_e_str (s : String) :
-    decimalCodec.e (.str s)
-      = if h : Numeral.Stored s then some (.n ⟨s, Numeral.stored_wf h⟩) else none := rfl
+theorem decimalCodec_e_dec (x : WFNumeral) :
+    decimalCodec.e (.dec x) = if Numeral.Stored x.1 then some (.n x) else none := rfl
 
 theorem decimalCodec_p_n (x : WFNumeral) :
-    decimalCodec.p (.n x) = if Numeral.Stored x.1 then some (.str x.1) else none := rfl
+    decimalCodec.p (.n x) = if Numeral.Stored x.1 then some (.dec x) else none := rfl
 
 theorem lawful_decimalCodec : Lawful decimalCodec := by
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro t a he
     cases t with
-    | str s =>
-      rw [decimalCodec_e_str] at he
-      by_cases hw : Numeral.Stored s = true
-      · rw [dif_pos hw] at he; cases he; rw [decimalCodec_p_n, if_pos hw]
-      · rw [dif_neg hw] at he; exact nomatch he
+    | dec x =>
+      rw [decimalCodec_e_dec] at he
+      by_cases hw : Numeral.Stored x.1 = true
+      · rw [if_pos hw] at he; cases he; rw [decimalCodec_p_n, if_pos hw]
+      · rw [if_neg hw] at he; exact nomatch he
     | _ => exact nomatch he
   · intro a t hp
     cases a with
     | n x =>
       rw [decimalCodec_p_n] at hp
       by_cases hw : Numeral.Stored x.1 = true
-      · rw [if_pos hw] at hp; cases hp; rw [decimalCodec_e_str, dif_pos hw]; rfl
+      · rw [if_pos hw] at hp; cases hp; rw [decimalCodec_e_dec, if_pos hw]; rfl
       · rw [if_neg hw] at hp; exact nomatch hp
     | _ => exact nomatch hp
   · intro μ hμ t a he
     cases t with
-    | str s =>
-      rw [decimalCodec_e_str] at he
-      by_cases hw : Numeral.Stored s = true
-      · rw [dif_pos hw] at he; cases he; cases hμ; rfl
-      · rw [dif_neg hw] at he; exact nomatch he
+    | dec x =>
+      rw [decimalCodec_e_dec] at he
+      by_cases hw : Numeral.Stored x.1 = true
+      · rw [if_pos hw] at he; cases he; cases hμ; rfl
+      · rw [if_neg hw] at he; exact nomatch he
     | _ => exact nomatch he
   · intro a t a' hp he
     cases a with
@@ -108,7 +107,7 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
       by_cases hw : Numeral.Stored x.1 = true
       · rw [if_pos hw] at hp
         cases hp
-        rw [decimalCodec_e_str, dif_pos hw] at he
+        rw [decimalCodec_e_dec, if_pos hw] at he
         cases he
         exact .n ..
       · rw [if_neg hw] at hp; exact nomatch hp
@@ -150,7 +149,7 @@ theorem ker_decimalCodec {x y : WFNumeral} (h : decimalCodec.Ker (.n x) (.n y))
   rw [decimalCodec_p_n, decimalCodec_p_n, if_pos hx] at h'
   by_cases hy : Numeral.Stored y.1 = true
   · rw [if_pos hy] at h'
-    exact Value.str.inj (Option.some.inj h')
+    exact congrArg Subtype.val (Value.dec.inj (Option.some.inj h'))
   · rw [if_neg hy] at h'; exact nomatch h'
 
 /-- §1: `Can(decimal)` is the normal forms and a normalisation fixes its own, so `Stored`
@@ -160,14 +159,14 @@ theorem survivesStore_decimalCodec {η : Attr → Attr}
     SurvivesStore decimalCodec η := by
   rintro a ⟨v, hv⟩
   cases v with
-  | str s =>
-    rw [decimalCodec_e_str] at hv
-    by_cases hs : Numeral.Stored s = true
-    · rw [dif_pos hs] at hv
+  | dec x =>
+    rw [decimalCodec_e_dec] at hv
+    by_cases hs : Numeral.Stored x.1 = true
+    · rw [if_pos hs] at hv
       cases hv
-      show decimalCodec.p (η (.n ⟨s, _⟩)) = decimalCodec.p (.n ⟨s, _⟩)
-      rw [hη ⟨s, Numeral.stored_wf hs⟩ hs]
-    · rw [dif_neg hs] at hv; exact nomatch hv
+      show decimalCodec.p (η (.n x)) = decimalCodec.p (.n x)
+      rw [hη x hs]
+    · rw [if_neg hs] at hv; exact nomatch hv
   | _ => exact nomatch hv
 
 /-- The `(number)` case — the one consuming the shortest-text axiom. -/

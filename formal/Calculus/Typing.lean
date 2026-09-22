@@ -56,6 +56,7 @@ abbrev Held := Value → Prop
 def HSet (T : Held) : Held := fun v =>
   (∃ S : NEFinset String, v = .strSet S ∧ ∀ s ∈ S.1, T (.str s)) ∨
   (∃ S : NEFinset Double, v = .numSet S ∧ ∀ d ∈ S.1, T (.num d)) ∨
+  (∃ S : NEFinset WFNumeral, v = .decSet S ∧ ∀ x ∈ S.1, T (.dec x)) ∨
   (∃ S : NEFinset Bytes,  v = .binSet S ∧ ∀ b ∈ S.1, T (.bin b))
 
 /-- The held set of a set's **base** — §3 `(set)`'s `T` premise, now a function of the
@@ -65,7 +66,7 @@ def HSet (T : Held) : Held := fun v =>
 def SetBase.held : SetBase → Held
   | .string  => fun v => ∃ s, v = .str s
   | .number  => fun v => ∃ d, v = .num d ∧ Numeral.WF d.toDec = true
-  | .decimal => fun v => ∃ s, v = .str s ∧ Numeral.Stored s = true
+  | .decimal => fun v => ∃ x : WFNumeral, v = .dec x ∧ Numeral.Stored x.1 = true
   | .binary  => fun v => ∃ b, v = .bin b
 
 /-- The base's held set **is** its codec's, at every base — the four rows were transcribed
@@ -223,9 +224,11 @@ inductive Typed : Term → Held → Option Member → Prop where
       concluded `⊢ number : D ⇝ N`; until `numberCodec` gated, the model's judgement said
       something weaker than the rule it was transcribing. -/
   | number  : Typed .number (fun v => ∃ d, v = .num d ∧ Numeral.WF d.toDec = true) (some .N)
-  /-- `decimal` holds `Numerals`, carried as `str` values (§1) — and `Numerals` is §1's
+  /-- `decimal` holds `Numerals`, carried as `dec` values, their own carrier and not the
+      wire's string (§1) — and `Numerals` is §1's
       grammar, not every string. -/
-  | decimal : Typed .decimal (fun v => ∃ s, v = .str s ∧ Numeral.Stored s = true) (some .N)
+  | decimal : Typed .decimal
+      (fun v => ∃ x : WFNumeral, v = .dec x ∧ Numeral.Stored x.1 = true) (some .N)
   | boolean : Typed .boolean (fun v => ∃ b, v = .bool b) (some .BOOL)
   /-- §3 `(null)`: the point held set `{null}`, stored as `⟨NULL, ∗⟩`. -/
   | null : Typed .null (fun v => v = .null) (some .NULL)
