@@ -1211,6 +1211,8 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * — `Orth1`, below — and the law that ties them is what `formal/.separations.lean` pins, one
  * theorem per pair this function refuses: **it never answers `false` where `certPair` answers `true`.**
  * Refusing a declaration the model proves separable would be refusing a union that works.
+ * `union` asks {@link crossing} ahead of this function, because this function can accept a pair
+ * that crosses.
  *
  * Five rows, and each carries its own warrant. A sixth exempted an `opaque` option and is gone;
  * the paragraph below the fifth says why.
@@ -1222,11 +1224,13 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * by a literal position, and two objects whose required slots meet at the bottom.
  *
  * **Two object options: the structural meet, which is the same question the type asks.** A union
- * admits an object by its structure, never by being attempted — the names present, and then every
- * literal field the value carries. Two such options are separable exactly where no value satisfies
- * both structures: either their name intervals do not meet (`OrthM`, and `Collides` is that written
- * in the type) or some shared required name is pinned to literals with nothing in common (`OrthS`).
- * This answers that, so the runtime and the declaration decide by one rule rather than two.
+ * admits every option by attempt, an object option included, so two object options are separable
+ * where no value passes both attempts. This row reads that off the two structures: the names
+ * present, and then every required literal field. Two such options are separable where no value
+ * satisfies both structures: either their name intervals do not meet (`OrthM`, and `Collides` is
+ * that written in the type) or some shared required name is pinned to literals with nothing in
+ * common (`OrthS`). The meet row above certifies two objects whose required slots meet at `never`
+ * through a field that pins no literal.
  *
  * **One object option beside a non-object meets through the occupancies**, as every other pair
  * does. `opaque` writes and reads a map too, so an object beside it is not separable outright.
@@ -1242,17 +1246,17 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * every pair it certifies, this row already accepts, and the row accepts twenty corpus pairs the
  * model does not certify. {@link identifies} names the three groups.
  *
- * **An occupancy that is unknown.** `held`'s `f` runs before the subterm and can move a value into
- * any constructor, `custom` is arbitrary both ways, and a host `lazy` cannot be read without
- * forcing a binding that may not exist. The model takes the same direction for the same reason:
- * over-approximating an occupancy is safe, so a pair involving one is not certified rather than
- * A term the model cannot spell at all takes the same answer by the same argument, and the caller
- * owns that case: `union` skips a pair with an absent term before it asks, so this takes two terms
- * and has no row for one that is missing.
+ * **An occupancy that is unknown.** A `held` that declares no `writes` has an unknown write side,
+ * because its `f` runs before the subterm and can move a value into any constructor. A `legacy`
+ * has an unknown read side, because its `r` widens exactly the reading. A `lazy` is transparent,
+ * so its occupancies are its subterm's. The model certifies no pair on an unknown side. This
+ * function takes the other direction, as the first paragraph states: an unknown side is not a
+ * meeting, so the known side decides. Every option of a `union` has a term, so this function
+ * takes two terms and has no row for one that is missing.
  *
  * **There is no `opaque` row, and its removal is the rule this function most recently learned.**
- * §5 separates the two things a `⊤` covers: *unknown* — `held`, `custom` and a host `lazy`, whose
- * answer exists and cannot be read — and *everything*, which is `opaque`, accepting every kind by
+ * §5 separates the two things a `⊤` covers: *unknown* — the write side of a `held` that declares
+ * no `writes` and the read side of a `legacy`, whose answer exists and cannot be read — and *everything*, which is `opaque`, accepting every kind by
  * design. The model states the second as a **closed form**, `occTop` at the total `opaq`, so
  * it can be compared; this library read it as `⊤` and exempted it instead, which
  * meant `union([opaque, X])` declared.
