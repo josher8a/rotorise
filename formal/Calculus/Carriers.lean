@@ -37,25 +37,6 @@ theorem carrier_stringCodec : Carrier stringCodec :=
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
     (fun _ h => h) carrier_pointCodec
 
-theorem carrier_decimalCodec : Carrier decimalCodec := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v with
-    | num x =>
-      replace h : (if Numeral.Stored x.1 = true then some (Attr.n x) else none) = some a := h
-      cases hw : Numeral.Stored x.1
-      · rw [hw, if_neg (by simp)] at h; exact nomatch h
-      · exact ⟨x, rfl, hw⟩
-    | _ => exact nomatch h
-  · intro a v h
-    cases a with
-    | n x =>
-      replace h : (if Numeral.Stored x.1 = true then some (Value.num x) else none) = some v := h
-      cases hw : Numeral.Stored x.1
-      · rw [hw, if_neg (by simp)] at h; exact nomatch h
-      · rw [hw, if_pos (by simp)] at h; cases h; exact ⟨x, rfl, hw⟩
-    | _ => exact nomatch h
-
 theorem carrier_booleanCodec : Carrier booleanCodec :=
   Carrier.congr (d := pointCodec boolV boolA .BOOL)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)

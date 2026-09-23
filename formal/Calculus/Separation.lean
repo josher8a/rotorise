@@ -520,48 +520,5 @@ theorem mapKeys_no_duplicates : ({"a", "a"} : Finset Name) = {"a"} :=
 end
 
 
-/-! ## The adapters this library ships, named so a vector can cite them
-
-`src/codec/lean.ts` prints `held` for a pair it recognises, the way it already prints a predicate
-it ships as `Numeral.WF` or `Numeral.Stored`. `number` and `decimal` are adapters over the
-one numeric base on that surface, so the pair each carries needs a name here or no vector at that
-base can be stated at all.
-
-**The text adapter only.** A caller holding a JS float has no adapter here and cannot have one:
-`Value` carries no float, so the conversion would be numeral to numeral and its content is
-binary64 rounding. Writing that down is the host axiom this development deleted, so the emitter
-refuses a float-carrying codec by name instead.
--/
-
-/-- **Text in, numeral out**, gated where `decimal` gates: the spelling the store returns.
-
-    Total, as `held` requires. Text the gate turns down is left where it is, and the base then
-    refuses it, which is how a partial conversion is written in a language whose adapters are
-    total. -/
-def numeralOfStoredText : Value → Value := fun v =>
-  match v with
-  | .str s =>
-      if h : Numeral.WF s = true then
-        if Numeral.Stored s then Value.num ⟨s, h⟩ else Value.null
-      else Value.null
-  -- the caller holds TEXT, so anything else is not a value this adapter carries, and the
-  -- base refuses what it is handed. `null` is the one constructor `number` never admits
-  | _ => Value.null
-
-/-- …and back, which is the numeral's own digits. -/
-def textOfNumeral : Value → Value := fun v =>
-  match v with
-  | .num x => Value.str x.1
-  | _ => v
-
-/-- `decimal`, as the surface ships it: the numeric base under the text adapter. -/
-def decimalHeld : Term := Term.held Term.number numeralOfStoredText textOfNumeral
-
-/-- It admits the stored spellings and nothing else, which is what `decimal` promises. -/
-example : Adm decimalHeld (Value.str "1.5") = true := by decide
-example : Adm decimalHeld (Value.str "1.50") = false := by decide
-example : Adm decimalHeld (Value.str "abc") = false := by decide
-example : Adm decimalHeld (Value.num (WFNumeral.of "1.5")) = false := by decide
-
 
 end Calculus

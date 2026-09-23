@@ -249,7 +249,7 @@ describe('terms', () => {
     /**
      * **A set of an adapter is refused, and this is the model's gap rather than the library's.**
      *
-     * `decimal` emits as a scalar, because `Separation.lean` names its pair —
+     * `decimal` emits as a scalar, because `DynamoDB.lean` names its pair —
      * `numeralOfStoredText`/`textOfNumeral`. `.set()` maps that conversion over the wire set, and
      * the model has no name for the set-level pair: writing one wants the element pair carried
      * over an `NEFinset`, which is a `Finset.image` and a proof that the image is nonempty.
@@ -1427,7 +1427,7 @@ describe("the read side, against the model's read row", () => {
             )
         }
         const module = leanReadModule(readVerdicts())
-        expect(module).toContain('import Calculus.Separation')
+        expect(module).toContain('import Calculus.DynamoDB')
         // the excluded ones are named in the header rather than dropped in silence
         expect(module).toContain('excluded, not skipped')
         expect(module).toContain('scalar_number__reads__raw_N')
@@ -1544,7 +1544,7 @@ describe("the declaration guard, against the model's classifier", () => {
         )
         // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
         // without the import Lean auto-binds the name and every verdict fails to elaborate
-        expect(leanSeparationModule([])).toContain('import Calculus.Separation')
+        expect(leanSeparationModule([])).toContain('import Calculus.DynamoDB')
     })
 
     /**
@@ -1663,7 +1663,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
         expect(module).toContain('import Calculus.Vectors')
         // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
         // without the import `denote` sticks on a free variable and no vector elaborates
-        expect(module).toContain('import Calculus.Separation')
+        expect(module).toContain('import Calculus.DynamoDB')
         // the header states what it could not state, which for this corpus is nothing
         expect(module).toContain('every corpus codec round trips')
     })

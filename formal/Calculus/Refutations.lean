@@ -565,55 +565,6 @@ no closed term, because the carrier was a host axiom, so there was nothing to qu
 go stale. `N` is carried exactly now and closed numeric literals exist, so the premise that made
 the two claims one is gone with the axiom. -/
 
-/-! ## `decimalCodec` before its held set was narrowed
-
-`survivesStore_decimalCodec` shows that gating on `Numeral.Stored` discharges `η ⊆ ker p`.
-This is the other half: the codec that gated on `Numeral.WF` instead — §1's *whole* numeral
-grammar, which is what the implementation shipped — does not, and the witness is a form
-DynamoDB was measured to normalise.
-
-Without this the narrowing reads as a precaution. With it, it is the only option: `WF` admits
-`"1.500"`, the store returns `"1.5"`, `decimal`'s `ker p` is equality (`ker_decimalCodec`),
-and (R) through the store fails on a value the codec claimed to hold. -/
-
-/-- `decimal`, gated on §1's grammar rather than on what the store hands back — which is
-    now **`numberCodec`, the base `decimal` actually refines**. Since `Attr.n` carries
-    `WF`, there is no wider text-side numeric codec to invent, so this refutation says
-    something about the base itself rather than about a codec built for the purpose.
-
-    Note its read is *total*: `WF` is the carrier now, so the gate that used to sit on `p`
-    has nothing left to reject. That is the whole asymmetry `decimal` adds — `Stored` is a
-    strictly smaller set than `WF`, and only the smaller one survives the store. -/
-theorem numberCodec_e_num' (x : WFNumeral) : numberCodec.e (.num x) = some (.n x) := rfl
-
-theorem numberCodec_p_n' (x : WFNumeral) : numberCodec.p (.n x) = some (.num x) := rfl
-
-/-- `"1.500"` is one of the forms `stored_rejects_denormal` records the store rewriting, and
-    the un-narrowed codec claims to hold it. -/
-theorem can_numberCodec_denormal : Can numberCodec (.n (.of "1.500")) :=
-  ⟨.num (.of "1.500"), by rw [numberCodec_e_num']⟩
-
-/-- **The un-narrowed `decimal` does not survive the store.** Any `η` that normalises
-    `"1.500"` — which is what DynamoDB was measured to do — falls outside its `ker p`. -/
-theorem not_survivesStore_numberCodec {η : Attr → Attr}
-    (hη : η (.n (.of "1.500")) = .n (.of "1.5")) : ¬ SurvivesStore numberCodec η := by
-  intro h
-  have hk : numberCodec.p (η (.n (.of "1.500"))) = numberCodec.p (.n (.of "1.500")) :=
-    h _ can_numberCodec_denormal
-  rw [hη, numberCodec_p_n', numberCodec_p_n'] at hk
-  exact absurd (congrArg Subtype.val (Value.num.inj (Option.some.inj hk))) (by decide)
-
-/-- And (R) through the store fails outright: the value is written, the store rewrites the
-    attribute, and the codec reads back something else — the shape of the shipped defect. -/
-theorem not_retract_through_store_numberCodec {η : Attr → Attr}
-    (hη : η (.n (.of "1.500")) = .n (.of "1.5")) :
-    numberCodec.e (.num (.of "1.500")) = some (.n (.of "1.500")) ∧
-      numberCodec.p (η (.n (.of "1.500"))) ≠ some (.num (.of "1.500")) := by
-  refine ⟨by rw [numberCodec_e_num'], ?_⟩
-  rw [hη, numberCodec_p_n']
-  intro hk
-  exact absurd (congrArg Subtype.val (Value.num.inj (Option.some.inj hk))) (by decide)
-
 /-! ## `union(opaque, c)` is never separable
 
 Not one of §6's nine rows — a row §5 never wrote, and the reason it did not is that

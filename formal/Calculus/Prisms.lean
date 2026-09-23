@@ -221,22 +221,6 @@ theorem numberCodec_e_num (x : WFNumeral) : numberCodec.e (.num x) = some (.n x)
 
 theorem numberCodec_p_n (x : WFNumeral) : numberCodec.p (.n x) = some (.num x) := rfl
 
-/-- §3 `(decimal)`. The held set is §1's `Numerals`, not every string: the grammar, the
-    38 significant digits and the magnitude range are checked on both halves. The read
-    side has to check as well — an ill-formed numeral admitted by `p` would name a value
-    `e` then refuses, and that is **(C)** failing. -/
-def decimalCodec : Codec :=
-  { T := fun v => ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true
-    μ := some .N
-    e := fun v => match v with
-      -- the carrier already proves `WF`, so the write produces the attribute directly and
-      -- `Numeral.stored_wf` is no longer needed to manufacture the proof
-      | .num x => if Numeral.Stored x.1 then some (.n x) else none
-      | _ => none
-    p := fun a => match a with
-      | .n x => if Numeral.Stored x.1 then some (.num x) else none
-      | _ => none }
-
 def booleanCodec : Codec :=
   { T := fun v => ∃ b, v = .bool b
     μ := some .BOOL
@@ -393,9 +377,10 @@ theorem restrict_p_adapt {c : Codec} (q : Value → Bool) :
     string is written as. §3 argues at length that gating only the write breaks (C), which
     is exactly the shape `restrict` has and an ad-hoc `if` does not.
 
-    So the gates are not bespoke: each of the two codecs is `refine` over a base, and the
-    theorems below say so on the pair. The bases used to be *ungated*, every numeral and every
-    string, and cannot be, now that both sides carry §1's `Numerals`. There is one base at `N`
+    So the gates are not bespoke: each of the two codecs is `refine` over a base. The
+    `decimal` gate is a fact of the store, so the DynamoDB port states it on the pair
+    (`decimalCodec_e_restrict`, `DynamoDB.lean`). The bases used to be *ungated*, every
+    numeral and every string, and cannot be, now that both sides carry §1's `Numerals`. There is one base at `N`
     instead of the two a host carrier forced, and it is §1's own set: `numberCodec`. The ungated
     bases were standing in for sets the carrier should have been. -/
 
@@ -405,13 +390,8 @@ theorem restrict_p_adapt {c : Codec} (q : Value → Bool) :
 def inD : Value → Bool :=
   fun v => match v with | .num _ => true | _ => false
 
-/-- §1's `Stored`, which is NOT carried and remains a real test: what the store hands back is
-    narrower than what it accepts. -/
-def isStored : Value → Bool :=
-  fun v => match v with | .num x => Numeral.Stored x.1 | _ => false
-
-/-- **`number` writes exactly on §1's `D`**, and **`decimal` exactly on `Stored`** —
-    stated as the `isSome` of the write, without the `dite`.
+/-- **`number` writes exactly on §1's `D`** — stated as the `isSome` of the write, without
+    the `dite`.
 
     Worth having as lemmas rather than leaving to `simp`: the decision inside those `dite`s
     is `Numeral.WF`, whose body is a string parser (`Domain.lean`), so any `simp` that
@@ -428,38 +408,14 @@ def isStored : Value → Bool :=
 @[simp] theorem numberCodec_e_isSome (v : Value) : (numberCodec.e v).isSome = inD v := by
   cases v <;> rfl
 
-@[simp] theorem decimalCodec_e_isSome (v : Value) :
-    (decimalCodec.e v).isSome = isStored v := by
-  cases v <;> try rfl
-  case num x =>
-    show (if Numeral.Stored x.1 then some (Attr.n x) else none).isSome = isStored (Value.num x)
-    cases h : Numeral.Stored x.1 <;> simp [isStored, h]
-
 /-! ### The base at `N` is §1's own set, and there is exactly ONE of them
 
 **`numberCodec` IS the base at `N`.** `Attr.n` carries `Numeral.WF` and so does the value
 side now, so `Carries(N)` is §1's `Numerals` on both halves and no wider codec exists to
 refine. ~~wfDecimalCodec~~ was the text-side base beside it, gated at `WF` where `numberCodec`
-went through a host spelling; the two are one definition now and the second is deleted. What
-remains is the refinement below, and `Stored` is a real gate rather than a carried one. -/
-
-/-- **§3's `(decimal)` gate is `refine`** at `Stored` over §1's `Numerals`, on the writing
-    half… The base is `numberCodec`, which is §1's own set rather than an ungated one, and
-    `Stored → WF` is what makes the composite equal `decimal`. -/
-theorem decimalCodec_e_restrict : decimalCodec.e = (numberCodec.restrict isStored).e := by
-  funext v; cases v with
-  | num x =>
-    cases hs : Numeral.Stored x.1 <;>
-      simp [decimalCodec, numberCodec, Codec.restrict, isStored, hs]
-  | _ => rfl
-
-/-- …and on the reading half. -/
-theorem decimalCodec_p_restrict : decimalCodec.p = (numberCodec.restrict isStored).p := by
-  funext a; cases a with
-  | n x =>
-    cases hs : Numeral.Stored x.1 <;>
-      simp [decimalCodec, numberCodec, Codec.restrict, isStored, hs]
-  | _ => rfl
+went through a host spelling; the two are one definition now and the second is deleted. The
+DynamoDB port refines it at `Stored` (`DynamoDB.lean`), and `Stored` is a real gate rather
+than a carried one. -/
 
 /-- §3 `(literal)`. **The pair is a refinement of its base by construction** — the `refine`
     §7 calls "an iso and a prism", with the prism named by `ℓ` and the iso supplied by the

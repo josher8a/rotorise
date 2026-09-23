@@ -4504,7 +4504,7 @@ local macro "admA_never" fam:ident : tactic => `(tactic|
             | (cases ‹SetBase› <;> rfl)
             | (cases ‹GroundKind› <;> cases ‹SetBase› <;> rfl)
         case g1 => rfl)
-     | (cases a <;> simp [AdmA, inD, isStored])))
+     | (cases a <;> simp [AdmA, inD])))
 
 /-- The base row: the same constructor on both sides is reflexive on both halves. -/
 theorem admA_same (x : Term) : AdmAAt x x x :=
