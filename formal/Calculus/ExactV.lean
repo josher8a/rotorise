@@ -123,20 +123,19 @@ noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
     `opaque` is the language's escape hatch, and it is the row below that **does not
     describe a set at all**. It asks the codec it denotes:
 
-        Adm  (.opaq lossy)    v = ((opaqCodecω lossy).e v).isSome
-        AdmA (.opaq lossy)    a = ((opaqCodecω lossy).p a).isSome
+        Adm  .opaq    v = ((opaqCodecω).e v).isSome
+        AdmA .opaq    a = ((opaqCodecω).p a).isSome
 
     Three things follow.
 
-    *It is exact by construction.* `denote`'s row sets `e := (opaqCodecω lossy).e`, by
+    *It is exact by construction.* `denote`'s row sets `e := (opaqCodecω).e`, by
     `denote_opaq`, so the row and `dom(e)` are the same function, and `ExactV`/`ExactA` at
     the term is `Iff.rfl`. That is not a sharp analysis of an escape hatch; it is the
     analysis *declining* to be one, and the exactness is the codec's, borrowed.
 
-    *It is as precise as the semantics is.* No syntactic set could name `opaqCodecω`'s
-    domain: it recurses on the *input's own depth*, refusing a `numSet` of numerals the
-    store will not take, or an array with one such numeral at any depth. A row over the term
-    cannot see past the top constructor. Deferring sees all of it, because it does not look.
+    *It is as precise as the semantics is.* `opaqCodecω` recurses on the *input's own
+    depth*, and a row over the term cannot see past the top constructor. Deferring sees all
+    of it, because it does not look. The domain is every value (`opaq_total`).
 
     *Nothing here knows anything about the implementation.* Swap `opaqCodecω` for a
     different `opaque` — a different numeric policy, a different set of options, a different
@@ -145,7 +144,7 @@ noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
 
     ### The warranty behind the row
 
-    `opaque` carries no premise. `Obligations (.opaq _) = True`, and it is `True` because the
+    `opaque` carries no premise. `Obligations .opaq = True`, and it is `True` because the
     laws are *theorems* here: `lawful_opaqCodecω` and `carrier_opaqCodecω`
     (`Opaque.lean`), off the stabilization and depth-preservation lemmas. The row asks a
     codec **the calculus warrants**, and owes nothing to whoever writes the term.
@@ -229,7 +228,7 @@ noncomputable def Adm : Term → Value → Bool
       | _ => false
   | .object b => AdmBody b
   -- **The second row that asks its own codec**, as the section above sets out:
-  -- `denote (.opaq lossy)` *is* `opaqCodecω lossy`, so this is `dom(e)` rather than a
+  -- `denote .opaq` *is* `opaqCodecω`, so this is `dom(e)` rather than a
   -- description of it, and `ExactV_opaq` is `Iff.rfl`.
   --
   -- It replaces a hand-written recursion over the value (~~AdmOpaqV~~) that computed the
@@ -237,7 +236,7 @@ noncomputable def Adm : Term → Value → Bool
   -- wrong shape for one reason: it stated `opaque`'s domain a *second* time, so a change
   -- to `opaqCodec` — a new option, a different numeric policy — meant editing two
   -- definitions that had to agree. Deferring leaves one.
-  | .opaq lossy => fun v => ((opaqCodecω lossy).e v).isSome
+  | .opaq => fun v => ((opaqCodecω).e v).isSome
 
 /-- The payload's row: the declared names are present, and every present name's value is
     admitted by its slot or by the open block. The companion `AdmField` and `AdmWild`
@@ -821,8 +820,8 @@ theorem neSetImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Opt
 /-- **`opaque` writes exactly what its row says — definitionally.**
 
     Read the proof before the statement: it is `Iff.rfl`, and that is the whole of what is
-    being claimed. `Adm (.opaq lossy)` is `((opaqCodecω lossy).e ·).isSome` and
-    `denote (.opaq lossy)` is `opaqCodecω lossy`, so the two sides of the `↔` are the same
+    being claimed. `Adm .opaq` is `((opaqCodecω).e ·).isSome` and
+    `denote .opaq` is `opaqCodecω`, so the two sides of the `↔` are the same
     Boolean and there is nothing to prove.
 
     This is exactness **earned by deferring**, not by a clever row: as a claim about the
@@ -836,9 +835,9 @@ theorem neSetImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Opt
     by `rfl`. `opaq` is the one term for which that is true.
 
     The codec the row asks is warranted by the calculus:
-    `Obligations (.opaq _) = True`, because `lawful_opaqCodecω` and `carrier_opaqCodecω`
+    `Obligations .opaq = True`, because `lawful_opaqCodecω` and `carrier_opaqCodecω`
     (`Opaque.lean`) are proved. The deferral costs the writer of the term nothing. -/
-theorem ExactV_opaq (lossy : Bool) : ExactV (.opaq lossy) := fun _ => Iff.rfl
+theorem ExactV_opaq : ExactV .opaq := fun _ => Iff.rfl
 
 
 /-- **`set` writes exactly what its row says**, which the constructor's old shape made
@@ -958,7 +957,7 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
       ExactV_list (exactVL_mem pre (Adm_exactL pre)) (exactVO_mem sp (Adm_exactO sp))
         (exactVL_mem suf (Adm_exactL suf))
   | .object b => Adm_exactB b
-  | .opaq lossy => ExactV_opaq lossy
+  | .opaq => ExactV_opaq
   -- both sides are empty, so the equivalence is `False ↔ False`
   | .never => fun _ => Iff.rfl
   -- the row the *constructor* made exact, rather than a sharper analysis of the old one

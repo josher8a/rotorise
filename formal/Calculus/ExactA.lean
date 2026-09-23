@@ -155,7 +155,7 @@ noncomputable def AdmA : Term → Attr → Bool
       | _ => false
   | .object b => AdmABody b
   -- the read side of the same deferral; see the `Adm` row and `ExactA_opaq`
-  | .opaq lossy => fun a => ((opaqCodecω lossy).p a).isSome
+  | .opaq => fun a => ((opaqCodecω).p a).isSome
 
 /-- The read side's payload row; `AdmBody`'s mirror. -/
 noncomputable def AdmABody : Body → AP
@@ -573,13 +573,13 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Obje
     simp [AdmA, AdmABody, denote, bodySem, objectCodec, objectCodecCore, carriedCodec, mA]
 
 /-- **`opaque` reads exactly what its row says**, definitionally, and for the reason
-    `ExactV_opaq` gives at length: `p := (opaqCodecω lossy).p`, so the row and `dom(p)` are
+    `ExactV_opaq` gives at length: `p := (opaqCodecω).p`, so the row and `dom(p)` are
     one function. ~~AdmOpaqA_iff~~ — a second induction, this one carrying an injectivity
     clause about the host's decimal reader that `decSet` needs — is deleted rather than moved. The
     clause was true and is still true; it is now the codec's business, where it was always
     stated (`decSet`, `Products.lean`), instead of being restated here in a form that had
     to be kept in step by hand. -/
-theorem ExactA_opaq (lossy : Bool) : ExactA (.opaq lossy) := fun _ => Iff.rfl
+theorem ExactA_opaq : ExactA .opaq := fun _ => Iff.rfl
 
 
 def ExactAL : List Term → Prop
@@ -637,7 +637,7 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       ExactA_list (exactAL_mem pre (AdmA_exactL pre)) (exactAO_mem sp (AdmA_exactO sp))
         (exactAL_mem suf (AdmA_exactL suf))
   | .object b => AdmA_exactB b
-  | .opaq lossy => ExactA_opaq lossy
+  | .opaq => ExactA_opaq
   -- both sides are empty, so the equivalence is `False ↔ False`
   | .never => fun _ => Iff.rfl
   -- exact because the constructor narrowed, not because the row sharpened

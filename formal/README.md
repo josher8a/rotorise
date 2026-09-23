@@ -203,7 +203,7 @@ A decimal literal's read side asks its codec rather than naming a set, and the r
 to name one: the codec's reader is a function, which is enough to make the answer unique. The
 `number` row names its set directly, because `N`'s carrier is the attribute's own. `AdmA`'s `number` row and `AdmALit`'s `.number`
 row are `dom(p)`
-exactly, which is what separates `opaque` from `number` and two disjoint numeric literals from
+exactly, which is what separates two disjoint numeric literals from
 each other. The store observation survives on the
 other side of the pair — `Lawful.retract_through_store`, which is (R) asked through any
 transformation the store may apply: a literal's stored texts are known at the declaration, but

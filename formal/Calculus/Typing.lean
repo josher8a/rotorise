@@ -187,16 +187,15 @@ def HObject (names : Finset Name) (b : {k // k ∈ names} → Bool × Held) (R :
 
 /-- `Uν` (§3 `(opaque)`): the values whose member is recoverable from the value alone,
     as the doc's fixpoint — everything self-identifying, closed under the containers.
-    `lossy = false` is `refuse`, and **refuse is the absence of the `number` option**. -/
-inductive HOpaque (lossy : Bool) : Value → Prop where
-  | str  (s)  : HOpaque lossy (.str s)
-  | bool (b)  : HOpaque lossy (.bool b)
-  | bin  (b)  : HOpaque lossy (.bin b)
-  | null      : HOpaque lossy .null
-  /-- The `D` premise is GONE: the carrier is the well-formed numerals, so there is no
-      numeral `opaque` cannot write and nothing for a premise to exclude. The `lossy` flag
-      stays and is now the whole of the numeric row's content. -/
-  | num  (d) (h : lossy = true) : HOpaque lossy (.num d)
+    Every `Value` is in `Uν`: the number option holds a numeral exactly. -/
+inductive HOpaque : Value → Prop where
+  | str  (s)  : HOpaque (.str s)
+  | bool (b)  : HOpaque (.bool b)
+  | bin  (b)  : HOpaque (.bin b)
+  | null      : HOpaque .null
+  /-- No premise: the carrier is the well-formed numerals, so there is no numeral
+      `opaque` cannot write and nothing for a premise to exclude. -/
+  | num  (d)  : HOpaque (.num d)
   /-- Non-emptiness carried no premise here any more, because `℘⁺fin` is the type. The
       argument for it stands and is worth keeping: an empty wire set is not writable, and
       its member would not be recoverable from the value anyway — you cannot tell `SS`
@@ -204,13 +203,13 @@ inductive HOpaque (lossy : Bool) : Value → Prop where
       the exclusion lives: `HeldSet.lean` used to exhibit `opaque` refusing `strSet ∅`,
       and that witness is now unstatable. -/
   | strSet (S : NEFinset String)
-      (h : ∀ s ∈ S.1, HOpaque lossy (.str s)) : HOpaque lossy (.strSet S)
+      (h : ∀ s ∈ S.1, HOpaque (.str s)) : HOpaque (.strSet S)
   | numSet (S : NEFinset WFNumeral)
-      (h : ∀ d ∈ S.1, HOpaque lossy (.num d)) : HOpaque lossy (.numSet S)
+      (h : ∀ d ∈ S.1, HOpaque (.num d)) : HOpaque (.numSet S)
   | binSet (S : NEFinset Bytes)
-      (h : ∀ b ∈ S.1, HOpaque lossy (.bin b)) : HOpaque lossy (.binSet S)
-  | arr  (vs) (h : ∀ x ∈ vs, HOpaque lossy x) : HOpaque lossy (.arr vs)
-  | map  (keys) (f) (h : ∀ k, HOpaque lossy (f k)) : HOpaque lossy (.map keys f)
+      (h : ∀ b ∈ S.1, HOpaque (.bin b)) : HOpaque (.binSet S)
+  | arr  (vs) (h : ∀ x ∈ vs, HOpaque x) : HOpaque (.arr vs)
+  | map  (keys) (f) (h : ∀ k, HOpaque (f k)) : HOpaque (.map keys f)
 
 /-! ## The judgement -/
 
@@ -270,7 +269,7 @@ inductive Typed : Term → Held → Option Member → Prop where
   | refine {t T μ p} (h : Typed t T μ) :
       Typed (.refine t p) (fun v => T v ∧ p.eval v) μ
   | lazy {t T μ} (h : Typed t T μ) : Typed (.lazy t) T none
-  | opaq (lossy) : Typed (.opaq lossy) (HOpaque lossy) none
+  | opaq : Typed .opaq HOpaque none
   /-- §5's bottom. It writes no value, so it stores no member, and its held set is `False`. -/
   | never : Typed .never HNever none
   /-- §4 `(object)`. The field table is a key set with a function on it, so the

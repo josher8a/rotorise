@@ -173,7 +173,6 @@ def occTop {α : Type} : α → Bool := fun _ => true
 def occNone {α : Type} : α → Bool := fun _ => false
 def occWith {α : Type} [DecidableEq α] (x : α) (o : α → Bool) : α → Bool :=
   fun y => decide (y = x) || o y
-def occBut {α : Type} [DecidableEq α] (x : α) : α → Bool := fun y => !decide (y = x)
 
 mutual
 
@@ -190,11 +189,7 @@ mutual
     * `refine t q` — the subterm's, over-approximating away `q`. Sound: a refinement writes
       a subset of what the base writes.
     * `LegacyRead` is outside the structural classifier.
-    * `opaq lossy` — a closed form, because `opaque` is a fixed list of options: every slot,
-      minus `num` when the numeric option is `Codec.empty`. This is itself an
-      over-approximation in one place: a non-lossy `opaque` refuses a `numSet` too, since
-      `opaqCodecω` budgets by the input's own depth and its element codec refuses numbers,
-      and the sound direction is to keep `numSet`.
+    * `opaq` — every slot, because `opaque` writes every value (`opaq_total`).
     * `union opts` — the union of the options'. `select` admits only where *exactly one*
       option does, so the union of the options' occupancies is an over-approximation. -/
 def occV : Term → Slot → Bool
@@ -214,7 +209,7 @@ def occV : Term → Slot → Bool
   | .refine t _  => occV t
   | .lazy t      => occV t
   | .union opts  => occVL opts
-  | .opaq lossy  => if lossy then occTop else occBut .num
+  | .opaq  => occTop
 
 def occVL : List Term → Slot → Bool
   | [] => fun _ => false
@@ -243,7 +238,7 @@ def occA : Term → Member → Bool
   | .held t _ _  => occA t
   | .lazy t      => occA t
   | .union opts  => occAL opts
-  | .opaq lossy  => if lossy then occTop else occBut .N
+  | .opaq  => occTop
 
 def occAL : List Term → Member → Bool
   | [] => fun _ => false
@@ -499,21 +494,6 @@ theorem occV_admitOpt {t : Term} (h : OccSoundV t) (v : Value)
     (hv : admitOptV (specOf t, Adm t) v = true) : occV t v.slot = true :=
   h v hv
 
-/-- **A refusing `opaque` writes no numeral**, off the joint row.
-
-    The occupancy proofs below are the only consumers, and they used to reach this fact
-    through ~~Adm_opaq_eq_adm~~ into the retired per-aspect tables — which made the whole
-    `Orth` chain a dependent of them, in the proof rather than in any statement. Both rows
-    ask `opaqCodecω`, so the fact is stated here now and the chain owes them nothing. -/
-theorem Adm_opaq_false_num (d : WFNumeral) : Adm (.opaq false) (.num d) = false := by
-  show ((opaqCodec (0+1) false).e (.num d)).isSome = false
-  rw [opaqCodec_e_num]; rfl
-
-/-- …and its twin on the read side. -/
-theorem AdmA_opaq_false_n (x : WFNumeral) : AdmA (.opaq false) (.n x) = false := by
-  show ((opaqCodec (0+1) false).p (.n x)).isSome = false
-  rw [opaqCodec_p_n]; rfl
-
 mutual
 
 /-- **The write occupancy contains the row.** Twenty-one cases, and three are worth
@@ -526,11 +506,7 @@ mutual
     be unsound.
 
     `literal k ls` is uniform in the base through `inL`, whose constructor pairing is exactly
-    `GroundKind.slot`.
-
-    `opaq false` is the one case that appeals to a lemma rather than to the row directly
-    (`Adm_opaq_false_num` above), and the lemma is available because the row asks the
-    codec. -/
+    `GroundKind.slot`. -/
 theorem occV_sound : ∀ (t : Term), OccSoundV t
   -- The rows whose `Adm` is a kind test and nothing more: one group, because a per-row
   -- proof here would be seven copies of one simp set. `number` is separate only because its
@@ -577,14 +553,7 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
       obtain ⟨t, ht, hadm⟩ := selOptV_mem_admitOpt (by rw [Adm_union] at h; exact h)
       exact occVL_of_mem ht
         (occV_admitOpt (occSoundVL_mem opts (occV_soundL opts) t ht) v hadm)
-  | .opaq lossy => fun v h => by
-      cases lossy with
-      | true => rfl
-      | false =>
-        cases v <;> simp only [occV, occBut, Value.slot, if_false, Bool.false_eq_true] <;>
-          first
-            | rfl
-            | (exact absurd h (by simp [Adm_opaq_false_num]))
+  | .opaq => fun _ _ => rfl
 
 theorem occV_soundL : ∀ (ts : List Term), OccSoundVL ts
   | [] => trivial
@@ -644,14 +613,7 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
       obtain ⟨t, ht, hadm⟩ := selOptA_mem_admitOpt (by rw [AdmA_union] at h; exact h)
       exact occAL_of_mem ht
         (occA_admitOpt (occSoundAL_mem opts (occA_soundL opts) t ht) a hadm)
-  | .opaq lossy => fun a h => by
-      cases lossy with
-      | true => rfl
-      | false =>
-        cases a <;> simp only [occA, occBut, Attr.member, if_false, Bool.false_eq_true] <;>
-          first
-            | rfl
-            | (exact absurd h (by simp [AdmA_opaq_false_n]))
+  | .opaq => fun _ _ => rfl
 
 theorem occA_soundL : ∀ (ts : List Term), OccSoundAL ts
   | [] => trivial
@@ -1295,10 +1257,7 @@ theorem typed_occV : ∀ {t T μ}, Typed t T μ → ∀ v, T v → occV t v.slot
     | held _ => rfl
     | @refine t' T' μ' q h' => exact typed_occV h' v hv.1
     | @lazy t' T' μ' h' => exact typed_occV h' v hv
-    | opaq lossy =>
-        cases lossy with
-        | true => rfl
-        | false => cases hv <;> simp_all [occV, occBut, Value.slot]
+    | opaq => rfl
     | @union opts Ts μs h' _ =>
         obtain ⟨T', hT', hv'⟩ := hv
         exact typed_occVL h' (fun t' _ _ _ hty w hw => typed_occV hty w hw) v T' hT' hv'
@@ -1642,10 +1601,6 @@ theorem orth_array_record : Orth (.array .string) (.record .string) = true := by
     both options to `.set`. The `Value` constructor does not. -/
 theorem orth_set_string_number : Orth (.set .string) (.set .number) = true := by decide
 
-/-- `opaque` with `numbers = 'refuse'` writes no number and reads no `N`, and the certificate
-    sees it because the occupancy is a closed form rather than a `⊤`. -/
-theorem orth_number_opaque : Orth .number (.opaq false) = true := by decide
-
 /-- **Phase *names*.** Two objects with no shared attribute at all — the second most common
     separator in practice, and invisible to every slot-based phase, since both options occupy
     `map` and `M`. -/
@@ -1676,10 +1631,9 @@ theorem not_orth_array_literals :
     base's. -/
 theorem not_orth_literal_string : Orth (.literal .string lsA) .string = false := by decide
 
-/-- `opaque` writes strings at either numeric policy — the fact the retired layer's two
-    `opaque`-against-`string` refutations carried, kept here where it is decidable. -/
-theorem not_orth_opaq_string_lossy : Orth (.opaq true) .string = false := by decide
-theorem not_orth_opaq_string_strict : Orth (.opaq false) .string = false := by decide
+/-- `opaque` writes strings — the fact the retired layer's two `opaque`-against-`string`
+    refutations carried, kept here where it is decidable. -/
+theorem not_orth_opaq_string : Orth .opaq .string = false := by decide
 
 /-- `not_uAtCan_literal_held`: `held`'s `f` runs *before* the
     subterm's row, so it can move the value into any constructor and the write occupancy is

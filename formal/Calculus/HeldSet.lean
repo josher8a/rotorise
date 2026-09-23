@@ -63,9 +63,9 @@ monotonicity lemma in between: each element's depth is below the list's, which i
 
 mutual
 
-theorem hopaque_T (lossy : Bool) :
-    ∀ (v : Value) (n : Nat), HOpaque lossy v -> Value.depth v <= n ->
-      (opaqCodec n lossy).T v
+theorem hopaque_T :
+    ∀ (v : Value) (n : Nat), HOpaque v -> Value.depth v <= n ->
+      (opaqCodec n).T v
   | .str s, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       exact ⟨.byAttempt stringCodec, by simp [opaqOptions], ⟨s, rfl⟩⟩
@@ -78,41 +78,37 @@ theorem hopaque_T (lossy : Bool) :
   | .null, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       exact ⟨.byAttempt nullCodec, by simp [opaqOptions], rfl⟩
-  | .num d, n, h, hd => by
+  | .num d, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      cases h with
-      | num _ hl =>
-        subst hl
-        exact ⟨.byAttempt (if true then numberCodec else Codec.empty), by simp [opaqOptions],
-               ⟨d, rfl⟩⟩
+      exact ⟨.byAttempt numberCodec, by simp [opaqOptions], ⟨d, rfl⟩⟩
   | .strSet S, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | strSet _ hall =>
-        exact ⟨.byAttempt (setCodec (opaqCodec n' lossy)), by simp [opaqOptions],
-               fun x hx => hopaque_T lossy (.str x) n' (hall x hx) (by
+        exact ⟨.byAttempt (setCodec (opaqCodec n')), by simp [opaqOptions],
+               fun x hx => hopaque_T (.str x) n' (hall x hx) (by
                   simp only [Value.depth] at hd ⊢; omega)⟩
   | .numSet S, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | numSet _ hall =>
-        exact ⟨.byAttempt (setCodec (opaqCodec n' lossy)), by simp [opaqOptions],
-               fun x hx => hopaque_T lossy (.num x) n' (hall x hx) (by
+        exact ⟨.byAttempt (setCodec (opaqCodec n')), by simp [opaqOptions],
+               fun x hx => hopaque_T (.num x) n' (hall x hx) (by
                   simp only [Value.depth] at hd ⊢; omega)⟩
   | .binSet S, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | binSet _ hall =>
-        exact ⟨.byAttempt (setCodec (opaqCodec n' lossy)), by simp [opaqOptions],
-               fun x hx => hopaque_T lossy (.bin x) n' (hall x hx) (by
+        exact ⟨.byAttempt (setCodec (opaqCodec n')), by simp [opaqOptions],
+               fun x hx => hopaque_T (.bin x) n' (hall x hx) (by
                   simp only [Value.depth] at hd ⊢; omega)⟩
   | .arr vs, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | arr _ hall =>
         have hL : Value.depthL vs <= n' := by simp only [Value.depth] at hd; omega
-        exact ⟨.byAttempt (arrayCodec (opaqCodec n' lossy)), by simp [opaqOptions],
-               hopaque_TL lossy vs n' hall hL⟩
+        exact ⟨.byAttempt (arrayCodec (opaqCodec n')), by simp [opaqOptions],
+               hopaque_TL vs n' hall hL⟩
   -- No list companion on this branch: `recordCodec`'s held set is already the pointwise
   -- statement about the entry function, so the induction hypothesis applies at each key
   -- with no traversal in between.
@@ -120,20 +116,20 @@ theorem hopaque_T (lossy : Bool) :
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | map _ _ hall =>
-        exact ⟨.byAttempt (recordCodec (opaqCodec n' lossy)), by simp [opaqOptions],
-               fun k => hopaque_T lossy (f k) n' (hall k)
+        exact ⟨.byAttempt (recordCodec (opaqCodec n')), by simp [opaqOptions],
+               fun k => hopaque_T (f k) n' (hall k)
                  (by have := Value.depth_map_entry (f := f) k; omega)⟩
 termination_by v n => (n, sizeOf v)
 
-theorem hopaque_TL (lossy : Bool) :
-    ∀ (vs : List Value) (n : Nat), (∀ x ∈ vs, HOpaque lossy x) ->
-      Value.depthL vs <= n -> ∀ x ∈ vs, (opaqCodec n lossy).T x
+theorem hopaque_TL :
+    ∀ (vs : List Value) (n : Nat), (∀ x ∈ vs, HOpaque x) ->
+      Value.depthL vs <= n -> ∀ x ∈ vs, (opaqCodec n).T x
   | [], _, _, _, x, hx => absurd hx (by simp)
   | v :: vs, n, hall, hd, x, hx => by
       rcases List.mem_cons.mp hx with h | hx'
-      · exact h ▸ hopaque_T lossy v n (hall v (by simp))
+      · exact h ▸ hopaque_T v n (hall v (by simp))
           (by simp only [Value.depthL] at hd; omega)
-      · exact hopaque_TL lossy vs n (fun y hy => hall y (by simp [hy]))
+      · exact hopaque_TL vs n (fun y hy => hall y (by simp [hy]))
           (by simp only [Value.depthL] at hd; omega) x hx'
 termination_by vs n => (n, sizeOf vs)
 
@@ -141,13 +137,13 @@ end
 
 /-- **§3's `Uν` *is* `opaque`'s held set.** The row §6 called unproved, and unprovable in
     the fuel encoding, closed for the case it said bites hardest. -/
-theorem opaq_T_identity (lossy : Bool) (v : Value) :
-    (opaqCodecω lossy).T v ↔ HOpaque lossy v := by
+theorem opaq_T_identity (v : Value) :
+    (opaqCodecω).T v ↔ HOpaque v := by
   constructor
   · rintro ⟨n, hn⟩
-    exact opaq_TSub n lossy v hn
+    exact opaq_TSub n v hn
   · intro h
-    exact ⟨Value.depth v, hopaque_T lossy v (Value.depth v) h (Nat.le_refl _)⟩
+    exact ⟨Value.depth v, hopaque_T v (Value.depth v) h (Nat.le_refl _)⟩
 
 /-! ## …and in general, at every rule
 
@@ -187,7 +183,7 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
     -- expression — the same fact that removed `typed_TSub`'s five-way split here
     | literal _ _ => exact hv
     | never => exact hv
-    | opaq lossy => exact (opaq_T_identity lossy v).mpr hv
+    | opaq => exact (opaq_T_identity v).mpr hv
     | set b =>
       rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>
         simp only [denote, setCodec, SetBase.elem_T] <;> exact hall

@@ -5,7 +5,7 @@ import Calculus.Objects
 
 `altCodec` over `OptionSem`s that carry their *admission as data*, with `UniqueAdmission`
 as (U) in premise form. `opaqCodec` is `altCodec`'s fueled fixpoint over everything
-self-identifying, and the `refuse` policy is the absence of the number option.
+self-identifying, and its number option is `numberCodec`, which holds a numeral exactly.
 -/
 
 namespace Calculus
@@ -355,21 +355,21 @@ def altCodec (os : List OptionSem) (μA : Option Member) : Codec :=
 /-- §3 `(opaque)`'s eight self-identifying options; `rec` is where the recursion goes.
 
     Named because three statements cite it — `opaqCodec`, `opaq_onKinds`,
-    `uniqueAdmission_opaque` — and a list spelled three times can drift twice. **`refuse` is
-    the absence of an option**, spelled here as the empty codec. -/
-def opaqOptions (lossy : Bool) (rec : Codec) : List OptionSem :=
+    `uniqueAdmission_opaque` — and a list spelled three times can drift twice. The number
+    option is `numberCodec`, which holds a numeral exactly. -/
+def opaqOptions (rec : Codec) : List OptionSem :=
   [.byAttempt stringCodec, .byAttempt booleanCodec, .byAttempt binaryCodec,
    .byAttempt nullCodec,
-   .byAttempt (if lossy then numberCodec else Codec.empty),
+   .byAttempt numberCodec,
    .byAttempt (setCodec rec), .byAttempt (arrayCodec rec), .byAttempt (recordCodec rec)]
 
 /-- `opaque` is not special: it is the recursive union of everything self-identifying,
     closed under the containers — "the values whose type is recoverable", as a
     fixpoint of the algebra. Its (U) is kind-disjointness (`uniqueAdmission_opaque`,
     via `uniqueAdmission_of_kinds`). -/
-def opaqCodec : Nat → Bool → Codec
-  | 0, _ => .empty
-  | fuel+1, lossy => altCodec (opaqOptions lossy (opaqCodec fuel lossy)) none
+def opaqCodec : Nat → Codec
+  | 0 => .empty
+  | fuel+1 => altCodec (opaqOptions (opaqCodec fuel)) none
 
 end
 
