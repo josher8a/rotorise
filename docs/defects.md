@@ -26,8 +26,8 @@ leading `/` matches no path. Measured 2026-09-07:
 Every file of `src/` answers the same way. Dropping the leading slash makes the linter run and
 report 6 errors in that one file.
 
-**Effect.** `npm run format:ci` exits 0 and reports 62 files checked. Those 62 are the formatter and
-the import sorter. The linter contributes nothing to any gate, so a lint class this repository has
+**Effect.** `npm run format:ci` exits 0 and reports 71 files checked, measured 2026-09-23. Those 71
+are the formatter and the import sorter. The linter contributes nothing to any gate, so a lint class this repository has
 switched on is unenforced. Whole-tree counts the moment the glob is corrected: **15 errors and 13
 warnings** with the spec exemption intact, and **32 errors and 35 warnings** with the specs linted,
 13 spec files carrying diagnostics.
@@ -51,7 +51,7 @@ moves and a declaration name is not. What has no guard is the same form aimed at
 Markdown file.
 
 **Effect.** Six citations carry a line number that nothing checks: `docs/dynamo-datatypes.md:130`
-from `Calculus/Domain.lean`, `src/codec/attribute.ts` and `src/codec/spec/laws/codec.depth.spec.ts`;
+from `Calculus/DynamoDB.lean`, `src/codec/attribute.ts` and `src/codec/spec/laws/codec.depth.spec.ts`;
 `src/codec/spec/literal/codec.set.spec.ts:76` from `Calculus/Products.lean`; and
 `src/codec/attribute.ts:138` and `src/codec/codec.ts:1466` from
 `src/codec/lean/lean.predicates.spec.ts`. Any edit above one of those lines moves it, and every
@@ -92,28 +92,18 @@ attribute that is absent and an attribute holding an undefined value are differe
 
 ## Partially mitigated: the corpus pins a numeric set and no scalar numeric value
 
-**Observation.** This entry recorded an obstruction and then outlived it. `Value.num` carried the
-deleted host float type, an axiom with no closed terms, so no numeric value could appear in a
-vector at all. It carries a `WFNumeral` now: the digits are the value, so a numeral is a closed
-term and `leanValueOf` emits `Value.num (WFNumeral.of "1.5")` for a `DynamoNumber`.
+**Observation.** `Value.num` carries a `WFNumeral`, which is a closed term, and `leanValueOf` emits
+`Value.num (WFNumeral.of "1.5")` for a `DynamoNumber`. The set half is in the corpus: a set vector
+at `dynamoNumber.set()` is in `sampleVectors`. Measured 2026-09-23 with `grep -o 'Value.numSet'`,
+`Value.numSet` appears once in each committed sample, 36 times in `.vectors.full.lean`, once in
+`.readvectors.lean` and 11 times in `.resolutions.lean`.
 
-**What closed.** The set half. A set vector at `dynamoNumber.set()` joined `sampleVectors`, and
-`Value.numSet` appears in five gate artifacts — twice in each committed sample, 37 times in
-`.vectors.full.lean`, once in `.readvectors.lean` and twelve times in `.resolutions.lean`.
-`leanValueOf` also stopped emitting `Value.map {"digits"}` for a `DynamoNumber`, which the record
-row did because it read the carrier's own field; that would have put a false vector in front of
-the kernel had any corpus value reached it.
-
-**Effect, and it is the scalar half.** `Value.num` appears **zero** times in every gate artifact.
-The numeric entry in the four corpus lists that cross codecs against each other is `dynamoNumber`,
-and it is not in `sampleVectors`, so no *write* vector carries a scalar numeric value. The read
-side is covered — `Attr.n` appears 182 times in `.readverdicts.lean` — so what is unpinned is one
-direction of one shape.
-
-**Not the `decimal` conflation, which closed.** The emitter writes a `decimal` vector with
-`Value.str "1.5"`, and that is now correct rather than a conflation: `decimal` is `held` over the
-native with the text pair the model names, so the caller's value *is* text and the term says so.
-The refusal message that named the deleted host type says what is true instead.
+**Effect, and it is the scalar half.** Measured the same way, `Value.num` appears zero times in each
+of the eight gate artifacts. The numeric entry in the four corpus lists that cross codecs against
+each other is `dynamoNumber`, and it is not in `sampleVectors`, so no write vector carries a scalar
+numeric value. The read side is covered: `Attr.n` appears 185 times in `.readverdicts.lean`. So one
+direction of one shape is unpinned. The `decimal` vector carries `Value.str "1.5"`, which is
+correct, because `decimal` is `held` over `number` with the text pair, so its value is text.
 
 **Pin.** The set half is pinned by the set vector in `sampleVectors`, which the gate elaborates.
 The scalar half has no pin, and closing it means putting a scalar `dynamoNumber` vector in
@@ -121,34 +111,23 @@ The scalar half has no pin, and closing it means putting a scalar `dynamoNumber`
 
 ---
 
-## Known: three of the gate's eight vector artifacts do not elaborate
+## Known: the meet emitter's tactic swallows an unknown lemma name, and no guard reads the names
 
-**Observation.** `formal/scripts/gate.sh`'s vector-bridge step elaborates eight generated files and
-fails if any produces output. Five are clean: `lean.sample.check.lean`, `lean.sample.lean`,
-`.vectors.full.lean`, `.readverdicts.lean` and `.resolutions.lean`. Three are not, and the three
-fail for three different reasons.
+**Observation.** `src/codec/lean.ts` writes a tactic macro into `.meets.lean`, and every meet
+theorem closes by that macro. The macro is `first | rfl | decide | (simp [MEET_LEMMAS] <;> decide)
+| (simp [MEET_LEMMAS] <;> rfl)`. An unknown constant in a `simp` list is an elaboration error, and
+`first` catches the error and tries the next alternative. Measured 2026-09-23 with `lake env lean`
+on a probe file: a `first` whose `simp` alternative names an undeclared constant, followed by `rfl`,
+closes `1 + 1 = 2` with no message. The same `simp` call alone reports `Unknown identifier`.
 
-- `.meets.lean`, 101 errors, naming three declarations the model replaced: the rest-merge
-  function and the two object recursors the meet emitter still writes. `Meet.lean` records that
-  where the development read the first there is now a nine-cell table over three cases. This is
-  name drift in the meet emitter, the same class the object body carried until `ObjectSlot` was
-  written.
-- `.separations.lean`, 17 errors, all "Expected type must not contain free variables".
-- `.readvectors.lean`, 8 errors, "Type mismatch" and "Not a definitional equality".
+**Effect.** A declaration that leaves the model and stays in `MEET_LEMMAS` leaves the bridge green.
+The `simp` alternatives stop contributing, and nothing reports it. `scripts/name_drift.py` does not
+close the gap: its targets are the documents and `Calculus/*.lean`, and neither `src/codec/lean.ts`
+nor a generated artifact is in that list.
 
-**Effect.** The bridge is dark for the meet, the separations and the read vectors. A generated
-theorem that does not elaborate proves nothing, so a change to any of the three goes unchecked —
-and this tree has recorded that failure before, where two sample files typechecked against no
-`Calculus/` for ten commits. `docs/roadmap.md` names this as the reason the term language is not
-yet rebuilt: while the artifacts do not elaborate, a change to the constructor set lands unchecked.
-
-**Not measured at a baseline.** The meet drift is established: `Rest.merge` entered
-`src/codec/lean.ts` at `8b637b8` and no later pass touched it. The other two are recorded as
-observed today; nobody has measured whether their error counts moved, so this entry does not claim
-they are unchanged.
-
-**Pin.** The vector-bridge step of `gate.sh`, which gates on the exit code and reports every check
-rather than the first failure.
+**Pin.** None. ~~famDecimal~~ left `MEET_LEMMAS`, and `isStored` left a `first` alternative of the
+`admA_never` macro in `Meet.lean`, in the passes that deleted or moved each declaration. No check
+reported either name.
 
 ---
 
@@ -211,26 +190,6 @@ repair is to route the remaining site through the same seam, not to write a rend
 
 ---
 
-## Known: the held-set index is not the domain of the write side at a union
-
-**Observation.** The judgement's held-set row ran two claims together. The first, that the held set
-equals the denotation's, is proved at every rule by `typed_T_identity`. The second, that the held
-set equals the domain of the write side, is false at a union.
-
-**Effect.** The two readings were treated as one, so the row appeared to be established when half of
-it was refuted. The first reading is definitional at a union, which is `altCodec_T`. The second is
-what remains open.
-
-**Pin.** `not_TIsDomE_unionLiteralString` in `HeldSet.lean` is the refutation, and `HeldSet.lean`
-separates the two claims so that neither can be read as the other.
-
-**Not a candidate for closure by deleting the index.** The rules are the model's transcription of
-the blueprint's `content.tex`, and a rule whose held set is spelled as the denotation's cannot be read
-against the document it transcribes. The identity is what makes the transcription checked rather
-than advertised, and it means that only because the two sides are written independently.
-
----
-
 ## Known: the type level reads a literal off a type, and the term is what the runtime reads
 
 **Observation.** The union's declaration gate decides whether an object option pins a name to a
@@ -240,7 +199,7 @@ question to ask there. Admission at run time reads the term instead, and a term 
 where a literal constructor made it.
 
 **Effect, and it runs the other way from what this entry used to say.** The two disagree on one
-shape. An adapter — a held codec, or a custom one — whose decode narrows to a literal type reads
+shape. An adapter, a held codec, whose decode narrows to a literal type reads
 as pinning a literal at the type level and pins none at the term. This entry recorded the
 consequence as ambiguity on the first item. Measured, it is the opposite: the pair **typechecks
 and then refuses at construction**, with the message a pair carrying no discriminator gets.

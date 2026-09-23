@@ -225,6 +225,8 @@ HOST = {
                     "names for one carrier, on the two sides of the bridge",
     "dynamoNumber": "`src/`'s codec at the native numeric base, whose term is `Term.number`. The "
                     "codec and the term are named on their own sides",
+    "MEET_LEMMAS": "`src/codec/lean.ts`'s list of the `simp` lemmas that the meet macro in "
+                   "`.meets.lean` names. The list is the host's, and each name in it is a model name",
     "sampleVectors": "`src/codec/lean/lean.spec.ts`'s differential corpus. The vectors it "
                      "generates are elaborated here; the list itself is the host's",
     "structuralMeet": "`src/codec/term.ts`'s object-body meet, which decides whether two object "
@@ -269,8 +271,6 @@ SPEC = {
                 "name for it is not a Lean name",
     "Numbers": "§5's policy name. The model has no policy: `opaque` holds a number exactly, and "
                "the host states each policy as `held` over its canonical `opaque`",
-    "lossy": "§3's name for one numeric policy of `opaque`, beside `refuse`. The model's `opaque` "
-             "has no policy, and the host keeps `opaque('lossy')` as `held` sugar",
     "dom": "§2's notation for a partial function's domain, written `dom(e)`; `domE` is the Lean "
            "lemma about it",
     "p_c": "§2's notation for a component codec's read half, paired with `e_c`",

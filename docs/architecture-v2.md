@@ -171,9 +171,9 @@ carriers, so an adapter admits a value exactly when its inner term admits one, a
 answers. The adapter's set stays unnamed, because the host function is arbitrary. The certificate
 never asks for the set.
 
-**An opaque projection decides that question.** An opaque term denotes a codec the calculus
-warrants, and not a codec a caller supplies. Its inhabitance is a theorem about that codec, and
-its set stays a question for that codec to answer.
+**`opaque` decides that question.** `opaque` denotes a codec the calculus warrants, and not a
+codec a caller supplies. `opaque` is the universal sum, and its set is every value: `opaq_total`
+states the value side, and `opaqA_total` states the attribute side.
 
 **A closure decides against a finite partner.** A closure is a caller's function on a value. Apply
 the function to each alternative of a finite admissible set, and the answer is exact. A ground
@@ -184,7 +184,7 @@ an unbounded carrier.
 flowchart LR
   POS["a position in the term"] --> Q{"can this position answer the certificate"}
   Q -- "a carrier, an admissible set,<br/>a name, an index" --> EX["recurse, exactly"]
-  Q -- "an adapter, an opaque projection,<br/>a closure over a finite set" --> EX
+  Q -- "an adapter, opaque,<br/>a closure over a finite set" --> EX
   Q -- "a closure over an unbounded carrier" --> TOP["no information, so refuse"]
   EX --> POS
 ```
@@ -229,7 +229,7 @@ meet owes at that position before anybody writes the row.
 
 | construction | in the language | what the meet owes |
 | --- | --- | --- |
-| a base | a ground carrier, an opaque projection | nothing beyond its own set |
+| a base | a ground carrier, `opaque` | nothing beyond its own set |
 | a **product** | an object, a tuple, an array | meet componentwise; the bottom propagates at a required position and not at a variadic one |
 | a **coproduct** | a union, a name's absent-or-present | a unit law; disjoint injections; the meet distributes over it |
 | a **subobject** | a restriction | the predicates **meet**: idempotent and commutative |
@@ -337,15 +337,17 @@ collapse above makes one inhabitance decision settle both projections. The ladde
 structure of the attribute side; it does not supply a test, and a design that reaches for it has
 mistaken a description for a mechanism.
 
-### The lattice is complete and the term language is not
+### The term language has a bottom and a top
 
-The term language has a bottom and no top. No term admits every value, because a term denotes a
-codec and no codec encodes every value.
+The term language has a bottom and a top. `opaque` is the top: the universal sum, total on the
+values (`opaq_total`) and on the attributes (`opaqA_total`). Each term with no `held` is a
+restriction of `opaque` on both halves (`confluence_W`, `confluence_R`). A `held` term changes the
+carrier, so that inclusion does not reach it. `opaque` carries no flag, because it holds a number
+exactly and so loses nothing.
 
-The description has a top and needs one: an undecidable leaf answers with it, and the value side
-of an uncertified adapter is it. So **the top belongs to the description and not to the term language**, and the
-asymmetry is forced rather than missing. A host constructs the top's **projection**, never the
-top: the opaque term is that projection, and its flag says whether the projection loses.
+The description has a top as well: an undecidable leaf answers with it, and the value side of an
+uncertified adapter is it. **A numeric policy is a host adapter.** A host that refuses
+its own numeric type, or rounds it, states the policy as an adapter over `opaque`, outside the core.
 
 ## 3. What the structure demands of any description
 
@@ -553,24 +555,21 @@ classical instance.
 
 ## 5. What is host-relative, and what is not
 
-**The value universe is the host's, and the core currently fixes one.** It names an opaque
-numeric type concretely and carries no decimal carrier, so a decimal value is a text value.
-Those are host facts, not laws: a host with an arbitrary-precision primitive separates them.
+**The value universe is fixed by the core, and a host numeric type is not in it.** The core
+carries a number exactly, as a well-formed numeral. A host numeric type approximates that
+numeral, and the port adapts the host type to the numeral inside the port.
 
-Everything derived from that collapse is therefore a property of a chosen universe. The text
-base and the decimal base sharing a value slot while storing at different members is one such
-thing, and so is every refusal that follows from it.
+Everything derived from that universe is a property of the chosen universe, and so is every
+refusal that follows from it.
 
-**The core already knows how to state premises instead of fixing an instance.** The numeric host
-is a structure over any carrier, with a spelling, a reader, a round trip and a decidable
-equality, and it has inhabitants that need no opaque type at all. That is the pattern: the core
-states what a host must provide, the host provides it, and the term references it.
+**A fact of the store lives in the port.** The numerals that the store hands back, and the
+nesting bound of the store, live in the DynamoDB port module. The core states the general law,
+and the port instantiates it. The core states no host interface for a port to fill.
 
-**A base of the language is an adapter.** The platform-number base and the host-independent
-decimal base have the adapter's signature exactly: the stored side passes through and the value
-side is re-indexed, with the round trip proved rather than promised. A number literal is a
-decimal literal under that adapter. So an adapter is native to the language rather than an escape
-hatch added to it.
+**A host base is an adapter.** The host's `decimal` is `number` under a text adapter. Each
+numeric policy of `opaque` is an adapter over `opaque`. The stored side passes through, and the
+value side is re-indexed. So an adapter is native to the language rather than an escape hatch
+added to it.
 
 ---
 
@@ -583,5 +582,3 @@ hatch added to it.
 - **A cheap dispatch.** Admission by attempt reads every field through that field's codec. A host
   may keep a discriminant dispatch as an optimisation that agrees with admission, and nothing
   here derives one for it.
-- **A top in the term language.** Forced: a term denotes a codec, and no codec encodes every
-  value.
