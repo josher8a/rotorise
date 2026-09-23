@@ -439,9 +439,19 @@ describe('terms', () => {
         )
     })
 
-    it('emits opaque with its number policy as the `lossy` flag', () => {
-        expect(leanTermOf(erase(opaque))).toBe('Term.opaq false')
-        expect(leanTermOf(erase(opaque('lossy')))).toBe('Term.opaq true')
+    /**
+     * **The canonical `opaque` is the model's exact `opaq true`**, and a numeric policy has no
+     * term there. Each policy is a `held` over the canonical term whose pair converts a JS number,
+     * and the model names no such pair, so the emitter refuses it as it refuses a caller's closure.
+     */
+    it('emits the total opaque as the exact opaq, and refuses each numeric policy', () => {
+        expect(leanTermOf(erase(opaque))).toBe('Term.opaq true')
+        expect(leanTermOf(erase(opaque()))).toBe('Term.opaq true')
+        for (const numbers of ['lossy', 'refuse'] as const) {
+            expect(
+                refusal(() => leanTermOf(erase(opaque(numbers)))).reason,
+            ).toContain('Value → Value')
+        }
     })
 })
 
@@ -1492,6 +1502,13 @@ describe("the declaration guard, against the model's classifier", () => {
      * `union_of_two` and `nullable_null`. `identifies` accepted all eight, and `Orth` declines
      * all eight.
      *
+     * **It was 165, and the one that arrived is `opaque_map__vs__scalar_number`.** The canonical
+     * `opaque` is total now: it holds a number as a `DynamoNumber`, so it writes the `number`
+     * slot and reads `N`, where the `'refuse'` policy that `opaque_map` used to carry wrote
+     * neither. `dynamoNumber` writes and reads exactly those, so the two options meet on both
+     * sides and the pair is refused. `Orth (Term.opaq true) Term.number` is `false`, so the
+     * warrant is `Orth` declining, and no pair left.
+     *
      * **Measured, and it is the question this count exists to answer**: the disjointness law
      * `6536d91` added refuses **none** of these pairs. Every refusal here is an occupancy or a
      * restriction, and no pair is refused for carrying a value another pair also carries.
@@ -1502,7 +1519,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(165)
+        expect(separations.length).toBe(166)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or — for a `never` pair, where
         // the model permits what `src/` lints away — the permits-form states what the model says

@@ -59,7 +59,7 @@ import type {
 import { CodecError, codecOfTerm, failed, opaque, orThrow } from './codec'
 import { accepts, holds, readsBack, valueKinds } from './denote'
 import type { Field, Predicate, Term } from './term'
-import { alwaysWritten, member as termMember } from './term'
+import { alwaysWritten, isOpaqueSugar, member as termMember } from './term'
 import { shapeOf } from './value'
 
 /** mulberry32 — small, fast, and good enough to search a value space. */
@@ -808,7 +808,8 @@ const someDecimal = (rng: Rng) =>
 const someUnknown = (
     rng: Rng,
     size: number,
-    numbers: opaque.Numbers,
+    /** `exact` is the canonical `opaque`, which holds a number as a `DynamoNumber`. */
+    numbers: opaque.Numbers | 'exact',
 ): unknown => {
     const scalars: unknown[] = [
         null,
@@ -819,6 +820,9 @@ const someUnknown = (
     // a number is in the domain only once the caller has said what to do with `N`
     if (numbers === 'lossy') {
         scalars.push(pickFrom(rng, [0, 1, -1, 1.5, 0.1, -0.25, 1e20, 1e21]))
+    }
+    if (numbers === 'exact') {
+        scalars.push(orThrow(DynamoNumber.from(someDecimal(rng))))
     }
     const scalar = () => pickFrom(rng, scalars)
     if (size <= 0) return scalar()
@@ -833,7 +837,9 @@ const someUnknown = (
                 someUnknown(rng, size - 1, numbers),
             ]),
         ),
-        new Set([someString(rng), someString(rng)].sort()),
+        numbers === 'exact' && rng() < 0.5
+            ? new Set([orThrow(DynamoNumber.from(someDecimal(rng)))])
+            : new Set([someString(rng), someString(rng)].sort()),
     ])
 }
 
@@ -841,6 +847,7 @@ const shrinkUnknown = (value: unknown): readonly unknown[] => {
     if (value === null) return []
     if (typeof value === 'string') return [null, ...shrinkString(value)]
     if (typeof value === 'number') return [null, ...shrinkNumber(value)]
+    if (value instanceof DynamoNumber) return [null]
     if (typeof value === 'boolean') return value ? [null, false] : [null]
     if (value instanceof Uint8Array) {
         return value.length === 0 ? [null] : [null, new Uint8Array(0)]
@@ -965,7 +972,7 @@ export const arbitraryOf = (
                 ),
             )
         case 'opaq':
-            return someUnknown(rng, size, def.lossy ? 'lossy' : 'refuse')
+            return someUnknown(rng, size, 'exact')
         case 'held':
             /**
              * Generated for the inner codec and handed out through `decode`, so what is generated is
@@ -978,6 +985,12 @@ export const arbitraryOf = (
              * run rather than folded into a value.
              */
             if (def.arbitrary) return def.arbitrary(rng, size)
+            // a numeric policy of `opaque` generates the JS values it holds, as before it was a
+            // `held`. The derived generator would hand it an `NS` read, which the policy refuses
+            if (def.via === 'opaqueLossy')
+                return someUnknown(rng, size, 'lossy')
+            if (def.via === 'opaqueRefuse')
+                return someUnknown(rng, size, 'refuse')
             return def.g(
                 arbitraryOf(codecOfTerm(def.inner), rng, size) as never,
             )
@@ -1242,6 +1255,7 @@ export const shrinkOf = (
             // A caller who stated a shrink owns the answer, because a partial pair cannot be
             // shrunk through: the inner side would hand back values the conversion refuses
             if (def.shrink) return def.shrink(value as never)
+            if (isOpaqueSugar(def.via)) return shrinkUnknown(value)
             return shrinkOf(codecOfTerm(def.inner), def.f(value as never)).map(
                 (shrunk) => def.g(shrunk as never),
             )

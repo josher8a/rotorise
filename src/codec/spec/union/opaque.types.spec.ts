@@ -6,9 +6,9 @@
  * resolves to an `ErrorMessage` exactly where the function returns a `CodecError`.
  *
  * This is the pair `native.ItemEncode` is for the AWS SDK's marshaller, and the two are not the same
- * function: this one refuses numbers by default, refuses `bigint`, refuses a set of numbers, refuses
- * a `Map`, and refuses a class instance. A team whose own marshaller resembles `opaque` diffs
- * against this.
+ * function: this one holds a number as a `DynamoNumber` and refuses a JS number, refuses `bigint`,
+ * refuses a `Map`, and refuses a class instance. A team whose own marshaller resembles `opaque`
+ * diffs against this.
  */
 import { attest } from '@ark/attest'
 import { describe, expect, it } from 'vitest'
@@ -26,8 +26,9 @@ import type {
     S,
     SS,
 } from '../../attribute'
+import { DynamoNumber } from '../../attribute'
 import type { AttributeCodec } from '../../codec'
-import { CodecError, failed, opaque } from '../../codec'
+import { CodecError, failed, opaque, orThrow } from '../../codec'
 import type { native } from '../../native'
 
 /**
@@ -57,13 +58,25 @@ describe('what opaque writes, as a type and as a function', () => {
         expect(wrote(Uint8Array.from([1]))).toEqual({ B: Uint8Array.from([1]) })
     })
 
-    it('on a number, only once told what to do with N', () => {
+    it('on a DynamoNumber, which the canonical codec holds exactly', () => {
+        attest<[opaque.Encode<DynamoNumber>], [N]>()
+        expect(opaque.encode(orThrow(DynamoNumber.from('1.50')))).toEqual({
+            N: '1.5',
+        })
+    })
+
+    it('on a JS number, only once a policy says what to do with N', () => {
         attest<[opaque.Encode<number, 'lossy'>], [N]>()
         expect(wrote(1.5)).toEqual({ N: '1.5' })
 
-        // and refused by default, in both
+        // the canonical codec refuses a float, and names the exact carrier and the policy
         attest<[Refuses<opaque.Encode<number>>], [true]>()
-        expect(refused(1.5)).toMatch(/a number cannot be stored/)
+        expect(refused(1.5)).toMatch(/`DynamoNumber`.*opaque\('lossy'\)/)
+        // and the refusing policy refuses it as before it was a `held`
+        attest<[Refuses<opaque.Encode<number, 'refuse'>>], [true]>()
+        expect(refused(1.5, opaque('refuse'))).toMatch(
+            /a number cannot be stored/,
+        )
     })
 
     it('on the sets it carries, and the one it does not', () => {
@@ -71,8 +84,20 @@ describe('what opaque writes, as a type and as a function', () => {
         attest<[opaque.Encode<ReadonlySet<Uint8Array>>], [BS]>()
         expect(wrote(new Set(['b', 'a']))).toEqual({ SS: ['a', 'b'] })
 
-        // a set of numbers reaches `NS`, which decodes as strings — so neither will write it
+        // the canonical codec writes a set of `DynamoNumber`s as the `NS` it reads back
+        attest<[opaque.Encode<ReadonlySet<DynamoNumber>>], [NS]>()
+        expect(
+            opaque.encode(
+                new Set([
+                    orThrow(DynamoNumber.from('2')),
+                    orThrow(DynamoNumber.from('1')),
+                ]),
+            ),
+        ).toEqual({ NS: ['1', '2'] })
+        // a set of JS numbers has no member, and the policies write no `NS` at all
         attest<[Refuses<opaque.Encode<ReadonlySet<number>>>], [true]>()
+        attest<[Refuses<opaque.Encode<ReadonlySet<number>, 'lossy'>>], [true]>()
+        expect(refused(new Set([1, 2]))).toMatch(/each holds one kind/)
         expect(refused(new Set([1, 2]), opaque('lossy'))).toMatch(
             /a set of numbers cannot be stored/,
         )
@@ -92,10 +117,17 @@ describe('what opaque writes, as a type and as a function', () => {
         attest<
             [opaque.Encode<readonly bigint[]>],
             [
+                ErrorMessage<'[opaque] a bigint writes `N` and reads back as a `DynamoNumber`, so `1n` would not come back as `1n`. Pass `DynamoNumber.from(value.toString())`'>,
+            ]
+        >()
+        attest<
+            [opaque.Encode<readonly bigint[], 'lossy'>],
+            [
                 ErrorMessage<'[opaque] a bigint shares `N` with `number` and decodes as one, so `1n` would come back as `1`. Use `decimal` and pass `value.toString()`'>,
             ]
         >()
         expect(refused([1n])).toMatch(/a bigint cannot be stored/)
+        expect(refused([1n], opaque('lossy'))).toMatch(/come back as `1`/)
     })
 
     it('on a plain object, nested', () => {
@@ -143,19 +175,22 @@ describe('what opaque writes, as a type and as a function', () => {
 /**
  * One entry point, its only parameter optional — the shape {@link native} takes.
  *
- * `opaque` is the refusing codec and calling it chooses the other policy. It was three names for two
- * codecs, and the policy is the one knob it has, so unlike `native` it is *fully* reflected in the
- * type: `Encode<number>` is a refusal and `Encode<number, 'lossy'>` is `N`, which is the whole of
- * what the runtime decides.
+ * `opaque` is the canonical codec, and a call chooses a numeric policy. The policy is the one knob
+ * it has, so unlike `native` it is *fully* reflected in the type: `Encode<DynamoNumber>` is `N`,
+ * `Encode<number>` is a refusal, and `Encode<number, 'lossy'>` is `N`.
  */
 describe('opaque is one codec and one optional policy', () => {
-    it('refuses by default, without being called', () => {
+    it('is the canonical codec without being called, which refuses a float', () => {
         expect(failed(opaque.encode(1))).toBe(true)
         attest<[Refuses<opaque.Encode<number>>], [true]>()
+        attest<[opaque.Decode<N>], [DynamoNumber]>()
     })
 
     it('and calling it with no argument means the same thing', () => {
         expect(failed(opaque().encode(1))).toBe(true)
+        expect(opaque().decode({ N: '1.50' })).toEqual(
+            orThrow(DynamoNumber.from('1.5')),
+        )
     })
 
     it('takes the other policy as an argument', () => {
@@ -198,10 +233,14 @@ describe('what opaque reads back, as a type and as a function', () => {
         expect(read({ B: Uint8Array.from([1]) })).toEqual(Uint8Array.from([1]))
     })
 
-    it('on an N, which is a refusal until a policy is chosen', () => {
-        attest<[Refuses<opaque.Decode<N>>], [true]>()
+    it('on an N, which is a DynamoNumber, a float under lossy, and a refusal under refuse', () => {
+        attest<[opaque.Decode<N>], [DynamoNumber]>()
+        attest<[Refuses<opaque.Decode<N, 'refuse'>>], [true]>()
         attest<[opaque.Decode<N, 'lossy'>], [number]>()
 
+        expect(opaque.decode({ N: '1.5' })).toEqual(
+            orThrow(DynamoNumber.from('1.5')),
+        )
         expect(read({ N: '1.5' })).toBe('refused')
         expect(read({ N: '1.5' }, 'lossy')).toBe(1.5)
     })
@@ -226,8 +265,8 @@ describe('what opaque reads back, as a type and as a function', () => {
     })
 
     it('carries a refused member out of the collection holding it', () => {
-        attest<[Refuses<opaque.Decode<L<N>>>], [true]>()
-        attest<[Refuses<opaque.Decode<M<{ big: N }>>>], [true]>()
+        attest<[Refuses<opaque.Decode<L<N>, 'refuse'>>], [true]>()
+        attest<[Refuses<opaque.Decode<M<{ big: N }>, 'refuse'>>], [true]>()
 
         expect(read({ L: [{ N: '1' }] })).toBe('refused')
         expect(read({ M: { big: { N: '1' } } })).toBe('refused')
@@ -241,19 +280,28 @@ describe('what opaque reads back, as a type and as a function', () => {
     })
 
     /**
-     * The three places this differs from the SDK's reading, asserted rather than described.
+     * The places this differs from the SDK's reading, asserted rather than described.
      *
-     * `NS` is the one that matters: its members are decimal strings, and nothing without a schema can
-     * say which of them a JS number holds faithfully. The SDK guesses; this does not.
+     * `N` and `NS` are the ones that matter: their members are decimal strings, and nothing
+     * without a schema can say which of them a JS number holds faithfully. The SDK guesses. The
+     * canonical codec reads the exact `DynamoNumber`, and the refusing policy refuses.
      */
     it('differs from native.Decode where the two disagree', () => {
         attest<[native.Decode<NS>], [Set<number | bigint>]>()
-        attest<[Refuses<opaque.Decode<NS>>], [true]>()
+        attest<[opaque.Decode<NS>], [Set<DynamoNumber>]>()
+        attest<[Refuses<opaque.Decode<NS, 'refuse'>>], [true]>()
 
         attest<[native.Decode<N>], [number | bigint]>()
-        attest<[Refuses<opaque.Decode<N>>], [true]>()
+        attest<[opaque.Decode<N>], [DynamoNumber]>()
+        attest<[Refuses<opaque.Decode<N, 'refuse'>>], [true]>()
 
-        // and the runtime agrees: a stored NS is refused, not guessed at
+        // and the runtime agrees: a stored NS is exact, or refused under a policy, never guessed
+        expect(opaque.decode({ NS: ['1', '2'] })).toEqual(
+            new Set([
+                orThrow(DynamoNumber.from('1')),
+                orThrow(DynamoNumber.from('2')),
+            ]),
+        )
         expect(read({ NS: ['1', '2'] })).toBe('refused')
     })
 })
@@ -334,10 +382,22 @@ describe('every N it writes is a numeral', () => {
         expect(lossy.unsafeDecode({ N: '0' })).toBe(0)
     })
 
-    it('still writes the range that is stored, including the ends', () => {
+    /**
+     * **The digits written are the normal form of `DynamoNumber`**, which is the form the store
+     * returns. `String(1e125)` is `1e+125`, and the policy writes the digits in full. The number is
+     * the same, so a read gives back the float that was written.
+     */
+    it('still writes the range that is stored, including the ends, in the normal form', () => {
         const lossy = opaque('lossy')
-        expect(lossy.unsafeEncode(1e125)).toEqual({ N: '1e+125' })
-        expect(lossy.unsafeEncode(1e-130)).toEqual({ N: '1e-130' })
+        expect(lossy.unsafeEncode(1e125)).toEqual({ N: `1${'0'.repeat(125)}` })
+        expect(lossy.unsafeEncode(1e-130)).toEqual({
+            N: `0.${'0'.repeat(129)}1`,
+        })
+        expect(lossy.unsafeEncode(1e21)).toEqual({
+            N: '1000000000000000000000',
+        })
+        expect(lossy.unsafeEncode(5e-7)).toEqual({ N: '0.0000005' })
+        expect(lossy.unsafeDecode(lossy.unsafeEncode(1e-130))).toBe(1e-130)
         expect(lossy.unsafeEncode(0)).toEqual({ N: '0' })
         expect(lossy.unsafeEncode(-1.5)).toEqual({ N: '-1.5' })
     })

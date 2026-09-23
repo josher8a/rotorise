@@ -98,8 +98,24 @@ describe('the union refusals a caller reads at compile time', () => {
             // @ts-expect-error the clause under test
             union([opaque, string]),
         ).type.errors.snap(
-            "Argument of type '[AttributeCodec<unknown, AttributeValue> & { readonly def: { readonly kind: \"opaq\"; }; } & ((numbers?: Numbers | undefined) => OpaqueCodec), StringCodec]' is not assignable to parameter of type 'readonly [AttributeCodec<unknown, AttributeValue> & { readonly def: { readonly kind: \"opaq\"; }; } & ((numbers?: Numbers | undefined) => OpaqueCodec), StringCodec] & ErrorMessage<...>'.Property '[errorMessage]' is missing in type '[AttributeCodec<unknown, AttributeValue> & { readonly def: { readonly kind: \"opaq\"; }; } & ((numbers?: Numbers | undefined) => OpaqueCodec), StringCodec]' but required in type 'ErrorMessage<\"[union] one option is `opaque`, which admits every value the others admit — so no value can select between them and the others can never be chosen. Remove the `opaque` option; a discriminator does not fix this\">'.",
+            'Argument of type \'[AttributeCodec<unknown, AttributeValue> & { readonly def: { readonly kind: "opaq"; }; } & { (): OpaqueCodec<{ readonly kind: "opaq"; }>; (numbers: Numbers): OpaqueCodec<...>; }, StringCodec]\' is not assignable to parameter of type \'readonly [AttributeCodec<unknown, AttributeValue> & { readonly def: { readonly kind: "opaq"; }; } & { (): OpaqueCodec<{ readonly kind: "opaq"; }>; (numbers: Numbers): OpaqueCodec<...>; }, StringCodec] & ErrorMessage<...>\'.Property \'[errorMessage]\' is missing in type \'[AttributeCodec<unknown, AttributeValue> & { readonly def: { readonly kind: "opaq"; }; } & { (): OpaqueCodec<{ readonly kind: "opaq"; }>; (numbers: Numbers): OpaqueCodec<...>; }, StringCodec]\' but required in type \'ErrorMessage<"[union] one option is `opaque`, which admits every value the others admit — so no value can select between them and the others can never be chosen. Remove the `opaque` option; a discriminator does not fix this">\'.',
         )
+    })
+
+    /**
+     * **A numeric policy is the same rule.** Each policy is a `held` over the canonical `opaque`,
+     * and it admits every value that holds no number, so no other option can be chosen beside it.
+     * The clause matches the policy's term as well as the bare `opaq`.
+     */
+    it('names a numeric policy of opaque as the option to remove', () => {
+        attest(() =>
+            // @ts-expect-error the clause under test
+            union([opaque('lossy'), string]),
+        ).type.errors('one option is `opaque`')
+        attest(() =>
+            // @ts-expect-error the clause under test
+            union([string, opaque('refuse')]),
+        ).type.errors('one option is `opaque`')
     })
 
     /**

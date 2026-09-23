@@ -44,6 +44,7 @@ import { carrying, isNumeral, memberOf, tooDeeplyNested } from './attribute'
 import { codec } from './build'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every, everyEntry } from './codec'
+import { opaqueTerms } from './denote'
 
 /**
  * The options `@aws-sdk/util-dynamodb` takes, as far as this reproduces them.
@@ -384,7 +385,7 @@ const configured = (
     // hand-written codec cannot claim another kind's definition. This is inside the library, so it
     // has the site that can
     return codec<unknown, AttributeValue>({
-        def: { kind: 'opaq', lossy: true },
+        def: opaqueTerms.lossy,
         encode: (value) => toNative(value, options, write),
         decode: (attribute) => fromNative(attribute, read),
     })

@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest'
 import { DynamoNumber } from '../../attribute'
 import type { AnyCodec } from '../../codec'
-import { decimal, refine, string } from '../../codec'
+import { decimal, opaque, refine, string } from '../../codec'
 import { orThrow } from '../../result'
 import type { Term } from '../../term'
 import { identifies, member, occA, occV, specOf, tagsOf } from '../../term'
@@ -49,7 +49,7 @@ describe('the member a term stores', () => {
      */
     it('the two terms whose member the term does not determine answer nothing', () => {
         expect(member({ kind: 'lazy', get: () => str })).toBe(undefined)
-        expect(member({ kind: 'opaq', lossy: true })).toBe(undefined)
+        expect(member({ kind: 'opaq' })).toBe(undefined)
     })
 
     /**
@@ -139,29 +139,30 @@ describe('the occupancies a declaration is separated by', () => {
     })
 
     /**
-     * §3 `(opaque)`: `refuse` is the **absence of the `number` option**, and (MP) is why — a bare
-     * `N` cannot say whether it was written as a number, so a codec that guesses changes the stored
-     * member on a read-modify-write.
+     * §3 `(opaque)` is **total**: it holds a number as a `DynamoNumber`, so it writes every slot
+     * and reads every member. That is the model's `occTop` at the exact `opaq true`.
      *
-     * **Both policies answer a closed form, and `undefined` would be the wrong answer.** §5
-     * separates the two things a `⊤` covers: *unknown*, which is `held`, `custom` and a host
-     * `lazy`, and *everything*, which is what `opaque` is by design. The model states the second
-     * as data — `occTop` at `lossy`, `occBut .num` at `refuse` — so a `lossy` answering
-     * `undefined` would claim its occupancy cannot be read, about the one term whose occupancy is
-     * completely known, and the declaration guard would decline to compare it.
+     * **The closed form, and `undefined` would be the wrong answer.** §5 separates the two things
+     * a `⊤` covers: *unknown*, which is `held`, `custom` and a host `lazy`, and *everything*,
+     * which is what `opaque` is by design. An `opaque` answering `undefined` would claim its
+     * occupancy cannot be read, about the one term whose occupancy is completely known, and the
+     * declaration guard would decline to compare it.
+     *
+     * **The `'refuse'` policy declares every slot but `number`**, so its write side is as before
+     * it was a `held`. Its read side is the canonical term's, `N` included: a wider occupancy is
+     * sound, and it refuses the unions a `Pred` complement would separate.
      */
-    it('an opaque answers a closed occupancy at both policies, never `⊤`', () => {
-        // lossy is every constructor there is, which is the model's `occTop`
-        expect(occV({ kind: 'opaq', lossy: true })).toContain('number')
-        expect(occV({ kind: 'opaq', lossy: true })).toContain('string')
-        expect(occA({ kind: 'opaq', lossy: true })).toContain('N')
-        // and refuse is that, less the one option it declines
-        expect(occV({ kind: 'opaq', lossy: false })).not.toContain('number')
-        expect(occV({ kind: 'opaq', lossy: false })).toContain('string')
-        expect(occA({ kind: 'opaq', lossy: false })).not.toContain('N')
-        // neither is `⊤`: an occupancy that cannot be read is what `held` and `custom` answer
-        expect(occV({ kind: 'opaq', lossy: true })).not.toBe(undefined)
-        expect(occV({ kind: 'opaq', lossy: false })).not.toBe(undefined)
+    it('the total opaque answers every slot and every member, never `⊤`', () => {
+        expect(occV({ kind: 'opaq' })).toContain('number')
+        expect(occV({ kind: 'opaq' })).toContain('numSet')
+        expect(occV({ kind: 'opaq' })).toContain('string')
+        expect(occA({ kind: 'opaq' })).toContain('N')
+        expect(occA({ kind: 'opaq' })).toContain('NS')
+        expect(occV({ kind: 'opaq' })).not.toBe(undefined)
+        expect(occV(erase(opaque('refuse')).def)).not.toContain('number')
+        expect(occV(erase(opaque('refuse')).def)).toContain('string')
+        expect(occA(erase(opaque('refuse')).def)).toContain('N')
+        expect(occV(erase(opaque('lossy')).def)).toContain('number')
     })
 
     /**

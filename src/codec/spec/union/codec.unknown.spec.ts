@@ -8,8 +8,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
+import { DynamoNumber } from '../../attribute'
 import type { AttributeCodec } from '../../codec'
-import { CodecError, opaque } from '../../codec'
+import { CodecError, opaque, orThrow } from '../../codec'
 import {
     type Checkable,
     checkDecodesAreWritable,
@@ -48,6 +49,15 @@ describe('what round-trips', () => {
         ['a set of strings', new Set(['a', 'b'])],
         ['a set of binary', new Set([Uint8Array.from([1])])],
         ['nested everything', { a: [{ b: new Set(['c']) }, null], d: '' }],
+        ['a DynamoNumber', orThrow(DynamoNumber.from('1.5'))],
+        [
+            'a set of DynamoNumbers',
+            new Set([
+                orThrow(DynamoNumber.from('1')),
+                orThrow(DynamoNumber.from('2.5')),
+            ]),
+        ],
+        ['a DynamoNumber nested', { a: [orThrow(DynamoNumber.from('-7'))] }],
         ['an empty array', []],
         ['an empty object', {}],
     ]
@@ -67,18 +77,13 @@ describe('what round-trips', () => {
 })
 
 describe('what it refuses, and what it tells you instead', () => {
-    const refused: [string, unknown, RegExp][] = [
-        ['a number', 1, /opt in with `opaque\('lossy'\)`/],
-        ['a fraction', 1.5, /changing the attribute's stored type/],
-        ['a bigint', 1n, /Use `decimal` and pass `value.toString\(\)`/],
-        ['NaN', Number.NaN, /no number for NaN/],
-        ['Infinity', Number.POSITIVE_INFINITY, /no number for Infinity/],
+    /** Refused by the canonical codec and by both numeric policies, with one text. */
+    const refusedByEvery: [string, unknown, RegExp][] = [
         [
             'a Map',
             new Map([['a', 'b']]),
             /use `object\(\[string, optional\(\.\.\.\)\]\)`/,
         ],
-        ['a set of numbers', new Set([1, 2]), /NS decodes as strings/],
         ['a Date', new Date(0), /faithful as an ISO string/],
         [
             'a class instance',
@@ -91,12 +96,87 @@ describe('what it refuses, and what it tells you instead', () => {
         ['undefined', undefined, /No DynamoDB member carries it/],
     ]
 
-    for (const [name, value, message] of refused) {
-        it(`refuses ${name}`, () => {
+    for (const [name, value, message] of refusedByEvery) {
+        for (const [policy, codec] of [
+            ['canonical', opaque],
+            ['refuse', opaque('refuse')],
+            ['lossy', opaque('lossy')],
+        ] as const) {
+            it(`refuses ${name} under ${policy}`, () => {
+                expect(() => codec.unsafeEncode(value)).toThrow(CodecError)
+                expect(() => codec.unsafeEncode(value)).toThrow(message)
+            })
+        }
+    }
+
+    /**
+     * **The canonical codec holds a number exactly, so a float is not a number it holds.** The
+     * message names the exact carrier and the policy that converts a float, so the caller has the
+     * two ways forward.
+     */
+    const refusedByCanonical: [string, unknown, RegExp][] = [
+        ['a JS number', 1, /`DynamoNumber`.*opt in with `opaque\('lossy'\)`/],
+        ['a fraction', 1.5, /binary64 float/],
+        ['NaN', Number.NaN, /binary64 float/],
+        ['a bigint', 1n, /Pass `DynamoNumber\.from\(value\.toString\(\)\)`/],
+        ['a set of JS numbers', new Set([1, 2]), /each holds one kind/],
+        [
+            'a set that holds one number two times',
+            new Set([
+                orThrow(DynamoNumber.from('1.5')),
+                orThrow(DynamoNumber.from('1.50')),
+            ]),
+            /one number two times/,
+        ],
+    ]
+
+    for (const [name, value, message] of refusedByCanonical) {
+        it(`refuses ${name}, which is not an exact number`, () => {
             expect(() => opaque.unsafeEncode(value)).toThrow(CodecError)
             expect(() => opaque.unsafeEncode(value)).toThrow(message)
         })
     }
+
+    /** The refusing policy keeps the texts it had before it was a `held` over the canonical codec. */
+    const refusedByRefuse: [string, unknown, RegExp][] = [
+        ['a number', 1, /opt in with `opaque\('lossy'\)`/],
+        ['a fraction', 1.5, /changing the attribute's stored type/],
+        ['a bigint', 1n, /Use `decimal` and pass `value.toString\(\)`/],
+        ['NaN', Number.NaN, /no number for NaN/],
+        ['Infinity', Number.POSITIVE_INFINITY, /no number for Infinity/],
+        ['a set of numbers', new Set([1, 2]), /NS decodes as strings/],
+        [
+            'a DynamoNumber',
+            orThrow(DynamoNumber.from('1')),
+            /an instance of DynamoNumber/,
+        ],
+    ]
+
+    for (const [name, value, message] of refusedByRefuse) {
+        it(`refuses ${name} under refuse, with the text it had`, () => {
+            expect(() => opaque('refuse').unsafeEncode(value)).toThrow(
+                CodecError,
+            )
+            expect(() => opaque('refuse').unsafeEncode(value)).toThrow(message)
+        })
+    }
+
+    it('names the path of a refused number under refuse', () => {
+        expect(() => opaque('refuse').unsafeEncode({ a: ['x', 1] })).toThrow(
+            /^at a\[1\]: a number cannot be stored/,
+        )
+    })
+
+    /**
+     * **A policy refuses its numbers first, then the canonical codec refuses the rest.** So a
+     * value with two defects can report a later one first: the policy walks the whole value
+     * before the canonical codec sees the `Map` at `[0]`.
+     */
+    it('reports the number under refuse before a defect that the canonical codec finds', () => {
+        expect(() =>
+            opaque('refuse').unsafeEncode([new Map([['a', 'b']]), 1]),
+        ).toThrow(/^at \[1\]: a number cannot be stored/)
+    })
 
     it('refuses an empty set, which DynamoDB has no representation for', () => {
         expect(() => opaque.unsafeEncode(new Set())).toThrow(CodecError)
@@ -105,18 +185,24 @@ describe('what it refuses, and what it tells you instead', () => {
     it('refuses to read one back, for the same reason', () => {
         expect(() => opaque.unsafeDecode({ SS: [] })).toThrow(CodecError)
         expect(() => opaque.unsafeDecode({ BS: [] })).toThrow(CodecError)
+        expect(() => opaque.unsafeDecode({ NS: [] })).toThrow(/no empty NS/)
     })
 
     /**
-     * `NS` is refused before emptiness is even asked, and by a stronger rule: this codec has
-     * no `NS` **write** path at all, so reading one would re-encode as `SS` and change the
-     * attribute's stored type. A member a codec cannot write is a member it cannot read —
+     * Under a policy, `NS` is refused by a stronger rule: the policy has no `NS` **write** path
+     * at all, so reading one would re-encode as `SS` and change the attribute's stored type. A
+     * member a codec cannot write is a member it cannot read —
      * `Calculus.Lawful.no_read_without_write`.
+     *
+     * **An empty `NS` gets the empty-set text now**, because the canonical codec reads first and
+     * refuses it before the policy sees a set.
      */
-    it('refuses NS outright, empty or not, because it cannot write one', () => {
-        expect(() => opaque.unsafeDecode({ NS: [] })).toThrow(CodecError)
-        expect(() => opaque.unsafeDecode({ NS: ['1', '2'] })).toThrow(
-            CodecError,
+    it('refuses NS under refuse, because the policy cannot write one', () => {
+        expect(() => opaque('refuse').unsafeDecode({ NS: [] })).toThrow(
+            /no empty NS/,
+        )
+        expect(() => opaque('refuse').unsafeDecode({ NS: ['1', '2'] })).toThrow(
+            /no counterpart this codec can write/,
         )
     })
 
@@ -128,8 +214,26 @@ describe('what it refuses, and what it tells you instead', () => {
 })
 
 describe('reading an N somebody else wrote', () => {
-    it('refuses rather than choose a reading nobody asked for', () => {
-        expect(() => opaque.unsafeDecode({ N: '1.50' })).toThrow(CodecError)
+    /** The canonical codec reads the exact number, so it chooses no reading. */
+    it('reads the exact DynamoNumber, which writes back as N', () => {
+        const read = opaque.unsafeDecode({ N: '1.50' })
+        expect(read).toEqual(orThrow(DynamoNumber.from('1.5')))
+        expect(opaque.unsafeEncode(read)).toEqual({ N: '1.5' })
+    })
+
+    it('reads an NS as a set of DynamoNumbers, which writes back as NS', () => {
+        const read = opaque.unsafeDecode({ NS: ['2', '1.50'] })
+        expect(opaque.unsafeEncode(read)).toEqual({ NS: ['1.5', '2'] })
+    })
+
+    /**
+     * Under `'refuse'`, the stored-number text quotes the normal form of the digits, because the
+     * policy sees the `DynamoNumber` that the canonical codec read, and not the stored text.
+     */
+    it('refuses under refuse rather than choose a reading nobody asked for', () => {
+        expect(() => opaque('refuse').unsafeDecode({ N: '1.50' })).toThrow(
+            /the stored number '1\.5' cannot be stored/,
+        )
     })
 
     /**
@@ -160,12 +264,40 @@ describe('reading an N somebody else wrote', () => {
     })
 })
 
+describe('with numbers held exactly', () => {
+    /** (C) on the canonical codec, whose read is the widest in the library. */
+    it('decodes only what it can write back', () => {
+        checkDecodesAreWritable(holderFor(opaque), {
+            count: 80,
+            seed: 20260829,
+        })
+    })
+
+    /** (MP) holds at `N` and `NS`, which is what the total codec is for. */
+    it('keeps N and NS on a read-modify-write', () => {
+        expect(() =>
+            checkMembersStable(holderFor(opaque), [
+                { v: { N: '1.50' } },
+                { v: { N: '12345678901234567890123456789012345678' } },
+                { v: { NS: ['1', '2'] } },
+            ]),
+        ).not.toThrow()
+    })
+})
+
 describe('with numbers refused', () => {
     /** The same law, on the policy that refuses `N` outright. */
     it('decodes only what it can write back', () => {
-        checkDecodesAreWritable(holderFor(opaque()), {
+        checkDecodesAreWritable(holderFor(opaque('refuse')), {
             count: 80,
             seed: 20260829,
+        })
+    })
+
+    it('round-trips every generated value', () => {
+        checkRoundTrip(holderFor(opaque('refuse')), {
+            count: 200,
+            seed: 20260826,
         })
     })
 })

@@ -10,6 +10,7 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
+    dynamoNumber,
     never,
     nullValue,
     number,
@@ -326,6 +327,36 @@ describe('the declaration guard, where a term is what the guard reads', () => {
         // and the refusal is about being unselectable, not about `opaque` being unusable
         expect(() => opaque.encode('a')).not.toThrow()
         expect(() => union([string, boolean])).not.toThrow()
+    })
+
+    /**
+     * **The total `opaque` writes a number and reads `N`**, so a numeric option meets it on both
+     * sides, and the runtime refuses the pair it declared while `opaque` refused numbers.
+     *
+     * **`'refuse'` keeps its write side, and its read side is the canonical one.** The policy
+     * declares every slot but `number`, and it reads through the canonical codec, whose read
+     * occupancy holds `N`. So a numeric option beside it meets it at `N` and is refused. That is a
+     * loss the owner accepted: a `Pred` complement would separate the pair, and the host has none.
+     */
+    it('refuses a numeric option beside opaque, at the total codec and at refuse', () => {
+        // declared through a cast, as a caller bypassing the compile-time check would
+        const declare = union as unknown as (
+            options: readonly AnyCodec[],
+        ) => unknown
+        const runtime = (options: readonly AnyCodec[]) => () => declare(options)
+        for (const numeric of [dynamoNumber, number, number(1)]) {
+            expect(runtime([opaque, numeric])).toThrow(
+                /opaque and number both take the same kind of value/,
+            )
+            expect(runtime([opaque('refuse'), numeric])).toThrow(
+                /opaque and number both store 'N'/,
+            )
+        }
+        // a numeric policy still admits every value that holds no number, so the containment
+        // row names it as the option that swallows a literal
+        expect(runtime([opaque('refuse'), string('a')])).toThrow(
+            /string\('a'\) admits only values that opaque also admits/,
+        )
     })
 
     /**

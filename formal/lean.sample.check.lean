@@ -266,7 +266,7 @@ theorem dunion_two_keys :
 /-- `opaque_map` -/
 theorem opaque_map :
     check 2
-      ((denote (Term.opaq false)).e
+      ((denote (Term.opaq true)).e
         (Value.map {"a"} (fun k => Value.str "x")))
       (some (Attr.m {"a"} (fun k => Attr.s "x"))) = .same := rfl
 
@@ -327,8 +327,8 @@ theorem union_of_two__reads :
 
 /-! ## Refusals — neither side writes anything for these
 
-38 of 1267 shown; `scripts/gate.sh` elaborates all
-1267. One `rfl` each, no comparator and no fuel: the answer is `none`,
+37 of 1266 shown; `scripts/gate.sh` elaborates all
+1266. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -501,11 +501,6 @@ theorem product_three__refuses__scalar_string :
 theorem dunion_two_keys__refuses__scalar_string :
     (denote (Term.union [Term.object (Body.mk {"kind", "size", "toy"} (fun k => if k.1 = "kind" then ObjectSlot.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then ObjectSlot.req (Term.literal GroundKind.string "small") else ObjectSlot.req (Term.string)) none), Term.object (Body.mk {"kind", "size", "pen"} (fun k => if k.1 = "kind" then ObjectSlot.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then ObjectSlot.req (Term.literal GroundKind.string "large") else ObjectSlot.req (Term.string)) none)])).e
       (Value.str "hello") = none := rfl
-
-/-- `opaque_map__refuses__set_of_number` — refused on both sides -/
-theorem opaque_map__refuses__set_of_number :
-    (denote (Term.opaq false)).e
-      (Value.numSet (NEFinset.of (WFNumeral.of "1.5") {(WFNumeral.of "2")})) = none := rfl
 
 /-- `lazy_string__refuses__scalar_boolean` — refused on both sides -/
 theorem lazy_string__refuses__scalar_boolean :
