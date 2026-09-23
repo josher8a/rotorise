@@ -440,13 +440,13 @@ describe('terms', () => {
     })
 
     /**
-     * **The canonical `opaque` is the model's exact `opaq true`**, and a numeric policy has no
+     * **The canonical `opaque` is the model's exact `opaq`**, and a numeric policy has no
      * term there. Each policy is a `held` over the canonical term whose pair converts a JS number,
      * and the model names no such pair, so the emitter refuses it as it refuses a caller's closure.
      */
     it('emits the total opaque as the exact opaq, and refuses each numeric policy', () => {
-        expect(leanTermOf(erase(opaque))).toBe('Term.opaq true')
-        expect(leanTermOf(erase(opaque()))).toBe('Term.opaq true')
+        expect(leanTermOf(erase(opaque))).toBe('Term.opaq')
+        expect(leanTermOf(erase(opaque()))).toBe('Term.opaq')
         for (const numbers of ['lossy', 'refuse'] as const) {
             expect(
                 refusal(() => leanTermOf(erase(opaque(numbers)))).reason,
@@ -1466,7 +1466,7 @@ describe("the declaration guard, against the model's classifier", () => {
      * exempted an `opaque` option rather than comparing it, on the ground that its occupancy is
      * `⊤`. §5 separates the two things a `⊤` covers, and `opaque` is the *everything* one: the
      * model states it as a closed form, so it can be compared and it meets every option. Every one
-     * of the fifteen new theorems holds — `Orth (Term.opaq false) Term.string` is `false` — so the
+     * of the fifteen new theorems holds — `Orth Term.opaq Term.string` is `false` — so the
      * law was untouched either way, and what moved is that a union no value can resolve is now
      * refused where it used to be declared. JH's ruling, landed in `ff75c6b`.
      *
@@ -1506,7 +1506,7 @@ describe("the declaration guard, against the model's classifier", () => {
      * `opaque` is total now: it holds a number as a `DynamoNumber`, so it writes the `number`
      * slot and reads `N`, where the `'refuse'` policy that `opaque_map` used to carry wrote
      * neither. `dynamoNumber` writes and reads exactly those, so the two options meet on both
-     * sides and the pair is refused. `Orth (Term.opaq true) Term.number` is `false`, so the
+     * sides and the pair is refused. `Orth Term.opaq Term.number` is `false`, so the
      * warrant is `Orth` declining, and no pair left.
      *
      * **Measured, and it is the question this count exists to answer**: the disjointness law

@@ -140,7 +140,7 @@ describe('the occupancies a declaration is separated by', () => {
 
     /**
      * §3 `(opaque)` is **total**: it holds a number as a `DynamoNumber`, so it writes every slot
-     * and reads every member. That is the model's `occTop` at the exact `opaq true`.
+     * and reads every member. That is the model's `occTop` at the exact `opaq`.
      *
      * **The closed form, and `undefined` would be the wrong answer.** §5 separates the two things
      * a `⊤` covers: *unknown*, which is `held`, `custom` and a host `lazy`, and *everything*,

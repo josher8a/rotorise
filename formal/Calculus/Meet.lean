@@ -358,32 +358,32 @@ def famString : Term → Option Term
   | .string => some .string
   | .literal k v => match k, v with
       | .string, v => some (.literal .string v) | _, _ => some .never
-  | .opaq _ => some .string
+  | .opaq => some .string
   | _ => some .never
 
 def famNumber : Term → Option Term
   | .number => some .number
   | .literal k v => match k, v with
       | .number, v => some (.literal .number v) | _, _ => some .never
-  | .opaq l => if l then some .number else some .never
+  | .opaq => some .number
   | _ => some .never
 
 def famBoolean : Term → Option Term
   | .boolean => some .boolean
   | .literal k v => if k = .boolean then some (.literal k v) else some .never
-  | .opaq _ => some .boolean
+  | .opaq => some .boolean
   | _ => some .never
 
 def famBinary : Term → Option Term
   | .binary => some .binary
   | .literal k v => if k = .binary then some (.literal k v) else some .never
-  | .opaq _ => some .binary
+  | .opaq => some .binary
   | _ => some .never
 
 def famNull : Term → Option Term
   | .null => some .null
   | .literal k v => if k = .null then some (.literal k v) else some .never
-  | .opaq _ => some .null
+  | .opaq => some .null
   | _ => some .never
 
 def famLit (k : GroundKind) (v : k.Carrier) : Term → Option Term
@@ -395,21 +395,21 @@ def famLit (k : GroundKind) (v : k.Carrier) : Term → Option Term
   | .binary => if k = .binary then some (.literal k v) else some .never
   | .null => if k = .null then some (.literal k v) else some .never
   | .literal k' v' => Term.meetLit k v k' v'
-  | .opaq _ => none
+  | .opaq => none
   | _ => some .never
 
 def famSet (b : SetBase) : Term → Option Term
   | .set b' => if b = b' then some (.set b) else some .never
-  | .opaq _ => none
+  | .opaq => none
   | _ => some .never
 
-def famOpaq (l : Bool) : Term → Option Term
+def famOpaq : Term → Option Term
   | .string => some .string
   | .boolean => some .boolean
   | .binary => some .binary
   | .null => some .null
-  | .number => if l then some .number else some .never
-  | .opaq l' => some (.opaq (l && l'))
+  | .number => some .number
+  | .opaq => some .opaq
   | _ => none
 
 /-- **The row a `list` shape assigns to `n` positions**: the prefix, the spread as often as
@@ -929,7 +929,7 @@ def listMeetRow (fpre : List (Term → Option Term)) (fsp : Option (Term → Opt
 def famList (fpre : List (Term → Option Term)) (fsp : Option (Term → Option Term))
     (fsuf : List (Term → Option Term)) : Term → Option Term
   | .list pre₂ sp₂ suf₂ => listMeetRow fpre fsp fsuf pre₂ sp₂ suf₂
-  | .opaq _ => none
+  | .opaq => none
   | _ => some .never
 
 
@@ -1071,7 +1071,7 @@ def objObj (a : Body) (g : {k // k ∈ a.fields} → ObjectSlot → Option Objec
 def famObj (a : Body) (g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot)
     (mw : Term → Option Term) : Term → Option Term
   | .object b => objObj a g mw b
-  | .opaq _ => none
+  | .opaq => none
   | _ => some .never
 
 mutual
@@ -1094,7 +1094,7 @@ def Term.meet : Term → Term → Option Term
   | .null, y => meetSRight famNull y
   | .literal k v, y => meetSRight (famLit k v) y
   | .set b, y => meetSRight (famSet b) y
-  | .opaq l, y => meetSRight (famOpaq l) y
+  | .opaq, y => meetSRight (famOpaq) y
   | .list pre sp suf, y =>
       meetSRight (famList (Term.meetSTs pre)
         (match sp with | none => none | some t => some (Term.meet t))
@@ -1149,7 +1149,7 @@ example : Term.meet (.literal .string "1") .boolean = some .never := by rfl
     so the union rows distribute over it and the ground rows answer each cell. This is the pair
     that had a row and got it wrong: the wrapper this replaced dropped the point at every
     partner but another wrapper and a `null`, and `opaq` holds the point. -/
-example : Term.meet (.union [.string, .null]) (.opaq true) = some (.union [.string, .null]) := by rfl
+example : Term.meet (.union [.string, .null]) .opaq = some (.union [.string, .null]) := by rfl
 
 /-- …and against the null term alone the string cell is the bottom, so one option survives. -/
 example : Term.meet (.union [.string, .null]) .null = some .null := by rfl
@@ -1263,7 +1263,7 @@ example : μSyn (Term.union [.string, .null]) = none := by simp [μSyn, μSynLis
 example : ¬ (μSyn Term.null = μSyn (Term.union [.string, .null])) := by
   simp [μSyn, μSynList, unanimous]
 
-example : Term.meet (.opaq true) .string = some .string := by rfl
+example : Term.meet .opaq .string = some .string := by rfl
 
 /-! ### `lazy` is transparent, and it constrains nothing
 
@@ -1286,7 +1286,7 @@ example : Term.meet (.lazy .string) .string = some .string := by rfl
     functions (`Term.lean`), so no term states the intersection of two of them. -/
 example : Term.meet (.held .string (fun v => v) (fun v => v)) .string = none := by rfl
 
-example : ¬ (μSyn Term.string = μSyn (Term.opaq true)) := by simp [μSyn]
+example : ¬ (μSyn Term.string = μSyn Term.opaq) := by simp [μSyn]
 
 /-! ## The homomorphism
 
@@ -1301,40 +1301,39 @@ stated first.
 
 /-! ## What `opaque` admits
 
-`Adm (.opaq l) v` is `dom(e)` of `opaqCodecω l`, and a scalar's budget is one layer, so each
+`Adm .opaq v` is `dom(e)` of `opaqCodecω`, and a scalar's budget is one layer, so each
 row below is the corresponding unfolding at fuel `0+1`. -/
 
 /-- `opaque` writes every string, so `string` is the finer term. -/
-theorem Adm_opaq_str (l : Bool) (s : String) : Adm (.opaq l) (.str s) = true := by
-  show ((opaqCodec (Value.depth (.str s)) l).e (.str s)).isSome = true
+theorem Adm_opaq_str (s : String) : Adm .opaq (.str s) = true := by
+  show ((opaqCodec (Value.depth (.str s))).e (.str s)).isSome = true
   rw [show Value.depth (.str s) = 0 + 1 from rfl, opaqCodec_e_str]
   simp [stringCodec]
 
 /-- …every boolean. -/
-theorem Adm_opaq_bool (l : Bool) (b : Bool) : Adm (.opaq l) (.bool b) = true := by
-  show ((opaqCodec (Value.depth (.bool b)) l).e (.bool b)).isSome = true
+theorem Adm_opaq_bool (b : Bool) : Adm .opaq (.bool b) = true := by
+  show ((opaqCodec (Value.depth (.bool b))).e (.bool b)).isSome = true
   rw [show Value.depth (.bool b) = 0 + 1 from rfl, opaqCodec_e_bool]
   simp [booleanCodec]
 
 /-- …every byte string. -/
-theorem Adm_opaq_bin (l : Bool) (b : Bytes) : Adm (.opaq l) (.bin b) = true := by
-  show ((opaqCodec (Value.depth (.bin b)) l).e (.bin b)).isSome = true
+theorem Adm_opaq_bin (b : Bytes) : Adm .opaq (.bin b) = true := by
+  show ((opaqCodec (Value.depth (.bin b))).e (.bin b)).isSome = true
   rw [show Value.depth (.bin b) = 0 + 1 from rfl, opaqCodec_e_bin]
   simp [binaryCodec]
 
 /-- …and the null point. -/
-theorem Adm_opaq_null (l : Bool) : Adm (.opaq l) .null = true := by
-  show ((opaqCodec (Value.depth .null) l).e .null).isSome = true
+theorem Adm_opaq_null : Adm .opaq .null = true := by
+  show ((opaqCodec (Value.depth .null)).e .null).isSome = true
   rw [show Value.depth .null = 0 + 1 from rfl, opaqCodec_e_null]
   simp [nullCodec]
 
-/-- A number only under the lossy policy, and then exactly on `D`: the refusing policy carries
-    the empty codec at that option. -/
-theorem Adm_opaq_num (l : Bool) (d : WFNumeral) :
-    Adm (.opaq l) (.num d) = (l && inD (.num d)) := by
-  show ((opaqCodec (Value.depth (.num d)) l).e (.num d)).isSome = _
+/-- …and every numeral, exactly on `D`. -/
+theorem Adm_opaq_num (d : WFNumeral) :
+    Adm .opaq (.num d) = inD (.num d) := by
+  show ((opaqCodec (Value.depth (.num d))).e (.num d)).isSome = _
   rw [show Value.depth (.num d) = 0 + 1 from rfl, opaqCodec_e_num]
-  cases l <;> simp [numberCodec, Codec.empty, inD]
+  simp [numberCodec, inD]
 
 
 /-- Two terms whose occupancies are disjoint share no value, so their conjunction is the
@@ -1502,150 +1501,9 @@ theorem AdmList_length (ts : List Term) : (AdmList ts).length = ts.length := by
   | nil => rfl
   | cons t ts ihx => simp only [AdmList, List.length_cons, ihx]
 
-/-- Every option but the numeric one ignores the policy, so the two policies write a scalar
-    the same way at every budget. -/
-theorem opaq_e_str_agree (n : Nat) (s : String) :
-    (opaqCodec n false).e (.str s) = (opaqCodec n true).e (.str s) := by
-  cases n with
-  | zero => rfl
-  | succ m => rw [opaqCodec_e_str, opaqCodec_e_str]
-
-/-- …and every byte string, at every budget. -/
-theorem opaq_e_bin_agree (n : Nat) (b : Bytes) :
-    (opaqCodec n false).e (.bin b) = (opaqCodec n true).e (.bin b) := by
-  cases n with
-  | zero => rfl
-  | succ m => rw [opaqCodec_e_bin, opaqCodec_e_bin]
-
-/-- …and the refusing policy writes no number at any budget, which is what makes a set of
-    numbers unwritable rather than written differently. -/
-theorem opaq_e_num_false (n : Nat) (d : WFNumeral) : (opaqCodec n false).e (.num d) = none := by
-  cases n with
-  | zero => rfl
-  | succ m => rw [opaqCodec_e_num]; rfl
-
-/-- A traversal carries a pointwise implication between the two element functions. -/
-theorem traverse_mono {α β : Type} {f g : α → Option β}
-    (h : ∀ x a, f x = some a → g x = some a) :
-    ∀ {xs : List α} {as : List β}, traverse f xs = some as → traverse g xs = some as := by
-  intro xs
-  induction xs with
-  | nil => intro as hh; exact hh
-  | cons x xs ihx =>
-    intro as hh
-    simp only [traverse] at hh ⊢
-    cases hf : f x with
-    | none => rw [hf] at hh; exact nomatch hh
-    | some b =>
-      rw [hf] at hh
-      cases ht : traverse f xs with
-      | none => rw [ht] at hh; exact nomatch hh
-      | some bs =>
-        rw [ht] at hh
-        rw [h x b hf, ihx ht]
-        exact hh
-
-/-- …and so does the image of a function on a key set. -/
-theorem funImage_mono {β : Type} {keys : Finset Name} {g g' : {k // k ∈ keys} → Option β}
-    {t : {k // k ∈ keys} → β}
-    (hm : ∀ k b, g k = some b → g' k = some b) (hh : funImage g = some t) :
-    funImage g' = some t := by
-  have hall : ∀ k, g' k = some (t k) := fun k => hm k (t k) (funImage_some hh k)
-  unfold funImage
-  rw [dif_pos (fun k => by rw [hall k]; rfl)]
-  exact congrArg some (funext fun k => Option.some.inj (by rw [Option.some_get, hall k]))
-
-/-- A codec that writes no element writes no set: the wire set has an element to refuse at. -/
-theorem encSet_none_of_refuse {α : Type} (c : Codec) (inj : α → Value) (S : NEFinset α)
-    (h : ∀ x, c.e (inj x) = none) : encSet c inj S = none := by
-  obtain ⟨x0, hx0⟩ := S.2
-  have key : ∀ {β : Type} [DecidableEq β] (out : Attr → Option β),
-      neSetImage (fun x => (c.e (inj x)).bind out) S = none := by
-    intro β _ out
-    cases hs : setImage (fun x => (c.e (inj x)).bind out) S.1 with
-    | none => exact neSetImage_none hs
-    | some T => exact absurd (setImage_some hs x0 hx0) (by rw [h x0]; exact fun hc => Bool.noConfusion hc)
-  unfold encSet
-  rw [key, key, key]
-  rfl
-
-
-/-- Two codecs agreeing on the elements write the same wire set. -/
-theorem encSet_congr_e {α : Type} (c d : Codec) (inj : α → Value) (S : NEFinset α)
-    (h : ∀ x, c.e (inj x) = d.e (inj x)) : encSet c inj S = encSet d inj S := by
-  unfold encSet
-  rw [neSetImage_congr (f := fun x => (c.e (inj x)).bind sC.out)
-        (g := fun x => (d.e (inj x)).bind sC.out) (fun x _ => by rw [h x]),
-      neSetImage_congr (f := fun x => (c.e (inj x)).bind nC.out)
-        (g := fun x => (d.e (inj x)).bind nC.out) (fun x _ => by rw [h x]),
-      neSetImage_congr (f := fun x => (c.e (inj x)).bind bC.out)
-        (g := fun x => (d.e (inj x)).bind bC.out) (fun x _ => by rw [h x])]
-
-/-- **The refusing policy is below the lossy one.** Where `opaque` at `refuse` writes, `opaque`
-    at `lossy` writes the same attribute: the numeric option is the only one that differs, and
-    it is empty on the refusing side. -/
-theorem opaq_e_mono : ∀ (n : Nat) (v : Value) (a : Attr),
-    (opaqCodec n false).e v = some a → (opaqCodec n true).e v = some a := by
-  intro n
-  induction n with
-  | zero => intro v a hh; exact nomatch hh
-  | succ m ihm =>
-    intro v a hh
-    cases v with
-    | str s => rw [opaqCodec_e_str] at hh ⊢; exact hh
-    | bool b => rw [opaqCodec_e_bool] at hh ⊢; exact hh
-    | bin b => rw [opaqCodec_e_bin] at hh ⊢; exact hh
-    | null => rw [opaqCodec_e_null] at hh ⊢; exact hh
-    | num d => rw [opaq_e_num_false] at hh; exact nomatch hh
-    | strSet S =>
-      rw [opaqCodec_e_strSet] at hh ⊢
-      show encSet (opaqCodec m true) Value.str S = some a
-      rw [← encSet_congr_e (opaqCodec m false) (opaqCodec m true) Value.str S
-            (opaq_e_str_agree m)]
-      exact hh
-    | binSet S =>
-      rw [opaqCodec_e_binSet] at hh ⊢
-      show encSet (opaqCodec m true) Value.bin S = some a
-      rw [← encSet_congr_e (opaqCodec m false) (opaqCodec m true) Value.bin S
-            (opaq_e_bin_agree m)]
-      exact hh
-    | numSet S =>
-      rw [opaqCodec_e_numSet] at hh
-      rw [show (setCodec (opaqCodec m false)).e (.numSet S)
-            = encSet (opaqCodec m false) Value.num S from rfl,
-          encSet_none_of_refuse _ _ _ (opaq_e_num_false m)] at hh
-      exact nomatch hh
-    | arr vs =>
-      rw [opaqCodec_e_arr] at hh ⊢
-      show ((traverse (opaqCodec m true).e vs).map Attr.l) = some a
-      replace hh : ((traverse (opaqCodec m false).e vs).map Attr.l) = some a := hh
-      obtain ⟨as, has, rfl⟩ := Option.map_eq_some_iff.mp hh
-      rw [traverse_mono (fun x b hb => ihm x b hb) has]
-      rfl
-    | map keys f =>
-      rw [opaqCodec_e_map] at hh ⊢
-      show ((funImage (fun k => (opaqCodec m true).e (f k))).map (Attr.m keys)) = some a
-      replace hh : ((funImage (fun k => (opaqCodec m false).e (f k))).map (Attr.m keys))
-          = some a := hh
-      obtain ⟨g, hg, rfl⟩ := Option.map_eq_some_iff.mp hh
-      rw [funImage_mono (fun k b hb => ihm _ b hb) hg]
-      rfl
-
-
 /-- `opaque`'s row is `dom(e)` of its codec, budgeted by the value's own depth. -/
-theorem Adm_opaq_eq (l : Bool) (v : Value) :
-    Adm (.opaq l) v = ((opaqCodec (Value.depth v) l).e v).isSome := rfl
-
-/-- The meet of two `opaque`s is `opaque` at the conjunction of the policies, because the
-    refusing policy writes a subset of what the lossy one writes. -/
-theorem Adm_opaq_and (l l' : Bool) (v : Value) :
-    Adm (.opaq (l && l')) v = (Adm (.opaq l) v && Adm (.opaq l') v) := by
-  rw [Adm_opaq_eq, Adm_opaq_eq, Adm_opaq_eq]
-  cases hf : (opaqCodec (Value.depth v) false).e v with
-  | none => cases l <;> cases l' <;> simp [hf]
-  | some a =>
-    have ht := opaq_e_mono _ v a hf
-    cases l <;> cases l' <;> simp [hf, ht]
+theorem Adm_opaq_eq (v : Value) :
+    Adm .opaq v = ((opaqCodec (Value.depth v)).e v).isSome := rfl
 
 /-- A body admits nothing that is not a map. -/
 theorem AdmBody_of_not_map {c : Body} {v : Value} (h : ∀ keys g, v ≠ .map keys g) :
@@ -2129,7 +1987,7 @@ theorem Adm_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmFam x fa
   | .null, _, h, v => hf .null _ trivial h v
   | .literal k lv, _, h, v => hf (.literal k lv) _ trivial h v
   | .set b, _, h, v => hf (.set b) _ trivial h v
-  | .opaq l, _, h, v => hf (.opaq l) _ trivial h v
+  | .opaq, _, h, v => hf .opaq _ trivial h v
   | .list p q s, _, h, v => hf (.list p q s) _ trivial h v
   | .object b, _, h, v => hf (.object b) _ trivial h v
 termination_by structural y => y
@@ -2180,7 +2038,7 @@ theorem Adm_famBoolean : AdmFam Term.boolean famBoolean := by
       next hk =>
         simp only [Option.some.injEq] at h; subst h
         cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD]
-  case opaq l =>
+  case opaq =>
       simp only [famBoolean, Option.some.injEq] at h; subst h
       cases v <;> (try simp only [Adm_opaq_bool]) <;> simp [Adm]
   all_goals fam_never famBoolean
@@ -2200,7 +2058,7 @@ theorem Adm_famBinary : AdmFam Term.binary famBinary := by
       next hk =>
         simp only [Option.some.injEq] at h; subst h
         cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD]
-  case opaq l =>
+  case opaq =>
       simp only [famBinary, Option.some.injEq] at h; subst h
       cases v <;> (try simp only [Adm_opaq_bin]) <;> simp [Adm]
   all_goals fam_never famBinary
@@ -2220,7 +2078,7 @@ theorem Adm_famNull : AdmFam Term.null famNull := by
       next hk =>
         simp only [Option.some.injEq] at h; subst h
         cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD]
-  case opaq l =>
+  case opaq =>
       simp only [famNull, Option.some.injEq] at h; subst h
       cases v <;> (try simp only [Adm_opaq_null]) <;> simp [Adm]
   all_goals fam_never famNull
@@ -2237,12 +2095,12 @@ theorem Adm_famString : AdmFam Term.string famString := by
           | (cases v <;> simp [Adm, AdmLit, inL, inD] <;>
               (try (intro hs _; exact hs)))
           | exact Adm_never_orth (by rfl) v
-  case opaq l =>
+  case opaq =>
       simp only [famString, Option.some.injEq] at h; subst h
       cases v <;> (try simp only [Adm_opaq_str]) <;> simp [Adm]
   all_goals fam_never famString
 
-/-- `number` meets its own literals and a lossy `opaque`. -/
+/-- `number` meets its own literals and `opaque`. -/
 theorem Adm_famNumber : AdmFam Term.number famNumber := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
@@ -2254,17 +2112,10 @@ theorem Adm_famNumber : AdmFam Term.number famNumber := by
           | (cases v <;> simp [Adm, AdmLit, inL, inD] <;>
               (try (intro hs _; exact hs)))
           | exact Adm_never_orth (by rfl) v
-  case opaq l =>
+  case opaq =>
       simp only [famNumber] at h
-      split at h
-      next hl =>
-        subst hl
-        simp only [Option.some.injEq] at h; subst h
-        cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
-      next hl =>
-        simp only [Bool.not_eq_true] at hl; subst hl
-        simp only [Option.some.injEq] at h; subst h
-        cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
+      simp only [Option.some.injEq] at h; subst h
+      cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
   all_goals fam_never famNumber
 
 /-- A literal meets its own base and an equal literal, and is the bottom elsewhere. -/
@@ -2295,7 +2146,7 @@ theorem Adm_famLit (k : GroundKind) (lv : k.Carrier) : AdmFam (.literal k lv) (f
         (try (simp only [Option.some.injEq] at h
               subst h
               cases v <;> simp_all [Adm, AdmLit, inL, inD]))
-  case opaq l => simp [famLit] at h
+  case opaq => simp [famLit] at h
   all_goals fam_never famLit
 
 /-- Two set bases meet where they are equal, and at the bottom wherever they occupy different
@@ -2311,11 +2162,11 @@ theorem Adm_famSet (b : SetBase) : AdmFam (.set b) (famSet b) := by
         first
           | simp
           | exact Adm_never_orth (by decide) v
-  case opaq l => simp [famSet] at h
+  case opaq => simp [famSet] at h
   all_goals fam_never famSet
 
-/-- `opaque` meets each self-identifying base, and another `opaque` at the conjoined policy. -/
-theorem Adm_famOpaq (l : Bool) : AdmFam (.opaq l) (famOpaq l) := by
+/-- `opaque` meets each self-identifying base, and another `opaque`. -/
+theorem Adm_famOpaq : AdmFam .opaq (famOpaq) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
   case string | boolean | binary | null =>
@@ -2325,18 +2176,11 @@ theorem Adm_famOpaq (l : Bool) : AdmFam (.opaq l) (famOpaq l) := by
         simp [Adm]
   case number =>
       simp only [famOpaq] at h
-      split at h
-      next hl =>
-        subst hl
-        simp only [Option.some.injEq] at h; subst h
-        cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
-      next hl =>
-        simp only [Bool.not_eq_true] at hl; subst hl
-        simp only [Option.some.injEq] at h; subst h
-        cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
-  case opaq l' =>
+      simp only [Option.some.injEq] at h; subst h
+      cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
+  case opaq =>
       simp only [famOpaq, Option.some.injEq] at h; subst h
-      exact Adm_opaq_and l l' v
+      exact (Bool.and_self _).symm
   all_goals simp [famOpaq] at h
 
 /-! ### The container families. The depth bounds go: the lifts are measure-free. -/
@@ -2643,7 +2487,7 @@ theorem Adm_famList {pre suf : List Term} {sp : Option Term}
                                 List.length_replicate, htsl, husl]
                             · simp only [List.length_take, htsl, husl]
             · exact absurd h (by simp)
-  case opaq l => simp [famList] at h
+  case opaq => simp [famList] at h
   all_goals fam_never famList
 
 /-! ### The object families. A body is read as its slot at every name, so each factor and the
@@ -2938,7 +2782,7 @@ theorem Adm_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Opti
                 (of_decide_eq_true hall) (fun k' s hs => (objSlot_sound hg hgreq hw hs).2)
                 (fun k' ha hb => by rw [Body.slotAt_neg ha, Body.slotAt_neg hb]; rfl) k
           next => exact absurd h (by simp)
-  case opaq l => simp [famObj] at h
+  case opaq => simp [famObj] at h
   all_goals fam_never famObj
 
 /-! ### The outer theorem. -/
@@ -3016,7 +2860,7 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
   | .null, y, z, h, v => Adm_meetSRight Adm_famNull y z h v
   | .literal k lv, y, z, h, v => Adm_meetSRight (Adm_famLit k lv) y z h v
   | .set b, y, z, h, v => Adm_meetSRight (Adm_famSet b) y z h v
-  | .opaq l, y, z, h, v => Adm_meetSRight (Adm_famOpaq l) y z h v
+  | .opaq, y, z, h, v => Adm_meetSRight (Adm_famOpaq) y z h v
   | .list pre sp suf, y, z, h, v => by
       cases sp with
       | none =>
@@ -3173,7 +3017,7 @@ theorem writes_meetSRight {x : Term} {fam : Term → Option Term} (hf : WritesFa
   | .null, _, h, m, hz => hf .null _ trivial h m hz
   | .literal k lv, _, h, m, hz => hf (.literal k lv) _ trivial h m hz
   | .set b, _, h, m, hz => hf (.set b) _ trivial h m hz
-  | .opaq l, _, h, m, hz => hf (.opaq l) _ trivial h m hz
+  | .opaq, _, h, m, hz => hf .opaq _ trivial h m hz
   | .list p q s, _, h, m, hz => hf (.list p q s) _ trivial h m hz
   | .object b, _, h, m, hz => hf (.object b) _ trivial h m hz
 termination_by structural y => y
@@ -3348,20 +3192,11 @@ theorem writes_famSet (b : SetBase) : WritesFam (.set b) (famSet b) := by
   all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
 
 /-- `opaque` names no member, so the pair agrees vacuously on the left. -/
-theorem writes_famOpaq (l : Bool) : WritesFam (.opaq l) (famOpaq l) := by
+theorem writes_famOpaq : WritesFam .opaq famOpaq := by
   intro y z hd h m hz
   cases y <;> first | exact hd.elim | skip
   all_goals (try simp_all [famOpaq, μSyn])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+  all_goals (subst_vars; simp_all [μSyn])
 
 /-- **A list names `L`, and a list it meets names `L` too.** The family answers a list or the
     bottom; the bottom writes nothing, so wherever the answer has a member that member is `L`,
@@ -3470,7 +3305,7 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
   | .null, y, z, h, m, hz => writes_meetSRight writes_famNull y z h m hz
   | .literal k lv, y, z, h, m, hz => writes_meetSRight (writes_famLit k lv) y z h m hz
   | .set b, y, z, h, m, hz => writes_meetSRight (writes_famSet b) y z h m hz
-  | .opaq l, y, z, h, m, hz => writes_meetSRight (writes_famOpaq l) y z h m hz
+  | .opaq, y, z, h, m, hz => writes_meetSRight (writes_famOpaq) y z h m hz
   | .list pre sp suf, y, z, h, m, hz => by
       cases sp with
       | none =>
@@ -3582,101 +3417,6 @@ theorem entryCodec_mk_neg {S : Finset Name} {f : {k // k ∈ S} → FieldSem} {r
     {k : Name} (h : k ∉ S) : entryCodec ⟨S, f⟩ rc? k = rc? := by
   rw [entryCodec, MapOf.at_of_not_mem (m := ⟨S, f⟩) h]
 
-/-- The refusing `opaque` reads no stored numeral, which is the row the `number` pair turns
-    on. -/
-theorem opaq_p_num_false (n : Nat) (x : WFNumeral) : (opaqCodec n false).p (.n x) = none := by
-  cases n with
-  | zero => rfl
-  | succ m => rw [opaqCodec_p_n]; rfl
-
-/-- A set over a base that reads nothing reads nothing. -/
-theorem decSet_none_of_refuse {α : Type} (c : Codec) (inj : α → Attr) (S : NEFinset α)
-    (h : ∀ x, c.p (inj x) = none) : decSet c inj S = none := by
-  obtain ⟨x0, hx0⟩ := S.2
-  have key : ∀ {β : Type} [DecidableEq β] (out : Value → Option β),
-      neSetImage (fun x => (c.p (inj x)).bind out) S = none := by
-    intro β _ out
-    cases hs : setImage (fun x => (c.p (inj x)).bind out) S.1 with
-    | none => exact neSetImage_none hs
-    | some T => exact absurd (setImage_some hs x0 hx0) (by rw [h x0]; exact fun hc => Bool.noConfusion hc)
-  unfold decSet
-  rw [key, key, key]
-  rfl
-
-/-- Two codecs that read a set's members alike give the set one reading. -/
-theorem decSet_congr_p {α : Type} (c d : Codec) (inj : α → Attr) (S : NEFinset α)
-    (h : ∀ x, c.p (inj x) = d.p (inj x)) : decSet c inj S = decSet d inj S := by
-  unfold decSet
-  rw [neSetImage_congr (f := fun x => (c.p (inj x)).bind vStr)
-        (g := fun x => (d.p (inj x)).bind vStr) (fun x _ => by rw [h x]),
-      neSetImage_congr (f := fun x => (c.p (inj x)).bind vNum)
-        (g := fun x => (d.p (inj x)).bind vNum) (fun x _ => by rw [h x]),
-      neSetImage_congr (f := fun x => (c.p (inj x)).bind vBin)
-        (g := fun x => (d.p (inj x)).bind vBin) (fun x _ => by rw [h x])]
-
-/-- The two policies read a stored string alike: only the numeral row separates them. -/
-theorem opaq_p_s_lossy (m : Nat) (s : String) :
-    (opaqCodec m false).p (.s s) = (opaqCodec m true).p (.s s) := by
-  cases m with
-  | zero => rfl
-  | succ k => rw [opaqCodec_p_s, opaqCodec_p_s]
-
-/-- …and stored bytes alike, for the same reason. -/
-theorem opaq_p_b_lossy (m : Nat) (b : Bytes) :
-    (opaqCodec m false).p (.b b) = (opaqCodec m true).p (.b b) := by
-  cases m with
-  | zero => rfl
-  | succ k => rw [opaqCodec_p_b, opaqCodec_p_b]
-
-/-- **The refusing policy is below the lossy one on the read side too.** -/
-theorem opaq_p_mono : ∀ (n : Nat) (a : Attr) (v : Value),
-    (opaqCodec n false).p a = some v → (opaqCodec n true).p a = some v := by
-  intro n
-  induction n with
-  | zero => intro a v hh; exact nomatch hh
-  | succ m ihm =>
-    intro a v hh
-    cases a with
-    | s s => rw [opaqCodec_p_s] at hh ⊢; exact hh
-    | bool b => rw [opaqCodec_p_bool] at hh ⊢; exact hh
-    | b b => rw [opaqCodec_p_b] at hh ⊢; exact hh
-    | null => rw [opaqCodec_p_null] at hh ⊢; exact hh
-    | n x => rw [opaq_p_num_false] at hh; exact nomatch hh
-    | ss S =>
-      rw [opaqCodec_p_ss] at hh ⊢
-      show (setCodec (opaqCodec m true)).p (.ss S) = some v
-      show decSet (opaqCodec m true) Attr.s S = some v
-      rw [← decSet_congr_p (opaqCodec m false) (opaqCodec m true) Attr.s S
-            (fun x => opaq_p_s_lossy m x)]
-      exact hh
-    | bs S =>
-      rw [opaqCodec_p_bs] at hh ⊢
-      show decSet (opaqCodec m true) Attr.b S = some v
-      rw [← decSet_congr_p (opaqCodec m false) (opaqCodec m true) Attr.b S
-            (fun x => opaq_p_b_lossy m x)]
-      exact hh
-    | ns S =>
-      rw [opaqCodec_p_ns] at hh
-      rw [show (setCodec (opaqCodec m false)).p (.ns S)
-            = decSet (opaqCodec m false) Attr.n S from rfl,
-          decSet_none_of_refuse _ _ _ (opaq_p_num_false m)] at hh
-      exact nomatch hh
-    | l as =>
-      rw [opaqCodec_p_l] at hh ⊢
-      show ((traverse (opaqCodec m true).p as).map Value.arr) = some v
-      replace hh : ((traverse (opaqCodec m false).p as).map Value.arr) = some v := hh
-      obtain ⟨vs, hvs, rfl⟩ := Option.map_eq_some_iff.mp hh
-      rw [traverse_mono (fun x b hb => ihm x b hb) hvs]
-      rfl
-    | m keys f =>
-      rw [opaqCodec_p_m] at hh ⊢
-      show ((funImage (fun k => (opaqCodec m true).p (f k))).map (Value.map keys)) = some v
-      replace hh : ((funImage (fun k => (opaqCodec m false).p (f k))).map (Value.map keys))
-          = some v := hh
-      obtain ⟨g, hg, rfl⟩ := Option.map_eq_some_iff.mp hh
-      rw [funImage_mono (fun k b hb => ihm _ b hb) hg]
-      rfl
-
 /-- A body reads nothing that is not a map. -/
 theorem AdmABody_of_not_m {c : Body} {a : Attr} (h : ∀ keys g, a ≠ .m keys g) :
     AdmABody c a = false := by
@@ -3708,36 +3448,35 @@ theorem AdmA_and_false {x y : Term} (h : Orth1 x y = true) (a : Attr) :
       exact absurd h2 (by simp)
 
 /-- `opaque` reads an attribute exactly where its codec at that depth answers. -/
-theorem AdmA_opaq_eq (l : Bool) (a : Attr) :
-    AdmA (.opaq l) a = ((opaqCodec (Attr.depth a) l).p a).isSome := rfl
+theorem AdmA_opaq_eq (a : Attr) :
+    AdmA .opaq a = ((opaqCodec (Attr.depth a)).p a).isSome := rfl
 
 /-- It reads every stored string, -/
-theorem AdmA_opaq_str (l : Bool) (s : String) : AdmA (.opaq l) (.s s) = true := by
+theorem AdmA_opaq_str (s : String) : AdmA .opaq (.s s) = true := by
   rw [AdmA_opaq_eq, show Attr.depth (.s s) = 0 + 1 from rfl, opaqCodec_p_s]
   simp [stringCodec]
 
 /-- …every stored boolean, -/
-theorem AdmA_opaq_bool (l : Bool) (b : Bool) : AdmA (.opaq l) (.bool b) = true := by
+theorem AdmA_opaq_bool (b : Bool) : AdmA .opaq (.bool b) = true := by
   rw [AdmA_opaq_eq, show Attr.depth (.bool b) = 0 + 1 from rfl, opaqCodec_p_bool]
   simp [booleanCodec]
 
 /-- …every stored byte string, -/
-theorem AdmA_opaq_bin (l : Bool) (b : Bytes) : AdmA (.opaq l) (.b b) = true := by
+theorem AdmA_opaq_bin (b : Bytes) : AdmA .opaq (.b b) = true := by
   rw [AdmA_opaq_eq, show Attr.depth (.b b) = 0 + 1 from rfl, opaqCodec_p_b]
   simp [binaryCodec]
 
-/-- …and the stored null, under either policy. -/
-theorem AdmA_opaq_null (l : Bool) : AdmA (.opaq l) .null = true := by
+/-- …the stored null, -/
+theorem AdmA_opaq_null : AdmA .opaq .null = true := by
   rw [AdmA_opaq_eq, show Attr.depth Attr.null = 0 + 1 from rfl, opaqCodec_p_null]
   simp [nullCodec]
 
 -- the numeric read row, mirror of `Adm_opaq_num`
-/-- The numeral is the one row the policy decides: the refusing `opaque` reads none. -/
-theorem AdmA_opaq_num (l : Bool) (x : WFNumeral) :
-    AdmA (.opaq l) (.n x) = (l && ((numberCodec.p (.n x)).isSome)) := by
-  show ((opaqCodec (Attr.depth (.n x)) l).p (.n x)).isSome = _
+/-- …and every stored numeral, as `number` reads it. -/
+theorem AdmA_opaq_num (x : WFNumeral) :
+    AdmA .opaq (.n x) = (numberCodec.p (.n x)).isSome := by
+  show ((opaqCodec (Attr.depth (.n x))).p (.n x)).isSome = _
   rw [show Attr.depth (.n x) = 0 + 1 from rfl, opaqCodec_p_n]
-  cases l <;> simp [Codec.empty]
 
 /-- A tuple with no tail pins the length of the wire list it reads. -/
 theorem alignPA_none_length : ∀ {Ps : List AP} {as : List Attr},
@@ -3817,17 +3556,6 @@ theorem reqPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → Ob
   · cases hf : fld k with
     | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
     | optional t => rfl
-
-/-- The two policies meet at their conjunction, which is what makes the `opaque` pair a row
-    rather than a refusal. -/
-theorem AdmA_opaq_and (l l2 : Bool) (a : Attr) :
-    AdmA (.opaq (l && l2)) a = (AdmA (.opaq l) a && AdmA (.opaq l2) a) := by
-  rw [AdmA_opaq_eq, AdmA_opaq_eq, AdmA_opaq_eq]
-  cases hf : (opaqCodec (Attr.depth a) false).p a with
-  | none => cases l <;> cases l2 <;> simp [hf]
-  | some v =>
-    have ht := opaq_p_mono _ a v hf
-    cases l <;> cases l2 <;> simp [hf, ht]
 
 /-- A declared name that must be read is a name the map carries. -/
 theorem mem_keys_of_req {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSlot}
@@ -3935,27 +3663,26 @@ theorem recordCodec_p_congr {c d : Codec} {keys : Finset Name} {g : {k // k ∈ 
 
 
 /-- `opaque` reads a self-identifying attribute exactly as the base for that attribute does. -/
-theorem opaq_p_string (l : Bool) (s : String) :
-    (denote (.opaq l)).p (.s s) = (denote (.string : Term)).p (.s s) := opaqCodec_p_s l 0 s
+theorem opaq_p_string (s : String) :
+    (denote .opaq).p (.s s) = (denote (.string : Term)).p (.s s) := opaqCodec_p_s 0 s
 
 /-- …a stored boolean as `boolean` does, -/
-theorem opaq_p_boolean (l : Bool) (b : Bool) :
-    (denote (.opaq l)).p (.bool b) = (denote (.boolean : Term)).p (.bool b) :=
-  opaqCodec_p_bool l 0 b
+theorem opaq_p_boolean (b : Bool) :
+    (denote .opaq).p (.bool b) = (denote (.boolean : Term)).p (.bool b) :=
+  opaqCodec_p_bool 0 b
 
 /-- …stored bytes as `binary` does, -/
-theorem opaq_p_binary (l : Bool) (b : Bytes) :
-    (denote (.opaq l)).p (.b b) = (denote (.binary : Term)).p (.b b) := opaqCodec_p_b l 0 b
+theorem opaq_p_binary (b : Bytes) :
+    (denote .opaq).p (.b b) = (denote (.binary : Term)).p (.b b) := opaqCodec_p_b 0 b
 
 /-- …and the stored null as `null` does. -/
-theorem opaq_p_null (l : Bool) :
-    (denote (.opaq l)).p .null = (denote (.null : Term)).p .null := opaqCodec_p_null l 0
+theorem opaq_p_null :
+    (denote .opaq).p .null = (denote (.null : Term)).p .null := opaqCodec_p_null 0
 
-/-- …and the lossy one reads a stored numeral as `number` does. The refusing one reads none,
-    which is why the `number` row answers the bottom there. -/
+/-- …and a stored numeral as `number` does. -/
 theorem opaq_p_number (x : WFNumeral) :
-    (denote (.opaq true)).p (.n x) = (denote (.number : Term)).p (.n x) := by
-  rw [show (denote (.opaq true)).p (.n x) = (opaqCodec (0 + 1) true).p (.n x) from rfl,
+    (denote .opaq).p (.n x) = (denote (.number : Term)).p (.n x) := by
+  rw [show (denote .opaq).p (.n x) = (opaqCodec (0 + 1)).p (.n x) from rfl,
     opaqCodec_p_n]
   rfl
 
@@ -3963,19 +3690,6 @@ theorem opaq_p_number (x : WFNumeral) :
     conjoin the two. -/
 theorem AdmA_number_eq (x : WFNumeral) :
     AdmA (.number : Term) (.n x) = (numberCodec.p (.n x)).isSome := rfl
-
-/-- The refusing `opaque` is below the lossy one, so where the refusing one admits, the two
-    read the same value. -/
-theorem opaq_p_lossy {l : Bool} {a : Attr} (hh : AdmA (.opaq false) a = true) :
-    (denote (.opaq l)).p a = (denote (.opaq false)).p a := by
-  cases l with
-  | false => rfl
-  | true =>
-      rw [AdmA_opaq_eq] at hh
-      obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hh
-      show (opaqCodec (Attr.depth a) true).p a = _
-      rw [opaq_p_mono _ a v hv]
-      exact hv.symm
 
 /-- A declared position that holds nothing empties the tuple: every wire list the tuple
     reads fills each declared position. -/
@@ -4753,7 +4467,7 @@ theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x 
   | .null, _, h => hf .null _ trivial h
   | .literal k lv, _, h => hf (.literal k lv) _ trivial h
   | .set b, _, h => hf (.set b) _ trivial h
-  | .opaq l, _, h => hf (.opaq l) _ trivial h
+  | .opaq, _, h => hf .opaq _ trivial h
   | .list p q s, _, h => hf (.list p q s) _ trivial h
   | .object b, _, h => hf (.object b) _ trivial h
 termination_by structural y => y
@@ -4812,7 +4526,7 @@ theorem admA_famString : AdmAFam Term.string famString := by
           | (refine bottom_row (fun a => ?_)
              cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
                Codec.restrict, baseCodec])
-  case opaq l =>
+  case opaq =>
       simp only [famString, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
       · cases a <;>
@@ -4842,7 +4556,7 @@ theorem admA_famBoolean : AdmAFam Term.boolean famBoolean := by
         refine bottom_row (fun a => ?_)
         cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
           Codec.restrict, baseCodec]
-  case opaq l =>
+  case opaq =>
       simp only [famBoolean, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
       · cases a <;>
@@ -4872,7 +4586,7 @@ theorem admA_famBinary : AdmAFam Term.binary famBinary := by
         refine bottom_row (fun a => ?_)
         cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
           Codec.restrict, baseCodec]
-  case opaq l =>
+  case opaq =>
       simp only [famBinary, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
       · cases a <;>
@@ -4902,7 +4616,7 @@ theorem admA_famNull : AdmAFam Term.null famNull := by
         refine bottom_row (fun a => ?_)
         cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
           Codec.restrict, baseCodec]
-  case opaq l =>
+  case opaq =>
       simp only [famNull, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
       · cases a <;>
@@ -4928,22 +4642,13 @@ theorem admA_famNumber : AdmAFam Term.number famNumber := by
           | (refine bottom_row (fun a => ?_)
              cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
                Codec.restrict, baseCodec])
-  case opaq l =>
-      simp only [famNumber] at h
-      split at h
-      next hl =>
-        subst hl
-        simp only [Option.some.injEq] at h; subst h
-        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-        · cases a <;>
-            (try simp only [AdmA_opaq_num, AdmA_number_eq, Bool.true_and, Bool.and_self]) <;>
-            simp [AdmA]
-        · cases a <;> refine ⟨?_, ?_⟩ <;> simp_all [AdmA, opaq_p_number]
-      next hl =>
-        simp only [Bool.not_eq_true] at hl; subst hl
-        simp only [Option.some.injEq] at h; subst h
-        refine bottom_row (fun a => ?_)
-        cases a <;> (try simp only [AdmA_opaq_num]) <;> simp [AdmA, inD]
+  case opaq =>
+      simp only [famNumber, Option.some.injEq] at h; subst h
+      refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+      · cases a <;>
+          (try simp only [AdmA_opaq_num, AdmA_number_eq, Bool.and_self]) <;>
+          simp [AdmA]
+      · cases a <;> refine ⟨?_, ?_⟩ <;> simp_all [AdmA, opaq_p_number]
   all_goals admA_never famNumber
 
 /-- A literal reads its own value and nothing else, and its base reads it too. -/
@@ -4975,7 +4680,7 @@ theorem admA_famLit (k : GroundKind) (lv : k.Carrier) :
              | true => rw [AdmA_base_of_literal rfl hx]; simp)
           | (refine bottom_row (fun a => ?_)
              exact Eq.trans rfl (AdmA_and_false (by first | rfl | decide) a).symm)
-  case opaq l => simp [famLit] at h
+  case opaq => simp [famLit] at h
   all_goals admA_never famLit
 
 /-- Two set bases read together where they are equal. -/
@@ -4990,11 +4695,11 @@ theorem admA_famSet (b : SetBase) : AdmAFam (.set b) (famSet b) := by
           | exact admA_same _
           | (refine bottom_row (fun a => ?_)
              cases a <;> simp_all [AdmA, AdmASet])
-  case opaq l => simp [famSet] at h
+  case opaq => simp [famSet] at h
   all_goals admA_never famSet
 
-/-- `opaque` reads each self-identifying base, and conjoins with another `opaque`. -/
-theorem admA_famOpaq (l : Bool) : AdmAFam (.opaq l) (famOpaq l) := by
+/-- `opaque` reads each self-identifying base, and meets another `opaque` as itself. -/
+theorem admA_famOpaq : AdmAFam .opaq (famOpaq) := by
   intro y z hd h
   cases y <;> first | exact hd.elim | skip
   case string | boolean | binary | null =>
@@ -5006,29 +4711,15 @@ theorem admA_famOpaq (l : Bool) : AdmAFam (.opaq l) (famOpaq l) := by
       · cases a <;> refine ⟨?_, ?_⟩ <;>
           simp_all [AdmA, opaq_p_string, opaq_p_boolean, opaq_p_binary, opaq_p_null]
   case number =>
-      simp only [famOpaq] at h
-      split at h
-      next hl =>
-        subst hl
-        simp only [Option.some.injEq] at h; subst h
-        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-        · cases a <;>
-            (try simp only [AdmA_opaq_num, AdmA_number_eq, Bool.true_and, Bool.and_self]) <;>
-            simp [AdmA]
-        · cases a <;> refine ⟨?_, ?_⟩ <;> simp_all [AdmA, opaq_p_number]
-      next hl =>
-        simp only [Bool.not_eq_true] at hl; subst hl
-        simp only [Option.some.injEq] at h; subst h
-        refine bottom_row (fun a => ?_)
-        cases a <;> (try simp only [AdmA_opaq_num]) <;> simp [AdmA, inD]
-  case opaq l' =>
       simp only [famOpaq, Option.some.injEq] at h; subst h
-      refine ⟨AdmA_opaq_and l l', fun a ha hb => ⟨?_, ?_⟩⟩ <;>
-        cases l <;> cases l' <;>
-        first
-          | rfl
-          | exact (opaq_p_lossy ha).symm
-          | exact (opaq_p_lossy hb).symm
+      refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+      · cases a <;>
+          (try simp only [AdmA_opaq_num, AdmA_number_eq, Bool.and_self]) <;>
+          simp [AdmA]
+      · cases a <;> refine ⟨?_, ?_⟩ <;> simp_all [AdmA, opaq_p_number]
+  case opaq =>
+      simp only [famOpaq, Option.some.injEq] at h; subst h
+      exact admA_same _
   all_goals simp [famOpaq] at h
 
 
@@ -5342,7 +5033,7 @@ theorem admA_famList {pre suf : List Term} {sp : Option Term}
                                 List.length_replicate, htsl, husl]
                             · simp only [List.length_take, htsl, husl]
             · exact absurd h (by simp)
-  case opaq l => simp [famList] at h
+  case opaq => simp [famList] at h
   all_goals admA_never famList
 
 /-- **A body reads a map by its slots**, the read side's twin of `AdmBody_map_slots`. -/
@@ -5606,7 +5297,7 @@ theorem admA_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Opt
                 (fun k' s hs => (objSlot_soundA hg hgreq hw hs).2.2 c)
                 (fun k' ha hb => (hblk k' ha hb).2.2 c) k
           next => exact absurd h (by simp)
-  case opaq l => simp [famObj] at h
+  case opaq => simp [famObj] at h
   all_goals admA_never famObj
 
 mutual
@@ -5678,7 +5369,7 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
   | .null, y, z, h => admA_meetSRight admA_famNull y z h
   | .literal k lv, y, z, h => admA_meetSRight (admA_famLit k lv) y z h
   | .set b, y, z, h => admA_meetSRight (admA_famSet b) y z h
-  | .opaq l, y, z, h => admA_meetSRight (admA_famOpaq l) y z h
+  | .opaq, y, z, h => admA_meetSRight (admA_famOpaq) y z h
   | .list pre sp suf, y, z, h => by
       cases sp with
       | none =>
@@ -6142,7 +5833,7 @@ theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam 
   | .null, _, h, hx, hy => hf .null _ trivial h hx hy
   | .literal k lv, _, h, hx, hy => hf (.literal k lv) _ trivial h hx hy
   | .set b, _, h, hx, hy => hf (.set b) _ trivial h hx hy
-  | .opaq l, _, h, hx, hy => hf (.opaq l) _ trivial h hx hy
+  | .opaq, _, h, hx, hy => hf .opaq _ trivial h hx hy
   | .list p q s, _, h, hx, hy => hf (.list p q s) _ trivial h hx hy
   | .object b, _, h, hx, hy => hf (.object b) _ trivial h hx hy
 termination_by structural y => y
@@ -6177,7 +5868,7 @@ local macro "typed_fam" fam:ident : tactic => `(tactic|
                | exact hx
                | exact hy
                | exact ⟨_, _, Typed.never⟩
-               | exact ⟨_, _, Typed.opaq _⟩))))
+               | exact ⟨_, _, Typed.opaq⟩))))
 
 /-- `string` meets its own literals and `opaque`, and each answer is a factor or the bottom. -/
 theorem typed_famString : TypedFam Term.string famString := by typed_fam famString
@@ -6201,8 +5892,8 @@ theorem typed_famLit (k : GroundKind) (lv : k.Carrier) :
 /-- Two set bases meet where they are equal. -/
 theorem typed_famSet (b : SetBase) : TypedFam (.set b) (famSet b) := by typed_fam famSet
 
-/-- `opaque` meets each self-identifying base, and another `opaque` at the conjoined policy. -/
-theorem typed_famOpaq (l : Bool) : TypedFam (.opaq l) (famOpaq l) := by typed_fam famOpaq
+/-- `opaque` meets each self-identifying base, and another `opaque`. -/
+theorem typed_famOpaq : TypedFam .opaq (famOpaq) := by typed_fam famOpaq
 
 /-! ### The container families: the four that read the recursion. -/
 
@@ -6327,7 +6018,7 @@ theorem typed_famList {pre suf : List Term} {sp : Option Term}
                     cases hw
                     exact hsound c spz hfc (hsp t rfl) (hsp₂ c rfl)
             · exact absurd h (by simp)
-  case opaq l => simp [famList] at h
+  case opaq => simp [famList] at h
   all_goals
     (simp only [famList, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
 
@@ -6403,7 +6094,7 @@ theorem typed_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Op
               rw [if_neg (by rw [hn]; exact Bool.false_ne_true)]
               exact typed_object_of hF (TypedWild.some ht)
           next => exact absurd h (by simp)
-  case opaq l => simp [famObj] at h
+  case opaq => simp [famObj] at h
   all_goals
     (simp only [famObj, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
 
@@ -6453,7 +6144,7 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
   | .null, y, z, h, hx, hy => typed_meetSRight typed_famNull y z h hx hy
   | .literal k lv, y, z, h, hx, hy => typed_meetSRight (typed_famLit k lv) y z h hx hy
   | .set b, y, z, h, hx, hy => typed_meetSRight (typed_famSet b) y z h hx hy
-  | .opaq l, y, z, h, hx, hy => typed_meetSRight (typed_famOpaq l) y z h hx hy
+  | .opaq, y, z, h, hx, hy => typed_meetSRight (typed_famOpaq) y z h hx hy
   | .list pre sp suf, y, z, h, hx, hy => by
       cases sp with
       | none =>

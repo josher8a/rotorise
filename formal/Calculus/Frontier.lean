@@ -860,12 +860,10 @@ theorem onKind_null : OptionSem.OnKind (.byAttempt nullCodec) .null := by
   constructor <;> intro x hx <;> cases x <;>
     simp_all [OptionSem.byAttempt, nullCodec, Value.kind, Attr.kind]
 
-/-- The `Numbers` policy: `lossy` offers the number option, `refuse` offers the empty
-    one — which admits nothing, so the pinning holds either way. -/
-theorem onKind_number (lossy : Bool) :
-    OptionSem.OnKind (.byAttempt (if lossy then numberCodec else Codec.empty)) .number := by
-  cases lossy <;> constructor <;> intro x hx <;> cases x <;>
-    simp_all [OptionSem.byAttempt, numberCodec, Codec.empty, Value.kind, Attr.kind]
+/-- The number option is pinned to `number`. -/
+theorem onKind_number : OptionSem.OnKind (.byAttempt numberCodec) .number := by
+  constructor <;> intro x hx <;> cases x <;>
+    simp_all [OptionSem.byAttempt, numberCodec, Value.kind, Attr.kind]
 
 /-- A container option is pinned by its own constructor, whatever it contains. This is
     why the fixpoint's (U) needs nothing from the recursive call — and why `opaque` is
@@ -897,45 +895,35 @@ def opaqKinds : List Kind :=
 
 /-- "The recursive union of everything self-identifying" (§3), spelled out: the eight
     options and the eight kinds that identify them. -/
-theorem opaq_onKinds (fuel : Nat) (lossy : Bool) :
-    List.Forall₂ OptionSem.OnKind (opaqOptions lossy (opaqCodec fuel lossy)) opaqKinds :=
+theorem opaq_onKinds (fuel : Nat) :
+    List.Forall₂ OptionSem.OnKind (opaqOptions (opaqCodec fuel)) opaqKinds :=
   .cons onKind_string (.cons onKind_boolean (.cons onKind_binary (.cons onKind_null
-    (.cons (onKind_number lossy) (.cons (onKind_set _) (.cons (onKind_array _)
+    (.cons onKind_number (.cons (onKind_set _) (.cons (onKind_array _)
       (.cons (onKind_record _) .nil)))))))
 
-/-- The `Numbers` option, lawful either way: `numberCodec` when `lossy`, and the empty
-    codec — the absence of an option — when `refuse`. -/
-theorem lawful_numOption (lossy : Bool) :
-    Lawful (if lossy then numberCodec else Codec.empty) := by
-  cases lossy
-  · exact Lawful.empty
-  · exact lawful_numberCodec
-
 /-- Every option of `opaque` is lawful, given the recursive one is. -/
-theorem lawful_opaqOptions {fuel : Nat} {lossy : Bool}
-    (hop : Lawful (opaqCodec fuel lossy)) :
-    ∀ o ∈ opaqOptions lossy (opaqCodec fuel lossy), Lawful o.c := by
+theorem lawful_opaqOptions {fuel : Nat} (hop : Lawful (opaqCodec fuel)) :
+    ∀ o ∈ opaqOptions (opaqCodec fuel), Lawful o.c := by
   intro o ho
   simp only [opaqOptions, List.mem_cons] at ho
   rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | h
   exacts [lawful_stringCodec, lawful_booleanCodec, lawful_binaryCodec,
-    lawful_nullCodec, lawful_numOption lossy, lawful_setCodec hop, lawful_arrayCodec hop,
+    lawful_nullCodec, lawful_numberCodec, lawful_setCodec hop, lawful_arrayCodec hop,
     lawful_recordCodec hop, absurd h (by simp)]
 
 /-- **(U) for `opaque`**, the fourth row of §5's discharger table: the eight options are
     pinned to eight distinct kinds, and each admits what it writes, so admission is
     unique on both sides. The only premise is the recursive option's lawfulness, which
     `uAtCan_opaque` (`Discharge.lean`) discharges. -/
-theorem uniqueAdmission_opaque (fuel : Nat) (lossy : Bool)
-    (hop : Lawful (opaqCodec fuel lossy)) :
-    UniqueAdmission (opaqOptions lossy (opaqCodec fuel lossy)) := by
-  refine uniqueAdmission_of_kinds (opaq_onKinds fuel lossy) (by decide) ?_
+theorem uniqueAdmission_opaque (fuel : Nat) (hop : Lawful (opaqCodec fuel)) :
+    UniqueAdmission (opaqOptions (opaqCodec fuel)) := by
+  refine uniqueAdmission_of_kinds (opaq_onKinds fuel) (by decide) ?_
   intro o ho t a he
   simp only [opaqOptions, List.mem_cons] at ho
   rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | h
   exacts [byAttempt_write lawful_stringCodec he,
     byAttempt_write lawful_booleanCodec he, byAttempt_write lawful_binaryCodec he,
-    byAttempt_write lawful_nullCodec he, byAttempt_write (lawful_numOption lossy) he,
+    byAttempt_write lawful_nullCodec he, byAttempt_write lawful_numberCodec he,
     byAttempt_write (lawful_setCodec hop) he,
     byAttempt_write (lawful_arrayCodec hop) he,
     byAttempt_write (lawful_recordCodec hop) he, absurd h (by simp)]
@@ -943,13 +931,13 @@ theorem uniqueAdmission_opaque (fuel : Nat) (lossy : Bool)
 /-- `opaque` closes with no bespoke induction: the sum lemma, its options' lemmas, and
     unique admission computed from the shapes — kinds partition the values, and the same
     kinds partition the attributes. -/
-theorem lawful_opaqCodec : ∀ (fuel : Nat) (lossy : Bool), Lawful (opaqCodec fuel lossy)
-  | 0, _ => Lawful.empty
-  | fuel+1, lossy =>
+theorem lawful_opaqCodec : ∀ (fuel : Nat), Lawful (opaqCodec fuel)
+  | 0 => Lawful.empty
+  | fuel+1 =>
     -- `μ` is `⊤`: the options name eight different members, so `unanimous` is `none`
-    have hop : Lawful (opaqCodec fuel lossy) := lawful_opaqCodec fuel lossy
+    have hop : Lawful (opaqCodec fuel) := lawful_opaqCodec fuel
     lawful_altCodec (lawful_opaqOptions hop)
-      (uniqueBothWays_of_uniqueAdmission (uniqueAdmission_opaque fuel lossy hop))
+      (uniqueBothWays_of_uniqueAdmission (uniqueAdmission_opaque fuel hop))
       (fun _ hm => nomatch hm)
 
 end

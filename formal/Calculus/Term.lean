@@ -109,12 +109,14 @@ inductive Term where
   | refine   (inner : Term) (p : Pred)
   /-- §3 `(lazy)`. The thunk is *not* `Unit → Term`: a closure adds no constructible
       term (every `Term` is finite either way) and only defeats the termination
-      checker. Recursive codecs are not modelled, and cannot be — see
-      `Continuity.lean`: `union`'s admission is anti-monotone, so a genuinely
-      recursive union has no fixpoint semantics in any system. -/
+      checker. A recursive term is not modelled. `Continuity.lean` shows that `union`'s
+      admission is anti-monotone, so a recursive union has no fixpoint semantics under
+      unique admission in general. A recursive union whose options are pairwise
+      kind-disjoint has one: `lawful_opaqCodecω` is the lawful fixed point of `opaque`. -/
   | lazy     (inner : Term)
-  /-- §3 `(opaque)`: `lossy = false` is the `refuse` policy. -/
-  | opaq     (lossy : Bool)
+  /-- §3 `(opaque)`: the universal sum. The number option is `numberCodec`, so `opaque`
+      writes every `Value` (`opaq_total`). -/
+  | opaq
   /-- §4's field table is a *set* of names each declaring one field, so that is what the
       term carries. A `List (Name × ObjectSlot)` admitted two orderings of one object and a
       repeated name, and the typing rule carried a `Nodup` premise to make the first
@@ -280,7 +282,7 @@ def Term.depth : Term → Nat
   | .string | .number | .boolean | .binary | .null
   -- `set` is a **leaf** since its base became an index: there is no element term to
   -- measure, so it sits with the other ground shapes rather than costing a layer.
-  | .literal _ _ | .opaq _ | .set _ | .never => 1
+  | .literal _ _ | .opaq | .set _ | .never => 1
   | .lazy t => Term.depth t + 1
   | .held t _ _ | .refine t _ => Term.depth t + 1
   | .list pre sp suf =>

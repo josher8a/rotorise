@@ -267,8 +267,10 @@ HOST = {
 SPEC = {
     "Numerals": "§1's numeral set; the model picks it out as `Numeral.WF`, so the specification's "
                 "name for it is not a Lean name",
-    "Numbers": "§5's policy name, realised as the `lossy`/`refuse` split — `onKind_number` is the "
-               "theorem, `Numbers` is the row",
+    "Numbers": "§5's policy name. The model has no policy: `opaque` holds a number exactly, and "
+               "the host states each policy as `held` over its canonical `opaque`",
+    "lossy": "§3's name for one numeric policy of `opaque`, beside `refuse`. The model's `opaque` "
+             "has no policy, and the host keeps `opaque('lossy')` as `held` sugar",
     "dom": "§2's notation for a partial function's domain, written `dom(e)`; `domE` is the Lean "
            "lemma about it",
     "p_c": "§2's notation for a component codec's read half, paired with `e_c`",

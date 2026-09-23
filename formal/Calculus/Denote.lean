@@ -107,7 +107,7 @@ def μSyn : Term → Option Member
   | .held t _ _ => μSyn t
   | .refine t _ => μSyn t
   | .lazy _ => none
-  | .opaq _ => none
+  | .opaq => none
   | .object _ => some .M
   | .union opts => unanimous (μSynList opts)
   -- the bottom writes no value, so there is no member it stores
@@ -179,7 +179,7 @@ def denote : Term → Codec
   | .lazy inner => { denote inner with μ := none }
   -- `opaqCodecω` budgets each input by its own depth (`Opaque.lean`); that is a recursion on the
   -- *input*, not on the term, and is untouched by this.
-  | .opaq lossy => opaqCodecω lossy
+  | .opaq => opaqCodecω
   | .object b => bodySem b
   | .union opts => altCodec (optionSems opts) (unanimous (denoteμs opts))
   -- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously
@@ -320,7 +320,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .list _ _ _ => rfl
   | .held t' _ _ => denote_μ t'
   | .refine t' _ => denote_μ t'
-  | .lazy _ | .opaq _ | .never => rfl
+  | .lazy _ | .opaq | .never => rfl
   | .object b => bodySem_μ b
   | .union opts => by
       show unanimous (denoteμs opts) = unanimous (μSynList opts)
@@ -393,7 +393,7 @@ theorem denote_union_sems (opts : List Term) :
 
 /-- `opaque` denotes `opaqCodecω` — the fuel-free one, which is why §5's discharger table has
     a row about `opaqCodec` at a fuel and a reason rather than a term-level twin. -/
-theorem denote_opaq (lossy : Bool) : denote (.opaq lossy) = opaqCodecω lossy := rfl
+theorem denote_opaq : denote .opaq = opaqCodecω := rfl
 
 /-- `object` denotes `objectCodec`. -/
 theorem denote_object_table (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)

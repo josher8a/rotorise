@@ -529,7 +529,7 @@ export const occV = (t: Term): readonly SetSlot[] | undefined => {
             return joined(t.options.map(occV))
         // **A closed form, not `⊤`.** §5 separates the two things a `⊤` covers: *unknown*, which is
         // `held`, `custom` and a host `lazy`, and *everything*, which is `opaque` by design. The
-        // model takes the second as data — `occV (.opaq true)` is `occTop` — so answering
+        // model takes the second as data — `occV .opaq` is `occTop` — so answering
         // `undefined` here would say "cannot be read" about the one term whose occupancy is fully
         // known, and {@link separable} would then decline to compare it.
         case 'opaq':
@@ -1262,7 +1262,7 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * **There is no `opaque` row, and its removal is the rule this function most recently learned.**
  * §5 separates the two things a `⊤` covers: *unknown* — `held`, `custom` and a host `lazy`, whose
  * answer exists and cannot be read — and *everything*, which is `opaque`, accepting every kind by
- * design. The model states the second as a **closed form**, `occTop` at the total `opaq true`, so
+ * design. The model states the second as a **closed form**, `occTop` at the total `opaq`, so
  * it can be compared; this library read it as `⊤` and exempted it instead, which
  * meant `union([opaque, X])` declared.
  *

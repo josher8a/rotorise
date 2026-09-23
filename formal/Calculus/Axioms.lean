@@ -154,8 +154,8 @@ closed for `opaque`; its proof sits behind seven
 makes it the single constant in this file with the most to lose from going unguarded. -/
 
 /-! §3's `(number)` gate and the two places the bound is forced outward. `opaq_T_identity`
-above is guarded for `Uν` *after* `HOpaque.num` gained its premise, which is the half of this
-change that reaches the depth machinery. The `(literal-N)` rows are the half that does not:
+above is the half that reaches the depth machinery. The `(literal-N)` rows are the half that
+does not:
 they are `(literal-N)`'s `ℓ ⊆ D`, added to §3 once the shipped `literal(NaN)` settled the
 question the conditional refutations leave open. -/
 

@@ -54,7 +54,7 @@ mutual
 def Obligations : Term → Prop
   -- `set` joins the leaves: its base is an index, so there is no subterm to carry premises.
   | .string | .number | .boolean | .binary | .null
-  | .literal _ _ | .opaq _ | .set _ | .never => True
+  | .literal _ _ | .opaq | .set _ | .never => True
   | .refine t' _ => Obligations t'
   | .list pre sp suf => ObligationsList pre ∧ ObligationsOpt sp ∧ ObligationsList suf
   | .held t' f g => Obligations t' ∧ IsoCancels (denote t') f g
@@ -233,7 +233,7 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .held h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .lazy _ => rfl
-  | _, _, _, .opaq _ => rfl
+  | _, _, _, .opaq => rfl
   | _, _, _, .object _ _ => rfl
   | _, _, _, .union h _ => by
       show unanimous (μSynList _) = unanimous _
@@ -284,7 +284,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
     | boolean => exact sound_ground lawful_booleanCodec
     | null => exact sound_ground lawful_nullCodec
     | binary => exact sound_ground lawful_binaryCodec
-    | opaq lossy => exact sound_ground (lawful_opaqCodecω lossy)
+    | opaq => exact sound_ground (lawful_opaqCodecω)
     -- a leaf now: `setCodec` is lawful at each of the four bases, so `(set)` discharges the
     -- way the ground rules do rather than by wrapping a subterm's soundness
     | set b => exact sound_ground (lawful_setCodec (lawful_setBase b))
@@ -594,24 +594,19 @@ theorem alignL_T_of_HTupleL {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre)
 
     **This fuel stays.** It is `Opaque.lean`'s budget on the *input's* depth, not `denote`'s on
     the term — a different recursion, and one this change does not touch. -/
-theorem opaq_TSub : ∀ (fuel : Nat) (lossy : Bool) (v : Value),
-    (opaqCodec fuel lossy).T v → HOpaque lossy v
-  | 0, _, _, h => nomatch h
-  | fuel+1, lossy, v, h => by
+theorem opaq_TSub : ∀ (fuel : Nat) (v : Value),
+    (opaqCodec fuel).T v → HOpaque v
+  | 0, _, h => nomatch h
+  | fuel+1, v, h => by
     obtain ⟨o, ho, hT⟩ := h
-    have ih := opaq_TSub fuel lossy
+    have ih := opaq_TSub fuel
     simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
     · obtain ⟨s, rfl⟩ := hT; exact .str s
     · obtain ⟨b, rfl⟩ := hT; exact .bool b
     · obtain ⟨b, rfl⟩ := hT; exact .bin b
     · cases hT; exact .null
-    · cases hl : lossy with
-      | false => rw [hl] at hT; exact nomatch hT
-      | true =>
-        rw [hl] at hT
-        obtain ⟨d, rfl⟩ := hT
-        exact .num d rfl
+    · obtain ⟨d, rfl⟩ := hT; exact .num d
     · cases v <;> first
         | exact .strSet _ fun s hs => ih (Value.str s) (hT s hs)
         | exact .numSet _ fun d hd => ih (Value.num d) (hT d hd)
@@ -625,11 +620,11 @@ theorem opaq_TSub : ∀ (fuel : Nat) (lossy : Bool) (v : Value),
         | exact nomatch hT
 
 /-- `opaqCodecω`'s held set — the union over all fuels — still lands in §3's `Uν`. -/
-theorem opaq_TSubω (lossy : Bool) (v : Value) :
-    (opaqCodecω lossy).T v → HOpaque lossy v := by
+theorem opaq_TSubω (v : Value) :
+    (opaqCodecω).T v → HOpaque v := by
   intro h
   obtain ⟨n, hn⟩ := h
-  exact opaq_TSub n lossy v hn
+  exact opaq_TSub n v hn
 
 /-- A union option's held set is one of the rule's. -/
 theorem TypedListμ.mem : ∀ {ts Ts μs}, TypedListμ ts Ts μs →
@@ -693,7 +688,7 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
     -- rule's are the same expression now — `HLit k ls` — so there is nothing to prove.
     | literal _ _ => exact hv
     | never => exact hv
-    | opaq lossy => exact opaq_TSubω lossy v hv
+    | opaq => exact opaq_TSubω v hv
     -- the base's codec holds exactly the base's held set (`SetBase.elem_T`), so the three
     -- wire families transport with no recursion left to do
     | set b =>
@@ -811,7 +806,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
     | @lazy γ T' μ' h' =>
       have ih := carrier_denote h' hob.lazy
       exact ⟨fun he => ih.domE he, fun hp => ih.ranP hp⟩
-    | opaq lossy => exact carrier_opaqCodecω lossy
+    | opaq => exact carrier_opaqCodecω
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest

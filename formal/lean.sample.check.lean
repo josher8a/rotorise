@@ -266,7 +266,7 @@ theorem dunion_two_keys :
 /-- `opaque_map` -/
 theorem opaque_map :
     check 2
-      ((denote (Term.opaq true)).e
+      ((denote (Term.opaq)).e
         (Value.map {"a"} (fun k => Value.str "x")))
       (some (Attr.m {"a"} (fun k => Attr.s "x"))) = .same := rfl
 

@@ -617,20 +617,14 @@ theorem not_retract_through_store_numberCodec {η : Attr → Attr}
 /-! ## `union(opaque, c)` is never separable
 
 Not one of §6's nine rows — a row §5 never wrote, and the reason it did not is that
-`opaque` looked like a term with nothing to say. `κ (.opaq _)` is `⊤` and, before `adm`
-was made to ask `opaqCodecω`, so were `adm (.opaq _)` and `admA (.opaq _)`. ~~SepV~~
+`opaque` looked like a term with nothing to say. `κ .opaq` is `⊤` and, before `adm`
+was made to ask `opaqCodecω`, so were `adm .opaq` and `admA .opaq`. ~~SepV~~
 offers exactly two routes — a disjoint kind or a disjoint admissible set — and ~~SepA~~
 two more — a distinct named member or a disjoint admissible set. A `⊤` on every one of
 the four is not a weak option; it is an **absorbing** one, in the sense `unknown | T` is
 absorbing in TypeScript.
 
-The absorption survives the semantic row, and the statements below say so in the form
-the row leaves them. They used to read "for every option that admits anything", on the
-strength of `adm (.opaq true) = ⊤`; that blanket is gone, because `adm` now asks the
-codec and `opaqCodecω` at a lossy policy refuses a value the numeral grammar rejects. What is true, and is all the refutation ever used, is: **an
-`opaque` never separates from an option they both admit.** The kind and member disjuncts
-are still structurally unavailable, so a single shared value or attribute is enough.
-
-Stated in both argument orders, because `List.Pairwise` asks the question one way round
-and the fact does not care; and at both policies, because the policy bit plays no part —
-what does the work is that `κ` and `μSyn` are `⊤` at an `opaque` whatever it writes. -/
+The absorption survives the semantic row. `opaque` writes every value (`opaq_total`), so
+**an `opaque` never separates from an option that admits anything.** The kind and member
+disjuncts are structurally unavailable, so a single shared value or attribute is enough.
+The fact holds in both argument orders, because `κ` and `μSyn` are `⊤` at an `opaque`. -/

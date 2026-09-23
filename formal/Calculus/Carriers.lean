@@ -220,11 +220,11 @@ theorem carrier_altCodec {os : List OptionSem} {μA : Option Member}
 
 
 /-- `opaque`'s fixpoint is on its carrier at every fuel — §3's `Uν`, one option per
-    kind, `refuse` being the absence of the `number` option. -/
-theorem carrier_opaqCodec : ∀ (fuel : Nat) (lossy : Bool), Carrier (opaqCodec fuel lossy)
-  | 0, _ => Carrier.empty
-  | fuel+1, lossy => by
-    have ih := carrier_opaqCodec fuel lossy
+    kind. -/
+theorem carrier_opaqCodec : ∀ (fuel : Nat), Carrier (opaqCodec fuel)
+  | 0 => Carrier.empty
+  | fuel+1 => by
+    have ih := carrier_opaqCodec fuel
     refine carrier_altCodec ?_
     intro o ho
     simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
@@ -233,9 +233,7 @@ theorem carrier_opaqCodec : ∀ (fuel : Nat) (lossy : Bool), Carrier (opaqCodec 
     · exact carrier_booleanCodec
     · exact carrier_binaryCodec
     · exact carrier_nullCodec
-    · cases lossy with
-      | false => exact Carrier.empty
-      | true => exact carrier_numberCodec
+    · exact carrier_numberCodec
     · exact carrier_setCodec ih
     · exact carrier_arrayCodec ih
     · exact carrier_recordCodec ih

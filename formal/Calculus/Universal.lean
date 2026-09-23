@@ -4,17 +4,15 @@ import Calculus.Meet
 # `opaque` is the universal sum
 
 `opaque` is the top of the admission lattice. `opaque` is not the unknown: the unknown carries
-no information, and `opaque` admits each wire value that the policy admits. The normal form
-is one union over each base and each container:
+no information, and `opaque` admits each wire value. The normal form is one union over each
+base and each container:
 
-    opaque(l) = union [string, boolean, binary, null, number?,
-                       array (lazy (opaque l)), record (lazy (opaque l)),
-                       set string, set number?, set binary]
-
-The two marked options exist only under the lossy policy.
+    opaque = union [string, boolean, binary, null, number,
+                    array (lazy opaque), record (lazy opaque),
+                    set string, set number, set binary]
 
 `opaq` stays the name of the fixed point. The union holds `opaq` under `lazy`, so the union is
-a finite `Term`, and no constructor is necessary. `denote (.opaq l)` stays `opaqCodecω l`,
+a finite `Term`, and no constructor is necessary. `denote .opaq` stays `opaqCodecω`,
 because a denotation of `opaq` through the union recurses on a term that is not a subterm.
 
 The unfolding is two theorems, one for each projection. `Adm_opaqUnfold` and
@@ -26,37 +24,35 @@ moves each container case to the budget of its elements through the stabilizatio
 namespace Calculus
 
 
-/-- `opaque` unfolded one time. The recursion stays under `lazy`, so the term is finite.
-    The number leaf and the number set exist only under the lossy policy. -/
-def opaqUnfold (l : Bool) : Term :=
-  .union ([.string, .boolean, .binary, .null] ++ (if l then [.number] else []) ++
-    [Term.array (.lazy (.opaq l)), Term.record (.lazy (.opaq l)), .set .string] ++
-    (if l then [.set .number] else []) ++ [.set .binary])
+/-- `opaque` unfolded one time. The recursion stays under `lazy`, so the term is finite. -/
+def opaqUnfold : Term :=
+  .union [.string, .boolean, .binary, .null, .number,
+    Term.array (.lazy .opaq), Term.record (.lazy .opaq), .set .string, .set .number, .set .binary]
 
 /-- `opaque` writes each element of a string set as the string base writes it. -/
-theorem encSet_opaq_str (l : Bool) (n : Nat) (S : NEFinset String) :
-    encSet (opaqCodec (n+1) l) Value.str S = encSet SetBase.string.elem Value.str S := by
-  simp only [encSet, show ∀ x : String, (opaqCodec (n+1) l).e (Value.str x)
+theorem encSet_opaq_str (n : Nat) (S : NEFinset String) :
+    encSet (opaqCodec (n+1)) Value.str S = encSet SetBase.string.elem Value.str S := by
+  simp only [encSet, show ∀ x : String, (opaqCodec (n+1)).e (Value.str x)
     = SetBase.string.elem.e (Value.str x) from fun x => by
       rw [opaqCodec_e_str]; rfl]
 
 /-- `opaque` writes each element of a byte-string set as the binary base writes it. -/
-theorem encSet_opaq_bin (l : Bool) (n : Nat) (S : NEFinset Bytes) :
-    encSet (opaqCodec (n+1) l) Value.bin S = encSet SetBase.binary.elem Value.bin S := by
-  simp only [encSet, show ∀ x : Bytes, (opaqCodec (n+1) l).e (Value.bin x)
+theorem encSet_opaq_bin (n : Nat) (S : NEFinset Bytes) :
+    encSet (opaqCodec (n+1)) Value.bin S = encSet SetBase.binary.elem Value.bin S := by
+  simp only [encSet, show ∀ x : Bytes, (opaqCodec (n+1)).e (Value.bin x)
     = SetBase.binary.elem.e (Value.bin x) from fun x => by
       rw [opaqCodec_e_bin]; rfl]
 
-/-- The lossy `opaque` writes each element of a number set as the number base writes it. -/
+/-- `opaque` writes each element of a number set as the number base writes it. -/
 theorem encSet_opaq_num (n : Nat) (S : NEFinset WFNumeral) :
-    encSet (opaqCodec (n+1) true) Value.num S = encSet SetBase.number.elem Value.num S := by
-  simp only [encSet, show ∀ x : WFNumeral, (opaqCodec (n+1) true).e (Value.num x)
+    encSet (opaqCodec (n+1)) Value.num S = encSet SetBase.number.elem Value.num S := by
+  simp only [encSet, show ∀ x : WFNumeral, (opaqCodec (n+1)).e (Value.num x)
     = SetBase.number.elem.e (Value.num x) from fun x => by
       rw [opaqCodec_e_num]; rfl]
 
-/-- The options of the unfolding are pairwise orthogonal, under both policies. -/
-theorem opaqUnfold_ok (l : Bool) : unionOk (match opaqUnfold l with | .union os => os | _ => []) = true := by
-  cases l <;> decide
+/-- The options of the unfolding are pairwise orthogonal. -/
+theorem opaqUnfold_ok : unionOk (match opaqUnfold with | .union os => os | _ => []) = true := by
+  decide
 
 /-- A list with no prefix and no suffix admits a value when the spread admits each element. -/
 theorem alignPL_spread (P : VP) (vs : List Value) :
@@ -73,81 +69,75 @@ theorem depth_le_depthL {x : Value} : ∀ {vs : List Value}, x ∈ vs → Value.
   | _ :: _, .tail _ h => by have := depth_le_depthL h; simp only [Value.depthL]; omega
 
 /-- `opaque` writes an array when `opaque` writes each element, at the element budget. -/
-theorem Adm_opaq_arr (l : Bool) (vs : List Value) :
-    Adm (.opaq l) (.arr vs) = decide (∀ x ∈ vs, Adm (.opaq l) x = true) := by
+theorem Adm_opaq_arr (vs : List Value) :
+    Adm .opaq (.arr vs) = decide (∀ x ∈ vs, Adm .opaq x = true) := by
   rw [Adm_opaq_eq, show Value.depth (.arr vs) = Value.depthL vs + 1 from rfl, opaqCodec_e_arr]
-  show ((traverse (opaqCodec (Value.depthL vs) l).e vs).map Attr.l).isSome = _
+  show ((traverse (opaqCodec (Value.depthL vs)).e vs).map Attr.l).isSome = _
   rw [Option.isSome_map]
   refine Bool.eq_iff_iff.mpr ((traverse_isSome_iff _ vs).trans ?_)
   simp only [decide_eq_true_eq]
   refine forall₂_congr fun x hx => ?_
-  rw [Adm_opaq_eq, opaq_e_agree l x _ _ (depth_le_depthL hx) (Nat.le_refl _)]
+  rw [Adm_opaq_eq, opaq_e_agree x _ _ (depth_le_depthL hx) (Nat.le_refl _)]
 
 /-- `opaque` writes a map when `opaque` writes each entry, at the entry budget. -/
-theorem Adm_opaq_map (l : Bool) (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
-    Adm (.opaq l) (.map keys g) = decide (∀ k, Adm (.opaq l) (g k) = true) := by
+theorem Adm_opaq_map (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
+    Adm .opaq (.map keys g) = decide (∀ k, Adm .opaq (g k) = true) := by
   rw [Adm_opaq_eq]
   obtain ⟨n, hn⟩ : ∃ n, Value.depth (.map keys g) = n + 1 :=
     ⟨_, rfl⟩
   rw [hn, opaqCodec_e_map]
-  show ((funImage fun k => (opaqCodec n l).e (g k)).map (Attr.m keys)).isSome = _
+  show ((funImage fun k => (opaqCodec n).e (g k)).map (Attr.m keys)).isSome = _
   rw [Option.isSome_map]
   refine Bool.eq_iff_iff.mpr (funImage_isSome_iff.trans ?_)
   simp only [decide_eq_true_eq]
   refine forall_congr' fun k => ?_
   have := Value.depth_map_entry (f := g) k
-  rw [Adm_opaq_eq, opaq_e_agree l (g k) _ _ (by omega) (Nat.le_refl _)]
+  rw [Adm_opaq_eq, opaq_e_agree (g k) _ _ (by omega) (Nat.le_refl _)]
 
 /-- **The unfolding lemma, write side.** `opaque` writes exactly the values that its
     unfolding writes. -/
-theorem Adm_opaqUnfold (l : Bool) (v : Value) : Adm (opaqUnfold l) v = Adm (.opaq l) v := by
-  have hu : Adm (opaqUnfold l) v = AdmAny (match opaqUnfold l with | .union os => os | _ => []) v :=
-    selOptV_eq_AdmAny (opaqUnfold_ok l) v
+theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
+  have hu : Adm opaqUnfold v = AdmAny (match opaqUnfold with | .union os => os | _ => []) v :=
+    selOptV_eq_AdmAny opaqUnfold_ok v
   rw [hu]
   cases v with
-  | str s => rw [Adm_opaq_str]; cases l <;> rfl
-  | bool b => rw [Adm_opaq_bool]; cases l <;> rfl
-  | bin b => rw [Adm_opaq_bin]; cases l <;> rfl
-  | null => rw [Adm_opaq_null]; cases l <;> rfl
-  | num d => rw [Adm_opaq_num]; cases l <;> rfl
+  | str s => rw [Adm_opaq_str]; rfl
+  | bool b => rw [Adm_opaq_bool]; rfl
+  | bin b => rw [Adm_opaq_bin]; rfl
+  | null => rw [Adm_opaq_null]; rfl
+  | num d => rw [Adm_opaq_num]; rfl
   | strSet S =>
       rw [Adm_opaq_eq, show Value.depth (.strSet S) = (1 : Nat) + 1 from rfl,
         opaqCodec_e_strSet]
-      show _ = (encSet (opaqCodec (0+1) l) Value.str S).isSome
+      show _ = (encSet (opaqCodec (0+1)) Value.str S).isSome
       rw [encSet_opaq_str]
       rw [(encSet_base_iff SetBase.string (fun _ _ h => Value.str.inj h) S).mpr
         (fun _ _ => rfl)]
-      cases l <;> simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record,
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record,
         inD, SetBase.adm]
   | numSet S =>
       rw [Adm_opaq_eq, show Value.depth (.numSet S) = (1 : Nat) + 1 from rfl,
         opaqCodec_e_numSet]
-      show _ = (encSet (opaqCodec (0+1) l) Value.num S).isSome
-      cases l with
-      | true =>
-          rw [encSet_opaq_num, (encSet_base_iff SetBase.number (fun _ _ h => Value.num.inj h) S).mpr
-            (fun _ _ => rfl)]
-          simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD, SetBase.adm]
-      | false =>
-          obtain ⟨d, hd⟩ := S.2
-          rw [encSet_isSome_false hd (by rw [opaqCodec_e_num]; rfl)]
-          simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record]
-          exact ⟨⟨d.1, d.2, hd, rfl⟩, ⟨d.1, d.2, hd, rfl⟩⟩
+      show _ = (encSet (opaqCodec (0+1)) Value.num S).isSome
+      rw [encSet_opaq_num, (encSet_base_iff SetBase.number (fun _ _ h => Value.num.inj h) S).mpr
+        (fun _ _ => rfl)]
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD, SetBase.adm]
   | binSet S =>
       rw [Adm_opaq_eq, show Value.depth (.binSet S) = (1 : Nat) + 1 from rfl,
         opaqCodec_e_binSet]
-      show _ = (encSet (opaqCodec (0+1) l) Value.bin S).isSome
+      show _ = (encSet (opaqCodec (0+1)) Value.bin S).isSome
       rw [encSet_opaq_bin, (encSet_base_iff SetBase.binary (fun _ _ h => Value.bin.inj h) S).mpr
         (fun _ _ => rfl)]
-      cases l <;> simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
         SetBase.adm]
   | arr vs =>
       rw [Adm_opaq_arr]
-      cases l <;> simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
-        AdmOptT, alignPL_spread] <;> exact decide_eq_decide.mpr Iff.rfl
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
+        AdmOptT, alignPL_spread]
+      exact decide_eq_decide.mpr Iff.rfl
   | map keys g =>
       rw [Adm_opaq_map]
-      cases l <;> simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
         AdmWild, valPresentT, objAdmV, entryP, MapOf.at]
 
 
@@ -166,29 +156,29 @@ theorem depth_le_depthLA {x : Attr} : ∀ {as : List Attr}, x ∈ as → Attr.de
   | _ :: _, .tail _ h => by have := depth_le_depthLA h; simp only [Attr.depthL]; omega
 
 /-- `opaque` reads a wire list when `opaque` reads each element, at the element budget. -/
-theorem AdmA_opaq_l (l : Bool) (as : List Attr) :
-    AdmA (.opaq l) (.l as) = decide (∀ x ∈ as, AdmA (.opaq l) x = true) := by
+theorem AdmA_opaq_l (as : List Attr) :
+    AdmA .opaq (.l as) = decide (∀ x ∈ as, AdmA .opaq x = true) := by
   rw [AdmA_opaq_eq, show Attr.depth (.l as) = Attr.depthL as + 1 from rfl, opaqCodec_p_l]
-  show ((traverse (opaqCodec (Attr.depthL as) l).p as).map Value.arr).isSome = _
+  show ((traverse (opaqCodec (Attr.depthL as)).p as).map Value.arr).isSome = _
   rw [Option.isSome_map]
   refine Bool.eq_iff_iff.mpr ((traverse_isSome_iff _ as).trans ?_)
   simp only [decide_eq_true_eq]
   refine forall₂_congr fun x hx => ?_
-  rw [AdmA_opaq_eq, opaq_p_agree l x _ _ (depth_le_depthLA hx) (Nat.le_refl _)]
+  rw [AdmA_opaq_eq, opaq_p_agree x _ _ (depth_le_depthLA hx) (Nat.le_refl _)]
 
 /-- `opaque` reads a wire map when `opaque` reads each entry, at the entry budget. -/
-theorem AdmA_opaq_m (l : Bool) (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
-    AdmA (.opaq l) (.m keys g) = decide (∀ k, AdmA (.opaq l) (g k) = true) := by
+theorem AdmA_opaq_m (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
+    AdmA .opaq (.m keys g) = decide (∀ k, AdmA .opaq (g k) = true) := by
   rw [AdmA_opaq_eq]
   obtain ⟨n, hn⟩ : ∃ n, Attr.depth (.m keys g) = n + 1 := ⟨_, rfl⟩
   rw [hn, opaqCodec_p_m]
-  show ((funImage fun k => (opaqCodec n l).p (g k)).map (Value.map keys)).isSome = _
+  show ((funImage fun k => (opaqCodec n).p (g k)).map (Value.map keys)).isSome = _
   rw [Option.isSome_map]
   refine Bool.eq_iff_iff.mpr (funImage_isSome_iff.trans ?_)
   simp only [decide_eq_true_eq]
   refine forall_congr' fun k => ?_
   have := Attr.depth_map_entry (f := g) k
-  rw [AdmA_opaq_eq, opaq_p_agree l (g k) _ _ (by omega) (Nat.le_refl _)]
+  rw [AdmA_opaq_eq, opaq_p_agree (g k) _ _ (by omega) (Nat.le_refl _)]
 
 /-- A set base's row is its codec's read domain, as a `Bool`. -/
 theorem AdmA_set_eq (b : SetBase) (a : Attr) :
@@ -197,53 +187,118 @@ theorem AdmA_set_eq (b : SetBase) (a : Attr) :
 
 /-- **The unfolding lemma, read side.** `opaque` reads exactly the attributes that its
     unfolding reads. -/
-theorem AdmA_opaqUnfold (l : Bool) (a : Attr) : AdmA (opaqUnfold l) a = AdmA (.opaq l) a := by
-  have hu : AdmA (opaqUnfold l) a
-      = AdmAAny (match opaqUnfold l with | .union os => os | _ => []) a :=
-    selOptA_eq_AdmAAny (opaqUnfold_ok l) a
+theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
+  have hu : AdmA opaqUnfold a
+      = AdmAAny (match opaqUnfold with | .union os => os | _ => []) a :=
+    selOptA_eq_AdmAAny opaqUnfold_ok a
   rw [hu]
   cases a with
-  | s x => rw [AdmA_opaq_str]; cases l <;> rfl
-  | bool b => rw [AdmA_opaq_bool]; cases l <;> rfl
-  | b x => rw [AdmA_opaq_bin]; cases l <;> rfl
-  | null => rw [AdmA_opaq_null]; cases l <;> rfl
-  | n x => rw [AdmA_opaq_num]; cases l <;> rfl
+  | s x => rw [AdmA_opaq_str]; rfl
+  | bool b => rw [AdmA_opaq_bool]; rfl
+  | b x => rw [AdmA_opaq_bin]; rfl
+  | null => rw [AdmA_opaq_null]; rfl
+  | n x => rw [AdmA_opaq_num]; rfl
   | ss S =>
-      have he : (setCodec (opaqCodec 1 l)).p (.ss S) = (setCodec SetBase.string.elem).p (.ss S) := by
-        simp only [setCodec, decSet, show ∀ x : String, (opaqCodec (0+1) l).p (Attr.s x)
+      have he : (setCodec (opaqCodec 1)).p (.ss S) = (setCodec SetBase.string.elem).p (.ss S) := by
+        simp only [setCodec, decSet, show ∀ x : String, (opaqCodec (0+1)).p (Attr.s x)
           = SetBase.string.elem.p (Attr.s x) from fun x => by rw [opaqCodec_p_s]; rfl]
       rw [AdmA_opaq_eq, show Attr.depth (.ss S) = (1 : Nat) + 1 from rfl, opaqCodec_p_ss, he,
         ← AdmA_set_eq]
-      cases l <;> rfl
+      rfl
   | bs S =>
-      have he : (setCodec (opaqCodec 1 l)).p (.bs S) = (setCodec SetBase.binary.elem).p (.bs S) := by
-        simp only [setCodec, decSet, show ∀ x : Bytes, (opaqCodec (0+1) l).p (Attr.b x)
+      have he : (setCodec (opaqCodec 1)).p (.bs S) = (setCodec SetBase.binary.elem).p (.bs S) := by
+        simp only [setCodec, decSet, show ∀ x : Bytes, (opaqCodec (0+1)).p (Attr.b x)
           = SetBase.binary.elem.p (Attr.b x) from fun x => by rw [opaqCodec_p_b]; rfl]
       rw [AdmA_opaq_eq, show Attr.depth (.bs S) = (1 : Nat) + 1 from rfl, opaqCodec_p_bs, he,
         ← AdmA_set_eq]
-      cases l <;> rfl
+      rfl
   | ns S =>
       rw [AdmA_opaq_eq, show Attr.depth (.ns S) = (1 : Nat) + 1 from rfl, opaqCodec_p_ns]
-      cases l with
-      | true =>
-          have he : (setCodec (opaqCodec 1 true)).p (.ns S)
-              = (setCodec SetBase.number.elem).p (.ns S) := by
-            simp only [setCodec, decSet, show ∀ x : WFNumeral, (opaqCodec (0+1) true).p (Attr.n x)
-              = SetBase.number.elem.p (Attr.n x) from fun x => by rw [opaqCodec_p_n]; rfl]
-          rw [he, ← AdmA_set_eq]
-          simp [opaqUnfold, AdmA, AdmASet, AdmABody, Term.array, Term.record]
-      | false =>
-          obtain ⟨x, hx⟩ := S.2
-          show _ = (decSet (opaqCodec (0+1) false) Attr.n S).isSome
-          rw [decSet_isSome_false hx (by rw [opaqCodec_p_n]; rfl)]
-          rfl
+      have he : (setCodec (opaqCodec 1)).p (.ns S)
+          = (setCodec SetBase.number.elem).p (.ns S) := by
+        simp only [setCodec, decSet, show ∀ x : WFNumeral, (opaqCodec (0+1)).p (Attr.n x)
+          = SetBase.number.elem.p (Attr.n x) from fun x => by rw [opaqCodec_p_n]; rfl]
+      rw [he, ← AdmA_set_eq]
+      simp [opaqUnfold, AdmA, AdmASet, AdmABody, Term.array, Term.record]
   | l as =>
       rw [AdmA_opaq_l]
-      cases l <;> simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, AdmASet, Term.array,
-        Term.record, AdmAOptT, alignPAL_spread] <;> exact decide_eq_decide.mpr Iff.rfl
+      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, AdmASet, Term.array,
+        Term.record, AdmAOptT, alignPAL_spread]
+      exact decide_eq_decide.mpr Iff.rfl
   | m keys g =>
       rw [AdmA_opaq_m]
-      cases l <;> simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, AdmASet, Term.array,
+      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, AdmASet, Term.array,
         Term.record, AdmAWild, reqPresentT, objAdmA, entryPA, MapOf.at]
+
+/-- **`opaque` is total, write side.** `opaque` writes every value. -/
+theorem opaq_total : ∀ v : Value, Adm .opaq v = true
+  | .str s => Adm_opaq_str s
+  | .bool b => Adm_opaq_bool b
+  | .bin b => Adm_opaq_bin b
+  | .null => Adm_opaq_null
+  | .num d => by rw [Adm_opaq_num]; rfl
+  | .strSet S => by
+      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from
+        selOptV_eq_AdmAny opaqUnfold_ok _]
+      simp [opaqUnfold, Adm, AdmBody, Term.array, Term.record, SetBase.adm, inD]
+  | .numSet S => by
+      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from
+        selOptV_eq_AdmAny opaqUnfold_ok _]
+      simp [opaqUnfold, Adm, AdmBody, Term.array, Term.record, SetBase.adm, inD]
+  | .binSet S => by
+      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from
+        selOptV_eq_AdmAny opaqUnfold_ok _]
+      simp [opaqUnfold, Adm, AdmBody, Term.array, Term.record, SetBase.adm, inD]
+  | .arr vs => by
+      rw [Adm_opaq_arr]
+      exact decide_eq_true (fun x hx =>
+        have : Value.depth x < Value.depth (.arr vs) := by
+          have := depth_le_depthL hx; simp only [Value.depth]; omega
+        opaq_total x)
+  | .map keys g => by
+      rw [Adm_opaq_map]
+      exact decide_eq_true (fun k =>
+        have : Value.depth (g k) < Value.depth (.map keys g) := by
+          have := Value.depth_map_entry (f := g) k; omega
+        opaq_total (g k))
+termination_by v => Value.depth v
+
+/-- **`opaque` is total, read side.** `opaque` reads every attribute. -/
+theorem opaqA_total : ∀ a : Attr, AdmA .opaq a = true
+  | .s x => AdmA_opaq_str x
+  | .bool b => AdmA_opaq_bool b
+  | .b x => AdmA_opaq_bin x
+  | .null => AdmA_opaq_null
+  | .n x => by rw [AdmA_opaq_num]; rfl
+  | .ss S => by
+      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from
+        selOptA_eq_AdmAAny opaqUnfold_ok _]
+      simp [opaqUnfold, AdmA, AdmABody, AdmASet, Term.array, Term.record]
+  | .ns S => by
+      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from
+        selOptA_eq_AdmAAny opaqUnfold_ok _]
+      simp [opaqUnfold, AdmA, AdmABody, AdmASet, Term.array, Term.record]
+      obtain ⟨x₀, hx₀⟩ := S.2
+      exact decSet_isSome_num hx₀ rfl (fun _ _ => rfl)
+        (fun x₁ _ x₂ _ y h₁ h₂ => by
+          simp only [numberCodec, Option.bind_some, vNum, Option.some.injEq] at h₁ h₂
+          exact h₁.trans h₂.symm)
+  | .bs S => by
+      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from
+        selOptA_eq_AdmAAny opaqUnfold_ok _]
+      simp [opaqUnfold, AdmA, AdmABody, AdmASet, Term.array, Term.record]
+  | .l as => by
+      rw [AdmA_opaq_l]
+      exact decide_eq_true (fun x hx =>
+        have : Attr.depth x < Attr.depth (.l as) := by
+          have := depth_le_depthLA hx; simp only [Attr.depth]; omega
+        opaqA_total x)
+  | .m keys g => by
+      rw [AdmA_opaq_m]
+      exact decide_eq_true (fun k =>
+        have : Attr.depth (g k) < Attr.depth (.m keys g) := by
+          have := Attr.depth_map_entry (f := g) k; omega
+        opaqA_total (g k))
+termination_by a => Attr.depth a
 
 end Calculus
