@@ -1288,7 +1288,7 @@ const MEET_LEMMAS = [
     'allSome',
     'Term.ofOptions',
     'unionOk',
-    'orthAll',
+    'certAll',
     'Term.isNever',
     'Term.isOpenObject',
     'MapOf.at',

@@ -42,8 +42,8 @@ gives a second witness.
 
 **A union carries a certificate, and the meet reads it.** `Adm (.union os)` is `selOptV`, which
 admits where *exactly one* option admits structurally. That is the join of the options' admissions
-only when the options carry `unionOk`: pairwise `Orth`, so no value is refused for being admitted
-twice. Each option's structural test is its row whether or not the option is open, because the
+only when the options carry `unionOk`: each pair passes `Orth` or meets at the bottom, so no value
+is refused for being admitted twice. Each option's structural test is its row whether or not the option is open, because the
 structural lemmas read the open block. Without the certificate the meet has nothing to state.
 
 **The meet and the merge are two operations.** `Body.merge` (`Merge.lean`) joins two bodies over
@@ -97,47 +97,6 @@ def ObjectSlot.isBottom : ObjectSlot → Bool
 def Pred.isData : Pred → Bool
   | .closure _ => false
   | _ => true
-
-/-- Pairwise `Orth` over a list. Lives here rather than beside `Orth` because the meet is its one
-    caller. -/
-def orthAll : List Term → Bool
-  | [] => true
-  | t :: ts => ts.all (fun u => Orth t u) && orthAll ts
-
-/-- **The certificate a union must carry for its admission to be the join of its options'.**
-    One condition. Pairwise `Orth` bounds the structural admitters at one, so nothing is
-    refused for being admitted twice.
-
-    An open object needs no second condition. The structural lemmas carry the open block
-    themselves, so a union holding an open block certifies on separation alone. -/
-def unionOk (os : List Term) : Bool :=
-  orthAll os
-
-/-- The certificate, in the form the separation lemmas take. -/
-theorem pairwise_of_orthAll : ∀ {ts : List Term}, orthAll ts = true →
-    List.Pairwise (fun x y => Orth x y = true) ts
-  | [], _ => .nil
-  | _ :: _, h => by
-      simp only [orthAll, Bool.and_eq_true, List.all_eq_true] at h
-      exact .cons (fun u hu => h.1 u hu) (pairwise_of_orthAll h.2)
-
-/-- The certificate's pairwise `Orth`, carried to the held sets option by option. -/
-theorem unionOk_pairwise_held : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs →
-    List.Pairwise (fun x y => Orth x y = true) os → Ts.Pairwise HDisj
-  | _, _, _, .nil, _ => .nil
-  | _, _, _, .cons hty hs, ho => by
-    obtain ⟨hohead, hotail⟩ := List.pairwise_cons.mp ho
-    refine .cons ?_ (unionOk_pairwise_held hs hotail)
-    intro T hT
-    obtain ⟨t', ht', μ', hty'⟩ := mem_typed_of_mem hs T hT
-    exact separates_held_of_orth (hohead t' ht') hty hty'
-
-/-- **A certified union satisfies (D).** The certificate is what the judgement's side
-    condition needs, and it needs no `denote`: the held sets are the judgement's own, and
-    disjointness is the second disjunct. This is the form the meet's union row takes. -/
-theorem dincomp_of_unionOk {os : List Term} {Ts μs} (hc : unionOk os = true)
-    (h : TypedListμ os Ts μs) : DIncomp Ts := by
-  exact dincomp_of_disjoint (unionOk_pairwise_held h (pairwise_of_orthAll hc))
 
 /-- A union of what survived a distribution: nothing is the bottom, one survivor is itself, and
     the rest are a union again. -/
@@ -1112,6 +1071,42 @@ def ObjectSlot.meet : ObjectSlot → ObjectSlot → Option ObjectSlot
 termination_by structural f _ => f
 end
 
+/-! ## The union certificate
+
+The certificate is defined here, after the meet, because one of its two tests is the meet. -/
+
+/-- **Whether two terms meet at the bottom.** A pair that the meet cannot state answers `false`,
+    so the pair is not certified. -/
+def meetNever (x y : Term) : Bool := (Term.meet x y).any Term.isNever
+
+/-- **The certificate for one pair of options.** Each test certifies pairs that the other misses.
+    The meet certifies two arrays told apart by a literal position, and the empty list beside a
+    list that holds one element or more. `Orth` certifies two string sets whose `each`
+    predicates hold disjoint members, because the meet does not meet two `each` predicates. -/
+def certPair (x y : Term) : Bool := Orth x y || meetNever x y
+
+/-- The certificate over a list of options, pair by pair. -/
+def certAll : List Term → Bool
+  | [] => true
+  | t :: ts => ts.all (fun u => certPair t u) && certAll ts
+
+/-- **The certificate a union must carry for its admission to be the join of its options'.**
+    One condition. Each pair of options is certified, so no value and no attribute has two
+    admitters, and nothing is refused for being admitted twice.
+
+    An open object needs no second condition. The structural lemmas carry the open block
+    themselves, so a union holding an open block certifies on separation alone. -/
+def unionOk (os : List Term) : Bool :=
+  certAll os
+
+/-- The certificate, in the pairwise form. -/
+theorem pairwise_of_certAll : ∀ {ts : List Term}, certAll ts = true →
+    List.Pairwise (fun x y => certPair x y = true) ts
+  | [], _ => .nil
+  | _ :: _, h => by
+      simp only [certAll, Bool.and_eq_true, List.all_eq_true] at h
+      exact .cons (fun u hu => h.1 u hu) (pairwise_of_certAll h.2)
+
 /-- Required presence dominates optional presence. -/
 example : ObjectSlot.meet (.optional .string) (.req .string) = some (.req .string) := by rfl
 
@@ -1202,16 +1197,19 @@ example :
         | _ => (true, true, true))
       = some (false, false, false) := by rfl
 
-/-- **An uncertified union has no meet, and there are two ways to be uncertified.** These two
-    options declare the same name with the same mark and no literal, so nothing tells them
-    apart: both admit a map carrying `a` *structurally*, `selOptV` finds two admitters and
-    refuses, and the union admits less than the join of its options. -/
-example : unionOk [.object (.mk {"a"} (fun _ => .req .string) none),
-    .object (.mk {"a"} (fun _ => .req .boolean) none)] = false := by
-  simp [unionOk, orthAll, Orth, Orth1, OrthM, OrthS, OrthL, occV, occOnly, Slot.all,
+/-- **`Orth` misses a pair that the meet certifies.** These two options declare the same name
+    with the same mark and no literal, so no phase of `Orth` tells them apart… -/
+example : Orth (.object (.mk {"a"} (fun _ => .req .string) none))
+    (.object (.mk {"a"} (fun _ => .req .boolean) none)) = false := by
+  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occOnly, Slot.all,
     namesSeparate, presenceMeetsBot, BodySpec.presenceAt, ObjectSlot.presence,
     ObjectSlot.isReq, Term.isNever, Body.spec, altsOfField,
     specOf, litDisjAt, altsDisj, MapOf.at, Finset.mem_singleton]
+
+/-- …and the meet answers the bottom, because the required slot meets `string` with `boolean`.
+    So the union is certified. -/
+example : unionOk [.object (.mk {"a"} (fun _ => .req .string) none),
+    .object (.mk {"a"} (fun _ => .req .boolean) none)] = true := by decide
 
 /-! ### The bottom bubbles up through a required slot
 
@@ -1232,11 +1230,11 @@ example : Term.meet
       = some .never := by rfl
 
 example : unionOk [.object (.mk {"x"} (fun _ => .optional .string) none)] = true := by
-  simp [unionOk, orthAll, Term.isOpenObject]
+  simp [unionOk, certAll]
 
 example : unionOk [.object (.mk {"x"} (fun _ => .req .string) none)]
     = true := by
-  simp [unionOk, orthAll, Term.isOpenObject]
+  simp [unionOk, certAll]
 
 /-- …and an **open** object separates from nothing on the names phase. Its open block makes
     an undeclared name the top, so no name meets at the bottom. `unionOk` admits the open
@@ -1244,7 +1242,30 @@ example : unionOk [.object (.mk {"x"} (fun _ => .req .string) none)]
     value the option admits. -/
 example : unionOk [.object (.mk {"a"} (fun _ => .req .string) (some .string))]
     = true := by
-  simp [unionOk, orthAll]
+  simp [unionOk, certAll]
+
+/-! ### Arrays told apart by a literal position
+
+The owner's witness. Each list below starts with a literal, and the empty list is an option of
+its own. No phase of `Orth` separates any pair, and each pair meets at the bottom. -/
+
+/-- The three options: a nonempty list of `"A"`, a nonempty list of `"B"`, and the empty list. -/
+def literalListOptions : List Term :=
+  [.list [.literal .string "A"] (some (.literal .string "A")) [],
+   .list [.literal .string "B"] (some (.literal .string "B")) [],
+   .list [] none []]
+
+/-- `Orth` refuses each of the three pairs. -/
+theorem orth_literalListOptions :
+    literalListOptions.Pairwise (fun x y => Orth x y = false) := by decide
+
+/-- **The meet certifies the union**: each pair meets at the bottom. -/
+theorem unionOk_literalListOptions : unionOk literalListOptions = true := by decide
+
+/-- **The crossing control is not certified.** `array (literal "A")` and `array (literal "B")`
+    both hold `[]`, so the meet is `array never`, which holds `[]` and is not the bottom. -/
+theorem not_unionOk_literalArrays :
+    unionOk [.array (.literal .string "A"), .array (.literal .string "B")] = false := by decide
 
 /-! ### Why the write-agreement condition is conditional
 
@@ -1794,16 +1815,6 @@ theorem selOptV_eq_AdmAny_of_le {os : List Term} {v : Value}
         rw [htl] at hat
         exact absurd hat (by rw [hao]; simp)
 
-/-- **A certified union's admission is the join of its options'.** The certificate bounds the
-    admitters at one, and that bound is the whole of what the equation needs. -/
-theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) :
-    selOptV (AdmSpecs os) v = AdmAny os v := by
-  refine selOptV_eq_AdmAny_of_le ?_
-  simp only [unionOk] at hc
-  have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc)).1 v
-  rwa [semsOf, ← optionSems_eq, filter_AdmSpecs (fun t _ => Adm_exact t) v,
-    List.length_map] at hone
-
 /-- A list reads an attribute exactly when one of its terms does. -/
 theorem AdmAAny_iff : ∀ {os : List Term} {a : Attr},
     AdmAAny os a = true ↔ ∃ t ∈ os, AdmA t a = true
@@ -1856,16 +1867,6 @@ theorem selOptA_eq_AdmAAny_of_le {os : List Term} {a : Attr}
         exact absurd hat (by rw [hao]; simp)
 
 
-/-- **A certified union reads the join of its options'.** `selOptV_eq_AdmAny`'s twin, and it
-    spends its certificate the same way. -/
-theorem selOptA_eq_AdmAAny {os : List Term} (hc : unionOk os = true) (a : Attr) :
-    selOptA (AdmASpecs os) a = AdmAAny os a := by
-  refine selOptA_eq_AdmAAny_of_le ?_
-  simp only [unionOk] at hc
-  have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc)).2 a
-  rwa [semsOf, ← optionSems_eq, filter_AdmASpecs (fun t _ => AdmA_exact t) a,
-    List.length_map] at hone
-
 /-- The options that survive are the ones that admit; the bottoms admit nothing. -/
 theorem AdmAny_filter_never : ∀ (ts : List Term) (v : Value),
     AdmAny (ts.filter (fun z => !z.isNever)) v = AdmAny ts v
@@ -1881,14 +1882,6 @@ theorem AdmAny_filter_never : ∀ (ts : List Term) (v : Value),
       | false =>
         rw [List.filter_cons, if_pos (by simp [ht]), AdmAny_cons, AdmAny_cons,
           AdmAny_filter_never ts v]
-
-/-- A certified list of survivors admits what its options admit. -/
-theorem Adm_ofOptions {ts : List Term} (hc : unionOk ts = true) (v : Value) :
-    Adm (Term.ofOptions ts) v = AdmAny ts v := by
-  match ts with
-  | [] => rfl
-  | [t] => simp only [Term.ofOptions, AdmAny_cons, AdmAny_nil, Bool.or_false]
-  | _ :: _ :: _ => exact selOptV_eq_AdmAny hc v
 
 /-- The join over the met options is the join over the options, met with the partner. -/
 theorem AdmAny_meet {y : Term} (v : Value) : ∀ {os zs : List Term},
@@ -4213,15 +4206,6 @@ theorem AdmAAny_filter_never : ∀ (ts : List Term) (v : Attr),
           AdmAAny_filter_never ts v]
 
 
-/-- A certified list of survivors reads what its options read. -/
-theorem AdmA_ofOptions {ts : List Term} (hc : unionOk ts = true) (v : Attr) :
-    AdmA (Term.ofOptions ts) v = AdmAAny ts v := by
-  match ts with
-  | [] => rfl
-  | [t] => simp only [Term.ofOptions, AdmAAny_cons, AdmAAny_nil, Bool.or_false]
-  | _ :: _ :: _ => exact selOptA_eq_AdmAAny hc v
-
-
 /-- The join over the met options is the join over the options, met with the partner. -/
 theorem AdmAAny_meet {y : Term} (v : Attr) : ∀ {os zs : List Term},
     List.Forall₂ (fun t w => ∀ u, AdmA w u = (AdmA t u && AdmA y u)) os zs →
@@ -5455,15 +5439,112 @@ theorem meet_separates_A {x y z : Term} (h : Term.meet x y = some z) (hz : z.isN
     (a : Attr) : (AdmA x a && AdmA y a) = false := by
   rw [← AdmA_meet h a, eq_never_of_isNever hz]; exact AdmA_never a
 
-/-- `orthAll` from the pairwise form, which is what a sublist preserves. -/
-theorem orthAll_of_pairwise : ∀ {ts : List Term},
-    List.Pairwise (fun x y => Orth x y = true) ts → orthAll ts = true
+/-- **A pair that meets at the bottom separates, on both halves.** `meet_separates` and
+    `meet_separates_A` take the meet's answer; this reads the answer off `meetNever`. -/
+theorem separates_of_meetNever {x y : Term} (h : meetNever x y = true) : Separates x y := by
+  unfold meetNever at h
+  cases hm : Term.meet x y with
+  | none => rw [hm] at h; exact nomatch h
+  | some z =>
+    rw [hm] at h
+    refine ⟨fun v hx hy => ?_, fun a hx hy => ?_⟩
+    · have hs := meet_separates hm h v
+      rw [show Adm x v = true from hx.2, show Adm y v = true from hy.2] at hs
+      exact nomatch hs
+    · have hs := meet_separates_A hm h a
+      rw [show AdmA x a = true from hx.2, show AdmA y a = true from hy.2] at hs
+      exact nomatch hs
+
+/-- **The pair certificate is sound**: each disjunct separates the pair. -/
+theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates x y := by
+  rcases Bool.or_eq_true_iff.mp h with ho | hm
+  · exact separates_of_orth ho
+  · exact separates_of_meetNever hm
+
+/-- **A certified union is separated**, which is the premise of `uAtCan_of_separated` and of
+    `admitsAtMostOne_of_separated`. -/
+theorem separated_of_unionOk {os : List Term} (h : unionOk os = true) : Separated os :=
+  (pairwise_of_certAll h).imp separates_of_certPair
+
+/-- **The pair certificate on the held sets.** At a derivable term the held set is the admission
+    (`typed_T_adm`), so a pair that meets at the bottom holds disjoint sets. -/
+theorem hdisj_of_certPair {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
+    (h : certPair x y = true) (hx : Typed x Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty := by
+  rcases Bool.or_eq_true_iff.mp h with ho | hm
+  · exact separates_held_of_orth ho hx hy
+  · intro v hvx hvy
+    unfold meetNever at hm
+    cases hmz : Term.meet x y with
+    | none => rw [hmz] at hm; exact nomatch hm
+    | some z =>
+      rw [hmz] at hm
+      have hs := meet_separates hmz hm v
+      rw [(typed_T_adm hx v).mp hvx, (typed_T_adm hy v).mp hvy] at hs
+      exact nomatch hs
+
+/-- The certificate's pairs, carried to the held sets option by option. -/
+theorem unionOk_pairwise_held : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs →
+    List.Pairwise (fun x y => certPair x y = true) os → Ts.Pairwise HDisj
+  | _, _, _, .nil, _ => .nil
+  | _, _, _, .cons hty hs, ho => by
+    obtain ⟨hohead, hotail⟩ := List.pairwise_cons.mp ho
+    refine .cons ?_ (unionOk_pairwise_held hs hotail)
+    intro T hT
+    obtain ⟨t', ht', μ', hty'⟩ := mem_typed_of_mem hs T hT
+    exact hdisj_of_certPair (hohead t' ht') hty hty'
+
+/-- **A certified union satisfies (D).** The certificate is what the judgement's side
+    condition needs: the held sets are the judgement's own, and the certificate makes them
+    pairwise disjoint. -/
+theorem dincomp_of_unionOk {os : List Term} {Ts μs} (hc : unionOk os = true)
+    (h : TypedListμ os Ts μs) : DIncomp Ts :=
+  dincomp_of_disjoint (unionOk_pairwise_held h (pairwise_of_certAll hc))
+
+/-- **A certified union's admission is the join of its options'.** The certificate bounds the
+    admitters at one, and that bound is the whole of what the equation needs. -/
+theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) :
+    selOptV (AdmSpecs os) v = AdmAny os v := by
+  refine selOptV_eq_AdmAny_of_le ?_
+  have hone := (admitsAtMostOne_of_separated (separated_of_unionOk hc)).1 v
+  rwa [semsOf, ← optionSems_eq, filter_AdmSpecs (fun t _ => Adm_exact t) v,
+    List.length_map] at hone
+
+/-- **A certified union reads the join of its options'.** `selOptV_eq_AdmAny`'s twin, and it
+    spends its certificate the same way. -/
+theorem selOptA_eq_AdmAAny {os : List Term} (hc : unionOk os = true) (a : Attr) :
+    selOptA (AdmASpecs os) a = AdmAAny os a := by
+  refine selOptA_eq_AdmAAny_of_le ?_
+  have hone := (admitsAtMostOne_of_separated (separated_of_unionOk hc)).2 a
+  rwa [semsOf, ← optionSems_eq, filter_AdmASpecs (fun t _ => AdmA_exact t) a,
+    List.length_map] at hone
+
+/-- A certified list of survivors admits what its options admit. -/
+theorem Adm_ofOptions {ts : List Term} (hc : unionOk ts = true) (v : Value) :
+    Adm (Term.ofOptions ts) v = AdmAny ts v := by
+  match ts with
+  | [] => rfl
+  | [t] => simp only [Term.ofOptions, AdmAny_cons, AdmAny_nil, Bool.or_false]
+  | _ :: _ :: _ => exact selOptV_eq_AdmAny hc v
+
+/-- A certified list of survivors reads what its options read. -/
+theorem AdmA_ofOptions {ts : List Term} (hc : unionOk ts = true) (v : Attr) :
+    AdmA (Term.ofOptions ts) v = AdmAAny ts v := by
+  match ts with
+  | [] => rfl
+  | [t] => simp only [Term.ofOptions, AdmAAny_cons, AdmAAny_nil, Bool.or_false]
+  | _ :: _ :: _ => exact selOptA_eq_AdmAAny hc v
+
+
+
+/-- `certAll` from the pairwise form, which is what a sublist preserves. -/
+theorem certAll_of_pairwise : ∀ {ts : List Term},
+    List.Pairwise (fun x y => certPair x y = true) ts → certAll ts = true
   | [], _ => rfl
   | t :: ts, h => by
       cases h with
       | cons hh hrest =>
-        simp only [orthAll, Bool.and_eq_true, List.all_eq_true]
-        exact ⟨fun u hu => hh u hu, orthAll_of_pairwise hrest⟩
+        simp only [certAll, Bool.and_eq_true, List.all_eq_true]
+        exact ⟨fun u hu => hh u hu, certAll_of_pairwise hrest⟩
 
 /-- **The certificate survives a sub-selection.** Both conjuncts are pairwise or pointwise, so
     keeping fewer options proves nothing new. (U) is the property that does not survive, and it
@@ -5471,7 +5552,7 @@ theorem orthAll_of_pairwise : ∀ {ts : List Term},
 theorem unionOk_sublist {opts sub : List Term} (hs : sub.Sublist opts)
     (h : unionOk opts = true) : unionOk sub = true := by
   simp only [unionOk] at h ⊢
-  exact orthAll_of_pairwise ((pairwise_of_orthAll h).sublist hs)
+  exact certAll_of_pairwise ((pairwise_of_certAll h).sublist hs)
 
 /-- **A value an option admits, the option admits as an option.** Every option is attempted, so
     `admitOptV` is the row itself and this is the identity. `Slice.lean` calls it by name. -/
