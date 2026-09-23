@@ -207,7 +207,6 @@ theorem AdmAny_extract_or_exclude (c : AltClause) (opts : List Term) (v : Value)
 theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
     (hok : unionOk opts = true) (v : Value) :
     (AdmAny (c.extract opts) v && AdmAny (c.exclude opts) v) = false := by
-  simp only [unionOk] at hok
   rcases hb : AdmAny (c.extract opts) v with _ | _
   · simp
   rcases hb2 : AdmAny (c.exclude opts) v with _ | _
@@ -222,7 +221,7 @@ theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
     have := (List.mem_filter.mp ht2).2; simpa using this
   have hne : t1 ≠ t2 := fun hh => by rw [hh, hc2] at hc1; exact Bool.noConfusion hc1
   have hlen : (opts.filter (fun t => admitOptV (specOf t, Adm t) v)).length ≤ 1 := by
-    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hok)).1 v
+    have hone := (admitsAtMostOne_of_separated (separated_of_unionOk hok)).1 v
     rwa [semsOf, ← optionSems_eq, filter_AdmSpecs (fun t _ => Adm_exact t) v,
       List.length_map] at hone
   have hf1 : t1 ∈ opts.filter (fun t => admitOptV (specOf t, Adm t) v) :=
