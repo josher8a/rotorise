@@ -1247,12 +1247,13 @@ theorem uAtAct_of_orth {opts : List Term}
 /-! ## The same certificate, on the held sets
 
 `separates_of_orth` above is stated on `Adm`, which is what an option **writes**. §5's (D) is
-stated on held sets, and the two are not the same set: `T = dom(e)` fails at a `union` whose
-options both admit one value, where `select` writes nothing and the held set keeps it
-(`TIsDomE`, `not_TIsDomE_unionLiteralString`). So disjoint admission does not give disjoint
-held sets, and `Typed.union`'s (D) cannot be discharged through `separates_of_orth`.
+stated on held sets. At a derivable term the two are one set (`typed_T_adm`), and
+`dincomp_of_admDisj` reads (D) off disjoint admission. At a codec that no derivation reaches
+they differ: `select` writes nothing where two options admit, and the held set keeps the value
+(`TIsDomE`, `not_TIsDomE_unionLiteralString`).
 
-The mirror below re-runs each phase against the judgement instead. It needs the value half
+The mirror below re-runs each phase against the judgement, with no induction over the
+judgement. It needs the value half
 only, because a held set is a set of values. `uAtCan_of_orth` takes a closedness premise
 for a different reason, which is admission and not separation: an open option's admission is
 not structural, so `optionSem_self_admit` needs it where this phase no longer does. -/

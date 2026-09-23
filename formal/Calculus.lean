@@ -26,6 +26,7 @@ import Calculus.Refutations
 import Calculus.ExactV
 import Calculus.ExactA
 import Calculus.Separation
+import Calculus.Laminar
 import Calculus.Meet
 import Calculus.LiteralArity1
 import Calculus.Orthogonality

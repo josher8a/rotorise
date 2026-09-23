@@ -298,7 +298,7 @@ Both are needed, and neither determines the other.
 
 \begin{definition}[(decimal)]
 \label{rule:decimal}
-\lean{Calculus.Typed.decimal}
+\lean{Calculus.decimalHeld, Calculus.Typed.held}
 \leanok
 \begin{verbatim}
 ──────────────────────────────
@@ -613,8 +613,6 @@ extendRead(c, r) : adapted(T, μ)
 \begin{definition}[(custom)]
 \label{rule:custom}
 \uses{cond:R,cond:C,cond:MP}
-\lean{Calculus.Typed.custom, Calculus.Obligations}
-\leanok
 \begin{verbatim}
 e : T ⇀ 𝔸    p : 𝔸 ⇀ T    (R), (C), (MP) hold of (e, p)
 ───────────────────────────────────────────────────────── (custom)
@@ -791,7 +789,7 @@ something whose judgement has a \texttt{⊗}.
 
 \begin{definition}[(rest)]
 \label{rule:rest}
-\lean{Calculus.TypedRest}
+\lean{Calculus.TypedWild}
 \leanok
 \begin{verbatim}
 ────────────────────────────────────────────────────────── (rest)
@@ -854,19 +852,22 @@ obligation is weaker, the same demand restricted to the inputs the union itself 
 strong form implies it.
 \end{definition}
 
-\begin{definition}[(D) incomparable held sets]
+\begin{definition}[(D) the selector is total on the held set]
 \label{cond:D}
-\lean{Calculus.DIncomp}
+\lean{Calculus.DIncomp, Calculus.SelTotal, Calculus.countSel_total}
 \leanok
-\texttt{∀\ i\ ≠\ j.\ (¬(Tᵢ\ ⊆\ Tⱼ)\ ∧\ ¬(Tⱼ\ ⊆\ Tᵢ))\ ∨\ Tᵢ\ ∩\ Tⱼ\ =\ ∅}.
-Well-formedness: of any two options, neither held set subsumes the other, or the two share no
-value. Required of every pair, disjointness rejects working unions, which is why it is offered as
-an alternative and not imposed; two disjoint options are distinguishable in the strongest way
-there is. An empty option is the unit of the sum and reaches the condition this way, being
-disjoint from everything: it contributes nothing to the union and so cannot make it ambiguous,
-while being a subset of every held set, which incomparability alone would reject. Decidable from
-the held sets alone. It does \textbf{not} discharge the readable side, for the reason the
-machinery of admission gives.
+\texttt{∀\ v\ ∈\ ⋃ᵢ\ Tᵢ.\ select(v)\ =\ i\ ∧\ v\ ∈\ dom(eᵢ)}.
+Well-formedness: each value the union holds selects one option, and that option writes the value.
+(D) is a property of the selector, not of a shape of the options. The selector of
+\rulelink{rule:union}{\texttt{(union)}} is the count: an option wins where it is the only option that admits the value.
+For the count, totality is \texttt{∀\ i\ ≠\ j.\ Tᵢ\ ∩\ Tⱼ\ =\ ∅}, and that is the premise the rule carries. A nested
+pair fails it: \texttt{union(literal("A"),\ string)} holds \texttt{"A"}, both options admit \texttt{"A"}, and the union
+writes nothing. A crossing pair fails it too. An empty option is the unit of the sum: it is disjoint
+from every held set, so it cannot make a union ambiguous. Under (D) the judgement's index is
+exact: a derivable term holds exactly the values it admits (\texttt{typed\_T\_adm}). The least-admitter
+selector \texttt{findSel} is total on a laminar family, each pair disjoint or nested, and the count over the
+cells of such a family is \texttt{findSel}; the union does not use it. (D) does \textbf{not} discharge the readable
+side, for the reason the machinery of admission gives.
 \end{definition}
 
 \begin{definition}[(union)]
@@ -1153,27 +1154,28 @@ which is what leaves the row decidable where it decides at all: \textbf{on one s
 when their occupancies on that side are disjoint. On both sides at once, they separate when one
 option requires a name the other does not declare.} That is a question about two terms, answered by computation at
 the declaration. What it declines is an obligation and not a refusal. No input reaches two
-options where option admission is disjoint, and that needs option admission itself, which the held
-sets do not determine.
+options where option admission is disjoint, and that needs option admission itself. At a derivable
+term the held set is the admission, so \rulelink{cond:D}{\textbf{(D)}} decides the writable side of a derivable union.
 
 Only \rulelink{cond:D}{\textbf{(D)}} is a premise, and it is the only condition here with a letter, because it appears in
 a rule. Everything in the discharger table is a discharger, and the asymmetry is not an
 oversight: \rulelink{cond:D}{\textbf{(D)}} is a condition on the judgement's own index, so the rule can demand it, while
 a discharger answers a question about inputs that the rule states as \rulelink{cond:U}{\textbf{(U)}} and settles where it
 can.
-A union no discharger covers is still a term, and what such a union lacks is not derivability but
-the theorem: its \rulelink{cond:U}{\textbf{(U)}} is unsettled at the declaration, and the semantics enforces it per input by
+A union no discharger covers is still a term, and what such a union lacks is the theorem: its
+\rulelink{cond:U}{\textbf{(U)}} is unsettled at the declaration, and the semantics enforces it per input by
 failing. Note where the failing lands, and that it is a fact about the two terms rather than a limit
-of any table: a container admits its empty case whatever its element admits, so the options collide
-at exactly one input — the empty array, the empty map — which is also the one input neither writes
-nor reads once they collide, so the loss is that the union declines the empty case and nothing else.
+of any table: a container admits its empty case whatever its element admits, so two container
+options collide at exactly one input — the empty array, the empty map — which is also the one
+input neither writes nor reads once they collide. Both options hold that input, so
+\rulelink{cond:D}{\textbf{(D)}} refuses the pair: the union holds a value that it does not write.
 The same union built from \texttt{object}s is decided outright, by names: a \texttt{req} binding is a name the
 empty item lacks, so there is no empty case to collide at.
 
-\rulelink{cond:D}{\textbf{(D)}} and the admission row ask the same kind of question of the two sides of the pair, and
-neither implies the other. \texttt{union(array(string),\ array(number))} satisfies \rulelink{cond:D}{\textbf{(D)}} — the held sets
-are incomparable — and is discharged by nothing: both options write a sequence, both store \texttt{L},
-and both admit the empty array.
+\rulelink{cond:D}{\textbf{(D)}} and the admission row ask the same kind of question of the two sides of the pair. On the
+writable side \rulelink{cond:D}{\textbf{(D)}} implies the row, because a derivable term holds what it admits. On the readable
+side it implies nothing, for the reason below. \texttt{union(array(string),\ array(number))} fails
+\rulelink{cond:D}{\textbf{(D)}}: both options write a sequence, both store \texttt{L}, and both hold the empty array.
 
 \texttt{union(set(string),\ set(number))} \emph{is} discharged, and on both sides, because
 the writable side is the one that labels by constructor. Those options store \texttt{SS} and \texttt{NS}, so
@@ -1236,12 +1238,11 @@ union's own admission is not the join of its options' — it is the set where \t
 admits, which is the union's own resolution, written as a set. Where two options both admit, the union writes nothing,
 which is the empty array above stated the other way round.
 
-\rulelink{cond:D}{\textbf{(D)}} as written is \emph{incomparability}, not disjointness. Two object options \texttt{⟨a\ :\ String⟩} and
-\texttt{⟨b\ :\ String⟩} are incomparable yet share the inhabitant \texttt{⟨a\ ↦\ "1",\ b\ ↦\ "2"⟩} — so \rulelink{cond:D}{\textbf{(D)}} admits
-them, and resolution falls to the name-set device above. The gap between the two is the set
-of unions resolved structurally rather than by type, and \rulelink{cond:U}{\textbf{(U)}} is what fills it.
+\rulelink{cond:D}{\textbf{(D)}} is \emph{disjointness}, not incomparability. Two open object options \texttt{⟨a\ :\ String⟩} and
+\texttt{⟨b\ :\ String⟩} are incomparable yet share the inhabitant \texttt{⟨a\ ↦\ "1",\ b\ ↦\ "2"⟩}, so \rulelink{cond:D}{\textbf{(D)}} refuses
+them: the count selector writes nothing at the shared value.
 
-Stating \rulelink{cond:D}{\textbf{(D)}} as genuine \emph{disjointness} would not be sound either, and the reason is the same
+Disjointness is not a discharger of the readable side, and the reason is the same
 confusion twice: \textbf{held sets are sets of values, and (U)'s readable side quantifies over
 attributes.} \texttt{held}
 is precisely the term that separates the two — its adapter relabels — so two options can hold
