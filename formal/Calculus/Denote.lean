@@ -148,6 +148,15 @@ Fuel was a termination device and never a cost measure; it is not even that any 
 noncomputable def inLs (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
   decide (∃ x ∈ ls.1, inL k x v = true)
 
+/-- Whether a value is of one ground base. -/
+def inBase : GroundKind → Value → Bool
+  | .string,  .str _  => true
+  | .number,  .num _  => true
+  | .boolean, .bool _ => true
+  | .binary,  .bin _  => true
+  | .null,    .null   => true
+  | _, _ => false
+
 /-- **What a `Pred` means.** The type is in `Term.lean`, and the meaning is here, because `inL`
     is in `Prisms.lean` and `liftQ` in `Products.lean`, and `Term.lean` imports neither.
 
@@ -161,6 +170,7 @@ noncomputable def Pred.eval : Pred → Value → Bool
   | .members k ls => inLs k ls
   | .each p       => liftQ p.eval
   | .closure q    => q
+  | .except k ls  => fun v => inBase k v && !inLs k ls v
 
 mutual
 

@@ -29,7 +29,8 @@ namespace Calculus
     function, so the pair keeps a host exemption that the model proves nothing about. And
     `src/codec/term.ts` had already made the same move for the same reason: its predicate type is
     `members | each | closure`, and its docstring says the declaration guard has to read the
-    predicate as data. These are the same three cases, so the two sides are now one shape.
+    predicate as data. The model has those three cases and one more, `except`, which the host
+    does not spell yet.
 
     * `members` is membership of a literal's alternatives, `inL k ls`. The base indexes the
       carrier, exactly as `Term.literal` does.
@@ -39,6 +40,9 @@ namespace Calculus
     * `closure` is a caller's function. It is the case that stays opaque, and it is why this
       is a wider type and not a narrower one: `refine` still carries an arbitrary predicate,
       and every theorem that quantifies over one still runs.
+    * `except` is the complement of `members` at one base: a value of the base that is none of
+      the alternatives. With it, the data cases are closed under the meet and under the
+      complement at a base. A name is a string, so the same case excludes a finite set of names.
 
     `Pred` mentions no `Term`, so it is not in the mutual block below. Its `eval` is not here
     either: `inL` is in `Prisms.lean` and `liftQ` in `Products.lean`, neither of which
@@ -49,6 +53,7 @@ inductive Pred where
   | members (k : GroundKind) (ls : NEFinset k.Carrier)
   | each    (p : Pred)
   | closure (q : Value → Bool)
+  | except  (k : GroundKind) (ls : NEFinset k.Carrier)
 
 mutual
 
