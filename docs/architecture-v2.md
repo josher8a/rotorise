@@ -21,6 +21,11 @@ A guarded document cannot cite a declaration that does not exist, and this file 
 purpose. So it carries the risk that every unguarded document carries: a name here can go stale
 and nothing reports it. Treat a name in this file as a proposal, and the tree as the authority.
 
+Two tags mark a paragraph whose statement the tree does not carry yet. A block that starts
+`> ASPIRATION:` follows a statement that is a target, and says what is missing. A block that
+starts `> OPEN (owner):` follows a statement that waits on a decision of the owner. A paragraph
+with no tag describes structure that exists under `Calculus/` or in the library.
+
 This file carries no count, no line number, no measurement and no section number, for the
 reason `architecture.md` gives. A renumbering must not be able to make a sentence here wrong. The measurements that produced this design, the probes that tested it,
 and the decisions still open are in the repository memory, not here. A reader who needs the
@@ -80,12 +85,18 @@ because the read of a term is injective. A term with no adapter is a restriction
 whose two halves are a bijection, and an adapter keeps an injective read under its iso premise. So
 a term is a partial bijection between values and attributes.
 
+> ASPIRATION: the tree proves the injective read for a term with no adapter. A probe proves it
+> for an adapter over such a term. No proof covers an adapter inside a container or inside another
+> adapter, and no lemma states that lists, objects and unions keep an injective read.
+
 ### The object is a partial bijection, and the fibres belong to the port
 
 **A store can spell one value in several ways**, as DynamoDB spells one number in several ways.
 The read of the store accepts every spelling, and the write picks one. That is a canonizer in
 front of the term, not a property of the term, so it lives in the port with the other facts of
 the store. A codec that reads more than one spelling of one value is not a term.
+
+> ASPIRATION: the agreement relation still sits in the core laws, not in the port.
 
 > OPEN (owner): whether the agreement clause leaves the lawfulness laws, with its relation kept
 > only for the refutation that needs a codec with non-trivial fibres.
@@ -127,6 +138,10 @@ existence decides whether they are compatible: two partial bijections are compat
 their meet exists and its domain and range are the meets of theirs. A meet that cannot tell is a
 decline on both questions, not a refutation.
 
+> ASPIRATION: no declaration decides compatibility through the meet, and the meet refuses an
+> adapter beside every term but the bottom. The link between compatibility and the meet is a theorem of inverse monoids, not yet of
+> this development.
+
 There is no second apparatus. A certificate that is not the inhabitance of the meet is a second
 function that must be held in agreement with the meet by hand, and nothing holds it there.
 
@@ -159,6 +174,10 @@ attribute; a lawful bound that reads two spellings does not carry the fact. So t
 has two halves: a shared canonical bound, or orthogonal views. An adapter beside a term that it
 does not bound, with views that meet, is refused.
 
+> ASPIRATION: a probe proves, for a union of two options, that compatibility makes the union
+> lawful and that a shared canonical bound gives compatibility. The tree carries neither, and the
+> library's declaration test is not yet the two halves above.
+
 **The selector decides what happens in the overlap, and nothing else.**
 
     count          the join with the overlap removed: a value two options admit is refused
@@ -167,6 +186,9 @@ does not bound, with views that meet, is refused.
 
 The overlap has no branch identity unless the family is laminar, so a crossing pair is refused as
 a question about the branch, not about the codec.
+
+> ASPIRATION: the union of the term language uses the count selector. The any-admitter and the
+> least-fiber selectors exist only as probes and as the totality lemmas of the laminar module.
 
 > OPEN (owner): which selector; and whether the obligation of a union becomes pairwise
 > compatibility, which is stronger than "lawful where the union acts" and refuses a union that
@@ -577,6 +599,9 @@ adapter's conversion runs. A value outside the domain is refused by name, not by
 conversion that ran on it. A restriction written outside the adapter meets into the held side,
 because both are restrictions on the caller's values.
 
+> ASPIRATION: a probe proves the codec equation. The tree does not normalize a restriction into
+> the held side.
+
 ### A name description is an admissible set
 
 A name admits absence, or presence carrying a value. That is one set and one emptiness test, not
@@ -624,6 +649,9 @@ vocabulary the core does not rule, and a port that later states disjointness can
 **Each universe is its own object.** A universe is its values, its attributes and the bijection
 between them. An adapter is a morphism between two universes. DynamoDB is one universe; a target
 whose attributes are the host's own values would be another, under the same algebra.
+
+> ASPIRATION: the core is not parametric in the universe. Its values, members and sets copy the
+> DynamoDB universe, so a second universe needs that parameter first.
 
 ---
 
