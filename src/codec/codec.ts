@@ -5298,13 +5298,13 @@ export const union = <const Options extends readonly AnyCodec[]>(
             const bothWrite = meet(occV(x), occV(y))
             if (bothWrite) {
                 throw new CodecError(
-                    `${first.describe} and ${second.describe} both take the same kind of value — ${bothWrite} — and neither checks what it is given, so no value can choose between them; give the entity a discriminator and use discriminatedUnion`,
+                    `${first.describe} and ${second.describe} both take the same kind of value — ${bothWrite} — and the declaration cannot show that no value is taken by both, so no value can choose between them; give the entity a discriminator and use discriminatedUnion`,
                 )
             }
             const bothRead = meet(occA(x), occA(y))
             if (bothRead) {
                 throw new CodecError(
-                    `${first.describe} and ${second.describe} both store '${bothRead}', and neither checks what it reads, so no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,
+                    `${first.describe} and ${second.describe} both store '${bothRead}', and the declaration cannot show that no stored attribute is read by both, so no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,
                 )
             }
         }
