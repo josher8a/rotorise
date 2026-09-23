@@ -27,6 +27,7 @@ import {
     literalShape,
     literalsRead,
     membersOf,
+    opaqueTerms,
     optionOfTerm,
     sameAssignment,
     termOf,
@@ -45,6 +46,7 @@ import type {
     LiteralForm,
     NameForm,
     NameLiteral,
+    OpaqueSugar,
     Term,
 } from './term'
 import {
@@ -2066,50 +2068,67 @@ export const nullable = <T, A extends AttributeValue>(
  * conversion admits, which may be one value. The rule is about a term that admits *everything*,
  * and the term is what says so.
  */
-type OpaqueCodec = AttributeCodec<unknown> & {
-    readonly def: { readonly kind: 'opaq' }
+type OpaqueCodec<Def = { readonly kind: 'opaq' }> = AttributeCodec<unknown> & {
+    readonly def: Def
 }
 
 /**
- * Any attribute, decoded to `unknown`.
+ * The term of a numeric policy: a `held` over the canonical `opaque`, named by `via`.
  *
- * The honest default. Where no schema states which member a value takes, the decoded type is not
- * knowable, so this returns `unknown` and the cast is yours to write — visibly, at the one place it
- * is needed, rather than hidden inside a marshaller applied to every field of every table.
- *
- * The domain is exactly the values whose type is recoverable, so `decode ∘ encode = id` holds for
- * everything accepted and everything else is named and refused. See {@link opaque.Numbers} for the
- * one case that cannot be decided without being told.
+ * {@link ValidateOptions} matches this shape as well as the bare `opaq`, because a policy admits
+ * every value that holds no number, and so no other option can share a union with it.
  */
-const withNumbers = (numbers: opaque.Numbers): OpaqueCodec =>
-    // **One cast, and it recovers what the construction site erases.** `codecOfTerm` takes a
-    // `Term` and returns a codec whose `def` is `Term`, so the kind of the term it was *given* is
-    // not in its result type. The literal one line up is that kind; nothing else can be. Making
-    // `codecOfTerm` generic in its term would push a type parameter through twenty-one
-    // constructors to narrow one.
-    codecOfTerm({ kind: 'opaq', lossy: numbers === 'lossy' }) as OpaqueCodec
+type OpaquePolicyDef = {
+    readonly kind: 'held'
+    readonly inner: { readonly kind: 'opaq' }
+    readonly via: OpaqueSugar
+}
+
+// **One cast per codec, and it recovers what the construction site erases.** `codecOfTerm` takes
+// a `Term` and returns a codec whose `def` is `Term`, so the kind of the term it was *given* is not
+// in its result type. `opaqueTerms` holds exactly these shapes; nothing else can be. Making
+// `codecOfTerm` generic in its term would push a type parameter through twenty-one constructors
+// to narrow three.
+const canonicalOpaque = codecOfTerm(opaqueTerms.canonical) as OpaqueCodec
+const opaquePolicies: {
+    readonly [Of in opaque.Numbers]: OpaqueCodec<OpaquePolicyDef>
+} = {
+    lossy: codecOfTerm(opaqueTerms.lossy) as OpaqueCodec<OpaquePolicyDef>,
+    refuse: codecOfTerm(opaqueTerms.refuse) as OpaqueCodec<OpaquePolicyDef>,
+}
+
+function opaqueOf(): OpaqueCodec
+function opaqueOf(numbers: opaque.Numbers): OpaqueCodec<OpaquePolicyDef>
+function opaqueOf(
+    numbers?: opaque.Numbers,
+): OpaqueCodec | OpaqueCodec<OpaquePolicyDef> {
+    return numbers === undefined ? canonicalOpaque : opaquePolicies[numbers]
+}
 
 /**
- * Any attribute, with numbers refused — which guesses nothing.
+ * Any attribute, decoded to `unknown`, with a number held exactly as a {@link DynamoNumber}.
  *
- * One entry point with its only parameter optional, the shape {@link native} takes: `opaque` *is* the
- * refusing codec, so `opaque.encode(value)` needs no call, and calling it chooses the other policy.
- * It was three names for two codecs — `opaqueOf(numbers)`, `opaque` and `opaque.lossy` — which is a
- * constructor, a default and a sibling for a decision with exactly two answers.
+ * The honest default, and **total**: every wire value has one value here. `N` reads as a
+ * `DynamoNumber` and an `NS` as a `Set` of them, and both write back as they were read. A JS
+ * `number` is refused, because a float is not the exact number that `N` stores.
+ *
+ * One entry point with its only parameter optional, the shape {@link native} takes: `opaque` *is*
+ * the canonical codec, so `opaque.encode(value)` needs no call. A call names one of the two
+ * numeric policies of {@link opaque.Numbers}. Each policy is a `held` over the canonical codec,
+ * so the policies add no term to the language.
  *
  * ```ts
- * opaque.encode(value)            // a number is refused
- * opaque('lossy').encode(value)   // `number` ⇄ `N`, digits only while a float holds them
+ * opaque.encode(value)             // `DynamoNumber` ⇄ `N`, exact
+ * opaque('lossy').encode(value)    // `number` ⇄ `N`, digits only while a float holds them
+ * opaque('refuse').encode(value)   // a number is refused, which guesses nothing
  * ```
  *
  * Callable *and* a codec, which is what lets `opaque.encode` and {@link opaque.Encode} keep the same
  * name.
  */
-export const opaque: OpaqueCodec & {
-    (numbers?: opaque.Numbers): OpaqueCodec
-} = Object.assign(
-    (numbers: opaque.Numbers = 'refuse') => withNumbers(numbers),
-    withNumbers('refuse'),
+export const opaque: OpaqueCodec & typeof opaqueOf = Object.assign(
+    opaqueOf,
+    canonicalOpaque,
 )
 
 /**
@@ -2122,18 +2141,19 @@ export const opaque: OpaqueCodec & {
  *
  * `Decode` and `ItemDecode` are the two this does not have yet, and their absence is the point of
  * spelling the family out: `decodeUnknown` has behaviour worth describing — every native set comes
- * back as a `Set`, and an `N` under `'refuse'` is a refusal rather than a value — and it is not a
+ * back as a `Set`, an `N` is a `DynamoNumber`, and an `N` under `'refuse'` is a refusal — and it is not a
  * mirror of {@link native.Decode}.
  */
 export namespace opaque {
     /**
-     * What an unknown attribute does with `N`.
+     * What a numeric policy of `opaque` does with a JS `number`, where the canonical codec holds a
+     * `DynamoNumber`.
      *
-     * There is no third option. `N` is a decimal string and no JS scalar carries it faithfully: decoding
-     * to `number` rounds anything wider than a float, and decoding to `string` re-encodes as `S` —
-     * silently changing the attribute's *stored type* on the next write, which breaks numeric sort keys
-     * and comparisons downstream. Without a schema there is nothing to decide it with, so the decision
-     * belongs to the caller and has to be made out loud.
+     * `N` is a decimal string and no JS scalar carries it faithfully: decoding to `number` rounds
+     * anything wider than a float, and decoding to `string` re-encodes as `S` — silently changing
+     * the attribute's *stored type* on the next write. The canonical codec reads `N` as a
+     * `DynamoNumber`, which is exact. A policy is for a caller who holds JS numbers, and each one
+     * is a `held` over the canonical codec:
      *
      * - `'refuse'` — numbers are not written, and reading an `N` throws. Nothing is guessed.
      * - `'lossy'` — `number` ⇄ `N`. The member always survives a read-modify-write; the digits survive
@@ -2145,13 +2165,14 @@ export namespace opaque {
      * What {@link opaque} writes for a value of type `T`, or why it refuses to.
      *
      * The counterpart of {@link native.Encode} for *this* package's marshaller, and they are not the
-     * same function. `opaque` refuses a number unless told what to do with `N`, refuses a `bigint`, refuses a
-     * set of numbers, refuses a `Map`, and refuses a class instance — because each of those decodes back
-     * as something else, and its whole domain is the values whose type survives a round trip. The SDK's
-     * marshaller accepts all of them. So a team whose in-house marshaller resembles `opaque` needs this
+     * same function. The canonical `opaque` writes a `DynamoNumber` as `N` and refuses a JS number,
+     * refuses a `bigint`, refuses a `Map`, and refuses a class instance — because each of those decodes
+     * back as something else, and its whole domain is the values whose type survives a round trip. The
+     * SDK's marshaller accepts all of them. `Of` names a numeric policy, which converts or refuses a JS
+     * number and writes no `NS`. So a team whose in-house marshaller resembles `opaque` needs this
      * type to diff against, not that one.
      *
-     * Every branch mirrors one in `encodeUnknown`, refusals included: where the runtime returns a
+     * Every branch mirrors one in `encodeUnknown` or in a policy, refusals included: where the runtime returns a
      * {@link CodecError}, this resolves to an {@link ErrorMessage} carrying the same reason. A shape
      * containing a refused value therefore fails to *describe*, rather than describing a write that
      * throws.
@@ -2161,7 +2182,21 @@ export namespace opaque {
      * runtime's own error message names, but a type cannot tell an arbitrary instance from a plain
      * object — so `Encode<SomeClass>` describes it as `M` where `encode` would refuse it.
      */
-    export type Encode<T, Of extends Numbers = 'refuse'> = [T] extends [never]
+    export type Encode<T, Of extends Numbers | undefined = undefined> = [
+        T,
+    ] extends [never]
+        ? never
+        : [Of] extends [undefined]
+          ? T extends DynamoNumber
+              ? N
+              : Encoded<T, Of>
+          : Encoded<T, Of>
+
+    /**
+     * {@link Encode} after the one row that only the canonical codec has. Under a policy, a
+     * `DynamoNumber` is a class instance, and it reaches the object row as today.
+     */
+    type Encoded<T, Of extends Numbers | undefined> = [T] extends [never]
         ? never
         : T extends null
           ? NULL
@@ -2176,15 +2211,23 @@ export namespace opaque {
                   : T extends number
                     ? Of extends 'lossy'
                         ? N
-                        : ErrorMessage<"[opaque] a number is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`. Declare it with `number` or `decimal`, or opt in with `opaque('lossy')`">
+                        : Of extends 'refuse'
+                          ? ErrorMessage<"[opaque] a number is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`. Declare it with `number` or `decimal`, or opt in with `opaque('lossy')`">
+                          : ErrorMessage<"[opaque] a JS number is a binary64 float, and `opaque` holds a number exactly, as a `DynamoNumber`. Build one with `DynamoNumber.from` or `DynamoNumber.fromNumber`, declare the attribute with `dynamoNumber` or `number`, or opt in with `opaque('lossy')`">
                     : T extends bigint
-                      ? ErrorMessage<'[opaque] a bigint shares `N` with `number` and decodes as one, so `1n` would come back as `1`. Use `decimal` and pass `value.toString()`'>
+                      ? [Of] extends [undefined]
+                          ? ErrorMessage<'[opaque] a bigint writes `N` and reads back as a `DynamoNumber`, so `1n` would not come back as `1n`. Pass `DynamoNumber.from(value.toString())`'>
+                          : ErrorMessage<'[opaque] a bigint shares `N` with `number` and decodes as one, so `1n` would come back as `1`. Use `decimal` and pass `value.toString()`'>
                       : T extends ReadonlySet<infer Member>
                         ? [Member] extends [string]
                             ? SS
                             : [Member] extends [Uint8Array]
                               ? BS
-                              : ErrorMessage<'[opaque] `NS` decodes as strings, because its members are decimal strings. Use a set of strings, or `array(number)` if the order does not matter'>
+                              : [Of] extends [undefined]
+                                ? [Member] extends [DynamoNumber]
+                                    ? NS
+                                    : ErrorMessage<'[opaque] a set writes `SS`, `BS` or `NS`, and each holds one kind: every member a string, every member binary, or every member a `DynamoNumber`'>
+                                : ErrorMessage<'[opaque] `NS` decodes as strings, because its members are decimal strings. Use a set of strings, or `array(number)` if the order does not matter'>
                         : T extends ReadonlyMap<unknown, unknown>
                           ? ErrorMessage<'[opaque] DynamoDB has one map member, `M`, and it decodes as a plain object. Pass an object, or use `object([string, optional(...)])` to state the value type'>
                           : T extends Date
@@ -2232,7 +2275,10 @@ export namespace opaque {
      * those apart, so an optional property is described as one that may be absent. The same reading
      * {@link native.ItemEncode} takes, for the same reason.
      */
-    export type ItemEncode<T, Of extends Numbers = 'refuse'> = show<
+    export type ItemEncode<
+        T,
+        Of extends Numbers | undefined = undefined,
+    > = show<
         {
             [K in keyof T as undefined extends T[K] ? never : K]: Encode<
                 T[K],
@@ -2253,29 +2299,33 @@ export namespace opaque {
      * `decodeUnknown` is a different function from the SDK's in three places, and each is a reason
      * this type has to exist rather than the SDK's being reused:
      *
-     * - `NS` is a **refusal**, where the SDK's answers `Set<number | bigint>`. Its members are
-     *   decimal strings and nothing without a schema can say which of them a JS number holds
-     *   faithfully — so this codec will not *write* a set of numbers, and a member it cannot
-     *   write is one it cannot read. It read back as `Set<string>` until that was noticed:
-     *   re-encoding turned an `NS` into an `SS`, changing the attribute's stored type on a
-     *   read-modify-write. See `Calculus.Lawful.no_read_without_write`.
-     * - `N` under the default policy is a *refusal*, where the SDK's always reads a number.
+     * - `NS` is a `Set<DynamoNumber>`, where the SDK's answers `Set<number | bigint>`: exact, and it
+     *   writes back as the `NS` it came from. Under a policy it is a **refusal**, because nothing
+     *   without a schema can say which member a JS number holds faithfully, so a policy will not
+     *   *write* a set of numbers, and a member it cannot write is one it cannot read. See
+     *   `Calculus.Lawful.no_read_without_write`.
+     * - `N` is a `DynamoNumber`, where the SDK's reads a JS number. Under `'refuse'` it is a
+     *   *refusal*, and under `'lossy'` it is a `number`.
      * - `L` and `M` carry a refused member out with them, the way {@link opaque.Encode} does, so a
      *   list of `N` under `'refuse'` is the refusal itself rather than a list of nothing.
      *
      * A bare {@link AttributeValue} distributes, which is the useful answer: it resolves to every
      * value a stored attribute could be read as, the refusal for `N` among them.
      */
-    export type Decode<A, Of extends Numbers = 'refuse'> = [A] extends [never]
+    export type Decode<A, Of extends Numbers | undefined = undefined> = [
+        A,
+    ] extends [never]
         ? never
         : A extends NULL
           ? null
           : A extends BOOL
             ? boolean
             : A extends N
-              ? Of extends 'lossy'
-                  ? number
-                  : ErrorMessage<"[opaque] a stored number is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`. Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`">
+              ? [Of] extends [undefined]
+                  ? DynamoNumber
+                  : Of extends 'lossy'
+                    ? number
+                    : ErrorMessage<"[opaque] a stored number is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`. Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`">
               : A extends S
                 ? string
                 : A extends B
@@ -2283,11 +2333,13 @@ export namespace opaque {
                   : A extends SS
                     ? Set<string>
                     : A extends NS
-                      ? // a member this codec cannot write is a member it cannot read: `NS`
-                        // has no write path here, so reading one would re-encode as `SS` and
-                        // change the attribute's stored type — (MP), which `μ = ⊤` leaves as
-                        // the only law watching
-                        ErrorMessage<'[opaque] a stored set of numbers has no counterpart this codec can write, so reading it would re-encode as `SS`. Declare the attribute with `number.set()` or `decimal.set()`'>
+                      ? [Of] extends [undefined]
+                          ? Set<DynamoNumber>
+                          : // a member this codec cannot write is a member it cannot read: `NS`
+                            // has no write path here, so reading one would re-encode as `SS` and
+                            // change the attribute's stored type — (MP), which `μ = ⊤` leaves as
+                            // the only law watching
+                            ErrorMessage<'[opaque] a stored set of numbers has no counterpart this codec can write, so reading it would re-encode as `SS`. Declare the attribute with `number.set()` or `decimal.set()`'>
                       : A extends BS
                         ? Set<Uint8Array>
                         : A extends L<infer Element>
@@ -2313,7 +2365,10 @@ export namespace opaque {
      * `undefined` is excluded before decoding, since `undefined` is not a member and would otherwise
      * fall through to the refusal at the end.
      */
-    export type ItemDecode<Item, Of extends Numbers = 'refuse'> = show<{
+    export type ItemDecode<
+        Item,
+        Of extends Numbers | undefined = undefined,
+    > = show<{
         [K in keyof Item]: Decode<Exclude<Item[K], undefined>, Of>
     }>
 }
@@ -4190,7 +4245,9 @@ type HasOpaque<Options extends readonly unknown[]> = Options extends readonly [
     infer Head,
     ...infer Rest extends readonly unknown[],
 ]
-    ? Head extends { readonly def: { readonly kind: 'opaq' } }
+    ? Head extends
+          | { readonly def: { readonly kind: 'opaq' } }
+          | { readonly def: OpaquePolicyDef }
         ? true
         : HasOpaque<Rest>
     : false

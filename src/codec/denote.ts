@@ -47,6 +47,8 @@ import type { Body, Field, Literal, NameLiteral, Predicate, Term } from './term'
 import {
     alternativesTerm,
     alwaysWritten,
+    everySlot,
+    isOpaqueSugar,
     literalForm,
     literalsOf,
     occV,
@@ -1223,8 +1225,8 @@ export const denote = (def: Term): Pair => {
                     ),
             }
         /**
-         * §3 `(opaque)`: the recursive union of everything self-identifying, at whichever numeric
-         * policy the term names. `lawful_opaqCodecω` is the lemma, and it is a *theorem* rather
+         * §3 `(opaque)`: the recursive union of everything self-identifying, and total: a number
+         * is a `DynamoNumber`. The two numeric policies are `held` over this row. `lawful_opaqCodecω` is the lemma, and it is a *theorem* rather
          * than an obligation — the model's `Obligations (.opaq _)` is `True`, which is what makes
          * `opaque` a well-behaved `custom`: the same analysis with the opposite warranty. A
          * `custom` carries a premise its author owes; this carries none, because the calculus
@@ -1234,13 +1236,11 @@ export const denote = (def: Term): Pair => {
          * asks it. §5's rows do the same for the same reason: no syntactic set names
          * `opaqCodecω`'s domain, because it recurses on the *input's own depth*.
          */
-        case 'opaq': {
-            const numbers = def.lossy ? 'lossy' : 'refuse'
+        case 'opaq':
             return {
-                encode: (value: unknown) => encodeUnknown(value, numbers),
-                decode: (attribute) => decodeUnknown(attribute, numbers),
+                encode: (value: unknown) => encodeUnknown(value),
+                decode: (attribute) => decodeUnknown(attribute),
             }
-        }
         /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
@@ -1431,14 +1431,14 @@ const unrecoverable = (what: string, instead: string) =>
 /**
  * Encodes a value whose type is recoverable from what is stored, and refuses one whose is not.
  *
- * The domain is deliberately narrow, so that `decode ∘ encode = id` holds for everything accepted.
- * Accepted: `null`, `string`, `boolean`, `Uint8Array`, a non-empty `Set` of strings or of binary,
- * arrays, and plain objects — recursively. A `number` only under `'lossy'`; see
- * {@link opaque.Numbers} for why that one cannot be decided here.
+ * The canonical `opaque`, and **total on the wire**: every attribute has one value here. The
+ * domain is exactly the values whose type is recoverable, so `decode ∘ encode = id` holds for
+ * everything accepted. Accepted: `null`, `string`, `boolean`, `Uint8Array`, a `DynamoNumber`, a
+ * non-empty `Set` of strings, of binary or of `DynamoNumber`s, arrays, and plain objects,
+ * recursively. A JS number is refused, because a float is not the exact number that `N` stores.
  */
 export const encodeUnknown = (
     value: unknown,
-    numbers: opaque.Numbers,
     /** How many `L`/`M` this value already sits inside. See {@link MAX_DOCUMENT_NESTING}. */
     enclosing = 0,
 ): Result<AttributeValue> => {
@@ -1446,39 +1446,18 @@ export const encodeUnknown = (
     if (typeof value === 'string') return carrying('S', value)
     if (typeof value === 'boolean') return carrying('BOOL', value)
     if (value instanceof Uint8Array) return carrying('B', value)
+    if (value instanceof DynamoNumber) return carrying('N', value.digits)
 
     if (typeof value === 'number') {
-        if (!Number.isFinite(value)) {
-            return new CodecError(`DynamoDB has no number for ${value}`)
-        }
-        if (numbers === 'refuse') {
-            return unrecoverable(
-                'a number',
-                "Reading it back is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`, changing the attribute's stored type. Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`.",
-            )
-        }
-        /**
-         * **Writing an `N` means writing a numeral.** `Number.isFinite` is not that test: §1's
-         * `Carries('N')` is `Numerals`, bounded by 38 significant digits and magnitude
-         * `1e-130 … 9.9…e125`, and `5e-324` is a perfectly finite double outside it — the
-         * specification's own example of the bound going unchecked.
-         *
-         * `number` has gated on this since the numeral domain was tightened and `literal` since
-         * its `ℓ ⊆ D` premise. `opaque` is the third term that writes an `N` from a JS number and
-         * it was checking only that the number existed, which let it write an attribute §1's `𝔸`
-         * has no point for. Same obligation, same gate: `ran(e) ⊆ 𝔸`.
-         */
-        return isNumeral(String(value))
-            ? carrying('N', String(value))
-            : new CodecError(
-                  `${value} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125`,
-              )
+        return new CodecError(
+            "a JS number is a binary64 float, and `opaque` holds a number exactly, as a `DynamoNumber`. Build one with `DynamoNumber.from` or `DynamoNumber.fromNumber`, declare the attribute with `dynamoNumber` or `number`, or opt in with `opaque('lossy')`.",
+        )
     }
 
     if (typeof value === 'bigint') {
         return unrecoverable(
             'a bigint',
-            'It shares `N` with `number` and decodes as one, so `1n` would come back as `1`. Use `decimal` and pass `value.toString()`.',
+            'It writes `N` and reads back as a `DynamoNumber`, so `1n` would not come back as `1n`. Pass `DynamoNumber.from(value.toString())`.',
         )
     }
 
@@ -1486,7 +1465,7 @@ export const encodeUnknown = (
         const deep = tooDeeplyNested(enclosing)
         if (deep) return new CodecError(deep)
         return andThen(
-            every(value, (x) => encodeUnknown(x, numbers, enclosing + 1)),
+            every(value, (x) => encodeUnknown(x, enclosing + 1)),
             (written) => carrying('L', written),
         )
     }
@@ -1502,9 +1481,17 @@ export const encodeUnknown = (
         if (members.every((x) => x instanceof Uint8Array)) {
             return carrying('BS', members as Uint8Array[])
         }
-        return unrecoverable(
-            'a set of numbers',
-            'NS decodes as strings, because its members are decimal strings. Use a set of strings, or `array(number)` if the order does not matter to you.',
+        if (members.every((x) => x instanceof DynamoNumber)) {
+            // the digits are normal, so two members that are one number have one spelling
+            const digits = members.map((x) => (x as DynamoNumber).digits)
+            return new Set(digits).size === digits.length
+                ? carrying('NS', digits.sort())
+                : new CodecError(
+                      'this set holds one number two times, as two `DynamoNumber`s, and an `NS` holds each number one time',
+                  )
+        }
+        return new CodecError(
+            'a set writes `SS`, `BS` or `NS`, and each holds one kind: every member a string, every member binary, or every member a `DynamoNumber`',
         )
     }
 
@@ -1530,7 +1517,7 @@ export const encodeUnknown = (
                     ? new CodecError(
                           `'${k}' is undefined, and DynamoDB has no attribute holding undefined. Omit the key, or use \`optional(...)\` on a declared attribute.`,
                       )
-                    : encodeUnknown(v, numbers, enclosing + 1),
+                    : encodeUnknown(v, enclosing + 1),
             ),
             (written) => carrying('M', written),
         )
@@ -1539,80 +1526,40 @@ export const encodeUnknown = (
     return unrecoverable(`a ${typeof value}`, 'No DynamoDB member carries it.')
 }
 
-export const decodeUnknown = (
-    attribute: AttributeValue,
-    numbers: opaque.Numbers,
-): Result<unknown> => {
+/** The stored digits as a `DynamoNumber`, behind the numeral gate that `number` reads through. */
+const storedNumber = (carried: string): Result<DynamoNumber> =>
+    isNumeral(carried)
+        ? DynamoNumber.from(carried)
+        : new CodecError(
+              `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
+          )
+
+/**
+ * Reads every attribute back, and a number as the `DynamoNumber` that the store holds.
+ *
+ * `N` and `NS` read exactly: the canonical `opaque` writes both, so a read-modify-write keeps the
+ * stored type. A `Set` of `DynamoNumber`s re-encodes as the `NS` it came from.
+ */
+export const decodeUnknown = (attribute: AttributeValue): Result<unknown> => {
     const member = memberOf(attribute)
     switch (member) {
         case 'NULL':
             return null
         case 'S':
             return attribute[member]
-
-        /**
-         * A number exactly when the stored digits are that number's own shortest form, and the raw
-         * string otherwise.
-         *
-         * `String(n)` is the shortest representation that reads back as `n`, so everything this
-         * codec wrote comes back as the number it was. Anything wider — `'1.50'`, a
-         * thirty-eight-digit decimal, `'9007199254740993'` — was written by something else with more
-         * precision than a float holds, and is handed back untouched rather than quietly rounded.
-         */
-        case 'N': {
-            const carried = attribute.N as string
-            if (numbers === 'refuse') {
-                return unrecoverable(
-                    `the stored number '${carried}'`,
-                    "Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`.",
-                )
-            }
-            /**
-             * The same two gates `number` reads through, and the second is not redundant for
-             * the same reason: `Number('9.9…E+125')` rounds *up* past the maximum, so a numeral
-             * the store holds can read back as a value nothing here can write.
-             *
-             * Without them this decoded `{ N: 'abc' }` to `NaN` and `{ N: '1e400' }` to
-             * `Infinity` — values its own `encode` refuses, which is **(C)** failing. `Number`
-             * reads far more than an `N` carries: `''` and whitespace are `0`, `'0x10'` is `16`.
-             */
-            if (!isNumeral(carried)) {
-                return new CodecError(
-                    `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
-                )
-            }
-            const read = Number(carried)
-            return isNumeral(String(read))
-                ? read
-                : new CodecError(
-                      `'${carried}' reads back as ${read}, which is outside what DynamoDB stores, so it cannot be written again`,
-                  )
-        }
+        case 'N':
+            return storedNumber(attribute.N as string)
         case 'B':
         case 'BOOL':
             return attribute[member]
-
-        /**
-         * **A member this codec cannot write is a member it cannot read.**
-         *
-         * `opaque` has no `NS` write path at all — a numeric `Set` is refused, because reading
-         * one back is undecidable without a schema. Reading `NS` anyway produced a
-         * `Set<string>`, and re-encoding that wrote `SS`: a numeric set attribute silently
-         * becoming a string one on a read-modify-write, which is **(MP)** — the law `opaque`'s
-         * `N` refusal already exists to protect, one member over.
-         *
-         * The general form is a corollary of §2 and is proved in the model
-         * (`Calculus.Lawful.no_read_without_write`): a codec is a *pair*, and (MP) holds the
-         * halves together, so if `e` never produces a member then no attribute carrying it can
-         * be in `dom(p)`. Note which law does the work — (C) is satisfied here, the value
-         * round-trips, and only the stored type changes. `μ = ⊤` is exactly where (MP) is the
-         * only law left watching.
-         */
-        case 'NS':
-            return unrecoverable(
-                'a stored set of numbers',
-                "`NS` has no counterpart this codec can write — a set of numbers is refused on the way in, because nothing without a schema says which of its members a JS number holds faithfully. Reading it would mean re-encoding it as `SS` and changing the attribute's stored type. Declare the attribute with `number.set()` or `decimal.set()`.",
-            )
+        case 'NS': {
+            const carried = attribute.NS ?? []
+            return carried.length === 0
+                ? new CodecError(
+                      'DynamoDB has no empty NS, so this attribute was not written by it',
+                  )
+                : andThen(every(carried, storedNumber), (read) => new Set(read))
+        }
         case 'SS':
         case 'BS': {
             // as in `set`: encode has no empty set to offer, so decode has none to return
@@ -1624,14 +1571,178 @@ export const decodeUnknown = (
                 : new Set(members)
         }
         case 'L':
-            return every(attribute.L ?? [], (x) => decodeUnknown(x, numbers))
+            return every(attribute.L ?? [], (x) => decodeUnknown(x))
         case 'M':
-            return everyEntry(attribute.M ?? {}, (v) =>
-                decodeUnknown(v, numbers),
-            )
+            return everyEntry(attribute.M ?? {}, (v) => decodeUnknown(v))
         default:
             return new CodecError('an AttributeValue carrying no member')
     }
+}
+
+/**
+ * **A numeric policy of `opaque`, as a walk that changes the number leaves and nothing else.**
+ *
+ * Each policy is a `held` over the canonical `opaque`. `f` walks the caller's value to the
+ * canonical value, and `g` walks the read value back. Both keep the path labels of
+ * `every` and `everyEntry`. The walk refuses each value that the policy refused before it was a
+ * `held`, with the same text. The canonical codec then refuses the rest, with the same text again.
+ *
+ * `f` stops at the nesting limit and hands the value on unchanged, so a cyclic value reaches the
+ * canonical codec, which refuses it at that depth.
+ */
+const numberPolicy = (numbers: opaque.Numbers) => {
+    const refuseText =
+        "Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`."
+
+    const into = (value: unknown, enclosing: number): Result<unknown> => {
+        if (typeof value === 'number') {
+            if (!Number.isFinite(value)) {
+                return new CodecError(`DynamoDB has no number for ${value}`)
+            }
+            if (numbers === 'refuse') {
+                return unrecoverable(
+                    'a number',
+                    `Reading it back is undecidable without a schema: as a \`number\` it rounds, and as a \`string\` it re-encodes as \`S\`, changing the attribute's stored type. ${refuseText}`,
+                )
+            }
+            /**
+             * **Writing an `N` means writing a numeral.** `Number.isFinite` is not that test: §1's
+             * `Carries('N')` is `Numerals`, bounded by 38 significant digits and magnitude
+             * `1e-130 … 9.9…e125`, and `5e-324` is a finite double outside it. The digits that
+             * reach the store are the normal form of `DynamoNumber`, which is the form the store
+             * returns: `1e21` is stored `1000000000000000000000`.
+             */
+            return isNumeral(String(value))
+                ? DynamoNumber.from(String(value))
+                : new CodecError(
+                      `${value} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125`,
+                  )
+        }
+        if (typeof value === 'bigint') {
+            return unrecoverable(
+                'a bigint',
+                'It shares `N` with `number` and decodes as one, so `1n` would come back as `1`. Use `decimal` and pass `value.toString()`.',
+            )
+        }
+        // the canonical codec writes a `DynamoNumber`, and a policy holds a JS number or none
+        if (value instanceof DynamoNumber) {
+            return unrecoverable(
+                'an instance of DynamoNumber',
+                'Only plain objects survive: `M` carries the own enumerable properties and nothing that says how to rebuild the instance. Convert it first — a `Date`, for example, is faithful as an ISO string.',
+            )
+        }
+        if (Array.isArray(value)) {
+            return tooDeeplyNested(enclosing)
+                ? value
+                : every(value, (x) => into(x, enclosing + 1))
+        }
+        if (value instanceof Set) {
+            const members = [...value]
+            return members.length === 0 ||
+                members.every((x) => typeof x === 'string') ||
+                members.every((x) => x instanceof Uint8Array)
+                ? value
+                : unrecoverable(
+                      'a set of numbers',
+                      'NS decodes as strings, because its members are decimal strings. Use a set of strings, or `array(number)` if the order does not matter to you.',
+                  )
+        }
+        if (
+            typeof value === 'object' &&
+            value !== null &&
+            isPlainObject(value)
+        ) {
+            return tooDeeplyNested(enclosing)
+                ? value
+                : everyEntry(value as Record<string, unknown>, (v) =>
+                      v === undefined ? v : into(v, enclosing + 1),
+                  )
+        }
+        return value
+    }
+
+    const outOf = (read: unknown): Result<unknown> => {
+        if (read instanceof DynamoNumber) {
+            if (numbers === 'refuse') {
+                return unrecoverable(
+                    `the stored number '${read.digits}'`,
+                    refuseText,
+                )
+            }
+            /**
+             * The second gate is not redundant: `Number('9.9…E+125')` rounds *up* past the
+             * maximum, so a numeral the store holds can read back as a value nothing here can
+             * write, which is **(C)** failing.
+             */
+            const number = Number(read.digits)
+            return isNumeral(String(number))
+                ? number
+                : new CodecError(
+                      `'${read.digits}' reads back as ${number}, which is outside what DynamoDB stores, so it cannot be written again`,
+                  )
+        }
+        if (Array.isArray(read)) return every(read, outOf)
+        /**
+         * **A member this policy cannot write is a member it cannot read.** A numeric `Set` is
+         * refused on the way in, so an `NS` has no write path, and reading one would re-encode
+         * as `SS`. That is **(MP)** failing, and `Calculus.Lawful.no_read_without_write` proves
+         * the general form.
+         */
+        if (read instanceof Set) {
+            return [...read].some((x) => x instanceof DynamoNumber)
+                ? unrecoverable(
+                      'a stored set of numbers',
+                      "`NS` has no counterpart this codec can write — a set of numbers is refused on the way in, because nothing without a schema says which of its members a JS number holds faithfully. Reading it would mean re-encoding it as `SS` and changing the attribute's stored type. Declare the attribute with `number.set()` or `decimal.set()`.",
+                  )
+                : read
+        }
+        if (
+            typeof read === 'object' &&
+            read !== null &&
+            !(read instanceof Uint8Array)
+        ) {
+            return everyEntry(read as Record<string, unknown>, outOf)
+        }
+        return read
+    }
+
+    return {
+        f: (value: unknown) => into(value, 0),
+        g: (read: unknown) => outOf(read),
+    }
+}
+
+const canonicalOpaque: Term = { kind: 'opaq' }
+
+const policyTerm = (numbers: opaque.Numbers): Term => {
+    const { f, g } = numberPolicy(numbers)
+    return {
+        kind: 'held',
+        inner: canonicalOpaque,
+        f,
+        g,
+        // `'refuse'` writes no number, so a union reads its write side as before it was a `held`
+        writes:
+            numbers === 'lossy'
+                ? everySlot
+                : everySlot.filter((slot) => slot !== 'number'),
+        via: numbers === 'lossy' ? 'opaqueLossy' : 'opaqueRefuse',
+    }
+}
+
+/**
+ * The terms of `opaque`: the canonical one, and a `held` for each numeric policy.
+ *
+ * One object per term, so the codec cache and the identity of `def` hold across calls.
+ */
+export const opaqueTerms: {
+    readonly canonical: Term
+    readonly lossy: Term
+    readonly refuse: Term
+} = {
+    canonical: canonicalOpaque,
+    lossy: policyTerm('lossy'),
+    refuse: policyTerm('refuse'),
 }
 
 /**
@@ -1717,8 +1828,9 @@ export const readsBack = (
  * model's. One kind differs: `Term.opaq` is written `opaque(...)`. Everything else is spelled the
  * same on both sides.
  *
- * Reached by `union`'s refusal, which is the one message that names an option by its kind. The
- * `opaq` row became reachable when the guard stopped exempting an `opaque` option: the message
+ * Reached by `union`'s refusal, which is the one message that names an option by its kind. A
+ * numeric policy of `opaque` is a `held`, and the caller wrote `opaque`, so it takes the same name.
+ * The `opaq` row became reachable when the guard stopped exempting an `opaque` option: the message
  * read "opaq and string both take the same kind of value", naming something no caller had typed.
  *
  * **A declared adapter names the value it takes, not the combinator.** `number` and `decimal` are
@@ -1729,7 +1841,7 @@ export const readsBack = (
  * say about one.
  */
 const namedKind = (t: Term): string =>
-    t.kind === 'opaq'
+    t.kind === 'opaq' || (t.kind === 'held' && isOpaqueSugar(t.via))
         ? 'opaque'
         : t.kind === 'literal'
           ? `${literalForm(t.base, undefined)}(${namedLiteral(t.v)})`

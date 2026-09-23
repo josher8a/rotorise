@@ -128,6 +128,19 @@ export type Predicate =
     | { readonly kind: 'each'; readonly of: Predicate }
     | { readonly kind: 'closure'; readonly q: Refinement }
 
+/**
+ * **The two numeric policies of `opaque`**, as the `via` of the `held` that builds each one.
+ *
+ * The term `opaq` is total and holds a number as a `DynamoNumber`. A policy converts a JS
+ * number, or refuses one, over that term. The name lets a reader find the `opaq` under the
+ * adapter: containment, the generator, and the union refusal at the type level each read it.
+ */
+export type OpaqueSugar = 'opaqueLossy' | 'opaqueRefuse'
+
+/** Whether a `held` is one of the two numeric policies of `opaque`. */
+export const isOpaqueSugar = (via: string | undefined): via is OpaqueSugar =>
+    via === 'opaqueLossy' || via === 'opaqueRefuse'
+
 /** §3's terms. One variant per `Term.lean` constructor, under the model's names. */
 export type Term =
     | { readonly kind: 'string' }
@@ -202,7 +215,7 @@ export type Term =
            * in and is read by the certificate; this says which named pair the model carries and
            * is read by the emitter. One of them can be known without the other.
            */
-          readonly via?: 'decimalText'
+          readonly via?: 'decimalText' | OpaqueSugar
           /**
            * **The same conversion at one element, where the adapter maps over a set.**
            *
@@ -276,8 +289,12 @@ export type Term =
      * term answering unknown on both projections, which is why it was the only hole.
      */
     | { readonly kind: 'lazy'; readonly get: () => Term }
-    /** §3 `(opaque)`: `lossy = false` is the `refuse` policy — the absence of the `number` option. */
-    | { readonly kind: 'opaq'; readonly lossy: boolean }
+    /**
+     * §3 `(opaque)`: the universal sum, and **total**. It holds a number as {@link DynamoNumber},
+     * which is the model's `WFNumeral`, so it writes every wire value. The two numeric policies
+     * `'refuse'` and `'lossy'` are not terms of their own: each is a `held` over this term.
+     */
+    | { readonly kind: 'opaq' }
     | { readonly kind: 'object'; readonly body: Body }
     | { readonly kind: 'union'; readonly options: readonly Term[] }
     /**
@@ -423,7 +440,7 @@ const setSlot: { readonly [B in SetBase]: SetSlot } = {
     binary: 'binSet',
 }
 
-const everySlot: readonly SetSlot[] = [
+export const everySlot: readonly SetSlot[] = [
     'string',
     'number',
     'boolean',
@@ -468,8 +485,8 @@ const joined = <A>(
  * coarse answer costs a certificate and never buys a wrong one.
  *
  * The `undefined` rows, and why each: `held`'s `f` runs *before* the subterm and can move a value
- * into any constructor; `custom` is arbitrary in both directions; `opaque` at `lossy` accepts every
- * kind by design, and at `refuse` every kind but `number`.
+ * into any constructor; `custom` is arbitrary in both directions. `opaque` accepts every kind by
+ * design, and its row answers that closed form, not `undefined`.
  *
  * **`lazy` diverges from the model, deliberately.** `occV (.lazy t)` is the subterm's there, because
  * the model's thunk carries a finite `Term`. Here it carries a closure over a binding that may not
@@ -512,13 +529,11 @@ export const occV = (t: Term): readonly SetSlot[] | undefined => {
             return joined(t.options.map(occV))
         // **A closed form, not `⊤`.** §5 separates the two things a `⊤` covers: *unknown*, which is
         // `held`, `custom` and a host `lazy`, and *everything*, which is `opaque` by design. The
-        // model takes the second as data — `occV (.opaq lossy)` is `occTop` and `occBut .num` at
-        // `refuse` — so answering `undefined` here would say "cannot be read" about the one term
-        // whose occupancy is fully known, and {@link separable} would then decline to compare it.
+        // model takes the second as data — `occV (.opaq true)` is `occTop` — so answering
+        // `undefined` here would say "cannot be read" about the one term whose occupancy is fully
+        // known, and {@link separable} would then decline to compare it.
         case 'opaq':
-            return t.lossy
-                ? everySlot
-                : everySlot.filter((slot) => slot !== 'number')
+            return everySlot
         // **Empty, not `undefined`.** `undefined` is the `⊤` that says "cannot be read", and this
         // term's occupancy is fully known: it is nothing. The model spells it `occNone`.
         case 'never':
@@ -629,9 +644,7 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
             return joined(t.options.map(occA))
         // the closed form again, for the reason {@link occV}'s `opaq` row gives
         case 'opaq':
-            return t.lossy
-                ? everyMember
-                : everyMember.filter((one) => one !== 'N')
+            return everyMember
         // empty and not `undefined`, for the reason {@link occV}'s `never` row gives
         case 'never':
             return []
@@ -975,16 +988,12 @@ export const identifies = (t: Term): boolean => {
 
 /**
  * **`opaque` unfolded one time**: the universal sum over each base and each container, with the
- * recursion under `lazy`. The number leaf and the number set exist only under the lossy policy.
- * `Calculus.Adm_opaqUnfold` and `Calculus.AdmA_opaqUnfold` prove that the union admits exactly what
+ * recursion under `lazy`. The term is total, so the number leaf and the number set are always
+ * options. `Calculus.Adm_opaqUnfold` and `Calculus.AdmA_opaqUnfold` prove that the union admits exactly what
  * `opaque` admits, on both sides.
  */
 export const unfoldOpaque = (op: Extract<Term, { kind: 'opaq' }>): Term => {
     const self: Term = { kind: 'lazy', get: () => op }
-    const numeric: readonly Term[] = op.lossy ? [{ kind: 'number' }] : []
-    const numericSet: readonly Term[] = op.lossy
-        ? [{ kind: 'set', base: 'number' }]
-        : []
     return {
         kind: 'union',
         options: [
@@ -992,11 +1001,11 @@ export const unfoldOpaque = (op: Extract<Term, { kind: 'opaq' }>): Term => {
             { kind: 'boolean' },
             { kind: 'binary' },
             { kind: 'null' },
-            ...numeric,
+            { kind: 'number' },
             { kind: 'list', pre: [], spread: self, suf: [] },
             { kind: 'object', body: { fields: {}, rest: self } },
             { kind: 'set', base: 'string' },
-            ...numericSet,
+            { kind: 'set', base: 'number' },
             { kind: 'set', base: 'binary' },
         ],
     }
@@ -1040,6 +1049,23 @@ export const restricts = (x: Term, y: Term): boolean => {
     if (y.kind === 'union')
         return y.options.some((option) => restricts(x, option))
     if (y.kind === 'opaq') return restricts(x, unfoldOpaque(y))
+    // **A numeric policy of `opaque` holds every value that holds no number, unchanged.** Its `f` is
+    // the identity there, so the options of the unfolding that write no number are inside it. A
+    // number option is not: the policy holds a JS number or none, and never a `DynamoNumber`
+    if (y.kind === 'held' && isOpaqueSugar(y.via) && y.inner.kind === 'opaq') {
+        const unfolded = unfoldOpaque(y.inner)
+        return (
+            unfolded.kind === 'union' &&
+            unfolded.options
+                .filter(
+                    (option) =>
+                        !(occV(option) ?? everySlot).some(
+                            (slot) => slot === 'number' || slot === 'numSet',
+                        ),
+                )
+                .some((option) => restricts(x, option))
+        )
+    }
     // a literal, or a union of literals at one base, is a refinement of that base: every value
     // it admits, the base admits
     const alts = literalAlternatives(x)
@@ -1236,8 +1262,8 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * **There is no `opaque` row, and its removal is the rule this function most recently learned.**
  * §5 separates the two things a `⊤` covers: *unknown* — `held`, `custom` and a host `lazy`, whose
  * answer exists and cannot be read — and *everything*, which is `opaque`, accepting every kind by
- * design. The model states the second as a **closed form**, `occTop` at `lossy` and `occBut .num`
- * at `refuse`, so it can be compared; this library read it as `⊤` and exempted it instead, which
+ * design. The model states the second as a **closed form**, `occTop` at the total `opaq true`, so
+ * it can be compared; this library read it as `⊤` and exempted it instead, which
  * meant `union([opaque, X])` declared.
  *
  * **JH ruled that union unacceptable, and the model says why.** It is not equal to `opaque`: it is
@@ -1356,15 +1382,14 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
         // refusal, while `decimal` held text and both families wrote a `strSet`
         return x.base === y.base ? x : never
     }
-    if (x.kind === 'opaq' && y.kind === 'opaq')
-        return { kind: 'opaq', lossy: x.lossy && y.lossy }
+    if (x.kind === 'opaq' && y.kind === 'opaq') return x
     if (x.kind === 'object' && y.kind === 'object')
         return meetBodies(x.body, y.body)
     // **`opaque` against a ground base.** It admits every value of every self-identifying kind, so
-    // at `string`, `boolean`, `binary` and `null` the base is the finer term. `decimal` refuses for
-    // the reason `string ∧ decimal` refuses. `number` follows the policy
-    if (x.kind === 'opaq') return opaqueAgainst(x, y)
-    if (y.kind === 'opaq') return opaqueAgainst(y, x)
+    // at `string`, `boolean`, `binary`, `null` and `number` the base is the finer term. `decimal`
+    // refuses for the reason `string ∧ decimal` refuses
+    if (x.kind === 'opaq') return opaqueAgainst(y)
+    if (y.kind === 'opaq') return opaqueAgainst(x)
     // **The `number` family and the `decimal` family never meet.** They write different value kinds,
     // so the bottom is right about the write side, and they read the same member `N`, so the bottom
     // is wrong about the read side: every stored numeral is an attribute both admit
@@ -1523,18 +1548,14 @@ const sameValue = (one: unknown, other: unknown): boolean =>
           one.every((byte, at) => byte === other[at])
         : one === other
 
-const opaqueAgainst = (
-    op: Extract<Term, { kind: 'opaq' }>,
-    other: Term,
-): Term | undefined => {
+const opaqueAgainst = (other: Term): Term | undefined => {
     switch (other.kind) {
         case 'string':
         case 'boolean':
         case 'binary':
         case 'null':
-            return other
         case 'number':
-            return op.lossy ? other : never
+            return other
         default:
             return undefined
     }

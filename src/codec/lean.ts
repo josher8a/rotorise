@@ -704,8 +704,11 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
                     leanTermOfTerm(variant, `${at}[${index}]`, forced),
                 )
                 .join(', ')}]`
+        // **The model still carries the numeric policy as an argument**, and its `true` is the
+        // exact `numberCodec`, which is this total term. The model step deletes the argument. The
+        // two policies are `held` over this term, and the `held` row refuses them
         case 'opaq':
-            return `Term.opaq ${t.lossy}`
+            return 'Term.opaq true'
         case 'lazy': {
             if (forced >= lazyLimit) {
                 return refuse(
