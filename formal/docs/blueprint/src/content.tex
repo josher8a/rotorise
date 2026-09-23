@@ -182,7 +182,8 @@ the way back. A codec reading \texttt{⟨N,\ "1.5"⟩} to a string and writing \
 typed index rejects the write. It holds per attribute and recursively: a member change three levels
 inside an \texttt{M} is the same failure.
 
-This is why \texttt{opaque} refuses \texttt{N} unless \texttt{ν} admits it. Its refusal is \rulelink{cond:MP}{\textbf{(MP)}}, and §2 without it could not say
+This is why \texttt{opaque} reads \texttt{N} as a numeral and never as a string. It writes the numeral
+back at \texttt{N}, so the member survives. That is \rulelink{cond:MP}{\textbf{(MP)}} at \texttt{opaque}, and §2 without it could not say
 so.
 
 Write \texttt{Can(c)\ =\ e{[}T{]}} for the \textbf{canonical} attributes: those a codec will actually produce. \texttt{e\ ∘\ p}
@@ -228,8 +229,8 @@ algebra.
 \subsection{When the deviations vanish}\label{when-the-deviations-vanish}
 
 Both extensions can be driven to zero, and asking what it takes is the cleanest way to see what
-each one is really for. They do not have the same answer, and in this calculus they cannot be
-answered at once.
+each one is really for. They do not have the same answer, and one term alone answers both at
+once.
 
 \textbf{The quotient collapses} when \texttt{ker\ p} is equality — when no two distinct attributes read to one
 value. That fails for exactly three reasons, and one of them is about the medium:
@@ -261,9 +262,11 @@ free algebra, a fixed-width binary layout, or a memory image, as long as more th
 one \texttt{𝔸}. What removes it is one schema per store, which is a different architecture rather than a
 better encoding.
 
-\textbf{They do not collapse together.} \texttt{decimal} kills the quotient and keeps partiality; \texttt{opaque(lossy)}
-comes closest to reading all of \texttt{𝔸} and keeps the quotient, since its \texttt{N} option reads through the
-numeral-to-double reading. No term of this calculus has both at once, and §1 is why.
+\textbf{They collapse together at \texttt{opaque} alone.} \texttt{opaque} reads every attribute of \texttt{𝔸}
+(\texttt{opaqA\_total}). Its pair is a bijection between \texttt{Value} and \texttt{𝔸} (\texttt{Ω\_onto}, \texttt{Ω\_canon}), so its
+\texttt{ker\ p} is equality. Its held set is every \texttt{Value}, so one \texttt{T} lives in \texttt{𝔸}, which is the
+condition the paragraph above names. \texttt{opaque} pays with \texttt{μ\ =\ ⊤}. Every term with a schema keeps one deviation at least:
+\texttt{decimal} kills the quotient and keeps partiality, and §1 is why.
 
 One deviation \emph{does} have a clean term-level answer, and it is often mistaken for the other
 two. Ambiguity in a \texttt{union} is not a property of the medium at
@@ -625,9 +628,8 @@ e : T ⇀ 𝔸    p : 𝔸 ⇀ T    (R), (C), (MP) hold of (e, p)
 \lean{Calculus.Typed.opaq}
 \leanok
 \begin{verbatim}
-ν ∈ {refuse, lossy}
 ─────────────────────────── (opaque)
-⊢ opaque(ν) : Uν ⇝ ⊤
+⊢ opaque : Value ⇝ ⊤
 \end{verbatim}
 \end{definition}
 
@@ -638,16 +640,18 @@ Demanding \rulelink{cond:R}{\textbf{(R)}} alone would under-demand, deriving a \
 exact term §2's argument for \texttt{opaque} says cannot exist. (\rulelink{cond:W}{\textbf{(W)}} is vacuous at \texttt{⊤}, so the three
 named are the whole obligation.)
 
-\texttt{opaque} is the calculus's custom-class term, and it is primitive only in presentation: it
+\texttt{opaque} is the calculus's universal sum, and it is primitive only in presentation: it
 unfolds to the \textbf{union of everything self-identifying, closed under the containers} — a fixpoint of shape
-\texttt{union(string,\ boolean,\ binary,\ ⟨NULL⟩,\ number?,\ set(opaque),\ array(opaque),\ record(opaque))} —
-whose \rulelink{cond:U}{\textbf{(U)}} holds because the options' kinds and members are pairwise disjoint. \texttt{Uν} is \emph{defined}
-as the values whose member is recoverable from the value alone, so \rulelink{cond:R}{\textbf{(R)}} holds by construction;
-what \texttt{ν} decides is \texttt{N}, the one member a bare value cannot answer for, and the fixpoint reading
-gives the policy its sharpest statement: \textbf{\texttt{refuse} is the absence of the \texttt{number} option.} Nothing
-is guessed, because there is nothing present to guess with. Under \texttt{lossy} the option is present and
-\texttt{number\ ⇄\ N}: the member survives every read-modify-write, and the digits survive only while they
-fit a double.
+\texttt{union(string,\ boolean,\ binary,\ ⟨NULL⟩,\ number,\ set(opaque),\ array(opaque),\ record(opaque))} —
+whose \rulelink{cond:U}{\textbf{(U)}} holds because the options' kinds and members are pairwise disjoint. The held set is \emph{defined}
+as the values whose member is recoverable from the value alone, so \rulelink{cond:R}{\textbf{(R)}} holds by construction.
+A numeral is such a value: the \texttt{number} option is \texttt{numberCodec}, which holds the numeral exactly, as its digits, and
+\texttt{number\ ⇄\ N} keeps the member and the digits on both halves. So the held set is every
+\texttt{Value} (\texttt{opaq\_total}).
+
+\textbf{\texttt{opaque} has no numeric policy.} A host whose numeric type is not exact, a binary64 float for
+example, adapts that type outside the core. A policy that refuses a host number, or one that rounds it,
+is \rulelink{rule:held}{\texttt{(held)}} over \texttt{opaque}, and that rule states its obligation.
 
 \texttt{held} and \texttt{refine} are the same shape at different strengths: an \textbf{iso} and a \textbf{prism}. The
 literature collapses them — invertible syntax descriptions \cite{invertible-syntax} builds everything from an algebra of

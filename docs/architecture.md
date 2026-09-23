@@ -204,8 +204,8 @@ shape recurs: *no syntactic set names this* is a reason to stop being syntactic,
 give up. The denotation of a numeric literal **is** the literal codec by reduction, so the row
 that asks is the domain of the read half exactly.
 
-The price is that a row becomes `noncomputable` when its codec is, which costs nothing here
-because the numeric equality is already a field of an axiomatized interface.
+The price is that a row becomes `noncomputable` when its codec is. That costs nothing here,
+because `denote` is `noncomputable` already: `inL` is, and `denote` reads it.
 
 An alternate reader is deliberately outside the term rows. `Codec.extendRead` tries the current
 reader first and then the alternate reader. No structural analysis reads the alternate reader.
@@ -395,8 +395,8 @@ and a racing run fails at once over an unchanged tree. Judge that check by its d
 judging it by its exit code.
 
 The bridge checks generated lines by kernel typechecking rather than by evaluation, because the
-denotation is `noncomputable` where the numeric host is an axiom. Evaluation and decision by
-compilation are both unavailable, and that is not a toolchain gap to route around.
+denotation is `noncomputable`. Evaluation and decision by compilation are both unavailable, and
+that is not a toolchain gap to route around.
 
 ### The host's instruments
 
@@ -429,7 +429,9 @@ filtered option list, and collapses the answer. Unique admission quantifies over
 options: a negative condition, anti-monotone in exactly the argument a fixpoint must grow.
 `altCodec_not_monotone` is the obligation any fixpoint construction would have to discharge and
 cannot, and `stage_not_monotone` shows the same collapse between adjacent stages. The low-stage
-answer is over-defined, not under-defined.
+answer is over-defined, not under-defined. `opaque` is the one recursive union the model carries.
+Its options are pairwise kind-disjoint, so unique admission needs nothing from the recursive call,
+and `lawful_opaqCodecω` proves the fixed point lawful.
 
 **The refutation is specific to counting.** Confluent resolution, where several options may admit
 provided they agree, is proved monotone and continuous by `selectF_mono` and
@@ -465,13 +467,11 @@ reaches `Classical.choice`. One value leaves no such set, so there is no bridge 
 keeps the n-ary call as a builder that writes the union, because the hand-written union costs the
 type checker in proportion to the number of alternatives where the call is flat.
 
-**A number with no closed terms.** The host's number is axiomatized rather than modelled, because
-rounding is not a theorem of this calculus. The price is paid in distinct places that close
-differently, and `docs/defects.md` records them as an issue with what is mitigated and what
-remains. The architectural point is the discipline: each is met by somebody doing something
-reasonable and finding it impossible, so **establish which impossibility it is before recording it
-as permanent.** Apparent walls here have turned out to be something else, and the one that was
-something else closed.
+**A host numeric type.** The model carries a number exactly, as `WFNumeral`, and declares no
+axiom. A host numeric type, such as a binary64 float, is not modelled, because rounding is not a
+theorem of this calculus. A port adapts the host type to `WFNumeral` inside the port. The emitter
+refuses a JS number for the same reason: writing one down as a `WFNumeral` is a rounding that the
+model does not state.
 
 **Non-malleability.** `Malleability.lean` records that this development deliberately fails it, and
 why the relational-format proposal that would have entailed it is refuted by `fmt_forced`: `Fmt`
@@ -539,16 +539,14 @@ how the host spells "the value the model means" where the model needs no spellin
 value semantics for byte arrays owes nothing here, and one without owes the identity.
 
 **Where the two sides disagree, the emitter is where it gets written down.** A tag is stored as a
-string or as a numeral, and the model reads a discriminator as the literal it is at either base —
-a decimal literal holds its numeral as text, so the two bases are two spellings of one tag rather
-than two tag types. There the two sides agree, and a discriminator at either base emits.
+string or as a numeral. A numeric literal carries a `WFNumeral`, which is a closed term, and the
+host's `decimal` literal is that literal under the text adapter `numeralOfStoredText`. So a
+discriminator at either base emits.
 
-**The one refusal left is the numeric base**, and it is not a disagreement about what a tag is.
-The model can state no tag there at all, for the reason `docs/defects.md` records as an issue: the
-numeric host is an axiom with no closed terms. The emitter refuses such a union rather than
-emitting a vector about a selection the model cannot express, and its message says so in the
-caller's vocabulary. That refusal is the record, and it is the shape every gap of this kind takes
-— the reader is total, and what bounds it is which terms have closed forms.
+**What bounds the emitter is which terms have closed forms.** A caller's closure has none. The
+emitter refuses a term that holds one, rather than emitting a vector about a codec the model
+cannot express, and its message says so in the caller's vocabulary. That refusal is the record,
+and it is the shape every gap of this kind takes.
 
 **A core union requires its discriminator.** The model selects only an input that carries the
 required discriminator. A caller that accepts an old input extends the whole union's codec with
