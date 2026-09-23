@@ -83,10 +83,9 @@ and does not govern. `architecture.md` governs. A reader who wants to know what 
 reads the second; a reader who wants to know where it is going reads the first. Neither repeats
 the other, and this entry is the only place that says how they relate.
 
-**The ruling today is not yet.** The generated artifacts are stated over the term language and
-are checked by elaborating them. While they do not elaborate, a change to the constructor set
-lands unchecked. That argues for restoring the bridge first, and it is the strongest argument
-against starting with this.
+**The ruling today is not yet.** The generated artifacts are stated over the term language, and
+the gate elaborates each of them. So a change to the constructor set lands checked wherever the
+change reaches an artifact.
 
 **What decides it.** Three things together, and none is a judgment call. The structure exists
 under `Calculus/`. `architecture-v2.md` replaces `architecture.md` under that name.

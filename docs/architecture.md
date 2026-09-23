@@ -102,7 +102,7 @@ error but a silent "everything": the analysis stays sound and stops saying anyth
 | --- | --- | --- |
 | a depth clause | `Body.depth` | the termination measure must see through it |
 | a denotation clause | `bodySem` | `denote` must dispatch with no case split at the use site |
-| a spec projection | `Body.spec` | `select` counts an object option by its names, not its contents |
+| a spec projection | `Body.spec` | `OrthM` and `OrthS` read an object option's names and literals off the spec |
 | an admission row, per side | `AdmBody` and `AdmABody` | exactness is per row; a stratum with no row cannot be exact |
 | a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
 | an emitter clause | the object row of `src/codec/lean.ts` | the bridge writes terms in this language, and a constructor it cannot spell breaks it |
@@ -182,11 +182,10 @@ whole resolves. Indices make per-thing properties structural, and this is not on
 **The discriminated union is the case that left the term language rather than crossing into it.**
 A dissection is a `union` of object members whose pairwise structural meet is empty: two members
 differ at a required literal name with disjoint alternatives, or the name intervals they declare
-cannot be satisfied at once. Structural admission is what reads that, on both halves of the pair.
-An object option is admitted when the names the item carries lie in the interval its spec declares,
-and every present name whose field is a literal carries one of that literal's alternatives. `OrthS`
-is the phase of `Orth` that certifies the first case, and a sub-selection of a certified union
-stays certified, because the certificate is `Pairwise` and `uAtAct_sublist` carries (U) under it. A
+cannot be satisfied at once. The certificate reads that off `Body.spec`, on both halves of the
+pair. `select` admits an object option by attempt, as it admits every other option. `OrthS` is the
+phase of `Orth` that certifies the first case, `OrthM` certifies the second, and a sub-selection
+of a certified union stays certified, because the certificate is `Pairwise` and `uAtAct_sublist` carries (U) under it. A
 tag table keyed by the discriminating literals is an index the host builds over such a union, and
 no term carries it.
 
@@ -290,16 +289,19 @@ discharger stated on what `select` actually decides by.
 over-approximates each term's occupancy per side with `occV` and `occA` and certifies a pair whose
 occupancies are disjoint, by `decide`.
 
-**Its value is that it is the specification of the library's only declaration-time guard, and a
-checked one.** The `union` combinator in `src/` refuses a pair of options no value can choose
-between, which is the same question `Orth` answers. The bridge is the separation class in
-`src/codec/lean.ts`: one theorem per pair the library refuses, asserting that `Orth` does not
-certify it, generated and elaborated by `formal/scripts/gate.sh`.
+**Its value is that it is half of the specification of the library's declaration-time guard, and
+a checked half.** The union certificate is `certPair`: `Orth`, or a meet at the bottom. The `union`
+combinator in `src/` refuses a pair of options that it cannot certify. The combinator also refuses
+two options that cross, where the meet is neither `never` nor one of the two options, because no
+option owns the overlap. The bridge is the separation class in `src/codec/lean.ts`: one theorem per
+pair the library refuses, asserting that `certPair` does not certify it, generated and elaborated
+by `formal/scripts/gate.sh`.
 
-**`Orth` is sufficient and not necessary,** so exactly one direction is a law: the library never
-refuses a pair the model certifies. A decline by `Orth` is not a refutation, and the pairs the
-library accepts while `Orth` declines all land in a documented exemption — a literal, which
-identifies its own values; an object option, chosen by names; or an option whose kind is unknown.
+**`certPair` is sufficient and not necessary,** so exactly one direction is a law: the library
+never refuses a pair the model certifies. A decline by `certPair` is not a refutation. The library
+also accepts a pair that a host row certifies: a literal, which identifies its own values; a pair
+of objects, which the host certifies by the names and literals they declare; or an option whose
+kind is unknown.
 Asserting the converse would manufacture findings.
 
 `Separated` is what names the separation guarantee over the option list, with

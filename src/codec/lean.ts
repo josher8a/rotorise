@@ -706,9 +706,9 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
             if (forced >= lazyLimit) {
                 return refuse(
                     at,
-                    `a lazy chain deeper than ${lazyLimit} — `.concat(
-                        'a genuinely recursive codec has no term at all: `Term.lazy` carries a `Term`, ',
-                        'not a thunk, and `Continuity.lean` shows a recursive union has no fixpoint semantics',
+                    `a lazy chain deeper than ${lazyLimit}. `.concat(
+                        'A recursive codec has no term: `Term.lazy` carries a `Term`, not a thunk, ',
+                        'so the model states no recursive term',
                     ),
                 )
             }
@@ -754,7 +754,7 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
         case 'legacy':
             return refuse(
                 at,
-                '`Term.legacy` carries `r : Attr → Option Value`; the definition carries the older reading now, and it is a JS closure, which no `Term` prints — the same wall `custom` meets',
+                '`Term.legacy` carries `r : Attr → Option Value`; the definition carries the older reading now, and it is a JS closure, which no `Term` prints',
             )
     }
 }

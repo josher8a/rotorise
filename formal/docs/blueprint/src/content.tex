@@ -64,8 +64,8 @@ c = (T, μ, e, p)      T ⊆ Value     μ ∈ Member ∪ {⊤}
 \end{verbatim}
 
 \begin{verbatim}
-v ∈ Value ::= str(String) | num(D) | bool(Bool) | bin(Bytes) | null
-            | strSet(℘⁺fin(String)) | numSet(℘⁺fin(D)) | binSet(℘⁺fin(Bytes))
+v ∈ Value ::= str(String) | num(WFNumeral) | bool(Bool) | bin(Bytes) | null
+            | strSet(℘⁺fin(String)) | numSet(℘⁺fin(WFNumeral)) | binSet(℘⁺fin(Bytes))
             | arr(Value*) | map(Name ⇀fin Value)
 
 k ∈ Kind  ::= string | number | boolean | binary | set | array | map | null
@@ -73,9 +73,9 @@ k ∈ Kind  ::= string | number | boolean | binary | set | array | map | null
 
 \texttt{T} is a set of values, the language of things a codec holds. Ten constructors, and eight
 kinds: the three set constructors are all of kind \texttt{set}, and every other constructor is a kind
-of its own. \texttt{D} is the doubles, fixed in §3. \texttt{Value} is not §1's \texttt{Member}: an \texttt{N} carries
-\texttt{Numerals}, which is text, where \texttt{num} carries a double, and §3's \texttt{decimal} is the term that
-closes the gap. \texttt{μ\ =\ ⊤} reads as
+of its own. \texttt{WFNumeral} is §1's well-formed numerals. \texttt{Value} is not §1's \texttt{Member}, but
+the two carry a number the same way: an \texttt{N} carries a \texttt{WFNumeral}, and \texttt{num} carries the same
+\texttt{WFNumeral}, exactly. A host whose numeric type is not exact adapts that type at the port. \texttt{μ\ =\ ⊤} reads as
 \emph{not determined by the term}, not as \emph{anything}. Which terms may leave it
 undetermined is settled in §3.
 
@@ -233,7 +233,7 @@ each one is really for. They do not have the same answer, and one term alone ans
 once.
 
 \textbf{The quotient collapses} when \texttt{ker\ p} is equality — when no two distinct attributes read to one
-value. That fails for exactly three reasons, and one of them is about the medium:
+value. That fails for exactly two reasons, and one of them is about the medium:
 
 \begin{itemize}
 \tightlist
@@ -241,15 +241,12 @@ value. That fails for exactly three reasons, and one of them is about the medium
   \textbf{\texttt{η}, the store's own normalisation of a stored numeral (§3), normalises \texttt{N}}. This is the medium, and it is the calculus's one concession to
   something it does not model.
 \item
-  \textbf{\texttt{drop} discards undeclared names} (§4). This is a schema's own decision, taken deliberately.
-\item
   \textbf{A set loses a payload} when two of its payloads read to one value (§5). This is the
   container's own, and \rulelink{cond:R}{\textbf{(R)}} is untouched, because the canonical payloads are the ones the
   codec wrote.
 \end{itemize}
 
-So a codec collapses the quotient by holding no set, reading no normalised numeral, and declaring
-every name it means to keep. \texttt{decimal} is the witness that this is reachable: its held set is \texttt{Stored}, the numerals
+So a codec collapses the quotient by holding no set and reading no normalised numeral. \texttt{decimal} is the witness that this is reachable: its held set is \texttt{Stored}, the numerals
 \texttt{η} leaves alone (§3), and its \texttt{ker\ p} is
 equality, which is precisely why its held set had to be narrowed to \texttt{Stored}.
 
@@ -314,9 +311,8 @@ Both are needed, and neither determines the other.
 \lean{Calculus.Typed.number}
 \leanok
 \begin{verbatim}
-D = { x ∈ Double : x = 0 ∨ 1e-130 ≤ |x| ≤ 9.9…e125 }
-────────────────────────────────────────────────────── (number)
-⊢ number : D ⇝ N
+──────────────────────────────
+⊢ number : WFNumeral ⇝ N   (number)
 \end{verbatim}
 \end{definition}
 
@@ -361,51 +357,32 @@ D = { x ∈ Double : x = 0 ∨ 1e-130 ≤ |x| ≤ 9.9…e125 }
 \end{verbatim}
 \end{definition}
 
-\texttt{D} is a set of doubles; the numeric host is taken as given and not modelled here.
-\texttt{number} is \textbf{not} restricted to integers, and not to \texttt{2⁵³}. Every finite double satisfies \rulelink{cond:R}{\textbf{(R)}},
-because \texttt{String} on a double is by definition the shortest text reading back as that same double — so
-\texttt{1.5} round-trips, and so does \texttt{2⁵³\ +\ 1}, which \emph{is} \texttt{2⁵³} and round-trips as that. What bounds \texttt{D} is
-DynamoDB's magnitude range: at most 38 significant digits, and magnitude zero or \texttt{1e-130\ …\ 9.9…e125}.
+\texttt{number} holds a \texttt{WFNumeral}: §1's numeral grammar with its bound, at most 38 significant
+digits and magnitude zero or \texttt{1e-130\ …\ 9.9…e125}. \texttt{number} is \textbf{not} restricted to integers,
+and not to \texttt{2⁵³}: \texttt{2⁵³\ +\ 1} is a numeral of its own. The bound is the type of the carrier, so
+\texttt{e} and \texttt{p} are constructor wrappers with no gate, and \rulelink{cond:R}{\textbf{(R)}} is the identity on the
+numeral. The calculus axiomatizes no numeric type. A host whose number is a binary64 float adapts the
+float to a \texttt{WFNumeral} with \rulelink{rule:held}{\texttt{(held)}}, and that rule states the obligation.
 
-\texttt{D} is \textbf{checked}, on both rules that write an \texttt{N} from a double. A term that writes an attribute
-outside §1's \texttt{𝔸} is not a term of this calculus, so the bound cannot be a precondition recorded and
-left to the service.
+A term that writes an attribute outside §1's \texttt{𝔸} is not a term of this calculus. So the bound is the
+type of the \texttt{N} carrier, and not a precondition recorded and left to the service.
 
-The two rules check it in the two different places their admissible sets live. \rulelink{rule:number}{\texttt{(number)}} gates
-\textbf{both halves}: \texttt{e} on the text the double is written as, and \texttt{p} on the double the text reads
-back to, which is not redundant — a numeral the store holds can read back as a double past the
-maximum, and gating only the write is the configuration that breaks \rulelink{cond:C}{\textbf{(C)}}.
+\rulelink{rule:literal}{\texttt{(literal)}} gates at the \textbf{declaration}, alongside \texttt{n\ ≥\ 1} and pairwise
+distinctness, because \texttt{ℓ} is data the term owns and a premise on data is decidable when the codec is
+built. The premise bounds the writable side: \texttt{ℓ} is fixed when the codec is built, so every value
+\texttt{e} will ever accept has been checked already. The readable side needs no gate: an \texttt{N} attribute
+carries a \texttt{WFNumeral}, so a numeric \texttt{literal} reads an attribute exactly where its numeral is one of
+\texttt{ℓ}.
 
-Both-halves gating is not an extra duty these rules carry; it is what a gate \emph{is} in this calculus.
-A predicate checked on the way in and on the way out is \texttt{refine}, and both number rules are \texttt{refine}
-— \texttt{number} at \texttt{D}, \texttt{decimal} at \texttt{Stored}. Neither base is an \emph{ungated} one, and neither can be: with
-the \texttt{N} carrier typed, an ungated numeric codec would have to write an attribute the domain has no
-point for. \texttt{number} is itself the base on the double side, because §1's \texttt{Numerals} is the whole of
-\texttt{Carries(N)}; \texttt{decimal}'s base is the numerals gated at well-formedness, which is the largest
-decimal codec the carrier permits. Nothing about them is bespoke, and
-the shape is the argument: an ad-hoc \texttt{if} can gate one half and a \texttt{refine} cannot. \rulelink{rule:literal}{\texttt{(literal)}} gates
-at the \textbf{declaration}, alongside \texttt{n\ ≥\ 1} and pairwise distinctness, because \texttt{ℓ} is data the term
-owns and a premise on data is decidable when the codec is built.
+A subset of the numerals chosen by the caller — a finite set of admitted numbers — is
+\texttt{refine(number,\ T)}, and has no rule of its own because it needs none. A term whose \texttt{p} returned the
+numeral it read \emph{without} verifying membership in \texttt{T} would break \rulelink{cond:C}{\textbf{(C)}}, and with it the
+claim that \texttt{:\ T} says anything; a term that does verify is \texttt{refine(number,\ T)} on all four fields. An
+unchecked narrowing of a read is a cast, and a cast belongs to \texttt{refine}, which does the check, or to
+\texttt{held}, which is where the caller's own functions live.
 
-That premise discharges the \textbf{writable} side and only the writable side: \texttt{ℓ} is fixed when the codec is
-built, so every value \texttt{e} will ever accept has been checked already. It discharges nothing on the
-read side. Reading an \texttt{N} as a value is wider than membership in \texttt{ℓ}, so an attribute that is not a
-numeral at all can land on a value the set contains, and the check passes on something §1 has no
-point for. \textbf{A premise bounds the values a term owns, and a stored attribute is not one of them.}
-So a numeric \texttt{literal} reads through the same gate as \rulelink{rule:number}{\texttt{(number)}}, and gets it from the same place:
-its base \textbf{is} \texttt{number}, and \texttt{ℓ\ ⊆\ T} is the rule's premise, so the stored text must be a numeral
-before it is read as a value.
-
-A subset of \texttt{D} chosen by the caller — a finite set of admitted numbers — is \texttt{refine(number,\ T)}, and has no
-rule of its own because it needs none. A term whose \texttt{p} returned the double it read \emph{without}
-verifying membership in \texttt{T} would break \rulelink{cond:C}{\textbf{(C)}}, and with it the claim that \texttt{:\ T} says anything; a
-term that does verify is \texttt{refine(number,\ T)} on all four fields. An unchecked narrowing of a read is
-a cast, and a cast belongs to \texttt{refine}, which does
-the check, or to \texttt{held}, which is where the caller's own functions live.
-
-\texttt{decimal} holds numerals, not a machine number. That is the one ground term whose held set is the
-stored text rather than the machine number, and §1's table is the reason: \texttt{N} carries 38
-significant digits and a double carries 15.
+\texttt{decimal} holds a numeral as text. It is \rulelink{rule:held}{\texttt{(held)}} over \texttt{number} at the text adapter
+\texttt{numeralOfStoredText}/\texttt{textOfNumeral}, so it holds text and stores \texttt{N}.
 
 Its held set is \texttt{Stored}, and not §1's \texttt{Numerals}, because those are \textbf{different sets}. \texttt{Numerals}
 is what the store \emph{accepts}; \texttt{Stored} is what it \emph{hands back}. DynamoDB normalises every \texttt{N} it
@@ -417,35 +394,24 @@ This is the calculus's one concession to something it does not model. §2 compos
 directly; in use there is a store between them, and it is not the identity on attributes. Writing
 \texttt{η} for the store's normalisation, a codec survives the round trip through it exactly when \textbf{\texttt{η}
 lies inside \texttt{ker\ p}} — \texttt{≈c} of §2, the relation that already exists for "a different attribute
-reading to the same value". \texttt{number} satisfies that for free, since \texttt{p(1.500)} and \texttt{p(1.5)} are the
-same double; \texttt{decimal} cannot, because its \texttt{ker\ p} is equality. So the held set is narrowed to the
+reading to the same value". \texttt{number} does not satisfy it: \texttt{p} is the identity on the numeral, so
+\texttt{p(1.500)} and \texttt{p(1.5)} are two values. \texttt{decimal}'s \texttt{ker\ p} is equality as well. So the held set is narrowed to the
 fixed points of \texttt{η}, which is what \texttt{Stored} is. \texttt{η} is observed, not stipulated: it is the store's
 behaviour, and the calculus can only be arranged around it.
 
 \subsection{A ground term either takes its member whole, or it is a refinement}\label{a-ground-term-either-takes-its-member-whole-or-it-is-a-refinement}
 
-Read the ground terms together and they fall into two kinds, with nothing in between. \texttt{string},
-\texttt{boolean}, \texttt{binary} and \texttt{null} take their member's carrier \textbf{whole} — every string is a \texttt{String},
-every bool a \texttt{Bool} — and there is nothing for them to check. The other four want a \emph{subset} of what
-the store will hold at that member, and each is \texttt{refine} over one of those bases at the predicate
-that names the subset:
-
-\begin{tabular}{@{}lll@{}}
-\toprule
-term & base & predicate \\
-\midrule
-\texttt{number} & §1's \texttt{Numerals} & \texttt{D} (§3) \\
-\texttt{decimal} & numerals that are well-formed by §1's grammar & \texttt{Stored} (§3) \\
-\texttt{literal(ℓ)} & the ground term \texttt{g} & \texttt{∈\ ℓ} \\
-\bottomrule
-\end{tabular}
+Read the ground terms together and they fall into two kinds, with nothing in between.
+\texttt{string}, \texttt{boolean}, \texttt{binary}, \texttt{null} and \texttt{number} take their member's carrier
+\textbf{whole} — every string is a \texttt{String}, every numeral a \texttt{WFNumeral} — and there is nothing for
+them to check. \texttt{literal(ℓ)} wants a \emph{subset} of what the store will hold at its member, and is
+\texttt{refine} over the ground term \texttt{g} at the predicate \texttt{∈\ ℓ}. \texttt{decimal} is not a ground term:
+it is \rulelink{rule:held}{\texttt{(held)}} over \texttt{number}.
 
 This is not a resemblance. A predicate wanted on \textbf{both} halves \emph{is} \texttt{refine}, because \texttt{e} and \texttt{p}
-are partial and refusing is what the error channel does; a rule that gates one half and not the
-other is the shape §3 spends a paragraph refusing at \rulelink{rule:number}{\texttt{(number)}}. So a gate is never a rule's private
-business, and its predicate belongs in the term's admissible set, which is why a \texttt{number}'s
-held values are \texttt{D} and a \texttt{decimal}'s are \texttt{Stored}, beside a literal's \texttt{ℓ} (§5): gating both
-ways is a term deciding its own membership.
+are partial and refusing is what the error channel does. So a gate is never a rule's private
+business, and its predicate belongs in the term's admissible set, which is why a literal's held
+values are \texttt{ℓ} (§5): gating both ways is a term deciding its own membership.
 
 \textbf{Containers are the other kind, and they are not refinements.} \texttt{set}, \texttt{array}, \texttt{tuple}, \texttt{record}
 and \texttt{object} narrow by their \emph{subterms} and their \emph{names}, never by a predicate on the whole value,
@@ -459,8 +425,8 @@ and the rule says so by reading both off a base: \texttt{ℓ} must lie in some g
 what that term stores is what the literal stores. One rule covers \texttt{S} and \texttt{N}, and covers \texttt{BOOL},
 \texttt{B} and \texttt{NULL} with nothing added — a boolean literal is \texttt{literal(true)}, at base \texttt{boolean}. The
 base is an index the derivation carries and the term does not write. An alternative's kind determines
-it, except between \texttt{string} and \texttt{decimal}, which both hold text: \texttt{decimal} is what to write when text
-is wanted stored as \texttt{N}, and the two derivations of one written literal differ in nothing else.
+it. A host's \texttt{decimal} literal is a \texttt{number} literal under the text adapter, so text wanted stored as
+\texttt{N} needs no base of its own.
 
 The rule is also not doing anything \texttt{refine} does not, which is why \texttt{literal}
 reads as the abbreviation it is. \texttt{literal(ℓ)} is \texttt{refine(g,\ ∈\ ℓ)}, and the general fact behind every
@@ -479,34 +445,33 @@ What \texttt{literal} adds over writing \texttt{refine} is that \texttt{ℓ} is 
 sets carry it (§5) and a reader sees the enumeration.
 
 There is deliberately no derivation for a mixed set: a codec writes one member, and one \texttt{g} cannot
-hold both a string and a double, so \texttt{literal(ℓ,\ k)} with \texttt{ℓ\ ∈\ String} and \texttt{k\ ∈\ D} has none. That is \rulelink{cond:W}{\textbf{(W)}} and not an omission, and it is not
+hold both a string and a numeral, so \texttt{literal(ℓ,\ k)} with \texttt{ℓ\ ∈\ String} and \texttt{k\ ∈\ WFNumeral} has none. That is \rulelink{cond:W}{\textbf{(W)}} and not an omission, and it is not
 a limitation either — the spelling is \texttt{union(literal(ℓ),\ literal(k))}, whose options separate on
 both sides for free, by distinct members on the readable one and disjoint kinds on the writable.
 What the union concludes is \texttt{⊤}, which is the honest index for a term that writes two members. A union of
 literals all at the number base is what gives the term for an enum indexed by number — the held set is the literal union and the
-stored member is \texttt{N}, checked in both directions — and note that \texttt{⇝\ N} carries \texttt{Numerals} on the wire
-while the held set is numeric, so \rulelink{cond:R}{\texttt{(R)}} obliges the reading to return the number and not its text.
+stored member is \texttt{N}, checked in both directions — and \texttt{⇝\ N} carries on the wire the same \texttt{WFNumeral}
+that the held set holds, so \rulelink{cond:R}{\texttt{(R)}} is the identity on the numeral.
 
 \subsection{Containers}\label{containers}
 
 \begin{definition}[(set)]
 \label{rule:set}
-\uses{rule:string,rule:number,rule:decimal,rule:binary}
+\uses{rule:string,rule:number,rule:binary}
 \lean{Calculus.Typed.set}
 \leanok
 \begin{verbatim}
-b ∈ {string, number, decimal, binary}
+b ∈ {string, number, binary}
 ─────────────────────────────────────── (set)
 ⊢ set(b) : ℘⁺fin(b.held) ⇝ b.member
 \end{verbatim}
 \end{definition}
 
 \rulelink{rule:set}{\texttt{(set)}}'s premise line is \textbf{an index}, not a hypothesis: the element's
-member is read off the base rather than tested, so the four bases the rule admits are exactly those that carry one,
+member is read off the base rather than tested, so the three bases the rule admits are exactly those that carry one,
 \texttt{b.held} and \texttt{b.member} are functions of the index, and an element that names no member is a
-type error. \textbf{Four bases onto three wire
-members}: \texttt{number} and \texttt{decimal} both store \texttt{NS} and are not the same base: one holds
-machine doubles, the other the numeral text.
+type error. \textbf{Three bases onto three wire
+members}: \texttt{string} stores \texttt{SS}, \texttt{number} \texttt{NS} and \texttt{binary} \texttt{BS}.
 
 What a base rather than a term costs: \texttt{set(refine(b,\ q))} and \texttt{set(literal(…))} are \textbf{not} lost — a
 restriction of the elements is a restriction of the set — but
@@ -797,7 +762,7 @@ something whose judgement has a \texttt{⊗}.
 \leanok
 \begin{verbatim}
 ────────────────────────────────────────────────────────── (rest)
-⊢ ρ : rest  ⟸  ρ = drop | ρ = refuse | ⊢ ρ : T ⇝ μ
+⊢ ρ : rest  ⟸  ρ absent | ⊢ ρ : T ⇝ μ
 \end{verbatim}
 \end{definition}
 
@@ -805,13 +770,10 @@ Here \texttt{n\ :\^{}opt\ T} is a binding the record may omit, \texttt{n\ :\^{}r
 part, joined to the declared names by \texttt{⊕}, which adds bindings no declared name claims: a
 declared name is always held by its own set, so \texttt{⊕} is total and there is no collision to resolve.
 The open part is
-\texttt{∅} for \texttt{drop} and \texttt{refuse}, and \texttt{Name\ ⇀fin\ T} for a rest codec holding \texttt{T}. \texttt{drop} and
-\texttt{refuse} differ only in what \texttt{p} does with an undeclared name — drop it, or fail — which is a
-difference in \texttt{dom(p)} and not in \texttt{T}. And \texttt{drop} is a \textbf{filter, never a traversal mode}: the
-discard is decided by the name alone, before anything is decoded, so it cannot depend on a value and
-the round trip through the declared names is untouched by what was discarded. That is the quotient
-of §2 again — an item is \texttt{≈c} itself minus its undeclared names — and, \texttt{SS}/\texttt{NS}/\texttt{BS} carrying
-no ordering to lose, one of only three places \texttt{ker\ p} is not equality. The others are \texttt{η} and a set.
+\texttt{∅} where \texttt{ρ} is absent, and \texttt{Name\ ⇀fin\ T} for a rest codec holding \texttt{T}. An object with no
+\texttt{ρ} is \textbf{closed}: \texttt{e} and \texttt{p} each refuse an undeclared name, so the undeclared name is outside
+\texttt{dom(e)} and \texttt{dom(p)}, and no item loses a name on the round trip. A caller who wants undeclared
+names kept declares a rest codec.
 
 \subsection{The stratification does work}\label{the-stratification-does-work}
 
@@ -1002,7 +964,8 @@ rests on a premise is weaker as a specification, whatever it gains in totality. 
 reason this is recorded here and not adopted.
 
 And it changes what the fixpoint argument says. That a union whose options are genuinely recursive
-has no fixpoint semantics is a refutation of \textbf{counting}, not of \texttt{union}:
+has no fixpoint semantics in general is a refutation of \textbf{counting}, not of \texttt{union}. \texttt{opaque} is a
+recursive union with a lawful fixed point, because its options are pairwise kind-disjoint:
 
 \begin{theorem}[confluent admission survives the refutation]
 \label{thm:confluent-survives}
@@ -1061,17 +1024,11 @@ rather than a description of one} — \texttt{dom(e)} and \texttt{dom(p)} — at
 no hypothesis and no term excepted. Nothing is over-approximated, and no term's answer is \texttt{⊤}.
 \end{theorem}
 
-That is available only because a row may \textbf{ask the codec} rather than describe it, and the four
+That is available only because a row may \textbf{ask the codec} rather than describe it, and the three
 terms force the point:
 
 \begin{itemize}
 \tightlist
-\item
-  \textbf{A numeric literal's readable side.} Distinct numerals read to the same double, so no set of
-  values bounds a set of attributes. Nor do the stored texts, which \emph{are} known at the declaration:
-  \texttt{literal(10²¹)} is written \texttt{⟨N,\ "1e+21"⟩} and handed back \texttt{⟨N,\ "1000000000000000000000"⟩}, which
-  only the numeral-to-double read recovers, so a syntactic set would refuse a row the codec itself
-  wrote — \texttt{ker\ p} shrinking below \texttt{η}. The set is \texttt{dom(p)} of the very pair the rule builds.
 \item
   \textbf{\texttt{refine(c,\ q)}.} \texttt{q} is a predicate on values, so the writable side is \texttt{V(c)\ ∩\ q} directly. The
   readable side cannot follow syntactically, \texttt{q} testing the value a read \emph{produces}, so it decodes
@@ -1093,29 +1050,22 @@ arbitrary \texttt{f}, \texttt{refine} an arbitrary \texttt{q}, so membership of 
 declaration can answer. Admission \textbf{specifies} the two families. It does not decide them. What the
 discharger row runs is occupancy and option admission, and those are decided.
 
-\textbf{Admission is not what a union consults, and the object is where the two part.} A union admits an
-object option by its \textbf{names}: a name set \texttt{N} admits \texttt{object(s,\ ρ)} when every name in \texttt{N} is one
-\texttt{s} declares and every \texttt{req}-marked name of \texttt{s} is in \texttt{N}. The union never attempts an object
-option's codec. So \texttt{V(c)} and \texttt{A(c)} are \emph{option} admission: admission by names at an object, and
-\texttt{dom(e)} and \texttt{dom(p)} at every other term.
+\textbf{Admission is what a union consults, at every option.} A union attempts each option's codec, an
+object option included, so \texttt{V(c)} and \texttt{A(c)} are \emph{option} admission as well: \texttt{dom(e)} and
+\texttt{dom(p)} at every term. A closed object refuses an undeclared name on both halves, so an object option
+admits a map exactly where its codec writes or reads the map.
 
-Stating the row on a term's own admissible sets instead is unsound and not merely coarse, and one
-pair shows it. Take two objects declaring the same single \texttt{req} name and different field terms,
-\texttt{⟨a\ :\ String⟩} against \texttt{⟨a\ :\ Number⟩}. Their admissible sets are disjoint on both sides, a map the
-first writes carrying a string at \texttt{a} which the second's field term refuses. Both are derivable,
-both closed — no free subterm — both lawful, so no other condition declines them. And both options admit
-\texttt{⟨a\ ↦\ "1"⟩}, because the union reads the names and never the contents. At an object a term's own
-admission is strictly \emph{tighter} than what the union consults, and disjointness of a tighter
-predicate implies nothing about disjointness of admission. Off an object the two coincide — being
-admitted there \emph{is} being written — so the object is the whole of the difference.
+One pair shows what the attempt decides. Take two objects declaring the same single \texttt{req} name and
+different field terms, \texttt{⟨a\ :\ String⟩} against \texttt{⟨a\ :\ Number⟩}. Their admissible sets are disjoint on
+both sides: a map the first writes carries a string at \texttt{a}, which the second's field term refuses. So
+\texttt{⟨a\ ↦\ "1"⟩} reaches the first option alone. Their meet is the bottom, because the two field terms meet
+at \texttt{never} at a required name, and the certificate accepts the pair on that meet.
 
-Note what admission by names does \emph{not} read: \texttt{ρ}. An undeclared name disqualifies the option even
-where its rest codec would hold it, so an object's open part is unreachable through a union — the
-price of deciding by names is that only declared names decide, and an open object that must be an
-option should declare what it means to keep. An \texttt{opt} binding \textbf{widens} admission, which makes two
-options differing only in optional names the ambiguity to watch: two objects declaring only optional
-names both admit the empty map, however disjoint their names. \rulelink{rule:dunion}{\texttt{(dunion)}}'s disjoint-literal premise
-is the special case where the discriminator's names decide alone.
+An open object's rest takes part in the attempt: an undeclared name reaches the option where its rest
+codec holds the name. An \texttt{opt} binding \textbf{widens} admission, which makes two options differing only
+in optional names the ambiguity to watch: two objects declaring only optional names both admit the
+empty map, however disjoint their names. \rulelink{rule:dunion}{\texttt{(dunion)}}'s disjoint-literal premise is the
+special case where the discriminator's names decide alone.
 
 \begin{definition}[occupancy]
 \label{def:occupancy}
@@ -1134,7 +1084,7 @@ the subterm and can move a value into any constructor, \texttt{custom} is arbitr
 
 \textbf{The writable side's label is the constructor of the value, not the runtime kind}, and the
 difference does work. A kind collapses the three set families into one; the constructors do not, and
-\texttt{set(string)} writes a set of strings where \texttt{set(number)} writes a set of doubles. Ten constructors
+\texttt{set(string)} writes a set of strings where \texttt{set(number)} writes a set of numerals. Ten constructors
 separate what eight kinds cannot. The readable side's label is the member, which the judgement's \texttt{μ}
 index already computes.
 
@@ -1173,7 +1123,7 @@ of any table: a container admits its empty case whatever its element admits, so 
 options collide at exactly one input — the empty array, the empty map — which is also the one
 input neither writes nor reads once they collide. Both options hold that input, so
 \rulelink{cond:D}{\textbf{(D)}} refuses the pair: the union holds a value that it does not write.
-The same union built from \texttt{object}s is decided outright, by names: a \texttt{req} binding is a name the
+The same union built from \texttt{object}s is certified outright, by names: a \texttt{req} binding is a name the
 empty item lacks, so there is no empty case to collide at.
 
 \rulelink{cond:D}{\textbf{(D)}} and the admission row ask the same kind of question of the two sides of the pair. On the
@@ -1183,15 +1133,15 @@ side it implies nothing, for the reason below. \texttt{union(array(string),\ arr
 
 \texttt{union(set(string),\ set(number))} \emph{is} discharged, and on both sides, because
 the writable side is the one that labels by constructor. Those options store \texttt{SS} and \texttt{NS}, so
-reading was never in doubt; and they write a set of strings and a set of doubles, which are two
+reading was never in doubt; and they write a set of strings and a set of numerals, which are two
 constructors, so the writing is settled as well. What remains is a loss of a different kind: a set's
 member is computed from its element, so the options are \texttt{⇝\ SS} and \texttt{⇝\ NS} and the union's own \texttt{μ} is
 \texttt{⊤} by the \rulelink{rule:union}{\texttt{(union)}} rule. A \texttt{⊤} term is one only \rulelink{cond:MP}{\textbf{(MP)}} constrains, where a \texttt{⇝\ SS} term is pinned
 by \rulelink{cond:W}{\textbf{(W)}} and its read-side corollary. That loss is the union's and not the discharger's.
 
-Two pairs show the two families failing independently, one each way. \texttt{union(set(string),\ set(decimal))} writes a set of strings at both options — a decimal is \emph{held} as a string — and
-stores \texttt{SS} at one and \texttt{NS} at the other, so the readable side separates and the writable one does
-not. \texttt{union(number,\ decimal)} is the mirror: a number writes a double and a decimal a string, and
+Two pairs show the two families failing independently, one each way. \texttt{union(string,\ decimal)} writes a string at both options — a decimal is \emph{held} as a string — and
+stores \texttt{S} at one and \texttt{N} at the other, so the readable side separates and the writable one does
+not. \texttt{union(number,\ decimal)} is the mirror: a number writes a numeral and a decimal a string, and
 both store \texttt{N}, so the writable side separates and the readable one does not. Neither union is
 resolved, and each fails on a different half, which is why the two families are asked separately and
 never reconciled.
@@ -1220,8 +1170,8 @@ Two counterexamples bound the question, and each refutes one form of it:
 
 \textbf{A pair sharing a base separates where neither term's own sets do}, which is the discharger
 table's fourth row rather than this section's. \texttt{number} and
-every numeric literal are the \textbf{same base} under different predicates — the base being every finite
-double written as its shortest text, and the predicates \texttt{D} and \texttt{∈\ ℓ}. Two literals over disjoint
+every numeric literal are the \textbf{same base}: \texttt{WFNumeral}, which a literal refines at
+\texttt{∈\ ℓ}. Two literals over disjoint
 value sets are two refinements of one base; refinements of one base read an attribute to the \emph{same}
 value, so at most one predicate accepts it, and both sides separate.
 \texttt{refine(number,\ positive)} against \texttt{refine(number,\ negative)} is the same argument outside \texttt{literal}.
@@ -1348,10 +1298,10 @@ grouping is the algebra of §7: points, wrappers, products, sums.
 \textbf{Points.} Each ground term writes one member, totally on its held set, and reads exactly that
 member back into the held set. \rulelink{cond:W}{\textbf{(W)}} and \rulelink{cond:C}{\textbf{(C)}} are immediate, \texttt{≼} is member equality with no
 substructure, and \rulelink{cond:R}{\textbf{(R)}} is the carrier's round trip: identity for \texttt{string}, \texttt{boolean}, \texttt{binary},
-\texttt{null} (whose held set is the single value \texttt{null} and whose payload is \texttt{∗}) and \texttt{decimal} (a numeral
-in \texttt{Stored} is returned as written, which is what \texttt{Stored} is chosen to make true, so \texttt{Can(decimal)}
-is the normalised part of \texttt{N}), shortest-text for \texttt{number} and a numeric \texttt{literal} — the §3 argument that
-every finite double survives.
+\texttt{null} (whose held set is the single value \texttt{null} and whose payload is \texttt{∗}), \texttt{number} and a numeric
+\texttt{literal}, whose carrier is \texttt{WFNumeral} on both halves. \texttt{decimal} is \texttt{held} over \texttt{number}, below: a
+numeral in \texttt{Stored} is returned as written, which is what \texttt{Stored} is chosen to make true, so
+\texttt{Can(decimal)} is the normalised part of \texttt{N}.
 
 \textbf{Wrappers.}
 
@@ -1432,10 +1382,9 @@ element is where the \rulelink{cond:MP}{\textbf{(MP)}} exemption propagates — 
 §2.
 
 \emph{object.} The step dispatches each entry by its name: a declared name through its field, with the
-\texttt{ε}-handling of the Fields case; an undeclared name by \texttt{ρ}. \texttt{drop} is a filter \emph{before} the step
-(§4), so it needs no traversal mode of its own; the presence guards — every \texttt{req} name demanded in
+\texttt{ε}-handling of the Fields case; an undeclared name by \texttt{ρ}, and a closed object refuses it. The presence guards — every \texttt{req} name demanded in
 both directions, every non-\texttt{opt} binding demanded of a value — are what keep the step total where
-item adds none. \rulelink{cond:W}{\textbf{(W)}}: \texttt{M}. \texttt{≼}: the Lemma's keyed clause; the names \texttt{drop} discards and the
+item adds none. \rulelink{cond:W}{\textbf{(W)}}: \texttt{M}. \texttt{≼}: the Lemma's keyed clause, and the
 quotient again.
 
 \emph{set.} The premise gives \texttt{e\_c(x)\ =\ ⟨μ,\ w(x)⟩}; the step is \texttt{w} outward and \texttt{p\_c(⟨μ,\ ·⟩)} back, and
@@ -1485,8 +1434,9 @@ every depth of the fixpoint, and the sum case closes with no residue here either
 \end{proof}
 
 What remains outside the theorem is what §3 already names: \rulelink{rule:custom}{\texttt{(custom)}}'s premises are the
-caller's to keep, and each \rulelink{rule:union}{\texttt{(union)}}'s residual \rulelink{cond:U}{\textbf{(U)}}. \texttt{D} is not among them: it is a gate on
-both halves of \rulelink{rule:number}{\texttt{(number)}}, and a numeric \texttt{literal}'s base \emph{is} \texttt{number}, so it is inside the theorem.
+caller's to keep, and each \rulelink{rule:union}{\texttt{(union)}}'s residual \rulelink{cond:U}{\textbf{(U)}}. The numeral bound is not among
+them: it is the carrier \texttt{WFNumeral} of \rulelink{rule:number}{\texttt{(number)}}, and a numeric \texttt{literal}'s base \emph{is}
+\texttt{number}, so it is inside the theorem.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
