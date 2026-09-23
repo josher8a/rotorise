@@ -651,4 +651,9 @@ theorem held_violates_R :
     apply to it. -/
 theorem not_HF_decimalHeld : ¬ HF decimalHeld := id
 
+/-- **The views do not certify the decimal adapter beside `string`.** Its caller side is
+    `string`, so the caller-side views overlap. -/
+theorem certPair_decimalHeld_string : certPair decimalHeld .string = false := by
+  decide
+
 end Calculus
