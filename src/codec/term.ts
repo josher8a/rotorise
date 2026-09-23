@@ -24,7 +24,7 @@ import type {
     SetBase,
     SetSlot,
 } from './codec'
-import { sameLiteral } from './value'
+import { namedLiteral, sameLiteral } from './value'
 
 /* ── the term ─────────────────────────────────────────────────────────────────────────── */
 
@@ -1217,7 +1217,7 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * **Two options that meet at the bottom.** The model's certificate is `certPair`: `Orth`, or a
  * meet at `never`. `Adm_meet` and `AdmA_meet` make the meet's admission the conjunction of the
  * two, so a meet at the bottom admits no common value and reads no common attribute. The row asks
- * {@link meetTerms} only where both terms are {@link thunkFree}. It certifies two lists told apart
+ * {@link meetTerms} only where both terms reach no thunk, which {@link reaches} answers. It certifies two lists told apart
  * by a literal position, and two objects whose required slots meet at the bottom.
  *
  * **Two object options: the structural meet, which is the same question the type asks.** A union
@@ -1275,7 +1275,7 @@ export const separable = (x: Term, y: Term): boolean => {
     if (restricts(x, y) || restricts(y, x)) return false
     // a meet at the bottom separates, and it runs ahead of the object row, because two objects
     // whose required slots meet at `never` share names and no value
-    if (thunkFree(x) && thunkFree(y) && meetTerms(x, y)?.kind === 'never')
+    if (!reaches(x, []) && !reaches(y, []) && meetTerms(x, y)?.kind === 'never')
         return true
     const xs = objectMembers(x)
     const ys = objectMembers(y)
@@ -1318,36 +1318,133 @@ export const separable = (x: Term, y: Term): boolean => {
 }
 
 /**
- * **Whether a term reaches no thunk**, at any depth.
+ * **Whether a term reaches a subterm of one of these kinds**, at any depth.
  *
  * The model's `lazy` is transparent, and {@link meetTerms} forces a thunk to read through it. A
  * thunk can be recursive, so a meet of two recursive terms need not end, and {@link separable}
- * asks the meet only of a term with no thunk. `held` and `legacy` need no such guard: the meet
- * answers `undefined` at each, and the model's certificate needs no `HF` premise.
+ * asks the meet only of a term that reaches no thunk, which `reaches(t, [])` answers. `held` and `legacy` need no such guard
+ * there: the meet answers `undefined` at each, and the model's certificate needs no `HF` premise.
+ * {@link crossing} asks for no adapter as well, because the model's confluence holds only there.
  */
-const thunkFree = (t: Term): boolean => {
+const reaches = (t: Term, kinds: readonly Term['kind'][]): boolean => {
+    if (kinds.includes(t.kind)) return true
     switch (t.kind) {
+        // a thunk cannot be read without forcing it, so it counts as reaching every kind
         case 'lazy':
-            return false
+            return true
         case 'held':
         case 'legacy':
         case 'refine':
-            return thunkFree(t.inner)
+            return reaches(t.inner, kinds)
         case 'list':
             return (
-                t.pre.every(thunkFree) &&
-                (t.spread === undefined || thunkFree(t.spread)) &&
-                t.suf.every(thunkFree)
+                t.pre.some((one) => reaches(one, kinds)) ||
+                (t.spread !== undefined && reaches(t.spread, kinds)) ||
+                t.suf.some((one) => reaches(one, kinds))
             )
         case 'object':
             return (
-                Object.values(t.body.fields).every((f) => thunkFree(f.t)) &&
-                (t.body.rest === undefined || thunkFree(t.body.rest))
+                Object.values(t.body.fields).some((f) => reaches(f.t, kinds)) ||
+                (t.body.rest !== undefined && reaches(t.body.rest, kinds))
             )
         case 'union':
-            return t.options.every(thunkFree)
+            return t.options.some((one) => reaches(one, kinds))
         default:
-            return true
+            return false
+    }
+}
+
+/**
+ * **The overlap of two options that cross**, or nothing.
+ *
+ * Two options cross where their meet is neither `never` nor one of the two. A pair whose meet is
+ * `never` is disjoint, and a pair whose meet is one option is nested. A value in the overlap is
+ * admitted by both options, so the value does not decide the branch, and no rule names an owner
+ * of the overlap. JH ruled that `union` refuses such a pair, and that a caller writes the overlap
+ * as an option of its own. Asked only where neither option reaches a thunk or an adapter: there
+ * the meet is exact, and two options that both admit a value write one attribute. The overlap
+ * must reach no `refine`, because the host meet does not decide whether a refinement holds a
+ * value.
+ */
+export const crossing = (x: Term, y: Term): Term | undefined => {
+    const adapters = ['held', 'legacy'] as const
+    if (reaches(x, adapters) || reaches(y, adapters)) return undefined
+    const overlap = meetTerms(x, y)
+    // a `refine` in the overlap can hold no value: two literal sets with disjoint alphabets meet
+    // at a set whose each element is in both, and the store has no empty set
+    if (
+        overlap === undefined ||
+        overlap.kind === 'never' ||
+        reaches(overlap, ['refine'])
+    )
+        return undefined
+    return sameTerm(overlap, x) || sameTerm(overlap, y) ? undefined : overlap
+}
+
+/** Two terms with the same structure. A function compares by reference, and bytes by value. */
+const sameTerm = (one: unknown, other: unknown): boolean => {
+    if (one === other) return true
+    if (one instanceof Uint8Array || other instanceof Uint8Array)
+        return sameValue(one, other)
+    if (typeof one !== 'object' || typeof other !== 'object') return false
+    if (one === null || other === null) return false
+    if (Array.isArray(one) !== Array.isArray(other)) return false
+    const mine = Object.entries(one)
+    const theirs = new Map(Object.entries(other))
+    return (
+        mine.length === theirs.size &&
+        mine.every(
+            ([key, value]) =>
+                theirs.has(key) && sameTerm(value, theirs.get(key)),
+        )
+    )
+}
+
+/**
+ * **A term, spelled with the constructors a caller writes**, for a message that names a term the
+ * caller did not write: the overlap that {@link crossing} finds.
+ */
+export const spelled = (t: Term): string => {
+    switch (t.kind) {
+        case 'number':
+            return 'dynamoNumber'
+        case 'null':
+            return 'nullValue'
+        case 'opaq':
+            return 'opaque'
+        case 'literal':
+            return `${literalForm(t.base, undefined)}(${namedLiteral(t.v)})`
+        case 'set':
+            return `${literalForm(t.base, undefined)}.set()`
+        case 'list':
+            return `list(${[
+                ...t.pre.map(spelled),
+                ...(t.spread === undefined
+                    ? []
+                    : [`spread(${spelled(t.spread)})`]),
+                ...t.suf.map(spelled),
+            ].join(', ')})`
+        case 'object': {
+            const fields = Object.entries(t.body.fields).map(
+                ([name, field]) =>
+                    `${name}: ${
+                        field.mark === 'req'
+                            ? spelled(field.t)
+                            : `${field.mark === 'fallback' ? 'withLegacyRead' : field.mark}(${spelled(field.t)})`
+                    }`,
+            )
+            const rest =
+                t.body.rest === undefined
+                    ? ''
+                    : `, [string, optional(${spelled(t.body.rest)})]`
+            return `object({ ${fields.join(', ')} }${rest})`
+        }
+        case 'union':
+            return `union([${t.options.map(spelled).join(', ')}])`
+        case 'refine':
+            return `refine(${spelled(t.inner)}, …)`
+        default:
+            return t.kind
     }
 }
 
