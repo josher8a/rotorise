@@ -380,10 +380,10 @@ export const unanimous = (
 /**
  * `μSyn`: the member a term stores, read off the term.
  *
- * `undefined` is the model's `⊤` — *not determined by the term* — and the four rows that answer it
- * do so for four different reasons (§3): `nullable` writes its subterm's member or `NULL` and so
- * names neither, `lazy` could be asked but answering forces the thunk, `custom` is a pair of opaque
- * functions with nothing to ask, and `opaque` writes whatever the value turns out to be.
+ * `undefined` is the model's `⊤`: *not determined by the term*. `lazy` answers it because the
+ * model's `μSyn (.lazy t)` is `none`: the thunk keeps its subterm's pair and loses only the member.
+ * `opaque` writes whatever the value turns out to be, `never` writes nothing, and a `union` answers
+ * it where its options do not agree on one member. `nullable` is such a union.
  */
 export const member = (t: Term): AttributeName | undefined => {
     switch (t.kind) {
@@ -485,15 +485,10 @@ const joined = <A>(
  * An over-approximation on purpose. If `X ⊆ X′`, `Y ⊆ Y′` and `X′ ∩ Y′ = ∅` then `X ∩ Y = ∅`, so a
  * coarse answer costs a certificate and never buys a wrong one.
  *
- * The `undefined` rows, and why each: `held`'s `f` runs *before* the subterm and can move a value
- * into any constructor; `custom` is arbitrary in both directions. `opaque` accepts every kind by
- * design, and its row answers that closed form, not `undefined`.
- *
- * **`lazy` diverges from the model, deliberately.** `occV (.lazy t)` is the subterm's there, because
- * the model's thunk carries a finite `Term`. Here it carries a closure over a binding that may not
- * exist when a declaration asks, so reading through would force it. `undefined` is the sound
- * direction: an over-approximation costs a certificate and never buys a wrong one, and the
- * alternative throws on the recursive entity the thunk exists to allow.
+ * The one `undefined` row is a `held` that declares no `writes`: its `f` runs *before* the subterm
+ * and can move a value into any constructor. A `held` that declares its slots answers them.
+ * `opaque` accepts every kind by design, and its row answers that closed form, not `undefined`.
+ * `lazy` reads through the thunk to its subterm, as the model's `occV (.lazy t)` does.
  */
 export const occV = (t: Term): readonly SetSlot[] | undefined => {
     switch (t.kind) {
@@ -529,7 +524,7 @@ export const occV = (t: Term): readonly SetSlot[] | undefined => {
         case 'union':
             return joined(t.options.map(occV))
         // **A closed form, not `⊤`.** §5 separates the two things a `⊤` covers: *unknown*, which is
-        // `held`, `custom` and a host `lazy`, and *everything*, which is `opaque` by design. The
+        // a `held` that declares no slots, and *everything*, which is `opaque` by design. The
         // model takes the second as data — `occV .opaq` is `occTop` — so answering
         // `undefined` here would say "cannot be read" about the one term whose occupancy is fully
         // known, and {@link separable} would then decline to compare it.
@@ -546,10 +541,9 @@ export const occV = (t: Term): readonly SetSlot[] | undefined => {
  * Whether a term reaches the null point, read off the term.
  *
  * `undefined` is *not determined by the term*, and it is what makes {@link nullable} refuse at
- * construction rather than guess. The rows that answer it are the four whose admission is a
- * function: `held`, `custom` and `withLegacyRead` carry the caller's, and `lazy` could be asked but
- * answering forces the thunk — which at module-evaluation time is a reference to a binding that
- * does not exist yet, so a recursive declaration would throw on the guard that exists to allow it.
+ * construction rather than guess. `withLegacyRead` answers it, because its older reader is the
+ * caller's function. `refine` and `union` answer it through their subterms, as the next paragraph
+ * says. A `held` answers from the slots it declares, and `lazy` reads through the thunk.
  *
  * `refine` answers `false` through its subterm and `undefined` otherwise: a predicate narrows, so
  * a subterm that does not reach the point keeps not reaching it, while one that does may or may not
@@ -657,8 +651,9 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
 /**
  * The names an object option answers to, each with whether the item must carry it.
  *
- * `undefined` for a non-object, which is what makes an object option the one kind chosen by names
- * rather than by being attempted. An `optional` binding is declared and not required, and that is
+ * `undefined` for a non-object. The certificate reads these names and the literals an object
+ * pins (the model's `OrthM` and `OrthS`). Selection itself is by attempt at every option, objects
+ * included. An `optional` binding is declared and not required, and that is
  * the ambiguity §5 names in the same words: two objects declaring only optional names both admit
  * the empty map, however disjoint their names.
  */
