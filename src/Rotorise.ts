@@ -671,7 +671,7 @@ type TableEntryDefinition<
     Schema,
     Separator extends string,
     CodecSpec = undefined,
-    CodecRest = 'refuse',
+    CodecRest = undefined,
 > = {
     /**
      * Converts a raw entity into a complete table entry with all keys computed.
@@ -1388,7 +1388,7 @@ export const tableEntry =
             | ItemSpec<Entity>
             | Record<string, unknown>
             | undefined = undefined,
-        const CodecRest = 'refuse',
+        const CodecRest = undefined,
         Separator extends string = '#',
     >(
         schema: Schema & ValidateSchema<Schema>,

@@ -248,7 +248,7 @@ describe('the rest policy a definition records', () => {
 
     it('agrees with the policy the item codec reports', () => {
         const closed = object({ id: string })
-        expect(closed.item.rest).toBe('refuse')
+        expect(closed.item.rest).toBe(undefined)
         expect(closed.def.kind === 'object' && closed.def.body.rest).toBe(
             undefined,
         )
