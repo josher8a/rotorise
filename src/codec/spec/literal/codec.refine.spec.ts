@@ -114,3 +114,18 @@ describe('the withLegacyRead is only reached from a generator', () => {
         expect(rngFrom(1)()).toBeGreaterThanOrEqual(0)
     })
 })
+
+describe('a refused value is a failure the caller receives, never a throw', () => {
+    /**
+     * A caller can hand `encode` a value past its type, and the closure's message names the
+     * value. `JSON.stringify` throws a `TypeError` on a `bigint`, so the message itself threw, and
+     * the refusal reached the caller as an exception rather than as a `CodecError`.
+     */
+    it('refuses a bigint with a CodecError that names it', () => {
+        const uuid = refine(string, isUuid, { describe: 'a uuid' })
+        const out = uuid.encode(10n as never)
+        expect(out).toBeInstanceOf(CodecError)
+        expect(String(out)).toContain('10')
+        expect(String(out)).toContain('a uuid')
+    })
+})
