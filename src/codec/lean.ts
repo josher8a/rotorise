@@ -356,7 +356,7 @@ export const leanAttrOf = (
  * stopped holding.
  *
  * The inventory is small, and the smallness is the finding rather than an omission: `src/` builds
- * **no** `refine`, `held`, `legacy` or `custom` internally — every one of the four is a combinator
+ * **no** `refine`, `held` or `legacy` internally — every one of the three is a combinator
  * a caller reaches for, and `codec.ts` never reaches for them itself. The only functions this
  * package exports that can stand in a predicate position at all are {@link isNumeral} and
  * {@link isStoredNumeral} (`src/codec/attribute.ts`), which are properties of the `N` carrier rather
@@ -456,19 +456,19 @@ const lazyLimit = 16
  * - **`number` and a numeric `literal` are *not* here.** `Term.number` is a closed term, and a
  *   numeric alternative is `WFNumeral.of`, so both emit. A JS number *value* is what has no
  *   exact image, and `leanValueOf` refuses it, so the refusal is reported where it lives.
- * - **`held`, `legacy`, `custom`.** Three of §3's constructors carry *functions* —
- *   `f g : Value → Value`, `r : Attr → Option Value`, `ce`/`cp` — and this library carries
+ * - **`held`, `legacy`.** Two of §3's constructors carry *functions* —
+ *   `f g : Value → Value` and `r : Attr → Option Value` — and this library carries
  *   JavaScript closures in the same positions. There is no expression in Lean for an arbitrary
- *   closure. `legacy` used to be the worst of the three for a second reason, and is not any more:
+ *   closure. `legacy` used to be the worse of the two for a second reason, and is not any more:
  *   the definition dropped the older readers entirely, so there was nothing to be refused about.
  *   It carries `older` now, and the refusal below names it.
- * - **`refine`, unless the predicate is one this library shipped.** The fourth
+ * - **`refine`, unless the predicate is one this library shipped.** The third
  *   function-carrying constructor, and the one where the line has moved. See
  *   {@link ShippedPredicate}: `isNumeral` and `isStoredNumeral` are recognised by reference and
  *   emitted as the model's own predicates, and everything else is still refused, by name. The
  *   boundary is no longer "all refinements" but "refinements this library did not build", which is
  *   the honest line — and it is only two predicates wide, because `src/` constructs none of these
- *   four internally.
+ *   three internally.
  *
  * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
  * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
@@ -930,7 +930,8 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  * does **not** mean the model cannot separate the pair. It means the cheap syntactic test
  * declines. Measured over the corpus, 66 of 351 pairs are exactly that and every one is
  * legitimate, each landing in one of the guard's three documented exemptions: a literal (which
- * identifies its own values), an object option (chosen by names), or an option whose kind is
+ * identifies its own values), a pair of object options (certified by the names and literals they
+ * declare), or an option whose kind is
  * unknown (`opaque`, `lazy`, an adapter).
  *
  * So the checkable law is the converse. **If the model certifies a pair, `src/` must accept it** —
@@ -1223,7 +1224,7 @@ const fieldNamesOf = (t: Term, into: Set<string>, forced: number): void => {
  *
  * **The tactic is generated and not a declaration of `Calculus/`.** `Term.meet` is compiled by
  * well-founded recursion, so it does not reduce: `decide` and `rfl` both fail, and `Term` carries
- * functions at `held`, `custom` and a `Body`'s field map, so it has no `DecidableEq` for `decide`
+ * functions at `held` and a `Body`'s field map, so it has no `DecidableEq` for `decide`
  * to use even where it did reduce. What is left is the equation compiler, which is what `simp` on
  * the definition reaches. The lemma set below is the union of the sets `Meet.lean`'s own worked
  * examples use, and the three alternatives are ordered by cost. A wrong answer does not close:

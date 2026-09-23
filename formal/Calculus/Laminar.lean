@@ -696,7 +696,7 @@ theorem depth_le_depthL {x : Value} : ∀ {vs : List Value}, x ∈ vs → Value.
   | _ :: _, .head _ => by simp only [Value.depthL]; omega
   | _ :: _, .tail _ h => by have := depth_le_depthL h; simp only [Value.depthL]; omega
 
-/-- `Uν` is `opaque`'s admission: each value is in `Uν`, and `opaque` writes each value. -/
+/-- `HOpaque` is `opaque`'s admission: each value is in `HOpaque`, and `opaque` writes each value. -/
 theorem hopaque_adm (v : Value) : HOpaque v ↔ Adm .opaq v = true := by
   constructor
   · intro h

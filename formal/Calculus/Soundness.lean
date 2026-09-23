@@ -581,7 +581,7 @@ theorem alignL_T_of_HTupleL {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre)
   · exact hpsF p hp'
   · exact hzip p hp'
 
-/-- `opaque`'s fixpoint carries §3's `Uν` at every fuel.
+/-- `opaque`'s fixpoint carries `HOpaque` at every fuel.
 
     **This fuel stays.** It is `Opaque.lean`'s budget on the *input's* depth, not `denote`'s on
     the term — a different recursion, and one this change does not touch. -/
@@ -610,7 +610,7 @@ theorem opaq_TSub : ∀ (fuel : Nat) (v : Value),
         | exact .map _ _ fun k => ih _ (hT k)
         | exact nomatch hT
 
-/-- `opaqCodecω`'s held set — the union over all fuels — still lands in §3's `Uν`. -/
+/-- `opaqCodecω`'s held set — the union over all fuels — still lands in `HOpaque`. -/
 theorem opaq_TSubω (v : Value) :
     (opaqCodecω).T v → HOpaque v := by
   intro h

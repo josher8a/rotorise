@@ -19,7 +19,7 @@ its answer never changes. So `opaque` can be given a fuel-free denotation by sup
 each input its own budget — `Value.depth` on the write side, `Attr.depth` on the read
 side — and the laws transfer from `lawful_opaqCodec` through the stabilization lemmas.
 
-This file is §3's `(opaque)` rule and §3's `Uν`, and the sections below say which part of
+This file is §3's `(opaque)` rule and its held set `HOpaque`, and the sections below say which part of
 each they are. Nothing here is about a term other than `opaque`.
 
 Structure:
@@ -705,7 +705,7 @@ end
 
 Each input supplies its own budget: the write side from the value, the read side from the
 attribute. The held set is the union over all fuels, which keeps `Carrier` trivial and
-still feeds `opaq_TSub` (every fuel's `T` lands in §3's `Uν`).
+still feeds `opaq_TSub` (every fuel's `T` lands in `HOpaque`).
 
 The two laws that cross sides — `retract` and `canon` — are exactly where the depth
 preservation lemmas are spent: `e` answers at `Value.depth v` and `p` at `Attr.depth a`,

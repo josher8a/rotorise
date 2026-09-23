@@ -267,9 +267,10 @@ export type Term =
      * §3 `(lazy)`, and **the one row where this language is wider than the model's.**
      *
      * `Term.lazy` carries a plain `Term`, and `Term.lean` says why in as many words: a closure adds
-     * no constructible term, every `Term` being finite either way, and recursive codecs are not
-     * modelled and cannot be — `union`'s admission is anti-monotone, so a genuinely recursive union
-     * has no fixpoint semantics in any system.
+     * no constructible term, every `Term` being finite either way, and the model states no recursive
+     * term. `union`'s admission is anti-monotone, so a recursive union has no fixpoint semantics under
+     * unique admission in general. `lawful_opaqCodecω` is the exception: `opaque` is a lawful
+     * recursive union, because its options are pairwise kind-disjoint.
      *
      * This library supports a recursive entity through a thunk, and `codec.recursive.spec.ts`
      * declares one, so the thunk stays. **Everything else here reads through it.**

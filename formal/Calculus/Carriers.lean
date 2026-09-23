@@ -200,7 +200,7 @@ theorem carrier_altCodec {os : List OptionSem} {μA : Option Member}
     exact ⟨o, ho, (h o ho).ranP hop⟩
 
 
-/-- `opaque`'s fixpoint is on its carrier at every fuel — §3's `Uν`, one option per
+/-- `opaque`'s fixpoint is on its carrier at every fuel — `HOpaque`, one option per
     kind. -/
 theorem carrier_opaqCodec : ∀ (fuel : Nat), Carrier (opaqCodec fuel)
   | 0 => Carrier.empty

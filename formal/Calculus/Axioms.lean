@@ -150,7 +150,7 @@ part of what the soundness statements rest on. -/
 shared transport constant — ~~denote_eq~~ was the ω-layer's and went with the layer
 (`Denote.lean`) — so each is guarded on its own footing. -/
 
-/-! §3's `Uν` for `opaque`, and §1's numeral domain. `opaq_T_identity` is the row
+/-! `HOpaque` for `opaque`, and §1's numeral domain. `opaq_T_identity` is the row
 closed for `opaque`; its proof sits behind seven
 `omega` calls in `HeldSet.lean`, and `omega` is a known `Classical.choice` route — which
 makes it the single constant in this file with the most to lose from going unguarded. -/
