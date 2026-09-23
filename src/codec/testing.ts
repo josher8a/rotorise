@@ -620,7 +620,7 @@ export const checkEncodePaths = <T, Spec>(
  */
 export const checkMembersStable = <T>(
     subject: Pick<Checkable<T>, 'unsafeEncode' | 'unsafeDecode'> & {
-        rest?: 'refuse' | AnyCodec
+        rest?: AnyCodec | undefined
     },
     items: readonly AttributeMap[],
     equals: (a: unknown, b: unknown) => boolean = structuralEquals,

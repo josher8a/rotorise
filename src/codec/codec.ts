@@ -2490,11 +2490,11 @@ declare const pathValue: unique symbol
 /**
  * The entity a spec describes.
  *
- * `refuse` says the row holds nothing else, so the entity is closed. A rest codec says it holds
- * anything that codec can read, which is exactly an index signature — the mirror of
+ * An absent rest says the row holds nothing else, so the entity is closed. A rest codec says it
+ * holds anything that codec can read, which is exactly an index signature — the mirror of
  * what {@link EncodedBy} does to the stored shape.
  */
-type DerivedItem<Spec, Rest> = [Rest] extends ['refuse']
+type DerivedItem<Spec, Rest> = [Rest] extends [undefined]
     ? show<ObjectOf<Spec>>
     : show<ObjectOf<Spec>> & { readonly [name: string]: Decoded<Rest> }
 
@@ -2535,7 +2535,7 @@ export type ItemSpec<T> = T extends unknown
  */
 export type ObjectCodec<
     Spec extends Record<string, ObjectSlot>,
-    Rest extends 'refuse' | AnyCodec = 'refuse',
+    Rest extends AnyCodec | undefined = undefined,
 > = {
     // spelled out rather than intersected with `AttributeCodec`, for the reason recorded on
     // {@link ItemCodec}: as an intersection the same type costs more to instantiate and stops being
@@ -2744,7 +2744,7 @@ export type UnionCodec<T, Options extends readonly unknown[]> = {
     readonly [writesMarker]?: WritesVariantsPin<SpecsOf<Options>>
 }
 
-export type ItemCodec<T, Spec = unknown, Rest = 'refuse'> = {
+export type ItemCodec<T, Spec = unknown, Rest = undefined> = {
     /** Every attribute, or why one could not be written. For `PutItem`. */
     readonly encode: (item: T) => Result<EncodedBy<Spec, Rest>>
     readonly unsafeEncode: (item: T) => EncodedBy<Spec, Rest>
@@ -2790,7 +2790,7 @@ export type ItemCodec<T, Spec = unknown, Rest = 'refuse'> = {
      */
     readonly path: () => PathOf<T>
     readonly spec: Spec
-    /** What this codec does with an attribute the spec does not declare. */
+    /** The codec of an attribute the spec does not declare, or `undefined` for a closed object. */
     readonly rest: Rest
     /** What this codec is — see {@link Term}. */
     readonly def: Term
@@ -2871,10 +2871,10 @@ const fieldOf = (declared: ObjectSlot): Field => {
  */
 const objectFromMap = <
     const Spec extends Record<string, ObjectSlot>,
-    const Rest extends 'refuse' | AnyCodec = 'refuse',
+    const Rest extends AnyCodec | undefined = undefined,
 >(
     spec: Spec & NoSpreadMember<Spec> & NoNeverField<Spec>,
-    rest: Rest = 'refuse' as Rest,
+    rest: Rest,
 ): ObjectCodec<Spec, Rest> => {
     // the marker off each declared attribute, once — the term. What the two directions walk is
     // the *compiled* form of it, which `bodySem` builds and which carries one thing the term does
@@ -2902,11 +2902,8 @@ const objectFromMap = <
             )
         }
     }
-    const declaredRest: 'refuse' | AnyCodec = rest
     const declaredBody: Body =
-        declaredRest === 'refuse'
-            ? { fields }
-            : { fields, rest: termOf(declaredRest) }
+        rest === undefined ? { fields } : { fields, rest: termOf(rest) }
     const itemDef = { kind: 'object', body: declaredBody } as const
     // the term's item pair, not a second one built beside it — `denote`'s row asks `itemSem` for
     // the same object, so `.item` and the codec run one body rather than two that agree
@@ -3088,7 +3085,7 @@ type WildcardEntry<Entries extends readonly AnyObjectEntry[]> =
 type EntryRest<Entries extends readonly AnyObjectEntry[]> = [
     WildcardEntry<Entries>,
 ] extends [never]
-    ? 'refuse'
+    ? undefined
     : Extract<WildcardEntry<Entries>, AnyCodec>
 
 const entryNames = (key: AnyCodec): string[] => {
@@ -3113,7 +3110,7 @@ const entryCodec = (slot: ObjectSlot): AnyCodec =>
 
 export function object<const Spec extends Record<string, ObjectSlot>>(
     spec: Spec & NoSpreadMember<Spec> & NoNeverField<Spec>,
-): ObjectCodec<show<Spec>, 'refuse'>
+): ObjectCodec<show<Spec>>
 export function object<const Entries extends readonly AnyObjectEntry[]>(
     ...entries: Entries & EntriesAdmission<Entries>
 ): ObjectCodec<EntrySpecs<Entries>, EntryRest<Entries>>
@@ -3132,7 +3129,7 @@ export function object<
 export function object(
     first?: Record<string, ObjectSlot> | AnyObjectEntry,
     ...tail: AnyObjectEntry[]
-): ObjectCodec<Record<string, ObjectSlot>, 'refuse' | AnyCodec> {
+): ObjectCodec<Record<string, ObjectSlot>, AnyCodec | undefined> {
     const isEntry = Array.isArray(first)
     const spec: Record<string, ObjectSlot> =
         !isEntry && first !== undefined
@@ -3140,7 +3137,7 @@ export function object(
             : {}
     const entries = (isEntry ? [first, ...tail] : tail) as AnyObjectEntry[]
     const fields: Record<string, ObjectSlot> = { ...spec }
-    let rest: AnyCodec | 'refuse' = 'refuse'
+    let rest: AnyCodec | undefined
     for (const [key, slot] of entries) {
         const names = entryNames(key)
         if (names.length === 0) {
@@ -3150,7 +3147,7 @@ export function object(
                     'an open key entry must be optional, because a required wildcard means at least one matching key',
                 )
             }
-            if (rest !== 'refuse') {
+            if (rest !== undefined) {
                 throw new CodecError('an object has at most one open key entry')
             }
             rest = entryCodec(slot)
@@ -3165,7 +3162,7 @@ export function object(
     }
     return objectFromMap(fields, rest) as ObjectCodec<
         Record<string, ObjectSlot>,
-        'refuse' | AnyCodec
+        AnyCodec | undefined
     >
 }
 
@@ -3184,23 +3181,19 @@ type DeclaredNames<F> = FactorOptions<F>[number] extends infer O
 /** Whether any option of a factor is left open by a rest codec. */
 type AnyOpen<F> = FactorOptions<F>[number] extends infer O
     ? O extends ObjectCodec<infer _S, infer R>
-        ? [R] extends ['refuse']
+        ? [R] extends [undefined]
             ? never
             : true
         : true
     : never
 
-/** `refuse` wins, because a name neither factor declares is one the product refuses. */
-type MergedRest<RA, RB> = [RA] extends ['refuse']
-    ? 'refuse'
-    : [RB] extends ['refuse']
-      ? 'refuse'
-      : 'refuse'
-
-/** One merge: `Body.merge` at the type level. */
-type MergeTwo<X, Y> = X extends ObjectCodec<infer A, infer RA>
-    ? Y extends ObjectCodec<infer B, infer RB>
-        ? ObjectCodec<show<A & B>, MergedRest<RA, RB>>
+/**
+ * One merge: `Body.merge` at the type level. The merge is closed, because a name neither factor
+ * declares is one the product refuses.
+ */
+type MergeTwo<X, Y> = X extends ObjectCodec<infer A, infer _RA>
+    ? Y extends ObjectCodec<infer B, infer _RB>
+        ? ObjectCodec<show<A & B>>
         : never
     : never
 
@@ -3281,13 +3274,13 @@ export type ValidateProduct<Fs extends readonly unknown[]> =
         : [SharedAcross<Fs>] extends [never]
           ? [AnyOpen<Fs[number]>] extends [never]
               ? unknown
-              : ErrorMessage<'[product] a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close every factor with `drop` or `refuse`'>
+              : ErrorMessage<'[product] a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close every factor: give it no open key entry'>
           : ErrorMessage<`[product] two factors both declare '${SharedAcross<Fs>}', and a product needs disjoint names. Rename it, or drop it from one factor`>
 
 /** One option of a factor: what the merge reads off it. */
 type Factor = {
     readonly spec: Record<string, ObjectSlot>
-    readonly rest: 'refuse' | AnyCodec
+    readonly rest: AnyCodec | undefined
     readonly def: Term
 }
 
@@ -3306,7 +3299,7 @@ const optionsOfFactor = (factor: unknown): readonly Factor[] => {
               readonly def?: Term
               readonly item?: {
                   readonly spec?: Record<string, ObjectSlot>
-                  readonly rest?: 'refuse' | AnyCodec
+                  readonly rest?: AnyCodec
                   readonly variant?: (index: number) => Factor
               }
           }
@@ -3340,7 +3333,7 @@ const optionsOfFactor = (factor: unknown): readonly Factor[] => {
         }
         return def.options.map((_, index) => variant(index))
     }
-    if (codec?.item?.spec && codec.item.rest !== undefined) {
+    if (def?.kind === 'object' && codec?.item?.spec) {
         return [codec.item as Factor]
     }
     throw new CodecError(
@@ -3358,9 +3351,9 @@ const productOfTwo = (first: unknown, second: unknown): unknown => {
                 'an option of a union factor is not an object codec — a product merges declared names, and only an object declares any',
             )
         }
-        if (option.rest !== 'refuse') {
+        if (option.rest !== undefined) {
             throw new CodecError(
-                'a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close every factor with `refuse`',
+                'a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close every factor: give it no open key entry',
             )
         }
     }
@@ -3373,8 +3366,7 @@ const productOfTwo = (first: unknown, second: unknown): unknown => {
                     )
                 }
             }
-            const rest = 'refuse'
-            return objectFromMap({ ...left.spec, ...right.spec }, rest)
+            return objectFromMap({ ...left.spec, ...right.spec }, undefined)
         }),
     )
     // one merge is an object and needs no union around it; several are one flat union, built
@@ -3638,18 +3630,18 @@ type Written<Full, K> = Exclude<Full[K & keyof Full], undefined>
 /**
  * What an item writes: the attributes the spec declares, plus whatever a rest policy adds.
  *
- * {@link Encoded} alone is a *lower bound* rather than the answer. Under `'refuse'` nothing else
+ * {@link Encoded} alone is a *lower bound* rather than the answer. With no rest nothing else
  * is written and the two agree; a rest codec emits attributes the spec never named, so
  * claiming `Encoded<Spec>` exactly would be a promise the compiler then enforces against the
  * caller — refusing to read an attribute the codec really did write.
  *
- * The closed policy is named rather than the codec matched: an {@link AttributeCodec} is
+ * The closed state is matched rather than the codec: an {@link AttributeCodec} is
  * invariant in its value, so `Rest extends AttributeCodec<unknown, infer A>` fails for every codec
  * of a narrower value and quietly takes the wrong branch. {@link AttributeOf} infers both
  * parameters, so the open block's attribute is exact. The index also admits each declared
  * attribute, because an index signature intersects with every declared key.
  */
-type EncodedBy<Spec, Rest> = [Rest] extends ['refuse']
+type EncodedBy<Spec, Rest> = [Rest] extends [undefined]
     ? Encoded<Spec>
     : Encoded<Spec> & {
           readonly [name: string]:
