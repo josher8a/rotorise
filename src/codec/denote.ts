@@ -46,7 +46,6 @@ import { andThen, CodecError, every, everyEntry, failed } from './result'
 import type { Body, Field, Literal, Predicate, Term } from './term'
 import {
     alwaysWritten,
-    everySlot,
     isOpaqueSugar,
     literalForm,
     occV,
@@ -697,8 +696,9 @@ export const altSem = (
      * fail. That was the only thing available while `encode` did not validate, and it is why this
      * union used to report ambiguity that was not there: a resolver that decides by *trying*
      * inherits every looseness of everything it tries, and then reports the result as a property of
-     * the declaration. `union([held(decimal, dateAdapter), string])` could not encode a `Date` for
-     * exactly that reason, and the fix was `string` refusing one.
+     * the declaration. `union([held(decimal, date, dateAdapter), string])` could not encode a `Date`
+     * for exactly that reason while `string` accepted one. That union is now refused where it is
+     * declared, because a foreign held side writes every kind.
      *
      * {@link accepts} is the decision for every option, and {@link admitOption} is that one row. §3's `Adm`,
      * proved exact at all 21 constructors, and `codec.laws.spec.ts` holds
@@ -741,7 +741,7 @@ export const altSem = (
     const forValue = (shape: Shape | undefined) => (option: Option) =>
         option.declares
             ? shape === 'map'
-            : !option.carries || !shape || option.carries.includes(shape)
+            : !shape || option.carries.includes(shape)
 
     type T = unknown
 
@@ -1708,18 +1708,34 @@ const numberPolicy = (numbers: opaque.Numbers) => {
 
 const canonicalOpaque: Term = { kind: 'opaq' }
 
+/**
+ * **The held side of `opaque('refuse')`**: every slot but `number`, as a union of the terms that
+ * write one slot each. `'refuse'` takes no JS number, so a union reads its write side as before
+ * it was a `held`. The term is a write occupancy only: `f` checks the held side itself.
+ */
+const everyButNumber: Term = {
+    kind: 'union',
+    options: [
+        { kind: 'string' },
+        { kind: 'boolean' },
+        { kind: 'binary' },
+        { kind: 'null' },
+        { kind: 'set', base: 'string' },
+        { kind: 'set', base: 'number' },
+        { kind: 'set', base: 'binary' },
+        { kind: 'list', pre: [], spread: canonicalOpaque, suf: [] },
+        { kind: 'object', body: { fields: {}, rest: canonicalOpaque } },
+    ],
+}
+
 const policyTerm = (numbers: opaque.Numbers): Term => {
     const { f, g } = numberPolicy(numbers)
     return {
         kind: 'held',
         inner: canonicalOpaque,
+        outer: numbers === 'lossy' ? canonicalOpaque : everyButNumber,
         f,
         g,
-        // `'refuse'` writes no number, so a union reads its write side as before it was a `held`
-        writes:
-            numbers === 'lossy'
-                ? everySlot
-                : everySlot.filter((slot) => slot !== 'number'),
         via: numbers === 'lossy' ? 'opaqueLossy' : 'opaqueRefuse',
     }
 }
@@ -1757,9 +1773,8 @@ export const opaqueTerms: {
  * out on a number instead of attempted and failed, and `f083188` refused the unions where that
  * filtering would have decided anything else.
  */
-export const valueKinds = (t: Term): readonly Shape[] | undefined => {
+export const valueKinds = (t: Term): readonly Shape[] => {
     const slots = occV(t)
-    if (slots === undefined) return undefined
     const out: Shape[] = []
     for (const slot of slots) {
         const shape: Shape =
@@ -1827,11 +1842,11 @@ export const readsBack = (
  * The `opaq` row became reachable when the guard stopped exempting an `opaque` option: the message
  * read "opaq and string both take the same kind of value", naming something no caller had typed.
  *
- * **A declared adapter names the value it takes, not the combinator.** `number` and `decimal` are
+ * **An adapter names the value it takes, not the combinator.** `number` and `decimal` are
  * `held` over one carrier, so the kind alone answered "held", which names nothing the caller
- * wrote. {@link Held.writes} is the slot the caller's value lands in, so it is the kind of value
- * the option takes, and a refusal that lists the options is asking exactly that. A caller's
- * adapter declares no `writes` and keeps the combinator's name, which is all this can honestly
+ * wrote. The held side is the slot the caller's value lands in, so it is the kind of value
+ * the option takes, and a refusal that lists the options is asking exactly that. An adapter
+ * whose held side is `opaque` keeps the combinator's name, which is all this can honestly
  * say about one.
  */
 const namedKind = (t: Term): string =>
@@ -1839,11 +1854,11 @@ const namedKind = (t: Term): string =>
         ? 'opaque'
         : t.kind === 'literal'
           ? `${literalForm(t.base, undefined)}(${namedLiteral(t.v)})`
-          : t.kind !== 'held' || t.writes === undefined
+          : t.kind !== 'held' || t.outer.kind === 'opaq'
             ? t.kind
             : (heldBase(t.inner) ?? undefined) !== undefined
-              ? literalForm(heldBase(t.inner) as LiteralBase, t.writes)
-              : t.writes.join(' | ')
+              ? literalForm(heldBase(t.inner) as LiteralBase, t.outer)
+              : occV(t.outer).join(' | ')
 
 /** The ground base a declared adapter carries, where it carries one. @see {@link namedKind} */
 const heldBase = (t: Term): LiteralBase | undefined =>

@@ -8,9 +8,10 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { S, SS } from '../../attribute'
-import type { Encoded } from '../../codec'
+import type { AnyCodec, Encoded } from '../../codec'
 import {
     array,
+    boolean,
     CodecError,
     decimal,
     failed,
@@ -22,10 +23,32 @@ import {
     string,
     union,
 } from '../../codec'
+import type { StandardSchemaV1 } from '../../standard'
 import { checkEncodePaths, checkRoundTrip } from '../../testing'
 
+/** A Standard Schema v1 written by hand: a foreign held side that admits a `Date`. */
+const date: StandardSchemaV1<Date> = {
+    '~standard': {
+        version: 1,
+        vendor: 'handwritten',
+        validate: (value) =>
+            value instanceof Date
+                ? { value }
+                : { issues: [{ message: 'expected a Date' }] },
+    },
+}
+
+/** …and one that admits every value, for a test whose subject is the conversion alone. */
+const anything = <T>(): StandardSchemaV1<T> => ({
+    '~standard': {
+        version: 1,
+        vendor: 'handwritten',
+        validate: (value) => ({ value: value as T }),
+    },
+})
+
 /** The case that prompted it: values arrive as an array, the table holds a set. */
-const tags = held(string.set(), {
+const tags = held(string.set(), array(string), {
     encode: (tags: readonly string[]) => new Set(tags),
     decode: (tags) => [...tags],
 })
@@ -75,7 +98,7 @@ describe('an array held where the table holds a set', () => {
 })
 
 describe('a Date held where the table holds a string', () => {
-    const when = held(string, {
+    const when = held(string, date, {
         encode: (at: Date) => at.toISOString(),
         decode: (at) => new Date(at),
     })
@@ -105,7 +128,7 @@ describe('a number held where the table holds digits', () => {
      * `decimal` exists so money never becomes a float, and holds a `string` for that reason. Where a
      * count really is a number and the digits still matter, the adapter says so locally.
      */
-    const counted = held(decimal, {
+    const counted = held(decimal, number, {
         encode: (n: number) => String(n),
         decode: Number,
     })
@@ -122,10 +145,14 @@ describe('failure belongs to the inner codec', () => {
      * error then names what was wrong with the *value* rather than what went wrong converting it.
      */
     const isIso = (v: string): v is string => !Number.isNaN(Date.parse(v))
-    const when = held(refine(string, isIso, { describe: 'an ISO timestamp' }), {
-        encode: (at: Date) => at.toISOString(),
-        decode: (at) => new Date(at),
-    })
+    const when = held(
+        refine(string, isIso, { describe: 'an ISO timestamp' }),
+        date,
+        {
+            encode: (at: Date) => at.toISOString(),
+            decode: (at) => new Date(at),
+        },
+    )
 
     /**
      * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
@@ -150,7 +177,8 @@ describe('a conversion that cannot convert', () => {
      * This is what an adapter over a narrower carrier needs. A text-to-number adapter meets text
      * that is not a number, and it owes the caller a reason rather than an exception.
      */
-    const digits = held(string, {
+    // every number, `NaN` included, so the refusal under test is the conversion's own
+    const digits = held(string, anything<number>(), {
         encode: (value: number) =>
             Number.isFinite(value)
                 ? String(value)
@@ -198,7 +226,7 @@ describe('a conversion that throws', () => {
      * an option to find out whether it is the right one, and catching there also swallowed failures
      * that had nothing to do with an adapter.
      */
-    const broken = held(string, {
+    const broken = held(string, anything<{ toString(): string }>(), {
         encode: (value: { toString(): string }) => value.toString(),
         decode: (raw) => JSON.parse(raw) as { toString(): string },
     })
@@ -224,7 +252,7 @@ describe('a conversion that throws', () => {
     })
 
     it('and a union can try it without catching anything itself', () => {
-        // `tags` reaches `new Set(4)` for a number, which throws inside the conversion
+        // the held side of `tags` is `array(string)`, so a number never reaches the conversion
         const Either = union([tags, number])
         expect(Either.unsafeEncode(4)).toEqual({ N: '4' })
         expect(Either.unsafeEncode(['a'])).toEqual({ SS: ['a'] })
@@ -246,39 +274,139 @@ describe('composing with the rest', () => {
     })
 
     /**
-     * And it is the one codec a union cannot filter by kind.
+     * And a union filters it by the kind of its held side, not of its inner codec.
      *
-     * `carries` refuses to read through an adapter, because reading through is exactly wrong: the
-     * inner codec takes a `Set` and this takes an array. With nothing declared, the union tries it —
-     * which still resolves, because only one option can carry a number.
+     * Reading through to the inner codec is exactly wrong: the inner codec takes a `Set` and this
+     * takes an array. The held side, `array(string)`, is the kind the union reads.
      */
-    it('is tried by a union rather than filtered, and still resolves', () => {
+    it('is filtered by a union through its held side, and resolves', () => {
         const Either = union([tags, number])
         expect(Either.unsafeDecode({ SS: ['a'] })).toEqual(['a'])
         expect(Either.unsafeDecode({ N: '4' })).toBe(4)
     })
 
     /**
-     * **And the limit that turned out not to be one.**
+     * **A list beside a list of another element is refused at the declaration.**
      *
-     * This asserted ambiguity: `readonly string[]` and `readonly number[]` are disjoint *types*, so
-     * the declaration is allowed, but they are the same kind of runtime value and — the load-bearing
-     * clause — "neither `array(number)` nor the adapter validates what it is given". So both
-     * succeeded on `['1']`, numeric text being the sharper witness than `['a']`.
-     *
-     * `number`'s row validates now, so `array(number).encode(['1'])` refuses a *string* element and
-     * the `held` option answers alone. The premise was a fact about `encode`, not about the two
-     * types, and the ambiguity went with it. What is left of the limit is the honest part: these two
-     * are told apart by their elements, so a pair whose elements do not separate still needs a
-     * discriminator.
+     * The guard reads the declared held side. `tags` declares `array(string)`, which admits `[]`,
+     * and `array(number)` admits `[]` too, so the two held sides are not disjoint and nothing
+     * certifies the pair. `tags` itself refuses `[]`, because its inner set has no empty value, so
+     * the refusal is conservative: a precise held side would state a non-empty list.
      */
-    it('is told apart from a list of another element, by its elements', () => {
-        const Either = union([tags, array(number)])
-        expect(Either.unsafeEncode(['1'])).toEqual({ SS: ['1'] })
-        // and the array arm still writes what it owns
-        expect(Either.unsafeEncode([1] as never)).toEqual({ L: [{ N: '1' }] })
-        // reading was never the problem, because `SS` and `L` say which
-        expect(Either.unsafeDecode({ SS: ['a'] })).toEqual(['a'])
-        expect(Either.unsafeDecode({ L: [{ N: '1' }] })).toEqual([1])
+    it('refuses a list of another element beside it, because both admit the empty list', () => {
+        // declared through a cast, as a caller bypassing the compile-time check would
+        const declare = union as unknown as (
+            options: readonly AnyCodec[],
+        ) => unknown
+        expect(() => declare([tags, array(number)])).toThrow(CodecError)
+    })
+})
+
+describe('the held side restricts both halves', () => {
+    /**
+     * `held` is the one codec that runs caller code, and a TypeScript type does not exist at run
+     * time. Without the check, a string typed as a `Date` reached `.toISOString()`, and the refusal
+     * named a thrown `TypeError` rather than the value. The held side answers first, by name.
+     */
+    it('refuses a value outside the held side by name, before encode runs', () => {
+        let calls = 0
+        const when = held(string, date, {
+            encode: (at: Date) => {
+                calls += 1
+                return at.toISOString()
+            },
+            decode: (at) => new Date(at),
+        })
+        const written = when.encode('2020-01-01' as never)
+        expect(failed(written)).toBe(true)
+        expect((written as CodecError).reason).toMatch(
+            /the held side of this `held`, a handwritten schema, refuses the value before `encode` runs: expected a Date/,
+        )
+        expect(calls).toBe(0)
+    })
+
+    it('refuses a value outside a held side of this library with the reason of that codec', () => {
+        const written = tags.encode('a' as never)
+        expect(failed(written)).toBe(true)
+        expect((written as CodecError).reason).toMatch(
+            /a codec of this library, refuses the value before `encode` runs: string `a` is not an array/,
+        )
+    })
+
+    it('refuses a decoded value outside the held side, because the read must be writable', () => {
+        const lying = held(string, date, {
+            encode: (at: Date) => at.toISOString(),
+            decode: (at) => at as unknown as Date,
+        })
+        const read = lying.decode({ S: '2020-01-01' })
+        expect(failed(read)).toBe(true)
+        expect((read as CodecError).reason).toMatch(
+            /refuses the value that `decode` returned: expected a Date/,
+        )
+    })
+
+    it('refuses an asynchronous schema as a value, because a codec answers synchronously', () => {
+        const later: StandardSchemaV1<Date> = {
+            '~standard': {
+                version: 1,
+                vendor: 'handwritten',
+                validate: (value) => Promise.resolve({ value: value as Date }),
+            },
+        }
+        const when = held(string, later, {
+            encode: (at: Date) => at.toISOString(),
+            decode: (at) => new Date(at),
+        })
+        const written = when.encode(new Date(0))
+        expect(failed(written)).toBe(true)
+        expect((written as CodecError).reason).toMatch(
+            /answered with a Promise/,
+        )
+    })
+
+    it('refuses a schema that throws as a value', () => {
+        const thrower: StandardSchemaV1<Date> = {
+            '~standard': {
+                version: 1,
+                vendor: 'handwritten',
+                validate: () => {
+                    throw new Error('boom')
+                },
+            },
+        }
+        const when = held(string, thrower, {
+            encode: (at: Date) => at.toISOString(),
+            decode: (at) => new Date(at),
+        })
+        expect(failed(when.encode(new Date(0)))).toBe(true)
+    })
+})
+
+describe('the held side is the write occupancy of a union option', () => {
+    // declared through a cast, as a caller bypassing the compile-time check would
+    const declare = union as unknown as (
+        options: readonly AnyCodec[],
+    ) => unknown
+
+    /**
+     * `decimal` holds text and stores `N`. `boolean` holds a boolean and stores `BOOL`. The two
+     * are disjoint on both sides, and the model certifies the pair: `Orth1 decimalHeld boolean`.
+     */
+    it('accepts decimal beside boolean, because the held sides are disjoint', () => {
+        const either = union([decimal, boolean])
+        expect(either.unsafeEncode('1.5')).toEqual({ N: '1.5' })
+        expect(either.unsafeEncode(true)).toEqual({ BOOL: true })
+    })
+
+    it('refuses decimal beside string, because both hold text', () => {
+        expect(() => declare([decimal, string])).toThrow(CodecError)
+    })
+
+    it('refuses a foreign held side beside a codec, because the top meets every kind', () => {
+        const when = held(string, date, {
+            encode: (at: Date) => at.toISOString(),
+            decode: (at) => new Date(at),
+        })
+        expect(() => declare([when, number])).toThrow(CodecError)
     })
 })

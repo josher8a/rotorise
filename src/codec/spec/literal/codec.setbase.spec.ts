@@ -26,6 +26,7 @@
 import { describe, expect, it } from 'vitest'
 import type { BS, NS, SS } from '../../attribute'
 import {
+    array,
     binary,
     boolean,
     CodecError,
@@ -278,7 +279,7 @@ describe('what a set cannot be built from', () => {
      * 968 signatures and rejected, so the runtime refusal stays for it.
      */
     it('takes an adapter, mapping the conversion over the wire set', () => {
-        const asArray = held(string, {
+        const asArray = held(string, array(string), {
             encode: (value: readonly string[]) => value.join(','),
             decode: (stored: string) => stored.split(','),
         })

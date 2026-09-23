@@ -506,7 +506,7 @@ describe('what cannot be emitted', () => {
         expect(refusal(() => leanTermOf(erase(notEmpty))).reason).toContain(
             'Value → Bool',
         )
-        const adapted = held(string.set(), {
+        const adapted = held(string.set(), array(string), {
             encode: (value: readonly string[]) => new Set(value),
             decode: (holding: ReadonlySet<string>) => [...holding],
         })

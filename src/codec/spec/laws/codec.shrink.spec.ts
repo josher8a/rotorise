@@ -42,12 +42,16 @@ const shrinkTruncatable = (value: string): readonly string[] =>
  * An adapter over `string` whose read half truncates, so the pair is partial and the derived
  * generator would offer values it never makes. That is why both generators are stated here.
  */
-const truncating: AttributeCodec<string, Attribute<'S'>> = held(string, {
-    encode: (value: string) => value,
-    decode: (held) => held.slice(0, 3),
-    arbitrary: someTruncatable,
-    shrink: shrinkTruncatable,
-})
+const truncating: AttributeCodec<string, Attribute<'S'>> = held(
+    string,
+    string,
+    {
+        encode: (value: string) => value,
+        decode: (held) => held.slice(0, 3),
+        arbitrary: someTruncatable,
+        shrink: shrinkTruncatable,
+    },
+)
 
 /**
  * Same, but empty throws — a *different* failure mode that shrinking must not drift into.
@@ -59,6 +63,7 @@ const truncating: AttributeCodec<string, Attribute<'S'>> = held(string, {
  * `unresolvedAt`. The rule under test is about the shrinker and not about either constructor.
  */
 const truncatingButEmptyThrows: AttributeCodec<string, Attribute<'S'>> = held(
+    string,
     string,
     {
         encode: (value: string) => value,
@@ -150,7 +155,7 @@ describe('shrinking', () => {
      */
     it('says nothing about shrinking when the first case is already minimal', () => {
         const Broken = object({
-            c: held(string, {
+            c: held(string, string, {
                 encode: (value: string) => value,
                 decode: (held) => held.slice(0, 3),
                 arbitrary: someTruncatable,

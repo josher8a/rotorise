@@ -70,7 +70,13 @@ describe('the member a term stores', () => {
             'N',
         )
         expect(
-            member({ kind: 'held', inner: dec, f: () => '1', g: () => 1 }),
+            member({
+                kind: 'held',
+                inner: dec,
+                outer: { kind: 'string' },
+                f: () => '1',
+                g: () => 1,
+            }),
         ).toBe('N')
     })
 
@@ -113,19 +119,24 @@ describe('the occupancies a declaration is separated by', () => {
 
     /**
      * §5: `held` and `withLegacyRead` swap sides, and the swap is the whole content of the two families
-     * being asked separately. `held`'s `f` runs *before* the subterm and can move a value into any
-     * constructor, while its `g` only post-processes a read. `withLegacyRead`'s `r` widens exactly the
-     * reading and adds no way to write.
+     * being asked separately. `held` writes where its held side does, because the held side
+     * restricts every value `f` receives, while its `g` only post-processes a read.
+     * `withLegacyRead`'s `r` widens exactly the reading and adds no way to write.
      */
-    it('an adapter is opaque on the write side and its inner term on the read side', () => {
+    it('an adapter writes where its held side does and reads where its inner term does', () => {
         const at: Term = {
             kind: 'held',
             inner: { kind: 'number' },
+            outer: { kind: 'string' },
             f: () => '',
             g: () => 0,
         }
-        expect(occV(at)).toBe(undefined)
+        expect(occV(at)).toEqual(['string'])
         expect(occA(at)).toEqual(['N'])
+        // a foreign held side is the top, so the adapter writes every slot
+        expect(occV({ ...at, outer: { kind: 'opaq' } })).toEqual(
+            occV({ kind: 'opaq' }),
+        )
     })
 
     it('a read widening is the mirror: its inner term on the write side, opaque on the read', () => {
@@ -185,29 +196,32 @@ describe('the occupancies a declaration is separated by', () => {
      * both sides and the two questions agree on all of them.
      *
      * **An adapter provides one, and it is the construct the carriers are built from.** `held`
-     * has distinct rows: it reads where its inner term reads, and writes anywhere, because a
-     * caller's conversion is not a function this library can read. So two adapters over disjoint
-     * bases separate on the stored side and not on the written one.
+     * has distinct rows: it reads where its inner term reads, and writes where its held side
+     * writes. A foreign held side is the top, because this library cannot read a foreign schema.
+     * So two adapters over disjoint bases with foreign held sides separate on the stored side and
+     * not on the written one.
      */
     it('an adapter separates on one side only, which is why both are asked', () => {
         const heldString: Term = {
             kind: 'held',
             inner: { kind: 'string' },
+            outer: { kind: 'opaq' },
             f: () => '',
             g: () => '',
         }
         const heldNumber: Term = {
             kind: 'held',
             inner: { kind: 'number' },
+            outer: { kind: 'opaq' },
             f: () => '',
             g: () => '',
         }
         // stored apart, because the read side reads through to the base
         expect(occA(heldString)).toEqual(['S'])
         expect(occA(heldNumber)).toEqual(['N'])
-        // and not written apart, because the write side cannot read the conversion
-        expect(occV(heldString)).toBe(undefined)
-        expect(occV(heldNumber)).toBe(undefined)
+        // and not written apart, because a foreign held side is the top on the write side
+        expect(occV(heldString)).toEqual(occV({ kind: 'opaq' }))
+        expect(occV(heldNumber)).toEqual(occV({ kind: 'opaq' }))
     })
 
     it('and the set bases agree on both sides, so none of them is that pair', () => {

@@ -19,7 +19,17 @@ import {
     string,
     withLegacyRead,
 } from '../../codec'
+import type { StandardSchemaV1 } from '../../standard'
 import { checkMembersStable, checkRoundTrip } from '../../testing'
+
+/** A Standard Schema v1 written by hand, that admits every value: the held side is not the subject. */
+const anything = <T>(): StandardSchemaV1<T> => ({
+    '~standard': {
+        version: 1,
+        vendor: 'handwritten',
+        validate: (value) => ({ value: value as T }),
+    },
+})
 
 type Listing = {
     id: string
@@ -196,7 +206,7 @@ describe('an attribute the row does not have', () => {
      */
     it('shares a stand-in structuredClone refuses, rather than failing the read', () => {
         type Holder = { tag: string; run: () => number }
-        const holding = held(string, {
+        const holding = held(string, anything<Holder>(), {
             encode: (value: Holder) => value.tag,
             decode: () => ({ tag: 'x', run: () => 1 }),
         })
@@ -274,7 +284,7 @@ describe('an attribute written in an older encoding', () => {
 })
 
 /** An adapter whose read hands back a value its write never produced. */
-const listOfStrings = held(array(string), {
+const listOfStrings = held(array(string), anything<string[]>(), {
     encode: (value: string[]) => value,
     decode: () => [] as string[],
 })

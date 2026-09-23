@@ -16,11 +16,14 @@
  * failing on a union that genuinely has two admitters, and on one that has none.
  */
 import { describe, expect, it } from 'vitest'
-import { memberOf } from '../../attribute'
+import type { Attribute } from '../../attribute'
+import { DynamoNumber, memberOf } from '../../attribute'
+import type { AnyCodec } from '../../codec'
 import {
     array,
     boolean,
     CodecError,
+    codecOfTerm,
     decimal,
     discriminatedUnion,
     held,
@@ -32,7 +35,20 @@ import {
     union,
     valueKinds,
 } from '../../codec'
+import type { StandardSchemaV1 } from '../../standard'
 import { checkUniqueAdmission } from '../../testing'
+
+/** A Standard Schema v1 written by hand: a foreign held side that admits a `Date`. */
+const date: StandardSchemaV1<Date> = {
+    '~standard': {
+        version: 1,
+        vendor: 'handwritten',
+        validate: (value) =>
+            value instanceof Date
+                ? { value }
+                : { issues: [{ message: 'expected a Date' }] },
+    },
+}
 
 const seed = 20260829
 
@@ -133,18 +149,34 @@ describe('the harness, against planted violations', () => {
      * point. Kept for the opposite reason to the diagnostics elsewhere in this batch.
      */
     it('reports a value two options admit', () => {
-        // an adapter over `number`, reading back as one. The guard's read side sees `N` against
-        // `S`, and its write side sees the top an adapter declares, so neither half refuses the
-        // pair. Admission is by attempt, and this conversion accepts the string `'1'` as well as
-        // the number, so both options admit one value — which is what the harness finds and what
-        // the guard is not complete enough to see. `Orth` is sufficient, not necessary
-        const loose = held(number, {
-            encode: (v: number) => Number(v),
-            decode: (a) => a,
-            arbitrary: () => 1,
+        // two adapters whose held sides understate their admission: each term says it writes one
+        // primitive kind, and each conversion accepts a `Date` too. The guard reads the terms, sees
+        // `number` against `string` and `N` against `S`, and refuses neither half. The harness
+        // filters by kind, and a `Date` has no kind, so it asks both options, and both admit it.
+        // Only library code reaches this construction: the public `held` checks its held side
+        // before `encode`, so a caller cannot build it. The runtime detection is defence in depth
+        const asNumber = codecOfTerm<number, Attribute<'N'>>({
+            kind: 'held',
+            inner: { kind: 'number' },
+            outer: { kind: 'number' },
+            f: ((v: number | Date) => DynamoNumber.from(String(Number(v)))) as (
+                value: never,
+            ) => unknown,
+            g: ((a: DynamoNumber) => a.toNumber()) as (held: never) => unknown,
+            arbitrary: () => new Date(0),
+        })
+        const asText = codecOfTerm<string, Attribute<'S'>>({
+            kind: 'held',
+            inner: { kind: 'string' },
+            outer: { kind: 'string' },
+            f: ((v: string | Date) =>
+                v instanceof Date ? v.toISOString() : v) as (
+                value: never,
+            ) => unknown,
+            g: ((a: string) => a) as (held: never) => unknown,
         })
         expect(() =>
-            checkUniqueAdmission(union([string, loose]), { seed }),
+            checkUniqueAdmission(union([asText, asNumber]), { seed }),
         ).toThrow(/\(U\) fails on the write side/)
     })
 
@@ -164,7 +196,7 @@ describe('the harness, against planted violations', () => {
      * point. Kept for the opposite reason to the diagnostics elsewhere in this batch.
      */
     it('reports an attribute no option admits', () => {
-        const writeOnly = held(string, {
+        const writeOnly = held(string, string, {
             encode: (v: string) => v,
             decode: () => new CodecError('this one never reads'),
             arbitrary: () => 'x',
@@ -208,74 +240,42 @@ describe('an object option with attributes it does not declare', () => {
     })
 })
 
-describe('the defect (U) found: an option with no κ on the write side', () => {
+describe('a foreign held side writes every kind, so a union beside it needs a discriminator', () => {
     /**
-     * **A union this library built, decoded from, and could not encode into — closed, and by
-     * neither of the two fixes that were on the table.**
+     * **The defect (U) found, and the rule that closes it at the declaration.**
      *
-     * `union([held(decimal, dateAdapter), string])` is a natural thing to write — a timestamp or a
-     * raw string — and it was accepted at the declaration, read back correctly from both `N` and
-     * `S`, and threw on **every** `Date` handed to `encode`. The κ asymmetry below is unchanged
-     * and still worth pinning; what changed is the sentence it used to end on.
+     * `union([held(decimal, <a Date schema>, asDate), string])` is a natural thing to write — a
+     * timestamp or a raw string. It was accepted at the declaration while the write side of a
+     * `held` was unknown, and an unknown side did not count as a meeting. That is the permissive
+     * direction, and it is unsound: nothing proved that the two options admit no common value.
      *
-     * The cause is one asymmetry in `κ`, and both of this library's guards exempt exactly the same
-     * options:
+     * A foreign held side is not this library's to rule. The library reads a foreign schema through
+     * `validate` only, so the write occupancy of the `held` is the top, every kind. The top meets
+     * `string`, and the union is refused where it is declared. A caller who needs both options
+     * gives the entity a discriminator.
      *
-     * - `writes(held(decimal, …))` is `'N'` — the stored member is the *inner* codec's, so the read
-     *   side has a `κ` and tells the two options apart.
-     * - the value kinds of `held(decimal, …)` are unknown — the adapter's carrier is a caller's type, and
-     *   §1's `Value` has no point for a `Date`. So there is no `κ` on the write side, and
-     *   `shapeOf(new Date())` is `undefined` too: the filter cannot even be applied to the value.
-     *
-     * With no `κ`, admission falls back to the attempt — and `string.encode(new Date())` used to
-     * *succeed*, because encoding did not validate. Two options admitted, and the union reported
-     * ambiguity rather than choosing, which was the correct behaviour for a union that genuinely
-     * could not tell them apart.
-     *
-     * **The ambiguity was never real; it was `encode`'s looseness wearing an ambiguity's clothes.**
-     * `string`'s row now refuses what `accepts(string, …)` refuses, so a `Date` is admitted by the
-     * `held` option alone and the union resolves. The two repairs this block used to name — refuse
-     * the declaration, or give `held` a write-side `κ` — were both about supplying the missing
-     * `κ`. Neither was needed. The option that had no `κ` still has none; what it no longer has is
-     * a rival that admitted everything.
-     *
-     * Worth keeping for the shape of the mistake: a resolver that decides by *trying* inherits
-     * every looseness of everything it tries, and reports the result as a property of the
-     * declaration. That is also the argument for wiring admission into the resolver rather than
-     * leaving it to attempt — HANDOFF's fourth item.
+     * The read side still has a `κ`: the stored member is the *inner* codec's, `N`.
      */
     const asDate = {
         encode: (at: Date) => String(at.getTime()),
         decode: (at: string) => new Date(Number(at)),
     }
+    // declared through a cast, as a caller bypassing the compile-time check would
+    const declare = union as unknown as (
+        options: readonly AnyCodec[],
+    ) => unknown
 
-    it('has a κ on the read side and none on the write side', () => {
-        // the member is asked of the attribute, because that is the law; `carries` stays a reader
-        // call because the *reader's answer* is the subject here — κ on the write side is exactly
-        // what `carries` reports, and that it reports nothing is the claim
-        const at = held(decimal, asDate)
+    it('has a κ on the read side, and every kind on the write side', () => {
+        // the member is asked of the attribute, because that is the law; the value kinds stay a
+        // reader call because the *reader's answer* is the subject here
+        const at = held(decimal, date, asDate)
         expect(memberOf(at.encode(new Date(0)) as never)).toBe('N')
-        expect(valueKinds(at.def)).toBeUndefined()
+        expect(valueKinds(at.def)).toEqual(valueKinds({ kind: 'opaq' }))
     })
 
-    it('reads back from either member', () => {
-        const either = union([held(decimal, asDate), string])
-        expect(either.unsafeDecode({ N: '0' })).toEqual(new Date(0))
-        expect(either.unsafeDecode({ S: 'hi' })).toBe('hi')
-    })
-
-    it('encodes a Date, now that `string` refuses one', () => {
-        const either = union([held(decimal, asDate), string])
-        expect(either.unsafeEncode(new Date(0) as never)).toEqual({ N: '0' })
-        // and the raw-string arm is untouched
-        expect(either.unsafeEncode('hi' as never)).toEqual({ S: 'hi' })
-    })
-
-    it('and (U) holds on the write side, where it used to fail', () => {
-        expect(() =>
-            checkUniqueAdmission(union([held(decimal, asDate), string]), {
-                seed,
-            }),
-        ).not.toThrow()
+    it('refuses the union at the declaration, because the top meets string', () => {
+        expect(() => declare([held(decimal, date, asDate), string])).toThrow(
+            CodecError,
+        )
     })
 })
