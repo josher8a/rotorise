@@ -324,7 +324,7 @@ mutual
 /-- A term is **held-free** when no `held` occurs in the term. A held-free term does not change
     the carrier, so the term is a restriction of `opaque`. -/
 def HF : Term → Prop
-  | .held _ _ _ => False
+  | .held _ _ _ _ => False
   | .refine t _ => HF t
   | .lazy t => HF t
   | .list pre sp suf => HFL pre ∧ HFO sp ∧ HFL suf
@@ -350,6 +350,43 @@ def HFO : Option Term → Prop
 end
 
 mutual
+/-- **Below `opaque`, the read occupancy lies inside the write occupancy.** The rows agree
+    under `Member.slot` at every base. A `held` is excluded: the write occupancy of a `held`
+    is its caller-side term's and the read occupancy is its stored-side term's, two
+    coordinates that need not agree. So `Orth1` asks the read question as well. -/
+theorem occA_le_occV : ∀ (t : Term), HF t → ∀ (m : Member), occA t m = true → occV t m.slot = true
+  | .string, _, m, h | .number, _, m, h | .boolean, _, m, h | .binary, _, m, h
+  | .null, _, m, h => by
+      cases m <;> simp_all [occA, occV, occOnly, Member.slot]
+  | .literal k _, _, m, h => by
+      cases k <;> cases m <;>
+        simp_all [occA, occV, occOnly, Member.slot, GroundKind.slot, GroundKind.member]
+  | .set b, _, m, h => by
+      cases b <;> cases m <;>
+        simp_all [occA, occV, occOnly, Member.slot, SetBase.slot, SetBase.member]
+  | .list _ _ _, _, m, h | .object _, _, m, h => by
+      cases m <;> simp_all [occA, occV, occOnly, Member.slot]
+  | .never, _, _, h => by simp [occA, occNone] at h
+  | .held _ _ _ _, hf, _, _ => nomatch hf
+  | .refine t _, hf, m, h => occA_le_occV t hf m (by simpa [occA] using h)
+  | .lazy t, hf, m, h => occA_le_occV t hf m (by simpa [occA] using h)
+  | .opaq, _, _, _ => by simp [occV, occTop]
+  | .union os, hf, m, h => by
+      simp only [occA, occV] at h ⊢
+      exact occAL_le_occVL os hf m h
+
+/-- …and over the options of a union, where both sides are the join of the options'. -/
+theorem occAL_le_occVL : ∀ (ts : List Term), HFL ts → ∀ (m : Member),
+    occAL ts m = true → occVL ts m.slot = true
+  | [], _, _, h => by simp [occAL] at h
+  | t :: ts, hf, m, h => by
+      simp only [occAL, occVL, Bool.or_eq_true] at h ⊢
+      rcases h with h | h
+      · exact Or.inl (occA_le_occV t hf.1 m h)
+      · exact Or.inr (occAL_le_occVL ts hf.2 m h)
+end
+
+mutual
 /-- **Confluence.** The denotation of a held-free term is a restriction of `Ω`, on both halves. -/
 theorem sub_denote : ∀ t : Term, HF t → Sub (denote t) Ω
   | .string, _ => sub_string
@@ -361,7 +398,7 @@ theorem sub_denote : ∀ t : Term, HF t → Sub (denote t) Ω
   | .set b, _ => sub_setBase b
   | .opaq, _ => ⟨fun _ _ h => h, fun _ _ h => h⟩
   | .never, _ => sub_empty
-  | .held _ _ _, h => h.elim
+  | .held _ _ _ _, h => h.elim
   | .refine t q, h => sub_restrict (sub_denote t h) q.eval
   | .lazy t, h => (sub_denote t h)
   | .list pre sp suf, ⟨h1, h2, h3⟩ =>

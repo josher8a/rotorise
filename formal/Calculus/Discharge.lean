@@ -645,7 +645,7 @@ theorem not_uAtCan_array_literals :
     says this, and (D) is a well-formedness condition on the `T` index rather than a
     discharger; the witness below is what settled it.
 
-    That witness is `union(literal("A"), held(literal("A"), f, g))` with `f` and `g`
+    That witness is `union(literal("A"), held(literal("A"), literal("B"), f, g))` with `f` and `g`
     swapping `"B"` for `"A"`. Its held sets are `{"A"}` and `{"B"}` — disjoint, so (D)
     passes in the strongest form ever proposed for it — and both options read the
     attribute `S "A"`, the first to `"A"` and the second to `"B"`. What decides the
@@ -665,8 +665,8 @@ def fRel : Value → Value := fun v => match v with | .str "B" => .str "A" | _ =
 /-- Its inverse on the carriers. -/
 def gRel : Value → Value := fun v => match v with | .str "A" => .str "B" | _ => .null
 
-/-- `held(literal("A"), fRel, gRel)` — holds `{"B"}`, stores it as `S "A"`. -/
-def tRel : Term := .held (.literal .string "A") fRel gRel
+/-- `held(literal("A"), literal("B"), fRel, gRel)` — holds `{"B"}`, stores it as `S "A"`. -/
+def tRel : Term := .held (.literal .string "A") (.literal .string "B") fRel gRel
 
 /-- The attribute-side twin of `not_uAtCan_pair`. -/
 theorem not_uAtCan_pair_A {t₁ t₂ : Term} {v w : Value} {a : Attr}
@@ -691,7 +691,8 @@ theorem not_uAtCan_pair_A {t₁ t₂ : Term} {v w : Value} {a : Attr}
 /-- Both options are derivable, and their held sets are disjoint — so this really is a
     union (D) admits, in the disjointness form §5 once proposed and withdrew. -/
 theorem typed_tRel :
-    Typed tRel (fun v => ∃ s, s ∈ ["A"] ∧ fRel v = .str s) (some .S) := by
+    Typed tRel (fun v => (∃ s, s ∈ ["A"] ∧ fRel v = .str s) ∧
+      ((denote (.literal .string "B")).e v).isSome) (some .S) := by
   refine Typed.held (I := fun w => ∃ s, s ∈ ["A"] ∧ w = .str s) ?_
   have h := Typed.literal .string "A"
   have hT : HLit .string "A" = fun w => ∃ s, s ∈ ["A"] ∧ w = Value.str s := by
@@ -701,8 +702,9 @@ theorem typed_tRel :
 
 theorem dDisj_tRel :
     HDisj (fun v => ∃ s, s ∈ ["A"] ∧ v = .str s)
-      (fun v => ∃ s, s ∈ ["A"] ∧ fRel v = .str s) := by
-  rintro v ⟨s, hs, rfl⟩ ⟨s', hs', hf⟩
+      (fun v => (∃ s, s ∈ ["A"] ∧ fRel v = .str s) ∧
+        ((denote (.literal .string "B")).e v).isSome) := by
+  rintro v ⟨s, hs, rfl⟩ ⟨⟨s', hs', hf⟩, -⟩
   -- `v = "A"`, so `fRel v = null`, which is no string
   have : s = "A" := by simpa using hs
   subst this

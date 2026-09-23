@@ -57,7 +57,8 @@ def Obligations : Term → Prop
   | .literal _ _ | .opaq | .set _ | .never => True
   | .refine t' _ => Obligations t'
   | .list pre sp suf => ObligationsList pre ∧ ObligationsOpt sp ∧ ObligationsList suf
-  | .held t' f g => Obligations t' ∧ IsoCancels (denote t') f g
+  -- the caller-side term owes nothing: a restriction keeps the laws of any lawful codec
+  | .held t' _ f g => Obligations t' ∧ IsoCancels (denote t') f g
   | .lazy t' => Obligations t'
   | .object b => ObligationsBody b
   | .union opts => ObligationsList opts ∧ UAtAct opts
@@ -127,7 +128,7 @@ theorem list {pre sp suf} (h : Obligations (.list pre sp suf)) :
   ⟨obligationsList_iff.mp h.1, obligationsOpt_iff.mp h.2.1, obligationsList_iff.mp h.2.2⟩
 
 /-- §3 `(held)`: the subterm's premises, and the iso cancelling on the carriers. -/
-theorem held {t f g} (h : Obligations (.held t f g)) :
+theorem held {t P f g} (h : Obligations (.held t P f g)) :
     Obligations t ∧ IsoCancels (denote t) f g := h
 
 /-- §5 `(union)`: one premise per option, and (U) where the union acts. -/
@@ -284,9 +285,9 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
         (LawfulCore.restrict · p.eval) (Lawful.restrict · p.eval)
     | @lazy γ T' μ' h' =>
       exact sound_wrap (t := γ) (soundness_both h' hob) LawfulCore.μNone Lawful.μNone
-    | @held t' I' μ' f g h' =>
-      exact sound_wrap (t := t') (soundness_both h' hob.1) (LawfulCore.through · hob.2)
-        (Lawful.through · hob.2)
+    | @held t' I' μ' P f g h' =>
+      exact sound_wrap (t := t') (soundness_both h' hob.1)
+        (fun h => (LawfulCore.through h hob.2).restrict _) (fun h => (h.through hob.2).restrict _)
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       have ihp : ∀ t' ∈ pre, Sound t' := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedList.forall hp t' ht'
@@ -698,8 +699,8 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
           (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
           (fun t' _ _ _ hty v hv => typed_TSub hty v hv) hal hall⟩
       all_goals exact absurd hv (by simp only [listCodec]; exact id)
-    | @held t' I' μ' f g h' =>
-      exact typed_TSub h' (f v) hv
+    | @held t' I' μ' P f g h' =>
+      exact ⟨typed_TSub h' (f v) hv.1, hv.2⟩
     | @refine t' T' μ' q h' => exact ⟨typed_TSub h' v hv.1, hv.2⟩
     | @lazy γ T' μ' h' => exact typed_TSub h' v hv
     | @object body bind R μs hfields hrest =>
@@ -789,9 +790,9 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
       · intro t' ht'
         obtain ⟨T', μ', hty⟩ := TypedList.forall hf t' ht'
         exact carrier_denote hty ((Obligations.list hob).2.2 t' ht')
-    | @held t' I' μ' f g h' =>
-      exact carrier_through (carrier_denote h' hob.1)
-        (soundness_both h' hob.1).1 hob.2.2
+    | @held t' I' μ' P f g h' =>
+      exact carrier_restrict (carrier_through (carrier_denote h' hob.1)
+        (soundness_both h' hob.1).1 hob.2.2) _
     | @refine t' T' μ' p h' =>
       exact carrier_restrict (carrier_denote h' hob.refine) p.eval
     | @lazy γ T' μ' h' =>

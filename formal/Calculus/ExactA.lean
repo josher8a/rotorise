@@ -132,7 +132,8 @@ noncomputable def AdmA : Term → Attr → Bool
   | .literal k ls => AdmALit k ls
   -- the bottom reads nothing back, and the row is that sentence
   | .never => fun _ => false
-  | .held t _ _ => AdmA t
+  -- the read side of the caller-side restriction: decode, transform, then ask `P`'s row
+  | .held t P _ g => fun a => AdmA t a && refineReads t (fun w => Adm P (g w)) a
   | .lazy t   => AdmA t
   | .refine t p => fun a => AdmA t a && refineReads t p.eval a
   -- hatch
@@ -669,12 +670,15 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       case boolean => exact AdmALit_boolean_exact ls a
       case binary => exact AdmALit_binary_exact ls a
       case null => exact AdmALit_null_exact ls a
-  | .held c f g => by
+  | .held c P f g => by
       have hc := AdmA_exact c
+      have hP := Adm_exact P
       intro a
-      simp only [AdmA, denote, denote, denote, Codec.through]
-      rw [hc a]
-      cases (denote c).p a <;> simp
+      simp only [AdmA, refineReads, denote_held, Codec.restrict, Codec.through,
+        Bool.and_eq_true, hc a]
+      cases (denote c).p a with
+      | none => simp
+      | some w => simpa using Bool.eq_iff_iff.mpr (hP (g w))
   -- **the row this file said could not exist.** `restrict`'s `p` is the base's `bind`ed
   -- through `q`, so `dom(p)` is `dom` of the base's intersected with `q` of what it decodes
   -- to — and that is what the row computes, term for term.

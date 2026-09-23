@@ -462,14 +462,38 @@ the representation audit asked for — both halves of §6 in one language. -/
 
 section Terms
 
-/-- §6: `held(c, id, id) ≡ c`. -/
-theorem equiv_denote_held_id (t : Term) :
-    Codec.Equiv (denote (.held t id id)) (denote t) := equiv_through_id _
+/-- §6: `held(c, P, id, id) ≡ refine(c, P)`. The identity transform leaves the caller-side
+    restriction, and that restriction is a `refine` by the admission of `P`. -/
+theorem equiv_denote_held_id (t P : Term) :
+    Codec.Equiv (denote (.held t P id id))
+      (denote (.refine t (.closure fun v => ((denote P).e v).isSome))) := by
+  refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩
+  · intro v a a' h h'
+    exact Option.some.inj ((through_e.mp (restrict_e.mp h).2).symm.trans (restrict_e.mp h').2)
+  · intro a v v' h h'
+    obtain ⟨w, hw, rfl⟩ := through_p.mp (restrict_p.mp h).1
+    exact Option.some.inj (hw.symm.trans (restrict_p.mp h').1)
 
-/-- §6: `held(held(c, f, g), f′, g′) ≡ held(c, f ∘ f′, g′ ∘ g)`. -/
-theorem equiv_denote_held_comp (t : Term) (f g f' g' : Value → Value) :
-    Codec.Equiv (denote (.held (.held t f g) f' g'))
-      (denote (.held t (f ∘ f') (g' ∘ g))) := equiv_through_comp _ _ _ _ _
+/-- §6: `held(held(c, P, f, g), P′, f′, g′) ≡ refine(held(c, P′, f ∘ f′, g′ ∘ g), P ∘ f′)`.
+    The transforms compose, and the inner caller-side restriction pulls back along `f′`. The
+    pullback is a predicate and no term, so the right side carries it as a `refine`. -/
+theorem equiv_denote_held_comp (t P P' : Term) (f g f' g' : Value → Value) :
+    Codec.Equiv (denote (.held (.held t P f g) P' f' g'))
+      (denote (.refine (.held t P' (f ∘ f') (g' ∘ g))
+        (.closure fun v => ((denote P).e (f' v)).isSome))) := by
+  refine ⟨fun _ => ⟨fun ⟨⟨h1, h2⟩, h3⟩ => ⟨⟨h1, h3⟩, h2⟩, fun ⟨⟨h1, h3⟩, h2⟩ => ⟨⟨h1, h2⟩, h3⟩⟩,
+    rfl, ?_, ?_⟩
+  · intro v a a' h h'
+    have hl := (restrict_e.mp (through_e.mp (restrict_e.mp h).2)).2
+    have hr := (restrict_e.mp (restrict_e.mp h').2).2
+    exact Option.some.inj ((through_e.mp hl).symm.trans hr)
+  · intro a v v' h h'
+    obtain ⟨w, hw, rfl⟩ := through_p.mp (restrict_p.mp h).1
+    obtain ⟨x, hx, rfl⟩ := through_p.mp (restrict_p.mp hw).1
+    obtain ⟨y, hy, rfl⟩ := through_p.mp (restrict_p.mp (restrict_p.mp h').1).1
+    rw [hx] at hy
+    cases hy
+    rfl
 
 /-- §6: `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`.
 
@@ -497,8 +521,8 @@ theorem equiv_denote_refine_full (t : Term) (p : Pred)
 
 /-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
     `optional_μ` and `optional_μ`, which are already stated over a denotation. -/
-theorem denote_held_μ (t : Term) (f g : Value → Value) :
-    (denote (.held t f g)).μ = (denote t).μ := rfl
+theorem denote_held_μ (t P : Term) (f g : Value → Value) :
+    (denote (.held t P f g)).μ = (denote t).μ := rfl
 
 theorem denote_refine_μ (t : Term) (p : Pred) :
     (denote (.refine t p)).μ = (denote t).μ := rfl

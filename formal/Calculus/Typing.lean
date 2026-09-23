@@ -36,8 +36,8 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
 * `held`'s iso premises are carrier-restricted (`T ≃ I`, not `Value ≃ Value`) and so mention
   `e`, which is why they sit in `Obligations` with the other semantic premises.
   The *rule* carries none of them, and no longer carries the held set's half of the iso
-  either: that half is not a premise but the conclusion's index, `fun v => I (f v)`,
-  which is what `through` builds.
+  either: that half is not a premise but the conclusion's index, `fun v => I (f v)` cut by
+  the admission of the caller-side term, which is what `through` and `restrict` build.
 * `(refine)` concludes `T v ∧ q v` where the doc concludes `q` under the premise
   `q ⊆ T`. The same set, stated without a premise the conclusion can carry.
 -/
@@ -249,14 +249,15 @@ inductive Typed : Term → Held → Option Member → Prop where
   | list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre) (hs : TypedOpt sp Tsp)
       (hf : TypedList suf Tsuf) :
       Typed (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L)
-  /-- `(held)`: the held set **is** the premise's, pulled back along `f`; the cancellation
-      laws are `Obligations`'.
+  /-- `(held)`: the held set **is** the premise's, pulled back along `f`, and cut by the
+      admission of the caller-side term `P`; the cancellation laws are `Obligations`'.
 
       No premise relating `T` to `I`, because `Codec.through` — what `denote` maps a `held` to
       — *defines* `T := fun v => c.T (f v)`. Carrying the iff instead would leave this the one
-      rule whose index its term does not determine. -/
-  | held {t I μ f g} (h : Typed t I μ) :
-      Typed (.held t f g) (fun v => I (f v)) μ
+      rule whose index its term does not determine. `P` carries no judgement, as the predicate
+      of `refine` carries none: the rule reads only the domain of its codec. -/
+  | held {t I μ P f g} (h : Typed t I μ) :
+      Typed (.held t P f g) (fun v => I (f v) ∧ ((denote P).e v).isSome) μ
   | refine {t T μ p} (h : Typed t T μ) :
       Typed (.refine t p) (fun v => T v ∧ p.eval v) μ
   | lazy {t T μ} (h : Typed t T μ) : Typed (.lazy t) T none

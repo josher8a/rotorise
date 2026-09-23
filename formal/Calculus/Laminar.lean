@@ -827,7 +827,9 @@ theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → ∀ v, T v ↔ Adm t v = tr
           (fun t' _ _ _ hty w => typed_T_adm hty w)
           (fun t' _ _ _ hty w => typed_T_adm hty w) vs
       | _ => simp [HList, Adm]
-    | @held t' I' μ' f g h' => exact typed_T_adm h' (f v)
+    | @held t' I' μ' P f g h' =>
+      exact (and_congr (typed_T_adm h' (f v)) (Adm_exact P v).symm).trans
+        Bool.and_eq_true_iff.symm
     | @refine t' T' μ' q h' =>
       show (T' v ∧ q.eval v = true) ↔ (Adm t' v && q.eval v) = true
       rw [Bool.and_eq_true, typed_T_adm h' v]

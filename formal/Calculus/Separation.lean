@@ -284,24 +284,25 @@ So the over-claim and the under-claim are the same mistake seen from two sides, 
 witnesses are duals:
 
 * `refine(string, ⊤)` — the adapter narrows nothing, and `ident` says it decides.
-* `held(string, fSplit, _)` — the adapter narrows to one string, and `ident` says it does
+* `held(string, string, fSplit, _)` — the adapter narrows to one string, and `ident` says it does
   not.
 
 `Adm` has no such split. `Adm_refine_adapt` and `Adm_held_adapt` show it doing the one
 thing `adapt` describes on both rows — apply the adapter, then ask the subterm — which is
-why it carries `q` and `f` where `ident` carries neither. -/
+why it carries `q` and `f` where `ident` carries neither. The `held` row also asks the
+caller-side term at the value itself. -/
 
 /-- An adapter that sends one string to itself and everything else off `string`'s carrier.
     Total, so this is a `held` and not a `refine` — and it narrows exactly as a refinement
     would. -/
 def fSplit : Value → Value := fun v => match v with | .str "A" => .str "A" | _ => .bool true
 
-/-- **The dual gap.** `held(string, fSplit, _)` writes `"A"` and refuses `"B"` — two values
+/-- **The dual gap.** `held(string, string, fSplit, _)` writes `"A"` and refuses `"B"` — two values
     of one kind, differing in admission — so it decides. `ident` says `false`. -/
-theorem decides_held : Decides (.held .string fSplit (fun v => v)) := by
+theorem decides_held : Decides (.held .string .string fSplit (fun v => v)) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
-  · simp [denote, denote, Codec.through, stringCodec, fSplit]
-  · simp [denote, denote, Codec.through, stringCodec, fSplit]
+  · simp [denote, denote, Codec.through, Codec.restrict, stringCodec, fSplit]
+  · simp [denote, denote, Codec.through, Codec.restrict, stringCodec, fSplit]
 
 
 /-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/
@@ -309,8 +310,8 @@ theorem Adm_refine_adapt (t : Term) (p : Pred) (v : Value) :
     Adm (.refine t p) v = ((partialId p.eval v).elim false (Adm t)) := by
   cases hq : p.eval v <;> simp [Adm, partialId, hq]
 
-theorem Adm_held_adapt (t : Term) (f g : Value → Value) (v : Value) :
-    Adm (.held t f g) v = ((some (f v)).elim false (Adm t)) := by
+theorem Adm_held_adapt (t P : Term) (f g : Value → Value) (v : Value) :
+    Adm (.held t P f g) v = (((some (f v)).elim false (Adm t)) && Adm P v) := by
   simp [Adm]
 
 /-! ### Adapters and alternatives, and why `alternate reader` was in the wrong family
