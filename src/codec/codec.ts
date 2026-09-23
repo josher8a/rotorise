@@ -25,7 +25,6 @@ import {
     itemSem,
     literalCodec,
     literalShape,
-    literalsRead,
     membersOf,
     opaqueTerms,
     optionOfTerm,
@@ -45,7 +44,6 @@ import type {
     Field,
     LiteralForm,
     NameForm,
-    NameLiteral,
     OpaqueSugar,
     Term,
 } from './term'
@@ -80,7 +78,6 @@ import type { ErrorMessage, show } from '../utils'
 import {
     describeShape,
     namedLiteral,
-    namesFit,
     namesOf,
     readTags,
     sameLiteral,
@@ -3665,10 +3662,13 @@ export type Encoded<Spec> = show<
             ? never
             : K]: AttributeOf<Spec[K]>
     } & {
+        // an optional name at `never` writes no attribute, so the item has no such key
         [K in keyof Spec as Spec[K] extends {
             readonly [optionalMarker]: true
         }
-            ? K
+            ? [AttributeOf<Spec[K]>] extends [never]
+                ? never
+                : K
             : never]?: AttributeOf<Spec[K]>
     }
 >
@@ -4423,15 +4423,10 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
 /**
  * One option of a union, reduced to what matching it actually asks.
  *
- * Two kinds, and the difference is the whole matcher. An **object** option declares a set of
- * attribute names, so the names of a value identify it before anything is encoded — and a failure
- * *after* it has been identified is a real error, not a reason to try the next one. Any **other**
- * codec declares nothing a name could match, so the only question that can be asked of it is whether
- * it can carry the value at all, and a failure means "not this one".
- *
- * Which is why an object option is never tried and rejected: an open `object({ a }, [string,
- * optional(string)])` encodes `{ a, b }` whichever option the caller meant, so "it encoded" is not
- * evidence that it is the right option. Its names are.
+ * **Every option is admitted by attempt**, an object option included, as the model's `admitOptV`
+ * and `admitOptA` admit. The kind of the value is a cheap filter in front of the attempt, and the
+ * names present select nothing. The declaration guard makes the attempt decide: two options that
+ * both admit one value are refused where the union is declared, so at most one attempt succeeds.
  */
 export type Option = {
     readonly codec: AnyCodec
@@ -4443,15 +4438,6 @@ export type Option = {
     readonly item: ItemCodec<Record<string, unknown>, unknown> | undefined
     /** The names it declares, for object options only. */
     readonly declares: ReadonlySet<string> | undefined
-    readonly requires: readonly string[]
-    /**
-     * The literal each declared name is pinned to, for object options only.
-     *
-     * The other half of structural admission. `declares` and `requires` are the model's `keysOk`;
-     * this is its `literalsOk`, and without it two object options with the same names are
-     * indistinguishable however differently their literals are declared.
-     */
-    readonly literals: Readonly<Record<string, NameLiteral>> | undefined
     /** How it is named in a message — written the way it was declared. */
     readonly describe: string
 }
@@ -5063,19 +5049,18 @@ export const never: AttributeCodec<never, never> & {
  *
  * Options are codecs of any kind, and the rule is the same for all of them: **exactly one** option
  * must match, or it is an error. What "match" means is the only thing that differs, and it differs
- * because the options do — see {@link Option}. An object option is chosen by the attribute *names*
- * present; anything else is chosen by being the only option that can carry the value.
+ * because the options do — see {@link Option}. Each option is attempted, and the option that
+ * alone admits the value is chosen. An object option is no exception: the names present select
+ * nothing.
  *
- * Ambiguity is reported rather than resolved by declaration order. Two object options that can hold
- * the same attributes are refused at the declaration; two attribute options that can both carry one
- * particular value cannot be known until that value turns up, because `string('A')` and
- * `string('B')` both write `S` and are never ambiguous — so that one is reported when it happens.
+ * Ambiguity is reported rather than resolved by declaration order. Two options that can admit one
+ * value are refused at the declaration where the guard can see it. Where the guard cannot, two
+ * options that both admit one value are reported when that value turns up.
  *
  * **Refused rather than scored**, and that is what keeps `decode ∘ encode = id` where first-match
- * wins does not: the matcher reads only names, never positions, so both directions reach the same
- * variant. Scoring widest or narrowest would preserve the law too, but every candidate declares all
- * the names present, so it would be an arbitrary tie-break committing in silence to a shape nobody
- * named.
+ * wins does not: the one option that admits a value is the one option that reads what it wrote, so
+ * both directions reach the same variant. A tie-break would commit in silence to an owner of the
+ * overlap that nobody named.
  *
  * @example
  * ```ts
@@ -5186,13 +5171,13 @@ export const union = <const Options extends readonly AnyCodec[]>(
 
     /**
      * The item reading's own matcher: the value is always a record, so the shape filter has nothing
-     * to do and structure is the whole of it — the names, and then every literal field the item
-     * carries, which is what tells two options with one name set apart.
+     * to do, and each option is attempted. The names present select nothing, as the model's
+     * `admitOptA` reads no name.
      */
     const readItem = (item: StoredItem): Result<T> => {
         const names = namesOf(item)
         return only(
-            (option) => namesFit(option, names) && literalsRead(option, item),
+            () => true,
             naming('this item', names),
             (option) =>
                 (
@@ -5204,7 +5189,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
     const writeItem = (item: T): Result<AttributeMap> => {
         const names = namesOf(item as Record<string, unknown>)
         return onlyAdmitting(
-            (option) => namesFit(option, names),
+            () => true,
             naming('this entity', names),
             item,
             (option) =>

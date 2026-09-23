@@ -745,8 +745,8 @@ export type NameForm = {
  * The literal each declared name is pinned to, **read through a declared adapter**.
  *
  * **Not {@link literalsOf}, and the two must not become one.** That reader answers at the caller's
- * level, because {@link literalsFit} compares the value a caller hands in: an adapter pins nothing
- * there, so a field under one is absent and the option is matched on its other names. This reader
+ * level, because {@link structuralMeet} compares what a caller hands in: an adapter pins nothing
+ * there, so a field under one is absent and the option is compared on its other names. This reader
  * descends, because `extract` compares a clause literal against a member literal and both sit
  * under the same kind of adapter, so the pair below is the pair that decides. Merging them makes
  * every object union at a numeric name refuse every value, and the failure is a runtime refusal
@@ -839,22 +839,6 @@ export const storedAlternatives = (t: Term): Alternatives | undefined =>
 /** One literal, as the one-alternative set it pins. */
 const oneAlternative = (t: Literal): Alternatives =>
     ({ kind: 'alternatives', base: t.base, ls: [t.v] }) as Alternatives
-
-/**
- * …and back: the term a set of alternatives denotes, which is one literal or a union of them.
- *
- * The inverse of {@link pinnedLiteral} at a literal or a union of literals, and it is what a
- * reader holding alternatives uses to build the codec that decides them. `refine` has no inverse
- * here and needs none: a refinement narrows what the alternatives already bound.
- */
-export const alternativesTerm = (a: Alternatives): Term => {
-    const [first, ...rest] = a.ls
-    const one = (value: LiteralValue): Term =>
-        ({ kind: 'literal', base: a.base, v: value }) as Term
-    return rest.length === 0
-        ? one(first)
-        : { kind: 'union', options: [one(first), ...rest.map(one)] }
-}
 
 /**
  * A union of literals at one base, as the alternatives it pins.
@@ -1224,11 +1208,17 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * *refutation*: it answers `false` only where both occupancies are known, they meet on a side, and
  * no exemption applies. Where `Orth` declines for want of a proof, this accepts. One row is shared
  * — `Orth1`, below — and the law that ties them is what `formal/.separations.lean` pins, one
- * theorem per pair this function refuses: **it never answers `false` where `Orth` answers `true`.**
+ * theorem per pair this function refuses: **it never answers `false` where `certPair` answers `true`.**
  * Refusing a declaration the model proves separable would be refusing a union that works.
  *
- * Four rows, and each carries its own warrant. A fifth exempted an `opaque` option and is gone;
- * the paragraph below the fourth says why.
+ * Five rows, and each carries its own warrant. A sixth exempted an `opaque` option and is gone;
+ * the paragraph below the fifth says why.
+ *
+ * **Two options that meet at the bottom.** The model's certificate is `certPair`: `Orth`, or a
+ * meet at `never`. `Adm_meet` and `AdmA_meet` make the meet's admission the conjunction of the
+ * two, so a meet at the bottom admits no common value and reads no common attribute. The row asks
+ * {@link meetTerms} only where both terms are {@link thunkFree}. It certifies two lists told apart
+ * by a literal position, and two objects whose required slots meet at the bottom.
  *
  * **Two object options: the structural meet, which is the same question the type asks.** A union
  * admits an object by its structure, never by being attempted — the names present, and then every
@@ -1283,6 +1273,10 @@ export const separable = (x: Term, y: Term): boolean => {
     // **Containment first.** The three {@link restricts} rows name a literal, a set of a literal
     // and `never`. `never` meets no occupancy, so the rows below would accept it beside anything
     if (restricts(x, y) || restricts(y, x)) return false
+    // a meet at the bottom separates, and it runs ahead of the object row, because two objects
+    // whose required slots meet at `never` share names and no value
+    if (thunkFree(x) && thunkFree(y) && meetTerms(x, y)?.kind === 'never')
+        return true
     const xs = objectMembers(x)
     const ys = objectMembers(y)
     if (xs && ys) {
@@ -1321,6 +1315,40 @@ export const separable = (x: Term, y: Term): boolean => {
         )
     }
     return identifies(x) || identifies(y)
+}
+
+/**
+ * **Whether a term reaches no thunk**, at any depth.
+ *
+ * The model's `lazy` is transparent, and {@link meetTerms} forces a thunk to read through it. A
+ * thunk can be recursive, so a meet of two recursive terms need not end, and {@link separable}
+ * asks the meet only of a term with no thunk. `held` and `legacy` need no such guard: the meet
+ * answers `undefined` at each, and the model's certificate needs no `HF` premise.
+ */
+const thunkFree = (t: Term): boolean => {
+    switch (t.kind) {
+        case 'lazy':
+            return false
+        case 'held':
+        case 'legacy':
+        case 'refine':
+            return thunkFree(t.inner)
+        case 'list':
+            return (
+                t.pre.every(thunkFree) &&
+                (t.spread === undefined || thunkFree(t.spread)) &&
+                t.suf.every(thunkFree)
+            )
+        case 'object':
+            return (
+                Object.values(t.body.fields).every((f) => thunkFree(f.t)) &&
+                (t.body.rest === undefined || thunkFree(t.body.rest))
+            )
+        case 'union':
+            return t.options.every(thunkFree)
+        default:
+            return true
+    }
 }
 
 /**
@@ -1480,7 +1508,7 @@ const distribute = (
  * **The certificate a union must carry for its admission to be the join of its options'** —
  * `Calculus.unionOk`.
  *
- * `orthAll` is {@link separable} here, which is this library's `Orth` and carries exemptions the
+ * `certAll` is {@link separable} here, which is this library's `certPair` and carries exemptions the
  * model's does not. Every union the builders can construct has already passed it pairwise, so the
  * conjunct bites on the survivor list rather than on the input.
  */

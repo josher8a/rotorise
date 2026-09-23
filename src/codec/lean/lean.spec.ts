@@ -1507,6 +1507,30 @@ describe("the declaration guard, against the model's classifier", () => {
      * sides and the pair is refused. `Orth Term.opaq Term.number` is `false`, so the
      * warrant is `Orth` declining, and no pair left.
      *
+     * **It was 166, and the thirty-six that left each meet at the bottom.** The model's union
+     * certificate is `certPair`, `Orth` or a meet at `never`, and {@link separable} asks the meet
+     * where no thunk is on either side. So each pair below declares now, and each theorem left
+     * because `certPair` answers `true`. No pair arrived.
+     * Lists that share no value: `array_empty__vs__tuple_pair`,
+     * `array_of_string__vs__list_spread_suffix`, `array_of_string__vs__tuple_pair`,
+     * `list_prefix_spread__vs__map_inside_a_list`, `list_prefix_spread__vs__tuple_pair`,
+     * `list_spread_suffix__vs__array_empty`, `list_spread_suffix__vs__map_inside_a_list` and
+     * `tuple_pair__vs__map_inside_a_list`.
+     * Objects whose required slot meets at the bottom: `object_nested__vs__` each of
+     * `object_restricted_rest` and `open_of_restricted_set`; `object_open__vs__` each of
+     * `object_nested`, `object_restricted_rest` and `open_of_restricted_set`;
+     * `object_optional_absent__vs__` each of `object_nested`, `object_restricted_rest` and
+     * `open_of_restricted_set`; `object_restricted_rest__vs__` each of `product_two_objects` and
+     * `product_union_object`; `object_two_fields__vs__` each of `object_restricted_rest` and
+     * `open_of_restricted_set`; `open_empty__vs__` each of `object_nested`,
+     * `object_restricted_rest`, `object_two_fields`, `product_three` and `product_two_objects`;
+     * `open_of_restricted_set__vs__` each of `discriminated_union`, `dunion_two_keys`,
+     * `product_three`, `product_two_objects`, `product_union_object` and `union_by_literal`; and
+     * `open_of_string__vs__` each of `object_nested`, `object_restricted_rest`,
+     * `object_two_fields`, `product_three` and `product_two_objects`.
+     * Five of these carry a `decimal` field, which is `held`. The meet still reaches the bottom
+     * through another field, so the row asks no `held` guard.
+     *
      * **Measured, and it is the question this count exists to answer**: the disjointness law
      * `6536d91` added refuses **none** of these pairs. Every refusal here is an occupancy or a
      * restriction, and no pair is refused for carrying a value another pair also carries.
@@ -1517,9 +1541,9 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(166)
+        expect(separations.length).toBe(130)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
-        // and it carries one of the two warrants: `Orth` declines, or — for a `never` pair, where
+        // and it carries one of the two warrants: `certPair` declines, or — for a `never` pair, where
         // the model permits what `src/` lints away — the permits-form states what the model says
         for (const one of separations) {
             const emitted = leanSeparation(one)
@@ -1537,9 +1561,7 @@ describe("the declaration guard, against the model's classifier", () => {
                 leanSeparationModule(separationPairs()),
             )
         }
-        expect(leanSeparationModule([])).toContain(
-            'import Calculus.Orthogonality',
-        )
+        expect(leanSeparationModule([])).toContain('import Calculus.Meet')
         // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
         // without the import Lean auto-binds the name and every verdict fails to elaborate
         expect(leanSeparationModule([])).toContain('import Calculus.DynamoDB')

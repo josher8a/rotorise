@@ -305,8 +305,8 @@ theorem lazy_string :
 
 /-! ## Refusals — neither side writes anything for these
 
-37 of 1266 shown; `scripts/gate.sh` elaborates all
-1266. One `rfl` each, no comparator and no fuel: the answer is `none`,
+37 of 1269 shown; `scripts/gate.sh` elaborates all
+1269. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 

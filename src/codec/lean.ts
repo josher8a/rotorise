@@ -935,8 +935,9 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  *
  * So the checkable law is the converse. **If the model certifies a pair, `src/` must accept it** —
  * refusing a declaration the model *proves* separable is `src/` rejecting a union that works.
- * Stated as a theorem per refusal: `Orth x y = false`, which stops compiling the moment `Orth`
- * starts certifying a pair `src/` turns down. Zero counterexamples today, and the pair that
+ * Stated as a theorem per refusal: `certPair x y = false`, which stops compiling the moment the
+ * certificate starts certifying a pair `src/` turns down. `certPair` is `Orth`, or a meet at the
+ * bottom, and it is what the model's `unionOk` reads. Zero counterexamples today, and the pair that
  * motivated `ff75c6b` is the reason the law is worth gating rather than asserting once:
  * `Orth (Term.set .string) (Term.set .number) = true`, which `src/` refused until that commit.
  *
@@ -1002,20 +1003,20 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     return [
         `/-- \`${name}\` — \`src/\` refuses this pair; the model must not certify it -/`,
         `theorem ${leanIdent(name)} :`,
-        `    Orth (${leanTermOf(left, name)})`,
+        `    certPair (${leanTermOf(left, name)})`,
         `      (${leanTermOf(right, name)}) = false := by decide`,
     ].join('\n')
 }
 
 /**
- * The separation verdicts as a module of their own, because they need `Orth`.
+ * The separation verdicts as a module of their own, because they need `certPair`.
  *
  * `Calculus.Vectors` reaches `Denote` and not `Orthogonality`, and adding the import to the
  * committed vector samples would make them depend on a module they have nothing to say about.
  *
  * The header imports `Calculus.DynamoDB` as well, because a `held` term spells
  * `numeralOfStoredText` and `textOfNumeral`, which the DynamoDB port defines, and
- * `Orthogonality` does not reach them. Lean
+ * `Meet` does not reach them. Lean
  * auto-binds an unknown lower-case name, so the missing import reports a free variable in the
  * expected type of every verdict rather than an unknown identifier.
  *
@@ -1025,15 +1026,15 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
 export const leanSeparationModule = (
     separations: readonly Separation[],
 ): string =>
-    `import Calculus.Orthogonality
+    `import Calculus.Meet
 import Calculus.DynamoDB
 
 /-!
 # Declaration-guard verdicts, proposed to the classifier
 
 **Generated — do not edit.** One theorem per option pair \`src/\`'s \`union\` refuses at the
-declaration. \`Orth\` is *sufficient* and not necessary, so this runs one way: a pair the model
-certifies must not be refused by \`src/\`. A refusal carries one of two warrants: \`Orth\` declines
+declaration. \`certPair\` is *sufficient* and not necessary, so this runs one way: a pair the model
+certifies must not be refused by \`src/\`. A refusal carries one of two warrants: \`certPair\` declines
 the pair, or — where the pair has \`never\` on a side — the model permits it and the theorem says
 so. That second one is a divergence, and a deliberate one: the model answers whether the union is
 well formed, \`src/\` answers whether it is useful, and an option admitting nothing is well formed

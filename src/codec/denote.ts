@@ -43,14 +43,12 @@ import type {
 } from './codec'
 import type { Result } from './result'
 import { andThen, CodecError, every, everyEntry, failed } from './result'
-import type { Body, Field, Literal, NameLiteral, Predicate, Term } from './term'
+import type { Body, Field, Literal, Predicate, Term } from './term'
 import {
-    alternativesTerm,
     alwaysWritten,
     everySlot,
     isOpaqueSugar,
     literalForm,
-    literalsOf,
     occV,
     storedAlternatives,
     member as termMember,
@@ -61,7 +59,6 @@ import {
     describeShape,
     expect,
     namedLiteral,
-    namesFit,
     namesOf,
     rendered,
     sameLiteral,
@@ -449,14 +446,20 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                 if (failed(written)) return written.under(name)
                 out[name] = written
             }
-            if (restCodec) {
-                for (const name in held) {
-                    const value = held[name]
-                    if (name in of || value === undefined) continue
-                    const written = restCodec.encode(value as never)
-                    if (failed(written)) return written.under(name)
-                    out[name] = written
+            for (const name in held) {
+                const value = held[name]
+                if (name in of || value === undefined) continue
+                // a closed body refuses an undeclared name on both sides, as the model's body does.
+                // A write that dropped the name read back a different value, and a union that
+                // admits by attempt reads this refusal to tell two closed options apart
+                if (!restCodec) {
+                    return new CodecError(
+                        `'${name}' is not an attribute this codec declares`,
+                    )
                 }
+                const written = restCodec.encode(value as never)
+                if (failed(written)) return written.under(name)
+                out[name] = written
             }
             return out
         },
@@ -666,18 +669,6 @@ export const altSem = (
         const candidates = all.filter(survives)
         if (candidates.length === 0) return unmatched(named)
         if (candidates.length === 1) return through(candidates[0] as Option)
-        // **The attempt loop runs only where a non-object option survives.** An object option is
-        // decided by its structure and never tried, so two of them surviving is an ambiguity in the
-        // declaration, and attempting would resolve it by whichever happens to decode — reporting a
-        // property of the data where the defect is in the union.
-        if (candidates.every((option) => option.declares)) {
-            return ambiguous(
-                candidates[0] as Option,
-                candidates[1] as Option,
-                named,
-            )
-        }
-
         let first: Option | undefined
         let carried: Result<A> | undefined
         for (const option of candidates) {
@@ -691,16 +682,13 @@ export const altSem = (
     }
 
     /**
-     * The model's `admitOptV`: an object option is admitted by the names it declares, which
-     * `survives` has already fit, and every other option by {@link accepts}. Asking the option's
-     * own admission terminates: it is one level down, and the direction that would not is an
-     * `encode` consulting admission.
+     * The model's `admitOptV`: every option is admitted by {@link accepts}, an object option
+     * included. The names present select nothing, because a name set that fits two options can
+     * hold a value that only one of them encodes. Asking the option's own admission terminates:
+     * it is one level down, and the direction that would not is an `encode` consulting admission.
      */
-    const admitOption = (option: Option, value: unknown) => {
-        if (!option.declares) return accepts(option.codec, value)
-        const held = asRecord(value)
-        return !!held && literalsFit(option, held)
-    }
+    const admitOption = (option: Option, value: unknown) =>
+        accepts(option.codec, value)
 
     /**
      * The same, **decided rather than attempted** — the write side only.
@@ -712,8 +700,7 @@ export const altSem = (
      * the declaration. `union([held(decimal, dateAdapter), string])` could not encode a `Date` for
      * exactly that reason, and the fix was `string` refusing one.
      *
-     * {@link accepts} is the decision for every option that is not an object option, and an object
-     * option is decided by its names alone: {@link admitOption} carries both rows. §3's `Adm`,
+     * {@link accepts} is the decision for every option, and {@link admitOption} is that one row. §3's `Adm`,
      * proved exact at all 21 constructors, and `codec.laws.spec.ts` holds
      * `accepts(c, v) ⟺ !failed(c.encode(v))` over its whole table — so on the values in play this
      * selects the same option `only` would have found by attempting, and says *why* rather than
@@ -722,9 +709,10 @@ export const altSem = (
      * out here instead of propagating, and an ambiguity is reported without first writing one of
      * the two answers.
      *
-     * **The read side keeps attempting**, because there is nothing to decide with: the model has
-     * `AdmA` on the attribute side and `src/` has no port of it. That asymmetry is the reason this
-     * is a second function rather than a flag on the first.
+     * **The read side attempts**, because there is nothing to decide with: the model has `AdmA` on
+     * the attribute side and `src/` has no port of it. The model's `admitOptA` is that attempt, an
+     * object option included. That asymmetry is the reason this is a second function rather than a
+     * flag on the first.
      */
     const onlyAdmitting = <A>(
         survives: (option: Option) => boolean,
@@ -746,13 +734,14 @@ export const altSem = (
         return through(candidates[0] as Option)
     }
 
-    /** Which options a value could be for: an object option by its names, anything else by kind. */
-    const forValue =
-        (shape: Shape | undefined, names: ReadonlySet<string> | undefined) =>
-        (option: Option) =>
-            option.declares
-                ? shape === 'map' && !!names && namesFit(option, names)
-                : !option.carries || !shape || option.carries.includes(shape)
+    /**
+     * Which options a value could be for, by kind. The names present select nothing: an object
+     * option is admitted by attempt, as the model's `admitOptV` admits every option.
+     */
+    const forValue = (shape: Shape | undefined) => (option: Option) =>
+        option.declares
+            ? shape === 'map'
+            : !option.carries || !shape || option.carries.includes(shape)
 
     type T = unknown
 
@@ -767,11 +756,7 @@ export const altSem = (
         return only(
             (option) =>
                 option.declares
-                    ? member === 'M' &&
-                      !!names &&
-                      namesFit(option, names) &&
-                      !!carriedMap &&
-                      literalsRead(option, carriedMap)
+                    ? member === 'M'
                     : option.member === undefined ||
                       member === undefined ||
                       option.member === member,
@@ -782,7 +767,7 @@ export const altSem = (
     const write = (value: unknown): Result<AttributeValue> => {
         const held = asRecord(value)
         return onlyAdmitting(
-            forValue(shapeOf(value), held ? namesOf(held) : undefined),
+            forValue(shapeOf(value)),
             naming('this value', held ? namesOf(held) : undefined),
             value,
             (option) => option.codec.encode(value as never),
@@ -1874,96 +1859,27 @@ const heldBase = (t: Term): LiteralBase | undefined =>
             : undefined
 
 /**
- * **Content admission on the write side**: every name present whose field is a literal carries one
- * of that literal's alternatives.
- *
- * The model's `literalsOk`, and the half `namesFit` cannot state. **Present-only**: a name the
- * value omits asks nothing here, because whether it may be omitted is `namesFit`'s question. So an
- * `optional` literal constrains exactly the values that do carry the name, and constrains nothing
- * else.
- *
- * A membership and not the literal's codec, which is the model's asymmetry with
- * {@link literalsRead}: `inL` is a predicate on a value, and the alternatives are the values.
- */
-export const literalsFit = (
-    option: Option,
-    held: Record<string, unknown>,
-): boolean => {
-    const literals = option.literals
-    if (!literals) return true
-    for (const name in literals) {
-        const carried = held[name]
-        if (carried === undefined) continue
-        const alts = (literals[name] as NameLiteral).alts
-        if (!alts.ls.some((one) => sameLiteral(one, carried))) return false
-    }
-    return true
-}
-
-/**
- * **…and on the read side, where the test is the literal codec's own.**
- *
- * The stored side holds an attribute and the alternatives are values, so the question is put to the
- * codec that decodes one into the other rather than to a second membership. That is the model's
- * `litOkA`, `((literalCodec g ls).p a).isSome` — and it is why a `decimal` literal, whose
- * alternatives are text and whose attribute is an `N`, needs no row of its own here.
- *
- * {@link codecOfTerm} and not {@link literalCodec}: the base and the alternatives are correlated by
- * the term and separate as two arguments, so passing the literal whole is what keeps a `decimal`
- * literal from being offered a numeric alternative list. The term cache makes the call a lookup.
- */
-export const literalsRead = (
-    option: Option,
-    carried: Readonly<Record<string, AttributeValue | undefined>>,
-): boolean => {
-    const literals = option.literals
-    if (!literals) return true
-    for (const name in literals) {
-        const attribute = carried[name]
-        if (attribute === undefined) continue
-        const alts = (literals[name] as NameLiteral).alts
-        if (failed(codecOfTerm(alternativesTerm(alts)).decode(attribute)))
-            return false
-    }
-    return true
-}
-
-/**
  * Everything about an option that the **term** decides, which is everything but `item`.
  *
  * `denote`'s `untagged` row builds its options from the definition and asks {@link altSem} for the
- * attribute pair, and that pair reads `codec`, `member`, `carries`, `declares` and `requires` — it
- * never reads `item`. So the resolution is a function of the terms, and this is it.
+ * attribute pair, and that pair reads `codec`, `member`, `carries` and `declares` — it never reads
+ * `item`. So the resolution is a function of the terms, and this is it.
  *
- * **The names come from the fields, not from a `spec`.** An object option's `declares` and
- * `requires` used to be read off `.item.spec`, asking each declared codec whether its definition
- * kind was `optional`. A `spec` is a caller's argument and a `Field`'s `mark` is what that argument
- * became, so the same two sets are read from the term here — `fieldOf` is the function that turns
- * one into the other, and a mark is closed where a definition kind is not. That question had its
- * own predicate, and this was its last caller, so the predicate goes too.
+ * **The names come from the fields, not from a `spec`.** A `spec` is a caller's argument and a
+ * `Field`'s `mark` is what that argument became, so `declares` and the names a message marks
+ * optional are read from the term here. The names select no option: every option is attempted.
+ * `declares` marks an object option, which the kind filter reads as a map, and a message names.
  *
- * That is also what makes this safe on a term-built codec, and the old form was not. It classified
- * an option as an object by finding `.item` on the codec, and only the object a *constructor*
- * returns carries one; a codec built from a term has none, so every object variant would have been
- * classified as a ground option and the union would have resolved by attempting instead of by
- * names. Nothing would have failed loudly. Here the term decides, and every codec has one.
+ * The term decides, and every codec has one. The object a *constructor* returns carries `.item`
+ * and a codec built from a term does not, so a test on `.item` would classify a term-built object
+ * option as a ground option.
  */
 export const optionOfTerm = (def: Term): Option => {
     const codec = codecOfTerm(def)
     /**
-     * **A union of objects carries names too**, and they are its members' taken together.
-     *
-     * There is no one `Body` to read, so the interval is read off the members: a member admits
-     * every name set between its required keys and its declared keys, so the option admits every
-     * set between the **intersection** of the members' required names — the ones present whichever
-     * member it turns out to be — and the **union** of their declared names.
-     *
-     * Without this an option like `discriminatedUnion('side', …)` reached {@link namesFit} with no
-     * `declares`, which answers `false`, so a `union` holding one had no whole-item reading: every
-     * option was filtered out and the row matched nothing. The attribute-level path never showed it,
-     * because that one falls back to matching on the value's kind and then attempts. It used to be
-     * the tagged row alone; a nested plain union of objects had the same hole and now has the same
-     * answer, which is what deleting the second sum buys here.
+     * **A union of objects is an object option too**, and its names are its members' taken
+     * together. A message names them: a name that every member always writes is named as
+     * required, and any other name as optional. The names select nothing.
      */
     if (
         def.kind === 'union' &&
@@ -1989,12 +1905,6 @@ export const optionOfTerm = (def: Term): Option => {
             carries: ['map'],
             item: undefined,
             declares,
-            requires,
-            // **No literals, and that is not an omission.** A tagged option is several members and
-            // each pins its discriminator to its own tag, so there is no one literal the option as
-            // a whole carries. An absent table asks nothing, which is the right answer: the tag
-            // table decides among the members one level down.
-            literals: undefined,
             describe: `${namedKind(def)} { ${[...declares]
                 .map((name) => (requires.includes(name) ? name : `${name}?`))
                 .join(', ')} }`,
@@ -2007,27 +1917,18 @@ export const optionOfTerm = (def: Term): Option => {
             carries: valueKinds(def),
             item: undefined,
             declares: undefined,
-            requires: [],
-            literals: undefined,
             describe: namedKind(def),
         }
     }
     const declares = new Set<string>()
-    const requires: string[] = []
     const fields = def.body.fields
-    for (const name in fields) {
-        declares.add(name)
-        const field = fields[name]
-        if (field && alwaysWritten(field)) requires.push(name)
-    }
+    for (const name in fields) declares.add(name)
     return {
         codec,
         member: 'M',
         carries: ['map'],
         item: undefined,
         declares,
-        requires,
-        literals: literalsOf(def),
         // an open block holds every undeclared name, and `...` names it
         describe: `{ ${[
             ...[...declares].map((name) =>

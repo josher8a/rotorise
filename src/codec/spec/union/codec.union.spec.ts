@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AttributeMap } from '../../attribute'
+import { DynamoNumber } from '../../attribute'
 import type { AnyCodec, UnionCodec } from '../../codec'
 import {
     array,
@@ -417,7 +418,80 @@ describe('the declaration guard, where a term is what the guard reads', () => {
  * `literalsOk` — so a required literal with disjoint alternatives resolves the pair, at the
  * declaration and at the item.
  */
-describe('an object option is admitted by its structure', () => {
+describe('an object option is admitted by attempt', () => {
+    /**
+     * **Two objects whose required slot meets at the bottom declare.** The two options declare
+     * one name, and `string` meets `boolean` at `never`, so no value is admitted by both. The
+     * value decides the option, and the names present decide nothing.
+     */
+    it('declares two objects that share a name and no value, and each value selects its own option', () => {
+        /** Declared through a cast: the type's guard still reads the names alone. */
+        const declare = union as unknown as (
+            options: readonly AnyCodec[],
+        ) => UnionCodec<{ readonly a: string | boolean }, readonly AnyCodec[]>
+        const either = declare([object({ a: string }), object({ a: boolean })])
+        const text = either.unsafeEncode({ a: 'x' })
+        const flag = either.unsafeEncode({ a: true })
+        expect(text).toEqual({ M: { a: { S: 'x' } } })
+        expect(flag).toEqual({ M: { a: { BOOL: true } } })
+        expect(either.unsafeDecode(text)).toEqual({ a: 'x' })
+        expect(either.unsafeDecode(flag)).toEqual({ a: true })
+    })
+
+    /**
+     * **A partition of two crossing objects declares, and each value selects its cell.**
+     *
+     * `{ a }` and `{ b }` with open blocks cross at `{ a, b }`. The partition writes the overlap as
+     * its own option, and `optional(never)` excludes a name from the other two. `dynamoNumber` is
+     * the numeric codec here, because `number` is a `held` adapter over it.
+     */
+    it('declares the partition of a crossing pair, and each value selects its cell on both sides', () => {
+        const options = [
+            object({ a: string, b: optional(never) }, [
+                string,
+                optional(dynamoNumber),
+            ]),
+            object({ b: dynamoNumber, a: optional(never) }, [
+                string,
+                optional(string),
+            ]),
+            object({ a: string, b: dynamoNumber }),
+        ] as const
+        /** Declared through a cast: the type's guard still reads the names alone. */
+        const declare = union as unknown as (
+            options: readonly AnyCodec[],
+        ) => UnionCodec<Record<string, unknown>, readonly AnyCodec[]>
+        const cells = declare(options)
+        const one = DynamoNumber.from('1')
+        const cases = [
+            [{ a: 's' }, 0],
+            [{ b: one }, 1],
+            [{ a: 's', b: one }, 2],
+        ] as const
+        for (const [value, cell] of cases) {
+            // exactly one option admits the value, and it is the expected cell
+            expect(options.map((option) => accepts(option, value))).toEqual(
+                options.map((_, at) => at === cell),
+            )
+            const written = cells.unsafeEncode(value as never)
+            // exactly one option reads the attribute back, and it is the same cell
+            expect(
+                options.map((option) => !failed(option.decode(written))),
+            ).toEqual(options.map((_, at) => at === cell))
+            expect(cells.unsafeEncode(cells.unsafeDecode(written))).toEqual(
+                written,
+            )
+        }
+        // the one value the partition leaves out: `c` is an undeclared name at the overlap cell
+        expect(() =>
+            cells.unsafeEncode({
+                a: 's',
+                b: one,
+                c: DynamoNumber.from('2'),
+            } as never),
+        ).toThrow(/no option admits/)
+    })
+
     it('resolves two options with one name set whose required literals differ', () => {
         // no cast: the declaration itself now stands, which is half the rule
         const Kinded = union([
@@ -433,8 +507,8 @@ describe('an object option is admitted by its structure', () => {
             kind: { S: 'b' },
             x: { N: '1' },
         })
-        // and both branches read back, which is the half `namesFit` alone could not reach: the
-        // stored side asks each literal's own codec to decode the attribute it carries
+        // and both branches read back: the stored side attempts each option's own decode, and the
+        // literal of one option refuses the attribute that the other option wrote
         expect(
             Kinded.unsafeDecode({ kind: { S: 'a' }, x: { S: '1' } }),
         ).toEqual({ kind: 'a', x: '1' })
@@ -462,24 +536,21 @@ describe('an object option is admitted by its structure', () => {
         ).toThrow(CodecError)
     })
 
-    it('reports the admitted option error when the structure fits one option and a value is wrong', () => {
+    it('refuses a value that no option encodes, even where its names fit one option', () => {
         const Sum = union([
             object({ kind: string('a'), x: string }),
             object({ petIds: array(string) }),
         ]).item
 
-        // the structure fits the first option and nothing else, so that option is the one chosen,
-        // and what it says about its own field is what the caller is told
+        // the names fit the first option, and the names select nothing: the first option does not
+        // encode `x: 1`, so no option admits the value
         expect(Sum.unsafeEncode({ kind: 'a', x: '1' })).toEqual({
             kind: { S: 'a' },
             x: { S: '1' },
         })
         expect(() => Sum.unsafeEncode({ kind: 'a', x: 1 } as never)).toThrow(
-            CodecError,
+            /no option admits/,
         )
-        expect(() =>
-            Sum.unsafeEncode({ kind: 'a', x: 1 } as never),
-        ).not.toThrow(/no option admits/)
     })
 
     it('admits no option where the literal itself is wrong, which is not that option error', () => {
@@ -488,8 +559,8 @@ describe('an object option is admitted by its structure', () => {
             object({ petIds: array(string) }),
         ]).item
 
-        // `kind: 'b'` is outside the first option's literal, so the first option is not admitted
-        // rather than admitted-and-failing — the difference structural admission makes
+        // `kind: 'b'` is outside the first option's literal, so the first option does not admit
+        // the value
         expect(() => Sum.unsafeEncode({ kind: 'b', x: '1' } as never)).toThrow(
             /no option admits/,
         )
@@ -498,7 +569,7 @@ describe('an object option is admitted by its structure', () => {
     /**
      * **A union reads an object option as closed, and the option's term is what has to say so.**
      *
-     * An undeclared name fails `namesFit` and so reaches no option's own `decode`.
+     * An undeclared name fails the `decode` of each closed option.
      * `Calculus.unionOk` asks every object option for a closed body, which has no open block.
      */
     it('states the closure a union reads its object options with', () => {
