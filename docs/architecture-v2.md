@@ -71,6 +71,10 @@ The two projections are different kinds of set, and the meet intersects each of 
 inhabited together, so one decision settles both. The undecidable leaf is the only place
 information is lost, and an unknown answer refuses rather than admits.
 
+> ASPIRATION: the undecidable leaf is not the only place where the meet declines. The meet also
+> refuses an adapter, `opaque` beside a container or a literal, two number literals, and a
+> closure beside a finite admissible set.
+
 ---
 
 ## 1. The one question, asked twice
@@ -144,6 +148,9 @@ decline on both questions, not a refutation.
 
 There is no second apparatus. A certificate that is not the inhabitance of the meet is a second
 function that must be held in agreement with the meet by hand, and nothing holds it there.
+
+> ASPIRATION: the certificate still has three disjuncts: the occupancy and discriminant tests,
+> the meet at the bottom, and the adapter views.
 
 ### The selector decides by attempt, at every constructor
 
@@ -221,6 +228,9 @@ carriers, so an adapter admits a value exactly when its inner term admits one, a
 answers. The adapter's set stays unnamed, because the host function is arbitrary. The certificate
 never asks for the set.
 
+> ASPIRATION: no theorem shows that an adapter is inhabited exactly when its inner term is,
+> and the meet refuses an adapter.
+
 **`opaque` decides that question.** `opaque` denotes a codec the calculus warrants, and not a
 codec a caller supplies. `opaque` is the universal sum, and its set is every value: `opaq_total`
 states the value side, and `opaqA_total` states the attribute side.
@@ -229,6 +239,9 @@ states the value side, and `opaqA_total` states the attribute side.
 the function to each alternative of a finite admissible set, and the answer is exact. A ground
 carrier with one inhabitant, or with two, is such a set. A closure answers with the top only over
 an unbounded carrier.
+
+> ASPIRATION: the meet refuses every closure, including a closure beside a finite admissible
+> set.
 
 ```mermaid
 flowchart LR
@@ -248,11 +261,18 @@ never upward, which is what an abstraction is:
 
 Nothing in that chain runs backwards.
 
+> ASPIRATION: the undecidable leaf is not the only place where the meet declines. The meet also
+> refuses an adapter, `opaque` beside a container or a literal, two number literals, and a
+> closure beside a finite admissible set.
+
 ### What the ruling deletes
 
 An occupancy projection over a finite index of value slots and attribute members. A presence
 test at a name. A literal test at a name. A row for each written shape. A body specification
 carried beside the term so that a test can read it without consulting a codec.
+
+> ASPIRATION: the tree still carries the occupancy, presence, literal and body-specification
+> tests, as disjuncts of the certificate.
 
 Every one of them is the recursion truncated at some depth. Each owes its own soundness proof,
 its own argument that the indices it skips could not have separated, and its own extension on
@@ -292,6 +312,8 @@ that uses it reports a normalization as a broken law.
 
 **The meet obeys these laws at every construction above.** The gap is not in the meet.
 
+> ASPIRATION: the meet has no adapter row, and a literal and a refinement do not meet.
+
 ### Testing for the bottom is exact over a normal form
 
 The certificate asks whether the intersection is inhabited. The bottom is the term that admits no
@@ -310,9 +332,10 @@ writes that form, and nothing states the law a second time.
 the meet does not carry yet.** Two constructions fail to propagate, and each fails for a reason
 that names its own repair.
 
-A **restriction** fails because the predicate language has no meet. A predicate over a finite set
-of alternatives cannot name the empty set, so two restrictions over one carrier pinned to disjoint
-sets stack rather than reduce. The result denotes the empty set and is spelled as a restriction.
+A **restriction** propagates over data predicates. The predicate language has a meet, and two
+restrictions over one carrier pinned to disjoint sets reduce to the bottom. Two cases still stack:
+a literal under a refinement, which the meet leaves as a refinement of the literal, and a closure,
+which the meet cannot read.
 The residual at a ground position is the admissible set this document already rules for, with
 one element added: a finite set of alternatives, the whole carrier, or the top. The addition is
 the **empty** set, which is the bottom at that position and is the one thing neither a literal nor
@@ -329,14 +352,15 @@ allow. Sound everywhere, and complete where no position answers the top: that is
 pass can discharge. The stronger one stays out of reach while a closure over an unbounded carrier
 is a term.
 
-**The order is forced rather than chosen.** The meet consults the certificate at its own coproduct
-row, so the certificate cannot be defined through the meet until that consultation goes. Under
-admission by attempt the consultation protects nothing, because the meet preserves the count at
-each option. A coproduct the selector refuses meets to a coproduct the selector refuses.
+**The meet reads no certificate at its coproduct row, so the certificate is defined through the
+meet.** A meet at the bottom is one case of the certificate. Under admission by attempt a
+certificate at that row would protect nothing, because the meet preserves the count at each
+option: a coproduct the selector refuses meets to a coproduct the selector refuses.
 
 A constructor added later arrives with its row known in advance, because the propagation rule
-decides it. A construction nobody has tested still owes its laws: the meet's associativity, its
-distribution over the coproduct, and the adapter's unit are not established here.
+decides it. The meet is associative on both projections, and it distributes over a certified coproduct on the
+value side. The adapter's unit holds as a codec equation, and the meet has no adapter row that
+could state it.
 
 ### The two projections are inhabited together, so one decision settles both
 
@@ -366,6 +390,9 @@ operands write, by canonicity, and that value is one the meet admits. An attribu
 meet therefore forces a value shared by the meet, and the contrapositive is the whole certificate:
 **a meet that admits no value accepts no attribute.**
 
+> ASPIRATION: no theorem derives the emptiness of the read side from the emptiness of the value
+> side. The tree tests each side at the spelling of the bottom, or separately.
+
 The premises are canonicity on the two operands and nothing else. They belong to the weaker bundle
 that a term containing an alternate reader still satisfies, and the development already carries
 them wherever it reasons about a term. **No preservation theorem about the meet is required**, and
@@ -374,6 +401,9 @@ the design rests on no standing assumption.
 What remains is one computable question: whether a term admits any value. The structural admission
 that answers it at a given value is in the development already and is proved exact at every term.
 So the work is the meet's own missing rows rather than a new description beside it.
+
+> ASPIRATION: admission is not computable, and no declaration decides whether a term admits any
+> value. The tree tests the spelling of the bottom.
 
 **An adapter is the exception, and the reason is structural.** An adapter's value side lives in the
 caller's universe and its attribute side in the stored universe. The meet cannot state it, so one
@@ -435,6 +465,8 @@ satisfying declaration must take, and not as something to grep for.
 under a dispatch on discriminants every field's type was such a fact. Admission by attempt
 projects nothing away except at a leaf it cannot decide, so `D4` stops being a standing debt and
 becomes a property of the one relation.
+
+> ASPIRATION: the certificate still reads body specifications that project the field types away.
 
 **D1. A description is total over its index.** A description answering only at declared names is
 a partial function pretending to be total, and every reader then carries the undeclared case by
@@ -510,6 +542,9 @@ finds two claimants. A selector that tells apart what the certificate cannot is 
 because the union is refused where the codec would have worked. Two functions kept in agreement
 by hand will drift, and nothing reports the drift. So they are one function at two arguments.
 
+> ASPIRATION: the certificate is sound for the selector, but it is a separate function, and it
+> is not complete for the selector.
+
 Separation on the two sides is one question and not two, because the two projections of a term
 are inhabited together. A recursion may discharge both at once where the codec makes them one
 fact, as a literal does. A recursion may never discharge one and stay silent about the other.
@@ -526,6 +561,8 @@ carrier is the whole set.** A type and a discriminant stop being different kinds
 is the symmetry the old arrangement broke: it gave a literal the power to separate and gave a
 type none. One relation over admissible sets decides both, at every depth, in every position.
 
+> ASPIRATION: a literal and a refinement are two constructors, and the meet does not unify them.
+
 An adapter does not restrict. It **re-indexes**, which is why it commutes with nothing: a
 refinement outside an adapter tests the caller's value and the same refinement inside tests the
 carrier's. Those are different facts and both are wanted, so the two orders are not collapsed.
@@ -540,6 +577,9 @@ reduced costs the certificate.** The reader tests the spelling, so a run over di
 denotes the empty set while it is spelled as a restriction, and the test misses it. The adapters
 form a monoid, so a run of them composes, and the order inside the run carries everything.
 
+> ASPIRATION: a run reduces only through the meet and only over data predicates. Two adapters
+> compose only up to a closure restriction outside them.
+
 Restrictions compose, because an adapter needs a second restriction naming the values it owns.
 
 ### The alternating stack
@@ -549,6 +589,9 @@ layers of one kind collapse: a run of restrictions meets to one restriction, a r
 composes to one adapter. A mixed pair does not collapse, because no law relates them. So every
 term is a carrier under an **alternating word**, and two terms that differ only inside a run are
 one term.
+
+> ASPIRATION: no function normalizes a term. Two terms that differ inside a run are equal only
+> up to codec equivalence.
 
 That is what makes the stack a mechanism rather than a list. A reader knows where a run ends
 without looking at its contents, and the description below reads the word positionally.
@@ -579,8 +622,9 @@ caller's level**, so the rule is positional: read every restriction outside the 
 adapter directly, and take the top from the outermost adapter inward. Nothing crosses an
 adapter, so nothing is transported, so no property of an adapter's function is ever required.
 
-The stored side needs no rule. An adapter is transparent there, so the description reads through
-the whole stack to the carrier.
+The stored side reads through an adapter to the carrier. One restriction does not cross: a
+restriction above an adapter that reads a whole container is caller-side data, so the stored view
+drops it.
 
 ### An adapter's domain
 
@@ -609,6 +653,9 @@ two coordinates tested apart with a presence equality guarding the second. The g
 absent summand, and writing it by hand is what makes a pair separated by the two summands
 together go unseen.
 
+> ASPIRATION: presence is a pair of flags in the body specification, and the literal test guards
+> on a presence equality. Only the meet treats a name as a sum.
+
 A name's description reaches the field's term, not a summary of it. Two objects declaring one
 name at two different types are separated by that name, at any depth, because the relation at
 the name is the relation itself.
@@ -616,8 +663,8 @@ the name is the relation itself.
 A set of admissible values is not a new representation. The members of a refinement are already
 a finite set over the carrier's type, so unifying a literal with a refinement merges two
 representations rather than introducing one. **The merge adds one element that neither side
-carries: the empty set.** Both spell non-empty sets today, which is why a meet of two disjoint
-ones has nowhere to land and stacks instead. What the unification inherits is `D6`'s
+carries: the empty set.** The meet of two disjoint member sets reduces to the bottom through the
+refinement, so the empty set is reached as the bottom rather than spelled as a set. What the unification inherits is `D6`'s
 discipline: quantify by membership, decide equality by mutual inclusion, and never reach for the
 classical instance.
 
