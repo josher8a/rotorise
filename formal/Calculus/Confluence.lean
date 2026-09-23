@@ -540,6 +540,24 @@ theorem admAAt_of_HF {x y z : Term} (hx : HF x) (hy : HF y) (hz : HF z)
   exact ⟨rfl, rfl⟩
 
 
+/-! ## A union that meets (U) only where the union acts
+
+`union(array(literal "A"), array(literal "B"))` fails `UAtCan` at `[]`
+(`not_uAtCan_array_literals`): `[]` is a canonical pair of each option. The union declines to
+write `[]`, so `UAtAct` holds, and the schema is one that people write. The pair is held-free,
+so `uAtAct_of_HF` discharges the pair with no certificate. -/
+
+/-- **§5's two residues, separated at a schema people write.**
+    `union(array(literal "A"), array(literal "B"))` fails `UAtCan`
+    (`not_uAtCan_array_literals`) and meets `UAtAct`. Each option is a restriction of
+    `opaque`, so each value that the union writes reads back through the option that wrote
+    the value. -/
+theorem uAtAct_array_literals :
+    UAtAct [Term.array (.literal .string "A"), Term.array (.literal .string "B")] :=
+  uAtAct_of_HF ⟨⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟩⟩ (forall_mem_pair
+    (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _))
+    (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _)))
+
 /-! ## The false control: a `held` adapter is not a restriction of `opaque` -/
 
 /-- `decimalHeld` writes the string `"1"` as the number `1`. -/
