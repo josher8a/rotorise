@@ -52,6 +52,23 @@ describe('the meet is the intersection of two admissions', () => {
     })
 })
 
+describe('two refinements of one set meet their predicates', () => {
+    it('meets two literal sets at their shared alphabet', () => {
+        expect(
+            meetTerms(
+                termOf(string.set('a', 'b')),
+                termOf(string.set('b', 'c')),
+            ),
+        ).toEqual(termOf(string.set('b')))
+    })
+
+    it('answers the bottom where the alphabets share no member, because a set is not empty', () => {
+        expect(
+            meetTerms(termOf(string.set('a', 'b')), termOf(string.set('c'))),
+        ).toEqual(bottom)
+    })
+})
+
 describe('a pair that shares what it writes two ways has no meet', () => {
     /**
      * `string` and `decimal` admit the same text and store it at `S` and at `N`, so a value they

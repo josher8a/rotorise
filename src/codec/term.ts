@@ -1537,9 +1537,82 @@ const groundBase = (t: Term): boolean =>
     t.kind === 'binary' ||
     t.kind === 'null'
 
-/** A refinement over the bottom is the bottom: `refine` narrows what the inner term holds. */
-const refineOf = (z: Term, q: Predicate): Term =>
-    z.kind === 'never' ? never : { kind: 'refine', inner: z, q }
+/**
+ * **A refinement over the bottom is the bottom, and two refinements over one term meet.** The
+ * model's `Term.refineOf`: a second refinement does not stack where the two predicates meet, and
+ * where no value satisfies both the result is the bottom.
+ */
+const refineOf = (z: Term, q: Predicate): Term => {
+    if (z.kind === 'never') return never
+    if (z.kind !== 'refine') return { kind: 'refine', inner: z, q }
+    const met = meetPredicates(z.q, q)
+    return met === undefined
+        ? { kind: 'refine', inner: z, q }
+        : met === null
+          ? never
+          : { kind: 'refine', inner: z.inner, q: met }
+}
+
+/**
+ * **Two predicates, met** — the model's `Pred.meetM`. `undefined` is a refusal to combine,
+ * `null` says that no value satisfies both, and a predicate is the combined one. `members` meets
+ * `members` at any two bases, and `each` meets `each` through the element predicates. A scalar
+ * `members` and `each` share no value, because `each` holds only a set. A `closure` refuses.
+ */
+const meetPredicates = (
+    q: Predicate,
+    p: Predicate,
+): Predicate | null | undefined => {
+    if (q.kind === 'closure' || p.kind === 'closure') return undefined
+    if (q.kind === 'each' && p.kind === 'each') {
+        const met = meetPredicates(q.of, p.of)
+        return met === undefined || met === null
+            ? met
+            : { kind: 'each', of: met }
+    }
+    if (q.kind === 'members' && p.kind === 'members') {
+        const met = meetAlternatives(q.literal, p.literal)
+        return met === null ? null : { kind: 'members', literal: met }
+    }
+    return null
+}
+
+/** Two alternative sets: the alternatives of the first that the second holds, or nothing. */
+const meetAlternatives = (
+    a: Alternatives,
+    b: Alternatives,
+): Alternatives | null => {
+    if (a.base !== b.base) return null
+    switch (a.base) {
+        case 'string': {
+            const ls = kept(a.ls, b.ls)
+            return ls ? { kind: 'alternatives', base: 'string', ls } : null
+        }
+        case 'number': {
+            const ls = kept(a.ls, b.ls)
+            return ls ? { kind: 'alternatives', base: 'number', ls } : null
+        }
+        case 'boolean': {
+            const ls = kept(a.ls, b.ls)
+            return ls ? { kind: 'alternatives', base: 'boolean', ls } : null
+        }
+        case 'binary': {
+            const ls = kept(a.ls, b.ls)
+            return ls ? { kind: 'alternatives', base: 'binary', ls } : null
+        }
+    }
+}
+
+/** The members of `ls` that `other` holds, in order, or nothing where none is left. */
+const kept = <A extends LiteralValue>(
+    ls: NonEmpty<A>,
+    other: readonly LiteralValue[],
+): NonEmpty<A> | undefined => {
+    const [head, ...tail] = ls.filter((one) =>
+        other.some((candidate) => sameLiteral(one, candidate)),
+    )
+    return head === undefined ? undefined : [head, ...tail]
+}
 
 /**
  * **A list with a declared position at the bottom is the bottom.**

@@ -138,17 +138,71 @@ def Pred.meetAlt (k : GroundKind) [DecidableEq k.Carrier]
     some (some (.members k ⟨A.1.filter (fun x => x ∈ B.1), nonempty_of_card_pos h⟩))
   else some none
 
-/-- **Two `members` predicates over one base, met.** `none` is a refusal to combine, `some none`
-    says the two share no alternative, and `some (some r)` is the combined predicate. The kinds
-    are matched in pairs so that every row has a concrete carrier, which is what `Term.meetLit`
-    does. `number` refuses, and the reason it used to carry is gone: its equality came from an
-    axiomatised host, and `DecidableEq` at that carrier now resolves with no host. The refusal
-    stands with no stated reason, and a row would be a change to the meet. A `closure` refuses
-    because nothing reads a caller's function. -/
+/-- An alternative set less another set over one base: the alternatives outside the second. -/
+def Pred.minus (k : GroundKind) [DecidableEq k.Carrier]
+    (A B : NEFinset k.Carrier) : Option (Option Pred) :=
+  if h : 0 < (A.1.filter (fun x => x ∉ B.1)).card then
+    some (some (.members k ⟨A.1.filter (fun x => x ∉ B.1), nonempty_of_card_pos h⟩))
+  else some none
+
+/-- Two exclusions over one base: the value is none of the alternatives of either set. -/
+def Pred.excBoth (k : GroundKind) [DecidableEq k.Carrier]
+    (A B : NEFinset k.Carrier) : Option (Option Pred) :=
+  some (some (.except k ⟨A.1 ∪ B.1,
+    match A.2 with | ⟨x, hx⟩ => ⟨x, Finset.mem_union.mpr (Or.inl hx)⟩⟩))
+
+/-- **Two `members` predicates, met at any two bases.** `inL` at a base holds only a value of
+    that base, so two different bases share no value. -/
+def Pred.meetMem : (k : GroundKind) → NEFinset k.Carrier →
+    (k' : GroundKind) → NEFinset k'.Carrier → Option (Option Pred)
+  | .string,  A, .string,  B => Pred.meetAlt .string A B
+  | .number,  A, .number,  B => Pred.meetAlt .number A B
+  | .boolean, A, .boolean, B => Pred.meetAlt .boolean A B
+  | .binary,  A, .binary,  B => Pred.meetAlt .binary A B
+  | .null,    A, .null,    B => Pred.meetAlt .null A B
+  | _, _, _, _ => some none
+
+/-- A `members` predicate met with an `except` predicate, at any two bases. -/
+def Pred.meetMemExc : (k : GroundKind) → NEFinset k.Carrier →
+    (k' : GroundKind) → NEFinset k'.Carrier → Option (Option Pred)
+  | .string,  A, .string,  B => Pred.minus .string A B
+  | .number,  A, .number,  B => Pred.minus .number A B
+  | .boolean, A, .boolean, B => Pred.minus .boolean A B
+  | .binary,  A, .binary,  B => Pred.minus .binary A B
+  | .null,    A, .null,    B => Pred.minus .null A B
+  | _, _, _, _ => some none
+
+/-- Two `except` predicates, met at any two bases. -/
+def Pred.meetExc : (k : GroundKind) → NEFinset k.Carrier →
+    (k' : GroundKind) → NEFinset k'.Carrier → Option (Option Pred)
+  | .string,  A, .string,  B => Pred.excBoth .string A B
+  | .number,  A, .number,  B => Pred.excBoth .number A B
+  | .boolean, A, .boolean, B => Pred.excBoth .boolean A B
+  | .binary,  A, .binary,  B => Pred.excBoth .binary A B
+  | .null,    A, .null,    B => Pred.excBoth .null A B
+  | _, _, _, _ => some none
+
+/-- The meet of two element predicates, lifted to `each`. -/
+def Pred.meetEach : Option (Option Pred) → Option (Option Pred)
+  | some (some r) => some (some (.each r))
+  | some none => some none
+  | none => none
+
+/-- **Two predicates, met.** `none` is a refusal to combine, `some none` says that no value
+    satisfies both, and `some (some r)` is the combined predicate. Every data case meets every
+    data case: `members` and `except` at any two bases, and `each` with `each` through the meet
+    of the element predicates. A scalar predicate and `each` share no value, because `each`
+    holds only a set. A `closure` refuses, because nothing reads a caller's function. -/
 def Pred.meetM : Pred → Pred → Option (Option Pred)
-  | .members .string A,  .members .string B  => Pred.meetAlt .string A B
-  | .members .boolean A, .members .boolean B => Pred.meetAlt .boolean A B
-  | .members .binary A,  .members .binary B  => Pred.meetAlt .binary A B
+  | .members k A, .members k' B => Pred.meetMem k A k' B
+  | .members k A, .except k' B  => Pred.meetMemExc k A k' B
+  | .except k B,  .members k' A => Pred.meetMemExc k' A k B
+  | .except k A,  .except k' B  => Pred.meetExc k A k' B
+  | .each p, .each q => Pred.meetEach (Pred.meetM p q)
+  | .members _ _, .each _ => some none
+  | .except _ _,  .each _ => some none
+  | .each _, .members _ _ => some none
+  | .each _, .except _ _  => some none
   | _, _ => none
 
 /-- **A refinement over the bottom is the bottom, and two refinements over one carrier meet.**
@@ -218,25 +272,283 @@ theorem meetAlt_empty {k : GroundKind} [DecidableEq k.Carrier] {A B : NEFinset k
             simp only [inLs, decide_eq_true_eq] at hA hB
             exact absurd hB (hiff hA)
 
+/-- **What a predicate meet must satisfy at each answer.** The combined predicate holds exactly
+    where both hold, the empty answer holds where no value satisfies both, and a refusal asks
+    nothing. -/
+def MeetOk (q p : Pred) : Option (Option Pred) → Prop
+  | some (some r) => ∀ v, Pred.eval r v = (Pred.eval q v && Pred.eval p v)
+  | some none => ∀ v, (Pred.eval q v && Pred.eval p v) = false
+  | none => True
+
+/-- The obligation is symmetric in the two predicates. -/
+theorem MeetOk.symm {q p : Pred} : ∀ {o : Option (Option Pred)}, MeetOk q p o → MeetOk p q o
+  | some (some _), h => fun v => by rw [h v, Bool.and_comm]
+  | some none, h => fun v => by rw [Bool.and_comm]; exact h v
+  | none, _ => trivial
+
+/-- Two alternative sets over one base meet as `meetAlt` says. -/
+theorem meetAlt_ok (k : GroundKind) [DecidableEq k.Carrier] (A B : NEFinset k.Carrier) :
+    MeetOk (.members k A) (.members k B) (Pred.meetAlt k A B) := by
+  cases h : Pred.meetAlt k A B with
+  | none => trivial
+  | some o =>
+    cases o with
+    | none => exact fun v => meetAlt_empty h v
+    | some r => exact fun v => meetAlt_eval h v
+
+/-- An alternative that `inL` holds at a value names the value's base. -/
+theorem inBase_of_inL {k : GroundKind} {x : k.Carrier} {v : Value} (h : inL k x v = true) :
+    inBase k v = true := by
+  cases k <;> cases v <;> simp_all [inL, inBase]
+
+/-- A value outside a base satisfies no alternative at that base. -/
+theorem inLs_false_of_base {k : GroundKind} {A : NEFinset k.Carrier} {v : Value}
+    (h : inBase k v = false) : inLs k A v = false := by
+  cases hA : inLs k A v with
+  | false => rfl
+  | true =>
+    simp only [inLs, decide_eq_true_eq] at hA
+    obtain ⟨x, _, hx⟩ := hA
+    rw [inBase_of_inL hx] at h
+    exact nomatch h
+
+/-- Two different bases hold no common value. -/
+theorem inBase_disj {k k' : GroundKind} (h : k ≠ k') (v : Value) :
+    (inBase k v && inBase k' v) = false := by
+  cases k <;> cases k' <;> cases v <;> first | rfl | exact absurd rfl h
+
+/-- A scalar base holds no set, and `each` holds nothing else. -/
+theorem liftQ_false_of_base {k : GroundKind} {v : Value} (h : inBase k v = true) (q : Value → Bool) :
+    liftQ q v = false := by
+  cases k <;> cases v <;> first | rfl | exact nomatch h
+
+/-- `members` at two different bases share no value. -/
+theorem memMem_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
+    (B : NEFinset k'.Carrier) : MeetOk (.members k A) (.members k' B) (some none) := by
+  intro v
+  show (inLs k A v && inLs k' B v) = false
+  have hd := inBase_disj h v
+  cases hk : inBase k v with
+  | false => rw [inLs_false_of_base hk]; rfl
+  | true =>
+    rw [hk, Bool.true_and] at hd
+    rw [inLs_false_of_base hd, Bool.and_false]
+
+/-- `members` and `except` at two different bases share no value. -/
+theorem memExc_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
+    (B : NEFinset k'.Carrier) : MeetOk (.members k A) (.except k' B) (some none) := by
+  intro v
+  show (inLs k A v && (inBase k' v && !inLs k' B v)) = false
+  have hd := inBase_disj h v
+  cases hk : inBase k v with
+  | false => rw [inLs_false_of_base hk]; rfl
+  | true =>
+    rw [hk, Bool.true_and] at hd
+    rw [hd, Bool.false_and, Bool.and_false]
+
+/-- `except` at two different bases share no value. -/
+theorem excExc_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
+    (B : NEFinset k'.Carrier) : MeetOk (.except k A) (.except k' B) (some none) := by
+  intro v
+  show ((inBase k v && !inLs k A v) && (inBase k' v && !inLs k' B v)) = false
+  have hd := inBase_disj h v
+  cases hk : inBase k v with
+  | false => rfl
+  | true =>
+    rw [hk, Bool.true_and] at hd
+    rw [hd, Bool.false_and, Bool.and_false]
+
+/-- **An alternative outside the second set is the only way the first holds and the second
+    does not.** `inL` names one inhabitant per base, as in `exists_filter_iff`. -/
+theorem exists_filter_not_iff {k : GroundKind} [DecidableEq k.Carrier]
+    (A B : Finset k.Carrier) (v : Value) :
+    (∃ x ∈ A.filter (fun x => x ∉ B), inL k x v = true)
+      ↔ ((∃ x ∈ A, inL k x v = true) ∧ ¬ ∃ y ∈ B, inL k y v = true) := by
+  constructor
+  · rintro ⟨x, hx, hv⟩
+    obtain ⟨hxA, hxB⟩ := Finset.mem_filter.mp hx
+    refine ⟨⟨x, hxA, hv⟩, ?_⟩
+    rintro ⟨y, hyB, hyv⟩
+    cases inL_inj hv hyv
+    exact hxB hyB
+  · rintro ⟨⟨x, hxA, hxv⟩, hn⟩
+    exact ⟨x, Finset.mem_filter.mpr ⟨hxA, fun hxB => hn ⟨x, hxB, hxv⟩⟩, hxv⟩
+
+/-- An alternative set less another meets as a `members` against an `except`. -/
+theorem minus_ok (k : GroundKind) [DecidableEq k.Carrier] (A B : NEFinset k.Carrier) :
+    MeetOk (.members k A) (.except k B) (Pred.minus k A B) := by
+  unfold Pred.minus
+  split
+  · intro v
+    show inLs k _ v = (inLs k A v && (inBase k v && !inLs k B v))
+    have hiff := exists_filter_not_iff A.1 B.1 v
+    cases hA : inLs k A v with
+    | false =>
+      simp only [inLs, decide_eq_false_iff_not] at hA ⊢
+      exact decide_eq_false (fun h => hA (hiff.mp h).1)
+    | true =>
+      have hA' : ∃ x ∈ A.1, inL k x v = true := by
+        simpa only [inLs, decide_eq_true_eq] using hA
+      obtain ⟨x, _, hxv⟩ := hA'
+      rw [inBase_of_inL hxv]
+      cases hB : inLs k B v with
+      | true =>
+        simp only [inLs, decide_eq_true_eq] at hB
+        exact decide_eq_false (fun h => (hiff.mp h).2 hB)
+      | false =>
+        simp only [inLs, decide_eq_false_iff_not] at hB
+        simp only [inLs, decide_eq_true_eq] at hA
+        exact decide_eq_true (hiff.mpr ⟨hA, hB⟩)
+  · rename_i hne
+    have hne : A.1.filter (fun x => x ∉ B.1) = ∅ :=
+      Finset.card_eq_zero.mp (Nat.eq_zero_of_not_pos hne)
+    intro v
+    show (inLs k A v && (inBase k v && !inLs k B v)) = false
+    have hiff := exists_filter_not_iff A.1 B.1 v
+    cases hA : inLs k A v with
+    | false => rfl
+    | true =>
+      cases hB : inLs k B v with
+      | true => simp
+      | false =>
+        simp only [inLs, decide_eq_true_eq, decide_eq_false_iff_not] at hA hB
+        obtain ⟨x, hx, _⟩ := hiff.mpr ⟨hA, hB⟩
+        rw [hne] at hx
+        exact absurd hx (Finset.notMem_empty x)
+
+/-- The alternatives of two sets over one base, as one set. -/
+theorem inLs_union {k : GroundKind} [DecidableEq k.Carrier] (A B : NEFinset k.Carrier)
+    (h : (A.1 ∪ B.1).Nonempty) (v : Value) :
+    inLs k ⟨A.1 ∪ B.1, h⟩ v = (inLs k A v || inLs k B v) := by
+  refine Bool.eq_iff_iff.mpr ?_
+  simp only [inLs, Bool.or_eq_true, decide_eq_true_eq]
+  constructor
+  · rintro ⟨x, hx, hv⟩
+    rcases Finset.mem_union.mp hx with h | h
+    · exact .inl ⟨x, h, hv⟩
+    · exact .inr ⟨x, h, hv⟩
+  · rintro (⟨x, h, hv⟩ | ⟨x, h, hv⟩)
+    · exact ⟨x, Finset.mem_union.mpr (Or.inl h), hv⟩
+    · exact ⟨x, Finset.mem_union.mpr (Or.inr h), hv⟩
+
+/-- Two exclusions over one base meet as the exclusion of both sets. -/
+theorem excBoth_ok (k : GroundKind) [DecidableEq k.Carrier] (A B : NEFinset k.Carrier) :
+    MeetOk (.except k A) (.except k B) (Pred.excBoth k A B) := by
+  intro v
+  show (inBase k v && !inLs k ⟨A.1 ∪ B.1, _⟩ v)
+    = ((inBase k v && !inLs k A v) && (inBase k v && !inLs k B v))
+  rw [inLs_union]
+  cases inBase k v <;> cases inLs k A v <;> cases inLs k B v <;> rfl
+
+/-- `members` meets `members` at any two bases. -/
+theorem meetMem_ok (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind)
+    (B : NEFinset k'.Carrier) : MeetOk (.members k A) (.members k' B) (Pred.meetMem k A k' B) := by
+  cases k <;> cases k' <;>
+    first
+      | exact meetAlt_ok _ A B
+      | exact memMem_none (by decide) A B
+
+/-- `members` meets `except` at any two bases. -/
+theorem meetMemExc_ok (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind)
+    (B : NEFinset k'.Carrier) :
+    MeetOk (.members k A) (.except k' B) (Pred.meetMemExc k A k' B) := by
+  cases k <;> cases k' <;>
+    first
+      | exact minus_ok _ A B
+      | exact memExc_none (by decide) A B
+
+/-- `except` meets `except` at any two bases. -/
+theorem meetExc_ok (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind)
+    (B : NEFinset k'.Carrier) :
+    MeetOk (.except k A) (.except k' B) (Pred.meetExc k A k' B) := by
+  cases k <;> cases k' <;>
+    first
+      | exact excBoth_ok _ A B
+      | exact excExc_none (by decide) A B
+
+/-- `each` lifts a conjunction to a conjunction. -/
+theorem liftQ_and (p q : Value → Bool) (v : Value) :
+    liftQ (fun w => p w && q w) v = (liftQ p v && liftQ q v) := by
+  cases v <;> simp only [liftQ] <;>
+    first
+      | rfl
+      | (refine Bool.eq_iff_iff.mpr ?_
+         simp only [Bool.and_eq_true, decide_eq_true_eq]
+         exact ⟨fun h => ⟨fun s hs => (h s hs).1, fun s hs => (h s hs).2⟩,
+           fun h s hs => ⟨h.1 s hs, h.2 s hs⟩⟩)
+
+/-- **No set has every element in an empty meet**, because a wire set is not empty. -/
+theorem liftQ_and_false {p q : Value → Bool} (h : ∀ w, (p w && q w) = false) (v : Value) :
+    (liftQ p v && liftQ q v) = false := by
+  rw [← liftQ_and]
+  cases v with
+  | strSet S =>
+    obtain ⟨s, hs⟩ := S.2
+    exact decide_eq_false (fun hall => Bool.false_ne_true ((h _).symm.trans (hall s hs)))
+  | numSet S =>
+    obtain ⟨s, hs⟩ := S.2
+    exact decide_eq_false (fun hall => Bool.false_ne_true ((h _).symm.trans (hall s hs)))
+  | binSet S =>
+    obtain ⟨s, hs⟩ := S.2
+    exact decide_eq_false (fun hall => Bool.false_ne_true ((h _).symm.trans (hall s hs)))
+  | _ => rfl
+
+/-- `each` meets `each` through the meet of the element predicates. -/
+theorem meetEach_ok {p q : Pred} :
+    ∀ {o : Option (Option Pred)}, MeetOk p q o → MeetOk (.each p) (.each q) (Pred.meetEach o)
+  | some (some r), h => fun v => by
+      show liftQ r.eval v = (liftQ p.eval v && liftQ q.eval v)
+      rw [← liftQ_and, show r.eval = fun w => p.eval w && q.eval w from funext h]
+  | some none, h => fun v => liftQ_and_false h v
+  | none, _ => trivial
+
+/-- A scalar `members` and an `each` share no value, because `each` holds only a set. -/
+theorem members_each_ok (k : GroundKind) (A : NEFinset k.Carrier) (q : Pred) :
+    MeetOk (.members k A) (.each q) (some none) := by
+  intro v
+  show (inLs k A v && liftQ q.eval v) = false
+  cases hk : inBase k v with
+  | false => rw [inLs_false_of_base hk]; rfl
+  | true => rw [liftQ_false_of_base hk, Bool.and_false]
+
+/-- An `except` and an `each` share no value, because `except` holds only a scalar. -/
+theorem except_each_ok (k : GroundKind) (A : NEFinset k.Carrier) (q : Pred) :
+    MeetOk (.except k A) (.each q) (some none) := by
+  intro v
+  show ((inBase k v && !inLs k A v) && liftQ q.eval v) = false
+  cases hk : inBase k v with
+  | false => rfl
+  | true => rw [liftQ_false_of_base hk, Bool.and_false]
+
+/-- **The predicate meet is sound at every row.** -/
+theorem meetM_ok : ∀ q p : Pred, MeetOk q p (Pred.meetM q p)
+  | .members k A, .members k' B => meetMem_ok k A k' B
+  | .members k A, .except k' B  => meetMemExc_ok k A k' B
+  | .except k B,  .members k' A => (meetMemExc_ok k' A k B).symm
+  | .except k A,  .except k' B  => meetExc_ok k A k' B
+  | .each p, .each q => meetEach_ok (meetM_ok p q)
+  | .members k A, .each q => members_each_ok k A q
+  | .except k A,  .each q => except_each_ok k A q
+  | .each q, .members k A => (members_each_ok k A q).symm
+  | .each q, .except k A  => (except_each_ok k A q).symm
+  | .members _ _, .closure _ => trivial
+  | .except _ _,  .closure _ => trivial
+  | .each _,      .closure _ => trivial
+  | .closure _, _ => trivial
+
 /-- The combined predicate holds exactly where both hold. -/
 theorem meetM_eval {q p r : Pred} (h : Pred.meetM q p = some (some r)) (v : Value) :
     Pred.eval r v = (Pred.eval q v && Pred.eval p v) := by
-  unfold Pred.meetM at h
-  split at h
-  case _ => exact meetAlt_eval h v
-  case _ => exact meetAlt_eval h v
-  case _ => exact meetAlt_eval h v
-  case _ => exact absurd h (by simp)
+  have hok := meetM_ok q p
+  rw [h] at hok
+  exact hok v
 
-/-- Where the two share no alternative, nothing satisfies both. -/
+/-- Where the meet is empty, nothing satisfies both. -/
 theorem meetM_empty {q p : Pred} (h : Pred.meetM q p = some none) (v : Value) :
     (Pred.eval q v && Pred.eval p v) = false := by
-  unfold Pred.meetM at h
-  split at h
-  case _ => exact meetAlt_empty h v
-  case _ => exact meetAlt_empty h v
-  case _ => exact meetAlt_empty h v
-  case _ => exact absurd h (by simp)
+  have hok := meetM_ok q p
+  rw [h] at hok
+  exact hok v
 
 
 /-- **A list with a declared position at the bottom is the bottom.** Every value the list
@@ -1079,10 +1391,11 @@ The certificate is defined here, after the meet, because one of its two tests is
     so the pair is not certified. -/
 def meetNever (x y : Term) : Bool := (Term.meet x y).any Term.isNever
 
-/-- **The certificate for one pair of options.** Each test certifies pairs that the other misses.
-    The meet certifies two arrays told apart by a literal position, and the empty list beside a
-    list that holds one element or more. `Orth` certifies two string sets whose `each`
-    predicates hold disjoint members, because the meet does not meet two `each` predicates. -/
+/-- **The certificate for one pair of options.** The meet certifies two arrays told apart by a
+    literal position, and the empty list beside a list that holds one element or more, which
+    `Orth` misses. The meet meets two `each` predicates, so two string sets whose members are
+    disjoint meet at the bottom, and `Orth` certifies that pair too. No theorem states that the
+    meet certifies every pair that `Orth` certifies, so `Orth` stays a disjunct. -/
 def certPair (x y : Term) : Bool := Orth x y || meetNever x y
 
 /-- The certificate over a list of options, pair by pair. -/
@@ -1266,6 +1579,25 @@ theorem unionOk_literalListOptions : unionOk literalListOptions = true := by dec
     both hold `[]`, so the meet is `array never`, which holds `[]` and is not the bottom. -/
 theorem not_unionOk_literalArrays :
     unionOk [.array (.literal .string "A"), .array (.literal .string "B")] = false := by decide
+
+/-! ### Two literal sets, met through `each`
+
+`Orth` certifies two string sets whose members are disjoint. The meet certifies the same pair,
+because `each` meets `each` through the member sets, and no set has every element in an empty
+meet. -/
+
+/-- **Two string sets with disjoint members meet at the bottom.** -/
+theorem meetNever_disjointStringSets :
+    meetNever (.refine (.set .string) (.each (.members .string (NEFinset.of "a" {"b"}))))
+      (.refine (.set .string) (.each (.members .string (NEFinset.of "c" ∅)))) = true := by
+  decide
+
+/-- **Two string sets that share a member meet at the set of the shared members.** -/
+theorem meet_stringSets_shared :
+    Term.meet (.refine (.set .string) (.each (.members .string (NEFinset.of "a" {"b"}))))
+      (.refine (.set .string) (.each (.members .string (NEFinset.of "b" {"c"}))))
+      = some (.refine (.set .string) (.each (.members .string (NEFinset.of "b" ∅)))) := by
+  rfl
 
 /-! ### Why the write-agreement condition is conditional
 
