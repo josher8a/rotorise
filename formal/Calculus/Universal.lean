@@ -131,9 +131,14 @@ theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
         AdmOptT, alignPL_spread]
       exact decide_eq_decide.mpr Iff.rfl
   | map keys g =>
+      -- the record's guard is vacuous over `∅`; a `simp` that unfolds the guard reaches
+      -- `Finset.instIsEmpty`, so the guard stays folded and the fact is handed in
+      have hp : valPresentT ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
+        decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [Adm_opaq_map]
       simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
-        AdmWild, valPresentT, objAdmV, entryP, MapOf.at]
+        AdmWild, objAdmV, entryP, MapOf.at]
+      exact fun _ => hp
 
 
 /-- `alignPL_spread` on the read side. -/
@@ -221,9 +226,13 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
         Term.record, AdmAOptT, alignPAL_spread]
       exact decide_eq_decide.mpr Iff.rfl
   | m keys g =>
+      -- the record's guard stays folded, for the reason `Adm_opaqUnfold` gives
+      have hp : reqPresentT ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
+        decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [AdmA_opaq_m]
       simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, AdmASet, Term.array,
-        Term.record, AdmAWild, reqPresentT, objAdmA, entryPA, MapOf.at]
+        Term.record, AdmAWild, objAdmA, entryPA, MapOf.at]
+      exact fun _ => hp
 
 /-- **`opaque` is total, write side.** `opaque` writes every value. -/
 theorem opaq_total : ∀ v : Value, Adm .opaq v = true

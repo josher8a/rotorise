@@ -305,8 +305,8 @@ theorem sub_bodySem (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSl
       cases hmA
       obtain ⟨-, d, hd, rfl⟩ := objRead_eq.mp hr
       rw [Ωp_m]
-      have hS : keys = keys.filter (keepB (wildSem w) ⟨fields, fun k => fieldSem (f k)⟩ ·) := by
-        rw [show keepB (wildSem w) _ = fun _ => true from funext (keepB_wild w _)]; simp
+      have hS : keys = keys.filter (keepB (wildSem w) ⟨fields, fun k => fieldSem (f k)⟩ ·) :=
+        (filter_eq_self_on (fun k _ => keepB_wild w _ k)).symm
       rw [funImage_record_congr hS (g' := fun k : {k // k ∈ keys.filter
           (keepB (wildSem w) ⟨fields, fun k => fieldSem (f k)⟩ ·)} =>
             (entryCodec ⟨fields, fun k => fieldSem (f k)⟩ (rcOf (wildSem w)) k.1).bind
@@ -436,46 +436,68 @@ theorem neSetImage_none_all {α β : Type} [DecidableEq β] {f : α → Option �
   exact neSetImage_none (setImage_none_of hx (h x))
 
 mutual
-/-- `Ω` writes every attribute: its write side is onto. -/
-theorem Ω_onto : ∀ a : Attr, ∃ v, Ω.e v = some a
-  | .s x => ⟨.str x, rfl⟩
-  | .n x => ⟨.num x, rfl⟩
-  | .b x => ⟨.bin x, rfl⟩
-  | .bool x => ⟨.bool x, rfl⟩
-  | .null => ⟨.null, rfl⟩
-  | .ss S => ⟨.strSet S, by
+/-- The value that `Ω` writes to an attribute, by structure. The witness of `Ω_onto` is this
+    function and not a choice, so the map case names its preimage without `Classical.choose`. -/
+def valueOfAttr : Attr → Value
+  | .s x => .str x
+  | .n x => .num x
+  | .b x => .bin x
+  | .bool x => .bool x
+  | .null => .null
+  | .ss S => .strSet S
+  | .ns S => .numSet S
+  | .bs S => .binSet S
+  | .l as => .arr (valueOfAttrL as)
+  | .m keys g => .map keys (fun k => valueOfAttr (g k))
+/-- …and on a list of attributes. -/
+def valueOfAttrL : List Attr → List Value
+  | [] => []
+  | a :: as => valueOfAttr a :: valueOfAttrL as
+end
+
+mutual
+/-- `Ω` writes each attribute from `valueOfAttr`. -/
+theorem Ω_e_valueOfAttr : ∀ a : Attr, Ω.e (valueOfAttr a) = some a
+  | .s _ => rfl
+  | .n _ => rfl
+  | .b _ => rfl
+  | .bool _ => rfl
+  | .null => rfl
+  | .ss S => by
+      show Ω.e (.strSet S) = _
       rw [Ωe_strSet]; unfold encSet
       rw [show (fun x : String => (Ω.e (Value.str x)).bind sC.out) = fun x => some x from rfl,
-        neSetImage_id]⟩
-  | .ns S => ⟨.numSet S, by
+        neSetImage_id]
+  | .ns S => by
+      show Ω.e (.numSet S) = _
       rw [Ωe_numSet]; unfold encSet
       rw [neSetImage_none_all (f := fun x : WFNumeral => (Ω.e (Value.num x)).bind sC.out) S
           (fun _ => rfl),
         show (fun x : WFNumeral => (Ω.e (Value.num x)).bind nC.out) = fun x => some x from rfl,
-        neSetImage_id]⟩
-  | .bs S => ⟨.binSet S, by
+        neSetImage_id]
+  | .bs S => by
+      show Ω.e (.binSet S) = _
       rw [Ωe_binSet]; unfold encSet
       rw [neSetImage_none_all (f := fun x : Bytes => (Ω.e (Value.bin x)).bind sC.out) S
           (fun _ => rfl),
         neSetImage_none_all (f := fun x : Bytes => (Ω.e (Value.bin x)).bind nC.out) S
           (fun _ => rfl),
         show (fun x : Bytes => (Ω.e (Value.bin x)).bind bC.out) = fun x => some x from rfl,
-        neSetImage_id]; rfl⟩
+        neSetImage_id]; rfl
   | .l as => by
-      obtain ⟨vs, hvs⟩ := Ω_ontoL as
-      exact ⟨.arr vs, by rw [Ωe_arr, hvs]; rfl⟩
+      show Ω.e (.arr (valueOfAttrL as)) = _
+      rw [Ωe_arr, Ω_e_valueOfAttrL as]; rfl
   | .m keys g => by
-      have h := fun k => Ω_onto (g k)
-      refine ⟨.map keys (fun k => Classical.choose (h k)), ?_⟩
-      rw [Ωe_map, funImage_eq (f := g) (fun k => Classical.choose_spec (h k))]; rfl
-/-- …and `Ω` writes every list of attributes. -/
-theorem Ω_ontoL : ∀ as : List Attr, ∃ vs, traverse Ω.e vs = some as
-  | [] => ⟨[], rfl⟩
-  | a :: as => by
-      obtain ⟨v, hv⟩ := Ω_onto a
-      obtain ⟨vs, hvs⟩ := Ω_ontoL as
-      exact ⟨v :: vs, by simp only [traverse, hv, hvs]⟩
+      show Ω.e (.map keys (fun k => valueOfAttr (g k))) = _
+      rw [Ωe_map, funImage_eq (f := g) (fun k => Ω_e_valueOfAttr (g k))]; rfl
+/-- …and each list of attributes from `valueOfAttrL`. -/
+theorem Ω_e_valueOfAttrL : ∀ as : List Attr, traverse Ω.e (valueOfAttrL as) = some as
+  | [] => rfl
+  | a :: as => by simp only [valueOfAttrL, traverse, Ω_e_valueOfAttr a, Ω_e_valueOfAttrL as]
 end
+
+/-- `Ω` writes every attribute: its write side is onto. -/
+theorem Ω_onto (a : Attr) : ∃ v, Ω.e v = some a := ⟨_, Ω_e_valueOfAttr a⟩
 
 /-- `Ω` reads only canonical attributes: `e ∘ p = id` on `dom(p)`. -/
 theorem Ω_canon {a : Attr} {t : Value} (h : Ω.p a = some t) : Ω.e t = some a :=

@@ -463,11 +463,11 @@ structure — the names and the literal fields, not every field's contents — s
 stated on `Adm` alone would not transfer.
 See `admitOptV`. -/
 
-theorem specOf_none_admitOptV {t : Term} (h : specOf t = none) (v : Value) :
-    admitOptV (specOf t, Adm t) v = Adm t v := by simp only [admitOptV, h]
+theorem specOf_none_admitOptV {t : Term} (v : Value) :
+    admitOptV (specOf t, Adm t) v = Adm t v := by simp only [admitOptV]
 
-theorem specOf_none_admitOptA {t : Term} (h : specOf t = none) (a : Attr) :
-    admitOptA (specOf t, AdmA t) a = AdmA t a := by simp only [admitOptA, h]
+theorem specOf_none_admitOptA {t : Term} (a : Attr) :
+    admitOptA (specOf t, AdmA t) a = AdmA t a := by simp only [admitOptA]
 
 /-- `selOptV`'s singleton, as the option it lands on — `selOptV_le_AdmAny` in the vocabulary
     the recursion needs. `AdmAny` is not enough here: at an *object* option the admission is
@@ -869,14 +869,14 @@ theorem separates_literal_disjoint {k : GroundKind} {x y : k.Carrier}
     Separates (.literal k x) (.literal k y) := by
   refine ⟨?_, ?_⟩
   · rintro v ⟨-, hx⟩ ⟨-, hy⟩
-    rw [specOf_none_admitOptV rfl, Adm_literal] at hx hy
+    rw [specOf_none_admitOptV, Adm_literal] at hx hy
     -- `AdmLit` is `inL`, full stop, since `number`'s `WF` conjunct became its carrier's
     have hix : inL k x v = true := hx
     have hiy : inL k y v = true := hy
     rw [inL_disjoint hd v hix] at hiy
     exact absurd hiy (by simp)
   · rintro a ⟨-, hx⟩ ⟨-, hy⟩
-    rw [specOf_none_admitOptA rfl, AdmA_literal] at hx hy
+    rw [specOf_none_admitOptA, AdmA_literal] at hx hy
     rw [admALit_disjoint hd a hx] at hy
     exact absurd hy (by simp)
 
@@ -957,13 +957,13 @@ theorem separates_setLiteral_disjoint {b : SetBase} {k : GroundKind}
               (.refine (.set b) (.each (.members k ls'))) := by
   refine ⟨?_, ?_⟩
   · rintro v ⟨-, hx⟩ ⟨-, hy⟩
-    rw [specOf_none_admitOptV rfl, Adm_refine_row] at hx hy
+    rw [specOf_none_admitOptV, Adm_refine_row] at hx hy
     have hlx : liftQ (inLs k ls) v = true := (Bool.and_eq_true_iff.mp hx).2
     have hly : liftQ (inLs k ls') v = true := (Bool.and_eq_true_iff.mp hy).2
     rw [liftQ_inLs_disjoint hd v hlx] at hly
     exact absurd hly (by simp)
   · rintro a ⟨-, hx⟩ ⟨-, hy⟩
-    rw [specOf_none_admitOptA rfl, AdmA_refine_row] at hx hy
+    rw [specOf_none_admitOptA, AdmA_refine_row] at hx hy
     have hrx := (Bool.and_eq_true_iff.mp hx).2
     have hry := (Bool.and_eq_true_iff.mp hy).2
     -- one base, so one decoded value: `refineReads` is `false` where the base reads nothing
@@ -1147,19 +1147,12 @@ theorem separates_of_orth {x y : Term} (h : Orth x y = true) : Separates x y := 
     · exact separates_of_orthS hs
   · exact separates_of_orthL hl
 
-/-- **§5's (U), from pairwise separation.** The two other premises are the ones every
-    discharger in `Discharge.lean` already takes: lawfulness, which soundness supplies, and
-    the closed-object restriction.
-
-    `hblk` asks that an open block's term denotes a lawful codec. The premise was
-    `Term.isOpenObject = false`, which refused the open object outright. The structural
-    lemmas now read the block, so an open option admits through a union like any other, and
-    the residue is lawfulness alone: `optionSem_self_admit` reads the block's codec back and
-    needs that codec to retract. A closed body discharges `hblk` with no content. -/
+/-- **§5's (U), from pairwise separation.** The other premise is the one every discharger
+    in `Discharge.lean` already takes: lawfulness, which soundness supplies. An open object
+    admits through a union like any other option: `optionSem_self_admit` reads the option's
+    codec back, and needs only that the codec retracts. -/
 theorem uAtCan_of_separated {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hblk : ∀ t ∈ opts, ∀ fields ff wild, t = .object (.mk fields ff wild) →
-      ∀ w : Term, wild = some w → Lawful (denote w))
     (h : Separated opts) :
     UAtCan opts := by
   refine uniqueAdmission_of_disjoint
@@ -1176,7 +1169,7 @@ theorem uAtCan_of_separated {opts : List Term}
   · rw [List.pairwise_map]; exact h.imp (fun hs => hs.2)
   · refine List.forall_mem_map.mpr fun t ht v a he => ?_
     rw [optionSemOf_c] at he
-    exact optionSem_self_admit t (hblk t ht) (hlaw t ht) he
+    exact optionSem_self_admit t (hlaw t ht) he
 
 /-- **Pairwise separation is the structural certificate**, which is (U)'s premise read as a
     counting fact rather than as a singleton one.
@@ -1229,20 +1222,16 @@ theorem admitsAtMostOne_of_orth {opts : List Term}
     twenty-five between them. The by-phase table at the end of the file is the measurement. -/
 theorem uAtCan_of_orth {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hblk : ∀ t ∈ opts, ∀ fields ff wild, t = .object (.mk fields ff wild) →
-      ∀ w : Term, wild = some w → Lawful (denote w))
     (h : List.Pairwise (fun x y => Orth x y = true) opts) :
     UAtCan opts :=
-  uAtCan_of_separated hlaw hblk (separated_of_orth h)
+  uAtCan_of_separated hlaw (separated_of_orth h)
 
 /-- …and the residue the laws actually need. -/
 theorem uAtAct_of_orth {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hblk : ∀ t ∈ opts, ∀ fields ff wild, t = .object (.mk fields ff wild) →
-      ∀ w : Term, wild = some w → Lawful (denote w))
     (h : List.Pairwise (fun x y => Orth x y = true) opts) :
     UAtAct opts :=
-  uAtAct_of_uAtCan (uAtCan_of_orth hlaw hblk h)
+  uAtAct_of_uAtCan (uAtCan_of_orth hlaw h)
 
 /-! ## The same certificate, on the held sets
 
@@ -1254,9 +1243,7 @@ they differ: `select` writes nothing where two options admit, and the held set k
 
 The mirror below re-runs each phase against the judgement, with no induction over the
 judgement. It needs the value half
-only, because a held set is a set of values. `uAtCan_of_orth` takes a closedness premise
-for a different reason, which is admission and not separation: an open option's admission is
-not structural, so `optionSem_self_admit` needs it where this phase no longer does. -/
+only, because a held set is a set of values. -/
 
 /-- The option list's held occupancy, for the `union` row below. -/
 theorem typed_occVL : ∀ {opts : List Term} {Ts μs}, TypedListμ opts Ts μs →
@@ -1750,7 +1737,6 @@ theorem not_orth_set_literal_closure (q : Value → Bool) :
 theorem uAtCan_literal_literal_by_orth :
     UAtCan [Term.literal .string lsA, Term.literal .string lsB] :=
   uAtCan_of_orth (forall_mem_pair (lawful_literal _ _) (lawful_literal _ _))
-    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
     (List.pairwise_pair.mpr (by decide))
 
 /-! ### The existing discharges, by phase
@@ -1796,7 +1782,6 @@ certificate on a pair of terms is. That gap is where the working container schem
     established rather than a second route to it. -/
 theorem uAtCan_string_null_by_orth : UAtCan [Term.string, Term.null] :=
   uAtCan_of_orth (forall_mem_pair lawful_string lawful_null)
-    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
     (List.pairwise_pair.mpr (by decide))
 
 end Calculus

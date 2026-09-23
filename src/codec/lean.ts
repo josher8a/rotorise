@@ -1287,7 +1287,6 @@ const MEET_LEMMAS = [
     'Pred.isData',
     'allSome',
     'Term.ofOptions',
-    'Term.ofOptionsGuarded',
     'unionOk',
     'orthAll',
     'Term.isNever',
