@@ -375,6 +375,48 @@ describe('two adapters in one union', () => {
     })
 })
 
+describe('a literal beside an adapter', () => {
+    // declared through a cast, as a caller bypassing the compile-time check would. The type of
+    // `union` refuses both pairs below, because both options take a caller's string
+    const declare = union as unknown as (
+        options: readonly AnyCodec[],
+    ) => unknown
+
+    /**
+     * **The adapter reads the stored `S` to a lower-case value, and the literal reads the same
+     * `S` to itself.** `encode('x')` writes `{ S: 'X' }`, and both options admit that attribute,
+     * so the union cannot read back the value that it wrote.
+     */
+    it('a literal beside an adapter that reads the same attribute to another value is refused', () => {
+        const upper = refine(
+            string,
+            (s: string): s is string =>
+                s === s.toUpperCase() && s !== s.toLowerCase(),
+            { describe: 'upper case' },
+        )
+        const lower = refine(
+            string,
+            (s: string): s is string =>
+                s === s.toLowerCase() && s !== s.toUpperCase(),
+            { describe: 'lower case' },
+        )
+        const shout = held(upper, lower, {
+            encode: (s) => s.toUpperCase(),
+            decode: (s) => s.toLowerCase(),
+        })
+        expect(shout.unsafeDecode(shout.unsafeEncode('x'))).toBe('x')
+        expect(() => declare([shout, string('X')])).toThrow(/both store 'S'/)
+    })
+
+    /**
+     * **`decimal` stores an `N` and the literal stores an `S`**, so no stored attribute is read by
+     * both, and the `identifies` row stays lawful.
+     */
+    it('a literal beside an adapter that stores another attribute stays declared', () => {
+        expect(() => declare([decimal, string('a')])).not.toThrow()
+    })
+})
+
 describe('the held side restricts both halves', () => {
     /**
      * `held` is the one codec that runs caller code, and a TypeScript type does not exist at run
