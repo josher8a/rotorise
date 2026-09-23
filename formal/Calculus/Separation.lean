@@ -100,8 +100,8 @@ theorem union_congruent (t : Term) (v : Value) :
 /-! ## Separation on the pair
 
 `SepJV` and `SepJA` state separation on the rows this file proves exact. Each side is one
-clause. `Adm` and `AdmA` fold the kind or member gate into their rows. `LegacyRead` is outside
-`Term`, so an alternate reader cannot add a second structural clause.
+clause. `Adm` and `AdmA` fold the kind or member gate into their rows. An alternate reader
+(`Codec.extendRead`) is outside `Term`, so an alternate reader cannot add a second structural clause.
 
 A discharger consumes disjointness of the options `select` builds, and every option — `object`
 included — is now admitted by attempt, which is `Adm`/`AdmA` exactly. `admitV_le_Adm` and
@@ -126,8 +126,8 @@ def SepJA (x y : Term) : Prop := ∀ a, AdmA x a = true → AdmA y a = false
 def rNum : Attr → Option Value := fun a => match a with | .n _ => some (.str "x") | _ => none
 
 /-- An alternate reader may read outside the member of its current term. -/
-theorem legacyRead_reads_n :
-    (LegacyRead.denote ⟨.string, some rNum⟩).p (.n (.of "1")) = some (.str "x") := rfl
+theorem extendRead_reads_n :
+    ((denote .string).extendRead rNum).p (.n (.of "1")) = some (.str "x") := rfl
 
 /-! ## What the pair does not record, and what to use instead
 
@@ -343,11 +343,6 @@ theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
   cases hc : c.p a with
   | none => rw [hc] at h; simp at h
   | some _ => rfl
-
-/-- The adapter always keeps the current reader first. -/
-theorem legacyRead_p_alt (t : Term) (r : Attr → Option Value) (a : Attr) :
-    (LegacyRead.denote ⟨t, some r⟩).p a =
-      match (denote t).p a with | some v => some v | none => r a := rfl
 
 /-- **A discharge §5 could not state.** Two sets over disjoint literals separate, because
     `℘⁺fin` has no empty inhabitant and so the two options share none. The non-emptiness

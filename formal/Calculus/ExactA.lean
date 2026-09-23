@@ -127,7 +127,8 @@ mutual
       syntactic set of attributes bounds that" is true of syntax and says nothing about a
       row, which may decode and then ask `q` (`refineReads`). Sound, and exact whenever the
       subterm's row is: `dom((c.restrict q).p)` is precisely `{a | ∃ v, c.p a = some v ∧ q v}`.
-    `LegacyRead` is outside `Term`, so this table has no alternate-reader row. -/
+    An alternate reader is `Codec.extendRead`, outside `Term`, so this table has no
+    alternate-reader row. -/
 noncomputable def AdmA : Term → Attr → Bool
   | .string   => fun a => match a with | .s _ => true | _ => false
   | .boolean  => fun a => match a with | .bool _ => true | _ => false

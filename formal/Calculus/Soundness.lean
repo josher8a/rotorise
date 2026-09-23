@@ -86,15 +86,6 @@ def ObligationsOpt : Option Term → Prop
 
 end
 
-/-! ## The normalized alternate reader -/
-
-/-- The current term's obligations and the alternate reader's existing coherence condition. -/
-def LegacyReadObligations (w : LegacyRead) : Prop :=
-  Obligations w.current ∧
-    match w.alternate with
-    | none => True
-    | some r => ReadsCoherently (denote w.current) r
-
 /-! ### The companions, as the quantifiers the rest of the file speaks in
 
 `ObligationsList` is what made the recursion structural; `∀ t ∈ ts, Obligations t` is what every
@@ -858,13 +849,11 @@ theorem soundness {t T μ} (h : Typed t T μ)
     (hob : Obligations t) : Lawful (denote t) :=
   (soundness_both h hob).2
 
-/-- The alternate reader preserves the three core laws under its existing condition. -/
-theorem legacyRead_lawfulCore {T μ} (w : LegacyRead) (ht : Typed w.current T μ)
-    (h : LegacyReadObligations w) :
-    LawfulCore w.denote := by
-  rcases w with ⟨current, alternate⟩
-  cases alternate with
-  | none => exact soundness_core ht h.1
-  | some r => exact LawfulCore.extendRead (soundness_core ht h.1) h.2.1
+/-- §3 `(alternate reader)`: an alternate reader over a derivable term preserves the three
+    core laws under its coherence condition. -/
+theorem extendRead_lawfulCore {t T μ} (ht : Typed t T μ) (hob : Obligations t)
+    {r : Attr → Option Value} (hr : ReadsCoherently (denote t) r) :
+    LawfulCore ((denote t).extendRead r) :=
+  LawfulCore.extendRead (soundness_core ht hob) hr.1
 
 end Calculus

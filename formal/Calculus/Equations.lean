@@ -495,17 +495,6 @@ theorem equiv_denote_refine_full (t : Term) (p : Pred)
     (hq : ∀ v, (denote t).T v ↔ p.eval v = true) :
     Codec.Equiv (denote (.refine t p)) (denote t) := equiv_restrict_full _ _ hq
 
-/-- §6: an adapter using the current reader as its alternate reader is equivalent to its core. -/
-theorem equiv_legacyRead_self (t : Term) :
-    Codec.Equiv (LegacyRead.denote ⟨t, some (denote t).p⟩) (denote t) :=
-  equiv_extendRead_self _
-
-/-- §6: an alternate reader cannot change a canonical current read. -/
-theorem legacyRead_eq_on_can (t : Term) (r : Attr → Option Value)
-    (hc : Lawful (denote t)) {a : Attr} (ha : Can (denote t) a) :
-    (LegacyRead.denote ⟨t, some r⟩).p a = (denote t).p a :=
-  extendRead_eq_on_can _ r hc ha
-
 /-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
     `optional_μ` and `optional_μ`, which are already stated over a denotation. -/
 theorem denote_held_μ (t : Term) (f g : Value → Value) :
@@ -513,9 +502,6 @@ theorem denote_held_μ (t : Term) (f g : Value → Value) :
 
 theorem denote_refine_μ (t : Term) (p : Pred) :
     (denote (.refine t p)).μ = (denote t).μ := rfl
-
-theorem legacyRead_μ (t : Term) (r : Attr → Option Value) :
-    (LegacyRead.denote ⟨t, some r⟩).μ = (denote t).μ := rfl
 
 end Terms
 
