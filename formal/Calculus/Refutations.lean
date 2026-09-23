@@ -291,14 +291,15 @@ def migrateNtoS : Attr → Option Value
   | .n _ => some (.str "x")
   | _ => none
 
-def migration : LegacyRead := ⟨.string, some migrateNtoS⟩
+/-- `string` with `migrateNtoS` as its alternate reader. -/
+noncomputable def migration : Codec := (denote .string).extendRead migrateNtoS
 
-theorem legacy_p_n : migration.denote.p (.n (.of "1")) = some (.str "x") := rfl
+theorem legacy_p_n : migration.p (.n (.of "1")) = some (.str "x") := rfl
 
-theorem legacy_e_x : migration.denote.e (.str "x") = some (.s "x") := rfl
+theorem legacy_e_x : migration.e (.str "x") = some (.s "x") := rfl
 
 /-- §6: an alternate reader can break (MP). The migration reads `N` and writes `S`. -/
-theorem legacy_breaks_MP : ¬ Lawful migration.denote := by
+theorem legacy_breaks_MP : ¬ Lawful migration := by
   intro h
   have hag := h.agree legacy_p_n legacy_e_x
   cases hag
@@ -306,7 +307,7 @@ theorem legacy_breaks_MP : ¬ Lawful migration.denote := by
 /-- §6: `e ∘ p ≢ id` — equality holds only on `Can(c)`, and this attribute is off it. -/
 theorem e_comp_p_ne_id :
     ∃ (c : Codec) (a : Attr) (v : Value), c.p a = some v ∧ c.e v ≠ some a :=
-  ⟨migration.denote, .n (.of "1"), .str "x", legacy_p_n, by
+  ⟨migration, .n (.of "1"), .str "x", legacy_p_n, by
     rw [legacy_e_x]; intro hc; exact nomatch hc⟩
 
 /-! ## `optional(optional(c))` — not derivable, by construction
@@ -314,7 +315,8 @@ theorem e_comp_p_ne_id :
 This row needs no theorem, and could not have one: it is enforced by the syntax. `ObjectSlot`
 (Term.lean) has two constructors — `req` and `optional` — and every one takes a
 `Term`. None takes an `ObjectSlot`, so `optional(optional(c))` cannot be written down.
-A `LegacyRead` carrier is outside a slot. An `ObjectSlot` always carries a current `Term`.
+An alternate reader (`Codec.extendRead`) is outside a slot. An `ObjectSlot` always carries a
+current `Term`.
 
 That is the stratification §4 of the specification asks for, and the model gets it from
 the type rather than from a side condition — which is the stronger place to get it. It is

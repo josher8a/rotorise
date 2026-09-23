@@ -86,7 +86,8 @@ block — into one thing. Two consequences are the reason to do it again:
   representable. `ObjectSlot` sits in the function's codomain, which is strictly positive.
 
 `ObjectSlot` carries the current-schema rule only. A required slot remains required on both
-current-schema sides. `LegacyRead` carries one current `Term` and one optional alternate reader.
+current-schema sides. An alternate reader is `Codec.extendRead`, over the codec of one current
+`Term`.
 Structural operations, including `meet` and union certification, operate on `Term`. The operations
 cannot observe or propagate an alternate reader.
 
@@ -132,7 +133,8 @@ only.
 | about what a codec does — its write half, its read half, an iso, a resolution | `Obligations`, as `UAtAct` and `IsoCancels` are | both soundness theorems |
 
 `Term` has no alternate reader. Therefore `soundness` proves all four laws for every typed term.
-`LegacyRead` packages a separate alternate reader and its conditions at the codec layer.
+An alternate reader is `Codec.extendRead` at the codec layer. `ReadsCoherently` is its condition,
+and `extendRead_lawfulCore` proves the three core laws for it over a typed term.
 
 Choosing wrong is not a build error. A semantic premise in `Typed` makes the judgement
 undecidable; a syntactic premise in `Obligations` becomes a burden every caller carries.
@@ -205,7 +207,7 @@ that asks is the domain of the read half exactly.
 The price is that a row becomes `noncomputable` when its codec is, which costs nothing here
 because the numeric equality is already a field of an axiomatized interface.
 
-An alternate reader is deliberately outside the term rows. `LegacyRead.denote` tries the current
+An alternate reader is deliberately outside the term rows. `Codec.extendRead` tries the current
 reader first and then the alternate reader. No structural analysis reads the alternate reader.
 
 ### One codec, stated once for both sides of the pair
@@ -250,8 +252,8 @@ and admissible sets are ways of building those families rather than four separat
 `ExactV.lean` holds `Adm` and `ExactA.lean` holds `AdmA`, exact at every constructor, with no
 hypothesis and no escape hatch. Its value-side separation predicate is one clause, because the
 joint predicate absorbs what a kind table used to carry. The attribute-side predicate is also one
-clause. An alternate reader cannot add a structural exception because `LegacyRead` is outside
-`Term`.
+clause. An alternate reader cannot add a structural exception because `Codec.extendRead` is
+outside `Term`.
 
 **Both generations stand, and the reason is that nothing has retired the older one.**
 `select` attempts every option, so option admission *is* the row at every constructor:
@@ -273,7 +275,7 @@ all. This development spends it on occupancy: `occV` and `occA` over-approximate
 occupies, and disjoint occupancy is what the certificate decides.
 
 **The outer carrier has a separate read-side fact.** An alternate reader can read an attribute
-outside the current term's member. `legacyRead_reads_n` records a string core that reads a numeric
+outside the current term's member. `extendRead_reads_n` records a string core that reads a numeric
 attribute through its alternate reader. The structural classifier has no row for the outer
 carrier.
 
@@ -549,8 +551,9 @@ caller's vocabulary. That refusal is the record, and it is the shape every gap o
 — the reader is total, and what bounds it is which terms have closed forms.
 
 **A core union requires its discriminator.** The model selects only an input that carries the
-required discriminator. A caller that accepts an old input wraps the whole union in one outer
-`LegacyRead` carrier. The alternate reader owns that migration after core selection refuses.
+required discriminator. A caller that accepts an old input extends the whole union's codec with
+one alternate reader (`Codec.extendRead`). The alternate reader owns that migration after core
+selection refuses.
 `Body.spec` contains no migration field.
 
 **A host obligation that no host code reads is found by whatever has to serialise the host's own

@@ -340,13 +340,13 @@ describe('terms', () => {
      * **A field's stand-in value has no slot, and the model put that stratum elsewhere.**
      *
      * This emitted `Field.fallback (t) (v)` against a `Field` with three constructors. An
-     * `ObjectSlot` has two, and the older reader lives in `LegacyRead` — a structure *outside*
-     * `Term`, carrying the current term and at most one alternate reader. `ExactA.lean` says so in
-     * as many words: its table has no alternate-reader row because `LegacyRead` is outside `Term`.
+     * `ObjectSlot` has two, and the older reader lives in `Codec.extendRead` — a codec *outside*
+     * `Term`, over the current term's codec. `ExactA.lean` says so in as many words: its table has
+     * no alternate-reader row because an alternate reader is outside `Term`.
      *
      * So this is not a slot the model declined to add. It is a stratum the model moved, and a
      * `Body` has nowhere to print it. The refusal is the honest answer until the emitter states a
-     * `LegacyRead` rather than a `Term` for such a codec.
+     * `Codec.extendRead` rather than a `Term` for such a codec.
      */
     it('refuses a missing-value field, which is a stratum outside the term', () => {
         const why = refusal(() =>
@@ -361,7 +361,7 @@ describe('terms', () => {
                 ),
             ),
         ).reason
-        expect(why).toContain('LegacyRead')
+        expect(why).toContain('Codec.extendRead')
         expect(why).toContain('no alternate-reader slot')
     })
 
@@ -1023,7 +1023,7 @@ export const allRefusals = (): readonly Refusal[] => {
 
 /** Whether the emitter can state this codec's term at all, which is a different axis from its
  * value. `object_fallback_present` is the one corpus entry that fails it: a field's older reader
- * lives in `LegacyRead`, outside `Term`, so a `Body` has no slot to print it. */
+ * lives in `Codec.extendRead`, outside `Term`, so a `Body` has no slot to print it. */
 const emittable = (one: Vector): boolean => statesTerm(one.codec, one.name)
 
 /**
@@ -1409,7 +1409,7 @@ describe("the read side, against the model's read row", () => {
     it('offers 1326 pairs, three of them stuck on the `Double` axiom', () => {
         const verdicts = readVerdicts()
         // 1634 until `object_fallback_present` left the emittable corpus: a field's older
-        // reader lives in `LegacyRead`, outside `Term`, so a `Body` has no slot to print it
+        // reader lives in `Codec.extendRead`, outside `Term`, so a `Body` has no slot to print it
         expect(verdicts.length).toBe(1591)
         const stuck = verdicts.filter(readRowIsStuck)
         expect(stuck.map((one) => one.name)).toEqual([
@@ -1484,7 +1484,7 @@ describe("the declaration guard, against the model's classifier", () => {
      * **It was 111, then 117, and it is 112.** Two corpus movements, and neither is the guard
      * changing its mind. Six pairs arrived with the `decimal` base being deleted, and five left
      * with `object_fallback_present`, which stopped being emittable: a field's older reader lives
-     * in `LegacyRead`, a structure outside `Term`, so a `Body` has no slot to print it.
+     * in `Codec.extendRead`, a codec outside `Term`, so a `Body` has no slot to print it.
      *
      * The six that arrived:
      * `dynamoNumber` is the one native at `number` and `decimal` is `held` over it, so two codecs
@@ -1629,7 +1629,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
      * the read side states like any other.
      *
      * What is skipped is `object_fallback_present`, whose **term** the emitter refuses: a field's
-     * older reader lives in `LegacyRead`, a structure outside `Term`, so a `Body` has no slot to
+     * older reader lives in `Codec.extendRead`, a codec outside `Term`, so a `Body` has no slot to
      * print it. It is named here rather than filtered in silence, because a second exclusion
      * arriving is the thing worth failing on.
      */

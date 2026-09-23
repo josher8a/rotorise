@@ -188,7 +188,7 @@ mutual
       subterm's.)
     * `refine t q` — the subterm's, over-approximating away `q`. Sound: a refinement writes
       a subset of what the base writes.
-    * `LegacyRead` is outside the structural classifier.
+    * An alternate reader (`Codec.extendRead`) is outside the structural classifier.
     * `opaq` — every slot, because `opaque` writes every value (`opaq_total`).
     * `union opts` — the union of the options'. `select` admits only where *exactly one*
       option does, so the union of the options' occupancies is an over-approximation. -/
@@ -221,7 +221,8 @@ mutual
 /-- **Which members this term can read.** The mirror, and it is not a symmetric mirror:
     `held` has distinct write and read rows.
 
-    `LegacyRead` is not a `Term`. The classifier has no alternate-reader row. -/
+    An alternate reader is a codec, not a `Term`. The classifier has no alternate-reader
+    row. -/
 def occA : Term → Member → Bool
   | .string  => occOnly .S
   | .number  => occOnly .N
@@ -1742,7 +1743,8 @@ being a map of duplicated work and is now a list of what only exists by hand.
 from the row above them, where the phase is `none` because `UAtCan` is false and there is no
 orthogonality to certify at all.
 
-`LegacyRead` stays outside `Term`. `legacyRead_reads_n` shows an alternate reader can read a numeric attribute through a string core. `Orth` classifies current terms only.
+An alternate reader (`Codec.extendRead`) stays outside `Term`. `extendRead_reads_n` shows an
+alternate reader can read a numeric attribute through a string core. `Orth` classifies current terms only.
 
 `uAtAct_array_literals` is out of reach **by strength, not by phase**: `Orth` produces
 `UAtCan`, and that pair genuinely fails `UAtCan` (`not_uAtCan_array_literals` — both options

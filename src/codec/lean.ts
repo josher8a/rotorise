@@ -779,15 +779,15 @@ const leanSlotOf = (field: TermField, at: string, forced: number): string => {
         /**
          * **A field's alternate reader has no slot, and that is deliberate in the model.**
          *
-         * `LegacyRead` is a structure outside `Term`, carrying the current term and at most one
-         * older reader, so a `Body` has no alternate-reader row to put this in — `ExactA.lean`
-         * states exactly that. A field-level fallback is not a slot the model declined to add; it
+         * The model states an older reader as `Codec.extendRead`, a codec over the current term's
+         * codec and outside `Term`, so a `Body` has no alternate-reader row to put this in —
+         * `ExactA.lean` states exactly that. A field-level fallback is not a slot the model declined to add; it
          * is a stratum the model put somewhere else, and nothing here can name it.
          */
         case 'fallback':
             return refuse(
                 at,
-                '`withLegacyRead` on a field has no `ObjectSlot`: the model carries an older reader in `LegacyRead`, which is a structure outside `Term`, so a body has no alternate-reader slot to print',
+                '`withLegacyRead` on a field has no `ObjectSlot`: the model carries an older reader as `Codec.extendRead`, which is a codec outside `Term`, so a body has no alternate-reader slot to print',
             )
         case 'req':
             return `ObjectSlot.req (${leanTermOfTerm(field.t, at, forced)})`
