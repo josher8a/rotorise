@@ -12,12 +12,14 @@ import {
     decimal,
     discriminatedUnion,
     dynamoNumber,
+    list,
     never,
     nullValue,
     number,
     object,
     opaque,
     optional,
+    spread,
     string,
     union,
 } from '../../codec'
@@ -436,6 +438,37 @@ describe('an object option is admitted by attempt', () => {
         expect(flag).toEqual({ M: { a: { BOOL: true } } })
         expect(either.unsafeDecode(text)).toEqual({ a: 'x' })
         expect(either.unsafeDecode(flag)).toEqual({ a: true })
+    })
+
+    /**
+     * **A crossing pair is refused, and the message names the overlap.** Two options cross where
+     * their meet is neither `never` nor one of the two. The value does not decide the branch of a
+     * value in the overlap, and JH ruled that no rule names an owner of it. The caller writes the
+     * overlap as an option of its own, and the partition declares.
+     */
+    it('refuses two crossing options with the overlap named, and declares their partition', () => {
+        // both arrays hold `[]`, and `[]` is the whole overlap
+        expect(() => union([array(string('A')), array(string('B'))])).toThrow(
+            /cross: both admit every value of list\(spread\(never\)\), so the value does not decide the branch\. Write that overlap as an option of its own/,
+        )
+        expect(() =>
+            union([
+                list(string('A'), spread(string('A'))),
+                list(string('B'), spread(string('B'))),
+                list(),
+            ]),
+        ).not.toThrow()
+
+        // JH's crossing pair, which overlaps at `{ a, b }`. `dynamoNumber` stands for `number`,
+        // because `number` is a `held` adapter and the refusal asks for no adapter
+        expect(() =>
+            union([
+                object({ a: string }, [string, optional(dynamoNumber)]),
+                object({ b: dynamoNumber }, [string, optional(string)]),
+            ]),
+        ).toThrow(
+            /cross: both admit every value of object\(\{ a: string, b: dynamoNumber \}\), so the value does not decide the branch/,
+        )
     })
 
     /**

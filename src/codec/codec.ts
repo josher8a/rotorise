@@ -51,6 +51,7 @@ import {
     alwaysWritten,
     clauseForm,
     clauseLiteralsOf,
+    crossing,
     elementAdapter,
     elementPredicates,
     literalAlternatives,
@@ -63,6 +64,7 @@ import {
     separable,
     setBaseOf,
     sharedLiterals,
+    spelled,
 } from './term'
 
 /**
@@ -5113,6 +5115,14 @@ export const union = <const Options extends readonly AnyCodec[]>(
 
     for (const [at, { option: first, term: x }] of pairs.entries()) {
         for (const { option: second, term: y } of pairs.slice(at + 1)) {
+            // **A crossing pair is refused first**, because `separable` can accept one: the value
+            // does not decide the branch, and a disjoint partition of the two is what decides it
+            const overlap = crossing(x, y)
+            if (overlap) {
+                throw new CodecError(
+                    `${first.describe} and ${second.describe} cross: both admit every value of ${spelled(overlap)}, so the value does not decide the branch. Write that overlap as an option of its own, and exclude it from the other two, for example with an \`optional(never)\` name`,
+                )
+            }
             if (separable(x, y)) continue
             // **The restriction refusal comes first, because its advice differs.** The two below
             // are ambiguity and the answer to ambiguity is a discriminator. This one is not:
