@@ -315,6 +315,28 @@ theorem decSet_elem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α
       obtain ⟨T, hT, -⟩ := Option.map_eq_some_iff.mp h
       exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
 
+/-- Two codecs that agree on the write of each element write one set. -/
+theorem encSet_congr {α : Type} {c d : Codec} {inj : α → Value} {S : NEFinset α}
+    (h : ∀ x ∈ S.1, c.e (inj x) = d.e (inj x)) : encSet c inj S = encSet d inj S := by
+  unfold encSet
+  rw [neSetImage_congr (S := S) (g := fun x => (d.e (inj x)).bind sC.out)
+      (fun x hx => by rw [h x hx]),
+    neSetImage_congr (S := S) (g := fun x => (d.e (inj x)).bind nC.out)
+      (fun x hx => by rw [h x hx]),
+    neSetImage_congr (S := S) (g := fun x => (d.e (inj x)).bind bC.out)
+      (fun x hx => by rw [h x hx])]
+
+/-- …and two codecs that agree on the read of each element read one set. -/
+theorem decSet_congr {α : Type} {c d : Codec} {inj : α → Attr} {S : NEFinset α}
+    (h : ∀ x ∈ S.1, c.p (inj x) = d.p (inj x)) : decSet c inj S = decSet d inj S := by
+  unfold decSet
+  rw [neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind vStr)
+      (fun x hx => by rw [h x hx]),
+    neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind vNum)
+      (fun x hx => by rw [h x hx]),
+    neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind vBin)
+      (fun x hx => by rw [h x hx])]
+
 /-- What a read produces: one of the three value sets, each element read from an element
     of the wire set. -/
 theorem decSet_mem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α} {v : Value}
