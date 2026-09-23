@@ -10,7 +10,8 @@
  * So the refusals are tested as carefully as the emissions, and they are the reason this file is
  * long. Each one names a fact about the model rather than about this library:
  *
- * - `Double` is an axiom, so `Value.num` has no closed term. `number` is out permanently.
+ * - A JS number is a binary64 float, and `Value.num` carries an exact `WFNumeral`, so a JS number
+ *   has no Lean value. A `DynamoNumber` is a numeral and emits.
  * - `refine`, `held` and `withLegacyRead` carry *functions* in the model and *closures* here.
  *   There is no expression in Lean for a closure. Out until somebody writes the Lean side by hand.
  * - `optional` and `withLegacyRead` are §4 `Field`s and `restOf` is a §4 `Rest`. Asking for a `Term` at
@@ -81,8 +82,6 @@ import {
     leanValueOf,
     leanVector,
     leanVectorModule,
-    readResolutionIsUnstatable,
-    readRowIsStuck,
     readVectorIsUnstatable,
 } from '../lean'
 import { orThrow } from '../result'
@@ -1341,19 +1340,13 @@ describe('union resolution, model against library', () => {
         const reads = readResolutions()
         expect(reads.length).toBe(400)
         /**
-         * **No pair is unstatable now, and the one that was is the axiom's last appearance here.**
-         *
-         * `rr_u_setstring_setnumber__set_of_decimal` read back to a `Value.numSet` over a
-         * `NEFinset Double`, which had no closed terms. `Value.num` carries a `WFNumeral` since
-         * `ac951ae`, so a numeral set is a closed term and the pair states. This asserts the empty
-         * list rather than dropping the check, because a pair becoming unstatable again is the
-         * thing worth failing on.
+         * **Every pair is stated, and no filter decides otherwise.** A read value with no Lean
+         * form makes `leanValueOf` throw, so a pair becoming unstatable fails the emission rather
+         * than leaving the module in silence.
          */
-        expect(
-            reads
-                .filter((one) => readResolutionIsUnstatable(one) === 'Double')
-                .map((one) => one.name),
-        ).toEqual([])
+        for (const one of reads) {
+            expect(() => leanReadResolution(one)).not.toThrow()
+        }
     })
 
     /**
@@ -1374,7 +1367,6 @@ describe('union resolution, model against library', () => {
             'rr_d_two_variants__discriminated_union',
         ]) {
             const one = byName.get(name) as ReadResolution
-            expect(readResolutionIsUnstatable(one)).toBeUndefined()
             expect(leanReadResolution(one)).toContain('vcheck')
         }
     })
@@ -1391,8 +1383,7 @@ describe('union resolution, model against library', () => {
             readResolutions(),
         )
         expect(module).toContain('import Calculus.Vectors')
-        // the one pair that stays out, and the reason, both in the header
-        expect(module).toContain('cannot be written down at all')
+        expect(module).toContain('400 on the read side')
         expect(module).toContain('vcheck')
     })
 })
@@ -1405,18 +1396,27 @@ describe("the read side, against the model's read row", () => {
      * where `encode` trusted its argument's type. So the port would have been a second
      * description of one thing, and this differential is the guard that a second description
      * would have needed anyway.
+     *
+     * **All 1591 are asserted, and it was 1588.** Three pairs were excluded as stuck on the
+     * `Double` axiom: `scalar_number__reads__scalar_decimal`,
+     * `scalar_number__reads__literal_decimal` and `scalar_number__reads__raw_N`, each a `number`
+     * codec against an `N` attribute. The model has no axiom, and `AdmA .number`'s `.n` row decides
+     * a concrete numeral by `rfl`, so the filter excluded pairs the row answers. The filter is
+     * deleted, and the three are theorems in `.readverdicts.lean` like every other pair.
      */
-    it('offers 1326 pairs, three of them stuck on the `Double` axiom', () => {
+    it('offers 1591 pairs, and asserts every one', () => {
         const verdicts = readVerdicts()
         // 1634 until `object_fallback_present` left the emittable corpus: a field's older
         // reader lives in `Codec.extendRead`, outside `Term`, so a `Body` has no slot to print it
         expect(verdicts.length).toBe(1591)
-        const stuck = verdicts.filter(readRowIsStuck)
-        expect(stuck.map((one) => one.name)).toEqual([
+        const module = leanReadModule(verdicts)
+        for (const name of [
             'scalar_number__reads__scalar_decimal',
             'scalar_number__reads__literal_decimal',
             'scalar_number__reads__raw_N',
-        ])
+        ]) {
+            expect(module).toContain(`theorem ${name} :`)
+        }
     })
 
     it('emits them for the gate to elaborate', () => {
@@ -1428,9 +1428,7 @@ describe("the read side, against the model's read row", () => {
         }
         const module = leanReadModule(readVerdicts())
         expect(module).toContain('import Calculus.DynamoDB')
-        // the excluded ones are named in the header rather than dropped in silence
-        expect(module).toContain('excluded, not skipped')
-        expect(module).toContain('scalar_number__reads__raw_N')
+        expect(module).toContain('All 1591 pairs are asserted here.')
     })
 })
 
