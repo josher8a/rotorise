@@ -74,35 +74,30 @@ A term denotes a codec: a partial write from a value to an attribute, and a part
 A union holds options, and the calculus decides at declaration time whether the options can be
 told apart, because selection must find at most one option claiming a given thing.
 
-**The write and the read are not inverse, and that is the reason this question is two questions.**
-A read after a write returns the value that was written. A write after a read returns an
-attribute that only *agrees* with the one that was read. So the read accepts a whole class of
-attributes where the write produces one, and the set of attributes a term accepts is strictly
-larger than the set it produces.
+**The write and the read are inverse on every term the language builds.** A read after a write
+returns the value that was written. A write after a read returns the attribute that was read,
+because the read of a term is injective. A term with no adapter is a restriction of `opaque`,
+whose two halves are a bijection, and an adapter keeps an injective read under its iso premise. So
+a term is a partial bijection between values and attributes.
 
-**A term therefore has two projections, and neither determines the other**: the values it writes,
-and the attributes it accepts. A term is not a partial bijection between them, and any reasoning
-that treats it as one collapses two independent facts into a single one. The calculus carries
-both projections for this reason and not for symmetry.
+### The object is a partial bijection, and the fibres belong to the port
 
-### The object is a retract
+**A store can spell one value in several ways**, as DynamoDB spells one number in several ways.
+The read of the store accepts every spelling, and the write picks one. That is a canonizer in
+front of the term, not a property of the term, so it lives in the port with the other facts of
+the store. A codec that reads more than one spelling of one value is not a term.
 
-The write is a section and the read is its retraction. That single fact fixes the shape of both
-projections and they come out as different kinds of object.
+> OPEN (owner): whether the agreement clause leaves the lawfulness laws, with its relation kept
+> only for the refutation that needs a codec with non-trivial fibres.
 
-    the value projection       a SUBSET of the value universe
-    the attribute projection   a set FIBRED over that subset
-    the write                  a choice of one representative in each fibre
+**The two projections still ask two questions where the two sides can come apart.**
 
-Every attribute the read accepts lands on some value, and the attributes landing on one value are
-that value's fibre. The write picks one of them, so the attributes a term produces are a section
-of the attributes it accepts, never all of them.
+    the values it writes       a subset of the caller's universe
+    the attributes it reads    a subset of the stored universe
 
-**A subset and a fibred set are compared by different means, so no reasoning unifies the two
-projections.** An argument that treats the attribute side as a subset of the values, or derives
-one projection from the other by injectivity, has discarded the fibres. Each such argument looks
-like a symmetry and is a category error, and the calculus carries two projections because there
-are two kinds of thing here, not two spellings of one.
+For a term with no adapter the two universes are one, identified by `opaque`, and the two
+questions have one answer. An adapter is the one construct whose two sides lie in two universes,
+so a pair that holds an adapter asks both questions.
 
 "Told apart" is two questions.
 
@@ -113,7 +108,7 @@ A pair disjoint on one side alone is not disjoint. Two terms can write different
 store at the same member, and then encoding is unambiguous while decoding is not.
 
 So every operation here answers one shape of question: **is the intersection of two described
-sets empty?**
+sets empty?** A union asks one more: **do the two options agree where they meet?**
 
 ## 2. Where the certificate lives
 
@@ -125,6 +120,12 @@ what both admit, or reports that it cannot tell. Everything the calculus needs i
     the meet         the intersection itself, as a term
     the certificate  is that intersection inhabited
     the selector     does this value inhabit it
+    compatibility    does the meet exist, with the domain and the range of the two meets
+
+The meet answers two questions. Its emptiness decides whether two options are orthogonal. Its
+existence decides whether they are compatible: two partial bijections are compatible exactly when
+their meet exists and its domain and range are the meets of theirs. A meet that cannot tell is a
+decline on both questions, not a refutation.
 
 There is no second apparatus. A certificate that is not the inhabitance of the meet is a second
 function that must be held in agreement with the meet by hand, and nothing holds it there.
@@ -143,6 +144,33 @@ dispatch never reads, such as a list index, never separates at all.
 **This document rules for attempt, at every constructor including the object.** The cost is real
 and named below. What it buys is that the certificate has nothing left to approximate except
 where approximation is forced.
+
+### A union is lawful by compatibility, and the selector decides only holes and branch
+
+Two options are compatible when they agree wherever they overlap: an attribute that both read,
+they read to one value, and a value that one reads, the other leaves alone or reads the same way.
+A union of compatible options is lawful where it acts, with no certificate. Orthogonality is the
+case with no overlap.
+
+**Two options below one canonical codec are compatible.** Every term with no adapter is below
+`opaque`, which is why such options never conflict. Two restrictions of one adapter are below that
+adapter, which is the same fact at a different bound. The bound must read each value from one
+attribute; a lawful bound that reads two spellings does not carry the fact. So the decidable test
+has two halves: a shared canonical bound, or orthogonal views. An adapter beside a term that it
+does not bound, with views that meet, is refused.
+
+**The selector decides what happens in the overlap, and nothing else.**
+
+    count          the join with the overlap removed: a value two options admit is refused
+    any admitter   the full join
+    least fiber    the full join, and the branch that owns each value, for a laminar family
+
+The overlap has no branch identity unless the family is laminar, so a crossing pair is refused as
+a question about the branch, not about the codec.
+
+> OPEN (owner): which selector; and whether the obligation of a union becomes pairwise
+> compatibility, which is stronger than "lawful where the union acts" and refuses a union that
+> declines every input.
 
 ### The abstraction is confined to the leaves
 
@@ -324,6 +352,18 @@ the design rests on no standing assumption.
 What remains is one computable question: whether a term admits any value. The structural admission
 that answers it at a given value is in the development already and is proved exact at every term.
 So the work is the meet's own missing rows rather than a new description beside it.
+
+**An adapter is the exception, and the reason is structural.** An adapter's value side lives in the
+caller's universe and its attribute side in the stored universe. The meet cannot state it, so one
+inhabitance decision does not settle both. The certificate reads an adapter through two views:
+the caller view replaces each adapter by the restriction that names the values it owns, and the
+stored view replaces it by the term inside. They are the domain and the range of the codec.
+
+Two rows keep the views sound, and both follow one rule: **data exists only on the side where it
+was stated.** A restriction above an adapter that reads a whole container is caller-side data, and
+on the stored side it could exist only as a closure, so the stored view drops it. A union with an
+adapter below it would need the join of its options' views, which the term language states only
+for a certified union, so the views do not certify it.
 
 ### The attribute side is a fibred set, and the certificate does not read it
 
@@ -532,6 +572,11 @@ obligation.** An adapter carrying a domain test is two restrictions composed, an
 stops being the top. Where no test is given the top is correct, and **the refusal is the product
 working** rather than a gap in it.
 
+The adapter carries that restriction as its held side, and the host tests it before the
+adapter's conversion runs. A value outside the domain is refused by name, not by the failure of a
+conversion that ran on it. A restriction written outside the adapter meets into the held side,
+because both are restrictions on the caller's values.
+
 ### A name description is an admissible set
 
 A name admits absence, or presence carrying a value. That is one set and one emptiness test, not
@@ -570,6 +615,15 @@ and the port instantiates it. The core states no host interface for a port to fi
 numeric policy of `opaque` is an adapter over `opaque`. The stored side passes through, and the
 value side is re-indexed. So an adapter is native to the language rather than an escape hatch
 added to it.
+
+**The caller side of an adapter may be foreign.** A schema from another library can name the
+values an adapter owns. The host can test membership in it at run time, and cannot compare it
+with another set, so the certificate reads it as the top. That is the honest answer about a
+vocabulary the core does not rule, and a port that later states disjointness can refine it.
+
+**Each universe is its own object.** A universe is its values, its attributes and the bijection
+between them. An adapter is a morphism between two universes. DynamoDB is one universe; a target
+whose attributes are the host's own values would be another, under the same algebra.
 
 ---
 
