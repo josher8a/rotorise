@@ -1393,12 +1393,123 @@ The certificate is defined here, after the meet, because one of its two tests is
     so the pair is not certified. -/
 def meetNever (x y : Term) : Bool := (Term.meet x y).any Term.isNever
 
+mutual
+/-- Whether a `held` occurs in the term. -/
+def hasHeld : Term → Bool
+  | .held _ _ _ _ => true
+  | .refine t _ => hasHeld t
+  | .lazy t => hasHeld t
+  | .list pre sp suf => hasHeldL pre || hasHeldO sp || hasHeldL suf
+  | .object b => hasHeldB b
+  | .union os => hasHeldL os
+  | .string | .number | .boolean | .binary | .null | .literal _ _ | .set _ | .opaq
+  | .never => false
+def hasHeldL : List Term → Bool
+  | [] => false
+  | t :: ts => hasHeld t || hasHeldL ts
+def hasHeldO : Option Term → Bool
+  | none => false
+  | some t => hasHeld t
+def hasHeldB : Body → Bool
+  | .mk fs f w => decide (∃ k : {k // k ∈ fs}, hasHeldS (f k) = true) || hasHeldO w
+def hasHeldS : ObjectSlot → Bool
+  | .req t => hasHeld t
+  | .optional t => hasHeld t
+end
+
+mutual
+/-- **Whether a `held` occurs below a `union`.** The views keep a `union` as written, and the
+    view of a `union` with a `held` below it would need the join of the views of its options.
+    The model has that join only as a certified union, so `certViews` refuses such a term. -/
+def heldBelowUnion : Term → Bool
+  | .held t P _ _ => heldBelowUnion t || heldBelowUnion P
+  | .refine t _ => heldBelowUnion t
+  | .lazy t => heldBelowUnion t
+  | .list pre sp suf => heldBelowUnionL pre || heldBelowUnionO sp || heldBelowUnionL suf
+  | .object b => heldBelowUnionB b
+  | .union os => hasHeldL os
+  | .string | .number | .boolean | .binary | .null | .literal _ _ | .set _ | .opaq
+  | .never => false
+def heldBelowUnionL : List Term → Bool
+  | [] => false
+  | t :: ts => heldBelowUnion t || heldBelowUnionL ts
+def heldBelowUnionO : Option Term → Bool
+  | none => false
+  | some t => heldBelowUnion t
+def heldBelowUnionB : Body → Bool
+  | .mk fs f w =>
+      decide (∃ k : {k // k ∈ fs}, heldBelowUnionS (f k) = true) || heldBelowUnionO w
+def heldBelowUnionS : ObjectSlot → Bool
+  | .req t => heldBelowUnion t
+  | .optional t => heldBelowUnion t
+end
+
+mutual
+/-- **The caller-side view**: each `held` becomes its caller-side term. The view admits each
+    value that the term admits, below every `union` that holds no `held`. -/
+def writeView : Term → Term
+  | .held _ P _ _ => writeView P
+  | .refine t p => .refine (writeView t) p
+  | .lazy t => .lazy (writeView t)
+  | .list pre sp suf => .list (writeViewL pre) (writeViewO sp) (writeViewL suf)
+  | .object b => .object (writeViewB b)
+  | t => t
+def writeViewL : List Term → List Term
+  | [] => []
+  | t :: ts => writeView t :: writeViewL ts
+def writeViewO : Option Term → Option Term
+  | none => none
+  | some t => some (writeView t)
+def writeViewB : Body → Body
+  | .mk fs f w => .mk fs (fun k => writeViewS (f k)) (writeViewO w)
+def writeViewS : ObjectSlot → ObjectSlot
+  | .req t => .req (writeView t)
+  | .optional t => .optional (writeView t)
+end
+
+mutual
+/-- **The stored-side view**: each `held` becomes its inner term. A `refine` above a `held`
+    drops its predicate. Data exists only on the side where it was stated: the read test of the
+    predicate decodes through `g`, so on the stored side the predicate is the closure `p ∘ g`,
+    and the view keeps no closure. -/
+def readView : Term → Term
+  | .held t _ _ _ => readView t
+  | .refine t p => if hasHeld t then readView t else .refine t p
+  | .lazy t => .lazy (readView t)
+  | .list pre sp suf => .list (readViewL pre) (readViewO sp) (readViewL suf)
+  | .object b => .object (readViewB b)
+  | t => t
+def readViewL : List Term → List Term
+  | [] => []
+  | t :: ts => readView t :: readViewL ts
+def readViewO : Option Term → Option Term
+  | none => none
+  | some t => some (readView t)
+def readViewB : Body → Body
+  | .mk fs f w => .mk fs (fun k => readViewS (f k)) (readViewO w)
+def readViewS : ObjectSlot → ObjectSlot
+  | .req t => .req (readView t)
+  | .optional t => .optional (readView t)
+end
+
+/-- **The certificate through the two views of a `held`.** A `held` has two restrictions, and
+    `Orth` and the meet see neither: occupancy sees only kinds, and the meet refuses a `held`.
+    The caller-side views answer the write question and the stored-side views answer the read
+    question. Each view is held-free, so the two tests are `Orth` and the meet. The test runs
+    only where a `held` occurs, and a `held` below a `union` is refused. -/
+def certViews (x y : Term) : Bool :=
+  (hasHeld x || hasHeld y) && !heldBelowUnion x && !heldBelowUnion y
+    && (Orth (writeView x) (writeView y) || meetNever (writeView x) (writeView y))
+    && (Orth (readView x) (readView y) || meetNever (readView x) (readView y))
+
 /-- **The certificate for one pair of options.** The meet certifies two arrays told apart by a
     literal position, and the empty list beside a list that holds one element or more, which
     `Orth` misses. The meet meets two `each` predicates, so two string sets whose members are
     disjoint meet at the bottom, and `Orth` certifies that pair too. No theorem states that the
-    meet certifies every pair that `Orth` certifies, so `Orth` stays a disjunct. -/
-def certPair (x y : Term) : Bool := Orth x y || meetNever x y
+    meet certifies every pair that `Orth` certifies, so `Orth` stays a disjunct. A `held` reaches
+    `Orth` only through its occupancies and the meet not at all, so `certViews` is the third
+    disjunct. -/
+def certPair (x y : Term) : Bool := Orth x y || meetNever x y || certViews x y
 
 /-- The certificate over a list of options, pair by pair. -/
 def certAll : List Term → Bool
@@ -1600,6 +1711,33 @@ theorem meet_stringSets_shared :
       (.refine (.set .string) (.each (.members .string (NEFinset.of "b" {"c"}))))
       = some (.refine (.set .string) (.each (.members .string (NEFinset.of "b" ∅)))) := by
   rfl
+
+/-! ### The views certify a `held` whose caller side is precise
+
+A string set held as a list of strings, beside a list of numbers. Both terms write the kind of a
+list, so the occupancies meet. The caller-side views meet at the bottom when the caller side
+requires one element or more, and the stored-side views differ in kind. -/
+
+/-- The occupancies and the meet do not certify the pair. -/
+theorem certPair_heldNE_base :
+    (Orth (.held (.set .string) (.list [.string] (some .string) []) id id)
+        (.list [] (some .number) [])
+      || meetNever (.held (.set .string) (.list [.string] (some .string) []) id id)
+        (.list [] (some .number) [])) = false := by
+  decide
+
+/-- **A caller side that requires one element or more is certified** beside a list of numbers. -/
+theorem certPair_heldNE :
+    certPair (.held (.set .string) (.list [.string] (some .string) []) id id)
+      (.list [] (some .number) []) = true := by
+  decide
+
+/-- **A caller side that admits the empty list is refused**, because the list of numbers admits
+    the empty list too. -/
+theorem certPair_heldAny :
+    certPair (.held (.set .string) (.list [] (some .string) []) id id)
+      (.list [] (some .number) []) = false := by
+  decide
 
 /-! ### Why the write-agreement condition is conditional
 
@@ -5789,11 +5927,331 @@ theorem separates_of_meetNever {x y : Term} (h : meetNever x y = true) : Separat
       rw [show AdmA x a = true from hx.2, show AdmA y a = true from hy.2] at hs
       exact nomatch hs
 
+/-! ## The views admit what the term admits -/
+
+/-- A row that admits at least what another row admits. -/
+def RowLe {α : Type} (P Q : α → Bool) : Prop := ∀ x, P x = true → Q x = true
+
+/-- The fixed positions and the spread of a list admit more when each row admits more. -/
+theorem alignP_mono {Ps Qs : List VP} {sp sq : Option VP} (hPQ : List.Forall₂ RowLe Ps Qs)
+    (hs : Option.Rel RowLe sp sq) : ∀ vs, alignP Ps sp vs = true → alignP Qs sq vs = true := by
+  induction hPQ with
+  | nil =>
+    cases hs with
+    | none => exact fun _ h => h
+    | some hr =>
+      intro vs h
+      induction vs with
+      | nil => rfl
+      | cons v vs ih =>
+        simp only [alignP, Bool.and_eq_true] at h ⊢
+        exact ⟨hr _ h.1, ih h.2⟩
+  | cons hr _ ih =>
+    intro vs h
+    cases vs with
+    | nil => simp [alignP] at h
+    | cons v vs =>
+      simp only [alignP, Bool.and_eq_true] at h ⊢
+      exact ⟨hr _ h.1, ih vs h.2⟩
+
+/-- The suffix of a list admits more when each row admits more. -/
+theorem zipP_mono {Ps Qs : List VP} (hPQ : List.Forall₂ RowLe Ps Qs) :
+    ∀ vs, zipP Ps vs = true → zipP Qs vs = true := by
+  induction hPQ with
+  | nil => exact fun _ h => h
+  | cons hr _ ih =>
+    intro vs h
+    cases vs with
+    | nil => simp [zipP] at h
+    | cons v vs =>
+      simp only [zipP, Bool.and_eq_true] at h ⊢
+      exact ⟨hr _ h.1, ih vs h.2⟩
+
+/-- A list admits more when each row admits more. -/
+theorem alignPL_mono {Ps Qs Ss Ts : List VP} {sp sq : Option VP}
+    (hPQ : List.Forall₂ RowLe Ps Qs) (hs : Option.Rel RowLe sp sq)
+    (hST : List.Forall₂ RowLe Ss Ts) (vs : List Value) (h : alignPL Ps sp Ss vs = true) :
+    alignPL Qs sq Ts vs = true := by
+  unfold alignPL at h ⊢
+  rw [← hST.length_eq]
+  simp only [Bool.and_eq_true] at h ⊢
+  exact ⟨alignP_mono hPQ hs _ h.1, zipP_mono hST _ h.2⟩
+
+/-- The fixed positions and the spread of a stored list read more when each row reads more. -/
+theorem alignPA_mono {Ps Qs : List AP} {sp sq : Option AP} (hPQ : List.Forall₂ RowLe Ps Qs)
+    (hs : Option.Rel RowLe sp sq) : ∀ as, alignPA Ps sp as = true → alignPA Qs sq as = true := by
+  induction hPQ with
+  | nil =>
+    cases hs with
+    | none => exact fun _ h => h
+    | some hr =>
+      intro as h
+      induction as with
+      | nil => rfl
+      | cons a as ih =>
+        simp only [alignPA, Bool.and_eq_true] at h ⊢
+        exact ⟨hr _ h.1, ih h.2⟩
+  | cons hr _ ih =>
+    intro as h
+    cases as with
+    | nil => simp [alignPA] at h
+    | cons a as =>
+      simp only [alignPA, Bool.and_eq_true] at h ⊢
+      exact ⟨hr _ h.1, ih as h.2⟩
+
+/-- The suffix of a stored list reads more when each row reads more. -/
+theorem zipPA_mono {Ps Qs : List AP} (hPQ : List.Forall₂ RowLe Ps Qs) :
+    ∀ as, zipPA Ps as = true → zipPA Qs as = true := by
+  induction hPQ with
+  | nil => exact fun _ h => h
+  | cons hr _ ih =>
+    intro as h
+    cases as with
+    | nil => simp [zipPA] at h
+    | cons a as =>
+      simp only [zipPA, Bool.and_eq_true] at h ⊢
+      exact ⟨hr _ h.1, ih as h.2⟩
+
+/-- A stored list reads more when each row reads more. -/
+theorem alignPAL_mono {Ps Qs Ss Ts : List AP} {sp sq : Option AP}
+    (hPQ : List.Forall₂ RowLe Ps Qs) (hs : Option.Rel RowLe sp sq)
+    (hST : List.Forall₂ RowLe Ss Ts) (as : List Attr) (h : alignPAL Ps sp Ss as = true) :
+    alignPAL Qs sq Ts as = true := by
+  unfold alignPAL at h ⊢
+  rw [← hST.length_eq]
+  simp only [Bool.and_eq_true] at h ⊢
+  exact ⟨alignPA_mono hPQ hs _ h.1, zipPA_mono hST _ h.2⟩
+
+/-- A term whose caller-side view admits each value that the term admits. -/
+def WriteLe (t : Term) : Prop := RowLe (Adm t) (Adm (writeView t))
+/-- Each term of the list has `WriteLe`. -/
+def WriteLeL : List Term → Prop
+  | [] => True
+  | t :: ts => WriteLe t ∧ WriteLeL ts
+/-- The term, where one is present, has `WriteLe`. -/
+def WriteLeO : Option Term → Prop
+  | none => True
+  | some t => WriteLe t
+/-- A term whose stored-side view reads each attribute that the term reads. -/
+def ReadLe (t : Term) : Prop := RowLe (AdmA t) (AdmA (readView t))
+/-- Each term of the list has `ReadLe`. -/
+def ReadLeL : List Term → Prop
+  | [] => True
+  | t :: ts => ReadLe t ∧ ReadLeL ts
+/-- The term, where one is present, has `ReadLe`. -/
+def ReadLeO : Option Term → Prop
+  | none => True
+  | some t => ReadLe t
+
+/-- The rows of a list of terms, beside the rows of their caller-side views. -/
+theorem writeLeL_forall₂ :
+    ∀ ts, WriteLeL ts → List.Forall₂ RowLe (AdmList ts) (AdmList (writeViewL ts))
+  | [], _ => .nil
+  | _ :: ts, h => .cons h.1 (writeLeL_forall₂ ts h.2)
+
+/-- The row of a spread, beside the row of its caller-side view. -/
+theorem writeLeO_rel : ∀ o, WriteLeO o → Option.Rel RowLe (AdmOptT o) (AdmOptT (writeViewO o))
+  | none, _ => .none
+  | some _, h => .some h
+
+/-- The stored rows of a list of terms, beside the rows of their stored-side views. -/
+theorem readLeL_forall₂ :
+    ∀ ts, ReadLeL ts → List.Forall₂ RowLe (AdmAList ts) (AdmAList (readViewL ts))
+  | [], _ => .nil
+  | _ :: ts, h => .cons h.1 (readLeL_forall₂ ts h.2)
+
+/-- The stored row of a spread, beside the row of its stored-side view. -/
+theorem readLeO_rel : ∀ o, ReadLeO o → Option.Rel RowLe (AdmAOptT o) (AdmAOptT (readViewO o))
+  | none, _ => .none
+  | some _, h => .some h
+
+/-- A list whose positions have `WriteLe` has `WriteLe`. -/
+theorem writeLe_list {pre suf : List Term} {sp : Option Term} (hp : WriteLeL pre)
+    (hs : WriteLeO sp) (hf : WriteLeL suf) : WriteLe (.list pre sp suf) := by
+  intro v h
+  cases v with
+  | arr vs =>
+    exact alignPL_mono (writeLeL_forall₂ pre hp) (writeLeO_rel sp hs)
+      (writeLeL_forall₂ suf hf) vs h
+  | _ => exact absurd h (by simp [Adm])
+
+/-- A list whose positions have `ReadLe` has `ReadLe`. -/
+theorem readLe_list {pre suf : List Term} {sp : Option Term} (hp : ReadLeL pre)
+    (hs : ReadLeO sp) (hf : ReadLeL suf) : ReadLe (.list pre sp suf) := by
+  intro a h
+  cases a with
+  | l as =>
+    exact alignPAL_mono (readLeL_forall₂ pre hp) (readLeO_rel sp hs)
+      (readLeL_forall₂ suf hf) as h
+  | _ => exact absurd h (by simp [AdmA])
+
+/-- An object whose slots and open block have `WriteLe` has `WriteLe`. The view keeps each
+    presence mark, so the presence test does not move. -/
+theorem writeLe_object {fs : Finset Name} {f : {k // k ∈ fs} → ObjectSlot} {w : Option Term}
+    (hf : ∀ k, RowLe (AdmField (f k)) (AdmField (writeViewS (f k)))) (hw : WriteLeO w) :
+    WriteLe (.object (.mk fs f w)) := by
+  intro v h
+  cases v with
+  | map keys g =>
+    simp only [writeView, writeViewB, Adm, AdmBody, Bool.and_eq_true] at h ⊢
+    refine ⟨decide_eq_true fun k => ?_, decide_eq_true fun k => ?_⟩
+    · have := of_decide_eq_true h.1 k
+      beta_reduce
+      generalize f k = s at this ⊢
+      cases s <;> simp_all [writeViewS]
+    · have := of_decide_eq_true h.2 k
+      rcases Decidable.em (k.1 ∈ fs) with hm | hm
+      · simp only [entryP, MapOf.at, dif_pos hm] at this ⊢
+        exact hf ⟨k.1, hm⟩ _ this
+      · simp only [entryP, MapOf.at, dif_neg hm] at this ⊢
+        cases w with
+        | none => exact absurd this (by simp [AdmWild])
+        | some t => exact hw _ this
+  | _ => exact absurd h (by simp [Adm, AdmBody])
+
+/-- An object whose slots and open block have `ReadLe` has `ReadLe`. -/
+theorem readLe_object {fs : Finset Name} {f : {k // k ∈ fs} → ObjectSlot} {w : Option Term}
+    (hf : ∀ k, RowLe (AdmAField (f k)) (AdmAField (readViewS (f k)))) (hw : ReadLeO w) :
+    ReadLe (.object (.mk fs f w)) := by
+  intro a h
+  cases a with
+  | m keys g =>
+    simp only [readView, readViewB, AdmA, AdmABody, Bool.and_eq_true] at h ⊢
+    refine ⟨decide_eq_true fun k => ?_, decide_eq_true fun k => ?_⟩
+    · have := of_decide_eq_true h.1 k
+      beta_reduce
+      generalize f k = s at this ⊢
+      cases s <;> simp_all [readViewS]
+    · have := of_decide_eq_true h.2 k
+      rcases Decidable.em (k.1 ∈ fs) with hm | hm
+      · simp only [entryPA, MapOf.at, dif_pos hm] at this ⊢
+        exact hf ⟨k.1, hm⟩ _ this
+      · simp only [entryPA, MapOf.at, dif_neg hm] at this ⊢
+        cases w with
+        | none => exact absurd this (by simp [AdmAWild])
+        | some t => exact hw _ this
+  | _ => exact absurd h (by simp [AdmA, AdmABody])
+
+mutual
+/-- **The caller-side view admits each value that the term admits**, where no `held` occurs
+    below a `union`. A `union` stays as written, because a count selector is anti-monotone: two
+    views can admit a value that one option alone admitted. -/
+theorem writeLe_of : ∀ t : Term, heldBelowUnion t = false → WriteLe t
+  | .held _ P _ _, hb => fun v h => by
+      simp only [heldBelowUnion, Bool.or_eq_false_iff] at hb
+      simp only [writeView]
+      exact writeLe_of P hb.2 v (Bool.and_eq_true_iff.mp h).2
+  | .refine t p, hb => fun v h => by
+      simp only [heldBelowUnion] at hb
+      simp only [writeView, Adm, Bool.and_eq_true] at h ⊢
+      exact ⟨writeLe_of t hb v h.1, h.2⟩
+  | .lazy t, hb => fun v h => by
+      simp only [heldBelowUnion] at hb
+      simp only [writeView]
+      exact writeLe_of t hb v h
+  | .list pre sp suf, hb => by
+      simp only [heldBelowUnion, Bool.or_eq_false_iff] at hb
+      exact writeLe_list (writeLe_ofL pre hb.1.1) (writeLe_ofO sp hb.1.2) (writeLe_ofL suf hb.2)
+  | .object (.mk fs f w), hb => by
+      simp only [heldBelowUnion, heldBelowUnionB, Bool.or_eq_false_iff,
+        decide_eq_false_iff_not, not_exists, Bool.not_eq_true] at hb
+      exact writeLe_object (fun k => writeLe_ofS (f k) (hb.1 k)) (writeLe_ofO w hb.2)
+  | .union _, _ => fun _ h => h
+  | .string, _ => fun _ h => h | .number, _ => fun _ h => h | .boolean, _ => fun _ h => h
+  | .binary, _ => fun _ h => h | .null, _ => fun _ h => h | .literal _ _, _ => fun _ h => h
+  | .set _, _ => fun _ h => h | .opaq, _ => fun _ h => h | .never, _ => fun _ h => h
+/-- `writeLe_of` over a list. -/
+theorem writeLe_ofL : ∀ ts : List Term, heldBelowUnionL ts = false → WriteLeL ts
+  | [], _ => trivial
+  | t :: ts, hb => by
+      simp only [heldBelowUnionL, Bool.or_eq_false_iff] at hb
+      exact ⟨writeLe_of t hb.1, writeLe_ofL ts hb.2⟩
+/-- `writeLe_of` at an optional term. -/
+theorem writeLe_ofO : ∀ o : Option Term, heldBelowUnionO o = false → WriteLeO o
+  | none, _ => trivial
+  | some t, hb => writeLe_of t hb
+/-- `writeLe_of` at a slot. -/
+theorem writeLe_ofS : ∀ s : ObjectSlot, heldBelowUnionS s = false →
+    RowLe (AdmField s) (AdmField (writeViewS s))
+  | .req t, hb => fun v h => writeLe_of t hb v h
+  | .optional t, hb => fun v h => writeLe_of t hb v h
+end
+
+mutual
+/-- **The stored-side view reads each attribute that the term reads**, where no `held` occurs
+    below a `union`. -/
+theorem readLe_of : ∀ t : Term, heldBelowUnion t = false → ReadLe t
+  | .held t _ _ _, hb => fun a h => by
+      simp only [heldBelowUnion, Bool.or_eq_false_iff] at hb
+      simp only [readView]
+      exact readLe_of t hb.1 a (Bool.and_eq_true_iff.mp h).1
+  | .refine t p, hb => fun a h => by
+      simp only [heldBelowUnion] at hb
+      simp only [readView]
+      split
+      · exact readLe_of t hb a (Bool.and_eq_true_iff.mp h).1
+      · exact h
+  | .lazy t, hb => fun a h => by
+      simp only [heldBelowUnion] at hb
+      simp only [readView]
+      exact readLe_of t hb a h
+  | .list pre sp suf, hb => by
+      simp only [heldBelowUnion, Bool.or_eq_false_iff] at hb
+      exact readLe_list (readLe_ofL pre hb.1.1) (readLe_ofO sp hb.1.2) (readLe_ofL suf hb.2)
+  | .object (.mk fs f w), hb => by
+      simp only [heldBelowUnion, heldBelowUnionB, Bool.or_eq_false_iff,
+        decide_eq_false_iff_not, not_exists, Bool.not_eq_true] at hb
+      exact readLe_object (fun k => readLe_ofS (f k) (hb.1 k)) (readLe_ofO w hb.2)
+  | .union _, _ => fun _ h => h
+  | .string, _ => fun _ h => h | .number, _ => fun _ h => h | .boolean, _ => fun _ h => h
+  | .binary, _ => fun _ h => h | .null, _ => fun _ h => h | .literal _ _, _ => fun _ h => h
+  | .set _, _ => fun _ h => h | .opaq, _ => fun _ h => h | .never, _ => fun _ h => h
+/-- `readLe_of` over a list. -/
+theorem readLe_ofL : ∀ ts : List Term, heldBelowUnionL ts = false → ReadLeL ts
+  | [], _ => trivial
+  | t :: ts, hb => by
+      simp only [heldBelowUnionL, Bool.or_eq_false_iff] at hb
+      exact ⟨readLe_of t hb.1, readLe_ofL ts hb.2⟩
+/-- `readLe_of` at an optional term. -/
+theorem readLe_ofO : ∀ o : Option Term, heldBelowUnionO o = false → ReadLeO o
+  | none, _ => trivial
+  | some t, hb => readLe_of t hb
+/-- `readLe_of` at a slot. -/
+theorem readLe_ofS : ∀ s : ObjectSlot, heldBelowUnionS s = false →
+    RowLe (AdmAField s) (AdmAField (readViewS s))
+  | .req t, hb => fun a h => readLe_of t hb a h
+  | .optional t, hb => fun a h => readLe_of t hb a h
+end
+
+/-- **The certificate through the views is sound.** A value that both terms admit is admitted
+    by both caller-side views, and an attribute that both terms read is read by both stored-side
+    views. The views are held-free, so `Orth` or the meet separates each pair of views. -/
+theorem separates_of_certViews {x y : Term} (h : certViews x y = true) : Separates x y := by
+  simp only [certViews, Bool.and_eq_true, Bool.not_eq_true'] at h
+  obtain ⟨⟨⟨⟨_, hbx⟩, hby⟩, hw⟩, hr⟩ := h
+  have sw : Separates (writeView x) (writeView y) := by
+    rcases Bool.or_eq_true_iff.mp hw with ho | hm
+    · exact separates_of_orth ho
+    · exact separates_of_meetNever hm
+  have sr : Separates (readView x) (readView y) := by
+    rcases Bool.or_eq_true_iff.mp hr with ho | hm
+    · exact separates_of_orth ho
+    · exact separates_of_meetNever hm
+  refine ⟨fun v hx hy => ?_, fun a hx hy => ?_⟩
+  · have hx' := writeLe_of x hbx v hx.2
+    have hy' := writeLe_of y hby v hy.2
+    exact sw.1 v ⟨occV_sound _ v hx', hx'⟩ ⟨occV_sound _ v hy', hy'⟩
+  · have hx' := readLe_of x hbx a hx.2
+    have hy' := readLe_of y hby a hy.2
+    exact sr.2 a ⟨occA_sound _ a hx', hx'⟩ ⟨occA_sound _ a hy', hy'⟩
+
 /-- **The pair certificate is sound**: each disjunct separates the pair. -/
 theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates x y := by
-  rcases Bool.or_eq_true_iff.mp h with ho | hm
-  · exact separates_of_orth ho
-  · exact separates_of_meetNever hm
+  rcases Bool.or_eq_true_iff.mp h with h | hv
+  · rcases Bool.or_eq_true_iff.mp h with ho | hm
+    · exact separates_of_orth ho
+    · exact separates_of_meetNever hm
+  · exact separates_of_certViews hv
 
 /-- **A certified union is separated**, which is the premise of `uAtCan_of_separated` and of
     `admitsAtMostOne_of_separated`. -/
@@ -5801,20 +6259,13 @@ theorem separated_of_unionOk {os : List Term} (h : unionOk os = true) : Separate
   (pairwise_of_certAll h).imp separates_of_certPair
 
 /-- **The pair certificate on the held sets.** At a derivable term the held set is the admission
-    (`typed_T_adm`), so a pair that meets at the bottom holds disjoint sets. -/
+    (`typed_T_adm`), so a separated pair holds disjoint sets. -/
 theorem hdisj_of_certPair {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
-    (h : certPair x y = true) (hx : Typed x Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty := by
-  rcases Bool.or_eq_true_iff.mp h with ho | hm
-  · exact separates_held_of_orth ho hx hy
-  · intro v hvx hvy
-    unfold meetNever at hm
-    cases hmz : Term.meet x y with
-    | none => rw [hmz] at hm; exact nomatch hm
-    | some z =>
-      rw [hmz] at hm
-      have hs := meet_separates hmz hm v
-      rw [(typed_T_adm hx v).mp hvx, (typed_T_adm hy v).mp hvy] at hs
-      exact nomatch hs
+    (h : certPair x y = true) (hx : Typed x Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty :=
+  fun v hvx hvy => by
+    have hvx' := (typed_T_adm hx v).mp hvx
+    have hvy' := (typed_T_adm hy v).mp hvy
+    exact (separates_of_certPair h).1 v ⟨occV_sound _ v hvx', hvx'⟩ ⟨occV_sound _ v hvy', hvy'⟩
 
 /-- The certificate's pairs, carried to the held sets option by option. -/
 theorem unionOk_pairwise_held : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs →
