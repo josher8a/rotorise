@@ -1,10 +1,10 @@
 import Calculus.Soundness
 
 /-!
-# `Uν` and the empty set — a mechanization bug, closed by the type
+# `HOpaque` and the empty set — a mechanization bug, closed by the type
 
-"`T` as an identity" was long unproved, and it bites hardest at `opaque`, where §3 says
-`Uν` *is* the held set. Attempting it turned up
+"`T` as an identity" was long unproved, and it bites hardest at `opaque`, where
+`HOpaque` *is* the held set. Attempting it turned up
 a defect — and, unlike §4's three, this one was in the **model**, not the specification.
 
 `HOpaque`'s `set` clause was transcribed as
@@ -18,7 +18,7 @@ calculus agreed:
 
 * §1's `SS`/`NS`/`BS` are `℘⁺fin` — explicitly non-empty. There is no empty wire set to
   write.
-* `(set)`'s own held set `HSet` excluded it. §3 exhibits `Uν` as the fixpoint
+* `(set)`'s own held set `HSet` excluded it. §3 exhibits `opaque` as the fixpoint
   `union(…, set(opaque), …)`, whose `set` option is that rule — so the fixpoint reading
   excludes `set []` too.
 * §3's prose reading — "the values whose member is recoverable from the value alone" —
@@ -29,7 +29,7 @@ calculus agreed:
 **The repair went through three stages, and the last one is why this section is now
 prose.** First the inductive gained `hne : vs ≠ []`, and three theorems here exhibited the
 gap: ~~not_hopaque_set_nil~~, ~~opaqCodec_T_set_nil~~ and ~~opaqCodecω_e_set_nil~~ — the empty
-set is held by no fuel, written by none, and refused by the corrected `Uν`. Then the sets
+set is held by no fuel, written by none, and refused by the corrected `HOpaque`. Then the sets
 became `Finset`, and `vs ≠ []` became `S.Nonempty`. Now `Value.strSet` takes a
 `NEFinset String`, and **the three theorems cannot be stated**: `Value.strSet ∅` does not
 typecheck, because `∅` carries no non-emptiness proof and `℘⁺fin` has no other inhabitant
@@ -51,7 +51,7 @@ namespace Calculus
 
 /-! ## `T` as an identity, for `opaque`
 
-With `Uν` corrected, the converse of `opaq_TSub` goes through: everything `Uν` admits, the
+With `HOpaque` corrected, the converse of `opaq_TSub` goes through: everything `HOpaque` admits, the
 denotation holds. §6's row asked for exactly this and could not have it while fuel was in
 the statement — the missing "fuel exceeds depth" hypothesis is now `Value.depth`.
 
@@ -135,7 +135,7 @@ termination_by vs n => (n, sizeOf vs)
 
 end
 
-/-- **§3's `Uν` *is* `opaque`'s held set.** The row §6 called unproved, and unprovable in
+/-- **`HOpaque` *is* `opaque`'s held set.** The row §6 called unproved, and unprovable in
     the fuel encoding, closed for the case it said bites hardest. -/
 theorem opaq_T_identity (v : Value) :
     (opaqCodecω).T v ↔ HOpaque v := by
@@ -252,8 +252,8 @@ theorem typed_T_identity {t T μ} (h : Typed t T μ) (v : Value) : (denote t).T 
 
 /-! ## Which identity? §6's row is two of them
 
-* **(A)** `(denote t).T = T` for a derivable `⊢ t : T ⇝ μ` — §3's "`Uν` *is* `opaque`'s held
-  set", which `opaq_T_identity` proves at `opaque` and `typed_T_identity` now proves at every
+* **(A)** `(denote t).T = T` for a derivable `⊢ t : T ⇝ μ` — `HOpaque` *is* `opaque`'s held
+  set, which `opaq_T_identity` proves at `opaque` and `typed_T_identity` now proves at every
   rule. **Closed**, and it was the half `typed_TSub` left.
 * **(B)** `T = dom(e)` — what makes `: T` an honest index rather than an upper bound.
   `Carrier.domE` is its other half.

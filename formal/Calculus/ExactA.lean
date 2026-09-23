@@ -102,16 +102,10 @@ noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
 /-- **What a set base reads.**
 
     Two bases answer concretely: `string` reads `SS` and nothing else, and `binary` `BS`.
-    `number` asks its codec.
-
-    The reason is worth stating, because it is the one residue the re-indexing does *not*
-    remove and it is not injectivity of `e`. `numberCodec.p` went through the host's decimal reader,
-    which **rounds** (`Prisms.lean`), so two distinct stored numerals can read to the
-    same double and `decSet`'s `Nodup` gate then refuses an `NS` every element of which
-    reads. That is `e ∘ p ≠ id`, not `e` non-injective, and the numeric host says nothing about
-    whether it ever fires — it is decidable, through the host's decidable equality, and not describable
-    syntactically, so the exact row is the codec's own answer. `AdmA` is already
-    `noncomputable`, so this costs nothing it had not already spent. -/
+    `number` asks its codec: `decSet` reads each payload of an `NS` through `numberCodec.p`.
+    `N` is carried exactly, so `numberCodec.p` is a constructor wrapper on the numeral
+    (`numberCodec_p_n`), and no two distinct payloads read to one value. `AdmA` is already
+    `noncomputable`, so the row costs nothing it had not already spent. -/
 noncomputable def AdmASet : SetBase → Attr → Bool
   | .string,  .ss _ => true
   | .binary,  .bs _ => true
@@ -146,7 +140,7 @@ noncomputable def AdmA : Term → Attr → Bool
   | .union opts => fun a => selOptA (AdmASpecs opts) a
   -- **the row that used to admit all three wire families whatever the element term was.**
   -- With the base an index the family is a function of it, so this names one — and at
-  -- `number` defers to the codec, for the rounding residue `AdmASet` documents.
+  -- `number` defers to the codec, as `AdmASet` states.
   | .set b    => AdmASet b
   -- **One row**, for the reason the value side gives: `array` and `tuple` were two rows
   -- computing different things on what is now one shape.
