@@ -27,7 +27,7 @@ import type {
     StoredItem,
 } from './attribute'
 import { DynamoNumber, memberOf } from './attribute'
-import type { LiteralValue, Option, Shape } from './codec'
+import type { LiteralValue, Shape } from './codec'
 import type { Result } from './result'
 import { CodecError, failed } from './result'
 
@@ -119,26 +119,6 @@ export const namesOf = (held: Record<string, unknown>) => {
         if (held[name] !== undefined) names.add(name)
     }
     return names
-}
-
-/**
- * Whether an object option can describe exactly this set of attribute names.
- *
- * Two conditions, and both matter for the law: every name present must be one the option declares
- * (otherwise encoding would drop data), and every attribute it requires must be present (otherwise
- * it is simply not this one).
- *
- * Named for what it is, which used to be `admits` — and it is emphatically **not** {@link accepts},
- * §3's `Adm`. It is a test on *names* alone, the `keysOk` the model's `optionSemOf` uses for object
- * options, and it says nothing about whether the values at those names are admissible. Two things
- * called `admits` in one file was one name for two questions.
- */
-export const namesFit = (option: Option, names: ReadonlySet<string>) => {
-    const declares = option.declares
-    if (!declares) return false
-    for (const name of names) if (!declares.has(name)) return false
-    for (const name of option.requires) if (!names.has(name)) return false
-    return true
 }
 
 type AttributeCarriesOf<K extends AttributeName> = Attribute<K>[K]
