@@ -555,8 +555,7 @@ describe('what cannot be emitted', () => {
 
     /**
      * A recursive codec is not a deep term; it is *no* term. `Term.lazy` carries a `Term` and not a
-     * thunk, deliberately — `formal/Calculus/Continuity.lean` shows `union`'s admission is
-     * anti-monotone, so a genuinely recursive union has no fixpoint semantics in any system. The
+     * thunk, so the model states no recursive term. The
      * emitter therefore stops at a depth rather than diverging, and reports that.
      */
     it('refuses a recursive lazy rather than looping', () => {
@@ -564,7 +563,7 @@ describe('what cannot be emitted', () => {
             lazy(() => recursive as unknown as AttributeCodec<unknown>),
         )
         expect(refusal(() => leanTermOf(recursive)).reason).toContain(
-            'no fixpoint semantics',
+            'the model states no recursive term',
         )
     })
 

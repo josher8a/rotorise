@@ -176,9 +176,9 @@ def HObject (names : Finset Name) (b : {k // k ∈ names} → Bool × Held) (R :
       if h : k.1 ∈ names then (b ⟨k.1, h⟩).2 (f k)
       else ∃ T, R = some T ∧ T (f k))
 
-/-- `Uν` (§3 `(opaque)`): the values whose member is recoverable from the value alone,
-    as the doc's fixpoint — everything self-identifying, closed under the containers.
-    Every `Value` is in `Uν`: the number option holds a numeral exactly. -/
+/-- `HOpaque` (§3 `(opaque)`): `opaque`'s held set, the values whose member is recoverable
+    from the value alone, as the doc's fixpoint — everything self-identifying, closed under the
+    containers. Every `Value` is in `HOpaque`: the number option holds a numeral exactly. -/
 inductive HOpaque : Value → Prop where
   | str  (s)  : HOpaque (.str s)
   | bool (b)  : HOpaque (.bool b)
@@ -190,9 +190,9 @@ inductive HOpaque : Value → Prop where
   /-- Non-emptiness carried no premise here any more, because `℘⁺fin` is the type. The
       argument for it stands and is worth keeping: an empty wire set is not writable, and
       its member would not be recoverable from the value anyway — you cannot tell `SS`
-      from `NS` at `∅`. Both readings §3 gives of `Uν` exclude it. What changed is where
-      the exclusion lives: `HeldSet.lean` used to exhibit `opaque` refusing `strSet ∅`,
-      and that witness is now unstatable. -/
+      from `NS` at `∅`. Both readings §3 gives of `opaque`'s held set exclude it. What
+      changed is where the exclusion lives: `HeldSet.lean` used to exhibit `opaque` refusing
+      `strSet ∅`, and that witness is now unstatable. -/
   | strSet (S : NEFinset String)
       (h : ∀ s ∈ S.1, HOpaque (.str s)) : HOpaque (.strSet S)
   | numSet (S : NEFinset WFNumeral)

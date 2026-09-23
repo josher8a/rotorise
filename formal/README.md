@@ -24,8 +24,8 @@ definition it touches.
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, structural), `UAtCan := UniqueAdmission ∘ semsOf`, theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `Can`, and all ten of §6's "Hold" nodes this development still states — `held`'s identity and composition, `refine`'s meet and full case, `Codec.extendRead` with its own reader as the alternate reader and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of §6's stated conditions), wrapper member preservation. §6's null-point node went with the wrapper: the point is a union option, so idempotence is the union's |
 | `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the kind-disjoint unfoldings — one per constructor each side, counted in that file's own header (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
-| `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`HOpaque` *is* `opaque`'s held set), and `not_TIsDomE_unionLiteralString` (§6's row is two identities and `union` has only the weaker one) |
-| `Calculus/Continuity.lean`  | §5, §7      | Why `union` admits no fixpoint semantics: `Codec.Approx` (the information order any ccpo must extend), `altCodec_not_monotone` (unique admission is anti-monotone in the options) and `stage_not_monotone` — the same collapse over a staging defined locally, since `denote` is structural and no longer stages |
+| `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`HOpaque` *is* `opaque`'s held set), `typed_T_identity` ((A) at every rule), and `not_TIsDomE_unionLiteralString` (§6's row is two identities: (B) fails at a union codec that no derivation reaches, and `typed_T_adm` in `Laminar.lean` proves (B) at every derivable term) |
+| `Calculus/Continuity.lean`  | §5, §7      | Why a `union` under unique admission has no fixpoint semantics in general: `Codec.Approx` (the information order any ccpo must extend), `altCodec_not_monotone` (unique admission is anti-monotone in the options) and `stage_not_monotone` — the same collapse over a staging defined locally, since `denote` is structural and no longer stages |
 | `Calculus/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's nesting bound, a parameter, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
 | `Calculus/DynamoDB.lean`    | §1          | The DynamoDB port: `DynamoDB.maxNesting` instantiates the nesting bound at the store's 32 levels; `Numeral.Normal`/`Numeral.Stored`, `decimalCodec` and its `SurvivesStore` instance, `not_survivesStore_numberCodec`, the numeral-domain report (`decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases), and the text adapter `numeralOfStoredText`/`textOfNumeral` |
 | `Calculus/Refutations.lean` | §6          | §6's seven "Do not hold" nodes, all settled, over eight declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `not_equiv_lazy` (where `≡`'s member index is what fails), `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
@@ -147,8 +147,8 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   `not_uAtCan_array_literals` (two-sided `ident` — `ident` propagates through `array`,
   but disjointness of the admissible sets does not, and both options admit `[]`). §5 keeps
   both counterexamples and states the discharger on option admission, disjoint per side — `Adm`/`AdmA`
-  are `dom(e)`/`dom(p)` on the nose, and admission by names is what a `union` asks of an
-  object option. `Calculus/Orthogonality.lean` discharges §5's own worked example, a pair
+  are `dom(e)`/`dom(p)` on the nose, and a `union` admits every option by attempt, an
+  object option included. `Calculus/Orthogonality.lean` discharges §5's own worked example, a pair
   that shares its occupancy on both sides, so only the admissible sets reach it.
 
 ## Is the model the specification?
@@ -201,16 +201,13 @@ convention rather than against it: shared construction, fewer sites.
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
 soundness. `union`'s commutativity is proved for the adjacent transposition, which
 generates every permutation, and lifting it to `List.Perm` is the obvious next step.
-A decimal literal's read side asks its codec rather than naming a set, and the row does not have
-to name one: the codec's reader is a function, which is enough to make the answer unique. The
-`number` row names its set directly, because `N`'s carrier is the attribute's own. `AdmA`'s `number` row and `AdmALit`'s `.number`
-row are `dom(p)`
-exactly, which is what separates two disjoint numeric literals from
-each other. The store observation survives on the
-other side of the pair — `Lawful.retract_through_store`, which is (R) asked through any
-transformation the store may apply: a literal's stored texts are known at the declaration, but
-`10²¹` is written `1e+21` and handed back normalised, so a row testing the *text* would refuse a
-row the codec itself wrote. That is why the row tests the codec.
+A numeric literal's read side names its set: `N` is carried exactly, so `AdmALit`'s `.number`
+row reads by equality, as the `.string` row does. `AdmA`'s `number` row and `AdmALit`'s `.number`
+row are `dom(p)` exactly, which is what separates two disjoint numeric literals from each other.
+The store observation lives in the DynamoDB port. `10²¹` is written `1e+21` and handed back
+normalised, and `not_survivesStore_numberCodec` shows that `number` does not survive the
+normalisation. `Lawful.retract_through_store` is (R) asked through any transformation the store
+may apply, and `survivesStore_decimalCodec` discharges its premise for `decimal`.
 
 ## Building
 
