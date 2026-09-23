@@ -231,8 +231,17 @@ const refusedBy = (q: Predicate, value: unknown): CodecError => {
             const at = elements.findIndex((one) => !holds(q.of)(one))
             return refusedBy(q.of, elements[at]).under(at)
         }
-        case 'closure':
-            return new CodecError(`${JSON.stringify(value)} is not ${q.q.what}`)
+        case 'closure': {
+            // `JSON.stringify` throws on a `bigint` and on a cycle, and a refusal is a value, so the
+            // message falls back to the value's shape rather than throwing past the caller
+            let named: string
+            try {
+                named = JSON.stringify(value)
+            } catch {
+                named = describeShape(value)
+            }
+            return new CodecError(`${named} is not ${q.q.what}`)
+        }
     }
 }
 
