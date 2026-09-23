@@ -125,9 +125,8 @@ The `simp` alternatives stop contributing, and nothing reports it. `scripts/name
 close the gap: its targets are the documents and `Calculus/*.lean`, and neither `src/codec/lean.ts`
 nor a generated artifact is in that list.
 
-**Pin.** None. ~~famDecimal~~ left `MEET_LEMMAS`, and `isStored` left a `first` alternative of the
-`admA_never` macro in `Meet.lean`, in the passes that deleted or moved each declaration. No check
-reported either name.
+**Pin.** None. No check reports a name in `MEET_LEMMAS`, or in a `first` alternative of a macro in
+`Meet.lean`, that no declaration carries.
 
 ---
 
