@@ -406,8 +406,8 @@ def Attr.kind : Attr → Kind
 
 /-! ## §1's nesting bound — the one constraint on `𝔸` the carrier cannot carry
 
-`docs/dynamo-datatypes.md:130`: *"The document types are list and map. These data types can
-be nested within each other, to represent complex data structures up to 32 levels deep."*
+A store can bound how deep the document types nest. The ideal algebra has no such bound, so
+the bound is a parameter here, and a port instantiates it: `DynamoDB.maxNesting` is 32.
 
 A subtype `{as : List Attr // Attr.nestingL as ≤ 31}` puts `Attr` under its own declaration
 and the kernel refuses it, exactly as it refuses `Finset Attr`. So `Attr` above is the
@@ -443,14 +443,11 @@ def Attr.nestingL : List Attr → Nat
 
 end
 
-/-- The reference's number, named once. -/
-def maxNesting : Nat := 32
-
-/-- **§1's `𝔸` as the store actually has it.** The `Attr` above is what the calculus writes
-    into; this is the subset DynamoDB accepts. Everything else in §1 is exact, so this
-    predicate is the whole of the difference — and `ran(e) ⊆ 𝔸` is only the guarantee it
-    reads as when the two agree. -/
-def Attr.Storable (a : Attr) : Prop := Attr.nesting a ≤ maxNesting
+/-- **§1's `𝔸` as a store with a nesting bound has it.** The `Attr` above is what the calculus
+    writes into; this is the subset a store accepts when it nests at most `bound` document
+    types. Everything else in §1 is exact, so this predicate is the whole of the difference —
+    and `ran(e) ⊆ 𝔸` is only the guarantee it reads as when the two agree. -/
+def Attr.Storable (bound : Nat) (a : Attr) : Prop := Attr.nesting a ≤ bound
 
 /-- The value language, partitioned exactly as §5's `Kind`. `decimal` holds numerals as
     `str` values — one string kind, as in the doc's κ table. -/

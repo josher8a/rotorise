@@ -20,6 +20,7 @@ import Calculus.Continuity
 import Calculus.Opaque
 import Calculus.HeldSet
 import Calculus.Nesting
+import Calculus.DynamoDB
 import Calculus.Malleability
 import Calculus.Refutations
 import Calculus.ExactV

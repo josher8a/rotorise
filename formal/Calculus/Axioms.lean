@@ -10,6 +10,7 @@ import Calculus.Meet
 import Batteries.Tactic.Lint
 import Calculus.LiteralArity1
 import Calculus.Nesting
+import Calculus.DynamoDB
 import Calculus.Malleability
 import Calculus.Orthogonality
 import Calculus.Vectors
