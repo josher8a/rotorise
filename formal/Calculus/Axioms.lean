@@ -15,6 +15,7 @@ import Calculus.Malleability
 import Calculus.Orthogonality
 import Calculus.Vectors
 import Calculus.Universal
+import Calculus.Confluence
 import Lean
 
 /-!
