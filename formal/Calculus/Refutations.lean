@@ -252,7 +252,7 @@ theorem not_equiv_tupleTail_array :
         optionSemOf, specOf, OptionSem.byAttempt, altCodec, tupleCodec, align, arrayCodec,
         stringCodec] at hv
 
-/-! ## `refine(held(c, f, g), q) ≢ held(refine(c, q), f, g)`
+/-! ## `refine(held(c, P, f, g), q) ≢ held(refine(c, q), P, f, g)`
 
 §6: "the refinement applies on opposite sides of the iso, so `q` is a subset of different
 sets." The model makes that literal — one held set says `q v`, the other says `q (f v)`. -/
@@ -269,8 +269,8 @@ def predA : Value → Bool
 /-- At `"B"`: the outer refinement rejects it, the inner one never sees it — `f` has
     already replaced it with `"A"`. -/
 theorem not_equiv_refine_held :
-    ¬ Codec.Equiv (denote (.refine (.held .string isoF id) (.closure predA)))
-                  (denote (.held (.refine .string (.closure predA)) isoF id)) := by
+    ¬ Codec.Equiv (denote (.refine (.held .string .string isoF id) (.closure predA)))
+                  (denote (.held (.refine .string (.closure predA)) .string isoF id)) := by
   intro h
   have hv := (h.heldSet (.str "B")).mpr
   simp [denote, denote, Codec.through, Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv

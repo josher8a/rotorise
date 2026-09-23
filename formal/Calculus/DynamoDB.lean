@@ -453,8 +453,9 @@ def textOfNumeral : Value → Value := fun v =>
   | .num x => Value.str x.1
   | _ => v
 
-/-- `decimal`, as the surface ships it: the numeric base under the text adapter. -/
-def decimalHeld : Term := Term.held Term.number numeralOfStoredText textOfNumeral
+/-- `decimal`, as the surface ships it: the numeric base under the text adapter, with the
+    caller side restricted to text. -/
+def decimalHeld : Term := Term.held Term.number Term.string numeralOfStoredText textOfNumeral
 
 /-- It admits the stored spellings and nothing else, which is what `decimal` promises. -/
 example : Adm decimalHeld (Value.str "1.5") = true := by decide

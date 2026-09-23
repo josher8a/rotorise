@@ -90,7 +90,7 @@ inductive Term where
       one pair on the nose, the first on `e` and the second on `p`, with `liftQ` carrying
       the predicate through. This cited the write-side theorem for both halves, and the
       read side was a sentence in its docstring until it was proved. What is lost is
-      `set(held b f g)` is not a term. An element-level adapter has no set-level spelling:
+      `set(held b P f g)` is not a term. An element-level adapter has no set-level spelling:
       a set-level `held` would need `setImage` rather than the classical `Finset.image` to
       stay injective. -/
   | set      (base : SetBase)
@@ -110,7 +110,11 @@ inductive Term where
       `array` and `tuple` survive below as *builders*, so a statement that spells either
       keeps its spelling. -/
   | list     (pre : List Term) (spread : Option Term) (suf : List Term)
-  | held     (inner : Term) (f : Value → Value) (g : Value → Value)
+  /-- §3 `(held)`: a morphism between two restrictions. `inner` restricts the stored side,
+      `outer` restricts the caller side, and `f` and `g` only transform between the two. The
+      caller side has no unrestricted spelling: a caller that states no restriction writes
+      `.opaq` as `outer`. -/
+  | held     (inner : Term) (outer : Term) (f : Value → Value) (g : Value → Value)
   | refine   (inner : Term) (p : Pred)
   /-- §3 `(lazy)`. The thunk is *not* `Unit → Term`: a closure adds no constructible
       term (every `Term` is finite either way) and only defeats the termination
@@ -289,7 +293,8 @@ def Term.depth : Term → Nat
   -- measure, so it sits with the other ground shapes rather than costing a layer.
   | .literal _ _ | .opaq | .set _ | .never => 1
   | .lazy t => Term.depth t + 1
-  | .held t _ _ | .refine t _ => Term.depth t + 1
+  | .held t P _ _ => max (Term.depth t) (Term.depth P) + 1
+  | .refine t _ => Term.depth t + 1
   | .list pre sp suf =>
       max (Term.depthL pre) (max (Term.depthO sp) (Term.depthL suf)) + 1
   -- one companion, like every other non-leaf row

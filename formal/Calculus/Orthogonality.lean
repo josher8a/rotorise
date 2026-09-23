@@ -21,7 +21,7 @@ answers whether there is a *syntactic certificate* that they cannot both admit o
 ## Sound, never complete, and why there is no `unknown`
 
 Semantic orthogonality is undecidable in this language — `refine t q` carries an arbitrary
-`Value → Bool` and `held t f g` an arbitrary pair of maps. So `Orth` answers a *narrower* question, and the answer `false` means "no
+`Value → Bool` and `held t P f g` an arbitrary pair of maps. So `Orth` answers a *narrower* question, and the answer `false` means "no
 certificate", never "not orthogonal".
 
 The direction that keeps this sound is that **over-approximating an occupancy is always
@@ -29,18 +29,20 @@ safe**: if `X ⊆ X'`, `Y ⊆ Y'` and `X' ∩ Y' = ∅`, then `X ∩ Y = ∅`. S
 contributes `⊤` — every slot — and a pair involving it simply fails to be certified. There is
 no third truth value to introduce.
 
-## Both halves of the pair, and one question for the classifier
+## Both halves of the pair, and two questions for the classifier
 
 `uniqueAdmission_of_disjoint` takes **two** families, one over `Value` and one over `Attr`,
 and asks each to be pairwise disjoint. The soundness families stay two: a pair can be
 separated on one side and not on the other, and then it is not separated. `held` is the
-witness: its write slot is the top, because `f` can move a value into any constructor, and its
-read member is its subterm's. So `union(held string f g, number)`, with an `f` that takes a
-number to a string, meets on the write side and separates on the read side.
+witness: its write occupancy is its caller-side term's, and its read occupancy is its
+stored-side term's. So `union(held(string, number, f, g), string)`, the decimal adapter
+against a string, separates on the write side and meets on the read side.
 
-The classifier asks one question. The witness goes in one direction only: `occA_le_occV`
-puts the read occupancy inside the write occupancy under `Member.slot`, at every term. So a
-pair disjoint on the write side is disjoint on the read side, and `Orth1` tests `occV` alone.
+The classifier asks two questions, one for each side. The two coincide below `opaque`: under
+`HF`, `occA_le_occV` puts the read occupancy inside the write occupancy under `Member.slot`,
+so a held-free pair disjoint on the write side is disjoint on the read side. A `held` has its
+two occupancies in two coordinates, and there the read question does work that the write
+question cannot.
 
 The specification's
 (U) discussion
@@ -191,10 +193,9 @@ mutual
     The `⊤` rows, and why each is `⊤` rather than sharper — §5's occupancy paragraph names
     the same terms:
 
-    * `held t f _` — `f` is an arbitrary `Value → Value` applied *before* the subterm's row,
-      so it can move the value into any constructor. `⊤`. (The read side is not: `g`
-      post-processes, so `AdmA (.held t f g) = AdmA t` and the read occupancy is the
-      subterm's.)
+    * `held t P f _` is no `⊤` row. `f` can move a value into any constructor, but the
+      caller-side term `P` restricts what the held writes, so the write occupancy is `P`'s.
+      The read occupancy is the stored-side term's (`occA`), which is another coordinate.
     * `refine t q` — the subterm's, over-approximating away `q`. Sound: a refinement writes
       a subset of what the base writes.
     * An alternate reader (`Codec.extendRead`) is outside the structural classifier.
@@ -214,7 +215,7 @@ def occV : Term → Slot → Bool
   -- `array` and `tuple` are one shape now, and both rows said the same thing
   | .list _ _ _  => occOnly .arr
   | .object _   => occOnly .map
-  | .held _ _ _  => occTop
+  | .held _ P _ _ => occV P
   | .refine t _  => occV t
   | .lazy t      => occV t
   | .union opts  => occVL opts
@@ -245,7 +246,7 @@ def occA : Term → Member → Bool
   | .list _ _ _  => occOnly .L
   | .object _   => occOnly .M
   | .refine t _  => occA t
-  | .held t _ _  => occA t
+  | .held t _ _ _ => occA t
   | .lazy t      => occA t
   | .union opts  => occAL opts
   | .opaq  => occTop
@@ -255,48 +256,19 @@ def occAL : List Term → Member → Bool
   | t :: ts => fun m => occA t m || occAL ts m
 end
 
-mutual
-
-/-- **The read occupancy lies inside the write occupancy, at every term.** The rows agree
-    under `Member.slot` at every base. `held` is the one row where the two differ, and there
-    the write side is the top. -/
-theorem occA_le_occV : ∀ (t : Term) (m : Member), occA t m = true → occV t m.slot = true
-  | .string, m, h | .number, m, h | .boolean, m, h | .binary, m, h | .null, m, h => by
-      cases m <;> simp_all [occA, occV, occOnly, Member.slot]
-  | .literal k _, m, h => by
-      cases k <;> cases m <;>
-        simp_all [occA, occV, occOnly, Member.slot, GroundKind.slot, GroundKind.member]
-  | .set b, m, h => by
-      cases b <;> cases m <;>
-        simp_all [occA, occV, occOnly, Member.slot, SetBase.slot, SetBase.member]
-  | .list _ _ _, m, h | .object _, m, h => by
-      cases m <;> simp_all [occA, occV, occOnly, Member.slot]
-  | .never, _, h => by simp [occA, occNone] at h
-  | .held _ _ _, _, _ => by simp [occV, occTop]
-  | .refine t _, m, h => occA_le_occV t m (by simpa [occA] using h)
-  | .lazy t, m, h => occA_le_occV t m (by simpa [occA] using h)
-  | .opaq, _, _ => by simp [occV, occTop]
-  | .union os, m, h => by
-      simp only [occA, occV] at h ⊢
-      exact occAL_le_occVL os m h
-
-/-- …and over the options of a union, where both sides are the join of the options'. -/
-theorem occAL_le_occVL : ∀ (ts : List Term) (m : Member),
-    occAL ts m = true → occVL ts m.slot = true
-  | [], _, h => by simp [occAL] at h
-  | t :: ts, m, h => by
-      simp only [occAL, occVL, Bool.or_eq_true] at h ⊢
-      rcases h with h | h
-      · exact Or.inl (occA_le_occV t m h)
-      · exact Or.inr (occAL_le_occVL ts m h)
-end
-
 /-! ## The classifier -/
 
-/-- **Phase *slot*.** The write occupancies disjoint. The read occupancies are then disjoint
-    too, by `occA_le_occV`, so `occA_disjoint_of_Orth1` needs no second conjunct. -/
+/-- **Phase *slot*.** The write occupancies disjoint, and the read occupancies disjoint.
+
+    **Two questions, and they coincide below `opaque`.** A `held` has its two occupancies in
+    two coordinates: the write side is the caller-side term's, and the read side is the
+    stored-side term's. A held-free term has one coordinate, and there the read occupancy
+    lies inside the write occupancy (`occA_le_occV`, under `HF`). The classifier asked the
+    write question alone while a held's write occupancy was the top, and that was sound only
+    for that reason. -/
 def Orth1 (x y : Term) : Bool :=
-  Slot.all.all (fun s => !(occV x s && occV y s))
+  Slot.all.all (fun s => !(occV x s && occV y s)) &&
+    Member.all.all (fun m => !(occA x m && occA y m))
 
 /-- **The two bodies admit presences at one name that meet at the bottom.**
 
@@ -590,7 +562,8 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
       fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
   | .object (.mk _ _ _) => fun v h => by
       cases v <;> simp_all [Adm, AdmBody, occV, occOnly, Value.slot]
-  | .held _ _ _ => fun _ _ => rfl
+  | .held _ P _ _ => fun v h => by
+      simpa [occV] using occV_sound P v (Bool.and_eq_true_iff.mp h).2
   | .refine t _ => fun v h => by
       simpa [occV] using occV_sound t v (Bool.and_eq_true_iff.mp h).1
   | .lazy t => fun v h => by simpa [occV] using occV_sound t v h
@@ -652,7 +625,8 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
       cases a <;> simp_all [AdmA, AdmABody, occA, occOnly, Attr.member]
   | .refine t _ => fun a h => by
       simpa [occA] using occA_sound t a (Bool.and_eq_true_iff.mp h).1
-  | .held t _ _ => fun a h => by simpa [occA] using occA_sound t a h
+  | .held t _ _ _ => fun a h => by
+      simpa [occA] using occA_sound t a (Bool.and_eq_true_iff.mp h).1
   | .lazy t => fun a h => by simpa [occA] using occA_sound t a h
   | .union opts => fun a h => by
       obtain ⟨t, ht, hadm⟩ := selOptA_mem_admitOpt (by rw [AdmA_union] at h; exact h)
@@ -681,12 +655,13 @@ def OrthSA (t : Term) : Attr → Prop :=
 
 theorem occV_disjoint_of_Orth1 {x y : Term} (h : Orth1 x y = true) {s : Slot}
     (hx : occV x s = true) (hy : occV y s = true) : False := by
-  have := List.all_eq_true.mp h s (Slot.mem_all s)
+  have := List.all_eq_true.mp (Bool.and_eq_true_iff.mp h).1 s (Slot.mem_all s)
   simp_all
 
 theorem occA_disjoint_of_Orth1 {x y : Term} (h : Orth1 x y = true) {m : Member}
-    (hx : occA x m = true) (hy : occA y m = true) : False :=
-  occV_disjoint_of_Orth1 h (occA_le_occV x m hx) (occA_le_occV y m hy)
+    (hx : occA x m = true) (hy : occA y m = true) : False := by
+  have := List.all_eq_true.mp (Bool.and_eq_true_iff.mp h).2 m (Member.mem_all m)
+  simp_all
 
 /-- **The name test really is disjointness of the admitted key sets.** `keysOk` puts the key
     set inside the presence each spec admits at the name. The two presences meet at the bottom,
@@ -1284,7 +1259,8 @@ theorem typed_occV : ∀ {t T μ}, Typed t T μ → ∀ v, T v → occV t v.slot
                simpa [SetBase.held] using hall a ha)
     | list _ _ _ => obtain ⟨vs, rfl, _⟩ := hv; rfl
     | object _ _ => obtain ⟨keys, f, rfl, _⟩ := hv; rfl
-    | held _ => rfl
+    | @held t' I' μ' P f g h' =>
+      exact occV_sound P v ((Adm_exact P v).mpr hv.2)
     | @refine t' T' μ' q h' => exact typed_occV h' v hv.1
     | @lazy t' T' μ' h' => exact typed_occV h' v hv
     | opaq => rfl
@@ -1665,13 +1641,12 @@ theorem not_orth_literal_string : Orth (.literal .string lsA) .string = false :=
     refutations carried, kept here where it is decidable. -/
 theorem not_orth_opaq_string : Orth .opaq .string = false := by decide
 
-/-- `not_uAtCan_literal_held`: `held`'s `f` runs *before* the
-    subterm's row, so it can move the value into any constructor and the write occupancy is
-    `⊤`. Holds for every `f` and `g`, which is what makes it a phase-*opaque* case rather
-    than a gap in the tables. -/
-theorem not_orth_literal_held (f g : Value → Value) :
-    Orth (.literal .string lsA) (.held (.literal .string lsB) f g) = false := by
-  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occTop, occOnly, Slot.all, specOf, GroundKind.slot]
+/-- `not_uAtCan_literal_held`: the two options read the member `S`, since the read occupancy
+    of a `held` is its stored-side term's. Holds for every caller-side term `P` and every `f`
+    and `g`: the read question refuses the pair whatever the write question answers. -/
+theorem not_orth_literal_held (P : Term) (f g : Value → Value) :
+    Orth (.literal .string lsA) (.held (.literal .string lsB) P f g) = false := by
+  simp [Orth, Orth1, OrthM, OrthS, OrthL, occA, occOnly, Member.all, specOf, GroundKind.member]
 
 /-- **Phase *alternatives*, and §5's own worked `ident` example.** The occupancies forget
     `ℓ`, so `Orth1` answers `false` here; `OrthL` reads `ℓ` and the classifier certifies the

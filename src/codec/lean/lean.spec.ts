@@ -119,7 +119,7 @@ describe('terms', () => {
         expect(leanTermOf(erase(dynamoNumber))).toBe('Term.number')
         // `decimal` is an adapter over that native, and the model names its pair
         expect(leanTermOf(erase(decimal))).toBe(
-            '(Term.held (Term.number) numeralOfStoredText textOfNumeral)',
+            '(Term.held (Term.number) (Term.string) numeralOfStoredText textOfNumeral)',
         )
         expect(leanTermOf(erase(boolean))).toBe('Term.boolean')
         expect(leanTermOf(erase(binary))).toBe('Term.binary')
@@ -183,10 +183,10 @@ describe('terms', () => {
      */
     it('emits a decimal literal at the native base, under the named pair', () => {
         expect(leanTermOf(erase(decimal('-1.5')))).toBe(
-            '(Term.held (Term.literal GroundKind.number (WFNumeral.of "-1.5")) numeralOfStoredText textOfNumeral)',
+            '(Term.held (Term.literal GroundKind.number (WFNumeral.of "-1.5")) (Term.string) numeralOfStoredText textOfNumeral)',
         )
         expect(leanTermOf(erase(decimal('1', '2.5')))).toBe(
-            '(Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) numeralOfStoredText textOfNumeral)',
+            '(Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.string) numeralOfStoredText textOfNumeral)',
         )
     })
 

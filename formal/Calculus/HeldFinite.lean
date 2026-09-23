@@ -7,16 +7,17 @@ A finite base writes a finite enumeration of values. Two bases have this form: `
 and `refine t (members k ls)` over a ground `t`. `finAlts` gives the enumeration, and
 `Adm_iff_finAlts` states that the base admits exactly the enumeration.
 
-`Adm (held t f g) v = Adm t (f v)`, so a `held` over a finite base writes the image under `g`
-of the enumeration. The premise is `IsoCancels (denote t) f g`, the premise that
+`Adm (held t P f g) v = Adm t (f v) && Adm P v`, so a `held` over a finite base writes the
+image under `g` of the enumeration, cut by the caller-side term `P`. The premise is `IsoCancels (denote t) f g`, the premise that
 `Obligations` carries at a `held`. The two halves of the premise do different work:
 
 * The first half, `g (f v) = v` where `t` writes `f v`, puts each written value in the image
   (`held_mem_image`).
 * The second half, `f (g w) = w` where `t` writes `w`, puts each image in the write domain
-  (`Adm_held_of_mem_image`).
+  (`Adm_held_of_mem_image`), where `P` admits the image.
 
-`AdmA (held t f g) a = AdmA t a`, so the read side of a `held` is the read side of its base.
+`AdmA (held t P f g) a` implies `AdmA t a`, so the read side of a `held` lies inside the read
+side of its base.
 
 `heldFinSep` is a decidable separation test for a `held` over a finite base against any term.
 The test sends each image and each alternative to the literal that holds that value, and asks
@@ -118,35 +119,38 @@ theorem Adm_iff_finAlts {t : Term} {A : Multiset Value} (h : finAlts t = some A)
     half of `IsoCancels` only: `g (f v) = v` where the base writes `f v`. -/
 theorem held_mem_image {t : Term} {A : Multiset Value} (h : finAlts t = some A)
     {f g : Value → Value} (h1 : ∀ v, ((denote t).e (f v)).isSome → g (f v) = v) {v : Value}
-    (hv : Adm (.held t f g) v = true) : v ∈ A.map g := by
-  have ha : Adm t (f v) = true := hv
+    {P : Term} (hv : Adm (.held t P f g) v = true) : v ∈ A.map g := by
+  have ha : Adm t (f v) = true := (Bool.and_eq_true_iff.mp hv).1
   rw [← h1 v ((Adm_exact t (f v)).mp ha)]
   exact Multiset.mem_map_of_mem g ((Adm_iff_finAlts h (f v)).mp ha)
 
 /-- **Under the first half of `IsoCancels`, the write domain is the image filtered by
     admission.** No other half of the premise is read. -/
 theorem Adm_held_iff_filter {t : Term} {A : Multiset Value} (h : finAlts t = some A)
-    {f g : Value → Value} (h1 : ∀ v, ((denote t).e (f v)).isSome → g (f v) = v) (v : Value) :
-    Adm (.held t f g) v = true ↔ v ∈ (A.map g).filter (fun w => Adm (.held t f g) w = true) := by
+    {P : Term} {f g : Value → Value} (h1 : ∀ v, ((denote t).e (f v)).isSome → g (f v) = v)
+    (v : Value) :
+    Adm (.held t P f g) v = true ↔ v ∈ (A.map g).filter (fun w => Adm (.held t P f g) w = true) := by
   rw [Multiset.mem_filter]
   exact ⟨fun hv => ⟨held_mem_image h h1 hv, hv⟩, fun hv => hv.2⟩
 
-/-- **Each image of an alternative is a value that the `held` writes.** The proof uses the
-    second half of `IsoCancels` only: `f (g w) = w` where the base writes `w`. -/
+/-- **Each image of an alternative that `P` admits is a value that the `held` writes.** The
+    proof uses the second half of `IsoCancels` only: `f (g w) = w` where the base writes `w`. -/
 theorem Adm_held_of_mem_image {t : Term} {A : Multiset Value} (h : finAlts t = some A)
-    {f g : Value → Value} (h2 : ∀ w, ((denote t).e w).isSome → f (g w) = w) {v : Value}
-    (hv : v ∈ A.map g) : Adm (.held t f g) v = true := by
+    {P : Term} {f g : Value → Value} (h2 : ∀ w, ((denote t).e w).isSome → f (g w) = w)
+    {v : Value} (hv : v ∈ A.map g) (hP : Adm P v = true) : Adm (.held t P f g) v = true := by
   obtain ⟨w, hw, rfl⟩ := Multiset.mem_map.mp hv
   have ha : Adm t w = true := (Adm_iff_finAlts h w).mpr hw
   have hb : Adm t (f (g w)) = true := by rw [h2 w ((Adm_exact t w).mp ha)]; exact ha
-  exact hb
+  exact Bool.and_eq_true_iff.mpr ⟨hb, hP⟩
 
-/-- **Under `IsoCancels`, the write domain of the `held` is the image of the alternatives.**
-    The filter of `Adm_held_iff_filter` keeps each image, by the second half. -/
+/-- **Under `IsoCancels`, the write domain of the `held` is the image of the alternatives,
+    cut by `P`.** The filter of `Adm_held_iff_filter` keeps each image that `P` admits, by the
+    second half. -/
 theorem Adm_held_iff_image {t : Term} {A : Multiset Value} (h : finAlts t = some A)
-    {f g : Value → Value} (hi : IsoCancels (denote t) f g) (v : Value) :
-    Adm (.held t f g) v = true ↔ v ∈ A.map g :=
-  ⟨held_mem_image h hi.1, Adm_held_of_mem_image h hi.2⟩
+    {P : Term} {f g : Value → Value} (hi : IsoCancels (denote t) f g) (v : Value) :
+    Adm (.held t P f g) v = true ↔ v ∈ A.map g ∧ Adm P v = true :=
+  ⟨fun hv => ⟨held_mem_image h hi.1 hv, (Bool.and_eq_true_iff.mp hv).2⟩,
+   fun hv => Adm_held_of_mem_image h hi.2 hv.1 hv.2⟩
 
 /-! ## Disjointness on each side -/
 
@@ -176,22 +180,23 @@ theorem rdisj_of_separates {x y : Term} (h : Separates x y) : RDisj x y := by
   | false => rfl
   | true => exact absurd ⟨occA_sound y a hy, hy⟩ (h.2 a ⟨occA_sound x a hx, hx⟩)
 
-/-! ## The witness: `union(held(literal "A", f, g), literal "B")` -/
+/-! ## The witness: `union(held(literal "A", P, f, g), literal "B")` -/
 
 /-- The string literal. -/
 abbrev litS (s : String) : Term := .literal .string s
 
 /-- **The write sides are disjoint exactly when `g` sends `"A"` to a value other than
-    `"B"`.** The forward direction uses the second half of `IsoCancels`, because the `held`
-    must write `g "A"`. The backward direction uses the first half, because each value that the
-    `held` writes must be `g "A"`. -/
-theorem witness_wdisj_iff {f g : Value → Value} (hi : IsoCancels (denote (litS "A")) f g) :
-    WDisj (.held (litS "A") f g) (litS "B") ↔ g (.str "A") ≠ .str "B" := by
+    `"B"`.** The forward direction uses the second half of `IsoCancels` and `P` at `g "A"`,
+    because the `held` must write `g "A"`. The backward direction uses the first half, because
+    each value that the `held` writes must be `g "A"`. -/
+theorem witness_wdisj_iff {P : Term} {f g : Value → Value}
+    (hi : IsoCancels (denote (litS "A")) f g) (hP : Adm P (g (.str "A")) = true) :
+    WDisj (.held (litS "A") P f g) (litS "B") ↔ g (.str "A") ≠ .str "B" := by
   have hA : finAlts (litS "A") = some {.str "A"} := rfl
   have hB : finAlts (litS "B") = some {.str "B"} := rfl
   constructor
   · intro hw he
-    have h1 := Adm_held_of_mem_image hA hi.2 (v := g (.str "A")) (by simp)
+    have h1 := Adm_held_of_mem_image hA hi.2 (v := g (.str "A")) (by simp) hP
     have h2 := hw _ h1
     rw [he] at h2
     have h3 := (Adm_iff_finAlts hB (.str "B")).mpr (Multiset.mem_singleton_self _)
@@ -206,18 +211,22 @@ theorem witness_wdisj_iff {f g : Value → Value} (hi : IsoCancels (denote (litS
       have := (Adm_iff_finAlts hB _).mp hb
       exact absurd (Multiset.mem_singleton.mp this) hne
 
-/-- **The read sides are disjoint for every `f` and `g`.** The `held` reads `S "A"`, and the
-    literal reads `S "B"`. No premise is read. -/
-theorem witness_rdisj (f g : Value → Value) : RDisj (.held (litS "A") f g) (litS "B") := by
+/-- **The read sides are disjoint for every `P`, `f` and `g`.** The `held` reads `S "A"`, and
+    the literal reads `S "B"`. No premise is read. -/
+theorem witness_rdisj (P : Term) (f g : Value → Value) :
+    RDisj (.held (litS "A") P f g) (litS "B") := by
   intro a ha
+  have ha' := (Bool.and_eq_true_iff.mp ha).1
   cases a <;> simp_all [AdmA, AdmALit]
 
 /-- The identity pair cancels on every codec. -/
 theorem isoCancels_id (c : Codec) : IsoCancels c id id := ⟨fun _ _ => rfl, fun _ _ => rfl⟩
 
-/-- **With `f = g = id`, the witness is separated on both sides.** -/
-theorem witness_id_separates : Separates (.held (litS "A") id id) (litS "B") :=
-  separates_of_disj ((witness_wdisj_iff (isoCancels_id _)).mpr (by simp)) (witness_rdisj id id)
+/-- **With `P = literal "A"` and `f = g = id`, the witness is separated on both sides.** -/
+theorem witness_id_separates : Separates (.held (litS "A") (litS "A") id id) (litS "B") :=
+  separates_of_disj
+    ((witness_wdisj_iff (isoCancels_id _) (by simp [Adm, AdmLit])).mpr (by simp))
+    (witness_rdisj _ id id)
 
 /-- **A constant `f` violates `IsoCancels`.** The first half makes `g "A"` equal to every
     value, so the premise excludes the ambiguous `held`, and no certificate needs to. -/
@@ -230,9 +239,10 @@ theorem not_isoCancels_const (g : Value → Value) :
   have h2 := hi.1 (.bool true) he
   rw [h1] at h2; exact nomatch h2
 
-/-- **The current certificate refuses the witness**, because `occV` of a `held` is every
-    slot and the meet of a `held` answers `none`. -/
-theorem unionOk_witness_id : unionOk [.held (litS "A") id id, litS "B"] = false := by decide
+/-- **The current certificate refuses the witness**, because the two options write the slot
+    `str` and read the member `S`, and the meet of a `held` answers `none`. -/
+theorem unionOk_witness_id : unionOk [.held (litS "A") (litS "A") id id, litS "B"] = false := by
+  decide
 
 /-! ## A decidable separation test -/
 
@@ -336,13 +346,13 @@ def heldImageSep (t : Term) (g : Value → Value) (y : Term) : Bool :=
 /-- **The decidable separation test for a `held` against any term.** Each term other than a
     `held` fails. -/
 def heldFinSep : Term → Term → Bool
-  | .held t _ g, y => heldImageSep t g y
+  | .held t _ _ g, y => heldImageSep t g y
   | _, _ => false
 
 /-- **The test gives write disjointness**, under the first half of `IsoCancels`. -/
-theorem wdisj_of_heldFinSep {t y : Term} {f g : Value → Value}
+theorem wdisj_of_heldFinSep {t y P : Term} {f g : Value → Value}
     (h1 : ∀ v, ((denote t).e (f v)).isSome → g (f v) = v)
-    (h : heldFinSep (.held t f g) y = true) : WDisj (.held t f g) y := by
+    (h : heldFinSep (.held t P f g) y = true) : WDisj (.held t P f g) y := by
   change heldImageSep t g y = true at h
   unfold heldImageSep at h
   cases hA : finAlts t with
@@ -356,8 +366,8 @@ theorem wdisj_of_heldFinSep {t y : Term} {f g : Value → Value}
 
 /-- **The test gives read disjointness**, with no premise. The `held` reads what its base
     reads, and the base reads only the attributes of its alternatives. -/
-theorem rdisj_of_heldFinSep {t y : Term} {f g : Value → Value}
-    (h : heldFinSep (.held t f g) y = true) : RDisj (.held t f g) y := by
+theorem rdisj_of_heldFinSep {t y P : Term} {f g : Value → Value}
+    (h : heldFinSep (.held t P f g) y = true) : RDisj (.held t P f g) y := by
   change heldImageSep t g y = true at h
   unfold heldImageSep at h
   cases hA : finAlts t with
@@ -366,29 +376,32 @@ theorem rdisj_of_heldFinSep {t y : Term} {f g : Value → Value}
     rw [hA] at h
     have hall := of_decide_eq_true h
     intro a ha
-    obtain ⟨w, hw, l, hl, hla⟩ := AdmA_finAlts hA (a := a) ha
+    obtain ⟨w, hw, l, hl, hla⟩ := AdmA_finAlts hA (a := a) (Bool.and_eq_true_iff.mp ha).1
     exact AdmA_false_of_refusesImage hl (hall w hw).2 hla
 
 /-- **The test is sound for the union row**, under the first half of `IsoCancels`. -/
-theorem separates_of_heldFinSep {t y : Term} {f g : Value → Value}
+theorem separates_of_heldFinSep {t y P : Term} {f g : Value → Value}
     (h1 : ∀ v, ((denote t).e (f v)).isSome → g (f v) = v)
-    (h : heldFinSep (.held t f g) y = true) : Separates (.held t f g) y :=
+    (h : heldFinSep (.held t P f g) y = true) : Separates (.held t P f g) y :=
   separates_of_disj (wdisj_of_heldFinSep h1 h) (rdisj_of_heldFinSep h)
 
 /-- **The test gives disjoint held sets**, under the first half of `IsoCancels`. -/
-theorem hdisj_of_heldFinSep {t y : Term} {f g : Value → Value} {Tx Ty : Held}
+theorem hdisj_of_heldFinSep {t y P : Term} {f g : Value → Value} {Tx Ty : Held}
     {μx μy : Option Member} (h1 : ∀ v, ((denote t).e (f v)).isSome → g (f v) = v)
-    (h : heldFinSep (.held t f g) y = true)
-    (hx : Typed (.held t f g) Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty :=
+    (h : heldFinSep (.held t P f g) y = true)
+    (hx : Typed (.held t P f g) Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty :=
   hdisj_of_wdisj (wdisj_of_heldFinSep h1 h) hx hy
 
 /-- **The kernel decides the test on the witness.** The test accepts the witness that
     `unionOk` refuses. -/
-theorem heldFinSep_witness_id : heldFinSep (.held (litS "A") id id) (litS "B") = true := by
+theorem heldFinSep_witness_id :
+    heldFinSep (.held (litS "A") (litS "A") id id) (litS "B") = true := by
   decide
 
-/-- **The test refuses an overlap**: `held(literal "A", id, id)` against `literal "A"`. -/
-theorem heldFinSep_overlap : heldFinSep (.held (litS "A") id id) (litS "A") = false := by
+/-- **The test refuses an overlap**: `held(literal "A", literal "A", id, id)` against
+    `literal "A"`. -/
+theorem heldFinSep_overlap :
+    heldFinSep (.held (litS "A") (litS "A") id id) (litS "A") = false := by
   decide
 
 end Calculus

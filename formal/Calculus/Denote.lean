@@ -104,7 +104,7 @@ def μSyn : Term → Option Member
   -- the member is the base's, where it was `setMember` of the element's and could be `none`
   | .set b => some b.member
   | .list _ _ _ => some .L
-  | .held t _ _ => μSyn t
+  | .held t _ _ _ => μSyn t
   | .refine t _ => μSyn t
   | .lazy _ => none
   | .opaq => none
@@ -183,7 +183,8 @@ def denote : Term → Codec
   | .literal k ls => literalCodec k ls
   | .set b => setCodec b.elem
   | .list pre spread suf => listCodec (denoteList pre) (denoteOpt spread) (denoteList suf)
-  | .held inner f g => (denote inner).through f g
+  -- the caller-side restriction is a `restrict`, the combinator of the `refine` row
+  | .held inner outer f g => ((denote inner).through f g).restrict fun v => ((denote outer).e v).isSome
   | .refine inner p => (denote inner).restrict p.eval
   -- `(lazy)` concludes `⊤`: the pair is the thunk's, the member is not.
   | .lazy inner => { denote inner with μ := none }
@@ -255,7 +256,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .string | .number | .boolean | .binary | .null => rfl
   | .set b => SetBase.setCodec_μ b
   | .list _ _ _ => rfl
-  | .held t' _ _ => denote_μ t'
+  | .held t' _ _ _ => denote_μ t'
   | .refine t' _ => denote_μ t'
   | .lazy _ | .opaq | .never => rfl
   | .object b => bodySem_μ b
@@ -311,9 +312,10 @@ theorem denote_list (pre : List Term) (spread : Option Term) (suf : List Term) :
     denote (.list pre spread suf)
       = listCodec (denoteList pre) (denoteOpt spread) (denoteList suf) := rfl
 
-/-- `held` denotes `through` — the entry that reads least like its term. -/
-theorem denote_held (t : Term) (f g : Value → Value) :
-    denote (.held t f g) = (denote t).through f g := rfl
+/-- `held` denotes `through`, restricted by the admission of the caller-side term. -/
+theorem denote_held (t P : Term) (f g : Value → Value) :
+    denote (.held t P f g) = ((denote t).through f g).restrict fun v => ((denote P).e v).isSome :=
+  rfl
 
 /-- `refine` denotes `restrict`, of the predicate's meaning.
 

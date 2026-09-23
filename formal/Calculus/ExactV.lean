@@ -155,7 +155,8 @@ noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
     a function is not something a reader can look inside. But a row is not a reader: it is a
     function with the term in hand, and the term *carries* `f` and `g` as data. It can
     apply them. `(c.through f g).e v = c.e (f v)` holds by `Iff.rfl`, so `held`'s writable
-    set is the subterm's pulled back along `f`, with no appeal to `held`'s iso obligation.
+    set is the subterm's pulled back along `f` and cut by the caller-side term's row, with no
+    appeal to `held`'s iso obligation.
 
     Three senses had been running together: (i) the term does not carry the information —
     true of nothing here; (ii) the domain cannot be computed without running the codec — true
@@ -195,7 +196,7 @@ noncomputable def Adm : Term → Value → Bool
   | .never => fun _ => false
   | .refine t p => fun v => Adm t v && p.eval v
   | .lazy t     => Adm t
-  | .held t f _ => fun v => Adm t (f v)
+  | .held t P f _ => fun v => Adm t (f v) && Adm P v
   -- **`select`'s count, mirrored** — where this was `⋁` over the options. The `⋁` was
   -- inexact with perfectly exact options (`union [string, string]`: two admit, so the union
   -- writes nothing while `⋁` says yes), and the count that fixes it was refused on
@@ -940,8 +941,9 @@ mutual
     with no hypothesis.
 
     The `held` case is the one worth reading: it appeals to the subterm at `f v`, which is
-    the pullback, and it is one line because `(c.through f g).e v = c.e (f v)` holds by
-    `Iff.rfl`. The `list` case is the repair of §5's container rows.
+    the pullback, and to the caller-side term at `v`, which is the restriction. It is short
+    because `(c.through f g).e v = c.e (f v)` holds by `Iff.rfl`. The `list` case is the
+    repair of §5's container rows.
 
     **There is no hypothesis to discharge**, which is the whole of what the last two rows
     bought: `Adm_sound` is now `(Adm_exact t v).mpr`, and a new `Term` constructor cannot be
@@ -984,9 +986,13 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   | .lazy c => by
       have hc := Adm_exact c
       intro v; simpa [Adm, denote] using hc v
-  | .held c f g => by
+  | .held c P f g => by
       have hc := Adm_exact c
-      intro v; simpa [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, Codec.through] using hc (f v)
+      have hP := Adm_exact P
+      intro v
+      rw [show Adm (.held c P f g) v = (Adm c (f v) && Adm P v) from rfl, denote_held,
+        restrict_e_isSome, Bool.and_eq_true, Bool.and_eq_true, hc (f v), hP v]
+      exact And.comm
 
 /-- The payload's own exactness, as a companion. An object's slots are reached through a
     function, so the recursion needs to land on a `Body` rather than on the `Term` that wraps
