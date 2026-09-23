@@ -208,8 +208,8 @@ theorem Lawful.can_roundTrip {c : Codec} (h : Lawful c) {a : Attr} {t : Value}
 /-! ## §1's store, as a premise
 
 §2 composes `e` and `p` directly. In use there is a store between them and it is not the
-identity on attributes, which `Domain.lean` states in prose and answers with
-`Numeral.Stored`. This is the premise itself. -/
+identity on attributes. The DynamoDB port (`DynamoDB.lean`) answers it with
+`Numeral.Stored`. This is the premise itself, for every store. -/
 
 /-- **`η ⊆ ker p`** — §1's concession, as a proposition. Quantified over `Can(c)` because
     `η` only ever sees what `e` wrote. Buys `retract_through_store`: (R) through the store. -/
