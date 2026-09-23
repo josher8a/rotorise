@@ -13,8 +13,8 @@
  * That is not available, and the reason is structural rather than a missing feature.
  *
  * `denote` is `noncomputable` — `funImage` is a `dite` on a `Decidable` instance the kernel does
- * not evaluate for free, and `Double` is an *axiom* with no closed terms at all. So `#eval` fails
- * on every denoted codec, and Lean can generate nothing.
+ * not evaluate for free. So `#eval` fails on every denoted codec, and Lean can generate nothing.
+ * The model declares no axiom: `N` is carried exactly, as `WFNumeral`.
  *
  * What Lean *can* do is check. `(denote t).e v = some a` is a closed proposition, and for every
  * term form this library can express it is provable by kernel reduction — see the `vector` tactic
@@ -46,9 +46,9 @@
  * ── what cannot be emitted ─────────────────────────────────────────────────────────────────────
  *
  * {@link LeanUnemittable} is thrown, never guessed around, and its cases are the honest boundary of
- * the bridge. See {@link leanTermOf}. The largest of them is **numbers**: `Double` is an axiom, so
- * `Value.num` has no closed inhabitant and no vector can mention one, ever. `decimal` is the
- * numeric escape hatch — it is text on both sides, and it evaluates.
+ * the bridge. See {@link leanTermOf}. A JS number is one of them: it is a binary64 float, and
+ * `Value.num` carries a `WFNumeral`, which is exact, so writing one down is a rounding the model
+ * does not state. A `DynamoNumber` is a numeral, and it emits as `Value.num`.
  */
 import type { AttributeValue } from './attribute'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
@@ -190,11 +190,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * grammar says it takes. The one place that would bite is `held`, whose whole job is to change the
  * kind held — and `held` is unemittable for a different reason anyway.
  *
- * A `number` is refused here rather than approximated. `Double` is an axiom
- * with `toDec`, `ofDec` and a round-trip law but no
- * constructor, so `Value.num` has no closed term and no `#print`able spelling. This is permanent,
- * not a gap: writing one would need a numeral-to-double literal the model deliberately does not
- * have.
+ * A JS `number` is refused here rather than approximated. `Value.num` carries a `WFNumeral`,
+ * which is exact, and a JS number is a binary64 float, so writing one down is a rounding the model
+ * does not state. A `DynamoNumber` is a numeral, and it emits as `Value.num`.
  */
 export const leanValueOf = (value: unknown, at = 'value'): string => {
     if (typeof value === 'string') return `Value.str ${leanString(value)}`
@@ -455,12 +453,9 @@ const lazyLimit = 16
  * A term is unemittable when *the term* has no Lean expression; a positive vector is impossible
  * when the term is fine and no *value* at it can be written. Only the first belongs here.
  *
- * - **A numeric `literal`.** Term-inexpressible: `Term.literal GroundKind.number ls` needs `ls :
- *   NEFinset Double`, and `Double` is an axiom with no closed terms, so there is no alternatives
- *   set to write. Permanent, in both directions — no refusal vector can name this term either.
- * - **`number` itself is *not* here.** `Term.number` is a closed term. `Value.num` is what has no
- *   inhabitant, and `leanValueOf` refuses it, so the impossibility is reported where it lives and
- *   refusal vectors reach `number` with no flag and no mode parameter.
+ * - **`number` and a numeric `literal` are *not* here.** `Term.number` is a closed term, and a
+ *   numeric alternative is `WFNumeral.of`, so both emit. A JS number *value* is what has no
+ *   exact image, and `leanValueOf` refuses it, so the refusal is reported where it lives.
  * - **`held`, `legacy`, `custom`.** Three of §3's constructors carry *functions* —
  *   `f g : Value → Value`, `r : Attr → Option Value`, `ce`/`cp` — and this library carries
  *   JavaScript closures in the same positions. There is no expression in Lean for an arbitrary
@@ -627,11 +622,10 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
         case 'null':
             return 'Term.null'
         /**
-         * **Emittable, and it took refusal vectors to see that.** `Term.number` is a closed term;
-         * what is unconstructible is a `Value.num`, `Double` being an axiom with no closed terms.
-         * So a positive vector at `number` cannot be stated and a *refusal* at `number` can, since
-         * the value it refuses is some other constructor. {@link leanValueOf} is where the wall is,
-         * and this row was refusing on its behalf one level too early.
+         * **Emittable, and it took refusal vectors to see that.** `Term.number` is a closed term.
+         * A `Value.num` is a closed term too, over a `WFNumeral`. What {@link leanValueOf} refuses
+         * is a JS number, which is a float, and this row used to refuse on its behalf one level
+         * too early.
          */
         case 'number':
             return 'Term.number'
@@ -892,9 +886,9 @@ export const leanVector = (
  * refusal's answer is `none`, which carries no payload, so `rfl` closes it outright at every
  * codec including the map-shaped ones.
  *
- * **And it reaches `number`**, where no positive vector can: `Term.number` is a closed term and
- * only its *values* are unwritable, so `(denote Term.number).e (Value.str "x") = none` is `rfl`.
- * A numeric `literal` stays out, its alternatives being `NEFinset Double`.
+ * **And it reaches `number`**: `Term.number` is a closed term, so
+ * `(denote Term.number).e (Value.str "x") = none` is `rfl`. A numeric `literal` is closed too, its
+ * alternatives being `WFNumeral`s.
  */
 export type Refusal = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
@@ -1330,27 +1324,6 @@ const MEET_LEMMAS = [
     'Term.meetSTs',
 ].join(', ')
 
-/**
- * Whether the pair has the shape that the model's read row was **stuck** on while `N` was a
- * `Double`.
- *
- * The shape is a `number` codec against an `N` attribute. The model has no numeric axiom, and
- * `AdmA .number`'s `.n` row decides a concrete numeral:
- * `AdmA Term.number (Attr.n (WFNumeral.of "1.5")) = true` closes by `rfl`. So this filter
- * excludes pairs that the row answers, and the exclusion is a leftover of the `Double` carrier.
- *
- * Recorded rather than skipped: three pairs in today's corpus match, they are named in the
- * generated module's header, and a *new* stuck pair outside this shape does not slip through —
- * it fails to elaborate, and the reason gets read.
- *
- * The shape is the mirror of `number`'s other boundary and worth the contrast: a positive
- * *vector* at `number` is impossible because no `Value.num` can be **written**, while here the
- * term and the attribute are both writable and the **row** will not compute.
- */
-export const readRowIsStuck = ({ codec, attribute }: ReadVerdict): boolean =>
-    codec.def?.kind === 'number' &&
-    Object.hasOwn(attribute as Record<string, unknown>, 'N')
-
 /** One read verdict, as a Lean `theorem`; `src/`'s answer is taken by running `decode`. */
 export const leanReadVerdict = (one: ReadVerdict): string => {
     const { name, codec, attribute } = one
@@ -1366,24 +1339,16 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
 /**
  * The read verdicts as a module of their own, because they need `AdmA`.
  *
- * Generated at gate time and elaborated, never committed — the counts are in
- * `docs/defects.md`, where the numeric wall this rests on is recorded as an issue.
+ * Generated at gate time and elaborated, never committed.
  */
-export const leanReadModule = (verdicts: readonly ReadVerdict[]): string => {
-    const stuck = verdicts.filter(readRowIsStuck)
-    const live = verdicts.filter((one) => !readRowIsStuck(one))
-    return `import Calculus.DynamoDB
+export const leanReadModule = (verdicts: readonly ReadVerdict[]): string =>
+    `import Calculus.DynamoDB
 
 /-!
 # Read verdicts, proposed to the model's read row
 
 **Generated — do not edit.** One theorem per (codec, attribute) pair: \`AdmA t a\` equals whether
-\`src/\`'s \`decode\` accepted it. ${live.length} of ${verdicts.length} pairs are asserted here.
-
-The other ${stuck.length} are **excluded, not skipped**: \`readRowIsStuck\` excludes a
-\`number\` codec against an \`N\` attribute. The model has no numeric axiom, and the row
-decides such a pair, so the exclusion is a leftover of the \`Double\` carrier.
-${stuck.map((one) => `  * \`${one.name}\``).join('\n')}
+\`src/\`'s \`decode\` accepted it. All ${verdicts.length} pairs are asserted here.
 -/
 
 /-! The emitted key function is total on a membership subtype, so a single-name object binds a
@@ -1394,11 +1359,10 @@ set_option linter.style.nameCheck false
 
 namespace Calculus
 
-${live.map(leanReadVerdict).join('\n\n')}
+${verdicts.map(leanReadVerdict).join('\n\n')}
 
 end Calculus
 `
-}
 
 /**
  * One **read vector**: this codec, given the attribute it wrote, reads that value back.
@@ -1419,10 +1383,9 @@ end Calculus
  * `veq` is `aeq`'s construction over `Value.map`, with `veq_sound` proved, so a `.same` verdict
  * cashes to the equation.
  *
- * A value the emitter cannot spell is skipped by {@link readVectorIsUnstatable} rather than
- * guessed at — the `Double` axiom again, on the value side. Measured when this landed: **none of
- * the 27 corpus codecs is blocked**, because the corpus carries no numeric value; `scalar_number`
- * is the twenty-eighth codec added by hand at three sites and is not in it.
+ * A codec that cannot read back its own attribute is skipped by {@link readVectorIsUnstatable}. A
+ * value the emitter cannot spell is not skipped: {@link leanValueOf} throws, and the emission
+ * fails where the reason is.
  */
 export const leanReadVector = ({ name, codec, value }: Vector): string => {
     const attribute = codec.unsafeEncode(value as never)
@@ -1447,30 +1410,20 @@ export const leanReadVector = ({ name, codec, value }: Vector): string => {
 /**
  * Whether a read vector **cannot be stated**, and the one reason it can be.
  *
- * The value the codec reads back has to have a Lean form. `Value.num` is `Double`, an axiom with
- * no closed terms, so any numeric value on the read side is unspellable — the same wall
- * {@link readResolutionIsUnstatable} meets, at the same constructor. A codec that refuses its own
- * encode, or that cannot read its own attribute back, is not a read vector either: there is no
- * agreement to proposeif nothing round trips.
+ * A codec that refuses its own encode, or that cannot read its own attribute back, is not a read
+ * vector: there is no agreement to propose if nothing round trips. The value read back needs a
+ * Lean form too, and {@link leanValueOf} throws where it has none, so that failure is loud.
  */
 export const readVectorIsUnstatable = (
     one: Vector,
-): 'Double' | 'no round trip' | undefined => {
-    let read: unknown
+): 'no round trip' | undefined => {
     try {
         const attribute = one.codec.unsafeEncode(one.value as never)
         const out = one.codec.decode(attribute as never)
-        if (failed(out)) return 'no round trip'
-        read = out
+        return failed(out) ? 'no round trip' : undefined
     } catch {
         return 'no round trip'
     }
-    try {
-        leanValueOf(read)
-    } catch {
-        return 'Double'
-    }
-    return undefined
 }
 
 /**
@@ -1536,8 +1489,8 @@ end Calculus
  * the read side, and the artifact is worth having for that and not for closing a gap.
  *
  * The write side reuses the `check` comparator, which is what crosses `Attr.m`'s binder. The read
- * side cannot: its answer is a `Value`, `Value.map` carries a function, and `Vectors.lean` has no
- * `Option Value` twin of `aeq`. See {@link readResolutionIsUnstatable}.
+ * side's answer is a `Value`, and `Value.map` carries a function, so it uses `vcheck`, the `Value`
+ * twin that `Vectors.lean` states as `veq`.
  */
 export type Resolution = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
@@ -1588,49 +1541,6 @@ export type ReadResolution = {
     readonly attribute: AttributeValue
 }
 
-/**
- * Whether a read-side resolution **cannot be stated**, for want of a comparator.
- *
- * A union that reads an attribute back to a **map** produces a `Value.map`, which carries a
- * function — so the model's answer is a lambda stuck under a binder, pointwise equal to the
- * emitted one and not definitionally equal. That is the same funext gap `Vectors.lean` opens by
- * describing for `Attr.m`, and the write side solves it with `aeq`: a fuelled comparator that
- * never compares two functions, only their values at every key of a key set it has already
- * checked is the same.
- *
- * **There is no `Option Value` twin of it.** `aeq` and `check` compare attributes. So these are
- * recorded rather than asserted, exactly as the three `Double`-stuck read verdicts are — and
- * unlike those, this one is a gap in the *machinery* and closable: the `veq` that would close it
- * is `aeq`'s construction over `Value.map` instead of `Attr.m`.
- *
- * **The second reason is the `Double` axiom arriving a second way**, and the two are worth
- * distinguishing because each closes differently or not at all. A numeric `literal` is
- * *term*-inexpressible: its alternatives are `NEFinset Double`. And here it is the **decoded value**
- * — `union([string.set(), number.set()])` reads an `NS` back to a `Set<number>`, whose Lean form
- * is `Value.numSet` over a `NEFinset Double`. Same axiom, two places, and only the funext one
- * has a repair.
- */
-export const readResolutionIsUnstatable = (
-    one: ReadResolution,
-): 'Double' | undefined => {
-    let read: unknown
-    try {
-        const out = one.union.decode(one.attribute as never)
-        if (failed(out)) return undefined
-        read = out
-    } catch {
-        return undefined
-    }
-    try {
-        leanValueOf(read)
-    } catch {
-        return 'Double'
-    }
-    // a map-valued read was unstatable until `veq` — `Calculus/Vectors.lean` has the `Value`
-    // twin of `aeq` now, so the funext gap is crossed on this side too
-    return undefined
-}
-
 /** One read-side resolution: what the union read, or that it read nothing. */
 export const leanReadResolution = (one: ReadResolution): string => {
     const { name, union: u, attribute } = one
@@ -1674,12 +1584,8 @@ export const leanReadResolution = (one: ReadResolution): string => {
 export const leanResolutionModule = (
     writes: readonly Resolution[],
     reads: readonly ReadResolution[],
-): string => {
-    const statable = reads.filter((one) => !readResolutionIsUnstatable(one))
-    const doubled = reads.filter(
-        (one) => readResolutionIsUnstatable(one) === 'Double',
-    )
-    return `import Calculus.Vectors
+): string =>
+    `import Calculus.Vectors
 import Calculus.DynamoDB
 
 /-!
@@ -1687,17 +1593,11 @@ import Calculus.DynamoDB
 
 **Generated — do not edit.** One theorem per (union, value) and (union, attribute) pair: the
 option the model's \`select\` resolves to, against the one this library's resolver picked.
-${writes.length} on the write side, ${statable.length} on the read side.
+${writes.length} on the write side, ${reads.length} on the read side.
 
 A map-valued read is stated like the others: it goes through \`vcheck\`, the \`Value\` twin of
 \`check\`, because \`Value.map\` carries a function and \`rfl\` on the assembled closure does not
 close. Five of these were recorded as unstatable until \`veq\` existed.
-
-${doubled.length} **cannot be written down at all**: the value read back is a set of numbers,
-so its Lean form is \`Value.numSet\` over a \`NEFinset Double\`, and \`Double\` is an axiom with no
-closed terms. That is the same axiom the numeric \`literal\` and \`AdmA .number\` meet, arriving a
-third way — at the *decoded value* rather than the term or the row — and it has no repair.
-${doubled.map((one) => `  * \`${one.name}\``).join('\n')}
 -/
 
 /-! The emitted key function is total on a membership subtype, so a single-name object binds a
@@ -1710,11 +1610,10 @@ namespace Calculus
 
 ${writes.map(leanResolution).join('\n\n')}
 
-${statable.map(leanReadResolution).join('\n\n')}
+${reads.map(leanReadResolution).join('\n\n')}
 
 end Calculus
 `
-}
 
 /**
  * The same budget on the value side, for `veq`.
