@@ -29,14 +29,18 @@ safe**: if `X ⊆ X'`, `Y ⊆ Y'` and `X' ∩ Y' = ∅`, then `X ∩ Y = ∅`. S
 contributes `⊤` — every slot — and a pair involving it simply fails to be certified. There is
 no third truth value to introduce.
 
-## Both halves of the pair, independently
+## Both halves of the pair, and one question for the classifier
 
 `uniqueAdmission_of_disjoint` takes **two** families, one over `Value` and one over `Attr`,
-and asks each to be pairwise disjoint. That is not a redundancy to be optimized away: a pair
-can be separated on one side and not on the other, and then it is not separated. `held` is the
+and asks each to be pairwise disjoint. The soundness families stay two: a pair can be
+separated on one side and not on the other, and then it is not separated. `held` is the
 witness: its write slot is the top, because `f` can move a value into any constructor, and its
 read member is its subterm's. So `union(held string f g, number)`, with an `f` that takes a
 number to a string, meets on the write side and separates on the read side.
+
+The classifier asks one question. The witness goes in one direction only: `occA_le_occV`
+puts the read occupancy inside the write occupancy under `Member.slot`, at every term. So a
+pair disjoint on the write side is disjoint on the read side, and `Orth1` tests `occV` alone.
 
 The specification's
 (U) discussion
@@ -59,7 +63,7 @@ The read-side slot is `Member`, which `Attr.member` already computes.
 
 | phase | separator | this module |
 |---|---|---|
-| slot | the `Value` constructor on the write side, the `Member` on the read side | `Orth1` |
+| slot | the `Value` constructor on the write side, which bounds the `Member` on the read side | `Orth1` |
 | names | the presence each body admits at one name, where the two meet at the bottom | `OrthM` |
 | literals | one shared required name pinned to disjoint alternatives, at four bases | `OrthS` |
 | alternatives | two literals, or two sets over literals, at one base with disjoint `ℓ` | `OrthL` |
@@ -159,6 +163,11 @@ def SetBase.slot : SetBase → Slot
   | .number  => .numSet
   | .binary  => .binSet
 
+/-- The slot a member's values are built with: the bijection above, as a function. -/
+def Member.slot : Member → Slot
+  | .S => .str | .N => .num | .B => .bin | .BOOL => .bool | .NULL => .null
+  | .SS => .strSet | .NS => .numSet | .BS => .binSet | .L => .arr | .M => .map
+
 /-! ## Occupancy
 
 An occupancy is a total map from slot to `Bool` — the three-element lattice `∅ | only s | ⊤`
@@ -246,13 +255,48 @@ def occAL : List Term → Member → Bool
   | t :: ts => fun m => occA t m || occAL ts m
 end
 
+mutual
+
+/-- **The read occupancy lies inside the write occupancy, at every term.** The rows agree
+    under `Member.slot` at every base. `held` is the one row where the two differ, and there
+    the write side is the top. -/
+theorem occA_le_occV : ∀ (t : Term) (m : Member), occA t m = true → occV t m.slot = true
+  | .string, m, h | .number, m, h | .boolean, m, h | .binary, m, h | .null, m, h => by
+      cases m <;> simp_all [occA, occV, occOnly, Member.slot]
+  | .literal k _, m, h => by
+      cases k <;> cases m <;>
+        simp_all [occA, occV, occOnly, Member.slot, GroundKind.slot, GroundKind.member]
+  | .set b, m, h => by
+      cases b <;> cases m <;>
+        simp_all [occA, occV, occOnly, Member.slot, SetBase.slot, SetBase.member]
+  | .list _ _ _, m, h | .object _, m, h => by
+      cases m <;> simp_all [occA, occV, occOnly, Member.slot]
+  | .never, _, h => by simp [occA, occNone] at h
+  | .held _ _ _, _, _ => by simp [occV, occTop]
+  | .refine t _, m, h => occA_le_occV t m (by simpa [occA] using h)
+  | .lazy t, m, h => occA_le_occV t m (by simpa [occA] using h)
+  | .opaq, _, _ => by simp [occV, occTop]
+  | .union os, m, h => by
+      simp only [occA, occV] at h ⊢
+      exact occAL_le_occVL os m h
+
+/-- …and over the options of a union, where both sides are the join of the options'. -/
+theorem occAL_le_occVL : ∀ (ts : List Term) (m : Member),
+    occAL ts m = true → occVL ts m.slot = true
+  | [], _, h => by simp [occAL] at h
+  | t :: ts, m, h => by
+      simp only [occAL, occVL, Bool.or_eq_true] at h ⊢
+      rcases h with h | h
+      · exact Or.inl (occA_le_occV t m h)
+      · exact Or.inr (occAL_le_occVL ts m h)
+end
+
 /-! ## The classifier -/
 
-/-- **Phase *slot*.** Both occupancies disjoint — and *both*, conjoined, because a pair
-    separated on one side only is not separated. -/
+/-- **Phase *slot*.** The write occupancies disjoint. The read occupancies are then disjoint
+    too, by `occA_le_occV`, so `occA_disjoint_of_Orth1` needs no second conjunct. -/
 def Orth1 (x y : Term) : Bool :=
-  Slot.all.all (fun s => !(occV x s && occV y s)) &&
-  Member.all.all (fun m => !(occA x m && occA y m))
+  Slot.all.all (fun s => !(occV x s && occV y s))
 
 /-- **The two bodies admit presences at one name that meet at the bottom.**
 
@@ -637,15 +681,12 @@ def OrthSA (t : Term) : Attr → Prop :=
 
 theorem occV_disjoint_of_Orth1 {x y : Term} (h : Orth1 x y = true) {s : Slot}
     (hx : occV x s = true) (hy : occV y s = true) : False := by
-  have h1 := (Bool.and_eq_true_iff.mp h).1
-  have := List.all_eq_true.mp h1 s (Slot.mem_all s)
+  have := List.all_eq_true.mp h s (Slot.mem_all s)
   simp_all
 
 theorem occA_disjoint_of_Orth1 {x y : Term} (h : Orth1 x y = true) {m : Member}
-    (hx : occA x m = true) (hy : occA y m = true) : False := by
-  have h1 := (Bool.and_eq_true_iff.mp h).2
-  have := List.all_eq_true.mp h1 m (Member.mem_all m)
-  simp_all
+    (hx : occA x m = true) (hy : occA y m = true) : False :=
+  occV_disjoint_of_Orth1 h (occA_le_occV x m hx) (occA_le_occV y m hy)
 
 /-- **The name test really is disjointness of the admitted key sets.** `keysOk` puts the key
     set inside the presence each spec admits at the name. The two presences meet at the bottom,
@@ -1642,7 +1683,7 @@ theorem not_orth_opaq_string : Orth .opaq .string = false := by decide
     than a gap in the tables. -/
 theorem not_orth_literal_held (f g : Value → Value) :
     Orth (.literal .string lsA) (.held (.literal .string lsB) f g) = false := by
-  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occTop, occOnly, Slot.all, Member.all, specOf]
+  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occTop, occOnly, Slot.all, specOf, GroundKind.slot]
 
 /-- **Phase *alternatives*, and §5's own worked `ident` example.** The occupancies forget
     `ℓ`, so `Orth1` answers `false` here; `OrthL` reads `ℓ` and the classifier certifies the
@@ -1663,15 +1704,13 @@ theorem not_orth_literal_literal_same :
     `uAtCan_of_literalN_disjoint`'s content. -/
 theorem not_orth_literal_number (x y : GroundKind.number.Carrier) :
     Orth (.literal .number x) (.literal .number y) = false := by
-  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
-    GroundKind.slot, GroundKind.member]
+  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occOnly, Slot.all, specOf, GroundKind.slot]
 
 /-- **Two null literals are never disjoint**, and `false` here is exact rather than a
     concession: `NEFinset Unit` has one inhabitant, so both hold `()`. -/
 theorem not_orth_literal_null (x y : GroundKind.null.Carrier) :
     Orth (.literal .null x) (.literal .null y) = false := by
-  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
-    GroundKind.slot, GroundKind.member]
+  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occOnly, Slot.all, specOf, GroundKind.slot]
 
 /-- **The same rule at a set**, which is the pair `Separation.lean` discharges by hand as
     `sepJV_set_literals` — and only on the write side, `SepJV` being about `Adm`. The
@@ -1701,8 +1740,7 @@ theorem orth_set_literals_two_bases :
 theorem not_orth_set_literal_closure (q : Value → Bool) :
     Orth (.refine (.set .string) (.each (.members .string setA)))
          (.refine (.set .string) (.each (.closure q))) = false := by
-  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
-    SetBase.slot, SetBase.member]
+  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occOnly, Slot.all, specOf, SetBase.slot]
 
 /-- …and the pair, discharged from one `decide` where it used to name its premise. At
     `.number` the route is still `separates_literal_disjoint` with the premise proved by

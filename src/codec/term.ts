@@ -1272,9 +1272,12 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * that no value can ever choose — §5's failure, not a rank. `occV` and `occA` answer the closed
  * form now, `Orth1` finds the meeting, and the pair is refused at the declaration.
  *
- * **Otherwise `Orth1`, both sides conjoined.** A pair separated on one side only is not separated:
- * the loosened form ships `union([decimal, number])`, which writes `'1.5'` to an `N` and cannot read
- * back what it wrote, because `decimal` takes a string and `number` a number while both store `N`.
+ * **Otherwise the two occupancies, both sides conjoined.** A pair separated on one side only is not
+ * separated: the loosened form ships `union([decimal, number])`, which writes `'1.5'` to an `N` and
+ * cannot read back what it wrote, because `decimal` takes a string and `number` a number while both
+ * store `N`. The model's `Orth1` tests the write side alone, because there `occA_le_occV` puts the
+ * read occupancy inside the write occupancy. Here a `held` declares its `writes`, and `decimal` writes
+ * a string and reads an `N`, so the read side is a second question.
  */
 export const separable = (x: Term, y: Term): boolean => {
     // **Containment first.** The three {@link restricts} rows name a literal, a set of a literal

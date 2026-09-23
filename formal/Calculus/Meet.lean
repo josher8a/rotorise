@@ -15,10 +15,11 @@ refuses where its closed form cannot be compared with an exact held set, and `re
 that is a refusal and not an empty one.
 
 **The same on the read side, and `never` is the empty intersection of BOTH halves.** A pair
-disjoint on one half only is not disjoint, which is why `Orth1` conjoins the two occupancies;
+disjoint on one half only is not disjoint. `Orth1` tests the write occupancies alone, because
+`occA_le_occV` makes a pair disjoint on the write half disjoint on the read half too;
 `never` is for a pair disjoint on both, and everything else refuses.
 
-Among the ground and set terms no pair is disjoint on one half alone, so the conjunction has no witness left there. It keeps one elsewhere:
+Among the ground and set terms no pair is disjoint on one half alone. The two halves part elsewhere:
 `occV` of a `held` is the top while `occA` of a `held` is its inner term's, so two adapters over
 disjoint natives separate on the read half and not on the write half.
 
@@ -1214,8 +1215,8 @@ example :
     refuses, and the union admits less than the join of its options. -/
 example : unionOk [.object (.mk {"a"} (fun _ => .req .string) none),
     .object (.mk {"a"} (fun _ => .req .boolean) none)] = false := by
-  simp [unionOk, orthAll, Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all,
-    Member.all, namesSeparate, presenceMeetsBot, BodySpec.presenceAt, ObjectSlot.presence,
+  simp [unionOk, orthAll, Orth, Orth1, OrthM, OrthS, OrthL, occV, occOnly, Slot.all,
+    namesSeparate, presenceMeetsBot, BodySpec.presenceAt, ObjectSlot.presence,
     ObjectSlot.isReq, Term.isNever, Body.spec, altsOfField,
     specOf, litDisjAt, altsDisj, MapOf.at, Finset.mem_singleton]
 
