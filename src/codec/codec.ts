@@ -49,6 +49,7 @@ import type {
 } from './term'
 import {
     alwaysWritten,
+    callerViewsApart,
     clauseForm,
     clauseLiteralsOf,
     crossing,
@@ -5294,14 +5295,15 @@ export const union = <const Options extends readonly AnyCodec[]>(
             }
             // the label the refusal names, asked again on the path that is about to throw:
             // `separable` answers the `Bool` the model's `Orth` answers, so the meeting is
-            // recomputed here rather than carried back through it
+            // recomputed here rather than carried back through it. Where the caller views of a
+            // `held` are apart, the write side is shown, and the read side is what refuses
             const bothWrite = meet(occV(x), occV(y))
-            if (bothWrite) {
+            const bothRead = meet(occA(x), occA(y))
+            if (bothWrite && !(bothRead && callerViewsApart(x, y))) {
                 throw new CodecError(
                     `${first.describe} and ${second.describe} both take the same kind of value — ${bothWrite} — and the declaration cannot show that no value is taken by both, so no value can choose between them; give the entity a discriminator and use discriminatedUnion`,
                 )
             }
-            const bothRead = meet(occA(x), occA(y))
             if (bothRead) {
                 throw new CodecError(
                     `${first.describe} and ${second.describe} both store '${bothRead}', and the declaration cannot show that no stored attribute is read by both, so no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,

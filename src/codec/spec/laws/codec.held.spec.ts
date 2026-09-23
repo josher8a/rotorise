@@ -16,10 +16,12 @@ import {
     decimal,
     failed,
     held,
+    list,
     number,
     object,
     optional,
     refine,
+    spread,
     string,
     union,
 } from '../../codec'
@@ -47,10 +49,19 @@ const anything = <T>(): StandardSchemaV1<T> => ({
     },
 })
 
-/** The case that prompted it: values arrive as an array, the table holds a set. */
-const tags = held(string.set(), array(string), {
-    encode: (tags: readonly string[]) => new Set(tags),
-    decode: (tags) => [...tags],
+/**
+ * The case that prompted it: values arrive as an array, the table holds a set. The held side
+ * states a non-empty array, because the store has no empty set.
+ */
+const tags = held(string.set(), list(string, spread(string)), {
+    encode: (tags: readonly [string, ...string[]]) => new Set(tags),
+    decode: (tags) => {
+        const [first, ...rest] = tags
+        if (first === undefined)
+            return new CodecError('a string set has no empty value')
+        const read: readonly [string, ...string[]] = [first, ...rest]
+        return read
+    },
 })
 
 describe('an array held where the table holds a set', () => {
@@ -91,7 +102,7 @@ describe('an array held where the table holds a set', () => {
     })
 
     it('still refuses what the inner codec refuses', () => {
-        expect(() => Pet.unsafeEncode({ id: 'p', tags: [] })).toThrow(
+        expect(() => Pet.unsafeEncode({ id: 'p', tags: [] as never })).toThrow(
             CodecError,
         )
     })
@@ -252,7 +263,7 @@ describe('a conversion that throws', () => {
     })
 
     it('and a union can try it without catching anything itself', () => {
-        // the held side of `tags` is `array(string)`, so a number never reaches the conversion
+        // the held side of `tags` is a list of strings, so a number never reaches the conversion
         const Either = union([tags, number])
         expect(Either.unsafeEncode(4)).toEqual({ N: '4' })
         expect(Either.unsafeEncode(['a'])).toEqual({ SS: ['a'] })
@@ -277,7 +288,7 @@ describe('composing with the rest', () => {
      * And a union filters it by the kind of its held side, not of its inner codec.
      *
      * Reading through to the inner codec is exactly wrong: the inner codec takes a `Set` and this
-     * takes an array. The held side, `array(string)`, is the kind the union reads.
+     * takes an array. The held side, a list of strings, is the kind the union reads.
      */
     it('is filtered by a union through its held side, and resolves', () => {
         const Either = union([tags, number])
@@ -286,19 +297,81 @@ describe('composing with the rest', () => {
     })
 
     /**
-     * **A list beside a list of another element is refused at the declaration.**
+     * **A list beside a list of another element is told apart by its elements.**
      *
-     * The guard reads the declared held side. `tags` declares `array(string)`, which admits `[]`,
-     * and `array(number)` admits `[]` too, so the two held sides are not disjoint and nothing
-     * certifies the pair. `tags` itself refuses `[]`, because its inner set has no empty value, so
-     * the refusal is conservative: a precise held side would state a non-empty list.
+     * The guard reads the two views of `tags`. The held side of `tags` requires one string or
+     * more, and `array(number)` admits `[]` and lists of numbers, so no caller value is admitted by
+     * both. `tags` stores `SS` and `array(number)` stores `L`, so no attribute is read by both.
      */
-    it('refuses a list of another element beside it, because both admit the empty list', () => {
+    it('is told apart from a list of another element, by its elements', () => {
+        const Either = union([tags, array(number)])
+        expect(Either.unsafeEncode(['1'])).toEqual({ SS: ['1'] })
+        // and the array arm still writes what it owns
+        expect(Either.unsafeEncode([1])).toEqual({ L: [{ N: '1' }] })
+        // reading was never the problem, because `SS` and `L` say which
+        expect(Either.unsafeDecode({ SS: ['a'] })).toEqual(['a'])
+        expect(Either.unsafeDecode({ L: [{ N: '1' }] })).toEqual([1])
+    })
+
+    /**
+     * **A held side that admits `[]` is refused beside a list of another element.** The caller
+     * views `array(string)` and `array(number)` both admit `[]`, so the value `[]` does not decide
+     * the branch, although the inner set of the adapter refuses `[]` at `encode`.
+     */
+    it('refuses a list of another element beside a held side that admits the empty list', () => {
+        const loose = held(string.set(), array(string), {
+            encode: (tags: readonly string[]) => new Set(tags),
+            decode: (tags) => [...tags],
+        })
         // declared through a cast, as a caller bypassing the compile-time check would
         const declare = union as unknown as (
             options: readonly AnyCodec[],
         ) => unknown
-        expect(() => declare([tags, array(number)])).toThrow(CodecError)
+        expect(() => declare([loose, array(number)])).toThrow(
+            /both take the same kind of value/,
+        )
+    })
+})
+
+describe('two adapters in one union', () => {
+    // a switch that the caller holds as `'on'` or `'off'`, and that the table stores as `BOOL`
+    const onOff = held(boolean, string('on', 'off'), {
+        encode: (s: 'on' | 'off') => s === 'on',
+        decode: (b) => (b ? 'on' : 'off'),
+    })
+    // declared through a cast, as a caller bypassing the compile-time check would
+    const declare = union as unknown as (
+        options: readonly AnyCodec[],
+    ) => unknown
+
+    /**
+     * **Two adapters are told apart where their held sides and their inner terms are each
+     * disjoint.** The two conversions differ, so one bare comparison of the two options proves
+     * nothing. The two views do: no caller value is in both held sides, and no attribute is in both
+     * inner terms.
+     */
+    it('is declared where the held sides and the inner terms are each disjoint', () => {
+        const auto = held(string('AUTO'), string('auto'), {
+            encode: (_: 'auto') => 'AUTO' as const,
+            decode: (_) => 'auto' as const,
+        })
+        const Mode = union([onOff, auto])
+        expect(Mode.unsafeEncode('on')).toEqual({ BOOL: true })
+        expect(Mode.unsafeEncode('auto')).toEqual({ S: 'AUTO' })
+        expect(Mode.unsafeDecode({ BOOL: false })).toBe('off')
+        expect(Mode.unsafeDecode({ S: 'AUTO' })).toBe('auto')
+    })
+
+    /**
+     * **Two adapters over one inner term are refused, although their held sides are disjoint.**
+     * A stored `BOOL` is read by both, so the attribute does not decide the branch.
+     */
+    it('is refused where both inner terms read one attribute', () => {
+        const auto = held(boolean, string('auto'), {
+            encode: (_: 'auto') => true,
+            decode: (_) => 'auto' as const,
+        })
+        expect(() => declare([onOff, auto])).toThrow(/both store 'BOOL'/)
     })
 })
 

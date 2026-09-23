@@ -1206,8 +1206,14 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * `union` asks {@link crossing} ahead of this function, because this function can accept a pair
  * that crosses.
  *
- * Five rows, and each carries its own warrant. A sixth exempted an `opaque` option and is gone;
- * the paragraph below the fifth says why.
+ * Six rows, and each carries its own warrant. A seventh exempted an `opaque` option and is gone;
+ * the paragraph below the sixth says why.
+ *
+ * **Two options, one of which holds a `held`: the two views.** The model's `certPair` has a third
+ * case, `certViews`. A `held` writes where its held side does and reads where its inner term does,
+ * so the caller views of the two options answer the write question and the stored views answer the
+ * read question. The row accepts where this function accepts both pairs of views. It certifies a
+ * `held` whose held side is a non-empty list beside a list of another element.
  *
  * **Two options that meet at the bottom.** The model's certificate is `certPair`: `Orth`, or a
  * meet at `never`. `Adm_meet` and `AdmA_meet` make the meet's admission the conjunction of the
@@ -1268,6 +1274,12 @@ export const separable = (x: Term, y: Term): boolean => {
     // **Containment first.** The three {@link restricts} rows name a literal, a set of a literal
     // and `never`. `never` meets no occupancy, so the rows below would accept it beside anything
     if (restricts(x, y) || restricts(y, x)) return false
+    // **Where an option holds a `held`, its two views.** The rows below see one term per option,
+    // and a `held` has two restrictions. The caller views answer the write question and the stored
+    // views answer the read question, as the model's `certViews` does. Each view holds no `held`,
+    // so the two inner calls do not reach this row again
+    if (callerViewsApart(x, y) && separable(storedView(x), storedView(y)))
+        return true
     // a meet at the bottom separates, and it runs ahead of the object row, because two objects
     // whose required slots meet at `never` share names and no value
     if (!reaches(x, []) && !reaches(y, []) && meetTerms(x, y)?.kind === 'never')
@@ -1348,6 +1360,118 @@ const reaches = (t: Term, kinds: readonly Term['kind'][]): boolean => {
             return false
     }
 }
+
+/**
+ * **Whether {@link callerView} and {@link storedView} are sound on a term**, and build it without
+ * forcing a thunk.
+ *
+ * The views keep a `union` as written. The view of a `union` with a `held` below it would need
+ * the join of the views of its options, so such a term has no view, as the model's
+ * `heldBelowUnion` states. A `legacy` with a `held` below it has none either: its `r` reads an
+ * attribute to a held value, so the read widens on both sides. A thunk has no view, because a
+ * walk that forces a recursive thunk does not end.
+ */
+const viewable = (t: Term): boolean => {
+    switch (t.kind) {
+        case 'lazy':
+            return false
+        case 'held':
+            return viewable(t.inner) && viewable(t.outer)
+        case 'refine':
+            return viewable(t.inner)
+        // `reaches` counts a thunk as a `held`, so a thunk below refuses here too
+        case 'union':
+        case 'legacy':
+            return !reaches(t, ['held'])
+        case 'list':
+            return (
+                t.pre.every(viewable) &&
+                (t.spread === undefined || viewable(t.spread)) &&
+                t.suf.every(viewable)
+            )
+        case 'object':
+            return (
+                Object.values(t.body.fields).every((f) => viewable(f.t)) &&
+                (t.body.rest === undefined || viewable(t.body.rest))
+            )
+        default:
+            return true
+    }
+}
+
+/** A list or an object with each position and each field replaced by its view. */
+const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
+    switch (t.kind) {
+        case 'list':
+            return {
+                kind: 'list',
+                pre: t.pre.map(view),
+                ...(t.spread === undefined ? {} : { spread: view(t.spread) }),
+                suf: t.suf.map(view),
+            }
+        case 'object': {
+            const { rest } = t.body
+            return {
+                kind: 'object',
+                body: {
+                    fields: Object.fromEntries(
+                        Object.entries(t.body.fields).map(([name, f]) => [
+                            name,
+                            { ...f, t: view(f.t) },
+                        ]),
+                    ),
+                    ...(rest === undefined ? {} : { rest: view(rest) }),
+                },
+            }
+        }
+        default:
+            return t
+    }
+}
+
+/**
+ * **The caller view**: each `held` becomes its held side. The view admits each value that the
+ * term admits, where {@link viewable} holds. A `refine` above a `held` keeps its predicate,
+ * because the caller states the predicate on the held value.
+ */
+const callerView = (t: Term): Term => {
+    switch (t.kind) {
+        case 'held':
+            return callerView(t.outer)
+        case 'refine':
+            return { kind: 'refine', inner: callerView(t.inner), q: t.q }
+        default:
+            return mapChildren(t, callerView)
+    }
+}
+
+/**
+ * **The stored view**: each `held` becomes its inner term. The view reads each attribute that
+ * the term reads, where {@link viewable} holds. A `refine` above a `held` drops its predicate,
+ * because data exists only on the side where it was stated: the stored side meets the predicate
+ * only through `g`, and the view keeps no closure.
+ */
+const storedView = (t: Term): Term => {
+    switch (t.kind) {
+        case 'held':
+            return storedView(t.inner)
+        case 'refine':
+            return reaches(t.inner, ['held']) ? storedView(t.inner) : t
+        default:
+            return mapChildren(t, storedView)
+    }
+}
+
+/**
+ * **Whether the caller views of two options are separable**, where one option holds a `held`
+ * and both are {@link viewable}. Then no caller value is admitted by both options. `union` reads
+ * this to name the read side in a refusal, where the write side is apart.
+ */
+export const callerViewsApart = (x: Term, y: Term): boolean =>
+    (reaches(x, ['held']) || reaches(y, ['held'])) &&
+    viewable(x) &&
+    viewable(y) &&
+    separable(callerView(x), callerView(y))
 
 /**
  * **The overlap of two options that cross**, or nothing.
