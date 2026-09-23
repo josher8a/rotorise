@@ -242,6 +242,14 @@ back the attribute it read. The model states this for held-free terms. \texttt{h
 constructor outside confluence (\texttt{held\_violates\_R}). Outside the term algebra, \texttt{extendRead} keeps
 a quotient, and \texttt{e\_comp\_p\_ne\_id} is its witness.
 
+\begin{theorem}[a held-free term has \texttt{ker\ p} equality]
+\label{thm:ker-heldfree}
+\lean{Calculus.ker_eq_of_HF, Calculus.e_p_of_HF}
+\leanok
+At a held-free term, two attributes that read to one value are equal. At a lawful held-free term,
+\texttt{e(p(a))\ =\ a} on \texttt{dom(p)}.
+\end{theorem}
+
 \textbf{The store is not a quotient of the codec.} \texttt{η}, the store's own normalisation of a stored
 numeral (§3), rewrites \texttt{N}. This is the medium, and it is the calculus's one concession to something it
 does not model. A codec survives the store when \texttt{η} lies inside \texttt{ker\ p} (\texttt{SurvivesStore}), and that
@@ -250,6 +258,13 @@ asks \texttt{η} to fix every canonical attribute. \texttt{number} writes \textt
 survive (\texttt{not\_survivesStore\_numberCodec}). The DynamoDB port's \texttt{decimalCodec} is gated at \texttt{Stored}, the
 numerals \texttt{η} leaves alone. Its \texttt{ker\ p} is equality as well (\texttt{ker\_decimalCodec}), and it survives
 (\texttt{survivesStore\_decimalCodec}). The gate absorbs the store, and no kernel does.
+
+\begin{theorem}[a held-free term survives the store only at a fixed point]
+\label{thm:store-heldfree}
+\lean{Calculus.survivesStore_fix_of_HF}
+\leanok
+A lawful held-free term survives the store only where \texttt{η} fixes each canonical attribute.
+\end{theorem}
 
 \textbf{Partiality collapses} when \texttt{dom(p)\ =\ 𝔸} — when every attribute the domain admits is one this
 codec reads. And here the answer is structural rather than a matter of care: \textbf{§1 fixes one \texttt{𝔸}
@@ -1220,8 +1235,8 @@ a ≼ a′  ⟺  member(a) = member(a′)
 
 Set members compare no deeper — an \texttt{SS} carries payloads, not attributes, so there is no member
 inside one to disagree on. Shared names, because a name on one side alone carries no member to disagree
-on. At a lawful held-free term the strong law holds as an equality, \texttt{e(p(a))\ =\ a}, by \texttt{confluence\_R}
-and \texttt{Ω\_canon}. The strong law is \texttt{e(p(a))\ ≼\ a} on \texttt{dom(p)},
+on. At a lawful held-free term the strong law holds as an equality, \texttt{e(p(a))\ =\ a}, by \texttt{e\_p\_of\_HF}
+(\rulelink{thm:ker-heldfree}{the held-free kernel Theorem}). The strong law is \texttt{e(p(a))\ ≼\ a} on \texttt{dom(p)},
 and it implies \rulelink{cond:MP}{\textbf{(MP)}} as stated.
 
 \begin{theorem}[soundness]
@@ -1380,8 +1395,8 @@ item adds none. \rulelink{cond:W}{\textbf{(W)}}: \texttt{M}. \texttt{≼}: the L
 the wire set is the image of the held set under it. \rulelink{cond:R}{\textbf{(R)}}: \texttt{w} is injective by the \rulelink{lem:injectivity}{injectivity Lemma} (member fixed,
 \texttt{e\_c} injective), so the written set holds one payload per element and the \rulelink{lem:traversal}{traversal Lemma} reads
 each back; non-emptiness survives both directions. \rulelink{cond:C}{\textbf{(C)}}: entrywise, and the re-encoded elements
-keep their member by \texttt{≼}, so the same payload projection re-succeeds. \texttt{p} is injective on payloads as well: a set is held-free, so by \texttt{confluence\_R} and
-\texttt{Ω\_canon} no two payloads read to one value, and the read set holds one value per payload. \rulelink{cond:W}{\textbf{(W)}}: \texttt{μS}, always. \texttt{≼}: member equality, and
+keep their member by \texttt{≼}, so the same payload projection re-succeeds. \texttt{p} is injective on payloads as well: a set is held-free, so by \texttt{ker\_eq\_of\_HF}
+(\rulelink{thm:ker-heldfree}{the held-free kernel Theorem}) no two payloads read to one value, and the read set holds one value per payload. \rulelink{cond:W}{\textbf{(W)}}: \texttt{μS}, always. \texttt{≼}: member equality, and
 a set has no interior members — the container fixes its elements' member, which is why the
 element's own \rulelink{cond:MP}{\textbf{(MP)}} is never even invoked inside one.
 
