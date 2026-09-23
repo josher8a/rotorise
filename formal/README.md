@@ -120,7 +120,7 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   its own numeric type to a caller adapts that type to `WFNumeral` in the port. IEEE-754 facts
   are not this calculus's theorems, and nothing here assumes them.
 - **Semantic rule premises live beside the carrier**, not in `Typed`: the doc's
-  `(held)` and `(custom)` side conditions live in `Obligations`. The alternate-reader
+  `(held)` side condition lives in `Obligations`. The alternate-reader
   condition is `ReadsCoherently`, which `extendRead_lawfulCore` consumes. Each definition has
   its denotation in scope.
   `Obligations` is **structural, not fuel-indexed** —

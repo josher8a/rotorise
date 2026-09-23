@@ -128,9 +128,9 @@ preserves \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and
 \rulelink{cond:W}{\textbf{(W)}} under its two premises, while its alternate reader can break
 \rulelink{cond:MP}{\textbf{(MP)}}.
 
-Only \rulelink{cond:R}{\textbf{(R)}} is an equality on the nose. Taken as one, \texttt{e\ ∘\ p\ =\ id} is \emph{false} and must be: digits have
-a normal form, so writing back what was read is free to normalise it, and a schema may discard names
-it does not declare. In the language of quotient lenses \cite{quotient-lenses} \texttt{e\ ∘\ p} is a
+Only \rulelink{cond:R}{\textbf{(R)}} is an equality on the nose. Taken as one, \texttt{e\ ∘\ p\ =\ id} is \emph{false} for a pair in
+general: an alternate reader reads an attribute that the current encoding writes differently, and
+\texttt{e\_comp\_p\_ne\_id} is that witness. In the language of quotient lenses \cite{quotient-lenses} \texttt{e\ ∘\ p} is a
 \textbf{canonizer} — total on \texttt{dom(p)} by \rulelink{cond:C}{\textbf{(C)}} — and the equivalence it works modulo is not a parameter
 a programmer chooses: it is \texttt{ker\ p}, forced by the reading itself. Write \texttt{a\ ≈c\ a′\ ⟺\ p(a)\ =\ p(a′)}.
 
@@ -209,7 +209,7 @@ it can be extended:
 \toprule
 & extension & what it buys & the law that governs it \\
 \midrule
-\textbf{quotient} & \texttt{dom(p)\ ⊇\ Can(c)}, strictly & reading back what the store hands you, not only what you wrote & \rulelink{cond:C}{\textbf{(C)}}, and \texttt{≈c} \\
+\textbf{quotient} & \texttt{dom(p)\ ⊇\ Can(c)}, strictly & reading back what an older encoding wrote, not only what you wrote & \rulelink{cond:C}{\textbf{(C)}}, and \texttt{≈c} \\
 \textbf{partiality} & \texttt{dom(e)\ ⊆\ T}, \texttt{dom(p)\ ⊊\ 𝔸} & refusing values and attributes that are not yours & the domains themselves \\
 \bottomrule
 \end{tabular}
@@ -232,23 +232,24 @@ Both extensions can be driven to zero, and asking what it takes is the cleanest 
 each one is really for. They do not have the same answer, and one term alone answers both at
 once.
 
-\textbf{The quotient collapses} when \texttt{ker\ p} is equality — when no two distinct attributes read to one
-value. That fails for exactly two reasons, and one of them is about the medium:
+\textbf{The quotient collapses} when \texttt{ker\ p} (\texttt{Codec.Ker}) is equality — when no two distinct attributes
+read to one value. \textbf{Every held-free term collapses it.} \texttt{confluence\_R} puts the reading of a
+held-free term inside \texttt{opaque}'s, and \texttt{Ω\_canon} makes \texttt{opaque}'s reading injective, so two
+attributes that read to one value are one attribute. A set is held-free, so no two of its payloads
+read to one value either. A lawful held-free term also reads only \texttt{Can(c)}: by
+\rulelink{cond:C}{\textbf{(C)}} the value it reads re-encodes, and \texttt{confluence\_W} with \texttt{Ω\_canon} gives
+back the attribute it read. The model states this for held-free terms. \texttt{held} is the one
+constructor outside confluence (\texttt{held\_violates\_R}). Outside the term algebra, \texttt{extendRead} keeps
+a quotient, and \texttt{e\_comp\_p\_ne\_id} is its witness.
 
-\begin{itemize}
-\tightlist
-\item
-  \textbf{\texttt{η}, the store's own normalisation of a stored numeral (§3), normalises \texttt{N}}. This is the medium, and it is the calculus's one concession to
-  something it does not model.
-\item
-  \textbf{A set loses a payload} when two of its payloads read to one value (§5). This is the
-  container's own, and \rulelink{cond:R}{\textbf{(R)}} is untouched, because the canonical payloads are the ones the
-  codec wrote.
-\end{itemize}
-
-So a codec collapses the quotient by holding no set and reading no normalised numeral. \texttt{decimal} is the witness that this is reachable: its held set is \texttt{Stored}, the numerals
-\texttt{η} leaves alone (§3), and its \texttt{ker\ p} is
-equality, which is precisely why its held set had to be narrowed to \texttt{Stored}.
+\textbf{The store is not a quotient of the codec.} \texttt{η}, the store's own normalisation of a stored
+numeral (§3), rewrites \texttt{N}. This is the medium, and it is the calculus's one concession to something it
+does not model. A codec survives the store when \texttt{η} lies inside \texttt{ker\ p} (\texttt{SurvivesStore}), and that
+buys \rulelink{cond:R}{\textbf{(R)}} through the store (\texttt{retract\_through\_store}). With \texttt{ker\ p} equality, the inclusion
+asks \texttt{η} to fix every canonical attribute. \texttt{number} writes \texttt{1.500}, which the store rewrites, so \texttt{number} does not
+survive (\texttt{not\_survivesStore\_numberCodec}). The DynamoDB port's \texttt{decimalCodec} is gated at \texttt{Stored}, the
+numerals \texttt{η} leaves alone. Its \texttt{ker\ p} is equality as well (\texttt{ker\_decimalCodec}), and it survives
+(\texttt{survivesStore\_decimalCodec}). The gate absorbs the store, and no kernel does.
 
 \textbf{Partiality collapses} when \texttt{dom(p)\ =\ 𝔸} — when every attribute the domain admits is one this
 codec reads. And here the answer is structural rather than a matter of care: \textbf{§1 fixes one \texttt{𝔸}
@@ -263,7 +264,7 @@ better encoding.
 (\texttt{opaqA\_total}). Its pair is a bijection between \texttt{Value} and \texttt{𝔸} (\texttt{Ω\_onto}, \texttt{Ω\_canon}), so its
 \texttt{ker\ p} is equality. Its held set is every \texttt{Value}, so one \texttt{T} lives in \texttt{𝔸}, which is the
 condition the paragraph above names. \texttt{opaque} pays with \texttt{μ\ =\ ⊤}. Every term with a schema keeps one deviation at least:
-\texttt{decimal} kills the quotient and keeps partiality, and §1 is why.
+a held-free term kills the quotient and keeps partiality, and §1 is why.
 
 One deviation \emph{does} have a clean term-level answer, and it is often mistaken for the other
 two. Ambiguity in a \texttt{union} is not a property of the medium at
@@ -578,16 +579,6 @@ extendRead(c, r) : adapted(T, μ)
 \end{verbatim}
 \end{definition}
 
-\begin{definition}[(custom)]
-\label{rule:custom}
-\uses{cond:R,cond:C,cond:MP}
-\begin{verbatim}
-e : T ⇀ 𝔸    p : 𝔸 ⇀ T    (R), (C), (MP) hold of (e, p)
-───────────────────────────────────────────────────────── (custom)
-⊢ custom(e, p) : T ⇝ ⊤
-\end{verbatim}
-\end{definition}
-
 \begin{definition}[(opaque)]
 \label{rule:opaque}
 \lean{Calculus.Typed.opaq}
@@ -702,7 +693,7 @@ that may already have it. It expresses nothing new, it costs no premise, and its
 property of insertion rather than a fact about \texttt{𝟙}. The one term outside both branches of the
 dichotomy is \texttt{nullable(null)}, which under the guard is simply \texttt{null}.
 
-\texttt{union(c,\ null)} replaces it at a subterm whose shape is unknown — \texttt{held}, \texttt{custom},
+\texttt{union(c,\ null)} replaces it at a subterm whose shape is unknown — \texttt{held} or
 \texttt{lazy}: no discharger — no decidable condition sufficient for \rulelink{cond:U}{\textbf{(U)}} at the
 declaration (§5) — means an \textbf{obligation}, not a refusal, so \texttt{union(c,\ null)} is
 derivable there and carries \rulelink{cond:U}{\textbf{(U)}} per input.
@@ -1045,7 +1036,7 @@ terms force the point:
   value comes out and never which attributes go in, and \texttt{A} passes through.
 \end{itemize}
 
-What exactness costs is decidability. \texttt{custom} carries a pair of partial functions, \texttt{held} an
+What exactness costs is decidability. \texttt{held} carries an
 arbitrary \texttt{f}, \texttt{refine} an arbitrary \texttt{q}, so membership of an admissible set is not a question the
 declaration can answer. Admission \textbf{specifies} the two families. It does not decide them. What the
 discharger row runs is occupancy and option admission, and those are decided.
@@ -1079,7 +1070,7 @@ which member of §1 it may store. Occupancy is what decides at the declaration.
 Both over-approximate, and over-approximating is the safe direction — if \texttt{X\ ⊆\ X′}, \texttt{Y\ ⊆\ Y′} and
 \texttt{X′\ ∩\ Y′\ =\ ∅} then \texttt{X\ ∩\ Y\ =\ ∅} — so a coarse answer costs a discharge and never buys a wrong one.
 Where a term carries an arbitrary function the answer is \texttt{⊤}, every label: \texttt{held}'s \texttt{f} runs before
-the subterm and can move a value into any constructor, \texttt{custom} is arbitrary in both directions, and
+the subterm and can move a value into any constructor, and
 \texttt{extendRead}'s \texttt{r} is arbitrary on the reading side.
 
 \textbf{The writable side's label is the constructor of the value, not the runtime kind}, and the
@@ -1088,8 +1079,8 @@ difference does work. A kind collapses the three set families into one; the cons
 separate what eight kinds cannot. The readable side's label is the member, which the judgement's \texttt{μ}
 index already computes.
 
-\texttt{⊤} covers two situations the check treats alike and the semantics does not: \textbf{unknown} — \texttt{held},
-\texttt{custom} and \texttt{lazy}, whose answer exists but cannot be read without forcing — and \textbf{everything} —
+\texttt{⊤} covers two situations the check treats alike and the semantics does not: \textbf{unknown} — \texttt{held}
+and \texttt{lazy}, whose answer exists but cannot be read without forcing — and \textbf{everything} —
 \texttt{opaque}, which accepts every kind by design. The row separates neither, and both fall to \rulelink{cond:U}{\textbf{(U)}}
 per input. The difference resurfaces only inside \texttt{opaque}'s own derivation, where "everything" is
 precisely what makes its fixpoint's options pairwise kind-disjoint (§3).
@@ -1228,8 +1219,9 @@ a ≼ a′  ⟺  member(a) = member(a′)
 \end{definition}
 
 Set members compare no deeper — an \texttt{SS} carries payloads, not attributes, so there is no member
-inside one to disagree on. Shared names, because a reading may drop what a writing then omits: the
-discard is the quotient of §2, not a member change. The strong law is \texttt{e(p(a))\ ≼\ a} on \texttt{dom(p)},
+inside one to disagree on. Shared names, because a name on one side alone carries no member to disagree
+on. At a lawful held-free term the strong law holds as an equality, \texttt{e(p(a))\ =\ a}, by \texttt{confluence\_R}
+and \texttt{Ω\_canon}. The strong law is \texttt{e(p(a))\ ≼\ a} on \texttt{dom(p)},
 and it implies \rulelink{cond:MP}{\textbf{(MP)}} as stated.
 
 \begin{theorem}[soundness]
@@ -1342,8 +1334,6 @@ change \rulelink{cond:MP}{\textbf{(MP)}} exists to refuse — is the same fact.
 \texttt{owns(nullable(c))} always, so the second case never nests: §6's idempotence is the construction,
 not an equation the proof has to earn.
 
-\emph{custom.} The laws are the premises, verbatim; \rulelink{cond:W}{\textbf{(W)}} is vacuous at \texttt{⊤}.
-
 \emph{lazy.} The pair of \texttt{γ(∗)}. This case is \textbf{three arguments and not one}: what a \texttt{γ}
 re-enters itself through decides which one applies.
 
@@ -1384,16 +1374,14 @@ element is where the \rulelink{cond:MP}{\textbf{(MP)}} exemption propagates — 
 \emph{object.} The step dispatches each entry by its name: a declared name through its field, with the
 \texttt{ε}-handling of the Fields case; an undeclared name by \texttt{ρ}, and a closed object refuses it. The presence guards — every \texttt{req} name demanded in
 both directions, every non-\texttt{opt} binding demanded of a value — are what keep the step total where
-item adds none. \rulelink{cond:W}{\textbf{(W)}}: \texttt{M}. \texttt{≼}: the Lemma's keyed clause, and the
-quotient again.
+item adds none. \rulelink{cond:W}{\textbf{(W)}}: \texttt{M}. \texttt{≼}: the Lemma's keyed clause.
 
 \emph{set.} The premise gives \texttt{e\_c(x)\ =\ ⟨μ,\ w(x)⟩}; the step is \texttt{w} outward and \texttt{p\_c(⟨μ,\ ·⟩)} back, and
 the wire set is the image of the held set under it. \rulelink{cond:R}{\textbf{(R)}}: \texttt{w} is injective by the \rulelink{lem:injectivity}{injectivity Lemma} (member fixed,
 \texttt{e\_c} injective), so the written set holds one payload per element and the \rulelink{lem:traversal}{traversal Lemma} reads
 each back; non-emptiness survives both directions. \rulelink{cond:C}{\textbf{(C)}}: entrywise, and the re-encoded elements
-keep their member by \texttt{≼}, so the same payload projection re-succeeds. \texttt{p} need \emph{not} be injective —
-two payloads reading to one value shrink the set, which is the quotient again and touches \rulelink{cond:R}{\textbf{(R)}}
-nowhere, since canonical payloads are \texttt{w}-images. \rulelink{cond:W}{\textbf{(W)}}: \texttt{μS}, always. \texttt{≼}: member equality, and
+keep their member by \texttt{≼}, so the same payload projection re-succeeds. \texttt{p} is injective on payloads as well: a set is held-free, so by \texttt{confluence\_R} and
+\texttt{Ω\_canon} no two payloads read to one value, and the read set holds one value per payload. \rulelink{cond:W}{\textbf{(W)}}: \texttt{μS}, always. \texttt{≼}: member equality, and
 a set has no interior members — the container fixes its elements' member, which is why the
 element's own \rulelink{cond:MP}{\textbf{(MP)}} is never even invoked inside one.
 
@@ -1433,8 +1421,7 @@ partition the values and members partition the attributes — so admission is un
 every depth of the fixpoint, and the sum case closes with no residue here either.
 \end{proof}
 
-What remains outside the theorem is what §3 already names: \rulelink{rule:custom}{\texttt{(custom)}}'s premises are the
-caller's to keep, and each \rulelink{rule:union}{\texttt{(union)}}'s residual \rulelink{cond:U}{\textbf{(U)}}. The numeral bound is not among
+What remains outside the theorem is what §3 already names: each \rulelink{rule:union}{\texttt{(union)}}'s residual \rulelink{cond:U}{\textbf{(U)}}. The numeral bound is not among
 them: it is the carrier \texttt{WFNumeral} of \rulelink{rule:number}{\texttt{(number)}}, and a numeric \texttt{literal}'s base \emph{is}
 \texttt{number}, so it is inside the theorem.
 
@@ -1644,25 +1631,23 @@ swapped for attribute-admission. Adjoining the null point is the same constructi
 attributes. A product traverses. Reading a discriminator's tag is one lookup, spelled once per
 carrier.
 
-Exactly three term constructors break it: \texttt{held}, \texttt{refine} and \texttt{custom}. Each
+Exactly two term constructors break it: \texttt{held} and \texttt{refine}. Each
 constructor carries a \textbf{caller's function that is not itself a codec}. \texttt{held}'s \texttt{f}
 gates the writing while \texttt{g} only post-processes the reading, which is why the readable side sees
 through it and the writable one cannot (§5). \texttt{refine}'s
 \texttt{q} is a predicate on \emph{values}, so it gates one carrier directly and the other only after a read.
-\texttt{custom} is the degenerate case: both halves are the caller's, so there is no shared construction to
-be symmetric about. Outside the term algebra, \texttt{extendRead}'s \texttt{r} widens the reading and
+Outside the term algebra, \texttt{extendRead}'s \texttt{r} widens the reading and
 touches the writing not at all.
 
 So the asymmetry in this calculus is not a property of encoding-versus-decoding. It is the mark of
-where a caller's function enters. It stays local to three term constructors and one outer carrier.
+where a caller's function enters. It stays local to two term constructors and one outer carrier.
 That is the divisible /
 decidable \cite{divisible-decidable} skeleton, read invariantly — as Invariant rather than as a
 contravariant functor — because both directions are present at once.
 
 The judgement settles the laws for every term the calculus builds itself. What it leaves to the
-caller is the premise on a function that is not a codec: \rulelink{rule:held}{\texttt{(held)}}'s inverse pair,
-\rulelink{rule:refine}{\texttt{(refine)}}'s predicate, and
-\rulelink{rule:custom}{\texttt{(custom)}}'s two halves outright. The outer
+caller is the premise on a function that is not a codec: \rulelink{rule:held}{\texttt{(held)}}'s inverse pair
+and \rulelink{rule:refine}{\texttt{(refine)}}'s predicate. The outer
 \rulelink{rule:legacy}{\texttt{(alternate reader)}} rule separately requires agreement with the current
 reading. What no derivation settles is each
 \texttt{union}'s residual \rulelink{cond:U}{\textbf{(U)}} where no discharger decides it, and how much of any of this an

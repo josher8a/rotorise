@@ -189,12 +189,6 @@ EXPECTED = {
     },
     "docs/blueprint/src/content.tex": {
         "e_c": "the specification's own notation for a component codec, not a Lean name",
-        "custom": "the specification's §3 `(custom)` rule, which neither side implements now: "
-                  "the model never carried `Term.custom` and the host deleted the constructor "
-                  "and the term. The rule is still stated here, so the citation is the "
-                  "specification naming its own rule. WHETHER THE RULE LEAVES THE "
-                  "SPECIFICATION IS THE OWNER'S DECISION, and this entry records the gap "
-                  "rather than closing it",
     },
 }
 
