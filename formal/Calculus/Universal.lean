@@ -63,11 +63,6 @@ theorem alignPL_spread (P : VP) (vs : List Value) :
   | nil => rfl
   | cons x xs ih => simp [alignP, ih]
 
-/-- An element of a list is no deeper than the list budget. -/
-theorem depth_le_depthL {x : Value} : ∀ {vs : List Value}, x ∈ vs → Value.depth x ≤ Value.depthL vs
-  | _ :: _, .head _ => by simp only [Value.depthL]; omega
-  | _ :: _, .tail _ h => by have := depth_le_depthL h; simp only [Value.depthL]; omega
-
 /-- `opaque` writes an array when `opaque` writes each element, at the element budget. -/
 theorem Adm_opaq_arr (vs : List Value) :
     Adm .opaq (.arr vs) = decide (∀ x ∈ vs, Adm .opaq x = true) := by

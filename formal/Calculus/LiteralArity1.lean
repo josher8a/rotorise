@@ -99,28 +99,21 @@ theorem hunion_map_literal_num (l : List WFNumeral) :
   · rintro ⟨d, hd, rfl⟩; exact ⟨_, ⟨d, hd, rfl⟩, rfl⟩
 
 /-- §5's **(D)** on a string literal set's options, from the alternatives being distinct —
-    which is `NEFinset`'s, not a premise. Incomparability is the *easy* direction here: two
-    distinct singletons contain each other in neither order. -/
+    which is `NEFinset`'s, not a premise. Two distinct singletons share no value. -/
 theorem dincomp_map_literal_str {l : List String} (hnd : l.Nodup) :
     DIncomp (l.map fun s => fun v => v = Value.str s) := by
   rw [DIncomp, List.pairwise_map]
   refine hnd.imp ?_
-  intro a b hab
-  refine Or.inl ⟨fun h => hab ?_, fun h => hab ?_⟩
-  · have h' : Value.str a = Value.str b := h (.str a) rfl
-    simpa using h'
-  · have h' : Value.str b = Value.str a := h (.str b) rfl
-    exact (by simpa using h' : b = a).symm
+  intro a b hab v ha hb
+  exact hab (Value.str.inj (ha.symm.trans hb))
 
 /-- …and the same at the numeric base. -/
 theorem dincomp_map_literal_num {l : List WFNumeral} (hnd : l.Nodup) :
     DIncomp (l.map fun d => fun v => v = Value.num d) := by
   rw [DIncomp, List.pairwise_map]
   refine hnd.imp ?_
-  intro a b hab
-  refine Or.inl ⟨fun h => hab ?_, fun h => hab ?_⟩
-  · exact Value.num.inj (h (.num a) rfl)
-  · exact (Value.num.inj (h (.num b) rfl)).symm
+  intro a b hab v ha hb
+  exact hab (Value.num.inj (ha.symm.trans hb))
 
 /-! ## (U) at the numeric base
 

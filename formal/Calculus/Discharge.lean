@@ -31,8 +31,8 @@ the pair is held-free, and `uAtAct_of_HF` (`Confluence.lean`) discharges it.
 values, (U)'s readable side quantifies over attributes, and `held`'s adapter relabels
 between them. Two options can hold disjoint sets and read one attribute. (D) is a
 well-formedness condition on the `T` index and lives there — `DIncomp`, a premise of
-`Typed.union` (`Typing.lean`), which asks incomparability or `HDisj`. Asked of *every* pair,
-`HDisj` is the stronger reading §5 considered and withdrew, and it is refuted below.
+`Typed.union` (`Typing.lean`), which asks `HDisj` of every pair. As a discharger of (U),
+`HDisj` of every pair is refuted below.
 
 The two counterexamples that repaired §5's discharger are at the foot of the file. §5 keeps
 both, and
@@ -335,8 +335,7 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
 /-- `HNever` holds nothing: it is `False` at every value. -/
 theorem hnever_false (v : Value) : ¬ HNever v := id
 
-/-- …so the bottom is disjoint from every held set, and that is how (D) admits it.
-    Incomparability cannot: the bottom is a subset of every held set. -/
+/-- …so the bottom is disjoint from every held set, and that is how (D) admits it. -/
 theorem hdisj_never_left (T : Held) : HDisj HNever T := fun v hv => absurd hv (hnever_false v)
 
 /-- …and on the other side, where the bottom is what the pair is disjoint from. -/
@@ -351,13 +350,13 @@ theorem hdisj_never_right (T : Held) : HDisj T HNever := fun v _ hn => hnever_fa
     divergence as a theorem rather than as prose. -/
 theorem dincomp_never_right (T : Held) : DIncomp [T, HNever] :=
   List.pairwise_cons.mpr
-    ⟨fun _ hb => by rw [List.mem_singleton] at hb; subst hb; exact Or.inr (hdisj_never_right T),
+    ⟨fun _ hb => by rw [List.mem_singleton] at hb; subst hb; exact hdisj_never_right T,
      List.pairwise_singleton _ _⟩
 
 /-- The same on the other side, where the bottom is the one the disjunct names. -/
 theorem dincomp_never_left (T : Held) : DIncomp [HNever, T] :=
   List.pairwise_cons.mpr
-    ⟨fun _ hb => by rw [List.mem_singleton] at hb; subst hb; exact Or.inr (hdisj_never_left _),
+    ⟨fun _ hb => by rw [List.mem_singleton] at hb; subst hb; exact hdisj_never_left _,
      List.pairwise_singleton _ _⟩
 
 
@@ -659,11 +658,10 @@ theorem not_uAtCan_array_literals :
 
 /-! ### (D) in its held-set form, as the disjointness §5 proposed
 
-`HDisj` (`Typing.lean`) is that predicate: no value is held by two options. It is *not* the
-rule's premise asked of every pair — `(union)` carries `DIncomp`, which asks incomparability
-**or** `HDisj` of each pair. §5's withdrawn reading asked `HDisj` of every pair, and that is the
-strictly stronger thing refuted below: the witness satisfies it and still fails (U). One
-predicate in two roles, so it is named once. -/
+`HDisj` (`Typing.lean`) is that predicate: no value is held by two options. `(union)` carries
+`DIncomp`, which asks `HDisj` of every pair, as a well-formedness condition. As a discharger of
+(U) it is refuted below: the witness satisfies it and still fails (U). One predicate in two
+roles, so it is named once. -/
 
 /-- The relabelling adapter: `"B"` on the outside is `"A"` on the inside. -/
 def fRel : Value → Value := fun v => match v with | .str "B" => .str "A" | _ => .null

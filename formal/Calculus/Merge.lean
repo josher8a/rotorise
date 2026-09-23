@@ -254,8 +254,8 @@ def HProdOn (na nb : Finset Name) (Ta Tb : Held) : Held :=
     fails there for the reason it failed before.
 
     **`hb` is not bookkeeping.** A factor that holds nothing makes every product hold nothing, and
-    two empty held sets are comparable in both directions, so (D) fails at the product however well
-    the factors separate. That is the bottom's rule one stratum up. -/
+    two empty held sets are comparable in both directions, so incomparability fails at the product
+    however well the factors separate. -/
 theorem not_subset_prodOn {na nb : Finset Name} (h : Disjoint na nb) {Ta Ta' Tb : Held}
     {ka : Finset Name} {fa : {k // k ∈ ka} → Value} (hka : ∀ k ∈ ka, k ∈ na)
     (hv : Ta (.map ka fa)) (hv' : ¬ Ta' (.map ka fa))

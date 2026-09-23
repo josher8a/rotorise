@@ -26,9 +26,9 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   the option judgements and (D); a discharger settles the (U) obligation, and lives with
   `κ`/`ident`/`adm` in `Discharge.lean` — downstream of this file, which is why it could
   not be a premise here even if it were one. Failing to discharge is not refusing:
-  `union(array(literal "A"), array(literal "B"))` is `Typed`, and `UAtCan` is false of it
-  (`not_uAtCan_array_literals`), which is the calculus working as §5 describes rather
-  than a gap between them.
+  `union(literal("A"), held(literal("A"), f, g))` holds disjoint sets, so (D) admits it, and
+  `UAtCan` is false of it (`not_uAtCan_literal_held`), which is the calculus working as §5
+  describes rather than a gap between them.
 * Premises over lists are auxiliary judgements (`TypedList`, …): the kernel refuses
   recursive occurrences nested under `∃`/`∀ ∈` binders.
 * `(union)` concludes the doc's unanimous μ, computed by `unanimous` from the option
@@ -125,53 +125,44 @@ def HMap (T : Held) : Held :=
 def HUnion (Ts : List Held) : Held :=
   fun v => ∃ T ∈ Ts, T v
 
-/-- The bottom's held set: nothing. It is a subset of every held set, so it is comparable
-    with every option, and (D) admits it on disjointness rather than by incomparability. -/
+/-- The bottom's held set: nothing. It is disjoint from every held set, so (D) admits it
+    beside any option. -/
 def HNever : Held := fun _ => False
 
-/-- Two options share no value. §5 considered this as the whole of (D) and withdrew it, because
-    required of every pair it rejects working unions (`not_uAtCan_literal_held`). As an
-    *alternative* to incomparability it rejects nothing, and it is what a union's certificate
-    actually provides. -/
+/-- Two options share no value. Asked of every pair, this is (D): the count selector is total
+    on the union's held set exactly when no value is held by two options. It is not a discharger
+    of (U): `not_uAtCan_literal_held` holds disjoint sets and still fails (U). It is what a
+    union's certificate provides. -/
 def HDisj (Tx Ty : Held) : Prop := ∀ v, Tx v → ¬ Ty v
 
-/-- §5's **(D)**, `(union)`'s well-formedness side condition, pairwise over the held sets.
+/-- §5's **(D)**, `(union)`'s well-formedness side condition: **the union's selector is total
+    on the union's held set.** Each held value reaches one option, and that option writes the
+    value. (D) is a property of the selector, not of a shape of the options.
 
-    Incomparability is the first disjunct and was once the whole condition. Requiring
-    disjointness instead rejects working unions, which is why §5 withdrew it; offering it as an
-    alternative rejects nothing, because two disjoint options are distinguishable in the
-    strongest way there is. Not a discharger of (U) either — no condition on held sets is one —
-    so no rule eliminates it; it constrains the judgement's `T`.
+    The selector of `altCodec` is the count: an option wins where it is the only option that
+    admits the value. For the count, totality is pairwise disjointness of the held sets, and
+    `countSel_total` (`Laminar.lean`) proves the codec form from this statement. A nested pair
+    fails the count, and `not_TIsDomE_unionLiteralString` is the witness: `"A"` is held, and
+    nothing is written. A crossing pair fails it too, and `not_countTotal_xOs` is the witness.
+    The least-admitter selector `findSel` is total on a laminar family (`findSel_total`), so a
+    union under `findSel` would carry laminarity here instead.
 
-    **It is not free, either.** Every union the meet builds owes it, and `typed_meet` pays it
-    through `dincomp_of_unionOk`, which reads the disjointness off the union's own certificate.
-    `src/codec/lean.ts` cites it too, for the pairs where the host refuses a `never` option and
-    the model permits it.
+    **The condition is not free.** Every union that the meet builds owes it, and
+    `dincomp_of_unionOk` reads it off the union's own certificate. `src/codec/lean.ts` cites it
+    too, for the pairs where the host refuses a `never` option and the model permits it.
 
-    **An empty option is the unit of the sum**, and it reaches (D) through the second disjunct:
-    it is disjoint from everything, vacuously. Such an option contributes nothing to `HUnion`,
-    so it cannot make a union ambiguous, while being a subset of every held set, which
-    incomparability alone would reject. The meet builds exactly that union: a `refine` whose
-    predicate holds of nothing the inner term holds is empty, is not syntactically the bottom,
-    and no syntactic test reads a predicate.
+    **An empty option is the unit of the sum.** An empty option is disjoint from each held set,
+    vacuously, so it contributes nothing to `HUnion` and cannot make a union ambiguous. The meet
+    builds exactly that union: a `refine` whose predicate holds of nothing that the inner term
+    holds is empty, and is not syntactically the bottom.
 
-    **Disjointness rather than emptiness, and the reason is constructive.** The two read the
-    same classically — an empty set is disjoint from everything, and disjoint sets with an
-    inhabitant apiece are incomparable. But a union's certificate yields disjointness directly,
-    where emptiness would have to be decided of a `Held`, which is a `Prop` at every value. -/
+    **Disjointness is monotone.** A pairwise-disjoint family stays pairwise disjoint when each
+    held set shrinks. The meet shrinks each option, so the meet keeps (D). -/
 def DIncomp (Ts : List Held) : Prop :=
-  Ts.Pairwise fun Tx Ty =>
-    (¬ (∀ v, Tx v → Ty v) ∧ ¬ (∀ v, Ty v → Tx v)) ∨ HDisj Tx Ty
+  Ts.Pairwise HDisj
 
-/-- The strong reading implies this one, so every derivation written against incomparability
-    alone survives the weakening. -/
-theorem dincomp_of_incomp {Ts : List Held}
-    (h : Ts.Pairwise fun Tx Ty => ¬ (∀ v, Tx v → Ty v) ∧ ¬ (∀ v, Ty v → Tx v)) :
-    DIncomp Ts := h.imp Or.inl
-
-/-- …and so does pairwise disjointness, which is the form a union's certificate gives. -/
-theorem dincomp_of_disjoint {Ts : List Held} (h : Ts.Pairwise HDisj) : DIncomp Ts :=
-  h.imp Or.inr
+/-- Pairwise disjointness is (D), and is the form a union's certificate gives. -/
+theorem dincomp_of_disjoint {Ts : List Held} (h : Ts.Pairwise HDisj) : DIncomp Ts := h
 
 /-- `⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ)` (§4 `(object)`). A binding is `(name, required?,
     held set)`; `R` is the open part — `none` for `drop`/`refuse`, the rest codec's held

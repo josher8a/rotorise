@@ -1,6 +1,7 @@
 import Calculus.HeldSet
 import Calculus.Merge
 import Calculus.Orthogonality
+import Calculus.Laminar
 
 /-!
 # The meet
@@ -119,16 +120,6 @@ theorem pairwise_of_orthAll : ∀ {ts : List Term}, orthAll ts = true →
   | _ :: _, h => by
       simp only [orthAll, Bool.and_eq_true, List.all_eq_true] at h
       exact .cons (fun u hu => h.1 u hu) (pairwise_of_orthAll h.2)
-
-/-- A held set of the option judgements is some option's own. -/
-theorem mem_typed_of_mem : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs →
-    ∀ T ∈ Ts, ∃ t ∈ os, ∃ μ, Typed t T μ
-  | _, _, _, .nil, _, hT => nomatch hT
-  | _, _, _, .cons hty hs, T, hT => by
-    rcases List.mem_cons.mp hT with rfl | hT'
-    · exact ⟨_, List.mem_cons_self, _, hty⟩
-    · obtain ⟨t', ht', μ', hty'⟩ := mem_typed_of_mem hs T hT'
-      exact ⟨t', List.mem_cons_of_mem _ ht', μ', hty'⟩
 
 /-- The certificate's pairwise `Orth`, carried to the held sets option by option. -/
 theorem unionOk_pairwise_held : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs →
@@ -1495,12 +1486,6 @@ theorem zipP_meet {r₁ r₂ rz : List Term} (hlen : r₁.length = r₂.length)
                   simp only [AdmList, zipP, hr,
                     ihw (by simpa using hlen) hrest]
                   simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
-
-/-- The rows of a term list are as many as the terms. -/
-theorem AdmList_length (ts : List Term) : (AdmList ts).length = ts.length := by
-  induction ts with
-  | nil => rfl
-  | cons t ts ihx => simp only [AdmList, List.length_cons, ihx]
 
 /-- `opaque`'s row is `dom(e)` of its codec, budgeted by the value's own depth. -/
 theorem Adm_opaq_eq (v : Value) :
@@ -2958,16 +2943,6 @@ theorem μSyn_ofOptions_mem {ts : List Term} {m : Member}
   | a :: b :: rest =>
       exact ⟨a, by simp, μSyn_union_mem (os := a :: b :: rest) h a (by simp)⟩
 
-
-/-- A `Forall₂` relates every right element to some left one. -/
-theorem forall₂_mem_right {α β : Type} {R : α → β → Prop} :
-    ∀ {as : List α} {bs : List β}, List.Forall₂ R as bs → ∀ {b}, b ∈ bs → ∃ a ∈ as, R a b
-  | _, _, .nil, _, hb => by simp at hb
-  | _, _, .cons hr hrest, b, hb => by
-      rcases List.mem_cons.mp hb with rfl | hb'
-      · exact ⟨_, List.mem_cons_self, hr⟩
-      · obtain ⟨a, ha, hra⟩ := forall₂_mem_right hrest hb'
-        exact ⟨a, List.mem_cons_of_mem _ ha, hra⟩
 
 section StructuralWrites
 set_option maxHeartbeats 1000000
@@ -5597,8 +5572,8 @@ theorem AdmA_meet_union_distrib {x z o : Term} {os : List Term} (hok : unionOk (
 /-! ## The typed fragment is closed under the meet
 
 `Typed.union` carries §5's (D), and the meet builds unions, so the rows that distribute a union
-owe it. `dincomp_of_unionOk` reads (D) off the certificate the same rows already test, which is
-why this theorem needs nothing from the denotation at a union.
+owe it. The meet shrinks each option, and (D) is pairwise disjointness, so the survivors keep
+it: `survivors` reads the disjointness off the options' admission through `typed_T_adm`.
 
 The object rows are the ones that would need a choice of index. They do not make one:
 `typed_canon` restates a derivation at indices that are functions of the term, so the merged
@@ -5613,14 +5588,15 @@ theorem typedListμ_of_all : ∀ {ss : List Term}, (∀ t ∈ ss, ∃ T μ, Type
     obtain ⟨Ts, μs, hs⟩ := typedListμ_of_all (fun u hu => h u (List.mem_cons_of_mem _ hu))
     exact ⟨T :: Ts, μ :: μs, .cons hty hs⟩
 
-/-- **A certified list of derivable survivors gives a derivable union.** -/
-theorem typed_ofOptions {ss : List Term} (hok : unionOk ss = true)
+/-- **A list of derivable survivors, disjoint on admission, gives a derivable union.** The
+    disjointness is (D), read through `dincomp_of_admDisj`. -/
+theorem typed_ofOptions {ss : List Term} (hd : ss.Pairwise AdmDisj)
     (h : ∀ t ∈ ss, ∃ T μ, Typed t T μ) : ∃ T μ, Typed (Term.ofOptions ss) T μ := by
   rcases ss with _ | ⟨a, _ | ⟨b, rest⟩⟩
   · exact ⟨_, _, Typed.never⟩
   · exact h a List.mem_cons_self
   · obtain ⟨Ts, μs, hL⟩ := typedListμ_of_all h
-    exact ⟨_, _, Typed.union hL (dincomp_of_unionOk hok hL)⟩
+    exact ⟨_, _, Typed.union hL (dincomp_of_admDisj hL hd)⟩
 
 
 /-- Each option of a derivable union is derivable. -/
@@ -5798,7 +5774,8 @@ theorem typed_object_of {fs : Finset Name} {F : {k // k ∈ fs} → ObjectSlot}
 
 mutual
 /-- Every row that reads the right operand alone is derivable wherever the family is. -/
-theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam x fam) :
+theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam x fam)
+    (hA : AdmFam x fam) :
     ∀ y z, meetSRight fam y = some z → (∃ T μ, Typed x T μ) → (∃ T μ, Typed y T μ) →
       ∃ T μ, Typed z T μ
   | .never, _, h, _, _ => by
@@ -5806,27 +5783,22 @@ theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam 
   | .held _ _ _, _, h, _, _ => by simp [meetSRight] at h
   | .lazy t, _, h, hx, hy => by
       rw [meetSRight] at h
-      refine typed_meetSRight hf t _ h hx ?_
+      refine typed_meetSRight hf hA t _ h hx ?_
       obtain ⟨T, μ, hT⟩ := hy
       cases hT with | lazy h' => exact ⟨_, _, h'⟩
   | .refine y p, _, h, hx, hy => by
       simp only [meetSRight] at h
       split at h
       · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-        exact typed_refineOf (typed_meetSRight hf y w hw hx (typed_refine_inv hy))
+        exact typed_refineOf (typed_meetSRight hf hA y w hw hx (typed_refine_inv hy))
       · exact absurd h (by simp)
   | .union os, _, h, hx, hy => by
       obtain ⟨zs, hF, rfl⟩ := meetSRight_union h
-      -- OPEN. `typed_ofOptions` takes `unionOk _ = true` to reach (D), and the restated
-      -- `meetSRight_union` no longer produces it. This is NOT the same gap as the rows above,
-      -- and no counting lemma closes it: (D) is stated on HELD SETS, the meet is stated on
-      -- admission, and `T = dom(e)` is false — see `TIsDomE` and
-      -- `not_TIsDomE_unionLiteralString` in `HeldSet.lean`, and the note above
-      -- `typed_occVL` in `Orthogonality.lean`, which says outright that disjoint admission
-      -- does not give disjoint held sets. Closing this needs a held-set certificate, not a
-      -- sharper count. `sorryAx` is unsanctioned, so `#assert_axioms_all` refuses any green
-      -- tree that still contains this.
-      sorry
+      have hs := survivors hy
+        (hF.imp fun t w hw v hv => adm_right_of_and (Adm_meetSRight hA t w hw v) hv)
+        ((typed_meetSRightL hf hA os zs hF).imp fun _ _ k => k hx)
+        (List.filter_sublist (p := fun w => !w.isNever))
+      exact typed_ofOptions hs.1 hs.2
   | .string, _, h, hx, hy => hf .string _ trivial h hx hy
   | .number, _, h, hx, hy => hf .number _ trivial h hx hy
   | .boolean, _, h, hx, hy => hf .boolean _ trivial h hx hy
@@ -5840,7 +5812,8 @@ theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam 
 termination_by structural y => y
 
 /-- The list companion: the union row's options, lifted pointwise. -/
-theorem typed_meetSRightL {x : Term} {fam : Term → Option Term} (hf : TypedFam x fam) :
+theorem typed_meetSRightL {x : Term} {fam : Term → Option Term} (hf : TypedFam x fam)
+    (hA : AdmFam x fam) :
     ∀ os zs, List.Forall₂ (fun t w => meetSRight fam t = some w) os zs →
       List.Forall₂ (fun t w => (∃ T μ, Typed x T μ) → (∃ T μ, Typed t T μ) →
         ∃ T μ, Typed w T μ) os zs
@@ -5848,8 +5821,8 @@ theorem typed_meetSRightL {x : Term} {fam : Term → Option Term} (hf : TypedFam
   | t :: ts, _, h => by
       cases h with
       | cons hh ht =>
-          exact .cons (fun hx hy => typed_meetSRight hf t _ hh hx hy)
-            (typed_meetSRightL hf ts _ ht)
+          exact .cons (fun hx hy => typed_meetSRight hf hA t _ hh hx hy)
+            (typed_meetSRightL hf hA ts _ ht)
 termination_by structural os => os
 end
 
@@ -6103,8 +6076,9 @@ theorem typed_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Op
 
 mutual
 /-- **The typed fragment is closed under the meet.** Where two derivable terms have a meet, the
-    meet is derivable. The union row is the one that needs the certificate: `unionOk` gives
-    pairwise `Orth`, and `dincomp_of_unionOk` reads §5's (D) off it. -/
+    meet is derivable. The union row is the one that owes §5's (D): the meet shrinks each
+    option, so the survivors stay pairwise disjoint on admission (`survivors`), and
+    `dincomp_of_admDisj` reads (D) off that. -/
 theorem typed_meet : ∀ x y z, Term.meet x y = some z →
     (∃ T μ, Typed x T μ) → (∃ T μ, Typed y T μ) → ∃ T μ, Typed z T μ
   | .never, _, _, h, _, _ => by
@@ -6135,36 +6109,52 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
           simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
       | _ =>
         obtain ⟨zs, hF, rfl⟩ := meet_union_of h (by simp)
-        -- OPEN, and it is the same gap as `typed_meetSRight`'s union row above: (D) is a
-        -- fact about held sets and the meet is a fact about admission. Read the note there.
-        sorry
-  | .string, y, z, h, hx, hy => typed_meetSRight typed_famString y z h hx hy
-  | .number, y, z, h, hx, hy => typed_meetSRight typed_famNumber y z h hx hy
-  | .boolean, y, z, h, hx, hy => typed_meetSRight typed_famBoolean y z h hx hy
-  | .binary, y, z, h, hx, hy => typed_meetSRight typed_famBinary y z h hx hy
-  | .null, y, z, h, hx, hy => typed_meetSRight typed_famNull y z h hx hy
-  | .literal k lv, y, z, h, hx, hy => typed_meetSRight (typed_famLit k lv) y z h hx hy
-  | .set b, y, z, h, hx, hy => typed_meetSRight (typed_famSet b) y z h hx hy
-  | .opaq, y, z, h, hx, hy => typed_meetSRight (typed_famOpaq) y z h hx hy
+        have hs := survivors hx
+          (hF.imp fun t w hw v hv => adm_left_of_and (Adm_meet t _ w hw v) hv)
+          ((typed_meetL os _ zs hF).imp fun _ _ k ht => k ht hy)
+          (List.filter_sublist (p := fun w => !w.isNever))
+        exact typed_ofOptions hs.1 hs.2
+  | .string, y, z, h, hx, hy => typed_meetSRight typed_famString Adm_famString y z h hx hy
+  | .number, y, z, h, hx, hy => typed_meetSRight typed_famNumber Adm_famNumber y z h hx hy
+  | .boolean, y, z, h, hx, hy => typed_meetSRight typed_famBoolean Adm_famBoolean y z h hx hy
+  | .binary, y, z, h, hx, hy => typed_meetSRight typed_famBinary Adm_famBinary y z h hx hy
+  | .null, y, z, h, hx, hy => typed_meetSRight typed_famNull Adm_famNull y z h hx hy
+  | .literal k lv, y, z, h, hx, hy => typed_meetSRight (typed_famLit k lv) (Adm_famLit k lv) y z h hx hy
+  | .set b, y, z, h, hx, hy => typed_meetSRight (typed_famSet b) (Adm_famSet b) y z h hx hy
+  | .opaq, y, z, h, hx, hy => typed_meetSRight (typed_famOpaq) (Adm_famOpaq) y z h hx hy
   | .list pre sp suf, y, z, h, hx, hy => by
       cases sp with
       | none =>
           exact typed_meetSRight (typed_famList (pre := pre) (sp := none) (suf := suf)
-            (typed_meetSTs pre) (Or.inl ⟨rfl, rfl⟩) (typed_meetSTs suf)) y z h hx hy
+            (typed_meetSTs pre) (Or.inl ⟨rfl, rfl⟩) (typed_meetSTs suf))
+            (Adm_famList (pre := pre) (sp := none) (suf := suf)
+              (Adm_meetSTs pre) (Or.inl ⟨rfl, rfl⟩) (Adm_meetSTs suf)) y z h hx hy
       | some t =>
           exact typed_meetSRight (typed_famList (pre := pre) (sp := some t) (suf := suf)
             (typed_meetSTs pre)
             (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => typed_meet t u w hw⟩)
-            (typed_meetSTs suf)) y z h hx hy
+            (typed_meetSTs suf))
+            (Adm_famList (pre := pre) (sp := some t) (suf := suf)
+              (Adm_meetSTs pre)
+              (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => Adm_meet t u w hw⟩)
+              (Adm_meetSTs suf)) y z h hx hy
   | .object (.mk fs f none), y, z, h, hx, hy =>
       typed_meetSRight (typed_famObj (a := .mk fs f none)
         (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)
         (fun _ _ hz _ _ => by
-          simp only [Option.some.injEq] at hz; subst hz; exact ⟨_, _, Typed.never⟩)) y z h hx hy
+          simp only [Option.some.injEq] at hz; subst hz; exact ⟨_, _, Typed.never⟩))
+        (Adm_famObj (a := .mk fs f none)
+          (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
+          (fun _ _ _ hm => isReq_Field_meet hm)
+          (fun _ _ hz _ => by simp only [Option.some.injEq] at hz; subst hz; rfl)) y z h hx hy
   | .object (.mk fs f (some t)), y, z, h, hx, hy =>
       typed_meetSRight (typed_famObj (a := .mk fs f (some t))
         (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)
-        (fun u w hw => typed_meet t u w hw)) y z h hx hy
+        (fun u w hw => typed_meet t u w hw))
+        (Adm_famObj (a := .mk fs f (some t))
+          (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
+          (fun _ _ _ hm => isReq_Field_meet hm)
+          (fun u w hw => Adm_meet t u w hw)) y z h hx hy
 termination_by structural x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
