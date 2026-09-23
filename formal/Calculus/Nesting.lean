@@ -3,8 +3,9 @@ import Calculus.Soundness
 /-!
 # §1's nesting bound, and the claim the calculus cannot make
 
-`Domain.lean` states the bound: `Attr.Storable a` is `Attr.nesting a ≤ 32`, counting `L` and
-`M` and nothing else. This file says what the calculus does and does not guarantee about it,
+`Domain.lean` states the bound: `Attr.Storable n a` is `Attr.nesting a ≤ n`, counting `L` and
+`M` and nothing else. The bound `n` is a parameter, because the ideal algebra has no depth
+limit. A port instantiates it (`DynamoDB.lean`). This file says what the calculus does and does not guarantee about it,
 and the answer is worth stating precisely because **it is the one place `𝔸` is larger in the
 model than in the store**.
 
@@ -70,8 +71,8 @@ theorem nestingL_of_mem {as : List Attr} {a : Attr} (h : a ∈ as) :
 
 /-! ## The witness: a derivable term outside the store's `𝔸`
 
-Stated over a family rather than a literal 33-deep term, so the proof is an induction and not
-thirty-three unfoldings — and so the bound can move without the witness being rewritten. -/
+Stated over a family rather than a literal term, so the proof is an induction and not one
+unfolding per level — and so the witness holds at every bound. -/
 
 /-- `n` nested `array`s over `string`. -/
 def deepT : Nat → Term
@@ -111,26 +112,25 @@ theorem deepT_e : ∀ n, (denote (deepT n)).e (deepV n) = some (deepA n)
     simp only [arrayCodec, traverse, deepT_e n]
     rfl
 
-/-- **The claim the calculus cannot make.** A derivable term, a value it writes, and an
-    attribute the store refuses — so `ran(e) ⊆ 𝔸` is exact against the model's `𝔸` and false
-    against DynamoDB's.
+/-- **The claim the calculus cannot make.** At every bound, a derivable term, a value it
+    writes, and an attribute the store refuses — so `ran(e) ⊆ 𝔸` is exact against the model's
+    `𝔸` and false against a bounded store's.
 
-    The term is `array^33(string)`, which carries no premise about depth because §3 states
-    none. That is the finding: the bound is not a side condition anyone forgot to discharge,
-    it is absent from the rules, and no derivation can be blamed. -/
-theorem not_storable_of_typed :
+    The term is `array^(bound+1)(string)`, which carries no premise about depth because §3
+    states none. That is the finding: the bound is not a side condition anyone forgot to
+    discharge, it is absent from the rules, and no derivation can be blamed. -/
+theorem not_storable_of_typed (bound : Nat) :
     ∃ (t : Term) (T : Held) (μ : Option Member) (v : Value) (a : Attr),
-      Typed t T μ ∧ (denote t).e v = some a ∧ ¬ Attr.Storable a := by
-  obtain ⟨T, μ, hty⟩ := typed_deepT (maxNesting + 1)
-  refine ⟨_, T, μ, deepV (maxNesting + 1), deepA (maxNesting + 1), hty,
-    deepT_e (maxNesting + 1), ?_⟩
-  show ¬ Attr.nesting (deepA (maxNesting + 1)) ≤ maxNesting
+      Typed t T μ ∧ (denote t).e v = some a ∧ ¬ Attr.Storable bound a := by
+  obtain ⟨T, μ, hty⟩ := typed_deepT (bound + 1)
+  refine ⟨_, T, μ, deepV (bound + 1), deepA (bound + 1), hty, deepT_e (bound + 1), ?_⟩
+  show ¬ Attr.nesting (deepA (bound + 1)) ≤ bound
   rw [nesting_deepA]
   omega
 
-/-- The boundary, both sides, so a change to `maxNesting` moves one number and not a proof. -/
-theorem storable_deepA_maxNesting : Attr.Storable (deepA maxNesting) := by
-  show Attr.nesting (deepA maxNesting) ≤ maxNesting
+/-- The other side of the boundary: the witness one level shallower is storable. -/
+theorem storable_deepA (bound : Nat) : Attr.Storable bound (deepA bound) := by
+  show Attr.nesting (deepA bound) ≤ bound
   rw [nesting_deepA]
 
 end Calculus
