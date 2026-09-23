@@ -290,7 +290,8 @@ over-approximates each term's occupancy per side with `occV` and `occA` and cert
 occupancies are disjoint, by `decide`.
 
 **Its value is that it is half of the specification of the library's declaration-time guard, and
-a checked half.** The union certificate is `certPair`: `Orth`, or a meet at the bottom. The `union`
+a checked half.** The union certificate is `certPair`: `Orth`, a meet at the bottom, or `certViews`,
+which certifies the caller views and the stored views of a `held` separately. The `union`
 combinator in `src/` refuses a pair of options that it cannot certify. The combinator also refuses
 two options that cross, where the meet is neither `never` nor one of the two options, because no
 option owns the overlap. The bridge is the separation class in `src/codec/lean.ts`: one theorem per
@@ -299,10 +300,14 @@ by `formal/scripts/gate.sh`.
 
 **`certPair` is sufficient and not necessary,** so exactly one direction is a law: the library
 never refuses a pair the model certifies. A decline by `certPair` is not a refutation. The library
-also accepts a pair that a host row certifies: a literal, which identifies its own values; a pair
-of objects, which the host certifies by the names and literals they declare; or an option whose
-kind is unknown.
-Asserting the converse would manufacture findings.
+also accepts a pair that a host row certifies: a literal, which identifies its own values, and a
+pair of objects, which the host certifies by the names and literals they declare.
+
+**No bridge checks that second direction, and it is not a law.** A host row is sound only where
+the two options are compatible: every attribute that both read, they read to one value, so the
+union is lawful where it acts. The `identifies` row fails that test where a `held` shares a value
+with a literal. `decimal` beside `string('1')` reads `S '1'` to `'1'` and then refuses to write
+`'1'`, because both options admit it.
 
 `Separated` is what names the separation guarantee over the option list, with
 `separated_of_orth` as the classifier's bridge into it.
