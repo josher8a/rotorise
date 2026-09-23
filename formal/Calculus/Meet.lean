@@ -146,14 +146,6 @@ def Term.ofOptions : List Term → Term
   | [t] => t
   | ts => .union ts
 
-/-- …and the answer the meet gives at a union: the survivors, where both the options met and
-    the survivors carry the certificate. The meet is the lattice's meet, and an uncertified
-    union is not in the lattice, so the pair has no meet to state. Both sides are tested and
-    not one: a meet can answer an OPEN object, so a certified list of options can meet to an
-    uncertified one. -/
-def Term.ofOptionsGuarded (os ts : List Term) : Option Term :=
-  some (Term.ofOptions ts)
-
 /-- A list of answers, as one answer: `none` where any cell refused. Outside the recursion, so
     the rows below reach a list through `List.attach` and a `map` rather than through a mutual
     companion — which is what makes every recursive call strictly shallower in one measure. -/
@@ -170,12 +162,21 @@ theorem inL_inj {k : GroundKind} {x y : k.Carrier} {v : Value}
       | rfl
       | (obtain ⟨_, rfl⟩ := hx; obtain ⟨_, rfl⟩ := hy; rfl)
 
+/-- A finite set with a positive count holds an element. `Finset.card_pos` states the same fact
+    through a route to `Classical.choice` that the gateway baseline does not list. This case
+    split on the underlying list reaches choice only through `Finset` membership. -/
+theorem nonempty_of_card_pos {α : Type} {s : Finset α} (h : 0 < s.card) : s.Nonempty := by
+  obtain ⟨⟨l⟩, _⟩ := s
+  cases l with
+  | nil => exact absurd h (Nat.lt_irrefl 0)
+  | cons a _ => exact ⟨a, List.mem_cons_self⟩
+
 /-- Two alternative sets over one base, met. `D6`: membership through `Finset.filter`, never
     `∩`, whose membership API is not a sanctioned route to `Classical.choice`. -/
 def Pred.meetAlt (k : GroundKind) [DecidableEq k.Carrier]
     (A B : NEFinset k.Carrier) : Option (Option Pred) :=
-  if h : (A.1.filter (fun x => x ∈ B.1)).Nonempty then
-    some (some (.members k ⟨A.1.filter (fun x => x ∈ B.1), h⟩))
+  if h : 0 < (A.1.filter (fun x => x ∈ B.1)).card then
+    some (some (.members k ⟨A.1.filter (fun x => x ∈ B.1), nonempty_of_card_pos h⟩))
   else some none
 
 /-- **Two `members` predicates over one base, met.** `none` is a refusal to combine, `some none`
@@ -244,7 +245,8 @@ theorem meetAlt_empty {k : GroundKind} [DecidableEq k.Carrier] {A B : NEFinset k
   split at h
   · exact absurd h (by simp)
   · rename_i hne
-    rw [Finset.not_nonempty_iff_eq_empty] at hne
+    have hne : A.1.filter (fun x => x ∈ B.1) = ∅ :=
+      Finset.card_eq_zero.mp (Nat.eq_zero_of_not_pos hne)
     have hiff := exists_filter_iff A.1 B.1 v
     rw [hne] at hiff
     simp only [Finset.notMem_empty, false_and, exists_false, false_iff, not_and] at hiff
@@ -339,7 +341,7 @@ def meetSRight (fam : Term → Option Term) : Term → Option Term
   | .lazy t => meetSRight fam t
   | .refine y p => if p.isData then (meetSRight fam y).map (fun z => Term.refineOf z p) else none
   | .union os => (allSome (meetSRightL fam os)).bind
-      (fun zs => Term.ofOptionsGuarded os (zs.filter (fun z => !z.isNever)))
+      (fun zs => some (Term.ofOptions (zs.filter (fun z => !z.isNever))))
   | y => fam y
 def meetSRightL (fam : Term → Option Term) : List Term → List (Option Term)
   | [] => [] | y :: ys => meetSRight fam y :: meetSRightL fam ys
@@ -1078,7 +1080,7 @@ def Term.meet : Term → Term → Option Term
   | .refine x p, y => if p.isData then (Term.meet x y).map (fun z => Term.refineOf z p) else none
   | .union _, .never => some .never
   | .union os, y => (allSome (Term.meetSL os y)).bind
-      (fun zs => Term.ofOptionsGuarded os (zs.filter (fun z => !z.isNever)))
+      (fun zs => some (Term.ofOptions (zs.filter (fun z => !z.isNever))))
   | .string, y => meetSRight famString y
   | .number, y => meetSRight famNumber y
   | .boolean, y => meetSRight famBoolean y
@@ -1728,7 +1730,10 @@ theorem filter_len_meet {y : Term} (v : Value) : ∀ {os zs : List Term},
   | @cons t w ts ws hr _ ih =>
       have hw : Adm w v = (Adm t v && Adm y v) := hr v
       cases hy : Adm y v with
-      | false => simp [List.filter_cons, hw, hy] at ih ⊢; simpa [hy] using ih
+      | false =>
+          have hw' : Adm w v = false := by rw [hw, hy, Bool.and_false]
+          simp only [List.filter_cons, hw', hy, Bool.false_eq_true, ↓reduceIte] at ih ⊢
+          exact ih
       | true => simp [List.filter_cons, hw, hy] at ih ⊢; cases Adm t v <;> simp [ih]
 
 /-- **`ofOptions` admits what the count says, and no certificate is spent.** -/
@@ -1938,7 +1943,6 @@ theorem meetSRight_union {fam : Term → Option Term} {os : List Term} {z : Term
       z = Term.ofOptions (zs.filter (fun w => !w.isNever)) := by
   rw [meetSRight] at h
   obtain ⟨zs, hzs, hg⟩ := Option.bind_eq_some_iff.mp h
-  unfold Term.ofOptionsGuarded at hg
   refine ⟨zs, allSome_map_forall₂ _ ?_, (Option.some.inj hg).symm⟩
   rw [← meetSRightL_eq]
   exact hzs
@@ -2799,7 +2803,6 @@ theorem meet_union_of {os : List Term} {y z : Term}
       z = Term.ofOptions (zs.filter (fun w => !w.isNever)) := by
   rw [Term.meet] at h
   · obtain ⟨zs, hzs, hg⟩ := Option.bind_eq_some_iff.mp h
-    unfold Term.ofOptionsGuarded at hg
     refine ⟨zs, allSome_map_forall₂ _ ?_, (Option.some.inj hg).symm⟩
     rw [← meetSL_eq]
     exact hzs
@@ -3972,7 +3975,10 @@ theorem filter_len_meetA {y : Term} (a : Attr) : ∀ {os zs : List Term},
   | @cons t w ts ws hr _ ih =>
       have hw : AdmA w a = (AdmA t a && AdmA y a) := hr a
       cases hy : AdmA y a with
-      | false => simp [List.filter_cons, hw, hy] at ih ⊢; simpa [hy] using ih
+      | false =>
+          have hw' : AdmA w a = false := by rw [hw, hy, Bool.and_false]
+          simp only [List.filter_cons, hw', hy, Bool.false_eq_true, ↓reduceIte] at ih ⊢
+          exact ih
       | true => simp [List.filter_cons, hw, hy] at ih ⊢; cases AdmA t a <;> simp [ih]
 
 /-- **`ofOptions` reads what the count says, and no certificate is spent.** -/

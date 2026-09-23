@@ -292,12 +292,8 @@ theorem literalsOkA_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} �
             simp only [entryCodec, MapOf.at, dif_pos hk]] at hw
       exact litOkA_of_field_e (by simpa using hw)
 
-/-- A closed option admits its own canonical pairs, on both sides. An *open* object —
-    a rest codec — is excluded, as §5 demands: an undeclared name disqualifies the
-    option even where its rest codec would hold it. -/
+/-- A lawful option admits its own canonical pairs, on both sides. -/
 theorem optionSem_self_admit (t : Term)
-    (hlawBlock : ∀ fields ff wild, t = .object (.mk fields ff wild) →
-      ∀ w : Term, wild = some w → Lawful (denote w))
     (hlaw : Lawful (denote t)) {v a}
     (he : (denote t).e v = some a) :
     (optionSemOf (denote t) (specOf t)).admitV v = true ∧

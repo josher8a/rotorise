@@ -197,6 +197,26 @@ def findSel (le : OptionSem → OptionSem → Bool) (os : List OptionSem) (v : V
     Option OptionSem :=
   os.find? fun o => o.admitV v && os.all fun o' => !o'.admitV v || le o o'
 
+/-- A list on which `all` fails holds a witness. `List.all_eq_false` states the same fact, and
+    that lemma reaches `Classical.choice`; this induction does not. -/
+theorem exists_of_all_false {α : Type} {q : α → Bool} :
+    ∀ {l : List α}, l.all q = false → ∃ x ∈ l, q x = false
+  | [], h => nomatch h
+  | a :: l, h => by
+      cases hq : q a with
+      | false => exact ⟨a, List.mem_cons_self, hq⟩
+      | true =>
+        rw [List.all_cons, hq, Bool.true_and] at h
+        obtain ⟨x, hx, hqx⟩ := exists_of_all_false h
+        exact ⟨x, List.mem_cons_of_mem a hx, hqx⟩
+
+/-- …and a witness makes `all` fail. -/
+theorem all_false_of_mem {α : Type} {q : α → Bool} {l : List α} {x : α} (hx : x ∈ l)
+    (hq : q x = false) : l.all q = false := by
+  cases h : l.all q with
+  | false => rfl
+  | true => rw [List.all_eq_true.mp h x hx] at hq; exact nomatch hq
+
 /-- `findSel` returns a least admitting option. -/
 theorem findSel_isLeast {le} {os : List OptionSem} (hle : LeOk le os) {v o}
     (h : findSel le os v = some o) : IsLeast os v o := by
@@ -215,9 +235,8 @@ theorem findSel_of_least {le} {os : List OptionSem} (hle : LeOk le os) {v m}
   | some o => exact ⟨o, rfl⟩
   | none =>
     have := List.find?_eq_none.mp hf m hm.1
-    simp only [hm.2.1, Bool.true_and, List.all_eq_true, Bool.or_eq_true, Bool.not_eq_true',
-      not_forall] at this
-    obtain ⟨o', ho', hn⟩ := this
+    simp only [hm.2.1, Bool.true_and] at this
+    obtain ⟨o', ho', hn⟩ := exists_of_all_false (Bool.eq_false_iff.mpr this)
     have : o'.admitV v = true ∧ le m o' = false := by
       cases h1 : o'.admitV v <;> cases h2 : le m o' <;> simp_all
     rw [(hle m hm.1 o' ho').mpr (hm.2.2 o' ho' this.1)] at this
@@ -446,8 +465,7 @@ theorem cells_attemptDom {le} {os : List OptionSem} (hA : AttemptDom os) :
 theorem cellQ_false {le} {os : List OptionSem} (hle : LeOk le os) {o v} (ho : o ∈ os)
     (h : cellQ le os o v = false) :
     ∃ o' ∈ os, o'.admitV v = true ∧ HeldLe o' o ∧ ¬ HeldLe o o' := by
-  simp only [cellQ, List.all_eq_false] at h
-  obtain ⟨o', ho', hn⟩ := h
+  obtain ⟨o', ho', hn⟩ := exists_of_all_false h
   have hn' : o'.admitV v = true ∧ le o' o = true ∧ le o o' = false := by
     simp only [child] at hn
     cases h1 : o'.admitV v <;> simp_all
@@ -467,8 +485,8 @@ theorem cells_disjoint {le} {os : List OptionSem} (hA : AttemptDom os)
     · exact hd v hav.1 hbv.1
     · -- `a` is a strict child of `b` and holds `v`, so `b`'s cell drops `v`
       have : cellQ le os b v = false := by
-        simp only [cellQ, List.all_eq_false]
-        refine ⟨a, ha, ?_⟩
+        unfold cellQ
+        refine all_false_of_mem ha ?_
         simp [child, (hA.admit_iff ha v).mpr hav.1, (hle a ha b hb).mpr hs.1,
           show le b a = false from by
             cases h : le b a
@@ -476,8 +494,8 @@ theorem cells_disjoint {le} {os : List OptionSem} (hA : AttemptDom os)
             · exact absurd ((hle b hb a ha).mp h) hs.2]
       rw [this] at hbv; exact nomatch hbv.2
     · have : cellQ le os a v = false := by
-        simp only [cellQ, List.all_eq_false]
-        refine ⟨b, hb, ?_⟩
+        unfold cellQ
+        refine all_false_of_mem hb ?_
         simp [child, (hA.admit_iff hb v).mpr hbv.1, (hle b hb a ha).mpr hs.1,
           show le a b = false from by
             cases h : le a b
@@ -649,7 +667,7 @@ theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectS
       · rw [dif_neg hk]
         simp only [entryP, MapOf.at, dif_neg hk]
         cases hrest with
-        | none => simp [AdmWild]
+        | none => exact ⟨fun ⟨_, h, _⟩ => (nomatch h), fun h => (nomatch h)⟩
         | @some t' T' μ' hty =>
           simp only [AdmWild, Option.some.injEq, exists_eq_left']
           exact ihw t' rfl _ _ hty _
@@ -736,7 +754,10 @@ theorem union_count : ∀ {opts : List Term} {Ts μs}, TypedListμ opts Ts μs �
     (∀ t ∈ opts, AdmIff t) → DIncomp Ts → ∀ v,
       ((∃ T ∈ Ts, T v) ↔ ∃ x ∈ AdmSpecs opts, x.2 v = true) ∧
       ((AdmSpecs opts).filter (fun o => admitOptV o v)).length ≤ 1
-  | _, _, _, .nil, _, _, v => by simp [AdmSpecs]
+  -- by hand: `simp` closes `∃ T ∈ [], T v` through the classical `Nonempty` instance of `Held`
+  | _, _, _, .nil, _, _, v =>
+      ⟨⟨fun ⟨_, h, _⟩ => absurd h List.not_mem_nil, fun ⟨_, h, _⟩ => absurd h (by simp [AdmSpecs])⟩,
+        by simp [AdmSpecs]⟩
   | _, _, _, @TypedListμ.cons t ts _ _ _ _ hty hs, ih, hD, v => by
       have hD' := List.pairwise_cons.mp hD
       have ⟨hi, hl⟩ := union_count hs (fun t' h => ih t' (List.mem_cons_of_mem _ h)) hD'.2 v
@@ -747,7 +768,7 @@ theorem union_count : ∀ {opts : List Term} {Ts μs}, TypedListμ opts Ts μs �
       · simp only [AdmSpecs, List.filter_cons, admitOptV] at hl ⊢
         rcases Bool.eq_false_or_eq_true (Adm t v) with ha | ha
         · have hnil : (AdmSpecs ts).filter (fun o => o.2 v) = [] := by
-            refine List.filter_eq_nil_iff.mpr fun x hx hxv => ?_
+            refine filter_nil_of fun x hx => Bool.eq_false_iff.mpr fun hxv => ?_
             obtain ⟨T', hT', hT'v⟩ := hi.mpr ⟨x, hx, hxv⟩
             exact hD'.1 T' hT' v (hT.mpr ha) hT'v
           rw [if_pos ha, hnil]; simp
