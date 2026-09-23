@@ -1270,15 +1270,19 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * where its held side does and reads where its inner term does: `decimal` writes a string and
  * reads an `N`.
  */
-export const separable = (x: Term, y: Term): boolean => {
+export const separable = (x: Term, y: Term, identified = true): boolean => {
     // **Containment first.** The three {@link restricts} rows name a literal, a set of a literal
     // and `never`. `never` meets no occupancy, so the rows below would accept it beside anything
     if (restricts(x, y) || restricts(y, x)) return false
     // **Where an option holds a `held`, its two views.** The rows below see one term per option,
     // and a `held` has two restrictions. The caller views answer the write question and the stored
     // views answer the read question, as the model's `certViews` does. Each view holds no `held`,
-    // so the two inner calls do not reach this row again
-    if (callerViewsApart(x, y) && separable(storedView(x), storedView(y)))
+    // so the two inner calls do not reach this row again. The stored call turns the `identifies`
+    // row off, because the stored view has erased the `decode` of each `held`
+    if (
+        callerViewsApart(x, y) &&
+        separable(storedView(x), storedView(y), false)
+    )
         return true
     // a meet at the bottom separates, and it runs ahead of the object row, because two objects
     // whose required slots meet at `never` share names and no value
@@ -1321,7 +1325,16 @@ export const separable = (x: Term, y: Term): boolean => {
             (readable === undefined || disjoint)
         )
     }
-    return identifies(x) || identifies(y)
+    // **The `identifies` row is lawful where the union acts, and needs each shared attribute read
+    // to one value.** A `held` reads the attribute to another value through its `decode`, and a
+    // stored view has erased that `decode`, so the row applies to neither where the reads meet.
+    // `reaches` counts a thunk as a `held`, because the host cannot read a thunk without forcing it
+    return (
+        identified &&
+        (readable === undefined ||
+            (!reaches(x, ['held']) && !reaches(y, ['held']))) &&
+        (identifies(x) || identifies(y))
+    )
 }
 
 /**
