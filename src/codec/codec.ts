@@ -77,6 +77,7 @@ import {
 export { codecOfTerm, termOf, valueKinds } from './denote'
 
 import type { ErrorMessage, show } from '../utils'
+import type { StandardOutput, StandardSchemaV1 } from './standard'
 import {
     describeShape,
     namedLiteral,
@@ -699,10 +700,15 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> & {
 /**
  * An adapter over {@link dynamoNumber}, one conversion wide, on both halves. `held` is defined
  * further down this file, so the term is built directly; the two are the same construction.
+ *
+ * `outer` is the base the adapter hands to the caller, as a write occupancy. The conversion
+ * checks the held side itself: `storedOnly` refuses a value that is not a string, and the carrier
+ * refuses a value that is not a number. The term of `number` holds a `DynamoNumber`, so the term
+ * cannot be the membership test for a JS float.
  */
 const numericAdapter = <T>(
     inner: Term,
-    writes: SetSlot,
+    outer: Term,
     into: (value: T) => Result<DynamoNumber>,
     outOf: (held: DynamoNumber) => Result<T>,
     via?: 'decimalText',
@@ -710,27 +716,28 @@ const numericAdapter = <T>(
     codecOfTerm<T, Attribute<'N'>>({
         kind: 'held',
         inner,
+        outer,
         f: into as (value: never) => unknown,
         g: outOf as (held: never) => unknown,
-        writes: [writes],
         ...(via ? { via } : {}),
     })
 
-/** …and the same over a set of them, element by element. */
+/** …and the same over a set of them, element by element. `outer` is the held side of one element. */
 const numericSetAdapter = <T>(
     inner: Term,
-    writes: SetSlot,
+    outer: { readonly kind: 'string' | 'number' },
     into: (value: T) => Result<DynamoNumber>,
     outOf: (held: DynamoNumber) => Result<T>,
 ): AttributeCodec<ReadonlySet<T>, NS> =>
     codecOfTerm<ReadonlySet<T>, NS>({
         kind: 'held',
-        writes: [writes],
+        outer: { kind: 'set', base: outer.kind },
         // what the set-level halves below are built from, kept so a reader that needs one element
         // does not have to rediscover it from a conversion over a whole set
         element: {
             f: into as (value: never) => unknown,
             g: outOf as (held: never) => unknown,
+            outer,
         },
         inner,
         f: ((value: ReadonlySet<T>) => {
@@ -811,14 +818,14 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> & {
                     ...allowed.map((one) => orThrow(storedOnly(one))),
                 ) as AnyCodec,
             ),
-            'string',
+            { kind: 'string' },
             storedOnly,
             (held) => held.toString(),
             'decimalText',
         ),
     numericAdapter<string>(
         { kind: 'number' },
-        'string',
+        { kind: 'string' },
         storedOnly,
         (held) => held.toString(),
         'decimalText',
@@ -833,7 +840,7 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> & {
                           )
                         : dynamoNumber.set()) as AnyCodec,
                 ),
-                'strSet',
+                { kind: 'string' },
                 storedOnly,
                 (held) => held.toString(),
             ),
@@ -931,11 +938,16 @@ export const number: AttributeCodec<number, Attribute<'N'>> & {
                     ...numericAlternatives(allowed),
                 ) as AnyCodec,
             ),
-            'number',
+            { kind: 'number' },
             asFloat,
             asJsNumber,
         ),
-    numericAdapter<number>({ kind: 'number' }, 'number', asFloat, asJsNumber),
+    numericAdapter<number>(
+        { kind: 'number' },
+        { kind: 'number' },
+        asFloat,
+        asJsNumber,
+    ),
     {
         set: (...allowed: readonly number[]) =>
             numericSetAdapter<number>(
@@ -944,7 +956,7 @@ export const number: AttributeCodec<number, Attribute<'N'>> & {
                         ? dynamoNumber.set(...numericAlternatives(allowed))
                         : dynamoNumber.set()) as AnyCodec,
                 ),
-                'numSet',
+                { kind: 'number' },
                 asFloat,
                 asJsNumber,
             ),
@@ -1114,6 +1126,14 @@ const set = <const C extends AnyCodec>(
         ? {
               kind: 'held',
               inner: bare,
+              // the held side of a set is the set of the element's held side, where a set base
+              // writes exactly that slot, and the top otherwise
+              outer:
+                  adapter.outer.kind === 'string' ||
+                  adapter.outer.kind === 'number' ||
+                  adapter.outer.kind === 'binary'
+                      ? { kind: 'set', base: adapter.outer.kind }
+                      : { kind: 'opaq' },
               // the pair the two halves below are built from, kept so a reader that needs one
               // element does not have to rediscover it from a conversion over a whole set
               element: adapter,
@@ -1687,34 +1707,49 @@ const withMissing = <const C extends AnyCodec>(
  * or narrows the second. This one changes only the second, by naming the two halves of the
  * conversion, and leaves what the table holds exactly as it was.
  *
- * Which makes it the answer to "my values arrive as an array and `.set()` wants a `Set`": nothing
- * about the *table* has to change for that, so nothing about the codec does either. It is also the
- * one to reach for where a caller holds a value the inner codec does not: the member, the
- * generation and the definition all keep coming from the codec underneath, where a codec written
- * by hand has to restate every one of them.
+ * **Two restrictions, and a conversion between them.** `inner` restricts the stored side and
+ * `outer` restricts the held side, which is the shape of `z.codec(in, out, { decode, encode })`.
+ * The held type derives from `outer`, and `encode` and `decode` only transform.
  *
  * @example
  * ```ts
  * // stored as SS, held as an array
- * const tags = held(string.set(), {
- *     encode: (tags: readonly string[]) => new Set(tags),
+ * const tags = held(string.set(), array(string), {
+ *     encode: (tags) => new Set(tags),
  *     decode: (tags) => [...tags],
  * })
  *
- * // stored as S, held as a Date
- * const when = held(string, {
- *     encode: (at: Date) => at.toISOString(),
+ * // stored as S, held as a Date, restricted by a schema of another library
+ * const when = held(string, z.date(), {
+ *     encode: (at) => at.toISOString(),
  *     decode: (at) => new Date(at),
  * })
  * ```
  *
- * **Both halves are total.** A conversion that can fail is two things at once, and they compose
- * better apart: narrow the inner codec first, so the failure is reported where the value is actually
- * wrong and with a message about it.
+ * **The held side is checked on both halves.** `encode` runs only on a value that `outer` admits,
+ * and the value that `decode` returns must pass `outer` too. A value outside `outer` is refused by
+ * name, as a base codec refuses a value past its type, and the caller's `encode` never runs on it.
+ * The model states the same codec: `through` the conversion, then restricted by `Adm outer` on
+ * both halves, so the codec is lawful for every `outer`.
+ *
+ * **`outer` has two forms.** A codec of this library admits a value where its `encode` succeeds,
+ * which is the admission `accepts` asks, and the term records the codec's term as the held side.
+ * A schema of another library implements Standard Schema v1, and admits a value where `validate`
+ * returns no issues. `validate` answers synchronously here, because a codec does. A `Promise` or a
+ * throw becomes a refusal.
+ *
+ * **A foreign schema records the top as the held side.** The library cannot read which kinds of
+ * value a foreign schema admits, so the write occupancy of this `held` is every kind. A `union`
+ * with such an option has no certificate on the write side, and refuses where the other option
+ * writes a kind. The runtime check still runs, so the codec refuses what the schema refuses.
+ *
+ * **Narrow the stored side in `inner`.** A conversion that can fail is two things at once, and
+ * they compose better apart: narrow the inner codec first, so the failure is reported where the
+ * value is actually wrong and with a message about it.
  *
  * ```ts
- * held(refine(string, isIsoDate, { describe: 'an ISO timestamp' }), {
- *     encode: (at: Date) => at.toISOString(),
+ * held(refine(string, isIsoDate, { describe: 'an ISO timestamp' }), z.date(), {
+ *     encode: (at) => at.toISOString(),
  *     decode: (at) => new Date(at),
  * })
  * ```
@@ -1730,9 +1765,7 @@ const withMissing = <const C extends AnyCodec>(
  * direction quantifies over the *held* type, which has no generator except `decode` itself, so
  * every value this library could make is already in the pair's image; and probing the other at
  * construction is worse than not probing it, because a legitimate adapter is an isomorphism on the
- * values its inner codec describes and *throws* off them — `held(string, dateAdapter)` would be
- * refused for `new Date('<anything>')`, which is exactly the narrowing the example above asks for
- * rather than a defect.
+ * values its inner codec describes and *throws* off them.
  *
  * So this is a written obligation, and `checkIso` is how a caller discharges it: it generates for
  * the inner codec and checks `encode(decode(y))`, which is the half a table depends on. The
@@ -1740,19 +1773,24 @@ const withMissing = <const C extends AnyCodec>(
  * *normalises* — `{ encode: v => v.toUpperCase(), decode: v => v }` reads `'a'` back as `'A'`,
  * and every read-modify-write on that row rewrites the value.
  */
-export const held = <T, const C extends AnyCodec>(
+export const held = <
+    const C extends AnyCodec,
+    const O extends AnyCodec | StandardSchemaV1,
+>(
     inner: C,
+    outer: O,
     adapt: {
         /**
-         * The value, as the inner codec holds it. Runs on the way to the table.
+         * The value, as the inner codec holds it. Runs on the way to the table, on a value that
+         * `outer` admits.
          *
          * Return a {@link CodecError} where the conversion has nothing to hand over — a value
          * outside the range the inner codec describes, or text that does not parse. That is a
          * refusal like any other and reaches the caller as one.
          */
-        readonly encode: (value: T) => Result<NoInfer<Decoded<C>>>
+        readonly encode: (value: HeldOf<O>) => Result<NoInfer<Decoded<C>>>
         /** What the inner codec read, as you hold it. Runs on the way back. Refuses the same way. */
-        readonly decode: (held: Decoded<C>) => Result<NoInfer<T>>
+        readonly decode: (held: Decoded<C>) => Result<NoInfer<HeldOf<O>>>
         /**
          * **How to generate one of these, where the pair is partial.**
          *
@@ -1764,11 +1802,12 @@ export const held = <T, const C extends AnyCodec>(
          * makes the derived generator offer values the pair never makes, so a property run fails
          * on the generator instead of on the codec.
          */
-        readonly arbitrary?: (rng: Rng, size: number) => T
+        readonly arbitrary?: (rng: Rng, size: number) => HeldOf<O>
         /** How to shrink one, where the pair is partial. Derived from the inner codec otherwise. */
-        readonly shrink?: (value: T) => readonly T[]
+        readonly shrink?: (value: HeldOf<O>) => readonly HeldOf<O>[]
     },
-): AttributeCodec<T, AttributeOf<C>> => {
+): AttributeCodec<HeldOf<O>, AttributeOf<C>> => {
+    const side = heldSide(outer)
     /**
      * **A half that cannot convert returns a `CodecError`**, and the signature says so. A refusal
      * is a value here, as it is everywhere else on this surface, so nothing about declining a
@@ -1781,17 +1820,120 @@ export const held = <T, const C extends AnyCodec>(
      * would make every caller defensive about it, and one already was: a union tries an option to
      * find out whether it is the right one, and had to catch, which meant it also swallowed
      * failures that were nothing to do with an adapter.
+     *
+     * The check of `outer` runs inside the two halves, and not in `denote`'s row. The term
+     * language carries a number as a `DynamoNumber`, so the term of `number` is a sound write
+     * occupancy for the JS float adapter and a wrong membership test for it. A library adapter
+     * checks the held side in its own conversion, and this checks the side the caller named.
      */
-    return codecOfTerm<T, AttributeOf<C>>({
+    return codecOfTerm<HeldOf<O>, AttributeOf<C>>({
         kind: 'held',
         inner: termOf(inner as unknown as AnyCodec),
-        f: adapt.encode,
-        g: adapt.decode,
+        outer: side.term,
+        f: (value: HeldOf<O>) =>
+            side.admit(value, 'encode') ?? adapt.encode(value),
+        g: (read: Decoded<C>) => {
+            const out = adapt.decode(read)
+            return failed(out) ? out : (side.admit(out, 'decode') ?? out)
+        },
         arbitrary: adapt.arbitrary,
         shrink: adapt.shrink as
             | ((value: never) => readonly unknown[])
             | undefined,
     })
+}
+
+/** The held type of a `held`: the output of a foreign schema, or what a codec decodes. */
+export type HeldOf<O> = O extends StandardSchemaV1
+    ? StandardOutput<O>
+    : Decoded<O>
+
+/**
+ * **The held side of a `held`**: the term it records, and the check that runs on each half.
+ *
+ * `admit` answers `undefined` for a value the side admits, and a refusal that names the side
+ * otherwise. `at` names the half, because the value that `decode` returns is the caller's defect
+ * and a value handed to `encode` past its type is the defect of the code that called.
+ */
+const heldSide = (
+    outer: AnyCodec | StandardSchemaV1,
+): {
+    readonly term: Term
+    readonly admit: (
+        value: unknown,
+        at: 'encode' | 'decode',
+    ) => CodecError | undefined
+} => {
+    const refused = (at: 'encode' | 'decode', side: string, why: string) =>
+        new CodecError(
+            at === 'encode'
+                ? `the held side of this \`held\`, ${side}, refuses the value before \`encode\` runs: ${why}`
+                : `the held side of this \`held\`, ${side}, refuses the value that \`decode\` returned: ${why}`,
+        )
+    if (!('~standard' in outer)) {
+        return {
+            term: termOf(outer),
+            // the admission `accepts` asks, encoded once so the refusal keeps the codec's reason.
+            // `accepts` catches a throw for the same reason: an object codec reaches for `value.a`
+            admit: (value, at) => {
+                let written: unknown
+                try {
+                    written = outer.encode(value as never)
+                } catch (thrown) {
+                    written = new CodecError(
+                        thrown instanceof Error
+                            ? thrown.message
+                            : String(thrown),
+                    )
+                }
+                return failed(written)
+                    ? refused(at, 'a codec of this library', written.reason)
+                    : undefined
+            },
+        }
+    }
+    const { vendor, validate } = outer['~standard']
+    const side = `a ${vendor} schema`
+    return {
+        /**
+         * **The top, because the held side is not this library's to rule.** A foreign schema has
+         * a runtime face, `validate`, and no static face: nothing here can read which kinds of
+         * value it admits. `opaque` is the term that admits every kind, so the write occupancy is
+         * the honest upper bound, and a certificate that needs a smaller one is refused. The
+         * runtime check below still restricts the codec to what the schema admits.
+         */
+        term: { kind: 'opaq' },
+        admit: (value, at) => {
+            // the boundary: `validate` is code of another library, so a throw and a malformed
+            // answer each become a refusal here, and nothing past this line catches
+            try {
+                const answer = validate(value)
+                if (answer instanceof Promise) {
+                    return refused(
+                        at,
+                        side,
+                        '`validate` answered with a Promise, and a codec answers synchronously, so the value has no verdict',
+                    )
+                }
+                return answer.issues === undefined
+                    ? undefined
+                    : refused(
+                          at,
+                          side,
+                          answer.issues
+                              .map((issue) => issue.message)
+                              .join('; ') ||
+                              'the schema reported an issue with no message',
+                      )
+            } catch (thrown) {
+                return refused(
+                    at,
+                    side,
+                    `\`validate\` threw: ${thrown instanceof Error ? thrown.message : String(thrown)}`,
+                )
+            }
+        },
+    }
 }
 
 /**
@@ -2013,7 +2155,7 @@ export const undefinable = <const C extends AnyCodec>(
  * point**, in which case this is `inner`'s own pair, untouched.
  *
  * Without the guard the wrapper's `NULL` branch shadows the inner codec, and **(R)** fails on a
- * term the specification proves lawful: `nullable(held(nullable(string), adapter))`, where the
+ * term the specification proves lawful: `nullable(held(nullable(string), string, adapter))`, where the
  * adapter maps `'SENTINEL'` to `null`, writes `{ NULL: true }` for `'SENTINEL'` and reads back
  * `null`. The value written is not the value read. No declaration in this repository builds that
  * term and `held` is unemittable, so no generated vector could ever have found it.
@@ -2039,7 +2181,7 @@ export const nullable = <T, A extends AttributeValue>(
         throw new CodecError(
             `nullable: ${t.kind} decides the null point by running a function this cannot read, ` +
                 'so whether the union would be certified is unknown. ' +
-                'Write the wrapper inside instead, as in held(nullable(inner), adapter).',
+                'Write the wrapper inside instead, as in held(nullable(inner), outer, adapter).',
         )
     }
     if (owns) return inner as AttributeCodec<T | null, A | Attribute<'NULL'>>
@@ -4435,7 +4577,7 @@ export type Option = {
     /** The member it writes, where the kind alone decides — a cheap filter on decode. */
     readonly member: AttributeName | undefined
     /** The kinds of value it takes, where the kind alone decides — the same filter on encode. */
-    readonly carries: readonly Shape[] | undefined
+    readonly carries: readonly Shape[]
     /** The whole-item reading, for object options only. */
     readonly item: ItemCodec<Record<string, unknown>, unknown> | undefined
     /** The names it declares, for object options only. */

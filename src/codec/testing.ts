@@ -1590,12 +1590,12 @@ const show = (value: unknown): string =>
  * @example
  * ```ts
  * // adapting by the identity is the identity
- * checkEquivalent(held(string, { encode: (v: string) => v, decode: (v) => v }), string)
+ * checkEquivalent(held(string, string, { encode: (v) => v, decode: (v) => v }), string)
  *
  * // two adapters compose into one
  * checkEquivalent(
- *     held(held(decimal, inner), outer),
- *     held(decimal, { encode: (v) => inner.encode(outer.encode(v)), decode: ... }),
+ *     held(held(decimal, string, inner), string, outer),
+ *     held(decimal, string, { encode: (v) => inner.encode(outer.encode(v)), decode: ... }),
  * )
  * ```
  */
@@ -1927,8 +1927,8 @@ const byNames = (
  *
  * `κ` is read off the term, which is where it lives: {@link carries} is the kinds of value a
  * term takes and {@link member} the member it stores them in, both computed from the term and
- * neither from the union's matcher. Where a term answers neither, the filter is `⊤` and admission
- * is the attempt alone — which is the honest answer for a `custom` and is how one gets caught.
+ * neither from the union's matcher. Every term answers the kinds. Where a term names no member,
+ * the read filter is `⊤` and admission on that side is the attempt alone.
  */
 const byKindThenAttempt = (codec: AnyCodec): UnionOption => {
     const takes = valueKinds(codec.def)
@@ -1938,7 +1938,7 @@ const byKindThenAttempt = (codec: AnyCodec): UnionOption => {
         describe: codec.def?.kind ?? 'a codec',
         admitsValue: (value) => {
             const shape = shapeOf(value)
-            if (takes && shape && !takes.includes(shape)) return false
+            if (shape && !takes.includes(shape)) return false
             return !!written(codec, value)
         },
         admitsAttribute: (attribute) => {

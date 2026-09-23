@@ -162,7 +162,7 @@ describe('what is still refused', () => {
      * function is not the library's however much it looks alike.
      */
     it('refuses an adapter whose pair the model does not name', () => {
-        const adapted = held(string, {
+        const adapted = held(string, string, {
             encode: (value: string) => value,
             decode: (holding: string) => holding,
         })

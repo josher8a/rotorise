@@ -185,33 +185,29 @@ export type Term =
           readonly spread?: Term
           readonly suf: readonly Term[]
       }
-    /** §3 `(held)`: the iso, both halves, as the caller supplied them. */
+    /**
+     * §3 `(held)`: a conversion between two restrictions. `inner` restricts the stored side, and
+     * `outer` restricts the held side, which is the model's second term.
+     */
     | {
           readonly kind: 'held'
           readonly inner: Term
+          /**
+           * **The held side, as a term.** The write occupancy of a `held` is the occupancy of this
+           * term, as the model's `occV (held t P f g) = occV P` states. A library adapter records
+           * the base it hands to the caller. A foreign schema records `opaque`, the top, because
+           * the library cannot read which kinds of value a foreign schema admits.
+           */
+          readonly outer: Term
           readonly f: (value: never) => unknown
           readonly g: (held: never) => unknown
-          /**
-           * **The value slots the conversion lands in, where the adapter knows them.**
-           *
-           * `occV` answers the top for an adapter, because `f` is a function this library did not
-           * write and cannot read. That is honest for a caller's adapter and wrong for one this
-           * library ships: `number` and `decimal` are adapters over the one numeric base now, and
-           * an unknown write side costs a union its certificate and `nullable` its null point at
-           * every numeric field.
-           *
-           * So the adapter declares it rather than the reader deriving it — the same split the
-           * codebase already uses, where one side owns the fact and the other states an
-           * expectancy. Absent is the honest answer for an adapter nobody has declared.
-           */
-          readonly writes?: readonly SetSlot[]
           /**
            * **Which adapter this is, where the library ships it**, so a vector can cite the pair
            * by name. The emitter prints `held` only for a pair it recognises, the way it already
            * prints `isNumeral` and `isStoredNumeral` for the predicates: a caller's closure has
            * no name in the model and is refused.
            *
-           * Separate from {@link writes} on purpose. That says which slots the conversion lands
+           * Separate from {@link outer} on purpose. That says which slots the conversion lands
            * in and is read by the certificate; this says which named pair the model carries and
            * is read by the emitter. One of them can be known without the other.
            */
@@ -225,7 +221,7 @@ export type Term =
            * the element pair is gone, so a generator handed a set of `decimal` built the native
            * element codec and offered it a caller's string.
            *
-           * So the builder records what it already had. This is the same split as {@link writes}:
+           * So the builder records what it already had. This is the same split as {@link outer}:
            * one side owns the fact rather than a reader deriving what was never written down.
            * Absent for every adapter that is not a set, and for a caller's, which is the honest
            * answer there.
@@ -233,6 +229,7 @@ export type Term =
           readonly element?: {
               readonly f: (value: never) => unknown
               readonly g: (held: never) => unknown
+              readonly outer: Term
           }
           /**
            * **The generators, where the caller supplies them rather than the inner codec.**
@@ -480,17 +477,17 @@ const joined = <A>(
 }
 
 /**
- * `occV`: which value constructors a term may write, or `undefined` for every one of them.
+ * `occV`: which value constructors a term may write.
  *
  * An over-approximation on purpose. If `X ⊆ X′`, `Y ⊆ Y′` and `X′ ∩ Y′ = ∅` then `X ∩ Y = ∅`, so a
  * coarse answer costs a certificate and never buys a wrong one.
  *
- * The one `undefined` row is a `held` that declares no `writes`: its `f` runs *before* the subterm
- * and can move a value into any constructor. A `held` that declares its slots answers them.
- * `opaque` accepts every kind by design, and its row answers that closed form, not `undefined`.
+ * A `held` answers the occupancy of its held side, the term `outer`: the held side restricts
+ * every value that `f` receives. A foreign schema records `opaque` there, so the answer is every
+ * slot. `opaque` accepts every kind by design, and its row answers that closed form, not `undefined`.
  * `lazy` reads through the thunk to its subterm, as the model's `occV (.lazy t)` does.
  */
-export const occV = (t: Term): readonly SetSlot[] | undefined => {
+export const occV = (t: Term): readonly SetSlot[] => {
     switch (t.kind) {
         case 'string':
             return ['string']
@@ -510,9 +507,9 @@ export const occV = (t: Term): readonly SetSlot[] | undefined => {
             return ['array']
         case 'object':
             return ['map']
-        // an adapter answers with what it declared, and the top where it declared nothing
+        // the held side restricts every value `f` receives, as `occV (held t P f g) = occV P`
         case 'held':
-            return t.writes
+            return occV(t.outer)
         // a thunk carries a term, so it answers what that term answers. `Meet.lean` heads the
         // section `lazy` is transparent, and it constrains nothing: the model reads through on
         // both projections and only the member is lost
@@ -522,9 +519,9 @@ export const occV = (t: Term): readonly SetSlot[] | undefined => {
         case 'legacy':
             return occV(t.inner)
         case 'union':
-            return joined(t.options.map(occV))
+            return [...new Set(t.options.flatMap(occV))]
         // **A closed form, not `⊤`.** §5 separates the two things a `⊤` covers: *unknown*, which is
-        // a `held` that declares no slots, and *everything*, which is `opaque` by design. The
+        // the read side of a `legacy`, and *everything*, which is `opaque` by design. The
         // model takes the second as data — `occV .opaq` is `occTop` — so answering
         // `undefined` here would say "cannot be read" about the one term whose occupancy is fully
         // known, and {@link separable} would then decline to compare it.
@@ -569,16 +566,15 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
             return false
         case 'refine':
             return ownsNullOf(t.inner) === false ? false : undefined
-        // **An adapter that declared its write slots answers**, and one that did not cannot.
-        // The null point is a question about which slots the conversion lands in, which is
-        // exactly what the declaration states, so `nullable(decimal)` is answerable where
-        // `nullable` over a caller's adapter still is not.
+        // **Two questions, one per side.** The held side must not reach null, or a caller's
+        // null reaches `f`. The inner term must not reach null, or `f` can land a caller's value
+        // on `NULL`, as `held(nullable(string), …)` does. `nullable(decimal)` answers `false` on
+        // both, and a foreign schema records `opaque` on the held side, so its answer is unknown
         case 'held':
-            return t.writes === undefined
-                ? undefined
-                : !t.writes.includes('null')
-                  ? false
-                  : undefined
+            return ownsNullOf(t.outer) === false &&
+                ownsNullOf(t.inner) === false
+                ? false
+                : undefined
         case 'union': {
             const answers = t.options.map(ownsNullOf)
             return answers.some((one) => one === undefined)
@@ -711,22 +707,22 @@ export const literalsOf = (
  * and share an inner value, and the base can no longer tell a clause at one from a member at the
  * other.
  *
- * {@link Held.writes} is what parts them, because it is the slot the caller's value lands in:
- * `decimal` takes text and `number` takes a float over one carrier. So the form is the base
- * everywhere but `number`, and there it is the adapter's declared slot.
+ * The held side of the adapter is what parts them, because it is the slot the caller's value
+ * lands in: `decimal` takes text and `number` takes a float over one carrier. So the form is the
+ * base everywhere but `number`, and there it is read off the held side.
  */
 export type LiteralForm = LiteralBase | 'decimal' | 'dynamoNumber'
 
 /** @see {@link LiteralForm} */
 export const literalForm = (
     base: LiteralBase,
-    writes: readonly SetSlot[] | undefined,
+    outer: Term | undefined,
 ): LiteralForm =>
     base !== 'number'
         ? base
-        : writes === undefined
+        : outer === undefined
           ? 'dynamoNumber'
-          : writes.includes('string')
+          : occV(outer).includes('string')
             ? 'decimal'
             : 'number'
 
@@ -748,7 +744,7 @@ export type NameForm = {
  * every object union at a numeric name refuse every value, and the failure is a runtime refusal
  * rather than a type error.
  *
- * A caller's adapter declares no `writes`, so it pins nothing here either and a clause cannot
+ * An adapter whose held side is `opaque` pins nothing here either, and a clause cannot
  * name it. That is the same honest answer {@link identifies} gives.
  */
 export const clauseLiteralsOf = (
@@ -774,14 +770,15 @@ export const clauseLiteralsOf = (
  */
 export const clauseForm = (
     t: Term,
-    writes?: readonly SetSlot[],
+    outer?: Term,
 ): { readonly alts: Alternatives; readonly form: LiteralForm } | undefined => {
+    // an `opaque` held side admits every kind, so it names no form
     if (t.kind === 'held')
-        return t.writes === undefined
+        return t.outer.kind === 'opaq'
             ? undefined
-            : clauseForm(t.inner, t.writes)
+            : clauseForm(t.inner, t.outer)
     const alts = literalAlternatives(t)
-    return alts && { alts, form: literalForm(alts.base, writes) }
+    return alts && { alts, form: literalForm(alts.base, outer) }
 }
 
 /** …and the member's side, which reads through a refinement too. @see {@link clauseForm} */
@@ -1039,7 +1036,7 @@ export const restricts = (x: Term, y: Term): boolean => {
             unfolded.options
                 .filter(
                     (option) =>
-                        !(occV(option) ?? everySlot).some(
+                        !occV(option).some(
                             (slot) => slot === 'number' || slot === 'numSet',
                         ),
                 )
@@ -1152,7 +1149,7 @@ const objectMembers = (
  * `dynamoNumber(2, 3)`, which are disjoint and so resolvable; `number(0.1)` and `decimal('0.1')`
  * become the same `dynamoNumber(0.1)`, and no stored attribute can ever choose between them.
  *
- * {@link clauseForm} is the descent, so an adapter that declares no `writes` pins nothing here and
+ * {@link clauseForm} is the descent, so an adapter whose held side is `opaque` pins nothing here and
  * is never certified.
  */
 const carrierDisjoint = (x: Term, y: Term): boolean =>
@@ -1241,18 +1238,16 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * every pair it certifies, this row already accepts, and the row accepts twenty corpus pairs the
  * model does not certify. {@link identifies} names the three groups.
  *
- * **An occupancy that is unknown.** A `held` that declares no `writes` has an unknown write side,
- * because its `f` runs before the subterm and can move a value into any constructor. A `legacy`
- * has an unknown read side, because its `r` widens exactly the reading. A `lazy` is transparent,
+ * **An occupancy that is unknown.** A `legacy` has an unknown read side, because its `r` widens exactly the reading. A `lazy` is transparent,
  * so its occupancies are its subterm's. The model certifies no pair on an unknown side. This
  * function takes the other direction, as the first paragraph states: an unknown side is not a
  * meeting, so the known side decides. Every option of a `union` has a term, so this function
  * takes two terms and has no row for one that is missing.
  *
  * **There is no `opaque` row, and its removal is the rule this function most recently learned.**
- * §5 separates the two things a `⊤` covers: *unknown* — the write side of a `held` that declares
- * no `writes` and the read side of a `legacy`, whose answer exists and cannot be read — and *everything*, which is `opaque`, accepting every kind by
- * design. The model states the second as a **closed form**, `occTop` at the total `opaq`, so
+ * §5 separates the two things a `⊤` covers: *unknown* — the read side of a `legacy`, whose answer
+ * exists and cannot be read — and *everything*, which is `opaque`, accepting every kind by
+ * design. A `held` over a foreign schema is the second: its held side is `opaque`. The model states the second as a **closed form**, `occTop` at the total `opaq`, so
  * it can be compared; this library read it as `⊤` and exempted it instead, which
  * meant `union([opaque, X])` declared.
  *
@@ -1265,9 +1260,9 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * **Otherwise the two occupancies, both sides conjoined.** A pair separated on one side only is not
  * separated: the loosened form ships `union([decimal, number])`, which writes `'1.5'` to an `N` and
  * cannot read back what it wrote, because `decimal` takes a string and `number` a number while both
- * store `N`. The model's `Orth1` tests the write side alone, because there `occA_le_occV` puts the
- * read occupancy inside the write occupancy. Here a `held` declares its `writes`, and `decimal` writes
- * a string and reads an `N`, so the read side is a second question.
+ * store `N`. The model's `Orth1` asks the write side and the read side, because a `held` writes
+ * where its held side does and reads where its inner term does: `decimal` writes a string and
+ * reads an `N`.
  */
 export const separable = (x: Term, y: Term): boolean => {
     // **Containment first.** The three {@link restricts} rows name a literal, a set of a literal
@@ -2004,11 +1999,18 @@ export const elementAdapter = (
     | {
           readonly f: (value: never) => unknown
           readonly g: (held: never) => unknown
+          readonly outer: Term
       }
     | undefined => {
     switch (elem.kind) {
         case 'held':
-            return elementAdapter(elem.inner) ?? { f: elem.f, g: elem.g }
+            return (
+                elementAdapter(elem.inner) ?? {
+                    f: elem.f,
+                    g: elem.g,
+                    outer: elem.outer,
+                }
+            )
         case 'refine':
             return elementAdapter(elem.inner)
         default:

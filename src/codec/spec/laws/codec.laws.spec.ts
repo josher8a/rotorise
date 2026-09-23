@@ -68,7 +68,7 @@ describe('held', () => {
     const identity = { encode: (v: string) => v, decode: (v: string) => v }
 
     it('by the identity is the codec itself', () => {
-        checkEquivalent(held(string, identity), string, { seed })
+        checkEquivalent(held(string, string, identity), string, { seed })
     })
 
     /** Two adapters in sequence are one adapter, composed in the order they are applied. */
@@ -82,8 +82,8 @@ describe('held', () => {
             decode: (v: string) => v.toLowerCase(),
         }
         checkEquivalent(
-            held(held(string, trim), upper),
-            held(string, {
+            held(held(string, string, trim), string, upper),
+            held(string, string, {
                 encode: (v: string) => trim.encode(upper.encode(v)),
                 decode: (v) => upper.decode(trim.decode(v)),
             }),
@@ -94,7 +94,7 @@ describe('held', () => {
     it('leaves what is stored alone, which is the whole of what it claims', () => {
         expect(
             memberWritten(
-                held(string.set(), {
+                held(string.set(), array(string), {
                     encode: (tags: readonly string[]) => new Set(tags),
                     decode: (tags) => [...tags],
                 }) as AnyCodec,
@@ -103,7 +103,7 @@ describe('held', () => {
         ).toBe('SS')
         expect(
             memberWritten(
-                held(decimal, {
+                held(decimal, number, {
                     encode: String,
                     decode: Number,
                 }) as AnyCodec,
@@ -185,7 +185,7 @@ describe('the obligations a caller owes', () => {
      * obligation rather than an unknown one.
      */
     it('held: an adapter that normalises breaks (R), and nothing refuses it', () => {
-        const normalising = held(string, {
+        const normalising = held(string, string, {
             encode: (v: string) => v.toUpperCase(),
             decode: (v: string) => v,
         })
@@ -433,20 +433,37 @@ describe('nullable', () => {
             encode: (v: string) => (v === 'SENTINEL' ? null : v),
             decode: (v: string | null) => (v === null ? 'SENTINEL' : v),
         }
-        expect(() => nullable(held(nullable(string), adapter))).toThrow(
-            /held\(nullable\(inner\), adapter\)/,
+        expect(() => nullable(held(nullable(string), string, adapter))).toThrow(
+            /held\(nullable\(inner\), outer, adapter\)/,
         )
+    })
+
+    /**
+     * **A held side and an inner term that both exclude null let `nullable` add the point.** The
+     * held side restricts what the caller hands in, and the inner term restricts where `f` lands,
+     * so neither can reach `NULL` and the added option owns it alone.
+     */
+    it('adds the null point to an adapter whose held side and inner term exclude null', () => {
+        const trimmed = nullable(
+            held(string, string, {
+                encode: (v: string) => v.trim(),
+                decode: (v: string) => v,
+            }),
+        )
+        expect(trimmed.unsafeEncode(null)).toEqual({ NULL: true })
+        expect(trimmed.unsafeDecode({ NULL: true })).toBeNull()
+        expect(trimmed.unsafeEncode('a')).toEqual({ S: 'a' })
     })
 
     /**
      * **…and the spelling it names round-trips.**
      *
-     * `held(nullable(inner), adapter)` puts the point inside the adapter rather than outside it, so
+     * `held(nullable(inner), outer, adapter)` puts the point inside the adapter rather than outside it, so
      * the adapter's `null` is the inner term's own `NULL` and there is one writer of the point.
      * This is the term the refusal above points at, and it is a law that must hold.
      */
     it('and the null point inside the adapter round-trips through it', () => {
-        const sentinel = held(nullable(string), {
+        const sentinel = held(nullable(string), string, {
             encode: (v: string) => (v === 'SENTINEL' ? null : v),
             decode: (v: string | null) => (v === null ? 'SENTINEL' : v),
         })
@@ -466,7 +483,11 @@ describe('what the wrappers preserve', () => {
      * honest: an index key's attribute type cannot change because somebody wrapped it.
      */
     it.each([
-        ['held', held(decimal, { encode: String, decode: Number }), 1.5],
+        [
+            'held',
+            held(decimal, number, { encode: String, decode: Number }),
+            1.5,
+        ],
         ['refine', refine(decimal, (_v): _v is string => true), '1.5'],
         [
             'required slot without a stand-in',
@@ -530,8 +551,8 @@ describe('the laws that do NOT hold', () => {
         }
 
         // the check underneath sees what is *stored*; the check outside sees what is *held*
-        const checkedInside = held(refine(string, short), adapt)
-        const checkedOutside = refine(held(string, adapt), short)
+        const checkedInside = held(refine(string, short), string, adapt)
+        const checkedOutside = refine(held(string, string, adapt), short)
 
         expect(() => checkedInside.unsafeDecode({ S: 'abcabc' })).toThrow(
             CodecError,
@@ -836,7 +857,7 @@ describe('`accepts`, and the direction of the law that is true', () => {
         ['refine', refine(string, isTag, { arbitrary: () => 't-x' as const })],
         [
             'held',
-            held(string.set(), {
+            held(string.set(), array(string), {
                 encode: (tags: readonly string[]) => new Set(tags),
                 decode: (tags: ReadonlySet<string>) => [...tags],
             }),
@@ -1003,7 +1024,7 @@ describe('`accepts`, and the direction of the law that is true', () => {
         expect(accepts(string.set(), new Set())).toBe(false)
 
         // `held` is asked about the value it holds, and its adapter throws on one it does not own
-        const asSet = held(string.set(), {
+        const asSet = held(string.set(), array(string), {
             encode: (tags: readonly string[]) => new Set(tags),
             decode: (tags: ReadonlySet<string>) => [...tags],
         })

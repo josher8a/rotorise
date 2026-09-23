@@ -52,7 +52,7 @@
  */
 import type { AttributeValue } from './attribute'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
-import type { AnyCodec, LiteralValue, ObjectSlot, SetSlot } from './codec'
+import type { AnyCodec, LiteralValue, ObjectSlot } from './codec'
 import { union } from './codec'
 import { accepts, readsBack } from './denote'
 import { failed } from './result'
@@ -419,11 +419,9 @@ const shippedPredicates: ReadonlyMap<unknown, ShippedPredicate> = new Map<
 const writesOnlyStrings = (t: Term | undefined): boolean => {
     if (!t) return false
     if (t.kind === 'string') return true
-    // an adapter answers from what it declared: `decimal` hands the caller text, so a refinement
+    // an adapter answers from its held side: `decimal` hands the caller text, so a refinement
     // outside it tests a string even though the base beneath writes a numeral
-    if (t.kind === 'held') {
-        return t.writes?.every((slot) => slot === 'string') ?? false
-    }
+    if (t.kind === 'held') return writesOnlyStrings(t.outer)
     // read off the base rather than off the values. `decimal` was the second base writing text
     // and is an adapter over `number` now, so `string` is the only one left
     if (t.kind === 'literal') {
@@ -746,7 +744,7 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
          */
         case 'held':
             return t.via === 'decimalText'
-                ? `(Term.held (${leanTermOfTerm(t.inner, at, forced)}) (${leanCallerSide(t.writes, at)}) numeralOfStoredText textOfNumeral)`
+                ? `(Term.held (${leanTermOfTerm(t.inner, at, forced)}) (${leanTermOfTerm(t.outer, at, forced)}) numeralOfStoredText textOfNumeral)`
                 : refuse(
                       at,
                       "`Term.held` carries two `Value → Value` functions. The library ships one pair the model names, `numeralOfStoredText`/`textOfNumeral`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted",
@@ -757,51 +755,6 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
                 '`Term.legacy` carries `r : Attr → Option Value`; the definition carries the older reading now, and it is a JS closure, which no `Term` prints',
             )
     }
-}
-
-/** The base term that writes exactly the values of one slot, where one exists. */
-const callerSideSlot: { readonly [S in SetSlot]: string | undefined } = {
-    string: 'Term.string',
-    number: 'Term.number',
-    boolean: 'Term.boolean',
-    binary: 'Term.binary',
-    null: 'Term.null',
-    strSet: 'Term.set SetBase.string',
-    numSet: 'Term.set SetBase.number',
-    binSet: 'Term.set SetBase.binary',
-    array: undefined,
-    map: undefined,
-}
-
-/**
- * **The caller-side term of a `held`**, from the slots its adapter declares.
- *
- * The model's `held` carries the restriction of the caller side as a term, and `writes` is where
- * the host states that restriction. One slot is its base term, and several slots are the union
- * of their base terms. An adapter that declares no slot has no caller-side term, and the emitter
- * refuses it rather than print the top in place of a restriction nobody stated.
- */
-const leanCallerSide = (
-    writes: readonly SetSlot[] | undefined,
-    at: string,
-): string => {
-    if (writes === undefined || writes.length === 0) {
-        return refuse(
-            at,
-            '`Term.held` carries the caller-side restriction as a term, and this adapter declares no `writes`, so the restriction has no spelling',
-        )
-    }
-    const terms = writes.map(
-        (slot) =>
-            callerSideSlot[slot] ??
-            refuse(
-                at,
-                `the adapter declares the slot \`${slot}\`, and no base term writes exactly that slot`,
-            ),
-    )
-    return terms.length === 1
-        ? `${terms[0]}`
-        : `Term.union [${terms.join(', ')}]`
 }
 
 /**
