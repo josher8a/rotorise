@@ -11,7 +11,15 @@ import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
 import { DynamoNumber } from '../../attribute'
 import type { AnyCodec } from '../../codec'
-import { array, dynamoNumber, object, string, union } from '../../codec'
+import {
+    array,
+    CodecError,
+    dynamoNumber,
+    lazy,
+    object,
+    string,
+    union,
+} from '../../codec'
 import { failed } from '../../result'
 
 type Erased = {
@@ -141,5 +149,60 @@ describe('a union of compatible options gives one answer whatever the option ord
         expect(answers?.[1]).toEqual({
             M: { kind: { S: 'y' }, a: { S: '1' } },
         })
+    })
+
+    // `lazy` is transparent: a thunk of a held-free term is held-free, as the model's `HF` reads
+    it('writes and reads a held-free option beside a thunk of a held-free option the same way in each order', () => {
+        const values = ['A', 'B']
+        const attributes: AttributeValue[] = [
+            { S: 'A' },
+            { S: 'B' },
+            { N: '1' },
+        ]
+        const answers = sameUnderEveryOrder(
+            [string('A'), lazy(() => string)],
+            (codec) => [
+                ...values.map((v) => codec.encode(v)),
+                ...attributes.map((a) => codec.decode(a)),
+            ],
+        )
+        expect(answers?.slice(0, 2)).toEqual([{ S: 'A' }, { S: 'B' }])
+    })
+})
+
+describe('a union refuses a thunk it must read and cannot, because the model has no recursive term', () => {
+    it('refuses a union whose thunk names the union itself, and ends', () => {
+        const declare = () => {
+            const self: AnyCodec = union([
+                string,
+                lazy(() => self as never),
+            ] as unknown as readonly AnyCodec[])
+            return self
+        }
+        expect(declare).toThrow(CodecError)
+    })
+
+    // a thunk below a list names the union being declared, so the walk meets the thunk again
+    it('ends beside a union that recurses below a list, and refuses where the options overlap', () => {
+        const json: AnyCodec = union([
+            string,
+            array(lazy(() => json as never)),
+        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+        expect(() =>
+            union([dynamoNumber, json] as unknown as readonly AnyCodec[]),
+        ).not.toThrow()
+        expect(() =>
+            union([array(string), json] as unknown as readonly AnyCodec[]),
+        ).toThrow(CodecError)
+    })
+
+    it('accepts recursion below an object, where the union reads no thunk', () => {
+        const tree: AnyCodec = object({
+            v: string,
+            kids: array(lazy(() => tree as never)),
+        }) as unknown as AnyCodec
+        expect(() =>
+            union([string, tree] as unknown as readonly AnyCodec[]),
+        ).not.toThrow()
     })
 })
