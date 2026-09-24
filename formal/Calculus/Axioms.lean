@@ -131,10 +131,6 @@ combinator, and the pair agrees on the nose. -/
 /-! §1's two number gates, as instances of the same combinator. `restrict` gates both
 halves by construction, which is what §3 argues an ad-hoc gate forgets. -/
 
-/-! `(union)`'s residue, and the bridge every discharger now crosses. The two witnesses
-are one union seen by both residues: `UAtCan` refutes it at an input it never writes,
-`UAtAct` holds of it. -/
-
 /-! `through_p` is the fact the `held` row rests on — `g` post-processes a read and is
 total, so `dom(p)` is the subterm's exactly. It is cited as a result now, so it is guarded
 like one. -/

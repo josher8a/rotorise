@@ -3,17 +3,10 @@ import Calculus.ExactA
 /-!
 # Orthogonality — a decidable certificate for §5's (U)
 
-`Typed.union` and `Obligations (.union opts)` between them carry two side conditions the
-model has been discharging by hand, once per shape: `DIncomp` (§5's (D)) and `UAtAct` (§5's
-residual (U)). Thirty-two `sep*`/`uAtCan_*`/`uAtAct_*` theorems live in `Discharge.lean` and
-`ExactV.lean` and `ExactA.lean` — not in `Refutations.lean`, whose separation theorems are all
-`not_sep*` and
-are refutations rather than discharges. Twenty-five of the thirty-two are the per-shape hand
-discharges; the other seven are the two generic dischargers, the ~~SepV~~→`SepJV` bridges, the
-`refine`-family discharger, and the two `object` witnesses that existed in order to *fail*.
-**Thirteen of the twenty-five are the *same rule* at different
-constructors**, and the by-phase table at the end of this file is that count, measured rather
-than estimated.
+`Obligations (.union opts)` carries pairwise compatibility. Two orthogonal options are
+compatible (`pairwiseCompat_of_orth`), and they admit uniquely (`uAtCan_of_orth`). Many hand
+discharges in `Discharge.lean` were the *same rule* at different constructors, and the by-phase
+table at the end of this file records which are left.
 
 `Orth` is that rule, written once. It is a **phase classifier**: given a pair of terms it
 answers whether there is a *syntactic certificate* that they cannot both admit one input.
@@ -200,8 +193,8 @@ mutual
       a subset of what the base writes.
     * An alternate reader (`Codec.extendRead`) is outside the structural classifier.
     * `opaq` — every slot, because `opaque` writes every value (`opaq_total`).
-    * `union opts` — the union of the options'. `select` admits only where *exactly one*
-      option does, so the union of the options' occupancies is an over-approximation. -/
+    * `union opts` — the union of the options'. A union admits only where one of its options
+      admits, so the union of the options' occupancies is an over-approximation. -/
 def occV : Term → Slot → Bool
   | .string  => occOnly .str
   | .number  => occOnly .num
@@ -441,41 +434,22 @@ theorem specOf_none_admitOptV {t : Term} (v : Value) :
 theorem specOf_none_admitOptA {t : Term} (a : Attr) :
     admitOptA (specOf t, AdmA t) a = AdmA t a := by simp only [admitOptA]
 
-/-- `selOptV`'s singleton, as the option it lands on — `selOptV_le_AdmAny` in the vocabulary
-    the recursion needs. `AdmAny` is not enough here: at an *object* option the admission is
-    `keysOk` and not `Adm`, so the union case has to hand its induction hypothesis the
-    option's own test. -/
+/-- `selOptV`'s disjunction, as an option it lands on. `AdmAny` is not enough here: at an
+    *object* option the admission is `keysOk` and not `Adm`, so the union case has to hand its
+    induction hypothesis the option's own test. -/
 theorem selOptV_mem_admitOpt {opts : List Term} {v : Value}
     (h : selOptV (AdmSpecs opts) v = true) :
     ∃ t ∈ opts, admitOptV (specOf t, Adm t) v = true := by
-  simp only [selOptV, AdmSpecs_eq] at h
-  cases hf : (opts.map fun t => (specOf t, Adm t)).filter (fun o => admitOptV o v) with
-  | nil => rw [hf] at h; exact absurd h (by simp)
-  | cons o rest =>
-    cases rest with
-    | cons _ _ => rw [hf] at h; exact absurd h (by simp)
-    | nil =>
-      have hmemf : o ∈ (opts.map fun t => (specOf t, Adm t)).filter
-          (fun o => admitOptV o v) := by rw [hf]; simp
-      have hadm : admitOptV o v = true := (List.mem_filter.mp hmemf).2
-      obtain ⟨t, ht, rfl⟩ := List.mem_map.mp (List.mem_of_mem_filter hmemf)
-      exact ⟨t, ht, hadm⟩
+  simp only [selOptV, AdmSpecs_eq, List.any_eq_true, List.mem_map] at h
+  obtain ⟨_, ⟨t, ht, rfl⟩, hadm⟩ := h
+  exact ⟨t, ht, hadm⟩
 
 theorem selOptA_mem_admitOpt {opts : List Term} {a : Attr}
     (h : selOptA (AdmASpecs opts) a = true) :
     ∃ t ∈ opts, admitOptA (specOf t, AdmA t) a = true := by
-  simp only [selOptA, AdmASpecs_eq] at h
-  cases hf : (opts.map fun t => (specOf t, AdmA t)).filter (fun o => admitOptA o a) with
-  | nil => rw [hf] at h; exact absurd h (by simp)
-  | cons o rest =>
-    cases rest with
-    | cons _ _ => rw [hf] at h; exact absurd h (by simp)
-    | nil =>
-      have hmemf : o ∈ (opts.map fun t => (specOf t, AdmA t)).filter
-          (fun o => admitOptA o a) := by rw [hf]; simp
-      have hadm : admitOptA o a = true := (List.mem_filter.mp hmemf).2
-      obtain ⟨t, ht, rfl⟩ := List.mem_map.mp (List.mem_of_mem_filter hmemf)
-      exact ⟨t, ht, hadm⟩
+  simp only [selOptA, AdmASpecs_eq, List.any_eq_true, List.mem_map] at h
+  obtain ⟨_, ⟨t, ht, rfl⟩, hadm⟩ := h
+  exact ⟨t, ht, hadm⟩
 
 /-- Only an object has a name spec — the fact that lets the `admitOptV` wrapper below split
     into two cases instead of twenty-one. -/
@@ -867,8 +841,7 @@ These two are the rule, uniform in the base and on both halves. -/
 
     The nonemptiness is what makes this a `set` fact rather than a container fact. An `array`
     admits `[]`, which passes every element predicate vacuously, and that is exactly why
-    `not_uAtCan_array_literals` holds and `uAtAct_array_literals` is the most that pair
-    meets. -/
+    `not_uAtCan_array_literals` holds. -/
 theorem inLs_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
     (hd : ∀ x ∈ ls.1, x ∉ ls'.1) (v : Value)
     (h : inLs k ls v = true) : inLs k ls' v = false := by
@@ -1146,14 +1119,9 @@ theorem uAtCan_of_separated {opts : List Term}
     rw [optionSemOf_c] at he
     exact optionSem_self_admit t (hlaw t ht) he
 
-/-- **Pairwise separation is the structural certificate**, which is (U)'s premise read as a
-    counting fact rather than as a singleton one.
-
-    `UniqueBothWays` asks that a filter *is* `[o]`; `AdmitsAtMostOne` asks only that no filter is
-    longer than one. The second is what `uAtAct_sublist` needs, because it is monotone under a
-    sub-selection where the first is not. Every phase supplies it at once: separation says no two
-    options admit one input, and admission implies occupancy through `occV_sound`, so the two
-    conjuncts of `OrthSV` are both in hand.
+/-- **Pairwise separation bounds the admitters at one.** Separation says no two options admit
+    one input, and admission implies occupancy through `occV_sound`, so the two conjuncts of
+    `OrthSV` are both in hand.
 
     Stated on `Separated` and not on `OrthS`, because the argument reads none of the phases. -/
 theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated opts) :
@@ -1186,7 +1154,7 @@ theorem separated_of_orth {opts : List Term}
     (h : List.Pairwise (fun x y => Orth x y = true) opts) : Separated opts :=
   h.imp separates_of_orth
 
-/-- …and from the decidable classifier, which is the form `uAtAct_sublist` takes at a call site. -/
+/-- …and from the decidable classifier. -/
 theorem admitsAtMostOne_of_orth {opts : List Term}
     (h : List.Pairwise (fun x y => Orth x y = true) opts) :
     AdmitsAtMostOne (semsOf opts) :=
@@ -1201,20 +1169,48 @@ theorem uAtCan_of_orth {opts : List Term}
     UAtCan opts :=
   uAtCan_of_separated hlaw (separated_of_orth h)
 
-/-- …and the residue the laws actually need. -/
-theorem uAtAct_of_orth {opts : List Term}
+/-- Two members that both meet `P`, in a list where no related pair both meets `P`, are one. -/
+theorem eq_of_pairwise_excl {α : Type} {P : α → Prop} {R : α → α → Prop}
+    (hR : ∀ x y, R x y → P x → P y → False) :
+    ∀ {l : List α}, l.Pairwise R → ∀ x ∈ l, ∀ y ∈ l, P x → P y → x = y
+  | [], _, _, hx, _, _, _, _ => nomatch hx
+  | h :: tl, hp, x, hx, y, hy, px, py => by
+    have hp' := List.pairwise_cons.mp hp
+    rcases List.mem_cons.mp hx with rfl | hx' <;> rcases List.mem_cons.mp hy with rfl | hy'
+    · rfl
+    · exact (hR _ _ (hp'.1 y hy') px py).elim
+    · exact (hR _ _ (hp'.1 x hx') py px).elim
+    · exact eq_of_pairwise_excl hR hp'.2 x hx' y hy' px py
+
+/-- **Pairwise separation gives the union's obligation.** No input reaches two separated
+    options, so an option never acts where another reads. -/
+theorem pairwiseCompat_of_separated {opts : List Term}
+    (hlaw : ∀ t ∈ opts, Lawful (denote t)) (h : Separated opts) : PairwiseCompat opts := by
+  intro s hs t ht a v hp hact
+  have hsA : admitOptA (specOf s, AdmA s) a = true := (AdmA_exact s a).mpr (by rw [hp]; rfl)
+  have hsV : admitOptV (specOf s, Adm s) v = true := (Adm_exact s v).mpr ((hlaw s hs).canon hp)
+  have hst : t = s := by
+    rcases hact with hq | he
+    · have htA : admitOptA (specOf t, AdmA t) a = true := (AdmA_exact t a).mpr hq
+      exact eq_of_pairwise_excl (P := fun u => OrthSA u a) (fun x y hxy px py => hxy.2 a px py)
+        h t ht s hs ⟨occA_admitOpt (occA_sound t) a htA, htA⟩
+        ⟨occA_admitOpt (occA_sound s) a hsA, hsA⟩
+    · have htV : admitOptV (specOf t, Adm t) v = true := (Adm_exact t v).mpr he
+      exact eq_of_pairwise_excl (P := fun u => OrthSV u v) (fun x y hxy px py => hxy.1 v px py)
+        h t ht s hs ⟨occV_admitOpt (occV_sound t) v htV, htV⟩
+        ⟨occV_admitOpt (occV_sound s) v hsV, hsV⟩
+  subst hst; exact hp
+
+/-- …and from the decidable classifier. -/
+theorem pairwiseCompat_of_orth {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (h : List.Pairwise (fun x y => Orth x y = true) opts) :
-    UAtAct opts :=
-  uAtAct_of_uAtCan (uAtCan_of_orth hlaw h)
+    (h : List.Pairwise (fun x y => Orth x y = true) opts) : PairwiseCompat opts :=
+  pairwiseCompat_of_separated hlaw (separated_of_orth h)
 
 /-! ## The same certificate, on the held sets
 
-`separates_of_orth` above is stated on `Adm`, which is what an option **writes**. §5's (D) is
-stated on held sets. At a derivable term the two are one set (`typed_T_adm`), and
-`dincomp_of_admDisj` reads (D) off disjoint admission. At a codec that no derivation reaches
-they differ: `select` writes nothing where two options admit, and the held set keeps the value
-(`TIsDomE`, `not_TIsDomE_unionLiteralString`).
+`separates_of_orth` above is stated on `Adm`, which is what an option **writes**. Disjointness
+of held sets is stated on held sets. At a derivable term the two are one set (`typed_T_adm`).
 
 The mirror below re-runs each phase against the judgement, with no induction over the
 judgement. It needs the value half
@@ -1264,7 +1260,7 @@ theorem typed_occV : ∀ {t T μ}, Typed t T μ → ∀ v, T v → occV t v.slot
     | @refine t' T' μ' q h' => exact typed_occV h' v hv.1
     | @lazy t' T' μ' h' => exact typed_occV h' v hv
     | opaq => rfl
-    | @union opts Ts μs h' _ =>
+    | @union opts Ts μs h' =>
         obtain ⟨T', hT', hv'⟩ := hv
         exact typed_occVL h' (fun t' _ _ _ hty w hw => typed_occV hty w hw) v T' hT' hv'
 termination_by t _ _ _ _ => Term.depth t
@@ -1571,8 +1567,7 @@ theorem held_disj_of_OrthS {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
             case _ => exact absurd hd (by simp)
 
 /-- **The certificate separates held sets.** Whichever phase found the certificate, two
-    derivable closed options hold no value in common. This is what `Typed.union`'s (D) takes,
-    in the disjointness form `dincomp_of_disjoint` reads. -/
+    derivable closed options hold no value in common. -/
 theorem separates_held_of_orth {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
     (h : Orth x y = true)
     (hx : Typed x Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty := by
@@ -1726,7 +1721,6 @@ Where the hand proofs sit, and the two that sit nowhere. `Orth` is the decidable
 | `sepJV_set_literals` | alternatives | `OrthL`'s set rows, and on both halves where the hand proof is `SepJV` |
 | ~~uAtCan_dunion~~ | tag | the constructor is gone: a dissection is a certified `union`, and phase *literals* certifies it |
 | `uAtCan_opaque` | kind | one level below the term language |
-| `uAtAct_array_literals` | none: `UAtCan` itself is false | never — there is nothing to certify |
 
 **The rows that are gone were the reason this table was worth having.** Every discharge in
 phase *slot*, and the string-base half of phase *alternatives*, was a hand proof stated on the
@@ -1739,18 +1733,14 @@ pass through `lazy` by definition, so the fact is the rows' rather than a theore
 phase *alternatives*, and the two constructors below the term language: the table has stopped
 being a map of duplicated work and is now a list of what only exists by hand.
 
-**Two fit no phase of the classifier, and each is a limit worth naming** — a different limit
-from the row above them, where the phase is `none` because `UAtCan` is false and there is no
-orthogonality to certify at all.
+**One fits no phase of the classifier, and the limit is worth naming.**
 
 An alternate reader (`Codec.extendRead`) stays outside `Term`. `extendRead_reads_n` shows an
 alternate reader can read a numeric attribute through a string core. `Orth` classifies current terms only.
 
-`uAtAct_array_literals` is out of reach **by strength, not by phase**: `Orth` produces
-`UAtCan`, and that pair genuinely fails `UAtCan` (`not_uAtCan_array_literals` — both options
-admit `[]`) while meeting `UAtAct`, because the *union* declines the empty array. Nothing that
-holds only where the union acts can be certified per-option, which is what a syntactic
-certificate on a pair of terms is. That gap is where the working container schemas sit. -/
+A union whose options share a value is out of reach of the certificate, and needs none:
+`union(array(literal "A"), array(literal "B"))` fails `UAtCan` (`not_uAtCan_array_literals` —
+both options admit `[]`), and its options are compatible (`pairwiseCompat_array_literals`). -/
 
 /-- The end-to-end shape, from one `decide` — and since the hand proof it used to restate
     was retired with the per-aspect layer, this is now where `UAtCan [string, null]` is

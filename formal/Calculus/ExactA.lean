@@ -36,11 +36,9 @@ abbrev AP := Attr → Bool
     goes unread here; `Orth` still reads it. -/
 def admitOptA (o : Option (BodySpec) × AP) (a : Attr) : Bool := o.2 a
 
-/-- …and the same count. -/
+/-- …and the same disjunction. -/
 def selOptA (os : List (Option (BodySpec) × AP)) (a : Attr) : Bool :=
-  match os.filter (fun o => admitOptA o a) with
-  | [o] => o.2 a
-  | _ => false
+  os.any (fun o => admitOptA o a)
 
 def allPA (P : AP) : List Attr → Bool
   | [] => true
@@ -137,7 +135,7 @@ noncomputable def AdmA : Term → Attr → Bool
   | .lazy t   => AdmA t
   | .refine t p => fun a => AdmA t a && refineReads t p.eval a
   -- hatch
-  -- the read side of the same count; every option, object included, is admitted by attempt
+  -- the read side of the same disjunction; every option, object included, is admitted by attempt
   | .union opts => fun a => selOptA (AdmASpecs opts) a
   -- **the row that used to admit all three wire families whatever the element term was.**
   -- With the base an index the family is a function of it, so this names one — and at
@@ -218,21 +216,18 @@ theorem AdmAAny_of_mem {t : Term} {ts : List Term} {a : Attr} (ht : t ∈ ts)
     · simp [AdmAAny_cons, h]
     · simp [AdmAAny_cons, ih h']
 
-/-- The count implies the disjunction — see `selOptV_le_AdmAny`. -/
+/-- The row is the disjunction — see `selOptV_eq_AdmAny`. -/
+theorem selOptA_eq_AdmAAny (opts : List Term) (a : Attr) :
+    selOptA (AdmASpecs opts) a = AdmAAny opts a := by
+  rw [AdmASpecs_eq]
+  induction opts with
+  | nil => rfl
+  | cons t ts ih => simp only [selOptA, List.map_cons, List.any_cons] at ih ⊢; rw [ih]; rfl
+
+/-- …read as the implication the containments need. -/
 theorem selOptA_le_AdmAAny {opts : List Term} {a : Attr}
-    (h : selOptA (AdmASpecs opts) a = true) : AdmAAny opts a = true := by
-  simp only [selOptA, AdmASpecs_eq] at h
-  cases hf : (opts.map fun t => (specOf t, AdmA t)).filter (fun o => admitOptA o a) with
-  | nil => rw [hf] at h; exact absurd h (by simp)
-  | cons o rest =>
-    cases rest with
-    | cons _ _ => rw [hf] at h; exact absurd h (by simp)
-    | nil =>
-      rw [hf] at h
-      have hmem : o ∈ opts.map fun t => (specOf t, AdmA t) :=
-        (mem_of_filter_eq_singleton hf).1
-      obtain ⟨t, ht, rfl⟩ := List.mem_map.mp hmem
-      exact AdmAAny_of_mem ht h
+    (h : selOptA (AdmASpecs opts) a = true) : AdmAAny opts a = true :=
+  selOptA_eq_AdmAAny opts a ▸ h
 
 /-- `AdmA`'s literal row, named — for the reason `Adm_literal` gives. -/
 @[simp] theorem AdmA_literal (k : GroundKind) (x : k.Carrier) (a : Attr) :
@@ -290,17 +285,6 @@ theorem admitOptA_eq {t : Term} (h : ExactA t) (a : Attr) :
   simp only [optionSemOf, OptionSem.byAttempt]
   exact Bool.coe_iff_coe.mp (by simpa using (h a).symm)
 
-/-- The row's own filter, pushed through the map. -/
-theorem filter_map_AdmASpecs (opts : List Term) (a : Attr) :
-    (opts.map fun t => (specOf t, AdmA t)).filter (fun o => admitOptA o a)
-      = (opts.filter fun t => admitOptA (specOf t, AdmA t) a).map
-          fun t => (specOf t, AdmA t) := by
-  induction opts with
-  | nil => rfl
-  | cons t ts ih =>
-    simp only [List.map_cons, List.filter_cons, ih]
-    cases hb : admitOptA (specOf t, AdmA t) a <;> simp []
-
 /-- `select`'s filter is the term list's, mapped — `filter_AdmSpecs`'s twin. -/
 theorem filter_AdmASpecs {opts : List Term} (h : ∀ t ∈ opts, ExactA t) (a : Attr) :
     (optionSems opts).filter (·.admitA a)
@@ -314,24 +298,44 @@ theorem filter_AdmASpecs {opts : List Term} (h : ∀ t ∈ opts, ExactA t) (a : 
     simp only [optionSems, List.filter_cons, admitOptA_eq ht, ih hts]
     cases hb : admitOptA (specOf t, AdmA t) a <;> simp []
 
+/-- **An attempted union reads exactly where one of its options reads.** -/
+theorem select_isSome_attemptA {os : List OptionSem} (hatt : ∀ o ∈ os, o = .byAttempt o.c)
+    (a : Attr) :
+    (select os (·.admitA) (·.c.p) a).isSome = true ↔ ∃ o ∈ os, (o.c.p a).isSome = true := by
+  constructor
+  · intro h
+    obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h
+    obtain ⟨o, ho, -, hp⟩ := select_admits hv
+    exact ⟨o, ho, by rw [hp]; rfl⟩
+  · rintro ⟨o, ho, hp⟩
+    obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hp
+    obtain ⟨o', hf⟩ := find?_attempt_A hatt ho hv
+    unfold select; rw [hf]; exact acts_of_find?_A hatt hf
+
 /-- **`union` reads exactly what its row says** — `ExactV_union` on the other side of the
-    pair, and the same two rewrites. `select` is stated once over both halves
-    (`Sums.lean`), which is why this proof is the value side's verbatim. -/
+    pair. -/
 theorem ExactA_union {opts : List Term} (h : ∀ t ∈ opts, ExactA t) : ExactA (.union opts) := by
   intro a
   rw [denote_union_sems]
   show selOptA (AdmASpecs opts) a = true ↔ (select (optionSems opts) (·.admitA) (·.c.p) a).isSome
-  rw [AdmASpecs_eq]
-  unfold select selOptA
-  rw [filter_map_AdmASpecs opts a, filter_AdmASpecs h a]
-  cases hf : opts.filter (fun t => admitOptA (specOf t, AdmA t) a) with
-  | nil => simp
-  | cons t rest =>
-    cases rest with
-    | nil =>
-      have ht : ExactA t := h t (mem_of_filter_eq_singleton hf).1
-      simpa [optionSemOf_c] using ht a
-    | cons t2 r2 => simp
+  have hatt : ∀ o ∈ optionSems opts, o = .byAttempt o.c := by
+    rw [optionSems_eq]
+    exact List.forall_mem_map.mpr fun _ _ => rfl
+  rw [selOptA_eq_AdmAAny, select_isSome_attemptA hatt, optionSems_eq]
+  simp only [List.mem_map, exists_exists_and_eq_and, optionSemOf_c]
+  clear hatt
+  constructor
+  · intro ha
+    induction opts with
+    | nil => exact absurd ha (by simp)
+    | cons t ts ih =>
+      rw [AdmAAny_cons, Bool.or_eq_true] at ha
+      rcases ha with ha | ha
+      · exact ⟨t, List.mem_cons_self, (h t List.mem_cons_self a).mp ha⟩
+      · obtain ⟨t', ht', hp⟩ := ih (fun t' ht' => h t' (List.mem_cons_of_mem _ ht')) ha
+        exact ⟨t', List.mem_cons_of_mem _ ht', hp⟩
+  · rintro ⟨t, ht, hp⟩
+    exact AdmAAny_of_mem ht ((h t ht a).mpr hp)
 
 /-- **`set` reads exactly what its row says.**
 

@@ -3,32 +3,16 @@ import Calculus.Confluence
 /-!
 # Compatibility of the options of a union
 
-`Compat c d` holds when each reading of `c` is a reading of `d` wherever `d` acts at the
-attribute or at the value. A union of pairwise compatible lawful options is lawful where the
-union acts (`uAtAct_of_compat`). The rule needs no certificate and no `HF` premise. Two codecs
-below one canonical codec are compatible (`compat_of_common_bound`). Every held-free term is
-below `opaque`, so held-free lawful terms are pairwise compatible (`compat_of_HF`).
-
-Compatibility is sufficient for `UAtAct`, and compatibility is not necessary. The options of
-`boolean | flipBool` disagree at every attribute, and the union meets `UAtAct` because each filter
-holds both options or none (`uAtAct_not_imp_compat`). `Lawful` alone does not make a common
-bound give compatibility: the bound must also be `Canon` (`common_bound_lawful_insufficient`).
+`Compat c d` (`Frontier.lean`) holds when each reading of `c` is a reading of `d` wherever `d`
+acts at the attribute or at the value. A union of pairwise compatible lawful options is lawful
+(`lawful_altCodec`). Two codecs below one canonical codec are compatible
+(`compat_of_common_bound`). Every held-free term is below `opaque`, so held-free lawful terms are
+pairwise compatible (`compat_of_HF`). `Lawful` alone does not make a common bound give
+compatibility: the bound must also be `Canon` (`common_bound_lawful_insufficient`). Without
+compatibility, the order of the options is observable (`flip_order_observable`).
 -/
 
 namespace Calculus
-
-/-- The compatibility that the count selector needs. `c` reads `a` as `t`. If `d` acts at `a`
-    or at `t`, then `d` reads `a` as `t`. -/
-def Compat (c d : Codec) : Prop :=
-  ∀ a t, c.p a = some t → ((d.p a).isSome = true ∨ (d.e t).isSome = true) → d.p a = some t
-
-/-! ## Compat and the two classical halves -/
-
-/-- **Read agreement**: two compatible readings of one attribute give one value. -/
-theorem Compat.p_agree {c d : Codec} (h : Compat c d) {a t w}
-    (hc : c.p a = some t) (hd : d.p a = some w) : w = t := by
-  have := h a t hc (Or.inl (by rw [hd]; rfl))
-  rw [hd] at this; exact Option.some.inj this
 
 /-- **The cross half**: `d` reads back from the attribute of `c` a value that both write. -/
 theorem Compat.cross {c d : Codec} (hc : Lawful c) (h : Compat c d) {v a}
@@ -49,58 +33,7 @@ theorem compat_of_agree {c d : Codec} (hcan : ∀ a t, c.p a = some t → c.e t 
     cases hE t a b (hcan a t hct) hb
     exact hd.retract hb
 
-/-! ## Pairwise Compat gives UAtAct -/
-
-/-- **A compatible lawful option acts at the attribute exactly when it acts at the value**,
-    at each reading of the other option. -/
-theorem acts_iff_of_compat {c d : Codec} (hd : Lawful d) (h : Compat c d) {a t}
-    (hp : c.p a = some t) : (d.p a).isSome = (d.e t).isSome := by
-  cases hq : d.p a with
-  | some w =>
-      have hw := h a t hp (Or.inl (by rw [hq]; rfl))
-      rw [hq] at hw; cases hw
-      exact (hd.canon hq).symm
-  | none =>
-      cases he : d.e t with
-      | none => rfl
-      | some b =>
-          have := h a t hp (Or.inr (by rw [he]; rfl))
-          rw [hq] at this; exact nomatch this
-
-/-- **Pairwise `Compat` of lawful option semantics gives `UniqueBothWays`**: at each reading,
-    the filter on the attribute and the filter on the value are one list. -/
-theorem ubw_of_compat (os : List OptionSem)
-    (hf : ∀ o ∈ os, Lawful o.c ∧ (∀ v, o.admitV v = (o.c.e v).isSome) ∧
-      (∀ a, o.admitA a = (o.c.p a).isSome))
-    (hc : ∀ o ∈ os, ∀ d ∈ os, Compat o.c d.c) : UniqueBothWays os := by
-  have key : ∀ o ∈ os, ∀ a t, o.c.p a = some t →
-      os.filter (·.admitA a) = os.filter (·.admitV t) := by
-    intro o ho a t hp
-    refine List.filter_congr (fun d hd => ?_)
-    obtain ⟨hl, hV, hA⟩ := hf d hd
-    rw [hV, hA]
-    exact acts_iff_of_compat hl (hc o ho d hd) hp
-  refine ⟨?_, ?_⟩
-  · intro o ho t a hsel he
-    rw [key o ho a t ((hf o ho).1.retract he)]; exact hsel
-  · intro o ho a t _ hsel hp _
-    rw [← key o ho a t hp]; exact hsel
-
-/-- **Pairwise `Compat` of lawful options gives `UAtAct`.** No certificate, no `HF`. -/
-theorem uAtAct_of_compat {opts : List Term} (hl : ∀ t ∈ opts, Lawful (denote t))
-    (hc : ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote s) (denote t)) : UAtAct opts := by
-  refine ubw_of_compat _ (fun o ho => ?_) (fun o ho d hd => ?_)
-  · obtain ⟨t, ht, rfl⟩ := List.mem_map.mp ho
-    exact ⟨hl t ht, fun _ => rfl, fun _ => rfl⟩
-  · obtain ⟨s, hs, rfl⟩ := List.mem_map.mp ho
-    obtain ⟨t, ht, rfl⟩ := List.mem_map.mp hd
-    exact hc s hs t ht
-
 /-! ## The common bound -/
-
-/-- Canonical reads: the codec writes each value that the codec reads at the attribute that
-    the codec read. -/
-def Canon (u : Codec) : Prop := ∀ a t, u.p a = some t → u.e t = some a
 
 /-- **Two codecs below one canonical bound are `Compat`.** The premises are minimal: the read
     half of `Sub c u`, both halves of `Sub d u`, `Canon u`, and `retract` of `d`. -/
@@ -127,6 +60,21 @@ theorem compat_of_common_bound' {c d u : Codec} (hc : Sub c u) (hd : Sub d u)
 theorem compat_of_HF {s t : Term} (hs : HF s) (ht : HF t) (hlt : Lawful (denote t)) :
     Compat (denote s) (denote t) :=
   compat_of_common_bound' (sub_denote s hs) (sub_denote t ht) (fun _ _ h => Ω_canon h) hlt
+
+/-- **A held-free union of lawful options meets its obligation**, with no certificate. -/
+theorem pairwiseCompat_of_HF {opts : List Term} (h : HFL opts)
+    (hl : ∀ t ∈ opts, Lawful (denote t)) : PairwiseCompat opts :=
+  fun s hs t ht => compat_of_HF (HFL_mem h s hs) (HFL_mem h t ht) (hl t ht)
+
+/-- **A schema people write, discharged with no certificate.**
+    `union(array(literal "A"), array(literal "B"))` fails `UAtCan` at `[]`
+    (`not_uAtCan_array_literals`): both options write `[]`. Both write it as the same attribute,
+    so the options are compatible. -/
+theorem pairwiseCompat_array_literals :
+    PairwiseCompat [Term.array (.literal .string "A"), Term.array (.literal .string "B")] :=
+  pairwiseCompat_of_HF ⟨⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟩⟩ (forall_mem_pair
+    (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _))
+    (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _)))
 
 /-! ## Where `Canon` comes from -/
 
@@ -340,15 +288,7 @@ theorem not_compat_shout : ¬ Compat (denote shout) (denote litX) := by
   have := Value.str.inj (h.p_agree shout_p litX_p)
   exact absurd this (by decide)
 
-/-- **The shout pair fails `UAtAct`** at `"x"`. -/
-theorem not_uAtAct_shout : ¬ UAtAct [shout, litX] := by
-  intro h
-  have h1 := h.1 (optionSemOf (denote shout) (specOf shout)) (by simp [semsOf])
-    (.str "x") (.s "X")
-  simp [semsOf, optionSemOf, List.filter, shout_e, litX_e, shout_p, litX_p] at h1
-  exact h1 shout_e
-
-/-! ## `UAtAct` without `Compat`: `boolean | flipBool` -/
+/-! ## An incompatible pair: `boolean | flipBool` -/
 
 /-- Boolean negation, and the identity on every other value. -/
 def notV : Value → Value := fun v =>
@@ -367,33 +307,6 @@ theorem iso_flip : IsoCancels (denote .boolean) notV notV := by
 theorem lawful_flip : Lawful (denote flipBool) :=
   (Lawful.through lawful_boolean iso_flip).restrict _
 
-/-- **`flipBool` writes the values that `boolean` writes.** -/
-theorem flip_e_acts (v : Value) :
-    ((denote flipBool).e v).isSome = ((denote .boolean).e v).isSome := by
-  cases v <;> rfl
-
-/-- **`flipBool` reads the attributes that `boolean` reads.** -/
-theorem flip_p_acts (a : Attr) :
-    ((denote flipBool).p a).isSome = ((denote .boolean).p a).isSome := by
-  cases a <;> rfl
-
-/-- **Two options that act at the same values and attributes give `UniqueBothWays`**: each
-    filter holds both options or none, so no filter is a singleton. -/
-theorem ubw_pair_same_acts (o₁ o₂ : OptionSem)
-    (hV : ∀ v, o₁.admitV v = o₂.admitV v) (hA : ∀ a, o₁.admitA a = o₂.admitA a) :
-    UniqueBothWays [o₁, o₂] := by
-  refine ⟨fun o _ t _ hsel _ => ?_, fun o _ a _ _ hsel _ _ => ?_⟩
-  · have := congrArg List.length hsel
-    simp only [List.filter, hV t] at this
-    cases hv : o₂.admitV t <;> simp [hv] at this
-  · have := congrArg List.length hsel
-    simp only [List.filter, hA a] at this
-    cases hv : o₂.admitA a <;> simp [hv] at this
-
-/-- **`boolean | flipBool` meets `UAtAct`.** The union declines every input. -/
-theorem uAtAct_flip : UAtAct [.boolean, flipBool] :=
-  ubw_pair_same_acts _ _ (fun v => (flip_e_acts v).symm) (fun a => (flip_p_acts a).symm)
-
 /-- **`boolean` and `flipBool` are not `Compat`**: the two read `true` to two values. -/
 theorem not_compat_flip : ¬ Compat (denote .boolean) (denote flipBool) := by
   intro h
@@ -401,19 +314,15 @@ theorem not_compat_flip : ¬ Compat (denote .boolean) (denote flipBool) := by
   have hf : (denote flipBool).p (.bool true) = some (.bool false) := rfl
   exact absurd (Value.bool.inj (h.p_agree hb hf)) (by decide)
 
-/-- **`UAtAct` does not imply pairwise `Compat`, under `Lawful`.** -/
-theorem uAtAct_not_imp_compat :
-    ¬ (∀ opts : List Term, (∀ t ∈ opts, Lawful (denote t)) → UAtAct opts →
-        ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote s) (denote t)) := by
-  intro h
-  refine not_compat_flip (h [.boolean, flipBool] ?_ uAtAct_flip .boolean (by simp) flipBool (by simp))
-  intro t ht
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
-  rcases ht with rfl | rfl
-  · exact lawful_boolean
-  · exact lawful_flip
+/-- **Without `Compat`, the order of the options is observable**: the union writes `true`
+    through the first option that admits it. -/
+theorem flip_order_observable :
+    (altCodec [.byAttempt (denote .boolean), .byAttempt (denote flipBool)] none).e (.bool true)
+      ≠ (altCodec [.byAttempt (denote flipBool), .byAttempt (denote .boolean)] none).e
+        (.bool true) := by
+  show some (Attr.bool true) ≠ some (Attr.bool false); simp
 
-/-! ## Compatible, `UAtAct`, and refused by `certPair`
+/-! ## Compatible, and refused by `certPair`
 
 Two overlapping `refine`s of one `held` swap sit below one canonical bound. -/
 
@@ -454,11 +363,10 @@ theorem compat_sw (x y : Term) (hx : x = sw1 ∨ x = sw2) (hy : y = sw1 ∨ y = 
     rintro z (rfl | rfl) <;> exact lawful_swap.restrict _
   exact compat_of_common_bound' (hsub x hx) (hsub y hy) canon_swap (hlaw y hy)
 
-/-- **The pair meets `UAtAct`** through the common bound, with no certificate. -/
-theorem uAtAct_sw : UAtAct [sw1, sw2] := by
+/-- **The pair meets the union's obligation** through the common bound, with no certificate. -/
+theorem pairwiseCompat_sw : PairwiseCompat [sw1, sw2] := by
   have hm : ∀ z ∈ [sw1, sw2], z = sw1 ∨ z = sw2 := by simp
-  refine uAtAct_of_compat (fun t ht => ?_) (fun s hs t ht => compat_sw s t (hm s hs) (hm t ht))
-  rcases hm t ht with rfl | rfl <;> exact lawful_swap.restrict _
+  exact fun s hs t ht => compat_sw s t (hm s hs) (hm t ht)
 
 /-- **The certificate refuses the pair.** -/
 theorem certPair_sw : certPair sw1 sw2 = false := by decide

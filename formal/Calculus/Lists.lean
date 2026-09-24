@@ -268,12 +268,6 @@ theorem filter_eq_singleton_of_labels {β α ι : Type}
     exact h l hS hS'
 
 
-/-- Filtering to a singleton names an element of the list that satisfies the
-    predicate — how a resolved choice is read back. -/
-theorem mem_of_filter_eq_singleton {α : Type} {l : List α} {p : α → Bool} {x : α}
-    (h : l.filter p = [x]) : x ∈ l ∧ p x = true :=
-  List.mem_filter.mp (h ▸ List.mem_cons_self)
-
 /-- …and the same for `Option.map`, which is how a uniform tail is carried. -/
 theorem forall_mem_map_option {α β : Type} {x? : Option α} {g : α → β} {P : β → Prop}
     (h : ∀ x ∈ x?, P (g x)) : ∀ y ∈ x?.map g, P y := by

@@ -193,9 +193,8 @@ theorem not_equiv_lazy : ¬ Codec.Equiv (denote (.lazy .string)) (denote .string
 
 /-! ## `union(c₁ … cₙ) ≢ union(c₁ … cₙ, c)`
 
-Not closed under extension. The held set grows, so `≡` fails before (D) or any discharger is
-consulted — which is the stronger statement, since §6 justifies the row by well-formedness
-and the model shows it fails for a more basic reason. -/
+Not closed under extension. The held set grows, so `≡` fails before any obligation is consulted.
+§6 justifies the row by well-formedness, and the model shows it fails for a more basic reason. -/
 
 theorem not_equiv_union_extend :
     ¬ Codec.Equiv (denote (.union [.string])) (denote (.union [.string, .boolean])) := by
@@ -347,63 +346,13 @@ that was underivable, only the `set` above it. -/
 theorem typed_union_string_boolean :
     Typed (.union [.string, .boolean])
       (HUnion [fun v => ∃ s, v = .str s, fun v => ∃ b, v = .bool b]) none :=
-  .union (.cons .string (.cons .boolean .nil)) <| by
-    -- (D): the held sets are disjoint — a string is never a boolean.
-    rw [DIncomp, List.pairwise_cons]
-    refine ⟨fun T hT => ?_, List.pairwise_singleton _ _⟩
-    rw [List.mem_singleton] at hT; subst hT
-    rintro v ⟨s, rfl⟩ ⟨b, hb⟩
-    exact nomatch hb
+  .union (.cons .string (.cons .boolean .nil))
 
 /-- **An empty option is the unit of the sum.** The bottom holds nothing, so it changes no
-    union's `HUnion`, and it is disjoint from every held set, so (D) admits it. The meet builds
-    such a union whenever a surviving option's predicate holds of nothing. -/
+    union's `HUnion`. The meet builds such a union whenever a surviving option's predicate
+    holds of nothing. -/
 example : ∃ T μ, Typed (.union [.string, .never]) T μ :=
-  ⟨_, _, .union (.cons .string (.cons .never .nil)) <| by
-    rw [DIncomp, List.pairwise_cons]
-    refine ⟨fun T hT => ?_, List.pairwise_singleton _ _⟩
-    rw [List.mem_singleton] at hT; subst hT
-    exact hdisj_never_right _⟩
-
-/-! ## What `≡` cannot see about associativity
-
-`Equations.equiv_altCodec_assoc` proves §6's associativity row *unconditionally* — no (D),
-no discharger, no (U). That is not a contradiction of §6's hedge; it is a fact about `≡`.
-
-`≡` requires `e` and `p` to agree only where **both** are defined. At an input where the
-nested option is ambiguous, the left side's inner union fails and the outer one resolves
-anyway, while the right side sees three admitting options and refuses. One side defined,
-the other not — so `≡` asks nothing, and the row holds.
-
-The behavioural difference is real all the same, and it is exactly what §6's prose
-describes. Here it is, so that the unconditional row is not mistaken for a licence to
-rewrite across the two forms freely: at `"A"`, with `string` outside and two copies of
-`literal("A")` nested inside, the left encodes and the right refuses.
-
-Both terms violate (U), which is the point — §6 conditions the row on precisely that, and
-the model shows the condition is needed for *interchangeability*, not for `≡`. -/
-
-/-- Left: the outer union resolves, because the inner one has already failed. -/
-theorem assoc_left_e :
-    (denote (.union [.string, .union [.literal .string "A", .literal .string "A"]])).e (.str "A")
-      = some (.s "A") := by
-  simp [denote, denote, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, select, stringCodec, literalCodec, baseCodec, Codec.restrict, inL]
-
-/-- Right: three options admit, so the union refuses globally. -/
-theorem assoc_right_e :
-    (denote (.union [.string, .literal .string "A", .literal .string "A"])).e (.str "A") = none := by
-  simp [denote, denote, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, select, stringCodec, literalCodec, baseCodec, Codec.restrict, inL]
-
-/-- The two associativity forms are `≡` but not interchangeable: one writes where the
-    other refuses. §6's (D)/discharger/(U) hedge is about this, not about `≡`. -/
-theorem not_eq_altCodec_assoc :
-    ∃ (l r : Term) (v : Value) (a : Attr),
-      (denote l).e v = some a ∧ (denote r).e v = none :=
-  ⟨.union [.string, .union [.literal .string "A", .literal .string "A"]],
-   .union [.string, .literal .string "A", .literal .string "A"],
-   .str "A", .s "A", assoc_left_e, assoc_right_e⟩
+  ⟨_, _, .union (.cons .string (.cons .never .nil))⟩
 
 /-! ## `≡` is not transitive
 

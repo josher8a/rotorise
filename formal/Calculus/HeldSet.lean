@@ -172,10 +172,8 @@ set_option linter.unreachableTactic false in
     iff, and `set` is `SetBase.elem_T`. Only four rules need anything new, and each needs the
     converse of a helper that was already here for the other direction.
 
-    **What this does *not* say is `T = dom(e)`**, which is a different claim. `typed_T_adm`
-    (`Laminar.lean`) proves that claim from (D), and `not_TIsDomE_unionLiteralString` shows
-    that it fails at a union codec that (D) refuses. Reading (A) as (B) is the mistake §6's
-    row made. -/
+    **What this does *not* say is `T = dom(e)`**, which is a different claim, proved by
+    `typed_T_adm` (`Laminar.lean`). Reading (A) as (B) is the mistake §6's row made. -/
 theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T v
   | t, T, μ, h, v, hv => by
     cases h with
@@ -230,7 +228,7 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
           | @some t' T''' μ'' hty' =>
             obtain rfl : T''' = T'' := Option.some.inj hR
             exact ⟨denote t', rfl, typed_T_eq hty' _ hT''⟩
-    | @union opts Ts μs h' hD =>
+    | @union opts Ts μs h' =>
       obtain ⟨T', hT', hTv⟩ := hv
       obtain ⟨tx, htx, hd⟩ :=
         unionT_of_mem h' (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) v T' hT' hTv
@@ -260,39 +258,18 @@ theorem typed_T_identity {t T μ} (h : Typed t T μ) (v : Value) : (denote t).T 
 
 §6's row asserted (A) and then justified it with a sentence about (B). (A) is not false at
 `union`; it is definitional — and it is now proved everywhere else too. **(B) holds at every
-derivable term** by `typed_T_adm` (`Laminar.lean`), because (D) refuses each union where the
-count writes less than the union holds. `not_TIsDomE_unionLiteralString` is such a union, as a
-codec that no derivation reaches. Reading a proof of (A) as a claim about (B) is the mistake
-the row made, and the reason both are named here. -/
+derivable term** by `typed_T_adm` (`Laminar.lean`): a union writes wherever one of its options
+writes. Reading a proof of (A) as a claim about (B) is the mistake the row made, and the reason
+both are named here. -/
 
 /-- **(A) at a union is definitional.** `altCodec`'s held set *is* the union of its options'
-    — no (U), no premise, nothing to prove. So the union case of (A) is exactly the options'
+    — no premise, nothing to prove. So the union case of (A) is exactly the options'
     (A), and §6's "false for `union`" cannot be about this claim. -/
 theorem altCodec_T (os : List OptionSem) (μA : Option Member) (v : Value) :
     (altCodec os μA).T v ↔ ∃ o ∈ os, o.c.T v := Iff.rfl
 
 /-- **(B), named.** The held set is exactly what the pair can write — `T = dom(e)`.
-    `Carrier.domE` gives `dom(e) ⊆ T` for every derivable term; this is the converse, and it
-    is the direction that fails. -/
+    `Carrier.domE` gives `dom(e) ⊆ T` for every derivable term; this is the converse. -/
 def TIsDomE (c : Codec) : Prop := ∀ v, c.T v ↔ (c.e v).isSome
-
-/-- §4's counterexample pair: both options admit `"A"`, which is what refuted §5's withdrawn
-    discharger. -/
-noncomputable def unionLiteralString : Codec :=
-  altCodec [.byAttempt (literalCodec .string "A"), .byAttempt stringCodec] (some .S)
-
-/-- **(B) is false for this union codec:** `"A"` is held and nothing is written for it, both
-    options admitting. Not unsound — `Carrier` bounds `e` by `T`, never the converse. No
-    derivation reaches the codec: the options are nested, and (D) refuses a nested pair. -/
-theorem not_TIsDomE_unionLiteralString : ¬ TIsDomE unionLiteralString := by
-  intro h
-  have hT : unionLiteralString.T (.str "A") :=
-    ⟨.byAttempt (literalCodec .string "A"), by simp [], rfl⟩
-  have he : unionLiteralString.e (.str "A") = none := by
-    simp [unionLiteralString, altCodec, select, OptionSem.byAttempt, literalCodec, baseCodec,
-      Codec.restrict, inL, stringCodec]
-  have := (h (.str "A")).mp hT
-  rw [he] at this
-  exact nomatch this
 
 end Calculus

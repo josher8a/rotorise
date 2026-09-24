@@ -11,10 +11,10 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   set formers below. The index is determined by the term in every rule, exactly as a
   syntax-directed judgement should be; it is an index rather than a function so the rules
   read as §3 writes them.
-* `Typed` keeps only one *syntactic* premise, `(union)`'s **(D)**. Every other side condition
-  became a type — see each constructor's own docstring.
+* `Typed` keeps no *syntactic* premise. Every side condition became a type — see each
+  constructor's own docstring.
   The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
-  `ran(r) ⊆ dom(e)` and coherence, and `(union)`'s residual (U) — live in
+  `ran(r) ⊆ dom(e)` and coherence, and `(union)`'s pairwise compatibility — live in
   `Obligations` (Soundness.lean), which is where they can mention the denotation.
 * **`literal` is one rule in §3 and one constructor here.** §3's `(literal)` reads its member
   off a base, which in a naive transcription needs `ℓ : List Value` plus a premise that the
@@ -23,12 +23,8 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   A set of alternatives is a certified `union` of singletons. `GroundKind` covers all six
   bases, so nothing §3 admits is spelled `refine`.
 * **§5's dischargers are in neither list, and that is the rule.** `(union)`'s premises are
-  the option judgements and (D); a discharger settles the (U) obligation, and lives with
-  `κ`/`ident`/`adm` in `Discharge.lean` — downstream of this file, which is why it could
-  not be a premise here even if it were one. Failing to discharge is not refusing:
-  `union(literal("A"), held(literal("A"), f, g))` holds disjoint sets, so (D) admits it, and
-  `UAtCan` is false of it (`not_uAtCan_literal_held`), which is the calculus working as §5
-  describes rather than a gap between them.
+  the option judgements; a discharger settles the compatibility obligation, and lives in
+  `Discharge.lean`, downstream of this file.
 * Premises over lists are auxiliary judgements (`TypedList`, …): the kernel refuses
   recursive occurrences nested under `∃`/`∀ ∈` binders.
 * `(union)` concludes the doc's unanimous μ, computed by `unanimous` from the option
@@ -125,43 +121,20 @@ def HMap (T : Held) : Held :=
 def HUnion (Ts : List Held) : Held :=
   fun v => ∃ T ∈ Ts, T v
 
-/-- The bottom's held set: nothing. It is disjoint from every held set, so (D) admits it
-    beside any option. -/
+/-- The bottom's held set: nothing. It is disjoint from every held set. -/
 def HNever : Held := fun _ => False
 
-/-- Two options share no value. Asked of every pair, this is (D): the count selector is total
-    on the union's held set exactly when no value is held by two options. It is not a discharger
-    of (U): `not_uAtCan_literal_held` holds disjoint sets and still fails (U). It is what a
-    union's certificate provides. -/
+/-- Two options share no value. It is not a discharger of (U): `not_uAtCan_literal_held` holds
+    disjoint sets and still fails (U). It is what a union's certificate provides. -/
 def HDisj (Tx Ty : Held) : Prop := ∀ v, Tx v → ¬ Ty v
 
-/-- §5's **(D)**, `(union)`'s well-formedness side condition: **the union's selector is total
-    on the union's held set.** Each held value reaches one option, and that option writes the
-    value. (D) is a property of the selector, not of a shape of the options.
-
-    The selector of `altCodec` is the count: an option wins where it is the only option that
-    admits the value. For the count, totality is pairwise disjointness of the held sets, and
-    `countSel_total` (`Laminar.lean`) proves the codec form from this statement. A nested pair
-    fails the count, and `not_TIsDomE_unionLiteralString` is the witness: `"A"` is held, and
-    nothing is written. A crossing pair fails it too, and `not_countTotal_xOs` is the witness.
-    The least-admitter selector `findSel` is total on a laminar family (`findSel_total`), so a
-    union under `findSel` would carry laminarity here instead.
-
-    **The condition is not free.** Every union that the meet builds owes it, and
-    `dincomp_of_unionOk` reads it off the union's own certificate. `src/codec/lean.ts` cites it
-    too, for the pairs where the host refuses a `never` option and the model permits it.
-
-    **An empty option is the unit of the sum.** An empty option is disjoint from each held set,
-    vacuously, so it contributes nothing to `HUnion` and cannot make a union ambiguous. The meet
-    builds exactly that union: a `refine` whose predicate holds of nothing that the inner term
-    holds is empty, and is not syntactically the bottom.
-
-    **Disjointness is monotone.** A pairwise-disjoint family stays pairwise disjoint when each
-    held set shrinks. The meet shrinks each option, so the meet keeps (D). -/
+/-- Pairwise disjointness of the held sets of a union's options: what the union's certificate
+    provides. The union's judgement does not ask for it, because a union writes wherever one
+    of its options writes. An empty option is disjoint from each held set, vacuously. -/
 def DIncomp (Ts : List Held) : Prop :=
   Ts.Pairwise HDisj
 
-/-- Pairwise disjointness is (D), and is the form a union's certificate gives. -/
+/-- Pairwise disjointness, in the form a union's certificate gives. -/
 theorem dincomp_of_disjoint {Ts : List Held} (h : Ts.Pairwise HDisj) : DIncomp Ts := h
 
 /-- `⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ)` (§4 `(object)`). A binding is `(name, required?,
@@ -272,8 +245,8 @@ inductive Typed : Term → Held → Option Member → Prop where
       (hf : ∀ k, TypedField (body.at k) (bind k).2 (bind k).1 (μs k))
       (hr : TypedWild body.wild R) :
       Typed (.object body) (HObject body.fields bind R) (some .M)
-  /-- `(union)`: the option judgements, and §5's **(D)** on their held sets. -/
-  | union {opts Ts μs} (h : TypedListμ opts Ts μs) (hD : DIncomp Ts) :
+  /-- `(union)`: the option judgements. -/
+  | union {opts Ts μs} (h : TypedListμ opts Ts μs) :
       Typed (.union opts) (HUnion Ts) (unanimous μs)
 
 inductive TypedList : List Term → List Held → Prop where

@@ -10,7 +10,6 @@ so the n-ary rule the specification writes is derived rather than assumed:
 * `typed_literalsS` / `typed_literalsN` derive exactly what the old ~~Typed.literalS~~ and
   ~~Typed.literalN~~ concluded, from `Typed.literal` at a singleton and `Typed.union`. Same held
   set, same member.
-* `dincomp_map_literal_str` / `_num` discharge §5's **(D)** from the alternatives being distinct.
 * `uAtCan_map_literal_str` / `_num` discharge (U) **on both sides**, through
   `uniqueAdmission_of_sharedBase`.
 
@@ -70,7 +69,7 @@ theorem typedListμ_map_literal_num : ∀ (l : List WFNumeral),
       show Typed (Term.literal .number d) (fun v => v = Value.num d) (some .N)
       exact Typed.literal .number d
 
-/-! ## The member, the held set, and (D) -/
+/-! ## The member and the held set -/
 
 /-- A union of options that all store the same member stores it. -/
 theorem unanimous_map_const {α : Type} {m : Option Member} : ∀ (l : List α), l ≠ [] →
@@ -97,23 +96,6 @@ theorem hunion_map_literal_num (l : List WFNumeral) :
   constructor
   · rintro ⟨T, ⟨d, hd, rfl⟩, hv⟩; exact ⟨d, hd, hv⟩
   · rintro ⟨d, hd, rfl⟩; exact ⟨_, ⟨d, hd, rfl⟩, rfl⟩
-
-/-- §5's **(D)** on a string literal set's options, from the alternatives being distinct —
-    which is `NEFinset`'s, not a premise. Two distinct singletons share no value. -/
-theorem dincomp_map_literal_str {l : List String} (hnd : l.Nodup) :
-    DIncomp (l.map fun s => fun v => v = Value.str s) := by
-  rw [DIncomp, List.pairwise_map]
-  refine hnd.imp ?_
-  intro a b hab v ha hb
-  exact hab (Value.str.inj (ha.symm.trans hb))
-
-/-- …and the same at the numeric base. -/
-theorem dincomp_map_literal_num {l : List WFNumeral} (hnd : l.Nodup) :
-    DIncomp (l.map fun d => fun v => v = Value.num d) := by
-  rw [DIncomp, List.pairwise_map]
-  refine hnd.imp ?_
-  intro a b hab v ha hb
-  exact hab (Value.num.inj (ha.symm.trans hb))
 
 /-! ## (U) at the numeric base
 
@@ -182,25 +164,25 @@ from one to the other is `Finset.toList`, which is `Multiset.toList`, which is `
 and every theorem stated through it picks up `Classical.choice`. The axiom scan says so: the first
 draft of this file stated the two rules over `NEFinset` and five theorems came back unsanctioned.
 
-So they are stated over a list with the two premises spelled out, which is choice-free and is the
-honest shape of the claim. `hnd` and `hne` are what the set was carrying, and writing them out is
-what lets the term language carry no set at all. -/
+So they are stated over a list with the premise spelled out, which is choice-free and is the
+honest shape of the claim. `hne` is what the set was carrying for the member, and writing it out
+is what lets the term language carry no set at all. -/
 
 /-- **`(literal-S)` is derivable.** Every part of ~~Typed.literalS~~'s conclusion — the held set and
     the member — comes from `Typed.literal` and `Typed.union`, with no premise ~~literalS~~ does not
-    already have: `hnd` and `hne` are what `NEFinset` was carrying. -/
-theorem typed_literalsS {l : List String} (hnd : l.Nodup) (hne : l ≠ []) :
+    already have: `hne` is what `NEFinset` was carrying for the member. -/
+theorem typed_literalsS {l : List String} (hne : l ≠ []) :
     Typed (.union (l.map fun s => .literal .string s))
       (fun v => ∃ s, s ∈ l ∧ v = .str s) (some .S) := by
-  have h := Typed.union (typedListμ_map_literal_str l) (dincomp_map_literal_str hnd)
+  have h := Typed.union (typedListμ_map_literal_str l)
   rw [hunion_map_literal_str, unanimous_map_const _ hne] at h
   exact h
 
 /-- **`(literal-N)` is derivable**, and §3's `ℓ ⊆ D` is the list's element type. -/
-theorem typed_literalsN {l : List WFNumeral} (hnd : l.Nodup) (hne : l ≠ []) :
+theorem typed_literalsN {l : List WFNumeral} (hne : l ≠ []) :
     Typed (.union (l.map fun d => .literal .number d))
       (fun v => ∃ d, d ∈ l ∧ v = .num d) (some .N) := by
-  have h := Typed.union (typedListμ_map_literal_num l) (dincomp_map_literal_num hnd)
+  have h := Typed.union (typedListμ_map_literal_num l)
   rw [hunion_map_literal_num, unanimous_map_const _ hne] at h
   exact h
 

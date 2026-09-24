@@ -836,9 +836,7 @@ For the count, totality is \texttt{∀\ i\ ≠\ j.\ Tᵢ\ ∩\ Tⱼ\ =\ ∅}, an
 pair fails it: \texttt{union(literal("A"),\ string)} holds \texttt{"A"}, both options admit \texttt{"A"}, and the union
 writes nothing. A crossing pair fails it too. An empty option is the unit of the sum: it is disjoint
 from every held set, so it cannot make a union ambiguous. Under (D) the judgement's index is
-exact: a derivable term holds exactly the values it admits (\texttt{typed\_T\_adm}). The least-admitter
-selector \texttt{findSel} is total on a laminar family, each pair disjoint or nested, and the count over the
-cells of such a family is \texttt{findSel}; the union does not use it. (D) does \textbf{not} discharge the readable
+exact: a derivable term holds exactly the values it admits (\texttt{typed\_T\_adm}). (D) does \textbf{not} discharge the readable
 side, for the reason the machinery of admission gives.
 \end{definition}
 

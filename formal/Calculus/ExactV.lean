@@ -85,22 +85,9 @@ def valPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot
     it. -/
 def admitOptV (o : Option (BodySpec) × VP) (v : Value) : Bool := o.2 v
 
-/-- `select` at a `union`, as a row: filter the options by the admission each one reads, and
-    the option that answers **alone** answers for the union.
-
-    **This is the row ~~Excuse.uniqueAdmission~~ said would be unsound**, and the excuse was
-    right about the calculus it was written in. A count is anti-monotone — loosen an option and
-    you add an admitting option, which turns a singleton into a pair and makes the row refuse
-    where the codec writes — so while any row was loose, sharpening `union` traded imprecision
-    for unsoundness. What the argument did not reach is that the count is *exact given the
-    options' exactness*, which is the hypothesis every other container row already carries; and
-    once `set` (a narrower constructor) stopped being loose, there was nothing left to
-    loosen. The excuse was a fact about the state of the
-    table, recorded as a fact about the row. -/
+/-- `select` at a `union`, as a row: the union admits where one of its options admits. -/
 def selOptV (os : List (Option (BodySpec) × VP)) (v : Value) : Bool :=
-  match os.filter (fun o => admitOptV o v) with
-  | [o] => o.2 v
-  | _ => false
+  os.any (fun o => admitOptV o v)
 
 /-- What the literal codec **writes**, exactly.
 
@@ -197,14 +184,8 @@ noncomputable def Adm : Term → Value → Bool
   | .refine t p => fun v => Adm t v && p.eval v
   | .lazy t     => Adm t
   | .held t P f _ => fun v => Adm t (f v) && Adm P v
-  -- **`select`'s count, mirrored** — where this was `⋁` over the options. The `⋁` was
-  -- inexact with perfectly exact options (`union [string, string]`: two admit, so the union
-  -- writes nothing while `⋁` says yes), and the count that fixes it was refused on
-  -- anti-monotonicity grounds that held only while some other row was loose. None is.
-  --
-  -- The count is over `AdmSpecs`, not over `Adm` directly, so the row mirrors
-  -- `optionSems`'s pairing with `specOf`. Every option, object included, is now admitted
-  -- by attempt: `admitOptV (specOf t, Adm t) v` reduces to `Adm t v`. See `admitOptV`.
+  -- `select`'s first admitter, mirrored: the row is the disjunction over `AdmSpecs`, so it
+  -- mirrors `optionSems`'s pairing with `specOf`
   | .union opts => fun v => selOptV (AdmSpecs opts) v
   -- **`set` is a leaf, and exact.** Its base's row is `SetBase.adm` — the four ground rows
   -- of this table, indexed — and the set's row is that row over whichever payload the value
@@ -456,25 +437,18 @@ theorem AdmAny_of_mem {t : Term} {ts : List Term} {v : Value} (ht : t ∈ ts)
     · simp [AdmAny_cons, h]
     · simp [AdmAny_cons, ih h']
 
-/-- **The count implies the disjunction**, which is the direction the containments need: the
-    option that answers *alone* is in particular an option that answers.
+/-- **The row is the disjunction**: a union admits where one of its options admits. -/
+theorem selOptV_eq_AdmAny (opts : List Term) (v : Value) :
+    selOptV (AdmSpecs opts) v = AdmAny opts v := by
+  rw [AdmSpecs_eq]
+  induction opts with
+  | nil => rfl
+  | cons t ts ih => simp only [selOptV, List.map_cons, List.any_cons] at ih ⊢; rw [ih]; rfl
 
-    The converse is exactly what fails, and `union [string, string]` is the witness — which is
-    why the row is the count and not the `⋁` it used to be. -/
+/-- …read as the implication the containments need. -/
 theorem selOptV_le_AdmAny {opts : List Term} {v : Value}
-    (h : selOptV (AdmSpecs opts) v = true) : AdmAny opts v = true := by
-  simp only [selOptV, AdmSpecs_eq] at h
-  cases hf : (opts.map fun t => (specOf t, Adm t)).filter (fun o => admitOptV o v) with
-  | nil => rw [hf] at h; exact absurd h (by simp)
-  | cons o rest =>
-    cases rest with
-    | cons _ _ => rw [hf] at h; exact absurd h (by simp)
-    | nil =>
-      rw [hf] at h
-      have hmem : o ∈ opts.map fun t => (specOf t, Adm t) :=
-        (mem_of_filter_eq_singleton hf).1
-      obtain ⟨t, ht, rfl⟩ := List.mem_map.mp hmem
-      exact AdmAny_of_mem ht h
+    (h : selOptV (AdmSpecs opts) v = true) : AdmAny opts v = true :=
+  selOptV_eq_AdmAny opts v ▸ h
 
 /-- `Adm`'s literal row, named.
 
@@ -878,20 +852,8 @@ theorem admitOptV_eq {t : Term} (h : ExactV t) (v : Value) :
   simp only [optionSemOf, OptionSem.byAttempt]
   exact Bool.coe_iff_coe.mp (by simpa using (h v).symm)
 
-/-- The row's own filter, pushed through the map — the plain commutation, no hypothesis. -/
-theorem filter_map_AdmSpecs (opts : List Term) (v : Value) :
-    (opts.map fun t => (specOf t, Adm t)).filter (fun o => admitOptV o v)
-      = (opts.filter fun t => admitOptV (specOf t, Adm t) v).map
-          fun t => (specOf t, Adm t) := by
-  induction opts with
-  | nil => rfl
-  | cons t ts ih =>
-    simp only [List.map_cons, List.filter_cons, ih]
-    cases hb : admitOptV (specOf t, Adm t) v <;> simp []
-
-/-- **The option list's filter is the term list's, mapped.** This is the step that lets a row
-    count terms where `select` counts semantics, and it is an induction rather than a rewrite
-    because the agreement above is per-option and hypothesis-bearing. -/
+/-- **The option list's filter is the term list's, mapped.** It is an induction rather than a
+    rewrite because the agreement above is per-option and hypothesis-bearing. -/
 theorem filter_AdmSpecs {opts : List Term} (h : ∀ t ∈ opts, ExactV t) (v : Value) :
     (optionSems opts).filter (·.admitV v)
       = (opts.filter (fun t => admitOptV (specOf t, Adm t) v)).map
@@ -904,37 +866,44 @@ theorem filter_AdmSpecs {opts : List Term} (h : ∀ t ∈ opts, ExactV t) (v : V
     simp only [optionSems, List.filter_cons, admitOptV_eq ht, ih hts]
     cases hb : admitOptV (specOf t, Adm t) v <;> simp []
 
-/-- **`union` writes exactly what its row says**, and this is the row ~~Excuse.uniqueAdmission~~
-    said could not be written soundly.
+/-- **An attempted union writes exactly where one of its options writes.** -/
+theorem select_isSome_attempt {os : List OptionSem} (hatt : ∀ o ∈ os, o = .byAttempt o.c)
+    (v : Value) :
+    (select os (·.admitV) (·.c.e) v).isSome = true ↔ ∃ o ∈ os, (o.c.e v).isSome = true := by
+  constructor
+  · intro h
+    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
+    obtain ⟨o, ho, -, he⟩ := select_admits ha
+    exact ⟨o, ho, by rw [he]; rfl⟩
+  · rintro ⟨o, ho, he⟩
+    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
+    obtain ⟨o', hf⟩ := find?_attempt_V hatt ho ha
+    unfold select; rw [hf]; exact acts_of_find?_V hatt hf
 
-    The excuse's argument was correct and its scope was the table, not the row: a count is
-    anti-monotone, so while any option's row could be loose the count could refuse where the
-    codec writes. The hypothesis here is the same one `ExactV_tuple` and `ExactV_object` both
-    take — the options are exact — and once `set` stopped declining there is no term at
-    which it is unavailable. `Adm_exact` supplies it by
-    structural recursion, exactly as it does at every other container.
-
-    What the proof spends it on is narrower than the excuse suggested: the *filter*, not the
-    count. `select` filters `optionSems` and the row filters terms; identifying the two needs
-    each option's admission to be its row, which at an object option is free and everywhere
-    else is exactness. The count itself is then a `cases` on a list. -/
+/-- **`union` writes exactly what its row says**: the options are exact, and a union writes
+    where one of them writes. -/
 theorem ExactV_union {opts : List Term} (h : ∀ t ∈ opts, ExactV t) : ExactV (.union opts) := by
   intro v
   rw [denote_union_sems]
   show selOptV (AdmSpecs opts) v = true ↔ (select (optionSems opts) (·.admitV) (·.c.e) v).isSome
-  rw [AdmSpecs_eq]
-  unfold select selOptV
-  -- both sides become a match over the *same* filtered term list: the row's by
-  -- `filter_map_AdmSpecs`, `select`'s by `filter_AdmSpecs`
-  rw [filter_map_AdmSpecs opts v, filter_AdmSpecs h v]
-  cases hf : opts.filter (fun t => admitOptV (specOf t, Adm t) v) with
-  | nil => simp
-  | cons t rest =>
-    cases rest with
-    | nil =>
-      have ht : ExactV t := h t (mem_of_filter_eq_singleton hf).1
-      simpa [optionSemOf_c] using ht v
-    | cons t2 r2 => simp
+  have hatt : ∀ o ∈ optionSems opts, o = .byAttempt o.c := by
+    rw [optionSems_eq]
+    exact List.forall_mem_map.mpr fun _ _ => rfl
+  rw [selOptV_eq_AdmAny, select_isSome_attempt hatt, optionSems_eq]
+  simp only [List.mem_map, exists_exists_and_eq_and, optionSemOf_c]
+  clear hatt
+  constructor
+  · intro ha
+    induction opts with
+    | nil => exact absurd ha (by simp)
+    | cons t ts ih =>
+      rw [AdmAny_cons, Bool.or_eq_true] at ha
+      rcases ha with ha | ha
+      · exact ⟨t, List.mem_cons_self, (h t List.mem_cons_self v).mp ha⟩
+      · obtain ⟨t', ht', he⟩ := ih (fun t' ht' => h t' (List.mem_cons_of_mem _ ht')) ha
+        exact ⟨t', List.mem_cons_of_mem _ ht', he⟩
+  · rintro ⟨t, ht, he⟩
+    exact AdmAny_of_mem ht ((h t ht v).mpr he)
 
 mutual
 /-- **Every row is exact.** Not a bound on `dom(e)` — `dom(e)`, at every constructor and
@@ -964,7 +933,7 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   | .never => fun _ => Iff.rfl
   -- the row the *constructor* made exact, rather than a sharper analysis of the old one
   | .set b => ExactV_set b
-  -- the count is exact given the options' exactness, which is the hypothesis this
+  -- the disjunction is exact given the options' exactness, which is the hypothesis this
   -- recursion hands it. See `ExactV_union`.
   | .union opts => ExactV_union (exactVL_mem opts (Adm_exactL opts))
 

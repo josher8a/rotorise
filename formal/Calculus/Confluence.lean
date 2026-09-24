@@ -17,9 +17,8 @@ mutual induction over `Term`, `Body`, `ObjectSlot`, the list and the option.
 The payoffs follow from one fact: `opaque`'s pair is a bijection between `Value` and `Attr`.
 `Ω_onto` and `Ω_canon` prove the bijection. So two held-free terms that both write a value
 write one attribute (`write_agree`), and two that both read an attribute read one value
-(`read_agree`). `uAtAct_of_HF` discharges (U) where the union acts for a held-free union of
-lawful options, with no certificate. `admAAt_of_HF` discharges the agreement conjunct of the
-read-side meet row at held-free terms.
+(`read_agree`). `admAAt_of_HF` discharges the agreement conjunct of the read-side meet row at
+held-free terms.
 
 `held` is the one constructor outside the result. An adapter changes the carrier, so it is
 not a restriction of `opaque`. `held_violates_W` and `held_violates_R` are the control:
@@ -273,10 +272,8 @@ theorem sub_listCodec {pre suf : List Codec} {sp : Option Codec}
 theorem select_some {A B : Type} {os : List OptionSem} {adm : OptionSem → A → Bool}
     {run : OptionSem → A → Option B} {x : A} {y : B} (h : select os adm run x = some y) :
     ∃ o ∈ os, run o x = some y := by
-  unfold select at h
-  split at h
-  · next o ho => exact ⟨o, List.mem_of_mem_filter (ho ▸ List.mem_singleton_self o), h⟩
-  · exact nomatch h
+  obtain ⟨o, ho, -, hr⟩ := select_admits h
+  exact ⟨o, ho, hr⟩
 
 /-- A union of restrictions of `Ω` is a restriction of `Ω`, because the selector returns the
     answer of one option. -/
@@ -540,37 +537,6 @@ theorem Ω_onto (a : Attr) : ∃ v, Ω.e v = some a := ⟨_, Ω_e_valueOfAttr a�
 theorem Ω_canon {a : Attr} {t : Value} (h : Ω.p a = some t) : Ω.e t = some a :=
   lawful_opaqCodecω.can_roundTrip (Ω_onto a) h
 
-/-- **(U) where the union acts, with no certificate.** The options are attempted, lawful, and
-    included in `Ω`; `Ω` is lawful, so its graph is the one inverse pair every option reads. -/
-theorem ubw_of_sub (os : List OptionSem)
-    (hf : ∀ o ∈ os, Lawful o.c ∧ Sub o.c Ω ∧ (∀ v, o.admitV v = (o.c.e v).isSome) ∧
-      (∀ a, o.admitA a = (o.c.p a).isSome)) : UniqueBothWays os := by
-  have hΩ := lawful_opaqCodecω
-  -- at a pair of `Ω`, each option admits the attribute exactly when it admits the value
-  have key : ∀ t a, Ω.e t = some a → os.filter (·.admitA a) = os.filter (·.admitV t) := by
-    intro t a hta
-    refine List.filter_congr (fun o ho => ?_)
-    obtain ⟨hl, hs, hV, hA⟩ := hf o ho
-    rw [hV, hA]
-    cases hp : o.c.p a with
-    | some w =>
-        have hw : Ω.p a = some w := hs.2 _ _ hp
-        rw [hΩ.retract hta] at hw; cases hw
-        simpa using (hl.canon hp).symm
-    | none =>
-        cases he : o.c.e t with
-        | none => rfl
-        | some a' =>
-            have := hs.1 _ _ he; rw [hta] at this; cases this
-            rw [hl.retract he] at hp; exact nomatch hp
-  refine ⟨?_, ?_⟩
-  · intro o ho t a hsel he
-    rw [key t a ((hf o ho).2.1.1 _ _ he)]; exact hsel
-  · intro o ho a t a' hsel hp he
-    have hpa : Ω.p a = some t := (hf o ho).2.1.2 _ _ hp
-    have hta : Ω.e t = some a := Ω_canon hpa
-    rw [← key t a hta]; exact hsel
-
 /-- Each member of a held-free list is held-free. -/
 theorem HFL_mem : ∀ {ts : List Term}, HFL ts → ∀ t ∈ ts, HF t
   | [], _, _, h => nomatch h
@@ -578,14 +544,6 @@ theorem HFL_mem : ∀ {ts : List Term}, HFL ts → ∀ t ∈ ts, HF t
       rcases List.mem_cons.mp hm with rfl | hm
       · exact h1
       · exact HFL_mem h2 t hm
-
-/-- **`UAtAct` is free for a held-free union of lawful options.** No certificate. -/
-theorem uAtAct_of_HF {opts : List Term} (h : HFL opts) (hl : ∀ t ∈ opts, Lawful (denote t)) :
-    UAtAct opts := by
-  refine ubw_of_sub _ (fun o ho => ?_)
-  obtain ⟨t, ht, rfl⟩ := List.mem_map.mp ho
-  exact ⟨hl t ht, sub_denote t (HFL_mem h t ht), fun _ => rfl, fun _ => rfl⟩
-
 
 /-- The read-side meet row's agreement conjunct is free at held-free terms. -/
 theorem admAAt_of_HF {x y z : Term} (hx : HF x) (hy : HF y) (hz : HF z)
@@ -598,24 +556,6 @@ theorem admAAt_of_HF {x y z : Term} (hx : HF x) (hy : HF y) (hz : HF z)
   rw [hu, hw, hr, read_agree hz hx hr hu, read_agree hx hy hu hw]
   exact ⟨rfl, rfl⟩
 
-
-/-! ## A union that meets (U) only where the union acts
-
-`union(array(literal "A"), array(literal "B"))` fails `UAtCan` at `[]`
-(`not_uAtCan_array_literals`): `[]` is a canonical pair of each option. The union declines to
-write `[]`, so `UAtAct` holds, and the schema is one that people write. The pair is held-free,
-so `uAtAct_of_HF` discharges the pair with no certificate. -/
-
-/-- **§5's two residues, separated at a schema people write.**
-    `union(array(literal "A"), array(literal "B"))` fails `UAtCan`
-    (`not_uAtCan_array_literals`) and meets `UAtAct`. Each option is a restriction of
-    `opaque`, so each value that the union writes reads back through the option that wrote
-    the value. -/
-theorem uAtAct_array_literals :
-    UAtAct [Term.array (.literal .string "A"), Term.array (.literal .string "B")] :=
-  uAtAct_of_HF ⟨⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟩⟩ (forall_mem_pair
-    (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _))
-    (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _)))
 
 /-! ## The false control: a `held` adapter is not a restriction of `opaque` -/
 

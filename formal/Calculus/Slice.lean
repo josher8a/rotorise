@@ -14,13 +14,8 @@ option is told apart by the meet: `OrthS` separates two objects at `boolean` and
 as at `string`, so a clause over text could not slice a union the classifier
 certifies. Non-emptiness is `Alts`'s own, so the record below declares no such field.
 
-**(D) is certificate-preserving on its own, and (U) is not.** Well-formedness of a union is a
-`Pairwise` property, and `List.Pairwise.sublist` carries it to any sub-selection with an empty
-axiom set. So keeping fewer options proves nothing new about (D). (U) reads a singleton filter
-instead, which no sub-selection preserves without a certificate: dropping an option can turn a
-filter of two into a filter of one and demand an answer nothing previously owed. `uAtAct_sublist`
-is that argument, and it takes `AdmitsAtMostOne`. So the two (U) corollaries below take
-`Separated`, and a union with no certificate has no slice.
+**The union's obligation survives a slice on its own.** Pairwise compatibility is a property of
+each pair of options, so any sub-selection keeps it, and the slice needs no certificate.
 
 Not in `Merge.lean`, which says of itself that it is a syntactic operation on `Body` with a typing
 corollary and sits with what it is about. These are syntactic operations on the option list, so
@@ -106,7 +101,7 @@ theorem AltClause.exclude_sublist (c : AltClause) (opts : List Term) :
 
     An existential, because the three lists the rule reads are positional: a selection speaks about
     the option, and the held set and the member at that position go or stay with it. The `Sublist`s
-    are what the callers need, and they are what (D) and `HUnion` are each read through.
+    are what the callers need, and they are what `HUnion` is read through.
 
     On the sub-selection and not on the filter. The filter form decides `p t` at each step and
     splits on the answer; this one recurses on `List.Sublist`, which already carries the decision
@@ -132,23 +127,21 @@ theorem TypedListμ.sublist {opts' opts : List Term} {Ts μs} (hsub : opts'.Subl
 /-- **The extraction of a derivable union is derivable.**
 
     Nothing is proved about an option that was not proved before: each kept option carries the
-    judgement it already had. (D) is a `Pairwise` property, so `List.Pairwise.sublist` carries it
-    to the kept held sets with an empty axiom set. The one lemma this needs is `TypedListμ.sublist`
-    above, and that lemma is about the positional lists, not about (D). -/
+    judgement it already had. The one lemma this needs is `TypedListμ.sublist` above. -/
 theorem typed_union_extract {opts : List Term} {Ts μs} (c : AltClause)
-    (h : TypedListμ opts Ts μs) (hD : DIncomp Ts) :
+    (h : TypedListμ opts Ts μs) :
     ∃ Ts' μs', Ts'.Sublist Ts ∧ μs'.Sublist μs ∧
       Typed (.union (c.extract opts)) (HUnion Ts') (unanimous μs') := by
   obtain ⟨Ts', μs', hts, hsT, hsμ⟩ := h.sublist (c.extract_sublist opts)
-  exact ⟨Ts', μs', hsT, hsμ, .union hts (List.Pairwise.sublist hsT hD)⟩
+  exact ⟨Ts', μs', hsT, hsμ, .union hts⟩
 
 /-- **The exclusion of a derivable union is derivable**, by the same argument at the complement. -/
 theorem typed_union_exclude {opts : List Term} {Ts μs} (c : AltClause)
-    (h : TypedListμ opts Ts μs) (hD : DIncomp Ts) :
+    (h : TypedListμ opts Ts μs) :
     ∃ Ts' μs', Ts'.Sublist Ts ∧ μs'.Sublist μs ∧
       Typed (.union (c.exclude opts)) (HUnion Ts') (unanimous μs') := by
   obtain ⟨Ts', μs', hts, hsT, hsμ⟩ := h.sublist (c.exclude_sublist opts)
-  exact ⟨Ts', μs', hsT, hsμ, .union hts (List.Pairwise.sublist hsT hD)⟩
+  exact ⟨Ts', μs', hsT, hsμ, .union hts⟩
 
 /-- The slice holds no value the original did not. A sub-selection of the held sets, so the
     disjunction narrows. -/
@@ -156,41 +149,33 @@ theorem hunion_sublist {Ts' Ts : List Held} (hs : Ts'.Sublist Ts) {v : Value}
     (hv : HUnion Ts' v) : HUnion Ts v :=
   hv.elim fun T hT => ⟨T, hs.subset hT.1, hT.2⟩
 
-/-! ### The certificate, and (U) -/
-
-/-- Denoting the options commutes with keeping some of them: `semsOf` is a map. -/
-theorem semsOf_sublist {opts' opts : List Term} (hs : opts'.Sublist opts) :
-    (semsOf opts').Sublist (semsOf opts) :=
-  List.Sublist.map _ hs
+/-! ### The certificate, and the obligation -/
 
 /-- **The classifier's certificate survives the slice**, because it is `Pairwise`. -/
 theorem separated_sublist {opts' opts : List Term} (hs : opts'.Sublist opts)
     (h : Separated opts) : Separated opts' :=
   List.Pairwise.sublist hs h
 
-/-- **(U) at the acting options survives the extraction, under the certificate.**
+/-- **The union's obligation survives any sub-selection.** -/
+theorem pairwiseCompat_sublist {opts' opts : List Term} (hs : opts'.Sublist opts)
+    (h : PairwiseCompat opts) : PairwiseCompat opts' :=
+  fun s hs' t ht' => h s (hs.subset hs') t (hs.subset ht')
 
-    `Separated` is the premise and not decoration. `UniqueBothWays` is a singleton test and is not
-    monotone on its own, so slicing an uncertified union can make a vacuous premise live;
-    `uAtAct_sublist` is where that argument is written, and `admitsAtMostOne_of_separated` is what
-    supplies it here. -/
-theorem uAtAct_extract {opts : List Term} (c : AltClause)
-    (hsep : Separated opts) (h : UAtAct opts) : UAtAct (c.extract opts) :=
-  uAtAct_sublist (semsOf_sublist (c.extract_sublist opts))
-    (admitsAtMostOne_of_separated hsep) h
+/-- …so the extraction keeps it, with no certificate. -/
+theorem pairwiseCompat_extract {opts : List Term} (c : AltClause) (h : PairwiseCompat opts) :
+    PairwiseCompat (c.extract opts) :=
+  pairwiseCompat_sublist (c.extract_sublist opts) h
 
 /-- ...and the exclusion, at the complement of the same predicate. -/
-theorem uAtAct_exclude {opts : List Term} (c : AltClause)
-    (hsep : Separated opts) (h : UAtAct opts) : UAtAct (c.exclude opts) :=
-  uAtAct_sublist (semsOf_sublist (c.exclude_sublist opts))
-    (admitsAtMostOne_of_separated hsep) h
+theorem pairwiseCompat_exclude {opts : List Term} (c : AltClause) (h : PairwiseCompat opts) :
+    PairwiseCompat (c.exclude opts) :=
+  pairwiseCompat_sublist (c.exclude_sublist opts) h
 
 
 /-! ## The slice partitions the union
 
-`unionOk` is `Meet.lean`'s, so the two corollaries that read it live behind that import. The
-join half needs no certificate: `extract` and `exclude` filter by a predicate and its negation.
-The disjointness half does, because two options sharing a value is exactly what (U) forbids. -/
+The join half needs no certificate: `extract` and `exclude` filter by a predicate and its
+negation. The disjointness half does, because two options may share a value. -/
 
 /-- **A clause partitions a union's options, and the join is the union's admission.** Pure list
     algebra: `extract` and `exclude` filter by a predicate and its negation. -/
@@ -235,25 +220,21 @@ theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
       exact hne (hf1.trans hf2.symm)
   | _ :: _ :: _, hl => rw [hL] at hlen; simp at hlen
 
-/-- **A clause partitions a certified union.** The two slices join to the union and share no
-    value, so a union is the sum of any slice and its complement. Stated on `Term.ofOptions`,
-    because a slice of one option is that option and a slice of none is the bottom. -/
-theorem Adm_extract_or_exclude {c : AltClause} {opts : List Term} (hok : unionOk opts = true)
-    (v : Value) :
+/-- **The two slices join to the union.** Stated on `Term.ofOptions`, because a slice of one
+    option is that option and a slice of none is the bottom. -/
+theorem Adm_extract_or_exclude (c : AltClause) (opts : List Term) (v : Value) :
     (Adm (Term.ofOptions (c.extract opts)) v || Adm (Term.ofOptions (c.exclude opts)) v)
       = Adm (Term.ofOptions opts) v := by
-  rw [Adm_ofOptions (unionOk_sublist (AltClause.extract_sublist c opts) hok),
-      Adm_ofOptions (unionOk_sublist (AltClause.exclude_sublist c opts) hok),
-      Adm_ofOptions hok]
+  rw [Adm_ofOptions, Adm_ofOptions, Adm_ofOptions]
   exact AdmAny_extract_or_exclude c opts v
 
-/-- …and no value falls in both slices. -/
+/-- …and no value falls in both slices of a certified union, so a certified union is the sum of
+    any slice and its complement. -/
 theorem Adm_extract_and_exclude {c : AltClause} {opts : List Term} (hok : unionOk opts = true)
     (v : Value) :
     (Adm (Term.ofOptions (c.extract opts)) v && Adm (Term.ofOptions (c.exclude opts)) v)
       = false := by
-  rw [Adm_ofOptions (unionOk_sublist (AltClause.extract_sublist c opts) hok),
-      Adm_ofOptions (unionOk_sublist (AltClause.exclude_sublist c opts) hok)]
+  rw [Adm_ofOptions, Adm_ofOptions]
   exact AdmAny_extract_and_exclude hok v
 
 

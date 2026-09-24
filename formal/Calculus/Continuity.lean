@@ -1,26 +1,14 @@
 import Calculus.Denote
 
 /-!
-# Non-continuity of `union` — why a fixpoint definition is impossible
+# Continuity of `union`
 
 Every least-fixpoint construction discharges a **monotonicity obligation**: unfolding may only
-add information. `altCodec` resolves by *unique* admission, so as the recursive results grow,
-admission grows, the filtered list grows from `[o]` to `[o, o']`, and the answer collapses from
-`some` to `none`. (U) is a negative condition on the *other* options — anti-monotone in exactly
-the argument a fixpoint must grow.
-
-The consequence for the specification, which is why this file sits beside `Discharge.lean`: a
-union whose options are genuinely recursive has no fixpoint semantics **under this resolution
-rule**, so `lazy` under `union` is unmodelled rather than merely awkward.
-
-**The scope is load-bearing: this is refuted by (U) specifically**, unique admission being a
-**negative** condition on the other options — so the refutation is about the *rule*, not about
-the constructor. The last section is the demonstration: weaken (U) to *confluence*, where every
-admitter agrees rather than exactly one admitting, and monotonicity comes back —
-`altCodec_not_monotone`'s own witness has its two admitters agreeing.
-
-The full argument is below and in commit `7ed4e5e` — the ccpo obligation, the direction of
-failure, the relational route, and what a port to Isabelle/HOL would meet instead.
+add information. `altCodec` resolves by the first admitter, so growth of an option changes the
+union's answer only where two admitters disagree. Under the obligation that every admitter agrees
+(`ConfluentAt`), first-match resolution is monotone (`selectF_mono_list`) and continuous
+(`selectF_continuous_list`). A codec built to break the obligation (`optBad_not_confluent`) shows
+that the obligation is not free.
 -/
 
 namespace Calculus
@@ -28,8 +16,8 @@ namespace Calculus
 /-! ## The information order
 
 The minimal requirement *any* such ccpo must meet — `e` and `p` grow from undefined, with
-`Codec.empty` at the bottom — stated positively, so the refutation does not depend on which
-ccpo one picks. -/
+`Codec.empty` at the bottom — stated positively, so nothing here depends on which ccpo one
+picks. -/
 structure Codec.Approx (c c' : Codec) : Prop where
   /-- Everything `c` encodes, `c'` encodes the same way. -/
   e : ∀ {v a}, c.e v = some a → c'.e v = some a
@@ -44,10 +32,7 @@ theorem Codec.Approx.refl (c : Codec) : Codec.Approx c c :=
 theorem Codec.Approx.empty_le (c : Codec) : Codec.Approx Codec.empty c := by
   refine ⟨?_, ?_⟩ <;> intro _ _ h <;> exact nomatch h
 
-/-! ## The refutation, on `altCodec`
-
-§4's counterexample pair, `union(literal("A"), string)`, with the `string` side at two stages
-of definedness. -/
+/-! ## The witnesses -/
 
 /-- The stable option: `literal("A")`, which admits `"A"` at every stage. -/
 noncomputable def optLit : OptionSem := .byAttempt (literalCodec .string "A")
@@ -55,82 +40,10 @@ noncomputable def optLit : OptionSem := .byAttempt (literalCodec .string "A")
 /-- The growing option, before unfolding: undefined everywhere. -/
 def optBot : OptionSem := .byAttempt Codec.empty
 
-/-- The growing option, after unfolding: `string`, which now also admits `"A"`. -/
-def optStr : OptionSem := .byAttempt stringCodec
-
-/-- `optBot` approximates `optStr` — the growing option only ever gained information. -/
-theorem optBot_approx_optStr : Codec.Approx optBot.c optStr.c :=
-  Codec.Approx.empty_le _
-
-/-- **The obligation `partial_function` cannot discharge.** One option grows in the
-    information order and the union's `e` *shrinks*. No ccpo repairs it: the order above is a
-    consequence of having a fixpoint at all. -/
-theorem altCodec_not_monotone :
-    Codec.Approx optBot.c optStr.c
-    ∧ (altCodec [optLit, optBot] (some .S)).e (.str "A") = some (.s "A")
-    ∧ (altCodec [optLit, optStr] (some .S)).e (.str "A") = none := by
-  refine ⟨optBot_approx_optStr, ?_, ?_⟩ <;>
-    simp [altCodec, select, optLit, optBot, optStr, OptionSem.byAttempt,
-          literalCodec, baseCodec, Codec.restrict, inL, stringCodec, Codec.empty]
-
-/-! ## The same defect through a staged denotation
-
-`denote` is structural and does not stage, so the collapse below is shown on a staged
-denotation built for the purpose rather than on `denote` itself — and *why* `denote` need not
-stage is the same fact this file is about. `Term.lazy` carries a plain `Term`, not a thunk,
-precisely because a genuinely recursive union has no fixpoint semantics (the refutation
-above). There is no recursion to approximate, so there is no
-approximation to be non-monotone.
-
-The theorem is kept, restated over a staging defined **here**, as a witness construction rather
-than as the denotation. That is the honest shape: the staged function is what a fixpoint
-definition of `denote` would have had to be, and the theorem says it cannot be one. -/
-
-/-- The staged approximation a fixpoint definition of `denote` would need, at the shape the
-    witness uses. Everything else is `Codec.empty`: this is a witness, not a semantics. -/
-noncomputable def stage : Nat → Term → Codec
-  | 0, _ => Codec.empty
-  | _+1, .literal k ls => literalCodec k ls
-  | _+1, .string => stringCodec
-  | n+1, .lazy t => { stage n t with μ := none }
-  | n+1, .union opts =>
-      altCodec (opts.map fun t => optionSemOf (stage n t) (specOf t))
-        (unanimous (opts.map fun t => (stage n t).μ))
-  | _+1, _ => Codec.empty
-
-/-- §4's `union(literal("A"), string)`, with the `string` option behind a `lazy` so it
-    arrives one stage later than the literal. -/
-def tWitness : Term :=
-  .union [.literal .string "A", .lazy .string]
-
-/-- **The stages are not a chain.** Stage `2` encodes `"A"`; stage `3` encodes nothing. So
-    `⨆ n, stage n t` is not a definition either, and the low-stage answer is *over*-defined —
-    a different answer, not an approximation from below. -/
-theorem stage_not_monotone :
-    (stage 2 tWitness).e (.str "A") = some (.s "A")
-    ∧ (stage 3 tWitness).e (.str "A") = none := by
-  constructor <;>
-    simp [stage, tWitness, specOf, optionSemOf, altCodec, select, OptionSem.byAttempt,
-          literalCodec, baseCodec, Codec.restrict, inL, stringCodec, Codec.empty]
-
-/-- At stage `3` the union is simply the ill-formed one §4 refuted, and `none` is correct;
-    stage `2` hid that by not looking. The defect is not a wrong answer at stage `3` — it is
-    that no monotone approximation exists, (U) being a property of the whole option list. -/
-theorem tWitness_violates_uniqueAdmission :
-    ((stage 3 tWitness).e (.str "A")).isNone := by
-  simp [stage_not_monotone.2]
-
 /-! ## What *is* monotone, and why the contrast is the whole point
 
-    The refutation above is about `union`, and it is worth saying plainly that it is not
-    about the calculus. Two of the three wrappers §5 calls one-sided move cleanly in the
-    information order — one up, one down — and it is the *sum* that moves neither way.
-
-    So "a codec is a continuous map between information lattices" is a reading the
-    wrappers support and the sum refutes. It is refuted by (U) specifically: unique
-    admission is a **negative** condition on the other options, so growth anywhere in the
-    list can remove definedness everywhere. Nothing about partiality or the quotient is
-    responsible; a calculus with both and no sum would be continuous. -/
+    Two of the three wrappers §5 calls one-sided move cleanly in the information order: one up,
+    one down. -/
 
 /-- **`alternate reader` is a step up.** `extendRead` only ever adds readings — everything `c`
     decodes, the migration decodes the same way, and the writing half is untouched. §3's
@@ -146,48 +59,29 @@ theorem approx_restrict (c : Codec) (q : Value → Bool) :
     Codec.Approx (c.restrict q) c :=
   ⟨fun h => (restrict_e.mp h).2, fun h => (restrict_p.mp h).1⟩
 
-/-! ## The condition, weakened — and what it restores
+/-! ## First-match resolution under the obligation
 
-Everything above is about **unique** admission. Weaken it to **confluence** — *every* admitter
-agrees, rather than *exactly one* admits — and the picture changes, because the negative
-condition becomes a positive one.
-
-Stating it as first-match plus an obligation is what makes it usable: the *definition* takes the
-first admitter and never compares attributes, so no `DecidableEq Attr` is needed (undecidable
-through `Attr.m`'s function field, and noncomputable through the host besides), while the
-*obligation* says the choice did not matter. So the order-independence that looks lost is
-recovered as a theorem — which places this exactly between the two designs: first-match with no
-obligation is order-dependent, unique admission needs no obligation and is partial. -/
+The definition takes the first admitter and never compares attributes, so no `DecidableEq Attr`
+is needed (undecidable through `Attr.m`'s function field). The obligation says that the choice
+did not matter, and order-independence is recovered as a theorem. -/
 
 /-- First-match resolution, value side. Total on the union of the options' domains. -/
 def selectF (os : List OptionSem) (v : Value) : Option Attr :=
-  match os.filter (fun o => o.admitV v) with
-  | [] => none
-  | o :: _ => o.c.e v
+  select os (·.admitV) (·.c.e) v
 
-/-- The obligation at one input: every admitter writes the same attribute. Weaker than (U),
-    which demands there be only one. -/
+/-- The obligation at one input: every admitter writes the same attribute. -/
 def ConfluentAt (os : List OptionSem) (v : Value) : Prop :=
   ∀ o ∈ os, ∀ o' ∈ os, o.admitV v = true → o'.admitV v = true → o.c.e v = o'.c.e v
 
 /-- `selectF`, reduced at an admitting head. -/
 theorem selectF_admit {o : OptionSem} {os : List OptionSem} {v : Value}
     (h : o.admitV v = true) : selectF (o :: os) v = o.c.e v := by
-  simp [selectF, h]
+  simp [selectF, select, List.find?, h]
 
 /-- …and at a non-admitting one. -/
 theorem selectF_skip {o : OptionSem} {os : List OptionSem} {v : Value}
     (h : o.admitV v = false) : selectF (o :: os) v = selectF os v := by
-  simp [selectF, h]
-
-/-- **`altCodec_not_monotone`'s witness does not refute confluence.** The growing option is
-    `string` and the fixed one is `literal("A")`; at `"A"` both admit and **both write
-    `⟨S,"A"⟩`**. Under counting the answer collapses from `some` to `none` — that is the
-    refutation. Under confluence it stays. -/
-theorem confluent_survives_the_refutation :
-    optLit.c.e (.str "A") = optStr.c.e (.str "A") := by
-  simp [optLit, optStr, OptionSem.byAttempt, literalCodec, baseCodec, Codec.restrict, inL,
-        stringCodec]
+  simp [selectF, select, List.find?, h]
 
 /-! ### The obligation is not free, and a new witness is needed -/
 
@@ -202,15 +96,13 @@ def cBad : Codec :=
 /-- …as an option. -/
 def optBad : OptionSem := .byAttempt cBad
 
-/-- **The counterexample confluence still needs**, and the failure mode differs from
-    counting's: with the growing option *first*, the answer does not collapse to `none`, it
-    **changes** — `⟨S,"A"⟩` to `⟨S,"B"⟩`. So `selectF` alone is no better than `select`; it is
-    `selectF` *under the obligation* that is. -/
+/-- **The counterexample the obligation excludes**: with the growing option first, the answer
+    **changes**, `⟨S,"A"⟩` to `⟨S,"B"⟩`. -/
 theorem selectF_not_monotone :
     selectF [optBot, optLit] (.str "A") = some (.s "A")
     ∧ selectF [optBad, optLit] (.str "A") = some (.s "B") := by
   constructor <;>
-    simp [selectF, optBot, optBad, optLit, OptionSem.byAttempt, cBad, ceBad, Codec.empty,
+    simp [selectF, select, optBot, optBad, optLit, OptionSem.byAttempt, cBad, ceBad, Codec.empty,
           literalCodec, baseCodec, Codec.restrict, inL, stringCodec]
 
 /-- …and the obligation is exactly what that violates. -/
@@ -237,7 +129,7 @@ remains; none is claimed here. -/
 
 /-! ### The two obligations a least fixpoint discharges -/
 
-/-- **Monotonicity, which counting provably lacks.** Stated with the growing option first — the
+/-- **Monotonicity.** Stated with the growing option first — the
     only position where growth can change the answer, since grown second the earlier admitter
     answers throughout. Confluence is used in exactly one of the three cases: where growth newly
     admits at a value another option was already answering. -/
@@ -265,8 +157,7 @@ theorem selectF_mono {o₁ o₁' o₂ : OptionSem} {v : Value} {a : Attr}
         rw [hc o₁' (by simp) o₂ (by simp) h1' h2]; exact h
 
 /-- Directed continuity, stated **without constructing sups** — this file defines `Codec.Approx`
-    and deliberately no ccpo, so that the refutation does not depend on which one is picked, and
-    the same restraint applies here. `oω` is an upper bound that is *least at `v`*: every answer
+    and deliberately no ccpo. `oω` is an upper bound that is *least at `v`*: every answer
     it gives, some finite stage already gave. In the flat `Option` order that is the whole sup
     condition. -/
 structure IsSupAt (f : Nat → OptionSem) (oω : OptionSem) (v : Value) : Prop where
@@ -279,10 +170,6 @@ structure IsSupAt (f : Nat → OptionSem) (oω : OptionSem) (v : Value) : Prop w
     load-bearing and the general case does not share it: see `selectF_continuous_list`, which
     takes the obligation at each stage. Growth-first is automatically the first admitter, so no
     other option can answer; elsewhere in the list the obligation is what says they agree.
-
-    Counting is continuous *unconditionally* — its singleton requirement at the limit forces
-    uniqueness at every earlier stage — and cannot be monotone at all. So the obligation is what
-    buys monotonicity and, in general, continuity too.
 
     The two premises are the model's own: `hself` is `uniqueAdmission_of_disjoint`'s `hw` — a
     canonical pair admits its *own* option — and `hadm` is `byAttempt`'s definition, trivial for
@@ -314,7 +201,7 @@ theorem ConfluentAt.tail {o : OptionSem} {os : List OptionSem} {v : Value}
 /-- The answer `selectF` gives comes from a member that admits. -/
 theorem selectF_mem : ∀ {os : List OptionSem} {v : Value} {a : Attr},
     selectF os v = some a → ∃ o ∈ os, o.admitV v = true ∧ o.c.e v = some a
-  | [], _, _, h => absurd h (by simp [selectF])
+  | [], _, _, h => absurd h (by simp [selectF, select])
   | o :: os, v, a, h => by
       cases ho : o.admitV v with
       | true => exact ⟨o, by simp, ho, by rw [selectF_admit ho] at h; exact h⟩
@@ -342,19 +229,12 @@ theorem selectF_of_mem : ∀ {os : List OptionSem} {v : Value} {o : OptionSem},
           · exact h') hadm
 
 
-/-! ### The general list versions, and a correction they force
+/-! ### The general list versions
 
-The two theorems above are the two-option, growth-first case. Generalising them changes one
-claim: `selectF_continuous`'s docstring said continuity "needs no confluence". **That is true of
-growth-first and false in general** — with the growing option first it is automatically the first
-admitter, so no other option can answer; anywhere else in the list, the obligation is what says
-the first admitter agrees with the one that grew.
-
-Counting is the reverse: its continuity really is unconditional, because its own singleton
-requirement *at the limit* forces uniqueness at every earlier stage (admission only grows, so the
-filter is `[o]` or `[]`). So the corrected diagnosis is simpler than the one it replaces —
-**the obligation must hold at every stage, and that one requirement buys both** monotonicity and
-continuity, where counting gets continuity free and cannot have monotonicity at all. -/
+With the growing option first, it is the first admitter, so no other option can answer. Anywhere
+else in the list, the obligation says that the first admitter agrees with the one that grew. So
+the obligation must hold at every stage, and that one requirement buys both monotonicity and
+continuity. -/
 
 /-- **Monotonicity over an arbitrary option list**, with the growth as a map. Cleaner than the
     two-option case, because `selectF_of_mem` does the work: the answer comes from *some*
@@ -389,20 +269,14 @@ theorem selectF_continuous_list {os : List OptionSem} {F : Nat → OptionSem →
 
 /-! ### What this does and does not establish
 
-**Does:** the refutation above is specific to counting; confluent resolution is monotone (given
-the obligation) and continuous (unconditionally), which are the two obligations a least-fixpoint
-construction discharges.
+**Does:** under the obligation, first-match resolution is monotone and continuous, the two
+obligations a least-fixpoint construction discharges.
 
-**Does not:** that a fixpoint *exists*. `selectF_mono_list` and `selectF_continuous_list` above
-are the general versions — this paragraph said they were "the same arguments, unwritten" and
-stayed that way through the commit that wrote them, thirty lines up. Monotonicity and continuity
-are a fixpoint's *obligations*, not its construction: the construction needs a ccpo this
-file deliberately does not define, while `denote` is structural and does not stage — `Term.lazy`
-carries a plain `Term` rather than a thunk *because* the refutation was believed. Reopening
-recursion means staging `denote` again, which is a larger change than these theorems.
+**Does not:** that a fixpoint *exists*. The construction needs a ccpo that this file does not
+define, and `denote` is structural and does not stage: `Term.lazy` carries a plain `Term`
+rather than a thunk. Reopening recursion means staging `denote`.
 
-**And the residue is one thing:** the obligation must be an invariant of the unrolling, which
-`optBad_not_confluent` above is the surviving witness for. It is vacuous where the options are
-pairwise disjoint, so the syntactic disjointness check is what would license it. -/
+The obligation must be an invariant of the unrolling, and `optBad_not_confluent` is the witness
+that it is not free. -/
 
 end Calculus

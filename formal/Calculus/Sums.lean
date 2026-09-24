@@ -3,9 +3,9 @@ import Calculus.Objects
 /-!
 # Sums (§5), and unknown values
 
-`altCodec` over `OptionSem`s that carry their *admission as data*, with `UniqueAdmission`
-as (U) in premise form. `opaqCodec` is `altCodec`'s fueled fixpoint over everything
-self-identifying, and its number option is `numberCodec`, which holds a numeral exactly.
+`altCodec` over `OptionSem`s that carry their *admission as data*: the first option that
+admits answers. `opaqCodec` is `altCodec`'s fueled fixpoint over everything self-identifying,
+and its number option is `numberCodec`, which holds a numeral exactly.
 -/
 
 namespace Calculus
@@ -218,60 +218,11 @@ def OptionSem.byAttempt (c : Codec) : OptionSem :=
 def optionSemOf (c : Codec) : Option BodySpec → OptionSem
   | _ => .byAttempt c
 
-/-- §5 (U) at every option's canonical pairs: each is admitted by that option alone, on
-    both sides. The strong form, and what every discharger in `Discharge` produces. -/
+/-- Unique admission at every option's canonical pairs: each is admitted by that option alone,
+    on both sides. What every discharger in `Discharge` produces. -/
 def UniqueAdmission (os : List OptionSem) : Prop :=
   ∀ o ∈ os, ∀ t a, o.c.e t = some a →
     os.filter (·.admitA a) = [o] ∧ os.filter (·.admitV t) = [o]
-
-/-- **§5 (U) where the laws consume it**, and the soundness theorem's actual residue.
-
-    `UniqueAdmission` quantifies over every canonical pair of every *option*. The four
-    laws never ask that much: they ask only about inputs the *union itself* resolves,
-    because `altCodec` is undefined wherever the filter is not a singleton, and a law
-    quantified over `dom` cannot reach an input the pair declines. This is that
-    restriction — resolving one side of the pair resolves the other, through the same
-    option — and the three uses in `lawfulCore_altCodec` and `lawful_altCodec` are
-    exactly its two clauses.
-
-    Strictly weaker, and the gap holds working schemas.
-    `union(array(literal "A"), array(literal "B"))` collides at `[]`, which is a
-    canonical pair of each option and so refutes `UniqueAdmission`
-    (`not_uAtCan_array_literals`) — while the union declines to write `[]` at all, so it
-    never acts there and no law is ever asked. `adm` stops at the containers (§5), which
-    is why the collision is the empty case and nothing else. `uAtAct_array_literals` is
-    that union meeting this condition, so the two are separated by a theorem and not by
-    an argument. -/
-def UniqueBothWays (os : List OptionSem) : Prop :=
-  (∀ o ∈ os, ∀ t a, os.filter (·.admitV t) = [o] → o.c.e t = some a →
-    os.filter (·.admitA a) = [o]) ∧
-  (∀ o ∈ os, ∀ a t a', os.filter (·.admitA a) = [o] → o.c.p a = some t →
-    o.c.e t = some a' → os.filter (·.admitV t) = [o])
-
-/-- The strong form implies the one the laws need — so every discharger still discharges,
-    unchanged. The converse fails, which is the whole point. -/
-theorem uniqueBothWays_of_uniqueAdmission {os : List OptionSem}
-    (hU : UniqueAdmission os) : UniqueBothWays os :=
-  ⟨fun o ho t a _ he => (hU o ho t a he).1,
-   fun o ho _ t a' _ _ he => (hU o ho t a' he).2⟩
-
-/-! ### Sub-selection
-
-A slice keeps some of the options and drops the rest. `(D)` survives that by itself, because it is
-a `Pairwise` property and `List.Pairwise.sublist` carries it to any sublist with no axioms at all.
-`UniqueBothWays` does **not**, and the reason is the singleton filter test below. -/
-
-/-- A list that holds at most one entry, and holds this one, is exactly it. -/
-theorem eq_singleton_of_mem_of_length_le_one {α : Type} {l : List α} {x : α}
-    (hx : x ∈ l) (hl : l.length ≤ 1) : l = [x] := by
-  cases l with
-  | nil => exact absurd hx (by simp)
-  | cons y ys =>
-    cases ys with
-    | nil =>
-      simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
-      rw [hx]
-    | cons z zs => simp at hl
 
 /-- A list no two of whose entries stand in any relation holds at most one entry. -/
 theorem length_le_one_of_pairwise_false {α : Type} {l : List α}
@@ -283,67 +234,26 @@ theorem length_le_one_of_pairwise_false {α : Type} {l : List α}
     | nil => simp
     | cons y ys => exact absurd ((List.pairwise_cons.mp h).1 y (by simp)) id
 
-/-- **No value and no attribute is admitted by two options.**
-
-    The certificate a discriminated selection carries and an undiscriminated one does not. Pass 7's
-    structural meet is a syntactic test that implies this; stated here as the property the lemma
-    below actually needs, so the lemma does not wait on the test. -/
+/-- **No value and no attribute is admitted by two options.** The certificate implies it
+    (`admitsAtMostOne_of_separated`). -/
 def AdmitsAtMostOne (os : List OptionSem) : Prop :=
   (∀ t, (os.filter (·.admitV t)).length ≤ 1) ∧
   (∀ a, (os.filter (·.admitA a)).length ≤ 1)
-
-/-- **(U) at the acting options survives a sub-selection, under the certificate and not without it.**
-
-    `UniqueBothWays` reads `os.filter (·.admitV t) = [o]`, which is a *singleton* test, so it is not
-    monotone on its own: dropping an option can turn a filter of two into a filter of one, making a
-    premise that was vacuous live and demanding a conclusion nothing previously required. **Slicing
-    an uncertified union can break it.**
-
-    Under `AdmitsAtMostOne` the question does not arise. No filter is ever longer than one, so a
-    singleton in the sub-selection is a singleton in the whole, the original's obligation applies,
-    and the answer restricts. The certificate is why a slice of a union is safe, and it is a
-    premise rather than decoration. -/
-theorem uAtAct_sublist {os us : List OptionSem} (hsub : us.Sublist os)
-    (hcert : AdmitsAtMostOne os) (h : UniqueBothWays os) : UniqueBothWays us := by
-  -- one argument, used on both halves: a singleton of the sub-selection is the whole's singleton
-  have lift : ∀ (p : OptionSem → Bool) (o : OptionSem),
-      (os.filter p).length ≤ 1 → us.filter p = [o] → os.filter p = [o] := by
-    intro p o hlen hus
-    have ho : o ∈ us.filter p := by rw [hus]; exact List.mem_singleton_self o
-    have hmem := List.mem_filter.mp ho
-    exact eq_singleton_of_mem_of_length_le_one
-      (List.mem_filter.mpr ⟨hsub.subset hmem.1, hmem.2⟩) hlen
-  -- and one for the conclusion: the whole's singleton restricts, because the member is kept
-  have drop : ∀ (p : OptionSem → Bool) (o : OptionSem),
-      o ∈ us → os.filter p = [o] → us.filter p = [o] := by
-    intro p o hou hos
-    have hp : p o = true := (List.mem_filter.mp (by rw [hos]; exact List.mem_singleton_self o)).2
-    have hsl : (us.filter p).Sublist [o] := hos ▸ hsub.filter p
-    have ho : o ∈ us.filter p := List.mem_filter.mpr ⟨hou, hp⟩
-    exact eq_singleton_of_mem_of_length_le_one ho (hsl.length_le)
-  exact
-    ⟨fun o ho t a hus he =>
-       drop _ o ho (h.1 o (hsub.subset ho) t a (lift _ o (hcert.1 t) hus) he),
-     fun o ho a t a' hus hp he =>
-       drop _ o ho (h.2 o (hsub.subset ho) a t a' (lift _ o (hcert.2 a) hus) hp he)⟩
 
 /-- A union's member: `μ` when unanimous, else `⊤` (§5 `(union)`). -/
 def unanimous : List (Option Member) → Option Member
   | [] => none
   | μ :: μs => if μs.all (· == μ) then μ else none
 
-/-- **One side of a sum.** Both halves of `altCodec` are this: filter the options by the
-    admission *that side* reads, and act through the one that answers alone. The two
-    differ only in which admission and which half of the pair — so stating the shape once
-    is what lets `altCodec_e` and `altCodec_p` be the same theorem at two instances,
-    instead of one theorem written twice. -/
+/-- **One side of a sum.** Both halves of `altCodec` are this: act through the first option
+    that admits by the admission *that side* reads. Stating the shape once is what lets
+    `altCodec_e` and `altCodec_p` be the same theorem at two instances. -/
 def select {A B : Type} (os : List OptionSem) (adm : OptionSem → A → Bool)
     (run : OptionSem → A → Option B) (x : A) : Option B :=
-  match os.filter (adm · x) with
-  | [o] => run o x
-  | _ => none
+  (os.find? (adm · x)).bind (run · x)
 
-/-- `union`: the sum, resolved by unique admission — never by declaration order. -/
+/-- `union`: the sum, resolved by the first admitter. Over pairwise compatible, canonical options
+    the order is unobservable (`altCodec_perm`). -/
 def altCodec (os : List OptionSem) (μA : Option Member) : Codec :=
   { T := fun v => ∃ o ∈ os, o.c.T v
     μ := μA

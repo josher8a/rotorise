@@ -118,10 +118,10 @@ inductive Term where
   | refine   (inner : Term) (p : Pred)
   /-- §3 `(lazy)`. The thunk is *not* `Unit → Term`: a closure adds no constructible
       term (every `Term` is finite either way) and only defeats the termination
-      checker. A recursive term is not modelled. `Continuity.lean` shows that `union`'s
-      admission is anti-monotone, so a recursive union has no fixpoint semantics under
-      unique admission in general. A recursive union whose options are pairwise
-      kind-disjoint has one: `lawful_opaqCodecω` is the lawful fixed point of `opaque`. -/
+      checker. A recursive term is not modelled. `Continuity.lean` proves the obligations of a
+      fixed point for first-match resolution and constructs none. A recursive union whose
+      options are pairwise kind-disjoint has one: `lawful_opaqCodecω` is the lawful fixed
+      point of `opaque`. -/
   | lazy     (inner : Term)
   /-- §3 `(opaque)`: the universal sum. The number option is `numberCodec`, so `opaque`
       writes every `Value` (`opaq_total`). -/
@@ -135,9 +135,9 @@ inductive Term where
   | object   (b : Body)
   | union    (options : List Term)
   /-- §5's bottom: the term that admits no value. Its held set is `False`, which is a subset of
-      every held set, so (D) fails against every other option and this is an option of no
-      `union`. A constructor and not an empty `union`: the empty option list is a term a caller
-      can build by accident, and a rule that reads it as the bottom reads that accident as intent. -/
+      every held set. A constructor and not an empty `union`: the empty option list is a term a
+      caller can build by accident, and a rule that reads it as the bottom reads that accident as
+      intent. -/
   | never
 
 /-- §4's object payload: the declared names, the slot at each, and the one open block.
