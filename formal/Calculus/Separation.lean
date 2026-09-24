@@ -32,17 +32,18 @@ runs `Adm` directly. `admitOptV`/`admitOptA` are `Adm`/`AdmA` at every construct
 domain-equal substitution changes no option's admission, and a rewrite that replaces a subterm
 by a domain-equal one is sound inside a `union`.
 
-**Admission by structure is not a congruence.** The structural test, `keysOk` and the literal
-alternatives and nothing else, differs from `Adm` at a declared name pinned to no literal.
-`vBoolAtA` against `tReqStr`, `{"A" ↦ true}` against `{A : req string}`, is the pair: the
-structural test answers `true` and the row answers `false`. So admission reads the row and
-not the structure. -/
+**Admission by structure is not a congruence.** A test that reads the declared names and the
+literal alternatives and nothing else differs from `Adm` at a declared name pinned to no
+literal. `vBoolAtA` against `tReqStr`, `{"A" ↦ true}` against `{A : req string}`, is the pair:
+the value carries exactly the declared names and the slot pins no literal, so such a test
+answers `true`, and the row answers `false`. So admission reads the row and not the
+structure. -/
 
 /-- A refinement by the trivially-true predicate: the same pair as the bare base. -/
 def qTop : Value → Bool := fun _ => true
 
-/-- One name, declared `req string` and pinned to no literal — so the structural test asks
-    only that the name is present. -/
+/-- One name, declared `req string` and pinned to no literal, so a test of the names and the
+    literals asks only that the name is present. -/
 def tReqStr : Term := .object (.mk {"A"} (fun _ => .req .string) none)
 
 /-- …and a map carrying that name at a boolean, which the structure admits and the row
@@ -74,10 +75,10 @@ theorem refine_top_row (t : Term) : Adm (.refine t (.closure qTop)) = Adm t := b
     constructor, not only at a `refine`. So the two options agree at every value, and a
     rewrite that replaces a subterm by a domain-equal one is sound inside a `union`.
 
-    **The congruence needs admission by attempt.** A structural test, `keysOk` and the literal
-    alternatives and nothing else, differs from `Adm` at a declared name pinned to no
-    literal. At `vBoolAtA` against `tReqStr` the structural test answers `true` and the row
-    answers `false`. -/
+    **The congruence needs admission by attempt.** A test that reads the declared names and
+    the literal alternatives and nothing else differs from `Adm` at a declared name pinned to
+    no literal. At `vBoolAtA` against `tReqStr` such a test answers `true` and the row answers
+    `false`. -/
 theorem union_congruent (t : Term) (v : Value) :
     admitOptV (specOf t, Adm t) v
       = admitOptV (specOf (.refine t (.closure qTop)), Adm (.refine t (.closure qTop))) v := by
@@ -95,9 +96,8 @@ included, is admitted by attempt, which is `Adm`/`AdmA` exactly. `admitV_le_Adm`
 `admitA_le_AdmA`, below the next section, are that containment stated for every constructor. -/
 
 
-/-! ~~selTagV_mem~~ and ~~selTagA_mem~~ went with the tag-filtered sum. They said that the option
-the filter lands on is one of the options; a dissection is a certified `union` now, and
-`selOptV_mem_admitOpt` is where that fact is read off. -/
+/-! A dissection is a certified `union`. `selOptV_mem_admitOpt` states that an option the union
+admits a value by is one of its options. -/
 
 /-- **Separation on the joint predicate, value side — one clause.** §5's ~~SepV~~ offers a
     choice between disjoint kinds and disjoint admissible sets; `Adm` carries the kind gate
@@ -274,27 +274,21 @@ theorem Adm_held_adapt (t P : Term) (f g : Value → Value) (v : Value) :
     Adm (.held t P f g) v = (((some (f v)).elim false (Adm t)) && Adm P v) := by
   simp [Adm]
 
-/-! ### Adapters and alternatives, and why `alternate reader` was in the wrong family
+/-! ### Adapters and alternatives, and why `alternate reader` is not an adapter
 
 `held` and `refine` are `Codec.adapt` with different adapters. `alternate reader` is **not** an
-adapter at all, and asking whether it was is what found the row above.
+adapter at all.
 
-An adapter *composes*: `adapt`'s read is `(c.p a).bind g`, so it can only lose attributes —
-`adapt_p_le`. `alternate reader`'s read *gains* them: `extendRead`'s `p` is the subterm's channel
-falling back to `r`'s, which is a **choice**, not a composition. That is the family `union`
-belongs to as well (`altCodec`, n-ary, both sides). `alternate reader` is the one-sided member: it reads
-on two channels and writes on one.
+An adapter *composes*: `adapt`'s read is `(c.p a).bind g`, so it can only lose attributes
+(`adapt_p_le`). `alternate reader`'s read *gains* them: `extendRead`'s `p` is the subterm's
+channel falling back to `r`'s, which is a **choice**, not a composition. That is the family
+`union` belongs to as well (`altCodec`, n-ary, both sides). `alternate reader` is the one-sided
+member: it reads on two channels and writes on one.
 
-Placing it correctly is what makes the row exact. §5 called `admA(alternate reader)` `⊤` because
-`extendRead` widens past the subterm's set — true, and the wrong conclusion, because the
-thing it widens *by* is `r`, which the term carries. The domain is
-`dom(p) ∪ dom(r)`, both halves named, and `AdmA` can apply `r` for the same reason it can
-apply `held`'s `f`.
-
-So `alternate reader` leaves the attribute hatch, and the ~~widenedRead~~ excuse is deleted rather than
-witnessed: it was covering a row that did not need excusing. What survives is the fact the
-excuse misread — §5's *passthrough* really is unsound, and the union is not the
-passthrough. -/
+The read domain of `extendRead c r` is `dom(p) ∪ dom(r)`. A passthrough that bounds it by the
+subterm's read domain is unsound, not coarse: `extendRead (literal "A") r`, with `r` reading
+`⟨N, "1"⟩` to `"A"`, reads an attribute that the literal refuses. `extendRead` is outside
+`Term`, so `AdmA` has no alternate-reader row. -/
 
 /-- An adapter never widens the read domain. -/
 theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
@@ -309,10 +303,9 @@ theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
     `℘⁺fin` has no empty inhabitant and so the two options share none. The non-emptiness
     is the *type's*, which is why every branch here ends at `S.2`.
 
-    The terms are `refine(set(string), liftQ …)` where they were `set(literal …)`, and that
-    is the whole of what the re-indexing cost this discharge: with `set` taking a base, a
-    literal element is a **restriction of the set**, and `setCodec_restrict` proves the two
-    write the same attribute on the nose. Same separation, one spelling further out. -/
+    The terms are `refine(set(string), liftQ …)`: with `set` taking a base, a literal element
+    is a **restriction of the set**, and `setCodec_restrict` proves the two write the same
+    attribute on the nose. -/
 theorem sepJV_set_literals :
     SepJV (.refine (.set .string) (.each (.members .string (.of "A" ∅))))
           (.refine (.set .string) (.each (.members .string (.of "B" ∅)))) := by

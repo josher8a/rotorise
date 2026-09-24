@@ -303,8 +303,8 @@ theorem objAdmV_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → V
   have hh := of_decide_eq_true hB ⟨k, hk⟩
   rwa [entryP, MapOf.at, dif_pos hc] at hh
 
-/-- A present name the body does not declare goes through the open block. `mem_fields_of_adm`'s
-    twin: where that lemma reads a closed body's refusal, this reads an open body's claim. -/
+/-- A present name the body does not declare goes through the open block: an open body claims
+    the name, and the block's row admits the name's value. -/
 theorem objAdmV_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Value}
     (hB : objAdmV ⟨c.fields, fun k => AdmField (c.at k)⟩ (AdmWild c.wild) keys g = true)
     {k : Name} (hk : k ∈ keys) (hnc : k ∉ c.fields) {w : Term}
@@ -312,33 +312,6 @@ theorem objAdmV_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → 
   unfold objAdmV at hB
   have hh := of_decide_eq_true hB ⟨k, hk⟩
   rwa [entryP, MapOf.at, dif_neg hnc, hw, AdmWild] at hh
-
-/-- Every present name is declared, where the rest refuses an undeclared one. -/
-theorem mem_fields_of_adm {b : Body} (hr : AdmWild b.wild = none)
-    {keys : Finset Name} {g : {k // k ∈ keys} → Value}
-    (h : AdmBody b (.map keys g) = true) : ∀ k ∈ keys, k ∈ b.fields := by
-  rw [AdmBody_map, Bool.and_eq_true] at h
-  have h2 := h.2
-  unfold objAdmV at h2
-  intro k hk
-  refine Decidable.byContradiction (fun hnb => ?_)
-  have hh := of_decide_eq_true h2 ⟨k, hk⟩
-  rw [entryP, MapOf.at, dif_neg hnb, hr] at hh
-  exact absurd hh (by simp)
-
-/-- A field's row carries its literal alternatives, where it has any. -/
-theorem altsOkV_of_AdmField {f : ObjectSlot} {v : Value} (h : AdmField f v = true) :
-    altsOkV (altsOfField f) v = true := by
-  cases f with
-  | req t => cases t <;> first | rfl | exact h
-  | optional t => cases t <;> first | rfl | exact h
-
-/-- A term's row carries its literal alternatives, where it has any. `altsOkV_of_AdmField`'s
-    twin at the term level, which is what an open block needs: the block carries a term and
-    no mark. -/
-theorem altsOkV_of_Adm {t : Term} {v : Value} (h : Adm t v = true) :
-    altsOkV (altsOfTerm t) v = true := by
-  cases t <;> first | rfl | exact h
 
 @[simp] theorem AdmList_eq : ∀ ts : List Term, AdmList ts = ts.map Adm
   | [] => rfl
