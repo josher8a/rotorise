@@ -752,7 +752,13 @@ const numericSetAdapter = <T>(
             outer,
         },
         inner,
+        // the held side is a set, as the model's `restrict` by the held side states: a string and
+        // an array are iterable, and would otherwise convert element by element
         f: ((value: ReadonlySet<T>) => {
+            if (!(value instanceof Set))
+                return new CodecError(
+                    `${describeShape(value)} is not a \`Set\`, and an NS is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                )
             const held = new Set<DynamoNumber>()
             for (const each of value) {
                 const one = into(each)

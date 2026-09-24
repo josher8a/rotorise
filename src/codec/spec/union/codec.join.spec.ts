@@ -315,6 +315,8 @@ describe("an accepted union's options never write one value, or read one attribu
         ['number', number],
         ['number(1)', number(1)],
         ['flip', flip],
+        ['decimal.set()', decimal.set()],
+        ['array(string)', array(string)],
     ] as unknown as readonly (readonly [string, AnyCodec])[]
     const values: readonly unknown[] = [
         '1',
@@ -326,6 +328,8 @@ describe("an accepted union's options never write one value, or read one attribu
         1,
         2.5,
         one,
+        ['1'],
+        new Set(['1']),
     ]
     const attributes: readonly AttributeValue[] = [
         { S: '1' },
@@ -386,6 +390,22 @@ describe("an accepted union's options never write one value, or read one attribu
             }
         }
         expect(disagreements).toEqual([])
+    })
+
+    it('writes a set of decimals only from a Set', () => {
+        const numerals = decimal.set() as unknown as Pair
+        expect(failed(numerals.encode('1'))).toBe(true)
+        expect(failed(numerals.encode(['1']))).toBe(true)
+        expect(numerals.encode(new Set(['1']))).toEqual({ NS: ['1'] })
+    })
+
+    it('refuses a value outside the base of a refinement, and runs no predicate on it', () => {
+        const nonEmptyText = refine(
+            string,
+            (s: string): s is string => s.length > 0,
+        ) as unknown as Pair
+        expect(failed(nonEmptyText.encode(null))).toBe(true)
+        expect(nonEmptyText.encode('a')).toEqual({ S: 'a' })
     })
 
     it('refuses a literal string beside a literal decimal of the same texts', () => {
