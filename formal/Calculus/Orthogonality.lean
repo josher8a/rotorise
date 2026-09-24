@@ -211,23 +211,7 @@ def Orth1 (x y : Term) : Bool :=
 
 Two structural recursions, one per side, each mutual with a list companion for `union`. The
 statement is about the **rows** (`Adm`/`AdmA`). `select` attempts every option, `object`
-included, so an option's admission `admitOptV`/`admitOptA` is its row. -/
-
-/-- `selOptV`'s disjunction, as an option it lands on. The union case hands its induction
-    hypothesis the option that admits. -/
-theorem selOptV_mem_admitOpt {opts : List Term} {v : Value}
-    (h : selOptV (AdmList opts) v = true) :
-    ∃ t ∈ opts, admitOptV (Adm t) v = true := by
-  simp only [selOptV, AdmList_eq, List.any_eq_true, List.mem_map] at h
-  obtain ⟨_, ⟨t, ht, rfl⟩, hadm⟩ := h
-  exact ⟨t, ht, hadm⟩
-
-theorem selOptA_mem_admitOpt {opts : List Term} {a : Attr}
-    (h : selOptA (AdmAList opts) a = true) :
-    ∃ t ∈ opts, admitOptA (AdmA t) a = true := by
-  simp only [selOptA, AdmAList_eq, List.any_eq_true, List.mem_map] at h
-  obtain ⟨_, ⟨t, ht, rfl⟩, hadm⟩ := h
-  exact ⟨t, ht, hadm⟩
+included, so an option's admission is its row. -/
 
 def OccSoundV (t : Term) : Prop := ∀ v, Adm t v = true → occV t v.slot = true
 
@@ -250,12 +234,6 @@ theorem occVL_of_mem {t : Term} {ts : List Term} {s : Slot} (ht : t ∈ ts)
     rcases List.mem_cons.mp ht with rfl | h'
     · simp [occVL, h]
     · simp [occVL, ih h']
-
-/-- Row soundness is option soundness. `admitOptV` is the row at every constructor, an object
-    included, so the row's soundness applies unchanged. -/
-theorem occV_admitOpt {t : Term} (h : OccSoundV t) (v : Value)
-    (hv : admitOptV (Adm t) v = true) : occV t v.slot = true :=
-  h v hv
 
 mutual
 
@@ -314,9 +292,9 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
       simpa [occV] using occV_sound t v (Bool.and_eq_true_iff.mp h).1
   | .lazy t => fun v h => by simpa [occV] using occV_sound t v h
   | .union opts => fun v h => by
-      obtain ⟨t, ht, hadm⟩ := selOptV_mem_admitOpt (by rw [Adm_union] at h; exact h)
+      obtain ⟨t, ht, hadm⟩ := AdmAny_iff.mp (by rw [Adm_union] at h; exact h)
       exact occVL_of_mem ht
-        (occV_admitOpt (occSoundVL_mem opts (occV_soundL opts) t ht) v hadm)
+        (occSoundVL_mem opts (occV_soundL opts) t ht v hadm)
   | .opaq => fun _ _ => rfl
 
 theorem occV_soundL : ∀ (ts : List Term), OccSoundVL ts
@@ -346,10 +324,6 @@ theorem occAL_of_mem {t : Term} {ts : List Term} {m : Member} (ht : t ∈ ts)
     · simp [occAL, h]
     · simp [occAL, ih h']
 
-theorem occA_admitOpt {t : Term} (h : OccSoundA t) (a : Attr)
-    (ha : admitOptA (AdmA t) a = true) : occA t a.member = true :=
-  h a ha
-
 mutual
 
 /-- **The read occupancy contains the row.** The mirror of `occV_sound`. -/
@@ -375,9 +349,9 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
       simpa [occA] using occA_sound t a (Bool.and_eq_true_iff.mp h).1
   | .lazy t => fun a h => by simpa [occA] using occA_sound t a h
   | .union opts => fun a h => by
-      obtain ⟨t, ht, hadm⟩ := selOptA_mem_admitOpt (by rw [AdmA_union] at h; exact h)
+      obtain ⟨t, ht, hadm⟩ := AdmAAny_iff.mp (by rw [AdmA_union] at h; exact h)
       exact occAL_of_mem ht
-        (occA_admitOpt (occSoundAL_mem opts (occA_soundL opts) t ht) a hadm)
+        (occSoundAL_mem opts (occA_soundL opts) t ht a hadm)
   | .opaq => fun _ _ => rfl
 
 theorem occA_soundL : ∀ (ts : List Term), OccSoundAL ts
@@ -392,10 +366,10 @@ admission**. Disjointness in either factor makes the intersection disjoint, so t
 separates through the occupancy and the meet through the admission, with no second family. -/
 
 def OrthSV (t : Term) : Value → Prop :=
-  fun v => occV t v.slot = true ∧ admitOptV (Adm t) v = true
+  fun v => occV t v.slot = true ∧ Adm t v = true
 
 def OrthSA (t : Term) : Attr → Prop :=
-  fun a => occA t a.member = true ∧ admitOptA (AdmA t) a = true
+  fun a => occA t a.member = true ∧ AdmA t a = true
 
 theorem occV_disjoint_of_Orth1 {x y : Term} (h : Orth1 x y = true) {s : Slot}
     (hx : occV x s = true) (hy : occV y s = true) : False := by
@@ -419,7 +393,7 @@ def Separates (x y : Term) : Prop :=
     produces the first and a caller supplies the second.
 
     **It names the guarantee where the guarantee already lives, and moves nothing.** `Typed.union`
-    cannot take it: `Separates` is stated on `Adm` and `admitOptV`, both in `ExactV.lean`, and
+    cannot take it: `Separates` is stated on `Adm`, in `ExactV.lean`, and
     the import chain is `Typing` then `Soundness` then `Discharge` then `ExactA` then this
     file. A premise here is four modules above the judgement it would constrain. So an undischarged
     union stays *underivable* through `Obligations`, which is where it was, rather than becoming
@@ -445,19 +419,19 @@ theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated opts) :
     refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
       (List.Pairwise.filter _ (h.imp fun hs => hs.1 v)))
     intro x y hx hy hxy
-    have hax : admitOptV (Adm x) v = true := (List.mem_filter.mp hx).2
-    have hay : admitOptV (Adm y) v = true := (List.mem_filter.mp hy).2
-    exact hxy ⟨occV_admitOpt (occV_sound x) v hax, hax⟩
-      ⟨occV_admitOpt (occV_sound y) v hay, hay⟩
+    have hax : Adm x v = true := (List.mem_filter.mp hx).2
+    have hay : Adm y v = true := (List.mem_filter.mp hy).2
+    exact hxy ⟨occV_sound x v hax, hax⟩
+      ⟨occV_sound y v hay, hay⟩
   · intro a
     rw [filter_AdmAList (fun t _ => AdmA_exact t) a, List.length_map]
     refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
       (List.Pairwise.filter _ (h.imp fun hs => hs.2 a)))
     intro x y hx hy hxy
-    have hax : admitOptA (AdmA x) a = true := (List.mem_filter.mp hx).2
-    have hay : admitOptA (AdmA y) a = true := (List.mem_filter.mp hy).2
-    exact hxy ⟨occA_admitOpt (occA_sound x) a hax, hax⟩
-      ⟨occA_admitOpt (occA_sound y) a hay, hay⟩
+    have hax : AdmA x a = true := (List.mem_filter.mp hx).2
+    have hay : AdmA y a = true := (List.mem_filter.mp hy).2
+    exact hxy ⟨occA_sound x a hax, hax⟩
+      ⟨occA_sound y a hay, hay⟩
 
 /-- Two members that both meet `P`, in a list where no related pair both meets `P`, are one. -/
 theorem eq_of_pairwise_excl {α : Type} {P : α → Prop} {R : α → α → Prop}
@@ -477,18 +451,18 @@ theorem eq_of_pairwise_excl {α : Type} {P : α → Prop} {R : α → α → Pro
 theorem pairwiseCompat_of_separated {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t)) (h : Separated opts) : PairwiseCompat opts := by
   intro s hs t ht a v hp hact
-  have hsA : admitOptA (AdmA s) a = true := (AdmA_exact s a).mpr (by rw [hp]; rfl)
-  have hsV : admitOptV (Adm s) v = true := (Adm_exact s v).mpr ((hlaw s hs).defined hp)
+  have hsA : AdmA s a = true := (AdmA_exact s a).mpr (by rw [hp]; rfl)
+  have hsV : Adm s v = true := (Adm_exact s v).mpr ((hlaw s hs).defined hp)
   have hst : t = s := by
     rcases hact with hq | he
-    · have htA : admitOptA (AdmA t) a = true := (AdmA_exact t a).mpr hq
+    · have htA : AdmA t a = true := (AdmA_exact t a).mpr hq
       exact eq_of_pairwise_excl (P := fun u => OrthSA u a) (fun x y hxy px py => hxy.2 a px py)
-        h t ht s hs ⟨occA_admitOpt (occA_sound t) a htA, htA⟩
-        ⟨occA_admitOpt (occA_sound s) a hsA, hsA⟩
-    · have htV : admitOptV (Adm t) v = true := (Adm_exact t v).mpr he
+        h t ht s hs ⟨occA_sound t a htA, htA⟩
+        ⟨occA_sound s a hsA, hsA⟩
+    · have htV : Adm t v = true := (Adm_exact t v).mpr he
       exact eq_of_pairwise_excl (P := fun u => OrthSV u v) (fun x y hxy px py => hxy.1 v px py)
-        h t ht s hs ⟨occV_admitOpt (occV_sound t) v htV, htV⟩
-        ⟨occV_admitOpt (occV_sound s) v hsV, hsV⟩
+        h t ht s hs ⟨occV_sound t v htV, htV⟩
+        ⟨occV_sound s v hsV, hsV⟩
   subst hst; exact hp
 
 /-- Each codec is compatible with itself. -/

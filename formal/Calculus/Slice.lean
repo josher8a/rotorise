@@ -204,15 +204,15 @@ theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
   have hc2 : c.admits t2 = false := by
     have := (List.mem_filter.mp ht2).2; simpa using this
   have hne : t1 ≠ t2 := fun hh => by rw [hh, hc2] at hc1; exact Bool.noConfusion hc1
-  have hlen : (opts.filter (fun t => admitOptV (Adm t) v)).length ≤ 1 := by
+  have hlen : (opts.filter (fun t => Adm t v)).length ≤ 1 := by
     have hone := (admitsAtMostOne_of_separated (separated_of_unionOk hok)).1 v
     rwa [filter_AdmList (fun t _ => Adm_exact t) v,
       List.length_map] at hone
-  have hf1 : t1 ∈ opts.filter (fun t => admitOptV (Adm t) v) :=
-    List.mem_filter.mpr ⟨hm1, admitOptV_of_Adm ha1⟩
-  have hf2 : t2 ∈ opts.filter (fun t => admitOptV (Adm t) v) :=
-    List.mem_filter.mpr ⟨hm2, admitOptV_of_Adm ha2⟩
-  match hL : opts.filter (fun t => admitOptV (Adm t) v), hlen with
+  have hf1 : t1 ∈ opts.filter (fun t => Adm t v) :=
+    List.mem_filter.mpr ⟨hm1, ha1⟩
+  have hf2 : t2 ∈ opts.filter (fun t => Adm t v) :=
+    List.mem_filter.mpr ⟨hm2, ha2⟩
+  match hL : opts.filter (fun t => Adm t v), hlen with
   | [], _ => rw [hL] at hf1; exact absurd hf1 (by simp)
   | [x], _ =>
       rw [hL, List.mem_singleton] at hf1 hf2

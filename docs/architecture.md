@@ -261,10 +261,10 @@ outside `Term`.
 
 **One test decides both.** `select` attempts every option, so option admission *is* the row at
 every constructor: `admitV_le_Adm` and `admitA_le_AdmA` hold from exactness alone, with no premise
-on the term and no exception for an object. `admitOptV_of_Adm` is the identity for the same
-reason. So the joint predicate and the admission a discharger consumes are one test, and
-`pairwiseCompat_of_separated` proves that a separated union of lawful options meets its
-obligation.
+on the term and no exception for an object. For the same reason, the row of a `union` is the
+disjunction of its options' rows (`Adm_union`). So the joint predicate and the admission a
+discharger consumes are one test, and `pairwiseCompat_of_separated` proves that a separated
+union of lawful options meets its obligation.
 
 **The direction has a standard name.** It is the abstract interpretation of Cousot and Cousot,
 1977: a coarse test that over-approximates a precise one transfers disjointness downward, and a
@@ -282,8 +282,8 @@ attribute through its alternate reader. The structural classifier has no row for
 carrier.
 
 `Orthogonality.lean` states the discharge on what the resolver consults rather than on what the
-row says. `OrthSV` and `OrthSA` are occupancy conjoined with option admission, `admitOptV_eq`
-identifies that second conjunct with option admission itself, and `pairwiseCompat_of_separated`
+row says. `OrthSV` and `OrthSA` are occupancy conjoined with the option's row, `isSome_e_eq_Adm`
+identifies that row with what the option writes, and `pairwiseCompat_of_separated`
 is the discharger stated on what `select` actually decides by.
 
 ### The classifier, and what it is the specification of

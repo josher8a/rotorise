@@ -685,7 +685,7 @@ export const altSem = (
     }
 
     /**
-     * The model's `admitOptV`: every option is admitted by {@link accepts}, an object option
+     * The model's option row, `Adm`: every option is admitted by {@link accepts}, an object option
      * included. The names present select nothing, because a name set that fits two options can
      * hold a value that only one of them encodes. Asking the option's own admission terminates:
      * it is one level down, and the direction that would not is an `encode` consulting admission.
@@ -706,7 +706,7 @@ export const altSem = (
      * filtered out here instead of propagating.
      *
      * **The read side attempts**, because there is nothing to decide with: the model has `AdmA` on
-     * the attribute side and `src/` has no port of it. The model's `admitOptA` is that attempt, an
+     * the attribute side and `src/` has no port of it. The model's `AdmA` of an option is that attempt, an
      * object option included. That asymmetry is the reason this is a second function rather than a
      * flag on the first.
      */
@@ -725,7 +725,7 @@ export const altSem = (
 
     /**
      * Which options a value could be for, by kind. The names present select nothing: an object
-     * option is admitted by attempt, as the model's `admitOptV` admits every option.
+     * option is admitted by attempt, as the model's `Adm` admits every option.
      */
     const forValue = (shape: Shape | undefined) => (option: Option) =>
         option.declares

@@ -400,7 +400,7 @@ describe('the declaration guard, where a term is what the guard reads', () => {
  * **An object option is admitted by attempt, not by its names.**
  *
  * The union attempts each option in order. The first option whose codec encodes the value writes
- * the value, as the model's `admitOptV` and `admitOptA` admit. The names present select no option. Two
+ * the value, as the model's `Adm_union` and `AdmA_union` state. The names present select no option. Two
  * options with one name set resolve where no value is admitted by both, for example where a
  * required literal has disjoint alternatives. A value that no option encodes is refused, even
  * where its names fit one option.

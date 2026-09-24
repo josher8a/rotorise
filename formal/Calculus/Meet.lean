@@ -42,7 +42,7 @@ enough: a bottom names no member, so no pair whose meet is one can conclude anyt
 factors. The meet normalises a refinement over the bottom to the bottom, so that shape no longer
 gives a second witness.
 
-**The meet of a union is the union of the meets.** `Adm (.union os)` is `selOptV`, which admits
+**The meet of a union is the union of the meets.** `Adm (.union os)` is `AdmAny os`, which admits
 where one option admits, so the meet against a union is the meet against each option
 (`Adm_meet_union`), with no certificate.
 
@@ -2104,21 +2104,6 @@ theorem AdmField_of_isBottom {f : ObjectSlot} (h : ObjectSlot.isBottom f = true)
   | req t => rw [show t = .never from eq_never_of_isNever h]; rfl
   | optional t => exact absurd h (by simp [ObjectSlot.isBottom])
 
-/-- A list admits a value exactly when one of its terms does. -/
-theorem AdmAny_iff : ∀ {os : List Term} {v : Value},
-    AdmAny os v = true ↔ ∃ t ∈ os, Adm t v = true
-  | [], v => by simp
-  | t :: ts, v => by
-      rw [AdmAny_cons, Bool.or_eq_true, AdmAny_iff]
-      constructor
-      · rintro (h | ⟨u, hu, h⟩)
-        · exact ⟨t, by simp, h⟩
-        · exact ⟨u, by simp [hu], h⟩
-      · rintro ⟨u, hu, h⟩
-        rcases List.mem_cons.mp hu with rfl | hu'
-        · exact Or.inl h
-        · exact Or.inr ⟨u, hu', h⟩
-
 
 /-! ### The count, and what the meet does to it
 
@@ -2127,21 +2112,6 @@ row used to supply one, and the guard could not survive: the certificate is stat
 so a guard that consults it closes a cycle. What the row actually needs is that the meet scales
 the number of admitting options by whether the partner admits, and that is a fact about counting
 rather than about separation. -/
-
-/-- A list reads an attribute exactly when one of its terms does. -/
-theorem AdmAAny_iff : ∀ {os : List Term} {a : Attr},
-    AdmAAny os a = true ↔ ∃ t ∈ os, AdmA t a = true
-  | [], a => by simp
-  | t :: ts, a => by
-      rw [AdmAAny_cons, Bool.or_eq_true, AdmAAny_iff]
-      constructor
-      · rintro (h | ⟨u, hu, h⟩)
-        · exact ⟨t, by simp, h⟩
-        · exact ⟨u, by simp [hu], h⟩
-      · rintro ⟨u, hu, h⟩
-        rcases List.mem_cons.mp hu with rfl | hu'
-        · exact Or.inl h
-        · exact Or.inr ⟨u, hu', h⟩
 
 /-- The options that survive are the ones that admit; the bottoms admit nothing. -/
 theorem AdmAny_filter_never : ∀ (ts : List Term) (v : Value),
@@ -2176,7 +2146,7 @@ theorem Adm_ofOptions (ts : List Term) (v : Value) :
   match ts with
   | [] => rfl
   | [t] => simp only [Term.ofOptions, AdmAny_cons, AdmAny_nil, Bool.or_false]
-  | _ :: _ :: _ => exact selOptV_eq_AdmAny _ v
+  | _ :: _ :: _ => rfl
 
 /-- **The coproduct row of the meet needs no certificate.** The bottoms admit nothing, and `&&`
     distributes over the options' disjunction. -/
@@ -2184,7 +2154,7 @@ theorem union_meet_free {os zs : List Term} {y : Term} (v : Value)
     (hR : List.Forall₂ (fun t w => ∀ u, Adm w u = (Adm t u && Adm y u)) os zs) :
     Adm (Term.ofOptions (zs.filter (fun z => !z.isNever))) v
       = (Adm (.union os) v && Adm y v) := by
-  rw [Adm_ofOptions, AdmAny_filter_never, AdmAny_meet v hR, Adm_union, selOptV_eq_AdmAny]
+  rw [Adm_ofOptions, AdmAny_filter_never, AdmAny_meet v hR, Adm_union]
 
 section StructuralAdm
 -- the object rows put the whole field table to `decide` under a binder, which is where the
@@ -4438,14 +4408,14 @@ theorem AdmA_ofOptions (ts : List Term) (a : Attr) :
   match ts with
   | [] => rfl
   | [t] => simp only [Term.ofOptions, AdmAAny_cons, AdmAAny_nil, Bool.or_false]
-  | _ :: _ :: _ => exact selOptA_eq_AdmAAny _ a
+  | _ :: _ :: _ => rfl
 
 /-- **The coproduct row of the meet needs no certificate, on the read side either.** -/
 theorem union_meet_freeA {os zs : List Term} {y : Term} (a : Attr)
     (hR : List.Forall₂ (fun t w => ∀ b, AdmA w b = (AdmA t b && AdmA y b)) os zs) :
     AdmA (Term.ofOptions (zs.filter (fun z => !z.isNever))) a
       = (AdmA (.union os) a && AdmA y a) := by
-  rw [AdmA_ofOptions, AdmAAny_filter_never, AdmAAny_meet a hR, AdmA_union, selOptA_eq_AdmAAny]
+  rw [AdmA_ofOptions, AdmAAny_filter_never, AdmAAny_meet a hR, AdmA_union]
 
 
 /-- A `Forall₂` relates every left element to some right one. -/
@@ -4468,7 +4438,7 @@ theorem union_p_find (ts : List Term) (a : Attr) :
   have hq : ((fun c : Codec => (c.p a).isSome) ∘ denote) = fun u => AdmA u a := by
     funext u
     show ((denote u).p a).isSome = AdmA u a
-    rw [admitOptA_eq (AdmA_exact u) a]; rfl
+    rw [isSome_p_eq_AdmA (AdmA_exact u) a]
   rw [hq]
   cases ts.find? (fun u => AdmA u a) <;> simp
 
@@ -4524,7 +4494,7 @@ theorem find?_filter_of {β : Type} {q keep : β → Bool} (h : ∀ w, q w = tru
 /-- A union that reads has a first reader. -/
 theorem find?_of_AdmA_union {os : List Term} {a : Attr} (h : AdmA (.union os) a = true) :
     ∃ t, os.find? (fun u => AdmA u a) = some t := by
-  rw [AdmA_union, selOptA_eq_AdmAAny] at h
+  rw [AdmA_union] at h
   obtain ⟨t, ht, hta⟩ := AdmAAny_iff.mp h
   cases hf : os.find? (fun u => AdmA u a) with
   | some t' => exact ⟨t', rfl⟩
@@ -5923,7 +5893,7 @@ theorem writeLe_of : ∀ t : Term, WriteLe t
   | .object (.mk fs f w) => writeLe_object (fun k => writeLe_ofS (f k)) (writeLe_ofO w)
   | .union os => fun v h => by
       simp only [writeView]
-      rw [Adm_union, selOptV_eq_AdmAny] at h ⊢
+      rw [Adm_union] at h ⊢
       exact anyWrite os (writeLe_ofL os) v h
   | .string => fun _ h => h | .number => fun _ h => h | .boolean => fun _ h => h
   | .binary => fun _ h => h | .null => fun _ h => h | .literal _ _ => fun _ h => h
@@ -5960,7 +5930,7 @@ theorem readLe_of : ∀ t : Term, ReadLe t
   | .object (.mk fs f w) => readLe_object (fun k => readLe_ofS (f k)) (readLe_ofO w)
   | .union os => fun a h => by
       simp only [readView]
-      rw [AdmA_union, selOptA_eq_AdmAAny] at h ⊢
+      rw [AdmA_union] at h ⊢
       exact anyRead os (readLe_ofL os) a h
   | .string => fun _ h => h | .number => fun _ h => h | .boolean => fun _ h => h
   | .binary => fun _ h => h | .null => fun _ h => h | .literal _ _ => fun _ h => h
@@ -6024,11 +5994,6 @@ theorem certAll_of_pairwise : ∀ {ts : List Term},
         simp only [certAll, Bool.and_eq_true, List.all_eq_true]
         exact ⟨fun u hu => hh u hu, certAll_of_pairwise hrest⟩
 
-/-- **A value an option admits, the option admits as an option.** Every option is attempted, so
-    `admitOptV` is the row itself and this is the identity. `Slice.lean` calls it by name. -/
-theorem admitOptV_of_Adm {t : Term} {v : Value}
-    (h : Adm t v = true) : admitOptV (Adm t) v = true := h
-
 
 /-! ## The laws, on admission
 
@@ -6067,8 +6032,7 @@ theorem Adm_meet_never {x z : Term} (h : Term.meet x .never = some z) (v : Value
 theorem Adm_meet_union {x z : Term} {os : List Term}
     (h : Term.meet x (.union os) = some z) (v : Value) :
     Adm z v = (Adm x v && AdmAny os v) := by
-  rw [Adm_meet _ _ _ h, show Adm (.union os) v = selOptV (AdmList os) v from rfl,
-    selOptV_eq_AdmAny]
+  rw [Adm_meet _ _ _ h, Adm_union]
 
 /-- …and the distribution, written so a reader sees it: the meet of a term with a join is the
     join of the meets, one option at a time. -/
@@ -6114,7 +6078,7 @@ theorem AdmA_meet_never {x z : Term} (h : Term.meet x .never = some z) (a : Attr
 theorem AdmA_meet_union {x z : Term} {os : List Term}
     (h : Term.meet x (.union os) = some z) (a : Attr) :
     AdmA z a = (AdmA x a && AdmAAny os a) := by
-  rw [AdmA_meet h, AdmA_union os a, selOptA_eq_AdmAAny]
+  rw [AdmA_meet h, AdmA_union os a]
 
 /-- …and the distribution, written so a reader sees it: the meet of a term with a join is the
     join of the meets, one option at a time. -/

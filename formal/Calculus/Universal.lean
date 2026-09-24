@@ -93,7 +93,7 @@ theorem Adm_opaq_map (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
     unfolding writes. -/
 theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
   have hu : Adm opaqUnfold v = AdmAny (match opaqUnfold with | .union os => os | _ => []) v :=
-    selOptV_eq_AdmAny _ v
+    rfl
   rw [hu]
   cases v with
   | str s => rw [Adm_opaq_str]; rfl
@@ -190,7 +190,7 @@ theorem AdmA_set_eq (b : SetBase) (a : Attr) :
 theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
   have hu : AdmA opaqUnfold a
       = AdmAAny (match opaqUnfold with | .union os => os | _ => []) a :=
-    selOptA_eq_AdmAAny _ a
+    rfl
   rw [hu]
   cases a with
   | s x => rw [AdmA_opaq_str]; rfl
@@ -242,16 +242,13 @@ theorem opaq_total : ∀ v : Value, Adm .opaq v = true
   | .null => Adm_opaq_null
   | .num d => by rw [Adm_opaq_num]; rfl
   | .strSet S => by
-      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from
-        selOptV_eq_AdmAny _ _]
+      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from rfl]
       simp [opaqUnfold, Adm, AdmBody, Term.array, Term.record, SetBase.adm, inD]
   | .numSet S => by
-      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from
-        selOptV_eq_AdmAny _ _]
+      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from rfl]
       simp [opaqUnfold, Adm, AdmBody, Term.array, Term.record, SetBase.adm, inD]
   | .binSet S => by
-      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from
-        selOptV_eq_AdmAny _ _]
+      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from rfl]
       simp [opaqUnfold, Adm, AdmBody, Term.array, Term.record, SetBase.adm, inD]
   | .arr vs => by
       rw [Adm_opaq_arr]
@@ -275,12 +272,10 @@ theorem opaqA_total : ∀ a : Attr, AdmA .opaq a = true
   | .null => AdmA_opaq_null
   | .n x => by rw [AdmA_opaq_num]; rfl
   | .ss S => by
-      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from
-        selOptA_eq_AdmAAny _ _]
+      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from rfl]
       simp [opaqUnfold, AdmA, AdmABody, AdmASet, Term.array, Term.record]
   | .ns S => by
-      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from
-        selOptA_eq_AdmAAny _ _]
+      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from rfl]
       simp [opaqUnfold, AdmA, AdmABody, AdmASet, Term.array, Term.record]
       obtain ⟨x₀, hx₀⟩ := S.2
       exact decSet_isSome_num hx₀ rfl (fun _ _ => rfl)
@@ -288,8 +283,7 @@ theorem opaqA_total : ∀ a : Attr, AdmA .opaq a = true
           simp only [numberCodec, Option.bind_some, vNum, Option.some.injEq] at h₁ h₂
           exact h₁.trans h₂.symm)
   | .bs S => by
-      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from
-        selOptA_eq_AdmAAny _ _]
+      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from rfl]
       simp [opaqUnfold, AdmA, AdmABody, AdmASet, Term.array, Term.record]
   | .l as => by
       rw [AdmA_opaq_l]
