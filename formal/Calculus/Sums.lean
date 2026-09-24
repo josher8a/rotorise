@@ -106,7 +106,7 @@ def litOkA (spec : BodySpec) (k : Name) (a : Attr) : Bool :=
 /-- **Content admission (objects): every present name whose field is a literal carries one of
     that literal's alternatives.**
 
-    The other half of an object option's admission, and the half `keysOk` alone cannot state.
+    The other half of the structural test, and the half `keysOk` alone cannot state.
     Present-only: the quantifier runs over the *map's* key set, so an absent name is `keysOk`'s
     business. `Finset.attach`'s decidable `∀ k ∈ keys` is what `decide` resolves through, the
     same route `valPresentT` takes and the one `Finset.toList` would spoil. -/
@@ -121,9 +121,12 @@ def literalsOkA (spec : BodySpec) (keys : Finset Name)
 
 /-! ### What the open block does, pinned
 
-Four cases, stated on `keysOk` and `literalsOk` together because that pair **is** an object
-option's admission. They are `by decide`, so each is the kernel running the definitions rather
-than a claim about them. -/
+Four cases, stated on `keysOk` and `literalsOk` together: the structural test of an object
+body, the declared names and the literal alternatives, read off a `BodySpec`. The structural
+test is not admission. Every option admits by attempt, and neither `Adm` nor `AdmA` reads
+`keysOk` or `literalsOk`. Outside these cases, only lemmas that no derivation uses read them.
+The cases are `by decide`, so each is the kernel running the definitions rather than a claim
+about them. -/
 
 /-- No declared name: everything the body claims, it claims through its block. -/
 private def noNames : MapOf NameSpec := ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩

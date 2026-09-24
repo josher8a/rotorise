@@ -251,8 +251,8 @@ theorem occVL_of_mem {t : Term} {ts : List Term} {s : Slot} (ht : t ∈ ts)
     · simp [occVL, h]
     · simp [occVL, ih h']
 
-/-- Row soundness lifts to option soundness. At an object the row is not consulted at all:
-    `keysOk` already says the value is a map, which is the only slot the term occupies. -/
+/-- Row soundness is option soundness. `admitOptV` is the row at every constructor, an object
+    included, so the row's soundness applies unchanged. -/
 theorem occV_admitOpt {t : Term} (h : OccSoundV t) (v : Value)
     (hv : admitOptV (specOf t, Adm t) v = true) : occV t v.slot = true :=
   h v hv
