@@ -13,6 +13,7 @@ import { DynamoNumber } from '../../attribute'
 import type { AnyCodec } from '../../codec'
 import {
     array,
+    boolean,
     CodecError,
     decimal,
     dynamoNumber,
@@ -443,5 +444,95 @@ describe("an accepted union's options never write one value, or read one attribu
                 nonEmpty,
             ] as unknown as readonly AnyCodec[]),
         ).toThrow(CodecError)
+    })
+})
+
+describe("extract and exclude partition a union's values and keep its answers", () => {
+    type Pair = {
+        readonly encode: (value: unknown) => unknown
+        readonly decode: (attribute: AttributeValue) => unknown
+    }
+    type Sliceable = Pair & {
+        readonly extract: (clause: Readonly<Record<string, unknown>>) => Pair
+        readonly exclude: (clause: Readonly<Record<string, unknown>>) => Pair
+    }
+    const rows = union([
+        object({ k: string('A', 'B'), a: string }),
+        object({ k: string('C'), b: decimal }),
+        object({ k: string('D', 'E'), c: boolean }),
+    ] as unknown as readonly AnyCodec[]) as unknown as Sliceable
+    const clauses = [
+        { k: string('A') },
+        { k: string('C') },
+        { k: string('B', 'D') },
+        { k: string('A', 'B') },
+        { k: string('C', 'D', 'E') },
+        { k: string('A', 'B', 'C', 'D', 'E') },
+    ]
+    const values: readonly unknown[] = [
+        { k: 'A', a: 'x' },
+        { k: 'B', a: 'y' },
+        { k: 'C', b: '1.5' },
+        { k: 'D', c: true },
+        { k: 'E', c: false },
+        { k: 'A', b: '1' },
+        { k: 'Z', a: 'x' },
+        'not an object',
+    ]
+    const sameAnswer = (a: unknown, b: unknown) =>
+        JSON.stringify(a) === JSON.stringify(b)
+    const ok = (result: unknown) => !failed(result)
+
+    // the control: a slice is not empty, so the partition below is not vacuous. A slice keeps
+    // whole options, as TypeScript's `Extract` does: `k: string('A')` covers no option, because
+    // the first option also takes 'B'
+    it('keeps a value its clause names, and drops it from the rest', () => {
+        const clause = { k: string('A', 'B') }
+        expect(ok(rows.extract(clause).encode({ k: 'A', a: 'x' }))).toBe(true)
+        expect(ok(rows.exclude(clause).encode({ k: 'A', a: 'x' }))).toBe(false)
+        expect(ok(rows.exclude(clause).encode({ k: 'C', b: '1.5' }))).toBe(true)
+    })
+
+    it("writes each value of the union through exactly one slice, with the union's answer", () => {
+        const disagreements: string[] = []
+        for (const clause of clauses) {
+            const kept = rows.extract(clause)
+            const rest = rows.exclude(clause)
+            for (const v of values) {
+                const whole = rows.encode(v)
+                const [x, y] = [kept.encode(v), rest.encode(v)]
+                const at = `${JSON.stringify(clause.k.def)} ${JSON.stringify(v)}`
+                if (!ok(whole)) {
+                    if (ok(x) || ok(y)) disagreements.push(`slice writes ${at}`)
+                    continue
+                }
+                if (ok(x) === ok(y)) disagreements.push(`not a partition ${at}`)
+                const answer = ok(x) ? x : y
+                if (!sameAnswer(answer, whole))
+                    disagreements.push(`answer ${at}`)
+            }
+        }
+        expect(disagreements).toEqual([])
+    })
+
+    it("reads each attribute of the union through exactly one slice, with the union's answer", () => {
+        const attributes = values
+            .map((v) => rows.encode(v))
+            .filter(ok) as AttributeValue[]
+        const disagreements: string[] = []
+        for (const clause of clauses) {
+            const kept = rows.extract(clause)
+            const rest = rows.exclude(clause)
+            for (const attribute of attributes) {
+                const whole = rows.decode(attribute)
+                const [x, y] = [kept.decode(attribute), rest.decode(attribute)]
+                const at = `${JSON.stringify(clause.k.def)} ${JSON.stringify(attribute)}`
+                if (ok(x) === ok(y)) disagreements.push(`not a partition ${at}`)
+                const answer = ok(x) ? x : y
+                if (!sameAnswer(answer, whole))
+                    disagreements.push(`answer ${at}`)
+            }
+        }
+        expect(disagreements).toEqual([])
     })
 })
