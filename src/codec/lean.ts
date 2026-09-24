@@ -64,7 +64,7 @@ import type {
     Term,
     Field as TermField,
 } from './term'
-import { heldFree, meetTerms } from './term'
+import { below, heldFree, meetTerms } from './term'
 import { shapeOf } from './value'
 
 /**
@@ -942,6 +942,22 @@ export type Separation = {
     readonly right: AnyCodec
 }
 
+/**
+ * The proof of `Sub (denote x) (denote y)` where {@link below} holds, one lemma per row of `below`.
+ */
+const leanBelow = (x: Term, y: Term): string => {
+    if (x.kind === 'union')
+        return `sub_union_of ${x.options.reduceRight(
+            (rest, one) =>
+                `(List.forall_mem_cons.mpr ⟨${leanBelow(one, y)}, ${rest}⟩)`,
+            '(fun _ h => nomatch h)',
+        )}`
+    if (x.kind === 'literal') return 'sub_literal_base _ _'
+    if (x.kind === 'held' && y.kind === 'held')
+        return `sub_held_inner (${leanBelow(x.inner, y.inner)})`
+    return '⟨fun _ _ h => h, fun _ _ h => h⟩'
+}
+
 /** One declaration verdict, as a Lean `theorem`, with the `src/` side decided here. */
 export const leanSeparation = ({ name, left, right }: Separation): string => {
     let refused = false
@@ -970,7 +986,11 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
           ? 'fun _ => pairwiseCompat_never_right _'
           : heldFree(left.def) && heldFree(right.def)
             ? 'fun hl => pairwiseCompat_of_HF (by hf_pair) hl'
-            : 'fun hl => pairwiseCompat_of_separated hl (separated_of_unionOk (by decide))'
+            : below(left.def, right.def)
+              ? `fun hl => pairwiseCompat_of_sub (${leanBelow(left.def, right.def)}) hl`
+              : below(right.def, left.def)
+                ? `fun hl => pairwiseCompat_of_sub' (${leanBelow(right.def, left.def)}) hl`
+                : 'fun hl => pairwiseCompat_of_separated hl (separated_of_unionOk (by decide))'
     return [
         `/-- \`${name}\` — \`src/\` accepts this pair; the model proves it compatible -/`,
         `theorem ${leanIdent(name)} :`,

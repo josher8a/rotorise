@@ -1440,7 +1440,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.endsWith('= false := by decide'),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([682, 21])
+        expect([accepted.length, refused.length]).toEqual([683, 20])
     })
 
     it('emits them for the gate to elaborate', () => {

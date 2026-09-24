@@ -1516,19 +1516,64 @@ const callerViewsApart = (x: Term, y: Term): boolean =>
  */
 export const heldFree = (t: Term): boolean => !reaches(t, ['held', 'legacy'])
 
+/** The terms with no payload, where the kind alone names the term. */
+const leaves: readonly Term['kind'][] = [
+    'string',
+    'number',
+    'boolean',
+    'binary',
+    'null',
+    'opaq',
+    'never',
+]
+
+/**
+ * **Whether two `held` terms are one adapter.** A library adapter names its pair in `via`, and the
+ * model carries one pair for each name. A caller's adapter is one adapter where both halves are
+ * the same function values.
+ */
+const sameAdapter = (
+    x: Extract<Term, { kind: 'held' }>,
+    y: Extract<Term, { kind: 'held' }>,
+): boolean =>
+    (x.via !== undefined && x.via === y.via) || (x.f === y.f && x.g === y.g)
+
+/**
+ * **Whether `x` is below `y` by a rule the model proves**: a literal is below its base, a union is
+ * below a term that each of its options is below, and a `held` is below the same adapter over a
+ * wider stored side (`sub_literal_base`, `sub_union_of`, `sub_held_inner`). A term with no payload
+ * is below itself. Nothing else is shown.
+ */
+export const below = (x: Term, y: Term): boolean => {
+    if (x.kind === 'union') return x.options.every((one) => below(one, y))
+    if (x.kind === 'literal') return y.kind === x.base
+    // one held side, because the model's monotonicity fixes the held side
+    if (x.kind === 'held' && y.kind === 'held')
+        return (
+            sameAdapter(x, y) &&
+            leaves.includes(x.outer.kind) &&
+            x.outer.kind === y.outer.kind &&
+            below(x.inner, y.inner)
+        )
+    return leaves.includes(x.kind) && x.kind === y.kind
+}
+
 /**
  * **Whether the declaration shows two options compatible**, which is what `union` asks of a pair.
  *
  * A union is the join of its options, and the join of two lawful options is lawful exactly when
  * the two are compatible: each reading of one is a reading of the other wherever the other acts.
- * Three warrants show it, as the model's three dischargers do. `never` is compatible with every
- * option (`pairwiseCompat_never_left`). Two held-free options sit below one canonical codec
- * (`pairwiseCompat_of_HF`). {@link separable} is the certificate (`pairwiseCompat_of_separated`).
+ * Four warrants show it, as the model's dischargers do. `never` is compatible with every option
+ * (`pairwiseCompat_never_left`). Two held-free options sit below one canonical codec
+ * (`pairwiseCompat_of_HF`). An option {@link below} the other has the other as that codec
+ * (`pairwiseCompat_of_sub`). {@link separable} is the certificate (`pairwiseCompat_of_separated`).
  */
 export const compatible = (x: Term, y: Term): boolean =>
     x.kind === 'never' ||
     y.kind === 'never' ||
     (heldFree(x) && heldFree(y)) ||
+    below(x, y) ||
+    below(y, x) ||
     separable(x, y)
 
 /**
