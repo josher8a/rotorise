@@ -14,16 +14,18 @@ definition it touches.
 | `Calculus/Prisms.lean`      | §3          | The entry point of the certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism) and `extendRead` (alternate reading) |
 | `Calculus/Products.lean`    | §3          | `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`), `tupleCodec` it at `align` + a traversal over `slots`, the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone. `setCodec` is argued on its own |
 | `Calculus/Objects.lean`     | §4          | The field table as a map rather than a row, and the object taken apart through it. `objectCodec` is cashed as an equation by `objectCodecCore_eq` rather than argued on its own |
-| `Calculus/Sums.lean`        | §5, §3      | `altCodec` (the sum, resolved by the first admitter), and `opaqCodec`, the fueled fixpoint over everything self-identifying |
+| `Calculus/Sums.lean`        | §5, §3      | `altCodec` (the sum, resolved by the first admitter), and `opaqStep`, one layer of everything self-identifying |
 | `Calculus/Carriers.lean`    | §3          | One `Carrier` lemma per combinator, so the judgement's held-set index is the domain of the pair |
 | `Calculus/Lawful.lean`      | §3–§5       | The lawfulness lemmas this development discharges, one per construction |
 | `Calculus/Frontier.lean`    | §3–§5       | The lawfulness lemmas that are stated and not yet discharged, and the ones whose discharge is partial |
 | `Calculus/Term.lean`        | §3–§4       | Current-schema terms, object slots, and object rest policies                                                                                                                                                                                                                                        |
-| `Calculus/Denote.lean`      | —           | `denote : Term → Codec`, structural, pure dispatch into the combinators                                                                                                                                                                                                     |
+| `Calculus/Recursion.lean`   | §3          | Guarded recursion: `muCodec` budgets each input by its own depth (`Value.depth`/`Attr.depth`); from `Contractive` alone the stages agree past the depth (`muStage_agree`), the limit is a fixed point (`muCodec_e_fix`/`muCodec_p_fix`), and lawful stages give a lawful limit (`lawful_muCodec`); each container keeps agreement one layer down |
+| `Calculus/Guarded.lean`     | §3          | The guard of a binder makes its body contractive: `denote_agree`, one congruence over the term family, and `contractive_body` |
+| `Calculus/Denote.lean`      | —           | `denote`, structural, pure dispatch into the combinators, over an environment for the bound variables; `mu` is `muCodec` of its body                                                                                                                                                                                                     |
 | `Calculus/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, structural), `PairwiseCompat`, theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `Can`, and all ten of §6's "Hold" nodes this development still states — `held`'s identity and composition, `refine`'s meet and full case, `Codec.extendRead` with its own reader as the alternate reader and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of §6's stated conditions), wrapper member preservation. §6's null-point node went with the wrapper: the point is a union option, so idempotence is the union's |
-| `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the kind-disjoint unfoldings — one per constructor each side, counted in that file's own header (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
+| `Calculus/Opaque.lean`      | §3, §7      | `opaque` as `muCodec opaqStep`: the kind-disjoint unfoldings — one per constructor each side, counted in that file's own header — `contractive_opaqStep`, `lawful_opaq`/`carrier_opaq` from the general theorems, and the fixed point at each container (`Ωe_fix`, `Ωe_arr` and the rest) |
 | `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`HOpaque` *is* `opaque`'s held set) and `typed_T_identity` ((A) at every rule); `typed_T_adm` in `Laminar.lean` proves (B) at every derivable term |
 | `Calculus/Continuity.lean`  | §5, §7      | `Codec.Approx` (the information order any ccpo must extend), and first-match resolution monotone (`selectF_mono_list`) and continuous (`selectF_continuous_list`) under the obligation that every admitter agrees |
 | `Calculus/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's nesting bound, a parameter, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
@@ -78,17 +80,19 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   is configured correctly. `Axioms.lean` cannot simply `import Calculus` instead — the
   aggregator imports the guard, so that is a cycle, and inverting it would let
   `defaultTargets = ["Calculus"]` build the tree with no guard running at all.
-- **There is no fuel.** `denote : Term → Codec` is structural. What the proofs recurse on
+- **There is no fuel.** `denote` is structural on the term. What the proofs recurse on
   instead is `Term.depth`, a measure derived from the term, so it appears in no statement.
   Neither of the two things that forced fuel still does: `lazy` carries a `Term`, and `opaq`
-  denotes `opaqCodecω`.
-- **A fixpoint for `union` has its obligations and no construction.** `altCodec` resolves a
-  union by the first admitter. `Continuity.lean` proves that first-match resolution is monotone
-  (`selectF_mono_list`, the `mono` obligation of a ccpo construction) and continuous
-  (`selectF_continuous_list`) under the obligation that
-  every admitter agrees, and `optBad_not_confluent` shows the obligation is not free. It
-  defines no ccpo, and `denote` is structural and does not stage: `Term.lazy` carries a plain
-  `Term` rather than a thunk.
+  and `mu` denote `muCodec`, which budgets each input by the input's own depth.
+- **Recursion is guarded, and constructed.** `mu b` denotes `muCodec` of its body, and each
+  input reads the stage of the body that its own depth names. `Term.guarded` refuses a variable
+  that reads its binder's input itself, and a variable under a `held`. From the guard alone the
+  stages agree past the depth of the input, the limit is a fixed point, and lawful stages give a
+  lawful limit (`Recursion.lean`, `Guarded.lean`). `Continuity.lean` proves that first-match
+  resolution is monotone (`selectF_mono_list`, the `mono` obligation of a ccpo construction)
+  and continuous (`selectF_continuous_list`) under
+  the obligation that every admitter agrees, and `optBad_not_confluent` shows the obligation is
+  not free. The construction does not need that obligation, because it budgets each input.
 - **One construction, one place — and one proof per law.** Each construction's
   definition, its two inversion lemmas, its carrier and its lawfulness sit together.
   Soundness needs only `Lawful`, so a core lemma exists only where a `Lawful` lemma or

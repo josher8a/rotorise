@@ -226,7 +226,7 @@ def binaryCodec : Codec :=
     e := fun v => match v with | .bin b => some (.b b) | _ => none
     p := fun a => match a with | .b b => some (.bin b) | _ => none }
 
-/-- The `NULL` point: one value, one attribute. A building block of `opaqCodec`. -/
+/-- The `NULL` point: one value, one attribute. A building block of `opaqStep`. -/
 def nullCodec : Codec :=
   { T := fun v => v = .null
     μ := some .NULL

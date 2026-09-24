@@ -9,6 +9,8 @@ import Calculus.Carriers
 import Calculus.Lawful
 import Calculus.Frontier
 import Calculus.Term
+import Calculus.Recursion
+import Calculus.Guarded
 import Calculus.Denote
 import Calculus.Typing
 import Calculus.Merge

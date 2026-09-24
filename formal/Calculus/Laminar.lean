@@ -137,62 +137,10 @@ theorem hset_iff (b : SetBase) (v : Value) : HSet b.held v ↔ Adm (.set b) v = 
   | binSet S => simp [HSet, Adm, setBase_held_adm]
   | _ => simp [HSet, Adm]
 
-/-- An element of a list is no deeper than the list budget. -/
-theorem depth_le_depthL {x : Value} : ∀ {vs : List Value}, x ∈ vs → Value.depth x ≤ Value.depthL vs
-  | _ :: _, .head _ => by simp only [Value.depthL]; omega
-  | _ :: _, .tail _ h => by have := depth_le_depthL h; simp only [Value.depthL]; omega
-
-/-- `HOpaque` is `opaque`'s admission: each value is in `HOpaque`, and `opaque` writes each value. -/
-theorem hopaque_adm (v : Value) : HOpaque v ↔ Adm .opaq v = true := by
-  constructor
-  · intro h
-    induction h with
-    | str s => show ((opaqCodec 1).e (.str s)).isSome = true; rw [opaqCodec_e_str 0]; simp [stringCodec]
-    | bool b => show ((opaqCodec 1).e (.bool b)).isSome = true; rw [opaqCodec_e_bool 0]; simp [booleanCodec]
-    | bin b => show ((opaqCodec 1).e (.bin b)).isSome = true; rw [opaqCodec_e_bin 0]; simp [binaryCodec]
-    | null => show ((opaqCodec 1).e .null).isSome = true; rw [opaqCodec_e_null 0]; simp [nullCodec]
-    | num d => show ((opaqCodec 1).e (.num d)).isSome = true; rw [opaqCodec_e_num 0]; simp [numberCodec]
-    | strSet S _ _ =>
-      show ((opaqCodec 2).e (.strSet S)).isSome = true
-      rw [opaqCodec_e_strSet 1]
-      show (encSet (opaqCodec 1) Value.str S).isSome = true
-      rw [encSet_congr (d := SetBase.string.elem) (fun x _ => opaqCodec_e_str 0 x)]
-      exact (Adm_exact (.set .string) (.strSet S)).mp (by simp [Adm, SetBase.adm])
-    | numSet S _ _ =>
-      show ((opaqCodec 2).e (.numSet S)).isSome = true
-      rw [opaqCodec_e_numSet 1]
-      show (encSet (opaqCodec 1) Value.num S).isSome = true
-      rw [encSet_congr (d := SetBase.number.elem) (fun x _ => opaqCodec_e_num 0 x)]
-      exact (Adm_exact (.set .number) (.numSet S)).mp (by simp [Adm, SetBase.adm, inD])
-    | binSet S _ _ =>
-      show ((opaqCodec 2).e (.binSet S)).isSome = true
-      rw [opaqCodec_e_binSet 1]
-      show (encSet (opaqCodec 1) Value.bin S).isSome = true
-      rw [encSet_congr (d := SetBase.binary.elem) (fun x _ => opaqCodec_e_bin 0 x)]
-      exact (Adm_exact (.set .binary) (.binSet S)).mp (by simp [Adm, SetBase.adm])
-    | arr vs _ ih =>
-      show ((opaqCodec (Value.depthL vs + 1)).e (.arr vs)).isSome = true
-      rw [opaqCodec_e_arr]
-      show ((traverse (opaqCodec (Value.depthL vs)).e vs).map Attr.l).isSome = true
-      rw [Option.isSome_map, traverse_isSome_iff]
-      intro x hx
-      have := ih x hx
-      change ((opaqCodec (Value.depth x)).e x).isSome = true at this
-      rwa [opaq_e_agree x _ _ (Nat.le_refl _) (depth_le_depthL hx)] at this
-    | map keys f _ ih =>
-      obtain ⟨n, hn⟩ : ∃ n, Value.depth (.map keys f) = n + 1 := ⟨_, rfl⟩
-      show ((opaqCodec (Value.depth (.map keys f))).e _).isSome = true
-      rw [hn, opaqCodec_e_map]
-      show ((funImage fun k => (opaqCodec n).e (f k)).map (Attr.m keys)).isSome = true
-      rw [Option.isSome_map, funImage_isSome_iff]
-      intro k
-      have := ih k
-      have hd := Value.depth_map_entry (f := f) k
-      change ((opaqCodec (Value.depth (f k))).e (f k)).isSome = true at this
-      rwa [opaq_e_agree (f k) (Value.depth (f k)) n (Nat.le_refl _) (by omega)] at this
-  · intro h
-    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
-    exact (opaq_T_identity v).mp (carrier_opaqCodecω.domE ha)
+/-- `HOpaque` is `opaque`'s admission: `opaque`'s held set is its write domain, and
+    `opaq_T_identity` names that set. -/
+theorem hopaque_adm (v : Value) : HOpaque v ↔ Adm .opaq v = true :=
+  (opaq_T_identity v).symm
 
 /-- A union's held set is the disjunction row of `Adm`. -/
 theorem hunion_iff : ∀ {opts Ts μs}, TypedListμ opts Ts μs → (∀ t ∈ opts, AdmIff t) →
@@ -220,6 +168,9 @@ theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → ∀ v, T v ↔ Adm t v = tr
     | literal k x => cases k <;> cases v <;> simp [HLit, Adm, AdmLit, inL, GroundKind.toValue]
     | never => simp [HNever, Adm]
     | opaq => exact hopaque_adm v
+    | var _ => simp [HNever, Adm]
+    -- a `mu`'s held set is its write domain, which is its row
+    | mu _ _ => exact Iff.rfl
     | set b => exact hset_iff b v
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       cases v with

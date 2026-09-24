@@ -118,10 +118,8 @@ inductive Term where
   | refine   (inner : Term) (p : Pred)
   /-- §3 `(lazy)`. The thunk is *not* `Unit → Term`: a closure adds no constructible
       term (every `Term` is finite either way) and only defeats the termination
-      checker. A recursive term is not modelled. `Continuity.lean` proves the obligations of a
-      fixed point for first-match resolution and constructs none. A recursive union whose
-      options are pairwise kind-disjoint has one: `lawful_opaqCodecω` is the lawful fixed
-      point of `opaque`. -/
+      checker. `lazy` concludes `⊤` and does not recurse: a recursive term is `mu`, and a
+      host thunk that refers back to its own schema is a `mu` with a `var` at the thunk. -/
   | lazy     (inner : Term)
   /-- §3 `(opaque)`: the universal sum. The number option is `numberCodec`, so `opaque`
       writes every `Value` (`opaq_total`). -/
@@ -139,6 +137,19 @@ inductive Term where
       caller can build by accident, and a rule that reads it as the bottom reads that accident as
       intent. -/
   | never
+  /-- A bound variable, as a de Bruijn index: `var 0` names the nearest enclosing `mu`. A closed
+      term reads a variable that no `mu` binds as the bottom. -/
+  | var (i : Nat)
+  /-- A guarded recursive term: `mu b` is the fixed point of `b`, where `var 0` in `b` stands for
+      `mu b` itself. The name is not `rec`, which the recursor holds. `denote` reads each input at
+      the stage of `b` that the input's own depth names (`muCodec`).
+
+      **The guard is a checked condition, and not a type.** `Term.guarded` refuses a variable that
+      reads the input of its binder itself, as in `mu (var 0)` and `mu (union [var 0, string])`,
+      and a variable under a `held`, whose `f` can make the input deeper. `Typed.mu` carries the
+      guard, and the test file pins each refusal. A type would need a second term family for the
+      body of a binder, and every table over terms would then have one more family. -/
+  | mu (body : Term)
 
 /-- §4's object payload: the declared names, the slot at each, and the one open block.
     The type is `inductive … | mk`, so the projections below are written by hand: three lines,
@@ -271,6 +282,92 @@ theorem Term.isOpenObject_eq_false {t : Term} :
     | _ => rfl
 
 
+/-! ## The guard of a binder
+
+`mu b` denotes the limit of the stages of `b`, and each input reads the stage its own depth names.
+That limit is stable only when `b` reads its variable at inputs strictly shallower than its own
+input. A container reads its elements one layer down. A sum, a restriction and `lazy` read their
+own input. A `held` reads its inner term at `f v`, and `f` can make the input deeper, so a variable
+under a `held` has no depth bound at all.
+
+`Term.use i t` says how `t` reads the variable `i`, as a level: `0` when `i` does not occur, `1`
+when each occurrence sits under a container and none under a `held`, `2` when an occurrence reads
+the input itself and none sits under a `held`, and `3` when an occurrence sits under a `held`. The
+level is a `Nat` and not an inductive, because a body's slot table is a key set with a function on
+it, and `Finset.sup` over `Nat` is the join over a key set that `Term.depth` already uses. The
+functions below produce the four levels and no other value. -/
+
+/-- A container reads its elements one layer down: an occurrence that read the input now reads an
+    element. -/
+def useUnder (u : Nat) : Nat := if u = 2 then 1 else u
+
+/-- A `held` reads its terms at an input of any depth. -/
+def useHeld (u : Nat) : Nat := if u = 0 then 0 else 3
+
+mutual
+
+/-- How `t` reads the variable `i`, as the level the section above defines. -/
+def Term.use (i : Nat) : Term → Nat
+  | .string | .number | .boolean | .binary | .null
+  | .literal _ _ | .opaq | .set _ | .never => 0
+  | .var j => if i = j then 2 else 0
+  | .mu t => Term.use (i + 1) t
+  | .refine t _ => Term.use i t
+  | .lazy t => Term.use i t
+  | .held t P _ _ => useHeld (max (Term.use i t) (Term.use i P))
+  | .list pre sp suf =>
+      useUnder (max (Term.useL i pre) (max (Term.useO i sp) (Term.useL i suf)))
+  | .union opts => Term.useL i opts
+  | .object b => useUnder (Body.use i b)
+
+def Body.use (i : Nat) : Body → Nat
+  | .mk fields f wild =>
+      max (fields.attach.sup fun k => ObjectSlot.use i (f k)) (Term.useO i wild)
+
+def ObjectSlot.use (i : Nat) : ObjectSlot → Nat
+  | .req t | .optional t => Term.use i t
+
+def Term.useL (i : Nat) : List Term → Nat
+  | [] => 0
+  | t :: ts => max (Term.use i t) (Term.useL i ts)
+
+def Term.useO (i : Nat) : Option Term → Nat
+  | none => 0
+  | some t => Term.use i t
+
+end
+
+mutual
+
+/-- **Every binder is guarded**: at each `mu b`, `b` reads `var 0` at level `1` or less. -/
+def Term.guarded : Term → Bool
+  | .string | .number | .boolean | .binary | .null
+  | .literal _ _ | .opaq | .set _ | .never | .var _ => true
+  | .mu t => decide (Term.use 0 t ≤ 1) && Term.guarded t
+  | .refine t _ => Term.guarded t
+  | .lazy t => Term.guarded t
+  | .held t P _ _ => Term.guarded t && Term.guarded P
+  | .list pre sp suf => Term.guardedL pre && Term.guardedO sp && Term.guardedL suf
+  | .union opts => Term.guardedL opts
+  | .object b => Body.guarded b
+
+def Body.guarded : Body → Bool
+  | .mk fields f wild =>
+      decide (∀ k : {k // k ∈ fields}, ObjectSlot.guarded (f k) = true) && Term.guardedO wild
+
+def ObjectSlot.guarded : ObjectSlot → Bool
+  | .req t | .optional t => Term.guarded t
+
+def Term.guardedL : List Term → Bool
+  | [] => true
+  | t :: ts => Term.guarded t && Term.guardedL ts
+
+def Term.guardedO : Option Term → Bool
+  | none => true
+  | some t => Term.guarded t
+
+end
+
 /-! ## A structural measure on terms
 
 `denote` recurses structurally and needs no measure. The **proofs** do: `soundness` recurses
@@ -279,7 +376,7 @@ recurse on the term instead — and `sizeOf` cannot serve, because `Term.object`
 *function* and `sizeOf` is blind to functions (`sizeOf f = 0`).
 
 This is the measure that sees through it, and it is not a new idea: it is exactly the shape
-`Value.depth` in `Opaque.lean` has always used — `attach.sup` over the key set where a list would
+`Value.depth` in `Recursion.lean` uses — `attach.sup` over the key set where a list would
 fold. What matters is that it is **derived from the term** rather than supplied by a caller, so it
 appears in no statement, no `Obligations`, and no rule. That is the whole difference between this
 and the `fuel` parameter it replaces. -/
@@ -290,8 +387,9 @@ def Term.depth : Term → Nat
   | .string | .number | .boolean | .binary | .null
   -- `set` is a **leaf** since its base became an index: there is no element term to
   -- measure, so it sits with the other ground shapes rather than costing a layer.
-  | .literal _ _ | .opaq | .set _ | .never => 1
+  | .literal _ _ | .opaq | .set _ | .never | .var _ => 1
   | .lazy t => Term.depth t + 1
+  | .mu t => Term.depth t + 1
   | .held t P _ _ => max (Term.depth t) (Term.depth P) + 1
   | .refine t _ => Term.depth t + 1
   | .list pre sp suf =>

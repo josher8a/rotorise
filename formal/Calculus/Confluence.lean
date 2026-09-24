@@ -31,9 +31,6 @@ namespace Calculus
 def Sub (c d : Codec) : Prop :=
   (∀ v a, c.e v = some a → d.e v = some a) ∧ (∀ a v, c.p a = some v → d.p a = some v)
 
-/-- `opaque`'s fuel-free codec, under the short name that the inclusion lemmas use. -/
-noncomputable abbrev Ω : Codec := opaqCodecω
-
 /-- `Ω` writes a string as `S`. -/
 theorem Ωe_str (s : String) : Ω.e (.str s) = some (.s s) := rfl
 /-- `Ω` writes a number as `N`. -/
@@ -54,82 +51,6 @@ theorem Ωp_bool (b : Bool) : Ω.p (.bool b) = some (.bool b) := rfl
 theorem Ωp_b (b : Bytes) : Ω.p (.b b) = some (.bin b) := rfl
 /-- `Ω` reads `NULL` as `null`. -/
 theorem Ωp_null : Ω.p .null = some .null := rfl
-
-/-- `Ω` writes an array element by element, through `Ω` itself. -/
-theorem Ωe_arr (vs : List Value) : Ω.e (.arr vs) = (traverse Ω.e vs).map Attr.l := by
-  show (opaqCodec (Value.depthL vs + 1)).e (.arr vs) = _
-  rw [opaqCodec_e_arr]
-  show (traverse (opaqCodec (Value.depthL vs)).e vs).map Attr.l = _
-  rw [traverse_congr (fun x hx => opaq_e_agree x _ _ (depth_le_depthL hx) (Nat.le_refl _))]
-  rfl
-
-/-- `Ω` reads a list element by element, through `Ω` itself. -/
-theorem Ωp_l (as : List Attr) : Ω.p (.l as) = (traverse Ω.p as).map Value.arr := by
-  show (opaqCodec (Attr.depthL as + 1)).p (.l as) = _
-  rw [opaqCodec_p_l]
-  show (traverse (opaqCodec (Attr.depthL as)).p as).map Value.arr = _
-  rw [traverse_congr (fun x hx => opaq_p_agree x _ _ (depth_le_depthLA hx) (Nat.le_refl _))]
-  rfl
-
-/-- `Ω` writes a map entry by entry, through `Ω` itself. -/
-theorem Ωe_map (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
-    Ω.e (.map keys g) = (funImage fun k => Ω.e (g k)).map (Attr.m keys) := by
-  obtain ⟨n, hn⟩ : ∃ n, Value.depth (.map keys g) = n + 1 := ⟨_, rfl⟩
-  show (opaqCodec (Value.depth (.map keys g))).e _ = _
-  rw [hn, opaqCodec_e_map]
-  show (funImage fun k => (opaqCodec n).e (g k)).map (Attr.m keys) = _
-  congr 2; funext k
-  have := Value.depth_map_entry (f := g) k
-  exact opaq_e_agree (g k) _ _ (by omega) (Nat.le_refl _)
-
-/-- `Ω` reads a map entry by entry, through `Ω` itself. -/
-theorem Ωp_m (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
-    Ω.p (.m keys g) = (funImage fun k => Ω.p (g k)).map (Value.map keys) := by
-  obtain ⟨n, hn⟩ : ∃ n, Attr.depth (.m keys g) = n + 1 := ⟨_, rfl⟩
-  show (opaqCodec (Attr.depth (.m keys g))).p _ = _
-  rw [hn, opaqCodec_p_m]
-  show (funImage fun k => (opaqCodec n).p (g k)).map (Value.map keys) = _
-  congr 2; funext k
-  have := Attr.depth_map_entry (f := g) k
-  exact opaq_p_agree (g k) _ _ (by omega) (Nat.le_refl _)
-
-/-- `Ω` writes a string set through `encSet` over `Ω` itself. -/
-theorem Ωe_strSet (S : NEFinset String) : Ω.e (.strSet S) = encSet Ω Value.str S := by
-  show (opaqCodec 2).e _ = _
-  rw [opaqCodec_e_strSet]; show encSet (opaqCodec 1) Value.str S = _
-  simp only [encSet, show ∀ x : String, (opaqCodec 1).e (Value.str x) = Ω.e (Value.str x)
-    from fun x => rfl]
-/-- `Ω` writes a number set through `encSet` over `Ω` itself. -/
-theorem Ωe_numSet (S : NEFinset WFNumeral) : Ω.e (.numSet S) = encSet Ω Value.num S := by
-  show (opaqCodec 2).e _ = _
-  rw [opaqCodec_e_numSet]; show encSet (opaqCodec 1) Value.num S = _
-  simp only [encSet, show ∀ x : WFNumeral, (opaqCodec 1).e (Value.num x) = Ω.e (Value.num x)
-    from fun x => rfl]
-/-- `Ω` writes a binary set through `encSet` over `Ω` itself. -/
-theorem Ωe_binSet (S : NEFinset Bytes) : Ω.e (.binSet S) = encSet Ω Value.bin S := by
-  show (opaqCodec 2).e _ = _
-  rw [opaqCodec_e_binSet]; show encSet (opaqCodec 1) Value.bin S = _
-  simp only [encSet, show ∀ x : Bytes, (opaqCodec 1).e (Value.bin x) = Ω.e (Value.bin x)
-    from fun x => rfl]
-/-- `Ω` reads `SS` through `decSet` over `Ω` itself. -/
-theorem Ωp_ss (S : NEFinset String) : Ω.p (.ss S) = decSet Ω Attr.s S := by
-  show (opaqCodec 2).p _ = _
-  rw [opaqCodec_p_ss]; show decSet (opaqCodec 1) Attr.s S = _
-  simp only [decSet, show ∀ x : String, (opaqCodec 1).p (Attr.s x) = Ω.p (Attr.s x)
-    from fun x => rfl]
-/-- `Ω` reads `NS` through `decSet` over `Ω` itself. -/
-theorem Ωp_ns (S : NEFinset WFNumeral) : Ω.p (.ns S) = decSet Ω Attr.n S := by
-  show (opaqCodec 2).p _ = _
-  rw [opaqCodec_p_ns]; show decSet (opaqCodec 1) Attr.n S = _
-  simp only [decSet, show ∀ x : WFNumeral, (opaqCodec 1).p (Attr.n x) = Ω.p (Attr.n x)
-    from fun x => rfl]
-/-- `Ω` reads `BS` through `decSet` over `Ω` itself. -/
-theorem Ωp_bs (S : NEFinset Bytes) : Ω.p (.bs S) = decSet Ω Attr.b S := by
-  show (opaqCodec 2).p _ = _
-  rw [opaqCodec_p_bs]; show decSet (opaqCodec 1) Attr.b S = _
-  simp only [decSet, show ∀ x : Bytes, (opaqCodec 1).p (Attr.b x) = Ω.p (Attr.b x)
-    from fun x => rfl]
-
 
 /-! ## Inclusion lemmas, one per combinator -/
 
@@ -285,8 +206,8 @@ theorem sub_altCodec {os : List Codec} (h : ∀ o ∈ os, Sub o Ω) (μ : Option
 
 /-- An object whose every slot and open block is a restriction of `Ω` is a restriction of `Ω`. -/
 theorem sub_bodySem (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
-    (w : Option Term) (hf : ∀ k, Sub (fieldSem (f k)).codec Ω)
-    (hw : ∀ c ∈ rcOf (wildSem w), Sub c Ω) : Sub (bodySem (.mk fields f w)) Ω := by
+    (w : Option Term) {ρ : List Codec} (hf : ∀ k, Sub (fieldSem (f k) ρ).codec Ω)
+    (hw : ∀ c ∈ rcOf (wildSem w ρ), Sub c Ω) : Sub (bodySem (.mk fields f w) ρ) Ω := by
   refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
   · obtain ⟨keys, g, g', rfl, rfl, -, hg⟩ := objectCodecCore_e_inv he
     rw [Ωe_map, funImage_eq (f := g') (fun k => ?_)]
@@ -302,11 +223,11 @@ theorem sub_bodySem (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSl
       cases hmA
       obtain ⟨-, d, hd, rfl⟩ := objRead_eq.mp hr
       rw [Ωp_m]
-      have hS : keys = keys.filter (keepB (wildSem w) ⟨fields, fun k => fieldSem (f k)⟩ ·) :=
+      have hS : keys = keys.filter (keepB (wildSem w ρ) ⟨fields, fun k => fieldSem (f k) ρ⟩ ·) :=
         (filter_eq_self_on (fun k _ => keepB_wild w _ k)).symm
       rw [funImage_record_congr hS (g' := fun k : {k // k ∈ keys.filter
-          (keepB (wildSem w) ⟨fields, fun k => fieldSem (f k)⟩ ·)} =>
-            (entryCodec ⟨fields, fun k => fieldSem (f k)⟩ (rcOf (wildSem w)) k.1).bind
+          (keepB (wildSem w ρ) ⟨fields, fun k => fieldSem (f k) ρ⟩ ·)} =>
+            (entryCodec ⟨fields, fun k => fieldSem (f k) ρ⟩ (rcOf (wildSem w ρ)) k.1).bind
               (fun c => c.p (g ⟨k.1, (Finset.mem_filter.mp k.2).1⟩))) (fun k h h' => ?_), hd]
       · rfl
       have hk := funImage_some hd ⟨k, h'⟩
@@ -324,11 +245,12 @@ def HF : Term → Prop
   | .held _ _ _ _ => False
   | .refine t _ => HF t
   | .lazy t => HF t
+  | .mu t => HF t
   | .list pre sp suf => HFL pre ∧ HFO sp ∧ HFL suf
   | .object b => HFB b
   | .union os => HFL os
   | .string | .number | .boolean | .binary | .null | .literal _ _ | .set _ | .opaq
-  | .never => True
+  | .never | .var _ => True
 /-- A body is held-free when each slot and the open block are held-free. -/
 def HFB : Body → Prop
   | .mk _ f w => (∀ k, HFS (f k)) ∧ HFO w
@@ -367,7 +289,8 @@ theorem occA_le_occV : ∀ (t : Term), HF t → ∀ (m : Member), occA t m = tru
   | .held _ _ _ _, hf, _, _ => nomatch hf
   | .refine t _, hf, m, h => occA_le_occV t hf m (by simpa [occA] using h)
   | .lazy t, hf, m, h => occA_le_occV t hf m (by simpa [occA] using h)
-  | .opaq, _, _, _ => by simp [occV, occTop]
+  | .opaq, _, _, _ | .mu _, _, _, _ => by simp [occV, occTop]
+  | .var _, _, _, h => by simp [occA, occNone] at h
   | .union os, hf, m, h => by
       simp only [occA, occV] at h ⊢
       exact occAL_le_occVL os hf m h
@@ -384,48 +307,72 @@ theorem occAL_le_occVL : ∀ (ts : List Term), HFL ts → ∀ (m : Member),
 end
 
 mutual
-/-- **Confluence.** The denotation of a held-free term is a restriction of `Ω`, on both halves. -/
-theorem sub_denote : ∀ t : Term, HF t → Sub (denote t) Ω
-  | .string, _ => sub_string
-  | .number, _ => sub_number
-  | .boolean, _ => sub_boolean
-  | .binary, _ => sub_binary
-  | .null, _ => sub_null
-  | .literal k x, _ => sub_literal k x
-  | .set b, _ => sub_setBase b
-  | .opaq, _ => ⟨fun _ _ h => h, fun _ _ h => h⟩
-  | .never, _ => sub_empty
-  | .held _ _ _ _, h => h.elim
-  | .refine t q, h => sub_restrict (sub_denote t h) q.eval
-  | .lazy t, h => (sub_denote t h)
-  | .list pre sp suf, ⟨h1, h2, h3⟩ =>
-      sub_listCodec (sub_denoteList pre h1) (sub_denoteOpt sp h2) (sub_denoteList suf h3)
-  | .object b, h => sub_body b h
-  | .union os, h => sub_altCodec (sub_denoteList os h) _
+/-- **Confluence.** The denotation of a held-free term is a restriction of `Ω`, on both halves,
+    over an environment of restrictions of `Ω`. -/
+theorem sub_denoteIn : ∀ t : Term, HF t → ∀ ρ : List Codec, (∀ i, Sub (envAt ρ i) Ω) →
+    Sub (denote t ρ) Ω
+  | .string, _, _, _ => sub_string
+  | .number, _, _, _ => sub_number
+  | .boolean, _, _, _ => sub_boolean
+  | .binary, _, _, _ => sub_binary
+  | .null, _, _, _ => sub_null
+  | .literal k x, _, _, _ => sub_literal k x
+  | .set b, _, _, _ => sub_setBase b
+  | .opaq, _, _, _ => ⟨fun _ _ h => h, fun _ _ h => h⟩
+  | .never, _, _, _ => sub_empty
+  | .var i, _, _, henv => henv i
+  -- each stage is a restriction by the body's case at the stage before, and the limit reads a
+  -- stage at each input
+  | .mu b, h, ρ, henv => by
+      have hs : ∀ n, Sub (muStage (fun c => denote b (c :: ρ)) n) Ω := fun n => by
+        induction n with
+        | zero => exact sub_empty
+        | succ n ih =>
+          exact sub_denoteIn b h (_ :: ρ) fun i => match i with
+            | 0 => ih
+            | i + 1 => henv i
+      exact ⟨fun v a he => (hs _).1 v a he, fun a v hp => (hs _).2 a v hp⟩
+  | .held _ _ _ _, h, _, _ => h.elim
+  | .refine t q, h, ρ, henv => sub_restrict (sub_denoteIn t h ρ henv) q.eval
+  | .lazy t, h, ρ, henv => (sub_denoteIn t h ρ henv)
+  | .list pre sp suf, ⟨h1, h2, h3⟩, ρ, henv =>
+      sub_listCodec (sub_denoteList pre h1 ρ henv) (sub_denoteOpt sp h2 ρ henv)
+        (sub_denoteList suf h3 ρ henv)
+  | .object b, h, ρ, henv => sub_body b h ρ henv
+  | .union os, h, ρ, henv => sub_altCodec (sub_denoteList os h ρ henv) _
 /-- …at a body. -/
-theorem sub_body : ∀ b : Body, HFB b → Sub (bodySem b) Ω
-  | .mk fields f w, ⟨hf, hw⟩ =>
-      sub_bodySem fields f w (fun k => sub_slot (f k) (hf k)) (sub_wild w hw)
+theorem sub_body : ∀ b : Body, HFB b → ∀ ρ : List Codec, (∀ i, Sub (envAt ρ i) Ω) →
+    Sub (bodySem b ρ) Ω
+  | .mk fields f w, ⟨hf, hw⟩, ρ, henv =>
+      sub_bodySem fields f w (fun k => sub_slot (f k) (hf k) ρ henv) (sub_wild w hw ρ henv)
 /-- …at a slot. -/
-theorem sub_slot : ∀ s : ObjectSlot, HFS s → Sub (fieldSem s).codec Ω
-  | .req t, h => sub_denote t h
-  | .optional t, h => sub_denote t h
+theorem sub_slot : ∀ s : ObjectSlot, HFS s → ∀ ρ : List Codec, (∀ i, Sub (envAt ρ i) Ω) →
+    Sub (fieldSem s ρ).codec Ω
+  | .req t, h, ρ, henv => sub_denoteIn t h ρ henv
+  | .optional t, h, ρ, henv => sub_denoteIn t h ρ henv
 /-- …at an open block. -/
-theorem sub_wild : ∀ w : Option Term, HFO w → ∀ c ∈ rcOf (wildSem w), Sub c Ω
-  | none, _ => fun _ hc => nomatch hc
-  | some t, h => fun c hc => by cases hc; exact sub_denote t h
+theorem sub_wild : ∀ w : Option Term, HFO w → ∀ ρ : List Codec, (∀ i, Sub (envAt ρ i) Ω) →
+    ∀ c ∈ rcOf (wildSem w ρ), Sub c Ω
+  | none, _, _, _ => fun _ hc => nomatch hc
+  | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn t h ρ henv
 /-- …at a list of terms. -/
-theorem sub_denoteList : ∀ ts : List Term, HFL ts → ∀ c ∈ denoteList ts, Sub c Ω
-  | [], _ => fun _ hc => nomatch hc
-  | t :: ts, ⟨h1, h2⟩ => fun c hc => by
+theorem sub_denoteList : ∀ ts : List Term, HFL ts → ∀ ρ : List Codec,
+    (∀ i, Sub (envAt ρ i) Ω) → ∀ c ∈ denoteList ts ρ, Sub c Ω
+  | [], _, _, _ => fun _ hc => nomatch hc
+  | t :: ts, ⟨h1, h2⟩, ρ, henv => fun c hc => by
       rcases List.mem_cons.mp hc with rfl | hc
-      · exact sub_denote t h1
-      · exact sub_denoteList ts h2 c hc
+      · exact sub_denoteIn t h1 ρ henv
+      · exact sub_denoteList ts h2 ρ henv c hc
 /-- …at an optional term. -/
-theorem sub_denoteOpt : ∀ o : Option Term, HFO o → ∀ c ∈ denoteOpt o, Sub c Ω
-  | none, _ => fun _ hc => nomatch hc
-  | some t, h => fun c hc => by cases hc; exact sub_denote t h
+theorem sub_denoteOpt : ∀ o : Option Term, HFO o → ∀ ρ : List Codec,
+    (∀ i, Sub (envAt ρ i) Ω) → ∀ c ∈ denoteOpt o ρ, Sub c Ω
+  | none, _, _, _ => fun _ hc => nomatch hc
+  | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn t h ρ henv
 end
+
+/-- **Confluence**, closed: the denotation of a held-free term is a restriction of `Ω`. -/
+theorem sub_denote (t : Term) (h : HF t) : Sub (denote t) Ω :=
+  sub_denoteIn t h [] fun _ => sub_empty
 
 /-- **(W)**: a held-free term writes only what `opaque` writes. -/
 theorem confluence_W {t : Term} (h : HF t) {v a} (he : (denote t).e v = some a) :
@@ -528,7 +475,7 @@ theorem Ω_onto (a : Attr) : ∃ v, Ω.e v = some a := ⟨_, Ω_e_valueOfAttr a�
 
 /-- `Ω` reads only canonical attributes: `e ∘ p = id` on `dom(p)`. -/
 theorem Ω_canon {a : Attr} {t : Value} (h : Ω.p a = some t) : Ω.e t = some a :=
-  lawful_opaqCodecω.can_roundTrip (Ω_onto a) h
+  lawful_opaq.can_roundTrip (Ω_onto a) h
 
 /-- Each member of a held-free list is held-free. -/
 theorem HFL_mem : ∀ {ts : List Term}, HFL ts → ∀ t ∈ ts, HF t
@@ -562,7 +509,7 @@ theorem held_violates_W :
     ¬ ∀ v a, (denote decimalHeld).e v = some a → (denote .opaq).e v = some a := by
   intro h
   have := h _ _ decimalHeld_writes
-  rw [denote_opaq, show opaqCodecω.e (.str "1") = some (.s "1") from rfl] at this
+  rw [denote_opaq, show (muCodec opaqStep).e (.str "1") = some (.s "1") from rfl] at this
   exact nomatch this
 
 /-- `decimalHeld` reads the number `1` as the string `"1"`. -/
@@ -575,8 +522,8 @@ theorem held_violates_R :
     ¬ ∀ a v, (denote decimalHeld).p a = some v → (denote .opaq).p a = some v := by
   intro h
   have := h _ _ decimalHeld_reads
-  rw [denote_opaq, show opaqCodecω.p (.n (WFNumeral.of "1")) = some (.num (WFNumeral.of "1"))
-    from rfl] at this
+  rw [denote_opaq, show (muCodec opaqStep).p (.n (WFNumeral.of "1"))
+    = some (.num (WFNumeral.of "1")) from rfl] at this
   exact nomatch this
 
 

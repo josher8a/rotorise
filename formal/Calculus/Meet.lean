@@ -605,6 +605,9 @@ mutual
 def meetSRight (fam : Term → Option Term) : Term → Option Term
   | .never => some .never
   | .held _ _ _ _ => none
+  -- a closed variable is the bottom, and the meet states no recursive term
+  | .var _ => some .never
+  | .mu _ => none
   | .lazy t => meetSRight fam t
   | .refine y p => if p.isData then (meetSRight fam y).map (fun z => Term.refineOf z p) else none
   | .union os => (allSome (meetSRightL fam os)).bind
@@ -1343,6 +1346,9 @@ def Term.meet : Term → Term → Option Term
   | .lazy x, y => Term.meet x y
   | .held _ _ _ _, .never => some .never
   | .held _ _ _ _, _ => none
+  | .var _, _ => some .never
+  | .mu _, .never => some .never
+  | .mu _, _ => none
   | .refine _ _, .never => some .never
   | .refine x p, y => if p.isData then (Term.meet x y).map (fun z => Term.refineOf z p) else none
   | .union _, .never => some .never
@@ -1393,11 +1399,12 @@ def hasHeld : Term → Bool
   | .held _ _ _ _ => true
   | .refine t _ => hasHeld t
   | .lazy t => hasHeld t
+  | .mu t => hasHeld t
   | .list pre sp suf => hasHeldL pre || hasHeldO sp || hasHeldL suf
   | .object b => hasHeldB b
   | .union os => hasHeldL os
   | .string | .number | .boolean | .binary | .null | .literal _ _ | .set _ | .opaq
-  | .never => false
+  | .never | .var _ => false
 def hasHeldL : List Term → Bool
   | [] => false
   | t :: ts => hasHeld t || hasHeldL ts
@@ -1741,39 +1748,26 @@ stated first.
 
 /-! ## What `opaque` admits
 
-`Adm .opaq v` is `dom(e)` of `opaqCodecω`, and a scalar's budget is one layer, so each
-row below is the corresponding unfolding at fuel `0+1`. -/
+`Adm .opaq v` is `dom(e)` of `Ω`, and a scalar's budget is one layer, so each row below
+reduces by `rfl`. -/
 
 /-- `opaque` writes every string, so `string` is the finer term. -/
-theorem Adm_opaq_str (s : String) : Adm .opaq (.str s) = true := by
-  show ((opaqCodec (Value.depth (.str s))).e (.str s)).isSome = true
-  rw [show Value.depth (.str s) = 0 + 1 from rfl, opaqCodec_e_str]
-  simp [stringCodec]
+theorem Adm_opaq_str (s : String) : Adm .opaq (.str s) = true := rfl
 
 /-- …every boolean. -/
-theorem Adm_opaq_bool (b : Bool) : Adm .opaq (.bool b) = true := by
-  show ((opaqCodec (Value.depth (.bool b))).e (.bool b)).isSome = true
-  rw [show Value.depth (.bool b) = 0 + 1 from rfl, opaqCodec_e_bool]
-  simp [booleanCodec]
+theorem Adm_opaq_bool (b : Bool) : Adm .opaq (.bool b) = true := rfl
 
 /-- …every byte string. -/
-theorem Adm_opaq_bin (b : Bytes) : Adm .opaq (.bin b) = true := by
-  show ((opaqCodec (Value.depth (.bin b))).e (.bin b)).isSome = true
-  rw [show Value.depth (.bin b) = 0 + 1 from rfl, opaqCodec_e_bin]
-  simp [binaryCodec]
+theorem Adm_opaq_bin (b : Bytes) : Adm .opaq (.bin b) = true := rfl
 
 /-- …and the null point. -/
-theorem Adm_opaq_null : Adm .opaq .null = true := by
-  show ((opaqCodec (Value.depth .null)).e .null).isSome = true
-  rw [show Value.depth .null = 0 + 1 from rfl, opaqCodec_e_null]
-  simp [nullCodec]
+theorem Adm_opaq_null : Adm .opaq .null = true := rfl
 
 /-- …and every numeral, exactly on `D`. -/
 theorem Adm_opaq_num (d : WFNumeral) :
     Adm .opaq (.num d) = inD (.num d) := by
-  show ((opaqCodec (Value.depth (.num d))).e (.num d)).isSome = _
-  rw [show Value.depth (.num d) = 0 + 1 from rfl, opaqCodec_e_num]
-  simp [numberCodec, inD]
+  rw [show Adm .opaq (.num d) = true from rfl]
+  simp [inD]
 
 
 /-- Two terms whose occupancies are disjoint share no value, so their conjunction is the
@@ -1935,9 +1929,8 @@ theorem zipP_meet {r₁ r₂ rz : List Term} (hlen : r₁.length = r₂.length)
                     ihw (by simpa using hlen) hrest]
                   simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
 
-/-- `opaque`'s row is `dom(e)` of its codec, budgeted by the value's own depth. -/
-theorem Adm_opaq_eq (v : Value) :
-    Adm .opaq v = ((opaqCodec (Value.depth v)).e v).isSome := rfl
+/-- `opaque`'s row is `dom(e)` of its codec. -/
+theorem Adm_opaq_eq (v : Value) : Adm .opaq v = (Ω.e v).isSome := rfl
 
 /-- A body admits nothing that is not a map. -/
 theorem AdmBody_of_not_map {c : Body} {v : Value} (h : ∀ keys g, v ≠ .map keys g) :
@@ -2173,7 +2166,7 @@ and the depth bounds the well-founded proof carries are gone with it. -/
     seven above, so the predicate below carries the same split the definition makes. `lazy`
     stays outside, because its own row meets the subterm and hands the family no thunk. -/
 def Delegated : Term → Prop
-  | .never | .held _ _ _ _ | .lazy _ | .refine _ _ | .union _ => False
+  | .never | .held _ _ _ _ | .lazy _ | .refine _ _ | .union _ | .var _ | .mu _ => False
   | _ => True
 
 /-- `f` answers the meet with one term fixed on the left, at EVERY right operand. The container
@@ -2209,6 +2202,9 @@ theorem Adm_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmFam x fa
   | .never, _, h, _ => by
       simp only [meetSRight, Option.some.injEq] at h; subst h; simp [Adm]
   | .held _ _ _ _, _, h, _ => by simp [meetSRight] at h
+  | .var _, _, h, _ => by
+      simp only [meetSRight, Option.some.injEq] at h; subst h; simp [Adm]
+  | .mu _, _, h, _ => by simp [meetSRight] at h
   | .lazy t, _, h, v => by
       rw [meetSRight] at h
       simpa [Adm] using Adm_meetSRight hf t _ h v
@@ -3059,6 +3055,13 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
           | exact absurd h (by simp [Term.meet])
+  | .var _, _, _, h, _ => by
+      simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm]
+  | .mu _, y, _, h, v => by
+      cases y <;>
+        first
+          | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
+          | exact absurd h (by simp [Term.meet])
   | .lazy x, y, _, h, v => by
       rw [Term.meet] at h
       simpa [Adm] using Adm_meet x y _ h v
@@ -3488,6 +3491,12 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
           | (simp only [Term.meet, Option.some.injEq] at h; subst h
              exact absurd hz (by simp [μSyn]))
           | exact absurd h (by simp [Term.meet])
+  | .mu _, y, _, h, _, hz => by
+      cases y <;>
+        first
+          | (simp only [Term.meet, Option.some.injEq] at h; subst h
+             exact absurd hz (by simp [μSyn]))
+          | exact absurd h (by simp [Term.meet])
   | .lazy x, y, _, h, m, hz => by
       rw [Term.meet] at h
       refine ⟨?_, (meet_writes x y _ h m hz).2⟩
@@ -3666,36 +3675,25 @@ theorem AdmA_and_false {x y : Term} (h : Orth1 x y = true) (a : Attr) :
       rw [occA_sound y a hy] at h2
       exact absurd h2 (by simp)
 
-/-- `opaque` reads an attribute exactly where its codec at that depth answers. -/
-theorem AdmA_opaq_eq (a : Attr) :
-    AdmA .opaq a = ((opaqCodec (Attr.depth a)).p a).isSome := rfl
+/-- `opaque` reads an attribute exactly where its codec answers. -/
+theorem AdmA_opaq_eq (a : Attr) : AdmA .opaq a = (Ω.p a).isSome := rfl
 
 /-- It reads every stored string, -/
-theorem AdmA_opaq_str (s : String) : AdmA .opaq (.s s) = true := by
-  rw [AdmA_opaq_eq, show Attr.depth (.s s) = 0 + 1 from rfl, opaqCodec_p_s]
-  simp [stringCodec]
+theorem AdmA_opaq_str (s : String) : AdmA .opaq (.s s) = true := rfl
 
 /-- …every stored boolean, -/
-theorem AdmA_opaq_bool (b : Bool) : AdmA .opaq (.bool b) = true := by
-  rw [AdmA_opaq_eq, show Attr.depth (.bool b) = 0 + 1 from rfl, opaqCodec_p_bool]
-  simp [booleanCodec]
+theorem AdmA_opaq_bool (b : Bool) : AdmA .opaq (.bool b) = true := rfl
 
 /-- …every stored byte string, -/
-theorem AdmA_opaq_bin (b : Bytes) : AdmA .opaq (.b b) = true := by
-  rw [AdmA_opaq_eq, show Attr.depth (.b b) = 0 + 1 from rfl, opaqCodec_p_b]
-  simp [binaryCodec]
+theorem AdmA_opaq_bin (b : Bytes) : AdmA .opaq (.b b) = true := rfl
 
 /-- …the stored null, -/
-theorem AdmA_opaq_null : AdmA .opaq .null = true := by
-  rw [AdmA_opaq_eq, show Attr.depth Attr.null = 0 + 1 from rfl, opaqCodec_p_null]
-  simp [nullCodec]
+theorem AdmA_opaq_null : AdmA .opaq .null = true := rfl
 
 -- the numeric read row, mirror of `Adm_opaq_num`
 /-- …and every stored numeral, as `number` reads it. -/
 theorem AdmA_opaq_num (x : WFNumeral) :
-    AdmA .opaq (.n x) = (numberCodec.p (.n x)).isSome := by
-  show ((opaqCodec (Attr.depth (.n x))).p (.n x)).isSome = _
-  rw [show Attr.depth (.n x) = 0 + 1 from rfl, opaqCodec_p_n]
+    AdmA .opaq (.n x) = (numberCodec.p (.n x)).isSome := rfl
 
 /-- A tuple with no tail pins the length of the wire list it reads. -/
 theorem alignPA_none_length : ∀ {Ps : List AP} {as : List Attr},
@@ -3883,27 +3881,23 @@ theorem recordCodec_p_congr {c d : Codec} {keys : Finset Name} {g : {k // k ∈ 
 
 /-- `opaque` reads a self-identifying attribute exactly as the base for that attribute does. -/
 theorem opaq_p_string (s : String) :
-    (denote .opaq).p (.s s) = (denote (.string : Term)).p (.s s) := opaqCodec_p_s 0 s
+    (denote .opaq).p (.s s) = (denote (.string : Term)).p (.s s) := rfl
 
 /-- …a stored boolean as `boolean` does, -/
 theorem opaq_p_boolean (b : Bool) :
-    (denote .opaq).p (.bool b) = (denote (.boolean : Term)).p (.bool b) :=
-  opaqCodec_p_bool 0 b
+    (denote .opaq).p (.bool b) = (denote (.boolean : Term)).p (.bool b) := rfl
 
 /-- …stored bytes as `binary` does, -/
 theorem opaq_p_binary (b : Bytes) :
-    (denote .opaq).p (.b b) = (denote (.binary : Term)).p (.b b) := opaqCodec_p_b 0 b
+    (denote .opaq).p (.b b) = (denote (.binary : Term)).p (.b b) := rfl
 
 /-- …and the stored null as `null` does. -/
 theorem opaq_p_null :
-    (denote .opaq).p .null = (denote (.null : Term)).p .null := opaqCodec_p_null 0
+    (denote .opaq).p .null = (denote (.null : Term)).p .null := rfl
 
 /-- …and a stored numeral as `number` does. -/
 theorem opaq_p_number (x : WFNumeral) :
-    (denote .opaq).p (.n x) = (denote (.number : Term)).p (.n x) := by
-  rw [show (denote .opaq).p (.n x) = (opaqCodec (0 + 1)).p (.n x) from rfl,
-    opaqCodec_p_n]
-  rfl
+    (denote .opaq).p (.n x) = (denote (.number : Term)).p (.n x) := rfl
 
 /-- `number`'s read row is its codec's domain, said as an equation so the `opaque` rows can
     conjoin the two. -/
@@ -4611,6 +4605,9 @@ mutual
 theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x fam) :
     ∀ y z, meetSRight fam y = some z → AdmAAt x y z
   | .never, _, h => by
+      simp only [meetSRight, Option.some.injEq] at h; subst h
+      exact ⟨fun a => by simp [AdmA], fun a _ hb => absurd hb (by simp [AdmA])⟩
+  | .var _, _, h => by
       simp only [meetSRight, Option.some.injEq] at h; subst h
       exact ⟨fun a => by simp [AdmA], fun a _ hb => absurd hb (by simp [AdmA])⟩
   | .held _ _ _ _, _, h => by simp [meetSRight] at h
@@ -5494,6 +5491,15 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
           | (simp only [Term.meet, Option.some.injEq] at h; subst h
              exact ⟨fun a => by simp [AdmA], fun a _ hb => absurd hb (by simp [AdmA])⟩)
           | exact absurd h (by simp [Term.meet])
+  | .var _, _, _, h => by
+      simp only [Term.meet, Option.some.injEq] at h; subst h
+      exact ⟨fun a => by simp [AdmA], fun a ha _ => absurd ha (by simp [AdmA])⟩
+  | .mu _, y, _, h => by
+      cases y <;>
+        first
+          | (simp only [Term.meet, Option.some.injEq] at h; subst h
+             exact ⟨fun a => by simp [AdmA], fun a _ hb => absurd hb (by simp [AdmA])⟩)
+          | exact absurd h (by simp [Term.meet])
   | .lazy x, y, _, h => by
       rw [Term.meet] at h
       obtain ⟨ih1, ih2⟩ := AdmA_meet_both x y _ h
@@ -5883,6 +5889,8 @@ theorem writeLe_of : ∀ t : Term, WriteLe t
   | .held _ P _ _ => fun v h => by
       simp only [writeView]
       exact writeLe_of P v (Bool.and_eq_true_iff.mp h).2
+  | .var _ => fun _ h => h
+  | .mu _ => fun _ h => h
   | .refine t p => fun v h => by
       simp only [writeView, Adm, Bool.and_eq_true] at h ⊢
       exact ⟨writeLe_of t v h.1, h.2⟩
@@ -5918,6 +5926,8 @@ theorem readLe_of : ∀ t : Term, ReadLe t
   | .held t _ _ _ => fun a h => by
       simp only [readView]
       exact readLe_of t a (Bool.and_eq_true_iff.mp h).1
+  | .var _ => fun _ h => h
+  | .mu _ => fun _ h => h
   | .refine t p => fun a h => by
       simp only [readView]
       split
@@ -6297,6 +6307,8 @@ theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam 
       ∃ T μ, Typed z T μ
   | .never, _, h, _, _ => by
       simp only [meetSRight, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
+  | .var _, _, h, _, _ => by
+      simp only [meetSRight, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
   | .held _ _ _ _, _, h, _, _ => by simp [meetSRight] at h
   | .lazy t, _, h, hx, hy => by
       rw [meetSRight] at h
@@ -6597,6 +6609,13 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
   | .never, _, _, h, _, _ => by
       simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
   | .held _ _ _ _, y, _, h, _, _ => by
+      cases y <;>
+        first
+          | (simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
+          | exact absurd h (by simp [Term.meet])
+  | .var _, _, _, h, _, _ => by
+      simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
+  | .mu _, y, _, h, _, _ => by
       cases y <;>
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
