@@ -65,6 +65,47 @@ theorem pairwiseCompat_of_HF {opts : List Term} (h : HFL opts)
     (hl : ∀ t ∈ opts, Lawful (denote t)) : PairwiseCompat opts :=
   fun s hs t ht => compat_of_HF (HFL_mem h s hs) (HFL_mem h t ht) (hl t ht)
 
+/-- **A `held` is monotone in its stored side**: the same adapter over a smaller inner codec is
+    a smaller codec. -/
+theorem sub_held_inner {i i' P : Term} {f g : Value → Value} (h : Sub (denote i) (denote i')) :
+    Sub (denote (.held i P f g)) (denote (.held i' P f g)) :=
+  ⟨fun _ _ he => restrict_e.mpr ⟨(restrict_e.mp he).1, h.1 _ _ (restrict_e.mp he).2⟩,
+   fun _ _ hp =>
+    let ⟨w, hw, hv⟩ := through_p.mp (restrict_p.mp hp).1
+    restrict_p.mpr ⟨through_p.mpr ⟨w, h.2 _ _ hw, hv⟩, (restrict_p.mp hp).2⟩⟩
+
+/-- **A union of options below one codec is below it**, because the join answers through one
+    option. -/
+theorem sub_union_of {os : List Term} {u : Codec} (h : ∀ o ∈ os, Sub (denote o) u) :
+    Sub (denote (.union os)) u :=
+  have hs : ∀ o ∈ optionSems os, Sub o.c u := fun _ ho =>
+    let ⟨t, ht, hto⟩ := List.mem_map.mp ((optionSems_eq os) ▸ ho)
+    hto ▸ h t ht
+  ⟨fun _ _ he => let ⟨o, ho, he⟩ := select_some he; (hs o ho).1 _ _ he,
+   fun _ _ hp => let ⟨o, ho, hp⟩ := select_some hp; (hs o ho).2 _ _ hp⟩
+
+/-- **A literal is below its base.** -/
+theorem sub_literal_base (k : GroundKind) (x : k.Carrier) :
+    Sub (denote (.literal k x)) (baseCodec k) :=
+  ⟨fun _ _ h => (restrict_e.mp h).2, fun _ _ h => (restrict_p.mp h).1⟩
+
+/-- **Two lawful options, one below the other, meet their obligation** (Lawson, Lemma 4.8): the
+    wider option is the common bound, and it reads canonically because it is lawful. -/
+theorem pairwiseCompat_of_sub {x y : Term} (h : Sub (denote x) (denote y))
+    (hl : ∀ t ∈ [x, y], Lawful (denote t)) : PairwiseCompat [x, y] :=
+  have hb : ∀ s ∈ [x, y], Sub (denote s) (denote y) :=
+    forall_mem_pair h ⟨fun _ _ h => h, fun _ _ h => h⟩
+  fun s hs t ht => compat_of_common_bound' (hb s hs) (hb t ht)
+    (fun _ _ hp => (hl y (List.mem_cons_of_mem x List.mem_cons_self)).canon hp) (hl t ht)
+
+/-- **…and with the wider option first.** -/
+theorem pairwiseCompat_of_sub' {x y : Term} (h : Sub (denote y) (denote x))
+    (hl : ∀ t ∈ [x, y], Lawful (denote t)) : PairwiseCompat [x, y] :=
+  have hb : ∀ s ∈ [x, y], Sub (denote s) (denote x) :=
+    forall_mem_pair ⟨fun _ _ h => h, fun _ _ h => h⟩ h
+  fun s hs t ht => compat_of_common_bound' (hb s hs) (hb t ht)
+    (fun _ _ hp => (hl x List.mem_cons_self).canon hp) (hl t ht)
+
 /-- **A schema people write, discharged with no certificate.**
     In `union(array(literal "A"), array(literal "B"))` both options write `[]`. Both write it
     as the same attribute, so the options are compatible. -/

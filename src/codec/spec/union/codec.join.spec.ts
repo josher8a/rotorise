@@ -14,7 +14,9 @@ import type { AnyCodec } from '../../codec'
 import {
     array,
     CodecError,
+    decimal,
     dynamoNumber,
+    held,
     lazy,
     object,
     string,
@@ -167,6 +169,46 @@ describe('a union of compatible options gives one answer whatever the option ord
             ],
         )
         expect(answers?.slice(0, 2)).toEqual([{ S: 'A' }, { S: 'B' }])
+    })
+})
+
+describe('a union of two restrictions of one adapter is the adapter, whatever the option order', () => {
+    // one adapter is the common bound (Lawson, Lemma 4.8): the wider option reads each attribute
+    // that the narrower reads, to the same value
+    it('writes and reads a decimal beside a literal decimal the same way in each order', () => {
+        const values = ['1', '2.5', '3']
+        const attributes: AttributeValue[] = [
+            { N: '1' },
+            { N: '2.5' },
+            { N: '3' },
+            { S: '1' },
+        ]
+        const answers = sameUnderEveryOrder(
+            [decimal('1', '2.5'), decimal],
+            (codec) => [
+                ...values.map((v) => codec.encode(v)),
+                ...attributes.map((a) => codec.decode(a)),
+            ],
+        )
+        expect(answers?.slice(0, 3)).toEqual([
+            { N: '1' },
+            { N: '2.5' },
+            { N: '3' },
+        ])
+    })
+
+    it('refuses two adapters with distinct functions, which show no common bound', () => {
+        const up = held(string, string, {
+            encode: (s: string) => s.toUpperCase(),
+            decode: (s: string) => s.toLowerCase(),
+        })
+        const same = held(string, string, {
+            encode: (s: string) => s.toUpperCase(),
+            decode: (s: string) => s.toLowerCase(),
+        })
+        expect(() =>
+            union([up, same] as unknown as readonly AnyCodec[]),
+        ).toThrow(CodecError)
     })
 })
 
