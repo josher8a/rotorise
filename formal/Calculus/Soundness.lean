@@ -15,9 +15,6 @@ namespace Calculus
 
 /-! ## Obligations -/
 
-/-- The union options, denoted with their name specs — as in `denote`'s union case. -/
-noncomputable def semsOf (opts : List Term) : List Codec :=
-  opts.map fun t' => denote t'
 
 /-- A term's rest policy keeps every name. -/
 theorem wildSem_ne_drop (w : Option Term) : wildSem w ≠ .drop :=
