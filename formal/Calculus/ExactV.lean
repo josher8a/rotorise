@@ -80,12 +80,11 @@ def valPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot
     (match fld k with | .optional _ => true | _ => decide (k.1 ∈ keys)) = true)
 
 /-- A `union` option's own admission. Every option decides by *attempt*, which is its row
-    exactly when its row is exact — `admitOptV (specOf t,
-    Adm t) v` reduces to `Adm t v`. `o.1` (`specOf`) goes unread here. -/
-def admitOptV (o : Option (BodySpec) × VP) (v : Value) : Bool := o.2 v
+    exactly when its row is exact, so `admitOptV (Adm t) v` reduces to `Adm t v`. -/
+def admitOptV (o : VP) (v : Value) : Bool := o v
 
 /-- `select` at a `union`, as a row: the union admits where one of its options admits. -/
-def selOptV (os : List (Option (BodySpec) × VP)) (v : Value) : Bool :=
+def selOptV (os : List VP) (v : Value) : Bool :=
   os.any (fun o => admitOptV o v)
 
 /-- What the literal codec **writes**, exactly.
@@ -183,9 +182,9 @@ noncomputable def Adm : Term → Value → Bool
   | .refine t p => fun v => Adm t v && p.eval v
   | .lazy t     => Adm t
   | .held t P f _ => fun v => Adm t (f v) && Adm P v
-  -- `select`'s first admitter, mirrored: the row is the disjunction over `AdmSpecs`, so it
-  -- mirrors `denoteList`'s pairing with `specOf`
-  | .union opts => fun v => selOptV (AdmSpecs opts) v
+  -- `select`'s first admitter, mirrored: the row is the disjunction over `AdmList`, which
+  -- mirrors `denoteList`
+  | .union opts => fun v => selOptV (AdmList opts) v
   -- **`set` is a leaf, and exact.** Its base's row is `SetBase.adm` — the four ground rows
   -- of this table, indexed — and the set's row is that row over whichever payload the value
   -- carries. All three wire families are matched rather than gated on kind: a base admits at
@@ -254,13 +253,6 @@ noncomputable def AdmOptT : Option Term → Option VP
   | some t => some (Adm t)
 
 
-/-- Each `union` option paired with its name spec — `denoteList`' mirror, the way
-    ~~AdmTagged~~ mirrored ~~denoteTagged~~. `specOf` is what tells an object option from the
-    rest, and it is a function of the term. -/
-noncomputable def AdmSpecs : List Term → List (Option (BodySpec) × VP)
-  | [] => []
-  | t :: ts => (specOf t, Adm t) :: AdmSpecs ts
-
 end
 
 /-- `valPresentT` in the form the object row uses: a declared name that must be present is
@@ -318,10 +310,6 @@ theorem objAdmV_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → 
   | t :: ts => by simp only [AdmList, List.map]; rw [AdmList_eq ts]
 
 
-@[simp] theorem AdmSpecs_eq : ∀ opts : List Term,
-    AdmSpecs opts = opts.map fun t => (specOf t, Adm t)
-  | [] => rfl
-  | t :: ts => by simp only [AdmSpecs, List.map]; rw [AdmSpecs_eq ts]
 
 /-- `⋁` of `Adm` over a union's options, named — sound, and *not* exact. -/
 noncomputable def AdmAny (ts : List Term) (v : Value) : Bool := anyP (AdmList ts) v
@@ -332,7 +320,7 @@ noncomputable def AdmAny (ts : List Term) (v : Value) : Bool := anyP (AdmList ts
     AdmAny (t :: ts) v = (Adm t v || AdmAny ts v) := rfl
 
 theorem Adm_union (opts : List Term) (v : Value) :
-    Adm (.union opts) v = selOptV (AdmSpecs opts) v := rfl
+    Adm (.union opts) v = selOptV (AdmList opts) v := rfl
 
 /-- An option that admits makes the disjunction true. -/
 theorem AdmAny_of_mem {t : Term} {ts : List Term} {v : Value} (ht : t ∈ ts)
@@ -346,15 +334,15 @@ theorem AdmAny_of_mem {t : Term} {ts : List Term} {v : Value} (ht : t ∈ ts)
 
 /-- **The row is the disjunction**: a union admits where one of its options admits. -/
 theorem selOptV_eq_AdmAny (opts : List Term) (v : Value) :
-    selOptV (AdmSpecs opts) v = AdmAny opts v := by
-  rw [AdmSpecs_eq]
+    selOptV (AdmList opts) v = AdmAny opts v := by
+  rw [AdmList_eq]
   induction opts with
   | nil => rfl
   | cons t ts ih => simp only [selOptV, List.map_cons, List.any_cons] at ih ⊢; rw [ih]; rfl
 
 /-- …read as the implication the containments need. -/
 theorem selOptV_le_AdmAny {opts : List Term} {v : Value}
-    (h : selOptV (AdmSpecs opts) v = true) : AdmAny opts v = true :=
+    (h : selOptV (AdmList opts) v = true) : AdmAny opts v = true :=
   selOptV_eq_AdmAny opts v ▸ h
 
 /-- `Adm`'s literal row, named.
@@ -753,22 +741,22 @@ theorem ExactV_set (b : SetBase) : ExactV (.set b) := by
 /-- Each option's row *is* its attempt — given that option's exactness, which is where the
     exactness hypothesis is spent. -/
 theorem admitOptV_eq {t : Term} (h : ExactV t) (v : Value) :
-    ((denote t).e v).isSome = admitOptV (specOf t, Adm t) v := by
+    ((denote t).e v).isSome = admitOptV (Adm t) v := by
   unfold admitOptV
   exact Bool.coe_iff_coe.mp (by simpa using (h v).symm)
 
 /-- **The option list's filter is the term list's, mapped.** It is an induction rather than a
     rewrite because the agreement above is per-option and hypothesis-bearing. -/
-theorem filter_AdmSpecs {opts : List Term} (h : ∀ t ∈ opts, ExactV t) (v : Value) :
+theorem filter_AdmList {opts : List Term} (h : ∀ t ∈ opts, ExactV t) (v : Value) :
     (denoteList opts).filter (fun c => (c.e v).isSome)
-      = (opts.filter (fun t => admitOptV (specOf t, Adm t) v)).map denote := by
+      = (opts.filter (fun t => admitOptV (Adm t) v)).map denote := by
   induction opts with
   | nil => rfl
   | cons t ts ih =>
     have ht : ExactV t := h t (by simp)
     have hts : ∀ t' ∈ ts, ExactV t' := fun t' h' => h t' (by simp [h'])
     simp only [denoteList, List.filter_cons, admitOptV_eq ht, ih hts]
-    cases hb : admitOptV (specOf t, Adm t) v <;> simp []
+    cases hb : admitOptV (Adm t) v <;> simp []
 
 /-- **A union writes exactly where one of its options writes.** -/
 theorem select_isSome_attempt (os : List Codec) (v : Value) :
@@ -788,7 +776,7 @@ theorem select_isSome_attempt (os : List Codec) (v : Value) :
 theorem ExactV_union {opts : List Term} (h : ∀ t ∈ opts, ExactV t) : ExactV (.union opts) := by
   intro v
   rw [denote_union_sems]
-  show selOptV (AdmSpecs opts) v = true ↔ (select (denoteList opts) (·.e) v).isSome
+  show selOptV (AdmList opts) v = true ↔ (select (denoteList opts) (·.e) v).isSome
   rw [selOptV_eq_AdmAny, select_isSome_attempt, denoteList_eq]
   simp only [List.mem_map, exists_exists_and_eq_and]
   constructor

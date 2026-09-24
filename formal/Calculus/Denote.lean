@@ -35,21 +35,14 @@ def altsOfField : ObjectSlot → Option Alts
   | _ => none
 
 /-- A body's spec: the presence and the pinned literal of each declared name, which a slice
-    reads. The payload's own function, so `specOf` is a dispatch and nothing more. Admission
-    reads no spec: every option admits by attempt, which runs `Adm`. -/
-def Body.spec : Body → BodySpec
-  | .mk fields f _ =>
-      { names := ⟨fields, fun k =>
-          ⟨(f k).presence, altsOfField (f k)⟩⟩ }
-
-/-- The spec's name table, read off the constructor. -/
-@[simp] theorem Body.spec_names_mk (fields : Finset Name)
-    (f : {k // k ∈ fields} → ObjectSlot) (wild : Option Term) :
-    (Body.mk fields f wild).spec.names =
-      ⟨fields, fun k => ⟨(f k).presence, altsOfField (f k)⟩⟩ := rfl
+    reads. A slice asks each name that a clause names, so an undeclared name and the open block
+    answer nothing here. The payload's own function, so `specOf` is a dispatch and nothing
+    more. Admission reads no spec: every option admits by attempt, which runs `Adm`. -/
+def Body.spec : Body → MapOf NameSpec
+  | .mk fields f _ => ⟨fields, fun k => ⟨(f k).presence, altsOfField (f k)⟩⟩
 
 /-- The spec of an object option — `none` for non-objects. -/
-def specOf : Term → Option BodySpec
+def specOf : Term → Option (MapOf NameSpec)
   | .object b => some b.spec
   | _ => none
 

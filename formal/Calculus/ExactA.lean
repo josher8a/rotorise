@@ -32,12 +32,11 @@ spends on the filter. -/
 /-- An attribute-side row, once the subterms' rows are known. -/
 abbrev AP := Attr → Bool
 
-/-- …and on the attribute side, admitted by attempt like `admitOptV`. `o.1` (`specOf`)
-    goes unread here. -/
-def admitOptA (o : Option (BodySpec) × AP) (a : Attr) : Bool := o.2 a
+/-- …and on the attribute side, admitted by attempt like `admitOptV`. -/
+def admitOptA (o : AP) (a : Attr) : Bool := o a
 
 /-- …and the same disjunction. -/
-def selOptA (os : List (Option (BodySpec) × AP)) (a : Attr) : Bool :=
+def selOptA (os : List AP) (a : Attr) : Bool :=
   os.any (fun o => admitOptA o a)
 
 def allPA (P : AP) : List Attr → Bool
@@ -136,7 +135,7 @@ noncomputable def AdmA : Term → Attr → Bool
   | .refine t p => fun a => AdmA t a && refineReads t p.eval a
   -- hatch
   -- the read side of the same disjunction; every option, object included, is admitted by attempt
-  | .union opts => fun a => selOptA (AdmASpecs opts) a
+  | .union opts => fun a => selOptA (AdmAList opts) a
   -- **the row that used to admit all three wire families whatever the element term was.**
   -- With the base an index the family is a function of it, so this names one — and at
   -- `number` defers to the codec, as `AdmASet` states.
@@ -177,10 +176,6 @@ noncomputable def AdmAOptT : Option Term → Option AP
   | some t => some (AdmA t)
 
 
-/-- `denoteList`' mirror on the attribute side. -/
-noncomputable def AdmASpecs : List Term → List (Option (BodySpec) × AP)
-  | [] => []
-  | t :: ts => (specOf t, AdmA t) :: AdmASpecs ts
 
 end
 
@@ -189,10 +184,6 @@ end
   | t :: ts => by simp only [AdmAList, List.map]; rw [AdmAList_eq ts]
 
 
-@[simp] theorem AdmASpecs_eq : ∀ opts : List Term,
-    AdmASpecs opts = opts.map fun t => (specOf t, AdmA t)
-  | [] => rfl
-  | t :: ts => by simp only [AdmASpecs, List.map]; rw [AdmASpecs_eq ts]
 
 /-- `⋁` of `AdmA` over a union's options; sound, and inexact for the reason the value side
     gives. -/
@@ -204,7 +195,7 @@ noncomputable def AdmAAny (ts : List Term) (a : Attr) : Bool := anyPA (AdmAList 
     AdmAAny (t :: ts) a = (AdmA t a || AdmAAny ts a) := rfl
 
 theorem AdmA_union (opts : List Term) (a : Attr) :
-    AdmA (.union opts) a = selOptA (AdmASpecs opts) a := rfl
+    AdmA (.union opts) a = selOptA (AdmAList opts) a := rfl
 
 /-- An option that admits makes the disjunction true. -/
 theorem AdmAAny_of_mem {t : Term} {ts : List Term} {a : Attr} (ht : t ∈ ts)
@@ -218,15 +209,15 @@ theorem AdmAAny_of_mem {t : Term} {ts : List Term} {a : Attr} (ht : t ∈ ts)
 
 /-- The row is the disjunction — see `selOptV_eq_AdmAny`. -/
 theorem selOptA_eq_AdmAAny (opts : List Term) (a : Attr) :
-    selOptA (AdmASpecs opts) a = AdmAAny opts a := by
-  rw [AdmASpecs_eq]
+    selOptA (AdmAList opts) a = AdmAAny opts a := by
+  rw [AdmAList_eq]
   induction opts with
   | nil => rfl
   | cons t ts ih => simp only [selOptA, List.map_cons, List.any_cons] at ih ⊢; rw [ih]; rfl
 
 /-- …read as the implication the containments need. -/
 theorem selOptA_le_AdmAAny {opts : List Term} {a : Attr}
-    (h : selOptA (AdmASpecs opts) a = true) : AdmAAny opts a = true :=
+    (h : selOptA (AdmAList opts) a = true) : AdmAAny opts a = true :=
   selOptA_eq_AdmAAny opts a ▸ h
 
 /-- `AdmA`'s literal row, named — for the reason `Adm_literal` gives. -/
@@ -280,21 +271,21 @@ def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denote t).p a).isSo
 
 /-- The read-side agreement, option by option — `admitOptV_eq`'s twin. -/
 theorem admitOptA_eq {t : Term} (h : ExactA t) (a : Attr) :
-    ((denote t).p a).isSome = admitOptA (specOf t, AdmA t) a := by
+    ((denote t).p a).isSome = admitOptA (AdmA t) a := by
   unfold admitOptA
   exact Bool.coe_iff_coe.mp (by simpa using (h a).symm)
 
-/-- `select`'s filter is the term list's, mapped — `filter_AdmSpecs`'s twin. -/
-theorem filter_AdmASpecs {opts : List Term} (h : ∀ t ∈ opts, ExactA t) (a : Attr) :
+/-- `select`'s filter is the term list's, mapped — `filter_AdmList`'s twin. -/
+theorem filter_AdmAList {opts : List Term} (h : ∀ t ∈ opts, ExactA t) (a : Attr) :
     (denoteList opts).filter (fun c => (c.p a).isSome)
-      = (opts.filter (fun t => admitOptA (specOf t, AdmA t) a)).map denote := by
+      = (opts.filter (fun t => admitOptA (AdmA t) a)).map denote := by
   induction opts with
   | nil => rfl
   | cons t ts ih =>
     have ht : ExactA t := h t (by simp)
     have hts : ∀ t' ∈ ts, ExactA t' := fun t' h' => h t' (by simp [h'])
     simp only [denoteList, List.filter_cons, admitOptA_eq ht, ih hts]
-    cases hb : admitOptA (specOf t, AdmA t) a <;> simp []
+    cases hb : admitOptA (AdmA t) a <;> simp []
 
 /-- **A union reads exactly where one of its options reads.** -/
 theorem select_isSome_attemptA (os : List Codec) (a : Attr) :
@@ -314,7 +305,7 @@ theorem select_isSome_attemptA (os : List Codec) (a : Attr) :
 theorem ExactA_union {opts : List Term} (h : ∀ t ∈ opts, ExactA t) : ExactA (.union opts) := by
   intro a
   rw [denote_union_sems]
-  show selOptA (AdmASpecs opts) a = true ↔ (select (denoteList opts) (·.p) a).isSome
+  show selOptA (AdmAList opts) a = true ↔ (select (denoteList opts) (·.p) a).isSome
   rw [selOptA_eq_AdmAAny, select_isSome_attemptA, denoteList_eq]
   simp only [List.mem_map, exists_exists_and_eq_and]
   constructor
