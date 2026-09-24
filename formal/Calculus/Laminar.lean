@@ -247,7 +247,7 @@ theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → ∀ v, T v ↔ Adm t v = tr
     | @union opts Ts μs h' =>
       rw [HUnion.eq_def] at *
       exact (hunion_iff h' (fun t' _ _ _ hty w => typed_T_adm hty w) v).trans
-        (by rw [Adm_union, selOptV_eq_AdmAny])
+        (by rw [Adm_union])
 termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
 

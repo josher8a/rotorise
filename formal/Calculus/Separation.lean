@@ -24,13 +24,13 @@ So `record c` and the object it expands to are **one term** too.
 
 ### …and `union` is a congruence for codec equivalence
 
-`union_congruent` carries the fact on a live pair: `refine t ⊤` and `t` have identical rows on
-both sides, hence — by `Adm_exact`/`AdmA_exact`, which take no hypothesis — identical domains
-on both sides. They are the same codec as far as anything observable through `e` and `p` can
-tell, and `union` agrees: every option, `object` included, is admitted by *attempt*, which
-runs `Adm` directly. `admitOptV`/`admitOptA` are `Adm`/`AdmA` at every constructor, so a
-domain-equal substitution changes no option's admission, and a rewrite that replaces a subterm
-by a domain-equal one is sound inside a `union`.
+`refine_top_row` carries the fact on a live pair: `refine t ⊤` and `t` have identical rows,
+hence, by `Adm_exact`/`AdmA_exact`, which take no hypothesis, identical domains on both sides.
+They are the same codec as far as anything observable through `e` and `p` can tell, and
+`union` agrees: every option, `object` included, is admitted by *attempt*, and the row of a
+`union` is the disjunction of its options' rows. So a domain-equal substitution changes no
+option's admission, and a rewrite that replaces a subterm by a domain-equal one is sound inside
+a `union`.
 
 **Admission by structure is not a congruence.** A test that reads the declared names and the
 literal alternatives and nothing else differs from `Adm` at a declared name pinned to no
@@ -69,22 +69,6 @@ way, and `arrayRow` above is that equation. -/
 theorem refine_top_row (t : Term) : Adm (.refine t (.closure qTop)) = Adm t := by
   funext v; simp [Adm, Pred.eval, qTop]
 
-/-- **`union` is a congruence for domain equality.** `refine t ⊤` and `t` admit the same
-    values at every point (`refine_top_row`), and every option, `object` included, is
-    admitted by *attempt*, which runs `Adm` directly: `admitOptV` is `Adm` at every
-    constructor, not only at a `refine`. So the two options agree at every value, and a
-    rewrite that replaces a subterm by a domain-equal one is sound inside a `union`.
-
-    **The congruence needs admission by attempt.** A test that reads the declared names and
-    the literal alternatives and nothing else differs from `Adm` at a declared name pinned to
-    no literal. At `vBoolAtA` against `tReqStr` such a test answers `true` and the row answers
-    `false`. -/
-theorem union_congruent (t : Term) (v : Value) :
-    admitOptV (Adm t) v
-      = admitOptV (Adm (.refine t (.closure qTop))) v := by
-  show Adm t v = Adm (.refine t (.closure qTop)) v
-  rw [refine_top_row]
-
 /-! ## Separation on the pair
 
 `SepJV` and `SepJA` state separation on the rows this file proves exact. Each side is one
@@ -96,8 +80,8 @@ included, is admitted by attempt, which is `Adm`/`AdmA` exactly. `admitV_le_Adm`
 `admitA_le_AdmA`, below the next section, are that containment stated for every constructor. -/
 
 
-/-! A dissection is a certified `union`. `selOptV_mem_admitOpt` states that an option the union
-admits a value by is one of its options. -/
+/-! A dissection is a certified `union`. `AdmAny_iff` states that a union admits a value exactly
+when one of its options does. -/
 
 /-- **Separation on the joint predicate, value side — one clause.** §5's ~~SepV~~ offers a
     choice between disjoint kinds and disjoint admissible sets; `Adm` carries the kind gate

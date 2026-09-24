@@ -79,14 +79,6 @@ def valPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot
   decide (∀ k : {k // k ∈ fields},
     (match fld k with | .optional _ => true | _ => decide (k.1 ∈ keys)) = true)
 
-/-- A `union` option's own admission. Every option decides by *attempt*, which is its row
-    exactly when its row is exact, so `admitOptV (Adm t) v` reduces to `Adm t v`. -/
-def admitOptV (o : VP) (v : Value) : Bool := o v
-
-/-- `select` at a `union`, as a row: the union admits where one of its options admits. -/
-def selOptV (os : List VP) (v : Value) : Bool :=
-  os.any (fun o => admitOptV o v)
-
 /-- What the literal codec **writes**, exactly.
 
     **This was `inL` conjoined with `Numeral.WF`, and the conjunct is now the carrier's.**
@@ -182,9 +174,8 @@ noncomputable def Adm : Term → Value → Bool
   | .refine t p => fun v => Adm t v && p.eval v
   | .lazy t     => Adm t
   | .held t P f _ => fun v => Adm t (f v) && Adm P v
-  -- `select`'s first admitter, mirrored: the row is the disjunction over `AdmList`, which
-  -- mirrors `denoteList`
-  | .union opts => fun v => selOptV (AdmList opts) v
+  -- `select` attempts every option, so the row is the disjunction of the options' rows
+  | .union opts => fun v => anyP (AdmList opts) v
   -- **`set` is a leaf, and exact.** Its base's row is `SetBase.adm` — the four ground rows
   -- of this table, indexed — and the set's row is that row over whichever payload the value
   -- carries. All three wire families are matched rather than gated on kind: a base admits at
@@ -320,7 +311,7 @@ noncomputable def AdmAny (ts : List Term) (v : Value) : Bool := anyP (AdmList ts
     AdmAny (t :: ts) v = (Adm t v || AdmAny ts v) := rfl
 
 theorem Adm_union (opts : List Term) (v : Value) :
-    Adm (.union opts) v = selOptV (AdmList opts) v := rfl
+    Adm (.union opts) v = AdmAny opts v := rfl
 
 /-- An option that admits makes the disjunction true. -/
 theorem AdmAny_of_mem {t : Term} {ts : List Term} {v : Value} (ht : t ∈ ts)
@@ -332,18 +323,20 @@ theorem AdmAny_of_mem {t : Term} {ts : List Term} {v : Value} (ht : t ∈ ts)
     · simp [AdmAny_cons, h]
     · simp [AdmAny_cons, ih h']
 
-/-- **The row is the disjunction**: a union admits where one of its options admits. -/
-theorem selOptV_eq_AdmAny (opts : List Term) (v : Value) :
-    selOptV (AdmList opts) v = AdmAny opts v := by
-  rw [AdmList_eq]
-  induction opts with
-  | nil => rfl
-  | cons t ts ih => simp only [selOptV, List.map_cons, List.any_cons] at ih ⊢; rw [ih]; rfl
-
-/-- …read as the implication the containments need. -/
-theorem selOptV_le_AdmAny {opts : List Term} {v : Value}
-    (h : selOptV (AdmList opts) v = true) : AdmAny opts v = true :=
-  selOptV_eq_AdmAny opts v ▸ h
+/-- A list admits a value exactly when one of its terms does. -/
+theorem AdmAny_iff : ∀ {os : List Term} {v : Value},
+    AdmAny os v = true ↔ ∃ t ∈ os, Adm t v = true
+  | [], v => by simp
+  | t :: ts, v => by
+      rw [AdmAny_cons, Bool.or_eq_true, AdmAny_iff]
+      constructor
+      · rintro (h | ⟨u, hu, h⟩)
+        · exact ⟨t, by simp, h⟩
+        · exact ⟨u, by simp [hu], h⟩
+      · rintro ⟨u, hu, h⟩
+        rcases List.mem_cons.mp hu with rfl | hu'
+        · exact Or.inl h
+        · exact Or.inr ⟨u, hu', h⟩
 
 /-- `Adm`'s literal row, named.
 
@@ -740,23 +733,22 @@ theorem ExactV_set (b : SetBase) : ExactV (.set b) := by
 
 /-- Each option's row *is* its attempt — given that option's exactness, which is where the
     exactness hypothesis is spent. -/
-theorem admitOptV_eq {t : Term} (h : ExactV t) (v : Value) :
-    ((denote t).e v).isSome = admitOptV (Adm t) v := by
-  unfold admitOptV
+theorem isSome_e_eq_Adm {t : Term} (h : ExactV t) (v : Value) :
+    ((denote t).e v).isSome = Adm t v := by
   exact Bool.coe_iff_coe.mp (by simpa using (h v).symm)
 
 /-- **The option list's filter is the term list's, mapped.** It is an induction rather than a
     rewrite because the agreement above is per-option and hypothesis-bearing. -/
 theorem filter_AdmList {opts : List Term} (h : ∀ t ∈ opts, ExactV t) (v : Value) :
     (denoteList opts).filter (fun c => (c.e v).isSome)
-      = (opts.filter (fun t => admitOptV (Adm t) v)).map denote := by
+      = (opts.filter (fun t => Adm t v)).map denote := by
   induction opts with
   | nil => rfl
   | cons t ts ih =>
     have ht : ExactV t := h t (by simp)
     have hts : ∀ t' ∈ ts, ExactV t' := fun t' h' => h t' (by simp [h'])
-    simp only [denoteList, List.filter_cons, admitOptV_eq ht, ih hts]
-    cases hb : admitOptV (Adm t) v <;> simp []
+    simp only [denoteList, List.filter_cons, isSome_e_eq_Adm ht, ih hts]
+    cases hb : Adm t v <;> simp []
 
 /-- **A union writes exactly where one of its options writes.** -/
 theorem select_isSome_attempt (os : List Codec) (v : Value) :
@@ -776,8 +768,8 @@ theorem select_isSome_attempt (os : List Codec) (v : Value) :
 theorem ExactV_union {opts : List Term} (h : ∀ t ∈ opts, ExactV t) : ExactV (.union opts) := by
   intro v
   rw [denote_union_sems]
-  show selOptV (AdmList opts) v = true ↔ (select (denoteList opts) (·.e) v).isSome
-  rw [selOptV_eq_AdmAny, select_isSome_attempt, denoteList_eq]
+  show AdmAny opts v = true ↔ (select (denoteList opts) (·.e) v).isSome
+  rw [select_isSome_attempt, denoteList_eq]
   simp only [List.mem_map, exists_exists_and_eq_and]
   constructor
   · intro ha
