@@ -1534,13 +1534,13 @@ describe("the declaration guard, against the model's classifier", () => {
      * `6536d91` added refuses **none** of these pairs. Every refusal here is an occupancy or a
      * restriction, and no pair is refused for carrying a value another pair also carries.
      *
-     * **The count pins a fact no law has, deliberately.** That it is 132 is a property of this
+     * **The count pins a fact no law has, deliberately.** That it is 134 is a property of this
      * corpus, so widening the corpus is meant to fail here and be looked at; the *law* is the loop
      * below, that every refusal the model also declines. Both are kept, and the number stays.
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(132)
+        expect(separations.length).toBe(134)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `certPair` declines, or — for a `never` pair, where
         // the model permits what `src/` lints away — the permits-form states what the model says
