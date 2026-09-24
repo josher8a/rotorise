@@ -16,6 +16,7 @@ import {
     list,
     never,
     nullable,
+    number,
     object,
     optional,
     product,
@@ -25,7 +26,7 @@ import {
     union,
     withLegacyRead,
 } from '../../codec'
-import { checkRoundTrip } from '../../testing'
+import { checkDecodesAreWritable, checkRoundTrip } from '../../testing'
 
 const Pet = object({ petId: string, name: string })
 const Price = object({ price: decimal, gift: optional(boolean) })
@@ -367,4 +368,46 @@ describe('the factors a product refuses until the owner rules', () => {
             ).kind,
         ).toBe('union')
     })
+})
+
+describe('a product of lawful factors is lawful', () => {
+    // each factor is lawful, and the product's field tables are a disjoint union, so the product
+    // reads back what it wrote and writes back what it read
+    const products = [
+        ['two closed objects', product(Pet, Price)],
+        [
+            'literals, sets and lists',
+            product(
+                object({ tag: string('a', 'b'), n: number }),
+                object({ tags: string.set(), steps: array(decimal) }),
+            ),
+        ],
+        [
+            'nullable and optional fields',
+            product(
+                object({ note: nullable(string) }),
+                object({ gift: optional(boolean), count: optional(number) }),
+            ),
+        ],
+        [
+            'three factors',
+            product(
+                object({ a: string }),
+                object({ b: decimal }),
+                object({ c: boolean }),
+            ),
+        ],
+    ] as const
+
+    for (const [name, codec] of products) {
+        it(`decodes what it encodes, for ${name}`, () => {
+            checkRoundTrip(codec.item as never, { count: 60, seed: 20260924 })
+        })
+        it(`encodes what it decodes, for ${name}`, () => {
+            checkDecodesAreWritable(codec.item as never, {
+                count: 40,
+                seed: 20260924,
+            })
+        })
+    }
 })

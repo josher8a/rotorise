@@ -707,6 +707,20 @@ describe('(C): what a codec reads, it can write', () => {
         checkDecodesAreWritable(Pet, { count: 40, seed: 20260829 })
     })
 
+    // the planted defect: a read that yields a value its own write refuses. Without it, no test
+    // shows that the check can fail
+    it('fails on a codec whose read yields a value it cannot write', () => {
+        const shouted = held(string, string, {
+            encode: (s: string) =>
+                s.endsWith('!') ? new CodecError('no shouting') : s,
+            decode: (s: string) => `${s}!`,
+        })
+        const Planted = object({ id: shouted }).item
+        expect(() =>
+            checkDecodesAreWritable(Planted, { count: 10, seed: 20260924 }),
+        ).toThrow(/\(C\) fails/)
+    })
+
     it('holds for the ground codecs, each in its own attribute', () => {
         const Ground = object({
             s: string,

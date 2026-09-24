@@ -339,16 +339,43 @@ export const checkDecodesAreWritable = <T>(
     }: CheckOptions<T> = {},
 ): void => {
     const rng = rngFrom(seed)
+    const maxDiscards = Math.max(100, count * 10)
+    let discards = 0
+    const discard = (why: string) => {
+        if (++discards > maxDiscards) {
+            throw new CodecError(
+                `${why} for ${discards} values with seed ${seed}, so the check has nothing to test; narrow the filter, or repair with refine`,
+            )
+        }
+    }
     for (let i = 0; i < count; i++) {
+        const before = readsGenerated
         const raw = arbitraryOf(subject as never, rng, size) as T
+        const throughRead = readsGenerated !== before
         const value = refine ? refine(raw) : raw
-        if (filter && !filter(value)) continue
+        if (filter && !filter(value)) {
+            discard('the filter rejected the value')
+            i--
+            continue
+        }
 
         let encoded: AttributeMap
         try {
             encoded = subject.unsafeEncode(value)
-        } catch {
-            continue // a value the codec declines to write says nothing about (C)
+        } catch (error) {
+            // a value the pair's own read produced is one (C) says it can write back
+            if (throughRead && !refine) {
+                throw new CodecError(
+                    `(C) fails: a value the codec read cannot be encoded.\n` +
+                        `  seed     = ${seed}, case ${i}\n` +
+                        `  value    = ${JSON.stringify(value)}\n` +
+                        `  encoding it said: ${(error as Error).message}`,
+                )
+            }
+            // any other value the codec declines to write says nothing about (C)
+            discard('the codec declined to write the value')
+            i--
+            continue
         }
 
         for (const { what, item } of mutations(encoded)) {
@@ -938,6 +965,13 @@ const bySampling = <Wide, Narrow extends Wide>(
 const samplers = new WeakMap<object, (rng: Rng, size: number) => unknown>()
 
 /**
+ * How many values the generator has produced through a `held` read. A check reads it before and
+ * after one generation: a value that came through a read is one the pair produced, so a codec
+ * that then declines to write it fails (C) rather than declining a stranger.
+ */
+let readsGenerated = 0
+
+/**
  * A value the codec can carry.
  *
  * Dispatches on {@link Term}, so a codec kind that grows a generator grows it here rather than
@@ -990,6 +1024,7 @@ export const arbitraryOf = (
                 return someUnknown(rng, size, 'lossy')
             if (def.via === 'opaqueRefuse')
                 return someUnknown(rng, size, 'refuse')
+            readsGenerated++
             return def.g(
                 arbitraryOf(codecOfTerm(def.inner), rng, size) as never,
             )
@@ -1479,9 +1514,10 @@ export const checkAgainst = <T>(
 ): void => {
     const rng = rngFrom(seed)
     for (let i = 0; i < count; i++) {
-        const entity = refine(
-            arbitraryOf(subject as unknown as AnyCodec, rng, size) as T,
-        )
+        const before = readsGenerated
+        const raw = arbitraryOf(subject as unknown as AnyCodec, rng, size) as T
+        const throughRead = readsGenerated !== before
+        const entity = refine(raw)
         if (!filter(entity)) continue
 
         // Refusals are part of the comparison, for the reason `checkEquivalent` gives: two
@@ -1497,7 +1533,15 @@ export const checkAgainst = <T>(
                 `write parity: ${ours.refused ? 'the codec refuses what the reference stores' : 'the codec stores what the reference refuses'}\n  entity  = ${show(entity)}\n  ours    = ${ours.refused ? `refused: ${ours.why}` : show(ours.value)}\n  theirs  = ${theirs.refused ? `refused: ${theirs.why}` : show(theirs.value)}`,
             )
         }
-        if (ours.refused) continue
+        if (ours.refused) {
+            // both refuse a value the codec's own read produced: (C) fails for the codec
+            if (throughRead && entity === raw) {
+                throw new CodecError(
+                    `(C) fails: the codec cannot write ${show(entity)}, a value its own read produced, with seed ${seed}: ${ours.why}`,
+                )
+            }
+            continue
+        }
 
         const written = firstDifference(ours.value, theirs.value)
         if (written) {
@@ -1610,7 +1654,9 @@ export const checkEquivalent = <T>(
 ): void => {
     const rng = rngFrom(seed)
     for (let i = 0; i < count; i++) {
+        const before = readsGenerated
         const value = arbitraryOf(a as unknown as AnyCodec, rng, size) as T
+        const throughRead = readsGenerated !== before
 
         const written = a.encode(value)
         const alsoWritten = b.encode(value)
@@ -1621,7 +1667,15 @@ export const checkEquivalent = <T>(
                 }${failed(alsoWritten) ? `the second refused it (${alsoWritten})` : ''}`,
             )
         }
-        if (failed(written) || failed(alsoWritten)) continue
+        if (failed(written) || failed(alsoWritten)) {
+            // both refuse a value the first codec's own read produced: (C) fails for it
+            if (throughRead) {
+                throw new CodecError(
+                    `(C) fails: the first codec cannot write ${show(value)}, a value its own read produced, with seed ${seed}: ${written}`,
+                )
+            }
+            continue
+        }
         if (!equals(written, alsoWritten)) {
             throw new CodecError(
                 `these codecs write ${show(value)} differently, with seed ${seed}: ${show(written)} against ${show(alsoWritten)}`,
