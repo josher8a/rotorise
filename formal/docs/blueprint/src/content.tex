@@ -1188,7 +1188,7 @@ decide a question about attributes.
 \begin{theorem}[soundness]
 \label{thm:soundness}
 \uses{cond:R,cond:C,cond:W,cond:compat,rule:lazy,rule:union,rule:dunion,rule:opaque}
-\lean{Calculus.soundness, Calculus.soundness_core, Calculus.carrier_denote}
+\lean{Calculus.soundness, Calculus.carrier_denote}
 \leanok
 Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, whose obligations hold, denotes a pair
 satisfying \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and \rulelink{cond:W}{\textbf{(W)}}. The obligations are each
@@ -1222,7 +1222,7 @@ If \texttt{e(t)\ =\ e(t′)} then \texttt{t\ =\ p(e(t))\ =\ p(e(t′))\ =\ t′}
 \begin{lemma}[traversal]
 \label{lem:traversal}
 \uses{cond:R,cond:C}
-\lean{Calculus.entrywise, Calculus.lawfulCore_entrywise, Calculus.lawful_entrywise, Calculus.carrier_entrywise}
+\lean{Calculus.entrywise, Calculus.lawful_entrywise, Calculus.carrier_entrywise}
 \leanok
 One proof shape serves every product. Let a \emph{step} be an entrywise pair
 between the entries of two lists, and lift it entrywise — defined where every entry is, positions

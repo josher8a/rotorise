@@ -217,76 +217,56 @@ end
 
 /-! ## The theorem
 
-Both halves in one induction. `Sound` names what a case has to deliver, and three
-helpers name the three shapes a case comes in: a ground pair, lawful outright; one
-subterm, whose two combinator lemmas are applied to the two halves of the induction
-hypothesis; and a list of subterms, where the hypothesis is read off the mapped list.
-What is left in each case is the combinator lemmas it cites — which is the content. -/
-
-/-- What one derivation has to deliver: the core laws, and retract, canon and writes. -/
-abbrev Sound (t : Term) : Prop := LawfulCore (denote t) ∧ Lawful (denote t)
-
-/-- A ground case supplies both results. -/
-theorem sound_ground {c : Codec} (h : Lawful c) : LawfulCore c ∧ Lawful c := ⟨h.core, h⟩
-
-/-- A one-subterm construction preserves both results. -/
-theorem sound_wrap {t : Term} {c : Codec} (ih : Sound t)
-    (core : LawfulCore (denote t) → LawfulCore c)
-    (full : Lawful (denote t) → Lawful c) : LawfulCore c ∧ Lawful c :=
-  ⟨core ih.1, full ih.2⟩
+One induction. A ground case is lawful outright, and a case with one subterm applies its
+combinator lemma to the induction hypothesis. A case with a list of subterms reads the
+hypothesis off the mapped list. What is left in each case is the combinator lemma it cites. -/
 
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
-/-- Both halves of §5's theorem in one induction: the core laws unconditionally, and
-    retract, canon and writes. One walk of the derivation, one
-    unpacking of the obligations; each case dispatches to its two combinator lemmas.
-    The public statements are the projections below. -/
-theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound t
+/-- Soundness: every current term whose obligations hold satisfies retract, canon and writes. One
+    walk of the derivation, one unpacking of the obligations; each case dispatches to its
+    combinator lemma. -/
+theorem soundness : ∀ {t T μ}, Typed t T μ → Obligations t → Lawful (denote t)
   | t, T, μ, h, hob => by
     cases h with
-    | literal k ls => exact sound_ground (lawful_literalCodec k ls)
+    | literal k ls => exact (lawful_literalCodec k ls)
     -- the bottom's domains are empty, so every law holds vacuously
-    | never => exact sound_ground Lawful.empty
-    | string => exact sound_ground lawful_stringCodec
-    | number => exact sound_ground lawful_numberCodec
-    | boolean => exact sound_ground lawful_booleanCodec
-    | null => exact sound_ground lawful_nullCodec
-    | binary => exact sound_ground lawful_binaryCodec
-    | opaq => exact sound_ground (lawful_opaqCodecω)
+    | never => exact Lawful.empty
+    | string => exact lawful_stringCodec
+    | number => exact lawful_numberCodec
+    | boolean => exact lawful_booleanCodec
+    | null => exact lawful_nullCodec
+    | binary => exact lawful_binaryCodec
+    | opaq => exact (lawful_opaqCodecω)
     -- a leaf now: `setCodec` is lawful at each of the four bases, so `(set)` discharges the
     -- way the ground rules do rather than by wrapping a subterm's soundness
-    | set b => exact sound_ground (lawful_setCodec (lawful_setBase b))
+    | set b => exact (lawful_setCodec (lawful_setBase b))
     | @refine t' T' μ' p h' =>
-      exact sound_wrap (t := t') (soundness_both h' hob)
-        (LawfulCore.restrict · p.eval) (Lawful.restrict · p.eval)
+      exact (soundness h' hob).restrict p.eval
     | @lazy γ T' μ' h' =>
-      exact sound_wrap (t := γ) (soundness_both h' hob) LawfulCore.μNone Lawful.μNone
+      exact (soundness h' hob).μNone
     | @held t' I' μ' P f g h' =>
-      exact sound_wrap (t := t') (soundness_both h' hob.1)
-        (fun h => (LawfulCore.through h hob.2).restrict _) (fun h => (h.through hob.2).restrict _)
+      exact ((soundness h' hob.1).through hob.2).restrict _
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
-      have ihp : ∀ t' ∈ pre, Sound t' := fun t' ht' => by
+      have ihp : ∀ t' ∈ pre, Lawful (denote t') := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedList.forall hp t' ht'
-        exact soundness_both hμ' ((Obligations.list hob).1 t' ht')
-      have ihsp : ∀ t' ∈ sp, Sound t' := fun t' ht' => by
+        exact soundness hμ' ((Obligations.list hob).1 t' ht')
+      have ihsp : ∀ t' ∈ sp, Lawful (denote t') := fun t' ht' => by
         cases sp with
         | none => exact nomatch ht'
         | some tx =>
           replace ht' : some tx = some t' := ht'
           cases ht'
           cases hs with
-          | some hμ' => exact soundness_both hμ' ((Obligations.list hob).2.1 t' rfl)
-      have ihf : ∀ t' ∈ suf, Sound t' := fun t' ht' => by
+          | some hμ' => exact soundness hμ' ((Obligations.list hob).2.1 t' rfl)
+      have ihf : ∀ t' ∈ suf, Lawful (denote t') := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedList.forall hf t' ht'
-        exact soundness_both hμ' ((Obligations.list hob).2.2 t' ht')
-      rw [Sound, denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq]
-      exact ⟨lawfulCore_listCodec (List.forall_mem_map.mpr fun t' ht' => (ihp t' ht').1)
-          (forall_mem_map_option fun t' ht' => (ihsp t' ht').1)
-          (List.forall_mem_map.mpr fun t' ht' => (ihf t' ht').1),
-        lawful_listCodec
-          (List.forall_mem_map.mpr fun t' ht' => (ihp t' ht').2)
-          (forall_mem_map_option fun t' ht' => (ihsp t' ht').2)
-          (List.forall_mem_map.mpr fun t' ht' => (ihf t' ht').2)⟩
+        exact soundness hμ' ((Obligations.list hob).2.2 t' ht')
+      rw [denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq]
+      exact lawful_listCodec
+          (List.forall_mem_map.mpr fun t' ht' => ihp t' ht')
+          (forall_mem_map_option fun t' ht' => ihsp t' ht')
+          (List.forall_mem_map.mpr fun t' ht' => ihf t' ht')
     -- The field table is indexed by the declared names, so the induction hypothesis is
     -- read off at a key rather than at a membership, and ~~TypedFields.forall~~ — which
     -- existed to walk the row — is not needed. Nor is a `Nodup` to transport.
@@ -296,33 +276,28 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest
       -- a field's codec is its term's denotation, and its laws reach it unchanged
-      have ihf : ∀ k, LawfulCore (fieldSem (ff k)).codec ∧
-          Lawful (fieldSem (ff k)).codec := by
+      have ihf : ∀ k, Lawful (fieldSem (ff k)).codec := by
         intro k
         have hobf := hob.1 k
         obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields k)
         rcases hshape with heq | heq
         · rw [heq] at hobf ⊢
-          exact soundness_both hty' hobf
-        · rw [heq] at hobf ⊢; exact soundness_both hty' hobf
-      have ihr : ∀ c, wildSem wild = .codec c →
-          LawfulCore c ∧ Lawful c := by
+          exact soundness hty' hobf
+        · rw [heq] at hobf ⊢; exact soundness hty' hobf
+      have ihr : ∀ c, wildSem wild = .codec c → Lawful c := by
         intro c hcr
         cases hrest with
         | none => exact nomatch hcr
         | @some t' T' μ' hty =>
           replace hcr : RestSem.codec (denote t') = RestSem.codec c := hcr
           cases hcr
-          exact soundness_both hty hob.2
-      rw [Sound, denote_object_table, fieldTable]
-      exact ⟨lawfulCore_objectCodec (fun k => (ihf k).1)
-          (fun c hcr => (ihr c hcr).1),
-        lawful_objectCodec (fun k => (ihf k).2)
-          (fun c hcr => (ihr c hcr).2) (wildSem_ne_drop _)⟩
+          exact soundness hty hob.2
+      rw [denote_object_table, fieldTable]
+      exact lawful_objectCodec ihf ihr (wildSem_ne_drop _)
     | @union opts Ts μs hlist =>
-      have ihs : ∀ t' ∈ opts, Sound t' := fun t' ht' => by
+      have ihs : ∀ t' ∈ opts, Lawful (denote t') := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
-        exact soundness_both hμ' ((Obligations.union hob).1 t' ht')
+        exact soundness hμ' ((Obligations.union hob).1 t' ht')
       have hC : ∀ o ∈ opts.map fun t' => denote t',
           ∀ o' ∈ opts.map fun t' => denote t', Compat o o' := by
         refine List.forall_mem_map.mpr fun s hs => List.forall_mem_map.mpr fun t' ht' => ?_
@@ -332,14 +307,10 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
             ∀ t' a, o.e t' = some a → a.member = m := by
         intro m hm
         refine List.forall_mem_map.mpr fun tx htx t' a he' => ?_
-        exact (ihs tx htx).1.writes
+        exact (ihs tx htx).writes
           (unanimous_spec hm _ (List.mem_map.mpr ⟨tx, htx, rfl⟩)) he'
-      rw [Sound, denote_union_sems, denoteList_eq, denoteμs_eq_map]
-      exact ⟨lawfulCore_altCodec
-          (List.forall_mem_map.mpr fun t' ht' => (ihs t' ht').1) hC hW,
-        lawful_altCodec
-          (List.forall_mem_map.mpr fun t' ht' => (ihs t' ht').2)
-          hC hW⟩
+      rw [denote_union_sems, denoteList_eq, denoteμs_eq_map]
+      exact lawful_altCodec (List.forall_mem_map.mpr fun t' ht' => ihs t' ht') hC hW
 
 termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
@@ -736,7 +707,7 @@ decreasing_by term_depth_wf
 set_option linter.unreachableTactic false in
 /-- Every derivable term denotes a pair **on its carrier** — §3's `e : T ⇀ 𝔸`,
     `p : 𝔸 ⇀ T`. One walk of the derivation, dispatching to the `Carrier` lemmas, with
-    `soundness_both` supplying the lawfulness the `held` case needs. -/
+    `soundness` supplying the lawfulness the `held` case needs. -/
 theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrier (denote t)
   | t, T, μ, h, hob => by
     cases h with
@@ -768,7 +739,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
         exact carrier_denote hty ((Obligations.list hob).2.2 t' ht')
     | @held t' I' μ' P f g h' =>
       exact carrier_restrict (carrier_through (carrier_denote h' hob.1)
-        (soundness_both h' hob.1).1 hob.2.2) _
+        (soundness h' hob.1).core hob.2.2) _
     | @refine t' T' μ' p h' =>
       exact carrier_restrict (carrier_denote h' hob.refine) p.eval
     | @lazy γ T' μ' h' =>
@@ -816,21 +787,11 @@ theorem typed_p_mem {t T μ} (h : Typed t T μ) (hob : Obligations t)
     {a v} (hp : (denote t).p a = some v) : T v :=
   typed_TSub h v ((carrier_denote h hob).ranP hp)
 
-/-- §5 Theorem (soundness), core half: (R), (C), (W) for every derivable current term. -/
-theorem soundness_core {t T μ} (h : Typed t T μ)
-    (hob : Obligations t) : LawfulCore (denote t) :=
-  (soundness_both h hob).1
-
-/-- Soundness: every current term whose obligations hold satisfies retract, canon and writes. -/
-theorem soundness {t T μ} (h : Typed t T μ)
-    (hob : Obligations t) : Lawful (denote t) :=
-  (soundness_both h hob).2
-
 /-- §3 `(alternate reader)`: an alternate reader over a derivable term preserves the three
     core laws under its coherence condition. -/
 theorem extendRead_lawfulCore {t T μ} (ht : Typed t T μ) (hob : Obligations t)
     {r : Attr → Option Value} (hr : ReadsCoherently (denote t) r) :
     LawfulCore ((denote t).extendRead r) :=
-  LawfulCore.extendRead (soundness_core ht hob) hr.1
+  LawfulCore.extendRead (soundness ht hob).core hr.1
 
 end Calculus

@@ -167,13 +167,6 @@ theorem funImage_isSome_iff {β : Type} {keys : Finset Name}
   obtain ⟨f, hf⟩ := Option.isSome_iff_exists.mp h
   rw [funImage_some hf k]; rfl
 
-theorem funImage_map_isSome {β γ : Type} {keys : Finset Name}
-    {g : {k // k ∈ keys} → Option β} (h : (funImage g).isSome = true)
-    (f : ({k // k ∈ keys} → β) → γ) : ((funImage g).map f).isSome = true := by
-  cases hh : funImage g with
-  | none => rw [hh] at h; exact absurd h (by simp)
-  | some x => simp
-
 theorem funImage_eq {β : Type} {keys : Finset Name} {g : {k // k ∈ keys} → Option β}
     {f : {k // k ∈ keys} → β} (h : ∀ k, g k = some (f k)) : funImage g = some f := by
   unfold funImage
@@ -583,12 +576,6 @@ theorem Carrier.congr {c d : Codec} (he : c.e = d.e) (hp : c.p = d.p)
 
 /-- Forgetting the member index preserves the laws — `(lazy)` concludes `⊤`. -/
 theorem Lawful.μNone {c : Codec} (h : Lawful c) : Lawful { c with μ := none } := by
-  refine ⟨h.retract, h.canon, ?_⟩
-  intro _ h'
-  exact nomatch h'
-
-theorem LawfulCore.μNone {c : Codec} (h : LawfulCore c) :
-    LawfulCore { c with μ := none } := by
   refine ⟨h.retract, h.canon, ?_⟩
   intro _ h'
   exact nomatch h'
