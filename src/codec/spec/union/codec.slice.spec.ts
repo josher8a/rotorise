@@ -368,8 +368,9 @@ describe('a union of objects has the same slice', () => {
 
     /**
      * **The slice runs the declaration guard again, and it has to.** A sub-selection of a certified
-     * union is certified and a sub-selection of an uncertified one is not, which is the premise
-     * `Calculus.uAtAct_extract` takes. Rebuilding through `union` is how the host takes it.
+     * union is certified and a sub-selection of an uncertified one is not. The model's slice keeps
+     * pairwise compatibility with no certificate (`Calculus.pairwiseCompat_extract`), and the host
+     * certifies, so rebuilding through `union` is how the host keeps it.
      */
     it('rebuilds through the declaration guard rather than assembling the term', () => {
         const kept = plain.exclude({ kind: string('c') })

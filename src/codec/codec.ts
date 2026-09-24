@@ -5175,10 +5175,9 @@ export const discriminatedUnion = <
  * no value will ever name. `discriminatedUnion` stays refused on an empty list — that list is a
  * typo or a `map` over an empty array — and this is the one name that reaches the bottom.
  *
- * The model makes it an option of any `union`: `False` is a subset of every held set, and §5's
- * (D) admits an option disjoint from its partner, which the bottom is from every held set, so
- * `union([X, never])` is `Typed`
- * (`dincomp_never_left`, `dincomp_never_right`). `union` here refuses it all the same, and on a
+ * The model makes it an option of any `union`: an empty option is compatible with every option,
+ * so `union([X, never])` meets its obligation
+ * (`pairwiseCompat_never_left`, `pairwiseCompat_never_right`). `union` here refuses it all the same, and on a
  * different ground: an option admitting nothing can never be chosen, which `restricts` answers
  * and which is a lint rather than a soundness rule. Well formed and useful are different claims,
  * and `.separations.lean` carries the divergence as a theorem.
@@ -5413,8 +5412,8 @@ export const union = <const Options extends readonly AnyCodec[]>(
  *
  * Rebuilt through {@link union} and not assembled here, so the declaration guard runs over the
  * result. It has to: a sub-selection of a certified union is certified, and a sub-selection of one
- * that was never certified is not — which is the premise `Calculus.uAtAct_extract` takes and the
- * reason it takes one.
+ * that was never certified is not. The model needs no such step: a slice keeps pairwise
+ * compatibility (`Calculus.pairwiseCompat_extract`).
  */
 const slicedUnion = (
     options: readonly AnyCodec[],

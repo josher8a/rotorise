@@ -124,19 +124,6 @@ def HUnion (Ts : List Held) : Held :=
 /-- The bottom's held set: nothing. It is disjoint from every held set. -/
 def HNever : Held := fun _ => False
 
-/-- Two options share no value. It is not a discharger of (U): `not_uAtCan_literal_held` holds
-    disjoint sets and still fails (U). It is what a union's certificate provides. -/
-def HDisj (Tx Ty : Held) : Prop := ∀ v, Tx v → ¬ Ty v
-
-/-- Pairwise disjointness of the held sets of a union's options: what the union's certificate
-    provides. The union's judgement does not ask for it, because a union writes wherever one
-    of its options writes. An empty option is disjoint from each held set, vacuously. -/
-def DIncomp (Ts : List Held) : Prop :=
-  Ts.Pairwise HDisj
-
-/-- Pairwise disjointness, in the form a union's certificate gives. -/
-theorem dincomp_of_disjoint {Ts : List Held} (h : Ts.Pairwise HDisj) : DIncomp Ts := h
-
 /-- `⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ)` (§4 `(object)`). A binding is `(name, required?,
     held set)`; `R` is the open part — `none` for `drop`/`refuse`, the rest codec's held
     set otherwise. Every `req` name is present, and every present name is either

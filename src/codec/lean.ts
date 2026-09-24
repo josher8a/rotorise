@@ -989,14 +989,15 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     if (isNever(left) || isNever(right)) {
         // the permits-form: `src/` refuses on usefulness, the model answers well-formedness, and
         // the theorem records what the model says rather than asserting a refusal it does not make
-        const [held, warrant] = isNever(left)
-            ? (['[HNever, T]', 'dincomp_never_left'] as const)
-            : (['[T, HNever]', 'dincomp_never_right'] as const)
+        const warrant = isNever(left)
+            ? 'pairwiseCompat_never_left'
+            : 'pairwiseCompat_never_right'
         return [
             `/-- \`${name}\` — \`src/\` refuses this pair as a lint: an option admitting nothing can`,
-            `    never be chosen. The model permits it, an empty option being the unit of the sum. -/`,
-            `theorem ${leanIdent(name)} : ∀ T : Held, DIncomp ${held} :=`,
-            `    ${warrant}`,
+            `    never be chosen. The model permits it: an empty option is compatible with every option. -/`,
+            `theorem ${leanIdent(name)} :`,
+            `    PairwiseCompat [${leanTermOf(left, name)}, ${leanTermOf(right, name)}] :=`,
+            `  ${warrant} _`,
         ].join('\n')
     }
     return [
