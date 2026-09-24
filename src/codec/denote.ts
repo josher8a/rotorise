@@ -583,7 +583,13 @@ export const restrict = (
     holds: (value: never) => boolean,
     refuse: (value: unknown) => CodecError,
 ): Pair => ({
-    encode: (value) => (holds(value) ? base.encode(value) : refuse(value)),
+    // the base writes first, so the predicate sees only a value of the base's type, and a value the
+    // base refuses is refused by the refinement. The model's `restrict` asks `q` first, and the
+    // two orders agree because the model's `q` is total
+    encode: (value) => {
+        const written = base.encode(value)
+        return !failed(written) && holds(value) ? written : refuse(value)
+    },
     decode: (attribute) => {
         const read = base.decode(attribute)
         return failed(read) || holds(read as never) ? read : refuse(read)
