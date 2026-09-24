@@ -18,7 +18,9 @@ import {
     dynamoNumber,
     held,
     lazy,
+    number,
     object,
+    refine,
     string,
     union,
 } from '../../codec'
@@ -291,5 +293,116 @@ describe('a union refuses a thunk it must read and cannot, because the model has
         expect(() =>
             union([string, tree] as unknown as readonly AnyCodec[]),
         ).not.toThrow()
+    })
+})
+
+describe("an accepted union's options never write one value, or read one attribute, two ways", () => {
+    const one = DynamoNumber.from('1')
+    const nonEmpty = refine(string, (s: string): s is string => s.length > 0)
+    const flip = held(string, string, {
+        encode: (s: string) => s.toUpperCase(),
+        decode: (s: string) => s.toLowerCase(),
+    })
+    const options: readonly (readonly [string, AnyCodec])[] = [
+        ['string', string],
+        ["string('1', '2.5')", string('1', '2.5')],
+        ["string('A', 'B')", string('A', 'B')],
+        ['nonEmpty', nonEmpty],
+        ['decimal', decimal],
+        ["decimal('1', '2.5')", decimal('1', '2.5')],
+        ["decimal('2', '3')", decimal('2', '3')],
+        ['dynamoNumber', dynamoNumber],
+        ['number', number],
+        ['number(1)', number(1)],
+        ['flip', flip],
+    ] as unknown as readonly (readonly [string, AnyCodec])[]
+    const values: readonly unknown[] = [
+        '1',
+        '2.5',
+        '3',
+        'A',
+        'a',
+        '',
+        1,
+        2.5,
+        one,
+    ]
+    const attributes: readonly AttributeValue[] = [
+        { S: '1' },
+        { S: '2.5' },
+        { S: 'A' },
+        { S: 'a' },
+        { N: '1' },
+        { N: '2.5' },
+        { N: '3' },
+    ]
+    type Pair = {
+        readonly encode: (value: unknown) => unknown
+        readonly decode: (attribute: AttributeValue) => unknown
+    }
+    const ok = (result: unknown) => !failed(result)
+    const sameAnswer = (a: unknown, b: unknown) =>
+        JSON.stringify(a, (_, v) =>
+            v instanceof DynamoNumber ? `N:${v}` : v,
+        ) ===
+        JSON.stringify(b, (_, v) => (v instanceof DynamoNumber ? `N:${v}` : v))
+
+    it('finds no value written two ways and no attribute read two ways, over every accepted pair', () => {
+        const disagreements: string[] = []
+        for (const [at, [an, a]] of options.entries()) {
+            for (const [bn, b] of options.slice(at + 1)) {
+                try {
+                    union([a, b] as unknown as readonly AnyCodec[])
+                } catch {
+                    continue
+                }
+                const [x, y] = [a, b] as unknown as readonly [Pair, Pair]
+                for (const v of values) {
+                    const wx = x.encode(v)
+                    const wy = y.encode(v)
+                    if (ok(wx) && ok(wy) && !sameAnswer(wx, wy))
+                        disagreements.push(`${an} | ${bn} write ${String(v)}`)
+                }
+                for (const attribute of attributes) {
+                    const rx = x.decode(attribute)
+                    const ry = y.decode(attribute)
+                    if (ok(rx) && ok(ry) && !sameAnswer(rx, ry))
+                        disagreements.push(
+                            `${an} | ${bn} read ${JSON.stringify(attribute)}`,
+                        )
+                    // a value one option reads, the other writes back at the same attribute
+                    for (const [r, w] of [
+                        [rx, y],
+                        [ry, x],
+                    ] as const) {
+                        if (!ok(r)) continue
+                        const back = w.encode(r)
+                        if (ok(back) && !sameAnswer(back, attribute))
+                            disagreements.push(
+                                `${an} | ${bn} cross ${JSON.stringify(attribute)}`,
+                            )
+                    }
+                }
+            }
+        }
+        expect(disagreements).toEqual([])
+    })
+
+    it('refuses a literal string beside a literal decimal of the same texts', () => {
+        expect(() =>
+            union([
+                string('1', '2.5'),
+                decimal('1', '2.5'),
+            ] as unknown as readonly AnyCodec[]),
+        ).toThrow(CodecError)
+    })
+
+    it('refuses a literal decimal beside a refinement of string that admits its texts', () => {
+        expect(() =>
+            union([
+                decimal('1', '2.5'),
+                nonEmpty,
+            ] as unknown as readonly AnyCodec[]),
+        ).toThrow(CodecError)
     })
 })

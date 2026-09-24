@@ -234,8 +234,6 @@ HOST = {
     "separable": "`src/codec/term.ts`'s certificate: whether two options share no value and no "
                  "attribute. The model's certificate is `certPair`; `.separations.lean` pins the "
                  "law in both directions",
-    "identifies": "`src/codec/term.ts`'s reader of whether a term decides which values are its own — "
-                  "§5's fourth discharger row, and the exemption `separable` consults first",
     "valueKinds": "`src/codec/denote.ts`'s coarsening of `occV` to the alphabet a *value* can be "
                   "classified into — the reader `carries` became. §5 cites the value-kind filter "
                   "because a union's write side reads it; the model's `κ` is over `Kind`, which "

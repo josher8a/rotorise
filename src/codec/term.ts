@@ -110,9 +110,8 @@ export type Alternatives =
  * §3 `(refine)`'s `q`, as the term carries it.
  *
  * The model's `q` is a bare `Value → Bool` and the host's used to be the caller's closure. Neither
- * is enough, because **`identifies` has to read the predicate as data**: §5's fourth discharger row
- * is about a term deciding which values are its own, and a closure decides nothing a declaration
- * can see. `ExactV.lean` writes the case that forced this — `liftQ (inL k ls)`, where `ls` is a
+ * is enough, because **the meet has to read the predicate as data**: a closure decides nothing a
+ * declaration can see. `ExactV.lean` writes the case that forced this — `liftQ (inL k ls)`, where `ls` is a
  * `NEFinset` and not a function.
  *
  * So three cases. `members` is membership of a {@link Literal}'s alternatives — the whole literal
@@ -743,7 +742,7 @@ export type NameForm = {
  * rather than a type error.
  *
  * An adapter whose held side is `opaque` pins nothing here either, and a clause cannot
- * name it. That is the same honest answer {@link identifies} gives.
+ * name it.
  */
 export const clauseLiteralsOf = (
     t: Term,
@@ -880,80 +879,6 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
 }
 
 /* ── the declaration guard ────────────────────────────────────────────────────────────── */
-
-/**
- * Whether a term decides which values are its own.
- *
- * §5's fourth discharger row: two refinements of one base read an attribute to the *same* value, so
- * at most one predicate accepts it and both sides separate. A literal is that with the predicate
- * written as data, which is why `union([string('A'), string('B')])` is not ambiguous and never was.
- *
- * **It propagates through the containers**, which is what keeps
- * `union([array(string('A')), array(string('B'))])` declarable — lawful, and proved so. Note what
- * that costs: both options admit `[]`, because a container admits its empty case whatever its
- * element admits, and the pair is pairwise compatible (`pairwiseCompat_array_literals`). So the
- * warrant for the flat case and the warrant for the container case are two different theorems,
- * and only the first is about literals.
- *
- * **The meet certifies two of these cases, and this row is still not redundant.** The model's
- * meet certifies two literals at one base with disjoint alternatives, and two
- * `refine(set b, each(members …))` at one base with disjoint alternatives. This row also accepts a
- * literal against an occupancy that is `⊤`, which the certificate declines. So this row is not an
- * exemption waiting for a certificate. It is a wider rule than the certificate's.
- *
- * A bare `set` answers `false`: {@link Term}'s `set` carries a **base** and has no element to read.
- * `string.set('a','b')` is `refine(set(string), each(members …))`, so this row sees the literal
- * through the `refine`.
- *
- * `nullable` is left out deliberately: two nullable literals both accept `null`, so the wrapper
- * admits a value neither literal decides. `held` is left out because the conversion is a caller's
- * function and there is nothing to read.
- */
-const decidesOwn = (q: Predicate): boolean =>
-    q.kind === 'members' ? true : q.kind === 'each' ? decidesOwn(q.of) : false
-
-export const identifies = (t: Term): boolean => {
-    switch (t.kind) {
-        case 'literal':
-        // …and a term that admits nothing turns every value down, which is evidence too
-        case 'never':
-            return true
-        /**
-         * **Every part, the spread included**, which is what the two rows this replaced disagreed
-         * about: `array` read its element and `tuple` read its declared positions and left the
-         * tail alone. A value longer than the declared positions is decided *by the spread*, so a
-         * tail whose admission is a caller's function decides nothing a declaration can see — the
-         * reason stated above for leaving `held` out. One row cannot hold both readings, and this
-         * is the reading the reason gives.
-         */
-        case 'list':
-            return (
-                t.pre.every(identifies) &&
-                (t.spread === undefined || identifies(t.spread)) &&
-                t.suf.every(identifies)
-            )
-        // every declared name and the open block, for the reason `list` reads every position: a
-        // name the open block holds is decided by the open block's term
-        case 'object':
-            return (
-                Object.values(t.body.fields).every((field) =>
-                    identifies(field.t),
-                ) &&
-                (t.body.rest === undefined || identifies(t.body.rest))
-            )
-        case 'union':
-            return t.options.every(identifies)
-        // a predicate that is data decides on its own — `refine(set(b), each(members …))` is how
-        // `set(literal …)` is spelled, and the literal is inside the predicate rather than inside
-        // a subterm, so reading only `inner` would miss it
-        case 'refine':
-            return decidesOwn(t.q) || identifies(t.inner)
-        case 'legacy':
-            return identifies(t.inner)
-        default:
-            return false
-    }
-}
 
 /**
  * **`opaque` unfolded one time**: the universal sum over each base and each container, with the
@@ -1104,10 +1029,8 @@ export const structuralMeet = (
  *
  * **A dissection is a union of objects**, so a union option that is one has members to compare
  * rather than an occupancy to meet. Without this, `union([discriminatedUnion(…),
- * discriminatedUnion(…)])` is two terms that both write `M`, and the occupancy meet refuses it —
- * which it did not do while a dissection was a term of its own, because `identifies` answered for
- * it. Deleting the second sum moved that fact here, where it is a statement about structures
- * rather than a claim that a whole union decides its own values.
+ * discriminatedUnion(…)])` is two terms that both write `M`, and the occupancy meet refuses it.
+ * This is a statement about structures, not a claim that a whole union decides its own values.
  */
 const objectMembers = (
     t: Term,
@@ -1164,12 +1087,6 @@ const objectMembers = (
  * its own paragraph below; a literal against its base and a literal set against its base's plain
  * set are the other two.
  *
- * **An option that identifies its own values.** {@link identifies}, whose warrants are on it, and
- * the row is permanent rather than pending. The model's meet certifies the flat literal case and
- * the literal-set case, and this row accepts those pairs and more. {@link identifies} names the three groups. The row applies only where
- * neither option reaches a `held`, because only there does `compat_of_HF` show the two options
- * compatible. A `held` beside a literal can share a caller value with the literal.
- *
  * **An occupancy that is unknown.** A `legacy` has an unknown read side, because its `r` widens exactly the reading. A `lazy` is transparent,
  * so its occupancies are its subterm's. The model certifies no pair on an unknown side. This
  * function takes the other direction, as the first paragraph states: an unknown side is not a
@@ -1190,19 +1107,15 @@ const objectMembers = (
  * where its held side does and reads where its inner term does: `decimal` writes a string and
  * reads an `N`.
  */
-export const separable = (x: Term, y: Term, identified = true): boolean => {
+export const separable = (x: Term, y: Term): boolean => {
     // **Containment first.** The three {@link restricts} rows name a literal, a set of a literal
     // and `never`. `never` meets no occupancy, so the rows below would accept it beside anything
     if (restricts(x, y) || restricts(y, x)) return false
     // **Where an option holds a `held`, its two views.** The rows below see one term per option,
     // and a `held` has two restrictions. The caller views answer the write question and the stored
     // views answer the read question, as the model's `certViews` does. Each view holds no `held`,
-    // so the two inner calls do not reach this row again. The stored call turns the `identifies`
-    // row off, because the stored view has erased the `decode` of each `held`
-    if (
-        callerViewsApart(x, y) &&
-        separable(storedView(x), storedView(y), false)
-    )
+    // so the two inner calls do not reach this row again
+    if (callerViewsApart(x, y) && separable(storedView(x), storedView(y)))
         return true
     // a meet at the bottom separates, and it runs ahead of the object row, because two objects
     // whose required slots meet at `never` share names and no value
@@ -1214,17 +1127,7 @@ export const separable = (x: Term, y: Term, identified = true): boolean => {
     }
     const writable = meet(occV(x), occV(y))
     const readable = meet(occA(x), occA(y))
-    if (writable === undefined && readable === undefined) return true
-    // **The `identifies` row needs two compatible options, and shows compatibility only where
-    // neither option reaches a `held`.** A `held` reads or writes a value that its inner term does
-    // not, so the row cannot see whether the two options agree. A stored view has erased that
-    // `decode`, so the row is off there. `reaches` counts a thunk it cannot read as a `held`
-    return (
-        identified &&
-        !reaches(x, ['held']) &&
-        !reaches(y, ['held']) &&
-        (identifies(x) || identifies(y))
-    )
+    return writable === undefined && readable === undefined
 }
 
 /**

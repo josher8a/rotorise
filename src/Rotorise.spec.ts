@@ -1361,7 +1361,6 @@ describe('the published surface', () => {
         'tagsOf',
         // the declaration guard and what it reads, which `identifying` and `deeper` became
         'separable',
-        'identifies',
         'meet',
         // the set reduction, which `setBase` became, and the predicate the elements of a set carry
         'setBaseOf',

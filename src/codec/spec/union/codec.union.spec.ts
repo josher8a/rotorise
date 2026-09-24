@@ -279,7 +279,7 @@ describe('the declaration guard, where a term is what the guard reads', () => {
      * `Term.set` is indexed by a bare `SetBase`, so a set over a literal has no term at all, and
      * the guard answers on `undefined` — not certified rather than refused. The pass that respells
      * `.set()` over a restricted ground as `refine(set(b), liftQ q)` gives it a term, and then
-     * `identifies` has to see the literal *through* the refinement or this test goes red. That is
+     * the meet has to see the literal *through* the refinement or this test goes red. That is
      * the pin that pass must keep.
      */
     it('declares a union of two literal sets whose alphabets do not meet', () => {
