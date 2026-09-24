@@ -10,17 +10,6 @@ so the n-ary rule the specification writes is derived rather than assumed:
 * `typed_literalsS` / `typed_literalsN` derive exactly what the old ~~Typed.literalS~~ and
   ~~Typed.literalN~~ concluded, from `Typed.literal` at a singleton and `Typed.union`. Same held
   set, same member.
-* `uAtCan_map_literal_str` / `_num` discharge (U) **on both sides**, through
-  `uniqueAdmission_of_sharedBase`.
-
-The (U) one is worth stating plainly. Read from the *pair*, two numeric options are refinements
-of one `numberCodec` at disjoint predicates, which is all `uniqueAdmission_of_sharedBase`
-needs.
-`uAtCan_of_literalN_disjoint` already made that argument for a union of n-ary numeric literals
-and never used the n-ary constructor to make it — only the shared base — so it holds for
-singletons too. The read-side row agrees, asking the codec rather than answering
-`⊤`; the correction is recorded below and it does not change a line of this file's proofs,
-which never appealed to the table.
 
 **Why the statements take a bare `List` and not a `Finset`.** `Term.union` takes a `List Term`,
 and bridging from a `NEFinset` is `Finset.toList`, which is `Multiset.toList`, which is
@@ -96,66 +85,6 @@ theorem hunion_map_literal_num (l : List WFNumeral) :
   constructor
   · rintro ⟨T, ⟨d, hd, rfl⟩, hv⟩; exact ⟨d, hd, hv⟩
   · rintro ⟨d, hd, rfl⟩; exact ⟨_, ⟨d, hd, rfl⟩, rfl⟩
-
-/-! ## (U) at the numeric base
-
-**`AdmA` does not need to *name* the attributes that read into `ℓ`, only to decide one.** `N` is
-carried exactly on both sides, so the payload of an `N` attribute IS the value, and one value
-cannot inhabit two disjoint sets.
-
-So `AdmALit`'s `.number` row is `decide (x = y)`, which separates two disjoint numeric literals
-term by term.
-
-The pair reading is not superseded and is the one used below: `uniqueAdmission_of_sharedBase`
-settles an `n`-ary family on both sides in one step where the table settles a pair at a time.
-Each option is `numberCodec.restrict` at a predicate, the predicates are disjoint, and that is
-the hypothesis — which needs only the shared base, never the n-ary constructor, so it holds
-here with `ℓ` as `Finset` data. -/
-
-/-- (U) on both sides for a string literal set's options. -/
-theorem uAtCan_map_literal_str {l : List String} (hnd : l.Nodup) :
-    UAtCan (l.map fun s => .literal .string s) := by
-  show UniqueAdmission (semsOf _)
-  have hs : semsOf (l.map fun s => .literal .string s)
-      = (l.map fun s => literalCodec .string s).map OptionSem.byAttempt := by
-    simp [semsOf, List.map_map, specOf, optionSemOf, denote]
-  rw [hs]
-  refine uniqueAdmission_of_sharedBase (base := baseCodec .string)
-    (qs := l.map fun s => inL .string s)
-    (lawful_baseCodec .string).core ?_ ?_
-  · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    exact List.forall₂_same.mpr fun s _ =>
-      ⟨literalCodec_e_restrict .string s, literalCodec_p_restrict .string s⟩
-  · rw [List.pairwise_map]
-    refine hnd.imp ?_
-    intro a b hab v hv
-    cases v <;> simp_all [inL]
-
-/-- …and at the numeric base, by the same shared-base route: `n`-ary and both sides in one
-    step, which is what this route buys over a pairwise separation read off the table. -/
-theorem uAtCan_map_literal_num {l : List WFNumeral} (hnd : l.Nodup) :
-    UAtCan (l.map fun d => .literal .number d) := by
-  show UniqueAdmission (semsOf _)
-  have hs : semsOf (l.map fun d => .literal .number d)
-      = (l.map fun d => literalCodec .number d).map OptionSem.byAttempt := by
-    simp [semsOf, List.map_map, specOf, optionSemOf, denote]
-  rw [hs]
-  refine uniqueAdmission_of_sharedBase (base := baseCodec .number)
-    (qs := l.map fun d => inL .number d)
-    (lawful_baseCodec .number).core ?_ ?_
-  · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    exact List.forall₂_same.mpr fun d _ =>
-      ⟨literalCodec_e_restrict .number d, literalCodec_p_restrict .number d⟩
-  · rw [List.pairwise_map]
-    refine hnd.imp ?_
-    intro a b hab v hv
-    cases v
-    case num d =>
-      -- `inL` at `number` is ungated now, so there is no gate to split on
-      simp only [inL, decide_eq_true_eq] at hv
-      simp only [inL, decide_eq_false_iff_not, hv]
-      exact hab
-    all_goals simp_all [inL]
 
 /-! ## The two rules, derived — over a `List`, and that is the finding
 

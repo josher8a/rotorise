@@ -446,7 +446,7 @@ attribute), so it is not a refinement of `string` and keeps its own proofs. -/
 /-- **§3's gate is `refine` over the base, at every base** — and the numeric one is `number`
     itself rather than a separate ungated numeric term, because §1's `Numerals` is the whole of
     `Carries(N)` and there is no wider numeric pair. That is what makes numeric literals
-    separable: see `uniqueAdmission_of_sharedBase`.
+    separable.
 
     Both halves are `rfl` now, where the string pair needed a `funext` and a case split: the
     codec *is* the restriction, rather than a hand-written pair that agreed with one. -/

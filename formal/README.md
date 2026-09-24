@@ -14,14 +14,14 @@ definition it touches.
 | `Calculus/Prisms.lean`      | §3          | The entry point of the certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism) and `extendRead` (alternate reading) |
 | `Calculus/Products.lean`    | §3          | `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`), `tupleCodec` it at `align` + a traversal over `slots`, the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone. `setCodec` is argued on its own |
 | `Calculus/Objects.lean`     | §4          | The field table as a map rather than a row, and the object taken apart through it. `objectCodec` is cashed as an equation by `objectCodecCore_eq` rather than argued on its own |
-| `Calculus/Sums.lean`        | §5, §3      | `altCodec` (the sum, resolved by the first admitter), `UniqueAdmission`, and `opaqCodec`, the fueled fixpoint over everything self-identifying |
+| `Calculus/Sums.lean`        | §5, §3      | `altCodec` (the sum, resolved by the first admitter), and `opaqCodec`, the fueled fixpoint over everything self-identifying |
 | `Calculus/Carriers.lean`    | §3          | One `Carrier` lemma per combinator, so the judgement's held-set index is the domain of the pair |
 | `Calculus/Lawful.lean`      | §3–§5       | The lawfulness lemmas this development discharges, one per construction |
 | `Calculus/Frontier.lean`    | §3–§5       | The lawfulness lemmas that are stated and not yet discharged, and the ones whose discharge is partial |
 | `Calculus/Term.lean`        | §3–§4       | Current-schema terms, object slots, and object rest policies                                                                                                                                                                                                                                        |
 | `Calculus/Denote.lean`      | —           | `denote : Term → Codec`, structural, pure dispatch into the combinators                                                                                                                                                                                                     |
 | `Calculus/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
-| `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, structural), `UAtCan := UniqueAdmission ∘ semsOf`, theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
+| `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, structural), `PairwiseCompat`, theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `Can`, and all ten of §6's "Hold" nodes this development still states — `held`'s identity and composition, `refine`'s meet and full case, `Codec.extendRead` with its own reader as the alternate reader and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of §6's stated conditions), wrapper member preservation. §6's null-point node went with the wrapper: the point is a union option, so idempotence is the union's |
 | `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the kind-disjoint unfoldings — one per constructor each side, counted in that file's own header (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
 | `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`HOpaque` *is* `opaque`'s held set) and `typed_T_identity` ((A) at every rule); `typed_T_adm` in `Laminar.lean` proves (B) at every derivable term |
@@ -30,7 +30,7 @@ definition it touches.
 | `Calculus/DynamoDB.lean`    | §1          | The DynamoDB port: `DynamoDB.maxNesting` instantiates the nesting bound at the store's 32 levels; `Numeral.Normal`/`Numeral.Stored`, `decimalCodec` and its `SurvivesStore` instance, `not_survivesStore_numberCodec`, the numeral-domain report (`decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases), and the text adapter `numeralOfStoredText`/`textOfNumeral` |
 | `Calculus/Refutations.lean` | §6          | §6's seven "Do not hold" nodes, all settled, over eight declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `not_equiv_lazy` (where `≡`'s member index is what fails), `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
-| `Calculus/Discharge.lean`   | §5          | The discharges of (U) that no phase of `Orth` reaches — an arbitrary `q` inside a `refine`, a union of numeric literals, and `opaque` — with the two counterexamples that repaired §5's admission row and the refutation of disjoint held sets as a discharger. The four per-aspect tables this file used to carry are retired: §5 states that row on option admission and occupancy, `Calculus/ExactV.lean` and `Calculus/ExactA.lean` prove those rows exact, and `Calculus/Orthogonality.lean` decides the pairs a declaration can decide |
+| `Calculus/Discharge.lean`   | §5          | `refine`'s read-side gate, and the lemmas that show an option admits its own canonical pairs, which `ExactV.lean` and `ExactA.lean` read |
 
 This table has a row of its own for twenty-two of the modules under `Calculus/`.
 `ExactV.lean`, `ExactA.lean`, `Separation.lean`, `Orthogonality.lean`,
@@ -39,8 +39,8 @@ Read those.
 
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
 of §5's soundness theorem are machine-checked — `soundness` (all four laws) and `soundness_core` ((R), (C), (W)) — by induction on the judgement, dispatching
-each case to its certified combinator lemma, with `opaque`'s (U) discharged by
-`uniqueAdmission_of_kinds`.
+each case to its certified combinator lemma, with `opaque`'s compatibility discharged by
+`compat_opaque`.
 The judgement carries both of §3's indices, and both are checked against the
 denotation. `typed_e_mem` and `typed_p_mem` are §3's `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T` at the
 judgement's own index — a derivable term writes and reads only values of the held set it
@@ -100,13 +100,13 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   `object` are all instances, so §2's prism halves are discharged once for all of them.
   `set` is the one product that is not, and the reason is stated where it is argued:
   its attribute side is a choice among three wire sets, not one constructor.
-- **`opaque`'s (U) is computed from kinds, not argued per option.** `Kind` is §1
+- **`opaque`'s compatibility is computed from kinds, not argued per option.** `Kind` is §1
   vocabulary now (`Domain.lean`), on both sides of the pair — `Value.kind` and
   `Attr.kind`, the ten members collapsing onto eight. An option is *pinned to a kind*
   when it admits only values and attributes of that kind (`OptionSem.OnKind`), and
-  `uniqueAdmission_of_kinds` turns pinned options with distinct kinds into (U). Each of
+  `compat_opaque` turns pinned options with distinct kinds into compatibility. Each of
   `opaque`'s eight is pinned in one line, and `onKind_set`/`onKind_array`/`onKind_record`
-  hold for *any* element codec — which is why the fixpoint's unique admission needs
+  hold for *any* element codec — which is why the fixpoint's compatibility needs
   nothing from the recursive call, and why `opaque` is not a special construction.
 - **`N` is carried exactly, and no numeric type is axiomatized.** A target language that hands
   its own numeric type to a caller adapts that type to `WFNumeral` in the port. IEEE-754 facts
@@ -118,30 +118,7 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   `Obligations` is **structural, not fuel-indexed** —
   this bullet said `Obligations fuel t` and "same premises, fueled form" long after `denote`
   became structural. §3's null point is not in the list either: the point is a union option,
-  so what was the wrapper's honesty premise is now the sum's (U).
-- **(U) is a premise, not a conclusion** (`UAtCan`), matching the doc's theorem residue.
-  Its disjointness dischargers are proved: pairwise-disjoint occupancy settles the value
-  side, pairwise-distinct named members the attribute side, and `Calculus/Orthogonality.lean`
-  decides both for the phases a syntactic certificate can reach.
-- **§5's (D) is not a discharger of (U), and the doc is fixed.** (D) is a condition on
-  held sets — sets of *values* — while (U)'s readable side quantifies over *attributes*,
-  and `held`'s adapter relabels between them. `not_uAtCan_literal_held` exhibits
-  `union(literal("A"), held(literal("A"), f, g))`: held sets `{"A"}` and `{"B"}`,
-  disjoint on the nose, both options reading `S "A"`. So (D) is well-formedness on the `T`
-  index, and the readable side is decided on stored attributes — distinct `μ`, or disjoint
-  readable-side admission.
-- **§5's decides-its-own-membership disjunct was unsound as stated; the mechanization
-  found it and the doc is fixed.** §5 used to write its writable-side discharger as
-  `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`
-  and call it sufficient for (U). Neither disjunct carries it, and both counterexamples
-  are proved in `Discharge.lean`: `not_uAtCan_literal_string` (one-sided `ident` —
-  `union(literal("A"), string)` passed it, and both options admit `"A"`) and
-  `not_uAtCan_array_literals` (two-sided `ident` — `ident` propagates through `array`,
-  but disjointness of the admissible sets does not, and both options admit `[]`). §5 keeps
-  both counterexamples and states the discharger on option admission, disjoint per side — `Adm`/`AdmA`
-  are `dom(e)`/`dom(p)` on the nose, and a `union` admits every option by attempt, an
-  object option included. `Calculus/Orthogonality.lean` discharges §5's own worked example, a pair
-  that shares its occupancy on both sides, so only the admissible sets reach it.
+  so what was the wrapper's honesty premise is now the sum's compatibility.
 
 ## Is the model the specification?
 

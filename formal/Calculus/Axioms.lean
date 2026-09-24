@@ -104,8 +104,7 @@ build stops here rather than in a reader's `#print axioms`. -/
 
 /-! Both indices of the judgement are claims about the denotation (§3). -/
 
-/-! The dischargers of (U) (§5), and the three refutations that repaired the specification
-(§4) — a counterexample proved classically would still be a counterexample, but these are
+/-! The refutations that repaired the specification (§4) — a counterexample proved classically would still be a counterexample, but these are
 constructive and the guard records that. -/
 
 /-! §5's `adm` cannot pass through `alternate reader` on the read side — the specification defect
@@ -120,10 +119,6 @@ rests on it. -/
 
 /-! §2's ideal: `e` and `p` are mutually inverse between `dom(e)` and `Can(c)`. `retract`
 is one half and this is the other, so the bijection is a theorem rather than a reading. -/
-
-/-! §5's two outright dischargers, as one theorem: label each side by a projection of the
-input, keep the options' label sets disjoint. `uniqueAdmission_of_kinds` is its one instance
-now; the tagged one went with the filtered sum. -/
 
 /-! §3's `held`/`refine` split, checked rather than asserted: both are one partial-iso
 combinator, and the pair agrees on the nose. -/

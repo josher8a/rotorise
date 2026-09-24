@@ -78,7 +78,7 @@ describe('a codec that does not', () => {
      * **Pins wording, because the *message* is the only channel this fact travels on.** Write
      * parity and read parity are the two directions `checkAgainst` compares, both reported as one
      * `CodecError`; asserting the type alone would make this test and its sibling
-     * indistinguishable. Same reason as `codec.uniqueadmission.spec.ts`'s (U) pair.
+     * indistinguishable.
      */
     it('reports a set stored as a list', () => {
         const asList: Reference<Pet> = {
@@ -101,7 +101,7 @@ describe('a codec that does not', () => {
      * **Pins wording, because the *message* is the only channel this fact travels on.** Write
      * parity and read parity are the two directions `checkAgainst` compares, both reported as one
      * `CodecError`; asserting the type alone would make this test and its sibling
-     * indistinguishable. Same reason as `codec.uniqueadmission.spec.ts`'s (U) pair.
+     * indistinguishable.
      */
     it('reports where an existing row reads back differently', () => {
         const readsDifferently: Reference<Pet> = {

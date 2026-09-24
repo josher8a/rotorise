@@ -101,7 +101,7 @@ describe('the occupancies a declaration is separated by', () => {
      * direction rather than the safe one.** The claim was that an over-approximation costs a
      * certificate and never buys a wrong one. It is backwards here: the guard refuses a union
      * when two occupancies *meet*, so an unknown occupancy makes it decline to refuse.
-     * `union([lazy(string), string])` was accepted at the declaration, and `checkUniqueAdmission`
+     * `union([lazy(string), string])` was accepted at the declaration, and a write
      * then reported two options admitting one value — the migration from declaration time to
      * write time that the calculus exists to stop. `lazy` was the only term answering unknown on
      * both projections, which is why it was the only hole.

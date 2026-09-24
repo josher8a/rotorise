@@ -171,9 +171,8 @@ structure IsSupAt (f : Nat → OptionSem) (oω : OptionSem) (v : Value) : Prop w
     takes the obligation at each stage. Growth-first is automatically the first admitter, so no
     other option can answer; elsewhere in the list the obligation is what says they agree.
 
-    The two premises are the model's own: `hself` is `uniqueAdmission_of_disjoint`'s `hw` — a
-    canonical pair admits its *own* option — and `hadm` is `byAttempt`'s definition, trivial for
-    `byStructure`. -/
+    The two premises are the model's own: `hself` says a canonical pair admits its *own*
+    option, and `hadm` is `byAttempt`'s definition. -/
 theorem selectF_continuous {f : Nat → OptionSem} {oω o₂ : OptionSem} {v : Value} {a : Attr}
     (hs : IsSupAt f oω v)
     (hself : ∀ i, ∀ b, (f i).c.e v = some b → (f i).admitV v = true)

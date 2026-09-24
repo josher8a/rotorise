@@ -40,8 +40,7 @@ below alongside the block that follows it:
     /** ... the specific note ... */
     it('...', () => {
 
-`codec.uniqueadmission.spec.ts` is where this pattern was first written, twice, for its
-(U) pair. A module docstring at the head of a file needs no marker: nothing precedes it,
+`conformance.spec.ts` carries this pattern twice. A module docstring at the head of a file needs no marker: nothing precedes it,
 so it is the file's own and is skipped by construction.
 
 The sharper question this cannot ask is whether the first sentence names a declaration

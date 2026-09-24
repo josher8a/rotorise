@@ -4,7 +4,7 @@ import Calculus.Typing
 # §5 — Soundness
 
 The theorem. `Obligations t` collects the semantic rule premises: `(held)` cancellation laws,
-and `(union)` residual (U). The current term language has no read adapter,
+and `(union)` pairwise compatibility. The current term language has no read adapter,
 so every typed term satisfies all four laws.
 
 The ground-term cases are wrappers over the certified combinators,
@@ -18,13 +18,6 @@ namespace Calculus
 /-- The union options, denoted with their name specs — as in `denote`'s union case. -/
 noncomputable def semsOf (opts : List Term) : List OptionSem :=
   opts.map fun t' => optionSemOf (denote t') (specOf t')
-
-/-- §5 (U) at canonical inputs: every canonical attribute of an option is admitted by
-    that option alone, on both sides. The strong form, and what the dischargers produce —
-    `Calculus.Orthogonality`'s `uAtCan_of_orth` and `uAtCan_of_separated`, and the hand
-    proofs in `Calculus.Discharge` that no phase of the classifier reaches. -/
-def UAtCan (opts : List Term) : Prop :=
-  UniqueAdmission (semsOf opts)
 
 /-- **The union's obligation**: its options are pairwise compatible. -/
 def PairwiseCompat (opts : List Term) : Prop :=

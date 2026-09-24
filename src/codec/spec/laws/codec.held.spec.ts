@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { S, SS } from '../../attribute'
+import { memberOf } from '../../attribute'
 import type { AnyCodec, Encoded } from '../../codec'
 import {
     array,
@@ -24,6 +25,7 @@ import {
     spread,
     string,
     union,
+    valueKinds,
 } from '../../codec'
 import type { StandardSchemaV1 } from '../../standard'
 import { checkEncodePaths, checkRoundTrip } from '../../testing'
@@ -554,5 +556,14 @@ describe('the held side is the write occupancy of a union option', () => {
             decode: (at) => new Date(at),
         })
         expect(() => declare([when, number])).toThrow(CodecError)
+    })
+
+    it('stores a foreign held side in the member of the inner codec, and takes every kind', () => {
+        const at = held(decimal, date, {
+            encode: (at: Date) => String(at.getTime()),
+            decode: (at: string) => new Date(Number(at)),
+        })
+        expect(memberOf(at.encode(new Date(0)) as never)).toBe('N')
+        expect(valueKinds(at.def)).toEqual(valueKinds({ kind: 'opaq' }))
     })
 })
