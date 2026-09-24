@@ -1,10 +1,9 @@
 import Calculus.Soundness
 
 /-!
-# Admission lemmas shared by the exactness proofs
+# The read gate of `refine`, and a premise at two options
 
-`refine`'s read-side gate, which `AdmA` reads, the member guard on an option's read, and a
-premise checked at two options.
+`refine`'s read-side gate, which `AdmA` reads, and a premise checked at two options.
 -/
 
 namespace Calculus
@@ -35,20 +34,6 @@ theorem refineReads_none {t : Term} {q : Value → Bool} {a : Attr}
     (h : (denote t).p a = none) : refineReads t q a = false := by
   simp [refineReads, h]
 
-
-/-! ## Admission is guarded -/
-
-
-/-- Any option's attribute admission is member-guarded: with a lawful pair and a
-    named member, an admitted attribute carries that member — §5's read-side (W). -/
-theorem admitA_member (t : Term) {μ a}
-    (hμ : μSyn t = some μ) (hlaw : Lawful (denote t))
-    (h : ((denote t).p a).isSome = true) :
-    a.member = μ := by
-  obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h
-  refine hlaw.reads ?_ hv
-  rw [denote_μ]
-  exact hμ
 
 /-! ## A premise at two options -/
 

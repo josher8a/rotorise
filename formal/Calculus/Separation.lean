@@ -80,8 +80,8 @@ theorem refine_top_row (t : Term) : Adm (.refine t (.closure qTop)) = Adm t := b
     no literal. At `vBoolAtA` against `tReqStr` such a test answers `true` and the row answers
     `false`. -/
 theorem union_congruent (t : Term) (v : Value) :
-    admitOptV (specOf t, Adm t) v
-      = admitOptV (specOf (.refine t (.closure qTop)), Adm (.refine t (.closure qTop))) v := by
+    admitOptV (Adm t) v
+      = admitOptV (Adm (.refine t (.closure qTop))) v := by
   show Adm t v = Adm (.refine t (.closure qTop)) v
   rw [refine_top_row]
 

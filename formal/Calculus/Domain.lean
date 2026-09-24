@@ -481,11 +481,6 @@ structure NameSpec where
   presence : Bool × Bool
   alts : Option Alts
 
-/-- A whole body, as a slice reads it: the declared names. A slice asks each name that a
-    clause names, so an undeclared name and the open block answer nothing here. -/
-structure BodySpec where
-  names : MapOf NameSpec
-
 /-! ## The set bases (§3 `(set)`'s payload)
 
 §3's `(set)` rule reads a member off its element term and refuses when there is none. Three

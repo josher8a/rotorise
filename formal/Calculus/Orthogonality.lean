@@ -216,16 +216,16 @@ included, so an option's admission `admitOptV`/`admitOptA` is its row. -/
 /-- `selOptV`'s disjunction, as an option it lands on. The union case hands its induction
     hypothesis the option that admits. -/
 theorem selOptV_mem_admitOpt {opts : List Term} {v : Value}
-    (h : selOptV (AdmSpecs opts) v = true) :
-    ∃ t ∈ opts, admitOptV (specOf t, Adm t) v = true := by
-  simp only [selOptV, AdmSpecs_eq, List.any_eq_true, List.mem_map] at h
+    (h : selOptV (AdmList opts) v = true) :
+    ∃ t ∈ opts, admitOptV (Adm t) v = true := by
+  simp only [selOptV, AdmList_eq, List.any_eq_true, List.mem_map] at h
   obtain ⟨_, ⟨t, ht, rfl⟩, hadm⟩ := h
   exact ⟨t, ht, hadm⟩
 
 theorem selOptA_mem_admitOpt {opts : List Term} {a : Attr}
-    (h : selOptA (AdmASpecs opts) a = true) :
-    ∃ t ∈ opts, admitOptA (specOf t, AdmA t) a = true := by
-  simp only [selOptA, AdmASpecs_eq, List.any_eq_true, List.mem_map] at h
+    (h : selOptA (AdmAList opts) a = true) :
+    ∃ t ∈ opts, admitOptA (AdmA t) a = true := by
+  simp only [selOptA, AdmAList_eq, List.any_eq_true, List.mem_map] at h
   obtain ⟨_, ⟨t, ht, rfl⟩, hadm⟩ := h
   exact ⟨t, ht, hadm⟩
 
@@ -254,7 +254,7 @@ theorem occVL_of_mem {t : Term} {ts : List Term} {s : Slot} (ht : t ∈ ts)
 /-- Row soundness is option soundness. `admitOptV` is the row at every constructor, an object
     included, so the row's soundness applies unchanged. -/
 theorem occV_admitOpt {t : Term} (h : OccSoundV t) (v : Value)
-    (hv : admitOptV (specOf t, Adm t) v = true) : occV t v.slot = true :=
+    (hv : admitOptV (Adm t) v = true) : occV t v.slot = true :=
   h v hv
 
 mutual
@@ -347,7 +347,7 @@ theorem occAL_of_mem {t : Term} {ts : List Term} {m : Member} (ht : t ∈ ts)
     · simp [occAL, ih h']
 
 theorem occA_admitOpt {t : Term} (h : OccSoundA t) (a : Attr)
-    (ha : admitOptA (specOf t, AdmA t) a = true) : occA t a.member = true :=
+    (ha : admitOptA (AdmA t) a = true) : occA t a.member = true :=
   h a ha
 
 mutual
@@ -392,10 +392,10 @@ admission**. Disjointness in either factor makes the intersection disjoint, so t
 separates through the occupancy and the meet through the admission, with no second family. -/
 
 def OrthSV (t : Term) : Value → Prop :=
-  fun v => occV t v.slot = true ∧ admitOptV (specOf t, Adm t) v = true
+  fun v => occV t v.slot = true ∧ admitOptV (Adm t) v = true
 
 def OrthSA (t : Term) : Attr → Prop :=
-  fun a => occA t a.member = true ∧ admitOptA (specOf t, AdmA t) a = true
+  fun a => occA t a.member = true ∧ admitOptA (AdmA t) a = true
 
 theorem occV_disjoint_of_Orth1 {x y : Term} (h : Orth1 x y = true) {s : Slot}
     (hx : occV x s = true) (hy : occV y s = true) : False := by
@@ -441,21 +441,21 @@ theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated opts) :
     AdmitsAtMostOne (denoteList opts) := by
   constructor
   · intro v
-    rw [filter_AdmSpecs (fun t _ => Adm_exact t) v, List.length_map]
+    rw [filter_AdmList (fun t _ => Adm_exact t) v, List.length_map]
     refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
       (List.Pairwise.filter _ (h.imp fun hs => hs.1 v)))
     intro x y hx hy hxy
-    have hax : admitOptV (specOf x, Adm x) v = true := (List.mem_filter.mp hx).2
-    have hay : admitOptV (specOf y, Adm y) v = true := (List.mem_filter.mp hy).2
+    have hax : admitOptV (Adm x) v = true := (List.mem_filter.mp hx).2
+    have hay : admitOptV (Adm y) v = true := (List.mem_filter.mp hy).2
     exact hxy ⟨occV_admitOpt (occV_sound x) v hax, hax⟩
       ⟨occV_admitOpt (occV_sound y) v hay, hay⟩
   · intro a
-    rw [filter_AdmASpecs (fun t _ => AdmA_exact t) a, List.length_map]
+    rw [filter_AdmAList (fun t _ => AdmA_exact t) a, List.length_map]
     refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
       (List.Pairwise.filter _ (h.imp fun hs => hs.2 a)))
     intro x y hx hy hxy
-    have hax : admitOptA (specOf x, AdmA x) a = true := (List.mem_filter.mp hx).2
-    have hay : admitOptA (specOf y, AdmA y) a = true := (List.mem_filter.mp hy).2
+    have hax : admitOptA (AdmA x) a = true := (List.mem_filter.mp hx).2
+    have hay : admitOptA (AdmA y) a = true := (List.mem_filter.mp hy).2
     exact hxy ⟨occA_admitOpt (occA_sound x) a hax, hax⟩
       ⟨occA_admitOpt (occA_sound y) a hay, hay⟩
 
@@ -477,15 +477,15 @@ theorem eq_of_pairwise_excl {α : Type} {P : α → Prop} {R : α → α → Pro
 theorem pairwiseCompat_of_separated {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t)) (h : Separated opts) : PairwiseCompat opts := by
   intro s hs t ht a v hp hact
-  have hsA : admitOptA (specOf s, AdmA s) a = true := (AdmA_exact s a).mpr (by rw [hp]; rfl)
-  have hsV : admitOptV (specOf s, Adm s) v = true := (Adm_exact s v).mpr ((hlaw s hs).defined hp)
+  have hsA : admitOptA (AdmA s) a = true := (AdmA_exact s a).mpr (by rw [hp]; rfl)
+  have hsV : admitOptV (Adm s) v = true := (Adm_exact s v).mpr ((hlaw s hs).defined hp)
   have hst : t = s := by
     rcases hact with hq | he
-    · have htA : admitOptA (specOf t, AdmA t) a = true := (AdmA_exact t a).mpr hq
+    · have htA : admitOptA (AdmA t) a = true := (AdmA_exact t a).mpr hq
       exact eq_of_pairwise_excl (P := fun u => OrthSA u a) (fun x y hxy px py => hxy.2 a px py)
         h t ht s hs ⟨occA_admitOpt (occA_sound t) a htA, htA⟩
         ⟨occA_admitOpt (occA_sound s) a hsA, hsA⟩
-    · have htV : admitOptV (specOf t, Adm t) v = true := (Adm_exact t v).mpr he
+    · have htV : admitOptV (Adm t) v = true := (Adm_exact t v).mpr he
       exact eq_of_pairwise_excl (P := fun u => OrthSV u v) (fun x y hxy px py => hxy.1 v px py)
         h t ht s hs ⟨occV_admitOpt (occV_sound t) v htV, htV⟩
         ⟨occV_admitOpt (occV_sound s) v hsV, hsV⟩

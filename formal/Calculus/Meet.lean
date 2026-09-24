@@ -2128,14 +2128,6 @@ so a guard that consults it closes a cycle. What the row actually needs is that 
 the number of admitting options by whether the partner admits, and that is a fact about counting
 rather than about separation. -/
 
-/-- A term that admits a value is not the bottom. -/
-theorem not_isNever_of_adm {t : Term} {v : Value} (h : Adm t v = true) : t.isNever = false := by
-  cases ht : t.isNever with
-  | true =>
-      rw [eq_never_of_isNever ht, show Adm .never v = false from rfl] at h
-      exact absurd h (by simp)
-  | false => rfl
-
 /-- A list reads an attribute exactly when one of its terms does. -/
 theorem AdmAAny_iff : ∀ {os : List Term} {a : Attr},
     AdmAAny os a = true ↔ ∃ t ∈ os, AdmA t a = true
@@ -2895,21 +2887,6 @@ theorem valPresentT_of_isReq {b : Body} {F : {k // k ∈ b.fields} → ObjectSlo
     valPresentT b.fields F keys = valPresentT b.fields b.at keys := by
   rw [valPresentT_req, valPresentT_req]
   exact decide_eq_decide.mpr (forall_congr' fun k => by rw [hreq k])
-
-/-- Every present name goes through its field and the left operand's term alike. -/
-theorem objAdmV_of_left {b : Body} {x t r : Term} {F : {k // k ∈ b.fields} → ObjectSlot}
-    (ihf : ∀ (k : {k // k ∈ b.fields}) (w : Value),
-      AdmField (F k) w = (Adm x w && AdmField (b.at k) w))
-    (iht : ∀ w, Adm r w = (Adm x w && Adm t w))
-    (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
-    objAdmV ⟨b.fields, fun k => AdmField (F k)⟩ (some (Adm r)) keys g
-      = (decide (∀ k : {k // k ∈ keys}, Adm x (g k) = true)
-         && objAdmV ⟨b.fields, fun k => AdmField (b.at k)⟩ (some (Adm t)) keys g) := by
-  simp only [objAdmV, entryP, MapOf.at]
-  refine decide_forall_and (fun k => ?_)
-  by_cases hk : k.1 ∈ b.fields
-  · simp only [dif_pos hk]; exact ihf ⟨k.1, hk⟩ (g k)
-  · simp only [dif_neg hk]; exact iht (g k)
 
 /-- No declared field meets the left operand's term to the bottom at a value both admit. -/
 theorem isBottom_false_of_left {b : Body} {x : Term} {F : {k // k ∈ b.fields} → ObjectSlot}
@@ -6050,7 +6027,7 @@ theorem certAll_of_pairwise : ∀ {ts : List Term},
 /-- **A value an option admits, the option admits as an option.** Every option is attempted, so
     `admitOptV` is the row itself and this is the identity. `Slice.lean` calls it by name. -/
 theorem admitOptV_of_Adm {t : Term} {v : Value}
-    (h : Adm t v = true) : admitOptV (specOf t, Adm t) v = true := h
+    (h : Adm t v = true) : admitOptV (Adm t) v = true := h
 
 
 /-! ## The laws, on admission
@@ -6090,7 +6067,7 @@ theorem Adm_meet_never {x z : Term} (h : Term.meet x .never = some z) (v : Value
 theorem Adm_meet_union {x z : Term} {os : List Term}
     (h : Term.meet x (.union os) = some z) (v : Value) :
     Adm z v = (Adm x v && AdmAny os v) := by
-  rw [Adm_meet _ _ _ h, show Adm (.union os) v = selOptV (AdmSpecs os) v from rfl,
+  rw [Adm_meet _ _ _ h, show Adm (.union os) v = selOptV (AdmList os) v from rfl,
     selOptV_eq_AdmAny]
 
 /-- …and the distribution, written so a reader sees it: the meet of a term with a join is the
