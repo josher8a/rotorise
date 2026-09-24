@@ -580,7 +580,6 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
                 ? undefined
                 : answers.some((one) => one === true)
         }
-        case 'held':
         case 'legacy':
             return undefined
         case 'lazy':
@@ -1121,54 +1120,6 @@ const objectMembers = (
 }
 
 /**
- * **Whether two pinned options hold disjoint carrier values** — the equivalence class the two sides
- * collapse onto, as a check.
- *
- * `identifies` is unary, and a unary predicate cannot state this: "each option knows its own
- * values" does not say the two sets of values are *different*. For a pair under one carrier that is
- * the whole question. `number(0, 1)` and `decimal('2', '3')` become `dynamoNumber(0, 1)` and
- * `dynamoNumber(2, 3)`, which are disjoint and so resolvable; `number(0.1)` and `decimal('0.1')`
- * become the same `dynamoNumber(0.1)`, and no stored attribute can ever choose between them.
- *
- * {@link clauseForm} is the descent, so an adapter whose held side is `opaque` pins nothing here and
- * is never certified.
- */
-const carrierDisjoint = (x: Term, y: Term): boolean =>
-    sharedLiterals(x, y)?.length === 0
-
-/** **The values two pinned options both carry**, or `undefined` where one of them pins none. */
-const sharedLiterals = (
-    x: Term,
-    y: Term,
-): readonly LiteralValue[] | undefined => {
-    const xs = clauseForm(x)
-    const ys = clauseForm(y)
-    if (!xs || !ys) return undefined
-    const theirs = ys.alts.ls as readonly LiteralValue[]
-    return (xs.alts.ls as readonly LiteralValue[]).filter((one) =>
-        theirs.some((other) => sameLiteral(one, other)),
-    )
-}
-
-/**
- * **Whether one conversion runs on both sides**, by reference.
- *
- * The write side needs it and the read side does not. A stored attribute lands in at most one of
- * two disjoint alternative sets whatever `g` does, so the read side is decided by the sets alone.
- * A caller's value reaches those sets through `f`, so two *different* `f`s could carry one value
- * into both sets and disjointness would certify nothing. Every `number(…)` shares one `asFloat` and
- * every `decimal(…)` one `storedOnly`, so the identity is the reference.
- *
- * **Two bare terms share the identity**, which is one conversion by the same argument: `string('a')`
- * and `string('b')` carry the caller's value to itself, so disjoint alternatives are disjoint
- * admissions. A bare term beside an adapter does not, because the identity and `f` are two.
- */
-const sameConversion = (x: Term, y: Term): boolean =>
-    x.kind === 'held' || y.kind === 'held'
-        ? x.kind === 'held' && y.kind === 'held' && x.f === y.f
-        : true
-
-/**
  * **Whether a union may hold these two options**, asked at the declaration.
  *
  * **This is not a port of `certPair`, and the difference is the direction.** `certPair` is a *certificate*:
@@ -1264,35 +1215,6 @@ export const separable = (x: Term, y: Term, identified = true): boolean => {
     const writable = meet(occV(x), occV(y))
     const readable = meet(occA(x), occA(y))
     if (writable === undefined && readable === undefined) return true
-    /**
-     * **Where both options pin a set of values, the values decide.**
-     *
-     * The occupancies answer *where* two options write and read, which is right, and they are
-     * silent about *what*, which is the question the meet asks. Two options that each name their own
-     * values meet exactly where those value sets meet, so a pair sharing a slot is separable when
-     * the sets are disjoint and is separable by nothing when they are not. That holds under an
-     * adapter and over a bare base alike: `number(0, 1)` and `decimal('2', '3')` are
-     * `dynamoNumber(0, 1)` and `dynamoNumber(2, 3)` beneath one carrier, and `string('a')` and
-     * `string('b')` are already themselves.
-     *
-     * **The two sides part company, and only the write side needs the conversion.** A stored
-     * attribute lies in at most one of two disjoint sets whatever `g` does. A caller's value
-     * reaches those sets through `f`, so two different conversions could carry one value into both
-     * and disjointness would certify nothing.
-     *
-     * This runs ahead of {@link identifies}, which is the unary reading of the same idea and
-     * cannot state it: "each option knows its own values" does not say the two sets differ. The
-     * short-circuit stays for the rows below it, where an option decides its own values through a
-     * closure or a subterm and names no set to compare.
-     */
-    const pinned = clauseForm(x) && clauseForm(y)
-    if (pinned) {
-        const disjoint = carrierDisjoint(x, y)
-        return (
-            (writable === undefined || (sameConversion(x, y) && disjoint)) &&
-            (readable === undefined || disjoint)
-        )
-    }
     // **The `identifies` row needs two compatible options, and shows compatibility only where
     // neither option reaches a `held`.** A `held` reads or writes a value that its inner term does
     // not, so the row cannot see whether the two options agree. A stored view has erased that
@@ -1598,11 +1520,10 @@ export const meet = <A>(
  * is the empty intersection alone. Conflating the two is the defect this development found four
  * separate times, each time by writing the homomorphism equation rather than by reading the table.
  *
- * **Where the host could answer and the model has no row, this refuses.** Two `number` literals,
- * two `withLegacyRead` fields and an `undefinable` field are each comparable in TypeScript and each
- * answer `undefined` here, because a row the model does not state is a rule this port would be
- * inventing. The first two are `docs/defects.md` entries; the third is a mark the model's `Field`
- * does not have.
+ * **Where the host could answer and the model has no row, this refuses.** Two `withLegacyRead`
+ * fields and an `undefinable` field are each comparable in TypeScript and each answer `undefined`
+ * here, because a row the model does not state is a rule this port would be inventing. The model's
+ * `Field` has no `undefinable` mark.
  */
 export const meetTerms = (x: Term, y: Term): Term | undefined =>
     // **A thunk the walk cannot read states no meet.** The meet forces each thunk it meets, and a
@@ -1856,15 +1777,14 @@ const literalAgainstBase = (lit: Literal, base: Term): Term | undefined => {
 }
 
 /**
- * **Two literals: the same value, or nothing.**
- *
- * `number` refuses, mirroring the model, whose `Term.meetLit` row at `number` answers `none`,
- * because `WFNumeral` equality is textual and two spellings can name one number. TypeScript can compare two numbers, and answering here would
- * make this library's meet finer than the one the model's theorems are about.
+ * **Two literals: the same value, or the bottom**, as the model's `Term.meetLit`. A `number`
+ * literal is a {@link DynamoNumber}, normalised at construction, so its digits are the numeral the
+ * emitter prints and the equality is the model's.
  */
 const meetLiterals = (x: Literal, y: Literal): Term | undefined => {
     if (x.base !== y.base) return never
-    if (x.base === 'number') return undefined
+    if (x.base === 'number' && y.base === 'number')
+        return x.v.equals(y.v) ? x : never
     const other = (y as { readonly v: unknown }).v
     return sameValue(x.v, other) ? x : never
 }
