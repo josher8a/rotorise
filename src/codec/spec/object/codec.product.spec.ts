@@ -149,7 +149,7 @@ describe('the product distributes over a union', () => {
     /**
      * **The distribution law.** A product over a union of objects is the union of the merges,
      * and nothing is nested: the result is one flat `union`, built through `union` itself so
-     * `Collides` and `separable` run over the products rather than over the factors.
+     * `compatible` runs over the products rather than over the factors.
      */
     it('is the union of the merges, flat', () => {
         expect(product(Kind, Tail).def).toEqual(
@@ -194,7 +194,7 @@ describe('the product distributes over a union', () => {
      *
      * A collision between two merges reduces to a collision inside one factor. Names are disjoint
      * across factors, so `req(Aᵢ ∪ Cⱼ) ⊆ decl(Aₖ ∪ C_l)` splits into `req(Aᵢ) ⊆ decl(Aₖ)` and
-     * `req(Cⱼ) ⊆ decl(C_l)` — and both directions of that are exactly `Collides` at one factor,
+     * `req(Cⱼ) ⊆ decl(C_l)` — and both directions of that are a collision of name intervals at one factor,
      * which that factor's own `union` already refused.
      *
      * So the collision check `product` hands to {@link union} never fires on valid factors. It is

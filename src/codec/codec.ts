@@ -39,33 +39,18 @@ import {
     orThrow,
     type Result,
 } from './result'
-import type {
-    Body,
-    Field,
-    LiteralForm,
-    NameForm,
-    OpaqueSugar,
-    Term,
-} from './term'
+import type { Body, Field, LiteralForm, NameForm, Term } from './term'
 import {
     alwaysWritten,
-    callerViewsApart,
     clauseForm,
     clauseLiteralsOf,
-    crossing,
+    compatible,
     elementAdapter,
     elementPredicates,
     literalAlternatives,
-    meet,
     member as memberOf,
-    occA,
-    occV,
     ownsNullOf,
-    restricts,
-    separable,
     setBaseOf,
-    sharedLiterals,
-    spelled,
 } from './term'
 
 /**
@@ -2197,53 +2182,17 @@ export const nullable = <T, A extends AttributeValue>(
 
 // ── the escape hatch ────────────────────────────────────────────────
 
-/**
- * `opaque`'s codec, with its **term's kind visible in the type**.
- *
- * The narrowing exists for one caller: {@link ValidateOptions} refuses a union holding an `opaque`
- * option, and to do that at compile time the type has to say which term this is. `AttributeCodec`
- * declares `def` as the whole of {@link Term}, so `opaque.def.kind` was the full twenty-one-member
- * union and no clause could match on it.
- *
- * **Matching on the kind and not on the decoded type**, deliberately: an adapter at an `unknown`
- * outer type also decodes to `unknown`, and it is not `opaque` — it admits exactly what its own
- * conversion admits, which may be one value. The rule is about a term that admits *everything*,
- * and the term is what says so.
- */
-type OpaqueCodec<Def = { readonly kind: 'opaq' }> = AttributeCodec<unknown> & {
-    readonly def: Def
-}
-
-/**
- * The term of a numeric policy: a `held` over the canonical `opaque`, named by `via`.
- *
- * {@link ValidateOptions} matches this shape as well as the bare `opaq`, because a policy admits
- * every value that holds no number, and so no other option can share a union with it.
- */
-type OpaquePolicyDef = {
-    readonly kind: 'held'
-    readonly inner: { readonly kind: 'opaq' }
-    readonly via: OpaqueSugar
-}
-
-// **One cast per codec, and it recovers what the construction site erases.** `codecOfTerm` takes
-// a `Term` and returns a codec whose `def` is `Term`, so the kind of the term it was *given* is not
-// in its result type. `opaqueTerms` holds exactly these shapes; nothing else can be. Making
-// `codecOfTerm` generic in its term would push a type parameter through twenty-one constructors
-// to narrow three.
-const canonicalOpaque = codecOfTerm(opaqueTerms.canonical) as OpaqueCodec
+const canonicalOpaque = codecOfTerm<unknown, AttributeValue>(
+    opaqueTerms.canonical,
+)
 const opaquePolicies: {
-    readonly [Of in opaque.Numbers]: OpaqueCodec<OpaquePolicyDef>
+    readonly [Of in opaque.Numbers]: AttributeCodec<unknown>
 } = {
-    lossy: codecOfTerm(opaqueTerms.lossy) as OpaqueCodec<OpaquePolicyDef>,
-    refuse: codecOfTerm(opaqueTerms.refuse) as OpaqueCodec<OpaquePolicyDef>,
+    lossy: codecOfTerm<unknown, AttributeValue>(opaqueTerms.lossy),
+    refuse: codecOfTerm<unknown, AttributeValue>(opaqueTerms.refuse),
 }
 
-function opaqueOf(): OpaqueCodec
-function opaqueOf(numbers: opaque.Numbers): OpaqueCodec<OpaquePolicyDef>
-function opaqueOf(
-    numbers?: opaque.Numbers,
-): OpaqueCodec | OpaqueCodec<OpaquePolicyDef> {
+function opaqueOf(numbers?: opaque.Numbers): AttributeCodec<unknown> {
     return numbers === undefined ? canonicalOpaque : opaquePolicies[numbers]
 }
 
@@ -2268,7 +2217,7 @@ function opaqueOf(
  * Callable *and* a codec, which is what lets `opaque.encode` and {@link opaque.Encode} keep the same
  * name.
  */
-export const opaque: OpaqueCodec & typeof opaqueOf = Object.assign(
+export const opaque: AttributeCodec<unknown> & typeof opaqueOf = Object.assign(
     opaqueOf,
     canonicalOpaque,
 )
@@ -3380,7 +3329,7 @@ type SharedAcross<Fs extends readonly unknown[]> = Fs extends readonly [
     ? (DeclaredNames<H> & DeclaredNames<T[number]>) | SharedAcross<T>
     : never
 
-/** Whether any factor is `never`, matched on the term's kind as {@link HasOpaque} is. */
+/** Whether any factor is `never`, matched on the term's kind. */
 type HasNeverFactor<Fs extends readonly unknown[]> = Fs extends readonly [
     infer H,
     ...infer T extends readonly unknown[],
@@ -3400,8 +3349,7 @@ type HasNeverFactor<Fs extends readonly unknown[]> = Fs extends readonly [
  * **Three rules, in the order that gives the advice a caller can act on.** A `never` factor comes
  * first: §5's (D) fails at a product against a factor that holds nothing, because every merge
  * holds nothing and two empty held sets are comparable in both directions. Without this clause the
- * open-factor one fired on it and told the caller to close a rest policy `never` does not have,
- * which is the same misdirection {@link ValidateOptions} orders its `opaque` clause to avoid.
+ * open-factor one fired on it and told the caller to close a rest policy `never` does not have.
  *
  * The shared name is next, because its message names the name. The open factor is last: a `rest`
  * codec holds an undeclared name through a codec of its own, and the product would have to hold it
@@ -3512,7 +3460,7 @@ const productOfTwo = (first: unknown, second: unknown): unknown => {
         }),
     )
     // one merge is an object and needs no union around it; several are one flat union, built
-    // through `union` itself so `Collides` and `separable` run over the products
+    // through `union` itself so `compatible` runs over the products
     return merges.length === 1
         ? merges[0]
         : union(merges as unknown as readonly AnyCodec[])
@@ -3527,8 +3475,8 @@ const productOfTwo = (first: unknown, second: unknown): unknown => {
  *
  * **A union factor distributes.** The result is one flat `union` of the `n·m` merges, outer over
  * the first factor's options and inner over the second — the `flatMap` order the model's
- * distribution law states. It is built through {@link union}, so `Collides` and `separable` run
- * over the products and a pair of merges no value can tell apart is refused there rather than here.
+ * distribution law states. It is built through {@link union}, so `compatible` runs
+ * over the products and a pair of merges it cannot show compatible is refused there rather than here.
  *
  * **More than two factors fold left.** `product(a, b, c)` is `product(product(a, b), c)`, and the
  * model's `merge_assoc` on `fields` and `rest` is why the other nesting gives the same term.
@@ -4109,25 +4057,6 @@ const slicedDissection = (
 
 // ── unions with no discriminator ────────────────────────────────────
 
-/**
- * Whether two variants can ever hold the same set of attribute names.
- *
- * A variant admits every name set between its required keys and its declared keys. Two such
- * intervals intersect exactly when each variant's required keys are all declared by the other —
- * which makes collision decidable at declaration, before any item exists.
- *
- * Prior art: degenerate's `VariantOverlapAnalyzer` runs the same check while generating Dart from
- * an OpenAPI spec and warns "consider adding a discriminator". It has to be conservative — it works
- * from a spec it did not write and can only report what it can *prove* — and it cannot refuse,
- * because real specs violate `oneOf` constantly. A hand-written codec is not so constrained: the
- * rule below is exact rather than one-sided, and a collision is an error rather than a warning.
- */
-type Collides<A, B> = [Exclude<RequiredKeysOf<A>, keyof B>] extends [never]
-    ? [Exclude<RequiredKeysOf<B>, keyof A>] extends [never]
-        ? true
-        : false
-    : false
-
 type RequiredKeysOf<Spec> = {
     [K in keyof Spec]-?: Spec[K] extends { readonly [optionalMarker]: true }
         ? never
@@ -4160,265 +4089,6 @@ type PinsALiteral<V> = [V] extends [never]
           : [V] extends [string | number | boolean]
             ? true
             : false
-
-/** What a spec declares at one name, as the type that name decodes to. */
-type PinnedAt<Spec, K extends PropertyKey> = K extends keyof Spec
-    ? Spec[K] extends AttributeCodec<infer V, AttributeValue>
-        ? V
-        : never
-    : never
-
-/**
- * **Two specs pin one shared required name to alternatives with nothing in common.**
- *
- * `Calculus.OrthS` written in the type, and `required` on both sides is a rule rather than a
- * precaution: two objects sharing an *optional* literal name with disjoint alternatives both admit
- * the map that omits the name, so a mark-blind test would certify a pair no value can resolve.
- *
- * At some shared name, not at the first, and the mapped type over the intersection of the two
- * required key sets is what makes the answer independent of the order they were written in.
- */
-type SharedRequired<A, B> = Extract<
-    RequiredKeysOf<A> & RequiredKeysOf<B>,
-    PropertyKey
->
-
-type LiteralsApart<A, B> = true extends {
-    [K in SharedRequired<A, B>]: PinsALiteral<PinnedAt<A, K>> extends true
-        ? PinsALiteral<PinnedAt<B, K>> extends true
-            ? [PinnedAt<A, K> & PinnedAt<B, K>] extends [never]
-                ? true
-                : false
-            : false
-        : false
-}[SharedRequired<A, B>]
-    ? true
-    : false
-
-/**
- * **The structural meet of two object options**: some value satisfies both structures.
- *
- * The whole of what structural admission decides, in the type. `denote.ts` reads a value's names
- * and then every literal field it carries; this asks the same two questions of the declarations.
- * The name intervals must meet — {@link Collides} — *and* no shared required literal name may tell
- * the two apart. Either alone is not the rule: names alone refuse
- * `union([object({ kind: string('a'), x: string }), object({ kind: string('b'), x: number })])`,
- * which resolves; literals alone accept two options with no name in common at all, which do not
- * collide in the first place.
- */
-type StructuralMeet<A, B> = Collides<A, B> extends true
-    ? LiteralsApart<A, B> extends true
-        ? false
-        : true
-    : false
-
-type PairwiseConflictsFrom<
-    Head,
-    Rest extends readonly unknown[],
-    Label extends string,
-    At extends number,
-    Cursor extends readonly unknown[],
-> = Rest extends readonly [infer Next, ...infer Tail extends readonly unknown[]]
-    ?
-          | (StructuralMeet<Head, Next> extends true
-                ? `${Label} ${At} and ${Cursor['length']}`
-                : never)
-          | PairwiseConflictsFrom<Head, Tail, Label, At, [...Cursor, unknown]>
-    : never
-
-/**
- * **Which pairs of options meet**, as `${Label} i and j`, over every pair once.
- *
- * `Label` is a string and not a second predicate, because TypeScript has no way to pass one: a
- * higher-kinded parameter would be what the walk actually wants, and the walk is the part worth
- * having once.
- */
-type PairwiseConflicts<
-    Specs extends readonly unknown[],
-    Label extends string,
-    Cursor extends readonly unknown[] = [],
-> = Specs extends readonly [
-    infer Head,
-    ...infer Rest extends readonly unknown[],
-]
-    ?
-          | PairwiseConflictsFrom<
-                Head,
-                Rest,
-                Label,
-                Cursor['length'],
-                [...Cursor, unknown]
-            >
-          | PairwiseConflicts<Rest, Label, [...Cursor, unknown]>
-    : never
-
-/**
- * Rejects a declaration whose variants cannot be told apart, at the declaration rather than on the
- * first item that collides in production.
- */
-export type ValidateVariants<Specs extends readonly unknown[]> = [
-    PairwiseConflicts<Specs, 'variants'>,
-] extends [never]
-    ? unknown
-    : ErrorMessage<`[untagged] ${PairwiseConflicts<Specs, 'variants'>} can hold the same attributes and cannot be told apart; give them a discriminator, or a literal field that tells them apart`>
-
-/**
- * Whether two options read back as types a value could not choose between.
- *
- * One direction is enough to be ambiguous: if everything of A's type is also a valid B, a value of
- * that type matches both. `string` and `decimal` both read back as `string`, so *every* value is
- * ambiguous — which is also why the union is ill-formed rather than merely risky: its entity type is
- * `string`, so nothing about a value says which option produced it and `decode ∘ encode = id` cannot
- * hold. `string('A')` and `string('B')` read back as `'A'` and `'B'`, which no value satisfies
- * both of.
- */
-type Overlaps<A, B> = [Decoded<A>] extends [Decoded<B>]
-    ? true
-    : [Decoded<B>] extends [Decoded<A>]
-      ? true
-      : false
-
-/**
- * Object options are exempt, because a different rule already covers them.
- *
- * Two object options are told apart by their structure, which is neither stricter nor looser than
- * their types but a different question: `{ a, b }` is assignable to `{ a }`, and yet an item
- * carrying both attributes is admitted by only one of them, while two options whose types differ at
- * a field no literal pins are not told apart at all. Judging those by type would refuse
- * declarations that work and accept declarations that do not, so they are judged by
- * {@link StructuralMeet} instead.
- */
-type BothObjects<A, B> = A extends AnyObjectCodec
-    ? B extends AnyObjectCodec
-        ? true
-        : false
-    : false
-
-/**
- * **One option's decoded type is a strict subtype of another's**, so every value it admits, the
- * other admits too.
- *
- * `Overlaps` above answers assignability *either* way round and reports ambiguity. This is the
- * half of it where the containment is one-directional, and it is a different failure with
- * different advice: §5's `select` acts only where exactly one option admits, so the narrower
- * option is never selected and no discriminator reaches it.
- *
- * Mutual assignability answers `false` here and falls through to `Overlaps`, which is the right
- * split: two options that read back as the *same* type are ambiguous, and one inside the other is
- * dead. `union([string('A'), string('B')])` answers `false` on both counts, neither literal being
- * assignable to the other, and declares.
- */
-type Restricts<A, B> = [Decoded<A>] extends [Decoded<B>]
-    ? [Decoded<B>] extends [Decoded<A>]
-        ? false
-        : true
-    : false
-
-type RestrictsFrom<
-    Head,
-    Rest extends readonly unknown[],
-    At extends number,
-    Cursor extends readonly unknown[],
-> = Rest extends readonly [infer Next, ...infer Tail extends readonly unknown[]]
-    ?
-          | (BothObjects<Head, Next> extends true
-                ? never
-                : Restricts<Head, Next> extends true
-                  ? `option ${At} inside option ${Cursor['length']}`
-                  : Restricts<Next, Head> extends true
-                    ? `option ${Cursor['length']} inside option ${At}`
-                    : never)
-          | RestrictsFrom<Head, Tail, At, [...Cursor, unknown]>
-    : never
-
-type Restricting<
-    Options extends readonly unknown[],
-    Cursor extends readonly unknown[] = [],
-> = Options extends readonly [
-    infer Head,
-    ...infer Rest extends readonly unknown[],
-]
-    ?
-          | RestrictsFrom<Head, Rest, Cursor['length'], [...Cursor, unknown]>
-          | Restricting<Rest, [...Cursor, unknown]>
-    : never
-
-type OverlapsFrom<
-    Head,
-    Rest extends readonly unknown[],
-    At extends number,
-    Cursor extends readonly unknown[],
-> = Rest extends readonly [infer Next, ...infer Tail extends readonly unknown[]]
-    ?
-          | (BothObjects<Head, Next> extends true
-                ? never
-                : Overlaps<Head, Next> extends true
-                  ? `options ${At} and ${Cursor['length']}`
-                  : never)
-          | OverlapsFrom<Head, Tail, At, [...Cursor, unknown]>
-    : never
-
-type Overlapping<
-    Options extends readonly unknown[],
-    Cursor extends readonly unknown[] = [],
-> = Options extends readonly [
-    infer Head,
-    ...infer Rest extends readonly unknown[],
-]
-    ?
-          | OverlapsFrom<Head, Rest, Cursor['length'], [...Cursor, unknown]>
-          | Overlapping<Rest, [...Cursor, unknown]>
-    : never
-
-/**
- * Whether any option is an `opaque` — the one option that cannot share a union.
- *
- * Matched on the **term's kind**, which is why {@link opaque} narrows its `def`. Not on the decoded
- * type: an adapter at an `unknown` outer type also reads back as `unknown` and is not `opaque`,
- * because it admits exactly what its own conversion admits and that may be a single value. What
- * this rule is about is a term that admits *everything*, and only the term says so.
- */
-type HasOpaque<Options extends readonly unknown[]> = Options extends readonly [
-    infer Head,
-    ...infer Rest extends readonly unknown[],
-]
-    ? Head extends
-          | { readonly def: { readonly kind: 'opaq' } }
-          | { readonly def: OpaquePolicyDef }
-        ? true
-        : HasOpaque<Rest>
-    : false
-
-/**
- * Four rules, in the order that gives the more specific message.
- *
- * **The two containment rules are reported first, because their advice differs.** The other two
- * failures are ambiguity, and the answer to ambiguity is a discriminator. Containment is not
- * ambiguity: where one option admits every value another admits, §5's `select` acts nowhere on the
- * narrower one, so it is a declared option no value reaches. No discriminator fixes it and no
- * ranking resolves it — the option has to go, and the message has to say so.
- *
- * **`opaque` is the containment rule at its widest**, and it is matched on the term's kind rather
- * than on the decoded type, because it reads back as `unknown`. {@link Restricting} is the same
- * rule where the decoded types say it: a literal inside its base, a set of a literal inside the
- * plain set. Both would otherwise fall to the overlap clause and be offered the discriminator
- * advice, which is why the order is load-bearing rather than cosmetic.
- *
- * The runtime carries the same two rules in the same order — `term.ts`'s `restricts` ahead of the
- * occupancy rows — so a cast that reaches past this gets the same sentence rather than a different
- * one.
- *
- * An overlap is the deeper of the remaining two — the union cannot round-trip at all — so it is
- * reported before a name collision, which {@link ValidateVariants} reports.
- */
-export type ValidateOptions<Options extends readonly unknown[]> =
-    HasOpaque<Options> extends true
-        ? ErrorMessage<`[union] one option is \`opaque\`, which admits every value the others admit — so no value can select between them and the others can never be chosen. Remove the \`opaque\` option; a discriminator does not fix this`>
-        : [Restricting<Options>] extends [never]
-          ? [Overlapping<Options>] extends [never]
-              ? ValidateVariants<ObjectSpecsOf<Options>>
-              : ErrorMessage<`[union] ${Overlapping<Options>} read back as the same type, so nothing about a value says which one it came from — give them a discriminator and use discriminatedUnion`>
-          : ErrorMessage<`[union] ${Restricting<Options>}: every value the narrower option admits, the wider one admits too, so no value can ever select it. Remove the narrower option; a discriminator does not fix this`>
 
 /**
  * An object codec with its spec forgotten — the constraint form, as {@link AnyCodec} is for codecs.
@@ -4466,45 +4136,6 @@ type AnyTaggedCodec = {
         readonly discriminator: string
     }
 }
-
-/**
- * The specs of the object options, with the others dropped.
- *
- * Only object options can collide on attribute names, so only they are checked. Positions in the
- * message {@link ValidateVariants} produces therefore count object options — the same thing for the
- * all-object union that is the common case.
- *
- * **A tagged option is one of the others, and its `spec` is the trap that says why.** A
- * {@link Tagged} carries its variants keyed by tag, so `item.spec` there is the *tag map* —
- * `{ placed: …, delivered: … }` — and not a record of attributes. Read as one, two tagged options
- * both "require" `placed` and `delivered`, {@link Collides} answers true, and a union of two
- * tagged options was refused whatever names its variants carried. That refusal was wrong in both halves: the specs
- * compared are not attribute specs, and the question is not asked of a tagged option at all.
- *
- * {@link identifies} is why it is not asked. A tag lookup fails for a value carrying no tag it
- * knows, so a tagged option identifies its own values and {@link separable} certifies it against
- * anything — the runtime selects it by attempting, never by names. Dropping it here is what makes
- * the two halves agree.
- *
- * Nothing is lost. Ambiguity between tagged options is still refused by the two clauses ahead of
- * this one: {@link Restricting} where one option's entity is a subtype of another's, and
- * {@link Overlapping} where they read back as the same type.
- *
- * This is what lets the two axes of a product nest — the outer {@link union} picking a group, an
- * inner {@link discriminatedUnion} picking the variant by tag — where neither combinator spans
- * both axes alone.
- */
-export type ObjectSpecsOf<Options extends readonly unknown[]> =
-    Options extends readonly [
-        infer Head,
-        ...infer Rest extends readonly unknown[],
-    ]
-        ? Head extends { readonly item: { readonly discriminator: string } }
-            ? ObjectSpecsOf<Rest>
-            : Head extends { readonly item: { readonly spec: infer S } }
-              ? [S, ...ObjectSpecsOf<Rest>]
-              : ObjectSpecsOf<Rest>
-        : []
 
 /** The entity a list of options describes: whatever any one of them reads back. */
 export type DerivedUnion<Options extends readonly unknown[]> = {
@@ -4703,7 +4334,7 @@ export type AssignmentOf<Spec, Ks extends readonly PropertyKey[]> = {
  * question about the collection — "does anybody name this key" — and an option that names none of
  * them passes, because its neighbours answered for it. Every other rule here is already distributed
  * over the options one at a time ({@link MultiTagged}) or over their pairs
- * ({@link SharedAssignments}, {@link Overlapping}); this is the same shape, and it was the one
+ * ({@link SharedAssignments}); this is the same shape, and it was the one
  * clause that was not.
  */
 type UntaggedKey<
@@ -4760,8 +4391,7 @@ type SharedAssignmentsFrom<
  *
  * A discriminated union is a *lookup*, so two options claiming one assignment is not an ambiguity
  * to be resolved when a value turns up — it is a table with one key written twice, and the second
- * write wins in silence. Decidable from the declaration, so it is refused there, the way
- * {@link Overlapping} refuses an untagged union's.
+ * write wins in silence. Decidable from the declaration, so it is refused there.
  */
 type SharedAssignments<
     Specs extends readonly unknown[],
@@ -5175,12 +4805,8 @@ export const discriminatedUnion = <
  * no value will ever name. `discriminatedUnion` stays refused on an empty list — that list is a
  * typo or a `map` over an empty array — and this is the one name that reaches the bottom.
  *
- * The model makes it an option of any `union`: an empty option is compatible with every option,
- * so `union([X, never])` meets its obligation
- * (`pairwiseCompat_never_left`, `pairwiseCompat_never_right`). `union` here refuses it all the same, and on a
- * different ground: an option admitting nothing can never be chosen, which `restricts` answers
- * and which is a lint rather than a soundness rule. Well formed and useful are different claims,
- * and `.separations.lean` carries the divergence as a theorem.
+ * It is the zero of `union`: an empty option is compatible with every option
+ * (`pairwiseCompat_never_left`, `pairwiseCompat_never_right`), so `union([X, never])` is `X`.
  */
 export const never: AttributeCodec<never, never> & {
     readonly def: { readonly kind: 'never' }
@@ -5191,65 +4817,35 @@ export const never: AttributeCodec<never, never> & {
 /**
  * A union told apart by what each option holds, with no tag to switch on — `zod`'s `union`.
  *
- * Options are codecs of any kind, and the rule is the same for all of them: **exactly one** option
- * must match, or it is an error. What "match" means is the only thing that differs, and it differs
- * because the options do — see {@link Option}. Each option is attempted, and the option that
- * alone admits the value is chosen. An object option is no exception: the names present select
- * nothing.
+ * **The union is the join of its options.** Options are codecs of any kind. The first option that
+ * admits a value writes the value, and the first option that reads an attribute reads it. An
+ * object option is no exception: the names present select nothing.
  *
- * Ambiguity is reported rather than resolved by declaration order. Two options that can admit one
- * value are refused at the declaration where the guard can see it. Where the guard cannot, two
- * options that both admit one value are reported when that value turns up.
- *
- * **Refused rather than scored**, and that is what keeps `decode ∘ encode = id` where first-match
- * wins does not: the one option that admits a value is the one option that reads what it wrote, so
- * both directions reach the same variant. A tie-break would commit in silence to an owner of the
- * overlap that nobody named.
+ * **The declaration refuses a pair that it cannot show compatible**, and nothing else. Two
+ * compatible options that both admit a value write it to one attribute, and two that both read an
+ * attribute read it to one value, so no value and no attribute can observe the option order.
+ * Options that overlap, nest, or repeat are therefore well formed: `union([string('A'), string])`
+ * is `string`. A pair that the declaration cannot show compatible is refused, because there the
+ * order would choose an owner of the overlap that nobody named.
  *
  * @example
  * ```ts
  * union([object({ petId: string, price: decimal }), object({ petIds: array(string) })])
  * union([string, number])                    // an attribute that is either
  * union([object({ at: string }), string])     // a map or a bare string
+ * union([string('A', 'B'), string('B', 'C')]) // two restrictions of one base
  * ```
  */
 export const union = <const Options extends readonly AnyCodec[]>(
-    options: Options & ValidateOptions<Options>,
+    options: Options,
 ): UnionCodec<DerivedUnion<Options>, Options> => {
     const all: readonly Option[] = (options as readonly AnyCodec[]).map(
         optionOf,
     )
 
-    /**
-     * Two options that no *value* can choose between, refused where the declaration is.
-     *
-     * {@link separable} is the rule and states its own four exemptions; this is why the question is
-     * asked *here*. `ValidateOptions` refuses the pairs no stored attribute can choose between at
-     * compile time, by asking whether they read back as the same type. This is the other direction,
-     * and the types cannot see it: `array(string)` and `array(number)` read back as different types
-     * and are handed the same array. Asking once at the declaration reports it once, where asking
-     * per encode would report it once per write forever.
-     *
-     * **Which containers separate turns on whether the container has an empty inhabitant**, and the
-     * pairs that share a value share only that one:
-     *
-     *     array(string) / array(number)     `[]`
-     *     open object of string / of number `{}`
-     *     set(string) / set(number)         nothing
-     *
-     * So `array` and an open object stay refused and `set` does not, because **DynamoDB has no empty
-     * set**. That is the asymmetry the term's own rows record — `[]` is admitted and an empty `Set`
-     * is not — deciding a question about declarations. `codec.laws.spec.ts` pins both halves.
-     *
-     * **A sufficient condition, deliberately.** "No value can choose between these two" is not
-     * decidable from two terms in general, so this refuses wherever it cannot show separation.
-     * Widening it means adding a container that provably has no empty inhabitant, not weakening
-     * what is here.
-     */
     // **Every option has a term.** A `set` over a restricted element is spelled as a restriction
     // of the set, and a `set` whose element reduces to no base is refused by `.set()` at
-    // construction — so the conversion is total here. This carried a `Term | undefined` and a row
-    // for the absent case until the suite was run with the catch removed and stayed green
+    // construction — so the conversion is total here
     const pairs = all.map((option) => ({
         option,
         term: option.codec.def,
@@ -5257,57 +4853,10 @@ export const union = <const Options extends readonly AnyCodec[]>(
 
     for (const [at, { option: first, term: x }] of pairs.entries()) {
         for (const { option: second, term: y } of pairs.slice(at + 1)) {
-            // **A crossing pair is refused first**, because `separable` can accept one: the value
-            // does not decide the branch, and a disjoint partition of the two is what decides it
-            const overlap = crossing(x, y)
-            if (overlap) {
-                throw new CodecError(
-                    `${first.describe} and ${second.describe} cross: both admit every value of ${spelled(overlap)}, so the value does not decide the branch. Write that overlap as an option of its own, and exclude it from the other two, for example with an \`optional(never)\` name`,
-                )
-            }
-            if (separable(x, y)) continue
-            // **The restriction refusal comes first, because its advice differs.** The two below
-            // are ambiguity and the answer to ambiguity is a discriminator. This one is not:
-            // every value the narrower option admits, the wider one admits too, so `select` acts
-            // nowhere on the narrower and it can never be chosen. The option has to go. The
-            // `opaque` refusal is the same sentence and `ValidateOptions` orders its clauses the
-            // same way, for the same reason.
-            const narrow = restricts(x, y)
-                ? ([first, second] as const)
-                : restricts(y, x)
-                  ? ([second, first] as const)
-                  : undefined
-            if (narrow) {
-                throw new CodecError(
-                    `${narrow[0].describe} admits only values that ${narrow[1].describe} also admits, so no value can ever select it and the option can never be chosen. Remove it; a discriminator does not fix this`,
-                )
-            }
-            // **The values, before the slots.** Where both options pin a set of values, the
-            // values are what refused them and the slot they share is incidental — two `string`
-            // literals always share `S`, and that says nothing about whether they are resolvable.
-            // So this names what actually meets.
-            const shared = sharedLiterals(x, y)
-            if (shared?.length) {
-                throw new CodecError(
-                    `${first.describe} and ${second.describe} both carry ${shared.map(namedLiteral).join(', ')}, so no value and no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,
-                )
-            }
-            // the label the refusal names, asked again on the path that is about to throw:
-            // `separable` answers the `Bool` the model's `Orth` answers, so the meeting is
-            // recomputed here rather than carried back through it. Where the caller views of a
-            // `held` are apart, the write side is shown, and the read side is what refuses
-            const bothWrite = meet(occV(x), occV(y))
-            const bothRead = meet(occA(x), occA(y))
-            if (bothWrite && !(bothRead && callerViewsApart(x, y))) {
-                throw new CodecError(
-                    `${first.describe} and ${second.describe} both take the same kind of value — ${bothWrite} — and the declaration cannot show that no value is taken by both, so no value can choose between them; give the entity a discriminator and use discriminatedUnion`,
-                )
-            }
-            if (bothRead) {
-                throw new CodecError(
-                    `${first.describe} and ${second.describe} both store '${bothRead}', and the declaration cannot show that no stored attribute is read by both, so no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,
-                )
-            }
+            if (compatible(x, y)) continue
+            throw new CodecError(
+                `${first.describe} and ${second.describe} are not shown compatible: an adapter or a thunk is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
+            )
         }
     }
 

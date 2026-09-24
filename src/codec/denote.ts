@@ -621,11 +621,6 @@ export const altSem = (
     /** Every option, for a message that says what was available. */
     const listed = () => all.map((option) => option.describe).join(' | ')
 
-    const ambiguous = (first: Option, second: Option, what: string) =>
-        new CodecError(
-            `${first.describe} and ${second.describe} both admit ${what}; these options cannot be told apart, so give them a discriminator and use discriminatedUnion`,
-        )
-
     const unmatched = (what: string) =>
         new CodecError(`no option admits ${what}; options are ${listed()}`)
 
@@ -643,22 +638,21 @@ export const altSem = (
             : label
 
     /**
-     * The one option this could be, or why there is not exactly one.
+     * The option this is for, or why no option is.
      *
-     * Two steps, and both are needed. The **kind** filter comes first and is the only step that can
-     * be trusted on its own: an option that takes a string cannot be the one for a number, and an
-     * option that writes `S` cannot read an `N`. If it leaves one option, that option *is* the answer
-     * — so a failure past that point is its error, reported as itself rather than swallowed into "no
-     * option matched".
+     * Two steps. The **kind** filter comes first and is the only step that can be trusted on its
+     * own: an option that writes `S` cannot read an `N`. If it leaves one option, that option *is*
+     * the answer, so a failure past that point is its error, reported as itself rather than
+     * swallowed into "no option matched".
      *
-     * If it leaves several, they are **tried**, and exactly one must succeed. The first step alone
-     * would not do: `string('A')` and `string('B')` take the same kind of value and are never
-     * ambiguous.
+     * If it leaves several, they are **tried**, and the first that succeeds answers. The options of
+     * every union this library builds are compatible, so two that both read an attribute read it
+     * to one value, and the order is not observable. `union` shows it at the declaration, `opaque`'s
+     * options are compatible by kind, and a meet or a slice keeps restrictions of compatible
+     * options.
      *
-     * **This is the read side only now.** Attempting was once the only thing available on both
-     * sides, because encoding did not validate and a permissive option would "succeed" on a value
-     * only its neighbour meant. The write side decides instead — {@link onlyAdmitting} — and this
-     * one still attempts because there is no `AdmA` in `src/` to decide a stored attribute with.
+     * **This is the read side.** The write side decides instead, {@link onlyAdmitting}, and this
+     * one attempts because there is no `AdmA` in `src/` to decide a stored attribute with.
      */
     const only = <A>(
         survives: (option: Option) => boolean,
@@ -668,16 +662,11 @@ export const altSem = (
         const candidates = all.filter(survives)
         if (candidates.length === 0) return unmatched(named)
         if (candidates.length === 1) return through(candidates[0] as Option)
-        let first: Option | undefined
-        let carried: Result<A> | undefined
         for (const option of candidates) {
             const attempt = through(option)
-            if (failed(attempt)) continue
-            if (first) return ambiguous(first, option, named)
-            first = option
-            carried = attempt
+            if (!failed(attempt)) return attempt
         }
-        return first ? (carried as Result<A>) : unmatched(named)
+        return unmatched(named)
     }
 
     /**
@@ -690,24 +679,16 @@ export const altSem = (
         accepts(option.codec, value)
 
     /**
-     * The same, **decided rather than attempted** — the write side only.
-     *
-     * `only` finds its answer by encoding through every survivor and keeping the one that did not
-     * fail. That was the only thing available while `encode` did not validate, and it is why this
-     * union used to report ambiguity that was not there: a resolver that decides by *trying*
-     * inherits every looseness of everything it tries, and then reports the result as a property of
-     * the declaration. `union([held(decimal, date, dateAdapter), string])` could not encode a `Date`
-     * for exactly that reason while `string` accepted one. That union is now refused where it is
-     * declared, because a foreign held side writes every kind.
+     * The same, **decided rather than attempted** — the write side only. The first option that
+     * admits the value writes it, and compatibility makes every admitting option write it to one
+     * attribute.
      *
      * {@link accepts} is the decision for every option, and {@link admitOption} is that one row. §3's `Adm`,
      * proved exact at all 21 constructors, and `codec.laws.spec.ts` holds
      * `accepts(c, v) ⟺ !failed(c.encode(v))` over its whole table — so on the values in play this
      * selects the same option `only` would have found by attempting, and says *why* rather than
-     * discovering it. Two differences that are improvements rather than
-     * equivalences: a `held` option whose adapter **throws** on a value it does not own is filtered
-     * out here instead of propagating, and an ambiguity is reported without first writing one of
-     * the two answers.
+     * discovering it. A `held` option whose adapter **throws** on a value it does not own is
+     * filtered out here instead of propagating.
      *
      * **The read side attempts**, because there is nothing to decide with: the model has `AdmA` on
      * the attribute side and `src/` has no port of it. The model's `admitOptA` is that attempt, an
@@ -723,15 +704,8 @@ export const altSem = (
         const candidates = all.filter(
             (option) => survives(option) && admitOption(option, value),
         )
-        if (candidates.length === 0) return unmatched(named)
-        if (candidates.length > 1) {
-            return ambiguous(
-                candidates[0] as Option,
-                candidates[1] as Option,
-                named,
-            )
-        }
-        return through(candidates[0] as Option)
+        const first = candidates[0]
+        return first === undefined ? unmatched(named) : through(first)
     }
 
     /**

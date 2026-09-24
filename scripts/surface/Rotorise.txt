@@ -59,7 +59,6 @@ ObjectCodec
 ObjectEntry
 ObjectOf
 ObjectSlot
-ObjectSpecsOf
 OptionalCodec
 PathOf
 PathTerminal
@@ -93,8 +92,6 @@ UndefinableCodec
 UnionCodec
 Untagged
 UntaggedSpec
-ValidateOptions
-ValidateVariants
 VariantOf
 WithLegacyReadOptions
 Writes

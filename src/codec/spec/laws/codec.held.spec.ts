@@ -315,20 +315,20 @@ describe('composing with the rest', () => {
 
     /**
      * **A held side that admits `[]` is refused beside a list of another element.** The caller
-     * views `array(string)` and `array(number)` both admit `[]`, so the value `[]` does not decide
-     * the branch, although the inner set of the adapter refuses `[]` at `encode`.
+     * views `array(string)` and `array(number)` both admit `[]`, and the declaration cannot show
+     * that the adapter writes `[]` where `array(number)` writes it.
      */
     it('refuses a list of another element beside a held side that admits the empty list', () => {
         const loose = held(string.set(), array(string), {
             encode: (tags: readonly string[]) => new Set(tags),
             decode: (tags) => [...tags],
         })
-        // declared through a cast, as a caller bypassing the compile-time check would
+        // declared through a cast, as a caller passing an erased list would
         const declare = union as unknown as (
             options: readonly AnyCodec[],
         ) => unknown
         expect(() => declare([loose, array(number)])).toThrow(
-            /both take the same kind of value/,
+            /are not shown compatible/,
         )
     })
 })
@@ -339,7 +339,7 @@ describe('two adapters in one union', () => {
         encode: (s: 'on' | 'off') => s === 'on',
         decode: (b) => (b ? 'on' : 'off'),
     })
-    // declared through a cast, as a caller bypassing the compile-time check would
+    // declared through a cast, as a caller passing an erased list would
     const declare = union as unknown as (
         options: readonly AnyCodec[],
     ) => unknown
@@ -364,20 +364,36 @@ describe('two adapters in one union', () => {
 
     /**
      * **Two adapters over one inner term are refused, although their held sides are disjoint.**
-     * A stored `BOOL` is read by both, so the attribute does not decide the branch.
+     * Both read a stored `BOOL`, to two different values.
      */
     it('is refused where both inner terms read one attribute', () => {
         const auto = held(boolean, string('auto'), {
             encode: (_: 'auto') => true,
             decode: (_) => 'auto' as const,
         })
-        expect(() => declare([onOff, auto])).toThrow(/both store 'BOOL'/)
+        expect(() => declare([onOff, auto])).toThrow(/are not shown compatible/)
+    })
+
+    /**
+     * **A boolean beside its negation is refused.** The two options admit every boolean, and they
+     * write `true` to two attributes, so the option order would decide what the union stores.
+     */
+    it('refuses a boolean beside its own negation, because the order would decide the attribute', () => {
+        const flipped = held(boolean, boolean, {
+            encode: (b: boolean) => !b,
+            decode: (b) => !b,
+        })
+        expect(() => declare([boolean, flipped])).toThrow(
+            /are not shown compatible/,
+        )
+        expect(() => declare([flipped, boolean])).toThrow(
+            /are not shown compatible/,
+        )
     })
 })
 
 describe('a literal beside an adapter', () => {
-    // declared through a cast, as a caller bypassing the compile-time check would. The type of
-    // `union` refuses both pairs below, because both options take a caller's string
+    // declared through a cast, as a caller passing an erased list would
     const declare = union as unknown as (
         options: readonly AnyCodec[],
     ) => unknown
@@ -405,16 +421,18 @@ describe('a literal beside an adapter', () => {
             decode: (s) => s.toLowerCase(),
         })
         expect(shout.unsafeDecode(shout.unsafeEncode('x'))).toBe('x')
-        expect(() => declare([shout, string('X')])).toThrow(/both store 'S'/)
+        expect(() => declare([shout, string('X')])).toThrow(
+            /are not shown compatible/,
+        )
     })
 
     /**
-     * **`decimal` and the literal both take the caller's `'1'`.** The union reads `{ S: '1' }` to
-     * `'1'` through the literal, and then refuses to write `'1'`, because both options admit it.
+     * **`decimal` and the literal both take the caller's `'1'`.** `decimal` writes it as `{ N: '1' }`
+     * and the literal writes it as `{ S: '1' }`, so the option order would decide the attribute.
      */
     it('a literal beside an adapter that shares a caller value with it is refused', () => {
         expect(() => declare([decimal, string('1')])).toThrow(
-            /both take the same kind of value/,
+            /are not shown compatible/,
         )
     })
 
@@ -425,7 +443,7 @@ describe('a literal beside an adapter', () => {
      */
     it('a literal beside an adapter is refused, because the held side of the adapter is not a data predicate', () => {
         expect(() => declare([decimal, string('a')])).toThrow(
-            /both take the same kind of value/,
+            /are not shown compatible/,
         )
     })
 })
@@ -511,7 +529,7 @@ describe('the held side restricts both halves', () => {
 })
 
 describe('the held side is the write occupancy of a union option', () => {
-    // declared through a cast, as a caller bypassing the compile-time check would
+    // declared through a cast, as a caller passing an erased list would
     const declare = union as unknown as (
         options: readonly AnyCodec[],
     ) => unknown

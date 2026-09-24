@@ -132,13 +132,12 @@ describe('a codec with no union', () => {
 
 describe('the harness, against planted violations', () => {
     /**
-     * Two options that both admit the same value, which neither guard can see.
+     * Two options that both admit the same value, which the guard cannot see.
      *
-     * `union` refuses an ambiguous pair twice — `ValidateOptions` at the type level where the two
-     * read back as the same type, and the `carries` scan at construction where they take the same
-     * kind of value. A `custom` slips both: it reads back as `number`, so the types are told apart,
-     * and it declares no `carries`, so it is not compared. What it actually does at runtime is
-     * accept any string, which is the situation both guards exist to prevent and neither sees.
+     * `union` reads the terms at construction, and accepts a pair of adapters only where it can
+     * separate them. Two adapters whose held sides understate their admission slip it: the terms
+     * say `number` against `string`, so the pair is separated. What the conversions do at runtime
+     * is accept a `Date` too, which is the situation the guard exists to prevent and does not see.
      * @anchored
      */
     /**
@@ -260,7 +259,7 @@ describe('a foreign held side writes every kind, so a union beside it needs a di
         encode: (at: Date) => String(at.getTime()),
         decode: (at: string) => new Date(Number(at)),
     }
-    // declared through a cast, as a caller bypassing the compile-time check would
+    // declared through a cast, as a caller passing an erased list would
     const declare = union as unknown as (
         options: readonly AnyCodec[],
     ) => unknown
