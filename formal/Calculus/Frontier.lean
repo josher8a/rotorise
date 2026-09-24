@@ -777,15 +777,15 @@ def opaqKinds : List Kind :=
 
 /-- "The recursive union of everything self-identifying" (§3), spelled out: the eight
     options and the eight kinds that identify them. -/
-theorem opaq_onKinds (fuel : Nat) :
-    List.Forall₂ Codec.OnKind (opaqOptions (opaqCodec fuel)) opaqKinds :=
+theorem opaq_onKinds (c : Codec) :
+    List.Forall₂ Codec.OnKind (opaqOptions c) opaqKinds :=
   .cons onKind_string (.cons onKind_boolean (.cons onKind_binary (.cons onKind_null
     (.cons onKind_number (.cons (onKind_set _) (.cons (onKind_array _)
       (.cons (onKind_record _) .nil)))))))
 
 /-- Every option of `opaque` is lawful, given the recursive one is. -/
-theorem lawful_opaqOptions {fuel : Nat} (hop : Lawful (opaqCodec fuel)) :
-    ∀ o ∈ opaqOptions (opaqCodec fuel), Lawful o := by
+theorem lawful_opaqOptions {c : Codec} (hop : Lawful c) :
+    ∀ o ∈ opaqOptions c, Lawful o := by
   intro o ho
   simp only [opaqOptions, List.mem_cons] at ho
   rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | h
@@ -813,15 +813,16 @@ theorem compat_of_exclusive {os : List Codec}
       rw [hxV o ho t hoV] at this; exact List.mem_singleton.mp this
   subst hsame; exact hp
 
-/-- `opaque`'s options are pairwise compatible: each input has one kind, and one option
-    answers to each kind. -/
-theorem compat_opaque (fuel : Nat) (hop : Lawful (opaqCodec fuel)) :
-    ∀ o ∈ opaqOptions (opaqCodec fuel), ∀ o' ∈ opaqOptions (opaqCodec fuel), Compat o o' := by
-  have hz := opaq_onKinds fuel
-  have hp : List.Pairwise (fun S T => ∀ l, S l → ¬ T l) (opaqKinds.map (fun k l => l = k)) := by
+/-- **Options pinned to distinct kinds are pairwise compatible**: each input has one kind, and
+    one option answers to each kind. This is the compatibility of `opaque`'s options, and of the
+    options of any recursive union whose options are kind-disjoint. -/
+theorem compat_of_onKinds {os : List Codec} {ks : List Kind} (hl : ∀ o ∈ os, LawfulCore o)
+    (hz : List.Forall₂ Codec.OnKind os ks) (hnd : ks.Nodup) :
+    ∀ o ∈ os, ∀ o' ∈ os, Compat o o' := by
+  have hp : List.Pairwise (fun S T => ∀ l, S l → ¬ T l) (ks.map (fun k l => l = k)) := by
     rw [List.pairwise_map]
-    exact (show opaqKinds.Nodup by decide).imp fun hne l hl hl' => hne (hl.symm.trans hl')
-  refine compat_of_exclusive (fun o ho => (lawful_opaqOptions hop o ho).core) ?_ ?_
+    exact hnd.imp fun hne l hl hl' => hne (hl.symm.trans hl')
+  refine compat_of_exclusive hl ?_ ?_
   · intro o ho v hv
     refine filter_eq_singleton_of_labels (adm := fun c v => (c.e v).isSome)
       (key := fun v => some v.kind) ?_ hp o ho hv
@@ -833,15 +834,17 @@ theorem compat_opaque (fuel : Nat) (hop : Lawful (opaqCodec fuel)) :
     rw [List.forall₂_map_right_iff]
     exact hz.imp fun _ _ h a ha => ⟨_, rfl, h.2 a ha⟩
 
-/-- `opaque` closes with no bespoke induction: the sum lemma, its options' lemmas, and
-    compatibility computed from the shapes — kinds partition the values, and the same kinds
-    partition the attributes. -/
-theorem lawful_opaqCodec : ∀ (fuel : Nat), Lawful (opaqCodec fuel)
-  | 0 => Lawful.empty
-  | fuel+1 =>
-    -- `μ` is `⊤`: the options name eight different members, so `unanimous` is `none`
-    have hop : Lawful (opaqCodec fuel) := lawful_opaqCodec fuel
-    lawful_altCodec (lawful_opaqOptions hop) (compat_opaque fuel hop) (fun _ hm => nomatch hm)
+/-- `opaque`'s options are pairwise compatible: they are pinned to its eight kinds. -/
+theorem compat_opaque (c : Codec) (hop : Lawful c) :
+    ∀ o ∈ opaqOptions c, ∀ o' ∈ opaqOptions c, Compat o o' :=
+  compat_of_onKinds (fun o ho => (lawful_opaqOptions hop o ho).core) (opaq_onKinds c) (by decide)
+
+/-- One layer of `opaque` is lawful when the layer below is, with no bespoke induction: the sum
+    lemma, its options' lemmas, and compatibility computed from the shapes — kinds partition the
+    values, and the same kinds partition the attributes. -/
+theorem lawful_opaqStep {c : Codec} (hop : Lawful c) : Lawful (opaqStep c) :=
+  -- `μ` is `⊤`: the options name eight different members, so `unanimous` is `none`
+  lawful_altCodec (lawful_opaqOptions hop) (compat_opaque c hop) (fun _ hm => nomatch hm)
 
 end
 

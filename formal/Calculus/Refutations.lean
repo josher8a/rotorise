@@ -485,7 +485,7 @@ the two claims one is gone with the axiom. -/
 
 Not one of §6's nine rows — a row §5 never wrote, and the reason it did not is that
 `opaque` looked like a term with nothing to say. `κ .opaq` is `⊤` and, before `adm`
-was made to ask `opaqCodecω`, so were `adm .opaq` and `admA .opaq`. ~~SepV~~
+was made to ask `opaque`'s codec, so were `adm .opaq` and `admA .opaq`. ~~SepV~~
 offers exactly two routes — a disjoint kind or a disjoint admissible set — and ~~SepA~~
 two more — a distinct named member or a disjoint admissible set. A `⊤` on every one of
 the four is not a weak option; it is an **absorbing** one, in the sense `unknown | T` is

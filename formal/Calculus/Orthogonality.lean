@@ -157,6 +157,9 @@ def occV : Term → Slot → Bool
   | .lazy t      => occV t
   | .union opts  => occVL opts
   | .opaq  => occTop
+  -- a closed variable is the bottom, and a recursive term is over-approximated by every slot
+  | .var _ => occNone
+  | .mu _ => occTop
 
 def occVL : List Term → Slot → Bool
   | [] => fun _ => false
@@ -187,6 +190,8 @@ def occA : Term → Member → Bool
   | .lazy t      => occA t
   | .union opts  => occAL opts
   | .opaq  => occTop
+  | .var _ => occNone
+  | .mu _ => occTop
 
 def occAL : List Term → Member → Bool
   | [] => fun _ => false
@@ -296,6 +301,8 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
       exact occVL_of_mem ht
         (occSoundVL_mem opts (occV_soundL opts) t ht v hadm)
   | .opaq => fun _ _ => rfl
+  | .var _ => fun _ h => by simp [Adm] at h
+  | .mu _ => fun _ _ => rfl
 
 theorem occV_soundL : ∀ (ts : List Term), OccSoundVL ts
   | [] => trivial
@@ -353,6 +360,8 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
       exact occAL_of_mem ht
         (occSoundAL_mem opts (occA_soundL opts) t ht a hadm)
   | .opaq => fun _ _ => rfl
+  | .var _ => fun _ h => by simp [AdmA] at h
+  | .mu _ => fun _ _ => rfl
 
 theorem occA_soundL : ∀ (ts : List Term), OccSoundAL ts
   | [] => trivial

@@ -1,4 +1,4 @@
-import Calculus.Denote
+import Calculus.Guarded
 
 /-!
 # §3–§5 — The judgement
@@ -235,6 +235,16 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- `(union)`: the option judgements. -/
   | union {opts Ts μs} (h : TypedListμ opts Ts μs) :
       Typed (.union opts) (HUnion Ts) (unanimous μs)
+  /-- A variable, read closed. No binder of the derivation gives it a codec, so it holds nothing.
+      Under a `mu`, `soundness` reads the variable from the environment, and this index plays no
+      part there. -/
+  | var (i : Nat) : Typed (.var i) HNever none
+  /-- `mu`: a guarded recursive term. The held set is the limit's own, which is its write domain
+      (`muCodec`), as `opaque`'s `HOpaque` is the fixpoint of its layers. The body's judgement is
+      the premise that `soundness` reads at each stage. `hg` is the guard, a checked condition on
+      the syntax (`Term.guarded`), and it refuses an unguarded binder at construction. -/
+  | mu {b T μ} (hg : (Term.mu b).guarded = true) (h : Typed b T μ) :
+      Typed (.mu b) (fun v => (denote (.mu b)).T v) none
 
 inductive TypedList : List Term → List Held → Prop where
   | nil : TypedList [] []

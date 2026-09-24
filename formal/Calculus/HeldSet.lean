@@ -51,110 +51,47 @@ namespace Calculus
 
 /-! ## `T` as an identity, for `opaque`
 
-With `HOpaque` corrected, the converse of `opaq_TSub` goes through: everything `HOpaque` admits, the
-denotation holds. §6's row asked for exactly this and could not have it while fuel was in
-the statement — the missing "fuel exceeds depth" hypothesis is now `Value.depth`.
+With `HOpaque` corrected, the converse of `opaq_TSub` goes through: everything `HOpaque` admits,
+`opaque` writes. `opaque`'s held set is its write domain (`muCodec`), so the identity is one
+induction over `HOpaque`, and each container case reads `opaque` through itself at the fixed
+point (`Ωe_arr`, `Ωe_map`, `Ωe_strSet` and the other two sets). -/
 
-Note the shape of the induction. The statement quantifies over *all* sufficient budgets
-(`∀ n, Value.depth v ≤ n → …`) rather than fixing `n = Value.depth v`. That is what lets
-the `set`/`array`/`map` cases hand their elements the parent's budget directly, with no
-monotonicity lemma in between: each element's depth is below the list's, which is below
-`n`. -/
-
-mutual
-
-theorem hopaque_T :
-    ∀ (v : Value) (n : Nat), HOpaque v -> Value.depth v <= n ->
-      (opaqCodec n).T v
-  | .str s, n, _, hd => by
-      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨stringCodec, by simp [opaqOptions], ⟨s, rfl⟩⟩
-  | .bool b, n, _, hd => by
-      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨booleanCodec, by simp [opaqOptions], ⟨b, rfl⟩⟩
-  | .bin b, n, _, hd => by
-      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨binaryCodec, by simp [opaqOptions], ⟨b, rfl⟩⟩
-  | .null, n, _, hd => by
-      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨nullCodec, by simp [opaqOptions], rfl⟩
-  | .num d, n, _, hd => by
-      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨numberCodec, by simp [opaqOptions], ⟨d, rfl⟩⟩
-  | .strSet S, n, h, hd => by
-      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      cases h with
-      | strSet _ hall =>
-        exact ⟨(setCodec (opaqCodec n')), by simp [opaqOptions],
-               fun x hx => hopaque_T (.str x) n' (hall x hx) (by
-                  simp only [Value.depth] at hd ⊢; omega)⟩
-  | .numSet S, n, h, hd => by
-      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      cases h with
-      | numSet _ hall =>
-        exact ⟨(setCodec (opaqCodec n')), by simp [opaqOptions],
-               fun x hx => hopaque_T (.num x) n' (hall x hx) (by
-                  simp only [Value.depth] at hd ⊢; omega)⟩
-  | .binSet S, n, h, hd => by
-      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      cases h with
-      | binSet _ hall =>
-        exact ⟨(setCodec (opaqCodec n')), by simp [opaqOptions],
-               fun x hx => hopaque_T (.bin x) n' (hall x hx) (by
-                  simp only [Value.depth] at hd ⊢; omega)⟩
-  | .arr vs, n, h, hd => by
-      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      cases h with
-      | arr _ hall =>
-        have hL : Value.depthL vs <= n' := by simp only [Value.depth] at hd; omega
-        exact ⟨(arrayCodec (opaqCodec n')), by simp [opaqOptions],
-               hopaque_TL vs n' hall hL⟩
-  -- No list companion on this branch: `recordCodec`'s held set is already the pointwise
-  -- statement about the entry function, so the induction hypothesis applies at each key
-  -- with no traversal in between.
-  | .map keys f, n, h, hd => by
-      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      cases h with
-      | map _ _ hall =>
-        exact ⟨(recordCodec (opaqCodec n')), by simp [opaqOptions],
-               fun k => hopaque_T (f k) n' (hall k)
-                 (by have := Value.depth_map_entry (f := f) k; omega)⟩
-termination_by v n => (n, sizeOf v)
-
-theorem hopaque_TL :
-    ∀ (vs : List Value) (n : Nat), (∀ x ∈ vs, HOpaque x) ->
-      Value.depthL vs <= n -> ∀ x ∈ vs, (opaqCodec n).T x
-  | [], _, _, _, x, hx => absurd hx (by simp)
-  | v :: vs, n, hall, hd, x, hx => by
-      rcases List.mem_cons.mp hx with h | hx'
-      · exact h ▸ hopaque_T v n (hall v (by simp))
-          (by simp only [Value.depthL] at hd; omega)
-      · exact hopaque_TL vs n (fun y hy => hall y (by simp [hy]))
-          (by simp only [Value.depthL] at hd; omega) x hx'
-termination_by vs n => (n, sizeOf vs)
-
-end
+/-- Everything `HOpaque` holds, `opaque` writes. -/
+theorem hopaque_e {v : Value} (h : HOpaque v) : (Ω.e v).isSome = true := by
+  induction h with
+  | str s => rfl
+  | bool b => rfl
+  | bin b => rfl
+  | null => rfl
+  | num d => rfl
+  | strSet S _ _ =>
+    rw [Ωe_strSet, encSet_congr (c := Ω) (d := SetBase.string.elem) (fun x _ => rfl)]
+    exact (encSet_base_iff .string (fun _ _ h => Value.str.inj h) S).mpr fun _ _ => rfl
+  | numSet S _ _ =>
+    rw [Ωe_numSet, encSet_congr (c := Ω) (d := SetBase.number.elem) (fun x _ => rfl)]
+    exact (encSet_base_iff .number (fun _ _ h => Value.num.inj h) S).mpr fun _ _ => rfl
+  | binSet S _ _ =>
+    rw [Ωe_binSet, encSet_congr (c := Ω) (d := SetBase.binary.elem) (fun x _ => rfl)]
+    exact (encSet_base_iff .binary (fun _ _ h => Value.bin.inj h) S).mpr fun _ _ => rfl
+  | arr vs _ ih =>
+    rw [Ωe_arr, Option.isSome_map]
+    exact traverse_isSome_of_all ih
+  | map keys f _ ih =>
+    rw [Ωe_map, Option.isSome_map]
+    exact funImage_isSome_iff.mpr ih
 
 /-- **`HOpaque` *is* `opaque`'s held set.** The row §6 called unproved, and unprovable in
     the fuel encoding, closed for the case it said bites hardest. -/
-theorem opaq_T_identity (v : Value) :
-    (opaqCodecω).T v ↔ HOpaque v := by
-  constructor
-  · rintro ⟨n, hn⟩
-    exact opaq_TSub n v hn
-  · intro h
-    exact ⟨Value.depth v, hopaque_T v (Value.depth v) h (Nat.le_refl _)⟩
+theorem opaq_T_identity (v : Value) : Ω.T v ↔ HOpaque v :=
+  ⟨opaq_TSubω v, hopaque_e⟩
 
 /-! ## …and in general, at every rule
 
 `opaq_T_identity` closes (A) at the constructor §3 says it bites hardest at. The general
 statement lives **here rather than beside `typed_TSub`**, which is where its mirror is and
-where it belongs by shape, for one reason that is not a preference: its `opaque` case is
-`opaq_T_identity`, and this module imports `Soundness.lean`. Moving the theorem up would
-mean moving `hopaque_T`'s mutual block with it, and that block is about `Value.depth` — a
-recursion on the *input*, `Opaque.lean`'s, not `denote`'s on the term. The four list and
-table helpers the other rules need did stay beside their converses in `Soundness.lean`;
-only the two theorems that reach `opaque` are here.
+where it belongs by shape: its `opaque` case is `opaq_T_identity`, and the two theorems that
+reach `opaque` stay together. The four list and table helpers the other rules need stay beside
+their converses in `Soundness.lean`.
 
 So `term_depth_wf`'s users are **no longer all in one module**. The reason they are not is
 written above, and no document carries a count of them.
@@ -183,6 +120,9 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
     | literal _ _ => exact hv
     | never => exact hv
     | opaq => exact (opaq_T_identity v).mpr hv
+    -- a closed variable holds nothing, and a `mu`'s index is its codec's held set
+    | var _ => exact False.elim hv
+    | mu _ _ => exact hv
     | set b =>
       rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>
         simp only [denote, setCodec, SetBase.elem_T] <;> exact hall

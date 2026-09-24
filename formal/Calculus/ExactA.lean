@@ -141,7 +141,10 @@ noncomputable def AdmA : Term → Attr → Bool
       | _ => false
   | .object b => AdmABody b
   -- the read side of the same deferral; see the `Adm` row and `ExactA_opaq`
-  | .opaq => fun a => ((opaqCodecω).p a).isSome
+  | .opaq => fun a => ((muCodec opaqStep).p a).isSome
+  -- a closed variable is the bottom, and `mu` asks its own codec, as `opaq` does
+  | .var _ => fun _ => false
+  | .mu b => fun a => ((denote (.mu b)).p a).isSome
 
 /-- The read side's payload row; `AdmBody`'s mirror. -/
 noncomputable def AdmABody : Body → AP
@@ -495,8 +498,8 @@ theorem reqPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → Obj
 /-- **The read side keeps every stored name.** `drop` was the one policy that dropped one,
     and it is gone, so `objRead`'s filter is the identity on the key set and the row owes it
     nothing. -/
-theorem keepB_wild (wild : Option Term) (sems : MapOf FieldSem) (k : Name) :
-    keepB (wildSem wild) sems k = true := by
+theorem keepB_wild (wild : Option Term) (sems : MapOf FieldSem) (k : Name) {ρ : List Codec} :
+    keepB (wildSem wild ρ) sems k = true := by
   cases wild with
   | none => rfl
   | some pt => rfl
@@ -551,7 +554,7 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Obje
     simp [AdmA, AdmABody, denote, bodySem, objectCodec, objectCodecCore, carriedCodec, mA]
 
 /-- **`opaque` reads exactly what its row says**, definitionally, and for the reason
-    `ExactV_opaq` gives at length: `p := (opaqCodecω).p`, so the row and `dom(p)` are
+    `ExactV_opaq` gives at length: `p := (muCodec opaqStep).p`, so the row and `dom(p)` are
     one function. ~~AdmOpaqA_iff~~ — a second induction, this one carrying an injectivity
     clause about the host's decimal reader that `decSet` needs — is deleted rather than moved. The
     clause was true and is still true; it is now the codec's business, where it was always
@@ -618,6 +621,8 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   | .opaq => ExactA_opaq
   -- both sides are empty, so the equivalence is `False ↔ False`
   | .never => fun _ => Iff.rfl
+  | .var _ => fun _ => Iff.rfl
+  | .mu _ => fun _ => Iff.rfl
   -- exact because the constructor narrowed, not because the row sharpened
   | .set b => ExactA_set b
   -- see `ExactA_union`

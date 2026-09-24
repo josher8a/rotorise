@@ -269,11 +269,13 @@ theorem selectF_continuous_list {os : List Codec} {F : Nat → Codec → Codec}
 **Does:** under the obligation, first-match resolution is monotone and continuous, the two
 obligations a least-fixpoint construction discharges.
 
-**Does not:** that a fixpoint *exists*. The construction needs a ccpo that this file does not
-define, and `denote` is structural and does not stage: `Term.lazy` carries a plain `Term`
-rather than a thunk. Reopening recursion means staging `denote`.
+**Does not:** construct a fixpoint. This file defines no ccpo. The model constructs its
+recursive terms another way: `mu` and `opaque` denote `muCodec` (`Recursion.lean`), which reads
+each input at the stage its own depth names. That construction needs no monotone chain, and so
+none of the obligations here: the guard of the binder alone makes the stages agree past the
+depth of the input.
 
-The obligation must be an invariant of the unrolling, and `optBad_not_confluent` is the witness
-that it is not free. -/
+Under a least-fixpoint construction the obligation would have to be an invariant of the
+unrolling, and `optBad_not_confluent` is the witness that it is not free. -/
 
 end Calculus

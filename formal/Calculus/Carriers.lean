@@ -195,24 +195,21 @@ theorem carrier_altCodec {os : List Codec} {μA : Option Member}
     exact ⟨o, ho, (h o ho).ranP hop⟩
 
 
-/-- `opaque`'s fixpoint is on its carrier at every fuel — `HOpaque`, one option per
+/-- One layer of `opaque` is on its carrier when the layer below is — `HOpaque`, one option per
     kind. -/
-theorem carrier_opaqCodec : ∀ (fuel : Nat), Carrier (opaqCodec fuel)
-  | 0 => Carrier.empty
-  | fuel+1 => by
-    have ih := carrier_opaqCodec fuel
-    refine carrier_altCodec ?_
-    intro o ho
-    simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
-    rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-    · exact carrier_stringCodec
-    · exact carrier_booleanCodec
-    · exact carrier_binaryCodec
-    · exact carrier_nullCodec
-    · exact carrier_numberCodec
-    · exact carrier_setCodec ih
-    · exact carrier_arrayCodec ih
-    · exact carrier_recordCodec ih
+theorem carrier_opaqStep {c : Codec} (ih : Carrier c) : Carrier (opaqStep c) := by
+  refine carrier_altCodec ?_
+  intro o ho
+  simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
+  rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  · exact carrier_stringCodec
+  · exact carrier_booleanCodec
+  · exact carrier_binaryCodec
+  · exact carrier_nullCodec
+  · exact carrier_numberCodec
+  · exact carrier_setCodec ih
+  · exact carrier_arrayCodec ih
+  · exact carrier_recordCodec ih
 
 end
 

@@ -4,8 +4,13 @@ import Calculus.Typing
 # §5 — Soundness
 
 The theorem. `Obligations t` collects the semantic rule premises: `(held)` cancellation laws,
-and `(union)` pairwise compatibility. The current term language has no read adapter,
-so every typed term whose obligations hold satisfies retract, canon and writes.
+and `(union)` pairwise compatibility, at every stage of each enclosing `mu`. The current term
+language has no read adapter, so every typed term whose obligations hold satisfies retract, canon
+and writes.
+
+The induction runs over open terms. `soundnessIn` takes an environment of lawful codecs for the
+variables, and a `mu` builds its stages from the body's soundness at the stage before.
+`soundness` is the closed case.
 
 The ground-term cases are wrappers over the certified combinators,
 where the per-construction lemmas — proved and open — now live.
@@ -17,13 +22,13 @@ namespace Calculus
 
 
 /-- A term's rest policy keeps every name. -/
-theorem wildSem_ne_drop (w : Option Term) : wildSem w ≠ .drop :=
-  Option.casesOn (motive := fun w => wildSem w ≠ .drop) w RestSem.noConfusion
+theorem wildSem_ne_drop (w : Option Term) {ρ : List Codec} : wildSem w ρ ≠ .drop :=
+  Option.casesOn (motive := fun w => wildSem w ρ ≠ .drop) w RestSem.noConfusion
     fun _ => RestSem.noConfusion
 
 /-- **The union's obligation**: its options are pairwise compatible. -/
-def PairwiseCompat (opts : List Term) : Prop :=
-  ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote s) (denote t)
+def PairwiseCompat (opts : List Term) (ρ : List Codec := []) : Prop :=
+  ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote s ρ) (denote t ρ)
 
 mutual
 
@@ -32,39 +37,42 @@ mutual
     **Structural**, and it means what the specification means: the premises hold. The list
     companions exist because `∀ t' ∈ ts, Obligations t'` is not a structural recursion and
     `ObligationsList` is. -/
-def Obligations : Term → Prop
+def Obligations : Term → (ρ : List Codec := []) → Prop
   -- `set` joins the leaves: its base is an index, so there is no subterm to carry premises.
-  | .string | .number | .boolean | .binary | .null
-  | .literal _ _ | .opaq | .set _ | .never => True
-  | .refine t' _ => Obligations t'
-  | .list pre sp suf => ObligationsList pre ∧ ObligationsOpt sp ∧ ObligationsList suf
+  | .string, _ | .number, _ | .boolean, _ | .binary, _ | .null, _
+  | .literal _ _, _ | .opaq, _ | .set _, _ | .never, _ | .var _, _ => True
+  | .refine t' _, ρ => Obligations t' ρ
+  | .list pre sp suf, ρ => ObligationsList pre ρ ∧ ObligationsOpt sp ρ ∧ ObligationsList suf ρ
   -- the caller-side term owes nothing: a restriction keeps the laws of any lawful codec
-  | .held t' _ f g => Obligations t' ∧ IsoCancels (denote t') f g
-  | .lazy t' => Obligations t'
-  | .object b => ObligationsBody b
-  | .union opts => ObligationsList opts ∧ PairwiseCompat opts
+  | .held t' _ f g, ρ => Obligations t' ρ ∧ IsoCancels (denote t' ρ) f g
+  | .lazy t', ρ => Obligations t' ρ
+  | .object b, ρ => ObligationsBody b ρ
+  | .union opts, ρ => ObligationsList opts ρ ∧ PairwiseCompat opts ρ
+  -- the body's premises at each stage, given that the stage before is lawful
+  | .mu b, ρ => ∀ n, Lawful (muStage (fun c => denote b (c :: ρ)) n) →
+      Obligations b (muStage (fun c => denote b (c :: ρ)) n :: ρ)
 
 /-- The payload's premises: every declared slot's, and the open block's. The companion
     `ObjectSlot` and the open block already had and the object row inlined. -/
-def ObligationsBody : Body → Prop
-  | .mk _ f wild => (∀ k, ObligationsField (f k)) ∧ ObligationsWild wild
+def ObligationsBody : Body → (ρ : List Codec := []) → Prop
+  | .mk _ f wild, ρ => (∀ k, ObligationsField (f k) ρ) ∧ ObligationsWild wild ρ
 
 /-- A slot's premises are the current-schema term's premises. -/
-def ObligationsField : ObjectSlot → Prop
-  | .req t' => Obligations t'
-  | .optional t' => Obligations t'
+def ObligationsField : ObjectSlot → (ρ : List Codec := []) → Prop
+  | .req t', ρ => Obligations t' ρ
+  | .optional t', ρ => Obligations t' ρ
 
-def ObligationsWild : Option Term → Prop
-  | some t' => Obligations t'
-  | none => True
+def ObligationsWild : Option Term → (ρ : List Codec := []) → Prop
+  | some t', ρ => Obligations t' ρ
+  | none, _ => True
 
-def ObligationsList : List Term → Prop
-  | [] => True
-  | t' :: ts => Obligations t' ∧ ObligationsList ts
+def ObligationsList : List Term → (ρ : List Codec := []) → Prop
+  | [], _ => True
+  | t' :: ts, ρ => Obligations t' ρ ∧ ObligationsList ts ρ
 
-def ObligationsOpt : Option Term → Prop
-  | none => True
-  | some t' => Obligations t'
+def ObligationsOpt : Option Term → (ρ : List Codec := []) → Prop
+  | none, _ => True
+  | some t', ρ => Obligations t' ρ
 
 end
 
@@ -73,15 +81,15 @@ end
 `ObligationsList` is what made the recursion structural; `∀ t ∈ ts, Obligations t` is what every
 proof below wants. These are that bridge, and they are the entire cost of losing the fuel. -/
 
-theorem obligationsList_iff : ∀ {ts : List Term},
-    ObligationsList ts ↔ ∀ t ∈ ts, Obligations t
+theorem obligationsList_iff {ρ : List Codec} : ∀ {ts : List Term},
+    ObligationsList ts ρ ↔ ∀ t ∈ ts, Obligations t ρ
   | [] => by simp [ObligationsList]
   | t :: ts => by
       simp only [ObligationsList, List.mem_cons, forall_eq_or_imp]
       exact and_congr_right (fun _ => obligationsList_iff)
 
-theorem obligationsOpt_iff : ∀ {tail : Option Term},
-    ObligationsOpt tail ↔ ∀ t ∈ tail, Obligations t
+theorem obligationsOpt_iff {ρ : List Codec} : ∀ {tail : Option Term},
+    ObligationsOpt tail ρ ↔ ∀ t ∈ tail, Obligations t ρ
   | none => by simp [ObligationsOpt]
   | some _ => by simp [ObligationsOpt]
 
@@ -96,25 +104,25 @@ namespace Obligations
 
 theorem array {t} (h : Obligations (.array t)) : Obligations t := h.2.1
 theorem record {t} (h : Obligations (.record t)) : Obligations t := h.2
-theorem refine {t q} (h : Obligations (.refine t q)) : Obligations t := h
-theorem lazy {t} (h : Obligations (.lazy t)) : Obligations t := h
+theorem refine {t q ρ} (h : Obligations (.refine t q) ρ) : Obligations t ρ := h
+theorem lazy {t ρ} (h : Obligations (.lazy t) ρ) : Obligations t ρ := h
 
 theorem tuple {ts tail} (h : Obligations (.tuple ts tail)) :
     (∀ t ∈ ts, Obligations t) ∧ (∀ t ∈ tail, Obligations t) :=
   ⟨obligationsList_iff.mp h.1, obligationsOpt_iff.mp h.2.1⟩
 
 /-- §3 `(list)`: one premise per declared position, the spread's, and the suffix's. -/
-theorem list {pre sp suf} (h : Obligations (.list pre sp suf)) :
-    (∀ t ∈ pre, Obligations t) ∧ (∀ t ∈ sp, Obligations t) ∧ (∀ t ∈ suf, Obligations t) :=
+theorem list {pre sp suf ρ} (h : Obligations (.list pre sp suf) ρ) :
+    (∀ t ∈ pre, Obligations t ρ) ∧ (∀ t ∈ sp, Obligations t ρ) ∧ (∀ t ∈ suf, Obligations t ρ) :=
   ⟨obligationsList_iff.mp h.1, obligationsOpt_iff.mp h.2.1, obligationsList_iff.mp h.2.2⟩
 
 /-- §3 `(held)`: the subterm's premises, and the iso cancelling on the carriers. -/
-theorem held {t P f g} (h : Obligations (.held t P f g)) :
-    Obligations t ∧ IsoCancels (denote t) f g := h
+theorem held {t P f g ρ} (h : Obligations (.held t P f g) ρ) :
+    Obligations t ρ ∧ IsoCancels (denote t ρ) f g := h
 
 /-- §5 `(union)`: one premise per option, and pairwise compatibility. -/
-theorem union {opts} (h : Obligations (.union opts)) :
-    (∀ t ∈ opts, Obligations t) ∧ PairwiseCompat opts :=
+theorem union {opts ρ} (h : Obligations (.union opts) ρ) :
+    (∀ t ∈ opts, Obligations t ρ) ∧ PairwiseCompat opts ρ :=
   ⟨obligationsList_iff.mp h.1, h.2⟩
 
 end Obligations
@@ -202,6 +210,8 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .lazy _ => rfl
   | _, _, _, .opaq => rfl
+  | _, _, _, .var _ => rfl
+  | _, _, _, .mu _ _ => rfl
   | _, _, _, .object _ _ => rfl
   | _, _, _, .union h => by
       show unanimous (μSynList _) = unanimous _
@@ -223,11 +233,12 @@ hypothesis off the mapped list. What is left in each case is the combinator lemm
 
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
-/-- Soundness: every current term whose obligations hold satisfies retract, canon and writes. One
-    walk of the derivation, one unpacking of the obligations; each case dispatches to its
-    combinator lemma. -/
-theorem soundness : ∀ {t T μ}, Typed t T μ → Obligations t → Lawful (denote t)
-  | t, T, μ, h, hob => by
+/-- Soundness over an environment: every term whose obligations hold at `ρ`, and whose free
+    variables `ρ` gives lawful codecs, satisfies retract, canon and writes. One walk of the
+    derivation, one unpacking of the obligations; each case dispatches to its combinator lemma. -/
+theorem soundnessIn : ∀ {t T μ} (ρ : List Codec), Typed t T μ → Obligations t ρ →
+    (∀ i, Lawful (envAt ρ i)) → Lawful (denote t ρ)
+  | t, T, μ, ρ, h, hob, henv => by
     cases h with
     | literal k ls => exact (lawful_literalCodec k ls)
     -- the bottom's domains are empty, so every law holds vacuously
@@ -237,31 +248,42 @@ theorem soundness : ∀ {t T μ}, Typed t T μ → Obligations t → Lawful (den
     | boolean => exact lawful_booleanCodec
     | null => exact lawful_nullCodec
     | binary => exact lawful_binaryCodec
-    | opaq => exact (lawful_opaqCodecω)
+    | opaq => exact lawful_opaq
+    | var i => exact henv i
+    -- each stage is lawful by the body's soundness at the stage before, and the guard carries
+    -- the laws to the limit
+    | @mu b T' μ' hg h' =>
+      refine lawful_muCodec (contractive_body hg ρ) fun n => ?_
+      induction n with
+      | zero => exact Lawful.empty
+      | succ n ih =>
+        exact soundnessIn (_ :: ρ) h' (hob n ih) fun i => match i with
+          | 0 => ih
+          | i + 1 => henv i
     -- a leaf now: `setCodec` is lawful at each of the four bases, so `(set)` discharges the
     -- way the ground rules do rather than by wrapping a subterm's soundness
     | set b => exact (lawful_setCodec (lawful_setBase b))
     | @refine t' T' μ' p h' =>
-      exact (soundness h' hob).restrict p.eval
+      exact (soundnessIn ρ h' hob henv).restrict p.eval
     | @lazy γ T' μ' h' =>
-      exact (soundness h' hob).μNone
+      exact (soundnessIn ρ h' hob henv).μNone
     | @held t' I' μ' P f g h' =>
-      exact ((soundness h' hob.1).through hob.2).restrict _
+      exact ((soundnessIn ρ h' hob.1 henv).through hob.2).restrict _
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
-      have ihp : ∀ t' ∈ pre, Lawful (denote t') := fun t' ht' => by
+      have ihp : ∀ t' ∈ pre, Lawful (denote t' ρ) := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedList.forall hp t' ht'
-        exact soundness hμ' ((Obligations.list hob).1 t' ht')
-      have ihsp : ∀ t' ∈ sp, Lawful (denote t') := fun t' ht' => by
+        exact soundnessIn ρ hμ' ((Obligations.list hob).1 t' ht') henv
+      have ihsp : ∀ t' ∈ sp, Lawful (denote t' ρ) := fun t' ht' => by
         cases sp with
         | none => exact nomatch ht'
         | some tx =>
           replace ht' : some tx = some t' := ht'
           cases ht'
           cases hs with
-          | some hμ' => exact soundness hμ' ((Obligations.list hob).2.1 t' rfl)
-      have ihf : ∀ t' ∈ suf, Lawful (denote t') := fun t' ht' => by
+          | some hμ' => exact soundnessIn ρ hμ' ((Obligations.list hob).2.1 t' rfl) henv
+      have ihf : ∀ t' ∈ suf, Lawful (denote t' ρ) := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedList.forall hf t' ht'
-        exact soundness hμ' ((Obligations.list hob).2.2 t' ht')
+        exact soundnessIn ρ hμ' ((Obligations.list hob).2.2 t' ht') henv
       rw [denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq]
       exact lawful_listCodec
           (List.forall_mem_map.mpr fun t' ht' => ihp t' ht')
@@ -276,34 +298,34 @@ theorem soundness : ∀ {t T μ}, Typed t T μ → Obligations t → Lawful (den
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest
       -- a field's codec is its term's denotation, and its laws reach it unchanged
-      have ihf : ∀ k, Lawful (fieldSem (ff k)).codec := by
+      have ihf : ∀ k, Lawful (fieldSem (ff k) ρ).codec := by
         intro k
         have hobf := hob.1 k
         obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields k)
         rcases hshape with heq | heq
         · rw [heq] at hobf ⊢
-          exact soundness hty' hobf
-        · rw [heq] at hobf ⊢; exact soundness hty' hobf
-      have ihr : ∀ c, wildSem wild = .codec c → Lawful c := by
+          exact soundnessIn ρ hty' hobf henv
+        · rw [heq] at hobf ⊢; exact soundnessIn ρ hty' hobf henv
+      have ihr : ∀ c, wildSem wild ρ = .codec c → Lawful c := by
         intro c hcr
         cases hrest with
         | none => exact nomatch hcr
         | @some t' T' μ' hty =>
-          replace hcr : RestSem.codec (denote t') = RestSem.codec c := hcr
+          replace hcr : RestSem.codec (denote t' ρ) = RestSem.codec c := hcr
           cases hcr
-          exact soundness hty hob.2
+          exact soundnessIn ρ hty hob.2 henv
       rw [denote_object_table, fieldTable]
       exact lawful_objectCodec ihf ihr (wildSem_ne_drop _)
     | @union opts Ts μs hlist =>
-      have ihs : ∀ t' ∈ opts, Lawful (denote t') := fun t' ht' => by
+      have ihs : ∀ t' ∈ opts, Lawful (denote t' ρ) := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
-        exact soundness hμ' ((Obligations.union hob).1 t' ht')
-      have hC : ∀ o ∈ opts.map fun t' => denote t',
-          ∀ o' ∈ opts.map fun t' => denote t', Compat o o' := by
+        exact soundnessIn ρ hμ' ((Obligations.union hob).1 t' ht') henv
+      have hC : ∀ o ∈ opts.map fun t' => denote t' ρ,
+          ∀ o' ∈ opts.map fun t' => denote t' ρ, Compat o o' := by
         refine List.forall_mem_map.mpr fun s hs => List.forall_mem_map.mpr fun t' ht' => ?_
         exact hob.2 s hs t' ht'
-      have hW : ∀ m, unanimous (opts.map fun t' => (denote t').μ) = some m →
-          ∀ o ∈ opts.map fun t' => denote t',
+      have hW : ∀ m, unanimous (opts.map fun t' => (denote t' ρ).μ) = some m →
+          ∀ o ∈ opts.map fun t' => denote t' ρ,
             ∀ t' a, o.e t' = some a → a.member = m := by
         intro m hm
         refine List.forall_mem_map.mpr fun tx htx t' a he' => ?_
@@ -312,8 +334,13 @@ theorem soundness : ∀ {t T μ}, Typed t T μ → Obligations t → Lawful (den
       rw [denote_union_sems, denoteList_eq, denoteμs_eq_map]
       exact lawful_altCodec (List.forall_mem_map.mpr fun t' ht' => ihs t' ht') hC hW
 
-termination_by t _ _ _ _ => Term.depth t
+termination_by t _ _ _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
+
+/-- Soundness: every closed term whose obligations hold satisfies retract, canon and writes. -/
+theorem soundness {t T μ} (h : Typed t T μ) (hob : Obligations t) : Lawful (denote t) :=
+  soundnessIn [] h hob fun _ => Lawful.empty
+
 /-! ## The denotation's held set is the judgement's
 
     `Carrier` bounds `e` and `p` by the *codec's* `T`. `typed_TSub` bounds the codec's
@@ -530,12 +557,10 @@ theorem alignL_T_of_HTupleL {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre)
   · exact hpsF p hp'
   · exact hzip p hp'
 
-/-- `opaque`'s fixpoint carries `HOpaque` at every fuel.
-
-    **This fuel stays.** It is `Opaque.lean`'s budget on the *input's* depth, not `denote`'s on
-    the term — a different recursion, and one this change does not touch. -/
+/-- Every stage of `opaque` carries `HOpaque`. The stage is the budget on the *input's* depth, not
+    a budget on the term. -/
 theorem opaq_TSub : ∀ (fuel : Nat) (v : Value),
-    (opaqCodec fuel).T v → HOpaque v
+    (muStage opaqStep fuel).T v → HOpaque v
   | 0, _, h => nomatch h
   | fuel+1, v, h => by
     obtain ⟨o, ho, hT⟩ := h
@@ -559,12 +584,14 @@ theorem opaq_TSub : ∀ (fuel : Nat) (v : Value),
         | exact .map _ _ fun k => ih _ (hT k)
         | exact nomatch hT
 
-/-- `opaqCodecω`'s held set — the union over all fuels — still lands in `HOpaque`. -/
+/-- `opaque`'s held set — its write domain — lands in `HOpaque`: the stage that writes a value is
+    on its carrier. -/
 theorem opaq_TSubω (v : Value) :
-    (opaqCodecω).T v → HOpaque v := by
+    Ω.T v → HOpaque v := by
   intro h
-  obtain ⟨n, hn⟩ := h
-  exact opaq_TSub n v hn
+  obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
+  exact opaq_TSub _ v
+    ((muStage_induct Carrier.empty (fun _ => carrier_opaqStep) (Value.depth v)).domE ha)
 
 /-- A union option's held set is one of the rule's. -/
 theorem TypedListμ.mem : ∀ {ts Ts μs}, TypedListμ ts Ts μs →
@@ -629,6 +656,9 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
     | literal _ _ => exact hv
     | never => exact hv
     | opaq => exact opaq_TSubω v hv
+    -- a closed variable is the bottom, and a `mu`'s index is its codec's held set
+    | var _ => exact False.elim hv
+    | mu _ _ => exact hv
     -- the base's codec holds exactly the base's held set (`SetBase.elem_T`), so the three
     -- wire families transport with no recursion left to do
     | set b =>
@@ -707,7 +737,7 @@ decreasing_by term_depth_wf
 set_option linter.unreachableTactic false in
 /-- Every derivable term denotes a pair **on its carrier** — §3's `e : T ⇀ 𝔸`,
     `p : 𝔸 ⇀ T`. One walk of the derivation, dispatching to the `Carrier` lemmas, with
-    `soundness` supplying the lawfulness the `held` case needs. -/
+    `soundness` supplying the lawfulness that the `held` and `mu` cases need. -/
 theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrier (denote t)
   | t, T, μ, h, hob => by
     cases h with
@@ -745,7 +775,10 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
     | @lazy γ T' μ' h' =>
       have ih := carrier_denote h' hob.lazy
       exact ⟨fun he => ih.domE he, fun hp => ih.ranP hp⟩
-    | opaq => exact carrier_opaqCodecω
+    | opaq => exact carrier_opaq
+    -- a closed variable is the bottom, and a lawful `mu` is on its held set, its write domain
+    | var _ => exact Carrier.empty
+    | @mu b T' μ' hg h' => exact carrier_muCodec (soundness (.mu hg h') hob)
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest

@@ -465,7 +465,7 @@ Each of these is a decision with a price, not a gap, and each has a witness.
 **A recursive term.** No term is recursive: `Term.lazy` carries a plain `Term`, and `denote` is
 structural. A recursive term needs a binder or a staged `denote`. `opaque` is the one recursive
 union the model carries. Its options are pairwise kind-exclusive, so they are compatible at each
-stage (`compat_opaque`), and `lawful_opaqCodecω` proves the fixed point lawful. Where the
+stage (`compat_opaque`), and `lawful_opaq` proves the fixed point lawful. Where the
 admitting options agree (`ConfluentAt`), first-match resolution is monotone and continuous
 (`selectF_mono_list`, `selectF_continuous_list`). Those are the two obligations that a
 least-fixpoint construction discharges.
