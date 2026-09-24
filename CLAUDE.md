@@ -1,8 +1,8 @@
 # Working agreement
 
 This file loads at the start of every session. The file has two layers.
-The rules apply to every task. The repository section holds the facts of this tree, and the
-evidence behind the rules. `docs/architecture.md` holds what the Lean development is.
+The rules apply to every task. The repository section holds the facts of this tree.
+`docs/architecture.md` holds what the Lean development is.
 `git log` holds why the code has its present shape. Read `git log` before you propose a
 change to something that already looks decided.
 
@@ -269,14 +269,13 @@ Name the command, and quote the output. A report without both is a claim.
 | --- | --- |
 | type checker clean | `npm run check`, which runs `tsc --noEmit` |
 | suite green in the real environment | `npx vitest --run`. `npm test` opens watch mode. A stubbed runner reports a false green |
-| linter clean | `npm run format:ci`, which runs `biome ci ./src` |
-| published name set | `npm run build`, then compare the export set of `dist/Rotorise.d.ts`, `dist/testing.d.ts` and `dist/native.d.ts` against the previous pass, and name each move in the commit message |
+| formatter and import order clean | `npm run format:ci`, which runs `biome ci ./src`. The linter lints no file: `docs/defects.md` holds the entry |
+| published name set | `bash scripts/surface-names.sh --build`, which compares the export set of the three entries against `scripts/surface/*.txt`. Name each move in the commit message |
 | type-level surface | the attest snapshots in `src/Rotorise.attest.test.ts`, against `.attest/assertions/typescript.json` |
 | the Lean side | `formal/scripts/gate.sh`, which gates on the exit code, and reports every check rather than the first failure |
 
-`biome ci` exits 0 on this tree. Measured at HEAD on 2026-09-19: `npm run format:ci` reports
-70 files and no fixes. A non-zero count is a regression that your pass caused. Measure at HEAD
-first anyway, because this line is dated and the tree moves.
+Run `npm run format:ci` at HEAD before your pass. A fix that appears after your pass is a
+regression that your pass caused.
 
 `biome --write` reformats a file that you did not edit. Name the files that you changed
 when you format.
@@ -297,10 +296,9 @@ These are the rulings of the owner, in the terms of this repository.
 
 - **Copy the pattern that works, and accept the duplication.** Do not build a generic layer
   to remove the duplication. One case is different: a copy that drifts in silence.
-  `CodecCapabilities` is one record instantiated two times, because the record was two
-  records. A capability added to the concrete form and not to the erased form stopped being
-  visible through the erased form, which `at`, `set` and `keyUpdates` all read. Nothing
-  failed. The fact never arrived. State such a fact one time, and duplicate elsewhere.
+  `CodecShape` is one record instantiated two times. A capability that one copy lacks
+  disappears in silence from the erased form, which `at`, `set` and `keyUpdates` read. State
+  such a fact one time, and duplicate elsewhere.
 - **The boundary is `decode`.** `decode` parses at the boundary. Code inside the boundary
   reads a value that already has a precise type, and parses the value no second time.
 - **A structural guarantee that the host cannot express owes three things**: a refusal at
@@ -312,8 +310,8 @@ These are the rulings of the owner, in the terms of this repository.
   other codec, and offers `.item` for the one place that writes no map.
 - **One side owns the fact. The other side declares an expectancy.** A marker such as
   `optional`, or the marker for the trailing elements of a tuple, exists at the type level
-  only. The runtime reads the fact from `CodecDef`, so no wrapper can forget to copy the
-  fact.
+  only. The runtime reads the fact from the term that the codec carries, so no wrapper can
+  forget to copy the fact.
 - **A refusal is a rule. A mark is a warning.** A refusal lands on the element that is
   wrong, through an intersection with the parameter rather than a check on the result. A
   brand is not a proof, and a cast defeats a brand.
@@ -347,51 +345,21 @@ These are the rulings of the owner, in the terms of this repository.
 - `lake env lean` reads the existing olean of a dependency. Edit `Domain.lean`, check
   `Prisms.lean`, and the new constructor reports as an unknown identifier until
   `lake build Calculus.Domain` runs.
-- A write reaches the container mount at once, measured on single-line writes in both
-  directions. A VS Code save and a large write are unmeasured.
 - Run one `lake build` at a time across the sessions that share this tree. Your build
   rewrites the oleans under the `lake env lean` of the other session. A parallel agent may
   run `lake env lean`, which writes nothing.
-- A change to `Domain.lean` rebuilds every module. A cold build of `Calculus/` from the
-  mathlib cache costs about 144 seconds over 592 targets. A build that compiles mathlib
-  itself is unmeasured.
+- A change to `Domain.lean` rebuilds every module.
 - `by_cases` and `by_contra` reach `Classical.em`. Use `cases h : decide P` and
   `Decidable.byContradiction` instead.
-- Run `#print axioms` on a definition, not on a theorem alone. One classical leak entered
-  through a `def` in `Vectors.lean`, through the `DecidableEq (Finset α)` instance of
-  mathlib. No review of the tactics finds such a leak.
+- Run `#print axioms` on a definition, not on a theorem alone. A classical instance in a
+  `def` leaks, and no review of the tactics finds the leak.
 - Never run `git checkout --` to undo a probe. The command reverts to HEAD, and the command
   takes the uncommitted work with the probe. Copy a snapshot first.
 
-### What this tree has taught
-
-These are measured facts. The facts are the reason for several rules above.
-
-- About one verdict in three that came from reading rather than from running was wrong.
-- Six claims of "impossible" in one arc turned out to be "did not".
-- Two sections of one document contradicted each other.
-- One grep pattern that was too literal produced three false readings.
-- Three large refactors died from a measurement, and each death was correct.
-- One `biome` count appeared as 8 in a document, as 9 in a session note, and measured 7.
-- Two commits reported every guard green over a red tree. The chain printed the exit code
-  and never read the exit code. `gate.sh` exists for that reason.
-
 ### What this file cannot do
 
-Most of the rigour sits in the repository rather than in this file. `#assert_axioms_all`
-fails the build rather than asserting cleanliness. `guard_reach.py`, `name_drift.py` and
-`ratchet.py` check what prose cannot check. Above all, the commit
-messages are the real record. A session that reads `git log` inherits the reasoning with
-the result.
-
-Judgment about which recorded verdict went stale does not transfer, and neither do the
-corrections that come from the owner. The sharpest moves of the last arc were the moves of
-the owner: `opaque` as a well-behaved `custom`, which is the same analysis with the
-opposite warranty; `.set` as a capability that propagates rather than a free function; and
-the refusal to judge a design by a defect in `refine`. Each move overturned a conclusion
-that an agent had just reached, and each move produced a better result than the version
-under defence.
-
-So the honest instruction to a new session is not "be like the last session". The honest
-instruction is this: the corrections of the owner are usually right, and the most valuable
-sentence in a report is the sentence that says the brief was wrong.
+The guards in `formal/scripts/` and `#assert_axioms_all` check what prose cannot check.
+`gate.sh` reads each exit code. A chain that prints an exit code and does not read the code
+reports a false green.
+The corrections of the owner are usually right. The most valuable sentence in a report says
+that the brief was wrong.
