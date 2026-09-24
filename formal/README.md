@@ -37,8 +37,8 @@ This table has a row of its own for twenty-two of the modules under `Calculus/`.
 `Malleability.lean`, `LiteralArity1.lean` and `Vectors.lean` have none, and each opens with a module docstring that says what it is for.
 Read those.
 
-**The mechanization is complete: the project builds with zero `sorry`.** Both halves
-of §5's soundness theorem are machine-checked — `soundness` (all four laws) and `soundness_core` ((R), (C), (W)) — by induction on the judgement, dispatching
+**The mechanization is complete: the project builds with zero `sorry`.** §5's
+soundness theorem is machine-checked — `soundness` (retract, canon and writes) — by induction on the judgement, dispatching
 each case to its certified combinator lemma, with `opaque`'s compatibility discharged by
 `compat_opaque`.
 The judgement carries both of §3's indices, and both are checked against the
@@ -90,12 +90,10 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   defines no ccpo, and `denote` is structural and does not stage: `Term.lazy` carries a plain
   `Term` rather than a thunk.
 - **One construction, one place — and one proof per law.** Each construction's
-  definition, its two inversion lemmas, its carrier and both strengths of its
-  lawfulness now sit together, and the core lemma is no longer a second copy of the
-  full one: they share their clauses (`tuple_retract`/`tuple_canon`,
-  `object_retract`/`object_canon`, `set_retract`/`set_writes`), differing only where
-  the content differs — `set`'s (C), where (MP)'s member-uniformity is replaced by the
-  `(set)` rule's own premise. The shape underneath is `carriedCodec`, a payload pair
+  definition, its two inversion lemmas, its carrier and its lawfulness sit together.
+  Soundness needs only `Lawful`, so a core lemma exists only where a `Lawful` lemma or
+  the alternate reader cites it, and the two share their clauses (`tuple_retract`,
+  `object_retract`, `set_retract`/`set_writes`). The shape underneath is `carriedCodec`, a payload pair
   between two prisms; `pointCodec`, `entrywise` (hence `array`, `record`), `tuple` and
   `object` are all instances, so §2's prism halves are discharged once for all of them.
   `set` is the one product that is not, and the reason is stated where it is argued:

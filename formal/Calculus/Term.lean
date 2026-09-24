@@ -274,7 +274,7 @@ theorem Term.isOpenObject_eq_false {t : Term} :
 
 /-! ## A structural measure on terms
 
-`denote` recurses structurally and needs no measure. The **proofs** do: `soundness_both` recurses
+`denote` recurses structurally and needs no measure. The **proofs** do: `soundness` recurses
 on the derivation, and `Typed` is a `Prop`-valued mutual family with no `.brecOn`, so it has to
 recurse on the term instead — and `sizeOf` cannot serve, because `Term.object`'s field table is a
 *function* and `sizeOf` is blind to functions (`sizeOf f = 0`).
@@ -392,7 +392,7 @@ theorem Term.depth_lt_object_rest {b : Body} {t : Term} (h : b.wild = some t) :
   lt_trans (Body.depth_lt_rest b h) (Term.depth_lt_object_body b)
 
 /-- The termination argument every `Term.depth` recursion in this development uses, written
-    once. **Three** theorems share it, all in `Soundness.lean` — `soundness_both`,
+    once. **Three** theorems share it, all in `Soundness.lean` — `soundness`,
     `typed_TSub`, `carrier_denote` — and their goal sets differ, so some alternatives are dead
     at each use. That is what the `unreachableTactic` linter reports at those sites, and it is
     why the option is disabled there rather than the block being specialised three ways.

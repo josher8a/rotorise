@@ -807,14 +807,6 @@ section Entrywise
 variable {α β : Type} {V : Ctor (List α) Value} {A : Ctor (List β) Attr}
   {μ₀ : Member} {P : List α → Prop} {f : α → Option β} {g : β → Option α}
 
-/-- The traversal toolkit is exactly what the payload pair's three clauses ask for:
-    the round trip reversed, definedness forgotten. -/
-theorem lawfulCore_entrywise (hμ : ∀ ys, (A.into ys).member = μ₀)
-    (hr : ∀ x y, f x = some y → g y = some x)
-    (hc : ∀ y x, g y = some x → (f x).isSome) :
-    LawfulCore (entrywise V A μ₀ P f g) :=
-  lawfulCore_carried hμ (traverse_roundTrip hr) (traverse_isSome hc)
-
 /-- Canonical reads, entry by entry. -/
 theorem lawful_entrywise (hμ : ∀ ys, (A.into ys).member = μ₀)
     (hr : ∀ x y, f x = some y → g y = some x)
@@ -871,12 +863,6 @@ def arrayCodec (c : Codec) : Codec :=
 theorem arrayCodec_eq {c : Codec} :
     arrayCodec c = entrywise arrV lA .L (fun vs => ∀ x ∈ vs, c.T x) c.e c.p := by
   ext v <;> cases v <;> simp_all [arrayCodec, entrywise, carriedCodec, arrV, lA]
-
-/-- (R), (C), (W) — `L` is the member every `arr` writes. -/
-theorem lawfulCore_arrayCodec {c : Codec} (h : LawfulCore c) :
-    LawfulCore (arrayCodec c) :=
-  arrayCodec_eq ▸ lawfulCore_entrywise (fun _ => rfl) (fun _ _ => h.retract)
-    (fun _ _ => h.canon)
 
 /-- `array` is lawful, entry by entry. -/
 theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) :=
@@ -1205,23 +1191,6 @@ theorem tuple_retract (hd : ∀ c ∈ cs, LawfulCore c) (htl : ∀ c ∈ tail, L
   exact Option.bind_eq_some_iff.mpr ⟨_, align_of_slots hs hn,
     zip_roundTrip ds vs as (slots_all hd htl hs) hlen htr⟩
 
-/-- (C) for the payload pair, the same way round. -/
-theorem tuple_canon (hd : ∀ c ∈ cs, LawfulCore c) (htl : ∀ c ∈ tail, LawfulCore c) :
-    ∀ as vs, (align cs tail as).bind (traverse fun ca => ca.1.p ca.2) = some vs →
-      ((align cs tail vs).bind (traverse fun cv => cv.1.e cv.2)).isSome := by
-  intro as vs hD
-  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
-  obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
-  have hn : vs.length = as.length := by
-    rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
-  rw [align_of_slots hs hn]
-  exact zip_canon ds as vs (slots_all hd htl hs) htr
-
-theorem lawfulCore_tupleCodec (hcs : ∀ c ∈ cs, LawfulCore c)
-    (htl : ∀ c ∈ tail, LawfulCore c) : LawfulCore (tupleCodec cs tail) :=
-  tupleCodec_eq ▸ lawfulCore_carried (fun _ => rfl) (tuple_retract hcs htl)
-    (tuple_canon hcs htl)
-
 /-- A tuple is lawful: the alignment puts each position on its own codec. -/
 theorem lawful_tupleCodec (hcs : ∀ c ∈ cs, Lawful c) (htl : ∀ c ∈ tail, Lawful c) :
     Lawful (tupleCodec cs tail) := by
@@ -1460,25 +1429,6 @@ theorem list_retract (hpre : ∀ c ∈ pre, LawfulCore c) (hsp : ∀ c ∈ sp, L
     rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
   exact Option.bind_eq_some_iff.mpr ⟨_, alignL_of_slotsL hs hn,
     zip_roundTrip ds vs as (slotsL_all hpre hsp hsuf hs) hlen htr⟩
-
-/-- (C) for the payload pair, the same way round. -/
-theorem list_canon (hpre : ∀ c ∈ pre, LawfulCore c) (hsp : ∀ c ∈ sp, LawfulCore c)
-    (hsuf : ∀ c ∈ suf, LawfulCore c) :
-    ∀ as vs, (alignL pre sp suf as).bind (traverse fun ca => ca.1.p ca.2) = some vs →
-      ((alignL pre sp suf vs).bind (traverse fun cv => cv.1.e cv.2)).isSome := by
-  intro as vs hD
-  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
-  obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
-  have hn : vs.length = as.length := by
-    rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
-  rw [alignL_of_slotsL hs hn]
-  exact zip_canon ds as vs (slotsL_all hpre hsp hsuf hs) htr
-
-/-- (R) and (C) for the shape. -/
-theorem lawfulCore_listCodec (hpre : ∀ c ∈ pre, LawfulCore c) (hsp : ∀ c ∈ sp, LawfulCore c)
-    (hsuf : ∀ c ∈ suf, LawfulCore c) : LawfulCore (listCodec pre sp suf) :=
-  listCodec_eq ▸ lawfulCore_carried (fun _ => rfl) (list_retract hpre hsp hsuf)
-    (list_canon hpre hsp hsuf)
 
 /-- A list is lawful: the alignment puts each position on its own codec. -/
 theorem lawful_listCodec (hpre : ∀ c ∈ pre, Lawful c) (hsp : ∀ c ∈ sp, Lawful c)

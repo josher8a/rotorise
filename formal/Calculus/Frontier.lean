@@ -277,23 +277,6 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
   all_goals exact nomatch hsm
 
 
-/-- Core set: (R), (C) and (W). The `(set)` rule's member premise is what fixes which wire
-    branch the write takes, so it is still a hypothesis — but nothing else is, and in
-    particular no traversal and no non-emptiness side condition. -/
-theorem lawfulCore_setCodec {c : Codec} {μ₀ μS : Member} (h : LawfulCore c)
-    (hμ : c.μ = some μ₀) (hsm : setMember μ₀ = some μS) :
-    LawfulCore (setCodec c) := by
-  refine ⟨set_retract h, ?_, set_writes h⟩
-  intro a t hp
-  rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
-      · refine encSet_isSome_of h hsm (fun x y hxy => by injection hxy) ?_
-          (fun x _ a' ha' => h.writes hμ ha')
-        intro y hy
-        obtain ⟨x, -, hpx⟩ := hm y hy
-        exact h.canon hpx
-
-
 /-- **A set writes exactly when every element does.**
 
     Both directions, and neither needs a hypothesis the term does not already carry: the
@@ -552,14 +535,9 @@ theorem carrier_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     · intro k
       exact entry_ranP' hsems hrc (funImage_some hd k)
 
-
-
-
-
 /-! #### §2's clauses for the object's payload pair
 
-Each is proved once, from core children, and both `lawfulCore_objectCodec` and
-`lawful_objectCodec` consume them. -/
+Each is proved once, from core children, and `lawful_objectCodec` consumes them. -/
 
 section ObjectLaws
 variable {sems : MapOf FieldSem} {rest : RestSem}
@@ -589,31 +567,6 @@ theorem object_retract (hf : ∀ k, LawfulCore (sems.2 k).codec)
     · intro k h₁ h₂
       have hk1 : k ∈ p.1.filter (keepB rest sems ·) := by rw [hfilter]; exact h₁
       simp only [dif_pos hk1]
-
-/-- (C): what was read is writable again by (C) at each stored entry. -/
-theorem object_canon (hf : ∀ k, LawfulCore (sems.2 k).codec)
-    (hrc : ∀ c ∈ rcOf rest, LawfulCore c) :
-    ∀ q p, objRead sems (rcOf rest) (keepB rest sems) q = some p →
-      (objWrite sems (rcOf rest) p).isSome = true := by
-  rintro q p h
-  obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
-  have hval : valPresentB sems (q.1.filter (keepB rest sems ·)) = true := by
-    refine valPresentB_of fun k fs hm hno => ?_
-    have hknk : keepB rest sems k = true := keepB_of_declared k (by rw [hm]; rfl)
-    cases fs with
-    | opt c => exact absurd rfl (hno c)
-    | req c => exact Finset.mem_filter.mpr ⟨reqPresentB_spec hreq hm, by simpa using hknk⟩
-  have hstep : ∀ k : {k // k ∈ q.1.filter (keepB rest sems ·)},
-      ((entryCodec sems (rcOf rest) k.1).bind (fun c => c.e (d k))).isSome = true := by
-    intro k
-    have hp := funImage_some hd k
-    cases hc : entryCodec sems (rcOf rest) k.1 with
-    | none => rw [hc] at hp; exact nomatch hp
-    | some c =>
-      simp only [hc, Option.bind_some] at hp ⊢
-      exact (entryCodec_of hf hrc hc).canon hp
-  simp only [objWrite, if_pos hval]
-  exact funImage_map_isSome (funImage_isSome hstep) _
 
 /-- Canonical reads: a policy that keeps every name writes back the map that was read. -/
 theorem object_canonS (hf : ∀ k, Lawful (sems.2 k).codec)
@@ -655,14 +608,6 @@ theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
   have hrc' := fun c hc => ((rcOf_forall hrest) c hc).core
   exact objectCodecCore_eq ▸ lawful_carried (fun _ => rfl)
     (object_retract hf' hrc') (object_canonS hf (rcOf_forall hrest) hnd)
-
-theorem lawfulCore_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
-    (hf : ∀ k, LawfulCore (sems.2 k).codec)
-    (hrest : ∀ c, rest = .codec c → LawfulCore c) :
-    LawfulCore (objectCodec sems rest) := by
-  show LawfulCore (objectCodecCore sems (rcOf rest) (keepB rest sems))
-  exact objectCodecCore_eq ▸ lawfulCore_carried (fun _ => rfl)
-    (object_retract hf (rcOf_forall hrest)) (object_canon hf (rcOf_forall hrest))
 
 /-- **Compatibility**: `c` reads `a` as `t`. If `d` acts at `a` or at `t`, then `d` reads `a` as
     `t`. Pairwise, it is the classical compatibility of partial bijections, and it is the
