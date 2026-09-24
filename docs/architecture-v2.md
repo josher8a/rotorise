@@ -282,7 +282,10 @@ that uses it reports a normalization as a broken law.
 
 **The meet obeys these laws at every construction above.** The gap is not in the meet.
 
-> ASPIRATION: the meet has no adapter row, and a literal and a refinement do not meet.
+> ASPIRATION: the meet has no adapter row. The meet of a literal and a data refinement is a
+> refinement of the literal, in either order. The meet does not evaluate the predicate at the
+> literal, so a literal outside the predicate is not spelled as the bottom. The meet of a literal
+> and a closure refinement is no term.
 
 ### Testing for the bottom is exact over a normal form
 

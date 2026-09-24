@@ -897,9 +897,10 @@ export const sampleVectors: readonly Vector[] = [
     },
     { name: 'nullable_null', codec: erase(nullable(string)), value: null },
     // **The vector pass 7 owed.** Two object options with the *same* names, told apart by a
-    // required literal and by nothing else — so the names alone resolve neither and `byStructure`
-    // resolves both. Nothing in this corpus exercised the literal half of admission before, which
-    // is why the bridge passed unchanged while the model gained it.
+    // required literal and by nothing else. The names alone resolve neither, and admission by
+    // attempt resolves both, because one option admits the value. Nothing in this corpus
+    // exercised the literal half of admission before, which is why the bridge passed unchanged
+    // while the model gained it.
     {
         name: 'union_by_literal',
         codec: erase(

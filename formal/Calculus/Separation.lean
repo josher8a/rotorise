@@ -3,48 +3,40 @@ import Calculus.ExactA
 /-!
 # Derivability, separation, and what the pair does not record
 
-Two of the twenty-one constructors are derivable from the others. `SepJV` states separation
-on the pair, in the one direction that holds. And the negative results say what the pair
+`array` and `record` are builders over other constructors, not constructors. `SepJV` states
+separation on the pair, in the one direction that holds. And the negative results say what the pair
 does not record, with what to use instead.
 -/
 
 namespace Calculus
 
 noncomputable section
-/-! ## `array` is derivable, and it is kept
+/-! ## `array` and `record` are builders
 
-`array` is the degenerate `tuple` — empty fixed part, uniform tail — and its row agrees with
-the general form *pointwise*, on both sides, so nothing in the analysis depends on it
-existing.
+`array` is the degenerate `tuple`: an empty fixed part and a uniform spread. Both builders write
+the same `list`, so `array c` and `tuple [] (some c)` are **one term**, and `arrayRow` is `rfl`.
+`set` is the opposite case: a narrower *constructor* buys *exactness*. `set b` cannot be spelled
+as a `refine` of anything, and indexing by the base is what makes `encSet`'s collision guard
+provably dead.
 
-It is kept anyway, and the reason is the shape of the row rather than the size of the
-language. `array`'s row is `allP`, one fold; the `tuple` it expands to is `alignP`, which
-carries a length discipline that at `([], some c)` can never fire. So the narrow builder buys
-a row a reader can check by eye, and that is the **opposite** trade from `set`, where a
-narrower *constructor* bought *exactness*: `set b` cannot be spelled as a `refine` of
-anything, and indexing by the base is what made `encSet`'s collision guard provably dead.
-Convenience here, necessity there.
-
-`record` used to stand beside `array` here, as the degenerate `object`. It does not any more:
-it is a builder over the body whose only block is the open one, so `record c` and the object
-it expanded to are **one term**, and the pair that compared them has nothing to compare.
+`record` is the degenerate `object`: a builder over the body whose only block is the open one.
+So `record c` and the object it expands to are **one term** too.
 
 ### …and `union` is a congruence for codec equivalence
 
 `union_congruent` carries the fact on a live pair: `refine t ⊤` and `t` have identical rows on
 both sides, hence — by `Adm_exact`/`AdmA_exact`, which take no hypothesis — identical domains
 on both sides. They are the same codec as far as anything observable through `e` and `p` can
-tell, and `union` no longer disagrees: every option, `object` included, is admitted by
-*attempt*, which runs `Adm` directly. `admitOptV`/`admitOptA` are `Adm`/`AdmA` at every
-constructor now, so a domain-equal substitution changes no option's admission, and a rewrite
-that replaces a subterm by a domain-equal one is sound inside a `union`.
+tell, and `union` agrees: every option, `object` included, is admitted by *attempt*, which
+runs `Adm` directly. `admitOptV`/`admitOptA` are `Adm`/`AdmA` at every constructor, so a
+domain-equal substitution changes no option's admission, and a rewrite that replaces a subterm
+by a domain-equal one is sound inside a `union`.
 
-This used to fail at one constructor: an object option was admitted *by structure* —
-`keysOk` and the literal alternatives, and nothing else — which is coarser than `Adm` at a
-declared name pinned to no literal. `{"A" ↦ true}` against `{A : req string}` is the pair
-that recorded the gap: the structural test answered `true` and the row answered `false`, with
-equal domains behind both. That gap closed when the option stopped being decided
-syntactically. -/
+**Admission by structure is not a congruence.** The structural test, `keysOk` and the literal
+alternatives and nothing else, differs from `Adm` at a declared name pinned to no literal.
+`vBoolAtA` against `tReqStr`, `{"A" ↦ true}` against `{A : req string}`, is the pair: the
+structural test answers `true` and the row answers `false`. So admission reads the row and
+not the structure. -/
 
 /-- A refinement by the trivially-true predicate: the same pair as the bare base. -/
 def qTop : Value → Bool := fun _ => true
@@ -57,9 +49,8 @@ def tReqStr : Term := .object (.mk {"A"} (fun _ => .req .string) none)
     refuses. -/
 def vBoolAtA : Value := .map {"A"} (fun _ => .bool true)
 
-/-- `array` **is** the degenerate `tuple`, and now on the nose: both builders write the
-    same `list`, so the two rows are one term and the equation is `rfl`. It was an
-    induction over the value's list while `allP` and `alignP` were two different rows. -/
+/-- `array` **is** the degenerate `tuple`: both builders write the same `list`, so the two
+    rows are one term and the equation is `rfl`. -/
 theorem arrayRow (c : Term) (v : Value) : Adm (.array c) v = Adm (.tuple [] (some c)) v := rfl
 
 /-- The same on the read side, and for the same reason. -/
@@ -67,12 +58,10 @@ theorem arrayRowA (c : Term) (a : Attr) : AdmA (.array c) a = AdmA (.tuple [] (s
 
 /-! ### `union` and domain equality
 
-`record c` and the object with no declared name and a rest codec used to be two spellings of
-one codec with two structural admissions, so a normalization pass that replaced either by the
-other used to change what a `union` selected. They are one term now: `record` is a builder
-over `object` with a block, and the pair that recorded the difference has nothing left to
-compare. `array` and `tuple` merged into `list` the same way, and `arrayRow` above is that
-merge on the nose. -/
+`record c` and the object with no declared name and a rest codec are one term: `record` is a
+builder over `object` with a block. So a normalization pass that replaces either by the other
+changes no term, and no `union` selects differently. `array` and `tuple` are one `list` the same
+way, and `arrayRow` above is that equation. -/
 
 /-- `refine t ⊤` and `t` admit the same values at every point: the row is `Adm t v && true`,
     so the domains are equal with no hypothesis. -/
@@ -80,17 +69,15 @@ theorem refine_top_row (t : Term) : Adm (.refine t (.closure qTop)) = Adm t := b
   funext v; simp [Adm, Pred.eval, qTop]
 
 /-- **`union` is a congruence for domain equality.** `refine t ⊤` and `t` admit the same
-    values at every point (`refine_top_row`), and every option — `object` included — is now
+    values at every point (`refine_top_row`), and every option, `object` included, is
     admitted by *attempt*, which runs `Adm` directly: `admitOptV` is `Adm` at every
     constructor, not only at a `refine`. So the two options agree at every value, and a
     rewrite that replaces a subterm by a domain-equal one is sound inside a `union`.
 
-    **This used to fail, and the witness recorded why.** An object option was admitted by
-    *structure* — `keysOk` and the literal alternatives, nothing else — which is coarser than
-    `Adm` at a declared name pinned to no literal. `{"A" ↦ true}` against `{A : req string}`
-    is the pair: the structural test answered `true`, the row answered `false`, and the
-    domains were equal behind both. That gap closed when the option stopped being decided
-    syntactically. -/
+    **The congruence needs admission by attempt.** A structural test, `keysOk` and the literal
+    alternatives and nothing else, differs from `Adm` at a declared name pinned to no
+    literal. At `vBoolAtA` against `tReqStr` the structural test answers `true` and the row
+    answers `false`. -/
 theorem union_congruent (t : Term) (v : Value) :
     admitOptV (specOf t, Adm t) v
       = admitOptV (specOf (.refine t (.closure qTop)), Adm (.refine t (.closure qTop))) v := by
@@ -103,8 +90,8 @@ theorem union_congruent (t : Term) (v : Value) :
 clause. `Adm` and `AdmA` fold the kind or member gate into their rows. An alternate reader
 (`Codec.extendRead`) is outside `Term`, so an alternate reader cannot add a second structural clause.
 
-A discharger consumes disjointness of the options `select` builds, and every option — `object`
-included — is now admitted by attempt, which is `Adm`/`AdmA` exactly. `admitV_le_Adm` and
+A discharger consumes disjointness of the options `select` builds, and every option, `object`
+included, is admitted by attempt, which is `Adm`/`AdmA` exactly. `admitV_le_Adm` and
 `admitA_le_AdmA`, below the next section, are that containment stated for every constructor. -/
 
 
@@ -151,8 +138,8 @@ theorem Adm_string_eq_refine : Adm .string = Adm (.refine .string (.closure qTop
 /-- **`SepJV` suffices for the codec-level discharge.** The joint predicate is tighter than
     the rows it replaces, so `SepJV` is a *weaker* statement — but `Adm_sound` connects it
     straight to the denotation: where `x` writes, `y` refuses. What a discharger consumes is
-    disjointness of the *options* `select` builds, and every option — `object` included — is
-    now admitted by attempting its codec, so this is the same fact the discharger needs. -/
+    disjointness of the *options* `select` builds, and every option, `object` included, is
+    admitted by attempting its codec, so this is the same fact the discharger needs. -/
 theorem admitV_of_sepJV {x y : Term} (h : SepJV x y) (v : Value) (a : Attr)
     (hx : (denote x).e v = some a) : ((denote y).e v).isSome = false := by
   have hAx : Adm x v = true := Adm_sound x hx
@@ -177,7 +164,7 @@ Every option is admitted by attempt, `object` included, so admission **is** `Adm
 every constructor: `admitV_le_Adm`/`admitA_le_AdmA` below hold unconditionally. -/
 
 /-- **The containment the discharger needs, at every constructor.** Admission is attempted
-    encoding now, whatever the term, and exactness identifies it with the row. -/
+    encoding, whatever the term, and exactness identifies it with the row. -/
 theorem admitV_le_Adm (t : Term) {v : Value}
     (h : ((denote t).e v).isSome = true) : Adm t v = true :=
   (Adm_exact t v).mpr h
