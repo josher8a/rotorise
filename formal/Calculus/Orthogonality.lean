@@ -157,9 +157,10 @@ def occV : Term → Slot → Bool
   | .lazy t      => occV t
   | .union opts  => occVL opts
   | .opaq  => occTop
-  -- a closed variable is the bottom, and a recursive term is over-approximated by every slot
+  -- a closed variable is the bottom, and a recursive term writes where its body does: its
+  -- variable sits under a container, whose slot is the container's
   | .var _ => occNone
-  | .mu _ => occTop
+  | .mu b => occV b
 
 def occVL : List Term → Slot → Bool
   | [] => fun _ => false
@@ -191,7 +192,7 @@ def occA : Term → Member → Bool
   | .union opts  => occAL opts
   | .opaq  => occTop
   | .var _ => occNone
-  | .mu _ => occTop
+  | .mu b => occA b
 
 def occAL : List Term → Member → Bool
   | [] => fun _ => false
@@ -214,64 +215,49 @@ def Orth1 (x y : Term) : Bool :=
 
 /-! ## Soundness
 
-Two structural recursions, one per side, each mutual with a list companion for `union`. The
-statement is about the **rows** (`Adm`/`AdmA`). `select` attempts every option, `object`
-included, so an option's admission is its row. -/
+The statement is about the **rows** (`Adm`/`AdmA`), and the proof is about open terms, because a
+recursive term's occupancy is its body's. A term either writes a value in its own occupancy, or
+one of its variables that reads the term's own input writes it (`occV_open`). A closed term has
+no such variable, so the row lands in the occupancy (`occV_sound`). A body reads its variable
+under a container, whose occupancy is the container's slot, so the occupancy of `mu b` is the
+occupancy of `b` with the variable at no slot. This needs no guard: a stage that writes a value
+writes it through the body at the stage before, and the stages start at the bottom. -/
 
 def OccSoundV (t : Term) : Prop := ∀ v, Adm t v = true → occV t v.slot = true
 
-def OccSoundVL : List Term → Prop
-  | [] => True
-  | t :: ts => OccSoundV t ∧ OccSoundVL ts
-
-theorem occSoundVL_mem : ∀ (ts : List Term), OccSoundVL ts → ∀ t ∈ ts, OccSoundV t
-  | [], _, t, ht => absurd ht (by simp)
-  | _ :: ts, h, t, ht => by
-      rcases List.mem_cons.mp ht with rfl | ht'
-      · exact h.1
-      · exact occSoundVL_mem ts h.2 t ht'
-
-theorem occVL_of_mem {t : Term} {ts : List Term} {s : Slot} (ht : t ∈ ts)
-    (h : occV t s = true) : occVL ts s = true := by
-  induction ts with
-  | nil => exact absurd ht (by simp)
-  | cons _ ts ih =>
-    rcases List.mem_cons.mp ht with rfl | h'
-    · simp [occVL, h]
-    · simp [occVL, ih h']
+/-- An occupancy of an option is inside the occupancy of the union. -/
+theorem occVL_cons {t : Term} {ts : List Term} {s : Slot} (h : occV t s = true ∨ occVL ts s = true) :
+    occVL (t :: ts) s = true := by
+  rcases h with h | h <;> simp [occVL, h]
 
 mutual
 
-/-- **The write occupancy contains the row.** Twenty-one cases, and three are worth
-    reading.
-
-    `set b` is where nonemptiness of `℘⁺fin` does the work: the row matches all three wire
-    families and asks `b.adm` element by element, so `set number` faced a `strSet` answers
-    `∀ s ∈ S, inD (.str s)` — and `S` has an element, whose answer is `false`. Without
-    nonemptiness a `set number` would admit the empty `strSet` and the sharp partition would
-    be unsound.
-
-    `literal k ls` is uniform in the base through `inL`, whose constructor pairing is exactly
-    `GroundKind.slot`. -/
-theorem occV_sound : ∀ (t : Term), OccSoundV t
-  -- The rows whose `Adm` is a kind test and nothing more: one group, because a per-row
-  -- proof here would be seven copies of one simp set. `number` is separate only because its
-  -- gate `inD` has to be in the set.
-  | .string | .boolean | .binary | .null =>
-      fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
-  | .number => fun v h => by cases v <;> simp_all [Adm, inD, occV, occOnly, Value.slot]
-  -- the row is `false`, so the premise is the one that cannot arrive
-  | .never => fun _ h => by simp [Adm] at h
-
-  | .literal k _ => fun v h => by
+/-- **The write occupancy contains what an open term writes**, or a variable that reads the
+    term's own input writes it. `set b` is where nonemptiness of `℘⁺fin` does the work: a set
+    row matches all three wire families and asks `b.adm` element by element, so `set number`
+    faced a `strSet` answers `∀ s ∈ S, inD (.str s)` — and `S` has an element, whose answer is
+    `false`. -/
+theorem occV_open : ∀ (t : Term) (ρ : List Codec) (v : Value),
+    ((denote t ρ).e v).isSome = true →
+      occV t v.slot = true ∨ ∃ i, 2 ≤ t.use i ∧ ((envAt ρ i).e v).isSome = true
+  | .string, _, v, h | .boolean, _, v, h | .binary, _, v, h | .null, _, v, h
+  | .number, _, v, h => Or.inl (by
+      cases v <;> simp_all [denote, stringCodec, booleanCodec, binaryCodec, nullCodec,
+        numberCodec, occV, occOnly, Value.slot])
+  | .never, _, _, h => by simp [denote, Codec.empty] at h
+  | .opaq, _, _, _ => Or.inl rfl
+  | .literal k x, _, v, h => by
+      have h := (Adm_exact (.literal k x) v).mpr h
       rw [Adm_literal] at h
-      cases k <;> cases v <;>
-        simp_all [AdmLit, inL, occV, occOnly, Value.slot, GroundKind.slot]
-  | .set b => fun v h => by
+      exact Or.inl (by
+        cases k <;> cases v <;>
+          simp_all [AdmLit, inL, occV, occOnly, Value.slot, GroundKind.slot])
+  | .set b, _, v, h => by
+      have h := (Adm_exact (.set b) v).mpr h
+      refine Or.inl ?_
       cases v with
       | strSet S => obtain ⟨x, hx⟩ := S.2; cases b <;>
           simp_all [Adm, SetBase.adm, inD, occV, occOnly, Value.slot, SetBase.slot]
-      -- the two bases that do not occupy `numSet` are refuted from the carrier's nonemptiness
       | numSet S =>
           obtain ⟨x, hx⟩ := S.2
           have hnone : ∀ b' : SetBase, b'.adm (.num x) = false →
@@ -286,87 +272,174 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
       | binSet S => obtain ⟨x, hx⟩ := S.2; cases b <;>
           simp_all [Adm, SetBase.adm, inD, occV, occOnly, Value.slot, SetBase.slot]
       | _ => exact absurd h (by simp [Adm])
-  -- the containers, whose slot is fixed by the constructor and not by the payload
-  | .list _ _ _ =>
-      fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
-  | .object (.mk _ _ _) => fun v h => by
-      cases v <;> simp_all [Adm, AdmBody, occV, occOnly, Value.slot]
-  | .held _ P _ _ => fun v h => by
-      simpa [occV] using occV_sound P v (Bool.and_eq_true_iff.mp h).2
-  | .refine t _ => fun v h => by
-      simpa [occV] using occV_sound t v (Bool.and_eq_true_iff.mp h).1
-  | .lazy t => fun v h => by simpa [occV] using occV_sound t v h
-  | .union opts => fun v h => by
-      obtain ⟨t, ht, hadm⟩ := AdmAny_iff.mp (by rw [Adm_union] at h; exact h)
-      exact occVL_of_mem ht
-        (occSoundVL_mem opts (occV_soundL opts) t ht v hadm)
-  | .opaq => fun _ _ => rfl
-  | .var _ => fun _ h => by simp [Adm] at h
-  | .mu _ => fun _ _ => rfl
+  -- the containers write their own slot, whatever their elements read
+  | .list _ _ _, _, v, h => Or.inl (by cases v <;> simp_all [denote, listCodec, occV, occOnly, Value.slot])
+  | .object (.mk _ _ _), _, v, h => by
+      obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
+      obtain ⟨keys, f, g, rfl, -⟩ := objectCodecCore_e_inv ha
+      exact Or.inl rfl
+  | .held t P f g, ρ, v, h => by
+      have hP : ((denote P ρ).e v).isSome = true := by
+        simp only [denote, restrict_e_isSome, Bool.and_eq_true] at h; exact h.1
+      rcases occV_open P ρ v hP with h1 | ⟨i, hi, he⟩
+      · exact Or.inl (by simpa [occV] using h1)
+      · exact Or.inr ⟨i, by simp only [Term.use, useHeld]; split <;> omega, he⟩
+  | .refine t p, ρ, v, h => by
+      have ht : ((denote t ρ).e v).isSome = true := by
+        simp only [denote, restrict_e_isSome, Bool.and_eq_true] at h; exact h.2
+      rcases occV_open t ρ v ht with h1 | ⟨i, hi, he⟩
+      · exact Or.inl (by simpa [occV] using h1)
+      · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
+  | .lazy t, ρ, v, h => by
+      rcases occV_open t ρ v h with h1 | ⟨i, hi, he⟩
+      · exact Or.inl (by simpa [occV] using h1)
+      · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
+  | .union opts, ρ, v, h => by
+      obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
+      obtain ⟨o, ho, hoe, -⟩ := altCodec_e_admits ha
+      rcases occV_openL opts ρ v o ho hoe with h1 | ⟨i, hi, he⟩
+      · exact Or.inl (by simpa [occV] using h1)
+      · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
+  | .var j, _, _, h => Or.inr ⟨j, by simp [Term.use], h⟩
+  -- a stage writes through the body at the stage before, and the first stage writes nothing
+  | .mu b, ρ, v, h => by
+      have hs : ∀ n, ((muStage (fun c => denote b (c :: ρ)) n).e v).isSome = true →
+          occV b v.slot = true ∨ ∃ i, 2 ≤ b.use (i + 1) ∧ ((envAt ρ i).e v).isSome = true := by
+        intro n
+        induction n with
+        | zero => intro h0; simp [muStage, Codec.empty] at h0
+        | succ n ih =>
+          intro hn
+          rcases occV_open b _ v hn with h1 | ⟨i, hi, he⟩
+          · exact Or.inl h1
+          · match i, hi, he with
+            | 0, _, he => exact ih he
+            | i + 1, hi, he => exact Or.inr ⟨i, hi, he⟩
+      rcases hs _ h with h1 | ⟨i, hi, he⟩
+      · exact Or.inl (by simpa [occV] using h1)
+      · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
 
-theorem occV_soundL : ∀ (ts : List Term), OccSoundVL ts
-  | [] => trivial
-  | t :: ts => ⟨occV_sound t, occV_soundL ts⟩
+/-- The options' companion: an option that writes a value writes it in the union's occupancy, or
+    through a variable that reads the input. -/
+theorem occV_openL : ∀ (ts : List Term) (ρ : List Codec) (v : Value) (o : Codec),
+    o ∈ denoteList ts ρ → (o.e v).isSome = true →
+      occVL ts v.slot = true ∨ ∃ i, 2 ≤ Term.useL i ts ∧ ((envAt ρ i).e v).isSome = true
+  | [], _, _, _, ho, _ => nomatch ho
+  | t :: ts, ρ, v, o, ho, h => by
+      simp only [denoteList, List.mem_cons] at ho
+      rcases ho with rfl | ho
+      · rcases occV_open t ρ v h with h1 | ⟨i, hi, he⟩
+        · exact Or.inl (occVL_cons (.inl h1))
+        · exact Or.inr ⟨i, by simp only [Term.useL]; omega, he⟩
+      · rcases occV_openL ts ρ v o ho h with h1 | ⟨i, hi, he⟩
+        · exact Or.inl (occVL_cons (.inr h1))
+        · exact Or.inr ⟨i, by simp only [Term.useL]; omega, he⟩
+
 end
+
+/-- **The write occupancy contains the row.** A closed term's variables are the bottom, so no
+    variable writes, and the open lemma lands in the occupancy. -/
+theorem occV_sound (t : Term) : OccSoundV t := fun v h =>
+  (occV_open t [] v ((Adm_exact t v).mp h)).resolve_right
+    fun ⟨_, _, he⟩ => by simp [envAt, Codec.empty] at he
 
 def OccSoundA (t : Term) : Prop := ∀ a, AdmA t a = true → occA t a.member = true
 
-def OccSoundAL : List Term → Prop
-  | [] => True
-  | t :: ts => OccSoundA t ∧ OccSoundAL ts
-
-theorem occSoundAL_mem : ∀ (ts : List Term), OccSoundAL ts → ∀ t ∈ ts, OccSoundA t
-  | [], _, t, ht => absurd ht (by simp)
-  | _ :: ts, h, t, ht => by
-      rcases List.mem_cons.mp ht with rfl | ht'
-      · exact h.1
-      · exact occSoundAL_mem ts h.2 t ht'
-
-theorem occAL_of_mem {t : Term} {ts : List Term} {m : Member} (ht : t ∈ ts)
-    (h : occA t m = true) : occAL ts m = true := by
-  induction ts with
-  | nil => exact absurd ht (by simp)
-  | cons _ ts ih =>
-    rcases List.mem_cons.mp ht with rfl | h'
-    · simp [occAL, h]
-    · simp [occAL, ih h']
+/-- A read occupancy of an option is inside the read occupancy of the union. -/
+theorem occAL_cons {t : Term} {ts : List Term} {m : Member}
+    (h : occA t m = true ∨ occAL ts m = true) : occAL (t :: ts) m = true := by
+  rcases h with h | h <;> simp [occAL, h]
 
 mutual
 
-/-- **The read occupancy contains the row.** The mirror of `occV_sound`. -/
-theorem occA_sound : ∀ (t : Term), OccSoundA t
-  -- One group where the write side needs three: on the read side the gates are gone, the
-  -- stored member being what `Attr.member` already computes.
-  | .string | .number | .boolean | .binary | .null =>
-      fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
-  | .never => fun _ h => by simp [AdmA] at h
-  | .literal k _ => fun a h => by
+/-- **The read occupancy contains what an open term reads**, or a variable that reads the term's
+    own input reads it. The mirror of `occV_open`. -/
+theorem occA_open : ∀ (t : Term) (ρ : List Codec) (a : Attr),
+    ((denote t ρ).p a).isSome = true →
+      occA t a.member = true ∨ ∃ i, 2 ≤ t.use i ∧ ((envAt ρ i).p a).isSome = true
+  | .string, _, a, h | .number, _, a, h | .boolean, _, a, h | .binary, _, a, h
+  | .null, _, a, h => Or.inl (by
+      cases a <;> simp_all [denote, stringCodec, booleanCodec, binaryCodec, nullCodec,
+        numberCodec, occA, occOnly, Attr.member])
+  | .never, _, _, h => by simp [denote, Codec.empty] at h
+  | .opaq, _, _, _ => Or.inl rfl
+  | .literal k x, _, a, h => by
+      have h := (AdmA_exact (.literal k x) a).mpr h
       rw [AdmA_literal] at h
-      cases k <;> cases a <;> simp_all [AdmALit, occA, occOnly, Attr.member, GroundKind.member]
-  | .set b => fun a h => by
-      cases b <;> cases a <;>
-        simp_all [AdmA, AdmASet, occA, occOnly, Attr.member, SetBase.member]
-  | .list _ _ _ =>
-      fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
-  | .object (.mk _ _ _) => fun a h => by
-      cases a <;> simp_all [AdmA, AdmABody, occA, occOnly, Attr.member]
-  | .refine t _ => fun a h => by
-      simpa [occA] using occA_sound t a (Bool.and_eq_true_iff.mp h).1
-  | .held t _ _ _ => fun a h => by
-      simpa [occA] using occA_sound t a (Bool.and_eq_true_iff.mp h).1
-  | .lazy t => fun a h => by simpa [occA] using occA_sound t a h
-  | .union opts => fun a h => by
-      obtain ⟨t, ht, hadm⟩ := AdmAAny_iff.mp (by rw [AdmA_union] at h; exact h)
-      exact occAL_of_mem ht
-        (occSoundAL_mem opts (occA_soundL opts) t ht a hadm)
-  | .opaq => fun _ _ => rfl
-  | .var _ => fun _ h => by simp [AdmA] at h
-  | .mu _ => fun _ _ => rfl
+      exact Or.inl (by
+        cases k <;> cases a <;> simp_all [AdmALit, occA, occOnly, Attr.member, GroundKind.member])
+  | .set b, _, a, h => by
+      have h := (AdmA_exact (.set b) a).mpr h
+      exact Or.inl (by
+        cases b <;> cases a <;>
+          simp_all [AdmA, AdmASet, occA, occOnly, Attr.member, SetBase.member])
+  | .list _ _ _, _, a, h => Or.inl (by
+      cases a <;> simp_all [denote, listCodec, occA, occOnly, Attr.member])
+  | .object (.mk _ _ _), _, a, h => Or.inl (by
+      cases a <;> simp_all [denote, bodySem, objectCodec, objectCodecCore, carriedCodec, mA,
+        occA, occOnly, Attr.member])
+  | .held t P f g, ρ, a, h => by
+      obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
+      obtain ⟨hc, -⟩ := restrict_p.mp hw
+      obtain ⟨u, hu, -⟩ := through_p.mp hc
+      rcases occA_open t ρ a (by rw [hu]; rfl) with h1 | ⟨i, hi, he⟩
+      · exact Or.inl (by simpa [occA] using h1)
+      · exact Or.inr ⟨i, by simp only [Term.use, useHeld]; split <;> omega, he⟩
+  | .refine t p, ρ, a, h => by
+      obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
+      obtain ⟨hc, -⟩ := restrict_p.mp hw
+      rcases occA_open t ρ a (by rw [hc]; rfl) with h1 | ⟨i, hi, he⟩
+      · exact Or.inl (by simpa [occA] using h1)
+      · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
+  | .lazy t, ρ, a, h => by
+      rcases occA_open t ρ a h with h1 | ⟨i, hi, he⟩
+      · exact Or.inl (by simpa [occA] using h1)
+      · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
+  | .union opts, ρ, a, h => by
+      obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
+      obtain ⟨o, ho, hop, -⟩ := altCodec_p_admits hw
+      rcases occA_openL opts ρ a o ho hop with h1 | ⟨i, hi, he⟩
+      · exact Or.inl (by simpa [occA] using h1)
+      · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
+  | .var j, _, _, h => Or.inr ⟨j, by simp [Term.use], h⟩
+  | .mu b, ρ, a, h => by
+      have hs : ∀ n, ((muStage (fun c => denote b (c :: ρ)) n).p a).isSome = true →
+          occA b a.member = true ∨ ∃ i, 2 ≤ b.use (i + 1) ∧ ((envAt ρ i).p a).isSome = true := by
+        intro n
+        induction n with
+        | zero => intro h0; simp [muStage, Codec.empty] at h0
+        | succ n ih =>
+          intro hn
+          rcases occA_open b _ a hn with h1 | ⟨i, hi, he⟩
+          · exact Or.inl h1
+          · match i, hi, he with
+            | 0, _, he => exact ih he
+            | i + 1, hi, he => exact Or.inr ⟨i, hi, he⟩
+      rcases hs _ h with h1 | ⟨i, hi, he⟩
+      · exact Or.inl (by simpa [occA] using h1)
+      · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
 
-theorem occA_soundL : ∀ (ts : List Term), OccSoundAL ts
-  | [] => trivial
-  | t :: ts => ⟨occA_sound t, occA_soundL ts⟩
+/-- The options' companion on the read side. -/
+theorem occA_openL : ∀ (ts : List Term) (ρ : List Codec) (a : Attr) (o : Codec),
+    o ∈ denoteList ts ρ → (o.p a).isSome = true →
+      occAL ts a.member = true ∨ ∃ i, 2 ≤ Term.useL i ts ∧ ((envAt ρ i).p a).isSome = true
+  | [], _, _, _, ho, _ => nomatch ho
+  | t :: ts, ρ, a, o, ho, h => by
+      simp only [denoteList, List.mem_cons] at ho
+      rcases ho with rfl | ho
+      · rcases occA_open t ρ a h with h1 | ⟨i, hi, he⟩
+        · exact Or.inl (occAL_cons (.inl h1))
+        · exact Or.inr ⟨i, by simp only [Term.useL]; omega, he⟩
+      · rcases occA_openL ts ρ a o ho h with h1 | ⟨i, hi, he⟩
+        · exact Or.inl (occAL_cons (.inr h1))
+        · exact Or.inr ⟨i, by simp only [Term.useL]; omega, he⟩
+
 end
+
+/-- **The read occupancy contains the row.** The mirror of `occV_sound`. -/
+theorem occA_sound (t : Term) : OccSoundA t := fun a h =>
+  (occA_open t [] a ((AdmA_exact t a).mp h)).resolve_right
+    fun ⟨_, _, he⟩ => by simp [envAt, Codec.empty] at he
 
 /-! ## Separation
 

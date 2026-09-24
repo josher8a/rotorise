@@ -350,7 +350,7 @@ describe('a union of two restrictions of one adapter is the adapter, whatever th
     })
 })
 
-describe('a union refuses a thunk it must read and cannot, because the model has no recursive term', () => {
+describe('a union refuses a thunk it must read at its own input, because the model guards each binder', () => {
     it('refuses a union whose thunk names the union itself, and ends', () => {
         const declare = () => {
             const self: AnyCodec = union([

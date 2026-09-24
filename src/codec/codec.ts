@@ -4869,7 +4869,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
     for (const [at, declared] of (options as readonly AnyCodec[]).entries()) {
         if (unreadableSpine(termOf(declared))) {
             throw new CodecError(
-                `option ${at + 1} of this union reaches a thunk that is recursive, or that names a codec not yet declared, where the union must read it. The model has no recursive term, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
+                `option ${at + 1} of this union reaches a thunk that is recursive, or that names a codec not yet declared, where the union must read it. The model's guard refuses a recursion that reads the input of its own binder, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
             )
         }
     }

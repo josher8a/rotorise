@@ -549,7 +549,8 @@ describe('the worked pairs the model pins', () => {
 })
 
 describe('the meet of a recursive term', () => {
-    // the model has no recursive term, so no term states the meet, and `undefined` certifies nothing
+    // the model's meet states no recursive term, so no term states this meet, and `undefined`
+    // certifies nothing
     it('states no meet of two terms that recurse below a list, and ends', () => {
         const json: AnyCodec = union([
             string,

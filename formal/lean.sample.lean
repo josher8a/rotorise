@@ -303,10 +303,32 @@ theorem lazy_string :
     = some (Attr.s "x") := by
   vector
 
+/-- `recursive_json` -/
+theorem recursive_json :
+    (denote (Term.mu (Term.union [Term.string, Term.array (Term.lazy (Term.var 0))]))).e
+      (Value.arr [Value.str "a", Value.arr [Value.str "b", Value.arr []]])
+    = some (Attr.l [Attr.s "a", Attr.l [Attr.s "b", Attr.l []]]) := by
+  vector
+
+/-- `recursive_json__guarded` — the model's guard accepts this term -/
+theorem recursive_json__guarded :
+    Term.guarded (Term.mu (Term.union [Term.string, Term.array (Term.lazy (Term.var 0))])) = true := rfl
+
+/-- `recursive_tree_optional` -/
+theorem recursive_tree_optional :
+    (denote (Term.lazy (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.lazy (Term.var 0)))) none))))).e
+      (Value.map {"name"} (fun k => Value.str "root"))
+    = some (Attr.m {"name"} (fun k => Attr.s "root")) := by
+  vector
+
+/-- `recursive_tree_optional__guarded` — the model's guard accepts this term -/
+theorem recursive_tree_optional__guarded :
+    Term.guarded (Term.lazy (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.lazy (Term.var 0)))) none)))) = true := rfl
+
 /-! ## Refusals — neither side writes anything for these
 
-37 of 1269 shown; `scripts/gate.sh` elaborates all
-1269. One `rfl` each, no comparator and no fuel: the answer is `none`,
+41 of 1564 shown; `scripts/gate.sh` elaborates all
+1564. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -484,6 +506,26 @@ theorem dunion_two_keys__refuses__scalar_string :
 theorem lazy_string__refuses__scalar_boolean :
     (denote (Term.lazy (Term.string))).e
       (Value.bool true) = none := rfl
+
+/-- `recursive_json__refuses__scalar_boolean` — refused on both sides -/
+theorem recursive_json__refuses__scalar_boolean :
+    (denote (Term.mu (Term.union [Term.string, Term.array (Term.lazy (Term.var 0))]))).e
+      (Value.bool true) = none := rfl
+
+/-- `recursive_tree__refuses__scalar_string` — refused on both sides -/
+theorem recursive_tree__refuses__scalar_string :
+    (denote (Term.mu (Term.object (Body.mk {"v", "kids"} (fun k => if k.1 = "v" then ObjectSlot.req (Term.string) else ObjectSlot.req (Term.array (Term.lazy (Term.var 0)))) none)))).e
+      (Value.str "hello") = none := rfl
+
+/-- `recursive_category__refuses__scalar_string` — refused on both sides -/
+theorem recursive_category__refuses__scalar_string :
+    (denote (Term.lazy (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.lazy (Term.var 0)))) none))))).e
+      (Value.str "hello") = none := rfl
+
+/-- `recursive_tree_optional__refuses__scalar_string` — refused on both sides -/
+theorem recursive_tree_optional__refuses__scalar_string :
+    (denote (Term.lazy (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.lazy (Term.var 0)))) none))))).e
+      (Value.str "hello") = none := rfl
 
 /-- `scalar_number__refuses__scalar_string` — refused on both sides -/
 theorem scalar_number__refuses__scalar_string :
