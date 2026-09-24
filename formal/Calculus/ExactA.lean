@@ -33,7 +33,7 @@ spends on the filter. -/
 abbrev AP := Attr → Bool
 
 /-- …and on the attribute side, admitted by attempt like `admitOptV`. `o.1` (`specOf`)
-    goes unread here; `Orth` still reads it. -/
+    goes unread here. -/
 def admitOptA (o : Option (BodySpec) × AP) (a : Attr) : Bool := o.2 a
 
 /-- …and the same disjunction. -/

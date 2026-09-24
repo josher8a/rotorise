@@ -181,6 +181,29 @@ describe('untagged', () => {
         })
     })
 
+    /**
+     * The views of a union are the union of the views of its options, so an adapter below a union
+     * is compared through its two sides like any other adapter.
+     */
+    it('accepts an object beside a union of objects that hold an adapter, where the views are apart', () => {
+        const priced = union([
+            object({ a: string, n: decimal }),
+            object({ b: boolean, n: decimal }),
+        ])
+        const either = union([object({ a: string, n: boolean }), priced])
+        for (const value of [
+            { a: 'x', n: true },
+            { a: 'x', n: '1.5' },
+            { b: false, n: '2' },
+        ])
+            expect(either.unsafeDecode(either.unsafeEncode(value))).toEqual(
+                value,
+            )
+        expect(either.unsafeEncode({ a: 'x', n: '1.5' })).toEqual({
+            M: { a: { S: 'x' }, n: { N: '1.5' } },
+        })
+    })
+
     it('exposes a chosen variant as a plain item codec', () => {
         expect(Leg.variant(1).field('petIds').unsafeEncode(['x'])).toEqual({
             L: [{ S: 'x' }],

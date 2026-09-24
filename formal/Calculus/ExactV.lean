@@ -81,8 +81,7 @@ def valPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot
 
 /-- A `union` option's own admission, as `optionSemOf` builds it. Every option decides by
     *attempt* now, which is its row exactly when its row is exact — `admitOptV (specOf t,
-    Adm t) v` reduces to `Adm t v`. `o.1` (`specOf`) goes unread here; `Orth` still reads
-    it. -/
+    Adm t) v` reduces to `Adm t v`. `o.1` (`specOf`) goes unread here. -/
 def admitOptV (o : Option (BodySpec) × VP) (v : Value) : Bool := o.2 v
 
 /-- `select` at a `union`, as a row: the union admits where one of its options admits. -/

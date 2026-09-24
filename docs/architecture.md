@@ -102,7 +102,7 @@ error but a silent "everything": the analysis stays sound and stops saying anyth
 | --- | --- | --- |
 | a depth clause | `Body.depth` | the termination measure must see through it |
 | a denotation clause | `bodySem` | `denote` must dispatch with no case split at the use site |
-| a spec projection | `Body.spec` | `OrthM` and `OrthS` read an object option's names and literals off the spec |
+| a spec projection | `Body.spec` | a slice reads an object option's names and literals off the spec |
 | an admission row, per side | `AdmBody` and `AdmABody` | exactness is per row; a stratum with no row cannot be exact |
 | a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
 | an emitter clause | the object row of `src/codec/lean.ts` | the bridge writes terms in this language, and a constructor it cannot spell breaks it |
@@ -182,10 +182,9 @@ whole resolves. Indices make per-thing properties structural, and this is not on
 **The discriminated union is the case that left the term language rather than crossing into it.**
 A dissection is a `union` of object members whose pairwise structural meet is empty: two members
 differ at a required literal name with disjoint alternatives, or the name intervals they declare
-cannot be satisfied at once. The certificate reads that off `Body.spec`, on both halves of the
-pair. `select` admits an object option by attempt, as it admits every other option. `OrthS` is the
-phase of `Orth` that certifies the first case, `OrthM` certifies the second, and a sub-selection
-of a certified union stays certified, because the certificate is `Pairwise` and `pairwiseCompat_sublist` carries the obligation under it. A
+cannot be satisfied at once. `select` admits an object option by attempt, as it admits every other
+option. The meet certifies both cases: the two bodies meet at the bottom. A sub-selection of a
+certified union stays certified, because the certificate is `Pairwise` and `pairwiseCompat_sublist` carries the obligation under it. A
 tag table keyed by the discriminating literals is an index the host builds over such a union, and
 no term carries it.
 
@@ -290,8 +289,8 @@ over-approximates each term's occupancy per side with `occV` and `occA` and cert
 occupancies are disjoint, by `decide`.
 
 **Its value is that it is half of the specification of the library's declaration-time guard, and
-a checked half.** The union certificate is `certPair`: `Orth`, a meet at the bottom, or `certViews`,
-which certifies the caller views and the stored views of a `held` separately. The `union`
+a checked half.** The union certificate is `certPair`: a meet at the bottom, or `certViews`, which
+certifies the caller views and the stored views of a `held` separately. The `union`
 combinator in `src/` refuses a pair of options that it cannot certify. The combinator also refuses
 two options that cross, where the meet is neither `never` nor one of the two options, because no
 option owns the overlap. The bridge is the separation class in `src/codec/lean.ts`: one theorem per
@@ -312,7 +311,7 @@ certificate decides the pair. So the `identifies` row refuses a `held` beside a 
 the model, and the host does not use that, because an overlap has no owner.
 
 `Separated` is what names the separation guarantee over the option list, with
-`separated_of_orth` as the classifier's bridge into it.
+`separated_of_unionOk` as the certificate's bridge into it.
 
 ---
 

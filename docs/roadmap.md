@@ -49,7 +49,7 @@ statement exists, the re-founding pays the whole term language for a guarantee t
 already give.
 
 **What names the guarantee instead today.** `Separated`, one `Prop` over the option list, with
-`separated_of_orth` as the classifier's bridge into it.
+`separated_of_unionOk` as the certificate's bridge into it.
 
 ---
 

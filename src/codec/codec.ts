@@ -3915,7 +3915,7 @@ const dissect = <T extends Record<string, unknown>>(
      *
      * A dissection is a certified union: its members are objects that differ at a required literal
      * key with disjoint alternatives, which is exactly what structural admission resolves and what
-     * `Calculus.OrthS` certifies. So there is one sum in the term language, and the key set below
+     * `Calculus.certPair` certifies. So there is one sum in the term language, and the key set below
      * is a lookup this builder keeps for `variant`, `encodePartial` and the item path — a host
      * index, carried by no term.
      */

@@ -648,7 +648,7 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
  * The names an object option answers to, each with whether the item must carry it.
  *
  * `undefined` for a non-object. The certificate reads these names and the literals an object
- * pins (the model's `OrthM` and `OrthS`). Selection itself is by attempt at every option, objects
+ * pins (the model reads them through the meet of two bodies). Selection itself is by attempt at every option, objects
  * included. An `optional` binding is declared and not required, and that is
  * the ambiguity §5 names in the same words: two objects declaring only optional names both admit
  * the empty map, however disjoint their names.
@@ -897,16 +897,11 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  * warrant for the flat case and the warrant for the container case are two different theorems,
  * and only the first is about literals.
  *
- * **`Orth` certifies two of these cases now and this row is still not redundant.** Since `OrthL`,
- * the model certifies two literals at one base with disjoint alternatives, and two
- * `refine(set b, each(members …))` at one base with disjoint alternatives. Measured over the 378
- * corpus pairs, removing this row and porting `OrthL` in its place loses twenty pairs and gains
- * none, in three groups: a `dunion` against anything, which no phase of `Orth` reaches; a literal
- * against an occupancy that is `⊤`, which is the over-approximation refusing to certify; and a
- * literal against its own base, where the union really is ambiguous at the literal's values and
- * the model's decline is correct rather than incomplete. So this row is not an exemption waiting
- * for a certificate. It is a wider rule than `Orth`'s, and the last group is a question about the
- * rule rather than about the proof.
+ * **The meet certifies two of these cases, and this row is still not redundant.** The model's
+ * meet certifies two literals at one base with disjoint alternatives, and two
+ * `refine(set b, each(members …))` at one base with disjoint alternatives. This row also accepts a
+ * literal against an occupancy that is `⊤`, which the certificate declines. So this row is not an
+ * exemption waiting for a certificate. It is a wider rule than the certificate's.
  *
  * A bare `set` answers `false`: {@link Term}'s `set` carries a **base** and has no element to read.
  * `string.set('a','b')` is `refine(set(string), each(members …))`, so this row sees the literal
@@ -997,10 +992,10 @@ export const unfoldOpaque = (op: Extract<Term, { kind: 'opaq' }>): Term => {
  *
  * **A term inside one option of a sum is inside the sum.** `opaque` is the universal sum, so
  * `string('a')` sits inside `opaque` through the `string` option of {@link unfoldOpaque}. The
- * model's `Orth` declines each such pair.
+ * model's certificate declines each such pair.
  *
  * Two restrictions of one base are a different shape: `string('A')` and `string('B')` share no
- * value, and `Orth` certifies the pair since `OrthL`. So this row asks containment, never
+ * value, and the meet certifies the pair. So this row asks containment, never
  * disjointness.
  *
  * **A union of literals at one base is a restriction of that base**, and reading only the
@@ -1051,7 +1046,7 @@ export const restricts = (x: Term, y: Term): boolean => {
  * A body admits every name set between its required names and the names it holds, so the two
  * intervals intersect exactly on that condition. A body holds its declared names, and an open
  * block holds every other name: `presenceAt` answers `(true, true)` for an undeclared name under a
- * block. `Calculus.OrthM` read positively.
+ * block. The model's meet of two bodies decides the same intersection.
  */
 const namesMeet = (x: Body, y: Body): boolean => {
     const holds = (b: Body, name: string) =>
@@ -1089,7 +1084,7 @@ const altsApart = (x: Alternatives, y: Alternatives): boolean =>
  *
  * Two clauses, and the second is what pass 7 added: the name intervals meet, and no shared
  * **required** name is pinned to literals with nothing in common. `required` on both sides is the
- * rule `Calculus.OrthS` states, because two objects sharing an *optional* literal name with
+ * rule the model's meet of two bodies reads, because two objects sharing an *optional* literal name with
  * disjoint alternatives both admit the map that omits the name.
  */
 export const structuralMeet = (
@@ -1177,11 +1172,11 @@ const sameConversion = (x: Term, y: Term): boolean =>
 /**
  * **Whether a union may hold these two options**, asked at the declaration.
  *
- * **This is not a port of `Orth`, and the difference is the direction.** `Orth` is a *certificate*:
+ * **This is not a port of `certPair`, and the difference is the direction.** `certPair` is a *certificate*:
  * `true` means the model proved the two cannot both admit one input. This is the complement of a
  * *refutation*: it answers `false` only where both occupancies are known, they meet on a side, and
- * no exemption applies. Where `Orth` declines for want of a proof, this accepts. One row is shared
- * — `Orth1`, below — and the law that ties them is what `formal/.separations.lean` pins, one
+ * no exemption applies. Where `certPair` declines for want of a proof, this accepts. One row is
+ * shared — the slot test `Orth1`, which the meet uses at the bottom — and the law that ties them is what `formal/.separations.lean` pins, one
  * theorem per pair this function refuses: **it never answers `false` where `certPair` answers `true`.**
  * Refusing a declaration the model proves separable would be refusing a union that works.
  * `union` asks it only of a pair that is not held-free, through {@link compatible}.
@@ -1195,8 +1190,8 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * read question. The row accepts where this function accepts both pairs of views. It certifies a
  * `held` whose held side is a non-empty list beside a list of another element.
  *
- * **Two options that meet at the bottom.** The model's certificate is `certPair`: `Orth`, or a
- * meet at `never`. `Adm_meet` and `AdmA_meet` make the meet's admission the conjunction of the
+ * **Two options that meet at the bottom.** The model's certificate is `certPair`: a meet at
+ * `never`, or `certViews`. `Adm_meet` and `AdmA_meet` make the meet's admission the conjunction of the
  * two, so a meet at the bottom admits no common value and reads no common attribute. The row asks
  * {@link meetTerms} only where both terms reach no thunk, which {@link reaches} answers. It certifies two lists told apart
  * by a literal position, and two objects whose required slots meet at the bottom.
@@ -1205,10 +1200,10 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * admits every option by attempt, an object option included, so two object options are separable
  * where no value passes both attempts. This row reads that off the two structures: the names
  * present, and then every required literal field. Two such options are separable where no value
- * satisfies both structures: either their name intervals do not meet (`OrthM`) or some shared
- * required name is pinned to literals with nothing in
- * common (`OrthS`). The meet row above certifies two objects whose required slots meet at `never`
- * through a field that pins no literal.
+ * satisfies both structures: either their name intervals do not meet or some shared required name
+ * is pinned to literals with nothing in common. The model's meet certifies both cases. The meet row
+ * above certifies two objects whose required slots meet at `never` through a field that pins no
+ * literal.
  *
  * **One object option beside a non-object meets through the occupancies**, as every other pair
  * does. `opaque` writes and reads a map too, so an object beside it is not separable outright.
@@ -1219,10 +1214,8 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * set are the other two.
  *
  * **An option that identifies its own values.** {@link identifies}, whose warrants are on it, and
- * the row is permanent rather than pending. `Orth` carries a phase `OrthL` now, so the flat
- * literal case and the literal-set case are certified. Porting `OrthL` here would be dead code:
- * every pair it certifies, this row already accepts, and the row accepts twenty corpus pairs the
- * model does not certify. {@link identifies} names the three groups. The row applies only where
+ * the row is permanent rather than pending. The model's meet certifies the flat literal case and
+ * the literal-set case, and this row accepts those pairs and more. {@link identifies} names the three groups. The row applies only where
  * neither option reaches a `held`, because only there does `compat_of_HF` show the two options
  * compatible. A `held` beside a literal can share a caller value with the literal.
  *
@@ -1276,7 +1269,7 @@ export const separable = (x: Term, y: Term, identified = true): boolean => {
      * **Where both options pin a set of values, the values decide.**
      *
      * The occupancies answer *where* two options write and read, which is right, and they are
-     * silent about *what*, which is the question `Orth` asks. Two options that each name their own
+     * silent about *what*, which is the question the meet asks. Two options that each name their own
      * values meet exactly where those value sets meet, so a pair sharing a slot is separable when
      * the sets are disjoint and is separable by nothing when they are not. That holds under an
      * adapter and over a bare base alike: `number(0, 1)` and `decimal('2', '3')` are
@@ -1355,9 +1348,8 @@ const reaches = (t: Term, kinds: readonly Term['kind'][]): boolean => {
  * **Whether {@link callerView} and {@link storedView} are sound on a term**, and build it without
  * forcing a thunk.
  *
- * The views keep a `union` as written. The view of a `union` with a `held` below it would need
- * the join of the views of its options, so such a term has no view, as the model's
- * `heldBelowUnion` states. A `legacy` with a `held` below it has none either: its `r` reads an
+ * The view of a `union` is the union of the views of its options, because a union admits where
+ * one of its options admits. A `legacy` with a `held` below it has no view: its `r` reads an
  * attribute to a held value, so the read widens on both sides. A thunk has no view, because a
  * walk that forces a recursive thunk does not end.
  */
@@ -1369,8 +1361,9 @@ const viewable = (t: Term): boolean => {
             return viewable(t.inner) && viewable(t.outer)
         case 'refine':
             return viewable(t.inner)
-        // `reaches` counts a thunk as a `held`, so a thunk below refuses here too
         case 'union':
+            return t.options.every(viewable)
+        // `reaches` counts a thunk as a `held`, so a thunk below refuses here too
         case 'legacy':
             return !reaches(t, ['held'])
         case 'list':
@@ -1389,7 +1382,7 @@ const viewable = (t: Term): boolean => {
     }
 }
 
-/** A list or an object with each position and each field replaced by its view. */
+/** A list, an object or a union with each position, field and option replaced by its view. */
 const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
     switch (t.kind) {
         case 'list':
@@ -1414,6 +1407,8 @@ const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
                 },
             }
         }
+        case 'union':
+            return { kind: 'union', options: t.options.map(view) }
         default:
             return t
     }
@@ -1488,7 +1483,7 @@ export const compatible = (x: Term, y: Term): boolean =>
  *
  * The label is what a refusal reports, so this answers the meeting rather than a boolean. `union`
  * asks again on the path it is about to throw on, which costs one walk of a term nobody will use
- * and keeps {@link separable} the `Bool` the model's `Orth` is.
+ * and keeps {@link separable} the `Bool` the model's `certPair` is.
  */
 export const meet = <A>(
     one: readonly A[] | undefined,
