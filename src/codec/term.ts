@@ -265,15 +265,14 @@ export type Term =
      *
      * `Term.lazy` carries a plain `Term`, and `Term.lean` says why in as many words: a closure adds
      * no constructible term, every `Term` being finite either way, and the model states no recursive
-     * term. `union`'s admission is anti-monotone, so a recursive union has no fixpoint semantics under
-     * unique admission in general. `lawful_opaqCodecω` is the exception: `opaque` is a lawful
-     * recursive union, because its options are pairwise kind-disjoint.
+     * term, so a recursive union has no counterpart there. `lawful_opaqCodecω` is the exception:
+     * `opaque` is a lawful recursive union, fuelled by the depth of each input.
      *
      * This library supports a recursive entity through a thunk, and `codec.recursive.spec.ts`
      * declares one, so the thunk stays. **Everything else here reads through it.**
      * {@link occV}, {@link occA} and {@link ownsNullOf} answer what the term underneath answers,
-     * `meetTerms` reads through on either side, and the emitter forces the chain to a depth and
-     * gives up only on a genuinely recursive one. `Meet.lean` heads the matching section
+     * `meetTerms` reads through on either side and states no meet of a recursive one, and the
+     * emitter forces the chain to a depth and gives up only on a genuinely recursive one. `Meet.lean` heads the matching section
      * "`lazy` is transparent, and it constrains nothing". Only {@link member} is lost, because
      * the model's `μSyn (.lazy t)` is `none`.
      *
@@ -1175,9 +1174,10 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * **This is not a port of `certPair`, and the difference is the direction.** `certPair` is a *certificate*:
  * `true` means the model proved the two cannot both admit one input. This is the complement of a
  * *refutation*: it answers `false` only where both occupancies are known, they meet on a side, and
- * no exemption applies. Where `certPair` declines for want of a proof, this accepts. One row is
- * shared — the slot test `Orth1`, which the meet uses at the bottom — and the law that ties them is what `formal/.separations.lean` pins, one
- * theorem per pair this function refuses: **it never answers `false` where `certPair` answers `true`.**
+ * no exemption applies. Where `certPair` declines for want of a proof, this accepts. The law that
+ * ties them is what `formal/.separations.lean` pins, in both directions: for each pair `union`
+ * refuses, `certPair` is `false`, so **this never answers `false` where `certPair` answers `true`**;
+ * for each pair `union` accepts, the model proves `PairwiseCompat`.
  * Refusing a declaration the model proves separable would be refusing a union that works.
  * `union` asks it only of a pair that is not held-free, through {@link compatible}.
  *
@@ -1192,9 +1192,8 @@ const sameConversion = (x: Term, y: Term): boolean =>
  *
  * **Two options that meet at the bottom.** The model's certificate is `certPair`: a meet at
  * `never`, or `certViews`. `Adm_meet` and `AdmA_meet` make the meet's admission the conjunction of the
- * two, so a meet at the bottom admits no common value and reads no common attribute. The row asks
- * {@link meetTerms} only where both terms reach no thunk, which {@link reaches} answers. It certifies two lists told apart
- * by a literal position, and two objects whose required slots meet at the bottom.
+ * two, so a meet at the bottom admits no common value and reads no common attribute. It certifies
+ * two lists told apart by a literal position, and two objects whose required slots meet at the bottom.
  *
  * **Two object options: the structural meet.** A union
  * admits every option by attempt, an object option included, so two object options are separable
@@ -1208,8 +1207,9 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * **One object option beside a non-object meets through the occupancies**, as every other pair
  * does. `opaque` writes and reads a map too, so an object beside it is not separable outright.
  *
- * **An option that is a restriction of another.** {@link restricts}, and it *refuses* where every
- * other row accepts, so it sits ahead of them. `opaque` was the first instance of the rule and had
+ * **An option that is a restriction of another.** {@link restricts}, and it answers `false` where
+ * every other row would accept, because an option inside another shares each of its values with
+ * the other, so it sits ahead of them. `opaque` was the first instance of the rule and had
  * its own paragraph below; a literal against its base and a literal set against its base's plain
  * set are the other two.
  *
@@ -1255,8 +1255,7 @@ export const separable = (x: Term, y: Term, identified = true): boolean => {
         return true
     // a meet at the bottom separates, and it runs ahead of the object row, because two objects
     // whose required slots meet at `never` share names and no value
-    if (!reaches(x, []) && !reaches(y, []) && meetTerms(x, y)?.kind === 'never')
-        return true
+    if (meetTerms(x, y)?.kind === 'never') return true
     const xs = objectMembers(x)
     const ys = objectMembers(y)
     if (xs && ys) {
@@ -1314,8 +1313,8 @@ export const separable = (x: Term, y: Term, identified = true): boolean => {
  * thunk that the walk meets again is recursive, and a thunk that throws names a codec that is not
  * yet declared. Each answers "reaches", because the model has no recursive term: the host shows
  * only what the model can state. So `reaches(t, [])` answers whether a thunk is unreadable, and
- * {@link separable} asks the meet only where none is, because a meet of two recursive terms need
- * not end. `held` and `legacy` need no such guard there: the meet answers `undefined` at each.
+ * {@link meetTerms} answers only where none is, because a meet of two recursive terms need not
+ * end. `held` and `legacy` need no such guard there: the meet answers `undefined` at each.
  * {@link heldFree} asks for no adapter, because the model's confluence holds only there.
  */
 const reaches = (
@@ -1605,16 +1604,22 @@ export const meet = <A>(
  * inventing. The first two are `docs/defects.md` entries; the third is a mark the model's `Field`
  * does not have.
  */
-export const meetTerms = (x: Term, y: Term): Term | undefined => {
+export const meetTerms = (x: Term, y: Term): Term | undefined =>
+    // **A thunk the walk cannot read states no meet.** The meet forces each thunk it meets, and a
+    // recursive thunk would not end, so the meet asks {@link reaches} first. `undefined` is the
+    // conservative answer: no caller reads it as the bottom, so it certifies nothing
+    reaches(x, []) || reaches(y, []) ? undefined : meetWalk(x, y)
+
+const meetWalk = (x: Term, y: Term): Term | undefined => {
     // the bottom absorbs, on either side
     if (x.kind === 'never' || y.kind === 'never') return never
     // a thunk carries a plain term, so the meet reads through it. The model's `.lazy` row sits
     // second on the left and after `held` on the right, and these two keep that precedence
-    if (x.kind === 'lazy') return meetTerms(x.get(), y)
+    if (x.kind === 'lazy') return meetWalk(x.get(), y)
     // the three whose admission is a function and not data: a reader cannot say what they admit
     // without running them, so no term states the intersection
     if (opaqueToReader(x) || opaqueToReader(y)) return undefined
-    if (y.kind === 'lazy') return meetTerms(x, y.get())
+    if (y.kind === 'lazy') return meetWalk(x, y.get())
     // a certified union distributes, on either side
     if (x.kind === 'union') return distribute(x.options, y)
     if (y.kind === 'union') return distribute(y.options, x)
@@ -1774,7 +1779,7 @@ const overRefinement = (
     other: Term,
 ): Term | undefined => {
     if (q.kind === 'closure') return undefined
-    const z = meetTerms(inner, other)
+    const z = meetWalk(inner, other)
     return z === undefined ? undefined : refineOf(z, q)
 }
 
@@ -1790,7 +1795,7 @@ const distribute = (
 ): Term | undefined => {
     const met: Term[] = []
     for (const option of options) {
-        const z = meetTerms(option, other)
+        const z = meetWalk(option, other)
         if (z === undefined) return undefined
         met.push(z)
     }
@@ -1912,7 +1917,7 @@ const rowMeet = (
 ): readonly Term[] | undefined => {
     const row: Term[] = []
     for (const [at, one] of a.entries()) {
-        const z = meetTerms(one, b[at] as Term)
+        const z = meetWalk(one, b[at] as Term)
         if (z === undefined) return undefined
         row.push(z)
     }
@@ -1956,7 +1961,7 @@ const meetLists = (
         const s = Math.max(x.suf.length, y.suf.length)
         if (!dominates(x.pre.length, x.suf.length, y.pre.length, y.suf.length))
             return undefined
-        const spread = meetTerms(x.spread, y.spread)
+        const spread = meetWalk(x.spread, y.spread)
         if (spread === undefined) return undefined
         const rows = rowOf(x, p + s)
         const other = rowOf(y, p + s)
@@ -1996,12 +2001,12 @@ const meetLists = (
 const meetFields = (a: Field, b: Field): Field | undefined => {
     if (a.mark === 'undefinable' || b.mark === 'undefinable') return undefined
     if (a.mark === 'optional' && b.mark === 'optional')
-        return mark(meetTerms(a.t, b.t), 'optional')
+        return mark(meetWalk(a.t, b.t), 'optional')
     if (a.mark === 'fallback' || b.mark === 'fallback')
         return a.mark === 'req' || b.mark === 'req'
-            ? mark(meetTerms(a.t, b.t), 'req')
+            ? mark(meetWalk(a.t, b.t), 'req')
             : undefined
-    return mark(meetTerms(a.t, b.t), 'req')
+    return mark(meetWalk(a.t, b.t), 'req')
 }
 
 const mark = (
@@ -2058,7 +2063,7 @@ const meetBodies = (a: Body, b: Body): Term | undefined => {
     ]
     if (met.some(([, field]) => field !== undefined && isBottomField(field)))
         return never
-    const block = meetTerms(aBlock, bBlock)
+    const block = meetWalk(aBlock, bBlock)
     if (block === undefined) return undefined
     const closed = block.kind === 'never'
     const fields: Record<string, Field> = {}

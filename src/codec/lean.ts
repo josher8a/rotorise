@@ -926,8 +926,10 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  *
  * - `src/` **accepts** the pair: the model proves `PairwiseCompat` for it, given lawful options,
  *   through the warrant the host used. `never` on a side is `pairwiseCompat_never_left` or
- *   `_right`. Two held-free options are `pairwiseCompat_of_HF`. Any other accepted pair was
- *   accepted by `separable`, the host's `certPair`, and is `pairwiseCompat_of_separated` through
+ *   `_right`. Two held-free options are `pairwiseCompat_of_HF`. An option {@link below} the other
+ *   is `pairwiseCompat_of_sub` or `_sub'`, with the proof of `Sub` printed row by row. Any other
+ *   accepted pair was accepted by `separable`, the host's `certPair`, and is
+ *   `pairwiseCompat_of_separated` through
  *   `separated_of_unionOk`. A host warrant that the model does not prove stops the file.
  * - `src/` **refuses** the pair: the model's certificate must not certify it, `certPair x y =
  *   false`. A certificate that starts to certify a pair `src/` turns down stops the file.

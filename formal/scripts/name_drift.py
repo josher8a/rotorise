@@ -231,18 +231,17 @@ HOST = {
     "opaque": "`src/`'s codec, analysed here as the language's one escape hatch, and warranted "
               "by the calculus rather than by its user (§7). `opaqCodec` is the model's, and is "
               "not the same name",
-    "separable": "`src/codec/term.ts`'s declaration-time guard: whether a union may hold two options. "
-                 "§5 cites it because `Orth` is its specification, and the two run opposite "
-                 "directions — `Orth` certifies, this refutes, so where `Orth` declines this "
-                 "accepts. `.separations.lean` pins the one-directional law between them",
+    "separable": "`src/codec/term.ts`'s certificate: whether two options share no value and no "
+                 "attribute. The model's certificate is `certPair`; `.separations.lean` pins the "
+                 "law in both directions",
     "identifies": "`src/codec/term.ts`'s reader of whether a term decides which values are its own — "
                   "§5's fourth discharger row, and the exemption `separable` consults first",
     "valueKinds": "`src/codec/denote.ts`'s coarsening of `occV` to the alphabet a *value* can be "
                   "classified into — the reader `carries` became. §5 cites the value-kind filter "
                   "because a union's write side reads it; the model's `κ` is over `Kind`, which "
                   "is the same coarsening one level up",
-    "Separation": "`src/codec/lean.ts`'s vector class carrying §5's bridge: one theorem per pair "
-                  "`src/` refuses, asserting `Orth` does not certify it",
+    "Separation": "`src/codec/lean.ts`'s vector class carrying §5's bridge: one theorem per corpus "
+                  "pair, `PairwiseCompat` where `src/` accepts, `certPair` false where it refuses",
     "ReadVerdict": "`src/codec/lean.ts`'s vector class carrying the read-side differential: "
                    "`AdmA t a` against whether the library's read accepted `a`. Cited because "
                    "the `AdmA` port was rejected and this is what landed instead",

@@ -1164,7 +1164,7 @@ export const denote = (def: Term): Pair => {
                 decode: (attribute) => codecOfTerm(def.get()).decode(attribute),
             }
         /**
-         * §3 `(union)`: the sum, resolved by unique admission. `lawful_altCodec` is the lemma and
+         * §3 `(union)`: the join, resolved by the first option that admits. `lawful_altCodec` is the lemma and
          * `altSem` is the resolution — one rule, serving both the attribute pair here and the item
          * pair an all-object union also offers.
          *

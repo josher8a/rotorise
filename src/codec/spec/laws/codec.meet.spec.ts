@@ -7,10 +7,13 @@
  * distinction going wrong, so the pairs that share a value are pinned one by one.
  */
 import { describe, expect, it } from 'vitest'
+import type { AnyCodec } from '../../codec'
 import {
+    array,
     binary,
     boolean,
     decimal,
+    lazy,
     never,
     nullValue,
     number,
@@ -542,5 +545,20 @@ describe('the worked pairs the model pins', () => {
                 body({ y: { mark: 'optional', t: termOf(string) } }),
             ),
         ).toEqual(body({}))
+    })
+})
+
+describe('the meet of a recursive term', () => {
+    // the model has no recursive term, so no term states the meet, and `undefined` certifies nothing
+    it('states no meet of two terms that recurse below a list, and ends', () => {
+        const json: AnyCodec = union([
+            string,
+            array(lazy(() => json as never)),
+        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+        const other: AnyCodec = union([
+            string,
+            array(lazy(() => other as never)),
+        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+        expect(meetTerms(json.def as Term, other.def as Term)).toBeUndefined()
     })
 })

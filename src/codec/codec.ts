@@ -4092,9 +4092,9 @@ type RequiredKeysOf<Spec> = {
  *
  * **Where this and the runtime disagree, and it is one case.** `literalsOf` reads the *term* and
  * accepts a `literal`, a `refine` over one included. A `held` or `custom` whose adapter happens to
- * decode to a literal type is read as pinned here and is not read as pinned there, so such a pair
- * would declare and then be ambiguous on the first item. An adapter that narrows to a literal type
- * is the only way to write it.
+ * decode to a literal type is read as pinned here and is not read as pinned there, so a clause on
+ * such a name typechecks and the slice keeps no option: `extract` and `exclude` return `never`. An
+ * adapter that narrows to a literal type is the only way to write it.
  */
 type PinsALiteral<V> = [V] extends [never]
     ? false
