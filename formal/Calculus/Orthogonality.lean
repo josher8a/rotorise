@@ -4,10 +4,12 @@ import Calculus.ExactA
 # Orthogonality — occupancy and separation
 
 `Obligations (.union opts)` carries pairwise compatibility. Two separated options are compatible
-(`pairwiseCompat_of_separated`). The decidable certificate is the meet (`certPair`, `Meet.lean`):
-two options are orthogonal when their meet is the bottom, or when the meets of their two views are.
+(`pairwiseCompat_of_separated`). The decidable certificate is `certPair` (`Meet.lean`): two
+options are orthogonal when their meet is the bottom, when the meets of their two views are, or
+when their occupancies are disjoint on both sides. The meet refuses a closure and the occupancies
+read no predicate, so the slot test certifies a pair that the meet cannot state.
 This module holds what the meet reads and what the certificate proves: the occupancies, the slot
-test `Orth1` that the meet uses at the bottom, and `Separates`.
+test `Orth1` that the meet uses at the bottom and the certificate uses alone, and `Separates`.
 
 ## Sound, never complete, and why there is no `unknown`
 

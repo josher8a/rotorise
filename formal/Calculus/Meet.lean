@@ -1381,7 +1381,7 @@ end
 
 /-! ## The union certificate
 
-The certificate is defined here, after the meet, because one of its two tests is the meet. -/
+The certificate is defined here, after the meet, because two of its three tests are the meet. -/
 
 /-- **Whether two terms meet at the bottom.** A pair that the meet cannot state answers `false`,
     so the pair is not certified. -/
@@ -1472,9 +1472,15 @@ def certViews (x y : Term) : Bool :=
     && meetNever (writeView x) (writeView y) && meetNever (readView x) (readView y)
 
 /-- **The certificate for one pair of options**: the meet, of the two terms or of their two
-    views. A `held` reaches the meet only through its views, so `certViews` is the second
-    disjunct. -/
-def certPair (x y : Term) : Bool := meetNever x y || certViews x y
+    views, or the slot test. A `held` reaches the meet only through its views, so `certViews` is
+    the second disjunct.
+
+    **The slot test is the third disjunct, because the meet refuses a closure.** A `refine` at a
+    `closure` has an admission that is a function, so the meet answers `none` beside every term
+    but the bottom. The occupancies read no predicate: `refine string (closure q)` beside
+    `list [] (some number) []` writes `str` against `list` and reads `S` against `L`, so
+    `Orth1` separates the pair where the meet cannot state the pair. -/
+def certPair (x y : Term) : Bool := meetNever x y || certViews x y || Orth1 x y
 
 /-- The certificate over a list of options, pair by pair. -/
 def certAll : List Term → Bool
@@ -6012,11 +6018,19 @@ theorem separates_of_certViews {x y : Term} (h : certViews x y = true) : Separat
     have hy' := readLe_of y a hy.2
     exact sr.2 a ⟨occA_sound _ a hx', hx'⟩ ⟨occA_sound _ a hy', hy'⟩
 
+/-- **The slot test is sound.** Each family of `Separates` holds the occupancy as a conjunct, and
+    `Orth1` makes the two occupancies disjoint on each side. -/
+theorem separates_of_Orth1 {x y : Term} (h : Orth1 x y = true) : Separates x y :=
+  ⟨fun _ hx hy => occV_disjoint_of_Orth1 h hx.1 hy.1,
+   fun _ hx hy => occA_disjoint_of_Orth1 h hx.1 hy.1⟩
+
 /-- **The pair certificate is sound**: each disjunct separates the pair. -/
 theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates x y := by
-  rcases Bool.or_eq_true_iff.mp h with hm | hv
+  simp only [certPair, Bool.or_eq_true] at h
+  rcases h with (hm | hv) | ho
   · exact separates_of_meetNever hm
   · exact separates_of_certViews hv
+  · exact separates_of_Orth1 ho
 
 /-- **A certified union is separated**, which is the premise of `pairwiseCompat_of_separated`
     and of `admitsAtMostOne_of_separated`. -/

@@ -20,6 +20,7 @@ import {
     optional,
     string,
     union,
+    withLegacyRead,
 } from '../../codec'
 import { accepts } from '../../denote'
 import { failed } from '../../result'
@@ -333,6 +334,25 @@ describe('the declaration guard, where a term is what the guard reads', () => {
                 /are not shown compatible/,
             )
         }
+    })
+
+    /**
+     * **An unknown read side meets every read side.** A field with a stand-in for an absent
+     * attribute reads what no term states, so the meet of two objects has no row for it, and the
+     * occupancies of two objects meet at `M`. Beside an object that holds an adapter, no warrant
+     * shows the pair compatible.
+     */
+    it('refuses an object with a stand-in field beside an object that holds an adapter', () => {
+        const standIn = object({
+            a: withLegacyRead({ current: string, whenMissing: 'stand-in' }),
+        })
+        const priced = object({ b: decimal })
+        expect(() => union([standIn, priced])).toThrow(
+            /are not shown compatible/,
+        )
+        expect(() => union([priced, standIn])).toThrow(
+            /are not shown compatible/,
+        )
     })
 
     /**

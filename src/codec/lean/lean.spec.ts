@@ -29,7 +29,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../attribute'
-import { DynamoNumber } from '../attribute'
+import { DynamoNumber, isNumeral } from '../attribute'
 import type { AnyCodec, AttributeCodec } from '../codec'
 import {
     array,
@@ -1138,6 +1138,16 @@ const separationPairs = (): readonly Separation[] => {
         left: erase(string('1', '2.5')),
         right: erase(decimal('1', '2.5')),
     })
+    // a closure refinement beside a list of adapters. The meet refuses the closure, and the views
+    // keep it, so only the occupancies certify the pair. `refine` wants a type predicate, and
+    // `isNumeral` returns a `boolean`
+    out.push({
+        name: 'numeral_text__vs__array_of_decimal',
+        left: erase(
+            refine(string, isNumeral as (value: string) => value is string),
+        ),
+        right: erase(array(decimal)),
+    })
     return out
 }
 
@@ -1454,7 +1464,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.endsWith('= false := by decide'),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([686, 19])
+        expect([accepted.length, refused.length]).toEqual([687, 19])
     })
 
     it('emits them for the gate to elaborate', () => {

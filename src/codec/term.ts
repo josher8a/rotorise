@@ -734,8 +734,7 @@ export type NameForm = {
  * The literal each declared name is pinned to, **read through a declared adapter**.
  *
  * **Not {@link literalsOf}, and the two must not become one.** That reader answers at the caller's
- * level, because {@link structuralMeet} compares what a caller hands in: an adapter pins nothing
- * there, so a field under one is absent and the option is compared on its other names. This reader
+ * level: an adapter pins nothing there, so a field under one is absent. This reader
  * descends, because `extract` compares a clause literal against a member literal and both sit
  * under the same kind of adapter, so the pair below is the pair that decides. Merging them makes
  * every object union at a numeric name refuse every value, and the failure is a runtime refusal
@@ -881,222 +880,46 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
 /* ── the declaration guard ────────────────────────────────────────────────────────────── */
 
 /**
- * **`opaque` unfolded one time**: the universal sum over each base and each container, with the
- * recursion under `lazy`. The term is total, so the number leaf and the number set are always
- * options. `Calculus.Adm_opaqUnfold` and `Calculus.AdmA_opaqUnfold` prove that the union admits exactly what
- * `opaque` admits, on both sides.
- */
-export const unfoldOpaque = (op: Extract<Term, { kind: 'opaq' }>): Term => {
-    const self: Term = { kind: 'lazy', get: () => op }
-    return {
-        kind: 'union',
-        options: [
-            { kind: 'string' },
-            { kind: 'boolean' },
-            { kind: 'binary' },
-            { kind: 'null' },
-            { kind: 'number' },
-            { kind: 'list', pre: [], spread: self, suf: [] },
-            { kind: 'object', body: { fields: {}, rest: self } },
-            { kind: 'set', base: 'string' },
-            { kind: 'set', base: 'number' },
-            { kind: 'set', base: 'binary' },
-        ],
-    }
-}
-
-/**
- * **One option's values are all admitted by the other**, so the two are not separated.
- *
- * {@link separable} is a certificate that no value is admitted by both options, and a
- * **restriction against the thing it restricts** shares every value it admits. A literal against
- * its own base's ground term, and a set of a literal against the plain set at that base, which is
- * spelled `refine(set b, each(members …))`, so this reads the predicate rather than a subterm.
- *
- * **A term inside one option of a sum is inside the sum.** `opaque` is the universal sum, so
- * `string('a')` sits inside `opaque` through the `string` option of {@link unfoldOpaque}. The
- * model's certificate declines each such pair.
- *
- * Two restrictions of one base are a different shape: `string('A')` and `string('B')` share no
- * value, and the meet certifies the pair. So this row asks containment, never
- * disjointness.
- *
- * **A union of literals at one base is a restriction of that base**, and reading only the
- * `literal` constructor here would miss it: `string('A', 'B')` builds that union.
- */
-export const restricts = (x: Term, y: Term): boolean => {
-    // the empty set is contained in every set, which is `opaque`'s rule at the opposite width
-    if (x.kind === 'never') return true
-    // a term inside one option of a sum is inside the sum, and `opaque` is the universal sum
-    if (y.kind === 'union')
-        return y.options.some((option) => restricts(x, option))
-    if (y.kind === 'opaq') return restricts(x, unfoldOpaque(y))
-    // **A numeric policy of `opaque` holds every value that holds no number, unchanged.** Its `f` is
-    // the identity there, so the options of the unfolding that write no number are inside it. A
-    // number option is not: the policy holds a JS number or none, and never a `DynamoNumber`
-    if (y.kind === 'held' && isOpaqueSugar(y.via) && y.inner.kind === 'opaq') {
-        const unfolded = unfoldOpaque(y.inner)
-        return (
-            unfolded.kind === 'union' &&
-            unfolded.options
-                .filter(
-                    (option) =>
-                        !occV(option).some(
-                            (slot) => slot === 'number' || slot === 'numSet',
-                        ),
-                )
-                .some((option) => restricts(x, option))
-        )
-    }
-    // a literal, or a union of literals at one base, is a refinement of that base: every value
-    // it admits, the base admits
-    const alts = literalAlternatives(x)
-    if (alts && y.kind === alts.base) return true
-    // …and a set of a literal is a restriction of the plain set at that base
-    return (
-        x.kind === 'refine' &&
-        x.inner.kind === 'set' &&
-        x.q.kind === 'each' &&
-        x.q.of.kind === 'members' &&
-        y.kind === 'set' &&
-        y.base === x.inner.base
-    )
-}
-
-/**
- * Whether two bodies' name intervals meet: neither requires a name the other refuses.
- *
- * A body admits every name set between its required names and the names it holds, so the two
- * intervals intersect exactly on that condition. A body holds its declared names, and an open
- * block holds every other name: `presenceAt` answers `(true, true)` for an undeclared name under a
- * block. The model's meet of two bodies decides the same intersection.
- */
-const namesMeet = (x: Body, y: Body): boolean => {
-    const holds = (b: Body, name: string) =>
-        name in b.fields || b.rest !== undefined
-    for (const [name, field] of Object.entries(x.fields)) {
-        if (alwaysWritten(field) && !holds(y, name)) return false
-    }
-    for (const [name, field] of Object.entries(y.fields)) {
-        if (alwaysWritten(field) && !holds(x, name)) return false
-    }
-    return true
-}
-
-/**
- * Whether two literals at one base admit nothing in common.
- *
- * Different bases answer `false` and not `true`. `string('a')` and `decimal('a')` are read from two
- * different attribute members, so they never meet on the stored side — but they meet on the value
- * side, where both are the text `'a'`, and a pair separated on one side only is not separated.
- */
-const altsApart = (x: Alternatives, y: Alternatives): boolean =>
-    x.base === y.base &&
-    !(x.ls as readonly unknown[]).some((one) =>
-        (y.ls as readonly unknown[]).some((other) =>
-            one instanceof Uint8Array
-                ? other instanceof Uint8Array &&
-                  one.length === other.length &&
-                  one.every((byte, at) => byte === other[at])
-                : one === other,
-        ),
-    )
-
-/**
- * **Whether some value satisfies both object structures.**
- *
- * Two clauses, and the second is what pass 7 added: the name intervals meet, and no shared
- * **required** name is pinned to literals with nothing in common. `required` on both sides is the
- * rule the model's meet of two bodies reads, because two objects sharing an *optional* literal name with
- * disjoint alternatives both admit the map that omits the name.
- */
-export const structuralMeet = (
-    x: Extract<Term, { kind: 'object' }>,
-    y: Extract<Term, { kind: 'object' }>,
-): boolean => {
-    if (!namesMeet(x.body, y.body)) return false
-    const theirs = literalsOf(y) ?? {}
-    for (const [name, mine] of Object.entries(literalsOf(x) ?? {})) {
-        const other = theirs[name]
-        if (!mine.required || !other?.required) continue
-        if (altsApart(mine.alts, other.alts)) return false
-    }
-    return true
-}
-
-/**
- * The object members a term offers: itself, or a union's options where every one is an object.
- *
- * **A dissection is a union of objects**, so a union option that is one has members to compare
- * rather than an occupancy to meet. Without this, `union([discriminatedUnion(…),
- * discriminatedUnion(…)])` is two terms that both write `M`, and the occupancy meet refuses it.
- * This is a statement about structures, not a claim that a whole union decides its own values.
- */
-const objectMembers = (
-    t: Term,
-): readonly Extract<Term, { kind: 'object' }>[] | undefined => {
-    if (t.kind === 'object') return [t]
-    if (t.kind !== 'union' || t.options.length === 0) return undefined
-    return t.options.every((o) => o.kind === 'object')
-        ? (t.options as readonly Extract<Term, { kind: 'object' }>[])
-        : undefined
-}
-
-/**
- * **Whether two options share no value and no attribute**, the host's certificate.
+ * **Whether two options share no value and no attribute**, the host's certificate: the model's
+ * `certPair`, row for row.
  *
  * `union` asks it of a pair that {@link compatible} shows by no other warrant. Where it answers
- * `true`, the model proves `PairwiseCompat` through `pairwiseCompat_of_separated`. For each pair
- * `union` refuses, `formal/.separations.lean` pins that `certPair` is `false`, so this never
- * answers `false` where `certPair` answers `true`.
+ * `true`, the model proves `PairwiseCompat` through `separates_of_certPair` and
+ * `pairwiseCompat_of_separated`. For each pair `union` refuses, `formal/.separations.lean` pins that
+ * `certPair` is `false`, so this never answers `false` where `certPair` answers `true`.
  *
- * Five rows, in the order the code asks them:
+ * Three rows, in the order the model asks them:
  *
- * **An option that is a restriction of another.** {@link restricts} answers `false`, because an
- * option inside another shares each of its values with the other. The rows are a literal against
- * its base, a literal set against its base's plain set, and `never`.
+ * **Two options that meet at the bottom**, as the model's `meetNever`. `Adm_meet` and `AdmA_meet`
+ * make the meet's admission the conjunction of the two, so a meet at `never` admits no common
+ * value and reads no common attribute. An option inside another meets the other at the option
+ * itself, and not at the bottom. The occupancies of the two meet too, so no row certifies a
+ * literal beside its base.
  *
  * **Two options, one of which holds a `held`: the two views**, as the model's `certViews`. A
  * `held` writes where its held side does and reads where its inner term does, so the caller views
  * answer the write question and the stored views answer the read question. Both pairs of views
- * must separate.
+ * must meet at the bottom.
  *
- * **Two options that meet at the bottom**, as the model's `meetNever`. `Adm_meet` and
- * `AdmA_meet` make the meet's admission the conjunction of the two, so a meet at `never` admits
- * no common value and reads no common attribute.
- *
- * **Two object options: the structural meet.** Two objects are separable where no value
- * satisfies both structures: their name intervals do not meet, or a shared required name is
- * pinned to literals with nothing in common.
- *
- * **Otherwise the two occupancies, both sides conjoined.** A pair separated on one side only is
- * not separated: `union([decimal, number])` would write `'1.5'` to an `N` and could not read it
- * back, because both options store `N`. `opaque` answers every slot, so it separates from no
- * option. The read side of a `legacy` is unknown, and an unknown read side meets every read
- * side: its older reader is caller code whose domain the declaration cannot see, so it can read
- * an attribute that the other option reads to another value. A `legacy` therefore separates from
- * no option by this row.
+ * **The two occupancies, both sides conjoined**, as the model's `Orth1`. The meet refuses a
+ * closure, and the occupancies read no predicate, so `union([refine(string, isNumeral),
+ * array(decimal)])` is certified here. A pair separated on one side only is not separated:
+ * `union([decimal, number])` would write `'1.5'` to an `N` and could not read it back, because
+ * both options store `N`. `opaque` answers every slot, so it separates from no option. The read
+ * side of a `legacy` is unknown, and an unknown read side meets every read side: its older reader
+ * is caller code whose domain the declaration cannot see. A `legacy` therefore separates from no
+ * option by this row.
  */
-export const separable = (x: Term, y: Term): boolean => {
-    // **Containment first.** The three {@link restricts} rows name a literal, a set of a literal
-    // and `never`. `never` meets no occupancy, so the rows below would accept it beside anything
-    if (restricts(x, y) || restricts(y, x)) return false
-    // **Where an option holds a `held`, its two views.** The rows below see one term per option,
-    // and a `held` has two restrictions. The caller views answer the write question and the stored
-    // views answer the read question, as the model's `certViews` does. Each view holds no `held`,
-    // so the two inner calls do not reach this row again
-    if (callerViewsApart(x, y) && separable(storedView(x), storedView(y)))
-        return true
-    // a meet at the bottom separates, and it runs ahead of the object row, because two objects
-    // whose required slots meet at `never` share names and no value
-    if (meetTerms(x, y)?.kind === 'never') return true
-    const xs = objectMembers(x)
-    const ys = objectMembers(y)
-    if (xs && ys) {
-        return xs.every((a) => ys.every((b) => !structuralMeet(a, b)))
-    }
+export const separable = (x: Term, y: Term): boolean =>
+    meetsAtBottom(x, y) || viewsApart(x, y) || occupanciesApart(x, y)
+
+/** The model's `meetNever`: the meet states the pair, and the meet is the bottom. */
+const meetsAtBottom = (x: Term, y: Term): boolean =>
+    meetTerms(x, y)?.kind === 'never'
+
+/** The model's `Orth1`, where an unknown read side is not apart. */
+const occupanciesApart = (x: Term, y: Term): boolean => {
     const [readsX, readsY] = [occA(x), occA(y)]
-    // an unknown read side meets every read side
     if (readsX === undefined || readsY === undefined) return false
     return (
         meet(occV(x), occV(y)) === undefined &&
@@ -1299,14 +1122,16 @@ const storedView = (t: Term): Term => {
 }
 
 /**
- * **Whether the caller views of two options are separable**, where one option holds a `held`
- * and both are {@link viewable}. Then no caller value is admitted by both options.
+ * **The model's `certViews`**: one option holds a `held`, both are {@link viewable}, the caller
+ * views meet at the bottom, and the stored views meet at the bottom. Then no caller value is
+ * admitted by both options, and no attribute is read by both.
  */
-const callerViewsApart = (x: Term, y: Term): boolean =>
+const viewsApart = (x: Term, y: Term): boolean =>
     (reaches(x, ['held']) || reaches(y, ['held'])) &&
     viewable(x) &&
     viewable(y) &&
-    separable(callerView(x), callerView(y))
+    meetsAtBottom(callerView(x), callerView(y)) &&
+    meetsAtBottom(storedView(x), storedView(y))
 
 /**
  * **Whether the walk shows a term held-free**, the model's `HF`. A `legacy` counts as an adapter,

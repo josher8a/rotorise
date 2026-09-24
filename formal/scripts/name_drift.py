@@ -223,9 +223,6 @@ HOST = {
                    "`.meets.lean` names. The list is the host's, and each name in it is a model name",
     "sampleVectors": "`src/codec/lean/lean.spec.ts`'s differential corpus. The vectors it "
                      "generates are elaborated here; the list itself is the host's",
-    "structuralMeet": "`src/codec/term.ts`'s object-body meet, which decides whether two object "
-                      "options can be told apart. `Term.meet` is the model's and is not the same "
-                      "function",
     "literalsOf": "`src/codec/term.ts`'s reader for the literals an object pins, at the caller's "
                   "level. The model reads `altsOfField`, which is not the same question",
     "opaque": "`src/`'s codec, analysed here as the language's one escape hatch, and warranted "
@@ -408,7 +405,7 @@ def tree_files():
     """
     skip = {".git", "node_modules", ".lake", "dist", ".attest", "__pycache__", ".venv"}
     full, base = set(), set()
-    for root, dirs, files in os.walk(".."):
+    for root, dirs, files in os.walk("..", followlinks=True):
         dirs[:] = [d for d in dirs if d not in skip]
         for f in files:
             full.add(os.path.relpath(os.path.join(root, f), "..").replace(os.sep, "/"))
