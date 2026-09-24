@@ -68,38 +68,38 @@ theorem hopaque_T :
       (opaqCodec n).T v
   | .str s, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨.byAttempt stringCodec, by simp [opaqOptions], ⟨s, rfl⟩⟩
+      exact ⟨stringCodec, by simp [opaqOptions], ⟨s, rfl⟩⟩
   | .bool b, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨.byAttempt booleanCodec, by simp [opaqOptions], ⟨b, rfl⟩⟩
+      exact ⟨booleanCodec, by simp [opaqOptions], ⟨b, rfl⟩⟩
   | .bin b, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨.byAttempt binaryCodec, by simp [opaqOptions], ⟨b, rfl⟩⟩
+      exact ⟨binaryCodec, by simp [opaqOptions], ⟨b, rfl⟩⟩
   | .null, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨.byAttempt nullCodec, by simp [opaqOptions], rfl⟩
+      exact ⟨nullCodec, by simp [opaqOptions], rfl⟩
   | .num d, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨.byAttempt numberCodec, by simp [opaqOptions], ⟨d, rfl⟩⟩
+      exact ⟨numberCodec, by simp [opaqOptions], ⟨d, rfl⟩⟩
   | .strSet S, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | strSet _ hall =>
-        exact ⟨.byAttempt (setCodec (opaqCodec n')), by simp [opaqOptions],
+        exact ⟨(setCodec (opaqCodec n')), by simp [opaqOptions],
                fun x hx => hopaque_T (.str x) n' (hall x hx) (by
                   simp only [Value.depth] at hd ⊢; omega)⟩
   | .numSet S, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | numSet _ hall =>
-        exact ⟨.byAttempt (setCodec (opaqCodec n')), by simp [opaqOptions],
+        exact ⟨(setCodec (opaqCodec n')), by simp [opaqOptions],
                fun x hx => hopaque_T (.num x) n' (hall x hx) (by
                   simp only [Value.depth] at hd ⊢; omega)⟩
   | .binSet S, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | binSet _ hall =>
-        exact ⟨.byAttempt (setCodec (opaqCodec n')), by simp [opaqOptions],
+        exact ⟨(setCodec (opaqCodec n')), by simp [opaqOptions],
                fun x hx => hopaque_T (.bin x) n' (hall x hx) (by
                   simp only [Value.depth] at hd ⊢; omega)⟩
   | .arr vs, n, h, hd => by
@@ -107,7 +107,7 @@ theorem hopaque_T :
       cases h with
       | arr _ hall =>
         have hL : Value.depthL vs <= n' := by simp only [Value.depth] at hd; omega
-        exact ⟨.byAttempt (arrayCodec (opaqCodec n')), by simp [opaqOptions],
+        exact ⟨(arrayCodec (opaqCodec n')), by simp [opaqOptions],
                hopaque_TL vs n' hall hL⟩
   -- No list companion on this branch: `recordCodec`'s held set is already the pointwise
   -- statement about the entry function, so the induction hypothesis applies at each key
@@ -116,7 +116,7 @@ theorem hopaque_T :
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | map _ _ hall =>
-        exact ⟨.byAttempt (recordCodec (opaqCodec n')), by simp [opaqOptions],
+        exact ⟨(recordCodec (opaqCodec n')), by simp [opaqOptions],
                fun k => hopaque_T (f k) n' (hall k)
                  (by have := Value.depth_map_entry (f := f) k; omega)⟩
 termination_by v n => (n, sizeOf v)
@@ -232,10 +232,10 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
       obtain ⟨T', hT', hTv⟩ := hv
       obtain ⟨tx, htx, hd⟩ :=
         unionT_of_mem h' (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) v T' hT' hTv
-      simp only [denote, optionSems_eq]
-      refine ⟨optionSemOf (denote tx) (specOf tx), ?_, ?_⟩
+      simp only [denote, denoteList_eq]
+      refine ⟨denote tx, ?_, ?_⟩
       · simp only [List.mem_map]; exact ⟨tx, htx, rfl⟩
-      · rw [optionSemOf_c]; exact hd
+      · exact hd
 termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
 
@@ -265,8 +265,8 @@ both are named here. -/
 /-- **(A) at a union is definitional.** `altCodec`'s held set *is* the union of its options'
     — no premise, nothing to prove. So the union case of (A) is exactly the options'
     (A), and §6's "false for `union`" cannot be about this claim. -/
-theorem altCodec_T (os : List OptionSem) (μA : Option Member) (v : Value) :
-    (altCodec os μA).T v ↔ ∃ o ∈ os, o.c.T v := Iff.rfl
+theorem altCodec_T (os : List Codec) (μA : Option Member) (v : Value) :
+    (altCodec os μA).T v ↔ ∃ o ∈ os, o.T v := Iff.rfl
 
 /-- **(B), named.** The held set is exactly what the pair can write — `T = dom(e)`.
     `Carrier.domE` gives `dom(e) ⊆ T` for every derivable term; this is the converse. -/

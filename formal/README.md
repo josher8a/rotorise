@@ -103,7 +103,7 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
 - **`opaque`'s compatibility is computed from kinds, not argued per option.** `Kind` is §1
   vocabulary now (`Domain.lean`), on both sides of the pair — `Value.kind` and
   `Attr.kind`, the ten members collapsing onto eight. An option is *pinned to a kind*
-  when it admits only values and attributes of that kind (`OptionSem.OnKind`), and
+  when it admits only values and attributes of that kind (`Codec.OnKind`), and
   `compat_opaque` turns pinned options with distinct kinds into compatibility. Each of
   `opaque`'s eight is pinned in one line, and `onKind_set`/`onKind_array`/`onKind_record`
   hold for *any* element codec — which is why the fixpoint's compatibility needs

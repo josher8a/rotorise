@@ -16,8 +16,8 @@ namespace Calculus
 /-! ## Obligations -/
 
 /-- The union options, denoted with their name specs — as in `denote`'s union case. -/
-noncomputable def semsOf (opts : List Term) : List OptionSem :=
-  opts.map fun t' => optionSemOf (denote t') (specOf t')
+noncomputable def semsOf (opts : List Term) : List Codec :=
+  opts.map fun t' => denote t'
 
 /-- A term's rest policy keeps every name. -/
 theorem wildSem_ne_drop (w : Option Term) : wildSem w ≠ .drop :=
@@ -186,11 +186,6 @@ theorem unanimous_spec : ∀ {l : List (Option Member)} {m},
           have hxeq : x = μ := eq_of_beq hbe
           rw [hxeq, h]
 
-theorem optionSemOf_c (c : Codec) : ∀ s?, (optionSemOf c s?).c = c
-  | some _ => rfl
-  | none => rfl
-
-
 mutual
 
 /-- Typing's member index is the syntactic one — exactly, both sides. -/
@@ -331,27 +326,23 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
       have ihs : ∀ t' ∈ opts, Sound t' := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
         exact soundness_both hμ' ((Obligations.union hob).1 t' ht')
-      have hatt : ∀ o ∈ opts.map fun t' => optionSemOf (denote t') (specOf t'),
-          o = .byAttempt o.c := by
-        exact List.forall_mem_map.mpr fun _ _ => rfl
-      have hC : ∀ o ∈ opts.map fun t' => optionSemOf (denote t') (specOf t'),
-          ∀ o' ∈ opts.map fun t' => optionSemOf (denote t') (specOf t'), Compat o.c o'.c := by
+      have hC : ∀ o ∈ opts.map fun t' => denote t',
+          ∀ o' ∈ opts.map fun t' => denote t', Compat o o' := by
         refine List.forall_mem_map.mpr fun s hs => List.forall_mem_map.mpr fun t' ht' => ?_
-        rw [optionSemOf_c, optionSemOf_c]; exact hob.2 s hs t' ht'
+        exact hob.2 s hs t' ht'
       have hW : ∀ m, unanimous (opts.map fun t' => (denote t').μ) = some m →
-          ∀ o ∈ opts.map fun t' => optionSemOf (denote t') (specOf t'),
-            ∀ t' a, o.c.e t' = some a → a.member = m := by
+          ∀ o ∈ opts.map fun t' => denote t',
+            ∀ t' a, o.e t' = some a → a.member = m := by
         intro m hm
         refine List.forall_mem_map.mpr fun tx htx t' a he' => ?_
-        rw [optionSemOf_c] at he'
         exact (ihs tx htx).1.writes
           (unanimous_spec hm _ (List.mem_map.mpr ⟨tx, htx, rfl⟩)) he'
-      rw [Sound, denote_union_sems, optionSems_eq, denoteμs_eq_map]
+      rw [Sound, denote_union_sems, denoteList_eq, denoteμs_eq_map]
       exact ⟨lawfulCore_altCodec
-          (List.forall_mem_map.mpr fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').1) hatt hC hW,
+          (List.forall_mem_map.mpr fun t' ht' => (ihs t' ht').1) hC hW,
         lawful_altCodec
-          (List.forall_mem_map.mpr fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').2)
-          hatt hC hW⟩
+          (List.forall_mem_map.mpr fun t' ht' => (ihs t' ht').2)
+          hC hW⟩
 
 termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
@@ -734,12 +725,11 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
             cases hrc
             exact ⟨T'', rfl, typed_TSub hty' _ hrcT⟩
     | @union opts Ts μs hlist =>
-      simp only [denote, optionSems_eq, denoteμs_eq_map] at hv
+      simp only [denote, denoteList_eq, denoteμs_eq_map] at hv
       obtain ⟨o, ho, hT⟩ := hv
       simp only [List.mem_map] at ho
       obtain ⟨tx, htx, rfl⟩ := ho
       obtain ⟨T', hT', μ', hty⟩ := TypedListμ.mem hlist tx htx
-      rw [optionSemOf_c] at hT
       exact ⟨T', hT', typed_TSub hty v hT⟩
 
 termination_by t _ _ _ _ _ => Term.depth t
@@ -810,10 +800,10 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
           exact carrier_denote hty hob.2
       exact carrier_objectCodec hsems hrc
     | @union opts Ts μs hlist =>
-      rw [denote_union_sems, optionSems_eq]
+      rw [denote_union_sems, denoteList_eq]
       refine carrier_altCodec (List.forall_mem_map.mpr fun t' ht' => ?_)
       obtain ⟨T', μ', hty⟩ := TypedListμ.forall hlist t' ht'
-      exact (optionSemOf_c _ _) ▸ carrier_denote hty ((Obligations.union hob).1 t' ht')
+      exact carrier_denote hty ((Obligations.union hob).1 t' ht')
 
 termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf

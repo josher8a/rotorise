@@ -3,23 +3,13 @@ import Calculus.Objects
 /-!
 # Sums (§5), and unknown values
 
-`altCodec` over `OptionSem`s that carry their *admission as data*: the first option that
-admits answers. `opaqCodec` is `altCodec`'s fueled fixpoint over everything self-identifying,
+`altCodec` over the options' codecs: the first option that acts answers. `opaqCodec` is `altCodec`'s fueled fixpoint over everything self-identifying,
 and its number option is `numberCodec`, which holds a numeral exactly.
 -/
 
 namespace Calculus
 
 noncomputable section
-/-! ## Sums (§5): admission as data -/
-
-/-- One union option: its admission functions and its pair. The doc's `κ`/`ident`/name
-    devices become *builders* of these. -/
-structure OptionSem where
-  admitA : Attr → Bool
-  admitV : Value → Bool
-  c : Codec
-
 /-- Name admission (objects): every present name allowed, and every absent name allowed.
     The spec is a `BodySpec` — the declared names with what admission reads at each, and the
     open block — for the same reason the field table is a `MapOf`: a list of pairs admits
@@ -187,36 +177,6 @@ private def forbiddenSpec : BodySpec := ⟨forbiddenNames, none⟩
 theorem optional_never_forbids :
     keysOk forbiddenSpec {"A"} = false := by decide
 
-/-- Decides by structure: the names lie in the spec's interval, and every present literal
-    field carries one of its alternatives. `optionSemOf` no longer builds this. -/
-def OptionSem.byStructure (spec : BodySpec) (c : Codec) : OptionSem :=
-  { admitA := fun a => match a with
-      | .m keys g => keysOk spec keys && literalsOkA spec keys g
-      | _ => false
-    admitV := fun v => match v with
-      | .map keys f => keysOk spec keys && literalsOk spec keys f
-      | _ => false
-    c := c }
-
-/-- Any other option is admitted by attempt. -/
-def OptionSem.byAttempt (c : Codec) : OptionSem :=
-  { admitA := fun a => (c.p a).isSome
-    admitV := fun v => (c.e v).isSome
-    c := c }
-
-/-- An attempted option admits an attribute exactly when its `p` is defined there — the
-    §1 rule applied to admission, so no proof takes `byAttempt` apart by hand. -/
-@[simp] theorem OptionSem.byAttempt_admitA {c : Codec} {a : Attr} :
-    (OptionSem.byAttempt c).admitA a = (c.p a).isSome := rfl
-
-/-- …and a value exactly when its `e` is. -/
-@[simp] theorem OptionSem.byAttempt_admitV {c : Codec} {v : Value} :
-    (OptionSem.byAttempt c).admitV v = (c.e v).isSome := rfl
-
-/-- The builder `denote` uses for a union option. -/
-def optionSemOf (c : Codec) : Option BodySpec → OptionSem
-  | _ => .byAttempt c
-
 /-- A list no two of whose entries stand in any relation holds at most one entry. -/
 theorem length_le_one_of_pairwise_false {α : Type} {l : List α}
     (h : List.Pairwise (fun _ _ : α => False) l) : l.length ≤ 1 := by
@@ -229,9 +189,9 @@ theorem length_le_one_of_pairwise_false {α : Type} {l : List α}
 
 /-- **No value and no attribute is admitted by two options.** The certificate implies it
     (`admitsAtMostOne_of_separated`). -/
-def AdmitsAtMostOne (os : List OptionSem) : Prop :=
-  (∀ t, (os.filter (·.admitV t)).length ≤ 1) ∧
-  (∀ a, (os.filter (·.admitA a)).length ≤ 1)
+def AdmitsAtMostOne (os : List Codec) : Prop :=
+  (∀ t, (os.filter (fun c => (c.e t).isSome)).length ≤ 1) ∧
+  (∀ a, (os.filter (fun c => (c.p a).isSome)).length ≤ 1)
 
 /-- A union's member: `μ` when unanimous, else `⊤` (§5 `(union)`). -/
 def unanimous : List (Option Member) → Option Member
@@ -241,17 +201,16 @@ def unanimous : List (Option Member) → Option Member
 /-- **One side of a sum.** Both halves of `altCodec` are this: act through the first option
     that admits by the admission *that side* reads. Stating the shape once is what lets
     `altCodec_e` and `altCodec_p` be the same theorem at two instances. -/
-def select {A B : Type} (os : List OptionSem) (adm : OptionSem → A → Bool)
-    (run : OptionSem → A → Option B) (x : A) : Option B :=
-  (os.find? (adm · x)).bind (run · x)
+def select {A B : Type} (os : List Codec) (run : Codec → A → Option B) (x : A) : Option B :=
+  (os.find? (fun c => (run c x).isSome)).bind (run · x)
 
 /-- `union`: the sum, resolved by the first admitter. Over lawful, pairwise compatible options
     the order is unobservable (`altCodec_perm`). -/
-def altCodec (os : List OptionSem) (μA : Option Member) : Codec :=
-  { T := fun v => ∃ o ∈ os, o.c.T v
+def altCodec (os : List Codec) (μA : Option Member) : Codec :=
+  { T := fun v => ∃ o ∈ os, o.T v
     μ := μA
-    e := select os (·.admitV) (·.c.e)
-    p := select os (·.admitA) (·.c.p) }
+    e := select os (·.e)
+    p := select os (·.p) }
 
 /-! ## Unknown values (§3 `(opaque)`) -/
 
@@ -260,11 +219,9 @@ def altCodec (os : List OptionSem) (μA : Option Member) : Codec :=
     Named because three statements cite it — `opaqCodec`, `opaq_onKinds`,
     `compat_opaque` — and a list spelled three times can drift twice. The number
     option is `numberCodec`, which holds a numeral exactly. -/
-def opaqOptions (rec : Codec) : List OptionSem :=
-  [.byAttempt stringCodec, .byAttempt booleanCodec, .byAttempt binaryCodec,
-   .byAttempt nullCodec,
-   .byAttempt numberCodec,
-   .byAttempt (setCodec rec), .byAttempt (arrayCodec rec), .byAttempt (recordCodec rec)]
+def opaqOptions (rec : Codec) : List Codec :=
+  [stringCodec, booleanCodec, binaryCodec, nullCodec, numberCodec,
+   setCodec rec, arrayCodec rec, recordCodec rec]
 
 /-- `opaque` is not special: it is the recursive union of everything self-identifying,
     closed under the containers — "the values whose type is recoverable", as a

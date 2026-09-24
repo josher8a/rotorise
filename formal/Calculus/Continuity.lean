@@ -35,10 +35,10 @@ theorem Codec.Approx.empty_le (c : Codec) : Codec.Approx Codec.empty c := by
 /-! ## The witnesses -/
 
 /-- The stable option: `literal("A")`, which admits `"A"` at every stage. -/
-noncomputable def optLit : OptionSem := .byAttempt (literalCodec .string "A")
+noncomputable def optLit : Codec := (literalCodec .string "A")
 
 /-- The growing option, before unfolding: undefined everywhere. -/
-def optBot : OptionSem := .byAttempt Codec.empty
+def optBot : Codec := Codec.empty
 
 /-! ## What *is* monotone, and why the contrast is the whole point
 
@@ -66,21 +66,21 @@ is needed (undecidable through `Attr.m`'s function field). The obligation says t
 did not matter, and order-independence is recovered as a theorem. -/
 
 /-- First-match resolution, value side. Total on the union of the options' domains. -/
-def selectF (os : List OptionSem) (v : Value) : Option Attr :=
-  select os (·.admitV) (·.c.e) v
+def selectF (os : List Codec) (v : Value) : Option Attr :=
+  select os (·.e) v
 
 /-- The obligation at one input: every admitter writes the same attribute. -/
-def ConfluentAt (os : List OptionSem) (v : Value) : Prop :=
-  ∀ o ∈ os, ∀ o' ∈ os, o.admitV v = true → o'.admitV v = true → o.c.e v = o'.c.e v
+def ConfluentAt (os : List Codec) (v : Value) : Prop :=
+  ∀ o ∈ os, ∀ o' ∈ os, (o.e v).isSome = true → (o'.e v).isSome = true → o.e v = o'.e v
 
 /-- `selectF`, reduced at an admitting head. -/
-theorem selectF_admit {o : OptionSem} {os : List OptionSem} {v : Value}
-    (h : o.admitV v = true) : selectF (o :: os) v = o.c.e v := by
+theorem selectF_admit {o : Codec} {os : List Codec} {v : Value}
+    (h : (o.e v).isSome = true) : selectF (o :: os) v = o.e v := by
   simp [selectF, select, List.find?, h]
 
 /-- …and at a non-admitting one. -/
-theorem selectF_skip {o : OptionSem} {os : List OptionSem} {v : Value}
-    (h : o.admitV v = false) : selectF (o :: os) v = selectF os v := by
+theorem selectF_skip {o : Codec} {os : List Codec} {v : Value}
+    (h : (o.e v).isSome = false) : selectF (o :: os) v = selectF os v := by
   simp [selectF, select, List.find?, h]
 
 /-! ### The obligation is not free, and a new witness is needed -/
@@ -94,7 +94,7 @@ def cBad : Codec :=
   { T := fun v => (ceBad v).isSome, μ := none, e := ceBad, p := fun _ => none }
 
 /-- …as an option. -/
-def optBad : OptionSem := .byAttempt cBad
+def optBad : Codec := cBad
 
 /-- **The counterexample the obligation excludes**: with the growing option first, the answer
     **changes**, `⟨S,"A"⟩` to `⟨S,"B"⟩`. -/
@@ -102,17 +102,17 @@ theorem selectF_not_monotone :
     selectF [optBot, optLit] (.str "A") = some (.s "A")
     ∧ selectF [optBad, optLit] (.str "A") = some (.s "B") := by
   constructor <;>
-    simp [selectF, select, optBot, optBad, optLit, OptionSem.byAttempt, cBad, ceBad, Codec.empty,
+    simp [selectF, select, optBot, optBad, optLit, cBad, ceBad, Codec.empty,
           literalCodec, baseCodec, Codec.restrict, inL, stringCodec]
 
 /-- …and the obligation is exactly what that violates. -/
 theorem optBad_not_confluent : ¬ ConfluentAt [optBad, optLit] (.str "A") := by
   intro h
   have := h optBad (by simp) optLit (by simp)
-    (by simp [optBad, OptionSem.byAttempt, cBad, ceBad])
-    (by simp [optLit, OptionSem.byAttempt, literalCodec, baseCodec, Codec.restrict, inL,
+    (by simp [optBad, cBad, ceBad])
+    (by simp [optLit, literalCodec, baseCodec, Codec.restrict, inL,
               stringCodec])
-  simp [optBad, optLit, OptionSem.byAttempt, cBad, ceBad, literalCodec, baseCodec,
+  simp [optBad, optLit, cBad, ceBad, literalCodec, baseCodec,
         Codec.restrict, inL, stringCodec] at this
 
 /-! **The ground-term witness is gone, and it was the decimal conflation.** ~~string_decimal_not_confluent~~
@@ -133,24 +133,26 @@ remains; none is claimed here. -/
     only position where growth can change the answer, since grown second the earlier admitter
     answers throughout. Confluence is used in exactly one of the three cases: where growth newly
     admits at a value another option was already answering. -/
-theorem selectF_mono {o₁ o₁' o₂ : OptionSem} {v : Value} {a : Attr}
-    (hap : Codec.Approx o₁.c o₁'.c)
-    (hadm : o₁.admitV v = true → o₁'.admitV v = true)
+theorem selectF_mono {o₁ o₁' o₂ : Codec} {v : Value} {a : Attr}
+    (hap : Codec.Approx o₁ o₁')
     (hc : ConfluentAt [o₁', o₂] v)
     (h : selectF [o₁, o₂] v = some a) : selectF [o₁', o₂] v = some a := by
-  cases h1' : o₁'.admitV v with
+  have hadm : (o₁.e v).isSome = true → (o₁'.e v).isSome = true := fun h1 =>
+    let ⟨b, hb⟩ := Option.isSome_iff_exists.mp h1
+    by rw [hap.e hb]; rfl
+  cases h1' : (o₁'.e v).isSome with
   | false =>
-    have h1 : o₁.admitV v = false := by
-      cases h1 : o₁.admitV v with
+    have h1 : (o₁.e v).isSome = false := by
+      cases h1 : (o₁.e v).isSome with
       | true => rw [hadm h1] at h1'; exact nomatch h1'
       | false => rfl
     rw [selectF_skip h1']; rw [selectF_skip h1] at h; exact h
   | true =>
-    cases h1 : o₁.admitV v with
+    cases h1 : (o₁.e v).isSome with
     | true => rw [selectF_admit h1']; rw [selectF_admit h1] at h; exact hap.e h
     | false =>
       rw [selectF_admit h1']; rw [selectF_skip h1] at h
-      cases h2 : o₂.admitV v with
+      cases h2 : (o₂.e v).isSome with
       | false => rw [selectF_skip h2] at h; exact nomatch h
       | true =>
         rw [selectF_admit h2] at h
@@ -160,49 +162,47 @@ theorem selectF_mono {o₁ o₁' o₂ : OptionSem} {v : Value} {a : Attr}
     and deliberately no ccpo. `oω` is an upper bound that is *least at `v`*: every answer
     it gives, some finite stage already gave. In the flat `Option` order that is the whole sup
     condition. -/
-structure IsSupAt (f : Nat → OptionSem) (oω : OptionSem) (v : Value) : Prop where
+structure IsSupAt (f : Nat → Codec) (oω : Codec) (v : Value) : Prop where
   /-- an upper bound of the chain -/
-  ub : ∀ i, Codec.Approx (f i).c oω.c
+  ub : ∀ i, Codec.Approx (f i) oω
   /-- …and least at `v`: the limit adds no answer the chain did not have -/
-  least : ∀ a, oω.c.e v = some a → ∃ i, (f i).c.e v = some a
+  least : ∀ a, oω.e v = some a → ∃ i, (f i).e v = some a
 
 /-- **Continuity — with the growing option first, needing no confluence.** That arrangement is
     load-bearing and the general case does not share it: see `selectF_continuous_list`, which
     takes the obligation at each stage. Growth-first is automatically the first admitter, so no
-    other option can answer; elsewhere in the list the obligation is what says they agree.
-
-    The two premises are the model's own: `hself` says a canonical pair admits its *own*
-    option, and `hadm` is `byAttempt`'s definition. -/
-theorem selectF_continuous {f : Nat → OptionSem} {oω o₂ : OptionSem} {v : Value} {a : Attr}
+    other option can answer; elsewhere in the list the obligation is what says they agree. -/
+theorem selectF_continuous {f : Nat → Codec} {oω o₂ : Codec} {v : Value} {a : Attr}
     (hs : IsSupAt f oω v)
-    (hself : ∀ i, ∀ b, (f i).c.e v = some b → (f i).admitV v = true)
-    (hadm : ∀ i, (f i).admitV v = true → oω.admitV v = true)
     (h : selectF [oω, o₂] v = some a) : ∃ i, selectF [f i, o₂] v = some a := by
-  cases hω : oω.admitV v with
+  have hadm : ∀ i, ((f i).e v).isSome = true → (oω.e v).isSome = true := fun i h1 =>
+    let ⟨b, hb⟩ := Option.isSome_iff_exists.mp h1
+    by rw [(hs.ub i).e hb]; rfl
+  cases hω : (oω.e v).isSome with
   | true =>
     rw [selectF_admit hω] at h
     obtain ⟨i, hi⟩ := hs.least a h
-    exact ⟨i, by rw [selectF_admit (hself i a hi)]; exact hi⟩
+    exact ⟨i, by rw [selectF_admit (by rw [hi]; rfl)]; exact hi⟩
   | false =>
     refine ⟨0, ?_⟩
-    have h0 : (f 0).admitV v = false := by
-      cases h0 : (f 0).admitV v with
+    have h0 : ((f 0).e v).isSome = false := by
+      cases h0 : ((f 0).e v).isSome with
       | true => rw [hadm 0 h0] at hω; exact nomatch hω
       | false => rfl
     rw [selectF_skip h0]; rw [selectF_skip hω] at h; exact h
 
 
 /-- Confluence is inherited by a tail. -/
-theorem ConfluentAt.tail {o : OptionSem} {os : List OptionSem} {v : Value}
+theorem ConfluentAt.tail {o : Codec} {os : List Codec} {v : Value}
     (h : ConfluentAt (o :: os) v) : ConfluentAt os v :=
   fun a ha b hb => h a (by simp [ha]) b (by simp [hb])
 
 /-- The answer `selectF` gives comes from a member that admits. -/
-theorem selectF_mem : ∀ {os : List OptionSem} {v : Value} {a : Attr},
-    selectF os v = some a → ∃ o ∈ os, o.admitV v = true ∧ o.c.e v = some a
+theorem selectF_mem : ∀ {os : List Codec} {v : Value} {a : Attr},
+    selectF os v = some a → ∃ o ∈ os, (o.e v).isSome = true ∧ o.e v = some a
   | [], _, _, h => absurd h (by simp [selectF, select])
   | o :: os, v, a, h => by
-      cases ho : o.admitV v with
+      cases ho : (o.e v).isSome with
       | true => exact ⟨o, by simp, ho, by rw [selectF_admit ho] at h; exact h⟩
       | false =>
         rw [selectF_skip ho] at h
@@ -211,11 +211,11 @@ theorem selectF_mem : ∀ {os : List OptionSem} {v : Value} {a : Attr},
 
 /-- **Order-independence as a theorem.** Under the obligation, *any* admitter's answer is the
     answer — so the first-match definition does not depend on the order after all. -/
-theorem selectF_of_mem : ∀ {os : List OptionSem} {v : Value} {o : OptionSem},
-    ConfluentAt os v → o ∈ os → o.admitV v = true → selectF os v = o.c.e v
+theorem selectF_of_mem : ∀ {os : List Codec} {v : Value} {o : Codec},
+    ConfluentAt os v → o ∈ os → (o.e v).isSome = true → selectF os v = o.e v
   | [], _, _, _, ho, _ => absurd ho (by simp)
   | hd :: tl, v, o, hc, ho, hadm => by
-      cases hhd : hd.admitV v with
+      cases hhd : (hd.e v).isSome with
       | true =>
         rw [selectF_admit hhd]
         exact hc hd (by simp) o (by simp [ho]) hhd hadm
@@ -239,31 +239,29 @@ continuity. -/
     two-option case, because `selectF_of_mem` does the work: the answer comes from *some*
     admitting member (`selectF_mem`), that member grows to an admitter with the same answer, and
     under the obligation any admitter's answer is the answer. -/
-theorem selectF_mono_list {os : List OptionSem} {g : OptionSem → OptionSem}
+theorem selectF_mono_list {os : List Codec} {g : Codec → Codec}
     {v : Value} {a : Attr}
-    (hap : ∀ o ∈ os, Codec.Approx o.c (g o).c)
-    (hadm : ∀ o ∈ os, o.admitV v = true → (g o).admitV v = true)
+    (hap : ∀ o ∈ os, Codec.Approx o (g o))
     (hc : ConfluentAt (os.map g) v)
     (h : selectF os v = some a) : selectF (os.map g) v = some a := by
-  obtain ⟨o, ho, hoadm, hoe⟩ := selectF_mem h
+  obtain ⟨o, ho, -, hoe⟩ := selectF_mem h
   have hmem : g o ∈ os.map g := List.mem_map_of_mem ho
-  rw [selectF_of_mem hc hmem (hadm o ho hoadm)]
+  rw [selectF_of_mem hc hmem (by rw [(hap o ho).e hoe]; rfl)]
   exact (hap o ho).e hoe
 
 /-- **Continuity, in general — and it does need the obligation at each stage.** See the note
     above: `selectF_continuous` escaped it by putting the growing option first. -/
 
-theorem selectF_continuous_list {os : List OptionSem} {F : Nat → OptionSem → OptionSem}
+theorem selectF_continuous_list {os : List Codec} {F : Nat → Codec → Codec}
     {v : Value} {a : Attr}
-    (hself : ∀ i, ∀ o ∈ os, ∀ b, (F i o).c.e v = some b → (F i o).admitV v = true)
-    (hleast : ∀ o ∈ os, ∀ b, o.c.e v = some b → ∃ i, (F i o).c.e v = some b)
+    (hleast : ∀ o ∈ os, ∀ b, o.e v = some b → ∃ i, (F i o).e v = some b)
     (hc : ∀ i, ConfluentAt (os.map (F i)) v)
     (h : selectF os v = some a) : ∃ i, selectF (os.map (F i)) v = some a := by
   obtain ⟨o, ho, hoadm, hoe⟩ := selectF_mem h
   obtain ⟨i, hi⟩ := hleast o ho a hoe
   refine ⟨i, ?_⟩
   have hmem : F i o ∈ os.map (F i) := List.mem_map_of_mem ho
-  rw [selectF_of_mem (hc i) hmem (hself i o ho a hi)]
+  rw [selectF_of_mem (hc i) hmem (by rw [hi]; rfl)]
   exact hi
 
 /-! ### What this does and does not establish

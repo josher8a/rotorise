@@ -187,7 +187,7 @@ def denote : Term → Codec
   -- *input*, not on the term, and is untouched by this.
   | .opaq => opaqCodecω
   | .object b => bodySem b
-  | .union opts => altCodec (optionSems opts) (unanimous (denoteμs opts))
+  | .union opts => altCodec (denoteList opts) (unanimous (denoteμs opts))
   -- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously
   | .never => Codec.empty
 
@@ -221,10 +221,6 @@ def denoteList : List Term → List Codec
 def denoteOpt : Option Term → Option Codec
   | none => none
   | some t => some (denote t)
-
-def optionSems : List Term → List OptionSem
-  | [] => []
-  | t :: ts => optionSemOf (denote t) (specOf t) :: optionSems ts
 
 def denoteμs : List Term → List (Option Member)
   | [] => []
@@ -323,7 +319,7 @@ theorem denote_refine (t : Term) (p : Pred) :
 /-- `union` denotes `altCodec`, over the options' semantics and their unanimous member. -/
 theorem denote_union_sems (opts : List Term) :
     denote (.union opts) =
-      altCodec (optionSems opts) (unanimous (denoteμs opts)) := rfl
+      altCodec (denoteList opts) (unanimous (denoteμs opts)) := rfl
 
 /-- `opaque` denotes `opaqCodecω` — the fuel-free one, which is why §5's discharger table has
     a row about `opaqCodec` at a fuel and a reason rather than a term-level twin. -/
@@ -354,11 +350,6 @@ has to know the companions exist. -/
 @[simp] theorem denoteOpt_eq : ∀ tail : Option Term, denoteOpt tail = tail.map denote
   | none => rfl
   | some _ => rfl
-
-@[simp] theorem optionSems_eq : ∀ opts : List Term,
-    optionSems opts = opts.map fun t => optionSemOf (denote t) (specOf t)
-  | [] => rfl
-  | t :: ts => by simp only [optionSems, List.map]; rw [optionSems_eq ts]
 
 @[simp] theorem denoteμs_eq_map : ∀ opts : List Term,
     denoteμs opts = opts.map fun t => (denote t).μ

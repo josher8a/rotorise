@@ -43,9 +43,8 @@ theorem refineReads_none {t : Term} {q : Value → Bool} {a : Attr}
     named member, an admitted attribute carries that member — §5's read-side (W). -/
 theorem admitA_member (t : Term) {μ a}
     (hμ : μSyn t = some μ) (hlaw : Lawful (denote t))
-    (h : (optionSemOf (denote t) (specOf t)).admitA a = true) :
+    (h : ((denote t).p a).isSome = true) :
     a.member = μ := by
-  replace h : ((denote t).p a).isSome = true := h
   obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h
   refine hlaw.reads ?_ hv
   rw [denote_μ]

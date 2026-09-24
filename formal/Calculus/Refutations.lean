@@ -172,7 +172,7 @@ theorem not_equiv_union_extend :
     ¬ Codec.Equiv (denote (.union [.string])) (denote (.union [.string, .boolean])) := by
   intro h
   have hb := (h.heldSet (.bool true)).mpr
-  simp [denote, denote, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
+  simp [denote, denote, denoteList, denoteμs, specOf,
         altCodec, stringCodec, booleanCodec] at hb
 
 /-! ## `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`
@@ -187,8 +187,8 @@ theorem not_equiv_union_array :
         (denote (.array (.union [.literal .string "A", .literal .string "B"]))) := by
   intro h
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
-  simp [Term.array, ← arrayCodec_eq_listCodec, denote, denote, optionSems, denoteμs,
-        optionSemOf, specOf, OptionSem.byAttempt, altCodec, arrayCodec, literalCodec,
+  simp [Term.array, ← arrayCodec_eq_listCodec, denote, denote, denoteList, denoteμs,
+        specOf, altCodec, arrayCodec, literalCodec,
         baseCodec, Codec.restrict, inL, stringCodec, HLit] at hv
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
@@ -219,8 +219,8 @@ theorem not_equiv_tupleTail_array :
   intro h
   have hv := (h.heldSet (.arr [])).mpr
   simp [Term.tuple, Term.array, ← tupleCodec_eq_listCodec, ← arrayCodec_eq_listCodec,
-        denote, denote, denoteList, denoteOpt, optionSems, denoteμs,
-        optionSemOf, specOf, OptionSem.byAttempt, altCodec, tupleCodec, align, arrayCodec,
+        denote, denote, denoteList, denoteOpt, denoteList, denoteμs,
+        specOf, altCodec, tupleCodec, align, arrayCodec,
         stringCodec] at hv
 
 /-! ## `refine(held(c, P, f, g), q) ≢ held(refine(c, q), P, f, g)`

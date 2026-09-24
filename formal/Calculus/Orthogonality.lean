@@ -441,7 +441,7 @@ theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated opts) :
     AdmitsAtMostOne (semsOf opts) := by
   constructor
   · intro v
-    rw [show semsOf opts = optionSems opts from (optionSems_eq opts).symm,
+    rw [show semsOf opts = denoteList opts from (denoteList_eq opts).symm,
       filter_AdmSpecs (fun t _ => Adm_exact t) v, List.length_map]
     refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
       (List.Pairwise.filter _ (h.imp fun hs => hs.1 v)))
@@ -451,7 +451,7 @@ theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated opts) :
     exact hxy ⟨occV_admitOpt (occV_sound x) v hax, hax⟩
       ⟨occV_admitOpt (occV_sound y) v hay, hay⟩
   · intro a
-    rw [show semsOf opts = optionSems opts from (optionSems_eq opts).symm,
+    rw [show semsOf opts = denoteList opts from (denoteList_eq opts).symm,
       filter_AdmASpecs (fun t _ => AdmA_exact t) a, List.length_map]
     refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
       (List.Pairwise.filter _ (h.imp fun hs => hs.2 a)))

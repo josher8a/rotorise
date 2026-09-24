@@ -69,41 +69,42 @@ theorem carrier_numberCodec : Carrier numberCodec := by
 
 /-! ### How a union resolves
 
-`altCodec`'s two halves are the same shape: the first option that admits answers. -/
+`altCodec`'s two halves are the same shape: the first option that acts answers. -/
 
-/-- **What a selection produces**: the first admitting option answered. -/
-theorem select_eq_some {A B : Type} {os : List OptionSem} {adm : OptionSem → A → Bool}
-    {run : OptionSem → A → Option B} {x : A} {y : B} :
-    select os adm run x = some y ↔ ∃ o, os.find? (adm · x) = some o ∧ run o x = some y := by
+/-- **What a selection produces**: the first option that acts answered. -/
+theorem select_eq_some {A B : Type} {os : List Codec} {run : Codec → A → Option B} {x : A}
+    {y : B} :
+    select os run x = some y ↔
+      ∃ o, os.find? (fun c => (run c x).isSome) = some o ∧ run o x = some y := by
   unfold select
-  cases os.find? (adm · x) <;> simp
+  cases os.find? (fun c => (run c x).isSome) <;> simp
 
-/-- …and it routes through an option that admits. -/
-theorem select_admits {A B : Type} {os : List OptionSem} {adm : OptionSem → A → Bool}
-    {run : OptionSem → A → Option B} {x : A} {y : B}
-    (h : select os adm run x = some y) : ∃ o ∈ os, adm o x = true ∧ run o x = some y := by
+/-- …and it routes through an option that acts. -/
+theorem select_admits {A B : Type} {os : List Codec} {run : Codec → A → Option B} {x : A}
+    {y : B} (h : select os run x = some y) :
+    ∃ o ∈ os, (run o x).isSome = true ∧ run o x = some y := by
   obtain ⟨o, hf, hr⟩ := select_eq_some.mp h
-  exact ⟨o, List.mem_of_find?_eq_some hf, List.find?_some (p := (adm · x)) hf, hr⟩
+  exact ⟨o, List.mem_of_find?_eq_some hf, List.find?_some (p := fun c => (run c x).isSome) hf, hr⟩
 
-/-- **What a union writes**: the first option that admits the value wrote. -/
-theorem altCodec_e {os : List OptionSem} {μA : Option Member} {v a} :
+/-- **What a union writes**: the first option that writes the value wrote. -/
+theorem altCodec_e {os : List Codec} {μA : Option Member} {v a} :
     (altCodec os μA).e v = some a ↔
-      ∃ o, os.find? (·.admitV v) = some o ∧ o.c.e v = some a := select_eq_some
+      ∃ o, os.find? (fun c => (c.e v).isSome) = some o ∧ o.e v = some a := select_eq_some
 
 /-- **What a union reads**: the same theorem, on the attribute side. -/
-theorem altCodec_p {os : List OptionSem} {μA : Option Member} {a v} :
+theorem altCodec_p {os : List Codec} {μA : Option Member} {a v} :
     (altCodec os μA).p a = some v ↔
-      ∃ o, os.find? (·.admitA a) = some o ∧ o.c.p a = some v := select_eq_some
+      ∃ o, os.find? (fun c => (c.p a).isSome) = some o ∧ o.p a = some v := select_eq_some
 
-/-- A sum's encode routes through an admitting option. -/
-theorem altCodec_e_admits {os : List OptionSem} {μA : Option Member} {v a}
+/-- A sum's encode routes through an option that writes. -/
+theorem altCodec_e_admits {os : List Codec} {μA : Option Member} {v a}
     (he : (altCodec os μA).e v = some a) :
-    ∃ o ∈ os, o.admitV v = true ∧ o.c.e v = some a := select_admits he
+    ∃ o ∈ os, (o.e v).isSome = true ∧ o.e v = some a := select_admits he
 
-/-- A sum's decode routes through an admitting option — the same theorem again. -/
-theorem altCodec_p_admits {os : List OptionSem} {μA : Option Member} {a v}
+/-- A sum's decode routes through an option that reads — the same theorem again. -/
+theorem altCodec_p_admits {os : List Codec} {μA : Option Member} {a v}
     (hp : (altCodec os μA).p a = some v) :
-    ∃ o ∈ os, o.admitA a = true ∧ o.c.p a = some v := select_admits hp
+    ∃ o ∈ os, (o.p a).isSome = true ∧ o.p a = some v := select_admits hp
 
 /-! ### Wrappers -/
 
@@ -183,8 +184,8 @@ theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) whe
 
 /-! ### Sums -/
 
-theorem carrier_altCodec {os : List OptionSem} {μA : Option Member}
-    (h : ∀ o ∈ os, Carrier o.c) : Carrier (altCodec os μA) := by
+theorem carrier_altCodec {os : List Codec} {μA : Option Member}
+    (h : ∀ o ∈ os, Carrier o) : Carrier (altCodec os μA) := by
   refine ⟨?_, ?_⟩
   · intro v a he
     obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
