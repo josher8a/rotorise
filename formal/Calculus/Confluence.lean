@@ -289,7 +289,8 @@ theorem occA_le_occV : ∀ (t : Term), HF t → ∀ (m : Member), occA t m = tru
   | .held _ _ _ _, hf, _, _ => nomatch hf
   | .refine t _, hf, m, h => occA_le_occV t hf m (by simpa [occA] using h)
   | .lazy t, hf, m, h => occA_le_occV t hf m (by simpa [occA] using h)
-  | .opaq, _, _, _ | .mu _, _, _, _ => by simp [occV, occTop]
+  | .opaq, _, _, _ => by simp [occV, occTop]
+  | .mu b, hf, m, h => by simpa [occV] using occA_le_occV b hf m (by simpa [occA] using h)
   | .var _, _, _, h => by simp [occA, occNone] at h
   | .union os, hf, m, h => by
       simp only [occA, occV] at h ⊢

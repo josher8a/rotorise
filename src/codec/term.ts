@@ -260,18 +260,19 @@ export type Term =
           readonly r: (attribute: AttributeValue) => unknown
       }
     /**
-     * §3 `(lazy)`, and **the one row where this language is wider than the model's.**
+     * §3 `(lazy)`: a thunk, which is how this language spells a recursive schema.
      *
-     * `Term.lazy` carries a plain `Term`, and `Term.lean` says why in as many words: a closure adds
-     * no constructible term, every `Term` being finite either way, and the model states no recursive
-     * term, so a recursive union has no counterpart there. `lawful_opaqCodecω` is the exception:
-     * `opaque` is a lawful recursive union, fuelled by the depth of each input.
+     * `Term.lazy` carries a plain `Term`, because a closure adds no constructible term. The model
+     * states a recursive schema with a binder instead: `Term.mu` at the term a thunk returns while
+     * that term is being read, and `Term.var` at the thunk. The model's guard accepts the binder
+     * when the variable sits under a list or an object, and `opaque` is the same construct at a
+     * fixed body.
      *
      * This library supports a recursive entity through a thunk, and `codec.recursive.spec.ts`
      * declares one, so the thunk stays. **Everything else here reads through it.**
      * {@link occV}, {@link occA} and {@link ownsNullOf} answer what the term underneath answers,
      * `meetTerms` reads through on either side and states no meet of a recursive one, and the
-     * emitter forces the chain to a depth and gives up only on a genuinely recursive one. `Meet.lean` heads the matching section
+     * emitter prints the binder at the term that closes the cycle. `Meet.lean` heads the matching section
      * "`lazy` is transparent, and it constrains nothing". Only {@link member} is lost, because
      * the model's `μSyn (.lazy t)` is `none`.
      *
@@ -933,8 +934,8 @@ const occupanciesApart = (x: Term, y: Term): boolean => {
  *
  * The model's `lazy` is transparent, so the walk forces each thunk once and reads through it. A
  * thunk that the walk meets again is recursive, and a thunk that throws names a codec that is not
- * yet declared. Each answers "reaches", because the model has no recursive term: the host shows
- * only what the model can state. So `reaches(t, [])` answers whether a thunk is unreadable, and
+ * yet declared. Each answers "reaches": the model's meet states no recursive term, and the host
+ * shows only what the model can state. So `reaches(t, [])` answers whether a thunk is unreadable, and
  * {@link meetTerms} answers only where none is, because a meet of two recursive terms need not
  * end. `held` and `legacy` need no such guard there: the meet answers `undefined` at each.
  * {@link heldFree} asks for no adapter, because the model's confluence holds only there.
@@ -1238,10 +1239,17 @@ export const meet = <A>(
  * `Field` has no `undefinable` mark.
  */
 export const meetTerms = (x: Term, y: Term): Term | undefined =>
-    // **A thunk the walk cannot read states no meet.** The meet forces each thunk it meets, and a
-    // recursive thunk would not end, so the meet asks {@link reaches} first. `undefined` is the
-    // conservative answer: no caller reads it as the bottom, so it certifies nothing
-    reaches(x, []) || reaches(y, []) ? undefined : meetWalk(x, y)
+    // the bottom absorbs, on either side, before any thunk is read: the model's `never` rows sit
+    // first, and a recursive term meets the bottom at the bottom
+    x.kind === 'never' || y.kind === 'never'
+        ? never
+        : // **A thunk the walk cannot read states no meet.** The meet forces each thunk it meets,
+          // and a recursive thunk would not end, so the meet asks {@link reaches} first.
+          // `undefined` is the conservative answer: no caller reads it as the bottom, so it
+          // certifies nothing
+          reaches(x, []) || reaches(y, [])
+          ? undefined
+          : meetWalk(x, y)
 
 const meetWalk = (x: Term, y: Term): Term | undefined => {
     // the bottom absorbs, on either side

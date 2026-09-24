@@ -437,8 +437,71 @@ const writesOnlyStrings = (t: Term | undefined): boolean => {
 
 /* ── terms ───────────────────────────────────────────────────────────────────────────────── */
 
-/** How deep a `lazy` chain may be forced before the emitter calls it recursive and gives up. */
-const lazyLimit = 16
+/**
+ * **Where the printer is in a term**: the term objects that bind a variable, and the binders it is
+ * inside, nearest last.
+ *
+ * A recursive host schema is a cycle of term objects closed by a thunk. The model names the cycle
+ * with a binder: `Term.mu` at the object a thunk returns while that object is being printed, and
+ * `Term.var k` at the thunk, where `k` counts the binders between the two.
+ */
+type Scope = {
+    readonly binds: ReadonlySet<Term>
+    readonly inside: readonly Term[]
+}
+
+/**
+ * **The binders of a term**: each term object that a thunk returns while that object is on the
+ * stack of the walk. The walk forces each thunk and stops at a cycle, so it ends: a thunk memoizes
+ * its codec, and every other edge of a term is built before the term.
+ */
+const bindersOf = (root: Term): ReadonlySet<Term> => {
+    const binds = new Set<Term>()
+    const walk = (t: Term, stack: readonly Term[]): void => {
+        const on = [...stack, t]
+        const next = (one: Term) => walk(one, on)
+        switch (t.kind) {
+            case 'lazy': {
+                let target: Term
+                try {
+                    target = t.get()
+                } catch {
+                    // a thunk that throws names a codec not yet declared; the printer reports it
+                    return
+                }
+                if (on.includes(target)) binds.add(target)
+                else next(target)
+                return
+            }
+            case 'list':
+                for (const e of [...t.pre, ...t.suf]) next(e)
+                if (t.spread) next(t.spread)
+                return
+            case 'object':
+                for (const field of Object.values(t.body.fields)) next(field.t)
+                if (t.body.rest) next(t.body.rest)
+                return
+            case 'union':
+                for (const o of t.options) next(o)
+                return
+            case 'held':
+                next(t.inner)
+                next(t.outer)
+                return
+            case 'refine':
+            case 'legacy':
+                next(t.inner)
+                return
+            default:
+                return
+        }
+    }
+    walk(root, [])
+    return binds
+}
+
+/** The scope of a term printed at the top: its own binders, and no enclosing binder. */
+const topScope = (t: Term): Scope => ({ binds: bindersOf(t), inside: [] })
 
 /**
  * A `Term` — §3's syntax, from what the codec says it is.
@@ -476,11 +539,7 @@ const lazyLimit = 16
  * vector would have needed them apart and would have been silently wrong. The `attributes` term
  * carries the policy now rather than only its codec, and this emits all three.
  */
-export const leanTermOf = (
-    declared: ObjectSlot,
-    at = 'codec',
-    forced = 0,
-): string => {
+export const leanTermOf = (declared: ObjectSlot, at = 'codec'): string => {
     // the entry takes a declaration and the printer below takes a term, so the refusal has a place
     // to live and stays reachable. A codec's definition is a term in the type, and the caller this
     // is for is the one that arrived past a cast — `termOf` draws the same line for the same reason
@@ -491,7 +550,7 @@ export const leanTermOf = (
             'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
         )
     }
-    return leanTermOfTerm(def, at, forced)
+    return leanTermOfTerm(def, at, topScope(def))
 }
 
 /**
@@ -555,12 +614,12 @@ const leanGround = (alts: Alternatives, at: string): string => {
  * registry below recognises two of them **by reference**, and everything else is refused. That is
  * the case `Pred` keeps rather than removes: `refine` still carries an arbitrary predicate.
  */
-const leanPredicate = (q: Predicate, at: string, forced: number): string => {
+const leanPredicate = (q: Predicate, at: string, scope: Scope): string => {
     switch (q.kind) {
         case 'members':
             return `(Pred.members ${leanGround(q.literal, at)})`
         case 'each':
-            return `(Pred.each ${leanPredicate(q.of, at, forced)})`
+            return `(Pred.each ${leanPredicate(q.of, at, scope)})`
         case 'closure': {
             // recognised by reference against the function this package exported, so a rename or a
             // reimplementation of the predicate is a type error here rather than a silent misemission
@@ -583,7 +642,7 @@ const leanPredicate = (q: Predicate, at: string, forced: number): string => {
  * tagged union — and there is one sum now, so a member of a dissection is an `object` term like
  * any other union option and prints through the row above.
  */
-const leanBodyOf = (body: Body, at: string, forced: number): string => {
+const leanBodyOf = (body: Body, at: string, scope: Scope): string => {
     const declared = Object.entries(body.fields)
     const names = declared.map(([name]) => name)
     const fields = leanKeyFunction(
@@ -591,7 +650,7 @@ const leanBodyOf = (body: Body, at: string, forced: number): string => {
             ([name, field]) =>
                 [
                     leanString(name),
-                    leanSlotOf(field, `${at}.${name}`, forced),
+                    leanSlotOf(field, `${at}.${name}`, scope),
                 ] as const,
         ),
     )
@@ -605,11 +664,16 @@ const leanBodyOf = (body: Body, at: string, forced: number): string => {
     const restTerm =
         rest === undefined
             ? 'none'
-            : `(some (${leanTermOfTerm(rest, `${at}.rest`, forced)}))`
+            : `(some (${leanTermOfTerm(rest, `${at}.rest`, scope)}))`
     return `(Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
 }
 
-const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
+const leanTermOfTerm = (t: Term, at: string, scope: Scope): string =>
+    scope.binds.has(t) && !scope.inside.includes(t)
+        ? `Term.mu (${leanTermCore(t, at, { ...scope, inside: [...scope.inside, t] })})`
+        : leanTermCore(t, at, scope)
+
+const leanTermCore = (t: Term, at: string, scope: Scope): string => {
     switch (t.kind) {
         case 'string':
             return 'Term.string'
@@ -658,20 +722,20 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
             ) =>
                 ts
                     .map((element, index) =>
-                        leanTermOfTerm(element, part(index), forced),
+                        leanTermOfTerm(element, part(index), scope),
                     )
                     .join(', ')
             const spread = t.spread
             if (t.suf.length === 0) {
                 if (t.pre.length === 0 && spread)
-                    return `Term.array (${leanTermOfTerm(spread, `${at}.element`, forced)})`
+                    return `Term.array (${leanTermOfTerm(spread, `${at}.element`, scope)})`
                 const tail = spread
-                    ? `(some (${leanTermOfTerm(spread, `${at}.tail`, forced)}))`
+                    ? `(some (${leanTermOfTerm(spread, `${at}.tail`, scope)}))`
                     : 'none'
                 return `Term.tuple [${positions(t.pre, (index) => `${at}[${index}]`)}] ${tail}`
             }
             const middle = spread
-                ? `(some (${leanTermOfTerm(spread, `${at}.spread`, forced)}))`
+                ? `(some (${leanTermOfTerm(spread, `${at}.spread`, scope)}))`
                 : 'none'
             return `Term.list [${positions(t.pre, (index) => `${at}[${index}]`)}] ${middle} [${positions(t.suf, (index) => `${at}.suffix[${index}]`)}]`
         }
@@ -686,31 +750,28 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
             //
             // A `dunion`'s variants are `Body`s too, so the payload is emitted by
             // {@link leanBodyOf} and both rows print the same thing.
-            return `Term.object ${leanBodyOf(t.body, at, forced)}`
+            return `Term.object ${leanBodyOf(t.body, at, scope)}`
         }
         case 'never':
             return 'Term.never'
         case 'union':
             return `Term.union [${t.options
                 .map((variant, index) =>
-                    leanTermOfTerm(variant, `${at}[${index}]`, forced),
+                    leanTermOfTerm(variant, `${at}[${index}]`, scope),
                 )
                 .join(', ')}]`
         // The model's `opaq` is the exact codec: its number option is `numberCodec`, so it is this
         // total term. The two policies are `held` over this term, and the `held` row refuses them
         case 'opaq':
             return 'Term.opaq'
+        // a thunk that returns a term being printed closes a cycle, and prints the variable of
+        // that term's binder; any other thunk prints the term it returns
         case 'lazy': {
-            if (forced >= lazyLimit) {
-                return refuse(
-                    at,
-                    `a lazy chain deeper than ${lazyLimit}. `.concat(
-                        'A recursive codec has no term: `Term.lazy` carries a `Term`, not a thunk, ',
-                        'so the model states no recursive term',
-                    ),
-                )
-            }
-            return `Term.lazy (${leanTermOfTerm(t.get(), `${at}.inner`, forced + 1)})`
+            const target = t.get()
+            const k = scope.inside.lastIndexOf(target)
+            return k === -1
+                ? `Term.lazy (${leanTermOfTerm(target, `${at}.inner`, scope)})`
+                : `Term.lazy (Term.var ${scope.inside.length - 1 - k})`
         }
         /**
          * §3 `(refine)`. The predicate is printed by {@link leanPredicate}, and the side condition
@@ -724,14 +785,14 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
          * to say about them.
          */
         case 'refine': {
-            const q = leanPredicate(t.q, at, forced)
+            const q = leanPredicate(t.q, at, scope)
             if (t.q.kind === 'closure' && !writesOnlyStrings(t.inner)) {
                 return refuse(
                     at,
                     `${shippedPredicates.get(t.q.q.is)?.what ?? 'this predicate'} decides a *string*, and this refinement's inner term writes values that are not strings — where JavaScript would coerce and the model would not, so the two predicates would part company`,
                 )
             }
-            return `Term.refine (${leanTermOfTerm(t.inner, `${at}.inner`, forced)}) ${q}`
+            return `Term.refine (${leanTermOfTerm(t.inner, `${at}.inner`, scope)}) ${q}`
         }
         /**
          * **An adapter this library ships is printed by name**, the way a recognised predicate
@@ -744,7 +805,7 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
          */
         case 'held':
             return t.via === 'decimalText'
-                ? `(Term.held (${leanTermOfTerm(t.inner, at, forced)}) (${leanTermOfTerm(t.outer, at, forced)}) numeralOfStoredText textOfNumeral)`
+                ? `(Term.held (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) numeralOfStoredText textOfNumeral)`
                 : refuse(
                       at,
                       "`Term.held` carries two `Value → Value` functions. The library ships one pair the model names, `numeralOfStoredText`/`textOfNumeral`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted",
@@ -764,10 +825,10 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
  * the presence lattice reads the rest. This emitted `Field.req` and `Field.optional` against a
  * model that stopped having them.
  */
-const leanSlotOf = (field: TermField, at: string, forced: number): string => {
+const leanSlotOf = (field: TermField, at: string, scope: Scope): string => {
     switch (field.mark) {
         case 'optional':
-            return `ObjectSlot.optional (${leanTermOfTerm(field.t, at, forced)})`
+            return `ObjectSlot.optional (${leanTermOfTerm(field.t, at, scope)})`
         /**
          * **A field's alternate reader has no slot, and that is deliberate in the model.**
          *
@@ -782,7 +843,7 @@ const leanSlotOf = (field: TermField, at: string, forced: number): string => {
                 '`withLegacyRead` on a field has no `ObjectSlot`: the model carries an older reader as `Codec.extendRead`, which is a codec outside `Term`, so a body has no alternate-reader slot to print',
             )
         case 'req':
-            return `ObjectSlot.req (${leanTermOfTerm(field.t, at, forced)})`
+            return `ObjectSlot.req (${leanTermOfTerm(field.t, at, scope)})`
         /**
          * `ObjectSlot.optional`, because that is what it denotes rather than an approximation of
          * it.
@@ -792,7 +853,7 @@ const leanSlotOf = (field: TermField, at: string, forced: number): string => {
          * quotient that rests on is {@link leanValueOf}'s, which was already there for `optional`.
          */
         case 'undefinable':
-            return `ObjectSlot.optional (${leanTermOfTerm(field.t, at, forced)})`
+            return `ObjectSlot.optional (${leanTermOfTerm(field.t, at, scope)})`
     }
 }
 
@@ -851,22 +912,48 @@ export const leanVector = (
     const term = leanTermOf(codec, name)
     const attribute = codec.unsafeEncode(value as never)
     const head = [`/-- \`${name}\` -/`, `theorem ${leanIdent(name)} :`]
-    return protocol === 'equation'
-        ? [
-              ...head,
-              `    (denote (${term})).e`,
-              `      (${leanValueOf(value, name)})`,
-              `    = some (${leanAttrOf(attribute, name)}) := by`,
-              '  vector',
-          ].join('\n')
-        : [
-              ...head,
-              `    check ${fuelFor(attribute)}`,
-              `      ((denote (${term})).e`,
-              `        (${leanValueOf(value, name)}))`,
-              `      (some (${leanAttrOf(attribute, name)})) = .same := rfl`,
-          ].join('\n')
+    // a recursive term the library wrote through is a term the guard accepts
+    const guard = term.includes('Term.mu')
+        ? `\n\n${leanGuard({ name: `${name}__guarded`, codec, guarded: true })}`
+        : ''
+    const vector =
+        protocol === 'equation'
+            ? [
+                  ...head,
+                  `    (denote (${term})).e`,
+                  `      (${leanValueOf(value, name)})`,
+                  `    = some (${leanAttrOf(attribute, name)}) := by`,
+                  '  vector',
+              ].join('\n')
+            : [
+                  ...head,
+                  `    check ${fuelFor(attribute)}`,
+                  `      ((denote (${term})).e`,
+                  `        (${leanValueOf(value, name)}))`,
+                  `      (some (${leanAttrOf(attribute, name)})) = .same := rfl`,
+              ].join('\n')
+    return `${vector}${guard}`
 }
+
+/**
+ * **A guard verdict**: whether the model's `Term.guarded` accepts the term of a codec. A recursive
+ * schema below a list or an object is guarded. A thunk that returns its own term reads the
+ * binder's input itself, and the guard refuses it: the stages of such a term never grow.
+ */
+export type Guard = {
+    /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
+    readonly name: string
+    readonly codec: AnyCodec
+    readonly guarded: boolean
+}
+
+/** One guard verdict, as a Lean `theorem` closed by `rfl`. */
+export const leanGuard = ({ name, codec, guarded }: Guard): string =>
+    [
+        `/-- \`${name}\` — the model's guard ${guarded ? 'accepts' : 'refuses'} this term -/`,
+        `theorem ${leanIdent(name)} :`,
+        `    Term.guarded (${leanTermOf(codec, name)}) = ${guarded} := rfl`,
+    ].join('\n')
 
 /**
  * One proposed **refusal**: this codec, given this value, writes nothing — and neither does the
@@ -1123,7 +1210,7 @@ export const leanMeet = ({ name, left, right }: MeetPair): string => {
     const rhs =
         answer === undefined
             ? 'none'
-            : `some (${leanTermOfTerm(answer, `${name}.meet`, 0)})`
+            : `some (${leanTermOfTerm(answer, `${name}.meet`, topScope(answer))})`
     return [
         `/-- \`${name}\` — the meet \`src/\` computes, put to the model -/`,
         `theorem ${leanIdent(name)} :`,
@@ -1156,13 +1243,13 @@ const leanMeetObjects = (
         const block = answer.body.rest
         const at = `${name}.meet[${i}]`
         const blockTerm = block
-            ? leanTermOfTerm(block, `${at}.rest`, 0)
+            ? leanTermOfTerm(block, `${at}.rest`, topScope(block))
             : undefined
         const option = `(${pair}).bind (·.optionAt ${i})`
         const slot = (k: string): string => {
             const field = answer.body.fields[k]
             return field
-                ? leanSlotOf(field, `${at}.${k}`, 0)
+                ? leanSlotOf(field, `${at}.${k}`, topScope(field.t))
                 : `ObjectSlot.optional (${blockTerm ?? 'Term.never'})`
         }
         return [
@@ -1793,6 +1880,8 @@ export const leanVectorModule = (
      * carries is the readable half.
      */
     reads: readonly Vector[] = [],
+    /** Guard verdicts, for a term that no vector can write through. */
+    guards: readonly Guard[] = [],
 ): string => {
     const written = vectors
         .map((vector) => leanVector(vector, protocol))
@@ -1804,7 +1893,11 @@ export const leanVectorModule = (
                   .filter((one) => readVectorIsUnstatable(one) === undefined)
                   .map(leanReadVector)
                   .join('\n\n')}`
-    const body = `${written}${readBack}`
+    const guarded =
+        guards.length === 0
+            ? ''
+            : `\n\n/-! ### The guard of a binder -/\n\n${guards.map(leanGuard).join('\n\n')}`
+    const body = `${written}${readBack}${guarded}`
     if (refusals.length === 0) {
         return `${protocol === 'equation' ? preamble : checkPreamble}\n${body}\n\nend Calculus\n`
     }

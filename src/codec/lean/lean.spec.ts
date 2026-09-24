@@ -69,6 +69,7 @@ import type {
 import {
     LeanUnemittable,
     leanAttrOf,
+    leanGuard,
     leanMeet,
     leanMeetModule,
     leanReadModule,
@@ -554,16 +555,31 @@ describe('what cannot be emitted', () => {
     })
 
     /**
-     * A recursive codec is not a deep term; it is *no* term. `Term.lazy` carries a `Term` and not a
-     * thunk, so the model states no recursive term. The
-     * emitter therefore stops at a depth rather than diverging, and reports that.
+     * **A recursive schema is a binder and its variable.** A thunk that returns a term being
+     * printed closes a cycle, so the emitter prints `Term.mu` at that term and `Term.var k` at the
+     * thunk, where `k` counts the binders between the two. The emitter ends on every cycle.
      */
-    it('refuses a recursive lazy rather than looping', () => {
-        const recursive: AnyCodec = erase(
-            lazy(() => recursive as unknown as AttributeCodec<unknown>),
+    it('prints a schema that recurses below a list as a binder whose variable sits in the list', () => {
+        expect(leanTermOf(json)).toBe(
+            'Term.mu (Term.union [Term.string, Term.array (Term.lazy (Term.var 0))])',
         )
-        expect(refusal(() => leanTermOf(recursive)).reason).toContain(
-            'the model states no recursive term',
+        // the top thunk of `Category` returns the object, and the object holds the same thunk
+        expect(leanTermOf(erase(Category))).toMatch(
+            /^Term\.lazy \(Term\.mu \(Term\.object .*Term\.array \(Term\.lazy \(Term\.var 0\)\).*\)\)$/,
+        )
+    })
+
+    /**
+     * **A thunk that returns its own term is printed, and the guard refuses it.** Its stages never
+     * grow, so the model has no limit for it, and `Term.guarded` answers `false`.
+     * `.vectors.full.lean` carries the verdict.
+     */
+    it('prints a thunk that returns itself as a binder the guard refuses', () => {
+        expect(leanTermOf(selfThunk)).toBe('Term.mu (Term.lazy (Term.var 0))')
+        expect(
+            leanGuard({ name: 'self_thunk', codec: selfThunk, guarded: false }),
+        ).toContain(
+            'Term.guarded (Term.mu (Term.lazy (Term.var 0))) = false := rfl',
         )
     })
 
@@ -727,6 +743,32 @@ describe('a whole vector', () => {
         expect(module.trimEnd().endsWith('end Calculus')).toBe(true)
     })
 })
+
+/**
+ * **The recursive schemas the host accepts**, each a cycle of term objects closed by a thunk below a
+ * list or an object. The model states each as `Term.mu`, with `Term.var` at the thunk.
+ */
+const json: AnyCodec = erase(
+    union([
+        string,
+        array(lazy(() => json as never)),
+    ] as unknown as readonly AnyCodec[]),
+)
+const tree: AnyCodec = erase(
+    object({ v: string, kids: array(lazy(() => tree as never)) }),
+)
+type Category = { name: string; children?: readonly Category[] }
+const Category: AttributeCodec<Category> = lazy(() =>
+    object({ name: string, children: optional(array(Category)) }),
+)
+type Tree = { name: string; children?: readonly Tree[] }
+const Tree: AttributeCodec<Tree> = lazy(() =>
+    object({ name: string, children: optional(array(Tree)) }),
+)
+/** A thunk that returns its own term: no container sits between the binder and its variable. */
+const selfThunk: AnyCodec = erase(
+    lazy(() => selfThunk as unknown as AttributeCodec<unknown>),
+)
 
 /**
  * The vectors in the committed sample, in the order they appear there.
@@ -977,6 +1019,22 @@ export const sampleVectors: readonly Vector[] = [
     },
     { name: 'opaque_map', codec: erase(opaque), value: { a: 'x' } },
     { name: 'lazy_string', codec: erase(lazy(() => string)), value: 'x' },
+    { name: 'recursive_json', codec: json, value: ['a', ['b', []]] },
+    {
+        name: 'recursive_tree',
+        codec: tree,
+        value: { v: 'r', kids: [{ v: 'c', kids: [] }] },
+    },
+    {
+        name: 'recursive_category',
+        codec: erase(Category),
+        value: { name: 'pets', children: [{ name: 'dogs' }] },
+    },
+    {
+        name: 'recursive_tree_optional',
+        codec: erase(Tree),
+        value: { name: 'root' },
+    },
 ]
 
 /**
@@ -1357,10 +1415,10 @@ describe('union resolution, model against library', () => {
      * `set_of_literal`, and 248 by `literal_non_ascii` and the three products: each new entry
      * adds the resolutions of the unions it takes part in.
      */
-    it('offers 370 write pairs and every one of 400 read pairs', () => {
-        expect(writeResolutions().length).toBe(370)
+    it('offers 410 write pairs and every one of 440 read pairs', () => {
+        expect(writeResolutions().length).toBe(410)
         const reads = readResolutions()
-        expect(reads.length).toBe(400)
+        expect(reads.length).toBe(440)
         /**
          * **Every pair is stated, and no filter decides otherwise.** A read value with no Lean
          * form makes `leanValueOf` throw, so a pair becoming unstatable fails the emission rather
@@ -1405,7 +1463,7 @@ describe('union resolution, model against library', () => {
             readResolutions(),
         )
         expect(module).toContain('import Calculus.Vectors')
-        expect(module).toContain('400 on the read side')
+        expect(module).toContain('440 on the read side')
         expect(module).toContain('vcheck')
     })
 })
@@ -1426,11 +1484,11 @@ describe("the read side, against the model's read row", () => {
      * a concrete numeral by `rfl`, so the filter excluded pairs the row answers. The filter is
      * deleted, and the three are theorems in `.readverdicts.lean` like every other pair.
      */
-    it('offers 1591 pairs, and asserts every one', () => {
+    it('offers 1927 pairs, and asserts every one', () => {
         const verdicts = readVerdicts()
         // 1634 until `object_fallback_present` left the emittable corpus: a field's older
         // reader lives in `Codec.extendRead`, outside `Term`, so a `Body` has no slot to print it
-        expect(verdicts.length).toBe(1591)
+        expect(verdicts.length).toBe(1927)
         const module = leanReadModule(verdicts)
         for (const name of [
             'scalar_number__reads__scalar_decimal',
@@ -1450,7 +1508,7 @@ describe("the read side, against the model's read row", () => {
         }
         const module = leanReadModule(readVerdicts())
         expect(module).toContain('import Calculus.DynamoDB')
-        expect(module).toContain('All 1591 pairs are asserted here.')
+        expect(module).toContain('All 1927 pairs are asserted here.')
     })
 })
 
@@ -1472,7 +1530,47 @@ describe("the declaration guard, against the model's classifier", () => {
             one.endsWith('= false := by decide'),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([688, 19])
+        expect([accepted.length, refused.length]).toEqual([783, 82])
+    })
+
+    /**
+     * **A recursive option is certified exactly where the host accepts it.** The host reads a
+     * recursive union's occupancy through one level, where a thunk sits under a container, and the
+     * model reads `mu b` as the occupancy of `b`, whose variable sits under a container. So `json`
+     * beside a number is certified by the occupancies, and `json` beside `array(string)` is refused
+     * by both sides, because both write a list. The meet states no recursive term on either side,
+     * so no pair rests on the meet.
+     */
+    it('certifies a recursive option where the host accepts it, and declines where the host refuses', () => {
+        const recursive = separationPairs().filter((one) =>
+            one.name.includes('recursive'),
+        )
+        const emitted = recursive.map(leanSeparation)
+        const byOccupancy = emitted.filter((one) =>
+            one.includes('separated_of_unionOk'),
+        )
+        const refused = emitted.filter((one) =>
+            one.endsWith('= false := by decide'),
+        )
+        const byBottom = emitted.filter((one) =>
+            one.includes('pairwiseCompat_never'),
+        )
+        expect([byOccupancy.length, byBottom.length, refused.length]).toEqual([
+            91, 4, 63,
+        ])
+        expect(byOccupancy.length + byBottom.length + refused.length).toBe(
+            recursive.length,
+        )
+        const verdict = (left: AnyCodec, right: AnyCodec) =>
+            leanSeparation({ name: 'probe', left, right })
+        expect(verdict(erase(dynamoNumber), json)).toContain(
+            'separated_of_unionOk',
+        )
+        expect(verdict(erase(array(string)), json)).toContain(
+            '= false := by decide',
+        )
+        expect(verdict(erase(string), tree)).toContain('separated_of_unionOk')
+        expect(verdict(tree, erase(Category))).toContain('= false := by decide')
     })
 
     it('emits them for the gate to elaborate', () => {
@@ -1495,7 +1593,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('puts every corpus meet to the model', () => {
         const meets = meetPairs()
-        expect(meets.length).toBe(703)
+        expect(meets.length).toBe(861)
         expect(MEET_DEFERRED.length).toBe(0)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
@@ -1540,7 +1638,20 @@ describe('the full refusal set, for the gate', () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.vectors.full.lean'),
-                leanVectorModule([], 'check', refusals),
+                leanVectorModule(
+                    [],
+                    'check',
+                    refusals,
+                    refusals.length,
+                    [],
+                    [
+                        {
+                            name: 'self_thunk__unguarded',
+                            codec: selfThunk,
+                            guarded: false,
+                        },
+                    ],
+                ),
             )
         }
         // every corpus value is refused by some codec, which is what makes the cross product a
@@ -1587,7 +1698,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
                 readVectorIsUnstatable(one) === undefined && emittable(one),
         )
         expect(statable.length).toBe(sampleVectors.length - 1)
-        expect(statable.length).toBe(36)
+        expect(statable.length).toBe(40)
         // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
         for (const one of statable) {
             const vector = leanReadVector(one)
@@ -1614,6 +1725,18 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
     })
 })
 
+/**
+ * **The recursive maps the `equation` protocol cannot state.** `vector` asks the elaborator's `whnf`
+ * for the codec's answer, and a recursive term reads the stage its input's depth names. A map's
+ * depth is a `Finset.sup` over its key set, which `whnf` does not reduce: `recursive_tree` timed out
+ * at 4000000 heartbeats, twenty times the default. The `check` sample states both by `rfl`, and the
+ * gate elaborates it, so the vectors are checked there and deferred here.
+ */
+const EQUATION_DEFERRED: readonly string[] = [
+    'recursive_tree',
+    'recursive_category',
+]
+
 describe('the committed sample', () => {
     /**
      * A sample that is not regenerated is a sample that lies — **and a regenerated one lies just
@@ -1639,7 +1762,12 @@ describe('the committed sample', () => {
             const emitted = leanVectorModule(
                 // `object_fallback_present` is excluded and named by the test above: its term has
                 // no `ObjectSlot`, so the sample states the codecs the model can spell
-                sampleVectors.filter(emittable),
+                sampleVectors.filter(
+                    (one) =>
+                        emittable(one) &&
+                        (protocol === 'check' ||
+                            !EQUATION_DEFERRED.includes(one.name)),
+                ),
                 protocol,
                 sampleRefusals,
                 allRefusals().length,
