@@ -11,8 +11,8 @@ plumbing rather than twenty-one bespoke cases.
 * `Ctor` — a constructor as a prism, on the value side and the attribute side;
 * ground codecs, one per §3 ground term;
 * `through` / `restrict` — the iso/prism pair behind `held` and `refine`;
-* `extendRead` — the agreeing extension of the reading, for `alternate reader`; (MP) is the
-  sanctioned breach and has no lemma, by design.
+* `extendRead` — the agreeing extension of the reading, for `alternate reader`; canonical reads
+  are the sanctioned breach and have no lemma, by design.
 -/
 
 namespace Calculus
@@ -555,7 +555,7 @@ theorem extendRead_e {r : Attr → Option Value} {v a} :
     (c.extendRead r).e v = some a ↔ c.e v = some a := Iff.rfl
 
 /-- It reads through the base where the base reads, and through the migration exactly
-    where the base does not. That "exactly" is where (MP) goes. -/
+    where the base does not. That "exactly" is where canonical reads go. -/
 theorem extendRead_p {r : Attr → Option Value} {a v} :
     (c.extendRead r).p a = some v ↔ c.p a = some v ∨ (c.p a = none ∧ r a = some v) := by
   show (match c.p a with | some w => some w | none => r a) = some v ↔ _
@@ -569,11 +569,10 @@ end WrapperInversion
     all over the development. -/
 theorem Lawful.congr {c d : Codec} (he : c.e = d.e) (hp : c.p = d.p) (hμ : c.μ = d.μ)
     (h : Lawful d) : Lawful c := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_⟩
   · intro t a hx; rw [he] at hx; rw [hp]; exact h.retract hx
   · intro a t hx; rw [hp] at hx; rw [he]; exact h.canon hx
   · intro μ hm t a hx; rw [hμ] at hm; rw [he] at hx; exact h.writes hm hx
-  · intro a t a' h1 h2; rw [hp] at h1; rw [he] at h2; exact h.agree h1 h2
 
 /-- The carrier transfers too, given the held set is no smaller. -/
 theorem Carrier.congr {c d : Codec} (he : c.e = d.e) (hp : c.p = d.p)
@@ -584,7 +583,7 @@ theorem Carrier.congr {c d : Codec} (he : c.e = d.e) (hp : c.p = d.p)
 
 /-- Forgetting the member index preserves the laws — `(lazy)` concludes `⊤`. -/
 theorem Lawful.μNone {c : Codec} (h : Lawful c) : Lawful { c with μ := none } := by
-  refine ⟨h.retract, h.canon, ?_, h.agree⟩
+  refine ⟨h.retract, h.canon, ?_⟩
   intro _ h'
   exact nomatch h'
 

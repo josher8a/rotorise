@@ -1233,8 +1233,7 @@ a ≼ a′  ⟺  member(a) = member(a′)
 
 Set members compare no deeper — an \texttt{SS} carries payloads, not attributes, so there is no member
 inside one to disagree on. Shared names, because a name on one side alone carries no member to disagree
-on. At a lawful held-free term the strong law holds as an equality, \texttt{e(p(a))\ =\ a}, by \texttt{e\_p\_of\_HF}
-(\rulelink{thm:ker-heldfree}{the held-free kernel Theorem}). The strong law is \texttt{e(p(a))\ ≼\ a} on \texttt{dom(p)},
+on. At a lawful codec the strong law holds as an equality, \texttt{e(p(a))\ =\ a}, by \texttt{Lawful.canon}. The strong law is \texttt{e(p(a))\ ≼\ a} on \texttt{dom(p)},
 and it implies \rulelink{cond:MP}{\textbf{(MP)}} as stated.
 
 \begin{theorem}[soundness]

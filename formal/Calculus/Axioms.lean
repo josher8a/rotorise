@@ -160,8 +160,8 @@ middle — the law production actually runs — and the two `decimalCodec` rows 
 narrowing and fails before it. -/
 
 /-! §2's corollary that a pair has two halves: a member a codec cannot write is one it
-cannot read. The `opaque`/`NS` defect is its counterexample, and (MP) is the only law that
-sees it — which is why it needs stating rather than following from the rest. -/
+cannot read. The `opaque`/`NS` defect is its counterexample, and canonical reads are the only
+law that sees it — which is why it needs stating rather than following from the rest. -/
 
 /-! §6's Hold rows at term level. The ten `denote_*` bridges are `rfl` and carry no axiom
 risk worth a line each; what is guarded is the twins, which go through `Codec.Equiv` and are

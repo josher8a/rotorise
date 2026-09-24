@@ -203,7 +203,7 @@ theorem decimalCodec_p_n (x : WFNumeral) :
     decimalCodec.p (.n x) = if Numeral.Stored x.1 then some (.num x) else none := rfl
 
 theorem lawful_decimalCodec : Lawful decimalCodec := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_⟩
   · intro t a he
     cases t with
     | num x =>
@@ -217,7 +217,7 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
     | n x =>
       rw [decimalCodec_p_n] at hp
       by_cases hw : Numeral.Stored x.1 = true
-      · rw [if_pos hw] at hp; cases hp; rw [decimalCodec_e_num, if_pos hw]; rfl
+      · rw [if_pos hw] at hp; cases hp; rw [decimalCodec_e_num, if_pos hw]
       · rw [if_neg hw] at hp; exact nomatch hp
     | _ => exact nomatch hp
   · intro μ hμ t a he
@@ -228,18 +228,6 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
       · rw [if_pos hw] at he; cases he; cases hμ; rfl
       · rw [if_neg hw] at he; exact nomatch he
     | _ => exact nomatch he
-  · intro a t a' hp he
-    cases a with
-    | n x =>
-      rw [decimalCodec_p_n] at hp
-      by_cases hw : Numeral.Stored x.1 = true
-      · rw [if_pos hw] at hp
-        cases hp
-        rw [decimalCodec_e_num, if_pos hw] at he
-        cases he
-        exact .n ..
-      · rw [if_neg hw] at hp; exact nomatch hp
-    | _ => exact nomatch hp
 
 /-! ### `number` against the store (§1)
 

@@ -25,22 +25,18 @@ a shrinking domain but never a differing `T`.
 
 namespace Calculus
 
-/-! ## §2's four laws are independent
+/-! ## §2's three laws are independent
 
-§2 asserts "The four are independent" and offers no witness. Independence *is* a family of
-counter-models — for each law, a codec satisfying the other three and failing that one — so
-the claim was four objects, and four objects were what the specification did not have.
+§2's laws are (R), canonical reads, and (W). Independence *is* a family of counter-models: for
+each law, a codec satisfying the other two and failing that one.
 
 They are stated at `Codec`, not at `Term`, which is what makes this independence rather than
 a remark about the terms that happen to exist: a law the language cannot violate is still a
 law the definition does not imply. Each is as small as `𝔸` allows — a pair of partial
 functions on strings, `T` everything, and a member named only where the law needs one.
 
-The `cM` case is the one worth reading twice. (W) and (MP) both constrain members, and it is
-tempting to take one for a special case of the other. `cM` declares no member at all, so (W)
-holds for the only reason it can hold without saying anything, and (MP) fails regardless. Its
-three positive halves are exactly `LawfulCore` — which is not a coincidence but the same
-residue `alternate reader` leaves (§5), arriving from the other direction. -/
+`cM` is the codec between `LawfulCore` and `Lawful`: every read value is writable, and the
+write lands on another attribute. That is the same residue `alternate reader` leaves (§5). -/
 
 /-- **(R) fails alone.** Every string is written to one attribute, so the write forgets which
     string it was; nothing else notices. -/
@@ -53,17 +49,12 @@ def cR : Codec where
 /-- `cR` loses the value: `"b"` is written and `"a"` is read back. -/
 theorem cR_notR : ¬ (∀ {t a}, cR.e t = some a → cR.p a = some t) := by
   intro h; have := @h (.str "b") (.s "x") rfl; simp [cR] at this
-/-- …but everything readable re-encodes. -/
-theorem cR_C : ∀ {a t}, cR.p a = some t → (cR.e t).isSome := by
+/-- …but every read value writes the attribute it was read from. -/
+theorem cR_canon : ∀ {a t}, cR.p a = some t → cR.e t = some a := by
   intro a t h; cases a <;> simp [cR] at h; split at h <;> simp_all [cR]; subst_vars; rfl
-/-- …the declared member is the only one written. -/
+/-- …and the declared member is the only one written. -/
 theorem cR_W : ∀ {μ}, cR.μ = some μ → ∀ {t a}, cR.e t = some a → a.member = μ := by
   intro μ hμ t a h; cases t <;> simp [cR] at h hμ; subst h; subst hμ; rfl
-/-- …and a read re-written lands on the attribute it was read from. Losing the *value* is
-    not losing the *member*, which is the distance between (R) and (MP). -/
-theorem cR_MP : ∀ {a t a'}, cR.p a = some t → cR.e t = some a' → Agree a' a := by
-  intro a t a' hp he; cases a <;> simp [cR] at hp; split at hp <;> simp_all [cR]; subst_vars
-  simp [] at he; subst_vars; exact .s _ _
 
 /-- **(C) fails alone.** Reads every `S`, writes only `"a"` — so `p` escapes `dom(e)`. -/
 def cC : Codec where
@@ -78,13 +69,9 @@ theorem cC_R : ∀ {t a}, cC.e t = some a → cC.p a = some t := by
 /-- …and names its member. -/
 theorem cC_W : ∀ {μ}, cC.μ = some μ → ∀ {t a}, cC.e t = some a → a.member = μ := by
   intro μ hμ t a h; cases t <;> simp [cC] at h hμ; split at h <;> simp_all []; subst_vars; rfl
-/-- …but `"b"` is readable and not writable, which is (C) and nothing else. -/
-theorem cC_notC : ¬ (∀ {a t}, cC.p a = some t → (cC.e t).isSome) := by
+/-- …but `"b"` is readable and not writable, which breaks canonical reads and nothing else. -/
+theorem cC_notCanon : ¬ (∀ {a t}, cC.p a = some t → cC.e t = some a) := by
   intro h; have := @h (.s "b") (.str "b") rfl; simp [cC] at this
-/-- …and (MP) survives, being quantified over what `e` actually returns. -/
-theorem cC_MP : ∀ {a t a'}, cC.p a = some t → cC.e t = some a' → Agree a' a := by
-  intro a t a' hp he; cases a <;> simp [cC] at hp; subst hp; simp [cC] at he
-  split at he <;> simp_all; subst he; exact .s _ _
 
 /-- **(W) fails alone.** A bijection on its domain that declares `μ = S` and writes `"z"` to
     `BOOL`. The pair is as well behaved as a pair can be; only the *declaration* is a lie. -/
@@ -111,37 +98,22 @@ theorem cW_R : ∀ {t a}, cW.e t = some a → cW.p a = some t := by
     · next hz => subst hz; cases h; rfl
     · next hz => cases h; simp only [cW]; rw [if_neg hz]
   all_goals exact absurd h (by simp)
-/-- …everything readable re-encodes… -/
-theorem cW_C : ∀ {a t}, cW.p a = some t → (cW.e t).isSome := by
+/-- …and every read value writes the attribute it was read from. -/
+theorem cW_canon : ∀ {a t}, cW.p a = some t → cW.e t = some a := by
   intro a t h
   cases a <;> simp only [cW] at h
   case s s =>
     split at h
     · exact absurd h (by simp)
-    · next hz => cases h; simp only [cW]; rw [if_neg hz]; rfl
+    · next hz => cases h; simp only [cW]; rw [if_neg hz]
   case bool b =>
     cases b
     · exact absurd h (by simp)
-    · cases h; simp only [cW]; rfl
+    · cases h; simp [cW]
   all_goals exact absurd h (by simp)
-/-- …and no read re-written changes a stored member. (W) constrains the *declaration*
-    against `ran(e)`; (MP) constrains `ran(e)` against `dom(p)`, and only the first is
-    broken here. -/
-theorem cW_MP : ∀ {a t a'}, cW.p a = some t → cW.e t = some a' → Agree a' a := by
-  intro a t a' hp he
-  cases a <;> simp only [cW] at hp
-  case s s =>
-    split at hp
-    · exact absurd hp (by simp)
-    · next hz => cases hp; simp only [cW] at he; rw [if_neg hz] at he; cases he; exact .s _ _
-  case bool b =>
-    cases b
-    · exact absurd hp (by simp)
-    · cases hp; simp only [cW] at he; simp at he; subst he; exact .bool _ _
-  all_goals exact absurd hp (by simp)
 
-/-- **(MP) fails alone.** Declares no member, and reads `⟨BOOL, true⟩` back as a string it
-    writes to `S` — so a stored `BOOL` becomes an `S` on the way through. -/
+/-- **Definedness without canonical reads.** Declares no member, and reads `⟨BOOL, true⟩` back
+    as a string it writes to `S` — so a stored `BOOL` becomes an `S` on the way through. -/
 def cM : Codec where
   T := fun _ => True
   μ := none
@@ -167,10 +139,10 @@ theorem cM_W : ∀ {μ}, cM.μ = some μ → ∀ {t a}, cM.e t = some a → a.me
   intro μ hμ; exact absurd hμ (by simp [cM])
 /-- So the three that hold are exactly `LawfulCore` — the same residue `alternate reader` leaves. -/
 theorem cM_core : LawfulCore cM := ⟨cM_R, cM_C, cM_W⟩
-/-- …and (MP) is what is left to break: `⟨BOOL, true⟩` reads as `"z"` and re-writes to
-    `⟨S, "z"⟩`, which `Agree` does not relate. -/
-theorem cM_notMP : ¬ (∀ {a t a'}, cM.p a = some t → cM.e t = some a' → Agree a' a) := by
-  intro h; have := @h (.bool true) (.str "z") (.s "z") rfl rfl; cases this
+/-- …and canonical reads are what is left to break: `⟨BOOL, true⟩` reads as `"z"` and re-writes
+    to `⟨S, "z"⟩`. -/
+theorem cM_notCanon : ¬ (∀ {a t}, cM.p a = some t → cM.e t = some a) := by
+  intro h; have := @h (.bool true) (.str "z") rfl; simp [cM] at this
 
 /-! ## `lazy(γ) ≢ γ(∗)`
 
@@ -274,16 +246,11 @@ theorem not_equiv_refine_held :
   have hv := (h.heldSet (.str "B")).mpr
   simp [denote, denote, Codec.through, Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv
 
-/-! ## `legacy(c, r)` breaks (MP), and `e ∘ p ≢ id`
+/-! ## `legacy(c, r)` breaks canonical reads, and `e ∘ p ≢ id`
 
-Two rows, one witness. (MP) is *member* agreement (`≼`), so a migration only breaks it by
-reading an attribute of one member into a value that writes another — which is precisely
-what a member-changing migration is, and precisely why §6 says a `alternate reader` attribute cannot
-be an index key.
-
-Note that a value-changing `r` would *not* refute (MP): `Agree.s x y` holds for any two
-strings. The row needs the member to move, and that is worth knowing before writing a
-migration one believes is safe. -/
+Two rows, one witness. A migration reads an attribute that the codec does not write, so the
+value it reads writes another attribute. That is why §6 says an `alternate reader` attribute
+cannot be an index key. -/
 
 /-- Reads an `N` into a string value — so the re-encoding lands on `S`. -/
 def migrateNtoS : Attr → Option Value
@@ -297,11 +264,12 @@ theorem legacy_p_n : migration.p (.n (.of "1")) = some (.str "x") := rfl
 
 theorem legacy_e_x : migration.e (.str "x") = some (.s "x") := rfl
 
-/-- §6: an alternate reader can break (MP). The migration reads `N` and writes `S`. -/
+/-- §6: an alternate reader breaks canonical reads. The migration reads `N` and writes `S`. -/
 theorem legacy_breaks_MP : ¬ Lawful migration := by
   intro h
-  have hag := h.agree legacy_p_n legacy_e_x
-  cases hag
+  have hc := h.canon legacy_p_n
+  rw [legacy_e_x] at hc
+  cases hc
 
 /-- §6: `e ∘ p ≢ id` — equality holds only on `Can(c)`, and this attribute is off it. -/
 theorem e_comp_p_ne_id :
@@ -378,17 +346,17 @@ What is *not* settled here: whether `≡` chains when both ends are `denote` of 
 terms. The middle codec below holds `null` and writes nothing, and no derivable term does
 that, so this refutation does not decide the restricted question. -/
 
-/-- Writes `null` as an `S`, and nothing else — lawful, and on its carrier. -/
+/-- Writes `null` as `S "A"`, and reads only that attribute — lawful, and on its carrier. -/
 def cA : Codec :=
   { T := fun v => v = .null, μ := none,
     e := fun v => match v with | .null => some (.s "A") | _ => none,
-    p := fun a => match a with | .s _ => some .null | _ => none }
+    p := fun a => match a with | .s x => if x = "A" then some .null else none | _ => none }
 
-/-- The same, writing `S "B"`. It disagrees with `cA` on the one value both write. -/
+/-- The same, at `S "B"`. It disagrees with `cA` on the one value both write. -/
 def cB : Codec :=
   { T := fun v => v = .null, μ := none,
     e := fun v => match v with | .null => some (.s "B") | _ => none,
-    p := fun a => match a with | .s _ => some .null | _ => none }
+    p := fun a => match a with | .s x => if x = "B" then some .null else none | _ => none }
 
 /-- The middle: the same held set, and no `e` or `p` anywhere. Every law of §2 is vacuous
     on it, which is exactly what makes it `≡` to both of the others. -/
@@ -396,33 +364,33 @@ def cMid : Codec :=
   { T := fun v => v = .null, μ := none, e := fun _ => none, p := fun _ => none }
 
 theorem lawful_cA : Lawful cA where
-  retract := by intro t a he; cases t <;> simp_all [cA]; subst_vars; rfl
-  canon := by intro a t hp; cases a <;> simp_all [cA]; subst_vars; rfl
+  retract := by intro t a he; cases t <;> simp_all [cA]; subst_vars; simp
+  canon := by
+    intro a t hp
+    cases a with
+    | s x =>
+      simp only [cA] at hp
+      split at hp
+      · next hx => cases hp; subst hx; rfl
+      · exact nomatch hp
+    | _ => simp [cA] at hp
   writes := by intro μ hμ; exact nomatch hμ
-  agree := by
-    intro a t a' hp he
-    cases a
-    case s v =>
-      obtain rfl : t = .null := by simpa [cA] using hp.symm
-      obtain rfl : a' = .s "A" := by simpa [cA] using he.symm
-      exact .s _ _
-    all_goals simp [cA] at hp
 
 theorem lawful_cB : Lawful cB where
-  retract := by intro t a he; cases t <;> simp_all [cB]; subst_vars; rfl
-  canon := by intro a t hp; cases a <;> simp_all [cB]; subst_vars; rfl
+  retract := by intro t a he; cases t <;> simp_all [cB]; subst_vars; simp
+  canon := by
+    intro a t hp
+    cases a with
+    | s x =>
+      simp only [cB] at hp
+      split at hp
+      · next hx => cases hp; subst hx; rfl
+      · exact nomatch hp
+    | _ => simp [cB] at hp
   writes := by intro μ hμ; exact nomatch hμ
-  agree := by
-    intro a t a' hp he
-    cases a
-    case s v =>
-      obtain rfl : t = .null := by simpa [cB] using hp.symm
-      obtain rfl : a' = .s "B" := by simpa [cB] using he.symm
-      exact .s _ _
-    all_goals simp [cB] at hp
 
 theorem lawful_cMid : Lawful cMid := by
-  refine ⟨?_, ?_, ?_, ?_⟩ <;> intros <;> simp_all [cMid]
+  refine ⟨?_, ?_, ?_⟩ <;> intros <;> simp_all [cMid]
 
 theorem carrier_cA : Carrier cA where
   domE := by intro v a he; cases v <;> simp_all [cA]

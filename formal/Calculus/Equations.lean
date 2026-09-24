@@ -13,7 +13,7 @@ load-bearing and came first:
 
 * `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))` — §5 leans on this for "declaration order is
   never consulted". Proved at *every* permutation and as an **equality** of the pair
-  (`altCodec_perm`), not merely `≡`, over pairwise compatible, canonical options. Deriving the general case from the adjacent one would
+  (`altCodec_perm`), not merely `≡`, over pairwise compatible, lawful options. Deriving the general case from the adjacent one would
   need `≡` to compose, and `Refutations.not_equiv_trans` says it does not.
 
 The remaining rows: `held`'s identity and composition, `refine`'s meet and its full case,
@@ -58,8 +58,8 @@ theorem Codec.Equiv.symm {c d : Codec} (h : Codec.Equiv c d) : Codec.Equiv d c :
 
 /-! ## `union` is commutative, at every permutation
 
-    Resolution takes the first admitter. Where the options are pairwise compatible and
-    canonical, every admitter writes and reads alike, so reordering the options changes
+    Resolution takes the first admitter. Where the options are lawful and pairwise
+    compatible, every admitter writes and reads alike, so reordering the options changes
     nothing. The general case is proved directly, and the adjacent one falls out of it at
     `List.Perm.swap`: `≡` does not compose (`Refutations.not_equiv_trans`), and an equality
     does. The two codecs are **equal**, not only equivalent. -/
@@ -75,15 +75,14 @@ theorem option_eq_of_some_iff {β : Type} {x y : Option β} (h : ∀ b, x = some
   | some b => exact ((h b).mp hx).symm
 
 /-- §6: `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))`, **on the nose**, over options that are
-    attempted, lawful, canonical and pairwise compatible. -/
+    attempted, lawful and pairwise compatible. -/
 theorem altCodec_perm {os os' : List OptionSem} (h : os.Perm os') (μA : Option Member)
-    (hatt : ∀ o ∈ os, o = .byAttempt o.c) (hl : ∀ o ∈ os, LawfulCore o.c)
-    (hcan : ∀ o ∈ os, Canon o.c) (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o.c o'.c) :
+    (hatt : ∀ o ∈ os, o = .byAttempt o.c) (hl : ∀ o ∈ os, Lawful o.c)
+    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o.c o'.c) :
     altCodec os μA = altCodec os' μA := by
   have m := fun o => h.mem_iff (a := o)
   have hatt' : ∀ o ∈ os', o = .byAttempt o.c := fun o ho => hatt o ((m o).mpr ho)
-  have hl' : ∀ o ∈ os', LawfulCore o.c := fun o ho => hl o ((m o).mpr ho)
-  have hcan' : ∀ o ∈ os', Canon o.c := fun o ho => hcan o ((m o).mpr ho)
+  have hl' : ∀ o ∈ os', Lawful o.c := fun o ho => hl o ((m o).mpr ho)
   have hC' : ∀ o ∈ os', ∀ o' ∈ os', Compat o.c o'.c :=
     fun o ho o' ho' => hC o ((m o).mpr ho) o' ((m o').mpr ho')
   refine Codec.ext ?_ rfl ?_ ?_
@@ -93,9 +92,9 @@ theorem altCodec_perm {os os' : List OptionSem} (h : os.Perm os') (μA : Option 
   · funext v
     refine option_eq_of_some_iff fun b => ⟨fun he => ?_, fun he => ?_⟩
     · obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
-      exact altCodec_e_of_mem hatt' hl' hcan' hC' ((m o).mp ho) hoe
+      exact altCodec_e_of_mem hatt' hl' hC' ((m o).mp ho) hoe
     · obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
-      exact altCodec_e_of_mem hatt hl hcan hC ((m o).mpr ho) hoe
+      exact altCodec_e_of_mem hatt hl hC ((m o).mpr ho) hoe
   · funext a
     refine option_eq_of_some_iff fun b => ⟨fun hp => ?_, fun hp => ?_⟩
     · obtain ⟨o, ho, -, hop⟩ := altCodec_p_admits hp
@@ -105,18 +104,18 @@ theorem altCodec_perm {os os' : List OptionSem} (h : os.Perm os') (μA : Option 
 
 /-- The row as §6 states it, in `≡`: `Codec.Equiv.refl` transported along the equality. -/
 theorem equiv_altCodec_perm {os os' : List OptionSem} (h : os.Perm os') (μA : Option Member)
-    (hatt : ∀ o ∈ os, o = .byAttempt o.c) (hl : ∀ o ∈ os, LawfulCore o.c)
-    (hcan : ∀ o ∈ os, Canon o.c) (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o.c o'.c) :
+    (hatt : ∀ o ∈ os, o = .byAttempt o.c) (hl : ∀ o ∈ os, Lawful o.c)
+    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o.c o'.c) :
     Codec.Equiv (altCodec os μA) (altCodec os' μA) :=
-  altCodec_perm h μA hatt hl hcan hC ▸ Codec.Equiv.refl _
+  altCodec_perm h μA hatt hl hC ▸ Codec.Equiv.refl _
 
 /-- §6: `union(c₁, c₂, …) ≡ union(c₂, c₁, …)`, the general theorem at `List.Perm.swap`. -/
 theorem equiv_altCodec_swap (o₁ o₂ : OptionSem) (os : List OptionSem) (μA : Option Member)
     (hatt : ∀ o ∈ o₁ :: o₂ :: os, o = .byAttempt o.c)
-    (hl : ∀ o ∈ o₁ :: o₂ :: os, LawfulCore o.c) (hcan : ∀ o ∈ o₁ :: o₂ :: os, Canon o.c)
+    (hl : ∀ o ∈ o₁ :: o₂ :: os, Lawful o.c)
     (hC : ∀ o ∈ o₁ :: o₂ :: os, ∀ o' ∈ o₁ :: o₂ :: os, Compat o.c o'.c) :
     Codec.Equiv (altCodec (o₁ :: o₂ :: os) μA) (altCodec (o₂ :: o₁ :: os) μA) :=
-  equiv_altCodec_perm (List.Perm.swap o₂ o₁ os) μA hatt hl hcan hC
+  equiv_altCodec_perm (List.Perm.swap o₂ o₁ os) μA hatt hl hC
 
 /-! ## `held` is an identity, and composes
 
