@@ -48,8 +48,8 @@ statement exists, the re-founding pays the whole term language for a guarantee t
 already give.
 
 **What names the guarantee instead today.** `PairwiseCompat`, one `Prop` over the option list.
-`pairwiseCompat_of_HF` discharges it with no certificate, and `pairwiseCompat_of_separated` with
-`separated_of_unionOk` discharges it through the certificate.
+`pairwiseCompat_of_HF` discharges it with no certificate, `pairwiseCompat_of_sub` through a common
+bound, and `pairwiseCompat_of_separated` with `separated_of_unionOk` through the certificate.
 
 ---
 
@@ -61,18 +61,35 @@ recursive schema rather than refusing it.
 
 **The obstruction is the term language, not the union.** `Term.lazy` carries a plain `Term`, and
 `denote` is structural, so no term is recursive. The host's `lazy` builds a recursive schema, and
-the emitter refuses a `lazy` chain that it cannot close. The union is the compatible join, and
-where the admitting options agree, first-match resolution is monotone and continuous
-(`selectF_mono_list`, `selectF_continuous_list`). Those are the two obligations of a
+the emitter refuses a `lazy` chain that it cannot close. The host's `union` refuses an option
+whose spine reaches a recursive thunk, and keeps recursion below a list or an object. The union
+is the compatible join, and where the admitting options agree, first-match resolution is monotone
+and continuous (`selectF_mono_list`, `selectF_continuous_list`). Those are the two obligations of a
 least-fixpoint construction. The literature is Kaarsgaard, Axelsen and Glück, "Join inverse
 categories and reversible recursion" (JLAMP, 2017): an inverse category with countable joins has
 morphism schemes for reversible recursion.
 
-**What decides it.** Two measurements together. The first is whether a binder or a staged
-`denote` deletes more than it adds, against the one recursive union the model carries, `opaque`.
-`opaqCodecω` already denotes the limit of `opaque`'s stages by depth. The second is whether the
-committed vectors still reduce by `rfl` under the new denotation. A limit taken through a choice
-does not reduce, and every vector that reduces `opaque` then breaks.
+**The measurement decides it now: do not build.** A probe built the construct in a
+standalone model: a binder over de Bruijn variables, and a denotation that budgets each input by
+its own depth. The fixed point is structural and stable, a two-option `opaque` over strings and
+lists is an instance of it, and its stages still reduce by `rfl`. Two kills bound the construct.
+
+- **A `held` on the recursive path defeats the guard.** "Recursion only under a list" is not
+  sufficient once an input transform sits between the list and the variable. A transform that
+  wraps its input back into a list keeps the depth from falling, so each stage writes a deeper
+  attribute and the budgeted unfolding never stabilizes. The guard must exclude `held`.
+- **A well-founded budget stops `rfl`.** The same budgeted `opaque` by well-founded recursion
+  evaluates, and the kernel does not reduce it. The budget must stay structural.
+
+**The cost is larger than the deletion.** The construct adds a variable and a binder to `Term`,
+an environment to `denote` and to each companion a stratum owes, an arm per new constructor in
+each declaration that matches on a term, and an open-term restatement of each induction over
+`Typed`. It deletes at most the special machinery of `Opaque.lean`.
+
+**What would change the verdict.** A recursive schema that a caller needs and that neither
+`opaque` nor recursion below a list or an object in the host can state. A deletion larger than the
+construct adds. A guard that admits a `held` on the path and still stabilizes. The measurement
+stays valid until the term language or the guard changes.
 
 ---
 

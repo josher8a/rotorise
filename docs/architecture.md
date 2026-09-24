@@ -132,10 +132,11 @@ only.
 | A premise that is | goes in | consumed by |
 | --- | --- | --- |
 | decidable from the term | `Typed` | the judgement itself |
-| about what a codec does — its write half, its read half, an iso, a resolution | `Obligations`, as `PairwiseCompat` and `IsoCancels` are | both soundness theorems |
+| about what a codec does: its write half, its read half, an iso, a resolution | `Obligations`, as `PairwiseCompat` and `IsoCancels` are | `soundness`, and `extendRead_lawfulCore` through it |
 
-`Term` has no alternate reader. Therefore `soundness` proves retract, canon and writes for every
-typed term whose obligations hold. An alternate reader is `Codec.extendRead` at the codec layer.
+`Term` has no alternate reader. Therefore `soundness` proves `Lawful`, which is retract, canon and
+writes, for every typed term whose obligations hold. The induction proves `Lawful` alone.
+`Lawful.core` gives `LawfulCore` from it. An alternate reader is `Codec.extendRead` at the codec layer.
 `ReadsCoherently` is its condition, and `extendRead_lawfulCore` proves `LawfulCore` for it over a
 typed term whose obligations hold.
 
@@ -268,7 +269,8 @@ obligation.
 tighter test does not. The principle is why a certificate may be proved over an approximation at
 all. This development spends it twice. `occV` and `occA` over-approximate what a term occupies,
 and the proofs of the meet's bottom rows use disjoint occupancy to justify those rows
-(`Adm_and_false`, `AdmA_and_false`). `writeView`
+(`Adm_and_false`, `AdmA_and_false`). The certificate also asks disjoint occupancy directly, as
+`Orth1` (`separates_of_Orth1`). `writeView`
 and `readView` admit each value and each attribute that the term admits (`writeLe_of`,
 `readLe_of`), so two views that meet at the bottom separate the terms.
 
@@ -285,16 +287,42 @@ is the discharger stated on what `select` actually decides by.
 ### The classifier, and what it is the specification of
 
 The union obligation is compatibility, and the certificate is sufficient for it. `certPair`
-certifies a pair whose meet is the bottom, or, where a `held` occurs, a pair whose caller views
-meet at the bottom and whose stored views meet at the bottom (`certViews`). The view of a `union`
-is the union of the views of its options.
+certifies a pair on one of three tests. The meet of the two terms is the bottom (`meetNever`).
+Where a `held` occurs, the caller views meet at the bottom and the stored views meet at the bottom
+(`certViews`). The occupancies are disjoint on both sides (`Orth1`). The view of a `union` is the
+union of the views of its options.
+
+**The slot test is a disjunct because the meet refuses a closure.** The admission of a `refine`
+at a `closure` is a function, so the meet answers `none` beside every term but the bottom. The
+occupancies read no predicate. So `Orth1` certifies a closure refinement beside an option that
+writes and reads other slots, where the meet answers `none`.
 
 **Its value is that it is half of the specification of the library's declaration-time guard, and
-a checked half.** The `union` combinator in `src/` accepts a pair on a warrant: the never side
-(one option is `never`), held-free (both options are held-free), or the certificate (the host
-certificate separates them). It
-refuses every other pair, because the pair is not shown compatible. Two held-free lawful terms
-are compatible with no certificate (`pairwiseCompat_of_HF`), because both sit below `opaque`.
+a checked half.** The `union` combinator in `src/` accepts a pair on one of four warrants. It
+refuses every other pair, because the pair is not shown compatible.
+
+| warrant | the host asks | the model proves the pair compatible by |
+| --- | --- | --- |
+| the never side | one option is `never` | `pairwiseCompat_never_left`, `pairwiseCompat_never_right` |
+| held-free | both options are held-free | `pairwiseCompat_of_HF`: both sit below `opaque` |
+| the common bound | `below(x, y)` or `below(y, x)` holds | `pairwiseCompat_of_sub`: the wider option is the bound |
+| the certificate | `separable`, the direct port of `certPair`, with the same three tests | `pairwiseCompat_of_separated` |
+
+The host's rule `below(x, y)` in `src/codec/term.ts` is narrower than the model's `Sub`. It has
+four rows: a literal is below its base; a union is below a term that each of its options is below;
+a `held` is below the same adapter where its stored side and its held side are each below; and a
+term with no payload is below itself. So `decimal('1')` beside `decimal('1', '2.5')` is refused,
+although `sub_held` puts the first below the second: no row puts a literal below a union of
+literals.
+
+**The host reads an unknown as the top.** The read side of an alternate reader is caller code,
+and the declaration cannot bound its domain. So the host's slot test counts that read side as
+meeting every read side, and separates such an option from no option. An unknown read as "no
+meeting" is the permissive direction, and so the unsound one.
+
+**The caller view of a `held` is its held side.** The host's `decimal` over literals records the
+string literals of its texts there, so its caller view is exact, and the views certify it beside a
+string literal it does not write. A caller-built `held` keeps the held side that the caller gave.
 
 **The bridge checks both directions.** The separation class in `src/codec/lean.ts` emits one
 theorem per emittable pair of the sample codecs, generated and elaborated by `formal/scripts/gate.sh`. For a
@@ -304,8 +332,10 @@ not certify it.
 
 **`certPair` is sufficient and not necessary.** A decline by `certPair` is not a refutation of
 compatibility. Two restrictions of one adapter are compatible in the model
-(`compat_of_common_bound`), and no certificate reaches such a pair where the two overlap, so the
-library refuses it.
+(`compat_of_common_bound`), and no certificate reaches such a pair where the two overlap. The
+library accepts such a pair where `below(x, y)` shows one option below the other, as
+`decimal('1', '2.5')` beside `decimal`. It refuses every other overlapping pair, as
+`decimal('1', '2.5')` beside `decimal('2.5', '3')`.
 
 `Separated` is what names the separation guarantee over the option list, with
 `separated_of_unionOk` as the certificate's bridge into it.
@@ -435,6 +465,10 @@ stage (`compat_opaque`), and `lawful_opaqCodecω` proves the fixed point lawful.
 admitting options agree (`ConfluentAt`), first-match resolution is monotone and continuous
 (`selectF_mono_list`, `selectF_continuous_list`). Those are the two obligations that a
 least-fixpoint construction discharges.
+
+The host's declaration states only what the model can state. `union` reads through each thunk
+that it can force, and refuses an option whose spine reaches a recursive thunk or a thunk that
+throws. Recursion below a list or an object stays declared, and the certificate decides it.
 
 **The nesting bound.** `Nesting.lean` is the one place the attribute algebra is larger in the
 model than in the store, deliberately. The list and map constructors nest without limit by
@@ -569,6 +603,11 @@ the law checkers. **The term is the only source.** Where a generator was a proje
 that the derivers read before the term was consulted, one fact travelled two paths and could
 disagree with itself; now a caller that wants to share a generator names it rather than reading it
 back off a codec.
+
+**A value that the codec's own read produced is evidence.** A law checker that generates a value
+through the read of a `held`, and finds that the codec declines to write the value, reports a (C)
+failure with the value and the seed. The decode check in `src/codec/testing.ts` discards a
+declined write of any other value, up to a bound, and throws with the seed past the bound.
 
 **So a guarantee that must be a gate in one target may be structural in another.** The three cases
 are re-answered per target at the time that target is certified, not in advance, and not as a

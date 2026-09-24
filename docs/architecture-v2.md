@@ -133,6 +133,9 @@ decline on both questions, not a refutation.
 There is no second apparatus: the certificate is the inhabitance of the meet, of the two terms or
 of their two views.
 
+> ASPIRATION: the certificate carries the occupancy test as a third disjunct, because the meet
+> refuses a closure and the occupancies read no predicate.
+
 ### Admission is by attempt, at every constructor
 
 An option admits a value when the option's codec accepts it. That is one rule, and it recurses
@@ -160,9 +163,11 @@ attribute (`Lawful.fmt_subsingleton`), and that is the fact the argument uses. S
 has two halves: a shared canonical bound, or orthogonal views. An adapter beside a term that it
 does not bound, with views that meet, is refused.
 
-> ASPIRATION: the tree proves that a shared canonical bound gives compatibility. The library
-> tests only the bound `opaque`, the bottom and the certificate, so it refuses two restrictions of
-> one adapter that overlap.
+> ASPIRATION: the library tests a bound only where the bound is `opaque`, or where its rule
+> `below` shows one option below the other. `below` has four rows: a literal below its base, a
+> union whose options are each below, the same adapter over sides that are each below, and a term
+> with no payload below itself. So it refuses `decimal('1')` beside `decimal('1', '2.5')`, and two
+> restrictions of one adapter that overlap where neither is below the other.
 
 **A union is the join of its options.** The first option that admits a value writes the value,
 and over lawful, pairwise compatible options the order of the options is unobservable. So a value
@@ -226,8 +231,8 @@ never upward, which is what an abstraction is:
 Nothing in that chain runs backwards.
 
 > ASPIRATION: the undecidable leaf is not the only place where the meet declines. The meet also
-> refuses an adapter, `opaque` beside a container or a literal, two number literals, and a
-> closure beside a finite admissible set.
+> refuses an adapter, `opaque` beside a container or a literal, and a closure beside a finite
+> admissible set.
 
 ### What the ruling deletes
 
@@ -235,8 +240,8 @@ An occupancy projection over a finite index of value slots and attribute members
 test at a name. A literal test at a name. A row for each written shape. A body specification
 carried beside the term so that a test can read it without consulting a codec.
 
-> ASPIRATION: the proofs of the meet's bottom rows still use the occupancy test, and a slice still reads the
-> body specification.
+> ASPIRATION: the certificate still asks the occupancy test as a disjunct, the proofs of the
+> meet's bottom rows still use it, and a slice still reads the body specification.
 
 Every one of them is the recursion truncated at some depth. Each owes its own soundness proof,
 its own argument that the indices it skips could not have separated, and its own extension on
@@ -414,7 +419,8 @@ a dispatch on discriminants drops every field's type. Admission by attempt proje
 except at a leaf it cannot decide, so `D4` stops being a standing debt and becomes a property of
 the one relation.
 
-> ASPIRATION: the certificate still reads body specifications that project the field types away.
+> ASPIRATION: the certificate still asks the occupancy test, a projection that keeps the outermost
+> slot and member and drops the field types. A slice still reads body specifications.
 
 **D1. A description is total over its index.** A description answering only at declared names is
 a partial function pretending to be total, and every reader then carries the undeclared case by
@@ -575,10 +581,13 @@ obligation.** An adapter carrying a domain test is two restrictions composed, an
 stops being the top. Where no test is given the top is correct, and the refusal is the product
 working.
 
-The adapter carries that restriction as its held side, and the host tests it before the
-adapter's conversion runs. A value outside the domain is refused by name, not by the failure of a
-conversion that ran on it. A restriction written outside the adapter meets into the held side,
-because both are restrictions on the caller's values.
+The adapter carries that restriction as its held side. For a caller's adapter the host tests the
+held side before the conversion runs, and a value outside the domain is refused by name, not by
+the failure of a conversion that ran on it. A library adapter over literals names the values it
+writes: the held side of `decimal('1', '2.5')` is the union of the string literals of its two
+texts. Its conversion tests only that the value is a string and a stored numeral, and the inner
+number literal refuses a numeral outside the texts. A restriction written outside the adapter
+meets into the held side, because both are restrictions on the caller's values.
 
 > ASPIRATION: a probe proves the codec equation. The tree does not normalize a restriction into
 > the held side.

@@ -10,8 +10,15 @@ rebuilds itself under `set`/`array`/`record`, so no term gets smaller and fuel i
 real work.
 
 Its eight options are pairwise **kind-disjoint**, so at most one ever admits: the first
-admitter is the only admitter, and growth of one option cannot change another's answer. That
-is what makes this file possible.
+admitter is the only admitter. That makes each stage lawful (`compat_opaque`, then
+`lawful_opaqCodec`), and it lets each unfolding below reduce the union to one option.
+
+**Stabilization does not need kind-disjointness, on either side.** Each option reads the
+recursive codec only at inputs strictly shallower than its own input: values by `Value.depth` on
+the write side, attributes by `Attr.depth` on the read side. So two budgets past the input's
+depth agree option by option, and first-match resolution agrees with them, whether or not two
+options overlap. The proofs below go through the unfoldings, which cash kind-disjointness,
+because the unfoldings are at hand and not because the argument needs it.
 
 The consequence: `opaqCodec` needs only as much fuel as the value is deep, and past that
 its answer never changes. So `opaque` can be given a fuel-free denotation by supplying
@@ -39,10 +46,10 @@ Structure:
   being "one *kind* and three *members*" — which is the very reason `Value` has three of
   them too, so the explanation refuted its own premise. The counts were wrong and the
   argument was wrong about a fact that could be counted; both are corrected here, and what
-  survives is the part that was never about a count. Kind-disjointness is what the argument
-  needs, so what each unfolding does is reduce `altCodec` to a single option — and on the
-  read side three members route to one option, which is a fact about
-  `Kind` (`Domain.lean`) and not about how many lemmas there are.
+  survives is the part that was never about a count. Kind-disjointness is what each unfolding
+  needs, because each unfolding reduces `altCodec` to a single option. On the read side three
+  members route to one option, which is a fact about `Kind` (`Domain.lean`) and not about how
+  many lemmas there are.
 -/
 
 namespace Calculus

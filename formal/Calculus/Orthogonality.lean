@@ -9,7 +9,8 @@ options are orthogonal when their meet is the bottom, when the meets of their tw
 when their occupancies are disjoint on both sides. The meet refuses a closure and the occupancies
 read no predicate, so the slot test certifies a pair that the meet cannot state.
 This module holds what the meet reads and what the certificate proves: the occupancies, the slot
-test `Orth1` that the meet uses at the bottom and the certificate uses alone, and `Separates`.
+test `Orth1` that the proofs of the meet's bottom rows use and the certificate uses alone, and
+`Separates`.
 
 ## Sound, never complete, and why there is no `unknown`
 
@@ -195,7 +196,8 @@ end
 /-! ## The slot test -/
 
 /-- **The slot test**: the write occupancies disjoint, and the read occupancies disjoint. The
-    meet answers the bottom where it holds.
+    certificate asks it as its third disjunct, because the meet refuses a closure and the
+    occupancies read no predicate.
 
     **Two questions, and they coincide below `opaque`.** A `held` has its two occupancies in
     two coordinates: the write side is the caller-side term's, and the read side is the
@@ -208,15 +210,11 @@ def Orth1 (x y : Term) : Bool :=
 /-! ## Soundness
 
 Two structural recursions, one per side, each mutual with a list companion for `union`. The
-statement is about the **rows** (`Adm`/`AdmA`) and about `admitOptV`/`admitOptA`, never about
-the term's own rows: `select` filters by the *option* semantics, and for an object option that is
-structure — the names and the literal fields, not every field's contents — so a certificate
-stated on `Adm` alone would not transfer.
-See `admitOptV`. -/
+statement is about the **rows** (`Adm`/`AdmA`). `select` attempts every option, `object`
+included, so an option's admission `admitOptV`/`admitOptA` is its row. -/
 
-/-- `selOptV`'s disjunction, as an option it lands on. `AdmAny` is not enough here: at an
-    *object* option the admission is `keysOk` and not `Adm`, so the union case has to hand its
-    induction hypothesis the option's own test. -/
+/-- `selOptV`'s disjunction, as an option it lands on. The union case hands its induction
+    hypothesis the option that admits. -/
 theorem selOptV_mem_admitOpt {opts : List Term} {v : Value}
     (h : selOptV (AdmSpecs opts) v = true) :
     ∃ t ∈ opts, admitOptV (specOf t, Adm t) v = true := by
