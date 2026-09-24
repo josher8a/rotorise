@@ -185,11 +185,7 @@ predicate was false.
 
 Every option is admitted by attempt now, `object` included, so `admitOptV`/`admitOptA` **are**
 `Adm`/`AdmA` at every constructor and the gap above is gone: `admitV_le_Adm`/`admitA_le_AdmA`
-below hold unconditionally, not only off an `object`. Whether the discharger itself —
-`(∀ t ∈ opts, Lawful (denote t)) → List.Pairwise SepJV opts → List.Pairwise SepJA opts →
-UAtCan opts` — is now sound in general is a question this file does not answer: closing the
-one gap a single witness pair exposed is not the same as showing no witness remains, and nothing
-below attempts that. -/
+below hold unconditionally, not only off an `object`. -/
 
 /-- **The containment the discharger needs, at every constructor.** Admission is attempted
     encoding now, whatever the term, and exactness identifies it with the row. -/
@@ -394,9 +390,9 @@ theorem not_sepJV_array_literals :
 Three readings were worth separating. Two were right and the third found a defect; the
 defect is now fixed by the type, and these are the witnesses that it is.
 
-**Not a `union`.** A union is a choice among *codecs*, resolved by (U); a set's elements all
-go through **one** codec, so no uniqueness obligation arises. That is why `set` needs no (U)
-and `union` does.
+**Not a `union`.** A union is a choice among *codecs*, lawful by pairwise compatibility; a
+set's elements all go through **one** codec, so no obligation between codecs arises. That is
+why `set` needs no compatibility premise and `union` does.
 
 **Not `array` with a wrapper either, any more.** It was, while both were lists: the two
 shared `traverse c.e vs` and differed only in how the payload list was presented. With the

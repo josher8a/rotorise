@@ -244,8 +244,8 @@ None was added speculatively.
 
 ## The analyses, and why two generations stand
 
-Every discharger is one appeal to `uniqueAdmission_of_disjoint`, which takes two families of
-allowed values, one per side, and asks only that each be pairwise disjoint. Kinds, members, tags
+Every separation is one appeal to `Separates`, which takes two families of allowed values, one
+per side, and asks only that each be pairwise disjoint. Kinds, members, tags
 and admissible sets are ways of building those families rather than four separate conditions.
 
 `ExactV.lean` holds `Adm` and `ExactA.lean` holds `AdmA`, exact at every constructor, with no
@@ -280,8 +280,8 @@ carrier.
 
 `Orthogonality.lean` states the discharge on what the resolver consults rather than on what the
 row says. `OrthSV` and `OrthSA` are occupancy conjoined with option admission, `admitOptV_eq`
-identifies that second conjunct with option admission itself, and `uAtCan_of_separated` is the
-discharger stated on what `select` actually decides by.
+identifies that second conjunct with option admission itself, and `pairwiseCompat_of_separated`
+is the discharger stated on what `select` actually decides by.
 
 ### The classifier, and what it is the specification of
 
@@ -464,8 +464,7 @@ read widening widens the whole attribute rather than each member.
 
 **The n-ary literal is a union of singletons.** A literal carries one value, and several
 alternatives are a `union` of singleton literals whose members are separated because the values
-differ. `LiteralArity1.lean` is the derivation, including the uniqueness property on both sides
-through `uniqueAdmission_of_sharedBase`. The route was refused while a literal held a set: the
+differ. `LiteralArity1.lean` is the derivation. The route was refused while a literal held a set: the
 bridge from a `Finset` of alternatives to the list `Term.union` takes is `Finset.toList`, which
 reaches `Classical.choice`. One value leaves no such set, so there is no bridge to cross. The host
 keeps the n-ary call as a builder that writes the union, because the hand-written union costs the

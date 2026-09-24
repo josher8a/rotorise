@@ -790,126 +790,18 @@ theorem lawful_altCodec {os : List OptionSem} {μA : Option Member}
       exact (h o' ho').agree hread hoe }
 
 
-/-! ### (U) by kind, and `opaque`'s fixpoint
+/-! ### Kind separation, and `opaque`'s fixpoint
 
-    §5's other disjointness discharger, and the one `(opaque)` needs. An option is
+    The discharger `(opaque)` needs. An option is
     *pinned to a kind* when it admits only values and attributes of that kind — which is
     precisely what §3 means by calling `opaque`'s options "self-identifying". Pin each
-    option and keep the kinds distinct, and (U) and compatibility follow with nothing said
+    option and keep the kinds distinct, and compatibility follows with nothing said
     about what the options contain: `onKind_set` and its two neighbours hold for *any*
     element codec, which is why the fixpoint needs nothing from the recursive call. -/
 
 /-- An option pinned to a kind: it admits only values and attributes of that kind. -/
 def OptionSem.OnKind (o : OptionSem) (k : Kind) : Prop :=
   (∀ v, o.admitV v = true → v.kind = k) ∧ (∀ a, o.admitA a = true → a.kind = k)
-
-/-- **(U) by disjoint admissibility** — the structure the rest of this section presents.
-
-    Give each option a set of values and a set of attributes it is allowed to admit, and
-    keep each family pairwise disjoint: then no input reaches two options, and admission is
-    unique. That is the entire separation argument. Kinds, members, tags and admissible
-    sets are *ways of building* those two families, not four different conditions — and
-    the two families are independent, which is what lets the value side be separated by a
-    kind while the attribute side is separated by a member. -/
-theorem uniqueAdmission_of_disjoint {os : List OptionSem}
-    {SVs : List (Value → Prop)} {SAs : List (Attr → Prop)}
-    (hV : List.Forall₂ (fun o S => ∀ v, o.admitV v = true → S v) os SVs)
-    (hA : List.Forall₂ (fun o S => ∀ a, o.admitA a = true → S a) os SAs)
-    (hdV : List.Pairwise (fun S T => ∀ v, S v → ¬ T v) SVs)
-    (hdA : List.Pairwise (fun S T => ∀ a, S a → ¬ T a) SAs)
-    (hw : ∀ o ∈ os, ∀ t a, o.c.e t = some a → o.admitV t = true ∧ o.admitA a = true) :
-    UniqueAdmission os := fun o ho t a he =>
-  ⟨filter_eq_singleton_of_disjoint hA hdA o ho (hw o ho t a he).2,
-   filter_eq_singleton_of_disjoint hV hdV o ho (hw o ho t a he).1⟩
-
-theorem uniqueAdmission_of_sharedBase {base : Codec} {cs : List Codec}
-    {qs : List (Value → Bool)} (hlaw : LawfulCore base)
-    (hz : List.Forall₂ (fun ci q => ci.e = (base.restrict q).e ∧ ci.p = (base.restrict q).p) cs qs)
-    (hdisj : List.Pairwise (fun q q' => ∀ v, q v = true → q' v = false) qs) :
-    UniqueAdmission (cs.map OptionSem.byAttempt) := by
-  refine uniqueAdmission_of_disjoint
-    (SVs := qs.map (fun q v => q v = true))
-    (SAs := qs.map (fun q a => ∃ v, base.p a = some v ∧ q v = true)) ?_ ?_ ?_ ?_ ?_
-  · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    refine hz.imp fun ci q h v hv => ?_
-    have : ((base.restrict q).e v).isSome = true := h.1 ▸ hv
-    obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp this
-    exact (restrict_e.mp hw).1
-  · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    refine hz.imp fun ci q h a ha => ?_
-    have : ((base.restrict q).p a).isSome = true := h.2 ▸ ha
-    obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp this
-    obtain ⟨hp, hq⟩ := restrict_p.mp hw
-    exact ⟨w, hp, hq⟩
-  · rw [List.pairwise_map]
-    refine hdisj.imp fun h v hv hv' => ?_
-    simp only at hv hv'; rw [h v hv] at hv'; exact nomatch hv'
-  · rw [List.pairwise_map]
-    refine hdisj.imp fun h a hx hy => ?_
-    obtain ⟨v, hv, hqv⟩ := hx
-    obtain ⟨v', hv', hqv'⟩ := hy
-    rw [hv] at hv'; cases hv'
-    rw [h v hqv] at hqv'; exact nomatch hqv'
-  · refine List.forall_mem_map.mpr fun ci hci t a he => ?_
-    obtain ⟨q, -, hq⟩ := hz.mem_left hci
-    have he' : (base.restrict q).e t = some a := hq.1 ▸ he
-    obtain ⟨hqt, hb⟩ := restrict_e.mp he'
-    refine ⟨?_, ?_⟩
-    · show (ci.e t).isSome = true
-      rw [hq.1, he']; rfl
-    · show (ci.p a).isSome = true
-      rw [hq.2, restrict_p.mpr ⟨hlaw.retract hb, hqt⟩]; rfl
-
-/-- An option pinned to a **set of labels**, under a partial projection of each side of
-    the pair. `OnKind` is the singleton case at `Value.kind`/`Attr.kind`. -/
-def OptionSem.Labelled {L : Type} (πV : Value → Option L) (πA : Attr → Option L)
-    (o : OptionSem) (S : L → Prop) : Prop :=
-  (∀ v, o.admitV v = true → ∃ l, πV v = some l ∧ S l) ∧
-  (∀ a, o.admitA a = true → ∃ l, πA a = some l ∧ S l)
-
-/-- **(U) by projection** — §5's two outright dischargers, once.
-
-    Label each side of the pair by a partial projection of the input, give each option the
-    set of labels it answers to, and keep those sets pairwise disjoint: then no input can
-    reach two options, because the label it carries is a property of the *input* and lands
-    in at most one option's set. `hw` is the only codec-facing premise, and it is what
-    ties a canonical pair to its own option's admission.
-
-    Kind-separation (`opaque`'s fixpoint) is this theorem at one projection; §5's table reads
-    as four conditions and is one. -/
-theorem uniqueAdmission_of_labels {L : Type} {πV : Value → Option L} {πA : Attr → Option L}
-    {os : List OptionSem} {Ss : List (L → Prop)}
-    (hz : List.Forall₂ (OptionSem.Labelled πV πA) os Ss)
-    (hdisj : List.Pairwise (fun S T => ∀ l, S l → ¬ T l) Ss)
-    (hw : ∀ o ∈ os, ∀ t a, o.c.e t = some a → o.admitV t = true ∧ o.admitA a = true) :
-    UniqueAdmission os := fun o ho t a he =>
-  ⟨filter_eq_singleton_of_labels (hz.imp fun _ _ h => h.2) hdisj o ho (hw o ho t a he).2,
-   filter_eq_singleton_of_labels (hz.imp fun _ _ h => h.1) hdisj o ho (hw o ho t a he).1⟩
--- `uniqueAdmission_of_labels` is `uniqueAdmission_of_disjoint` with both families pulled
--- back along one projection; sharing the label type `L` is a convenience of the two cases
--- that need it (a tag, a kind), not part of the structure.
-
-/-- **(U) by kind-separation**, `uniqueAdmission_of_labels` at the total projection
-    `Value.kind`/`Attr.kind` with one label per option: `Nodup` is disjointness of
-    singletons. -/
-theorem uniqueAdmission_of_kinds {os : List OptionSem} {ks : List Kind}
-    (hz : List.Forall₂ OptionSem.OnKind os ks) (hnd : ks.Nodup)
-    (hw : ∀ o ∈ os, ∀ t a, o.c.e t = some a →
-      o.admitV t = true ∧ o.admitA a = true) :
-    UniqueAdmission os := by
-  refine uniqueAdmission_of_labels (πV := fun v => some v.kind) (πA := fun a => some a.kind)
-    (Ss := ks.map (fun k l => l = k)) ?_ ?_ hw
-  · rw [List.forall₂_map_right_iff]
-    exact hz.imp fun _ _ h =>
-      ⟨fun v hv => ⟨_, rfl, h.1 v hv⟩, fun a ha => ⟨_, rfl, h.2 a ha⟩⟩
-  · rw [List.pairwise_map]
-    exact hnd.imp fun hne l hl hl' => hne (hl.symm.trans hl')
-
-/-- An option that decides by attempting admits what it writes, on both sides — the
-    read side by (R), which is the only thing `hw` above ever needs. -/
-theorem byAttempt_write {c : Codec} (h : Lawful c) {t a} (he : c.e t = some a) :
-    (OptionSem.byAttempt c).admitV t = true ∧ (OptionSem.byAttempt c).admitA a = true :=
-  ⟨by simp [OptionSem.byAttempt, he], by simp [OptionSem.byAttempt, h.retract he]⟩
 
 /-! ### `opaque`'s options, each pinned to its kind -/
 
@@ -935,7 +827,7 @@ theorem onKind_number : OptionSem.OnKind (.byAttempt numberCodec) .number := by
     simp_all [OptionSem.byAttempt, numberCodec, Value.kind, Attr.kind]
 
 /-- A container option is pinned by its own constructor, whatever it contains. This is
-    why the fixpoint's (U) needs nothing from the recursive call — and why `opaque` is
+    why the fixpoint's compatibility needs nothing from the recursive call — and why `opaque` is
     not a special construction. -/
 theorem onKind_set (c : Codec) : OptionSem.OnKind (.byAttempt (setCodec c)) .set := by
   constructor <;> intro x hx <;> cases x <;>
@@ -979,23 +871,6 @@ theorem lawful_opaqOptions {fuel : Nat} (hop : Lawful (opaqCodec fuel)) :
   exacts [lawful_stringCodec, lawful_booleanCodec, lawful_binaryCodec,
     lawful_nullCodec, lawful_numberCodec, lawful_setCodec hop, lawful_arrayCodec hop,
     lawful_recordCodec hop, absurd h (by simp)]
-
-/-- **(U) for `opaque`**, the fourth row of §5's discharger table: the eight options are
-    pinned to eight distinct kinds, and each admits what it writes, so admission is
-    unique on both sides. The only premise is the recursive option's lawfulness, which
-    `uAtCan_opaque` (`Discharge.lean`) discharges. -/
-theorem uniqueAdmission_opaque (fuel : Nat) (hop : Lawful (opaqCodec fuel)) :
-    UniqueAdmission (opaqOptions (opaqCodec fuel)) := by
-  refine uniqueAdmission_of_kinds (opaq_onKinds fuel) (by decide) ?_
-  intro o ho t a he
-  simp only [opaqOptions, List.mem_cons] at ho
-  rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | h
-  exacts [byAttempt_write lawful_stringCodec he,
-    byAttempt_write lawful_booleanCodec he, byAttempt_write lawful_binaryCodec he,
-    byAttempt_write lawful_nullCodec he, byAttempt_write lawful_numberCodec he,
-    byAttempt_write (lawful_setCodec hop) he,
-    byAttempt_write (lawful_arrayCodec hop) he,
-    byAttempt_write (lawful_recordCodec hop) he, absurd h (by simp)]
 
 /-- **Exclusive admission gives compatibility.** Where the option that admits an input is the
     only one, the other option never acts where the first reads. -/

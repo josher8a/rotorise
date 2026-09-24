@@ -6083,8 +6083,8 @@ theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates
     · exact separates_of_meetNever hm
   · exact separates_of_certViews hv
 
-/-- **A certified union is separated**, which is the premise of `uAtCan_of_separated` and of
-    `admitsAtMostOne_of_separated`. -/
+/-- **A certified union is separated**, which is the premise of `pairwiseCompat_of_separated`
+    and of `admitsAtMostOne_of_separated`. -/
 theorem separated_of_unionOk {os : List Term} (h : unionOk os = true) : Separated os :=
   (pairwise_of_certAll h).imp separates_of_certPair
 

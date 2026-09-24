@@ -283,7 +283,7 @@ export type Term =
      * entity still round-trips. And `undefined` was the unsound direction rather than the safe
      * one, because the declaration guard refuses a union when two occupancies *meet*, so an
      * unknown occupancy makes it decline to refuse. `union([lazy(string), string])` was accepted
-     * and `checkUniqueAdmission` then found two options admitting one value. `lazy` was the only
+     * and a write then found two options admitting one value. `lazy` was the only
      * term answering unknown on both projections, which is why it was the only hole.
      */
     | { readonly kind: 'lazy'; readonly get: () => Term }
@@ -892,11 +892,10 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  *
  * **It propagates through the containers**, which is what keeps
  * `union([array(string('A')), array(string('B'))])` declarable — lawful, and proved so. Note what
- * that costs: the pair fails `UAtCan` outright at `[]` (`not_uAtCan_array_literals`) and is
- * pairwise compatible (`pairwiseCompat_array_literals`), because a
- * container admits its empty case whatever its element admits. So the warrant for the flat case and
- * the warrant for the container case are two different theorems, and only the first is about
- * literals.
+ * that costs: both options admit `[]`, because a container admits its empty case whatever its
+ * element admits, and the pair is pairwise compatible (`pairwiseCompat_array_literals`). So the
+ * warrant for the flat case and the warrant for the container case are two different theorems,
+ * and only the first is about literals.
  *
  * **`Orth` certifies two of these cases now and this row is still not redundant.** Since `OrthL`,
  * the model certifies two literals at one base with disjoint alternatives, and two

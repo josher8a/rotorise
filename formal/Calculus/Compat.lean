@@ -67,9 +67,8 @@ theorem pairwiseCompat_of_HF {opts : List Term} (h : HFL opts)
   fun s hs t ht => compat_of_HF (HFL_mem h s hs) (HFL_mem h t ht) (hl t ht)
 
 /-- **A schema people write, discharged with no certificate.**
-    `union(array(literal "A"), array(literal "B"))` fails `UAtCan` at `[]`
-    (`not_uAtCan_array_literals`): both options write `[]`. Both write it as the same attribute,
-    so the options are compatible. -/
+    In `union(array(literal "A"), array(literal "B"))` both options write `[]`. Both write it
+    as the same attribute, so the options are compatible. -/
 theorem pairwiseCompat_array_literals :
     PairwiseCompat [Term.array (.literal .string "A"), Term.array (.literal .string "B")] :=
   pairwiseCompat_of_HF ⟨⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟩⟩ (forall_mem_pair

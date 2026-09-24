@@ -198,8 +198,7 @@ def OptionSem.byStructure (spec : BodySpec) (c : Codec) : OptionSem :=
       | _ => false
     c := c }
 
-/-- Any other option is admitted by attempt — the doc's `ident` caveat lives in the
-    (U) premise, not here. -/
+/-- Any other option is admitted by attempt. -/
 def OptionSem.byAttempt (c : Codec) : OptionSem :=
   { admitA := fun a => (c.p a).isSome
     admitV := fun v => (c.e v).isSome
@@ -217,12 +216,6 @@ def OptionSem.byAttempt (c : Codec) : OptionSem :=
 /-- The builder `denote` uses for a union option. -/
 def optionSemOf (c : Codec) : Option BodySpec → OptionSem
   | _ => .byAttempt c
-
-/-- Unique admission at every option's canonical pairs: each is admitted by that option alone,
-    on both sides. What every discharger in `Discharge` produces. -/
-def UniqueAdmission (os : List OptionSem) : Prop :=
-  ∀ o ∈ os, ∀ t a, o.c.e t = some a →
-    os.filter (·.admitA a) = [o] ∧ os.filter (·.admitV t) = [o]
 
 /-- A list no two of whose entries stand in any relation holds at most one entry. -/
 theorem length_le_one_of_pairwise_false {α : Type} {l : List α}
@@ -265,7 +258,7 @@ def altCodec (os : List OptionSem) (μA : Option Member) : Codec :=
 /-- §3 `(opaque)`'s eight self-identifying options; `rec` is where the recursion goes.
 
     Named because three statements cite it — `opaqCodec`, `opaq_onKinds`,
-    `uniqueAdmission_opaque` — and a list spelled three times can drift twice. The number
+    `compat_opaque` — and a list spelled three times can drift twice. The number
     option is `numberCodec`, which holds a numeral exactly. -/
 def opaqOptions (rec : Codec) : List OptionSem :=
   [.byAttempt stringCodec, .byAttempt booleanCodec, .byAttempt binaryCodec,
@@ -275,8 +268,7 @@ def opaqOptions (rec : Codec) : List OptionSem :=
 
 /-- `opaque` is not special: it is the recursive union of everything self-identifying,
     closed under the containers — "the values whose type is recoverable", as a
-    fixpoint of the algebra. Its (U) is kind-disjointness (`uniqueAdmission_opaque`,
-    via `uniqueAdmission_of_kinds`). -/
+    fixpoint of the algebra. Its compatibility is kind-disjointness (`compat_opaque`). -/
 def opaqCodec : Nat → Codec
   | 0 => .empty
   | fuel+1 => altCodec (opaqOptions (opaqCodec fuel)) none
