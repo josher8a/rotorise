@@ -19,12 +19,13 @@ moves and a declaration name does not.
 
 **The future state.** `Term` becomes a subtype of a pre-term, carrying its own well-formedness:
 `{t : PreTerm // wf t = true}`, where `wf` recurses after the inductive rather than inside it. A
-union whose options no value can separate then has no inhabitant, so a union that cannot resolve is
-a type error rather than a runtime refusal.
+union whose options are not shown compatible then has no inhabitant, so such a union is a type
+error rather than a runtime refusal.
 
-**The ruling today is no, and it is JH's.** The model's `Typed` already makes an undischarged union
-underivable, and the library already refuses such a union in its own type and at construction. The
-re-founding buys the model a stronger statement about itself and buys the library nothing it lacks.
+**The ruling today is no, and it is JH's.** The model's `Obligations` already carries the
+compatibility of a union, and `soundness` takes it as a premise. The library refuses such a union
+at construction. The re-founding buys the model a stronger statement about itself and buys the
+library nothing it lacks.
 
 **Two other shapes do not elaborate, and both were run rather than argued.** A witness indexed by
 the option list it constrains is induction-induction, and the elaborator answers `unknown
@@ -33,10 +34,8 @@ induction-recursion, and the elaborator answers `invalid mutual block: either al
 block must be inductive/structure declarations, or they must all be definitions`. The subtype shape
 elaborates and is axiom-free, so the obstruction is not expressibility but cost.
 
-**A `Prop` premise on the judgement is no substitute.** `Separates` is stated on `Adm` and
-`admitOptV`, and the import chain runs `Typing`, `Soundness`, `Discharge`, `ExactV`, then
-`Orthogonality`. The premise would sit above the rule it constrains, in a module the rule cannot
-reach.
+**The obligation is a `Prop` today.** `PairwiseCompat` sits in `Obligations`, beside the
+judgement, and a term that does not meet it is still a term.
 
 **The cost is structural.** Every constructor of `Term` becomes a smart constructor carrying a proof
 obligation, and every match on a term goes through the subtype's first projection. `Term` is the
@@ -48,8 +47,32 @@ cost does not.
 statement exists, the re-founding pays the whole term language for a guarantee two other layers
 already give.
 
-**What names the guarantee instead today.** `Separated`, one `Prop` over the option list, with
-`separated_of_unionOk` as the certificate's bridge into it.
+**What names the guarantee instead today.** `PairwiseCompat`, one `Prop` over the option list.
+`pairwiseCompat_of_HF` discharges it with no certificate, and `pairwiseCompat_of_separated` with
+`separated_of_unionOk` discharges it through the certificate.
+
+---
+
+## A term can be recursive
+
+**The future state.** A term can refer to itself: `lazy` binds a name, or `denote` stages. A
+recursive union then denotes the least fixed point of its unfolding, and the emitter states a
+recursive schema rather than refusing it.
+
+**The obstruction is the term language, not the union.** `Term.lazy` carries a plain `Term`, and
+`denote` is structural, so no term is recursive. The host's `lazy` builds a recursive schema, and
+the emitter refuses a `lazy` chain that it cannot close. The union is the compatible join, and
+where the admitting options agree, first-match resolution is monotone and continuous
+(`selectF_mono_list`, `selectF_continuous_list`). Those are the two obligations of a
+least-fixpoint construction. The literature is Kaarsgaard, Axelsen and Glück, "Join inverse
+categories and reversible recursion" (JLAMP, 2017): an inverse category with countable joins has
+morphism schemes for reversible recursion.
+
+**What decides it.** Two measurements together. The first is whether a binder or a staged
+`denote` deletes more than it adds, against the one recursive union the model carries, `opaque`.
+`opaqCodecω` already denotes the limit of `opaque`'s stages by depth. The second is whether the
+committed vectors still reduce by `rfl` under the new denotation. A limit taken through a choice
+does not reduce, and every vector that reduces `opaque` then breaks.
 
 ---
 

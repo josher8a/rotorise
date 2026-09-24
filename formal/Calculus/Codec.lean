@@ -139,8 +139,8 @@ def ReadsCoherently (c : Codec) (r : Attr → Option Value) : Prop :=
   (∀ a v, r a = some v → ∀ v', c.p a = some v' → v = v')
 
 /-- §3 types the pair *on the held set*: `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`. `Lawful` never
-    mentions `T` — the four laws relate `e` and `p` to each other, not to the index — so
-    this is the separate claim that the index is honest, and it is what makes `T` a
+    mentions `T`, because retract, canon and writes relate `e` and `p` to each other and not to
+    the index. So this is the separate claim that the index is honest, and it is what makes `T` a
     checked part of the judgement rather than a decoration. -/
 structure Carrier (c : Codec) : Prop where
   /-- `e : T ⇀ 𝔸` — nothing outside the held set is written. -/

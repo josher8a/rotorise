@@ -61,11 +61,10 @@ flowchart TB
   MEET --> Q{"does the meet admit anything"}
   LEAF["the one leaf nothing can decide<br/>a closure over an unbounded carrier"] -. "no information" .-> Q
   Q -- "no" --> YES["the options separate, the union is admitted"]
-  Q -- "yes, or unknown" --> NO["refused where it is written"]
+  Q -- "yes, or unknown" --> C{"are the options below one canonical codec"}
+  C -- "yes" --> YES
+  C -- "no, or unknown" --> NO["refused where it is written"]
 ```
-
-> OPEN (owner): the diagram shows orthogonality alone. A union of compatible options that
-> overlap is lawful, and the diagram refuses the union.
 
 ---
 
@@ -73,29 +72,21 @@ flowchart TB
 
 A term denotes a codec: a partial write from a value to an attribute, and a partial read back.
 A union holds options, and the calculus decides at declaration time whether the options agree
-where they overlap, and which option owns a value that two options admit.
+where they overlap.
 
-**The write and the read are inverse on every term the language builds.** A read after a write
+**The write and the read are inverse on every term whose obligations hold.** A read after a write
 returns the value that was written. A write after a read returns the attribute that was read,
-because the read of a term is injective. A term with no adapter is a restriction of `opaque`,
-whose two halves are a bijection, and an adapter keeps an injective read under its iso premise. So
-a term is a partial bijection between values and attributes.
-
-> ASPIRATION: the tree proves the injective read for a term with no adapter. A probe proves it
-> for an adapter over such a term. No proof covers an adapter inside a container or inside another
-> adapter, and no lemma states that lists, objects and unions keep an injective read.
+because the reads of a lawful codec are canonical. So such a term is a partial bijection between
+values and attributes, and its read is injective (`Lawful.ker_eq`). A union of incompatible options
+is a term that breaks its obligation, and it is not a partial bijection.
 
 ### The object is a partial bijection, and the fibres belong to the port
 
 **A store can spell one value in several ways**, as DynamoDB spells one number in several ways.
 The read of the store accepts every spelling, and the write picks one. That is a canonizer in
 front of the term, not a property of the term, so it lives in the port with the other facts of
-the store. A codec that reads more than one spelling of one value is not a term.
-
-> ASPIRATION: the agreement relation still sits in the core laws, not in the port.
-
-> OPEN (owner): whether the agreement clause leaves the lawfulness laws, with its relation kept
-> only for the refutation that needs a codec with non-trivial fibres.
+the store. A codec that reads more than one spelling of one value is not lawful
+(`Lawful.fmt_subsingleton`), and so it is not a term.
 
 **The two projections ask two questions where the two sides can come apart.**
 
@@ -126,7 +117,7 @@ what both admit, or reports that it cannot tell. Everything the calculus needs i
 
     the meet         the intersection itself, as a term
     the certificate  is that intersection inhabited
-    the selector     does this value inhabit it
+    admission        does this value inhabit it
     compatibility    does the meet exist, with the domain and the range of the two meets
 
 The meet answers two questions. Its emptiness decides whether two options are orthogonal. Its
@@ -135,15 +126,14 @@ their meet exists and its domain and range are the meets of theirs. A meet that 
 decline on both questions, not a refutation.
 
 > ASPIRATION: no declaration decides compatibility through the meet, and the meet refuses an
-> adapter beside every term but the bottom. The link between compatibility and the meet is a theorem of inverse monoids, not yet of
-> this development.
+> adapter beside every term but the bottom. A meet row for two adapters must decide whether
+> their functions are equal, and a function has no decidable equality. The link between
+> compatibility and the meet is a theorem of inverse monoids, not yet of this development.
 
-There is no second apparatus: the certificate is the inhabitance of the meet.
+There is no second apparatus: the certificate is the inhabitance of the meet, of the two terms or
+of their two views.
 
-> ASPIRATION: the certificate still has three disjuncts: the occupancy and discriminant tests,
-> the meet at the bottom, and the adapter views.
-
-### The selector decides by attempt, at every constructor
+### Admission is by attempt, at every constructor
 
 An option admits a value when the option's codec accepts it. That is one rule, and it recurses
 because a codec recurses.
@@ -156,7 +146,7 @@ dispatch never reads, such as a list index, never separates at all.
 **Admission is by attempt, at every constructor including the object.** The certificate then has
 nothing left to approximate except where approximation is forced.
 
-### A union is lawful by compatibility, and the selector decides only holes and branch
+### A union is lawful by compatibility, and no option owns an overlap
 
 Two options are compatible when they agree wherever they overlap: an attribute that both read,
 they read to one value, and a value that one reads, the other leaves alone or reads the same way.
@@ -165,30 +155,19 @@ case with no overlap.
 
 **Two options below one canonical codec are compatible.** Every term with no adapter is below
 `opaque`, which is why such options never conflict. Two restrictions of one adapter are below that
-adapter, which is the same fact at a different bound. The bound must read each value from one
-attribute; a lawful bound that reads two spellings does not carry the fact. So the decidable test
+adapter, which is the same fact at a different bound. A lawful bound reads each value from one
+attribute (`Lawful.fmt_subsingleton`), and that is the fact the argument uses. So the decidable test
 has two halves: a shared canonical bound, or orthogonal views. An adapter beside a term that it
 does not bound, with views that meet, is refused.
 
-> ASPIRATION: the tree proves that pairwise compatible options make a union lawful where it
-> acts, and that a shared canonical bound gives compatibility. The library tests only the bound
-> `opaque`, and orthogonal views, so its declaration test is not yet the two halves above.
+> ASPIRATION: the tree proves that a shared canonical bound gives compatibility. The library
+> tests only the bound `opaque`, the bottom and the certificate, so it refuses two restrictions of
+> one adapter that overlap.
 
-**The selector decides what happens in the overlap, and nothing else.**
-
-    count          the join with the overlap removed: a value two options admit is refused
-    any admitter   the full join
-    least fiber    the full join, and the branch that owns each value, for a laminar family
-
-The overlap has no branch identity unless the family is laminar, so a crossing pair is refused as
-a question about the branch, not about the codec.
-
-> ASPIRATION: the union of the term language uses the count selector. The any-admitter and the
-> least-fiber selectors exist only as probes and as the totality lemmas of the laminar module.
-
-> OPEN (owner): which selector; and whether the obligation of a union becomes pairwise
-> compatibility, which is stronger than "lawful where the union acts" and refuses a union that
-> declines every input.
+**A union is the join of its options.** The first option that admits a value writes the value,
+and over lawful, pairwise compatible options the order of the options is unobservable. So a value
+that two options admit has no owner, because no operation can observe one. Without compatibility
+the order is observable, and the union is refused.
 
 ### The abstraction is confined to the leaves
 
@@ -256,8 +235,8 @@ An occupancy projection over a finite index of value slots and attribute members
 test at a name. A literal test at a name. A row for each written shape. A body specification
 carried beside the term so that a test can read it without consulting a codec.
 
-> ASPIRATION: the tree still carries the occupancy, presence, literal and body-specification
-> tests, as disjuncts of the certificate.
+> ASPIRATION: the proofs of the meet's bottom rows still use the occupancy test, and a slice still reads the
+> body specification.
 
 Every one of them is the recursion truncated at some depth. Each owes its own soundness proof,
 its own argument that the indices it skips could not have separated, and its own extension on
@@ -273,9 +252,9 @@ admission, never as the definition of it.
 
 **One side of the trade is a cost and the other side is a defect.** Two object options that
 declare the same names with the same marks and no literal carry one description. The dispatch
-admits both, the selector finds two admitters, and the union admits no value at all. So the
-dispatch does not only stop separating below some depth. It empties a union that the options'
-own codecs separate.
+admits both, the first option answers, and the union writes nothing where the first option's
+codec refuses the value and the second option's codec accepts it. So the dispatch does not only
+stop separating below some depth. It loses values that the options' own codecs write.
 
 ### The constructors are universal constructions, and the laws arrive with them
 
@@ -334,16 +313,12 @@ discharge. The stronger one stays out of reach while a closure over an unbounded
 term.
 
 **The meet reads no certificate at its coproduct row, so the certificate is defined through the
-meet.** A meet at the bottom is one case of the certificate. Under admission by attempt a
-certificate at that row would protect nothing, because the meet preserves the count at each
-option: a coproduct the selector refuses meets to a coproduct the selector refuses.
-
-> OPEN (owner): this argument reads the selector as a count. Under the least-fiber selector, the
-> coproduct row owes the branch, not the count.
+meet.** A meet at the bottom is one case of the certificate. A union admits exactly where one of
+its options admits, with no condition, so the meet is exact at that row with no certificate.
 
 A constructor added later arrives with its row known in advance, because the propagation rule
-decides it. The meet is associative on both projections, and it distributes over a certified coproduct on the
-value side. The adapter's unit holds as a codec equation, and the meet has no adapter row that
+decides it. The meet is associative on both projections, and it distributes over a coproduct on
+the value side. The adapter's unit holds as a codec equation, and the meet has no adapter row that
 could state it.
 
 ### The two projections are inhabited together, so one decision settles both
@@ -352,10 +327,10 @@ The meet intersects **both** projections, and each has its own homomorphism law:
 meet admits are the values both factors admit, and the attributes the meet accepts are the
 attributes both factors accept.
 
-Now take any one term and use the retraction law and the canonicity law alone.
+Now take any one term and use the retraction law and the definedness of reads alone.
 
     it admits a value      →  the value writes an attribute  →  retraction  →  that attribute is accepted
-    it accepts an attribute →  the attribute reads a value   →  canonicity  →  that value is written
+    it accepts an attribute →  the attribute reads a value   →  definedness →  that value is written
 
 **So a term's two projections are inhabited together.** Apply that to the meet of two options:
 the value projections are disjoint exactly when the meet admits no value, the attribute
@@ -368,14 +343,14 @@ under anything.
 
 The read-side law says more than that the meet accepts what both accept: where both operands
 accept one attribute, the meet reads it to the same value each of them does. So an attribute the
-meet accepts is read to a value that both operands write, by canonicity, and that value is one
+meet accepts is read to a value that both operands write, by definedness, and that value is one
 the meet admits. The contrapositive is the whole certificate: **a meet that admits no value
 accepts no attribute.**
 
 > ASPIRATION: no theorem derives the emptiness of the read side from the emptiness of the value
 > side. The tree tests each side at the spelling of the bottom, or separately.
 
-The premises are canonicity on the two operands and nothing else. They belong to the weaker bundle
+The premises are the definedness of reads on the two operands and nothing else. They belong to the weaker bundle
 that a term containing an alternate reader still satisfies, and the development already carries
 them wherever it reasons about a term. **No preservation theorem about the meet is required.**
 
@@ -394,9 +369,9 @@ They are the domain and the range of the codec.
 
 Two rows keep the views sound, and both follow one rule: **data exists only on the side where it
 was stated.** A restriction above an adapter that reads a whole container is caller-side data, and
-on the stored side it could exist only as a closure, so the stored view drops it. A union with an
-adapter below it would need the join of its options' views, which the term language states only
-for a certified union, so the views do not certify it.
+on the stored side it could exist only as a closure, so the stored view drops it. The view of a
+union is the union of its options' views, because a union admits where one of its options
+admits.
 
 The attribute side also admits a ladder of descriptions, from the outermost member, through the
 member at every position recursively, to the fibres the codec distinguishes, to the raw wire. The
@@ -428,7 +403,7 @@ development that meets it. The table is that pairing; the text below is the reas
 | D5. analysability is a field | a certified adapter |
 | D6. the description decides in the kernel | mutual inclusion |
 | D7. a concept lives outside the language when it is terminal | the alternate reader |
-| D8. the selector and the certificate are one relation | the structural admission |
+| D8. admission and the certificate are one relation | the structural admission |
 
 The members constructor is a declaration in `Calculus/` today. The other entries in the right
 column are concepts this design names and the development does not: read each as the shape a
@@ -501,19 +476,17 @@ nothing reachable. If any position accepts it, moving it outside makes a reachab
 unwritable, and encoding exists to do the opposite. The alternate reader is terminal and sits
 outside. An adapter is a union option and composes with itself, so it is a constructor.
 
-**D8. The selector and the certificate are one relation.** `D8` constrains the certificate rather
-than a description. The certificate asks whether any value can inhabit two options. The selector
-asks whether this value inhabits one. A certificate that separates what the selector cannot tell
-apart is **unsound**, because the run time then finds two claimants. A selector that tells apart
-what the certificate cannot is **wasted**, because the union is refused where the codec would
-have worked. Two functions kept in agreement by hand will drift, and nothing reports the drift.
-So they are one function at two arguments.
+**D8. Admission and the certificate are one relation.** `D8` constrains the certificate rather
+than a description. The certificate asks whether any value can inhabit two options. Admission
+asks whether this value inhabits one. A certificate that separates what admission cannot tell
+apart is **unsound**: two incompatible options then admit one value, and the order of the options
+decides the attribute. A test that admission tells apart and the certificate cannot is
+**wasted**, because the union is refused where the codec would have worked. Two functions kept in
+agreement by hand will drift, and nothing reports the drift. So they are one function at two
+arguments.
 
-> ASPIRATION: the certificate is sound for the selector, but it is a separate function, and it
-> is not complete for the selector.
-
-> OPEN (owner): "two claimants" reads the selector as a count. Under the least-fiber selector,
-> two claimants are unsound only where they cross or coincide.
+> ASPIRATION: the certificate is sound for admission, but it is a separate function, and it is
+> not complete for admission.
 
 A recursion may discharge both sides at once where the codec makes them one fact, as a literal
 does. A recursion may never discharge one side and stay silent about the other.

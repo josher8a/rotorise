@@ -58,10 +58,10 @@ theorem lawful_nullCodec : Lawful nullCodec :=
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
     (lawful_pointCodec (fun _ => rfl))
 
-/-- **The `(number)` case, and it no longer consumes an axiom.** `e` and `p` are mutually
-    inverse constructor wrappers over one carrier, so all four laws are `rfl` at the only
-    inhabited row. The shortest-text round trip this used to spend is not needed, because
-    there is no host spelling to round-trip through. -/
+/-- **The `(number)` case, with no axiom.** `e` and `p` are mutually inverse constructor
+    wrappers over one carrier, so retract, canon and writes are `rfl` at the only inhabited
+    row. No shortest-text round trip is needed, because there is no host spelling to
+    round-trip through. -/
 theorem lawful_numberCodec : Lawful numberCodec := by
   refine ⟨?_, ?_, ?_⟩
   · intro t a he
@@ -134,8 +134,8 @@ theorem lawful_setBase : ∀ b : SetBase, Lawful b.elem
 
 /-! ### The literal codec is lawful because its base is
 
-`literal` adds a prism and nothing else, so all four laws come from `Lawful.restrict` — one
-statement, because there is one codec. -/
+`literal` adds a prism and nothing else, so retract, canon and writes come from
+`Lawful.restrict`. That is one statement, because there is one codec. -/
 
 /-- §3 `(literal)` is lawful, full stop.
 

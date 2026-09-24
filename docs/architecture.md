@@ -54,7 +54,9 @@ The import graph of `Calculus/` is an almost-linear spine: `Domain`, then `Codec
 combinator algebra as `Prisms`, `Products`, `Objects`, `Sums`, `Carriers`, `Lawful` and
 `Frontier`, and `Term`, then `Denote`, `Typing`, `Soundness`, then the analyses `Discharge`,
 `HeldSet`, `Nesting` and `Equations`, then `ExactV`, `ExactA` and `Separation`, then
-`Orthogonality`, with `Axioms` as the sink. `Malleability` is the one analysis off the spine.
+`Orthogonality`, with `Axioms` as the sink. Several analyses sit off the spine: no module but
+`Axioms.lean` imports them. `Malleability` is one of them: a lawful codec has one attribute per
+value (`Lawful.fmt_subsingleton`).
 
 **The layering is a convenience. One property of it is checked.** `Axioms.lean` walks the
 environment, and the environment is what `Axioms.lean` imports, which is a hand-maintained list. A
@@ -132,9 +134,10 @@ only.
 | decidable from the term | `Typed` | the judgement itself |
 | about what a codec does — its write half, its read half, an iso, a resolution | `Obligations`, as `PairwiseCompat` and `IsoCancels` are | both soundness theorems |
 
-`Term` has no alternate reader. Therefore `soundness` proves all four laws for every typed term.
-An alternate reader is `Codec.extendRead` at the codec layer. `ReadsCoherently` is its condition,
-and `extendRead_lawfulCore` proves the three core laws for it over a typed term.
+`Term` has no alternate reader. Therefore `soundness` proves retract, canon and writes for every
+typed term whose obligations hold. An alternate reader is `Codec.extendRead` at the codec layer.
+`ReadsCoherently` is its condition, and `extendRead_lawfulCore` proves `LawfulCore` for it over a
+typed term whose obligations hold.
 
 Choosing wrong is not a build error. A semantic premise in `Typed` makes the judgement
 undecidable; a syntactic premise in `Obligations` becomes a burden every caller carries.
@@ -175,9 +178,9 @@ declaration time, or when it is a property of one argument expressible in that a
 type. It does not when the premise relates one argument to other arguments' behaviour at a shared
 input.
 
-That last clause is the boundary, and **unique admission is the case on the wrong side of it**:
-it is not a property of an option but a property of a set of options at an input the set as a
-whole resolves. Indices make per-thing properties structural, and this is not one.
+That last clause is the boundary, and **compatibility is the case on the wrong side of it**: it
+is not a property of an option but a relation between two options at an input both act on.
+Indices make per-thing properties structural, and this is not one.
 
 **The discriminated union is the case that left the term language rather than crossing into it.**
 A dissection is a `union` of object members whose pairwise structural meet is empty: two members
@@ -241,7 +244,7 @@ None was added speculatively.
 
 ---
 
-## The analyses, and why two generations stand
+## The analyses, and the one test that decides both sides
 
 Every separation is one appeal to `Separates`, which takes two families of allowed values, one
 per side, and asks only that each be pairwise disjoint. Kinds, members, tags
@@ -253,24 +256,21 @@ joint predicate absorbs what a kind table used to carry. The attribute-side pred
 clause. An alternate reader cannot add a structural exception because `Codec.extendRead` is
 outside `Term`.
 
-**Both generations stand, and the reason is that nothing has retired the older one.**
-`select` attempts every option, so option admission *is* the row at every constructor:
-`admitV_le_Adm` and `admitA_le_AdmA` hold from exactness alone, with no premise on the term and
-no exception for an object. `admitOptV_of_Adm` is the identity for the same reason. So the joint
-predicate and the admission a discharger consumes are one test, and a discharger stated on the
-joint predicate asks the question `select` decides by.
-
-**Whether that discharger is sound in general is open, and the development does not claim it.**
-The two tests coinciding at every constructor removes the shape that is known to part them. It is
-not a proof that no pair parts them, and no theorem here attempts that proof. Until one arrives
-the per-aspect tables and their separation stay, and `Orthogonality.lean` remains the certificate
-the library is checked against.
+**One test decides both.** `select` attempts every option, so option admission *is* the row at
+every constructor: `admitV_le_Adm` and `admitA_le_AdmA` hold from exactness alone, with no premise
+on the term and no exception for an object. `admitOptV_of_Adm` is the identity for the same
+reason. So the joint predicate and the admission a discharger consumes are one test, and
+`pairwiseCompat_of_separated` proves that a separated union of lawful options meets its
+obligation.
 
 **The direction has a standard name.** It is the abstract interpretation of Cousot and Cousot,
 1977: a coarse test that over-approximates a precise one transfers disjointness downward, and a
 tighter test does not. The principle is why a certificate may be proved over an approximation at
-all. This development spends it on occupancy: `occV` and `occA` over-approximate what a term
-occupies, and disjoint occupancy is what the certificate decides.
+all. This development spends it twice. `occV` and `occA` over-approximate what a term occupies,
+and the proofs of the meet's bottom rows use disjoint occupancy to justify those rows
+(`Adm_and_false`, `AdmA_and_false`). `writeView`
+and `readView` admit each value and each attribute that the term admits (`writeLe_of`,
+`readLe_of`), so two views that meet at the bottom separate the terms.
 
 **The outer carrier has a separate read-side fact.** An alternate reader can read an attribute
 outside the current term's member. `extendRead_reads_n` records a string core that reads a numeric
@@ -284,31 +284,28 @@ is the discharger stated on what `select` actually decides by.
 
 ### The classifier, and what it is the specification of
 
-`Orthogonality.lean` is a decidable certificate for a fragment of the uniqueness property. It
-over-approximates each term's occupancy per side with `occV` and `occA` and certifies a pair whose
-occupancies are disjoint, by `decide`.
+The union obligation is compatibility, and the certificate is sufficient for it. `certPair`
+certifies a pair whose meet is the bottom, or, where a `held` occurs, a pair whose caller views
+meet at the bottom and whose stored views meet at the bottom (`certViews`). The view of a `union`
+is the union of the views of its options.
 
 **Its value is that it is half of the specification of the library's declaration-time guard, and
-a checked half.** The union certificate is `certPair`: a meet at the bottom, or `certViews`, which
-certifies the caller views and the stored views of a `held` separately. The `union`
-combinator in `src/` refuses a pair of options that it cannot certify. The combinator also refuses
-two options that cross, where the meet is neither `never` nor one of the two options, because no
-option owns the overlap. The bridge is the separation class in `src/codec/lean.ts`: one theorem per
-pair the library refuses, asserting that `certPair` does not certify it, generated and elaborated
-by `formal/scripts/gate.sh`.
+a checked half.** The `union` combinator in `src/` accepts a pair on a warrant: the never side
+(one option is `never`), held-free (both options are held-free), or the certificate (the host
+certificate separates them). It
+refuses every other pair, because the pair is not shown compatible. Two held-free lawful terms
+are compatible with no certificate (`pairwiseCompat_of_HF`), because both sit below `opaque`.
 
-**`certPair` is sufficient and not necessary,** so exactly one direction is a law: the library
-never refuses a pair the model certifies. A decline by `certPair` is not a refutation. The library
-also accepts a pair that a host row certifies: a literal, which identifies its own values, and a
-pair of objects, which the host certifies by the names and literals they declare.
+**The bridge checks both directions.** The separation class in `src/codec/lean.ts` emits one
+theorem per emittable pair of the sample codecs, generated and elaborated by `formal/scripts/gate.sh`. For a
+pair the library accepts, the theorem states that the two terms meet `PairwiseCompat` where both
+denote lawful codecs, proved by the warrant the library used. For a pair the library refuses, the theorem states that `certPair` does
+not certify it.
 
-**No bridge checks that second direction, and it is not a law.** A host row that accepts a pair
-without a certificate needs the two options compatible: every attribute that both read, they read
-to one value, so the union is lawful where it acts. The host decides compatibility only where
-neither option reaches a `held`, by `compat_of_HF`. Where the views of a `held` are orthogonal, the
-certificate decides the pair. So the `identifies` row refuses a `held` beside a literal, because a
-`held` can share a caller value with the literal. Two restrictions of one adapter are compatible in
-the model, and the host does not use that, because an overlap has no owner.
+**`certPair` is sufficient and not necessary.** A decline by `certPair` is not a refutation of
+compatibility. Two restrictions of one adapter are compatible in the model
+(`compat_of_common_bound`), and no certificate reaches such a pair where the two overlap, so the
+library refuses it.
 
 `Separated` is what names the separation guarantee over the option list, with
 `separated_of_unionOk` as the certificate's bridge into it.
@@ -380,7 +377,7 @@ form too and expect the arity to be implicit.
 ### The bridge, and the claims that cannot reach the kernel
 
 **Regeneration is not verification.** What verifies the bridge is elaboration, which is why the
-gate runs the committed samples and the full refusal cross product through Lean rather than
+gate runs the committed samples and every emittable pair of the sample codecs through Lean rather than
 trusting a byte comparison. **Refusal vectors are the other half of the same blind spot**: a
 positive vector is an agreement about what the library wrote, so a value the library refuses
 produces no vector at all — the half of the pair where the two sides could disagree unobserved.
@@ -431,16 +428,13 @@ into an answer.
 
 Each of these is a decision with a price, not a gap, and each has a witness.
 
-**Recursion under a union.** A union resolves by the first admitting option. Where the admitting
-options agree (`ConfluentAt`), first-match resolution is monotone (`selectF_mono_list`). `opaque` is the one recursive union the model carries.
-Its options are pairwise kind-disjoint, so unique admission needs nothing from the recursive call,
-and `lawful_opaqCodecω` proves the fixed point lawful.
-
-**The refutation is specific to counting.** Confluent resolution, where several options may admit
-provided they agree, is proved monotone and continuous by `selectF_mono` and
-`selectF_continuous_list`, and is **not adopted**. Order-independence stops being unconditional
-and holds only given the obligation, and a specification whose commutativity is conditional is a
-worse specification. That is a specification call, not a mechanization call.
+**A recursive term.** No term is recursive: `Term.lazy` carries a plain `Term`, and `denote` is
+structural. A recursive term needs a binder or a staged `denote`. `opaque` is the one recursive
+union the model carries. Its options are pairwise kind-exclusive, so they are compatible at each
+stage (`compat_opaque`), and `lawful_opaqCodecω` proves the fixed point lawful. Where the
+admitting options agree (`ConfluentAt`), first-match resolution is monotone and continuous
+(`selectF_mono_list`, `selectF_continuous_list`). Those are the two obligations that a
+least-fixpoint construction discharges.
 
 **The nesting bound.** `Nesting.lean` is the one place the attribute algebra is larger in the
 model than in the store, deliberately. The list and map constructors nest without limit by
@@ -474,11 +468,6 @@ axiom. A host numeric type, such as a binary64 float, is not modelled, because r
 theorem of this calculus. A port adapts the host type to `WFNumeral` inside the port. The emitter
 refuses a JS number for the same reason: writing one down as a `WFNumeral` is a rounding that the
 model does not state.
-
-**Non-malleability.** `Malleability.lean` records that this development deliberately fails it, and
-why the relational-format proposal that would have entailed it is refuted by `fmt_forced`: `Fmt`
-is the fibre of the read half, so a relational presentation is the same model addressed by fibre,
-and a fibre cannot be shrunk to buy the agreement clause without losing completeness.
 
 ---
 

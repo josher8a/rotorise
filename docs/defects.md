@@ -187,39 +187,31 @@ instance when the class-instance option is off.
 **No total renderer exists to write instead**, because a conversion is arbitrary user code. The
 repair is to route the remaining site through the same seam, not to write a renderer.
 
+
 ---
 
 ## Known: the type level reads a literal off a type, and the term is what the runtime reads
 
-**Observation.** The union's declaration gate decides whether an object option pins a name to a
-literal by looking at the type that name's codec decodes to: a literal type answers yes, and a base
-type answers no. Nothing in a codec's type says which constructor built it, so there is no other
-question to ask there. Admission at run time reads the term instead, and a term is a literal only
-where a literal constructor made it.
+**Observation.** `extract` and `exclude` check a clause at the type level with the type PinsALiteral in
+`src/codec/codec.ts`: a member pins a key when the type that the key's codec decodes to is a
+literal type. Nothing in a codec's type says which constructor built it, so no other question is
+available there. At run time the slice reads the term, and a term pins a literal only where a
+literal constructor built it. An adapter whose decode narrows to a literal type pins a literal at
+the type level and pins none at the term. Measured 2026-09-24 with a throwaway spec and
+`npx tsc --noEmit`:
 
-**Effect, and it runs the other way from what this entry used to say.** The two disagree on one
-shape. An adapter, a held codec, whose decode narrows to a literal type reads
-as pinning a literal at the type level and pins none at the term. This entry recorded the
-consequence as ambiguity on the first item. Measured, it is the opposite: the pair **typechecks
-and then refuses at construction**, with the message a pair carrying no discriminator gets.
-
-    union([object({ k: tagA, v: string }), object({ k: tagB, v: string })])
+    const tagA = held(string, string('A'), { encode: (v: 'A') => v, decode: ... })
+    const u = union([object({ k: tagA, a: string }), object({ k: string('B'), b: string })])
+    u.extract({ k: string('A') })
       type checker: accepted
-      runtime:      refused, "{ k, v } and { k, v } both take the same kind of value — map"
+      runtime:      {"kind":"never"}
+    u.extract({ k: string('B') })
+      runtime:      the member with the literal
 
-Both halves of the disagreement were checked: the type checker refuses the same shape written
-with a bare `string` at `k`, so the type-level gate is discriminating and simply reads the wrong
-thing; and the same pair told apart by two `decimal` literals — a *library* adapter, which
-declares its write slots — refuses at construction too, so descending a declared adapter in the clause readers did
-not reach this path. `structuralMeet` asks `literalsOf`, which answers at the caller's level and
-pins nothing under any adapter.
+**Effect.** A caller gets a green typecheck and a slice that selects no member. The union itself
+has no type-level gate: `union` decides compatibility at run time only.
 
-So the failure is an over-refusal against the type rather than an under-refusal against the item:
-a caller gets a green typecheck and a throw. The refinement case is closed, because the term
-reader walks through a refinement to the literal underneath.
-
-**Pin.** None. No test declares such a pair. The disagreement is written at the type-level
-predicate, and the runtime half is stated by no assertion.
+**Pin.** None. No test declares a clause over an adapter that narrows to a literal type.
 
 **Fix direction.** The type-level test has to read the constructor rather than the decoded type,
 which needs a codec's type to carry which constructor built it. It does not today. Widening the

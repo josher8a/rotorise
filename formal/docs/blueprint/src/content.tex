@@ -88,11 +88,12 @@ undetermined is settled in §3.
 \texttt{∀\ t\ ∈\ dom(e).\ p(e(t))\ =\ t}. Writing then reading returns the value written.
 \end{definition}
 
-\begin{definition}[(C) canonizability]
+\begin{definition}[(C) canonical reads]
 \label{cond:C}
 \lean{Calculus.Lawful.canon}
 \leanok
-\texttt{∀\ a\ ∈\ dom(p).\ p(a)\ ∈\ dom(e)}. Whatever was read can be written back.
+\texttt{∀\ a\ ∈\ dom(p).\ e(p(a))\ =\ a}. Whatever was read is written back, at the attribute it was
+read from.
 \end{definition}
 
 \begin{definition}[(W) a term writes its member]
@@ -103,36 +104,38 @@ undetermined is settled in §3.
 and no other.
 \end{definition}
 
-\begin{definition}[(MP) member preservation]
+\begin{corollary}[(MP) member preservation]
 \label{cond:MP}
 \uses{cond:C}
-\lean{Calculus.Lawful.agree, Calculus.Agree.member_eq}
+\lean{Calculus.Lawful.canon}
 \leanok
 \texttt{∀\ a\ ∈\ dom(p).\ member(e(p(a)))\ =\ member(a)}. Reading and writing back never changes a stored
-member. §5's strong form \texttt{e(p(a))\ ≼\ a} implies this.
-\end{definition}
+member. It is immediate from \rulelink{cond:C}{\textbf{(C)}}, because \texttt{e(p(a))} is \texttt{a}.
+\end{corollary}
 
-\begin{theorem}[the four laws are independent]
+\begin{theorem}[the three laws are independent]
 \label{thm:laws-independent}
-\uses{cond:R,cond:C,cond:W,cond:MP}
-\lean{Calculus.cR_notR, Calculus.cR_C, Calculus.cR_W, Calculus.cR_MP, Calculus.cC_R, Calculus.cC_notC, Calculus.cC_W, Calculus.cC_MP, Calculus.cW_notW, Calculus.cW_R, Calculus.cW_C, Calculus.cW_MP, Calculus.cM_R, Calculus.cM_C, Calculus.cM_W, Calculus.cM_notMP}
+\uses{cond:R,cond:C,cond:W}
+\lean{Calculus.cR_notR, Calculus.cR_canon, Calculus.cR_W, Calculus.cC_R, Calculus.cC_notCanon, Calculus.cC_W, Calculus.cW_notW, Calculus.cW_R, Calculus.cW_canon}
 \leanok
-No one of \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}}, \rulelink{cond:W}{\textbf{(W)}} and \rulelink{cond:MP}{\textbf{(MP)}} follows from the other three: for each
-there is a pair satisfying the other three and failing that one.
+No one of \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and \rulelink{cond:W}{\textbf{(W)}} follows from the other two: for each
+there is a pair satisfying the other two and failing that one.
 \end{theorem}
 
-And \rulelink{cond:MP}{\textbf{(MP)}} is well defined only because \rulelink{cond:C}{\textbf{(C)}} holds — \texttt{e(p(a))} is an
-attribute at all because everything readable re-encodes. Every term satisfies
-\rulelink{cond:MP}{\textbf{(MP)}}. A read extension \texttt{extendRead(c,\ r)} is not a term. It is an outer carrier that
-preserves \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and
-\rulelink{cond:W}{\textbf{(W)}} under its two premises, while its alternate reader can break
-\rulelink{cond:MP}{\textbf{(MP)}}.
+A weaker form of \rulelink{cond:C}{\textbf{(C)}} asks only that a read value be writable:
+\texttt{∀\ a\ ∈\ dom(p).\ p(a)\ ∈\ dom(e)}. It does not imply \rulelink{cond:C}{\textbf{(C)}}: \texttt{cM} reads \texttt{⟨BOOL,\ true⟩}
+to a string, and writes that string at \texttt{S} (\texttt{cM\_core}, \texttt{cM\_notCanon}). Every term whose obligations hold
+satisfies \rulelink{cond:C}{\textbf{(C)}}. A read extension \texttt{extendRead(c,\ r)} is not a term. It is an outer carrier that
+preserves \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:W}{\textbf{(W)}} and the weaker form under its two premises
+(\texttt{LawfulCore}), while its alternate reader can break \rulelink{cond:C}{\textbf{(C)}}.
 
-Only \rulelink{cond:R}{\textbf{(R)}} is an equality on the nose. Taken as one, \texttt{e\ ∘\ p\ =\ id} is \emph{false} for a pair in
-general: an alternate reader reads an attribute that the current encoding writes differently, and
-\texttt{e\_comp\_p\_ne\_id} is that witness. In the language of quotient lenses \cite{quotient-lenses} \texttt{e\ ∘\ p} is a
-\textbf{canonizer} — total on \texttt{dom(p)} by \rulelink{cond:C}{\textbf{(C)}} — and the equivalence it works modulo is not a parameter
-a programmer chooses: it is \texttt{ker\ p}, forced by the reading itself. Write \texttt{a\ ≈c\ a′\ ⟺\ p(a)\ =\ p(a′)}.
+\rulelink{cond:R}{\textbf{(R)}} and \rulelink{cond:C}{\textbf{(C)}} are both equalities on the nose: \texttt{p\ ∘\ e\ =\ id} on
+\texttt{dom(e)} and \texttt{e\ ∘\ p\ =\ id} on \texttt{dom(p)}. So a lawful pair is a partial bijection. For a pair
+outside the laws \texttt{e\ ∘\ p\ =\ id} can fail: an alternate reader reads an attribute that the current
+encoding writes differently, and \texttt{e\_comp\_p\_ne\_id} is that witness. In the language of quotient
+lenses \cite{quotient-lenses} \texttt{e\ ∘\ p} is then a \textbf{canonizer}, total on \texttt{dom(p)} by the
+weaker form, and the equivalence it works modulo is not a parameter a programmer chooses: it is
+\texttt{ker\ p}, forced by the reading itself. Write \texttt{a\ ≈c\ a′\ ⟺\ p(a)\ =\ p(a′)}.
 
 \subsection{Stability under a generator}\label{corollary-q--stability}
 
@@ -164,10 +167,9 @@ produced, \rulelink{cor:Q}{\textbf{(Q)}} at values a table returned. What \rulel
 \end{corollary}
 
 \begin{proof}
-\uses{cond:C,cond:W,cond:MP}
+\uses{cond:C,cond:W}
 \leanok
-\texttt{p(a)\ ∈\ dom(e)} by \rulelink{cond:C}{\textbf{(C)}}, so \texttt{e(p(a))\ =\ ⟨μ,\ \_⟩} by \rulelink{cond:W}{\textbf{(W)}}, and
-\texttt{member(a)\ =\ member(e(p(a)))\ =\ μ} by \rulelink{cond:MP}{\textbf{(MP)}}.
+\texttt{e(p(a))\ =\ a} by \rulelink{cond:C}{\textbf{(C)}}, so \texttt{a\ =\ ⟨μ,\ \_⟩} by \rulelink{cond:W}{\textbf{(W)}}.
 \end{proof}
 
 \rulelink{cond:W}{\textbf{(W)}} constrains only the writing half; this corollary is what makes the reading half follow. A
@@ -175,7 +177,7 @@ produced, \rulelink{cor:Q}{\textbf{(Q)}} at values a table returned. What \rulel
 smuggle a member change through. The outer read extension \texttt{extendRead} is the sanctioned violation: it reads members the
 current encoding no longer writes, and re-encoding them is the migration.
 
-\rulelink{cond:MP}{\textbf{(MP)}} binds hardest where \texttt{μ\ =\ ⊤}. A term with a \texttt{μ} is pinned by \rulelink{cond:W}{\textbf{(W)}} and the corollary above;
+\rulelink{cond:C}{\textbf{(C)}} binds hardest where \texttt{μ\ =\ ⊤}. A term with a \texttt{μ} is pinned by \rulelink{cond:W}{\textbf{(W)}} and the corollary above;
 a term without one chooses per value, and \rulelink{cond:R}{\textbf{(R)}} and \rulelink{cor:Q}{\textbf{(Q)}} do not stop it choosing differently on
 the way back. A codec reading \texttt{⟨N,\ "1.5"⟩} to a string and writing \texttt{⟨S,\ "1.5"⟩} satisfies both — the
 \emph{value} survives — while silently changing the stored type, so a numeric sort key stops ordering and a
@@ -183,43 +185,42 @@ typed index rejects the write. It holds per attribute and recursively: a member 
 inside an \texttt{M} is the same failure.
 
 This is why \texttt{opaque} reads \texttt{N} as a numeral and never as a string. It writes the numeral
-back at \texttt{N}, so the member survives. That is \rulelink{cond:MP}{\textbf{(MP)}} at \texttt{opaque}, and §2 without it could not say
+back at \texttt{N}, so the member survives. That is \rulelink{cond:C}{\textbf{(C)}} at \texttt{opaque}, and §2 without it could not say
 so.
 
-Write \texttt{Can(c)\ =\ e{[}T{]}} for the \textbf{canonical} attributes: those a codec will actually produce. \texttt{e\ ∘\ p}
-is then the canonizer, mapping any readable attribute to the canonical representative of its class. A
-codec is total on \texttt{Can(c)} and merely partial on \texttt{𝔸}, which is the precise sense in which a table is
-more permissive than the schema describing it.
+Write \texttt{Can(c)\ =\ e{[}T{]}} for the \textbf{canonical} attributes: those a codec will actually produce. By
+\rulelink{cond:C}{\textbf{(C)}} a lawful codec reads exactly \texttt{Can(c)}. It is total on \texttt{Can(c)} and merely partial on
+\texttt{𝔸}, which is the precise sense in which a table is more permissive than the schema describing
+it.
 
 \subsection{What a codec ideally is}\label{what-a-codec-ideally-is}
 
-Those pieces assemble into something simpler than the four laws suggest, and that is where the
+Those pieces assemble into something simpler than the three laws suggest, and that is where the
 complexity lives.
 
 \textbf{Between \texttt{dom(e)} and \texttt{Can(c)}, a codec is a bijection.} \texttt{p\ ∘\ e\ =\ id} there is \rulelink{cond:R}{\textbf{(R)}}; \texttt{e\ ∘\ p\ =\ id}
-there follows from it, since a canonical attribute is \texttt{e(t)} for some \texttt{t} and \rulelink{cond:R}{\textbf{(R)}} sends it back
-to that \texttt{t}; and \texttt{e} is injective for the same reason. No quotient, no partiality, nothing to
-choose. On that part a codec is a plain isomorphism between a set of values and a set of attributes,
-and there is nothing further to say about it.
+there is \rulelink{cond:C}{\textbf{(C)}}; and \texttt{e} is injective by \rulelink{cond:R}{\textbf{(R)}}. No quotient, no choice. On that part a
+codec is a plain isomorphism between a set of values and a set of attributes, and there is nothing
+further to say about it.
 
-Everything else in §2 is one of exactly \textbf{two extensions} of that bijection, in the two directions
-it can be extended:
+A bijection extends in \textbf{two directions}, and a lawful codec takes one of them:
 
 \begin{tabular}{@{}llll@{}}
 \toprule
-& extension & what it buys & the law that governs it \\
+& extension & what it buys & where it lives \\
 \midrule
-\textbf{quotient} & \texttt{dom(p)\ ⊇\ Can(c)}, strictly & reading back what an older encoding wrote, not only what you wrote & \rulelink{cond:C}{\textbf{(C)}}, and \texttt{≈c} \\
-\textbf{partiality} & \texttt{dom(e)\ ⊆\ T}, \texttt{dom(p)\ ⊊\ 𝔸} & refusing values and attributes that are not yours & the domains themselves \\
+\textbf{quotient} & \texttt{dom(p)\ ⊇\ Can(c)}, strictly & reading back what an older encoding wrote, not only what you wrote & the alternate reader, outside the laws: \rulelink{cond:C}{\textbf{(C)}} refuses it \\
+\textbf{partiality} & \texttt{dom(e)\ ⊆\ T}, \texttt{dom(p)\ ⊊\ 𝔸} & refusing values and attributes that are not yours & every lawful codec \\
 \bottomrule
 \end{tabular}
 
-So \texttt{e\ ∘\ p\ =\ id} being false is not a defect of the pair, and not a weakening of the iso. It is the
-first extension, seen from outside: on \texttt{Can(c)} the equation \emph{does} hold, and off it the canonizer
-maps each class to its representative. The literature has a name for each — quotient lenses \cite{quotient-lenses} for
-the first, partial isomorphisms \cite{invertible-syntax} for the second — and this calculus needs both, which is why
-neither reference alone is the right one. The quotient reading refines the asymmetric lens of
-\cite{tree-transformations}, and \cite{lens-laws} is where the variants are told apart.
+So \texttt{e\ ∘\ p\ =\ id} holds for every lawful codec, and fails only for the alternate reader, which
+extends the reading past \texttt{Can(c)}. There the canonizer maps each class to its representative. The
+literature has a name for each extension: quotient lenses \cite{quotient-lenses} for the first, and
+partial isomorphisms \cite{invertible-syntax} for the second. This calculus needs both, the
+first outside its terms, which is why neither reference alone is the right one. The quotient
+reading refines the asymmetric lens of \cite{tree-transformations}, and \cite{lens-laws} is where the
+variants are told apart.
 
 The same two relaxations reappear one level up. §3's \texttt{held} is an iso and
 \texttt{refine} its prism. The outer read extension \texttt{extendRead(c,\ r)} satisfies
@@ -233,37 +234,34 @@ each one is really for. They do not have the same answer, and one term alone ans
 once.
 
 \textbf{The quotient collapses} when \texttt{ker\ p} (\texttt{Codec.Ker}) is equality — when no two distinct attributes
-read to one value. \textbf{Every held-free term collapses it.} \texttt{confluence\_R} puts the reading of a
-held-free term inside \texttt{opaque}'s, and \texttt{Ω\_canon} makes \texttt{opaque}'s reading injective, so two
-attributes that read to one value are one attribute. A set is held-free, so no two of its payloads
-read to one value either. A lawful held-free term also reads only \texttt{Can(c)}: by
-\rulelink{cond:C}{\textbf{(C)}} the value it reads re-encodes, and \texttt{confluence\_W} with \texttt{Ω\_canon} gives
-back the attribute it read. The model states this for held-free terms. \texttt{held} is the one
-constructor outside confluence (\texttt{held\_violates\_R}). Outside the term algebra, \texttt{extendRead} keeps
-a quotient, and \texttt{e\_comp\_p\_ne\_id} is its witness.
+read to one value. \textbf{Every lawful codec collapses it.} By \rulelink{cond:C}{\textbf{(C)}} an attribute that reads to
+\texttt{t} is \texttt{e(t)}, so two attributes that read to one value are one attribute. So every term
+whose obligations hold collapses it. A held-free term collapses it with no law as a premise: \texttt{confluence\_R} puts its
+reading inside \texttt{opaque}'s, and \texttt{Ω\_canon} makes \texttt{opaque}'s reading injective. Outside the
+term algebra, \texttt{extendRead} keeps a quotient, and \texttt{e\_comp\_p\_ne\_id} is its witness.
 
-\begin{theorem}[a held-free term has \texttt{ker\ p} equality]
+\begin{theorem}[a lawful codec has \texttt{ker\ p} equality]
 \label{thm:ker-heldfree}
-\lean{Calculus.ker_eq_of_HF, Calculus.e_p_of_HF}
+\lean{Calculus.Lawful.ker_eq, Calculus.ker_eq_of_HF}
 \leanok
-At a held-free term, two attributes that read to one value are equal. At a lawful held-free term,
-\texttt{e(p(a))\ =\ a} on \texttt{dom(p)}.
+At a lawful codec, two attributes that read to one value are equal. At a held-free term the same
+holds with no law as a premise.
 \end{theorem}
 
 \textbf{The store is not a quotient of the codec.} \texttt{η}, the store's own normalisation of a stored
 numeral (§3), rewrites \texttt{N}. This is the medium, and it is the calculus's one concession to something it
 does not model. A codec survives the store when \texttt{η} lies inside \texttt{ker\ p} (\texttt{SurvivesStore}), and that
-buys \rulelink{cond:R}{\textbf{(R)}} through the store (\texttt{retract\_through\_store}). With \texttt{ker\ p} equality, the inclusion
+buys \rulelink{cond:R}{\textbf{(R)}} through the store (\texttt{Lawful.retract\_through\_store}). With \texttt{ker\ p} equality, the inclusion
 asks \texttt{η} to fix every canonical attribute. \texttt{number} writes \texttt{1.500}, which the store rewrites, so \texttt{number} does not
 survive (\texttt{not\_survivesStore\_numberCodec}). The DynamoDB port's \texttt{decimalCodec} is gated at \texttt{Stored}, the
 numerals \texttt{η} leaves alone. Its \texttt{ker\ p} is equality as well (\texttt{ker\_decimalCodec}), and it survives
 (\texttt{survivesStore\_decimalCodec}). The gate absorbs the store, and no kernel does.
 
-\begin{theorem}[a held-free term survives the store only at a fixed point]
+\begin{theorem}[a lawful codec survives the store only at a fixed point]
 \label{thm:store-heldfree}
-\lean{Calculus.survivesStore_fix_of_HF}
+\lean{Calculus.Lawful.survivesStore_fix}
 \leanok
-A lawful held-free term survives the store only where \texttt{η} fixes each canonical attribute.
+A lawful codec survives the store only where \texttt{η} fixes each canonical attribute.
 \end{theorem}
 
 \textbf{Partiality collapses} when \texttt{dom(p)\ =\ 𝔸} — when every attribute the domain admits is one this
@@ -279,15 +277,14 @@ better encoding.
 (\texttt{opaqA\_total}). Its pair is a bijection between \texttt{Value} and \texttt{𝔸} (\texttt{Ω\_onto}, \texttt{Ω\_canon}), so its
 \texttt{ker\ p} is equality. Its held set is every \texttt{Value}, so one \texttt{T} lives in \texttt{𝔸}, which is the
 condition the paragraph above names. \texttt{opaque} pays with \texttt{μ\ =\ ⊤}. Every term with a schema keeps one deviation at least:
-a held-free term kills the quotient and keeps partiality, and §1 is why.
+every term whose obligations hold kills the quotient and keeps partiality, and §1 is why.
 
 One deviation \emph{does} have a clean term-level answer, and it is often mistaken for the other
-two. Ambiguity in a \texttt{union} is not a property of the medium at
-all — it is what happens when a choice is written without a tag. \rulelink{rule:dunion}{\texttt{(dunion)}} is the tagged case, and
-its \rulelink{cond:U}{\textbf{(U)}} is neither an obligation — a condition the semantics enforces per
-input by refusing (§5) — nor a theorem: the tag reaches one variant by
-construction. Whatever the storage looks like, that
-collapse is available by declaring the discriminator.
+two. Ambiguity in a \texttt{union} is not a property of the medium at all. It is what happens when
+two options disagree where they overlap. A union of compatible options has no ambiguity to resolve,
+and \rulelink{rule:dunion}{\texttt{(dunion)}} is the tagged case: the tag reaches one variant by construction.
+Whatever the storage looks like, that collapse is available by declaring the options compatible,
+or by declaring the discriminator.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -614,7 +611,7 @@ named are the whole obligation.)
 \texttt{opaque} is the calculus's universal sum, and it is primitive only in presentation: it
 unfolds to the \textbf{union of everything self-identifying, closed under the containers} — a fixpoint of shape
 \texttt{union(string,\ boolean,\ binary,\ ⟨NULL⟩,\ number,\ set(opaque),\ array(opaque),\ record(opaque))} —
-whose \rulelink{cond:U}{\textbf{(U)}} holds because the options' kinds and members are pairwise disjoint. The held set is \emph{defined}
+whose options are \rulelink{cond:compat}{\textbf{(Compat)}} because their kinds and members are pairwise disjoint (\texttt{compat\_opaque}). The held set is \emph{defined}
 as the values whose member is recoverable from the value alone, so \rulelink{cond:R}{\textbf{(R)}} holds by construction.
 A numeral is such a value: the \texttt{number} option is \texttt{numberCodec}, which holds the numeral exactly, as its digits, and
 \texttt{number\ ⇄\ N} keeps the member and the digits on both halves. So the held set is every
@@ -680,8 +677,8 @@ out through one and back through the other, and \rulelink{cond:R}{\textbf{(R)}} 
 on either side taken alone.
 
 None of this is a new kind of condition. \texttt{nullable(c)} is structurally the two-option union
-\texttt{union(c,\ ⟨NULL⟩-point)}, and its honesty conditions are that pair's §5 side conditions —
-uniqueness of admission on the way in, on the way out — which the guard makes hold rather than
+\texttt{union(c,\ ⟨NULL⟩-point)}, and its honesty conditions are that pair's side condition,
+the compatibility of \texttt{c} with the null point, which the guard makes hold rather than
 demand.
 
 \rulelink{rule:null}{\texttt{(null)}} above makes \texttt{union(c,\ null)} a term, so both spellings exist, and the relation between
@@ -708,10 +705,11 @@ that may already have it. It expresses nothing new, it costs no premise, and its
 property of insertion rather than a fact about \texttt{𝟙}. The one term outside both branches of the
 dichotomy is \texttt{nullable(null)}, which under the guard is simply \texttt{null}.
 
-\texttt{union(c,\ null)} replaces it at a subterm whose shape is unknown — \texttt{held} or
-\texttt{lazy}: no discharger — no decidable condition sufficient for \rulelink{cond:U}{\textbf{(U)}} at the
-declaration (§5) — means an \textbf{obligation}, not a refusal, so \texttt{union(c,\ null)} is
-derivable there and carries \rulelink{cond:U}{\textbf{(U)}} per input.
+\texttt{union(c,\ null)} replaces it at any subterm. Where no discharger decides the pair, the pair
+carries \rulelink{cond:compat}{\textbf{(Compat)}} as an \textbf{obligation}, not a refusal, so \texttt{union(c,\ null)} is
+derivable there. The meet reads through \texttt{lazy}, and the certificate reads a \texttt{held} through its
+two views, so a \texttt{held} or a \texttt{lazy} subterm beside \texttt{null} is certified where the meet or the views
+reach the bottom.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -791,65 +789,79 @@ same reason: none of those positions has a name for anything to be absent from.
 
 \section{§5 Choice, and its side conditions}\label{5-choice-and-its-side-conditions}
 
-The rules a grammar cannot state, because they relate siblings rather than a term to its subterms,
-and, before them, the one semantic condition even the judgement cannot decide, which everything else
-in this section exists to approximate.
+The rules a grammar cannot state, because they relate siblings rather than a term to its subterms:
+the condition that makes a union lawful, and the decidable tests that discharge it.
 
-\subsection{Unique admission}\label{unique-admission}
+\subsection{Compatibility}\label{compatibility}
 
-A union's pair is defined by \textbf{unique admission}. Each option answers, per input and per side,
-whether the input could be its — an attribute on the way out, a value on the way in — and the union
-acts through the option that answers alone. Write \texttt{V(c)\ ⊆\ Value} for the values an option may be
+A union's pair is the \textbf{join} of its options. Each option answers, per input and per side,
+whether the input could be its: a value on the way out, an attribute on the way in. The union
+acts through the first option that answers. Write \texttt{V(c)\ ⊆\ Value} for the values an option may be
 asked to write and \texttt{A(c)\ ⊆\ 𝔸} for the attributes it may be asked to read.
 
-\begin{definition}[(U) unique admission]
-\label{cond:U}
-\lean{Calculus.UAtCan, Calculus.UAtAct}
+\begin{definition}[(Compat) compatibility]
+\label{cond:compat}
+\lean{Calculus.Compat, Calculus.PairwiseCompat}
 \leanok
 \begin{verbatim}
-strong      ∀ i. ∀ t ∈ dom(eᵢ).  {j : t ∈ V(cⱼ)} = {i}
-                              ∧  {j : eᵢ(t) ∈ A(cⱼ)} = {i}
-
-restricted  ∀ i. ∀ t ∈ dom(eᵢ).  {j : t ∈ V(cⱼ)} = {i}
-                              ⟹  {j : eᵢ(t) ∈ A(cⱼ)} = {i}
-            ∀ i. ∀ a ∈ dom(pᵢ).  {j : a ∈ A(cⱼ)} = {i}
-                              ∧  pᵢ(a) ∈ dom(eᵢ)
-                              ⟹  {j : pᵢ(a) ∈ V(cⱼ)} = {i}
+Compat(c, d)     ∀ a t.  p_c(a) = t  ∧  (a ∈ dom(p_d)  ∨  t ∈ dom(e_d))
+                                     ⟹  p_d(a) = t
+union(c₁ … cₙ)   obliges  ∀ i j.  Compat(cᵢ, cⱼ)
 \end{verbatim}
-Resolving one side alone resolves the other, the same option. Asked where the union \emph{acts}: at
-each value it writes, and each attribute it reads. Ambiguity is a failure, never a rank. The letter
-names the strong form: at every canonical pair of every option, that option alone admits the
-value, and that option alone admits the attribute. What \rulelink{rule:union}{\texttt{(union)}} carries as an
-obligation is weaker, the same demand restricted to the inputs the union itself resolves, and the
-strong form implies it.
+Two options agree wherever they overlap. An attribute that both read, they read to one value. A
+value that one option reads from an attribute, the other writes at that attribute or leaves alone.
+At lawful codecs the relation is symmetric (\texttt{compat\_symm}). It is the compatibility of inverse
+semigroups: two partial bijections are compatible exactly when their union is a partial bijection
+\cite{inverse-semigroups}.
 \end{definition}
 
-\begin{definition}[(D) the selector is total on the held set]
-\label{cond:D}
-\lean{Calculus.DIncomp, Calculus.SelTotal, Calculus.countSel_total}
+\begin{theorem}[a compatible union is lawful]
+\label{thm:join-lawful}
+\uses{cond:compat}
+\lean{Calculus.lawful_altCodec, Calculus.altCodec_e_of_mem}
 \leanok
-\texttt{∀\ v\ ∈\ ⋃ᵢ\ Tᵢ.\ select(v)\ =\ i\ ∧\ v\ ∈\ dom(eᵢ)}.
-Well-formedness: each value the union holds selects one option, and that option writes the value.
-(D) is a property of the selector, not of a shape of the options. The selector of
-\rulelink{rule:union}{\texttt{(union)}} is the count: an option wins where it is the only option that admits the value.
-For the count, totality is \texttt{∀\ i\ ≠\ j.\ Tᵢ\ ∩\ Tⱼ\ =\ ∅}, and that is the premise the rule carries. A nested
-pair fails it: \texttt{union(literal("A"),\ string)} holds \texttt{"A"}, both options admit \texttt{"A"}, and the union
-writes nothing. A crossing pair fails it too. An empty option is the unit of the sum: it is disjoint
-from every held set, so it cannot make a union ambiguous. Under (D) the judgement's index is
-exact: a derivable term holds exactly the values it admits (\texttt{typed\_T\_adm}). (D) does \textbf{not} discharge the readable
-side, for the reason the machinery of admission gives.
-\end{definition}
+Over lawful, pairwise compatible options, the union is lawful, and it writes each value that any
+option writes, at the attribute that option writes.
+\end{theorem}
+
+\begin{theorem}[the order of the options is unobservable]
+\label{thm:join-perm}
+\uses{cond:compat}
+\lean{Calculus.altCodec_perm}
+\leanok
+Over lawful, pairwise compatible options, a permutation of the options gives the same codec, on
+the nose.
+\end{theorem}
+
+\begin{theorem}[without compatibility the order is observable]
+\label{thm:join-order}
+\lean{Calculus.flip_order_observable, Calculus.not_compat_flip}
+\leanok
+\texttt{boolean} beside its negation under \texttt{held} is two lawful options that are not compatible,
+and the two orders write \texttt{true} at two different attributes.
+\end{theorem}
+
+So declaration order enters the definition of the union and leaves again as a theorem, and
+compatibility is the condition under which it leaves. A value that two compatible options admit has
+no owner, because no operation can observe one.
+
+\textbf{The index is exact with no condition.} A union writes wherever one of its options writes, so
+a derivable term holds exactly the values it admits (\texttt{typed\_T\_adm}), a union included. An empty
+option is the unit of the sum: it is compatible with every option (\texttt{pairwiseCompat\_never\_left},
+\texttt{pairwiseCompat\_never\_right}).
 
 \begin{definition}[(union)]
 \label{rule:union}
-\uses{cond:D}
+\uses{cond:compat}
 \lean{Calculus.Typed.union}
 \leanok
 \begin{verbatim}
-⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)    (D)
+⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)
 ─────────────────────────────────────────────────────────────────── (union)
 ⊢ union(c₁ … cₙ) : ⋃ Tᵢ ⇝ (μ if ∀i. μᵢ = μ;  else ⊤)
 \end{verbatim}
+The rule carries no side condition. \rulelink{cond:compat}{\textbf{(Compat)}} is an obligation of the derivation
+(\texttt{Obligations}), and soundness takes it as a premise.
 \end{definition}
 
 \begin{definition}[(dunion)]
@@ -869,49 +881,44 @@ an old row supplies one outer \texttt{extendRead} reader for the whole union.
 \textbf{Arity one at the discriminator}, and n-ary literals everywhere else. The rule asks for a single
 tag \texttt{tᵢ} per variant, and disjointness of singletons is distinctness. Soundness does not need the
 restriction: \rulelink{rule:literal}{\texttt{(literal)}} is n-ary, a set of tags is a perfectly good
-admissible set, and pairwise disjointness is the condition (U) needs.
+admissible set, and disjoint options are compatible, so pairwise disjointness discharges the
+obligation.
 
 What required it is what a discriminated union \emph{is}. It is a \textbf{lookup}: the stored tag chooses
 the variant. A variant answering to two tags is a key that does not identify its variant, and a
 reader who has the tag still cannot say which shape they hold without consulting the table twice.
 
-Read \rulelink{cond:U}{\textbf{(U)}} carefully, because the scope is the whole content. \texttt{∣\{i\ :\ cᵢ\ admits\ it\}∣\ =\ 1} at
-\emph{every} input would be a stronger demand, and a wrong one: where two options both admit, the union
-is simply undefined, and a law quantified over \texttt{dom} cannot reach an input the pair declines. What
-the laws need is that ambiguity never appears \emph{on the far side of a round trip the union did take} —
-\texttt{e(t)} unambiguous on the way out obliges \texttt{e(t)} to be unambiguous on the way back. An input the
-union refuses outright asks nothing of anyone.
+The join decides real schemas, and the next example is one.
+\texttt{union(array(literal("A")),\ array(literal("B")))} has both options admitting \texttt{{[}{]}}, and both write
+\texttt{⟨L,\ {[}{]}⟩}. So the options are compatible (\texttt{pairwiseCompat\_array\_literals}), and the union writes
+the empty array and reads it back.
 
-The difference decides real schemas, and the next example is one.
-\texttt{union(array(literal("A")),\ array(literal("B")))} has both options admitting \texttt{{[}{]}}, so it declines to
-write the empty array, but every value it does write is read back by the one option that wrote it.
-Under the stronger reading the union is refused; under this one it is lawful, minus the empty case.
+\subsection{The dischargers}\label{the-dischargers}
 
-Declaration order is never consulted, which is what puts commutativity in §6, and why \texttt{extendRead}'s
-coherence premise (§3) matters beyond \texttt{extendRead}: a precedence between readings anywhere in the
-calculus would be a union resolved by rank, which is what \rulelink{cond:U}{\textbf{(U)}} refuses.
-
-\rulelink{cond:U}{\textbf{(U)}} quantifies over inputs, so it is not decidable at the declaration, where a
-codec is built and its subterms are known but no input is. The rest of
-this section is its \textbf{dischargers} — decidable conditions, each sufficient for \rulelink{cond:U}{\textbf{(U)}} on the
+\rulelink{cond:compat}{\textbf{(Compat)}} quantifies over inputs, so it is not decidable at the declaration, where a
+codec is built and its subterms are known but no input is. The rest of this section is its
+\textbf{dischargers}: decidable conditions, each sufficient for \rulelink{cond:compat}{\textbf{(Compat)}} on the
 unions it covers:
 
 \begin{tabular}{@{}lll@{}}
 \toprule
-Discharger & Decides & From \\
+Discharger & Covers & From \\
 \midrule
-distinct members & the readable side, where the stored attributes differ & \texttt{μ}, the judgement's own index \\
-disjoint option admission, \texttt{∀\ i\ ≠\ j.\ V(cᵢ)\ ∩\ V(cⱼ)\ =\ ∅} on the writable side and \texttt{A(cᵢ)\ ∩\ A(cⱼ)\ =\ ∅} on the readable one & either side, each side asked on its own & admission and occupancy (one coarse label per term per side), below \\
-tag disjointness & \rulelink{rule:dunion}{\texttt{(dunion)}}, outright — both sides & the discriminator literals \\
-disjoint predicates over one base & refinements of a common \texttt{c}, outright — both sides & the predicates \texttt{q} \\
-kind disjointness & \texttt{opaque}'s fixpoint (§3), outright & one option per kind of §2 \\
+held-free options & every pair of terms with no \texttt{held} & both sit below \texttt{opaque}, which reads each value from one attribute (\texttt{pairwiseCompat\_of\_HF}) \\
+a common canonical bound & two restrictions of one adapter & \texttt{compat\_of\_common\_bound} \\
+separation & two options that no input reaches both of & the certificate below (\texttt{pairwiseCompat\_of\_separated}) \\
+an empty option & a pair with \texttt{never} on a side & \texttt{pairwiseCompat\_never\_left}, \texttt{pairwiseCompat\_never\_right} \\
+kind exclusivity & \texttt{opaque}'s fixpoint (§3) & \texttt{compat\_opaque} \\
+tag disjointness & \rulelink{rule:dunion}{\texttt{(dunion)}}, outright & the discriminator literals \\
+a slice & a sublist of a compatible union & \texttt{pairwiseCompat\_sublist}, \texttt{pairwiseCompat\_extract}, \texttt{pairwiseCompat\_exclude} \\
 \bottomrule
 \end{tabular}
 
-\textbf{Every row is one condition at a different projection.} Fix a partial map from inputs to labels —
-a stored member, a runtime kind, a discriminator's tag — and give each option the set of labels it
-answers to. Where those sets are pairwise disjoint, no input can reach two options, because the
-label is a property of the \emph{input} and lands in at most one set. That is the whole argument.
+\textbf{Separation is one condition at a different projection.} Fix a partial map from inputs to
+labels, such as a stored member, a runtime kind or a discriminator's tag, and give each option the set of
+labels it answers to. Where those sets are pairwise disjoint, no input can reach two options,
+because the label is a property of the \emph{input} and lands in at most one set. That is the whole
+argument.
 
 Said more directly, without projections at all: \textbf{each option gets one set of values it may write
 and one set of attributes it may read, and separation is disjointness of those two families.} A
@@ -924,93 +931,66 @@ Read that way the admission row stops offering a \emph{choice} between a shape a
 simply \textbf{intersect} — an option may write \texttt{v} only if its shape allows the constructor of \texttt{v} \emph{and}
 it admits \texttt{v} — and disjointness of the intersections follows from disjointness in either factor. A
 coarse shape and an exact set are two factors of one family rather than two mechanisms, which is why
-one row carries both. The two families are also independent, which is the point the pairwise reading
-obscures: the writable side may be separated by a shape while the readable side is separated by a
-member, and nothing has to reconcile the two.
+one row carries both. The two families are also independent: the writable side may be separated by
+a shape while the readable side is separated by a member, and nothing has to reconcile the two.
 
 What is left to distinguish the rows is one thing only: whether a row constrains \emph{both} families or
 one. \texttt{μ} labels attributes and nothing else, so the member row settles the readable side and never
-the writable one. A discriminator's tag and §1's kind label both, which is why those two settle
-\rulelink{cond:U}{\textbf{(U)}} outright. The admission row is asked once per side and may settle one side or both; a
-union is resolved when both sides are resolved, by whatever combination of rows reaches them.
+the writable one. A discriminator's tag and §1's kind label both, which is why those two settle a
+pair outright. A pair is separated when both sides are separated, by whatever combination of rows
+reaches them.
 
 Read that way, \rulelink{rule:dunion}{\texttt{(dunion)}} is not a second kind of sum. It is \rulelink{rule:union}{\texttt{(union)}} with admission \textbf{read
-off} the discriminator instead of attempted, and its \rulelink{cond:U}{\texttt{(U)}} needs no discharge, because reading a
+off} the discriminator instead of attempted, and its separation needs no discharge, because reading a
 label off an input reaches one variant by construction.
 
-What no discharger covers stays an obligation the semantics enforces per input by failing — safe for
-every law except \rulelink{cond:R}{\textbf{(R)}} at a canonical attribute, and that residue is what the theorem
-below names. An option whose shape is \texttt{⊤} is one the admission row never separates, for the same
-reason it cannot be checked: it could be anything. That costs nothing, because failing to discharge is not
-refusing: \rulelink{cond:U}{\textbf{(U)}}
-still guards each value the option is actually given.
+What no discharger covers is an undischarged obligation. The model still derives the union, and
+soundness does not reach it. The library refuses it at the declaration, because the pair is not
+shown compatible.
 
-\subsection{A weaker condition, and what it costs}\label{a-weaker-condition-proved-and-not-adopted}
-
-The reading above rejects \texttt{∣\{i\ :\ cᵢ\ admits\ it\}∣\ =\ 1} as too strong and settles for \emph{undefined at the
-overlap}. There is a third position between them.
-
-\textbf{Confluent admission.} Where several options admit, require only that they \textbf{agree}, and then
-act. Stated as \emph{first-match plus an obligation}, which is what makes it usable: the rule takes the
-first admitter and never compares attributes, while the obligation says the choice did not matter.
-So declaration order enters the definition and leaves again as a theorem: the first-match rule is
-one half, the agreement obligation the other.
-
-It is strictly weaker than \rulelink{cond:U}{\textbf{(U)}}, so strictly more total, and the case it gains is the one this
-section already named as the price: \texttt{union(array(literal("A")),\ array(literal("B")))} writes \texttt{{[}{]}},
-because both options write \texttt{⟨L,\ {[}{]}⟩} and the choice is inconsequential. "Lawful, minus the empty
-case" loses the \emph{minus}.
-
-What it costs is stated as plainly. \textbf{Order-independence stops being unconditional.} Under \rulelink{cond:U}{\textbf{(U)}}
-commutativity is a fact about the definition: §6's \texttt{union(c₁,\ c₂,\ …)\ ≡\ union(c₂,\ c₁,\ …)} has no
-hypotheses. Under confluence it holds \emph{given the obligation}, and a specification whose commutativity
-rests on a premise is weaker as a specification, whatever it gains in totality. That trade is the
-reason this is recorded here and not adopted.
-
-And it changes what the fixpoint argument says. That a union whose options are genuinely recursive
-has no fixpoint semantics in general is a refutation of \textbf{counting}, not of \texttt{union}. \texttt{opaque} is a
-recursive union with a lawful fixed point, because its options are pairwise kind-disjoint:
-
-\begin{theorem}[confluent admission survives the refutation]
-\label{thm:confluent-survives}
-\uses{cond:U}
-\lean{Calculus.confluent_survives_the_refutation}
+\begin{definition}[the certificate]
+\label{def:certificate}
+\uses{cond:compat}
+\lean{Calculus.certPair, Calculus.meetNever, Calculus.certViews}
 \leanok
-In the witness both options write \texttt{⟨S,"A"⟩}, so the weaker rule still resolves where counting
-collapses to \texttt{none}.
-\end{theorem}
+Two options are certified when their meet is the bottom, or, where a \texttt{held} occurs, when their
+caller views meet at the bottom and their stored views meet at the bottom. The view of a union is
+the union of its options' views, because a union admits where one of its options admits. A
+certified pair is separated (\texttt{separates\_of\_certPair}), so it is compatible. The certificate is
+sufficient and not necessary: two restrictions of one adapter that overlap are compatible, and no
+certificate reaches them.
+\end{definition}
 
-\begin{theorem}[confluent admission is monotone]
+\subsection{The join is monotone}\label{the-join-is-monotone}
+
+First-match resolution grows with its options where the options that admit agree. It is stated as
+first-match plus an obligation: the rule takes the first admitter and never compares attributes,
+and the obligation says that the choice did not matter. Over lawful, compatible options the
+obligation holds, because each option that admits a value writes it at one attribute
+(\rulelink{thm:join-lawful}{the lawful-join Theorem}).
+
+\begin{theorem}[first-match resolution is monotone]
 \label{thm:confluent-mono}
-\uses{cond:U}
-\lean{Calculus.selectF_mono}
+\uses{cond:compat}
+\lean{Calculus.selectF_mono, Calculus.selectF_mono_list}
 \leanok
-Monotone given the obligation, which counting provably lacks.
+Monotone, given that the options that admit agree.
 \end{theorem}
 
-\begin{theorem}[confluent admission is continuous]
+\begin{theorem}[first-match resolution is continuous]
 \label{thm:confluent-continuous}
-\uses{cond:U}
+\uses{cond:compat}
 \lean{Calculus.selectF_continuous_list, Calculus.selectF_continuous}
 \leanok
 Continuous, and in general this needs the obligation \textbf{at each stage} too. The two-option case
 escapes it by putting the growing option first, which makes it automatically the first admitter.
 \end{theorem}
 
-Counting's continuity \emph{is} unconditional — its singleton requirement at the limit forces
-uniqueness at every earlier stage — and counting cannot be monotone at all. So one requirement, the
-obligation holding at every stage, buys both; what unique admission cannot buy at any price is
-monotonicity, being a \emph{negative} condition on the other options.
-
-Two things that are \textbf{not} established, and the second is why \texttt{lazy} under \texttt{union} is
-outside the theorem. A fixpoint is not shown to exist: monotonicity and continuity are its obligations, not
-its construction, and both theorems are the two-option case. And the obligation must hold at every
-stage of an unrolling, which is not automatic: two \emph{ground} terms both take \texttt{.str\ "1.5"}
-and store it differently. Where the options are pairwise disjoint it is
-vacuous, so a syntactic disjointness test on the options is what would license it.
-
-\textbf{Normatively, the rule is unique admission as stated above.} This subsection records a proved
-alternative and the trade, not a change to the judgement.
+Two things are \textbf{not} established. A fixpoint is not shown to exist: monotonicity and continuity
+are its obligations, not its construction, and the model carries no recursive term, because
+\texttt{Term.lazy} carries a plain term. And the obligation must hold at every stage of an unrolling.
+\texttt{opaque} meets it at every stage, because its options are kind-exclusive (\texttt{compat\_opaque}), and
+\texttt{lawful\_opaqCodecω} proves its fixed point lawful.
 
 \subsection{The machinery of admission}\label{the-machinery-of-admission}
 
@@ -1052,7 +1032,8 @@ terms force the point:
 What exactness costs is decidability. \texttt{held} carries an
 arbitrary \texttt{f}, \texttt{refine} an arbitrary \texttt{q}, so membership of an admissible set is not a question the
 declaration can answer. Admission \textbf{specifies} the two families. It does not decide them. What the
-discharger row runs is occupancy and option admission, and those are decided.
+certificate runs is the meet, and the meet is decided. The proofs of the meet's bottom rows use
+occupancy to justify them.
 
 \textbf{Admission is what a union consults, at every option.} A union attempts each option's codec, an
 object option included, so \texttt{V(c)} and \texttt{A(c)} are \emph{option} admission as well: \texttt{dom(e)} and
@@ -1067,24 +1048,26 @@ at \texttt{never} at a required name, and the certificate accepts the pair on th
 
 An open object's rest takes part in the attempt: an undeclared name reaches the option where its rest
 codec holds the name. An \texttt{opt} binding \textbf{widens} admission, which makes two options differing only
-in optional names the ambiguity to watch: two objects declaring only optional names both admit the
-empty map, however disjoint their names. \rulelink{rule:dunion}{\texttt{(dunion)}}'s disjoint-literal premise is the
+in optional names the overlap to watch: two objects declaring only optional names both admit the
+empty map, however disjoint their names. Where both are held-free they are compatible, and the
+union writes the empty map once. \rulelink{rule:dunion}{\texttt{(dunion)}}'s disjoint-literal premise is the
 special case where the discriminator's names decide alone.
 
 \begin{definition}[occupancy]
 \label{def:occupancy}
-\uses{cond:U}
+\uses{cond:compat}
 \lean{Calculus.occV, Calculus.occA}
 \leanok
 One coarse label per term per side: which constructor of \texttt{Value} the term may write, and
-which member of §1 it may store. Occupancy is what decides at the declaration.
+which member of §1 it may store. The proofs of the meet's bottom rows use occupancy
+(\texttt{Adm\_and\_false}, \texttt{AdmA\_and\_false}).
 \end{definition}
 
 Both over-approximate, and over-approximating is the safe direction — if \texttt{X\ ⊆\ X′}, \texttt{Y\ ⊆\ Y′} and
 \texttt{X′\ ∩\ Y′\ =\ ∅} then \texttt{X\ ∩\ Y\ =\ ∅} — so a coarse answer costs a discharge and never buys a wrong one.
-Where a term carries an arbitrary function the answer is \texttt{⊤}, every label: \texttt{held}'s \texttt{f} runs before
-the subterm and can move a value into any constructor, and
-\texttt{extendRead}'s \texttt{r} is arbitrary on the reading side.
+A \texttt{held} takes its write occupancy from its caller-side term and its read occupancy from its
+stored-side term, so its two labels can differ. A \texttt{lazy} and a \texttt{refine} take their subterm's
+occupancy. Only \texttt{opaque} answers \texttt{⊤}, every label.
 
 \textbf{The writable side's label is the constructor of the value, not the runtime kind}, and the
 difference does work. A kind collapses the three set families into one; the constructors do not, and
@@ -1092,15 +1075,13 @@ difference does work. A kind collapses the three set families into one; the cons
 separate what eight kinds cannot. The readable side's label is the member, which the judgement's \texttt{μ}
 index already computes.
 
-\texttt{⊤} covers two situations the check treats alike and the semantics does not: \textbf{unknown} — \texttt{held}
-and \texttt{lazy}, whose answer exists but cannot be read without forcing — and \textbf{everything} —
-\texttt{opaque}, which accepts every kind by design. The row separates neither, and both fall to \rulelink{cond:U}{\textbf{(U)}}
-per input. The difference resurfaces only inside \texttt{opaque}'s own derivation, where "everything" is
-precisely what makes its fixpoint's options pairwise kind-disjoint (§3).
+\texttt{⊤} is \texttt{opaque}'s answer, because \texttt{opaque} accepts every kind by design. A \texttt{held} and a \texttt{lazy}
+have a label of their own: \texttt{lazy(string)} beside \texttt{null}, and \texttt{flipBool} beside \texttt{null}, are each certified. That \texttt{opaque} accepts every kind is also what makes its
+fixpoint's options pairwise kind-exclusive.
 
 \begin{definition}[the family, conjoined]
 \label{def:family}
-\uses{def:occupancy,cond:U}
+\uses{def:occupancy,cond:compat}
 \lean{Calculus.OrthSV, Calculus.OrthSA}
 \leanok
 An option's set of values is its occupancy intersected with
@@ -1110,51 +1091,42 @@ its option admission, and its set of attributes likewise.
 Disjointness in either factor is enough,
 which is what leaves the row decidable where it decides at all: \textbf{on one side, two options separate
 when their occupancies on that side are disjoint. On both sides at once, they separate when one
-option requires a name the other does not declare.} That is a question about two terms, answered by computation at
-the declaration. What it declines is an obligation and not a refusal. No input reaches two
-options where option admission is disjoint, and that needs option admission itself. At a derivable
-term the held set is the admission, so \rulelink{cond:D}{\textbf{(D)}} decides the writable side of a derivable union.
+option requires a name the other does not declare.} That is a question about two terms, answered by
+computation at the declaration. What it declines is an undischarged obligation, not a refusal of
+compatibility.
 
-Only \rulelink{cond:D}{\textbf{(D)}} is a premise, and it is the only condition here with a letter, because it appears in
-a rule. Everything in the discharger table is a discharger, and the asymmetry is not an
-oversight: \rulelink{cond:D}{\textbf{(D)}} is a condition on the judgement's own index, so the rule can demand it, while
-a discharger answers a question about inputs that the rule states as \rulelink{cond:U}{\textbf{(U)}} and settles where it
-can.
-A union no discharger covers is still a term, and what such a union lacks is the theorem: its
-\rulelink{cond:U}{\textbf{(U)}} is unsettled at the declaration, and the semantics enforces it per input by
-failing. Note where the failing lands, and that it is a fact about the two terms rather than a limit
-of any table: a container admits its empty case whatever its element admits, so two container
-options collide at exactly one input — the empty array, the empty map — which is also the one
-input neither writes nor reads once they collide. Both options hold that input, so
-\rulelink{cond:D}{\textbf{(D)}} refuses the pair: the union holds a value that it does not write.
-The same union built from \texttt{object}s is certified outright, by names: a \texttt{req} binding is a name the
-empty item lacks, so there is no empty case to collide at.
+Note where two container options overlap, and that it is a fact about the two terms rather than a
+limit of any table: a container admits its empty case whatever its element admits, so two container
+options share exactly one input: the empty array, or the empty map. Where the options are compatible,
+both write that input at one attribute, and the union writes it. The same union built from
+\texttt{object}s is separated outright, by names: a \texttt{req} binding is a name the empty item lacks, so
+there is no empty case to share.
 
-\rulelink{cond:D}{\textbf{(D)}} and the admission row ask the same kind of question of the two sides of the pair. On the
-writable side \rulelink{cond:D}{\textbf{(D)}} implies the row, because a derivable term holds what it admits. On the readable
-side it implies nothing, for the reason below. \texttt{union(array(string),\ array(number))} fails
-\rulelink{cond:D}{\textbf{(D)}}: both options write a sequence, both store \texttt{L}, and both hold the empty array.
+\texttt{union(array(string),\ array(number))} is not separated: both options write a sequence, both store
+\texttt{L}, and both hold the empty array. It is compatible all the same, because both options are
+held-free.
 
 \texttt{union(set(string),\ set(number))} \emph{is} discharged, and on both sides, because
 the writable side is the one that labels by constructor. Those options store \texttt{SS} and \texttt{NS}, so
 reading was never in doubt; and they write a set of strings and a set of numerals, which are two
 constructors, so the writing is settled as well. What remains is a loss of a different kind: a set's
 member is computed from its element, so the options are \texttt{⇝\ SS} and \texttt{⇝\ NS} and the union's own \texttt{μ} is
-\texttt{⊤} by the \rulelink{rule:union}{\texttt{(union)}} rule. A \texttt{⊤} term is one only \rulelink{cond:MP}{\textbf{(MP)}} constrains, where a \texttt{⇝\ SS} term is pinned
+\texttt{⊤} by the \rulelink{rule:union}{\texttt{(union)}} rule. A \texttt{⊤} term is one only \rulelink{cond:C}{\textbf{(C)}} constrains, where a \texttt{⇝\ SS} term is pinned
 by \rulelink{cond:W}{\textbf{(W)}} and its read-side corollary. That loss is the union's and not the discharger's.
 
 Two pairs show the two families failing independently, one each way. \texttt{union(string,\ decimal)} writes a string at both options — a decimal is \emph{held} as a string — and
 stores \texttt{S} at one and \texttt{N} at the other, so the readable side separates and the writable one does
 not. \texttt{union(number,\ decimal)} is the mirror: a number writes a numeral and a decimal a string, and
-both store \texttt{N}, so the writable side separates and the readable one does not. Neither union is
-resolved, and each fails on a different half, which is why the two families are asked separately and
-never reconciled.
+both store \texttt{N}, so the writable side separates and the readable one does not. Neither pair is
+separated, and each fails on a different half, which is why the two families are asked separately and
+never reconciled. Neither pair is compatible either: the first writes one value at two attributes,
+and the second reads one attribute to two values.
 
 \textbf{Attempting an option answers a real question.} Whether a term \emph{decides its own membership} —
 whether "this option accepted the value" is evidence at all — is answered by an admissible set that
-\emph{is} \texttt{dom(e)}, and nothing is left for a second condition to add. \texttt{union(literal("A"),\ literal("B"))} is discharged
+\emph{is} \texttt{dom(e)}, and nothing is left for a second condition to add. \texttt{union(literal("A"),\ literal("B"))} is separated
 because \texttt{\{"A"\}} and \texttt{\{"B"\}} do not meet; \texttt{union(literal("A"),\ string)} is not, because \texttt{\{"A"\}} sits
-inside every string. A term that decides nothing about its values has the widest domain, and the
+inside every string. That pair is compatible all the same, because both options are held-free. A term that decides nothing about its values has the widest domain, and the
 widest domain is the one that fails to be disjoint.
 
 Two counterexamples bound the question, and each refutes one form of it:
@@ -1164,16 +1136,14 @@ Two counterexamples bound the question, and each refutes one form of it:
 \item
   \textbf{One side is not enough.} \texttt{union(literal("A"),\ string)} has the left option deciding its own
   membership, so "either option decides" is satisfied, and both options admit \texttt{"A"}. A real answer
-  from one option does not resolve a pair; the other option is still answering, and still
-  meaninglessly.
+  from one option does not separate a pair; the other option is still answering.
 \item
   \textbf{Two sides are not enough either.} \texttt{union(array(literal("A")),\ array(literal("B")))} has both
   options as decisive as a term can be, and both admit \texttt{{[}{]}}. Deciding at the element does not
   decide at the container: every container admits its empty case, which no element ever sees.
 \end{itemize}
 
-\textbf{A pair sharing a base separates where neither term's own sets do}, which is the discharger
-table's fourth row rather than this section's. \texttt{number} and
+\textbf{A pair sharing a base separates where neither term's own sets do}. \texttt{number} and
 every numeric literal are the \textbf{same base}: \texttt{WFNumeral}, which a literal refines at
 \texttt{∈\ ℓ}. Two literals over disjoint
 value sets are two refinements of one base; refinements of one base read an attribute to the \emph{same}
@@ -1192,71 +1162,48 @@ side. The member projection cannot distinguish either pair: both options are \te
 
 One note on what has no set of its own. \texttt{optional} is a \textbf{field} (§4), not a term,
 so nothing passes through it: admission is a function on terms and has no case to give it. And a
-union's own admission is not the join of its options' — it is the set where \textbf{exactly one} option
-admits, which is the union's own resolution, written as a set. Where two options both admit, the union writes nothing,
-which is the empty array above stated the other way round.
+union's own admission is the join of its options': the set where one option admits
+(\texttt{selOptV\_eq\_AdmAny}).
 
-\rulelink{cond:D}{\textbf{(D)}} is \emph{disjointness}, not incomparability. Two open object options \texttt{⟨a\ :\ String⟩} and
-\texttt{⟨b\ :\ String⟩} are incomparable yet share the inhabitant \texttt{⟨a\ ↦\ "1",\ b\ ↦\ "2"⟩}, so \rulelink{cond:D}{\textbf{(D)}} refuses
-them: the count selector writes nothing at the shared value.
+Two open object options \texttt{⟨a\ :\ String⟩} and \texttt{⟨b\ :\ String⟩} share the inhabitant
+\texttt{⟨a\ ↦\ "1",\ b\ ↦\ "2"⟩}, so they are not separated. They are compatible, because both are
+held-free, and the union writes the shared value once.
 
-Disjointness is not a discharger of the readable side, and the reason is the same
-confusion twice: \textbf{held sets are sets of values, and (U)'s readable side quantifies over
-attributes.} \texttt{held}
-is precisely the term that separates the two — its adapter relabels — so two options can hold
-disjoint sets of values and still read one attribute, each to its own value.
+Disjoint held sets do not discharge compatibility, and the reason is the same confusion twice:
+\textbf{held sets are sets of values, and compatibility's readable side quantifies over attributes.}
+\texttt{held} is precisely the term that separates the two, because its adapter relabels, so two options can
+hold disjoint sets of values and still read one attribute, each to its own value.
 \texttt{union(literal("A"),\ held(literal("A"),\ f,\ g))} with \texttt{f} and \texttt{g} swapping \texttt{"B"} for \texttt{"A"} holds
 \texttt{\{"A"\}} and \texttt{\{"B"\}}, which are disjoint on the nose, and both options read \texttt{S\ "A"} — the first to
-\texttt{"A"}, the second to \texttt{"B"}.
+\texttt{"A"}, the second to \texttt{"B"}. Such a pair is not compatible (\texttt{not\_compat\_shout} is the witness,
+with \texttt{"X"} and \texttt{"x"}).
 
-So \rulelink{cond:D}{\textbf{(D)}} is a well-formedness condition on the judgement's \texttt{T} index and not a discharger of
-\rulelink{cond:U}{\textbf{(U)}}: no condition on held sets can be one. What decides the readable side is a condition on
-\emph{stored attributes} — distinct members \texttt{μᵢ\ ≠\ μⱼ}, or disjoint readable-side admission — which is
-what the first two rows of the discharger table take. Attributes rather than values is the point: a
-condition on values cannot decide a question about attributes.
+So no condition on held sets discharges compatibility. What decides the readable side is a condition
+on \emph{stored attributes}, distinct members \texttt{μᵢ\ ≠\ μⱼ} or disjoint readable-side admission, which
+the separation row takes. Attributes rather than values is the point: a condition on values cannot
+decide a question about attributes.
 
 \subsection{Soundness of the judgement}\label{theorem-soundness}
 
-\begin{definition}[≼, member agreement]
-\label{def:agree}
-\uses{cond:MP}
-\lean{Calculus.Agree}
-\leanok
-§2 states \rulelink{cond:MP}{\textbf{(MP)}} per attribute "and recursively"; the proof
-needs that as a relation. Define \texttt{a\ ≼\ a′} by recursion on \texttt{a}:
-\begin{verbatim}
-a ≼ a′  ⟺  member(a) = member(a′)
-           ∧  member(a) = L ⟹ pointwise ≼ on shared positions
-           ∧  member(a) = M ⟹ pointwise ≼ on shared names
-\end{verbatim}
-\end{definition}
-
-Set members compare no deeper — an \texttt{SS} carries payloads, not attributes, so there is no member
-inside one to disagree on. Shared names, because a name on one side alone carries no member to disagree
-on. At a lawful codec the strong law holds as an equality, \texttt{e(p(a))\ =\ a}, by \texttt{Lawful.canon}. The strong law is \texttt{e(p(a))\ ≼\ a} on \texttt{dom(p)},
-and it implies \rulelink{cond:MP}{\textbf{(MP)}} as stated.
-
 \begin{theorem}[soundness]
 \label{thm:soundness}
-\uses{cond:R,cond:C,cond:W,cond:MP,cond:U,rule:lazy,rule:union,rule:dunion,rule:opaque}
+\uses{cond:R,cond:C,cond:W,cond:compat,rule:lazy,rule:union,rule:dunion,rule:opaque}
 \lean{Calculus.soundness, Calculus.soundness_core, Calculus.carrier_denote}
 \leanok
-Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, denotes a pair satisfying \rulelink{cond:R}{\textbf{(R)}},
-\rulelink{cond:C}{\textbf{(C)}}, \rulelink{cond:W}{\textbf{(W)}}, and \rulelink{cond:MP}{\textbf{(MP)}} in the strong form \texttt{e(p(a))\ ≼\ a}, with two residues,
-both named: every
-\rulelink{rule:union}{\texttt{(union)}} in the derivation carries \rulelink{cond:U}{\textbf{(U)}} \emph{where the union acts} as an obligation, which the
-dischargers of this section settle at the declaration wherever they decide a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and
-\texttt{opaque} outright; and a \rulelink{rule:lazy}{\texttt{(lazy)}} whose unfolding re-enters itself \textbf{through a union} is outside
-the theorem entirely, for the reason §5 gives under confluent admission and the \rulelink{rule:lazy}{\texttt{(lazy)}} case
-below repeats: there is no fixpoint there to prove anything about. Such a union is still derivable.
-What it lacks is the theorem, not a rule.
+Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, whose obligations hold, denotes a pair
+satisfying \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and \rulelink{cond:W}{\textbf{(W)}}. The obligations are each
+\rulelink{rule:held}{\texttt{(held)}}'s iso premise and each \rulelink{rule:union}{\texttt{(union)}}'s \rulelink{cond:compat}{\textbf{(Compat)}}. The
+dischargers of this section settle \rulelink{cond:compat}{\textbf{(Compat)}} at the declaration wherever they decide
+a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and \texttt{opaque} outright. A \rulelink{rule:lazy}{\texttt{(lazy)}} whose unfolding
+re-enters itself \textbf{through a union} is outside the theorem, because the model carries no
+recursive term. Such a union is still derivable. What it lacks is the theorem, not a rule.
 \end{theorem}
 
 The two premises on \rulelink{rule:legacy}{\texttt{(alternate reader)}}, \texttt{ran(r)\ ⊆\ dom(e)} and
 coherence, exist because this proof failed without them. Each excludes a term that the calculus
 would otherwise derive and the laws refuse. Null-honesty is not
 among them: the null point is an option of \rulelink{rule:union}{\texttt{(union)}}, so what would have been a
-premise is that sum's \rulelink{cond:U}{\textbf{(U)}}, and the sugar paragraph of §3 settles it.
+premise is that sum's \rulelink{cond:compat}{\textbf{(Compat)}}, and the sugar paragraph of §3 settles it.
 
 \begin{lemma}[injectivity]
 \label{lem:injectivity}
@@ -1286,10 +1233,10 @@ preserved. If the step satisfies a law pointwise, the lift satisfies it listwise
 \uses{cond:R,cond:C}
 \leanok
 \rulelink{cond:R}{\textbf{(R)}} because
-positions re-read in place, \rulelink{cond:C}{\textbf{(C)}} because each entry re-encodes, \texttt{≼} because a shared position
-decodes and re-encodes through the same step, and lengths survive both directions. Keyed products need
-no extra clause: \texttt{M} is a name set with a function on it, so keys are unique by type and \texttt{≼}'s \texttt{M}
-clause compares at a shared key with no first occurrence to prefer. Proved once; every product case
+positions re-read in place, \rulelink{cond:C}{\textbf{(C)}} because each entry re-encodes at the attribute it
+was read from, and lengths survive both directions. Keyed products need no extra clause: \texttt{M} is
+a name set with a function on it, so keys are unique by type and there is no first occurrence to
+prefer. Proved once; every product case
 below is an instantiation.
 \end{proof}
 
@@ -1300,8 +1247,8 @@ first says what the pair \emph{is} — the denotation is part of the rule — th
 grouping is the algebra of §7: points, wrappers, products, sums.
 
 \textbf{Points.} Each ground term writes one member, totally on its held set, and reads exactly that
-member back into the held set. \rulelink{cond:W}{\textbf{(W)}} and \rulelink{cond:C}{\textbf{(C)}} are immediate, \texttt{≼} is member equality with no
-substructure, and \rulelink{cond:R}{\textbf{(R)}} is the carrier's round trip: identity for \texttt{string}, \texttt{boolean}, \texttt{binary},
+member back into the held set. \rulelink{cond:W}{\textbf{(W)}} and \rulelink{cond:C}{\textbf{(C)}} are immediate, and
+\rulelink{cond:R}{\textbf{(R)}} is the carrier's round trip: identity for \texttt{string}, \texttt{boolean}, \texttt{binary},
 \texttt{null} (whose held set is the single value \texttt{null} and whose payload is \texttt{∗}), \texttt{number} and a numeric
 \texttt{literal}, whose carrier is \texttt{WFNumeral} on both halves. \texttt{decimal} is \texttt{held} over \texttt{number}, below: a
 numeral in \texttt{Stored} is returned as written, which is what \texttt{Stored} is chosen to make true, so
@@ -1310,25 +1257,25 @@ numeral in \texttt{Stored} is returned as written, which is what \texttt{Stored}
 \textbf{Wrappers.}
 
 \emph{held.} \texttt{e\ =\ e\_c\ ∘\ f}, \texttt{p\ =\ g\ ∘\ p\_c}. \rulelink{cond:R}{\textbf{(R)}}: \texttt{g(p\_c(e\_c(f\ t)))\ =\ g(f\ t)\ =\ t}. \rulelink{cond:C}{\textbf{(C)}}:
-\texttt{e(p(a))} asks \texttt{f(g(p\_c\ a))\ =\ p\_c\ a\ ∈\ dom(e\_c)}, the premise's \rulelink{cond:C}{\textbf{(C)}}. \texttt{≼}:
-\texttt{e(p(a))\ =\ e\_c(p\_c(a))}, the premise's hypothesis. \rulelink{cond:W}{\textbf{(W)}}: the member is untouched.
+\texttt{e(p(a))\ =\ e\_c(f(g(p\_c\ a)))\ =\ e\_c(p\_c\ a)\ =\ a}, by the iso premise and the premise's
+\rulelink{cond:C}{\textbf{(C)}}. \rulelink{cond:W}{\textbf{(W)}}: the member is untouched.
 
-\emph{refine.} \texttt{e\ =\ e\_c} on \texttt{q}; \texttt{dom(p)\ =\ p\_c⁻¹(q)}. All four laws restrict.
+\emph{refine.} \texttt{e\ =\ e\_c} on \texttt{q}; \texttt{dom(p)\ =\ p\_c⁻¹(q)}. All three laws restrict.
 
 \emph{legacy.} \texttt{e\ =\ e\_c}; \texttt{p\ =\ p\_c\ ∪\ r}, a function \emph{because} of coherence — without that premise the
-definition needs a precedence between the two readings, and a precedence is a union with a
-privileged write path, the resolution order \rulelink{cond:U}{\textbf{(U)}} exists to refuse. \rulelink{cond:R}{\textbf{(R)}}: \texttt{e\_c(t)\ ∈\ dom(p\_c)}
+definition needs a precedence between the two readings, and a precedence between two incompatible
+readings is a union whose order is observable, which \rulelink{cond:compat}{\textbf{(Compat)}} exists to refuse. \rulelink{cond:R}{\textbf{(R)}}: \texttt{e\_c(t)\ ∈\ dom(p\_c)}
 by the premise's \rulelink{cond:R}{\textbf{(R)}}, and coherence makes any overlap with \texttt{dom(r)} agree, so the composite
-reads it to \texttt{t}. \rulelink{cond:C}{\textbf{(C)}}: on \texttt{dom(p\_c)} by the premise; on the extension it \emph{is}
-\texttt{ran(r)\ ⊆\ dom(e)} — without it a migrated attribute reads and the write-back is the failure.
-\rulelink{cond:W}{\textbf{(W)}}: unchanged. \texttt{≼}: on \texttt{dom(p\_c)} by hypothesis; on the extension it is what the term
-is licensed to break, and no further — \texttt{e(r(a))} is canonical, so the breach does not survive its
+reads it to \texttt{t}. The weaker form of \rulelink{cond:C}{\textbf{(C)}}: on \texttt{dom(p\_c)} by the premise; on the
+extension it \emph{is} \texttt{ran(r)\ ⊆\ dom(e)}: without it a migrated attribute reads and the write-back
+is the failure. \rulelink{cond:W}{\textbf{(W)}}: unchanged. \rulelink{cond:C}{\textbf{(C)}} itself: on \texttt{dom(p\_c)} by
+hypothesis; on the extension it is what the reader is licensed to break, and no further: \texttt{e(r(a))} is canonical, so the breach does not survive its
 own round trip, which is the precise sense in which a migrated row behaves like a current one from
 the first rewrite on.
 
 \emph{nullable.} Two cases, by the guard of §3, and neither carries a premise.
 
-Where \texttt{owns(c)}, the pair \emph{is} \texttt{c}'s — \texttt{e\ =\ e\_c}, \texttt{p\ =\ p\_c} — and all four laws are the
+Where \texttt{owns(c)}, the pair \emph{is} \texttt{c}'s, \texttt{e\ =\ e\_c} and \texttt{p\ =\ p\_c}, and all three laws are the
 hypothesis, restated at a \texttt{⊤} index where \rulelink{cond:W}{\textbf{(W)}} is vacuous.
 
 Where it does not, \texttt{e}: \texttt{null\ ↦\ ⟨NULL,\ ∗⟩}, else \texttt{e\_c}; \texttt{p}: \texttt{⟨NULL,\ ∗⟩\ ↦\ null}, else \texttt{p\_c}, and
@@ -1339,9 +1286,9 @@ without the guard, \texttt{nullable(held(nullable(string),\ f,\ g))} with \textt
 would encode the sentinel as \texttt{⟨NULL,\ ∗⟩} and read back \texttt{null}; with it, the inner \texttt{nullable} owns
 the point and the outer one adds nothing. \rulelink{cond:C}{\textbf{(C)}}: \texttt{⟨NULL,\ ∗⟩} round-trips; else \texttt{p\_c(a)\ ≠\ null},
 because if it were, the hypothesis's \rulelink{cond:C}{\textbf{(C)}} would put \texttt{null} in \texttt{dom(e\_c)} and \texttt{owns(c)} would
-hold, so the \texttt{e\_c} branch answers. \texttt{≼} at \texttt{⟨NULL,\ ∗⟩} is exact; elsewhere it is the hypothesis, and
-what rules out a non-\texttt{NULL} attribute reading to \texttt{null} and re-encoding as \texttt{⟨NULL,\ ∗⟩} — the member
-change \rulelink{cond:MP}{\textbf{(MP)}} exists to refuse — is the same fact.
+hold, so the \texttt{e\_c} branch answers, and it writes the attribute back by the hypothesis's
+\rulelink{cond:C}{\textbf{(C)}}. What rules out a non-\texttt{NULL} attribute reading to \texttt{null} and re-encoding as
+\texttt{⟨NULL,\ ∗⟩}, the member change that \rulelink{cond:MP}{\textbf{(MP)}} refuses, is the same fact.
 
 \texttt{owns(nullable(c))} always, so the second case never nests: §6's idempotence is the construction,
 not an equation the proof has to earn.
@@ -1358,12 +1305,10 @@ covers this \texttt{γ} is not the induction but partiality — each wrapper mov
 order, so the unfolding never gains a definedness it did not start with, and it defines nothing at
 that input. The laws quantify over \texttt{dom} and hold over an empty one.
 
-\textbf{Through a union.} Outside the theorem, and this is the third residue. Unique admission is a
-\emph{negative} condition on the other options, so it is anti-monotone in exactly the argument a
-fixpoint must grow: as the recursive options grow, admission grows, and the answer collapses from
-\texttt{some} to \texttt{none}. There is no least fixpoint, so there is no pair here to prove the laws of — not a
-pair with an empty domain, which is what the wrapper case has, but no semantics at all. That is the
-same exclusion §5 records under confluent admission, and it is a residue of this theorem.
+\textbf{Through a union.} Outside the theorem, because the model carries no recursive term:
+\texttt{Term.lazy} carries a plain term. Under the join, first-match resolution is monotone and continuous
+where the options that admit agree, and those are the two obligations of a least fixpoint. The
+construction itself is not stated.
 
 Partiality is doing the termination argument's work in the second case, which is why it has to be
 its own step.
@@ -1373,67 +1318,63 @@ its own step.
 \texttt{𝔸} as before. \rulelink{rule:field}{\texttt{(field)}} and \rulelink{rule:optional}{\texttt{(optional)}} set \texttt{e♭\ =\ e}, \texttt{p♭\ =\ p}; absence is handled at \rulelink{rule:object}{\texttt{(object)}},
 where an \texttt{opt} name absent in the item is a binding absent in the record. A required name
 must be present on both current-schema sides.
-\texttt{≼} quantifies over \texttt{𝔸}, so \texttt{ε} asks nothing.
+\rulelink{cond:C}{\textbf{(C)}} quantifies over \texttt{𝔸}, so \texttt{ε} asks nothing.
 
 \textbf{Products} — each an instantiation of the \rulelink{lem:traversal}{traversal Lemma}.
 
 \emph{array, tuple, tuple-tail, record.} The step is the subterm's pair at each position or name — a
 tuple first aligns positions with their codecs, head positionally and tail uniformly, length
-mismatches refusing. The Lemma gives all four laws from the induction hypotheses; an \texttt{extendRead}
-element is where the \rulelink{cond:MP}{\textbf{(MP)}} exemption propagates — pointwise, on the positions it rereads, per
-§2.
+mismatches refusing. The Lemma gives all three laws from the induction hypotheses; an \texttt{extendRead}
+element is where the breach of \rulelink{cond:C}{\textbf{(C)}} propagates, pointwise, on the positions it rereads,
+per §2.
 
 \emph{object.} The step dispatches each entry by its name: a declared name through its field, with the
 \texttt{ε}-handling of the Fields case; an undeclared name by \texttt{ρ}, and a closed object refuses it. The presence guards — every \texttt{req} name demanded in
 both directions, every non-\texttt{opt} binding demanded of a value — are what keep the step total where
-item adds none. \rulelink{cond:W}{\textbf{(W)}}: \texttt{M}. \texttt{≼}: the Lemma's keyed clause.
+item adds none. \rulelink{cond:W}{\textbf{(W)}}: \texttt{M}. \rulelink{cond:C}{\textbf{(C)}}: the Lemma's keyed clause. A rest
+policy that drops undeclared names is not lawful (\texttt{not\_lawful\_dropAll}), and no term has one.
 
 \emph{set.} The premise gives \texttt{e\_c(x)\ =\ ⟨μ,\ w(x)⟩}; the step is \texttt{w} outward and \texttt{p\_c(⟨μ,\ ·⟩)} back, and
 the wire set is the image of the held set under it. \rulelink{cond:R}{\textbf{(R)}}: \texttt{w} is injective by the \rulelink{lem:injectivity}{injectivity Lemma} (member fixed,
 \texttt{e\_c} injective), so the written set holds one payload per element and the \rulelink{lem:traversal}{traversal Lemma} reads
-each back; non-emptiness survives both directions. \rulelink{cond:C}{\textbf{(C)}}: entrywise, and the re-encoded elements
-keep their member by \texttt{≼}, so the same payload projection re-succeeds. \texttt{p} is injective on payloads as well: a set is held-free, so by \texttt{ker\_eq\_of\_HF}
-(\rulelink{thm:ker-heldfree}{the held-free kernel Theorem}) no two payloads read to one value, and the read set holds one value per payload. \rulelink{cond:W}{\textbf{(W)}}: \texttt{μS}, always. \texttt{≼}: member equality, and
-a set has no interior members — the container fixes its elements' member, which is why the
-element's own \rulelink{cond:MP}{\textbf{(MP)}} is never even invoked inside one.
+each back; non-emptiness survives both directions. \rulelink{cond:C}{\textbf{(C)}}: entrywise, each element is
+written back at the attribute it was read from, so the same payload projection re-succeeds. \texttt{p} is injective on payloads as well: a set is held-free, so by \texttt{ker\_eq\_of\_HF}
+(\rulelink{thm:ker-heldfree}{the kernel Theorem}) no two payloads read to one value, and the read set holds one value per payload. \rulelink{cond:W}{\textbf{(W)}}: \texttt{μS}, always. A set
+has no interior members: the container fixes its elements' member, which is why the element's own
+\rulelink{cond:MP}{\textbf{(MP)}} is never even invoked inside one.
 
-\textbf{Sums.} Admission, per side: option \texttt{i} admits attribute \texttt{a} when the member/name filter passes
-and \texttt{pᵢ(a)} is defined, and admits value \texttt{t} when the shape/name filter passes and \texttt{eᵢ(t)} is
-defined. \texttt{p(a)\ =\ pᵢ(a)} for the unique admitting \texttt{i}, else undefined; \texttt{e(t)} dually — \rulelink{cond:U}{\textbf{(U)}} as
-semantics rather than aspiration. The laws, and where each needs \rulelink{cond:U}{\textbf{(U)}}:
+\textbf{Sums.} Admission, per side: option \texttt{i} admits attribute \texttt{a} when \texttt{pᵢ(a)} is defined, and admits
+value \texttt{t} when \texttt{eᵢ(t)} is defined. \texttt{e(t)\ =\ eᵢ(t)} for the first admitting \texttt{i}, else undefined;
+\texttt{p(a)} dually. The laws, and where each needs \rulelink{cond:compat}{\textbf{(Compat)}}:
 
 \begin{itemize}
 \tightlist
 \item
-  \rulelink{cond:R}{\textbf{(R)}}: \texttt{t\ ∈\ dom(e)} names a unique \texttt{i} — that is what makes \texttt{e(t)} defined at all — and \texttt{i}
-  admits \texttt{eᵢ(t)} back (the premise's \rulelink{cond:R}{\textbf{(R)}}); \emph{uniqueness} of that admission is \rulelink{cond:U}{\textbf{(U)}} on the
-  attribute side, asked at exactly the attributes the union writes. Where it holds,
-  \texttt{p(e(t))\ =\ pᵢ(eᵢ(t))\ =\ t}. Partiality cannot hide this: an ambiguous \texttt{e(t)} makes \texttt{p(e(t))}
-  undefined, which \rulelink{cond:R}{\textbf{(R)}} counts as failure. What partiality \emph{does} excuse is the input the union
-  never wrote: \texttt{t\ ∉\ dom(e)} is outside \rulelink{cond:R}{\textbf{(R)}}'s quantifier, so an ambiguity there costs nothing.
+  \rulelink{cond:R}{\textbf{(R)}}: \texttt{t\ ∈\ dom(e)} names the first admitting \texttt{i}, and \texttt{i} reads \texttt{eᵢ(t)} back (the
+  premise's \rulelink{cond:R}{\textbf{(R)}}). The first option \texttt{j} that admits \texttt{eᵢ(t)} acts at that attribute, so
+  \rulelink{cond:compat}{\textbf{(Compat)}} makes \texttt{j} read it to \texttt{t}, and \texttt{p(e(t))\ =\ t}.
 \item
-  \rulelink{cond:C}{\textbf{(C)}}: \texttt{a\ ∈\ dom(p)} names a unique \texttt{i}; \texttt{pᵢ(a)\ ∈\ dom(eᵢ)} by the premise's \rulelink{cond:C}{\textbf{(C)}}, so \texttt{i}
-  admits it, and uniqueness is \rulelink{cond:U}{\textbf{(U)}} on the value side. Where it holds, \texttt{p(a)\ ∈\ dom(e)}.
-\item
-  \texttt{≼}: with both uniquenesses the route is the \emph{same option in both directions} — \texttt{i} admits
-  \texttt{pᵢ(a)}, so \texttt{e} goes through \texttt{i} — and the premise's hypothesis closes it.
+  \rulelink{cond:C}{\textbf{(C)}}: \texttt{a\ ∈\ dom(p)} names the first admitting \texttt{i}, and \texttt{eᵢ(pᵢ(a))\ =\ a} by the premise's
+  \rulelink{cond:C}{\textbf{(C)}}. The first option \texttt{j} that admits \texttt{pᵢ(a)} acts at that value, so
+  \rulelink{cond:compat}{\textbf{(Compat)}} makes \texttt{j} read \texttt{a} to \texttt{pᵢ(a)}, \texttt{j}'s own \rulelink{cond:C}{\textbf{(C)}} makes \texttt{j}
+  write \texttt{pᵢ(a)} at \texttt{a}, and \texttt{e(p(a))\ =\ a}.
 \item
   \rulelink{cond:W}{\textbf{(W)}}: when every \texttt{μᵢ\ =\ μ}, whichever option answers writes \texttt{⟨μ,\ \_⟩}.
 \end{itemize}
 
-The dischargers close the residue where they apply:
+The dischargers close the obligation where they apply:
 
 \emph{dunion.} A canonical item of option \texttt{i} carries the discriminator with a tag in \texttt{Lᵢ}; option
 \texttt{j\ ≠\ i} either does not admit the name set or its literal refuses the tag, \texttt{Lⱼ} being disjoint from
-\texttt{Lᵢ} — so admission is unique on both sides, and the sum case closes with no residue. The one union
-whose \rulelink{cond:U}{\textbf{(U)}} holds by construction, which is what the term is \emph{for}.
+\texttt{Lᵢ}. So no input reaches two options, the options are separated, and the sum case closes. The one
+union that is separated by construction, which is what the term is \emph{for}.
 
 \emph{opaque.} The fixpoint of §3: one option per kind, each self-identifying by construction — kinds
-partition the values and members partition the attributes — so admission is unique on both sides at
-every depth of the fixpoint, and the sum case closes with no residue here either.
+partition the values and members partition the attributes. So its options are compatible at
+every depth of the fixpoint (\texttt{compat\_opaque}), and the sum case closes here too.
 \end{proof}
 
-What remains outside the theorem is what §3 already names: each \rulelink{rule:union}{\texttt{(union)}}'s residual \rulelink{cond:U}{\textbf{(U)}}. The numeral bound is not among
+What remains outside the theorem is what §3 already names: each \rulelink{rule:union}{\texttt{(union)}}'s \rulelink{cond:compat}{\textbf{(Compat)}} where no discharger decides it. The numeral bound is not among
 them: it is the carrier \texttt{WFNumeral} of \rulelink{rule:number}{\texttt{(number)}}, and a numeric \texttt{literal}'s base \emph{is}
 \texttt{number}, so it is inside the theorem.
 
@@ -1510,19 +1451,18 @@ lawful current encoding only off the canonical set, and the premise it needs is 
 \uses{rule:union}
 \lean{Calculus.equiv_altCodec_assoc}
 \leanok
-\texttt{union(c₁,\ union(c₂,\ c₃))\ ≡\ union(c₁,\ c₂,\ c₃)}. Associative. An ambiguity \emph{inside}
-the nested option fails locally on the left and leaves the right side undefined, and \texttt{≡}
-compares \texttt{e} and \texttt{p} only where both are defined, so the two sides cannot disagree
-there.
+\texttt{union(c₁,\ union(c₂,\ c₃))\ ≡\ union(c₁,\ c₂,\ c₃)}. Associative, with no side condition: the first
+admitter of the nested union is the first admitter of the flat one, so nesting is flattening.
 \end{theorem}
 
 \begin{theorem}[union is commutative]
 \label{eq:union-perm}
-\uses{rule:union,cond:U}
+\uses{rule:union,cond:compat}
 \lean{Calculus.equiv_altCodec_perm, Calculus.altCodec_perm, Calculus.equiv_altCodec_swap}
 \leanok
-\texttt{union(c₁\ …\ cₙ)\ ≡\ union(c\_σ(1)\ …\ c\_σ(n))} for any permutation \texttt{σ}. Commutative:
-resolution is unique admission (§5), never declaration order.
+\texttt{union(c₁\ …\ cₙ)\ ≡\ union(c\_σ(1)\ …\ c\_σ(n))} for any permutation \texttt{σ}, over lawful, pairwise
+compatible options. Commutative: the first-admitter rule reads declaration order, and
+\rulelink{cond:compat}{\textbf{(Compat)}} makes the order unobservable.
 \end{theorem}
 
 \begin{theorem}[wrappers preserve the member]
@@ -1537,12 +1477,11 @@ So wrapping a term never changes the member a key stores.
 
 \begin{theorem}[a union of arrays is not an array of unions]
 \label{eq:union-array}
-\uses{rule:union,rule:array,cond:U}
+\uses{rule:union,rule:array}
 \lean{Calculus.not_equiv_union_array}
 \leanok
 \texttt{union(array(c₁),\ array(c₂))\ ≢\ array(union(c₁,\ c₂))}. Left: a sequence homogeneous in one
-option. Right: a sequence of either, elementwise. Different held sets, and only the right has a
-discharger for its \rulelink{cond:U}{\textbf{(U)}}.
+option. Right: a sequence of either, elementwise. Different held sets.
 \end{theorem}
 
 \begin{theorem}[a tuple with a tail is neither a tuple nor an array]
@@ -1565,12 +1504,11 @@ sides of the iso, so \texttt{q} is a subset of different sets. Two different ter
 
 \begin{theorem}[a union is not closed under extension]
 \label{eq:union-extend}
-\uses{rule:union,cond:D,cond:U}
+\uses{rule:union,cond:compat}
 \lean{Calculus.not_equiv_union_extend}
 \leanok
-\texttt{union(c₁\ …\ cₙ)\ ≢\ union(c₁\ …\ cₙ,\ c)}. Not closed under extension: a further option can
-violate \rulelink{cond:D}{\textbf{(D)}} and make the term ill formed, or leave \rulelink{cond:U}{\textbf{(U)}} unresolved where it was
-discharged before.
+\texttt{union(c₁\ …\ cₙ)\ ≢\ union(c₁\ …\ cₙ,\ c)}. Not closed under extension: a further option grows the
+held set, and it can also break the compatibility of the options.
 \end{theorem}
 
 \begin{theorem}[lazy is not its own unfolding]
@@ -1617,9 +1555,9 @@ Equation & Why it is not derivable \\
 
 Three layers answer different questions, and conflating them is what makes a side condition look
 optional. A grammar over the terms — a regular tree grammar, with nonterminals indexed by \texttt{μ} — says
-which terms can be \emph{written}. It cannot express \rulelink{cond:D}{\textbf{(D)}}, which relates siblings rather than a term to
-its subterms, so well-formedness needs the judgement of §3 and §5 rather than a production — nor
-the dischargers and \rulelink{cond:U}{\textbf{(U)}}, which are not about the term at all but about the inputs it is given.
+which terms can be \emph{written}. It cannot express \rulelink{cond:compat}{\textbf{(Compat)}}, which relates siblings rather
+than a term to its subterms, and which is not about the term at all but about the inputs it is
+given, so lawfulness needs the obligations of the union rather than a production.
 And the judgement in turn says nothing about what a term \emph{means}; that is §2, the pair and its laws —
 a connection §5's soundness theorem proves rather than leaves implied.
 
@@ -1630,15 +1568,15 @@ grouping makes official: \textbf{points} (the ground terms); one \textbf{partial
 its prism); three \textbf{products} — positional (\texttt{array},
 \texttt{tuple}) and keyed (\texttt{record}, \texttt{object}), instances of one traversal argument, and unordered (\texttt{set}),
 which is the image argument, with injectivity from \rulelink{cond:R}{\textbf{(R)}};
-one \textbf{sum} (\texttt{union}), resolved by unique admission, with \rulelink{rule:dunion}{\texttt{(dunion)}} the one whose (U) holds
-by construction and \texttt{opaque} the one whose (U) is a theorem; and a \textbf{fixpoint} (\texttt{lazy},
+one \textbf{sum} (\texttt{union}), the join of compatible options, with \rulelink{rule:dunion}{\texttt{(dunion)}} the one separated
+by construction and \texttt{opaque} the one whose compatibility is a theorem; and a \textbf{fixpoint} (\texttt{lazy},
 and \texttt{opaque} again). Fields are the keyed product's
 presence decoration, and \texttt{nullable} is that sum's guarded insertion (§3) rather than a term of its own.
 The outer read extension \texttt{extendRead} adds one agreeing read-extension to a complete current term.
 
 The algebra makes one more thing visible, which the rules do not show. \textbf{The two halves of the pair are the same construction at two carriers, everywhere the
 calculus builds something itself.} A sum filters by the admission \emph{that side} reads and acts
-through the option answering alone — the same sentence for \texttt{e} and for \texttt{p}, with value-admission
+through the first option that answers: the same sentence for \texttt{e} and for \texttt{p}, with value-admission
 swapped for attribute-admission. Adjoining the null point is the same construction on values and on
 attributes. A product traverses. Reading a discriminator's tag is one lookup, spelled once per
 carrier.
@@ -1662,7 +1600,7 @@ caller is the premise on a function that is not a codec: \rulelink{rule:held}{\t
 and \rulelink{rule:refine}{\texttt{(refine)}}'s predicate. The outer
 \rulelink{rule:legacy}{\texttt{(alternate reader)}} rule separately requires agreement with the current
 reading. What no derivation settles is each
-\texttt{union}'s residual \rulelink{cond:U}{\textbf{(U)}} where no discharger decides it, and how much of any of this an
+\texttt{union}'s \rulelink{cond:compat}{\textbf{(Compat)}} where no discharger decides it, and how much of any of this an
 implementation carries in its own types, which is a question about that implementation and not
 about the calculus.
 
@@ -1702,6 +1640,12 @@ about the calculus.
 \bibitem{lens-laws}
   \textbf{A Tangled Web of 12 Lens Laws.} A taxonomy of the variants, where the distinctions matter.
   \url{https://link.springer.com/chapter/10.1007/978-3-030-79837-6_11}
+
+\bibitem{inverse-semigroups}
+  \textbf{Introduction to inverse semigroups.} Mark V. Lawson. arXiv:2304.13580, 2023. The natural
+  partial order, compatibility and orthogonality, and the fact that two partial bijections are
+  compatible exactly when their union is a partial bijection.
+  \url{https://arxiv.org/abs/2304.13580}
 
 \bibitem{dynamodb-types}
   \textbf{Supported data types and naming rules in Amazon DynamoDB.} The \texttt{N} range, stated in exponent

@@ -50,7 +50,7 @@
     "Calculus/Compat.lean": 0,
     "Calculus/Confluence.lean": 0,
     "Calculus/Continuity.lean": 1,
-    "Calculus/Denote.lean": 9,
+    "Calculus/Denote.lean": 8,
     "Calculus/Discharge.lean": 0,
     "Calculus/Domain.lean": 3,
     "Calculus/DynamoDB.lean": 1,
