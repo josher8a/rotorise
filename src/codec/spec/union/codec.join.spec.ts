@@ -23,6 +23,7 @@ import {
     refine,
     string,
     union,
+    withLegacyRead,
 } from '../../codec'
 import { failed } from '../../result'
 
@@ -299,6 +300,14 @@ describe('a union refuses a thunk it must read and cannot, because the model has
 describe("an accepted union's options never write one value, or read one attribute, two ways", () => {
     const one = DynamoNumber.from('1')
     const nonEmpty = refine(string, (s: string): s is string => s.length > 0)
+    // an older reader that migrates `N` to text: a read side the declaration cannot see
+    const legacy = withLegacyRead({
+        current: string,
+        older: {
+            decode: (attribute: AttributeValue) =>
+                'N' in attribute ? attribute.N : new CodecError('not an N'),
+        },
+    } as never)
     const flip = held(string, string, {
         encode: (s: string) => s.toUpperCase(),
         decode: (s: string) => s.toLowerCase(),
@@ -317,6 +326,7 @@ describe("an accepted union's options never write one value, or read one attribu
         ['flip', flip],
         ['decimal.set()', decimal.set()],
         ['array(string)', array(string)],
+        ['legacy', legacy],
     ] as unknown as readonly (readonly [string, AnyCodec])[]
     const values: readonly unknown[] = [
         '1',
@@ -406,6 +416,15 @@ describe("an accepted union's options never write one value, or read one attribu
         ) as unknown as Pair
         expect(failed(nonEmptyText.encode(null))).toBe(true)
         expect(nonEmptyText.encode('a')).toEqual({ S: 'a' })
+    })
+
+    it('refuses an older reader beside an option that reads the attribute it migrates', () => {
+        expect(() =>
+            union([legacy, dynamoNumber] as unknown as readonly AnyCodec[]),
+        ).toThrow(CodecError)
+        expect(() =>
+            union([dynamoNumber, legacy] as unknown as readonly AnyCodec[]),
+        ).toThrow(CodecError)
     })
 
     it('refuses a literal string beside a literal decimal of the same texts', () => {

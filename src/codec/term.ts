@@ -1072,8 +1072,10 @@ const objectMembers = (
  * **Otherwise the two occupancies, both sides conjoined.** A pair separated on one side only is
  * not separated: `union([decimal, number])` would write `'1.5'` to an `N` and could not read it
  * back, because both options store `N`. `opaque` answers every slot, so it separates from no
- * option. The read side of a `legacy` is unknown, and an unknown side is not a meeting, so the
- * write side decides.
+ * option. The read side of a `legacy` is unknown, and an unknown read side meets every read
+ * side: its older reader is caller code whose domain the declaration cannot see, so it can read
+ * an attribute that the other option reads to another value. A `legacy` therefore separates from
+ * no option by this row.
  */
 export const separable = (x: Term, y: Term): boolean => {
     // **Containment first.** The three {@link restricts} rows name a literal, a set of a literal
@@ -1093,9 +1095,13 @@ export const separable = (x: Term, y: Term): boolean => {
     if (xs && ys) {
         return xs.every((a) => ys.every((b) => !structuralMeet(a, b)))
     }
-    const writable = meet(occV(x), occV(y))
-    const readable = meet(occA(x), occA(y))
-    return writable === undefined && readable === undefined
+    const [readsX, readsY] = [occA(x), occA(y)]
+    // an unknown read side meets every read side
+    if (readsX === undefined || readsY === undefined) return false
+    return (
+        meet(occV(x), occV(y)) === undefined &&
+        meet(readsX, readsY) === undefined
+    )
 }
 
 /**
