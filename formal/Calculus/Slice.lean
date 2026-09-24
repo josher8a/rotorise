@@ -10,9 +10,9 @@ clause describes; the exclusion keeps the options it rejects. Both give a union 
 options in the same order, and fewer of them.
 
 **The clause carries an `Alts` at each name it speaks about, and not a set of text.** A union
-option is told apart by the meet: `OrthS` separates two objects at `boolean` and `binary` as well
-as at `string`, so a clause over text could not slice a union the classifier
-certifies. Non-emptiness is `Alts`'s own, so the record below declares no such field.
+option is told apart by the meet, which separates two objects at a `boolean` or a `binary`
+literal as well as at a `string` one, so a clause over text could not slice a union that the
+certificate certifies. Non-emptiness is `Alts`'s own, so the record below declares no such field.
 
 **The union's obligation survives a slice on its own.** Pairwise compatibility is a property of
 each pair of options, so any sub-selection keeps it, and the slice needs no certificate.
@@ -30,7 +30,7 @@ namespace Calculus
     replaces existed only while a literal held a set. Selecting several alternatives is
     selecting with one clause per alternative, which `mem_extract_or` below states.
 
-    Three rows, and they are `altsDisj`'s rows for `altsDisj`'s reasons: `number` declines because
+    Three rows: `number` declines because
     the numeric carrier's equality came from an axiomatised host, and `null` because its carrier has one
     inhabitant, so a clause there would keep every member rather than select among them. A name
     pinned at one base against a clause at another is no match, which is the `_` row. -/
@@ -51,9 +51,8 @@ structure AltClause where
 /-- One clause key, answered against one option's spec: the name is declared, it is required,
     and its alternatives lie inside the clause's.
 
-    `litDisjAt`'s shape with the subset test in place of the disjointness one, and required
-    presence is read for `litDisjAt`'s reason. An optional literal name admits the map that
-    omits the name, so the option holds values outside every fibre the clause describes, and
+    Required presence is read because an optional literal name admits the map that omits the
+    name, so the option holds values outside every fibre the clause describes, and
     the clause does not describe the option. -/
 def litSubAt (s : BodySpec) (c : AltClause) (k : {k // k ∈ c.keys}) : Bool :=
   match s.names.at k.1 with
@@ -151,7 +150,7 @@ theorem hunion_sublist {Ts' Ts : List Held} (hs : Ts'.Sublist Ts) {v : Value}
 
 /-! ### The certificate, and the obligation -/
 
-/-- **The classifier's certificate survives the slice**, because it is `Pairwise`. -/
+/-- **Separation survives the slice**, because it is `Pairwise`. -/
 theorem separated_sublist {opts' opts : List Term} (hs : opts'.Sublist opts)
     (h : Separated opts) : Separated opts' :=
   List.Pairwise.sublist hs h

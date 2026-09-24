@@ -161,7 +161,7 @@ def inBase : GroundKind → Value → Bool
     is in `Prisms.lean` and `liftQ` in `Products.lean`, and `Term.lean` imports neither.
 
     `noncomputable`, because `inL` is. `denote` is noncomputable for the same reason, and
-    `Orth` never calls this: a classifier reads a `Pred`'s constructors, which are data.
+    the meet never calls this: the meet reads a `Pred`'s constructors, which are data.
 
     **`members` keeps its `Finset`, and a literal no longer has one.** A refinement predicate is
     data over a set of alternatives; a literal is one value. `inLs` is the set form, built from

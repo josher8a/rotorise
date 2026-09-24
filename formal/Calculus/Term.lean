@@ -25,8 +25,8 @@ namespace Calculus
 /-- §3 `(refine)`'s predicate, as far as it can be read.
 
     A bare `Value → Bool` decides nothing a table can see, and two things wanted to see it.
-    `Orth` cannot certify `set(literal k ls)` against another one while the predicate is a
-    function, so the pair keeps a host exemption that the model proves nothing about. And
+    A certificate cannot compare `set(literal k ls)` with another one while the predicate is a
+    function, because the meet reads a predicate only as data. And
     `src/codec/term.ts` had already made the same move for the same reason: its predicate type is
     `members | each | closure`, and its docstring says the declaration guard has to read the
     predicate as data. The model has those three cases and one more, `except`, which the host
@@ -73,8 +73,8 @@ inductive Term where
       say nothing but what it means.
 
       **One value, and several values are a `union`.** A set of alternatives is a certified
-      union of singletons: the members are pairwise separated because the values differ, which
-      is `OrthL` at one base. `Calculus/LiteralArity1.lean` derives that rule. -/
+      union of singletons: the members are pairwise separated because the values differ.
+      `Calculus/LiteralArity1.lean` derives that rule. -/
   | literal (k : GroundKind) (v : k.Carrier)
   /-- §3 `(set)`, indexed by its element **base** rather than by an arbitrary element term.
 

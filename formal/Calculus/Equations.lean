@@ -396,9 +396,7 @@ theorem equiv_denote_held_comp (t P P' : Term) (f g f' g' : Value → Value) :
     **The meet is a `closure`, and that is what `Pred` costs.** The equation is about codecs
     and it holds: `equiv_restrict_meet` is unchanged, because `restrict` still takes a
     `Value → Bool` and `denote` hands it `p.eval`. What the reified predicate cannot do is
-    keep the *shape*. Two `members` meet in a term the classifier no longer reads, so `Orth`
-    declines the right-hand side where it certifies the left. That is the sound direction: a
-    declined certificate is a missing proof, never a wrong one.
+    keep the *shape*.
 
     For the reader who reaches for a fourth constructor: two `members` at one base meet in a
     `members` over the intersection, where the intersection is nonempty. A discharger that

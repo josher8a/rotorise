@@ -1217,7 +1217,7 @@ const readVerdicts = (): readonly ReadVerdict[] => {
  *
  * `sampleVectors` carries two — `union_of_two` and `discriminated_union` — and both are already
  * pinned in the committed sample. These widen that: the pair `ff75c6b` un-refused
- * (`set(string)`/`set(number)`, which `Orth` certifies), objects chosen by name, two literals,
+ * (`set(string)`/`set(number)`, which the certificate certifies), objects chosen by name, two literals,
  * a `nullValue` arm, an `optional` inside a variant, and a three-way `dunion`. Every one is legal
  * at the declaration and emittable.
  */
@@ -1440,7 +1440,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.endsWith('= false := by decide'),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([674, 29])
+        expect([accepted.length, refused.length]).toEqual([676, 27])
     })
 
     it('emits them for the gate to elaborate', () => {

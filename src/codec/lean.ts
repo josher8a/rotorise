@@ -1052,8 +1052,8 @@ export type ReadVerdict = {
 /**
  * A pair of corpus terms, put to the model's meet with the answer `src/` computes.
  *
- * The separations bridge runs one way, because `Orth` is sufficient and not necessary. This one
- * runs both: `Term.meet` and {@link meetTerms} are the *same function* stated twice, so a
+ * The separations bridge checks the host's verdict against the certificate. This one checks the
+ * meet itself, both ways: `Term.meet` and {@link meetTerms} are the *same function* stated twice, so a
  * disagreement in either direction is a defect on one side. It is the only check that measures the
  * meet at all.
  */
