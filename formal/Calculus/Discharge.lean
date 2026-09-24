@@ -24,14 +24,13 @@ in that vocabulary. What that layer proved by hand in phases *slot* and *alterna
 So the discharges that remain are the ones no phase reaches: an arbitrary `q` inside a
 `refine`, a union of numeric literals at a base whose `DecidableEq` is axiomatized,
 and `opaque`, whose (U) is a theorem one level below the term language.
-`uAtAct_array_literals`, which holds where `UAtCan` is outright false, needs no hand proof:
-the pair is held-free, and `uAtAct_of_HF` (`Confluence.lean`) discharges it.
+`pairwiseCompat_array_literals`, a union where `UAtCan` is outright false, needs no hand proof
+of its obligation: the pair is held-free, and `pairwiseCompat_of_HF` (`Compat.lean`) discharges
+it.
 
-§5's (D) is not among them, and `not_uAtCan_literal_held` is why: held sets are sets of
-values, (U)'s readable side quantifies over attributes, and `held`'s adapter relabels
-between them. Two options can hold disjoint sets and read one attribute. (D) is a
-well-formedness condition on the `T` index and lives there — `DIncomp`, a premise of
-`Typed.union` (`Typing.lean`), which asks `HDisj` of every pair. As a discharger of (U),
+Disjoint held sets are not among the discharges, and `not_uAtCan_literal_held` is why: held sets
+are sets of values, (U)'s readable side quantifies over attributes, and `held`'s adapter relabels
+between them. Two options can hold disjoint sets and read one attribute. As a discharger of (U),
 `HDisj` of every pair is refuted below.
 
 The two counterexamples that repaired §5's discharger are at the foot of the file. §5 keeps
@@ -72,8 +71,7 @@ theorem refineReads_none {t : Term} {q : Value → Bool} {a : Attr}
 
 
 /-- Any option's attribute admission is member-guarded: with a lawful pair and a
-    named member, an admitted attribute carries that member — §5's read-side (W),
-    doing (D)'s job through the member index. -/
+    named member, an admitted attribute carries that member — §5's read-side (W). -/
 theorem admitA_member (t : Term) {μ a}
     (hμ : μSyn t = some μ) (hlaw : Lawful (denote t))
     (h : (optionSemOf (denote t) (specOf t)).admitA a = true) :
@@ -331,19 +329,19 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
 /-- `HNever` holds nothing: it is `False` at every value. -/
 theorem hnever_false (v : Value) : ¬ HNever v := id
 
-/-- …so the bottom is disjoint from every held set, and that is how (D) admits it. -/
+/-- …so the bottom is disjoint from every held set. -/
 theorem hdisj_never_left (T : Held) : HDisj HNever T := fun v hv => absurd hv (hnever_false v)
 
 /-- …and on the other side, where the bottom is what the pair is disjoint from. -/
 theorem hdisj_never_right (T : Held) : HDisj T HNever := fun v _ hn => hnever_false v hn
 
-/-- **(D) holds against the bottom, on emptiness.** `union([X, never])` is `Typed`: the bottom
-    contributes nothing to `HUnion`, so it cannot make the union ambiguous.
+/-- **The bottom is disjoint from every held set, on emptiness.** `union([X, never])` is
+    `Typed`: the bottom contributes nothing to `HUnion`.
 
     `src/` refuses the pair all the same, and the two sides are not in conflict. The model says
     the union is *well formed*; `src/` says it is *useless*, because an option that admits
-    nothing can never be selected, and refuses it as a lint. `.separations.lean` carries that
-    divergence as a theorem rather than as prose. -/
+    nothing is never the first admitter, and refuses it as a lint. `.separations.lean` carries
+    that divergence as a theorem rather than as prose. -/
 theorem dincomp_never_right (T : Held) : DIncomp [T, HNever] :=
   List.pairwise_cons.mpr
     ⟨fun _ hb => by rw [List.mem_singleton] at hb; subst hb; exact hdisj_never_right T,
@@ -529,7 +527,7 @@ theorem uAtCan_of_literalN_disjoint {xs : List WFNumeral}
 one union whose (U) is discharged by the rule itself", and the discharge was ~~uAtCan_dunion~~ over
 ~~semsOfD~~, the option list that rule's denotation used to build. There is no such rule now: a
 dissection is a certified `union`, its members are separated by phase *literals* of `Orth`, and
-(U) at a sub-selection is `uAtAct_extract`'s premise rather than a row of this table.
+the obligation at a sub-selection is `pairwiseCompat_extract` rather than a row of this table.
 ~~uAtCan_dunion~~, ~~UAtCanD~~ and ~~semsOfD~~ are deleted rather than restated, which is the
 strongest form the row's claim can take. -/
 
@@ -634,30 +632,27 @@ theorem not_uAtCan_array_literals :
   rw [if_pos (List.mem_cons_self), if_neg (by simp)]
   exact fun h => nomatch h
 
-/-! ## Why (D) does not discharge the readable side either
+/-! ## Why disjoint held sets do not discharge the readable side
 
-    An earlier §5 listed **(D)** — incomparable held sets — as a discharger of (U)'s
+    An earlier §5 listed incomparable held sets as a discharger of (U)'s
     readable side, and held that stating it as genuine *disjointness* would be sound
     though needlessly strict. Disjointness is not sound either: held sets are sets of
     **values**, (U)'s readable side quantifies over **attributes**, and `held` is exactly
     the term that separates the two. Its adapter relabels, so two options can hold
     disjoint sets of values and still read one attribute — each to its own value. §5 now
-    says this, and (D) is a well-formedness condition on the `T` index rather than a
-    discharger; the witness below is what settled it.
+    says this; the witness below is what settled it.
 
     That witness is `union(literal("A"), held(literal("A"), literal("B"), f, g))` with `f` and `g`
-    swapping `"B"` for `"A"`. Its held sets are `{"A"}` and `{"B"}` — disjoint, so (D)
-    passes in the strongest form ever proposed for it — and both options read the
+    swapping `"B"` for `"A"`. Its held sets are `{"A"}` and `{"B"}` — disjoint — and both
+    options read the
     attribute `S "A"`, the first to `"A"` and the second to `"B"`. What decides the
     readable side is a condition on stored attributes: distinct members, or disjoint
     readable-side admission. -/
 
-/-! ### (D) in its held-set form, as the disjointness §5 proposed
+/-! ### Disjoint held sets, as §5 proposed
 
-`HDisj` (`Typing.lean`) is that predicate: no value is held by two options. `(union)` carries
-`DIncomp`, which asks `HDisj` of every pair, as a well-formedness condition. As a discharger of
-(U) it is refuted below: the witness satisfies it and still fails (U). One predicate in two
-roles, so it is named once. -/
+`HDisj` (`Typing.lean`) is that predicate: no value is held by two options. As a discharger of
+(U) it is refuted below: the witness satisfies it and still fails (U). -/
 
 /-- The relabelling adapter: `"B"` on the outside is `"A"` on the inside. -/
 def fRel : Value → Value := fun v => match v with | .str "B" => .str "A" | _ => .null
@@ -688,8 +683,8 @@ theorem not_uAtCan_pair_A {t₁ t₂ : Term} {v w : Value} {a : Attr}
   · exact hne (congrArg (fun o => OptionSem.admitV o w) heq.symm)
   · exact absurd hnil (by simp)
 
-/-- Both options are derivable, and their held sets are disjoint — so this really is a
-    union (D) admits, in the disjointness form §5 once proposed and withdrew. -/
+/-- Both options are derivable, and their held sets are disjoint, in the form §5 once proposed
+    and withdrew. -/
 theorem typed_tRel :
     Typed tRel (fun v => (∃ s, s ∈ ["A"] ∧ fRel v = .str s) ∧
       ((denote (.literal .string "B")).e v).isSome) (some .S) := by
@@ -710,7 +705,7 @@ theorem dDisj_tRel :
   subst this
   exact nomatch hf
 
-/-- **(D) does not discharge the readable side.** Disjoint held sets, and both options
+/-- **Disjoint held sets do not discharge the readable side.** Both options
     admit the attribute `S "A"` — the first reading it to `"A"`, the second to `"B"`. -/
 theorem not_uAtCan_literal_held :
     ¬ UAtCan [Term.literal .string "A", tRel] := by

@@ -130,7 +130,7 @@ only.
 | A premise that is | goes in | consumed by |
 | --- | --- | --- |
 | decidable from the term | `Typed`, as `DIncomp` is for a union | the judgement itself |
-| about what a codec does — its write half, its read half, an iso, a resolution | `Obligations`, as `UAtAct` and `IsoCancels` are | both soundness theorems |
+| about what a codec does — its write half, its read half, an iso, a resolution | `Obligations`, as `PairwiseCompat` and `IsoCancels` are | both soundness theorems |
 
 `Term` has no alternate reader. Therefore `soundness` proves all four laws for every typed term.
 An alternate reader is `Codec.extendRead` at the codec layer. `ReadsCoherently` is its condition,
@@ -185,7 +185,7 @@ differ at a required literal name with disjoint alternatives, or the name interv
 cannot be satisfied at once. The certificate reads that off `Body.spec`, on both halves of the
 pair. `select` admits an object option by attempt, as it admits every other option. `OrthS` is the
 phase of `Orth` that certifies the first case, `OrthM` certifies the second, and a sub-selection
-of a certified union stays certified, because the certificate is `Pairwise` and `uAtAct_sublist` carries (U) under it. A
+of a certified union stays certified, because the certificate is `Pairwise` and `pairwiseCompat_sublist` carries the obligation under it. A
 tag table keyed by the discriminating literals is an index the host builds over such a union, and
 no term carries it.
 
@@ -432,13 +432,8 @@ into an answer.
 
 Each of these is a decision with a price, not a gap, and each has a witness.
 
-**Recursion under a union.** A union resolves by *unique* admission, and admission derived from
-whether the write half succeeds means that growing a recursive result grows admission, grows the
-filtered option list, and collapses the answer. Unique admission quantifies over the other
-options: a negative condition, anti-monotone in exactly the argument a fixpoint must grow.
-`altCodec_not_monotone` is the obligation any fixpoint construction would have to discharge and
-cannot, and `stage_not_monotone` shows the same collapse between adjacent stages. The low-stage
-answer is over-defined, not under-defined. `opaque` is the one recursive union the model carries.
+**Recursion under a union.** A union resolves by the first admitting option. Where the admitting
+options agree (`ConfluentAt`), first-match resolution is monotone (`selectF_mono_list`). `opaque` is the one recursive union the model carries.
 Its options are pairwise kind-disjoint, so unique admission needs nothing from the recursive call,
 and `lawful_opaqCodecω` proves the fixed point lawful.
 

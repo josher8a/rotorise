@@ -14,7 +14,7 @@ definition it touches.
 | `Calculus/Prisms.lean`      | §3          | The entry point of the certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism) and `extendRead` (alternate reading) |
 | `Calculus/Products.lean`    | §3          | `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`), `tupleCodec` it at `align` + a traversal over `slots`, the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone. `setCodec` is argued on its own |
 | `Calculus/Objects.lean`     | §4          | The field table as a map rather than a row, and the object taken apart through it. `objectCodec` is cashed as an equation by `objectCodecCore_eq` rather than argued on its own |
-| `Calculus/Sums.lean`        | §5, §3      | `altCodec` + `UniqueAdmission` (the sum), `uAtAct_sublist` (which carries (U) to a sub-selection under the classifier's certificate) and `opaqCodec`, the fueled fixpoint over everything self-identifying |
+| `Calculus/Sums.lean`        | §5, §3      | `altCodec` (the sum, resolved by the first admitter), `UniqueAdmission`, and `opaqCodec`, the fueled fixpoint over everything self-identifying |
 | `Calculus/Carriers.lean`    | §3          | One `Carrier` lemma per combinator, so the judgement's held-set index is the domain of the pair |
 | `Calculus/Lawful.lean`      | §3–§5       | The lawfulness lemmas this development discharges, one per construction |
 | `Calculus/Frontier.lean`    | §3–§5       | The lawfulness lemmas that are stated and not yet discharged, and the ones whose discharge is partial |
@@ -24,13 +24,13 @@ definition it touches.
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, structural), `UAtCan := UniqueAdmission ∘ semsOf`, theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `Can`, and all ten of §6's "Hold" nodes this development still states — `held`'s identity and composition, `refine`'s meet and full case, `Codec.extendRead` with its own reader as the alternate reader and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of §6's stated conditions), wrapper member preservation. §6's null-point node went with the wrapper: the point is a union option, so idempotence is the union's |
 | `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the kind-disjoint unfoldings — one per constructor each side, counted in that file's own header (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
-| `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`HOpaque` *is* `opaque`'s held set), `typed_T_identity` ((A) at every rule), and `not_TIsDomE_unionLiteralString` (§6's row is two identities: (B) fails at a union codec that no derivation reaches, and `typed_T_adm` in `Laminar.lean` proves (B) at every derivable term) |
-| `Calculus/Continuity.lean`  | §5, §7      | Why a `union` under unique admission has no fixpoint semantics in general: `Codec.Approx` (the information order any ccpo must extend), `altCodec_not_monotone` (unique admission is anti-monotone in the options) and `stage_not_monotone` — the same collapse over a staging defined locally, since `denote` is structural and no longer stages |
+| `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`HOpaque` *is* `opaque`'s held set) and `typed_T_identity` ((A) at every rule); `typed_T_adm` in `Laminar.lean` proves (B) at every derivable term |
+| `Calculus/Continuity.lean`  | §5, §7      | `Codec.Approx` (the information order any ccpo must extend), and first-match resolution monotone (`selectF_mono_list`) and continuous (`selectF_continuous_list`) under the obligation that every admitter agrees |
 | `Calculus/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's nesting bound, a parameter, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
 | `Calculus/DynamoDB.lean`    | §1          | The DynamoDB port: `DynamoDB.maxNesting` instantiates the nesting bound at the store's 32 levels; `Numeral.Normal`/`Numeral.Stored`, `decimalCodec` and its `SurvivesStore` instance, `not_survivesStore_numberCodec`, the numeral-domain report (`decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases), and the text adapter `numeralOfStoredText`/`textOfNumeral` |
 | `Calculus/Refutations.lean` | §6          | §6's seven "Do not hold" nodes, all settled, over eight declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `not_equiv_lazy` (where `≡`'s member index is what fails), `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
-| `Calculus/Discharge.lean`   | §5          | The discharges of (U) that no phase of `Orth` reaches — an arbitrary `q` inside a `refine`, a union of numeric literals, `opaque`, and `uAtAct_array_literals` where `UAtCan` is outright false — with the two counterexamples that repaired §5's admission row and the refutation of (D) as a discharger. The four per-aspect tables this file used to carry are retired: §5 states that row on option admission and occupancy, `Calculus/ExactV.lean` and `Calculus/ExactA.lean` prove those rows exact, and `Calculus/Orthogonality.lean` decides the pairs a declaration can decide |
+| `Calculus/Discharge.lean`   | §5          | The discharges of (U) that no phase of `Orth` reaches — an arbitrary `q` inside a `refine`, a union of numeric literals, and `opaque` — with the two counterexamples that repaired §5's admission row and the refutation of disjoint held sets as a discharger. The four per-aspect tables this file used to carry are retired: §5 states that row on option admission and occupancy, `Calculus/ExactV.lean` and `Calculus/ExactA.lean` prove those rows exact, and `Calculus/Orthogonality.lean` decides the pairs a declaration can decide |
 
 This table has a row of its own for twenty-two of the modules under `Calculus/`.
 `ExactV.lean`, `ExactA.lean`, `Separation.lean`, `Orthogonality.lean`,
@@ -82,21 +82,13 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   instead is `Term.depth`, a measure derived from the term, so it appears in no statement.
   Neither of the two things that forced fuel still does: `lazy` carries a `Term`, and `opaq`
   denotes `opaqCodecω`.
-- **Fuel is not removable by a fixpoint, and that is a fact about (U), not about Lean.**
-  `Continuity.lean` proves it: `altCodec` resolves a union by *unique* admission, and
-  `OptionSem.byAttempt` derives admission from `(c.e v).isSome`, so growing the recursive
-  result grows admission, grows the filtered list from `[o]` to `[o, o']`, and collapses
-  the union's answer from `some` to `none`. Unique admission quantifies over the *other*
-  options — a negative condition, anti-monotone in exactly the argument a fixpoint must
-  grow. `altCodec_not_monotone` is the `mono` obligation any ccpo construction
-  (Isabelle's `partial_function`, HOLCF, a hand-rolled `⨆`) would have to discharge and
-  cannot; `stage_not_monotone` shows the same collapse between two adjacent stages, on
-  `union(literal("A"), lazy(string))` — §5's own counterexample pair, staggered.
-  Note the direction: the low-stage answer is *over*-defined, not under-defined.
-  The staging is defined in `Continuity.lean` itself, as a witness rather than a
-  semantics: `denote` is structural and does not stage, and the reason it need not is
-  the refutation above — `Term.lazy` carries a plain `Term` rather than a thunk, so
-  there is no recursion to approximate. `Continuity.lean` carries the argument.
+- **A fixpoint for `union` has its obligations and no construction.** `altCodec` resolves a
+  union by the first admitter. `Continuity.lean` proves that first-match resolution is monotone
+  (`selectF_mono_list`, the `mono` obligation of a ccpo construction) and continuous
+  (`selectF_continuous_list`) under the obligation that
+  every admitter agrees, and `optBad_not_confluent` shows the obligation is not free. It
+  defines no ccpo, and `denote` is structural and does not stage: `Term.lazy` carries a plain
+  `Term` rather than a thunk.
 - **One construction, one place — and one proof per law.** Each construction's
   definition, its two inversion lemmas, its carrier and both strengths of its
   lawfulness now sit together, and the core lemma is no longer a second copy of the
@@ -162,7 +154,7 @@ audit's findings belong: an audit is not load bearing.
 demands a total iso where the proof consumes only the domain-restricted one. Two others closed
 in the tree rather than on paper. The set carrier's nonemptiness and uniqueness are properties
 of its own type, so the omission the reading found is not there to state. And the commutativity
-node holds at any permutation, by `select_perm` and `altCodec_perm`, which is a stronger claim
+node holds at any permutation of compatible, canonical options, by `altCodec_perm`, which is a stronger claim
 than the node asked for: reordering the options yields the same codec rather than an equivalent
 one.
 

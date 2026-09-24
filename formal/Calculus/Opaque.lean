@@ -9,10 +9,9 @@ strict subterm except one: `opaque`. Its regress is not on the term at all — `
 rebuilds itself under `set`/`array`/`record`, so no term gets smaller and fuel is doing
 real work.
 
-It is also the one union in the calculus that *is* continuous. `Continuity.lean` shows
-`altCodec` is anti-monotone in general, because two options may both admit; `opaqCodec`'s
-eight options are pairwise **kind-disjoint**, so at most one ever admits and the
-pathology cannot arise. That is what makes this file possible and `union` hopeless.
+Its eight options are pairwise **kind-disjoint**, so at most one ever admits: the first
+admitter is the only admitter, and growth of one option cannot change another's answer. That
+is what makes this file possible.
 
 The consequence: `opaqCodec` needs only as much fuel as the value is deep, and past that
 its answer never changes. So `opaque` can be given a fuel-free denotation by supplying
@@ -28,8 +27,8 @@ Structure:
 * `maxOf` / `traverse_maxOf_le` — the measure and the step that keeps it: a traversal whose
   entry step does not increase the measure does not increase the list's maximum.
 * `opaqCodec_e_*` / `opaqCodec_p_*` — the unfoldings, one per constructor of the domain
-  each side ranges over. Each collapses `altCodec`'s filter to a single option by
-  kind-disjointness, and is where the "at most one admits" argument is actually cashed.
+  each side ranges over. Each reduces `altCodec` to a single option by kind-disjointness,
+  and is where the "at most one admits" argument is actually cashed.
 
   **Ten a side**, one per constructor of the domain that side ranges over: `Value` has ten
   and so does `Attr`, the three wire sets appearing on both (`strSet`/`numSet`/`binSet`
@@ -40,9 +39,9 @@ Structure:
   being "one *kind* and three *members*" — which is the very reason `Value` has three of
   them too, so the explanation refuted its own premise. The counts were wrong and the
   argument was wrong about a fact that could be counted; both are corrected here, and what
-  survives is the part that was never about a count. Kind-disjointness is what the (U)
-  argument needs, so what each unfolding does is collapse `altCodec`'s filter to a single
-  option — and on the read side three members route to one option, which is a fact about
+  survives is the part that was never about a count. Kind-disjointness is what the argument
+  needs, so what each unfolding does is reduce `altCodec` to a single option — and on the
+  read side three members route to one option, which is a fact about
   `Kind` (`Domain.lean`) and not about how many lemmas there are.
 -/
 
@@ -154,10 +153,9 @@ theorem traverse_maxOf_le {α β : Type} {f : α → Option β} {mα : α → Na
 
 /-! ## The unfoldings — §3 `(opaque)`, one per constructor of each domain
 
-Each says: at this value's kind, `altCodec`'s filter collapses to exactly one option, so
-the union's answer *is* that option's. This is kind-disjointness cashed — the property
-`union` in general does not have (`onKind_*` is what `opaque` has and `union` does not),
-and the reason `opaque` escapes `Continuity.lean`.
+Each says: at this value's kind, exactly one option admits, so the union's answer *is* that
+option's. This is kind-disjointness cashed — the property `union` in general does not have
+(`onKind_*` is what `opaque` has and `union` does not).
 
 Stated against the option's own codec rather than its literal encoding, so they stay
 true if a primitive's shape changes. Every one of them computes through the same ten

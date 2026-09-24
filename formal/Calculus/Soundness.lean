@@ -26,23 +26,9 @@ noncomputable def semsOf (opts : List Term) : List OptionSem :=
 def UAtCan (opts : List Term) : Prop :=
   UniqueAdmission (semsOf opts)
 
-/-- **§5 (U) where the union acts** — the theorem's actual residue, and what `(union)`
-    carries as an obligation.
-
-    `UAtCan` quantifies over every canonical pair of every *option*; the laws only ever
-    ask about inputs the *union* resolves, since `altCodec` declines everything else and
-    a law quantified over `dom` cannot reach a declined input. `UAtAct` is that
-    restriction (`UniqueBothWays`), and it is strictly weaker: the gap is where the
-    working schemas sit — `union(array(literal "A"), array(literal "B"))` fails `UAtCan`
-    at `[]` and meets `UAtAct`, because the union declines to write `[]`.
-
-    Every discharger still discharges, through `uAtAct_of_uAtCan`. -/
-def UAtAct (opts : List Term) : Prop :=
-  UniqueBothWays (semsOf opts)
-
-/-- The strong residue implies the one the laws need, so §5's dischargers are unaffected. -/
-theorem uAtAct_of_uAtCan {opts} (h : UAtCan opts) : UAtAct opts :=
-  uniqueBothWays_of_uniqueAdmission h
+/-- **The union's obligation**: its options are pairwise compatible. -/
+def PairwiseCompat (opts : List Term) : Prop :=
+  ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote s) (denote t)
 
 mutual
 
@@ -61,7 +47,7 @@ def Obligations : Term → Prop
   | .held t' _ f g => Obligations t' ∧ IsoCancels (denote t') f g
   | .lazy t' => Obligations t'
   | .object b => ObligationsBody b
-  | .union opts => ObligationsList opts ∧ UAtAct opts
+  | .union opts => ObligationsList opts ∧ PairwiseCompat opts
 
 /-- The payload's premises: every declared slot's, and the open block's. The companion
     `ObjectSlot` and the open block already had and the object row inlined. -/
@@ -131,9 +117,9 @@ theorem list {pre sp suf} (h : Obligations (.list pre sp suf)) :
 theorem held {t P f g} (h : Obligations (.held t P f g)) :
     Obligations t ∧ IsoCancels (denote t) f g := h
 
-/-- §5 `(union)`: one premise per option, and (U) where the union acts. -/
+/-- §5 `(union)`: one premise per option, and pairwise compatibility. -/
 theorem union {opts} (h : Obligations (.union opts)) :
-    (∀ t ∈ opts, Obligations t) ∧ UAtAct opts :=
+    (∀ t ∈ opts, Obligations t) ∧ PairwiseCompat opts :=
   ⟨obligationsList_iff.mp h.1, h.2⟩
 
 end Obligations
@@ -227,7 +213,7 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .lazy _ => rfl
   | _, _, _, .opaq => rfl
   | _, _, _, .object _ _ => rfl
-  | _, _, _, .union h _ => by
+  | _, _, _, .union h => by
       show unanimous (μSynList _) = unanimous _
       rw [typedListμ_μSyn h]
 
@@ -343,12 +329,17 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
           (fun c hcr => (ihr c hcr).1),
         lawful_objectCodec (fun k => (ihf k).2)
           (fun c hcr => (ihr c hcr).2)⟩
-    | @union opts Ts μs hlist _ =>
+    | @union opts Ts μs hlist =>
       have ihs : ∀ t' ∈ opts, Sound t' := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
         exact soundness_both hμ' ((Obligations.union hob).1 t' ht')
-      have hU : UniqueBothWays
-          (opts.map fun t' => optionSemOf (denote t') (specOf t')) := hob.2
+      have hatt : ∀ o ∈ opts.map fun t' => optionSemOf (denote t') (specOf t'),
+          o = .byAttempt o.c := by
+        exact List.forall_mem_map.mpr fun _ _ => rfl
+      have hC : ∀ o ∈ opts.map fun t' => optionSemOf (denote t') (specOf t'),
+          ∀ o' ∈ opts.map fun t' => optionSemOf (denote t') (specOf t'), Compat o.c o'.c := by
+        refine List.forall_mem_map.mpr fun s hs => List.forall_mem_map.mpr fun t' ht' => ?_
+        rw [optionSemOf_c, optionSemOf_c]; exact hob.2 s hs t' ht'
       have hW : ∀ m, unanimous (opts.map fun t' => (denote t').μ) = some m →
           ∀ o ∈ opts.map fun t' => optionSemOf (denote t') (specOf t'),
             ∀ t' a, o.c.e t' = some a → a.member = m := by
@@ -359,10 +350,10 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
           (unanimous_spec hm _ (List.mem_map.mpr ⟨tx, htx, rfl⟩)) he'
       rw [Sound, denote_union_sems, optionSems_eq, denoteμs_eq_map]
       exact ⟨lawfulCore_altCodec
-          (List.forall_mem_map.mpr fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').1) hU hW,
+          (List.forall_mem_map.mpr fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').1) hatt hC hW,
         lawful_altCodec
           (List.forall_mem_map.mpr fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').2)
-          hU hW⟩
+          hatt hC hW⟩
 
 termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
@@ -744,7 +735,7 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
             replace hrc : some (denote t') = some rc := hrc
             cases hrc
             exact ⟨T'', rfl, typed_TSub hty' _ hrcT⟩
-    | @union opts Ts μs hlist _ =>
+    | @union opts Ts μs hlist =>
       simp only [denote, optionSems_eq, denoteμs_eq_map] at hv
       obtain ⟨o, ho, hT⟩ := hv
       simp only [List.mem_map] at ho
@@ -820,7 +811,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
           cases hcr
           exact carrier_denote hty hob.2
       exact carrier_objectCodec hsems hrc
-    | @union opts Ts μs hlist _ =>
+    | @union opts Ts μs hlist =>
       rw [denote_union_sems, optionSems_eq]
       refine carrier_altCodec (List.forall_mem_map.mpr fun t' ht' => ?_)
       obtain ⟨T', μ', hty⟩ := TypedListμ.forall hlist t' ht'
