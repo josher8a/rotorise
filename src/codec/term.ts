@@ -1043,69 +1043,37 @@ const objectMembers = (
 }
 
 /**
- * **Whether a union may hold these two options**, asked at the declaration.
+ * **Whether two options share no value and no attribute**, the host's certificate.
  *
- * **This is not a port of `certPair`, and the difference is the direction.** `certPair` is a *certificate*:
- * `true` means the model proved the two cannot both admit one input. This is the complement of a
- * *refutation*: it answers `false` only where both occupancies are known, they meet on a side, and
- * no exemption applies. Where `certPair` declines for want of a proof, this accepts. The law that
- * ties them is what `formal/.separations.lean` pins, in both directions: for each pair `union`
- * refuses, `certPair` is `false`, so **this never answers `false` where `certPair` answers `true`**;
- * for each pair `union` accepts, the model proves `PairwiseCompat`.
- * Refusing a declaration the model proves separable would be refusing a union that works.
- * `union` asks it only of a pair that is not held-free, through {@link compatible}.
+ * `union` asks it of a pair that {@link compatible} shows by no other warrant. Where it answers
+ * `true`, the model proves `PairwiseCompat` through `pairwiseCompat_of_separated`. For each pair
+ * `union` refuses, `formal/.separations.lean` pins that `certPair` is `false`, so this never
+ * answers `false` where `certPair` answers `true`.
  *
- * Six rows, and each carries its own warrant. A seventh exempted an `opaque` option and is gone;
- * the paragraph below the sixth says why.
+ * Five rows, in the order the code asks them:
  *
- * **Two options, one of which holds a `held`: the two views.** The model's `certPair` has a third
- * case, `certViews`. A `held` writes where its held side does and reads where its inner term does,
- * so the caller views of the two options answer the write question and the stored views answer the
- * read question. The row accepts where this function accepts both pairs of views. It certifies a
- * `held` whose held side is a non-empty list beside a list of another element.
+ * **An option that is a restriction of another.** {@link restricts} answers `false`, because an
+ * option inside another shares each of its values with the other. The rows are a literal against
+ * its base, a literal set against its base's plain set, and `never`.
  *
- * **Two options that meet at the bottom.** The model's certificate is `certPair`: a meet at
- * `never`, or `certViews`. `Adm_meet` and `AdmA_meet` make the meet's admission the conjunction of the
- * two, so a meet at the bottom admits no common value and reads no common attribute. It certifies
- * two lists told apart by a literal position, and two objects whose required slots meet at the bottom.
+ * **Two options, one of which holds a `held`: the two views**, as the model's `certViews`. A
+ * `held` writes where its held side does and reads where its inner term does, so the caller views
+ * answer the write question and the stored views answer the read question. Both pairs of views
+ * must separate.
  *
- * **Two object options: the structural meet.** A union
- * admits every option by attempt, an object option included, so two object options are separable
- * where no value passes both attempts. This row reads that off the two structures: the names
- * present, and then every required literal field. Two such options are separable where no value
- * satisfies both structures: either their name intervals do not meet or some shared required name
- * is pinned to literals with nothing in common. The model's meet certifies both cases. The meet row
- * above certifies two objects whose required slots meet at `never` through a field that pins no
- * literal.
+ * **Two options that meet at the bottom**, as the model's `meetNever`. `Adm_meet` and
+ * `AdmA_meet` make the meet's admission the conjunction of the two, so a meet at `never` admits
+ * no common value and reads no common attribute.
  *
- * **One object option beside a non-object meets through the occupancies**, as every other pair
- * does. `opaque` writes and reads a map too, so an object beside it is not separable outright.
+ * **Two object options: the structural meet.** Two objects are separable where no value
+ * satisfies both structures: their name intervals do not meet, or a shared required name is
+ * pinned to literals with nothing in common.
  *
- * **An option that is a restriction of another.** {@link restricts}, and it answers `false` where
- * every other row would accept, because an option inside another shares each of its values with
- * the other, so it sits ahead of them. `opaque` was the first instance of the rule and had
- * its own paragraph below; a literal against its base and a literal set against its base's plain
- * set are the other two.
- *
- * **An occupancy that is unknown.** A `legacy` has an unknown read side, because its `r` widens exactly the reading. A `lazy` is transparent,
- * so its occupancies are its subterm's. The model certifies no pair on an unknown side. This
- * function takes the other direction, as the first paragraph states: an unknown side is not a
- * meeting, so the known side decides. Every option of a `union` has a term, so this function
- * takes two terms and has no row for one that is missing.
- *
- * **There is no `opaque` row.** §5 separates the two things a `⊤` covers: *unknown* — the read
- * side of a `legacy`, whose answer exists and cannot be read — and *everything*, which is
- * `opaque`, accepting every kind by design. A `held` over a foreign schema is the second: its held
- * side is `opaque`. The model states the second as a **closed form**, `occTop` at the total
- * `opaq`, so it can be compared: `occV` and `occA` answer the closed form, and `Orth1` finds that
- * `opaque` meets every option. So `opaque` is separated from no option.
- *
- * **Otherwise the two occupancies, both sides conjoined.** A pair separated on one side only is not
- * separated: the loosened form ships `union([decimal, number])`, which writes `'1.5'` to an `N` and
- * cannot read back what it wrote, because `decimal` takes a string and `number` a number while both
- * store `N`. The model's `Orth1` asks the write side and the read side, because a `held` writes
- * where its held side does and reads where its inner term does: `decimal` writes a string and
- * reads an `N`.
+ * **Otherwise the two occupancies, both sides conjoined.** A pair separated on one side only is
+ * not separated: `union([decimal, number])` would write `'1.5'` to an `N` and could not read it
+ * back, because both options store `N`. `opaque` answers every slot, so it separates from no
+ * option. The read side of a `legacy` is unknown, and an unknown side is not a meeting, so the
+ * write side decides.
  */
 export const separable = (x: Term, y: Term): boolean => {
     // **Containment first.** The three {@link restricts} rows name a literal, a set of a literal

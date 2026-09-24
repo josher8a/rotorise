@@ -206,7 +206,7 @@ theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
   have hne : t1 ≠ t2 := fun hh => by rw [hh, hc2] at hc1; exact Bool.noConfusion hc1
   have hlen : (opts.filter (fun t => admitOptV (specOf t, Adm t) v)).length ≤ 1 := by
     have hone := (admitsAtMostOne_of_separated (separated_of_unionOk hok)).1 v
-    rwa [semsOf, ← denoteList_eq, filter_AdmSpecs (fun t _ => Adm_exact t) v,
+    rwa [filter_AdmSpecs (fun t _ => Adm_exact t) v,
       List.length_map] at hone
   have hf1 : t1 ∈ opts.filter (fun t => admitOptV (specOf t, Adm t) v) :=
     List.mem_filter.mpr ⟨hm1, admitOptV_of_Adm ha1⟩
