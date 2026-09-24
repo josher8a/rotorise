@@ -1242,7 +1242,9 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * the row is permanent rather than pending. `Orth` carries a phase `OrthL` now, so the flat
  * literal case and the literal-set case are certified. Porting `OrthL` here would be dead code:
  * every pair it certifies, this row already accepts, and the row accepts twenty corpus pairs the
- * model does not certify. {@link identifies} names the three groups.
+ * model does not certify. {@link identifies} names the three groups. The row applies only where
+ * neither option reaches a `held`, because only there does `compat_of_HF` show the two options
+ * compatible. A `held` beside a literal can share a caller value with the literal.
  *
  * **An occupancy that is unknown.** A `legacy` has an unknown read side, because its `r` widens exactly the reading. A `lazy` is transparent,
  * so its occupancies are its subterm's. The model certifies no pair on an unknown side. This
@@ -1325,14 +1327,15 @@ export const separable = (x: Term, y: Term, identified = true): boolean => {
             (readable === undefined || disjoint)
         )
     }
-    // **The `identifies` row is lawful where the union acts, and needs each shared attribute read
-    // to one value.** A `held` reads the attribute to another value through its `decode`, and a
-    // stored view has erased that `decode`, so the row applies to neither where the reads meet.
-    // `reaches` counts a thunk as a `held`, because the host cannot read a thunk without forcing it
+    // **The `identifies` row needs two compatible options, and shows compatibility only where
+    // neither option reaches a `held`.** A `held` reads or writes a value that its inner term does
+    // not, so the row cannot see whether the two options agree. A stored view has erased that
+    // `decode`, so the row is off there. `reaches` counts a thunk as a `held`, because the host
+    // cannot read a thunk without forcing it
     return (
         identified &&
-        (readable === undefined ||
-            (!reaches(x, ['held']) && !reaches(y, ['held']))) &&
+        !reaches(x, ['held']) &&
+        !reaches(y, ['held']) &&
         (identifies(x) || identifies(y))
     )
 }

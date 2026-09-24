@@ -409,11 +409,24 @@ describe('a literal beside an adapter', () => {
     })
 
     /**
-     * **`decimal` stores an `N` and the literal stores an `S`**, so no stored attribute is read by
-     * both, and the `identifies` row stays lawful.
+     * **`decimal` and the literal both take the caller's `'1'`.** The union reads `{ S: '1' }` to
+     * `'1'` through the literal, and then refuses to write `'1'`, because both options admit it.
      */
-    it('a literal beside an adapter that stores another attribute stays declared', () => {
-        expect(() => declare([decimal, string('a')])).not.toThrow()
+    it('a literal beside an adapter that shares a caller value with it is refused', () => {
+        expect(() => declare([decimal, string('1')])).toThrow(
+            /both take the same kind of value/,
+        )
+    })
+
+    /**
+     * **The host cannot show that the two options are compatible.** The held side of `decimal` is
+     * `string`, not a data predicate for numerals, so the declaration cannot see that `'a'` is
+     * outside it.
+     */
+    it('a literal beside an adapter is refused, because the held side of the adapter is not a data predicate', () => {
+        expect(() => declare([decimal, string('a')])).toThrow(
+            /both take the same kind of value/,
+        )
     })
 })
 

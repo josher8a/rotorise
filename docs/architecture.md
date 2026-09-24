@@ -303,11 +303,13 @@ never refuses a pair the model certifies. A decline by `certPair` is not a refut
 also accepts a pair that a host row certifies: a literal, which identifies its own values, and a
 pair of objects, which the host certifies by the names and literals they declare.
 
-**No bridge checks that second direction, and it is not a law.** A host row is sound only where
-the two options are compatible: every attribute that both read, they read to one value, so the
-union is lawful where it acts. The `identifies` row fails that test where a `held` shares a value
-with a literal. `decimal` beside `string('1')` reads `S '1'` to `'1'` and then refuses to write
-`'1'`, because both options admit it.
+**No bridge checks that second direction, and it is not a law.** A host row that accepts a pair
+without a certificate needs the two options compatible: every attribute that both read, they read
+to one value, so the union is lawful where it acts. The host decides compatibility only where
+neither option reaches a `held`, by `compat_of_HF`. Where the views of a `held` are orthogonal, the
+certificate decides the pair. So the `identifies` row refuses a `held` beside a literal, because a
+`held` can share a caller value with the literal. Two restrictions of one adapter are compatible in
+the model, and the host does not use that, because an overlap has no owner.
 
 `Separated` is what names the separation guarantee over the option list, with
 `separated_of_orth` as the classifier's bridge into it.
