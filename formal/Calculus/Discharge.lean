@@ -84,64 +84,6 @@ theorem keysOk_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → Obj
   · simp only [Bool.or_eq_true]
     exact Or.inr (decide_eq_true hsub)
 
-/-- Object-encode under a closed rest policy stamps name admission: every written name
-    is declared and every non-`opt` name is written.
-
-    **One statement where there were two.** The list representation had a value row and
-    an attribute row, and the second half of this lemma was the first transported along
-    `traverse_fst`. `M`'s payload is a key set with a function on it, and encoding does
-    not touch the key set — so the value side's admission *is* the attribute side's, and
-    there is nothing to transport. -/
-theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option Term} {keys : Finset Name}
-    {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
-    (hval : valPresentB ⟨fields, fun k => fieldSem (ff k)⟩ keys = true)
-    (hfi : funImage (fun k : {k // k ∈ keys} =>
-        (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ (rcOf (wildSem wild)) k.1).bind
-          (fun c => c.e (f k))) = some g) :
-    keysOk (Body.spec (.mk fields ff wild))
-      keys = true := by
-  refine keysOk_of_names ?_ (fun k hb => ?_) (fun k hb hk => ?_)
-  · -- an open block claims every name; a closed body claims only what it declares, and
-    -- there `entryCodec` succeeds through the field table alone
-    cases hwild : wild with
-    | some _ => exact Or.inl rfl
-    | none =>
-      refine Or.inr (fun k hk => ?_)
-      apply Decidable.byContradiction
-      intro hnk
-      have hw := funImage_some hfi ⟨k, hk⟩
-      rw [hwild] at hw
-      rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem)
-            (rcOf (wildSem none)) k
-          = none from by simp only [rcOf, wildSem, entryCodec, MapOf.at, dif_neg hnk]] at hw
-      exact nomatch hw
-  · apply valPresentB_spec hval (MapOf.at_of_mem (m := ⟨fields, _⟩) k)
-    apply fieldSem_ne_opt
-    cases hfd : ff k with
-    | req t => simp
-    | optional t => cases t <;> simp [ObjectSlot.presence, Term.isNever, hfd] at hb
-  · have hw := funImage_some hfi ⟨k.1, hk⟩
-    have he : (fieldSem (ff k)).codec.e (f ⟨k.1, hk⟩) = some (g ⟨k.1, hk⟩) := by
-      rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem)
-            (rcOf (wildSem wild)) k.1
-          = some (fieldSem (ff k)).codec by
-            simp only [entryCodec, MapOf.at, dif_pos k.2]] at hw
-      simpa using hw
-    cases hfd : ff k with
-    | req t =>
-      cases t <;> simp [ObjectSlot.presence, ObjectSlot.isReq, Term.isNever, hfd] at hb
-      case never =>
-        rw [hfd] at he
-        change none = some _ at he
-        cases he
-    | optional t =>
-      cases t <;> simp [ObjectSlot.presence, Term.isNever, hfd] at hb
-      case never =>
-        rw [hfd] at he
-        change none = some _ at he
-        cases he
-
 /-- A field whose term is a literal writes only that literal's alternatives, whatever the
     slot's presence marker: `fieldSem` carries the same codec through both marks, and
     `altsOfField` reads the same. -/
@@ -180,49 +122,8 @@ theorem altsOkA_of_term_e : ∀ {t : Term} {v a}, Lawful (denote t) → (denote 
         | exact Option.isSome_iff_exists.mpr ⟨_, (lawful_literalCodec _ _).retract
             (by simpa [denote] using he)⟩
 
-/-- Object-encode stamps content admission too: every written name whose field is a literal
-    carries one of that literal's alternatives.
-
-    `keysOk_of_encode`'s twin, on the other half of the structural test. The quantifier runs
-    over the *written* key set, which is what makes an `optional` literal field harmless: a
-    name the encode did not write is `keysOk`'s business and never reaches here. -/
-theorem literalsOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option Term}
-    {keys : Finset Name} {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
-    (hfi : funImage (fun k : {k // k ∈ keys} =>
-        (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ (rcOf (wildSem wild)) k.1).bind
-          (fun c => c.e (f k))) = some g) :
-    literalsOk (Body.spec (.mk fields ff wild))
-      keys f = true := by
-  simp only [literalsOk, decide_eq_true_eq]
-  intro k
-  have hw := funImage_some hfi k
-  cases hm : decide ((k : Name) ∈ fields) with
-  | false =>
-      have hk : (k : Name) ∉ fields := of_decide_eq_false hm
-      show litOkV (Body.spec (.mk fields ff wild)) k.1 (f k) = true
-      rw [litOkV, show (Body.spec (.mk fields ff wild)).names.at k.1 = none from dif_neg hk]
-      -- an undeclared name: a closed body never wrote it, and an open block wrote it
-      -- through the block's own codec, so the block's alternatives hold
-      cases hwild : wild with
-      | none => rfl
-      | some w =>
-        rw [hwild] at hw
-        rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem)
-              (rcOf (wildSem (some w))) k.1 = some (denote w) from by
-              simp only [rcOf, wildSem, entryCodec, MapOf.at, dif_neg hk]] at hw
-        exact altsOkV_of_term_e (by simpa using hw)
-  | true =>
-      have hk : (k : Name) ∈ fields := of_decide_eq_true hm
-      rw [litOkV, show (Body.spec (.mk fields ff wild)).names.at k.1
-          = some ⟨_, altsOfField (ff ⟨k.1, hk⟩)⟩ from dif_pos hk]
-      rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem)
-            (rcOf (wildSem wild)) k.1
-          = some (fieldSem (ff ⟨k.1, hk⟩)).codec from by
-            simp only [entryCodec, MapOf.at, dif_pos hk]] at hw
-      exact litOkV_of_field_e (by simpa using hw)
-
-/-- …and the read side, at the attribute the same encode produced. -/
+/-- Object-encode stamps read-side content admission: at each attribute the encode wrote, a
+    name whose field is a literal carries one of that literal's alternatives. -/
 theorem literalsOkA_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
     {wild : Option Term} (hlaw : ∀ w : Term, wild = some w → Lawful (denote w))
     {keys : Finset Name} {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}

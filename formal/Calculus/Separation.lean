@@ -120,11 +120,9 @@ theorem extendRead_reads_n :
 
 A predicate on values does not say how a term is *written*. `string` and `refine(string, ⊤)`
 denote the same pair and have the same `Adm`, so nothing defined on the pair tells them
-apart. The retired table that answered this read the constructor instead, which is why
-nothing consumed it. `Decides` below is the semantic notion §5's prose was reaching for,
-pinned from the pair rather than read off the syntax. The witness that the two
-questions are different is the one theorem kept from that table's section, immediately
-below. -/
+apart. `Decides` below is the semantic notion §5's prose describes, pinned from the pair
+rather than read off the syntax. The theorem immediately below is the witness that the two
+questions are different. -/
 
 /-- **How a term is written is not a function of what it admits.** Two terms, one a
     refinement of the other, agreeing on the joint predicate at every value. -/
@@ -174,31 +172,21 @@ theorem admitA_le_AdmA (t : Term) {a : Attr}
     (h : ((denote t).p a).isSome = true) : AdmA t a = true :=
   (AdmA_exact t a).mpr h
 
-/-! ### `ident`, pinned from below
-
-The section above concluded that `ident` cannot be recovered from the pair and should
-therefore be left alone. That was the wrong conclusion from a correct observation. `ident`
-is a table like the other three, it had never been pinned from below either, and the reason
-it resists the pair is not that it carries something the pair lacks — it is that it carries
-something **nothing** justifies.
+/-! ### `Decides`, and why no table over the syntax decides it
 
 `Decides` below is the semantic notion §5's prose describes: two values of the same kind,
 one written and one refused, so that the kind does not settle admission and an admission is
-therefore evidence. Against it, `ident` is neither an over- nor an under-approximation:
+therefore evidence.
 
-* **Too generous.** `refine(string, ⊤)` is `ident` and decides nothing — `q` is checked on
-  both halves and always passes. `ident` cannot see this, because it never looks at `q`.
-* **Too stingy.** `object` with a required field refuses the empty map and writes a
-  populated one, which is deciding by any reading, and `ident` calls it `false`.
+**No table that reads the constructor is exact for `Decides`**, in either direction:
 
-And its `refine` row was not an oversight but an artifact: answering `true` there
-unconditionally is what made the pinning lemma go through, since a refinement's admissible
-set can refuse on `q` alone while the subterm decides nothing. The row existed to satisfy a
-lemma, not because refinements decide.
+* A row that answers `true` at every `refine` is too generous. `refine(string, ⊤)` decides
+  nothing, because `q` is checked on both halves and always passes (`not_decides_refine_top`).
+* A row that answers `false` at every `object` is too stingy. An `object` with a required
+  field refuses the empty map and writes a populated one, so it decides (`decides_object`).
 
-That table could not be made exact — whether an arbitrary `q : Value → Bool` narrows
-anything is not a syntactic question — and it erred on both sides at once. Nothing live
-depended on it, which is why it went and `Decides` stayed. -/
+Whether an arbitrary `q : Value → Bool` narrows anything is not a syntactic question, so the
+notion is stated on the denotation. -/
 
 /-- **What "decides its own membership" actually says.** Two values of the *same kind*, one
     written and one refused: the kind does not settle admission, so an admission is
@@ -228,7 +216,8 @@ theorem not_decides_refine_top : ¬ Decides (.refine .string (.closure qTop)) :=
     simp_all [Codec.restrict, Pred.eval, stringCodec, qTop, Value.kind]
 
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
-    populated one — two `map`s differing in admission — while `ident` calls it `false`. -/
+    populated one: two `map`s differing in admission, so a row that answers `false` at every
+    `object` is wrong. -/
 theorem decides_object :
     Decides (.object (.mk {"k"} (fun _ => .req .string) none)) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
@@ -251,26 +240,25 @@ They are **one combinator with two adapters**: `Codec.adapt` generalises both, `
 the total `some ∘ f` (`through_e_adapt`) and `refine` the partial identity `partialId q`
 (`restrict_e_adapt`). The doc says as much — "the *same* combinator, weaker adapter".
 
-`ident` gives them opposite rows. `refine` is `true` unconditionally; `held` propagates.
-So the over-claim and the under-claim are the same mistake seen from two sides, and the
+A row that reads the combinator and not the adapter errs at one of the two, and the
 witnesses are duals:
 
-* `refine(string, ⊤)` — the adapter narrows nothing, and `ident` says it decides.
-* `held(string, string, fSplit, _)` — the adapter narrows to one string, and `ident` says it does
-  not.
+* `refine(string, ⊤)`: the adapter narrows nothing, and the term does not decide.
+* `held(string, string, fSplit, _)`: the adapter narrows to one string, and the term decides
+  (`decides_held`).
 
 `Adm` has no such split. `Adm_refine_adapt` and `Adm_held_adapt` show it doing the one
-thing `adapt` describes on both rows — apply the adapter, then ask the subterm — which is
-why it carries `q` and `f` where `ident` carries neither. The `held` row also asks the
-caller-side term at the value itself. -/
+thing `adapt` describes on both rows, apply the adapter and then ask the subterm, which is
+why it carries `q` and `f`. The `held` row also asks the caller-side term at the value
+itself. -/
 
 /-- An adapter that sends one string to itself and everything else off `string`'s carrier.
     Total, so this is a `held` and not a `refine` — and it narrows exactly as a refinement
     would. -/
 def fSplit : Value → Value := fun v => match v with | .str "A" => .str "A" | _ => .bool true
 
-/-- **The dual gap.** `held(string, string, fSplit, _)` writes `"A"` and refuses `"B"` — two values
-    of one kind, differing in admission — so it decides. `ident` says `false`. -/
+/-- **The dual gap.** `held(string, string, fSplit, _)` writes `"A"` and refuses `"B"`: two values
+    of one kind, differing in admission, so it decides. -/
 theorem decides_held : Decides (.held .string .string fSplit (fun v => v)) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
   · simp [denote, denote, Codec.through, Codec.restrict, stringCodec, fSplit]
@@ -361,26 +349,22 @@ theorem not_sepJV_array_literals :
   intro h
   exact absurd (h (.arr []) (Adm_array_nil _)) (by rw [Adm_array_nil]; exact fun hc => nomatch hc)
 
-/-! ### What `set` is, structurally — and the defect that closed
+/-! ### What `set` is, structurally
 
-Three readings were worth separating. Two were right and the third found a defect; the
-defect is now fixed by the type, and these are the witnesses that it is.
+Three readings are worth separating. The third is a fact about the type, and the theorems
+below are its witnesses.
 
 **Not a `union`.** A union is a choice among *codecs*, lawful by pairwise compatibility; a
 set's elements all go through **one** codec, so no obligation between codecs arises. That is
 why `set` needs no compatibility premise and `union` does.
 
-**Not `array` with a wrapper either, any more.** It was, while both were lists: the two
-shared `traverse c.e vs` and differed only in how the payload list was presented. With the
-sets typed there is no shared list to share — `array` traverses a `List Value`, `set` images
-a `Finset` — and what survives of the old observation is that the *element* codec is the
-same in both.
+**Not `array` with a wrapper.** `array` traverses a `List Value`, and `set` images a
+`Finset`. The two share the *element* codec and nothing else.
 
-**And "order does not matter" is now true of the model**, where it was not. §1 types `SS` as
-`℘⁺fin(String)` and the reference says the order of a set's values is not preserved and each
-value is unique. Three theorems recorded that the model disagreed. They are replaced by the
-three below, which say the disagreement is over: an ordering is not a distinction a `Finset`
-can make, and a repeat is not an inhabitant it can hold. -/
+**"Order does not matter" is true of the model.** §1 types `SS` as `℘⁺fin(String)`, and the
+reference says the order of a set's values is not preserved and each value is unique. The
+three theorems below state it: an ordering is not a distinction a `Finset` can make, and a
+repeat is not an inhabitant it can hold. -/
 
 /-- Two "orderings" of one set are the same value — there is nothing to quotient. -/
 theorem set_order_irrelevant :
@@ -399,7 +383,7 @@ theorem wireSet_order_irrelevant :
            fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e)⟩))
 
 /-- A repeat is not an inhabitant: `℘⁺fin` has no multiplicities, and neither does the
-    model now. -/
+    model. -/
 theorem set_no_duplicates :
     (Value.strSet (.of "a" {"a"})) = (Value.strSet (.of "a" ∅)) :=
   congrArg Value.strSet (Subtype.ext (Finset.ext fun x => by
@@ -407,23 +391,20 @@ theorem set_no_duplicates :
       Finset.notMem_empty, or_false]
     exact ⟨fun h => h.elim id id, fun h => Or.inl h⟩))
 
-/-! ### What (R) would have forced, had the type not settled it
+/-! ### What (R) forces on a list carrier for a set
 
-The repair was once going to be a canonical form over lists, and (R) constrained it hard:
-retraction is to the *same* value, not an agreeing one, so a codec whose `e` collapsed two
-orderings would owe one attribute two readings. `e` could not normalise; it would have had
-to accept exactly one representative per set and refuse the rest, with `p` normalising so
-that `ker p` collapsed the orderings — §2's sentence, made true by construction.
+(R) rules out a canonical form over lists. Retraction is to the *same* value, not an
+agreeing one, so a codec whose `e` collapses two orderings owes one attribute two readings.
+Such an `e` cannot normalise: it has to accept exactly one representative per set and refuse
+the rest, with `p` normalising so that `ker p` collapses the orderings.
 
-None of that is needed. `Finset` has one representative per set *as a type*, so there is
-nothing for `e` to choose between and nothing for `p` to collapse; `ker p` is equality at
-`setCodec` and that is now correct rather than a defect. The constraint is recorded because
-it is what rules out the alternative design, not because anything here depends on it.
+`Finset` has one representative per set *as a type*, so there is nothing for `e` to choose
+between and nothing for `p` to collapse, and `ker p` is equality at `setCodec`. The constraint
+is stated because it rules out the alternative design. Nothing here depends on it.
 
-The canonical form and the axiom-free order it was built on were likewise no longer on the set
-path, and `f3bb956` deleted them; the `Classical.choice` hazard they existed to route around is
-recorded beside `NEFinset` in `Domain.lean`. Nor, as the next section shows, on the map path: the
-quotient the kernel refuses is `Finset (Name × Attr)`, and `M` does not need it. -/
+No canonical form and no order is on the set path or on the map path. The `Classical.choice`
+hazard of an order is stated beside `NEFinset` in `Domain.lean`. The quotient the kernel
+refuses is `Finset (Name × Attr)`, and `M` does not need it, as the next section shows. -/
 
 /-! ### The reference, checked against the model
 
@@ -432,31 +413,24 @@ exactly — `Numeral.WF`'s 38 digits and `-130 … 125` exponent range are the d
 bounds; binary compares unsigned; empty strings and empty binary are permitted, empty lists
 and maps are permitted, empty sets are not, and the model already refuses the last.
 
-Two things do not survive, and they are the same defect at two members.
+Two statements of the reference are about order and uniqueness, and the type carries both.
 
-**`SS`/`NS`/`BS`** — *"Each value within a set must be unique. The order of the values within
-a set is not preserved."* Recorded above.
+**`SS`/`NS`/`BS`**: *"Each value within a set must be unique. The order of the values within
+a set is not preserved."* The section above states it.
 
-**`M`** — *"A map type attribute can store an **unordered** collection of name-value
-pairs."* The model's `M` was a `List (Name × Attr)`, so two orderings of one map were two
-attributes and a repeated key was writable, which no map has. Three theorems recorded the
-disagreement; they are replaced by the three below.
+**`M`**: *"A map type attribute can store an **unordered** collection of name-value
+pairs."* The three theorems below state it.
 
-This one was called sharper than the set case for two reasons, and only the first survives.
-The model did *state* the intent elsewhere — member agreement at `M` compared by key and
-ignored order — so the two halves of the model disagreed with each other and not merely with
-the reference. But the second reason, that maps cannot be repaired by typing, was wrong, and the
-correction is the content of this section. `Finset (Name × Attr)` **is** rejected by the
-kernel, exactly as `Finset Value` is, the element type being the one under declaration. What
-does not follow is that `M` needs the well-formedness route. The pair need not be the
-element: §1's `M` is a finite *partial function*, so the names go in a `Finset` over the
-concrete type `Name` and the attributes go in a function's codomain — a strictly positive
-position, which the kernel accepts:
+**A map is repaired by typing.** `Finset (Name × Attr)` is rejected by the kernel, exactly as
+`Finset Value` is, because the element type is the one under declaration. That does not send
+`M` to a well-formedness premise. The pair need not be the element: §1's `M` is a finite
+*partial function*, so the names go in a `Finset` over the concrete type `Name` and the
+attributes go in a function's codomain, a strictly positive position that the kernel accepts:
 
     | m (keys : Finset Name) (f : {k // k ∈ keys} → Attr)
 
-Unordered, unique-keyed and total-on-its-keys are now facts about the type. No canonical
-order, no ~~Wire.canon~~, and nothing for `e` to choose between. -/
+Unordered, unique-keyed and total-on-its-keys are facts about the type. No canonical order,
+no ~~Wire.canon~~, and nothing for `e` to choose between. -/
 
 /-- Two "orderings" of one map's names are one name set — there is nothing to quotient. -/
 theorem mapKeys_order_irrelevant : ({"a", "b"} : Finset Name) = {"b", "a"} :=
@@ -465,9 +439,9 @@ theorem mapKeys_order_irrelevant : ({"a", "b"} : Finset Name) = {"b", "a"} :=
     exact ⟨fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e),
            fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e)⟩
 
-/-- …so the codec has one answer where it used to have two. Equal key sets and
-    pointwise-equal entries are one attribute (`MapOf.ext`), and one attribute is one
-    reading — the order-sensitivity had nowhere left to live. -/
+/-- …so the codec has one answer. Equal key sets and pointwise-equal entries are one
+    attribute (`MapOf.ext`), and one attribute is one reading, so no reading depends on an
+    order. -/
 theorem record_p_order_irrelevant
     (g : {k // k ∈ ({"a", "b"} : Finset Name)} → Attr)
     (g' : {k // k ∈ ({"b", "a"} : Finset Name)} → Attr)
