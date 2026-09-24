@@ -954,7 +954,7 @@ const leanBelow = (x: Term, y: Term): string => {
         )}`
     if (x.kind === 'literal') return 'sub_literal_base _ _'
     if (x.kind === 'held' && y.kind === 'held')
-        return `sub_held_inner (${leanBelow(x.inner, y.inner)})`
+        return `sub_held (${leanBelow(x.inner, y.inner)}) (${leanBelow(x.outer, y.outer)})`
     return '⟨fun _ _ h => h, fun _ _ h => h⟩'
 }
 

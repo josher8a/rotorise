@@ -183,10 +183,10 @@ describe('terms', () => {
      */
     it('emits a decimal literal at the native base, under the named pair', () => {
         expect(leanTermOf(erase(decimal('-1.5')))).toBe(
-            '(Term.held (Term.literal GroundKind.number (WFNumeral.of "-1.5")) (Term.string) numeralOfStoredText textOfNumeral)',
+            '(Term.held (Term.literal GroundKind.number (WFNumeral.of "-1.5")) (Term.literal GroundKind.string "-1.5") numeralOfStoredText textOfNumeral)',
         )
         expect(leanTermOf(erase(decimal('1', '2.5')))).toBe(
-            '(Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.string) numeralOfStoredText textOfNumeral)',
+            '(Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) numeralOfStoredText textOfNumeral)',
         )
     })
 
@@ -1440,7 +1440,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.endsWith('= false := by decide'),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([683, 20])
+        expect([accepted.length, refused.length]).toEqual([685, 18])
     })
 
     it('emits them for the gate to elaborate', () => {

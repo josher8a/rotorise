@@ -65,14 +65,20 @@ theorem pairwiseCompat_of_HF {opts : List Term} (h : HFL opts)
     (hl : ∀ t ∈ opts, Lawful (denote t)) : PairwiseCompat opts :=
   fun s hs t ht => compat_of_HF (HFL_mem h s hs) (HFL_mem h t ht) (hl t ht)
 
-/-- **A `held` is monotone in its stored side**: the same adapter over a smaller inner codec is
-    a smaller codec. -/
-theorem sub_held_inner {i i' P : Term} {f g : Value → Value} (h : Sub (denote i) (denote i')) :
-    Sub (denote (.held i P f g)) (denote (.held i' P f g)) :=
-  ⟨fun _ _ he => restrict_e.mpr ⟨(restrict_e.mp he).1, h.1 _ _ (restrict_e.mp he).2⟩,
+/-- **A `held` is monotone in both of its terms**: the same adapter over a smaller stored side and
+    a smaller held side is a smaller codec. -/
+theorem sub_held {i i' P P' : Term} {f g : Value → Value} (h : Sub (denote i) (denote i'))
+    (hP : Sub (denote P) (denote P')) :
+    Sub (denote (.held i P f g)) (denote (.held i' P' f g)) :=
+  ⟨fun _ _ he =>
+    let ⟨hq, he'⟩ := restrict_e.mp he
+    let ⟨a, ha⟩ := Option.isSome_iff_exists.mp hq
+    restrict_e.mpr ⟨Option.isSome_iff_exists.mpr ⟨a, hP.1 _ _ ha⟩, h.1 _ _ he'⟩,
    fun _ _ hp =>
     let ⟨w, hw, hv⟩ := through_p.mp (restrict_p.mp hp).1
-    restrict_p.mpr ⟨through_p.mpr ⟨w, h.2 _ _ hw, hv⟩, (restrict_p.mp hp).2⟩⟩
+    let ⟨a, ha⟩ := Option.isSome_iff_exists.mp (restrict_p.mp hp).2
+    restrict_p.mpr ⟨through_p.mpr ⟨w, h.2 _ _ hw, hv⟩,
+      Option.isSome_iff_exists.mpr ⟨a, hP.1 _ _ ha⟩⟩⟩
 
 /-- **A union of options below one codec is below it**, because the join answers through one
     option. -/

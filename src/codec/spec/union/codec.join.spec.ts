@@ -197,6 +197,51 @@ describe('a union of two restrictions of one adapter is the adapter, whatever th
         ])
     })
 
+    // the held side of `decimal('1', '2.5')` is the texts it writes, so its view meets the other
+    // option's literals at the bottom (Lawson: orthogonality reads the views exactly)
+    it('writes and reads a literal decimal beside other string literals the same way in each order', () => {
+        const values = ['1', '2.5', 'A', 'B', 'C']
+        const attributes: AttributeValue[] = [
+            { N: '1' },
+            { N: '2.5' },
+            { S: 'A' },
+            { S: 'B' },
+            { S: '1' },
+        ]
+        const answers = sameUnderEveryOrder(
+            [decimal('1', '2.5'), string('A', 'B')],
+            (codec) => [
+                ...values.map((v) => codec.encode(v)),
+                ...attributes.map((a) => codec.decode(a)),
+            ],
+        )
+        expect(answers?.slice(0, 4)).toEqual([
+            { N: '1' },
+            { N: '2.5' },
+            { S: 'A' },
+            { S: 'B' },
+        ])
+    })
+
+    // plain `decimal` holds every numeral text, and no data states that set, so the view is `string`
+    it('refuses a decimal beside string literals, whose view shows no separation', () => {
+        expect(() =>
+            union([
+                decimal,
+                string('A', 'B'),
+            ] as unknown as readonly AnyCodec[]),
+        ).toThrow(/not shown compatible/)
+    })
+
+    it('keeps what a literal decimal writes: its own numerals, and no other', () => {
+        const only = decimal('1', '2.5') as unknown as Erased
+        expect(only.encode('1')).toEqual({ N: '1' })
+        expect(failed(only.encode('3'))).toBe(true)
+        expect(failed(only.encode('1.0'))).toBe(true)
+        expect(only.decode({ N: '2.5' })).toBe('2.5')
+        expect(failed(only.decode({ N: '3' }))).toBe(true)
+    })
+
     it('refuses two adapters with distinct functions, which show no common bound', () => {
         const up = held(string, string, {
             encode: (s: string) => s.toUpperCase(),
