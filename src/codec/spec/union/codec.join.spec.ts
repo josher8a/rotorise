@@ -241,6 +241,55 @@ describe('a union of two restrictions of one adapter is the adapter, whatever th
         ])
     })
 
+    // one adapter, and each side of `decimal('1')` is below one option of a held-free union of
+    // literals, so the wider option is the common bound
+    it('writes and reads a literal decimal beside a wider literal decimal the same way in each order', () => {
+        const values = ['1', '2.5', '3']
+        const attributes: AttributeValue[] = [
+            { N: '1' },
+            { N: '2.5' },
+            { N: '3' },
+            { S: '1' },
+        ]
+        const answers = sameUnderEveryOrder(
+            [decimal('1'), decimal('1', '2.5')],
+            (codec) => [
+                ...values.map((v) => codec.encode(v)),
+                ...attributes.map((a) => codec.decode(a)),
+            ],
+        )
+        expect(answers).toEqual([
+            { N: '1' },
+            { N: '2.5' },
+            'failed',
+            '1',
+            '2.5',
+            'failed',
+            'failed',
+        ])
+    })
+
+    // the two options share `2.5`, and neither is below the other, so no warrant shows them compatible
+    it('refuses two literal decimals that overlap where neither is below the other', () => {
+        expect(() =>
+            union([
+                decimal('1', '2.5'),
+                decimal('2.5', '3'),
+            ] as unknown as readonly AnyCodec[]),
+        ).toThrow(/not shown compatible/)
+    })
+
+    // the model bounds the options of a union by `opaque`, and an option with a `held` has no such
+    // bound, so a term below one such option is not shown below the union
+    it('refuses a literal decimal beside a union whose wider option holds an adapter', () => {
+        expect(() =>
+            union([
+                decimal('1'),
+                union([decimal('1', '2.5'), string('A')]),
+            ] as unknown as readonly AnyCodec[]),
+        ).toThrow(/not shown compatible/)
+    })
+
     // the held side of `decimal('1', '2.5')` is the texts it writes, so its view meets the other
     // option's literals at the bottom (Lawson: orthogonality reads the views exactly)
     it('writes and reads a literal decimal beside other string literals the same way in each order', () => {
@@ -359,6 +408,7 @@ describe("an accepted union's options never write one value, or read one attribu
         ["string('A', 'B')", string('A', 'B')],
         ['nonEmpty', nonEmpty],
         ['decimal', decimal],
+        ["decimal('1')", decimal('1')],
         ["decimal('1', '2.5')", decimal('1', '2.5')],
         ["decimal('2', '3')", decimal('2', '3')],
         ['dynamoNumber', dynamoNumber],

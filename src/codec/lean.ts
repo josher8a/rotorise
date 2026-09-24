@@ -954,7 +954,14 @@ const leanBelow = (x: Term, y: Term): string => {
                 `(List.forall_mem_cons.mpr ⟨${leanBelow(one, y)}, ${rest}⟩)`,
             '(fun _ h => nomatch h)',
         )}`
-    if (x.kind === 'literal') return 'sub_literal_base _ _'
+    if (y.kind === 'union')
+        for (const [at, one] of y.options.entries())
+            if (below(x, one))
+                return `sub_union_mem (${leanBelow(x, one)}) (${'List.mem_cons_of_mem _ ('.repeat(at)}List.mem_cons_self${')'.repeat(at)}) (by hf_pair)`
+    if (x.kind === 'literal')
+        return y.kind === 'literal'
+            ? '⟨fun _ _ h => h, fun _ _ h => h⟩'
+            : 'sub_literal_base _ _'
     if (x.kind === 'held' && y.kind === 'held')
         return `sub_held (${leanBelow(x.inner, y.inner)}) (${leanBelow(x.outer, y.outer)})`
     return '⟨fun _ _ h => h, fun _ _ h => h⟩'

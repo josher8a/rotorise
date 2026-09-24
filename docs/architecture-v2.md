@@ -164,10 +164,11 @@ has two halves: a shared canonical bound, or orthogonal views. An adapter beside
 does not bound, with views that meet, is refused.
 
 > ASPIRATION: the library tests a bound only where the bound is `opaque`, or where its rule
-> `below` shows one option below the other. `below` has four rows: a literal below its base, a
-> union whose options are each below, the same adapter over sides that are each below, and a term
-> with no payload below itself. So it refuses `decimal('1')` beside `decimal('1', '2.5')`, and two
-> restrictions of one adapter that overlap where neither is below the other.
+> `below(x, y)` shows one option below the other. The rule has five rows: a literal below its base
+> and below itself, a union whose options are each below, a term below a held-free union where the
+> term is below one option, the same adapter over sides that are each below, and a term with no
+> payload below itself. So it refuses `decimal('1')` beside `union([decimal('1', '2.5'),
+> string('A')])`, and two restrictions of one adapter that overlap where neither is below the other.
 
 **A union is the join of its options.** The first option that admits a value writes the value,
 and over lawful, pairwise compatible options the order of the options is unobservable. So a value
