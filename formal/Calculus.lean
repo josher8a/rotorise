@@ -34,4 +34,5 @@ import Calculus.Vectors
 import Calculus.Universal
 import Calculus.Confluence
 import Calculus.Kernel
+import Calculus.Compat
 import Calculus.Axioms
