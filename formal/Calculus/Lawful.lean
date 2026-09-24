@@ -19,59 +19,51 @@ prisms. Below, each of the four is that one lemma transported across the definit
 equality by `Lawful.congr`, which is what lets the definitions stay in the unfolded form
 the rest of the development `simp`s with. -/
 
-/-- §2's four laws for any pair of prisms. The two premises are the only things a prism
-    pair does not already supply: which member the attribute side stamps, and that `≼` is
-    reflexive on its image. Everything else is `out_into` and `into_out`. -/
+/-- §2's laws for any pair of prisms. The one premise a prism pair does not already supply is
+    which member the attribute side stamps. Everything else is `out_into` and `into_out`. -/
 theorem lawful_pointCodec {α : Type} {V : Ctor α Value} {A : Ctor α Attr} {μ₀ : Member}
-    (hμ : ∀ x, (A.into x).member = μ₀) (hrefl : ∀ x, Agree (A.into x) (A.into x)) :
+    (hμ : ∀ x, (A.into x).member = μ₀) :
     Lawful (pointCodec V A μ₀) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_⟩
   · -- (R): match, rebuild, match again — `out_into` on each side.
     intro t a he
     obtain ⟨x, hx, rfl⟩ := Option.map_eq_some_iff.mp he
     simp [pointCodec, A.out_into, ← V.into_out hx]
-  · -- (C): what `p` produced was built by `V`, so `V.out` matches it.
+  · -- (C): what `p` produced was built by `V`, and `A` rebuilds the attribute it read.
     intro a t hp
-    obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp hp
-    simp [pointCodec, V.out_into]
+    obtain ⟨x, hx, rfl⟩ := Option.map_eq_some_iff.mp hp
+    simp [pointCodec, V.out_into, A.into_out hx]
   · -- (W): everything written is `A.into` of something.
     intro μ hm t a he
     obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp he
     cases hm; exact hμ x
-  · -- (MP): the re-encoding is the attribute itself, not merely an agreeing one.
-    intro a t a' hp he
-    obtain ⟨x, hx, rfl⟩ := Option.map_eq_some_iff.mp hp
-    simp only [pointCodec, V.out_into, Option.map_some] at he
-    cases he
-    rw [A.into_out hx]
-    exact hrefl x
 
 theorem lawful_stringCodec : Lawful stringCodec :=
   Lawful.congr (d := pointCodec strV sC .S)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
-    (lawful_pointCodec (fun _ => rfl) (fun _ => .s ..))
+    (lawful_pointCodec (fun _ => rfl))
 
 theorem lawful_booleanCodec : Lawful booleanCodec :=
   Lawful.congr (d := pointCodec boolV boolA .BOOL)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
-    (lawful_pointCodec (fun _ => rfl) (fun _ => .bool ..))
+    (lawful_pointCodec (fun _ => rfl))
 
 theorem lawful_binaryCodec : Lawful binaryCodec :=
   Lawful.congr (d := pointCodec binV bC .B)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
-    (lawful_pointCodec (fun _ => rfl) (fun _ => .b ..))
+    (lawful_pointCodec (fun _ => rfl))
 
 theorem lawful_nullCodec : Lawful nullCodec :=
   Lawful.congr (d := pointCodec nullV nullA .NULL)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
-    (lawful_pointCodec (fun _ => rfl) (fun _ => .null))
+    (lawful_pointCodec (fun _ => rfl))
 
 /-- **The `(number)` case, and it no longer consumes an axiom.** `e` and `p` are mutually
     inverse constructor wrappers over one carrier, so all four laws are `rfl` at the only
     inhabited row. The shortest-text round trip this used to spend is not needed, because
     there is no host spelling to round-trip through. -/
 theorem lawful_numberCodec : Lawful numberCodec := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_⟩
   · intro t a he
     cases t with
     | num x => cases he; rfl
@@ -84,10 +76,6 @@ theorem lawful_numberCodec : Lawful numberCodec := by
     cases t with
     | num x => cases he; cases hμ; rfl
     | _ => exact nomatch he
-  · intro a t a' hp he
-    cases a with
-    | n x => cases hp; cases he; exact .n ..
-    | _ => exact nomatch hp
 
 theorem LawfulCore.through {c : Codec} (h : LawfulCore c) {f g : Value → Value}
     (hiso : IsoCancels c f g) :
@@ -101,16 +89,15 @@ theorem LawfulCore.through {c : Codec} (h : LawfulCore c) {f g : Value → Value
     exact h.canon hw
   writes := by intro μ hμ t a he; exact h.writes hμ (through_e.mp he)
 
-/-- `held` preserves the full laws: the core lemma, plus `≼` through the iso. -/
+/-- `held` preserves the laws: the core lemma, plus canonical reads through the iso. -/
 theorem Lawful.through {c : Codec} (h : Lawful c) {f g : Value → Value}
     (hiso : IsoCancels c f g) :
     Lawful (c.through f g) :=
   { LawfulCore.through h.core hiso with
-    agree := by
-      intro a t a' hp he
+    canon := by
+      intro a t hp
       obtain ⟨w, hw, rfl⟩ := through_p.mp hp
-      rw [through_e, hiso.2 w (h.canon hw)] at he
-      exact h.agree hw he }
+      rw [through_e, hiso.2 w (h.defined hw)]; exact h.canon hw }
 
 /-- `refine` preserves the laws: everything restricts. -/
 theorem LawfulCore.restrict {c : Codec} (h : LawfulCore c) (q : Value → Bool) :
@@ -128,7 +115,7 @@ theorem LawfulCore.restrict {c : Codec} (h : LawfulCore c) (q : Value → Bool) 
 theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
     Lawful (c.restrict q) :=
   { LawfulCore.restrict h.core q with
-    agree := fun hp he => h.agree (restrict_p.mp hp).1 (restrict_e.mp he).2 }
+    canon := fun hp => let ⟨hc, hq⟩ := restrict_p.mp hp; restrict_e.mpr ⟨hq, h.canon hc⟩ }
 
 
 /-- …and every base is lawful. -/

@@ -7,9 +7,8 @@ import Calculus.Confluence
 acts at the attribute or at the value. A union of pairwise compatible lawful options is lawful
 (`lawful_altCodec`). Two codecs below one canonical codec are compatible
 (`compat_of_common_bound`). Every held-free term is below `opaque`, so held-free lawful terms are
-pairwise compatible (`compat_of_HF`). `Lawful` alone does not make a common bound give
-compatibility: the bound must also be `Canon` (`common_bound_lawful_insufficient`). Without
-compatibility, the order of the options is observable (`flip_order_observable`).
+pairwise compatible (`compat_of_HF`). Without compatibility, the order of the options is
+observable (`flip_order_observable`).
 -/
 
 namespace Calculus
@@ -75,36 +74,6 @@ theorem pairwiseCompat_array_literals :
     (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _))
     (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _)))
 
-/-! ## Where `Canon` comes from -/
-
-/-- **A restriction keeps `Canon`.** -/
-theorem canon_restrict {c : Codec} (h : Canon c) (q : Value → Bool) : Canon (c.restrict q) := by
-  intro a t hp
-  obtain ⟨hc, hq⟩ := restrict_p.mp hp
-  exact restrict_e.mpr ⟨hq, h a t hc⟩
-
-/-- **An adapter keeps `Canon`** under `IsoCancels` alone. -/
-theorem canon_through {c : Codec} (h : Canon c) {f g : Value → Value}
-    (hiso : IsoCancels c f g) : Canon (c.through f g) := by
-  intro a t hp
-  obtain ⟨w, hw, rfl⟩ := through_p.mp hp
-  have he := h a w hw
-  show c.e (f (g w)) = some a
-  rw [hiso.2 w (by rw [he]; rfl)]; exact he
-
-/-- **A lawful codec below `Ω` is `Canon`.** -/
-theorem canon_of_sub_Ω {c : Codec} (hl : Lawful c) (h : Sub c Ω) : Canon c := by
-  intro a t hp
-  obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (hl.canon hp)
-  have h1 := h.1 _ _ hb
-  rw [Ω_canon (h.2 _ _ hp)] at h1
-  cases h1; exact hb
-
-/-- **A lawful `held` over a held-free inner is a canonical bound.** -/
-theorem canon_held {t P : Term} {f g : Value → Value} (ht : HF t) (hl : Lawful (denote t))
-    (hiso : IsoCancels (denote t) f g) : Canon (denote (.held t P f g)) :=
-  canon_restrict (canon_through (canon_of_sub_Ω hl (sub_denote t ht)) hiso) _
-
 /-- **A restriction is below the codec that it restricts.** -/
 theorem sub_restrict_self (c : Codec) (q : Value → Bool) : Sub (c.restrict q) c :=
   ⟨fun _ _ h => (restrict_e.mp h).2, fun _ _ h => (restrict_p.mp h).1⟩
@@ -122,122 +91,6 @@ theorem sub_held_refine (t P : Term) (R : Pred) (f g : Value → Value) :
   · obtain ⟨hp, hq⟩ := restrict_p.mp h
     obtain ⟨w, hw, rfl⟩ := through_p.mp hp
     exact restrict_p.mpr ⟨through_p.mpr ⟨w, (restrict_p.mp hw).1, rfl⟩, hq⟩
-
-/-! ## A lawful bound that is not canonical
-
-`nonCanon` reads `"A"` and `"B"` to `"x"`, and writes `"x"` as `"B"`. The read is not
-injective, so the codec is not a partial bijection, and a restriction of the codec is not
-compatible with the codec. -/
-
-/-- A lawful codec that reads `"A"` and `"B"` to `"x"`, and writes `"x"` as `"B"`. -/
-def nonCanon : Codec where
-  T := fun _ => True
-  μ := none
-  e := fun v => match v with
-    | .str s => if s = "x" then some (.s "B") else none
-    | _ => none
-  p := fun a => match a with
-    | .s s => if s = "A" ∨ s = "B" then some (.str "x") else none
-    | _ => none
-
-/-- The restriction of `nonCanon` that reads only `"B"`. -/
-def nonCanonB : Codec where
-  T := fun _ => True
-  μ := none
-  e := nonCanon.e
-  p := fun a => match a with
-    | .s s => if s = "B" then some (.str "x") else none
-    | _ => none
-
-/-- **`nonCanon` is lawful.** -/
-theorem lawful_nonCanon : Lawful nonCanon where
-  retract := by
-    intro t a he
-    cases t with
-    | str s =>
-        simp only [nonCanon] at he; split at he
-        · cases he; subst_vars; rfl
-        · exact nomatch he
-    | _ => exact nomatch he
-  canon := by
-    intro a t hp
-    cases a with
-    | s s =>
-        simp only [nonCanon] at hp; split at hp
-        · cases hp; rfl
-        · exact nomatch hp
-    | _ => exact nomatch hp
-  writes := by intro μ hμ; exact nomatch hμ
-  agree := by
-    intro a t a' hp he
-    cases a with
-    | s s =>
-        cases t with
-        | str r =>
-            simp only [nonCanon] at he; split at he
-            · cases he; exact .s _ _
-            · exact nomatch he
-        | _ => exact nomatch he
-    | _ => exact nomatch hp
-
-/-- **`nonCanonB` is lawful.** -/
-theorem lawful_nonCanonB : Lawful nonCanonB where
-  retract := by
-    intro t a he
-    cases t with
-    | str s =>
-        simp only [nonCanonB, nonCanon] at he; split at he
-        · cases he; subst_vars; rfl
-        · exact nomatch he
-    | _ => exact nomatch he
-  canon := by
-    intro a t hp
-    cases a with
-    | s s =>
-        simp only [nonCanonB] at hp; split at hp
-        · cases hp; rfl
-        · exact nomatch hp
-    | _ => exact nomatch hp
-  writes := by intro μ hμ; exact nomatch hμ
-  agree := by
-    intro a t a' hp he
-    cases a with
-    | s s =>
-        cases t with
-        | str r =>
-            simp only [nonCanonB, nonCanon] at he; split at he
-            · cases he; exact .s _ _
-            · exact nomatch he
-        | _ => exact nomatch he
-    | _ => exact nomatch hp
-
-/-- **`nonCanonB` is below `nonCanon`.** -/
-theorem sub_nonCanonB : Sub nonCanonB nonCanon := by
-  refine ⟨fun v a h => h, fun a v h => ?_⟩
-  cases a with
-  | s s =>
-      simp only [nonCanonB] at h; split at h
-      · cases h; subst_vars; rfl
-      · exact nomatch h
-  | _ => exact nomatch h
-
-/-- **`Sub` is reflexive.** -/
-theorem sub_refl (c : Codec) : Sub c c := ⟨fun _ _ h => h, fun _ _ h => h⟩
-
-/-- **`nonCanon` is not `Canon`**: the codec reads `"A"` and writes the value as `"B"`. -/
-theorem not_canon_nonCanon : ¬ Canon nonCanon := by
-  intro h
-  have := h (.s "A") (.str "x") rfl
-  simp [nonCanon] at this
-
-/-- **A lawful common bound does not give `Compat`**: `nonCanon` and `nonCanonB` are lawful
-    and below the lawful `nonCanon`, and the pair is not `Compat`. -/
-theorem common_bound_lawful_insufficient :
-    Sub nonCanon nonCanon ∧ Sub nonCanonB nonCanon ∧ Lawful nonCanon ∧ Lawful nonCanonB ∧
-      ¬ Compat nonCanon nonCanonB := by
-  refine ⟨sub_refl _, sub_nonCanonB, lawful_nonCanon, lawful_nonCanonB, fun h => ?_⟩
-  have := h (.s "A") (.str "x") rfl (Or.inr rfl)
-  exact nomatch this
 
 /-! ## An incompatible pair: `shout | string('X')`
 
@@ -347,7 +200,7 @@ theorem lawful_swap : Lawful (denote swap) :=
   (Lawful.through lawful_string iso_swap).restrict _
 
 /-- **`swap` is a canonical bound.** -/
-theorem canon_swap : Canon (denote swap) := canon_held trivial lawful_string iso_swap
+theorem canon_swap : Canon (denote swap) := fun _ _ hp => lawful_swap.canon hp
 
 /-- **The two restrictions overlap at `"x"`**: both read the stored `"X"` to `"x"`. -/
 theorem sw_overlap : (denote sw1).p (.s "X") = some (.str "x") ∧

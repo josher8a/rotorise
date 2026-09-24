@@ -19,6 +19,11 @@ namespace Calculus
 noncomputable def semsOf (opts : List Term) : List OptionSem :=
   opts.map fun t' => optionSemOf (denote t') (specOf t')
 
+/-- A term's rest policy keeps every name. -/
+theorem wildSem_ne_drop (w : Option Term) : wildSem w ≠ .drop :=
+  Option.casesOn (motive := fun w => wildSem w ≠ .drop) w RestSem.noConfusion
+    fun _ => RestSem.noConfusion
+
 /-- **The union's obligation**: its options are pairwise compatible. -/
 def PairwiseCompat (opts : List Term) : Prop :=
   ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote s) (denote t)
@@ -298,7 +303,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
       -- function on it, and `objectCodec` is stated over those
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest
-      -- a field's codec is its term's denotation, and (MP) reaches it unchanged
+      -- a field's codec is its term's denotation, and its laws reach it unchanged
       have ihf : ∀ k, LawfulCore (fieldSem (ff k)).codec ∧
           Lawful (fieldSem (ff k)).codec := by
         intro k
@@ -321,7 +326,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
       exact ⟨lawfulCore_objectCodec (fun k => (ihf k).1)
           (fun c hcr => (ihr c hcr).1),
         lawful_objectCodec (fun k => (ihf k).2)
-          (fun c hcr => (ihr c hcr).2)⟩
+          (fun c hcr => (ihr c hcr).2) (wildSem_ne_drop _)⟩
     | @union opts Ts μs hlist =>
       have ihs : ∀ t' ∈ opts, Sound t' := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'

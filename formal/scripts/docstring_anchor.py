@@ -40,8 +40,8 @@ below alongside the block that follows it:
     /** ... the specific note ... */
     it('...', () => {
 
-`conformance.spec.ts` carries this pattern twice. A module docstring at the head of a file needs no marker: nothing precedes it,
-so it is the file's own and is skipped by construction.
+`conformance.spec.ts` carries this pattern. A module docstring at the head of a file needs no
+marker: nothing precedes it, so it is the file's own and is skipped by construction.
 
 The sharper question this cannot ask is whether the first sentence names a declaration
 that is not the one below it. That needs a reader. This narrows the reading to the runs

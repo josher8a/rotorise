@@ -716,7 +716,7 @@ noncomputable def opaqCodecω : Codec :=
     p := fun a => (opaqCodec (Attr.depth a)).p a }
 
 theorem lawful_opaqCodecω : Lawful (opaqCodecω) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_⟩
   · intro v a he
     replace he : (opaqCodec (Value.depth v)).e v = some a := he
     have hb : Attr.depth a <= Value.depth v := opaq_e_depth v (Value.depth v) a he
@@ -728,18 +728,10 @@ theorem lawful_opaqCodecω : Lawful (opaqCodecω) := by
     replace hp : (opaqCodec (Attr.depth a)).p a = some v := hp
     have hb : Value.depth v <= Attr.depth a := opaq_p_depth a (Attr.depth a) v hp
     have hc := (lawful_opaqCodec (Attr.depth a)).canon hp
-    show ((opaqCodec (Value.depth v)).e v).isSome
+    show (opaqCodec (Value.depth v)).e v = some a
     rw [opaq_e_agree v (Value.depth v) (Attr.depth a) (Nat.le_refl _) hb]
     exact hc
   · intro μ hμ; exact nomatch hμ
-  · intro a v a' hp he
-    replace hp : (opaqCodec (Attr.depth a)).p a = some v := hp
-    replace he : (opaqCodec (Value.depth v)).e v = some a' := he
-    have hb : Value.depth v <= Attr.depth a := opaq_p_depth a (Attr.depth a) v hp
-    have he' : (opaqCodec (Attr.depth a)).e v = some a' := by
-      rw [← opaq_e_agree v (Value.depth v) (Attr.depth a) (Nat.le_refl _) hb]
-      exact he
-    exact (lawful_opaqCodec (Attr.depth a)).agree hp he'
 
 theorem carrier_opaqCodecω : Carrier (opaqCodecω) := by
   refine ⟨?_, ?_⟩

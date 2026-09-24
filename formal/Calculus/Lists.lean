@@ -12,13 +12,12 @@ plumbing rather than content.
 
 Three groups:
 
-* Three additions to mathlib's `Forall₂` — `mem_left`, `mem_right`, `compose` — which is
+* Two additions to mathlib's `Forall₂` — `mem_left`, `mem_right` — which is
   where the file starts because the next group rests on them.
 * `traverse` and its laws — the one proof shape every product consumes. It rests on a
   single pivot, `traverse_eq_some`: **a successful traversal *is* the pointwise relation**
   `List.Forall₂ (f · = some ·)`. Each law is then that relation pushed around — reversed
-  for (R), forgotten for (C), composed for (MP) — which is what mathlib's `Forall₂` API
-  is for.
+  for (R), forgotten for definedness — which is what mathlib's `Forall₂` API is for.
 * A handful of `filter` facts stated in the form the sum proofs want, mostly about a
   `filter` that resolves to a singleton or to nil.
 
@@ -47,15 +46,6 @@ theorem Forall₂.mem_left {α β : Type _} {R : α → β → Prop} :
       · obtain ⟨y, hy, hR⟩ := hxs.mem_left hx'
         exact ⟨y, List.mem_cons_of_mem _ hy, hR⟩
 
-/-- Chaining two pointwise relations through a shared middle list. A read-then-rewrite
-    pair is exactly this: `p` relates attributes to values, `e` relates those values to
-    attributes, and the composite relates the two attribute lists. -/
-theorem Forall₂.compose {α β γ : Type _} {R : α → β → Prop} {S : β → γ → Prop}
-    {T : α → γ → Prop} (h : ∀ x y z, R x y → S y z → T x z) :
-    ∀ {xs ys zs}, Forall₂ R xs ys → Forall₂ S ys zs → Forall₂ T xs zs
-  | _, _, _, .nil, .nil => .nil
-  | _, _, _, .cons hxy hxs, .cons hyz hys => .cons (h _ _ _ hxy hyz) (hxs.compose h hys)
-
 end List
 
 namespace Calculus
@@ -75,14 +65,13 @@ This section **is** §5's Lemma (traversal), which five rules — `array`, `tupl
 | defined where every entry is | `traverse_isSome_of_all` | no partner list — only that every entry is writable |
 | **(R)**, "positions re-read in place" | `traverse_roundTrip` | the relation, reversed |
 | **(C)**, "each entry re-encodes" | `traverse_isSome` | the relation, forgotten down to definedness |
-| **`≼`**, "a shared position decodes and re-encodes through the same step" | `traverse_rel` | the relation, composed — read-then-rewrite is two traversals, so `Forall₂.compose` |
 | "lengths survive both directions" | `traverse_length` | one direction; the other is `traverse_roundTrip` and this again |
 
 §5's keyed refinement — *"entries are dispatched and compared by name, first occurrence
 first"* — is **gone from this file**, along with the whole association-list section that
 served it. It was a statement about `M` as a `List (Name × Attr)`: a clause needed because
 a keyed list has an order and can repeat a key. `M` is now a name set with a function on
-it, so `Agree.m` compares at a shared key and there is no first occurrence to prefer.
+it, so there is no first occurrence to prefer.
 `traverse_fst` survives because `L` really is a list. -/
 
 /-- A list traversed by an entrywise partial function: all-or-nothing. -/
@@ -154,19 +143,6 @@ theorem traverse_isSome {f : α → Option γ} (h : ∀ y x, g y = some x → (f
     ∀ (ys : List β) (xs : List α), traverse g ys = some xs → (traverse f xs).isSome :=
   fun _ _ ht => traverse_isSome_of_all fun _ hx =>
     let ⟨_, _, hR⟩ := (traverse_eq_some.mp ht).mem_right hx; h _ _ hR
-
-/-- §5, Lemma (traversal), **`≼`** — "a shared position decodes and re-encodes through the
-    same step", which is every product's (MP). Read-then-rewrite is a composite of two
-    traversals, so `Forall₂.compose`; the zip is what `Agree.l`/`Agree.m` consume. -/
-theorem traverse_rel {f : α → Option γ} {R : γ → β → Prop}
-    (h : ∀ y x z, g y = some x → f x = some z → R z y) :
-    ∀ (ys : List β) (xs : List α) (zs : List γ),
-      traverse g ys = some xs → traverse f xs = some zs →
-      ∀ q ∈ zs.zip ys, R q.1 q.2 :=
-  fun _ _ _ hg hf q hq =>
-    List.forall₂_iff_zip.mp
-        (((traverse_eq_some.mp hg).compose h (traverse_eq_some.mp hf)).flip)
-      |>.2 (by cases q; exact hq)
 
 /-- Every output is witnessed by an input it was written from. -/
 theorem traverse_mem₂ {xs : List α} {ys} (h : traverse f xs = some ys) :

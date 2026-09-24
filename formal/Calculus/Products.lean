@@ -764,20 +764,18 @@ theorem lawfulCore_carried (hμ : ∀ y, (A.into y).member = μ₀)
     obtain ⟨_, y, _, _, rfl⟩ := carried_e.mp he
     exact (hμ y).trans (Option.some.inj hμ')
 
-/-- (MP) is the payload pair's own too, stated where it has to be — at the attribute
-    constructor, since that is where `≼` is defined. -/
+/-- Canonical reads are the payload pair's own too. -/
 theorem lawful_carried (hμ : ∀ y, (A.into y).member = μ₀)
     (hr : ∀ x y, E x = some y → D y = some x)
-    (hc : ∀ y x, D y = some x → (E x).isSome)
-    (hag : ∀ y x y', D y = some x → E x = some y' → Agree (A.into y') (A.into y)) :
+    (hcan : ∀ y x, D y = some x → E x = some y) :
     Lawful (carriedCodec V A μ₀ P E D) :=
-  { lawfulCore_carried hμ hr hc with
-    agree := by
-      intro a t a' hp he
+  have hc := lawfulCore_carried (P := P) hμ hr (fun y x h => by rw [hcan y x h]; rfl)
+  { retract := hc.retract
+    writes := hc.writes
+    canon := by
+      intro a t hp
       obtain ⟨y, x, ha, hy, rfl⟩ := carried_p.mp hp
-      obtain ⟨x', y', hv, hx, rfl⟩ := carried_e.mp he
-      obtain rfl : x' = x := Option.some.inj ((V.out_into x).symm.trans hv).symm
-      exact A.into_out ha ▸ hag _ _ _ hy hx }
+      exact carried_e.mpr ⟨x, y, V.out_into x, hcan y x hy, A.into_out ha⟩ }
 
 /-- `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`: the held set's condition has to hold of whatever
     payload either half of the pair accepts. -/
@@ -798,9 +796,7 @@ end Carried
 
 `array` and `record` are `carriedCodec` where the payload pair is one entry function
 traversed: a value constructor holding a list of entries, an attribute constructor
-holding a list of wire entries. Named once, §2's laws are discharged once — and each
-instance is left with only the part that is genuinely its own, the shape of `≼` at its
-attribute constructor (`Agree.l` compares by position, `Agree.m` by name). -/
+holding a list of wire entries. Named once, §2's laws are discharged once. -/
 
 /-- **The entrywise product**: `carriedCodec` at a traversal. -/
 def entrywise {α β : Type} (V : Ctor (List α) Value) (A : Ctor (List β) Attr)
@@ -819,19 +815,12 @@ theorem lawfulCore_entrywise (hμ : ∀ ys, (A.into ys).member = μ₀)
     LawfulCore (entrywise V A μ₀ P f g) :=
   lawfulCore_carried hμ (traverse_roundTrip hr) (traverse_isSome hc)
 
-/-- (MP) is the one clause `array` and `record` do not share: `R` is the entry-level
-    agreement the pair delivers, and `hA` is how the attribute constructor turns a
-    pointwise `R` into `≼`. -/
-theorem lawful_entrywise {R : β → β → Prop} (hμ : ∀ ys, (A.into ys).member = μ₀)
+/-- Canonical reads, entry by entry. -/
+theorem lawful_entrywise (hμ : ∀ ys, (A.into ys).member = μ₀)
     (hr : ∀ x y, f x = some y → g y = some x)
-    (hc : ∀ y x, g y = some x → (f x).isSome)
-    (hag : ∀ y x y', g y = some x → f x = some y' → R y' y)
-    (hA : ∀ {ys ys' : List β}, ys'.length = ys.length →
-            (∀ q ∈ ys'.zip ys, R q.1 q.2) → Agree (A.into ys') (A.into ys)) :
+    (hcan : ∀ y x, g y = some x → f x = some y) :
     Lawful (entrywise V A μ₀ P f g) :=
-  lawful_carried hμ (traverse_roundTrip hr) (traverse_isSome hc)
-    fun _ _ _ hy hx => hA ((traverse_length _ _ hy).trans (traverse_length _ _ hx)).symm
-      (traverse_rel hag _ _ _ hy hx)
+  lawful_carried hμ (traverse_roundTrip hr) (traverse_roundTrip hcan)
 
 theorem carrier_entrywise
     (hdom : ∀ {xs ys}, traverse f xs = some ys → P xs)
@@ -889,10 +878,9 @@ theorem lawfulCore_arrayCodec {c : Codec} (h : LawfulCore c) :
   arrayCodec_eq ▸ lawfulCore_entrywise (fun _ => rfl) (fun _ _ => h.retract)
     (fun _ _ => h.canon)
 
-/-- `≼` at `L` is positional: `Agree.l` reads the zip the traversal already provides. -/
+/-- `array` is lawful, entry by entry. -/
 theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) :=
-  arrayCodec_eq ▸ lawful_entrywise (R := Agree) (fun _ => rfl) (fun _ _ => h.retract)
-    (fun _ _ => h.canon) (fun _ _ _ => h.agree) (fun _ hz => .l _ _ hz)
+  arrayCodec_eq ▸ lawful_entrywise (fun _ => rfl) (fun _ _ => h.retract) (fun _ _ => h.canon)
 
 theorem carrier_arrayCodec {c : Codec} (hc : Carrier c) : Carrier (arrayCodec c) :=
   arrayCodec_eq ▸ carrier_entrywise
@@ -983,16 +971,13 @@ theorem lawfulCore_recordCodec {c : Codec} (h : LawfulCore c) :
     obtain ⟨keys, f, g, rfl, -, rfl⟩ := recordCodec_e_eq.mp he
     simpa [Attr.member] using Option.some.inj hμ
 
-/-- `≼` at `M` is by name, and now that is what the constructor says. -/
+/-- `record` is lawful, name by name. -/
 theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) := by
-  refine ⟨(lawfulCore_recordCodec h.core).retract, (lawfulCore_recordCodec h.core).canon,
-    (lawfulCore_recordCodec h.core).writes, ?_⟩
-  intro a t a' hp he
+  refine ⟨(lawfulCore_recordCodec h.core).retract, ?_, (lawfulCore_recordCodec h.core).writes⟩
+  intro a t hp
   obtain ⟨keys, g, f, rfl, hf, rfl⟩ := recordCodec_p_eq.mp hp
-  obtain ⟨keys', f', g', hv, hg, rfl⟩ := recordCodec_e_eq.mp he
-  cases hv
-  exact Agree.m keys keys g' g (fun k hx hy =>
-    h.agree (funImage_some hf ⟨k, hy⟩) (funImage_some hg ⟨k, hx⟩))
+  exact recordCodec_e_eq.mpr ⟨keys, f, g, rfl,
+    funImage_eq (fun k => h.canon (funImage_some hf k)), rfl⟩
 
 theorem carrier_recordCodec {c : Codec} (hc : Carrier c) : Carrier (recordCodec c) where
   domE {v a} he := by
@@ -1147,24 +1132,20 @@ theorem zip_canon : ∀ (ds : List Codec) (as : List Attr) (vs : List Value),
         (zip_canon ds as vs' (fun c hc => hd c (by simp [hc])) hvs')
       simp [List.zip_cons_cons, traverse_cons, ha', has']
 
-theorem zip_agree : ∀ (ds : List Codec) (as : List Attr) (vs : List Value) (as' : List Attr),
-    (∀ c ∈ ds, Lawful c) →
+/-- Reading a row and writing it back gives the row: canonical reads, position by position. -/
+theorem zip_canonS : ∀ (ds : List Codec) (as : List Attr) (vs : List Value),
+    (∀ c ∈ ds, Lawful c) → ds.length = as.length →
     traverse (fun ca : Codec × Attr => ca.1.p ca.2) (ds.zip as) = some vs →
-    traverse (fun cv : Codec × Value => cv.1.e cv.2) (ds.zip vs) = some as' →
-    ∀ q ∈ as'.zip as, Agree q.1 q.2
-  | [], as, vs, as', _, h, h' => by simp_all
-  | _ :: _, [], vs, as', _, h, h' => by simp_all
-  | d :: ds, a :: as, vs, as', hd, h, h' => by
+    traverse (fun cv : Codec × Value => cv.1.e cv.2) (ds.zip vs) = some as
+  | [], as, vs, _, hlen, h => by simp_all [List.eq_nil_of_length_eq_zero hlen.symm]
+  | _ :: _, [], vs, _, hlen, h => by simp_all
+  | d :: ds, a :: as, vs, hd, hlen, h => by
       rw [List.zip_cons_cons, traverse_cons] at h
       obtain ⟨v, hv, hvs⟩ := Option.bind_eq_some_iff.mp h
       obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some_iff.mp hvs
-      rw [List.zip_cons_cons, traverse_cons] at h'
-      obtain ⟨a₁, ha₁, has⟩ := Option.bind_eq_some_iff.mp h'
-      obtain ⟨as₁, has₁, rfl⟩ := Option.map_eq_some_iff.mp has
-      intro q hq
-      rcases List.mem_cons.mp (by simpa using hq) with rfl | hq'
-      · exact (hd d (by simp)).agree hv ha₁
-      · exact zip_agree ds as vs' as₁ (fun c hc => hd c (by simp [hc])) hvs' has₁ q hq'
+      rw [List.zip_cons_cons, traverse_cons, (hd d (by simp)).canon hv,
+        zip_canonS ds as vs' (fun c hc => hd c (by simp [hc])) (by simpa using hlen) hvs']
+      rfl
 
 /-- Writing a row puts every position on its own carrier… -/
 theorem zip_domE : ∀ (ds : List Codec) (vs : List Value) (as : List Attr),
@@ -1241,22 +1222,18 @@ theorem lawfulCore_tupleCodec (hcs : ∀ c ∈ cs, LawfulCore c)
   tupleCodec_eq ▸ lawfulCore_carried (fun _ => rfl) (tuple_retract hcs htl)
     (tuple_canon hcs htl)
 
-/-- `≼` at `L` is positional, and so is the alignment — which is why the re-encoded row
-    lands on the same codecs and agrees with the stored one entry for entry. -/
+/-- A tuple is lawful: the alignment puts each position on its own codec. -/
 theorem lawful_tupleCodec (hcs : ∀ c ∈ cs, Lawful c) (htl : ∀ c ∈ tail, Lawful c) :
     Lawful (tupleCodec cs tail) := by
   refine tupleCodec_eq ▸ lawful_carried (fun _ => rfl)
-    (tuple_retract (fun c h => (hcs c h).core) (fun c h => (htl c h).core))
-    (tuple_canon (fun c h => (hcs c h).core) (fun c h => (htl c h).core)) ?_
-  intro as vs as' hD hE
+    (tuple_retract (fun c h => (hcs c h).core) (fun c h => (htl c h).core)) ?_
+  intro as vs hD
   obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
   obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
   have hn : vs.length = as.length := by
     rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
-  obtain ⟨ps', hal', htr'⟩ := Option.bind_eq_some_iff.mp hE
-  rw [align_of_slots hs hn] at hal'
-  cases hal'
-  exact .l as' as (zip_agree ds as vs as' (slots_all hcs htl hs) htr htr')
+  rw [align_of_slots hs hn]
+  exact zip_canonS ds as vs (slots_all hcs htl hs) hlen htr
 
 theorem carrier_tupleCodec (hcs : ∀ c ∈ cs, Carrier c) (htl : ∀ c ∈ tail, Carrier c) :
     Carrier (tupleCodec cs tail) := by
@@ -1503,24 +1480,19 @@ theorem lawfulCore_listCodec (hpre : ∀ c ∈ pre, LawfulCore c) (hsp : ∀ c �
   listCodec_eq ▸ lawfulCore_carried (fun _ => rfl) (list_retract hpre hsp hsuf)
     (list_canon hpre hsp hsuf)
 
-/-- `≼` at `L` is positional, and so is the alignment, which is why the re-encoded row
-    lands on the same codecs and agrees with the stored one entry for entry. -/
+/-- A list is lawful: the alignment puts each position on its own codec. -/
 theorem lawful_listCodec (hpre : ∀ c ∈ pre, Lawful c) (hsp : ∀ c ∈ sp, Lawful c)
     (hsuf : ∀ c ∈ suf, Lawful c) : Lawful (listCodec pre sp suf) := by
   refine listCodec_eq ▸ lawful_carried (fun _ => rfl)
     (list_retract (fun c h => (hpre c h).core) (fun c h => (hsp c h).core)
-      (fun c h => (hsuf c h).core))
-    (list_canon (fun c h => (hpre c h).core) (fun c h => (hsp c h).core)
       (fun c h => (hsuf c h).core)) ?_
-  intro as vs as' hD hE
+  intro as vs hD
   obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
   obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
   have hn : vs.length = as.length := by
     rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
-  obtain ⟨ps', hal', htr'⟩ := Option.bind_eq_some_iff.mp hE
-  rw [alignL_of_slotsL hs hn] at hal'
-  cases hal'
-  exact .l as' as (zip_agree ds as vs as' (slotsL_all hpre hsp hsuf hs) htr htr')
+  rw [alignL_of_slotsL hs hn]
+  exact zip_canonS ds as vs (slotsL_all hpre hsp hsuf hs) hlen htr
 
 /-- Writing and reading a `list` puts every position on its own carrier. -/
 theorem carrier_listCodec (hpre : ∀ c ∈ pre, Carrier c) (hsp : ∀ c ∈ sp, Carrier c)

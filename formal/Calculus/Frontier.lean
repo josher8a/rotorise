@@ -294,71 +294,6 @@ theorem lawfulCore_setCodec {c : Codec} {μ₀ μS : Member} (h : LawfulCore c)
         exact h.canon hpx
 
 
-/-! ### Which branch `encSet` takes
-
-`encSet` tries `SS`, then `NS`, then `BS`. `lawfulCore_setCodec` only needed to know that
-*some* branch fires; **(A)** needs to know *which*, because `Agree` pairs a wire set with a
-wire set of the same family. The member of the elements' attributes decides it. -/
-
-/-- Elements at member `S` take the `SS` branch. -/
-theorem encSet_ss_of {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset α} {a : Attr}
-    (hm : ∀ x ∈ S.1, ∀ b, c.e (vinj x) = some b → b.member = .S)
-    (h : encSet c vinj S = some a) : ∃ T, a = .ss T := by
-  obtain ⟨x₀, hx₀⟩ := S.2
-  have hall := encSet_elem h
-  obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
-  have hbm := hm x₀ hx₀ b hb
-  unfold encSet at h
-  cases hT : neSetImage (fun x => (c.e (vinj x)).bind sC.out) S with
-  | some T => rw [hT] at h; exact ⟨T, (Option.some.inj h).symm⟩
-  | none =>
-    exfalso
-    have hN : neSetImage (fun x => (c.e (vinj x)).bind nC.out) S = none :=
-      neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [nC, Attr.member]))
-    have hB : neSetImage (fun x => (c.e (vinj x)).bind bC.out) S = none :=
-      neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [bC, Attr.member]))
-    rw [hT, hN, hB] at h
-    simp at h
-
-/-- Elements at member `N` take the `NS` branch, the `SS` one having failed. -/
-theorem encSet_ns_of {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset α} {a : Attr}
-    (hm : ∀ x ∈ S.1, ∀ b, c.e (vinj x) = some b → b.member = .N)
-    (h : encSet c vinj S = some a) : ∃ T, a = .ns T := by
-  obtain ⟨x₀, hx₀⟩ := S.2
-  have hall := encSet_elem h
-  obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
-  have hbm := hm x₀ hx₀ b hb
-  have hS : neSetImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
-    neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [sC, Attr.member]))
-  unfold encSet at h
-  rw [hS] at h
-  cases hT : neSetImage (fun x => (c.e (vinj x)).bind nC.out) S with
-  | some T => rw [hT] at h; exact ⟨T, (Option.some.inj h).symm⟩
-  | none =>
-    exfalso
-    have hB : neSetImage (fun x => (c.e (vinj x)).bind bC.out) S = none :=
-      neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [bC, Attr.member]))
-    rw [hT, hB] at h
-    simp at h
-
-/-- Elements at member `B` take the `BS` branch, both earlier ones having failed. -/
-theorem encSet_bs_of {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset α} {a : Attr}
-    (hm : ∀ x ∈ S.1, ∀ b, c.e (vinj x) = some b → b.member = .B)
-    (h : encSet c vinj S = some a) : ∃ T, a = .bs T := by
-  obtain ⟨x₀, hx₀⟩ := S.2
-  have hall := encSet_elem h
-  obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
-  have hbm := hm x₀ hx₀ b hb
-  have hS : neSetImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
-    neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [sC, Attr.member]))
-  have hN : neSetImage (fun x => (c.e (vinj x)).bind nC.out) S = none :=
-    neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [nC, Attr.member]))
-  unfold encSet at h
-  rw [hS, hN] at h
-  obtain ⟨T, -, hTa⟩ := Option.map_eq_some_iff.mp h
-  exact ⟨T, hTa.symm⟩
-
-
 /-- **A set writes exactly when every element does.**
 
     Both directions, and neither needs a hypothesis the term does not already carry: the
@@ -380,60 +315,98 @@ theorem encSet_base_iff {α : Type} (b : SetBase) {vinj : α → Value}
       (fun x hx => (b.adm_iff (vinj x)).mp (h x hx))
       (fun _ _ a' ha' => (lawful_setBase b).core.writes b.elem_μ ha')
 
-/-- **`setCodec` is lawful**, and the argument is not `lawfulCore_setCodec` with `agree`
-    bolted on. That theorem gets member uniformity from `c.μ`, and the two call sites in
-    the `opaque` fixpoint cannot supply it: `opaqCodec`'s `μ` is `none`. Here it comes from
-    **(A)** instead — a value read out of `Attr.s x` writes back to something that *agrees*
-    with `Attr.s x`, hence shares its member — which is a fact about the attribute the read
-    came from, not about the codec's index. -/
-theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
-  refine ⟨set_retract h.core, ?_, set_writes h.core, ?_⟩
-  · intro a t hp
-    rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
-      · refine encSet_isSome_of (μ₀ := .S) (μS := .SS) h.core rfl
-          (fun x y hxy => by injection hxy) ?_ ?_
-        · intro y hy
-          obtain ⟨x, -, hpx⟩ := hm y hy
-          exact h.canon hpx
-        · intro y hy a' ha'
-          obtain ⟨x, -, hpx⟩ := hm y hy
-          exact (h.agree hpx ha').member_eq
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
-      · refine encSet_isSome_of (μ₀ := .N) (μS := .NS) h.core rfl
-          (fun x y hxy => by injection hxy) ?_ ?_
-        · intro y hy
-          obtain ⟨x, -, hpx⟩ := hm y hy
-          exact h.canon hpx
-        · intro y hy a' ha'
-          obtain ⟨x, -, hpx⟩ := hm y hy
-          exact (h.agree hpx ha').member_eq
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
-      · refine encSet_isSome_of (μ₀ := .B) (μS := .BS) h.core rfl
-          (fun x y hxy => by injection hxy) ?_ ?_
-        · intro y hy
-          obtain ⟨x, -, hpx⟩ := hm y hy
-          exact h.canon hpx
-        · intro y hy a' ha'
-          obtain ⟨x, -, hpx⟩ := hm y hy
-          exact (h.agree hpx ha').member_eq
-  · intro a t a' hp he
-    rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
-      · obtain ⟨T, rfl⟩ := encSet_ss_of (fun y hy b hb => by
-          obtain ⟨x, -, hpx⟩ := hm y hy
-          exact (h.agree hpx hb).member_eq) he
-        exact Agree.ss T S
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
-      · obtain ⟨T, rfl⟩ := encSet_ns_of (fun y hy b hb => by
-          obtain ⟨x, -, hpx⟩ := hm y hy
-          exact (h.agree hpx hb).member_eq) he
-        exact Agree.ns T S
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
-      · obtain ⟨T, rfl⟩ := encSet_bs_of (fun y hy b hb => by
-          obtain ⟨x, -, hpx⟩ := hm y hy
-          exact (h.agree hpx hb).member_eq) he
-        exact Agree.bs T S
+/-- `encSet` writes a string set when the element writes produce strings. -/
+theorem encSet_ssBranch {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset α}
+    {T : NEFinset String}
+    (h1 : neSetImage (fun x => (c.e (inj x)).bind sC.out) S = some T) :
+    encSet c inj S = some (.ss T) := by
+  unfold encSet; rw [h1]
+
+/-- …a number set when they produce numbers, the string branch having failed. -/
+theorem encSet_nsBranch {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset α}
+    {T : NEFinset WFNumeral}
+    (h0 : neSetImage (fun x => (c.e (inj x)).bind sC.out) S = none)
+    (h1 : neSetImage (fun x => (c.e (inj x)).bind nC.out) S = some T) :
+    encSet c inj S = some (.ns T) := by
+  unfold encSet; rw [h0, h1]
+
+/-- …and a binary set when both earlier ones have. -/
+theorem encSet_bsBranch {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset α}
+    {T : NEFinset Bytes}
+    (h0 : neSetImage (fun x => (c.e (inj x)).bind sC.out) S = none)
+    (h0' : neSetImage (fun x => (c.e (inj x)).bind nC.out) S = none)
+    (h1 : neSetImage (fun x => (c.e (inj x)).bind bC.out) S = some T) :
+    encSet c inj S = some (.bs T) := by
+  unfold encSet; rw [h0, h0', h1]; rfl
+
+/-- **Canonical reads for `set`.** The mirror of `set_retract`: the read image inverts by
+    `setImage_inv`, and the write lands on the wire member of the attribute that was read. -/
+theorem set_canon {c : Codec} (h : Lawful c) :
+    ∀ {a t}, (setCodec c).p a = some t → (setCodec c).e t = some a := by
+  have key : ∀ {α β : Type} [DecidableEq α] [DecidableEq β]
+      {vinj : β → Value} {aout : Attr → Option α} {ainj : α → Attr}
+      {vout : Value → Option β},
+      (∀ y, aout (ainj y) = some y) → (∀ o x, o.bind vout = some x → o = some (vinj x)) →
+      ∀ {S : NEFinset α} {U : NEFinset β},
+        neSetImage (fun y => (c.p (ainj y)).bind vout) S = some U →
+        neSetImage (fun x => (c.e (vinj x)).bind aout) U = some S := by
+    intro α β _ _ vinj aout ainj vout hA hV S U hI
+    refine neSetImage_eq_setImage.mpr (setImage_inv (fun y x hxy => ?_)
+      (neSetImage_eq_setImage.mp hI))
+    rw [h.canon (hV _ x hxy)]
+    exact hA y
+  have miss : ∀ {α β γ : Type} [DecidableEq β] [DecidableEq γ]
+      {vinj : β → Value} {aout : Attr → Option γ} {ainj : α → Attr}
+      {vout : Value → Option β},
+      (∀ y, aout (ainj y) = none) → (∀ o x, o.bind vout = some x → o = some (vinj x)) →
+      ∀ {S : NEFinset α} {U : NEFinset β},
+        neSetImage (fun y => (c.p (ainj y)).bind vout) S = some U →
+        neSetImage (fun x => (c.e (vinj x)).bind aout) U = none := by
+    intro α β γ _ _ vinj aout ainj vout hA hV S U hI
+    obtain ⟨x, hx⟩ := U.2
+    obtain ⟨y, -, hy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hI) x).mp hx
+    exact neSetImage_none (setImage_none_of hx (by rw [h.canon (hV _ x hy)]; exact hA y))
+  have hs : ∀ o x, o.bind vStr = some x → o = some (Value.str x) := fun _ _ => bind_vStr
+  have hn : ∀ o x, o.bind vNum = some x → o = some (Value.num x) := fun _ _ => bind_vNum
+  have hb : ∀ o x, o.bind vBin = some x → o = some (Value.bin x) := fun _ _ => bind_vBin
+  intro a t hp
+  rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
+    (unfold decSet at hD
+     split at hD
+     · next U hU =>
+       injection hD with hD; subst hD
+       first
+       | exact encSet_ssBranch (key (aout := sC.out) (fun _ => rfl) hs hU)
+       | exact encSet_nsBranch (miss (aout := sC.out) (fun _ => rfl) hs hU)
+           (key (aout := nC.out) (fun _ => rfl) hs hU)
+       | exact encSet_bsBranch (miss (aout := sC.out) (fun _ => rfl) hs hU)
+           (miss (aout := nC.out) (fun _ => rfl) hs hU)
+           (key (aout := bC.out) (fun _ => rfl) hs hU)
+     · split at hD
+       · next U hU =>
+         injection hD with hD; subst hD
+         first
+         | exact encSet_ssBranch (key (aout := sC.out) (fun _ => rfl) hn hU)
+         | exact encSet_nsBranch (miss (aout := sC.out) (fun _ => rfl) hn hU)
+             (key (aout := nC.out) (fun _ => rfl) hn hU)
+         | exact encSet_bsBranch (miss (aout := sC.out) (fun _ => rfl) hn hU)
+             (miss (aout := nC.out) (fun _ => rfl) hn hU)
+             (key (aout := bC.out) (fun _ => rfl) hn hU)
+       · next =>
+         obtain ⟨U, hU, hA⟩ := Option.map_eq_some_iff.mp hD
+         subst hA
+         first
+         | exact encSet_ssBranch (key (aout := sC.out) (fun _ => rfl) hb hU)
+         | exact encSet_nsBranch (miss (aout := sC.out) (fun _ => rfl) hb hU)
+             (key (aout := nC.out) (fun _ => rfl) hb hU)
+         | exact encSet_bsBranch (miss (aout := sC.out) (fun _ => rfl) hb hU)
+             (miss (aout := nC.out) (fun _ => rfl) hb hU)
+             (key (aout := bC.out) (fun _ => rfl) hb hU))
+
+/-- **`setCodec` is lawful.** The member law comes from `set_writes`, and canonical reads from
+    `set_canon`; neither needs the element codec's index. -/
+theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) :=
+  ⟨set_retract h.core, set_canon h, set_writes h.core⟩
 
 
 /-! ### Keyed lookup and traversal facts (the keyed product consumes these) -/
@@ -642,35 +615,46 @@ theorem object_canon (hf : ∀ k, LawfulCore (sems.2 k).codec)
   simp only [objWrite, if_pos hval]
   exact funImage_map_isSome (funImage_isSome hstep) _
 
-theorem object_agree (hf : ∀ k, Lawful (sems.2 k).codec)
-    (hrc : ∀ c ∈ rcOf rest, Lawful c) :
-    ∀ q p q', objRead sems (rcOf rest) (keepB rest sems) q = some p →
-      objWrite sems (rcOf rest) p = some q' → Agree (mA.into q') (mA.into q) := by
-  rintro q p q' hD hE
-  obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp hD
-  obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp hE
-  refine Agree.m _ _ _ _ fun k hx hy => ?_
-  have hp := funImage_some hd ⟨k, hx⟩
-  have hw := funImage_some hg ⟨k, hx⟩
-  cases hc : entryCodec sems (rcOf rest) k with
+/-- Canonical reads: a policy that keeps every name writes back the map that was read. -/
+theorem object_canonS (hf : ∀ k, Lawful (sems.2 k).codec)
+    (hrc : ∀ c ∈ rcOf rest, Lawful c) (hnd : rest ≠ .drop) :
+    ∀ q p, objRead sems (rcOf rest) (keepB rest sems) q = some p →
+      objWrite sems (rcOf rest) p = some q := by
+  rintro q p h
+  obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
+  have hkeep : ∀ k, keepB rest sems k = true := by
+    intro k; cases rest with
+    | drop => exact absurd rfl hnd
+    | refuse => rfl
+    | codec _ => rfl
+  have hfilter : q.1.filter (keepB rest sems ·) = q.1 :=
+    Finset.filter_eq_self.mpr fun k _ => by simpa using hkeep k
+  have hval : valPresentB sems (q.1.filter (keepB rest sems ·)) = true := by
+    refine valPresentB_of fun k fs hm hno => ?_
+    cases fs with
+    | opt c => exact absurd rfl (hno c)
+    | req c => exact Finset.mem_filter.mpr ⟨reqPresentB_spec hreq hm, by simpa using hkeep k⟩
+  refine objWrite_eq.mpr ⟨hval, fun k => q.2 ⟨k.1, (Finset.mem_filter.mp k.2).1⟩,
+    funImage_eq fun k => ?_, MapOf.ext hfilter.symm fun _ _ _ => rfl⟩
+  have hp := funImage_some hd k
+  cases hc : entryCodec sems (rcOf rest) k.1 with
   | none => rw [hc] at hp; exact nomatch hp
   | some c =>
-    simp only [hc, Option.bind_some] at hp hw
-    exact (entryCodec_of hf hrc hc).agree hp hw
+    simp only [hc, Option.bind_some] at hp ⊢
+    exact (entryCodec_of hf hrc hc).canon hp
 
 end ObjectLaws
 
 /-- The keyed product — the doc's current-schema `object`. -/
 theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hf : ∀ k, Lawful (sems.2 k).codec)
-    (hrest : ∀ c, rest = .codec c → Lawful c) :
+    (hrest : ∀ c, rest = .codec c → Lawful c) (hnd : rest ≠ .drop) :
     Lawful (objectCodec sems rest) := by
   show Lawful (objectCodecCore sems (rcOf rest) (keepB rest sems))
   have hf' := fun k => (hf k).core
   have hrc' := fun c hc => ((rcOf_forall hrest) c hc).core
   exact objectCodecCore_eq ▸ lawful_carried (fun _ => rfl)
-    (object_retract hf' hrc') (object_canon hf' hrc')
-    (object_agree hf (rcOf_forall hrest))
+    (object_retract hf' hrc') (object_canonS hf (rcOf_forall hrest) hnd)
 
 theorem lawfulCore_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hf : ∀ k, LawfulCore (sems.2 k).codec)
@@ -685,6 +669,21 @@ theorem lawfulCore_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     condition under which a union of lawful options is lawful. -/
 def Compat (c d : Codec) : Prop :=
   ∀ a t, c.p a = some t → ((d.p a).isSome = true ∨ (d.e t).isSome = true) → d.p a = some t
+
+/-- **At lawful codecs `Compat` is symmetric**, so the one-sided form is the classical
+    compatibility of partial bijections and loses nothing. -/
+theorem compat_symm {c d : Codec} (hc : Lawful c) (hd : Lawful d) (h : Compat c d) :
+    Compat d c := by
+  intro a t hp hact
+  rcases hact with hq | he
+  · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hq
+    have := h a w hw (Or.inl (by rw [hp]; rfl))
+    rw [hp] at this; rw [hw, this]
+  · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp he
+    have hcb := hc.retract hb
+    have hdb := h b t hcb (Or.inr (hd.defined hp))
+    have e2 := hd.canon hdb
+    rw [hd.canon hp] at e2; cases e2; exact hcb
 
 /-- **Read agreement**: two compatible readings of one attribute give one value. -/
 theorem Compat.p_agree {c d : Codec} (h : Compat c d) {a t w}
@@ -729,13 +728,13 @@ theorem Compat.e_agree {c d : Codec} (h : Compat c d) (hc : LawfulCore c) (hd : 
 
 /-- **A union writes what any option writes**, over pairwise compatible, canonical options. -/
 theorem altCodec_e_of_mem {os : List OptionSem} {μA : Option Member}
-    (hatt : ∀ o ∈ os, o = .byAttempt o.c) (hl : ∀ o ∈ os, LawfulCore o.c)
-    (hcan : ∀ o ∈ os, Canon o.c) (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o.c o'.c)
+    (hatt : ∀ o ∈ os, o = .byAttempt o.c) (hl : ∀ o ∈ os, Lawful o.c)
+    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o.c o'.c)
     {o v a} (ho : o ∈ os) (he : o.c.e v = some a) : (altCodec os μA).e v = some a := by
   obtain ⟨o', hf⟩ := find?_attempt_V hatt ho he
   have ho' := List.mem_of_find?_eq_some hf
   obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find?_V hatt hf)
-  rw [(hC o ho o' ho').e_agree (hl o ho) (hcan o' ho') he hb] at hb
+  rw [(hC o ho o' ho').e_agree (hl o ho).core (fun _ _ hp => (hl o' ho').canon hp) he hb] at hb
   exact altCodec_e.mpr ⟨o', hf, hb⟩
 
 /-- **A union reads what any option reads**, over pairwise compatible options. -/
@@ -772,22 +771,19 @@ theorem lawfulCore_altCodec {os : List OptionSem} {μA : Option Member}
     obtain ⟨o, hf, hoe⟩ := altCodec_e.mp he
     exact hW μ hμ o (List.mem_of_find?_eq_some hf) t a hoe
 
-/-- …and (MP) with them: the option that read `a` as `t` also acts at `t`, so compatibility
-    makes it read the attribute that the union writes, and `≼` holds at that option. -/
+/-- …and canonical reads: the option that read `a` as `t` writes `t` at `a`, and compatibility
+    makes the option that the union writes through agree. -/
 theorem lawful_altCodec {os : List OptionSem} {μA : Option Member}
     (h : ∀ o ∈ os, Lawful o.c) (hatt : ∀ o ∈ os, o = .byAttempt o.c)
     (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o.c o'.c)
     (hW : ∀ m, μA = some m → ∀ o ∈ os, ∀ t a, o.c.e t = some a → a.member = m) :
     Lawful (altCodec os μA) :=
   { lawfulCore_altCodec (fun o ho => (h o ho).core) hatt hC hW with
-    agree := by
-      intro a t a' hp he
+    canon := by
+      intro a t hp
       obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
-      obtain ⟨o', hf', hoe⟩ := altCodec_e.mp he
       have ho := List.mem_of_find?_eq_some hf
-      have ho' := List.mem_of_find?_eq_some hf'
-      have hread : o'.c.p a = some t := hC o ho o' ho' _ _ hop (Or.inr (by rw [hoe]; rfl))
-      exact (h o' ho').agree hread hoe }
+      exact altCodec_e_of_mem hatt h hC ho ((h o ho).canon hop) }
 
 
 /-! ### Kind separation, and `opaque`'s fixpoint

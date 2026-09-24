@@ -3,9 +3,8 @@ import Calculus.Domain
 /-!
 # §2 — What a codec is, and its laws
 
-The pair is data; the laws are a `Prop`-valued structure over it. `(MP)` is carried in the
-strong form `Agree` (the doc's `≼`), from which the top-level member law is a corollary.
-The two §2 corollaries — (Q) and read-side (W) — are proved here, exactly as in the doc.
+The pair is data; the laws are a `Prop`-valued structure over it: a lawful codec is a canonical
+partial bijection. The two §2 corollaries — (Q) and read-side (W) — are proved here.
 -/
 
 namespace Calculus
@@ -54,49 +53,28 @@ theorem Codec.ker_equivalence (c : Codec) : Equivalence c.Ker :=
     and merely partial on `𝔸`; §6's `≈` rows are stated on it. -/
 def Can (c : Codec) (a : Attr) : Prop := ∃ v, c.e v = some a
 
-/-- §5's `≼`: recursive member agreement. `L` compares pointwise on shared positions,
-    `M` pointwise on shared names, sets no deeper than the member (payloads carry no
-    member to disagree on). -/
-inductive Agree : Attr → Attr → Prop where
-  | s    (x y : String)  : Agree (.s x) (.s y)
-  | n    (x y : WFNumeral) : Agree (.n x) (.n y)
-  | b    (x y : Bytes)   : Agree (.b x) (.b y)
-  | bool (x y : Bool)    : Agree (.bool x) (.bool y)
-  | null                 : Agree .null .null
-  | ss   (x y : NEFinset String)  : Agree (.ss x) (.ss y)
-  | ns   (x y : NEFinset WFNumeral) : Agree (.ns x) (.ns y)
-  | bs   (x y : NEFinset Bytes)   : Agree (.bs x) (.bs y)
-  | l    (xs ys : List Attr)
-         (h : ∀ q ∈ List.zip xs ys, Agree q.1 q.2) : Agree (.l xs) (.l ys)
-  /-- Keyed, as it always was in intent — the list version compared by `lookup` and
-      ignored order, which is what `M` being unordered means. With the names a `Finset`
-      and the values a function on it, that is simply what the constructor says. -/
-  | m    (kx ky : Finset Name) (fx : {k // k ∈ kx} → Attr) (fy : {k // k ∈ ky} → Attr)
-         (h : ∀ k (hx : k ∈ kx) (hy : k ∈ ky), Agree (fx ⟨k, hx⟩) (fy ⟨k, hy⟩)) :
-         Agree (.m kx fx) (.m ky fy)
-
-/-- `≼` implies plain member equality — (MP) as §2 states it. -/
-theorem Agree.member_eq {a a' : Attr} (h : Agree a a') : a.member = a'.member := by
-  cases h <;> rfl
-
-/-- §2 Laws. `(R)` retraction, `(C)` canonizability, `(W)` member-naming, and `(MP)` in
-    §5's strong form. The `alternate reader` exemption is handled at the theorem (§5), not here:
-    `Lawful` is the exemption-free bundle. -/
+/-- §2 Laws: the codec is a canonical partial bijection. `(R)` retraction, `(C)` in the canonical
+    form (a read at `a` of `t` writes `t` at `a`), and `(W)` member-naming. The `alternate reader`
+    exemption is handled at the theorem (§5), not here: `Lawful` is the exemption-free bundle. -/
 structure Lawful (c : Codec) : Prop where
   retract : ∀ {t a}, c.e t = some a → c.p a = some t
-  canon   : ∀ {a t}, c.p a = some t → (c.e t).isSome
+  canon   : ∀ {a t}, c.p a = some t → c.e t = some a
   writes  : ∀ {μ}, c.μ = some μ → ∀ {t a}, c.e t = some a → a.member = μ
-  agree   : ∀ {a t a'}, c.p a = some t → c.e t = some a' → Agree a' a
 
-/-- `(R)`, `(C)`, `(W)` without `(MP)` — what survives in a derivation containing
+/-- `(R)`, `(C)` as definedness, and `(W)` — what survives in a derivation containing
     `alternate reader` (§5 theorem, first residue). -/
 structure LawfulCore (c : Codec) : Prop where
   retract : ∀ {t a}, c.e t = some a → c.p a = some t
   canon   : ∀ {a t}, c.p a = some t → (c.e t).isSome
   writes  : ∀ {μ}, c.μ = some μ → ∀ {t a}, c.e t = some a → a.member = μ
 
+/-- A read value is writable. -/
+theorem Lawful.defined {c : Codec} (h : Lawful c) {a t} (hp : c.p a = some t) :
+    (c.e t).isSome := by
+  rw [h.canon hp]; rfl
+
 theorem Lawful.core {c : Codec} (h : Lawful c) : LawfulCore c :=
-  ⟨h.retract, h.canon, h.writes⟩
+  ⟨h.retract, h.defined, h.writes⟩
 
 /-- §2 Corollary (Q — stability): `∀ a ∈ dom(p). e(p(a)) ≈c a`. Retraction asked at values a
     *table* returned rather than a generator produced; what it adds to (R) is (C). -/
@@ -107,30 +85,26 @@ theorem Lawful.stable {c : Codec} (h : Lawful c) {a t a'}
 
 /-- §2 Corollary (read-side W): a member-naming codec accepts only its member. -/
 theorem Lawful.reads {c : Codec} (h : Lawful c) {μ a t}
-    (hμ : c.μ = some μ) (hp : c.p a = some t) : a.member = μ := by
-  obtain ⟨a', he⟩ := Option.isSome_iff_exists.mp (h.canon hp)
-  have hm := (h.agree hp he).member_eq
-  rw [← hm, h.writes hμ he]
+    (hμ : c.μ = some μ) (hp : c.p a = some t) : a.member = μ :=
+  h.writes hμ (h.canon hp)
 
-/-- §2 Corollary: **a member a codec cannot write is one it cannot read.** (MP) holds the
-    pair's halves together, so a member absent from `ran(e)` is absent from `dom(p)`.
+/-- §2 Corollary: **a member a codec cannot write is one it cannot read.** Canonical reads hold
+    the pair's halves together, so a member absent from `ran(e)` is absent from `dom(p)`.
 
-    Only (MP) sees this: in the failing case `e (p a)` is defined and the value survives —
-    just at a different member — and a `⊤`-membered term has no (W) to appeal to. -/
+    Definedness alone does not see this: in the failing case `e (p a)` is defined and the value
+    survives — just at a different member — and a `⊤`-membered term has no (W) to appeal to. -/
 theorem Lawful.no_read_without_write {c : Codec} (h : Lawful c) {m : Member}
     (hw : ∀ {v a}, c.e v = some a → a.member ≠ m) {a v} (hm : a.member = m) :
     c.p a ≠ some v := by
   intro hp
-  obtain ⟨a', he⟩ := Option.isSome_iff_exists.mp (h.canon hp)
-  exact hw he (((h.agree hp he).member_eq).trans hm)
+  exact hw (h.canon hp) hm
 
 /-- The contrapositive, in the form a port checks: if a member is readable, it is writable.
     `C1`'s audit list asks which terms touch a refined member; this asks the prior question
     of *any* member, and a `⊤`-membered term is where it has teeth. -/
 theorem Lawful.write_of_read {c : Codec} (h : Lawful c) {a v} (hp : c.p a = some v) :
-    ∃ a', c.e v = some a' ∧ a'.member = a.member := by
-  obtain ⟨a', he⟩ := Option.isSome_iff_exists.mp (h.canon hp)
-  exact ⟨a', he, (h.agree hp he).member_eq⟩
+    ∃ a', c.e v = some a' ∧ a'.member = a.member :=
+  ⟨a, h.canon hp, rfl⟩
 
 /-- `(R)` makes `e` injective on its domain — the Lemma of §5's proof, consumed by the
     `set` case. -/

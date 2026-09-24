@@ -245,7 +245,7 @@ def select {A B : Type} (os : List OptionSem) (adm : OptionSem → A → Bool)
     (run : OptionSem → A → Option B) (x : A) : Option B :=
   (os.find? (adm · x)).bind (run · x)
 
-/-- `union`: the sum, resolved by the first admitter. Over pairwise compatible, canonical options
+/-- `union`: the sum, resolved by the first admitter. Over lawful, pairwise compatible options
     the order is unobservable (`altCodec_perm`). -/
 def altCodec (os : List OptionSem) (μA : Option Member) : Codec :=
   { T := fun v => ∃ o ∈ os, o.c.T v

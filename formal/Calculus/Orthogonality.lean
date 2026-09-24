@@ -1146,7 +1146,7 @@ theorem pairwiseCompat_of_separated {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t)) (h : Separated opts) : PairwiseCompat opts := by
   intro s hs t ht a v hp hact
   have hsA : admitOptA (specOf s, AdmA s) a = true := (AdmA_exact s a).mpr (by rw [hp]; rfl)
-  have hsV : admitOptV (specOf s, Adm s) v = true := (Adm_exact s v).mpr ((hlaw s hs).canon hp)
+  have hsV : admitOptV (specOf s, Adm s) v = true := (Adm_exact s v).mpr ((hlaw s hs).defined hp)
   have hst : t = s := by
     rcases hact with hq | he
     · have htA : admitOptA (specOf t, AdmA t) a = true := (AdmA_exact t a).mpr hq

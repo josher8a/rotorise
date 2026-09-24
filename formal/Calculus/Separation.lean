@@ -467,9 +467,9 @@ attributes and a repeated key was writable, which no map has. Three theorems rec
 disagreement; they are replaced by the three below.
 
 This one was called sharper than the set case for two reasons, and only the first survives.
-The model does *state* the intent elsewhere — `Agree` at `M` compares by key and ignores
-order — so the two halves of the model disagreed with each other and not merely with the
-reference. But the second reason, that maps cannot be repaired by typing, was wrong, and the
+The model did *state* the intent elsewhere — member agreement at `M` compared by key and
+ignored order — so the two halves of the model disagreed with each other and not merely with
+the reference. But the second reason, that maps cannot be repaired by typing, was wrong, and the
 correction is the content of this section. `Finset (Name × Attr)` **is** rejected by the
 kernel, exactly as `Finset Value` is, the element type being the one under declaration. What
 does not follow is that `M` needs the well-formedness route. The pair need not be the
