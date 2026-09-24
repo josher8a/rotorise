@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
-import { DynamoNumber } from '../../attribute'
+import { DynamoNumber, isNumeral } from '../../attribute'
 import type { AnyCodec } from '../../codec'
 import {
     array,
@@ -174,6 +174,46 @@ describe('a union of compatible options gives one answer whatever the option ord
         )
         expect(answers?.slice(0, 2)).toEqual([{ S: 'A' }, { S: 'B' }])
     })
+
+    /**
+     * **The meet refuses a closure, and the occupancies read no predicate.** A closure refinement
+     * of `string` writes `S` from text, and a list of decimals writes `L` from an array. No value
+     * and no attribute reaches both, so the union is certified by the occupancies.
+     */
+    it('declares a closure refinement of string beside a list of decimals, and gives one answer in each order', () => {
+        // `refine` wants a type predicate, and `isNumeral` returns a `boolean`
+        const numeral = refine(
+            string,
+            isNumeral as (value: string) => value is string,
+        )
+        const values = ['1.5', 'x', ['1.5'], [], 1.5]
+        const attributes: AttributeValue[] = [
+            { S: '1.5' },
+            { S: 'x' },
+            { L: [{ N: '1.5' }] },
+            { L: [] },
+            { N: '1.5' },
+        ]
+        const answers = sameUnderEveryOrder(
+            [numeral, array(decimal)] as unknown as readonly AnyCodec[],
+            (codec) => [
+                ...values.map((v) => codec.encode(v)),
+                ...attributes.map((a) => codec.decode(a)),
+            ],
+        )
+        expect(answers).toEqual([
+            { S: '1.5' },
+            'failed',
+            { L: [{ N: '1.5' }] },
+            { L: [] },
+            'failed',
+            '1.5',
+            'failed',
+            ['1.5'],
+            [],
+            'failed',
+        ])
+    })
 })
 
 describe('a union of two restrictions of one adapter is the adapter, whatever the option order', () => {
@@ -328,6 +368,9 @@ describe("an accepted union's options never write one value, or read one attribu
         ['decimal.set()', decimal.set()],
         ['array(string)', array(string)],
         ['legacy', legacy],
+        // a closure the meet refuses, and a list of adapters beside it
+        ['numeral', refine(string, isNumeral as (s: string) => s is string)],
+        ['array(decimal)', array(decimal)],
     ] as unknown as readonly (readonly [string, AnyCodec])[]
     const values: readonly unknown[] = [
         '1',
@@ -340,6 +383,7 @@ describe("an accepted union's options never write one value, or read one attribu
         2.5,
         one,
         ['1'],
+        ['A'],
         new Set(['1']),
     ]
     const attributes: readonly AttributeValue[] = [
@@ -350,6 +394,8 @@ describe("an accepted union's options never write one value, or read one attribu
         { N: '1' },
         { N: '2.5' },
         { N: '3' },
+        { L: [{ N: '1' }] },
+        { L: [{ S: 'A' }] },
     ]
     type Pair = {
         readonly encode: (value: unknown) => unknown
