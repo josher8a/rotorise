@@ -5,7 +5,7 @@ import Calculus.Typing
 
 The theorem. `Obligations t` collects the semantic rule premises: `(held)` cancellation laws,
 and `(union)` pairwise compatibility. The current term language has no read adapter,
-so every typed term satisfies all four laws.
+so every typed term whose obligations hold satisfies retract, canon and writes.
 
 The ground-term cases are wrappers over the certified combinators,
 where the per-construction lemmas — proved and open — now live.
@@ -231,7 +231,7 @@ subterm, whose two combinator lemmas are applied to the two halves of the induct
 hypothesis; and a list of subterms, where the hypothesis is read off the mapped list.
 What is left in each case is the combinator lemmas it cites — which is the content. -/
 
-/-- What one derivation has to deliver: the core laws and all four laws. -/
+/-- What one derivation has to deliver: the core laws, and retract, canon and writes. -/
 abbrev Sound (t : Term) : Prop := LawfulCore (denote t) ∧ Lawful (denote t)
 
 /-- A ground case supplies both results. -/
@@ -246,7 +246,7 @@ theorem sound_wrap {t : Term} {c : Codec} (ih : Sound t)
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
 /-- Both halves of §5's theorem in one induction: the core laws unconditionally, and
-    all four laws. One walk of the derivation, one
+    retract, canon and writes. One walk of the derivation, one
     unpacking of the obligations; each case dispatches to its two combinator lemmas.
     The public statements are the projections below. -/
 theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound t
@@ -834,7 +834,7 @@ theorem soundness_core {t T μ} (h : Typed t T μ)
     (hob : Obligations t) : LawfulCore (denote t) :=
   (soundness_both h hob).1
 
-/-- §5 Theorem (soundness): every current term satisfies all four laws. -/
+/-- Soundness: every current term whose obligations hold satisfies retract, canon and writes. -/
 theorem soundness {t T μ} (h : Typed t T μ)
     (hob : Obligations t) : Lawful (denote t) :=
   (soundness_both h hob).2

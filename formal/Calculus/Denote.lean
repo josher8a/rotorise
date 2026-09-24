@@ -9,16 +9,11 @@ import Calculus.Opaque
 recursion is **structural** — `Term.lazy` carries a plain `Term`, so there is nothing to
 stage.
 
-This paragraph described `denote fuel t` and said "fuel is primary: every recursive call
-decrements it". That was the shape until the ω-layer was deleted and `denote` lost its fuel,
-which is the change that also retired ~~denoteω~~ as a name for `denote`. What survived the
-deletion is the fact the fuel was never needed for: `μ := μSyn t` is a *function of the
-term*, which is the content of `denote_μ` and the reason the `⇝` column stays truthful.
+`μ := μSyn t` is a *function of the term* (`denote_μ`), so the `⇝` column stays truthful.
 
-Why it need not stage is `Continuity.lean`'s subject: a union resolved by *unique* admission
-is anti-monotone, so a genuinely recursive union has no fixpoint semantics under that rule —
-there is no recursion to approximate, so no approximation to be non-monotone. Laws are in
-Soundness.lean.
+No term is recursive, so `denote` does not stage. A recursive term needs a binder or a staged
+`denote`. `altCodec` resolves by the first admitter, and first-match resolution is monotone
+where the admitters agree (`Continuity.lean`). Laws are in Soundness.lean.
 -/
 
 namespace Calculus

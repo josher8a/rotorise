@@ -33,7 +33,7 @@ written out once per constructor before it was named:
   pairs, factored out because `encSet` needs the same three prisms to decide which wire set
   a homogeneous element set writes to.
 
-Naming the shape once is what lets §2's four laws be discharged once for each family
+Naming the shape once is what lets retract, canon and writes be discharged once for each family
 rather than once per constructor. -/
 
 /-- A constructor, as a partial iso onto its image. -/

@@ -709,7 +709,7 @@ theorem setCodec_restrict_p (c : Codec) (q : Value → Bool) :
 
 The shape underneath every product in §3–§4. A pair works on *payloads* — lists of
 entries, mostly — and two prisms say which value and which attribute constructor hold
-them. §2's four laws split cleanly along that seam: the prism halves are discharged once,
+them. Retract, canon and writes split cleanly along that seam: the prism halves are discharged once,
 here, and each construction is left with only its payload pair's own round trip,
 definedness and agreement.
 
