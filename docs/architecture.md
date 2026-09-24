@@ -309,11 +309,13 @@ refuses every other pair, because the pair is not shown compatible.
 | the certificate | `separable`, the direct port of `certPair`, with the same three tests | `pairwiseCompat_of_separated` |
 
 The host's rule `below(x, y)` in `src/codec/term.ts` is narrower than the model's `Sub`. It has
-four rows: a literal is below its base; a union is below a term that each of its options is below;
-a `held` is below the same adapter where its stored side and its held side are each below; and a
-term with no payload is below itself. So `decimal('1')` beside `decimal('1', '2.5')` is refused,
-although `sub_held` puts the first below the second: no row puts a literal below a union of
-literals.
+five rows: a literal is below its base and below itself; a union is below a term that each of its
+options is below; a term is below a held-free union where the term is below one option; a `held` is
+below the same adapter where its stored side and its held side are each below; and a term with no
+payload is below itself. The union row asks for a held-free union, because `sub_union_mem` bounds
+the options by `opaque`, and an option with a `held` has no such bound. So `decimal('1')` beside
+`union([decimal('1', '2.5'), string('A')])` is refused, although the first is below one option of
+the second.
 
 **The host reads an unknown as the top.** The read side of an alternate reader is caller code,
 and the declaration cannot bound its domain. So the host's slot test counts that read side as

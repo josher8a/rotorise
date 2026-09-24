@@ -1138,6 +1138,13 @@ const separationPairs = (): readonly Separation[] => {
         left: erase(string('1', '2.5')),
         right: erase(decimal('1', '2.5')),
     })
+    // a literal decimal beside a wider literal decimal: one adapter, and each side of the first is
+    // below one option of a union of literals on the second
+    out.push({
+        name: 'literal_decimal_1__vs__literal_decimal_12',
+        left: erase(decimal('1')),
+        right: erase(decimal('1', '2.5')),
+    })
     // a closure refinement beside a list of adapters. The meet refuses the closure, and the views
     // keep it, so only the occupancies certify the pair. `refine` wants a type predicate, and
     // `isNumeral` returns a `boolean`
@@ -1464,7 +1471,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.endsWith('= false := by decide'),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([687, 19])
+        expect([accepted.length, refused.length]).toEqual([688, 19])
     })
 
     it('emits them for the gate to elaborate', () => {

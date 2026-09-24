@@ -90,6 +90,26 @@ theorem sub_union_of {os : List Term} {u : Codec} (h : ∀ o ∈ os, Sub (denote
   ⟨fun _ _ he => let ⟨o, ho, he⟩ := select_some he; (hs o ho).1 _ _ he,
    fun _ _ hp => let ⟨o, ho, hp⟩ := select_some hp; (hs o ho).2 _ _ hp⟩
 
+/-- **A codec below one option of a held-free union is below the union.** Each option is below
+    `Ω`, so the option that the union writes or reads through gives the answer of `o`. -/
+theorem sub_union_mem {x o : Term} {os : List Term} (h : Sub (denote x) (denote o)) (ho : o ∈ os)
+    (hf : HFL os) : Sub (denote x) (denote (.union os)) :=
+  have hΩ : ∀ c ∈ denoteList os, Sub c Ω := (denoteList_eq os) ▸
+    List.forall_mem_map.mpr fun t ht => sub_denote t (HFL_mem hf t ht)
+  have hm : denote o ∈ denoteList os := (denoteList_eq os) ▸ List.mem_map_of_mem ho
+  ⟨fun _ _ he =>
+    let hoe := h.1 _ _ he
+    let ⟨o', hf'⟩ := find?_attempt_V hm hoe
+    let ⟨_, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find?_V hf')
+    altCodec_e.mpr ⟨o', hf', ((hΩ _ hm).1 _ _ hoe).symm.trans
+      ((hΩ _ (List.mem_of_find?_eq_some hf')).1 _ _ hb) ▸ hb⟩,
+   fun _ _ hp =>
+    let hop := h.2 _ _ hp
+    let ⟨o', hf'⟩ := find?_attempt_A hm hop
+    let ⟨_, hw⟩ := Option.isSome_iff_exists.mp (acts_of_find?_A hf')
+    altCodec_p.mpr ⟨o', hf', ((hΩ _ hm).2 _ _ hop).symm.trans
+      ((hΩ _ (List.mem_of_find?_eq_some hf')).2 _ _ hw) ▸ hw⟩⟩
+
 /-- **A literal is below its base.** -/
 theorem sub_literal_base (k : GroundKind) (x : k.Carrier) :
     Sub (denote (.literal k x)) (baseCodec k) :=

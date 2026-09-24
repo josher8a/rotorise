@@ -1162,14 +1162,24 @@ const sameAdapter = (
     (x.via !== undefined && x.via === y.via) || (x.f === y.f && x.g === y.g)
 
 /**
- * **Whether `x` is below `y` by a rule the model proves**: a literal is below its base, a union is
- * below a term that each of its options is below, and a `held` is below the same adapter over a
- * wider stored side and a wider held side (`sub_literal_base`, `sub_union_of`, `sub_held`). A term with no payload
- * is below itself. Nothing else is shown.
+ * **Whether `x` is below `y` by a rule the model proves**: a literal is below its base and below
+ * itself, a union is below a term that each of its options is below, a term is below a held-free
+ * union where the term is below one option, and a `held` is below the same adapter over a wider
+ * stored side and a wider held side (`sub_literal_base`, `sub_union_of`, `sub_union_mem`,
+ * `sub_held`). A term with no payload is below itself. Nothing else is shown.
+ *
+ * The union must be held-free, because the model's proof bounds its options by `opaque`. An option
+ * with a `held` has no such bound. The proof then needs each option lawful and the options
+ * compatible, and a verdict states lawfulness only of the two terms of the pair.
  */
 export const below = (x: Term, y: Term): boolean => {
     if (x.kind === 'union') return x.options.every((one) => below(one, y))
-    if (x.kind === 'literal') return y.kind === x.base
+    if (y.kind === 'union')
+        return heldFree(y) && y.options.some((one) => below(x, one))
+    if (x.kind === 'literal')
+        return (
+            y.kind === x.base || (y.kind === 'literal' && sameLiteral(x.v, y.v))
+        )
     if (x.kind === 'held' && y.kind === 'held')
         return (
             sameAdapter(x, y) &&
