@@ -20,10 +20,8 @@ namespace Calculus
 
 noncomputable section
 
-/-- The payload's field table as a `MapOf` — the shape `MapOf.at` reads. `MapOf Field` is
-    what `Body` would *be* if a `mutual` block could nest an inductive through a structure
-    whose field is a function into the type being defined; it cannot, so this is the coercion.
-    -/
+/-- The payload's field table as a `MapOf`, the shape `MapOf.at` reads. `Body.mk` takes the key
+    set and the slot function as two arguments, so this is the coercion. -/
 def Body.map (b : Body) : MapOf ObjectSlot := ⟨b.fields, b.at⟩
 
 /-- The alternatives a field pins its name to, where the field's term is a literal.
@@ -48,8 +46,8 @@ def altsOfTerm : Term → Option Alts
     The open block contributes `altsOfTerm` of its term, one layer in: `some (some alts)` where
     the block is a literal, `some none` where it is any other term, and `none` where the body
     has no block at all. Reading the block here is what lets `keysOk` and `litOkV` answer for
-    an undeclared name without consulting `Adm`, which is `noncomputable` and is the whole
-    reason admission decides by structure. -/
+    an undeclared name without consulting `Adm`. Admission reads no spec: every option
+    admits by attempt, which runs `Adm`. -/
 def Body.spec : Body → BodySpec
   | .mk fields f wild =>
       { names := ⟨fields, fun k =>

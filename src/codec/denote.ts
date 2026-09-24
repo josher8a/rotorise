@@ -43,10 +43,18 @@ import type {
 } from './codec'
 import type { Result } from './result'
 import { andThen, CodecError, every, everyEntry, failed } from './result'
-import type { Body, Field, Literal, Predicate, Term } from './term'
+import type {
+    Alternatives,
+    Body,
+    Field,
+    Literal,
+    Predicate,
+    Term,
+} from './term'
 import {
     alwaysWritten,
     isOpaqueSugar,
+    literalAlternatives,
     literalForm,
     occV,
     storedAlternatives,
@@ -1829,17 +1837,39 @@ export const readsBack = (
  * the option takes, and a refusal that lists the options is asking exactly that. An adapter
  * whose held side is `opaque` keeps the combinator's name, which is all this can honestly
  * say about one.
+ *
+ * **A literal option names its alternatives.** Two options at one form differ only in their
+ * literals, so a refusal that names the form alone names both options with one word.
  */
-const namedKind = (t: Term): string =>
-    t.kind === 'opaq' || (t.kind === 'held' && isOpaqueSugar(t.via))
+const namedKind = (t: Term): string => {
+    const pinned = literalAlternatives(t)
+    return t.kind === 'opaq' || (t.kind === 'held' && isOpaqueSugar(t.via))
         ? 'opaque'
-        : t.kind === 'literal'
-          ? `${literalForm(t.base, undefined)}(${namedLiteral(t.v)})`
+        : pinned !== undefined
+          ? namedLiterals(literalForm(pinned.base, undefined), pinned)
           : t.kind !== 'held' || t.outer.kind === 'opaq'
             ? t.kind
-            : (heldBase(t.inner) ?? undefined) !== undefined
-              ? literalForm(heldBase(t.inner) as LiteralBase, t.outer)
-              : occV(t.outer).join(' | ')
+            : namedAdapter(t.inner, t.outer)
+}
+
+/** A literal form with its alternatives, as the caller writes the call. */
+const namedLiterals = (form: string, alts: Alternatives): string =>
+    `${form}(${alts.ls.map(namedLiteral).join(', ')})`
+
+/**
+ * An adapter over a ground base, named by its form and the literals that the caller wrote.
+ * The held side holds the caller's literals where the held side pins them: `decimal('1', '2.5')`
+ * stores numerals and holds the texts. Otherwise the stored literals are the caller's. An adapter
+ * over no ground base names the kinds of its held side. @see {@link namedKind}
+ */
+const namedAdapter = (inner: Term, outer: Term): string => {
+    const stored = literalAlternatives(inner)
+    const base = heldBase(inner) ?? stored?.base
+    if (base === undefined) return occV(outer).join(' | ')
+    const written = literalAlternatives(outer) ?? stored
+    const form = literalForm(base, outer)
+    return written === undefined ? form : namedLiterals(form, written)
+}
 
 /** The ground base a declared adapter carries, where it carries one. @see {@link namedKind} */
 const heldBase = (t: Term): LiteralBase | undefined =>

@@ -93,9 +93,11 @@ current-schema sides. An alternate reader is `Codec.extendRead`, over the codec 
 Structural operations, including `meet` and union certification, operate on `Term`. The operations
 cannot observe or propagate an alternate reader.
 
-`Body`'s projections `Body.fields`, `Body.at` and `Body.wild` are written by hand, because a
-`mutual` block admits no `structure`. Rows needing all three match on the constructor, which keeps
-the equation compiler's reductions available.
+`Body`'s projections `Body.fields`, `Body.at` and `Body.wild` are written by hand, because `Body`
+is an `inductive` with one constructor. The `mutual` block of `Term`, `Body` and `ObjectSlot` also
+elaborates with `Body` as a `structure`, and with a `MapOf ObjectSlot` argument in place of the key
+set and the slot function. `Body` takes neither form. Rows needing all three match on the
+constructor, which keeps the equation compiler's reductions available.
 
 **A stratum owes a companion in each of these places.** Miss one and the failure is not a build
 error but a silent "everything": the analysis stays sound and stops saying anything.

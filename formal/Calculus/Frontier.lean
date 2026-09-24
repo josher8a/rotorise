@@ -610,25 +610,11 @@ theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (object_retract hf' hrc') (object_canonS hf (rcOf_forall hrest) hnd)
 
 /-- **Compatibility**: `c` reads `a` as `t`. If `d` acts at `a` or at `t`, then `d` reads `a` as
-    `t`. Pairwise, it is the classical compatibility of partial bijections, and it is the
-    condition under which a union of lawful options is lawful. -/
+    `t`. The relation is one-sided. `PairwiseCompat` asks it of each pair in both orders, so
+    the obligation of a union is symmetric, as Lawson's compatibility of partial bijections is.
+    That obligation is the condition under which a union of lawful options is lawful. -/
 def Compat (c d : Codec) : Prop :=
   ∀ a t, c.p a = some t → ((d.p a).isSome = true ∨ (d.e t).isSome = true) → d.p a = some t
-
-/-- **At lawful codecs `Compat` is symmetric**, so the one-sided form is the classical
-    compatibility of partial bijections and loses nothing. -/
-theorem compat_symm {c d : Codec} (hc : Lawful c) (hd : Lawful d) (h : Compat c d) :
-    Compat d c := by
-  intro a t hp hact
-  rcases hact with hq | he
-  · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hq
-    have := h a w hw (Or.inl (by rw [hp]; rfl))
-    rw [hp] at this; rw [hw, this]
-  · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp he
-    have hcb := hc.retract hb
-    have hdb := h b t hcb (Or.inr (hd.defined hp))
-    have e2 := hd.canon hdb
-    rw [hd.canon hp] at e2; cases e2; exact hcb
 
 /-- **Read agreement**: two compatible readings of one attribute give one value. -/
 theorem Compat.p_agree {c d : Codec} (h : Compat c d) {a t w}

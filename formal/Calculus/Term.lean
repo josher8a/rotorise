@@ -141,9 +141,8 @@ inductive Term where
   | never
 
 /-- §4's object payload: the declared names, the slot at each, and the one open block.
-    A `mutual` block admits no `structure`, so this is `inductive … | mk` and the projections
-    below are written by hand — three lines, against a `Body`-shaped row in every table over
-    terms.
+    The type is `inductive … | mk`, so the projections below are written by hand: three lines,
+    against a `Body`-shaped row in every table over terms.
 
     **A body is a partition of the key space.** The declared names are one block each, `wild`
     is the single open block, and every remaining name is refused. There is no policy that
@@ -218,11 +217,11 @@ def Term.record (val : Term) : Term :=
 
 /-! ## `Body`'s projections
 
-`inductive … | mk` generates none, and a `mutual` block admits no `structure`, so these are
-written out. They are named for `MapOf`'s — `fields`/`at` — because a body *is* a `MapOf Field`
-paired with a policy, and `MapOf Field` is not expressible here: nesting an inductive through a
-structure whose field is a function into the type being defined is not something the nested
-inductive compiler accepts.
+`inductive … | mk` generates none, so these are written out. They are named for `MapOf`'s
+`fields`/`at`, because a body *is* a `MapOf ObjectSlot` paired with an open block. The `mutual`
+block also elaborates with `Body` as a `structure`, and with a `MapOf ObjectSlot` argument in
+place of the key set and the slot function. `Body` takes neither form, so the projections are
+written by hand.
 
 The projections exist so that a *statement* about an object can quantify over one thing. Rows
 that need all three components still pattern-match on `.mk`, which is cheaper than three

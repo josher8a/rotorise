@@ -378,16 +378,32 @@ describe('the declaration guard, where a term is what the guard reads', () => {
         expect(() => union([string('A'), string('B')])).not.toThrow()
         expect(() => union([string('A'), number])).not.toThrow()
     })
+
+    /**
+     * **A refusal names each option as the caller declared it.** The caller removes an option by
+     * its call, and two literal options at one form differ only in their literals.
+     */
+    it('names both declared options of a refused pair, literals included', () => {
+        expect(() => union([decimal('1', '2.5'), decimal('2.5', '3')])).toThrow(
+            "decimal('1', '2.5') and decimal('2.5', '3') are not shown compatible",
+        )
+        expect(() => union([decimal('1', '2'), string('1', '2')])).toThrow(
+            "decimal('1', '2') and string('1', '2') are not shown compatible",
+        )
+        expect(() => union([number(1, 2), number(2, 3)])).toThrow(
+            'number(1, 2) and number(2, 3) are not shown compatible',
+        )
+    })
 })
 
 /**
- * **An object option is admitted by its structure, not by its names alone.**
+ * **An object option is admitted by attempt, not by its names.**
  *
- * Pass 7. Admission used to read the name set and stop, so two options declaring one name set were
- * ambiguous whatever their fields said, and a discriminator was the only way to tell them apart.
- * It now reads the name set *and* every literal field the value carries — the model's `keysOk` and
- * `literalsOk` — so a required literal with disjoint alternatives resolves the pair, at the
- * declaration and at the item.
+ * The union attempts each option in order. The first option whose codec encodes the value writes
+ * the value, as the model's `admitOptV` and `admitOptA` admit. The names present select no option. Two
+ * options with one name set resolve where no value is admitted by both, for example where a
+ * required literal has disjoint alternatives. A value that no option encodes is refused, even
+ * where its names fit one option.
  */
 describe('an object option is admitted by attempt', () => {
     /**

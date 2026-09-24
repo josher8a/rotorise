@@ -774,65 +774,6 @@ theorem altsOkA_of_AdmA {t : Term} {a : Attr} (h : AdmA t a = true) :
     altsOkA (altsOfTerm t) a = true := by
   cases t <;> first | rfl | exact (AdmA_exact _ a).mp h
 
-/-- **An object option has its structural test for a read row, open block and all.**
-    `structural_of_AdmBody`'s twin, and it carries no closedness premise for the same reason. -/
-theorem structural_of_AdmABody {b : Body}
-    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (h : AdmABody b (.m keys g) = true) :
-    (keysOk b.spec keys && literalsOkA b.spec keys g) = true := by
-  have h' := h
-  rw [AdmABody_map, Bool.and_eq_true] at h'
-  cases hb : b with
-  | mk fields fld wild =>
-    subst hb
-    refine Bool.and_eq_true _ _ |>.mpr ⟨?_, ?_⟩
-    · refine keysOk_of_names ?_ (fun k hreq => ?_) (fun k hforbid hk => ?_)
-      · cases hw : wild with
-        | none => exact Or.inr (mem_fields_of_admA (b := .mk fields fld wild) hw h)
-        | some _ => exact Or.inl rfl
-      · cases hf : fld k with
-        | req t =>
-          have hh := of_decide_eq_true h'.1 k
-          exact of_decide_eq_true (by simpa [Body.at, hf] using hh)
-        | optional t =>
-          rw [hf] at hreq
-          cases t <;> simp [ObjectSlot.presence, Term.isNever] at hreq
-      · have hrow := objAdmA_row h'.2 hk k.2
-        change AdmAField (fld k) (g ⟨k.1, hk⟩) = true at hrow
-        cases hf : fld k with
-        | req t =>
-          rw [hf] at hforbid
-          have ht : t = .never := by
-            cases t <;> simp [ObjectSlot.presence, ObjectSlot.isReq, Term.isNever] at hforbid ⊢
-          subst t
-          rw [hf] at hrow
-          simp [AdmAField, AdmA] at hrow
-        | optional t =>
-          rw [hf] at hforbid
-          have ht : t = .never := by
-            cases t <;> simp [ObjectSlot.presence, Term.isNever] at hforbid ⊢
-          subst t
-          rw [hf] at hrow
-          simp [AdmAField, AdmA] at hrow
-    · refine decide_eq_true (fun k => ?_)
-      show litOkA _ k.1 (g k) = true
-      cases hkf : decide (k.1 ∈ fields) with
-      | true =>
-        have hd := of_decide_eq_true hkf
-        rw [litOkA, show (Body.spec (.mk fields fld wild)).names.at k.1
-              = some ⟨_, altsOfField (fld ⟨k.1, hd⟩)⟩ from dif_pos hd]
-        exact altsOkA_of_AdmAField (objAdmA_row h'.2 k.2 hd)
-      | false =>
-        have hnd := of_decide_eq_false hkf
-        cases hw : wild with
-        | none => exact absurd (mem_fields_of_admA (b := .mk fields fld wild) hw h k.1 k.2) hnd
-        | some w =>
-          have hat : (Body.spec (.mk fields fld (some w))).names.at k.1 = none := dif_neg hnd
-          have hws : (Body.spec (.mk fields fld (some w))).wild = some (altsOfTerm w) := by
-            simp [Body.spec]
-          simp only [litOkA, hat, hws]
-          exact altsOkA_of_AdmA (objAdmA_wild h'.2 k.2 hnd hw)
-
 /-- Soundness of every attribute row — a corollary, as on the value side. The
     hundred-and-thirty-line depth recursion this was, and the ~~SoundA~~ scaffolding it needed,
     are deleted: `AdmA_exact` carries no hypothesis, so the weaker half comes free. -/
