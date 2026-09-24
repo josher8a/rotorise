@@ -4479,16 +4479,15 @@ theorem forall₂_mem_left {α β : Type} {R : α → β → Prop} :
 theorem union_p_find (ts : List Term) (a : Attr) :
     (denote (.union ts)).p a = (ts.find? (fun u => AdmA u a)).bind (fun t => (denote t).p a) := by
   rw [denote_union_sems]
-  show select (optionSems ts) (·.admitA) (·.c.p) a = _
+  show select (denoteList ts) (·.p) a = _
   unfold select
-  rw [optionSems_eq, List.find?_map]
-  have hq : ((fun o : OptionSem => o.admitA a) ∘ fun t => optionSemOf (denote t) (specOf t))
-      = fun u => AdmA u a := by
+  rw [denoteList_eq, List.find?_map]
+  have hq : ((fun c : Codec => (c.p a).isSome) ∘ denote) = fun u => AdmA u a := by
     funext u
-    show (optionSemOf (denote u) (specOf u)).admitA a = AdmA u a
+    show ((denote u).p a).isSome = AdmA u a
     rw [admitOptA_eq (AdmA_exact u) a]; rfl
   rw [hq]
-  cases ts.find? (fun u => AdmA u a) <;> simp [optionSemOf_c]
+  cases ts.find? (fun u => AdmA u a) <;> simp
 
 /-- …and so does a list of survivors, whatever its length. -/
 theorem ofOptions_p_find (ts : List Term) (a : Attr) :

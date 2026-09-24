@@ -84,8 +84,8 @@ theorem sub_held {i i' P P' : Term} {f g : Value → Value} (h : Sub (denote i) 
     option. -/
 theorem sub_union_of {os : List Term} {u : Codec} (h : ∀ o ∈ os, Sub (denote o) u) :
     Sub (denote (.union os)) u :=
-  have hs : ∀ o ∈ optionSems os, Sub o.c u := fun _ ho =>
-    let ⟨t, ht, hto⟩ := List.mem_map.mp ((optionSems_eq os) ▸ ho)
+  have hs : ∀ o ∈ denoteList os, Sub o u := fun _ ho =>
+    let ⟨t, ht, hto⟩ := List.mem_map.mp ((denoteList_eq os) ▸ ho)
     hto ▸ h t ht
   ⟨fun _ _ he => let ⟨o, ho, he⟩ := select_some he; (hs o ho).1 _ _ he,
    fun _ _ hp => let ⟨o, ho, hp⟩ := select_some hp; (hs o ho).2 _ _ hp⟩
@@ -214,11 +214,10 @@ theorem not_compat_flip : ¬ Compat (denote .boolean) (denote flipBool) := by
   exact absurd (Value.bool.inj (h.p_agree hb hf)) (by decide)
 
 /-- **Without `Compat`, the order of the options is observable**: the union writes `true`
-    through the first option that admits it. -/
+    through the first option that writes it. -/
 theorem flip_order_observable :
-    (altCodec [.byAttempt (denote .boolean), .byAttempt (denote flipBool)] none).e (.bool true)
-      ≠ (altCodec [.byAttempt (denote flipBool), .byAttempt (denote .boolean)] none).e
-        (.bool true) := by
+    (altCodec [denote .boolean, denote flipBool] none).e (.bool true)
+      ≠ (altCodec [denote flipBool, denote .boolean] none).e (.bool true) := by
   show some (Attr.bool true) ≠ some (Attr.bool false); simp
 
 /-! ## Compatible, and refused by `certPair`

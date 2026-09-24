@@ -165,17 +165,17 @@ of one list: what is left in each proof is the case split it actually needs. -/
 private theorem opaq_unfold (n : Nat) :
     opaqCodec (n+1) =
       altCodec
-        [.byAttempt stringCodec, .byAttempt booleanCodec, .byAttempt binaryCodec,
-         .byAttempt nullCodec,
-         .byAttempt numberCodec,
-         .byAttempt (setCodec (opaqCodec n)),
-         .byAttempt (arrayCodec (opaqCodec n)),
-         .byAttempt (recordCodec (opaqCodec n))]
+        [stringCodec, booleanCodec, binaryCodec,
+         nullCodec,
+         numberCodec,
+         (setCodec (opaqCodec n)),
+         (arrayCodec (opaqCodec n)),
+         (recordCodec (opaqCodec n))]
         none := rfl
 
 -- Every unfolding computes through the same ten definitions.
 section Unfoldings
-attribute [local simp] opaq_unfold altCodec select OptionSem.byAttempt stringCodec booleanCodec
+attribute [local simp] opaq_unfold altCodec select stringCodec booleanCodec
   binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec
 
 /-- §3 `(opaque)`, write side at kind `string`: only the `S` option admits, so the filter collapses to it. -/
@@ -335,7 +335,7 @@ by the `set` option. Kind-disjointness is the same argument — each attribute c
 is accepted by at most one of the eight. -/
 
 section UnfoldingsA
-attribute [local simp] opaq_unfold altCodec select OptionSem.byAttempt stringCodec booleanCodec
+attribute [local simp] opaq_unfold altCodec select stringCodec booleanCodec
   binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec
 
 /-- §3 `(opaque)`, read side at member `S`: distinct members, so at most one option admits. -/

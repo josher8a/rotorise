@@ -171,31 +171,20 @@ theorem admitA_of_sepJA {x y : Term} (h : SepJA x y)
   | none => rfl
   | some w => exact absurd (AdmA_sound y hy) (by simp [hAy])
 
-/-! ### …and it now suffices for the discharger, at every constructor
+/-! ### …and it suffices for the discharger, at every constructor
 
-This section used to record a gap: `admitV_of_sepJV` is a claim about the **codec** — where
-`x`'s `e` writes, `y`'s `e` refuses — and a discharger is a claim about the **options `select`
-builds**, and at an `object` those used not to be the same test. `admitOptV` matched the
-asymmetry: an object option was admitted by `keysOk`, which reads which names a map carries
-and never what they hold, so `Adm` was strictly *tighter* than `OptionSem.admitV` there, and
-disjointness of a tighter predicate did not imply disjointness of admission. The witness was
-two objects with the same declared name and different field terms — `SepJV`/`SepJA` separated
-the pair, and `select` still confused their options, so the discharger restated on the joint
-predicate was false.
-
-Every option is admitted by attempt now, `object` included, so `admitOptV`/`admitOptA` **are**
-`Adm`/`AdmA` at every constructor and the gap above is gone: `admitV_le_Adm`/`admitA_le_AdmA`
-below hold unconditionally, not only off an `object`. -/
+Every option is admitted by attempt, `object` included, so admission **is** `Adm`/`AdmA` at
+every constructor: `admitV_le_Adm`/`admitA_le_AdmA` below hold unconditionally. -/
 
 /-- **The containment the discharger needs, at every constructor.** Admission is attempted
     encoding now, whatever the term, and exactness identifies it with the row. -/
 theorem admitV_le_Adm (t : Term) {v : Value}
-    (h : (optionSemOf (denote t) (specOf t)).admitV v = true) : Adm t v = true :=
+    (h : ((denote t).e v).isSome = true) : Adm t v = true :=
   (Adm_exact t v).mpr h
 
 /-- …and its twin on the readable side. -/
 theorem admitA_le_AdmA (t : Term) {a : Attr}
-    (h : (optionSemOf (denote t) (specOf t)).admitA a = true) : AdmA t a = true :=
+    (h : ((denote t).p a).isSome = true) : AdmA t a = true :=
   (AdmA_exact t a).mpr h
 
 /-! ### `ident`, pinned from below

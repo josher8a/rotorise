@@ -269,15 +269,15 @@ theorem sub_listCodec {pre suf : List Codec} {sp : Option Codec}
 
 
 /-- The selector returns the answer of one option, and nothing else. -/
-theorem select_some {A B : Type} {os : List OptionSem} {adm : OptionSem → A → Bool}
-    {run : OptionSem → A → Option B} {x : A} {y : B} (h : select os adm run x = some y) :
+theorem select_some {A B : Type} {os : List Codec} {run : Codec → A → Option B} {x : A} {y : B}
+    (h : select os run x = some y) :
     ∃ o ∈ os, run o x = some y := by
   obtain ⟨o, ho, -, hr⟩ := select_admits h
   exact ⟨o, ho, hr⟩
 
 /-- A union of restrictions of `Ω` is a restriction of `Ω`, because the selector returns the
     answer of one option. -/
-theorem sub_altCodec {os : List OptionSem} (h : ∀ o ∈ os, Sub o.c Ω) (μ : Option Member) :
+theorem sub_altCodec {os : List Codec} (h : ∀ o ∈ os, Sub o Ω) (μ : Option Member) :
     Sub (altCodec os μ) Ω := by
   refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
   · obtain ⟨o, ho, he⟩ := select_some he; exact (h o ho).1 _ _ he
@@ -401,7 +401,7 @@ theorem sub_denote : ∀ t : Term, HF t → Sub (denote t) Ω
   | .list pre sp suf, ⟨h1, h2, h3⟩ =>
       sub_listCodec (sub_denoteList pre h1) (sub_denoteOpt sp h2) (sub_denoteList suf h3)
   | .object b, h => sub_body b h
-  | .union os, h => sub_altCodec (sub_optionSems os h) _
+  | .union os, h => sub_altCodec (sub_denoteList os h) _
 /-- …at a body. -/
 theorem sub_body : ∀ b : Body, HFB b → Sub (bodySem b) Ω
   | .mk fields f w, ⟨hf, hw⟩ =>
@@ -425,13 +425,6 @@ theorem sub_denoteList : ∀ ts : List Term, HFL ts → ∀ c ∈ denoteList ts,
 theorem sub_denoteOpt : ∀ o : Option Term, HFO o → ∀ c ∈ denoteOpt o, Sub c Ω
   | none, _ => fun _ hc => nomatch hc
   | some t, h => fun c hc => by cases hc; exact sub_denote t h
-/-- …at the options of a union. -/
-theorem sub_optionSems : ∀ ts : List Term, HFL ts → ∀ o ∈ optionSems ts, Sub o.c Ω
-  | [], _ => fun _ ho => nomatch ho
-  | t :: ts, ⟨h1, h2⟩ => fun o ho => by
-      rcases List.mem_cons.mp ho with rfl | ho
-      · exact sub_denote t h1
-      · exact sub_optionSems ts h2 o ho
 end
 
 /-- **(W)**: a held-free term writes only what `opaque` writes. -/

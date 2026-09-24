@@ -177,7 +177,7 @@ noncomputable def AdmAOptT : Option Term → Option AP
   | some t => some (AdmA t)
 
 
-/-- `optionSems`' mirror on the attribute side. -/
+/-- `denoteList`' mirror on the attribute side. -/
 noncomputable def AdmASpecs : List Term → List (Option (BodySpec) × AP)
   | [] => []
   | t :: ts => (specOf t, AdmA t) :: AdmASpecs ts
@@ -280,28 +280,25 @@ def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denote t).p a).isSo
 
 /-- The read-side agreement, option by option — `admitOptV_eq`'s twin. -/
 theorem admitOptA_eq {t : Term} (h : ExactA t) (a : Attr) :
-    (optionSemOf (denote t) (specOf t)).admitA a = admitOptA (specOf t, AdmA t) a := by
+    ((denote t).p a).isSome = admitOptA (specOf t, AdmA t) a := by
   unfold admitOptA
-  simp only [optionSemOf, OptionSem.byAttempt]
   exact Bool.coe_iff_coe.mp (by simpa using (h a).symm)
 
 /-- `select`'s filter is the term list's, mapped — `filter_AdmSpecs`'s twin. -/
 theorem filter_AdmASpecs {opts : List Term} (h : ∀ t ∈ opts, ExactA t) (a : Attr) :
-    (optionSems opts).filter (·.admitA a)
-      = (opts.filter (fun t => admitOptA (specOf t, AdmA t) a)).map
-          (fun t => optionSemOf (denote t) (specOf t)) := by
+    (denoteList opts).filter (fun c => (c.p a).isSome)
+      = (opts.filter (fun t => admitOptA (specOf t, AdmA t) a)).map denote := by
   induction opts with
   | nil => rfl
   | cons t ts ih =>
     have ht : ExactA t := h t (by simp)
     have hts : ∀ t' ∈ ts, ExactA t' := fun t' h' => h t' (by simp [h'])
-    simp only [optionSems, List.filter_cons, admitOptA_eq ht, ih hts]
+    simp only [denoteList, List.filter_cons, admitOptA_eq ht, ih hts]
     cases hb : admitOptA (specOf t, AdmA t) a <;> simp []
 
-/-- **An attempted union reads exactly where one of its options reads.** -/
-theorem select_isSome_attemptA {os : List OptionSem} (hatt : ∀ o ∈ os, o = .byAttempt o.c)
-    (a : Attr) :
-    (select os (·.admitA) (·.c.p) a).isSome = true ↔ ∃ o ∈ os, (o.c.p a).isSome = true := by
+/-- **A union reads exactly where one of its options reads.** -/
+theorem select_isSome_attemptA (os : List Codec) (a : Attr) :
+    (select os (·.p) a).isSome = true ↔ ∃ o ∈ os, (o.p a).isSome = true := by
   constructor
   · intro h
     obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h
@@ -309,21 +306,17 @@ theorem select_isSome_attemptA {os : List OptionSem} (hatt : ∀ o ∈ os, o = .
     exact ⟨o, ho, by rw [hp]; rfl⟩
   · rintro ⟨o, ho, hp⟩
     obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hp
-    obtain ⟨o', hf⟩ := find?_attempt_A hatt ho hv
-    unfold select; rw [hf]; exact acts_of_find?_A hatt hf
+    obtain ⟨o', hf⟩ := find?_attempt_A ho hv
+    unfold select; rw [hf]; exact acts_of_find?_A hf
 
 /-- **`union` reads exactly what its row says** — `ExactV_union` on the other side of the
     pair. -/
 theorem ExactA_union {opts : List Term} (h : ∀ t ∈ opts, ExactA t) : ExactA (.union opts) := by
   intro a
   rw [denote_union_sems]
-  show selOptA (AdmASpecs opts) a = true ↔ (select (optionSems opts) (·.admitA) (·.c.p) a).isSome
-  have hatt : ∀ o ∈ optionSems opts, o = .byAttempt o.c := by
-    rw [optionSems_eq]
-    exact List.forall_mem_map.mpr fun _ _ => rfl
-  rw [selOptA_eq_AdmAAny, select_isSome_attemptA hatt, optionSems_eq]
-  simp only [List.mem_map, exists_exists_and_eq_and, optionSemOf_c]
-  clear hatt
+  show selOptA (AdmASpecs opts) a = true ↔ (select (denoteList opts) (·.p) a).isSome
+  rw [selOptA_eq_AdmAAny, select_isSome_attemptA, denoteList_eq]
+  simp only [List.mem_map, exists_exists_and_eq_and]
   constructor
   · intro ha
     induction opts with
