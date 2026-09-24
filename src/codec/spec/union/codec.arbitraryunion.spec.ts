@@ -95,21 +95,11 @@ describe('the kind of value is a filter, not the answer', () => {
     /**
      * And the pair that is refused before any value exists.
      *
-     * `string` and `decimal` both read back as `string`, so the union's entity type *is* `string` and
-     * nothing about a value says which option produced it — `decode ∘ encode = id` cannot hold. That
-     * is a fact about the declaration, so it is reported there rather than on the first encode.
-     *
-     * Trying could not have saved it either: neither validates on the way in, so `decimal` given
-     * `'x'` writes `{ N: 'x' }` rather than failing. Encoding trusts its types.
+     * `string` writes `'1'` as an `S` and `decimal` writes it as an `N`, so the option order would
+     * decide the attribute, and the declaration cannot show the pair compatible. That is a fact
+     * about the declaration, so it is reported there rather than on the first encode.
      */
-    it('is refused at the declaration when two options read back the same', () => {
-        const _wrong = () =>
-            // @ts-expect-error both read back as `string`, so no value chooses between them
-            union([string, decimal])
-        expect(typeof _wrong).toBe('function')
-    })
-
-    it('and the runtime refuses it too, where the declaration is', () => {
+    it('is refused at the declaration, where two options write one value to two attributes', () => {
         const declare = union as unknown as (
             options: readonly AnyCodec[],
         ) => UnionCodec<string, readonly AnyCodec[]>

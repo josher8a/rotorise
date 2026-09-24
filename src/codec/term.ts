@@ -24,7 +24,7 @@ import type {
     SetBase,
     SetSlot,
 } from './codec'
-import { namedLiteral, sameLiteral } from './value'
+import { sameLiteral } from './value'
 
 /* ── the term ─────────────────────────────────────────────────────────────────────────── */
 
@@ -989,35 +989,23 @@ export const unfoldOpaque = (op: Extract<Term, { kind: 'opaq' }>): Term => {
 }
 
 /**
- * **One option's values are all admitted by the other**, so the narrower one can never be chosen.
+ * **One option's values are all admitted by the other**, so the two are not separated.
  *
- * §5's `select` acts only where *exactly one* option admits. If every value `X` admits is also
- * admitted by `Y`, then the union is undefined on all of `X` and is `Y` everywhere else, so `X` is
- * a declared option no value reaches. That is not ambiguity and no discriminator fixes it. The
- * option has to go.
- *
- * `opaque` was the first instance and `f083188` refused it. These are the other two, and they are
- * the same sentence: a **restriction against the thing it restricts**. A literal against its own
- * base's ground term, and a set of a literal against the plain set at that base — which is spelled
- * `refine(set b, each(members …))`, so this reads the predicate rather than a subterm.
+ * {@link separable} is a certificate that no value is admitted by both options, and a
+ * **restriction against the thing it restricts** shares every value it admits. A literal against
+ * its own base's ground term, and a set of a literal against the plain set at that base, which is
+ * spelled `refine(set b, each(members …))`, so this reads the predicate rather than a subterm.
  *
  * **A term inside one option of a sum is inside the sum.** `opaque` is the universal sum, so
- * `union([string('a'), opaque])` refuses through the `string` option of {@link unfoldOpaque}. The
- * model's `Orth` declines each such pair already. The pair declared here because `identifies`
- * accepts it, and containment runs first.
+ * `string('a')` sits inside `opaque` through the `string` option of {@link unfoldOpaque}. The
+ * model's `Orth` declines each such pair.
  *
- * Two restrictions of one base are a different shape and still declare:
- * `union([string('A'), string('B')])` is two options neither of which contains the other, and
- * `Orth` certifies it since `OrthL`. So this row asks containment, never disjointness.
+ * Two restrictions of one base are a different shape: `string('A')` and `string('B')` share no
+ * value, and `Orth` certifies the pair since `OrthL`. So this row asks containment, never
+ * disjointness.
  *
  * **A union of literals at one base is a restriction of that base**, and reading only the
- * `literal` constructor here would miss it: `string('A', 'B')` builds that union, so the pair
- * `union([string, string('A', 'B')])` would declare and then fail at the first value both admit.
- * Measured — it cost three corpus pairs before this row read the union.
- *
- * The type level says the same thing already — `Overlaps` fires on a subtype either way round —
- * so a typed caller never reaches this. What reaches it is a cast, a JavaScript caller, or an
- * erased path. This is the runtime agreeing with the type rather than a new refusal.
+ * `literal` constructor here would miss it: `string('A', 'B')` builds that union.
  */
 export const restricts = (x: Term, y: Term): boolean => {
     // the empty set is contained in every set, which is `opaque`'s rule at the opposite width
@@ -1064,7 +1052,7 @@ export const restricts = (x: Term, y: Term): boolean => {
  * A body admits every name set between its required names and the names it holds, so the two
  * intervals intersect exactly on that condition. A body holds its declared names, and an open
  * block holds every other name: `presenceAt` answers `(true, true)` for an undeclared name under a
- * block. `Calculus.OrthM` read positively, and the same rule `Collides` states in the type.
+ * block. `Calculus.OrthM` read positively.
  */
 const namesMeet = (x: Body, y: Body): boolean => {
     const holds = (b: Body, name: string) =>
@@ -1098,7 +1086,7 @@ const altsApart = (x: Alternatives, y: Alternatives): boolean =>
     )
 
 /**
- * **Whether some value satisfies both object structures** — the runtime half of `StructuralMeet`.
+ * **Whether some value satisfies both object structures.**
  *
  * Two clauses, and the second is what pass 7 added: the name intervals meet, and no shared
  * **required** name is pinned to literals with nothing in common. `required` on both sides is the
@@ -1155,14 +1143,8 @@ const objectMembers = (
 const carrierDisjoint = (x: Term, y: Term): boolean =>
     sharedLiterals(x, y)?.length === 0
 
-/**
- * **The values two pinned options both carry**, or `undefined` where one of them pins none.
- *
- * `union` asks again on the path it is about to throw on, so a refusal can name the values that
- * caused it rather than the slot they happen to share. That is the same walk {@link meet} is asked
- * to repeat for the same reason.
- */
-export const sharedLiterals = (
+/** **The values two pinned options both carry**, or `undefined` where one of them pins none. */
+const sharedLiterals = (
     x: Term,
     y: Term,
 ): readonly LiteralValue[] | undefined => {
@@ -1203,8 +1185,7 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * — `Orth1`, below — and the law that ties them is what `formal/.separations.lean` pins, one
  * theorem per pair this function refuses: **it never answers `false` where `certPair` answers `true`.**
  * Refusing a declaration the model proves separable would be refusing a union that works.
- * `union` asks {@link crossing} ahead of this function, because this function can accept a pair
- * that crosses.
+ * `union` asks it only of a pair that is not held-free, through {@link compatible}.
  *
  * Six rows, and each carries its own warrant. A seventh exempted an `opaque` option and is gone;
  * the paragraph below the sixth says why.
@@ -1221,12 +1202,12 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * {@link meetTerms} only where both terms reach no thunk, which {@link reaches} answers. It certifies two lists told apart
  * by a literal position, and two objects whose required slots meet at the bottom.
  *
- * **Two object options: the structural meet, which is the same question the type asks.** A union
+ * **Two object options: the structural meet.** A union
  * admits every option by attempt, an object option included, so two object options are separable
  * where no value passes both attempts. This row reads that off the two structures: the names
  * present, and then every required literal field. Two such options are separable where no value
- * satisfies both structures: either their name intervals do not meet (`OrthM`, and `Collides` is
- * that written in the type) or some shared required name is pinned to literals with nothing in
+ * satisfies both structures: either their name intervals do not meet (`OrthM`) or some shared
+ * required name is pinned to literals with nothing in
  * common (`OrthS`). The meet row above certifies two objects whose required slots meet at `never`
  * through a field that pins no literal.
  *
@@ -1252,18 +1233,12 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * meeting, so the known side decides. Every option of a `union` has a term, so this function
  * takes two terms and has no row for one that is missing.
  *
- * **There is no `opaque` row, and its removal is the rule this function most recently learned.**
- * §5 separates the two things a `⊤` covers: *unknown* — the read side of a `legacy`, whose answer
- * exists and cannot be read — and *everything*, which is `opaque`, accepting every kind by
- * design. A `held` over a foreign schema is the second: its held side is `opaque`. The model states the second as a **closed form**, `occTop` at the total `opaq`, so
- * it can be compared; this library read it as `⊤` and exempted it instead, which
- * meant `union([opaque, X])` declared.
- *
- * **JH ruled that union unacceptable, and the model says why.** It is not equal to `opaque`: it is
- * *undefined* wherever `X` admits, because `opaque` admits every value `X` does and `select` acts
- * only where exactly one option does. Everywhere else it is `opaque`. So `X` is a declared option
- * that no value can ever choose — §5's failure, not a rank. `occV` and `occA` answer the closed
- * form now, `Orth1` finds the meeting, and the pair is refused at the declaration.
+ * **There is no `opaque` row.** §5 separates the two things a `⊤` covers: *unknown* — the read
+ * side of a `legacy`, whose answer exists and cannot be read — and *everything*, which is
+ * `opaque`, accepting every kind by design. A `held` over a foreign schema is the second: its held
+ * side is `opaque`. The model states the second as a **closed form**, `occTop` at the total
+ * `opaq`, so it can be compared: `occV` and `occA` answer the closed form, and `Orth1` finds that
+ * `opaque` meets every option. So `opaque` is separated from no option.
  *
  * **Otherwise the two occupancies, both sides conjoined.** A pair separated on one side only is not
  * separated: the loosened form ships `union([decimal, number])`, which writes `'1.5'` to an `N` and
@@ -1347,7 +1322,7 @@ export const separable = (x: Term, y: Term, identified = true): boolean => {
  * thunk can be recursive, so a meet of two recursive terms need not end, and {@link separable}
  * asks the meet only of a term that reaches no thunk, which `reaches(t, [])` answers. `held` and `legacy` need no such guard
  * there: the meet answers `undefined` at each, and the model's certificate needs no `HF` premise.
- * {@link crossing} asks for no adapter as well, because the model's confluence holds only there.
+ * {@link heldFree} asks for no adapter, because the model's confluence holds only there.
  */
 const reaches = (t: Term, kinds: readonly Term['kind'][]): boolean => {
     if (kinds.includes(t.kind)) return true
@@ -1480,108 +1455,34 @@ const storedView = (t: Term): Term => {
 
 /**
  * **Whether the caller views of two options are separable**, where one option holds a `held`
- * and both are {@link viewable}. Then no caller value is admitted by both options. `union` reads
- * this to name the read side in a refusal, where the write side is apart.
+ * and both are {@link viewable}. Then no caller value is admitted by both options.
  */
-export const callerViewsApart = (x: Term, y: Term): boolean =>
+const callerViewsApart = (x: Term, y: Term): boolean =>
     (reaches(x, ['held']) || reaches(y, ['held'])) &&
     viewable(x) &&
     viewable(y) &&
     separable(callerView(x), callerView(y))
 
 /**
- * **The overlap of two options that cross**, or nothing.
- *
- * Two options cross where their meet is neither `never` nor one of the two. A pair whose meet is
- * `never` is disjoint, and a pair whose meet is one option is nested. A value in the overlap is
- * admitted by both options, so the value does not decide the branch, and no rule names an owner
- * of the overlap. JH ruled that `union` refuses such a pair, and that a caller writes the overlap
- * as an option of its own. Asked only where neither option reaches a thunk or an adapter: there
- * the meet is exact, and two options that both admit a value write one attribute. The overlap
- * must reach no `refine`, because the host meet does not decide whether a refinement holds a
- * value.
+ * **Whether the walk shows a term held-free**, the model's `HF`. A thunk and a `legacy` count as
+ * adapters, because the walk cannot show them held-free.
  */
-export const crossing = (x: Term, y: Term): Term | undefined => {
-    const adapters = ['held', 'legacy'] as const
-    if (reaches(x, adapters) || reaches(y, adapters)) return undefined
-    const overlap = meetTerms(x, y)
-    // a `refine` in the overlap can hold no value: two literal sets with disjoint alphabets meet
-    // at a set whose each element is in both, and the store has no empty set
-    if (
-        overlap === undefined ||
-        overlap.kind === 'never' ||
-        reaches(overlap, ['refine'])
-    )
-        return undefined
-    return sameTerm(overlap, x) || sameTerm(overlap, y) ? undefined : overlap
-}
-
-/** Two terms with the same structure. A function compares by reference, and bytes by value. */
-const sameTerm = (one: unknown, other: unknown): boolean => {
-    if (one === other) return true
-    if (one instanceof Uint8Array || other instanceof Uint8Array)
-        return sameValue(one, other)
-    if (typeof one !== 'object' || typeof other !== 'object') return false
-    if (one === null || other === null) return false
-    if (Array.isArray(one) !== Array.isArray(other)) return false
-    const mine = Object.entries(one)
-    const theirs = new Map(Object.entries(other))
-    return (
-        mine.length === theirs.size &&
-        mine.every(
-            ([key, value]) =>
-                theirs.has(key) && sameTerm(value, theirs.get(key)),
-        )
-    )
-}
+export const heldFree = (t: Term): boolean => !reaches(t, ['held', 'legacy'])
 
 /**
- * **A term, spelled with the constructors a caller writes**, for a message that names a term the
- * caller did not write: the overlap that {@link crossing} finds.
+ * **Whether the declaration shows two options compatible**, which is what `union` asks of a pair.
+ *
+ * A union is the join of its options, and the join of two lawful options is lawful exactly when
+ * the two are compatible: each reading of one is a reading of the other wherever the other acts.
+ * Three warrants show it, as the model's three dischargers do. `never` is compatible with every
+ * option (`pairwiseCompat_never_left`). Two held-free options sit below one canonical codec
+ * (`pairwiseCompat_of_HF`). {@link separable} is the certificate (`pairwiseCompat_of_separated`).
  */
-export const spelled = (t: Term): string => {
-    switch (t.kind) {
-        case 'number':
-            return 'dynamoNumber'
-        case 'null':
-            return 'nullValue'
-        case 'opaq':
-            return 'opaque'
-        case 'literal':
-            return `${literalForm(t.base, undefined)}(${namedLiteral(t.v)})`
-        case 'set':
-            return `${literalForm(t.base, undefined)}.set()`
-        case 'list':
-            return `list(${[
-                ...t.pre.map(spelled),
-                ...(t.spread === undefined
-                    ? []
-                    : [`spread(${spelled(t.spread)})`]),
-                ...t.suf.map(spelled),
-            ].join(', ')})`
-        case 'object': {
-            const fields = Object.entries(t.body.fields).map(
-                ([name, field]) =>
-                    `${name}: ${
-                        field.mark === 'req'
-                            ? spelled(field.t)
-                            : `${field.mark === 'fallback' ? 'withLegacyRead' : field.mark}(${spelled(field.t)})`
-                    }`,
-            )
-            const rest =
-                t.body.rest === undefined
-                    ? ''
-                    : `, [string, optional(${spelled(t.body.rest)})]`
-            return `object({ ${fields.join(', ')} }${rest})`
-        }
-        case 'union':
-            return `union([${t.options.map(spelled).join(', ')}])`
-        case 'refine':
-            return `refine(${spelled(t.inner)}, …)`
-        default:
-            return t.kind
-    }
-}
+export const compatible = (x: Term, y: Term): boolean =>
+    x.kind === 'never' ||
+    y.kind === 'never' ||
+    (heldFree(x) && heldFree(y)) ||
+    separable(x, y)
 
 /**
  * Where two occupancies meet, or nothing — and `⊤` on either side means "not compared".
@@ -1810,16 +1711,13 @@ const distribute = (
 }
 
 /**
- * **The certificate a union must carry for its admission to be the join of its options'** —
- * `Calculus.unionOk`.
- *
- * `certAll` is {@link separable} here, which is this library's `certPair` and carries exemptions the
- * model's does not. Every union the builders can construct has already passed it pairwise, so the
- * conjunct bites on the survivor list rather than on the input.
+ * **What a union must show for the meet to distribute over it**: each pair of options
+ * {@link compatible}, as `union` asks at the declaration. Every union the builders can construct has
+ * already shown it, so the conjunct bites on the survivor list rather than on the input.
  */
 const unionOk = (os: readonly Term[]): boolean =>
     os.every((t, at) =>
-        os.every((u, other) => other <= at || separable(t, u)),
+        os.every((u, other) => other <= at || compatible(t, u)),
     ) && os.every((t) => !isOpenObject(t) && objectNamesAgree(t))
 
 const isOpenObject = (t: Term): boolean =>

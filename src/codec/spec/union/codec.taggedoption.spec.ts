@@ -8,16 +8,11 @@
  * both axes alone, so the two nest: the outer union picks the group, the inner tag picks the
  * variant.
  *
- * This declared at runtime and was refused by the type, because {@link ObjectSpecsOf} read a
- * tagged option's `item.spec` as a record of attributes. It is the **tag map**, so two tagged
- * options both looked to require `placed` and `delivered` and `Collides` called them the same. A
- * tagged option is not judged by names at all: `identifies` certifies it, and the runtime selects
- * it by attempting.
+ * A tagged option is not judged by names: the runtime selects it by attempting.
  */
 import { attest } from '@ark/attest'
 import { describe, expect, it } from 'vitest'
-import type { ErrorMessage } from '../../../utils'
-import type { AttributeCodec, ValidateOptions } from '../../codec'
+import type { AttributeCodec } from '../../codec'
 import {
     discriminatedUnion,
     object,
@@ -25,9 +20,6 @@ import {
     string,
     union,
 } from '../../codec'
-
-/** That it refuses, rather than the words it refuses with. */
-type Refuses<T> = [T] extends [ErrorMessage<string>] ? true : false
 
 type Order =
     | {
@@ -55,13 +47,6 @@ const byPetIds = discriminatedUnion('status', [
 
 describe('a union whose options are tagged', () => {
     const order = union([byPetId, byPetIds]) satisfies AttributeCodec<Order>
-
-    it('declares, where the tag map read as attributes refused it', () => {
-        attest<
-            false,
-            Refuses<ValidateOptions<[typeof byPetId, typeof byPetIds]>>
-        >()
-    })
 
     it('picks the group by name and the variant by tag, in both directions', () => {
         for (const value of [
@@ -114,21 +99,23 @@ describe('a union whose options are tagged', () => {
     })
 
     /**
-     * The refusal the dropped check does not lose.
-     *
-     * `same` admits every value `byPetId` admits, `shipDate` being optional, so no value selects
-     * it. That is {@link Restricting} — a question about the entities, which a tagged option
-     * answers as readily as an object one.
-     *
-     * The type refuses it and the runtime does not, which is where an object option already
-     * stands: {@link separable} exempts one on its first row and defers the name question to the
-     * declaration. A tagged option reaches the same answer one row later, by {@link identifies}.
+     * **A tagged option inside another adds nothing, and takes nothing away.** `byPetId` admits
+     * every value `same` admits, `shipDate` being optional. The two write each such value to one
+     * attribute, so the union writes what `byPetId` writes, whatever the order.
      */
-    it('still refuses a tagged option whose entity sits inside another', () => {
+    it('declares a tagged option whose entity sits inside another, and writes as the wider one', () => {
         const same = discriminatedUnion('status', [
             object({ status: string('placed'), petId: string }),
             object({ status: string('delivered'), petId: string }),
         ])
-        attest<true, Refuses<ValidateOptions<[typeof byPetId, typeof same]>>>()
+        const value = { status: 'placed', petId: 'a' } as const
+        for (const options of [
+            [byPetId, same],
+            [same, byPetId],
+        ] as const) {
+            expect(union(options).unsafeEncode(value)).toEqual(
+                byPetId.unsafeEncode(value),
+            )
+        }
     })
 })

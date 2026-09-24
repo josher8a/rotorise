@@ -526,14 +526,14 @@ describe('what the wrappers preserve', () => {
 
 describe('the laws that do NOT hold', () => {
     /**
-     * `union` is not a lattice: adding an option can turn a working declaration into an ambiguous
-     * one, and the type system refuses that case rather than the runtime.
+     * `union` is a join of compatible options, not of every option: adding an option that the
+     * declaration cannot show compatible refuses the declaration. `decimal` writes `'1'` as an `N`
+     * and `string` writes it as an `S`.
      */
-    it('a union is not closed under adding an option', () => {
-        const _wrong = () =>
-            // @ts-expect-error `string('A')` reads back as a subtype of what `string` reads back
-            union([string, string('A')])
-        expect(typeof _wrong).toBe('function')
+    it('a union is not closed under adding an option that is not shown compatible', () => {
+        expect(() => union([string, decimal] as never)).toThrow(
+            /are not shown compatible/,
+        )
     })
 
     /**

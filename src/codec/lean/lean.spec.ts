@@ -1101,12 +1101,8 @@ describe('the `check` protocol', () => {
 })
 
 /**
- * Every option pair the corpus offers, with `src/`'s declaration verdict.
- *
- * `leanTermOf` is what bounds it: a pair either side of which is term-inexpressible cannot be put
- * to the model at all. Over the emittable pairs the split measured 268 both-certify, 17
- * both-refuse, **0** where `src/` refuses and `Orth` certifies, and 66 where `src/` accepts and
- * `Orth` declines — the last being `Orth`'s sufficiency rather than a disagreement.
+ * Every option pair the corpus offers. `leanTermOf` is what bounds it: a pair either side of which
+ * is term-inexpressible cannot be put to the model at all.
  */
 const separationPairs = (): readonly Separation[] => {
     const codecs: readonly (readonly [string, AnyCodec])[] = [
@@ -1125,12 +1121,7 @@ const separationPairs = (): readonly Separation[] => {
             } catch {
                 continue
             }
-            try {
-                union([left, right] as never)
-                continue // accepted: the law does not run in this direction
-            } catch {
-                out.push({ name: `${an}__vs__${bn}`, left, right })
-            }
+            out.push({ name: `${an}__vs__${bn}`, left, right })
         }
     }
     return out
@@ -1433,126 +1424,23 @@ describe("the read side, against the model's read row", () => {
 
 describe("the declaration guard, against the model's classifier", () => {
     /**
-     * **`src/` refuses seventy-three pairs, and each one carries a warrant.** That is the whole
-     * law, and it is one-directional on purpose: `Orth` is sufficient and not necessary, so a
-     * pair it declines may still be separable. What would be a defect is `src/` refusing a
-     * declaration the model *proves* works — which is what it did to
-     * `union([string.set(), number.set()])` until `ff75c6b`, and what `Orth` certifies.
+     * **Each pair carries the warrant of the host's verdict**, and the gate elaborates each one.
+     * An accepted pair carries the model's proof that the pair is compatible, through the warrant
+     * the host used. A refused pair carries `certPair x y = false`.
      *
-     * **It was thirty-six, and the ones that arrived all have `never` on a side.** `never` admits
-     * no value, so every value it admits every other option admits, and {@link restricts} answers
-     * the containment at its narrowest width.
-     *
-     * **Those carry the other warrant, and needed it.** `Orth` *certifies* a pair with `never` on
-     * a side — `never` occupies no slot and meets nothing — so asserting `Orth x y = false` about
-     * one is false, and `decide` refuted nineteen of them the first time this corpus carried the
-     * bottom. The model types the union too: an empty option is compatible with
-     * every option. So these carry the *permits*-form, `pairwiseCompat_never_left` and
-     * `pairwiseCompat_never_right`, and the emitter states which warrant a pair carries. `src/` refuses
-     * them on usefulness — an option admitting nothing can never be chosen — and that is a
-     * divergence the artifact records rather than a disagreement about soundness.
-     *
-     * **The four before those all have a *restriction* on a side**, which is `opaque`'s rule at a
-     * narrower width: a literal against its own base's ground term, three of them, and a set of a
-     * literal against the plain set at that base. Every value the narrower option admits, the
-     * wider one admits too, so `select` acts nowhere on the narrower and it can never be chosen.
-     * The type level already refused all four; this is the runtime agreeing with it. `Orth`
-     * declines every one, `not_orth_literal_string` on purpose, so the law is untouched.
-     *
-     * **It was seventeen, and the fifteen that arrived all have `opaque` on a side.** The guard
-     * exempted an `opaque` option rather than comparing it, on the ground that its occupancy is
-     * `⊤`. §5 separates the two things a `⊤` covers, and `opaque` is the *everything* one: the
-     * model states it as a closed form, so it can be compared and it meets every option. Every one
-     * of the fifteen new theorems holds — `Orth Term.opaq Term.string` is `false` — so the
-     * law was untouched either way, and what moved is that a union no value can resolve is now
-     * refused where it used to be declared. JH's ruling, landed in `ff75c6b`.
-     *
-     * **It was seventy-three, and the seven that arrived are all object against object.** Pass 7
-     * gave the runtime guard the structural meet, where its object row used to answer `true`
-     * unconditionally and defer to the type's `Collides`. So a pair of object options whose name
-     * intervals meet and which no required literal tells apart is now refused at construction as
-     * well as at the declaration:
-     * `object_two_fields__vs__object_optional_absent`, `object_optional_absent__vs__` each of
-     * `object_fallback_present`, `object_open` and `object_nested`,
-     * `object_fallback_present__vs__` each of `object_open` and `object_nested`, and
-     * `object_open__vs__object_nested`. `Orth` declines every one, so the law is untouched and
-     * what moved is that the two levels now answer one rule instead of two.
-     *
-     * **It was 111, then 117, and it is 112.** Two corpus movements, and neither is the guard
-     * changing its mind. Six pairs arrived with the `decimal` base being deleted, and five left
-     * with `object_fallback_present`, which stopped being emittable: a field's older reader lives
-     * in `Codec.extendRead`, a codec outside `Term`, so a `Body` has no slot to print it.
-     *
-     * The six that arrived:
-     * `dynamoNumber` is the one native at `number` and `decimal` is `held` over it, so two codecs
-     * a *base* used to tell apart now collide at `N` and the pairs are refused:
-     * `scalar_decimal__vs__scalar_number` and `literal_decimal__vs__scalar_number` are that
-     * collision named, and `set_of_number` replaced `set_of_decimal` because a set of an adapter
-     * cannot be emitted yet. `crossesStringDecimal` and `crossesNumberDecimal` went with the base,
-     * which is the same fact from the other side.
-     *
-     * **It was 157, and the eight that arrived all have a sum on the wider side.** {@link restricts}
-     * reads a term inside one option of a sum as inside the sum, and `opaque` is the universal
-     * sum. Four pairs have `opaque_map` on a side, against `literal_alternatives`,
-     * `literal_binary`, `literal_non_ascii` and `set_of_literal`. Four have a union that holds the
-     * base of the literal: `literal_alternatives` and `literal_non_ascii`, each against
-     * `union_of_two` and `nullable_null`. `identifies` accepted all eight, and `Orth` declines
-     * all eight.
-     *
-     * **It was 165, and the one that arrived is `opaque_map__vs__scalar_number`.** The canonical
-     * `opaque` is total now: it holds a number as a `DynamoNumber`, so it writes the `number`
-     * slot and reads `N`, where the `'refuse'` policy that `opaque_map` used to carry wrote
-     * neither. `dynamoNumber` writes and reads exactly those, so the two options meet on both
-     * sides and the pair is refused. `Orth Term.opaq Term.number` is `false`, so the
-     * warrant is `Orth` declining, and no pair left.
-     *
-     * **It was 166, and the thirty-six that left each meet at the bottom.** The model's union
-     * certificate is `certPair`, `Orth` or a meet at `never`, and {@link separable} asks the meet
-     * where no thunk is on either side. So each pair below declares now, and each theorem left
-     * because `certPair` answers `true`. No pair arrived.
-     * Lists that share no value: `array_empty__vs__tuple_pair`,
-     * `array_of_string__vs__list_spread_suffix`, `array_of_string__vs__tuple_pair`,
-     * `list_prefix_spread__vs__map_inside_a_list`, `list_prefix_spread__vs__tuple_pair`,
-     * `list_spread_suffix__vs__array_empty`, `list_spread_suffix__vs__map_inside_a_list` and
-     * `tuple_pair__vs__map_inside_a_list`.
-     * Objects whose required slot meets at the bottom: `object_nested__vs__` each of
-     * `object_restricted_rest` and `open_of_restricted_set`; `object_open__vs__` each of
-     * `object_nested`, `object_restricted_rest` and `open_of_restricted_set`;
-     * `object_optional_absent__vs__` each of `object_nested`, `object_restricted_rest` and
-     * `open_of_restricted_set`; `object_restricted_rest__vs__` each of `product_two_objects` and
-     * `product_union_object`; `object_two_fields__vs__` each of `object_restricted_rest` and
-     * `open_of_restricted_set`; `open_empty__vs__` each of `object_nested`,
-     * `object_restricted_rest`, `object_two_fields`, `product_three` and `product_two_objects`;
-     * `open_of_restricted_set__vs__` each of `discriminated_union`, `dunion_two_keys`,
-     * `product_three`, `product_two_objects`, `product_union_object` and `union_by_literal`; and
-     * `open_of_string__vs__` each of `object_nested`, `object_restricted_rest`,
-     * `object_two_fields`, `product_three` and `product_two_objects`.
-     * Five of these carry a `decimal` field, which is `held`. The meet still reaches the bottom
-     * through another field, so the row asks no `held` guard.
-     *
-     * **Measured, and it is the question this count exists to answer**: the disjointness law
-     * `6536d91` added refuses **none** of these pairs. Every refusal here is an occupancy or a
-     * restriction, and no pair is refused for carrying a value another pair also carries.
-     *
-     * **The count pins a fact no law has, deliberately.** That it is 134 is a property of this
-     * corpus, so widening the corpus is meant to fail here and be looked at; the *law* is the loop
-     * below, that every refusal the model also declines. Both are kept, and the number stays.
+     * **The counts pin a fact no law has, deliberately.** They are a property of this corpus, so
+     * widening the corpus is meant to fail here and be looked at.
      */
-    it('refuses only pairs the classifier also declines', () => {
-        const separations = separationPairs()
-        expect(separations.length).toBe(134)
-        // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
-        // and it carries one of the two warrants: `certPair` declines, or — for a `never` pair, where
-        // the model permits what `src/` lints away — the permits-form states what the model says
-        for (const one of separations) {
-            const emitted = leanSeparation(one)
-            expect(
-                emitted.includes('= false := by decide') ||
-                    /PairwiseCompat \[.*\] :=\n {2}pairwiseCompat_never_(left|right) _$/.test(
-                        emitted,
-                    ),
-            ).toBe(true)
-        }
+    it('accepts only pairs the model proves compatible, and refuses only pairs the certificate declines', () => {
+        const emitted = separationPairs().map(leanSeparation)
+        const accepted = emitted.filter((one) =>
+            one.includes('PairwiseCompat ['),
+        )
+        const refused = emitted.filter((one) =>
+            one.endsWith('= false := by decide'),
+        )
+        expect(accepted.length + refused.length).toBe(emitted.length)
+        expect([accepted.length, refused.length]).toEqual([674, 29])
     })
 
     it('emits them for the gate to elaborate', () => {
@@ -1571,8 +1459,7 @@ describe("the declaration guard, against the model's classifier", () => {
     /**
      * **The meet, both directions.** `Term.meet` and `meetTerms` are one function written twice,
      * so a disagreement either way is a defect on one side. This is the only check that measures
-     * the meet: the host's `unionOk` reads `separable`, which exempts what the model's `Orth` does
-     * not, and no other guard holds that divergence.
+     * the meet.
      */
     it('puts every corpus meet to the model', () => {
         const meets = meetPairs()
@@ -1587,17 +1474,22 @@ describe("the declaration guard, against the model's classifier", () => {
         expect(leanMeetModule([])).toContain('import Calculus.Meet')
     })
 
-    /** And the direction the law does not run, refused rather than emitted as a vacuous claim. */
-    it('refuses to state a verdict about a pair src accepts', () => {
-        expect(
-            refusal(() =>
-                leanSeparation({
-                    name: 'accepted',
-                    left: erase(string),
-                    right: erase(boolean),
-                }),
-            ).reason,
-        ).toContain('one-directional')
+    /** A pair `src/` accepts carries the warrant the host used, and a refused pair the certificate. */
+    it('states the warrant of each verdict, both ways', () => {
+        const accepted = leanSeparation({
+            name: 'accepted',
+            left: erase(string),
+            right: erase(boolean),
+        })
+        expect(accepted).toContain('PairwiseCompat [Term.string, Term.boolean]')
+        expect(accepted).toContain('pairwiseCompat_of_HF')
+        const refused = leanSeparation({
+            name: 'refused',
+            left: erase(string),
+            right: erase(decimal),
+        })
+        expect(refused).toMatch(/^ {4}certPair \(Term\.string\)$/m)
+        expect(refused.endsWith('= false := by decide')).toBe(true)
     })
 })
 

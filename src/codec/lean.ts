@@ -64,7 +64,7 @@ import type {
     Term,
     Field as TermField,
 } from './term'
-import { meetTerms } from './term'
+import { heldFree, meetTerms } from './term'
 import { shapeOf } from './value'
 
 /**
@@ -919,40 +919,21 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
 }
 
 /**
- * One proposed **separation verdict**: `src/` refuses this pair at the declaration, and the model
- * must not certify it.
+ * One **declaration verdict**: what `src/`'s `union` does with this pair, and what the model says.
  *
- * **The bridge from `src/`'s declaration-time guard to `Orth`, and it runs one way only.** `Orth`
- * is a *sufficient* decidable condition for a fragment of (U) — `docs/architecture.md`'s own
- * by-phase table puts it at six of twenty-five hand discharges directly — so `Orth x y = false`
- * does **not** mean the model cannot separate the pair. It means the cheap syntactic test
- * declines. Measured over the corpus, 66 of 351 pairs are exactly that and every one is
- * legitimate, each landing in one of the guard's three documented exemptions: a literal (which
- * identifies its own values), a pair of object options (certified by the names and literals they
- * declare), or an option whose kind is
- * unknown (`opaque`, `lazy`, an adapter).
+ * **The bridge runs both ways, because the two host defects of the certificate lived in the
+ * direction that the one-way bridge did not check.**
  *
- * So the checkable law is the converse. **If the model certifies a pair, `src/` must accept it** —
- * refusing a declaration the model *proves* separable is `src/` rejecting a union that works.
- * Stated as a theorem per refusal: `certPair x y = false`, which stops compiling the moment the
- * certificate starts certifying a pair `src/` turns down. `certPair` is `Orth`, or a meet at the
- * bottom, and it is what the model's `unionOk` reads. Zero counterexamples today, and the pair that
- * motivated `ff75c6b` is the reason the law is worth gating rather than asserting once:
- * `Orth (Term.set .string) (Term.set .number) = true`, which `src/` refused until that commit.
+ * - `src/` **accepts** the pair: the model proves `PairwiseCompat` for it, given lawful options,
+ *   through the warrant the host used. `never` on a side is `pairwiseCompat_never_left` or
+ *   `_right`. Two held-free options are `pairwiseCompat_of_HF`. Any other accepted pair was
+ *   accepted by `separable`, the host's `certPair`, and is `pairwiseCompat_of_separated` through
+ *   `separated_of_unionOk`. A host warrant that the model does not prove stops the file.
+ * - `src/` **refuses** the pair: the model's certificate must not certify it, `certPair x y =
+ *   false`. A certificate that starts to certify a pair `src/` turns down stops the file.
  *
- * **That law holds of a pair the model TYPES, and a refusal has one of two warrants.** `never` is
- * the pair it does not reach. `Orth` certifies it on slots alone — `Orth Term.string Term.never`
- * is `true`, `never` occupying no slot — so `Orth x y = false` is false about it. The model types
- * the union as well: `HNever` is disjoint from every held set, being empty, and §5's (D) holds on
- * that disjunct.
- *
- * **So a `never` pair is the one place the two sides diverge, and the artifact states the
- * divergence rather than hiding it.** `src/` refuses the pair as a *lint*: `restricts` answers
- * that an option admitting nothing can never be chosen, which is true and is worth saying. The
- * model answers that the union is *well formed*, which is also true. Well formed and useful are
- * different claims, so a pair with `never` on a side carries the permits-form — what the model
- * does say about it — and the other side appears in the name and the docstring only: the warrant
- * does not depend on it.
+ * Compatibility is not decidable, so a refused pair carries no theorem that it is incompatible:
+ * `not_compat_flip` and `not_compat_shout` are the model's witnesses of that class.
  */
 export type Separation = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
@@ -961,13 +942,7 @@ export type Separation = {
     readonly right: AnyCodec
 }
 
-/**
- * One separation verdict, as a Lean `theorem` — and the `src/` side is checked here, as with
- * {@link leanRefusal}.
- *
- * `union([left, right])` must throw. Emitting this for a pair `src/` *accepts* would assert the
- * model declines a pair nobody is refusing, which says nothing about either side.
- */
+/** One declaration verdict, as a Lean `theorem`, with the `src/` side decided here. */
 export const leanSeparation = ({ name, left, right }: Separation): string => {
     let refused = false
     try {
@@ -975,44 +950,39 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     } catch {
         refused = true
     }
-    if (!refused) {
-        throw new LeanUnemittable(
-            name,
-            '`src/` accepts this pair at the declaration, so there is no refusal for the model to contradict — the law is one-directional and this is the direction it does not run',
-        )
+    const l = leanTermOf(left, name)
+    const r = leanTermOf(right, name)
+    if (refused) {
+        return [
+            `/-- \`${name}\` — \`src/\` refuses this pair; the model must not certify it -/`,
+            `theorem ${leanIdent(name)} :`,
+            `    certPair (${l})`,
+            `      (${r}) = false := by decide`,
+        ].join('\n')
     }
-    // the same test `restricts` makes, which is what put the pair in this list
     const isNever = (declared: AnyCodec): boolean => {
         const def = declared.def
         return !('mark' in def) && def.kind === 'never'
     }
-    if (isNever(left) || isNever(right)) {
-        // the permits-form: `src/` refuses on usefulness, the model answers well-formedness, and
-        // the theorem records what the model says rather than asserting a refusal it does not make
-        const warrant = isNever(left)
-            ? 'pairwiseCompat_never_left'
-            : 'pairwiseCompat_never_right'
-        return [
-            `/-- \`${name}\` — \`src/\` refuses this pair as a lint: an option admitting nothing can`,
-            `    never be chosen. The model permits it: an empty option is compatible with every option. -/`,
-            `theorem ${leanIdent(name)} :`,
-            `    PairwiseCompat [${leanTermOf(left, name)}, ${leanTermOf(right, name)}] :=`,
-            `  ${warrant} _`,
-        ].join('\n')
-    }
+    const warrant = isNever(left)
+        ? 'fun _ => pairwiseCompat_never_left _'
+        : isNever(right)
+          ? 'fun _ => pairwiseCompat_never_right _'
+          : heldFree(left.def) && heldFree(right.def)
+            ? 'fun hl => pairwiseCompat_of_HF (by hf_pair) hl'
+            : 'fun hl => pairwiseCompat_of_separated hl (separated_of_unionOk (by decide))'
     return [
-        `/-- \`${name}\` — \`src/\` refuses this pair; the model must not certify it -/`,
+        `/-- \`${name}\` — \`src/\` accepts this pair; the model proves it compatible -/`,
         `theorem ${leanIdent(name)} :`,
-        `    certPair (${leanTermOf(left, name)})`,
-        `      (${leanTermOf(right, name)}) = false := by decide`,
+        `    (∀ t ∈ [${l}, ${r}], Lawful (denote t)) →`,
+        `      PairwiseCompat [${l}, ${r}] :=`,
+        `  ${warrant}`,
     ].join('\n')
 }
 
 /**
- * The separation verdicts as a module of their own, because they need `certPair`.
- *
- * `Calculus.Vectors` reaches `Denote` and not `Orthogonality`, and adding the import to the
- * committed vector samples would make them depend on a module they have nothing to say about.
+ * The declaration verdicts as a module of their own, because they need `certPair` and the
+ * dischargers of `PairwiseCompat`.
  *
  * The header imports `Calculus.DynamoDB` as well, because a `held` term spells
  * `numeralOfStoredText` and `textOfNumeral`, which the DynamoDB port defines, and
@@ -1020,25 +990,22 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
  * auto-binds an unknown lower-case name, so the missing import reports a free variable in the
  * expected type of every verdict rather than an unknown identifier.
  *
- * Generated at gate time and elaborated, never committed — the counts are in
- * `docs/architecture.md`, which is where the verdict this checks is written down.
+ * Generated at gate time and elaborated, never committed.
  */
 export const leanSeparationModule = (
     separations: readonly Separation[],
 ): string =>
     `import Calculus.Meet
+import Calculus.Compat
 import Calculus.DynamoDB
 
 /-!
-# Declaration-guard verdicts, proposed to the classifier
+# Declaration verdicts, both ways
 
-**Generated — do not edit.** One theorem per option pair \`src/\`'s \`union\` refuses at the
-declaration. \`certPair\` is *sufficient* and not necessary, so this runs one way: a pair the model
-certifies must not be refused by \`src/\`. A refusal carries one of two warrants: \`certPair\` declines
-the pair, or — where the pair has \`never\` on a side — the model permits it and the theorem says
-so. That second one is a divergence, and a deliberate one: the model answers whether the union is
-well formed, \`src/\` answers whether it is useful, and an option admitting nothing is well formed
-and useless at once. See \`src/codec/lean.ts\`'s \`Separation\`.
+**Generated — do not edit.** One theorem per option pair of the corpus. A pair \`src/\`'s \`union\`
+accepts carries the model's proof that the pair is compatible, through the warrant the host used.
+A pair \`src/\` refuses carries \`certPair x y = false\`: the model's certificate declines it too.
+See \`src/codec/lean.ts\`'s \`Separation\`.
 -/
 
 /-! The emitted key function is total on a membership subtype, so a single-name object binds a
@@ -1048,6 +1015,10 @@ set_option linter.unusedVariables false
 set_option linter.style.nameCheck false
 
 namespace Calculus
+
+/-- Held-freeness of two concrete terms: the definitions unfold, and each slot of a body splits. -/
+macro "hf_pair" : tactic =>
+  \`(tactic| simp [HFL, HF, HFB, HFS, HFO, Term.tuple, Term.array, Term.record, apply_ite HFS])
 
 ${separations.map(leanSeparation).join('\n\n')}
 
@@ -1084,8 +1055,7 @@ export type ReadVerdict = {
  * The separations bridge runs one way, because `Orth` is sufficient and not necessary. This one
  * runs both: `Term.meet` and {@link meetTerms} are the *same function* stated twice, so a
  * disagreement in either direction is a defect on one side. It is the only check that measures the
- * meet at all — the host's `unionOk` reads `separable`, which exempts what the model's `Orth` does
- * not, and nothing else holds that divergence.
+ * meet at all.
  */
 export type MeetPair = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */

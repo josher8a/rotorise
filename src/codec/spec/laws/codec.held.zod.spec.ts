@@ -70,7 +70,7 @@ describe('a zod schema as the held side', () => {
             decode: (s) => new Date(s),
         })
         expect(() => union([at, boolean])).toThrow(
-            /held and boolean both take the same kind of value — boolean — and the declaration cannot show/,
+            /held and boolean are not shown compatible/,
         )
     })
 })

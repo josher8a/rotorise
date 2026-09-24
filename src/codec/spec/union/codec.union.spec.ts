@@ -12,14 +12,12 @@ import {
     decimal,
     discriminatedUnion,
     dynamoNumber,
-    list,
     never,
     nullValue,
     number,
     object,
     opaque,
     optional,
-    spread,
     string,
     union,
 } from '../../codec'
@@ -104,18 +102,22 @@ describe('untagged', () => {
         )
     })
 
-    it('rejects variants that cannot be told apart, at the declaration', () => {
-        // `{ a }` is admitted by both, so nothing can tell them apart — and the two levels now
-        // answer one rule, so the declaration is refused by the type and by the constructor
-        expect(() =>
-            union(
-                // @ts-expect-error the declaration itself is rejected
-                [
-                    object({ a: string, b: optional(string) }),
-                    object({ a: string }),
-                ],
-            ),
-        ).toThrow(CodecError)
+    it('declares variants that can hold the same attributes, and writes a shared value to one attribute whatever the order', () => {
+        // `{ a }` is admitted by both, and both write it to one map, so the order is not observable
+        const wide = object({ a: string, b: optional(string) })
+        const narrow = object({ a: string })
+        for (const options of [
+            [wide, narrow],
+            [narrow, wide],
+        ] as const) {
+            const either = union(options)
+            expect(either.unsafeEncode({ a: '1' })).toEqual({
+                M: { a: { S: '1' } },
+            })
+            expect(either.unsafeDecode({ M: { a: { S: '1' } } })).toEqual({
+                a: '1',
+            })
+        }
     })
 
     /**
@@ -148,13 +150,9 @@ describe('untagged', () => {
         // with neither checking what it reads is refused, and a pair separable by member is not
         expect(() => union([decimal, number])).toThrow(CodecError)
         expect(() => union([string, number])).not.toThrow()
-        // and the mirror it was hiding behind, which was refused all along — twice over, since two
-        // options reading back as the same type is also `ValidateOptions`. `union([decimal,
-        // number])` passes *that* check too: they read back as `string` and `number`
-        expect(() =>
-            // @ts-expect-error both read back as a string, which the type refuses as well
-            union([string, decimal]),
-        ).toThrow(CodecError)
+        // and the mirror it was hiding behind, which was refused all along: `string` writes `'1'` as
+        // an `S`, and `decimal` writes it as an `N`
+        expect(() => union([string, decimal])).toThrow(CodecError)
     })
 
     /**
@@ -170,30 +168,6 @@ describe('untagged', () => {
         expect(() =>
             union([object({ a: string }), object({ b: string })]),
         ).not.toThrow()
-    })
-
-    it('refuses a caller who bypasses the compile-time check, at construction', () => {
-        type Overlapping = { a: string; b?: string } | { a: string }
-        // declared through a cast, as a caller bypassing the compile-time check would. The options
-        // are still codecs — what is bypassed is `ValidateVariants`, which is the check being tested
-        const declare = union as unknown as (
-            options: readonly AnyCodec[],
-        ) => UnionCodec<Overlapping, readonly AnyCodec[]>
-
-        // what makes it ambiguous is that *both* options admit the entity — (U) fails at this input
-        expect(
-            accepts(object({ a: string, b: optional(string) }), { a: '1' }),
-        ).toBe(true)
-        expect(accepts(object({ a: string }), { a: '1' })).toBe(true)
-
-        // the constructor answers the same structural question the type does, so the refusal
-        // arrives at the declaration rather than on the first item that collides
-        expect(() =>
-            declare([
-                object({ a: string, b: optional(string) }),
-                object({ a: string }),
-            ]),
-        ).toThrow(CodecError)
     })
 
     it('nests, like the discriminated form', () => {
@@ -296,118 +270,70 @@ describe('the declaration guard, where a term is what the guard reads', () => {
     })
 
     /**
-     * **An option no value can select is not an option.**
-     *
-     * `opaque` admits every value every other option admits, and §5's `select` acts only where
-     * *exactly one* option does. So `union([opaque, X])` is not `opaque` with `X` beside it: it is
-     * **undefined** wherever `X` admits, and `opaque` everywhere else. `X` is declared and can
-     * never be chosen, which is §5's failure rather than a precedence question — there is no rank
-     * that resolves it, because ranking would be choosing an option the model says is not chosen.
-     *
-     * The guard used to exempt an `opaque` option instead of comparing it, reading its occupancy
-     * as `⊤`. §5 separates the two things a `⊤` covers, and `opaque` is the *everything* one: the
-     * model states it as a closed form, so it is comparable and it meets every option. Refusing
-     * these is JH's ruling, landed in `ff75c6b`, and it moved the corpus's refusal
-     * set from 17 pairs to 32 with every new theorem holding.
+     * **`opaque` beside an option it contains is `opaque`.** `opaque` admits every value the other
+     * option admits, and the two write each such value to one attribute, so the union writes what
+     * `opaque` writes, whatever the order.
      */
-    it('refuses a union where one option can never be selected', () => {
-        // @ts-expect-error the type refuses this pair too, and now **for the right reason**: the
-        // clause naming `opaque` fires ahead of the read-back one, so a caller is told to remove
-        // the option rather than to add a discriminator that cannot help.
-        // `Rotorise.attest.test.ts` pins the message. This asserts the *runtime* half, which is
-        // what a caller reaches past the type — a cast, or plain JavaScript.
-        expect(() => union([opaque, string])).toThrow(CodecError)
-        // the message names the option that swallows the other, because that is the one to remove,
-        // and it names it as the caller wrote it rather than as the term spells it
-        // @ts-expect-error the same type-level refusal
-        expect(() => union([opaque, string])).toThrow(/opaque/)
-        // both policies: `lossy` admits a number too, so it swallows strictly more
-        // @ts-expect-error the same type-level refusal
-        expect(() => union([opaque('lossy'), string])).toThrow(CodecError)
-        // @ts-expect-error and the order of the options does not matter
-        expect(() => union([string, opaque])).toThrow(CodecError)
-
-        // and the refusal is about being unselectable, not about `opaque` being unusable
-        expect(() => opaque.encode('a')).not.toThrow()
-        expect(() => union([string, boolean])).not.toThrow()
+    it('declares opaque beside a held-free option, and writes as opaque in either order', () => {
+        for (const options of [
+            [opaque, string],
+            [string, opaque],
+        ] as const) {
+            const either = union(options)
+            expect(either.unsafeEncode('a')).toEqual(opaque.unsafeEncode('a'))
+            expect(either.unsafeEncode(true)).toEqual(opaque.unsafeEncode(true))
+        }
+        expect(() => union([opaque, dynamoNumber])).not.toThrow()
     })
 
     /**
-     * **The total `opaque` writes a number and reads `N`**, so a numeric option meets it on both
-     * sides, and the runtime refuses the pair it declared while `opaque` refused numbers.
-     *
-     * **`'refuse'` keeps its write side, and its read side is the canonical one.** The policy
-     * declares every slot but `number`, and it reads through the canonical codec, whose read
-     * occupancy holds `N`. So a numeric option beside it meets it at `N` and is refused. That is a
-     * loss the owner accepted: a `Pred` complement would separate the pair, and the host has none.
+     * **A `held` beside `opaque` is refused**, because the declaration cannot show that the
+     * adapter writes a value where `opaque` writes it. `number` is an adapter over `dynamoNumber`,
+     * and each numeric policy of `opaque` is a `held` over the canonical codec.
      */
-    it('refuses a numeric option beside opaque, at the total codec and at refuse', () => {
-        // declared through a cast, as a caller bypassing the compile-time check would
+    it('refuses an adapter beside opaque, and a numeric policy beside any option', () => {
+        // declared through a cast, as a caller passing an erased list would
         const declare = union as unknown as (
             options: readonly AnyCodec[],
         ) => unknown
         const runtime = (options: readonly AnyCodec[]) => () => declare(options)
-        for (const numeric of [dynamoNumber, number, number(1)]) {
+        for (const numeric of [number, number(1)]) {
             expect(runtime([opaque, numeric])).toThrow(
-                /opaque and number both take the same kind of value/,
-            )
-            expect(runtime([opaque('refuse'), numeric])).toThrow(
-                /opaque and number both store 'N'/,
+                /are not shown compatible/,
             )
         }
-        // a numeric policy still admits every value that holds no number, so the containment
-        // row names it as the option that swallows a literal
-        expect(runtime([opaque('refuse'), string('a')])).toThrow(
-            /string\('a'\) admits only values that opaque also admits/,
-        )
+        for (const other of [string, string('a'), dynamoNumber]) {
+            expect(runtime([opaque('refuse'), other])).toThrow(
+                /are not shown compatible/,
+            )
+            expect(runtime([opaque('lossy'), other])).toThrow(
+                /are not shown compatible/,
+            )
+        }
     })
 
     /**
-     * **The same rule, two widths narrower**, and it is the rule rather than a second exemption:
-     * an option whose admitted values are all admitted by another can never be selected. `opaque`
-     * is the widest instance, where "another" is every option. These two are the narrowest, where
-     * one option is a *restriction of the thing it restricts*: a literal against its own base's
-     * ground term, and a set of a literal against the plain set at that base.
-     *
-     * **The type level already refused both**, and with the discriminator advice, which is the
-     * advice that cannot help. So what moves here is the runtime, which used to accept them
-     * through the `identifies` exemption, and the message, which now names the option to remove.
-     * A typed caller cannot have shipped one of these; what reaches the runtime is a cast, plain
-     * JavaScript, or an erased path.
-     *
-     * JH ruled it, on the ground that it is `opaque`'s failure at a narrower width. The corpus's
-     * refusal set moved from 32 to 36 and `Orth` declines all four, `not_orth_literal_string` on
-     * purpose.
+     * **A restriction beside what it restricts is the wider option.** A literal inside its base,
+     * and a set of a literal inside the plain set, add no value and take none away.
      */
-    it('refuses an option that is a restriction of another option', () => {
-        // @ts-expect-error the type refuses this pair too, and `Rotorise.attest.test.ts` pins the
-        // message; this asserts the runtime half, which is what a cast reaches past
-        expect(() => union([string, string('A')])).toThrow(CodecError)
-        // @ts-expect-error the same refusal, and the order of the options does not matter
-        expect(() => union([string('A'), string])).toThrow(CodecError)
-        // the message names the narrower option first, because that is the one to remove
-        // @ts-expect-error the same type-level refusal
-        expect(() => union([string, string('A')])).toThrow(
-            /admits only values that/,
-        )
-        // …and it says the thing a discriminator cannot be the answer to
-        // @ts-expect-error the same type-level refusal
-        expect(() => union([string, string('A')])).toThrow(
-            /a discriminator does not fix this/,
-        )
-        // a set of a literal is a restriction of the plain set at its base, one spelling out
-        // @ts-expect-error the same type-level refusal
-        expect(() => union([string.set(), string.set('a', 'b')])).toThrow(
-            CodecError,
-        )
+    it('declares an option that is a restriction of another option, and writes as the wider one', () => {
+        for (const options of [
+            [string, string('A')],
+            [string('A'), string],
+        ] as const) {
+            const either = union(options)
+            expect(either.unsafeEncode('A')).toEqual({ S: 'A' })
+            expect(either.unsafeEncode('B')).toEqual({ S: 'B' })
+            expect(either.unsafeDecode({ S: 'A' })).toBe('A')
+        }
+        const sets = union([string.set(), string.set('a', 'b')])
+        expect(sets.unsafeEncode(new Set(['a', 'z']) as never)).toEqual({
+            SS: ['a', 'z'],
+        })
 
-        // **and two restrictions of one base still declare**, which is the shape this is not
-        // about: neither literal contains the other, and `Orth` certifies the pair since `OrthL`
+        // and two restrictions of one base declare as before
         expect(() => union([string('A'), string('B')])).not.toThrow()
         expect(() => union([string('A'), number])).not.toThrow()
-        expect(() =>
-            union([string.set('a', 'b'), string.set('c')]),
-        ).not.toThrow()
     })
 })
 
@@ -427,7 +353,7 @@ describe('an object option is admitted by attempt', () => {
      * value decides the option, and the names present decide nothing.
      */
     it('declares two objects that share a name and no value, and each value selects its own option', () => {
-        /** Declared through a cast: the type's guard still reads the names alone. */
+        /** Declared through a cast, which states the entity type. */
         const declare = union as unknown as (
             options: readonly AnyCodec[],
         ) => UnionCodec<{ readonly a: string | boolean }, readonly AnyCodec[]>
@@ -441,34 +367,41 @@ describe('an object option is admitted by attempt', () => {
     })
 
     /**
-     * **A crossing pair is refused, and the message names the overlap.** Two options cross where
-     * their meet is neither `never` nor one of the two. The value does not decide the branch of a
-     * value in the overlap, and JH ruled that no rule names an owner of it. The caller writes the
-     * overlap as an option of its own, and the partition declares.
+     * **A crossing pair declares, and the overlap is written once.** Two options cross where their
+     * meet is neither `never` nor one of the two. A value in the overlap is admitted by both, and
+     * both write it to one attribute, so no rule has to name an owner of the overlap.
      */
-    it('refuses two crossing options with the overlap named, and declares their partition', () => {
+    it('declares two crossing options, and writes a value in the overlap once, whatever the order', () => {
         // both arrays hold `[]`, and `[]` is the whole overlap
-        expect(() => union([array(string('A')), array(string('B'))])).toThrow(
-            /cross: both admit every value of list\(spread\(never\)\), so the value does not decide the branch\. Write that overlap as an option of its own/,
-        )
-        expect(() =>
-            union([
-                list(string('A'), spread(string('A'))),
-                list(string('B'), spread(string('B'))),
-                list(),
-            ]),
-        ).not.toThrow()
+        for (const options of [
+            [array(string('A')), array(string('B'))],
+            [array(string('B')), array(string('A'))],
+        ] as const) {
+            const either = union(options)
+            expect(either.unsafeEncode([])).toEqual({ L: [] })
+            expect(either.unsafeDecode({ L: [] })).toEqual([])
+            expect(either.unsafeEncode(['A'])).toEqual({ L: [{ S: 'A' }] })
+        }
 
-        // JH's crossing pair, which overlaps at `{ a, b }`. `dynamoNumber` stands for `number`,
-        // because `number` is a `held` adapter and the refusal asks for no adapter
-        expect(() =>
-            union([
-                object({ a: string }, [string, optional(dynamoNumber)]),
-                object({ b: dynamoNumber }, [string, optional(string)]),
-            ]),
-        ).toThrow(
-            /cross: both admit every value of object\(\{ a: string, b: dynamoNumber \}\), so the value does not decide the branch/,
-        )
+        // JH's crossing pair, which overlaps at `{ a, b }`
+        const first = object({ a: string }, [string, optional(dynamoNumber)])
+        const second = object({ b: dynamoNumber }, [string, optional(string)])
+        const both = { a: 's', b: DynamoNumber.from('1') }
+        for (const options of [
+            [first, second],
+            [second, first],
+        ] as const) {
+            const either = (
+                union as unknown as (
+                    options: readonly AnyCodec[],
+                ) => UnionCodec<Record<string, unknown>, readonly AnyCodec[]>
+            )(options)
+            const written = either.unsafeEncode(both)
+            expect(written).toEqual({
+                M: { a: { S: 's' }, b: { N: '1' } },
+            })
+            expect(either.unsafeDecode(written)).toEqual(both)
+        }
     })
 
     /**
@@ -490,7 +423,7 @@ describe('an object option is admitted by attempt', () => {
             ]),
             object({ a: string, b: dynamoNumber }),
         ] as const
-        /** Declared through a cast: the type's guard still reads the names alone. */
+        /** Declared through a cast, which states the entity type. */
         const declare = union as unknown as (
             options: readonly AnyCodec[],
         ) => UnionCodec<Record<string, unknown>, readonly AnyCodec[]>
@@ -550,23 +483,19 @@ describe('an object option is admitted by attempt', () => {
         ).toEqual({ kind: 'b', x: 1 })
     })
 
-    it('still reports ambiguity where one name set carries no literal difference', () => {
-        type Kinded =
-            | { readonly kind: 'a'; readonly x: string }
-            | { readonly kind: string; readonly x: string }
-        /** Declared through a cast: the type refuses the pair for the same reason. */
-        const declare = union as unknown as (
-            options: readonly AnyCodec[],
-        ) => UnionCodec<Kinded, readonly AnyCodec[]>
-
-        // `string` admits `'a'`, so the two literals are not disjoint and no value chooses between
-        // them — a literal field is not a discriminator merely by being a literal on one side
-        expect(() =>
-            declare([
-                object({ kind: string('a'), x: string }),
-                object({ kind: string, x: string }),
-            ]),
-        ).toThrow(CodecError)
+    it('declares an object option inside another, where a literal field sits inside its base', () => {
+        // `string` admits `'a'`, so the first option sits inside the second, and the two write each
+        // value of the first to one map
+        const either = union([
+            object({ kind: string('a'), x: string }),
+            object({ kind: string, x: string }),
+        ])
+        expect(either.unsafeEncode({ kind: 'a', x: '1' })).toEqual({
+            M: { kind: { S: 'a' }, x: { S: '1' } },
+        })
+        expect(either.unsafeEncode({ kind: 'b', x: '1' })).toEqual({
+            M: { kind: { S: 'b' }, x: { S: '1' } },
+        })
     })
 
     it('refuses a value that no option encodes, even where its names fit one option', () => {
@@ -650,43 +579,22 @@ describe('never', () => {
     })
 
     /**
-     * **`opaque`'s rule at the opposite width.** `opaque` admits every value, so every other
-     * option is inside it. `never` admits none, so it is inside every other option, and §5's
-     * `select` acts nowhere on it. The message is the same one, and it names the option to remove.
+     * **`never` is the zero of `union`.** It admits no value, so it is compatible with every
+     * option, and the union writes what the other option writes.
      */
-    it('can never be an option of a union', () => {
-        // @ts-expect-error the type refuses the pair; this asserts the runtime half
-        expect(() => union([string, never])).toThrow(CodecError)
-        // @ts-expect-error the order of the options does not matter
-        expect(() => union([never, string])).toThrow(CodecError)
-        // @ts-expect-error the same type-level refusal
-        expect(() => union([string, never])).toThrow(/admits only values that/)
-        // @ts-expect-error the same type-level refusal
-        expect(() => union([string, never])).toThrow(
-            /a discriminator does not fix this/,
-        )
-    })
-
-    /**
-     * **An object option is no exception**, and it is the one pair that made the order matter.
-     *
-     * `separable` exempts an object option, because a union admits an object by its names. That
-     * exemption used to be asked before containment, so an object beside `never` was certified
-     * separable and the refusal was never reached — the type refused the pair and the runtime
-     * declared it. Containment is asked first now, and no other object pair changes answer: the
-     * three {@link restricts} rows name a literal, a set of a literal and `never`.
-     */
-    it('can never be an option beside an object either', () => {
-        // @ts-expect-error the type refuses the pair; this asserts the runtime half
-        expect(() => union([object({ a: string }), never])).toThrow(CodecError)
-        // @ts-expect-error the same type-level refusal
-        expect(() => union([object({ a: string }), never])).toThrow(
-            /admits only values that/,
-        )
-        // and the exemption itself still stands for a pair of objects, which names decide
-        expect(() =>
-            union([object({ a: string }), object({ b: string })]),
-        ).not.toThrow()
+    it('is the zero of a union: the union writes what the other option writes', () => {
+        for (const options of [
+            [string, never],
+            [never, string],
+        ] as const) {
+            const either = union(options)
+            expect(either.unsafeEncode('x')).toEqual({ S: 'x' })
+            expect(either.unsafeDecode({ S: 'x' })).toBe('x')
+        }
+        const record = union([object({ a: string }), never])
+        expect(record.unsafeEncode({ a: 'x' })).toEqual({
+            M: { a: { S: 'x' } },
+        })
     })
 
     /** `discriminatedUnion` over no options stays refused: an empty list is a mistake, not a term. */
