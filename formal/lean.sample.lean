@@ -95,7 +95,7 @@ theorem literal_alternatives :
 
 /-- `literal_decimal` -/
 theorem literal_decimal :
-    (denote ((Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.string) numeralOfStoredText textOfNumeral))).e
+    (denote ((Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) numeralOfStoredText textOfNumeral))).e
       (Value.str "2.5")
     = some (Attr.n (WFNumeral.of "2.5")) := by
   vector
@@ -342,7 +342,7 @@ theorem literal_alternatives__refuses__scalar_string :
 
 /-- `literal_decimal__refuses__scalar_string` — refused on both sides -/
 theorem literal_decimal__refuses__scalar_string :
-    (denote ((Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.string) numeralOfStoredText textOfNumeral))).e
+    (denote ((Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) numeralOfStoredText textOfNumeral))).e
       (Value.str "hello") = none := rfl
 
 /-- `literal_non_ascii__refuses__scalar_string` — refused on both sides -/

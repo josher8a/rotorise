@@ -49,6 +49,7 @@ import {
     elementPredicates,
     literalAlternatives,
     member as memberOf,
+    occV,
     ownsNullOf,
     setBaseOf,
     unreadableSpine,
@@ -685,6 +686,30 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> & {
 ) as never
 
 /**
+ * The held side of a set of adapted elements: the set of the element's held side, where that side
+ * lands in one set base, and the top otherwise.
+ */
+const setOuter = (slots: ReturnType<typeof occV>): Term => {
+    const [only] = slots
+    return slots.length === 1 &&
+        (only === 'string' || only === 'number' || only === 'binary')
+        ? { kind: 'set', base: only }
+        : { kind: 'opaq' }
+}
+
+/** The held side of an adapter over a finite set of numerals: the texts it hands the caller. */
+const textsOf = (texts: readonly string[]): Term => {
+    const options: Term[] = [...new Set(texts)].map((v) => ({
+        kind: 'literal',
+        base: 'string',
+        v,
+    }))
+    return options.length === 1
+        ? (options[0] as Term)
+        : { kind: 'union', options }
+}
+
+/**
  * An adapter over {@link dynamoNumber}, one conversion wide, on both halves. `held` is defined
  * further down this file, so the term is built directly; the two are the same construction.
  *
@@ -798,18 +823,17 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> & {
         ): AttributeCodec<ReadonlySet<T>, NS>
     }
 } = Object.assign(
-    (...allowed: readonly string[]) =>
-        numericAdapter<string>(
-            termOf(
-                literalCapability('number')(
-                    ...allowed.map((one) => orThrow(storedOnly(one))),
-                ) as AnyCodec,
-            ),
-            { kind: 'string' },
+    (...allowed: readonly string[]) => {
+        const stored = allowed.map((one) => orThrow(storedOnly(one)))
+        return numericAdapter<string>(
+            termOf(literalCapability('number')(...stored) as AnyCodec),
+            // the held side is the texts the adapter hands the caller, so the view is exact
+            textsOf(stored.map((held) => held.toString())),
             storedOnly,
             (held) => held.toString(),
             'decimalText',
-        ),
+        )
+    },
     numericAdapter<string>(
         { kind: 'number' },
         { kind: 'string' },
@@ -1113,14 +1137,7 @@ const set = <const C extends AnyCodec>(
         ? {
               kind: 'held',
               inner: bare,
-              // the held side of a set is the set of the element's held side, where a set base
-              // writes exactly that slot, and the top otherwise
-              outer:
-                  adapter.outer.kind === 'string' ||
-                  adapter.outer.kind === 'number' ||
-                  adapter.outer.kind === 'binary'
-                      ? { kind: 'set', base: adapter.outer.kind }
-                      : { kind: 'opaq' },
+              outer: setOuter(occV(adapter.outer)),
               // the pair the two halves below are built from, kept so a reader that needs one
               // element does not have to rediscover it from a conversion over a whole set
               element: adapter,

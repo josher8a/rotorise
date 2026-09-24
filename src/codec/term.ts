@@ -1541,19 +1541,17 @@ const sameAdapter = (
 /**
  * **Whether `x` is below `y` by a rule the model proves**: a literal is below its base, a union is
  * below a term that each of its options is below, and a `held` is below the same adapter over a
- * wider stored side (`sub_literal_base`, `sub_union_of`, `sub_held_inner`). A term with no payload
+ * wider stored side and a wider held side (`sub_literal_base`, `sub_union_of`, `sub_held`). A term with no payload
  * is below itself. Nothing else is shown.
  */
 export const below = (x: Term, y: Term): boolean => {
     if (x.kind === 'union') return x.options.every((one) => below(one, y))
     if (x.kind === 'literal') return y.kind === x.base
-    // one held side, because the model's monotonicity fixes the held side
     if (x.kind === 'held' && y.kind === 'held')
         return (
             sameAdapter(x, y) &&
-            leaves.includes(x.outer.kind) &&
-            x.outer.kind === y.outer.kind &&
-            below(x.inner, y.inner)
+            below(x.inner, y.inner) &&
+            below(x.outer, y.outer)
         )
     return leaves.includes(x.kind) && x.kind === y.kind
 }
