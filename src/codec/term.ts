@@ -1297,8 +1297,7 @@ export const separable = (x: Term, y: Term, identified = true): boolean => {
     // **The `identifies` row needs two compatible options, and shows compatibility only where
     // neither option reaches a `held`.** A `held` reads or writes a value that its inner term does
     // not, so the row cannot see whether the two options agree. A stored view has erased that
-    // `decode`, so the row is off there. `reaches` counts a thunk as a `held`, because the host
-    // cannot read a thunk without forcing it
+    // `decode`, so the row is off there. `reaches` counts a thunk it cannot read as a `held`
     return (
         identified &&
         !reaches(x, ['held']) &&
@@ -1308,37 +1307,91 @@ export const separable = (x: Term, y: Term, identified = true): boolean => {
 }
 
 /**
- * **Whether a term reaches a subterm of one of these kinds**, at any depth.
+ * **Whether a term reaches a subterm of one of these kinds**, at any depth, or reaches a thunk
+ * that the walk cannot read.
  *
- * The model's `lazy` is transparent, and {@link meetTerms} forces a thunk to read through it. A
- * thunk can be recursive, so a meet of two recursive terms need not end, and {@link separable}
- * asks the meet only of a term that reaches no thunk, which `reaches(t, [])` answers. `held` and `legacy` need no such guard
- * there: the meet answers `undefined` at each, and the model's certificate needs no `HF` premise.
+ * The model's `lazy` is transparent, so the walk forces each thunk once and reads through it. A
+ * thunk that the walk meets again is recursive, and a thunk that throws names a codec that is not
+ * yet declared. Each answers "reaches", because the model has no recursive term: the host shows
+ * only what the model can state. So `reaches(t, [])` answers whether a thunk is unreadable, and
+ * {@link separable} asks the meet only where none is, because a meet of two recursive terms need
+ * not end. `held` and `legacy` need no such guard there: the meet answers `undefined` at each.
  * {@link heldFree} asks for no adapter, because the model's confluence holds only there.
  */
-const reaches = (t: Term, kinds: readonly Term['kind'][]): boolean => {
+const reaches = (
+    t: Term,
+    kinds: readonly Term['kind'][],
+    seen: Set<Term> = new Set(),
+): boolean => {
     if (kinds.includes(t.kind)) return true
+    const on = (one: Term) => reaches(one, kinds, seen)
     switch (t.kind) {
-        // a thunk cannot be read without forcing it, so it counts as reaching every kind
-        case 'lazy':
-            return true
+        case 'lazy': {
+            if (seen.has(t)) return true
+            seen.add(t)
+            const forced = force(t)
+            return forced === undefined || on(forced)
+        }
         case 'held':
         case 'legacy':
         case 'refine':
-            return reaches(t.inner, kinds)
+            return on(t.inner)
         case 'list':
             return (
-                t.pre.some((one) => reaches(one, kinds)) ||
-                (t.spread !== undefined && reaches(t.spread, kinds)) ||
-                t.suf.some((one) => reaches(one, kinds))
+                t.pre.some(on) ||
+                (t.spread !== undefined && on(t.spread)) ||
+                t.suf.some(on)
             )
         case 'object':
             return (
-                Object.values(t.body.fields).some((f) => reaches(f.t, kinds)) ||
-                (t.body.rest !== undefined && reaches(t.body.rest, kinds))
+                Object.values(t.body.fields).some((f) => on(f.t)) ||
+                (t.body.rest !== undefined && on(t.body.rest))
             )
         case 'union':
-            return t.options.some((one) => reaches(one, kinds))
+            return t.options.some(on)
+        default:
+            return false
+    }
+}
+
+/**
+ * The term of a thunk, or nothing where the thunk throws. A thunk is caller code, so its throw
+ * crosses the boundary here. At a declaration the throw is a thunk that names the codec being
+ * declared, and the caller of this function refuses or declines.
+ */
+const force = (t: Term & { readonly kind: 'lazy' }): Term | undefined => {
+    try {
+        return t.get()
+    } catch {
+        return undefined
+    }
+}
+
+/**
+ * **Whether a thunk on the spine of a term is recursive, or throws when forced.** The spine is
+ * what {@link occV} and {@link occA} force: a thunk, the options of a union, both sides of a
+ * `held`, and the inner term of a `refine` or a `legacy`. A union asks this of each option before
+ * any occupancy runs, so a recursive spine is refused and does not loop.
+ */
+export const unreadableSpine = (
+    t: Term,
+    seen: Set<Term> = new Set(),
+): boolean => {
+    const on = (one: Term) => unreadableSpine(one, seen)
+    switch (t.kind) {
+        case 'lazy': {
+            if (seen.has(t)) return true
+            seen.add(t)
+            const forced = force(t)
+            return forced === undefined || on(forced)
+        }
+        case 'held':
+            return on(t.inner) || on(t.outer)
+        case 'legacy':
+        case 'refine':
+            return on(t.inner)
+        case 'union':
+            return t.options.some(on)
         default:
             return false
     }
@@ -1363,7 +1416,7 @@ const viewable = (t: Term): boolean => {
             return viewable(t.inner)
         case 'union':
             return t.options.every(viewable)
-        // `reaches` counts a thunk as a `held`, so a thunk below refuses here too
+        // `reaches` counts a thunk it cannot read as a `held`, so such a thunk below refuses here too
         case 'legacy':
             return !reaches(t, ['held'])
         case 'list':
@@ -1458,8 +1511,8 @@ const callerViewsApart = (x: Term, y: Term): boolean =>
     separable(callerView(x), callerView(y))
 
 /**
- * **Whether the walk shows a term held-free**, the model's `HF`. A thunk and a `legacy` count as
- * adapters, because the walk cannot show them held-free.
+ * **Whether the walk shows a term held-free**, the model's `HF`. A `legacy` counts as an adapter,
+ * and so does a thunk that the walk cannot read.
  */
 export const heldFree = (t: Term): boolean => !reaches(t, ['held', 'legacy'])
 

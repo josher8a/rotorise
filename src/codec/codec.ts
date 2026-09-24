@@ -51,6 +51,7 @@ import {
     member as memberOf,
     ownsNullOf,
     setBaseOf,
+    unreadableSpine,
 } from './term'
 
 /**
@@ -4839,6 +4840,16 @@ export const never: AttributeCodec<never, never> & {
 export const union = <const Options extends readonly AnyCodec[]>(
     options: Options,
 ): UnionCodec<DerivedUnion<Options>, Options> => {
+    // **A recursive spine is refused before any occupancy runs.** An option's occupancies force
+    // each thunk on its spine, and a recursive one would not end, or would throw on the codec
+    // being declared
+    for (const [at, declared] of (options as readonly AnyCodec[]).entries()) {
+        if (unreadableSpine(termOf(declared))) {
+            throw new CodecError(
+                `option ${at + 1} of this union reaches a thunk that is recursive, or that names a codec not yet declared, where the union must read it. The model has no recursive term, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
+            )
+        }
+    }
     const all: readonly Option[] = (options as readonly AnyCodec[]).map(
         optionOf,
     )
