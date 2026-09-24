@@ -6088,31 +6088,6 @@ theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates
 theorem separated_of_unionOk {os : List Term} (h : unionOk os = true) : Separated os :=
   (pairwise_of_certAll h).imp separates_of_certPair
 
-/-- **The pair certificate on the held sets.** At a derivable term the held set is the admission
-    (`typed_T_adm`), so a separated pair holds disjoint sets. -/
-theorem hdisj_of_certPair {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
-    (h : certPair x y = true) (hx : Typed x Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty :=
-  fun v hvx hvy => by
-    have hvx' := (typed_T_adm hx v).mp hvx
-    have hvy' := (typed_T_adm hy v).mp hvy
-    exact (separates_of_certPair h).1 v ⟨occV_sound _ v hvx', hvx'⟩ ⟨occV_sound _ v hvy', hvy'⟩
-
-/-- The certificate's pairs, carried to the held sets option by option. -/
-theorem unionOk_pairwise_held : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs →
-    List.Pairwise (fun x y => certPair x y = true) os → Ts.Pairwise HDisj
-  | _, _, _, .nil, _ => .nil
-  | _, _, _, .cons hty hs, ho => by
-    obtain ⟨hohead, hotail⟩ := List.pairwise_cons.mp ho
-    refine .cons ?_ (unionOk_pairwise_held hs hotail)
-    intro T hT
-    obtain ⟨t', ht', μ', hty'⟩ := mem_typed_of_mem hs T hT
-    exact hdisj_of_certPair (hohead t' ht') hty hty'
-
-/-- **A certified union's held sets are pairwise disjoint.** -/
-theorem dincomp_of_unionOk {os : List Term} {Ts μs} (hc : unionOk os = true)
-    (h : TypedListμ os Ts μs) : DIncomp Ts :=
-  dincomp_of_disjoint (unionOk_pairwise_held h (pairwise_of_certAll hc))
-
 /-- `certAll` from the pairwise form, which is what a sublist preserves. -/
 theorem certAll_of_pairwise : ∀ {ts : List Term},
     List.Pairwise (fun x y => certPair x y = true) ts → certAll ts = true

@@ -129,7 +129,7 @@ only.
 
 | A premise that is | goes in | consumed by |
 | --- | --- | --- |
-| decidable from the term | `Typed`, as `DIncomp` is for a union | the judgement itself |
+| decidable from the term | `Typed` | the judgement itself |
 | about what a codec does — its write half, its read half, an iso, a resolution | `Obligations`, as `PairwiseCompat` and `IsoCancels` are | both soundness theorems |
 
 `Term` has no alternate reader. Therefore `soundness` proves all four laws for every typed term.

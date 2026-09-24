@@ -31,7 +31,7 @@ it.
 Disjoint held sets are not among the discharges, and `not_uAtCan_literal_held` is why: held sets
 are sets of values, (U)'s readable side quantifies over attributes, and `held`'s adapter relabels
 between them. Two options can hold disjoint sets and read one attribute. As a discharger of (U),
-`HDisj` of every pair is refuted below.
+disjointness of every pair of held sets is refuted below.
 
 The two counterexamples that repaired §5's discharger are at the foot of the file. §5 keeps
 both, and
@@ -318,41 +318,6 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
       exact pairwise_imp_mem
         (fun x hx y hy => h x (List.mem_cons_of_mem a hx) y (List.mem_cons_of_mem a hy))
         htail
-
-/-! ### A term that admits nothing
-
-    Disjointness of admissible sets is not on its own a discharge, and the reason is a term
-    whose set is *empty*: it is disjoint from everything, including from itself, so it would
-    separate from options the discharger refuses. `never` is that term. -/
-
-
-/-- `HNever` holds nothing: it is `False` at every value. -/
-theorem hnever_false (v : Value) : ¬ HNever v := id
-
-/-- …so the bottom is disjoint from every held set. -/
-theorem hdisj_never_left (T : Held) : HDisj HNever T := fun v hv => absurd hv (hnever_false v)
-
-/-- …and on the other side, where the bottom is what the pair is disjoint from. -/
-theorem hdisj_never_right (T : Held) : HDisj T HNever := fun v _ hn => hnever_false v hn
-
-/-- **The bottom is disjoint from every held set, on emptiness.** `union([X, never])` is
-    `Typed`: the bottom contributes nothing to `HUnion`.
-
-    `src/` refuses the pair all the same, and the two sides are not in conflict. The model says
-    the union is *well formed*; `src/` says it is *useless*, because an option that admits
-    nothing is never the first admitter, and refuses it as a lint. `.separations.lean` carries
-    that divergence as a theorem rather than as prose. -/
-theorem dincomp_never_right (T : Held) : DIncomp [T, HNever] :=
-  List.pairwise_cons.mpr
-    ⟨fun _ hb => by rw [List.mem_singleton] at hb; subst hb; exact hdisj_never_right T,
-     List.pairwise_singleton _ _⟩
-
-/-- The same on the other side, where the bottom is the one the disjunct names. -/
-theorem dincomp_never_left (T : Held) : DIncomp [HNever, T] :=
-  List.pairwise_cons.mpr
-    ⟨fun _ hb => by rw [List.mem_singleton] at hb; subst hb; exact hdisj_never_left _,
-     List.pairwise_singleton _ _⟩
-
 
 /-- **The pair reading of the same fact**, and it is not superseded: it discharges the whole
     `UAtCan` for an `n`-ary family in one step, where the retired per-aspect route separated a
@@ -651,8 +616,8 @@ theorem not_uAtCan_array_literals :
 
 /-! ### Disjoint held sets, as §5 proposed
 
-`HDisj` (`Typing.lean`) is that predicate: no value is held by two options. As a discharger of
-(U) it is refuted below: the witness satisfies it and still fails (U). -/
+The predicate is that no value is held by two options. As a discharger of (U) it is refuted
+below: the witness satisfies it (`dDisj_tRel`) and still fails (U). -/
 
 /-- The relabelling adapter: `"B"` on the outside is `"A"` on the inside. -/
 def fRel : Value → Value := fun v => match v with | .str "B" => .str "A" | _ => .null
@@ -695,11 +660,11 @@ theorem typed_tRel :
   rw [hT] at h
   exact h
 
-theorem dDisj_tRel :
-    HDisj (fun v => ∃ s, s ∈ ["A"] ∧ v = .str s)
-      (fun v => (∃ s, s ∈ ["A"] ∧ fRel v = .str s) ∧
+theorem dDisj_tRel (v : Value) (hv : ∃ s, s ∈ ["A"] ∧ v = .str s) :
+    ¬ ((∃ s, s ∈ ["A"] ∧ fRel v = .str s) ∧
         ((denote (.literal .string "B")).e v).isSome) := by
-  rintro v ⟨s, hs, rfl⟩ ⟨⟨s', hs', hf⟩, -⟩
+  revert hv
+  rintro ⟨s, hs, rfl⟩ ⟨⟨s', hs', hf⟩, -⟩
   -- `v = "A"`, so `fRel v = null`, which is no string
   have : s = "A" := by simpa using hs
   subst this

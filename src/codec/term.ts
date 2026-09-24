@@ -891,9 +891,9 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  * written as data, which is why `union([string('A'), string('B')])` is not ambiguous and never was.
  *
  * **It propagates through the containers**, which is what keeps
- * `union([array(string('A')), array(string('B'))])` declarable — lawful where the union acts, and
- * proved so. Note what that costs: the pair fails `UAtCan` outright at `[]`
- * (`not_uAtCan_array_literals`) and meets only `UAtAct` (`uAtAct_array_literals`), because a
+ * `union([array(string('A')), array(string('B'))])` declarable — lawful, and proved so. Note what
+ * that costs: the pair fails `UAtCan` outright at `[]` (`not_uAtCan_array_literals`) and is
+ * pairwise compatible (`pairwiseCompat_array_literals`), because a
  * container admits its empty case whatever its element admits. So the warrant for the flat case and
  * the warrant for the container case are two different theorems, and only the first is about
  * literals.
