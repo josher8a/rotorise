@@ -574,18 +574,14 @@ theorem listOf_cases (pre : List Term) (sp : Option Term) (suf : List Term) :
 
 mutual
 
-/-- Two literals: the same value at the same base, or nothing.
-
-    `number` refuses, and the reason it used to carry is gone: its equality came from an
-    axiomatised host, and the exact carrier decides. The refusal stands with no stated reason, and a row would be a change to the
-    meet rather than a repair. -/
+/-- Two literals: the same value at the same base, or the bottom. -/
 def Term.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.Carrier → Option Term
   | .string, v, .string, v' => if v = v' then some (.literal .string v) else some .never
   | .boolean, v, .boolean, v' => if v = v' then some (.literal .boolean v) else some .never
   | .binary, v, .binary, v' => if v = v' then some (.literal .binary v) else some .never
   -- `Unit` has one inhabitant, so two null literals name the same value
   | .null, v, .null, _ => some (.literal .null v)
-  | .number, _, .number, _ => none
+  | .number, v, .number, v' => if v = v' then some (.literal .number v) else some .never
   | _, _, _, _ => some .never
 
 

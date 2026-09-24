@@ -1124,6 +1124,14 @@ const separationPairs = (): readonly Separation[] => {
             out.push({ name: `${an}__vs__${bn}`, left, right })
         }
     }
+    // two numeric literal sets, one under the `decimal` adapter, which the meet of two numbers
+    // separates. No sample pairs a numeric literal with a literal decimal
+    const numeral = (text: string) => orThrow(DynamoNumber.from(text))
+    out.push({
+        name: 'pinned_numerals__vs__literal_decimal_23',
+        left: erase(dynamoNumber(numeral('0'), numeral('1'))),
+        right: erase(decimal('2', '3')),
+    })
     return out
 }
 
@@ -1440,7 +1448,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.endsWith('= false := by decide'),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([685, 18])
+        expect([accepted.length, refused.length]).toEqual([686, 18])
     })
 
     it('emits them for the gate to elaborate', () => {
