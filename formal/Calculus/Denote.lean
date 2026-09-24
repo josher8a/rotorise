@@ -26,48 +26,27 @@ def Body.map (b : Body) : MapOf ObjectSlot := ⟨b.fields, b.at⟩
 
 /-- The alternatives a field pins its name to, where the field's term is a literal.
 
-    Every field form and not `req` only, because the test this feeds is present-only: a name
-    an object does not carry is settled by `keysOk` and never reaches `literalsOk`, so an
-    `optional` literal constrains exactly the values that do carry the name. -/
+    Every field form and not `req` only. The slice reads the presence beside the alternatives
+    (`litSubAt`), so an `optional` literal is told apart by its presence and not by its
+    alternatives. -/
 def altsOfField : ObjectSlot → Option Alts
   | .req (.literal k x) => some ⟨k, x⟩
   | .optional (.literal k x) => some ⟨k, x⟩
   | _ => none
 
-/-- The alternatives a *term* pins, for the open block, which carries a term and no mark.
-    `altsOfField`'s row for a slot, with the slot taken off. -/
-def altsOfTerm : Term → Option Alts
-  | .literal k x => some ⟨k, x⟩
-  | _ => none
-
-/-- A body's spec: what admission reads off each declared name, **and off the open block**.
-    The payload's own function, so `specOf` is a dispatch and nothing more.
-
-    The open block contributes `altsOfTerm` of its term, one layer in: `some (some alts)` where
-    the block is a literal, `some none` where it is any other term, and `none` where the body
-    has no block at all. Reading the block here is what lets `keysOk` and `litOkV` answer for
-    an undeclared name without consulting `Adm`. Admission reads no spec: every option
-    admits by attempt, which runs `Adm`. -/
+/-- A body's spec: the presence and the pinned literal of each declared name, which a slice
+    reads. The payload's own function, so `specOf` is a dispatch and nothing more. Admission
+    reads no spec: every option admits by attempt, which runs `Adm`. -/
 def Body.spec : Body → BodySpec
-  | .mk fields f wild =>
+  | .mk fields f _ =>
       { names := ⟨fields, fun k =>
-          ⟨(f k).presence, altsOfField (f k)⟩⟩
-        wild := wild.map (fun w => altsOfTerm w) }
+          ⟨(f k).presence, altsOfField (f k)⟩⟩ }
 
 /-- The spec's name table, read off the constructor. -/
 @[simp] theorem Body.spec_names_mk (fields : Finset Name)
     (f : {k // k ∈ fields} → ObjectSlot) (wild : Option Term) :
     (Body.mk fields f wild).spec.names =
       ⟨fields, fun k => ⟨(f k).presence, altsOfField (f k)⟩⟩ := rfl
-
-/-- …and the open block, which a closed body does not have. -/
-@[simp] theorem Body.spec_wild_none (fields : Finset Name)
-    (f : {k // k ∈ fields} → ObjectSlot) : (Body.mk fields f none).spec.wild = none := rfl
-
-/-- The spec has an open block exactly where the body does. `altsOfTerm` reads what the
-    block pins, never whether there is one, so the two questions stay separate. -/
-@[simp] theorem Body.spec_wild_isNone (b : Body) : b.spec.wild.isNone = b.wild.isNone := by
-  cases b with | mk _ _ w => cases w <;> rfl
 
 /-- The spec of an object option — `none` for non-objects. -/
 def specOf : Term → Option BodySpec

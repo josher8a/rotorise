@@ -3,8 +3,8 @@ import Calculus.Soundness
 /-!
 # Admission lemmas shared by the exactness proofs
 
-`refine`'s read-side gate, and the lemmas that show an option admits its own canonical pairs.
-`ExactV.lean` and `ExactA.lean` read them.
+`refine`'s read-side gate, which `AdmA` reads, the member guard on an option's read, and a
+premise checked at two options.
 -/
 
 namespace Calculus
@@ -50,114 +50,7 @@ theorem admitA_member (t : Term) {μ a}
   rw [denote_μ]
   exact hμ
 
-/-! ## Options admit their own canonical pairs -/
-
-/-- Only `optional` denotes to `opt`, which is what the value-side guard needs of a
-    non-`optional` field. Stated where every argument is a variable — at the use site
-    the field is `ff k`, and eliminating a function application in place is more
-    trouble than naming the fact. -/
-theorem fieldSem_ne_opt {fd : ObjectSlot}
-    (h : (match fd with | ObjectSlot.optional _ => false | _ => true) = true) :
-    ∀ c, fieldSem fd ≠ FieldSem.opt c := by
-  cases fd with
-  | req t => simp_all [fieldSem]
-  | optional t => simp_all
-
-/-- **Name admission, from the three facts `keysOk` reads.** The first premise is the body's
-    claim on a present name: an open block claims every name, and a closed body claims the
-    names it declares. The two that follow are the declared names' own presence bits. -/
-theorem keysOk_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option Term} {keys : Finset Name}
-    (hclaims : wild.isSome = true ∨ ∀ k ∈ keys, k ∈ fields)
-    (hreq : ∀ k : {k // k ∈ fields},
-      (ff k).presence.2 = false → k.1 ∈ keys)
-    (hforbid : ∀ k : {k // k ∈ fields},
-      (ff k).presence.1 = false → k.1 ∉ keys) :
-    keysOk (Body.spec (.mk fields ff wild))
-      keys = true := by
-  simp only [keysOk, Body.spec, Bool.and_eq_true]
-  refine ⟨?_, decide_eq_true hreq, decide_eq_true hforbid⟩
-  rcases hclaims with hw | hsub
-  · cases wild with
-    | none => exact absurd hw (by simp)
-    | some _ => simp
-  · simp only [Bool.or_eq_true]
-    exact Or.inr (decide_eq_true hsub)
-
-/-- A field whose term is a literal writes only that literal's alternatives, whatever the
-    slot's presence marker: `fieldSem` carries the same codec through both marks, and
-    `altsOfField` reads the same. -/
-theorem litOkV_of_field_e : ∀ {fd : ObjectSlot} {v a}, (fieldSem fd).codec.e v = some a →
-    altsOkV (altsOfField fd) v = true
-  | .req t, _, _, he  | .optional t, _, _, he => by
-      cases t <;> first
-        | rfl
-        | exact inL_of_literalCodec_e (by simpa [fieldSem, FieldSem.codec, denote] using he)
-
-/-- …and the attribute it wrote is one the same codec reads back, which is `retract` at the
-    field's own codec rather than at the object's. -/
-theorem litOkA_of_field_e : ∀ {fd : ObjectSlot} {v a}, (fieldSem fd).codec.e v = some a →
-    altsOkA (altsOfField fd) a = true
-  | .req t, _, _, he  | .optional t, _, _, he => by
-      cases t <;> first
-        | rfl
-        | exact Option.isSome_iff_exists.mpr ⟨_, (lawful_literalCodec _ _).retract
-            (by simpa [fieldSem, FieldSem.codec, denote] using he)⟩
-
-/-- …and the same fact at the term level, which the open block needs: the block carries a
-    term, so the alternatives are `altsOfTerm`'s and the codec is the term's own. -/
-theorem altsOkV_of_term_e : ∀ {t : Term} {v a}, (denote t).e v = some a →
-    altsOkV (altsOfTerm t) v = true
-  | t, _, _, he => by
-      cases t <;> first
-        | rfl
-        | exact inL_of_literalCodec_e (by simpa [denote] using he)
-
-/-- …and the read side of the same, at the attribute the block's codec wrote. -/
-theorem altsOkA_of_term_e : ∀ {t : Term} {v a}, Lawful (denote t) → (denote t).e v = some a →
-    altsOkA (altsOfTerm t) a = true
-  | t, _, _, hlaw, he => by
-      cases t <;> first
-        | rfl
-        | exact Option.isSome_iff_exists.mpr ⟨_, (lawful_literalCodec _ _).retract
-            (by simpa [denote] using he)⟩
-
-/-- Object-encode stamps read-side content admission: at each attribute the encode wrote, a
-    name whose field is a literal carries one of that literal's alternatives. -/
-theorem literalsOkA_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option Term} (hlaw : ∀ w : Term, wild = some w → Lawful (denote w))
-    {keys : Finset Name} {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
-    (hfi : funImage (fun k : {k // k ∈ keys} =>
-        (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ (rcOf (wildSem wild)) k.1).bind
-          (fun c => c.e (f k))) = some g) :
-    literalsOkA (Body.spec (.mk fields ff wild))
-      keys g = true := by
-  simp only [literalsOkA, decide_eq_true_eq]
-  intro k
-  have hw := funImage_some hfi k
-  cases hm : decide ((k : Name) ∈ fields) with
-  | false =>
-      have hk : (k : Name) ∉ fields := of_decide_eq_false hm
-      show litOkA (Body.spec (.mk fields ff wild)) k.1 (g k) = true
-      rw [litOkA, show (Body.spec (.mk fields ff wild)).names.at k.1 = none from dif_neg hk]
-      -- the open block's codec wrote this attribute, so the block reads it back
-      cases hwild : wild with
-      | none => rfl
-      | some w =>
-        rw [hwild] at hw
-        rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem)
-              (rcOf (wildSem (some w))) k.1 = some (denote w) from by
-              simp only [rcOf, wildSem, entryCodec, MapOf.at, dif_neg hk]] at hw
-        exact altsOkA_of_term_e (hlaw w hwild) (by simpa using hw)
-  | true =>
-      have hk : (k : Name) ∈ fields := of_decide_eq_true hm
-      rw [litOkA, show (Body.spec (.mk fields ff wild)).names.at k.1
-          = some ⟨_, altsOfField (ff ⟨k.1, hk⟩)⟩ from dif_pos hk]
-      rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem)
-            (rcOf (wildSem wild)) k.1
-          = some (fieldSem (ff ⟨k.1, hk⟩)).codec from by
-            simp only [entryCodec, MapOf.at, dif_pos hk]] at hw
-      exact litOkA_of_field_e (by simpa using hw)
+/-! ## A premise at two options -/
 
 /-- A premise of the form `∀ t ∈ [x, y], P t`, checked at the two options. -/
 theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy : P y) :

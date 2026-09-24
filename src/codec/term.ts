@@ -662,9 +662,9 @@ export const specOf = (
 }
 
 /**
- * One declared name, as **structural admission** reads it.
+ * One declared name, as a **slice clause** reads it.
  *
- * The model's `NameSpec`: `required` is what `keysOk` reads, `alts` what `literalsOk` reads. Split
+ * The model's `NameSpec`, which `litSubAt` reads: `required` is its presence, `alts` its literal. Split
  * across two host readers rather than one record, because {@link specOf} already answers the first
  * for every declared name and this answers the second for the few names a literal pins.
  */

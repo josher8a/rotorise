@@ -714,8 +714,8 @@ end
 /-! ### The same equation on the read side
 
 The value side needs only `AdmWild`, which is `none` exactly where the body declares no open
-block. The read side reads the block the same way. `mem_fields_of_admA` handles an undeclared
-name under a closed body, and each name's own presence pair handles a declared absent name. -/
+block. The read side reads the block the same way: an undeclared name under a closed body is
+refused, and each name's own presence pair handles a declared absent name. -/
 
 /-- `AdmABody` at a map, unfolded. -/
 theorem AdmABody_map {b : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr} :
@@ -723,30 +723,6 @@ theorem AdmABody_map {b : Body} {keys : Finset Name} {g : {k // k ∈ keys} → 
       = (reqPresentT b.fields b.at keys &&
          objAdmA ⟨b.fields, fun k => AdmAField (b.at k)⟩ (AdmAWild b.wild) keys g) := by
   cases b; rfl
-
-/-- A field's row carries its literal alternatives on the read side, where it has any —
-    `altsOkV_of_AdmField`'s twin, through `ExactA` because `altsOkA` asks the codec. -/
-theorem altsOkA_of_AdmAField {f : ObjectSlot} {a : Attr} (h : AdmAField f a = true) :
-    altsOkA (altsOfField f) a = true := by
-  cases f with
-  | req t => cases t <;> first | rfl | exact (AdmA_exact _ a).mp h
-  | optional t => cases t <;> first | rfl | exact (AdmA_exact _ a).mp h
-
-/-- Every present name is declared, where the body declares no open block and so refuses an
-    undeclared one. The read side used to need this against `drop` as well, which skips such a
-    name rather than refusing it, and a name that is skipped is read. `drop` is gone, so the one
-    closed state answers both halves the same way. -/
-theorem mem_fields_of_admA {b : Body} (hr : b.wild = none)
-    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (h : AdmABody b (.m keys g) = true) : ∀ k ∈ keys, k ∈ b.fields := by
-  rw [AdmABody_map, Bool.and_eq_true] at h
-  have h2 := h.2
-  unfold objAdmA at h2
-  intro k hk
-  refine Decidable.byContradiction (fun hnb => ?_)
-  have hh := of_decide_eq_true h2 ⟨k, hk⟩
-  rw [entryPA, MapOf.at, dif_neg hnb, hr] at hh
-  exact absurd hh (by simp [AdmAWild])
 
 /-- One entry of the read-side object row — `objAdmV_row`'s twin. It took a keep filter as a
     hypothesis while `drop` made the two sides' filters differ; they do not differ now. -/
@@ -767,12 +743,6 @@ theorem objAdmA_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → 
   unfold objAdmA at hB
   have hh := of_decide_eq_true hB ⟨k, hk⟩
   rwa [entryPA, MapOf.at, dif_neg hnc, hw, AdmAWild] at hh
-
-/-- A term's row carries its literal alternatives on the read side, where it has any.
-    `altsOkA_of_AdmAField`'s twin at the term level, which is what an open block needs. -/
-theorem altsOkA_of_AdmA {t : Term} {a : Attr} (h : AdmA t a = true) :
-    altsOkA (altsOfTerm t) a = true := by
-  cases t <;> first | rfl | exact (AdmA_exact _ a).mp h
 
 /-- Soundness of every attribute row — a corollary, as on the value side. The
     hundred-and-thirty-line depth recursion this was, and the ~~SoundA~~ scaffolding it needed,

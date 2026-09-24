@@ -30,7 +30,7 @@ definition it touches.
 | `Calculus/DynamoDB.lean`    | §1          | The DynamoDB port: `DynamoDB.maxNesting` instantiates the nesting bound at the store's 32 levels; `Numeral.Normal`/`Numeral.Stored`, `decimalCodec` and its `SurvivesStore` instance, `not_survivesStore_numberCodec`, the numeral-domain report (`decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases), and the text adapter `numeralOfStoredText`/`textOfNumeral` |
 | `Calculus/Refutations.lean` | §6          | §6's seven "Do not hold" nodes, all settled, over eight declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `not_equiv_lazy` (where `≡`'s member index is what fails), `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
-| `Calculus/Discharge.lean`   | §5          | `refine`'s read-side gate, and the lemmas that show an option admits its own canonical pairs, which `ExactV.lean` and `ExactA.lean` read |
+| `Calculus/Discharge.lean`   | §5          | `refine`'s read-side gate, which `AdmA` reads, the member guard on an option's read, and a premise checked at two options |
 
 This table has a row of its own for twenty-two of the modules under `Calculus/`.
 `ExactV.lean`, `ExactA.lean`, `Separation.lean`, `Orthogonality.lean`,

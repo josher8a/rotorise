@@ -472,31 +472,19 @@ in scope. -/
     literal as data is this pair and not two fields. -/
 abbrev Alts := (k : GroundKind) × k.Carrier
 
-/-- One declared name, as admission reads it: one presence lattice element, and the value the
+/-- One declared name, as a slice reads it: one presence lattice element, and the value the
     name is pinned to where its field is a literal.
 
-    Each presence pair admits presence and absence, respectively. `alts` is what the literal
-    readers read. -/
+    Each presence pair admits presence and absence, respectively. `alts` is what a clause
+    compares against. -/
 structure NameSpec where
   presence : Bool × Bool
   alts : Option Alts
 
-/-- A whole body, as admission reads it: the declared names, and the open block.
-
-    **The open block is one fact about the body, not one fact per name**, so it sits beside
-    the name table rather than inside `NameSpec`. A flag repeated at every declared name is a
-    record instantiated once per name, and a body with no declared names could not carry it
-    at all.
-
-    The two layers of `Option` answer two questions. The outer one is whether the body has an
-    open block: `none` is a closed body, which refuses every undeclared name. The inner one is
-    what that block pins, and it is `altsOfTerm` of the wild's term: `some alts` where the
-    wild is a literal, `none` where it is anything else. So an undeclared name under an open
-    block is read exactly as a declared name whose field is not `req` is read — by its
-    alternatives where it has them, and admitted where it has none. -/
+/-- A whole body, as a slice reads it: the declared names. A slice asks each name that a
+    clause names, so an undeclared name and the open block answer nothing here. -/
 structure BodySpec where
   names : MapOf NameSpec
-  wild : Option (Option Alts)
 
 /-! ## The set bases (§3 `(set)`'s payload)
 
