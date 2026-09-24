@@ -1132,6 +1132,12 @@ const separationPairs = (): readonly Separation[] => {
         left: erase(dynamoNumber(numeral('0'), numeral('1'))),
         right: erase(decimal('2', '3')),
     })
+    // a literal string beside a literal decimal of the same texts: both write "1", at S and at N
+    out.push({
+        name: 'literal_strings_12__vs__literal_decimal_12',
+        left: erase(string('1', '2.5')),
+        right: erase(decimal('1', '2.5')),
+    })
     return out
 }
 
@@ -1448,7 +1454,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.endsWith('= false := by decide'),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([686, 18])
+        expect([accepted.length, refused.length]).toEqual([686, 19])
     })
 
     it('emits them for the gate to elaborate', () => {

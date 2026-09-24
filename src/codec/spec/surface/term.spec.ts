@@ -13,7 +13,7 @@ import type { AnyCodec } from '../../codec'
 import { decimal, opaque, refine, string } from '../../codec'
 import { orThrow } from '../../result'
 import type { Term } from '../../term'
-import { identifies, member, occA, occV, specOf, tagsOf } from '../../term'
+import { member, occA, occV, specOf, tagsOf } from '../../term'
 
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
 
@@ -386,7 +386,7 @@ describe('the term `.set()` writes', () => {
 
     /**
      * …and a set over a *literal* element carries the alternatives as data, which is what makes
-     * `identifies` able to read them. The model's spelling is `liftQ (inL k ls)`, where `ls` is a
+     * the meet able to read them. The model's spelling is `liftQ (inL k ls)`, where `ls` is a
      * `NEFinset` and not a function — a closure decides nothing a declaration can see.
      */
     it('a set over a literal carries the alternatives, so the declaration can read them', () => {
@@ -406,7 +406,6 @@ describe('the term `.set()` writes', () => {
                 },
             },
         })
-        expect(identifies(term)).toBe(true)
         expect(member(term)).toBe('SS')
     })
 
@@ -463,50 +462,5 @@ describe('the term `.set()` writes', () => {
                 },
             ],
         })
-    })
-})
-
-describe('what a term decides about its own values', () => {
-    /**
-     * **Every part of a list decides, the spread included**, because a value longer than the
-     * declared positions is decided *by the spread*. §5's fourth discharger row is about a term
-     * deciding which values are its own, and a spread whose admission is not data decides nothing a
-     * declaration can see — the same reason `held` is left out.
-     *
-     * This is one rule where there used to be two: the `array` row read its element and the `tuple`
-     * row read the declared positions and left the tail alone, so a tail at a base certified a union
-     * it had no warrant for.
-     */
-    it('a list decides only where its prefix, spread and suffix all decide', () => {
-        const alternatives = erase(string('a')).def
-        expect(identifies({ kind: 'list', pre: [alternatives], suf: [] })).toBe(
-            true,
-        )
-        expect(
-            identifies({
-                kind: 'list',
-                pre: [alternatives],
-                spread: alternatives,
-                suf: [alternatives],
-            }),
-        ).toBe(true)
-        // the spread is a base, which admits values it cannot tell from another option's
-        expect(
-            identifies({
-                kind: 'list',
-                pre: [alternatives],
-                spread: str,
-                suf: [],
-            }),
-        ).toBe(false)
-        // and so is a suffix position
-        expect(
-            identifies({
-                kind: 'list',
-                pre: [alternatives],
-                spread: alternatives,
-                suf: [str],
-            }),
-        ).toBe(false)
     })
 })
