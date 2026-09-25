@@ -82,7 +82,7 @@ theorem guard_accepts_container_path :
 
 /-- `jsonTerm` is derivable. -/
 theorem typed_json : Typed jsonTerm (fun v => (denote jsonTerm).T v) none :=
-  .mu rfl (.union (.cons (.base _) (.cons (.array (.var 0)) .nil)))
+  .mu rfl (.union (.cons (Typed.base _) (.cons (Typed.array (.var 0)) .nil)))
 
 /-- `jsonTerm`'s options are compatible at every lawful stage: they are pinned to two kinds. -/
 theorem pairwiseCompat_json (c : Codec) (hc : Lawful c) :
@@ -100,7 +100,8 @@ theorem pairwiseCompat_json (c : Codec) (hc : Lawful c) :
 /-- `jsonTerm`'s obligations hold: the body owes compatibility at each stage, given that the
     stage before is lawful. -/
 theorem obligations_json : Obligations jsonTerm := fun _ hl =>
-  ⟨⟨trivial, ⟨trivial, trivial, trivial⟩, trivial⟩, pairwiseCompat_json _ hl⟩
+  ⟨⟨trivial, ⟨trivial, trivial, trivial⟩, trivial⟩, fun s hs t ht => by
+    rw [← denote_eq_alg, ← denote_eq_alg]; exact pairwiseCompat_json _ hl s hs t ht⟩
 
 /-- **The host's recursive `jsonTerm` denotes a lawful codec.** -/
 theorem lawful_json : Lawful (denote jsonTerm) := soundness typed_json obligations_json

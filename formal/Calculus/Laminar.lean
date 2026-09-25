@@ -133,7 +133,7 @@ theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectS
     element can collide two values or mix two members. -/
 theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed t T μ) (hob : Obligations (.set t))
     (ih : ∀ w, T w ↔ Adm t w = true) (v : Value) : HSet T v ↔ Adm (.set t) v = true := by
-  obtain ⟨hob', hse⟩ := hob
+  obtain ⟨hob', hse⟩ := Obligations.set hob
   have hl := (soundness hty hob').core
   cases hμ : (denote t).μ with
   | none => simp [SetElem, hμ] at hse
@@ -183,7 +183,7 @@ theorem hunion_iff : ∀ {opts Ts μs}, TypedListμ opts Ts μs → (∀ t ∈ o
     ∀ v, HUnion Ts v ↔ AdmAny opts v = true
   -- by hand: `simp` closes `∃ T ∈ [], T v` through the classical `Nonempty` instance of `Held`
   | _, _, _, .nil, _, v => ⟨fun ⟨_, h, _⟩ => absurd h List.not_mem_nil, fun h => nomatch h⟩
-  | _, _, _, @TypedListμ.cons t ts _ _ _ _ hty hs, ih, v => by
+  | _, _, _, @TypedListμ.cons _ _ t ts _ _ _ _ hty hs, ih, v => by
       have hi := hunion_iff hs (fun t' h => ih t' (List.mem_cons_of_mem _ h)) v
       have hT := ih _ List.mem_cons_self _ _ hty v
       simp only [HUnion, List.mem_cons, exists_eq_or_imp, AdmAny_cons, Bool.or_eq_true] at hi ⊢
@@ -229,7 +229,6 @@ theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → Obligations t → ∀ v, T 
         (fun k t' he _ _ hty w => typed_T_adm hty (by have := hob.1 k; rw [he] at this; exact this) w)
         hrest (fun t' he _ _ hty w => typed_T_adm hty (by have := hob.2; rw [he] at this; exact this) w) v
     | @union opts Ts μs h' =>
-      rw [HUnion.eq_def] at *
       exact (hunion_iff h' (fun t' ht' _ _ hty w =>
           typed_T_adm hty ((Obligations.union hob).1 t' ht') w) v).trans
         (by rw [Adm_union])

@@ -1,4 +1,5 @@
 import Calculus.Guarded
+import Calculus.AlgTyping
 
 /-!
 # §3–§5 — The judgement
@@ -12,11 +13,12 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   syntax-directed judgement should be; it is an index rather than a function so the rules
   read as §3 writes them.
 * `Typed` keeps no *syntactic* premise. Every side condition became a type — see each
-  constructor's own docstring.
+  rule's own docstring.
   The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
   `ran(r) ⊆ dom(e)` and coherence, and `(union)`'s pairwise compatibility — live in
   `Obligations` (Soundness.lean), which is where they can mention the denotation.
-* **`literal` is one rule in §3 and one constructor here.** §3's `(literal)` reads its member
+* **`literal` is one rule in §3 and one primitive here**, `Ground.literal`, which the generic
+  rule `Alg.Typed.prim` types. §3's `(literal)` reads its member
   off a base, which in a naive transcription needs `ℓ : List Value` plus a premise that the
   values share a kind. `literal (k : GroundKind) (x : k.Carrier)` gets that from the *type*:
   with the base as an index, `ℓᵢ ∈ T` is the carrier and the member is a function of the index.
@@ -42,6 +44,8 @@ namespace Calculus
 
 open Alg (Term.guarded)
 
+export Alg (HTuple HTupleL HUnion HNever)
+
 /-! ## Held sets
 
     §3's `T` — a set of values, written as its characteristic predicate. Each former
@@ -50,34 +54,13 @@ open Alg (Term.guarded)
 /-- A held set: §3's `T`. -/
 abbrev Held := Value → Prop
 
-/-- `℘⁺fin(T)` — the nonempty finite subsets of `T` (§3 `(set)`). -/
-def HSet (T : Held) : Held := fun v =>
-  (∃ S : NEFinset String, v = .strSet S ∧ ∀ s ∈ S.1, T (.str s)) ∨
-  (∃ S : NEFinset WFNumeral, v = .numSet S ∧ ∀ d ∈ S.1, T (.num d)) ∨
-  (∃ S : NEFinset Bytes,  v = .binSet S ∧ ∀ b ∈ S.1, T (.bin b))
-
 /-- `T*` (§3 `(array)`). -/
 def HStar (T : Held) : Held :=
   fun v => ∃ vs, v = .arr vs ∧ ∀ x ∈ vs, T x
 
-/-- The positional part of `T₁ × … × Tₙ`, and of `… × T*` when a tail is present:
-    the fixed head matched position by position, the tail uniformly. -/
-def HTuple : List Held → Option Held → List Value → Prop
-  | [], none, vs => vs = []
-  | [], some T, vs => ∀ x ∈ vs, T x
-  | _ :: _, _, [] => False
-  | T :: Ts, tl, v :: vs => T v ∧ HTuple Ts tl vs
-
 /-- `T₁ × … × Tₙ` (§3 `(tuple)`), and `T₁ × … × Tₙ × T*` (`(tuple-tail)`). -/
 def HProd (Ts : List Held) (tail : Option Held) : Held :=
   fun v => ∃ vs, v = .arr vs ∧ HTuple Ts tail vs
-
-/-- The positional part of a `list`'s held set: the suffix splits off the right end, and
-    what is left is `HTuple`'s prefix-and-spread. `Forall₂` carries both the length of the
-    suffix and the holding at each of its positions, so no length premise is owed. -/
-def HTupleL (pre : List Held) (sp : Option Held) (suf : List Held) (vs : List Value) : Prop :=
-  ∃ front back : List Value,
-    vs = front ++ back ∧ List.Forall₂ (fun T v => T v) suf back ∧ HTuple pre sp front
 
 /-- `T₁ × … × Tₚ × T* × U₁ × … × U_s` (§3 `(list)`): the one positional held set. -/
 def HList (pre : List Held) (sp : Option Held) (suf : List Held) : Held :=
@@ -105,13 +88,6 @@ theorem HStar_eq_HList (T : Held) : HStar T = HList [] (some T) [] := by
 def HMap (T : Held) : Held :=
   fun v => ∃ keys f, v = .map keys f ∧ ∀ k, T (f k)
 
-/-- `⋃ Tᵢ` (§5 `(union)`). -/
-def HUnion (Ts : List Held) : Held :=
-  fun v => ∃ T ∈ Ts, T v
-
-/-- The bottom's held set: nothing. It is disjoint from every held set. -/
-def HNever : Held := fun _ => False
-
 /-- `⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ)` (§4 `(object)`). A binding is `(name, required?,
     held set)`; `R` is the open part — `none` for `drop`/`refuse`, the rest codec's held
     set otherwise. Every `req` name is present, and every present name is either
@@ -124,142 +100,172 @@ def HObject (names : Finset Name) (b : {k // k ∈ names} → Bool × Held) (R :
       if h : k.1 ∈ names then (b ⟨k.1, h⟩).2 (f k)
       else ∃ T, R = some T ∧ T (f k))
 
-/-- `HOpaque` (§3 `(opaque)`): `opaque`'s held set, the values whose member is recoverable
-    from the value alone, as the doc's fixpoint — everything self-identifying, closed under the
-    containers. Every `Value` is in `HOpaque`: the number option holds a numeral exactly. -/
-inductive HOpaque : Value → Prop where
-  | str  (s)  : HOpaque (.str s)
-  | bool (b)  : HOpaque (.bool b)
-  | bin  (b)  : HOpaque (.bin b)
-  | null      : HOpaque .null
-  /-- No premise: the carrier is the well-formed numerals, so there is no numeral
-      `opaque` cannot write and nothing for a premise to exclude. -/
-  | num  (d)  : HOpaque (.num d)
-  /-- Non-emptiness carried no premise here any more, because `℘⁺fin` is the type. The
-      argument for it stands and is worth keeping: an empty wire set is not writable, and
-      its member would not be recoverable from the value anyway — you cannot tell `SS`
-      from `NS` at `∅`. Both readings §3 gives of `opaque`'s held set exclude it. What
-      changed is where the exclusion lives: `HeldSet.lean` used to exhibit `opaque` refusing
-      `strSet ∅`, and that witness is now unstatable. -/
-  | strSet (S : NEFinset String)
-      (h : ∀ s ∈ S.1, HOpaque (.str s)) : HOpaque (.strSet S)
-  | numSet (S : NEFinset WFNumeral)
-      (h : ∀ d ∈ S.1, HOpaque (.num d)) : HOpaque (.numSet S)
-  | binSet (S : NEFinset Bytes)
-      (h : ∀ b ∈ S.1, HOpaque (.bin b)) : HOpaque (.binSet S)
-  | arr  (vs) (h : ∀ x ∈ vs, HOpaque x) : HOpaque (.arr vs)
-  | map  (keys) (f) (h : ∀ k, HOpaque (f k)) : HOpaque (.map keys f)
+/-! ## The judgement
 
-/-! ## The judgement -/
+The judgement is `Alg.Typed` at the DynamoDB signature. Each rule below keeps its DynamoDB
+spelling at the DynamoDB held set, and `Typed.casesD` gives each case at the same held set. -/
 
-mutual
+/-- The judgement of DynamoDB. -/
+abbrev Typed : Term → Held → Option Member → Prop := Alg.Typed (S := dynSyn)
+abbrev TypedList : List Term → List Held → Prop := Alg.TypedList (S := dynSyn)
+abbrev TypedListμ : List Term → List Held → List (Option Member) → Prop :=
+  Alg.TypedListμ (S := dynSyn)
+abbrev TypedOpt : Option Term → Option Held → Prop := Alg.TypedOpt (S := dynSyn)
+abbrev TypedField : ObjectSlot → Held → Bool → Option Member → Prop := Alg.TypedField (S := dynSyn)
+abbrev TypedWild : Option Term → Option Held → Prop := Alg.TypedWild (S := dynSyn)
 
-inductive Typed : Term → Held → Option Member → Prop where
-  /-- §3's ground rules, as one rule: the held set is the base codec's. At `number` that set is
-      `D`, §1's numeral domain, and at `null` it is the point `{null}`. -/
-  | base (k : GroundKind) : Typed (.base k) (baseCodec k).T (some k.member)
-  /-- **§3 `(literal)`, with no premise line left.**
+namespace TypedList export Alg.TypedList (nil cons «forall») end TypedList
+namespace TypedListμ export Alg.TypedListμ (nil cons «forall» mem) end TypedListμ
+namespace TypedOpt export Alg.TypedOpt (none some) end TypedOpt
+namespace TypedField
+export Alg.TypedField (req optional term not_optional true_of_not_optional)
+end TypedField
+namespace TypedWild export Alg.TypedWild (none some) end TypedWild
 
-      §3 writes it `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T; n ≥ 1; pairwise distinct`. Every clause
-      is a type here: `g ground` is the index `k`; `n ≥ 1` and distinctness are `NEFinset`'s;
-      `ℓᵢ ∈ T` is `NEFinset k.Carrier`, which at `number` means the well-formed numerals and
-      so carries §1's `ℓ ⊆ D` in the element. The member is `k.member`, a function of the index.
+/-- §3's ground rules: the held set is the base codec's. At `number` that set is `D`, §1's
+    numeral domain, and at `null` it is the point `{null}`. -/
+theorem Typed.base (k : GroundKind) : Typed (.base k) (baseCodec k).T (some k.member) :=
+  Alg.Typed.prim (S := dynSyn) (Ground.base k)
 
-      **The one thing typing the carrier would have cost, and did not.** A transcription in
-      `Refutations.lean` used to exhibit a literal that is *held* and unwritable, which is (B)
-      failing, and the case against gating the carrier was that gating it deletes the witness.
-      It did not, at the time: the witness was about §3's rule, which
-      admits an ungated `ℓ` only if you drop `ℓᵢ ∈ T`, so it is stated on an ungated prism that
-      is deliberately not a `Term`. What the gate does buy is that `inL` is the whole of
-      admission, which makes `adm (.literal .number x)` exact.
+/-- **§3 `(literal)`, with no premise line left.**
 
-      **One value.** Several alternatives are a certified `union` of singletons, and
-      `Calculus/LiteralArity1.lean` derives that rule from this one and `Typed.union`. -/
-  | literal (k : GroundKind) (x : k.Carrier) :
-      Typed (.literal k x) (HLit k x) (some k.member)
-  /-- §3 `(set)`: the element's judgement, lifted. The held set is `℘⁺fin` of the element's,
-      and the member is `setMember` of the element's.
+    §3 writes it `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T; n ≥ 1; pairwise distinct`. Every clause
+    is a type here: `g ground` is the index `k`; `n ≥ 1` and distinctness are `NEFinset`'s;
+    `ℓᵢ ∈ T` is `NEFinset k.Carrier`, which at `number` means the well-formed numerals and
+    so carries §1's `ℓ ⊆ D` in the element. The member is `k.member`, a function of the index.
 
-      **No premise names a base.** That a stored set holds elements of one member of `S`, `N`
-      or `B` is the DynamoDB universe's rule, and `Obligations` carries it as `SetElem`, the
-      way it carries `(union)`'s compatibility. The rule itself is the lift, and a lawful
-      element gives a lawful set whatever its member (`lawful_setCodec`). -/
-  | set {t T μ} (h : Typed t T μ) : Typed (.set t) (HSet T) (μ.bind setMember)
-  /-- `(list)`: one rule for the one positional container. `(array)`, `(tuple)` and
-      `(tuple-tail)` were three rules of this one, and the theorems below recover each
-      spelling. -/
-  | list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre) (hs : TypedOpt sp Tsp)
-      (hf : TypedList suf Tsuf) :
-      Typed (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L)
-  /-- `(held)`: the held set **is** the premise's, pulled back along `f`, and cut by the
-      admission of the caller-side term `P`; the cancellation laws are `Obligations`'.
+    **The one thing typing the carrier would have cost, and did not.** A transcription in
+    `Refutations.lean` used to exhibit a literal that is *held* and unwritable, which is (B)
+    failing, and the case against gating the carrier was that gating it deletes the witness.
+    It did not, at the time: the witness was about §3's rule, which
+    admits an ungated `ℓ` only if you drop `ℓᵢ ∈ T`, so it is stated on an ungated prism that
+    is deliberately not a `Term`. What the gate does buy is that `inL` is the whole of
+    admission, which makes `adm (.literal .number x)` exact.
 
-      No premise relating `T` to `I`, because `Codec.through` — what `denote` maps a `held` to
-      — *defines* `T := fun v => c.T (f v)`. Carrying the iff instead would leave this the one
-      rule whose index its term does not determine. `P` carries no judgement, as the predicate
-      of `refine` carries none: the rule reads only the domain of its codec. -/
-  | held {t I μ P f g} (h : Typed t I μ) :
-      Typed (.held t P f g) (fun v => I (f v) ∧ ((denote P).e v).isSome) μ
-  | refine {t T μ p} (h : Typed t T μ) :
-      Typed (.refine t p) (fun v => T v ∧ p.eval v) μ
-  | opaq : Typed .opaq HOpaque none
-  /-- §5's bottom. It writes no value, so it stores no member, and its held set is `False`. -/
-  | never : Typed .never HNever none
-  /-- §4 `(object)`. The field table is a key set with a function on it, so the
-      judgement is **pointwise**: every declared name's field is typed at its binding,
-      and the bindings are indexed by the same set — so "the same names, in the same
-      order, without repeats" is not a premise, it is the type. `hnd` is gone with it. -/
-  | object {body : Body} {bind R} {μs : {k // k ∈ body.fields} → Option Member}
+    **One value.** Several alternatives are a certified `union` of singletons, and
+    `Calculus/LiteralArity1.lean` derives that rule from this one and `Typed.union`. -/
+theorem Typed.literal (k : GroundKind) (x : k.Carrier) :
+    Typed (.literal k x) (HLit k x) (some k.member) :=
+  Alg.Typed.prim (S := dynSyn) (Ground.literal k x)
+
+/-- §3 `(set)`: the element's judgement, lifted. The held set is `℘⁺fin` of the element's,
+    and the member is `setMember` of the element's.
+
+    **No premise names a base.** That a stored set holds elements of one member of `S`, `N`
+    or `B` is the DynamoDB universe's rule, and `Obligations` carries it as `SetElem`, the
+    way it carries `(union)`'s compatibility. -/
+theorem Typed.set {t T μ} (h : Typed t T μ) : Typed (.set t) (HSet T) (μ.bind setMember) :=
+  Alg.Typed.set rfl h
+
+/-- `(list)`: `(array)`, `(tuple)` and `(tuple-tail)` were three rules of this one, and the
+    theorems below recover each spelling. -/
+theorem Typed.list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre) (hs : TypedOpt sp Tsp)
+    (hf : TypedList suf Tsuf) : Typed (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L) :=
+  Alg.Typed.list (S := dynSyn) (L := dList) rfl hp hs hf
+
+/-- The held set of a `held`, at the DynamoDB denotation. -/
+theorem held_index_eq (I : Held) (P : Term) (f : Value → Value) :
+    (fun v => I (f v) ∧ ((denote P).e v).isSome)
+      = fun v => I (f v) ∧ ((Alg.denote P).e v).isSome := by
+  rw [denote_eq_alg]
+
+/-- The held set of a `mu`, at the DynamoDB denotation. -/
+theorem mu_index_eq (b : Term) :
+    (fun v => (denote (.mu b)).T v) = fun v => (Alg.denote (.mu b)).T v := by
+  rw [denote_eq_alg]
+
+/-- `(held)`, at the DynamoDB denotation of the caller-side term. -/
+theorem Typed.held {t I μ P f g} (h : Typed t I μ) :
+    Typed (.held t P f g) (fun v => I (f v) ∧ ((denote P).e v).isSome) μ := by
+  rw [held_index_eq]; exact Alg.Typed.held h
+
+/-- `(refine)`: the held set is the premise's, cut by the predicate. -/
+theorem Typed.refine {t T μ p} (h : Typed t T μ) :
+    Typed (.refine t p) (fun v => T v ∧ p.eval v) μ :=
+  Alg.Typed.refine h
+
+/-- §3 `(opaque)`: the held set is `HOpaque`. -/
+theorem Typed.opaq : Typed .opaq HOpaque none := Alg.Typed.opaq
+
+/-- §5's bottom: it holds nothing and stores no member. -/
+theorem Typed.never : Typed .never HNever none := Alg.Typed.never
+
+/-- §4 `(object)`, at the `map` prism. -/
+theorem Typed.object {body : Body} {bind R} {μs : {k // k ∈ body.fields} → Option Member}
+    (hf : ∀ k, TypedField (body.at k) (bind k).2 (bind k).1 (μs k))
+    (hr : TypedWild body.wild R) :
+    Typed (.object body) (HObject body.fields bind R) (some .M) :=
+  Alg.Typed.object (S := dynSyn) (F := dMap) rfl hf hr
+
+/-- `(union)`: the union of the options' held sets, at their unanimous member. -/
+theorem Typed.union {opts Ts μs} (h : TypedListμ opts Ts μs) :
+    Typed (.union opts) (HUnion Ts) (unanimous μs) :=
+  Alg.Typed.union h
+
+/-- A variable, read closed, holds nothing. -/
+theorem Typed.var (i : Nat) : Typed (.var i) HNever none := Alg.Typed.var i
+
+/-- `mu`, at the DynamoDB denotation of the binder. -/
+theorem Typed.mu {b T μ} (hg : (Term.mu b).guarded = true) (h : Typed b T μ) :
+    Typed (.mu b) (fun v => (denote (.mu b)).T v) none := by
+  rw [mu_index_eq]; exact Alg.Typed.mu hg h
+
+/-- **Case analysis on a DynamoDB judgement**, with the primitive rule split into `base` and
+    `literal`, and each case at its DynamoDB held set. `cases` uses this eliminator for every
+    `Typed`. -/
+@[elab_as_elim, cases_eliminator]
+theorem Typed.casesD {motive : ∀ t T μ, Typed t T μ → Prop}
+    (base : ∀ k, motive (.base k) (baseCodec k).T (some k.member) (.base k))
+    (literal : ∀ k x, motive (.literal k x) (HLit k x) (some k.member) (.literal k x))
+    (set : ∀ {t T μ} (h : Typed t T μ), motive (.set t) (HSet T) (μ.bind setMember) (.set h))
+    (list : ∀ {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre) (hs : TypedOpt sp Tsp)
+      (hf : TypedList suf Tsuf),
+      motive (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L) (.list hp hs hf))
+    (held : ∀ {t I μ P f g} (h : Typed t I μ),
+      motive (.held t P f g) (fun v => I (f v) ∧ ((denote P).e v).isSome) μ (.held h))
+    (refine : ∀ {t T μ p} (h : Typed t T μ),
+      motive (.refine t p) (fun v => T v ∧ p.eval v) μ (.refine h))
+    (opaq : motive .opaq HOpaque none .opaq)
+    (never : motive .never HNever none .never)
+    (object : ∀ {body : Body} {bind R} {μs : {k // k ∈ body.fields} → Option Member}
       (hf : ∀ k, TypedField (body.at k) (bind k).2 (bind k).1 (μs k))
-      (hr : TypedWild body.wild R) :
-      Typed (.object body) (HObject body.fields bind R) (some .M)
-  /-- `(union)`: the option judgements. -/
-  | union {opts Ts μs} (h : TypedListμ opts Ts μs) :
-      Typed (.union opts) (HUnion Ts) (unanimous μs)
-  /-- A variable, read closed. No binder of the derivation gives it a codec, so it holds nothing.
-      Under a `mu`, `soundness` reads the variable from the environment, and this index plays no
-      part there. -/
-  | var (i : Nat) : Typed (.var i) HNever none
-  /-- `mu`: a guarded recursive term. The held set is the limit's own, which is its write domain
-      (`muCodec`), as `opaque`'s `HOpaque` is the fixpoint of its layers. The body's judgement is
-      the premise that `soundness` reads at each stage. `hg` is the guard, a checked condition on
-      the syntax (`Term.guarded`), and it refuses an unguarded binder at construction. -/
-  | mu {b T μ} (hg : (Term.mu b).guarded = true) (h : Typed b T μ) :
-      Typed (.mu b) (fun v => (denote (.mu b)).T v) none
-
-inductive TypedList : List Term → List Held → Prop where
-  | nil : TypedList [] []
-  | cons {t ts T Ts μ} (h : Typed t T μ) (hs : TypedList ts Ts) :
-      TypedList (t :: ts) (T :: Ts)
-
-/-- The option judgements of a `(union)`, held sets and members kept: the rule's
-    conclusion is computed from them (`HUnion`, `unanimous`), as in the doc. -/
-inductive TypedListμ : List Term → List Held → List (Option Member) → Prop where
-  | nil : TypedListμ [] [] []
-  | cons {t ts T Ts μ μs} (h : Typed t T μ) (hs : TypedListμ ts Ts μs) :
-      TypedListμ (t :: ts) (T :: Ts) (μ :: μs)
+      (hr : TypedWild body.wild R),
+      motive (.object body) (HObject body.fields bind R) (some .M) (.object hf hr))
+    (union : ∀ {opts Ts μs} (h : TypedListμ opts Ts μs),
+      motive (.union opts) (HUnion Ts) (unanimous μs) (.union h))
+    (var : ∀ i, motive (.var i) HNever none (.var i))
+    (mu : ∀ {b T μ} (hg : (Term.mu b).guarded = true) (h : Typed b T μ),
+      motive (.mu b) (fun v => (denote (.mu b)).T v) none (.mu hg h)) :
+    ∀ {t T μ} (h : Typed t T μ), motive t T μ h := by
+  intro t T μ h
+  cases h with
+  | prim g =>
+    cases g with
+    | base k => exact base k
+    | literal k x => exact literal k x
+  | set hL h => cases hL; exact set h
+  | list hL hp hs hf => cases hL; exact list hp hs hf
+  | @held t I μ P f g h =>
+    have hm : ∀ T' (h' : Typed (.held t P f g) T' μ),
+        T' = (fun v => I (f v) ∧ ((denote P).e v).isSome) → motive _ T' μ h' := by
+      intro T' h' e; subst e; exact held h
+    exact hm _ _ (held_index_eq I P f).symm
+  | refine h => exact refine h
+  | opaq => exact opaq
+  | never => exact never
+  | object hF hf hr => cases hF; exact object hf hr
+  | union h => exact union h
+  | var i => exact var i
+  | @mu b T μ hg h =>
+    have hm : ∀ T' (h' : Typed (.mu b) T' none),
+        T' = (fun v => (denote (.mu b)).T v) → motive _ T' none h' := by
+      intro T' h' e; subst e; exact mu hg h
+    exact hm _ _ (mu_index_eq b).symm
 
 inductive TypedListM : List Term → List Held → Prop where
   | nil : TypedListM [] []
   | cons {t ts T Ts} (h : Typed t T (some .M)) (hs : TypedListM ts Ts) :
       TypedListM (t :: ts) (T :: Ts)
-
-inductive TypedOpt : Option Term → Option Held → Prop where
-  | none : TypedOpt none none
-  | some {t T μ} (h : Typed t T μ) : TypedOpt (some t) (some T)
-
-/-- §4's `⊢ f : T ⊗ π ⇝ μ`; the `Bool` is `π`, `true` for `req`. -/
-inductive TypedField : ObjectSlot → Held → Bool → Option Member → Prop where
-  | req {t T μ} (h : Typed t T μ) : TypedField (.req t) T true μ
-  | optional {t T μ} (h : Typed t T μ) : TypedField (.optional t) T false μ
-
-/-- §4's `⊢ ρ : wild`, carrying `R(ρ)` — `∅` (here `none`) where the body carries no open
-    block, the open block's held set otherwise. -/
-inductive TypedWild : Option Term → Option Held → Prop where
-  | none : TypedWild none none
-  | some {t T μ} (h : Typed t T μ) : TypedWild (some t) (some T)
-
-end
 
 /-- **§3 `(record)`, derived.** `record` is the object that declares no name and takes every
     key at one codec, so its rule is `object`'s at the empty key set. It was a constructor,
@@ -304,39 +310,5 @@ theorem Typed.array {t T μ} (h : Typed t T μ) : Typed (.array t) (HStar T) (so
 theorem Typed.tuple {ts Ts tail Tt} (h : TypedList ts Ts) (ht : TypedOpt tail Tt) :
     Typed (.tuple ts tail) (HProd Ts Tt) (some .L) :=
   (HProd_eq_HList Ts Tt) ▸ Typed.list h ht TypedList.nil
-
-/-! ## Reading a field's judgement
-
-`TypedField`'s indices at a declared name are `(b k).2`, `(b k).1` and `μs k` — none of
-them a variable — so `cases` on it cannot eliminate. These two extract what the callers
-want without eliminating at the use site. -/
-
-/-- A typed field gives its term, that term's judgement, and its shape. -/
-theorem TypedField.term {fd : ObjectSlot} {T π μ} (h : TypedField fd T π μ) :
-    ∃ t', Typed t' T μ ∧
-      (fd = .req t' ∨ fd = .optional t') := by
-  cases h with
-  | req h' => exact ⟨_, h', Or.inl rfl⟩
-  | optional h' => exact ⟨_, h', Or.inr rfl⟩
-
-/-- …and a required one is not optional. -/
-theorem TypedField.not_optional {fd : ObjectSlot} {T π μ} (h : TypedField fd T π μ)
-    (hπ : π = true) : ∀ t', fd ≠ .optional t' := by
-  cases h with
-  | req _ => intro t' hc; exact nomatch hc
-  | optional _ => exact absurd hπ (by simp)
-
-/-- …and the same fact read the other way: a field that is not `optional` is required.
-
-    `not_optional` is what a *consumer* of the judgement wants — it has `π = true` and needs
-    the shape. Producing `π = true` from the shape is the converse, and `typed_T_eq`'s
-    `object` case is where it is needed: there the map's key set is known to contain every
-    required name and the guard `valPresentB` is stated by shape, so the two have to be
-    exchanged in this direction. Both rows are `rfl`. -/
-theorem TypedField.true_of_not_optional {fd : ObjectSlot} {T π μ} (h : TypedField fd T π μ)
-    (hno : ∀ t', fd ≠ .optional t') : π = true := by
-  cases h with
-  | req _ => rfl
-  | optional _ => exact absurd rfl (hno _)
 
 end Calculus

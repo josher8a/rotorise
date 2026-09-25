@@ -295,13 +295,13 @@ theorem setElem_union_refused : ¬ SetElem (denote (.union [.string, .boolean]))
 theorem typed_union_string_boolean :
     Typed (.union [.string, .boolean])
       (HUnion [fun v => ∃ s, v = .str s, fun v => ∃ b, v = .bool b]) none :=
-  .union (.cons (.base _) (.cons (.base _) .nil))
+  .union (.cons (Typed.base _) (.cons (Typed.base _) .nil))
 
 /-- **An empty option is the unit of the sum.** The bottom holds nothing, so it changes no
     union's `HUnion`. The meet builds such a union whenever a surviving option's predicate
     holds of nothing. -/
 example : ∃ T μ, Typed (.union [.string, .never]) T μ :=
-  ⟨_, _, .union (.cons (.base _) (.cons .never .nil))⟩
+  ⟨_, _, .union (.cons (Typed.base _) (.cons .never .nil))⟩
 
 /-! ## `≡` is not transitive
 
