@@ -2278,7 +2278,7 @@ export namespace opaque {
      *   writes back as the `NS` it came from. Under a policy it is a **refusal**, because nothing
      *   without a schema can say which member a JS number holds faithfully, so a policy will not
      *   *write* a set of numbers, and a member it cannot write is one it cannot read. See
-     *   `Calculus.Lawful.no_read_without_write`.
+     *   `Calculus.Alg.Lawful.no_read_without_write`.
      * - `N` is a `DynamoNumber`, where the SDK's reads a JS number. Under `'refuse'` it is a
      *   *refusal*, and under `'lossy'` it is a `number`.
      * - `L` and `M` carry a refused member out with them, the way {@link opaque.Encode} does, so a

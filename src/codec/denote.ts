@@ -1650,7 +1650,7 @@ const numberPolicy = (numbers: opaque.Numbers) => {
         /**
          * **A member this policy cannot write is a member it cannot read.** A numeric `Set` is
          * refused on the way in, so an `NS` has no write path, and reading one would re-encode
-         * as `SS`. That is **(MP)** failing, and `Calculus.Lawful.no_read_without_write` proves
+         * as `SS`. That is **(MP)** failing, and `Calculus.Alg.Lawful.no_read_without_write` proves
          * the general form.
          */
         if (read instanceof Set) {

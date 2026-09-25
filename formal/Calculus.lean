@@ -1,5 +1,6 @@
 import Calculus.Lists
 import Calculus.Domain
+import Calculus.Alg
 import Calculus.Codec
 import Calculus.Prisms
 import Calculus.Products
