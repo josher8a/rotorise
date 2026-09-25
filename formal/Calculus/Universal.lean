@@ -37,15 +37,6 @@ def opaqUnfold : Term :=
 theorem opaqUnfold_ok : unionOk (match opaqUnfold with | .union os => os | _ => []) = true := by
   decide
 
-/-- A list with no prefix and no suffix admits a value when the spread admits each element. -/
-theorem alignPL_spread (P : VP) (vs : List Value) :
-    alignPL [] (some P) [] vs = decide (∀ x ∈ vs, P x = true) := by
-  simp only [alignPL, List.length_nil, Nat.sub_zero, List.take_length, List.drop_length, zipP,
-    Bool.and_true]
-  induction vs with
-  | nil => rfl
-  | cons x xs ih => simp [alignP, ih]
-
 /-- `opaque` writes an array when `opaque` writes each element, at the element budget. -/
 theorem Adm_opaq_arr (vs : List Value) :
     Adm .opaq (.arr vs) = decide (∀ x ∈ vs, Adm .opaq x = true) := by
@@ -103,15 +94,6 @@ theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
       exact fun _ => hp
 
 
-/-- `alignPL_spread` on the read side. -/
-theorem alignPAL_spread (P : AP) (as : List Attr) :
-    alignPAL [] (some P) [] as = decide (∀ x ∈ as, P x = true) := by
-  simp only [alignPAL, List.length_nil, Nat.sub_zero, List.take_length, List.drop_length, zipPA,
-    Bool.and_true]
-  induction as with
-  | nil => rfl
-  | cons x xs ih => simp [alignPA, ih]
-
 /-- `opaque` reads a wire list when `opaque` reads each element, at the element budget. -/
 theorem AdmA_opaq_l (as : List Attr) :
     AdmA .opaq (.l as) = decide (∀ x ∈ as, AdmA .opaq x = true) := by
@@ -143,28 +125,28 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
   | n x => rw [AdmA_opaq_num]; rfl
   | ss S =>
       rw [AdmA_opaq_eq, Ωp_ss]
-      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, Term.array, Term.record, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA, AdmABody, Term.array, Term.record, setCodec]
       rfl
   | bs S =>
       rw [AdmA_opaq_eq, Ωp_bs]
-      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, Term.array, Term.record, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA, AdmABody, Term.array, Term.record, setCodec]
       rfl
   | ns S =>
       rw [AdmA_opaq_eq, Ωp_ns]
-      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, Term.array, Term.record, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA, AdmABody, Term.array, Term.record, setCodec]
       rfl
   | l as =>
       rw [AdmA_opaq_l]
-      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, Term.array,
-        Term.record, AdmAOptT, alignPAL_spread, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA, AdmABody, Term.array,
+        Term.record, AdmAOptT, alignPL_spread, setCodec]
       exact decide_eq_decide.mpr Iff.rfl
   | m keys g =>
       -- the record's guard stays folded, for the reason `Adm_opaqUnfold` gives
       have hp : reqPresentT ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [AdmA_opaq_m]
-      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, Term.array,
-        Term.record, AdmAWild, objAdmA, entryPA, MapOf.at, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA, AdmABody, Term.array,
+        Term.record, AdmAWild, objAdmA, entryP, MapOf.at, setCodec]
       exact fun _ => hp
 
 /-- **`opaque` is total, write side.** `opaque` writes every value. -/
