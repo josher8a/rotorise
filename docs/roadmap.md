@@ -177,7 +177,7 @@ constructive *base* is a further state that needs the other routes closed as wel
 
 The state this entry names is a membership and decision layer of this development's own, over
 `Multiset.Mem` rather than the coercion to `Set`, with the mathlib lemmas the tree uses restated or
-bridged against it. `MapOf` in `Domain.lean` is where it starts, because the key set is a
+bridged against it. `MapOf` in `AlgMaps.lean` is where it starts, because the key set is a
 `Finset Name` and `MapOf.at` is the first declaration that decides membership.
 
 **What decides it.** Two local instances, membership and its decision, were measured against the

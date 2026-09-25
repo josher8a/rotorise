@@ -132,10 +132,10 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       obtain ⟨vs, rfl, hall⟩ := hv
       rw [denote, denoteList_eq, denoteOpt_eq, denoteList_eq]
-      exact alignL_T_of_HTupleL hp hs hf
+      exact ⟨vs, rfl, alignL_T_of_HTupleL hp hs hf
         (fun t' _ _ _ hty w hw => typed_T_eq hty w hw)
         (fun t' _ _ _ hty w hw => typed_T_eq hty w hw)
-        (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) hall
+        (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) hall⟩
     | @held t' I' μ' P f g h' => exact ⟨typed_T_eq h' (f v) hv.1, hv.2⟩
     | @refine t' T' μ' q h' => exact ⟨typed_T_eq h' v hv.1, hv.2⟩
     | @object body bind R μs hfields hrest =>

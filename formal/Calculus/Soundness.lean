@@ -680,14 +680,11 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
         | exact nomatch hv
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       rw [denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq] at hv
-      cases v
-      case arr vs =>
-        obtain ⟨ps, hal, hall⟩ := hv
-        exact ⟨_, rfl, alignL_TSub hp hs hf
-          (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
-          (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
-          (fun t' _ _ _ hty v hv => typed_TSub hty v hv) hal hall⟩
-      all_goals exact absurd hv (by simp only [listCodec]; exact id)
+      obtain ⟨vs, rfl, ps, hal, hall⟩ := hv
+      exact ⟨_, rfl, alignL_TSub hp hs hf
+        (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
+        (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
+        (fun t' _ _ _ hty v hv => typed_TSub hty v hv) hal hall⟩
     | @held t' I' μ' P f g h' =>
       exact ⟨typed_TSub h' (f v) hv.1, hv.2⟩
     | @refine t' T' μ' q h' => exact ⟨typed_TSub h' v hv.1, hv.2⟩

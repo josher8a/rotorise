@@ -207,12 +207,12 @@ theorem decides_object :
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)), ?_, rfl, ?_⟩
   · simp +contextual [denote, denote, bodySem, wildSem, fieldSem,
-          objectCodec, objectCodecCore, stringCodec,
+          objectCodec, stringCodec,
           valPresentB, valPresentAt, fieldSem, rcOf, Alg.FieldSem.codec, carriedCodec,
           mapV, mA, objWrite, entryCodec, MapOf.at, funImage,
           Subtype.forall]
   · simp [denote, denote, bodySem, wildSem, fieldSem,
-          objectCodec, objectCodecCore, stringCodec,
+          objectCodec, Alg.objectCodec, Alg.objectCodecCore, stringCodec,
           valPresentB, valPresentAt, fieldSem, rcOf, carriedCodec,
           mapV, mA, objWrite, Subtype.forall]
 

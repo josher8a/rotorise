@@ -360,7 +360,8 @@ theorem occV_open : ∀ (t : Term) (ρ : List Codec) (v : Value),
           | (simp_all [occV, Value.slot, Slot.setElem]; done)
           | simp [occV, Value.slot, Slot.setElem, Term.hasVar_of_use t i (by omega)]
   -- the containers write their own slot, whatever their elements read
-  | .list _ _ _, _, v, h => Or.inl (by cases v <;> simp_all [denote, listCodec, occV, occOnly, Value.slot])
+  | .list _ _ _, _, v, h => Or.inl (by cases v <;> simp_all [denote, listCodec, Alg.listCodec,
+      carriedCodec, arrV, lA, occV, occOnly, Value.slot])
   | .object (.mk _ _ _), _, v, h => by
       obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
       obtain ⟨keys, f, g, rfl, -⟩ := objectCodecCore_e_inv ha
@@ -461,9 +462,11 @@ theorem occA_open : ∀ (t : Term) (ρ : List Codec) (a : Attr),
           | (simp_all [occA, Attr.member, Member.setElem]; done)
           | simp [occA, Attr.member, Member.setElem, Term.hasVar_of_use t i (by omega)]
   | .list _ _ _, _, a, h => Or.inl (by
-      cases a <;> simp_all [denote, listCodec, occA, occOnly, Attr.member])
+      cases a <;> simp_all [denote, listCodec, Alg.listCodec, carriedCodec, arrV, lA, occA,
+          occOnly, Attr.member])
   | .object (.mk _ _ _), _, a, h => Or.inl (by
-      cases a <;> simp_all [denote, bodySem, objectCodec, objectCodecCore, carriedCodec, mA,
+      cases a <;> simp_all [denote, bodySem, objectCodec, Alg.objectCodec, Alg.objectCodecCore,
+          carriedCodec, mA,
         occA, occOnly, Attr.member])
   | .held t P f g, ρ, a, h => by
       obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
