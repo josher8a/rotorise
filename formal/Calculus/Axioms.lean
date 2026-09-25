@@ -28,6 +28,8 @@ import Calculus.Lang.Typing
 import Calculus.Lang.Guarded
 import Calculus.Lang.Sound
 import Calculus.Lang.HeldFree
+import Calculus.Lang.ExactV
+import Calculus.Lang.ExactA
 import Lean
 
 /-!

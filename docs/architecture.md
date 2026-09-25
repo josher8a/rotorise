@@ -95,10 +95,12 @@ compute with.
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
 | the top | `Sem.top`, `Sem.lawful_top`, `Sem.topHeld` | `Ω`, `HOpaque` | `idCodec` |
 | the top laws | `TopLaws`, proved once for each universe | `Ω_topLaws` | `id_topLaws` |
+| the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `AdmLit`, `inBaseA` and `AdmALit` | the kind test |
 
 A former is an `Option`. A universe without a former denotes the term of that former as the
 bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only
-the held-free theory reads them.
+the held-free theory reads them. `PrimAdm` and `PrimAdmA` are outside `Sem` for the same reason:
+only exactness reads them.
 
 **The set former is a lift, and not a prism.** The list and map formers are prisms from `List`
 and `MapOf` of the carrier onto the carrier. A set former cannot be such a prism: the kernel
@@ -127,9 +129,14 @@ attribute registers for `g`. `denote_eq_alg` proves the two functions equal, by 
 theorem over the family. So a row that drifts from the generic row fails the build.
 `μSyn_eq_alg` pins the member index the same way.
 
-**The analyses are DynamoDB tables.** `Meet`, `ExactV`, `ExactA`, `Orthogonality`, `Separation`,
-`Slice` and the certificate read the constructors of the DynamoDB carriers. No generic form of
-them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
+**Exactness holds at every signature.** `Alg.Adm` and `Alg.AdmA` give a row per constructor, and
+`Alg.Adm_exact` and `Alg.AdmA_exact` prove each row equal to the domain of `denote t`, from the
+exactness of the primitive rows alone. A universe states the primitive rows, so a verdict at a
+primitive reduces without the codec. The DynamoDB `Adm` and `AdmA` state their own rows, for the
+reason that `denote` does, and `Adm_eq_alg` and `AdmA_eq_alg` pin each row to the generic row.
+
+**The other analyses are DynamoDB tables.** `Meet`, `Orthogonality`, `Separation`, `Slice` and
+the certificate read the constructors of the DynamoDB carriers. No generic form of them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
 `Codec`, then the combinator algebra at the DynamoDB carriers as `Prisms`, `Products`, `Objects`,
 `Sums`, `Carriers`, `Lawful` and `Frontier`, and `Term`, then `Denote`, `Typing`, `Soundness`,
 then `ExactV`, `ExactA` and `Separation`, then `Orthogonality`, with `Axioms` as the sink. Each instance module imports the
@@ -836,8 +843,8 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New stratum in the term family → every companion in the table above, counted per side.
 - New law of the algebra → state it in an `Alg` module, which imports no instance module. A
   statement that needs a fact of a carrier belongs to that universe.
-- New universe → a `Syn`, a `Sem` instance, and its `TopLaws` where the held-free theory must
-  hold. Make the module reachable from `Axioms.lean`.
+- New universe → a `Syn`, a `Sem` instance, its `TopLaws` where the held-free theory must
+  hold, and its `PrimAdm` and `PrimAdmA` where exactness must hold. Make the module reachable from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.
 - New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness

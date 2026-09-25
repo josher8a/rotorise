@@ -1,3 +1,4 @@
+import Calculus.Lang.ExactA
 import Calculus.Dynamo.Analysis.ExactV
 
 /-!
@@ -58,12 +59,9 @@ spends on the filter. -/
 /-- An attribute-side row, once the subterms' rows are known. -/
 abbrev AP := Attr → Bool
 
-/-- The current-schema reader has the same required-name guard as the writer. -/
-def reqPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
-    (keys : Finset Name) : Bool :=
-  decide (∀ k : {k // k ∈ fields},
-    (match fld k with | .req _ => decide (k.1 ∈ keys) | _ => true) = true)
-
+/- `reqPresentT` is the generic guard of `Calculus.Lang.ExactA`, and no caller reaches it by
+   field notation. -/
+export Alg (reqPresentT)
 
 /-- What the literal codec **reads**, exactly.
 
@@ -116,7 +114,7 @@ noncomputable def AdmA : Term → Attr → Bool
       | .l as => alignPL (AdmAList pre) (AdmAOptT sp) (AdmAList suf) as
       | _ => false
   | .object b => AdmABody b
-  -- the read side of the same deferral; see the `Adm` row and `ExactA_opaq`
+  -- the read side of the same deferral; see the `Adm` row
   | .opaq => fun a => ((muCodec opaqStep).p a).isSome
   -- a closed variable is the bottom, and `mu` asks its own codec, as `opaq` does
   | .var _ => fun _ => false
@@ -208,8 +206,8 @@ enough to exhaust the heartbeat budget. Taking the carrier as a plain type in th
 does the reduction once, at elaboration.
 
 `string` and `boolean` are here for the same reason and not because they failed: inline in
-`AdmA_exact` they were re-derived inside a twenty-case fan, and the row each one needs is a
-statement about *one* base. `AdmA_exact` cites all four and unfolds none. -/
+the literal row they were re-derived inside a twenty-case fan, and the row each one needs is a
+statement about *one* base. The literal row of `dynPrimAdmA` cites all four and unfolds none. -/
 
 theorem AdmALit_binary_exact (y : Bytes) (a : Attr) :
     AdmA (.literal .binary y) a = true ↔ ((denote (Term.literal .binary y)).p a).isSome = true := by
@@ -260,155 +258,6 @@ theorem filter_AdmAList {opts : List Term} (h : ∀ t ∈ opts, ExactA t) (a : A
     simp only [denoteList, List.filter_cons, isSome_p_eq_AdmA ht, ih hts]
     cases hb : AdmA t a <;> simp []
 
-/-- **A union reads exactly where one of its options reads.** -/
-theorem select_isSome_attemptA (os : List Codec) (a : Attr) :
-    (select os (·.p) a).isSome = true ↔ ∃ o ∈ os, (o.p a).isSome = true := by
-  constructor
-  · intro h
-    obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h
-    obtain ⟨o, ho, -, hp⟩ := select_admits hv
-    exact ⟨o, ho, by rw [hp]; rfl⟩
-  · rintro ⟨o, ho, hp⟩
-    obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hp
-    obtain ⟨o', hf⟩ := find?_attempt_A ho hv
-    unfold select; rw [hf]; exact acts_of_find?_A hf
-
-/-- **`union` reads exactly what its row says** — `ExactV_union` on the other side of the
-    pair. -/
-theorem ExactA_union {opts : List Term} (h : ∀ t ∈ opts, ExactA t) : ExactA (.union opts) := by
-  intro a
-  rw [denote_union_sems]
-  show AdmAAny opts a = true ↔ (select (denoteList opts) (·.p) a).isSome
-  rw [select_isSome_attemptA, denoteList_eq]
-  simp only [List.mem_map, exists_exists_and_eq_and]
-  constructor
-  · intro ha
-    induction opts with
-    | nil => exact absurd ha (by simp)
-    | cons t ts ih =>
-      rw [AdmAAny_cons, Bool.or_eq_true] at ha
-      rcases ha with ha | ha
-      · exact ⟨t, List.mem_cons_self, (h t List.mem_cons_self a).mp ha⟩
-      · obtain ⟨t', ht', hp⟩ := ih (fun t' ht' => h t' (List.mem_cons_of_mem _ ht')) ha
-        exact ⟨t', List.mem_cons_of_mem _ ht', hp⟩
-  · rintro ⟨t, ht, hp⟩
-    exact AdmAAny_of_mem ht ((h t ht a).mpr hp)
-
-/-- **`set` reads exactly what its row says**, because the row asks the set's codec. -/
-theorem ExactA_set (t : Term) : ExactA (.set t) := fun _ => Iff.rfl
-
-theorem alignPA_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactA t) :
-    ∀ (ts : List Term) (as : List Attr), (∀ t ∈ ts, ExactA t) →
-      (alignP (AdmAList ts) (AdmAOptT tail) as = true ↔
-        ((align (denoteList ts) (denoteOpt tail) as).bind
-          (traverse fun ca => ca.1.p ca.2)).isSome = true)
-  | [], [], _ => by
-      cases tail <;> simp [alignP, AdmAList, AdmAOptT, align, denoteList, denoteOpt, traverse]
-  | [], a :: as, _ => by
-      cases htail : tail with
-      | none => simp [alignP, AdmAList, AdmAOptT, align, denoteList, denoteOpt]
-      | some t =>
-        have ht : ExactA t := htl t (by simp [htail])
-        have ih := alignPA_iff tail htl [] as (by simp)
-        rw [htail] at ih
-        simp only [AdmAList, AdmAOptT, denoteList, denoteOpt] at ih
-        simp only [alignP, AdmAList, AdmAOptT, align, denoteList, denoteOpt,
-          Bool.and_eq_true]
-        cases hal : align [] (some (denote t)) as with
-        | none =>
-          rw [hal] at ih
-          simp at ih
-          simp [ih]
-        | some ps =>
-          rw [hal] at ih
-          simp only [Option.map_some, Option.bind_some] at ih ⊢
-          rw [traverse_cons_isSome, Bool.and_eq_true, ← ht a, ← ih]
-  | t :: ts, [], _ => by
-      cases tail <;> simp [alignP, AdmAList, AdmAOptT, align, denoteList, denoteOpt]
-  | t :: ts, a :: as, h => by
-      have ht : ExactA t := h t (by simp)
-      have ih := alignPA_iff tail htl ts as (fun t' ht' => h t' (by simp [ht']))
-      simp only [alignP, AdmAList, align, denoteList, Bool.and_eq_true]
-      cases hal : align (denoteList ts) (denoteOpt tail) as with
-      | none =>
-        simp only [hal, Option.map_none, Option.bind_none, Option.isSome_none] at ih ⊢
-        simp at ih
-        simp [ih]
-      | some ps =>
-        simp only [hal, Option.map_some, Option.bind_some] at ih ⊢
-        rw [traverse_cons_isSome, Bool.and_eq_true, ← ht a, ← ih]
-
-/-- The suffix's row, transported across its positions' exactness. The length premise is
-    load bearing for the reason `zipP_iff`'s is: `List.zip` truncates. -/
-theorem zipPA_iff : ∀ (suf : List Term), (∀ t ∈ suf, ExactA t) → ∀ (back : List Attr),
-    back.length = suf.length →
-    (zipP (AdmAList suf) back = true ↔
-      (traverse (fun ca : Codec × Attr => ca.1.p ca.2)
-        ((denoteList suf).zip back)).isSome = true)
-  | [], _, [], _ => by simp [zipP, AdmAList, denoteList]
-  | [], _, _ :: _, h => by
-      exact absurd h (by simp only [List.length_cons, List.length_nil]; omega)
-  | _ :: _, _, [], h => by
-      exact absurd h (by simp only [List.length_cons, List.length_nil]; omega)
-  | t :: ts, h, a :: as, hlen => by
-      simp only [AdmAList, denoteList, zipP, List.zip_cons_cons, Bool.and_eq_true,
-        traverse_cons_isSome]
-      rw [zipPA_iff ts (fun t' ht' => h t' (List.mem_cons_of_mem _ ht')) as
-          (by simp only [List.length_cons] at hlen; omega),
-        h t List.mem_cons_self a]
-
-/-- **`alignPL` is `alignL`'s row on the read side.** -/
-theorem alignPAL_iff (pre : List Term) (sp : Option Term) (suf : List Term)
-    (hpre : ∀ t ∈ pre, ExactA t) (hsp : ∀ t ∈ sp, ExactA t) (hsuf : ∀ t ∈ suf, ExactA t)
-    (as : List Attr) :
-    alignPL (AdmAList pre) (AdmAOptT sp) (AdmAList suf) as = true ↔
-      ((alignL (denoteList pre) (denoteOpt sp) (denoteList suf) as).bind
-        (traverse fun ca => ca.1.p ca.2)).isSome = true := by
-  have hlenA : (AdmAList suf).length = suf.length := by simp
-  have hlenD : (denoteList suf).length = suf.length := by simp
-  unfold alignPL
-  rw [hlenA]
-  rcases Nat.lt_or_ge as.length suf.length with hlt | hge
-  · rw [alignL_short _ _ _ _ (by omega)]
-    have h0 : as.length - suf.length = 0 := by omega
-    rw [h0, List.drop_zero]
-    refine ⟨fun hc => ?_, fun hc => nomatch hc⟩
-    have := zipP_length _ _ (Bool.and_eq_true .. ▸ hc |>.2)
-    rw [hlenA] at this
-    omega
-  · rw [alignL_eq_split _ _ _ _ (by omega), hlenD]
-    rw [Bool.and_eq_true, alignPA_iff sp hsp pre (as.take (as.length - suf.length)) hpre,
-      zipPA_iff suf hsuf _ (by simp; omega)]
-    cases hal : align (denoteList pre) (denoteOpt sp) (as.take (as.length - suf.length)) with
-    | none => simp
-    | some ps => simp [traverse_append_isSome]
-
-/-- **`list` reads exactly** once its three parts do. -/
-theorem ExactA_list {pre : List Term} {sp : Option Term} {suf : List Term}
-    (hpre : ∀ t ∈ pre, ExactA t) (hsp : ∀ t ∈ sp, ExactA t) (hsuf : ∀ t ∈ suf, ExactA t) :
-    ExactA (.list pre sp suf) := by
-  intro a
-  cases a
-  case l as =>
-    show alignPL (AdmAList pre) (AdmAOptT sp) (AdmAList suf) as = true ↔
-      (((alignL (denoteList pre) (denoteOpt sp) (denoteList suf) as).bind
-        (traverse fun ca => ca.1.p ca.2)).map Value.arr).isSome = true
-    rw [alignPAL_iff pre sp suf hpre hsp hsuf as]
-    cases (alignL (denoteList pre) (denoteOpt sp) (denoteList suf) as).bind
-      (traverse fun ca => ca.1.p ca.2) <;> simp
-  all_goals simp [AdmA, denote, listCodec, Alg.listCodec, carriedCodec, arrV, lA]
-
-theorem ExactA_tuple {ts : List Term} {tail : Option Term}
-    (h : ∀ t ∈ ts, ExactA t) (htl : ∀ t ∈ tail, ExactA t) : ExactA (.tuple ts tail) :=
-  ExactA_list h htl (by simp)
-
-/-- **`array` reads exactly** once its element does. -/
-theorem ExactA_array {c : Term} (hc : ExactA c) : ExactA (.array c) :=
-  ExactA_list (by simp) (by simpa using hc) (by simp)
-
-def ExactAField (fd : ObjectSlot) : Prop :=
-  ∀ a, AdmAField fd a = true ↔ (((fieldSem fd).codec).p a).isSome
-
 theorem reqPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
     (keys : Finset Name) :
     reqPresentT fields fld keys = reqPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys := by
@@ -420,106 +269,6 @@ theorem reqPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → Obj
       | req t => simp_all [reqPresentAt, fieldSem]
       | optional t => simp_all [reqPresentAt, fieldSem])
 
-/-- **The read side keeps every stored name.** `drop` was the one policy that dropped one,
-    and it is gone, so `objRead`'s filter is the identity on the key set and the row owes it
-    nothing. -/
-theorem keepB_wild (wild : Option Term) (sems : MapOf FieldSem) (k : Name) {ρ : List Codec} :
-    keepB (wildSem wild ρ) sems k = true := by
-  cases wild with
-  | none => rfl
-  | some pt => rfl
-
-theorem entryA_iff {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option Term}
-    (hf : ∀ k : {k // k ∈ fields}, ExactAField (fld k))
-    (hr : ∀ t, wild = some t → ExactA t) (k : Name) (a : Attr) :
-    (entryP ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) k).any (· a) = true ↔
-    ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (wildSem wild)) k).bind
-      (fun c => c.p a)).isSome = true := by
-  simp only [entryP, entryCodec, MapOf.at]
-  by_cases hk : k ∈ fields
-  · rw [dif_pos hk, dif_pos hk]
-    simpa using hf ⟨k, hk⟩ a
-  · rw [dif_neg hk, dif_neg hk]
-    cases wild with
-    | none => simp [AdmAWild, wildSem, rcOf]
-    | some pt => simpa [AdmAWild, wildSem, rcOf] using hr pt rfl a
-
-theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option Term}
-    (hf : ∀ k : {k // k ∈ fields}, ExactAField (fld k))
-    (hr : ∀ t, wild = some t → ExactA t) :
-    ExactA (.object (.mk fields fld wild)) := by
-  intro a
-  cases a
-  case m keys g =>
-    show (reqPresentT fields fld keys &&
-        objAdmV ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) keys g) = true ↔
-      ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩ (wildSem wild)).p (.m keys g)).isSome
-        = true
-    rw [reqPresentT_eq]
-    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, mA, objRead,
-      objAdmV, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map,
-      Option.bind_some]
-    by_cases hv : reqPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys = true
-    · rw [if_pos hv]
-      simp only [hv, true_and, Option.isSome_map, funImage_isSome_iff]
-      constructor
-      · intro h k
-        exact (entryA_iff hf hr k.1 _).mp (h ⟨k.1, (Finset.mem_filter.mp k.2).1⟩)
-      · intro h k
-        refine (entryA_iff hf hr k.1 (g k)).mpr ?_
-        have hmem : k.1 ∈ keys.filter (keepB (wildSem wild) ⟨fields, fun k => fieldSem (fld k)⟩ ·) :=
-          Finset.mem_filter.mpr ⟨k.2, keepB_wild wild _ k.1⟩
-        exact h ⟨k.1, hmem⟩
-    · rw [if_neg hv]
-      simp [hv]
-  all_goals
-    simp [AdmA, AdmABody, denote, bodySem, objectCodec, Alg.objectCodec, Alg.objectCodecCore,
-        carriedCodec, mA]
-
-/-- **`opaque` reads exactly what its row says**, definitionally, and for the reason
-    `ExactV_opaq` gives at length: `p := (muCodec opaqStep).p`, so the row and `dom(p)` are
-    one function. ~~AdmOpaqA_iff~~ — a second induction, this one carrying an injectivity
-    clause about the host's decimal reader that `decSet` needs — is deleted rather than moved. The
-    clause was true and is still true; it is now the codec's business, where it was always
-    stated (`decSet`, `Products.lean`), instead of being restated here in a form that had
-    to be kept in step by hand. -/
-theorem ExactA_opaq : ExactA .opaq := fun _ => Iff.rfl
-
-
-def ExactAL : List Term → Prop
-  | [] => True
-  | t :: ts => ExactA t ∧ ExactAL ts
-
-def ExactAO : Option Term → Prop
-  | none => True
-  | some t => ExactA t
-
-def ExactAW : Option Term → Prop
-  | none => True
-  | some t => ExactA t
-
-theorem exactAL_mem : ∀ (ts : List Term), ExactAL ts → ∀ t ∈ ts, ExactA t
-  | [], _, t, ht => absurd ht (by simp)
-  | t0 :: ts, h, t, ht => by
-      rcases List.mem_cons.mp ht with rfl | ht'
-      · exact h.1
-      · exact exactAL_mem ts h.2 t ht'
-
-theorem exactAO_mem : ∀ (tail : Option Term), ExactAO tail → ∀ t ∈ tail, ExactA t
-  | none, _, t, ht => absurd ht (by simp)
-  | some t0, h, t, ht => by
-      have heq : t0 = t := by simpa using ht
-      subst heq; exact h
-
-theorem exactAW_codec : ∀ (wild : Option Term), ExactAW wild →
-    ∀ t, wild = some t → ExactA t
-  | none, _, t, h => nomatch h
-  | some t0, h, t, hc => by
-      simp only [Option.some.injEq] at hc
-      exact hc ▸ h
-
 /-- `allP` transported across the entry's exactness. -/
 theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
     allP (AdmA c) as = true ↔ ∀ a ∈ as, ((denote c).p a).isSome = true := by
@@ -527,99 +276,136 @@ theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
   | nil => simp [allP]
   | cons a as ih => simp [allP, ih, h a]
 
+/-! ## DynamoDB is an instance
+
+The structure of `AdmA` and its exactness are the term language's (`Alg.AdmA`,
+`Alg.AdmA_exact`). DynamoDB supplies the primitive rows, `inBaseA` and `AdmALit`, and their
+exactness. `AdmA` keeps the DynamoDB rows by name, for the reason `Adm` does, and `AdmA_eq_alg`
+pins each row to the generic one. -/
+
+/-- The DynamoDB primitive rows on the read side: `inBaseA` at a base and `AdmALit` at a
+    literal. -/
+noncomputable instance dynPrimAdmA : Alg.PrimAdmA dynSyn where
+  admA
+    | .base k => inBaseA k
+    | .literal k x => AdmALit k x
+  admA_exact
+    | .base k, a => by
+        show AdmA (.base k) a = true ↔ ((denote (.base k)).p a).isSome = true
+        cases k <;> cases a <;> simp [AdmA, inBaseA, denote, stringCodec, numberCodec,
+          booleanCodec, binaryCodec, nullCodec]
+    | .literal k ls, a => by
+        show AdmA (.literal k ls) a = true ↔ ((denote (.literal k ls)).p a).isSome = true
+        cases k
+        case number =>
+          cases a
+          case n x =>
+            -- `numberCodec.p` is a constructor wrapper, so the row is the payload comparison
+            -- on both sides
+            rw [show (denote (Term.literal .number ls)).p (.n x)
+                   = (literalCodec .number ls).p (.n x) from rfl,
+               literalNCodec_p_n, numberCodec_p_n]
+            simp [AdmALit, inL]
+          -- for every other attribute the base's own read is `none` by a match
+          all_goals (simp only [AdmA_literal, AdmALit]; rfl)
+        -- the four bases whose stored attribute *is* the value, one tight simp set each
+        case string => exact AdmALit_string_exact ls a
+        case boolean => exact AdmALit_boolean_exact ls a
+        case binary => exact AdmALit_binary_exact ls a
+        case null => exact AdmALit_null_exact ls a
+
+/-- The read-side gate at DynamoDB is the generic gate. -/
+theorem refineReads_eq_alg (t : Term) (q : Value → Bool) :
+    refineReads t q = Alg.refineReads t q := by
+  funext a
+  unfold refineReads Alg.refineReads
+  rw [denote_eq_alg]
+  -- the two matches are different auxiliary definitions, and a match reduces only at a
+  -- constructor
+  cases (Alg.denote t).p a <;> rfl
+
 mutual
-/-- **Every attribute row is exact** — all twenty-one, as on the value side, and nothing
-    declines on either. `refine` was the last difference between
-    the two sides and is exact now: its row decodes and then applies `q`.
-    which used to be the other half of that asymmetry, is exact here because its row is the
-    union of the two channels it reads on.
 
-    The numeric rows are the interesting ones: they reach `dom(p)` through the host's decimal reader,
-    which is axiomatized, and are exact anyway — a row may *call* an axiomatized function
-    even though no finite set of numerals describes its domain. §5 wrote `⊤` there. -/
-theorem AdmA_exact : ∀ (t : Term), ExactA t
-  -- the rows §5 excused on this side too
-  | .list pre sp suf =>
-      ExactA_list (exactAL_mem pre (AdmA_exactL pre)) (exactAO_mem sp (AdmA_exactO sp))
-        (exactAL_mem suf (AdmA_exactL suf))
-  | .object b => AdmA_exactB b
-  | .opaq => ExactA_opaq
-  -- both sides are empty, so the equivalence is `False ↔ False`
-  | .never => fun _ => Iff.rfl
-  | .var _ => fun _ => Iff.rfl
-  | .mu _ => fun _ => Iff.rfl
-  -- exact because the constructor narrowed, not because the row sharpened
-  | .set t => ExactA_set t
-  -- see `ExactA_union`
-  | .union opts => ExactA_union (exactAL_mem opts (AdmA_exactL opts))
+/-- The DynamoDB rows are the generic rows at `dynSyn`. -/
+theorem AdmA_eq_alg : ∀ t : Term, AdmA t = Alg.AdmA t
+  | .base _ | .literal _ _ | .never | .opaq | .var _ => rfl
+  | .refine t p => by
+      show (fun a => AdmA t a && refineReads t p.eval a)
+        = fun a => Alg.AdmA t a && Alg.refineReads t p.eval a
+      rw [AdmA_eq_alg t, refineReads_eq_alg]
+      rfl
+  | .held t P _ g => by
+      show (fun a => AdmA t a && refineReads t (fun w => Adm P (g w)) a)
+        = fun a => Alg.AdmA t a && Alg.refineReads t (fun w => Alg.Adm P (g w)) a
+      rw [AdmA_eq_alg t, refineReads_eq_alg, Adm_eq_alg P]
+      rfl
+  | .union opts => by
+      show (fun a => anyP (AdmAList opts) a) = fun a => anyP (Alg.AdmAList opts) a
+      rw [AdmAList_eq_alg opts]
+      rfl
+  | .set t => by
+      show (fun a => ((setCodec (denote t)).p a).isSome)
+        = fun a => ((setCodec (Alg.denote t)).p a).isSome
+      rw [denote_eq_alg]
+  | .mu b => by
+      show (fun a => ((denote (.mu b)).p a).isSome) = fun a => ((Alg.denote (.mu b)).p a).isSome
+      rw [denote_eq_alg]
+      rfl
+  | .list pre sp suf => by
+      funext a
+      cases a
+      case l as =>
+        show alignPL (AdmAList pre) (AdmAOptT sp) (AdmAList suf) as
+          = alignPL (Alg.AdmAList pre) (Alg.AdmAOptT sp) (Alg.AdmAList suf) as
+        rw [AdmAList_eq_alg pre, AdmAOptT_eq_alg sp, AdmAList_eq_alg suf]
+      all_goals rfl
+  | .object b => AdmABody_eq_alg b
 
-  | .base k => by
-      intro a; cases k <;> cases a <;> simp [AdmA, inBaseA, denote, stringCodec, numberCodec,
-        booleanCodec, binaryCodec, nullCodec]
-  -- Three rows into one, and `number`'s no longer needs the host lookup that used to make it
-  -- the awkward one: both numeric bases now read the attribute payload directly.
-  | .literal k ls => by
-      intro a
-      cases k
-      case number =>
-        cases a
-        case n x =>
-          -- `numberCodec.p` is a constructor wrapper now, so the host's decimal reader bind and the
-          -- `Numeral.WF` gate this used to walk through are both gone and the row is the
-          -- payload comparison on both sides
-          rw [show (denote (Term.literal .number ls)).p (.n x)
-                 = (literalCodec .number ls).p (.n x) from rfl,
-             literalNCodec_p_n, numberCodec_p_n]
-          simp [AdmALit, inL]
-        -- for every other attribute the base's own read is `none` by a match, so this is
-        -- `rfl` once `AdmA`'s recursion is unfolded
-        all_goals (simp only [AdmA_literal, AdmALit]; rfl)
-      -- the four bases whose stored attribute *is* the value, one tight simp set each: a
-      -- shared set has to mention every base's codec, and one of those is `number`
-      case string => exact AdmALit_string_exact ls a
-      case boolean => exact AdmALit_boolean_exact ls a
-      case binary => exact AdmALit_binary_exact ls a
-      case null => exact AdmALit_null_exact ls a
-  | .held c P f g => by
-      have hc := AdmA_exact c
-      have hP := Adm_exact P
-      intro a
-      simp only [AdmA, refineReads, denote_held, Alg.Codec.restrict, Alg.Codec.through,
-        Bool.and_eq_true, hc a]
-      cases (denote c).p a with
-      | none => simp
-      | some w => simpa using Bool.eq_iff_iff.mpr (hP (g w))
-  -- **the row this file said could not exist.** `restrict`'s `p` is the base's `bind`ed
-  -- through `q`, so `dom(p)` is `dom` of the base's intersected with `q` of what it decodes
-  -- to — and that is what the row computes, term for term.
-  | .refine c p => by
-      have hc := AdmA_exact c
-      intro a
-      simp only [AdmA, refineReads, denote_refine, Alg.Codec.restrict, Bool.and_eq_true, hc a]
-      cases hx : (denote c).p a <;> simp []
+/-- …at a payload. -/
+theorem AdmABody_eq_alg : ∀ b : Body, AdmABody b = Alg.AdmABody b
+  | .mk fields fld wild => by
+      have hf : (fun k => AdmAField (fld k)) = fun k => Alg.AdmAField (fld k) :=
+        funext fun k => AdmAField_eq_alg (fld k)
+      funext a
+      cases a
+      case m keys g =>
+        show (reqPresentT fields fld keys &&
+            objAdmV ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) keys g)
+          = (reqPresentT fields fld keys &&
+            objAdmV ⟨fields, fun k => Alg.AdmAField (fld k)⟩ (Alg.AdmAWild wild) keys g)
+        rw [hf, AdmAWild_eq_alg wild]
+      all_goals rfl
 
-/-- …and its read-side twin, for the reason the write side gives. -/
-theorem AdmA_exactB : ∀ (b : Body), ExactA (.object b)
-  | .mk _ fld wild =>
-      ExactA_object (fun k => AdmA_exactF (fld k)) (exactAW_codec wild (AdmA_exactW wild))
+/-- …at a slot. -/
+theorem AdmAField_eq_alg : ∀ s : ObjectSlot, AdmAField s = Alg.AdmAField s
+  | .req t | .optional t => AdmA_eq_alg t
 
-theorem AdmA_exactL : ∀ (ts : List Term), ExactAL ts
-  | [] => trivial
-  | t0 :: ts => ⟨AdmA_exact t0, AdmA_exactL ts⟩
+/-- …at the open block. -/
+theorem AdmAWild_eq_alg : ∀ w : Option Term, AdmAWild w = Alg.AdmAWild w
+  | none => rfl
+  | some t => congrArg some (AdmA_eq_alg t)
 
-theorem AdmA_exactO : ∀ (tail : Option Term), ExactAO tail
-  | none => trivial
-  | some t0 => AdmA_exact t0
+/-- …at a list of terms. -/
+theorem AdmAList_eq_alg : ∀ ts : List Term, AdmAList ts = Alg.AdmAList ts
+  | [] => rfl
+  | t :: ts => by
+      show AdmA t :: AdmAList ts = Alg.AdmA t :: Alg.AdmAList ts
+      rw [AdmA_eq_alg t, AdmAList_eq_alg ts]
 
-/-- Each current-schema slot reads exactly through its carried term. -/
-theorem AdmA_exactF : ∀ (fd : ObjectSlot), ExactAField fd
-  | .req t0 => fun a => AdmA_exact t0 a
-  | .optional t0 => fun a => AdmA_exact t0 a
+/-- …at an optional term. -/
+theorem AdmAOptT_eq_alg : ∀ o : Option Term, AdmAOptT o = Alg.AdmAOptT o
+  | none => rfl
+  | some t => congrArg some (AdmA_eq_alg t)
 
-theorem AdmA_exactW : ∀ (wild : Option Term), ExactAW wild
-  | none => trivial
-  | some t0 => AdmA_exact t0
 end
+
+/-- **Every attribute row is exact**, as on the value side. The term language proves it once
+    for every universe (`Alg.AdmA_exact`), and this is that theorem at DynamoDB. The numeric
+    rows read the attribute payload directly, so a row reaches `dom(p)` with no appeal to the
+    host's decimal reader. -/
+theorem AdmA_exact (t : Term) : ExactA t := fun a => by
+  rw [AdmA_eq_alg, denote_eq_alg]
+  exact Alg.AdmA_exact t a
 
 /-! ### The same equation on the read side
 

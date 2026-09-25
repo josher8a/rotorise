@@ -86,7 +86,7 @@ theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
   | map keys g =>
       -- the record's guard is vacuous over `∅`; a `simp` that unfolds the guard reaches
       -- `Finset.instIsEmpty`, so the guard stays folded and the fact is handed in
-      have hp : valPresentT ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
+      have hp : valPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [Adm_opaq_map]
       simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inBase,
@@ -142,7 +142,7 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
       exact decide_eq_decide.mpr Iff.rfl
   | m keys g =>
       -- the record's guard stays folded, for the reason `Adm_opaqUnfold` gives
-      have hp : reqPresentT ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
+      have hp : reqPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [AdmA_opaq_m]
       simp [opaqUnfold, AdmAAny, anyP, AdmA, inBaseA, AdmABody, Term.array,

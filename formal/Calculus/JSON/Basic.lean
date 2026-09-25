@@ -1,4 +1,5 @@
 import Calculus.Lang.HeldFree
+import Calculus.Lang.ExactA
 
 /-!
 # A second universe: JSON
@@ -203,6 +204,31 @@ theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum := by
       · trivial
       · exact nomatch hx
   exact Alg.compat_of_HF id_topLaws canon_idCodec (hf s hs) (hf t ht) (hl t ht)
+
+/-! ## Exactness
+
+The row of a kind is the kind test. So the exactness of every admission row of the term language
+holds at `jsonSyn`, by `Alg.Adm_exact` and `Alg.AdmA_exact`. -/
+
+/-- The gate admits exactly the values of its kind. -/
+theorem gate_isSome (m : JMember) (v : Json) : (gate m v).isSome = decide (v.member = m) := by
+  unfold gate
+  split <;> simp_all
+
+/-- The value-side row of a kind. -/
+instance jsonPrimAdm : Alg.PrimAdm jsonSyn where
+  admV m v := decide (v.member = m)
+  admV_exact m v := by rw [show (Alg.Sem.ground m).e v = gate m v from rfl, gate_isSome]
+
+/-- The attribute-side row of a kind: the stored value is the caller value. -/
+instance jsonPrimAdmA : Alg.PrimAdmA jsonSyn where
+  admA m a := decide (a.member = m)
+  admA_exact m a := by rw [show (Alg.Sem.ground m).p a = gate m a from rfl, gate_isSome]
+
+/-- The string-or-number term admits exactly what its codec writes, and reads exactly what its
+    codec reads. -/
+theorem exact_strOrNum : Alg.ExactV strOrNumTerm ∧ Alg.ExactA strOrNumTerm :=
+  ⟨Alg.Adm_exact _, Alg.AdmA_exact _⟩
 
 /-! ## Arrays -/
 
