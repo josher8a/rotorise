@@ -833,7 +833,7 @@ asked to write and \texttt{A(c)\ ⊆\ 𝔸} for the attributes it may be asked t
 
 \begin{definition}[(Compat) compatibility]
 \label{cond:compat}
-\lean{Calculus.Compat, Calculus.PairwiseCompat}
+\lean{Calculus.Alg.Compat, Calculus.PairwiseCompat}
 \leanok
 \begin{verbatim}
 Compat(c, d)     ∀ a t.  p_c(a) = t  ∧  (a ∈ dom(p_d)  ∨  t ∈ dom(e_d))
@@ -850,7 +850,7 @@ semigroups: two partial bijections are compatible exactly when their union is a 
 \begin{theorem}[a compatible union is lawful]
 \label{thm:join-lawful}
 \uses{cond:compat}
-\lean{Calculus.lawful_altCodec, Calculus.altCodec_e_of_mem}
+\lean{Calculus.Alg.lawful_altCodec, Calculus.Alg.altCodec_e_of_mem}
 \leanok
 Over lawful, pairwise compatible options, the union is lawful, and it writes each value that any
 option writes, at the attribute that option writes.
@@ -859,7 +859,7 @@ option writes, at the attribute that option writes.
 \begin{theorem}[the order of the options is unobservable]
 \label{thm:join-perm}
 \uses{cond:compat}
-\lean{Calculus.altCodec_perm}
+\lean{Calculus.Alg.altCodec_perm}
 \leanok
 Over lawful, pairwise compatible options, a permutation of the options gives the same codec, on
 the nose.
@@ -1007,7 +1007,7 @@ obligation holds, because each option that admits a value writes it at one attri
 \begin{theorem}[first-match resolution is monotone]
 \label{thm:confluent-mono}
 \uses{cond:compat}
-\lean{Calculus.selectF_mono, Calculus.selectF_mono_list}
+\lean{Calculus.Alg.selectF_mono, Calculus.Alg.selectF_mono_list}
 \leanok
 Monotone, given that the options that admit agree.
 \end{theorem}
@@ -1015,7 +1015,7 @@ Monotone, given that the options that admit agree.
 \begin{theorem}[first-match resolution is continuous]
 \label{thm:confluent-continuous}
 \uses{cond:compat}
-\lean{Calculus.selectF_continuous_list, Calculus.selectF_continuous}
+\lean{Calculus.Alg.selectF_continuous_list, Calculus.Alg.selectF_continuous}
 \leanok
 Continuous, and in general this needs the obligation \textbf{at each stage} too. The two-option case
 escapes it by putting the growing option first, which makes it automatically the first admitter.
@@ -1424,7 +1424,7 @@ everywhere both are defined.
 \begin{theorem}[held(c, id, id) ≡ c]
 \label{eq:held-id}
 \uses{rule:held}
-\lean{Calculus.equiv_through_id, Calculus.equiv_denote_held_id}
+\lean{Calculus.Alg.equiv_through_id, Calculus.equiv_denote_held_id}
 \leanok
 \texttt{held(c,\ id,\ id)\ ≡\ c}. Identity.
 \end{theorem}
@@ -1432,7 +1432,7 @@ everywhere both are defined.
 \begin{theorem}[isos compose]
 \label{eq:held-comp}
 \uses{rule:held}
-\lean{Calculus.equiv_through_comp, Calculus.equiv_denote_held_comp}
+\lean{Calculus.Alg.equiv_through_comp, Calculus.equiv_denote_held_comp}
 \leanok
 \texttt{held(held(c,\ f,\ g),\ f′,\ g′)\ ≡\ held(c,\ f\ ∘\ f′,\ g′\ ∘\ g)}. Isos compose; note the
 reversal on the reading half.
@@ -1441,7 +1441,7 @@ reversal on the reading half.
 \begin{theorem}[prisms meet]
 \label{eq:refine-meet}
 \uses{rule:refine}
-\lean{Calculus.equiv_restrict_meet, Calculus.equiv_denote_refine_meet}
+\lean{Calculus.Alg.equiv_restrict_meet, Calculus.equiv_denote_refine_meet}
 \leanok
 \texttt{refine(refine(c,\ q),\ q′)\ ≡\ refine(c,\ q\ ∩\ q′)}. Prisms meet.
 \end{theorem}
@@ -1449,7 +1449,7 @@ reversal on the reading half.
 \begin{theorem}[a full refinement is none]
 \label{eq:refine-full}
 \uses{rule:refine}
-\lean{Calculus.equiv_restrict_full, Calculus.equiv_denote_refine_full}
+\lean{Calculus.Alg.equiv_restrict_full, Calculus.equiv_denote_refine_full}
 \leanok
 \texttt{refine(c,\ T)\ ≡\ c} for \texttt{⊢\ c\ :\ T\ ⇝\ μ}. A refinement admitting everything is no
 refinement.
@@ -1458,7 +1458,7 @@ refinement.
 \begin{theorem}[a legacy reading that is the current one]
 \label{eq:legacy-self}
 \uses{rule:legacy}
-\lean{Calculus.equiv_extendRead_self}
+\lean{Calculus.Alg.equiv_extendRead_self}
 \leanok
 \texttt{extendRead(c,\ p\_c)\ ≡\ c}. An older reading that is the current one adds nothing.
 \end{theorem}
@@ -1466,7 +1466,7 @@ refinement.
 \begin{theorem}[a migration agrees on the canonical set]
 \label{eq:legacy-can}
 \uses{rule:legacy,cond:R}
-\lean{Calculus.extendRead_eq_on_can}
+\lean{Calculus.Alg.extendRead_eq_on_can}
 \leanok
 \texttt{extendRead(c,\ r)\ ≈\ c} on \texttt{Can(c)}, for lawful \texttt{c}. A migration differs from a
 lawful current encoding only off the canonical set, and the premise it needs is \rulelink{cond:R}{\textbf{(R)}}.
@@ -1475,7 +1475,7 @@ lawful current encoding only off the canonical set, and the premise it needs is 
 \begin{theorem}[choice of one]
 \label{eq:union-single}
 \uses{rule:union}
-\lean{Calculus.equiv_altCodec_single}
+\lean{Calculus.Alg.equiv_altCodec_single}
 \leanok
 \texttt{union(c)\ ≡\ c}. Choice of one.
 \end{theorem}
@@ -1492,7 +1492,7 @@ admitter of the nested union is the first admitter of the flat one, so nesting i
 \begin{theorem}[union is commutative]
 \label{eq:union-perm}
 \uses{rule:union,cond:compat}
-\lean{Calculus.equiv_altCodec_perm, Calculus.altCodec_perm, Calculus.equiv_altCodec_swap}
+\lean{Calculus.Alg.equiv_altCodec_perm, Calculus.Alg.altCodec_perm, Calculus.Alg.equiv_altCodec_swap}
 \leanok
 \texttt{union(c₁\ …\ cₙ)\ ≡\ union(c\_σ(1)\ …\ c\_σ(n))} for any permutation \texttt{σ}, over lawful, pairwise
 compatible options. Commutative: the first-admitter rule reads declaration order, and

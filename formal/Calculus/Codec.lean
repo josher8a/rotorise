@@ -1,5 +1,5 @@
 import Calculus.Domain
-import Calculus.AlgCombinators
+import Calculus.AlgRelations
 import Calculus.AlgMaps
 
 /-!
@@ -32,11 +32,29 @@ export Alg (Can IsoCancels ReadsCoherently Carrier can_iff_image SurvivesStore
   extendRead_p length_le_one_of_pairwise_false AdmitsAtMostOne select altCodec select_eq_some
   select_admits altCodec_e altCodec_p altCodec_e_admits altCodec_p_admits carrier_pointCodec
   carrier_through carrier_restrict carrier_extendRead carrier_altCodec lawful_pointCodec
-  funImage funImage_some funImage_isSome funImage_isSome_iff funImage_eq)
+  funImage funImage_some funImage_isSome funImage_isSome_iff funImage_eq
+  Sub sub_restrict_self optBot approx_extendRead approx_restrict selectF ConfluentAt selectF_admit
+  selectF_skip selectF_mono IsSupAt selectF_continuous selectF_mem selectF_of_mem
+  selectF_mono_list selectF_continuous_list Compat find?_attempt_V find?_attempt_A acts_of_find?_V
+  acts_of_find?_A Canon altCodec_e_of_mem altCodec_p_of_mem lawfulCore_altCodec lawful_altCodec
+  compat_of_exclusive compat_of_agree compat_of_common_bound compat_of_common_bound'
+  option_eq_of_some_iff altCodec_perm equiv_altCodec_perm equiv_altCodec_swap equiv_through_id
+  equiv_through_comp equiv_restrict_meet equiv_restrict_full extendRead_self_p
+  equiv_extendRead_self extendRead_eq_on_can equiv_altCodec_single through_μ restrict_μ
+  extendRead_μ select_nil_eq select_cons altCodec_nest_e altCodec_nest_p altCodec_assoc_heldSet)
 
 namespace Codec
-export Alg.Codec (ext ext_iff empty Ker.refl Ker.symm Ker.trans)
+export Alg.Codec (ext ext_iff empty Ker.refl Ker.symm Ker.trans Approx Approx.refl
+  Approx.empty_le Equiv Equiv.refl Equiv.symm)
 end Codec
+
+namespace ConfluentAt
+export Alg.ConfluentAt (tail)
+end ConfluentAt
+
+namespace Compat
+export Alg.Compat (p_agree e_agree cross)
+end Compat
 
 namespace Lawful
 export Alg.Lawful (empty congr)

@@ -2,6 +2,7 @@ import Calculus.Lists
 import Calculus.Domain
 import Calculus.Alg
 import Calculus.AlgCombinators
+import Calculus.AlgRelations
 import Calculus.AlgMaps
 import Calculus.Codec
 import Calculus.Prisms

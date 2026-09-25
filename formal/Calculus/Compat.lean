@@ -3,7 +3,7 @@ import Calculus.Confluence
 /-!
 # Compatibility of the options of a union
 
-`Compat c d` (`Frontier.lean`) holds when each reading of `c` is a reading of `d` wherever `d`
+`Compat c d` holds when each reading of `c` is a reading of `d` wherever `d`
 acts at the attribute or at the value. A union of pairwise compatible lawful options is lawful
 (`lawful_altCodec`). Two codecs below one canonical codec are compatible
 (`compat_of_common_bound`). Every held-free term is below `opaque`, so held-free lawful terms are
@@ -12,48 +12,6 @@ observable (`flip_order_observable`).
 -/
 
 namespace Calculus
-
-/-- **The cross half**: `d` reads back from the attribute of `c` a value that both write. -/
-theorem Compat.cross {c d : Codec} (hc : Lawful c) (h : Compat c d) {v a}
-    (he : c.e v = some a) (hd : (d.e v).isSome = true) : d.p a = some v :=
-  h a v (hc.retract he) (Or.inr hd)
-
-/-- **Write agreement and read agreement give `Compat`** under canonical reads of `c`. So
-    `Compat` is the classical compatibility on partial bijections. -/
-theorem compat_of_agree {c d : Codec} (hcan : ∀ a t, c.p a = some t → c.e t = some a)
-    (hd : Lawful d)
-    (hE : ∀ v a b, c.e v = some a → d.e v = some b → a = b)
-    (hP : ∀ a t w, c.p a = some t → d.p a = some w → w = t) : Compat c d := by
-  intro a t hct hact
-  rcases hact with hq | he
-  · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hq
-    rw [hw, hP a t w hct hw]
-  · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp he
-    cases hE t a b (hcan a t hct) hb
-    exact hd.retract hb
-
-/-! ## The common bound -/
-
-/-- **Two codecs below one canonical bound are `Compat`.** The premises are minimal: the read
-    half of `Sub c u`, both halves of `Sub d u`, `Canon u`, and `retract` of `d`. -/
-theorem compat_of_common_bound {c d u : Codec}
-    (hcp : ∀ a v, c.p a = some v → u.p a = some v) (hd : Sub d u) (hu : Canon u)
-    (hdr : ∀ {t a}, d.e t = some a → d.p a = some t) : Compat c d := by
-  intro a t hp hact
-  have hup : u.p a = some t := hcp _ _ hp
-  rcases hact with hq | he
-  · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hq
-    have := hd.2 _ _ hw
-    rw [hup] at this; cases this; exact hw
-  · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp he
-    have := hd.1 _ _ hb
-    rw [hu a t hup] at this; cases this
-    exact hdr hb
-
-/-- **`compat_of_common_bound` with `Sub` on both sides and a lawful `d`.** -/
-theorem compat_of_common_bound' {c d u : Codec} (hc : Sub c u) (hd : Sub d u)
-    (hu : Canon u) (hdl : Lawful d) : Compat c d :=
-  compat_of_common_bound hc.2 hd hu hdl.retract
 
 /-- **Held-free lawful terms are pairwise `Compat`**: the common bound is `Ω`. -/
 theorem compat_of_HF {s t : Term} (hs : HF s) (ht : HF t) (hlt : Lawful (denote t)) :
@@ -140,10 +98,6 @@ theorem pairwiseCompat_array_literals :
   pairwiseCompat_of_HF ⟨⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟩⟩ (forall_mem_pair
     (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _))
     (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _)))
-
-/-- **A restriction is below the codec that it restricts.** -/
-theorem sub_restrict_self (c : Codec) (q : Value → Bool) : Sub (c.restrict q) c :=
-  ⟨fun _ _ h => (restrict_e.mp h).2, fun _ _ h => (restrict_p.mp h).1⟩
 
 /-- **`refine x Q` is below `x`.** -/
 theorem sub_denote_refine (x : Term) (Q : Pred) : Sub (denote (.refine x Q)) (denote x) :=
