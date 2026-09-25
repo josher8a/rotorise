@@ -28,8 +28,8 @@ read half.
 
 **The write side agrees only where both factors name a member**, and that is weaker than "all three
 write the same way". `μSyn` answers `none` for two different reasons — a term that writes no value
-at all (`never`) and a term that names no *single* stored member (`union`, `opaq`, `lazy`,
-`lazy`) — so a factor answering `none` constrains nothing. The two examples at the foot of this
+at all (`never`) and a term that names no *single* stored member (`union`, `opaq`, `mu`)
+— so a factor answering `none` constrains nothing. The two examples at the foot of this
 file are the witnesses: `union [string, null] ∧ null` is `null` and `opaq ∧ string` is `string`,
 and in each the meet names a member neither shared with its `none`-answering factor.
 
@@ -597,18 +597,15 @@ def zipF : List (Term → Option Term) → List Term → List (Option Term)
 
 mutual
 /-- **Every row that reads the right operand alone, written once.** The bottom, the four whose
-    admission is a function, a thunk, a refinement and a certified union answer the same way
-    whatever the left operand is, so they are stated here rather than restated per left
-    constructor. `lazy` is transparent: the row meets the left operand with the subterm, because
-    `Adm (.lazy t) = Adm t` and `AdmA (.lazy t) = AdmA t`. `fam` carries the left operand,
-    already applied. -/
+    admission is a function, a variable, a recursive term, a refinement and a certified union
+    answer the same way whatever the left operand is, so they are stated here rather than restated
+    per left constructor. `fam` carries the left operand, already applied. -/
 def meetSRight (fam : Term → Option Term) : Term → Option Term
   | .never => some .never
   | .held _ _ _ _ => none
   -- a closed variable is the bottom, and the meet states no recursive term
   | .var _ => some .never
   | .mu _ => none
-  | .lazy t => meetSRight fam t
   | .refine y p => if p.isData then (meetSRight fam y).map (fun z => Term.refineOf z p) else none
   | .union os => (allSome (meetSRightL fam os)).bind
       (fun zs => some (Term.ofOptions (zs.filter (fun z => !z.isNever))))
@@ -1343,7 +1340,6 @@ mutual
     operand. Every row keeps the left operand on the left. -/
 def Term.meet : Term → Term → Option Term
   | .never, _ => some .never
-  | .lazy x, y => Term.meet x y
   | .held _ _ _ _, .never => some .never
   | .held _ _ _ _, _ => none
   | .var _, _ => some .never
@@ -1398,7 +1394,6 @@ mutual
 def hasHeld : Term → Bool
   | .held _ _ _ _ => true
   | .refine t _ => hasHeld t
-  | .lazy t => hasHeld t
   | .mu t => hasHeld t
   | .list pre sp suf => hasHeldL pre || hasHeldO sp || hasHeldL suf
   | .object b => hasHeldB b
@@ -1425,7 +1420,6 @@ mutual
 def writeView : Term → Term
   | .held _ P _ _ => writeView P
   | .refine t p => .refine (writeView t) p
-  | .lazy t => .lazy (writeView t)
   | .list pre sp suf => .list (writeViewL pre) (writeViewO sp) (writeViewL suf)
   | .object b => .object (writeViewB b)
   | .union os => .union (writeViewL os)
@@ -1451,7 +1445,6 @@ mutual
 def readView : Term → Term
   | .held t _ _ _ => readView t
   | .refine t p => if hasHeld t then readView t else .refine t p
-  | .lazy t => .lazy (readView t)
   | .list pre sp suf => .list (readViewL pre) (readViewO sp) (readViewL suf)
   | .object b => .object (readViewB b)
   | .union os => .union (readViewL os)
@@ -1711,23 +1704,6 @@ example : ¬ (μSyn Term.null = μSyn (Term.union [.string, .null])) := by
   simp [μSyn, μSynList, unanimous]
 
 example : Term.meet .opaq .string = some .string := by rfl
-
-/-! ### `lazy` is transparent, and it constrains nothing
-
-`Term.lazy` carries a plain `Term`, not a closure, so the admission of `.lazy t` is the
-admission of `t` on both halves (`ExactV.lean` and `ExactA.lean`). The meet reads through the
-thunk on either side. `μSyn (.lazy t)` is `none`, so a `lazy` factor names no member and
-constrains nothing, exactly as an `opaq` factor does: the answer comes back unwrapped. -/
-
-/-- Two thunks over disjoint bases share no value. -/
-example : Term.meet (.lazy .string) (.lazy .number) = some .never := by rfl
-
-/-- The thunk is transparent on the left alone. -/
-example : Term.meet (.lazy .string) .number = some .never := by rfl
-
-/-- The `opaq` rule: the `lazy` factor names no member, so the meet takes the other factor's
-    answer without the wrapper. -/
-example : Term.meet (.lazy .string) .string = some .string := by rfl
 
 /-- `held` still refuses, and the ground is its alone: it carries host
     functions (`Term.lean`), so no term states the intersection of two of them. -/
@@ -2163,10 +2139,9 @@ and the depth bounds the well-founded proof carries are gone with it. -/
 
 /-- The right operands `meetSRight` hands to the family: everything its own rows do not answer.
     A family's catch-all row answers the bottom, which is right for these and wrong for the
-    seven above, so the predicate below carries the same split the definition makes. `lazy`
-    stays outside, because its own row meets the subterm and hands the family no thunk. -/
+    seven above, so the predicate below carries the same split the definition makes. -/
 def Delegated : Term → Prop
-  | .never | .held _ _ _ _ | .lazy _ | .refine _ _ | .union _ | .var _ | .mu _ => False
+  | .never | .held _ _ _ _ | .refine _ _ | .union _ | .var _ | .mu _ => False
   | _ => True
 
 /-- `f` answers the meet with one term fixed on the left, at EVERY right operand. The container
@@ -2205,9 +2180,6 @@ theorem Adm_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmFam x fa
   | .var _, _, h, _ => by
       simp only [meetSRight, Option.some.injEq] at h; subst h; simp [Adm]
   | .mu _, _, h, _ => by simp [meetSRight] at h
-  | .lazy t, _, h, v => by
-      rw [meetSRight] at h
-      simpa [Adm] using Adm_meetSRight hf t _ h v
   | .refine y p, _, h, v => by
       simp only [meetSRight] at h
       split at h
@@ -3062,9 +3034,6 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
           | exact absurd h (by simp [Term.meet])
-  | .lazy x, y, _, h, v => by
-      rw [Term.meet] at h
-      simpa [Adm] using Adm_meet x y _ h v
   | .refine x p, y, _, h, v => by
       cases y with
       | never =>
@@ -3213,10 +3182,6 @@ theorem writes_meetSRight {x : Term} {fam : Term → Option Term} (hf : WritesFa
       simp only [meetSRight, Option.some.injEq] at h; subst h
       exact absurd hz (by simp [μSyn])
   | .held _ _ _ _, _, h, _, _ => by simp [meetSRight] at h
-  | .lazy t, _, h, m, hz => by
-      rw [meetSRight] at h
-      refine ⟨(writes_meetSRight hf t _ h m hz).1, ?_⟩
-      intro my hmy; exact absurd hmy (by simp [μSyn])
   | .refine y p, _, h, m, hz => by
       simp only [meetSRight] at h
       split at h
@@ -3497,10 +3462,6 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
           | (simp only [Term.meet, Option.some.injEq] at h; subst h
              exact absurd hz (by simp [μSyn]))
           | exact absurd h (by simp [Term.meet])
-  | .lazy x, y, _, h, m, hz => by
-      rw [Term.meet] at h
-      refine ⟨?_, (meet_writes x y _ h m hz).2⟩
-      intro mx hmx; exact absurd hmx (by simp [μSyn])
   | .refine x p, y, _, h, m, hz => by
       cases y with
       | never =>
@@ -4611,11 +4572,6 @@ theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x 
       simp only [meetSRight, Option.some.injEq] at h; subst h
       exact ⟨fun a => by simp [AdmA], fun a _ hb => absurd hb (by simp [AdmA])⟩
   | .held _ _ _ _, _, h => by simp [meetSRight] at h
-  | .lazy t, _, h => by
-      rw [meetSRight] at h
-      obtain ⟨ih1, ih2⟩ := admA_meetSRight hf t _ h
-      exact ⟨fun a => by simpa [AdmA] using ih1 a,
-        fun a ha hb => ih2 a ha (by simpa [AdmA] using hb)⟩
   | .refine y p, _, h => by
       simp only [meetSRight] at h
       split at h
@@ -5500,11 +5456,6 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
           | (simp only [Term.meet, Option.some.injEq] at h; subst h
              exact ⟨fun a => by simp [AdmA], fun a _ hb => absurd hb (by simp [AdmA])⟩)
           | exact absurd h (by simp [Term.meet])
-  | .lazy x, y, _, h => by
-      rw [Term.meet] at h
-      obtain ⟨ih1, ih2⟩ := AdmA_meet_both x y _ h
-      exact ⟨fun a => by simpa [AdmA] using ih1 a,
-        fun a ha hb => ih2 a (by simpa [AdmA] using ha) hb⟩
   | .refine x p, y, _, h => by
       cases y with
       | never =>
@@ -5894,9 +5845,6 @@ theorem writeLe_of : ∀ t : Term, WriteLe t
   | .refine t p => fun v h => by
       simp only [writeView, Adm, Bool.and_eq_true] at h ⊢
       exact ⟨writeLe_of t v h.1, h.2⟩
-  | .lazy t => fun v h => by
-      simp only [writeView]
-      exact writeLe_of t v h
   | .list pre sp suf => writeLe_list (writeLe_ofL pre) (writeLe_ofO sp) (writeLe_ofL suf)
   | .object (.mk fs f w) => writeLe_object (fun k => writeLe_ofS (f k)) (writeLe_ofO w)
   | .union os => fun v h => by
@@ -5933,9 +5881,6 @@ theorem readLe_of : ∀ t : Term, ReadLe t
       split
       · exact readLe_of t a (Bool.and_eq_true_iff.mp h).1
       · exact h
-  | .lazy t => fun a h => by
-      simp only [readView]
-      exact readLe_of t a h
   | .list pre sp suf => readLe_list (readLe_ofL pre) (readLe_ofO sp) (readLe_ofL suf)
   | .object (.mk fs f w) => readLe_object (fun k => readLe_ofS (f k)) (readLe_ofO w)
   | .union os => fun a h => by
@@ -6310,11 +6255,6 @@ theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam 
   | .var _, _, h, _, _ => by
       simp only [meetSRight, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
   | .held _ _ _ _, _, h, _, _ => by simp [meetSRight] at h
-  | .lazy t, _, h, hx, hy => by
-      rw [meetSRight] at h
-      refine typed_meetSRight hf hA t _ h hx ?_
-      obtain ⟨T, μ, hT⟩ := hy
-      cases hT with | lazy h' => exact ⟨_, _, h'⟩
   | .refine y p, _, h, hx, hy => by
       simp only [meetSRight] at h
       split at h
@@ -6620,11 +6560,6 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
           | exact absurd h (by simp [Term.meet])
-  | .lazy x, y, _, h, hx, hy => by
-      rw [Term.meet] at h
-      refine typed_meet x y _ h ?_ hy
-      obtain ⟨T, μ, hT⟩ := hx
-      cases hT with | lazy h' => exact ⟨_, _, h'⟩
   | .refine x p, y, _, h, hx, hy => by
       cases y with
       | never =>

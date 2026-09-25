@@ -154,7 +154,6 @@ def occV : Term → Slot → Bool
   | .object _   => occOnly .map
   | .held _ P _ _ => occV P
   | .refine t _  => occV t
-  | .lazy t      => occV t
   | .union opts  => occVL opts
   | .opaq  => occTop
   -- a closed variable is the bottom, and a recursive term writes where its body does: its
@@ -188,7 +187,6 @@ def occA : Term → Member → Bool
   | .object _   => occOnly .M
   | .refine t _  => occA t
   | .held t _ _ _ => occA t
-  | .lazy t      => occA t
   | .union opts  => occAL opts
   | .opaq  => occTop
   | .var _ => occNone
@@ -290,10 +288,6 @@ theorem occV_open : ∀ (t : Term) (ρ : List Codec) (v : Value),
       rcases occV_open t ρ v ht with h1 | ⟨i, hi, he⟩
       · exact Or.inl (by simpa [occV] using h1)
       · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
-  | .lazy t, ρ, v, h => by
-      rcases occV_open t ρ v h with h1 | ⟨i, hi, he⟩
-      · exact Or.inl (by simpa [occV] using h1)
-      · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
   | .union opts, ρ, v, h => by
       obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
       obtain ⟨o, ho, hoe, -⟩ := altCodec_e_admits ha
@@ -389,10 +383,6 @@ theorem occA_open : ∀ (t : Term) (ρ : List Codec) (a : Attr),
       obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
       obtain ⟨hc, -⟩ := restrict_p.mp hw
       rcases occA_open t ρ a (by rw [hc]; rfl) with h1 | ⟨i, hi, he⟩
-      · exact Or.inl (by simpa [occA] using h1)
-      · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
-  | .lazy t, ρ, a, h => by
-      rcases occA_open t ρ a h with h1 | ⟨i, hi, he⟩
       · exact Or.inl (by simpa [occA] using h1)
       · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
   | .union opts, ρ, a, h => by

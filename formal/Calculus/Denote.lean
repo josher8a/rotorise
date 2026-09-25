@@ -57,9 +57,7 @@ The `Option` in `Codec.μ` is `Codec.μ`'s own — a codec that writes no attrib
 
 mutual
 
-/-- The member a term stores, syntactically — the `⇝` index computed from the term.
-    Fuel-free: `lazy` concludes `⊤` (the doc's `(lazy)` rule), so the thunk is never
-    forced. -/
+/-- The member a term stores, syntactically — the `⇝` index computed from the term. -/
 def μSyn : Term → Option Member
   | .string => some .S
   | .literal k _ => some k.member
@@ -72,7 +70,6 @@ def μSyn : Term → Option Member
   | .list _ _ _ => some .L
   | .held t _ _ _ => μSyn t
   | .refine t _ => μSyn t
-  | .lazy _ => none
   | .opaq => none
   -- a closed term reads an unbound variable as the bottom, and a recursive term concludes `⊤`
   | .var _ => none
@@ -160,8 +157,6 @@ def denote : Term → (ρ : List Codec := []) → Codec
   | .held inner outer f g, ρ =>
       ((denote inner ρ).through f g).restrict fun v => ((denote outer ρ).e v).isSome
   | .refine inner p, ρ => (denote inner ρ).restrict p.eval
-  -- `(lazy)` concludes `⊤`: the pair is the thunk's, the member is not.
-  | .lazy inner, ρ => { denote inner ρ with μ := none }
   -- `opaque` is the recursive codec of one fixed body (`Opaque.lean`)
   | .opaq, _ => muCodec opaqStep
   | .object b, ρ => bodySem b ρ
@@ -230,7 +225,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .list _ _ _ => rfl
   | .held t' _ _ _ => denote_μ t'
   | .refine t' _ => denote_μ t'
-  | .lazy _ | .opaq | .never | .var _ | .mu _ => rfl
+  | .opaq | .never | .var _ | .mu _ => rfl
   | .object b => bodySem_μ b
   | .union opts => by
       show unanimous (denoteμs opts) = unanimous (μSynList opts)

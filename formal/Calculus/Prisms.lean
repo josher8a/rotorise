@@ -574,12 +574,6 @@ theorem Carrier.congr {c d : Codec} (he : c.e = d.e) (hp : c.p = d.p)
   · intro v a hx; rw [he] at hx; exact hT v (h.domE hx)
   · intro a v hx; rw [hp] at hx; exact hT v (h.ranP hx)
 
-/-- Forgetting the member index preserves the laws — `(lazy)` concludes `⊤`. -/
-theorem Lawful.μNone {c : Codec} (h : Lawful c) : Lawful { c with μ := none } := by
-  refine ⟨h.retract, h.canon, ?_⟩
-  intro _ h'
-  exact nomatch h'
-
 end
 
 end Calculus

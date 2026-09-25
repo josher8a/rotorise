@@ -107,9 +107,6 @@ theorem denote_agree : ∀ (t : Term), t.guarded = true → ∀ (d : Nat) (ρ₁
       | 0 => exact UseAgree.mono (u' := 2) hc (by omega)
       | i + 1 => exact h i
   | .refine t p, hg, d, ρ₁, ρ₂, h => agreeLe_restrict (denote_agree t hg d ρ₁ ρ₂ h) p.eval
-  | .lazy t, hg, d, ρ₁, ρ₂, h =>
-      let ih := denote_agree t hg d ρ₁ ρ₂ h
-      ⟨ih.e, ih.p⟩
   | .held t P f g, hg, _, ρ₁, ρ₂, h => by
       simp only [Term.guarded, Bool.and_eq_true] at hg
       have ht := AgreeLe.eq_of_forall fun d' =>

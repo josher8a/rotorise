@@ -433,10 +433,8 @@ describe('terms', () => {
         expect(emitted.split('Body.mk')).toHaveLength(3)
     })
 
-    it('forces a lazy and emits what it finds', () => {
-        expect(leanTermOf(erase(lazy(() => string)))).toBe(
-            'Term.lazy (Term.string)',
-        )
+    it('prints a thunk that closes no cycle as the term it returns', () => {
+        expect(leanTermOf(erase(lazy(() => string)))).toBe('Term.string')
     })
 
     /**
@@ -561,11 +559,11 @@ describe('what cannot be emitted', () => {
      */
     it('prints a schema that recurses below a list as a binder whose variable sits in the list', () => {
         expect(leanTermOf(json)).toBe(
-            'Term.mu (Term.union [Term.string, Term.array (Term.lazy (Term.var 0))])',
+            'Term.mu (Term.union [Term.string, Term.array (Term.var 0)])',
         )
         // the top thunk of `Category` returns the object, and the object holds the same thunk
         expect(leanTermOf(erase(Category))).toMatch(
-            /^Term\.lazy \(Term\.mu \(Term\.object .*Term\.array \(Term\.lazy \(Term\.var 0\)\).*\)\)$/,
+            /^Term\.mu \(Term\.object .*Term\.array \(Term\.var 0\).*\)$/,
         )
     })
 
@@ -575,12 +573,10 @@ describe('what cannot be emitted', () => {
      * `.vectors.full.lean` carries the verdict.
      */
     it('prints a thunk that returns itself as a binder the guard refuses', () => {
-        expect(leanTermOf(selfThunk)).toBe('Term.mu (Term.lazy (Term.var 0))')
+        expect(leanTermOf(selfThunk)).toBe('Term.mu (Term.var 0)')
         expect(
             leanGuard({ name: 'self_thunk', codec: selfThunk, guarded: false }),
-        ).toContain(
-            'Term.guarded (Term.mu (Term.lazy (Term.var 0))) = false := rfl',
-        )
+        ).toContain('Term.guarded (Term.mu (Term.var 0)) = false := rfl')
     })
 
     /**

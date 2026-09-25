@@ -1085,8 +1085,11 @@ const set = <const C extends AnyCodec>(
 ): AttributeCodec<ReadonlySet<Decoded<C>>, SetOf<C>> => {
     type T = Decoded<C>
     const inner = element as unknown as AttributeCodec<T>
-    // the member the element stores, read off its term — the deleted reader asked the definition and the
-    // two answer the same rows, but only the term's answer survives the reader going
+    // the member the element stores, read off its term. The check has two parts, and neither is a
+    // law of the codec algebra. A DynamoDB set, `SS`, `NS` or `BS`, holds elements of one member,
+    // which is a fact of the store universe. A thunk element answers no member here, because the
+    // host cannot force a thunk safely at declaration: forcing a recursive thunk can loop, which
+    // is a limit of the host's carrier. So a set of a thunk is refused
     const member = memberOf(inner.def)
     if (member !== 'S' && member !== 'N' && member !== 'B') {
         throw new CodecError(

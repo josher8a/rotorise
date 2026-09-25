@@ -146,7 +146,7 @@ def muStage (B : Codec → Codec) : Nat → Codec
   | n + 1 => B (muStage B n)
 
 /-- **The recursive codec**: each input read at the stage its own depth names. The member is
-    `⊤`, as `(lazy)` concludes it, because the stages need not agree on one. The held set is the
+    `⊤`, because the stages need not agree on one. The held set is the
     write domain, so the held set of a recursive term is its admission with no induction over
     the stages. -/
 def muCodec (B : Codec → Codec) : Codec :=

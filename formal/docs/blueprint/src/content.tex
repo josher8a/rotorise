@@ -580,17 +580,6 @@ extendRead(c, r) : adapted(T, μ)
 \end{verbatim}
 \end{definition}
 
-\begin{definition}[(lazy)]
-\label{rule:lazy}
-\lean{Calculus.Typed.lazy}
-\leanok
-\begin{verbatim}
-γ : 𝟙 → Codec    ⊢ γ(∗) : T ⇝ μ
-─────────────────────────────── (lazy)
-⊢ lazy(γ) : T ⇝ ⊤
-\end{verbatim}
-\end{definition}
-
 \begin{definition}[(var)]
 \label{rule:var}
 \lean{Calculus.Typed.var}
@@ -643,8 +632,7 @@ the body on both sides, and lawful stages give a lawful limit. No two options of
 \end{verbatim}
 \end{definition}
 
-These \texttt{⊤}s are forced for different reasons, and the distinction matters. \texttt{lazy} concludes \texttt{⊤} as the rule
-states it: computing a member would force the thunk, and a thunk may name a recursive schema. \texttt{mu} concludes \texttt{⊤}, because its
+These \texttt{⊤}s are forced for different reasons, and the distinction matters. \texttt{mu} concludes \texttt{⊤}, because its
 stages need not agree on one member. \texttt{held} carries a pair of opaque maps and there is nothing to ask, which is also why its
 premise is the cancellation law itself: nothing structural guarantees it, so the rule demands it.
 Demanding \rulelink{cond:R}{\textbf{(R)}} alone would under-demand, deriving a \texttt{⊤} term free to change stored members — the
@@ -753,9 +741,8 @@ dichotomy is \texttt{nullable(null)}, which under the guard is simply \texttt{nu
 
 \texttt{union(c,\ null)} replaces it at any subterm. Where no discharger decides the pair, the pair
 carries \rulelink{cond:compat}{\textbf{(Compat)}} as an \textbf{obligation}, not a refusal, so \texttt{union(c,\ null)} is
-derivable there. The meet reads through \texttt{lazy}, and the certificate reads a \texttt{held} through its
-two views, so a \texttt{held} or a \texttt{lazy} subterm beside \texttt{null} is certified where the meet or the views
-reach the bottom.
+derivable there. The certificate reads a \texttt{held} through its two views, so a \texttt{held} subterm
+beside \texttt{null} is certified where the views reach the bottom.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -1115,7 +1102,7 @@ which member of §1 it may store. The proofs of the meet's bottom rows use occup
 Both over-approximate, and over-approximating is the safe direction — if \texttt{X\ ⊆\ X′}, \texttt{Y\ ⊆\ Y′} and
 \texttt{X′\ ∩\ Y′\ =\ ∅} then \texttt{X\ ∩\ Y\ =\ ∅} — so a coarse answer costs a discharge and never buys a wrong one.
 A \texttt{held} takes its write occupancy from its caller-side term and its read occupancy from its
-stored-side term, so its two labels can differ. A \texttt{lazy} and a \texttt{refine} take their subterm's
+stored-side term, so its two labels can differ. A \texttt{refine} takes its subterm's
 occupancy. \texttt{mu\ b} takes the occupancy of its body, with a variable at no label. The proof is an induction over
 the stages, and it needs no guard (\texttt{occV\_open}, \texttt{occA\_open}). Only \texttt{opaque} answers
 \texttt{⊤}, every label.
@@ -1126,8 +1113,8 @@ difference does work. A kind collapses the three set families into one; the cons
 separate what eight kinds cannot. The readable side's label is the member, which the judgement's \texttt{μ}
 index already computes.
 
-\texttt{⊤} is \texttt{opaque}'s answer, because \texttt{opaque} accepts every kind by design. A \texttt{held} and a \texttt{lazy}
-have a label of their own: \texttt{lazy(string)} beside \texttt{null}, and \texttt{flipBool} beside \texttt{null}, are each certified. That \texttt{opaque} accepts every kind is also what makes its
+\texttt{⊤} is \texttt{opaque}'s answer, because \texttt{opaque} accepts every kind by design. A \texttt{held} has a
+label of its own: \texttt{flipBool} beside \texttt{null} is certified. That \texttt{opaque} accepts every kind is also what makes its
 fixpoint's options pairwise kind-exclusive.
 
 \begin{definition}[the family, conjoined]
@@ -1238,7 +1225,7 @@ decide a question about attributes.
 
 \begin{theorem}[soundness]
 \label{thm:soundness}
-\uses{cond:R,cond:C,cond:W,cond:compat,rule:lazy,rule:union,rule:dunion,rule:opaque,rule:mu,thm:guarded-recursion}
+\uses{cond:R,cond:C,cond:W,cond:compat,rule:union,rule:dunion,rule:opaque,rule:mu,thm:guarded-recursion}
 \lean{Calculus.soundness, Calculus.soundnessIn, Calculus.carrier_denote}
 \leanok
 Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, whose obligations hold, denotes a pair
@@ -1346,9 +1333,9 @@ hold, so the \texttt{e\_c} branch answers, and it writes the attribute back by t
 \texttt{owns(nullable(c))} always, so the second case never nests: §6's idempotence is the construction,
 not an equation the proof has to earn.
 
-\emph{lazy.} The pair of its term, with the member erased. The model's \texttt{lazy} carries a plain term, and a
-thunk that re-enters its own schema is a \rulelink{rule:mu}{\texttt{(mu)}} with a variable at the thunk. What the re-entry
-passes through decides the case.
+\emph{mu.} The model has no thunk. A thunk that re-enters its own schema is a \rulelink{rule:mu}{\texttt{(mu)}} with a
+variable at the thunk, and any other thunk is the term it returns. What the re-entry passes through decides the
+case.
 
 \textbf{Through a container.} The guard accepts the binder, and \rulelink{thm:guarded-recursion}{guarded recursion} gives the
 case. The stages are lawful by the induction over open terms, at an environment that holds the stage
@@ -1557,16 +1544,6 @@ sides of the iso, so \texttt{q} is a subset of different sets. Two different ter
 held set, and it can also break the compatibility of the options.
 \end{theorem}
 
-\begin{theorem}[lazy is not its own unfolding]
-\label{eq:lazy-unfold}
-\uses{rule:lazy,rule:set}
-\lean{Calculus.not_equiv_lazy}
-\leanok
-\texttt{lazy(γ)\ ≢\ γ(∗)}. The pair is the same and the μ is not: \texttt{lazy} concludes \texttt{⊤} where
-\texttt{γ(∗)} may name its member, so \texttt{set(lazy(γ))} has no derivation. \texttt{≡} compares the index
-too.
-\end{theorem}
-
 \begin{theorem}[legacy breaks (MP), on purpose]
 \label{eq:legacy-mp}
 \uses{rule:legacy,cond:MP,cor:readW}
@@ -1615,8 +1592,8 @@ its prism); three \textbf{products} — positional (\texttt{array},
 \texttt{tuple}) and keyed (\texttt{record}, \texttt{object}), instances of one traversal argument, and unordered (\texttt{set}),
 which is the image argument, with injectivity from \rulelink{cond:R}{\textbf{(R)}};
 one \textbf{sum} (\texttt{union}), the join of compatible options, with \rulelink{rule:dunion}{\texttt{(dunion)}} the one separated
-by construction and \texttt{opaque} the one whose compatibility is a theorem; and a \textbf{fixpoint} (\texttt{lazy},
-and \texttt{opaque} again). Fields are the keyed product's
+by construction and \texttt{opaque} the one whose compatibility is a theorem; and a \textbf{fixpoint} (\texttt{mu},
+and \texttt{opaque} as its instance). Fields are the keyed product's
 presence decoration, and \texttt{nullable} is that sum's guarded insertion (§3) rather than a term of its own.
 The outer read extension \texttt{extendRead} adds one agreeing read-extension to a complete current term.
 

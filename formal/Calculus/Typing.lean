@@ -220,7 +220,6 @@ inductive Typed : Term → Held → Option Member → Prop where
       Typed (.held t P f g) (fun v => I (f v) ∧ ((denote P).e v).isSome) μ
   | refine {t T μ p} (h : Typed t T μ) :
       Typed (.refine t p) (fun v => T v ∧ p.eval v) μ
-  | lazy {t T μ} (h : Typed t T μ) : Typed (.lazy t) T none
   | opaq : Typed .opaq HOpaque none
   /-- §5's bottom. It writes no value, so it stores no member, and its held set is `False`. -/
   | never : Typed .never HNever none

@@ -30,7 +30,7 @@ definition it touches.
 | `Calculus/Continuity.lean`  | §5, §7      | `Codec.Approx` (the information order any ccpo must extend), and first-match resolution monotone (`selectF_mono_list`) and continuous (`selectF_continuous_list`) under the obligation that every admitter agrees |
 | `Calculus/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's nesting bound, a parameter, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
 | `Calculus/DynamoDB.lean`    | §1          | The DynamoDB port: `DynamoDB.maxNesting` instantiates the nesting bound at the store's 32 levels; `Numeral.Normal`/`Numeral.Stored`, `decimalCodec` and its `SurvivesStore` instance, `not_survivesStore_numberCodec`, the numeral-domain report (`decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases), and the text adapter `numeralOfStoredText`/`textOfNumeral` |
-| `Calculus/Refutations.lean` | §6          | §6's seven "Do not hold" nodes, all settled, over eight declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `not_equiv_lazy` (where `≡`'s member index is what fails), `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
+| `Calculus/Refutations.lean` | §6          | §6's six "Do not hold" nodes, all settled, over seven declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
 | `Calculus/Discharge.lean`   | §5          | `refine`'s read-side gate, which `AdmA` reads, and a premise checked at two options |
 
@@ -51,8 +51,7 @@ held set is inside the judgement's) — and the containment is an **identity** i
 directions, `typed_T_identity`, so the index describes the denotation exactly rather than
 bounding it. The
 member index is fuel-free (`μSyn`, with `denote_μ` and `typed_μSyn` tying the denotation
-and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the doc's
-`(lazy)` rule demands.
+and the judgement to it).
 
 ## Modelling decisions
 
@@ -82,7 +81,7 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   `defaultTargets = ["Calculus"]` build the tree with no guard running at all.
 - **There is no fuel.** `denote` is structural on the term. What the proofs recurse on
   instead is `Term.depth`, a measure derived from the term, so it appears in no statement.
-  Neither of the two things that forced fuel still does: `lazy` carries a `Term`, and `opaq`
+  Neither of the two things that forced fuel still does: the model has no thunk, and `opaq`
   and `mu` denote `muCodec`, which budgets each input by the input's own depth.
 - **Recursion is guarded, and constructed.** `mu b` denotes `muCodec` of its body, and each
   input reads the stage of the body that its own depth names. `Term.guarded` refuses a variable

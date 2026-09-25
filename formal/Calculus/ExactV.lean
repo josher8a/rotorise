@@ -141,17 +141,7 @@ noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
     true of nothing here; (ii) the domain cannot be computed without running the codec — true
     of `opaq`, and the reason the row *does* run it, at the price of being
     `noncomputable`; (iii) a reader cannot see through it — true of `held` and
-    `opaq`, and not a property of the calculus.
-
-    ### And `lazy` is transparent, on both sides
-
-    `denote (.lazy t) = { denote t with μ := none }`: the pair is the subterm's and only the
-    member is erased, so both rows below pass straight through. The specification's §5
-    lists `lazy` as unanalysable, and that is inherited from the document's
-    thunk, which is `∗ → term`. `Term.lazy` carries a plain `Term` — a deliberate change,
-    made because a closure adds no constructible term and defeats the termination checker
-    (`Term.lean`) — so the model answers a question the document's `lazy` cannot be asked.
-    The two constructors are not the same object and the section is right about its own. -/
+    `opaq`, and not a property of the calculus. -/
 
 mutual
 
@@ -174,7 +164,6 @@ noncomputable def Adm : Term → Value → Bool
   -- the bottom admits nothing, and the row is that sentence
   | .never => fun _ => false
   | .refine t p => fun v => Adm t v && p.eval v
-  | .lazy t     => Adm t
   | .held t P f _ => fun v => Adm t (f v) && Adm P v
   -- `select` attempts every option, so the row is the disjunction of the options' rows
   | .union opts => fun v => anyP (AdmList opts) v
@@ -841,9 +830,6 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   | .refine c p => by
       have hc := Adm_exact c
       intro v; cases hq : p.eval v <;> simp [Adm, denote, denote, Codec.restrict, hq, hc v]
-  | .lazy c => by
-      have hc := Adm_exact c
-      intro v; simpa [Adm, denote] using hc v
   | .held c P f g => by
       have hc := Adm_exact c
       have hP := Adm_exact P

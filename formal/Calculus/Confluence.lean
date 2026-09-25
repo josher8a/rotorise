@@ -244,7 +244,6 @@ mutual
 def HF : Term → Prop
   | .held _ _ _ _ => False
   | .refine t _ => HF t
-  | .lazy t => HF t
   | .mu t => HF t
   | .list pre sp suf => HFL pre ∧ HFO sp ∧ HFL suf
   | .object b => HFB b
@@ -288,7 +287,6 @@ theorem occA_le_occV : ∀ (t : Term), HF t → ∀ (m : Member), occA t m = tru
   | .never, _, _, h => by simp [occA, occNone] at h
   | .held _ _ _ _, hf, _, _ => nomatch hf
   | .refine t _, hf, m, h => occA_le_occV t hf m (by simpa [occA] using h)
-  | .lazy t, hf, m, h => occA_le_occV t hf m (by simpa [occA] using h)
   | .opaq, _, _, _ => by simp [occV, occTop]
   | .mu b, hf, m, h => by simpa [occV] using occA_le_occV b hf m (by simpa [occA] using h)
   | .var _, _, _, h => by simp [occA, occNone] at h
@@ -335,7 +333,6 @@ theorem sub_denoteIn : ∀ t : Term, HF t → ∀ ρ : List Codec, (∀ i, Sub (
       exact ⟨fun v a he => (hs _).1 v a he, fun a v hp => (hs _).2 a v hp⟩
   | .held _ _ _ _, h, _, _ => h.elim
   | .refine t q, h, ρ, henv => sub_restrict (sub_denoteIn t h ρ henv) q.eval
-  | .lazy t, h, ρ, henv => (sub_denoteIn t h ρ henv)
   | .list pre sp suf, ⟨h1, h2, h3⟩, ρ, henv =>
       sub_listCodec (sub_denoteList pre h1 ρ henv) (sub_denoteOpt sp h2 ρ henv)
         (sub_denoteList suf h3 ρ henv)

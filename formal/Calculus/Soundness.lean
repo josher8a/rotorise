@@ -45,7 +45,6 @@ def Obligations : Term → (ρ : List Codec := []) → Prop
   | .list pre sp suf, ρ => ObligationsList pre ρ ∧ ObligationsOpt sp ρ ∧ ObligationsList suf ρ
   -- the caller-side term owes nothing: a restriction keeps the laws of any lawful codec
   | .held t' _ f g, ρ => Obligations t' ρ ∧ IsoCancels (denote t' ρ) f g
-  | .lazy t', ρ => Obligations t' ρ
   | .object b, ρ => ObligationsBody b ρ
   | .union opts, ρ => ObligationsList opts ρ ∧ PairwiseCompat opts ρ
   -- the body's premises at each stage, given that the stage before is lawful
@@ -105,7 +104,6 @@ namespace Obligations
 theorem array {t} (h : Obligations (.array t)) : Obligations t := h.2.1
 theorem record {t} (h : Obligations (.record t)) : Obligations t := h.2
 theorem refine {t q ρ} (h : Obligations (.refine t q) ρ) : Obligations t ρ := h
-theorem lazy {t ρ} (h : Obligations (.lazy t) ρ) : Obligations t ρ := h
 
 theorem tuple {ts tail} (h : Obligations (.tuple ts tail)) :
     (∀ t ∈ ts, Obligations t) ∧ (∀ t ∈ tail, Obligations t) :=
@@ -208,7 +206,6 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .list _ _ _ => rfl
   | _, _, _, .held h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
-  | _, _, _, .lazy _ => rfl
   | _, _, _, .opaq => rfl
   | _, _, _, .var _ => rfl
   | _, _, _, .mu _ _ => rfl
@@ -265,8 +262,6 @@ theorem soundnessIn : ∀ {t T μ} (ρ : List Codec), Typed t T μ → Obligatio
     | set b => exact (lawful_setCodec (lawful_setBase b))
     | @refine t' T' μ' p h' =>
       exact (soundnessIn ρ h' hob henv).restrict p.eval
-    | @lazy γ T' μ' h' =>
-      exact (soundnessIn ρ h' hob henv).μNone
     | @held t' I' μ' P f g h' =>
       exact ((soundnessIn ρ h' hob.1 henv).through hob.2).restrict _
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
@@ -680,7 +675,6 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
     | @held t' I' μ' P f g h' =>
       exact ⟨typed_TSub h' (f v) hv.1, hv.2⟩
     | @refine t' T' μ' q h' => exact ⟨typed_TSub h' v hv.1, hv.2⟩
-    | @lazy γ T' μ' h' => exact typed_TSub h' v hv
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest ⊢
@@ -772,9 +766,6 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
         (soundness h' hob.1).core hob.2.2) _
     | @refine t' T' μ' p h' =>
       exact carrier_restrict (carrier_denote h' hob.refine) p.eval
-    | @lazy γ T' μ' h' =>
-      have ih := carrier_denote h' hob.lazy
-      exact ⟨fun he => ih.domE he, fun hp => ih.ranP hp⟩
     | opaq => exact carrier_opaq
     -- a closed variable is the bottom, and a lawful `mu` is on its held set, its write domain
     | var _ => exact Carrier.empty

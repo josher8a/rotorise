@@ -483,7 +483,10 @@ structure NameSpec where
 
 /-! ## The set bases (§3 `(set)`'s payload)
 
-§3's `(set)` rule reads a member off its element term and refuses when there is none. Three
+A DynamoDB set, `SS`, `NS` or `BS`, holds elements of one member. That is a fact of the store
+universe, not a rule of the codec algebra, and `SetBase` is the store's vocabulary for it. §3's
+`(set)` rule states the fact as a premise: it reads a member off its element term and refuses
+when there is none. Three
 element terms have one: `string`, `number` and `binary`. Every other element term the
 constructor accepted was either underivable (`setMember` is partial) or unreachable in `src/`.
 `SetBase` is those three as an index, so the rule's member premise becomes a function of the

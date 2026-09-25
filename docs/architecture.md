@@ -220,13 +220,14 @@ occupancies alone.
 
 **The host spells recursion as a thunk, and the bridge prints the binder.** The emitter marks each
 term object that a thunk returns during the printing of that object. It prints `Term.mu` at the
-object and `Term.lazy (Term.var k)` at the thunk, where `k` counts the binders between the two. Each
-recursive vector asserts that the guard accepts its term. The host's `union` refuses the two shapes
-the guard refuses. One is an option whose spine reaches a recursive thunk. The other is an option
-where a `held` sits between the term that a recursive thunk returns and the thunk. The host's
-`union` also refuses a thunk that throws. Recursion below a list or an object stays declared, and
-the certificate decides it. The host's `heldFree(t)` answers `false` at a recursive thunk. The
-model's `HF` reads through a binder, so the host is the narrower of the two.
+object and `Term.var k` at the thunk, where `k` counts the binders between the two. Any other thunk
+prints the term it returns, because the model has no thunk. Each recursive vector asserts that the
+guard accepts its term. The host's `union` refuses the two shapes the guard refuses. One is an
+option whose spine reaches a recursive thunk. The other is an option where a `held` sits between the
+term that a recursive thunk returns and the thunk. The host's `union` also refuses a thunk that
+throws. Recursion below a list or an object stays declared, and the certificate decides it. The
+host's `heldFree(t)` answers `false` at a recursive thunk. The model's `HF` reads through a binder,
+so the host is the narrower of the two.
 
 ---
 
