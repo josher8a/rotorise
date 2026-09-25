@@ -1,6 +1,6 @@
-import Calculus.Denote
-import Calculus.Frontier
-import Calculus.DynamoDB
+import Calculus.Dynamo.Denote
+import Calculus.Dynamo.Frontier
+import Calculus.Dynamo.Store
 import Mathlib.Tactic.FinCases
 
 /-!

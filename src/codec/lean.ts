@@ -850,7 +850,7 @@ const leanSlotOf = (field: TermField, at: string, scope: Scope): string => {
  * How a vector states its claim to the kernel.
  *
  * `'check'` writes `check n ((denote t).e v) (some a) = .same := rfl` and is the default. It
- * depends on `Calculus/Vectors.lean` — a fuelled three-valued comparator with `check_same` and
+ * depends on `Calculus/Bridge/Vectors.lean` — a fuelled three-valued comparator with `check_same` and
  * `check_differ` proved about it, so a passing line cashes to `(denote t).e v = some a` as a
  * theorem. No tactic, no `funext` gymnastics, an order of magnitude faster on maps, and it can
  * state a **negative** vector (`= .differ`), which an equation cannot. The `n` is fuel, because
@@ -1087,7 +1087,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
  * The declaration verdicts as a module of their own, because they need `certPair` and the
  * dischargers of `PairwiseCompat`.
  *
- * The header imports `Calculus.DynamoDB` as well, because a `held` term spells
+ * The header imports `Calculus.Dynamo.Store` as well, because a `held` term spells
  * `numeralOfStoredText` and `textOfNumeral`, which the DynamoDB port defines, and
  * `Meet` does not reach them. Lean
  * auto-binds an unknown lower-case name, so the missing import reports a free variable in the
@@ -1098,9 +1098,9 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
 export const leanSeparationModule = (
     separations: readonly Separation[],
 ): string =>
-    `import Calculus.Meet
-import Calculus.Compat
-import Calculus.DynamoDB
+    `import Calculus.Dynamo.Meet
+import Calculus.Dynamo.Compat
+import Calculus.Dynamo.Store
 
 /-!
 # Declaration verdicts, both ways
@@ -1307,8 +1307,8 @@ export const leanMeetModule = (
     meets: readonly MeetPair[],
     deferred: readonly string[] = [],
 ): string =>
-    `import Calculus.Meet
-import Calculus.DynamoDB
+    `import Calculus.Dynamo.Meet
+import Calculus.Dynamo.Store
 
 /-!
 # The meet, proposed to the model
@@ -1411,7 +1411,7 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
  * Generated at gate time and elaborated, never committed.
  */
 export const leanReadModule = (verdicts: readonly ReadVerdict[]): string =>
-    `import Calculus.DynamoDB
+    `import Calculus.Dynamo.Store
 
 /-!
 # Read verdicts, proposed to the model's read row
@@ -1498,7 +1498,7 @@ export const readVectorIsUnstatable = (
 /**
  * The read vectors as a module, with what it could not state named in the header.
  *
- * The header imports `Calculus.DynamoDB` as well, because a `held` term spells
+ * The header imports `Calculus.Dynamo.Store` as well, because a `held` term spells
  * `numeralOfStoredText` and `textOfNumeral`, which the DynamoDB port defines, and `Vectors`
  * does not reach them. Lean auto-binds
  * an unknown lower-case name, so the missing import leaves `denote` stuck on a free variable and
@@ -1511,8 +1511,8 @@ export const leanReadVectorModule = (vectors: readonly Vector[]): string => {
     const live = vectors.filter(
         (one) => readVectorIsUnstatable(one) === undefined,
     )
-    return `import Calculus.Vectors
-import Calculus.DynamoDB
+    return `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Store
 
 /-!
 # Read vectors, proposed to the model's \`p\`
@@ -1654,8 +1654,8 @@ export const leanResolutionModule = (
     writes: readonly Resolution[],
     reads: readonly ReadResolution[],
 ): string =>
-    `import Calculus.Vectors
-import Calculus.DynamoDB
+    `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Store
 
 /-!
 # Union resolution, model against library
@@ -1752,9 +1752,9 @@ const fuelFor = (attribute: AttributeValue): number => {
  * bridge would stop being one-directional. Everything the generated file needs is in the generated
  * file.
  */
-const preamble = `import Calculus.Denote
-import Calculus.Frontier
-import Calculus.DynamoDB
+const preamble = `import Calculus.Dynamo.Denote
+import Calculus.Dynamo.Frontier
+import Calculus.Dynamo.Store
 import Mathlib.Tactic.FinCases
 
 /-!
@@ -1806,8 +1806,8 @@ macro "vector" : tactic => \`(tactic|
      | congr 1))
 `
 
-const checkPreamble = `import Calculus.Vectors
-import Calculus.DynamoDB
+const checkPreamble = `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Store
 
 /-!
 # Differential-testing vectors

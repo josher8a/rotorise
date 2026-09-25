@@ -108,12 +108,12 @@ export const memberOf = (value: AttributeValue): AttributeName | undefined => {
 //
 // `Carries('N')` is not `string`. Every term that writes or reads an `N` owes the same predicate,
 // and it lives here rather than beside any one of them: it is a property of the carrier, the way
-// `Attr.n : WFNumeral` is in `formal/Calculus/Domain.lean`, not of the codec that happens to use it.
+// `Attr.n : WFNumeral` is in `formal/Calculus/Dynamo/Domain.lean`, not of the codec that happens to use it.
 
 /**
  * What DynamoDB **accepts** in an `N`: optional sign, digits, optional point, optional exponent;
  * at most 38 significant digits; magnitude zero or `1e-130 … 9.9…e125`. §1's `Numerals`, and the
- * same predicate as `Numeral.WF` in `formal/Calculus/Domain.lean`.
+ * same predicate as `Numeral.WF` in `formal/Calculus/Dynamo/Domain.lean`.
  */
 const NUMERAL = /^[+-]?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/
 
@@ -135,7 +135,7 @@ export const isNumeral = (s: string): boolean => {
  * What DynamoDB **hands back**, which is a smaller set: it normalises every `N` it accepts —
  * trimming leading and trailing zeros, dropping `+`, expanding exponents, and keeping one spelling
  * of zero. Measured, not assumed: `codec.dynamodb.spec.ts` puts each form into a real table and reads it
- * back, and `Numeral.Stored` in `formal/Calculus/DynamoDB.lean` is the same set.
+ * back, and `Numeral.Stored` in `formal/Calculus/Dynamo/Store.lean` is the same set.
  */
 export const isStoredNumeral = (s: string): boolean =>
     s !== '-0' && /^-?(?:0|[1-9]\d*)(?:\.\d*[1-9])?$/.test(s) && isNumeral(s)
@@ -145,7 +145,7 @@ export const isStoredNumeral = (s: string): boolean =>
 // The two predicates above are properties of the carrier rather than of any codec, and until now
 // there was no carrier for them to be properties OF: `N` was carried as `string` at every surface,
 // so the predicate had to be re-checked at each boundary and the type never said it had passed.
-// `DynamoNumber` is that carrier. It is what `formal/Calculus/Domain.lean` calls `WFNumeral`.
+// `DynamoNumber` is that carrier. It is what `formal/Calculus/Dynamo/Domain.lean` calls `WFNumeral`.
 
 /**
  * **An exact DynamoDB number.** The carrier `N` actually has: a numeral the service accepts,
@@ -375,7 +375,7 @@ export const MAX_DOCUMENT_NESTING = 32
  * gap and is queued rather than fixed here, because closing it means threading a level through
  * every container codec, which is a different change from guarding the two escape hatches. It is
  * measured: a self-nesting entity reaches `depth 82` at forty levels. The repair that would be
- * compositional is stated in `formal/Calculus/Nesting.lean`, which also says why it cannot cover
+ * compositional is stated in `formal/Calculus/Dynamo/Nesting.lean`, which also says why it cannot cover
  * the whole language — `opaque` and `lazy` take their depth from the value, so no syntactic bound
  * exists for them and the theorem there is about the fragment that excludes them.
  */
