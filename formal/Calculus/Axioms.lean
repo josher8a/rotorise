@@ -19,6 +19,7 @@ import Calculus.Confluence
 import Calculus.Kernel
 import Calculus.Compat
 import Calculus.JSON
+import Calculus.AlgLists
 import Lean
 
 /-!

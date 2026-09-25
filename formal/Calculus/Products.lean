@@ -9,6 +9,9 @@ hence `arrayCodec` and `recordCodec`, and `tupleCodec` is it at `align` plus a t
 where the one fact worth proving is that alignment depends on a row's *length* alone.
 `setCodec` is argued on its own. `drop` is a *filter* and not a traversal mode, so nothing
 here needs a second toolkit.
+
+`traverse`, `carriedCodec` and `entrywise` take the carriers as parameters, so they live in the
+generic layer. This file instantiates them at the DynamoDB carriers.
 -/
 
 namespace Calculus
@@ -443,120 +446,11 @@ theorem decSet_isSome_bin {α : Type} {c : Codec} {inj : α → Attr} {S : NEFin
 
 /-! ### A codec carried between two prisms
 
-The shape underneath every product in §3–§4. A pair works on *payloads* — lists of
-entries, mostly — and two prisms say which value and which attribute constructor hold
-them. Retract, canon and writes split cleanly along that seam: the prism halves are discharged once,
-here, and each construction is left with only its payload pair's own round trip,
-definedness and agreement.
+`carriedCodec` and `entrywise` take the carriers as parameters. The aliases give them their names
+in this namespace. -/
 
-`pointCodec` above is the degenerate case, where the payload passes through untouched.
-The three below are the products: `entrywise` (a traversal, hence `array` and `record`),
-`tuple` (`align`, then a traversal) and `object` (a guard, a filter, then a traversal).
-
-`set` is the one product that is *not* an instance, and for a reason worth stating: its
-attribute side is a choice among three wire sets, not one constructor. It is argued on
-its own below. -/
-
-/-- **A codec between two prisms.** `P` is the held set's condition on the payload;
-    `E`/`D` are the payload pair. -/
-def carriedCodec {γ δ : Type} (V : Ctor γ Value) (A : Ctor δ Attr) (μ₀ : Member)
-    (P : γ → Prop) (E : γ → Option δ) (D : δ → Option γ) : Codec :=
-  { T := fun v => ∃ x, v = V.into x ∧ P x
-    μ := some μ₀
-    e := fun v => ((V.out v).bind E).map A.into
-    p := fun a => ((A.out a).bind D).map V.into }
-
-section Carried
-variable {γ δ : Type} {V : Ctor γ Value} {A : Ctor δ Attr} {μ₀ : Member}
-  {P : γ → Prop} {E : γ → Option δ} {D : δ → Option γ}
-
-/-- What it writes: only a value the prism matches, and only what `E` accepts. -/
-theorem carried_e {v a} :
-    (carriedCodec V A μ₀ P E D).e v = some a ↔
-      ∃ x y, V.out v = some x ∧ E x = some y ∧ a = A.into y := by
-  simp [carriedCodec, Option.bind_eq_some_iff, Option.map_eq_some_iff, eq_comm (a := a)]
-
-/-- What it reads: the mirror. -/
-theorem carried_p {a v} :
-    (carriedCodec V A μ₀ P E D).p a = some v ↔
-      ∃ y x, A.out a = some y ∧ D y = some x ∧ v = V.into x := by
-  simp [carriedCodec, Option.bind_eq_some_iff, Option.map_eq_some_iff, eq_comm (a := v)]
-
-/-- (R), (C) and (W) are the payload pair's own, plus the member the attribute
-    constructor stamps. The prisms contribute nothing but their two laws. -/
-theorem lawfulCore_carried (hμ : ∀ y, (A.into y).member = μ₀)
-    (hr : ∀ x y, E x = some y → D y = some x)
-    (hc : ∀ y x, D y = some x → (E x).isSome) :
-    LawfulCore (carriedCodec V A μ₀ P E D) where
-  retract he := by
-    obtain ⟨x, y, hv, hx, rfl⟩ := carried_e.mp he
-    exact carried_p.mpr ⟨y, x, A.out_into y, hr x y hx, V.into_out hv⟩
-  canon hp := by
-    obtain ⟨y, x, _, hy, rfl⟩ := carried_p.mp hp
-    obtain ⟨y', h'⟩ := Option.isSome_iff_exists.mp (hc y x hy)
-    exact Option.isSome_iff_exists.mpr ⟨_, carried_e.mpr ⟨x, y', V.out_into x, h', rfl⟩⟩
-  writes := by
-    intro μ hμ' t a he
-    obtain ⟨_, y, _, _, rfl⟩ := carried_e.mp he
-    exact (hμ y).trans (Option.some.inj hμ')
-
-/-- Canonical reads are the payload pair's own too. -/
-theorem lawful_carried (hμ : ∀ y, (A.into y).member = μ₀)
-    (hr : ∀ x y, E x = some y → D y = some x)
-    (hcan : ∀ y x, D y = some x → E x = some y) :
-    Lawful (carriedCodec V A μ₀ P E D) :=
-  have hc := lawfulCore_carried (P := P) hμ hr (fun y x h => by rw [hcan y x h]; rfl)
-  { retract := hc.retract
-    writes := hc.writes
-    canon := by
-      intro a t hp
-      obtain ⟨y, x, ha, hy, rfl⟩ := carried_p.mp hp
-      exact carried_e.mpr ⟨x, y, V.out_into x, hcan y x hy, A.into_out ha⟩ }
-
-/-- `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`: the held set's condition has to hold of whatever
-    payload either half of the pair accepts. -/
-theorem carrier_carried
-    (hdom : ∀ {x y}, E x = some y → P x)
-    (hran : ∀ {y x}, D y = some x → P x) :
-    Carrier (carriedCodec V A μ₀ P E D) where
-  domE he := by
-    obtain ⟨x, y, hv, hx, _⟩ := carried_e.mp he
-    exact ⟨x, V.into_out hv, hdom hx⟩
-  ranP hp := by
-    obtain ⟨y, x, _, hy, rfl⟩ := carried_p.mp hp
-    exact ⟨x, rfl, hran hy⟩
-
-end Carried
-
-/-! ### The entrywise product, named once
-
-`array` and `record` are `carriedCodec` where the payload pair is one entry function
-traversed: a value constructor holding a list of entries, an attribute constructor
-holding a list of wire entries. Named once, §2's laws are discharged once. -/
-
-/-- **The entrywise product**: `carriedCodec` at a traversal. -/
-def entrywise {α β : Type} (V : Ctor (List α) Value) (A : Ctor (List β) Attr)
-    (μ₀ : Member) (P : List α → Prop) (f : α → Option β) (g : β → Option α) : Codec :=
-  carriedCodec V A μ₀ P (traverse f) (traverse g)
-
-section Entrywise
-variable {α β : Type} {V : Ctor (List α) Value} {A : Ctor (List β) Attr}
-  {μ₀ : Member} {P : List α → Prop} {f : α → Option β} {g : β → Option α}
-
-/-- Canonical reads, entry by entry. -/
-theorem lawful_entrywise (hμ : ∀ ys, (A.into ys).member = μ₀)
-    (hr : ∀ x y, f x = some y → g y = some x)
-    (hcan : ∀ y x, g y = some x → f x = some y) :
-    Lawful (entrywise V A μ₀ P f g) :=
-  lawful_carried hμ (traverse_roundTrip hr) (traverse_roundTrip hcan)
-
-theorem carrier_entrywise
-    (hdom : ∀ {xs ys}, traverse f xs = some ys → P xs)
-    (hran : ∀ {ys xs}, traverse g ys = some xs → P xs) :
-    Carrier (entrywise V A μ₀ P f g) :=
-  carrier_carried hdom hran
-
-end Entrywise
+export Alg (carriedCodec carried_e carried_p lawfulCore_carried lawful_carried carrier_carried
+  entrywise lawful_entrywise carrier_entrywise)
 
 /-! ### `array` (§3) — entrywise between `arr` and `L` -/
 

@@ -1,167 +1,28 @@
-import Mathlib.Data.List.Forall2
-import Mathlib.Data.List.Basic
+import Calculus.AlgLists
 import Calculus.Domain
 
 /-!
-# The list plumbing
+# The list plumbing at the DynamoDB carriers
 
-Everything in this file is a statement about lists and `Option` — no codec, no law, no
-member. It lives apart so that `Prisms.lean` reads as codec vocabulary and nothing
-else: when a proof there cites a name from this file, that is the signal that the step is
-plumbing rather than content.
+The traversal and the `filter` facts take no carrier, so they are generic. The aliases below
+give them their names in this namespace. The keyed clause of the traversal reads `Name`, so it
+stays here.
 
-Three groups:
-
-* Two additions to mathlib's `Forall₂` — `mem_left`, `mem_right` — which is
-  where the file starts because the next group rests on them.
-* `traverse` and its laws — the one proof shape every product consumes. It rests on a
-  single pivot, `traverse_eq_some`: **a successful traversal *is* the pointwise relation**
-  `List.Forall₂ (f · = some ·)`. Each law is then that relation pushed around — reversed
-  for (R), forgotten for definedness — which is what mathlib's `Forall₂` API is for.
-* A handful of `filter` facts stated in the form the sum proofs want, mostly about a
-  `filter` that resolves to a singleton or to nil.
-
-The bar for adding here is that mathlib genuinely lacks the fact, or states it in a shape
-the use sites cannot consume. Anything mathlib has outright should be cited under mathlib's
-own name at the use site instead.
+§5's keyed refinement, *"entries are dispatched and compared by name, first occurrence
+first"*, is gone. It was a statement about `M` as a `List (Name × Attr)`: a clause needed because
+a keyed list has an order and can repeat a key. `M` is now a name set with a function on it, so
+there is no first occurrence to prefer. `traverse_fst` survives because `L` really is a list.
 -/
-
-namespace List
-
-/-- A pointwise relation exhibits a partner for every member of the right-hand list. -/
-theorem Forall₂.mem_right {α β : Type _} {R : α → β → Prop} :
-    ∀ {xs : List α} {ys : List β}, Forall₂ R xs ys → ∀ {y}, y ∈ ys → ∃ x ∈ xs, R x y
-  | _, _, .cons hxy hxs, _, hy => by
-      rcases List.mem_cons.mp hy with rfl | hy'
-      · exact ⟨_, List.mem_cons_self, hxy⟩
-      · obtain ⟨x, hx, hR⟩ := hxs.mem_right hy'
-        exact ⟨x, List.mem_cons_of_mem _ hx, hR⟩
-
-/-- …and for every member of the left-hand one. -/
-theorem Forall₂.mem_left {α β : Type _} {R : α → β → Prop} :
-    ∀ {xs : List α} {ys : List β}, Forall₂ R xs ys → ∀ {x}, x ∈ xs → ∃ y ∈ ys, R x y
-  | _, _, .cons hxy hxs, _, hx => by
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · exact ⟨_, List.mem_cons_self, hxy⟩
-      · obtain ⟨y, hy, hR⟩ := hxs.mem_left hx'
-        exact ⟨y, List.mem_cons_of_mem _ hy, hR⟩
-
-end List
 
 namespace Calculus
 
-/-! ## Traversal — §5's Lemma, clause by clause
-
-This section **is** §5's Lemma (traversal), which five rules — `array`, `tuple`, `record`,
-`object`, `set` — are instantiations of. The correspondence was stated nowhere.
-
-> *Let a step be an entrywise pair between the entries of two lists, and lift it entrywise —
-> defined where every entry is, positions preserved. If the step satisfies a law pointwise,
-> the lift satisfies it listwise.*
-
-| §5's clause | here | how |
-| --- | --- | --- |
-| the lift itself, positions preserved | `traverse_eq_some` | the pivot: a successful traversal **is** `Forall₂ (f · = some ·)`, which is positional by construction |
-| defined where every entry is | `traverse_isSome_of_all` | no partner list — only that every entry is writable |
-| **(R)**, "positions re-read in place" | `traverse_roundTrip` | the relation, reversed |
-| **(C)**, "each entry re-encodes" | `traverse_isSome` | the relation, forgotten down to definedness |
-| "lengths survive both directions" | `traverse_length` | one direction; the other is `traverse_roundTrip` and this again |
-
-§5's keyed refinement — *"entries are dispatched and compared by name, first occurrence
-first"* — is **gone from this file**, along with the whole association-list section that
-served it. It was a statement about `M` as a `List (Name × Attr)`: a clause needed because
-a keyed list has an order and can repeat a key. `M` is now a name set with a function on
-it, so there is no first occurrence to prefer.
-`traverse_fst` survives because `L` really is a list. -/
-
-/-- A list traversed by an entrywise partial function: all-or-nothing. -/
-def traverse {α β : Type} (f : α → Option β) : List α → Option (List β)
-  | [] => some []
-  | x :: xs =>
-    match f x, traverse f xs with
-    | some y, some ys => some (y :: ys)
-    | _, _ => none
+export Alg (traverse traverse_nil traverse_cons traverse_eq_some traverse_length
+  traverse_append_isSome traverse_roundTrip traverse_isSome_of_all traverse_isSome traverse_mem₂
+  traverse_mem traverse_mem_input filter_nil_of filter_eq_singleton_of_disjoint
+  filter_eq_singleton_of_labels forall_mem_map_option)
 
 section Traverse
-variable {α β γ : Type} {f : α → Option β} {g : β → Option α}
-
-@[simp] theorem traverse_nil : traverse f [] = some [] := rfl
-
-/-- The `cons` step in `Option`'s monad, which is the form `simp` can reason with. -/
-theorem traverse_cons {x : α} {xs : List α} :
-    traverse f (x :: xs) = (f x).bind fun y => (traverse f xs).map (y :: ·) := by
-  simp only [traverse]; cases f x <;> cases traverse f xs <;> rfl
-
-/-- **The pivot** (§5, Lemma (traversal): the lift, positions preserved). A traversal
-    succeeds exactly when the entrywise function relates the two lists position by position.
-    Everything below is a corollary of this and mathlib's `Forall₂` API. -/
-theorem traverse_eq_some {xs : List α} {ys : List β} :
-    traverse f xs = some ys ↔ List.Forall₂ (fun x y => f x = some y) xs ys := by
-  induction xs generalizing ys with
-  | nil => cases ys <;> simp [eq_comm]
-  | cons x xs ih => cases ys with
-    | nil => simp [traverse_cons, Option.bind_eq_some_iff, ih]
-    | cons y ys => simp [traverse_cons, Option.bind_eq_some_iff, ih, List.forall₂_cons]
-
-/-- §5, Lemma (traversal): "lengths survive both directions". This is one of them; the
-    other is this applied to `traverse_roundTrip`'s conclusion. -/
-theorem traverse_length :
-    ∀ (xs : List α) (ys : List β), traverse f xs = some ys → xs.length = ys.length :=
-  fun _ _ ht => (traverse_eq_some.mp ht).length_eq
-
-/-- A traversal of two parts is defined exactly where both parts are. `list`'s alignment
-    splits at the suffix, so the two halves are traversed independently. -/
-theorem traverse_append_isSome :
-    ∀ (xs ys : List α),
-      (traverse f (xs ++ ys)).isSome = ((traverse f xs).isSome && (traverse f ys).isSome)
-  | [], ys => by simp
-  | x :: xs, ys => by
-      simp only [List.cons_append, traverse_cons]
-      rw [show (traverse f (xs ++ ys)) = (traverse f (xs ++ ys)) from rfl]
-      cases hx : f x <;> simp [traverse_cons, traverse_append_isSome xs ys, hx]
-
-/-- §5, Lemma (traversal), **(R)** — "positions re-read in place". Pointwise (R) lifts to
-    the traversal: reverse the relation. -/
-theorem traverse_roundTrip (h : ∀ x y, f x = some y → g y = some x) :
-    ∀ (xs : List α) (ys : List β), traverse f xs = some ys → traverse g ys = some xs :=
-  fun _ _ ht => traverse_eq_some.mpr ((traverse_eq_some.mp ht).imp h).flip
-
-/-- §5, Lemma (traversal): "defined where every entry is". Definedness needs no partner
-    list — only that every entry is writable. -/
-theorem traverse_isSome_of_all {xs : List α} (h : ∀ x ∈ xs, (f x).isSome) :
-    (traverse f xs).isSome := by
-  induction xs with
-  | nil => rfl
-  | cons x xs ih =>
-      obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (h x (by simp))
-      obtain ⟨ys, hys⟩ := Option.isSome_iff_exists.mp (ih fun z hz => h z (by simp [hz]))
-      simp [traverse_cons, hy, hys]
-
-/-- §5, Lemma (traversal), **(C)** — "each entry re-encodes". Pointwise (C) lifts to the
-    traversal: forget the partner, keep definedness. -/
-theorem traverse_isSome {f : α → Option γ} (h : ∀ y x, g y = some x → (f x).isSome) :
-    ∀ (ys : List β) (xs : List α), traverse g ys = some xs → (traverse f xs).isSome :=
-  fun _ _ ht => traverse_isSome_of_all fun _ hx =>
-    let ⟨_, _, hR⟩ := (traverse_eq_some.mp ht).mem_right hx; h _ _ hR
-
-/-- Every output is witnessed by an input it was written from. -/
-theorem traverse_mem₂ {xs : List α} {ys} (h : traverse f xs = some ys) :
-    ∀ y ∈ ys, ∃ x ∈ xs, f x = some y :=
-  fun _ hy => (traverse_eq_some.mp h).mem_right hy
-
-/-- A property of the outputs, established entrywise. -/
-theorem traverse_mem {P : β → Prop} (hP : ∀ x y, f x = some y → P y) {xs ys}
-    (h : traverse f xs = some ys) : ∀ y ∈ ys, P y :=
-  fun _ hy => let ⟨_, _, hf⟩ := traverse_mem₂ h _ hy; hP _ _ hf
-
-/-- A property of the inputs, established entrywise — a traversal only succeeds on a list
-    whose every entry the function accepted. -/
-theorem traverse_mem_input {P : α → Prop} (hP : ∀ x y, f x = some y → P x) {xs ys}
-    (h : traverse f xs = some ys) : ∀ x ∈ xs, P x :=
-  fun _ hx => let ⟨_, _, hf⟩ := (traverse_eq_some.mp h).mem_left hx; hP _ _ hf
-
-
-
+variable {α β : Type}
 
 /-- §5, Lemma (traversal), keyed clause: names survive. A traversal that preserves each
     entry's name preserves the list of names. -/
@@ -177,75 +38,4 @@ theorem traverse_fst {f : Name × α → Option (Name × β)}
 
 end Traverse
 
-
-/-- Constructive on purpose: mathlib's `filter_eq_nil_iff` routes through
-    `Classical.choice`, and this module keeps choice out even though the advertised base
-    admits it through `Finset`. -/
-theorem filter_nil_of {α : Type _} {p : α → Bool} :
-    ∀ {l : List α}, (∀ y ∈ l, p y = false) → l.filter p = []
-  | [], _ => rfl
-  | a :: l, h => by
-      have ha := h a (List.mem_cons_self)
-      simp only [List.filter, ha]
-      exact filter_nil_of fun y hy => h y (List.mem_cons_of_mem a hy)
-
-
-
-
-
-/-- **Separation.** Suppose a predicate family `adm` pins each list entry to a key: an
-    entry admits `x` only when `key x` is that entry's key. If the keys are pairwise
-    distinct, then whatever one entry admits, no other does — so filtering by admission
-    leaves exactly that entry. This is the shape every disjointness discharger has. -/
-theorem filter_eq_singleton_of_disjoint {β α : Type} {adm : β → α → Bool} {x : α} :
-    ∀ {os : List β} {Ss : List (α → Prop)},
-      List.Forall₂ (fun o S => ∀ y, adm o y = true → S y) os Ss →
-      List.Pairwise (fun S T => ∀ y, S y → ¬ T y) Ss →
-      ∀ o ∈ os, adm o x = true → os.filter (adm · x) = [o]
-  | [], _, .nil, _, _, ho, _ => nomatch ho
-  | o₀ :: os', S₀ :: Ss', .cons h₀ hz, hp, o, ho, hx => by
-    obtain ⟨hhead, htail⟩ := List.pairwise_cons.mp hp
-    by_cases h0 : adm o₀ x = true
-    · have hnone : ∀ o' ∈ os', adm o' x = false := by
-        intro o' ho'
-        cases hq : adm o' x with
-        | false => rfl
-        | true =>
-          obtain ⟨S', hS'mem, hrel⟩ := hz.mem_left ho'
-          exact absurd (hrel x hq) (hhead S' hS'mem x (h₀ x h0))
-      obtain rfl : o = o₀ := by
-        rcases List.mem_cons.mp ho with rfl | ho'
-        · rfl
-        · exact absurd hx (by rw [hnone o ho']; exact Bool.noConfusion)
-      rw [List.filter_cons_of_pos (p := (adm · x)) h0, filter_nil_of hnone]
-    · have ho' : o ∈ os' := by
-        rcases List.mem_cons.mp ho with rfl | h
-        · exact absurd hx (by simp_all)
-        · exact h
-      rw [List.filter_cons_of_neg (p := (adm · x)) (by simpa using h0)]
-      exact filter_eq_singleton_of_disjoint hz htail o ho' hx
-
-/-- A projection is not a different condition — it is a way of *building* the sets. Pull
-    each option's label set back along the projection and the sets are disjoint again,
-    because an input has at most one label. -/
-theorem filter_eq_singleton_of_labels {β α ι : Type}
-    {adm : β → α → Bool} {key : α → Option ι} {x : α} {os : List β} {Ss : List (ι → Prop)}
-    (hz : List.Forall₂ (fun o S => ∀ y, adm o y = true → ∃ l, key y = some l ∧ S l) os Ss)
-    (hp : List.Pairwise (fun S T => ∀ l, S l → ¬ T l) Ss)
-    (o : β) (ho : o ∈ os) (hx : adm o x = true) : os.filter (adm · x) = [o] := by
-  refine filter_eq_singleton_of_disjoint
-    (Ss := Ss.map (fun S y => ∃ l, key y = some l ∧ S l)) ?_ ?_ o ho hx
-  · rw [List.forall₂_map_right_iff]; exact hz
-  · rw [List.pairwise_map]
-    refine hp.imp fun h y hy hy' => ?_
-    obtain ⟨l, hk, hS⟩ := hy
-    obtain ⟨l', hk', hS'⟩ := hy'
-    rw [hk] at hk'; cases hk'
-    exact h l hS hS'
-
-
-/-- …and the same for `Option.map`, which is how a uniform tail is carried. -/
-theorem forall_mem_map_option {α β : Type} {x? : Option α} {g : α → β} {P : β → Prop}
-    (h : ∀ x ∈ x?, P (g x)) : ∀ y ∈ x?.map g, P y := by
-  cases x? <;> simp_all
-
+end Calculus
