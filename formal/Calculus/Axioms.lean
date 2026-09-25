@@ -18,6 +18,7 @@ import Calculus.Universal
 import Calculus.Confluence
 import Calculus.Kernel
 import Calculus.Compat
+import Calculus.JSON
 import Lean
 
 /-!
