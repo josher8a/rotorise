@@ -376,6 +376,60 @@ describe('a union refuses a thunk it must read at its own input, because the mod
         ).toThrow(CodecError)
     })
 
+    /**
+     * **An adapter on the path of a recursion is refused, and the refusal names the option.** The
+     * model's guard refuses a `held` between a binder and its variable, because the conversion can
+     * make the input deeper, so the stages need not agree. A list on the path bounds nothing then.
+     */
+    it('refuses a held between a recursive thunk and the codec it returns, and names the option', () => {
+        const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
+        // at its own declaration the thunk throws, because the constant is not yet declared
+        const declare = () => {
+            const self: AnyCodec = union([
+                string,
+                array(
+                    held(
+                        lazy(() => self as never),
+                        lazy(() => self as never),
+                        same,
+                    ),
+                ),
+            ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+            return self
+        }
+        expect(declare).toThrow(/option 2 of this union holds a `held`/)
+        // declared outside a union, the cycle is complete when a union reads it
+        const kids: AnyCodec = object({
+            kids: array(
+                held(
+                    lazy(() => kids as never),
+                    lazy(() => kids as never),
+                    same,
+                ),
+            ),
+        }) as unknown as AnyCodec
+        expect(() =>
+            union([number, kids] as unknown as readonly AnyCodec[]),
+        ).toThrow(/option 2 of this union holds a `held`/)
+    })
+
+    it('accepts a recursion below a list or an object with no adapter on its path', () => {
+        const json: AnyCodec = union([
+            string,
+            array(lazy(() => json as never)),
+        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+        const tree: AnyCodec = object({
+            v: string,
+            kids: array(lazy(() => tree as never)),
+        }) as unknown as AnyCodec
+        expect(() =>
+            union([number, json] as unknown as readonly AnyCodec[]),
+        ).not.toThrow()
+        expect(() =>
+            union([number, tree] as unknown as readonly AnyCodec[]),
+        ).not.toThrow()
+    })
+
     it('accepts recursion below an object, where the union reads no thunk', () => {
         const tree: AnyCodec = object({
             v: string,

@@ -47,6 +47,7 @@ import {
     compatible,
     elementAdapter,
     elementPredicates,
+    heldOnRecursivePath,
     literalAlternatives,
     member as memberOf,
     occV,
@@ -4870,6 +4871,14 @@ export const union = <const Options extends readonly AnyCodec[]>(
         if (unreadableSpine(termOf(declared))) {
             throw new CodecError(
                 `option ${at + 1} of this union reaches a thunk that is recursive, or that names a codec not yet declared, where the union must read it. The model's guard refuses a recursion that reads the input of its own binder, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
+            )
+        }
+        // **An adapter on a recursive path is refused as well.** The model's guard refuses a
+        // `held` between a binder and its variable, because the conversion can make the input
+        // deeper, and a container on the path then bounds nothing
+        if (heldOnRecursivePath(termOf(declared))) {
+            throw new CodecError(
+                `option ${at + 1} of this union holds a \`held\` between a recursive thunk and the codec that the thunk returns, or above a thunk that names a codec not yet declared. The conversion of a \`held\` can make its input deeper, so the model's guard refuses the recursion, and this option is not shown compatible with the others. Put no adapter on the path of a recursion`,
             )
         }
     }

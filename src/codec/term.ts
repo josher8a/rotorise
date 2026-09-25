@@ -1020,6 +1020,59 @@ export const unreadableSpine = (
 }
 
 /**
+ * **Whether a `held` sits between a recursive thunk and the term the thunk returns**, which is the
+ * model's `Term.guarded` refusing a variable at level 3. The walk forces each thunk and keeps the
+ * term objects it is inside. A thunk that returns an object on that stack closes a cycle, and the
+ * objects between the two are the path of the recursion. A `held` on that path refuses: its
+ * conversion can make the input deeper, so no container on the path bounds the depth of a stage.
+ *
+ * **A thunk that throws under a `held` refuses too.** At the declaration of a recursive schema the
+ * thunk names the constant being declared, so it throws, and the walk cannot see the cycle. The
+ * spine reads such a thunk as recursive ({@link unreadableSpine}), and a `held` path reads it the
+ * same way. The walk ends at each cycle, because a thunk memoizes its codec and every other edge of
+ * a term is built before the term.
+ */
+export const heldOnRecursivePath = (root: Term): boolean => {
+    const walk = (t: Term, stack: readonly Term[]): boolean => {
+        const on = [...stack, t]
+        const next = (one: Term) => walk(one, on)
+        switch (t.kind) {
+            case 'lazy': {
+                const target = force(t)
+                if (target === undefined)
+                    return on.some((one) => one.kind === 'held')
+                const at = on.indexOf(target)
+                return at === -1
+                    ? next(target)
+                    : on.slice(at).some((one) => one.kind === 'held')
+            }
+            case 'list':
+                return (
+                    [...t.pre, ...t.suf].some(next) ||
+                    (t.spread !== undefined && next(t.spread))
+                )
+            case 'object':
+                return (
+                    Object.values(t.body.fields).some((field) =>
+                        next(field.t),
+                    ) ||
+                    (t.body.rest !== undefined && next(t.body.rest))
+                )
+            case 'union':
+                return t.options.some(next)
+            case 'held':
+                return next(t.inner) || next(t.outer)
+            case 'refine':
+            case 'legacy':
+                return next(t.inner)
+            default:
+                return false
+        }
+    }
+    return walk(root, [])
+}
+
+/**
  * **Whether {@link callerView} and {@link storedView} are sound on a term**, and build it without
  * forcing a thunk.
  *
