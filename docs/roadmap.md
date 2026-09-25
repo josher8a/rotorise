@@ -53,43 +53,40 @@ bound, and `pairwiseCompat_of_separated` with `separated_of_unionOk` through the
 
 ---
 
-## A term can be recursive
+## The meet states a recursive term
 
-**The future state.** A term can refer to itself: `lazy` binds a name, or `denote` stages. A
-recursive union then denotes the least fixed point of its unfolding, and the emitter states a
-recursive schema rather than refusing it.
+**The future state.** The meet has a row for `mu`. The certificate then certifies two recursive
+options where the meet reaches the bottom, and a recursive option beside a finite one. It no longer
+needs the occupancies to be apart.
 
-**The obstruction is the term language, not the union.** `Term.lazy` carries a plain `Term`, and
-`denote` is structural, so no term is recursive. The host's `lazy` builds a recursive schema, and
-the emitter refuses a `lazy` chain that it cannot close. The host's `union` refuses an option
-whose spine reaches a recursive thunk, and keeps recursion below a list or an object. The union
-is the compatible join, and where the admitting options agree, first-match resolution is monotone
-and continuous (`selectF_mono_list`, `selectF_continuous_list`). Those are the two obligations of a
-least-fixpoint construction. The literature is Kaarsgaard, Axelsen and Glück, "Join inverse
-categories and reversible recursion" (JLAMP, 2017): an inverse category with countable joins has
-morphism schemes for reversible recursion.
+**What stands today.** `Term.meet` answers `none` for a `mu`, except against the bottom, and the
+host's `meetTerms(x, y)` answers nothing at a recursive thunk. So a pair with a recursive option is
+certified by `Orth1`, accepted beside the bottom, or refused. The corpus tree beside the corpus
+category is refused on both sides, because both write a map. The two closed objects share no value.
 
-**The measurement decides it now: do not build.** A probe built the construct in a
-standalone model: a binder over de Bruijn variables, and a denotation that budgets each input by
-its own depth. The fixed point is structural and stable, a two-option `opaque` over strings and
-lists is an instance of it, and its stages still reduce by `rfl`. Two kills bound the construct.
+**What decides it.** A corpus pair that a caller needs, that the occupancies refuse, and that a
+meet row could certify. A candidate row unfolds `mu` once against a finite term, by the fixed
+point (`muCodec_e_fix`, `muCodec_p_fix`). The row needs a proof that the meet's homomorphism
+(`Adm_meet`) survives the unfolding. Whether two recursive operands need a coinductive argument
+is open. A probe decides it. The probe writes a meet row for two `mu` terms, and proves `Adm_meet` by
+stage induction or prints the obstruction.
 
-- **A `held` on the recursive path defeats the guard.** "Recursion only under a list" is not
-  sufficient once an input transform sits between the list and the variable. A transform that
-  wraps its input back into a list keeps the depth from falling, so each stage writes a deeper
-  attribute and the budgeted unfolding never stabilizes. The guard must exclude `held`.
-- **A well-founded budget stops `rfl`.** The same budgeted `opaque` by well-founded recursion
-  evaluates, and the kernel does not reduce it. The budget must stay structural.
+---
 
-**The cost is larger than the deletion.** The construct adds a variable and a binder to `Term`,
-an environment to `denote` and to each companion a stratum owes, an arm per new constructor in
-each declaration that matches on a term, and an open-term restatement of each induction over
-`Typed`. It deletes at most the special machinery of `Opaque.lean`.
+## The host reads held-freeness through a binder
 
-**What would change the verdict.** A recursive schema that a caller needs and that neither
-`opaque` nor recursion below a list or an object in the host can state. A deletion larger than the
-construct adds. A guard that admits a `held` on the path and still stabilizes. The measurement
-stays valid until the term language or the guard changes.
+**The future state.** The host's `heldFree(t)` reads through a recursive thunk, as the model's `HF`
+reads through `mu`. A pair of held-free options with a recursive one is then accepted on the
+held-free warrant (`pairwiseCompat_of_HF`), as the model already proves it compatible.
+
+**What stands today.** `heldFree(t)` answers `false` at a recursive thunk, because its walk treats an
+unreadable thunk as reaching an adapter. So the host refuses `union([array(string), json])`, while
+the model proves the pair compatible by `pairwiseCompat_of_HF` and declines it by `certPair`. The
+host is the narrower side, which is the safe direction.
+
+**What decides it.** The owner decides whether the held-free warrant extends to recursive
+options. The host then needs a walk that carries held-freeness from construction, so that the walk
+ends at a cycle without forcing it again.
 
 ---
 

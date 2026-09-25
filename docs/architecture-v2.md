@@ -391,7 +391,9 @@ read the ladder.
 
 `opaque` is the top: the universal sum, total on the values (`opaq_total`) and on the attributes
 (`opaqA_total`). `opaque` denotes a codec the calculus warrants, and not a codec a caller
-supplies. Each term with no `held` is a restriction of `opaque` on both halves (`confluence_W`,
+supplies. `opaqStep` is one layer of everything self-identifying, and `opaque` is its limit
+(`muCodec opaqStep`).
+Each term with no `held` is a restriction of `opaque` on both halves (`confluence_W`,
 `confluence_R`). A `held` term changes the carrier, so that inclusion does not reach it. `opaque`
 carries no flag, because it holds a number exactly and so loses nothing.
 
@@ -616,6 +618,27 @@ carries: the empty set**, which is the bottom at a ground position. The meet of 
 member sets reduces to the bottom through the refinement, so the empty set is reached as the
 bottom rather than spelled as a set. What the unification inherits is `D6`'s discipline: quantify
 by membership, decide equality by mutual inclusion, and never reach for the classical instance.
+
+### A recursive term is a guarded binder
+
+A recursive schema is a binder and its variable: `mu b`, where the variable in `b` stands for
+`mu b` itself. Each input reads the stage of the body that the input's own depth names. So the
+recursion runs on the input, and a closed term still reduces. The guard asks that the body reads
+its variable under a container, and never under an adapter. The conversion of an adapter can make
+the input deeper. The guard alone makes the stages agree past the depth of the input. The limit is
+a fixed point of its body, and lawful stages give a lawful limit. The construct needs no option to
+be disjoint from another, so it asks nothing of a union that a union does not already owe.
+
+`opaque` is this construct at one fixed body. Its options are kind-disjoint, which gives each
+layer compatible options and so a lawful layer. The limit is the general theorem.
+
+Its body describes a recursive term. Its admissible set is its own codec's domain. Its
+occupancy is its body's, by an induction over the stages that needs no guard. The meet states a
+recursive term only against the bottom. So the certificate decides a pair of a recursive option
+and a term that is not the bottom by the occupancies alone.
+
+> ASPIRATION: the meet states a recursive term only against the bottom. So the certificate
+> refuses two recursive options whose occupancies meet, even where the two write no common value.
 
 ---
 

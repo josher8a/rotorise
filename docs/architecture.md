@@ -160,6 +160,74 @@ What matters is that the measure is **derived from the term**, so it appears in 
 `term_depth_wf` is the shared tactic for a term recursion. Anything new recursing on a term takes
 it, and an inequality the block does not offer goes beside `Term.depth` rather than inline.
 
+A recursive term recurses on its input, not on the term. `muCodec` reads each input at the stage
+that the input's own depth names, `Value.depth` on the write side and `Attr.depth` on the read side.
+That budget is a structural recursion on the input, so a closed recursive term still reduces by
+`rfl`, and the bridge states its vectors. A well-founded budget evaluates and does not reduce in
+the kernel.
+
+---
+
+## Recursion
+
+**A recursive term is a guarded binder.** `Term.mu b` binds `Term.var 0` in `b`, with de Bruijn
+indices. `denote` takes an environment of codecs for the variables, and a closed term is denoted in
+the empty one, where a variable is the bottom. `denote (.mu b) ρ` is `muCodec` of the body
+`fun c => denote b (c :: ρ)`. The stages start at the bottom, and each applies the body to the
+one before. Each input reads the stage its own depth names.
+
+**The guard is a checked condition on the syntax.** `Term.use i t` is the level at which `t` reads
+the variable `i`. The four levels are absent, under a container, at the input, and under a `held`.
+`Term.guarded` asks, at each binder, that the body reads its variable under a container at most.
+It refuses two shapes, and `Discharge.lean` pins each refusal:
+
+- a variable that reads the binder's own input, as in `mu (var 0)` (`not_typed_unguarded_binder`)
+  and `mu (union [var 0, string])` (`guard_refuses_option_at_binder_input`). The stages of such a
+  term never grow;
+- a `held` between the binder and its variable (`guard_refuses_held_on_path`). The `f` of a
+  `held` can make the input deeper, so a container on the path does not bound the depth.
+
+`Typed.mu` carries the guard as a premise, because the guard is decidable from the term. A type
+would need a second term family for the body of a binder, and every table over terms would gain a
+family.
+
+**Stability needs the guard alone.** `Contractive` says that a body reads its argument only at
+inputs strictly shallower than its own input, on both sides. `contractive_body` derives it from the
+guard, through one congruence over the term family (`denote_agree`). From it the stages agree past
+the depth of the input (`muStage_agree`). The limit is a fixed point of its body (`muCodec_e_fix`,
+`muCodec_p_fix`), and lawful stages give a lawful limit (`lawful_muCodec`). The lawful limit reads
+both sides at the stage of the larger depth, so no lemma about depth preservation is owed. No
+option of a body has to be disjoint from another for any of these.
+
+**Soundness runs over the environment.** `Obligations` takes the environment. A `mu` owes the
+premises of its body at each stage, given that the stage before is lawful. `soundnessIn` proves
+`Lawful` for an open term whose variables the environment gives lawful codecs, and `soundness` is
+the closed case. A recursive codec's held set is its write domain, so the held-set theorems stay
+closed: at `mu` they are definitional.
+
+**`opaque` is the construct at a fixed body.** `opaque` denotes `muCodec opaqStep`, where `opaqStep
+c` is one layer of everything self-identifying over `c`. `contractive_opaqStep` is the contraction
+at that body. Kind-disjointness gives the compatibility of its options (`compat_of_onKinds`, with
+`compat_opaque` as the instance). That makes each layer lawful (`lawful_opaqStep`), and
+`lawful_opaq` is the general limit theorem at that body.
+
+**The analyses read a recursive term through its body.** `Adm` and `AdmA` of a `mu` ask its own
+codec, as the rows of `opaque` do. The occupancy of `mu b` is the occupancy of `b`, with a variable
+at no slot. The proof is an induction over the stages on open terms (`occV_open`, `occA_open`),
+and it needs no guard. The meet states no recursive
+term, except against the bottom, so the certificate decides a pair with a recursive option by the
+occupancies alone.
+
+**The host spells recursion as a thunk, and the bridge prints the binder.** The emitter marks each
+term object that a thunk returns during the printing of that object. It prints `Term.mu` at the
+object and `Term.lazy (Term.var k)` at the thunk, where `k` counts the binders between the two. Each
+recursive vector asserts that the guard accepts its term. The host's `union` refuses the two shapes
+the guard refuses. One is an option whose spine reaches a recursive thunk. The other is an option
+where a `held` sits between the term that a recursive thunk returns and the thunk. The host's
+`union` also refuses a thunk that throws. Recursion below a list or an object stays declared, and
+the certificate decides it. The host's `heldFree(t)` answers `false` at a recursive thunk. The
+model's `HF` reads through a binder, so the host is the narrower of the two.
+
 ---
 
 ## The four recurring design moves
@@ -461,18 +529,6 @@ into an answer.
 ## What is deliberately not modelled
 
 Each of these is a decision with a price, not a gap, and each has a witness.
-
-**A recursive term.** No term is recursive: `Term.lazy` carries a plain `Term`, and `denote` is
-structural. A recursive term needs a binder or a staged `denote`. `opaque` is the one recursive
-union the model carries. Its options are pairwise kind-exclusive, so they are compatible at each
-stage (`compat_opaque`), and `lawful_opaq` proves the fixed point lawful. Where the
-admitting options agree (`ConfluentAt`), first-match resolution is monotone and continuous
-(`selectF_mono_list`, `selectF_continuous_list`). Those are the two obligations that a
-least-fixpoint construction discharges.
-
-The host's declaration states only what the model can state. `union` reads through each thunk
-that it can force, and refuses an option whose spine reaches a recursive thunk or a thunk that
-throws. Recursion below a list or an object stays declared, and the certificate decides it.
 
 **The nesting bound.** `Nesting.lean` is the one place the attribute algebra is larger in the
 model than in the store, deliberately. The list and map constructors nest without limit by
