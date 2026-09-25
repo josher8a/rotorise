@@ -192,7 +192,7 @@ describe('what it refuses, and what it tells you instead', () => {
      * Under a policy, `NS` is refused by a stronger rule: the policy has no `NS` **write** path
      * at all, so reading one would re-encode as `SS` and change the attribute's stored type. A
      * member a codec cannot write is a member it cannot read —
-     * `Calculus.Lawful.no_read_without_write`.
+     * `Calculus.Alg.Lawful.no_read_without_write`.
      *
      * **An empty `NS` gets the empty-set text now**, because the canonical codec reads first and
      * refuses it before the policy sees a set.

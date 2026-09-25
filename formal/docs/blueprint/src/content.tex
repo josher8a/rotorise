@@ -83,14 +83,14 @@ undetermined is settled in §3.
 
 \begin{definition}[(R) retraction]
 \label{cond:R}
-\lean{Calculus.Lawful.retract}
+\lean{Calculus.Alg.Lawful.retract}
 \leanok
 \texttt{∀\ t\ ∈\ dom(e).\ p(e(t))\ =\ t}. Writing then reading returns the value written.
 \end{definition}
 
 \begin{definition}[(C) canonical reads]
 \label{cond:C}
-\lean{Calculus.Lawful.canon}
+\lean{Calculus.Alg.Lawful.canon}
 \leanok
 \texttt{∀\ a\ ∈\ dom(p).\ e(p(a))\ =\ a}. Whatever was read is written back, at the attribute it was
 read from.
@@ -98,7 +98,7 @@ read from.
 
 \begin{definition}[(W) a term writes its member]
 \label{cond:W}
-\lean{Calculus.Lawful.writes}
+\lean{Calculus.Alg.Lawful.writes}
 \leanok
 \texttt{μ\ ≠\ ⊤\ ⟹\ ∀\ t\ ∈\ dom(e).\ e(t)\ =\ ⟨μ,\ \_⟩}. A term that names its member writes that member
 and no other.
@@ -107,7 +107,7 @@ and no other.
 \begin{corollary}[(MP) member preservation]
 \label{cond:MP}
 \uses{cond:C}
-\lean{Calculus.Lawful.canon}
+\lean{Calculus.Alg.Lawful.canon}
 \leanok
 \texttt{∀\ a\ ∈\ dom(p).\ member(e(p(a)))\ =\ member(a)}. Reading and writing back never changes a stored
 member. It is immediate from \rulelink{cond:C}{\textbf{(C)}}, because \texttt{e(p(a))} is \texttt{a}.
@@ -141,7 +141,7 @@ weaker form, and the equivalence it works modulo is not a parameter a programmer
 
 \begin{corollary}[Q — stability]
 \label{cor:Q}
-\lean{Calculus.Lawful.stable}
+\lean{Calculus.Alg.Lawful.stable}
 \leanok
 \texttt{∀\ a\ ∈\ dom(p).\ e(p(a))\ ≈c\ a}.
 \end{corollary}
@@ -161,7 +161,7 @@ produced, \rulelink{cor:Q}{\textbf{(Q)}} at values a table returned. What \rulel
 
 \begin{corollary}[read-side W]
 \label{cor:readW}
-\lean{Calculus.Lawful.reads}
+\lean{Calculus.Alg.Lawful.reads}
 \leanok
 \texttt{μ\ ≠\ ⊤\ ⟹\ ∀\ a\ ∈\ dom(p).\ member(a)\ =\ μ}.
 \end{corollary}
@@ -1248,7 +1248,7 @@ premise is that sum's \rulelink{cond:compat}{\textbf{(Compat)}}, and the sugar p
 \begin{lemma}[injectivity]
 \label{lem:injectivity}
 \uses{cond:R}
-\lean{Calculus.Lawful.e_injective}
+\lean{Calculus.Alg.Lawful.e_injective}
 \leanok
 \rulelink{cond:R}{\textbf{(R)}} makes \texttt{e} injective on \texttt{dom(e)}.
 \end{lemma}

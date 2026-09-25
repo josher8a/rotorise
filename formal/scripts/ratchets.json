@@ -1,9 +1,10 @@
 {
   "_comment": "Per-file ratchet baselines. See scripts/ratchet.py \u2014 a rise fails the build; move a number only with --accept.",
   "branches": {
+    "Calculus/Alg.lean": 2,
     "Calculus/Axioms.lean": 1,
     "Calculus/Carriers.lean": 49,
-    "Calculus/Codec.lean": 6,
+    "Calculus/Codec.lean": 2,
     "Calculus/Compat.lean": 29,
     "Calculus/Confluence.lean": 57,
     "Calculus/Continuity.lean": 38,
@@ -48,6 +49,7 @@
     "../docs/architecture.md": 0,
     "../docs/defects.md": 0,
     "../docs/roadmap.md": 0,
+    "Calculus/Alg.lean": 0,
     "Calculus/Axioms.lean": 4,
     "Calculus/Carriers.lean": 1,
     "Calculus/Codec.lean": 0,
@@ -96,9 +98,10 @@
     "docs/blueprint/src/introduction.tex": 0
   },
   "undocumented_public_theorems": {
+    "Calculus/Alg.lean": 4,
     "Calculus/Axioms.lean": 0,
     "Calculus/Carriers.lean": 6,
-    "Calculus/Codec.lean": 4,
+    "Calculus/Codec.lean": 0,
     "Calculus/Compat.lean": 0,
     "Calculus/Confluence.lean": 0,
     "Calculus/Continuity.lean": 2,
@@ -140,9 +143,10 @@
     "Calculus/Vectors.lean": 4
   },
   "unfolding_sites": {
+    "Calculus/Alg.lean": 1,
     "Calculus/Axioms.lean": 0,
     "Calculus/Carriers.lean": 1,
-    "Calculus/Codec.lean": 1,
+    "Calculus/Codec.lean": 0,
     "Calculus/Compat.lean": 1,
     "Calculus/Confluence.lean": 7,
     "Calculus/Continuity.lean": 7,

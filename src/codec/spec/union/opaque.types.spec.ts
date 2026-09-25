@@ -350,7 +350,7 @@ describe('every N it writes is a numeral', () => {
      * It used to read `NS` as `Set<string>`, so re-encoding what it read produced `SS`: an
      * `NS` attribute silently becoming an `SS` on a read-modify-write. **(MP)**, and the only
      * law watching, since `opaque`'s `μ` is `⊤`. A codec is a pair, and a member it cannot
-     * write is a member it cannot read — `Calculus.Lawful.no_read_without_write`.
+     * write is a member it cannot read — `Calculus.Alg.Lawful.no_read_without_write`.
      */
     it('refuses a set of numbers on both sides, which is what a pair means', () => {
         const lossy = opaque('lossy')
