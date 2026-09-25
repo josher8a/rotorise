@@ -1,4 +1,5 @@
 import Calculus.AlgRelations
+import Calculus.AlgLists
 
 /-!
 # A second universe: JSON
@@ -13,13 +14,12 @@ stored carrier are both `Json`, and the member of a value is its JSON kind. A nu
 
 The module instantiates these parts of the generic layer: the record `Alg.Codec`, the laws
 `Alg.Lawful`, the refinement by `Alg.Lawful.restrict`, the adapter by `Alg.Lawful.through`, and
-the join by `Alg.lawful_altCodec`. The compatibility of the join comes from
-`Alg.compat_of_common_bound'`: the identity codec bounds each ground codec, because the two
-carriers are one type.
+the join by `Alg.lawful_altCodec`, and the array by `Alg.lawful_entrywise`. The compatibility of
+the join comes from `Alg.compat_of_common_bound'`: the identity codec bounds each ground codec,
+because the two carriers are one type.
 
-The module writes three things itself. The ground codecs and their laws, because a ground
-codec reads the carrier. The traversal of a list and its round trip. The array codec and its
-law, because the generic layer has no container combinator.
+The module writes only three things itself: the carrier, the ground codecs with their laws, and
+the prism of an array. Each of the three reads the carrier.
 -/
 
 namespace Calculus.JSON
@@ -153,65 +153,23 @@ theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum :=
       | head => exact ⟨lawful_num, sub_ground_id _⟩
       | tail _ ho => nomatch ho
 
-/-! ## Arrays
+/-! ## Arrays -/
 
-The generic layer has no container combinator. So the array codec and its traversal are
-written here. -/
-
-/-- A list traversed by a partial function: all entries, or nothing. -/
-def traverse {α β : Type} (f : α → Option β) : List α → Option (List β)
-  | [] => some []
-  | x :: xs => (f x).bind fun y => (traverse f xs).map (y :: ·)
-
-/-- (R) of each entry gives (R) of the traversal. -/
-theorem traverse_roundTrip {α β : Type} {f : α → Option β} {g : β → Option α}
-    (h : ∀ {x y}, f x = some y → g y = some x) :
-    ∀ {xs ys}, traverse f xs = some ys → traverse g ys = some xs
-  | [], _, ht => by cases ht; rfl
-  | _ :: _, _, ht => by
-    obtain ⟨y, hy, ht⟩ := Option.bind_eq_some_iff.mp ht
-    obtain ⟨ys, hys, rfl⟩ := Option.map_eq_some_iff.mp ht
-    simp only [traverse, h hy, traverse_roundTrip h hys, Option.bind_some, Option.map_some]
+/-- The array constructor, as a prism. The caller side and the stored side share the prism. -/
+def arrP : Alg.Ctor (List Json) Json where
+  into := .arr
+  out := fun v => match v with | .arr xs => some xs | _ => none
+  out_into _ := rfl
+  into_out {v _} h := by cases v <;> first | cases h; rfl | exact nomatch h
 
 /-- The array codec over an element codec: each entry through the element codec. -/
 def arr (c : Alg.Codec Json Json JMember) : Alg.Codec Json Json JMember :=
-  { T := fun v => match v with | .arr xs => ∀ x ∈ xs, c.T x | _ => False
-    μ := some .arr
-    e := fun v => match v with | .arr xs => (traverse c.e xs).map .arr | _ => none
-    p := fun a => match a with | .arr as => (traverse c.p as).map .arr | _ => none }
-
-/-- What the array codec writes: an array, each entry written by the element codec. -/
-theorem arr_e {c : Alg.Codec Json Json JMember} {v a : Json} :
-    (arr c).e v = some a → ∃ xs ys, v = .arr xs ∧ traverse c.e xs = some ys ∧ a = .arr ys := by
-  intro h
-  cases v with
-  | arr xs =>
-    obtain ⟨ys, hys, rfl⟩ := Option.map_eq_some_iff.mp h
-    exact ⟨xs, ys, rfl, hys, rfl⟩
-  | _ => nomatch h
-
-/-- What the array codec reads: the mirror of `arr_e`. -/
-theorem arr_p {c : Alg.Codec Json Json JMember} {a v : Json} :
-    (arr c).p a = some v → ∃ ys xs, a = .arr ys ∧ traverse c.p ys = some xs ∧ v = .arr xs := by
-  intro h
-  cases a with
-  | arr ys =>
-    obtain ⟨xs, hxs, rfl⟩ := Option.map_eq_some_iff.mp h
-    exact ⟨ys, xs, rfl, hxs, rfl⟩
-  | _ => nomatch h
+  Alg.entrywise arrP arrP .arr (fun xs => ∀ x ∈ xs, c.T x) c.e c.p
 
 /-- An array of a lawful element codec is lawful, entry by entry. -/
 theorem lawful_arr {c : Alg.Codec Json Json JMember} (h : Alg.Lawful Json.member c) :
-    Alg.Lawful Json.member (arr c) where
-  retract he := by
-    obtain ⟨_, _, rfl, hys, rfl⟩ := arr_e he
-    exact congrArg (Option.map Json.arr) (traverse_roundTrip h.retract hys)
-  canon hp := by
-    obtain ⟨_, _, rfl, hxs, rfl⟩ := arr_p hp
-    exact congrArg (Option.map Json.arr) (traverse_roundTrip h.canon hxs)
-  writes hμ _ _ he := by
-    obtain ⟨_, _, _, _, rfl⟩ := arr_e he
-    exact Option.some.inj hμ
+    Alg.Lawful Json.member (arr c) :=
+  Alg.lawful_entrywise (fun _ => rfl) (fun _ _ => h.retract) (fun _ _ => h.canon)
 
 /-- An array of strings. -/
 def strArr : Alg.Codec Json Json JMember := arr str
