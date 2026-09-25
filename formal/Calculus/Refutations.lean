@@ -306,7 +306,7 @@ example : ∃ T μ, Typed (.union [.string, .never]) T μ :=
 /-! ## `≡` is not transitive
 
 Not a row of §6 — a property of §6 itself. `Codec.Equiv.refl` and `Codec.Equiv.symm` are
-proved in `Equations.lean`; `trans` is absent, and this is why. §6 is presented as an
+proved over any carriers; `trans` is absent, and this is why. §6 is presented as an
 equational theory and the conformance standard asks a port to exhibit `Codec.Equiv`, so a
 reader is entitled to assume the relation chains. It does not,
 and nothing said so.
@@ -315,8 +315,8 @@ The mechanism is the tolerance the header above describes: `≡` compares `e` an
 *where both are defined*, so a codec whose `e` is nowhere defined agrees with everything.
 Put one in the middle and it relates two codecs that disagree outright.
 
-The witness is at `Codec` level, which is the level §6's relation lives at — `Equations.lean`
-states all thirty-six of its rows about combinators, never about `denote`. What keeps it
+The witness is at `Codec` level, which is the level §6's relation lives at: the rows of §6 are
+stated over any carriers, about combinators and not about `denote`. What keeps it
 from being a degenerate artifact is that **all three codecs are `Lawful` and on their
 `Carrier`**, and the held set is not empty: the failure survives every hypothesis §2
 imposes on a pair. It uses only the licence §2 grants explicitly — a term's `e` does
@@ -400,7 +400,7 @@ theorem not_equiv_cA_cB : ¬ Codec.Equiv cA cB := by
 
 /-- **§6's `≡` is not transitive**, and the counterexample is lawful throughout. -/
 theorem not_equiv_trans :
-    ¬ ∀ c d e, Codec.Equiv c d → Codec.Equiv d e → Codec.Equiv c e :=
+    ¬ ∀ c d e : Codec, Codec.Equiv c d → Codec.Equiv d e → Codec.Equiv c e :=
   fun h => not_equiv_cA_cB (h _ _ _ equiv_cA_cMid equiv_cMid_cB)
 
 /-! ## `(literal-N)`'s `ℓ ⊆ D`, and what it refuses

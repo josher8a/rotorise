@@ -18,10 +18,6 @@ set writes and reads exactly where each element does. `Confluence.lean` holds th
 -/
 
 namespace Calculus
-/-- Graph inclusion of two codecs on both halves: a restriction of `d` to the domains of `c`. -/
-def Sub (c d : Codec) : Prop :=
-  (∀ v a, c.e v = some a → d.e v = some a) ∧ (∀ a v, c.p a = some v → d.p a = some v)
-
 /-- `Ω` writes a string as `S`. -/
 theorem Ωe_str (s : String) : Ω.e (.str s) = some (.s s) := rfl
 /-- `Ω` writes a number as `N`. -/

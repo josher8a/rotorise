@@ -588,108 +588,6 @@ theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
   exact objectCodecCore_eq ▸ lawful_carried (fun _ => rfl)
     (object_retract hf' hrc') (object_canonS hf (rcOf_forall hrest) hnd)
 
-/-- **Compatibility**: `c` reads `a` as `t`. If `d` acts at `a` or at `t`, then `d` reads `a` as
-    `t`. The relation is one-sided. `PairwiseCompat` asks it of each pair in both orders, so
-    the obligation of a union is symmetric, as Lawson's compatibility of partial bijections is.
-    That obligation is the condition under which a union of lawful options is lawful. -/
-def Compat (c d : Codec) : Prop :=
-  ∀ a t, c.p a = some t → ((d.p a).isSome = true ∨ (d.e t).isSome = true) → d.p a = some t
-
-/-- **Read agreement**: two compatible readings of one attribute give one value. -/
-theorem Compat.p_agree {c d : Codec} (h : Compat c d) {a t w}
-    (hc : c.p a = some t) (hd : d.p a = some w) : w = t := by
-  have := h a t hc (Or.inl (by rw [hd]; rfl))
-  rw [hd] at this; exact Option.some.inj this
-
-/-- A family has a first writer wherever one of its options writes. -/
-theorem find?_attempt_V {os : List Codec} {o v a} (ho : o ∈ os) (he : o.e v = some a) :
-    ∃ o', os.find? (fun c => (c.e v).isSome) = some o' :=
-  Option.isSome_iff_exists.mp (List.find?_isSome.mpr ⟨o, ho, by simp [he]⟩)
-
-/-- …and a first reader wherever one of its options reads. -/
-theorem find?_attempt_A {os : List Codec} {o a v} (ho : o ∈ os) (hp : o.p a = some v) :
-    ∃ o', os.find? (fun c => (c.p a).isSome) = some o' :=
-  Option.isSome_iff_exists.mp (List.find?_isSome.mpr ⟨o, ho, by simp [hp]⟩)
-
-/-- The first writer writes. -/
-theorem acts_of_find?_V {os : List Codec} {o v}
-    (hf : os.find? (fun c => (c.e v).isSome) = some o) : (o.e v).isSome = true :=
-  List.find?_some (p := fun c : Codec => (c.e v).isSome) hf
-
-/-- …and the first reader reads. -/
-theorem acts_of_find?_A {os : List Codec} {o a}
-    (hf : os.find? (fun c => (c.p a).isSome) = some o) : (o.p a).isSome = true :=
-  List.find?_some (p := fun c : Codec => (c.p a).isSome) hf
-
-/-- Canonical reads: the codec writes each value that the codec reads at the attribute that
-    the codec read. -/
-def Canon (u : Codec) : Prop := ∀ a t, u.p a = some t → u.e t = some a
-
-/-- **Write agreement**: two compatible options that both write `v` write one attribute. -/
-theorem Compat.e_agree {c d : Codec} (h : Compat c d) (hc : LawfulCore c) (hd : Canon d) {v a b}
-    (ha : c.e v = some a) (hb : d.e v = some b) : b = a := by
-  have hp : d.p a = some v := h a v (hc.retract ha) (Or.inr (by rw [hb]; rfl))
-  have := hd a v hp
-  rw [hb] at this; exact Option.some.inj this
-
-/-- **A union writes what any option writes**, over pairwise compatible, canonical options. -/
-theorem altCodec_e_of_mem {os : List Codec} {μA : Option Member} (hl : ∀ o ∈ os, Lawful o)
-    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o')
-    {o v a} (ho : o ∈ os) (he : o.e v = some a) : (altCodec os μA).e v = some a := by
-  obtain ⟨o', hf⟩ := find?_attempt_V ho he
-  have ho' := List.mem_of_find?_eq_some hf
-  obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find?_V hf)
-  rw [(hC o ho o' ho').e_agree (hl o ho).core (fun _ _ hp => (hl o' ho').canon hp) he hb] at hb
-  exact altCodec_e.mpr ⟨o', hf, hb⟩
-
-/-- **A union reads what any option reads**, over pairwise compatible options. -/
-theorem altCodec_p_of_mem {os : List Codec} {μA : Option Member} (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o')
-    {o a v} (ho : o ∈ os) (hp : o.p a = some v) : (altCodec os μA).p a = some v := by
-  obtain ⟨o', hf⟩ := find?_attempt_A ho hp
-  have ho' := List.mem_of_find?_eq_some hf
-  exact altCodec_p.mpr ⟨o', hf, hC o ho o' ho' _ _ hp (Or.inl (acts_of_find?_A hf))⟩
-
-/-- The sum's core laws. Compatibility is what makes them hold: the option that reads the
-    attribute of a write reads the value back, whichever option wrote. -/
-theorem lawfulCore_altCodec {os : List Codec} {μA : Option Member}
-    (h : ∀ o ∈ os, LawfulCore o)
-    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o')
-    (hW : ∀ m, μA = some m → ∀ o ∈ os, ∀ t a, o.e t = some a → a.member = m) :
-    LawfulCore (altCodec os μA) where
-  retract he := by
-    obtain ⟨o, hf, hoe⟩ := altCodec_e.mp he
-    have ho := List.mem_of_find?_eq_some hf
-    have hop := (h o ho).retract hoe
-    obtain ⟨o', hf'⟩ := find?_attempt_A ho hop
-    have ho' := List.mem_of_find?_eq_some hf'
-    exact altCodec_p.mpr ⟨o', hf', hC o ho o' ho' _ _ hop (Or.inl (acts_of_find?_A hf'))⟩
-  canon hp := by
-    obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
-    have ho := List.mem_of_find?_eq_some hf
-    obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((h o ho).canon hop)
-    obtain ⟨o', hf'⟩ := find?_attempt_V ho ha'
-    obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find?_V hf')
-    exact Option.isSome_iff_exists.mpr ⟨b, altCodec_e.mpr ⟨o', hf', hb⟩⟩
-  writes := by
-    intro μ hμ t a he
-    obtain ⟨o, hf, hoe⟩ := altCodec_e.mp he
-    exact hW μ hμ o (List.mem_of_find?_eq_some hf) t a hoe
-
-/-- …and canonical reads: the option that read `a` as `t` writes `t` at `a`, and compatibility
-    makes the option that the union writes through agree. -/
-theorem lawful_altCodec {os : List Codec} {μA : Option Member}
-    (h : ∀ o ∈ os, Lawful o)
-    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o')
-    (hW : ∀ m, μA = some m → ∀ o ∈ os, ∀ t a, o.e t = some a → a.member = m) :
-    Lawful (altCodec os μA) :=
-  { lawfulCore_altCodec (fun o ho => (h o ho).core) hC hW with
-    canon := by
-      intro a t hp
-      obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
-      have ho := List.mem_of_find?_eq_some hf
-      exact altCodec_e_of_mem h hC ho ((h o ho).canon hop) }
-
-
 /-! ### Kind separation, and `opaque`'s fixpoint
 
     The discharger `(opaque)` needs. An option is
@@ -771,26 +669,6 @@ theorem lawful_opaqOptions {c : Codec} (hop : Lawful c) :
   exacts [lawful_stringCodec, lawful_booleanCodec, lawful_binaryCodec,
     lawful_nullCodec, lawful_numberCodec, lawful_setCodec hop, lawful_arrayCodec hop,
     lawful_recordCodec hop, absurd h (by simp)]
-
-/-- **Exclusive admission gives compatibility.** Where the option that admits an input is the
-    only one, the other option never acts where the first reads. -/
-theorem compat_of_exclusive {os : List Codec}
-    (hl : ∀ o ∈ os, LawfulCore o)
-    (hxV : ∀ o ∈ os, ∀ v, (o.e v).isSome = true → os.filter (fun c => (c.e v).isSome) = [o])
-    (hxA : ∀ o ∈ os, ∀ a, (o.p a).isSome = true → os.filter (fun c => (c.p a).isSome) = [o]) :
-    ∀ o ∈ os, ∀ o' ∈ os, Compat o o' := by
-  intro o ho o' ho' a t hp hact
-  have hsame : o' = o := by
-    rcases hact with hq | he
-    · have hoA : (o.p a).isSome = true := by simp [hp]
-      have ho'A : (o'.p a).isSome = true := hq
-      have := (List.mem_filter (p := (fun c => (c.p a).isSome))).mpr ⟨ho', ho'A⟩
-      rw [hxA o ho a hoA] at this; exact List.mem_singleton.mp this
-    · have hoV : (o.e t).isSome = true := (hl o ho).canon hp
-      have ho'V : (o'.e t).isSome = true := he
-      have := (List.mem_filter (p := (fun c => (c.e t).isSome))).mpr ⟨ho', ho'V⟩
-      rw [hxV o ho t hoV] at this; exact List.mem_singleton.mp this
-  subst hsame; exact hp
 
 /-- **Options pinned to distinct kinds are pairwise compatible**: each input has one kind, and
     one option answers to each kind. This is the compatibility of `opaque`'s options, and of the
