@@ -1098,8 +1098,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
 export const leanSeparationModule = (
     separations: readonly Separation[],
 ): string =>
-    `import Calculus.Dynamo.Meet
-import Calculus.Dynamo.Compat
+    `import Calculus.Dynamo.Analysis.Meet
+import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Store
 
 /-!
@@ -1307,7 +1307,7 @@ export const leanMeetModule = (
     meets: readonly MeetPair[],
     deferred: readonly string[] = [],
 ): string =>
-    `import Calculus.Dynamo.Meet
+    `import Calculus.Dynamo.Analysis.Meet
 import Calculus.Dynamo.Store
 
 /-!
@@ -1752,8 +1752,8 @@ const fuelFor = (attribute: AttributeValue): number => {
  * bridge would stop being one-directional. Everything the generated file needs is in the generated
  * file.
  */
-const preamble = `import Calculus.Dynamo.Denote
-import Calculus.Dynamo.Frontier
+const preamble = `import Calculus.Dynamo.Lang.Denote
+import Calculus.Dynamo.Alg.Frontier
 import Calculus.Dynamo.Store
 import Mathlib.Tactic.FinCases
 

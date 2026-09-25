@@ -1,5 +1,5 @@
-import Calculus.Dynamo.Nesting
-import Calculus.Dynamo.Separation
+import Calculus.Dynamo.Witness.Nesting
+import Calculus.Dynamo.Analysis.Separation
 
 /-!
 # The DynamoDB port
