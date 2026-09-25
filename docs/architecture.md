@@ -48,20 +48,109 @@ here is silence rather than error, and silence does not fail a build.
 
 ---
 
-## The layering, and the one property the build enforces
+## The layering, and what the imports guarantee
 
-The import graph of `Calculus/` is an almost-linear spine: `Domain`, then `Codec`, then the
-combinator algebra as `Prisms`, `Products`, `Objects`, `Sums`, `Carriers`, `Lawful` and
-`Frontier`, and `Term`, then `Denote`, `Typing`, `Soundness`, then the analyses `Discharge`,
-`HeldSet`, `Nesting` and `Equations`, then `ExactV`, `ExactA` and `Separation`, then
-`Orthogonality`, with `Axioms` as the sink. Several analyses sit off the spine: no module but
+`Calculus/` has two layers. The generic layer states the codec algebra for every universe. An
+instance layer gives one universe its carriers and the facts of those carriers. DynamoDB is one
+instance, and JSON is a second instance.
+
+**The generic layer** is the namespace `Calculus.Alg`, in the modules whose names start with `Alg`.
+
+| module | states, for every universe |
+| --- | --- |
+| `Alg` | the record `Codec` and its laws `Lawful` and `LawfulCore`, over the carriers `V`, `A` and `M` |
+| `AlgCombinators`, `AlgRelations` | the combinators, the join by the first admitter, the order, the equivalence, `Compat`, `Canon` and `Sub` |
+| `AlgLists`, `AlgPositions`, `AlgMaps` | the traversal and `entrywise`, the positional theory, the image of a function over a key set, and `MapOf`, which keeps the namespace `Calculus` |
+| `AlgContainers`, `AlgRecursion` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
+| `AlgTerm`, `AlgTyping` | the term family over a signature, `denote`, the guard, `Typed` and `Obligations` |
+| `AlgGuarded`, `AlgSound`, `AlgHeldFree` | `contractive_body`, `soundness`, and `compat_of_HF` |
+
+`Rows.lean` is generic too, in the namespace `Calculus`. It states the row combinators of the
+analyses over one carrier type, and each side of the pair instantiates it.
+
+`Lawful` takes the member of an attribute as a parameter. (W) reads that function, and no law
+reads more of the store.
+
+**A universe is a signature in two parts.** `Syn` holds the syntax: the values that a `held`
+maps, the primitives, and the predicates. The class `Sem` over a `Syn` holds the meaning: the
+stored carrier, the member, the codec of each primitive, the evaluation of a predicate, the
+depths, the formers and the top. The term family reads `Syn` alone. The compiled code of a
+function over `Term S` takes `S` as a real argument, because `casesOn` takes the parameter of the
+family as a real argument. The semantic fields are `noncomputable` at DynamoDB: `inL`, `setCodec`,
+`Ω` and `Pred.eval` are. One structure would make each function over terms `noncomputable` at
+DynamoDB, `Term.meet` and `Term.hasVar` included. The split keeps a term as data that code can
+compute with.
+
+**A universe owns these facts, and the generic layer owns none of them.**
+
+| the fact | the field | at DynamoDB | at JSON |
+| --- | --- | --- | --- |
+| the carriers | `Syn.V`, `Sem.A`, `Sem.M` | `Value`, `Attr`, `Member` | `Json`, `Json`, `JMember` |
+| the member of an attribute | `Sem.member` | `Attr.member` | `Json.member` |
+| the primitives and their codecs | `Syn.Ground`, `Sem.ground`, `Sem.lawful_ground` | `Ground`, `groundCodec` | `JMember`, `ground` |
+| the predicates | `Syn.Pred`, `Sem.eval` | `Pred`, `Pred.eval` | a function on `Json` |
+| the depths | `Sem.dV`, `Sem.dA` | `Value.depth`, `Attr.depth` | a constant |
+| the list and map formers | `Sem.list` as a `ListF`, `Sem.map` as a `MapF`: a prism on each side | `dList`, `dMap` | none |
+| the set former | `Sem.set` as a `SetF`: a lift and its laws | `dSet`, over `setCodec` | none |
+| the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
+| the top | `Sem.top`, `Sem.lawful_top`, `Sem.topHeld` | `Ω`, `HOpaque` | `idCodec` |
+| the top laws | `TopLaws`, proved once for each universe | `Ω_topLaws` | `id_topLaws` |
+
+A former is an `Option`. A universe without a former denotes the term of that former as the
+bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only
+the held-free theory reads them.
+
+**The set former is a lift, and not a prism.** The list and map formers are prisms from `List`
+and `MapOf` of the carrier onto the carrier. A set former cannot be such a prism: the kernel
+refuses a `Finset` of the datatype that it declares, as a nested occurrence. So `SetF` carries a
+codec transformer `lift` with its law, its agreement one layer down, and its held set. At
+DynamoDB the lift is `setCodec`, over the three wire-set constructors of `Value`.
+
+**The theorems of the algebra hold at every signature.** `Alg.soundness` proves `Lawful` for each
+closed typed term whose obligations hold, in any universe. The universe supplies the laws of its
+primitives, of its formers and of its top, and the generic combinators supply the rest.
+`Alg.compat_of_HF` proves two held-free terms compatible from `TopLaws` and a canonical top,
+when the second term is lawful.
+
+**The instance names the generic declarations.** At DynamoDB, `Codec` and `Lawful` are
+abbreviations at the DynamoDB carriers, and `Term`, `Typed` and `Obligations` are abbreviations
+at `dynSyn`. A `match_pattern` abbreviation keeps each constructor spelling, such as
+`Term.string` and `Term.literal`. `Term.casesD` keeps the case tags `base` and `literal`. The
+cited DynamoDB theorems, such as `soundnessIn` and `carrier_denote`, are one-line wrappers of
+the generic theorems, through `denote_eq_alg`.
+
+**The DynamoDB `denote` states its own rows, and a theorem pins them.** A proof at DynamoDB reads
+`baseCodec`, `setCodec` and `listCodec` by name. So `denote` in `Denote.lean` is a mutual
+definition with one row for each constructor. A wrapper of `Alg.denote` cannot give those rows:
+`simp only [g]` unfolds the body of a wrapper `g`, and ignores the equations that the eqns
+attribute registers for `g`. `denote_eq_alg` proves the two functions equal, by one mutual
+theorem over the family. So a row that drifts from the generic row fails the build.
+`μSyn_eq_alg` pins the member index the same way.
+
+**The analyses are DynamoDB tables.** `Meet`, `ExactV`, `ExactA`, `Orthogonality`, `Separation`,
+`Slice` and the certificate read the constructors of the DynamoDB carriers. No generic form of
+them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
+`Codec`, then the combinator algebra at the DynamoDB carriers as `Prisms`, `Products`, `Objects`,
+`Sums`, `Carriers`, `Lawful` and `Frontier`, and `Term`, then `Denote`, `Typing`, `Soundness`,
+then the analyses `Discharge`, `HeldSet`, `Nesting` and `Equations`, then `ExactV`, `ExactA` and
+`Separation`, then `Orthogonality`, with `Axioms` as the sink. Each instance module imports the
+generic module that it instantiates. Several analyses sit off the spine: no module but
 `Axioms.lean` imports them. `Malleability` is one of them: a lawful codec has one attribute per
 value (`Lawful.fmt_subsingleton`).
 
-**The layering is a convenience. One property of it is checked.** `Axioms.lean` walks the
-environment, and the environment is what `Axioms.lean` imports, which is a hand-maintained list. A
-module nothing on that list reaches is silently unguarded. `scripts/guard_reach.py` fails when any
-module under `Calculus/` sits outside the transitive closure of the guard's imports.
+**What the imports guarantee.** No generic module imports `Domain` or another instance module,
+directly or through its imports. So a generic declaration that cites a fact of the DynamoDB
+carriers is an unknown identifier, and the build fails. `JSON.lean` imports the generic layer and
+no DynamoDB module, so `Calculus.Value` is an unknown identifier under `import Calculus.JSON`. The
+laws, the combinators, the join and soundness are therefore facts of the algebra, and not facts of
+one store. Nothing checks the import lists themselves. An instance import in a generic module
+removes the guarantee, and no guard reports the change.
+
+**One property of the graph is checked.** `Axioms.lean` walks the environment, and the
+environment is what `Axioms.lean` imports, which is a hand-maintained list. A module that nothing
+on that list reaches is silently unguarded. `scripts/guard_reach.py` fails when any module under
+`Calculus/` sits outside the transitive closure of the guard's imports. `Axioms.lean` imports
+`JSON` for this reason: no other module under `Calculus/` imports it.
 
 So a new module under `Calculus/` must be reachable from `Axioms.lean`. `Axioms.lean` cannot
 import the aggregator instead, because the aggregator imports the guard, and inverting that would
@@ -74,9 +163,11 @@ taste is caught by nobody.
 
 ## The term family, and what a stratum owes
 
-`Term`, `Body` and `ObjectSlot` are inductives in one `mutual` block. **The point of the split
-is negative: no `Term` position accepts an `ObjectSlot`.** A slot is not a term, so a nonsensical
-term is a type error rather than a rule somebody must remember to refuse.
+`Term S`, `Body S` and `ObjectSlot S` are inductives in one `mutual` block over a signature `S`,
+in `AlgTerm.lean`. At DynamoDB, `Term`, `Body` and `ObjectSlot` are their abbreviations at
+`dynSyn`. **The point of the split is negative: no `Term` position accepts an `ObjectSlot`.** A
+slot is not a term, so a nonsensical term is a type error rather than a rule somebody must
+remember to refuse.
 
 `Body` bundles the object payload — the declared key set, the slot at each key, and the one open
 block — into one thing. Two consequences are the reason to do it again:
@@ -86,6 +177,10 @@ block — into one thing. Two consequences are the reason to do it again:
 - A `Finset Name` together with a function off the membership subtype makes the no-duplicate-keys
   premise disappear. Both a repeated name and two orderings of one object stop being
   representable. `ObjectSlot` sits in the function's codomain, which is strictly positive.
+
+A primitive is one constructor, `prim`, over the primitives of the universe. At DynamoDB the
+primitives are `Ground`, with the constructors `base` over a `GroundKind` and `literal`, so a
+table over terms states every ground base in one row. `opaq` denotes the top of the universe.
 
 `ObjectSlot` carries the current-schema rule only. A required slot remains required on both
 current-schema sides. An alternate reader is `Codec.extendRead`, over the codec of one current
@@ -105,11 +200,16 @@ error but a silent "everything": the analysis stays sound and stops saying anyth
 | Companion | For `Body` | Why it is owed |
 | --- | --- | --- |
 | a depth clause | `Body.depth` | the termination measure must see through it |
-| a denotation clause | `bodySem` | `denote` must dispatch with no case split at the use site |
+| a denotation clause | `bodySem`, generic, with its DynamoDB row pinned by `bodySem_eq_alg` | `denote` must dispatch with no case split at the use site |
 | a spec projection | `Body.spec` | a slice reads an object option's names and literals off the spec |
 | an admission row, per side | `AdmBody` and `AdmABody` | exactness is per row; a stratum with no row cannot be exact |
 | a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
 | an emitter clause | the object row of `src/codec/lean.ts` | the bridge writes terms in this language, and a constructor it cannot spell breaks it |
+
+The depth clause, the denotation clause and the premise carrier are generic, and each universe
+inherits them. The spec projection and the admission rows are DynamoDB tables. The DynamoDB rows
+of `denote` and their pin are owed too, but a missing row there is a build error, and not a
+silent one.
 
 The spec projection is owed only by a stratum that holds names. A policy answers to no name.
 Every other row is owed unconditionally.
@@ -135,6 +235,7 @@ only.
 | --- | --- | --- |
 | decidable from the term | `Typed` | the judgement itself |
 | about what a codec does: its write half, its read half, an iso, a resolution | `Obligations`, as `PairwiseCompat` and `IsoCancels` are | `soundness`, and `extendRead_lawfulCore` through it |
+| a rule of one universe on a set element | the `elem` field of the universe's `SetF`, which `SetObl` puts in `Obligations` | no law: `soundness` takes it as a premise and does not read it |
 
 `Term` has no alternate reader. Therefore `soundness` proves `Lawful`, which is retract, canon and
 writes, for every typed term whose obligations hold. The induction proves `Lawful` alone.
@@ -161,7 +262,8 @@ What matters is that the measure is **derived from the term**, so it appears in 
 it, and an inequality the block does not offer goes beside `Term.depth` rather than inline.
 
 A recursive term recurses on its input, not on the term. `muCodec` reads each input at the stage
-that the input's own depth names, `Value.depth` on the write side and `Attr.depth` on the read side.
+that the input's own depth names, by the depths of the universe: `Sem.dV` on the write side and
+`Sem.dA` on the read side, which are `Value.depth` and `Attr.depth` at DynamoDB.
 That budget is a structural recursion on the input, so a closed recursive term still reduces by
 `rfl`, and the bridge states its vectors. A well-founded budget evaluates and does not reduce in
 the kernel.
@@ -547,9 +649,10 @@ element term, and a lawful element gives a lawful set (`lawful_setCodec`). Three
 set are DynamoDB facts and not rules of the algebra. The element types `S`, `N` and `B` and the
 absent empty set live in the carrier: `Value.strSet`, `numSet` and `binSet` over `NEFinset`. That
 the element writes one member of `S`, `N` or `B` is an obligation, `SetElem`, beside `(union)`'s
-compatibility. The carrier is not generic over `Value`, because the kernel rejects a nested `Finset`, `Multiset`
-or `Quot` of the datatype being declared, and a list carrier needs a canonical spelling that every
-set codec enforces by refusal.
+compatibility. `SetElem` is the `elem` field of the DynamoDB set former `dSet`, and the generic
+`SetObl` reads it. The carrier holds no set of `Value`, for two reasons. The kernel rejects a
+nested `Finset`, `Multiset` or `Quot` of the datatype being declared. A list carrier needs a
+canonical spelling that every set codec enforces by refusal.
 
 **The n-ary literal is a union of singletons.** A literal carries one value, and several
 alternatives are a `union` of singleton literals whose members are separated because the values
@@ -731,6 +834,10 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New module under `Calculus/` → make it reachable from `Axioms.lean`, and baseline its counts,
   because a new module has no prior state to be judged against.
 - New stratum in the term family → every companion in the table above, counted per side.
+- New law of the algebra → state it in an `Alg` module, which imports no instance module. A
+  statement that needs a fact of a carrier belongs to that universe.
+- New universe → a `Syn`, a `Sem` instance, and its `TopLaws` where the held-free theory must
+  hold. Make the module reachable from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.
 - New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness

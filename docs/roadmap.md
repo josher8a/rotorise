@@ -144,6 +144,10 @@ hold the bulk of the mass are twins in name only, and the largest are the least 
 `AdmLit` against `AdmALit`, `Adm` against `AdmA`. A parametrised development would abstract the
 boilerplate and leave the content untouched.
 
+**The row combinators are one development already.** `Rows.lean` states `RowLe`, `allP`, `anyP`,
+`zipP`, `alignP` and `alignPL` one time over a carrier type, and each side instantiates them. The
+twins that remain state `Adm` or `AdmA` facts, or differ in their bodies.
+
 **This is the same fact the codec algebra states from the other side.** `carriedCodec` states one
 codec for both sides precisely where the two sides are the same. Where they are not, the doubling is
 content rather than repetition. The side split stays local: it does not thread through the codec
@@ -169,7 +173,7 @@ is proved classically, so every statement that mentions membership in a key set 
 
 **The layer alone does not drop the axiom, and that is measured rather than expected.** The
 `Finset` route is one of several. Core Lean's own string lemmas reach `Classical.propDecidable`
-through the UTF-8 decoding proofs, and theorems across five modules reach choice that way; cut
+through the UTF-8 decoding proofs, and theorems in several modules reach choice that way; cut
 `Finset.instSetLike` out of the citation graph and those theorems still reach it. One arithmetic
 simp lemma is a third route. `scripts/classical_gateways.txt` holds the set, and the gate fails
 on a route that is not in it. So this entry delivers a constructive membership layer, and a
@@ -178,7 +182,7 @@ constructive *base* is a further state that needs the other routes closed as wel
 The state this entry names is a membership and decision layer of this development's own, over
 `Multiset.Mem` rather than the coercion to `Set`, with the mathlib lemmas the tree uses restated or
 bridged against it. `MapOf` in `AlgMaps.lean` is where it starts, because the key set is a
-`Finset Name` and `MapOf.at` is the first declaration that decides membership.
+`Finset String` and `MapOf.at` is the first declaration that decides membership.
 
 **What decides it.** Two local instances, membership and its decision, were measured against the
 whole tree and moved a small fraction of the declarations that reach the axiom. So the entry arrives

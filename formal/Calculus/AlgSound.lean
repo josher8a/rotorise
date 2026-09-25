@@ -11,8 +11,8 @@ writes, and lies on its carrier.
 
 The induction runs over open terms. `soundnessIn` takes an environment of lawful codecs for the
 variables, and a `mu` builds its stages from the body's soundness at the stage before.
-`soundness` is the closed case. A universe supplies the laws of its primitives, of its top and of
-its set lift, and the generic combinators supply the rest.
+`soundness` is the closed case. A universe supplies the laws of its primitives, of its formers
+and of its top, and the positivity of its depths. The generic combinators supply the rest.
 -/
 
 namespace Calculus.Alg

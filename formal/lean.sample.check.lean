@@ -17,7 +17,7 @@ generator — an under-fuelled line reduces to `.exhausted`, which matches neith
 -/
 
 /-! A key function is emitted total on the membership subtype, so a single-declared-name object
-binds a `k` it never reads. `Calculus/` itself builds warning-free and so should this file; the
+binds a `k` it never reads. The gate fails this file on any warning, so the linter is off; the
 binder cannot be `_` because a multi-name object *does* read `k.1`. -/
 set_option linter.unusedVariables false
 /-! A vector's name spells the codec pair it came from, so it carries `__`. -/
