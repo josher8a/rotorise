@@ -443,7 +443,7 @@ const writesOnlyStrings = (t: Term | undefined): boolean => {
  *
  * A recursive host schema is a cycle of term objects closed by a thunk. The model names the cycle
  * with a binder: `Term.mu` at the object a thunk returns while that object is being printed, and
- * `Term.var k` at the thunk, where `k` counts the binders between the two.
+ * `Term.lazy (Term.var k)` at the thunk, where `k` counts the binders between the two.
  */
 type Scope = {
     readonly binds: ReadonlySet<Term>

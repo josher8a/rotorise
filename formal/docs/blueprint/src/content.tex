@@ -591,6 +591,48 @@ extendRead(c, r) : adapted(T, μ)
 \end{verbatim}
 \end{definition}
 
+\begin{definition}[(var)]
+\label{rule:var}
+\lean{Calculus.Typed.var}
+\leanok
+\begin{verbatim}
+─────────────────── (var)
+⊢ var i : ∅ ⇝ ⊤
+\end{verbatim}
+\end{definition}
+
+\begin{definition}[(mu)]
+\label{rule:mu}
+\uses{rule:var}
+\lean{Calculus.Typed.mu, Calculus.Term.guarded}
+\leanok
+\begin{verbatim}
+⊢ b : T ⇝ μ    guarded(mu b)
+─────────────────────────────── (mu)
+⊢ mu b : dom(e) ⇝ ⊤
+\end{verbatim}
+\end{definition}
+
+A variable is a de Bruijn index: \texttt{var\ 0} in \texttt{b} stands for \texttt{mu\ b} itself. A closed term reads a variable
+that no binder gives as the bottom, which is why \rulelink{rule:var}{\texttt{(var)}} holds nothing. The held set of
+\texttt{mu\ b} is its write domain. The guard is decidable from the term. At each binder the body reads its
+variable under a list or an object. It never reads the variable at the binder's own input or under a \texttt{held}.
+The guard refuses \texttt{mu(var\ 0)} (\texttt{not\_typed\_unguarded\_binder}) and \texttt{mu(union(var\ 0,\ string))}
+(\texttt{guard\_refuses\_option\_at\_binder\_input}). It also refuses a \texttt{held} between the binder and its variable
+(\texttt{guard\_refuses\_held\_on\_path}), because the conversion of a \texttt{held} can make the input deeper.
+
+\begin{theorem}[guarded recursion]
+\label{thm:guarded-recursion}
+\uses{rule:mu,cond:R,cond:C,cond:W}
+\lean{Calculus.muCodec, Calculus.contractive_body, Calculus.muStage_agree, Calculus.muCodec_e_fix, Calculus.muCodec_p_fix, Calculus.lawful_muCodec}
+\leanok
+\texttt{mu\ b} denotes the limit of the stages of its body: the stages start at the bottom, and each input reads
+the stage its own depth names, on the write side by the depth of the value and on the read side by the
+depth of the attribute. The guard makes the body contractive: it reads its argument only at inputs strictly
+shallower than its own input, at least one layer down. From that alone the stages agree past the depth of the input. The limit is a fixed point of
+the body on both sides, and lawful stages give a lawful limit. No two options of a body need be disjoint.
+\end{theorem}
+
 \begin{definition}[(opaque)]
 \label{rule:opaque}
 \lean{Calculus.Typed.opaq}
@@ -601,17 +643,21 @@ extendRead(c, r) : adapted(T, μ)
 \end{verbatim}
 \end{definition}
 
-These \texttt{⊤}s are forced for different reasons, and the distinction matters. \texttt{lazy} could be asked but answering would force the thunk, which is the recursion it exists to
-break. \texttt{held} carries a pair of opaque maps and there is nothing to ask, which is also why its
+These \texttt{⊤}s are forced for different reasons, and the distinction matters. \texttt{lazy} concludes \texttt{⊤} as the rule
+states it: computing a member would force the thunk, and a thunk may name a recursive schema. \texttt{mu} concludes \texttt{⊤}, because its
+stages need not agree on one member. \texttt{held} carries a pair of opaque maps and there is nothing to ask, which is also why its
 premise is the cancellation law itself: nothing structural guarantees it, so the rule demands it.
 Demanding \rulelink{cond:R}{\textbf{(R)}} alone would under-demand, deriving a \texttt{⊤} term free to change stored members — the
 exact term §2's argument for \texttt{opaque} says cannot exist. (\rulelink{cond:W}{\textbf{(W)}} is vacuous at \texttt{⊤}, so the three
 named are the whole obligation.)
 
 \texttt{opaque} is the calculus's universal sum, and it is primitive only in presentation: it
-unfolds to the \textbf{union of everything self-identifying, closed under the containers} — a fixpoint of shape
-\texttt{union(string,\ boolean,\ binary,\ ⟨NULL⟩,\ number,\ set(opaque),\ array(opaque),\ record(opaque))} —
-whose options are \rulelink{cond:compat}{\textbf{(Compat)}} because their kinds and members are pairwise disjoint (\texttt{compat\_opaque}). The held set is \emph{defined}
+is \rulelink{thm:guarded-recursion}{guarded recursion} at one fixed body. The body is the \textbf{union of everything
+self-identifying, closed under the containers}, a fixpoint of shape
+\texttt{union(string,\ boolean,\ binary,\ ⟨NULL⟩,\ number,\ set(opaque),\ array(opaque),\ record(opaque))}
+(\texttt{opaqStep}, \texttt{contractive\_opaqStep}). Its options are \rulelink{cond:compat}{\textbf{(Compat)}}, because their kinds and
+members are pairwise disjoint (\texttt{compat\_opaque}). That makes each layer lawful, and the limit is lawful by the
+general theorem (\texttt{lawful\_opaq}). The held set is \emph{defined}
 as the values whose member is recoverable from the value alone, so \rulelink{cond:R}{\textbf{(R)}} holds by construction.
 A numeral is such a value: the \texttt{number} option is \texttt{numberCodec}, which holds the numeral exactly, as its digits, and
 \texttt{number\ ⇄\ N} keeps the member and the digits on both halves. So the held set is every
@@ -988,10 +1034,10 @@ Continuous, and in general this needs the obligation \textbf{at each stage} too.
 escapes it by putting the growing option first, which makes it automatically the first admitter.
 \end{theorem}
 
-Two things are \textbf{not} established. A fixpoint is not shown to exist: monotonicity and continuity
-are its obligations, not its construction, and the model carries no recursive term, because
-\texttt{Term.lazy} carries a plain term. And the obligation must hold at every stage of an unrolling.
-\texttt{opaque} meets it at every stage, because its options are kind-exclusive (\texttt{compat\_opaque}), and
+These are the obligations of a least-fixpoint construction, and the model's recursion does not need
+them. \rulelink{thm:guarded-recursion}{Guarded recursion} reads each input at the stage its own depth names, so it builds
+no chain. The guard alone makes the stages agree past the depth of the input. \texttt{opaque} is that
+construction at one body, and its options are kind-exclusive at every stage (\texttt{compat\_opaque}), so
 \texttt{lawful\_opaq} proves its fixed point lawful.
 
 \subsection{The machinery of admission}\label{the-machinery-of-admission}
@@ -1070,7 +1116,9 @@ Both over-approximate, and over-approximating is the safe direction — if \text
 \texttt{X′\ ∩\ Y′\ =\ ∅} then \texttt{X\ ∩\ Y\ =\ ∅} — so a coarse answer costs a discharge and never buys a wrong one.
 A \texttt{held} takes its write occupancy from its caller-side term and its read occupancy from its
 stored-side term, so its two labels can differ. A \texttt{lazy} and a \texttt{refine} take their subterm's
-occupancy. Only \texttt{opaque} answers \texttt{⊤}, every label.
+occupancy. \texttt{mu\ b} takes the occupancy of its body, with a variable at no label. The proof is an induction over
+the stages, and it needs no guard (\texttt{occV\_open}, \texttt{occA\_open}). Only \texttt{opaque} answers
+\texttt{⊤}, every label.
 
 \textbf{The writable side's label is the constructor of the value, not the runtime kind}, and the
 difference does work. A kind collapses the three set families into one; the constructors do not, and
@@ -1190,16 +1238,17 @@ decide a question about attributes.
 
 \begin{theorem}[soundness]
 \label{thm:soundness}
-\uses{cond:R,cond:C,cond:W,cond:compat,rule:lazy,rule:union,rule:dunion,rule:opaque}
-\lean{Calculus.soundness, Calculus.carrier_denote}
+\uses{cond:R,cond:C,cond:W,cond:compat,rule:lazy,rule:union,rule:dunion,rule:opaque,rule:mu,thm:guarded-recursion}
+\lean{Calculus.soundness, Calculus.soundnessIn, Calculus.carrier_denote}
 \leanok
 Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, whose obligations hold, denotes a pair
 satisfying \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and \rulelink{cond:W}{\textbf{(W)}}. The obligations are each
 \rulelink{rule:held}{\texttt{(held)}}'s iso premise and each \rulelink{rule:union}{\texttt{(union)}}'s \rulelink{cond:compat}{\textbf{(Compat)}}. The
 dischargers of this section settle \rulelink{cond:compat}{\textbf{(Compat)}} at the declaration wherever they decide
-a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and \texttt{opaque} outright. A \rulelink{rule:lazy}{\texttt{(lazy)}} whose unfolding
-re-enters itself \textbf{through a union} is outside the theorem, because the model carries no
-recursive term. Such a union is still derivable. What it lacks is the theorem, not a rule.
+a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and \texttt{opaque} outright. A \rulelink{rule:mu}{\texttt{(mu)}} owes the obligations of its
+body at each stage, given that the stage before is lawful. The induction runs over open terms, with
+an environment of lawful codecs for the variables. The closed theorem is its case at the empty
+environment. The host's recursive schema for JSON is derived and lawful through it (\texttt{lawful\_json}).
 \end{theorem}
 
 The two premises on \rulelink{rule:legacy}{\texttt{(alternate reader)}}, \texttt{ran(r)\ ⊆\ dom(e)} and
@@ -1245,7 +1294,8 @@ below is an instantiation.
 
 \begin{proof}
 \leanok
-By induction on the derivation, with one refinement at \rulelink{rule:lazy}{\texttt{(lazy)}}. Each case
+By induction on the derivation, with one refinement at \rulelink{rule:mu}{\texttt{(mu)}}. The induction runs over open
+terms, with an environment of lawful codecs for the variables (\texttt{soundnessIn}). Each case
 first says what the pair \emph{is} — the denotation is part of the rule — then discharges the laws. The
 grouping is the algebra of §7: points, wrappers, products, sums.
 
@@ -1296,25 +1346,18 @@ hold, so the \texttt{e\_c} branch answers, and it writes the attribute back by t
 \texttt{owns(nullable(c))} always, so the second case never nests: §6's idempotence is the construction,
 not an equation the proof has to earn.
 
-\emph{lazy.} The pair of \texttt{γ(∗)}. This case is \textbf{three arguments and not one}: what a \texttt{γ}
-re-enters itself through decides which one applies.
+\emph{lazy.} The pair of its term, with the member erased. The model's \texttt{lazy} carries a plain term, and a
+thunk that re-enters its own schema is a \rulelink{rule:mu}{\texttt{(mu)}} with a variable at the thunk. What the re-entry
+passes through decides the case.
 
-\textbf{Through a container.} Induct on the pair (input size, derivation size), lexicographically.
-Containers strictly shrink the input; the wrappers shrink the derivation and never grow the input.
+\textbf{Through a container.} The guard accepts the binder, and \rulelink{thm:guarded-recursion}{guarded recursion} gives the
+case. The stages are lawful by the induction over open terms, at an environment that holds the stage
+before. The limit is lawful. Containers strictly shrink the input, which is what makes the stages
+agree past the depth of the input.
 
-\textbf{Through wrappers alone.} The measure does not decrease: \texttt{γ(∗)}'s derivation contains \texttt{lazy(γ)}
-again, at the same input, so neither component falls and the induction has nothing to say. What
-covers this \texttt{γ} is not the induction but partiality — each wrapper moves one way in the information
-order, so the unfolding never gains a definedness it did not start with, and it defines nothing at
-that input. The laws quantify over \texttt{dom} and hold over an empty one.
-
-\textbf{Through a union.} Outside the theorem, because the model carries no recursive term:
-\texttt{Term.lazy} carries a plain term. Under the join, first-match resolution is monotone and continuous
-where the options that admit agree, and those are the two obligations of a least fixpoint. The
-construction itself is not stated.
-
-Partiality is doing the termination argument's work in the second case, which is why it has to be
-its own step.
+\textbf{Through wrappers, or a union, alone.} The variable reads the binder's own input, the stages never
+grow, and the guard refuses the binder, so no judgement derives the term. \textbf{Through a \texttt{held}.} The
+conversion can make the input deeper, and the guard refuses the binder too.
 
 \textbf{Fields.} A field denotes a pair over presence-extended domains — \texttt{e♭\ :\ T\ ⇀\ 𝔸\ ∪\ \{ε\}},
 \texttt{p♭\ :\ (𝔸\ ∪\ \{ε\})\ ⇀\ T}, \texttt{ε} the absent binding — with \texttt{member(ε)} undefined and the laws read over
