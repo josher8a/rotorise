@@ -229,51 +229,33 @@ describe('terms', () => {
     })
 
     /**
-     * A set is **not** structural, and stopped being so the day `Term.set` took a `SetBase`. This
-     * emitted `Term.set (<element term>)` until then, and the generated file stopped compiling —
-     * which is the defect this test now guards.
-     *
-     * **There is one numeric set base now, and two adapters over it.** `SetBase.decimal` went with
-     * the `decimal` ground base: `number.set()` and `decimal.set()` are one wire set under two
-     * elementwise conversions, so the base that used to tell them apart no longer exists and the
-     * adapter is what does.
+     * A set prints as `Term.set` of its element term, because the model's `Term.set` takes one:
+     * the set is the finite-powerset lift of its element.
      */
-    it('emits a set as its base, not as its element term', () => {
-        expect(leanTermOf(erase(string.set()))).toBe('Term.set SetBase.string')
+    it('emits a set as the set of its element term', () => {
+        expect(leanTermOf(erase(string.set()))).toBe('Term.set (Term.string)')
         expect(leanTermOf(erase(dynamoNumber.set()))).toBe(
-            'Term.set SetBase.number',
+            'Term.set (Term.number)',
         )
-        expect(leanTermOf(erase(binary.set()))).toBe('Term.set SetBase.binary')
+        expect(leanTermOf(erase(binary.set()))).toBe('Term.set (Term.binary)')
     })
 
     /**
-     * **A set of an adapter is refused, and this is the model's gap rather than the library's.**
-     *
-     * `decimal` emits as a scalar, because `DynamoDB.lean` names its pair —
-     * `numeralOfStoredText`/`textOfNumeral`. `.set()` maps that conversion over the wire set, and
-     * the model has no name for the set-level pair: writing one wants the element pair carried
-     * over an `NEFinset`, which is a `Finset.image` and a proof that the image is nonempty.
-     *
-     * So the emitter refuses rather than invent a name, and this test is where the gap is
-     * recorded. **It is meant to fail when the model gains the pair**, and the failure is the
-     * signal to emit these two instead.
+     * **A set of an adapter prints as the set of the adapter**, because the conversion rides at the
+     * element. `decimal` has a pair the model names, so its set prints. The float adapter has no
+     * name in the model, so its set is refused for the reason its scalar is.
      */
-    it('refuses a set of an adapter, which the model cannot name yet', () => {
-        for (const codec of [decimal.set(), number.set()]) {
-            const why = refusal(() => leanTermOf(erase(codec))).reason
-            expect(why).toContain('numeralOfStoredText')
-        }
+    it('emits the set of a named adapter, and refuses the set of an unnamed one', () => {
+        expect(leanTermOf(erase(decimal.set()))).toBe(
+            'Term.set ((Term.held (Term.number) (Term.string) numeralOfStoredText textOfNumeral))',
+        )
+        const why = refusal(() => leanTermOf(erase(number.set()))).reason
+        expect(why).toContain('numeralOfStoredText')
     })
 
     /**
-     * A *restricted* element is printed as the restriction of the set it is.
-     *
-     * `string.set('a','b')` is `refine(set(string), each(members …))` and the model spells that
-     * predicate the same way, `Pred.each (Pred.members k ls)` — the two `Predicate` types are one
-     * shape. It used to print the predicate's *meaning*, `liftQ (inL k ls)`, because `Term.refine`
-     * carried a function and there was no constructor to print; `Pred.eval` is where those two
-     * expressions live now. Both halves are data the term carries, so both print, and the equation
-     * licensing the spelling is `setCodec_restrict` on `e` and `setCodec_restrict_p` on `p`.
+     * A *restricted* element prints at the element. `string.set('a','b')` is the set of the union
+     * of the two literals.
      *
      * **A closure element is still refused, and permanently.** The predicate is a caller's
      * JavaScript function; the registry recognises two by reference and there is no expression for
@@ -281,7 +263,7 @@ describe('terms', () => {
      */
     it('prints a set of a literal element, and refuses one over a closure', () => {
         expect(leanTermOf(erase(string.set('a', 'b')))).toBe(
-            'Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"})))',
+            'Term.set (Term.union [Term.literal GroundKind.string "a", Term.literal GroundKind.string "b"])',
         )
         const positive = refine(
             decimal,
@@ -810,12 +792,8 @@ export const sampleVectors: readonly Vector[] = [
         value: new Set(['b', 'a']),
     },
     /**
-     * A set over a **literal** element, which is a restriction of the set and not a `set` term.
-     *
-     * Added when the emitter learned to print a data predicate. The model reads it as
-     * `refine (set string) (liftQ (inL …))`, which is the equation `setCodec_restrict` proves on
-     * `e` and `setCodec_restrict_p` on `p` — so this vector is the differential asking the model
-     * about the one shape that took three passes to spell.
+     * A set over a **literal** element: the set of the union of the literals, with the
+     * restriction at the element.
      */
     {
         name: 'set_of_literal',

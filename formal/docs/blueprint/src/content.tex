@@ -429,8 +429,9 @@ values are \texttt{ℓ} (§5): gating both ways is a term deciding its own membe
 \textbf{Containers are the other kind, and they are not refinements.} \texttt{set}, \texttt{array}, \texttt{tuple}, \texttt{record}
 and \texttt{object} narrow by their \emph{subterms} and their \emph{names}, never by a predicate on the whole value,
 so there is no \texttt{q} for an admissible set to carry. §5 records the same fact from the other side: a
-container admits its empty case whatever its element admits, so no set of one container's own values
-separates it from another. Scalars are refined by predicates; containers are refined structurally, and only the first kind
+list, a record and an object admit their empty case whatever their element admits, so no set of one
+container's own values separates it from another. A set has no empty case, because \texttt{℘⁺fin} has no
+empty inhabitant. Scalars are refined by predicates; containers are refined structurally, and only the first kind
 has a gate to record.
 
 \texttt{literal} is the one ground term whose member follows from its \emph{values} rather than from its name,
@@ -470,26 +471,24 @@ that the held set holds, so \rulelink{cond:R}{\texttt{(R)}} is the identity on t
 
 \begin{definition}[(set)]
 \label{rule:set}
-\uses{rule:string,rule:number,rule:binary}
 \lean{Calculus.Typed.set}
 \leanok
 \begin{verbatim}
-b ∈ {string, number, binary}
-─────────────────────────────────────── (set)
-⊢ set(b) : ℘⁺fin(b.held) ⇝ b.member
+⊢ c : T ⇝ μ
+─────────────────────────────── (set)
+⊢ set(c) : ℘⁺fin(T) ⇝ setMember μ
 \end{verbatim}
 \end{definition}
 
-\rulelink{rule:set}{\texttt{(set)}}'s premise line is \textbf{an index}, not a hypothesis: the element's
-member is read off the base rather than tested, so the three bases the rule admits are exactly those that carry one,
-\texttt{b.held} and \texttt{b.member} are functions of the index, and an element that names no member is a
-type error. \textbf{Three bases onto three wire
-members}: \texttt{string} stores \texttt{SS}, \texttt{number} \texttt{NS} and \texttt{binary} \texttt{BS}.
+\rulelink{rule:set}{\texttt{(set)}} is the finite-powerset lift of its element, and a lawful element gives a lawful set
+(\texttt{lawful\_setCodec}) whatever its member. \texttt{setMember} takes \texttt{S}, \texttt{N} and \texttt{B} to
+\texttt{SS}, \texttt{NS} and \texttt{BS}, and every other member to \texttt{⊤}.
 
-What a base rather than a term costs: \texttt{set(refine(b,\ q))} and \texttt{set(literal(…))} are \textbf{not} lost — a
-restriction of the elements is a restriction of the set — but
-\texttt{set(held(…))} and \texttt{set(legacy(…))} are, having no set-level spelling and no appearance in any
-schema.
+\textbf{The DynamoDB set rules are not premises of the rule.} That a stored set holds elements of one member of
+\texttt{S}, \texttt{N} or \texttt{B} is a fact of the store, and it is an obligation beside \rulelink{rule:union}{\texttt{(union)}}'s
+compatibility (\texttt{SetElem}). The three element types and the absent empty set are facts of the carrier:
+\texttt{Value.strSet}, \texttt{Value.numSet} and \texttt{Value.binSet} over \texttt{NEFinset}. A restricted element, a
+literal element and an adapter element are each spelled at the element.
 
 \begin{definition}[(array)]
 \label{rule:array}
@@ -878,8 +877,9 @@ So declaration order enters the definition of the union and leaves again as a th
 compatibility is the condition under which it leaves. A value that two compatible options admit has
 no owner, because no operation can observe one.
 
-\textbf{The index is exact with no condition.} A union writes wherever one of its options writes, so
-a derivable term holds exactly the values it admits (\texttt{typed\_T\_adm}), a union included. An empty
+\textbf{The index is exact under the obligations.} A union writes wherever one of its options writes, so
+a derivable term whose obligations hold holds exactly the values it admits (\texttt{typed\_T\_adm}), a union
+included. A set is the rule that reads the obligations: its element writes injectively and at one member. An empty
 option is the unit of the sum: it is compatible with every option (\texttt{pairwiseCompat\_never\_left},
 \texttt{pairwiseCompat\_never\_right}).
 
@@ -1134,8 +1134,8 @@ computation at the declaration. What it declines is an undischarged obligation, 
 compatibility.
 
 Note where two container options overlap, and that it is a fact about the two terms rather than a
-limit of any table: a container admits its empty case whatever its element admits, so two container
-options share exactly one input: the empty array, or the empty map. Where the options are compatible,
+limit of any table: a list, a record and an object admit their empty case whatever their element
+admits, so two such options share exactly one input: the empty array, or the empty map. Where the options are compatible,
 both write that input at one attribute, and the union writes it. The same union built from
 \texttt{object}s is separated outright, by names: a \texttt{req} binding is a name the empty item lacks, so
 there is no empty case to share.
@@ -1178,7 +1178,8 @@ Two counterexamples bound the question, and each refutes one form of it:
 \item
   \textbf{Two sides are not enough either.} \texttt{union(array(literal("A")),\ array(literal("B")))} has both
   options as decisive as a term can be, and both admit \texttt{{[}{]}}. Deciding at the element does not
-  decide at the container: every container admits its empty case, which no element ever sees.
+  decide at the container: every list, record and object admits its empty case, which no element
+  ever sees. A set has none, because \texttt{℘⁺fin} has no empty inhabitant.
 \end{itemize}
 
 \textbf{A pair sharing a base separates where neither term's own sets do}. \texttt{number} and
@@ -1367,12 +1368,12 @@ both directions, every non-\texttt{opt} binding demanded of a value — are what
 item adds none. \rulelink{cond:W}{\textbf{(W)}}: \texttt{M}. \rulelink{cond:C}{\textbf{(C)}}: the Lemma's keyed clause. A rest
 policy that drops undeclared names is not lawful (\texttt{not\_lawful\_dropAll}), and no term has one.
 
-\emph{set.} The premise gives \texttt{e\_c(x)\ =\ ⟨μ,\ w(x)⟩}; the step is \texttt{w} outward and \texttt{p\_c(⟨μ,\ ·⟩)} back, and
-the wire set is the image of the held set under it. \rulelink{cond:R}{\textbf{(R)}}: \texttt{w} is injective by the \rulelink{lem:injectivity}{injectivity Lemma} (member fixed,
-\texttt{e\_c} injective), so the written set holds one payload per element and the \rulelink{lem:traversal}{traversal Lemma} reads
+\emph{set.} The premise is \texttt{Lawful\ c} and nothing else. The step writes each element through \texttt{e\_c} and
+carries the payloads into the first wire family, \texttt{SS}, \texttt{NS} or \texttt{BS}, into which every element writes; it
+fails where no family holds every element or where two elements share a payload. \rulelink{cond:R}{\textbf{(R)}}: \texttt{e\_c} is
+injective by the \rulelink{lem:injectivity}{injectivity Lemma}, so the written set holds one payload per element and the \rulelink{lem:traversal}{traversal Lemma} reads
 each back; non-emptiness survives both directions. \rulelink{cond:C}{\textbf{(C)}}: entrywise, each element is
-written back at the attribute it was read from, so the same payload projection re-succeeds. \texttt{p} is injective on payloads as well: a set is held-free, so by \texttt{ker\_eq\_of\_HF}
-(\rulelink{thm:ker-heldfree}{the kernel Theorem}) no two payloads read to one value, and the read set holds one value per payload. \rulelink{cond:W}{\textbf{(W)}}: \texttt{μS}, always. A set
+written back at the attribute it was read from, so the same payload projection re-succeeds. \texttt{p} is injective on payloads as well: by \rulelink{cond:C}{\textbf{(C)}} the element writes each read value back at the payload it was read from, so no two payloads read to one value, and the read set holds one value per payload. \rulelink{cond:W}{\textbf{(W)}}: \texttt{setMember\ μ} where the element names \texttt{μ}, and nothing where it names none. A set
 has no interior members: the container fixes its elements' member, which is why the element's own
 \rulelink{cond:MP}{\textbf{(MP)}} is never even invoked inside one.
 
@@ -1566,9 +1567,9 @@ This is §2's quotient.
 
 \begin{tabular}{@{}ll@{}}
 \toprule
-Equation & Why it is not derivable \\
+Term & Why the store refuses it \\
 \midrule
-\texttt{set(union(c₁,\ c₂))} — not derivable & The premise on \texttt{set} demands a member, and a union of options writing different members has none. \\
+\texttt{set(union(c₁,\ c₂))}, derivable & The union names no single member, so the DynamoDB set obligation \texttt{SetElem} refuses the set (\texttt{setElem\_union\_refused}). \\
 \bottomrule
 \end{tabular}
 

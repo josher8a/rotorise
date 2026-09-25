@@ -167,19 +167,11 @@ noncomputable def Adm : Term → Value → Bool
   | .held t P f _ => fun v => Adm t (f v) && Adm P v
   -- `select` attempts every option, so the row is the disjunction of the options' rows
   | .union opts => fun v => anyP (AdmList opts) v
-  -- **`set` is a leaf, and exact.** Its base's row is `SetBase.adm` — the four ground rows
-  -- of this table, indexed — and the set's row is that row over whichever payload the value
-  -- carries. All three wire families are matched rather than gated on kind: a base admits at
-  -- most one of them, and `℘⁺fin` has no empty inhabitant, so the other two answer `false`
-  -- element by element. Homogeneity is the value type's and non-emptiness is `℘⁺fin`'s;
-  -- what used to be missing was **injectivity**, and indexing supplies it — every base's
-  -- element map is injective, so `encSet`'s collision guard never fires (`encSet_base_iff`).
-  | .set b      => fun v =>
-      match v with
-      | .strSet S => decide (∀ s ∈ S.1, b.adm (.str s) = true)
-      | .numSet S => decide (∀ d ∈ S.1, b.adm (.num d) = true)
-      | .binSet S => decide (∀ y ∈ S.1, b.adm (.bin y) = true)
-      | _ => false
+  -- **`set` asks its own codec**, as `opaq` and `mu` do. A row over the elements alone is exact
+  -- only where the element writes injectively and at one member, and an arbitrary element term
+  -- does neither: a `held` can collide two elements, and a `union` can mix `S` and `N`. Below
+  -- `opaque` both hold, and the meet reads the row element by element there.
+  | .set t      => fun v => ((setCodec (denote t)).e v).isSome
   -- **One row for the one positional container.** `array` and `tuple` were two rows that
   -- computed different things (`allP` and `alignP`) on shapes that are now the same term,
   -- so the first would have shadowed the second in silence. `alignPL` is the row both
@@ -699,33 +691,8 @@ theorem neSetImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Opt
 theorem ExactV_opaq : ExactV .opaq := fun _ => Iff.rfl
 
 
-/-- **`set` writes exactly what its row says**, which the constructor's old shape made
-    false.
-
-    Both directions run through `encSet_base_iff`, and the direction that used to fail is
-    the interesting one: `encSet` refuses a *collision*, and a row over the elements cannot
-    see one. At a base there is none to see — every base's element map is injective, by
-    the host's round trip at `number` and by construction at the other three — so the guard
-    never fires and the element conjunction is the whole domain.
-
-    The three wire families are three cases rather than one because the payload types
-    differ; the argument is the same in each. -/
-theorem ExactV_set (b : SetBase) : ExactV (.set b) := by
-  intro v
-  cases v
-  case strSet S =>
-    show decide (∀ s ∈ S.1, b.adm (.str s) = true) = true
-      ↔ (encSet b.elem Value.str S).isSome = true
-    rw [decide_eq_true_eq, encSet_base_iff b (fun _ _ h => by injection h) S]
-  case numSet S =>
-    show decide (∀ d ∈ S.1, b.adm (.num d) = true) = true
-      ↔ (encSet b.elem Value.num S).isSome = true
-    rw [decide_eq_true_eq, encSet_base_iff b (fun _ _ h => by injection h) S]
-  case binSet S =>
-    show decide (∀ y ∈ S.1, b.adm (.bin y) = true) = true
-      ↔ (encSet b.elem Value.bin S).isSome = true
-    rw [decide_eq_true_eq, encSet_base_iff b (fun _ _ h => by injection h) S]
-  all_goals exact Iff.intro (fun h => nomatch h) (fun h => nomatch h)
+/-- **`set` writes exactly what its row says**, because the row asks the set's codec. -/
+theorem ExactV_set (t : Term) : ExactV (.set t) := fun _ => Iff.rfl
 
 /-- Each option's row *is* its attempt — given that option's exactness, which is where the
     exactness hypothesis is spent. -/
@@ -810,7 +777,7 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   -- both sides are empty, so the equivalence is `False ↔ False`
   | .never => fun _ => Iff.rfl
   -- the row the *constructor* made exact, rather than a sharper analysis of the old one
-  | .set b => ExactV_set b
+  | .set t => ExactV_set t
   -- the disjunction is exact given the options' exactness, which is the hypothesis this
   -- recursion hands it. See `ExactV_union`.
   | .union opts => ExactV_union (exactVL_mem opts (Adm_exactL opts))

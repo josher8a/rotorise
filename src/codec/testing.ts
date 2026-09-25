@@ -54,11 +54,10 @@ import type {
     ItemCodec,
     LiteralValue,
     Rng,
-    SetBase,
 } from './codec'
 import { CodecError, codecOfTerm, failed, opaque, orThrow } from './codec'
 import { accepts, holds } from './denote'
-import type { Predicate, Term } from './term'
+import type { Term } from './term'
 import { isOpaqueSugar, member as termMember } from './term'
 
 /** mulberry32 — small, fast, and good enough to search a value space. */
@@ -1039,7 +1038,7 @@ export const arbitraryOf = (
              * `O(n log n)` times — as did re-asking `writes` which member the element writes, a
              * recursive walk of the element's definition, once per value.
              */
-            const element = codecOfTerm({ kind: def.base })
+            const element = codecOfTerm(def.elem)
             return someSet(rng, element, () => arbitraryOf(element, rng, size))
         }
         case 'list': {
@@ -1099,30 +1098,6 @@ export const arbitraryOf = (
             )
         case 'refine': {
             const q = def.q
-            /**
-             * A set over a restricted element is `refine(set(b), each(p))`, one `refine` per
-             * predicate. Sampling whole sets against membership would almost never land, so the
-             * elements are generated against the element predicates and the set is assembled the
-             * way the `set` row assembles one.
-             */
-            if (q.kind === 'each') {
-                const { base, elements, element: pair } = restrictedSet(def)
-                /**
-                 * **At the caller's level, not the stored one.** The predicates below restrict what
-                 * a caller hands in, and a set of an adapter stores something else: `amount.set()`
-                 * restricts strings and stores numerals. Generating at the stored base handed the
-                 * native codec a string. `element` is the adapter at one member, which `.set()`
-                 * recorded because it is what the set-level halves were built from.
-                 */
-                const element = codecOfTerm(
-                    pair
-                        ? { kind: 'held', inner: { kind: base }, ...pair }
-                        : { kind: base },
-                )
-                return someSet(rng, element, () =>
-                    someElement(rng, size, element, elements),
-                )
-            }
             if (q.kind === 'members') {
                 const ls: readonly LiteralValue[] = q.literal.ls
                 return pickFrom(rng, ls)
@@ -1182,65 +1157,6 @@ const someSet = (
 }
 
 /**
- * The base and the element predicates of a restricted set, peeled from `refine(…, each(p))` down
- * to the `set` the refinements wrap. `.set()` builds nothing else with an `each`.
- */
-const restrictedSet = (
-    t: Term,
-): {
-    readonly base: SetBase
-    readonly elements: readonly Predicate[]
-    readonly element?: Extract<Term, { kind: 'held' }>['element']
-} => {
-    if (t.kind === 'set') return { base: t.base, elements: [] }
-    // `.set()` maps an element's adapter over the wire set, so a set of `decimal` is a set of
-    // the numeric base under one. The base is the stored one, which is beneath the adapter, and
-    // `element` is that adapter at one member — what the values generated here are, as against
-    // what they are stored as
-    if (t.kind === 'held')
-        return { ...restrictedSet(t.inner), element: t.element }
-    if (t.kind === 'refine' && t.q.kind === 'each') {
-        const inner = restrictedSet(t.inner)
-        return { ...inner, elements: [t.q.of, ...inner.elements] }
-    }
-    throw new CodecError(
-        `\`each\` restricts a set, and this \`${t.kind}\` is not one; \`.set()\` builds every \`each\`, so this term was not built by it`,
-    )
-}
-
-/**
- * One element of a restricted set: a member of the literal where there is one, the closure's own
- * generator where it gave one, and the base sampled against every predicate otherwise.
- */
-const someElement = (
-    rng: Rng,
-    size: number,
-    base: AnyCodec,
-    elements: readonly Predicate[],
-): unknown => {
-    const admitted = (value: unknown) => elements.every((q) => holds(q)(value))
-    for (const q of elements) {
-        if (q.kind === 'members') {
-            const ls: readonly LiteralValue[] = q.literal.ls
-            return pickFrom(rng, ls.filter(admitted))
-        }
-    }
-    for (const q of elements) {
-        if (q.kind === 'closure' && q.q.arbitrary)
-            return q.q.arbitrary(rng, size)
-    }
-    const what = elements
-        .map((q) => (q.kind === 'closure' ? q.q.what : q.kind))
-        .join(' and ')
-    return bySampling(
-        (r: Rng, sz: number) => arbitraryOf(base, r, sz),
-        (value: unknown): value is unknown => admitted(value),
-        what,
-        undefined,
-    )(rng, size)
-}
-
-/**
  * Values simpler than this one, cheapest reduction first.
  *
  * The counterpart of {@link arbitraryOf}, dispatching on the same {@link Term}.
@@ -1297,7 +1213,7 @@ export const shrinkOf = (
             // shrunk as a sequence and handed back as a set, which is what it is
             return shrinkSequence(
                 [...(value as ReadonlySet<unknown>)],
-                shrinkAt(codecOfTerm({ kind: def.base })),
+                shrinkAt(codecOfTerm(def.elem)),
                 1,
             ).map((shrunk) => new Set(shrunk as readonly unknown[]))
         case 'list':

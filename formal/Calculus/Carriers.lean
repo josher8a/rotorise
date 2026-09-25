@@ -132,12 +132,6 @@ theorem carrier_baseCodec : ∀ k : GroundKind, Carrier (baseCodec k)
   | .binary  => carrier_binaryCodec
   | .null    => carrier_nullCodec
 
-/-- …and each set base's element pair is on its carrier too. -/
-theorem carrier_setBase : ∀ b : SetBase, Carrier b.elem
-  | .string  => carrier_stringCodec
-  | .number  => carrier_numberCodec
-  | .binary  => carrier_binaryCodec
-
 /-! ### The refinement ground codecs, on their carriers -/
 
 /-- **One theorem where there were two, and the numeric one was twenty-six lines.**

@@ -226,17 +226,17 @@ deriving DecidableEq, Repr
     a gate could enforce this was a claim worth testing. -/
 abbrev NEFinset (α : Type) := {S : Finset α // S.Nonempty}
 
-/-! **Do not reach for an order on these.** A wire set read back as a *list* would need a
-canonical representative, hence a sort, hence an order — and `LinearOrder String` and
-`List.sorted_insertionSort` both depend on `Classical.choice`, which `sanctionedAxioms`
-(`Calculus/Axioms.lean`) does not include. `#assert_axioms_all` is what
-caught it, and `f3bb956` deleted the 247 lines of axiom-free order built to get around it.
+/-! **No order is on the set path, and none is needed.** Both sides of every wire set are a
+`Finset` of a *concrete element type*: `NEFinset String`, `NEFinset WFNumeral` and `NEFinset Bytes`
+on `Value`, the same on `Attr`. So there is no list to sort and no representative to choose.
 
-None of that is needed any more, and the reason is this abbreviation: both sides of every wire
-set are now a `Finset` of a *concrete element type* — `NEFinset String`, `NEFinset WFNumeral`,
-`NEFinset Bytes` on `Value`, the same on `Attr` — so there is no list to sort and no
-representative to choose. The file is deleted; this note is the part of it that was load-bearing.
--/
+An order is not excluded by the axiom base. A decidable strict total order on a `Value` with one
+generic list-carried set constructor, maps included, proves its three laws on
+`[propext, Classical.choice, Quot.sound]` and reaches `Classical.choice` only through routes that
+`scripts/classical_gateways.txt` already lists. The kernel refuses the generic carrier that would
+not need the order (a nested `Finset`, `Multiset` or `Quot` of the datatype), and the list carrier
+needs a canonical spelling that each set codec enforces by refusal, so the carriers are the three
+concrete ones. -/
 
 /-- §1's `Numerals` — the strings DynamoDB accepts in an `N`, carried by the type. So
     `Carries(N)` is exact and `⟨N, "abc"⟩` is not an attribute at all.
@@ -372,7 +372,13 @@ inductive Value where
   | bin  (v : Bytes)
   | null
   /-- The reference: "The set types are string set, number set, and binary set." Three
-      concrete element types, so each is a genuine `Finset`. -/
+      concrete element types, so each is a genuine `Finset`.
+
+      **These three constructors are DynamoDB facts in the carrier, not rules of the set
+      algebra.** The three element types and `℘⁺fin` (no empty set) are the store universe's.
+      The algebra is the finite-powerset lift of a lawful element codec (`lawful_setCodec`),
+      and the term `set` takes any element term. The one set rule the carrier cannot carry, that
+      the element writes one member of `S`, `N` or `B`, is an obligation (`SetElem`). -/
   | strSet (v : NEFinset String)
   | numSet (v : NEFinset WFNumeral)
   | binSet (v : NEFinset Bytes)
@@ -480,32 +486,5 @@ abbrev Alts := (k : GroundKind) × k.Carrier
 structure NameSpec where
   presence : Bool × Bool
   alts : Option Alts
-
-/-! ## The set bases (§3 `(set)`'s payload)
-
-A DynamoDB set, `SS`, `NS` or `BS`, holds elements of one member. That is a fact of the store
-universe, not a rule of the codec algebra, and `SetBase` is the store's vocabulary for it. §3's
-`(set)` rule states the fact as a premise: it reads a member off its element term and refuses
-when there is none. Three
-element terms have one: `string`, `number` and `binary`. Every other element term the
-constructor accepted was either underivable (`setMember` is partial) or unreachable in `src/`.
-`SetBase` is those three as an index, so the rule's member premise becomes a function of the
-index and `set(union(…))` is unstatable rather than merely underivable.
-
-**One base for each wire member.** The number base carries `WFNumeral`, which is exact, so the
-value side of a number set is exact with no second base. A set of decimal text is the number
-set under the text adapter, which is a `held` term and not a base. -/
-
-/-- The three bases a set's elements may sit at. -/
-inductive SetBase where
-  | string | number | binary
-deriving DecidableEq, Repr
-
-/-- The wire member a set at this base stores as — §3 `(set)`'s `μS`, now a total function
-    of the index where it was a premise (`setMember μ = some μS`). Injective. -/
-@[simp] def SetBase.member : SetBase → Member
-  | .string  => .SS
-  | .number  => .NS
-  | .binary  => .BS
 
 end Calculus

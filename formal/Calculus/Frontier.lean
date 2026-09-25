@@ -277,27 +277,6 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
   all_goals exact nomatch hsm
 
 
-/-- **A set writes exactly when every element does.**
-
-    Both directions, and neither needs a hypothesis the term does not already carry: the
-    injectivity `encSet` demands comes from the element pair's own **(R)**
-    (`encSet_isSome_of`), and every base's element map is injective for a reason —
-    the host's decimal spelling from the host's round trip, the other three by construction. This is why
-    indexing `set` makes the value-side row exact where an arbitrary element term could not
-    (a `held` adapter may collapse two elements). -/
-theorem encSet_base_iff {α : Type} (b : SetBase) {vinj : α → Value}
-    (hvi : ∀ x y, vinj x = vinj y → x = y) (S : NEFinset α) :
-    (encSet b.elem vinj S).isSome = true ↔ ∀ x ∈ S.1, b.adm (vinj x) = true := by
-  constructor
-  · intro h x hx
-    cases he : encSet b.elem vinj S with
-    | none => rw [he] at h; exact nomatch h
-    | some a => exact (b.adm_iff (vinj x)).mpr (encSet_elem he x hx)
-  · intro h
-    exact encSet_isSome_of (lawful_setBase b).core (b.setMember_elemMember) hvi
-      (fun x hx => (b.adm_iff (vinj x)).mp (h x hx))
-      (fun _ _ a' ha' => (lawful_setBase b).core.writes b.elem_μ ha')
-
 /-- `encSet` writes a string set when the element writes produce strings. -/
 theorem encSet_ssBranch {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset α}
     {T : NEFinset String}

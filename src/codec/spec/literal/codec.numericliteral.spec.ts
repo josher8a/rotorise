@@ -159,11 +159,12 @@ describe('a set of a literal', () => {
      * these two stay.
      */
     it('checks each member, naming where it failed', () => {
+        // the element is a union of numeric literals, so the element's own refusal names them
         expect(() => codes.unsafeDecode({ NS: ['9'] })).toThrow(
-            /at \[0\]: 9 is not one of 1, 2, 3, 4/,
+            /at \[0\]: no option admits this attribute; options are dynamoNumber\(1\) \| dynamoNumber\(2\) \| dynamoNumber\(3\) \| dynamoNumber\(4\)/,
         )
         expect(() => tags.unsafeDecode({ SS: ['z'] })).toThrow(
-            /at \[0\]: 'z' is not one of 'a', 'b', 'c'/,
+            /at \[0\]: no option admits this attribute; options are string\('a'\) \| string\('b'\) \| string\('c'\)/,
         )
     })
 

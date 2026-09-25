@@ -21,7 +21,6 @@ import type {
     LiteralValue,
     Refinement,
     Rng,
-    SetBase,
     SetSlot,
 } from './codec'
 import { sameLiteral } from './value'
@@ -111,20 +110,16 @@ export type Alternatives =
  *
  * The model's `q` is a bare `Value → Bool` and the host's used to be the caller's closure. Neither
  * is enough, because **the meet has to read the predicate as data**: a closure decides nothing a
- * declaration can see. `ExactV.lean` writes the case that forced this — `liftQ (inL k ls)`, where `ls` is a
- * `NEFinset` and not a function.
+ * declaration can see. `Pred.members` is the case that forced this: its `ls` is a `NEFinset`
+ * and not a function.
  *
- * So three cases. `members` is membership of a {@link Literal}'s alternatives — the whole literal
+ * So two cases. `members` is membership of a {@link Literal}'s alternatives: the whole literal
  * and not a base beside a list, so a `decimal` membership over numeric alternatives is
- * unrepresentable here for the same reason it is unrepresentable as a term. `each` is
- * `liftQ`: every element of a wire set satisfies the element's predicate, which is what makes
- * `set(literal …)` expressible as a refinement of the set — the equation `setCodec_restrict` and
- * `setCodec_restrict_p` prove on both halves of the pair. `closure` is the caller's function, which
- * no declaration reads and no `Term` prints.
+ * unrepresentable here for the same reason it is unrepresentable as a term. `closure` is the
+ * caller's function, which no declaration reads and no `Term` prints.
  */
 export type Predicate =
     | { readonly kind: 'members'; readonly literal: Alternatives }
-    | { readonly kind: 'each'; readonly of: Predicate }
     | { readonly kind: 'closure'; readonly q: Refinement }
 
 /**
@@ -155,16 +150,15 @@ export type Term =
     | { readonly kind: 'null' }
     | Literal
     /**
-     * §3 `(set)`, indexed by its element **base** and not by an element term.
+     * §3 `(set)`: the finite-powerset lift of an element term. A lawful element gives a lawful set
+     * (`lawful_setCodec`), and that law reads nothing about the element's base.
      *
-     * The premise `setMember μ = some μS` was partial, so a constructor over element terms accepted
-     * terms the rule then refused. Four bases survive it, so the base is an index and the refusal is
-     * a type error. `set(refine(b, q))` and `set(literal k ls)` are not lost as *codecs* —
-     * `setCodec_restrict` and `setCodec_restrict_p` prove the set of a restriction and the
-     * restriction of a set are one pair, on both halves — so `.set()` spells them as
-     * `refine(set(b), each(…))`, with {@link elementPredicates} naming the restriction.
+     * That a stored set holds elements of one member of `S`, `N` or `B` is the DynamoDB universe's
+     * rule, not structure here: {@link set} refuses an element that names no such member, as the
+     * model's `SetElem` obligation does. A restricted element, a literal element and an adapter
+     * element are each spelled at the element.
      */
-    | { readonly kind: 'set'; readonly base: SetBase }
+    | { readonly kind: 'set'; readonly elem: Term }
     /**
      * §3 `(list)`: the one positional container, as a prefix, at most one spread, and a suffix.
      *
@@ -211,25 +205,6 @@ export type Term =
            * is read by the emitter. One of them can be known without the other.
            */
           readonly via?: 'decimalText' | OpaqueSugar
-          /**
-           * **The same conversion at one element, where the adapter maps over a set.**
-           *
-           * `.set()` maps an element's conversion over the wire set, so the set-level `f` and `g`
-           * are built *from* an element pair and then hold only the set form. A reader that needs
-           * the element view cannot recover it: `restrictedSet` descends to the stored base and
-           * the element pair is gone, so a generator handed a set of `decimal` built the native
-           * element codec and offered it a caller's string.
-           *
-           * So the builder records what it already had. This is the same split as {@link outer}:
-           * one side owns the fact rather than a reader deriving what was never written down.
-           * Absent for every adapter that is not a set, and for a caller's, which is the honest
-           * answer there.
-           */
-          readonly element?: {
-              readonly f: (value: never) => unknown
-              readonly g: (held: never) => unknown
-              readonly outer: Term
-          }
           /**
            * **The generators, where the caller supplies them rather than the inner codec.**
            *
@@ -351,12 +326,20 @@ const baseMember: { readonly [B in LiteralBase]: AttributeName } = {
     binary: 'B',
 }
 
-/** …and which member a set of that base stores. Three bases onto three wire members. */
-const setMember: { readonly [B in SetBase]: AttributeName } = {
-    string: 'SS',
-    number: 'NS',
-    binary: 'BS',
-}
+/**
+ * The member a set stores, from the member its element stores: `setMember`. An element of any
+ * other member has no stored set, and answers the model's `none`.
+ */
+const setMemberOf = (
+    element: AttributeName | undefined,
+): AttributeName | undefined =>
+    element === 'S'
+        ? 'SS'
+        : element === 'N'
+          ? 'NS'
+          : element === 'B'
+            ? 'BS'
+            : undefined
 
 /**
  * §5 `(union)`'s member: `μ` where every option agrees, and `⊤` otherwise.
@@ -398,7 +381,7 @@ export const member = (t: Term): AttributeName | undefined => {
         case 'literal':
             return baseMember[t.base]
         case 'set':
-            return setMember[t.base]
+            return setMemberOf(member(t.elem))
         case 'list':
             return 'L'
         case 'object':
@@ -429,15 +412,17 @@ const baseSlot: { readonly [B in LiteralBase]: SetSlot } = {
 }
 
 /**
- * …and a set base's. Four bases onto three slots, colliding at `string`/`decimal`, where
- * {@link setMember} collides at `number`/`decimal` instead. The two collisions are disjoint, which
- * is why the pair of families separates all four bases and neither family does alone.
+ * The wire family a set writes for each scalar slot its element writes: `Slot.setElem`, read from
+ * the element's side.
  */
-const setSlot: { readonly [B in SetBase]: SetSlot } = {
-    string: 'strSet',
-    number: 'numSet',
-    binary: 'binSet',
-}
+const setSlotOf = (slot: SetSlot): SetSlot | undefined =>
+    slot === 'string'
+        ? 'strSet'
+        : slot === 'number'
+          ? 'numSet'
+          : slot === 'binary'
+            ? 'binSet'
+            : undefined
 
 export const everySlot: readonly SetSlot[] = [
     'string',
@@ -502,8 +487,9 @@ export const occV = (t: Term): readonly SetSlot[] => {
             return ['null']
         case 'literal':
             return [baseSlot[t.base]]
+        // a set writes the wire family of each scalar slot its element writes
         case 'set':
-            return [setSlot[t.base]]
+            return occV(t.elem).flatMap((slot) => setSlotOf(slot) ?? [])
         case 'list':
             return ['array']
         case 'object':
@@ -617,8 +603,10 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
             return ['NULL']
         case 'literal':
             return [baseMember[t.base]]
-        case 'set':
-            return [setMember[t.base]]
+        case 'set': {
+            const read = occA(t.elem)
+            return read && read.flatMap((one) => setMemberOf(one) ?? [])
+        }
         case 'list':
             return ['L']
         case 'object':
@@ -791,8 +779,7 @@ export const pinnedForm = (
  *
  * A refinement of a literal admits a subset of that literal's alternatives, so the literal is a
  * sound upper bound on what the field can carry: a value outside it is outside the field, and a
- * value inside it that the refinement rejects is the option's own error to report. `setBaseOf`
- * reads through `refine` for the same reason.
+ * value inside it that the refinement rejects is the option's own error to report.
  */
 const pinnedLiteral = (t: Term): Alternatives | undefined =>
     t.kind === 'refine' ? pinnedLiteral(t.inner) : literalAlternatives(t)
@@ -960,6 +947,8 @@ const reaches = (
         case 'legacy':
         case 'refine':
             return on(t.inner)
+        case 'set':
+            return on(t.elem)
         case 'list':
             return (
                 t.pre.some(on) ||
@@ -1062,6 +1051,8 @@ export const heldOnRecursivePath = (root: Term): boolean => {
                 )
             case 'union':
                 return t.options.some(next)
+            case 'set':
+                return next(t.elem)
             case 'held':
                 return next(t.inner) || next(t.outer)
             case 'refine':
@@ -1091,6 +1082,8 @@ const viewable = (t: Term): boolean => {
             return viewable(t.inner) && viewable(t.outer)
         case 'refine':
             return viewable(t.inner)
+        case 'set':
+            return viewable(t.elem)
         case 'union':
             return t.options.every(viewable)
         // `reaches` counts a thunk it cannot read as a `held`, so such a thunk below refuses here too
@@ -1139,6 +1132,12 @@ const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
         }
         case 'union':
             return { kind: 'union', options: t.options.map(view) }
+        // a set's view is the set of its element's view, where that view is held-free: the
+        // model reads a held-free element element by element
+        case 'set': {
+            const elem = view(t.elem)
+            return reaches(elem, ['held']) ? t : { kind: 'set', elem }
+        }
         default:
             return t
     }
@@ -1194,6 +1193,12 @@ const viewsApart = (x: Term, y: Term): boolean =>
  * and so does a thunk that the walk cannot read.
  */
 export const heldFree = (t: Term): boolean => !reaches(t, ['held', 'legacy'])
+
+/**
+ * **Whether a `withLegacyRead` occurs in the term.** The model has no read widening in `Term`, so a
+ * construction that the model states only over `Term`, as `set` is, refuses one.
+ */
+export const widensRead = (t: Term): boolean => reaches(t, ['legacy'])
 
 /** The terms with no payload, where the kind alone names the term. */
 const leaves: readonly Term['kind'][] = [
@@ -1331,11 +1336,18 @@ const meetWalk = (x: Term, y: Term): Term | undefined => {
     if (x.kind === 'literal') return literalAgainstBase(x, y)
     if (y.kind === 'literal') return literalAgainstBase(y, x)
     if (x.kind === 'list' && y.kind === 'list') return meetLists(x, y)
+    // **Two sets meet at their elements**, the model's `famSet`. An element meet at the bottom is a
+    // set meet at the bottom, because a stored set is not empty. A set is stated only where the
+    // three terms are held-free, where each set writes and reads element by element
     if (x.kind === 'set' && y.kind === 'set') {
-        // every set base is disjoint from every other on both halves now, so two unequal ones
-        // meet at the bottom and none of them refuses. `set string` against `set decimal` was the
-        // refusal, while `decimal` held text and both families wrote a `strSet`
-        return x.base === y.base ? x : never
+        const elem = meetWalk(x.elem, y.elem)
+        if (elem === undefined) return undefined
+        if (elem.kind === 'never') return never
+        return reaches(x.elem, ['held']) ||
+            reaches(y.elem, ['held']) ||
+            reaches(elem, ['held'])
+            ? undefined
+            : { kind: 'set', elem }
     }
     if (x.kind === 'opaq' && y.kind === 'opaq') return x
     if (x.kind === 'object' && y.kind === 'object')
@@ -1383,25 +1395,15 @@ const refineOf = (z: Term, q: Predicate): Term => {
 /**
  * **Two predicates, met** — the model's `Pred.meetM`. `undefined` is a refusal to combine,
  * `null` says that no value satisfies both, and a predicate is the combined one. `members` meets
- * `members` at any two bases, and `each` meets `each` through the element predicates. A scalar
- * `members` and `each` share no value, because `each` holds only a set. A `closure` refuses.
+ * `members` at any two bases. A `closure` refuses.
  */
 const meetPredicates = (
     q: Predicate,
     p: Predicate,
 ): Predicate | null | undefined => {
     if (q.kind === 'closure' || p.kind === 'closure') return undefined
-    if (q.kind === 'each' && p.kind === 'each') {
-        const met = meetPredicates(q.of, p.of)
-        return met === undefined || met === null
-            ? met
-            : { kind: 'each', of: met }
-    }
-    if (q.kind === 'members' && p.kind === 'members') {
-        const met = meetAlternatives(q.literal, p.literal)
-        return met === null ? null : { kind: 'members', literal: met }
-    }
-    return null
+    const met = meetAlternatives(q.literal, p.literal)
+    return met === null ? null : { kind: 'members', literal: met }
 }
 
 /** Two alternative sets: the alternatives of the first that the second holds, or nothing. */
@@ -1771,105 +1773,5 @@ const meetBodies = (a: Body, b: Body): Term | undefined => {
     return {
         kind: 'object',
         body: closed ? { fields } : { fields, rest: block },
-    }
-}
-
-/**
- * Which of the four set bases a term's values sit at, or `undefined` where the term is not one.
- *
- * `member` could answer this now that `decimal` is an adapter rather than a second base at `N`,
- * and this stays a function of the term because the term is where the base is recorded. Reads
- * through `refine` and a literal only — both are *restrictions* of a base, so the set
- * they build is a restriction of the base's set (`setCodec_restrict`). An adapter (`held`), a read
- * widening (`withLegacyRead`) or a union is not a restriction of anything, and gets `undefined`.
- */
-export const setBaseOf = (t: Term): SetBase | undefined => {
-    switch (t.kind) {
-        case 'string':
-        case 'number':
-        case 'binary':
-            return t.kind
-        case 'literal':
-            return t.base === 'boolean' ? undefined : t.base
-        case 'refine':
-            return setBaseOf(t.inner)
-        // **An adapter has a set-level spelling after all, so it is read through.** This refused
-        // a `held` element on the ground that a set of one could not be written down. It can:
-        // an adapter is elementwise, so mapping it over the wire set is the spelling, and
-        // {@link elementAdapter} is what `set` builds it from. The base is the *stored* one,
-        // which is the inner term's.
-        case 'held':
-            return setBaseOf(t.inner)
-        // `string.set('a', 'b')` puts a union of literals at the element, and a union of literals
-        // at one base is that base narrowed — the same reading a single literal gets
-        case 'union': {
-            const alts = literalAlternatives(t)
-            return alts === undefined || alts.base === 'boolean'
-                ? undefined
-                : alts.base
-        }
-        default:
-            return undefined
-    }
-}
-
-/**
- * **The adapter an element carries, if it carries one.** `number` and `decimal` are adapters over
- * the one numeric base, so a set of either is a set of that base with the conversion mapped over
- * it, and this is where `set` reads the pair to map.
- *
- * Innermost wins, because the stack alternates and only the one next to the base converts the
- * value the wire set holds.
- */
-export const elementAdapter = (
-    elem: Term,
-):
-    | {
-          readonly f: (value: never) => unknown
-          readonly g: (held: never) => unknown
-          readonly outer: Term
-      }
-    | undefined => {
-    switch (elem.kind) {
-        case 'held':
-            return (
-                elementAdapter(elem.inner) ?? {
-                    f: elem.f,
-                    g: elem.g,
-                    outer: elem.outer,
-                }
-            )
-        case 'refine':
-            return elementAdapter(elem.inner)
-        default:
-            return undefined
-    }
-}
-
-/**
- * What a set's element restricts by, outermost first — empty where the element restricts by nothing.
- *
- * The element of a `set` is a bare base, a literal at that base, or a refinement over either. The
- * first restricts nothing and the set is a plain `Term.set`. The other two restrict, and the set
- * is a refinement of the plain one — which is what `setCodec_restrict` and `setCodec_restrict_p`
- * license, on both halves of the pair. `.set()` wraps the plain set in one `refine(…, each(p))`
- * per predicate listed here, so a refinement over a literal contributes **both** the closure and
- * the membership, conjoined the way `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)` conjoins them.
- */
-export const elementPredicates = (elem: Term): readonly Predicate[] => {
-    switch (elem.kind) {
-        case 'literal':
-            return [{ kind: 'members', literal: oneAlternative(elem) }]
-        // `string.set('a', 'b')` puts a union of literals at the element, and the model's
-        // `Pred.members` carries a `NEFinset` — so the set is where the alternatives come back
-        // together. A union of anything else restricts by nothing this can name.
-        case 'union': {
-            const alts = unionAlternatives(elem.options)
-            return alts ? [{ kind: 'members', literal: alts }] : []
-        }
-        case 'refine':
-            return [elem.q, ...elementPredicates(elem.inner)]
-        default:
-            return []
     }
 }

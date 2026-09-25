@@ -1362,9 +1362,7 @@ describe('the published surface', () => {
         // the declaration guard and what it reads, which `identifying` and `deeper` became
         'separable',
         'meet',
-        // the set reduction, which `setBase` became, and the predicate the elements of a set carry
-        'setBaseOf',
-        'elementPredicates',
+        // the predicate a refinement carries, run
         'holds',
         // the value kinds a term takes, the two halves of the term cache, and the mark reader
         'valueKinds',

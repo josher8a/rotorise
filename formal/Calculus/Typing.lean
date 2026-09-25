@@ -54,20 +54,6 @@ def HSet (T : Held) : Held := fun v =>
   (∃ S : NEFinset WFNumeral, v = .numSet S ∧ ∀ d ∈ S.1, T (.num d)) ∨
   (∃ S : NEFinset Bytes,  v = .binSet S ∧ ∀ b ∈ S.1, T (.bin b))
 
-/-- The held set of a set's **base** — §3 `(set)`'s `T` premise, now a function of the
-    index. Each is the ground rule's conclusion at that base, verbatim: `string` holds every
-    string, `number` §1's `D`, which the carrier now IS, and `binary` every byte string. -/
-def SetBase.held : SetBase → Held
-  | .string  => fun v => ∃ s, v = .str s
-  | .number  => fun v => ∃ x : WFNumeral, v = .num x
-  | .binary  => fun v => ∃ b, v = .bin b
-
-/-- The base's held set **is** its codec's, at every base — the three rows were transcribed
-    from the three ground rules, and those rules' codecs carry the same condition. `rfl`, so
-    `(set)`'s subset obligation reduces to nothing. -/
-theorem SetBase.elem_T : ∀ b : SetBase, b.elem.T = b.held
-  | .string | .number | .binary => rfl
-
 /-- `T*` (§3 `(array)`). -/
 def HStar (T : Held) : Held :=
   fun v => ∃ vs, v = .arr vs ∧ ∀ x ∈ vs, T x
@@ -195,14 +181,14 @@ inductive Typed : Term → Held → Option Member → Prop where
       `Calculus/LiteralArity1.lean` derives that rule from this one and `Typed.union`. -/
   | literal (k : GroundKind) (x : k.Carrier) :
       Typed (.literal k x) (HLit k x) (some k.member)
-  /-- §3 `(set)`, and there is nothing left of the premise line.
+  /-- §3 `(set)`: the element's judgement, lifted. The held set is `℘⁺fin` of the element's,
+      and the member is `setMember` of the element's.
 
-      The rule was `⊢ c : T ⇝ μ` plus `setMember μ = some μS`, and the second premise was
-      the whole content: `setMember` is partial, so the constructor could be applied to
-      element terms the rule then refused. The base is an index, so `T` is `b.held`, `μS` is
-      `b.member`, and both are functions rather than premises — the same move `(literal)`
-      made when `GroundKind` replaced its three constructors. -/
-  | set (b : SetBase) : Typed (.set b) (HSet b.held) (some b.member)
+      **No premise names a base.** That a stored set holds elements of one member of `S`, `N`
+      or `B` is the DynamoDB universe's rule, and `Obligations` carries it as `SetElem`, the
+      way it carries `(union)`'s compatibility. The rule itself is the lift, and a lawful
+      element gives a lawful set whatever its member (`lawful_setCodec`). -/
+  | set {t T μ} (h : Typed t T μ) : Typed (.set t) (HSet T) (μ.bind setMember)
   /-- `(list)`: one rule for the one positional container. `(array)`, `(tuple)` and
       `(tuple-tail)` were three rules of this one, and the theorems below recover each
       spelling. -/

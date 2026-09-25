@@ -4,7 +4,7 @@ import Calculus.ExactV
 /-!
 # (B): the held set is the admission
 
-A derivable term holds exactly the values that it admits (`typed_T_adm`), so the judgement's
+A derivable term whose obligations hold holds exactly the values that it admits (`typed_T_adm`), so the judgement's
 index is `dom(e)` and not an upper bound. A union writes wherever one of its options writes, so
 the union row needs no side condition.
 -/
@@ -125,17 +125,52 @@ theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectS
       exact ⟨keys, f, rfl, hpres.mpr hreq, fun k => (hent k).mpr (hall k)⟩
   | _ => simp [HObject, AdmBody]
 
-/-- A set base holds exactly what the base admits. -/
-theorem setBase_held_adm (b : SetBase) (v : Value) : b.held v ↔ b.adm v = true := by
-  cases b <;> cases v <;> simp [SetBase.held, SetBase.adm, inD]
-
-/-- `HSet` is the set row of `Adm`. -/
-theorem hset_iff (b : SetBase) (v : Value) : HSet b.held v ↔ Adm (.set b) v = true := by
+/-- **`HSet` is the set row of `Adm`, under the set's obligations.** The element's held set is its
+    admission, and a lawful element whose member is `S`, `N` or `B` writes a set exactly where it
+    writes every element: (R) makes the element map injective, and the member law puts every
+    element in one wire family. Without the obligations the row is narrower than `HSet`, because an
+    element can collide two values or mix two members. -/
+theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed t T μ) (hob : Obligations (.set t))
+    (ih : ∀ w, T w ↔ Adm t w = true) (v : Value) : HSet T v ↔ Adm (.set t) v = true := by
+  obtain ⟨hob', hse⟩ := hob
+  have hl := (soundness hty hob').core
+  cases hμ : (denote t).μ with
+  | none => simp [SetElem, hμ] at hse
+  | some μ₀ =>
+  cases hsm : setMember μ₀ with
+  | none => simp [SetElem, hμ, hsm] at hse
+  | some μS =>
+  have hw : ∀ x a, (denote t).e x = some a → a.member = μ₀ := fun _ _ h => hl.writes hμ h
+  have hin : ∀ w, T w ↔ ((denote t).e w).isSome = true := fun w => (ih w).trans (Adm_exact t w)
   cases v with
-  | strSet S => simp [HSet, Adm, setBase_held_adm]
-  | numSet S => simp [HSet, Adm, setBase_held_adm]
-  | binSet S => simp [HSet, Adm, setBase_held_adm]
-  | _ => simp [HSet, Adm]
+  | strSet S =>
+    show HSet T (.strSet S) ↔ (encSet (denote t) Value.str S).isSome = true
+    simp only [HSet, Value.strSet.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
+      or_false]
+    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Value.str.inj h)
+        (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
+      fun he x hx => by
+        obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
+        exact (hin _).mpr (encSet_elem ha x hx)⟩
+  | numSet S =>
+    show HSet T (.numSet S) ↔ (encSet (denote t) Value.num S).isSome = true
+    simp only [HSet, Value.numSet.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
+      false_or, or_false]
+    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Value.num.inj h)
+        (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
+      fun he x hx => by
+        obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
+        exact (hin _).mpr (encSet_elem ha x hx)⟩
+  | binSet S =>
+    show HSet T (.binSet S) ↔ (encSet (denote t) Value.bin S).isSome = true
+    simp only [HSet, Value.binSet.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
+      false_or]
+    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Value.bin.inj h)
+        (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
+      fun he x hx => by
+        obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
+        exact (hin _).mpr (encSet_elem ha x hx)⟩
+  | _ => simp [HSet, Adm, setCodec]
 
 /-- `HOpaque` is `opaque`'s admission: `opaque`'s held set is its write domain, and
     `opaq_T_identity` names that set. -/
@@ -155,10 +190,11 @@ theorem hunion_iff : ∀ {opts Ts μs}, TypedListμ opts Ts μs → (∀ t ∈ o
 
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
-/-- **(B): the held set is the admission, at every rule.** A derivable term holds exactly the
-    values it admits, so `T = dom(e)` by `Adm_exact`. -/
-theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → ∀ v, T v ↔ Adm t v = true
-  | t, T, μ, h, v => by
+/-- **(B): the held set is the admission, at every rule.** A derivable term whose obligations
+    hold holds exactly the values it admits, so `T = dom(e)` by `Adm_exact`. `set` is the rule
+    that reads the obligations (`hset_iff`); every other rule passes them to its subterms. -/
+theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → Obligations t → ∀ v, T v ↔ Adm t v = true
+  | t, T, μ, h, hob, v => by
     cases h with
     | string => cases v <;> simp [Adm]
     | number => cases v <;> simp [Adm, inD]
@@ -171,32 +207,33 @@ theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → ∀ v, T v ↔ Adm t v = tr
     | var _ => simp [HNever, Adm]
     -- a `mu`'s held set is its write domain, which is its row
     | mu _ _ => exact Iff.rfl
-    | set b => exact hset_iff b v
+    | @set t' T' μ' h' => exact hset_iff h' hob (typed_T_adm h' hob.1) v
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       cases v with
       | arr vs =>
         simp only [HList, Adm, Value.arr.injEq, exists_eq_left']
         exact htupleL_iff hp hs hf
-          (fun t' _ _ _ hty w => typed_T_adm hty w)
-          (fun t' _ _ _ hty w => typed_T_adm hty w)
-          (fun t' _ _ _ hty w => typed_T_adm hty w) vs
+          (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).1 t' ht') w)
+          (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.1 t' ht') w)
+          (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.2 t' ht') w) vs
       | _ => simp [HList, Adm]
     | @held t' I' μ' P f g h' =>
-      exact (and_congr (typed_T_adm h' (f v)) (Adm_exact P v).symm).trans
+      exact (and_congr (typed_T_adm h' hob.1 (f v)) (Adm_exact P v).symm).trans
         Bool.and_eq_true_iff.symm
     | @refine t' T' μ' q h' =>
       show (T' v ∧ q.eval v = true) ↔ (Adm t' v && q.eval v) = true
-      rw [Bool.and_eq_true, typed_T_adm h' v]
+      rw [Bool.and_eq_true, typed_T_adm h' hob v]
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest ⊢
       exact hobject_iff hfields
-        (fun k t' _ _ _ hty w => typed_T_adm hty w)
-        (fun k t' _ _ _ hty w => typed_T_adm hty w)
-        hrest (fun t' _ _ _ hty w => typed_T_adm hty w) v
+        (fun k t' he _ _ hty w => typed_T_adm hty (by have := hob.1 k; rw [he] at this; exact this) w)
+        (fun k t' he _ _ hty w => typed_T_adm hty (by have := hob.1 k; rw [he] at this; exact this) w)
+        hrest (fun t' he _ _ hty w => typed_T_adm hty (by have := hob.2; rw [he] at this; exact this) w) v
     | @union opts Ts μs h' =>
       rw [HUnion.eq_def] at *
-      exact (hunion_iff h' (fun t' _ _ _ hty w => typed_T_adm hty w) v).trans
+      exact (hunion_iff h' (fun t' ht' _ _ hty w =>
+          typed_T_adm hty ((Obligations.union hob).1 t' ht') w) v).trans
         (by rw [Adm_union])
 termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf

@@ -8,11 +8,15 @@ no information, and `opaque` admits each wire value. The normal form is one unio
 base and each container:
 
     opaque = union [string, boolean, binary, null, number,
-                    array opaque, record opaque,
-                    set string, set number, set binary]
+                    array opaque, record opaque, set opaque]
 
-`opaq` stays the name of the fixed point. The union holds `opaq` under a container, so the union
-is a finite `Term`. `denote .opaq` stays `muCodec opaqStep`, because a denotation of `opaq`
+These are the eight options of `opaqOptions`, one for one. `opaq` stays the name of the fixed
+point. The union holds `opaq` under a container, so the union is a finite `Term`.
+
+`set opaque` does not meet the DynamoDB set obligation (`SetElem`), because `opaque` names no
+member. The unfolding is a statement of the algebra, and the obligation is the store's: a spelling
+that meets it needs one set option per element member, `set string`, `set number` and
+`set binary`, which is ten options. `denote .opaq` stays `muCodec opaqStep`, because a denotation of `opaq`
 through the union recurses on a term that is not a subterm.
 
 The unfolding is two theorems, one for each projection. `Adm_opaqUnfold` and
@@ -27,22 +31,7 @@ namespace Calculus
 /-- `opaque` unfolded one time. The recursion stays under a container, so the term is finite. -/
 def opaqUnfold : Term :=
   .union [.string, .boolean, .binary, .null, .number,
-    Term.array .opaq, Term.record .opaq, .set .string, .set .number, .set .binary]
-
-/-- `opaque` writes each element of a string set as the string base writes it. -/
-theorem encSet_opaq_str (S : NEFinset String) :
-    encSet Ω Value.str S = encSet SetBase.string.elem Value.str S :=
-  encSet_congr fun _ _ => rfl
-
-/-- `opaque` writes each element of a byte-string set as the binary base writes it. -/
-theorem encSet_opaq_bin (S : NEFinset Bytes) :
-    encSet Ω Value.bin S = encSet SetBase.binary.elem Value.bin S :=
-  encSet_congr fun _ _ => rfl
-
-/-- `opaque` writes each element of a number set as the number base writes it. -/
-theorem encSet_opaq_num (S : NEFinset WFNumeral) :
-    encSet Ω Value.num S = encSet SetBase.number.elem Value.num S :=
-  encSet_congr fun _ _ => rfl
+    Term.array .opaq, Term.record .opaq, .set .opaq]
 
 /-- The options of the unfolding are pairwise orthogonal. -/
 theorem opaqUnfold_ok : unionOk (match opaqUnfold with | .union os => os | _ => []) = true := by
@@ -85,25 +74,23 @@ theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
   | bin b => rw [Adm_opaq_bin]; rfl
   | null => rw [Adm_opaq_null]; rfl
   | num d => rw [Adm_opaq_num]; rfl
+  -- `set opaque` is `opaque`'s own set option, so the two rows are one expression
   | strSet S =>
-      rw [Adm_opaq_eq, Ωe_strSet, encSet_opaq_str]
-      rw [(encSet_base_iff SetBase.string (fun _ _ h => Value.str.inj h) S).mpr
-        (fun _ _ => rfl)]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record,
-        inD, SetBase.adm]
+      rw [Adm_opaq_eq, Ωe_strSet]
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD, setCodec]
+      rfl
   | numSet S =>
-      rw [Adm_opaq_eq, Ωe_numSet, encSet_opaq_num, (encSet_base_iff SetBase.number (fun _ _ h => Value.num.inj h) S).mpr
-        (fun _ _ => rfl)]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD, SetBase.adm]
+      rw [Adm_opaq_eq, Ωe_numSet]
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD, setCodec]
+      rfl
   | binSet S =>
-      rw [Adm_opaq_eq, Ωe_binSet, encSet_opaq_bin, (encSet_base_iff SetBase.binary (fun _ _ h => Value.bin.inj h) S).mpr
-        (fun _ _ => rfl)]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
-        SetBase.adm]
+      rw [Adm_opaq_eq, Ωe_binSet]
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD, setCodec]
+      rfl
   | arr vs =>
       rw [Adm_opaq_arr]
       simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
-        AdmOptT, alignPL_spread]
+        AdmOptT, alignPL_spread, setCodec]
       exact decide_eq_decide.mpr Iff.rfl
   | map keys g =>
       -- the record's guard is vacuous over `∅`; a `simp` that unfolds the guard reaches
@@ -112,7 +99,7 @@ theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [Adm_opaq_map]
       simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
-        AdmWild, objAdmV, entryP, MapOf.at]
+        AdmWild, objAdmV, entryP, MapOf.at, setCodec]
       exact fun _ => hp
 
 
@@ -141,11 +128,6 @@ theorem AdmA_opaq_m (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
   simp only [decide_eq_true_eq]
   exact Iff.rfl
 
-/-- A set base's row is its codec's read domain, as a `Bool`. -/
-theorem AdmA_set_eq (b : SetBase) (a : Attr) :
-    AdmA (.set b) a = ((setCodec b.elem).p a).isSome :=
-  Bool.eq_iff_iff.mpr (ExactA_set b a)
-
 /-- **The unfolding lemma, read side.** `opaque` reads exactly the attributes that its
     unfolding reads. -/
 theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
@@ -160,32 +142,29 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
   | null => rw [AdmA_opaq_null]; rfl
   | n x => rw [AdmA_opaq_num]; rfl
   | ss S =>
-      have he : decSet Ω Attr.s S = (setCodec SetBase.string.elem).p (.ss S) :=
-        decSet_congr fun _ _ => rfl
-      rw [AdmA_opaq_eq, Ωp_ss, he, ← AdmA_set_eq]
+      rw [AdmA_opaq_eq, Ωp_ss]
+      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, Term.array, Term.record, setCodec]
       rfl
   | bs S =>
-      have he : decSet Ω Attr.b S = (setCodec SetBase.binary.elem).p (.bs S) :=
-        decSet_congr fun _ _ => rfl
-      rw [AdmA_opaq_eq, Ωp_bs, he, ← AdmA_set_eq]
+      rw [AdmA_opaq_eq, Ωp_bs]
+      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, Term.array, Term.record, setCodec]
       rfl
   | ns S =>
-      have he : decSet Ω Attr.n S = (setCodec SetBase.number.elem).p (.ns S) :=
-        decSet_congr fun _ _ => rfl
-      rw [AdmA_opaq_eq, Ωp_ns, he, ← AdmA_set_eq]
-      simp [opaqUnfold, AdmA, AdmASet, AdmABody, Term.array, Term.record]
+      rw [AdmA_opaq_eq, Ωp_ns]
+      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, Term.array, Term.record, setCodec]
+      rfl
   | l as =>
       rw [AdmA_opaq_l]
-      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, AdmASet, Term.array,
-        Term.record, AdmAOptT, alignPAL_spread]
+      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, Term.array,
+        Term.record, AdmAOptT, alignPAL_spread, setCodec]
       exact decide_eq_decide.mpr Iff.rfl
   | m keys g =>
       -- the record's guard stays folded, for the reason `Adm_opaqUnfold` gives
       have hp : reqPresentT ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [AdmA_opaq_m]
-      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, AdmASet, Term.array,
-        Term.record, AdmAWild, objAdmA, entryPA, MapOf.at]
+      simp [opaqUnfold, AdmAAny, anyPA, AdmA, AdmABody, Term.array,
+        Term.record, AdmAWild, objAdmA, entryPA, MapOf.at, setCodec]
       exact fun _ => hp
 
 /-- **`opaque` is total, write side.** `opaque` writes every value. -/
@@ -195,15 +174,10 @@ theorem opaq_total : ∀ v : Value, Adm .opaq v = true
   | .bin b => Adm_opaq_bin b
   | .null => Adm_opaq_null
   | .num d => by rw [Adm_opaq_num]; rfl
-  | .strSet S => by
-      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from rfl]
-      simp [opaqUnfold, Adm, AdmBody, Term.array, Term.record, SetBase.adm, inD]
-  | .numSet S => by
-      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from rfl]
-      simp [opaqUnfold, Adm, AdmBody, Term.array, Term.record, SetBase.adm, inD]
-  | .binSet S => by
-      rw [← Adm_opaqUnfold, show Adm opaqUnfold _ = AdmAny _ _ from rfl]
-      simp [opaqUnfold, Adm, AdmBody, Term.array, Term.record, SetBase.adm, inD]
+  -- a scalar set is `HOpaque`, and `opaque` writes what `HOpaque` holds
+  | .strSet S => by rw [Adm_opaq_eq]; exact hopaque_e (.strSet S fun s _ => .str s)
+  | .numSet S => by rw [Adm_opaq_eq]; exact hopaque_e (.numSet S fun d _ => .num d)
+  | .binSet S => by rw [Adm_opaq_eq]; exact hopaque_e (.binSet S fun b _ => .bin b)
   | .arr vs => by
       rw [Adm_opaq_arr]
       exact decide_eq_true (fun x hx =>
@@ -225,20 +199,19 @@ theorem opaqA_total : ∀ a : Attr, AdmA .opaq a = true
   | .b x => AdmA_opaq_bin x
   | .null => AdmA_opaq_null
   | .n x => by rw [AdmA_opaq_num]; rfl
+  -- `opaque` is a restriction of itself, so a wire set reads where each payload does
   | .ss S => by
-      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from rfl]
-      simp [opaqUnfold, AdmA, AdmABody, AdmASet, Term.array, Term.record]
+      rw [AdmA_opaq_eq, Ωp_ss]
+      exact (setCodec_p_isSome_of_sub (c := Ω) ⟨fun _ _ h => h, fun _ _ h => h⟩ (.ss S)).mpr
+        fun _ _ => rfl
   | .ns S => by
-      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from rfl]
-      simp [opaqUnfold, AdmA, AdmABody, AdmASet, Term.array, Term.record]
-      obtain ⟨x₀, hx₀⟩ := S.2
-      exact decSet_isSome_num hx₀ rfl (fun _ _ => rfl)
-        (fun x₁ _ x₂ _ y h₁ h₂ => by
-          simp only [numberCodec, Option.bind_some, vNum, Option.some.injEq] at h₁ h₂
-          exact h₁.trans h₂.symm)
+      rw [AdmA_opaq_eq, Ωp_ns]
+      exact (setCodec_p_isSome_of_sub (c := Ω) ⟨fun _ _ h => h, fun _ _ h => h⟩ (.ns S)).mpr
+        fun _ _ => rfl
   | .bs S => by
-      rw [← AdmA_opaqUnfold, show AdmA opaqUnfold _ = AdmAAny _ _ from rfl]
-      simp [opaqUnfold, AdmA, AdmABody, AdmASet, Term.array, Term.record]
+      rw [AdmA_opaq_eq, Ωp_bs]
+      exact (setCodec_p_isSome_of_sub (c := Ω) ⟨fun _ _ h => h, fun _ _ h => h⟩ (.bs S)).mpr
+        fun _ _ => rfl
   | .l as => by
       rw [AdmA_opaq_l]
       exact decide_eq_true (fun x hx =>

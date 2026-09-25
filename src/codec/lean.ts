@@ -600,12 +600,10 @@ const leanGround = (alts: Alternatives, at: string): string => {
 /**
  * §3 `(refine)`'s predicate, as the model's `Pred`.
  *
- * **The two sides are one shape now.** {@link Predicate} is `members | each | closure` and
- * `Calculus.Pred` is the same three constructors, so this is a rename and not a translation:
- * `members` to `Pred.members`, `each` to `Pred.each`, a recognised closure to `Pred.closure`.
- * The emitter used to print the *meaning* — `inL k ls`, `liftQ p` — because `Term.refine` carried
- * a `Value → Bool` and a constructor was not available to print. `Pred.eval` is where those two
- * expressions live in the model now, and this prints the data instead.
+ * **The two sides are one shape now.** {@link Predicate} is `members | closure`, and
+ * `Calculus.Pred` has those two constructors and `except`, which the host does not spell. So this
+ * is a rename and not a translation: `members` to `Pred.members`, a recognised closure to
+ * `Pred.closure`. `Pred.eval` is where the meaning lives in the model, and this prints the data.
  *
  * Every case comes back parenthesised, because each is an application and `Term.refine` takes its
  * second argument juxtaposed. That includes the recognised closures, which used to come back bare
@@ -615,12 +613,10 @@ const leanGround = (alts: Alternatives, at: string): string => {
  * registry below recognises two of them **by reference**, and everything else is refused. That is
  * the case `Pred` keeps rather than removes: `refine` still carries an arbitrary predicate.
  */
-const leanPredicate = (q: Predicate, at: string, scope: Scope): string => {
+const leanPredicate = (q: Predicate, at: string): string => {
     switch (q.kind) {
         case 'members':
             return `(Pred.members ${leanGround(q.literal, at)})`
-        case 'each':
-            return `(Pred.each ${leanPredicate(q.of, at, scope)})`
         case 'closure': {
             // recognised by reference against the function this package exported, so a rename or a
             // reimplementation of the predicate is a type error here rather than a silent misemission
@@ -694,19 +690,9 @@ const leanTermCore = (t: Term, at: string, scope: Scope): string => {
             return 'Term.number'
         case 'literal':
             return `Term.literal ${leanLiteral(t)}`
-        /**
-         * `Term.set` is indexed by a **`SetBase`**, and by the time the printer sees one it holds a
-         * base rather than an element term.
-         *
-         * The refusal for a restricted element — `refine(b, q).set()`, `string.set('a','b')` — used
-         * to live here, and it lives at `.set()` now, because it is not a fact
-         * about emission. Such a codec is lawful and simply has no `set` term:
-         * `setCodec_restrict` and `setCodec_restrict_p` prove the set of a restriction and the
-         * restriction of a set are one pair on both halves, and that is an equation between codecs
-         * rather than a term.
-         */
+        /** `Term.set` takes its element term, as the host term does. */
         case 'set':
-            return `Term.set SetBase.${t.base}`
+            return `Term.set (${leanTermOfTerm(t.elem, `${at}.elem`, scope)})`
         /**
          * **The builder where the shape is one, the constructor where it is not.**
          *
@@ -780,13 +766,13 @@ const leanTermCore = (t: Term, at: string, scope: Scope): string => {
          *
          * `writesOnlyStrings` exists because the two shipped predicates take a `string` and a
          * `Value → Bool` takes anything: they disagree where JavaScript coerces, so the emission is
-         * confined to inner terms that write nowhere else. `members` and `each` are `Pred`
-         * constructors over data the term carries, and `Pred.eval` sends them to the model's own
-         * `inL` and `liftQ`, so they agree at every value by construction and the gate has nothing
+         * confined to inner terms that write nowhere else. `members` is a `Pred`
+         * constructor over data the term carries, and `Pred.eval` sends it to the model's own
+         * `inL`, so the two agree at every value by construction and the gate has nothing
          * to say about them.
          */
         case 'refine': {
-            const q = leanPredicate(t.q, at, scope)
+            const q = leanPredicate(t.q, at)
             if (t.q.kind === 'closure' && !writesOnlyStrings(t.inner)) {
                 return refuse(
                     at,
