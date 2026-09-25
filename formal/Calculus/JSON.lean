@@ -1,5 +1,4 @@
-import Calculus.AlgRelations
-import Calculus.AlgLists
+import Calculus.AlgHeldFree
 
 /-!
 # A second universe: JSON
@@ -13,13 +12,14 @@ stored carrier are both `Json`, and the member of a value is its JSON kind. A nu
 `Int`, so that no numeral parser enters the module.
 
 The module instantiates these parts of the generic layer: the record `Alg.Codec`, the laws
-`Alg.Lawful`, the refinement by `Alg.Lawful.restrict`, the adapter by `Alg.Lawful.through`, and
-the join by `Alg.lawful_altCodec`, and the array by `Alg.lawful_entrywise`. The compatibility of
-the join comes from `Alg.compat_of_common_bound'`: the identity codec bounds each ground codec,
-because the two carriers are one type.
+`Alg.Lawful`, the refinement by `Alg.Lawful.restrict`, the adapter by `Alg.Lawful.through`, the
+array by `Alg.lawful_entrywise`, and the term language with its soundness at the signature
+`jsonSyn`. A union term is lawful by `Alg.soundness`, and its options are compatible by
+`Alg.compat_of_HF`: the identity codec bounds each ground codec, because the two carriers are one
+type.
 
-The module writes only three things itself: the carrier, the ground codecs with their laws, and
-the prism of an array. Each of the three reads the carrier.
+The module writes only four things itself: the carrier, the ground codecs with their laws, the
+prism of an array, and the signature. Each of the four reads the carrier.
 -/
 
 namespace Calculus.JSON
@@ -131,27 +131,78 @@ theorem canon_idCodec : Alg.Canon idCodec := fun _ _ h => (Option.some.inj h).sy
 theorem sub_ground_id (m : JMember) : Alg.Sub (ground m) idCodec :=
   ⟨fun _ _ h => (gate_eq_some.mp h).2 ▸ rfl, fun _ _ h => (gate_eq_some.mp h).2 ▸ rfl⟩
 
-/-- **A union of lawful codecs below the identity codec is lawful.** The identity codec is the
-    common bound, so each pair of options is compatible. The union names no member. -/
-theorem lawful_join {os : List (Alg.Codec Json Json JMember)}
-    (h : ∀ o ∈ os, Alg.Lawful Json.member o ∧ Alg.Sub o idCodec) :
-    Alg.Lawful Json.member (Alg.altCodec os none) :=
-  Alg.lawful_altCodec (fun o ho => (h o ho).1)
-    (fun _ ho _ ho' =>
-      Alg.compat_of_common_bound' (h _ ho).2 (h _ ho').2 canon_idCodec (h _ ho').1)
-    (fun _ hμ => nomatch hμ)
+/-! ## The JSON signature
+
+The term language and its soundness are the generic ones at `jsonSyn`. JSON's primitives are its
+kinds, and a predicate is a function. The term language has no list, map or set former here, and
+the top is the identity codec. -/
+
+/-- **The JSON syntax**: values, the kinds, and the predicates. -/
+abbrev jsonSyn : Alg.Syn where
+  V := Json
+  Ground := JMember
+  Pred := Json → Bool
+
+/-- **The JSON meaning** of that syntax. -/
+instance jsonSem : Alg.Sem jsonSyn where
+  A := Json
+  M := JMember
+  member := Json.member
+  decM := inferInstance
+  ground := ground
+  lawful_ground := lawful_ground
+  carrier_ground _ := ⟨fun he => (gate_eq_some.mp he).1, fun hp => (gate_eq_some.mp hp).2 ▸
+    (gate_eq_some.mp hp).1⟩
+  eval q := q
+  dV _ := 1
+  dA _ := 1
+  dV_pos _ := Nat.one_pos
+  dA_pos _ := Nat.one_pos
+  list := none
+  map := none
+  set := none
+  groundμ m := some m
+  top := idCodec
+  lawful_top := ⟨fun he => (Option.some.inj he) ▸ rfl, fun hp => (Option.some.inj hp) ▸ rfl,
+    fun hμ => nomatch hμ⟩
+  carrier_top := ⟨fun _ => trivial, fun _ => trivial⟩
+  topHeld _ := True
+  top_held _ _ := trivial
+
+/-- The laws of the identity codec that the held-free theory reads: each kind is below it. -/
+theorem id_topLaws : Alg.TopLaws jsonSyn where
+  ground := sub_ground_id
+  list _ h := nomatch h
+  map _ h := nomatch h
+  set _ h := nomatch h
+
+/-- A string or a number, as a term. -/
+def strOrNumTerm : Alg.Term jsonSyn := .union [.prim .str, .prim .num]
 
 /-- A string or a number. -/
-def strOrNum : Alg.Codec Json Json JMember := Alg.altCodec [str, num] none
+noncomputable def strOrNum : Alg.Codec Json Json JMember := Alg.denote strOrNumTerm
 
-/-- The union of the string codec and the number codec is lawful. -/
-theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum :=
-  lawful_join fun o ho => by
-    cases ho with
-    | head => exact ⟨lawful_str, sub_ground_id _⟩
-    | tail _ ho => cases ho with
-      | head => exact ⟨lawful_num, sub_ground_id _⟩
-      | tail _ ho => nomatch ho
+/-- **The union of the string codec and the number codec is lawful**, by the generic soundness:
+    the two options are held-free, so the identity codec bounds both, and they are compatible. -/
+theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum := by
+  have hty : ∀ m, Alg.Typed (Alg.Term.prim (S := jsonSyn) m) (ground m).T (some m) :=
+    fun m => .prim m
+  refine Alg.soundness (.union (.cons (hty _) (.cons (hty _) .nil))) ⟨⟨trivial, trivial, trivial⟩,
+    fun s hs t ht => ?_⟩
+  have hl : ∀ x ∈ [Alg.Term.prim (S := jsonSyn) .str, .prim .num],
+      Alg.Lawful Json.member (Alg.denote x) := fun x hx => by
+    rcases List.mem_cons.mp hx with rfl | hx
+    · exact lawful_ground _
+    · rcases List.mem_cons.mp hx with rfl | hx
+      · exact lawful_ground _
+      · exact nomatch hx
+  have hf : ∀ x ∈ [Alg.Term.prim (S := jsonSyn) .str, .prim .num], Alg.HF x := fun x hx => by
+    rcases List.mem_cons.mp hx with rfl | hx
+    · trivial
+    · rcases List.mem_cons.mp hx with rfl | hx
+      · trivial
+      · exact nomatch hx
+  exact Alg.compat_of_HF id_topLaws canon_idCodec (hf s hs) (hf t ht) (hl t ht)
 
 /-! ## Arrays -/
 

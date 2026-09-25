@@ -130,6 +130,76 @@ theorem lawful_groundCodec : ∀ g, Lawful (groundCodec g)
   | .base k => lawful_baseCodec k
   | .literal k v => lawful_literalCodec k v
 
+/-! ### The held sets that the signature names -/
+
+/-- `℘⁺fin(T)` — the nonempty finite subsets of `T` (§3 `(set)`). -/
+def HSet (T : Value → Prop) : Value → Prop := fun v =>
+  (∃ S : NEFinset String, v = .strSet S ∧ ∀ s ∈ S.1, T (.str s)) ∨
+  (∃ S : NEFinset WFNumeral, v = .numSet S ∧ ∀ d ∈ S.1, T (.num d)) ∨
+  (∃ S : NEFinset Bytes,  v = .binSet S ∧ ∀ b ∈ S.1, T (.bin b))
+
+/-- `HOpaque` (§3 `(opaque)`): `opaque`'s held set, the values whose member is recoverable
+    from the value alone, as the doc's fixpoint — everything self-identifying, closed under the
+    containers. Every `Value` is in `HOpaque`: the number option holds a numeral exactly. -/
+inductive HOpaque : Value → Prop where
+  | str  (s)  : HOpaque (.str s)
+  | bool (b)  : HOpaque (.bool b)
+  | bin  (b)  : HOpaque (.bin b)
+  | null      : HOpaque .null
+  /-- No premise: the carrier is the well-formed numerals, so there is no numeral
+      `opaque` cannot write and nothing for a premise to exclude. -/
+  | num  (d)  : HOpaque (.num d)
+  /-- Non-emptiness carried no premise here any more, because `℘⁺fin` is the type. The
+      argument for it stands and is worth keeping: an empty wire set is not writable, and
+      its member would not be recoverable from the value anyway — you cannot tell `SS`
+      from `NS` at `∅`. Both readings §3 gives of `opaque`'s held set exclude it. What
+      changed is where the exclusion lives: `HeldSet.lean` used to exhibit `opaque` refusing
+      `strSet ∅`, and that witness is now unstatable. -/
+  | strSet (S : NEFinset String)
+      (h : ∀ s ∈ S.1, HOpaque (.str s)) : HOpaque (.strSet S)
+  | numSet (S : NEFinset WFNumeral)
+      (h : ∀ d ∈ S.1, HOpaque (.num d)) : HOpaque (.numSet S)
+  | binSet (S : NEFinset Bytes)
+      (h : ∀ b ∈ S.1, HOpaque (.bin b)) : HOpaque (.binSet S)
+  | arr  (vs) (h : ∀ x ∈ vs, HOpaque x) : HOpaque (.arr vs)
+  | map  (keys) (f) (h : ∀ k, HOpaque (f k)) : HOpaque (.map keys f)
+
+/-- Every stage of `opaque` carries `HOpaque`. The stage is the budget on the *input's* depth, not
+    a budget on the term. -/
+theorem opaq_TSub : ∀ (fuel : Nat) (v : Value),
+    (muStage opaqStep fuel).T v → HOpaque v
+  | 0, _, h => nomatch h
+  | fuel+1, v, h => by
+    obtain ⟨o, ho, hT⟩ := h
+    have ih := opaq_TSub fuel
+    simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
+    rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    · obtain ⟨s, rfl⟩ := hT; exact .str s
+    · obtain ⟨b, rfl⟩ := hT; exact .bool b
+    · obtain ⟨b, rfl⟩ := hT; exact .bin b
+    · cases hT; exact .null
+    · obtain ⟨d, rfl⟩ := hT; exact .num d
+    · cases v <;> first
+        | exact .strSet _ fun s hs => ih (Value.str s) (hT s hs)
+        | exact .numSet _ fun d hd => ih (Value.num d) (hT d hd)
+        | exact .binSet _ fun b hb => ih (Value.bin b) (hT b hb)
+        | exact nomatch hT
+    · cases v <;> first
+        | exact .arr _ fun x hx => ih x (hT x hx)
+        | exact nomatch hT
+    · cases v <;> first
+        | exact .map _ _ fun k => ih _ (hT k)
+        | exact nomatch hT
+
+/-- `opaque`'s held set — its write domain — lands in `HOpaque`: the stage that writes a value is
+    on its carrier. -/
+theorem opaq_TSubω (v : Value) :
+    Ω.T v → HOpaque v := by
+  intro h
+  obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
+  exact opaq_TSub _ v
+    ((muStage_induct Carrier.empty (fun _ => carrier_opaqStep) (Value.depth v)).domE ha)
+
 /-- The list former: the `arr` and `L` prisms. -/
 abbrev dList : Alg.ListF Value Attr Member Attr.member Value.depth Attr.depth where
   pV := arrV
@@ -154,6 +224,15 @@ noncomputable abbrev dSet : Alg.SetF Value Attr Member Attr.member Value.depth A
   lawful h := lawful_setCodec h
   agree h := agreeLe_setCodec h
   elem := SetElem
+  held := HSet
+  member := setMember
+  carrier h := carrier_setCodec h
+  held_of {c T} ih v hv := by
+    cases v <;> first
+      | exact Or.inl ⟨_, rfl, fun x hx => ih _ (hv x hx)⟩
+      | exact Or.inr (Or.inl ⟨_, rfl, fun x hx => ih _ (hv x hx)⟩)
+      | exact Or.inr (Or.inr ⟨_, rfl, fun x hx => ih _ (hv x hx)⟩)
+      | exact nomatch hv
 
 /-- **The DynamoDB syntax**: values, the ground primitives, and the data predicates. -/
 abbrev dynSyn : Alg.Syn where
@@ -169,6 +248,9 @@ abbrev dynSyn : Alg.Syn where
   decM := inferInstance
   ground := groundCodec
   lawful_ground := lawful_groundCodec
+  carrier_ground
+    | .base k => carrier_baseCodec k
+    | .literal k v => carrier_literalCodec k v
   eval := Pred.eval
   dV := Value.depth
   dA := Attr.depth
@@ -177,8 +259,13 @@ abbrev dynSyn : Alg.Syn where
   list := some dList
   map := some dMap
   set := some dSet
+  groundμ
+    | .base k | .literal k _ => some k.member
   top := Ω
   lawful_top := lawful_opaq
+  carrier_top := carrier_opaq
+  topHeld := HOpaque
+  top_held := opaq_TSubω
 
 /-! ## The term language at DynamoDB
 
@@ -313,52 +400,5 @@ theorem Term.isOpenObject_eq_false {t : Term} :
     | _ => rfl
 
 
-
-/-- The termination argument every `Term.depth` recursion in this development uses, written
-    once. **Three** theorems share it, all in `Soundness.lean` — `soundness`,
-    `typed_TSub`, `carrier_denote` — and their goal sets differ, so some alternatives are dead
-    at each use. That is what the `unreachableTactic` linter reports at those sites, and it is
-    why the option is disabled there rather than the block being specialised three ways.
-
-    This said *five*, naming `Adm_sound` and `AdmA_sound` as the other two. They do not
-    recurse: `Adm_exact`/`AdmA_exact` are structural mutual recursions over the term family
-    with no `termination_by`, and `Adm_sound`/`AdmA_sound` are one-line corollaries of them.
-    The claim was true before the exactness rewrite replaced a measured recursion with a
-    structural one, and nothing was keeping it honest — `name_drift.py` checks that cited
-    names *exist*, and all five do. -/
-macro (name := termDepthWf) "term_depth_wf" : tactic => `(tactic|
-  (all_goals simp_wf
-   all_goals subst_vars
-   all_goals
-     first
-       -- one subterm: the measure is `depth t' + 1`
-       | (simp only [Term.depth]; omega)
-       -- an element of a list, where the layer is a bare fold (union)…
-       | (have hle := Term.depth_le_depthL ‹_ ∈ _›
-          simp only [Term.depth]
-          exact Nat.lt_succ_of_le hle)
-       -- …or a `max` (list): the prefix, the spread and the suffix each sit under one
-       -- branch of the nested `max`, and `omega` reads `Nat.max` directly, so one
-       -- alternative per companion covers all three rather than one per branch.
-       | (have hle := Term.depth_le_depthL ‹_ ∈ _›
-          simp only [Term.depth]
-          omega)
-       | (have hle := Term.depthO_le ‹_ ∈ _›
-          simp only [Term.depth]
-          omega)
-       -- the spread, where the recursion substituted `sp := some t'` and left no
-       -- membership to read: `depthO (some t')` IS `t'.depth`, so the row needs no premise
-       | (simp only [Term.depth, Term.depthO]; omega)
-       -- a declared field's term: the inequality `sizeOf` cannot give
-       | exact Term.depth_lt_object_req _ (by assumption)
-       | exact Term.depth_lt_object_opt _ (by assumption)
-       -- the rest policy's codec
-       | exact Term.depth_lt_object_rest (by assumption)
-       | exact Term.depth_lt_object_rest rfl
-       | (simp only [Term.depth, Body.depth, Rest.depth]
-          first
-            | exact Nat.lt_succ_of_le (le_trans (Nat.le_succ _) (le_max_right _ _))
-            | exact Nat.lt_succ_of_le (le_max_right _ _)
-            | omega)))
 
 end Calculus

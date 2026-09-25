@@ -47,6 +47,14 @@ structure SetF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → Na
   agree : ∀ {d c₁ c₂}, AgreeLe dV dA d c₁ c₂ → AgreeLe dV dA (d + 1) (lift c₁) (lift c₂)
   /-- The universe's own obligation on an element. Soundness does not read this field. -/
   elem : Codec V A M → Prop
+  /-- The held set of a set, from the held set of its element. -/
+  held : (V → Prop) → V → Prop
+  /-- The member of a set, from the member of its element. -/
+  member : M → Option M
+  /-- The lift of a codec on its carrier is on its carrier. -/
+  carrier : ∀ {c : Codec V A M}, Carrier c → Carrier (lift c)
+  /-- The lift's held set is inside `held` of any bound on the element's held set. -/
+  held_of : ∀ {c : Codec V A M} {T : V → Prop}, (∀ v, c.T v → T v) → ∀ v, (lift c).T v → held T v
 
 /-- **The syntax of a universe**: the values a `held` maps, the primitives, and the predicates.
     The term language reads no more than this, so a term over a universe is data that code can
@@ -66,6 +74,7 @@ class Sem (S : Syn) where
   decM : DecidableEq M
   ground : S.Ground → Codec S.V A M
   lawful_ground : ∀ g, Lawful member (ground g)
+  carrier_ground : ∀ g, Carrier (ground g)
   eval : S.Pred → S.V → Bool
   dV : S.V → Nat
   dA : A → Nat
@@ -74,8 +83,14 @@ class Sem (S : Syn) where
   list : Option (ListF S.V A M member dV dA)
   map : Option (MapF S.V A M member dV dA)
   set : Option (SetF S.V A M member dV dA)
+  /-- The member that the judgement gives a primitive. -/
+  groundμ : S.Ground → Option M
   top : Codec S.V A M
   lawful_top : Lawful member top
+  carrier_top : Carrier top
+  /-- The held set that the judgement gives the top, and the top's held set lies inside it. -/
+  topHeld : S.V → Prop
+  top_held : ∀ v, top.T v → topHeld v
 
 instance (S : Syn) [Sem S] : DecidableEq (Sem.M S) := Sem.decM
 
@@ -509,5 +524,44 @@ noncomputable def denoteμs : List (Term S) → (ρ : List S.C := []) → List (
 end
 
 end Denote
+
+/-- The termination argument every `Term.depth` recursion in this development uses, written
+    once, for every universe. The goal sets of its users differ, so some alternatives are dead
+    at each use. That is what the `unreachableTactic` linter reports at those sites, and it is
+    why the option is disabled there rather than the block being specialised per use. -/
+macro (name := termDepthWf) "term_depth_wf" : tactic => `(tactic|
+  (all_goals simp_wf
+   all_goals subst_vars
+   all_goals
+     first
+       -- one subterm: the measure is `depth t' + 1`
+       | (simp only [Term.depth]; omega)
+       -- an element of a list, where the layer is a bare fold (union)…
+       | (have hle := Term.depth_le_depthL ‹_ ∈ _›
+          simp only [Term.depth]
+          exact Nat.lt_succ_of_le hle)
+       -- …or a `max` (list): the prefix, the spread and the suffix each sit under one
+       -- branch of the nested `max`, and `omega` reads `Nat.max` directly, so one
+       -- alternative per companion covers all three rather than one per branch.
+       | (have hle := Term.depth_le_depthL ‹_ ∈ _›
+          simp only [Term.depth]
+          omega)
+       | (have hle := Term.depthO_le ‹_ ∈ _›
+          simp only [Term.depth]
+          omega)
+       -- the spread, where the recursion substituted `sp := some t'` and left no
+       -- membership to read: `depthO (some t')` IS `t'.depth`, so the row needs no premise
+       | (simp only [Term.depth, Term.depthO]; omega)
+       -- a declared field's term: the inequality `sizeOf` cannot give
+       | exact Term.depth_lt_object_req _ (by assumption)
+       | exact Term.depth_lt_object_opt _ (by assumption)
+       -- the rest policy's codec
+       | exact Term.depth_lt_object_rest (by assumption)
+       | exact Term.depth_lt_object_rest rfl
+       | (simp only [Term.depth, Body.depth, Rest.depth]
+          first
+            | exact Nat.lt_succ_of_le (le_trans (Nat.le_succ _) (le_max_right _ _))
+            | exact Nat.lt_succ_of_le (le_max_right _ _)
+            | omega)))
 
 end Calculus.Alg

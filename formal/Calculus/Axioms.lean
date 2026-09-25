@@ -24,6 +24,10 @@ import Calculus.AlgPositions
 import Calculus.AlgContainers
 import Calculus.AlgRecursion
 import Calculus.AlgTerm
+import Calculus.AlgTyping
+import Calculus.AlgGuarded
+import Calculus.AlgSound
+import Calculus.AlgHeldFree
 import Lean
 
 /-!

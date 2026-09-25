@@ -1,4 +1,5 @@
 import Calculus.ExactA
+import Calculus.AlgHeldFree
 
 /-!
 # Held-free terms are restrictions of `opaque`
@@ -6,12 +7,12 @@ import Calculus.ExactA
 A term with no `held` does not change the carrier. Each combinator either restricts its
 subterm or composes subterms through the structure that `opaque` itself uses. So the write
 graph and the read graph of a held-free term lie inside the graphs of `opaque`.
-`confluence_W` and `confluence_R` state the two inclusions. `sub_denote` proves them by one
-mutual induction over `Term`, `Body`, `ObjectSlot`, the list and the option.
+`confluence_W` and `confluence_R` state the two inclusions. `sub_denote` proves them from
+`Alg.sub_denote`, one mutual induction over `Term`, `Body`, `ObjectSlot`, the list and the
+option, for every universe. `Ω_topLaws` gives the laws of `Ω` that the induction reads.
 
-`Sub c d` is the inclusion of graphs on both halves. The only case that reads a union is
-`select_some`: the selector returns the answer of one option. The set cases go through
-`encSet_congr` and `decSet_congr`.
+`Sub c d` is the inclusion of graphs on both halves. The set cases go through `encSet_congr` and
+`decSet_congr`.
 
 The file sits below the meet because the meet's `set` row reads it: over a held-free element, a
 set writes and reads exactly where each element does. `Confluence.lean` holds the payoffs.
@@ -61,9 +62,6 @@ theorem sub_binary : Sub binaryCodec Ω :=
 theorem sub_null : Sub nullCodec Ω :=
   ⟨fun v a h => (by cases v <;> simp [nullCodec] at h; subst h; rfl),
    fun a v h => (by cases a <;> simp [nullCodec] at h; subst h; rfl)⟩
-
-/-- The empty codec is a restriction of `Ω`. -/
-theorem sub_empty : Sub Codec.empty Ω := ⟨fun _ _ h => (nomatch h), fun _ _ h => (nomatch h)⟩
 
 /-- A restriction of a restriction of `Ω` is a restriction of `Ω`. -/
 theorem sub_restrict {c : Codec} (h : Sub c Ω) (q : Value → Bool) : Sub (c.restrict q) Ω := by
@@ -118,60 +116,6 @@ theorem sub_setCodec {c : Codec} (h : Sub c Ω) : Sub (setCodec c) Ω := by
     · rw [Ωp_ns]; exact decSet_sub h hS
     · rw [Ωp_bs]; exact decSet_sub h hS
 
-/-- A zipped traversal whose every row codec is included in `Ω` is a traversal of `Ω`. -/
-theorem forall₂_zip_e : ∀ (ds : List Codec) (vs : List Value) (as : List Attr),
-    ds.length = vs.length → (∀ c ∈ ds, Sub c Ω) →
-    List.Forall₂ (fun (cv : Codec × Value) a => cv.1.e cv.2 = some a) (ds.zip vs) as →
-    List.Forall₂ (fun v a => Ω.e v = some a) vs as
-  | [], [], _, _, _, h => by cases h; exact .nil
-  | d :: ds, v :: vs, a :: as, hl, hd, .cons h1 h2 =>
-      .cons ((hd d (by simp)).1 _ _ h1)
-        (forall₂_zip_e ds vs as (by simpa using hl) (fun c hc => hd c (by simp [hc])) h2)
-  | [], _ :: _, _, hl, _, _ => nomatch hl
-  | _ :: _, [], _, hl, _, _ => nomatch hl
-  | _ :: _, _ :: _, [], _, _, h => nomatch h
-
-/-- …and the same on the read side. -/
-theorem forall₂_zip_p : ∀ (ds : List Codec) (as : List Attr) (vs : List Value),
-    ds.length = as.length → (∀ c ∈ ds, Sub c Ω) →
-    List.Forall₂ (fun (ca : Codec × Attr) v => ca.1.p ca.2 = some v) (ds.zip as) vs →
-    List.Forall₂ (fun a v => Ω.p a = some v) as vs
-  | [], [], _, _, _, h => by cases h; exact .nil
-  | d :: ds, a :: as, v :: vs, hl, hd, .cons h1 h2 =>
-      .cons ((hd d (by simp)).2 _ _ h1)
-        (forall₂_zip_p ds as vs (by simpa using hl) (fun c hc => hd c (by simp [hc])) h2)
-  | [], _ :: _, _, hl, _, _ => nomatch hl
-  | _ :: _, [], _, hl, _, _ => nomatch hl
-  | _ :: _, _ :: _, [], _, _, h => nomatch h
-
-/-- A list whose every slot codec is a restriction of `Ω` is a restriction of `Ω`. -/
-theorem sub_listCodec {pre suf : List Codec} {sp : Option Codec}
-    (hpre : ∀ c ∈ pre, Sub c Ω) (hsp : ∀ c ∈ sp, Sub c Ω) (hsuf : ∀ c ∈ suf, Sub c Ω) :
-    Sub (listCodec pre sp suf) Ω := by
-  have hrow : ∀ n ds, slotsL pre sp suf n = some ds → ∀ c ∈ ds, Sub c Ω := fun n ds h c hc => by
-    rcases slotsL_mem pre sp suf n ds h c hc with h1 | h1 | h1
-    · exact hpre c h1
-    · exact hsp c h1
-    · exact hsuf c h1
-  refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
-  · obtain ⟨vs, as, hv, hE, rfl⟩ := carried_e.mp he
-    obtain rfl := arrV.into_out hv
-    simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hE
-    obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hE
-    refine (Ωe_arr vs).trans ?_
-    rw [traverse_eq_some.mpr (forall₂_zip_e ds vs as
-      (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
-    rfl
-  · obtain ⟨as, vs, ha, hD, rfl⟩ := carried_p.mp hp
-    obtain rfl := lA.into_out ha
-    simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hD
-    obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hD
-    refine (Ωp_l as).trans ?_
-    rw [traverse_eq_some.mpr (forall₂_zip_p ds as vs
-      (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
-    rfl
-
-
 /-- The selector returns the answer of one option, and nothing else. -/
 theorem select_some {A B : Type} {os : List Codec} {run : Codec → A → Option B} {x : A} {y : B}
     (h : select os run x = some y) :
@@ -179,147 +123,25 @@ theorem select_some {A B : Type} {os : List Codec} {run : Codec → A → Option
   obtain ⟨o, ho, -, hr⟩ := select_admits h
   exact ⟨o, ho, hr⟩
 
-/-- A union of restrictions of `Ω` is a restriction of `Ω`, because the selector returns the
-    answer of one option. -/
-theorem sub_altCodec {os : List Codec} (h : ∀ o ∈ os, Sub o Ω) (μ : Option Member) :
-    Sub (altCodec os μ) Ω := by
-  refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
-  · obtain ⟨o, ho, he⟩ := select_some he; exact (h o ho).1 _ _ he
-  · obtain ⟨o, ho, hp⟩ := select_some hp; exact (h o ho).2 _ _ hp
-
-/-- A filter that keeps every element is the set. -/
-theorem filter_eq_self_on {S : Finset Name} {p : Name → Bool} (h : ∀ k ∈ S, p k = true) :
-    S.filter (p ·) = S := by
-  ext k
-  simp only [Finset.mem_filter]
-  exact ⟨fun hk => hk.1, fun hk => ⟨hk, h k hk⟩⟩
-
-/-- An object whose every slot and open block is a restriction of `Ω` is a restriction of `Ω`. -/
-theorem sub_bodySem (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
-    (w : Option Term) {ρ : List Codec} (hf : ∀ k, Sub (fieldSem (f k) ρ).codec Ω)
-    (hw : ∀ c ∈ rcOf (wildSem w ρ), Sub c Ω) : Sub (bodySem (.mk fields f w) ρ) Ω := by
-  refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
-  · obtain ⟨keys, g, g', rfl, rfl, -, hg⟩ := objectCodecCore_e_inv he
-    rw [Ωe_map, funImage_eq (f := g') (fun k => ?_)]
-    · rfl
-    have hk := funImage_some hg k
-    obtain ⟨c, hc, hce⟩ := Option.bind_eq_some_iff.mp hk
-    exact (entryCodec_of (Q := fun c => Sub c Ω) hf hw hc).1 _ _ hce
-  · cases a with
-    | m keys g =>
-      simp only [bodySem, objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec,
-          Option.map_eq_some_iff,
-        Option.bind_eq_some_iff] at hp
-      obtain ⟨q, ⟨p', hmA, hr⟩, rfl⟩ := hp
-      cases hmA
-      obtain ⟨-, d, hd, rfl⟩ := objRead_eq.mp hr
-      rw [Ωp_m]
-      have hS : keys = keys.filter (keepB (wildSem w ρ) ⟨fields, fun k => fieldSem (f k) ρ⟩ ·) :=
-        (filter_eq_self_on (fun k _ => keepB_wild w _ k)).symm
-      rw [funImage_record_congr hS (g' := fun k : {k // k ∈ keys.filter
-          (keepB (wildSem w ρ) ⟨fields, fun k => fieldSem (f k) ρ⟩ ·)} =>
-            (entryCodec ⟨fields, fun k => fieldSem (f k) ρ⟩ (rcOf (wildSem w ρ)) k.1).bind
-              (fun c => c.p (g ⟨k.1, (Finset.mem_filter.mp k.2).1⟩))) (fun k h h' => ?_), hd]
-      · rfl
-      have hk := funImage_some hd ⟨k, h'⟩
-      rw [hk]
-      obtain ⟨c, hc, hcp⟩ := Option.bind_eq_some_iff.mp hk
-      exact (entryCodec_of (Q := fun c => Sub c Ω) hf hw hc).2 _ _ hcp
-    | _ => exact nomatch hp
-
 /-! ## Held-free terms -/
 
-mutual
-/-- A term is **held-free** when no `held` occurs in the term. A held-free term does not change
-    the carrier, so the term is a restriction of `opaque`. -/
-def HF : Term → Prop
-  | .held _ _ _ _ => False
-  | .refine t _ => HF t
-  | .mu t => HF t
-  | .list pre sp suf => HFL pre ∧ HFO sp ∧ HFL suf
-  | .object b => HFB b
-  | .union os => HFL os
-  | .set t => HF t
-  | .base _ | .literal _ _ | .opaq | .never | .var _ => True
-/-- A body is held-free when each slot and the open block are held-free. -/
-def HFB : Body → Prop
-  | .mk _ f w => (∀ k, HFS (f k)) ∧ HFO w
-/-- A slot is held-free when the slot's term is held-free. -/
-def HFS : ObjectSlot → Prop
-  | .req t => HF t
-  | .optional t => HF t
-/-- Each term of the list is held-free. -/
-def HFL : List Term → Prop
-  | [] => True
-  | t :: ts => HF t ∧ HFL ts
-/-- The optional term is held-free where the term is present. -/
-def HFO : Option Term → Prop
-  | none => True
-  | some t => HF t
-end
+-- A term is **held-free** when no `held` occurs in the term: `Alg.HF`. The names are aliases,
+-- so `simp [HF]` reads the equations of `Alg.HF`, as the emitted vectors ask.
+export Alg (HF HFB HFS HFL HFO)
 
-mutual
-/-- **Confluence.** The denotation of a held-free term is a restriction of `Ω`, on both halves,
-    over an environment of restrictions of `Ω`. -/
-theorem sub_denoteIn : ∀ t : Term, HF t → ∀ ρ : List Codec, (∀ i, Sub (envAt ρ i) Ω) →
-    Sub (denote t ρ) Ω
-  | .base k, _, _, _ => sub_baseCodec k
-  | .literal k x, _, _, _ => sub_literal k x
-  | .set t, h, ρ, henv => sub_setCodec (sub_denoteIn t h ρ henv)
-  | .opaq, _, _, _ => ⟨fun _ _ h => h, fun _ _ h => h⟩
-  | .never, _, _, _ => sub_empty
-  | .var i, _, _, henv => henv i
-  -- each stage is a restriction by the body's case at the stage before, and the limit reads a
-  -- stage at each input
-  | .mu b, h, ρ, henv => by
-      have hs : ∀ n, Sub (muStage (fun c => denote b (c :: ρ)) n) Ω := fun n => by
-        induction n with
-        | zero => exact sub_empty
-        | succ n ih =>
-          exact sub_denoteIn b h (_ :: ρ) fun i => match i with
-            | 0 => ih
-            | i + 1 => henv i
-      exact ⟨fun v a he => (hs _).1 v a he, fun a v hp => (hs _).2 a v hp⟩
-  | .held _ _ _ _, h, _, _ => h.elim
-  | .refine t q, h, ρ, henv => sub_restrict (sub_denoteIn t h ρ henv) q.eval
-  | .list pre sp suf, ⟨h1, h2, h3⟩, ρ, henv =>
-      sub_listCodec (sub_denoteList pre h1 ρ henv) (sub_denoteOpt sp h2 ρ henv)
-        (sub_denoteList suf h3 ρ henv)
-  | .object b, h, ρ, henv => sub_body b h ρ henv
-  | .union os, h, ρ, henv => sub_altCodec (sub_denoteList os h ρ henv) _
-/-- …at a body. -/
-theorem sub_body : ∀ b : Body, HFB b → ∀ ρ : List Codec, (∀ i, Sub (envAt ρ i) Ω) →
-    Sub (bodySem b ρ) Ω
-  | .mk fields f w, ⟨hf, hw⟩, ρ, henv =>
-      sub_bodySem fields f w (fun k => sub_slot (f k) (hf k) ρ henv) (sub_wild w hw ρ henv)
-/-- …at a slot. -/
-theorem sub_slot : ∀ s : ObjectSlot, HFS s → ∀ ρ : List Codec, (∀ i, Sub (envAt ρ i) Ω) →
-    Sub (fieldSem s ρ).codec Ω
-  | .req t, h, ρ, henv => sub_denoteIn t h ρ henv
-  | .optional t, h, ρ, henv => sub_denoteIn t h ρ henv
-/-- …at an open block. -/
-theorem sub_wild : ∀ w : Option Term, HFO w → ∀ ρ : List Codec, (∀ i, Sub (envAt ρ i) Ω) →
-    ∀ c ∈ rcOf (wildSem w ρ), Sub c Ω
-  | none, _, _, _ => fun _ hc => nomatch hc
-  | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn t h ρ henv
-/-- …at a list of terms. -/
-theorem sub_denoteList : ∀ ts : List Term, HFL ts → ∀ ρ : List Codec,
-    (∀ i, Sub (envAt ρ i) Ω) → ∀ c ∈ denoteList ts ρ, Sub c Ω
-  | [], _, _, _ => fun _ hc => nomatch hc
-  | t :: ts, ⟨h1, h2⟩, ρ, henv => fun c hc => by
-      rcases List.mem_cons.mp hc with rfl | hc
-      · exact sub_denoteIn t h1 ρ henv
-      · exact sub_denoteList ts h2 ρ henv c hc
-/-- …at an optional term. -/
-theorem sub_denoteOpt : ∀ o : Option Term, HFO o → ∀ ρ : List Codec,
-    (∀ i, Sub (envAt ρ i) Ω) → ∀ c ∈ denoteOpt o ρ, Sub c Ω
-  | none, _, _, _ => fun _ hc => nomatch hc
-  | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn t h ρ henv
-end
+/-- The laws of `Ω` that the held-free theory reads: each primitive is below `Ω`, `Ω` acts as the
+    `arr` and `map` formers, and a set over a restriction of `Ω` is a restriction of `Ω`. -/
+theorem Ω_topLaws : Alg.TopLaws dynSyn where
+  ground
+    | .base k => sub_baseCodec k
+    | .literal k x => sub_literal k x
+  list L hL := by cases hL; exact ⟨Ωe_arr, Ωp_l⟩
+  map F hF := by cases hF; exact ⟨fun m => Ωe_map m.keys m.get, fun m => Ωp_m m.keys m.get⟩
+  set L hL c hc := by cases hL; exact sub_setCodec hc
 
 /-- **Confluence**, closed: the denotation of a held-free term is a restriction of `Ω`. -/
-theorem sub_denote (t : Term) (h : HF t) : Sub (denote t) Ω :=
-  sub_denoteIn t h [] fun _ => sub_empty
+theorem sub_denote (t : Term) (h : HF t) : Sub (denote t) Ω := by
+  rw [denote_eq_alg]; exact Alg.sub_denote Ω_topLaws t h
 
 /-- **(W)**: a held-free term writes only what `opaque` writes. -/
 theorem confluence_W {t : Term} (h : HF t) {v a} (he : (denote t).e v = some a) :
