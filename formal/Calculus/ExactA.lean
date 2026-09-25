@@ -558,7 +558,7 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       have hc := AdmA_exact c
       have hP := Adm_exact P
       intro a
-      simp only [AdmA, refineReads, denote_held, Codec.restrict, Codec.through,
+      simp only [AdmA, refineReads, denote_held, Alg.Codec.restrict, Alg.Codec.through,
         Bool.and_eq_true, hc a]
       cases (denote c).p a with
       | none => simp
@@ -569,7 +569,7 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   | .refine c p => by
       have hc := AdmA_exact c
       intro a
-      simp only [AdmA, refineReads, denote_refine, Codec.restrict, Bool.and_eq_true, hc a]
+      simp only [AdmA, refineReads, denote_refine, Alg.Codec.restrict, Bool.and_eq_true, hc a]
       cases hx : (denote c).p a <;> simp []
 
 /-- …and its read-side twin, for the reason the write side gives. -/

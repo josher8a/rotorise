@@ -182,9 +182,9 @@ def Decides (t : Term) : Prop :=
 /-- A string `literal` decides, as §5 says. -/
 theorem decides_literalS : Decides (.literal .string "A") :=
   ⟨.str "A", .str "B",
-   by simp [denote, denote, literalCodec, baseCodec, Codec.restrict, inL, stringCodec],
+   by simp [denote, denote, literalCodec, baseCodec, Alg.Codec.restrict, inL, stringCodec],
    rfl,
-   by simp [denote, denote, literalCodec, baseCodec, Codec.restrict, inL, stringCodec]⟩
+   by simp [denote, denote, literalCodec, baseCodec, Alg.Codec.restrict, inL, stringCodec]⟩
 
 /-- `string` does not, as §5 also says. -/
 theorem not_decides_string : ¬ Decides .string := by
@@ -197,7 +197,7 @@ theorem not_decides_refine_top : ¬ Decides (.refine .string (.closure qTop)) :=
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote, denote] at hv hw
   cases v <;> cases w <;>
-    simp_all [Codec.restrict, Pred.eval, stringCodec, qTop, Value.kind]
+    simp_all [Alg.Codec.restrict, Pred.eval, stringCodec, qTop, Value.kind]
 
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one: two `map`s differing in admission, so a row that answers `false` at every
@@ -245,8 +245,8 @@ def fSplit : Value → Value := fun v => match v with | .str "A" => .str "A" | _
     of one kind, differing in admission, so it decides. -/
 theorem decides_held : Decides (.held .string .string fSplit (fun v => v)) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
-  · simp [denote, denote, Codec.through, Codec.restrict, stringCodec, fSplit]
-  · simp [denote, denote, Codec.through, Codec.restrict, stringCodec, fSplit]
+  · simp [denote, denote, Alg.Codec.through, Alg.Codec.restrict, stringCodec, fSplit]
+  · simp [denote, denote, Alg.Codec.through, Alg.Codec.restrict, stringCodec, fSplit]
 
 
 /-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/
@@ -278,7 +278,7 @@ subterm's read domain is unsound, not coarse: `extendRead (literal "A") r`, with
 theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
     ((c.adapt f g).p a).isSome = true → (c.p a).isSome = true := by
   intro h
-  simp only [Codec.adapt] at h
+  simp only [Alg.Codec.adapt] at h
   cases hc : c.p a with
   | none => rw [hc] at h; simp at h
   | some _ => rfl

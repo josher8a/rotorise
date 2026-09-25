@@ -1,6 +1,8 @@
 import Calculus.Lists
 import Calculus.Domain
 import Calculus.Alg
+import Calculus.AlgCombinators
+import Calculus.AlgMaps
 import Calculus.Codec
 import Calculus.Prisms
 import Calculus.Products

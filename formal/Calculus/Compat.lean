@@ -199,7 +199,7 @@ theorem iso_shout : IsoCancels (denote (.literal .string "X")) swX swX :=
 
 /-- **`shout` is lawful.** -/
 theorem lawful_shout : Lawful (denote shout) :=
-  (Lawful.through (lawful_literal _ _) iso_shout).restrict _
+  (Alg.Lawful.through (lawful_literal _ _) iso_shout).restrict _
 
 /-- **The shout pair is not `Compat`**: the two options read `"X"` to two values. -/
 theorem not_compat_shout : ¬ Compat (denote shout) (denote litX) := by
@@ -224,7 +224,7 @@ theorem iso_flip : IsoCancels (denote .boolean) notV notV := by
 
 /-- **`flipBool` is lawful.** -/
 theorem lawful_flip : Lawful (denote flipBool) :=
-  (Lawful.through lawful_boolean iso_flip).restrict _
+  (Alg.Lawful.through lawful_boolean iso_flip).restrict _
 
 /-- **`boolean` and `flipBool` are not `Compat`**: the two read `true` to two values. -/
 theorem not_compat_flip : ¬ Compat (denote .boolean) (denote flipBool) := by
@@ -263,7 +263,7 @@ theorem iso_swap : IsoCancels (denote .string) swX swX :=
 
 /-- **`swap` is lawful.** -/
 theorem lawful_swap : Lawful (denote swap) :=
-  (Lawful.through lawful_string iso_swap).restrict _
+  (Alg.Lawful.through lawful_string iso_swap).restrict _
 
 /-- **`swap` is a canonical bound.** -/
 theorem canon_swap : Canon (denote swap) := fun _ _ hp => lawful_swap.canon hp

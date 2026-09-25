@@ -832,6 +832,6 @@ theorem typed_p_mem {t T μ} (h : Typed t T μ) (hob : Obligations t)
 theorem extendRead_lawfulCore {t T μ} (ht : Typed t T μ) (hob : Obligations t)
     {r : Attr → Option Value} (hr : ReadsCoherently (denote t) r) :
     LawfulCore ((denote t).extendRead r) :=
-  LawfulCore.extendRead (soundness ht hob).core hr.1
+  Alg.LawfulCore.extendRead (soundness ht hob).core hr.1
 
 end Calculus

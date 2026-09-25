@@ -11,40 +11,10 @@ which holds a numeral exactly.
 namespace Calculus
 
 noncomputable section
-/-- A list no two of whose entries stand in any relation holds at most one entry. -/
-theorem length_le_one_of_pairwise_false {α : Type} {l : List α}
-    (h : List.Pairwise (fun _ _ : α => False) l) : l.length ≤ 1 := by
-  cases l with
-  | nil => simp
-  | cons x xs =>
-    cases xs with
-    | nil => simp
-    | cons y ys => exact absurd ((List.pairwise_cons.mp h).1 y (by simp)) id
-
-/-- **No value and no attribute is admitted by two options.** The certificate implies it
-    (`admitsAtMostOne_of_separated`). -/
-def AdmitsAtMostOne (os : List Codec) : Prop :=
-  (∀ t, (os.filter (fun c => (c.e t).isSome)).length ≤ 1) ∧
-  (∀ a, (os.filter (fun c => (c.p a).isSome)).length ≤ 1)
-
 /-- A union's member: `μ` when unanimous, else `⊤` (§5 `(union)`). -/
 def unanimous : List (Option Member) → Option Member
   | [] => none
   | μ :: μs => if μs.all (· == μ) then μ else none
-
-/-- **One side of a sum.** Both halves of `altCodec` are this: act through the first option
-    that admits by the admission *that side* reads. Stating the shape once is what lets
-    `altCodec_e` and `altCodec_p` be the same theorem at two instances. -/
-def select {A B : Type} (os : List Codec) (run : Codec → A → Option B) (x : A) : Option B :=
-  (os.find? (fun c => (run c x).isSome)).bind (run · x)
-
-/-- `union`: the sum, resolved by the first admitter. Over lawful, pairwise compatible options
-    the order is unobservable (`altCodec_perm`). -/
-def altCodec (os : List Codec) (μA : Option Member) : Codec :=
-  { T := fun v => ∃ o ∈ os, o.T v
-    μ := μA
-    e := select os (·.e)
-    p := select os (·.p) }
 
 /-! ## Unknown values (§3 `(opaque)`) -/
 

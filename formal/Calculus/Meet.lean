@@ -3609,7 +3609,7 @@ theorem AdmAField_of_isBottom {f : ObjectSlot} (h : ObjectSlot.isBottom f = true
 theorem literal_p_base {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
     (h : (literalCodec k x).p a = some v) : (baseCodec k).p a = some v := by
   rw [literalCodec_p_restrict] at h
-  simp only [Codec.restrict] at h
+  simp only [Alg.Codec.restrict] at h
   cases hb : (baseCodec k).p a with
   | none => rw [hb] at h; simp at h
   | some w => rw [hb] at h; simp only [Option.bind] at h; split at h <;> simp_all
@@ -3635,7 +3635,7 @@ theorem AdmA_base_of_literal {k : GroundKind} {x : k.Carrier} {bt : Term} {a : A
 theorem literal_inL {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
     (h : (literalCodec k x).p a = some v) : inL k x v = true := by
   rw [literalCodec_p_restrict] at h
-  simp only [Codec.restrict] at h
+  simp only [Alg.Codec.restrict] at h
   cases hb : (baseCodec k).p a with
   | none => rw [hb] at h; simp at h
   | some w => rw [hb] at h; simp only [Option.bind] at h; split at h <;> simp_all
@@ -4030,7 +4030,7 @@ theorem AdmA_refineOf (z : Term) (p : Pred) (a : Attr) :
          · rename_i r hr
            show (AdmA z' a && refineReads z' r.eval a)
                = ((AdmA z' a && refineReads z' q.eval a) && refineReads (.refine z' q) p.eval a)
-           simp only [refineReads, denote_refine, Codec.restrict]
+           simp only [refineReads, denote_refine, Alg.Codec.restrict]
            cases hv : (denote z').p a with
            | none => simp
            | some v0 =>
@@ -4039,7 +4039,7 @@ theorem AdmA_refineOf (z : Term) (p : Pred) (a : Attr) :
                cases hq : q.eval v0 <;> simp [hq]
          · rename_i hr
            show false = ((AdmA z' a && refineReads z' q.eval a) && refineReads (.refine z' q) p.eval a)
-           simp only [refineReads, denote_refine, Codec.restrict]
+           simp only [refineReads, denote_refine, Alg.Codec.restrict]
            cases hv : (denote z').p a with
            | none => simp
            | some v0 =>
@@ -4063,7 +4063,7 @@ theorem refineOf_p {w : Term} {p : Pred} {a : Attr} (hw : AdmA w a = true) :
       | some v0 =>
         have hqv : q.eval v0 = true := (refineReads_some hv).symm.trans hq
         have hwv : (denote (.refine z' q)).p a = some v0 := by
-          rw [denote_refine, Codec.restrict]
+          rw [denote_refine, Alg.Codec.restrict]
           show ((denote z').p a).bind (fun v => if q.eval v then some v else none) = some v0
           rw [hv]; simp [hqv]
         rw [hwv]
@@ -4071,7 +4071,7 @@ theorem refineOf_p {w : Term} {p : Pred} {a : Attr} (hw : AdmA w a = true) :
         simp only [Term.refineOf]
         split
         · rename_i r hr
-          rw [denote_refine, Codec.restrict]
+          rw [denote_refine, Alg.Codec.restrict]
           show ((denote z').p a).bind (fun v => if r.eval v then some v else none) = _
           rw [hv]
           simp only [Option.bind_some]
@@ -4081,7 +4081,7 @@ theorem refineOf_p {w : Term} {p : Pred} {a : Attr} (hw : AdmA w a = true) :
             have he := meetM_empty hr v0
             rwa [hqv, Bool.true_and] at he
           rw [hp0]; rfl
-        · rw [denote_refine, Codec.restrict]
+        · rw [denote_refine, Alg.Codec.restrict]
           show (((denote z').p a).bind (fun v => if q.eval v then some v else none)).bind
               (fun v => if p.eval v then some v else none) = _
           rw [hv]; simp [hqv]
@@ -4512,7 +4512,7 @@ theorem admA_famString : AdmAFam Term.string famString := by
              | true => rw [AdmA_base_of_literal rfl hx]; simp)
           | (refine bottom_row (fun a => ?_)
              cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
-               Codec.restrict, baseCodec])
+               Alg.Codec.restrict, baseCodec])
   case opaq =>
       simp only [famString, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
@@ -4542,7 +4542,7 @@ theorem admA_famBoolean : AdmAFam Term.boolean famBoolean := by
         simp only [Option.some.injEq] at h; subst h
         refine bottom_row (fun a => ?_)
         cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
-          Codec.restrict, baseCodec]
+          Alg.Codec.restrict, baseCodec]
   case opaq =>
       simp only [famBoolean, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
@@ -4572,7 +4572,7 @@ theorem admA_famBinary : AdmAFam Term.binary famBinary := by
         simp only [Option.some.injEq] at h; subst h
         refine bottom_row (fun a => ?_)
         cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
-          Codec.restrict, baseCodec]
+          Alg.Codec.restrict, baseCodec]
   case opaq =>
       simp only [famBinary, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
@@ -4602,7 +4602,7 @@ theorem admA_famNull : AdmAFam Term.null famNull := by
         simp only [Option.some.injEq] at h; subst h
         refine bottom_row (fun a => ?_)
         cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
-          Codec.restrict, baseCodec]
+          Alg.Codec.restrict, baseCodec]
   case opaq =>
       simp only [famNull, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
@@ -4628,7 +4628,7 @@ theorem admA_famNumber : AdmAFam Term.number famNumber := by
              | true => rw [AdmA_base_of_literal rfl hx]; simp)
           | (refine bottom_row (fun a => ?_)
              cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
-               Codec.restrict, baseCodec])
+               Alg.Codec.restrict, baseCodec])
   case opaq =>
       simp only [famNumber, Option.some.injEq] at h; subst h
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩

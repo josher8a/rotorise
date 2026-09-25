@@ -51,7 +51,7 @@ def optBot : Codec := Codec.empty
     replacement, and this is that fact in the information order. -/
 theorem approx_extendRead (c : Codec) (r : Attr → Option Value) :
     Codec.Approx c (c.extendRead r) :=
-  ⟨fun h => h, fun h => by simp only [Codec.extendRead, h]⟩
+  ⟨fun h => h, fun h => by simp only [Alg.Codec.extendRead, h]⟩
 
 /-- **`refine` is a step down.** The prism only ever removes, on both halves — which is
     why §6's `refine(c, T) ≡ c` is the top of a descending chain and not a coincidence. -/
@@ -103,17 +103,17 @@ theorem selectF_not_monotone :
     ∧ selectF [optBad, optLit] (.str "A") = some (.s "B") := by
   constructor <;>
     simp [selectF, select, optBot, optBad, optLit, cBad, ceBad, Codec.empty,
-          literalCodec, baseCodec, Codec.restrict, inL, stringCodec]
+          literalCodec, baseCodec, Alg.Codec.restrict, inL, stringCodec]
 
 /-- …and the obligation is exactly what that violates. -/
 theorem optBad_not_confluent : ¬ ConfluentAt [optBad, optLit] (.str "A") := by
   intro h
   have := h optBad (by simp) optLit (by simp)
     (by simp [optBad, cBad, ceBad])
-    (by simp [optLit, literalCodec, baseCodec, Codec.restrict, inL,
+    (by simp [optLit, literalCodec, baseCodec, Alg.Codec.restrict, inL,
               stringCodec])
   simp [optBad, optLit, cBad, ceBad, literalCodec, baseCodec,
-        Codec.restrict, inL, stringCodec] at this
+        Alg.Codec.restrict, inL, stringCodec] at this
 
 /-! **The ground-term witness is gone, and it was the decimal conflation.** ~~string_decimal_not_confluent~~
 took `string` and a decimal base both writing `.str "1.5"` and storing it differently. The model
