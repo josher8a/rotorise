@@ -443,7 +443,8 @@ const writesOnlyStrings = (t: Term | undefined): boolean => {
  *
  * A recursive host schema is a cycle of term objects closed by a thunk. The model names the cycle
  * with a binder: `Term.mu` at the object a thunk returns while that object is being printed, and
- * `Term.lazy (Term.var k)` at the thunk, where `k` counts the binders between the two.
+ * `Term.var k` at the thunk, where `k` counts the binders between the two. The model has no thunk,
+ * so any other thunk prints the term it returns.
  */
 type Scope = {
     readonly binds: ReadonlySet<Term>
@@ -770,8 +771,8 @@ const leanTermCore = (t: Term, at: string, scope: Scope): string => {
             const target = t.get()
             const k = scope.inside.lastIndexOf(target)
             return k === -1
-                ? `Term.lazy (${leanTermOfTerm(target, `${at}.inner`, scope)})`
-                : `Term.lazy (Term.var ${scope.inside.length - 1 - k})`
+                ? leanTermOfTerm(target, `${at}.inner`, scope)
+                : `Term.var ${scope.inside.length - 1 - k}`
         }
         /**
          * §3 `(refine)`. The predicate is printed by {@link leanPredicate}, and the side condition

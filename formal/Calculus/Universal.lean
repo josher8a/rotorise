@@ -8,11 +8,11 @@ no information, and `opaque` admits each wire value. The normal form is one unio
 base and each container:
 
     opaque = union [string, boolean, binary, null, number,
-                    array (lazy opaque), record (lazy opaque),
+                    array opaque, record opaque,
                     set string, set number, set binary]
 
-`opaq` stays the name of the fixed point. The union holds `opaq` under `lazy`, so the union is
-a finite `Term`. `denote .opaq` stays `muCodec opaqStep`, because a denotation of `opaq`
+`opaq` stays the name of the fixed point. The union holds `opaq` under a container, so the union
+is a finite `Term`. `denote .opaq` stays `muCodec opaqStep`, because a denotation of `opaq`
 through the union recurses on a term that is not a subterm.
 
 The unfolding is two theorems, one for each projection. `Adm_opaqUnfold` and
@@ -24,10 +24,10 @@ reads each container case through `opaque` itself at the fixed point (`Ωe_arr` 
 namespace Calculus
 
 
-/-- `opaque` unfolded one time. The recursion stays under `lazy`, so the term is finite. -/
+/-- `opaque` unfolded one time. The recursion stays under a container, so the term is finite. -/
 def opaqUnfold : Term :=
   .union [.string, .boolean, .binary, .null, .number,
-    Term.array (.lazy .opaq), Term.record (.lazy .opaq), .set .string, .set .number, .set .binary]
+    Term.array .opaq, Term.record .opaq, .set .string, .set .number, .set .binary]
 
 /-- `opaque` writes each element of a string set as the string base writes it. -/
 theorem encSet_opaq_str (S : NEFinset String) :

@@ -144,25 +144,6 @@ theorem cM_core : LawfulCore cM := ⟨cM_R, cM_C, cM_W⟩
 theorem cM_notCanon : ¬ (∀ {a t}, cM.p a = some t → cM.e t = some a) := by
   intro h; have := @h (.bool true) (.str "z") rfl; simp [cM] at this
 
-/-! ## `lazy(γ) ≢ γ(∗)`
-
-§6 singles this row out: "the pair is the same and the μ is not … `≡` compares the index
-too, and this is the row where that matters." The model says exactly that — the two
-denotations differ in `μ` alone, and `Codec.Equiv` sees it. -/
-
-/-- The pairs really are the same: `lazy` changes only the index. -/
-theorem lazy_e_eq (t : Term) : (denote (.lazy t)).e = (denote t).e := rfl
-
-theorem lazy_p_eq (t : Term) : (denote (.lazy t)).p = (denote t).p := rfl
-
-/-- And the index really does differ: `lazy` concludes `⊤`, `string` names `S`. -/
-theorem lazy_μ_ne : (denote (.lazy .string)).μ ≠ (denote .string).μ := by
-  simp [denote, denote, stringCodec]
-
-/-- §6: `lazy(γ) ≢ γ(∗)` — refuted on the member index, with the pair identical. -/
-theorem not_equiv_lazy : ¬ Codec.Equiv (denote (.lazy .string)) (denote .string) :=
-  fun h => lazy_μ_ne h.member
-
 /-! ## `union(c₁ … cₙ) ≢ union(c₁ … cₙ, c)`
 
 Not closed under extension. The held set grows, so `≡` fails before any obligation is consulted.

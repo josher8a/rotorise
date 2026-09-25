@@ -260,11 +260,11 @@ export type Term =
           readonly r: (attribute: AttributeValue) => unknown
       }
     /**
-     * §3 `(lazy)`: a thunk, which is how this language spells a recursive schema.
+     * A thunk, which is how this language spells a recursive schema.
      *
-     * `Term.lazy` carries a plain `Term`, because a closure adds no constructible term. The model
-     * states a recursive schema with a binder instead: `Term.mu` at the term a thunk returns while
-     * that term is being read, and `Term.var` at the thunk. The model's guard accepts the binder
+     * The model has no thunk. It states a recursive schema with a binder: `Term.mu` at the term a
+     * thunk returns while that term is being read, and `Term.var` at the thunk. Any other thunk is
+     * the term it returns. The model's guard accepts the binder
      * when the variable sits under a list or an object, and `opaque` is the same construct at a
      * fixed body.
      *
@@ -272,9 +272,9 @@ export type Term =
      * declares one, so the thunk stays. **Everything else here reads through it.**
      * {@link occV}, {@link occA} and {@link ownsNullOf} answer what the term underneath answers,
      * `meetTerms` reads through on either side and states no meet of a recursive one, and the
-     * emitter prints the binder at the term that closes the cycle. `Meet.lean` heads the matching section
-     * "`lazy` is transparent, and it constrains nothing". Only {@link member} is lost, because
-     * the model's `μSyn (.lazy t)` is `none`.
+     * emitter prints the binder at the term that closes the cycle. Only {@link member} answers
+     * `undefined`, because the host cannot force a thunk safely at declaration: forcing a recursive
+     * thunk can loop.
      *
      * **The two projections answered `undefined` until it was measured, on the ground that
      * forcing would throw on the entity the thunk exists to allow. Both halves were wrong.**
@@ -376,10 +376,12 @@ export const unanimous = (
 /**
  * `μSyn`: the member a term stores, read off the term.
  *
- * `undefined` is the model's `⊤`: *not determined by the term*. `lazy` answers it because the
- * model's `μSyn (.lazy t)` is `none`: the thunk keeps its subterm's pair and loses only the member.
- * `opaque` writes whatever the value turns out to be, `never` writes nothing, and a `union` answers
- * it where its options do not agree on one member. `nullable` is such a union.
+ * `undefined` is the model's `⊤`: *not determined by the term*. A thunk answers it for a reason of
+ * the host: the host cannot force a thunk safely here, because forcing a recursive thunk can loop,
+ * which is a limit of the host's carrier. A caller that needs one member, as a DynamoDB set does,
+ * refuses the thunk: a set holding one element member is a fact of the store universe. `opaque`
+ * writes whatever the value turns out to be, `never` writes nothing, and a `union` answers it
+ * where its options do not agree on one member. `nullable` is such a union.
  */
 export const member = (t: Term): AttributeName | undefined => {
     switch (t.kind) {
@@ -484,7 +486,7 @@ const joined = <A>(
  * A `held` answers the occupancy of its held side, the term `outer`: the held side restricts
  * every value that `f` receives. A foreign schema records `opaque` there, so the answer is every
  * slot. `opaque` accepts every kind by design, and its row answers that closed form, not `undefined`.
- * `lazy` reads through the thunk to its subterm, as the model's `occV (.lazy t)` does.
+ * A thunk reads through to its subterm, as the model reads the term a thunk returns.
  */
 export const occV = (t: Term): readonly SetSlot[] => {
     switch (t.kind) {

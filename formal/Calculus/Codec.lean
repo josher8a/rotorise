@@ -17,8 +17,8 @@ structure Codec where
   e : Value → Option Attr
   p : Attr → Option Value
 
-/-- The degenerate codec: empty domains everywhere. Laws hold vacuously — this is what
-    `lazy` denotes at fuel 0 ("partiality is doing the termination argument's work"). -/
+/-- The degenerate codec: empty domains everywhere. Laws hold vacuously. It is the first stage of
+    a recursive term (`muStage`), and a variable that no binder gives. -/
 def Codec.empty : Codec :=
   { T := fun _ => False, μ := none, e := fun _ => none, p := fun _ => none }
 

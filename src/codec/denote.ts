@@ -1163,14 +1163,12 @@ export const denote = (def: Term): Pair => {
             }
         }
         /**
-         * §3 `(lazy)`: the pair of the term the thunk resolves to, forced on use.
+         * A thunk: the pair of the term the thunk resolves to, forced on use.
          *
          * The row recurses on the **value**, never on the term, which is what makes it terminate:
-         * `def.get()` is forced once per level of the value, and a value is finite. The model's
-         * `Term.lazy` carries a plain `Term` rather than a thunk — a closure adds no constructible
-         * term and defeats the termination checker — so the two constructors are not the same
-         * object, and §5 keeps the document's `lazy` unanalysable for that reason while the model's
-         * answers the subterm's.
+         * `def.get()` is forced once per level of the value, and a value is finite. The model has no
+         * thunk: a thunk that closes a cycle is the variable of a binder there (`Term.mu`), and any
+         * other thunk is the term it returns.
          */
         case 'lazy':
             return {

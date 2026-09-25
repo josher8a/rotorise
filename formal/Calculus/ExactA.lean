@@ -124,7 +124,6 @@ noncomputable def AdmA : Term → Attr → Bool
   | .never => fun _ => false
   -- the read side of the caller-side restriction: decode, transform, then ask `P`'s row
   | .held t P _ g => fun a => AdmA t a && refineReads t (fun w => Adm P (g w)) a
-  | .lazy t   => AdmA t
   | .refine t p => fun a => AdmA t a && refineReads t p.eval a
   -- hatch
   -- the read side of the same disjunction; every option, object included, is admitted by attempt
@@ -674,9 +673,6 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       intro a
       simp only [AdmA, refineReads, denote_refine, Codec.restrict, Bool.and_eq_true, hc a]
       cases hx : (denote c).p a <;> simp []
-  | .lazy c => by
-      have hc := AdmA_exact c
-      intro a; simpa [AdmA, denote] using hc a
 
 /-- …and its read-side twin, for the reason the write side gives. -/
 theorem AdmA_exactB : ∀ (b : Body), ExactA (.object b)

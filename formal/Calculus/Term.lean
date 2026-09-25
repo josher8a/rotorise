@@ -80,9 +80,10 @@ inductive Term where
 
       The rule's premise was `⊢ c : T ⇝ μ` together with `setMember μ = some μS`, and
       `setMember` is partial — so the constructor accepted element terms the rule then
-      refused (`set(union(string, boolean))` was the standing witness). `SetBase` is the
-      four bases that survive that premise, so the member is a function of the index and
-      the refusal is a type error.
+      refused (`set(union(string, boolean))` was the standing witness). The premise is the
+      DynamoDB universe's: a stored set holds elements of one member. `SetBase` is the three
+      bases that survive that premise, so the member is a function of the index and the
+      refusal is a type error.
 
       **What this gives up, deliberately.** `set(refine(b, q))` and `set(literal k ls)` are
       *not* lost: a restriction of the elements is a restriction of the set, and
@@ -116,11 +117,6 @@ inductive Term where
       `.opaq` as `outer`. -/
   | held     (inner : Term) (outer : Term) (f : Value → Value) (g : Value → Value)
   | refine   (inner : Term) (p : Pred)
-  /-- §3 `(lazy)`. The thunk is *not* `Unit → Term`: a closure adds no constructible
-      term (every `Term` is finite either way) and only defeats the termination
-      checker. `lazy` concludes `⊤` and does not recurse: a recursive term is `mu`, and a
-      host thunk that refers back to its own schema is a `mu` with a `var` at the thunk. -/
-  | lazy     (inner : Term)
   /-- §3 `(opaque)`: the universal sum. The number option is `numberCodec`, so `opaque`
       writes every `Value` (`opaq_total`). -/
   | opaq
@@ -286,7 +282,7 @@ theorem Term.isOpenObject_eq_false {t : Term} :
 
 `mu b` denotes the limit of the stages of `b`, and each input reads the stage its own depth names.
 That limit is stable only when `b` reads its variable at inputs strictly shallower than its own
-input. A container reads its elements one layer down. A sum, a restriction and `lazy` read their
+input. A container reads its elements one layer down. A sum and a restriction read their
 own input. A `held` reads its inner term at `f v`, and `f` can make the input deeper, so a variable
 under a `held` has no depth bound at all.
 
@@ -313,7 +309,6 @@ def Term.use (i : Nat) : Term → Nat
   | .var j => if i = j then 2 else 0
   | .mu t => Term.use (i + 1) t
   | .refine t _ => Term.use i t
-  | .lazy t => Term.use i t
   | .held t P _ _ => useHeld (max (Term.use i t) (Term.use i P))
   | .list pre sp suf =>
       useUnder (max (Term.useL i pre) (max (Term.useO i sp) (Term.useL i suf)))
@@ -345,7 +340,6 @@ def Term.guarded : Term → Bool
   | .literal _ _ | .opaq | .set _ | .never | .var _ => true
   | .mu t => decide (Term.use 0 t ≤ 1) && Term.guarded t
   | .refine t _ => Term.guarded t
-  | .lazy t => Term.guarded t
   | .held t P _ _ => Term.guarded t && Term.guarded P
   | .list pre sp suf => Term.guardedL pre && Term.guardedO sp && Term.guardedL suf
   | .union opts => Term.guardedL opts
@@ -388,7 +382,6 @@ def Term.depth : Term → Nat
   -- `set` is a **leaf** since its base became an index: there is no element term to
   -- measure, so it sits with the other ground shapes rather than costing a layer.
   | .literal _ _ | .opaq | .set _ | .never | .var _ => 1
-  | .lazy t => Term.depth t + 1
   | .mu t => Term.depth t + 1
   | .held t P _ _ => max (Term.depth t) (Term.depth P) + 1
   | .refine t _ => Term.depth t + 1

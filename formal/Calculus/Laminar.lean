@@ -187,7 +187,6 @@ theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → ∀ v, T v ↔ Adm t v = tr
     | @refine t' T' μ' q h' =>
       show (T' v ∧ q.eval v = true) ↔ (Adm t' v && q.eval v) = true
       rw [Bool.and_eq_true, typed_T_adm h' v]
-    | @lazy t' T' μ' h' => exact typed_T_adm h' v
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest ⊢
