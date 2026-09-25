@@ -49,8 +49,7 @@ mutual
     companions exist because `∀ t' ∈ ts, Obligations t'` is not a structural recursion and
     `ObligationsList` is. -/
 def Obligations : Term → (ρ : List Codec := []) → Prop
-  | .string, _ | .number, _ | .boolean, _ | .binary, _ | .null, _
-  | .literal _ _, _ | .opaq, _ | .never, _ | .var _, _ => True
+  | .base _, _ | .literal _ _, _ | .opaq, _ | .never, _ | .var _, _ => True
   -- the element's premises, and the DynamoDB universe's set rule
   | .set t', ρ => Obligations t' ρ ∧ SetElem (denote t' ρ)
   | .refine t' _, ρ => Obligations t' ρ
@@ -142,20 +141,8 @@ end Obligations
 
 /-! ## Ground-term lemmas -/
 
-theorem lawful_string : Lawful (denote .string) := by
-  simp only [denote]; exact lawful_stringCodec
-
-theorem lawful_boolean : Lawful (denote .boolean) := by
-  simp only [denote]; exact lawful_booleanCodec
-
-theorem lawful_null : Lawful (denote .null) := by
-  simp only [denote]; exact lawful_nullCodec
-
-theorem lawful_binary : Lawful (denote .binary) := by
-  simp only [denote]; exact lawful_binaryCodec
-
-theorem lawful_number : Lawful (denote .number) := by
-  simp only [denote]; exact lawful_numberCodec
+/-- Each ground base is lawful: the term denotes the base codec. -/
+theorem lawful_base (k : GroundKind) : Lawful (denote (.base k)) := lawful_baseCodec k
 
 /-- One where there were two, at every base rather than the two commonest. -/
 theorem lawful_literal (k : GroundKind) (x : k.Carrier) :
@@ -211,11 +198,7 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   -- `rfl`, where this used to be the rule's `hμ`. The member is a function of the *index* on
   -- both sides now — `μSyn` reads `GroundKind.member`, and so does the rule.
   | _, _, _, .literal _ _ => rfl
-  | _, _, _, .string => rfl
-  | _, _, _, .number => rfl
-  | _, _, _, .boolean => rfl
-  | _, _, _, .null => rfl
-  | _, _, _, .binary => rfl
+  | _, _, _, .base _ => rfl
   | _, _, _, .set h' => by
       have ih := typed_μSyn h'
       show (μSyn _).bind setMember = _
@@ -258,11 +241,7 @@ theorem soundnessIn : ∀ {t T μ} (ρ : List Codec), Typed t T μ → Obligatio
     | literal k ls => exact (lawful_literalCodec k ls)
     -- the bottom's domains are empty, so every law holds vacuously
     | never => exact Lawful.empty
-    | string => exact lawful_stringCodec
-    | number => exact lawful_numberCodec
-    | boolean => exact lawful_booleanCodec
-    | null => exact lawful_nullCodec
-    | binary => exact lawful_binaryCodec
+    | base k => exact lawful_baseCodec k
     | opaq => exact lawful_opaq
     | var i => exact henv i
     -- each stage is lawful by the body's soundness at the stage before, and the guard carries
@@ -661,7 +640,7 @@ set_option linter.unreachableTactic false in
 theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T v
   | t, T, μ, h, v, hv => by
     cases h with
-    | string | number | boolean | binary | null => exact hv
+    | base _ => exact hv
     -- `exact hv`, where this was a five-way split guarding against `simp` unfolding
     -- `numberCodec` into `Numeral.WF`'s decision procedure. The denotation's held set and the
     -- rule's are the same expression now — `HLit k ls` — so there is nothing to prove.
@@ -750,11 +729,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
     cases h with
     | literal k ls => exact carrier_literalCodec k ls
     | never => exact Carrier.empty
-    | string => exact carrier_stringCodec
-    | number => exact carrier_numberCodec
-    | boolean => exact carrier_booleanCodec
-    | null => exact carrier_nullCodec
-    | binary => exact carrier_binaryCodec
+    | base k => exact carrier_baseCodec k
     | @set t' T' μ' h' => exact carrier_setCodec (carrier_denote h' hob.1)
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       rw [denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq]

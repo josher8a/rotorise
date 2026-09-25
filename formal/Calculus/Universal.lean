@@ -68,19 +68,19 @@ theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
   -- `set opaque` is `opaque`'s own set option, so the two rows are one expression
   | strSet S =>
       rw [Adm_opaq_eq, Ωe_strSet]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD, setCodec]
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inBase, setCodec]
       rfl
   | numSet S =>
       rw [Adm_opaq_eq, Ωe_numSet]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD, setCodec]
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inBase, setCodec]
       rfl
   | binSet S =>
       rw [Adm_opaq_eq, Ωe_binSet]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD, setCodec]
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inBase, setCodec]
       rfl
   | arr vs =>
       rw [Adm_opaq_arr]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inBase,
         AdmOptT, alignPL_spread, setCodec]
       exact decide_eq_decide.mpr Iff.rfl
   | map keys g =>
@@ -89,7 +89,7 @@ theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
       have hp : valPresentT ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [Adm_opaq_map]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inD,
+      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inBase,
         AdmWild, objAdmV, entryP, MapOf.at, setCodec]
       exact fun _ => hp
 
@@ -125,19 +125,19 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
   | n x => rw [AdmA_opaq_num]; rfl
   | ss S =>
       rw [AdmA_opaq_eq, Ωp_ss]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA, AdmABody, Term.array, Term.record, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA, inBaseA, AdmABody, Term.array, Term.record, setCodec]
       rfl
   | bs S =>
       rw [AdmA_opaq_eq, Ωp_bs]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA, AdmABody, Term.array, Term.record, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA, inBaseA, AdmABody, Term.array, Term.record, setCodec]
       rfl
   | ns S =>
       rw [AdmA_opaq_eq, Ωp_ns]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA, AdmABody, Term.array, Term.record, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA, inBaseA, AdmABody, Term.array, Term.record, setCodec]
       rfl
   | l as =>
       rw [AdmA_opaq_l]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA, AdmABody, Term.array,
+      simp [opaqUnfold, AdmAAny, anyP, AdmA, inBaseA, AdmABody, Term.array,
         Term.record, AdmAOptT, alignPL_spread, setCodec]
       exact decide_eq_decide.mpr Iff.rfl
   | m keys g =>
@@ -145,7 +145,7 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
       have hp : reqPresentT ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [AdmA_opaq_m]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA, AdmABody, Term.array,
+      simp [opaqUnfold, AdmAAny, anyP, AdmA, inBaseA, AdmABody, Term.array,
         Term.record, AdmAWild, objAdmV, entryP, MapOf.at, setCodec]
       exact fun _ => hp
 

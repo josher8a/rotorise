@@ -188,7 +188,7 @@ theorem not_equiv_tupleTail_tuple :
   -- `simp`'s classical push-neg turned this into an existential and pulled
   -- `Classical.choice` in with it; the implication is the constructive shape.
   simp only [Term.tuple, ← tupleCodec_eq_listCodec, denote, denote, denoteList, denoteOpt,
-    tupleCodec, align, stringCodec, Option.map_some,
+    tupleCodec, align, Option.map_some,
     Option.some.injEq, exists_eq_left', List.mem_cons, List.not_mem_nil, or_false] at hv
   exact absurd (hv (by rintro p (rfl | rfl) <;> exact ⟨_, rfl⟩))
     (by rintro ⟨ps, hps, -⟩; simp at hps)
@@ -295,13 +295,13 @@ theorem setElem_union_refused : ¬ SetElem (denote (.union [.string, .boolean]))
 theorem typed_union_string_boolean :
     Typed (.union [.string, .boolean])
       (HUnion [fun v => ∃ s, v = .str s, fun v => ∃ b, v = .bool b]) none :=
-  .union (.cons .string (.cons .boolean .nil))
+  .union (.cons (.base _) (.cons (.base _) .nil))
 
 /-- **An empty option is the unit of the sum.** The bottom holds nothing, so it changes no
     union's `HUnion`. The meet builds such a union whenever a surviving option's predicate
     holds of nothing. -/
 example : ∃ T μ, Typed (.union [.string, .never]) T μ :=
-  ⟨_, _, .union (.cons .string (.cons .never .nil))⟩
+  ⟨_, _, .union (.cons (.base _) (.cons .never .nil))⟩
 
 /-! ## `≡` is not transitive
 

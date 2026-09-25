@@ -59,12 +59,7 @@ mutual
 
 /-- The member a term stores, syntactically — the `⇝` index computed from the term. -/
 def μSyn : Term → Option Member
-  | .string => some .S
-  | .literal k _ => some k.member
-  | .number => some .N
-  | .boolean => some .BOOL
-  | .null => some .NULL
-  | .binary => some .B
+  | .base k | .literal k _ => some k.member
   -- the member is `setMember` of the element's: `none` where the element names no member of
   -- `S`, `N` or `B`, which is the case the DynamoDB obligation `SetElem` refuses
   | .set t => (μSyn t).bind setMember
@@ -144,11 +139,7 @@ def envAt (ρ : List Codec) (i : Nat) : Codec := ρ.getD i .empty
 mutual
 
 def denote : Term → (ρ : List Codec := []) → Codec
-  | .string, _ => stringCodec
-  | .number, _ => numberCodec
-  | .boolean, _ => booleanCodec
-  | .null, _ => nullCodec
-  | .binary, _ => binaryCodec
+  | .base k, _ => baseCodec k
   | .literal k ls, _ => literalCodec k ls
   | .set t, ρ => setCodec (denote t ρ)
   | .list pre spread suf, ρ =>
@@ -220,7 +211,7 @@ mutual
 
 theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .literal k ls => literalCodec_μ k ls
-  | .string | .number | .boolean | .binary | .null => rfl
+  | .base k => by cases k <;> rfl
   | .set t => by show (denote t).μ.bind setMember = _; rw [denote_μ t]; rfl
   | .list _ _ _ => rfl
   | .held t' _ _ _ => denote_μ t'

@@ -53,6 +53,11 @@ noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
   | .number,  y, .n x    => decide (x = y)
   | _, _, _ => false
 
+/-- Whether an attribute is of one ground base's member. -/
+def inBaseA : GroundKind → Attr → Bool
+  | .string, .s _ | .number, .n _ | .boolean, .bool _ | .binary, .b _ | .null, .null => true
+  | _, _ => false
+
 mutual
 
 /-- **The joint admission predicate, attribute side.** The mirror of `Adm` across §1's
@@ -65,11 +70,7 @@ mutual
     An alternate reader is `Codec.extendRead`, outside `Term`, so this table has no
     alternate-reader row. -/
 noncomputable def AdmA : Term → Attr → Bool
-  | .string   => fun a => match a with | .s _ => true | _ => false
-  | .boolean  => fun a => match a with | .bool _ => true | _ => false
-  | .binary   => fun a => match a with | .b _ => true | _ => false
-  | .null     => fun a => match a with | .null => true | _ => false
-  | .number   => fun a => match a with | .n _ => true | _ => false
+  | .base k   => inBaseA k
   | .literal k ls => AdmALit k ls
   -- the bottom reads nothing back, and the row is that sentence
   | .never => fun _ => false
@@ -526,11 +527,9 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   -- see `ExactA_union`
   | .union opts => ExactA_union (exactAL_mem opts (AdmA_exactL opts))
 
-  | .string => by intro a; cases a <;> simp [AdmA, denote, denote, stringCodec]
-  | .boolean => by intro a; cases a <;> simp [AdmA, denote, denote, booleanCodec]
-  | .binary => by intro a; cases a <;> simp [AdmA, denote, denote, binaryCodec]
-  | .null => by intro a; cases a <;> simp [AdmA, denote, denote, nullCodec]
-  | .number => by intro a; cases a <;> simp [AdmA, denote, denote, numberCodec]
+  | .base k => by
+      intro a; cases k <;> cases a <;> simp [AdmA, inBaseA, denote, stringCodec, numberCodec,
+        booleanCodec, binaryCodec, nullCodec]
   -- Three rows into one, and `number`'s no longer needs the host lookup that used to make it
   -- the awkward one: both numeric bases now read the attribute payload directly.
   | .literal k ls => by

@@ -178,7 +178,7 @@ theorem iso_flip : IsoCancels (denote .boolean) notV notV := by
 
 /-- **`flipBool` is lawful.** -/
 theorem lawful_flip : Lawful (denote flipBool) :=
-  (Alg.Lawful.through lawful_boolean iso_flip).restrict _
+  (Alg.Lawful.through (lawful_base .boolean) iso_flip).restrict _
 
 /-- **`boolean` and `flipBool` are not `Compat`**: the two read `true` to two values. -/
 theorem not_compat_flip : ¬ Compat (denote .boolean) (denote flipBool) := by
@@ -217,7 +217,7 @@ theorem iso_swap : IsoCancels (denote .string) swX swX :=
 
 /-- **`swap` is lawful.** -/
 theorem lawful_swap : Lawful (denote swap) :=
-  (Alg.Lawful.through lawful_string iso_swap).restrict _
+  (Alg.Lawful.through (lawful_base .string) iso_swap).restrict _
 
 /-- **`swap` is a canonical bound.** -/
 theorem canon_swap : Canon (denote swap) := fun _ _ hp => lawful_swap.canon hp

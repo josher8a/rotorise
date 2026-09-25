@@ -240,8 +240,7 @@ def HF : Term → Prop
   | .object b => HFB b
   | .union os => HFL os
   | .set t => HF t
-  | .string | .number | .boolean | .binary | .null | .literal _ _ | .opaq
-  | .never | .var _ => True
+  | .base _ | .literal _ _ | .opaq | .never | .var _ => True
 /-- A body is held-free when each slot and the open block are held-free. -/
 def HFB : Body → Prop
   | .mk _ f w => (∀ k, HFS (f k)) ∧ HFO w
@@ -264,11 +263,7 @@ mutual
     over an environment of restrictions of `Ω`. -/
 theorem sub_denoteIn : ∀ t : Term, HF t → ∀ ρ : List Codec, (∀ i, Sub (envAt ρ i) Ω) →
     Sub (denote t ρ) Ω
-  | .string, _, _, _ => sub_string
-  | .number, _, _, _ => sub_number
-  | .boolean, _, _, _ => sub_boolean
-  | .binary, _, _, _ => sub_binary
-  | .null, _, _, _ => sub_null
+  | .base k, _, _, _ => sub_baseCodec k
   | .literal k x, _, _, _ => sub_literal k x
   | .set t, h, ρ, henv => sub_setCodec (sub_denoteIn t h ρ henv)
   | .opaq, _, _, _ => ⟨fun _ _ h => h, fun _ _ h => h⟩

@@ -195,11 +195,8 @@ set_option linter.unreachableTactic false in
 theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → Obligations t → ∀ v, T v ↔ Adm t v = true
   | t, T, μ, h, hob, v => by
     cases h with
-    | string => cases v <;> simp [Adm]
-    | number => cases v <;> simp [Adm, inD]
-    | boolean => cases v <;> simp [Adm]
-    | binary => cases v <;> simp [Adm]
-    | null => cases v <;> simp [Adm]
+    | base k => cases k <;> cases v <;> simp [Adm, inBase, stringCodec, numberCodec,
+        booleanCodec, binaryCodec, nullCodec, -Subtype.exists]
     | literal k x => cases k <;> cases v <;> simp [HLit, Adm, AdmLit, inL, GroundKind.toValue]
     | never => simp [HNever, Adm]
     | opaq => exact hopaque_adm v

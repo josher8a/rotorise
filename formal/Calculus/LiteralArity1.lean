@@ -132,17 +132,6 @@ On the write side the refinement is not merely equal but **strictly sharper at `
 *and* `WF d.toDec` — the fourth row `b52910d` left standing), while the refinement conjoins the
 base's own `inD`. -/
 
-/-- The term denoting a ground base, as an index. `baseCodec`'s counterpart one level up. -/
-def groundTerm : GroundKind → Term
-  | .string => .string
-  | .number => .number
-  | .boolean => .boolean
-  | .binary => .binary
-  | .null => .null
-
-theorem denote_groundTerm (k : GroundKind) : denote (groundTerm k) = baseCodec k := by
-  cases k <;> rfl
-
 /-- **`refine(base k, ∈ ℓ)` reads exactly the base restricted to `ℓ`**, up to the held set a
     literal carries — which `restrict` cannot know and `T` is not consulted by either row.
 
@@ -150,7 +139,7 @@ theorem denote_groundTerm (k : GroundKind) : denote (groundTerm k) = baseCodec k
     literal is the one-alternative case of the same restriction: `literalCodec k x` is
     `(baseCodec k).restrict (inL k x)` by definition, and `inLs` at a singleton is `inL`. -/
 theorem denote_refine_ground_p (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
-    (denote (.refine (groundTerm k) (.members k ls))).p a
+    (denote (.refine (.base k) (.members k ls))).p a
       = ((baseCodec k).restrict (inLs k ls)).p a := by
   cases k <;> rfl
 

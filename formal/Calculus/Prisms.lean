@@ -174,7 +174,7 @@ def nullCodec : Codec :=
     the rule quantifies over the base — the three constructors this replaces had it hard-coded
     three times over, which is why `literal-S` and `literal-N` were two rules and `boolean`,
     `binary` and `null` were none. -/
-noncomputable def baseCodec : GroundKind → Codec
+@[simp] noncomputable def baseCodec : GroundKind → Codec
   | .string  => stringCodec
   | .number  => numberCodec
   | .boolean => booleanCodec

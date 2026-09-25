@@ -123,11 +123,7 @@ mutual
     header of this file and missed the sentence eleven lines below it. One more description
     that nothing was keeping honest. -/
 noncomputable def Adm : Term → Value → Bool
-  | .string   => fun v => match v with | .str _ => true | _ => false
-  | .boolean  => fun v => match v with | .bool _ => true | _ => false
-  | .binary   => fun v => match v with | .bin _ => true | _ => false
-  | .null     => fun v => match v with | .null => true | _ => false
-  | .number   => inD
+  | .base k   => inBase k
   | .literal k ls => AdmLit k ls
   -- the bottom admits nothing, and the row is that sentence
   | .never => fun _ => false
@@ -695,11 +691,9 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   -- recursion hands it. See `ExactV_union`.
   | .union opts => ExactV_union (exactVL_mem opts (Adm_exactL opts))
 
-  | .string => by intro v; cases v <;> simp [Adm, denote, denote, stringCodec]
-  | .boolean => by intro v; cases v <;> simp [Adm, denote, denote, booleanCodec]
-  | .binary => by intro v; cases v <;> simp [Adm, denote, denote, binaryCodec]
-  | .null => by intro v; cases v <;> simp [Adm, denote, denote, nullCodec]
-  | .number => by intro v; cases v <;> simp [Adm, denote, denote, inD]
+  | .base k => by
+      intro v; cases k <;> cases v <;> simp [Adm, inBase, denote, stringCodec, numberCodec,
+        booleanCodec, binaryCodec, nullCodec]
   -- three rows into one, and `numberCodec` is read through `numberCodec_e_isSome` rather
   -- than unfolded: its `dite` is a string parser, and `simp` inside it runs out of heartbeats.
   | .literal k ls => by

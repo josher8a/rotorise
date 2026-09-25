@@ -86,11 +86,7 @@ mutual
 theorem denote_agree : ∀ (t : Term), t.guarded = true → ∀ (d : Nat) (ρ₁ ρ₂ : List Codec),
     (∀ i, UseAgree (t.use i) d (envAt ρ₁ i) (envAt ρ₂ i)) →
     AgreeLe d (denote t ρ₁) (denote t ρ₂)
-  | .string, _, _, _, _, _ => .refl _ _
-  | .number, _, _, _, _, _ => .refl _ _
-  | .boolean, _, _, _, _, _ => .refl _ _
-  | .binary, _, _, _, _, _ => .refl _ _
-  | .null, _, _, _, _, _ => .refl _ _
+  | .base _, _, _, _, _, _ => .refl _ _
   | .literal _ _, _, _, _, _, _ => .refl _ _
   | .opaq, _, _, _, _, _ => .refl _ _
   | .never, _, _, _, _, _ => .refl _ _

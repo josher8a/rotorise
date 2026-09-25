@@ -82,7 +82,7 @@ theorem guard_accepts_container_path :
 
 /-- `jsonTerm` is derivable. -/
 theorem typed_json : Typed jsonTerm (fun v => (denote jsonTerm).T v) none :=
-  .mu rfl (.union (.cons .string (.cons (.array (.var 0)) .nil)))
+  .mu rfl (.union (.cons (.base _) (.cons (.array (.var 0)) .nil)))
 
 /-- `jsonTerm`'s options are compatible at every lawful stage: they are pinned to two kinds. -/
 theorem pairwiseCompat_json (c : Codec) (hc : Lawful c) :
