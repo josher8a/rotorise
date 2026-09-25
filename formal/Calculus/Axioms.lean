@@ -20,6 +20,7 @@ import Calculus.Kernel
 import Calculus.Compat
 import Calculus.JSON
 import Calculus.AlgLists
+import Calculus.AlgPositions
 import Lean
 
 /-!

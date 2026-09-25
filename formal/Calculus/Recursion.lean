@@ -139,11 +139,7 @@ end AgreeLe
 def Contractive (B : Codec → Codec) : Prop :=
   ∀ d c₁ c₂, AgreeLe d c₁ c₂ → AgreeLe (d + 1) (B c₁) (B c₂)
 
-/-- The stage `n` of the body `B`: `n` applications of `B` to `Codec.empty`. A structural
-    recursion on `n`, so a stage at a numeral reduces by `rfl`. -/
-def muStage (B : Codec → Codec) : Nat → Codec
-  | 0 => .empty
-  | n + 1 => B (muStage B n)
+export Alg (muStage muStage_induct)
 
 /-- **The recursive codec**: each input read at the stage its own depth names. The member is
     `⊤`, because the stages need not agree on one. The held set is the
@@ -162,13 +158,6 @@ theorem muCodec_e (B : Codec → Codec) (v : Value) :
 /-- The limit reads an attribute at the stage the attribute's depth names. -/
 theorem muCodec_p (B : Codec → Codec) (a : Attr) :
     (muCodec B).p a = (muStage B (Attr.depth a)).p a := rfl
-
-/-- A property that `Codec.empty` has and that each application of the body keeps holds at
-    every stage. -/
-theorem muStage_induct {B : Codec → Codec} {P : Codec → Prop} (h0 : P .empty)
-    (hs : ∀ c, P c → P (B c)) : ∀ n, P (muStage B n)
-  | 0 => h0
-  | n + 1 => hs _ (muStage_induct h0 hs n)
 
 /-- Each stage agrees with the next one below its own index. -/
 theorem muStage_stable {B : Codec → Codec} (hB : Contractive B) :
@@ -273,49 +262,7 @@ theorem agreeLe_restrict {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂)
    fun a ha => congrArg (fun x => Option.bind x fun v => if q v = true then some v else none)
      (h.p a ha)⟩
 
-/-- `Option.map` keeps a relation that the two functions keep. -/
-theorem optionRel_map {α β γ δ : Type} {R : α → β → Prop} {S : γ → δ → Prop}
-    {f : α → γ} {g : β → δ} (hfg : ∀ x y, R x y → S (f x) (g y)) :
-    ∀ {a : Option α} {b : Option β}, Option.Rel R a b → Option.Rel S (a.map f) (b.map g)
-  | _, _, .none => .none
-  | _, _, .some h => .some (hfg _ _ h)
-
-/-- `Option.bind` sends related inputs to one answer when the two functions agree on them. -/
-theorem optionRel_bind {α β γ : Type} {R : α → β → Prop} {f : α → Option γ} {g : β → Option γ}
-    (hfg : ∀ x y, R x y → f x = g y) :
-    ∀ {a : Option α} {b : Option β}, Option.Rel R a b → a.bind f = b.bind g
-  | _, _, .none => rfl
-  | _, _, .some h => hfg _ _ h
-
-/-- Related options are defined together. -/
-theorem optionRel_isSome {α β : Type} {R : α → β → Prop} :
-    ∀ {a : Option α} {b : Option β}, Option.Rel R a b → a.isSome = b.isSome
-  | _, _, .none => rfl
-  | _, _, .some _ => rfl
-
-/-- A slot row of one shape pairs related codecs position by position. -/
-theorem slots_rel {R : Codec → Codec → Prop} :
-    ∀ (n : Nat) {cs₁ cs₂ : List Codec} {t₁ t₂ : Option Codec},
-      List.Forall₂ R cs₁ cs₂ → Option.Rel R t₁ t₂ →
-      Option.Rel (List.Forall₂ R) (slots cs₁ t₁ n) (slots cs₂ t₂ n)
-  | 0, _, _, _, _, .nil, _ => .some .nil
-  | 0, _, _, _, _, .cons _ _, _ => .none
-  | _ + 1, _, _, _, _, .nil, .none => .none
-  | n + 1, _, _, _, _, .nil, .some hc =>
-      optionRel_map (fun _ _ h => .cons hc h) (slots_rel n .nil (.some hc))
-  | n + 1, _, _, _, _, .cons hc hcs, ht =>
-      optionRel_map (fun _ _ h => .cons hc h) (slots_rel n hcs ht)
-
-/-- A `list` shape assigns related rows to related parts, position by position. -/
-theorem slotsL_rel {R : Codec → Codec → Prop} {pre₁ pre₂ suf₁ suf₂ : List Codec}
-    {sp₁ sp₂ : Option Codec} (hpre : List.Forall₂ R pre₁ pre₂) (hsp : Option.Rel R sp₁ sp₂)
-    (hsuf : List.Forall₂ R suf₁ suf₂) (n : Nat) :
-    Option.Rel (List.Forall₂ R) (slotsL pre₁ sp₁ suf₁ n) (slotsL pre₂ sp₂ suf₂ n) := by
-  unfold slotsL
-  rw [hsuf.length_eq]
-  split
-  · exact .none
-  · exact optionRel_map (fun _ _ h => List.rel_append h hsuf) (slots_rel _ hpre hsp)
+export Alg (optionRel_map optionRel_bind optionRel_isSome slots_rel slotsL_rel)
 
 /-- A row of codecs that agree below `d`, zipped with inputs no deeper than `d`, traverses to
     one answer. -/
@@ -409,45 +356,8 @@ An object reads its entry codecs at the entries of a map, one layer below the ma
 guards and the name filter read the shape of each field and never its codec, so two tables of one
 shape guard and filter alike. -/
 
-/-- Two fields of one shape whose codecs stand in `R`. -/
-def FieldSem.Rel (R : Codec → Codec → Prop) : FieldSem → FieldSem → Prop
-  | .req c₁, .req c₂ => R c₁ c₂
-  | .opt c₁, .opt c₂ => R c₁ c₂
-  | _, _ => False
-
-/-- Two rest policies of one shape whose codecs stand in `R`. -/
-def RestSem.Rel (R : Codec → Codec → Prop) : RestSem → RestSem → Prop
-  | .drop, .drop => True
-  | .refuse, .refuse => True
-  | .codec c₁, .codec c₂ => R c₁ c₂
-  | _, _ => False
-
 section ObjectAgree
 variable {R : Codec → Codec → Prop} {keys : Finset Name} {F₁ F₂ : {k // k ∈ keys} → FieldSem}
-
-/-- Related fields have related codecs. -/
-theorem FieldSem.Rel.codec : ∀ {f₁ f₂ : FieldSem}, FieldSem.Rel R f₁ f₂ → R f₁.codec f₂.codec
-  | .req _, .req _, h => h
-  | .opt _, .opt _, h => h
-
-/-- The write-side presence guard reads the shape of a field, never its codec. -/
-theorem FieldSem.Rel.valPresentAt (names : Finset Name) (k : Name) :
-    ∀ {f₁ f₂ : FieldSem}, FieldSem.Rel R f₁ f₂ → valPresentAt names k f₁ = valPresentAt names k f₂
-  | .req _, .req _, _ => rfl
-  | .opt _, .opt _, _ => rfl
-
-/-- The read-side presence guard reads the shape of a field, never its codec. -/
-theorem FieldSem.Rel.reqPresentAt (names : Finset Name) (k : Name) :
-    ∀ {f₁ f₂ : FieldSem}, FieldSem.Rel R f₁ f₂ → reqPresentAt names k f₁ = reqPresentAt names k f₂
-  | .req _, .req _, _ => rfl
-  | .opt _, .opt _, _ => rfl
-
-/-- Related rest policies give related rest codecs. -/
-theorem RestSem.Rel.rcOf : ∀ {r₁ r₂ : RestSem}, RestSem.Rel R r₁ r₂ →
-    Option.Rel R (Calculus.rcOf r₁) (Calculus.rcOf r₂)
-  | .drop, .drop, _ => .none
-  | .refuse, .refuse, _ => .none
-  | .codec _, .codec _, h => .some h
 
 /-- A lookup in two tables of one key set is related where the fields are. -/
 theorem mapOf_at_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) (k : Name) :

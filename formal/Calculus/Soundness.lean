@@ -23,8 +23,8 @@ namespace Calculus
 
 /-- A term's rest policy keeps every name. -/
 theorem wildSem_ne_drop (w : Option Term) {ρ : List Codec} : wildSem w ρ ≠ .drop :=
-  Option.casesOn (motive := fun w => wildSem w ρ ≠ .drop) w RestSem.noConfusion
-    fun _ => RestSem.noConfusion
+  Option.casesOn (motive := fun w => wildSem w ρ ≠ .drop) w (fun h => nomatch h)
+    fun _ h => nomatch h
 
 /-- **The union's obligation**: its options are pairwise compatible. -/
 def PairwiseCompat (opts : List Term) (ρ : List Codec := []) : Prop :=

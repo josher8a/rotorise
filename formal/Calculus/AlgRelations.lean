@@ -46,6 +46,19 @@ theorem Codec.Approx.empty_le (c : Codec V A M) : Codec.Approx Codec.empty c := 
 /-- The growing option, before unfolding: undefined everywhere. -/
 def optBot : Codec V A M := Codec.empty
 
+/-- The stage `n` of the body `B`: `n` applications of `B` to `Codec.empty`. A structural
+    recursion on `n`, so a stage at a numeral reduces by `rfl`. -/
+def muStage (B : Codec V A M → Codec V A M) : Nat → Codec V A M
+  | 0 => .empty
+  | n + 1 => B (muStage B n)
+
+/-- A property that `Codec.empty` has and that each application of the body keeps holds at
+    every stage. -/
+theorem muStage_induct {B : Codec V A M → Codec V A M} {P : Codec V A M → Prop} (h0 : P .empty)
+    (hs : ∀ c, P c → P (B c)) : ∀ n, P (muStage B n)
+  | 0 => h0
+  | n + 1 => hs _ (muStage_induct h0 hs n)
+
 /-- **`alternate reader` is a step up.** `extendRead` only ever adds readings — everything `c`
     decodes, the migration decodes the same way, and the writing half is untouched. §3's
     `(alternate reader)` coherence premise is what makes this an *extension* rather than a
