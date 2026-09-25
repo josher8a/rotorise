@@ -114,8 +114,8 @@ theorem denote_agree : ∀ (t : Term), t.guarded = true → ∀ (d : Nat) (ρ₁
         denote_agree P hg.2 d' ρ₁ ρ₂ fun i =>
           UseAgree.of_held (v := t.use i) (by rw [Nat.max_comm]; exact h i)
       refine AgreeLe.of_eq ?_ ?_
-      · simp only [denote, Codec.restrict, Codec.through, ht.1, hP.1]
-      · simp only [denote, Codec.restrict, Codec.through, ht.2, hP.1]
+      · simp only [denote, Alg.Codec.restrict, Alg.Codec.through, ht.1, hP.1]
+      · simp only [denote, Alg.Codec.restrict, Alg.Codec.through, ht.2, hP.1]
   | .list pre sp suf, hg, d, ρ₁, ρ₂, h => by
       simp only [Term.guarded, Bool.and_eq_true] at hg
       match d with

@@ -708,7 +708,7 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
               stringCodec, booleanCodec, binaryCodec, nullCodec, inD]
   | .refine c p => by
       have hc := Adm_exact c
-      intro v; cases hq : p.eval v <;> simp [Adm, denote, denote, Codec.restrict, hq, hc v]
+      intro v; cases hq : p.eval v <;> simp [Adm, denote, denote, Alg.Codec.restrict, hq, hc v]
   | .held c P f g => by
       have hc := Adm_exact c
       have hP := Adm_exact P

@@ -178,7 +178,7 @@ theorem equiv_restrict_full (c : Codec) (q : Value → Bool)
     `c.p a`, so re-reading through `c`'s own `p` adds nothing at all. -/
 theorem extendRead_self_p (c : Codec) : (c.extendRead c.p).p = c.p := by
   funext a
-  show (match c.p a with | some v => some v | none => c.p a) = c.p a
+  simp only [Alg.Codec.extendRead]
   cases c.p a <;> rfl
 
 /-- §6: `legacy(c, p_c) ≡ c`. -/
@@ -198,8 +198,7 @@ theorem extendRead_eq_on_can (c : Codec) (r : Attr → Option Value) (hc : Lawfu
     {a : Attr} (ha : Can c a) : (c.extendRead r).p a = c.p a := by
   obtain ⟨v, hv⟩ := ha
   have hp : c.p a = some v := hc.retract hv
-  show (match c.p a with | some v => some v | none => r a) = c.p a
-  rw [hp]
+  simp only [Alg.Codec.extendRead, hp]
 
 /-! ## `union` of one -/
 

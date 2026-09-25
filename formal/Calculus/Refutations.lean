@@ -170,7 +170,7 @@ theorem not_equiv_union_array :
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
   simp [Term.array, ← arrayCodec_eq_listCodec, denote, denote, denoteList, denoteμs,
         altCodec, arrayCodec, literalCodec,
-        baseCodec, Codec.restrict, inL, stringCodec, HLit] at hv
+        baseCodec, Alg.Codec.restrict, inL, stringCodec, HLit] at hv
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
 
@@ -225,7 +225,7 @@ theorem not_equiv_refine_held :
                   (denote (.held (.refine .string (.closure predA)) .string isoF id)) := by
   intro h
   have hv := (h.heldSet (.str "B")).mpr
-  simp [denote, denote, Codec.through, Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv
+  simp [denote, denote, Alg.Codec.through, Alg.Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv
 
 /-! ## `legacy(c, r)` breaks canonical reads, and `e ∘ p ≢ id`
 

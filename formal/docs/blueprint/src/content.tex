@@ -549,7 +549,7 @@ subterm's member this way.
 
 \begin{definition}[(held)]
 \label{rule:held}
-\lean{Calculus.Typed.held, Calculus.IsoCancels}
+\lean{Calculus.Typed.held, Calculus.Alg.IsoCancels}
 \begin{verbatim}
 ⊢ c : I ⇝ μ    f : T → I    g : I → T    g ∘ f = id_T    f ∘ g = id_I
 ─────────────────────────────────────────────────────────────────────── (held)
@@ -570,7 +570,7 @@ subterm's member this way.
 
 \begin{definition}[(alternate reader)]
 \label{rule:legacy}
-\lean{Calculus.Codec.extendRead, Calculus.ReadsCoherently}
+\lean{Calculus.Alg.Codec.extendRead, Calculus.Alg.ReadsCoherently}
 \leanok
 \begin{verbatim}
 ⊢ c : T ⇝ μ    r : 𝔸 ⇀ T    ran(r) ⊆ dom(e)    a ∈ dom(r) ∩ dom(p) ⟹ r(a) = p(a)

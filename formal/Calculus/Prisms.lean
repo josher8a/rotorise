@@ -2,17 +2,14 @@ import Calculus.Lists
 import Calculus.Codec
 
 /-!
-# Constructors as prisms, the ground codecs and the wrappers
+# Constructors as prisms, and the ground codecs
 
-The entry point of the certified combinator algebra: the semantic constructions the
-denotation factors through, each carrying its own lawfulness lemma, so soundness becomes
-plumbing rather than twenty-one bespoke cases.
+The DynamoDB instances of the certified combinator algebra. `Ctor`, the wrappers `through`,
+`restrict` and `extendRead`, and their laws take the carriers as parameters. This file states
+the instances that read the constructors of `Value` and `Attr`:
 
-* `Ctor` — a constructor as a prism, on the value side and the attribute side;
-* ground codecs, one per §3 ground term;
-* `through` / `restrict` — the iso/prism pair behind `held` and `refine`;
-* `extendRead` — the agreeing extension of the reading, for `alternate reader`; canonical reads
-  are the sanctioned breach and have no lemma, by design.
+* the prisms, one per constructor, on the value side and the attribute side;
+* ground codecs, one per §3 ground term.
 -/
 
 namespace Calculus
@@ -26,7 +23,7 @@ is the prism §7 of the specification already names when it calls `held` and `re
 same shape at different strengths". Two families turn out to be instances, and each was
 written out once per constructor before it was named:
 
-* the **point ground codecs** (`pointCodec` below) — `string`, `boolean`, `binary` and
+* the **point ground codecs** (`pointCodec`) — `string`, `boolean`, `binary` and
   `null` are a payload carried between a value constructor and an attribute constructor,
   differing in nothing but which pair;
 * the **scalar payload prisms** (`sC`/`nC`/`bC`) — the attribute half of three of those
@@ -35,17 +32,6 @@ written out once per constructor before it was named:
 
 Naming the shape once is what lets retract, canon and writes be discharged once for each family
 rather than once per constructor. -/
-
-/-- A constructor, as a partial iso onto its image. -/
-structure Ctor (α β : Type) where
-  /-- Build. -/
-  into : α → β
-  /-- Match, partially. -/
-  out : β → Option α
-  /-- Matching what was built returns it. -/
-  out_into : ∀ x, out (into x) = some x
-  /-- Anything that matches was built. -/
-  into_out : ∀ {b x}, out b = some x → b = into x
 
 /-! ### The prisms, value side and attribute side -/
 
@@ -135,57 +121,6 @@ under Products) rather than two. -/
   out := fun a => match a with | .m keys f => some ⟨keys, f⟩ | _ => none
   out_into _ := rfl
   into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
-
-/-- **The map analogue of `setImage`, and much simpler.** A set codec can collide two
-    elements onto one; a map cannot, because the names are fixed and the codec only moves
-    the values. So all this has to do is demand that every value succeeds. -/
-noncomputable def funImage {β : Type} {keys : Finset Name}
-    (g : {k // k ∈ keys} → Option β) : Option ({k // k ∈ keys} → β) :=
-  if h : ∀ k, (g k).isSome = true then some (fun k => (g k).get (h k)) else none
-
-theorem funImage_some {β : Type} {keys : Finset Name} {g : {k // k ∈ keys} → Option β}
-    {f : {k // k ∈ keys} → β} (h : funImage g = some f) : ∀ k, g k = some (f k) := by
-  unfold funImage at h
-  split at h
-  · next hall =>
-      intro k
-      have := Option.some.inj h
-      subst this
-      exact (Option.some_get (hall k)).symm
-  · exact nomatch h
-
-theorem funImage_isSome {β : Type} {keys : Finset Name} {g : {k // k ∈ keys} → Option β}
-    (hall : ∀ k, (g k).isSome = true) : (funImage g).isSome = true := by
-  unfold funImage; rw [dif_pos hall]; rfl
-
-/-- …and exactly when, which is what the exactness rows need: `funImage` is defined at a
-    key set precisely where every entry is. -/
-theorem funImage_isSome_iff {β : Type} {keys : Finset Name}
-    {g : {k // k ∈ keys} → Option β} :
-    (funImage g).isSome = true ↔ ∀ k, (g k).isSome = true := by
-  refine ⟨fun h k => ?_, funImage_isSome⟩
-  obtain ⟨f, hf⟩ := Option.isSome_iff_exists.mp h
-  rw [funImage_some hf k]; rfl
-
-theorem funImage_eq {β : Type} {keys : Finset Name} {g : {k // k ∈ keys} → Option β}
-    {f : {k // k ∈ keys} → β} (h : ∀ k, g k = some (f k)) : funImage g = some f := by
-  unfold funImage
-  rw [dif_pos (fun k => by rw [h k]; rfl)]
-  congr 1
-  funext k
-  exact Option.some.inj ((Option.some_get _).trans (h k))
-
-/-- **The point ground codecs of §3**, as one construction: a payload carried between a
-    value constructor and an attribute constructor, both prisms.
-
-    The prism laws are exactly §2's laws in disguise — `out_into` is the round trip **(R)**
-    and `into_out` is canonizability **(C)** — which is why `lawful_pointCodec` needs no
-    hypothesis about either side beyond the member it stamps. -/
-def pointCodec {α : Type} (V : Ctor α Value) (A : Ctor α Attr) (μ₀ : Member) : Codec :=
-  { T := fun v => ∃ x, v = V.into x
-    μ := some μ₀
-    e := fun v => (V.out v).map A.into
-    p := fun a => (A.out a).map V.into }
 
 /-! ## Ground codecs (§3) -/
 
@@ -295,64 +230,6 @@ def HLit (k : GroundKind) (x : k.Carrier) : Value → Prop :=
 
 /-! ## Wrappers -/
 
-/-- `held`: an iso on the value side; the stored side is untouched. -/
-def Codec.through (c : Codec) (f g : Value → Value) : Codec :=
-  { T := fun v => c.T (f v)
-    μ := c.μ
-    e := fun v => c.e (f v)
-    p := fun a => (c.p a).map g }
-
-/-- `refine`: the prism. -/
-def Codec.restrict (c : Codec) (q : Value → Bool) : Codec :=
-  { T := fun v => c.T v ∧ q v
-    μ := c.μ
-    e := fun v => if q v then c.e v else none
-    p := fun a => (c.p a).bind fun v => if q v then some v else none }
-
-/-- **The combinator `held` and `refine` both are.** A partial iso either side of the
-    pair: `f` in front of the writing, `g` behind the reading, both allowed to refuse.
-
-    §3 keeps the two apart and says why — "the literature collapses them … which is
-    exactly the merged combinator", separated for a reason *outside* the calculus, since a
-    total `g` lets a generator for `I` be pushed forward while a partial one leaves only
-    rejection sampling. This is that merged combinator, so the claim is checked rather
-    than asserted: `through` is `adapt` with both halves total, `refine` is `adapt` with a
-    partial identity on both halves, and the four theorems below are the whole of it.
-
-    The `Codec` is not redefined in its terms. `T` agrees only propositionally — `adapt`'s
-    is `∃ w, f v = some w ∧ c.T w` where `through`'s is `c.T (f v)` — so a merge at the
-    definition would cost every `rfl` over the two wrappers, and that trade is not worth
-    taking blind. The pair is what the claim is about, and the
-    pair agrees on the nose. -/
-def Codec.adapt (c : Codec) (f g : Value → Option Value) : Codec :=
-  { T := fun v => ∃ w, f v = some w ∧ c.T w
-    μ := c.μ
-    e := fun v => (f v).bind c.e
-    p := fun a => (c.p a).bind g }
-
-/-- The partial identity on a predicate — `refine`'s adapter, on both halves. -/
-def partialId (q : Value → Bool) : Value → Option Value := fun v => if q v then some v else none
-
-/-- `held` writes as `adapt` with a total adapter. -/
-theorem through_e_adapt {c : Codec} (f g : Value → Value) :
-    (c.through f g).e = (c.adapt (some ∘ f) (some ∘ g)).e := rfl
-
-/-- …and reads as one. -/
-theorem through_p_adapt {c : Codec} (f g : Value → Value) :
-    (c.through f g).p = (c.adapt (some ∘ f) (some ∘ g)).p := by
-  funext a; simp only [Codec.through, Codec.adapt]; cases c.p a <;> rfl
-
-/-- `refine` writes as `adapt` with a partial identity — the *same* combinator, weaker
-    adapter. This is the sense in which it is sugar. -/
-theorem restrict_e_adapt {c : Codec} (q : Value → Bool) :
-    (c.restrict q).e = (c.adapt (partialId q) (partialId q)).e := by
-  funext v; simp only [Codec.restrict, Codec.adapt, partialId]; cases q v <;> rfl
-
-/-- …and reads as one. -/
-theorem restrict_p_adapt {c : Codec} (q : Value → Bool) :
-    (c.restrict q).p = (c.adapt (partialId q) (partialId q)).p := by
-  funext a; simp only [Codec.restrict, Codec.adapt, partialId]; rfl
-
 /-! ### §1's number gates are that combinator too
 
     `(number)` and `(decimal)` each carry a predicate checked on **both** halves —
@@ -379,15 +256,7 @@ def inD : Value → Bool :=
     Worth having as lemmas rather than leaving to `simp`: the decision inside those `dite`s
     is `Numeral.WF`, whose body is a string parser (`Domain.lean`), so any `simp` that
     unfolds the codec will chase the parser and run out of heartbeats. These state the only
-    consequence the analysis rows need.
-
-    `restrict_e_isSome` is the same move one level up: a refinement writes where the gate
-    passes and the base writes, so a row can read off a refinement without unfolding it. -/
-@[simp] theorem restrict_e_isSome {c : Codec} {q : Value → Bool} (v : Value) :
-    ((c.restrict q).e v).isSome = (q v && (c.e v).isSome) := by
-  simp only [Codec.restrict]
-  by_cases h : q v = true <;> simp [h]
-
+    consequence the analysis rows need. -/
 @[simp] theorem numberCodec_e_isSome (v : Value) : (numberCodec.e v).isSome = inD v := by
   cases v <;> rfl
 
@@ -445,7 +314,7 @@ theorem literalCodec_p_restrict (k : GroundKind) (x : k.Carrier) :
 theorem inL_of_literalCodec_e {k : GroundKind} {x : k.Carrier} {v a}
     (he : (literalCodec k x).e v = some a) : inL k x v = true := by
   rw [literalCodec_e_restrict] at he
-  simp only [Codec.restrict] at he
+  simp only [Alg.Codec.restrict] at he
   split at he
   · assumption
   · exact absurd he (by simp)
@@ -482,87 +351,6 @@ theorem hLit_of_inL (k : GroundKind) (x : k.Carrier) (v : Value) :
            simp only [inL, hs, dif_pos, decide_eq_true_eq] at h
            exact congrArg Value.num (congrArg Subtype.val h)
          | false => simp [inL, hs] at h)
-
-/-- `alternate reader`: extend the reading. With §3's coherence premise this presentation equals
-    the order-free `p ∪ r`. -/
-def Codec.extendRead (c : Codec) (r : Attr → Option Value) : Codec :=
-  { T := c.T
-    μ := c.μ
-    e := c.e
-    p := fun a => match c.p a with | some v => some v | none => r a }
-
-/-! ### What the wrappers write and read
-
-Each wrapper is one line of definition and touches exactly one half of the pair; stating
-that as an `iff` is what keeps the proofs below — and §6's wrapper rows — from unfolding
-the definitions again. `held` and `alternate reader` are transparent on the side they do not
-touch, which is why two of the eight are `Iff.rfl`. -/
-
-section WrapperInversion
-variable {c : Codec}
-
-/-- `held` writes what its base writes, at the transported value. -/
-theorem through_e {f g : Value → Value} {v a} :
-    (c.through f g).e v = some a ↔ c.e (f v) = some a := Iff.rfl
-
-/-- …and reads what its base reads, transported back. -/
-theorem through_p {f g : Value → Value} {a v} :
-    (c.through f g).p a = some v ↔ ∃ w, c.p a = some w ∧ v = g w := by
-  simp [Codec.through, Option.map_eq_some_iff, eq_comm (a := v)]
-
-/-- The read side of `restrict_e_isSome`, and its absence is why every literal row unfolded
-    `Codec.restrict` by hand. §4c asks for one codec stated once for both sides; the write half
-    was `@[simp]` and the read half was not there. -/
-@[simp] theorem restrict_p_isSome {c : Codec} {q : Value → Bool} (a : Attr) :
-    ((c.restrict q).p a).isSome = ((c.p a).elim false q) := by
-  simp only [Codec.restrict]
-  cases c.p a with
-  | none => rfl
-  | some v => cases hq : q v <;> simp [hq]
-
-/-- `refine` writes only what passes the prism… -/
-theorem restrict_e {q : Value → Bool} {v a} :
-    (c.restrict q).e v = some a ↔ q v = true ∧ c.e v = some a := by
-  simp only [Codec.restrict]; split <;> simp_all
-
-/-- …and reads only into it. -/
-theorem restrict_p {q : Value → Bool} {a v} :
-    (c.restrict q).p a = some v ↔ c.p a = some v ∧ q v = true := by
-  simp only [Codec.restrict, Option.bind_eq_some_iff]
-  constructor
-  · rintro ⟨w, hw, h⟩; split at h <;> simp_all
-  · rintro ⟨h, hq⟩; exact ⟨v, h, by simp [hq]⟩
-
-/-- `alternate reader` does not touch the writing at all — §5's whole point. -/
-theorem extendRead_e {r : Attr → Option Value} {v a} :
-    (c.extendRead r).e v = some a ↔ c.e v = some a := Iff.rfl
-
-/-- It reads through the base where the base reads, and through the migration exactly
-    where the base does not. That "exactly" is where canonical reads go. -/
-theorem extendRead_p {r : Attr → Option Value} {a v} :
-    (c.extendRead r).p a = some v ↔ c.p a = some v ∨ (c.p a = none ∧ r a = some v) := by
-  show (match c.p a with | some w => some w | none => r a) = some v ↔ _
-  cases hp : c.p a <;> simp
-
-end WrapperInversion
-
-/-- Lawfulness sees only the pair and the member, so it transfers to any codec agreeing on
-    those three. This is how a ground codec inherits from the wrapper it turns out to be,
-    without disturbing its definition — which matters, since the definitions are unfolded
-    all over the development. -/
-theorem Lawful.congr {c d : Codec} (he : c.e = d.e) (hp : c.p = d.p) (hμ : c.μ = d.μ)
-    (h : Lawful d) : Lawful c := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a hx; rw [he] at hx; rw [hp]; exact h.retract hx
-  · intro a t hx; rw [hp] at hx; rw [he]; exact h.canon hx
-  · intro μ hm t a hx; rw [hμ] at hm; rw [he] at hx; exact h.writes hm hx
-
-/-- The carrier transfers too, given the held set is no smaller. -/
-theorem Carrier.congr {c d : Codec} (he : c.e = d.e) (hp : c.p = d.p)
-    (hT : ∀ v, d.T v → c.T v) (h : Carrier d) : Carrier c := by
-  refine ⟨?_, ?_⟩
-  · intro v a hx; rw [he] at hx; exact hT v (h.domE hx)
-  · intro a v hx; rw [hp] at hx; exact hT v (h.ranP hx)
 
 end
 
