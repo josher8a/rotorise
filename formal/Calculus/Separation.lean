@@ -208,7 +208,7 @@ theorem decides_object :
           .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)), ?_, rfl, ?_⟩
   · simp +contextual [denote, denote, bodySem, wildSem, fieldSem,
           objectCodec, objectCodecCore, stringCodec,
-          valPresentB, valPresentAt, fieldSem, rcOf, FieldSem.codec, carriedCodec,
+          valPresentB, valPresentAt, fieldSem, rcOf, Alg.FieldSem.codec, carriedCodec,
           mapV, mA, objWrite, entryCodec, MapOf.at, funImage,
           Subtype.forall]
   · simp [denote, denote, bodySem, wildSem, fieldSem,

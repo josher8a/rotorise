@@ -36,19 +36,7 @@ theorem member_of_bC {a : Attr} (h : (bC.out a).isSome = true) : a.member = .B :
   cases a <;> simp_all [bC, Attr.member]
 
 
-/-- What each wire element reads back to: the value it came from. -/
-theorem setImage_read {α β : Type} [DecidableEq β] {c : Codec} (h : LawfulCore c)
-    {vinj : α → Value} {aout : Attr → Option β} {ainj : β → Attr}
-    (hA : ∀ a b, aout a = some b → a = ainj b)
-    {S : Finset α} {T : Finset β}
-    (hI : setImage (fun x => (c.e (vinj x)).bind aout) S = some T) :
-    ∀ y ∈ T, ∃ x ∈ S, c.p (ainj y) = some (vinj x) := by
-  intro y hy
-  obtain ⟨x, hx, hxy⟩ := (mem_setImage hI y).mp hy
-  simp only [Option.bind_eq_some_iff] at hxy
-  obtain ⟨a, hea, hoa⟩ := hxy
-  rw [hA a y hoa] at hea
-  exact ⟨x, hx, h.retract hea⟩
+export Alg (setImage_read)
 
 /-- `decSet` lands on the string branch when the reads produce strings. -/
 theorem decSet_strBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
@@ -455,17 +443,7 @@ and `keepB rest sems`. The three lemmas here are what that costs, discharged onc
 they used to be hypotheses on five signatures, and one of them was re-proved by hand at
 the call site in `Soundness.lean`. -/
 
-/-- A property of the rest policy's codec, from one per `rest = .codec c`. -/
-theorem rcOf_forall {P : Codec → Prop} {rest : RestSem}
-    (h : ∀ c, rest = .codec c → P c) : ∀ c ∈ rcOf rest, P c := by
-  intro c hc
-  cases rest with
-  | codec c' =>
-    replace hc : some c' = some c := hc
-    cases hc
-    exact h c rfl
-  | drop => exact nomatch hc
-  | refuse => exact nomatch hc
+export Alg (rcOf_forall)
 
 /-- What object-encode produces, `keepB` keeps: under `drop` an encoded entry's name
     is declared, and the other policies keep everything. -/

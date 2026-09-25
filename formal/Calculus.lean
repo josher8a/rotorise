@@ -5,6 +5,7 @@ import Calculus.AlgCombinators
 import Calculus.AlgRelations
 import Calculus.AlgMaps
 import Calculus.AlgLists
+import Calculus.AlgPositions
 import Calculus.JSON
 import Calculus.Codec
 import Calculus.Prisms

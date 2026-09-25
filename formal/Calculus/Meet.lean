@@ -5145,8 +5145,8 @@ theorem entryCodec_slotAt (c : Body) (k : Name) (x : Attr) :
   · rw [dif_pos hk, Body.slotAt_pos hk]; rfl
   · rw [dif_neg hk, Body.slotAt_neg hk]
     cases hw : c.wild with
-    | none => simp [wildSem, rcOf, Body.block, hw, fieldSem, FieldSem.codec, denote, Codec.empty]
-    | some t => simp [wildSem, rcOf, Body.block, hw, fieldSem, FieldSem.codec]
+    | none => simp [wildSem, rcOf, Body.block, hw, fieldSem, Alg.FieldSem.codec, denote, Codec.empty]
+    | some t => simp [wildSem, rcOf, Body.block, hw, fieldSem, Alg.FieldSem.codec]
 
 /-- **Two bodies that read every present name alike read the map alike.** -/
 theorem bodySem_p_congr {c d : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}

@@ -12,19 +12,24 @@ namespace Calculus
 noncomputable section
 /-! ## Objects (§4) -/
 
-/-- A field, denoted: presence marker plus the attribute pair. -/
-inductive FieldSem where
-  | req (c : Codec)
-  | opt (c : Codec)
+/-- A field, denoted, at the DynamoDB carriers. -/
+abbrev FieldSem := Alg.FieldSem Value Attr Member
 
-def FieldSem.codec : FieldSem → Codec
-  | .req c => c
-  | .opt c => c
+/-- A rest policy, denoted, at the DynamoDB carriers. -/
+abbrev RestSem := Alg.RestSem Value Attr Member
 
-/-- A rest policy, denoted. -/
-inductive RestSem where
-  | drop | refuse
-  | codec (c : Codec)
+/- The fields, the guards and the rest codec take the carriers as parameters. The aliases give
+   them their names in this namespace. `FieldSem.codec` has no alias, because an alias captures
+   field notation, and field notation reaches the generic name through the abbreviation. -/
+export Alg (valPresentAt reqPresentAt rcOf)
+
+namespace FieldSem
+export Alg.FieldSem (req opt Rel)
+end FieldSem
+
+namespace RestSem
+export Alg.RestSem (drop refuse codec Rel)
+end RestSem
 
 /-! ### The field table is a map, not a row
 
@@ -39,27 +44,12 @@ the term language. The lookup is deliberately shaped like `List.lookup`, so ever
 — `entryCodec`, `objEntryT`, `field value`, `keepB` and every proof that splits on them — reads
 unchanged. -/
 
-/-- What each guard asks of one binding, named so the guards themselves are a single
-    quantifier over the key set rather than a `List.all` over a row. -/
-def valPresentAt (names : Finset Name) : Name → FieldSem → Bool
-  | _, .opt _ => true
-  | k, _ => decide (k ∈ names)
-
-def reqPresentAt (names : Finset Name) : Name → FieldSem → Bool
-  | k, .req _ => decide (k ∈ names)
-  | _, _ => true
-
 def valPresentB (sems : MapOf FieldSem) (names : Finset Name) : Bool :=
   decide (∀ k : {k // k ∈ sems.1}, valPresentAt names k.1 (sems.2 k) = true)
 
 /-- Every `req` name present on the stored side. -/
 def reqPresentB (sems : MapOf FieldSem) (names : Finset Name) : Bool :=
   decide (∀ k : {k // k ∈ sems.1}, reqPresentAt names k.1 (sems.2 k) = true)
-
-/-- The rest policy's codec, where it has one. -/
-def rcOf : RestSem → Option Codec
-  | .codec c => some c
-  | _ => none
 
 /-- The name filter: `drop` keeps declared names only; the others keep everything.
     A filter, never a traversal mode (§4). -/
