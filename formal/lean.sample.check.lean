@@ -1,5 +1,5 @@
-import Calculus.Vectors
-import Calculus.DynamoDB
+import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Store
 
 /-!
 # Differential-testing vectors

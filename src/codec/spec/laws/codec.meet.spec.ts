@@ -293,7 +293,7 @@ describe('a union distributes and the survivors carry the certificate', () => {
 })
 
 /**
- * The pairs `Calculus.Meet` pins as worked examples, answered here.
+ * The pairs `Calculus.Dynamo.Meet` pins as worked examples, answered here.
  *
  * Each one is an `example` in `Meet.lean` with the model's answer written out. They are the
  * differential this side of the bridge can run without emitting a term: the model states the

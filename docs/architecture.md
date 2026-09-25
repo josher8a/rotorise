@@ -58,12 +58,12 @@ instance, and JSON is a second instance.
 
 | module | states, for every universe |
 | --- | --- |
-| `Alg` | the record `Codec` and its laws `Lawful` and `LawfulCore`, over the carriers `V`, `A` and `M` |
-| `AlgCombinators`, `AlgRelations` | the combinators, the join by the first admitter, the order, the equivalence, `Compat`, `Canon` and `Sub` |
-| `AlgLists`, `AlgPositions`, `AlgMaps` | the traversal and `entrywise`, the positional theory, the image of a function over a key set, and `MapOf`, which keeps the namespace `Calculus` |
-| `AlgContainers`, `AlgRecursion` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
-| `AlgTerm`, `AlgTyping` | the term family over a signature, `denote`, the guard, `Typed` and `Obligations` |
-| `AlgGuarded`, `AlgSound`, `AlgHeldFree` | `contractive_body`, `soundness`, and `compat_of_HF` |
+| `Alg/Codec.lean` | the record `Codec` and its laws `Lawful` and `LawfulCore`, over the carriers `V`, `A` and `M` |
+| `Alg/Combinators.lean`, `Alg/Relations.lean` | the combinators, the join by the first admitter, the order, the equivalence, `Compat`, `Canon` and `Sub` |
+| `Alg/Lists.lean`, `Alg/Positions.lean`, `Alg/Maps.lean` | the traversal and `entrywise`, the positional theory, the image of a function over a key set, and `MapOf`, which keeps the namespace `Calculus` |
+| `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
+| `Lang/Term.lean`, `Lang/Typing.lean` | the term family over a signature, `denote`, the guard, `Typed` and `Obligations` |
+| `Lang/Guarded.lean`, `Lang/Sound.lean`, `Lang/HeldFree.lean` | `contractive_body`, `soundness`, and `compat_of_HF` |
 
 `Rows.lean` is generic too, in the namespace `Calculus`. It states the row combinators of the
 analyses over one carrier type, and each side of the pair instantiates it.
@@ -140,8 +140,8 @@ value (`Lawful.fmt_subsingleton`).
 
 **What the imports guarantee.** No generic module imports `Domain` or another instance module,
 directly or through its imports. So a generic declaration that cites a fact of the DynamoDB
-carriers is an unknown identifier, and the build fails. `JSON.lean` imports the generic layer and
-no DynamoDB module, so `Calculus.Value` is an unknown identifier under `import Calculus.JSON`. The
+carriers is an unknown identifier, and the build fails. `JSON/Basic.lean` imports the generic layer and
+no DynamoDB module, so `Calculus.Value` is an unknown identifier under `import Calculus.JSON.Basic`. The
 laws, the combinators, the join and soundness are therefore facts of the algebra, and not facts of
 one store. Nothing checks the import lists themselves. An instance import in a generic module
 removes the guarantee, and no guard reports the change.
@@ -164,7 +164,7 @@ taste is caught by nobody.
 ## The term family, and what a stratum owes
 
 `Term S`, `Body S` and `ObjectSlot S` are inductives in one `mutual` block over a signature `S`,
-in `AlgTerm.lean`. At DynamoDB, `Term`, `Body` and `ObjectSlot` are their abbreviations at
+in `Lang/Term.lean`. At DynamoDB, `Term`, `Body` and `ObjectSlot` are their abbreviations at
 `dynSyn`. **The point of the split is negative: no `Term` position accepts an `ObjectSlot`.** A
 slot is not a term, so a nonsensical term is a type error rather than a rule somebody must
 remember to refuse.

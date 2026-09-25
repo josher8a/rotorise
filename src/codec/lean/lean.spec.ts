@@ -682,7 +682,7 @@ describe('a whole vector', () => {
 
     /**
      * The same claim in the older protocol, kept because it depends on nothing but `denote` and
-     * is what a tree without `Calculus/Vectors.lean` can still check. It cannot state a refusal,
+     * is what a tree without `Calculus/Bridge/Vectors.lean` can still check. It cannot state a refusal,
      * and on a map `rfl` does not fail but diverges — which is why it is no longer the default.
      */
     it('still emits the bare equation when asked for it', () => {
@@ -707,7 +707,7 @@ describe('a whole vector', () => {
 
     it('imports the comparator the default protocol is cashed against', () => {
         const module = leanVectorModule([])
-        expect(module).toContain('import Calculus.Vectors')
+        expect(module).toContain('import Calculus.Bridge.Vectors')
         expect(module).toContain('namespace Calculus')
         expect(module.trimEnd().endsWith('end Calculus')).toBe(true)
     })
@@ -715,7 +715,7 @@ describe('a whole vector', () => {
     /** The equation protocol carries its own proof, so its preamble is the one with the tactic. */
     it('carries the tactic and the imports the equation protocol needs', () => {
         const module = leanVectorModule([], 'equation')
-        expect(module).toContain('import Calculus.Denote')
+        expect(module).toContain('import Calculus.Dynamo.Denote')
         expect(module).toContain('import Mathlib.Tactic.FinCases')
         expect(module).toContain('macro "vector" : tactic')
         expect(module.trimEnd().endsWith('end Calculus')).toBe(true)
@@ -1092,7 +1092,7 @@ export const sampleRefusals: readonly Refusal[] = refusalCodecs.flatMap(
 
 describe('the `check` protocol', () => {
     /**
-     * The second protocol exists because `formal/Calculus/Vectors.lean` does — a hand-written
+     * The second protocol exists because `formal/Calculus/Bridge/Vectors.lean` does — a hand-written
      * three-valued comparator with `check_same` proved about it, so `.same` is a *proof* of
      * equality and not a comparator's opinion. Where it is available it is the better target: no
      * tactic, no `funext` gymnastics, and it can state a negative vector, which an equation cannot.
@@ -1128,7 +1128,7 @@ describe('the `check` protocol', () => {
 
     it('imports the comparator instead of carrying a tactic', () => {
         const module = leanVectorModule([], 'check')
-        expect(module).toContain('import Calculus.Vectors')
+        expect(module).toContain('import Calculus.Bridge.Vectors')
         expect(module).not.toContain('macro "vector"')
     })
 })
@@ -1436,7 +1436,7 @@ describe('union resolution, model against library', () => {
             writeResolutions(),
             readResolutions(),
         )
-        expect(module).toContain('import Calculus.Vectors')
+        expect(module).toContain('import Calculus.Bridge.Vectors')
         expect(module).toContain('440 on the read side')
         expect(module).toContain('vcheck')
     })
@@ -1481,7 +1481,7 @@ describe("the read side, against the model's read row", () => {
             )
         }
         const module = leanReadModule(readVerdicts())
-        expect(module).toContain('import Calculus.DynamoDB')
+        expect(module).toContain('import Calculus.Dynamo.Store')
         expect(module).toContain('All 1927 pairs are asserted here.')
     })
 })
@@ -1554,10 +1554,14 @@ describe("the declaration guard, against the model's classifier", () => {
                 leanSeparationModule(separationPairs()),
             )
         }
-        expect(leanSeparationModule([])).toContain('import Calculus.Meet')
+        expect(leanSeparationModule([])).toContain(
+            'import Calculus.Dynamo.Meet',
+        )
         // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
         // without the import Lean auto-binds the name and every verdict fails to elaborate
-        expect(leanSeparationModule([])).toContain('import Calculus.DynamoDB')
+        expect(leanSeparationModule([])).toContain(
+            'import Calculus.Dynamo.Store',
+        )
     })
 
     /**
@@ -1575,7 +1579,7 @@ describe("the declaration guard, against the model's classifier", () => {
                 leanMeetModule(meets, MEET_DEFERRED),
             )
         }
-        expect(leanMeetModule([])).toContain('import Calculus.Meet')
+        expect(leanMeetModule([])).toContain('import Calculus.Dynamo.Meet')
     })
 
     /** A pair `src/` accepts carries the warrant the host used, and a refused pair the certificate. */
@@ -1690,10 +1694,10 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
             )
         }
         const module = leanReadVectorModule(sampleVectors.filter(emittable))
-        expect(module).toContain('import Calculus.Vectors')
+        expect(module).toContain('import Calculus.Bridge.Vectors')
         // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
         // without the import `denote` sticks on a free variable and no vector elaborates
-        expect(module).toContain('import Calculus.DynamoDB')
+        expect(module).toContain('import Calculus.Dynamo.Store')
         // the header states what it could not state, which for this corpus is nothing
         expect(module).toContain('every corpus codec round trips')
     })
