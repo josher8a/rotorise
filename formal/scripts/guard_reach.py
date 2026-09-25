@@ -25,7 +25,7 @@ That gap has been real twice:
 Both were caught by someone adding an import. This script is the check that makes
 the next one fail the build instead.
 
-    every `Calculus/*.lean` on disk is transitively imported by `Calculus/Axioms.lean`
+    every `.lean` file under `Calculus/` on disk is transitively imported by `Calculus/Axioms.lean`
 
 The method is textual: read `import Calculus.X` out of every module, take the
 transitive closure from `Axioms.lean`'s own imports, diff against the files on disk.
@@ -83,7 +83,7 @@ def reachable(graph, roots):
 
 
 def main():
-    src = sorted(glob.glob(os.path.join("Calculus", "*.lean")))
+    src = sorted(glob.glob(os.path.join("Calculus", "**", "*.lean"), recursive=True))
     if not src or not os.path.exists(GUARD):
         sys.exit("no Calculus/Axioms.lean found — run from formal/")
 

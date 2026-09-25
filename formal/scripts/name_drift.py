@@ -14,7 +14,7 @@ both caught by luck rather than by a check.
 A hit is a backticked token that *looks* like a Lean name — no spaces, and either a `_`
 or a `.` in it or else a single word that is not one of four categories that cannot be
 `Calculus/` names (see `single_word_checkable`) — and matches no identifier occurring in
-**the code** of `Calculus/*.lean`, comments and docstrings stripped (`occurring()`).
+**the code** of every `.lean` file under `Calculus/`, comments and docstrings stripped (`occurring()`).
 It stays deliberately loose about *where* in the code: any occurrence clears a citation, not
 just a declaration, so a structure projection or a mathlib lemma appealed to in one proof is
 enough. The residue is therefore small and worth reading by hand.
@@ -110,7 +110,7 @@ CURRENT = ["README.md", "docs/blueprint/src/content.tex", "docs/blueprint/src/ab
 # `Soundness.lean` docstring passed this guard clean. They are `CURRENT`, not a reported-only
 # list, because at the time of adding them none dangled — so the bar is "keep it at zero",
 # which is only meaningful if breaking it fails the build.
-CURRENT += sorted(glob.glob("Calculus/*.lean"))
+CURRENT += sorted(glob.glob("Calculus/**/*.lean", recursive=True))
 # `LOG` held two change logs — scanned under `--all`, reported, never failing, because a name
 # missing from a change log may be a deliberate record of a deletion rather than drift and no
 # check can tell those apart. `b163c17` deleted both; `git log` is the change log now, and a
@@ -269,7 +269,7 @@ SPEC = {
 
 
 # A single-word citation is checked against the same source set as a dotted one — any
-# identifier occurring anywhere in `Calculus/*.lean`. Four categories can never occur there
+# identifier occurring anywhere in a `.lean` file under `Calculus/`. Four categories can never occur there
 # and are skipped by shape rather than by name, so the list cannot rot:
 #
 #   MODULE_NAMES  a module is a filename, not a declaration. `Denote` names a file; the dotted
@@ -284,8 +284,9 @@ SPEC = {
 # Everything else is checked. That is 194 citations the guard was blind to before, and it caught
 # `Item` in `README.md`'s module inventory — deleted on purpose in `f3bb956` and still listed as
 # something `Domain.lean` defines.
-MODULE_NAMES = {os.path.splitext(os.path.basename(f))[0]
-                for f in glob.glob("Calculus/*.lean")} | {"Calculus"}
+# A module under a layer folder is named by its file and by its folder.
+MODULE_NAMES = {part for f in glob.glob("Calculus/**/*.lean", recursive=True)
+                for part in os.path.splitext(os.path.relpath(f, "Calculus"))[0].split(os.sep)} | {"Calculus"}
 HASH = re.compile(r"^[0-9a-f]{7,}$")
 PRELUDE = set("""
 Bool Prop Type Sort Nat Int String Char Unit True False And Or Not Iff Eq Option Some None
@@ -381,12 +382,12 @@ def occurring():
     archaeology sweep deleted the prose that was clearing them. Comments are 45.1% of
     `Calculus/` by character; a citation now has to be answered by code.
     """
-    # `scripts/*.lean` as well as `Calculus/*.lean`: a script written in Lean is Lean code in
+    # `scripts/*.lean` as well as every `.lean` file under `Calculus/`: a script written in Lean is Lean code in
     # this development, and a document citing the definitions inside one is citing real names.
     # No such script exists today — the audit instruments that were written in Lean are deleted
     # — and the glob stays so that the next one is covered without anyone remembering to add it.
     src = "".join(strip_comments(open(f).read())
-                  for f in sorted(glob.glob("Calculus/*.lean"))
+                  for f in sorted(glob.glob("Calculus/**/*.lean", recursive=True))
                           + sorted(glob.glob("scripts/*.lean")))
     out = set()
     for tok in IDENT.findall(src):
@@ -528,7 +529,7 @@ def host_without_declarations():
 
 
 def main():
-    if not glob.glob("Calculus/*.lean"):
+    if not glob.glob("Calculus/**/*.lean", recursive=True):
         sys.exit("run from formal/")
     present = occurring()
     targets = CURRENT + (LOG if "--all" in sys.argv else [])

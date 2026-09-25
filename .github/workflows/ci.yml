@@ -73,8 +73,9 @@ jobs:
       - name: leanchecker
         working-directory: formal
         run: |
-          for f in Calculus/*.lean; do
-            lake env leanchecker "Calculus.$(basename "$f" .lean)"
+          for f in $(find Calculus -name '*.lean' | sort); do
+            m="${f%.lean}"
+            lake env leanchecker "${m//\//.}"
           done
 
   publish:

@@ -184,7 +184,7 @@ def undocumented(path):
 def measure():
     """{metric: {path: count}} over the current tree.
 
-    The two proof measures range over `Calculus/*.lean`. The mark count ranges over
+    The two proof measures range over every `.lean` file under `Calculus/`. The mark count ranges over
     **`name_drift.py`'s whole `CURRENT` list**, documents included, because the hole it closes
     is not specific to docstrings: a session that deletes a declaration and marks its citations
     in a document in the same commit gets exactly as little checking as one that does it
@@ -192,7 +192,7 @@ def measure():
     """
     out = {m: {} for m in ("unfolding_sites", "retirement_marks",
                            "undocumented_public_theorems", "branches")}
-    for path in sorted(glob.glob("Calculus/*.lean")):
+    for path in sorted(glob.glob("Calculus/**/*.lean", recursive=True)):
         code = strip_comments(open(path).read())
         lines = code.split("\n")
         out["unfolding_sites"][path] = sum(1 for l in lines if SITE.search(l))
@@ -229,7 +229,7 @@ def write_baseline(data):
 
 
 def main():
-    if not glob.glob("Calculus/*.lean"):
+    if not glob.glob("Calculus/**/*.lean", recursive=True):
         sys.exit("run from formal/")
     current = measure()
     baseline = load_baseline()
@@ -276,12 +276,12 @@ def main():
         print(f"  {metric:30s} {total:5d}  (baseline {btotal}, {arrow})")
 
     for metric, path, was, now in falls:
-        print(f"  down  {metric:30s} {os.path.basename(path):24s} {was} -> {now}")
+        print(f"  down  {metric:30s} {os.path.relpath(path, 'Calculus'):24s} {was} -> {now}")
     for metric, path, n in new_files:
-        print(f"  new   {metric:30s} {os.path.basename(path):24s} {n} "
+        print(f"  new   {metric:30s} {os.path.relpath(path, 'Calculus'):24s} {n} "
               f"(no prior — admitted on --accept)")
     for metric, path, was, now in rises:
-        print(f"  RISE  {metric:30s} {os.path.basename(path):24s} {was} -> {now}")
+        print(f"  RISE  {metric:30s} {os.path.relpath(path, 'Calculus'):24s} {was} -> {now}")
     for metric, path in stale:
         print(f"  STALE {metric:30s} {path}  (file is gone — drop it with --accept)")
     for metric, total in new_metrics:
@@ -290,7 +290,7 @@ def main():
 
     if "--names" in sys.argv:
         print()
-        for path in sorted(glob.glob("Calculus/*.lean")):
+        for path in sorted(glob.glob("Calculus/**/*.lean", recursive=True)):
             hits = undocumented(path)
             if hits:
                 print(f"  {os.path.normpath(path)}  {len(hits)} undocumented")
