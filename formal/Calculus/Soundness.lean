@@ -5,7 +5,8 @@ import Calculus.AlgSound
 # §5 — Soundness
 
 The theorem. `Obligations t` collects the semantic rule premises: `(held)` cancellation laws,
-and `(union)` pairwise compatibility, at every stage of each enclosing `mu`. The current term
+`(union)` pairwise compatibility, and the set obligation `SetElem`, at every stage of each
+enclosing `mu`. The current term
 language has no read adapter, so every typed term whose obligations hold satisfies retract, canon
 and writes.
 

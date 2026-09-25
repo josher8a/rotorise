@@ -79,6 +79,12 @@ the two carry a number the same way: an \texttt{N} carries a \texttt{WFNumeral},
 \emph{not determined by the term}, not as \emph{anything}. Which terms may leave it
 undetermined is settled in §3.
 
+The record and its laws take the carriers as parameters: the values, the attributes, and the
+members. No law reads the structure of a value or of an attribute, and \rulelink{cond:W}{\textbf{(W)}} reads only the
+member of an attribute. This document states the calculus at the DynamoDB carriers: \texttt{Value},
+§1's \texttt{𝔸} and \texttt{Member}. The development states the same laws, the term language and
+soundness at a JSON carrier too (\texttt{Calculus.JSON}).
+
 \subsection{Laws}\label{laws}
 
 \begin{definition}[(R) retraction]
@@ -1231,12 +1237,16 @@ decide a question about attributes.
 \leanok
 Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, whose obligations hold, denotes a pair
 satisfying \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and \rulelink{cond:W}{\textbf{(W)}}. The obligations are each
-\rulelink{rule:held}{\texttt{(held)}}'s iso premise and each \rulelink{rule:union}{\texttt{(union)}}'s \rulelink{cond:compat}{\textbf{(Compat)}}. The
+\rulelink{rule:held}{\texttt{(held)}}'s iso premise, each \rulelink{rule:union}{\texttt{(union)}}'s \rulelink{cond:compat}{\textbf{(Compat)}}, and each
+\rulelink{rule:set}{\texttt{(set)}}'s set obligation (\texttt{SetObl}): the rule of the universe on a set element, which is
+\texttt{SetElem} at DynamoDB. Soundness takes the set obligation as a premise and does not read it. The
 dischargers of this section settle \rulelink{cond:compat}{\textbf{(Compat)}} at the declaration wherever they decide
 a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and \texttt{opaque} outright. A \rulelink{rule:mu}{\texttt{(mu)}} owes the obligations of its
 body at each stage, given that the stage before is lawful. The induction runs over open terms, with
 an environment of lawful codecs for the variables. The closed theorem is its case at the empty
 environment. The host's recursive schema for JSON is derived and lawful through it (\texttt{lawful\_json}).
+The theorem holds at every universe signature. A universe supplies the laws of its primitives, of its
+formers and of its top, and the generic combinators supply the rest.
 \end{theorem}
 
 The two premises on \rulelink{rule:legacy}{\texttt{(alternate reader)}}, \texttt{ran(r)\ ⊆\ dom(e)} and

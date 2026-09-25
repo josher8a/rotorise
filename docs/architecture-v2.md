@@ -667,11 +667,16 @@ with another set, so the certificate reads it as the top. A port that later stat
 can refine it.
 
 **Each universe is its own object.** A universe is its values, its attributes and the bijection
-between them. An adapter is a morphism between two universes. DynamoDB is one universe; a target
-whose attributes are the host's own values would be another, under the same algebra.
+between them. An adapter is a morphism between two universes. DynamoDB is one universe. JSON,
+whose attributes are its own values, is a second universe under the same algebra.
 
-> ASPIRATION: the core is not parametric in the universe. Its values, members and sets copy the
-> DynamoDB universe, so a second universe needs that parameter first.
+**The algebra is parametric in the universe.** The codec laws, the combinators, the term
+language, the judgement and soundness take a universe signature as a parameter. DynamoDB and JSON
+are two instances of the signature.
+
+> ASPIRATION: the analyses are not parametric in the universe. The meet, the exactness rows, the
+> separation rows and the certificate read the constructors of the DynamoDB carriers, so JSON has
+> none of them.
 
 ---
 

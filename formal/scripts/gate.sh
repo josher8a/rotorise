@@ -78,8 +78,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
        [ -f "$f" ] || { echo "missing $f"; exit 1; }
        out=$(lake env lean "$f" 2>&1) || { echo "$out"; exit 1; }
        # warnings are failures here: the generated files are machine-written, so a warning is
-       # the emitter being sloppy rather than a human judgement call, and `Calculus/` itself
-       # builds warning-free
+       # the emitter being sloppy rather than a human judgement call
        [ -z "$out" ] || { echo "$f: $out"; exit 1; }
      done'
 else
