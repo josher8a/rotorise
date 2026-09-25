@@ -21,6 +21,8 @@ import Calculus.Compat
 import Calculus.JSON
 import Calculus.AlgLists
 import Calculus.AlgPositions
+import Calculus.AlgContainers
+import Calculus.AlgRecursion
 import Lean
 
 /-!

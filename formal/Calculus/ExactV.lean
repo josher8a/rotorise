@@ -479,7 +479,7 @@ theorem ExactV_list {pre : List Term} {sp : Option Term} {suf : List Term}
     rw [alignPL_iff pre sp suf hpre hsp hsuf vs]
     cases (alignL (denoteList pre) (denoteOpt sp) (denoteList suf) vs).bind
       (traverse fun cv => cv.1.e cv.2) <;> simp
-  all_goals simp [Adm, denote, listCodec]
+  all_goals simp [Adm, denote, listCodec, Alg.listCodec, carriedCodec, arrV, lA]
 
 /-- **`tuple` is exact** once its components are: the `list` with no suffix. -/
 theorem ExactV_tuple {ts : List Term} {tail : Option Term}
@@ -535,7 +535,7 @@ theorem ExactV_object {fields : Finset Name} {fld : {k // k ∈ fields} → Obje
       ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩ (wildSem wild)).e (.map keys g)).isSome
         = true
     rw [valPresentT_eq]
-    simp only [objectCodec, objectCodecCore, carriedCodec, mapV, objWrite,
+    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, mapV, objWrite,
       objAdmV, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map,
       Option.bind_some]
     by_cases hv : valPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys = true
@@ -545,7 +545,8 @@ theorem ExactV_object {fields : Finset Name} {fld : {k // k ∈ fields} → Obje
     · rw [if_neg hv]
       simp [hv]
   all_goals
-    simp [Adm, AdmBody, denote, bodySem, objectCodec, objectCodecCore, carriedCodec, mapV]
+    simp [Adm, AdmBody, denote, bodySem, objectCodec, Alg.objectCodec, Alg.objectCodecCore,
+        carriedCodec, mapV]
 
 theorem setImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
     (hall : ∀ x ∈ S, (f x).isSome = true)

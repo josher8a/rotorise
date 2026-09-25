@@ -1,5 +1,5 @@
 import Calculus.Prisms
-import Calculus.AlgPositions
+import Calculus.AlgContainers
 
 /-!
 # Products
@@ -522,20 +522,10 @@ for `tuple` and for `array`.
 are proved equal to a `list` below rather than restated, so the positional theory is
 proved one time. -/
 
-/-- §3 `(list)`: the positional product over a prefix, a spread and a suffix. -/
-def listCodec (pre : List Codec) (spread : Option Codec) (suf : List Codec) : Codec :=
-  { T := fun v => match v with
-      | .arr vs => ∃ ps, alignL pre spread suf vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2
-      | _ => False
-    μ := some .L
-    e := fun v => match v with
-      | .arr vs => ((alignL pre spread suf vs).bind
-          (traverse fun cv => cv.1.e cv.2)).map Attr.l
-      | _ => none
-    p := fun a => match a with
-      | .l as => ((alignL pre spread suf as).bind
-          (traverse fun ca => ca.1.p ca.2)).map Value.arr
-      | _ => none }
+/-- §3 `(list)`: the positional product over a prefix, a spread and a suffix. The generic
+    `list` at the `arr` and `L` prisms. -/
+abbrev listCodec (pre : List Codec) (spread : Option Codec) (suf : List Codec) : Codec :=
+  Alg.listCodec arrV lA .L pre spread suf
 
 section ListShape
 variable {pre : List Codec} {sp : Option Codec} {suf : List Codec}
@@ -545,38 +535,17 @@ theorem listCodec_eq :
     listCodec pre sp suf = carriedCodec arrV lA .L
       (fun vs => ∃ ps, alignL pre sp suf vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2)
       (fun vs => (alignL pre sp suf vs).bind (traverse fun cv => cv.1.e cv.2))
-      (fun as => (alignL pre sp suf as).bind (traverse fun ca => ca.1.p ca.2)) := by
-  refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
-    simp [listCodec, carriedCodec, arrV, lA]
+      (fun as => (alignL pre sp suf as).bind (traverse fun ca => ca.1.p ca.2)) := rfl
 
 /-- A list is lawful: the alignment puts each position on its own codec. -/
 theorem lawful_listCodec (hpre : ∀ c ∈ pre, Lawful c) (hsp : ∀ c ∈ sp, Lawful c)
-    (hsuf : ∀ c ∈ suf, Lawful c) : Lawful (listCodec pre sp suf) := by
-  refine listCodec_eq ▸ lawful_carried (fun _ => rfl)
-    (list_retract (fun c h => (hpre c h).core) (fun c h => (hsp c h).core)
-      (fun c h => (hsuf c h).core)) ?_
-  intro as vs hD
-  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
-  obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
-  have hn : vs.length = as.length := by
-    rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
-  rw [alignL_of_slotsL hs hn]
-  exact zip_canonS ds as vs (slotsL_all hpre hsp hsuf hs) hlen htr
+    (hsuf : ∀ c ∈ suf, Lawful c) : Lawful (listCodec pre sp suf) :=
+  Alg.lawful_listCodec (fun _ => rfl) hpre hsp hsuf
 
 /-- Writing and reading a `list` puts every position on its own carrier. -/
 theorem carrier_listCodec (hpre : ∀ c ∈ pre, Carrier c) (hsp : ∀ c ∈ sp, Carrier c)
-    (hsuf : ∀ c ∈ suf, Carrier c) : Carrier (listCodec pre sp suf) := by
-  refine listCodec_eq ▸ carrier_carried ?_ ?_
-  · intro vs as hE
-    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hE
-    obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
-    exact ⟨_, hal, zip_domE ds vs as (slotsL_all hpre hsp hsuf hs) htr⟩
-  · intro as vs hD
-    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
-    obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
-    have hn : vs.length = as.length := by
-      rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
-    exact ⟨_, alignL_of_slotsL hs hn, zip_ranP ds as vs (slotsL_all hpre hsp hsuf hs) htr⟩
+    (hsuf : ∀ c ∈ suf, Carrier c) : Carrier (listCodec pre sp suf) :=
+  Alg.carrier_listCodec hpre hsp hsuf
 
 end ListShape
 
@@ -584,12 +553,13 @@ end ListShape
 theorem tupleCodec_eq_listCodec (cs : List Codec) (tail : Option Codec) :
     tupleCodec cs tail = listCodec cs tail [] := by
   refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
-    simp [tupleCodec, listCodec, alignL_nil_suf]
+    simp [tupleCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA, alignL_nil_suf]
 
 /-- `array` writes what the `list` with one spread writes. -/
 theorem arrayCodec_e (c : Codec) (v : Value) :
     (arrayCodec c).e v = (listCodec [] (some c) []).e v := by
-  cases v <;> (simp only [arrayCodec, listCodec]; try rfl)
+  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA,
+      Option.bind_some]; try rfl)
   rw [alignL_spread]
   show _ = ((traverse (fun q : Codec × Value => q.1.e q.2) _).map Attr.l)
   rw [traverse_replicate_zip c (fun d x => d.e x)]
@@ -597,7 +567,8 @@ theorem arrayCodec_e (c : Codec) (v : Value) :
 /-- …and reads what it reads. -/
 theorem arrayCodec_p (c : Codec) (a : Attr) :
     (arrayCodec c).p a = (listCodec [] (some c) []).p a := by
-  cases a <;> (simp only [arrayCodec, listCodec]; try rfl)
+  cases a <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA,
+      Option.bind_some]; try rfl)
   rw [alignL_spread]
   show _ = ((traverse (fun q : Codec × Attr => q.1.p q.2) _).map Value.arr)
   rw [traverse_replicate_zip c (fun d x => d.p x)]
@@ -605,7 +576,9 @@ theorem arrayCodec_p (c : Codec) (a : Attr) :
 /-- …and carries what it carries. -/
 theorem arrayCodec_T (c : Codec) (v : Value) :
     (arrayCodec c).T v ↔ (listCodec [] (some c) []).T v := by
-  cases v <;> (simp only [arrayCodec, listCodec]; try exact Iff.rfl)
+  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA,
+      Value.arr.injEq, reduceCtorEq,
+    false_and, exists_false, exists_eq_left', iff_self]; try exact Iff.rfl)
   rw [alignL_spread]
   constructor
   · intro h

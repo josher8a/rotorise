@@ -154,22 +154,22 @@ theorem sub_listCodec {pre suf : List Codec} {sp : Option Codec}
     · exact hsp c h1
     · exact hsuf c h1
   refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
-  · cases v with
-    | arr vs =>
-      simp only [listCodec, alignL, Option.map_eq_some_iff, Option.bind_eq_some_iff] at he
-      obtain ⟨as, ⟨ps, ⟨ds, hds, rfl⟩, ht⟩, rfl⟩ := he
-      rw [Ωe_arr, traverse_eq_some.mpr (forall₂_zip_e ds vs as
-        (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
-      rfl
-    | _ => exact nomatch he
-  · cases a with
-    | l as =>
-      simp only [listCodec, alignL, Option.map_eq_some_iff, Option.bind_eq_some_iff] at hp
-      obtain ⟨vs, ⟨ps, ⟨ds, hds, rfl⟩, ht⟩, rfl⟩ := hp
-      rw [Ωp_l, traverse_eq_some.mpr (forall₂_zip_p ds as vs
-        (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
-      rfl
-    | _ => exact nomatch hp
+  · obtain ⟨vs, as, hv, hE, rfl⟩ := carried_e.mp he
+    obtain rfl := arrV.into_out hv
+    simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hE
+    obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hE
+    refine (Ωe_arr vs).trans ?_
+    rw [traverse_eq_some.mpr (forall₂_zip_e ds vs as
+      (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
+    rfl
+  · obtain ⟨as, vs, ha, hD, rfl⟩ := carried_p.mp hp
+    obtain rfl := lA.into_out ha
+    simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hD
+    obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hD
+    refine (Ωp_l as).trans ?_
+    rw [traverse_eq_some.mpr (forall₂_zip_p ds as vs
+      (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
+    rfl
 
 
 /-- The selector returns the answer of one option, and nothing else. -/
@@ -207,7 +207,8 @@ theorem sub_bodySem (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSl
     exact (entryCodec_of (Q := fun c => Sub c Ω) hf hw hc).1 _ _ hce
   · cases a with
     | m keys g =>
-      simp only [bodySem, objectCodec, objectCodecCore, carriedCodec, Option.map_eq_some_iff,
+      simp only [bodySem, objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec,
+          Option.map_eq_some_iff,
         Option.bind_eq_some_iff] at hp
       obtain ⟨q, ⟨p', hmA, hr⟩, rfl⟩ := hp
       cases hmA

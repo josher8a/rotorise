@@ -353,3 +353,63 @@ theorem rcOf_forall {P : Codec V A M → Prop} {rest : RestSem V A M}
 end Fields
 
 end Calculus.Alg
+
+namespace Calculus
+
+/-! ## The keyed map
+
+A key *set* with a function on it, which is what a stored map is, and what §4's field table is
+one stratum up. A `List (String × α)` admits two orderings of one payload and a repeated key;
+both are properties of this type instead.
+
+The keys are strings. The store reads a name as a string, and so does the term language: §4's
+field table is a `MapOf` of slots. Nothing about it is codec-shaped: a `Finset`, a function, and
+a lookup.
+
+**The structure keeps its name `Calculus.MapOf`, outside `Alg`.** Callers extend it
+(`MapOf.restrict`, `MapOf.disjUnion`) and reach each extension by field notation. An abbreviation
+over a generic structure sends field notation to the generic namespace, where no extension is. -/
+
+/-- A map's payload: the key set, and the values on it. A dependent pair rather than a
+    list of pairs, because that is what a stored map is. -/
+structure MapOf (α : Type) where
+  keys : Finset String
+  get  : {k // k ∈ keys} → α
+
+/-- Two map payloads are equal when their name sets are and their values agree on them.
+    The dependent pair needs this said once; the list representation got it from
+    `List.ext`. -/
+theorem MapOf.ext {α : Type} {p q : MapOf α} (hk : p.1 = q.1)
+    (hf : ∀ k (h₁ : k ∈ p.1) (h₂ : k ∈ q.1), p.2 ⟨k, h₁⟩ = q.2 ⟨k, h₂⟩) : p = q := by
+  obtain ⟨kp, fp⟩ := p
+  obtain ⟨kq, fq⟩ := q
+  cases hk
+  exact congrArg (MapOf.mk kp) (funext fun k => hf k.1 k.2 k.2)
+
+/-- The value a `MapOf` gives a name, where it gives one — the lookup a key set with a
+    function on it has. Generic because the *term*'s field table needs it too. -/
+def MapOf.at {α : Type} (m : MapOf α) (k : String) : Option α :=
+  if h : k ∈ m.keys then some (m.get ⟨k, h⟩) else none
+
+/-- A declared name is one the table's key set carries, and conversely. -/
+theorem MapOf.at_eq_some {α : Type} {m : MapOf α} {k : String} {x : α} :
+    m.at k = some x ↔ ∃ h : k ∈ m.keys, m.get ⟨k, h⟩ = x := by
+  simp only [MapOf.at]
+  by_cases h : k ∈ m.1
+  · rw [dif_pos h]
+    exact ⟨fun he => ⟨h, Option.some.inj he⟩, fun ⟨_, he⟩ => by rw [← he]⟩
+  · rw [dif_neg h]
+    exact Iff.intro (fun he => nomatch he) (fun ⟨h', _⟩ => absurd h' h)
+
+/-- Every key of the table is declared, at the value the table gives it. -/
+theorem MapOf.at_of_mem {α : Type} {m : MapOf α} (k : {k // k ∈ m.1}) :
+    m.at k.1 = some (m.2 k) := by
+  simp only [MapOf.at, dif_pos k.2]
+
+/-- A property of every value is a property of every declared name's value. -/
+theorem MapOf.at_forall {α : Type} {m : MapOf α} {Q : α → Prop}
+    (h : ∀ k, Q (m.2 k)) {k x} (hm : m.at k = some x) : Q x := by
+  obtain ⟨hk, rfl⟩ := MapOf.at_eq_some.mp hm
+  exact h ⟨k, hk⟩
+
+end Calculus

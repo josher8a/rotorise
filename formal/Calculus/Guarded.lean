@@ -50,7 +50,7 @@ theorem mono {u u' : Nat} (h : UseAgree u' d c₁ c₂) (hu : u ≤ u') : UseAgr
   match u, u', hu, h with
   | 0, _, _, _ => trivial
   | 1, 1, _, h => h
-  | 1, 2, _, h => AgreeLe.mono h (Nat.sub_le d 1)
+  | 1, 2, _, h => Alg.AgreeLe.mono h (Nat.sub_le d 1)
   | 1, _ + 3, _, h => h _
   | 2, 2, _, h => h
   | 2, _ + 3, _, h => h _
@@ -63,7 +63,7 @@ theorem of_under {u w : Nat} (h : UseAgree (useUnder w) (d + 1) c₁ c₂) (hu :
   unfold useUnder at h
   match w, h with
   | 0, _ => trivial
-  | 1, h => exact AgreeLe.mono h (by omega)
+  | 1, h => exact Alg.AgreeLe.mono h (by omega)
   | 2, h => exact h
   | _ + 3, h => exact h
 

@@ -369,7 +369,7 @@ theorem ExactA_list {pre : List Term} {sp : Option Term} {suf : List Term}
     rw [alignPAL_iff pre sp suf hpre hsp hsuf as]
     cases (alignL (denoteList pre) (denoteOpt sp) (denoteList suf) as).bind
       (traverse fun ca => ca.1.p ca.2) <;> simp
-  all_goals simp [AdmA, denote, listCodec]
+  all_goals simp [AdmA, denote, listCodec, Alg.listCodec, carriedCodec, arrV, lA]
 
 theorem ExactA_tuple {ts : List Term} {tail : Option Term}
     (h : ∀ t ∈ ts, ExactA t) (htl : ∀ t ∈ tail, ExactA t) : ExactA (.tuple ts tail) :=
@@ -431,7 +431,7 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Obje
       ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩ (wildSem wild)).p (.m keys g)).isSome
         = true
     rw [reqPresentT_eq]
-    simp only [objectCodec, objectCodecCore, carriedCodec, mA, objRead,
+    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, mA, objRead,
       objAdmV, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map,
       Option.bind_some]
     by_cases hv : reqPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys = true
@@ -448,7 +448,8 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Obje
     · rw [if_neg hv]
       simp [hv]
   all_goals
-    simp [AdmA, AdmABody, denote, bodySem, objectCodec, objectCodecCore, carriedCodec, mA]
+    simp [AdmA, AdmABody, denote, bodySem, objectCodec, Alg.objectCodec, Alg.objectCodecCore,
+        carriedCodec, mA]
 
 /-- **`opaque` reads exactly what its row says**, definitionally, and for the reason
     `ExactV_opaq` gives at length: `p := (muCodec opaqStep).p`, so the row and `dom(p)` are

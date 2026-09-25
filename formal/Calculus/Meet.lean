@@ -4406,7 +4406,8 @@ theorem AdmA_list_at {p₁ s₁ p₂ s₂ pz sz : List Term} {q₁ q₂ qz : Opt
                     simp only [Option.map_some, ← AdmAList_eq_map] at ha hb
                     obtain ⟨hq1, hq2⟩ :=
                       traverse_p_agree hF hlen (zipPA_forall₂ ha) (zipPA_forall₂ hb)
-                    simp only [denote_list, listCodec, alignL, denoteList_eq, denoteOpt_eq_map,
+                    simp only [denote_list, listCodec, Alg.listCodec, carriedCodec, arrV, lA,
+                        alignL, denoteList_eq, denoteOpt_eq_map,
                       slotsL_eq_rowOfG, rowOfG_map, h₁, h₂, hz, Option.map_some,
                       Option.bind_some]
                     exact ⟨congrArg (Option.map Value.arr) hq1,
@@ -5162,7 +5163,8 @@ theorem bodySem_p_congr {c d : Body} {keys : Finset Name} {g : {k // k ∈ keys}
   | mk fc Fc wc =>
     cases d with
     | mk fd Fd wd =>
-      simp only [bodySem, objectCodec, objectCodecCore, carriedCodec, mapV, mA, hkc, Option.bind_some]
+      simp only [bodySem, objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, mapV,
+          mA, hkc, Option.bind_some]
       simp only [objRead]
       simp only [Body.fields_mk, Body.at_mk] at hc hd
       rw [if_pos hc, if_pos hd, Option.map_map, Option.map_map]

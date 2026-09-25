@@ -359,212 +359,29 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) :=
   ⟨set_retract h.core, set_canon h, set_writes h.core⟩
 
 
-/-! ### Keyed lookup and traversal facts (the keyed product consumes these) -/
+/-! ### The keyed product
 
-/-- The guard characterizations. One `decide` over the key set replaces the `List.all`,
-    and the `Nodup` premise that used to accompany every use of them is gone. -/
-theorem valPresentB_spec {sems : MapOf FieldSem} {names : Finset Name}
-    (h : valPresentB sems names = true) {k fs} (hm : sems.at k = some fs)
-    (hno : ∀ c, fs ≠ FieldSem.opt c) : k ∈ names := by
-  obtain ⟨hk, rfl⟩ := MapOf.at_eq_some.mp hm
-  have hb := of_decide_eq_true h ⟨k, hk⟩
-  cases hs : sems.2 ⟨k, hk⟩ with
-  | opt c => rw [hs] at hno; exact absurd rfl (hno c)
-  | req c => rw [hs] at hb; exact of_decide_eq_true hb
+The guards, the entry steps, the rest policy and the two clauses of §2 read no carrier
+constructor, so they are the generic layer's. The aliases give them their names here, and the
+two laws below are the generic ones at the `map` and `M` prisms. -/
 
-theorem valPresentB_of {sems : MapOf FieldSem} {names : Finset Name}
-    (h : ∀ k fs, sems.at k = some fs → (∀ c, fs ≠ FieldSem.opt c) → k ∈ names) :
-    valPresentB sems names = true := by
-  refine decide_eq_true fun k => ?_
-  cases hs : sems.2 k with
-  | opt c => simp [valPresentAt]
-  | req c =>
-    simpa [valPresentAt, hs] using
-      h k.1 (.req c) (by rw [MapOf.at_of_mem k, hs]) (fun _ h' => nomatch h')
-
-theorem reqPresentB_spec {sems : MapOf FieldSem} {names : Finset Name}
-    (h : reqPresentB sems names = true) {k c} (hm : sems.at k = some (.req c)) :
-    k ∈ names := by
-  obtain ⟨hk, hs⟩ := MapOf.at_eq_some.mp hm
-  have hb := of_decide_eq_true h ⟨k, hk⟩
-  rw [hs] at hb
-  exact of_decide_eq_true hb
-
-theorem reqPresentB_of {sems : MapOf FieldSem} {names : Finset Name}
-    (h : ∀ k c, sems.at k = some (.req c) → k ∈ names) :
-    reqPresentB sems names = true := by
-  refine decide_eq_true fun k => ?_
-  cases hs : sems.2 k with
-  | req c => simpa [reqPresentAt, hs] using h k.1 c (by rw [MapOf.at_of_mem k, hs])
-  | opt c => simp [reqPresentAt]
-
-
-/-! ### The keyed steps: round trip, definedness, agreement, and name preservation -/
-
-
-
-/-! ### Carriers, continued: objects
-
-    Placed here, after the name-dispatch helpers `p` needs. -/
-
-
-
-
-/-- The same two, stated on the step the payload pair actually takes now: dispatch by
-    name, then run that entry's codec. -/
-theorem entry_domE' {sems : MapOf FieldSem} {rc? : Option Codec}
-    (hs : ∀ k, Carrier (sems.2 k).codec) (hrc : ∀ c ∈ rc?, Carrier c)
-    {k : Name} {v : Value} {a : Attr}
-    (h : (entryCodec sems rc? k).bind (fun c => c.e v) = some a) :
-    objEntryT sems rc? (k, v) := by
-  cases hc : entryCodec sems rc? k with
-  | none => rw [hc] at h; exact nomatch h
-  | some c =>
-    rw [hc] at h
-    exact objEntryT_eq.mpr ⟨c, hc, (entryCodec_of hs hrc hc).domE h⟩
-
-theorem entry_ranP' {sems : MapOf FieldSem} {rc? : Option Codec}
-    (hs : ∀ k, Carrier (sems.2 k).codec) (hrc : ∀ c ∈ rc?, Carrier c)
-    {k : Name} {a : Attr} {v : Value}
-    (h : (entryCodec sems rc? k).bind (fun c => c.p a) = some v) :
-    objEntryT sems rc? (k, v) := by
-  cases hc : entryCodec sems rc? k with
-  | none => rw [hc] at h; exact nomatch h
-  | some c =>
-    rw [hc] at h
-    exact objEntryT_eq.mpr ⟨c, hc, (entryCodec_of hs hrc hc).ranP h⟩
-
-/-! #### The rest policy fixes both halves
-
-`objectCodecCore` is stated over a free `rc? : Option Codec` and a free filter
-`kn : Name → Bool` because that is what its payload pair takes. Nothing instantiates
-them independently: the object rule reads both off one `rest : RestSem`, as `rcOf rest`
-and `keepB rest sems`. The three lemmas here are what that costs, discharged once —
-they used to be hypotheses on five signatures, and one of them was re-proved by hand at
-the call site in `Soundness.lean`. -/
-
-export Alg (rcOf_forall)
-
-/-- What object-encode produces, `keepB` keeps: under `drop` an encoded entry's name
-    is declared, and the other policies keep everything. -/
-theorem keepB_of_entryWrite {sems : MapOf FieldSem} {rest : RestSem} :
-    ∀ k v a, (entryCodec sems (rcOf rest) k).bind (fun c => c.e v) = some a →
-      keepB rest sems k = true := by
-  intro k v a h
-  cases rest with
-  | drop =>
-    simp only [entryCodec] at h
-    cases hsp : sems.at k with
-    | none => rw [hsp] at h; simp only [rcOf, Option.bind_none] at h; exact nomatch h
-    | some fs => simp [keepB, hsp]
-  | refuse => rfl
-  | codec rc => rfl
-
-/-- Declared names pass every keep filter. -/
-theorem keepB_of_declared {sems : MapOf FieldSem} {rest : RestSem} :
-    ∀ k, (sems.at k).isSome = true → keepB rest sems k = true := by
-  intro k h
-  cases rest with
-  | drop => exact h
-  | refuse => rfl
-  | codec rc => rfl
+export Alg (valPresentB_spec valPresentB_of reqPresentB_spec reqPresentB_of entry_domE'
+  entry_ranP' rcOf_forall keepB_of_entryWrite keepB_of_declared object_retract object_canonS)
 
 /-- §4's held set follows from the entry carriers. The current-schema reader returns only stored
     entries, so the object row needs no extra reader premise. -/
 theorem carrier_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hsems : ∀ k, Carrier (sems.2 k).codec)
     (hrc : ∀ rc, rcOf rest = some rc → Carrier rc) :
-    Carrier (objectCodec sems rest) := by
-  show Carrier (objectCodecCore sems (rcOf rest) (keepB rest sems))
-  refine objectCodecCore_eq ▸ carrier_carried ?_ ?_
-  · rintro p q h
-    obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp h
-    exact ⟨hval, fun k => entry_domE' hsems hrc (funImage_some hg k)⟩
-  · rintro q p h
-    obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
-    constructor
-    · refine valPresentB_of fun k fs hm hno => ?_
-      have hkn : keepB rest sems k = true := keepB_of_declared k (by rw [hm]; rfl)
-      cases fs with
-      | opt c => exact absurd rfl (hno c)
-      | req c =>
-        exact Finset.mem_filter.mpr ⟨reqPresentB_spec hreq hm, by simpa using hkn⟩
-    · intro k
-      exact entry_ranP' hsems hrc (funImage_some hd k)
-
-/-! #### §2's clauses for the object's payload pair
-
-Each is proved once, from core children, and `lawful_objectCodec` consumes them. -/
-
-section ObjectLaws
-variable {sems : MapOf FieldSem} {rest : RestSem}
-
-/-- (R): a written row is complete, so reading it back is the entrywise round trip. -/
-theorem object_retract (hf : ∀ k, LawfulCore (sems.2 k).codec)
-    (hrc : ∀ c ∈ rcOf rest, LawfulCore c) :
-    ∀ p q, objWrite sems (rcOf rest) p = some q →
-      objRead sems (rcOf rest) (keepB rest sems) q = some p := by
-  rintro p q h
-  obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp h
-  -- every name of a writable map is kept, so the `drop` filter is the identity
-  have hfilter : p.1.filter (keepB rest sems ·) = p.1 :=
-    Finset.filter_eq_self.mpr fun k hk => by
-      simpa using keepB_of_entryWrite k (p.2 ⟨k, hk⟩) _ (funImage_some hg ⟨k, hk⟩)
-  refine objRead_eq.mpr ⟨reqPresentB_of fun k c hm =>
-    valPresentB_spec hval hm (fun _ h' => nomatch h'), ?_⟩
-  refine ⟨fun k => p.2 ⟨k.1, (Finset.mem_filter.mp k.2).1⟩, funImage_eq fun k => ?_, ?_⟩
-  · have hw := funImage_some hg ⟨k.1, (Finset.mem_filter.mp k.2).1⟩
-    cases hc : entryCodec sems (rcOf rest) k.1 with
-    | none => rw [hc] at hw; exact nomatch hw
-    | some c =>
-      simp only [hc, Option.bind_some] at hw ⊢
-      exact (entryCodec_of hf hrc hc).retract hw
-  · refine MapOf.ext ?_ ?_
-    · exact hfilter.symm
-    · intro k h₁ h₂
-      have hk1 : k ∈ p.1.filter (keepB rest sems ·) := by rw [hfilter]; exact h₁
-      simp only [dif_pos hk1]
-
-/-- Canonical reads: a policy that keeps every name writes back the map that was read. -/
-theorem object_canonS (hf : ∀ k, Lawful (sems.2 k).codec)
-    (hrc : ∀ c ∈ rcOf rest, Lawful c) (hnd : rest ≠ .drop) :
-    ∀ q p, objRead sems (rcOf rest) (keepB rest sems) q = some p →
-      objWrite sems (rcOf rest) p = some q := by
-  rintro q p h
-  obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
-  have hkeep : ∀ k, keepB rest sems k = true := by
-    intro k; cases rest with
-    | drop => exact absurd rfl hnd
-    | refuse => rfl
-    | codec _ => rfl
-  have hfilter : q.1.filter (keepB rest sems ·) = q.1 :=
-    Finset.filter_eq_self.mpr fun k _ => by simpa using hkeep k
-  have hval : valPresentB sems (q.1.filter (keepB rest sems ·)) = true := by
-    refine valPresentB_of fun k fs hm hno => ?_
-    cases fs with
-    | opt c => exact absurd rfl (hno c)
-    | req c => exact Finset.mem_filter.mpr ⟨reqPresentB_spec hreq hm, by simpa using hkeep k⟩
-  refine objWrite_eq.mpr ⟨hval, fun k => q.2 ⟨k.1, (Finset.mem_filter.mp k.2).1⟩,
-    funImage_eq fun k => ?_, MapOf.ext hfilter.symm fun _ _ _ => rfl⟩
-  have hp := funImage_some hd k
-  cases hc : entryCodec sems (rcOf rest) k.1 with
-  | none => rw [hc] at hp; exact nomatch hp
-  | some c =>
-    simp only [hc, Option.bind_some] at hp ⊢
-    exact (entryCodec_of hf hrc hc).canon hp
-
-end ObjectLaws
+    Carrier (objectCodec sems rest) :=
+  Alg.carrier_objectCodec hsems hrc
 
 /-- The keyed product — the doc's current-schema `object`. -/
 theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hf : ∀ k, Lawful (sems.2 k).codec)
     (hrest : ∀ c, rest = .codec c → Lawful c) (hnd : rest ≠ .drop) :
-    Lawful (objectCodec sems rest) := by
-  show Lawful (objectCodecCore sems (rcOf rest) (keepB rest sems))
-  have hf' := fun k => (hf k).core
-  have hrc' := fun c hc => ((rcOf_forall hrest) c hc).core
-  exact objectCodecCore_eq ▸ lawful_carried (fun _ => rfl)
-    (object_retract hf' hrc') (object_canonS hf (rcOf_forall hrest) hnd)
+    Lawful (objectCodec sems rest) :=
+  Alg.lawful_objectCodec (fun _ => rfl) hf hrest hnd
 
 /-! ### Kind separation, and `opaque`'s fixpoint
 

@@ -1,4 +1,5 @@
 import Calculus.Sums
+import Calculus.AlgRecursion
 import Mathlib.Data.Finset.Lattice.Fold
 
 /-!
@@ -90,45 +91,22 @@ theorem Attr.depth_map_entry {keys : Finset Name} {f : {k // k ∈ keys} → Att
   Nat.succ_le_succ
     (Finset.le_sup (f := fun k => Attr.depth (f k)) (Finset.mem_attach _ k))
 
-/-! ## Agreement below a depth -/
+/-! ## Agreement below a depth
 
-/-- Two codecs agree on every input of depth at most `d`, on both sides. `Lawful` relates the
-    two sides, so a statement about one side alone cannot carry the laws to a limit. -/
-structure AgreeLe (d : Nat) (c₁ c₂ : Codec) : Prop where
-  e : ∀ v, Value.depth v ≤ d → c₁.e v = c₂.e v
-  p : ∀ a, Attr.depth a ≤ d → c₁.p a = c₂.p a
+Agreement, the guard, the recursive codec and its laws read the universe only through a depth on
+each carrier, so they are the generic layer's. Here they sit at `Value.depth` and `Attr.depth`.
+The aliases give the names that callers write in full; field notation (`h.mono`, `h.trans`)
+reaches the generic lemmas through the abbreviation. -/
+
+/-- Two codecs agree on every input of depth at most `d`, on both sides. -/
+abbrev AgreeLe (d : Nat) (c₁ c₂ : Codec) : Prop := Alg.AgreeLe Value.depth Attr.depth d c₁ c₂
 
 namespace AgreeLe
-
-variable {d : Nat} {c₁ c₂ c₃ : Codec}
-
-/-- A codec agrees with itself at every depth. -/
-theorem refl (d : Nat) (c : Codec) : AgreeLe d c c := ⟨fun _ _ => rfl, fun _ _ => rfl⟩
-
-/-- Agreement below a depth is symmetric. -/
-theorem symm (h : AgreeLe d c₁ c₂) : AgreeLe d c₂ c₁ :=
-  ⟨fun v hv => (h.e v hv).symm, fun a ha => (h.p a ha).symm⟩
-
-/-- Agreement below a depth is transitive. -/
-theorem trans (h : AgreeLe d c₁ c₂) (h' : AgreeLe d c₂ c₃) : AgreeLe d c₁ c₃ :=
-  ⟨fun v hv => (h.e v hv).trans (h'.e v hv), fun a ha => (h.p a ha).trans (h'.p a ha)⟩
-
-/-- Agreement below a depth holds below every smaller depth. -/
-theorem mono {d' : Nat} (h : AgreeLe d c₁ c₂) (hd : d' ≤ d) : AgreeLe d' c₁ c₂ :=
-  ⟨fun v hv => h.e v (le_trans hv hd), fun a ha => h.p a (le_trans ha hd)⟩
+export Alg.AgreeLe (refl of_eq eq_of_forall)
 
 /-- Every input has depth at least one, so any two codecs agree below depth zero. -/
 theorem zero (c₁ c₂ : Codec) : AgreeLe 0 c₁ c₂ :=
-  ⟨fun v hv => absurd hv (Nat.not_le.mpr (Value.depth_pos v)),
-   fun a ha => absurd ha (Nat.not_le.mpr (Attr.depth_pos a))⟩
-
-/-- Two codecs with one pair of halves agree at every depth. -/
-theorem of_eq (he : c₁.e = c₂.e) (hp : c₁.p = c₂.p) : AgreeLe d c₁ c₂ :=
-  ⟨fun v _ => congrFun he v, fun a _ => congrFun hp a⟩
-
-/-- …and agreement at every depth is one pair of halves, because every input has a depth. -/
-theorem eq_of_forall (h : ∀ d, AgreeLe d c₁ c₂) : c₁.e = c₂.e ∧ c₁.p = c₂.p :=
-  ⟨funext fun v => (h _).e v le_rfl, funext fun a => (h _).p a le_rfl⟩
+  Alg.AgreeLe.zero Value.depth_pos Attr.depth_pos c₁ c₂
 
 end AgreeLe
 
@@ -136,20 +114,13 @@ end AgreeLe
 
 /-- **The guard, on a body.** The body reads its argument only at inputs strictly shallower than
     its own input, on both sides. -/
-def Contractive (B : Codec → Codec) : Prop :=
-  ∀ d c₁ c₂, AgreeLe d c₁ c₂ → AgreeLe (d + 1) (B c₁) (B c₂)
+abbrev Contractive (B : Codec → Codec) : Prop := Alg.Contractive Value.depth Attr.depth B
 
-export Alg (muStage muStage_induct)
+export Alg (muStage muStage_induct carrier_muCodec agreeLe_muCodec select_congr agreeLe_altCodec
+  agreeLe_restrict traverse_zip_congr traverse_row_congr)
 
-/-- **The recursive codec**: each input read at the stage its own depth names. The member is
-    `⊤`, because the stages need not agree on one. The held set is the
-    write domain, so the held set of a recursive term is its admission with no induction over
-    the stages. -/
-def muCodec (B : Codec → Codec) : Codec :=
-  { T := fun v => ((muStage B (Value.depth v)).e v).isSome = true
-    μ := none
-    e := fun v => (muStage B (Value.depth v)).e v
-    p := fun a => (muStage B (Attr.depth a)).p a }
+/-- **The recursive codec**: each input read at the stage its own depth names. -/
+abbrev muCodec (B : Codec → Codec) : Codec := Alg.muCodec Value.depth Attr.depth B
 
 /-- The limit writes a value at the stage the value's depth names. -/
 theorem muCodec_e (B : Codec → Codec) (v : Value) :
@@ -161,76 +132,38 @@ theorem muCodec_p (B : Codec → Codec) (a : Attr) :
 
 /-- Each stage agrees with the next one below its own index. -/
 theorem muStage_stable {B : Codec → Codec} (hB : Contractive B) :
-    ∀ n, AgreeLe n (muStage B n) (muStage B (n + 1))
-  | 0 => AgreeLe.zero _ _
-  | n + 1 => hB n _ _ (muStage_stable hB n)
+    ∀ n, AgreeLe n (muStage B n) (muStage B (n + 1)) :=
+  Alg.muStage_stable Value.depth_pos Attr.depth_pos hB
 
 /-- **Stability.** Past the depth of the input, a later stage changes nothing. -/
 theorem muStage_agree {B : Codec → Codec} (hB : Contractive B) {d : Nat} :
-    ∀ k, AgreeLe d (muStage B d) (muStage B (d + k))
-  | 0 => AgreeLe.refl _ _
-  | k + 1 => (muStage_agree hB k).trans ((muStage_stable hB (d + k)).mono (by omega))
+    ∀ k, AgreeLe d (muStage B d) (muStage B (d + k)) :=
+  Alg.muStage_agree Value.depth_pos Attr.depth_pos hB
 
 /-- Any two stages at or past `d` agree below `d`. -/
 theorem muStage_agree_le {B : Codec → Codec} (hB : Contractive B) {d n : Nat} (h : d ≤ n) :
-    AgreeLe d (muStage B d) (muStage B n) := by
-  obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
-  exact muStage_agree hB k
+    AgreeLe d (muStage B d) (muStage B n) :=
+  Alg.muStage_agree_le Value.depth_pos Attr.depth_pos hB h
 
 /-- The limit agrees with the stage `n` below `n`. -/
 theorem muCodec_agree {B : Codec → Codec} (hB : Contractive B) (n : Nat) :
     AgreeLe n (muCodec B) (muStage B n) :=
-  ⟨fun v hv => (muStage_agree_le hB hv).e v le_rfl,
-   fun a ha => (muStage_agree_le hB ha).p a le_rfl⟩
+  Alg.muCodec_agree Value.depth_pos Attr.depth_pos hB n
 
 /-- **The fixed point, write side.** The limit writes what its body writes over the limit. -/
 theorem muCodec_e_fix {B : Codec → Codec} (hB : Contractive B) (v : Value) :
-    (muCodec B).e v = (B (muCodec B)).e v := by
-  obtain ⟨k, hk⟩ : ∃ k, Value.depth v = k + 1 :=
-    ⟨Value.depth v - 1, by have := Value.depth_pos v; omega⟩
-  rw [muCodec_e, hk]
-  exact (hB k _ _ (muCodec_agree hB k).symm).e v (by omega)
+    (muCodec B).e v = (B (muCodec B)).e v :=
+  Alg.muCodec_e_fix Value.depth_pos Attr.depth_pos hB v
 
 /-- **The fixed point, read side.** -/
 theorem muCodec_p_fix {B : Codec → Codec} (hB : Contractive B) (a : Attr) :
-    (muCodec B).p a = (B (muCodec B)).p a := by
-  obtain ⟨k, hk⟩ : ∃ k, Attr.depth a = k + 1 :=
-    ⟨Attr.depth a - 1, by have := Attr.depth_pos a; omega⟩
-  rw [muCodec_p, hk]
-  exact (hB k _ _ (muCodec_agree hB k).symm).p a (by omega)
+    (muCodec B).p a = (B (muCodec B)).p a :=
+  Alg.muCodec_p_fix Value.depth_pos Attr.depth_pos hB a
 
-/-- **Lawful stages give a lawful limit.** The write side reads at the depth of the value and
-    the read side at the depth of the attribute. Stability moves both answers to the stage
-    at the larger of the two depths, and that stage is lawful. -/
+/-- **Lawful stages give a lawful limit.** -/
 theorem lawful_muCodec {B : Codec → Codec} (hB : Contractive B)
-    (hs : ∀ n, Lawful (muStage B n)) : Lawful (muCodec B) := by
-  refine ⟨fun {v a} he => ?_, fun {a v} hp => ?_, fun hμ => nomatch hμ⟩
-  · have hN := muStage_agree_le hB (Nat.le_max_left (Value.depth v) (Attr.depth a))
-    rw [muCodec_e, hN.e v le_rfl] at he
-    rw [muCodec_p, (muStage_agree_le hB (Nat.le_max_right (Value.depth v) (Attr.depth a))).p a
-      le_rfl]
-    exact (hs _).retract he
-  · have hN := muStage_agree_le hB (Nat.le_max_left (Attr.depth a) (Value.depth v))
-    rw [muCodec_p, hN.p a le_rfl] at hp
-    rw [muCodec_e, (muStage_agree_le hB (Nat.le_max_right (Attr.depth a) (Value.depth v))).e v
-      le_rfl]
-    exact (hs _).canon hp
-
-/-- A lawful limit is on its held set. The held set is the write domain, and a lawful codec writes
-    every value it reads. -/
-theorem carrier_muCodec {B : Codec → Codec} (h : Lawful (muCodec B)) : Carrier (muCodec B) :=
-  ⟨fun he => Option.isSome_iff_exists.mpr ⟨_, he⟩,
-   fun hp => Option.isSome_iff_exists.mpr ⟨_, h.canon hp⟩⟩
-
-/-- Two bodies that preserve agreement below `d` give limits that agree below `d`. -/
-theorem agreeLe_muCodec {d : Nat} {B₁ B₂ : Codec → Codec}
-    (h : ∀ c₁ c₂, AgreeLe d c₁ c₂ → AgreeLe d (B₁ c₁) (B₂ c₂)) :
-    AgreeLe d (muCodec B₁) (muCodec B₂) := by
-  have hs : ∀ n, AgreeLe d (muStage B₁ n) (muStage B₂ n) := fun n => by
-    induction n with
-    | zero => exact AgreeLe.refl _ _
-    | succ n ih => exact h _ _ ih
-  exact ⟨fun v hv => (hs _).e v hv, fun a ha => (hs _).p a ha⟩
+    (hs : ∀ n, Lawful (muStage B n)) : Lawful (muCodec B) :=
+  Alg.lawful_muCodec Value.depth_pos Attr.depth_pos hB hs
 
 /-! ## The combinators keep agreement
 
@@ -238,79 +171,17 @@ A container reads its element codecs one layer down, so it turns agreement below
 agreement below `d + 1`. A sum, a restriction and a relabelling read the same input, so they
 keep the depth. -/
 
-/-- First-match resolution reads each option at the input only. -/
-theorem select_congr {A R : Type} {run : Codec → A → Option R} {x : A} :
-    ∀ {os₁ os₂ : List Codec}, List.Forall₂ (fun o₁ o₂ => run o₁ x = run o₂ x) os₁ os₂ →
-      select os₁ run x = select os₂ run x
-  | [], [], .nil => rfl
-  | o₁ :: os₁, o₂ :: os₂, .cons h hs => by
-      have ih := select_congr hs
-      simp only [select, List.find?_cons] at ih ⊢
-      rw [h]
-      cases run o₂ x <;> simp [ih, h]
-
-/-- A sum reads its options at its own input, so it keeps the depth of their agreement. -/
-theorem agreeLe_altCodec {d : Nat} {os₁ os₂ : List Codec} (μ₁ μ₂ : Option Member)
-    (h : List.Forall₂ (AgreeLe d) os₁ os₂) : AgreeLe d (altCodec os₁ μ₁) (altCodec os₂ μ₂) :=
-  ⟨fun v hv => select_congr (h.imp fun _ _ hc => hc.e v hv),
-   fun a ha => select_congr (h.imp fun _ _ hc => hc.p a ha)⟩
-
-/-- A restriction reads its codec at its own input, so it keeps the depth. -/
-theorem agreeLe_restrict {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂) (q : Value → Bool) :
-    AgreeLe d (c₁.restrict q) (c₂.restrict q) :=
-  ⟨fun v hv => congrArg (fun x => if q v = true then x else none) (h.e v hv),
-   fun a ha => congrArg (fun x => Option.bind x fun v => if q v = true then some v else none)
-     (h.p a ha)⟩
-
 export Alg (optionRel_map optionRel_bind optionRel_isSome slots_rel slotsL_rel)
-
-/-- A row of codecs that agree below `d`, zipped with inputs no deeper than `d`, traverses to
-    one answer. -/
-theorem traverse_zip_congr {α β : Type} {d : Nat} {run : Codec → α → Option β}
-    {depth : α → Nat} (hrun : ∀ c₁ c₂ x, AgreeLe d c₁ c₂ → depth x ≤ d → run c₁ x = run c₂ x) :
-    ∀ {ds₁ ds₂ : List Codec} (xs : List α), List.Forall₂ (AgreeLe d) ds₁ ds₂ →
-      (∀ x ∈ xs, depth x ≤ d) →
-      traverse (fun cx => run cx.1 cx.2) (ds₁.zip xs)
-        = traverse (fun cx => run cx.1 cx.2) (ds₂.zip xs)
-  | _, _, [], .nil, _ => rfl
-  | _, _, [], .cons _ _, _ => rfl
-  | _, _, _ :: _, .nil, _ => rfl
-  | _, _, x :: xs, .cons hc hcs, hx => by
-      simp only [List.zip_cons_cons, traverse_cons]
-      rw [hrun _ _ x hc (hx x List.mem_cons_self),
-        traverse_zip_congr hrun xs hcs fun y hy => hx y (List.mem_cons_of_mem _ hy)]
-
-/-- …and so does a row that the shape may refuse, when both rows refuse together. -/
-theorem traverse_row_congr {α β : Type} {d : Nat} {run : Codec → α → Option β}
-    {depth : α → Nat} (hrun : ∀ c₁ c₂ x, AgreeLe d c₁ c₂ → depth x ≤ d → run c₁ x = run c₂ x)
-    (xs : List α) (hx : ∀ x ∈ xs, depth x ≤ d) :
-    ∀ {r₁ r₂ : Option (List Codec)}, Option.Rel (List.Forall₂ (AgreeLe d)) r₁ r₂ →
-      (r₁.map (·.zip xs)).bind (traverse fun cx => run cx.1 cx.2)
-        = (r₂.map (·.zip xs)).bind (traverse fun cx => run cx.1 cx.2)
-  | _, _, .none => rfl
-  | _, _, .some h => traverse_zip_congr hrun xs h hx
 
 /-- A `list` reads each element one layer down, so it turns agreement below `d` into agreement
     below `d + 1`. -/
 theorem agreeLe_listCodec {d : Nat} {pre₁ pre₂ suf₁ suf₂ : List Codec}
     {sp₁ sp₂ : Option Codec} (hpre : List.Forall₂ (AgreeLe d) pre₁ pre₂)
     (hsp : Option.Rel (AgreeLe d) sp₁ sp₂) (hsuf : List.Forall₂ (AgreeLe d) suf₁ suf₂) :
-    AgreeLe (d + 1) (listCodec pre₁ sp₁ suf₁) (listCodec pre₂ sp₂ suf₂) := by
-  refine ⟨fun v hv => ?_, fun a ha => ?_⟩
-  · cases v with
-    | arr vs =>
-      exact congrArg (Option.map Attr.l) (traverse_row_congr (fun _ _ x hc hx => hc.e x hx) vs
-        (fun x hx => by
-          have := Value.depth_le_depthL hx; simp only [Value.depth] at hv; omega)
-        (slotsL_rel hpre hsp hsuf vs.length))
-    | _ => rfl
-  · cases a with
-    | l as =>
-      exact congrArg (Option.map Value.arr) (traverse_row_congr (fun _ _ x hc hx => hc.p x hx) as
-        (fun x hx => by
-          have := Attr.depth_le_depthL hx; simp only [Attr.depth] at ha; omega)
-        (slotsL_rel hpre hsp hsuf as.length))
-    | _ => rfl
+    AgreeLe (d + 1) (listCodec pre₁ sp₁ suf₁) (listCodec pre₂ sp₂ suf₂) :=
+  Alg.agreeLe_listCodec (pV := arrV) (pA := lA) (μL := .L)
+    (fun _ _ hx => Nat.succ_le_succ (Value.depth_le_depthL hx))
+    (fun _ _ hx => Nat.succ_le_succ (Attr.depth_le_depthL hx)) hpre hsp hsuf
 
 /-- An array is the spread-only `list`, and so reads its elements one layer down. -/
 theorem agreeLe_arrayCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂) :
@@ -352,86 +223,18 @@ theorem agreeLe_setCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂)
 
 /-! ### Objects
 
-An object reads its entry codecs at the entries of a map, one layer below the map. The presence
-guards and the name filter read the shape of each field and never its codec, so two tables of one
-shape guard and filter alike. -/
+An object reads its entry codecs at the entries of a map, one layer below the map. -/
 
-section ObjectAgree
-variable {R : Codec → Codec → Prop} {keys : Finset Name} {F₁ F₂ : {k // k ∈ keys} → FieldSem}
-
-/-- A lookup in two tables of one key set is related where the fields are. -/
-theorem mapOf_at_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) (k : Name) :
-    Option.Rel (FieldSem.Rel R) ((⟨keys, F₁⟩ : MapOf FieldSem).at k)
-      ((⟨keys, F₂⟩ : MapOf FieldSem).at k) := by
-  unfold MapOf.at
-  split
-  · exact .some (hF _)
-  · exact .none
-
-/-- The codec an entry goes through is related where the table and the rest codec are. -/
-theorem entryCodec_rel {rc₁ rc₂ : Option Codec} (hr : Option.Rel R rc₁ rc₂) :
-    ∀ {o₁ o₂ : Option FieldSem}, Option.Rel (FieldSem.Rel R) o₁ o₂ →
-      Option.Rel R (match o₁ with | some fs => some fs.codec | none => rc₁)
-        (match o₂ with | some fs => some fs.codec | none => rc₂)
-  | _, _, .none => hr
-  | _, _, .some h => .some h.codec
-
-/-- Two tables of one shape guard the write side alike. -/
-theorem valPresentB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) (names : Finset Name) :
-    valPresentB ⟨keys, F₁⟩ names = valPresentB ⟨keys, F₂⟩ names :=
-  decide_eq_decide.mpr (forall_congr' fun k => by rw [(hF k).valPresentAt names k.1])
-
-/-- Two tables of one shape guard the read side alike. -/
-theorem reqPresentB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) (names : Finset Name) :
-    reqPresentB ⟨keys, F₁⟩ names = reqPresentB ⟨keys, F₂⟩ names :=
-  decide_eq_decide.mpr (forall_congr' fun k => by rw [(hF k).reqPresentAt names k.1])
-
-/-- Two tables of one shape filter the names alike. -/
-theorem keepB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) :
-    ∀ {r₁ r₂ : RestSem}, RestSem.Rel R r₁ r₂ → keepB r₁ ⟨keys, F₁⟩ = keepB r₂ ⟨keys, F₂⟩
-  | .drop, .drop, _ => funext fun k => optionRel_isSome (mapOf_at_rel hF k)
-  | .refuse, .refuse, _ => rfl
-  | .codec _, .codec _, _ => rfl
-
-end ObjectAgree
+export Alg (mapOf_at_rel entryCodec_rel valPresentB_rel reqPresentB_rel keepB_rel)
 
 /-- An object reads each entry one layer below the map, so it turns agreement below `d` into
     agreement below `d + 1`. -/
 theorem agreeLe_objectCodec {d : Nat} {keys : Finset Name} {F₁ F₂ : {k // k ∈ keys} → FieldSem}
     {r₁ r₂ : RestSem} (hF : ∀ k, FieldSem.Rel (AgreeLe d) (F₁ k) (F₂ k))
     (hr : RestSem.Rel (AgreeLe d) r₁ r₂) :
-    AgreeLe (d + 1) (objectCodec ⟨keys, F₁⟩ r₁) (objectCodec ⟨keys, F₂⟩ r₂) := by
-  have hent : ∀ k, Option.Rel (AgreeLe d) (entryCodec ⟨keys, F₁⟩ (rcOf r₁) k)
-      (entryCodec ⟨keys, F₂⟩ (rcOf r₂) k) := fun k => entryCodec_rel hr.rcOf (mapOf_at_rel hF k)
-  have hbind : ∀ {α β : Type} (run : Codec → α → Option β) (x : α),
-      (∀ c₁ c₂, AgreeLe d c₁ c₂ → run c₁ x = run c₂ x) → ∀ k,
-      (entryCodec ⟨keys, F₁⟩ (rcOf r₁) k).bind (run · x)
-        = (entryCodec ⟨keys, F₂⟩ (rcOf r₂) k).bind (run · x) := fun run x hrun k =>
-    optionRel_bind (fun _ _ h => hrun _ _ h) (hent k)
-  unfold objectCodec
-  rw [keepB_rel hF hr]
-  refine ⟨fun v hv => ?_, fun a ha => ?_⟩
-  · cases v with
-    | map ks f =>
-      refine congrArg (Option.map mA.into) ?_
-      simp only [mapV, Option.bind_some, objWrite, valPresentB_rel hF]
-      split
-      · congr 2
-        funext k
-        exact hbind (·.e ·) (f k) (fun _ _ h => h.e _ (by
-          have := Value.depth_map_entry (f := f) k; omega)) k.1
-      · rfl
-    | _ => rfl
-  · cases a with
-    | m ks g =>
-      refine congrArg (Option.map mapV.into) ?_
-      simp only [mA, Option.bind_some, objRead, reqPresentB_rel hF]
-      split
-      · congr 2
-        funext k
-        exact hbind (·.p ·) _ (fun _ _ h => h.p _ (by
-          have := Attr.depth_map_entry (f := g) ⟨k.1, (Finset.mem_filter.mp k.2).1⟩; omega)) k.1
-      · rfl
-    | _ => rfl
+    AgreeLe (d + 1) (objectCodec ⟨keys, F₁⟩ r₁) (objectCodec ⟨keys, F₂⟩ r₂) :=
+  Alg.agreeLe_objectCodec (mV := mapV) (mA := mA) (μM := .M)
+    (fun m k => Value.depth_map_entry (f := m.2) k)
+    (fun m k => Attr.depth_map_entry (f := m.2) k) hF hr
 
 end Calculus
