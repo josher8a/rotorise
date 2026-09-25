@@ -1172,16 +1172,12 @@ def Body.block (b : Body) : Term :=
   | some t => t
 
 /-- A closed traversal and a traversal through a block that admits nothing agree. -/
-theorem objAdmV_none_never (fs : MapOf VP) (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
+theorem objAdmV_none_never {α : Type} (fs : MapOf (α → Bool)) (keys : Finset Name)
+    (g : {k // k ∈ keys} → α) :
     objAdmV fs none keys g = objAdmV fs (some (fun _ => false)) keys g := by
   unfold objAdmV
   exact decide_eq_decide.mpr (forall_congr' fun k => by unfold entryP; cases fs.at k.1 <;> exact Iff.rfl)
 
-/-- …and the same on the read side. -/
-theorem objAdmA_none_never (fs : MapOf AP) (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
-    objAdmA fs none keys g = objAdmA fs (some (fun _ => false)) keys g := by
-  unfold objAdmA
-  exact decide_eq_decide.mpr (forall_congr' fun k => by unfold entryP; cases fs.at k.1 <;> exact Iff.rfl)
 
 /-- **The closed body is the open body whose block is `never`**, on the write side. -/
 theorem Adm_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → ObjectSlot) :
@@ -1200,9 +1196,9 @@ theorem AdmA_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → Obj
   funext a
   cases a with
   | m keys g =>
-      show (reqPresentT D f keys && objAdmA _ none keys g) =
-        (reqPresentT D f keys && objAdmA _ (some (fun _ => false)) keys g)
-      rw [objAdmA_none_never]
+      show (reqPresentT D f keys && objAdmV _ none keys g) =
+        (reqPresentT D f keys && objAdmV _ (some (fun _ => false)) keys g)
+      rw [objAdmV_none_never]
   | _ => rfl
 
 /-- A slot met through one term's meet, keeping the slot's mark. It is `ObjectSlot.meet
@@ -1470,6 +1466,7 @@ example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (some .string)))
   apply decide_eq_true
   intro k
   rw [if_neg (by have hk := k.2; simp only [Finset.mem_singleton] at hk; simp [hk])]
+  rfl
 
 /-! ### The presence table
 
@@ -2670,7 +2667,7 @@ theorem AdmBody_map_slots (c : Body) (keys : Finset Name) (g : {k // k ∈ keys}
   refine forall_congr' fun k => ?_
   unfold entryP; simp only [MapOf.at]
   rcases Decidable.em (k.1 ∈ c.fields) with hk | hk
-  · rw [dif_pos hk, Body.slotAt_pos hk]
+  · rw [dif_pos hk, Body.slotAt_pos hk]; rfl
   · rw [dif_neg hk, Body.slotAt_neg hk]
     cases hw : c.wild with
     | none => simp [AdmWild, Body.block, hw, AdmField, Adm]
@@ -5102,11 +5099,11 @@ theorem AdmABody_map_slots (c : Body) (keys : Finset Name) (g : {k // k ∈ keys
       ∀ k : {k // k ∈ keys}, AdmAField (c.slotAt k.1) (g k) = true := by
   rw [AdmABody_map, reqPresentT_req, Bool.and_eq_true, reqs_slotAt]
   apply and_congr Iff.rfl
-  unfold objAdmA; rw [decide_eq_true_iff]
+  unfold objAdmV; rw [decide_eq_true_iff]
   refine forall_congr' fun k => ?_
   unfold entryP; simp only [MapOf.at]
   rcases Decidable.em (k.1 ∈ c.fields) with hk | hk
-  · rw [dif_pos hk, Body.slotAt_pos hk]
+  · rw [dif_pos hk, Body.slotAt_pos hk]; rfl
   · rw [dif_neg hk, Body.slotAt_neg hk]
     cases hw : c.wild with
     | none => simp [AdmAWild, Body.block, hw, AdmAField, AdmA]

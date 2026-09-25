@@ -146,7 +146,7 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [AdmA_opaq_m]
       simp [opaqUnfold, AdmAAny, anyP, AdmA, AdmABody, Term.array,
-        Term.record, AdmAWild, objAdmA, entryP, MapOf.at, setCodec]
+        Term.record, AdmAWild, objAdmV, entryP, MapOf.at, setCodec]
       exact fun _ => hp
 
 /-- **`opaque` is total, write side.** `opaque` writes every value. -/

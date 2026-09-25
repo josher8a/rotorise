@@ -34,11 +34,11 @@ def entryP {α : Type} (fs : MapOf (α → Bool)) (rp : Option (α → Bool)) (k
     Option (α → Bool) :=
   match fs.at k with | some P => some P | none => rp
 
-/-- `objWrite`'s traversal, as a row: every entry goes through the codec its name names. -/
-def objAdmV (fs : MapOf VP) (rp : Option VP) (keys : Finset Name)
-    (g : {k // k ∈ keys} → Value) : Bool :=
-  decide (∀ k : {k // k ∈ keys},
-    (match entryP fs rp k.1 with | some P => P (g k) | none => false) = true)
+/-- `objWrite`'s traversal and `objRead`'s traversal, as a row: every entry goes through the
+    codec its name names. -/
+def objAdmV {α : Type} (fs : MapOf (α → Bool)) (rp : Option (α → Bool)) (keys : Finset Name)
+    (g : {k // k ∈ keys} → α) : Bool :=
+  decide (∀ k : {k // k ∈ keys}, (entryP fs rp k.1).any (· (g k)) = true)
 
 /-- `valPresentB`'s guard, read off the *term*'s field table: only `optional` may be absent.
     Decidable over a `Finset Name`, which is why the excuse that named it never held. -/
@@ -509,8 +509,7 @@ theorem entry_iff {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSl
     {wild : Option Term}
     (hf : ∀ k : {k // k ∈ fields}, ExactField (fld k))
     (hr : ∀ t, wild = some t → ExactV t) (k : Name) (v : Value) :
-    (match entryP ⟨fields, fun k => AdmField (fld k)⟩ (AdmWild wild) k with
-      | some P => P v | none => false) = true ↔
+    (entryP ⟨fields, fun k => AdmField (fld k)⟩ (AdmWild wild) k).any (· v) = true ↔
     ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (wildSem wild)) k).bind
       (fun c => c.e v)).isSome = true := by
   simp only [entryP, entryCodec, MapOf.at]
