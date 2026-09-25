@@ -121,7 +121,7 @@ def Term.hasVar : Term → Bool
   | .list pre sp suf => Term.hasVarL pre || Term.hasVarO sp || Term.hasVarL suf
   | .object b => Body.hasVar b
   | .union os => Term.hasVarL os
-  | .string | .number | .boolean | .binary | .null | .literal _ _ | .opaq | .never => false
+  | .base _ | .literal _ _ | .opaq | .never => false
 /-- …in a body: in a declared slot or in the open block. -/
 def Body.hasVar : Body → Bool
   | .mk fs f w => decide (∃ k : {k // k ∈ fs}, ObjectSlot.hasVar (f k) = true) || Term.hasVarO w
@@ -163,8 +163,7 @@ theorem Term.hasVar_of_use : ∀ (t : Term) (i : Nat), t.use i ≠ 0 → t.hasVa
   | .object b, i, h => Body.hasVar_of_use b i (by
       simp only [Term.use, useUnder] at h; split at h <;> omega)
   | .union os, i, h => Term.hasVarL_of_use os i (by simpa [Term.use] using h)
-  | .string, _, h | .number, _, h | .boolean, _, h | .binary, _, h | .null, _, h
-  | .literal _ _, _, h | .opaq, _, h | .never, _, h => by simp [Term.use] at h
+  | .base _, _, h | .literal _ _, _, h | .opaq, _, h | .never, _, h => by simp [Term.use] at h
 /-- …in a body. -/
 theorem Body.hasVar_of_use : ∀ (b : Body) (i : Nat), b.use i ≠ 0 → b.hasVar = true
   | .mk fs f w, i, h => by
@@ -235,12 +234,7 @@ mutual
     * `union opts` — the union of the options'. A union admits only where one of its options
       admits, so the union of the options' occupancies is an over-approximation. -/
 def occV : Term → Slot → Bool
-  | .string  => occOnly .str
-  | .number  => occOnly .num
-  | .boolean => occOnly .bool
-  | .binary  => occOnly .bin
-  | .null    => occOnly .null
-  | .literal k _ => occOnly k.slot
+  | .base k | .literal k _ => occOnly k.slot
   -- the bottom writes nothing, so it occupies no slot
   | .never       => occNone
   -- a set writes the wire family of each scalar slot its element writes, and every family
@@ -273,12 +267,7 @@ mutual
     An alternate reader is a codec, not a `Term`. The occupancy has no alternate-reader
     row. -/
 def occA : Term → Member → Bool
-  | .string  => occOnly .S
-  | .number  => occOnly .N
-  | .boolean => occOnly .BOOL
-  | .binary  => occOnly .B
-  | .null    => occOnly .NULL
-  | .literal k _ => occOnly k.member
+  | .base k | .literal k _ => occOnly k.member
   -- and stores nothing, so it occupies no member
   | .never       => occNone
   | .set t       => fun m => match m.setElem with
@@ -337,10 +326,9 @@ mutual
 theorem occV_open : ∀ (t : Term) (ρ : List Codec) (v : Value),
     ((denote t ρ).e v).isSome = true →
       occV t v.slot = true ∨ ∃ i, 2 ≤ t.use i ∧ ((envAt ρ i).e v).isSome = true
-  | .string, _, v, h | .boolean, _, v, h | .binary, _, v, h | .null, _, v, h
-  | .number, _, v, h => Or.inl (by
-      cases v <;> simp_all [denote, stringCodec, booleanCodec, binaryCodec, nullCodec,
-        numberCodec, occV, occOnly, Value.slot])
+  | .base k, _, v, h => Or.inl (by
+      cases k <;> cases v <;> simp_all [denote, stringCodec, booleanCodec, binaryCodec, nullCodec,
+        numberCodec, occV, occOnly, Value.slot, GroundKind.slot])
   | .never, _, _, h => by simp [denote, Codec.empty] at h
   | .opaq, _, _, _ => Or.inl rfl
   | .literal k x, _, v, h => by
@@ -441,9 +429,8 @@ mutual
 theorem occA_open : ∀ (t : Term) (ρ : List Codec) (a : Attr),
     ((denote t ρ).p a).isSome = true →
       occA t a.member = true ∨ ∃ i, 2 ≤ t.use i ∧ ((envAt ρ i).p a).isSome = true
-  | .string, _, a, h | .number, _, a, h | .boolean, _, a, h | .binary, _, a, h
-  | .null, _, a, h => Or.inl (by
-      cases a <;> simp_all [denote, stringCodec, booleanCodec, binaryCodec, nullCodec,
+  | .base k, _, a, h => Or.inl (by
+      cases k <;> cases a <;> simp_all [denote, stringCodec, booleanCodec, binaryCodec, nullCodec,
         numberCodec, occA, occOnly, Attr.member])
   | .never, _, _, h => by simp [denote, Codec.empty] at h
   | .opaq, _, _, _ => Or.inl rfl

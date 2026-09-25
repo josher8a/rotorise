@@ -99,7 +99,7 @@ theorem nesting_deepA : ∀ n, Attr.nesting (deepA n) = n
 
 /-- Every one of them is derivable. -/
 theorem typed_deepT : ∀ n, ∃ T μ, Typed (deepT n) T μ
-  | 0 => ⟨_, _, Typed.string⟩
+  | 0 => ⟨_, _, Typed.base .string⟩
   | n + 1 => by
     obtain ⟨T, μ, h⟩ := typed_deepT n
     exact ⟨_, _, Typed.array h⟩

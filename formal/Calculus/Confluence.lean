@@ -27,10 +27,7 @@ mutual
     is its caller-side term's and the read occupancy is its stored-side term's, two
     coordinates that need not agree. So `Orth1` asks the read question as well. -/
 theorem occA_le_occV : ∀ (t : Term), HF t → ∀ (m : Member), occA t m = true → occV t m.slot = true
-  | .string, _, m, h | .number, _, m, h | .boolean, _, m, h | .binary, _, m, h
-  | .null, _, m, h => by
-      cases m <;> simp_all [occA, occV, occOnly, Member.slot]
-  | .literal k _, _, m, h => by
+  | .base k, _, m, h | .literal k _, _, m, h => by
       cases k <;> cases m <;>
         simp_all [occA, occV, occOnly, Member.slot, GroundKind.slot, GroundKind.member]
   -- a set's member names its element's member, and the element carries the inclusion

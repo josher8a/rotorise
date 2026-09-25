@@ -153,15 +153,9 @@ inductive HOpaque : Value → Prop where
 mutual
 
 inductive Typed : Term → Held → Option Member → Prop where
-  | string  : Typed .string  (fun v => ∃ s, v = .str s) (some .S)
-  /-- `number` holds `D` — §1's numeral domain — and not every double. The rule always
-      concluded `⊢ number : D ⇝ N`; until `numberCodec` gated, the model's judgement said
-      something weaker than the rule it was transcribing. -/
-  | number  : Typed .number (fun v => ∃ x : WFNumeral, v = .num x) (some .N)
-  | boolean : Typed .boolean (fun v => ∃ b, v = .bool b) (some .BOOL)
-  /-- §3 `(null)`: the point held set `{null}`, stored as `⟨NULL, ∗⟩`. -/
-  | null : Typed .null (fun v => v = .null) (some .NULL)
-  | binary  : Typed .binary  (fun v => ∃ b, v = .bin b) (some .B)
+  /-- §3's ground rules, as one rule: the held set is the base codec's. At `number` that set is
+      `D`, §1's numeral domain, and at `null` it is the point `{null}`. -/
+  | base (k : GroundKind) : Typed (.base k) (baseCodec k).T (some k.member)
   /-- **§3 `(literal)`, with no premise line left.**
 
       §3 writes it `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T; n ≥ 1; pairwise distinct`. Every clause

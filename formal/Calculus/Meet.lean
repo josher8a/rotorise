@@ -306,6 +306,16 @@ theorem inBase_disj {k k' : GroundKind} (h : k ≠ k') (v : Value) :
     (inBase k v && inBase k' v) = false := by
   cases k <;> cases k' <;> cases v <;> first | rfl | exact absurd rfl h
 
+/-- A literal and a base share the literal's values where the two bases agree, and no value
+    elsewhere. -/
+theorem inL_and_inBase {k k' : GroundKind} (x : k.Carrier) (v : Value) :
+    (inL k x v && inBase k' v) = if k = k' then inL k x v else false := by
+  split
+  · next hk => subst hk; cases hl : inL k x v; rfl; rw [inBase_of_inL hl]; rfl
+  · next hk =>
+    cases hl : inL k x v; rfl
+    have := inBase_disj hk v; rw [inBase_of_inL hl] at this; exact this
+
 /-- `members` at two different bases share no value. -/
 theorem memMem_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
     (B : NEFinset k'.Carrier) : MeetOk (.members k A) (.members k' B) (some none) := by
@@ -539,46 +549,15 @@ def meetSRightL (fam : Term → Option Term) : List Term → List (Option Term)
 end
 
 /-! ### The families: one per left constructor, flat and non-recursive. -/
-def famString : Term → Option Term
-  | .string => some .string
-  | .literal k v => match k, v with
-      | .string, v => some (.literal .string v) | _, _ => some .never
-  | .opaq => some .string
-  | _ => some .never
-
-def famNumber : Term → Option Term
-  | .number => some .number
-  | .literal k v => match k, v with
-      | .number, v => some (.literal .number v) | _, _ => some .never
-  | .opaq => some .number
-  | _ => some .never
-
-def famBoolean : Term → Option Term
-  | .boolean => some .boolean
-  | .literal k v => if k = .boolean then some (.literal k v) else some .never
-  | .opaq => some .boolean
-  | _ => some .never
-
-def famBinary : Term → Option Term
-  | .binary => some .binary
-  | .literal k v => if k = .binary then some (.literal k v) else some .never
-  | .opaq => some .binary
-  | _ => some .never
-
-def famNull : Term → Option Term
-  | .null => some .null
-  | .literal k v => if k = .null then some (.literal k v) else some .never
-  | .opaq => some .null
+/-- A base meets its own base, its own literals and `opaque`, and is the bottom elsewhere. -/
+def famBase (k : GroundKind) : Term → Option Term
+  | .base k' => if k' = k then some (.base k) else some .never
+  | .literal k' v => if k' = k then some (.literal k' v) else some .never
+  | .opaq => some (.base k)
   | _ => some .never
 
 def famLit (k : GroundKind) (v : k.Carrier) : Term → Option Term
-  | .string => match k, v with
-      | .string, v => some (.literal .string v) | _, _ => some .never
-  | .number => match k, v with
-      | .number, v => some (.literal .number v) | _, _ => some .never
-  | .boolean => if k = .boolean then some (.literal k v) else some .never
-  | .binary => if k = .binary then some (.literal k v) else some .never
-  | .null => if k = .null then some (.literal k v) else some .never
+  | .base k' => if k' = k then some (.literal k v) else some .never
   | .literal k' v' => Term.meetLit k v k' v'
   | .opaq => none
   | _ => some .never
@@ -593,8 +572,7 @@ def hasHeld : Term → Bool
   | .object b => hasHeldB b
   | .union os => hasHeldL os
   | .set t => hasHeld t
-  | .string | .number | .boolean | .binary | .null | .literal _ _ | .opaq
-  | .never | .var _ => false
+  | .base _ | .literal _ _ | .opaq | .never | .var _ => false
 def hasHeldL : List Term → Bool
   | [] => false
   | t :: ts => hasHeld t || hasHeldL ts
@@ -636,8 +614,7 @@ theorem HF_of_hasHeld : ∀ t : Term, hasHeld t = false → HF t
       exact ⟨HFL_of_hasHeld pre h.1.1, HFO_of_hasHeld sp h.1.2, HFL_of_hasHeld suf h.2⟩
   | .object b, h => HFB_of_hasHeld b h
   | .union os, h => HFL_of_hasHeld os h
-  | .string, _ | .number, _ | .boolean, _ | .binary, _ | .null, _ | .literal _ _, _
-  | .opaq, _ | .never, _ | .var _, _ => trivial
+  | .base _, _ | .literal _ _, _ | .opaq, _ | .never, _ | .var _, _ => trivial
 /-- …at a body. -/
 theorem HFB_of_hasHeld : ∀ b : Body, hasHeldB b = false → HFB b
   | .mk fs f w, h => by
@@ -659,11 +636,7 @@ theorem HFO_of_hasHeld : ∀ o : Option Term, hasHeldO o = false → HFO o
 end
 
 def famOpaq : Term → Option Term
-  | .string => some .string
-  | .boolean => some .boolean
-  | .binary => some .binary
-  | .null => some .null
-  | .number => some .number
+  | .base k => some (.base k)
   | .opaq => some .opaq
   | _ => none
 
@@ -1270,11 +1243,7 @@ def Term.meet : Term → Term → Option Term
   | .union _, .never => some .never
   | .union os, y => (allSome (Term.meetSL os y)).bind
       (fun zs => some (Term.ofOptions (zs.filter (fun z => !z.isNever))))
-  | .string, y => meetSRight famString y
-  | .number, y => meetSRight famNumber y
-  | .boolean, y => meetSRight famBoolean y
-  | .binary, y => meetSRight famBinary y
-  | .null, y => meetSRight famNull y
+  | .base k, y => meetSRight (famBase k) y
   | .literal k v, y => meetSRight (famLit k v) y
   | .set a, y => meetSRight (famSet a (Term.meet a)) y
   | .opaq, y => meetSRight (famOpaq) y
@@ -1457,7 +1426,7 @@ example :
 /-- The left body admits `{x := "1"}` through its declared slot… -/
 example : Adm (.object (.mk {"x"} (fun _ => .req .string) (some .string)))
     (.map {"x"} (fun _ => .str "1")) = true := by
-  simp [Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at, AdmField]
+  simp [Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at, AdmField, inBase]
 
 /-- …and the right body admits it through its open block, at a name it does not declare. -/
 example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (some .string)))
@@ -2031,11 +2000,7 @@ theorem Adm_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmFam x fa
       obtain ⟨zs, hF, rfl⟩ := meetSRight_union h
       rw [Bool.and_comm]
       exact union_meet_free v (Adm_meetSRightL hf os _ hF)
-  | .string, _, h, v => hf .string _ trivial h v
-  | .number, _, h, v => hf .number _ trivial h v
-  | .boolean, _, h, v => hf .boolean _ trivial h v
-  | .binary, _, h, v => hf .binary _ trivial h v
-  | .null, _, h, v => hf .null _ trivial h v
+  | .base k, _, h, v => hf (.base k) _ trivial h v
   | .literal k lv, _, h, v => hf (.literal k lv) _ trivial h v
   | .set b, _, h, v => hf (.set b) _ trivial h v
   | .opaq, _, h, v => hf .opaq _ trivial h v
@@ -2087,122 +2052,34 @@ local macro "fam_never" fam:ident : tactic => `(tactic|
           (try cases ‹GroundKind›) <;> simp_all [Slot.setElem, Member.setElem, occV, occA,
             occOnly, GroundKind.slot, GroundKind.member])))
 
-/-- `boolean` meets the boolean literal, `opaque`, and nothing else. -/
-theorem Adm_famBoolean : AdmFam Term.boolean famBoolean := by
+/-- A base meets its own base, its own literals and `opaque`, and nothing else. -/
+theorem Adm_famBase (k : GroundKind) : AdmFam (.base k) (famBase k) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
-  case boolean => simp only [famBoolean, Option.some.injEq] at h; subst h; simp
-  case literal k v' =>
-      simp only [famBoolean] at h
-      split at h
-      next hk =>
-        subst hk
-        simp only [Option.some.injEq] at h; subst h
-        cases v <;> simp [Adm, AdmLit, inL, inD]
-      next hk =>
-        simp only [Option.some.injEq] at h; subst h
-        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD]
+  case base k' =>
+      simp only [famBase] at h
+      split at h <;> simp only [Option.some.injEq] at h <;> subst h
+      · next hk => subst hk; exact (Bool.and_self _).symm
+      · next hk => exact (inBase_disj (Ne.symm hk) v).symm
+  case literal k' v' =>
+      simp only [famBase] at h
+      split at h <;> simp only [Option.some.injEq] at h <;> subst h <;> rw [Bool.and_comm]
+      · next hk => exact ((inL_and_inBase v' v).trans (if_pos hk)).symm
+      · next hk => exact ((inL_and_inBase v' v).trans (if_neg hk)).symm
   case opaq =>
-      simp only [famBoolean, Option.some.injEq] at h; subst h
-      cases v <;> (try simp only [Adm_opaq_bool]) <;> simp [Adm]
-  all_goals fam_never famBoolean
-
-/-- `binary` meets the binary literal, `opaque`, and nothing else. -/
-theorem Adm_famBinary : AdmFam Term.binary famBinary := by
-  intro y z hd h v
-  cases y <;> first | exact hd.elim | skip
-  case binary => simp only [famBinary, Option.some.injEq] at h; subst h; simp
-  case literal k v' =>
-      simp only [famBinary] at h
-      split at h
-      next hk =>
-        subst hk
-        simp only [Option.some.injEq] at h; subst h
-        cases v <;> simp [Adm, AdmLit, inL, inD]
-      next hk =>
-        simp only [Option.some.injEq] at h; subst h
-        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD]
-  case opaq =>
-      simp only [famBinary, Option.some.injEq] at h; subst h
-      cases v <;> (try simp only [Adm_opaq_bin]) <;> simp [Adm]
-  all_goals fam_never famBinary
-
-/-- `null` meets the null literal, `opaque`, and nothing else. -/
-theorem Adm_famNull : AdmFam Term.null famNull := by
-  intro y z hd h v
-  cases y <;> first | exact hd.elim | skip
-  case null => simp only [famNull, Option.some.injEq] at h; subst h; simp
-  case literal k v' =>
-      simp only [famNull] at h
-      split at h
-      next hk =>
-        subst hk
-        simp only [Option.some.injEq] at h; subst h
-        cases v <;> simp [Adm, AdmLit, inL, inD]
-      next hk =>
-        simp only [Option.some.injEq] at h; subst h
-        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD]
-  case opaq =>
-      simp only [famNull, Option.some.injEq] at h; subst h
-      cases v <;> (try simp only [Adm_opaq_null]) <;> simp [Adm]
-  all_goals fam_never famNull
-
-/-- `string` meets its own literals and `opaque`. -/
-theorem Adm_famString : AdmFam Term.string famString := by
-  intro y z hd h v
-  cases y <;> first | exact hd.elim | skip
-  case string => simp only [famString, Option.some.injEq] at h; subst h; simp
-  case literal k v' =>
-      cases k <;> simp only [famString, Option.some.injEq, reduceCtorEq] at h <;>
-        (try subst h) <;>
-        first
-          | (cases v <;> simp [Adm, AdmLit, inL, inD] <;>
-              (try (intro hs _; exact hs)))
-          | exact Adm_never_orth (by rfl) v
-  case opaq =>
-      simp only [famString, Option.some.injEq] at h; subst h
-      cases v <;> (try simp only [Adm_opaq_str]) <;> simp [Adm]
-  all_goals fam_never famString
-
-/-- `number` meets its own literals and `opaque`. -/
-theorem Adm_famNumber : AdmFam Term.number famNumber := by
-  intro y z hd h v
-  cases y <;> first | exact hd.elim | skip
-  case number => simp only [famNumber, Option.some.injEq] at h; subst h; simp
-  case literal k v' =>
-      cases k <;> simp only [famNumber, Option.some.injEq, reduceCtorEq] at h <;>
-        (try subst h) <;>
-        first
-          | (cases v <;> simp [Adm, AdmLit, inL, inD] <;>
-              (try (intro hs _; exact hs)))
-          | exact Adm_never_orth (by rfl) v
-  case opaq =>
-      simp only [famNumber] at h
-      simp only [Option.some.injEq] at h; subst h
-      cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
-  all_goals fam_never famNumber
+      simp only [famBase, Option.some.injEq] at h; subst h
+      cases k <;> cases v <;> rfl
+  all_goals fam_never famBase
 
 /-- A literal meets its own base and an equal literal, and is the bottom elsewhere. -/
 theorem Adm_famLit (k : GroundKind) (lv : k.Carrier) : AdmFam (.literal k lv) (famLit k lv) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
-  case string | number =>
-      cases k <;> simp only [famLit, Option.some.injEq, reduceCtorEq] at h <;>
-        (try subst h) <;>
-        first
-          | (cases v <;> simp [Adm, AdmLit, inL, inD] <;>
-              (try (intro hs _; exact hs)))
-          | exact Adm_never_orth (by rfl) v
-  case boolean | binary | null =>
+  case base k' =>
       simp only [famLit] at h
-      split at h
-      next hk =>
-        subst hk
-        simp only [Option.some.injEq] at h; subst h
-        cases v <;> simp [Adm, AdmLit, inL, inD]
-      next hk =>
-        simp only [Option.some.injEq] at h; subst h
-        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD]
+      split at h <;> simp only [Option.some.injEq] at h <;> subst h
+      · next hk => exact ((inL_and_inBase lv v).trans (if_pos hk.symm)).symm
+      · next hk => exact ((inL_and_inBase lv v).trans (if_neg (Ne.symm hk))).symm
   case literal k' v' =>
       simp only [famLit] at h
       cases k <;> cases k' <;> simp only [Term.meetLit, reduceCtorEq] at h <;>
@@ -2287,15 +2164,9 @@ theorem Adm_famSet (a : Term) {mt : Term → Option Term} (ih : AdmSound a mt) :
 theorem Adm_famOpaq : AdmFam .opaq (famOpaq) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
-  case string | boolean | binary | null =>
+  case base k =>
       simp only [famOpaq, Option.some.injEq] at h; subst h
-      cases v <;>
-        (try simp only [Adm_opaq_str, Adm_opaq_bool, Adm_opaq_bin, Adm_opaq_null]) <;>
-        simp [Adm]
-  case number =>
-      simp only [famOpaq] at h
-      simp only [Option.some.injEq] at h; subst h
-      cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
+      rw [Bool.and_comm]; cases k <;> cases v <;> rfl
   case opaq =>
       simp only [famOpaq, Option.some.injEq] at h; subst h
       exact (Bool.and_self _).symm
@@ -2959,11 +2830,7 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
       | _ =>
         obtain ⟨zs, hF, rfl⟩ := meet_union_of h (by simp)
         exact union_meet_free v (Adm_meetL os _ _ hF)
-  | .string, y, z, h, v => Adm_meetSRight Adm_famString y z h v
-  | .number, y, z, h, v => Adm_meetSRight Adm_famNumber y z h v
-  | .boolean, y, z, h, v => Adm_meetSRight Adm_famBoolean y z h v
-  | .binary, y, z, h, v => Adm_meetSRight Adm_famBinary y z h v
-  | .null, y, z, h, v => Adm_meetSRight Adm_famNull y z h v
+  | .base k, y, z, h, v => Adm_meetSRight (Adm_famBase k) y z h v
   | .literal k lv, y, z, h, v => Adm_meetSRight (Adm_famLit k lv) y z h v
   | .set a, y, z, h, v =>
       Adm_meetSRight (Adm_famSet a (fun u w hw => Adm_meet a u w hw)) y z h v
@@ -3103,11 +2970,7 @@ theorem writes_meetSRight {x : Term} {fam : Term → Option Term} (hf : WritesFa
         forall₂_mem_right (writes_meetSRightL hf os zs hF) (List.mem_of_mem_filter hw)
       have ih := hP m hwm
       exact ⟨ih.1, fun my hmy => ih.2 my (μSyn_union_mem hmy o ho)⟩
-  | .string, _, h, m, hz => hf .string _ trivial h m hz
-  | .number, _, h, m, hz => hf .number _ trivial h m hz
-  | .boolean, _, h, m, hz => hf .boolean _ trivial h m hz
-  | .binary, _, h, m, hz => hf .binary _ trivial h m hz
-  | .null, _, h, m, hz => hf .null _ trivial h m hz
+  | .base k, _, h, m, hz => hf (.base k) _ trivial h m hz
   | .literal k lv, _, h, m, hz => hf (.literal k lv) _ trivial h m hz
   | .set b, _, h, m, hz => hf (.set b) _ trivial h m hz
   | .opaq, _, h, m, hz => hf .opaq _ trivial h m hz
@@ -3129,144 +2992,27 @@ theorem writes_meetSRightL {x : Term} {fam : Term → Option Term} (hf : WritesF
 termination_by structural os => os
 end
 
-/-- `string` names `S`, and so does every term it meets. -/
-theorem writes_famString : WritesFam Term.string famString := by
+/-- A base names its member, and so does every term it meets. -/
+theorem writes_famBase (k : GroundKind) : WritesFam (.base k) (famBase k) := by
   intro y z hd h m hz
   cases y <;> first | exact hd.elim | skip
-  case literal k lv =>
-      cases k <;> (try simp_all [famString, μSyn]) <;>
-        (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-      all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
-  all_goals (try simp_all [famString, μSyn, Term.meetLit])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
-
-/-- `number` names `N`, and so does every term it meets. -/
-theorem writes_famNumber : WritesFam Term.number famNumber := by
-  intro y z hd h m hz
-  cases y <;> first | exact hd.elim | skip
-  case literal k lv =>
-      cases k <;> (try simp_all [famNumber, μSyn, Term.meetLit]) <;>
-        (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-      all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
-  all_goals (try simp_all [famNumber, μSyn, Term.meetLit])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
-
-
-/-- `boolean` names `BOOL`, and so does every term it meets. -/
-theorem writes_famBoolean : WritesFam Term.boolean famBoolean := by
-  intro y z hd h m hz
-  cases y <;> first | exact hd.elim | skip
-  case literal k lv =>
-      cases k <;> (try simp_all [famBoolean, μSyn, Term.meetLit]) <;>
-        (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-      all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
-  all_goals (try simp_all [famBoolean, μSyn, Term.meetLit])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
-
-/-- `binary` names `B`, and so does every term it meets. -/
-theorem writes_famBinary : WritesFam Term.binary famBinary := by
-  intro y z hd h m hz
-  cases y <;> first | exact hd.elim | skip
-  case literal k lv =>
-      cases k <;> (try simp_all [famBinary, μSyn, Term.meetLit]) <;>
-        (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-      all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
-  all_goals (try simp_all [famBinary, μSyn, Term.meetLit])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
-
-/-- `null` names `NULL`, and so does every term it meets. -/
-theorem writes_famNull : WritesFam Term.null famNull := by
-  intro y z hd h m hz
-  cases y <;> first | exact hd.elim | skip
-  case literal k lv =>
-      cases k <;> (try simp_all [famNull, μSyn, Term.meetLit]) <;>
-        (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-      all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
-  all_goals (try simp_all [famNull, μSyn, Term.meetLit])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
+  all_goals simp only [famBase] at h
+  all_goals (try split at h)
+  all_goals (simp only [Option.some.injEq] at h; subst_vars)
+  all_goals simp_all [μSyn]
 
 /-- A literal names its base's member, and so does every term it meets. -/
 theorem writes_famLit (k : GroundKind) (lv : k.Carrier) :
     WritesFam (.literal k lv) (famLit k lv) := by
   intro y z hd h m hz
   cases y <;> first | exact hd.elim | skip
+  all_goals simp only [famLit] at h
   case literal k' lv' =>
-      cases k <;> cases k' <;> (try simp_all [famLit, μSyn, Term.meetLit, GroundKind.member])
-      all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
-  all_goals (cases k <;> (try simp_all [famLit, μSyn, Term.meetLit, GroundKind.member]))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
+      cases k <;> cases k' <;> simp only [Term.meetLit] at h <;> (try split at h) <;>
+        (simp only [Option.some.injEq] at h; subst_vars) <;> simp_all [μSyn]
+  all_goals (try split at h)
+  all_goals (try simp only [Option.some.injEq] at h)
+  all_goals (subst_vars; simp_all [μSyn])
 
 /-- **A set names `setMember` of its element's member, and so does every set it meets.** The
     element meet carries the element's member, and the other rows answer the bottom, which names
@@ -3409,11 +3155,7 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
           forall₂_mem_right (writes_meetL os _ zs hF) (List.mem_of_mem_filter hw)
         have ih := hP m hwm
         exact ⟨fun mx hmx => ih.1 mx (μSyn_union_mem hmx o ho), ih.2⟩
-  | .string, y, z, h, m, hz => writes_meetSRight writes_famString y z h m hz
-  | .number, y, z, h, m, hz => writes_meetSRight writes_famNumber y z h m hz
-  | .boolean, y, z, h, m, hz => writes_meetSRight writes_famBoolean y z h m hz
-  | .binary, y, z, h, m, hz => writes_meetSRight writes_famBinary y z h m hz
-  | .null, y, z, h, m, hz => writes_meetSRight writes_famNull y z h m hz
+  | .base k, y, z, h, m, hz => writes_meetSRight (writes_famBase k) y z h m hz
   | .literal k lv, y, z, h, m, hz => writes_meetSRight (writes_famLit k lv) y z h m hz
   | .set a, y, z, h, m, hz =>
       writes_meetSRight (writes_famSet a (fun u w hw => meet_writes a u w hw)) y z h m hz
@@ -4447,11 +4189,7 @@ theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x 
         rw [ofOptions_p_find, find?_filter_of (fun w hw => by rw [not_isNever_of_admA hw]; rfl),
           hfw, union_p_find, hft]
         exact ⟨(hwP a hta ha).2, (hwP a hta ha).1⟩
-  | .string, _, h => hf .string _ trivial h
-  | .number, _, h => hf .number _ trivial h
-  | .boolean, _, h => hf .boolean _ trivial h
-  | .binary, _, h => hf .binary _ trivial h
-  | .null, _, h => hf .null _ trivial h
+  | .base k, _, h => hf (.base k) _ trivial h
   | .literal k lv, _, h => hf (.literal k lv) _ trivial h
   | .set b, _, h => hf (.set b) _ trivial h
   | .opaq, _, h => hf .opaq _ trivial h
@@ -4498,146 +4236,39 @@ local macro "admA_never" fam:ident : tactic => `(tactic|
 theorem admA_same (x : Term) : AdmAAt x x x :=
   ⟨fun a => (Bool.and_self _).symm, fun a _ _ => ⟨rfl, rfl⟩⟩
 
-/-- `string` reads `S`, and what it meets reads the same attribute. -/
-theorem admA_famString : AdmAFam Term.string famString := by
+/-- A base reads its member, and what it meets reads the same attribute. -/
+theorem admA_famBase (k : GroundKind) : AdmAFam (.base k) (famBase k) := by
   intro y z hd h
   cases y <;> first | exact hd.elim | skip
-  case string => simp only [famString, Option.some.injEq] at h; subst h; exact admA_same _
-  case literal k lv =>
-      cases k <;> simp only [famString, Option.some.injEq, reduceCtorEq] at h <;>
-        (try subst h) <;>
-        first
-          | (refine ⟨fun a => ?_, fun a ha hb => ⟨literal_denote_agree hb, rfl⟩⟩
-             cases hx : AdmA (Term.literal _ _) a with
-             | false => simp
-             | true => rw [AdmA_base_of_literal rfl hx]; simp)
-          | (refine bottom_row (fun a => ?_)
-             cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
-               Alg.Codec.restrict, baseCodec])
-  case opaq =>
-      simp only [famString, Option.some.injEq] at h; subst h
-      refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-      · cases a <;>
-          (try simp only [AdmA_opaq_str, AdmA_opaq_bool, AdmA_opaq_bin, AdmA_opaq_null]) <;>
-          simp [AdmA]
-      · cases a <;> refine ⟨?_, ?_⟩ <;>
-          simp_all [AdmA, opaq_p_string, opaq_p_boolean, opaq_p_binary, opaq_p_null]
-  all_goals admA_never famString
-
-/-- `boolean` reads `BOOL`, and what it meets reads the same attribute. -/
-theorem admA_famBoolean : AdmAFam Term.boolean famBoolean := by
-  intro y z hd h
-  cases y <;> first | exact hd.elim | skip
-  case boolean => simp only [famBoolean, Option.some.injEq] at h; subst h; exact admA_same _
-  case literal k lv =>
-      simp only [famBoolean] at h
-      split at h
-      next hk =>
+  case base k' =>
+      simp only [famBase] at h
+      split at h <;> simp only [Option.some.injEq] at h <;> subst h
+      · next hk => subst hk; exact admA_same _
+      · next hk =>
+        refine bottom_row (fun a => ?_)
+        cases k <;> cases k' <;> first
+          | exact absurd rfl hk
+          | exact Eq.trans rfl (AdmA_and_false rfl a).symm
+  case literal k' lv =>
+      simp only [famBase] at h
+      split at h <;> simp only [Option.some.injEq] at h <;> subst h
+      · next hk =>
         subst hk
-        simp only [Option.some.injEq] at h; subst h
         refine ⟨fun a => ?_, fun a ha hb => ⟨literal_denote_agree hb, rfl⟩⟩
         cases hx : AdmA (Term.literal _ _) a with
         | false => simp
         | true => rw [AdmA_base_of_literal rfl hx]; simp
-      next hk =>
-        simp only [Option.some.injEq] at h; subst h
+      · next hk =>
         refine bottom_row (fun a => ?_)
-        cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
-          Alg.Codec.restrict, baseCodec]
+        cases k <;> cases k' <;> first
+          | exact absurd rfl hk
+          | exact Eq.trans rfl (AdmA_and_false rfl a).symm
   case opaq =>
-      simp only [famBoolean, Option.some.injEq] at h; subst h
-      refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-      · cases a <;>
-          (try simp only [AdmA_opaq_str, AdmA_opaq_bool, AdmA_opaq_bin, AdmA_opaq_null]) <;>
-          simp [AdmA]
-      · cases a <;> refine ⟨?_, ?_⟩ <;>
-          simp_all [AdmA, opaq_p_string, opaq_p_boolean, opaq_p_binary, opaq_p_null]
-  all_goals admA_never famBoolean
-
-/-- `binary` reads `B`, and what it meets reads the same attribute. -/
-theorem admA_famBinary : AdmAFam Term.binary famBinary := by
-  intro y z hd h
-  cases y <;> first | exact hd.elim | skip
-  case binary => simp only [famBinary, Option.some.injEq] at h; subst h; exact admA_same _
-  case literal k lv =>
-      simp only [famBinary] at h
-      split at h
-      next hk =>
-        subst hk
-        simp only [Option.some.injEq] at h; subst h
-        refine ⟨fun a => ?_, fun a ha hb => ⟨literal_denote_agree hb, rfl⟩⟩
-        cases hx : AdmA (Term.literal _ _) a with
-        | false => simp
-        | true => rw [AdmA_base_of_literal rfl hx]; simp
-      next hk =>
-        simp only [Option.some.injEq] at h; subst h
-        refine bottom_row (fun a => ?_)
-        cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
-          Alg.Codec.restrict, baseCodec]
-  case opaq =>
-      simp only [famBinary, Option.some.injEq] at h; subst h
-      refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-      · cases a <;>
-          (try simp only [AdmA_opaq_str, AdmA_opaq_bool, AdmA_opaq_bin, AdmA_opaq_null]) <;>
-          simp [AdmA]
-      · cases a <;> refine ⟨?_, ?_⟩ <;>
-          simp_all [AdmA, opaq_p_string, opaq_p_boolean, opaq_p_binary, opaq_p_null]
-  all_goals admA_never famBinary
-
-/-- `null` reads `NULL`, and what it meets reads the same attribute. -/
-theorem admA_famNull : AdmAFam Term.null famNull := by
-  intro y z hd h
-  cases y <;> first | exact hd.elim | skip
-  case null => simp only [famNull, Option.some.injEq] at h; subst h; exact admA_same _
-  case literal k lv =>
-      simp only [famNull] at h
-      split at h
-      next hk =>
-        subst hk
-        simp only [Option.some.injEq] at h; subst h
-        refine ⟨fun a => ?_, fun a ha hb => ⟨literal_denote_agree hb, rfl⟩⟩
-        cases hx : AdmA (Term.literal _ _) a with
-        | false => simp
-        | true => rw [AdmA_base_of_literal rfl hx]; simp
-      next hk =>
-        simp only [Option.some.injEq] at h; subst h
-        refine bottom_row (fun a => ?_)
-        cases k <;> cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
-          Alg.Codec.restrict, baseCodec]
-  case opaq =>
-      simp only [famNull, Option.some.injEq] at h; subst h
-      refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-      · cases a <;>
-          (try simp only [AdmA_opaq_str, AdmA_opaq_bool, AdmA_opaq_bin, AdmA_opaq_null]) <;>
-          simp [AdmA]
-      · cases a <;> refine ⟨?_, ?_⟩ <;>
-          simp_all [AdmA, opaq_p_string, opaq_p_boolean, opaq_p_binary, opaq_p_null]
-  all_goals admA_never famNull
-
-/-- `number` reads a stored numeral. -/
-theorem admA_famNumber : AdmAFam Term.number famNumber := by
-  intro y z hd h
-  cases y <;> first | exact hd.elim | skip
-  case number => simp only [famNumber, Option.some.injEq] at h; subst h; exact admA_same _
-  case literal k lv =>
-      cases k <;> simp only [famNumber, Option.some.injEq, reduceCtorEq] at h <;>
-        (try subst h) <;>
-        first
-          | (refine ⟨fun a => ?_, fun a ha hb => ⟨literal_denote_agree hb, rfl⟩⟩
-             cases hx : AdmA (Term.literal _ _) a with
-             | false => simp
-             | true => rw [AdmA_base_of_literal rfl hx]; simp)
-          | (refine bottom_row (fun a => ?_)
-             cases a <;> simp_all [AdmA, AdmALit, inL, inD, literalCodec,
-               Alg.Codec.restrict, baseCodec])
-  case opaq =>
-      simp only [famNumber, Option.some.injEq] at h; subst h
-      refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-      · cases a <;>
-          (try simp only [AdmA_opaq_num, AdmA_number_eq, Bool.and_self]) <;>
-          simp [AdmA]
-      · cases a <;> refine ⟨?_, ?_⟩ <;> simp_all [AdmA, opaq_p_number]
-  all_goals admA_never famNumber
+      simp only [famBase, Option.some.injEq] at h; subst h
+      refine ⟨fun a => ?_, fun a ha hb => ⟨rfl, ?_⟩⟩
+      · cases k <;> cases a <;> rfl
+      · cases k <;> cases a <;> first | rfl | cases ha
+  all_goals admA_never famBase
 
 /-- A literal reads its own value and nothing else, and its base reads it too. -/
 theorem admA_famLit (k : GroundKind) (lv : k.Carrier) :
@@ -4657,17 +4288,20 @@ theorem admA_famLit (k : GroundKind) (lv : k.Carrier) :
                    first
                      | exact AdmALit_never_of_ne (by assumption) a
                      | exact Eq.trans rfl (AdmA_and_false (by first | rfl | decide) a).symm)))
-  case string | number | boolean | binary | null =>
-      cases k <;>
-        simp only [famLit, reduceCtorEq, reduceIte, Option.some.injEq] at h <;>
-        (try subst h) <;>
-        first
-          | (refine ⟨fun a => ?_, fun a ha hb => ⟨rfl, literal_denote_agree ha⟩⟩
-             cases hx : AdmA (Term.literal _ _) a with
-             | false => simp
-             | true => rw [AdmA_base_of_literal rfl hx]; simp)
-          | (refine bottom_row (fun a => ?_)
-             exact Eq.trans rfl (AdmA_and_false (by first | rfl | decide) a).symm)
+  case base k' =>
+      simp only [famLit] at h
+      split at h <;> simp only [Option.some.injEq] at h <;> subst h
+      · next hk =>
+        subst hk
+        refine ⟨fun a => ?_, fun a ha hb => ⟨rfl, literal_denote_agree ha⟩⟩
+        cases hx : AdmA (Term.literal _ _) a with
+        | false => simp
+        | true => rw [AdmA_base_of_literal rfl hx]; simp
+      · next hk =>
+        refine bottom_row (fun a => ?_)
+        cases k <;> cases k' <;> first
+          | exact absurd rfl hk
+          | exact Eq.trans rfl (AdmA_and_false rfl a).symm
   case opaq => simp [famLit] at h
   all_goals admA_never famLit
 
@@ -4759,21 +4393,11 @@ theorem admA_famSet (a : Term) {mt : Term → Option Term} (ih : AdmASound a mt)
 theorem admA_famOpaq : AdmAFam .opaq (famOpaq) := by
   intro y z hd h
   cases y <;> first | exact hd.elim | skip
-  case string | boolean | binary | null =>
+  case base k =>
       simp only [famOpaq, Option.some.injEq] at h; subst h
-      refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-      · cases a <;>
-          (try simp only [AdmA_opaq_str, AdmA_opaq_bool, AdmA_opaq_bin, AdmA_opaq_null]) <;>
-          simp [AdmA]
-      · cases a <;> refine ⟨?_, ?_⟩ <;>
-          simp_all [AdmA, opaq_p_string, opaq_p_boolean, opaq_p_binary, opaq_p_null]
-  case number =>
-      simp only [famOpaq, Option.some.injEq] at h; subst h
-      refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-      · cases a <;>
-          (try simp only [AdmA_opaq_num, AdmA_number_eq, Bool.and_self]) <;>
-          simp [AdmA]
-      · cases a <;> refine ⟨?_, ?_⟩ <;> simp_all [AdmA, opaq_p_number]
+      refine ⟨fun a => ?_, fun a ha hb => ⟨?_, rfl⟩⟩
+      · rw [Bool.and_comm]; cases k <;> cases a <;> rfl
+      · cases k <;> cases a <;> first | rfl | cases hb
   case opaq =>
       simp only [famOpaq, Option.some.injEq] at h; subst h
       exact admA_same _
@@ -5411,11 +5035,7 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
           rw [ofOptions_p_find, find?_filter_of (fun w hw => by rw [not_isNever_of_admA hw]; rfl),
             hfw, union_p_find, hft]
           exact hwP a hta hb
-  | .string, y, z, h => admA_meetSRight admA_famString y z h
-  | .number, y, z, h => admA_meetSRight admA_famNumber y z h
-  | .boolean, y, z, h => admA_meetSRight admA_famBoolean y z h
-  | .binary, y, z, h => admA_meetSRight admA_famBinary y z h
-  | .null, y, z, h => admA_meetSRight admA_famNull y z h
+  | .base k, y, z, h => admA_meetSRight (admA_famBase k) y z h
   | .literal k lv, y, z, h => admA_meetSRight (admA_famLit k lv) y z h
   | .set a, y, z, h => admA_meetSRight (admA_famSet a (fun u w hw => AdmA_meet_both a u w hw)) y z h
   | .opaq, y, z, h => admA_meetSRight (admA_famOpaq) y z h
@@ -5706,8 +5326,7 @@ theorem writeLe_of : ∀ t : Term, WriteLe t
       simp only [writeView]
       rw [Adm_union] at h ⊢
       exact anyWrite os (writeLe_ofL os) v h
-  | .string => fun _ h => h | .number => fun _ h => h | .boolean => fun _ h => h
-  | .binary => fun _ h => h | .null => fun _ h => h | .literal _ _ => fun _ h => h
+  | .base _ => fun _ h => h | .literal _ _ => fun _ h => h
   | .set t => fun v h => by
       simp only [writeView]
       split
@@ -5749,8 +5368,7 @@ theorem readLe_of : ∀ t : Term, ReadLe t
       simp only [readView]
       rw [AdmA_union] at h ⊢
       exact anyRead os (readLe_ofL os) a h
-  | .string => fun _ h => h | .number => fun _ h => h | .boolean => fun _ h => h
-  | .binary => fun _ h => h | .null => fun _ h => h | .literal _ _ => fun _ h => h
+  | .base _ => fun _ h => h | .literal _ _ => fun _ h => h
   | .set t => fun a h => by
       simp only [readView]
       split
@@ -6135,11 +5753,7 @@ theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam 
       exact typed_ofOptions (survivors hy
         ((typed_meetSRightL hf hA os zs hF).imp fun _ _ k => k hx)
         (List.filter_sublist (p := fun w : Term => !w.isNever)))
-  | .string, _, h, hx, hy => hf .string _ trivial h hx hy
-  | .number, _, h, hx, hy => hf .number _ trivial h hx hy
-  | .boolean, _, h, hx, hy => hf .boolean _ trivial h hx hy
-  | .binary, _, h, hx, hy => hf .binary _ trivial h hx hy
-  | .null, _, h, hx, hy => hf .null _ trivial h hx hy
+  | .base k, _, h, hx, hy => hf (.base k) _ trivial h hx hy
   | .literal k lv, _, h, hx, hy => hf (.literal k lv) _ trivial h hx hy
   | .set b, _, h, hx, hy => hf (.set b) _ trivial h hx hy
   | .opaq, _, h, hx, hy => hf .opaq _ trivial h hx hy
@@ -6180,20 +5794,9 @@ local macro "typed_fam" fam:ident : tactic => `(tactic|
                | exact ⟨_, _, Typed.never⟩
                | exact ⟨_, _, Typed.opaq⟩))))
 
-/-- `string` meets its own literals and `opaque`, and each answer is a factor or the bottom. -/
-theorem typed_famString : TypedFam Term.string famString := by typed_fam famString
-
-/-- `number` likewise. -/
-theorem typed_famNumber : TypedFam Term.number famNumber := by typed_fam famNumber
-
-/-- `boolean` likewise. -/
-theorem typed_famBoolean : TypedFam Term.boolean famBoolean := by typed_fam famBoolean
-
-/-- `binary` likewise. -/
-theorem typed_famBinary : TypedFam Term.binary famBinary := by typed_fam famBinary
-
-/-- `null` likewise. -/
-theorem typed_famNull : TypedFam Term.null famNull := by typed_fam famNull
+/-- A base meets its own base, its own literals and `opaque`, and each answer is a factor or the
+    bottom. -/
+theorem typed_famBase (k : GroundKind) : TypedFam (.base k) (famBase k) := by typed_fam famBase
 
 /-- A literal meets its own base and an equal literal, and is the bottom elsewhere. -/
 theorem typed_famLit (k : GroundKind) (lv : k.Carrier) :
@@ -6470,11 +6073,7 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
         exact typed_ofOptions (survivors hx
           ((typed_meetL os _ zs hF).imp fun _ _ k ht => k ht hy)
           (List.filter_sublist (p := fun w : Term => !w.isNever)))
-  | .string, y, z, h, hx, hy => typed_meetSRight typed_famString Adm_famString y z h hx hy
-  | .number, y, z, h, hx, hy => typed_meetSRight typed_famNumber Adm_famNumber y z h hx hy
-  | .boolean, y, z, h, hx, hy => typed_meetSRight typed_famBoolean Adm_famBoolean y z h hx hy
-  | .binary, y, z, h, hx, hy => typed_meetSRight typed_famBinary Adm_famBinary y z h hx hy
-  | .null, y, z, h, hx, hy => typed_meetSRight typed_famNull Adm_famNull y z h hx hy
+  | .base k, y, z, h, hx, hy => typed_meetSRight (typed_famBase k) (Adm_famBase k) y z h hx hy
   | .literal k lv, y, z, h, hx, hy => typed_meetSRight (typed_famLit k lv) (Adm_famLit k lv) y z h hx hy
   | .set a, y, z, h, hx, hy =>
       typed_meetSRight (typed_famSet a (fun u w hw => typed_meet a u w hw))

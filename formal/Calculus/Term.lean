@@ -53,11 +53,10 @@ inductive Pred where
 mutual
 
 inductive Term where
-  | string | number | boolean | binary
-  /-- §3 `(null)`: the `NULL` point. `Value.null` and `⟨NULL, ∗⟩` are in §1 and
-      `nullCodec` is one of `opaque`'s options, but until now no *term* denoted it —
-      so a schema could not say "this attribute is exactly NULL". -/
-  | null
+  /-- §3's ground bases, as one row: the base is an index, as `literal`'s is. Every table over
+      terms reads a base through `GroundKind` data, so a table has one row for the five bases.
+      `Term.string` and the other four names below keep the spelling of each base. -/
+  | base (k : GroundKind)
   /-- §3 `(literal)`: a ground **base**, and one inhabitant of that base's carrier.
 
       This was three constructors — arity-one over a value, and ~~literalS~~/~~literalN~~ at the
@@ -161,6 +160,14 @@ inductive ObjectSlot where
   | optional (t : Term)
 
 end
+
+/-- The five bases by name. A pattern `.string` still matches, as `.base .string`. -/
+@[match_pattern] abbrev Term.string : Term := .base .string
+@[match_pattern] abbrev Term.number : Term := .base .number
+@[match_pattern] abbrev Term.boolean : Term := .base .boolean
+@[match_pattern] abbrev Term.binary : Term := .base .binary
+/-- §3 `(null)`: the `NULL` point, so a schema can say "this attribute is exactly NULL". -/
+@[match_pattern] abbrev Term.null : Term := .base .null
 
 /-- Whether a term is the bottom, as a `Bool` the object presence rows branch on. -/
 def Term.isNever : Term → Bool
@@ -290,8 +297,7 @@ mutual
 
 /-- How `t` reads the variable `i`, as the level the section above defines. -/
 def Term.use (i : Nat) : Term → Nat
-  | .string | .number | .boolean | .binary | .null
-  | .literal _ _ | .opaq | .never => 0
+  | .base _ | .literal _ _ | .opaq | .never => 0
   | .var j => if i = j then 2 else 0
   | .set t => useUnder (Term.use i t)
   | .mu t => Term.use (i + 1) t
@@ -323,8 +329,7 @@ mutual
 
 /-- **Every binder is guarded**: at each `mu b`, `b` reads `var 0` at level `1` or less. -/
 def Term.guarded : Term → Bool
-  | .string | .number | .boolean | .binary | .null
-  | .literal _ _ | .opaq | .never | .var _ => true
+  | .base _ | .literal _ _ | .opaq | .never | .var _ => true
   | .mu t => decide (Term.use 0 t ≤ 1) && Term.guarded t
   | .set t => Term.guarded t
   | .refine t _ => Term.guarded t
@@ -366,8 +371,7 @@ and the `fuel` parameter it replaces. -/
 mutual
 
 def Term.depth : Term → Nat
-  | .string | .number | .boolean | .binary | .null
-  | .literal _ _ | .opaq | .never | .var _ => 1
+  | .base _ | .literal _ _ | .opaq | .never | .var _ => 1
   | .mu t => Term.depth t + 1
   | .set t => Term.depth t + 1
   | .held t P _ _ => max (Term.depth t) (Term.depth P) + 1

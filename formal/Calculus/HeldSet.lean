@@ -117,7 +117,7 @@ set_option linter.unreachableTactic false in
 theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T v
   | t, T, μ, h, v, hv => by
     cases h with
-    | string | number | boolean | binary | null => exact hv
+    | base _ => exact hv
     -- the carrier is gated, so the rule's `HLit k ls` and the denotation's are one
     -- expression — the same fact that removed `typed_TSub`'s five-way split here
     | literal _ _ => exact hv
