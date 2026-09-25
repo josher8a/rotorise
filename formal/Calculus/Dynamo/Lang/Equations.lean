@@ -1,4 +1,3 @@
-import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Lang.Denote
 import Calculus.Dynamo.Alg.Opaque
 

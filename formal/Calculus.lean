@@ -31,12 +31,12 @@ import Calculus.Dynamo.Analysis.Merge
 import Calculus.Dynamo.Analysis.Slice
 import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Witness.Discharge
-import Calculus.Dynamo.Alg.Equations
+import Calculus.Dynamo.Lang.Equations
 import Calculus.Dynamo.Alg.Continuity
 import Calculus.Dynamo.Alg.Opaque
 import Calculus.Dynamo.Lang.HeldSet
 import Calculus.Dynamo.Witness.Nesting
-import Calculus.Dynamo.Store
+import Calculus.Dynamo.Lang.Store
 import Calculus.Dynamo.Witness.Malleability
 import Calculus.Dynamo.Witness.Refutations
 import Calculus.Dynamo.Analysis.ExactV

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The commit gate: every check, in order, gated on exit codes.
 #
-#   scripts/gate.sh              all eight checks
-#   scripts/gate.sh --no-build   the four Python guards only
+#   scripts/gate.sh              all nine checks
+#   scripts/gate.sh --no-build   the five Python guards only
 #
 # `--no-build` skips the build, the gateway check, the emit and the bridge, and is honest only
 # when no `.lean` file changed.
@@ -58,6 +58,7 @@ run 'guard_reach.py'        python3 scripts/guard_reach.py
 run 'name_drift.py'         python3 scripts/name_drift.py
 run 'ratchet.py'            python3 scripts/ratchet.py
 run 'docstring_anchor.py'   python3 scripts/docstring_anchor.py
+run 'layer_order.py'        python3 scripts/layer_order.py
 
 if [ "$RUN_BUILD" -eq 1 ]; then
   run 'lake build' lake build

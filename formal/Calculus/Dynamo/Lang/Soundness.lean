@@ -29,6 +29,16 @@ open Alg (Body.fields_mk Body.wild_mk Body.at_mk Term.depth)
 def PairwiseCompat (opts : List Term) (ρ : List Codec := []) : Prop :=
   ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote s ρ) (denote t ρ)
 
+/-- A premise of the form `∀ t ∈ [x, y], P t`, checked at the two options. -/
+theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy : P y) :
+    ∀ z ∈ [x, y], P z := by
+  intro z hz
+  rcases List.mem_cons.mp hz with rfl | hz
+  · exact hx
+  · rcases List.mem_cons.mp hz with rfl | hz
+    · exact hy
+    · exact absurd hz (by simp)
+
 
 /-- The doc's semantic rule premises, at DynamoDB: `Alg.Obligations` at the DynamoDB signature,
     whose set obligation is `SetElem`. -/

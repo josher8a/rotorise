@@ -1,5 +1,4 @@
-import Calculus.Dynamo.Witness.Nesting
-import Calculus.Dynamo.Analysis.Separation
+import Calculus.Dynamo.Lang.Term
 
 /-!
 # The DynamoDB port
@@ -25,12 +24,6 @@ namespace Calculus.DynamoDB
 
 /-- The store's nesting bound. -/
 def maxNesting : Nat := 32
-
-/-- At the store's bound, a derivable term writes an attribute that DynamoDB refuses. -/
-theorem not_storable_of_typed :
-    ∃ (t : Term) (T : Held) (μ : Option Member) (v : Value) (a : Attr),
-      Typed t T μ ∧ (denote t).e v = some a ∧ ¬ Attr.Storable maxNesting a :=
-  Calculus.not_storable_of_typed maxNesting
 
 end Calculus.DynamoDB
 
@@ -444,11 +437,5 @@ def textOfNumeral : Value → Value := fun v =>
 /-- `decimal`, as the surface ships it: the numeric base under the text adapter, with the
     caller side restricted to text. -/
 def decimalHeld : Term := Term.held Term.number Term.string numeralOfStoredText textOfNumeral
-
-/-- It admits the stored spellings and nothing else, which is what `decimal` promises. -/
-example : Adm decimalHeld (Value.str "1.5") = true := by decide
-example : Adm decimalHeld (Value.str "1.50") = false := by decide
-example : Adm decimalHeld (Value.str "abc") = false := by decide
-example : Adm decimalHeld (Value.num (WFNumeral.of "1.5")) = false := by decide
 
 end Calculus

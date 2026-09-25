@@ -1,4 +1,4 @@
-import Calculus.Dynamo.Alg.Equations
+import Calculus.Dynamo.Lang.Equations
 import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Witness.Discharge
 

@@ -132,8 +132,7 @@ theorem over the family. So a row that drifts from the generic row fails the bui
 them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
 `Codec`, then the combinator algebra at the DynamoDB carriers as `Prisms`, `Products`, `Objects`,
 `Sums`, `Carriers`, `Lawful` and `Frontier`, and `Term`, then `Denote`, `Typing`, `Soundness`,
-then the analyses `Discharge`, `HeldSet`, `Nesting` and `Equations`, then `ExactV`, `ExactA` and
-`Separation`, then `Orthogonality`, with `Axioms` as the sink. Each instance module imports the
+then `ExactV`, `ExactA` and `Separation`, then `Orthogonality`, with `Axioms` as the sink. Each instance module imports the
 generic module that it instantiates. Several analyses sit off the spine: no module but
 `Axioms.lean` imports them. `Malleability` is one of them: a lawful codec has one attribute per
 value (`Lawful.fmt_subsingleton`).
@@ -143,10 +142,11 @@ directly or through its imports. So a generic declaration that cites a fact of t
 carriers is an unknown identifier, and the build fails. `JSON/Basic.lean` imports the generic layer and
 no DynamoDB module, so `Calculus.Value` is an unknown identifier under `import Calculus.JSON.Basic`. The
 laws, the combinators, the join and soundness are therefore facts of the algebra, and not facts of
-one store. Nothing checks the import lists themselves. An instance import in a generic module
-removes the guarantee, and no guard reports the change.
+one store. The gate runs `scripts/layer_order.py` on the import lists. The guard fails when a
+generic module imports a universe, when one universe imports the other, or when a module imports
+a higher layer.
 
-**One property of the graph is checked.** `Axioms.lean` walks the environment, and the
+**A second property of the graph is checked.** `Axioms.lean` walks the environment, and the
 environment is what `Axioms.lean` imports, which is a hand-maintained list. A module that nothing
 on that list reaches is silently unguarded. `scripts/guard_reach.py` fails when any module under
 `Calculus/` sits outside the transitive closure of the guard's imports. `Axioms.lean` imports
@@ -156,8 +156,8 @@ So a new module under `Calculus/` must be reachable from `Axioms.lean`. `Axioms.
 import the aggregator instead, because the aggregator imports the guard, and inverting that would
 let the default build run with no guard at all.
 
-Nothing else about the graph is enforced. A cycle is caught by Lean; an upward dependency in bad
-taste is caught by nobody.
+Lean catches a cycle, and `scripts/layer_order.py` holds the order of the layers. Nothing else
+about the graph is enforced.
 
 ---
 

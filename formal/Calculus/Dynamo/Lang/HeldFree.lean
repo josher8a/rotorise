@@ -1,4 +1,4 @@
-import Calculus.Dynamo.Analysis.ExactA
+import Calculus.Dynamo.Lang.Denote
 import Calculus.Lang.HeldFree
 
 /-!

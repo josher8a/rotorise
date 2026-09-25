@@ -1,5 +1,5 @@
 import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Store
+import Calculus.Dynamo.Lang.Store
 
 /-!
 # Differential-testing vectors

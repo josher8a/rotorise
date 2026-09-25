@@ -135,7 +135,7 @@ export const isNumeral = (s: string): boolean => {
  * What DynamoDB **hands back**, which is a smaller set: it normalises every `N` it accepts —
  * trimming leading and trailing zeros, dropping `+`, expanding exponents, and keeping one spelling
  * of zero. Measured, not assumed: `codec.dynamodb.spec.ts` puts each form into a real table and reads it
- * back, and `Numeral.Stored` in `formal/Calculus/Dynamo/Store.lean` is the same set.
+ * back, and `Numeral.Stored` in `formal/Calculus/Dynamo/Lang/Store.lean` is the same set.
  */
 export const isStoredNumeral = (s: string): boolean =>
     s !== '-0' && /^-?(?:0|[1-9]\d*)(?:\.\d*[1-9])?$/.test(s) && isNumeral(s)
