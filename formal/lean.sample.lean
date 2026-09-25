@@ -312,7 +312,7 @@ theorem recursive_json :
 
 /-- `recursive_json__guarded` — the model's guard accepts this term -/
 theorem recursive_json__guarded :
-    Term.guarded (Term.mu (Term.union [Term.string, Term.array (Term.var 0)])) = true := rfl
+    Alg.Term.guarded (Term.mu (Term.union [Term.string, Term.array (Term.var 0)])) = true := rfl
 
 /-- `recursive_tree_optional` -/
 theorem recursive_tree_optional :
@@ -323,7 +323,7 @@ theorem recursive_tree_optional :
 
 /-- `recursive_tree_optional__guarded` — the model's guard accepts this term -/
 theorem recursive_tree_optional__guarded :
-    Term.guarded (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none))) = true := rfl
+    Alg.Term.guarded (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none))) = true := rfl
 
 /-! ## Refusals — neither side writes anything for these
 

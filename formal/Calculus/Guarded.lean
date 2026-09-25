@@ -16,6 +16,9 @@ agree stage by stage.
 
 namespace Calculus
 
+open Alg (useUnder useHeld Term.use ObjectSlot.use Term.useL Term.useO Term.guarded Body.guarded
+  Term.guardedL Term.guardedO)
+
 /-- What a level of `Term.use` asks of the two codecs that stand for one variable: nothing where
     the variable does not occur, agreement one layer down under a container, agreement at the
     input's depth where it reads the input, and agreement everywhere under a `held`. -/

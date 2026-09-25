@@ -23,6 +23,7 @@ import Calculus.AlgLists
 import Calculus.AlgPositions
 import Calculus.AlgContainers
 import Calculus.AlgRecursion
+import Calculus.AlgTerm
 import Lean
 
 /-!
@@ -44,6 +45,8 @@ happened while this module was being written, which is why it exists.
 open Lean Elab Command
 
 namespace Calculus
+
+open Alg (Term.depthL)
 
 /-- **The sanctioned base is Lean's own, and nothing else.** There is no numeric host axiom
     here any more, because there is no host in the calculus: `N` is carried exactly, as

@@ -13,6 +13,8 @@ Not in `Products.lean`, which is the codec traversal toolkit — `carriedCodec`,
 
 namespace Calculus
 
+open Alg (Body.at)
+
 /-- Two map payloads over disjoint key sets, as one.
 
     `Finset.disjUnion` and not `∪`: the union's membership API goes through `Finset.image`

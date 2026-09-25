@@ -1,4 +1,5 @@
 import Calculus.Objects
+import Calculus.AlgTerm
 
 /-!
 # Sums (§5), and unknown values
@@ -11,10 +12,7 @@ which holds a numeral exactly.
 namespace Calculus
 
 noncomputable section
-/-- A union's member: `μ` when unanimous, else `⊤` (§5 `(union)`). -/
-def unanimous : List (Option Member) → Option Member
-  | [] => none
-  | μ :: μs => if μs.all (· == μ) then μ else none
+export Alg (unanimous)
 
 /-! ## Unknown values (§3 `(opaque)`) -/
 

@@ -8,6 +8,7 @@ import Calculus.AlgLists
 import Calculus.AlgPositions
 import Calculus.AlgContainers
 import Calculus.AlgRecursion
+import Calculus.AlgTerm
 import Calculus.JSON
 import Calculus.Codec
 import Calculus.Prisms

@@ -1,4 +1,5 @@
-import Calculus.Codec
+import Calculus.AlgTerm
+import Calculus.Opaque
 import Mathlib.Data.Finset.Lattice.Fold
 
 /-!
@@ -22,6 +23,10 @@ Deep embedding. Notes:
 
 namespace Calculus
 
+open Alg (Term.depth Body.depth Term.depthO Term.depth_le_depthL Term.depthO_le
+  Term.depth_lt_object_req Term.depth_lt_object_opt Term.depth_lt_object_rest)
+
+
 /-- §3 `(refine)`'s predicate, as far as it can be read.
 
     A bare `Value → Bool` decides nothing a table can see, and two things wanted to see it.
@@ -41,21 +46,65 @@ namespace Calculus
       the alternatives. With it, the data cases are closed under the meet and under the
       complement at a base. A name is a string, so the same case excludes a finite set of names.
 
-    `Pred` mentions no `Term`, so it is not in the mutual block below. Its `eval` is not here
-    either: `inL` is in `Prisms.lean`, which `Term.lean` does not import, so
-    `Pred.eval` sits beside `denote`. The type is the term language's; the meaning is the
-    denotation's. -/
+    `Pred` mentions no `Term`, so it is the universe's predicate type (`Alg.Syn.Pred`), and
+    `Pred.eval` below is its meaning (`Alg.Sem.eval`). -/
 inductive Pred where
   | members (k : GroundKind) (ls : NEFinset k.Carrier)
   | closure (q : Value → Bool)
   | except  (k : GroundKind) (ls : NEFinset k.Carrier)
 
-mutual
 
-inductive Term where
-  /-- §3's ground bases, as one row: the base is an index, as `literal`'s is. Every table over
-      terms reads a base through `GroundKind` data, so a table has one row for the five bases.
-      `Term.string` and the other four names below keep the spelling of each base. -/
+/-- **A set of alternatives, as the predicate `Pred.members` carries.** Some alternative is the
+    value, which is `inL` at each.
+
+    This is what `inL` was before a literal carried one value. It survives because a refinement
+    predicate is data over a `Finset` and a literal is not: `Pred.members` is the only remaining
+    set of alternatives in the language. -/
+noncomputable def inLs (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
+  decide (∃ x ∈ ls.1, inL k x v = true)
+
+/-- Whether a value is of one ground base. -/
+def inBase : GroundKind → Value → Bool
+  | .string,  .str _  => true
+  | .number,  .num _  => true
+  | .boolean, .bool _ => true
+  | .binary,  .bin _  => true
+  | .null,    .null   => true
+  | _, _ => false
+
+/-- **What a `Pred` means.** The universe's `Alg.Sem.eval`, beside the type.
+
+    `noncomputable`, because `inL` is. `denote` is noncomputable for the same reason, and
+    the meet never calls this: the meet reads a `Pred`'s constructors, which are data.
+
+    **`members` keeps its `Finset`, and a literal no longer has one.** A refinement predicate is
+    data over a set of alternatives; a literal is one value. `inLs` is the set form, built from
+    `inL` at each alternative rather than as a membership row of its own. -/
+noncomputable def Pred.eval : Pred → Value → Bool
+  | .members k ls => inLs k ls
+  | .closure q    => q
+  | .except k ls  => fun v => inBase k v && !inLs k ls v
+
+/-- **The DynamoDB set obligation**: the element writes one member of `S`, `N` or `B`.
+
+    A rule of the store universe, not of the set algebra: `lawful_setCodec` needs only a lawful
+    element. A set writes a wire set in the first family, `SS`, `NS` or `BS`, into which every
+    element writes, and writes nothing where no family holds every element. So `set` over an
+    element that names no member can still write a value (`set opaque` writes an `SS` of strings),
+    and `set` over an element of a non-scalar member writes nothing. The obligation asks the static
+    fact a schema states: the element names one member of `S`, `N` or `B`. The other two DynamoDB set rules, the three element types and the absent
+    empty set, are the carrier's (`Value.strSet`, `numSet`, `binSet`). -/
+def SetElem (c : Codec) : Prop := (c.μ.bind setMember).isSome = true
+
+/-! ## The DynamoDB signature
+
+The term language is `Alg.Term` at `dynSyn`, and `dynSem` is its meaning. Each field of the signature is a declaration that
+this development already proves: the ground codecs, the list and map prisms, the set lift and
+`opaque`. -/
+
+/-- The primitives of DynamoDB: a ground base, or one alternative at a base. -/
+inductive Ground where
+  /-- §3's ground bases: the base is an index, as `literal`'s is. -/
   | base (k : GroundKind)
   /-- §3 `(literal)`: a ground **base**, and one inhabitant of that base's carrier.
 
@@ -70,96 +119,137 @@ inductive Term where
       union of singletons: the members are pairwise separated because the values differ.
       `Calculus/LiteralArity1.lean` derives that rule. -/
   | literal (k : GroundKind) (v : k.Carrier)
-  /-- §3 `(set)`: the finite-powerset lift of an element term. A lawful element gives a lawful
-      set (`lawful_setCodec`), and that law reads nothing about the element's base.
 
-      **The DynamoDB set rules are not structure here.** That a stored set holds elements of one
-      member of `S`, `N` or `B` is the store universe's rule, and `Obligations` states it as
-      `SetElem`, the way `(union)`'s compatibility is stated. The three element types and the
-      absent empty set are the carrier's (`Value.strSet`, `numSet`, `binSet`). So a restricted
-      element, a literal element and an adapter element are each spelled at the element:
-      `set(refine(string, q))`, `set(literal k v)` and `set(held number string f g)`. -/
-  | set      (elem : Term)
-  /-- §3 `(list)`: the one positional container, as a prefix, at most one spread, and a
-      suffix. `array`, `(tuple)` and `(tuple-tail)` were three shapes of one thing, and
-      none of the three could say `[A, B, ...C[], D]` — a fixed position AFTER a spread.
+/-- The codec of each primitive. -/
+@[simp] noncomputable def groundCodec : Ground → Codec
+  | .base k => baseCodec k
+  | .literal k v => literalCodec k v
 
-      A value of length `n` is admitted when `n ≥ pre.length + suf.length`: `pre` aligns
-      from the left, `suf` from the right, and every position between them goes through
-      the spread. With `spread = none` the arity is exactly `pre.length + suf.length`.
+/-- Each primitive is lawful. -/
+theorem lawful_groundCodec : ∀ g, Lawful (groundCodec g)
+  | .base k => lawful_baseCodec k
+  | .literal k v => lawful_literalCodec k v
 
-      **Two spreads have no term**, because the spread is an `Option` and not a `List`.
-      The host's list constructor takes the spread as one parameter and inherits that,
-      while its tuple takes a tail as a marker inside a variadic parameter list. So the
-      host's type-level refusal for a misplaced tail still has a job, on the tuple alone:
-      the refusal is narrower than it was and it is not gone. Measured, not read.
-      `array` and `tuple` survive below as *builders*, so a statement that spells either
-      keeps its spelling. -/
-  | list     (pre : List Term) (spread : Option Term) (suf : List Term)
-  /-- §3 `(held)`: a morphism between two restrictions. `inner` restricts the stored side,
-      `outer` restricts the caller side, and `f` and `g` only transform between the two. The
-      caller side has no unrestricted spelling: a caller that states no restriction writes
-      `.opaq` as `outer`. -/
-  | held     (inner : Term) (outer : Term) (f : Value → Value) (g : Value → Value)
-  | refine   (inner : Term) (p : Pred)
-  /-- §3 `(opaque)`: the universal sum. The number option is `numberCodec`, so `opaque`
-      writes every `Value` (`opaq_total`). -/
-  | opaq
-  /-- §4's field table is a *set* of names each declaring one field, so that is what the
-      term carries. A `List (Name × ObjectSlot)` admitted two orderings of one object and a
-      repeated name, and the typing rule carried a `Nodup` premise to make the first
-      harmless and rule out the second; both are now properties of the type. `ObjectSlot`
-      sits in the function's codomain, which is strictly positive — the same factoring
-      `Attr.m` and `Value.map` use one level down. -/
-  | object   (b : Body)
-  | union    (options : List Term)
-  /-- §5's bottom: the term that admits no value. Its held set is `False`, which is a subset of
-      every held set. A constructor and not an empty `union`: the empty option list is a term a
-      caller can build by accident, and a rule that reads it as the bottom reads that accident as
-      intent. -/
-  | never
-  /-- A bound variable, as a de Bruijn index: `var 0` names the nearest enclosing `mu`. A closed
-      term reads a variable that no `mu` binds as the bottom. -/
-  | var (i : Nat)
-  /-- A guarded recursive term: `mu b` is the fixed point of `b`, where `var 0` in `b` stands for
-      `mu b` itself. The name is not `rec`, which the recursor holds. `denote` reads each input at
-      the stage of `b` that the input's own depth names (`muCodec`).
+/-- The list former: the `arr` and `L` prisms. -/
+abbrev dList : Alg.ListF Value Attr Member Attr.member Value.depth Attr.depth where
+  pV := arrV
+  pA := lA
+  μ := .L
+  hμ _ := rfl
+  dV_lt _ _ hx := Nat.succ_le_succ (Value.depth_le_depthL hx)
+  dA_lt _ _ hx := Nat.succ_le_succ (Attr.depth_le_depthL hx)
 
-      **The guard is a checked condition, and not a type.** `Term.guarded` refuses a variable that
-      reads the input of its binder itself, as in `mu (var 0)` and `mu (union [var 0, string])`,
-      and a variable under a `held`, whose `f` can make the input deeper. `Typed.mu` carries the
-      guard, and the test file pins each refusal. A type would need a second term family for the
-      body of a binder, and every table over terms would then have one more family. -/
-  | mu (body : Term)
+/-- The map former: the `map` and `M` prisms. -/
+abbrev dMap : Alg.MapF Value Attr Member Attr.member Value.depth Attr.depth where
+  mV := mapV
+  mA := mA
+  μ := .M
+  hμ _ := rfl
+  dV_lt m k := Value.depth_map_entry (f := m.2) k
+  dA_lt m k := Attr.depth_map_entry (f := m.2) k
 
-/-- §4's object payload: the declared names, the slot at each, and the one open block.
-    The type is `inductive … | mk`, so the projections below are written by hand: three lines,
-    against a `Body`-shaped row in every table over terms.
+/-- The set former: the lift, with the store's set rule as the element's obligation. -/
+noncomputable abbrev dSet : Alg.SetF Value Attr Member Attr.member Value.depth Attr.depth where
+  lift := setCodec
+  lawful h := lawful_setCodec h
+  agree h := agreeLe_setCodec h
+  elem := SetElem
 
-    **A body is a partition of the key space.** The declared names are one block each, `wild`
-    is the single open block, and every remaining name is refused. There is no policy that
-    silently drops a name: an undeclared name a body does not claim is a name the body refuses,
-    on the way in and on the way out. The declared names are subtracted *structurally*, so no
-    well-formedness premise travels with a body.
+/-- **The DynamoDB syntax**: values, the ground primitives, and the data predicates. -/
+abbrev dynSyn : Alg.Syn where
+  V := Value
+  Ground := Ground
+  Pred := Pred
 
-    **An open block needs no ban list.** A name an open body must refuse is a *declared* name at
-    `optional never`: the key may be absent, and nothing admits it when it is present. So
-    `object({c}, exclude d)` is `{c, d : optional never}` with an open block, and the exclusion
-    needs no second place to live.
+/-- **The DynamoDB meaning** of that syntax. -/
+@[reducible] noncomputable instance dynSem : Alg.Sem dynSyn where
+  A := Attr
+  M := Member
+  member := Attr.member
+  decM := inferInstance
+  ground := groundCodec
+  lawful_ground := lawful_groundCodec
+  eval := Pred.eval
+  dV := Value.depth
+  dA := Attr.depth
+  dV_pos := Value.depth_pos
+  dA_pos := Attr.depth_pos
+  list := some dList
+  map := some dMap
+  set := some dSet
+  top := Ω
+  lawful_top := lawful_opaq
 
-    **The open block is a term and no pattern.** It holds every undeclared name. `Name` is
-    `String` and so infinite, which is why two open blocks always intersect, and why one block
-    is all a body can ever carry. A key pattern other than "every undeclared name", a template
-    or a regular expression, is a change to this constructor. -/
-inductive Body where
-  | mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot) (wild : Option Term)
+/-! ## The term language at DynamoDB
 
-/-- §4's current-schema slot. A required name is required on both current-schema sides. -/
-inductive ObjectSlot where
-  | req      (t : Term)
-  | optional (t : Term)
+Each constructor keeps its spelling, as a `match_pattern` abbreviation: a pattern `.list pre sp
+suf` or `.string` matches as it did. -/
 
-end
+/-- The term language of DynamoDB. -/
+abbrev Term := Alg.Term dynSyn
+/-- An object payload of DynamoDB. -/
+abbrev Body := Alg.Body dynSyn
+/-- An object slot of DynamoDB. -/
+abbrev ObjectSlot := Alg.ObjectSlot dynSyn
+
+@[match_pattern] abbrev Term.base (k : GroundKind) : Term := Alg.Term.prim (.base k)
+@[match_pattern] abbrev Term.literal (k : GroundKind) (v : k.Carrier) : Term :=
+  Alg.Term.prim (.literal k v)
+@[match_pattern] abbrev Term.set (elem : Term) : Term := Alg.Term.set elem
+@[match_pattern] abbrev Term.list (pre : List Term) (spread : Option Term) (suf : List Term) :
+    Term := Alg.Term.list pre spread suf
+@[match_pattern] abbrev Term.held (inner outer : Term) (f g : Value → Value) : Term :=
+  Alg.Term.held inner outer f g
+@[match_pattern] abbrev Term.refine (inner : Term) (p : Pred) : Term := Alg.Term.refine inner p
+@[match_pattern] abbrev Term.opaq : Term := Alg.Term.opaq
+@[match_pattern] abbrev Term.object (b : Body) : Term := Alg.Term.object b
+@[match_pattern] abbrev Term.union (options : List Term) : Term := Alg.Term.union options
+@[match_pattern] abbrev Term.never : Term := Alg.Term.never
+@[match_pattern] abbrev Term.var (i : Nat) : Term := Alg.Term.var i
+@[match_pattern] abbrev Term.mu (body : Term) : Term := Alg.Term.mu body
+@[match_pattern] abbrev Body.mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
+    (wild : Option Term) : Body := Alg.Body.mk fields f wild
+@[match_pattern] abbrev ObjectSlot.req (t : Term) : ObjectSlot := Alg.ObjectSlot.req t
+@[match_pattern] abbrev ObjectSlot.optional (t : Term) : ObjectSlot := Alg.ObjectSlot.optional t
+
+/-- **Case analysis on a DynamoDB term**, with the primitive split into its two rows, and each
+    field at its DynamoDB type. `cases` uses this eliminator for every `Term`, so a case reads
+    `base k` and `literal k v`, and a field reads the DynamoDB tables by field notation. -/
+@[elab_as_elim, cases_eliminator]
+def Term.casesD {motive : Term → Sort _} (base : ∀ k, motive (.base k))
+    (literal : ∀ k v, motive (.literal k v)) (set : ∀ elem, motive (.set elem))
+    (list : ∀ pre spread suf, motive (.list pre spread suf))
+    (held : ∀ inner outer f g, motive (.held inner outer f g))
+    (refine : ∀ inner p, motive (.refine inner p)) (opaq : motive .opaq)
+    (object : ∀ b, motive (.object b)) (union : ∀ options, motive (.union options))
+    (never : motive .never) (var : ∀ i, motive (.var i)) (mu : ∀ body, motive (.mu body)) :
+    (t : Term) → motive t
+  | .base k => base k
+  | .literal k v => literal k v
+  | .set e => set e
+  | .list pre sp suf => list pre sp suf
+  | .held i o f g => held i o f g
+  | .refine i p => refine i p
+  | .opaq => opaq
+  | .object b => object b
+  | .union os => union os
+  | .never => never
+  | .var i => var i
+  | .mu b => mu b
+
+/-- Case analysis on a DynamoDB payload, at the DynamoDB types. -/
+@[elab_as_elim, cases_eliminator]
+def Body.casesD {motive : Body → Sort _}
+    (mk : ∀ fields (f : {k // k ∈ fields} → ObjectSlot) wild, motive (Body.mk fields f wild)) :
+    (b : Body) → motive b
+  | .mk fields f wild => mk fields f wild
+
+/-- Case analysis on a DynamoDB slot, at the DynamoDB types. -/
+@[elab_as_elim, cases_eliminator]
+def ObjectSlot.casesD {motive : ObjectSlot → Sort _} (req : ∀ t, motive (ObjectSlot.req t))
+    (optional : ∀ t, motive (ObjectSlot.optional t)) : (s : ObjectSlot) → motive s
+  | .req t => req t
+  | .optional t => optional t
 
 /-- The five bases by name. A pattern `.string` still matches, as `.base .string`. -/
 @[match_pattern] abbrev Term.string : Term := .base .string
@@ -168,22 +258,6 @@ end
 @[match_pattern] abbrev Term.binary : Term := .base .binary
 /-- §3 `(null)`: the `NULL` point, so a schema can say "this attribute is exactly NULL". -/
 @[match_pattern] abbrev Term.null : Term := .base .null
-
-/-- Whether a term is the bottom, as a `Bool` the object presence rows branch on. -/
-def Term.isNever : Term → Bool
-  | .never => true
-  | _ => false
-
-/-- Whether a slot's name must be present on the write side. -/
-def ObjectSlot.isReq : ObjectSlot → Bool
-  | .optional _ => false
-  | _ => true
-
-/-- A slot's presence lattice element. The bits admit presence and absence, respectively. -/
-def ObjectSlot.presence (f : ObjectSlot) : Bool × Bool :=
-  match f with
-  | .req t => if t.isNever then (false, false) else (f.isReq, !f.isReq)
-  | .optional t => if t.isNever then (false, true) else (true, true)
 
 /-- A required slot is required on both sides of the current schema. -/
 theorem req_presence :
@@ -213,38 +287,6 @@ def Term.tuple (elems : List Term) (tail : Option Term) : Term := .list elems ta
 def Term.record (val : Term) : Term :=
   .object (.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some val))
 
-
-
-/-! ## `Body`'s projections
-
-`inductive … | mk` generates none, so these are written out. They are named for `MapOf`'s
-`fields`/`at`, because a body *is* a `MapOf ObjectSlot` paired with an open block. The `mutual`
-block also elaborates with `Body` as a `structure`, and with a `MapOf ObjectSlot` argument in
-place of the key set and the slot function. `Body` takes neither form, so the projections are
-written by hand.
-
-The projections exist so that a *statement* about an object can quantify over one thing. Rows
-that need all three components still pattern-match on `.mk`, which is cheaper than three
-projections and keeps the equation compiler's iota reductions available. -/
-
-def Body.fields : Body → Finset Name
-  | .mk fields _ _ => fields
-
-def Body.at : (b : Body) → {k // k ∈ b.fields} → ObjectSlot
-  | .mk _ f _ => f
-
-def Body.wild : Body → Option Term
-  | .mk _ _ wild => wild
-
-@[simp] theorem Body.fields_mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
-    (wild : Option Term) : (Body.mk fields f wild).fields = fields := rfl
-
-@[simp] theorem Body.wild_mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
-    (wild : Option Term) : (Body.mk fields f wild).wild = wild := rfl
-
-@[simp] theorem Body.at_mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
-    (wild : Option Term) : (Body.mk fields f wild).at = f := rfl
-
 /-- An **open object**: one that carries the open block, so a name it does not declare is held
     rather than refused.
 
@@ -271,206 +313,6 @@ theorem Term.isOpenObject_eq_false {t : Term} :
     | _ => rfl
 
 
-/-! ## The guard of a binder
-
-`mu b` denotes the limit of the stages of `b`, and each input reads the stage its own depth names.
-That limit is stable only when `b` reads its variable at inputs strictly shallower than its own
-input. A container reads its elements one layer down. A sum and a restriction read their
-own input. A `held` reads its inner term at `f v`, and `f` can make the input deeper, so a variable
-under a `held` has no depth bound at all.
-
-`Term.use i t` says how `t` reads the variable `i`, as a level: `0` when `i` does not occur, `1`
-when each occurrence sits under a container and none under a `held`, `2` when an occurrence reads
-the input itself and none sits under a `held`, and `3` when an occurrence sits under a `held`. The
-level is a `Nat` and not an inductive, because a body's slot table is a key set with a function on
-it, and `Finset.sup` over `Nat` is the join over a key set that `Term.depth` already uses. The
-functions below produce the four levels and no other value. -/
-
-/-- A container reads its elements one layer down: an occurrence that read the input now reads an
-    element. -/
-def useUnder (u : Nat) : Nat := if u = 2 then 1 else u
-
-/-- A `held` reads its terms at an input of any depth. -/
-def useHeld (u : Nat) : Nat := if u = 0 then 0 else 3
-
-mutual
-
-/-- How `t` reads the variable `i`, as the level the section above defines. -/
-def Term.use (i : Nat) : Term → Nat
-  | .base _ | .literal _ _ | .opaq | .never => 0
-  | .var j => if i = j then 2 else 0
-  | .set t => useUnder (Term.use i t)
-  | .mu t => Term.use (i + 1) t
-  | .refine t _ => Term.use i t
-  | .held t P _ _ => useHeld (max (Term.use i t) (Term.use i P))
-  | .list pre sp suf =>
-      useUnder (max (Term.useL i pre) (max (Term.useO i sp) (Term.useL i suf)))
-  | .union opts => Term.useL i opts
-  | .object b => useUnder (Body.use i b)
-
-def Body.use (i : Nat) : Body → Nat
-  | .mk fields f wild =>
-      max (fields.attach.sup fun k => ObjectSlot.use i (f k)) (Term.useO i wild)
-
-def ObjectSlot.use (i : Nat) : ObjectSlot → Nat
-  | .req t | .optional t => Term.use i t
-
-def Term.useL (i : Nat) : List Term → Nat
-  | [] => 0
-  | t :: ts => max (Term.use i t) (Term.useL i ts)
-
-def Term.useO (i : Nat) : Option Term → Nat
-  | none => 0
-  | some t => Term.use i t
-
-end
-
-mutual
-
-/-- **Every binder is guarded**: at each `mu b`, `b` reads `var 0` at level `1` or less. -/
-def Term.guarded : Term → Bool
-  | .base _ | .literal _ _ | .opaq | .never | .var _ => true
-  | .mu t => decide (Term.use 0 t ≤ 1) && Term.guarded t
-  | .set t => Term.guarded t
-  | .refine t _ => Term.guarded t
-  | .held t P _ _ => Term.guarded t && Term.guarded P
-  | .list pre sp suf => Term.guardedL pre && Term.guardedO sp && Term.guardedL suf
-  | .union opts => Term.guardedL opts
-  | .object b => Body.guarded b
-
-def Body.guarded : Body → Bool
-  | .mk fields f wild =>
-      decide (∀ k : {k // k ∈ fields}, ObjectSlot.guarded (f k) = true) && Term.guardedO wild
-
-def ObjectSlot.guarded : ObjectSlot → Bool
-  | .req t | .optional t => Term.guarded t
-
-def Term.guardedL : List Term → Bool
-  | [] => true
-  | t :: ts => Term.guarded t && Term.guardedL ts
-
-def Term.guardedO : Option Term → Bool
-  | none => true
-  | some t => Term.guarded t
-
-end
-
-/-! ## A structural measure on terms
-
-`denote` recurses structurally and needs no measure. The **proofs** do: `soundness` recurses
-on the derivation, and `Typed` is a `Prop`-valued mutual family with no `.brecOn`, so it has to
-recurse on the term instead — and `sizeOf` cannot serve, because `Term.object`'s field table is a
-*function* and `sizeOf` is blind to functions (`sizeOf f = 0`).
-
-This is the measure that sees through it, and it is not a new idea: it is exactly the shape
-`Value.depth` in `Recursion.lean` uses — `attach.sup` over the key set where a list would
-fold. What matters is that it is **derived from the term** rather than supplied by a caller, so it
-appears in no statement, no `Obligations`, and no rule. That is the whole difference between this
-and the `fuel` parameter it replaces. -/
-
-mutual
-
-def Term.depth : Term → Nat
-  | .base _ | .literal _ _ | .opaq | .never | .var _ => 1
-  | .mu t => Term.depth t + 1
-  | .set t => Term.depth t + 1
-  | .held t P _ _ => max (Term.depth t) (Term.depth P) + 1
-  | .refine t _ => Term.depth t + 1
-  | .list pre sp suf =>
-      max (Term.depthL pre) (max (Term.depthO sp) (Term.depthL suf)) + 1
-  -- one companion, like every other non-leaf row
-  | .object b => Body.depth b + 1
-  | .union opts => Term.depthL opts + 1
-/-- The payload's own budget: the slot table is a key *set* with a function on it, so its
-    layer is the largest slot budget over the key set — a `Finset.sup`, where a list would be
-    a fold — against the open block's. This is the companion `ObjectSlot.depth` and
-    `Body.wildDepth` were always missing: the object row used to inline it, which is why the
-    three inequality lemmas below had to quantify over three components. -/
-def Body.depth : Body → Nat
-  | .mk fields f wild =>
-      max (fields.attach.sup fun k => ObjectSlot.depth (f k)) (Body.wildDepth wild) + 1
-
-def ObjectSlot.depth : ObjectSlot → Nat
-  | .req t | .optional t => Term.depth t + 1
-
-def Body.wildDepth : Option Term → Nat
-  | none => 1
-  | some t => Term.depth t + 1
-
-def Term.depthL : List Term → Nat
-  | [] => 1
-  | t :: ts => max (Term.depth t) (Term.depthL ts)
-
-def Term.depthO : Option Term → Nat
-  | none => 1
-  | some t => Term.depth t
-
-end
-
-theorem Term.depth_pos (t : Term) : 0 < Term.depth t := by
-  cases t <;> simp [Term.depth]
-
-/-- A list element is no deeper than its list. -/
-theorem Term.depth_le_depthL : ∀ {ts : List Term} {t}, t ∈ ts → Term.depth t ≤ Term.depthL ts
-  | _ :: _, _, h => by
-      rcases List.mem_cons.mp h with rfl | h'
-      · simp [Term.depthL]
-      · exact le_trans (Term.depth_le_depthL h') (by simp [Term.depthL])
-
-theorem Term.depthO_le : ∀ {tail : Option Term} {t}, t ∈ tail → Term.depth t ≤ Term.depthO tail
-  | some _, _, h => by cases h; simp [Term.depthO]
-
-/-- A declared field is strictly shallower than the body — the inequality `sizeOf` cannot give,
-    and the reason this measure exists. Stated at `Body`, where it belongs: it is a fact about a
-    key set and a function on it, and mentions no `Term` at all. -/
-theorem Body.depth_lt_field : ∀ (b : Body) (k : {k // k ∈ b.fields}),
-    ObjectSlot.depth (b.at k) < Body.depth b
-  | .mk fields f _, k => by
-      have : (fun k => ObjectSlot.depth (f k)) k ≤
-          fields.attach.sup fun k => ObjectSlot.depth (f k) :=
-        Finset.le_sup (f := fun k => ObjectSlot.depth (f k)) (Finset.mem_attach _ k)
-      simp only at this
-      simp only [Body.depth, Body.at]
-      omega
-
-/-- …and the open block's codec, the other half of the payload. -/
-theorem Body.depth_lt_rest : ∀ (b : Body) {t : Term}, b.wild = some t →
-    Term.depth t < Body.depth b
-  | .mk _ _ _, _, h => by
-      simp only [Body.wild] at h
-      subst h
-      simp only [Body.depth, Body.wildDepth]
-      omega
-
-/-- The body is strictly shallower than the object term — one layer, by `rfl` on the measure. -/
-theorem Term.depth_lt_object_body (b : Body) : Body.depth b < Term.depth (.object b) := by
-  simp only [Term.depth]; omega
-
-/-- A declared field's *layer* against the object's, kept under its old name: every downstream
-    citation is of this, and the payload's own version is `Body.depth_lt_field`. -/
-theorem Term.depth_lt_object (b : Body) (k : {k // k ∈ b.fields}) :
-    ObjectSlot.depth (b.at k) < Term.depth (.object b) :=
-  lt_trans (Body.depth_lt_field b k) (Term.depth_lt_object_body b)
-
-/-- …and the two slot shapes, which is what a proof recursing into a declared slot needs.
-    A row that matched `.object (.mk fields f wild)` discharges these with `f k = .req t m` in
-    hand: `(Body.mk fields f wild).at k` is `f k` by `rfl`, so `assumption` closes it.
-
-    so the `req` lemma covers both and the third one is gone rather than renamed. -/
-theorem Term.depth_lt_object_req {b : Body} (k : {k // k ∈ b.fields}) {t : Term}
-    (h : b.at k = .req t) : Term.depth t < Term.depth (.object b) := by
-  have h1 := Term.depth_lt_object b k
-  rw [h] at h1; simp only [ObjectSlot.depth] at h1; omega
-
-theorem Term.depth_lt_object_opt {b : Body} (k : {k // k ∈ b.fields}) {t : Term}
-    (h : b.at k = .optional t) : Term.depth t < Term.depth (.object b) := by
-  have h1 := Term.depth_lt_object b k
-  rw [h] at h1; simp only [ObjectSlot.depth] at h1; omega
-
-/-- The open block's codec against the object's layer, for the same reason. -/
-theorem Term.depth_lt_object_rest {b : Body} {t : Term} (h : b.wild = some t) :
-    Term.depth t < Term.depth (.object b) :=
-  lt_trans (Body.depth_lt_rest b h) (Term.depth_lt_object_body b)
 
 /-- The termination argument every `Term.depth` recursion in this development uses, written
     once. **Three** theorems share it, all in `Soundness.lean` — `soundness`,

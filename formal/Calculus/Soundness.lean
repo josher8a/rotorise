@@ -18,6 +18,8 @@ where the per-construction lemmas — proved and open — now live.
 
 namespace Calculus
 
+open Alg (Body.fields_mk Body.wild_mk Body.at_mk Term.depth)
+
 /-! ## Obligations -/
 
 
@@ -30,16 +32,6 @@ theorem wildSem_ne_drop (w : Option Term) {ρ : List Codec} : wildSem w ρ ≠ .
 def PairwiseCompat (opts : List Term) (ρ : List Codec := []) : Prop :=
   ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote s ρ) (denote t ρ)
 
-/-- **The DynamoDB set obligation**: the element writes one member of `S`, `N` or `B`.
-
-    A rule of the store universe, not of the set algebra: `lawful_setCodec` needs only a lawful
-    element. A set writes a wire set in the first family, `SS`, `NS` or `BS`, into which every
-    element writes, and writes nothing where no family holds every element. So `set` over an
-    element that names no member can still write a value (`set opaque` writes an `SS` of strings),
-    and `set` over an element of a non-scalar member writes nothing. The obligation asks the static
-    fact a schema states: the element names one member of `S`, `N` or `B`. The other two DynamoDB set rules, the three element types and the absent
-    empty set, are the carrier's (`Value.strSet`, `numSet`, `binSet`). -/
-def SetElem (c : Codec) : Prop := (c.μ.bind setMember).isSome = true
 
 mutual
 

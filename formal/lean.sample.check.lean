@@ -286,7 +286,7 @@ theorem recursive_json :
 
 /-- `recursive_json__guarded` — the model's guard accepts this term -/
 theorem recursive_json__guarded :
-    Term.guarded (Term.mu (Term.union [Term.string, Term.array (Term.var 0)])) = true := rfl
+    Alg.Term.guarded (Term.mu (Term.union [Term.string, Term.array (Term.var 0)])) = true := rfl
 
 /-- `recursive_tree` -/
 theorem recursive_tree :
@@ -297,7 +297,7 @@ theorem recursive_tree :
 
 /-- `recursive_tree__guarded` — the model's guard accepts this term -/
 theorem recursive_tree__guarded :
-    Term.guarded (Term.mu (Term.object (Body.mk {"v", "kids"} (fun k => if k.1 = "v" then ObjectSlot.req (Term.string) else ObjectSlot.req (Term.array (Term.var 0))) none))) = true := rfl
+    Alg.Term.guarded (Term.mu (Term.object (Body.mk {"v", "kids"} (fun k => if k.1 = "v" then ObjectSlot.req (Term.string) else ObjectSlot.req (Term.array (Term.var 0))) none))) = true := rfl
 
 /-- `recursive_category` -/
 theorem recursive_category :
@@ -308,7 +308,7 @@ theorem recursive_category :
 
 /-- `recursive_category__guarded` — the model's guard accepts this term -/
 theorem recursive_category__guarded :
-    Term.guarded (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none))) = true := rfl
+    Alg.Term.guarded (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none))) = true := rfl
 
 /-- `recursive_tree_optional` -/
 theorem recursive_tree_optional :
@@ -319,7 +319,7 @@ theorem recursive_tree_optional :
 
 /-- `recursive_tree_optional__guarded` — the model's guard accepts this term -/
 theorem recursive_tree_optional__guarded :
-    Term.guarded (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none))) = true := rfl
+    Alg.Term.guarded (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none))) = true := rfl
 
 /-! ### Read back, through the same term
 

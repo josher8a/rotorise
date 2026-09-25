@@ -40,6 +40,8 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
 
 namespace Calculus
 
+open Alg (Term.guarded)
+
 /-! ## Held sets
 
     §3's `T` — a set of values, written as its characteristic predicate. Each former
