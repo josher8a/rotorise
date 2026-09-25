@@ -1,5 +1,5 @@
-import Calculus.Dynamo.Denote
-import Calculus.Dynamo.Frontier
+import Calculus.Dynamo.Lang.Denote
+import Calculus.Dynamo.Alg.Frontier
 import Calculus.Dynamo.Store
 import Mathlib.Tactic.FinCases
 

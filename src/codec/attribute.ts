@@ -375,7 +375,7 @@ export const MAX_DOCUMENT_NESTING = 32
  * gap and is queued rather than fixed here, because closing it means threading a level through
  * every container codec, which is a different change from guarding the two escape hatches. It is
  * measured: a self-nesting entity reaches `depth 82` at forty levels. The repair that would be
- * compositional is stated in `formal/Calculus/Dynamo/Nesting.lean`, which also says why it cannot cover
+ * compositional is stated in `formal/Calculus/Dynamo/Witness/Nesting.lean`, which also says why it cannot cover
  * the whole language — `opaque` and `lazy` take their depth from the value, so no syntactic bound
  * exists for them and the theorem there is about the fragment that excludes them.
  */

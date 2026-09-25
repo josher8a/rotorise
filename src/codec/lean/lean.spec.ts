@@ -715,7 +715,7 @@ describe('a whole vector', () => {
     /** The equation protocol carries its own proof, so its preamble is the one with the tactic. */
     it('carries the tactic and the imports the equation protocol needs', () => {
         const module = leanVectorModule([], 'equation')
-        expect(module).toContain('import Calculus.Dynamo.Denote')
+        expect(module).toContain('import Calculus.Dynamo.Lang.Denote')
         expect(module).toContain('import Mathlib.Tactic.FinCases')
         expect(module).toContain('macro "vector" : tactic')
         expect(module.trimEnd().endsWith('end Calculus')).toBe(true)
@@ -1555,7 +1555,7 @@ describe("the declaration guard, against the model's classifier", () => {
             )
         }
         expect(leanSeparationModule([])).toContain(
-            'import Calculus.Dynamo.Meet',
+            'import Calculus.Dynamo.Analysis.Meet',
         )
         // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
         // without the import Lean auto-binds the name and every verdict fails to elaborate
@@ -1579,7 +1579,9 @@ describe("the declaration guard, against the model's classifier", () => {
                 leanMeetModule(meets, MEET_DEFERRED),
             )
         }
-        expect(leanMeetModule([])).toContain('import Calculus.Dynamo.Meet')
+        expect(leanMeetModule([])).toContain(
+            'import Calculus.Dynamo.Analysis.Meet',
+        )
     })
 
     /** A pair `src/` accepts carries the warrant the host used, and a refused pair the certificate. */

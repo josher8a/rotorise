@@ -15,7 +15,7 @@ it is shorter and therefore easier to believe is complete.
 
 That gap has been real twice:
 
-  * `Calculus/Dynamo/Nesting.lean` used `omega`, a known `Classical.choice` route, and sat
+  * `Calculus/Dynamo/Witness/Nesting.lean` used `omega`, a known `Classical.choice` route, and sat
     outside the guard until the import was added by hand.
   * `Calculus/Bridge/Vectors.lean` pulled `Classical.choice` through mathlib's
     `DecidableEq (Finset α)` — and it entered through a `def`, so no amount of proof
@@ -56,7 +56,7 @@ IMPORT = re.compile(r"^import\s+(Calculus(?:\.[^\s]+)?)\s*$")
 
 
 def module_of(path):
-    """`Calculus/Dynamo/HeldSet.lean` -> `Calculus.Dynamo.HeldSet`; `Calculus.lean` -> `Calculus`."""
+    """`Calculus/Dynamo/Lang/HeldSet.lean` -> `Calculus.Dynamo.Lang.HeldSet`; `Calculus.lean` -> `Calculus`."""
     return os.path.splitext(path)[0].replace(os.sep, ".")
 
 

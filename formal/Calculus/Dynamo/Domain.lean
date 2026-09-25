@@ -21,7 +21,7 @@ Mechanization of the specification, `docs/blueprint/src/content.tex`. Modelling 
   properties of the type, so set-ness lives in the carrier and not in §2's `ker p`. The
   kernel's restriction is narrower than it looks: it rejects a `Finset` whose element type
   is the datatype being declared, which is why `union`'s payload is still a list (see
-  `Calculus/Dynamo/LiteralArity1.lean`), and accepts one over a concrete type in the same constructor.
+  `Calculus/Dynamo/Witness/LiteralArity1.lean`), and accepts one over a concrete type in the same constructor.
 * **`N` is carried exactly and this calculus assumes nothing about any numeric type.** The
   value side of `N` is `WFNumeral`, the subtype `Numeral.WF` cuts out, so there is no host
   axiom here at all. A port that hands its own numeric type to a caller adapts that type to
@@ -371,7 +371,7 @@ three times over (~~literalOK~~'s `| _ => false`, ~~literalMember~~'s `none`, `l
 `GroundKind` is the premise line as a type. The base is an index, so `member` is a function of
 it and `g ground` is unsayable-otherwise; the alternative is one inhabitant of *that base's*
 carrier, so `ℓ ⊆ T` is the type. A literal carries one value; several values are a certified
-`union` of singletons, and `Calculus/Dynamo/LiteralArity1.lean` derives that rule. -/
+`union` of singletons, and `Calculus/Dynamo/Witness/LiteralArity1.lean` derives that rule. -/
 
 /-- The five bases a literal can sit at: `Kind` minus the three container kinds. -/
 inductive GroundKind where
@@ -423,7 +423,7 @@ deriving DecidableEq, Repr
 /-! ## What a `union` option's admission reads
 
 `Sums.lean` states a union option's admission and cannot see `ObjectSlot`: `Term.lean` is on no
-import path below `Calculus.Dynamo.Objects`. So an object option's slot table crosses to `Sums` as
+import path below `Calculus.Dynamo.Alg.Objects`. So an object option's slot table crosses to `Sums` as
 the two things admission reads off each declared name, built in `Denote.lean` where `ObjectSlot` is
 in scope. -/
 
