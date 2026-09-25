@@ -13,6 +13,8 @@ import Calculus.Lang.Typing
 import Calculus.Lang.Guarded
 import Calculus.Lang.Sound
 import Calculus.Lang.HeldFree
+import Calculus.Lang.ExactV
+import Calculus.Lang.ExactA
 import Calculus.JSON.Basic
 import Calculus.Dynamo.Alg.Codec
 import Calculus.Dynamo.Alg.Prisms

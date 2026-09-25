@@ -21,6 +21,8 @@ definition it touches.
 | `Calculus/Lang/Guarded.lean`  | §3          | `denote_agree` and `contractive_body`: the guard of a binder makes its body contractive, at every signature |
 | `Calculus/Lang/Sound.lean`    | §5          | `soundnessIn`, `soundness`, `typed_TSub` and `carrier_denote`, at every signature |
 | `Calculus/Lang/HeldFree.lean` | §5          | The held-free terms `HF`, the laws of the top that they read (`TopLaws`), `sub_denote`, and `compat_of_HF`, at every signature |
+| `Calculus/Lang/ExactV.lean`   | §5          | The admission row `Adm` over a signature, with the primitive rows `PrimAdm` that a universe supplies, and `Adm_exact`: each row is `dom(e)` of `denote`, from the exactness of the primitive rows alone |
+| `Calculus/Lang/ExactA.lean`   | §5          | The attribute side: `AdmA`, the primitive rows `PrimAdmA`, and `AdmA_exact`: each row is `dom(p)` |
 | `Calculus/Dynamo/Alg/Lists.lean`       | —           | The list plumbing at the DynamoDB carriers: the aliases of the generic traversal and `filter` facts, and the keyed clause `traverse_fst`, which reads `Name` |
 | `Calculus/Dynamo/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Value.kind`/`Attr.kind` (the ten members collapsing onto eight), and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
 | `Calculus/Dynamo/Alg/Codec.lean`       | §2, §5      | `Codec`, `Lawful` (a canonical partial bijection) and `LawfulCore` as abbreviations of the generic record and laws at `Value`, `Attr` and `Member`, and the aliases of the generic combinators |
@@ -46,9 +48,9 @@ definition it touches.
 | `Calculus/Dynamo/Witness/Refutations.lean` | §6          | §6's six "Do not hold" nodes, all settled, over seven declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id`, plus `optional` nesting, which the syntax rules out, and `set(union(…))`, which the DynamoDB set obligation refuses (`setElem_union_refused`) |
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
 | `Calculus/Dynamo/Witness/Discharge.lean`   | §5          | The host's recursive schema for JSON (`jsonTerm`) carried through `soundness`, with the refusals of the guard pinned |
-| `Calculus/JSON/Basic.lean`        | —           | A second universe on the generic layer, with no DynamoDB import: the carrier `Json`, the ground codecs, the array prism, the signature `jsonSyn`/`jsonSem` with `id_topLaws`, and a union lawful by `Alg.soundness` and `Alg.compat_of_HF` (`lawful_strOrNum`) |
+| `Calculus/JSON/Basic.lean`        | —           | A second universe on the generic layer, with no DynamoDB import: the carrier `Json`, the ground codecs, the array prism, the signature `jsonSyn`/`jsonSem` with `id_topLaws`, a union lawful by `Alg.soundness` and `Alg.compat_of_HF` (`lawful_strOrNum`), and the kind test as the primitive admission rows, exact by `Alg.Adm_exact` and `Alg.AdmA_exact` (`exact_strOrNum`) |
 
-This table has a row of its own for thirty-nine of the fifty-six modules under `Calculus/`.
+This table has a row of its own for forty-one of the fifty-eight modules under `Calculus/`.
 `Compat.lean`, `Confluence.lean`, `ExactA.lean`, `ExactV.lean`, `HeldFree.lean`, `Kernel.lean`,
 `Laminar.lean`, `LiteralArity1.lean`, `Malleability.lean`, `Meet.lean`, `Merge.lean`,
 `Orthogonality.lean`, `Rows.lean`, `Separation.lean`, `Slice.lean`, `Universal.lean` and
