@@ -38,7 +38,6 @@ import type {
     Option,
     opaque,
     Refinement,
-    SetBase,
     Shape,
 } from './codec'
 import type { Result } from './result'
@@ -196,8 +195,7 @@ const satisfies = (q: Refinement, value: unknown): boolean =>
 /**
  * §3 `(refine)`'s `q`, run: whether a value satisfies a {@link Predicate}.
  *
- * `members` is `inL`, compared the way the base compares. `each` is `liftQ`: the value is a `Set`
- * and every element satisfies the element's predicate. `closure` is the caller's function.
+ * `members` is `inL`, compared the way the base compares. `closure` is the caller's function.
  */
 export const holds = (q: Predicate): ((value: unknown) => boolean) => {
     switch (q.kind) {
@@ -205,16 +203,12 @@ export const holds = (q: Predicate): ((value: unknown) => boolean) => {
             const ls: readonly LiteralValue[] = q.literal.ls
             return (value) => ls.some((one) => sameLiteral(one, value))
         }
-        case 'each': {
-            const element = holds(q.of)
-            return (value) => value instanceof Set && [...value].every(element)
-        }
         case 'closure':
             return (value) => satisfies(q.q, value)
     }
 }
 
-/** …and why a value does not, naming the element that failed where the predicate is `each`. */
+/** …and why a value does not. */
 const refusedBy = (q: Predicate, value: unknown): CodecError => {
     switch (q.kind) {
         case 'members': {
@@ -224,17 +218,6 @@ const refusedBy = (q: Predicate, value: unknown): CodecError => {
                     .map(namedLiteral)
                     .join(', ')}`,
             )
-        }
-        case 'each': {
-            if (!(value instanceof Set)) {
-                return new CodecError(
-                    `${describeShape(value)} is not a \`Set\`, and a set is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                )
-            }
-            // labelled where it failed, as `every` labels a list: the position is the subject
-            const elements = [...value]
-            const at = elements.findIndex((one) => !holds(q.of)(one))
-            return refusedBy(q.of, elements[at]).under(at)
         }
         case 'closure': {
             // `JSON.stringify` throws on a `bigint` and on a cycle, and a refusal is a value, so the
@@ -250,14 +233,8 @@ const refusedBy = (q: Predicate, value: unknown): CodecError => {
     }
 }
 
-/** The wire set and the element member a set base stores — three bases onto three wire sets. */
-const setWire: {
-    readonly [B in SetBase]: readonly ['S' | 'N' | 'B', 'SS' | 'NS' | 'BS']
-} = {
-    string: ['S', 'SS'],
-    number: ['N', 'NS'],
-    binary: ['B', 'BS'],
-}
+/** The wire set that holds an element of each scalar member: `setMember`. */
+const setWire = { S: 'SS', N: 'NS', B: 'BS' } as const
 
 /**
  * **A member's assignment: one tag per key, read off the member's own body.**
@@ -1031,12 +1008,12 @@ export const denote = (def: Term): Pair => {
         /**
          * §3 `(set)`, and the one product that is **not** a {@link carriedCodec}. The model says
          * why: its attribute side is a choice among three wire sets rather than one member, so
-         * there is no single `A` prism to carry a payload into. `setCodec_restrict` is the lemma
-         * that keeps `refine` and a literal readable through — a restriction of the elements is a
-         * restriction of the set, and the two write the same attribute.
+         * there is no single `A` prism to carry a payload into.
          *
-         * Which set follows from the base that indexes the term, and the element's pair is the
-         * base's own. A restricted element is a `refine` around this row, never inside it.
+         * The set is the lift of its element's codec: each member is written and read through the
+         * element, so a restriction, a literal and an adapter at the element run on every member.
+         * Which wire set follows from the element's member, which {@link set} checked is `S`, `N`
+         * or `B`, the DynamoDB set obligation.
          *
          * **Empty is refused in both directions, and the read side is the one that matters.**
          * DynamoDB never stores an empty `SS`, so an item carrying one was written by something
@@ -1048,8 +1025,15 @@ export const denote = (def: Term): Pair => {
          * `{ SS: ['a','b','c'] }` for `'abc'`. The `set` row asks `instanceof Set` first.
          */
         case 'set': {
-            const inner = codecOfTerm({ kind: def.base })
-            const [member, setMember] = setWire[def.base]
+            const inner = codecOfTerm(def.elem)
+            const one = termMember(def.elem)
+            if (one !== 'S' && one !== 'N' && one !== 'B') {
+                throw new CodecError(
+                    `a set holds strings, numbers or binary, and this element writes ${one ? `'${one}'` : 'no single member'}`,
+                )
+            }
+            const member = one
+            const setMember = setWire[one]
             const carried = (value: unknown): Result<string | Uint8Array> =>
                 andThen(
                     inner.encode(value as never),
@@ -1707,9 +1691,9 @@ const everyButNumber: Term = {
         { kind: 'boolean' },
         { kind: 'binary' },
         { kind: 'null' },
-        { kind: 'set', base: 'string' },
-        { kind: 'set', base: 'number' },
-        { kind: 'set', base: 'binary' },
+        { kind: 'set', elem: { kind: 'string' } },
+        { kind: 'set', elem: { kind: 'number' } },
+        { kind: 'set', elem: { kind: 'binary' } },
         { kind: 'list', pre: [], spread: canonicalOpaque, suf: [] },
         { kind: 'object', body: { fields: {}, rest: canonicalOpaque } },
     ],

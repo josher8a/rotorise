@@ -28,15 +28,12 @@ namespace Calculus
     A certificate cannot compare `set(literal k ls)` with another one while the predicate is a
     function, because the meet reads a predicate only as data. And
     `src/codec/term.ts` had already made the same move for the same reason: its predicate type is
-    `members | each | closure`, and its docstring says the declaration guard has to read the
-    predicate as data. The model has those three cases and one more, `except`, which the host
-    does not spell yet.
+    `members | closure`, and its docstring says the declaration guard has to read the
+    predicate as data. The model has `members` and `closure` and one more, `except`, which the
+    host does not spell yet.
 
     * `members` is membership of a literal's alternatives, `inL k ls`. The base indexes the
       carrier, exactly as `Term.literal` does.
-    * `each` lifts an element predicate to a wire set, `liftQ`. It is what makes
-      `set(literal k ls)` expressible: `set` takes a base, so a restricted element is a
-      restriction of the *set*, and `setCodec_restrict` proves the two are one pair.
     * `closure` is a caller's function. It is the case that stays opaque, and it is why this
       is a wider type and not a narrower one: `refine` still carries an arbitrary predicate,
       and every theorem that quantifies over one still runs.
@@ -45,13 +42,11 @@ namespace Calculus
       complement at a base. A name is a string, so the same case excludes a finite set of names.
 
     `Pred` mentions no `Term`, so it is not in the mutual block below. Its `eval` is not here
-    either: `inL` is in `Prisms.lean` and `liftQ` in `Products.lean`, neither of which
-    `Term.lean` imports, so
+    either: `inL` is in `Prisms.lean`, which `Term.lean` does not import, so
     `Pred.eval` sits beside `denote`. The type is the term language's; the meaning is the
     denotation's. -/
 inductive Pred where
   | members (k : GroundKind) (ls : NEFinset k.Carrier)
-  | each    (p : Pred)
   | closure (q : Value → Bool)
   | except  (k : GroundKind) (ls : NEFinset k.Carrier)
 
@@ -76,25 +71,16 @@ inductive Term where
       union of singletons: the members are pairwise separated because the values differ.
       `Calculus/LiteralArity1.lean` derives that rule. -/
   | literal (k : GroundKind) (v : k.Carrier)
-  /-- §3 `(set)`, indexed by its element **base** rather than by an arbitrary element term.
+  /-- §3 `(set)`: the finite-powerset lift of an element term. A lawful element gives a lawful
+      set (`lawful_setCodec`), and that law reads nothing about the element's base.
 
-      The rule's premise was `⊢ c : T ⇝ μ` together with `setMember μ = some μS`, and
-      `setMember` is partial — so the constructor accepted element terms the rule then
-      refused (`set(union(string, boolean))` was the standing witness). The premise is the
-      DynamoDB universe's: a stored set holds elements of one member. `SetBase` is the three
-      bases that survive that premise, so the member is a function of the index and the
-      refusal is a type error.
-
-      **What this gives up, deliberately.** `set(refine(b, q))` and `set(literal k ls)` are
-      *not* lost: a restriction of the elements is a restriction of the set, and
-      `setCodec_restrict` and `setCodec_restrict_p` (`Products.lean`) prove the two are
-      one pair on the nose, the first on `e` and the second on `p`, with `liftQ` carrying
-      the predicate through. This cited the write-side theorem for both halves, and the
-      read side was a sentence in its docstring until it was proved. What is lost is
-      `set(held b P f g)` is not a term. An element-level adapter has no set-level spelling:
-      a set-level `held` would need `setImage` rather than the classical `Finset.image` to
-      stay injective. -/
-  | set      (base : SetBase)
+      **The DynamoDB set rules are not structure here.** That a stored set holds elements of one
+      member of `S`, `N` or `B` is the store universe's rule, and `Obligations` states it as
+      `SetElem`, the way `(union)`'s compatibility is stated. The three element types and the
+      absent empty set are the carrier's (`Value.strSet`, `numSet`, `binSet`). So a restricted
+      element, a literal element and an adapter element are each spelled at the element:
+      `set(refine(string, q))`, `set(literal k v)` and `set(held number string f g)`. -/
+  | set      (elem : Term)
   /-- §3 `(list)`: the one positional container, as a prefix, at most one spread, and a
       suffix. `array`, `(tuple)` and `(tuple-tail)` were three shapes of one thing, and
       none of the three could say `[A, B, ...C[], D]` — a fixed position AFTER a spread.
@@ -305,8 +291,9 @@ mutual
 /-- How `t` reads the variable `i`, as the level the section above defines. -/
 def Term.use (i : Nat) : Term → Nat
   | .string | .number | .boolean | .binary | .null
-  | .literal _ _ | .opaq | .set _ | .never => 0
+  | .literal _ _ | .opaq | .never => 0
   | .var j => if i = j then 2 else 0
+  | .set t => useUnder (Term.use i t)
   | .mu t => Term.use (i + 1) t
   | .refine t _ => Term.use i t
   | .held t P _ _ => useHeld (max (Term.use i t) (Term.use i P))
@@ -337,8 +324,9 @@ mutual
 /-- **Every binder is guarded**: at each `mu b`, `b` reads `var 0` at level `1` or less. -/
 def Term.guarded : Term → Bool
   | .string | .number | .boolean | .binary | .null
-  | .literal _ _ | .opaq | .set _ | .never | .var _ => true
+  | .literal _ _ | .opaq | .never | .var _ => true
   | .mu t => decide (Term.use 0 t ≤ 1) && Term.guarded t
+  | .set t => Term.guarded t
   | .refine t _ => Term.guarded t
   | .held t P _ _ => Term.guarded t && Term.guarded P
   | .list pre sp suf => Term.guardedL pre && Term.guardedO sp && Term.guardedL suf
@@ -379,10 +367,9 @@ mutual
 
 def Term.depth : Term → Nat
   | .string | .number | .boolean | .binary | .null
-  -- `set` is a **leaf** since its base became an index: there is no element term to
-  -- measure, so it sits with the other ground shapes rather than costing a layer.
-  | .literal _ _ | .opaq | .set _ | .never | .var _ => 1
+  | .literal _ _ | .opaq | .never | .var _ => 1
   | .mu t => Term.depth t + 1
+  | .set t => Term.depth t + 1
   | .held t P _ _ => max (Term.depth t) (Term.depth P) + 1
   | .refine t _ => Term.depth t + 1
   | .list pre sp suf =>

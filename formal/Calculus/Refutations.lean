@@ -273,25 +273,25 @@ codec is expected has no corresponding `Term`, and the mapping fails there rathe
 quietly succeeding.
 -/
 
-/-! ## `set(union(c₁, c₂))` — not derivable, and now not writable
+/-! ## `set(union(c₁, c₂))`: derivable, and refused by the store
 
 §6: "the premise on `set` demands a member, and a union of options writing different
-members has none." This was the one row that is a claim about the *judgement* rather than
-about `≡`, and the model settled it from the member index alone: `(set)` concluded
-`some μS`, `μSyn` of a heterogeneous union is `none`, and `typed_μSyn` said the two must
-agree. ~~not_typed_set_union~~ was that proof.
+members has none." `μSyn` of a heterogeneous union is `none`, and `typed_μSyn` puts the same
+`none` in the judgement.
 
-**It cannot be stated any more.** `Term.set` takes a `SetBase`, so
-`set(union(string, boolean))` is not a term — the elaborator refuses it where a derivation
-used to fail. That is the same closure `HeldSet.lean` records for `strSet ∅` and the map
-defect for duplicate keys: a witness that something is excluded is worth having exactly
-while it is expressible, and when the type takes over the exclusion the witness goes with
-it. What §6's row asked of the judgement is now the constructor's argument type.
+`Term.set` takes any element term, so `set(union(string, boolean))` is a term, and the judgement
+types it at the member `none` (`setMember` of the union's `none`). The DynamoDB set obligation
+`SetElem` refuses it (`setElem_union_refused`). The lift of a lawful union is lawful.
+-/
 
-The union on its own is unaffected, and is still worth exhibiting: it was never the union
-that was underivable, only the `set` above it. -/
+/-- **A heterogeneous union fails the DynamoDB set obligation**, because the union names no single
+    member. -/
+theorem setElem_union_refused : ¬ SetElem (denote (.union [.string, .boolean])) := by
+  intro h
+  rw [SetElem, denote_μ] at h
+  exact absurd h (by decide)
 
-/-- The union on its own is fine — it is the `set` above it that has no derivation. -/
+/-- The union on its own is typed, and so is the `set` above it: the store refuses the set. -/
 theorem typed_union_string_boolean :
     Typed (.union [.string, .boolean])
       (HUnion [fun v => ∃ s, v = .str s, fun v => ∃ b, v = .bool b]) none :=

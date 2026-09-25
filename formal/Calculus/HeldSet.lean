@@ -65,14 +65,17 @@ theorem hopaque_e {v : Value} (h : HOpaque v) : (Ω.e v).isSome = true := by
   | null => rfl
   | num d => rfl
   | strSet S _ _ =>
-    rw [Ωe_strSet, encSet_congr (c := Ω) (d := SetBase.string.elem) (fun x _ => rfl)]
-    exact (encSet_base_iff .string (fun _ _ h => Value.str.inj h) S).mpr fun _ _ => rfl
+    rw [Ωe_strSet, encSet_congr (c := Ω) (d := stringCodec) (fun x _ => rfl)]
+    exact encSet_isSome_of lawful_stringCodec.core (μ₀ := .S) rfl (fun _ _ h => Value.str.inj h)
+      (fun _ _ => rfl) (fun _ _ _ ha => lawful_stringCodec.writes rfl ha)
   | numSet S _ _ =>
-    rw [Ωe_numSet, encSet_congr (c := Ω) (d := SetBase.number.elem) (fun x _ => rfl)]
-    exact (encSet_base_iff .number (fun _ _ h => Value.num.inj h) S).mpr fun _ _ => rfl
+    rw [Ωe_numSet, encSet_congr (c := Ω) (d := numberCodec) (fun x _ => rfl)]
+    exact encSet_isSome_of lawful_numberCodec.core (μ₀ := .N) rfl (fun _ _ h => Value.num.inj h)
+      (fun _ _ => rfl) (fun _ _ _ ha => lawful_numberCodec.writes rfl ha)
   | binSet S _ _ =>
-    rw [Ωe_binSet, encSet_congr (c := Ω) (d := SetBase.binary.elem) (fun x _ => rfl)]
-    exact (encSet_base_iff .binary (fun _ _ h => Value.bin.inj h) S).mpr fun _ _ => rfl
+    rw [Ωe_binSet, encSet_congr (c := Ω) (d := binaryCodec) (fun x _ => rfl)]
+    exact encSet_isSome_of lawful_binaryCodec.core (μ₀ := .B) rfl (fun _ _ h => Value.bin.inj h)
+      (fun _ _ => rfl) (fun _ _ _ ha => lawful_binaryCodec.writes rfl ha)
   | arr vs _ ih =>
     rw [Ωe_arr, Option.isSome_map]
     exact traverse_isSome_of_all ih
@@ -106,7 +109,7 @@ set_option linter.unreachableTactic false in
     general statement is here because it is `typed_TSub`'s mirror and recurses the same way.
     Every rule closes: the ground rules and `literal` are `exact hv`, the two
     containers and the four wrappers reduce past their constructor, `opaque` is the existing
-    iff, and `set` is `SetBase.elem_T`. Only four rules need anything new, and each needs the
+    iff, and `set` recurses into its element. Only four rules need anything new, and each needs the
     converse of a helper that was already here for the other direction.
 
     **What this does *not* say is `T = dom(e)`**, which is a different claim, proved by
@@ -123,9 +126,9 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
     -- a closed variable holds nothing, and a `mu`'s index is its codec's held set
     | var _ => exact False.elim hv
     | mu _ _ => exact hv
-    | set b =>
+    | @set t' T' μ' h' =>
       rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>
-        simp only [denote, setCodec, SetBase.elem_T] <;> exact hall
+        exact fun x hx => typed_T_eq h' _ (hall x hx)
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       obtain ⟨vs, rfl, hall⟩ := hv
       rw [denote, denoteList_eq, denoteOpt_eq, denoteList_eq]
@@ -197,8 +200,8 @@ theorem typed_T_identity {t T μ} (h : Typed t T μ) (v : Value) : (denote t).T 
 
 §6's row asserted (A) and then justified it with a sentence about (B). (A) is not false at
 `union`; it is definitional — and it is now proved everywhere else too. **(B) holds at every
-derivable term** by `typed_T_adm` (`Laminar.lean`): a union writes wherever one of its options
-writes. Reading a proof of (A) as a claim about (B) is the mistake the row made, and the reason
+derivable term whose obligations hold** by `typed_T_adm` (`Laminar.lean`): a union writes wherever
+one of its options writes, and a set reads its obligations. Reading a proof of (A) as a claim about (B) is the mistake the row made, and the reason
 both are named here. -/
 
 /-- **(A) at a union is definitional.** `altCodec`'s held set *is* the union of its options'

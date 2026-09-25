@@ -185,8 +185,9 @@ development had **never run them**, because `Batteries.Tactic.Lint` is not impor
 anything `Calculus` needed and so was never built.
 
 The first run over 1674 declarations found one substantive defect and it was invisible by
-reading: `SetBase.setMember_elemMember` was `@[simp]` with a left-hand side that cannot occur
-in simp-normal form, because `SetBase.elemMember` is `@[simp]` too and unfolds first. An
+reading: a lemma on the member of a set's element was `@[simp]` with a left-hand side that
+cannot occur in simp-normal form, because the function it named is `@[simp]` too and unfolds
+first. An
 attribute asserting something about behaviour that had quietly stopped being true — the same
 failure class as a description drifting from what it describes, and the reason this guard is
 here rather than a note saying someone should lint occasionally.

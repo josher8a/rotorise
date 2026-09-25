@@ -65,8 +65,9 @@ def μSyn : Term → Option Member
   | .boolean => some .BOOL
   | .null => some .NULL
   | .binary => some .B
-  -- the member is the base's, where it was `setMember` of the element's and could be `none`
-  | .set b => some b.member
+  -- the member is `setMember` of the element's: `none` where the element names no member of
+  -- `S`, `N` or `B`, which is the case the DynamoDB obligation `SetElem` refuses
+  | .set t => (μSyn t).bind setMember
   | .list _ _ _ => some .L
   | .held t _ _ _ => μSyn t
   | .refine t _ => μSyn t
@@ -124,7 +125,7 @@ def inBase : GroundKind → Value → Bool
   | _, _ => false
 
 /-- **What a `Pred` means.** The type is in `Term.lean`, and the meaning is here, because `inL`
-    is in `Prisms.lean` and `liftQ` in `Products.lean`, and `Term.lean` imports neither.
+    is in `Prisms.lean`, which `Term.lean` does not import.
 
     `noncomputable`, because `inL` is. `denote` is noncomputable for the same reason, and
     the meet never calls this: the meet reads a `Pred`'s constructors, which are data.
@@ -134,7 +135,6 @@ def inBase : GroundKind → Value → Bool
     `inL` at each alternative rather than as a membership row of its own. -/
 noncomputable def Pred.eval : Pred → Value → Bool
   | .members k ls => inLs k ls
-  | .each p       => liftQ p.eval
   | .closure q    => q
   | .except k ls  => fun v => inBase k v && !inLs k ls v
 
@@ -150,7 +150,7 @@ def denote : Term → (ρ : List Codec := []) → Codec
   | .null, _ => nullCodec
   | .binary, _ => binaryCodec
   | .literal k ls, _ => literalCodec k ls
-  | .set b, _ => setCodec b.elem
+  | .set t, ρ => setCodec (denote t ρ)
   | .list pre spread suf, ρ =>
       listCodec (denoteList pre ρ) (denoteOpt spread ρ) (denoteList suf ρ)
   -- the caller-side restriction is a `restrict`, the combinator of the `refine` row
@@ -221,7 +221,7 @@ mutual
 theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .literal k ls => literalCodec_μ k ls
   | .string | .number | .boolean | .binary | .null => rfl
-  | .set b => SetBase.setCodec_μ b
+  | .set t => by show (denote t).μ.bind setMember = _; rw [denote_μ t]; rfl
   | .list _ _ _ => rfl
   | .held t' _ _ _ => denote_μ t'
   | .refine t' _ => denote_μ t'
@@ -261,7 +261,8 @@ def fieldTable (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
 
 section Bridge
 
-theorem denote_set (b : SetBase) : denote (.set b) = setCodec b.elem := rfl
+/-- `set` denotes the finite-powerset lift of its element's codec. -/
+theorem denote_set (t : Term) (ρ : List Codec) : denote (.set t) ρ = setCodec (denote t ρ) := rfl
 /-- `array` denotes the spread-only `list`, which is what `arrayCodec` is. -/
 theorem denote_array (t : Term) : denote (.array t) = arrayCodec (denote t) :=
   (arrayCodec_eq_listCodec (denote t)).symm

@@ -89,19 +89,6 @@ noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
   | .number,  y, .n x    => decide (x = y)
   | _, _, _ => false
 
-/-- **What a set base reads.**
-
-    Two bases answer concretely: `string` reads `SS` and nothing else, and `binary` `BS`.
-    `number` asks its codec: `decSet` reads each payload of an `NS` through `numberCodec.p`.
-    `N` is carried exactly, so `numberCodec.p` is a constructor wrapper on the numeral
-    (`numberCodec_p_n`), and no two distinct payloads read to one value. `AdmA` is already
-    `noncomputable`, so the row costs nothing it had not already spent. -/
-noncomputable def AdmASet : SetBase → Attr → Bool
-  | .string,  .ss _ => true
-  | .binary,  .bs _ => true
-  | .number,  .ns S => (decSet numberCodec Attr.n S).isSome
-  | _, _ => false
-
 mutual
 
 /-- **The joint admission predicate, attribute side.** The mirror of `Adm` across §1's
@@ -128,10 +115,9 @@ noncomputable def AdmA : Term → Attr → Bool
   -- hatch
   -- the read side of the same disjunction; every option, object included, is admitted by attempt
   | .union opts => fun a => anyPA (AdmAList opts) a
-  -- **the row that used to admit all three wire families whatever the element term was.**
-  -- With the base an index the family is a function of it, so this names one — and at
-  -- `number` defers to the codec, as `AdmASet` states.
-  | .set b    => AdmASet b
+  -- **`set` asks its own codec**, for the reason the value side gives: a read over the
+  -- elements alone is exact only where the element reads injectively and at one member
+  | .set t    => fun a => ((setCodec (denote t)).p a).isSome
   -- **One row**, for the reason the value side gives: `array` and `tuple` were two rows
   -- computing different things on what is now one shape.
   | .list pre sp suf => fun a =>
@@ -317,49 +303,8 @@ theorem ExactA_union {opts : List Term} (h : ∀ t ∈ opts, ExactA t) : ExactA 
   · rintro ⟨t, ht, hp⟩
     exact AdmAAny_of_mem ht ((h t ht a).mpr hp)
 
-/-- **`set` reads exactly what its row says.**
-
-    Four bases, eleven attribute constructors, and the argument is the same three moves in
-    each cell: `decSet` succeeds on the branch the base's `p` lands in, and fails at the
-    first element that base refuses (`decSet_isSome_false`). `number` is the cell that is
-    `rfl`, because its row *is* the codec's answer — see `AdmASet` for why it has to be. -/
-theorem ExactA_set (b : SetBase) : ExactA (.set b) := by
-  intro a
-  show AdmASet b a = true ↔ ((setCodec b.elem).p a).isSome = true
-  cases a
-  case ss S =>
-    cases b
-    case string =>
-      have h : (decSet stringCodec Attr.s S).isSome = true :=
-        decSet_isSome_str (fun _ _ => rfl) (fun _ _ _ _ _ h1 h2 => by
-          simp only [stringCodec, Option.bind_some, vStr] at h1 h2
-          exact (Option.some.inj h1).trans (Option.some.inj h2).symm)
-      exact Iff.intro (fun _ => h) (fun _ => rfl)
-    all_goals
-      obtain ⟨x, hx⟩ := S.2
-      simp only [AdmASet, SetBase.elem, setCodec]
-      rw [decSet_isSome_false hx rfl]
-  case ns S =>
-    cases b
-    case number => exact Iff.rfl
-    all_goals
-      obtain ⟨x, hx⟩ := S.2
-      simp only [AdmASet, SetBase.elem, setCodec]
-      rw [decSet_isSome_false hx rfl]
-  case bs S =>
-    cases b
-    case binary =>
-      obtain ⟨x₀, hx₀⟩ := S.2
-      have h : (decSet binaryCodec Attr.b S).isSome = true :=
-        decSet_isSome_bin hx₀ rfl rfl (fun _ _ => rfl) (fun _ _ _ _ _ h1 h2 => by
-          simp only [binaryCodec, Option.bind_some, vBin] at h1 h2
-          exact (Option.some.inj h1).trans (Option.some.inj h2).symm)
-      exact Iff.intro (fun _ => h) (fun _ => rfl)
-    all_goals
-      obtain ⟨x, hx⟩ := S.2
-      simp only [AdmASet, SetBase.elem, setCodec]
-      rw [decSet_isSome_false hx rfl]
-  all_goals cases b <;> exact Iff.intro (fun h => nomatch h) (fun h => nomatch h)
+/-- **`set` reads exactly what its row says**, because the row asks the set's codec. -/
+theorem ExactA_set (t : Term) : ExactA (.set t) := fun _ => Iff.rfl
 
 theorem alignPA_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactA t) :
     ∀ (ts : List Term) (as : List Attr), (∀ t ∈ ts, ExactA t) →
@@ -623,7 +568,7 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   | .var _ => fun _ => Iff.rfl
   | .mu _ => fun _ => Iff.rfl
   -- exact because the constructor narrowed, not because the row sharpened
-  | .set b => ExactA_set b
+  | .set t => ExactA_set t
   -- see `ExactA_union`
   | .union opts => ExactA_union (exactAL_mem opts (AdmA_exactL opts))
 

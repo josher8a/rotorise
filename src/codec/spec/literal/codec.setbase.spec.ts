@@ -5,10 +5,9 @@
  * has, spelled where the base is. `boolean` has no `.set`, because there is no `BOOLS`.
  *
  * **Both numeric forms are first-class.** `number.set()` is what a caller who means their
- * platform's numbers means; `decimal.set()` is the host-independent one. They write the same member
- * — `NS` — and hold different things, which is exactly why `formal/Calculus/Domain.lean` indexes a
- * set by a *base* rather than by a `Member`: `Member` cannot tell them apart and the index can.
- * Neither is a legacy encoding path.
+ * platform's numbers means; `decimal.set()` is the host-independent one. They write the same member,
+ * `NS`, and hold different things: each is the set of its own adapter, and the adapter is what
+ * tells them apart. Neither is a legacy encoding path.
  *
  * ── the free `set(...)` is gone, and the branding objection was answered rather than overruled ──
  *
@@ -18,9 +17,9 @@
  *
  * The premise was right and the conclusion was wrong. The brand rides on `amount`, so the
  * capability belongs on `amount` — `amount.set()`, which is `ReadonlySet<Price>` for exactly the
- * reason the old argument gave. {@link SetCapable} is the type and {@link setBaseOf} is the runtime
- * reduction; a set of a refinement of a literal of a base is still a set of that base, which is
- * `setCodec_restrict`. So the general form did not need to be free-standing, and the free
+ * reason the old argument gave. {@link SetCapable} is the type and the element check of `.set()` is
+ * the runtime one; a set of a refinement is the set of that refinement, with the predicate at the
+ * element. So the general form did not need to be free-standing, and the free
  * `set(...)` is no longer exported: `.set()` is the whole surface, and the builder is internal.
  */
 import { describe, expect, it } from 'vitest'
@@ -74,17 +73,24 @@ describe('a set at each base', () => {
      * claim is the one this test is for, so it is now asserted rather than obtained as a
      * side effect of comparing closures.
      */
-    it('records the base itself as its index', () => {
-        expect(string.set().def).toEqual({ kind: 'set', base: 'string' })
-        expect(binary.set().def).toEqual({ kind: 'set', base: 'binary' })
-        // `number` and `decimal` are adapters over the one numeric base, so each is that base's
-        // set with the conversion mapped over it
-        for (const one of [number.set(), decimal.set()]) {
-            expect(one.def.kind).toBe('held')
-            expect((one.def as { inner: unknown }).inner).toEqual({
-                kind: 'set',
-                base: 'number',
-            })
+    it('records the element term itself as the set element', () => {
+        expect(string.set().def).toEqual({
+            kind: 'set',
+            elem: { kind: 'string' },
+        })
+        expect((string.set().def as { elem: unknown }).elem).toBe(string.def)
+        expect(binary.set().def).toEqual({
+            kind: 'set',
+            elem: { kind: 'binary' },
+        })
+        // `number` and `decimal` are adapters over the one numeric base, so each set holds the
+        // adapter as its element and the conversion rides there
+        for (const [one, element] of [
+            [number.set(), number],
+            [decimal.set(), decimal],
+        ] as const) {
+            expect(one.def.kind).toBe('set')
+            expect((one.def as { elem: unknown }).elem).toBe(element.def)
         }
     })
 
@@ -149,8 +155,8 @@ describe('a set of a literal, spelled at the base', () => {
 /**
  * **The branding verdict, pinned rather than asserted in prose.**
  *
- * The model recovers a set of a refinement exactly, by lifting the element predicate to a
- * set-level one — `setCodec_restrict`. In TypeScript that lift is not available *at the type*: a
+ * The model spells a set of a refinement as the set of that refinement: the predicate sits at the
+ * element. A set-level refinement would be the other spelling, and in TypeScript that lift is not available *at the type*: a
  * set-level refinement of `ReadonlySet<string>` gives back `ReadonlySet<string>`, and the brand is
  * gone. So the only spelling that preserves it is the one whose element is a *codec*.
  *
@@ -193,9 +199,8 @@ describe('branding survives, and it survives through the capability', () => {
     })
 
     /**
-     * The capability propagates as far as {@link setBaseOf} reduces, which is through any number of
-     * refinements and through a literal — the two the model keeps under `setCodec_restrict`. So a
-     * set whose members are checked twice, by the literal and by the predicate, is one `.set()`
+     * The capability propagates through any number of refinements and through a literal, because
+     * each rides at the element. So a set whose members are checked twice, by the literal and by the predicate, is one `.set()`
      * call, where before it needed the free builder and a codec argument.
      */
     it('propagates through a refinement of a literal', () => {
@@ -215,11 +220,10 @@ describe('branding survives, and it survives through the capability', () => {
     /**
      * The same rule on the write side, which the test above states only for the accepted value.
      *
-     * A set over a restricted element is `refine(set(b), each(p))` per predicate the element
-     * carries, so both restrictions have to run on every member and neither may be dropped. Only
-     * the read side was asserted, and the two halves are one pair — `setCodec_restrict` on `e` and
-     * `setCodec_restrict_p` on `p` — so a spelling that keeps one and loses the other is a codec
-     * that writes what it cannot read back.
+     * A set over a restricted element runs the element's codec on every member, so both
+     * restrictions have to run on every member and neither may be dropped. Only the read side was
+     * asserted, and the two halves are one pair, so a spelling that keeps one and loses the other is
+     * a codec that writes what it cannot read back.
      */
     it('encodes a set only where every member is in the literal and passes the predicate', () => {
         const first = refine(
@@ -241,18 +245,12 @@ describe('branding survives, and it survives through the capability', () => {
 })
 
 /**
- * **What a set's element may be, tightened to match the model.**
+ * **What a set's element may be: the DynamoDB set rule, and one host refusal.**
  *
- * §3 `(set)`'s premise used to be `setMember μ = some μS`, read off an arbitrary element term, and
- * `setMember` is partial — so the constructor accepted elements the rule then refused.
- * `Term.set`'s `SetBase` index replaced the element term, making the
- * refusal a type error, and states what that gives up: a set of a `held` and of a `withLegacyRead`.
- *
- * This library had the same hole and it was reachable. The member reader read *through* an adapter
- * — `held` writes where its inner term does — so a set of `held(string, …)` was accepted, and its two
- * functions then ran once per member of an attribute whose stored form records no adapter at all.
- * The refusal now lives beside the member check, which is where the other half of the premise
- * already was.
+ * A stored set holds elements of one member of `S`, `N` or `B`. That is the store universe's rule,
+ * the model's `SetElem` obligation, and it is the whole of the element check: the lift of a lawful
+ * element is lawful whatever the element is. The host adds one refusal, a `withLegacyRead`
+ * element, because the model states no set of an older reader.
  */
 describe('what a set cannot be built from', () => {
     it('still refuses an element that writes no single member', () => {
@@ -293,7 +291,30 @@ describe('what a set cannot be built from', () => {
         ])
     })
 
-    it('refuses a read widening, for the same reason', () => {
+    /**
+     * **The DynamoDB set rule is the whole of the element check.** A stored set holds elements of
+     * one member of `S`, `N` or `B`, so any element that writes one such member is taken: a union
+     * of non-literal string options is one, and the set of it round-trips.
+     */
+    it('takes any element that writes one member of S, N or B, a union of string options included', () => {
+        const short = refine(
+            string,
+            (value: string): value is string => value.length < 3,
+            { describe: 'short' },
+        )
+        const shouting = refine(
+            string,
+            (value: string): value is string =>
+                value.length >= 3 && value === value.toUpperCase(),
+            { describe: 'long and upper case' },
+        )
+        const words = refine(union([short, shouting]), isText).set()
+        const value = new Set(['ab', 'XYZ'])
+        expect(words.unsafeEncode(value)).toEqual({ SS: ['XYZ', 'ab'] })
+        expect(words.unsafeDecode(words.unsafeEncode(value))).toEqual(value)
+    })
+
+    it('refuses a read widening, because the model states no set of an older reader', () => {
         const widened = withLegacyRead({ current: string, older: decimal })
         expect(() => refine(widened, isText).set()).toThrow(CodecError)
     })

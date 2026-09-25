@@ -38,10 +38,10 @@ disjoint on the read side.
 ## The write-side slot is the `Value` constructor, not `Kind`
 
 `Kind` collapses `strSet`, `numSet` and `binSet` to `.set`, so `κ (set string)` and
-`κ (set number)` are equal. The ten `Value` constructors can tell them apart, and `Adm (.set b)`
-is exact, so the sharper partition is *available in the model*: the row for `set b` matches the
-payload's wire family and asks `b.adm` of its elements, and `℘⁺fin` has no empty inhabitant, so
-a base admits exactly one family. `Slot` below is that partition. The read-side slot is
+`κ (set number)` are equal. The ten `Value` constructors can tell them apart, so the sharper
+partition is *available in the model*: a set writes the wire family of each scalar slot its
+element writes, and `℘⁺fin` has no empty inhabitant, so a written set has an element whose slot
+names the family. `Slot` below is that partition. The read-side slot is
 `Member`, which `Attr.member` already computes.
 -/
 
@@ -96,11 +96,106 @@ def GroundKind.slot : GroundKind → Slot
   | .binary  => .bin
   | .null    => .null
 
-/-- A set base's value slot — the wire family its payload sits in. One slot for each base. -/
-def SetBase.slot : SetBase → Slot
-  | .string  => .strSet
-  | .number  => .numSet
-  | .binary  => .binSet
+/-- The element slot of a set slot: the scalar constructor a wire family's payloads are built
+    with. The three set slots have one, and every other slot has none. -/
+def Slot.setElem : Slot → Option Slot
+  | .strSet => some .str
+  | .numSet => some .num
+  | .binSet => some .bin
+  | _ => none
+
+/-- …and the element member of a set member, on the read side. -/
+def Member.setElem : Member → Option Member
+  | .SS => some .S
+  | .NS => some .N
+  | .BS => some .B
+  | _ => none
+
+mutual
+/-- Whether a variable occurs in the term. A set whose element reads a variable occupies every
+    set slot, because the variable's codec is not known from the term. -/
+def Term.hasVar : Term → Bool
+  | .var _ => true
+  | .refine t _ | .mu t | .set t => Term.hasVar t
+  | .held t P _ _ => Term.hasVar t || Term.hasVar P
+  | .list pre sp suf => Term.hasVarL pre || Term.hasVarO sp || Term.hasVarL suf
+  | .object b => Body.hasVar b
+  | .union os => Term.hasVarL os
+  | .string | .number | .boolean | .binary | .null | .literal _ _ | .opaq | .never => false
+/-- …in a body: in a declared slot or in the open block. -/
+def Body.hasVar : Body → Bool
+  | .mk fs f w => decide (∃ k : {k // k ∈ fs}, ObjectSlot.hasVar (f k) = true) || Term.hasVarO w
+/-- …in a slot's term. -/
+def ObjectSlot.hasVar : ObjectSlot → Bool
+  | .req t | .optional t => Term.hasVar t
+/-- …in a list of terms. -/
+def Term.hasVarL : List Term → Bool
+  | [] => false
+  | t :: ts => Term.hasVar t || Term.hasVarL ts
+/-- …in an optional term. -/
+def Term.hasVarO : Option Term → Bool
+  | none => false
+  | some t => Term.hasVar t
+end
+
+mutual
+/-- A term that reads a variable at any level has a variable. -/
+theorem Term.hasVar_of_use : ∀ (t : Term) (i : Nat), t.use i ≠ 0 → t.hasVar = true
+  | .var _, _, _ => rfl
+  | .refine t _, i, h => Term.hasVar_of_use t i (by simpa [Term.use] using h)
+  | .mu t, i, h => Term.hasVar_of_use t (i + 1) (by simpa [Term.use] using h)
+  | .set t, i, h => Term.hasVar_of_use t i (by
+      simp only [Term.use, useUnder] at h; split at h <;> omega)
+  | .held t P _ _, i, h => by
+      simp only [Term.use, useHeld] at h
+      simp only [Term.hasVar, Bool.or_eq_true]
+      by_cases ht : t.use i = 0
+      · exact Or.inr (Term.hasVar_of_use P i (by split at h <;> omega))
+      · exact Or.inl (Term.hasVar_of_use t i ht)
+  | .list pre sp suf, i, h => by
+      simp only [Term.use, useUnder] at h
+      simp only [Term.hasVar, Bool.or_eq_true]
+      by_cases h1 : Term.useL i pre = 0
+      · by_cases h2 : Term.useO i sp = 0
+        · exact Or.inr (Term.hasVarL_of_use suf i (by split at h <;> omega))
+        · exact Or.inl (Or.inr (Term.hasVarO_of_use sp i h2))
+      · exact Or.inl (Or.inl (Term.hasVarL_of_use pre i h1))
+  | .object b, i, h => Body.hasVar_of_use b i (by
+      simp only [Term.use, useUnder] at h; split at h <;> omega)
+  | .union os, i, h => Term.hasVarL_of_use os i (by simpa [Term.use] using h)
+  | .string, _, h | .number, _, h | .boolean, _, h | .binary, _, h | .null, _, h
+  | .literal _ _, _, h | .opaq, _, h | .never, _, h => by simp [Term.use] at h
+/-- …in a body. -/
+theorem Body.hasVar_of_use : ∀ (b : Body) (i : Nat), b.use i ≠ 0 → b.hasVar = true
+  | .mk fs f w, i, h => by
+      simp only [Body.use] at h
+      simp only [Body.hasVar, Bool.or_eq_true, decide_eq_true_eq]
+      by_cases hw : Term.useO i w = 0
+      · refine Or.inl (Decidable.byContradiction fun hn => h ?_)
+        have hall : ∀ k : {k // k ∈ fs}, ObjectSlot.use i (f k) = 0 := fun k =>
+          Decidable.byContradiction fun hk => hn ⟨k, ObjectSlot.hasVar_of_use (f k) i hk⟩
+        rw [hw, Nat.max_eq_left (Nat.zero_le _)]
+        exact Nat.eq_zero_of_le_zero (Finset.sup_le fun k _ => (hall k).le)
+      · exact Or.inr (Term.hasVarO_of_use w i hw)
+/-- …in a slot. -/
+theorem ObjectSlot.hasVar_of_use : ∀ (s : ObjectSlot) (i : Nat), s.use i ≠ 0 → s.hasVar = true
+  | .req t, i, h | .optional t, i, h => Term.hasVar_of_use t i h
+/-- …in a list. -/
+theorem Term.hasVarL_of_use : ∀ (ts : List Term) (i : Nat), Term.useL i ts ≠ 0 →
+    Term.hasVarL ts = true
+  | [], _, h => by simp [Term.useL] at h
+  | t :: ts, i, h => by
+      simp only [Term.useL] at h
+      simp only [Term.hasVarL, Bool.or_eq_true]
+      by_cases ht : t.use i = 0
+      · exact Or.inr (Term.hasVarL_of_use ts i (by omega))
+      · exact Or.inl (Term.hasVar_of_use t i ht)
+/-- …in an optional term. -/
+theorem Term.hasVarO_of_use : ∀ (o : Option Term) (i : Nat), Term.useO i o ≠ 0 →
+    Term.hasVarO o = true
+  | none, _, h => by simp [Term.useO] at h
+  | some t, i, h => Term.hasVar_of_use t i h
+end
 
 /-- The slot a member's values are built with: the bijection above, as a function. -/
 def Member.slot : Member → Slot
@@ -148,7 +243,11 @@ def occV : Term → Slot → Bool
   | .literal k _ => occOnly k.slot
   -- the bottom writes nothing, so it occupies no slot
   | .never       => occNone
-  | .set b       => occOnly b.slot
+  -- a set writes the wire family of each scalar slot its element writes, and every family
+  -- where its element reads a variable
+  | .set t       => fun s => match s.setElem with
+      | some e => occV t e || t.hasVar
+      | none => false
   -- `array` and `tuple` are one shape now, and both rows said the same thing
   | .list _ _ _  => occOnly .arr
   | .object _   => occOnly .map
@@ -182,7 +281,9 @@ def occA : Term → Member → Bool
   | .literal k _ => occOnly k.member
   -- and stores nothing, so it occupies no member
   | .never       => occNone
-  | .set b       => occOnly b.member
+  | .set t       => fun m => match m.setElem with
+      | some e => occA t e || t.hasVar
+      | none => false
   | .list _ _ _  => occOnly .L
   | .object _   => occOnly .M
   | .refine t _  => occA t
@@ -231,10 +332,8 @@ theorem occVL_cons {t : Term} {ts : List Term} {s : Slot} (h : occV t s = true �
 mutual
 
 /-- **The write occupancy contains what an open term writes**, or a variable that reads the
-    term's own input writes it. `set b` is where nonemptiness of `℘⁺fin` does the work: a set
-    row matches all three wire families and asks `b.adm` element by element, so `set number`
-    faced a `strSet` answers `∀ s ∈ S, inD (.str s)` — and `S` has an element, whose answer is
-    `false`. -/
+    term's own input writes it. `set t` is where nonemptiness of `℘⁺fin` does the work: a set
+    writes one element at least, so the element's slot names the wire family. -/
 theorem occV_open : ∀ (t : Term) (ρ : List Codec) (v : Value),
     ((denote t ρ).e v).isSome = true →
       occV t v.slot = true ∨ ∃ i, 2 ≤ t.use i ∧ ((envAt ρ i).e v).isSome = true
@@ -250,26 +349,16 @@ theorem occV_open : ∀ (t : Term) (ρ : List Codec) (v : Value),
       exact Or.inl (by
         cases k <;> cases v <;>
           simp_all [AdmLit, inL, occV, occOnly, Value.slot, GroundKind.slot])
-  | .set b, _, v, h => by
-      have h := (Adm_exact (.set b) v).mpr h
+  -- a set writes one element at least, and that element's slot names the family
+  | .set t, ρ, v, h => by
+      obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
       refine Or.inl ?_
-      cases v with
-      | strSet S => obtain ⟨x, hx⟩ := S.2; cases b <;>
-          simp_all [Adm, SetBase.adm, inD, occV, occOnly, Value.slot, SetBase.slot]
-      | numSet S =>
-          obtain ⟨x, hx⟩ := S.2
-          have hnone : ∀ b' : SetBase, b'.adm (.num x) = false →
-              Adm (.set b') (.numSet S) = true → False := by
-            intro b' hb' hA
-            simp only [Adm, decide_eq_true_eq] at hA
-            exact Bool.noConfusion (hb' ▸ hA x hx)
-          cases b
-          case number => rfl
-          case string => exact absurd h (fun hA => (hnone .string rfl hA).elim)
-          case binary => exact absurd h (fun hA => (hnone .binary rfl hA).elim)
-      | binSet S => obtain ⟨x, hx⟩ := S.2; cases b <;>
-          simp_all [Adm, SetBase.adm, inD, occV, occOnly, Value.slot, SetBase.slot]
-      | _ => exact absurd h (by simp [Adm])
+      rcases setCodec_e_eq.mp ha with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
+        obtain ⟨x, hx⟩ := S.2 <;>
+        rcases occV_open t ρ _ (encSet_elem hS x hx) with h1 | ⟨i, hi, -⟩ <;>
+        first
+          | (simp_all [occV, Value.slot, Slot.setElem]; done)
+          | simp [occV, Value.slot, Slot.setElem, Term.hasVar_of_use t i (by omega)]
   -- the containers write their own slot, whatever their elements read
   | .list _ _ _, _, v, h => Or.inl (by cases v <;> simp_all [denote, listCodec, occV, occOnly, Value.slot])
   | .object (.mk _ _ _), _, v, h => by
@@ -362,11 +451,15 @@ theorem occA_open : ∀ (t : Term) (ρ : List Codec) (a : Attr),
       rw [AdmA_literal] at h
       exact Or.inl (by
         cases k <;> cases a <;> simp_all [AdmALit, occA, occOnly, Attr.member, GroundKind.member])
-  | .set b, _, a, h => by
-      have h := (AdmA_exact (.set b) a).mpr h
-      exact Or.inl (by
-        cases b <;> cases a <;>
-          simp_all [AdmA, AdmASet, occA, occOnly, Attr.member, SetBase.member])
+  | .set t, ρ, a, h => by
+      obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
+      refine Or.inl ?_
+      rcases setCodec_p_eq.mp hw with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
+        obtain ⟨x, hx⟩ := S.2 <;>
+        rcases occA_open t ρ _ (decSet_elem hS x hx) with h1 | ⟨i, hi, -⟩ <;>
+        first
+          | (simp_all [occA, Attr.member, Member.setElem]; done)
+          | simp [occA, Attr.member, Member.setElem, Term.hasVar_of_use t i (by omega)]
   | .list _ _ _, _, a, h => Or.inl (by
       cases a <;> simp_all [denote, listCodec, occA, occOnly, Attr.member])
   | .object (.mk _ _ _), _, a, h => Or.inl (by

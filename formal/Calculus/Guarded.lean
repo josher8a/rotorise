@@ -93,7 +93,6 @@ theorem denote_agree : ∀ (t : Term), t.guarded = true → ∀ (d : Nat) (ρ₁
   | .null, _, _, _, _, _ => .refl _ _
   | .literal _ _, _, _, _, _, _ => .refl _ _
   | .opaq, _, _, _, _, _ => .refl _ _
-  | .set _, _, _, _, _, _ => .refl _ _
   | .never, _, _, _, _, _ => .refl _ _
   | .var j, _, _, _, _, h => by
       have hj := h j
@@ -126,6 +125,10 @@ theorem denote_agree : ∀ (t : Term), t.guarded = true → ∀ (d : Nat) (ρ₁
           (denoteList_agree pre hg.1.1 d ρ₁ ρ₂ fun i => UseAgree.of_under (h i) (by omega))
           (denoteOpt_agree sp hg.1.2 d ρ₁ ρ₂ fun i => UseAgree.of_under (h i) (by omega))
           (denoteList_agree suf hg.2 d ρ₁ ρ₂ fun i => UseAgree.of_under (h i) (by omega))
+  | .set t, hg, d, ρ₁, ρ₂, h =>
+      match d with
+      | 0 => AgreeLe.zero _ _
+      | d + 1 => agreeLe_setCodec (denote_agree t hg d ρ₁ ρ₂ fun i => UseAgree.of_under (h i) le_rfl)
   | .union opts, hg, d, ρ₁, ρ₂, h =>
       agreeLe_altCodec _ _ (denoteList_agree opts hg d ρ₁ ρ₂ h)
   | .object b, hg, d, ρ₁, ρ₂, h =>

@@ -34,7 +34,10 @@ describe('the member a term stores', () => {
         expect(
             member({
                 kind: 'union',
-                options: [{ kind: 'number' }, { kind: 'set', base: 'number' }],
+                options: [
+                    { kind: 'number' },
+                    { kind: 'set', elem: { kind: 'number' } },
+                ],
             }),
         ).toBe(undefined)
         // one option is the model's `union(c) ≡ c` at the index
@@ -81,12 +84,15 @@ describe('the member a term stores', () => {
     })
 
     /**
-     * §3 `(set)`: a set's member is its base's, and the two numeric bases store the same one.
-     * That collision is why the base is an index rather than something a reader recovers.
+     * §3 `(set)`: a set's member is `setMember` of its element's member. An element of any other
+     * member has no stored set, which is the DynamoDB set obligation, and the index says `⊤`.
      */
-    it('a set stores its base member, and the two numeric bases store the same one', () => {
-        expect(member({ kind: 'set', base: 'string' })).toBe('SS')
-        expect(member({ kind: 'set', base: 'binary' })).toBe('BS')
+    it("a set stores the set member of its element's member, and nothing for any other member", () => {
+        expect(member({ kind: 'set', elem: { kind: 'string' } })).toBe('SS')
+        expect(member({ kind: 'set', elem: { kind: 'binary' } })).toBe('BS')
+        expect(member({ kind: 'set', elem: { kind: 'boolean' } })).toBe(
+            undefined,
+        )
     })
 })
 
@@ -226,10 +232,10 @@ describe('the occupancies a declaration is separated by', () => {
 
     it('and the set bases agree on both sides, so none of them is that pair', () => {
         for (const base of ['string', 'number', 'binary'] as const) {
-            const one: Term = { kind: 'set', base }
+            const one: Term = { kind: 'set', elem: { kind: base } }
             for (const other of ['string', 'number', 'binary'] as const) {
                 if (base === other) continue
-                const two: Term = { kind: 'set', base: other }
+                const two: Term = { kind: 'set', elem: { kind: other } }
                 expect(occV(one)).not.toEqual(occV(two))
                 expect(occA(one)).not.toEqual(occA(two))
             }
@@ -356,64 +362,46 @@ describe('the tags a variant answers to', () => {
 
 describe('the term `.set()` writes', () => {
     /**
-     * §3 `(set)` is indexed by a base, so a set over a restricted element is spelled as a
-     * restriction of the **set** — which is not a loss, and the model proves it is not:
-     * `setCodec_restrict` and `setCodec_restrict_p` say the set of a restriction and the
-     * restriction of a set are one pair, on `e` and on `p`. `each` is `liftQ` at the term level.
+     * §3 `(set)` is the finite-powerset lift of an element term, so a restriction rides at the
+     * element: the set of `refine(decimal, q)` holds that refinement as its element, and the
+     * predicate tests the text the caller holds.
      */
-    it('a set over a restricted element is a restriction of the set, not a loss', () => {
+    it('a set over a restricted element holds the restriction at the element', () => {
         const positive = refine(
             decimal,
             (value: string): value is string => !value.startsWith('-'),
             { describe: 'non-negative' },
         )
         const term = erase(positive.set()).def
-        expect(term.kind).toBe('refine')
-        // `decimal` is an adapter over the one numeric base, so the set is built at that base and
-        // the conversion is mapped over it. The restriction stays outside, because the predicate
-        // tests the text the caller holds and not the numeral the table does
-        const held = (term as { inner: Term }).inner
-        expect(held.kind).toBe('held')
-        expect((held as { inner: Term }).inner).toEqual({
-            kind: 'set',
-            base: 'number',
-        })
-        expect((term as { q: { kind: string } }).q.kind).toBe('each')
-        // the member is the set's and reaches no element, which is what `Term.set` being indexed
-        // by a base buys: `refine` preserves the member (§6)
+        expect(term).toEqual({ kind: 'set', elem: positive.def })
+        // the element writes `N`, so the set writes `NS`
         expect(member(term)).toBe('NS')
     })
 
     /**
-     * …and a set over a *literal* element carries the alternatives as data, which is what makes
-     * the meet able to read them. The model's spelling is `liftQ (inL k ls)`, where `ls` is a
-     * `NEFinset` and not a function — a closure decides nothing a declaration can see.
+     * …and a set over a *literal* element carries the alternatives as data at the element, which
+     * is what makes the meet able to read them.
      */
     it('a set over a literal carries the alternatives, so the declaration can read them', () => {
         const term = erase(string.set('a', 'b')).def
         expect(term).toEqual({
-            kind: 'refine',
-            inner: { kind: 'set', base: 'string' },
-            q: {
-                kind: 'each',
-                of: {
-                    kind: 'members',
-                    literal: {
-                        kind: 'alternatives',
-                        base: 'string',
-                        ls: ['a', 'b'],
-                    },
-                },
+            kind: 'set',
+            elem: {
+                kind: 'union',
+                options: [
+                    { kind: 'literal', base: 'string', v: 'a' },
+                    { kind: 'literal', base: 'string', v: 'b' },
+                ],
             },
         })
         expect(member(term)).toBe('SS')
     })
 
-    /** …and a bare base does have one, which is the whole of what `SetBase` indexes. */
-    it('a set over a bare base is the base, and nothing about the element survives', () => {
+    /** …and a set over a bare base holds the base as its element. */
+    it('a set over a bare base holds the base as its element', () => {
         expect(erase(string.set()).def).toEqual({
             kind: 'set',
-            base: 'string',
+            elem: { kind: 'string' },
         })
     })
 

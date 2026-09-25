@@ -285,38 +285,41 @@ theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
 
 /-- **A discharge §5 could not state.** Two sets over disjoint literals separate, because
     `℘⁺fin` has no empty inhabitant and so the two options share none. The non-emptiness
-    is the *type's*, which is why every branch here ends at `S.2`.
+    is the *type's*, which is why every branch here starts at `S.2`.
 
-    The terms are `refine(set(string), liftQ …)`: with `set` taking a base, a literal element
-    is a **restriction of the set**, and `setCodec_restrict` proves the two write the same
-    attribute on the nose. -/
+    The literal sits at the element: `set(literal string "A")`. -/
 theorem sepJV_set_literals :
-    SepJV (.refine (.set .string) (.each (.members .string (.of "A" ∅))))
-          (.refine (.set .string) (.each (.members .string (.of "B" ∅)))) := by
+    SepJV (.set (.literal .string "A")) (.set (.literal .string "B")) := by
+  -- a string literal writes one string and no other value
+  have hlit : ∀ (c : String) (w : Value), ((denote (.literal .string c)).e w).isSome = true →
+      w = .str c := fun c w h => by
+    have := (Adm_exact (.literal .string c) w).mpr h
+    cases w <;> simp_all [Adm, AdmLit, inL]
   intro v hv
   cases v
   case strSet S =>
     obtain ⟨x, hx⟩ := S.2
-    simp only [Adm, Bool.and_eq_true, Pred.eval, liftQ, decide_eq_true_eq] at hv
-    have hxA : x = "A" := by
-      have h1 := (of_decide_eq_true hv.2) x hx
-      simpa [inLs, inL] using h1
-    simp only [Adm, Pred.eval, liftQ, Bool.and_eq_false_iff, decide_eq_false_iff_not]
-    refine Or.inr (decide_eq_false (fun hall => ?_))
-    have h2 := hall x hx
-    rw [hxA] at h2
-    simp [inLs, inL] at h2
-  -- the other two wire families are refused by the *set* row, element by element: a
-  -- `string` base admits no number and no byte string, and `℘⁺fin` supplies the element
+    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
+    have hA := hlit "A" _ (encSet_elem (c := denote (.literal .string "A")) ha x hx)
+    cases hb : Adm (.set (.literal .string "B")) (.strSet S) with
+    | false => rfl
+    | true =>
+      obtain ⟨b, hb'⟩ := Option.isSome_iff_exists.mp hb
+      have hB := hlit "B" _ (encSet_elem (c := denote (.literal .string "B")) hb' x hx)
+      exact absurd (hA.symm.trans hB) (by simp)
+  -- the other two wire families are refused element by element, and `℘⁺fin` supplies the
+  -- element
   case numSet S =>
     obtain ⟨x, hx⟩ := S.2
-    simp only [Adm, Bool.and_eq_false_iff, decide_eq_false_iff_not]
-    exact Or.inl (fun hall => by have h := hall x hx; simp [SetBase.adm] at h)
+    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
+    exact absurd (hlit "A" _ (encSet_elem (c := denote (.literal .string "A")) ha x hx))
+      (by simp)
   case binSet S =>
     obtain ⟨x, hx⟩ := S.2
-    simp only [Adm, Bool.and_eq_false_iff, decide_eq_false_iff_not]
-    exact Or.inl (fun hall => by have h := hall x hx; simp [SetBase.adm] at h)
-  all_goals simp [Adm, Pred.eval, liftQ]
+    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
+    exact absurd (hlit "A" _ (encSet_elem (c := denote (.literal .string "A")) ha x hx))
+      (by simp)
+  all_goals simp [Adm, setCodec] at hv
 
 /-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
     separate, because both options admit `[]`. This is §5's empty-container argument in its
@@ -370,17 +373,19 @@ theorem set_no_duplicates :
 
 /-! ### What (R) forces on a list carrier for a set
 
-(R) rules out a canonical form over lists. Retraction is to the *same* value, not an
-agreeing one, so a codec whose `e` collapses two orderings owes one attribute two readings.
-Such an `e` cannot normalise: it has to accept exactly one representative per set and refuse
-the rest, with `p` normalising so that `ker p` collapses the orderings.
+(R) makes `e` injective, so a list-carried set codec cannot normalise: two spellings of one set
+that write one attribute owe that attribute two readings. (R) does not rule out a canonical form.
+A list carrier with a decidable total order on `Value` is lawful when `e` accepts only the
+canonical spelling and refuses the rest, and `p` returns the canonical spelling. The cost is the
+refusal: every set codec refuses a non-canonical spelling, so the carrier holds values that no set
+codec writes.
 
-`Finset` has one representative per set *as a type*, so there is nothing for `e` to choose
-between and nothing for `p` to collapse, and `ker p` is equality at `setCodec`. The constraint
-is stated because it rules out the alternative design. Nothing here depends on it.
+`Finset` has one representative per set *as a type*, so there is nothing for `e` to refuse and
+nothing for `p` to choose, and `ker p` is equality at `setCodec`. The kernel refuses the generic
+carrier (a nested `Finset`, `Multiset` or `Quot` of the datatype being declared), which is why the
+three concrete set carriers stay.
 
-No canonical form and no order is on the set path or on the map path. The `Classical.choice`
-hazard of an order is stated beside `NEFinset` in `Domain.lean`. The quotient the kernel
+No canonical form and no order is on the set path or on the map path. The quotient the kernel
 refuses is `Finset (Name × Attr)`, and `M` does not need it, as the next section shows. -/
 
 /-! ### The reference, checked against the model

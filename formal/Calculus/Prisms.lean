@@ -246,16 +246,6 @@ noncomputable def baseCodec : GroundKind → Codec
   | .binary  => binaryCodec
   | .null    => nullCodec
 
-/-- §3 `(set)`'s element pair, chosen by the base.
-
-    `denote (.set b)` is `setCodec b.elem`, which is why `setCodec`, `encSet`, `decSet` and
-    `setImage` are untouched by the re-indexing: the *constructor* changed, the combinator
-    did not. Three bases, three wire members. -/
-noncomputable def SetBase.elem : SetBase → Codec
-  | .string  => stringCodec
-  | .number  => numberCodec
-  | .binary  => binaryCodec
-
 /-- `literal(ℓ)`'s predicate: the value is the alternative.
 
     One definition where there were two (~~inLS~~, ~~inLN~~) and three bases with none. Dispatching

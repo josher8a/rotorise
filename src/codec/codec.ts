@@ -45,15 +45,12 @@ import {
     clauseForm,
     clauseLiteralsOf,
     compatible,
-    elementAdapter,
-    elementPredicates,
     heldOnRecursivePath,
     literalAlternatives,
     member as memberOf,
-    occV,
     ownsNullOf,
-    setBaseOf,
     unreadableSpine,
+    widensRead,
 } from './term'
 
 /**
@@ -283,7 +280,7 @@ export type Decoded<C> = C extends {
 /*
  * A reader here answers from the **term** and nothing else, which is what makes the term determine
  * the codec rather than describe it. `constantOf` is the one left in this file; `member`, `occV`,
- * `occA`, `specOf`, `tagsOf`, `separable` and `setBaseOf` are `term.ts`'s, and
+ * `occA`, `specOf`, `tagsOf` and `separable` are `term.ts`'s, and
  * `carries`, `accepts` and `readsBack` ask the pair in `denote.ts`.
  *
  * They take a *codec* and read its term rather than taking the term, and that is the decision
@@ -686,18 +683,6 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> & {
     { set: setCapability('number', () => dynamoNumber) },
 ) as never
 
-/**
- * The held side of a set of adapted elements: the set of the element's held side, where that side
- * lands in one set base, and the top otherwise.
- */
-const setOuter = (slots: ReturnType<typeof occV>): Term => {
-    const [only] = slots
-    return slots.length === 1 &&
-        (only === 'string' || only === 'number' || only === 'binary')
-        ? { kind: 'set', base: only }
-        : { kind: 'opaq' }
-}
-
 /** The held side of an adapter over a finite set of numerals: the texts it hands the caller. */
 const textsOf = (texts: readonly string[]): Term => {
     const options: Term[] = [...new Set(texts)].map((v) => ({
@@ -733,50 +718,6 @@ const numericAdapter = <T>(
         f: into as (value: never) => unknown,
         g: outOf as (held: never) => unknown,
         ...(via ? { via } : {}),
-    })
-
-/** …and the same over a set of them, element by element. `outer` is the held side of one element. */
-const numericSetAdapter = <T>(
-    inner: Term,
-    outer: { readonly kind: 'string' | 'number' },
-    into: (value: T) => Result<DynamoNumber>,
-    outOf: (held: DynamoNumber) => Result<T>,
-): AttributeCodec<ReadonlySet<T>, NS> =>
-    codecOfTerm<ReadonlySet<T>, NS>({
-        kind: 'held',
-        outer: { kind: 'set', base: outer.kind },
-        // what the set-level halves below are built from, kept so a reader that needs one element
-        // does not have to rediscover it from a conversion over a whole set
-        element: {
-            f: into as (value: never) => unknown,
-            g: outOf as (held: never) => unknown,
-            outer,
-        },
-        inner,
-        // the held side is a set, as the model's `restrict` by the held side states: a string and
-        // an array are iterable, and would otherwise convert element by element
-        f: ((value: ReadonlySet<T>) => {
-            if (!(value instanceof Set))
-                return new CodecError(
-                    `${describeShape(value)} is not a \`Set\`, and an NS is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                )
-            const held = new Set<DynamoNumber>()
-            for (const each of value) {
-                const one = into(each)
-                if (failed(one)) return one
-                held.add(one)
-            }
-            return held
-        }) as (value: never) => unknown,
-        g: ((held: ReadonlySet<DynamoNumber>) => {
-            const out = new Set<T>()
-            for (const each of held) {
-                const one = outOf(each)
-                if (failed(one)) return one
-                out.add(one)
-            }
-            return out
-        }) as (held: never) => unknown,
     })
 
 /**
@@ -849,19 +790,9 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> & {
         'decimalText',
     ),
     {
+        // the set of the adapter itself: the conversion rides at the element
         set: (...allowed: readonly string[]) =>
-            numericSetAdapter<string>(
-                termOf(
-                    (allowed.length
-                        ? dynamoNumber.set(
-                              ...allowed.map((one) => orThrow(storedOnly(one))),
-                          )
-                        : dynamoNumber.set()) as AnyCodec,
-                ),
-                { kind: 'string' },
-                storedOnly,
-                (held) => held.toString(),
-            ),
+            set((allowed.length ? decimal(...allowed) : decimal) as AnyCodec),
     },
 ) as never
 
@@ -934,8 +865,7 @@ const asJsNumber = (held: DynamoNumber): Result<number> => {
  *
  * **An adapter over {@link dynamoNumber}, not a base of its own**, and the conversion is where the
  * loss is: the float has already rounded before this codec sees it. `number.set()` and
- * `decimal.set()` are two carriers over one wire set rather than two set bases, which is why
- * `SetBase` no longer has a `decimal`.
+ * `decimal.set()` are two carriers over one wire set: each is the set of its adapter.
  */
 export const number: AttributeCodec<number, Attribute<'N'>> & {
     <const T extends number>(only: T): ConstantCodec<T, Attribute<'N'>>
@@ -967,17 +897,9 @@ export const number: AttributeCodec<number, Attribute<'N'>> & {
         asJsNumber,
     ),
     {
+        // the set of the adapter itself: the conversion rides at the element
         set: (...allowed: readonly number[]) =>
-            numericSetAdapter<number>(
-                termOf(
-                    (allowed.length
-                        ? dynamoNumber.set(...numericAlternatives(allowed))
-                        : dynamoNumber.set()) as AnyCodec,
-                ),
-                { kind: 'number' },
-                asFloat,
-                asJsNumber,
-            ),
+            set((allowed.length ? number(...allowed) : number) as AnyCodec),
     },
 ) as never
 
@@ -1085,95 +1007,29 @@ const set = <const C extends AnyCodec>(
 ): AttributeCodec<ReadonlySet<Decoded<C>>, SetOf<C>> => {
     type T = Decoded<C>
     const inner = element as unknown as AttributeCodec<T>
-    // the member the element stores, read off its term. The check has two parts, and neither is a
-    // law of the codec algebra. A DynamoDB set, `SS`, `NS` or `BS`, holds elements of one member,
-    // which is a fact of the store universe. A thunk element answers no member here, because the
-    // host cannot force a thunk safely at declaration: forcing a recursive thunk can loop, which
-    // is a limit of the host's carrier. So a set of a thunk is refused
+    // **The DynamoDB set obligation, and nothing of the algebra.** A stored set, `SS`, `NS` or `BS`,
+    // holds elements of one scalar member, which is the model's `SetElem`; the lift of any lawful
+    // element is lawful (`lawful_setCodec`), so this refusal belongs to the store universe. A thunk
+    // element answers no member here, because the host cannot force a thunk safely at declaration:
+    // forcing a recursive thunk can loop, which is a limit of the host's carrier. So a set of a
+    // thunk is refused
     const member = memberOf(inner.def)
     if (member !== 'S' && member !== 'N' && member !== 'B') {
         throw new CodecError(
             `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
         )
     }
-    /**
-     * …and the element reduces to one of the four bases a stored set is built from.
-     *
-     * The member check above is §3 `(set)`'s premise as it *was* — `setMember μ = some μS` — and it
-     * is not enough, because `member` reads through wrappers that a set has no way to record.
-     * a set of `held(string, f, g)` passed it: `held` writes where its inner term does, so the member
-     * was `'S'`, and the adapter's two functions then ran per member of an attribute that stores no
-     * such thing. The model closed this by indexing `Term.set` with a `SetBase`
-     * and says outright what that gives up — a set of a `withLegacyRead`, which has no set-level
-     * spelling. A set of a `held` was given up on the same ground and is not: an adapter is
-     * elementwise, so mapping it over the wire set IS the spelling, and `decimal.set()` needs it
-     * now that `decimal` is an adapter rather than a base.
-     *
-     * `refine` and a literal are **not** given up: a restriction of the elements is a restriction of
-     * the set, and `setCodec_restrict` and `setCodec_restrict_p` prove the two are one pair on both
-     * halves. So the walk reads through those two and nothing else.
-     *
-     * **Asked of the element's term, not of the element's codec.** `set` takes a base now, and the
-     * base is a fact about the term — the same walk that decides how the conversion spells this
-     * set, so the guard and the spelling cannot answer differently.
-     */
-    const base = setBaseOf(inner.def)
-    if (base === undefined) {
+    // **A read widening has no set of it in the model.** `withLegacyRead` is `Codec.extendRead`,
+    // which is outside the model's `Term`, so no law covers a set of it, and the host refuses one
+    // rather than ship a pair nothing proves
+    if (widensRead(inner.def)) {
         throw new CodecError(
-            `a set's element must be one of the four bases a stored set is built from — \`string\`, \`number\`, \`decimal\` or \`binary\`, narrowed by \`refine\` or by a literal — and this element is a \`${inner.def?.kind ?? 'codec with no definition'}\`, which writes '${member}' by reading through to something else. A set of it has nothing DynamoDB stores`,
+            `a set's element cannot carry \`withLegacyRead\`: the model states no set of an older reader, so no law covers the pair; declare the set of the current codec, and read the older form with \`withLegacyRead\` around the whole set`,
         )
     }
-    /**
-     * §3 `(set)` is indexed by the **base**, so a restricted element is spelled as a restriction of
-     * the *set*: `string.set('a','b')` is `refine(set(string), each(members …))` and
-     * `refine(decimal, q).set()` is `refine(set(decimal), each(closure q))`. `each` is `liftQ` at
-     * the term level — every element of the wire set satisfies the element's own predicate — and
-     * `setCodec_restrict` and `setCodec_restrict_p` prove the two spellings are one pair on both
-     * halves. One `refine` per predicate the element carries, outermost first.
-     */
-    const bare: Term = { kind: 'set', base }
-    /**
-     * **An adapter on the element is mapped over the set**, which is the set-level spelling this
-     * used to say did not exist. `number` and `decimal` are adapters over the one numeric base
-     * now, so `decimal.set()` and `refine(decimal, q).set()` both arrive here carrying one, and
-     * refusing them would take two published capabilities.
-     *
-     * The order is forced and is the alternating stack's: the wire set is converted first, then
-     * the element predicates run, because a predicate a caller wrote tests the value the caller
-     * holds and not the one the table does.
-     */
-    const adapter = elementAdapter(inner.def)
-    const adapted: Term = adapter
-        ? {
-              kind: 'held',
-              inner: bare,
-              outer: setOuter(occV(adapter.outer)),
-              // the pair the two halves below are built from, kept so a reader that needs one
-              // element does not have to rediscover it from a conversion over a whole set
-              element: adapter,
-              f: ((value: ReadonlySet<unknown>) => {
-                  const held = new Set<unknown>()
-                  for (const each of value) {
-                      const one = (adapter.f as (v: unknown) => unknown)(each)
-                      if (failed(one)) return one
-                      held.add(one)
-                  }
-                  return held
-              }) as (value: never) => unknown,
-              g: ((held: ReadonlySet<unknown>) =>
-                  new Set(
-                      [...held].map(adapter.g as (v: unknown) => unknown),
-                  )) as (held: never) => unknown,
-          }
-        : bare
-    const term = elementPredicates(inner.def).reduceRight<Term>(
-        (restricted, of) => ({
-            kind: 'refine',
-            inner: restricted,
-            q: { kind: 'each', of },
-        }),
-        adapted,
-    )
+    // the element is the element's own term, so a restriction, a literal and an adapter each ride
+    // at the element, and the set is its finite-powerset lift
+    const term: Term = { kind: 'set', elem: inner.def }
     return codecOfTerm<ReadonlySet<T>, SetOf<C>>(term)
 }
 
@@ -1531,14 +1387,14 @@ export type Refined<T, A extends AttributeValue> = AttributeCodec<T, A> &
 /**
  * `.set()`, where the codec it sits on can be a set's element.
  *
- * The capability {@link setBaseOf} decides at runtime, stated at the type as far as the type can see
- * it — which is not all the way. A codec's *type* is not generic in its definition — every codec
- * carries a `Term`, and none of them carries *which* one at the type — so `refine(...)`'s type
- * knows the attribute and never the base it reduced through. So the gate here is the attribute — `S`, `N` or `B`, the three a stored set is built
- * from — and `refine(held(string, f, g), p).set()` type-checks and throws, because `held` writes
- * `S` and reduces to no base. That gap closes only by making the codec type generic in its
- * definition, which was measured at 481 of 968 signatures and rejected; the runtime refusal in
- * {@link set} is what stands in for it, and is tested at each of the six kinds that reach it.
+ * The capability {@link set} decides at runtime, stated at the type as far as the type can see
+ * it, which is not all the way. A codec's *type* is not generic in its definition: every codec
+ * carries a `Term`, and none of them carries *which* one at the type. So `refine(...)`'s type
+ * knows the attribute and never the term beneath, and the gate here is the attribute: `S`, `N` or
+ * `B`, the three a stored set is built from. `refine(withLegacyRead(…), p).set()` type-checks
+ * and throws, because a read widening has no set in the model. That gap closes only by making the
+ * codec type generic in its definition, which was measured at 481 of 968 signatures and rejected;
+ * the runtime refusal in {@link set} is what stands in for it.
  *
  * **One member at a time, and each test non-distributive.** Two shorter spellings were tried and
  * both admit `refine(union([string, number]), p).set()`, which is a set of an element writing two

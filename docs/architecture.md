@@ -239,8 +239,7 @@ These are the architecture, more than the module list is.
 
 Repeatedly a typing-rule side condition turns out to be expressible in the type of the
 constructor, at which point violating it stops being possible rather than being refused.
-`SetBase` is the set of bases that survive the element premise, so the member is a total function
-of the index and the refusal is a type error. `GroundKind` makes a literal's carrier concrete and
+`GroundKind` makes a literal's carrier concrete and
 its equality decidable, so `ℓ ⊆ T` is the carrier rather than a premise beside it. `NEFinset`
 makes nonemptiness, pairwise distinctness and homogeneity properties of the type wherever a wire
 set is written.
@@ -543,12 +542,14 @@ mutual form, so every list position needs a hand-rolled companion indexed alongs
 the price. `Attr.Storable` counts the two nesting constructors and is a different function from
 `Attr.depth`, which is a termination measure. Do not unify them.
 
-**An element-level adapter or read widening under a set**, given up by indexing the set by its
-element base. A restriction of the elements is not lost: `setCodec_restrict` proves that a
-restriction of the elements and a restriction of the set write the same attribute on the nose,
-with `liftQ` carrying the predicate through. What is lost has no set-level spelling, because a
-set-level adapter would need an injective image rather than the classical one, and a set-level
-read widening widens the whole attribute rather than each member.
+**The DynamoDB set rules, outside the set algebra.** `set` is the finite-powerset lift of any
+element term, and a lawful element gives a lawful set (`lawful_setCodec`). Three rules of a stored
+set are DynamoDB facts and not rules of the algebra. The element types `S`, `N` and `B` and the
+absent empty set live in the carrier: `Value.strSet`, `numSet` and `binSet` over `NEFinset`. That
+the element writes one member of `S`, `N` or `B` is an obligation, `SetElem`, beside `(union)`'s
+compatibility. The carrier is not generic over `Value`, because the kernel rejects a nested `Finset`, `Multiset`
+or `Quot` of the datatype being declared, and a list carrier needs a canonical spelling that every
+set codec enforces by refusal.
 
 **The n-ary literal is a union of singletons.** A literal carries one value, and several
 alternatives are a `union` of singleton literals whose members are separated because the values

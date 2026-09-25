@@ -30,6 +30,17 @@ theorem wildSem_ne_drop (w : Option Term) {ρ : List Codec} : wildSem w ρ ≠ .
 def PairwiseCompat (opts : List Term) (ρ : List Codec := []) : Prop :=
   ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote s ρ) (denote t ρ)
 
+/-- **The DynamoDB set obligation**: the element writes one member of `S`, `N` or `B`.
+
+    A rule of the store universe, not of the set algebra: `lawful_setCodec` needs only a lawful
+    element. A set writes a wire set in the first family, `SS`, `NS` or `BS`, into which every
+    element writes, and writes nothing where no family holds every element. So `set` over an
+    element that names no member can still write a value (`set opaque` writes an `SS` of strings),
+    and `set` over an element of a non-scalar member writes nothing. The obligation asks the static
+    fact a schema states: the element names one member of `S`, `N` or `B`. The other two DynamoDB set rules, the three element types and the absent
+    empty set, are the carrier's (`Value.strSet`, `numSet`, `binSet`). -/
+def SetElem (c : Codec) : Prop := (c.μ.bind setMember).isSome = true
+
 mutual
 
 /-- The doc's semantic rule premises.
@@ -38,9 +49,10 @@ mutual
     companions exist because `∀ t' ∈ ts, Obligations t'` is not a structural recursion and
     `ObligationsList` is. -/
 def Obligations : Term → (ρ : List Codec := []) → Prop
-  -- `set` joins the leaves: its base is an index, so there is no subterm to carry premises.
   | .string, _ | .number, _ | .boolean, _ | .binary, _ | .null, _
-  | .literal _ _, _ | .opaq, _ | .set _, _ | .never, _ | .var _, _ => True
+  | .literal _ _, _ | .opaq, _ | .never, _ | .var _, _ => True
+  -- the element's premises, and the DynamoDB universe's set rule
+  | .set t', ρ => Obligations t' ρ ∧ SetElem (denote t' ρ)
   | .refine t' _, ρ => Obligations t' ρ
   | .list pre sp suf, ρ => ObligationsList pre ρ ∧ ObligationsOpt sp ρ ∧ ObligationsList suf ρ
   -- the caller-side term owes nothing: a restriction keeps the laws of any lawful codec
@@ -104,6 +116,9 @@ namespace Obligations
 theorem array {t} (h : Obligations (.array t)) : Obligations t := h.2.1
 theorem record {t} (h : Obligations (.record t)) : Obligations t := h.2
 theorem refine {t q ρ} (h : Obligations (.refine t q) ρ) : Obligations t ρ := h
+
+/-- §3 `(set)`: the element's premises, and the DynamoDB set rule. -/
+theorem set {t ρ} (h : Obligations (.set t) ρ) : Obligations t ρ ∧ SetElem (denote t ρ) := h
 
 theorem tuple {ts tail} (h : Obligations (.tuple ts tail)) :
     (∀ t ∈ ts, Obligations t) ∧ (∀ t ∈ tail, Obligations t) :=
@@ -201,7 +216,10 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .boolean => rfl
   | _, _, _, .null => rfl
   | _, _, _, .binary => rfl
-  | _, _, _, .set _ => rfl
+  | _, _, _, .set h' => by
+      have ih := typed_μSyn h'
+      show (μSyn _).bind setMember = _
+      rw [ih]
   | _, _, _, .never => rfl
   | _, _, _, .list _ _ _ => rfl
   | _, _, _, .held h' => by have ih := typed_μSyn h'; exact ih
@@ -257,9 +275,8 @@ theorem soundnessIn : ∀ {t T μ} (ρ : List Codec), Typed t T μ → Obligatio
         exact soundnessIn (_ :: ρ) h' (hob n ih) fun i => match i with
           | 0 => ih
           | i + 1 => henv i
-    -- a leaf now: `setCodec` is lawful at each of the four bases, so `(set)` discharges the
-    -- way the ground rules do rather than by wrapping a subterm's soundness
-    | set b => exact (lawful_setCodec (lawful_setBase b))
+    -- the lift of a lawful element is lawful, and the DynamoDB set rule is not read
+    | @set t' T' μ' h' => exact lawful_setCodec (soundnessIn ρ h' hob.1 henv)
     | @refine t' T' μ' p h' =>
       exact (soundnessIn ρ h' hob henv).restrict p.eval
     | @held t' I' μ' P f g h' =>
@@ -654,13 +671,12 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
     -- a closed variable is the bottom, and a `mu`'s index is its codec's held set
     | var _ => exact False.elim hv
     | mu _ _ => exact hv
-    -- the base's codec holds exactly the base's held set (`SetBase.elem_T`), so the three
-    -- wire families transport with no recursion left to do
-    | set b =>
-      cases b <;> cases v <;> first
-        | exact Or.inl ⟨_, rfl, fun x hx => hv x hx⟩
-        | exact Or.inr (Or.inl ⟨_, rfl, fun x hx => hv x hx⟩)
-        | exact Or.inr (Or.inr ⟨_, rfl, fun x hx => hv x hx⟩)
+    -- each wire family's elements are the element's, one layer down
+    | @set t' T' μ' h' =>
+      cases v <;> first
+        | exact Or.inl ⟨_, rfl, fun x hx => typed_TSub h' _ (hv x hx)⟩
+        | exact Or.inr (Or.inl ⟨_, rfl, fun x hx => typed_TSub h' _ (hv x hx)⟩)
+        | exact Or.inr (Or.inr ⟨_, rfl, fun x hx => typed_TSub h' _ (hv x hx)⟩)
         | exact nomatch hv
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       rw [denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq] at hv
@@ -742,7 +758,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
     | boolean => exact carrier_booleanCodec
     | null => exact carrier_nullCodec
     | binary => exact carrier_binaryCodec
-    | set b => exact carrier_setCodec (carrier_setBase b)
+    | @set t' T' μ' h' => exact carrier_setCodec (carrier_denote h' hob.1)
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       rw [denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq]
       refine carrier_listCodec (List.forall_mem_map.mpr ?_) (forall_mem_map_option ?_)

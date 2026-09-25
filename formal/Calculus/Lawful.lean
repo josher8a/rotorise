@@ -126,12 +126,6 @@ theorem lawful_baseCodec : ∀ k : GroundKind, Lawful (baseCodec k)
   | .binary  => lawful_binaryCodec
   | .null    => lawful_nullCodec
 
-/-- …and so is each set base's element pair. -/
-theorem lawful_setBase : ∀ b : SetBase, Lawful b.elem
-  | .string  => lawful_stringCodec
-  | .number  => lawful_numberCodec
-  | .binary  => lawful_binaryCodec
-
 /-! ### The literal codec is lawful because its base is
 
 `literal` adds a prism and nothing else, so retract, canon and writes come from

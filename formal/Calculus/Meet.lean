@@ -1,4 +1,5 @@
 import Calculus.HeldSet
+import Calculus.HeldFree
 import Calculus.Merge
 import Calculus.Orthogonality
 import Calculus.Laminar
@@ -182,27 +183,15 @@ def Pred.meetExc : (k : GroundKind) → NEFinset k.Carrier →
   | .null,    A, .null,    B => Pred.excBoth .null A B
   | _, _, _, _ => some none
 
-/-- The meet of two element predicates, lifted to `each`. -/
-def Pred.meetEach : Option (Option Pred) → Option (Option Pred)
-  | some (some r) => some (some (.each r))
-  | some none => some none
-  | none => none
-
 /-- **Two predicates, met.** `none` is a refusal to combine, `some none` says that no value
     satisfies both, and `some (some r)` is the combined predicate. Every data case meets every
-    data case: `members` and `except` at any two bases, and `each` with `each` through the meet
-    of the element predicates. A scalar predicate and `each` share no value, because `each`
-    holds only a set. A `closure` refuses, because nothing reads a caller's function. -/
+    data case: `members` and `except` at any two bases. A `closure` refuses, because nothing
+    reads a caller's function. -/
 def Pred.meetM : Pred → Pred → Option (Option Pred)
   | .members k A, .members k' B => Pred.meetMem k A k' B
   | .members k A, .except k' B  => Pred.meetMemExc k A k' B
   | .except k B,  .members k' A => Pred.meetMemExc k' A k B
   | .except k A,  .except k' B  => Pred.meetExc k A k' B
-  | .each p, .each q => Pred.meetEach (Pred.meetM p q)
-  | .members _ _, .each _ => some none
-  | .except _ _,  .each _ => some none
-  | .each _, .members _ _ => some none
-  | .each _, .except _ _  => some none
   | _, _ => none
 
 /-- **A refinement over the bottom is the bottom, and two refinements over one carrier meet.**
@@ -316,11 +305,6 @@ theorem inLs_false_of_base {k : GroundKind} {A : NEFinset k.Carrier} {v : Value}
 theorem inBase_disj {k k' : GroundKind} (h : k ≠ k') (v : Value) :
     (inBase k v && inBase k' v) = false := by
   cases k <;> cases k' <;> cases v <;> first | rfl | exact absurd rfl h
-
-/-- A scalar base holds no set, and `each` holds nothing else. -/
-theorem liftQ_false_of_base {k : GroundKind} {v : Value} (h : inBase k v = true) (q : Value → Bool) :
-    liftQ q v = false := by
-  cases k <;> cases v <;> first | rfl | exact nomatch h
 
 /-- `members` at two different bases share no value. -/
 theorem memMem_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
@@ -466,74 +450,14 @@ theorem meetExc_ok (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind)
       | exact excBoth_ok _ A B
       | exact excExc_none (by decide) A B
 
-/-- `each` lifts a conjunction to a conjunction. -/
-theorem liftQ_and (p q : Value → Bool) (v : Value) :
-    liftQ (fun w => p w && q w) v = (liftQ p v && liftQ q v) := by
-  cases v <;> simp only [liftQ] <;>
-    first
-      | rfl
-      | (refine Bool.eq_iff_iff.mpr ?_
-         simp only [Bool.and_eq_true, decide_eq_true_eq]
-         exact ⟨fun h => ⟨fun s hs => (h s hs).1, fun s hs => (h s hs).2⟩,
-           fun h s hs => ⟨h.1 s hs, h.2 s hs⟩⟩)
-
-/-- **No set has every element in an empty meet**, because a wire set is not empty. -/
-theorem liftQ_and_false {p q : Value → Bool} (h : ∀ w, (p w && q w) = false) (v : Value) :
-    (liftQ p v && liftQ q v) = false := by
-  rw [← liftQ_and]
-  cases v with
-  | strSet S =>
-    obtain ⟨s, hs⟩ := S.2
-    exact decide_eq_false (fun hall => Bool.false_ne_true ((h _).symm.trans (hall s hs)))
-  | numSet S =>
-    obtain ⟨s, hs⟩ := S.2
-    exact decide_eq_false (fun hall => Bool.false_ne_true ((h _).symm.trans (hall s hs)))
-  | binSet S =>
-    obtain ⟨s, hs⟩ := S.2
-    exact decide_eq_false (fun hall => Bool.false_ne_true ((h _).symm.trans (hall s hs)))
-  | _ => rfl
-
-/-- `each` meets `each` through the meet of the element predicates. -/
-theorem meetEach_ok {p q : Pred} :
-    ∀ {o : Option (Option Pred)}, MeetOk p q o → MeetOk (.each p) (.each q) (Pred.meetEach o)
-  | some (some r), h => fun v => by
-      show liftQ r.eval v = (liftQ p.eval v && liftQ q.eval v)
-      rw [← liftQ_and, show r.eval = fun w => p.eval w && q.eval w from funext h]
-  | some none, h => fun v => liftQ_and_false h v
-  | none, _ => trivial
-
-/-- A scalar `members` and an `each` share no value, because `each` holds only a set. -/
-theorem members_each_ok (k : GroundKind) (A : NEFinset k.Carrier) (q : Pred) :
-    MeetOk (.members k A) (.each q) (some none) := by
-  intro v
-  show (inLs k A v && liftQ q.eval v) = false
-  cases hk : inBase k v with
-  | false => rw [inLs_false_of_base hk]; rfl
-  | true => rw [liftQ_false_of_base hk, Bool.and_false]
-
-/-- An `except` and an `each` share no value, because `except` holds only a scalar. -/
-theorem except_each_ok (k : GroundKind) (A : NEFinset k.Carrier) (q : Pred) :
-    MeetOk (.except k A) (.each q) (some none) := by
-  intro v
-  show ((inBase k v && !inLs k A v) && liftQ q.eval v) = false
-  cases hk : inBase k v with
-  | false => rfl
-  | true => rw [liftQ_false_of_base hk, Bool.and_false]
-
 /-- **The predicate meet is sound at every row.** -/
 theorem meetM_ok : ∀ q p : Pred, MeetOk q p (Pred.meetM q p)
   | .members k A, .members k' B => meetMem_ok k A k' B
   | .members k A, .except k' B  => meetMemExc_ok k A k' B
   | .except k B,  .members k' A => (meetMemExc_ok k' A k B).symm
   | .except k A,  .except k' B  => meetExc_ok k A k' B
-  | .each p, .each q => meetEach_ok (meetM_ok p q)
-  | .members k A, .each q => members_each_ok k A q
-  | .except k A,  .each q => except_each_ok k A q
-  | .each q, .members k A => (members_each_ok k A q).symm
-  | .each q, .except k A  => (except_each_ok k A q).symm
   | .members _ _, .closure _ => trivial
   | .except _ _,  .closure _ => trivial
-  | .each _,      .closure _ => trivial
   | .closure _, _ => trivial
 
 /-- The combined predicate holds exactly where both hold. -/
@@ -659,10 +583,80 @@ def famLit (k : GroundKind) (v : k.Carrier) : Term → Option Term
   | .opaq => none
   | _ => some .never
 
-def famSet (b : SetBase) : Term → Option Term
-  | .set b' => if b = b' then some (.set b) else some .never
+mutual
+/-- Whether a `held` occurs in the term. -/
+def hasHeld : Term → Bool
+  | .held _ _ _ _ => true
+  | .refine t _ => hasHeld t
+  | .mu t => hasHeld t
+  | .list pre sp suf => hasHeldL pre || hasHeldO sp || hasHeldL suf
+  | .object b => hasHeldB b
+  | .union os => hasHeldL os
+  | .set t => hasHeld t
+  | .string | .number | .boolean | .binary | .null | .literal _ _ | .opaq
+  | .never | .var _ => false
+def hasHeldL : List Term → Bool
+  | [] => false
+  | t :: ts => hasHeld t || hasHeldL ts
+def hasHeldO : Option Term → Bool
+  | none => false
+  | some t => hasHeld t
+def hasHeldB : Body → Bool
+  | .mk fs f w => decide (∃ k : {k // k ∈ fs}, hasHeldS (f k) = true) || hasHeldO w
+def hasHeldS : ObjectSlot → Bool
+  | .req t => hasHeld t
+  | .optional t => hasHeld t
+end
+
+/-- **Two sets meet at their elements.** The meet of the elements is the element of the meet, and
+    an element meet at the bottom is a set meet at the bottom, because `℘⁺fin` has no empty
+    inhabitant. The row states a set only where the three terms are held-free: there each set
+    writes and reads exactly where each element does (`setCodec_e_isSome_of_sub`), while an
+    adapter element can collide two values or change the wire family. -/
+def famSet (a : Term) (mt : Term → Option Term) : Term → Option Term
+  | .set y => match mt y with
+      | some z =>
+          if z.isNever then some .never
+          else if hasHeld a || hasHeld y || hasHeld z then none
+          else some (.set z)
+      | none => none
   | .opaq => none
   | _ => some .never
+
+mutual
+/-- A term with no `held` is held-free. `hasHeld` is the test the meet can run, and `HF` is the
+    premise `sub_denote` reads. -/
+theorem HF_of_hasHeld : ∀ t : Term, hasHeld t = false → HF t
+  | .held _ _ _ _, h => by simp [hasHeld] at h
+  | .refine t _, h => HF_of_hasHeld t h
+  | .mu t, h => HF_of_hasHeld t h
+  | .set t, h => HF_of_hasHeld t h
+  | .list pre sp suf, h => by
+      simp only [hasHeld, Bool.or_eq_false_iff] at h
+      exact ⟨HFL_of_hasHeld pre h.1.1, HFO_of_hasHeld sp h.1.2, HFL_of_hasHeld suf h.2⟩
+  | .object b, h => HFB_of_hasHeld b h
+  | .union os, h => HFL_of_hasHeld os h
+  | .string, _ | .number, _ | .boolean, _ | .binary, _ | .null, _ | .literal _ _, _
+  | .opaq, _ | .never, _ | .var _, _ => trivial
+/-- …at a body. -/
+theorem HFB_of_hasHeld : ∀ b : Body, hasHeldB b = false → HFB b
+  | .mk fs f w, h => by
+      simp only [hasHeldB, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists] at h
+      exact ⟨fun k => HFS_of_hasHeld (f k) (by simpa using h.1 k), HFO_of_hasHeld w h.2⟩
+/-- …at a slot. -/
+theorem HFS_of_hasHeld : ∀ s : ObjectSlot, hasHeldS s = false → HFS s
+  | .req t, h | .optional t, h => HF_of_hasHeld t h
+/-- …at a list. -/
+theorem HFL_of_hasHeld : ∀ ts : List Term, hasHeldL ts = false → HFL ts
+  | [], _ => trivial
+  | t :: ts, h => by
+      simp only [hasHeldL, Bool.or_eq_false_iff] at h
+      exact ⟨HF_of_hasHeld t h.1, HFL_of_hasHeld ts h.2⟩
+/-- …at an optional term. -/
+theorem HFO_of_hasHeld : ∀ o : Option Term, hasHeldO o = false → HFO o
+  | none, _ => trivial
+  | some t, h => HF_of_hasHeld t h
+end
 
 def famOpaq : Term → Option Term
   | .string => some .string
@@ -1356,7 +1350,7 @@ def Term.meet : Term → Term → Option Term
   | .binary, y => meetSRight famBinary y
   | .null, y => meetSRight famNull y
   | .literal k v, y => meetSRight (famLit k v) y
-  | .set b, y => meetSRight (famSet b) y
+  | .set a, y => meetSRight (famSet a (Term.meet a)) y
   | .opaq, y => meetSRight (famOpaq) y
   | .list pre sp suf, y =>
       meetSRight (famList (Term.meetSTs pre)
@@ -1389,29 +1383,6 @@ The certificate is defined here, after the meet, because two of its three tests 
     so the pair is not certified. -/
 def meetNever (x y : Term) : Bool := (Term.meet x y).any Term.isNever
 
-mutual
-/-- Whether a `held` occurs in the term. -/
-def hasHeld : Term → Bool
-  | .held _ _ _ _ => true
-  | .refine t _ => hasHeld t
-  | .mu t => hasHeld t
-  | .list pre sp suf => hasHeldL pre || hasHeldO sp || hasHeldL suf
-  | .object b => hasHeldB b
-  | .union os => hasHeldL os
-  | .string | .number | .boolean | .binary | .null | .literal _ _ | .set _ | .opaq
-  | .never | .var _ => false
-def hasHeldL : List Term → Bool
-  | [] => false
-  | t :: ts => hasHeld t || hasHeldL ts
-def hasHeldO : Option Term → Bool
-  | none => false
-  | some t => hasHeld t
-def hasHeldB : Body → Bool
-  | .mk fs f w => decide (∃ k : {k // k ∈ fs}, hasHeldS (f k) = true) || hasHeldO w
-def hasHeldS : ObjectSlot → Bool
-  | .req t => hasHeld t
-  | .optional t => hasHeld t
-end
 
 mutual
 /-- **The caller-side view**: each `held` becomes its caller-side term. The view admits each
@@ -1423,6 +1394,9 @@ def writeView : Term → Term
   | .list pre sp suf => .list (writeViewL pre) (writeViewO sp) (writeViewL suf)
   | .object b => .object (writeViewB b)
   | .union os => .union (writeViewL os)
+  -- a set's view is the set of its element's view, where that view is held-free: the set row
+  -- of `Adm` reads a held-free element element by element
+  | .set t => if hasHeld (writeView t) then .set t else .set (writeView t)
   | t => t
 def writeViewL : List Term → List Term
   | [] => []
@@ -1448,6 +1422,7 @@ def readView : Term → Term
   | .list pre sp suf => .list (readViewL pre) (readViewO sp) (readViewL suf)
   | .object b => .object (readViewB b)
   | .union os => .union (readViewL os)
+  | .set t => if hasHeld (readView t) then .set t else .set (readView t)
   | t => t
 def readViewL : List Term → List Term
   | [] => []
@@ -1649,22 +1624,22 @@ theorem unionOk_literalListOptions : unionOk literalListOptions = true := by dec
 theorem not_unionOk_literalArrays :
     unionOk [.array (.literal .string "A"), .array (.literal .string "B")] = false := by decide
 
-/-! ### Two literal sets, met through `each`
+/-! ### Two restricted sets, met at their elements
 
-The meet certifies two string sets whose members are disjoint, because `each` meets `each`
-through the member sets, and no set has every element in an empty meet. -/
+The meet certifies two string sets whose members are disjoint, because the elements meet at the
+bottom and no set is empty. -/
 
 /-- **Two string sets with disjoint members meet at the bottom.** -/
 theorem meetNever_disjointStringSets :
-    meetNever (.refine (.set .string) (.each (.members .string (NEFinset.of "a" {"b"}))))
-      (.refine (.set .string) (.each (.members .string (NEFinset.of "c" ∅)))) = true := by
+    meetNever (.set (.refine .string (.members .string (NEFinset.of "a" {"b"}))))
+      (.set (.refine .string (.members .string (NEFinset.of "c" ∅)))) = true := by
   decide
 
 /-- **Two string sets that share a member meet at the set of the shared members.** -/
 theorem meet_stringSets_shared :
-    Term.meet (.refine (.set .string) (.each (.members .string (NEFinset.of "a" {"b"}))))
-      (.refine (.set .string) (.each (.members .string (NEFinset.of "b" {"c"}))))
-      = some (.refine (.set .string) (.each (.members .string (NEFinset.of "b" ∅)))) := by
+    Term.meet (.set (.refine .string (.members .string (NEFinset.of "a" {"b"}))))
+      (.set (.refine .string (.members .string (NEFinset.of "b" {"c"}))))
+      = some (.set (.refine .string (.members .string (NEFinset.of "b" ∅)))) := by
   rfl
 
 /-! ### The views certify a `held` whose caller side is precise
@@ -2219,6 +2194,18 @@ theorem Adm_meetSRightL {x : Term} {fam : Term → Option Term} (hf : AdmFam x f
 termination_by structural os => os
 end
 
+/-- A set and a term that occupies no set slot on either side are orthogonal. -/
+theorem orth1_set_left (a y : Term) (hv : ∀ s, s.setElem.isSome = true → occV y s = false)
+    (hp : ∀ m, m.setElem.isSome = true → occA y m = false) : Orth1 (.set a) y = true := by
+  simp only [Orth1, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true', Bool.and_eq_false_iff]
+  refine ⟨fun s _ => ?_, fun m _ => ?_⟩
+  · cases hs : s.setElem with
+    | none => exact Or.inl (by simp [occV, hs])
+    | some e => exact Or.inr (hv s (by simp [hs]))
+  · cases hm : m.setElem with
+    | none => exact Or.inl (by simp [occA, hm])
+    | some e => exact Or.inr (hp m (by simp [hm]))
+
 /-- The catch-all of every family: two constructors in different value slots meet at the bottom. -/
 theorem Adm_never_orth {x y : Term} (ho : Orth1 x y = true) (v : Value) :
     Adm Term.never v = (Adm x v && Adm y v) := by
@@ -2233,8 +2220,9 @@ local macro "fam_never" fam:ident : tactic => `(tactic|
      | rfl
      | decide
      | (cases ‹GroundKind› <;> first | rfl | decide)
-     | (cases ‹SetBase› <;> first | rfl | decide)
-     | (cases ‹GroundKind› <;> cases ‹SetBase› <;> first | rfl | decide)))
+     | (apply orth1_set_left <;> intro s hs <;> cases s <;>
+          (try cases ‹GroundKind›) <;> simp_all [Slot.setElem, Member.setElem, occV, occA,
+            occOnly, GroundKind.slot, GroundKind.member])))
 
 /-- `boolean` meets the boolean literal, `opaque`, and nothing else. -/
 theorem Adm_famBoolean : AdmFam Term.boolean famBoolean := by
@@ -2362,19 +2350,73 @@ theorem Adm_famLit (k : GroundKind) (lv : k.Carrier) : AdmFam (.literal k lv) (f
   case opaq => simp [famLit] at h
   all_goals fam_never famLit
 
-/-- Two set bases meet where they are equal, and at the bottom wherever they occupy different
-    wire slots. `famSet` refuses the rest, so every unequal row that reaches here has disjoint
-    occupancy and `Adm_never_orth` is the whole argument, as it is for every other family. -/
-theorem Adm_famSet (b : SetBase) : AdmFam (.set b) (famSet b) := by
+/-- **Two sets whose elements share no value share no set**, because no set is empty. -/
+theorem Adm_set_and_false {a y : Term} (h : ∀ u, (Adm a u && Adm y u) = false) (v : Value) :
+    (Adm (.set a) v && Adm (.set y) v) = false := by
+  cases hA : Adm (.set a) v with
+  | false => rfl
+  | true =>
+  cases hY : Adm (.set y) v with
+  | false => rfl
+  | true =>
+  exfalso
+  obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp hA
+  obtain ⟨q, hq⟩ := Option.isSome_iff_exists.mp hY
+  have hne : ∀ w, ((denote a).e w).isSome = true → ((denote y).e w).isSome = true → False :=
+    fun w h1 h2 => by
+      have := h w
+      rw [(Adm_exact a w).mpr h1, (Adm_exact y w).mpr h2] at this
+      exact Bool.noConfusion this
+  rcases setCodec_e_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
+    obtain ⟨x, hx⟩ := S.2
+  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote y) (inj := Value.str) hq x hx)
+  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote y) (inj := Value.num) hq x hx)
+  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote y) (inj := Value.bin) hq x hx)
+
+/-- **Over held-free terms, the set of the element meet is the meet of the sets.** Each set
+    writes exactly where every element does (`setCodec_e_isSome_of_sub`), so the element
+    equation lifts. -/
+theorem Adm_set_meet {a y z : Term} (ha : HF a) (hy : HF y) (hz : HF z)
+    (h : ∀ u, Adm z u = (Adm a u && Adm y u)) (v : Value) :
+    Adm (.set z) v = (Adm (.set a) v && Adm (.set y) v) := by
+  have hr : ∀ t, HF t → ∀ w, ((denote t).e w).isSome = Adm t w := fun t _ w =>
+    isSome_e_eq_Adm (Adm_exact t) w
+  apply Bool.eq_iff_iff.mpr
+  rw [Bool.and_eq_true]
+  show ((setCodec (denote z)).e v).isSome = true ↔
+    ((setCodec (denote a)).e v).isSome = true ∧ ((setCodec (denote y)).e v).isSome = true
+  rw [setCodec_e_isSome_of_sub (sub_denote z hz), setCodec_e_isSome_of_sub (sub_denote a ha),
+    setCodec_e_isSome_of_sub (sub_denote y hy)]
+  cases v <;> simp only [hr z hz, hr a ha, hr y hy, h, Bool.and_eq_true, and_false, iff_self] <;>
+    exact ⟨fun H => ⟨fun x hx => (H x hx).1, fun x hx => (H x hx).2⟩,
+      fun H x hx => ⟨H.1 x hx, H.2 x hx⟩⟩
+
+/-- **Two sets meet at their elements**, and a set is at the bottom beside every other
+    constructor. -/
+theorem Adm_famSet (a : Term) {mt : Term → Option Term} (ih : AdmSound a mt) :
+    AdmFam (.set a) (famSet a mt) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
-  case set b' =>
-      cases b <;> cases b' <;>
-        simp only [famSet, reduceCtorEq, reduceIte, Option.some.injEq] at h <;>
-        (try subst h) <;>
-        first
-          | simp
-          | exact Adm_never_orth (by decide) v
+  case set y =>
+      simp only [famSet] at h
+      split at h
+      · next z' hz =>
+        have hm := ih y z' hz
+        split at h
+        · next hn =>
+          simp only [Option.some.injEq] at h; subst h
+          have hz' : z' = .never := by cases z' <;> simp_all [Term.isNever]
+          subst hz'
+          rw [Adm_set_and_false (fun u => by rw [← hm u]; rfl) v]; rfl
+        · next hn =>
+          split at h
+          · exact nomatch h
+          · next hh =>
+            simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hh
+            simp only [Option.some.injEq] at h; subst h
+            exact Adm_set_meet (HF_of_hasHeld a hh.1.1) (HF_of_hasHeld y hh.1.2)
+              (HF_of_hasHeld z' hh.2) hm v
+      · exact nomatch h
   case opaq => simp [famSet] at h
   all_goals fam_never famSet
 
@@ -3060,7 +3102,8 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
   | .binary, y, z, h, v => Adm_meetSRight Adm_famBinary y z h v
   | .null, y, z, h, v => Adm_meetSRight Adm_famNull y z h v
   | .literal k lv, y, z, h, v => Adm_meetSRight (Adm_famLit k lv) y z h v
-  | .set b, y, z, h, v => Adm_meetSRight (Adm_famSet b) y z h v
+  | .set a, y, z, h, v =>
+      Adm_meetSRight (Adm_famSet a (fun u w hw => Adm_meet a u w hw)) y z h v
   | .opaq, y, z, h, v => Adm_meetSRight (Adm_famOpaq) y z h v
   | .list pre sp suf, y, z, h, v => by
       cases sp with
@@ -3231,20 +3274,20 @@ theorem writes_famString : WritesFam Term.string famString := by
       cases k <;> (try simp_all [famString, μSyn]) <;>
         (try (subst_vars; simp_all [μSyn, GroundKind.member]))
       all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
+      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
   all_goals (try simp_all [famString, μSyn, Term.meetLit])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
+                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
+  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
 
 /-- `number` names `N`, and so does every term it meets. -/
 theorem writes_famNumber : WritesFam Term.number famNumber := by
@@ -3252,22 +3295,22 @@ theorem writes_famNumber : WritesFam Term.number famNumber := by
   cases y <;> first | exact hd.elim | skip
   case literal k lv =>
       cases k <;> (try simp_all [famNumber, μSyn, Term.meetLit]) <;>
-        (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+        (try (subst_vars; simp_all [μSyn, GroundKind.member]))
       all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
+      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
   all_goals (try simp_all [famNumber, μSyn, Term.meetLit])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
+                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
+  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
 
 
 /-- `boolean` names `BOOL`, and so does every term it meets. -/
@@ -3276,22 +3319,22 @@ theorem writes_famBoolean : WritesFam Term.boolean famBoolean := by
   cases y <;> first | exact hd.elim | skip
   case literal k lv =>
       cases k <;> (try simp_all [famBoolean, μSyn, Term.meetLit]) <;>
-        (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+        (try (subst_vars; simp_all [μSyn, GroundKind.member]))
       all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
+      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
   all_goals (try simp_all [famBoolean, μSyn, Term.meetLit])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
+                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
+  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
 
 /-- `binary` names `B`, and so does every term it meets. -/
 theorem writes_famBinary : WritesFam Term.binary famBinary := by
@@ -3299,22 +3342,22 @@ theorem writes_famBinary : WritesFam Term.binary famBinary := by
   cases y <;> first | exact hd.elim | skip
   case literal k lv =>
       cases k <;> (try simp_all [famBinary, μSyn, Term.meetLit]) <;>
-        (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+        (try (subst_vars; simp_all [μSyn, GroundKind.member]))
       all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
+      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
   all_goals (try simp_all [famBinary, μSyn, Term.meetLit])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
+                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
+  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
 
 /-- `null` names `NULL`, and so does every term it meets. -/
 theorem writes_famNull : WritesFam Term.null famNull := by
@@ -3322,22 +3365,22 @@ theorem writes_famNull : WritesFam Term.null famNull := by
   cases y <;> first | exact hd.elim | skip
   case literal k lv =>
       cases k <;> (try simp_all [famNull, μSyn, Term.meetLit]) <;>
-        (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+        (try (subst_vars; simp_all [μSyn, GroundKind.member]))
       all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
+      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
   all_goals (try simp_all [famNull, μSyn, Term.meetLit])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
+                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
+  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
 
 /-- A literal names its base's member, and so does every term it meets. -/
 theorem writes_famLit (k : GroundKind) (lv : k.Carrier) :
@@ -3347,36 +3390,52 @@ theorem writes_famLit (k : GroundKind) (lv : k.Carrier) :
   case literal k' lv' =>
       cases k <;> cases k' <;> (try simp_all [famLit, μSyn, Term.meetLit, GroundKind.member])
       all_goals (try (split at h))
-      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-      all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+      all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
+      all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
   all_goals (cases k <;> (try simp_all [famLit, μSyn, Term.meetLit, GroundKind.member]))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
+                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
+  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
 
-/-- A set names its base's member, and so does every term it meets. -/
-theorem writes_famSet (b : SetBase) : WritesFam (.set b) (famSet b) := by
+/-- **A set names `setMember` of its element's member, and so does every set it meets.** The
+    element meet carries the element's member, and the other rows answer the bottom, which names
+    none. -/
+theorem writes_famSet (a : Term) {mt : Term → Option Term}
+    (ih : ∀ y z, mt y = some z → ∀ m : Member, μSyn z = some m →
+      (∀ mx, μSyn a = some mx → mx = m) ∧ (∀ my, μSyn y = some my → my = m)) :
+    WritesFam (.set a) (famSet a mt) := by
   intro y z hd h m hz
   cases y <;> first | exact hd.elim | skip
-  all_goals (cases b <;> (try simp_all [famSet, μSyn, SetBase.member]))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+  case set y =>
+      simp only [famSet] at h
+      split at h
+      · next z' hz' =>
+        split at h
+        · simp only [Option.some.injEq] at h; subst h; exact absurd hz (by simp [μSyn])
+        · split at h
+          · exact nomatch h
+          · simp only [Option.some.injEq] at h; subst h
+            simp only [μSyn, Option.bind_eq_some_iff] at hz
+            obtain ⟨e, he, hsm⟩ := hz
+            have hw := ih y z' hz' e he
+            refine ⟨fun mx hmx => ?_, fun my hmy => ?_⟩
+            · simp only [μSyn, Option.bind_eq_some_iff] at hmx
+              obtain ⟨ea, hea, hsa⟩ := hmx
+              rw [hw.1 ea hea, hsm] at hsa; exact (Option.some.inj hsa).symm
+            · simp only [μSyn, Option.bind_eq_some_iff] at hmy
+              obtain ⟨ey, hey, hsy⟩ := hmy
+              rw [hw.2 ey hey, hsm] at hsy; exact (Option.some.inj hsy).symm
+      · exact nomatch h
+  case opaq => simp [famSet] at h
+  all_goals (simp only [famSet, Option.some.injEq] at h; subst h; exact absurd hz (by simp [μSyn]))
 
 /-- `opaque` names no member, so the pair agrees vacuously on the left. -/
 theorem writes_famOpaq : WritesFam .opaq famOpaq := by
@@ -3428,16 +3487,16 @@ theorem writes_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → O
       · exact absurd hz (by simp [μSyn])
       · simpa [μSyn] using hz
   all_goals (try simp_all [famObj, μSyn])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member]))
   all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+                  simp only [μSyn, GroundKind.member, Option.some.injEq] at hz
+                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member], fun _ hh => by simp_all [μSyn, GroundKind.member]⟩))
+  all_goals (try (subst h; simp_all [μSyn, GroundKind.member]))
+  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, Option.some.injEq] at hz; exact hz.symm))
 
 
 mutual
@@ -3493,7 +3552,8 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
   | .binary, y, z, h, m, hz => writes_meetSRight writes_famBinary y z h m hz
   | .null, y, z, h, m, hz => writes_meetSRight writes_famNull y z h m hz
   | .literal k lv, y, z, h, m, hz => writes_meetSRight (writes_famLit k lv) y z h m hz
-  | .set b, y, z, h, m, hz => writes_meetSRight (writes_famSet b) y z h m hz
+  | .set a, y, z, h, m, hz =>
+      writes_meetSRight (writes_famSet a (fun u w hw => meet_writes a u w hw)) y z h m hz
   | .opaq, y, z, h, m, hz => writes_meetSRight (writes_famOpaq) y z h m hz
   | .list pre sp suf, y, z, h, m, hz => by
       cases sp with
@@ -3571,13 +3631,6 @@ theorem filter_eq_empty_on {S : Finset Name} {p : Name → Bool} (h : ∀ k ∈ 
   obtain ⟨hs, hp⟩ := Finset.mem_filter.mp hk
   rw [h k hs] at hp
   exact Bool.noConfusion hp
-
-/-- …and one that keeps everything is the set. -/
-theorem filter_eq_self_on {S : Finset Name} {p : Name → Bool} (h : ∀ k ∈ S, p k = true) :
-    S.filter (p ·) = S := by
-  ext k
-  simp only [Finset.mem_filter]
-  exact ⟨fun hk => hk.1, fun hk => ⟨hk, h k hk⟩⟩
 
 /-- `AdmA` at an object is its body's row. -/
 theorem AdmA_object (b : Body) (a : Attr) : AdmA (.object b) a = AdmABody b a := rfl
@@ -4634,8 +4687,9 @@ local macro "admA_never" fam:ident : tactic => `(tactic|
           first
             | rfl
             | (cases ‹GroundKind› <;> rfl)
-            | (cases ‹SetBase› <;> rfl)
-            | (cases ‹GroundKind› <;> cases ‹SetBase› <;> rfl)
+            | (apply orth1_set_left <;> intro s hs <;> cases s <;>
+                (try cases ‹GroundKind›) <;> simp_all [Slot.setElem, Member.setElem, occV, occA,
+                  occOnly, GroundKind.slot, GroundKind.member])
         case g1 => rfl)
      | (cases a <;> simp [AdmA, inD])))
 
@@ -4816,18 +4870,87 @@ theorem admA_famLit (k : GroundKind) (lv : k.Carrier) :
   case opaq => simp [famLit] at h
   all_goals admA_never famLit
 
-/-- Two set bases read together where they are equal. -/
-theorem admA_famSet (b : SetBase) : AdmAFam (.set b) (famSet b) := by
+/-- **Two sets whose elements read no common attribute read no common set**, because no set is
+    empty. -/
+theorem AdmA_set_and_false {a y : Term} (h : ∀ u, (AdmA a u && AdmA y u) = false) (att : Attr) :
+    (AdmA (.set a) att && AdmA (.set y) att) = false := by
+  cases hA : AdmA (.set a) att with
+  | false => rfl
+  | true =>
+  cases hY : AdmA (.set y) att with
+  | false => rfl
+  | true =>
+  exfalso
+  obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp hA
+  obtain ⟨q, hq⟩ := Option.isSome_iff_exists.mp hY
+  have hne : ∀ w, ((denote a).p w).isSome = true → ((denote y).p w).isSome = true → False :=
+    fun w h1 h2 => by
+      have := h w
+      rw [(AdmA_exact a w).mpr h1, (AdmA_exact y w).mpr h2] at this
+      exact Bool.noConfusion this
+  rcases setCodec_p_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
+    obtain ⟨x, hx⟩ := S.2
+  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote y) (inj := Attr.s) hq x hx)
+  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote y) (inj := Attr.n) hq x hx)
+  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote y) (inj := Attr.b) hq x hx)
+
+/-- **Over held-free terms, the set of the element meet reads what both sets read**, and reads
+    it as both do: every held-free read is `Ω`'s. -/
+theorem admA_set_meet {a y z : Term} (ha : HF a) (hy : HF y) (hz : HF z)
+    (h : ∀ u, AdmA z u = (AdmA a u && AdmA y u)) : AdmAAt (.set a) (.set y) (.set z) := by
+  have hr : ∀ t, ∀ w, ((denote t).p w).isSome = AdmA t w := fun t w =>
+    Bool.coe_iff_coe.mp (by simpa using (AdmA_exact t w).symm)
+  have h1 : ∀ att, AdmA (.set z) att = (AdmA (.set a) att && AdmA (.set y) att) := fun att => by
+    apply Bool.eq_iff_iff.mpr
+    rw [Bool.and_eq_true]
+    show ((setCodec (denote z)).p att).isSome = true ↔
+      ((setCodec (denote a)).p att).isSome = true ∧ ((setCodec (denote y)).p att).isSome = true
+    rw [setCodec_p_isSome_of_sub (sub_denote z hz), setCodec_p_isSome_of_sub (sub_denote a ha),
+      setCodec_p_isSome_of_sub (sub_denote y hy)]
+    cases att <;> simp only [hr, h, Bool.and_eq_true, and_false, iff_self] <;>
+      exact ⟨fun H => ⟨fun x hx => (H x hx).1, fun x hx => (H x hx).2⟩,
+        fun H x hx => ⟨H.1 x hx, H.2 x hx⟩⟩
+  refine ⟨h1, fun att hA hY => ?_⟩
+  have hZ : AdmA (.set z) att = true := by rw [h1, hA, hY]; rfl
+  obtain ⟨vz, hvz⟩ := Option.isSome_iff_exists.mp hZ
+  obtain ⟨va, hva⟩ := Option.isSome_iff_exists.mp hA
+  obtain ⟨vy, hvy⟩ := Option.isSome_iff_exists.mp hY
+  have oz := (sub_setCodec (sub_denote z hz)).2 _ _ hvz
+  have oa := (sub_setCodec (sub_denote a ha)).2 _ _ hva
+  have oy := (sub_setCodec (sub_denote y hy)).2 _ _ hvy
+  refine ⟨?_, ?_⟩
+  · show (setCodec (denote z)).p att = (setCodec (denote a)).p att
+    rw [hvz, hva, Option.some.inj (oz.symm.trans oa)]
+  · show (setCodec (denote z)).p att = (setCodec (denote y)).p att
+    rw [hvz, hvy, Option.some.inj (oz.symm.trans oy)]
+
+/-- **Two sets read together at their elements**, and a set reads nothing any other constructor
+    reads. -/
+theorem admA_famSet (a : Term) {mt : Term → Option Term} (ih : AdmASound a mt) :
+    AdmAFam (.set a) (famSet a mt) := by
   intro y z hd h
   cases y <;> first | exact hd.elim | skip
-  case set b' =>
-      cases b <;> cases b' <;>
-        simp only [famSet, reduceCtorEq, reduceIte, Option.some.injEq] at h <;>
-        (try subst h) <;>
-        first
-          | exact admA_same _
-          | (refine bottom_row (fun a => ?_)
-             cases a <;> simp_all [AdmA, AdmASet])
+  case set y =>
+      simp only [famSet] at h
+      split at h
+      · next z' hz =>
+        have hm := (ih y z' hz).1
+        split at h
+        · next hn =>
+          simp only [Option.some.injEq] at h; subst h
+          have hz' : z' = .never := by cases z' <;> simp_all [Term.isNever]
+          subst hz'
+          exact bottom_row fun att => by
+            rw [AdmA_set_and_false (fun u => by rw [← hm u]; rfl) att]; rfl
+        · next hn =>
+          split at h
+          · exact nomatch h
+          · next hh =>
+            simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hh
+            simp only [Option.some.injEq] at h; subst h
+            exact admA_set_meet (HF_of_hasHeld a hh.1.1) (HF_of_hasHeld y hh.1.2)
+              (HF_of_hasHeld z' hh.2) hm
+      · exact nomatch h
   case opaq => simp [famSet] at h
   all_goals admA_never famSet
 
@@ -5492,7 +5615,7 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
   | .binary, y, z, h => admA_meetSRight admA_famBinary y z h
   | .null, y, z, h => admA_meetSRight admA_famNull y z h
   | .literal k lv, y, z, h => admA_meetSRight (admA_famLit k lv) y z h
-  | .set b, y, z, h => admA_meetSRight (admA_famSet b) y z h
+  | .set a, y, z, h => admA_meetSRight (admA_famSet a (fun u w hw => AdmA_meet_both a u w hw)) y z h
   | .opaq, y, z, h => admA_meetSRight (admA_famOpaq) y z h
   | .list pre sp suf, y, z, h => by
       cases sp with
@@ -5708,6 +5831,29 @@ theorem alignPAL_mono {Ps Qs Ss Ts : List AP} {sp sq : Option AP}
   simp only [Bool.and_eq_true] at h ⊢
   exact ⟨alignPA_mono hPQ hs _ h.1, zipPA_mono hST _ h.2⟩
 
+/-- **A set over a held-free element admits where a set over a narrower element does.** The
+    held-free set writes element by element, so an element inclusion lifts to the sets. -/
+theorem Adm_set_of_elem {t u : Term} (hu : HF u) (h : ∀ w, Adm t w = true → Adm u w = true)
+    {v : Value} (hv : Adm (.set t) v = true) : Adm (.set u) v = true := by
+  obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
+  have el : ∀ w, ((denote t).e w).isSome = true → ((denote u).e w).isSome = true := fun w hw =>
+    (Adm_exact u w).mp (h w ((Adm_exact t w).mpr hw))
+  show ((setCodec (denote u)).e v).isSome = true
+  rw [setCodec_e_isSome_of_sub (sub_denote u hu)]
+  rcases setCodec_e_eq.mp ha with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
+    exact fun x hx => el _ (encSet_elem hS x hx)
+
+/-- …and the same on the read side. -/
+theorem AdmA_set_of_elem {t u : Term} (hu : HF u) (h : ∀ w, AdmA t w = true → AdmA u w = true)
+    {att : Attr} (ha : AdmA (.set t) att = true) : AdmA (.set u) att = true := by
+  obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp ha
+  have el : ∀ w, ((denote t).p w).isSome = true → ((denote u).p w).isSome = true := fun w hw =>
+    (AdmA_exact u w).mp (h w ((AdmA_exact t w).mpr hw))
+  show ((setCodec (denote u)).p att).isSome = true
+  rw [setCodec_p_isSome_of_sub (sub_denote u hu)]
+  rcases setCodec_p_eq.mp hv with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
+    exact fun x hx => el _ (decSet_elem hS x hx)
+
 /-- A term whose caller-side view admits each value that the term admits. -/
 def WriteLe (t : Term) : Prop := RowLe (Adm t) (Adm (writeView t))
 /-- Each term of the list has `WriteLe`. -/
@@ -5853,7 +5999,14 @@ theorem writeLe_of : ∀ t : Term, WriteLe t
       exact anyWrite os (writeLe_ofL os) v h
   | .string => fun _ h => h | .number => fun _ h => h | .boolean => fun _ h => h
   | .binary => fun _ h => h | .null => fun _ h => h | .literal _ _ => fun _ h => h
-  | .set _ => fun _ h => h | .opaq => fun _ h => h | .never => fun _ h => h
+  | .set t => fun v h => by
+      simp only [writeView]
+      split
+      · exact h
+      · next hh =>
+        exact Adm_set_of_elem (HF_of_hasHeld _ (Bool.eq_false_iff.mpr hh))
+          (fun w hw => writeLe_of t w hw) h
+  | .opaq => fun _ h => h | .never => fun _ h => h
 /-- `writeLe_of` over a list. -/
 theorem writeLe_ofL : ∀ ts : List Term, WriteLeL ts
   | [] => trivial
@@ -5889,7 +6042,14 @@ theorem readLe_of : ∀ t : Term, ReadLe t
       exact anyRead os (readLe_ofL os) a h
   | .string => fun _ h => h | .number => fun _ h => h | .boolean => fun _ h => h
   | .binary => fun _ h => h | .null => fun _ h => h | .literal _ _ => fun _ h => h
-  | .set _ => fun _ h => h | .opaq => fun _ h => h | .never => fun _ h => h
+  | .set t => fun a h => by
+      simp only [readView]
+      split
+      · exact h
+      · next hh =>
+        exact AdmA_set_of_elem (HF_of_hasHeld _ (Bool.eq_false_iff.mpr hh))
+          (fun w hw => readLe_of t w hw) h
+  | .opaq => fun _ h => h | .never => fun _ h => h
 /-- `readLe_of` over a list. -/
 theorem readLe_ofL : ∀ ts : List Term, ReadLeL ts
   | [] => trivial
@@ -6330,8 +6490,30 @@ theorem typed_famNull : TypedFam Term.null famNull := by typed_fam famNull
 theorem typed_famLit (k : GroundKind) (lv : k.Carrier) :
     TypedFam (.literal k lv) (famLit k lv) := by typed_fam famLit
 
-/-- Two set bases meet where they are equal. -/
-theorem typed_famSet (b : SetBase) : TypedFam (.set b) (famSet b) := by typed_fam famSet
+/-- **Two sets meet at a set of the element meet**, which is derivable where the element meet is,
+    or at the bottom. -/
+theorem typed_famSet (a : Term) {mt : Term → Option Term} (ih : TypedSound a mt) :
+    TypedFam (.set a) (famSet a mt) := by
+  intro y z hd h hx hy
+  cases y <;> first | exact hd.elim | skip
+  case set y =>
+      simp only [famSet] at h
+      split at h
+      · next z' hz =>
+        split at h
+        · simp only [Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
+        · split at h
+          · exact nomatch h
+          · simp only [Option.some.injEq] at h; subst h
+            obtain ⟨_, _, hxa⟩ := hx
+            obtain ⟨_, _, hyy⟩ := hy
+            cases hxa with | set hxa' =>
+            cases hyy with | set hyy' =>
+            obtain ⟨T, μ, hz'⟩ := ih y z' hz ⟨_, _, hxa'⟩ ⟨_, _, hyy'⟩
+            exact ⟨_, _, Typed.set hz'⟩
+      · exact nomatch h
+  case opaq => simp [famSet] at h
+  all_goals (simp only [famSet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
 
 /-- `opaque` meets each self-identifying base, and another `opaque`. -/
 theorem typed_famOpaq : TypedFam .opaq (famOpaq) := by typed_fam famOpaq
@@ -6585,7 +6767,9 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
   | .binary, y, z, h, hx, hy => typed_meetSRight typed_famBinary Adm_famBinary y z h hx hy
   | .null, y, z, h, hx, hy => typed_meetSRight typed_famNull Adm_famNull y z h hx hy
   | .literal k lv, y, z, h, hx, hy => typed_meetSRight (typed_famLit k lv) (Adm_famLit k lv) y z h hx hy
-  | .set b, y, z, h, hx, hy => typed_meetSRight (typed_famSet b) (Adm_famSet b) y z h hx hy
+  | .set a, y, z, h, hx, hy =>
+      typed_meetSRight (typed_famSet a (fun u w hw => typed_meet a u w hw))
+        (Adm_famSet a (fun u w hw => Adm_meet a u w hw)) y z h hx hy
   | .opaq, y, z, h, hx, hy => typed_meetSRight (typed_famOpaq) (Adm_famOpaq) y z h hx hy
   | .list pre sp suf, y, z, h, hx, hy => by
       cases sp with
