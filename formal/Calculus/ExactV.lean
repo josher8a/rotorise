@@ -1,4 +1,5 @@
 import Calculus.Discharge
+import Calculus.Rows
 import Calculus.Soundness
 
 /-!
@@ -27,43 +28,10 @@ and a structural recursion is what this shape buys — the same reason `denote` 
 /-- A value-side row, once the subterms' rows are known. -/
 abbrev VP := Value → Bool
 
-/-- `⋀` over a container's elements. -/
-def allP (P : VP) : List Value → Bool
-  | [] => true
-  | x :: xs => P x && allP P xs
-
-/-- `⋁` over a union's options. -/
-def anyP : List VP → Value → Bool
-  | [], _ => false
-  | P :: Ps, v => P v || anyP Ps v
-
-/-- `align`'s row: the same length discipline — fixed head positionally, tail uniformly, a
-    mismatch refused — asked of the rows rather than of the codecs. §5's `⊤` on any `.arr`
-    ignored all three of those things. -/
-def alignP : List VP → Option VP → List Value → Bool
-  | [], none, [] => true
-  | [], none, _ :: _ => false
-  | [], some _, [] => true
-  | [], some P, v :: vs => P v && alignP [] (some P) vs
-  | _ :: _, _, [] => false
-  | P :: Ps, tail, v :: vs => P v && alignP Ps tail vs
-
-/-- The suffix's row: position for position, and a length mismatch refused. -/
-def zipP : List VP → List Value → Bool
-  | [], [] => true
-  | P :: Ps, v :: vs => P v && zipP Ps vs
-  | _, _ => false
-
-/-- `alignL`'s row: the suffix splits off the right end, and what is left is `alignP`'s
-    prefix-and-spread. A row shorter than the suffix takes `0` off the end, and `zipP`
-    refuses it on the length, so no guard is owed. -/
-def alignPL (pre : List VP) (sp : Option VP) (suf : List VP) (vs : List Value) : Bool :=
-  alignP pre sp (vs.take (vs.length - suf.length))
-    && zipP suf (vs.drop (vs.length - suf.length))
-
 /-- `entryCodec`'s row: the slot a name declares, or else the open block's. `none` is an
     undeclared name in a body that declares no open block, and both sides refuse it. -/
-def entryP (fs : MapOf VP) (rp : Option VP) (k : Name) : Option VP :=
+def entryP {α : Type} (fs : MapOf (α → Bool)) (rp : Option (α → Bool)) (k : Name) :
+    Option (α → Bool) :=
   match fs.at k with | some P => some P | none => rp
 
 /-- `objWrite`'s traversal, as a row: every entry goes through the codec its name names. -/
@@ -448,61 +416,6 @@ theorem alignP_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactV t) :
         simp only [hal, Option.map_some, Option.bind_some] at ih ⊢
         rw [traverse_cons_isSome, Bool.and_eq_true, ← ht v, ← ih]
 
-
-/-- A suffix row that holds pins the length. -/
-theorem zipP_length : ∀ (Ps : List VP) (vs : List Value), zipP Ps vs = true → Ps.length = vs.length
-  | [], [], _ => rfl
-  | [], _ :: _, h => by simp [zipP] at h
-  | _ :: _, [], h => by simp [zipP] at h
-  | _ :: Ps, _ :: vs, h => by
-      simp only [zipP, Bool.and_eq_true] at h
-      simp [zipP_length Ps vs h.2]
-
-/-- A row of the wrong length holds nothing. -/
-theorem zipP_false_of_length_ne (Ps : List VP) (ws : List Value) (h : Ps.length ≠ ws.length) :
-    zipP Ps ws = false := by
-  cases hz : zipP Ps ws with
-  | false => rfl
-  | true => exact absurd (zipP_length Ps ws hz) h
-
-/-- Two rows of matching heads split. -/
-theorem zipP_append : ∀ (a₁ b₁ : List VP) (a₂ b₂ : List Value), a₁.length = a₂.length →
-    zipP (a₁ ++ b₁) (a₂ ++ b₂) = (zipP a₁ a₂ && zipP b₁ b₂)
-  | [], _, [], _, _ => by simp [zipP]
-  | P :: Ps, b₁, v :: vs, b₂, h => by
-      simp only [List.cons_append, zipP, zipP_append Ps b₁ vs b₂ (by simpa using h)]
-      exact (Bool.and_assoc _ _ _).symm
-
-/-- With no spread, `alignP` IS the positionwise row: both refuse a length mismatch. -/
-theorem alignP_none_eq_zipP : ∀ (pre : List VP) (ws : List Value),
-    alignP pre none ws = zipP pre ws
-  | [], [] => rfl
-  | [], _ :: _ => rfl
-  | _ :: _, [] => rfl
-  | _ :: Ps, _ :: vs => by simp only [alignP, zipP, alignP_none_eq_zipP Ps vs]
-
-/-- A spread pads the row out to the value's length. -/
-theorem alignP_some_eq_zipP : ∀ (pre : List VP) (c : VP) (ws : List Value),
-    pre.length ≤ ws.length →
-    alignP pre (some c) ws = zipP (pre ++ List.replicate (ws.length - pre.length) c) ws
-  | [], _, [], _ => rfl
-  | [], c, _ :: vs, _ => by
-      have ih := alignP_some_eq_zipP [] c vs (Nat.zero_le _)
-      simp only [List.length_nil, Nat.sub_zero, List.nil_append] at ih ⊢
-      simp only [alignP, List.length_cons, List.replicate_succ, zipP, ih]
-  | _ :: _, _, [], h => by simp at h
-  | _ :: Ps, c, _ :: vs, h => by
-      have ih := alignP_some_eq_zipP Ps c vs (by simpa using h)
-      simp only [alignP, List.cons_append, zipP, List.length_cons,
-        Nat.succ_sub_succ_eq_sub, ih]
-
-/-- …and refuses a row shorter than its declared positions. -/
-theorem alignP_short : ∀ (pre : List VP) (sp : Option VP) (ws : List Value),
-    ws.length < pre.length → alignP pre sp ws = false
-  | [], _, _, h => by simp at h
-  | _ :: _, sp, [], _ => by cases sp <;> rfl
-  | _ :: Ps, sp, _ :: vs, h => by
-      simp only [alignP, alignP_short Ps sp vs (by simpa using h), Bool.and_false]
 
 /-- The suffix's row, transported across its positions' exactness.
 

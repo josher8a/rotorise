@@ -680,18 +680,6 @@ def rowOfG {α : Type} (pre : List α) (sp : Option α) (suf : List α) (n : Nat
       else some (pre ++ List.replicate (n - pre.length - suf.length) c ++ suf)
   | none => if n = pre.length + suf.length then some (pre ++ suf) else none
 
-/-- The spread row, split at the suffix. Stated over an explicit split so no rewrite has to
-    reach inside a length. -/
-theorem zipP_row_split (pre suf : List VP) (c : VP) (A B : List Value)
-    (hB : B.length = suf.length) (hA : pre.length ≤ A.length) :
-    (zipP (pre ++ List.replicate (A.length - pre.length) c) A && zipP suf B)
-      = zipP (pre ++ List.replicate ((A ++ B).length - pre.length - suf.length) c ++ suf)
-          (A ++ B) := by
-  have hcount : (A ++ B).length - pre.length - suf.length = A.length - pre.length := by
-    simp only [List.length_append, hB]; omega
-  rw [hcount, zipP_append _ _ _ _
-      (by simp only [List.length_append, List.length_replicate]; omega)]
-
 /-- **`alignPL` is its row, applied position for position.** This is `align_eq_zip` one level
     down, and it is what lets the meet reason about two shapes by reasoning about their rows
     at one length: the admission of a `list` at a value of length `n` is the admission of the
@@ -741,80 +729,22 @@ theorem alignPL_eq_rowOfG (pre : List VP) (sp : Option VP) (suf : List VP) (ws :
         rw [hAB] at hz
         exact hz
 
-/-! ### The read side's mirror of the same five, and the row equation they give.
+/-! ### The read side's row equation
 
-    The value side states these in `ExactV`; `alignPL_eq_rowOfG` above is stated here because
-    `rowOfG` is. The read-side twins follow it rather than their value-side siblings, so the
-    two row equations sit together. -/
+    `alignPL_eq_rowOfG` above is stated here because `rowOfG` is. The read-side twin follows
+    it, so the two row equations sit together. -/
 
-/-- A suffix row of the wrong length refuses. -/
-theorem zipPA_false_of_length_ne (Ps : List AP) (as : List Attr) (h : Ps.length ≠ as.length) :
-    zipPA Ps as = false := by
-  cases hz : zipPA Ps as with
-  | false => rfl
-  | true => exact absurd (zipPA_length Ps as hz) h
-
-/-- A row shorter than the declared prefix refuses. -/
-theorem alignPA_short : ∀ (pre : List AP) (sp : Option AP) (as : List Attr),
-    as.length < pre.length → alignPA pre sp as = false
-  | [], _, _, h => by simp at h
-  | _ :: _, sp, [], _ => by cases sp <;> rfl
-  | _ :: Ps, sp, _ :: as, h => by
-      simp only [alignPA, alignPA_short Ps sp as (by simpa using h), Bool.and_false]
-
-/-- With no spread, the prefix row is the suffix row. -/
-theorem alignPA_none_eq_zipPA : ∀ (pre : List AP) (as : List Attr),
-    alignPA pre none as = zipPA pre as
-  | [], [] => rfl
-  | [], _ :: _ => rfl
-  | _ :: _, [] => rfl
-  | _ :: Ps, _ :: as => by simp only [alignPA, zipPA, alignPA_none_eq_zipPA Ps as]
-
-/-- …and with a spread it is the prefix padded out to the length. -/
-theorem alignPA_some_eq_zipPA : ∀ (pre : List AP) (c : AP) (as : List Attr),
-    pre.length ≤ as.length →
-    alignPA pre (some c) as = zipPA (pre ++ List.replicate (as.length - pre.length) c) as
-  | [], _, [], _ => rfl
-  | [], c, _ :: as, _ => by
-      have ih := alignPA_some_eq_zipPA [] c as (Nat.zero_le _)
-      simp only [List.length_nil, Nat.sub_zero, List.nil_append] at ih ⊢
-      simp only [alignPA, List.length_cons, List.replicate_succ, zipPA, ih]
-  | _ :: _, _, [], h => by simp at h
-  | _ :: Ps, c, _ :: as, h => by
-      have ih := alignPA_some_eq_zipPA Ps c as (by simpa using h)
-      simp only [alignPA, List.cons_append, zipPA, List.length_cons,
-        Nat.succ_sub_succ_eq_sub, ih]
-
-/-- The suffix row splits where the rows do. -/
-theorem zipPA_append : ∀ (a₁ b₁ : List AP) (a₂ b₂ : List Attr), a₁.length = a₂.length →
-    zipPA (a₁ ++ b₁) (a₂ ++ b₂) = (zipPA a₁ a₂ && zipPA b₁ b₂)
-  | [], _, [], _, _ => by simp [zipPA]
-  | P :: Ps, b₁, a :: as, b₂, h => by
-      simp only [List.cons_append, zipPA, zipPA_append Ps b₁ as b₂ (by simpa using h)]
-      exact (Bool.and_assoc _ _ _).symm
-
-/-- The spread row, split at the suffix, on the read side. -/
-theorem zipPA_row_split (pre suf : List AP) (c : AP) (A B : List Attr)
-    (hB : B.length = suf.length) (hA : pre.length ≤ A.length) :
-    (zipPA (pre ++ List.replicate (A.length - pre.length) c) A && zipPA suf B)
-      = zipPA (pre ++ List.replicate ((A ++ B).length - pre.length - suf.length) c ++ suf)
-          (A ++ B) := by
-  have hcount : (A ++ B).length - pre.length - suf.length = A.length - pre.length := by
-    simp only [List.length_append, hB]; omega
-  rw [hcount, zipPA_append _ _ _ _
-      (by simp only [List.length_append, List.length_replicate]; omega)]
-
-/-- **`alignPAL` is its row, applied position for position.** The read-side twin of
+/-- **`alignPL` is its row, applied position for position.** The read-side twin of
     `alignPL_eq_rowOfG`, and the same statement: what a `list` reads at an attribute list of
     length `n` is the row `rowOfG` assigns to `n`, read position by position. -/
 theorem alignPAL_eq_rowOfG (pre : List AP) (sp : Option AP) (suf : List AP) (as : List Attr) :
-    alignPAL pre sp suf as
+    alignPL pre sp suf as
       = match rowOfG pre sp suf as.length with
         | none => false
-        | some row => zipPA row as := by
+        | some row => zipP row as := by
   have htl : (as.take (as.length - suf.length)).length = as.length - suf.length := by
     simp only [List.length_take]; omega
-  unfold alignPAL
+  unfold alignPL
   rcases Nat.lt_or_ge as.length (pre.length + suf.length) with hlt | hge
   · have hrow : rowOfG pre sp suf as.length = none := by
       cases sp with
@@ -822,32 +752,32 @@ theorem alignPAL_eq_rowOfG (pre : List AP) (sp : Option AP) (suf : List AP) (as 
       | some c => simp only [rowOfG]; rw [if_pos (by omega)]
     rw [hrow]
     rcases Nat.lt_or_ge as.length suf.length with hs | hs
-    · rw [zipPA_false_of_length_ne _ _ (by simp only [List.length_drop]; omega), Bool.and_false]
-    · rw [alignPA_short _ _ _ (by omega), Bool.false_and]
+    · rw [zipP_false_of_length_ne _ _ (by simp only [List.length_drop]; omega), Bool.and_false]
+    · rw [alignP_short _ _ _ (by omega), Bool.false_and]
   · have hdl : (as.drop (as.length - suf.length)).length = suf.length := by
       simp only [List.length_drop]; omega
     have hAB : as.take (as.length - suf.length) ++ as.drop (as.length - suf.length) = as :=
       List.take_append_drop _ _
     cases sp with
     | none =>
-        rw [alignPA_none_eq_zipPA]
+        rw [alignP_none_eq_zipP]
         simp only [rowOfG]
         rcases Nat.eq_or_lt_of_le hge with heq | hlt2
         · rw [if_pos heq.symm]
-          show _ = zipPA (pre ++ suf) as
-          have hz := (zipPA_append pre suf (as.take (as.length - suf.length))
+          show _ = zipP (pre ++ suf) as
+          have hz := (zipP_append pre suf (as.take (as.length - suf.length))
             (as.drop (as.length - suf.length)) (by omega)).symm
           rw [hAB] at hz
           exact hz
         · rw [if_neg (by omega)]
           show _ = false
-          rw [zipPA_false_of_length_ne _ _ (by omega), Bool.false_and]
+          rw [zipP_false_of_length_ne _ _ (by omega), Bool.false_and]
     | some c =>
-        rw [alignPA_some_eq_zipPA _ _ _ (by omega)]
+        rw [alignP_some_eq_zipP _ _ _ (by omega)]
         simp only [rowOfG]
         rw [if_neg (by omega)]
-        show _ = zipPA (pre ++ List.replicate (as.length - pre.length - suf.length) c ++ suf) as
-        have hz := zipPA_row_split pre suf c (as.take (as.length - suf.length))
+        show _ = zipP (pre ++ List.replicate (as.length - pre.length - suf.length) c ++ suf) as
+        have hz := zipP_row_split pre suf c (as.take (as.length - suf.length))
           (as.drop (as.length - suf.length)) hdl (by omega)
         rw [hAB] at hz
         exact hz
@@ -1251,7 +1181,7 @@ theorem objAdmV_none_never (fs : MapOf VP) (keys : Finset Name) (g : {k // k ∈
 theorem objAdmA_none_never (fs : MapOf AP) (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
     objAdmA fs none keys g = objAdmA fs (some (fun _ => false)) keys g := by
   unfold objAdmA
-  exact decide_eq_decide.mpr (forall_congr' fun k => by unfold entryPA; cases fs.at k.1 <;> exact Iff.rfl)
+  exact decide_eq_decide.mpr (forall_congr' fun k => by unfold entryP; cases fs.at k.1 <;> exact Iff.rfl)
 
 /-- **The closed body is the open body whose block is `never`**, on the write side. -/
 theorem Adm_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → ObjectSlot) :
@@ -1765,70 +1695,6 @@ theorem allSome_map_forall₂ {α β : Type} (f : α → Option β) :
       simp only [allSome, Option.map_eq_some_iff] at h
       obtain ⟨zs, hzs, rfl⟩ := h
       exact .cons hf (ihx hzs)
-
-/-- Two tuples of one arity: the positions meet positionwise and the tails meet. -/
-theorem alignP_meet_zip :
-    ∀ {Ps Qs Rs : List VP},
-      List.Forall₂ (fun (pq : VP × VP) r => ∀ w, r w = (pq.1 w && pq.2 w)) (Ps.zip Qs) Rs →
-      Ps.length = Qs.length →
-    ∀ {pt qt rt : Option VP},
-      ((pt = none ∧ qt = none ∧ rt = none) ∨
-        ∃ p q r, pt = some p ∧ qt = some q ∧ rt = some r ∧ ∀ w, r w = (p w && q w)) →
-    ∀ ws, alignP Rs rt ws = (alignP Ps pt ws && alignP Qs qt ws) := by
-  intro Ps Qs Rs hF hlen pt qt rt htl ws
-  induction ws generalizing Ps Qs Rs with
-  | nil =>
-    cases Ps with
-    | nil =>
-      cases Qs with
-      | nil =>
-        cases hF
-        rcases htl with ⟨rfl, rfl, rfl⟩ | ⟨p, q, r, rfl, rfl, rfl, _⟩ <;> simp [alignP]
-      | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
-    | cons p Ps' =>
-      cases Qs with
-      | nil => simp only [List.length_nil, List.length_cons] at hlen; omega
-      | cons q Qs' =>
-        rw [List.zip_cons_cons] at hF
-        cases hF with
-        | cons _ _ => simp [alignP]
-  | cons w ws ihw =>
-    cases Ps with
-    | nil =>
-      cases Qs with
-      | nil =>
-        cases hF
-        rcases htl with ⟨rfl, rfl, rfl⟩ | ⟨p, q, r, rfl, rfl, rfl, hr⟩
-        · simp [alignP]
-        · simp only [alignP, hr, ihw (Ps := []) (Qs := []) .nil rfl]
-          simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
-      | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
-    | cons p Ps' =>
-      cases Qs with
-      | nil => simp only [List.length_nil, List.length_cons] at hlen; omega
-      | cons q Qs' =>
-        rw [List.zip_cons_cons] at hF
-        cases hF with
-        | cons hr hrest =>
-          simp only [alignP, hr, ihw hrest (by simpa using hlen)]
-          simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
-
-/-- A tuple with no tail pins the length of the array it admits. -/
-theorem alignP_none_length : ∀ {Ps : List VP} {ws : List Value},
-    alignP Ps none ws = true → ws.length = Ps.length := by
-  intro Ps
-  induction Ps with
-  | nil => intro ws h; cases ws with
-    | nil => rfl
-    | cons _ _ => simp [alignP] at h
-  | cons p Ps' ihp =>
-    intro ws h
-    cases ws with
-    | nil => simp [alignP] at h
-    | cons w ws' =>
-      simp only [alignP, Bool.and_eq_true] at h
-      simp [ihp h.2]
-
 
 /-- The rows of a term list are that list mapped, so `rowOfG_map` carries a row of terms
     onto the row of rows the admission reads. -/
@@ -3709,69 +3575,6 @@ theorem AdmA_opaq_null : AdmA .opaq .null = true := rfl
 theorem AdmA_opaq_num (x : WFNumeral) :
     AdmA .opaq (.n x) = (numberCodec.p (.n x)).isSome := rfl
 
-/-- A tuple with no tail pins the length of the wire list it reads. -/
-theorem alignPA_none_length : ∀ {Ps : List AP} {as : List Attr},
-    alignPA Ps none as = true → as.length = Ps.length := by
-  intro Ps
-  induction Ps with
-  | nil => intro as h; cases as with
-    | nil => rfl
-    | cons _ _ => simp [alignPA] at h
-  | cons p Ps' ihp =>
-    intro as h
-    cases as with
-    | nil => simp [alignPA] at h
-    | cons w as' =>
-      simp only [alignPA, Bool.and_eq_true] at h
-      simp [ihp h.2]
-
-/-- Two tuples of one arity: the positions meet positionwise and the tails meet. -/
-theorem alignPA_meet_zip :
-    ∀ {Ps Qs Rs : List AP},
-      List.Forall₂ (fun (pq : AP × AP) r => ∀ a, r a = (pq.1 a && pq.2 a)) (Ps.zip Qs) Rs →
-      Ps.length = Qs.length →
-    ∀ {pt qt rt : Option AP},
-      ((pt = none ∧ qt = none ∧ rt = none) ∨
-        ∃ p q r, pt = some p ∧ qt = some q ∧ rt = some r ∧ ∀ a, r a = (p a && q a)) →
-    ∀ as, alignPA Rs rt as = (alignPA Ps pt as && alignPA Qs qt as) := by
-  intro Ps Qs Rs hF hlen pt qt rt htl as
-  induction as generalizing Ps Qs Rs with
-  | nil =>
-    cases Ps with
-    | nil =>
-      cases Qs with
-      | nil =>
-        cases hF
-        rcases htl with ⟨rfl, rfl, rfl⟩ | ⟨p, q, r, rfl, rfl, rfl, _⟩ <;> simp [alignPA]
-      | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
-    | cons p Ps' =>
-      cases Qs with
-      | nil => simp only [List.length_nil, List.length_cons] at hlen; omega
-      | cons q Qs' =>
-        rw [List.zip_cons_cons] at hF
-        cases hF with
-        | cons _ _ => simp [alignPA]
-  | cons a as ihw =>
-    cases Ps with
-    | nil =>
-      cases Qs with
-      | nil =>
-        cases hF
-        rcases htl with ⟨rfl, rfl, rfl⟩ | ⟨p, q, r, rfl, rfl, rfl, hr⟩
-        · simp [alignPA]
-        · simp only [alignPA, hr, ihw (Ps := []) (Qs := []) .nil rfl]
-          simp [Bool.and_assoc, Bool.and_left_comm]
-      | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
-    | cons p Ps' =>
-      cases Qs with
-      | nil => simp only [List.length_nil, List.length_cons] at hlen; omega
-      | cons q Qs' =>
-        rw [List.zip_cons_cons] at hF
-        cases hF with
-        | cons hr hrest =>
-          simp only [alignPA, hr, ihw hrest (by simpa using hlen)]
-          simp [Bool.and_assoc, Bool.and_left_comm]
-
 /-- `reqPresentT` in the form the object row uses: a declared name that must be read is
     present. -/
 theorem reqPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
@@ -3921,7 +3724,7 @@ theorem AdmA_number_eq (x : WFNumeral) :
 /-- A declared position that holds nothing empties the tuple: every wire list the tuple
     reads fills each declared position. -/
 theorem alignPA_never_false : ∀ {ts : List Term} {tail : Option Term} {ws : List Attr},
-    ts.any Term.isNever = true → alignPA (AdmAList ts) (AdmAOptT tail) ws = false := by
+    ts.any Term.isNever = true → alignP (AdmAList ts) (AdmAOptT tail) ws = false := by
   intro ts
   induction ts with
   | nil => intro _ _ h; simp at h
@@ -3931,7 +3734,7 @@ theorem alignPA_never_false : ∀ {ts : List Term} {tail : Option Term} {ws : Li
     | nil => rfl
     | cons w ws' =>
       simp only [List.any_cons, Bool.or_eq_true] at h
-      simp only [AdmAList, alignPA]
+      simp only [AdmAList, alignP]
       rcases h with ht | hrest
       · rw [show t = Term.never from eq_never_of_isNever ht, show AdmA .never _ = false from rfl, Bool.false_and]
       · rw [ih (tail := tail) (ws := ws') hrest, Bool.and_false]
@@ -3939,7 +3742,7 @@ theorem alignPA_never_false : ∀ {ts : List Term} {tail : Option Term} {ws : Li
 
 /-- A suffix holding the bottom reads nothing, on the read side. -/
 theorem zipPA_never_false : ∀ {suf : List Term} {as : List Attr},
-    suf.any Term.isNever = true → zipPA (AdmAList suf) as = false := by
+    suf.any Term.isNever = true → zipP (AdmAList suf) as = false := by
   intro suf
   induction suf with
   | nil => intro _ h; simp at h
@@ -3949,7 +3752,7 @@ theorem zipPA_never_false : ∀ {suf : List Term} {as : List Attr},
     | nil => rfl
     | cons w as' =>
       simp only [List.any_cons, Bool.or_eq_true] at h
-      simp only [AdmAList, zipPA]
+      simp only [AdmAList, zipP]
       rcases h with ht | hrest
       · rw [show t = Term.never from eq_never_of_isNever ht,
           show AdmA .never w = false from rfl, Bool.false_and]
@@ -3963,7 +3766,7 @@ theorem AdmA_listOf (pre : List Term) (sp : Option Term) (suf : List Term) (a : 
   next hany =>
     cases a <;> simp only [AdmA] <;> try rfl
     refine Eq.symm ?_
-    simp only [alignPAL]
+    simp only [alignPL]
     rcases Bool.or_eq_true .. |>.mp hany with hp | hs
     · rw [alignPA_never_false hp, Bool.false_and]
     · rw [zipPA_never_false hs, Bool.and_false]
@@ -3988,14 +3791,14 @@ theorem AdmAOptT_eq_map (sp : Option Term) : AdmAOptT sp = sp.map AdmA := by
 theorem zipPA_meet {r₁ r₂ rz : List Term} (hlen : r₁.length = r₂.length)
     (hF : List.Forall₂ (fun (pq : Term × Term) w => ∀ b, AdmA w b = (AdmA pq.1 b && AdmA pq.2 b))
       (r₁.zip r₂) rz) :
-    ∀ as, zipPA (AdmAList rz) as = (zipPA (AdmAList r₁) as && zipPA (AdmAList r₂) as) := by
+    ∀ as, zipP (AdmAList rz) as = (zipP (AdmAList r₁) as && zipP (AdmAList r₂) as) := by
   intro as
   induction as generalizing r₁ r₂ rz with
   | nil =>
       cases r₁ with
       | nil =>
           cases r₂ with
-          | nil => cases hF; simp [zipPA, AdmAList]
+          | nil => cases hF; simp [zipP, AdmAList]
           | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
       | cons t r₁' =>
           cases r₂ with
@@ -4003,12 +3806,12 @@ theorem zipPA_meet {r₁ r₂ rz : List Term} (hlen : r₁.length = r₂.length)
           | cons u r₂' =>
               rw [List.zip_cons_cons] at hF
               cases hF with
-              | cons _ _ => simp [zipPA, AdmAList]
+              | cons _ _ => simp [zipP, AdmAList]
   | cons b as ihb =>
       cases r₁ with
       | nil =>
           cases r₂ with
-          | nil => cases hF; simp [zipPA, AdmAList]
+          | nil => cases hF; simp [zipP, AdmAList]
           | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
       | cons t r₁' =>
           cases r₂ with
@@ -4017,7 +3820,7 @@ theorem zipPA_meet {r₁ r₂ rz : List Term} (hlen : r₁.length = r₂.length)
               rw [List.zip_cons_cons] at hF
               cases hF with
               | cons hr hrest =>
-                  simp only [AdmAList, zipPA, hr, ihb (by simpa using hlen) hrest]
+                  simp only [AdmAList, zipP, hr, ihb (by simpa using hlen) hrest]
                   simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
 
 /-- **The `list` meet's read-side admission obligation, read off the three rows.** The twin
@@ -4145,7 +3948,7 @@ theorem slotsL_eq_rowOfG (pre : List Codec) (sp : Option Codec) (suf : List Code
               simp
 
 /-- Every position of an admitted row is admitted. -/
-theorem zipPA_forall₂ : ∀ {r : List Term} {as : List Attr}, zipPA (AdmAList r) as = true →
+theorem zipPA_forall₂ : ∀ {r : List Term} {as : List Attr}, zipP (AdmAList r) as = true →
     List.Forall₂ (fun t b => AdmA t b = true) r as := by
   intro r
   induction r with
@@ -4153,13 +3956,13 @@ theorem zipPA_forall₂ : ∀ {r : List Term} {as : List Attr}, zipPA (AdmAList 
       intro as h
       cases as with
       | nil => exact .nil
-      | cons => simp [zipPA, AdmAList] at h
+      | cons => simp [zipP, AdmAList] at h
   | cons t r' ih =>
       intro as h
       cases as with
-      | nil => simp [zipPA, AdmAList] at h
+      | nil => simp [zipP, AdmAList] at h
       | cons b as' =>
-          simp only [AdmAList, zipPA, Bool.and_eq_true] at h
+          simp only [AdmAList, zipP, Bool.and_eq_true] at h
           exact .cons h.1 (ih h.2)
 
 /-- The spread a container denotes is the spread's own codec. -/
@@ -4188,16 +3991,16 @@ The mirror of §"The count, and what the meet does to it" above, one section at 
 /-- A wire list a tuple aligns leaves no declared position at the bottom, so the normalised
     tuple is the tuple. -/
 theorem alignPA_not_never : ∀ {vs : List Term} {tl : Option Term} {as : List Attr},
-    alignPA (AdmAList vs) (AdmAOptT tl) as = true → vs.any Term.isNever = false := by
+    alignP (AdmAList vs) (AdmAOptT tl) as = true → vs.any Term.isNever = false := by
   intro vs
   induction vs with
   | nil => intro _ _ _; rfl
   | cons v vs' ihv =>
       intro tl as hh
       cases as with
-      | nil => exact absurd hh (by simp [AdmAList, alignPA])
+      | nil => exact absurd hh (by simp [AdmAList, alignP])
       | cons b as' =>
-          simp only [AdmAList, alignPA, Bool.and_eq_true] at hh
+          simp only [AdmAList, alignP, Bool.and_eq_true] at hh
           simp only [List.any_cons, Bool.or_eq_false_iff]
           exact ⟨not_isNever_of_admA hh.1, ihv hh.2⟩
 
@@ -5301,7 +5104,7 @@ theorem AdmABody_map_slots (c : Body) (keys : Finset Name) (g : {k // k ∈ keys
   apply and_congr Iff.rfl
   unfold objAdmA; rw [decide_eq_true_iff]
   refine forall_congr' fun k => ?_
-  unfold entryPA; simp only [MapOf.at]
+  unfold entryP; simp only [MapOf.at]
   rcases Decidable.em (k.1 ∈ c.fields) with hk | hk
   · rw [dif_pos hk, Body.slotAt_pos hk]
   · rw [dif_neg hk, Body.slotAt_neg hk]
@@ -5738,99 +5541,6 @@ theorem separates_of_meetNever {x y : Term} (h : meetNever x y = true) : Separat
 
 /-! ## The views admit what the term admits -/
 
-/-- A row that admits at least what another row admits. -/
-def RowLe {α : Type} (P Q : α → Bool) : Prop := ∀ x, P x = true → Q x = true
-
-/-- The fixed positions and the spread of a list admit more when each row admits more. -/
-theorem alignP_mono {Ps Qs : List VP} {sp sq : Option VP} (hPQ : List.Forall₂ RowLe Ps Qs)
-    (hs : Option.Rel RowLe sp sq) : ∀ vs, alignP Ps sp vs = true → alignP Qs sq vs = true := by
-  induction hPQ with
-  | nil =>
-    cases hs with
-    | none => exact fun _ h => h
-    | some hr =>
-      intro vs h
-      induction vs with
-      | nil => rfl
-      | cons v vs ih =>
-        simp only [alignP, Bool.and_eq_true] at h ⊢
-        exact ⟨hr _ h.1, ih h.2⟩
-  | cons hr _ ih =>
-    intro vs h
-    cases vs with
-    | nil => simp [alignP] at h
-    | cons v vs =>
-      simp only [alignP, Bool.and_eq_true] at h ⊢
-      exact ⟨hr _ h.1, ih vs h.2⟩
-
-/-- The suffix of a list admits more when each row admits more. -/
-theorem zipP_mono {Ps Qs : List VP} (hPQ : List.Forall₂ RowLe Ps Qs) :
-    ∀ vs, zipP Ps vs = true → zipP Qs vs = true := by
-  induction hPQ with
-  | nil => exact fun _ h => h
-  | cons hr _ ih =>
-    intro vs h
-    cases vs with
-    | nil => simp [zipP] at h
-    | cons v vs =>
-      simp only [zipP, Bool.and_eq_true] at h ⊢
-      exact ⟨hr _ h.1, ih vs h.2⟩
-
-/-- A list admits more when each row admits more. -/
-theorem alignPL_mono {Ps Qs Ss Ts : List VP} {sp sq : Option VP}
-    (hPQ : List.Forall₂ RowLe Ps Qs) (hs : Option.Rel RowLe sp sq)
-    (hST : List.Forall₂ RowLe Ss Ts) (vs : List Value) (h : alignPL Ps sp Ss vs = true) :
-    alignPL Qs sq Ts vs = true := by
-  unfold alignPL at h ⊢
-  rw [← hST.length_eq]
-  simp only [Bool.and_eq_true] at h ⊢
-  exact ⟨alignP_mono hPQ hs _ h.1, zipP_mono hST _ h.2⟩
-
-/-- The fixed positions and the spread of a stored list read more when each row reads more. -/
-theorem alignPA_mono {Ps Qs : List AP} {sp sq : Option AP} (hPQ : List.Forall₂ RowLe Ps Qs)
-    (hs : Option.Rel RowLe sp sq) : ∀ as, alignPA Ps sp as = true → alignPA Qs sq as = true := by
-  induction hPQ with
-  | nil =>
-    cases hs with
-    | none => exact fun _ h => h
-    | some hr =>
-      intro as h
-      induction as with
-      | nil => rfl
-      | cons a as ih =>
-        simp only [alignPA, Bool.and_eq_true] at h ⊢
-        exact ⟨hr _ h.1, ih h.2⟩
-  | cons hr _ ih =>
-    intro as h
-    cases as with
-    | nil => simp [alignPA] at h
-    | cons a as =>
-      simp only [alignPA, Bool.and_eq_true] at h ⊢
-      exact ⟨hr _ h.1, ih as h.2⟩
-
-/-- The suffix of a stored list reads more when each row reads more. -/
-theorem zipPA_mono {Ps Qs : List AP} (hPQ : List.Forall₂ RowLe Ps Qs) :
-    ∀ as, zipPA Ps as = true → zipPA Qs as = true := by
-  induction hPQ with
-  | nil => exact fun _ h => h
-  | cons hr _ ih =>
-    intro as h
-    cases as with
-    | nil => simp [zipPA] at h
-    | cons a as =>
-      simp only [zipPA, Bool.and_eq_true] at h ⊢
-      exact ⟨hr _ h.1, ih as h.2⟩
-
-/-- A stored list reads more when each row reads more. -/
-theorem alignPAL_mono {Ps Qs Ss Ts : List AP} {sp sq : Option AP}
-    (hPQ : List.Forall₂ RowLe Ps Qs) (hs : Option.Rel RowLe sp sq)
-    (hST : List.Forall₂ RowLe Ss Ts) (as : List Attr) (h : alignPAL Ps sp Ss as = true) :
-    alignPAL Qs sq Ts as = true := by
-  unfold alignPAL at h ⊢
-  rw [← hST.length_eq]
-  simp only [Bool.and_eq_true] at h ⊢
-  exact ⟨alignPA_mono hPQ hs _ h.1, zipPA_mono hST _ h.2⟩
-
 /-- **A set over a held-free element admits where a set over a narrower element does.** The
     held-free set writes element by element, so an element inclusion lifts to the sets. -/
 theorem Adm_set_of_elem {t u : Term} (hu : HF u) (h : ∀ w, Adm t w = true → Adm u w = true)
@@ -5913,7 +5623,7 @@ theorem readLe_list {pre suf : List Term} {sp : Option Term} (hp : ReadLeL pre)
   intro a h
   cases a with
   | l as =>
-    exact alignPAL_mono (readLeL_forall₂ pre hp) (readLeO_rel sp hs)
+    exact alignPL_mono (readLeL_forall₂ pre hp) (readLeO_rel sp hs)
       (readLeL_forall₂ suf hf) as h
   | _ => exact absurd h (by simp [AdmA])
 
@@ -5956,9 +5666,9 @@ theorem readLe_object {fs : Finset Name} {f : {k // k ∈ fs} → ObjectSlot} {w
       cases s <;> simp_all [readViewS]
     · have := of_decide_eq_true h.2 k
       rcases Decidable.em (k.1 ∈ fs) with hm | hm
-      · simp only [entryPA, MapOf.at, dif_pos hm] at this ⊢
+      · simp only [entryP, MapOf.at, dif_pos hm] at this ⊢
         exact hf ⟨k.1, hm⟩ _ this
-      · simp only [entryPA, MapOf.at, dif_neg hm] at this ⊢
+      · simp only [entryP, MapOf.at, dif_neg hm] at this ⊢
         cases w with
         | none => exact absurd this (by simp [AdmAWild])
         | some t => exact hw _ this
