@@ -13,6 +13,8 @@ unsoundness. `Adm` is admission as a *domain* instead: exact at every constructo
 
 namespace Calculus
 
+open Alg (ObjectSlot.isReq Term.depth)
+
 noncomputable section
 
 /-! ## The rows a term's subterms hand up

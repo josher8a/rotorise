@@ -47,6 +47,8 @@ names the family. `Slot` below is that partition. The read-side slot is
 
 namespace Calculus
 
+open Alg (useUnder useHeld Term.use Body.use ObjectSlot.use Term.useL Term.useO)
+
 /-! ## Slots
 
 `Slot` is the `Value` constructor as data. `Member` is reused unchanged for the read side —

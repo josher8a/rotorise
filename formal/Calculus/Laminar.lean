@@ -11,6 +11,8 @@ the union row needs no side condition.
 
 namespace Calculus
 
+open Alg (ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Term.depth)
+
 /-! ## The held set is the admission -/
 
 

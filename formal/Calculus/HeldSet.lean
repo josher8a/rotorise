@@ -49,6 +49,8 @@ the `: T` index, and nothing else.
 
 namespace Calculus
 
+open Alg (Body.fields_mk Body.wild_mk Body.at_mk Term.depth)
+
 /-! ## `T` as an identity, for `opaque`
 
 With `HOpaque` corrected, the converse of `opaq_TSub` goes through: everything `HOpaque` admits,

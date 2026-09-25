@@ -923,7 +923,7 @@ export const leanVector = (
 }
 
 /**
- * **A guard verdict**: whether the model's `Term.guarded` accepts the term of a codec. A recursive
+ * **A guard verdict**: whether the model's `Alg.Term.guarded` accepts the term of a codec. A recursive
  * schema below a list or an object is guarded. A thunk that returns its own term reads the
  * binder's input itself, and the guard refuses it: the stages of such a term never grow.
  */
@@ -939,7 +939,7 @@ export const leanGuard = ({ name, codec, guarded }: Guard): string =>
     [
         `/-- \`${name}\` — the model's guard ${guarded ? 'accepts' : 'refuses'} this term -/`,
         `theorem ${leanIdent(name)} :`,
-        `    Term.guarded (${leanTermOf(codec, name)}) = ${guarded} := rfl`,
+        `    Alg.Term.guarded (${leanTermOf(codec, name)}) = ${guarded} := rfl`,
     ].join('\n')
 
 /**

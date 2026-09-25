@@ -84,6 +84,8 @@ turned away go with the policy.
 
 namespace Calculus
 
+open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk)
+
 
 /-! ## Reading a field and a term -/
 

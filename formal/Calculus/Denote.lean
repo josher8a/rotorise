@@ -101,40 +101,7 @@ and nothing here does.
 
 Fuel was a termination device and never a cost measure; it is not even that any more. -/
 
-/-- **A set of alternatives, as the predicate `Pred.members` carries.** Some alternative is the
-    value, which is `inL` at each.
-
-    This is what `inL` was before a literal carried one value. It survives because a refinement
-    predicate is data over a `Finset` and a literal is not: `Pred.members` is the only remaining
-    set of alternatives in the language. -/
-noncomputable def inLs (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
-  decide (∃ x ∈ ls.1, inL k x v = true)
-
-/-- Whether a value is of one ground base. -/
-def inBase : GroundKind → Value → Bool
-  | .string,  .str _  => true
-  | .number,  .num _  => true
-  | .boolean, .bool _ => true
-  | .binary,  .bin _  => true
-  | .null,    .null   => true
-  | _, _ => false
-
-/-- **What a `Pred` means.** The type is in `Term.lean`, and the meaning is here, because `inL`
-    is in `Prisms.lean`, which `Term.lean` does not import.
-
-    `noncomputable`, because `inL` is. `denote` is noncomputable for the same reason, and
-    the meet never calls this: the meet reads a `Pred`'s constructors, which are data.
-
-    **`members` keeps its `Finset`, and a literal no longer has one.** A refinement predicate is
-    data over a set of alternatives; a literal is one value. `inLs` is the set form, built from
-    `inL` at each alternative rather than as a membership row of its own. -/
-noncomputable def Pred.eval : Pred → Value → Bool
-  | .members k ls => inLs k ls
-  | .closure q    => q
-  | .except k ls  => fun v => inBase k v && !inLs k ls v
-
-/-- The codec an environment gives the variable `i`: the bottom where no binder is. -/
-def envAt (ρ : List Codec) (i : Nat) : Codec := ρ.getD i .empty
+export Alg (envAt)
 
 mutual
 
@@ -192,6 +159,71 @@ def denoteOpt : Option Term → (ρ : List Codec := []) → Option Codec
 def denoteμs : List Term → (ρ : List Codec := []) → List (Option Member)
   | [], _ => []
   | t :: ts, ρ => (denote t ρ).μ :: denoteμs ts ρ
+
+end
+
+/-! ### The DynamoDB rows are the generic denotation
+
+`denote` states the rows at DynamoDB, so a proof reads `baseCodec`, `setCodec` and `listCodec` by
+name. `Alg.denote` at `dynSem` is the same function, and `denote_eq_alg` is that fact: a row that
+drifts from the generic one fails here. -/
+
+mutual
+
+/-- The DynamoDB denotation is the generic one at `dynSem`. -/
+theorem denote_eq_alg : ∀ (t : Term) (ρ : List Codec), denote t ρ = Alg.denote t ρ
+  | .base _, _ | .literal _ _, _ | .opaq, _ | .never, _ | .var _, _ => rfl
+  | .set t, ρ => congrArg setCodec (denote_eq_alg t ρ)
+  | .list pre sp suf, ρ => by
+      simp only [denote, denoteList_eq_alg pre ρ, denoteOpt_eq_alg sp ρ, denoteList_eq_alg suf ρ]
+      rfl
+  | .held inner outer f g, ρ => by
+      simp only [denote, denote_eq_alg inner ρ, denote_eq_alg outer ρ]
+      rfl
+  | .refine inner p, ρ => congrArg (Alg.Codec.restrict · p.eval) (denote_eq_alg inner ρ)
+  | .object b, ρ => bodySem_eq_alg b ρ
+  | .union opts, ρ => by
+      simp only [denote, denoteList_eq_alg opts ρ, denoteμs_eq_alg opts ρ]
+      rfl
+  | .mu b, ρ => congrArg muCodec (funext fun c => denote_eq_alg b (c :: ρ))
+
+/-- …at a payload. -/
+theorem bodySem_eq_alg : ∀ (b : Body) (ρ : List Codec), bodySem b ρ = Alg.bodySem b ρ
+  | .mk fields f wild, ρ => by
+      simp only [bodySem, wildSem_eq_alg wild ρ, fun k => fieldSem_eq_alg (f k) ρ]
+      rfl
+
+/-- …at a slot. -/
+theorem fieldSem_eq_alg : ∀ (s : ObjectSlot) (ρ : List Codec), fieldSem s ρ = Alg.fieldSem s ρ
+  | .req t, ρ => congrArg FieldSem.req (denote_eq_alg t ρ)
+  | .optional t, ρ => congrArg FieldSem.opt (denote_eq_alg t ρ)
+
+/-- …at the open block. -/
+theorem wildSem_eq_alg : ∀ (w : Option Term) (ρ : List Codec), wildSem w ρ = Alg.wildSem w ρ
+  | none, _ => rfl
+  | some t, ρ => congrArg RestSem.codec (denote_eq_alg t ρ)
+
+/-- …at a list of terms. -/
+theorem denoteList_eq_alg : ∀ (ts : List Term) (ρ : List Codec),
+    denoteList ts ρ = Alg.denoteList ts ρ
+  | [], _ => rfl
+  | t :: ts, ρ => by
+      simp only [denoteList, denote_eq_alg t ρ, denoteList_eq_alg ts ρ]
+      rfl
+
+/-- …at an optional term. -/
+theorem denoteOpt_eq_alg : ∀ (o : Option Term) (ρ : List Codec),
+    denoteOpt o ρ = Alg.denoteOpt o ρ
+  | none, _ => rfl
+  | some t, ρ => congrArg some (denote_eq_alg t ρ)
+
+/-- …at the members of a list of terms. -/
+theorem denoteμs_eq_alg : ∀ (ts : List Term) (ρ : List Codec),
+    denoteμs ts ρ = Alg.denoteμs ts ρ
+  | [], _ => rfl
+  | t :: ts, ρ => by
+      simp only [denoteμs, denote_eq_alg t ρ, denoteμs_eq_alg ts ρ]
+      rfl
 
 end
 
