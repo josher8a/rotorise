@@ -51,7 +51,7 @@ moves and a declaration name is not. What has no guard is the same form aimed at
 Markdown file.
 
 **Effect.** Six citations carry a line number that nothing checks: `docs/dynamo-datatypes.md:130`
-from `Calculus/Dynamo/Store.lean`, `src/codec/attribute.ts` and `src/codec/spec/laws/codec.depth.spec.ts`;
+from `Calculus/Dynamo/Lang/Store.lean`, `src/codec/attribute.ts` and `src/codec/spec/laws/codec.depth.spec.ts`;
 `src/codec/spec/literal/codec.set.spec.ts:76` from `Calculus/Dynamo/Alg/Products.lean`; and
 `src/codec/attribute.ts:138` and `src/codec/codec.ts:1466` from
 `src/codec/lean/lean.predicates.spec.ts`. Any edit above one of those lines moves it, and every

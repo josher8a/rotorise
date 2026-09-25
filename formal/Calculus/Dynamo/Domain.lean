@@ -13,7 +13,7 @@ Mechanization of the specification, `docs/blueprint/src/content.tex`. Modelling 
 
 * `Numeral` is `String` — the *raw text a parser sees*. The carrier is not: `Attr.n`
   carries `WFNumeral`, the subtype `Numeral.WF` picks out, so `⟨N, "abc"⟩` is
-  unrepresentable rather than merely unwritten. The DynamoDB port (`Dynamo/Store.lean`) gates
+  unrepresentable rather than merely unwritten. The DynamoDB port (`Dynamo/Lang/Store.lean`) gates
   at `Stored`, which is a narrower question than well-formedness.
 * Wire sets (`SS`/`NS`/`BS`) are `NEFinset` of a *concrete element type* — `NEFinset
   String`, `NEFinset WFNumeral`, `NEFinset Bytes`, and the same three on `Value`. Maps
@@ -66,12 +66,12 @@ grammar is forced onto both halves by the laws, not by taste.
 
 One narrowing, and it is a narrowing of §1 rather than a transcription of it: a bare integer
 part is required, so `".5"` and `"1."` are rejected where DynamoDB *accepts* both and
-normalises them (`src/codec/spec/surface/codec.dynamodb.spec.ts`). It stands because `Stored` (`Dynamo/Store.lean`) rejects them
+normalises them (`src/codec/spec/surface/codec.dynamodb.spec.ts`). It stands because `Stored` (`Dynamo/Lang/Store.lean`) rejects them
 anyway. Significance is counted between the first and last
 nonzero digit, which is the trimming DynamoDB documents.
 
 **`WF` is what DynamoDB accepts; `Stored` is what it hands back.** They are different
-sets, and the difference is not cosmetic — see `Dynamo/Store.lean`. -/
+sets, and the difference is not cosmetic — see `Dynamo/Lang/Store.lean`. -/
 
 namespace Numeral
 

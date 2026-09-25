@@ -1481,7 +1481,7 @@ describe("the read side, against the model's read row", () => {
             )
         }
         const module = leanReadModule(readVerdicts())
-        expect(module).toContain('import Calculus.Dynamo.Store')
+        expect(module).toContain('import Calculus.Dynamo.Lang.Store')
         expect(module).toContain('All 1927 pairs are asserted here.')
     })
 })
@@ -1560,7 +1560,7 @@ describe("the declaration guard, against the model's classifier", () => {
         // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
         // without the import Lean auto-binds the name and every verdict fails to elaborate
         expect(leanSeparationModule([])).toContain(
-            'import Calculus.Dynamo.Store',
+            'import Calculus.Dynamo.Lang.Store',
         )
     })
 
@@ -1699,7 +1699,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
         expect(module).toContain('import Calculus.Bridge.Vectors')
         // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
         // without the import `denote` sticks on a free variable and no vector elaborates
-        expect(module).toContain('import Calculus.Dynamo.Store')
+        expect(module).toContain('import Calculus.Dynamo.Lang.Store')
         // the header states what it could not state, which for this corpus is nothing
         expect(module).toContain('every corpus codec round trips')
     })

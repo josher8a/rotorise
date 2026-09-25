@@ -1087,7 +1087,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
  * The declaration verdicts as a module of their own, because they need `certPair` and the
  * dischargers of `PairwiseCompat`.
  *
- * The header imports `Calculus.Dynamo.Store` as well, because a `held` term spells
+ * The header imports `Calculus.Dynamo.Lang.Store` as well, because a `held` term spells
  * `numeralOfStoredText` and `textOfNumeral`, which the DynamoDB port defines, and
  * `Meet` does not reach them. Lean
  * auto-binds an unknown lower-case name, so the missing import reports a free variable in the
@@ -1100,7 +1100,7 @@ export const leanSeparationModule = (
 ): string =>
     `import Calculus.Dynamo.Analysis.Meet
 import Calculus.Dynamo.Analysis.Compat
-import Calculus.Dynamo.Store
+import Calculus.Dynamo.Lang.Store
 
 /-!
 # Declaration verdicts, both ways
@@ -1308,7 +1308,7 @@ export const leanMeetModule = (
     deferred: readonly string[] = [],
 ): string =>
     `import Calculus.Dynamo.Analysis.Meet
-import Calculus.Dynamo.Store
+import Calculus.Dynamo.Lang.Store
 
 /-!
 # The meet, proposed to the model
@@ -1411,7 +1411,8 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
  * Generated at gate time and elaborated, never committed.
  */
 export const leanReadModule = (verdicts: readonly ReadVerdict[]): string =>
-    `import Calculus.Dynamo.Store
+    `import Calculus.Dynamo.Analysis.ExactA
+import Calculus.Dynamo.Lang.Store
 
 /-!
 # Read verdicts, proposed to the model's read row
@@ -1498,7 +1499,7 @@ export const readVectorIsUnstatable = (
 /**
  * The read vectors as a module, with what it could not state named in the header.
  *
- * The header imports `Calculus.Dynamo.Store` as well, because a `held` term spells
+ * The header imports `Calculus.Dynamo.Lang.Store` as well, because a `held` term spells
  * `numeralOfStoredText` and `textOfNumeral`, which the DynamoDB port defines, and `Vectors`
  * does not reach them. Lean auto-binds
  * an unknown lower-case name, so the missing import leaves `denote` stuck on a free variable and
@@ -1512,7 +1513,7 @@ export const leanReadVectorModule = (vectors: readonly Vector[]): string => {
         (one) => readVectorIsUnstatable(one) === undefined,
     )
     return `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Store
+import Calculus.Dynamo.Lang.Store
 
 /-!
 # Read vectors, proposed to the model's \`p\`
@@ -1655,7 +1656,7 @@ export const leanResolutionModule = (
     reads: readonly ReadResolution[],
 ): string =>
     `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Store
+import Calculus.Dynamo.Lang.Store
 
 /-!
 # Union resolution, model against library
@@ -1754,7 +1755,7 @@ const fuelFor = (attribute: AttributeValue): number => {
  */
 const preamble = `import Calculus.Dynamo.Lang.Denote
 import Calculus.Dynamo.Alg.Frontier
-import Calculus.Dynamo.Store
+import Calculus.Dynamo.Lang.Store
 import Mathlib.Tactic.FinCases
 
 /-!
@@ -1807,7 +1808,7 @@ macro "vector" : tactic => \`(tactic|
 `
 
 const checkPreamble = `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Store
+import Calculus.Dynamo.Lang.Store
 
 /-!
 # Differential-testing vectors

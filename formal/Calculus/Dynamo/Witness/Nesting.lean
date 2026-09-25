@@ -1,11 +1,13 @@
 import Calculus.Dynamo.Lang.Soundness
+import Calculus.Dynamo.Lang.Store
+import Calculus.Dynamo.Analysis.ExactV
 
 /-!
 # §1's nesting bound, and the claim the calculus cannot make
 
 `Domain.lean` states the bound: `Attr.Storable n a` is `Attr.nesting a ≤ n`, counting `L` and
 `M` and nothing else. The bound `n` is a parameter, because the ideal algebra has no depth
-limit. A port instantiates it (`Dynamo/Store.lean`). This file says what the calculus does and does not guarantee about it,
+limit. A port instantiates it (`Dynamo/Lang/Store.lean`). This file says what the calculus does and does not guarantee about it,
 and the answer is worth stating precisely because **it is the one place `𝔸` is larger in the
 model than in the store**.
 
@@ -132,5 +134,26 @@ theorem not_storable_of_typed (bound : Nat) :
 theorem storable_deepA (bound : Nat) : Attr.Storable bound (deepA bound) := by
   show Attr.nesting (deepA bound) ≤ bound
   rw [nesting_deepA]
+
+end Calculus
+
+namespace Calculus.DynamoDB
+
+/-- At the store's bound, a derivable term writes an attribute that DynamoDB refuses. -/
+theorem not_storable_of_typed :
+    ∃ (t : Term) (T : Held) (μ : Option Member) (v : Value) (a : Attr),
+      Typed t T μ ∧ (denote t).e v = some a ∧ ¬ Attr.Storable maxNesting a :=
+  Calculus.not_storable_of_typed maxNesting
+
+end Calculus.DynamoDB
+
+namespace Calculus
+
+/-- `decimalHeld` admits the stored spellings and nothing else, which is what `decimal`
+    promises. -/
+example : Adm decimalHeld (Value.str "1.5") = true := by decide
+example : Adm decimalHeld (Value.str "1.50") = false := by decide
+example : Adm decimalHeld (Value.str "abc") = false := by decide
+example : Adm decimalHeld (Value.num (WFNumeral.of "1.5")) = false := by decide
 
 end Calculus

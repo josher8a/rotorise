@@ -1,4 +1,5 @@
-import Calculus.Dynamo.Lang.Denote
+import Calculus.Dynamo.Alg.Prisms
+import Calculus.Dynamo.Alg.Frontier
 
 /-!
 # Continuity of `union`

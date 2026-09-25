@@ -551,7 +551,7 @@ def Separates (x y : Term) : Prop :=
 
     **It names the guarantee where the guarantee already lives, and moves nothing.** `Typed.union`
     cannot take it: `Separates` is stated on `Adm`, in `ExactV.lean`, and
-    the import chain is `Typing` then `Soundness` then `Discharge` then `ExactA` then this
+    the import chain is `Typing` then `Soundness` then `ExactV` then `ExactA` then this
     file. A premise here is four modules above the judgement it would constrain. So an undischarged
     union stays *underivable* through `Obligations`, which is where it was, rather than becoming
     unrepresentable.

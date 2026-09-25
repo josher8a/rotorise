@@ -1,4 +1,3 @@
-import Calculus.Dynamo.Witness.Discharge
 import Calculus.Alg.Rows
 import Calculus.Dynamo.Lang.Soundness
 
