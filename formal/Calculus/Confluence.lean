@@ -1,5 +1,4 @@
 import Calculus.Universal
-import Calculus.DynamoDB
 
 /-!
 # Confluence: the payoffs of a held-free term
@@ -16,7 +15,7 @@ held-free terms.
 
 `held` is the one constructor outside the result. An adapter changes the carrier, so it is
 not a restriction of `opaque`. `held_violates_W` and `held_violates_R` are the control:
-`decimalHeld` writes `"1"` as the number `1`, which `opaque` does not.
+`oneHeld` writes `"1"` as the number `1`, which `opaque` does not.
 -/
 
 namespace Calculus
@@ -170,41 +169,46 @@ theorem admAAt_of_HF {x y z : Term} (hx : HF x) (hy : HF y) (hz : HF z)
 
 /-! ## The false control: a `held` adapter is not a restriction of `opaque` -/
 
-/-- `decimalHeld` writes the string `"1"` as the number `1`. -/
-theorem decimalHeld_writes : (denote decimalHeld).e (.str "1") = some (.n (WFNumeral.of "1")) := by
+/-- The numeric base under a constant adapter, with the caller side restricted to text. The
+    adapter writes each text as the number `1`, and reads each number as the text `"1"`. -/
+def oneHeld : Term :=
+  Term.held Term.number Term.string (fun _ => Value.num (WFNumeral.of "1")) (fun _ => Value.str "1")
+
+/-- `oneHeld` writes the string `"1"` as the number `1`. -/
+theorem oneHeld_writes : (denote oneHeld).e (.str "1") = some (.n (WFNumeral.of "1")) := by
   rfl
 
-/-- **The false control, write side.** `decimalHeld` writes an attribute that `opaque` does not
+/-- **The false control, write side.** `oneHeld` writes an attribute that `opaque` does not
     write at the same value, so `confluence_W` needs `HF`. -/
 theorem held_violates_W :
-    ¬ ∀ v a, (denote decimalHeld).e v = some a → (denote .opaq).e v = some a := by
+    ¬ ∀ v a, (denote oneHeld).e v = some a → (denote .opaq).e v = some a := by
   intro h
-  have := h _ _ decimalHeld_writes
+  have := h _ _ oneHeld_writes
   rw [denote_opaq, show (muCodec opaqStep).e (.str "1") = some (.s "1") from rfl] at this
   exact nomatch this
 
-/-- `decimalHeld` reads the number `1` as the string `"1"`. -/
-theorem decimalHeld_reads : (denote decimalHeld).p (.n (WFNumeral.of "1")) = some (.str "1") := by
+/-- `oneHeld` reads the number `1` as the string `"1"`. -/
+theorem oneHeld_reads : (denote oneHeld).p (.n (WFNumeral.of "1")) = some (.str "1") := by
   rfl
 
-/-- **The false control, read side.** `decimalHeld` reads a value that `opaque` does not read at
+/-- **The false control, read side.** `oneHeld` reads a value that `opaque` does not read at
     the same attribute, so `confluence_R` needs `HF`. -/
 theorem held_violates_R :
-    ¬ ∀ a v, (denote decimalHeld).p a = some v → (denote .opaq).p a = some v := by
+    ¬ ∀ a v, (denote oneHeld).p a = some v → (denote .opaq).p a = some v := by
   intro h
-  have := h _ _ decimalHeld_reads
+  have := h _ _ oneHeld_reads
   rw [denote_opaq, show (muCodec opaqStep).p (.n (WFNumeral.of "1"))
     = some (.num (WFNumeral.of "1")) from rfl] at this
   exact nomatch this
 
 
-/-- The control of the control: `decimalHeld` is not held-free, so `confluence_W` does not
+/-- The control of the control: `oneHeld` is not held-free, so `confluence_W` does not
     apply to it. -/
-theorem not_HF_decimalHeld : ¬ HF decimalHeld := id
+theorem not_HF_oneHeld : ¬ HF oneHeld := id
 
-/-- **The views do not certify the decimal adapter beside `string`.** Its caller side is
+/-- **The views do not certify the constant adapter beside `string`.** Its caller side is
     `string`, so the caller-side views overlap. -/
-theorem certPair_decimalHeld_string : certPair decimalHeld .string = false := by
+theorem certPair_oneHeld_string : certPair oneHeld .string = false := by
   decide
 
 end Calculus
