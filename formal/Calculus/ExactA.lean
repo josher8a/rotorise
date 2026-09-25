@@ -32,12 +32,6 @@ spends on the filter. -/
 /-- An attribute-side row, once the subterms' rows are known. -/
 abbrev AP := Attr → Bool
 
-/-- `objRead`'s traversal, as a row: every stored entry goes through its name's codec. -/
-def objAdmA (fs : MapOf AP) (rp : Option AP) (keys : Finset Name)
-    (g : {k // k ∈ keys} → Attr) : Bool :=
-  decide (∀ k : {k // k ∈ keys},
-    (match entryP fs rp k.1 with | some P => P (g k) | none => false) = true)
-
 /-- The current-schema reader has the same required-name guard as the writer. -/
 def reqPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
     (keys : Finset Name) : Bool :=
@@ -107,7 +101,7 @@ noncomputable def AdmABody : Body → AP
       match a with
       | .m keys g =>
           reqPresentT fields fld keys &&
-          objAdmA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) keys g
+          objAdmV ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) keys g
       | _ => false
 
 noncomputable def AdmAField : ObjectSlot → AP
@@ -412,8 +406,7 @@ theorem entryA_iff {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectS
     {wild : Option Term}
     (hf : ∀ k : {k // k ∈ fields}, ExactAField (fld k))
     (hr : ∀ t, wild = some t → ExactA t) (k : Name) (a : Attr) :
-    (match entryP ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) k with
-      | some P => P a | none => false) = true ↔
+    (entryP ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) k).any (· a) = true ↔
     ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (wildSem wild)) k).bind
       (fun c => c.p a)).isSome = true := by
   simp only [entryP, entryCodec, MapOf.at]
@@ -434,12 +427,12 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Obje
   cases a
   case m keys g =>
     show (reqPresentT fields fld keys &&
-        objAdmA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) keys g) = true ↔
+        objAdmV ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) keys g) = true ↔
       ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩ (wildSem wild)).p (.m keys g)).isSome
         = true
     rw [reqPresentT_eq]
     simp only [objectCodec, objectCodecCore, carriedCodec, mA, objRead,
-      objAdmA, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map,
+      objAdmV, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map,
       Option.bind_some]
     by_cases hv : reqPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys = true
     · rw [if_pos hv]
@@ -612,26 +605,26 @@ refused, and each name's own presence pair handles a declared absent name. -/
 theorem AdmABody_map {b : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr} :
     AdmABody b (.m keys g)
       = (reqPresentT b.fields b.at keys &&
-         objAdmA ⟨b.fields, fun k => AdmAField (b.at k)⟩ (AdmAWild b.wild) keys g) := by
+         objAdmV ⟨b.fields, fun k => AdmAField (b.at k)⟩ (AdmAWild b.wild) keys g) := by
   cases b; rfl
 
 /-- One entry of the read-side object row — `objAdmV_row`'s twin. It took a keep filter as a
     hypothesis while `drop` made the two sides' filters differ; they do not differ now. -/
 theorem objAdmA_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (hB : objAdmA ⟨c.fields, fun k => AdmAField (c.at k)⟩ (AdmAWild c.wild) keys g = true)
+    (hB : objAdmV ⟨c.fields, fun k => AdmAField (c.at k)⟩ (AdmAWild c.wild) keys g = true)
     {k : Name} (hk : k ∈ keys) (hc : k ∈ c.fields) :
     AdmAField (c.at ⟨k, hc⟩) (g ⟨k, hk⟩) = true := by
-  unfold objAdmA at hB
+  unfold objAdmV at hB
   have hh := of_decide_eq_true hB ⟨k, hk⟩
   rwa [entryP, MapOf.at, dif_pos hc] at hh
 
 /-- A present name the body does not declare goes through the open block, on the read side.
     `objAdmV_wild`'s twin. -/
 theorem objAdmA_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (hB : objAdmA ⟨c.fields, fun k => AdmAField (c.at k)⟩ (AdmAWild c.wild) keys g = true)
+    (hB : objAdmV ⟨c.fields, fun k => AdmAField (c.at k)⟩ (AdmAWild c.wild) keys g = true)
     {k : Name} (hk : k ∈ keys) (hnc : k ∉ c.fields) {w : Term}
     (hw : c.wild = some w) : AdmA w (g ⟨k, hk⟩) = true := by
-  unfold objAdmA at hB
+  unfold objAdmV at hB
   have hh := of_decide_eq_true hB ⟨k, hk⟩
   rwa [entryP, MapOf.at, dif_neg hnc, hw, AdmAWild] at hh
 

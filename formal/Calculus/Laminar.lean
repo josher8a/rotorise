@@ -103,8 +103,7 @@ theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectS
       forall_congr' fun k => by rw [(hF k).1]
     have hent : ∀ k : {k // k ∈ keys},
         (if h : k.1 ∈ fields then (bind ⟨k.1, h⟩).2 (f k) else ∃ T, R = some T ∧ T (f k)) ↔
-        (match entryP ⟨fields, fun k => AdmField (ff k)⟩ (AdmWild wild) k.1 with
-          | some P => P (f k) | none => false) = true := by
+        (entryP ⟨fields, fun k => AdmField (ff k)⟩ (AdmWild wild) k.1).any (· (f k)) = true := by
       intro k
       rcases Decidable.em (k.1 ∈ fields) with hk | hk
       · rw [dif_pos hk]
