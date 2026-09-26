@@ -241,8 +241,8 @@ An occupancy projection over a finite index of value slots and attribute members
 test at a name. A literal test at a name. A row for each written shape. A body specification
 carried beside the term so that a test can read it without consulting a codec.
 
-> ASPIRATION: the certificate still asks the occupancy test as a disjunct, the proofs of the
-> meet's bottom rows still use it, and a slice still reads the body specification.
+> ASPIRATION: the certificate still asks the occupancy test as a disjunct, the read-side proof of
+> the DynamoDB leaf meet still uses it, and a slice still reads the body specification.
 
 Every one of them is the recursion truncated at some depth. Each owes its own soundness proof,
 its own argument that the indices it skips could not have separated, and its own extension on
@@ -675,9 +675,10 @@ language, the judgement and soundness take a universe signature as a parameter. 
 are two instances of the signature.
 
 > ASPIRATION: the analyses are not parametric in the universe. The meet and its theorems are
-> parametric: a universe supplies the leaf meet and the laws of its leaves and formers, and JSON
-> has them. The separation rows and the certificate read the constructors of the DynamoDB
-> carriers, so JSON has none of them. The exactness rows are parametric, and JSON has them.
+> parametric: a universe supplies the leaf meet, its shape classes and the laws of its leaves and
+> formers, and JSON has them. The occupancies and the shape test are parametric, and JSON has them.
+> The separation rows and the certificate read the constructors of the DynamoDB carriers, so JSON
+> has none of them. The exactness rows are parametric, and JSON has them.
 
 ---
 

@@ -10,8 +10,9 @@ terms read an attribute, `z` reads it to the same value as each. The pairing is 
 `refine` asks the predicate of what the inner term reads, so the refinement rows reduce to the
 reading agreement.
 
-A universe supplies the laws in two classes, as on the write side. `FormerAdmA` holds the laws of
-the formers, and `LeafAdmA` holds the laws of the leaf meet.
+A universe supplies the laws in two classes, as on the write side. `FormerAdmA` holds the set
+laws, and `LeafAdmA` holds the laws of the leaf meet. The disjointness of two formers is a theorem
+of the shape classes (`Shapes`).
 -/
 
 namespace Calculus.Alg
@@ -421,8 +422,7 @@ theorem admA_same (x : Term S) : AdmAAt x x x :=
 /-! ## The laws, on the read side -/
 
 /-- **The read-side laws of the formers.** The set laws carry an element meet to a set meet. The
-    six disjointness laws close the catch-all rows of the families: two formers in different
-    attribute slots share no attribute. -/
+    catch-all rows of the families read the disjointness of the former classes (`Shapes`). -/
 class FormerAdmA (S : Syn) [Sem S] [PrimAdm S] [PrimAdmA S] : Prop where
   /-- Over held-free terms, the set of an element meet reads what both sets read, as each. -/
   set_meet : ∀ a y z : Term S, HF a → HF y → HF z → (∀ u, AdmA z u = (AdmA a u && AdmA y u)) →
@@ -430,20 +430,6 @@ class FormerAdmA (S : Syn) [Sem S] [PrimAdm S] [PrimAdmA S] : Prop where
   /-- Two sets whose elements share no attribute share no set. -/
   set_never : ∀ a y : Term S, (∀ u, (AdmA a u && AdmA y u) = false) →
     ∀ c, (AdmA (.set a) c && AdmA (.set y) c) = false
-  /-- A primitive and a set share no attribute. -/
-  prim_set : ∀ (g : S.Ground) (t : Term S) c, (AdmA (.prim g) c && AdmA (.set t) c) = false
-  /-- A primitive and a list share no attribute. -/
-  prim_list : ∀ (g : S.Ground) (pre : List (Term S)) sp suf c,
-    (AdmA (.prim g) c && AdmA (.list pre sp suf) c) = false
-  /-- A primitive and an object share no attribute. -/
-  prim_obj : ∀ (g : S.Ground) (b : Body S) c, (AdmA (.prim g) c && AdmA (.object b) c) = false
-  /-- A set and a list share no attribute. -/
-  set_list : ∀ (t : Term S) pre sp suf c, (AdmA (.set t) c && AdmA (.list pre sp suf) c) = false
-  /-- A set and an object share no attribute. -/
-  set_obj : ∀ (t : Term S) b c, (AdmA (.set t) c && AdmA (.object b) c) = false
-  /-- A list and an object share no attribute. -/
-  list_obj : ∀ (pre : List (Term S)) sp suf b c,
-    (AdmA (.list pre sp suf) c && AdmA (.object b) c) = false
 
 /-- **The read-side laws of a leaf meet**: each leaf answer reads what both factors read, and
     reads it as each of them does. -/
@@ -475,18 +461,18 @@ local macro "fam_bottomA" fam:ident : tactic => `(tactic|
   (simp only [$fam:ident, Option.some.injEq] at *
    subst_vars
    first
-     | exact bottom_of_and_falseA (fun c => FormerAdmA.prim_set _ _ c)
-     | exact bottom_of_and_falseA' (fun c => FormerAdmA.prim_set _ _ c)
-     | exact bottom_of_and_falseA (fun c => FormerAdmA.prim_list _ _ _ _ c)
-     | exact bottom_of_and_falseA' (fun c => FormerAdmA.prim_list _ _ _ _ c)
-     | exact bottom_of_and_falseA (fun c => FormerAdmA.prim_obj _ _ c)
-     | exact bottom_of_and_falseA' (fun c => FormerAdmA.prim_obj _ _ c)
-     | exact bottom_of_and_falseA (fun c => FormerAdmA.set_list _ _ _ _ c)
-     | exact bottom_of_and_falseA' (fun c => FormerAdmA.set_list _ _ _ _ c)
-     | exact bottom_of_and_falseA (fun c => FormerAdmA.set_obj _ _ c)
-     | exact bottom_of_and_falseA' (fun c => FormerAdmA.set_obj _ _ c)
-     | exact bottom_of_and_falseA (fun c => FormerAdmA.list_obj _ _ _ _ c)
-     | exact bottom_of_and_falseA' (fun c => FormerAdmA.list_obj _ _ _ _ c)))
+     | exact bottom_of_and_falseA (fun c => Shapes.prim_setA _ _ c)
+     | exact bottom_of_and_falseA' (fun c => Shapes.prim_setA _ _ c)
+     | exact bottom_of_and_falseA (fun c => Shapes.prim_listA _ _ _ _ c)
+     | exact bottom_of_and_falseA' (fun c => Shapes.prim_listA _ _ _ _ c)
+     | exact bottom_of_and_falseA (fun c => Shapes.prim_objA _ _ c)
+     | exact bottom_of_and_falseA' (fun c => Shapes.prim_objA _ _ c)
+     | exact bottom_of_and_falseA (fun c => Shapes.set_listA _ _ _ _ c)
+     | exact bottom_of_and_falseA' (fun c => Shapes.set_listA _ _ _ _ c)
+     | exact bottom_of_and_falseA (fun c => Shapes.set_objA _ _ c)
+     | exact bottom_of_and_falseA' (fun c => Shapes.set_objA _ _ c)
+     | exact bottom_of_and_falseA (fun c => Shapes.list_objA _ _ _ _ c)
+     | exact bottom_of_and_falseA' (fun c => Shapes.list_objA _ _ _ _ c)))
 
 /-- Normalising a refinement keeps what it reads. -/
 theorem AdmA_refineOf [Leaf S] [LeafAdm S] (z : Term S) (p : S.Pred) (a : Sem.A S) :
@@ -926,7 +912,7 @@ end
 /-! ### The leaf families -/
 
 /-- **The one leaf family reads exactly wherever the leaf laws hold.** -/
-theorem admA_famPrim [Leaf S] [LeafAdmA S] [FormerAdmA S] (g : S.Ground) :
+theorem admA_famPrim [Leaf S] [LeafAdmA S] [Shapes S] (g : S.Ground) :
     AdmAFam (.prim g) (famPrim g) := by
   intro y z hd h
   cases y <;> first | exact hd.elim | skip
@@ -965,7 +951,7 @@ theorem admA_famOpaq [Leaf S] [LeafAdmA S] : AdmAFam (.opaq : Term S) famOpaq :=
 
 /-- **Two sets read together at their elements**, and a set reads nothing that another former
     reads. -/
-theorem admA_famSet [FormerAdmA S] (a : Term S) {mt : Term S → Option (Term S)}
+theorem admA_famSet [FormerAdmA S] [Shapes S] (a : Term S) {mt : Term S → Option (Term S)}
     (ih : AdmASound a mt) : AdmAFam (.set a) (famSet a mt) := by
   intro y z hd h
   cases y <;> first | exact hd.elim | skip
@@ -1047,7 +1033,7 @@ theorem zipF_lift_termsA :
 
 /-- **The one positional container's family, on the read side.** The same three branches the
     value side takes, with `AdmA_list_at` in place of `Adm_list_rows`. -/
-theorem admA_famList [FormerAdmA S] {pre suf : List (Term S)} {sp : Option (Term S)}
+theorem admA_famList [Shapes S] {pre suf : List (Term S)} {sp : Option (Term S)}
     {fpre fsuf : List (Term S → Option (Term S))} {fsp : Option (Term S → Option (Term S))}
     (hp : List.Forall₂ AdmASound pre fpre)
     (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ AdmASound t f)
@@ -1492,7 +1478,7 @@ theorem objSlot_soundA {a b : Body S} {g : {k // k ∈ a.fields} → ObjectSlot 
       exact ⟨fun c => (hw _ _ hz).1 c, rfl, fun c h1 h2 => (hw _ _ hz).2 c h1 h2⟩
 
 /-- **Two objects meet pointwise, and the meet is exact on the read side.** -/
-theorem admA_famObj [FormerAdmA S] {a : Body S} {g : {k // k ∈ a.fields} → ObjectSlot S → Option (ObjectSlot S)}
+theorem admA_famObj [Shapes S] {a : Body S} {g : {k // k ∈ a.fields} → ObjectSlot S → Option (ObjectSlot S)}
     {mw : Term S → Option (Term S)}
     (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot S), g k fl = some fm →
       (∀ c, AdmAField fm c = (AdmAField (a.at k) c && AdmAField fl c))
@@ -1572,7 +1558,7 @@ mutual
 /-- **The read side's homomorphism and its reading agreement, together.** Both halves are
     proved at once because a refinement row needs the agreement against whichever factor the
     wrapper sits on. -/
-theorem AdmA_meet_both [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] : ∀ (x y : Term S) z, Term.meet x y = some z → AdmAAt x y z
+theorem AdmA_meet_both [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S] : ∀ (x y : Term S) z, Term.meet x y = some z → AdmAAt x y z
   | .never, _, _, h => by
       simp only [Term.meet, Option.some.injEq] at h; subst h
       exact ⟨fun a => rfl, fun a ha _ => absurd ha (by simp [AdmA])⟩
@@ -1649,7 +1635,7 @@ theorem AdmA_meet_both [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] : ∀ (x
 termination_by structural x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
-theorem admA_meetL [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] : ∀ (os : List (Term S)) (y : Term S) (zs : List (Term S)),
+theorem admA_meetL [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S] : ∀ (os : List (Term S)) (y : Term S) (zs : List (Term S)),
     List.Forall₂ (fun t w => Term.meet t y = some w) os zs →
     List.Forall₂ (fun t w =>
       (∀ b, AdmA w b = (AdmA t b && AdmA y b)) ∧
@@ -1662,13 +1648,13 @@ theorem admA_meetL [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] : ∀ (os : 
 termination_by structural os => os
 
 /-- Every position of a tuple carries the meet at that position. -/
-theorem admA_meetSTs [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] : ∀ ts : List (Term S), List.Forall₂ AdmASound ts (Term.meetSTs ts)
+theorem admA_meetSTs [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S] : ∀ ts : List (Term S), List.Forall₂ AdmASound ts (Term.meetSTs ts)
   | [] => .nil
   | t :: ts => .cons (fun u w hw => AdmA_meet_both t u w hw) (admA_meetSTs ts)
 termination_by structural ts => ts
 
 /-- Two fields at one name read what both read, and read it to the same value. -/
-theorem admA_Field_meet [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] : ∀ (f fl : ObjectSlot S) (fm : ObjectSlot S), ObjectSlot.meet f fl = some fm →
+theorem admA_Field_meet [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S] : ∀ (f fl : ObjectSlot S) (fm : ObjectSlot S), ObjectSlot.meet f fl = some fm →
     (∀ c, AdmAField fm c = (AdmAField f c && AdmAField fl c))
     ∧ (∀ c, AdmAField f c = true → AdmAField fl c = true →
         (fieldSem fm).codec.p c = (fieldSem f).codec.p c
@@ -1686,13 +1672,13 @@ end
 
 /-- **`AdmA` is a homomorphism from the meet to conjunction.** Where two terms have a meet, the
     attributes it reads are exactly the attributes both read. -/
-theorem AdmA_meet [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] {x y z : Term S} (h : Term.meet x y = some z) (a : Sem.A S) :
+theorem AdmA_meet [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S] {x y z : Term S} (h : Term.meet x y = some z) (a : Sem.A S) :
     AdmA z a = (AdmA x a && AdmA y a) :=
   (AdmA_meet_both x y z h).1 a
 
 /-- **…and it reads them to the same value.** The read agreement is proved with the homomorphism
     and not after it: `AdmA (.refine t p) a` asks the predicate of what `t` decodes `a` to. -/
-theorem denote_meet_p [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] {x y z : Term S} (h : Term.meet x y = some z) {a : Sem.A S}
+theorem denote_meet_p [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S] {x y z : Term S} (h : Term.meet x y = some z) {a : Sem.A S}
     (hx : AdmA x a = true) (hy : AdmA y a = true) :
     (denote z).p a = (denote x).p a ∧ (denote z).p a = (denote y).p a :=
   (AdmA_meet_both x y z h).2 a hx hy

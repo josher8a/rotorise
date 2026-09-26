@@ -20,6 +20,7 @@ not a restriction of `opaque`. `held_violates_W` and `held_violates_R` are the c
 
 namespace Calculus
 
+open Alg (occV occA occVL occAL)
 
 mutual
 /-- **Below `opaque`, the read occupancy lies inside the write occupancy.** The rows agree
@@ -29,14 +30,15 @@ mutual
 theorem occA_le_occV : ∀ (t : Term), HF t → ∀ (m : Member), occA t m = true → occV t m.slot = true
   | .base k, _, m, h | .literal k _, _, m, h => by
       cases k <;> cases m <;>
-        simp_all [occA, occV, occOnly, Member.slot, GroundKind.slot, GroundKind.member]
+        simp_all [occA_base, occA_literal, occV_base, occV_literal, occOnly, Member.slot,
+          GroundKind.slot, GroundKind.member]
   -- a set's member names its element's member, and the element carries the inclusion
   | .set t, hf, m, h => by
-      cases m <;> simp only [occA, occV, Member.slot, Member.setElem, Slot.setElem,
+      cases m <;> simp only [occA_set, occV_set, Member.slot, Member.setElem, Slot.setElem, Option.elim,
         Bool.or_eq_true, reduceCtorEq] at h ⊢ <;>
         exact h.imp_left (occA_le_occV t hf _)
   | .list _ _ _, _, m, h | .object _, _, m, h => by
-      cases m <;> simp_all [occA, occV, occOnly, Member.slot]
+      cases m <;> simp_all [occA_list, occV_list, occA_object, occV_object, occOnly, Member.slot]
   | .never, _, _, h => by simp [occA, occNone] at h
   | .held _ _ _ _, hf, _, _ => nomatch hf
   | .refine t _, hf, m, h => occA_le_occV t hf m (by simpa [occA] using h)

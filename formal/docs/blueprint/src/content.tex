@@ -990,7 +990,7 @@ shown compatible.
 \begin{definition}[the certificate]
 \label{def:certificate}
 \uses{cond:compat,def:occupancy}
-\lean{Calculus.certPair, Calculus.meetNever, Calculus.certViews, Calculus.Orth1}
+\lean{Calculus.certPair, Calculus.meetNever, Calculus.certViews, Calculus.Alg.Orth1}
 \leanok
 Two options are certified on one of three tests. Their meet is the bottom. Where a \texttt{held}
 occurs, their caller views meet at the bottom and their stored views meet at the bottom. Their
@@ -1073,8 +1073,9 @@ terms force the point:
 What exactness costs is decidability. \texttt{held} carries an
 arbitrary \texttt{f}, \texttt{refine} an arbitrary \texttt{q}, so membership of an admissible set is not a question the
 declaration can answer. Admission \textbf{specifies} the two families. It does not decide them. What the
-certificate runs is the meet and the occupancy test, and both are decided. The proofs of the meet's
-bottom rows use occupancy to justify them.
+certificate runs is the meet and the occupancy test, and both are decided. The bottom rows of the
+meet at two formers read the shape classes of the universe, and the read-side proof of the DynamoDB
+leaf meet uses occupancy.
 
 \textbf{Admission is what a union consults, at every option.} A union attempts each option's codec, an
 object option included, so \texttt{V(c)} and \texttt{A(c)} are \emph{option} admission as well: \texttt{dom(e)} and
@@ -1097,11 +1098,12 @@ special case where the discriminator's names decide alone.
 \begin{definition}[occupancy]
 \label{def:occupancy}
 \uses{cond:compat}
-\lean{Calculus.occV, Calculus.occA}
+\lean{Calculus.Alg.occV, Calculus.Alg.occA}
 \leanok
-One coarse label per term per side: which constructor of \texttt{Value} the term may write, and
-which member of §1 it may store. The proofs of the meet's bottom rows use occupancy
-(\texttt{Adm\_and\_false}, \texttt{AdmA\_and\_false}), and the certificate asks it directly
+One coarse label per term per side: which root shape of a value the term may write, and which root
+shape of an attribute it may store. A universe supplies the shapes. At DynamoDB they are the
+constructor of \texttt{Value} and the member of §1. The read-side proof of the DynamoDB leaf meet uses occupancy
+(\texttt{AdmA\_and\_false}), and the certificate asks it directly
 (\texttt{separates\_of\_Orth1}).
 \end{definition}
 

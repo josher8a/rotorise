@@ -3,6 +3,7 @@ import Calculus.Lang.MeetV
 import Calculus.Lang.MeetA
 import Calculus.Lang.MeetWrites
 import Calculus.Lang.MeetTyped
+import Calculus.Lang.Occupancy
 
 /-!
 # The meet at JSON
@@ -48,16 +49,64 @@ theorem admA_former_empty (a : Json) :
     (∀ b : Alg.Body jsonSyn, Alg.AdmA (.object b) a = false) :=
   ⟨fun _ => rfl, fun _ _ _ => rfl, fun b => by cases b; rfl⟩
 
+/-- **The shape classes of JSON.** Every value and every attribute is a primitive, and JSON has
+    no set, list or map former to land elsewhere. -/
+instance jsonShapes : Alg.Shapes jsonSyn where
+  former _ := .prim
+  formerA _ := .prim
+  prim _ _ _ := rfl
+  primA _ _ _ := rfl
+  set _ h := nomatch h
+  setA _ h := nomatch h
+  list _ h := nomatch h
+  listA _ h := nomatch h
+  map _ h := nomatch h
+  mapA _ h := nomatch h
+
+/-- **The shapes of JSON**: the kind, on both sides. JSON has no set, list or map former, so their
+    shapes are never occupied by a written value, and any kind serves. -/
+instance jsonOcc : Alg.Occ jsonSyn where
+  ShV := JMember
+  ShA := JMember
+  decV := inferInstance
+  decA := inferInstance
+  allV := [.null, .bool, .num, .str, .arr, .obj]
+  mem_allV m := by cases m <;> decide
+  allA := [.null, .bool, .num, .str, .arr, .obj]
+  mem_allA m := by cases m <;> decide
+  primV m := occOnly m
+  primA m := occOnly m
+  setV _ := none
+  setA _ := none
+  listV := .arr
+  listA := .arr
+  mapV := .obj
+  mapA := .obj
+
+/-- The shape maps of JSON are the kind, and a kind writes and reads only values of that kind. -/
+instance jsonOccSound : Alg.OccSound jsonSyn where
+  shapeV := Json.member
+  shapeA := Json.member
+  prim_e m v h := by
+    have h' := (Alg.PrimAdm.admV_exact (S := jsonSyn) m v).mpr h
+    exact show occOnly m v.member = true by simpa [Alg.PrimAdm.admV, occOnly] using h'
+  prim_p m a h := by
+    have h' := (Alg.PrimAdmA.admA_exact (S := jsonSyn) m a).mpr h
+    exact show occOnly m a.member = true by simpa [Alg.PrimAdmA.admA, occOnly] using h'
+  set_e _ h := nomatch h
+  set_p _ h := nomatch h
+  list_e _ h := nomatch h
+  list_p _ h := nomatch h
+  map_e _ h := nomatch h
+  map_p _ h := nomatch h
+
+/-- The shape test is computable at JSON: a string and a number occupy different kinds. -/
+theorem orth1_str_num : Alg.Orth1 (.prim .str : Alg.Term jsonSyn) (.prim .num) = true := by decide
+
 /-- The formers of JSON, on the write side: every former term admits nothing. -/
 instance jsonFormerAdm : Alg.FormerAdm jsonSyn where
   set_meet _ _ _ _ _ _ _ v := by simp [(adm_former_empty v).1]
   set_never _ _ _ v := by simp [(adm_former_empty v).1]
-  prim_set _ _ v := by simp [(adm_former_empty v).1]
-  prim_list _ _ _ _ v := by simp [(adm_former_empty v).2.1]
-  prim_obj _ _ v := by simp [(adm_former_empty v).2.2]
-  set_list _ _ _ _ v := by simp [(adm_former_empty v).1]
-  set_obj _ _ v := by simp [(adm_former_empty v).1]
-  list_obj _ _ _ _ v := by simp [(adm_former_empty v).2.1]
 
 /-- The leaf meet of JSON is exact on the write side. -/
 instance jsonLeafAdm : Alg.LeafAdm jsonSyn where
@@ -86,12 +135,6 @@ instance jsonFormerAdmA : Alg.FormerAdmA jsonSyn where
   set_meet _ _ _ _ _ _ _ := ⟨fun a => by simp [(admA_former_empty a).1],
     fun a ha _ => by simp [(admA_former_empty a).1] at ha⟩
   set_never _ _ _ a := by simp [(admA_former_empty a).1]
-  prim_set _ _ a := by simp [(admA_former_empty a).1]
-  prim_list _ _ _ _ a := by simp [(admA_former_empty a).2.1]
-  prim_obj _ _ a := by simp [(admA_former_empty a).2.2]
-  set_list _ _ _ _ a := by simp [(admA_former_empty a).1]
-  set_obj _ _ a := by simp [(admA_former_empty a).1]
-  list_obj _ _ _ _ a := by simp [(admA_former_empty a).2.1]
 
 /-- The leaf meet of JSON is exact on the read side, and reads as each factor reads: a kind reads
     an attribute of that kind as itself, and so does the top. -/
