@@ -64,6 +64,8 @@ instance, and JSON is a second instance.
 | `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
 | `Lang/Term.lean`, `Lang/Typing.lean` | the term family over a signature, `denote`, the guard, `Typed` and `Obligations` |
 | `Lang/Guarded.lean`, `Lang/Sound.lean`, `Lang/HeldFree.lean` | `contractive_body`, `soundness`, and `compat_of_HF` |
+| `Lang/Meet.lean`, `Lang/MeetRows.lean` | the class `Leaf`, the structural meet `Term.meet` over a signature, and the rows of the meet that read no admission |
+| `Lang/MeetV.lean`, `Lang/MeetA.lean`, `Lang/MeetWrites.lean`, `Lang/MeetTyped.lean` | the theorems of the meet: `Adm_meet`, `AdmA_meet_both`, `meet_writes`, and `typed_meet` |
 
 `Rows.lean` is generic too, in the namespace `Calculus`. It states the row combinators of the
 analyses over one carrier type, and each side of the pair instantiates it.
@@ -96,11 +98,36 @@ compute with.
 | the top | `Sem.top`, `Sem.lawful_top`, `Sem.topHeld` | `Ω`, `HOpaque` | `idCodec` |
 | the top laws | `TopLaws`, proved once for each universe | `Ω_topLaws` | `id_topLaws` |
 | the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `AdmLit`, `inBaseA` and `AdmALit` | the kind test |
+| the leaf meet: two primitives, a primitive and the top, two predicates | `Leaf` | `dynLeaf`: `Ground.meet`, `Ground.meetTop`, `Pred.isData`, `Pred.meetM` | `jsonLeaf`: one kind |
+| the laws of the leaf meet | `LeafAdm`, `LeafAdmA`, `LeafWrites` | `dynLeafAdm`, `dynLeafAdmA`, `dynLeafWrites` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafWrites` |
+| the laws of the formers that the meet reads | `FormerAdm`, `FormerAdmA` | `dynFormerAdm`, `dynFormerAdmA` | `jsonFormerAdm`, `jsonFormerAdmA` |
 
 A former is an `Option`. A universe without a former denotes the term of that former as the
 bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only
 the held-free theory reads them. `PrimAdm` and `PrimAdmA` are outside `Sem` for the same reason:
 only exactness reads them.
+
+**The meet is structural, and a universe supplies its leaves.** `Alg.Term.meet` has one row per
+constructor of the left operand. Only two rows read a fact of a universe: a primitive met with a
+primitive or with the top, and a predicate met with a predicate. `Leaf` holds those two meets and
+the test for a predicate that the meet can carry. `Leaf` is outside `Sem` and holds computable
+fields only, so the meet stays computable, and the kernel evaluates a closed pair. At DynamoDB,
+`Term.meet` is the generic meet at `dynLeaf`.
+
+**The theorems of the meet hold at every signature, from the laws of the leaves and the formers.**
+`Alg.Adm_meet` says that the meet admits exactly the values that both factors admit.
+`Alg.AdmA_meet_both` says the same of attributes, and that the meet reads an attribute as each
+factor reads it. `Alg.meet_writes` says that a member the meet names is each factor's member.
+`Alg.typed_meet` says that the meet of two derivable terms is derivable, and reads no law. Each
+proof recurses on the left operand, as the meet does. The laws are classes outside `Sem`, because
+only the theorems of the meet read them. `LeafAdm`, `LeafAdmA` and `LeafWrites` say that each
+leaf answer is exact. `FormerAdm` and `FormerAdmA` say that the set former carries an element meet
+to a set meet, and that two formers in different slots share no value and no attribute. At
+DynamoDB, a leaf law is a fact about `inBase` and `inL`, a set law is a fact about `setCodec`, and a
+disjointness law is an occupancy fact through `Orth1`. The DynamoDB theorems, such as `Adm_meet`
+and `AdmA_meet_both`, are one-line wrappers of the generic theorems. At JSON, two kinds meet where
+they are one kind, and each former law holds because the signature has no former and both sides
+admit nothing.
 
 **The set former is a lift, and not a prism.** The list and map formers are prisms from `List`
 and `MapOf` of the carrier onto the carrier. A set former cannot be such a prism: the kernel
@@ -844,7 +871,8 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New law of the algebra → state it in an `Alg` module, which imports no instance module. A
   statement that needs a fact of a carrier belongs to that universe.
 - New universe → a `Syn`, a `Sem` instance, its `TopLaws` where the held-free theory must
-  hold, and its `PrimAdm` and `PrimAdmA` where exactness must hold. Make the module reachable from `Axioms.lean`.
+  hold, its `PrimAdm` and `PrimAdmA` where exactness must hold, its `Leaf` where the meet must
+  compute, and the laws of the meet where the theorems of the meet must hold. Make the module reachable from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.
 - New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness

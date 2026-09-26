@@ -15,7 +15,14 @@ import Calculus.Lang.Sound
 import Calculus.Lang.HeldFree
 import Calculus.Lang.ExactV
 import Calculus.Lang.ExactA
+import Calculus.Lang.Meet
+import Calculus.Lang.MeetRows
+import Calculus.Lang.MeetV
+import Calculus.Lang.MeetWrites
+import Calculus.Lang.MeetA
+import Calculus.Lang.MeetTyped
 import Calculus.JSON.Basic
+import Calculus.JSON.Meet
 import Calculus.Dynamo.Alg.Codec
 import Calculus.Dynamo.Alg.Prisms
 import Calculus.Dynamo.Alg.Products

@@ -23,6 +23,12 @@ definition it touches.
 | `Calculus/Lang/HeldFree.lean` | §5          | The held-free terms `HF`, the laws of the top that they read (`TopLaws`), `sub_denote`, and `compat_of_HF`, at every signature |
 | `Calculus/Lang/ExactV.lean`   | §5          | The admission row `Adm` over a signature, with the primitive rows `PrimAdm` that a universe supplies, and `Adm_exact`: each row is `dom(e)` of `denote`, from the exactness of the primitive rows alone |
 | `Calculus/Lang/ExactA.lean`   | §5          | The attribute side: `AdmA`, the primitive rows `PrimAdmA`, and `AdmA_exact`: each row is `dom(p)` |
+| `Calculus/Lang/Meet.lean`     | §5          | The leaf meet `Leaf` that a universe supplies, and the structural meet `Term.meet` over a signature, with its families and the readers `Term.slotAt`, `Term.optionAt` and `Term.blockOf` |
+| `Calculus/Lang/MeetRows.lean` | §5          | The rows of the meet that read no admission: `rowOfG` and its laws, dominance, the answers of the list and object families, and the held-free test `HF_of_hasHeld` |
+| `Calculus/Lang/MeetV.lean`    | §5          | `Adm_meet` at every signature, from the write-side laws `FormerAdm` and `LeafAdm` |
+| `Calculus/Lang/MeetA.lean`    | §5          | `AdmA_meet_both` at every signature: the read-side homomorphism and its reading agreement, from `FormerAdmA` and `LeafAdmA` |
+| `Calculus/Lang/MeetWrites.lean` | §5        | `meet_writes` at every signature, from the member law `LeafWrites` |
+| `Calculus/Lang/MeetTyped.lean` | §5         | `typed_meet` at every signature: the typed fragment is closed under the meet, with no law |
 | `Calculus/Dynamo/Alg/Lists.lean`       | —           | The list plumbing at the DynamoDB carriers: the aliases of the generic traversal and `filter` facts, and the keyed clause `traverse_fst`, which reads `Name` |
 | `Calculus/Dynamo/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Value.kind`/`Attr.kind` (the ten members collapsing onto eight), and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
 | `Calculus/Dynamo/Alg/Codec.lean`       | §2, §5      | `Codec`, `Lawful` (a canonical partial bijection) and `LawfulCore` as abbreviations of the generic record and laws at `Value`, `Attr` and `Member`, and the aliases of the generic combinators |
@@ -49,8 +55,9 @@ definition it touches.
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
 | `Calculus/Dynamo/Witness/Discharge.lean`   | §5          | The host's recursive schema for JSON (`jsonTerm`) carried through `soundness`, with the refusals of the guard pinned |
 | `Calculus/JSON/Basic.lean`        | —           | A second universe on the generic layer, with no DynamoDB import: the carrier `Json`, the ground codecs, the array prism, the signature `jsonSyn`/`jsonSem` with `id_topLaws`, a union lawful by `Alg.soundness` and `Alg.compat_of_HF` (`lawful_strOrNum`), and the kind test as the primitive admission rows, exact by `Alg.Adm_exact` and `Alg.AdmA_exact` (`exact_strOrNum`) |
+| `Calculus/JSON/Meet.lean`         | —           | The meet at JSON: the leaf meet `jsonLeaf` (two kinds meet where they are one kind), the laws of the leaf and of the formers as instances, and `Alg.Adm_meet` and `Alg.AdmA_meet_both` at `jsonSyn` |
 
-This table has a row of its own for forty-one of the fifty-eight modules under `Calculus/`.
+This table has a row of its own for forty-eight of the sixty-five modules under `Calculus/`.
 `Compat.lean`, `Confluence.lean`, `ExactA.lean`, `ExactV.lean`, `HeldFree.lean`, `Kernel.lean`,
 `Laminar.lean`, `LiteralArity1.lean`, `Malleability.lean`, `Meet.lean`, `Merge.lean`,
 `Orthogonality.lean`, `Rows.lean`, `Separation.lean`, `Slice.lean`, `Universal.lean` and

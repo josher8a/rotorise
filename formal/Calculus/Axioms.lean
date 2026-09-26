@@ -19,6 +19,7 @@ import Calculus.Dynamo.Analysis.Confluence
 import Calculus.Dynamo.Analysis.Kernel
 import Calculus.Dynamo.Analysis.Compat
 import Calculus.JSON.Basic
+import Calculus.JSON.Meet
 import Calculus.Alg.Lists
 import Calculus.Alg.Positions
 import Calculus.Alg.Containers
@@ -30,6 +31,12 @@ import Calculus.Lang.Sound
 import Calculus.Lang.HeldFree
 import Calculus.Lang.ExactV
 import Calculus.Lang.ExactA
+import Calculus.Lang.Meet
+import Calculus.Lang.MeetRows
+import Calculus.Lang.MeetV
+import Calculus.Lang.MeetWrites
+import Calculus.Lang.MeetA
+import Calculus.Lang.MeetTyped
 import Lean
 
 /-!
