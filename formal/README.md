@@ -20,11 +20,11 @@ definition it touches.
 | `Calculus/Lang/Typing.lean`   | §3–§5       | The held sets, the judgement `Typed` over a signature, `μSyn` with `typed_μSyn`, and `Obligations` with `PairwiseCompat` and the set obligation `SetObl` |
 | `Calculus/Lang/Guarded.lean`  | §3          | `denote_agree` and `contractive_body`: the guard of a binder makes its body contractive, at every signature |
 | `Calculus/Lang/Sound.lean`    | §5          | `soundnessIn`, `soundness`, `typed_TSub` and `carrier_denote`, at every signature |
-| `Calculus/Lang/HeldFree.lean` | §5          | The held-free terms `HF`, the laws of the top that they read (`TopLaws`), `sub_denote`, and `compat_of_HF`, at every signature |
+| `Calculus/Lang/HeldFree.lean` | §5          | The held-free terms `HF`, the Bool test `hasHeldUnder` in both directions (`hasHeldUnder_of_HF`, `HF_of_hasHeldUnder`), the laws of the top that they read (`TopLaws`), `sub_denote`, and `compat_of_HF`, at every signature |
 | `Calculus/Lang/ExactV.lean`   | §5          | The admission row `Adm` over a signature, with the primitive rows `PrimAdm` that a universe supplies, and `Adm_exact`: each row is `dom(e)` of `denote`, from the exactness of the primitive rows alone |
 | `Calculus/Lang/ExactA.lean`   | §5          | The attribute side: `AdmA`, the primitive rows `PrimAdmA`, and `AdmA_exact`: each row is `dom(p)` |
 | `Calculus/Lang/Meet.lean`     | §5          | The leaf meet `Leaf` that a universe supplies, and the structural meet `Term.meet` over a signature, with its families and the readers `Term.slotAt`, `Term.optionAt` and `Term.blockOf` |
-| `Calculus/Lang/MeetRows.lean` | §5          | The rows of the meet that read no admission: `rowOfG` and its laws, dominance, the answers of the list and object families, and the held-free test `HF_of_hasHeld` |
+| `Calculus/Lang/MeetRows.lean` | §5          | The rows of the meet that read no admission: `rowOfG` and its laws, dominance, and the answers of the list and object families |
 | `Calculus/Lang/Shapes.lean`   | §5          | The shape classes `Shapes` that a universe supplies: the former class of each value and attribute, and where each former lands. The six disjointness laws per side are theorems of them, at every signature |
 | `Calculus/Lang/MeetV.lean`    | §5          | `Adm_meet` at every signature, from the write-side laws `FormerAdm` and `LeafAdm` and the shape classes |
 | `Calculus/Lang/MeetA.lean`    | §5          | `AdmA_meet_both` at every signature: the read-side homomorphism and its reading agreement, from `FormerAdmA` and `LeafAdmA` |

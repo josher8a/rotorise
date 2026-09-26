@@ -85,7 +85,7 @@ turned away go with the policy.
 namespace Calculus
 
 open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Body.block
-  Body.slotAt Body.slotAt_pos Body.slotAt_neg listOf_cases HF_of_hasHeld alignPL_eq_rowOfG
+  Body.slotAt Body.slotAt_pos Body.slotAt_neg listOf_cases alignPL_eq_rowOfG
   rowOfG_length rowOfG_none_eq rowOfG_some_eq rowOfG_mem forall₂_replicate forall₂_append
   forall₂_zip_append forall₂_zip_replicate forall₂_zip_take forall₂_zip_drop rowOfG_map
   rowOfG_forall₂ rowOfG_forall₂_left rowOfG_some_isSome rowOfG_total rowOfG_respread dominates_max
@@ -94,7 +94,7 @@ open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk B
   meet_union_of)
 
 export Alg (ObjectSlot.isBottom Term.ofOptions allSome Term.refineOf Term.listOf Term.tupleOf zipF
-  meetSRight meetSRightL famPrim hasHeld famSet famOpaq rowOfG dominates listMeetRow famList
+  meetSRight meetSRightL famPrim famSet famOpaq rowOfG dominates listMeetRow famList
   ObjectSlot.through objSlot ObjectSlot.isAbsentOpt objObj famObj Term.meetSL Term.meetSTs
   ObjectSlot.meet Term.slotAt Term.optionAt Term.blockOf Pairing pair0)
 

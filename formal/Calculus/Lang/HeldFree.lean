@@ -174,44 +174,6 @@ def HFO : Option (Term S) → Prop
 end
 
 
-/-- **The flags under one more binder**: `b` for the new variable, and `env` for the rest. -/
-def flagsCons (b : Bool) (env : Nat → Bool) : Nat → Bool
-  | 0 => b
-  | i + 1 => env i
-
-mutual
-/-- **Whether a `held` can occur in the term, under one flag per variable.** The flag `env i`
-    says whether the binder of `var i` holds a `held`. The flag of `mu b` is the test of `b` with
-    its own variable at `false`: the variable adds no `held` of its own, so the flag is the least
-    fixed point. Under the flags `fun _ => false` this is `HF` (`hasHeldUnder_of_HF`). -/
-def hasHeldUnder (env : Nat → Bool) : Term S → Bool
-  | .held _ _ _ _ => true
-  | .var i => env i
-  | .refine t _ => hasHeldUnder env t
-  | .mu b => hasHeldUnder (flagsCons false env) b
-  | .list pre sp suf => hasHeldUnderL env pre || hasHeldUnderO env sp || hasHeldUnderL env suf
-  | .object b => hasHeldUnderB env b
-  | .union os => hasHeldUnderL env os
-  | .set t => hasHeldUnder env t
-  | .prim _ | .opaq | .never => false
-/-- …in a list. -/
-def hasHeldUnderL (env : Nat → Bool) : List (Term S) → Bool
-  | [] => false
-  | t :: ts => hasHeldUnder env t || hasHeldUnderL env ts
-/-- …in an optional term. -/
-def hasHeldUnderO (env : Nat → Bool) : Option (Term S) → Bool
-  | none => false
-  | some t => hasHeldUnder env t
-/-- …in a body. -/
-def hasHeldUnderB (env : Nat → Bool) : Body S → Bool
-  | .mk fs f w => decide (∃ k : {k // k ∈ fs}, hasHeldUnderS env (f k) = true) ||
-      hasHeldUnderO env w
-/-- …in a slot. -/
-def hasHeldUnderS (env : Nat → Bool) : ObjectSlot S → Bool
-  | .req t => hasHeldUnder env t
-  | .optional t => hasHeldUnder env t
-end
-
 /-- Flags that are `false` at each variable stay so under a binder with the flag `false`. -/
 theorem flagsCons_false {env : Nat → Bool} (h : ∀ i, env i = false) :
     ∀ i, flagsCons false env i = false
@@ -255,6 +217,43 @@ theorem hasHeldUnderS_of_HFS : ∀ s : ObjectSlot S, HFS s → ∀ env : Nat →
     (∀ i, env i = false) → hasHeldUnderS env s = false
   | .req t, h, env, he => hasHeldUnder_of_HF t h env he
   | .optional t, h, env, he => hasHeldUnder_of_HF t h env he
+end
+
+mutual
+/-- **A term with no `held` under some flags is held-free.** The flags only add a `held` at a
+    variable, so a test that answers `false` under any flags answers `false` at each `held`. -/
+theorem HF_of_hasHeldUnder : ∀ (t : Term S) (env : Nat → Bool), hasHeldUnder env t = false → HF t
+  | .held _ _ _ _, _, h => nomatch h
+  | .refine t _, env, h => HF_of_hasHeldUnder t env h
+  | .mu b, _, h => HF_of_hasHeldUnder b _ h
+  | .set t, env, h => HF_of_hasHeldUnder t env h
+  | .list pre sp suf, env, h => by
+      simp only [hasHeldUnder, Bool.or_eq_false_iff] at h
+      exact ⟨HFL_of_hasHeldUnderL pre env h.1.1, HFO_of_hasHeldUnderO sp env h.1.2,
+        HFL_of_hasHeldUnderL suf env h.2⟩
+  | .object (.mk fs f w), env, h => by
+      simp only [hasHeldUnder, hasHeldUnderB, Bool.or_eq_false_iff, decide_eq_false_iff_not,
+        not_exists] at h
+      exact ⟨fun k => HFS_of_hasHeldUnderS (f k) env (by simpa using h.1 k),
+        HFO_of_hasHeldUnderO w env h.2⟩
+  | .union os, env, h => HFL_of_hasHeldUnderL os env h
+  | .prim _, _, _ | .opaq, _, _ | .never, _, _ | .var _, _, _ => trivial
+/-- …in a list. -/
+theorem HFL_of_hasHeldUnderL : ∀ (ts : List (Term S)) (env : Nat → Bool),
+    hasHeldUnderL env ts = false → HFL ts
+  | [], _, _ => trivial
+  | t :: ts, env, h => by
+      simp only [hasHeldUnderL, Bool.or_eq_false_iff] at h
+      exact ⟨HF_of_hasHeldUnder t env h.1, HFL_of_hasHeldUnderL ts env h.2⟩
+/-- …in an optional term. -/
+theorem HFO_of_hasHeldUnderO : ∀ (o : Option (Term S)) (env : Nat → Bool),
+    hasHeldUnderO env o = false → HFO o
+  | none, _, _ => trivial
+  | some t, env, h => HF_of_hasHeldUnder t env h
+/-- …in a slot. -/
+theorem HFS_of_hasHeldUnderS : ∀ (s : ObjectSlot S) (env : Nat → Bool),
+    hasHeldUnderS env s = false → HFS s
+  | .req t, env, h | .optional t, env, h => HF_of_hasHeldUnder t env h
 end
 
 variable [Sem S]

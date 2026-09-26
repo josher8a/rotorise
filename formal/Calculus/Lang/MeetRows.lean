@@ -6,8 +6,8 @@ import Calculus.Alg.Rows
 # The rows of the meet
 
 The facts about the meet that read no admission: the rows that `rowOfG` assigns to a `list`
-shape, the zip and replicate laws of `Forall₂`, dominance, the answers of the list family, and
-the held-free test. Every statement holds at every signature, and most hold at any element type.
+shape, the zip and replicate laws of `Forall₂`, dominance, and the answers of the list family.
+Every statement holds at every signature, and most hold at any element type.
 -/
 
 namespace Calculus.Alg
@@ -23,40 +23,6 @@ theorem listOf_cases (pre : List (Term S)) (sp : Option (Term S)) (suf : List (T
   unfold Term.listOf; split
   · exact Or.inl rfl
   · exact Or.inr rfl
-
-mutual
-/-- A term with no `held` is held-free. `hasHeld` is the test the meet can run, and `HF` is the
-    premise `sub_denote` reads. -/
-theorem HF_of_hasHeld : ∀ t : Term S, hasHeld t = false → HF t
-  | .held _ _ _ _, h => by simp [hasHeld] at h
-  | .refine t _, h => HF_of_hasHeld t h
-  | .mu t, h => HF_of_hasHeld t h
-  | .set t, h => HF_of_hasHeld t h
-  | .list pre sp suf, h => by
-      simp only [hasHeld, Bool.or_eq_false_iff] at h
-      exact ⟨HFL_of_hasHeld pre h.1.1, HFO_of_hasHeld sp h.1.2, HFL_of_hasHeld suf h.2⟩
-  | .object b, h => HFB_of_hasHeld b h
-  | .union os, h => HFL_of_hasHeld os h
-  | .prim _, _ | .opaq, _ | .never, _ | .var _, _ => trivial
-/-- …at a body. -/
-theorem HFB_of_hasHeld : ∀ b : Body S, hasHeldB b = false → HFB b
-  | .mk fs f w, h => by
-      simp only [hasHeldB, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists] at h
-      exact ⟨fun k => HFS_of_hasHeld (f k) (by simpa using h.1 k), HFO_of_hasHeld w h.2⟩
-/-- …at a slot. -/
-theorem HFS_of_hasHeld : ∀ s : ObjectSlot S, hasHeldS s = false → HFS s
-  | .req t, h | .optional t, h => HF_of_hasHeld t h
-/-- …at a list. -/
-theorem HFL_of_hasHeld : ∀ ts : List (Term S), hasHeldL ts = false → HFL ts
-  | [], _ => trivial
-  | t :: ts, h => by
-      simp only [hasHeldL, Bool.or_eq_false_iff] at h
-      exact ⟨HF_of_hasHeld t h.1, HFL_of_hasHeld ts h.2⟩
-/-- …at an optional term. -/
-theorem HFO_of_hasHeld : ∀ o : Option (Term S), hasHeldO o = false → HFO o
-  | none, _ => trivial
-  | some t, h => HF_of_hasHeld t h
-end
 
 /-- **`alignPL` is its row, applied position for position.** This is `align_eq_zip` one level
     down, and it is what lets the meet reason about two shapes by reasoning about their rows
