@@ -120,8 +120,7 @@ attribute side, rather than written twice.
 **The ruling today is no, on measurement.** The twins that are cheap to merge are cheap because
 there is nothing in them: membership lemmas, wrappers, and one-line abbreviations. The twins that
 hold the bulk of the mass are twins in name only, and the largest are the least alike —
-`occV` against `occA`, `occV_sound` against `occA_sound`, `AdmLit` against `AdmALit`, `Adm`
-against `AdmA`. A parametrised development would abstract the boilerplate and leave the content
+`AdmLit` against `AdmALit`, `Adm` against `AdmA`. A parametrised development would abstract the boilerplate and leave the content
 untouched.
 
 **The row combinators are one development already.** `Rows.lean` states `RowLe`, `allP`, `anyP`,

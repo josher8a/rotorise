@@ -1,8 +1,7 @@
 import Calculus.Dynamo.Analysis.ExactA
-import Calculus.Lang.Occupancy
 
 /-!
-# Orthogonality — the DynamoDB shapes and separation
+# Orthogonality: separation
 
 `Obligations (.union opts)` carries pairwise compatibility. Two separated options are compatible
 (`pairwiseCompat_of_separated`). The decidable certificate is `certPair` (`Meet.lean`): two
@@ -10,165 +9,36 @@ options are orthogonal when `meet'` meets them at the bottom. `meet'` answers th
 domains and the ranges of the two terms meet at the bottom. The meet refuses a closure beside a
 partner that its inner term does not meet at the bottom.
 
-The occupancies and their soundness are generic (`Alg.occV`, `Alg.occA`, `Alg.occV_sound`,
-`Alg.occA_sound`). This module holds what DynamoDB supplies to them, the shapes `dynOcc` and their
-laws `dynOccSound`, and `Separates`.
+This module holds `Separates` and the two theorems that the discharger reads from it.
 
 ## Sound, never complete, and why there is no `unknown`
 
 Semantic orthogonality is undecidable in this language — `refine t q` carries an arbitrary
 `Value → Bool` and `held t P f g` an arbitrary pair of maps. So the certificate answers a
 *narrower* question, and the answer `false` means "no certificate", never "not orthogonal".
-An opaque subterm occupies every shape, and a pair involving it fails to be certified.
+An opaque subterm admits every input, so a pair with an opaque option and a nonempty partner is
+not separated.
 
 ## Both halves of the pair
 
 `Separates` takes **two** families, one over `Value` and one over `Attr`, and asks each to be
 pairwise disjoint. A pair can be separated on one side and not on the other, and then it is not
-separated. `held` is the witness: its write occupancy is its caller-side term's, and its read
-occupancy is its stored-side term's. So `union(held(string, number, f, g), string)`, the decimal
-adapter against a string, separates on the write side and meets on the read side.
-
-## The write-side slot is the `Value` constructor, not `Kind`
-
-`Kind` collapses `strSet`, `numSet` and `binSet` to `.set`, so `κ (set string)` and
-`κ (set number)` are equal. The ten `Value` constructors can tell them apart, so the sharper
-partition is *available in the model*: a set writes the wire family of each scalar slot its
-element writes, and `℘⁺fin` has no empty inhabitant, so a written set has an element whose slot
-names the family. `Slot` below is that partition. The read-side slot is
-`Member`, which `Attr.member` already computes.
+separated. `held` is the witness: it writes what its caller-side term admits, and it reads what
+its stored-side term reads. So `union(held(string, number, f, g), string)`, the decimal adapter
+against a string, separates on the write side and meets on the read side.
 -/
 
 namespace Calculus
 
-open Alg (occV occA occV_sound occA_sound)
-
-/-! ## Slots
-
-`Slot` is the `Value` constructor as data. `Member` is reused unchanged for the read side —
-`Attr.member` is already the constructor tag there.
-
-**`Slot` and `Member` are in bijection**: the ten slots match the ten members one for one.
-
-The two types are kept apart anyway, and deliberately, because the bijection is a FACT ABOUT
-THE PRESENT TABLE rather than a property of the design. A slot is what a value is built with
-and a member is what the store files it under; nothing makes them the same kind of thing, and
-an adapter that gives a host carrier its own slot would part them again. Merging them is a
-change to make on purpose, with the reason written down, and not by noticing they line up. -/
-
-inductive Slot where
-  | str | num | bool | bin | null | strSet | numSet | binSet | arr | map
-deriving DecidableEq, Repr
-
-/-- The constructor a value is built with. Ten of them, where `Value.kind` has eight. -/
-def Value.slot : Value → Slot
-  | .str _    => .str
-  | .num _    => .num
-  | .bool _   => .bool
-  | .bin _    => .bin
-  | .null     => .null
-  | .strSet _ => .strSet
-  | .numSet _ => .numSet
-  | .binSet _ => .binSet
-  | .arr _    => .arr
-  | .map _ _  => .map
-
-/-- Every member, so that a disjointness test on the read occupancies is a `List.all` rather than
-    a `Fintype` instance. `AdmA_and_false` reads it, and `decide` evaluates it. -/
-def Member.all : List Member := [.S, .N, .B, .BOOL, .NULL, .SS, .NS, .BS, .L, .M]
-
-theorem Member.mem_all (m : Member) : m ∈ Member.all := by cases m <;> simp [Member.all]
-
-/-- A literal base's *value* slot, as against `GroundKind.member`, its stored member. -/
-def GroundKind.slot : GroundKind → Slot
-  | .string  => .str
-  | .number  => .num
-  | .boolean => .bool
-  | .binary  => .bin
-  | .null    => .null
-
-/-- The element slot of a set slot: the scalar constructor a wire family's payloads are built
-    with. The three set slots have one, and every other slot has none. -/
-def Slot.setElem : Slot → Option Slot
-  | .strSet => some .str
-  | .numSet => some .num
-  | .binSet => some .bin
-  | _ => none
-
-/-- …and the element member of a set member, on the read side. -/
-def Member.setElem : Member → Option Member
-  | .SS => some .S
-  | .NS => some .N
-  | .BS => some .B
-  | _ => none
-
-/-! ## The shapes of DynamoDB -/
-
-/-- **The DynamoDB shapes**: `Slot` on the value side, `Member` on the attribute side. A primitive
-    occupies the slot and the member of its base, and a set slot names its element slot. -/
-instance dynOcc : Alg.Occ dynSyn where
-  ShV := Slot
-  ShA := Member
-  decV := inferInstance
-  decA := inferInstance
-  primV | .base k | .literal k _ => occOnly k.slot
-  primA | .base k | .literal k _ => occOnly k.member
-  setV := Slot.setElem
-  setA := Member.setElem
-  listV := .arr
-  listA := .L
-  mapV := .map
-  mapA := .M
-
-/-- **The DynamoDB shape maps and their landing facts.** A base or a literal writes its slot and
-    reads its member, a written set has an element because `℘⁺fin` has no empty inhabitant, and
-    the prisms build `arr`, `L`, `map` and `M`. -/
-noncomputable instance dynOccSound : Alg.OccSound dynSyn where
-  shapeV := Value.slot
-  shapeA := Attr.member
-  prim_e g v h := by
-    have h' := (Alg.PrimAdm.admV_exact (S := dynSyn) g v).mpr h
-    cases g with
-    | base k => cases k <;> cases v <;> first | rfl | exact nomatch h'
-    | literal k x =>
-        cases k <;> cases v <;> first | rfl | simp [Alg.PrimAdm.admV, AdmLit, inL] at h'
-  prim_p g a h := by
-    have h' := (Alg.PrimAdmA.admA_exact (S := dynSyn) g a).mpr h
-    cases g with
-    | base k => cases k <;> cases a <;> first | rfl | exact nomatch h'
-    | literal k x => cases k <;> cases a <;> first | rfl | exact nomatch h'
-  set_e L hL c v h := by
-    cases hL
-    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
-    rcases setCodec_e_eq.mp ha with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
-      obtain ⟨x, hx⟩ := S.2 <;> exact ⟨_, encSet_elem hS x hx, rfl⟩
-  set_p L hL c a h := by
-    cases hL
-    obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
-    rcases setCodec_p_eq.mp hw with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
-      obtain ⟨x, hx⟩ := S.2 <;> exact ⟨_, decSet_elem hS x hx, rfl⟩
-  list_e L hL _ := by cases hL; rfl
-  list_p L hL _ := by cases hL; rfl
-  map_e F hF _ := by cases hF; rfl
-  map_p F hF _ := by cases hF; rfl
-
 /-! ## Separation
 
-The families each option is confined to are the occupancy **intersected with the option's own
-admission**. Disjointness in either factor makes the intersection disjoint. The meet separates
-through the admission, with no second family. -/
-
-def OrthSV (t : Term) : Value → Prop :=
-  fun v => occV t v.slot = true ∧ Adm t v = true
-
-def OrthSA (t : Term) : Attr → Prop :=
-  fun a => occA t a.member = true ∧ AdmA t a = true
+Two options are separated when no input is admitted by both. -/
 
 /-- **What the discharger consumes.** Both families disjoint, as a `Prop`, of which the
     certificate is the decidable part. A new certificate is a new theorem producing `Separates`,
     not a new case in `pairwiseCompat_of_separated`. -/
 def Separates (x y : Term) : Prop :=
-  (∀ v, OrthSV x v → ¬ OrthSV y v) ∧ (∀ a, OrthSA x a → ¬ OrthSA y a)
+  (∀ v, Adm x v = true → ¬ Adm y v = true) ∧ (∀ a, AdmA x a = true → ¬ AdmA y a = true)
 
 /-- **The whole premise the discharger takes**, as one name: every pair of options separated.
 
@@ -192,8 +62,7 @@ def Separates (x y : Term) : Prop :=
 def Separated (opts : List Term) : Prop := List.Pairwise Separates opts
 
 /-- **Pairwise separation bounds the admitters at one.** Separation says no two options admit
-    one input, and admission implies occupancy through `occV_sound`, so the two conjuncts of
-    `OrthSV` are both in hand. -/
+    one input. -/
 theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated opts) :
     AdmitsAtMostOne (denoteList opts) := by
   constructor
@@ -204,8 +73,7 @@ theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated opts) :
     intro x y hx hy hxy
     have hax : Adm x v = true := (List.mem_filter.mp hx).2
     have hay : Adm y v = true := (List.mem_filter.mp hy).2
-    exact hxy ⟨occV_sound x v hax, hax⟩
-      ⟨occV_sound y v hay, hay⟩
+    exact hxy hax hay
   · intro a
     rw [filter_AdmAList (fun t _ => AdmA_exact t) a, List.length_map]
     refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
@@ -213,8 +81,7 @@ theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated opts) :
     intro x y hx hy hxy
     have hax : AdmA x a = true := (List.mem_filter.mp hx).2
     have hay : AdmA y a = true := (List.mem_filter.mp hy).2
-    exact hxy ⟨occA_sound x a hax, hax⟩
-      ⟨occA_sound y a hay, hay⟩
+    exact hxy hax hay
 
 /-- Two members that both meet `P`, in a list where no related pair both meets `P`, are one. -/
 theorem eq_of_pairwise_excl {α : Type} {P : α → Prop} {R : α → α → Prop}
@@ -239,13 +106,11 @@ theorem pairwiseCompat_of_separated {opts : List Term}
   have hst : t = s := by
     rcases hact with hq | he
     · have htA : AdmA t a = true := (AdmA_exact t a).mpr hq
-      exact eq_of_pairwise_excl (P := fun u => OrthSA u a) (fun x y hxy px py => hxy.2 a px py)
-        h t ht s hs ⟨occA_sound t a htA, htA⟩
-        ⟨occA_sound s a hsA, hsA⟩
+      exact eq_of_pairwise_excl (P := fun u => AdmA u a = true)
+        (fun x y hxy px py => hxy.2 a px py) h t ht s hs htA hsA
     · have htV : Adm t v = true := (Adm_exact t v).mpr he
-      exact eq_of_pairwise_excl (P := fun u => OrthSV u v) (fun x y hxy px py => hxy.1 v px py)
-        h t ht s hs ⟨occV_sound t v htV, htV⟩
-        ⟨occV_sound s v hsV, hsV⟩
+      exact eq_of_pairwise_excl (P := fun u => Adm u v = true)
+        (fun x y hxy px py => hxy.1 v px py) h t ht s hs htV hsV
   subst hst; exact hp
 
 /-- Each codec is compatible with itself. -/

@@ -240,8 +240,7 @@ An occupancy projection over a finite index of value slots and attribute members
 test at a name. A literal test at a name. A row for each written shape. A body specification
 carried beside the term so that a test can read it without consulting a codec.
 
-> ASPIRATION: the read-side proof of the DynamoDB leaf meet still uses the occupancy test, and a
-> slice still reads the body specification.
+> ASPIRATION: a slice still reads the body specification.
 
 Every one of them is the recursion truncated at some depth. Each owes its own soundness proof,
 its own argument that the indices it skips could not have separated, and its own extension on
@@ -632,8 +631,7 @@ be disjoint from another, so it asks nothing of a union that a union does not al
 `opaque` is this construct at one fixed body. Its options are kind-disjoint, which gives each
 layer compatible options and so a lawful layer. The limit is the general theorem.
 
-Its body describes a recursive term. Its admissible set is its own codec's domain. Its
-occupancy is its body's, by an induction over the stages that needs no guard. The meet of two
+Its body describes a recursive term. Its admissible set is its own codec's domain. The meet of two
 recursive terms is the recursive term of their bodies met, stage by stage. A recursive term beside
 another constructor unfolds at the stage below the depth of the input. So the certificate decides
 a pair with a recursive option by the meet.
@@ -674,7 +672,7 @@ are two instances of the signature.
 
 > ASPIRATION: the analyses are not parametric in the universe. The meet and its theorems are
 > parametric: a universe supplies the leaf meet, its shape classes and the laws of its leaves and
-> formers, and JSON has them. The occupancies are parametric, and JSON has them.
+> formers, and JSON has them.
 > The separation rows and the certificate read the constructors of the DynamoDB carriers, so JSON
 > has none of them. The exactness rows are parametric, and JSON has them.
 

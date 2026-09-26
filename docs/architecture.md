@@ -102,7 +102,6 @@ compute with.
 | the laws of the leaf meet | `LeafAdm`, `LeafAdmA`, `LeafWrites` | `dynLeafAdm`, `dynLeafAdmA`, `dynLeafWrites` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafWrites` |
 | the set laws that the meet reads | `FormerAdm`, `FormerAdmA` | `dynFormerAdm`, `dynFormerAdmA` | `jsonFormerAdm`, `jsonFormerAdmA` |
 | the former class of each value and attribute, and where each former lands | `Shapes` | `dynShapes`: the root constructor | `jsonShapes`: every value is a primitive |
-| the shapes that an occupancy reads, and their landing facts | `Occ`, `OccSound` | `dynOcc`, `dynOccSound`: `Slot` and `Member` | `jsonOcc`, `jsonOccSound`: the kind |
 
 A former is an `Option`. A universe without a former denotes the term of that former as the
 bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only
@@ -180,12 +179,6 @@ generic head. `exact` compares up to unfolding, and accepts both.
 exactness of the primitive rows alone. A universe states the primitive rows, so a verdict at a
 primitive reduces without the codec. The DynamoDB `Adm` and `AdmA` are the generic rows, and
 read their DynamoDB rows from a simp set, as `denote` does.
-
-**Occupancy is the shape abstraction, and holds at every signature.** `Alg.occV` and `Alg.occA`
-map a term to the root shapes that it can write and read. `Alg.occV_sound` and `Alg.occA_sound`
-put the row of a term inside its occupancy. A universe supplies its shapes in `Occ`, which holds
-computable data so that the kernel evaluates an occupancy at a closed term, and the shape maps
-with their landing facts in `OccSound`. The rows of `union`, `held`, `refine`, `mu`, `var`, `never` and `opaq` are structure.
 
 **The other analyses are DynamoDB tables.** `Meet`, `Separation`, `Slice` and the certificate read
 the constructors of the DynamoDB carriers. No generic form of them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
@@ -374,9 +367,7 @@ at that body. Kind-disjointness gives the compatibility of its options (`compat_
 
 **The analyses read a recursive term through its body.** `Adm` and `AdmA` take the environment
 that `denote` takes. A variable asks the codec that the environment gives the variable, and a
-`mu` asks its own codec, as the rows of `opaque` do. The occupancy of `mu b` is the occupancy of
-`b`, with a variable at no slot. The proof is an induction over the stages on open terms
-(`occV_open`, `occA_open`), and it needs no guard.
+`mu` asks its own codec, as the rows of `opaque` do.
 
 **The meet reads a recursive term stage by stage.** Two recursive terms meet where their bodies
 meet under every three stages that meet, because each stage is the body over the stage below
@@ -503,9 +494,7 @@ union of lawful options meets its obligation.
 **The direction has a standard name.** It is the abstract interpretation of Cousot and Cousot,
 1977: a coarse test that over-approximates a precise one transfers disjointness downward, and a
 tighter test does not. The principle is why a certificate may be proved over an approximation at
-all. This development spends it twice. `occV` and `occA` over-approximate what a term occupies,
-and the read-side proof of the DynamoDB leaf meet uses disjoint occupancy to close the rows of
-two distinct primitives (`AdmA_and_false`). `writeView`
+all. This development spends it once. `writeView`
 and `readView` admit each value and each attribute that the term admits (`writeLe_of`,
 `readLe_of`), so two views that meet at the bottom separate the terms.
 
@@ -515,7 +504,7 @@ attribute through its alternate reader. The structural classifier has no row for
 carrier.
 
 `Orthogonality.lean` states the discharge on what the resolver consults rather than on what the
-row says. `OrthSV` and `OrthSA` are occupancy conjoined with the option's row, `isSome_e_eq_Adm`
+row says. `Separates` reads the row of each option, `isSome_e_eq_Adm`
 identifies that row with what the option writes, and `pairwiseCompat_of_separated`
 is the discharger stated on what `select` actually decides by.
 
@@ -916,8 +905,8 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
   statement that needs a fact of a carrier belongs to that universe.
 - New universe → a `Syn`, a `Sem` instance, its `TopLaws` where the held-free theory must
   hold, its `PrimAdm` and `PrimAdmA` where exactness must hold, its `Leaf` where the meet must
-  compute, its `Shapes` and the laws of the meet where the theorems of the meet must hold,
-  and its `Occ` and `OccSound` where the occupancies must be sound. Make the module reachable from `Axioms.lean`.
+  compute, and its `Shapes` and the laws of the meet where the theorems of the meet must hold.
+  Make the module reachable from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.
 - New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness

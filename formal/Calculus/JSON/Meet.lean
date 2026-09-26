@@ -3,7 +3,6 @@ import Calculus.Lang.MeetV
 import Calculus.Lang.MeetA
 import Calculus.Lang.MeetWrites
 import Calculus.Lang.MeetTyped
-import Calculus.Lang.Occupancy
 
 /-!
 # The meet at JSON
@@ -62,39 +61,6 @@ instance jsonShapes : Alg.Shapes jsonSyn where
   listA _ h := nomatch h
   map _ h := nomatch h
   mapA _ h := nomatch h
-
-/-- **The shapes of JSON**: the kind, on both sides. JSON has no set, list or map former, so their
-    shapes are never occupied by a written value, and any kind serves. -/
-instance jsonOcc : Alg.Occ jsonSyn where
-  ShV := JMember
-  ShA := JMember
-  decV := inferInstance
-  decA := inferInstance
-  primV m := occOnly m
-  primA m := occOnly m
-  setV _ := none
-  setA _ := none
-  listV := .arr
-  listA := .arr
-  mapV := .obj
-  mapA := .obj
-
-/-- The shape maps of JSON are the kind, and a kind writes and reads only values of that kind. -/
-instance jsonOccSound : Alg.OccSound jsonSyn where
-  shapeV := Json.member
-  shapeA := Json.member
-  prim_e m v h := by
-    have h' := (Alg.PrimAdm.admV_exact (S := jsonSyn) m v).mpr h
-    exact show occOnly m v.member = true by simpa [Alg.PrimAdm.admV, occOnly] using h'
-  prim_p m a h := by
-    have h' := (Alg.PrimAdmA.admA_exact (S := jsonSyn) m a).mpr h
-    exact show occOnly m a.member = true by simpa [Alg.PrimAdmA.admA, occOnly] using h'
-  set_e _ h := nomatch h
-  set_p _ h := nomatch h
-  list_e _ h := nomatch h
-  list_p _ h := nomatch h
-  map_e _ h := nomatch h
-  map_p _ h := nomatch h
 
 /-- The formers of JSON, on the write side: every former term admits nothing. -/
 instance jsonFormerAdm : Alg.FormerAdm jsonSyn where
