@@ -1361,7 +1361,6 @@ describe('the published surface', () => {
         'tagsOf',
         // the declaration guard and what it reads, which `identifying` and `deeper` became
         'separable',
-        'meet',
         // the predicate a refinement carries, run
         'holds',
         // the value kinds a term takes, the two halves of the term cache, and the mark reader

@@ -182,11 +182,10 @@ primitive reduces without the codec. The DynamoDB `Adm` and `AdmA` are the gener
 read their DynamoDB rows from a simp set, as `denote` does.
 
 **Occupancy is the shape abstraction, and holds at every signature.** `Alg.occV` and `Alg.occA`
-map a term to the root shapes that it can write and read, and `Alg.Orth1` tests two terms for
-disjoint occupancies on both sides. `Alg.occV_sound` and `Alg.occA_sound` put the row of a term
-inside its occupancy. A universe supplies its shapes in `Occ`, which holds computable data so that
-the kernel evaluates `Orth1` at a closed pair, and the shape maps with their landing facts in
-`OccSound`. The rows of `union`, `held`, `refine`, `mu`, `var`, `never` and `opaq` are structure.
+map a term to the root shapes that it can write and read. `Alg.occV_sound` and `Alg.occA_sound`
+put the row of a term inside its occupancy. A universe supplies its shapes in `Occ`, which holds
+computable data so that the kernel evaluates an occupancy at a closed term, and the shape maps
+with their landing facts in `OccSound`. The rows of `union`, `held`, `refine`, `mu`, `var`, `never` and `opaq` are structure.
 
 **The other analyses are DynamoDB tables.** `Meet`, `Separation`, `Slice` and the certificate read
 the constructors of the DynamoDB carriers. No generic form of them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
@@ -506,8 +505,7 @@ union of lawful options meets its obligation.
 tighter test does not. The principle is why a certificate may be proved over an approximation at
 all. This development spends it twice. `occV` and `occA` over-approximate what a term occupies,
 and the read-side proof of the DynamoDB leaf meet uses disjoint occupancy to close the rows of
-two distinct primitives (`AdmA_and_false`). The certificate also asks disjoint occupancy directly, as
-`Orth1` (`separates_of_Orth1`). `writeView`
+two distinct primitives (`AdmA_and_false`). `writeView`
 and `readView` admit each value and each attribute that the term admits (`writeLe_of`,
 `readLe_of`), so two views that meet at the bottom separate the terms.
 
@@ -524,8 +522,7 @@ is the discharger stated on what `select` actually decides by.
 ### The classifier, and what it is the specification of
 
 The union obligation is compatibility, and the certificate is sufficient for it. `certPair`
-certifies a pair on one of two tests. The meet of the two terms is the bottom (`meetNever'`), or
-the occupancies are disjoint on both sides (`Orth1`).
+certifies a pair where the meet of the two terms is the bottom (`meetNever'`).
 
 **The meet at the bottom is orthogonality.** A term denotes a partial isomorphism. `writeView`
 states its domain and `readView` states its range. In an inverse semigroup, two elements whose
@@ -537,8 +534,8 @@ of `b`, and a variable stays a variable, so a `held` below a recursion reaches t
 stored view keeps a predicate only where the inner term holds no `held` and no variable, because a
 variable denotes a stage of its binder, and the stage can hold a `held`.
 
-**The slot test is a disjunct, and the occupancies read no predicate.** The admission of a
-`refine` at a `closure` is a function. A refinement admits a part of what its inner term admits,
+**The meet reads a closure through its inner term.** The admission of a `refine` at a `closure`
+is a function. A refinement admits a part of what its inner term admits,
 so the meet answers the bottom where the inner term meets the partner at the bottom, and `none`
 elsewhere. A closure refinement beside an option that writes and reads other slots meets at the
 bottom.
@@ -552,7 +549,7 @@ refuses every other pair, because the pair is not shown compatible.
 | the never side | one option is `never` | `pairwiseCompat_never_left`, `pairwiseCompat_never_right` |
 | held-free | both options are held-free | `pairwiseCompat_of_HF`: both sit below `opaque` |
 | the common bound | `below(x, y)` or `below(y, x)` holds | `pairwiseCompat_of_sub`: the wider option is the bound |
-| the certificate | `separable`, the direct port of `certPair`: the meet at the bottom, of the terms or of their views, or the slot test | `pairwiseCompat_of_separated` |
+| the certificate | `separable`, the direct port of `certPair`: the meet at the bottom, of the terms or of their views | `pairwiseCompat_of_separated` |
 
 The host's rule `below(x, y)` in `src/codec/term.ts` is narrower than the model's `Sub`. It has
 five rows: a literal is below its base and below itself; a union is below a term that each of its
@@ -563,10 +560,17 @@ the options by `opaque`, and an option with a `held` has no such bound. So `deci
 `union([decimal('1', '2.5'), string('A')])` is refused, although the first is below one option of
 the second.
 
-**The host reads an unknown as the top.** The read side of an alternate reader is caller code,
-and the declaration cannot bound its domain. So the host's slot test counts that read side as
-meeting every read side, and separates such an option from no option. An unknown read as "no
-meeting" is the permissive direction, and so the unsound one.
+**The host reads an unknown as a refusal.** The read side of an alternate reader is caller code,
+and the declaration cannot bound its domain. So the host's meet refuses where it must read an
+alternate reader, and a refusal certifies nothing. A container of an alternate reader beside a
+term of another kind meets at the bottom, and reads no reader. An unknown read as "no meeting" is
+the permissive direction, and so the unsound one.
+
+**The host reads a thunk that throws as a free variable.** At a declaration, a thunk that names
+the union under declaration throws. The model spells the thunk as a variable, and the theorems of
+the meet hold under every environment of the variables. So the host's meet reads the thunk as a
+variable that pairs with no binder. Beside the bottom the meet is the bottom, and beside any other
+term the meet refuses. A list of such a thunk beside a string meets at the bottom.
 
 **The caller view of a `held` is its held side.** The host's `decimal` over literals records the
 string literals of its texts there, so its caller view is exact, and the views certify it beside a
@@ -913,7 +917,7 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New universe → a `Syn`, a `Sem` instance, its `TopLaws` where the held-free theory must
   hold, its `PrimAdm` and `PrimAdmA` where exactness must hold, its `Leaf` where the meet must
   compute, its `Shapes` and the laws of the meet where the theorems of the meet must hold,
-  and its `Occ` and `OccSound` where the shape test must hold. Make the module reachable from `Axioms.lean`.
+  and its `Occ` and `OccSound` where the occupancies must be sound. Make the module reachable from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.
 - New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness

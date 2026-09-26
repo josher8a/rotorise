@@ -254,8 +254,8 @@ export type Term =
      * forcing would throw on the entity the thunk exists to allow. Both halves were wrong.**
      * Forcing does not throw: `object()` already forces at the declaration and the recursive
      * entity still round-trips. And `undefined` was the unsound direction rather than the safe
-     * one, because the declaration guard refuses a union when two occupancies *meet*, so an
-     * unknown occupancy makes it decline to refuse. `union([lazy(string), string])` was accepted
+     * one, because the declaration guard then refused a union when two occupancies *met*, so an
+     * unknown occupancy made it decline to refuse. `union([lazy(string), string])` was accepted
      * and a write then found two options admitting one value. `lazy` was the only
      * term answering unknown on both projections, which is why it was the only hole.
      */
@@ -525,7 +525,7 @@ export const occV = (t: Term): readonly SetSlot[] => {
         // the read side of a `legacy`, and *everything*, which is `opaque` by design. The
         // model takes the second as data — `occV .opaq` is `occTop` — so answering
         // `undefined` here would say "cannot be read" about the one term whose occupancy is fully
-        // known, and {@link separable} would then decline to compare it.
+        // known.
         case 'opaq':
             return everySlot
         // **Empty, not `undefined`.** `undefined` is the `⊤` that says "cannot be read", and this
@@ -892,14 +892,12 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  * `pairwiseCompat_of_separated`. For each pair `union` refuses, `formal/.separations.lean` pins that
  * `certPair` is `false`, so this never answers `false` where `certPair` answers `true`.
  *
- * Three rows. The first two are the model's first disjunct, `meetNever'`, and the third row is
- * the model's second disjunct, `Orth1`:
+ * Two rows, and together they are the model's `meetNever'`:
  *
  * **Two options that meet at the bottom**, the `Term.meet` row of the model's `meet'`. `Adm_meet'`
  * and `AdmA_meet'` make the meet's admission the conjunction of the two, so a meet at `never`
  * admits no common value and reads no common attribute. An option inside another meets the other
- * at the option itself, and not at the bottom. The occupancies of the two meet too, so no row
- * certifies a literal beside its base.
+ * at the option itself, and not at the bottom, so no row certifies a literal beside its base.
  *
  * **Two options, one of which holds a `held`: the two views**, the orthogonal row of the model's
  * `meet'`. A `held` writes where its held side does and reads where its inner term does, so the
@@ -908,31 +906,15 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  * on a held-free term the caller view is the term itself, so the row certifies no pair that the
  * first row does not certify.
  *
- * **The two occupancies, both sides conjoined**, as the model's `Orth1`. The occupancies read no
- * predicate. The meet refuses a closure beside a partner that its inner term does not meet at the
- * bottom, so the first row certifies `union([refine(string, isNumeral), array(decimal)])`. A
- * pair separated on one side only is not separated: `union([decimal, number])` would write
- * `'1.5'` to an `N` and could not read it back, because both options store `N`. `opaque` answers
- * every slot, so it separates from no option. The read side of a `legacy` is unknown, and an
- * unknown read side meets every read side: its older reader is caller code whose domain the
- * declaration cannot see. A `legacy` therefore separates from no option by this row.
+ * The meet refuses a closure beside a partner that its inner term does not meet at the bottom, so
+ * the first row certifies `union([refine(string, isNumeral), array(decimal)])`.
  */
 export const separable = (x: Term, y: Term): boolean =>
-    meetsAtBottom(x, y) || viewsApart(x, y) || occupanciesApart(x, y)
+    meetsAtBottom(x, y) || viewsApart(x, y)
 
 /** The model's `meetNever`: the meet states the pair, and the meet is the bottom. */
 const meetsAtBottom = (x: Term, y: Term): boolean =>
     meetTerms(x, y)?.kind === 'never'
-
-/** The model's `Orth1`, where an unknown read side is not apart. */
-const occupanciesApart = (x: Term, y: Term): boolean => {
-    const [readsX, readsY] = [occA(x), occA(y)]
-    if (readsX === undefined || readsY === undefined) return false
-    return (
-        meet(occV(x), occV(y)) === undefined &&
-        meet(readsX, readsY) === undefined
-    )
-}
 
 /**
  * **Whether a term reaches a subterm of one of these kinds**, at any depth, or reaches a thunk
@@ -984,7 +966,8 @@ const reaches = (
 /**
  * The term of a thunk, or nothing where the thunk throws. A thunk is caller code, so its throw
  * crosses the boundary here. At a declaration the throw is a thunk that names the codec being
- * declared, and the caller of this function refuses or declines.
+ * declared, and the caller of this function refuses, declines, or reads the thunk as a free
+ * variable.
  */
 const force = (t: Term & { readonly kind: 'lazy' }): Term | undefined => {
     try {
@@ -1085,7 +1068,8 @@ export const heldOnRecursivePath = (root: Term): boolean => {
  * The view of a `union` is the union of the views of its options, because a union admits where
  * one of its options admits. A `legacy` with a `held` below it has no view: its `r` reads an
  * attribute to a held value, so the read widens on both sides. A thunk has the view of the term
- * it returns, and a thunk that throws has no view, because the view of the thunk forces it.
+ * it returns. A thunk that throws is a free variable, and the view of a variable is the variable:
+ * {@link meetTerms} reads the view of the thunk as a free variable too.
  *
  * The walk forces each thunk once, so it ends: a thunk memoizes its codec, and every other edge
  * of a term is built before the term.
@@ -1097,7 +1081,7 @@ const viewable = (t: Term, seen: Set<Term> = new Set()): boolean => {
             if (seen.has(t)) return true
             seen.add(t)
             const forced = force(t)
-            return forced !== undefined && on(forced)
+            return forced === undefined || on(forced)
         }
         case 'held':
             return on(t.inner) && on(t.outer)
@@ -1170,7 +1154,8 @@ const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
  *
  * The build forces no thunk, so it ends: it recurses only through the edges that are not a
  * thunk, and every such edge of a term is built before the term. A thunk of the view forces its
- * thunk when {@link meetTerms} reads it, and {@link viewable} forced each such thunk already.
+ * thunk when {@link meetTerms} reads it, and {@link viewable} forced each such thunk already. A
+ * thunk that throws throws again there, and {@link meetTerms} reads it as a free variable.
  */
 const throughThunks =
     (row: (t: Term, view: (t: Term) => Term) => Term) =>
@@ -1319,19 +1304,6 @@ export const compatible = (x: Term, y: Term): boolean =>
     below(y, x) ||
     separable(x, y)
 
-/**
- * Where two occupancies meet, or nothing — and `⊤` on either side means "not compared".
- *
- * The label is what a refusal reports, so this answers the meeting rather than a boolean. `union`
- * asks again on the path it is about to throw on, which costs one walk of a term nobody will use
- * and keeps {@link separable} the `Bool` the model's `certPair` is.
- */
-export const meet = <A>(
-    one: readonly A[] | undefined,
-    other: readonly A[] | undefined,
-): A | undefined =>
-    one && other ? one.find((label) => other.includes(label)) : undefined
-
 /* ── the meet ─────────────────────────────────────────────────────────────────────────── */
 
 /**
@@ -1353,20 +1325,23 @@ export const meet = <A>(
  * returns to, and a variable at the thunk that closes the cycle ({@link Scope}). Two variables meet
  * where the two binders were met together, and a variable beside any other term refuses. Two
  * recursive terms meet at the recursive term of the two bodies met ({@link meetBinders}). A
- * recursive term beside another term unfolds, and its binder pairs with nothing. A thunk that
- * throws names a codec that is not yet declared, so no term states the meet.
+ * recursive term beside another term unfolds, and its binder pairs with nothing.
+ *
+ * **A thunk that throws is a free variable that pairs with nothing.** The thunk names a codec that
+ * is not yet declared, so the host cannot read the term that the thunk returns. The model's meet
+ * holds under every environment of its variables, so a meet that reads no such variable holds
+ * whatever the thunk returns later. The walk reads the variable as the model reads a variable
+ * under `pair0`: beside the bottom the meet is the bottom, and beside any other term the meet
+ * refuses. A container of the variable beside a constructor of another kind meets at the bottom,
+ * and reads no variable.
  */
 export const meetTerms = (x: Term, y: Term): Term | undefined => {
     // the bottom absorbs, on either side, before any thunk is read: the model's `never` rows sit
     // first, and a recursive term meets the bottom at the bottom
     if (x.kind === 'never' || y.kind === 'never') return never
-    const left = bindersOf(x)
-    const right = bindersOf(y)
-    // `undefined` certifies nothing: no caller reads it as the bottom
-    if (left === undefined || right === undefined) return undefined
     return meetWalk(x, y, {
-        left: { binds: left, inside: [] },
-        right: { binds: right, inside: [] },
+        left: { binds: bindersOf(x), inside: [] },
+        right: { binds: bindersOf(y), inside: [] },
         pairs: [],
         variables: new Set(),
     })
@@ -1389,62 +1364,64 @@ export type Scope = {
 
 /**
  * **The binders of a term**: each term object that a thunk returns while that object is on the
- * stack of the walk, or `undefined` where a thunk throws. The walk forces each thunk and stops at
- * a cycle, so it ends: a thunk memoizes its codec, and every other edge of a term is built before
- * the term.
+ * stack of the walk. A thunk that throws binds nothing, because {@link see} reads the thunk as a
+ * free variable. The walk forces each thunk and stops at a cycle, so it ends: a thunk memoizes
+ * its codec, and every other edge of a term is built before the term.
  */
-export const bindersOf = (root: Term): ReadonlySet<Term> | undefined => {
+export const bindersOf = (root: Term): ReadonlySet<Term> => {
     const binds = new Set<Term>()
-    // `false` where a thunk throws
-    const walk = (t: Term, stack: readonly Term[]): boolean => {
+    const walk = (t: Term, stack: readonly Term[]): void => {
         const on = [...stack, t]
         const next = (one: Term) => walk(one, on)
         switch (t.kind) {
             case 'lazy': {
                 const target = force(t)
-                if (target === undefined) return false
-                if (!on.includes(target)) return next(target)
-                binds.add(target)
-                return true
+                if (target === undefined) return
+                if (on.includes(target)) binds.add(target)
+                else next(target)
+                return
             }
             case 'list':
-                return (
-                    [...t.pre, ...t.suf].every(next) &&
-                    (t.spread === undefined || next(t.spread))
-                )
+                for (const one of [...t.pre, ...t.suf]) next(one)
+                if (t.spread !== undefined) next(t.spread)
+                return
             case 'object':
-                return (
-                    Object.values(t.body.fields).every((field) =>
-                        next(field.t),
-                    ) &&
-                    (t.body.rest === undefined || next(t.body.rest))
-                )
+                for (const field of Object.values(t.body.fields)) next(field.t)
+                if (t.body.rest !== undefined) next(t.body.rest)
+                return
             case 'union':
-                return t.options.every(next)
+                for (const one of t.options) next(one)
+                return
             case 'set':
                 return next(t.elem)
             case 'held':
-                return next(t.inner) && next(t.outer)
+                next(t.inner)
+                return next(t.outer)
             case 'refine':
             case 'legacy':
                 return next(t.inner)
             default:
-                return true
+                return
         }
     }
-    return walk(root, []) ? binds : undefined
+    walk(root, [])
+    return binds
 }
 
-/** **A term as the model spells it at a scope**: a binder, a variable, or a constructor. */
+/**
+ * **A term as the model spells it at a scope**: a binder, a variable, a free variable, or a
+ * constructor. A free variable is a thunk that throws, and it pairs with no binder.
+ */
 type Seen =
     | { readonly kind: 'mu'; readonly body: Term; readonly scope: Scope }
     | { readonly kind: 'var'; readonly binder: Term }
+    | { readonly kind: 'free' }
     | { readonly kind: 'term'; readonly t: Term }
 
 /**
  * A binder of the scope that the walk is not inside is `mu` of its body, and the walk is then
- * inside the binder. A thunk that returns a binder the walk is inside is a variable. Any other
- * thunk is the term it returns. {@link bindersOf} forced each thunk already, so no thunk throws.
+ * inside the binder. A thunk that returns a binder the walk is inside is a variable. A thunk that
+ * throws is a free variable. Any other thunk is the term it returns.
  */
 const see = (t: Term, scope: Scope): Seen => {
     if (scope.binds.has(t) && !scope.inside.includes(t))
@@ -1454,7 +1431,8 @@ const see = (t: Term, scope: Scope): Seen => {
             scope: { binds: scope.binds, inside: [...scope.inside, t] },
         }
     if (t.kind !== 'lazy') return { kind: 'term', t }
-    const target = t.get()
+    const target = force(t)
+    if (target === undefined) return { kind: 'free' }
     return scope.inside.includes(target)
         ? { kind: 'var', binder: target }
         : see(target, scope)
@@ -1505,6 +1483,8 @@ const meetWalk = (x: Term, y: Term, w: Walk): Term | undefined => {
         (other.kind === 'term' && other.t.kind === 'never')
     )
         return never
+    // a free variable pairs with no binder, so beside any term but the bottom the meet refuses
+    if (one.kind === 'free' || other.kind === 'free') return undefined
     // a variable admits what its binder admits, so a variable meets only the variable of the
     // binder that its own binder was met with
     if (one.kind === 'var')
@@ -1679,7 +1659,8 @@ const readsBinder = (
 /**
  * **Whether the spelling of a term at a scope reads a variable, or holds a subterm of one of these
  * kinds**, the model's `hasVar` and `hasHeld`. A thunk that returns a term the walk is inside is a
- * variable, and the walk stops there, so it ends where the spelling ends.
+ * variable, and a thunk that throws is a free variable. The walk stops at each, so it ends where
+ * the spelling ends.
  */
 const spells = (
     t: Term,
@@ -1689,9 +1670,10 @@ const spells = (
     if (kinds.includes(t.kind)) return true
     const on = (one: Term) => spells(one, [...inside, t], kinds)
     switch (t.kind) {
+        // a thunk that throws is a free variable
         case 'lazy': {
-            const target = t.get()
-            return inside.includes(target) || on(target)
+            const target = force(t)
+            return target === undefined || inside.includes(target) || on(target)
         }
         case 'set':
             return on(t.elem)

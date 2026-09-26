@@ -96,7 +96,7 @@ describe('the member a term stores', () => {
     })
 })
 
-describe('the occupancies a declaration is separated by', () => {
+describe('the occupancies of a term', () => {
     /**
      * **A thunk carries a term, so both projections read through it.** `Meet.lean` heads the
      * section "`lazy` is transparent, and it constrains nothing", and the model reads through on
@@ -105,8 +105,8 @@ describe('the occupancies a declaration is separated by', () => {
      *
      * **This answered `⊤` on both sides until it was measured, and `⊤` was the unsound
      * direction rather than the safe one.** The claim was that an over-approximation costs a
-     * certificate and never buys a wrong one. It is backwards here: the guard refuses a union
-     * when two occupancies *meet*, so an unknown occupancy makes it decline to refuse.
+     * certificate and never buys a wrong one. It was backwards here: the guard then refused a
+     * union when two occupancies *met*, so an unknown occupancy made it decline to refuse.
      * `union([lazy(string), string])` was accepted at the declaration, and a write
      * then reported two options admitting one value — the migration from declaration time to
      * write time that the calculus exists to stop. `lazy` was the only term answering unknown on

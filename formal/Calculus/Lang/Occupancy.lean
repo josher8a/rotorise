@@ -10,8 +10,8 @@ over-approximates, and over-approximation is the safe direction: if `X ⊆ X'`, 
 subterm gets no certificate. No third truth value is necessary.
 
 A universe supplies the shapes in two classes. `Occ` holds computable data: the two shape types,
-their enumerations, the shapes of each primitive, the element shape of a set shape, and the shape
-of the list and map formers. So `Orth1` stays computable, and the kernel evaluates a closed pair.
+the shapes of each primitive, the element shape of a set shape, and the shape of the list and map
+formers. So an occupancy stays computable, and the kernel evaluates a closed term.
 `OccSound` holds the shape maps of the two carriers and the landing fact of each former, which only
 the soundness theorems read. Every other row is structure: `union`, `held`, `refine`, `mu`, `var`,
 `never`, and `opaq`, which occupies every shape.
@@ -38,12 +38,6 @@ class Occ (S : Syn) where
   ShA : Type
   decV : DecidableEq ShV
   decA : DecidableEq ShA
-  /-- Every value shape, so that a disjointness test is a `List.all`. -/
-  allV : List ShV
-  mem_allV : ∀ s, s ∈ allV
-  /-- Every attribute shape. -/
-  allA : List ShA
-  mem_allA : ∀ m, m ∈ allA
   /-- The value shapes that a primitive can write. -/
   primV : S.Ground → ShV → Bool
   /-- The attribute shapes that a primitive can read. -/
@@ -212,26 +206,6 @@ def occAL : List (Term S) → Occ.ShA S → Bool
   | [] => fun _ => false
   | t :: ts => fun m => occA t m || occAL ts m
 end
-
-/-- **The shape test**: the write occupancies disjoint, and the read occupancies disjoint.
-
-    A `held` has its two occupancies in two coordinates: the write side is the caller-side
-    term's, and the read side is the stored-side term's. So the test asks both sides. -/
-def Orth1 (x y : Term S) : Bool :=
-  (Occ.allV (S := S)).all (fun s => !(occV x s && occV y s)) &&
-    (Occ.allA (S := S)).all (fun m => !(occA x m && occA y m))
-
-/-- The shape test makes the write occupancies disjoint. -/
-theorem occV_disjoint_of_Orth1 {x y : Term S} (h : Orth1 x y = true) {s : Occ.ShV S}
-    (hx : occV x s = true) (hy : occV y s = true) : False := by
-  have := List.all_eq_true.mp (Bool.and_eq_true_iff.mp h).1 s (Occ.mem_allV s)
-  simp_all
-
-/-- …and the read occupancies. -/
-theorem occA_disjoint_of_Orth1 {x y : Term S} (h : Orth1 x y = true) {m : Occ.ShA S}
-    (hx : occA x m = true) (hy : occA y m = true) : False := by
-  have := List.all_eq_true.mp (Bool.and_eq_true_iff.mp h).2 m (Occ.mem_allA m)
-  simp_all
 
 /-- An occupancy of an option is inside the occupancy of the union. -/
 theorem occVL_cons {t : Term S} {ts : List (Term S)} {s : Occ.ShV S}

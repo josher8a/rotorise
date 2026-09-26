@@ -135,10 +135,6 @@ domains and ranges meet at the bottom are orthogonal, and the meet of two orthog
 the bottom (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). The domain and the range of a
 term are its two views, so the meet answers the bottom there.
 
-> ASPIRATION: the certificate carries the occupancy test as a second disjunct. The meet refuses a
-> closure beside a partner that its inner term does not meet at the bottom, and the occupancies
-> read no predicate.
-
 ### Admission is by attempt, at every constructor
 
 An option admits a value when the option's codec accepts it. That is one rule, and it recurses
@@ -244,8 +240,8 @@ An occupancy projection over a finite index of value slots and attribute members
 test at a name. A literal test at a name. A row for each written shape. A body specification
 carried beside the term so that a test can read it without consulting a codec.
 
-> ASPIRATION: the certificate still asks the occupancy test as a disjunct, the read-side proof of
-> the DynamoDB leaf meet still uses it, and a slice still reads the body specification.
+> ASPIRATION: the read-side proof of the DynamoDB leaf meet still uses the occupancy test, and a
+> slice still reads the body specification.
 
 Every one of them is the recursion truncated at some depth. Each owes its own soundness proof,
 its own argument that the indices it skips could not have separated, and its own extension on
@@ -430,8 +426,7 @@ a dispatch on discriminants drops every field's type. Admission by attempt proje
 except at a leaf it cannot decide, so `D4` stops being a standing debt and becomes a property of
 the one relation.
 
-> ASPIRATION: the certificate still asks the occupancy test, a projection that keeps the outermost
-> slot and member and drops the field types. A slice still reads body specifications.
+> ASPIRATION: a slice still reads body specifications.
 
 **D1. A description is total over its index.** A description answering only at declared names is
 a partial function pretending to be total, and every reader then carries the undeclared case by
@@ -641,7 +636,7 @@ Its body describes a recursive term. Its admissible set is its own codec's domai
 occupancy is its body's, by an induction over the stages that needs no guard. The meet of two
 recursive terms is the recursive term of their bodies met, stage by stage. A recursive term beside
 another constructor unfolds at the stage below the depth of the input. So the certificate decides
-a pair with a recursive option by the meet, or by the occupancies.
+a pair with a recursive option by the meet.
 
 ---
 
@@ -679,7 +674,7 @@ are two instances of the signature.
 
 > ASPIRATION: the analyses are not parametric in the universe. The meet and its theorems are
 > parametric: a universe supplies the leaf meet, its shape classes and the laws of its leaves and
-> formers, and JSON has them. The occupancies and the shape test are parametric, and JSON has them.
+> formers, and JSON has them. The occupancies are parametric, and JSON has them.
 > The separation rows and the certificate read the constructors of the DynamoDB carriers, so JSON
 > has none of them. The exactness rows are parametric, and JSON has them.
 

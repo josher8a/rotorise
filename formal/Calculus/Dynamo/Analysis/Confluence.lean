@@ -4,8 +4,7 @@ import Calculus.Dynamo.Analysis.Universal
 # Confluence: the payoffs of a held-free term
 
 `HeldFree.lean` proves that a held-free term is a restriction of `opaque` on both halves
-(`sub_denote`, `confluence_W`, `confluence_R`). This file holds what follows from it, and the
-read occupancy inside the write occupancy below `opaque` (`occA_le_occV`).
+(`sub_denote`, `confluence_W`, `confluence_R`). This file holds what follows from it.
 
 The payoffs follow from one fact: `opaque`'s pair is a bijection between `Value` and `Attr`.
 `Ω_onto` and `Ω_canon` prove the bijection. So two held-free terms that both write a value
@@ -19,46 +18,6 @@ not a restriction of `opaque`. `held_violates_W` and `held_violates_R` are the c
 -/
 
 namespace Calculus
-
-open Alg (occV occA occVL occAL)
-
-mutual
-/-- **Below `opaque`, the read occupancy lies inside the write occupancy.** The rows agree
-    under `Member.slot` at every base. A `held` is excluded: the write occupancy of a `held`
-    is its caller-side term's and the read occupancy is its stored-side term's, two
-    coordinates that need not agree. So `Orth1` asks the read question as well. -/
-theorem occA_le_occV : ∀ (t : Term), HF t → ∀ (m : Member), occA t m = true → occV t m.slot = true
-  | .base k, _, m, h | .literal k _, _, m, h => by
-      cases k <;> cases m <;>
-        simp_all [occA_base, occA_literal, occV_base, occV_literal, occOnly, Member.slot,
-          GroundKind.slot, GroundKind.member]
-  -- a set's member names its element's member, and the element carries the inclusion
-  | .set t, hf, m, h => by
-      cases m <;> simp only [occA_set, occV_set, Member.slot, Member.setElem, Slot.setElem, Option.elim,
-        Bool.or_eq_true, reduceCtorEq] at h ⊢ <;>
-        exact h.imp_left (occA_le_occV t hf _)
-  | .list _ _ _, _, m, h | .object _, _, m, h => by
-      cases m <;> simp_all [occA_list, occV_list, occA_object, occV_object, occOnly, Member.slot]
-  | .never, _, _, h => by simp [occA, occNone] at h
-  | .held _ _ _ _, hf, _, _ => nomatch hf
-  | .refine t _, hf, m, h => occA_le_occV t hf m (by simpa [occA] using h)
-  | .opaq, _, _, _ => by simp [occV, occTop]
-  | .mu b, hf, m, h => by simpa [occV] using occA_le_occV b hf m (by simpa [occA] using h)
-  | .var _, _, _, h => by simp [occA, occNone] at h
-  | .union os, hf, m, h => by
-      simp only [occA, occV] at h ⊢
-      exact occAL_le_occVL os hf m h
-
-/-- …and over the options of a union, where both sides are the join of the options'. -/
-theorem occAL_le_occVL : ∀ (ts : List Term), HFL ts → ∀ (m : Member),
-    occAL ts m = true → occVL ts m.slot = true
-  | [], _, _, h => by simp [occAL] at h
-  | t :: ts, hf, m, h => by
-      simp only [occAL, occVL, Bool.or_eq_true] at h ⊢
-      rcases h with h | h
-      · exact Or.inl (occA_le_occV t hf.1 m h)
-      · exact Or.inr (occAL_le_occVL ts hf.2 m h)
-end
 
 /-! ## Payoffs -/
 
