@@ -270,17 +270,18 @@ describe('two object bodies meet over the names both declare', () => {
     })
 })
 
-describe('a union distributes and the survivors carry the certificate', () => {
+describe('a union distributes over its options with no certificate', () => {
     it('meets each option and drops the bottoms', () => {
         const met = meetTerms(termOf(union([string, boolean])), termOf(string))
         expect(met).toEqual(termOf(string))
     })
 
     /**
-     * The meet is the lattice's meet and an uncertified union is not in the lattice, so the pair
-     * has no meet to state. An open object option is what fails the certificate.
+     * The model's union row asks no certificate of the options. A certificate reads the meet, so a
+     * union that recurses through its options would make the meet ask itself again. An open
+     * object option failed the old certificate, and the meet still distributes over it.
      */
-    it('refuses where the option list does not certify', () => {
+    it('distributes over an option list that the certificate does not accept', () => {
         const uncertified: Term = {
             kind: 'union',
             options: [
@@ -288,7 +289,7 @@ describe('a union distributes and the survivors carry the certificate', () => {
                 termOf(string),
             ],
         }
-        expect(meetTerms(uncertified, termOf(string))).toBeUndefined()
+        expect(meetTerms(uncertified, termOf(string))).toEqual(termOf(string))
     })
 })
 
@@ -549,9 +550,12 @@ describe('the worked pairs the model pins', () => {
 })
 
 describe('the meet of a recursive term', () => {
-    // the model's meet states no recursive term, so no term states this meet, and `undefined`
-    // certifies nothing
-    it('states no meet of two terms that recurse below a list, and ends', () => {
+    /**
+     * Two binders met together are one binder of the answer. The answer is a thunk that returns
+     * the met body, and the recursive position of the body is a thunk back to the answer, so the
+     * emitter spells the answer as `mu` of the body.
+     */
+    it('meets two recursive terms at the recursive term of the two bodies met, and ends', () => {
         const json: AnyCodec = union([
             string,
             array(lazy(() => json as never)),
@@ -560,6 +564,14 @@ describe('the meet of a recursive term', () => {
             string,
             array(lazy(() => other as never)),
         ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
-        expect(meetTerms(json.def as Term, other.def as Term)).toBeUndefined()
+        const met = meetTerms(json.def as Term, other.def as Term)
+        if (met?.kind !== 'lazy') throw new Error('the meet states no binder')
+        const body = met.get()
+        if (body.kind !== 'union') throw new Error('the body is not a union')
+        const [text, list] = body.options
+        expect(text).toEqual(termOf(string))
+        if (list?.kind !== 'list' || list.spread?.kind !== 'lazy')
+            throw new Error('the second option is not a recursive list')
+        expect(list.spread.get()).toBe(met)
     })
 })

@@ -1504,7 +1504,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.endsWith('= false := by decide'),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([783, 82])
+        expect([accepted.length, refused.length]).toEqual([823, 42])
     })
 
     /**
@@ -1512,15 +1512,15 @@ describe("the declaration guard, against the model's classifier", () => {
      * recursive union's occupancy through one level, where a thunk sits under a container, and the
      * model reads `mu b` as the occupancy of `b`, whose variable sits under a container. So `json`
      * beside a number is certified by the occupancies, and `json` beside `array(string)` is refused
-     * by both sides, because both write a list. The meet states no recursive term on either side,
-     * so no pair rests on the meet.
+     * by both sides, because both write a list. The meet reads a recursive term as its binder, so
+     * a recursive option beside an object that the meet takes to the bottom is certified too.
      */
-    it('certifies a recursive option where the host accepts it, and declines where the host refuses', () => {
+    it('certifies a recursive option by the meet at the bottom or by the occupancies, as the model does', () => {
         const recursive = separationPairs().filter((one) =>
             one.name.includes('recursive'),
         )
         const emitted = recursive.map(leanSeparation)
-        const byOccupancy = emitted.filter((one) =>
+        const byCertificate = emitted.filter((one) =>
             one.includes('separated_of_unionOk'),
         )
         const refused = emitted.filter((one) =>
@@ -1529,10 +1529,10 @@ describe("the declaration guard, against the model's classifier", () => {
         const byBottom = emitted.filter((one) =>
             one.includes('pairwiseCompat_never'),
         )
-        expect([byOccupancy.length, byBottom.length, refused.length]).toEqual([
-            91, 4, 63,
-        ])
-        expect(byOccupancy.length + byBottom.length + refused.length).toBe(
+        expect([byCertificate.length, byBottom.length, refused.length]).toEqual(
+            [131, 4, 23],
+        )
+        expect(byCertificate.length + byBottom.length + refused.length).toBe(
             recursive.length,
         )
         const verdict = (left: AnyCodec, right: AnyCodec) =>
@@ -1544,7 +1544,8 @@ describe("the declaration guard, against the model's classifier", () => {
             '= false := by decide',
         )
         expect(verdict(erase(string), tree)).toContain('separated_of_unionOk')
-        expect(verdict(tree, erase(Category))).toContain('= false := by decide')
+        // `tree` requires `v` and `Category` holds no `v`, so the two binders meet at the bottom
+        expect(verdict(tree, erase(Category))).toContain('separated_of_unionOk')
     })
 
     it('emits them for the gate to elaborate', () => {

@@ -8,8 +8,8 @@ import Calculus.Lang.Occupancy
 (`pairwiseCompat_of_separated`). The decidable certificate is `certPair` (`Meet.lean`): two
 options are orthogonal when `meet'` meets them at the bottom, or when their occupancies are
 disjoint on both sides. `meet'` answers the bottom where the domains and the ranges of the two
-terms meet at the bottom. The meet states no recursion and refuses a closure, and the occupancies
-read no predicate, so the shape test certifies a pair that the meet cannot state.
+terms meet at the bottom. The meet refuses a closure, and the occupancies read no predicate, so
+the shape test certifies a pair that the meet cannot state.
 
 The occupancies, the shape test `Orth1` and their soundness are generic (`Alg.occV`, `Alg.occA`,
 `Alg.Orth1`, `Alg.occV_sound`, `Alg.occA_sound`). This module holds what DynamoDB supplies to them,

@@ -136,7 +136,7 @@ the bottom (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). The domain an
 term are its two views, so the meet answers the bottom there.
 
 > ASPIRATION: the certificate carries the occupancy test as a second disjunct, because the meet
-> states no recursion, the meet refuses a closure, and the occupancies read no predicate.
+> refuses a closure, and the occupancies read no predicate.
 
 ### Admission is by attempt, at every constructor
 
@@ -635,12 +635,10 @@ be disjoint from another, so it asks nothing of a union that a union does not al
 layer compatible options and so a lawful layer. The limit is the general theorem.
 
 Its body describes a recursive term. Its admissible set is its own codec's domain. Its
-occupancy is its body's, by an induction over the stages that needs no guard. The meet states a
-recursive term only against the bottom. So the certificate decides a pair of a recursive option
-and a term that is not the bottom by the occupancies alone.
-
-> ASPIRATION: the meet states a recursive term only against the bottom. So the certificate
-> refuses two recursive options whose occupancies meet, even where the two write no common value.
+occupancy is its body's, by an induction over the stages that needs no guard. The meet of two
+recursive terms is the recursive term of their bodies met, stage by stage. A recursive term beside
+another constructor unfolds at the stage below the depth of the input. So the certificate decides
+a pair with a recursive option by the meet, or by the occupancies.
 
 ---
 

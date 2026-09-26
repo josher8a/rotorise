@@ -227,8 +227,8 @@ instance jsonPrimAdmA : Alg.PrimAdmA jsonSyn where
 
 /-- The string-or-number term admits exactly what its codec writes, and reads exactly what its
     codec reads. -/
-theorem exact_strOrNum : Alg.ExactV strOrNumTerm ∧ Alg.ExactA strOrNumTerm :=
-  ⟨Alg.Adm_exact _, Alg.AdmA_exact _⟩
+theorem exact_strOrNum : Alg.ExactV strOrNumTerm [] ∧ Alg.ExactA strOrNumTerm [] :=
+  ⟨Alg.Adm_exact _ _, Alg.AdmA_exact _ _⟩
 
 /-! ## Arrays -/
 

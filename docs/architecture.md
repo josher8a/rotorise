@@ -114,12 +114,19 @@ constructor of the left operand. Only two rows read a fact of a universe: a prim
 primitive or with the top, and a predicate met with a predicate. `Leaf` holds those two meets and
 the test for a predicate that the meet can carry. `Leaf` is outside `Sem` and holds computable
 fields only, so the meet stays computable, and the kernel evaluates a closed pair. At DynamoDB,
-`Term.meet` is the generic meet at `dynLeaf`.
+`Term.meet` is the generic meet at `dynLeaf` and at the closed pairing `pair0`.
+
+**The meet reads two open terms at a pairing of their binders.** `p i j = some k` says that the
+left variable `i` and the right variable `j` are the variable `k` of the answer. Two variables
+meet where the pairing names them one binder, and a variable beside a constructor refuses. Two
+recursive terms meet at the recursive term of their bodies met, with the two new binders paired.
+A recursive term beside another constructor unfolds, and its binder pairs with nothing. The set
+row refuses an element that reads a variable, because the set laws are stated over closed terms.
 
 **The theorems of the meet hold at every signature, from the laws of the leaves and the formers.**
-`Alg.Adm_meet` says that the meet admits exactly the values that both factors admit.
-`Alg.AdmA_meet_both` says the same of attributes, and that the meet reads an attribute as each
-factor reads it. `Alg.meet_writes` says that a member the meet names is each factor's member.
+`Alg.Adm_meet` says that the meet admits exactly the values that both factors admit, under every
+three environments that agree with the pairing (`PairedV`). `Alg.AdmA_meet_both` says the same of
+attributes (`PairedA`), and that the meet reads an attribute as each factor reads it. `Alg.meet_writes` says that a member the meet names is each factor's member.
 `Alg.typed_meet` says that the meet of two derivable terms is derivable, and reads no law. Each
 proof recurses on the left operand, as the meet does. The laws are classes outside `Sem`, because
 only the theorems of the meet read them. `LeafAdm`, `LeafAdmA` and `LeafWrites` say that each
@@ -366,12 +373,17 @@ at that body. Kind-disjointness gives the compatibility of its options (`compat_
 `compat_opaque` as the instance). That makes each layer lawful (`lawful_opaqStep`), and
 `lawful_opaq` is the general limit theorem at that body.
 
-**The analyses read a recursive term through its body.** `Adm` and `AdmA` of a `mu` ask its own
-codec, as the rows of `opaque` do. The occupancy of `mu b` is the occupancy of `b`, with a variable
-at no slot. The proof is an induction over the stages on open terms (`occV_open`, `occA_open`),
-and it needs no guard. The meet states no recursive
-term, except against the bottom, so the certificate decides a pair with a recursive option by the
-occupancies alone.
+**The analyses read a recursive term through its body.** `Adm` and `AdmA` take the environment
+that `denote` takes. A variable asks the codec that the environment gives the variable, and a
+`mu` asks its own codec, as the rows of `opaque` do. The occupancy of `mu b` is the occupancy of
+`b`, with a variable at no slot. The proof is an induction over the stages on open terms
+(`occV_open`, `occA_open`), and it needs no guard.
+
+**The meet reads a recursive term stage by stage.** Two recursive terms meet where their bodies
+meet under every three stages that meet, because each stage is the body over the stage below
+(`stage_meetV`, `stage_meetA`). A recursive term beside another constructor reads the stage below
+the depth of the input (`Adm_mu_unfold`, `mu_p_unfold`). Neither row needs the guard. The answer
+`mu z` is stated only where `mu z` is guarded, because `Typed.mu` asks the guard.
 
 **The host spells recursion as a thunk, and the bridge prints the binder.** The emitter marks each
 term object that a thunk returns during the printing of that object. It prints `Term.mu` at the
@@ -522,8 +534,8 @@ Lemma 2.16). `meet'` adds that row in front of `Term.meet`, and `Adm_meet'` and 
 with no premise. `Term.meet` refuses a `held`, so a `held` reaches the meet through that row. The
 view of a `union` is the union of the views of its options.
 
-**The slot test is a disjunct because the meet cannot state every pair.** The meet states no
-recursion. The admission of a `refine` at a `closure` is a function, so the meet answers `none`
+**The slot test is a disjunct because the meet cannot state every pair.** The admission of a
+`refine` at a `closure` is a function, so the meet answers `none`
 beside every term but the bottom. The occupancies read no predicate. So `Orth1` certifies a
 closure refinement beside an option that writes and reads other slots, where the meet answers
 `none`.

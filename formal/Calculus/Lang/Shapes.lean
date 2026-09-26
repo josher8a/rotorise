@@ -62,22 +62,22 @@ theorem and_false_of_ne {α : Type} {cls : α → Former} {P Q : α → Bool} {i
 /-! ## The landing facts of the terms -/
 
 section Value
-variable [PrimAdm S]
+variable [PrimAdm S] {ρ ρ' : List S.C}
 
 /-- A primitive admits only primitive values. -/
-theorem adm_prim (g : S.Ground) (v : S.V) (h : Adm (.prim g) v = true) :
+theorem adm_prim (g : S.Ground) (v : S.V) (h : Adm (.prim g) ρ v = true) :
     former v = .prim :=
   Shapes.prim g v ((PrimAdm.admV_exact g v).mp h)
 
 /-- A set admits only set values. -/
-theorem adm_set (t : Term S) (v : S.V) (h : Adm (.set t) v = true) : former v = .set := by
+theorem adm_set (t : Term S) (v : S.V) (h : Adm (.set t) ρ v = true) : former v = .set := by
   simp only [Adm, denote] at h
   split at h
   · next L hL => exact Shapes.set L hL _ v h
   · exact nomatch h
 
 /-- A list admits only list values. -/
-theorem adm_list (pre : List (Term S)) sp suf (v : S.V) (h : Adm (.list pre sp suf) v = true) :
+theorem adm_list (pre : List (Term S)) sp suf (v : S.V) (h : Adm (.list pre sp suf) ρ v = true) :
     former v = .list := by
   simp only [Adm] at h
   split at h
@@ -88,7 +88,7 @@ theorem adm_list (pre : List (Term S)) sp suf (v : S.V) (h : Adm (.list pre sp s
   · exact nomatch h
 
 /-- An object admits only object values. -/
-theorem adm_object (b : Body S) (v : S.V) (h : Adm (.object b) v = true) :
+theorem adm_object (b : Body S) (v : S.V) (h : Adm (.object b) ρ v = true) :
     former v = .object := by
   cases b
   simp only [Adm, AdmBody] at h
@@ -102,44 +102,44 @@ theorem adm_object (b : Body S) (v : S.V) (h : Adm (.object b) v = true) :
 /-! ## The six disjointness laws, on the write side -/
 
 /-- A primitive and a set share no value. -/
-theorem prim_set (g : S.Ground) (t : Term S) v : (Adm (.prim g) v && Adm (.set t) v) = false :=
+theorem prim_set (g : S.Ground) (t : Term S) v : (Adm (.prim g) ρ v && Adm (.set t) ρ' v) = false :=
   and_false_of_ne (by decide) (adm_prim g) (adm_set t) v
 
 /-- A primitive and a list share no value. -/
 theorem prim_list (g : S.Ground) (pre : List (Term S)) sp suf v :
-    (Adm (.prim g) v && Adm (.list pre sp suf) v) = false :=
+    (Adm (.prim g) ρ v && Adm (.list pre sp suf) ρ' v) = false :=
   and_false_of_ne (by decide) (adm_prim g) (adm_list pre sp suf) v
 
 /-- A primitive and an object share no value. -/
-theorem prim_obj (g : S.Ground) (b : Body S) v : (Adm (.prim g) v && Adm (.object b) v) = false :=
+theorem prim_obj (g : S.Ground) (b : Body S) v : (Adm (.prim g) ρ v && Adm (.object b) ρ' v) = false :=
   and_false_of_ne (by decide) (adm_prim g) (adm_object b) v
 
 /-- A set and a list share no value. -/
 theorem set_list (t : Term S) pre sp suf v :
-    (Adm (.set t) v && Adm (.list pre sp suf) v) = false :=
+    (Adm (.set t) ρ v && Adm (.list pre sp suf) ρ' v) = false :=
   and_false_of_ne (by decide) (adm_set t) (adm_list pre sp suf) v
 
 /-- A set and an object share no value. -/
-theorem set_obj (t : Term S) (b : Body S) v : (Adm (.set t) v && Adm (.object b) v) = false :=
+theorem set_obj (t : Term S) (b : Body S) v : (Adm (.set t) ρ v && Adm (.object b) ρ' v) = false :=
   and_false_of_ne (by decide) (adm_set t) (adm_object b) v
 
 /-- A list and an object share no value. -/
 theorem list_obj (pre : List (Term S)) sp suf (b : Body S) v :
-    (Adm (.list pre sp suf) v && Adm (.object b) v) = false :=
+    (Adm (.list pre sp suf) ρ v && Adm (.object b) ρ' v) = false :=
   and_false_of_ne (by decide) (adm_list pre sp suf) (adm_object b) v
 
 end Value
 
 section Attr
-variable [PrimAdm S] [PrimAdmA S]
+variable [PrimAdm S] [PrimAdmA S] {ρ ρ' : List S.C}
 
 /-- A primitive reads only primitive attributes. -/
-theorem admA_prim (g : S.Ground) (a : Sem.A S) (h : AdmA (.prim g) a = true) :
+theorem admA_prim (g : S.Ground) (a : Sem.A S) (h : AdmA (.prim g) ρ a = true) :
     formerA a = .prim :=
   Shapes.primA g a ((PrimAdmA.admA_exact g a).mp h)
 
 /-- A set reads only set attributes. -/
-theorem admA_set (t : Term S) (a : Sem.A S) (h : AdmA (.set t) a = true) :
+theorem admA_set (t : Term S) (a : Sem.A S) (h : AdmA (.set t) ρ a = true) :
     formerA a = .set := by
   simp only [AdmA, denote] at h
   split at h
@@ -148,7 +148,7 @@ theorem admA_set (t : Term S) (a : Sem.A S) (h : AdmA (.set t) a = true) :
 
 /-- A list reads only list attributes. -/
 theorem admA_list (pre : List (Term S)) sp suf (a : Sem.A S)
-    (h : AdmA (.list pre sp suf) a = true) : formerA a = .list := by
+    (h : AdmA (.list pre sp suf) ρ a = true) : formerA a = .list := by
   simp only [AdmA] at h
   split at h
   · next L hL =>
@@ -158,7 +158,7 @@ theorem admA_list (pre : List (Term S)) sp suf (a : Sem.A S)
   · exact nomatch h
 
 /-- An object reads only object attributes. -/
-theorem admA_object (b : Body S) (a : Sem.A S) (h : AdmA (.object b) a = true) :
+theorem admA_object (b : Body S) (a : Sem.A S) (h : AdmA (.object b) ρ a = true) :
     formerA a = .object := by
   cases b
   simp only [AdmA, AdmABody] at h
@@ -172,31 +172,31 @@ theorem admA_object (b : Body S) (a : Sem.A S) (h : AdmA (.object b) a = true) :
 /-! ## The six disjointness laws, on the read side -/
 
 /-- A primitive and a set share no attribute. -/
-theorem prim_setA (g : S.Ground) (t : Term S) c : (AdmA (.prim g) c && AdmA (.set t) c) = false :=
+theorem prim_setA (g : S.Ground) (t : Term S) c : (AdmA (.prim g) ρ c && AdmA (.set t) ρ' c) = false :=
   and_false_of_ne (by decide) (admA_prim g) (admA_set t) c
 
 /-- A primitive and a list share no attribute. -/
 theorem prim_listA (g : S.Ground) (pre : List (Term S)) sp suf c :
-    (AdmA (.prim g) c && AdmA (.list pre sp suf) c) = false :=
+    (AdmA (.prim g) ρ c && AdmA (.list pre sp suf) ρ' c) = false :=
   and_false_of_ne (by decide) (admA_prim g) (admA_list pre sp suf) c
 
 /-- A primitive and an object share no attribute. -/
 theorem prim_objA (g : S.Ground) (b : Body S) c :
-    (AdmA (.prim g) c && AdmA (.object b) c) = false :=
+    (AdmA (.prim g) ρ c && AdmA (.object b) ρ' c) = false :=
   and_false_of_ne (by decide) (admA_prim g) (admA_object b) c
 
 /-- A set and a list share no attribute. -/
 theorem set_listA (t : Term S) pre sp suf c :
-    (AdmA (.set t) c && AdmA (.list pre sp suf) c) = false :=
+    (AdmA (.set t) ρ c && AdmA (.list pre sp suf) ρ' c) = false :=
   and_false_of_ne (by decide) (admA_set t) (admA_list pre sp suf) c
 
 /-- A set and an object share no attribute. -/
-theorem set_objA (t : Term S) (b : Body S) c : (AdmA (.set t) c && AdmA (.object b) c) = false :=
+theorem set_objA (t : Term S) (b : Body S) c : (AdmA (.set t) ρ c && AdmA (.object b) ρ' c) = false :=
   and_false_of_ne (by decide) (admA_set t) (admA_object b) c
 
 /-- A list and an object share no attribute. -/
 theorem list_objA (pre : List (Term S)) sp suf (b : Body S) c :
-    (AdmA (.list pre sp suf) c && AdmA (.object b) c) = false :=
+    (AdmA (.list pre sp suf) ρ c && AdmA (.object b) ρ' c) = false :=
   and_false_of_ne (by decide) (admA_list pre sp suf) (admA_object b) c
 
 end Attr

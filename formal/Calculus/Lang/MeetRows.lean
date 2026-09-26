@@ -538,15 +538,15 @@ def Delegated : Term S → Prop
   | _ => True
 
 /-- The list companion is the plain map, so the union row reuses the `Forall₂` machinery. -/
-theorem meetSRightL_eq [Leaf S] (fam : Term S → Option (Term S)) :
-    ∀ os, meetSRightL fam os = os.map (meetSRight fam)
+theorem meetSRightL_eq [Leaf S] (fam : Pairing → Term S → Option (Term S)) (p : Pairing) :
+    ∀ os, meetSRightL fam p os = os.map (meetSRight fam p)
   | [] => rfl
-  | _ :: os => congrArg _ (meetSRightL_eq fam os)
+  | _ :: os => congrArg _ (meetSRightL_eq fam p os)
 
 /-- …and the union row's extraction, with no exclusions: the row is reached by the pattern. -/
-theorem meetSRight_union [Leaf S] {fam : Term S → Option (Term S)} {os : List (Term S)} {z : Term S}
-    (h : meetSRight fam (.union os) = some z) :
-    ∃ zs, List.Forall₂ (fun t w => meetSRight fam t = some w) os zs ∧
+theorem meetSRight_union [Leaf S] {fam : Pairing → Term S → Option (Term S)} {p : Pairing}
+    {os : List (Term S)} {z : Term S} (h : meetSRight fam p (.union os) = some z) :
+    ∃ zs, List.Forall₂ (fun t w => meetSRight fam p t = some w) os zs ∧
       z = Term.ofOptions (zs.filter (fun w => !w.isNever)) := by
   rw [meetSRight] at h
   obtain ⟨zs, hzs, hg⟩ := Option.bind_eq_some_iff.mp h
@@ -555,7 +555,8 @@ theorem meetSRight_union [Leaf S] {fam : Term S → Option (Term S)} {os : List 
   exact hzs
 
 /-- Two fields meet at the stronger mark, so the write bit is the join. -/
-theorem isReq_Field_meet [Leaf S] : ∀ {f fl fm : ObjectSlot S}, ObjectSlot.meet f fl = some fm →
+theorem isReq_Field_meet [Leaf S] {p : Pairing} :
+    ∀ {f fl fm : ObjectSlot S}, ObjectSlot.meet p f fl = some fm →
     ObjectSlot.isReq fm = (ObjectSlot.isReq f || ObjectSlot.isReq fl) := by
   intro f fl fm h
   match f, fl, h with
@@ -568,15 +569,16 @@ theorem isReq_Field_meet [Leaf S] : ∀ {f fl fm : ObjectSlot S}, ObjectSlot.mee
       rfl
 
 /-- The option companion is the plain map at the fixed partner. -/
-theorem meetSL_eq [Leaf S] (y : Term S) : ∀ os, Term.meetSL os y = os.map (fun t => Term.meet t y)
+theorem meetSL_eq [Leaf S] (p : Pairing) (y : Term S) :
+    ∀ os, Term.meetSL p os y = os.map (fun t => Term.meet p t y)
   | [] => rfl
-  | _ :: os => congrArg _ (meetSL_eq y os)
+  | _ :: os => congrArg _ (meetSL_eq p y os)
 
 /-- A certified union distributes: every option meets, the bottoms drop, and the survivors
     carry the certificate. -/
-theorem meet_union_of [Leaf S] {os : List (Term S)} {y z : Term S}
-    (h : Term.meet (.union os) y = some z) (hy : y ≠ .never) :
-    ∃ zs, List.Forall₂ (fun t w => Term.meet t y = some w) os zs ∧
+theorem meet_union_of [Leaf S] {p : Pairing} {os : List (Term S)} {y z : Term S}
+    (h : Term.meet p (.union os) y = some z) (hy : y ≠ .never) :
+    ∃ zs, List.Forall₂ (fun t w => Term.meet p t y = some w) os zs ∧
       z = Term.ofOptions (zs.filter (fun w => !w.isNever)) := by
   rw [Term.meet] at h
   · obtain ⟨zs, hzs, hg⟩ := Option.bind_eq_some_iff.mp h

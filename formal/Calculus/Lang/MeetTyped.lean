@@ -87,6 +87,10 @@ theorem typed_refine_inv {a : Term S} {p : S.Pred} :
     (∃ T μ, Typed (.refine a p) T μ) → ∃ T μ, Typed a T μ
   | ⟨_, _, h⟩ => by cases h with | refine h' => exact ⟨_, _, h'⟩
 
+/-- …and the body under a recursive term. -/
+theorem typed_mu_inv {b : Term S} : (∃ T μ, Typed (.mu b) T μ) → ∃ T μ, Typed b T μ
+  | ⟨_, _, h⟩ => by cases h with | mu _ h' => exact ⟨_, _, h'⟩
+
 /-- Normalising a refinement keeps it derivable: the bottom is derivable too. -/
 theorem typed_refineOf [Leaf S] {t : Term S} {p : S.Pred} (h : ∃ T μ, Typed t T μ) :
     ∃ T μ, Typed (Term.refineOf t p) T μ := by
@@ -231,43 +235,47 @@ theorem typed_object_of {F} (hF : Sem.map (S := S) = some F) {fs : Finset String
 
 mutual
 /-- Every row that reads the right operand alone is derivable wherever the family is. -/
-theorem typed_meetSRight [Leaf S] {x : Term S} {fam : Term S → Option (Term S)} (hf : TypedFam x fam) :
-    ∀ (y : Term S) z, meetSRight fam y = some z → (∃ T μ, Typed x T μ) → (∃ T μ, Typed y T μ) →
-      ∃ T μ, Typed z T μ
-  | .never, _, h, _, _ => by
+theorem typed_meetSRight [Leaf S] {x : Term S} {fam : Pairing → Term S → Option (Term S)}
+    (hf : ∀ q, TypedFam x (fam q)) :
+    ∀ (y : Term S) (p : Pairing) z, meetSRight fam p y = some z → (∃ T μ, Typed x T μ) →
+      (∃ T μ, Typed y T μ) → ∃ T μ, Typed z T μ
+  | .never, _, _, h, _, _ => by
       simp only [meetSRight, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
-  | .var _, _, h, _, _ => by
-      simp only [meetSRight, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
-  | .held _ _ _ _, _, h, _, _ => by simp [meetSRight] at h
-  | .refine y p, _, h, hx, hy => by
+  | .var _, _, _, h, _, _ => by simp [meetSRight] at h
+  | .held _ _ _ _, _, _, h, _, _ => by simp [meetSRight] at h
+  | .mu b, p, _, h, hx, hy => by
+      simp only [meetSRight] at h
+      exact typed_meetSRight hf b (shiftR p) _ h hx (typed_mu_inv hy)
+  | .refine y q, p, _, h, hx, hy => by
       simp only [meetSRight] at h
       split at h
       · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-        exact typed_refineOf (typed_meetSRight hf y w hw hx (typed_refine_inv hy))
+        exact typed_refineOf (typed_meetSRight hf y p w hw hx (typed_refine_inv hy))
       · exact absurd h (by simp)
-  | .union os, _, h, hx, hy => by
+  | .union os, p, _, h, hx, hy => by
       obtain ⟨zs, hF, rfl⟩ := meetSRight_union h
       exact typed_ofOptions (survivors hy
-        ((typed_meetSRightL hf os zs hF).imp fun _ _ k => k hx)
+        ((typed_meetSRightL hf os p zs hF).imp fun _ _ k => k hx)
         (List.filter_sublist (p := fun w : Term S => !w.isNever)))
-  | .prim g, _, h, hx, hy => hf (.prim g) _ trivial h hx hy
-  | .set b, _, h, hx, hy => hf (.set b) _ trivial h hx hy
-  | .opaq, _, h, hx, hy => hf .opaq _ trivial h hx hy
-  | .list p q s, _, h, hx, hy => hf (.list p q s) _ trivial h hx hy
-  | .object b, _, h, hx, hy => hf (.object b) _ trivial h hx hy
+  | .prim g, p, _, h, hx, hy => hf p (.prim g) _ trivial h hx hy
+  | .set b, p, _, h, hx, hy => hf p (.set b) _ trivial h hx hy
+  | .opaq, p, _, h, hx, hy => hf p .opaq _ trivial h hx hy
+  | .list pr q s, p, _, h, hx, hy => hf p (.list pr q s) _ trivial h hx hy
+  | .object b, p, _, h, hx, hy => hf p (.object b) _ trivial h hx hy
 termination_by structural y => y
 
 /-- The list companion: the union row's options, lifted pointwise. -/
-theorem typed_meetSRightL [Leaf S] {x : Term S} {fam : Term S → Option (Term S)} (hf : TypedFam x fam) :
-    ∀ os zs, List.Forall₂ (fun t w => meetSRight fam t = some w) os zs →
+theorem typed_meetSRightL [Leaf S] {x : Term S} {fam : Pairing → Term S → Option (Term S)}
+    (hf : ∀ q, TypedFam x (fam q)) :
+    ∀ os (p : Pairing) zs, List.Forall₂ (fun t w => meetSRight fam p t = some w) os zs →
       List.Forall₂ (fun t w => (∃ T μ, Typed x T μ) → (∃ T μ, Typed t T μ) →
         ∃ T μ, Typed w T μ) os zs
-  | [], _, h => by cases h; exact .nil
-  | t :: ts, _, h => by
+  | [], _, _, h => by cases h; exact .nil
+  | t :: ts, p, _, h => by
       cases h with
       | cons hh ht =>
-          exact .cons (fun hx hy => typed_meetSRight hf t _ hh hx hy)
-            (typed_meetSRightL hf ts _ ht)
+          exact .cons (fun hx hy => typed_meetSRight hf t p _ hh hx hy)
+            (typed_meetSRightL hf ts p _ ht)
 termination_by structural os => os
 end
 
@@ -305,6 +313,8 @@ theorem typed_famSet (a : Term S) {mt : Term S → Option (Term S)} (ih : TypedS
   cases y <;> first | exact hd.elim | skip
   case set y =>
       simp only [famSet] at h
+      split at h
+      · exact nomatch h
       split at h
       · next z' hz =>
         split at h
@@ -532,23 +542,43 @@ theorem typed_famObj {a : Body S} {g : {k // k ∈ a.fields} → ObjectSlot S �
 mutual
 /-- **The typed fragment is closed under the meet.** Where two derivable terms have a meet, the
     meet is derivable. The union row owes only the survivors' derivability (`survivors`). -/
-theorem typed_meet [Leaf S] : ∀ (x y : Term S) z, Term.meet x y = some z →
+theorem typed_meet [Leaf S] : ∀ (p : Pairing) (x y : Term S) z, Term.meet p x y = some z →
     (∃ T μ, Typed x T μ) → (∃ T μ, Typed y T μ) → ∃ T μ, Typed z T μ
-  | .never, _, _, h, _, _ => by
+  | _, .never, _, _, h, _, _ => by
       simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
-  | .held _ _ _ _, y, _, h, _, _ => by
+  | _, .held _ _ _ _, y, _, h, _, _ => by
       cases y <;>
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
           | exact absurd h (by simp [Term.meet])
-  | .var _, _, _, h, _, _ => by
-      simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
-  | .mu _, y, _, h, _, _ => by
+  | _, .var _, y, _, h, _, _ => by
       cases y <;>
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
+          | (simp only [Term.meet, Option.map_eq_some_iff] at h
+             obtain ⟨_, _, rfl⟩ := h
+             exact ⟨_, _, Typed.var _⟩)
           | exact absurd h (by simp [Term.meet])
-  | .refine x p, y, _, h, hx, hy => by
+  -- two recursive terms meet at a guarded recursive term of the body meet, and an unfolding
+  -- meets the body
+  | p, .mu b, y, _, h, hx, hy => by
+      cases y <;>
+        first
+          | (simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
+          | (simp only [Term.meet, Option.bind_eq_some_iff] at h
+             obtain ⟨w, hw, hz⟩ := h
+             split at hz
+             · cases hz; exact ⟨_, _, Typed.never⟩
+             · split at hz
+               · next hg =>
+                   cases hz
+                   obtain ⟨_, _, hwt⟩ :=
+                     typed_meet (pairMu p) b _ w hw (typed_mu_inv hx) (typed_mu_inv hy)
+                   exact ⟨_, _, Typed.mu hg hwt⟩
+               · exact nomatch hz)
+          | (simp only [Term.meet] at h
+             exact typed_meet (shiftL p) b _ _ h (typed_mu_inv hx) hy)
+  | p, .refine x q, y, _, h, hx, hy => by
       cases y with
       | never =>
           simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
@@ -556,77 +586,82 @@ theorem typed_meet [Leaf S] : ∀ (x y : Term S) z, Term.meet x y = some z →
         simp only [Term.meet] at h
         split at h
         · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-          exact typed_refineOf (typed_meet x _ w hw (typed_refine_inv hx) hy)
+          exact typed_refineOf (typed_meet p x _ w hw (typed_refine_inv hx) hy)
         · exact absurd h (by simp)
-  | .union os, y, _, h, hx, hy => by
+  | p, .union os, y, _, h, hx, hy => by
       cases y with
       | never =>
           simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
       | _ =>
         obtain ⟨zs, hF, rfl⟩ := meet_union_of h (by simp)
         exact typed_ofOptions (survivors hx
-          ((typed_meetL os _ zs hF).imp fun _ _ k ht => k ht hy)
+          ((typed_meetL p os _ zs hF).imp fun _ _ k ht => k ht hy)
           (List.filter_sublist (p := fun w : Term S => !w.isNever)))
-  | .prim g, y, z, h, hx, hy => typed_meetSRight (typed_famPrim g) y z h hx hy
-  | .set a, y, z, h, hx, hy =>
-      typed_meetSRight (typed_famSet a (fun u w hw => typed_meet a u w hw)) y z h hx hy
-  | .opaq, y, z, h, hx, hy => typed_meetSRight (typed_famOpaq) y z h hx hy
-  | .list pre sp suf, y, z, h, hx, hy => by
+  | p, .prim g, y, z, h, hx, hy => typed_meetSRight (fun _ => typed_famPrim g) y p z h hx hy
+  | p, .set a, y, z, h, hx, hy =>
+      typed_meetSRight (fun q => typed_famSet a (fun u w hw => typed_meet q a u w hw))
+        y p z h hx hy
+  | p, .opaq, y, z, h, hx, hy => typed_meetSRight (fun _ => typed_famOpaq) y p z h hx hy
+  | p, .list pre sp suf, y, z, h, hx, hy => by
       cases sp with
       | none =>
-          exact typed_meetSRight (typed_famList (pre := pre) (sp := none) (suf := suf)
-            (typed_meetSTs pre) (Or.inl ⟨rfl, rfl⟩) (typed_meetSTs suf)) y z h hx hy
+          exact typed_meetSRight (fun q => typed_famList (pre := pre) (sp := none) (suf := suf)
+            (typed_meetSTs q pre) (Or.inl ⟨rfl, rfl⟩) (typed_meetSTs q suf)) y p z h hx hy
       | some t =>
-          exact typed_meetSRight (typed_famList (pre := pre) (sp := some t) (suf := suf)
-            (typed_meetSTs pre)
-            (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => typed_meet t u w hw⟩)
-            (typed_meetSTs suf)) y z h hx hy
-  | .object (.mk fs f none), y, z, h, hx, hy =>
-      typed_meetSRight (typed_famObj (a := .mk fs f none)
-        (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)
+          exact typed_meetSRight (fun q => typed_famList (pre := pre) (sp := some t)
+            (suf := suf) (typed_meetSTs q pre)
+            (Or.inr ⟨t, Term.meet q t, rfl, rfl, fun u w hw => typed_meet q t u w hw⟩)
+            (typed_meetSTs q suf)) y p z h hx hy
+  | p, .object (.mk fs f none), y, z, h, hx, hy =>
+      typed_meetSRight (fun q => typed_famObj (a := .mk fs f none)
+        (fun k fl fm hm => typed_Field_meet q (f k) fl fm hm)
         (fun _ _ hz _ _ => by
-          simp only [Option.some.injEq] at hz; subst hz; exact ⟨_, _, Typed.never⟩)) y z h hx hy
-  | .object (.mk fs f (some t)), y, z, h, hx, hy =>
-      typed_meetSRight (typed_famObj (a := .mk fs f (some t))
-        (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)
-        (fun u w hw => typed_meet t u w hw)) y z h hx hy
-termination_by structural x => x
+          simp only [Option.some.injEq] at hz; subst hz; exact ⟨_, _, Typed.never⟩))
+        y p z h hx hy
+  | p, .object (.mk fs f (some t)), y, z, h, hx, hy =>
+      typed_meetSRight (fun q => typed_famObj (a := .mk fs f (some t))
+        (fun k fl fm hm => typed_Field_meet q (f k) fl fm hm)
+        (fun u w hw => typed_meet q t u w hw)) y p z h hx hy
+termination_by structural _ x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
-theorem typed_meetL [Leaf S] : ∀ (os : List (Term S)) (y : Term S) (zs : List (Term S)),
-    List.Forall₂ (fun t w => Term.meet t y = some w) os zs →
+theorem typed_meetL [Leaf S] : ∀ (p : Pairing) (os : List (Term S)) (y : Term S)
+    (zs : List (Term S)),
+    List.Forall₂ (fun t w => Term.meet p t y = some w) os zs →
     List.Forall₂ (fun t w => (∃ T μ, Typed t T μ) → (∃ T μ, Typed y T μ) →
       ∃ T μ, Typed w T μ) os zs
-  | [], _, _, h => by cases h; exact .nil
-  | t :: ts, y, _, h => by
+  | _, [], _, _, h => by cases h; exact .nil
+  | p, t :: ts, y, _, h => by
       cases h with
       | cons hh ht =>
-          exact .cons (fun hx hy => typed_meet t y _ hh hx hy) (typed_meetL ts y _ ht)
-termination_by structural os => os
+          exact .cons (fun hx hy => typed_meet p t y _ hh hx hy) (typed_meetL p ts y _ ht)
+termination_by structural _ os => os
 
 /-- Every position of a tuple carries the meet at that position. -/
-theorem typed_meetSTs [Leaf S] : ∀ ts : List (Term S), List.Forall₂ TypedSound ts (Term.meetSTs ts)
-  | [] => .nil
-  | t :: ts => .cons (fun u w hw => typed_meet t u w hw) (typed_meetSTs ts)
-termination_by structural ts => ts
+theorem typed_meetSTs [Leaf S] : ∀ (p : Pairing) (ts : List (Term S)),
+    List.Forall₂ TypedSound ts (Term.meetSTs p ts)
+  | _, [] => .nil
+  | p, t :: ts => .cons (fun u w hw => typed_meet p t u w hw) (typed_meetSTs p ts)
+termination_by structural _ ts => ts
 
 /-- Two fields at one name carry two terms that meet. -/
-theorem typed_Field_meet [Leaf S] : ∀ (f fl : ObjectSlot S) (fm : ObjectSlot S), ObjectSlot.meet f fl = some fm →
+theorem typed_Field_meet [Leaf S] : ∀ (p : Pairing) (f fl : ObjectSlot S) (fm : ObjectSlot S),
+    ObjectSlot.meet p f fl = some fm →
     (∃ T μ, Typed (ObjectSlot.termOf f) T μ) → (∃ T μ, Typed (ObjectSlot.termOf fl) T μ) →
     ∃ T μ, Typed (ObjectSlot.termOf fm) T μ
-  | .req x, .req y, _, h, hx, hy => by
+  | p, .req x, .req y, _, h, hx, hy => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact typed_meet x y tz hz hx hy
-  | .req x, .optional y, _, h, hx, hy => by
+      exact typed_meet p x y tz hz hx hy
+  | p, .req x, .optional y, _, h, hx, hy => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact typed_meet x y tz hz hx hy
-  | .optional x, .req y, _, h, hx, hy => by
+      exact typed_meet p x y tz hz hx hy
+  | p, .optional x, .req y, _, h, hx, hy => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact typed_meet x y tz hz hx hy
-  | .optional x, .optional y, _, h, hx, hy => by
+      exact typed_meet p x y tz hz hx hy
+  | p, .optional x, .optional y, _, h, hx, hy => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact typed_meet x y tz hz hx hy
-termination_by structural f => f
+      exact typed_meet p x y tz hz hx hy
+termination_by structural _ f => f
 end
 
 end Calculus.Alg
