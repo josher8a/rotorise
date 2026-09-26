@@ -511,17 +511,19 @@ is the discharger stated on what `select` actually decides by.
 ### The classifier, and what it is the specification of
 
 The union obligation is compatibility, and the certificate is sufficient for it. `certPair`
-certifies a pair where the meet of the two terms is the bottom (`meetNever'`).
+certifies a pair where the two terms are orthogonal (`viewsNever`).
 
-**The meet at the bottom is orthogonality.** A term denotes a partial isomorphism. `writeView`
+**The certificate is orthogonality.** A term denotes a partial isomorphism. `writeView`
 states its domain and `readView` states its range. In an inverse semigroup, two elements whose
 domains and ranges are disjoint meet at the bottom (Lawson, *Primer on inverse semigroups I*,
-Lemma 2.16). `meet'` adds that row in front of `Term.meet`, and `Adm_meet'` and `AdmA_meet'` hold
-with no premise. `Term.meet` refuses a `held`, so a `held` reaches the meet through that row. The
+Lemma 2.16). `certPair` meets the two caller views and the two stored views with `Term.meet`.
+`Term.meet` refuses a `held`, and a view holds no `held`, so a `held` reaches the certificate
+through its views. On a term with no `held`, the caller view is the term itself. The
 view of a `union` is the union of the views of its options. The view of `mu b` is `mu` of the view
-of `b`, and a variable stays a variable, so a `held` below a recursion reaches the meet too. The
-stored view keeps a predicate only where the inner term holds no `held` and no variable, because a
-variable denotes a stage of its binder, and the stage can hold a `held`.
+of `b`, and a variable stays a variable, so a `held` below a recursion reaches the certificate too.
+The stored view keeps a predicate only where the inner term holds no `held` under one flag per
+binder. The flag says whether the binder's body holds a `held`, because a variable denotes a stage
+of its binder, and the stage holds a `held` only where the body holds one.
 
 **The meet reads a closure through its inner term.** The admission of a `refine` at a `closure`
 is a function. A refinement admits a part of what its inner term admits,
@@ -538,7 +540,7 @@ refuses every other pair, because the pair is not shown compatible.
 | the never side | one option is `never` | `pairwiseCompat_never_left`, `pairwiseCompat_never_right` |
 | held-free | both options are held-free | `pairwiseCompat_of_HF`: both sit below `opaque` |
 | the common bound | `below(x, y)` or `below(y, x)` holds | `pairwiseCompat_of_sub`: the wider option is the bound |
-| the certificate | `separable`, the direct port of `certPair`: the meet at the bottom, of the terms or of their views | `pairwiseCompat_of_separated` |
+| the certificate | `separable`: `certPair`, which meets the views at the bottom, and the meet of the terms at the bottom where the host has no views | `pairwiseCompat_of_separated` |
 
 The host's rule `below(x, y)` in `src/codec/term.ts` is narrower than the model's `Sub`. It has
 five rows: a literal is below its base and below itself; a union is below a term that each of its

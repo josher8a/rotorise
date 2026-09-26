@@ -133,7 +133,7 @@ decline on both questions, not a refutation.
 There is no second apparatus: the certificate is the inhabitance of the meet. Two terms whose
 domains and ranges meet at the bottom are orthogonal, and the meet of two orthogonal elements is
 the bottom (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). The domain and the range of a
-term are its two views, so the meet answers the bottom there.
+term are its two views, so the certificate meets the views at the bottom.
 
 ### Admission is by attempt, at every constructor
 

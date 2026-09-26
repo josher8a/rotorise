@@ -886,26 +886,31 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
 
 /**
  * **Whether two options share no value and no attribute**, the host's certificate: the model's
- * `certPair`, row for row.
+ * `certPair`, and a meet row where the host has no views.
  *
  * `union` asks it of a pair that {@link compatible} shows by no other warrant. Where it answers
  * `true`, the model proves `PairwiseCompat` through `separates_of_certPair` and
  * `pairwiseCompat_of_separated`. For each pair `union` refuses, `formal/.separations.lean` pins that
  * `certPair` is `false`, so this never answers `false` where `certPair` answers `true`.
  *
- * Two rows, and together they are the model's `meetNever'`:
+ * Two rows. The model's `certPair` is the second row alone: `viewsNever`.
  *
- * **Two options that meet at the bottom**, the `Term.meet` row of the model's `meet'`. `Adm_meet'`
- * and `AdmA_meet'` make the meet's admission the conjunction of the two, so a meet at `never`
- * admits no common value and reads no common attribute. An option inside another meets the other
- * at the option itself, and not at the bottom, so no row certifies a literal beside its base.
+ * **Two options that meet at the bottom**, the model's `meetNever`. `Adm_meet` and `AdmA_meet`
+ * make the meet's admission the conjunction of the two, so a meet at `never` admits no common
+ * value and reads no common attribute. An option inside another meets the other at the option
+ * itself, and not at the bottom, so no row certifies a literal beside its base.
  *
- * **Two options, one of which holds a `held`: the two views**, the orthogonal row of the model's
- * `meet'`. A `held` writes where its held side does and reads where its inner term does, so the
- * caller views answer the write question and the stored views answer the read question. Both
- * pairs of views must meet at the bottom. The model asks the row with no `held` guard, because
- * on a held-free term the caller view is the term itself, so the row certifies no pair that the
- * first row does not certify.
+ * **The host keeps this row where the views do not exist.** {@link viewable} refuses a `legacy`
+ * with a `held` below it. The meet still answers the bottom at two objects whose tags meet at the
+ * bottom, because a slot at the bottom decides before a slot that refuses. The model has no
+ * `legacy`, so the model needs no such row.
+ *
+ * **Two options, one of which holds a `held`: the two views**, the model's `viewsNever`. A `held`
+ * writes where its held side does and reads where its inner term does, so the caller views answer
+ * the write question and the stored views answer the read question. Both pairs of views must meet
+ * at the bottom. The host asks the row only where one option holds a `held`. On a held-free term
+ * the caller view is the term itself, so there the first row certifies each pair that the views
+ * certify.
  *
  * The meet refuses a closure beside a partner that its inner term does not meet at the bottom, so
  * the first row certifies `union([refine(string, isNumeral), array(decimal)])`.
@@ -1214,7 +1219,7 @@ const storedView = throughThunks((t, view) => {
 })
 
 /**
- * **The orthogonal row of the model's `meet'`**: one option holds a `held`, both are
+ * **The model's `viewsNever`, where one option holds a `held`**: both are
  * {@link viewable}, the caller views meet at the bottom, and the stored views meet at the bottom.
  * Then no caller value is admitted by both options, and no attribute is read by both.
  */
