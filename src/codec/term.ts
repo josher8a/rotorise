@@ -878,18 +878,20 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  * `pairwiseCompat_of_separated`. For each pair `union` refuses, `formal/.separations.lean` pins that
  * `certPair` is `false`, so this never answers `false` where `certPair` answers `true`.
  *
- * Three rows, in the order the model asks them:
+ * Three rows. The first two are the model's first disjunct, `meetNever'`, and the third row is
+ * the model's second disjunct, `Orth1`:
  *
- * **Two options that meet at the bottom**, as the model's `meetNever`. `Adm_meet` and `AdmA_meet`
- * make the meet's admission the conjunction of the two, so a meet at `never` admits no common
- * value and reads no common attribute. An option inside another meets the other at the option
- * itself, and not at the bottom. The occupancies of the two meet too, so no row certifies a
- * literal beside its base.
+ * **Two options that meet at the bottom**, the `Term.meet` row of the model's `meet'`. `Adm_meet'`
+ * and `AdmA_meet'` make the meet's admission the conjunction of the two, so a meet at `never`
+ * admits no common value and reads no common attribute. An option inside another meets the other
+ * at the option itself, and not at the bottom. The occupancies of the two meet too, so no row
+ * certifies a literal beside its base.
  *
- * **Two options, one of which holds a `held`: the two views**, as the model's `certViews`. A
- * `held` writes where its held side does and reads where its inner term does, so the caller views
- * answer the write question and the stored views answer the read question. Both pairs of views
- * must meet at the bottom.
+ * **Two options, one of which holds a `held`: the two views**, the orthogonal row of the model's
+ * `meet'`. A `held` writes where its held side does and reads where its inner term does, so the
+ * caller views answer the write question and the stored views answer the read question. Both
+ * pairs of views must meet at the bottom. The model asks the row with no `held` guard, because
+ * on a held-free term each view is the term itself, and the row is then the first row.
  *
  * **The two occupancies, both sides conjoined**, as the model's `Orth1`. The meet refuses a
  * closure, and the occupancies read no predicate, so `union([refine(string, isNumeral),
@@ -1177,9 +1179,9 @@ const storedView = (t: Term): Term => {
 }
 
 /**
- * **The model's `certViews`**: one option holds a `held`, both are {@link viewable}, the caller
- * views meet at the bottom, and the stored views meet at the bottom. Then no caller value is
- * admitted by both options, and no attribute is read by both.
+ * **The orthogonal row of the model's `meet'`**: one option holds a `held`, both are
+ * {@link viewable}, the caller views meet at the bottom, and the stored views meet at the bottom.
+ * Then no caller value is admitted by both options, and no attribute is read by both.
  */
 const viewsApart = (x: Term, y: Term): boolean =>
     (reaches(x, ['held']) || reaches(y, ['held'])) &&

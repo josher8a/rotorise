@@ -130,11 +130,13 @@ decline on both questions, not a refutation.
 > their functions are equal, and a function has no decidable equality. The link between
 > compatibility and the meet is a theorem of inverse monoids, not yet of this development.
 
-There is no second apparatus: the certificate is the inhabitance of the meet, of the two terms or
-of their two views.
+There is no second apparatus: the certificate is the inhabitance of the meet. Two terms whose
+domains and ranges meet at the bottom are orthogonal, and the meet of two orthogonal elements is
+the bottom (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). The domain and the range of a
+term are its two views, so the meet answers the bottom there.
 
-> ASPIRATION: the certificate carries the occupancy test as a third disjunct, because the meet
-> refuses a closure and the occupancies read no predicate.
+> ASPIRATION: the certificate carries the occupancy test as a second disjunct, because the meet
+> states no recursion, the meet refuses a closure, and the occupancies read no predicate.
 
 ### Admission is by attempt, at every constructor
 

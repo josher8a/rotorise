@@ -512,15 +512,21 @@ is the discharger stated on what `select` actually decides by.
 ### The classifier, and what it is the specification of
 
 The union obligation is compatibility, and the certificate is sufficient for it. `certPair`
-certifies a pair on one of three tests. The meet of the two terms is the bottom (`meetNever`).
-Where a `held` occurs, the caller views meet at the bottom and the stored views meet at the bottom
-(`certViews`). The occupancies are disjoint on both sides (`Orth1`). The view of a `union` is the
-union of the views of its options.
+certifies a pair on one of two tests. The meet of the two terms is the bottom (`meetNever'`), or
+the occupancies are disjoint on both sides (`Orth1`).
 
-**The slot test is a disjunct because the meet refuses a closure.** The admission of a `refine`
-at a `closure` is a function, so the meet answers `none` beside every term but the bottom. The
-occupancies read no predicate. So `Orth1` certifies a closure refinement beside an option that
-writes and reads other slots, where the meet answers `none`.
+**The meet at the bottom is orthogonality.** A term denotes a partial isomorphism. `writeView`
+states its domain and `readView` states its range. In an inverse semigroup, two elements whose
+domains and ranges are disjoint meet at the bottom (Lawson, *Primer on inverse semigroups I*,
+Lemma 2.16). `meet'` adds that row in front of `Term.meet`, and `Adm_meet'` and `AdmA_meet'` hold
+with no premise. `Term.meet` refuses a `held`, so a `held` reaches the meet through that row. The
+view of a `union` is the union of the views of its options.
+
+**The slot test is a disjunct because the meet cannot state every pair.** The meet states no
+recursion. The admission of a `refine` at a `closure` is a function, so the meet answers `none`
+beside every term but the bottom. The occupancies read no predicate. So `Orth1` certifies a
+closure refinement beside an option that writes and reads other slots, where the meet answers
+`none`.
 
 **Its value is that it is half of the specification of the library's declaration-time guard, and
 a checked half.** The `union` combinator in `src/` accepts a pair on one of four warrants. It
@@ -531,7 +537,7 @@ refuses every other pair, because the pair is not shown compatible.
 | the never side | one option is `never` | `pairwiseCompat_never_left`, `pairwiseCompat_never_right` |
 | held-free | both options are held-free | `pairwiseCompat_of_HF`: both sit below `opaque` |
 | the common bound | `below(x, y)` or `below(y, x)` holds | `pairwiseCompat_of_sub`: the wider option is the bound |
-| the certificate | `separable`, the direct port of `certPair`, with the same three tests | `pairwiseCompat_of_separated` |
+| the certificate | `separable`, the direct port of `certPair`: the meet at the bottom, of the terms or of their views, or the slot test | `pairwiseCompat_of_separated` |
 
 The host's rule `below(x, y)` in `src/codec/term.ts` is narrower than the model's `Sub`. It has
 five rows: a literal is below its base and below itself; a union is below a term that each of its

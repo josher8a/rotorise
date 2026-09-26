@@ -990,13 +990,17 @@ shown compatible.
 \begin{definition}[the certificate]
 \label{def:certificate}
 \uses{cond:compat,def:occupancy}
-\lean{Calculus.certPair, Calculus.meetNever, Calculus.certViews, Calculus.Alg.Orth1}
+\lean{Calculus.certPair, Calculus.meet', Calculus.meetNever', Calculus.viewsNever, Calculus.Alg.Orth1}
 \leanok
-Two options are certified on one of three tests. Their meet is the bottom. Where a \texttt{held}
-occurs, their caller views meet at the bottom and their stored views meet at the bottom. Their
-occupancies are disjoint on both sides. The view of a union is the union of its options' views,
-because a union admits where one of its options admits. The third test is a disjunct because the
-meet refuses a closure, and the occupancies read no predicate. A certified pair is separated
+Two options are certified on one of two tests. Their meet is the bottom, or their occupancies are
+disjoint on both sides. A term denotes a partial isomorphism, and its caller view and its stored
+view are its domain and its range. Two terms whose domains and ranges meet at the bottom are
+orthogonal, and the meet of two orthogonal elements is the bottom (Lawson, \emph{Primer on inverse
+semigroups I}, Lemma 2.16). So the meet answers the bottom there, and a \texttt{held} reaches the
+meet through its views. On a held-free term each view is the term itself. The view of a union is
+the union of its options' views, because a union admits where one of its options admits. The
+second test is a disjunct because the meet states no recursion and refuses a closure, and the
+occupancies read no predicate. A certified pair is separated
 (\texttt{separates\_of\_certPair}), so it is compatible. The certificate is sufficient and not
 necessary: two restrictions of one adapter that overlap are compatible, and no certificate reaches
 them.
