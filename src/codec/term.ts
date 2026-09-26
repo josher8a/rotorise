@@ -890,7 +890,8 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  * `meet'`. A `held` writes where its held side does and reads where its inner term does, so the
  * caller views answer the write question and the stored views answer the read question. Both
  * pairs of views must meet at the bottom. The model asks the row with no `held` guard, because
- * on a held-free term each view is the term itself, and the row is then the first row.
+ * on a held-free term the caller view is the term itself, so the row certifies no pair that the
+ * first row does not certify.
  *
  * **The two occupancies, both sides conjoined**, as the model's `Orth1`. The occupancies read no
  * predicate. The meet refuses a closure beside a partner that its inner term does not meet at the
@@ -1064,39 +1065,46 @@ export const heldOnRecursivePath = (root: Term): boolean => {
 }
 
 /**
- * **Whether {@link callerView} and {@link storedView} are sound on a term**, and build it without
- * forcing a thunk.
+ * **Whether {@link callerView} and {@link storedView} are sound on a term.**
  *
  * The view of a `union` is the union of the views of its options, because a union admits where
  * one of its options admits. A `legacy` with a `held` below it has no view: its `r` reads an
- * attribute to a held value, so the read widens on both sides. A thunk has no view, because a
- * walk that forces a recursive thunk does not end.
+ * attribute to a held value, so the read widens on both sides. A thunk has the view of the term
+ * it returns, and a thunk that throws has no view, because the view of the thunk forces it.
+ *
+ * The walk forces each thunk once, so it ends: a thunk memoizes its codec, and every other edge
+ * of a term is built before the term.
  */
-const viewable = (t: Term): boolean => {
+const viewable = (t: Term, seen: Set<Term> = new Set()): boolean => {
+    const on = (one: Term) => viewable(one, seen)
     switch (t.kind) {
-        case 'lazy':
-            return false
+        case 'lazy': {
+            if (seen.has(t)) return true
+            seen.add(t)
+            const forced = force(t)
+            return forced !== undefined && on(forced)
+        }
         case 'held':
-            return viewable(t.inner) && viewable(t.outer)
+            return on(t.inner) && on(t.outer)
         case 'refine':
-            return viewable(t.inner)
+            return on(t.inner)
         case 'set':
-            return viewable(t.elem)
+            return on(t.elem)
         case 'union':
-            return t.options.every(viewable)
+            return t.options.every(on)
         // `reaches` counts a thunk it cannot read as a `held`, so such a thunk below refuses here too
         case 'legacy':
             return !reaches(t, ['held'])
         case 'list':
             return (
-                t.pre.every(viewable) &&
-                (t.spread === undefined || viewable(t.spread)) &&
-                t.suf.every(viewable)
+                t.pre.every(on) &&
+                (t.spread === undefined || on(t.spread)) &&
+                t.suf.every(on)
             )
         case 'object':
             return (
-                Object.values(t.body.fields).every((f) => viewable(f.t)) &&
-                (t.body.rest === undefined || viewable(t.body.rest))
+                Object.values(t.body.fields).every((f) => on(f.t)) &&
+                (t.body.rest === undefined || on(t.body.rest))
             )
         default:
             return true
@@ -1130,49 +1138,79 @@ const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
         }
         case 'union':
             return { kind: 'union', options: t.options.map(view) }
-        // a set's view is the set of its element's view, where that view is held-free: the
-        // model reads a held-free element element by element
-        case 'set': {
-            const elem = view(t.elem)
-            return reaches(elem, ['held']) ? t : { kind: 'set', elem }
-        }
+        // a view holds no `held`, so the set of the element's view writes element by element
+        case 'set':
+            return { kind: 'set', elem: view(t.elem) }
         default:
             return t
     }
 }
 
 /**
+ * **A view that reads through a thunk**, as the model's views read through `mu`: the view of a
+ * thunk is a thunk that returns the view of the term that the first thunk returns. Each term
+ * object has one view object, so a cycle of the term is a cycle of the view, closed at the view
+ * of the same binder. {@link meetTerms} then reads the view as `mu` of the view of the body, and
+ * a variable of the view at the thunk.
+ *
+ * The build forces no thunk, so it ends: it recurses only through the edges that are not a
+ * thunk, and every such edge of a term is built before the term. A thunk of the view forces its
+ * thunk when {@link meetTerms} reads it, and {@link viewable} forced each such thunk already.
+ */
+const throughThunks =
+    (row: (t: Term, view: (t: Term) => Term) => Term) =>
+    (root: Term): Term => {
+        const views = new Map<Term, Term>()
+        const view = (t: Term): Term => {
+            const known = views.get(t)
+            if (known !== undefined) return known
+            const made: Term =
+                t.kind === 'lazy'
+                    ? { kind: 'lazy', get: () => view(t.get()) }
+                    : row(t, view)
+            views.set(t, made)
+            return made
+        }
+        return view(root)
+    }
+
+/**
  * **The caller view**: each `held` becomes its held side. The view admits each value that the
  * term admits, where {@link viewable} holds. A `refine` above a `held` keeps its predicate,
  * because the caller states the predicate on the held value.
  */
-const callerView = (t: Term): Term => {
+const callerView = throughThunks((t, view) => {
     switch (t.kind) {
         case 'held':
-            return callerView(t.outer)
+            return view(t.outer)
         case 'refine':
-            return { kind: 'refine', inner: callerView(t.inner), q: t.q }
+            return { kind: 'refine', inner: view(t.inner), q: t.q }
         default:
-            return mapChildren(t, callerView)
+            return mapChildren(t, view)
     }
-}
+})
 
 /**
  * **The stored view**: each `held` becomes its inner term. The view reads each attribute that
- * the term reads, where {@link viewable} holds. A `refine` above a `held` drops its predicate,
- * because data exists only on the side where it was stated: the stored side meets the predicate
- * only through `g`, and the view keeps no closure.
+ * the term reads, where {@link viewable} holds.
+ *
+ * **The view keeps a predicate only where the inner term decodes the same in the view as in the
+ * term**: where the inner term reaches no `held` and closes no cycle. A thunk that closes a cycle
+ * is a variable of the model, and the variable denotes a stage of its binder, which can hold a
+ * `held`. {@link reaches} counts such a thunk as a `held`. Elsewhere the view drops the
+ * predicate, because data exists only on the side where it was stated: the stored side meets the
+ * predicate only through `g`, and the view keeps no closure.
  */
-const storedView = (t: Term): Term => {
+const storedView = throughThunks((t, view) => {
     switch (t.kind) {
         case 'held':
-            return storedView(t.inner)
+            return view(t.inner)
         case 'refine':
-            return reaches(t.inner, ['held']) ? storedView(t.inner) : t
+            return reaches(t.inner, ['held']) ? view(t.inner) : t
         default:
-            return mapChildren(t, storedView)
+            return mapChildren(t, view)
     }
-}
+})
 
 /**
  * **The orthogonal row of the model's `meet'`**: one option holds a `held`, both are
