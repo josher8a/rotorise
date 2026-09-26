@@ -548,16 +548,20 @@ def meetNever (x y : Term) : Bool := (Term.meet x y).any Term.isNever
 mutual
 /-- **The caller-side view**: each `held` becomes its caller-side term. The view admits each
     value that the term admits. The view of a `union` is the union of the views, because a union
-    admits where one of its options admits. -/
+    admits where one of its options admits.
+
+    The view of `mu b` is `mu` of the view of `b`, and a variable stays a variable. Each stage of
+    the view writes each value that the same stage of the term writes, so the view of a
+    recursive term admits what the term admits. The view holds no `held` (`HF_writeView`), so a
+    set of the view writes element by element. -/
 def writeView : Term → Term
   | .held _ P _ _ => writeView P
   | .refine t p => .refine (writeView t) p
   | .list pre sp suf => .list (writeViewL pre) (writeViewO sp) (writeViewL suf)
   | .object b => .object (writeViewB b)
   | .union os => .union (writeViewL os)
-  -- a set's view is the set of its element's view, where that view is held-free: the set row
-  -- of `Adm` reads a held-free element element by element
-  | .set t => if hasHeld (writeView t) then .set t else .set (writeView t)
+  | .set t => .set (writeView t)
+  | .mu b => .mu (writeView b)
   | t => t
 def writeViewL : List Term → List Term
   | [] => []
@@ -573,17 +577,23 @@ def writeViewS : ObjectSlot → ObjectSlot
 end
 
 mutual
-/-- **The stored-side view**: each `held` becomes its inner term. A `refine` above a `held`
-    drops its predicate. Data exists only on the side where it was stated: the read test of the
-    predicate decodes through `g`, so on the stored side the predicate is the closure `p ∘ g`,
-    and the view keeps no closure. -/
+/-- **The stored-side view**: each `held` becomes its inner term. The view of `mu b` is `mu` of
+    the view of `b`, and a variable stays a variable, as in `writeView`.
+
+    **The view keeps a predicate only where the inner term decodes the same in the view as in the
+    term**: where the inner term holds no `held` and no variable. A variable denotes a stage of
+    its binder, and the stage can hold a `held`, so a variable counts as a possible `held`.
+    Elsewhere the view drops the predicate. Data exists only on the side where it was stated: the
+    read test of the predicate decodes through `g`, so on the stored side the predicate is the
+    closure `p ∘ g`, and the view keeps no closure. The view holds no `held` (`HF_readView`). -/
 def readView : Term → Term
   | .held t _ _ _ => readView t
-  | .refine t p => if hasHeld t then readView t else .refine t p
+  | .refine t p => if hasHeld t || t.hasVar then readView t else .refine t p
   | .list pre sp suf => .list (readViewL pre) (readViewO sp) (readViewL suf)
   | .object b => .object (readViewB b)
   | .union os => .union (readViewL os)
-  | .set t => if hasHeld (readView t) then .set t else .set (readView t)
+  | .set t => .set (readView t)
+  | .mu b => .mu (readView b)
   | t => t
 def readViewL : List Term → List Term
   | [] => []
@@ -848,6 +858,23 @@ theorem certPair_heldNE :
 theorem certPair_heldAny :
     certPair (.held (.set .string) (.list [] (some .string) []) id id)
       (.list [] (some .number) []) = false := by
+  decide
+
+/-- **A `held` below a recursion is certified where the views part.** The caller view of the
+    recursive term is `mu (union [literal "1", list [] (some (var 0)) []])`, and the stored view
+    is `mu (union [number, list [] (some (var 0)) []])`. Each meets `literal "A" ∪ literal "B"` at
+    the bottom. The shape test does not certify the pair, because both terms write a string. -/
+theorem certPair_heldBelowMu :
+    certPair (.union [.literal .string "A", .literal .string "B"])
+      (.mu (.union [.held .number (.literal .string "1") id id, .list [] (some (.var 0)) []]))
+      = true := by
+  decide
+
+/-- …and the pair is refused where the caller views meet: the text `"1"` is a value of both. -/
+theorem certPair_heldBelowMu_meets :
+    certPair (.literal .string "1")
+      (.mu (.union [.held .number (.literal .string "1") id id, .list [] (some (.var 0)) []]))
+      = false := by
   decide
 
 /-! ### Why the write-agreement condition is conditional
@@ -1441,236 +1468,329 @@ theorem separates_of_meetNever {x y : Term} (h : meetNever x y = true) : Separat
 
 /-! ## The views admit what the term admits -/
 
-/-- **A set over a held-free element admits where a set over a narrower element does.** The
-    held-free set writes element by element, so an element inclusion lifts to the sets. -/
-theorem Adm_set_of_elem {t u : Term} (hu : HF u) (h : ∀ w, Adm t w = true → Adm u w = true)
-    {v : Value} (hv : Adm (.set t) v = true) : Adm (.set u) v = true := by
+mutual
+/-- **The caller-side view holds no `held`.** Each `held` becomes its caller-side view, and
+    every other row keeps its constructor. -/
+theorem HF_writeView : ∀ t : Term, HF (writeView t)
+  | .held _ P _ _ => by simp only [writeView]; exact HF_writeView P
+  | .refine t _ => by simp only [writeView]; exact HF_writeView t
+  | .list pre sp suf => by
+      simp only [writeView]; exact ⟨HF_writeViewL pre, HF_writeViewO sp, HF_writeViewL suf⟩
+  | .object (.mk fs f w) => by
+      simp only [writeView, writeViewB]; exact ⟨fun k => HF_writeViewS (f k), HF_writeViewO w⟩
+  | .union os => by simp only [writeView]; exact HF_writeViewL os
+  | .set t => by simp only [writeView]; exact HF_writeView t
+  | .mu b => by simp only [writeView]; exact HF_writeView b
+  | .prim _ => trivial | .opaq => trivial | .never => trivial | .var _ => trivial
+/-- `HF_writeView` over a list. -/
+theorem HF_writeViewL : ∀ ts : List Term, HFL (writeViewL ts)
+  | [] => trivial
+  | t :: ts => ⟨HF_writeView t, HF_writeViewL ts⟩
+/-- `HF_writeView` at an optional term. -/
+theorem HF_writeViewO : ∀ o : Option Term, HFO (writeViewO o)
+  | none => trivial
+  | some t => HF_writeView t
+/-- `HF_writeView` at a slot. -/
+theorem HF_writeViewS : ∀ s : ObjectSlot, HFS (writeViewS s)
+  | .req t => HF_writeView t
+  | .optional t => HF_writeView t
+end
+
+mutual
+/-- **The stored-side view holds no `held`.** A `refine` that the view keeps has an inner term
+    with no `held`. -/
+theorem HF_readView : ∀ t : Term, HF (readView t)
+  | .held t _ _ _ => by simp only [readView]; exact HF_readView t
+  | .refine t _ => by
+      simp only [readView]
+      split
+      · exact HF_readView t
+      · next h =>
+        simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at h
+        exact HF_of_hasHeld t h.1
+  | .list pre sp suf => by
+      simp only [readView]; exact ⟨HF_readViewL pre, HF_readViewO sp, HF_readViewL suf⟩
+  | .object (.mk fs f w) => by
+      simp only [readView, readViewB]; exact ⟨fun k => HF_readViewS (f k), HF_readViewO w⟩
+  | .union os => by simp only [readView]; exact HF_readViewL os
+  | .set t => by simp only [readView]; exact HF_readView t
+  | .mu b => by simp only [readView]; exact HF_readView b
+  | .prim _ => trivial | .opaq => trivial | .never => trivial | .var _ => trivial
+/-- `HF_readView` over a list. -/
+theorem HF_readViewL : ∀ ts : List Term, HFL (readViewL ts)
+  | [] => trivial
+  | t :: ts => ⟨HF_readView t, HF_readViewL ts⟩
+/-- `HF_readView` at an optional term. -/
+theorem HF_readViewO : ∀ o : Option Term, HFO (readViewO o)
+  | none => trivial
+  | some t => HF_readView t
+/-- `HF_readView` at a slot. -/
+theorem HF_readViewS : ∀ s : ObjectSlot, HFS (readViewS s)
+  | .req t => HF_readView t
+  | .optional t => HF_readView t
+end
+
+
+/-- A union of rows over wider rows admits where the narrower union admits. -/
+theorem anyP_mono {α : Type} : ∀ {Ps Qs : List (α → Bool)}, List.Forall₂ RowLe Ps Qs →
+    ∀ x, anyP Ps x = true → anyP Qs x = true
+  | [], [], .nil, _, h => h
+  | _ :: _, _ :: _, .cons hPQ hr, x, h => by
+      simp only [anyP, Bool.or_eq_true] at h ⊢
+      exact h.imp (hPQ x) (anyP_mono hr x)
+
+/-- A set over a restriction of `Ω` writes where a set over a narrower element writes. -/
+theorem setCodec_e_mono {c d : Codec} (hd : Sub d Ω)
+    (h : ∀ w, (c.e w).isSome = true → (d.e w).isSome = true) {v : Value}
+    (hv : ((setCodec c).e v).isSome = true) : ((setCodec d).e v).isSome = true := by
   obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
-  have el : ∀ w, ((denote t).e w).isSome = true → ((denote u).e w).isSome = true := fun w hw =>
-    (Adm_exact u w).mp (h w ((Adm_exact t w).mpr hw))
-  show ((setCodec (denote u)).e v).isSome = true
-  rw [setCodec_e_isSome_of_sub (sub_denote u hu)]
+  rw [setCodec_e_isSome_of_sub hd]
   rcases setCodec_e_eq.mp ha with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
-    exact fun x hx => el _ (encSet_elem hS x hx)
+    exact fun x hx => h _ (encSet_elem hS x hx)
 
-/-- …and the same on the read side. -/
-theorem AdmA_set_of_elem {t u : Term} (hu : HF u) (h : ∀ w, AdmA t w = true → AdmA u w = true)
-    {att : Attr} (ha : AdmA (.set t) att = true) : AdmA (.set u) att = true := by
+/-- …and reads where a set over a narrower element reads. -/
+theorem setCodec_p_mono {c d : Codec} (hd : Sub d Ω)
+    (h : ∀ w, (c.p w).isSome = true → (d.p w).isSome = true) {a : Attr}
+    (ha : ((setCodec c).p a).isSome = true) : ((setCodec d).p a).isSome = true := by
   obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp ha
-  have el : ∀ w, ((denote t).p w).isSome = true → ((denote u).p w).isSome = true := fun w hw =>
-    (AdmA_exact u w).mp (h w ((AdmA_exact t w).mpr hw))
-  show ((setCodec (denote u)).p att).isSome = true
-  rw [setCodec_p_isSome_of_sub (sub_denote u hu)]
+  rw [setCodec_p_isSome_of_sub hd]
   rcases setCodec_p_eq.mp hv with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
-    exact fun x hx => el _ (decSet_elem hS x hx)
+    exact fun x hx => h _ (decSet_elem hS x hx)
 
-/-- A term whose caller-side view admits each value that the term admits. -/
-def WriteLe (t : Term) : Prop := RowLe (Adm t) (Adm (writeView t))
-/-- Each term of the list has `WriteLe`. -/
-def WriteLeL : List Term → Prop
-  | [] => True
-  | t :: ts => WriteLe t ∧ WriteLeL ts
-/-- The term, where one is present, has `WriteLe`. -/
-def WriteLeO : Option Term → Prop
-  | none => True
-  | some t => WriteLe t
-/-- A term whose stored-side view reads each attribute that the term reads. -/
-def ReadLe (t : Term) : Prop := RowLe (AdmA t) (AdmA (readView t))
-/-- Each term of the list has `ReadLe`. -/
-def ReadLeL : List Term → Prop
-  | [] => True
-  | t :: ts => ReadLe t ∧ ReadLeL ts
-/-- The term, where one is present, has `ReadLe`. -/
-def ReadLeO : Option Term → Prop
-  | none => True
-  | some t => ReadLe t
+/-- The second environment writes, at each index, each value that the first writes. -/
+def EnvLeV (ρ ρ' : List Codec) : Prop :=
+  ∀ i v, ((Alg.envAt ρ i).e v).isSome = true → ((Alg.envAt ρ' i).e v).isSome = true
+/-- The second environment reads, at each index, each attribute that the first reads. -/
+def EnvLeA (ρ ρ' : List Codec) : Prop :=
+  ∀ i a, ((Alg.envAt ρ i).p a).isSome = true → ((Alg.envAt ρ' i).p a).isSome = true
+/-- Each codec of the environment is a restriction of `Ω`. -/
+def EnvSub (ρ : List Codec) : Prop := ∀ i, Sub (Alg.envAt ρ i) Ω
 
-/-- The rows of a list of terms, beside the rows of their caller-side views. -/
-theorem writeLeL_forall₂ :
-    ∀ ts, WriteLeL ts → List.Forall₂ RowLe (AdmList ts) (AdmList (writeViewL ts))
-  | [], _ => .nil
-  | _ :: ts, h => .cons h.1 (writeLeL_forall₂ ts h.2)
+/-- A codec that writes more, on top of an environment that writes more. -/
+theorem EnvLeV.cons {c c' : Codec} {ρ ρ' : List Codec}
+    (hc : ∀ v, (c.e v).isSome = true → (c'.e v).isSome = true) (h : EnvLeV ρ ρ') :
+    EnvLeV (c :: ρ) (c' :: ρ')
+  | 0 => hc
+  | i + 1 => h i
+/-- A codec that reads more, on top of an environment that reads more. -/
+theorem EnvLeA.cons {c c' : Codec} {ρ ρ' : List Codec}
+    (hc : ∀ a, (c.p a).isSome = true → (c'.p a).isSome = true) (h : EnvLeA ρ ρ') :
+    EnvLeA (c :: ρ) (c' :: ρ')
+  | 0 => hc
+  | i + 1 => h i
+/-- A restriction of `Ω`, on top of an environment of restrictions of `Ω`. -/
+theorem EnvSub.cons {c : Codec} {ρ : List Codec} (hc : Sub c Ω) (h : EnvSub ρ) : EnvSub (c :: ρ)
+  | 0 => hc
+  | i + 1 => h i
+/-- The empty environment gives the bottom at each index. -/
+theorem EnvSub.nil : EnvSub [] := fun _ => Alg.sub_empty
 
-/-- The row of a spread, beside the row of its caller-side view. -/
-theorem writeLeO_rel : ∀ o, WriteLeO o → Option.Rel RowLe (AdmOptT o) (AdmOptT (writeViewO o))
-  | none, _ => .none
-  | some _, h => .some h
-
-/-- The stored rows of a list of terms, beside the rows of their stored-side views. -/
-theorem readLeL_forall₂ :
-    ∀ ts, ReadLeL ts → List.Forall₂ RowLe (AdmAList ts) (AdmAList (readViewL ts))
-  | [], _ => .nil
-  | _ :: ts, h => .cons h.1 (readLeL_forall₂ ts h.2)
-
-/-- The stored row of a spread, beside the row of its stored-side view. -/
-theorem readLeO_rel : ∀ o, ReadLeO o → Option.Rel RowLe (AdmAOptT o) (AdmAOptT (readViewO o))
-  | none, _ => .none
-  | some _, h => .some h
-
-/-- A list whose positions have `WriteLe` has `WriteLe`. -/
-theorem writeLe_list {pre suf : List Term} {sp : Option Term} (hp : WriteLeL pre)
-    (hs : WriteLeO sp) (hf : WriteLeL suf) : WriteLe (.list pre sp suf) := by
-  intro v h
-  cases v with
-  | arr vs =>
-    exact alignPL_mono (writeLeL_forall₂ pre hp) (writeLeO_rel sp hs)
-      (writeLeL_forall₂ suf hf) vs h
-  | _ => exact absurd h (by simp [Adm_rows])
-
-/-- A list whose positions have `ReadLe` has `ReadLe`. -/
-theorem readLe_list {pre suf : List Term} {sp : Option Term} (hp : ReadLeL pre)
-    (hs : ReadLeO sp) (hf : ReadLeL suf) : ReadLe (.list pre sp suf) := by
-  intro a h
-  cases a with
-  | l as =>
-    exact alignPL_mono (readLeL_forall₂ pre hp) (readLeO_rel sp hs)
-      (readLeL_forall₂ suf hf) as h
-  | _ => exact absurd h (by simp [AdmA_rows])
-
-/-- An object whose slots and open block have `WriteLe` has `WriteLe`. The view keeps each
-    presence mark, so the presence test does not move. -/
-theorem writeLe_object {fs : Finset Name} {f : {k // k ∈ fs} → ObjectSlot} {w : Option Term}
-    (hf : ∀ k, RowLe (AdmField (f k)) (AdmField (writeViewS (f k)))) (hw : WriteLeO w) :
-    WriteLe (.object (.mk fs f w)) := by
-  intro v h
-  cases v with
-  | map keys g =>
-    simp only [writeView, writeViewB, Adm_rows, Bool.and_eq_true] at h ⊢
-    refine ⟨decide_eq_true fun k => ?_, decide_eq_true fun k => ?_⟩
-    · have := of_decide_eq_true h.1 k
-      beta_reduce
-      generalize f k = s at this ⊢
-      cases s <;> simp_all [writeViewS]
-    · have := of_decide_eq_true h.2 k
-      rcases Decidable.em (k.1 ∈ fs) with hm | hm
-      · simp only [entryP, MapOf.at, dif_pos hm] at this ⊢
-        exact hf ⟨k.1, hm⟩ _ this
-      · simp only [entryP, MapOf.at, dif_neg hm] at this ⊢
-        cases w with
-        | none => exact absurd this (by simp [Adm_rows])
-        | some t => exact hw _ this
-  | _ => exact absurd h (by simp [Adm_rows])
-
-/-- An object whose slots and open block have `ReadLe` has `ReadLe`. -/
-theorem readLe_object {fs : Finset Name} {f : {k // k ∈ fs} → ObjectSlot} {w : Option Term}
-    (hf : ∀ k, RowLe (AdmAField (f k)) (AdmAField (readViewS (f k)))) (hw : ReadLeO w) :
-    ReadLe (.object (.mk fs f w)) := by
-  intro a h
-  cases a with
-  | m keys g =>
-    simp only [readView, readViewB, AdmA_rows, Bool.and_eq_true] at h ⊢
-    refine ⟨decide_eq_true fun k => ?_, decide_eq_true fun k => ?_⟩
-    · have := of_decide_eq_true h.1 k
-      beta_reduce
-      generalize f k = s at this ⊢
-      cases s <;> simp_all [readViewS]
-    · have := of_decide_eq_true h.2 k
-      rcases Decidable.em (k.1 ∈ fs) with hm | hm
-      · simp only [entryP, MapOf.at, dif_pos hm] at this ⊢
-        exact hf ⟨k.1, hm⟩ _ this
-      · simp only [entryP, MapOf.at, dif_neg hm] at this ⊢
-        cases w with
-        | none => exact absurd this (by simp [AdmA_rows])
-        | some t => exact hw _ this
-  | _ => exact absurd h (by simp [AdmA_rows])
-
-/-- The views of a list admit where the list admits. -/
-theorem anyWrite : ∀ ts : List Term, WriteLeL ts → ∀ v, AdmAny ts v = true →
-    AdmAny (writeViewL ts) v = true
-  | [], _, _, h => h
-  | _ :: ts, hw, v, h => by
-      simp only [AdmAny_cons, writeViewL, Bool.or_eq_true] at h ⊢
-      exact h.imp (hw.1 v) (anyWrite ts hw.2 v)
-
-/-- The stored views of a list read where the list reads. -/
-theorem anyRead : ∀ ts : List Term, ReadLeL ts → ∀ a, AdmAAny ts a = true →
-    AdmAAny (readViewL ts) a = true
-  | [], _, _, h => h
-  | _ :: ts, hr, a, h => by
-      simp only [AdmAAny_cons, readViewL, Bool.or_eq_true] at h ⊢
-      exact h.imp (hr.1 a) (anyRead ts hr.2 a)
+/-- The entry test of an object over wider slot rows and a wider open block admits where the
+    narrower test admits. -/
+theorem objAdmV_mono {α : Type} {fs : Finset Name} {P Q : {k // k ∈ fs} → α → Bool}
+    {wP wQ : Option (α → Bool)} (hf : ∀ k, RowLe (P k) (Q k)) (hw : Option.Rel RowLe wP wQ)
+    {keys : Finset Name} {g : {k // k ∈ keys} → α}
+    (h : objAdmV ⟨fs, P⟩ wP keys g = true) : objAdmV ⟨fs, Q⟩ wQ keys g = true := by
+  unfold objAdmV at h ⊢
+  refine decide_eq_true fun k => ?_
+  have := of_decide_eq_true h k
+  rcases Decidable.em (k.1 ∈ fs) with hm | hm
+  · simp only [entryP, MapOf.at, dif_pos hm] at this ⊢
+    exact hf ⟨k.1, hm⟩ _ this
+  · simp only [entryP, MapOf.at, dif_neg hm] at this ⊢
+    cases hw with
+    | none => exact this
+    | some hr => exact hr _ this
 
 mutual
+/-- **The caller-side view admits each value that the term admits**, under an environment that
+    writes at each index each value that the first environment writes.
+
+    The environment is what the `mu` row needs. A recursive term admits what its body admits over
+    the stage below the depth of the value (`Adm_mu_unfold`), and the view does the same over the
+    stage of the view. An induction over the stages carries the inclusion to each stage. The
+    environment of the view is a restriction of `Ω`, because the view holds no `held`, and the
+    `set` row reads a restriction of `Ω` element by element. -/
+theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
+    RowLe (Alg.Adm t ρ) (Alg.Adm (writeView t) ρ')
+  | .held _ P _ _, ρ, ρ', he, hs => fun v h => by
+      simp only [writeView]
+      exact writeLeE P ρ ρ' he hs v (Bool.and_eq_true_iff.mp h).2
+  | .var i, _, _, he, _ => fun v h => he i v h
+  | .mu b, ρ, ρ', he, hs => fun v h => by
+      simp only [writeView]
+      rw [Alg.Adm_mu_unfold] at h ⊢
+      have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote b (c :: ρ)) n).e w).isSome = true →
+          ((Alg.muStage (fun c => Alg.denote (writeView b) (c :: ρ')) n).e w).isSome = true) ∧
+          Sub (Alg.muStage (fun c => Alg.denote (writeView b) (c :: ρ')) n) Ω := by
+        intro n
+        induction n with
+        | zero => exact ⟨(fun _ hw => nomatch hw), Alg.sub_empty⟩
+        | succ n ih =>
+          have he' := EnvLeV.cons ih.1 he
+          have hs' := EnvSub.cons ih.2 hs
+          refine ⟨fun w hw => ?_,
+            Alg.sub_denoteIn Ω_topLaws (writeView b) (HF_writeView b) _ hs'⟩
+          have := writeLeE b _ _ he' hs' w (by rw [Alg.Adm_eq_isSome]; exact hw)
+          rwa [Alg.Adm_eq_isSome] at this
+      exact writeLeE b _ _ (EnvLeV.cons (hst _).1 he) (EnvSub.cons (hst _).2 hs) v h
+  | .refine t p, ρ, ρ', he, hs => fun v h => by
+      simp only [writeView]
+      have h' := Bool.and_eq_true_iff.mp h
+      exact Bool.and_eq_true_iff.mpr ⟨writeLeE t ρ ρ' he hs v h'.1, h'.2⟩
+  | .list pre sp suf, ρ, ρ', he, hs => fun v h => by
+      cases v with
+      | arr vs =>
+        exact alignPL_mono (writeLeEL pre ρ ρ' he hs) (writeLeEO sp ρ ρ' he hs)
+          (writeLeEL suf ρ ρ' he hs) vs h
+      | _ => exact absurd h Bool.false_ne_true
+  | .object (.mk fs f w), ρ, ρ', he, hs => fun v h => by
+      cases v with
+      | map keys g =>
+        have h : (valPresentT fs f keys &&
+            objAdmV ⟨fs, fun k => Alg.AdmField (f k) ρ⟩ (Alg.AdmWild w ρ) keys g) = true := h
+        show (valPresentT fs (fun k => writeViewS (f k)) keys &&
+            objAdmV ⟨fs, fun k => Alg.AdmField (writeViewS (f k)) ρ'⟩
+              (Alg.AdmWild (writeViewO w) ρ') keys g) = true
+        rw [Bool.and_eq_true] at h ⊢
+        refine ⟨?_, objAdmV_mono (fun k => writeLeES (f k) ρ ρ' he hs) ?_ h.2⟩
+        · refine decide_eq_true fun k => ?_
+          have := of_decide_eq_true h.1 k
+          beta_reduce
+          generalize f k = s at this ⊢
+          cases s <;> simp_all [writeViewS]
+        · cases w with
+          | none => exact .none
+          | some t => exact .some (writeLeE t ρ ρ' he hs)
+      | _ => exact absurd h Bool.false_ne_true
+  | .union os, ρ, ρ', he, hs => fun v h => anyP_mono (writeLeEL os ρ ρ' he hs) v h
+  | .set t, ρ, ρ', he, hs => fun v h => by
+      simp only [writeView]
+      exact setCodec_e_mono (c := Alg.denote t ρ)
+        (Alg.sub_denoteIn Ω_topLaws _ (HF_writeView t) ρ' hs)
+        (fun w hw => by
+          have := writeLeE t ρ ρ' he hs w (by rw [Alg.Adm_eq_isSome]; exact hw)
+          rwa [Alg.Adm_eq_isSome] at this) h
+  | .prim _, _, _, _, _ => fun _ h => h
+  | .opaq, _, _, _, _ => fun _ h => h
+  | .never, _, _, _, _ => fun _ h => h
+/-- `writeLeE` over a list. -/
+theorem writeLeEL : ∀ (ts : List Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
+    List.Forall₂ RowLe (Alg.AdmList ts ρ) (Alg.AdmList (writeViewL ts) ρ')
+  | [], _, _, _, _ => .nil
+  | t :: ts, ρ, ρ', he, hs => .cons (writeLeE t ρ ρ' he hs) (writeLeEL ts ρ ρ' he hs)
+/-- `writeLeE` at an optional term. -/
+theorem writeLeEO : ∀ (o : Option Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
+    Option.Rel RowLe (Alg.AdmOptT o ρ) (Alg.AdmOptT (writeViewO o) ρ')
+  | none, _, _, _, _ => .none
+  | some t, ρ, ρ', he, hs => .some (writeLeE t ρ ρ' he hs)
+/-- `writeLeE` at a slot. -/
+theorem writeLeES : ∀ (s : ObjectSlot) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
+    RowLe (Alg.AdmField s ρ) (Alg.AdmField (writeViewS s) ρ')
+  | .req t, ρ, ρ', he, hs => writeLeE t ρ ρ' he hs
+  | .optional t, ρ, ρ', he, hs => writeLeE t ρ ρ' he hs
+end
+
 /-- **The caller-side view admits each value that the term admits.** -/
-theorem writeLe_of : ∀ t : Term, WriteLe t
-  | .held _ P _ _ => fun v h => by
-      simp only [writeView]
-      exact writeLe_of P v (Bool.and_eq_true_iff.mp h).2
-  | .var _ => fun _ h => h
-  | .mu _ => fun _ h => h
-  | .refine t p => fun v h => by
-      simp only [writeView, Adm_rows, Bool.and_eq_true] at h ⊢
-      exact ⟨writeLe_of t v h.1, h.2⟩
-  | .list pre sp suf => writeLe_list (writeLe_ofL pre) (writeLe_ofO sp) (writeLe_ofL suf)
-  | .object (.mk fs f w) => writeLe_object (fun k => writeLe_ofS (f k)) (writeLe_ofO w)
-  | .union os => fun v h => by
-      simp only [writeView]
-      rw [Adm_union] at h ⊢
-      exact anyWrite os (writeLe_ofL os) v h
-  | .base _ => fun _ h => h | .literal _ _ => fun _ h => h
-  | .set t => fun v h => by
-      simp only [writeView]
-      split
-      · exact h
-      · next hh =>
-        exact Adm_set_of_elem (HF_of_hasHeld _ (Bool.eq_false_iff.mpr hh))
-          (fun w hw => writeLe_of t w hw) h
-  | .opaq => fun _ h => h | .never => fun _ h => h
-/-- `writeLe_of` over a list. -/
-theorem writeLe_ofL : ∀ ts : List Term, WriteLeL ts
-  | [] => trivial
-  | t :: ts => ⟨writeLe_of t, writeLe_ofL ts⟩
-/-- `writeLe_of` at an optional term. -/
-theorem writeLe_ofO : ∀ o : Option Term, WriteLeO o
-  | none => trivial
-  | some t => writeLe_of t
-/-- `writeLe_of` at a slot. -/
-theorem writeLe_ofS : ∀ s : ObjectSlot, RowLe (AdmField s) (AdmField (writeViewS s))
-  | .req t => fun v h => writeLe_of t v h
-  | .optional t => fun v h => writeLe_of t v h
-end
+theorem writeLe_of (t : Term) : RowLe (Adm t) (Adm (writeView t)) :=
+  writeLeE t [] [] (fun _ _ h => h) EnvSub.nil
 
 mutual
-/-- **The stored-side view reads each attribute that the term reads.** -/
-theorem readLe_of : ∀ t : Term, ReadLe t
-  | .held t _ _ _ => fun a h => by
+/-- **The stored-side view reads each attribute that the term reads**, under an environment that
+    reads at each index each attribute that the first environment reads.
+
+    The `refine` row that the view keeps has an inner term with no variable, so the environment
+    does not change the decode of the predicate (`denote_closed`). A `refine` over a variable
+    drops its predicate, because the stage of the view can decode where the stage of the term
+    decodes through a `held`. -/
+theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
+    RowLe (Alg.AdmA t ρ) (Alg.AdmA (readView t) ρ')
+  | .held t _ _ _, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
-      exact readLe_of t a (Bool.and_eq_true_iff.mp h).1
-  | .var _ => fun _ h => h
-  | .mu _ => fun _ h => h
-  | .refine t p => fun a h => by
+      exact readLeE t ρ ρ' he hs a (Bool.and_eq_true_iff.mp h).1
+  | .var i, _, _, he, _ => fun a h => he i a h
+  | .mu b, ρ, ρ', he, hs => fun a h => by
+      simp only [readView]
+      rw [Alg.AdmA_mu_unfold] at h ⊢
+      have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote b (c :: ρ)) n).p w).isSome = true →
+          ((Alg.muStage (fun c => Alg.denote (readView b) (c :: ρ')) n).p w).isSome = true) ∧
+          Sub (Alg.muStage (fun c => Alg.denote (readView b) (c :: ρ')) n) Ω := by
+        intro n
+        induction n with
+        | zero => exact ⟨(fun _ hw => nomatch hw), Alg.sub_empty⟩
+        | succ n ih =>
+          have he' := EnvLeA.cons ih.1 he
+          have hs' := EnvSub.cons ih.2 hs
+          refine ⟨fun w hw => ?_,
+            Alg.sub_denoteIn Ω_topLaws (readView b) (HF_readView b) _ hs'⟩
+          have := readLeE b _ _ he' hs' w (by rw [Alg.AdmA_eq_isSome]; exact hw)
+          rwa [Alg.AdmA_eq_isSome] at this
+      exact readLeE b _ _ (EnvLeA.cons (hst _).1 he) (EnvSub.cons (hst _).2 hs) a h
+  | .refine t p, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
       split
-      · exact readLe_of t a (Bool.and_eq_true_iff.mp h).1
-      · exact h
-  | .list pre sp suf => readLe_list (readLe_ofL pre) (readLe_ofO sp) (readLe_ofL suf)
-  | .object (.mk fs f w) => readLe_object (fun k => readLe_ofS (f k)) (readLe_ofO w)
-  | .union os => fun a h => by
+      · exact readLeE t ρ ρ' he hs a (Bool.and_eq_true_iff.mp h).1
+      · next hv =>
+        simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hv
+        rw [Alg.AdmA_eq_isSome] at h ⊢
+        rwa [← Alg.denote_closed (.refine t p) hv.2 ρ ρ']
+  | .list pre sp suf, ρ, ρ', he, hs => fun a h => by
+      cases a with
+      | l as =>
+        exact alignPL_mono (readLeEL pre ρ ρ' he hs) (readLeEO sp ρ ρ' he hs)
+          (readLeEL suf ρ ρ' he hs) as h
+      | _ => exact absurd h Bool.false_ne_true
+  | .object (.mk fs f w), ρ, ρ', he, hs => fun a h => by
+      cases a with
+      | m keys g =>
+        have h : (reqPresentT fs f keys &&
+            objAdmV ⟨fs, fun k => Alg.AdmAField (f k) ρ⟩ (Alg.AdmAWild w ρ) keys g) = true := h
+        show (reqPresentT fs (fun k => readViewS (f k)) keys &&
+            objAdmV ⟨fs, fun k => Alg.AdmAField (readViewS (f k)) ρ'⟩
+              (Alg.AdmAWild (readViewO w) ρ') keys g) = true
+        rw [Bool.and_eq_true] at h ⊢
+        refine ⟨?_, objAdmV_mono (fun k => readLeES (f k) ρ ρ' he hs) ?_ h.2⟩
+        · refine decide_eq_true fun k => ?_
+          have := of_decide_eq_true h.1 k
+          beta_reduce
+          generalize f k = s at this ⊢
+          cases s <;> simp_all [readViewS]
+        · cases w with
+          | none => exact .none
+          | some t => exact .some (readLeE t ρ ρ' he hs)
+      | _ => exact absurd h Bool.false_ne_true
+  | .union os, ρ, ρ', he, hs => fun a h => anyP_mono (readLeEL os ρ ρ' he hs) a h
+  | .set t, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
-      rw [AdmA_union] at h ⊢
-      exact anyRead os (readLe_ofL os) a h
-  | .base _ => fun _ h => h | .literal _ _ => fun _ h => h
-  | .set t => fun a h => by
-      simp only [readView]
-      split
-      · exact h
-      · next hh =>
-        exact AdmA_set_of_elem (HF_of_hasHeld _ (Bool.eq_false_iff.mpr hh))
-          (fun w hw => readLe_of t w hw) h
-  | .opaq => fun _ h => h | .never => fun _ h => h
-/-- `readLe_of` over a list. -/
-theorem readLe_ofL : ∀ ts : List Term, ReadLeL ts
-  | [] => trivial
-  | t :: ts => ⟨readLe_of t, readLe_ofL ts⟩
-/-- `readLe_of` at an optional term. -/
-theorem readLe_ofO : ∀ o : Option Term, ReadLeO o
-  | none => trivial
-  | some t => readLe_of t
-/-- `readLe_of` at a slot. -/
-theorem readLe_ofS : ∀ s : ObjectSlot, RowLe (AdmAField s) (AdmAField (readViewS s))
-  | .req t => fun a h => readLe_of t a h
-  | .optional t => fun a h => readLe_of t a h
+      exact setCodec_p_mono (c := Alg.denote t ρ)
+        (Alg.sub_denoteIn Ω_topLaws _ (HF_readView t) ρ' hs)
+        (fun w hw => by
+          have := readLeE t ρ ρ' he hs w (by rw [Alg.AdmA_eq_isSome]; exact hw)
+          rwa [Alg.AdmA_eq_isSome] at this) h
+  | .prim _, _, _, _, _ => fun _ h => h
+  | .opaq, _, _, _, _ => fun _ h => h
+  | .never, _, _, _, _ => fun _ h => h
+/-- `readLeE` over a list. -/
+theorem readLeEL : ∀ (ts : List Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
+    List.Forall₂ RowLe (Alg.AdmAList ts ρ) (Alg.AdmAList (readViewL ts) ρ')
+  | [], _, _, _, _ => .nil
+  | t :: ts, ρ, ρ', he, hs => .cons (readLeE t ρ ρ' he hs) (readLeEL ts ρ ρ' he hs)
+/-- `readLeE` at an optional term. -/
+theorem readLeEO : ∀ (o : Option Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
+    Option.Rel RowLe (Alg.AdmAOptT o ρ) (Alg.AdmAOptT (readViewO o) ρ')
+  | none, _, _, _, _ => .none
+  | some t, ρ, ρ', he, hs => .some (readLeE t ρ ρ' he hs)
+/-- `readLeE` at a slot. -/
+theorem readLeES : ∀ (s : ObjectSlot) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
+    RowLe (Alg.AdmAField s ρ) (Alg.AdmAField (readViewS s) ρ')
+  | .req t, ρ, ρ', he, hs => readLeE t ρ ρ' he hs
+  | .optional t, ρ, ρ', he, hs => readLeE t ρ ρ' he hs
 end
+
+/-- **The stored-side view reads each attribute that the term reads.** -/
+theorem readLe_of (t : Term) : RowLe (AdmA t) (AdmA (readView t)) :=
+  readLeE t [] [] (fun _ _ h => h) EnvSub.nil
+
 
 /-! ## The orthogonal row -/
 

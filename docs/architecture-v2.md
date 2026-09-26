@@ -381,9 +381,11 @@ They are the domain and the range of the codec.
 
 Two rows keep the views sound, and both follow one rule: **data exists only on the side where it
 was stated.** A restriction above an adapter that reads a whole container is caller-side data, and
-on the stored side it could exist only as a closure, so the stored view drops it. The view of a
-union is the union of its options' views, because a union admits where one of its options
-admits.
+on the stored side it could exist only as a closure, so the stored view drops it. A restriction
+above a variable is dropped for the same reason: the variable denotes a stage of its binder, and
+the stage can hold an adapter. The view of a union is the union of its options' views, because a
+union admits where one of its options admits. The view of a recursive term is the recursion of
+the view of its body.
 
 The attribute side also admits a ladder of descriptions, from the outermost member, through the
 member at every position recursively, to the fibres the codec distinguishes, to the raw wire. The

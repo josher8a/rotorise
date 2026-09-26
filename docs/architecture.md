@@ -532,7 +532,10 @@ states its domain and `readView` states its range. In an inverse semigroup, two 
 domains and ranges are disjoint meet at the bottom (Lawson, *Primer on inverse semigroups I*,
 Lemma 2.16). `meet'` adds that row in front of `Term.meet`, and `Adm_meet'` and `AdmA_meet'` hold
 with no premise. `Term.meet` refuses a `held`, so a `held` reaches the meet through that row. The
-view of a `union` is the union of the views of its options.
+view of a `union` is the union of the views of its options. The view of `mu b` is `mu` of the view
+of `b`, and a variable stays a variable, so a `held` below a recursion reaches the meet too. The
+stored view keeps a predicate only where the inner term holds no `held` and no variable, because a
+variable denotes a stage of its binder, and the stage can hold a `held`.
 
 **The slot test is a disjunct, and the occupancies read no predicate.** The admission of a
 `refine` at a `closure` is a function. A refinement admits a part of what its inner term admits,

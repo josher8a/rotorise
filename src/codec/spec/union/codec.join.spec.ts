@@ -442,6 +442,48 @@ describe('a union refuses a thunk it must read at its own input, because the mod
     })
 })
 
+/**
+ * **The views of an option read through its thunk, as the model's views read through a binder.**
+ * The caller view of a recursive option is the recursion of the caller view of its body, and the
+ * stored view is the same on the stored side. Two options whose caller views meet at the bottom
+ * and whose stored views meet at the bottom are orthogonal, and an adapter below the recursion
+ * does not change that.
+ */
+describe('a union reads the views of a recursive option through its thunk', () => {
+    it('accepts a recursive option with an adapter below the recursion, where the views of the two options part', () => {
+        const json: AnyCodec = union([
+            decimal('1', '2.5'),
+            array(lazy(() => json as never)),
+        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+        const values = ['A', '1', ['2.5', ['1']]]
+        const attributes: AttributeValue[] = [
+            { S: 'A' },
+            { N: '1' },
+            { L: [{ N: '2.5' }, { L: [{ N: '1' }] }] },
+        ]
+        const answers = sameUnderEveryOrder(
+            [string('A', 'B'), json],
+            (codec) => [
+                ...values.map((v) => codec.encode(v)),
+                ...attributes.map((a) => codec.decode(a)),
+            ],
+        )
+        // each value has one writer, and what the union writes it reads back
+        expect(answers).toEqual([...attributes, ...values])
+    })
+
+    it('refuses the same recursive option beside an option whose caller view meets its caller view', () => {
+        const json: AnyCodec = union([
+            decimal('1', '2.5'),
+            array(lazy(() => json as never)),
+        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+        // the text '1' is a value of both options, written as `S` by one and as `N` by the other
+        expect(() =>
+            union([string('1', 'B'), json] as unknown as readonly AnyCodec[]),
+        ).toThrow(CodecError)
+    })
+})
+
 describe("an accepted union's options never write one value, or read one attribute, two ways", () => {
     const one = DynamoNumber.from('1')
     const nonEmpty = refine(string, (s: string): s is string => s.length > 0)

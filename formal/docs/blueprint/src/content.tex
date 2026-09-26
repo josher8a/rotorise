@@ -997,8 +997,10 @@ disjoint on both sides. A term denotes a partial isomorphism, and its caller vie
 view are its domain and its range. Two terms whose domains and ranges meet at the bottom are
 orthogonal, and the meet of two orthogonal elements is the bottom (Lawson, \emph{Primer on inverse
 semigroups I}, Lemma 2.16). So the meet answers the bottom there, and a \texttt{held} reaches the
-meet through its views. On a held-free term each view is the term itself. The view of a union is
-the union of its options' views, because a union admits where one of its options admits. The
+meet through its views. On a held-free term the caller view is the term itself. The view of a union is
+the union of its options' views, because a union admits where one of its options admits. The view
+of a recursive term is the recursion of the view of its body, so a \texttt{held} below a recursion
+reaches the meet too. The
 second test reads no predicate. The meet refuses a closure beside a partner that its inner term
 does not meet at the bottom. A certified pair is separated
 (\texttt{separates\_of\_certPair}), so it is compatible. The certificate is sufficient and not
