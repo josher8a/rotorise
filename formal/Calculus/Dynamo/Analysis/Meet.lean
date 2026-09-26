@@ -98,9 +98,9 @@ open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk B
   meet_union_of)
 
 export Alg (ObjectSlot.isBottom Term.ofOptions allSome Term.refineOf Term.listOf Term.tupleOf zipF
-  meetSRight meetSRightL famPrim hasHeld hasHeldL hasHeldO hasHeldB hasHeldS famSet famOpaq rowOfG
-  dominates listMeetRow famList ObjectSlot.through objSlot ObjectSlot.isAbsentOpt objObj
-  famObj Term.meet Term.meetSL Term.meetSTs ObjectSlot.meet Term.slotAt Term.optionAt Term.blockOf)
+  meetSRight meetSRightL famPrim hasHeld famSet famOpaq rowOfG dominates listMeetRow famList
+  ObjectSlot.through objSlot ObjectSlot.isAbsentOpt objObj famObj Term.meet Term.meetSL Term.meetSTs
+  ObjectSlot.meet Term.slotAt Term.optionAt Term.blockOf)
 
 
 /-! ## Reading a field and a term -/
@@ -689,12 +689,12 @@ example :
 /-- The left body admits `{x := "1"}` through its declared slot… -/
 example : Adm (.object (.mk {"x"} (fun _ => .req .string) (some .string)))
     (.map {"x"} (fun _ => .str "1")) = true := by
-  simp [Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at, AdmField, inBase]
+  simp [Adm_rows, valPresentT, objAdmV, entryP, MapOf.at, inBase]
 
 /-- …and the right body admits it through its open block, at a name it does not declare. -/
 example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (some .string)))
     (.map {"x"} (fun _ => .str "1")) = true := by
-  simp [Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at, AdmField, AdmWild]
+  simp [Adm_rows, valPresentT, objAdmV, entryP, MapOf.at]
   apply decide_eq_true
   intro k
   rw [if_neg (by have hk := k.2; simp only [Finset.mem_singleton] at hk; simp [hk])]
@@ -837,10 +837,10 @@ Two meets that are not the bottom and whose factor names no member. They are why
 rows keep is "where both factors name a member" rather than "all three name the same member": a
 `μSyn` of `none` is a term that names no single stored member, not a term that writes nothing. -/
 
-example : μSyn (Term.union [.string, .null]) = none := by simp [μSyn, μSynList, unanimous]
+example : μSyn (Term.union [.string, .null]) = none := by simp [μSyn_rows, unanimous]
 
 example : ¬ (μSyn Term.null = μSyn (Term.union [.string, .null])) := by
-  simp [μSyn, μSynList, unanimous]
+  simp [μSyn_rows, unanimous]
 
 example : Term.meet Term.opaq Term.string = some Term.string := by rfl
 
@@ -848,7 +848,7 @@ example : Term.meet Term.opaq Term.string = some Term.string := by rfl
     functions (`Term.lean`), so no term states the intersection of two of them. -/
 example : Term.meet (Term.held .string .opaq (fun v => v) (fun v => v)) Term.string = none := by rfl
 
-example : ¬ (μSyn Term.string = μSyn Term.opaq) := by simp [μSyn]
+example : ¬ (μSyn Term.string = μSyn Term.opaq) := by simp [μSyn_rows]
 
 /-! ## The homomorphism
 
@@ -1016,7 +1016,7 @@ theorem Adm_prim_some : ∀ g g' h : Ground, Ground.meet g g' = some h →
           | (simp only [reduceCtorEq] at hp)
           | (simp only [Option.some.injEq] at hp
              subst hp
-             cases v <;> simp_all [Adm, AdmLit, inL])
+             cases v <;> simp_all [Adm_rows, AdmLit, inL])
 
 /-- **Two primitives met at the bottom share no value.** -/
 theorem Adm_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
@@ -1041,7 +1041,7 @@ theorem Adm_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
       cases k <;> cases k' <;> simp only [Ground.meetLit, reduceCtorEq] at hp <;>
         (try split at hp) <;>
         (try (simp only [reduceCtorEq] at hp)) <;>
-        (cases v <;> simp_all [Adm, AdmLit, inL])
+        (cases v <;> simp_all [Adm_rows, AdmLit, inL])
 
 /-- **A base is inside the top.** -/
 theorem Adm_prim_top : ∀ g : Ground, Ground.meetTop g = true →
@@ -1055,29 +1055,28 @@ theorem Adm_prim_top : ∀ g : Ground, Ground.meetTop g = true →
 /-- The formers of DynamoDB: the set laws of `setCodec`, and the six disjointness laws by
     occupancy. -/
 instance dynFormerAdm : Alg.FormerAdm dynSyn where
-  set_meet a y z ha hy hz h v := by
-    simp only [← Adm_eq_alg] at h ⊢; exact Adm_set_meet ha hy hz h v
-  set_never a y h v := by simp only [← Adm_eq_alg] at h ⊢; exact Adm_set_and_false h v
-  prim_set g t v := by simp only [← Adm_eq_alg]; cases g <;> orth_false
-  prim_list g pre sp suf v := by simp only [← Adm_eq_alg]; cases g <;> orth_false
-  prim_obj g b v := by simp only [← Adm_eq_alg]; cases g <;> orth_false
-  set_list t pre sp suf v := by simp only [← Adm_eq_alg]; orth_false
-  set_obj t b v := by simp only [← Adm_eq_alg]; orth_false
-  list_obj pre sp suf b v := by simp only [← Adm_eq_alg]; orth_false
+  set_meet a y z ha hy hz h v := Adm_set_meet ha hy hz h v
+  set_never a y h v := Adm_set_and_false h v
+  prim_set g t v := by cases g <;> orth_false
+  prim_list g pre sp suf v := by cases g <;> orth_false
+  prim_obj g b v := by cases g <;> orth_false
+  set_list t pre sp suf v := by orth_false
+  set_obj t b v := by orth_false
+  list_obj pre sp suf b v := by orth_false
 
 /-- The leaf meet of DynamoDB is exact on the write side. -/
 instance dynLeafAdm : Alg.LeafAdm dynSyn where
-  prim_some g g' h hp v := by simp only [← Adm_eq_alg]; exact Adm_prim_some g g' h hp v
-  prim_none g g' hp v := by simp only [← Adm_eq_alg]; exact Adm_prim_none g g' hp v
-  prim_top g hg v hv := by simp only [← Adm_eq_alg] at hv ⊢; exact Adm_prim_top g hg v hv
-  pmeet_some q p r h v := meetM_eval h v
-  pmeet_none q p h v := meetM_empty h v
+  prim_some g g' h hp v := Adm_prim_some g g' h hp v
+  prim_none g g' hp v := Adm_prim_none g g' hp v
+  prim_top g hg v hv := Adm_prim_top g hg v hv
+  pmeet_some _ _ _ h v := meetM_eval h v
+  pmeet_none _ _ h v := meetM_empty h v
 
 /-- **`Adm` is a homomorphism from the meet to conjunction.** Where two terms have a meet,
     the values it admits are exactly the values both admit. `Alg.Adm_meet` at DynamoDB. -/
 theorem Adm_meet (x y : Term) (z : Term) (h : Term.meet x y = some z) (v : Value) :
-    Adm z v = (Adm x v && Adm y v) := by
-  simpa only [← Adm_eq_alg] using Alg.Adm_meet x y z h v
+    Adm z v = (Adm x v && Adm y v) :=
+  Alg.Adm_meet x y z h v
 
 /-! ## The member the meet names
 
@@ -1119,15 +1118,6 @@ instance dynLeafWrites : Alg.LeafWrites dynSyn where
     exact ⟨fun mx hx => Option.some.inj ((h1.trans hx).symm.trans hm),
       fun my hy => Option.some.inj ((h2.trans hy).symm.trans hm)⟩
 
-/-- **Where the meet names a member, any member a factor names is that one.** `Alg.meet_writes`
-    at DynamoDB. `μSyn z` is a hypothesis and not a conclusion, because the converse fails: a
-    bottom names no member, so two factors naming different members meet at a term that names
-    none. -/
-theorem meet_writes (x y z : Term) (h : Term.meet x y = some z) (m : Member)
-    (hz : μSyn z = some m) :
-    (∀ mx, μSyn x = some mx → mx = m) ∧ (∀ my, μSyn y = some my → my = m) := by
-  simp only [μSyn_eq_alg] at hz ⊢
-  exact Alg.meet_writes x y z h m hz
 
 /-- **The converse is false, and a bottom is why.** Two factors naming different members meet at
     the bottom, which names none, so a theorem concluding `mx = my` from the factors alone fails
@@ -1232,10 +1222,10 @@ theorem literal_inL {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
 theorem AdmALit_never_of_ne {k : GroundKind} {x y : k.Carrier} (hne : ¬ (x = y)) (a : Attr) :
     AdmA (.never : Term) a = (AdmA (Term.literal k x) a && AdmA (Term.literal k y) a) := by
   cases hx : AdmA (Term.literal k x) a with
-  | false => simp [AdmA]
+  | false => simp [AdmA_rows]
   | true =>
       cases hy : AdmA (Term.literal k y) a with
-      | false => simp [AdmA]
+      | false => simp [AdmA_rows]
       | true =>
           exfalso
           obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ a).mp hx)
@@ -1296,10 +1286,8 @@ theorem admA_set_meet {a y z : Term} (ha : HF a) (hy : HF y) (hz : HF z)
   have oa := (sub_setCodec (sub_denote a ha)).2 _ _ hva
   have oy := (sub_setCodec (sub_denote y hy)).2 _ _ hvy
   refine ⟨?_, ?_⟩
-  · show (setCodec (denote z)).p att = (setCodec (denote a)).p att
-    rw [hvz, hva, Option.some.inj (oz.symm.trans oa)]
-  · show (setCodec (denote z)).p att = (setCodec (denote y)).p att
-    rw [hvz, hvy, Option.some.inj (oz.symm.trans oy)]
+  · exact hvz.trans ((congrArg some (Option.some.inj (oz.symm.trans oa))).trans hva.symm)
+  · exact hvz.trans ((congrArg some (Option.some.inj (oz.symm.trans oy))).trans hvy.symm)
 
 /-- Two terms in different attribute slots share no attribute, by their occupancies. -/
 local macro "orth_falseA" : tactic => `(tactic|
@@ -1384,55 +1372,38 @@ theorem admA_prim_top : ∀ g : Ground, Ground.meetTop g = true → AdmAAt (.pri
       fun a ha hb => ⟨rfl, by cases k <;> cases a <;> first | rfl | cases ha⟩⟩
   | .literal _ _, h => by simp [Ground.meetTop] at h
 
-/-- The read side of `Alg.AdmAAt` at DynamoDB is `AdmAAt`. -/
-theorem AdmAAt_eq_alg (x y z : Term) : Alg.AdmAAt x y z ↔ AdmAAt x y z := by
-  unfold Alg.AdmAAt AdmAAt
-  simp only [← AdmA_eq_alg, ← denote_eq_alg]
-  exact Iff.rfl
-
 /-- The formers of DynamoDB, on the read side. -/
 instance dynFormerAdmA : Alg.FormerAdmA dynSyn where
-  set_meet a y z ha hy hz h := (AdmAAt_eq_alg _ _ _).mpr
-    (admA_set_meet ha hy hz (fun u => by simpa only [← AdmA_eq_alg] using h u))
-  set_never a y h c := by
-    simp only [← AdmA_eq_alg] at h ⊢; exact AdmA_set_and_false h c
-  prim_set g t c := by simp only [← AdmA_eq_alg]; cases g <;> orth_falseA
-  prim_list g pre sp suf c := by simp only [← AdmA_eq_alg]; cases g <;> orth_falseA
-  prim_obj g b c := by simp only [← AdmA_eq_alg]; cases g <;> orth_falseA
-  set_list t pre sp suf c := by simp only [← AdmA_eq_alg]; orth_falseA
-  set_obj t b c := by simp only [← AdmA_eq_alg]; orth_falseA
-  list_obj pre sp suf b c := by simp only [← AdmA_eq_alg]; orth_falseA
+  set_meet a y z ha hy hz h := admA_set_meet ha hy hz h
+  set_never a y h c := AdmA_set_and_false h c
+  prim_set g t c := by cases g <;> orth_falseA
+  prim_list g pre sp suf c := by cases g <;> orth_falseA
+  prim_obj g b c := by cases g <;> orth_falseA
+  set_list t pre sp suf c := by orth_falseA
+  set_obj t b c := by orth_falseA
+  list_obj pre sp suf b c := by orth_falseA
 
 /-- The leaf meet of DynamoDB is exact on the read side, and reads as each factor reads. -/
 instance dynLeafAdmA : Alg.LeafAdmA dynSyn where
-  prim_some g g' h hp := (AdmAAt_eq_alg _ _ _).mpr (admA_prim_some g g' h hp)
-  prim_none g g' hp c := by simp only [← AdmA_eq_alg]; exact admA_prim_none g g' hp c
-  prim_top g hg := (AdmAAt_eq_alg _ _ _).mpr (admA_prim_top g hg)
+  prim_some g g' h hp := admA_prim_some g g' h hp
+  prim_none g g' hp c := admA_prim_none g g' hp c
+  prim_top g hg := admA_prim_top g hg
 
-/-- **The read-side homomorphism and its reading agreement.** `Alg.AdmA_meet_both` at DynamoDB. -/
-theorem AdmA_meet_both (x y z : Term) (h : Term.meet x y = some z) : AdmAAt x y z :=
-  (AdmAAt_eq_alg x y z).mp (Alg.AdmA_meet_both x y z h)
 
 /-- **Where two terms have a meet, it reads exactly the attributes both read.** -/
 theorem AdmA_meet {x y z : Term} (h : Term.meet x y = some z) (a : Attr) :
     AdmA z a = (AdmA x a && AdmA y a) :=
-  (AdmA_meet_both x y z h).1 a
+  (Alg.AdmA_meet_both x y z h).1 a
 
 /-- **…and it reads them to the same value.** The read agreement is proved with the homomorphism
     and not after it: `AdmA (.refine t p) a` asks the predicate of what `t` decodes `a` to. -/
 theorem denote_meet_p {x y z : Term} (h : Term.meet x y = some z) {a : Attr}
     (hx : AdmA x a = true) (hy : AdmA y a = true) :
     (denote z).p a = (denote x).p a ∧ (denote z).p a = (denote y).p a :=
-  (AdmA_meet_both x y z h).2 a hx hy
+  (Alg.AdmA_meet_both x y z h).2 a hx hy
 
 
 /-! ## The bottom, and what a sub-selection keeps -/
-
-/-- The bottom admits no value. -/
-theorem Adm_never (v : Value) : Adm .never v = false := rfl
-
-/-- …and reads no attribute. -/
-theorem AdmA_never (a : Attr) : AdmA .never a = false := rfl
 
 /-- **The meet is the separation certificate, and this is its soundness half.** Where two terms
     meet at the bottom, no value is admitted by both. `Adm_meet` makes the meet's row the
@@ -1544,7 +1515,7 @@ theorem writeLe_list {pre suf : List Term} {sp : Option Term} (hp : WriteLeL pre
   | arr vs =>
     exact alignPL_mono (writeLeL_forall₂ pre hp) (writeLeO_rel sp hs)
       (writeLeL_forall₂ suf hf) vs h
-  | _ => exact absurd h (by simp [Adm])
+  | _ => exact absurd h (by simp [Adm_rows])
 
 /-- A list whose positions have `ReadLe` has `ReadLe`. -/
 theorem readLe_list {pre suf : List Term} {sp : Option Term} (hp : ReadLeL pre)
@@ -1554,7 +1525,7 @@ theorem readLe_list {pre suf : List Term} {sp : Option Term} (hp : ReadLeL pre)
   | l as =>
     exact alignPL_mono (readLeL_forall₂ pre hp) (readLeO_rel sp hs)
       (readLeL_forall₂ suf hf) as h
-  | _ => exact absurd h (by simp [AdmA])
+  | _ => exact absurd h (by simp [AdmA_rows])
 
 /-- An object whose slots and open block have `WriteLe` has `WriteLe`. The view keeps each
     presence mark, so the presence test does not move. -/
@@ -1564,7 +1535,7 @@ theorem writeLe_object {fs : Finset Name} {f : {k // k ∈ fs} → ObjectSlot} {
   intro v h
   cases v with
   | map keys g =>
-    simp only [writeView, writeViewB, Adm, AdmBody, Bool.and_eq_true] at h ⊢
+    simp only [writeView, writeViewB, Adm_rows, Bool.and_eq_true] at h ⊢
     refine ⟨decide_eq_true fun k => ?_, decide_eq_true fun k => ?_⟩
     · have := of_decide_eq_true h.1 k
       beta_reduce
@@ -1576,9 +1547,9 @@ theorem writeLe_object {fs : Finset Name} {f : {k // k ∈ fs} → ObjectSlot} {
         exact hf ⟨k.1, hm⟩ _ this
       · simp only [entryP, MapOf.at, dif_neg hm] at this ⊢
         cases w with
-        | none => exact absurd this (by simp [AdmWild])
+        | none => exact absurd this (by simp [Adm_rows])
         | some t => exact hw _ this
-  | _ => exact absurd h (by simp [Adm, AdmBody])
+  | _ => exact absurd h (by simp [Adm_rows])
 
 /-- An object whose slots and open block have `ReadLe` has `ReadLe`. -/
 theorem readLe_object {fs : Finset Name} {f : {k // k ∈ fs} → ObjectSlot} {w : Option Term}
@@ -1587,7 +1558,7 @@ theorem readLe_object {fs : Finset Name} {f : {k // k ∈ fs} → ObjectSlot} {w
   intro a h
   cases a with
   | m keys g =>
-    simp only [readView, readViewB, AdmA, AdmABody, Bool.and_eq_true] at h ⊢
+    simp only [readView, readViewB, AdmA_rows, Bool.and_eq_true] at h ⊢
     refine ⟨decide_eq_true fun k => ?_, decide_eq_true fun k => ?_⟩
     · have := of_decide_eq_true h.1 k
       beta_reduce
@@ -1599,9 +1570,9 @@ theorem readLe_object {fs : Finset Name} {f : {k // k ∈ fs} → ObjectSlot} {w
         exact hf ⟨k.1, hm⟩ _ this
       · simp only [entryP, MapOf.at, dif_neg hm] at this ⊢
         cases w with
-        | none => exact absurd this (by simp [AdmAWild])
+        | none => exact absurd this (by simp [AdmA_rows])
         | some t => exact hw _ this
-  | _ => exact absurd h (by simp [AdmA, AdmABody])
+  | _ => exact absurd h (by simp [AdmA_rows])
 
 /-- The views of a list admit where the list admits. -/
 theorem anyWrite : ∀ ts : List Term, WriteLeL ts → ∀ v, AdmAny ts v = true →
@@ -1628,7 +1599,7 @@ theorem writeLe_of : ∀ t : Term, WriteLe t
   | .var _ => fun _ h => h
   | .mu _ => fun _ h => h
   | .refine t p => fun v h => by
-      simp only [writeView, Adm, Bool.and_eq_true] at h ⊢
+      simp only [writeView, Adm_rows, Bool.and_eq_true] at h ⊢
       exact ⟨writeLe_of t v h.1, h.2⟩
   | .list pre sp suf => writeLe_list (writeLe_ofL pre) (writeLe_ofO sp) (writeLe_ofL suf)
   | .object (.mk fs f w) => writeLe_object (fun k => writeLe_ofS (f k)) (writeLe_ofO w)
@@ -1839,15 +1810,6 @@ theorem AdmA_meet_union_distrib {x z o : Term} {os : List Term}
     AdmA z a = ((AdmA x a && AdmA o a) || (AdmA x a && AdmAAny os a)) := by
   rw [AdmA_meet_union h, AdmAAny_cons]
   cases AdmA x a <;> cases AdmA o a <;> cases AdmAAny os a <;> rfl
-
-/-! ## The typed fragment is closed under the meet -/
-
-/-- **The typed fragment is closed under the meet.** Where two derivable terms have a meet, the
-    meet is derivable. `Alg.typed_meet` at DynamoDB. -/
-theorem typed_meet (x y z : Term) (h : Term.meet x y = some z)
-    (hx : ∃ T μ, Typed x T μ) (hy : ∃ T μ, Typed y T μ) : ∃ T μ, Typed z T μ :=
-  Alg.typed_meet x y z h hx hy
-
 
 
 end Calculus

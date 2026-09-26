@@ -365,8 +365,7 @@ The guards, the entry steps, the rest policy and the two clauses of §2 read no 
 constructor, so they are the generic layer's. The aliases give them their names here, and the
 two laws below are the generic ones at the `map` and `M` prisms. -/
 
-export Alg (valPresentB_spec valPresentB_of reqPresentB_spec reqPresentB_of entry_domE'
-  entry_ranP' rcOf_forall keepB_of_entryWrite keepB_of_declared object_retract object_canonS)
+export Alg (valPresentB_of)
 
 /-- §4's held set follows from the entry carriers. The current-schema reader returns only stored
     entries, so the object row needs no extra reader premise. -/

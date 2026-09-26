@@ -21,6 +21,25 @@ Deep embedding. Notes:
   convention rather than by type.
 -/
 
+/-! ## The DynamoDB rows of the generic functions
+
+`denote`, `μSyn`, `Adm`, `AdmA` and their companions are the generic functions at `dynSyn`. A
+generic equation states a row through the signature (`Sem.list`, `PrimAdm.admV`), and
+`simp only [g]` delta-unfolds an abbreviation and reads no other equation. So each row at the
+DynamoDB constructors is a `rfl` lemma in one of these sets, and a proof names the set. The
+sets are registered here because a set is usable only in a module that imports its
+registration. -/
+
+/-- The rows of `denote`, `bodySem`, `fieldSem`, `wildSem`, `denoteList`, `denoteOpt` and
+    `denoteμs` at the DynamoDB constructors. -/
+register_simp_attr denote_rows
+/-- The rows of `μSyn` and `μSynList` at the DynamoDB constructors. -/
+register_simp_attr μSyn_rows
+/-- The rows of `Adm` and its companions at the DynamoDB constructors. -/
+register_simp_attr Adm_rows
+/-- The rows of `AdmA`, its companions and `refineReads` at the DynamoDB constructors. -/
+register_simp_attr AdmA_rows
+
 namespace Calculus
 
 open Alg (Term.depth Body.depth Term.depthO Term.depth_le_depthL Term.depthO_le

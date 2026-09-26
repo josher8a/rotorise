@@ -60,8 +60,7 @@ theorem pairwiseCompat_json (c : Codec) (hc : Lawful c) :
 /-- `jsonTerm`'s obligations hold: the body owes compatibility at each stage, given that the
     stage before is lawful. -/
 theorem obligations_json : Obligations jsonTerm := fun _ hl =>
-  ⟨⟨trivial, ⟨trivial, trivial, trivial⟩, trivial⟩, fun s hs t ht => by
-    rw [← denote_eq_alg, ← denote_eq_alg]; exact pairwiseCompat_json _ hl s hs t ht⟩
+  ⟨⟨trivial, ⟨trivial, trivial, trivial⟩, trivial⟩, pairwiseCompat_json _ hl⟩
 
 /-- **The host's recursive `jsonTerm` denotes a lawful codec.** -/
 theorem lawful_json : Lawful (denote jsonTerm) := soundness typed_json obligations_json
@@ -69,7 +68,7 @@ theorem lawful_json : Lawful (denote jsonTerm) := soundness typed_json obligatio
 /-- **`jsonTerm` is a fixed point**: it writes what one layer over `jsonTerm` writes. -/
 theorem json_e_fix (v : Value) :
     (denote jsonTerm).e v = (denote (.union [.string, .array (.var 0)]) [denote jsonTerm]).e v :=
-  muCodec_e_fix (contractive_body rfl []) v
+  muCodec_e_fix (Alg.contractive_body (b := (.union [.string, .array (.var 0)] : Term)) rfl []) v
 
 /-- `jsonTerm` writes a nested array through itself, and refuses an element it does not hold. -/
 theorem json_vectors :

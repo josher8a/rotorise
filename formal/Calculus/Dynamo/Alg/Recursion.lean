@@ -102,8 +102,6 @@ reaches the generic lemmas through the abbreviation. -/
 abbrev AgreeLe (d : Nat) (c₁ c₂ : Codec) : Prop := Alg.AgreeLe Value.depth Attr.depth d c₁ c₂
 
 namespace AgreeLe
-export Alg.AgreeLe (refl of_eq eq_of_forall)
-
 /-- Every input has depth at least one, so any two codecs agree below depth zero. -/
 theorem zero (c₁ c₂ : Codec) : AgreeLe 0 c₁ c₂ :=
   Alg.AgreeLe.zero Value.depth_pos Attr.depth_pos c₁ c₂
@@ -116,8 +114,7 @@ end AgreeLe
     its own input, on both sides. -/
 abbrev Contractive (B : Codec → Codec) : Prop := Alg.Contractive Value.depth Attr.depth B
 
-export Alg (muStage muStage_induct carrier_muCodec agreeLe_muCodec select_congr agreeLe_altCodec
-  agreeLe_restrict traverse_zip_congr traverse_row_congr)
+export Alg (muStage muStage_induct carrier_muCodec agreeLe_altCodec)
 
 /-- **The recursive codec**: each input read at the stage its own depth names. -/
 abbrev muCodec (B : Codec → Codec) : Codec := Alg.muCodec Value.depth Attr.depth B
@@ -171,8 +168,6 @@ A container reads its element codecs one layer down, so it turns agreement below
 agreement below `d + 1`. A sum, a restriction and a relabelling read the same input, so they
 keep the depth. -/
 
-export Alg (optionRel_map optionRel_bind optionRel_isSome slots_rel slotsL_rel)
-
 /-- A `list` reads each element one layer down, so it turns agreement below `d` into agreement
     below `d + 1`. -/
 theorem agreeLe_listCodec {d : Nat} {pre₁ pre₂ suf₁ suf₂ : List Codec}
@@ -224,8 +219,6 @@ theorem agreeLe_setCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂)
 /-! ### Objects
 
 An object reads its entry codecs at the entries of a map, one layer below the map. -/
-
-export Alg (mapOf_at_rel entryCodec_rel valPresentB_rel reqPresentB_rel keepB_rel)
 
 /-- An object reads each entry one layer below the map, so it turns agreement below `d` into
     agreement below `d + 1`. -/

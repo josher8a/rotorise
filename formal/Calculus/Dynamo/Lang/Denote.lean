@@ -1,4 +1,5 @@
 import Calculus.Dynamo.Lang.Term
+import Calculus.Lang.Typing
 import Calculus.Dynamo.Alg.Frontier
 import Calculus.Dynamo.Alg.Opaque
 
@@ -55,31 +56,37 @@ which is `Prisms.literalCodec_μ`, stated where the codec is.
 The `Option` in `Codec.μ` is `Codec.μ`'s own — a codec that writes no attribute — and never
 "this payload had no base", the member being a function of the index. -/
 
-mutual
+/-- The member a term stores, syntactically: the generic `⇝` index at DynamoDB. -/
+abbrev μSyn (t : Term) : Option Member := Alg.μSyn t
 
-/-- The member a term stores, syntactically — the `⇝` index computed from the term. -/
-def μSyn : Term → Option Member
-  | .base k | .literal k _ => some k.member
-  -- the member is `setMember` of the element's: `none` where the element names no member of
-  -- `S`, `N` or `B`, which is the case the DynamoDB obligation `SetElem` refuses
-  | .set t => (μSyn t).bind setMember
-  | .list _ _ _ => some .L
-  | .held t _ _ _ => μSyn t
-  | .refine t _ => μSyn t
-  | .opaq => none
-  -- a closed term reads an unbound variable as the bottom, and a recursive term concludes `⊤`
-  | .var _ => none
-  | .mu _ => none
-  | .object _ => some .M
-  | .union opts => unanimous (μSynList opts)
-  -- the bottom writes no value, so there is no member it stores
-  | .never => none
+/-- The members of a list of terms, in order. -/
+abbrev μSynList (ts : List Term) : List (Option Member) := Alg.μSynList ts
 
-def μSynList : List Term → List (Option Member)
-  | [] => []
-  | t :: ts => μSyn t :: μSynList ts
+section Rows
+variable (k : GroundKind) (t : Term) (ts : List Term)
 
-end
+@[μSyn_rows] theorem μSyn_base : μSyn (.base k) = some k.member := rfl
+@[μSyn_rows] theorem μSyn_literal (x : k.Carrier) : μSyn (.literal k x) = some k.member := rfl
+/-- The member is `setMember` of the element's: `none` where the element names no member of
+    `S`, `N` or `B`, which is the case the DynamoDB obligation `SetElem` refuses. -/
+@[μSyn_rows] theorem μSyn_set : μSyn (.set t) = (μSyn t).bind setMember := rfl
+@[μSyn_rows] theorem μSyn_list (pre suf : List Term) (sp : Option Term) :
+    μSyn (.list pre sp suf) = some .L := rfl
+@[μSyn_rows] theorem μSyn_held (P : Term) (f g : Value → Value) :
+    μSyn (.held t P f g) = μSyn t := rfl
+@[μSyn_rows] theorem μSyn_refine (p : Pred) : μSyn (.refine t p) = μSyn t := rfl
+@[μSyn_rows] theorem μSyn_opaq : μSyn .opaq = none := rfl
+/-- A closed term reads an unbound variable as the bottom, and a recursive term concludes `⊤`. -/
+@[μSyn_rows] theorem μSyn_var (i : Nat) : μSyn (.var i) = none := rfl
+@[μSyn_rows] theorem μSyn_mu : μSyn (.mu t) = none := rfl
+@[μSyn_rows] theorem μSyn_object (b : Body) : μSyn (.object b) = some .M := rfl
+@[μSyn_rows] theorem μSyn_union : μSyn (.union ts) = unanimous (μSynList ts) := rfl
+/-- The bottom writes no value, so there is no member it stores. -/
+@[μSyn_rows] theorem μSyn_never : μSyn .never = none := rfl
+@[μSyn_rows] theorem μSynList_nil : μSynList [] = [] := rfl
+@[μSyn_rows] theorem μSynList_cons : μSynList (t :: ts) = μSyn t :: μSynList ts := rfl
+
+end Rows
 
 /-! ## The denotation
 
@@ -103,129 +110,88 @@ Fuel was a termination device and never a cost measure; it is not even that any 
 
 export Alg (envAt)
 
-mutual
-
-def denote : Term → (ρ : List Codec := []) → Codec
-  | .base k, _ => baseCodec k
-  | .literal k ls, _ => literalCodec k ls
-  | .set t, ρ => setCodec (denote t ρ)
-  | .list pre spread suf, ρ =>
-      listCodec (denoteList pre ρ) (denoteOpt spread ρ) (denoteList suf ρ)
-  -- the caller-side restriction is a `restrict`, the combinator of the `refine` row
-  | .held inner outer f g, ρ =>
-      ((denote inner ρ).through f g).restrict fun v => ((denote outer ρ).e v).isSome
-  | .refine inner p, ρ => (denote inner ρ).restrict p.eval
-  -- `opaque` is the recursive codec of one fixed body (`Opaque.lean`)
-  | .opaq, _ => muCodec opaqStep
-  | .object b, ρ => bodySem b ρ
-  | .union opts, ρ => altCodec (denoteList opts ρ) (unanimous (denoteμs opts ρ))
-  -- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously
-  | .never, _ => Codec.empty
-  | .var i, ρ => envAt ρ i
-  -- each input reads the stage of the body that its own depth names
-  | .mu b, ρ => muCodec fun c => denote b (c :: ρ)
+/-- Each term, at its certified combinator: the generic denotation at DynamoDB. -/
+abbrev denote (t : Term) (ρ : List Codec := []) : Codec := Alg.denote t ρ
 
 /-- The payload's semantics: the slot table and the open block, each through its own
-    companion. This is the third companion of `denote`, alongside `fieldSem` and `wildSem`, and
-    it exists for the same reason they do — the recursion has to be passed *applied*. Before
-    `Body`, `denote`'s row inlined it, which is why nothing else could name "the codec an
-    object payload denotes" without repeating the pair. -/
-def bodySem : Body → (ρ : List Codec := []) → Codec
-  | .mk fields f wild, ρ => objectCodec ⟨fields, fun k => fieldSem (f k) ρ⟩ (wildSem wild ρ)
+    companion. The recursion has to be passed *applied*, so `denote`'s `.object` row delegates
+    to this companion, alongside `fieldSem` and `wildSem`. -/
+abbrev bodySem (b : Body) (ρ : List Codec := []) : Codec := Alg.bodySem b ρ
 
-/-- A field's semantics. A companion of `denote` rather than a function of one — which is what
+/-- A field's semantics. A companion of `denote` rather than a function of one, which is what
     removed the fuel. -/
-def fieldSem : ObjectSlot → (ρ : List Codec := []) → FieldSem
-  | .req t, ρ => .req (denote t ρ)
-  | .optional t, ρ => .opt (denote t ρ)
+abbrev fieldSem (s : ObjectSlot) (ρ : List Codec := []) : FieldSem := Alg.fieldSem s ρ
 
-/-- The open block's semantics, for the same reason.
+/-- The open block's semantics. **A body with no open block refuses**: a name the body does not
+    claim is a name the body refuses, in both directions. -/
+abbrev wildSem (w : Option Term) (ρ : List Codec := []) : RestSem := Alg.wildSem w ρ
 
-    **A body with no open block refuses.** There is no third answer: the policy that read an
-    undeclared name and wrote nothing back is gone, so a name the body does not claim is a name
-    the body refuses, in both directions. -/
-def wildSem : Option Term → (ρ : List Codec := []) → RestSem
-  | none, _ => .refuse
-  | some t, ρ => .codec (denote t ρ)
+/-- The options' codecs, in order. -/
+abbrev denoteList (ts : List Term) (ρ : List Codec := []) : List Codec := Alg.denoteList ts ρ
 
-def denoteList : List Term → (ρ : List Codec := []) → List Codec
-  | [], _ => []
-  | t :: ts, ρ => denote t ρ :: denoteList ts ρ
+/-- The spread's codec, where there is one. -/
+abbrev denoteOpt (o : Option Term) (ρ : List Codec := []) : Option Codec := Alg.denoteOpt o ρ
 
-def denoteOpt : Option Term → (ρ : List Codec := []) → Option Codec
-  | none, _ => none
-  | some t, ρ => some (denote t ρ)
+/-- The options' members, in order. -/
+abbrev denoteμs (ts : List Term) (ρ : List Codec := []) : List (Option Member) :=
+  Alg.denoteμs ts ρ
 
-def denoteμs : List Term → (ρ : List Codec := []) → List (Option Member)
-  | [], _ => []
-  | t :: ts, ρ => (denote t ρ).μ :: denoteμs ts ρ
+/-! ### The rows at the DynamoDB constructors
 
-end
+Each row is `rfl`: the generic row at `dynSem` is the DynamoDB combinator. `§6`'s **Hold** rows
+are stated about combinators and its **Do not hold** rows (`Refutations.lean`) about terms, and
+these rows are the translation between the two. -/
 
-/-! ### The DynamoDB rows are the generic denotation
+section Rows
+variable (t : Term) (ts : List Term) (ρ : List Codec)
 
-`denote` states the rows at DynamoDB, so a proof reads `baseCodec`, `setCodec` and `listCodec` by
-name. `Alg.denote` at `dynSem` is the same function, and `denote_eq_alg` is that fact: a row that
-drifts from the generic one fails here. -/
+@[denote_rows] theorem denote_base (k : GroundKind) : denote (.base k) ρ = baseCodec k := rfl
+@[denote_rows] theorem denote_literal (k : GroundKind) (x : k.Carrier) :
+    denote (.literal k x) ρ = literalCodec k x := rfl
+/-- `set` denotes the finite-powerset lift of its element's codec. -/
+@[denote_rows] theorem denote_set : denote (.set t) ρ = setCodec (denote t ρ) := rfl
+/-- The container denotes the `list` codec over its three parts. -/
+@[denote_rows] theorem denote_list (pre : List Term) (spread : Option Term) (suf : List Term) :
+    denote (.list pre spread suf) ρ
+      = listCodec (denoteList pre ρ) (denoteOpt spread ρ) (denoteList suf ρ) := rfl
+/-- `held` denotes `through`, restricted by the admission of the caller-side term. -/
+@[denote_rows] theorem denote_held (P : Term) (f g : Value → Value) :
+    denote (.held t P f g) ρ
+      = ((denote t ρ).through f g).restrict fun v => ((denote P ρ).e v).isSome := rfl
+/-- `refine` denotes `restrict`, of the predicate's meaning. This is the whole of what `Pred`
+    cost the codec layer: one `.eval`. -/
+@[denote_rows] theorem denote_refine (p : Pred) :
+    denote (.refine t p) ρ = (denote t ρ).restrict p.eval := rfl
+/-- `opaque` denotes the recursive codec of its body `opaqStep` (`Opaque.lean`). -/
+@[denote_rows] theorem denote_opaq : denote .opaq ρ = muCodec opaqStep := rfl
+/-- `object` denotes its payload's semantics. -/
+@[denote_rows] theorem denote_object (b : Body) : denote (.object b) ρ = bodySem b ρ := rfl
+/-- `union` denotes `altCodec`, over the options' semantics and their unanimous member. -/
+@[denote_rows] theorem denote_union_sems :
+    denote (.union ts) ρ = altCodec (denoteList ts ρ) (unanimous (denoteμs ts ρ)) := rfl
+/-- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously. -/
+@[denote_rows] theorem denote_never : denote .never ρ = Codec.empty := rfl
+@[denote_rows] theorem denote_var (i : Nat) : denote (.var i) ρ = envAt ρ i := rfl
+/-- `mu` denotes the recursive codec of its body: each input reads the stage of the body that
+    its own depth names. -/
+@[denote_rows] theorem denote_mu : denote (.mu t) ρ = muCodec fun c => denote t (c :: ρ) := rfl
+@[denote_rows] theorem bodySem_mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
+    (wild : Option Term) : bodySem (.mk fields f wild) ρ
+      = objectCodec ⟨fields, fun k => fieldSem (f k) ρ⟩ (wildSem wild ρ) := rfl
+@[denote_rows] theorem fieldSem_req : fieldSem (.req t) ρ = .req (denote t ρ) := rfl
+@[denote_rows] theorem fieldSem_optional : fieldSem (.optional t) ρ = .opt (denote t ρ) := rfl
+@[denote_rows] theorem wildSem_none : wildSem none ρ = .refuse := rfl
+@[denote_rows] theorem wildSem_some : wildSem (some t) ρ = .codec (denote t ρ) := rfl
+@[denote_rows] theorem denoteList_nil : denoteList [] ρ = [] := rfl
+@[denote_rows] theorem denoteList_cons : denoteList (t :: ts) ρ = denote t ρ :: denoteList ts ρ :=
+  rfl
+@[denote_rows] theorem denoteOpt_none : denoteOpt none ρ = none := rfl
+@[denote_rows] theorem denoteOpt_some : denoteOpt (some t) ρ = some (denote t ρ) := rfl
+@[denote_rows] theorem denoteμs_nil : denoteμs [] ρ = [] := rfl
+@[denote_rows] theorem denoteμs_cons : denoteμs (t :: ts) ρ = (denote t ρ).μ :: denoteμs ts ρ :=
+  rfl
 
-mutual
-
-/-- The DynamoDB denotation is the generic one at `dynSem`. -/
-theorem denote_eq_alg : ∀ (t : Term) (ρ : List Codec), denote t ρ = Alg.denote t ρ
-  | .base _, _ | .literal _ _, _ | .opaq, _ | .never, _ | .var _, _ => rfl
-  | .set t, ρ => congrArg setCodec (denote_eq_alg t ρ)
-  | .list pre sp suf, ρ => by
-      simp only [denote, denoteList_eq_alg pre ρ, denoteOpt_eq_alg sp ρ, denoteList_eq_alg suf ρ]
-      rfl
-  | .held inner outer f g, ρ => by
-      simp only [denote, denote_eq_alg inner ρ, denote_eq_alg outer ρ]
-      rfl
-  | .refine inner p, ρ => congrArg (Alg.Codec.restrict · p.eval) (denote_eq_alg inner ρ)
-  | .object b, ρ => bodySem_eq_alg b ρ
-  | .union opts, ρ => by
-      simp only [denote, denoteList_eq_alg opts ρ, denoteμs_eq_alg opts ρ]
-      rfl
-  | .mu b, ρ => congrArg muCodec (funext fun c => denote_eq_alg b (c :: ρ))
-
-/-- …at a payload. -/
-theorem bodySem_eq_alg : ∀ (b : Body) (ρ : List Codec), bodySem b ρ = Alg.bodySem b ρ
-  | .mk fields f wild, ρ => by
-      simp only [bodySem, wildSem_eq_alg wild ρ, fun k => fieldSem_eq_alg (f k) ρ]
-      rfl
-
-/-- …at a slot. -/
-theorem fieldSem_eq_alg : ∀ (s : ObjectSlot) (ρ : List Codec), fieldSem s ρ = Alg.fieldSem s ρ
-  | .req t, ρ => congrArg FieldSem.req (denote_eq_alg t ρ)
-  | .optional t, ρ => congrArg FieldSem.opt (denote_eq_alg t ρ)
-
-/-- …at the open block. -/
-theorem wildSem_eq_alg : ∀ (w : Option Term) (ρ : List Codec), wildSem w ρ = Alg.wildSem w ρ
-  | none, _ => rfl
-  | some t, ρ => congrArg RestSem.codec (denote_eq_alg t ρ)
-
-/-- …at a list of terms. -/
-theorem denoteList_eq_alg : ∀ (ts : List Term) (ρ : List Codec),
-    denoteList ts ρ = Alg.denoteList ts ρ
-  | [], _ => rfl
-  | t :: ts, ρ => by
-      simp only [denoteList, denote_eq_alg t ρ, denoteList_eq_alg ts ρ]
-      rfl
-
-/-- …at an optional term. -/
-theorem denoteOpt_eq_alg : ∀ (o : Option Term) (ρ : List Codec),
-    denoteOpt o ρ = Alg.denoteOpt o ρ
-  | none, _ => rfl
-  | some t, ρ => congrArg some (denote_eq_alg t ρ)
-
-/-- …at the members of a list of terms. -/
-theorem denoteμs_eq_alg : ∀ (ts : List Term) (ρ : List Codec),
-    denoteμs ts ρ = Alg.denoteμs ts ρ
-  | [], _ => rfl
-  | t :: ts, ρ => by
-      simp only [denoteμs, denote_eq_alg t ρ, denoteμs_eq_alg ts ρ]
-      rfl
-
-end
+end Rows
 
 /-! ## The member index
 
@@ -259,7 +225,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
 theorem denoteμs_eq : ∀ opts : List Term, denoteμs opts = μSynList opts
   | [] => rfl
   | t :: ts => by
-      simp only [denoteμs, μSynList]
+      simp only [denote_rows, μSyn_rows]
       rw [denote_μ t, denoteμs_eq ts]
 
 end
@@ -284,11 +250,10 @@ def fieldTable (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
 
 section Bridge
 
-/-- `set` denotes the finite-powerset lift of its element's codec. -/
-theorem denote_set (t : Term) (ρ : List Codec) : denote (.set t) ρ = setCodec (denote t ρ) := rfl
 /-- `array` denotes the spread-only `list`, which is what `arrayCodec` is. -/
 theorem denote_array (t : Term) : denote (.array t) = arrayCodec (denote t) :=
   (arrayCodec_eq_listCodec (denote t)).symm
+
 /-- `record` denotes `recordCodec`: the empty body with an open block, which is what
     `objectCodec_empty_codec` proves the record codec to be. -/
 theorem denote_record (t : Term) : denote (.record t) = recordCodec (denote t) :=
@@ -299,46 +264,12 @@ theorem denote_tuple (ts : List Term) (tail : Option Term) :
     denote (.tuple ts tail) = tupleCodec (denoteList ts) (denoteOpt tail) :=
   (tupleCodec_eq_listCodec (denoteList ts) (denoteOpt tail)).symm
 
-/-- …and the container itself denotes the `list` codec over its three parts. -/
-theorem denote_list (pre : List Term) (spread : Option Term) (suf : List Term)
-    {ρ : List Codec} : denote (.list pre spread suf) ρ
-      = listCodec (denoteList pre ρ) (denoteOpt spread ρ) (denoteList suf ρ) := rfl
-
-/-- `held` denotes `through`, restricted by the admission of the caller-side term. -/
-theorem denote_held (t P : Term) (f g : Value → Value) :
-    denote (.held t P f g) = ((denote t).through f g).restrict fun v => ((denote P).e v).isSome :=
-  rfl
-
-/-- `refine` denotes `restrict`, of the predicate's meaning.
-
-    This is the whole of what `Pred` cost the codec layer: one `.eval`. `restrict` still takes
-    a `Value → Bool`, so every theorem about it in the combinator modules is untouched. -/
-theorem denote_refine (t : Term) (p : Pred) :
-    denote (.refine t p) = (denote t).restrict p.eval := rfl
-
-
-/-- `union` denotes `altCodec`, over the options' semantics and their unanimous member. -/
-theorem denote_union_sems (opts : List Term) {ρ : List Codec} :
-    denote (.union opts) ρ =
-      altCodec (denoteList opts ρ) (unanimous (denoteμs opts ρ)) := rfl
-
-/-- `opaque` denotes the recursive codec of its body `opaqStep`. -/
-theorem denote_opaq : denote .opaq = muCodec opaqStep := rfl
-
-/-- `mu` denotes the recursive codec of its body, with the stage for the bound variable. -/
-theorem denote_mu (b : Term) (ρ : List Codec) :
-    denote (.mu b) ρ = muCodec fun c => denote b (c :: ρ) := rfl
-
 /-- `object` denotes `objectCodec`. -/
 theorem denote_object_table (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
     (wild : Option Term) {ρ : List Codec} :
     denote (.object (.mk fields f wild)) ρ
       = objectCodec (fieldTable fields f ρ) (wildSem wild ρ) :=
   rfl
-
-/-- …and the `Body`-level form, which is the one a statement about an arbitrary object needs. -/
-theorem denote_object (b : Body) : denote (.object b) = bodySem b := rfl
-
 
 end Bridge
 
@@ -351,7 +282,7 @@ has to know the companions exist. -/
 @[simp] theorem denoteList_eq {ρ : List Codec} :
     ∀ ts : List Term, denoteList ts ρ = ts.map (denote · ρ)
   | [] => rfl
-  | t :: ts => by simp only [denoteList, List.map]; rw [denoteList_eq ts]
+  | t :: ts => by simp only [denote_rows, List.map]; rw [denoteList_eq ts]
 
 @[simp] theorem denoteOpt_eq {ρ : List Codec} :
     ∀ tail : Option Term, denoteOpt tail ρ = tail.map (denote · ρ)
@@ -361,7 +292,7 @@ has to know the companions exist. -/
 @[simp] theorem denoteμs_eq_map {ρ : List Codec} : ∀ opts : List Term,
     denoteμs opts ρ = opts.map fun t => (denote t ρ).μ
   | [] => rfl
-  | t :: ts => by simp only [denoteμs, List.map]; rw [denoteμs_eq_map ts]
+  | t :: ts => by simp only [denote_rows, List.map]; rw [denoteμs_eq_map ts]
 
 end
 

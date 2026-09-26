@@ -329,9 +329,9 @@ theorem occV_open : ∀ (t : Term) (ρ : List Codec) (v : Value),
     ((denote t ρ).e v).isSome = true →
       occV t v.slot = true ∨ ∃ i, 2 ≤ t.use i ∧ ((envAt ρ i).e v).isSome = true
   | .base k, _, v, h => Or.inl (by
-      cases k <;> cases v <;> simp_all [denote, stringCodec, booleanCodec, binaryCodec, nullCodec,
+      cases k <;> cases v <;> simp_all [denote_rows, stringCodec, booleanCodec, binaryCodec, nullCodec,
         numberCodec, occV, occOnly, Value.slot, GroundKind.slot])
-  | .never, _, _, h => by simp [denote, Codec.empty] at h
+  | .never, _, _, h => by simp [denote_rows, Codec.empty] at h
   | .opaq, _, _, _ => Or.inl rfl
   | .literal k x, _, v, h => by
       have h := (Adm_exact (.literal k x) v).mpr h
@@ -350,7 +350,7 @@ theorem occV_open : ∀ (t : Term) (ρ : List Codec) (v : Value),
           | (simp_all [occV, Value.slot, Slot.setElem]; done)
           | simp [occV, Value.slot, Slot.setElem, Term.hasVar_of_use t i (by omega)]
   -- the containers write their own slot, whatever their elements read
-  | .list _ _ _, _, v, h => Or.inl (by cases v <;> simp_all [denote, listCodec, Alg.listCodec,
+  | .list _ _ _, _, v, h => Or.inl (by cases v <;> simp_all [denote_rows, listCodec, Alg.listCodec,
       carriedCodec, arrV, lA, occV, occOnly, Value.slot])
   | .object (.mk _ _ _), _, v, h => by
       obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
@@ -358,13 +358,13 @@ theorem occV_open : ∀ (t : Term) (ρ : List Codec) (v : Value),
       exact Or.inl rfl
   | .held t P f g, ρ, v, h => by
       have hP : ((denote P ρ).e v).isSome = true := by
-        simp only [denote, restrict_e_isSome, Bool.and_eq_true] at h; exact h.1
+        simp only [denote_rows, restrict_e_isSome, Bool.and_eq_true] at h; exact h.1
       rcases occV_open P ρ v hP with h1 | ⟨i, hi, he⟩
       · exact Or.inl (by simpa [occV] using h1)
       · exact Or.inr ⟨i, by simp only [Term.use, useHeld]; split <;> omega, he⟩
   | .refine t p, ρ, v, h => by
       have ht : ((denote t ρ).e v).isSome = true := by
-        simp only [denote, restrict_e_isSome, Bool.and_eq_true] at h; exact h.2
+        simp only [denote_rows, restrict_e_isSome, Bool.and_eq_true] at h; exact h.2
       rcases occV_open t ρ v ht with h1 | ⟨i, hi, he⟩
       · exact Or.inl (by simpa [occV] using h1)
       · exact Or.inr ⟨i, by simpa [Term.use] using hi, he⟩
@@ -400,7 +400,7 @@ theorem occV_openL : ∀ (ts : List Term) (ρ : List Codec) (v : Value) (o : Cod
       occVL ts v.slot = true ∨ ∃ i, 2 ≤ Term.useL i ts ∧ ((envAt ρ i).e v).isSome = true
   | [], _, _, _, ho, _ => nomatch ho
   | t :: ts, ρ, v, o, ho, h => by
-      simp only [denoteList, List.mem_cons] at ho
+      simp only [denote_rows, List.mem_cons] at ho
       rcases ho with rfl | ho
       · rcases occV_open t ρ v h with h1 | ⟨i, hi, he⟩
         · exact Or.inl (occVL_cons (.inl h1))
@@ -432,9 +432,9 @@ theorem occA_open : ∀ (t : Term) (ρ : List Codec) (a : Attr),
     ((denote t ρ).p a).isSome = true →
       occA t a.member = true ∨ ∃ i, 2 ≤ t.use i ∧ ((envAt ρ i).p a).isSome = true
   | .base k, _, a, h => Or.inl (by
-      cases k <;> cases a <;> simp_all [denote, stringCodec, booleanCodec, binaryCodec, nullCodec,
+      cases k <;> cases a <;> simp_all [denote_rows, stringCodec, booleanCodec, binaryCodec, nullCodec,
         numberCodec, occA, occOnly, Attr.member])
-  | .never, _, _, h => by simp [denote, Codec.empty] at h
+  | .never, _, _, h => by simp [denote_rows, Codec.empty] at h
   | .opaq, _, _, _ => Or.inl rfl
   | .literal k x, _, a, h => by
       have h := (AdmA_exact (.literal k x) a).mpr h
@@ -451,10 +451,10 @@ theorem occA_open : ∀ (t : Term) (ρ : List Codec) (a : Attr),
           | (simp_all [occA, Attr.member, Member.setElem]; done)
           | simp [occA, Attr.member, Member.setElem, Term.hasVar_of_use t i (by omega)]
   | .list _ _ _, _, a, h => Or.inl (by
-      cases a <;> simp_all [denote, listCodec, Alg.listCodec, carriedCodec, arrV, lA, occA,
+      cases a <;> simp_all [denote_rows, listCodec, Alg.listCodec, carriedCodec, arrV, lA, occA,
           occOnly, Attr.member])
   | .object (.mk _ _ _), _, a, h => Or.inl (by
-      cases a <;> simp_all [denote, bodySem, objectCodec, Alg.objectCodec, Alg.objectCodecCore,
+      cases a <;> simp_all [denote_rows, objectCodec, Alg.objectCodec, Alg.objectCodecCore,
           carriedCodec, mA,
         occA, occOnly, Attr.member])
   | .held t P f g, ρ, a, h => by
@@ -500,7 +500,7 @@ theorem occA_openL : ∀ (ts : List Term) (ρ : List Codec) (a : Attr) (o : Code
       occAL ts a.member = true ∨ ∃ i, 2 ≤ Term.useL i ts ∧ ((envAt ρ i).p a).isSome = true
   | [], _, _, _, ho, _ => nomatch ho
   | t :: ts, ρ, a, o, ho, h => by
-      simp only [denoteList, List.mem_cons] at ho
+      simp only [denote_rows, List.mem_cons] at ho
       rcases ho with rfl | ho
       · rcases occA_open t ρ a h with h1 | ⟨i, hi, he⟩
         · exact Or.inl (occAL_cons (.inl h1))

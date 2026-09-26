@@ -1,4 +1,5 @@
-import Calculus.Dynamo.Lang.Guarded
+import Calculus.Dynamo.Lang.Denote
+import Calculus.Lang.Guarded
 import Calculus.Lang.Typing
 
 /-!
@@ -118,7 +119,7 @@ namespace TypedList export Alg.TypedList (nil cons «forall») end TypedList
 namespace TypedListμ export Alg.TypedListμ (nil cons «forall» mem) end TypedListμ
 namespace TypedOpt export Alg.TypedOpt (none some) end TypedOpt
 namespace TypedField
-export Alg.TypedField (req optional term not_optional true_of_not_optional)
+export Alg.TypedField (req optional term true_of_not_optional)
 end TypedField
 namespace TypedWild export Alg.TypedWild (none some) end TypedWild
 
@@ -163,21 +164,10 @@ theorem Typed.list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre) (hs : Ty
     (hf : TypedList suf Tsuf) : Typed (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L) :=
   Alg.Typed.list (S := dynSyn) (L := dList) rfl hp hs hf
 
-/-- The held set of a `held`, at the DynamoDB denotation. -/
-theorem held_index_eq (I : Held) (P : Term) (f : Value → Value) :
-    (fun v => I (f v) ∧ ((denote P).e v).isSome)
-      = fun v => I (f v) ∧ ((Alg.denote P).e v).isSome := by
-  rw [denote_eq_alg]
-
-/-- The held set of a `mu`, at the DynamoDB denotation. -/
-theorem mu_index_eq (b : Term) :
-    (fun v => (denote (.mu b)).T v) = fun v => (Alg.denote (.mu b)).T v := by
-  rw [denote_eq_alg]
-
 /-- `(held)`, at the DynamoDB denotation of the caller-side term. -/
 theorem Typed.held {t I μ P f g} (h : Typed t I μ) :
-    Typed (.held t P f g) (fun v => I (f v) ∧ ((denote P).e v).isSome) μ := by
-  rw [held_index_eq]; exact Alg.Typed.held h
+    Typed (.held t P f g) (fun v => I (f v) ∧ ((denote P).e v).isSome) μ :=
+  Alg.Typed.held h
 
 /-- `(refine)`: the held set is the premise's, cut by the predicate. -/
 theorem Typed.refine {t T μ p} (h : Typed t T μ) :
@@ -207,8 +197,8 @@ theorem Typed.var (i : Nat) : Typed (.var i) HNever none := Alg.Typed.var i
 
 /-- `mu`, at the DynamoDB denotation of the binder. -/
 theorem Typed.mu {b T μ} (hg : (Term.mu b).guarded = true) (h : Typed b T μ) :
-    Typed (.mu b) (fun v => (denote (.mu b)).T v) none := by
-  rw [mu_index_eq]; exact Alg.Typed.mu hg h
+    Typed (.mu b) (fun v => (denote (.mu b)).T v) none :=
+  Alg.Typed.mu hg h
 
 /-- **Case analysis on a DynamoDB judgement**, with the primitive rule split into `base` and
     `literal`, and each case at its DynamoDB held set. `cases` uses this eliminator for every
@@ -245,22 +235,14 @@ theorem Typed.casesD {motive : ∀ t T μ, Typed t T μ → Prop}
     | literal k x => exact literal k x
   | set hL h => cases hL; exact set h
   | list hL hp hs hf => cases hL; exact list hp hs hf
-  | @held t I μ P f g h =>
-    have hm : ∀ T' (h' : Typed (.held t P f g) T' μ),
-        T' = (fun v => I (f v) ∧ ((denote P).e v).isSome) → motive _ T' μ h' := by
-      intro T' h' e; subst e; exact held h
-    exact hm _ _ (held_index_eq I P f).symm
+  | held h => exact held h
   | refine h => exact refine h
   | opaq => exact opaq
   | never => exact never
   | object hF hf hr => cases hF; exact object hf hr
   | union h => exact union h
   | var i => exact var i
-  | @mu b T μ hg h =>
-    have hm : ∀ T' (h' : Typed (.mu b) T' none),
-        T' = (fun v => (denote (.mu b)).T v) → motive _ T' none h' := by
-      intro T' h' e; subst e; exact mu hg h
-    exact hm _ _ (mu_index_eq b).symm
+  | mu hg h => exact mu hg h
 
 inductive TypedListM : List Term → List Held → Prop where
   | nil : TypedListM [] []

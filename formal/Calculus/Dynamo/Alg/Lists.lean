@@ -16,10 +16,8 @@ there is no first occurrence to prefer. `traverse_fst` survives because `L` real
 
 namespace Calculus
 
-export Alg (traverse traverse_nil traverse_cons traverse_eq_some traverse_length
-  traverse_append_isSome traverse_roundTrip traverse_isSome_of_all traverse_isSome traverse_mem₂
-  traverse_mem traverse_mem_input filter_nil_of filter_eq_singleton_of_disjoint
-  filter_eq_singleton_of_labels forall_mem_map_option)
+export Alg (traverse traverse_cons traverse_eq_some traverse_length traverse_isSome_of_all
+  traverse_mem traverse_mem_input filter_eq_singleton_of_labels)
 
 section Traverse
 variable {α β : Type}

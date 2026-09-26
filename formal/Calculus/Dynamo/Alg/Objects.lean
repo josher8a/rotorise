@@ -38,8 +38,7 @@ end RestSem
 pair read no carrier constructor, so they are the generic layer's (`Alg.objWrite` and its
 neighbours), and the aliases below give them their names in this namespace. -/
 
-export Alg (valPresentB reqPresentB keepB objEntryT entryCodec entryCodec_of objEntryT_eq
-  objWrite objRead objWrite_eq objRead_eq)
+export Alg (valPresentB reqPresentB keepB objEntryT entryCodec objWrite objRead objWrite_eq)
 
 section Object
 variable {sems : MapOf FieldSem} {rc? : Option Codec} {kn : Name → Bool}

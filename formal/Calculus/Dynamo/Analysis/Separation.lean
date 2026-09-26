@@ -67,7 +67,7 @@ way, and `arrayRow` above is that equation. -/
 /-- `refine t ⊤` and `t` admit the same values at every point: the row is `Adm t v && true`,
     so the domains are equal with no hypothesis. -/
 theorem refine_top_row (t : Term) : Adm (.refine t (.closure qTop)) = Adm t := by
-  funext v; simp [Adm, Pred.eval, qTop]
+  funext v; simp [Adm_rows, Pred.eval, qTop]
 
 /-! ## Separation on the pair
 
@@ -182,20 +182,20 @@ def Decides (t : Term) : Prop :=
 /-- A string `literal` decides, as §5 says. -/
 theorem decides_literalS : Decides (.literal .string "A") :=
   ⟨.str "A", .str "B",
-   by simp [denote, denote, literalCodec, baseCodec, Alg.Codec.restrict, inL, stringCodec],
+   by simp [denote_rows, literalCodec, baseCodec, Alg.Codec.restrict, inL, stringCodec],
    rfl,
-   by simp [denote, denote, literalCodec, baseCodec, Alg.Codec.restrict, inL, stringCodec]⟩
+   by simp [denote_rows, literalCodec, baseCodec, Alg.Codec.restrict, inL, stringCodec]⟩
 
 /-- `string` does not, as §5 also says. -/
 theorem not_decides_string : ¬ Decides .string := by
   rintro ⟨v, w, hv, hk, hw⟩
-  simp only [denote, denote] at hv hw
+  simp only [denote_rows] at hv hw
   cases v <;> cases w <;> simp_all [stringCodec, Value.kind]
 
 
 theorem not_decides_refine_top : ¬ Decides (.refine .string (.closure qTop)) := by
   rintro ⟨v, w, hv, hk, hw⟩
-  simp only [denote, denote] at hv hw
+  simp only [denote_rows] at hv hw
   cases v <;> cases w <;>
     simp_all [Alg.Codec.restrict, Pred.eval, stringCodec, qTop, Value.kind]
 
@@ -206,14 +206,14 @@ theorem decides_object :
     Decides (.object (.mk {"k"} (fun _ => .req .string) none)) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)), ?_, rfl, ?_⟩
-  · simp +contextual [denote, denote, bodySem, wildSem, fieldSem,
+  · simp +contextual [denote_rows,
           objectCodec, stringCodec,
-          valPresentB, valPresentAt, fieldSem, rcOf, Alg.FieldSem.codec, carriedCodec,
+          valPresentB, valPresentAt, rcOf, Alg.FieldSem.codec, carriedCodec,
           mapV, mA, objWrite, entryCodec, MapOf.at, funImage,
           Subtype.forall]
-  · simp [denote, denote, bodySem, wildSem, fieldSem,
+  · simp [denote_rows,
           objectCodec, Alg.objectCodec, Alg.objectCodecCore, stringCodec,
-          valPresentB, valPresentAt, fieldSem, rcOf, carriedCodec,
+          valPresentB, valPresentAt, rcOf, carriedCodec,
           mapV, mA, objWrite, Subtype.forall]
 
 
@@ -245,18 +245,18 @@ def fSplit : Value → Value := fun v => match v with | .str "A" => .str "A" | _
     of one kind, differing in admission, so it decides. -/
 theorem decides_held : Decides (.held .string .string fSplit (fun v => v)) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
-  · simp [denote, denote, Alg.Codec.through, Alg.Codec.restrict, stringCodec, fSplit]
-  · simp [denote, denote, Alg.Codec.through, Alg.Codec.restrict, stringCodec, fSplit]
+  · simp [denote_rows, Alg.Codec.through, Alg.Codec.restrict, stringCodec, fSplit]
+  · simp [denote_rows, Alg.Codec.through, Alg.Codec.restrict, stringCodec, fSplit]
 
 
 /-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/
 theorem Adm_refine_adapt (t : Term) (p : Pred) (v : Value) :
     Adm (.refine t p) v = ((partialId p.eval v).elim false (Adm t)) := by
-  cases hq : p.eval v <;> simp [Adm, partialId, hq]
+  cases hq : p.eval v <;> simp [Adm_rows, partialId, hq]
 
 theorem Adm_held_adapt (t P : Term) (f g : Value → Value) (v : Value) :
     Adm (.held t P f g) v = (((some (f v)).elim false (Adm t)) && Adm P v) := by
-  simp [Adm]
+  simp [Adm_rows]
 
 /-! ### Adapters and alternatives, and why `alternate reader` is not an adapter
 
@@ -294,7 +294,7 @@ theorem sepJV_set_literals :
   have hlit : ∀ (c : String) (w : Value), ((denote (.literal .string c)).e w).isSome = true →
       w = .str c := fun c w h => by
     have := (Adm_exact (.literal .string c) w).mpr h
-    cases w <;> simp_all [Adm, AdmLit, inL]
+    cases w <;> simp_all [Adm_rows, AdmLit, inL]
   intro v hv
   cases v
   case strSet S =>
@@ -319,7 +319,7 @@ theorem sepJV_set_literals :
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
     exact absurd (hlit "A" _ (encSet_elem (c := denote (.literal .string "A")) ha x hx))
       (by simp)
-  all_goals simp [Adm, setCodec] at hv
+  all_goals simp [Adm_rows, setCodec] at hv
 
 /-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
     separate, because both options admit `[]`. This is §5's empty-container argument in its

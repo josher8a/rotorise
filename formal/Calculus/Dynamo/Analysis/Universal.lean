@@ -68,20 +68,19 @@ theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
   -- `set opaque` is `opaque`'s own set option, so the two rows are one expression
   | strSet S =>
       rw [Adm_opaq_eq, Ωe_strSet]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inBase, setCodec]
+      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec]
       rfl
   | numSet S =>
       rw [Adm_opaq_eq, Ωe_numSet]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inBase, setCodec]
+      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec]
       rfl
   | binSet S =>
       rw [Adm_opaq_eq, Ωe_binSet]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inBase, setCodec]
+      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec]
       rfl
   | arr vs =>
       rw [Adm_opaq_arr]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inBase,
-        AdmOptT, alignPL_spread, setCodec]
+      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, alignPL_spread, setCodec]
       exact decide_eq_decide.mpr Iff.rfl
   | map keys g =>
       -- the record's guard is vacuous over `∅`; a `simp` that unfolds the guard reaches
@@ -89,8 +88,7 @@ theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
       have hp : valPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [Adm_opaq_map]
-      simp [opaqUnfold, AdmAny_cons, Adm, AdmBody, Term.array, Term.record, inBase,
-        AdmWild, objAdmV, entryP, MapOf.at, setCodec]
+      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, objAdmV, entryP, MapOf.at, setCodec]
       exact fun _ => hp
 
 
@@ -125,28 +123,28 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
   | n x => rw [AdmA_opaq_num]; rfl
   | ss S =>
       rw [AdmA_opaq_eq, Ωp_ss]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA, inBaseA, AdmABody, Term.array, Term.record, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBaseA, Term.array, Term.record, setCodec]
       rfl
   | bs S =>
       rw [AdmA_opaq_eq, Ωp_bs]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA, inBaseA, AdmABody, Term.array, Term.record, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBaseA, Term.array, Term.record, setCodec]
       rfl
   | ns S =>
       rw [AdmA_opaq_eq, Ωp_ns]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA, inBaseA, AdmABody, Term.array, Term.record, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBaseA, Term.array, Term.record, setCodec]
       rfl
   | l as =>
       rw [AdmA_opaq_l]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA, inBaseA, AdmABody, Term.array,
-        Term.record, AdmAOptT, alignPL_spread, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBaseA, Term.array,
+        Term.record, alignPL_spread, setCodec]
       exact decide_eq_decide.mpr Iff.rfl
   | m keys g =>
       -- the record's guard stays folded, for the reason `Adm_opaqUnfold` gives
       have hp : reqPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [AdmA_opaq_m]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA, inBaseA, AdmABody, Term.array,
-        Term.record, AdmAWild, objAdmV, entryP, MapOf.at, setCodec]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBaseA, Term.array,
+        Term.record, objAdmV, entryP, MapOf.at, setCodec]
       exact fun _ => hp
 
 /-- **`opaque` is total, write side.** `opaque` writes every value. -/

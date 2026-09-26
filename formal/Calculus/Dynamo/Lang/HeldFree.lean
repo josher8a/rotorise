@@ -140,8 +140,8 @@ theorem Ω_topLaws : Alg.TopLaws dynSyn where
   set L hL c hc := by cases hL; exact sub_setCodec hc
 
 /-- **Confluence**, closed: the denotation of a held-free term is a restriction of `Ω`. -/
-theorem sub_denote (t : Term) (h : HF t) : Sub (denote t) Ω := by
-  rw [denote_eq_alg]; exact Alg.sub_denote Ω_topLaws t h
+theorem sub_denote (t : Term) (h : HF t) : Sub (denote t) Ω :=
+  Alg.sub_denote Ω_topLaws t h
 
 /-- **(W)**: a held-free term writes only what `opaque` writes. -/
 theorem confluence_W {t : Term} (h : HF t) {v a} (he : (denote t).e v = some a) :

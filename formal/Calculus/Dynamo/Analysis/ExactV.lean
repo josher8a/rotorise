@@ -97,91 +97,107 @@ noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
     `noncomputable`; (iii) a reader cannot see through it — true of `held` and
     `opaq`, and not a property of the calculus. -/
 
-mutual
+/-! ## DynamoDB is an instance
 
-/-- **The joint admission predicate.** One structural recursion over the term, with the
-    containers recursing through *this* — which is exactly what the retired per-aspect rows
-    failed to do.
+The structure of `Adm` and its exactness are the term language's (`Alg.Adm`, `Alg.Adm_exact`).
+DynamoDB supplies the primitive rows, `inBase` and `AdmLit`, and their exactness. -/
 
-    **Every row is exact.** This said `union` was "still a sound over-approximation and
-    claims no exactness, and it is now the only one" — true when written and false from the
-    commit that proved `ExactV_union` and made `Adm_exact` unconditional, which rewrote the
-    header of this file and missed the sentence eleven lines below it. One more description
-    that nothing was keeping honest. -/
-noncomputable def Adm : Term → Value → Bool
-  | .base k   => inBase k
-  | .literal k ls => AdmLit k ls
-  -- the bottom admits nothing, and the row is that sentence
-  | .never => fun _ => false
-  | .refine t p => fun v => Adm t v && p.eval v
-  | .held t P f _ => fun v => Adm t (f v) && Adm P v
-  -- `select` attempts every option, so the row is the disjunction of the options' rows
-  | .union opts => fun v => anyP (AdmList opts) v
-  -- **`set` asks its own codec**, as `opaq` and `mu` do. A row over the elements alone is exact
-  -- only where the element writes injectively and at one member, and an arbitrary element term
-  -- does neither: a `held` can collide two elements, and a `union` can mix `S` and `N`. Below
-  -- `opaque` both hold, and the meet reads the row element by element there.
-  | .set t      => fun v => ((setCodec (denote t)).e v).isSome
-  -- **One row for the one positional container.** `array` and `tuple` were two rows that
-  -- computed different things (`allP` and `alignP`) on shapes that are now the same term,
-  -- so the first would have shadowed the second in silence. `alignPL` is the row both
-  -- shapes reduce to.
-  | .list pre sp suf => fun v =>
-      match v with
-      | .arr vs => alignPL (AdmList pre) (AdmOptT sp) (AdmList suf) vs
-      | _ => false
-  | .object b => AdmBody b
-  -- **The second row that asks its own codec**, as the section above sets out:
-  -- `denote .opaq` *is* `muCodec opaqStep`, so this is `dom(e)` rather than a
-  -- description of it, and the row's exactness is `Iff.rfl`.
-  --
-  -- It replaces a hand-written recursion over the value (~~AdmOpaqV~~) that computed the
-  -- same set. That recursion was correct and cost ~120 lines of proof, and it was the
-  -- wrong shape for one reason: it stated `opaque`'s domain a *second* time, so a change
-  -- to `opaque`'s body — a new option, a different numeric policy — meant editing two
-  -- definitions that had to agree. Deferring leaves one.
-  | .opaq => fun v => ((muCodec opaqStep).e v).isSome
-  -- a closed variable is the bottom
-  | .var _ => fun _ => false
-  -- the second recursive term asks its own codec, for the reason `opaq` does
-  | .mu b => fun v => ((denote (.mu b)).e v).isSome
+/-- The DynamoDB primitive rows: `inBase` at a base and `AdmLit` at a literal. -/
+noncomputable instance dynPrimAdm : Alg.PrimAdm dynSyn where
+  admV
+    | .base k => inBase k
+    | .literal k x => AdmLit k x
+  admV_exact
+    | .base k, v => by
+        show inBase k v = true ↔ ((denote (.base k)).e v).isSome = true
+        cases k <;> cases v <;> simp [inBase, denote_rows, stringCodec, numberCodec,
+          booleanCodec, binaryCodec, nullCodec]
+    -- `numberCodec` is read through `numberCodec_e_isSome` rather than unfolded: its `dite` is a
+    -- string parser, and `simp` inside it runs out of heartbeats.
+    | .literal k x, v => by
+        show AdmLit k x v = true ↔ ((denote (.literal k x)).e v).isSome = true
+        cases k <;> cases v <;>
+          simp [AdmLit, denote_rows, literalCodec, baseCodec, inL,
+                stringCodec, booleanCodec, binaryCodec, nullCodec, inD]
+
+/-- **The joint admission predicate**: the generic row at DynamoDB. One structural recursion
+    over the term, with the containers recursing through *this*, which is exactly what the
+    retired per-aspect rows failed to do. **Every row is exact** (`Adm_exact`). -/
+abbrev Adm (t : Term) : VP := Alg.Adm t
 
 /-- The payload's row: the declared names are present, and every present name's value is
-    admitted by its slot or by the open block. The companion `AdmField` and `AdmWild`
-    were missing — `Adm`'s object row inlined it, so the one place that says what an object
-    payload admits was a row of a table rather than a definition. -/
-noncomputable def AdmBody : Body → VP
-  | .mk fields fld wild => fun v =>
+    admitted by its slot or by the open block. -/
+abbrev AdmBody (b : Body) : VP := Alg.AdmBody b
+
+/-- A slot's row is its term's. The presence marker is `valPresentT`'s business, so it does
+    not reach this row. -/
+abbrev AdmField (s : ObjectSlot) : VP := Alg.AdmField s
+
+/-- The open block's row, where the body has one: `rcOf`'s mirror. A body with no open
+    block refuses, so an undeclared name is refused on the way *out* as well. -/
+abbrev AdmWild (w : Option Term) : Option VP := Alg.AdmWild w
+
+/-- The options' rows, in order: `denoteList`'s mirror. -/
+abbrev AdmList (ts : List Term) : List VP := Alg.AdmList ts
+
+/-- The spread's row, where there is one. -/
+abbrev AdmOptT (o : Option Term) : Option VP := Alg.AdmOptT o
+
+/-! ### The rows at the DynamoDB constructors
+
+Each row is the generic row at `dynSyn`, stated at the DynamoDB carriers: `Value.arr` and
+`Value.map` in place of the formers' prisms, and the primitive row in place of `PrimAdm.admV`. -/
+
+section Rows
+variable (t : Term) (ts : List Term)
+
+@[Adm_rows] theorem Adm_base (k : GroundKind) : Adm (.base k) = inBase k := rfl
+/-- The bottom admits no value, and the row is that sentence. -/
+@[Adm_rows] theorem Adm_never (v : Value) : Adm .never v = false := rfl
+@[Adm_rows] theorem Adm_refine (p : Pred) : Adm (.refine t p) = fun v => Adm t v && p.eval v :=
+  rfl
+@[Adm_rows] theorem Adm_held (P : Term) (f g : Value → Value) :
+    Adm (.held t P f g) = fun v => Adm t (f v) && Adm P v := rfl
+/-- `select` attempts every option, so the row is the disjunction of the options' rows. -/
+@[Adm_rows] theorem Adm_union_row : Adm (.union ts) = fun v => anyP (AdmList ts) v := rfl
+/-- **`set` asks its own codec**, as `opaq` and `mu` do. A row over the elements alone is exact
+    only where the element writes injectively and at one member, and an arbitrary element term
+    does neither: a `held` can collide two elements, and a `union` can mix `S` and `N`. -/
+@[Adm_rows] theorem Adm_set : Adm (.set t) = fun v => ((setCodec (denote t)).e v).isSome := rfl
+/-- **One row for the one positional container.** `array` and `tuple` are shapes of this term,
+    and `alignPL` is the row both shapes reduce to. -/
+@[Adm_rows] theorem Adm_list (pre suf : List Term) (sp : Option Term) :
+    Adm (.list pre sp suf) = fun v =>
+      match v with
+      | .arr vs => alignPL (AdmList pre) (AdmOptT sp) (AdmList suf) vs
+      | _ => false := by
+  funext v; cases v <;> rfl
+@[Adm_rows] theorem Adm_object (b : Body) : Adm (.object b) = AdmBody b := rfl
+/-- **The second row that asks its own codec**: `denote .opaq` *is* `muCodec opaqStep`, so this
+    is `dom(e)` rather than a description of it, and the row's exactness is `Iff.rfl`. -/
+@[Adm_rows] theorem Adm_opaq : Adm .opaq = fun v => ((muCodec opaqStep).e v).isSome := rfl
+/-- A closed variable is the bottom. -/
+@[Adm_rows] theorem Adm_var (i : Nat) : Adm (.var i) = fun _ => false := rfl
+/-- The second recursive term asks its own codec, for the reason `opaq` does. -/
+@[Adm_rows] theorem Adm_mu : Adm (.mu t) = fun v => ((denote (.mu t)).e v).isSome := rfl
+@[Adm_rows] theorem AdmBody_mk (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
+    (wild : Option Term) : AdmBody (.mk fields fld wild) = fun v =>
       match v with
       | .map keys g =>
           valPresentT fields fld keys &&
           objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmWild wild) keys g
-      | _ => false
+      | _ => false := by
+  funext v; cases v <;> rfl
+@[Adm_rows] theorem AdmField_req : AdmField (.req t) = Adm t := rfl
+@[Adm_rows] theorem AdmField_optional : AdmField (.optional t) = Adm t := rfl
+@[Adm_rows] theorem AdmWild_none : AdmWild none = none := rfl
+@[Adm_rows] theorem AdmWild_some : AdmWild (some t) = some (Adm t) := rfl
+@[Adm_rows] theorem AdmList_nil : AdmList [] = [] := rfl
+@[Adm_rows] theorem AdmList_cons : AdmList (t :: ts) = Adm t :: AdmList ts := rfl
+@[Adm_rows] theorem AdmOptT_none : AdmOptT none = none := rfl
+@[Adm_rows] theorem AdmOptT_some : AdmOptT (some t) = some (Adm t) := rfl
 
-/-- A slot's row is its term's. The presence marker is `valPresentT`'s business, so it does
-    not reach this row. Mirrors `fieldSem`, and for the same reason: the recursion has to be
-    passed *applied*. -/
-noncomputable def AdmField : ObjectSlot → VP
-  | .req t => Adm t
-  | .optional t => Adm t
-
-/-- The open block's row, where the body has one — `rcOf`'s mirror. A body with no open
-    block refuses, so an undeclared name is refused on the way *out* as well. -/
-noncomputable def AdmWild : Option Term → Option VP
-  | none => none
-  | some t => some (Adm t)
-
-/-- The options' rows, in order — `denoteList`'s mirror. -/
-noncomputable def AdmList : List Term → List VP
-  | [] => []
-  | t :: ts => Adm t :: AdmList ts
-
-noncomputable def AdmOptT : Option Term → Option VP
-  | none => none
-  | some t => some (Adm t)
-
-
-end
+end Rows
 
 /-- `valPresentT` in the form the object row uses: a declared name that must be present is
     present. -/
@@ -231,12 +247,7 @@ theorem objAdmV_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → 
     (hw : c.wild = some w) : Adm w (g ⟨k, hk⟩) = true := by
   unfold objAdmV at hB
   have hh := of_decide_eq_true hB ⟨k, hk⟩
-  rwa [entryP, MapOf.at, dif_neg hnc, hw, AdmWild] at hh
-
-@[simp] theorem AdmList_eq : ∀ ts : List Term, AdmList ts = ts.map Adm
-  | [] => rfl
-  | t :: ts => by simp only [AdmList, List.map]; rw [AdmList_eq ts]
-
+  rwa [entryP, MapOf.at, dif_neg hnc, hw, AdmWild_some] at hh
 
 
 /-- `⋁` of `Adm` over a union's options, named — sound, and *not* exact. -/
@@ -275,14 +286,10 @@ theorem AdmAny_iff : ∀ {os : List Term} {v : Value},
         · exact Or.inl h
         · exact Or.inr ⟨u, hu', h⟩
 
-/-- `Adm`'s literal row, named.
-
-    Nothing should `simp [Adm]` at a literal: the row's pattern is *dependent* — `ls`'s type
-    mentions `k` — so generating the table's equation lemmas across it is expensive enough to
-    exhaust the heartbeat budget in proofs that used to close in one step. Stating the row once
-    contains that cost, and every literal proof below rewrites with this instead. -/
-@[simp] theorem Adm_literal (k : GroundKind) (x : k.Carrier) (v : Value) :
-    Adm (.literal k x) v = AdmLit k x v := by unfold Adm; rfl
+/-- `Adm`'s literal row. The row's pattern is *dependent*, since `ls`'s type mentions `k`, so
+    the row is stated once here, at an applied value. -/
+@[simp, Adm_rows] theorem Adm_literal (k : GroundKind) (x : k.Carrier) (v : Value) :
+    Adm (.literal k x) v = AdmLit k x v := rfl
 
 /-- §5's converse direction: the row is `dom(e)`, not merely a bound on it. -/
 def ExactV (t : Term) : Prop := ∀ v, Adm t v = true ↔ ((denote t).e v).isSome
@@ -367,124 +374,27 @@ theorem filter_AdmList {opts : List Term} (h : ∀ t ∈ opts, ExactV t) (v : Va
   | cons t ts ih =>
     have ht : ExactV t := h t (by simp)
     have hts : ∀ t' ∈ ts, ExactV t' := fun t' h' => h t' (by simp [h'])
-    simp only [denoteList, List.filter_cons, isSome_e_eq_Adm ht, ih hts]
+    simp only [denote_rows, List.filter_cons, isSome_e_eq_Adm ht, ih hts]
     cases hb : Adm t v <;> simp []
-
-/-! ## DynamoDB is an instance
-
-The structure of `Adm` and its exactness are the term language's (`Alg.Adm`, `Alg.Adm_exact`).
-DynamoDB supplies the primitive rows, `inBase` and `AdmLit`, and their exactness. `Adm` keeps the
-DynamoDB rows by name, because `simp only [Adm]` reads the equations of `Adm` and not those of
-`Alg.Adm`. `Adm_eq_alg` pins each row to the generic one, so a row that drifts fails here. -/
-
-/-- The DynamoDB primitive rows: `inBase` at a base and `AdmLit` at a literal. -/
-noncomputable instance dynPrimAdm : Alg.PrimAdm dynSyn where
-  admV
-    | .base k => inBase k
-    | .literal k x => AdmLit k x
-  admV_exact
-    | .base k, v => by
-        show Adm (.base k) v = true ↔ ((denote (.base k)).e v).isSome = true
-        cases k <;> cases v <;> simp [Adm, inBase, denote, stringCodec, numberCodec,
-          booleanCodec, binaryCodec, nullCodec]
-    -- `numberCodec` is read through `numberCodec_e_isSome` rather than unfolded: its `dite` is a
-    -- string parser, and `simp` inside it runs out of heartbeats.
-    | .literal k x, v => by
-        show AdmLit k x v = true ↔ ((denote (.literal k x)).e v).isSome = true
-        cases k <;> cases v <;>
-          simp [AdmLit, denote, literalCodec, baseCodec, inL,
-                stringCodec, booleanCodec, binaryCodec, nullCodec, inD]
-
-mutual
-
-/-- The DynamoDB rows are the generic rows at `dynSyn`. -/
-theorem Adm_eq_alg : ∀ t : Term, Adm t = Alg.Adm t
-  | .base _ | .literal _ _ | .never | .opaq | .var _ => rfl
-  | .refine t p => by
-      show (fun v => Adm t v && p.eval v) = fun v => Alg.Adm t v && p.eval v
-      rw [Adm_eq_alg t]
-  | .held t P f _ => by
-      show (fun v => Adm t (f v) && Adm P v) = fun v => Alg.Adm t (f v) && Alg.Adm P v
-      rw [Adm_eq_alg t, Adm_eq_alg P]
-  | .union opts => by
-      show (fun v => anyP (AdmList opts) v) = fun v => anyP (Alg.AdmList opts) v
-      rw [AdmList_eq_alg opts]
-  | .set t => by
-      show (fun v => ((setCodec (denote t)).e v).isSome)
-        = fun v => ((setCodec (Alg.denote t)).e v).isSome
-      rw [denote_eq_alg]
-  | .mu b => by
-      show (fun v => ((denote (.mu b)).e v).isSome) = fun v => ((Alg.denote (.mu b)).e v).isSome
-      rw [denote_eq_alg]
-  | .list pre sp suf => by
-      funext v
-      cases v
-      case arr vs =>
-        show alignPL (AdmList pre) (AdmOptT sp) (AdmList suf) vs
-          = alignPL (Alg.AdmList pre) (Alg.AdmOptT sp) (Alg.AdmList suf) vs
-        rw [AdmList_eq_alg pre, AdmOptT_eq_alg sp, AdmList_eq_alg suf]
-      all_goals rfl
-  | .object b => AdmBody_eq_alg b
-
-/-- …at a payload. -/
-theorem AdmBody_eq_alg : ∀ b : Body, AdmBody b = Alg.AdmBody b
-  | .mk fields fld wild => by
-      have hf : (fun k => AdmField (fld k)) = fun k => Alg.AdmField (fld k) :=
-        funext fun k => AdmField_eq_alg (fld k)
-      funext v
-      cases v
-      case map keys g =>
-        show (valPresentT fields fld keys &&
-            objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmWild wild) keys g)
-          = (valPresentT fields fld keys &&
-            objAdmV ⟨fields, fun k => Alg.AdmField (fld k)⟩ (Alg.AdmWild wild) keys g)
-        rw [hf, AdmWild_eq_alg wild]
-      all_goals rfl
-
-/-- …at a slot. -/
-theorem AdmField_eq_alg : ∀ s : ObjectSlot, AdmField s = Alg.AdmField s
-  | .req t | .optional t => Adm_eq_alg t
-
-/-- …at the open block. -/
-theorem AdmWild_eq_alg : ∀ w : Option Term, AdmWild w = Alg.AdmWild w
-  | none => rfl
-  | some t => congrArg some (Adm_eq_alg t)
-
-/-- …at a list of terms. -/
-theorem AdmList_eq_alg : ∀ ts : List Term, AdmList ts = Alg.AdmList ts
-  | [] => rfl
-  | t :: ts => by
-      show Adm t :: AdmList ts = Alg.Adm t :: Alg.AdmList ts
-      rw [Adm_eq_alg t, AdmList_eq_alg ts]
-
-/-- …at an optional term. -/
-theorem AdmOptT_eq_alg : ∀ o : Option Term, AdmOptT o = Alg.AdmOptT o
-  | none => rfl
-  | some t => congrArg some (Adm_eq_alg t)
-
-end
 
 /-- **Every row is exact.** Not a bound on `dom(e)`: `dom(e)`, at every constructor and with no
     hypothesis. The term language proves it once for every universe (`Alg.Adm_exact`), from the
     exactness of the primitive rows, and this is that theorem at DynamoDB. `Adm_sound` is
     `(Adm_exact t v).mpr`. -/
-theorem Adm_exact (t : Term) : ExactV t := fun v => by
-  rw [Adm_eq_alg, denote_eq_alg]
-  exact Alg.Adm_exact t v
+theorem Adm_exact (t : Term) : ExactV t := Alg.Adm_exact t
 
 /-- §5's empty-container argument, **derived**: the exact row still admits `[]`. -/
 theorem Adm_array_nil (c : Term) : Adm (.array c) (.arr []) = true := by
-  simp [Term.array, Adm, alignPL, alignP, zipP, AdmList, AdmOptT]
+  simp [Term.array, Adm_rows, alignPL, alignP, zipP]
 
 /-- …and it is strictly sharper than the `⊤` that was standing in for it. -/
 theorem Adm_array_sharp : Adm (.array (.literal .string "A")) (.arr [.str "B"]) = false := by
-  simp [Term.array, Adm, alignPL, alignP, zipP, AdmList, AdmOptT, AdmLit, inL]
+  simp [Term.array, Adm_rows, alignPL, alignP, zipP, AdmLit, inL]
 
 /-- Nested, which the old row could not see at any depth. -/
 theorem Adm_array_nested :
     Adm (.array (.array (.literal .string "A"))) (.arr [.arr [.str "B"]]) = false := by
-  simp [Term.array, Adm, alignPL, alignP, zipP, AdmList, AdmOptT, AdmLit, inL]
-
+  simp [Term.array, Adm_rows, alignPL, alignP, zipP, AdmLit, inL]
 
 
 /-- Soundness of every row — **now a corollary.**

@@ -618,7 +618,7 @@ The guard refuses \texttt{mu(var\ 0)} (\texttt{not\_typed\_unguarded\_binder}) a
 \begin{theorem}[guarded recursion]
 \label{thm:guarded-recursion}
 \uses{rule:mu,cond:R,cond:C,cond:W}
-\lean{Calculus.muCodec, Calculus.contractive_body, Calculus.muStage_agree, Calculus.muCodec_e_fix, Calculus.muCodec_p_fix, Calculus.lawful_muCodec}
+\lean{Calculus.muCodec, Calculus.Alg.contractive_body, Calculus.muStage_agree, Calculus.muCodec_e_fix, Calculus.muCodec_p_fix, Calculus.lawful_muCodec}
 \leanok
 \texttt{mu\ b} denotes the limit of the stages of its body: the stages start at the bottom, and each input reads
 the stage its own depth names, on the write side by the depth of the value and on the read side by the
@@ -1233,7 +1233,7 @@ decide a question about attributes.
 \begin{theorem}[soundness]
 \label{thm:soundness}
 \uses{cond:R,cond:C,cond:W,cond:compat,rule:union,rule:dunion,rule:opaque,rule:mu,thm:guarded-recursion}
-\lean{Calculus.soundness, Calculus.soundnessIn, Calculus.carrier_denote}
+\lean{Calculus.soundness, Calculus.Alg.soundnessIn, Calculus.Alg.carrier_denote}
 \leanok
 Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, whose obligations hold, denotes a pair
 satisfying \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and \rulelink{cond:W}{\textbf{(W)}}. The obligations are each
