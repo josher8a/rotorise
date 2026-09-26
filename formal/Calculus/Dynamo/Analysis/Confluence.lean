@@ -108,10 +108,11 @@ theorem Ω_canon {a : Attr} {t : Value} (h : Ω.p a = some t) : Ω.e t = some a 
 /-- Each member of a held-free list is held-free. -/
 theorem HFL_mem : ∀ {ts : List Term}, HFL ts → ∀ t ∈ ts, HF t
   | [], _, _, h => nomatch h
-  | _ :: _, ⟨h1, h2⟩, t, hm => by
+  | _ :: _, h, t, hm => by
+      simp only [HFL, Alg.hasHeldL, Bool.or_eq_false_iff] at h
       rcases List.mem_cons.mp hm with rfl | hm
-      · exact h1
-      · exact HFL_mem h2 t hm
+      · exact h.1
+      · exact HFL_mem h.2 t hm
 
 /-- The read-side meet row's agreement conjunct is free at held-free terms. -/
 theorem admAAt_of_HF {x y z : Term} (hx : HF x) (hy : HF y) (hz : HF z)
@@ -162,7 +163,7 @@ theorem held_violates_R :
 
 /-- The control of the control: `oneHeld` is not held-free, so `confluence_W` does not
     apply to it. -/
-theorem not_HF_oneHeld : ¬ HF oneHeld := id
+theorem not_HF_oneHeld : ¬ HF oneHeld := nofun
 
 /-- **The views do not certify the constant adapter beside `string`.** Its caller side is
     `string`, so the caller-side views overlap. -/

@@ -13,7 +13,8 @@
  * - A JS number is a binary64 float, and `Value.num` carries an exact `WFNumeral`, so a JS number
  *   has no Lean value. A `DynamoNumber` is a numeral and emits.
  * - `refine`, `held` and `withLegacyRead` carry *functions* in the model and *closures* here.
- *   There is no expression in Lean for a closure. Out until somebody writes the Lean side by hand.
+ *   There is no expression in Lean for a closure. A declaration verdict binds a caller's closure
+ *   and a caller's adapter as variables of the theorem, and every other vector refuses them.
  * - `optional` and `withLegacyRead` are §4 `Field`s and `restOf` is a §4 `Rest`. Asking for a `Term` at
  *   one of them is a stratification error, and the emitter reports it as one rather than flattening
  *   it — which is the same discipline `NotAboutAbsence` enforces in the types.
@@ -420,6 +421,39 @@ describe('terms', () => {
     })
 
     /**
+     * **A thunk that throws is a free variable, and the emitter returns a term for it.** The
+     * thunk names a codec not yet declared. The host reads the thunk as a variable that pairs with
+     * no binder, so the emitter prints the first index past the binders that enclose the thunk.
+     */
+    it('prints a thunk that names a codec under declaration as a variable that no binder binds', () => {
+        expect(leanTermOf(array(undeclared))).toBe('Term.array (Term.var 0)')
+        expect(leanTermOf(underBinder)).toBe(
+            'Term.mu (Term.tuple [Term.var 1, Term.array (Term.var 0)] none)',
+        )
+    })
+
+    /**
+     * **A caller's function is a variable of a quantified verdict.** The model has no expression
+     * for a caller's closure or adapter, so a verdict binds one variable for each function, and the
+     * claim holds at every function. One function is one variable on both sides of the pair.
+     * Outside a verdict the emitter refuses the function, because no vector states a value there.
+     */
+    it('binds each caller function of a declaration verdict as a variable, and refuses it elsewhere', () => {
+        const verdict = leanSeparation({
+            name: 'flags',
+            left: textFlags,
+            right: numberFlags,
+        })
+        expect(verdict).toContain(
+            'theorem flags (q0 : Value → Bool) (f0 f1 f2 f3 : Value → Value) :',
+        )
+        expect(verdict.endsWith('= false := rfl')).toBe(true)
+        expect(refusal(() => leanTermOf(textFlags)).reason).toContain(
+            'Value → Bool',
+        )
+    })
+
+    /**
      * **The canonical `opaque` is the model's exact `opaq`**, and a numeric policy has no
      * term there. Each policy is a `held` over the canonical term whose pair converts a JS number,
      * and the model names no such pair, so the emitter refuses it as it refuses a caller's closure.
@@ -754,6 +788,42 @@ const underObject: AnyCodec = erase(
 const selfThunk: AnyCodec = erase(
     lazy(() => selfThunk as unknown as AttributeCodec<unknown>),
 )
+
+/**
+ * **A thunk that names the constant under declaration**, as a recursive schema's thunk does
+ * before the constant is assigned. The thunk throws when forced, so the host reads it as a free
+ * variable, and the emitter prints a variable that no binder of the term binds.
+ */
+const undeclared = lazy((): AttributeCodec<string> => {
+    throw new ReferenceError('the constant under declaration')
+})
+/** A recursive union of decimals: a library adapter below a binder. */
+type DecimalJson = string | readonly DecimalJson[]
+const decimalJson: AttributeCodec<DecimalJson> = lazy(() =>
+    union([decimal, array(decimalJson)]),
+)
+/** A recursive pair with a thunk that throws below its binder. */
+type Chain = readonly [string, readonly Chain[]]
+const underBinder: AttributeCodec<Chain> = lazy(() =>
+    list(undeclared, array(underBinder)),
+)
+/** A caller's type guard over every boolean, and two caller adapters to a boolean. */
+const anyBoolean = (value: boolean): value is boolean => value || !value
+const textFlag = held(string, boolean, {
+    encode: (value: boolean) => (value ? 'y' : 'n'),
+    decode: (text: string) => text === 'y',
+})
+const numberFlag = held(decimal, boolean, {
+    encode: (value: boolean) => (value ? '1' : '0'),
+    decode: (text: string) => text === '1',
+})
+/** A set of a caller's adapter: the caller side of a set needs a refinement to have a set. */
+const textFlags = refine(textFlag, anyBoolean).set()
+const numberFlags = refine(numberFlag, anyBoolean).set()
+/** A caller's type guard over text, which the model names by no predicate. */
+const nonEmpty = (value: string): value is string => value.length > 0
+/** A caller's type guard that asks the shipped `isNumeral`, and is itself the caller's closure. */
+const numeralText = (value: string): value is string => isNumeral(value)
 
 /**
  * The vectors in the committed sample, in the order they appear there.
@@ -1185,16 +1255,74 @@ const separationPairs = (): readonly Separation[] => {
         left: erase(decimal('1')),
         right: erase(decimal('1', '2.5')),
     })
-    // a closure refinement beside a list of adapters. The meet answers the bottom, because
-    // `string` meets the list at the bottom. `refine` wants a type predicate, and
-    // `isNumeral` returns a `boolean`
+    // a caller's closure refinement beside a list of adapters. The meet answers the bottom,
+    // because `string` meets the list at the bottom, so the verdict holds at every closure
     out.push({
         name: 'numeral_text__vs__array_of_decimal',
-        left: erase(
-            refine(string, isNumeral as (value: string) => value is string),
-        ),
-        right: erase(array(decimal)),
+        left: refine(string, numeralText),
+        right: array(decimal),
     })
+    // a caller's closure refinement of text beside the text adapter: both write a string
+    out.push({
+        name: 'caller_text__vs__scalar_decimal',
+        left: refine(string, nonEmpty),
+        right: decimal,
+    })
+    // a thunk that throws beside three partners: a free variable pairs with no binder
+    out.push(
+        {
+            name: 'free_array__vs__scalar_decimal',
+            left: array(undeclared),
+            right: decimal,
+        },
+        {
+            name: 'free_variable__vs__scalar_string',
+            left: undeclared,
+            right: string,
+        },
+        {
+            name: 'free_json__vs__scalar_string',
+            left: union([string, array(undeclared)]),
+            right: string,
+        },
+    )
+    // a set of a caller's adapter beside three sets: the model's caller carrier has no set of
+    // booleans, so the caller sides of two such sets meet at the booleans
+    out.push(
+        {
+            name: 'text_flags__vs__number_flags',
+            left: textFlags,
+            right: numberFlags,
+        },
+        {
+            name: 'text_flags__vs__decimal_set',
+            left: textFlags,
+            right: decimal.set(),
+        },
+        {
+            name: 'text_flags__vs__string_set',
+            left: textFlags,
+            right: string.set(),
+        },
+    )
+    // a library adapter below a binder, beside three partners
+    out.push(
+        {
+            name: 'recursive_decimal_json__vs__scalar_binary',
+            left: decimalJson,
+            right: binary,
+        },
+        {
+            name: 'recursive_decimal_json__vs__scalar_string',
+            left: decimalJson,
+            right: string,
+        },
+        {
+            name: 'recursive_decimal_json__vs__never',
+            left: decimalJson,
+            right: never,
+        },
+    )
     return out
 }
 
@@ -1244,6 +1372,25 @@ const meetPairs = (): readonly MeetPair[] => {
         left: erase(object({ a: json as never })),
         right: erase(object({ a: underObject as never })),
     })
+    // a thunk that throws beside two partners: the meet refuses, because a free variable pairs
+    // with no binder, and a union meets `string` at its `string` option
+    out.push(
+        {
+            name: 'free_array__meet__scalar_decimal',
+            left: array(undeclared),
+            right: decimal,
+        },
+        {
+            name: 'free_variable__meet__scalar_string',
+            left: undeclared,
+            right: string,
+        },
+        {
+            name: 'free_json__meet__scalar_string',
+            left: union([string, array(undeclared)]),
+            right: string,
+        },
+    )
     return out
 }
 
@@ -1521,10 +1668,10 @@ describe("the declaration guard, against the model's classifier", () => {
             one.includes('PairwiseCompat ['),
         )
         const refused = emitted.filter((one) =>
-            one.endsWith('= false := by decide'),
+            /= false := (by decide|rfl)$/.test(one),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([823, 42])
+        expect([accepted.length, refused.length]).toEqual([827, 48])
     })
 
     /**
@@ -1550,7 +1697,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.includes('pairwiseCompat_never'),
         )
         expect([byCertificate.length, byBottom.length, refused.length]).toEqual(
-            [131, 4, 23],
+            [132, 5, 24],
         )
         expect(byCertificate.length + byBottom.length + refused.length).toBe(
             recursive.length,
@@ -1592,7 +1739,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('puts every corpus meet to the model', () => {
         const meets = meetPairs()
-        expect(meets.length).toBe(863)
+        expect(meets.length).toBe(866)
         expect(MEET_DEFERRED.length).toBe(0)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(

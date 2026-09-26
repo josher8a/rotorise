@@ -549,8 +549,8 @@ def Term.hasVarO : Option (Term S) → Bool
 end
 
 mutual
-/-- **Whether a `held` occurs in the term**, the decision procedure of `HF`. A variable is not a
-    `held`, as `HF` counts it. -/
+/-- **Whether a `held` occurs in the term.** A variable is not a `held`. A term is held-free
+    (`HF`) where this test answers `false`. -/
 def hasHeld : Term S → Bool
   | .held _ _ _ _ => true
   | .refine t _ => hasHeld t

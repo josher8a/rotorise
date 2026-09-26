@@ -55,7 +55,7 @@
     "Calculus/Lang/ExactA.lean": 125,
     "Calculus/Lang/ExactV.lean": 119,
     "Calculus/Lang/Guarded.lean": 74,
-    "Calculus/Lang/HeldFree.lean": 96,
+    "Calculus/Lang/HeldFree.lean": 67,
     "Calculus/Lang/Meet.lean": 130,
     "Calculus/Lang/MeetA.lean": 509,
     "Calculus/Lang/MeetRows.lean": 123,
