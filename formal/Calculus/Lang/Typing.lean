@@ -327,4 +327,57 @@ theorem obligationsOpt_iff {ρ : List S.C} : ∀ {tail : Option (Term S)},
   | none => by simp [ObligationsOpt]
   | some _ => by simp [ObligationsOpt]
 
+/-! ## A renaming of the free variables -/
+
+mutual
+/-- **A renaming keeps the judgement.** The judgement reads a variable closed, and reads the
+    denotation of a caller-side term and of a binder under the empty environment, where every
+    variable is the bottom. -/
+theorem typed_rename (r : Nat → Nat) : ∀ {t : Term S} {T μ}, Typed t T μ →
+    Typed (Term.rename r t) T μ
+  | _, _, _, .prim g => .prim g
+  | _, _, _, .set hL h => .set hL (typed_rename r h)
+  | _, _, _, .list hL hp hs hf =>
+      .list hL (typedList_rename r hp) (typedOpt_rename r hs) (typedList_rename r hf)
+  | _, _, _, .held (P := P) h => by
+      rw [denote_rename P r [] [] fun _ _ => rfl]
+      exact .held (typed_rename r h)
+  | _, _, _, .refine h => .refine (typed_rename r h)
+  | _, _, _, .opaq => .opaq
+  | _, _, _, .never => .never
+  | _, _, _, .object (body := .mk fs f w) hF hf hr =>
+      .object (body := Body.rename r (.mk fs f w)) hF (fun k => typedField_rename r (hf k))
+        (typedWild_rename r hr)
+  | _, _, _, .union h => .union (typedListμ_rename r h)
+  | _, _, _, .var i => .var (r i)
+  | _, _, _, .mu (b := b) hg h => by
+      rw [denote_rename (.mu b) r [] [] fun _ _ => rfl]
+      exact .mu (by rw [← guarded_rename (.mu b) r] at hg; exact hg) (typed_rename (liftRen r) h)
+/-- …at a list. -/
+theorem typedList_rename (r : Nat → Nat) : ∀ {ts : List (Term S)} {Ts}, TypedList ts Ts →
+    TypedList (Term.renameL r ts) Ts
+  | _, _, .nil => .nil
+  | _, _, .cons h hs => .cons (typed_rename r h) (typedList_rename r hs)
+/-- …at the options of a union. -/
+theorem typedListμ_rename (r : Nat → Nat) : ∀ {ts : List (Term S)} {Ts μs},
+    TypedListμ ts Ts μs → TypedListμ (Term.renameL r ts) Ts μs
+  | _, _, _, .nil => .nil
+  | _, _, _, .cons h hs => .cons (typed_rename r h) (typedListμ_rename r hs)
+/-- …at an optional term. -/
+theorem typedOpt_rename (r : Nat → Nat) : ∀ {sp : Option (Term S)} {T}, TypedOpt sp T →
+    TypedOpt (Term.renameO r sp) T
+  | _, _, .none => .none
+  | _, _, .some h => .some (typed_rename r h)
+/-- …at a slot. -/
+theorem typedField_rename (r : Nat → Nat) : ∀ {s : ObjectSlot S} {T π μ}, TypedField s T π μ →
+    TypedField (ObjectSlot.rename r s) T π μ
+  | _, _, _, _, .req h => .req (typed_rename r h)
+  | _, _, _, _, .optional h => .optional (typed_rename r h)
+/-- …at an open block. -/
+theorem typedWild_rename (r : Nat → Nat) : ∀ {w : Option (Term S)} {R}, TypedWild w R →
+    TypedWild (Term.renameO r w) R
+  | _, _, .none => .none
+  | _, _, .some h => .some (typed_rename r h)
+end
+
 end Calculus.Alg

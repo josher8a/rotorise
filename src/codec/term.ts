@@ -1580,9 +1580,9 @@ const meetWalk = (x: Term, y: Term, w: Walk): Term | undefined => {
  * The answer is the bottom where the body is. It is a binder only where the model's guard accepts
  * the binder: the body reads the variable under a container, and under no `held`.
  *
- * **A body that never reads the variable parts from the model.** The model answers `mu z` there.
- * A host binder is a cycle, and such a body closes no cycle, so the host has no spelling for the
- * binder and answers the body `z`. No corpus vector reaches this case.
+ * **A body that never reads the variable is the answer.** A binder whose variable does not occur
+ * denotes its body. The host has no cycle to spell there, and the model answers the body with its
+ * free variables lowered by one.
  */
 const meetBinders = (
     one: Extract<Seen, { kind: 'mu' }>,

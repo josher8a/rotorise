@@ -1766,8 +1766,16 @@ theorem AdmA_meet_both [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes 
                  rw [eq_never_of_isNever hn] at hmu
                  exact bottom_row (fun a => by rw [← hmu.1 a, AdmA_mu_never, AdmA_never])
              · split at hz
-               · cases hz; exact hmu
-               · exact nomatch hz)
+               · next hu =>
+                   cases hz
+                   have hp' := (denote_mu_vacuous hu ρ'').2
+                   refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+                   · rw [AdmA_eq_isSome _ ρ'' a, ← hp', ← AdmA_eq_isSome (.mu w) ρ'' a]
+                     exact hmu.1 a
+                   · rw [← hp']; exact hmu.2 a ha hb
+               · split at hz
+                 · cases hz; exact hmu
+                 · exact nomatch hz)
           | (simp only [Term.meet] at h
              exact AdmAAt_unfold_left fun c =>
                AdmA_meet_both (shiftL p) b _ _ h (c :: ρ) ρ' ρ'' (hp.left c))

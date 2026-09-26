@@ -326,8 +326,10 @@ mutual
 
     Two variables meet where the pairing names them one binder. Two recursive terms meet at the
     recursive term of the two bodies met, with the two binders paired. A recursive term met with
-    another constructor unfolds, and its binder pairs with nothing. The answer `mu z` is stated
-    only where `mu z` is guarded, because a derivation of `mu` asks the guard.
+    another constructor unfolds, and its binder pairs with nothing. Where the body met reads no
+    variable of the pair, the answer is the body with its free variables lowered by one, because
+    `μx.z = z` where `x` is not free in `z`. Elsewhere the answer `mu z` is stated only where
+    `mu z` is guarded, because a derivation of `mu` asks the guard.
 
     A refinement admits a part of what its inner term admits. So at a predicate that is not data,
     the refinement row meets the inner term, answers the bottom where that meet is the bottom, and
@@ -342,6 +344,7 @@ def Term.meet [Leaf S] (p : Pairing) : Term S → Term S → Option (Term S)
   | .mu _, .never => some .never
   | .mu b, .mu b' => (Term.meet (pairMu p) b b').bind fun z =>
       if z.isNever then some .never
+      else if Term.use 0 z = 0 then some (Term.rename (· - 1) z)
       else if (Term.mu z).guarded then some (.mu z) else none
   | .mu b, y => Term.meet (shiftL p) b y
   | .refine _ _, .never => some .never

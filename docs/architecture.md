@@ -372,8 +372,10 @@ that `denote` takes. A variable asks the codec that the environment gives the va
 **The meet reads a recursive term stage by stage.** Two recursive terms meet where their bodies
 meet under every three stages that meet, because each stage is the body over the stage below
 (`stage_meetV`, `stage_meetA`). A recursive term beside another constructor reads the stage below
-the depth of the input (`Adm_mu_unfold`, `mu_p_unfold`). Neither row needs the guard. The answer
-`mu z` is stated only where `mu z` is guarded, because `Typed.mu` asks the guard.
+the depth of the input (`Adm_mu_unfold`, `mu_p_unfold`). Neither row needs the guard. Where the
+body met reads no variable of the pair, the answer is the body with its free variables lowered by
+one, because such a binder denotes its body on both sides (`denote_mu_vacuous`). Elsewhere the
+answer `mu z` is stated only where `mu z` is guarded, because `Typed.mu` asks the guard.
 
 **The host spells recursion as a thunk, and the bridge prints the binder.** The emitter marks each
 term object that a thunk returns during the printing of that object. It prints `Term.mu` at the

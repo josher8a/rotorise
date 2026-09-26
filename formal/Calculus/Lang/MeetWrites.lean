@@ -290,8 +290,11 @@ theorem meet_writes [Leaf S] [LeafWrites S] : ∀ (p : Pairing) (x y : Term S) z
              split at hw
              · cases hw; exact absurd hz (by simp [μSyn])
              · split at hw
-               · cases hw; exact absurd hz (by simp [μSyn])
-               · exact nomatch hw)
+               · exact ⟨fun _ hmx => absurd hmx (by simp [μSyn]),
+                   fun _ hmy => absurd hmy (by simp [μSyn])⟩
+               · split at hw
+                 · cases hw; exact absurd hz (by simp [μSyn])
+                 · exact nomatch hw)
           | (simp only [Term.meet] at h
              exact ⟨fun mx hmx => absurd hmx (by simp [μSyn]),
                (meet_writes (shiftL p) b _ _ h m hz).2⟩)
