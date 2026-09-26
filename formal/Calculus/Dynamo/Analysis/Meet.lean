@@ -84,8 +84,7 @@ turned away go with the policy.
 
 namespace Calculus
 
-open Alg (occV occA occV_sound occA_sound
-  Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Body.block
+open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Body.block
   Body.slotAt Body.slotAt_pos Body.slotAt_neg listOf_cases HF_of_hasHeld alignPL_eq_rowOfG
   rowOfG_length rowOfG_none_eq rowOfG_some_eq rowOfG_mem forall₂_replicate forall₂_append
   forall₂_zip_append forall₂_zip_replicate forall₂_zip_take forall₂_zip_drop rowOfG_map
@@ -831,9 +830,9 @@ theorem meet_stringSets_shared :
 
 /-! ### The views certify a `held` whose caller side is precise
 
-A string set held as a list of strings, beside a list of numbers. Both terms write the kind of a
-list, so the occupancies meet. The caller-side views meet at the bottom when the caller side
-requires one element or more, and the stored-side views differ in kind. -/
+A string set held as a list of strings, beside a list of numbers. Both terms write a list, so
+the meet of the two terms is not the bottom. The caller-side views meet at the bottom when the
+caller side requires one element or more, and the stored-side views differ in kind. -/
 
 /-- The meet of the two terms does not certify the pair. -/
 theorem certPair_heldNE_base :
@@ -1185,22 +1184,15 @@ abbrev AdmAAt (x y z : Term) : Prop :=
   (∀ a : Attr, AdmA x a = true → AdmA y a = true →
     (denote z).p a = (denote x).p a ∧ (denote z).p a = (denote y).p a)
 
-/-- Two terms whose read occupancies are disjoint share no attribute, so their conjunction is
+/-- Two terms that read only two different members share no attribute, so their conjunction is
     the bottom. This closes every row that answers `never` because the two read different `Attr`
     constructors. -/
-theorem AdmA_and_false {x y : Term} (h : Member.all.all (fun m => !(occA x m && occA y m)) = true)
+theorem AdmA_and_false {x y : Term} {m m' : Member} (hne : m ≠ m')
+    (hx : ∀ a, AdmA x a = true → a.member = m) (hy : ∀ a, AdmA y a = true → a.member = m')
     (a : Attr) : (AdmA x a && AdmA y a) = false := by
-  cases hx : AdmA x a with
-  | false => simp
-  | true =>
-    cases hy : AdmA y a with
-    | false => simp
-    | true =>
-      have h2 := List.all_eq_true.mp h a.member (Member.mem_all _)
-      have hx' : occA x a.member = true := occA_sound x a hx
-      have hy' : occA y a.member = true := occA_sound y a hy
-      rw [hx', hy'] at h2
-      exact absurd h2 (by simp)
+  refine Bool.eq_false_iff.mpr fun h => hne ?_
+  rw [Bool.and_eq_true] at h
+  exact (hx a h.1).symm.trans (hy a h.2)
 
 /-- `opaque` reads an attribute exactly where its codec answers. -/
 theorem AdmA_opaq_eq (a : Attr) : AdmA .opaq a = (Ω.p a).isSome := rfl
@@ -1247,6 +1239,16 @@ theorem AdmA_base_of_literal {k : GroundKind} {x : k.Carrier} {bt : Term} {a : A
   obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ a).mp h)
   rw [literal_p_base (show (literalCodec k x).p a = some w from hw)]
   rfl
+
+/-- **A base reads only its own member.** -/
+theorem AdmA_base_member (k : GroundKind) (a : Attr) (h : AdmA (.base k) a = true) :
+    a.member = k.member := by
+  cases k <;> cases a <;> first | rfl | exact nomatch h
+
+/-- **A literal reads only the member of its base**, because its base reads where it reads. -/
+theorem AdmA_literal_member (k : GroundKind) (x : k.Carrier) (a : Attr)
+    (h : AdmA (.literal k x) a = true) : a.member = k.member :=
+  AdmA_base_member k a (AdmA_base_of_literal rfl h)
 
 /-- A literal's guard, read off a successful read: mirror of `literal_p_base`. -/
 theorem literal_inL {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
@@ -1375,24 +1377,34 @@ theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
       simp only [Ground.meet] at hp
       split at hp
       · exact nomatch hp
-      · next hk => cases k <;> cases k' <;> first | exact absurd rfl hk | exact AdmA_and_false rfl a
+      · next hk =>
+          exact AdmA_and_false
+            (by cases k <;> cases k' <;> first | exact absurd rfl hk | decide)
+            (AdmA_base_member k) (AdmA_base_member k') a
   | .base k, .literal k' x, hp, a => by
       simp only [Ground.meet] at hp
       split at hp
       · exact nomatch hp
-      · next hk => cases k <;> cases k' <;> first | exact absurd rfl hk | exact AdmA_and_false rfl a
+      · next hk =>
+          exact AdmA_and_false
+            (by cases k <;> cases k' <;> first | exact absurd rfl hk | decide)
+            (AdmA_base_member k) (AdmA_literal_member k' _) a
   | .literal k x, .base k', hp, a => by
       simp only [Ground.meet] at hp
       split at hp
       · exact nomatch hp
-      · next hk => cases k <;> cases k' <;> first | exact absurd rfl hk | exact AdmA_and_false rfl a
+      · next hk =>
+          exact AdmA_and_false
+            (by cases k <;> cases k' <;> first | exact absurd rfl hk | decide)
+            (AdmA_literal_member k _) (AdmA_base_member k') a
   | .literal k x, .literal k' x', hp, a => by
       simp only [Ground.meet] at hp
       cases k <;> cases k' <;> simp only [Ground.meetLit, reduceCtorEq] at hp <;>
         (try split at hp) <;>
         first
           | (simp only [reduceCtorEq] at hp; done)
-          | exact AdmA_and_false (by first | rfl | decide) a
+          | exact AdmA_and_false (by decide) (AdmA_literal_member _ _)
+              (AdmA_literal_member _ _) a
           | (rename_i hne; rw [← AdmALit_never_of_ne hne a]; rfl)
 
 /-- **A base reads as the top reads it.** -/
@@ -1456,10 +1468,10 @@ theorem separates_of_meetNever {x y : Term} (h : meetNever x y = true) : Separat
     rw [hm] at h
     refine ⟨fun v hx hy => ?_, fun a hx hy => ?_⟩
     · have hs := meet_separates hm h v
-      rw [show Adm x v = true from hx.2, show Adm y v = true from hy.2] at hs
+      rw [hx, hy] at hs
       exact nomatch hs
     · have hs := meet_separates_A hm h a
-      rw [show AdmA x a = true from hx.2, show AdmA y a = true from hy.2] at hs
+      rw [hx, hy] at hs
       exact nomatch hs
 
 /-! ## The views admit what the term admits -/
@@ -1800,8 +1812,7 @@ theorem viewsNever_adm {x y : Term} (h : viewsNever x y = true) (v : Value) :
     Bool.and_self]
   have hx' := writeLe_of x v hx
   have hy' := writeLe_of y v hy
-  exact absurd ⟨occV_sound (writeView y) v hy', hy'⟩
-    (sw.1 v ⟨occV_sound (writeView x) v hx', hx'⟩)
+  exact absurd hy' (sw.1 v hx')
 
 /-- **Orthogonal terms read no common attribute.** An attribute that both terms read is read
     by both stored-side views, and the views meet at the bottom. -/
@@ -1813,8 +1824,7 @@ theorem viewsNever_admA {x y : Term} (h : viewsNever x y = true) (a : Attr) :
     Bool.and_self]
   have hx' := readLe_of x a hx
   have hy' := readLe_of y a hy
-  exact absurd ⟨occA_sound (readView y) a hy', hy'⟩
-    (sr.2 a ⟨occA_sound (readView x) a hx', hx'⟩)
+  exact absurd hy' (sr.2 a hx')
 
 /-- **The write homomorphism holds for `meet'`**, with no premise. -/
 theorem Adm_meet' (x y z : Term) (h : meet' x y = some z) (v : Value) :
@@ -1848,9 +1858,9 @@ theorem separates_of_meetNever' {x y : Term} (h : meetNever' x y = true) : Separ
     subst hz
     refine ⟨fun v hx hy => ?_, fun a hx hy => ?_⟩
     · have := Adm_meet' x y _ hm v
-      rw [hx.2, hy.2] at this; exact nomatch this
+      rw [hx, hy] at this; exact nomatch this
     · have := (AdmA_meet' x y _ hm).1 a
-      rw [hx.2, hy.2] at this; exact nomatch this
+      rw [hx, hy] at this; exact nomatch this
 
 /-- **The pair certificate is sound**: the meet at the bottom separates the pair. -/
 theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates x y :=

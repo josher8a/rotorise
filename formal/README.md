@@ -26,7 +26,6 @@ definition it touches.
 | `Calculus/Lang/Meet.lean`     | §5          | The leaf meet `Leaf` that a universe supplies, and the structural meet `Term.meet` over a signature, with its families and the readers `Term.slotAt`, `Term.optionAt` and `Term.blockOf` |
 | `Calculus/Lang/MeetRows.lean` | §5          | The rows of the meet that read no admission: `rowOfG` and its laws, dominance, the answers of the list and object families, and the held-free test `HF_of_hasHeld` |
 | `Calculus/Lang/Shapes.lean`   | §5          | The shape classes `Shapes` that a universe supplies: the former class of each value and attribute, and where each former lands. The six disjointness laws per side are theorems of them, at every signature |
-| `Calculus/Lang/Occupancy.lean` | §5         | The shape abstraction of a term over a signature: the shapes `Occ` and their laws `OccSound` that a universe supplies, `occV`, `occA`, and `occV_sound`, `occA_sound`: the row of a term lies inside its occupancy |
 | `Calculus/Lang/MeetV.lean`    | §5          | `Adm_meet` at every signature, from the write-side laws `FormerAdm` and `LeafAdm` and the shape classes |
 | `Calculus/Lang/MeetA.lean`    | §5          | `AdmA_meet_both` at every signature: the read-side homomorphism and its reading agreement, from `FormerAdmA` and `LeafAdmA` |
 | `Calculus/Lang/MeetWrites.lean` | §5        | `meet_writes` at every signature, from the member law `LeafWrites` |
@@ -58,7 +57,7 @@ definition it touches.
 | `Calculus/JSON/Basic.lean`        | —           | A second universe on the generic layer, with no DynamoDB import: the carrier `Json`, the ground codecs, the array prism, the signature `jsonSyn`/`jsonSem` with `id_topLaws`, a union lawful by `Alg.soundness` and `Alg.compat_of_HF` (`lawful_strOrNum`), and the kind test as the primitive admission rows, exact by `Alg.Adm_exact` and `Alg.AdmA_exact` (`exact_strOrNum`) |
 | `Calculus/JSON/Meet.lean`         | —           | The meet at JSON: the leaf meet `jsonLeaf` (two kinds meet where they are one kind), the laws of the leaf and of the formers as instances, and `Alg.Adm_meet` and `Alg.AdmA_meet_both` at `jsonSyn` |
 
-This table has a row of its own for forty-nine of the sixty-six modules under `Calculus/`.
+This table has a row of its own for forty-eight of the sixty-five modules under `Calculus/`.
 `Compat.lean`, `Confluence.lean`, `ExactA.lean`, `ExactV.lean`, `HeldFree.lean`, `Kernel.lean`,
 `Laminar.lean`, `LiteralArity1.lean`, `Malleability.lean`, `Meet.lean`, `Merge.lean`,
 `Orthogonality.lean`, `Rows.lean`, `Separation.lean`, `Slice.lean`, `Universal.lean` and

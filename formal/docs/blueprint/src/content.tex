@@ -1079,7 +1079,7 @@ arbitrary \texttt{f}, \texttt{refine} an arbitrary \texttt{q}, so membership of 
 declaration can answer. Admission \textbf{specifies} the two families. It does not decide them. What the
 certificate runs is the meet, and the meet is decided. The bottom rows of the
 meet at two formers read the shape classes of the universe, and the read-side proof of the DynamoDB
-leaf meet uses occupancy.
+leaf meet reads the member of each primitive.
 
 \textbf{Admission is what a union consults, at every option.} A union attempts each option's codec, an
 object option included, so \texttt{V(c)} and \texttt{A(c)} are \emph{option} admission as well: \texttt{dom(e)} and
@@ -1099,47 +1099,19 @@ empty map, however disjoint their names. Where both are held-free they are compa
 union writes the empty map once. \rulelink{rule:dunion}{\texttt{(dunion)}}'s disjoint-literal premise is the
 special case where the discriminator's names decide alone.
 
-\begin{definition}[occupancy]
-\label{def:occupancy}
-\uses{cond:compat}
-\lean{Calculus.Alg.occV, Calculus.Alg.occA}
-\leanok
-One coarse label per term per side: which root shape of a value the term may write, and which root
-shape of an attribute it may store. A universe supplies the shapes. At DynamoDB they are the
-constructor of \texttt{Value} and the member of §1. The read-side proof of the DynamoDB leaf meet uses occupancy
-(\texttt{AdmA\_and\_false}).
-\end{definition}
+\texttt{opaque} accepts every kind by design. That is also what makes its fixpoint's options
+pairwise kind-exclusive.
 
-Both over-approximate, and over-approximating is the safe direction — if \texttt{X\ ⊆\ X′}, \texttt{Y\ ⊆\ Y′} and
-\texttt{X′\ ∩\ Y′\ =\ ∅} then \texttt{X\ ∩\ Y\ =\ ∅} — so a coarse answer costs a discharge and never buys a wrong one.
-A \texttt{held} takes its write occupancy from its caller-side term and its read occupancy from its
-stored-side term, so its two labels can differ. A \texttt{refine} takes its subterm's
-occupancy. \texttt{mu\ b} takes the occupancy of its body, with a variable at no label. The proof is an induction over
-the stages, and it needs no guard (\texttt{occV\_open}, \texttt{occA\_open}). Only \texttt{opaque} answers
-\texttt{⊤}, every label.
-
-\textbf{The writable side's label is the constructor of the value, not the runtime kind}, and the
-difference does work. A kind collapses the three set families into one; the constructors do not, and
-\texttt{set(string)} writes a set of strings where \texttt{set(number)} writes a set of numerals. Ten constructors
-separate what eight kinds cannot. The readable side's label is the member, which the judgement's \texttt{μ}
-index already computes.
-
-\texttt{⊤} is \texttt{opaque}'s answer, because \texttt{opaque} accepts every kind by design. A \texttt{held} has a
-label of its own: \texttt{flipBool} beside \texttt{null} is certified. That \texttt{opaque} accepts every kind is also what makes its
-fixpoint's options pairwise kind-exclusive.
-
-\begin{definition}[the family, conjoined]
+\begin{definition}[separation]
 \label{def:family}
-\uses{def:occupancy,cond:compat}
-\lean{Calculus.OrthSV, Calculus.OrthSA}
+\uses{cond:compat}
+\lean{Calculus.Separates}
 \leanok
-An option's set of values is its occupancy intersected with
-its option admission, and its set of attributes likewise.
+Two options separate when no value is admitted by both and no attribute is read by both.
 \end{definition}
 
-Disjointness in either factor is enough: \textbf{on one side, two options separate
-when their occupancies on that side are disjoint. On both sides at once, they separate when one
-option requires a name the other does not declare.} The certificate asks the second factor, through
+\textbf{On both sides at once, two options separate when one option requires a name the other does
+not declare.} The certificate asks the question through
 the meet: two closed bodies meet at the bottom where one requires a name that the other does not
 declare. That is a question about two terms, answered by computation at the declaration. What it declines is an undischarged obligation, not a refusal of
 compatibility.
