@@ -49,6 +49,7 @@ import {
     literalAlternatives,
     member as memberOf,
     ownsNullOf,
+    ThunkReentered,
     unreadableSpine,
     widensRead,
 } from './term'
@@ -1951,9 +1952,22 @@ export function withLegacyRead<const C extends AnyCodec>(
 export const lazy = <T, A extends AttributeValue = AttributeValue>(
     get: () => Nestable<T>,
 ): AttributeCodec<T, A> => {
+    // **A black hole.** The resolution of a recursive union forces the thunk again, because the
+    // union checks its options. Without the mark, each force runs `get()` again, and the recursion
+    // overflows the stack. The re-entrant force throws at once, and `force` reads the throw as the
+    // free variable that a thunk in the temporal dead zone is. A `get()` that throws leaves no mark,
+    // so a later force retries
     let resolved: AttributeCodec<T> | undefined
+    let resolving = false
     const inner = (): AttributeCodec<T> => {
-        resolved ??= get()
+        if (resolved !== undefined) return resolved
+        if (resolving) throw new ThunkReentered()
+        resolving = true
+        try {
+            resolved = get()
+        } finally {
+            resolving = false
+        }
         return resolved
     }
     return codecOfTerm<T, A>({

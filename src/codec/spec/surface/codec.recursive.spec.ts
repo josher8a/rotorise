@@ -8,14 +8,18 @@
 import { describe, expect, it } from 'vitest'
 import type { Attribute } from '../../attribute'
 import {
+    type AnyCodec,
     type AttributeCodec,
     array,
     CodecError,
+    decimal,
     lazy,
     object,
     optional,
     string,
+    union,
 } from '../../codec'
+import { leanTermOf } from '../../lean'
 import { arbitraryOf, checkRoundTrip, rngFrom, shrinkOf } from '../../testing'
 
 type Category = {
@@ -103,5 +107,79 @@ describe('a recursive entity', () => {
         Counted.unsafeEncode({ n: 'b' })
         Counted.unsafeDecode(Counted.unsafeEncode({ n: 'c' }))
         expect(built).toBe(1)
+    })
+})
+
+type Tree = string | readonly Tree[]
+
+/** The verdict of a union of `codec` beside `other`: whether the declaration accepts. */
+const accepts = (codec: AnyCodec, other: AnyCodec): boolean => {
+    try {
+        union([codec, other])
+        return true
+    } catch {
+        return false
+    }
+}
+
+describe('a union that names itself', () => {
+    /**
+     * The union checks its options at the declaration, and the check forces the thunk that is
+     * being resolved. The forced thunk names the codec being declared, and the declaration ends.
+     */
+    it(
+        'declares when the thunk encloses the whole union, and round-trips a value',
+        {
+            timeout: 5000,
+        },
+        () => {
+            const Self: AttributeCodec<Tree> = lazy(() =>
+                union([string, array(Self)]),
+            )
+            const value: Tree = ['x', ['y']]
+            expect(Self.unsafeEncode(value)).toEqual({
+                L: [{ S: 'x' }, { L: [{ S: 'y' }] }],
+            })
+            expect(Self.unsafeDecode(Self.unsafeEncode(value))).toEqual(value)
+        },
+    )
+
+    /** Where the thunk sits is a spelling. The term and each verdict are the same. */
+    it(
+        'gives one term and one verdict wherever the thunk sits',
+        {
+            timeout: 5000,
+        },
+        () => {
+            const Self: AttributeCodec<Tree> = lazy(() =>
+                union([string, array(Self)]),
+            )
+            const Json: AttributeCodec<Tree> = union([
+                string,
+                array(lazy(() => Json)),
+            ])
+            expect(leanTermOf(Self)).toBe(leanTermOf(Json))
+            for (const other of [string, decimal])
+                expect(accepts(Self, other)).toBe(accepts(Json, other))
+        },
+    )
+
+    /**
+     * A thunk forced before its constant exists names a codec not yet declared. The thunk
+     * resolves once the constant exists.
+     */
+    it('resolves a thunk that was forced before its constant existed', () => {
+        const Early: AttributeCodec<string> = lazy(() => Late)
+        expect(() => Early.unsafeEncode('x')).toThrow(ReferenceError)
+        const Late = string
+        expect(Early.unsafeEncode('x')).toEqual({ S: 'x' })
+    })
+
+    /** A throw that names no undeclared codec is a defect of the caller, and reaches the caller. */
+    it('surfaces a thunk that fails for any other reason', () => {
+        const Broken: AttributeCodec<string> = lazy(() => {
+            throw new TypeError('the caller code is wrong')
+        })
+        expect(() => union([decimal, array(Broken)])).toThrow(TypeError)
     })
 })
