@@ -6,8 +6,9 @@ import Calculus.Lang.Occupancy
 
 `Obligations (.union opts)` carries pairwise compatibility. Two separated options are compatible
 (`pairwiseCompat_of_separated`). The decidable certificate is `certPair` (`Meet.lean`): two
-options are orthogonal when their meet is the bottom, when the meets of their two views are, or
-when their occupancies are disjoint on both sides. The meet refuses a closure and the occupancies
+options are orthogonal when `meet'` meets them at the bottom, or when their occupancies are
+disjoint on both sides. `meet'` answers the bottom where the domains and the ranges of the two
+terms meet at the bottom. The meet states no recursion and refuses a closure, and the occupancies
 read no predicate, so the shape test certifies a pair that the meet cannot state.
 
 The occupancies, the shape test `Orth1` and their soundness are generic (`Alg.occV`, `Alg.occA`,

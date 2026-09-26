@@ -531,7 +531,7 @@ theorem AdmA_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → Obj
 
 /-! ## The union certificate
 
-The certificate is defined here, after the meet, because two of its three tests are the meet. -/
+The certificate is defined here, after the meet, because its first test is the meet. -/
 
 /-- **Whether two terms meet at the bottom.** A pair that the meet cannot state answers `false`,
     so the pair is not certified. -/
@@ -591,25 +591,37 @@ def readViewS : ObjectSlot → ObjectSlot
   | .optional t => .optional (readView t)
 end
 
-/-- **The certificate through the two views of a `held`.** A `held` has two restrictions, and
-    the meet sees neither: the meet refuses a `held`.
-    The caller-side views answer the write question and the stored-side views answer the read
-    question. Each view is held-free, so the meet answers both. The test runs only where a
-    `held` occurs. -/
-def certViews (x y : Term) : Bool :=
-  (hasHeld x || hasHeld y)
-    && meetNever (writeView x) (writeView y) && meetNever (readView x) (readView y)
+/-- **Whether the two pairs of views meet at the bottom.** A term denotes a partial isomorphism.
+    `writeView` states its domain and `readView` states its range. Two terms whose domains meet
+    at the bottom and whose ranges meet at the bottom are orthogonal. -/
+def viewsNever (x y : Term) : Bool :=
+  meetNever (writeView x) (writeView y) && meetNever (readView x) (readView y)
 
-/-- **The certificate for one pair of options**: the meet, of the two terms or of their two
-    views, or the slot test. A `held` reaches the meet only through its views, so `certViews` is
-    the second disjunct.
+/-- **The meet with the orthogonal row in front.** Two orthogonal terms meet at the bottom, as
+    in an inverse semigroup (Lawson, *Primer on inverse semigroups I*, Lemma 2.16): the meet
+    exists, and its domain and range are the meets of the domains and of the ranges. `Term.meet`
+    refuses a `held`, and the views state the domain and the range of a `held`. So `meet'`
+    answers the bottom at an orthogonal pair, and `Term.meet` elsewhere. `Adm_meet'` and
+    `AdmA_meet'` are its homomorphisms, with no premise. -/
+def meet' (x y : Term) : Option Term :=
+  if viewsNever x y then some .never else Term.meet x y
 
-    **The slot test is the third disjunct, because the meet refuses a closure.** A `refine` at a
-    `closure` has an admission that is a function, so the meet answers `none` beside every term
-    but the bottom. The occupancies read no predicate: `refine string (closure q)` beside
+/-- **Whether `meet'` answers the bottom.** A pair that `meet'` cannot state answers `false`. -/
+def meetNever' (x y : Term) : Bool := (meet' x y).any Term.isNever
+
+/-- **The certificate for one pair of options**: the meet at the bottom, or the shape test.
+
+    **The meet is `meet'`, and orthogonality is its bottom row.** The domains meet at the bottom
+    and the ranges meet at the bottom, so no value has two writers and no attribute has two
+    readers. A `held` reaches the meet only through that row.
+
+    **The shape test is the second disjunct, because the meet cannot state every pair.** The
+    meet states no recursion, and the meet refuses a closure. A `refine` at a `closure` has an
+    admission that is a function, so the meet answers `none` beside every term but the bottom.
+    The occupancies read no predicate: `refine string (closure q)` beside
     `list [] (some number) []` writes `str` against `list` and reads `S` against `L`, so
     `Orth1` separates the pair where the meet cannot state the pair. -/
-def certPair (x y : Term) : Bool := meetNever x y || certViews x y || Orth1 x y
+def certPair (x y : Term) : Bool := meetNever' x y || Orth1 x y
 
 /-- The certificate over a list of options, pair by pair. -/
 def certAll : List Term → Bool
@@ -1654,21 +1666,69 @@ theorem readLe_ofS : ∀ s : ObjectSlot, RowLe (AdmAField s) (AdmAField (readVie
   | .optional t => fun a h => readLe_of t a h
 end
 
-/-- **The certificate through the views is sound.** A value that both terms admit is admitted
-    by both caller-side views, and an attribute that both terms read is read by both stored-side
-    views. The views are held-free, so the meet separates each pair of views. -/
-theorem separates_of_certViews {x y : Term} (h : certViews x y = true) : Separates x y := by
-  simp only [certViews, Bool.and_eq_true] at h
-  obtain ⟨⟨_, hw⟩, hr⟩ := h
-  have sw := separates_of_meetNever hw
-  have sr := separates_of_meetNever hr
-  refine ⟨fun v hx hy => ?_, fun a hx hy => ?_⟩
-  · have hx' := writeLe_of x v hx.2
-    have hy' := writeLe_of y v hy.2
-    exact sw.1 v ⟨occV_sound (writeView x) v hx', hx'⟩ ⟨occV_sound (writeView y) v hy', hy'⟩
-  · have hx' := readLe_of x a hx.2
-    have hy' := readLe_of y a hy.2
-    exact sr.2 a ⟨occA_sound (readView x) a hx', hx'⟩ ⟨occA_sound (readView y) a hy', hy'⟩
+/-! ## The orthogonal row -/
+
+/-- **Orthogonal terms admit no common value.** A value that both terms admit is admitted by
+    both caller-side views, and the views meet at the bottom. -/
+theorem viewsNever_adm {x y : Term} (h : viewsNever x y = true) (v : Value) :
+    (Adm x v && Adm y v) = false := by
+  simp only [viewsNever, Bool.and_eq_true] at h
+  have sw := separates_of_meetNever h.1
+  cases hx : Adm x v <;> cases hy : Adm y v <;> simp only [Bool.and_false, Bool.false_and,
+    Bool.and_self]
+  have hx' := writeLe_of x v hx
+  have hy' := writeLe_of y v hy
+  exact absurd ⟨occV_sound (writeView y) v hy', hy'⟩
+    (sw.1 v ⟨occV_sound (writeView x) v hx', hx'⟩)
+
+/-- **Orthogonal terms read no common attribute.** An attribute that both terms read is read
+    by both stored-side views, and the views meet at the bottom. -/
+theorem viewsNever_admA {x y : Term} (h : viewsNever x y = true) (a : Attr) :
+    (AdmA x a && AdmA y a) = false := by
+  simp only [viewsNever, Bool.and_eq_true] at h
+  have sr := separates_of_meetNever h.2
+  cases hx : AdmA x a <;> cases hy : AdmA y a <;> simp only [Bool.and_false, Bool.false_and,
+    Bool.and_self]
+  have hx' := readLe_of x a hx
+  have hy' := readLe_of y a hy
+  exact absurd ⟨occA_sound (readView y) a hy', hy'⟩
+    (sr.2 a ⟨occA_sound (readView x) a hx', hx'⟩)
+
+/-- **The write homomorphism holds for `meet'`**, with no premise. -/
+theorem Adm_meet' (x y z : Term) (h : meet' x y = some z) (v : Value) :
+    Adm z v = (Adm x v && Adm y v) := by
+  unfold meet' at h
+  split at h
+  · next hv => cases h; rw [viewsNever_adm hv v]; rfl
+  · exact Adm_meet x y z h v
+
+/-- **The read homomorphism and the reading agreement hold for `meet'`**, with no premise. The
+    bottom reads nothing, so the agreement at the orthogonal row is vacuous. -/
+theorem AdmA_meet' (x y z : Term) (h : meet' x y = some z) : AdmAAt x y z := by
+  unfold meet' at h
+  split at h
+  · next hv =>
+    cases h
+    refine ⟨fun a => by rw [viewsNever_admA hv a]; rfl, fun a hx hy => ?_⟩
+    have := viewsNever_admA hv a
+    rw [hx, hy] at this
+    exact nomatch this
+  · exact Alg.AdmA_meet_both x y z h
+
+/-- **A pair that `meet'` meets at the bottom separates, on both halves.** -/
+theorem separates_of_meetNever' {x y : Term} (h : meetNever' x y = true) : Separates x y := by
+  unfold meetNever' at h
+  cases hm : meet' x y with
+  | none => rw [hm] at h; exact nomatch h
+  | some z =>
+    rw [hm] at h
+    have hz := eq_never_of_isNever (by simpa using h)
+    subst hz
+    refine ⟨fun v hx hy => ?_, fun a hx hy => ?_⟩
+    · have := Adm_meet' x y _ hm v
+      rw [hx.2, hy.2] at this; exact nomatch this
+    · have := (AdmA_meet' x y _ hm).1 a
+      rw [hx.2, hy.2] at this; exact nomatch this
 
 /-- **The slot test is sound.** Each family of `Separates` holds the occupancy as a conjunct, and
     `Orth1` makes the two occupancies disjoint on each side. -/
@@ -1679,9 +1739,8 @@ theorem separates_of_Orth1 {x y : Term} (h : Orth1 x y = true) : Separates x y :
 /-- **The pair certificate is sound**: each disjunct separates the pair. -/
 theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates x y := by
   simp only [certPair, Bool.or_eq_true] at h
-  rcases h with (hm | hv) | ho
-  · exact separates_of_meetNever hm
-  · exact separates_of_certViews hv
+  rcases h with hm | ho
+  · exact separates_of_meetNever' hm
   · exact separates_of_Orth1 ho
 
 /-- **A certified union is separated**, which is the premise of `pairwiseCompat_of_separated`
