@@ -970,18 +970,40 @@ const reaches = (
 }
 
 /**
- * The term of a thunk, or nothing where the thunk throws. A thunk is caller code, so its throw
- * crosses the boundary here. At a declaration the throw is a thunk that names the codec being
- * declared, and the caller of this function refuses, declines, or reads the thunk as a free
- * variable.
+ * **The throw of a thunk that its own resolution forces again**, the black hole of a lazy runtime.
+ * `lazy(() => union([string, array(self)]))` forces `self` while the union under declaration
+ * checks its options. The thunk has no term yet, so the thunk names the codec being declared, as
+ * a thunk in the temporal dead zone does.
+ */
+export class ThunkReentered extends Error {
+    constructor() {
+        super('a thunk was forced again while its own resolution ran')
+        this.name = 'ThunkReentered'
+    }
+}
+
+/**
+ * The term of a thunk, or nothing where the thunk names a codec not yet declared. A thunk is
+ * caller code, so its throw crosses the boundary here. Two throws name such a codec: the
+ * `ReferenceError` of a constant in the temporal dead zone, and {@link ThunkReentered}. The
+ * caller of this function refuses, declines, or reads the thunk as a free variable.
+ *
+ * **Every other throw propagates.** A `RangeError` is a stack that overflowed, which is a broken
+ * invariant of the host and not a free variable. Read as a free variable, an overflow makes each
+ * walk back out one level and force again, and a recursive declaration does not end.
  */
 export const force = (
     t: Term & { readonly kind: 'lazy' },
 ): Term | undefined => {
     try {
         return t.get()
-    } catch {
-        return undefined
+    } catch (thrown) {
+        if (
+            thrown instanceof ReferenceError ||
+            thrown instanceof ThunkReentered
+        )
+            return undefined
+        throw thrown
     }
 }
 
