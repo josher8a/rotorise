@@ -1,5 +1,6 @@
 import Calculus.Lang.MeetRows
 import Calculus.Lang.ExactV
+import Calculus.Lang.Shapes
 
 /-!
 # The meet on the write side, over a universe signature
@@ -8,10 +9,11 @@ import Calculus.Lang.ExactV
 have a meet `z`, `z` admits exactly the values that both terms admit. The proof recurses on the
 left operand, as the meet does, and every row is structure except the leaves.
 
-A universe supplies the laws in two classes. `FormerAdm` holds the laws of the formers: the set
-former carries an element meet to a set meet, and two formers in different value slots share no
-value. `LeafAdm` holds the laws of the leaf meet: each leaf answer is exact. Both classes are
-outside `Sem` and outside `Leaf`, because only the theorems of the meet read the laws.
+A universe supplies the laws in two classes. `FormerAdm` holds the set laws: the set former
+carries an element meet to a set meet. `LeafAdm` holds the laws of the leaf meet: each leaf answer
+is exact. Both classes are outside `Sem` and outside `Leaf`, because only the theorems of the meet
+read the laws. Two formers in different classes share no value, and that fact is a theorem of
+the shape classes (`Shapes`).
 -/
 
 namespace Calculus.Alg
@@ -471,8 +473,7 @@ end
 /-! ## The laws, on the write side -/
 
 /-- **The write-side laws of the formers.** The set laws carry an element meet to a set meet. The
-    six disjointness laws close the catch-all rows of the families: two formers in different
-    value slots share no value. -/
+    catch-all rows of the families read the disjointness of the former classes (`Shapes`). -/
 class FormerAdm (S : Syn) [Sem S] [PrimAdm S] : Prop where
   /-- Over held-free terms, the set of an element meet is the meet of the sets. -/
   set_meet : ∀ a y z : Term S, HF a → HF y → HF z → (∀ u, Adm z u = (Adm a u && Adm y u)) →
@@ -480,20 +481,6 @@ class FormerAdm (S : Syn) [Sem S] [PrimAdm S] : Prop where
   /-- Two sets whose elements share no value share no set. -/
   set_never : ∀ a y : Term S, (∀ u, (Adm a u && Adm y u) = false) →
     ∀ v, (Adm (.set a) v && Adm (.set y) v) = false
-  /-- A primitive and a set share no value. -/
-  prim_set : ∀ (g : S.Ground) (t : Term S) v, (Adm (.prim g) v && Adm (.set t) v) = false
-  /-- A primitive and a list share no value. -/
-  prim_list : ∀ (g : S.Ground) (pre : List (Term S)) sp suf v,
-    (Adm (.prim g) v && Adm (.list pre sp suf) v) = false
-  /-- A primitive and an object share no value. -/
-  prim_obj : ∀ (g : S.Ground) (b : Body S) v, (Adm (.prim g) v && Adm (.object b) v) = false
-  /-- A set and a list share no value. -/
-  set_list : ∀ (t : Term S) pre sp suf v, (Adm (.set t) v && Adm (.list pre sp suf) v) = false
-  /-- A set and an object share no value. -/
-  set_obj : ∀ (t : Term S) b v, (Adm (.set t) v && Adm (.object b) v) = false
-  /-- A list and an object share no value. -/
-  list_obj : ∀ (pre : List (Term S)) sp suf b v,
-    (Adm (.list pre sp suf) v && Adm (.object b) v) = false
 
 /-- **The write-side laws of a leaf meet**: each leaf answer is exact. -/
 class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] : Prop where
@@ -518,18 +505,18 @@ local macro "fam_bottom" fam:ident : tactic => `(tactic|
   (simp only [$fam:ident, Option.some.injEq] at *
    subst_vars
    first
-     | exact bottom_of_and_false (FormerAdm.prim_set ..)
-     | exact bottom_of_and_false' (FormerAdm.prim_set ..)
-     | exact bottom_of_and_false (FormerAdm.prim_list ..)
-     | exact bottom_of_and_false' (FormerAdm.prim_list ..)
-     | exact bottom_of_and_false (FormerAdm.prim_obj ..)
-     | exact bottom_of_and_false' (FormerAdm.prim_obj ..)
-     | exact bottom_of_and_false (FormerAdm.set_list ..)
-     | exact bottom_of_and_false' (FormerAdm.set_list ..)
-     | exact bottom_of_and_false (FormerAdm.set_obj ..)
-     | exact bottom_of_and_false' (FormerAdm.set_obj ..)
-     | exact bottom_of_and_false (FormerAdm.list_obj ..)
-     | exact bottom_of_and_false' (FormerAdm.list_obj ..)))
+     | exact bottom_of_and_false (Shapes.prim_set ..)
+     | exact bottom_of_and_false' (Shapes.prim_set ..)
+     | exact bottom_of_and_false (Shapes.prim_list ..)
+     | exact bottom_of_and_false' (Shapes.prim_list ..)
+     | exact bottom_of_and_false (Shapes.prim_obj ..)
+     | exact bottom_of_and_false' (Shapes.prim_obj ..)
+     | exact bottom_of_and_false (Shapes.set_list ..)
+     | exact bottom_of_and_false' (Shapes.set_list ..)
+     | exact bottom_of_and_false (Shapes.set_obj ..)
+     | exact bottom_of_and_false' (Shapes.set_obj ..)
+     | exact bottom_of_and_false (Shapes.list_obj ..)
+     | exact bottom_of_and_false' (Shapes.list_obj ..)))
 
 -- the object rows put the whole field table to `decide` under a binder
 set_option maxHeartbeats 1000000
@@ -540,7 +527,7 @@ noncomputable section
 
 /-- **The one positional container's family.** Two `list` shapes meet through their rows, and
     `Adm_list_rows` states the whole obligation over those rows. -/
-theorem Adm_famList [FormerAdm S] {pre suf : List (Term S)} {sp : Option (Term S)}
+theorem Adm_famList [Shapes S] {pre suf : List (Term S)} {sp : Option (Term S)}
     {fpre fsuf : List (Term S → Option (Term S))} {fsp : Option (Term S → Option (Term S))}
     (hp : List.Forall₂ AdmSound pre fpre)
     (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ AdmSound t f)
@@ -794,7 +781,7 @@ theorem Adm_famList [FormerAdm S] {pre suf : List (Term S)} {sp : Option (Term S
   all_goals fam_bottom famList
 
 /-- **Two objects meet pointwise, and the meet is exact on the write side.** -/
-theorem Adm_famObj [FormerAdm S] {a : Body S} {g : {k // k ∈ a.fields} → ObjectSlot S → Option (ObjectSlot S)}
+theorem Adm_famObj [Shapes S] {a : Body S} {g : {k // k ∈ a.fields} → ObjectSlot S → Option (ObjectSlot S)}
     {mw : Term S → Option (Term S)}
     (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot S), g k fl = some fm →
       ∀ w, AdmField fm w = (AdmField (a.at k) w && AdmField fl w))
@@ -842,7 +829,7 @@ theorem Adm_famObj [FormerAdm S] {a : Body S} {g : {k // k ∈ a.fields} → Obj
   all_goals fam_bottom famObj
 
 /-- **Two sets meet at their elements**, and a set is at the bottom beside every other former. -/
-theorem Adm_famSet [FormerAdm S] (a : Term S) {mt : Term S → Option (Term S)} (ih : AdmSound a mt) :
+theorem Adm_famSet [FormerAdm S] [Shapes S] (a : Term S) {mt : Term S → Option (Term S)} (ih : AdmSound a mt) :
     AdmFam (.set a) (famSet a mt) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
@@ -934,7 +921,7 @@ termination_by structural os => os
 end
 
 /-- **The one leaf family is exact wherever the leaf laws hold.** -/
-theorem Adm_famPrim [Leaf S] [LeafAdm S] [FormerAdm S] (g : S.Ground) : AdmFam (.prim g) (famPrim g) := by
+theorem Adm_famPrim [Leaf S] [LeafAdm S] [Shapes S] (g : S.Ground) : AdmFam (.prim g) (famPrim g) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
   case prim g' =>
@@ -979,7 +966,7 @@ theorem Adm_famOpaq [Leaf S] [LeafAdm S] : AdmFam (.opaq : Term S) famOpaq := by
 mutual
 /-- **`Adm` is a homomorphism from the meet to conjunction.** Where two terms have a meet,
     the values it admits are exactly the values both admit. -/
-theorem Adm_meet [Leaf S] [LeafAdm S] [FormerAdm S] : ∀ (x y : Term S) z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x v && Adm y v)
+theorem Adm_meet [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] : ∀ (x y : Term S) z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x v && Adm y v)
   | .never, _, _, h, _ => by
       simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm]
   | .held _ _ _ _, y, _, h, v => by
@@ -1041,7 +1028,7 @@ theorem Adm_meet [Leaf S] [LeafAdm S] [FormerAdm S] : ∀ (x y : Term S) z, Term
 termination_by structural x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
-theorem Adm_meetL [Leaf S] [LeafAdm S] [FormerAdm S] : ∀ (os : List (Term S)) (y : Term S) (zs : List (Term S)),
+theorem Adm_meetL [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] : ∀ (os : List (Term S)) (y : Term S) (zs : List (Term S)),
     List.Forall₂ (fun t w => Term.meet t y = some w) os zs →
     List.Forall₂ (fun t w => ∀ u, Adm w u = (Adm t u && Adm y u)) os zs
   | [], _, _, h => by cases h; exact .nil
@@ -1051,13 +1038,13 @@ theorem Adm_meetL [Leaf S] [LeafAdm S] [FormerAdm S] : ∀ (os : List (Term S)) 
 termination_by structural os => os
 
 /-- Every position of a tuple carries the meet at that position. -/
-theorem Adm_meetSTs [Leaf S] [LeafAdm S] [FormerAdm S] : ∀ ts : List (Term S), List.Forall₂ AdmSound ts (Term.meetSTs ts)
+theorem Adm_meetSTs [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] : ∀ ts : List (Term S), List.Forall₂ AdmSound ts (Term.meetSTs ts)
   | [] => .nil
   | t :: ts => .cons (fun u w hw => Adm_meet t u w hw) (Adm_meetSTs ts)
 termination_by structural ts => ts
 
 /-- Two fields at one name admit what both admit, at the stronger mark. -/
-theorem Adm_Field_meet [Leaf S] [LeafAdm S] [FormerAdm S] : ∀ (f fl : ObjectSlot S) (fm : ObjectSlot S), ObjectSlot.meet f fl = some fm →
+theorem Adm_Field_meet [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] : ∀ (f fl : ObjectSlot S) (fm : ObjectSlot S), ObjectSlot.meet f fl = some fm →
     ∀ w, AdmField fm w = (AdmField f w && AdmField fl w)
   | .req x, .req y, _, h, w => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h

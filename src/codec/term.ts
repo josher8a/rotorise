@@ -2,7 +2,7 @@
  * §3's term language, and the five functions of a term that the model computes.
  *
  * Derived from `formal/Calculus/Dynamo/Lang/Term.lean`, with `member` from `Denote.lean`'s `μSyn`, `specOf`
- * from `Denote.lean`, and {@link occV}/{@link occA} from `Orthogonality.lean`. {@link tagsOf} has
+ * from `Denote.lean`, and {@link occV}/{@link occA} from `Lang/Occupancy.lean`. {@link tagsOf} has
  * no counterpart there: the tag table is a host index, and no term carries it. One
  * variant per model constructor, under the model's own names, so a reader holding the two files
  * side by side is reading one language twice rather than two languages that agree.

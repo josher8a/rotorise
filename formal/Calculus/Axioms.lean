@@ -31,6 +31,8 @@ import Calculus.Lang.Sound
 import Calculus.Lang.HeldFree
 import Calculus.Lang.ExactV
 import Calculus.Lang.ExactA
+import Calculus.Lang.Shapes
+import Calculus.Lang.Occupancy
 import Calculus.Lang.Meet
 import Calculus.Lang.MeetRows
 import Calculus.Lang.MeetV

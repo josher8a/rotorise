@@ -88,7 +88,8 @@ turned away go with the policy.
 
 namespace Calculus
 
-open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Body.block
+open Alg (occV occA Orth1 occV_sound occA_sound occV_disjoint_of_Orth1 occA_disjoint_of_Orth1
+  Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Body.block
   Body.slotAt Body.slotAt_pos Body.slotAt_neg listOf_cases HF_of_hasHeld alignPL_eq_rowOfG
   rowOfG_length rowOfG_none_eq rowOfG_some_eq rowOfG_mem forall₂_replicate forall₂_append
   forall₂_zip_append forall₂_zip_replicate forall₂_zip_take forall₂_zip_drop rowOfG_map
@@ -884,27 +885,12 @@ theorem Adm_opaq_num (d : WFNumeral) :
   simp [inD]
 
 
-/-- Two terms whose occupancies are disjoint share no value, so their conjunction is the
-    bottom. This closes every row that answers `never` because the two write different
-    `Value` constructors. -/
-theorem Adm_and_false {x y : Term} (h : Orth1 x y = true) (v : Value) :
-    (Adm x v && Adm y v) = false := by
-  cases hx : Adm x v with
-  | false => simp
-  | true =>
-    cases hy : Adm y v with
-    | false => simp
-    | true =>
-      have h2 := occV_disjoint_of_Orth1 h (occV_sound x v hx)
-      rw [occV_sound y v hy] at h2
-      exact absurd h2 (by simp)
-
 /-! ## DynamoDB is an instance of the meet laws, on the write side
 
 `Alg.Adm_meet` proves the homomorphism once, over any signature. DynamoDB supplies the laws of its
 formers (`dynFormerAdm`) and of its leaf meet (`dynLeafAdm`). A primitive law is a fact about
-`inBase` and `inL`, a set law is a fact about `setCodec`, and a disjointness law is an occupancy
-fact through `Orth1`. -/
+`inBase` and `inL`, and a set law is a fact about `setCodec`. The disjointness of two formers is
+a theorem of the shape classes (`dynShapes`). -/
 
 /-- `opaque`'s row is `dom(e)` of its codec. -/
 theorem Adm_opaq_eq (v : Value) : Adm .opaq v = (Ω.e v).isSome := rfl
@@ -958,33 +944,10 @@ theorem Adm_set_meet {a y z : Term} (ha : HF a) (hy : HF y) (hz : HF z)
     exact ⟨fun H => ⟨fun x hx => (H x hx).1, fun x hx => (H x hx).2⟩,
       fun H x hx => ⟨H.1 x hx, H.2 x hx⟩⟩
 
-/-- A set and a term that occupies no set slot on either side are orthogonal. -/
-theorem orth1_set_left (a y : Term) (hv : ∀ s, s.setElem.isSome = true → occV y s = false)
-    (hp : ∀ m, m.setElem.isSome = true → occA y m = false) : Orth1 (.set a) y = true := by
-  simp only [Orth1, Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true', Bool.and_eq_false_iff]
-  refine ⟨fun s _ => ?_, fun m _ => ?_⟩
-  · cases hs : s.setElem with
-    | none => exact Or.inl (by simp [occV, hs])
-    | some e => exact Or.inr (hv s (by simp [hs]))
-  · cases hm : m.setElem with
-    | none => exact Or.inl (by simp [occA, hm])
-    | some e => exact Or.inr (hp m (by simp [hm]))
-
 /-- The right operands `meetSRight` hands to a family: everything its own rows do not answer. -/
 def Delegated : Term → Prop
   | .never | .held _ _ _ _ | .refine _ _ | .union _ | .var _ | .mu _ => False
   | _ => True
-
-/-- Two terms in different value slots share no value, by their occupancies. -/
-local macro "orth_false" : tactic => `(tactic|
-  (refine Adm_and_false ?_ _
-   first
-     | rfl
-     | decide
-     | (cases ‹GroundKind› <;> first | rfl | decide)
-     | (apply orth1_set_left <;> intro s hs <;> cases s <;>
-          (try cases ‹GroundKind›) <;> simp_all [Slot.setElem, Member.setElem, occV, occA,
-            occOnly, GroundKind.slot, GroundKind.member])))
 
 /-- **Two primitives met at a primitive admit what both admit.** -/
 theorem Adm_prim_some : ∀ g g' h : Ground, Ground.meet g g' = some h →
@@ -1052,17 +1015,53 @@ theorem Adm_prim_top : ∀ g : Ground, Ground.meetTop g = true →
       exact e.symm
   | .literal _ _, h, _, _ => by simp [Ground.meetTop] at h
 
-/-- The formers of DynamoDB: the set laws of `setCodec`, and the six disjointness laws by
-    occupancy. -/
+/-- The former class of a value: its root constructor. -/
+def Value.former : Value → Alg.Former
+  | .str _ | .num _ | .bool _ | .bin _ | .null => .prim
+  | .strSet _ | .numSet _ | .binSet _ => .set
+  | .arr _ => .list
+  | .map _ _ => .object
+
+/-- The former class of an attribute: its root constructor. -/
+def Attr.former : Attr → Alg.Former
+  | .s _ | .n _ | .b _ | .bool _ | .null => .prim
+  | .ss _ | .ns _ | .bs _ => .set
+  | .l _ => .list
+  | .m _ _ => .object
+
+/-- **The shape classes of DynamoDB.** A base or a literal writes and reads a scalar, `setCodec`
+    writes and reads one of the three sets, and the prisms build `arr`, `l`, `map` and `m`. -/
+noncomputable instance dynShapes : Alg.Shapes dynSyn where
+  former := Value.former
+  formerA := Attr.former
+  prim g v h := by
+    have h' := (Alg.PrimAdm.admV_exact (S := dynSyn) g v).mpr h
+    cases g with
+    | base k => cases k <;> cases v <;> first | rfl | exact nomatch h'
+    | literal k x =>
+        cases k <;> cases v <;> first | rfl | simp [Alg.PrimAdm.admV, AdmLit, inL] at h'
+  primA g a h := by
+    have h' := (Alg.PrimAdmA.admA_exact (S := dynSyn) g a).mpr h
+    cases g with
+    | base k => cases k <;> cases a <;> first | rfl | exact nomatch h'
+    | literal k x => cases k <;> cases a <;> first | rfl | exact nomatch h'
+  set L hL c v h := by
+    cases hL
+    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
+    rcases setCodec_e_eq.mp ha with ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ <;> rfl
+  setA L hL c a h := by
+    cases hL
+    obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
+    rcases setCodec_p_eq.mp hw with ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ <;> rfl
+  list L hL _ := by cases hL; rfl
+  listA L hL _ := by cases hL; rfl
+  map F hF _ := by cases hF; rfl
+  mapA F hF _ := by cases hF; rfl
+
+/-- The formers of DynamoDB: the set laws of `setCodec`. -/
 instance dynFormerAdm : Alg.FormerAdm dynSyn where
-  set_meet a y z ha hy hz h v := Adm_set_meet ha hy hz h v
-  set_never a y h v := Adm_set_and_false h v
-  prim_set g t v := by cases g <;> orth_false
-  prim_list g pre sp suf v := by cases g <;> orth_false
-  prim_obj g b v := by cases g <;> orth_false
-  set_list t pre sp suf v := by orth_false
-  set_obj t b v := by orth_false
-  list_obj pre sp suf b v := by orth_false
+  set_meet _ _ _ ha hy hz h v := Adm_set_meet ha hy hz h v
+  set_never _ _ h v := Adm_set_and_false h v
 
 /-- The leaf meet of DynamoDB is exact on the write side. -/
 instance dynLeafAdm : Alg.LeafAdm dynSyn where
@@ -1289,17 +1288,6 @@ theorem admA_set_meet {a y z : Term} (ha : HF a) (hy : HF y) (hz : HF z)
   · exact hvz.trans ((congrArg some (Option.some.inj (oz.symm.trans oa))).trans hva.symm)
   · exact hvz.trans ((congrArg some (Option.some.inj (oz.symm.trans oy))).trans hvy.symm)
 
-/-- Two terms in different attribute slots share no attribute, by their occupancies. -/
-local macro "orth_falseA" : tactic => `(tactic|
-  (refine AdmA_and_false ?_ _
-   first
-     | rfl
-     | decide
-     | (cases ‹GroundKind› <;> first | rfl | decide)
-     | (apply orth1_set_left <;> intro s hs <;> cases s <;>
-          (try cases ‹GroundKind›) <;> simp_all [Slot.setElem, Member.setElem, occV, occA,
-            occOnly, GroundKind.slot, GroundKind.member])))
-
 /-- **Two primitives met at a primitive read as each factor reads.** -/
 theorem admA_prim_some : ∀ g g' h : Ground, Ground.meet g g' = some h →
     AdmAAt (.prim g) (.prim g') (.prim h)
@@ -1374,14 +1362,8 @@ theorem admA_prim_top : ∀ g : Ground, Ground.meetTop g = true → AdmAAt (.pri
 
 /-- The formers of DynamoDB, on the read side. -/
 instance dynFormerAdmA : Alg.FormerAdmA dynSyn where
-  set_meet a y z ha hy hz h := admA_set_meet ha hy hz h
-  set_never a y h c := AdmA_set_and_false h c
-  prim_set g t c := by cases g <;> orth_falseA
-  prim_list g pre sp suf c := by cases g <;> orth_falseA
-  prim_obj g b c := by cases g <;> orth_falseA
-  set_list t pre sp suf c := by orth_falseA
-  set_obj t b c := by orth_falseA
-  list_obj pre sp suf b c := by orth_falseA
+  set_meet _ _ _ ha hy hz h := admA_set_meet ha hy hz h
+  set_never _ _ h c := AdmA_set_and_false h c
 
 /-- The leaf meet of DynamoDB is exact on the read side, and reads as each factor reads. -/
 instance dynLeafAdmA : Alg.LeafAdmA dynSyn where
@@ -1683,10 +1665,10 @@ theorem separates_of_certViews {x y : Term} (h : certViews x y = true) : Separat
   refine ⟨fun v hx hy => ?_, fun a hx hy => ?_⟩
   · have hx' := writeLe_of x v hx.2
     have hy' := writeLe_of y v hy.2
-    exact sw.1 v ⟨occV_sound _ v hx', hx'⟩ ⟨occV_sound _ v hy', hy'⟩
+    exact sw.1 v ⟨occV_sound (writeView x) v hx', hx'⟩ ⟨occV_sound (writeView y) v hy', hy'⟩
   · have hx' := readLe_of x a hx.2
     have hy' := readLe_of y a hy.2
-    exact sr.2 a ⟨occA_sound _ a hx', hx'⟩ ⟨occA_sound _ a hy', hy'⟩
+    exact sr.2 a ⟨occA_sound (readView x) a hx', hx'⟩ ⟨occA_sound (readView y) a hy', hy'⟩
 
 /-- **The slot test is sound.** Each family of `Separates` holds the occupancy as a conjunct, and
     `Orth1` makes the two occupancies disjoint on each side. -/

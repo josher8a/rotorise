@@ -100,7 +100,9 @@ compute with.
 | the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `AdmLit`, `inBaseA` and `AdmALit` | the kind test |
 | the leaf meet: two primitives, a primitive and the top, two predicates | `Leaf` | `dynLeaf`: `Ground.meet`, `Ground.meetTop`, `Pred.isData`, `Pred.meetM` | `jsonLeaf`: one kind |
 | the laws of the leaf meet | `LeafAdm`, `LeafAdmA`, `LeafWrites` | `dynLeafAdm`, `dynLeafAdmA`, `dynLeafWrites` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafWrites` |
-| the laws of the formers that the meet reads | `FormerAdm`, `FormerAdmA` | `dynFormerAdm`, `dynFormerAdmA` | `jsonFormerAdm`, `jsonFormerAdmA` |
+| the set laws that the meet reads | `FormerAdm`, `FormerAdmA` | `dynFormerAdm`, `dynFormerAdmA` | `jsonFormerAdm`, `jsonFormerAdmA` |
+| the former class of each value and attribute, and where each former lands | `Shapes` | `dynShapes`: the root constructor | `jsonShapes`: every value is a primitive |
+| the shapes that an occupancy reads, and their landing facts | `Occ`, `OccSound` | `dynOcc`, `dynOccSound`: `Slot` and `Member` | `jsonOcc`, `jsonOccSound`: the kind |
 
 A former is an `Option`. A universe without a former denotes the term of that former as the
 bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only
@@ -122,12 +124,20 @@ factor reads it. `Alg.meet_writes` says that a member the meet names is each fac
 proof recurses on the left operand, as the meet does. The laws are classes outside `Sem`, because
 only the theorems of the meet read them. `LeafAdm`, `LeafAdmA` and `LeafWrites` say that each
 leaf answer is exact. `FormerAdm` and `FormerAdmA` say that the set former carries an element meet
-to a set meet, and that two formers in different slots share no value and no attribute. At
-DynamoDB, a leaf law is a fact about `inBase` and `inL`, a set law is a fact about `setCodec`, and a
-disjointness law is an occupancy fact through `Orth1`. The DynamoDB theorems, such as `Adm_meet`
-and `AdmA_meet`, state the generic theorems at the DynamoDB names. At JSON, two kinds meet where
-they are one kind, and each former law holds because the signature has no former and both sides
-admit nothing.
+to a set meet. At DynamoDB, a leaf law is a fact about `inBase` and `inL`, and a set law is a fact
+about `setCodec`. The DynamoDB theorems, such as `Adm_meet` and `AdmA_meet`, state the generic
+theorems at the DynamoDB names. At JSON, two kinds meet where they are one kind, and each set law
+holds because the signature has no former and both sides admit nothing.
+
+**A universe is a container, and the disjointness of two formers is a theorem.** The carrier of a
+universe is the W-type of a container, and the member of a value is its root shape. Each former
+lands in one class of root shapes: a primitive, a set, a list or an object. The classes of distinct
+formers are disjoint, because the carrier is a coproduct. `Shapes` gives the class of each value
+and of each attribute, and the landing fact of each former: a primitive codec, the set lift, the
+list prism and the map prism. So two formers in different classes share no value and no attribute
+(`Shapes.prim_set`, `Shapes.prim_setA` and their companions), and the catch-all rows of the meet
+read those theorems. A set and a keyed map are quotient containers, so the set laws stay a class
+of each universe. At DynamoDB, the class of a value or an attribute is its root constructor.
 
 **The set former is a lift, and not a prism.** The list and map formers are prisms from `List`
 and `MapOf` of the carrier onto the carrier. A set former cannot be such a prism: the kernel
@@ -164,8 +174,15 @@ exactness of the primitive rows alone. A universe states the primitive rows, so 
 primitive reduces without the codec. The DynamoDB `Adm` and `AdmA` are the generic rows, and
 read their DynamoDB rows from a simp set, as `denote` does.
 
-**The other analyses are DynamoDB tables.** `Meet`, `Orthogonality`, `Separation`, `Slice` and
-the certificate read the constructors of the DynamoDB carriers. No generic form of them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
+**Occupancy is the shape abstraction, and holds at every signature.** `Alg.occV` and `Alg.occA`
+map a term to the root shapes that it can write and read, and `Alg.Orth1` tests two terms for
+disjoint occupancies on both sides. `Alg.occV_sound` and `Alg.occA_sound` put the row of a term
+inside its occupancy. A universe supplies its shapes in `Occ`, which holds computable data so that
+the kernel evaluates `Orth1` at a closed pair, and the shape maps with their landing facts in
+`OccSound`. The rows of `union`, `held`, `refine`, `mu`, `var`, `never` and `opaq` are structure.
+
+**The other analyses are DynamoDB tables.** `Meet`, `Separation`, `Slice` and the certificate read
+the constructors of the DynamoDB carriers. No generic form of them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
 `Codec`, then the combinator algebra at the DynamoDB carriers as `Prisms`, `Products`, `Objects`,
 `Sums`, `Carriers`, `Lawful` and `Frontier`, and `Term`, then `Denote`, `Typing`, `Soundness`,
 then `ExactV`, `ExactA` and `Separation`, then `Orthogonality`, with `Axioms` as the sink. Each instance module imports the
@@ -243,7 +260,7 @@ error but a silent "everything": the analysis stays sound and stops saying anyth
 | an emitter clause | the object row of `src/codec/lean.ts` | the bridge writes terms in this language, and a constructor it cannot spell breaks it |
 
 The depth clause, the denotation clause and the premise carrier are generic, and each universe
-inherits them. The spec projection and the admission rows are DynamoDB tables. The DynamoDB rows
+inherits them. The admission rows are generic too. The spec projection is a DynamoDB table. The DynamoDB rows
 of `denote` in `denote_rows` are owed too. A missing row fails only a proof that reads the
 row.
 
@@ -476,8 +493,8 @@ union of lawful options meets its obligation.
 1977: a coarse test that over-approximates a precise one transfers disjointness downward, and a
 tighter test does not. The principle is why a certificate may be proved over an approximation at
 all. This development spends it twice. `occV` and `occA` over-approximate what a term occupies,
-and the proofs of the meet's bottom rows use disjoint occupancy to justify those rows
-(`Adm_and_false`, `AdmA_and_false`). The certificate also asks disjoint occupancy directly, as
+and the read-side proof of the DynamoDB leaf meet uses disjoint occupancy to close the rows of
+two distinct primitives (`AdmA_and_false`). The certificate also asks disjoint occupancy directly, as
 `Orth1` (`separates_of_Orth1`). `writeView`
 and `readView` admit each value and each attribute that the term admits (`writeLe_of`,
 `readLe_of`), so two views that meet at the bottom separate the terms.
@@ -874,7 +891,8 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
   statement that needs a fact of a carrier belongs to that universe.
 - New universe → a `Syn`, a `Sem` instance, its `TopLaws` where the held-free theory must
   hold, its `PrimAdm` and `PrimAdmA` where exactness must hold, its `Leaf` where the meet must
-  compute, and the laws of the meet where the theorems of the meet must hold. Make the module reachable from `Axioms.lean`.
+  compute, its `Shapes` and the laws of the meet where the theorems of the meet must hold,
+  and its `Occ` and `OccSound` where the shape test must hold. Make the module reachable from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.
 - New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness
