@@ -990,7 +990,7 @@ shown compatible.
 \begin{definition}[the certificate]
 \label{def:certificate}
 \uses{cond:compat,def:family}
-\lean{Calculus.certPair, Calculus.viewsNever, Calculus.readView, Calculus.Alg.hasHeldUnder}
+\lean{Calculus.certPair, Calculus.viewsNever, Calculus.readView, Calculus.Alg.hasHeld}
 \leanok
 Two options are certified where they are orthogonal. A term denotes a partial isomorphism, and its caller view and its stored
 view are its domain and its range. Two terms whose domains and ranges meet at the bottom are
@@ -1000,8 +1000,9 @@ reaches the certificate through its views. On a held-free term the caller view i
 the union of its options' views, because a union admits where one of its options admits. The view
 of a recursive term is the recursion of the view of its body, so a \texttt{held} below a recursion
 reaches the certificate too. The stored view keeps a predicate only where the inner term holds no
-\texttt{held} under one flag per binder, and the flag says whether the binder's body holds a
-\texttt{held}. The
+\texttt{held} and no variable. A finer view keeps a predicate over a variable whose binder holds no
+\texttt{held}. The host builds no data predicate over a variable, so no host-built term tells the
+two views apart. The
 meet refuses a closure beside a partner that its inner term does not meet at the bottom. A certified pair is separated
 (\texttt{separates\_of\_certPair}), so it is compatible. The certificate is sufficient and not
 necessary: two restrictions of one adapter that overlap are compatible, and no certificate reaches

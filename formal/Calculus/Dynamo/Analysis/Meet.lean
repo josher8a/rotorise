@@ -85,7 +85,7 @@ turned away go with the policy.
 namespace Calculus
 
 open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Body.block
-  Body.slotAt Body.slotAt_pos Body.slotAt_neg listOf_cases alignPL_eq_rowOfG
+  Body.slotAt Body.slotAt_pos Body.slotAt_neg listOf_cases HF_of_hasHeld alignPL_eq_rowOfG
   rowOfG_length rowOfG_none_eq rowOfG_some_eq rowOfG_mem forall₂_replicate forall₂_append
   forall₂_zip_append forall₂_zip_replicate forall₂_zip_take forall₂_zip_drop rowOfG_map
   rowOfG_forall₂ rowOfG_forall₂_left rowOfG_some_isSome rowOfG_total rowOfG_respread dominates_max
@@ -94,7 +94,7 @@ open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk B
   meet_union_of)
 
 export Alg (ObjectSlot.isBottom Term.ofOptions allSome Term.refineOf Term.listOf Term.tupleOf zipF
-  meetSRight meetSRightL famPrim famSet famOpaq rowOfG dominates listMeetRow famList
+  meetSRight meetSRightL famPrim hasHeld famSet famOpaq rowOfG dominates listMeetRow famList
   ObjectSlot.through objSlot ObjectSlot.isAbsentOpt objObj famObj Term.meetSL Term.meetSTs
   ObjectSlot.meet Term.slotAt Term.optionAt Term.blockOf Pairing pair0)
 
@@ -572,43 +572,48 @@ end
 
 mutual
 /-- **The stored-side view**: each `held` becomes its inner term. The view of `mu b` is `mu` of
-    the view of `b`, and a variable stays a variable, as in `writeView`. The closed term is
-    viewed at `readView fun _ => true`: an unbound variable is a possible `held`.
+    the view of `b`, and a variable stays a variable, as in `writeView`.
 
     **The view keeps a predicate only where the inner term decodes the same in the view as in the
-    term**: where the inner term holds no `held` under `env` (`Alg.hasHeldUnder`). The flag of a
-    binder says whether the binder's body holds a `held`, so a variable is a possible `held` only
-    where its binder holds one. Elsewhere the view drops the predicate. Data exists only on the
-    side where it was stated: the read test of the predicate decodes through `g`, so on the
-    stored side the predicate is the closure `p ∘ g`, and the view keeps no closure. The view
-    holds no `held` (`HF_readView`). -/
-def readView (env : Nat → Bool) : Term → Term
-  | .held t _ _ _ => readView env t
-  | .refine t p => if Alg.hasHeldUnder env t then readView env t else .refine (readView env t) p
-  | .list pre sp suf => .list (readViewL env pre) (readViewO env sp) (readViewL env suf)
-  | .object b => .object (readViewB env b)
-  | .union os => .union (readViewL env os)
-  | .set t => .set (readView env t)
-  | .mu b => .mu (readView (Alg.flagsCons (Alg.hasHeldUnder (Alg.flagsCons false env) b) env) b)
+    term**: where the inner term holds no `held` and no variable. A variable denotes a stage of
+    its binder, and the stage can hold a `held`, so a variable counts as a possible `held`.
+    Elsewhere the view drops the predicate. Data exists only on the side where it was stated: the
+    read test of the predicate decodes through `g`, so on the stored side the predicate is the
+    closure `p ∘ g`, and the view keeps no closure. The view holds no `held` (`HF_readView`).
+
+    **The view is narrower than it can be, and no host-built term observes the difference.** A
+    variable holds a `held` only where its binder's body holds one, so a finer view keeps more
+    predicates over a variable. The meet reads a closure through its inner term, so only a data
+    predicate over a variable changes a verdict. The host's public `refine` builds a closure, and
+    the host builds a `members` predicate only as the meet of two, so no host-built term holds a
+    data predicate. An example after `separates_of_certPair` pins the narrowing. -/
+def readView : Term → Term
+  | .held t _ _ _ => readView t
+  | .refine t p => if hasHeld t || t.hasVar then readView t else .refine t p
+  | .list pre sp suf => .list (readViewL pre) (readViewO sp) (readViewL suf)
+  | .object b => .object (readViewB b)
+  | .union os => .union (readViewL os)
+  | .set t => .set (readView t)
+  | .mu b => .mu (readView b)
   | t => t
-def readViewL (env : Nat → Bool) : List Term → List Term
+def readViewL : List Term → List Term
   | [] => []
-  | t :: ts => readView env t :: readViewL env ts
-def readViewO (env : Nat → Bool) : Option Term → Option Term
+  | t :: ts => readView t :: readViewL ts
+def readViewO : Option Term → Option Term
   | none => none
-  | some t => some (readView env t)
-def readViewB (env : Nat → Bool) : Body → Body
-  | .mk fs f w => .mk fs (fun k => readViewS env (f k)) (readViewO env w)
-def readViewS (env : Nat → Bool) : ObjectSlot → ObjectSlot
-  | .req t => .req (readView env t)
-  | .optional t => .optional (readView env t)
+  | some t => some (readView t)
+def readViewB : Body → Body
+  | .mk fs f w => .mk fs (fun k => readViewS (f k)) (readViewO w)
+def readViewS : ObjectSlot → ObjectSlot
+  | .req t => .req (readView t)
+  | .optional t => .optional (readView t)
 end
 
 /-- **Whether the two pairs of views meet at the bottom.** A term denotes a partial isomorphism.
     `writeView` states its domain and `readView` states its range. Two terms whose domains meet
     at the bottom and whose ranges meet at the bottom are orthogonal. -/
 def viewsNever (x y : Term) : Bool :=
-  meetNever (writeView x) (writeView y) && meetNever (readView (fun _ => true) x) (readView (fun _ => true) y)
+  meetNever (writeView x) (writeView y) && meetNever (readView x) (readView y)
 
 /-- **The certificate for one pair of options**: orthogonality. The domains meet at the bottom
     and the ranges meet at the bottom, as for two orthogonal elements of an inverse semigroup
@@ -616,8 +621,9 @@ def viewsNever (x y : Term) : Bool :=
     attribute has two readers (`viewsNever_adm`, `viewsNever_admA`).
 
     **The views state the domain and the range of a `held`**, which `Term.meet` refuses. On a term
-    with no `held`, the caller view is the term, and the stored view keeps each predicate. So a
-    pair that `Term.meet` meets at the bottom also has views that meet at the bottom.
+    with no `held`, the caller view is the term, and the stored view keeps each predicate that is
+    not over a variable. So the certificate refuses a pair that `Term.meet` meets at the bottom
+    only at a data predicate over a variable, which the host does not build (`readView`).
 
     **A `refine` at a `closure` has an admission that is a function.** The meet answers the
     bottom where the inner term meets the partner at the bottom, and `none` elsewhere. So
@@ -1498,36 +1504,37 @@ theorem HF_writeViewS : ∀ s : ObjectSlot, HFS (writeViewS s)
 end
 
 mutual
-/-- **The stored-side view holds no `held`.** A `refine` that the view keeps has the view of its
-    inner term inside. -/
-theorem HF_readView (env : Nat → Bool) : ∀ t : Term, HF (readView env t)
-  | .held t _ _ _ => by simp only [readView]; exact HF_readView env t
+/-- **The stored-side view holds no `held`.** A `refine` that the view keeps has an inner term
+    with no `held`. -/
+theorem HF_readView : ∀ t : Term, HF (readView t)
+  | .held t _ _ _ => by simp only [readView]; exact HF_readView t
   | .refine t _ => by
       simp only [readView]
       split
-      · exact HF_readView env t
-      · exact HF_readView env t
+      · exact HF_readView t
+      · next h =>
+        simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at h
+        exact HF_of_hasHeld t h.1
   | .list pre sp suf => by
-      simp only [readView]
-      exact ⟨HF_readViewL env pre, HF_readViewO env sp, HF_readViewL env suf⟩
+      simp only [readView]; exact ⟨HF_readViewL pre, HF_readViewO sp, HF_readViewL suf⟩
   | .object (.mk fs f w) => by
-      simp only [readView, readViewB]; exact ⟨fun k => HF_readViewS env (f k), HF_readViewO env w⟩
-  | .union os => by simp only [readView]; exact HF_readViewL env os
-  | .set t => by simp only [readView]; exact HF_readView env t
-  | .mu b => by simp only [readView]; exact HF_readView _ b
+      simp only [readView, readViewB]; exact ⟨fun k => HF_readViewS (f k), HF_readViewO w⟩
+  | .union os => by simp only [readView]; exact HF_readViewL os
+  | .set t => by simp only [readView]; exact HF_readView t
+  | .mu b => by simp only [readView]; exact HF_readView b
   | .prim _ => trivial | .opaq => trivial | .never => trivial | .var _ => trivial
 /-- `HF_readView` over a list. -/
-theorem HF_readViewL (env : Nat → Bool) : ∀ ts : List Term, HFL (readViewL env ts)
+theorem HF_readViewL : ∀ ts : List Term, HFL (readViewL ts)
   | [] => trivial
-  | t :: ts => ⟨HF_readView env t, HF_readViewL env ts⟩
+  | t :: ts => ⟨HF_readView t, HF_readViewL ts⟩
 /-- `HF_readView` at an optional term. -/
-theorem HF_readViewO (env : Nat → Bool) : ∀ o : Option Term, HFO (readViewO env o)
+theorem HF_readViewO : ∀ o : Option Term, HFO (readViewO o)
   | none => trivial
-  | some t => HF_readView env t
+  | some t => HF_readView t
 /-- `HF_readView` at a slot. -/
-theorem HF_readViewS (env : Nat → Bool) : ∀ s : ObjectSlot, HFS (readViewS env s)
-  | .req t => HF_readView env t
-  | .optional t => HF_readView env t
+theorem HF_readViewS : ∀ s : ObjectSlot, HFS (readViewS s)
+  | .req t => HF_readView t
+  | .optional t => HF_readView t
 end
 
 
@@ -1699,29 +1706,22 @@ mutual
 /-- **The stored-side view reads each attribute that the term reads**, under an environment that
     reads at each index each attribute that the first environment reads.
 
-    The `refine` row that the view keeps has an inner term with no `held` under `env`, and each
-    variable that `env` flags free of `held` is a restriction of `Ω` (`Alg.EnvHeld`). So the term
-    and the view decode the attribute through restrictions of `Ω`, to one value
-    (`Alg.sub_denoteUnder`).
-    A `refine` whose inner term can hold a `held` drops its predicate, because the stage of the
-    view can decode where the stage of the term decodes through a `held`. -/
-theorem readLeE : ∀ (t : Term) (env : Nat → Bool) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
-    Alg.EnvHeld (S := dynSyn) env ρ → RowLe (Alg.AdmA t ρ) (Alg.AdmA (readView env t) ρ')
-  | .held t _ _ _, env, ρ, ρ', he, hs, hh => fun a h => by
+    The `refine` row that the view keeps has an inner term with no variable, so the environment
+    does not change the decode of the predicate (`denote_closed`). A `refine` over a variable
+    drops its predicate, because the stage of the view can decode where the stage of the term
+    decodes through a `held`. -/
+theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
+    RowLe (Alg.AdmA t ρ) (Alg.AdmA (readView t) ρ')
+  | .held t _ _ _, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
-      exact readLeE t env ρ ρ' he hs hh a (Bool.and_eq_true_iff.mp h).1
-  | .var i, _, _, _, he, _, _ => fun a h => he i a h
-  | .mu b, env, ρ, ρ', he, hs, hh => fun a h => by
+      exact readLeE t ρ ρ' he hs a (Bool.and_eq_true_iff.mp h).1
+  | .var i, _, _, he, _ => fun a h => he i a h
+  | .mu b, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
       rw [Alg.AdmA_mu_unfold] at h ⊢
-      have hh' : ∀ n, Alg.EnvHeld (S := dynSyn) (Alg.flagsCons (Alg.hasHeldUnder (Alg.flagsCons false env) b) env)
-          (Alg.muStage (fun c => Alg.denote b (c :: ρ)) n :: ρ) := fun n =>
-        Alg.EnvHeld.cons (fun hf => Alg.sub_muStage_under Ω_topLaws hf hh n) hh
       have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote b (c :: ρ)) n).p w).isSome = true →
-          ((Alg.muStage (fun c => Alg.denote (readView (Alg.flagsCons (Alg.hasHeldUnder (Alg.flagsCons false env) b) env) b)
-            (c :: ρ')) n).p w).isSome = true) ∧
-          Sub (Alg.muStage (fun c => Alg.denote (readView (Alg.flagsCons (Alg.hasHeldUnder (Alg.flagsCons false env) b) env) b)
-            (c :: ρ')) n) Ω := by
+          ((Alg.muStage (fun c => Alg.denote (readView b) (c :: ρ')) n).p w).isSome = true) ∧
+          Sub (Alg.muStage (fun c => Alg.denote (readView b) (c :: ρ')) n) Ω := by
         intro n
         induction n with
         | zero => exact ⟨(fun _ hw => nomatch hw), Alg.sub_empty⟩
@@ -1729,51 +1729,34 @@ theorem readLeE : ∀ (t : Term) (env : Nat → Bool) (ρ ρ' : List Codec), Env
           have he' := EnvLeA.cons ih.1 he
           have hs' := EnvSub.cons ih.2 hs
           refine ⟨fun w hw => ?_,
-            Alg.sub_denoteIn Ω_topLaws _ (HF_readView _ b) _ hs'⟩
-          have := readLeE b _ _ _ he' hs' (hh' n) w (by rw [Alg.AdmA_eq_isSome]; exact hw)
+            Alg.sub_denoteIn Ω_topLaws (readView b) (HF_readView b) _ hs'⟩
+          have := readLeE b _ _ he' hs' w (by rw [Alg.AdmA_eq_isSome]; exact hw)
           rwa [Alg.AdmA_eq_isSome] at this
-      exact readLeE b _ _ _ (EnvLeA.cons (hst _).1 he) (EnvSub.cons (hst _).2 hs) (hh' _) a h
-  | .refine t p, env, ρ, ρ', he, hs, hh => fun a h => by
-      have ih := readLeE t env ρ ρ' he hs hh a (Bool.and_eq_true_iff.mp h).1
+      exact readLeE b _ _ (EnvLeA.cons (hst _).1 he) (EnvSub.cons (hst _).2 hs) a h
+  | .refine t p, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
       split
-      · exact ih
+      · exact readLeE t ρ ρ' he hs a (Bool.and_eq_true_iff.mp h).1
       · next hv =>
-        have hv : Alg.hasHeldUnder env t = false := by simpa using hv
-        have hr := (Bool.and_eq_true_iff.mp h).2
-        show (Alg.AdmA (readView env t) ρ' a &&
-          Alg.refineReads (readView env t) ρ' (Alg.Sem.eval p) a) = true
-        rw [Bool.and_eq_true]
-        refine ⟨ih, ?_⟩
-        have hsub := Alg.sub_denoteUnder Ω_topLaws t env ρ hv hh
-        have hsub' := Alg.sub_denoteIn Ω_topLaws _ (HF_readView env t) ρ' hs
-        rw [Alg.AdmA_eq_isSome] at ih
-        obtain ⟨v', hv'⟩ := Option.isSome_iff_exists.mp ih
-        unfold Alg.refineReads at hr ⊢
-        rw [hv']
-        cases hp : (Alg.denote t ρ).p a with
-        | none => rw [hp] at hr; exact nomatch hr
-        | some v =>
-          rw [hp] at hr
-          have := (hsub.2 a v hp).symm.trans (hsub'.2 a v' hv')
-          cases this
-          exact hr
-  | .list pre sp suf, env, ρ, ρ', he, hs, hh => fun a h => by
+        simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hv
+        rw [Alg.AdmA_eq_isSome] at h ⊢
+        rwa [← Alg.denote_closed (.refine t p) hv.2 ρ ρ']
+  | .list pre sp suf, ρ, ρ', he, hs => fun a h => by
       cases a with
       | l as =>
-        exact alignPL_mono (readLeEL pre env ρ ρ' he hs hh) (readLeEO sp env ρ ρ' he hs hh)
-          (readLeEL suf env ρ ρ' he hs hh) as h
+        exact alignPL_mono (readLeEL pre ρ ρ' he hs) (readLeEO sp ρ ρ' he hs)
+          (readLeEL suf ρ ρ' he hs) as h
       | _ => exact absurd h Bool.false_ne_true
-  | .object (.mk fs f w), env, ρ, ρ', he, hs, hh => fun a h => by
+  | .object (.mk fs f w), ρ, ρ', he, hs => fun a h => by
       cases a with
       | m keys g =>
         have h : (reqPresentT fs f keys &&
             objAdmV ⟨fs, fun k => Alg.AdmAField (f k) ρ⟩ (Alg.AdmAWild w ρ) keys g) = true := h
-        show (reqPresentT fs (fun k => readViewS env (f k)) keys &&
-            objAdmV ⟨fs, fun k => Alg.AdmAField (readViewS env (f k)) ρ'⟩
-              (Alg.AdmAWild (readViewO env w) ρ') keys g) = true
+        show (reqPresentT fs (fun k => readViewS (f k)) keys &&
+            objAdmV ⟨fs, fun k => Alg.AdmAField (readViewS (f k)) ρ'⟩
+              (Alg.AdmAWild (readViewO w) ρ') keys g) = true
         rw [Bool.and_eq_true] at h ⊢
-        refine ⟨?_, objAdmV_mono (fun k => readLeES (f k) env ρ ρ' he hs hh) ?_ h.2⟩
+        refine ⟨?_, objAdmV_mono (fun k => readLeES (f k) ρ ρ' he hs) ?_ h.2⟩
         · refine decide_eq_true fun k => ?_
           have := of_decide_eq_true h.1 k
           beta_reduce
@@ -1781,43 +1764,39 @@ theorem readLeE : ∀ (t : Term) (env : Nat → Bool) (ρ ρ' : List Codec), Env
           cases s <;> simp_all [readViewS]
         · cases w with
           | none => exact .none
-          | some t => exact .some (readLeE t env ρ ρ' he hs hh)
+          | some t => exact .some (readLeE t ρ ρ' he hs)
       | _ => exact absurd h Bool.false_ne_true
-  | .union os, env, ρ, ρ', he, hs, hh => fun a h => anyP_mono (readLeEL os env ρ ρ' he hs hh) a h
-  | .set t, env, ρ, ρ', he, hs, hh => fun a h => by
+  | .union os, ρ, ρ', he, hs => fun a h => anyP_mono (readLeEL os ρ ρ' he hs) a h
+  | .set t, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
       exact setCodec_p_mono (c := Alg.denote t ρ)
-        (Alg.sub_denoteIn Ω_topLaws _ (HF_readView env t) ρ' hs)
+        (Alg.sub_denoteIn Ω_topLaws _ (HF_readView t) ρ' hs)
         (fun w hw => by
-          have := readLeE t env ρ ρ' he hs hh w (by rw [Alg.AdmA_eq_isSome]; exact hw)
+          have := readLeE t ρ ρ' he hs w (by rw [Alg.AdmA_eq_isSome]; exact hw)
           rwa [Alg.AdmA_eq_isSome] at this) h
-  | .prim _, _, _, _, _, _, _ => fun _ h => h
-  | .opaq, _, _, _, _, _, _ => fun _ h => h
-  | .never, _, _, _, _, _, _ => fun _ h => h
+  | .prim _, _, _, _, _ => fun _ h => h
+  | .opaq, _, _, _, _ => fun _ h => h
+  | .never, _, _, _, _ => fun _ h => h
 /-- `readLeE` over a list. -/
-theorem readLeEL : ∀ (ts : List Term) (env : Nat → Bool) (ρ ρ' : List Codec), EnvLeA ρ ρ' →
-    EnvSub ρ' → Alg.EnvHeld (S := dynSyn) env ρ →
-    List.Forall₂ RowLe (Alg.AdmAList ts ρ) (Alg.AdmAList (readViewL env ts) ρ')
-  | [], _, _, _, _, _, _ => .nil
-  | t :: ts, env, ρ, ρ', he, hs, hh =>
-      .cons (readLeE t env ρ ρ' he hs hh) (readLeEL ts env ρ ρ' he hs hh)
+theorem readLeEL : ∀ (ts : List Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
+    List.Forall₂ RowLe (Alg.AdmAList ts ρ) (Alg.AdmAList (readViewL ts) ρ')
+  | [], _, _, _, _ => .nil
+  | t :: ts, ρ, ρ', he, hs => .cons (readLeE t ρ ρ' he hs) (readLeEL ts ρ ρ' he hs)
 /-- `readLeE` at an optional term. -/
-theorem readLeEO : ∀ (o : Option Term) (env : Nat → Bool) (ρ ρ' : List Codec), EnvLeA ρ ρ' →
-    EnvSub ρ' → Alg.EnvHeld (S := dynSyn) env ρ →
-    Option.Rel RowLe (Alg.AdmAOptT o ρ) (Alg.AdmAOptT (readViewO env o) ρ')
-  | none, _, _, _, _, _, _ => .none
-  | some t, env, ρ, ρ', he, hs, hh => .some (readLeE t env ρ ρ' he hs hh)
+theorem readLeEO : ∀ (o : Option Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
+    Option.Rel RowLe (Alg.AdmAOptT o ρ) (Alg.AdmAOptT (readViewO o) ρ')
+  | none, _, _, _, _ => .none
+  | some t, ρ, ρ', he, hs => .some (readLeE t ρ ρ' he hs)
 /-- `readLeE` at a slot. -/
-theorem readLeES : ∀ (s : ObjectSlot) (env : Nat → Bool) (ρ ρ' : List Codec), EnvLeA ρ ρ' →
-    EnvSub ρ' → Alg.EnvHeld (S := dynSyn) env ρ →
-    RowLe (Alg.AdmAField s ρ) (Alg.AdmAField (readViewS env s) ρ')
-  | .req t, env, ρ, ρ', he, hs, hh => readLeE t env ρ ρ' he hs hh
-  | .optional t, env, ρ, ρ', he, hs, hh => readLeE t env ρ ρ' he hs hh
+theorem readLeES : ∀ (s : ObjectSlot) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
+    RowLe (Alg.AdmAField s ρ) (Alg.AdmAField (readViewS s) ρ')
+  | .req t, ρ, ρ', he, hs => readLeE t ρ ρ' he hs
+  | .optional t, ρ, ρ', he, hs => readLeE t ρ ρ' he hs
 end
 
 /-- **The stored-side view reads each attribute that the term reads.** -/
-theorem readLe_of (t : Term) : RowLe (AdmA t) (AdmA (readView (fun _ => true) t)) :=
-  readLeE t _ [] [] (fun _ _ h => h) EnvSub.nil (fun _ h => nomatch h)
+theorem readLe_of (t : Term) : RowLe (AdmA t) (AdmA (readView t)) :=
+  readLeE t [] [] (fun _ _ h => h) EnvSub.nil
 
 
 /-! ## The orthogonal row -/
@@ -1864,6 +1843,20 @@ example :
     certPair (.set (.refine (.held .string (.union [.string, .boolean]) id id)
         (.closure fun _ => true)))
       (.set (.held .number (.union [.number, .boolean]) id id)) = false := by
+  decide
+
+/-- **The certificate refuses a separated pair at a data predicate over a variable.** The pair is
+    separated, because the meet answers the bottom: `mu (refine (union [string, array (var 0)])
+    {a})` admits the string `"a"` and no other string, and `refine string {b}` admits the string
+    `"b"` alone. The stored view drops `{a}`, because the inner term holds a variable. So the
+    stored views share each string, and `certPair` answers `false`. The host builds no data
+    predicate over a variable, so no observable distinguishes this view from a finer view that
+    keeps `{a}`. A finer view becomes necessary only when the host builds such a term. -/
+example :
+    certPair (.mu (.refine (.union [.string, .array (.var 0)]) (.members .string (NEFinset.of "a" ∅))))
+        (.refine .string (.members .string (NEFinset.of "b" ∅))) = false ∧
+      meetNever (.mu (.refine (.union [.string, .array (.var 0)]) (.members .string (NEFinset.of "a" ∅))))
+        (.refine .string (.members .string (NEFinset.of "b" ∅))) = true := by
   decide
 
 /-- **A certified union is separated**, which is the premise of `pairwiseCompat_of_separated`

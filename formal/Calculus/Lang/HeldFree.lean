@@ -174,86 +174,36 @@ def HFO : Option (Term S) → Prop
 end
 
 
-/-- Flags that are `false` at each variable stay so under a binder with the flag `false`. -/
-theorem flagsCons_false {env : Nat → Bool} (h : ∀ i, env i = false) :
-    ∀ i, flagsCons false env i = false
-  | 0 => rfl
-  | i + 1 => h i
-
 mutual
-/-- **A held-free term has no `held` under flags that are `false` at each variable.** -/
-theorem hasHeldUnder_of_HF : ∀ t : Term S, HF t → ∀ env : Nat → Bool, (∀ i, env i = false) →
-    hasHeldUnder env t = false
-  | .held _ _ _ _, h, _, _ => h.elim
-  | .var i, _, _, he => he i
-  | .refine t _, h, env, he => hasHeldUnder_of_HF t h env he
-  | .mu b, h, env, he => hasHeldUnder_of_HF b h _ (flagsCons_false he)
-  | .list pre sp suf, ⟨h1, h2, h3⟩, env, he => by
-      simp only [hasHeldUnder, Bool.or_eq_false_iff]
-      exact ⟨⟨hasHeldUnderL_of_HFL pre h1 env he, hasHeldUnderO_of_HFO sp h2 env he⟩,
-        hasHeldUnderL_of_HFL suf h3 env he⟩
-  | .object (.mk fs f w), ⟨hf, hw⟩, env, he => by
-      simp only [hasHeldUnder, hasHeldUnderB, Bool.or_eq_false_iff, decide_eq_false_iff_not,
-        not_exists]
-      exact ⟨fun k => by rw [hasHeldUnderS_of_HFS (f k) (hf k) env he]; exact Bool.false_ne_true,
-        hasHeldUnderO_of_HFO w hw env he⟩
-  | .union os, h, env, he => hasHeldUnderL_of_HFL os h env he
-  | .set t, h, env, he => hasHeldUnder_of_HF t h env he
-  | .prim _, _, _, _ | .opaq, _, _, _ | .never, _, _, _ => rfl
-/-- …in a list. -/
-theorem hasHeldUnderL_of_HFL : ∀ ts : List (Term S), HFL ts → ∀ env : Nat → Bool,
-    (∀ i, env i = false) → hasHeldUnderL env ts = false
-  | [], _, _, _ => rfl
-  | t :: ts, ⟨h1, h2⟩, env, he => by
-      simp only [hasHeldUnderL, Bool.or_eq_false_iff]
-      exact ⟨hasHeldUnder_of_HF t h1 env he, hasHeldUnderL_of_HFL ts h2 env he⟩
-/-- …in an optional term. -/
-theorem hasHeldUnderO_of_HFO : ∀ o : Option (Term S), HFO o → ∀ env : Nat → Bool,
-    (∀ i, env i = false) → hasHeldUnderO env o = false
-  | none, _, _, _ => rfl
-  | some t, h, env, he => hasHeldUnder_of_HF t h env he
-/-- …in a slot. -/
-theorem hasHeldUnderS_of_HFS : ∀ s : ObjectSlot S, HFS s → ∀ env : Nat → Bool,
-    (∀ i, env i = false) → hasHeldUnderS env s = false
-  | .req t, h, env, he => hasHeldUnder_of_HF t h env he
-  | .optional t, h, env, he => hasHeldUnder_of_HF t h env he
-end
-
-mutual
-/-- **A term with no `held` under some flags is held-free.** The flags only add a `held` at a
-    variable, so a test that answers `false` under any flags answers `false` at each `held`. -/
-theorem HF_of_hasHeldUnder : ∀ (t : Term S) (env : Nat → Bool), hasHeldUnder env t = false → HF t
-  | .held _ _ _ _, _, h => nomatch h
-  | .refine t _, env, h => HF_of_hasHeldUnder t env h
-  | .mu b, _, h => HF_of_hasHeldUnder b _ h
-  | .set t, env, h => HF_of_hasHeldUnder t env h
-  | .list pre sp suf, env, h => by
-      simp only [hasHeldUnder, Bool.or_eq_false_iff] at h
-      exact ⟨HFL_of_hasHeldUnderL pre env h.1.1, HFO_of_hasHeldUnderO sp env h.1.2,
-        HFL_of_hasHeldUnderL suf env h.2⟩
-  | .object (.mk fs f w), env, h => by
-      simp only [hasHeldUnder, hasHeldUnderB, Bool.or_eq_false_iff, decide_eq_false_iff_not,
+/-- **A term with no `held` is held-free.** `hasHeld` is the test the meet can run, and `HF` is
+    the premise `sub_denote` reads. -/
+theorem HF_of_hasHeld : ∀ t : Term S, hasHeld t = false → HF t
+  | .held _ _ _ _, h => nomatch h
+  | .refine t _, h => HF_of_hasHeld t h
+  | .mu b, h => HF_of_hasHeld b h
+  | .set t, h => HF_of_hasHeld t h
+  | .list pre sp suf, h => by
+      simp only [hasHeld, Bool.or_eq_false_iff] at h
+      exact ⟨HFL_of_hasHeldL pre h.1.1, HFO_of_hasHeldO sp h.1.2, HFL_of_hasHeldL suf h.2⟩
+  | .object (.mk fs f w), h => by
+      simp only [hasHeld, hasHeldB, Bool.or_eq_false_iff, decide_eq_false_iff_not,
         not_exists] at h
-      exact ⟨fun k => HFS_of_hasHeldUnderS (f k) env (by simpa using h.1 k),
-        HFO_of_hasHeldUnderO w env h.2⟩
-  | .union os, env, h => HFL_of_hasHeldUnderL os env h
-  | .prim _, _, _ | .opaq, _, _ | .never, _, _ | .var _, _, _ => trivial
+      exact ⟨fun k => HFS_of_hasHeldS (f k) (by simpa using h.1 k), HFO_of_hasHeldO w h.2⟩
+  | .union os, h => HFL_of_hasHeldL os h
+  | .prim _, _ | .opaq, _ | .never, _ | .var _, _ => trivial
 /-- …in a list. -/
-theorem HFL_of_hasHeldUnderL : ∀ (ts : List (Term S)) (env : Nat → Bool),
-    hasHeldUnderL env ts = false → HFL ts
-  | [], _, _ => trivial
-  | t :: ts, env, h => by
-      simp only [hasHeldUnderL, Bool.or_eq_false_iff] at h
-      exact ⟨HF_of_hasHeldUnder t env h.1, HFL_of_hasHeldUnderL ts env h.2⟩
+theorem HFL_of_hasHeldL : ∀ ts : List (Term S), hasHeldL ts = false → HFL ts
+  | [], _ => trivial
+  | t :: ts, h => by
+      simp only [hasHeldL, Bool.or_eq_false_iff] at h
+      exact ⟨HF_of_hasHeld t h.1, HFL_of_hasHeldL ts h.2⟩
 /-- …in an optional term. -/
-theorem HFO_of_hasHeldUnderO : ∀ (o : Option (Term S)) (env : Nat → Bool),
-    hasHeldUnderO env o = false → HFO o
-  | none, _, _ => trivial
-  | some t, env, h => HF_of_hasHeldUnder t env h
+theorem HFO_of_hasHeldO : ∀ o : Option (Term S), hasHeldO o = false → HFO o
+  | none, _ => trivial
+  | some t, h => HF_of_hasHeld t h
 /-- …in a slot. -/
-theorem HFS_of_hasHeldUnderS : ∀ (s : ObjectSlot S) (env : Nat → Bool),
-    hasHeldUnderS env s = false → HFS s
-  | .req t, env, h | .optional t, env, h => HF_of_hasHeldUnder t env h
+theorem HFS_of_hasHeldS : ∀ s : ObjectSlot S, hasHeldS s = false → HFS s
+  | .req t, h | .optional t, h => HF_of_hasHeld t h
 end
 
 variable [Sem S]
@@ -273,109 +223,78 @@ structure TopLaws (S : Syn) [Sem S] : Prop where
   set : ∀ L ∈ Sem.set (S := S), ∀ c : S.C, Sub c (Sem.top (S := S)) →
     Sub (L.lift c) (Sem.top (S := S))
 
-/-- Each variable that `env` flags free of `held` denotes a restriction of the top. -/
-def EnvHeld (env : Nat → Bool) (ρ : List S.C) : Prop :=
-  ∀ i, env i = false → Sub (envAt ρ i) (Sem.top (S := S))
-
-/-- A binder whose flag is `false` only where its codec is a restriction of the top. -/
-theorem EnvHeld.cons {flag : Bool} {c : S.C} {env : Nat → Bool} {ρ : List S.C}
-    (hc : flag = false → Sub c (Sem.top (S := S))) (h : EnvHeld env ρ) :
-    EnvHeld (flagsCons flag env) (c :: ρ)
-  | 0, hf => hc hf
-  | i + 1, hf => h i hf
-
 mutual
-/-- **Confluence.** The denotation of a term with no `held` under the flags is a restriction of
-    the top, on both halves, over an environment whose flagged variables are restrictions of the
-    top. A variable is a possible `held` only where its flag says so. -/
-theorem sub_denoteUnder (hT : TopLaws S) : ∀ (t : Term S) (env : Nat → Bool) (ρ : List S.C),
-    hasHeldUnder env t = false → EnvHeld env ρ → Sub (denote t ρ) (Sem.top (S := S))
-  | .prim g, _, _, _, _ => hT.ground g
-  | .opaq, _, _, _, _ => ⟨fun _ _ h => h, fun _ _ h => h⟩
-  | .never, _, _, _, _ => sub_empty
-  | .var i, _, _, h, henv => henv i h
-  | .set t, env, ρ, h, henv => by
+/-- **Confluence.** The denotation of a held-free term is a restriction of the top, on both
+    halves, over an environment of restrictions of the top. -/
+theorem sub_denoteIn (hT : TopLaws S) : ∀ t : Term S, HF t → ∀ ρ : List S.C,
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (denote t ρ) (Sem.top (S := S))
+  | .prim g, _, _, _ => hT.ground g
+  | .opaq, _, _, _ => ⟨fun _ _ h => h, fun _ _ h => h⟩
+  | .never, _, _, _ => sub_empty
+  | .var i, _, _, henv => henv i
+  | .set t, h, ρ, henv => by
       simp only [denote]
       cases hL : Sem.set (S := S) with
       | none => exact sub_empty
-      | some L => exact hT.set L hL _ (sub_denoteUnder hT t env ρ h henv)
+      | some L => exact hT.set L hL _ (sub_denoteIn hT t h ρ henv)
   -- each stage is a restriction by the body's case at the stage before, and the limit reads a
   -- stage at each input
-  | .mu b, env, ρ, h, henv => by
+  | .mu b, h, ρ, henv => by
       have hs : ∀ n, Sub (muStage (fun c => denote b (c :: ρ)) n) (Sem.top (S := S)) := fun n => by
         induction n with
         | zero => exact sub_empty
-        | succ n ih => exact sub_denoteUnder hT b _ (_ :: ρ) h (EnvHeld.cons (fun _ => ih) henv)
+        | succ n ih =>
+          exact sub_denoteIn hT b h (_ :: ρ) fun i => match i with
+            | 0 => ih
+            | i + 1 => henv i
       exact ⟨fun v a he => (hs _).1 v a he, fun a v hp => (hs _).2 a v hp⟩
-  | .held _ _ _ _, _, _, h, _ => nomatch h
-  | .refine t q, env, ρ, h, henv =>
-      sub_trans (sub_restrict_self _ _) (sub_denoteUnder hT t env ρ h henv)
-  | .list pre sp suf, env, ρ, h, henv => by
-      simp only [hasHeldUnder, Bool.or_eq_false_iff] at h
+  | .held _ _ _ _, h, _, _ => h.elim
+  | .refine t q, h, ρ, henv =>
+      sub_trans (sub_restrict_self _ _) (sub_denoteIn hT t h ρ henv)
+  | .list pre sp suf, ⟨h1, h2, h3⟩, ρ, henv => by
       simp only [denote]
       cases hL : Sem.list (S := S) with
       | none => exact sub_empty
       | some L =>
         exact sub_listCodec (hT.list L hL).1 (hT.list L hL).2
-          (sub_denoteList hT pre env ρ h.1.1 henv) (sub_denoteOpt hT sp env ρ h.1.2 henv)
-          (sub_denoteList hT suf env ρ h.2 henv)
-  | .object b, env, ρ, h, henv => sub_body hT b env ρ h henv
-  | .union os, env, ρ, h, henv => sub_altCodec (sub_denoteList hT os env ρ h henv) _
+          (sub_denoteList hT pre h1 ρ henv) (sub_denoteOpt hT sp h2 ρ henv)
+          (sub_denoteList hT suf h3 ρ henv)
+  | .object b, h, ρ, henv => sub_body hT b h ρ henv
+  | .union os, h, ρ, henv => sub_altCodec (sub_denoteList hT os h ρ henv) _
 /-- …at a body. -/
-theorem sub_body (hT : TopLaws S) : ∀ (b : Body S) (env : Nat → Bool) (ρ : List S.C),
-    hasHeldUnderB env b = false → EnvHeld env ρ → Sub (bodySem b ρ) (Sem.top (S := S))
-  | .mk fields f w, env, ρ, h, henv => by
-      simp only [hasHeldUnderB, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists] at h
+theorem sub_body (hT : TopLaws S) : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (bodySem b ρ) (Sem.top (S := S))
+  | .mk fields f w, ⟨hf, hw⟩, ρ, henv => by
       simp only [bodySem]
       cases hF : Sem.map (S := S) with
       | none => exact sub_empty
       | some F =>
         exact sub_objectCodec (hT.map F hF).1 (hT.map F hF).2 (wildSem_ne_drop _)
-          (fun k => sub_slot hT (f k) env ρ (by simpa using h.1 k) henv)
-          (sub_wild hT w env ρ h.2 henv)
+          (fun k => sub_slot hT (f k) (hf k) ρ henv) (sub_wild hT w hw ρ henv)
 /-- …at a slot. -/
-theorem sub_slot (hT : TopLaws S) : ∀ (s : ObjectSlot S) (env : Nat → Bool) (ρ : List S.C),
-    hasHeldUnderS env s = false → EnvHeld env ρ → Sub (fieldSem s ρ).codec (Sem.top (S := S))
-  | .req t, env, ρ, h, henv => sub_denoteUnder hT t env ρ h henv
-  | .optional t, env, ρ, h, henv => sub_denoteUnder hT t env ρ h henv
+theorem sub_slot (hT : TopLaws S) : ∀ s : ObjectSlot S, HFS s → ∀ ρ : List S.C,
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (fieldSem s ρ).codec (Sem.top (S := S))
+  | .req t, h, ρ, henv => sub_denoteIn hT t h ρ henv
+  | .optional t, h, ρ, henv => sub_denoteIn hT t h ρ henv
 /-- …at an open block. -/
-theorem sub_wild (hT : TopLaws S) : ∀ (w : Option (Term S)) (env : Nat → Bool) (ρ : List S.C),
-    hasHeldUnderO env w = false → EnvHeld env ρ →
-    ∀ c ∈ rcOf (wildSem w ρ), Sub c (Sem.top (S := S))
-  | none, _, _, _, _ => fun _ hc => nomatch hc
-  | some t, env, ρ, h, henv => fun c hc => by cases hc; exact sub_denoteUnder hT t env ρ h henv
+theorem sub_wild (hT : TopLaws S) : ∀ w : Option (Term S), HFO w → ∀ ρ : List S.C,
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ rcOf (wildSem w ρ), Sub c (Sem.top (S := S))
+  | none, _, _, _ => fun _ hc => nomatch hc
+  | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn hT t h ρ henv
 /-- …at a list of terms. -/
-theorem sub_denoteList (hT : TopLaws S) : ∀ (ts : List (Term S)) (env : Nat → Bool)
-    (ρ : List S.C), hasHeldUnderL env ts = false → EnvHeld env ρ →
-    ∀ c ∈ denoteList ts ρ, Sub c (Sem.top (S := S))
-  | [], _, _, _, _ => fun _ hc => nomatch hc
-  | t :: ts, env, ρ, h, henv => fun c hc => by
-      simp only [hasHeldUnderL, Bool.or_eq_false_iff] at h
+theorem sub_denoteList (hT : TopLaws S) : ∀ ts : List (Term S), HFL ts → ∀ ρ : List S.C,
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ denoteList ts ρ, Sub c (Sem.top (S := S))
+  | [], _, _, _ => fun _ hc => nomatch hc
+  | t :: ts, ⟨h1, h2⟩, ρ, henv => fun c hc => by
       rcases List.mem_cons.mp hc with rfl | hc
-      · exact sub_denoteUnder hT t env ρ h.1 henv
-      · exact sub_denoteList hT ts env ρ h.2 henv c hc
+      · exact sub_denoteIn hT t h1 ρ henv
+      · exact sub_denoteList hT ts h2 ρ henv c hc
 /-- …at an optional term. -/
-theorem sub_denoteOpt (hT : TopLaws S) : ∀ (o : Option (Term S)) (env : Nat → Bool)
-    (ρ : List S.C), hasHeldUnderO env o = false → EnvHeld env ρ →
-    ∀ c ∈ denoteOpt o ρ, Sub c (Sem.top (S := S))
-  | none, _, _, _, _ => fun _ hc => nomatch hc
-  | some t, env, ρ, h, henv => fun c hc => by cases hc; exact sub_denoteUnder hT t env ρ h henv
+theorem sub_denoteOpt (hT : TopLaws S) : ∀ o : Option (Term S), HFO o → ∀ ρ : List S.C,
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ denoteOpt o ρ, Sub c (Sem.top (S := S))
+  | none, _, _, _ => fun _ hc => nomatch hc
+  | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn hT t h ρ henv
 end
-
-/-- **Confluence, held-free.** The denotation of a held-free term is a restriction of the top,
-    over an environment of restrictions of the top: `sub_denoteUnder` at the flags that are
-    `false` at each variable. -/
-theorem sub_denoteIn (hT : TopLaws S) (t : Term S) (h : HF t) (ρ : List S.C)
-    (henv : ∀ i, Sub (envAt ρ i) (Sem.top (S := S))) : Sub (denote t ρ) (Sem.top (S := S)) :=
-  sub_denoteUnder hT t (fun _ => false) ρ (hasHeldUnder_of_HF t h _ fun _ => rfl)
-    (fun i _ => henv i)
-
-/-- **Each stage of a binder with no `held` under the flags is a restriction of the top.** -/
-theorem sub_muStage_under (hT : TopLaws S) {b : Term S} {env : Nat → Bool} {ρ : List S.C}
-    (h : hasHeldUnder (flagsCons false env) b = false) (henv : EnvHeld env ρ) :
-    ∀ n, Sub (muStage (fun c => denote b (c :: ρ)) n) (Sem.top (S := S))
-  | 0 => sub_empty
-  | n + 1 => sub_denoteUnder hT b _ _ h (EnvHeld.cons (fun _ => sub_muStage_under hT h henv n) henv)
 
 /-- **Confluence**, closed: the denotation of a held-free term is a restriction of the top. -/
 theorem sub_denote (hT : TopLaws S) (t : Term S) (h : HF t) : Sub (denote t) (Sem.top (S := S)) :=

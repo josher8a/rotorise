@@ -167,8 +167,8 @@ def famSet (a : Term S) (mt : Term S → Option (Term S)) : Term S → Option (T
       match mt y with
       | some z =>
           if z.isNever then some .never
-          else if hasHeldUnder (fun _ => false) a || hasHeldUnder (fun _ => false) y ||
-            hasHeldUnder (fun _ => false) z || z.hasVar then none
+          else if hasHeld a || hasHeld y ||
+            hasHeld z || z.hasVar then none
           else some (.set z)
       | none => none
   | .opaq => none

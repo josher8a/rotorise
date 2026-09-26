@@ -1664,9 +1664,9 @@ const readsBinder = (
 
 /**
  * **Whether the spelling of a term at a scope reads a variable, or holds a subterm of one of these
- * kinds**, the model's `hasVar` and `hasHeldUnder`. A thunk that returns a term the walk is inside
- * is a variable, and a thunk that throws is a free variable. The walk stops at each, so it ends
- * where the spelling ends.
+ * kinds**, the model's `hasVar` and `hasHeld`. A thunk that returns a term the walk is inside is a
+ * variable, and a thunk that throws is a free variable. The walk stops at each, so it ends where
+ * the spelling ends.
  */
 const spells = (
     t: Term,
