@@ -156,34 +156,6 @@ def famPrim [Leaf S] (g : S.Ground) : Term S → Option (Term S)
   | .opaq => if Leaf.primTop g then some (.prim g) else none
   | _ => some .never
 
-mutual
-/-- Whether a `held` occurs in the term. -/
-def hasHeld : Term S → Bool
-  | .held _ _ _ _ => true
-  | .refine t _ => hasHeld t
-  | .mu t => hasHeld t
-  | .list pre sp suf => hasHeldL pre || hasHeldO sp || hasHeldL suf
-  | .object b => hasHeldB b
-  | .union os => hasHeldL os
-  | .set t => hasHeld t
-  | .prim _ | .opaq | .never | .var _ => false
-/-- …in a list. -/
-def hasHeldL : List (Term S) → Bool
-  | [] => false
-  | t :: ts => hasHeld t || hasHeldL ts
-/-- …in an optional term. -/
-def hasHeldO : Option (Term S) → Bool
-  | none => false
-  | some t => hasHeld t
-/-- …in a body. -/
-def hasHeldB : Body S → Bool
-  | .mk fs f w => decide (∃ k : {k // k ∈ fs}, hasHeldS (f k) = true) || hasHeldO w
-/-- …in a slot. -/
-def hasHeldS : ObjectSlot S → Bool
-  | .req t => hasHeld t
-  | .optional t => hasHeld t
-end
-
 /-- **Two sets meet at their elements.** The meet of the elements is the element of the meet, and
     an element meet at the bottom is a set meet at the bottom, because a set former has no empty
     inhabitant. The row states a set only where the three terms are held-free: there each set
@@ -195,7 +167,8 @@ def famSet (a : Term S) (mt : Term S → Option (Term S)) : Term S → Option (T
       match mt y with
       | some z =>
           if z.isNever then some .never
-          else if hasHeld a || hasHeld y || hasHeld z || z.hasVar then none
+          else if hasHeldUnder (fun _ => false) a || hasHeldUnder (fun _ => false) y ||
+            hasHeldUnder (fun _ => false) z || z.hasVar then none
           else some (.set z)
       | none => none
   | .opaq => none

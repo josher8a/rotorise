@@ -872,8 +872,8 @@ theorem Adm_famSet [FormerAdm S] [Shapes S] (a : Term S) {mt : Term S → Option
             simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hh
             simp only [Option.some.injEq] at h; subst h
             rw [Adm_closed (.set z') hh.2 ρ'' [], hsa, hsy]
-            exact FormerAdm.set_meet a y z' (HF_of_hasHeld a hh.1.1.1) (HF_of_hasHeld y hh.1.1.2)
-              (HF_of_hasHeld z' hh.1.2)
+            exact FormerAdm.set_meet a y z' (HF_of_hasHeldUnder a _ hh.1.1.1)
+              (HF_of_hasHeldUnder y _ hh.1.1.2) (HF_of_hasHeldUnder z' _ hh.1.2)
               (fun u => by rw [← Adm_closed z' hh.2 ρ'' [], ← ha, ← hy]; exact hm u) v
       · exact nomatch h
   case opaq => simp [famSet] at h
