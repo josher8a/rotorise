@@ -53,26 +53,6 @@ bound, and `pairwiseCompat_of_separated` with `separated_of_unionOk` through the
 
 ---
 
-## The meet states a recursive term
-
-**The future state.** The meet has a row for `mu`. The certificate then certifies two recursive
-options where the meet reaches the bottom, and a recursive option beside a finite one. It no longer
-needs the occupancies to be apart.
-
-**What stands today.** `Term.meet` answers `none` for a `mu`, except against the bottom, and the
-host's `meetTerms(x, y)` answers nothing at a recursive thunk. So a pair with a recursive option is
-certified by `Orth1`, accepted beside the bottom, or refused. The corpus tree beside the corpus
-category is refused on both sides, because both write a map. The two closed objects share no value.
-
-**What decides it.** A corpus pair that a caller needs, that the occupancies refuse, and that a
-meet row could certify. A candidate row unfolds `mu` once against a finite term, by the fixed
-point (`muCodec_e_fix`, `muCodec_p_fix`). The row needs a proof that the meet's homomorphism
-(`Adm_meet`) survives the unfolding. Whether two recursive operands need a coinductive argument
-is open. A probe decides it. The probe writes a meet row for two `mu` terms, and proves `Adm_meet` by
-stage induction or prints the obstruction.
-
----
-
 ## The host reads held-freeness through a binder
 
 **The future state.** The host's `heldFree(t)` reads through a recursive thunk, as the model's `HF`

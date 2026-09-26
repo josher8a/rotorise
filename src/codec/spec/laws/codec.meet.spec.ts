@@ -20,6 +20,7 @@ import {
     object,
     opaque,
     optional,
+    refine,
     string,
     union,
     withLegacyRead,
@@ -121,6 +122,28 @@ describe('a factor whose admission is a function states no meet', () => {
         expect(meetTerms(termOf(opaque()), termOf(binary))).toEqual(
             termOf(binary),
         )
+    })
+})
+
+/**
+ * A refinement admits a part of what its inner term admits. So a refinement meets a partner at the
+ * bottom where the inner term does, whatever the predicate is. A caller's closure is not data, so
+ * every other meet of the closure refuses.
+ */
+describe('a refinement by a closure meets at the bottom where its inner term does', () => {
+    const nonEmpty = refine(string, (s: string): s is string => s.length > 0)
+
+    it('answers the bottom where the inner term meets the partner at the bottom', () => {
+        expect(meetTerms(termOf(nonEmpty), termOf(boolean))).toEqual(bottom)
+        expect(meetTerms(termOf(boolean), termOf(nonEmpty))).toEqual(bottom)
+        expect(meetTerms(termOf(nonEmpty), termOf(array(decimal)))).toEqual(
+            bottom,
+        )
+    })
+
+    it('refuses where the inner meet is not the bottom, because a closure is not data', () => {
+        expect(meetTerms(termOf(nonEmpty), termOf(string))).toBeUndefined()
+        expect(meetTerms(termOf(string('A')), termOf(nonEmpty))).toBeUndefined()
     })
 })
 

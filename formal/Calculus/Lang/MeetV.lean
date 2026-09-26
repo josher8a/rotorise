@@ -1005,7 +1005,15 @@ theorem Adm_meetSRight [Leaf S] [LeafAdm S] {x : Term S}
         rw [Adm_refineOf]
         simp only [Adm, ihw]
         simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
-      · exact absurd h (by simp)
+      · obtain ⟨w, hw, hz⟩ := Option.bind_eq_some_iff.mp h
+        split at hz
+        · next hn =>
+            cases hz
+            have ihw := Adm_meetSRight hf y p ρ' ρ'' w hp hw v
+            rw [eq_never_of_isNever hn, Adm_never] at ihw
+            have hr : Adm (.refine y q) ρ' v = (Adm y ρ' v && Sem.eval q v) := by simp [Adm]
+            rw [Adm_never, hr, ← Bool.and_assoc, ← ihw, Bool.false_and]
+        · exact nomatch hz
   | .union os, p, ρ', ρ'', _, hp, h, v => by
       obtain ⟨zs, hF, rfl⟩ := meetSRight_union h
       rw [Bool.and_comm]
@@ -1135,7 +1143,15 @@ theorem Adm_meet [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
           rw [Adm_refineOf]
           simp only [Adm, ihw]
           simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
-        · exact absurd h (by simp)
+        · obtain ⟨w, hw, hz⟩ := Option.bind_eq_some_iff.mp h
+          split at hz
+          · next hn =>
+              cases hz
+              have ihw := Adm_meet p x _ w hw ρ ρ' ρ'' hp v
+              rw [eq_never_of_isNever hn, Adm_never] at ihw
+              have hr : Adm (.refine x q) ρ v = (Adm x ρ v && Sem.eval q v) := by simp [Adm]
+              rw [Adm_never, hr, Bool.and_right_comm, ← ihw, Bool.false_and]
+          · exact nomatch hz
   | p, .union os, y, _, h, ρ, ρ', ρ'', hp, v => by
       cases y with
       | never =>

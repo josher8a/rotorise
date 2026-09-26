@@ -16,9 +16,10 @@ constructor: `some z` says a value satisfies `z` exactly when it satisfies both 
 never` says nothing satisfies both, and `none` is a
 refusal — the pair is one whose admission is a function rather than data, so no term states the
 intersection. `held` refuses on that ground at every partner, `opaq`
-refuses where its closed form cannot be compared with an exact held set, and `refine` refuses at a
-`closure`. A pair that admits a common value and stores it at two members has no meet either, and
-that is a refusal and not an empty one.
+refuses where its closed form cannot be compared with an exact held set, and `refine` at a
+`closure` refuses beside every partner that its inner term does not meet at the bottom. A pair
+that admits a common value and stores it at two members has no meet either, and that is a refusal
+and not an empty one.
 
 **The same on the read side, and `never` is the empty intersection of BOTH halves.** A pair
 disjoint on one half only is not disjoint. `Orth1` tests the write occupancies and the read
@@ -621,12 +622,11 @@ def meetNever' (x y : Term) : Bool := (meet' x y).any Term.isNever
     and the ranges meet at the bottom, so no value has two writers and no attribute has two
     readers. A `held` reaches the meet only through that row.
 
-    **The shape test is the second disjunct, because the meet cannot state every pair.** The
-    meet refuses a closure. A `refine` at a `closure` has an
-    admission that is a function, so the meet answers `none` beside every term but the bottom.
-    The occupancies read no predicate: `refine string (closure q)` beside
-    `list [] (some number) []` writes `str` against `list` and reads `S` against `L`, so
-    `Orth1` separates the pair where the meet cannot state the pair. -/
+    **The shape test is the second disjunct, and the occupancies read no predicate.** A `refine`
+    at a `closure` has an admission that is a function. The meet answers the bottom where the
+    inner term meets the partner at the bottom, and `none` elsewhere. So
+    `refine string (closure q)` beside `list [] (some number) []` meets at the bottom, because
+    `string` beside the list meets at the bottom. -/
 def certPair (x y : Term) : Bool := meetNever' x y || Orth1 x y
 
 /-- The certificate over a list of options, pair by pair. -/

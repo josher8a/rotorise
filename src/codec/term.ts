@@ -892,14 +892,14 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  * pairs of views must meet at the bottom. The model asks the row with no `held` guard, because
  * on a held-free term each view is the term itself, and the row is then the first row.
  *
- * **The two occupancies, both sides conjoined**, as the model's `Orth1`. The meet refuses a
- * closure, and the occupancies read no predicate, so `union([refine(string, isNumeral),
- * array(decimal)])` is certified here. A pair separated on one side only is not separated:
- * `union([decimal, number])` would write `'1.5'` to an `N` and could not read it back, because
- * both options store `N`. `opaque` answers every slot, so it separates from no option. The read
- * side of a `legacy` is unknown, and an unknown read side meets every read side: its older reader
- * is caller code whose domain the declaration cannot see. A `legacy` therefore separates from no
- * option by this row.
+ * **The two occupancies, both sides conjoined**, as the model's `Orth1`. The occupancies read no
+ * predicate. The meet refuses a closure beside a partner that its inner term does not meet at the
+ * bottom, so the first row certifies `union([refine(string, isNumeral), array(decimal)])`. A
+ * pair separated on one side only is not separated: `union([decimal, number])` would write
+ * `'1.5'` to an `N` and could not read it back, because both options store `N`. `opaque` answers
+ * every slot, so it separates from no option. The read side of a `legacy` is unknown, and an
+ * unknown read side meets every read side: its older reader is caller code whose domain the
+ * declaration cannot see. A `legacy` therefore separates from no option by this row.
  */
 export const separable = (x: Term, y: Term): boolean =>
     meetsAtBottom(x, y) || viewsApart(x, y) || occupanciesApart(x, y)
@@ -1478,7 +1478,7 @@ const meetWalk = (x: Term, y: Term, w: Walk): Term | undefined => {
     if (left.kind === 'union') return distribute(left.options, y, w)
     if (other.kind === 'term' && other.t.kind === 'union')
         return distribute(other.t.options, left, flip(w))
-    // a refinement conjoins: the predicate is data, so it rides on the meet of the inner terms
+    // a refinement conjoins: a predicate that is data rides on the meet of the inner terms
     if (left.kind === 'refine') return overRefinement(left.inner, left.q, y, w)
     // a constructor beside a variable refuses, and beside a recursive term the recursive term
     // unfolds
@@ -1778,9 +1778,12 @@ const overRefinement = (
     other: Term,
     w: Walk,
 ): Term | undefined => {
-    if (q.kind === 'closure') return undefined
     const z = meetWalk(inner, other, w)
-    return z === undefined ? undefined : refineOf(z, q)
+    if (z === undefined) return undefined
+    // a refinement admits a part of what its inner term admits, so an inner meet at the bottom is
+    // the bottom whatever the predicate is. A closure is not data, so any other meet refuses
+    if (q.kind === 'closure') return z.kind === 'never' ? never : undefined
+    return refineOf(z, q)
 }
 
 /**
