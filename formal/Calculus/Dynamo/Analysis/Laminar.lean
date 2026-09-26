@@ -236,36 +236,4 @@ termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
 
 
-/-- A held set of the option judgements is some option's own. -/
-theorem mem_typed_of_mem : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs →
-    ∀ T ∈ Ts, ∃ t ∈ os, ∃ μ, Typed t T μ
-  | _, _, _, .nil, _, hT => nomatch hT
-  | _, _, _, .cons hty hs, T, hT => by
-    rcases List.mem_cons.mp hT with rfl | hT'
-    · exact ⟨_, List.mem_cons_self, _, hty⟩
-    · obtain ⟨t', ht', μ', hty'⟩ := mem_typed_of_mem hs T hT'
-      exact ⟨t', List.mem_cons_of_mem _ ht', μ', hty'⟩
-
-/-- A `Forall₂` relates every right element to some left one. -/
-theorem forall₂_mem_right {α β : Type} {R : α → β → Prop} :
-    ∀ {as : List α} {bs : List β}, List.Forall₂ R as bs → ∀ {b}, b ∈ bs → ∃ a ∈ as, R a b
-  | _, _, .nil, _, hb => by simp at hb
-  | _, _, .cons hr hrest, b, hb => by
-      rcases List.mem_cons.mp hb with rfl | hb'
-      · exact ⟨_, List.mem_cons_self, hr⟩
-      · obtain ⟨a, ha, hra⟩ := forall₂_mem_right hrest hb'
-        exact ⟨a, List.mem_cons_of_mem _ ha, hra⟩
-
-/-- **The meet keeps derivability.** Each survivor of a derivable union's meet is derivable. -/
-theorem survivors {os zs ss : List Term} (hy : ∃ T μ, Typed (.union os) T μ)
-    (hT : List.Forall₂ (fun t w => (∃ T μ, Typed t T μ) → ∃ T μ, Typed w T μ) os zs)
-    (hs : ss.Sublist zs) : ∀ w ∈ ss, ∃ T μ, Typed w T μ := by
-  obtain ⟨T, μ, hty⟩ := hy
-  cases hty with
-  | union hL =>
-    intro w hw
-    obtain ⟨t, ht, hr⟩ := forall₂_mem_right hT (hs.subset hw)
-    obtain ⟨T', -, μ', hty'⟩ := TypedListμ.mem hL t ht
-    exact hr ⟨T', μ', hty'⟩
-
 end Calculus

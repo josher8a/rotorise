@@ -1554,7 +1554,7 @@ const literalAgainstBase = (lit: Literal, base: Term): Term | undefined => {
 }
 
 /**
- * **Two literals: the same value, or the bottom**, as the model's `Term.meetLit`. A `number`
+ * **Two literals: the same value, or the bottom**, as the model's `Ground.meetLit`. A `number`
  * literal is a {@link DynamoNumber}, normalised at construction, so its digits are the numeral the
  * emitter prints and the equality is the model's.
  */

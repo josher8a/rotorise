@@ -674,9 +674,10 @@ whose attributes are its own values, is a second universe under the same algebra
 language, the judgement and soundness take a universe signature as a parameter. DynamoDB and JSON
 are two instances of the signature.
 
-> ASPIRATION: the analyses are not parametric in the universe. The meet, the separation rows and
-> the certificate read the constructors of the DynamoDB carriers, so JSON has none of them. The
-> exactness rows are parametric, and JSON has them.
+> ASPIRATION: the analyses are not parametric in the universe. The meet and its theorems are
+> parametric: a universe supplies the leaf meet and the laws of its leaves and formers, and JSON
+> has them. The separation rows and the certificate read the constructors of the DynamoDB
+> carriers, so JSON has none of them. The exactness rows are parametric, and JSON has them.
 
 ---
 
