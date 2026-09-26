@@ -127,12 +127,11 @@ theorem Lawful.empty : Lawful member (Codec.empty : Codec V A M) where
     it does write, `e` and `p` are **mutually inverse** — a bijection, on the nose, with
     no quotient and no partiality anywhere in sight.
 
-    So §2's `e ∘ p ≠ id` is not a failure of the pair; it is a statement about the two
-    places the bijection is *extended*. Off `Can(c)` but inside `dom(p)`, `e ∘ p` is the
-    canonizer and the equivalence is `Ker` — the quotient half. Off `dom(e)` inside `T`,
-    there is simply nothing to write — the partial half. Every law in §2 beyond `(R)` is
-    about one of those two extensions, and nothing is about the bijection, because there
-    is nothing to say about it. -/
+    A lawful codec has no canonizer. `canon` sends every read attribute to itself, so
+    `dom(p) ⊆ Can(c)` and `Ker` is trivial on `dom(p)`. The quotient half, where `e ∘ p` is
+    a canonizer and the equivalence is `Ker`, belongs to `LawfulCore`, whose `canon` asks only
+    that a read value be writable: that is an alternate reader. Off `dom(e)` inside `T`, there
+    is nothing to write: that is the partial half. -/
 theorem Lawful.can_roundTrip {c : Codec V A M} (h : Lawful member c) {a : A} {t : V}
     (ha : Can c a) (hp : c.p a = some t) : c.e t = some a := by
   obtain ⟨t', ht'⟩ := ha
