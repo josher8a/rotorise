@@ -12,12 +12,14 @@ import {
     decimal,
     discriminatedUnion,
     dynamoNumber,
+    held,
     never,
     nullValue,
     number,
     object,
     opaque,
     optional,
+    refine,
     string,
     union,
     withLegacyRead,
@@ -282,6 +284,46 @@ describe('the declaration guard, where a term is what the guard reads', () => {
         expect(either.unsafeEncode(new Set(['a']) as never)).toEqual({
             SS: ['a'],
         })
+    })
+
+    /**
+     * **A caller set that no stored family types still occupies a set slot.** The two options
+     * below admit one caller value, `Set([true])`, and write the value to `SS` and to `NS`. The
+     * model has no set of booleans, so the model drops the slot. The host holds the value, so the
+     * occupancy keeps the slot, and the declaration refuses the pair.
+     */
+    it('refuses two sets that admit one caller set and write the set to two families', () => {
+        const isTrue = (b: boolean): b is true => b === true
+        const asText = held(string, boolean, {
+            encode: (b) => (b ? 'y' : 'n'),
+            decode: (s) => s === 'y',
+        })
+        const asNumber = held(dynamoNumber, boolean, {
+            encode: (b) => DynamoNumber.from(b ? '1' : '0'),
+            decode: (n) => String(n) === '1',
+        })
+        const x = refine(asText, isTrue).set()
+        const y = refine(asNumber, isTrue).set()
+        const one = new Set<true>([true])
+        expect(x.unsafeEncode(one)).toEqual({ SS: ['y'] })
+        expect(y.unsafeEncode(one)).toEqual({ NS: ['1'] })
+        expect(() => union([x, y])).toThrow(CodecError)
+        expect(() => union([y, x])).toThrow(CodecError)
+    })
+
+    it('dispatches a caller set that no stored family types to the set option', () => {
+        const isTrue = (b: boolean): b is true => b === true
+        const asText = held(string, boolean, {
+            encode: (b) => (b ? 'y' : 'n'),
+            decode: (s) => s === 'y',
+        })
+        const flags = union([refine(asText, isTrue).set(), string])
+        expect(flags.unsafeEncode(new Set<true>([true]))).toEqual({ SS: ['y'] })
+    })
+
+    it('declares two sets and two lists whose element families do not meet', () => {
+        expect(() => union([string.set(), dynamoNumber.set()])).not.toThrow()
+        expect(() => union([array(string), array(dynamoNumber)])).not.toThrow()
     })
 
     /**
