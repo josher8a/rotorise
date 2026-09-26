@@ -15,7 +15,7 @@ variables, and a `mu` builds its stages from the body's soundness at the stage b
 `soundness` is the closed case.
 
 The proofs are `Alg.soundnessIn`, `Alg.typed_TSub` and `Alg.carrier_denote`, for every universe.
-Each theorem here states the generic one at the DynamoDB signature, through `denote_eq_alg`.
+Each theorem here states the generic one at the DynamoDB signature.
 -/
 
 namespace Calculus
@@ -44,7 +44,7 @@ theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy 
     whose set obligation is `SetElem`. -/
 abbrev Obligations : Term → optParam (List Codec) [] → Prop := @Alg.Obligations dynSyn _
 
-export Alg (ObligationsBody ObligationsField ObligationsWild ObligationsList ObligationsOpt)
+export Alg (ObligationsList)
 
 /-! ### The companions, as the quantifiers the rest of the file speaks in
 
@@ -68,7 +68,7 @@ theorem refine {t q ρ} (h : Obligations (.refine t q) ρ) : Obligations t ρ :=
 
 /-- §3 `(set)`: the element's premises, and the DynamoDB set rule. -/
 theorem set {t ρ} (h : Obligations (.set t) ρ) : Obligations t ρ ∧ SetElem (denote t ρ) :=
-  ⟨h.1, by rw [denote_eq_alg]; exact h.2⟩
+  ⟨h.1, h.2⟩
 
 theorem tuple {ts tail} (h : Obligations (.tuple ts tail)) :
     (∀ t ∈ ts, Obligations t) ∧ (∀ t ∈ tail, Obligations t) :=
@@ -82,20 +82,16 @@ theorem list {pre sp suf ρ} (h : Obligations (.list pre sp suf) ρ) :
 /-- §3 `(held)`: the subterm's premises, and the iso cancelling on the carriers. -/
 theorem held {t P f g ρ} (h : Obligations (.held t P f g) ρ) :
     Obligations t ρ ∧ IsoCancels (denote t ρ) f g :=
-  ⟨h.1, by rw [denote_eq_alg]; exact h.2⟩
+  ⟨h.1, h.2⟩
 
 /-- §5 `(union)`: one premise per option, and pairwise compatibility. -/
 theorem union {opts ρ} (h : Obligations (.union opts) ρ) :
     (∀ t ∈ opts, Obligations t ρ) ∧ PairwiseCompat opts ρ :=
-  ⟨obligationsList_iff.mp h.1, fun s hs t ht => by
-    rw [denote_eq_alg, denote_eq_alg]; exact h.2 s hs t ht⟩
+  ⟨obligationsList_iff.mp h.1, h.2⟩
 
 /-- A binder's premises: the body's, at each stage whose stage before is lawful. -/
 theorem mu {b ρ} (h : Obligations (.mu b) ρ) : ∀ n, Lawful (muStage (fun c => denote b (c :: ρ)) n) →
-    Obligations b (muStage (fun c => denote b (c :: ρ)) n :: ρ) := by
-  rw [show (fun c => denote b (c :: ρ)) = fun c => Alg.denote b (c :: ρ) from
-    funext fun c => denote_eq_alg b _]
-  exact h
+    Obligations b (muStage (fun c => denote b (c :: ρ)) n :: ρ) := h
 
 end Obligations
 
@@ -107,7 +103,7 @@ theorem lawful_base (k : GroundKind) : Lawful (denote (.base k)) := lawful_baseC
 /-- One where there were two, at every base rather than the two commonest. -/
 theorem lawful_literal (k : GroundKind) (x : k.Carrier) :
     Lawful (denote (.literal k x)) := by
-  simp only [denote]; exact lawful_literalCodec k x
+  simp only [denote_rows]; exact lawful_literalCodec k x
 
 /-! ## Inversion and dispatch helpers -/
 
@@ -119,41 +115,15 @@ theorem TypedListM.forall : ∀ {ts Ts}, TypedListM ts Ts →
       · exact ⟨_, h⟩
       · exact TypedListM.forall hs t ht'
 
-/-- The DynamoDB member index is the generic one at `dynSem`. -/
-theorem μSyn_eq_alg : ∀ t : Term, μSyn t = Alg.μSyn t
-  | .base _ | .literal _ _ | .list _ _ _ | .opaq | .var _ | .mu _ | .object _ | .never => rfl
-  | .set t => by
-      show (μSyn t).bind setMember = (Alg.μSyn t).bind setMember
-      rw [μSyn_eq_alg t]
-  | .held t _ _ _ => μSyn_eq_alg t
-  | .refine t _ => μSyn_eq_alg t
-  | .union opts => by
-      show unanimous (μSynList opts) = unanimous (Alg.μSynList opts)
-      rw [μSynList_eq_alg opts]
-where
-  μSynList_eq_alg : ∀ ts : List Term, μSynList ts = Alg.μSynList ts
-    | [] => rfl
-    | t :: ts => by
-        show μSyn t :: μSynList ts = Alg.μSyn t :: Alg.μSynList ts
-        rw [μSyn_eq_alg t, μSynList_eq_alg ts]
-
-/-- Typing's member index is the syntactic one — exactly, both sides. -/
-theorem typed_μSyn {t T μ} (h : Typed t T μ) : μSyn t = μ :=
-  (μSyn_eq_alg t).trans (Alg.typed_μSyn h)
 
 /-! ## The theorem
 
 `Alg.soundnessIn` at the DynamoDB signature. -/
 
-/-- Soundness over an environment: every term whose obligations hold at `ρ`, and whose free
-    variables `ρ` gives lawful codecs, satisfies retract, canon and writes. -/
-theorem soundnessIn {t T μ} (ρ : List Codec) (h : Typed t T μ) (hob : Obligations t ρ)
-    (henv : ∀ i, Lawful (envAt ρ i)) : Lawful (denote t ρ) := by
-  rw [denote_eq_alg]; exact Alg.soundnessIn ρ h hob henv
 
 /-- Soundness: every closed term whose obligations hold satisfies retract, canon and writes. -/
 theorem soundness {t T μ} (h : Typed t T μ) (hob : Obligations t) : Lawful (denote t) :=
-  soundnessIn [] h hob fun _ => Lawful.empty
+  Alg.soundnessIn [] h hob fun _ => Lawful.empty
 
 /-! ## The denotation's held set is the judgement's
 
@@ -309,26 +279,19 @@ theorem unionMT_of_mem : ∀ {opts : List Term} {Ts}, TypedListM opts Ts →
         unionMT_of_mem hs (fun x hx => ih x (List.mem_cons_of_mem _ hx)) v T hT' hv
       exact ⟨t'', List.mem_cons_of_mem _ ht'', hd⟩
 
-/-- The denotation's held set is inside the judgement's. -/
-theorem typed_TSub {t T μ} (h : Typed t T μ) (v : Value) (hv : (denote t).T v) : T v :=
-  Alg.typed_TSub h v (by rw [← denote_eq_alg]; exact hv)
 
-/-- Every derivable term denotes a pair **on its carrier** — §3's `e : T ⇀ 𝔸`,
-    `p : 𝔸 ⇀ T`. -/
-theorem carrier_denote {t T μ} (h : Typed t T μ) (hob : Obligations t) : Carrier (denote t) := by
-  rw [denote_eq_alg]; exact Alg.carrier_denote h hob
 
 /-- §3's `e : T ⇀ 𝔸`, at the judgement's own index: a derivable term writes only
     values of the held set it names. -/
 theorem typed_e_mem {t T μ} (h : Typed t T μ) (hob : Obligations t)
     {v a} (he : (denote t).e v = some a) : T v :=
-  typed_TSub h v ((carrier_denote h hob).domE he)
+  Alg.typed_TSub h v ((Alg.carrier_denote h hob).domE he)
 
 /-- §3's `p : 𝔸 ⇀ T`, at the judgement's own index: a derivable term reads only into
     the held set it names. -/
 theorem typed_p_mem {t T μ} (h : Typed t T μ) (hob : Obligations t)
     {a v} (hp : (denote t).p a = some v) : T v :=
-  typed_TSub h v ((carrier_denote h hob).ranP hp)
+  Alg.typed_TSub h v ((Alg.carrier_denote h hob).ranP hp)
 
 /-- §3 `(alternate reader)`: an alternate reader over a derivable term preserves the three
     core laws under its coherence condition. -/

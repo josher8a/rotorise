@@ -33,7 +33,6 @@ import Calculus.Dynamo.Alg.Lawful
 import Calculus.Dynamo.Alg.Frontier
 import Calculus.Dynamo.Lang.Term
 import Calculus.Dynamo.Alg.Recursion
-import Calculus.Dynamo.Lang.Guarded
 import Calculus.Dynamo.Lang.Denote
 import Calculus.Dynamo.Lang.Typing
 import Calculus.Dynamo.Analysis.Merge

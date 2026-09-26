@@ -133,7 +133,7 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
         exact fun x hx => typed_T_eq h' _ (hall x hx)
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       obtain ⟨vs, rfl, hall⟩ := hv
-      rw [denote, denoteList_eq, denoteOpt_eq, denoteList_eq]
+      rw [denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq]
       exact ⟨vs, rfl, alignL_T_of_HTupleL hp hs hf
         (fun t' _ _ _ hty w hw => typed_T_eq hty w hw)
         (fun t' _ _ _ hty w hw => typed_T_eq hty w hw)
@@ -176,7 +176,7 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
       obtain ⟨T', hT', hTv⟩ := hv
       obtain ⟨tx, htx, hd⟩ :=
         unionT_of_mem h' (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) v T' hT' hTv
-      simp only [denote, denoteList_eq]
+      simp only [denote_rows, denoteList_eq]
       refine ⟨denote tx, ?_, ?_⟩
       · simp only [List.mem_map]; exact ⟨tx, htx, rfl⟩
       · exact hd
@@ -190,7 +190,7 @@ decreasing_by term_depth_wf
     `(denote t).T` cannot be read against the document it transcribes. What the identity buys
     is that the reading is now checked rather than advertised. -/
 theorem typed_T_identity {t T μ} (h : Typed t T μ) (v : Value) : (denote t).T v ↔ T v :=
-  ⟨typed_TSub h v, typed_T_eq h v⟩
+  ⟨Alg.typed_TSub h v, typed_T_eq h v⟩
 
 /-! ## Which identity? §6's row is two of them
 

@@ -278,8 +278,8 @@ theorem decSet_isSome_bin {α : Type} {c : Codec} {inj : α → Attr} {S : NEFin
 `carriedCodec` and `entrywise` take the carriers as parameters. The aliases give them their names
 in this namespace. -/
 
-export Alg (carriedCodec carried_e carried_p lawfulCore_carried lawful_carried carrier_carried
-  entrywise lawful_entrywise carrier_entrywise)
+export Alg (carriedCodec carried_e lawful_carried carrier_carried entrywise lawful_entrywise
+  carrier_entrywise)
 
 /-! ### `array` (§3) — entrywise between `arr` and `L` -/
 
@@ -446,11 +446,9 @@ position by position over the codec row, exactly as they do for `array`. -/
 
 /- The positional theory takes the carriers as parameters. The aliases give it its names in this
    namespace. -/
-export Alg (align slots align_eq_zip slots_length slots_mem slots_all align_eq_some align_of_slots
-  zip_roundTrip zip_canon zip_canonS zip_domE zip_ranP tuple_retract slotsL alignL slotsL_length
-  slotsL_mem slotsL_all alignL_eq_some alignL_of_slotsL slotsL_nil_suf alignL_nil_suf
-  slotsL_split alignL_split alignL_of_split alignL_short alignL_eq_split list_retract
-  slots_spread traverse_replicate_zip alignL_spread mem_replicate_zip)
+export Alg (align slots slots_all align_eq_some align_of_slots zip_canonS zip_domE zip_ranP
+  tuple_retract slotsL alignL alignL_nil_suf alignL_split alignL_of_split traverse_replicate_zip
+  alignL_spread mem_replicate_zip)
 
 def tupleCodec (cs : List Codec) (tail : Option Codec) : Codec :=
   { T := fun v => match v with

@@ -23,7 +23,7 @@ def AdmIff (t : Term) : Prop := ∀ T μ, Typed t T μ → ∀ v, T v ↔ Adm t 
 theorem AdmList_length (ts : List Term) : (AdmList ts).length = ts.length := by
   induction ts with
   | nil => rfl
-  | cons t ts ihx => simp only [AdmList, List.length_cons, ihx]
+  | cons t ts ihx => simp only [Adm_rows, List.length_cons, ihx]
 
 /-- A spread holds a list exactly where the spread's row admits each element. -/
 theorem htuple_nil_some_iff {t : Term} {T : Held} {μ} (hty : Typed t T μ) (ih : AdmIff t) :
@@ -41,22 +41,22 @@ theorem htuple_iff {tail : Option Term} {Tt} (hopt : TypedOpt tail Tt)
       ∀ vs, HTuple Ts Tt vs ↔ alignP (AdmList ts) (AdmOptT tail) vs = true
   | _, _, .nil, _, vs => by
       cases hopt with
-      | none => cases vs <;> simp [HTuple, alignP, AdmList, AdmOptT]
+      | none => cases vs <;> simp [HTuple, alignP, Adm_rows]
       | some hty => exact htuple_nil_some_iff hty (iht _ rfl) vs
-  | _, _, .cons _ _, _, [] => by simp [HTuple, alignP, AdmList]
+  | _, _, .cons _ _, _, [] => by simp [HTuple, alignP, Adm_rows]
   | _, _, .cons hty hs, ih, v :: vs => by
-      simp only [HTuple, AdmList, alignP, Bool.and_eq_true]
+      simp only [HTuple, Adm_rows, alignP, Bool.and_eq_true]
       rw [ih _ List.mem_cons_self _ _ hty v,
         htuple_iff hopt iht hs (fun t' h => ih t' (List.mem_cons_of_mem _ h)) vs]
 
 /-- The suffix's held set is `zipP` at terms whose held sets are their admissions. -/
 theorem zip_iff : ∀ {ts Ts}, TypedList ts Ts → (∀ t' ∈ ts, AdmIff t') →
     ∀ back, List.Forall₂ (fun (T : Held) v => T v) Ts back ↔ zipP (AdmList ts) back = true
-  | _, _, .nil, _, [] => by simp [AdmList, zipP]
-  | _, _, .nil, _, _ :: _ => by simp [AdmList, zipP]
-  | _, _, .cons _ _, _, [] => by simp [AdmList, zipP]
+  | _, _, .nil, _, [] => by simp [Adm_rows, zipP]
+  | _, _, .nil, _, _ :: _ => by simp [Adm_rows, zipP]
+  | _, _, .cons _ _, _, [] => by simp [Adm_rows, zipP]
   | _, _, .cons hty hs, ih, v :: vs => by
-      simp only [List.forall₂_cons, AdmList, zipP, Bool.and_eq_true]
+      simp only [List.forall₂_cons, Adm_rows, zipP, Bool.and_eq_true]
       rw [ih _ List.mem_cons_self _ _ hty v,
         zip_iff hs (fun t' h => ih t' (List.mem_cons_of_mem _ h)) vs]
 
@@ -99,7 +99,7 @@ theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectS
   have hF := fun k => typedField_adm (hfields k) (ihr k) (iho k)
   cases v with
   | map keys f =>
-    simp only [AdmBody, Bool.and_eq_true, valPresentT_req, objAdmV, decide_eq_true_eq]
+    simp only [Adm_rows, Bool.and_eq_true, valPresentT_req, objAdmV, decide_eq_true_eq]
     have hpres : (∀ k : {k // k ∈ fields}, (bind k).1 = true → k.1 ∈ keys) ↔
         (∀ k : {k // k ∈ fields}, ObjectSlot.isReq (ff k) = true → k.1 ∈ keys) :=
       forall_congr' fun k => by rw [(hF k).1]
@@ -116,7 +116,7 @@ theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectS
         cases hrest with
         | none => exact ⟨fun ⟨_, h, _⟩ => (nomatch h), fun h => (nomatch h)⟩
         | @some t' T' μ' hty =>
-          simp only [AdmWild, Option.some.injEq, exists_eq_left']
+          simp only [Adm_rows, Option.some.injEq, exists_eq_left']
           exact ihw t' rfl _ _ hty _
     constructor
     · rintro ⟨keys', f', heq, hreq, hall⟩
@@ -124,7 +124,7 @@ theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectS
       exact ⟨hpres.mp hreq, fun k => (hent k).mp (hall k)⟩
     · rintro ⟨hreq, hall⟩
       exact ⟨keys, f, rfl, hpres.mpr hreq, fun k => (hent k).mpr (hall k)⟩
-  | _ => simp [HObject, AdmBody]
+  | _ => simp [HObject, Adm_rows]
 
 /-- **`HSet` is the set row of `Adm`, under the set's obligations.** The element's held set is its
     admission, and a lawful element whose member is `S`, `N` or `B` writes a set exactly where it
@@ -171,7 +171,7 @@ theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed t T μ) (hob : Obligati
       fun he x hx => by
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
         exact (hin _).mpr (encSet_elem ha x hx)⟩
-  | _ => simp [HSet, Adm, setCodec]
+  | _ => simp [HSet, Adm_rows, setCodec]
 
 /-- `HOpaque` is `opaque`'s admission: `opaque`'s held set is its write domain, and
     `opaq_T_identity` names that set. -/
@@ -197,24 +197,24 @@ set_option linter.unreachableTactic false in
 theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → Obligations t → ∀ v, T v ↔ Adm t v = true
   | t, T, μ, h, hob, v => by
     cases h with
-    | base k => cases k <;> cases v <;> simp [Adm, inBase, stringCodec, numberCodec,
+    | base k => cases k <;> cases v <;> simp [Adm_rows, inBase, stringCodec, numberCodec,
         booleanCodec, binaryCodec, nullCodec, -Subtype.exists]
-    | literal k x => cases k <;> cases v <;> simp [HLit, Adm, AdmLit, inL, GroundKind.toValue]
-    | never => simp [HNever, Adm]
+    | literal k x => cases k <;> cases v <;> simp [HLit, Adm_rows, AdmLit, inL, GroundKind.toValue]
+    | never => simp [HNever, Adm_rows]
     | opaq => exact hopaque_adm v
-    | var _ => simp [HNever, Adm]
+    | var _ => simp [HNever, Adm_rows]
     -- a `mu`'s held set is its write domain, which is its row
     | mu _ _ => exact Iff.rfl
     | @set t' T' μ' h' => exact hset_iff h' hob (typed_T_adm h' hob.1) v
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       cases v with
       | arr vs =>
-        simp only [HList, Adm, Value.arr.injEq, exists_eq_left']
+        simp only [HList, Adm_rows, Value.arr.injEq, exists_eq_left']
         exact htupleL_iff hp hs hf
           (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).1 t' ht') w)
           (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.1 t' ht') w)
           (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.2 t' ht') w) vs
-      | _ => simp [HList, Adm]
+      | _ => simp [HList, Adm_rows]
     | @held t' I' μ' P f g h' =>
       exact (and_congr (typed_T_adm h' hob.1 (f v)) (Adm_exact P v).symm).trans
         Bool.and_eq_true_iff.symm

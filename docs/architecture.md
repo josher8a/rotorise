@@ -125,7 +125,7 @@ leaf answer is exact. `FormerAdm` and `FormerAdmA` say that the set former carri
 to a set meet, and that two formers in different slots share no value and no attribute. At
 DynamoDB, a leaf law is a fact about `inBase` and `inL`, a set law is a fact about `setCodec`, and a
 disjointness law is an occupancy fact through `Orth1`. The DynamoDB theorems, such as `Adm_meet`
-and `AdmA_meet_both`, are one-line wrappers of the generic theorems. At JSON, two kinds meet where
+and `AdmA_meet`, state the generic theorems at the DynamoDB names. At JSON, two kinds meet where
 they are one kind, and each former law holds because the signature has no former and both sides
 admit nothing.
 
@@ -144,23 +144,25 @@ when the second term is lawful.
 **The instance names the generic declarations.** At DynamoDB, `Codec` and `Lawful` are
 abbreviations at the DynamoDB carriers, and `Term`, `Typed` and `Obligations` are abbreviations
 at `dynSyn`. A `match_pattern` abbreviation keeps each constructor spelling, such as
-`Term.string` and `Term.literal`. `Term.casesD` keeps the case tags `base` and `literal`. The
-cited DynamoDB theorems, such as `soundnessIn` and `carrier_denote`, are one-line wrappers of
-the generic theorems, through `denote_eq_alg`.
+`Term.string` and `Term.literal`. `Term.casesD` keeps the case tags `base` and `literal`. A
+cited DynamoDB theorem, such as `soundness` or `Adm_exact`, states the generic theorem at the
+DynamoDB names.
 
-**The DynamoDB `denote` states its own rows, and a theorem pins them.** A proof at DynamoDB reads
-`baseCodec`, `setCodec` and `listCodec` by name. So `denote` in `Denote.lean` is a mutual
-definition with one row for each constructor. A wrapper of `Alg.denote` cannot give those rows:
-`simp only [g]` unfolds the body of a wrapper `g`, and ignores the equations that the eqns
-attribute registers for `g`. `denote_eq_alg` proves the two functions equal, by one mutual
-theorem over the family. So a row that drifts from the generic row fails the build.
-`μSyn_eq_alg` pins the member index the same way.
+**The DynamoDB `denote` is the generic `denote`, and a simp set gives its rows.** `denote`,
+`μSyn`, `Adm`, `AdmA` and their companions are abbreviations of the generic functions, typed at
+`Term`. So a constructor argument such as `.base k` resolves in the DynamoDB namespace. A proof at
+DynamoDB reads `baseCodec`, `setCodec` and `listCodec` by name. A generic equation states a row
+through the signature, and `simp only [g]` unfolds an abbreviation `g` and reads no other
+equation. So each row at the DynamoDB constructors is a `rfl` lemma in a registered simp set:
+`denote_rows`, `μSyn_rows`, `Adm_rows` or `AdmA_rows`. A proof names the set where it named the
+function. `rw` matches the head symbol, so a lemma stated at an abbreviation does not rewrite the
+generic head. `exact` compares up to unfolding, and accepts both.
 
 **Exactness holds at every signature.** `Alg.Adm` and `Alg.AdmA` give a row per constructor, and
 `Alg.Adm_exact` and `Alg.AdmA_exact` prove each row equal to the domain of `denote t`, from the
 exactness of the primitive rows alone. A universe states the primitive rows, so a verdict at a
-primitive reduces without the codec. The DynamoDB `Adm` and `AdmA` state their own rows, for the
-reason that `denote` does, and `Adm_eq_alg` and `AdmA_eq_alg` pin each row to the generic row.
+primitive reduces without the codec. The DynamoDB `Adm` and `AdmA` are the generic rows, and
+read their DynamoDB rows from a simp set, as `denote` does.
 
 **The other analyses are DynamoDB tables.** `Meet`, `Orthogonality`, `Separation`, `Slice` and
 the certificate read the constructors of the DynamoDB carriers. No generic form of them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
@@ -234,7 +236,7 @@ error but a silent "everything": the analysis stays sound and stops saying anyth
 | Companion | For `Body` | Why it is owed |
 | --- | --- | --- |
 | a depth clause | `Body.depth` | the termination measure must see through it |
-| a denotation clause | `bodySem`, generic, with its DynamoDB row pinned by `bodySem_eq_alg` | `denote` must dispatch with no case split at the use site |
+| a denotation clause | `bodySem`, generic, with its DynamoDB row in `denote_rows` | `denote` must dispatch with no case split at the use site |
 | a spec projection | `Body.spec` | a slice reads an object option's names and literals off the spec |
 | an admission row, per side | `AdmBody` and `AdmABody` | exactness is per row; a stratum with no row cannot be exact |
 | a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
@@ -242,8 +244,8 @@ error but a silent "everything": the analysis stays sound and stops saying anyth
 
 The depth clause, the denotation clause and the premise carrier are generic, and each universe
 inherits them. The spec projection and the admission rows are DynamoDB tables. The DynamoDB rows
-of `denote` and their pin are owed too, but a missing row there is a build error, and not a
-silent one.
+of `denote` in `denote_rows` are owed too. A missing row fails only a proof that reads the
+row.
 
 The spec projection is owed only by a stratum that holds names. A policy answers to no name.
 Every other row is owed unconditionally.

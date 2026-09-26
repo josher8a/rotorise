@@ -16,8 +16,7 @@ namespace Calculus
 /-- **Held-free lawful terms are pairwise `Compat`**: the common bound is `Ω`. -/
 theorem compat_of_HF {s t : Term} (hs : HF s) (ht : HF t) (hlt : Lawful (denote t)) :
     Compat (denote s) (denote t) :=
-  by rw [denote_eq_alg, denote_eq_alg] at *
-     exact Alg.compat_of_HF Ω_topLaws (fun _ _ h => Ω_canon h) hs ht hlt
+  Alg.compat_of_HF Ω_topLaws (fun _ _ h => Ω_canon h) hs ht hlt
 
 /-- **A held-free union of lawful options meets its obligation**, with no certificate. -/
 theorem pairwiseCompat_of_HF {opts : List Term} (h : HFL opts)

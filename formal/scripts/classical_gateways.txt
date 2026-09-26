@@ -15,7 +15,9 @@
 #                        choice is still reachable from here.
 #   Lean and Batteries   the guard's own elaborators in `Axioms.lean`, not proof appeals.
 #                        `#lint_calculus` and `#assert_axioms_all` are `CommandElabM`, and the
-#                        monad plumbing under them carries choice.
+#                        monad plumbing under them carries choice. The simp sets that
+#                        `Dynamo/Lang/Term.lean` registers are `initialize` declarations,
+#                        and the registration code carries choice the same way.
 Batteries.Tactic.Lint.getChecks
 Batteries.Tactic.Lint.lintCore
 Finset.Nonempty
@@ -27,7 +29,6 @@ Finset.decidableExistsAndFinsetCoe
 Finset.decidableMem
 Finset.disjUnion
 Finset.disjoint_left
-Finset.empty_union
 Finset.ext
 Finset.filter_eq_self
 Finset.filter_false_of_mem
@@ -36,26 +37,19 @@ Finset.instOrderBot
 Finset.instPartialOrder
 Finset.instSetLike
 Finset.instUnion
-Finset.instUniqueSubtypeMemSingleton
 Finset.le_sup
 Finset.mem_attach
 Finset.mem_disjUnion
 Finset.mem_filter
-Finset.mem_filter._simp_1
 Finset.mem_insert
 Finset.mem_insert_self
-Finset.mem_map
 Finset.mem_mk
 Finset.mem_singleton
 Finset.mem_singleton._simp_1
-Finset.mem_singleton_self
 Finset.mem_union
 Finset.notMem_empty
 Finset.notMem_empty._simp_1
-Finset.not_nonempty_empty._simp_1
-Finset.singleton_nonempty
 Finset.sup_le
-Finset.union_empty
 Fintype.decidableExistsFintype
 Fintype.decidableForallFintype
 Lean.Core.CoreM
@@ -76,6 +70,10 @@ Lean.Environment.constants
 Lean.Exception
 Lean.MessageData
 Lean.MessageData.instAppend
+Lean.Meta.Simp.SimprocExtension
+Lean.Meta.Simp.registerSimprocAttr
+Lean.Meta.SimpExtension
+Lean.Meta.registerSimpAttr
 Lean.MonadEnv.getEnv
 Lean.MonadError.mk
 Lean.Name.isInternal
@@ -88,7 +86,6 @@ Lean.instToMessageDataName
 Lean.instToMessageDataString
 Lean.realizeGlobalConstNoOverload
 Lean.throwError
-Nat.add_eq_right._simp_1
 String.Slice.Pattern.ForwardSliceSearcher.instForwardPattern_1
 String.instLawfulEqOrd
 String.instOrd

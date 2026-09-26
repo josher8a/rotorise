@@ -153,7 +153,7 @@ theorem not_equiv_union_extend :
     ¬ Codec.Equiv (denote (.union [.string])) (denote (.union [.string, .boolean])) := by
   intro h
   have hb := (h.heldSet (.bool true)).mpr
-  simp [denote, denote, denoteList, denoteμs,
+  simp [denote_rows,
         altCodec, stringCodec, booleanCodec] at hb
 
 /-! ## `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`
@@ -168,7 +168,7 @@ theorem not_equiv_union_array :
         (denote (.array (.union [.literal .string "A", .literal .string "B"]))) := by
   intro h
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
-  simp [Term.array, ← arrayCodec_eq_listCodec, denote, denote, denoteList, denoteμs,
+  simp [Term.array, ← arrayCodec_eq_listCodec, denote_rows,
         altCodec, arrayCodec, literalCodec,
         baseCodec, Alg.Codec.restrict, inL, stringCodec, HLit] at hv
 
@@ -187,7 +187,7 @@ theorem not_equiv_tupleTail_tuple :
   have hv := (h.heldSet (.arr [.str "a", .str "b"])).mp
   -- `simp`'s classical push-neg turned this into an existential and pulled
   -- `Classical.choice` in with it; the implication is the constructive shape.
-  simp only [Term.tuple, ← tupleCodec_eq_listCodec, denote, denote, denoteList, denoteOpt,
+  simp only [Term.tuple, ← tupleCodec_eq_listCodec, denote_rows,
     tupleCodec, align, Option.map_some,
     Option.some.injEq, exists_eq_left', List.mem_cons, List.not_mem_nil, or_false] at hv
   exact absurd (hv (by rintro p (rfl | rfl) <;> exact ⟨_, rfl⟩))
@@ -200,7 +200,7 @@ theorem not_equiv_tupleTail_array :
   intro h
   have hv := (h.heldSet (.arr [])).mpr
   simp [Term.tuple, Term.array, ← tupleCodec_eq_listCodec, ← arrayCodec_eq_listCodec,
-        denote, denote, denoteList, denoteOpt, denoteList, denoteμs,
+        denote_rows,
         altCodec, tupleCodec, align, arrayCodec,
         stringCodec] at hv
 
@@ -225,7 +225,7 @@ theorem not_equiv_refine_held :
                   (denote (.held (.refine .string (.closure predA)) .string isoF id)) := by
   intro h
   have hv := (h.heldSet (.str "B")).mpr
-  simp [denote, denote, Alg.Codec.through, Alg.Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv
+  simp [denote_rows, Alg.Codec.through, Alg.Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv
 
 /-! ## `legacy(c, r)` breaks canonical reads, and `e ∘ p ≢ id`
 
