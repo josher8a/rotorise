@@ -538,7 +538,8 @@ describe('the held side is the write occupancy of a union option', () => {
 
     /**
      * `decimal` holds text and stores `N`. `boolean` holds a boolean and stores `BOOL`. The two
-     * are disjoint on both sides, and the model certifies the pair: `Orth1 decimalHeld boolean`.
+     * are disjoint on both sides, and the model certifies the pair: the caller views and the
+     * stored views meet at the bottom (`viewsNever`).
      */
     it('accepts decimal beside boolean, because the held sides are disjoint', () => {
         const either = union([decimal, boolean])

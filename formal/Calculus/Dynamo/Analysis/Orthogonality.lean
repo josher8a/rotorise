@@ -6,14 +6,13 @@ import Calculus.Lang.Occupancy
 
 `Obligations (.union opts)` carries pairwise compatibility. Two separated options are compatible
 (`pairwiseCompat_of_separated`). The decidable certificate is `certPair` (`Meet.lean`): two
-options are orthogonal when `meet'` meets them at the bottom, or when their occupancies are
-disjoint on both sides. `meet'` answers the bottom where the domains and the ranges of the two
-terms meet at the bottom. The meet refuses a closure beside a partner that its inner term does not
-meet at the bottom, and the occupancies read no predicate.
+options are orthogonal when `meet'` meets them at the bottom. `meet'` answers the bottom where the
+domains and the ranges of the two terms meet at the bottom. The meet refuses a closure beside a
+partner that its inner term does not meet at the bottom.
 
-The occupancies, the shape test `Orth1` and their soundness are generic (`Alg.occV`, `Alg.occA`,
-`Alg.Orth1`, `Alg.occV_sound`, `Alg.occA_sound`). This module holds what DynamoDB supplies to them,
-the shapes `dynOcc` and their laws `dynOccSound`, and `Separates`.
+The occupancies and their soundness are generic (`Alg.occV`, `Alg.occA`, `Alg.occV_sound`,
+`Alg.occA_sound`). This module holds what DynamoDB supplies to them, the shapes `dynOcc` and their
+laws `dynOccSound`, and `Separates`.
 
 ## Sound, never complete, and why there is no `unknown`
 
@@ -29,10 +28,6 @@ pairwise disjoint. A pair can be separated on one side and not on the other, and
 separated. `held` is the witness: its write occupancy is its caller-side term's, and its read
 occupancy is its stored-side term's. So `union(held(string, number, f, g), string)`, the decimal
 adapter against a string, separates on the write side and meets on the read side.
-
-The two sides coincide below `opaque`: under `HF`, `occA_le_occV` puts the read occupancy inside
-the write occupancy under `Member.slot`, so a held-free pair disjoint on the write side is
-disjoint on the read side.
 
 ## The write-side slot is the `Value` constructor, not `Kind`
 
@@ -78,13 +73,8 @@ def Value.slot : Value → Slot
   | .arr _    => .arr
   | .map _ _  => .map
 
-/-- Enumerations, so the disjointness test is a `List.all` rather than a `Fintype` instance —
-    `decide` over these is the whole of what makes `Orth1` checkable by `by decide`. -/
-def Slot.all : List Slot :=
-  [.str, .num, .bool, .bin, .null, .strSet, .numSet, .binSet, .arr, .map]
-
-theorem Slot.mem_all (s : Slot) : s ∈ Slot.all := by cases s <;> simp [Slot.all]
-
+/-- Every member, so that a disjointness test on the read occupancies is a `List.all` rather than
+    a `Fintype` instance. `AdmA_and_false` reads it, and `decide` evaluates it. -/
 def Member.all : List Member := [.S, .N, .B, .BOOL, .NULL, .SS, .NS, .BS, .L, .M]
 
 theorem Member.mem_all (m : Member) : m ∈ Member.all := by cases m <;> simp [Member.all]
@@ -112,11 +102,6 @@ def Member.setElem : Member → Option Member
   | .BS => some .B
   | _ => none
 
-/-- The slot a member's values are built with: the bijection above, as a function. -/
-def Member.slot : Member → Slot
-  | .S => .str | .N => .num | .B => .bin | .BOOL => .bool | .NULL => .null
-  | .SS => .strSet | .NS => .numSet | .BS => .binSet | .L => .arr | .M => .map
-
 /-! ## The shapes of DynamoDB -/
 
 /-- **The DynamoDB shapes**: `Slot` on the value side, `Member` on the attribute side. A primitive
@@ -126,10 +111,6 @@ instance dynOcc : Alg.Occ dynSyn where
   ShA := Member
   decV := inferInstance
   decA := inferInstance
-  allV := Slot.all
-  mem_allV := Slot.mem_all
-  allA := Member.all
-  mem_allA := Member.mem_all
   primV | .base k | .literal k _ => occOnly k.slot
   primA | .base k | .literal k _ => occOnly k.member
   setV := Slot.setElem
@@ -171,38 +152,11 @@ noncomputable instance dynOccSound : Alg.OccSound dynSyn where
   map_e F hF _ := by cases hF; rfl
   map_p F hF _ := by cases hF; rfl
 
-/-! The rows of the occupancies that read the DynamoDB shapes. `simp` does not unfold an
-instance, so a proof that computes an occupancy reads these rows. -/
-
-/-- A base writes its slot. -/
-theorem occV_base (k : GroundKind) : occV (Term.base k) = occOnly k.slot := rfl
-/-- A literal writes the slot of its base. -/
-theorem occV_literal (k : GroundKind) (x : k.Carrier) : occV (Term.literal k x) = occOnly k.slot := rfl
-/-- A base reads its member. -/
-theorem occA_base (k : GroundKind) : occA (Term.base k) = occOnly k.member := rfl
-/-- A literal reads the member of its base. -/
-theorem occA_literal (k : GroundKind) (x : k.Carrier) : occA (Term.literal k x) = occOnly k.member :=
-  rfl
-/-- A set writes the set slot of each element slot. -/
-theorem occV_set (t : Term) :
-    occV (Term.set t) = fun s => s.setElem.elim false fun e => occV t e || t.hasVar := rfl
-/-- A set reads the set member of each element member. -/
-theorem occA_set (t : Term) :
-    occA (Term.set t) = fun m => m.setElem.elim false fun e => occA t e || t.hasVar := rfl
-/-- A list writes `arr`. -/
-theorem occV_list (pre : List Term) sp suf : occV (Term.list pre sp suf) = occOnly Slot.arr := rfl
-/-- A list reads `L`. -/
-theorem occA_list (pre : List Term) sp suf : occA (Term.list pre sp suf) = occOnly Member.L := rfl
-/-- An object writes `map`. -/
-theorem occV_object (b : Body) : occV (Term.object b) = occOnly Slot.map := rfl
-/-- An object reads `M`. -/
-theorem occA_object (b : Body) : occA (Term.object b) = occOnly Member.M := rfl
-
 /-! ## Separation
 
 The families each option is confined to are the occupancy **intersected with the option's own
-admission**. Disjointness in either factor makes the intersection disjoint, so the slot test
-separates through the occupancy and the meet through the admission, with no second family. -/
+admission**. Disjointness in either factor makes the intersection disjoint. The meet separates
+through the admission, with no second family. -/
 
 def OrthSV (t : Term) : Value → Prop :=
   fun v => occV t v.slot = true ∧ Adm t v = true

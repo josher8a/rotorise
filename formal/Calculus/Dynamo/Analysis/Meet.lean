@@ -22,15 +22,10 @@ that admits a common value and stores it at two members has no meet either, and 
 and not an empty one.
 
 **The same on the read side, and `never` is the empty intersection of BOTH halves.** A pair
-disjoint on one half only is not disjoint. `Orth1` tests the write occupancies and the read
-occupancies. The two tests coincide below `opaque`, where `occA_le_occV` (under `HF`) makes a
-pair disjoint on the write half disjoint on the read half too. `never` is for a pair disjoint on
-both, and everything else refuses.
-
-Among the ground and set terms no pair is disjoint on one half alone. The two halves part at a
-`held`: `occV` of a `held` is its caller-side term's while `occA` of a `held` is its inner term's,
-so an adapter and a native of the adapter's stored kind separate on the write half and not on the
-read half.
+disjoint on one half only is not disjoint. `never` is for a pair disjoint on both, and everything
+else refuses. The two halves part at a `held`: a `held` writes where its caller-side term writes
+and reads where its inner term reads, so an adapter and a native of the adapter's stored kind
+separate on the write half and not on the read half.
 
 **The write side agrees only where both factors name a member**, and that is weaker than "all three
 write the same way". `μSyn` answers `none` for two different reasons — a term that writes no value
@@ -89,7 +84,7 @@ turned away go with the policy.
 
 namespace Calculus
 
-open Alg (occV occA Orth1 occV_sound occA_sound occV_disjoint_of_Orth1 occA_disjoint_of_Orth1
+open Alg (occV occA occV_sound occA_sound
   Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Body.block
   Body.slotAt Body.slotAt_pos Body.slotAt_neg listOf_cases HF_of_hasHeld alignPL_eq_rowOfG
   rowOfG_length rowOfG_none_eq rowOfG_some_eq rowOfG_mem forall₂_replicate forall₂_append
@@ -626,18 +621,17 @@ def meet' (x y : Term) : Option Term :=
 /-- **Whether `meet'` answers the bottom.** A pair that `meet'` cannot state answers `false`. -/
 def meetNever' (x y : Term) : Bool := (meet' x y).any Term.isNever
 
-/-- **The certificate for one pair of options**: the meet at the bottom, or the shape test.
+/-- **The certificate for one pair of options**: the meet at the bottom.
 
     **The meet is `meet'`, and orthogonality is its bottom row.** The domains meet at the bottom
     and the ranges meet at the bottom, so no value has two writers and no attribute has two
     readers. A `held` reaches the meet only through that row.
 
-    **The shape test is the second disjunct, and the occupancies read no predicate.** A `refine`
-    at a `closure` has an admission that is a function. The meet answers the bottom where the
-    inner term meets the partner at the bottom, and `none` elsewhere. So
+    **A `refine` at a `closure` has an admission that is a function.** The meet answers the
+    bottom where the inner term meets the partner at the bottom, and `none` elsewhere. So
     `refine string (closure q)` beside `list [] (some number) []` meets at the bottom, because
     `string` beside the list meets at the bottom. -/
-def certPair (x y : Term) : Bool := meetNever' x y || Orth1 x y
+def certPair (x y : Term) : Bool := meetNever' x y
 
 /-- The certificate over a list of options, pair by pair. -/
 def certAll : List Term → Bool
@@ -863,7 +857,7 @@ theorem certPair_heldAny :
 /-- **A `held` below a recursion is certified where the views part.** The caller view of the
     recursive term is `mu (union [literal "1", list [] (some (var 0)) []])`, and the stored view
     is `mu (union [number, list [] (some (var 0)) []])`. Each meets `literal "A" ∪ literal "B"` at
-    the bottom. The shape test does not certify the pair, because both terms write a string. -/
+    the bottom. -/
 theorem certPair_heldBelowMu :
     certPair (.union [.literal .string "A", .literal .string "B"])
       (.mu (.union [.held .number (.literal .string "1") id id, .list [] (some (.var 0)) []]))
@@ -1191,19 +1185,21 @@ abbrev AdmAAt (x y z : Term) : Prop :=
   (∀ a : Attr, AdmA x a = true → AdmA y a = true →
     (denote z).p a = (denote x).p a ∧ (denote z).p a = (denote y).p a)
 
-/-- Two terms whose occupancies are disjoint share no attribute, so their conjunction is
+/-- Two terms whose read occupancies are disjoint share no attribute, so their conjunction is
     the bottom. This closes every row that answers `never` because the two read different `Attr`
     constructors. -/
-theorem AdmA_and_false {x y : Term} (h : Orth1 x y = true) (a : Attr) :
-    (AdmA x a && AdmA y a) = false := by
+theorem AdmA_and_false {x y : Term} (h : Member.all.all (fun m => !(occA x m && occA y m)) = true)
+    (a : Attr) : (AdmA x a && AdmA y a) = false := by
   cases hx : AdmA x a with
   | false => simp
   | true =>
     cases hy : AdmA y a with
     | false => simp
     | true =>
-      have h2 := occA_disjoint_of_Orth1 h (occA_sound x a hx)
-      rw [occA_sound y a hy] at h2
+      have h2 := List.all_eq_true.mp h a.member (Member.mem_all _)
+      have hx' : occA x a.member = true := occA_sound x a hx
+      have hy' : occA y a.member = true := occA_sound y a hy
+      rw [hx', hy'] at h2
       exact absurd h2 (by simp)
 
 /-- `opaque` reads an attribute exactly where its codec answers. -/
@@ -1856,18 +1852,21 @@ theorem separates_of_meetNever' {x y : Term} (h : meetNever' x y = true) : Separ
     · have := (AdmA_meet' x y _ hm).1 a
       rw [hx.2, hy.2] at this; exact nomatch this
 
-/-- **The slot test is sound.** Each family of `Separates` holds the occupancy as a conjunct, and
-    `Orth1` makes the two occupancies disjoint on each side. -/
-theorem separates_of_Orth1 {x y : Term} (h : Orth1 x y = true) : Separates x y :=
-  ⟨fun _ hx hy => occV_disjoint_of_Orth1 h hx.1 hy.1,
-   fun _ hx hy => occA_disjoint_of_Orth1 h hx.1 hy.1⟩
+/-- **The pair certificate is sound**: the meet at the bottom separates the pair. -/
+theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates x y :=
+  separates_of_meetNever' h
 
-/-- **The pair certificate is sound**: each disjunct separates the pair. -/
-theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates x y := by
-  simp only [certPair, Bool.or_eq_true] at h
-  rcases h with hm | ho
-  · exact separates_of_meetNever' hm
-  · exact separates_of_Orth1 ho
+/-- **The certificate refuses a pair that only the model's caller carrier separates.** Each option
+    is a set of adapters, and each caller side admits a boolean. The host builds `Set([true])` as
+    a caller value of each option, and the two options write that value to `SS` and to `NS`. So
+    the host refuses the union. The model's `Value` has no set of booleans, so in the model the
+    two options write disjoint slots. The caller sides share `boolean`, so the meet of the pair
+    is not the bottom, and the certificate agrees with the host. -/
+example :
+    certPair (.set (.refine (.held .string (.union [.string, .boolean]) id id)
+        (.closure fun _ => true)))
+      (.set (.held .number (.union [.number, .boolean]) id id)) = false := by
+  decide
 
 /-- **A certified union is separated**, which is the premise of `pairwiseCompat_of_separated`
     and of `admitsAtMostOne_of_separated`. -/

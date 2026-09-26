@@ -989,11 +989,10 @@ shown compatible.
 
 \begin{definition}[the certificate]
 \label{def:certificate}
-\uses{cond:compat,def:occupancy}
-\lean{Calculus.certPair, Calculus.meet', Calculus.meetNever', Calculus.viewsNever, Calculus.Alg.Orth1}
+\uses{cond:compat,def:family}
+\lean{Calculus.certPair, Calculus.meet', Calculus.meetNever', Calculus.viewsNever}
 \leanok
-Two options are certified on one of two tests. Their meet is the bottom, or their occupancies are
-disjoint on both sides. A term denotes a partial isomorphism, and its caller view and its stored
+Two options are certified where their meet is the bottom. A term denotes a partial isomorphism, and its caller view and its stored
 view are its domain and its range. Two terms whose domains and ranges meet at the bottom are
 orthogonal, and the meet of two orthogonal elements is the bottom (Lawson, \emph{Primer on inverse
 semigroups I}, Lemma 2.16). So the meet answers the bottom there, and a \texttt{held} reaches the
@@ -1001,8 +1000,7 @@ meet through its views. On a held-free term the caller view is the term itself. 
 the union of its options' views, because a union admits where one of its options admits. The view
 of a recursive term is the recursion of the view of its body, so a \texttt{held} below a recursion
 reaches the meet too. The
-second test reads no predicate. The meet refuses a closure beside a partner that its inner term
-does not meet at the bottom. A certified pair is separated
+meet refuses a closure beside a partner that its inner term does not meet at the bottom. A certified pair is separated
 (\texttt{separates\_of\_certPair}), so it is compatible. The certificate is sufficient and not
 necessary: two restrictions of one adapter that overlap are compatible, and no certificate reaches
 them.
@@ -1079,7 +1077,7 @@ terms force the point:
 What exactness costs is decidability. \texttt{held} carries an
 arbitrary \texttt{f}, \texttt{refine} an arbitrary \texttt{q}, so membership of an admissible set is not a question the
 declaration can answer. Admission \textbf{specifies} the two families. It does not decide them. What the
-certificate runs is the meet and the occupancy test, and both are decided. The bottom rows of the
+certificate runs is the meet, and the meet is decided. The bottom rows of the
 meet at two formers read the shape classes of the universe, and the read-side proof of the DynamoDB
 leaf meet uses occupancy.
 
@@ -1109,8 +1107,7 @@ special case where the discriminator's names decide alone.
 One coarse label per term per side: which root shape of a value the term may write, and which root
 shape of an attribute it may store. A universe supplies the shapes. At DynamoDB they are the
 constructor of \texttt{Value} and the member of §1. The read-side proof of the DynamoDB leaf meet uses occupancy
-(\texttt{AdmA\_and\_false}), and the certificate asks it directly
-(\texttt{separates\_of\_Orth1}).
+(\texttt{AdmA\_and\_false}).
 \end{definition}
 
 Both over-approximate, and over-approximating is the safe direction — if \texttt{X\ ⊆\ X′}, \texttt{Y\ ⊆\ Y′} and
@@ -1140,11 +1137,11 @@ An option's set of values is its occupancy intersected with
 its option admission, and its set of attributes likewise.
 \end{definition}
 
-Disjointness in either factor is enough,
-which is what leaves the row decidable where it decides at all: \textbf{on one side, two options separate
+Disjointness in either factor is enough: \textbf{on one side, two options separate
 when their occupancies on that side are disjoint. On both sides at once, they separate when one
-option requires a name the other does not declare.} That is a question about two terms, answered by
-computation at the declaration. What it declines is an undischarged obligation, not a refusal of
+option requires a name the other does not declare.} The certificate asks the second factor, through
+the meet: two closed bodies meet at the bottom where one requires a name that the other does not
+declare. That is a question about two terms, answered by computation at the declaration. What it declines is an undischarged obligation, not a refusal of
 compatibility.
 
 Note where two container options overlap, and that it is a fact about the two terms rather than a

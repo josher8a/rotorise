@@ -442,7 +442,7 @@ const writesOnlyStrings = (t: Term | undefined): boolean => {
  * throws names a codec not yet declared, and the printer reports the throw.
  */
 const topScope = (t: Term): Scope => ({
-    binds: bindersOf(t) ?? new Set(),
+    binds: bindersOf(t),
     inside: [],
 })
 

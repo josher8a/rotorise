@@ -70,10 +70,6 @@ instance jsonOcc : Alg.Occ jsonSyn where
   ShA := JMember
   decV := inferInstance
   decA := inferInstance
-  allV := [.null, .bool, .num, .str, .arr, .obj]
-  mem_allV m := by cases m <;> decide
-  allA := [.null, .bool, .num, .str, .arr, .obj]
-  mem_allA m := by cases m <;> decide
   primV m := occOnly m
   primA m := occOnly m
   setV _ := none
@@ -99,9 +95,6 @@ instance jsonOccSound : Alg.OccSound jsonSyn where
   list_p _ h := nomatch h
   map_e _ h := nomatch h
   map_p _ h := nomatch h
-
-/-- The shape test is computable at JSON: a string and a number occupy different kinds. -/
-theorem orth1_str_num : Alg.Orth1 (.prim .str : Alg.Term jsonSyn) (.prim .num) = true := by decide
 
 /-- The formers of JSON, on the write side: every former term admits nothing. -/
 instance jsonFormerAdm : Alg.FormerAdm jsonSyn where
