@@ -56,16 +56,16 @@
     "Calculus/Lang/ExactV.lean": 119,
     "Calculus/Lang/Guarded.lean": 74,
     "Calculus/Lang/HeldFree.lean": 114,
-    "Calculus/Lang/Meet.lean": 129,
-    "Calculus/Lang/MeetA.lean": 508,
+    "Calculus/Lang/Meet.lean": 130,
+    "Calculus/Lang/MeetA.lean": 509,
     "Calculus/Lang/MeetRows.lean": 123,
-    "Calculus/Lang/MeetTyped.lean": 245,
-    "Calculus/Lang/MeetV.lean": 320,
+    "Calculus/Lang/MeetTyped.lean": 246,
+    "Calculus/Lang/MeetV.lean": 321,
     "Calculus/Lang/MeetWrites.lean": 122,
     "Calculus/Lang/Shapes.lean": 5,
     "Calculus/Lang/Sound.lean": 140,
-    "Calculus/Lang/Term.lean": 185,
-    "Calculus/Lang/Typing.lean": 92
+    "Calculus/Lang/Term.lean": 276,
+    "Calculus/Lang/Typing.lean": 113
   },
   "retirement_marks": {
     "../docs/architecture.md": 0,

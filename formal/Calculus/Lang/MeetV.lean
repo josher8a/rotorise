@@ -1126,8 +1126,14 @@ theorem Adm_meet [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
                  cases hz
                  rw [← hmu, eq_never_of_isNever hn, Adm_mu_never, Adm_never]
              · split at hz
-               · cases hz; exact hmu
-               · exact nomatch hz)
+               · next hu =>
+                   cases hz
+                   rw [Adm_eq_isSome _ ρ'' v, ← (denote_mu_vacuous hu ρ'').1,
+                     ← Adm_eq_isSome (.mu w) ρ'' v]
+                   exact hmu
+               · split at hz
+                 · cases hz; exact hmu
+                 · exact nomatch hz)
           | (simp only [Term.meet] at h
              rw [Adm_mu_unfold b ρ v]
              exact Adm_meet (shiftL p) b _ _ h _ ρ' ρ'' (hp.left _) v)

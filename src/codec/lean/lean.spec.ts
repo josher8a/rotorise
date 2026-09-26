@@ -743,6 +743,13 @@ type Tree = { name: string; children?: readonly Tree[] }
 const Tree: AttributeCodec<Tree> = lazy(() =>
     object({ name: string, children: optional(array(Tree)) }),
 )
+/** A recursive union whose recursion sits under an optional field of an object. */
+const underObject: AnyCodec = erase(
+    union([
+        string,
+        object({ m: optional(lazy(() => underObject as never)) }),
+    ] as unknown as readonly AnyCodec[]),
+)
 /** A thunk that returns its own term: no container sits between the binder and its variable. */
 const selfThunk: AnyCodec = erase(
     lazy(() => selfThunk as unknown as AttributeCodec<unknown>),
@@ -1224,6 +1231,19 @@ const meetPairs = (): readonly MeetPair[] => {
             out.push(one)
         }
     }
+    // two recursive unions whose bodies meet at `string`, which reads no variable of the pair.
+    // The answer is the body, because a binder whose variable does not occur denotes its body
+    out.push({
+        name: 'recursive_json__meet__recursive_under_object',
+        left: json,
+        right: underObject,
+    })
+    // the same pair under one required field, where the answer is an object stated pointwise
+    out.push({
+        name: 'field_json__meet__field_under_object',
+        left: erase(object({ a: json as never })),
+        right: erase(object({ a: underObject as never })),
+    })
     return out
 }
 
@@ -1572,7 +1592,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('puts every corpus meet to the model', () => {
         const meets = meetPairs()
-        expect(meets.length).toBe(861)
+        expect(meets.length).toBe(863)
         expect(MEET_DEFERRED.length).toBe(0)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(

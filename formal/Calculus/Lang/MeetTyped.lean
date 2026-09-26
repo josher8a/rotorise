@@ -562,23 +562,23 @@ theorem typed_meet [Leaf S] : ∀ (p : Pairing) (x y : Term S) z, Term.meet p x 
              obtain ⟨_, _, rfl⟩ := h
              exact ⟨_, _, Typed.var _⟩)
           | exact absurd h (by simp [Term.meet])
-  -- two recursive terms meet at a guarded recursive term of the body meet, and an unfolding
-  -- meets the body
+  -- two recursive terms meet at the lowered body meet or at a guarded recursive term of it, and
+  -- an unfolding meets the body
   | p, .mu b, y, _, h, hx, hy => by
       cases y <;>
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
           | (simp only [Term.meet, Option.bind_eq_some_iff] at h
              obtain ⟨w, hw, hz⟩ := h
+             obtain ⟨_, _, hwt⟩ :=
+               typed_meet (pairMu p) b _ w hw (typed_mu_inv hx) (typed_mu_inv hy)
              split at hz
              · cases hz; exact ⟨_, _, Typed.never⟩
              · split at hz
-               · next hg =>
-                   cases hz
-                   obtain ⟨_, _, hwt⟩ :=
-                     typed_meet (pairMu p) b _ w hw (typed_mu_inv hx) (typed_mu_inv hy)
-                   exact ⟨_, _, Typed.mu hg hwt⟩
-               · exact nomatch hz)
+               · cases hz; exact ⟨_, _, typed_rename _ hwt⟩
+               · split at hz
+                 · next hg => cases hz; exact ⟨_, _, Typed.mu hg hwt⟩
+                 · exact nomatch hz)
           | (simp only [Term.meet] at h
              exact typed_meet (shiftL p) b _ _ h (typed_mu_inv hx) hy)
   | p, .refine x q, y, _, h, hx, hy => by

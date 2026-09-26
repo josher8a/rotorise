@@ -327,6 +327,200 @@ def Term.guardedO : Option (Term S) → Bool
 
 end
 
+/-! ## Renaming the free variables
+
+`Term.rename r t` reads each free variable `j` of `t` as `r j`. The meet lowers the free variables
+of a body that reads no variable of its binder, because such a binder denotes its body. -/
+
+/-- A renaming under one more binder: the new variable stays `0`, and the rest move up one. -/
+def liftRen (r : Nat → Nat) : Nat → Nat
+  | 0 => 0
+  | j + 1 => r j + 1
+
+mutual
+/-- **The term with each free variable `j` read as `r j`.** A binder lifts the renaming. -/
+def Term.rename (r : Nat → Nat) : Term S → Term S
+  | .prim g => .prim g
+  | .opaq => .opaq
+  | .never => .never
+  | .var j => .var (r j)
+  | .set t => .set (Term.rename r t)
+  | .mu t => .mu (Term.rename (liftRen r) t)
+  | .refine t p => .refine (Term.rename r t) p
+  | .held t P f g => .held (Term.rename r t) (Term.rename r P) f g
+  | .list pre sp suf => .list (Term.renameL r pre) (Term.renameO r sp) (Term.renameL r suf)
+  | .union os => .union (Term.renameL r os)
+  | .object b => .object (Body.rename r b)
+/-- …in a body. -/
+def Body.rename (r : Nat → Nat) : Body S → Body S
+  | .mk fs f w => .mk fs (fun k => ObjectSlot.rename r (f k)) (Term.renameO r w)
+/-- …in a slot. -/
+def ObjectSlot.rename (r : Nat → Nat) : ObjectSlot S → ObjectSlot S
+  | .req t => .req (Term.rename r t)
+  | .optional t => .optional (Term.rename r t)
+/-- …in a list. -/
+def Term.renameL (r : Nat → Nat) : List (Term S) → List (Term S)
+  | [] => []
+  | t :: ts => Term.rename r t :: Term.renameL r ts
+/-- …in an optional term. -/
+def Term.renameO (r : Nat → Nat) : Option (Term S) → Option (Term S)
+  | none => none
+  | some t => some (Term.rename r t)
+end
+
+/-- A container of a term reads a variable exactly where the term reads the variable. -/
+theorem useUnder_eq_zero {u : Nat} : useUnder u = 0 ↔ u = 0 := by
+  unfold useUnder
+  rcases Nat.decEq u 2 with h | h
+  · rw [if_neg h]
+  · subst h; exact ⟨fun h1 => (nomatch h1), fun h0 => (nomatch h0)⟩
+
+/-- A `held` of a term reads a variable exactly where the term reads the variable. -/
+theorem useHeld_eq_zero {u : Nat} : useHeld u = 0 ↔ u = 0 := by
+  unfold useHeld
+  rcases Nat.decEq u 0 with h | h
+  · rw [if_neg h]; exact ⟨fun h3 => (nomatch h3), fun h0 => absurd h0 h⟩
+  · rw [if_pos h]; exact ⟨fun _ => h, fun _ => rfl⟩
+
+/-- A join of two levels is `0` only where both levels are `0`. -/
+theorem max_eq_zero {a b : Nat} : max a b = 0 ↔ a = 0 ∧ b = 0 :=
+  ⟨fun h => ⟨Nat.eq_zero_of_le_zero (h ▸ Nat.le_max_left a b),
+      Nat.eq_zero_of_le_zero (h ▸ Nat.le_max_right a b)⟩,
+    fun ⟨ha, hb⟩ => by subst ha; subst hb; rfl⟩
+
+/-- A join over a key set is `0` only where each joined level is `0`. -/
+theorem sup_attach_eq_zero {fs : Finset String} {g : {k // k ∈ fs} → Nat}
+    (h : fs.attach.sup g = 0) (k : {k // k ∈ fs}) : g k = 0 :=
+  Nat.eq_zero_of_le_zero (h ▸ Finset.le_sup (f := g) (Finset.mem_attach _ k))
+
+mutual
+/-- **A renaming keeps the level of a variable** that no other occurring variable shares a name
+    with. -/
+theorem use_rename : ∀ (t : Term S) (r : Nat → Nat) (i : Nat),
+    (∀ j, j ≠ i → r j = r i → t.use j = 0) → (Term.rename r t).use (r i) = t.use i
+  | .prim _, _, _, _ => rfl
+  | .opaq, _, _, _ => rfl
+  | .never, _, _, _ => rfl
+  | .var j, r, i, h => by
+      simp only [Term.rename, Term.use]
+      rcases Nat.decEq i j with hij | hij
+      · have hr : r i ≠ r j := fun he => by
+          have := h j (Ne.symm hij) he.symm
+          simp [Term.use] at this
+        simp [hij, hr]
+      · subst hij; simp
+  | .set t, r, i, h => by
+      simp only [Term.rename, Term.use]
+      rw [use_rename t r i fun j hj hr => useUnder_eq_zero.mp (h j hj hr)]
+  | .mu t, r, i, h => by
+      simp only [Term.rename, Term.use]
+      exact use_rename t (liftRen r) (i + 1) fun j hj hr =>
+        match j, hj, hr with
+        | 0, _, hr => nomatch hr
+        | j + 1, hj, hr => h j (fun he => hj (congrArg (· + 1) he))
+            (Nat.succ.inj hr)
+  | .refine t _, r, i, h => by
+      simp only [Term.rename, Term.use]
+      exact use_rename t r i h
+  | .held t P _ _, r, i, h => by
+      simp only [Term.rename, Term.use]
+      have h' := fun j hj hr => max_eq_zero.mp (useHeld_eq_zero.mp (h j hj hr))
+      rw [use_rename t r i fun j hj hr => (h' j hj hr).1,
+        use_rename P r i fun j hj hr => (h' j hj hr).2]
+  | .list pre sp suf, r, i, h => by
+      simp only [Term.rename, Term.use]
+      have h' := fun j hj hr => max_eq_zero.mp (useUnder_eq_zero.mp (h j hj hr))
+      rw [useL_rename pre r i fun j hj hr => (h' j hj hr).1,
+        useO_rename sp r i fun j hj hr => (max_eq_zero.mp (h' j hj hr).2).1,
+        useL_rename suf r i fun j hj hr => (max_eq_zero.mp (h' j hj hr).2).2]
+  | .union os, r, i, h => by
+      simp only [Term.rename, Term.use]
+      exact useL_rename os r i h
+  | .object b, r, i, h => by
+      simp only [Term.rename, Term.use]
+      rw [Body.use_rename b r i fun j hj hr => useUnder_eq_zero.mp (h j hj hr)]
+/-- …in a body. -/
+theorem Body.use_rename : ∀ (b : Body S) (r : Nat → Nat) (i : Nat),
+    (∀ j, j ≠ i → r j = r i → b.use j = 0) → (Body.rename r b).use (r i) = b.use i
+  | .mk fs f w, r, i, h => by
+      simp only [Body.rename, Body.use]
+      have h' := fun j hj hr => max_eq_zero.mp (h j hj hr)
+      congr 1
+      · exact congrArg fs.attach.sup (funext fun k => ObjectSlot.use_rename (f k) r i fun j hj hr =>
+          sup_attach_eq_zero (g := fun k => ObjectSlot.use j (f k)) (h' j hj hr).1 k)
+      · exact useO_rename w r i fun j hj hr => (h' j hj hr).2
+/-- …in a slot. -/
+theorem ObjectSlot.use_rename : ∀ (s : ObjectSlot S) (r : Nat → Nat) (i : Nat),
+    (∀ j, j ≠ i → r j = r i → s.use j = 0) → (ObjectSlot.rename r s).use (r i) = s.use i
+  | .req t, r, i, h => use_rename t r i h
+  | .optional t, r, i, h => use_rename t r i h
+/-- …in a list. -/
+theorem useL_rename : ∀ (ts : List (Term S)) (r : Nat → Nat) (i : Nat),
+    (∀ j, j ≠ i → r j = r i → Term.useL j ts = 0) →
+    Term.useL (r i) (Term.renameL r ts) = Term.useL i ts
+  | [], _, _, _ => rfl
+  | t :: ts, r, i, h => by
+      simp only [Term.renameL, Term.useL]
+      have h' := fun j hj hr => max_eq_zero.mp (h j hj hr)
+      rw [use_rename t r i fun j hj hr => (h' j hj hr).1,
+        useL_rename ts r i fun j hj hr => (h' j hj hr).2]
+/-- …in an optional term. -/
+theorem useO_rename : ∀ (sp : Option (Term S)) (r : Nat → Nat) (i : Nat),
+    (∀ j, j ≠ i → r j = r i → Term.useO j sp = 0) →
+    Term.useO (r i) (Term.renameO r sp) = Term.useO i sp
+  | none, _, _, _ => rfl
+  | some t, r, i, h => use_rename t r i h
+end
+
+/-- A renaming under a binder names the variable of the binder `0`, and no other variable `0`. -/
+theorem liftRen_eq_zero {r : Nat → Nat} : ∀ {j : Nat}, liftRen r j = 0 → j = 0
+  | 0, _ => rfl
+  | _ + 1, h => nomatch h
+
+mutual
+/-- **A renaming keeps the guard.** Under a binder the renaming names the binder's own variable
+    `0`, and no other variable `0`, so the level of the binder's variable is unchanged. -/
+theorem guarded_rename : ∀ (t : Term S) (r : Nat → Nat), (Term.rename r t).guarded = t.guarded
+  | .prim _, _ | .opaq, _ | .never, _ | .var _, _ => rfl
+  | .set t, r => by simp only [Term.rename, Term.guarded]; exact guarded_rename t r
+  | .mu t, r => by
+      simp only [Term.rename, Term.guarded]
+      have h0 : (Term.rename (liftRen r) t).use 0 = t.use 0 :=
+        use_rename t (liftRen r) 0 fun j hj hr => absurd (liftRen_eq_zero hr) hj
+      rw [h0, guarded_rename t (liftRen r)]
+  | .refine t _, r => by simp only [Term.rename, Term.guarded]; exact guarded_rename t r
+  | .held t P _ _, r => by
+      simp only [Term.rename, Term.guarded]; rw [guarded_rename t r, guarded_rename P r]
+  | .list pre sp suf, r => by
+      simp only [Term.rename, Term.guarded]
+      rw [guardedL_rename pre r, guardedO_rename sp r, guardedL_rename suf r]
+  | .union os, r => by simp only [Term.rename, Term.guarded]; exact guardedL_rename os r
+  | .object b, r => by simp only [Term.rename, Term.guarded]; exact Body.guarded_rename b r
+/-- …in a body. -/
+theorem Body.guarded_rename : ∀ (b : Body S) (r : Nat → Nat), (Body.rename r b).guarded = b.guarded
+  | .mk fs f w, r => by
+      simp only [Body.rename, Body.guarded]
+      have hk : ∀ k, (ObjectSlot.rename r (f k)).guarded = (f k).guarded :=
+        fun k => ObjectSlot.guarded_rename (f k) r
+      simp only [hk, guardedO_rename w r]
+/-- …in a slot. -/
+theorem ObjectSlot.guarded_rename : ∀ (s : ObjectSlot S) (r : Nat → Nat),
+    (ObjectSlot.rename r s).guarded = s.guarded
+  | .req t, r => guarded_rename t r
+  | .optional t, r => guarded_rename t r
+/-- …in a list. -/
+theorem guardedL_rename : ∀ (ts : List (Term S)) (r : Nat → Nat),
+    Term.guardedL (Term.renameL r ts) = Term.guardedL ts
+  | [], _ => rfl
+  | t :: ts, r => by
+      simp only [Term.renameL, Term.guardedL]; rw [guarded_rename t r, guardedL_rename ts r]
+/-- …in an optional term. -/
+theorem guardedO_rename : ∀ (sp : Option (Term S)) (r : Nat → Nat),
+    Term.guardedO (Term.renameO r sp) = Term.guardedO sp
+  | none, _ => rfl
+  | some t, r => guarded_rename t r
+end
+
 mutual
 /-- Whether a variable occurs in the term. A term with no variable denotes one codec under every
     environment (`denote_closed`). -/
@@ -671,6 +865,126 @@ theorem denoteμs_closed : ∀ (ts : List (Term S)), Term.hasVarL ts = false →
       rw [denote_closed t h.1 ρ ρ', denoteμs_closed ts h.2 ρ ρ']
 
 end
+
+/-- The hypothesis of `denote_rename` at a subterm whose levels sit below the term's. -/
+theorem renameEnv_of {u v : Nat → Nat} {ρ ρ' : List S.C} {r : Nat → Nat}
+    (h : ∀ j, u j ≠ 0 → envAt ρ j = envAt ρ' (r j)) (huv : ∀ j, u j = 0 → v j = 0) :
+    ∀ j, v j ≠ 0 → envAt ρ j = envAt ρ' (r j) :=
+  fun j hj => h j fun hu => hj (huv j hu)
+
+mutual
+/-- **A renaming reads each occurring variable where the renaming sends it.** Two environments
+    that agree along the renaming at every occurring variable give one codec. -/
+theorem denote_rename : ∀ (t : Term S) (r : Nat → Nat) (ρ ρ' : List S.C),
+    (∀ j, t.use j ≠ 0 → envAt ρ j = envAt ρ' (r j)) → denote t ρ = denote (Term.rename r t) ρ'
+  | .prim _, _, _, _, _ => rfl
+  | .opaq, _, _, _, _ => rfl
+  | .never, _, _, _, _ => rfl
+  | .var j, _, _, _, h => h j (by simp [Term.use])
+  | .set t, r, ρ, ρ', h => by
+      simp only [denote, Term.rename]
+      rw [denote_rename t r ρ ρ' (renameEnv_of h fun j hj => useUnder_eq_zero.mp hj)]
+  | .refine t _, r, ρ, ρ', h => by
+      simp only [denote, Term.rename]; rw [denote_rename t r ρ ρ' h]
+  | .mu b, r, ρ, ρ', h => by
+      simp only [denote, Term.rename]
+      congr 1
+      funext c
+      exact denote_rename b (liftRen r) (c :: ρ) (c :: ρ') fun j hj =>
+        match j, hj with
+        | 0, _ => rfl
+        | j + 1, hj => h j hj
+  | .held t P _ _, r, ρ, ρ', h => by
+      simp only [denote, Term.rename]
+      rw [denote_rename t r ρ ρ' (renameEnv_of h fun j hj =>
+          (max_eq_zero.mp (useHeld_eq_zero.mp hj)).1),
+        denote_rename P r ρ ρ' (renameEnv_of h fun j hj =>
+          (max_eq_zero.mp (useHeld_eq_zero.mp hj)).2)]
+  | .list pre sp suf, r, ρ, ρ', h => by
+      simp only [denote, Term.rename]
+      rw [denoteList_rename pre r ρ ρ' (renameEnv_of h fun j hj =>
+          (max_eq_zero.mp (useUnder_eq_zero.mp hj)).1),
+        denoteOpt_rename sp r ρ ρ' (renameEnv_of h fun j hj =>
+          (max_eq_zero.mp (max_eq_zero.mp (useUnder_eq_zero.mp hj)).2).1),
+        denoteList_rename suf r ρ ρ' (renameEnv_of h fun j hj =>
+          (max_eq_zero.mp (max_eq_zero.mp (useUnder_eq_zero.mp hj)).2).2)]
+  | .object b, r, ρ, ρ', h => by
+      simp only [denote, Term.rename]
+      exact bodySem_rename b r ρ ρ' (renameEnv_of h fun j hj => useUnder_eq_zero.mp hj)
+  | .union os, r, ρ, ρ', h => by
+      simp only [denote, Term.rename]
+      rw [denoteList_rename os r ρ ρ' h, denoteμs_rename os r ρ ρ' h]
+/-- …at a body. -/
+theorem bodySem_rename : ∀ (b : Body S) (r : Nat → Nat) (ρ ρ' : List S.C),
+    (∀ j, b.use j ≠ 0 → envAt ρ j = envAt ρ' (r j)) → bodySem b ρ = bodySem (Body.rename r b) ρ'
+  | .mk fs f w, r, ρ, ρ', h => by
+      have hf : (fun k => fieldSem (f k) ρ) = (fun k => fieldSem (ObjectSlot.rename r (f k)) ρ') :=
+        funext fun k => fieldSem_rename (f k) r ρ ρ' (renameEnv_of h fun j hj =>
+          sup_attach_eq_zero (g := fun k => ObjectSlot.use j (f k)) (max_eq_zero.mp hj).1 k)
+      simp only [bodySem, Body.rename]
+      rw [hf, wildSem_rename w r ρ ρ' (renameEnv_of h fun j hj => (max_eq_zero.mp hj).2)]
+/-- …at a slot. -/
+theorem fieldSem_rename : ∀ (s : ObjectSlot S) (r : Nat → Nat) (ρ ρ' : List S.C),
+    (∀ j, s.use j ≠ 0 → envAt ρ j = envAt ρ' (r j)) →
+    fieldSem s ρ = fieldSem (ObjectSlot.rename r s) ρ'
+  | .req t, r, ρ, ρ', h => by
+      simp only [fieldSem, ObjectSlot.rename]; rw [denote_rename t r ρ ρ' h]
+  | .optional t, r, ρ, ρ', h => by
+      simp only [fieldSem, ObjectSlot.rename]; rw [denote_rename t r ρ ρ' h]
+/-- …at an open block. -/
+theorem wildSem_rename : ∀ (w : Option (Term S)) (r : Nat → Nat) (ρ ρ' : List S.C),
+    (∀ j, Term.useO j w ≠ 0 → envAt ρ j = envAt ρ' (r j)) →
+    wildSem w ρ = wildSem (Term.renameO r w) ρ'
+  | none, _, _, _, _ => rfl
+  | some t, r, ρ, ρ', h => by
+      simp only [wildSem, Term.renameO]; rw [denote_rename t r ρ ρ' h]
+/-- …at a list of terms. -/
+theorem denoteList_rename : ∀ (ts : List (Term S)) (r : Nat → Nat) (ρ ρ' : List S.C),
+    (∀ j, Term.useL j ts ≠ 0 → envAt ρ j = envAt ρ' (r j)) →
+    denoteList ts ρ = denoteList (Term.renameL r ts) ρ'
+  | [], _, _, _, _ => rfl
+  | t :: ts, r, ρ, ρ', h => by
+      simp only [denoteList, Term.renameL]
+      rw [denote_rename t r ρ ρ' (renameEnv_of h fun j hj => (max_eq_zero.mp hj).1),
+        denoteList_rename ts r ρ ρ' (renameEnv_of h fun j hj => (max_eq_zero.mp hj).2)]
+/-- …at an optional term. -/
+theorem denoteOpt_rename : ∀ (sp : Option (Term S)) (r : Nat → Nat) (ρ ρ' : List S.C),
+    (∀ j, Term.useO j sp ≠ 0 → envAt ρ j = envAt ρ' (r j)) →
+    denoteOpt sp ρ = denoteOpt (Term.renameO r sp) ρ'
+  | none, _, _, _, _ => rfl
+  | some t, r, ρ, ρ', h => by
+      simp only [denoteOpt, Term.renameO]; rw [denote_rename t r ρ ρ' h]
+/-- …at the members of a list of terms. -/
+theorem denoteμs_rename : ∀ (ts : List (Term S)) (r : Nat → Nat) (ρ ρ' : List S.C),
+    (∀ j, Term.useL j ts ≠ 0 → envAt ρ j = envAt ρ' (r j)) →
+    denoteμs ts ρ = denoteμs (Term.renameL r ts) ρ'
+  | [], _, _, _, _ => rfl
+  | t :: ts, r, ρ, ρ', h => by
+      simp only [denoteμs, Term.renameL]
+      rw [denote_rename t r ρ ρ' (renameEnv_of h fun j hj => (max_eq_zero.mp hj).1),
+        denoteμs_rename ts r ρ ρ' (renameEnv_of h fun j hj => (max_eq_zero.mp hj).2)]
+end
+
+/-- **`μx.z = z` where `x` is not free in `z`**, on the write side and on the read side. The body
+    reads no stage, so every stage past the bottom is the body with its free variables lowered by
+    one, and every input has a depth of at least one. The member is not part of the law: the
+    limit states none, and the body can state one. -/
+theorem denote_mu_vacuous {z : Term S} (hz : z.use 0 = 0) (ρ : List S.C) :
+    (denote (.mu z) ρ).e = (denote (Term.rename (· - 1) z) ρ).e ∧
+    (denote (.mu z) ρ).p = (denote (Term.rename (· - 1) z) ρ).p := by
+  have hc : (fun c => denote z (c :: ρ)) = fun _ => denote (Term.rename (· - 1) z) ρ :=
+    funext fun c => denote_rename z _ (c :: ρ) ρ fun j hj =>
+      match j, hj with
+      | 0, hj => absurd hz hj
+      | _ + 1, _ => rfl
+  simp only [denote, hc]
+  refine ⟨funext fun v => ?_, funext fun a => ?_⟩
+  · show (muStage _ (Sem.dV v)).e v = _
+    obtain ⟨n, hn⟩ : ∃ n, Sem.dV v = n + 1 := ⟨Sem.dV v - 1, by have := Sem.dV_pos v; omega⟩
+    rw [hn]; rfl
+  · show (muStage _ (Sem.dA a)).p a = _
+    obtain ⟨n, hn⟩ : ∃ n, Sem.dA a = n + 1 := ⟨Sem.dA a - 1, by have := Sem.dA_pos a; omega⟩
+    rw [hn]; rfl
 
 end Denote
 
