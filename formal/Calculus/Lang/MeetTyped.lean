@@ -251,7 +251,10 @@ theorem typed_meetSRight [Leaf S] {x : Term S} {fam : Pairing → Term S → Opt
       split at h
       · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
         exact typed_refineOf (typed_meetSRight hf y p w hw hx (typed_refine_inv hy))
-      · exact absurd h (by simp)
+      · obtain ⟨w, -, hw⟩ := Option.bind_eq_some_iff.mp h
+        split at hw
+        · cases hw; exact ⟨_, _, Typed.never⟩
+        · exact nomatch hw
   | .union os, p, _, h, hx, hy => by
       obtain ⟨zs, hF, rfl⟩ := meetSRight_union h
       exact typed_ofOptions (survivors hy
@@ -587,7 +590,10 @@ theorem typed_meet [Leaf S] : ∀ (p : Pairing) (x y : Term S) z, Term.meet p x 
         split at h
         · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
           exact typed_refineOf (typed_meet p x _ w hw (typed_refine_inv hx) hy)
-        · exact absurd h (by simp)
+        · obtain ⟨w, -, hw⟩ := Option.bind_eq_some_iff.mp h
+          split at hw
+          · cases hw; exact ⟨_, _, Typed.never⟩
+          · exact nomatch hw
   | p, .union os, y, _, h, hx, hy => by
       cases y with
       | never =>

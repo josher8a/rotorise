@@ -1178,8 +1178,8 @@ const separationPairs = (): readonly Separation[] => {
         left: erase(decimal('1')),
         right: erase(decimal('1', '2.5')),
     })
-    // a closure refinement beside a list of adapters. The meet refuses the closure, and the views
-    // keep it, so only the occupancies certify the pair. `refine` wants a type predicate, and
+    // a closure refinement beside a list of adapters. The meet answers the bottom, because
+    // `string` meets the list at the bottom. `refine` wants a type predicate, and
     // `isNumeral` returns a `boolean`
     out.push({
         name: 'numeral_text__vs__array_of_decimal',

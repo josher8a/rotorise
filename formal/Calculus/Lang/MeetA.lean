@@ -1015,7 +1015,17 @@ theorem admA_meetSRight [Leaf S] [LeafAdm S] {x : Term S}
       · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
         obtain ⟨ih1, ih2⟩ := admA_meetSRight hf y p ρ' ρ'' w hp hw
         exact refine_row_r ih1 ih2
-      · exact absurd h (by simp)
+      · obtain ⟨w, hw, hz⟩ := Option.bind_eq_some_iff.mp h
+        split at hz
+        · next hn =>
+            cases hz
+            obtain ⟨ih1, -⟩ := admA_meetSRight hf y p ρ' ρ'' w hp hw
+            rw [eq_never_of_isNever hn] at ih1
+            refine bottom_row (fun a => ?_)
+            have hr : AdmA (.refine y q) ρ' a =
+                (AdmA y ρ' a && refineReads y ρ' (Sem.eval q) a) := rfl
+            rw [hr, ← Bool.and_assoc, ← ih1 a, AdmA_never, Bool.false_and]
+        · exact nomatch hz
   | .union os, p, ρ', ρ'', _, hp, h => by
       obtain ⟨zs, hF, rfl⟩ := meetSRight_union h
       have hB := admA_meetSRightL hf os p ρ' ρ'' zs hp hF
@@ -1772,7 +1782,17 @@ theorem AdmA_meet_both [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes 
         · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
           obtain ⟨ih1, ih2⟩ := AdmA_meet_both p x _ w hw ρ ρ' ρ'' hp
           exact refine_row_l ih1 ih2
-        · exact absurd h (by simp)
+        · obtain ⟨w, hw, hz⟩ := Option.bind_eq_some_iff.mp h
+          split at hz
+          · next hn =>
+              cases hz
+              obtain ⟨ih1, -⟩ := AdmA_meet_both p x _ w hw ρ ρ' ρ'' hp
+              rw [eq_never_of_isNever hn] at ih1
+              refine bottom_row (fun a => ?_)
+              have hr : AdmA (.refine x q) ρ a =
+                  (AdmA x ρ a && refineReads x ρ (Sem.eval q) a) := rfl
+              rw [hr, Bool.and_right_comm, ← ih1 a, AdmA_never, Bool.false_and]
+          · exact nomatch hz
   | p, .union os, y, _, h, ρ, ρ', ρ'', hp => by
       cases y with
       | never =>

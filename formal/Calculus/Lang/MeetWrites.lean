@@ -107,7 +107,10 @@ theorem writes_meetSRight [Leaf S] {x : Term S} {fam : Pairing → Term S → Op
         replace hz := μSyn_refineOf hz
         have ih := writes_meetSRight hf y p w hw m hz
         exact ⟨ih.1, fun my hmy => ih.2 my (by simpa [μSyn] using hmy)⟩
-      · exact absurd h (by simp)
+      · obtain ⟨w, -, hw⟩ := Option.bind_eq_some_iff.mp h
+        split at hw
+        · cases hw; exact absurd hz (by simp [μSyn])
+        · exact nomatch hw
   | .union os, p, _, h, m, hz => by
       obtain ⟨zs, hF, _, _, rfl⟩ := meetSRight_union h
       obtain ⟨w, hw, hwm⟩ := μSyn_ofOptions_mem hz
@@ -304,7 +307,10 @@ theorem meet_writes [Leaf S] [LeafWrites S] : ∀ (p : Pairing) (x y : Term S) z
           replace hz := μSyn_refineOf hz
           have ih := meet_writes p x _ w hw m hz
           exact ⟨fun mx hmx => ih.1 mx (by simpa [μSyn] using hmx), ih.2⟩
-        · exact absurd h (by simp)
+        · obtain ⟨w, -, hw⟩ := Option.bind_eq_some_iff.mp h
+          split at hw
+          · cases hw; exact absurd hz (by simp [μSyn])
+          · exact nomatch hw
   | p, .union os, y, _, h, m, hz => by
       cases y with
       | never =>

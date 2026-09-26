@@ -135,8 +135,9 @@ domains and ranges meet at the bottom are orthogonal, and the meet of two orthog
 the bottom (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). The domain and the range of a
 term are its two views, so the meet answers the bottom there.
 
-> ASPIRATION: the certificate carries the occupancy test as a second disjunct, because the meet
-> refuses a closure, and the occupancies read no predicate.
+> ASPIRATION: the certificate carries the occupancy test as a second disjunct. The meet refuses a
+> closure beside a partner that its inner term does not meet at the bottom, and the occupancies
+> read no predicate.
 
 ### Admission is by attempt, at every constructor
 
@@ -212,8 +213,8 @@ the function to each alternative of a finite admissible set, and the answer is e
 carrier with one inhabitant, or with two, is such a set. A closure answers with the top only over
 an unbounded carrier.
 
-> ASPIRATION: the meet refuses every closure, including a closure beside a finite admissible
-> set.
+> ASPIRATION: the meet refuses a closure beside every partner that its inner term does not meet
+> at the bottom, including a finite admissible set.
 
 ```mermaid
 flowchart LR

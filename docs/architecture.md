@@ -534,11 +534,11 @@ Lemma 2.16). `meet'` adds that row in front of `Term.meet`, and `Adm_meet'` and 
 with no premise. `Term.meet` refuses a `held`, so a `held` reaches the meet through that row. The
 view of a `union` is the union of the views of its options.
 
-**The slot test is a disjunct because the meet cannot state every pair.** The admission of a
-`refine` at a `closure` is a function, so the meet answers `none`
-beside every term but the bottom. The occupancies read no predicate. So `Orth1` certifies a
-closure refinement beside an option that writes and reads other slots, where the meet answers
-`none`.
+**The slot test is a disjunct, and the occupancies read no predicate.** The admission of a
+`refine` at a `closure` is a function. A refinement admits a part of what its inner term admits,
+so the meet answers the bottom where the inner term meets the partner at the bottom, and `none`
+elsewhere. A closure refinement beside an option that writes and reads other slots meets at the
+bottom.
 
 **Its value is that it is half of the specification of the library's declaration-time guard, and
 a checked half.** The `union` combinator in `src/` accepts a pair on one of four warrants. It

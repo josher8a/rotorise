@@ -136,7 +136,8 @@ def meetSRight [Leaf S] (fam : Pairing → Term S → Option (Term S)) (p : Pair
   | .var _ => none
   | .mu b => meetSRight fam (shiftR p) b
   | .refine y q =>
-      if Leaf.isData q then (meetSRight fam p y).map (fun z => Term.refineOf z q) else none
+      if Leaf.isData q then (meetSRight fam p y).map (fun z => Term.refineOf z q)
+      else (meetSRight fam p y).bind (fun z => if z.isNever then some .never else none)
   | .union os => (allSome (meetSRightL fam p os)).bind
       (fun zs => some (Term.ofOptions (zs.filter (fun z => !z.isNever))))
   | y => fam p y
@@ -353,7 +354,11 @@ mutual
     Two variables meet where the pairing names them one binder. Two recursive terms meet at the
     recursive term of the two bodies met, with the two binders paired. A recursive term met with
     another constructor unfolds, and its binder pairs with nothing. The answer `mu z` is stated
-    only where `mu z` is guarded, because a derivation of `mu` asks the guard. -/
+    only where `mu z` is guarded, because a derivation of `mu` asks the guard.
+
+    A refinement admits a part of what its inner term admits. So at a predicate that is not data,
+    the refinement row meets the inner term, answers the bottom where that meet is the bottom, and
+    refuses elsewhere. -/
 def Term.meet [Leaf S] (p : Pairing) : Term S → Term S → Option (Term S)
   | .never, _ => some .never
   | .held _ _ _ _, .never => some .never
@@ -368,7 +373,8 @@ def Term.meet [Leaf S] (p : Pairing) : Term S → Term S → Option (Term S)
   | .mu b, y => Term.meet (shiftL p) b y
   | .refine _ _, .never => some .never
   | .refine x q, y =>
-      if Leaf.isData q then (Term.meet p x y).map (fun z => Term.refineOf z q) else none
+      if Leaf.isData q then (Term.meet p x y).map (fun z => Term.refineOf z q)
+      else (Term.meet p x y).bind (fun z => if z.isNever then some .never else none)
   | .union _, .never => some .never
   | .union os, y => (allSome (Term.meetSL p os y)).bind
       (fun zs => some (Term.ofOptions (zs.filter (fun z => !z.isNever))))

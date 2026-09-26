@@ -176,9 +176,10 @@ describe('a union of compatible options gives one answer whatever the option ord
     })
 
     /**
-     * **The meet refuses a closure, and the occupancies read no predicate.** A closure refinement
+     * **A closure refinement meets at the bottom where its inner term does.** A closure refinement
      * of `string` writes `S` from text, and a list of decimals writes `L` from an array. No value
-     * and no attribute reaches both, so the union is certified by the occupancies.
+     * and no attribute reaches both, so `string` meets the list at the bottom, and the union is
+     * certified.
      */
     it('declares a closure refinement of string beside a list of decimals, and gives one answer in each order', () => {
         // `refine` wants a type predicate, and `isNumeral` returns a `boolean`
@@ -472,7 +473,7 @@ describe("an accepted union's options never write one value, or read one attribu
         ['decimal.set()', decimal.set()],
         ['array(string)', array(string)],
         ['legacy', legacy],
-        // a closure the meet refuses, and a list of adapters beside it
+        // a closure, and a list of adapters beside it that its inner term meets at the bottom
         ['numeral', refine(string, isNumeral as (s: string) => s is string)],
         ['array(decimal)', array(decimal)],
     ] as unknown as readonly (readonly [string, AnyCodec])[]
