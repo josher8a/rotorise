@@ -975,7 +975,9 @@ const reaches = (
  * declared, and the caller of this function refuses, declines, or reads the thunk as a free
  * variable.
  */
-const force = (t: Term & { readonly kind: 'lazy' }): Term | undefined => {
+export const force = (
+    t: Term & { readonly kind: 'lazy' },
+): Term | undefined => {
     try {
         return t.get()
     } catch {

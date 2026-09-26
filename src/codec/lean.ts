@@ -64,7 +64,14 @@ import type {
     Term,
     Field as TermField,
 } from './term'
-import { below, bindersOf, heldFree, meetTerms, type Scope } from './term'
+import {
+    below,
+    bindersOf,
+    force,
+    heldFree,
+    meetTerms,
+    type Scope,
+} from './term'
 import { shapeOf } from './value'
 
 /**
@@ -447,6 +454,44 @@ const topScope = (t: Term): Scope => ({
 })
 
 /**
+ * **The caller's functions that a quantified vector binds.** A caller closure and each function of
+ * a caller adapter has no expression in the model, so the theorem binds one variable for each,
+ * and the claim holds at every function. Keyed by the function, so one function is one variable
+ * wherever the pair uses it. `Value` holds each value that a caller function receives, except a
+ * JS float, so an adapter this library ships over a float is still refused.
+ */
+type Bound = {
+    readonly closures: Map<unknown, string>
+    readonly adapters: Map<unknown, string>
+}
+
+/** A scope, and the functions that the theorem binds where the vector is quantified. */
+type At = Scope & { readonly bound?: Bound }
+
+/** The variable of one caller function, made on the first use. */
+const boundName = (
+    names: Map<unknown, string>,
+    fn: unknown,
+    prefix: string,
+): string => {
+    const known = names.get(fn)
+    if (known !== undefined) return known
+    const made = `${prefix}${names.size}`
+    names.set(fn, made)
+    return made
+}
+
+/** The binders of a quantified theorem, or nothing where the vector binds no function. */
+const leanBinders = (bound: Bound): string => {
+    const group = (names: Map<unknown, string>, type: string): string[] =>
+        names.size === 0 ? [] : [`(${[...names.values()].join(' ')} : ${type})`]
+    return [
+        ...group(bound.closures, 'Value → Bool'),
+        ...group(bound.adapters, 'Value → Value'),
+    ].join(' ')
+}
+
+/**
  * A `Term` — §3's syntax, from what the codec says it is.
  *
  * Read off `codec.def`, which is this library's own abstract syntax and is documented as such. The
@@ -472,7 +517,10 @@ const topScope = (t: Term): Scope => ({
  *   emitted as the model's own predicates, and everything else is still refused, by name. The
  *   boundary is no longer "all refinements" but "refinements this library did not build", which is
  *   the honest line — and it is only two predicates wide, because `src/` constructs none of these
- *   three internally.
+ *   three internally. A declaration verdict passes a {@link Bound}, and there a caller's closure
+ *   and a caller's adapter print as variables that the theorem binds.
+ * - **A thunk that throws is not here.** It names a codec not yet declared, and it prints as a
+ *   variable that no binder of the term binds, as the host's meet reads it.
  *
  * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
  * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
@@ -482,7 +530,11 @@ const topScope = (t: Term): Scope => ({
  * vector would have needed them apart and would have been silently wrong. The `attributes` term
  * carries the policy now rather than only its codec, and this emits all three.
  */
-export const leanTermOf = (declared: ObjectSlot, at = 'codec'): string => {
+export const leanTermOf = (
+    declared: ObjectSlot,
+    at = 'codec',
+    bound?: Bound,
+): string => {
     // the entry takes a declaration and the printer below takes a term, so the refusal has a place
     // to live and stays reachable. A codec's definition is a term in the type, and the caller this
     // is for is the one that arrived past a cast — `termOf` draws the same line for the same reason
@@ -493,7 +545,7 @@ export const leanTermOf = (declared: ObjectSlot, at = 'codec'): string => {
             'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
         )
     }
-    return leanTermOfTerm(def, at, topScope(def))
+    return leanTermOfTerm(def, at, { ...topScope(def), bound })
 }
 
 /**
@@ -555,7 +607,7 @@ const leanGround = (alts: Alternatives, at: string): string => {
  * registry below recognises two of them **by reference**, and everything else is refused. That is
  * the case `Pred` keeps rather than removes: `refine` still carries an arbitrary predicate.
  */
-const leanPredicate = (q: Predicate, at: string): string => {
+const leanPredicate = (q: Predicate, at: string, bound?: Bound): string => {
     switch (q.kind) {
         case 'members':
             return `(Pred.members ${leanGround(q.literal, at)})`
@@ -563,6 +615,9 @@ const leanPredicate = (q: Predicate, at: string): string => {
             // recognised by reference against the function this package exported, so a rename or a
             // reimplementation of the predicate is a type error here rather than a silent misemission
             const known = shippedPredicates.get(q.q.is)
+            // a caller's closure in a quantified vector is a variable of the theorem
+            if (!known && bound)
+                return `(Pred.closure ${boundName(bound.closures, q.q.is, 'q')})`
             if (!known) {
                 return refuse(
                     at,
@@ -581,7 +636,7 @@ const leanPredicate = (q: Predicate, at: string): string => {
  * tagged union — and there is one sum now, so a member of a dissection is an `object` term like
  * any other union option and prints through the row above.
  */
-const leanBodyOf = (body: Body, at: string, scope: Scope): string => {
+const leanBodyOf = (body: Body, at: string, scope: At): string => {
     const declared = Object.entries(body.fields)
     const names = declared.map(([name]) => name)
     const fields = leanKeyFunction(
@@ -607,12 +662,12 @@ const leanBodyOf = (body: Body, at: string, scope: Scope): string => {
     return `(Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
 }
 
-const leanTermOfTerm = (t: Term, at: string, scope: Scope): string =>
+const leanTermOfTerm = (t: Term, at: string, scope: At): string =>
     scope.binds.has(t) && !scope.inside.includes(t)
         ? `Term.mu (${leanTermCore(t, at, { ...scope, inside: [...scope.inside, t] })})`
         : leanTermCore(t, at, scope)
 
-const leanTermCore = (t: Term, at: string, scope: Scope): string => {
+const leanTermCore = (t: Term, at: string, scope: At): string => {
     switch (t.kind) {
         case 'string':
             return 'Term.string'
@@ -694,9 +749,11 @@ const leanTermCore = (t: Term, at: string, scope: Scope): string => {
         case 'opaq':
             return 'Term.opaq'
         // a thunk that returns a term being printed closes a cycle, and prints the variable of
-        // that term's binder; any other thunk prints the term it returns
+        // that term's binder; any other thunk prints the term it returns. A thunk that throws
+        // names a codec not yet declared, and prints a variable that no binder of the term binds
         case 'lazy': {
-            const target = t.get()
+            const target = force(t)
+            if (target === undefined) return `Term.var ${scope.inside.length}`
             const k = scope.inside.lastIndexOf(target)
             return k === -1
                 ? leanTermOfTerm(target, `${at}.inner`, scope)
@@ -704,7 +761,8 @@ const leanTermCore = (t: Term, at: string, scope: Scope): string => {
         }
         /**
          * §3 `(refine)`. The predicate is printed by {@link leanPredicate}, and the side condition
-         * below applies to a **closure** only.
+         * below applies to a **shipped closure** only. A caller's closure in a quantified vector
+         * is a variable, and the claim holds at every function, so no coercion can part the two.
          *
          * `writesOnlyStrings` exists because the two shipped predicates take a `string` and a
          * `Value → Bool` takes anything: they disagree where JavaScript coerces, so the emission is
@@ -714,8 +772,12 @@ const leanTermCore = (t: Term, at: string, scope: Scope): string => {
          * to say about them.
          */
         case 'refine': {
-            const q = leanPredicate(t.q, at)
-            if (t.q.kind === 'closure' && !writesOnlyStrings(t.inner)) {
+            const q = leanPredicate(t.q, at, scope.bound)
+            if (
+                t.q.kind === 'closure' &&
+                shippedPredicates.has(t.q.q.is) &&
+                !writesOnlyStrings(t.inner)
+            ) {
                 return refuse(
                     at,
                     `${shippedPredicates.get(t.q.q.is)?.what ?? 'this predicate'} decides a *string*, and this refinement's inner term writes values that are not strings — where JavaScript would coerce and the model would not, so the two predicates would part company`,
@@ -728,11 +790,14 @@ const leanTermCore = (t: Term, at: string, scope: Scope): string => {
          * is. `decimal` is `number` under the text adapter now, so refusing every `held` would
          * take every decimal vector with it.
          *
-         * A caller's pair is still refused, and so is the float adapter, for a reason that is not
-         * about closures: `Value` carries no float, so the conversion would be numeral to numeral
-         * and its content is binary64 rounding. That is the host axiom this development deleted.
+         * A caller's pair prints two variables of a quantified vector, and is refused elsewhere.
+         * The float adapter is refused everywhere, for a reason that is not about closures:
+         * `Value` carries no float, so the conversion would be numeral to numeral and its content
+         * is binary64 rounding. That is the host axiom this development deleted.
          */
         case 'held':
+            if (t.via === undefined && scope.bound)
+                return `(Term.held (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) ${boundName(scope.bound.adapters, t.f, 'f')} ${boundName(scope.bound.adapters, t.g, 'f')})`
             return t.via === 'decimalText'
                 ? `(Term.held (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) numeralOfStoredText textOfNumeral)`
                 : refuse(
@@ -754,7 +819,7 @@ const leanTermCore = (t: Term, at: string, scope: Scope): string => {
  * the presence lattice reads the rest. This emitted `Field.req` and `Field.optional` against a
  * model that stopped having them.
  */
-const leanSlotOf = (field: TermField, at: string, scope: Scope): string => {
+const leanSlotOf = (field: TermField, at: string, scope: At): string => {
     switch (field.mark) {
         case 'optional':
             return `ObjectSlot.optional (${leanTermOfTerm(field.t, at, scope)})`
@@ -973,7 +1038,7 @@ const leanBelow = (x: Term, y: Term): string => {
     if (y.kind === 'union')
         for (const [at, one] of y.options.entries())
             if (below(x, one))
-                return `sub_union_mem (${leanBelow(x, one)}) (${'List.mem_cons_of_mem _ ('.repeat(at)}List.mem_cons_self${')'.repeat(at)}) (by hf_pair)`
+                return `sub_union_mem (${leanBelow(x, one)}) (${'List.mem_cons_of_mem _ ('.repeat(at)}List.mem_cons_self${')'.repeat(at)}) rfl`
     if (x.kind === 'literal')
         return y.kind === 'literal'
             ? '⟨fun _ _ h => h, fun _ _ h => h⟩'
@@ -991,14 +1056,20 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     } catch {
         refused = true
     }
-    const l = leanTermOf(left, name)
-    const r = leanTermOf(right, name)
+    // a caller's function is a variable of the theorem, and the kernel's `decide` refuses a goal
+    // with a free variable, so a quantified verdict reduces by `rfl`
+    const bound: Bound = { closures: new Map(), adapters: new Map() }
+    const l = leanTermOf(left, name, bound)
+    const r = leanTermOf(right, name, bound)
+    const binders = leanBinders(bound)
+    const head = `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`
+    const reduce = binders === '' ? 'by decide' : 'rfl'
     if (refused) {
         return [
             `/-- \`${name}\` — \`src/\` refuses this pair; the model must not certify it -/`,
-            `theorem ${leanIdent(name)} :`,
+            head,
             `    certPair (${l})`,
-            `      (${r}) = false := by decide`,
+            `      (${r}) = false := ${reduce}`,
         ].join('\n')
     }
     const isNever = (declared: AnyCodec): boolean => {
@@ -1010,15 +1081,15 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
         : isNever(right)
           ? 'fun _ => pairwiseCompat_never_right _'
           : heldFree(left.def) && heldFree(right.def)
-            ? 'fun hl => pairwiseCompat_of_HF (by hf_pair) hl'
+            ? 'fun hl => pairwiseCompat_of_HF rfl hl'
             : below(left.def, right.def)
               ? `fun hl => pairwiseCompat_of_sub (${leanBelow(left.def, right.def)}) hl`
               : below(right.def, left.def)
                 ? `fun hl => pairwiseCompat_of_sub' (${leanBelow(right.def, left.def)}) hl`
-                : 'fun hl => pairwiseCompat_of_separated hl (separated_of_unionOk (by decide))'
+                : `fun hl => pairwiseCompat_of_separated hl (separated_of_unionOk (${reduce}))`
     return [
         `/-- \`${name}\` — \`src/\` accepts this pair; the model proves it compatible -/`,
-        `theorem ${leanIdent(name)} :`,
+        head,
         `    (∀ t ∈ [${l}, ${r}], Lawful (denote t)) →`,
         `      PairwiseCompat [${l}, ${r}] :=`,
         `  ${warrant}`,
@@ -1060,10 +1131,6 @@ set_option linter.unusedVariables false
 set_option linter.style.nameCheck false
 
 namespace Calculus
-
-/-- Held-freeness of two concrete terms: the definitions unfold, and each slot of a body splits. -/
-macro "hf_pair" : tactic =>
-  \`(tactic| simp [HFL, HF, HFB, HFS, HFO, Term.tuple, Term.array, Term.record, apply_ite HFS])
 
 ${separations.map(leanSeparation).join('\n\n')}
 
@@ -1241,9 +1308,11 @@ const fieldNamesOf = (t: Term, into: Set<string>, forced: number): void => {
         case 'legacy':
             fieldNamesOf(t.inner, into, forced)
             return
-        case 'lazy':
-            if (forced > 0) fieldNamesOf(t.get(), into, forced - 1)
+        case 'lazy': {
+            const target = forced > 0 ? force(t) : undefined
+            if (target !== undefined) fieldNamesOf(target, into, forced - 1)
             return
+        }
         default:
             return
     }
@@ -1320,14 +1389,14 @@ const MEET_LEMMAS = [
     'Term.ofOptions',
     'unionOk',
     'certAll',
-    'Term.isNever',
+    'Alg.Term.isNever',
     'Term.isOpenObject',
     'MapOf.at',
     'Term.tupleOf',
     'Term.listOf',
     'Term.refineOf',
     'ObjectSlot.meet',
-    'ObjectSlot.isReq',
+    'Alg.ObjectSlot.isReq',
     'ObjectSlot.isBottom',
     'objSlot',
     'ObjectSlot.through',

@@ -125,8 +125,8 @@ theorem select_some {A B : Type} {os : List Codec} {run : Codec → A → Option
 
 /-! ## Held-free terms -/
 
--- A term is **held-free** when no `held` occurs in the term: `Alg.HF`. The names are aliases,
--- so `simp [HF]` reads the equations of `Alg.HF`, as the emitted vectors ask.
+-- A term is **held-free** when no `held` occurs in the term: `Alg.HF`, the test `hasHeld` at
+-- `false`. The names are aliases, so a closed term is shown held-free by `rfl`.
 export Alg (HF HFB HFS HFL HFO)
 
 /-- The laws of `Ω` that the held-free theory reads: each primitive is below `Ω`, `Ω` acts as the

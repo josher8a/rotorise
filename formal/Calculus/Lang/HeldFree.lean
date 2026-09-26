@@ -144,67 +144,18 @@ end Combinators
 section HeldFree
 variable {S : Syn}
 
-mutual
-/-- A term is **held-free** when no `held` occurs in the term. A held-free term does not change
-    the carrier, so the term is a restriction of the top. -/
-def HF : Term S → Prop
-  | .held _ _ _ _ => False
-  | .refine t _ => HF t
-  | .mu t => HF t
-  | .list pre sp suf => HFL pre ∧ HFO sp ∧ HFL suf
-  | .object b => HFB b
-  | .union os => HFL os
-  | .set t => HF t
-  | .prim _ | .opaq | .never | .var _ => True
+/-- A term is **held-free** when no `held` occurs in the term: the test `hasHeld` answers
+    `false`. A held-free term does not change the carrier, so the term is a restriction of the
+    top. The test is the definition, so a closed term is shown held-free by `rfl`. -/
+abbrev HF (t : Term S) : Prop := hasHeld t = false
 /-- A body is held-free when each slot and the open block are held-free. -/
-def HFB : Body S → Prop
-  | .mk _ f w => (∀ k, HFS (f k)) ∧ HFO w
+abbrev HFB (b : Body S) : Prop := hasHeldB b = false
 /-- A slot is held-free when the slot's term is held-free. -/
-def HFS : ObjectSlot S → Prop
-  | .req t => HF t
-  | .optional t => HF t
+abbrev HFS (s : ObjectSlot S) : Prop := hasHeldS s = false
 /-- Each term of the list is held-free. -/
-def HFL : List (Term S) → Prop
-  | [] => True
-  | t :: ts => HF t ∧ HFL ts
+abbrev HFL (ts : List (Term S)) : Prop := hasHeldL ts = false
 /-- The optional term is held-free where the term is present. -/
-def HFO : Option (Term S) → Prop
-  | none => True
-  | some t => HF t
-end
-
-
-mutual
-/-- **A term with no `held` is held-free.** `hasHeld` is the test the meet can run, and `HF` is
-    the premise `sub_denote` reads. -/
-theorem HF_of_hasHeld : ∀ t : Term S, hasHeld t = false → HF t
-  | .held _ _ _ _, h => nomatch h
-  | .refine t _, h => HF_of_hasHeld t h
-  | .mu b, h => HF_of_hasHeld b h
-  | .set t, h => HF_of_hasHeld t h
-  | .list pre sp suf, h => by
-      simp only [hasHeld, Bool.or_eq_false_iff] at h
-      exact ⟨HFL_of_hasHeldL pre h.1.1, HFO_of_hasHeldO sp h.1.2, HFL_of_hasHeldL suf h.2⟩
-  | .object (.mk fs f w), h => by
-      simp only [hasHeld, hasHeldB, Bool.or_eq_false_iff, decide_eq_false_iff_not,
-        not_exists] at h
-      exact ⟨fun k => HFS_of_hasHeldS (f k) (by simpa using h.1 k), HFO_of_hasHeldO w h.2⟩
-  | .union os, h => HFL_of_hasHeldL os h
-  | .prim _, _ | .opaq, _ | .never, _ | .var _, _ => trivial
-/-- …in a list. -/
-theorem HFL_of_hasHeldL : ∀ ts : List (Term S), hasHeldL ts = false → HFL ts
-  | [], _ => trivial
-  | t :: ts, h => by
-      simp only [hasHeldL, Bool.or_eq_false_iff] at h
-      exact ⟨HF_of_hasHeld t h.1, HFL_of_hasHeldL ts h.2⟩
-/-- …in an optional term. -/
-theorem HFO_of_hasHeldO : ∀ o : Option (Term S), hasHeldO o = false → HFO o
-  | none, _ => trivial
-  | some t, h => HF_of_hasHeld t h
-/-- …in a slot. -/
-theorem HFS_of_hasHeldS : ∀ s : ObjectSlot S, hasHeldS s = false → HFS s
-  | .req t, h | .optional t, h => HF_of_hasHeld t h
-end
+abbrev HFO (o : Option (Term S)) : Prop := hasHeldO o = false
 
 variable [Sem S]
 
@@ -248,29 +199,32 @@ theorem sub_denoteIn (hT : TopLaws S) : ∀ t : Term S, HF t → ∀ ρ : List S
             | 0 => ih
             | i + 1 => henv i
       exact ⟨fun v a he => (hs _).1 v a he, fun a v hp => (hs _).2 a v hp⟩
-  | .held _ _ _ _, h, _, _ => h.elim
+  | .held _ _ _ _, h, _, _ => nomatch h
   | .refine t q, h, ρ, henv =>
       sub_trans (sub_restrict_self _ _) (sub_denoteIn hT t h ρ henv)
-  | .list pre sp suf, ⟨h1, h2, h3⟩, ρ, henv => by
+  | .list pre sp suf, h, ρ, henv => by
+      simp only [HF, hasHeld, Bool.or_eq_false_iff] at h
       simp only [denote]
       cases hL : Sem.list (S := S) with
       | none => exact sub_empty
       | some L =>
         exact sub_listCodec (hT.list L hL).1 (hT.list L hL).2
-          (sub_denoteList hT pre h1 ρ henv) (sub_denoteOpt hT sp h2 ρ henv)
-          (sub_denoteList hT suf h3 ρ henv)
+          (sub_denoteList hT pre h.1.1 ρ henv) (sub_denoteOpt hT sp h.1.2 ρ henv)
+          (sub_denoteList hT suf h.2 ρ henv)
   | .object b, h, ρ, henv => sub_body hT b h ρ henv
   | .union os, h, ρ, henv => sub_altCodec (sub_denoteList hT os h ρ henv) _
 /-- …at a body. -/
 theorem sub_body (hT : TopLaws S) : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (bodySem b ρ) (Sem.top (S := S))
-  | .mk fields f w, ⟨hf, hw⟩, ρ, henv => by
+  | .mk fields f w, h, ρ, henv => by
+      simp only [HFB, hasHeldB, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists] at h
       simp only [bodySem]
       cases hF : Sem.map (S := S) with
       | none => exact sub_empty
       | some F =>
         exact sub_objectCodec (hT.map F hF).1 (hT.map F hF).2 (wildSem_ne_drop _)
-          (fun k => sub_slot hT (f k) (hf k) ρ henv) (sub_wild hT w hw ρ henv)
+          (fun k => sub_slot hT (f k) (Bool.eq_false_iff.mpr (h.1 k)) ρ henv)
+          (sub_wild hT w h.2 ρ henv)
 /-- …at a slot. -/
 theorem sub_slot (hT : TopLaws S) : ∀ s : ObjectSlot S, HFS s → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (fieldSem s ρ).codec (Sem.top (S := S))
@@ -285,10 +239,11 @@ theorem sub_wild (hT : TopLaws S) : ∀ w : Option (Term S), HFO w → ∀ ρ : 
 theorem sub_denoteList (hT : TopLaws S) : ∀ ts : List (Term S), HFL ts → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ denoteList ts ρ, Sub c (Sem.top (S := S))
   | [], _, _, _ => fun _ hc => nomatch hc
-  | t :: ts, ⟨h1, h2⟩, ρ, henv => fun c hc => by
+  | t :: ts, h, ρ, henv => fun c hc => by
+      simp only [HFL, hasHeldL, Bool.or_eq_false_iff] at h
       rcases List.mem_cons.mp hc with rfl | hc
-      · exact sub_denoteIn hT t h1 ρ henv
-      · exact sub_denoteList hT ts h2 ρ henv c hc
+      · exact sub_denoteIn hT t h.1 ρ henv
+      · exact sub_denoteList hT ts h.2 ρ henv c hc
 /-- …at an optional term. -/
 theorem sub_denoteOpt (hT : TopLaws S) : ∀ o : Option (Term S), HFO o → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ denoteOpt o ρ, Sub c (Sem.top (S := S))

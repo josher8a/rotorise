@@ -95,7 +95,7 @@ theorem pairwiseCompat_of_sub' {x y : Term} (h : Sub (denote y) (denote x))
     as the same attribute, so the options are compatible. -/
 theorem pairwiseCompat_array_literals :
     PairwiseCompat [Term.array (.literal .string "A"), Term.array (.literal .string "B")] :=
-  pairwiseCompat_of_HF ⟨⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟨⟩, ⟨⟩, ⟨⟩⟩, ⟨⟩⟩ (forall_mem_pair
+  pairwiseCompat_of_HF rfl (forall_mem_pair
     (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _))
     (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _)))
 

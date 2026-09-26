@@ -85,7 +85,7 @@ turned away go with the policy.
 namespace Calculus
 
 open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Body.block
-  Body.slotAt Body.slotAt_pos Body.slotAt_neg listOf_cases HF_of_hasHeld alignPL_eq_rowOfG
+  Body.slotAt Body.slotAt_pos Body.slotAt_neg listOf_cases alignPL_eq_rowOfG
   rowOfG_length rowOfG_none_eq rowOfG_some_eq rowOfG_mem forall₂_replicate forall₂_append
   forall₂_zip_append forall₂_zip_replicate forall₂_zip_take forall₂_zip_drop rowOfG_map
   rowOfG_forall₂ rowOfG_forall₂_left rowOfG_some_isSome rowOfG_total rowOfG_respread dominates_max
@@ -1482,20 +1482,24 @@ theorem HF_writeView : ∀ t : Term, HF (writeView t)
   | .held _ P _ _ => by simp only [writeView]; exact HF_writeView P
   | .refine t _ => by simp only [writeView]; exact HF_writeView t
   | .list pre sp suf => by
-      simp only [writeView]; exact ⟨HF_writeViewL pre, HF_writeViewO sp, HF_writeViewL suf⟩
+      simp only [writeView, HF, hasHeld, Bool.or_eq_false_iff]
+      exact ⟨⟨HF_writeViewL pre, HF_writeViewO sp⟩, HF_writeViewL suf⟩
   | .object (.mk fs f w) => by
-      simp only [writeView, writeViewB]; exact ⟨fun k => HF_writeViewS (f k), HF_writeViewO w⟩
+      simp only [writeView, writeViewB, HF, hasHeld, Alg.hasHeldB, Bool.or_eq_false_iff,
+        decide_eq_false_iff_not, not_exists]
+      exact ⟨fun k => Bool.eq_false_iff.mp (HF_writeViewS (f k)), HF_writeViewO w⟩
   | .union os => by simp only [writeView]; exact HF_writeViewL os
   | .set t => by simp only [writeView]; exact HF_writeView t
   | .mu b => by simp only [writeView]; exact HF_writeView b
-  | .prim _ => trivial | .opaq => trivial | .never => trivial | .var _ => trivial
+  | .prim _ => rfl | .opaq => rfl | .never => rfl | .var _ => rfl
 /-- `HF_writeView` over a list. -/
 theorem HF_writeViewL : ∀ ts : List Term, HFL (writeViewL ts)
-  | [] => trivial
-  | t :: ts => ⟨HF_writeView t, HF_writeViewL ts⟩
+  | [] => rfl
+  | t :: ts => by
+      simp only [writeViewL, HFL, Alg.hasHeldL, Bool.or_eq_false_iff]; exact ⟨HF_writeView t, HF_writeViewL ts⟩
 /-- `HF_writeView` at an optional term. -/
 theorem HF_writeViewO : ∀ o : Option Term, HFO (writeViewO o)
-  | none => trivial
+  | none => rfl
   | some t => HF_writeView t
 /-- `HF_writeView` at a slot. -/
 theorem HF_writeViewS : ∀ s : ObjectSlot, HFS (writeViewS s)
@@ -1514,22 +1518,26 @@ theorem HF_readView : ∀ t : Term, HF (readView t)
       · exact HF_readView t
       · next h =>
         simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at h
-        exact HF_of_hasHeld t h.1
+        exact h.1
   | .list pre sp suf => by
-      simp only [readView]; exact ⟨HF_readViewL pre, HF_readViewO sp, HF_readViewL suf⟩
+      simp only [readView, HF, hasHeld, Bool.or_eq_false_iff]
+      exact ⟨⟨HF_readViewL pre, HF_readViewO sp⟩, HF_readViewL suf⟩
   | .object (.mk fs f w) => by
-      simp only [readView, readViewB]; exact ⟨fun k => HF_readViewS (f k), HF_readViewO w⟩
+      simp only [readView, readViewB, HF, hasHeld, Alg.hasHeldB, Bool.or_eq_false_iff,
+        decide_eq_false_iff_not, not_exists]
+      exact ⟨fun k => Bool.eq_false_iff.mp (HF_readViewS (f k)), HF_readViewO w⟩
   | .union os => by simp only [readView]; exact HF_readViewL os
   | .set t => by simp only [readView]; exact HF_readView t
   | .mu b => by simp only [readView]; exact HF_readView b
-  | .prim _ => trivial | .opaq => trivial | .never => trivial | .var _ => trivial
+  | .prim _ => rfl | .opaq => rfl | .never => rfl | .var _ => rfl
 /-- `HF_readView` over a list. -/
 theorem HF_readViewL : ∀ ts : List Term, HFL (readViewL ts)
-  | [] => trivial
-  | t :: ts => ⟨HF_readView t, HF_readViewL ts⟩
+  | [] => rfl
+  | t :: ts => by
+      simp only [readViewL, HFL, Alg.hasHeldL, Bool.or_eq_false_iff]; exact ⟨HF_readView t, HF_readViewL ts⟩
 /-- `HF_readView` at an optional term. -/
 theorem HF_readViewO : ∀ o : Option Term, HFO (readViewO o)
-  | none => trivial
+  | none => rfl
   | some t => HF_readView t
 /-- `HF_readView` at a slot. -/
 theorem HF_readViewS : ∀ s : ObjectSlot, HFS (readViewS s)
