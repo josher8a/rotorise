@@ -423,6 +423,9 @@ const setSlotOf = (slot: SetSlot): SetSlot | undefined =>
             ? 'binSet'
             : undefined
 
+/** The three wire set families: the occupancy of a set whose element family is not known. */
+const everySetFamily: readonly SetSlot[] = ['strSet', 'numSet', 'binSet']
+
 export const everySlot: readonly SetSlot[] = [
     'string',
     'number',
@@ -486,9 +489,21 @@ export const occV = (t: Term): readonly SetSlot[] => {
             return ['null']
         case 'literal':
             return [baseSlot[t.base]]
-        // a set writes the wire family of each scalar slot its element writes
+        // a set writes the wire family of each scalar slot its element writes. **An element slot
+        // with no family answers every family, not none.** The model's caller carrier has no
+        // set of booleans, so the model drops the slot exactly. The host caller carrier holds
+        // sets that the stored universe has no family for: `refine(held(string, boolean, …),
+        // isTrue).set()` admits a `Set<boolean>` and writes the set. The occupancy must
+        // over-approximate, so the occupancy keeps that slot. Two such sets then overlap, and
+        // `union` refuses the pair at construction
         case 'set':
-            return occV(t.elem).flatMap((slot) => setSlotOf(slot) ?? [])
+            return [
+                ...new Set(
+                    occV(t.elem).flatMap(
+                        (slot) => setSlotOf(slot) ?? everySetFamily,
+                    ),
+                ),
+            ]
         case 'list':
             return ['array']
         case 'object':
