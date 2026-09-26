@@ -5,9 +5,8 @@ import Calculus.Dynamo.Analysis.ExactA
 
 `Obligations (.union opts)` carries pairwise compatibility. Two separated options are compatible
 (`pairwiseCompat_of_separated`). The decidable certificate is `certPair` (`Meet.lean`): two
-options are orthogonal when `meet'` meets them at the bottom. `meet'` answers the bottom where the
-domains and the ranges of the two terms meet at the bottom. The meet refuses a closure beside a
-partner that its inner term does not meet at the bottom.
+options are orthogonal when the domains and the ranges of the two terms meet at the bottom. The
+meet refuses a closure beside a partner that its inner term does not meet at the bottom.
 
 This module holds `Separates` and the two theorems that the discharger reads from it.
 
