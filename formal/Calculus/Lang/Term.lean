@@ -548,43 +548,33 @@ def Term.hasVarO : Option (Term S) → Bool
   | some t => Term.hasVar t
 end
 
-/-- **The flags under one more binder**: `b` for the new variable, and `env` for the rest. -/
-def flagsCons (b : Bool) (env : Nat → Bool) : Nat → Bool
-  | 0 => b
-  | i + 1 => env i
-
 mutual
-/-- **Whether a `held` can occur in the term, under one flag per variable.** The flag `env i`
-    says whether the binder of `var i` holds a `held`. The flag of `mu b` is the test of `b` with
-    its own variable at `false`: the variable adds no `held` of its own, so the flag is the least
-    fixed point. Under the flags `fun _ => false`, the test is `false` exactly where no `held`
-    occurs. -/
-def hasHeldUnder (env : Nat → Bool) : Term S → Bool
+/-- **Whether a `held` occurs in the term**, the decision procedure of `HF`. A variable is not a
+    `held`, as `HF` counts it. -/
+def hasHeld : Term S → Bool
   | .held _ _ _ _ => true
-  | .var i => env i
-  | .refine t _ => hasHeldUnder env t
-  | .mu b => hasHeldUnder (flagsCons false env) b
-  | .list pre sp suf => hasHeldUnderL env pre || hasHeldUnderO env sp || hasHeldUnderL env suf
-  | .object b => hasHeldUnderB env b
-  | .union os => hasHeldUnderL env os
-  | .set t => hasHeldUnder env t
-  | .prim _ | .opaq | .never => false
+  | .refine t _ => hasHeld t
+  | .mu b => hasHeld b
+  | .list pre sp suf => hasHeldL pre || hasHeldO sp || hasHeldL suf
+  | .object b => hasHeldB b
+  | .union os => hasHeldL os
+  | .set t => hasHeld t
+  | .prim _ | .opaq | .never | .var _ => false
 /-- …in a list. -/
-def hasHeldUnderL (env : Nat → Bool) : List (Term S) → Bool
+def hasHeldL : List (Term S) → Bool
   | [] => false
-  | t :: ts => hasHeldUnder env t || hasHeldUnderL env ts
+  | t :: ts => hasHeld t || hasHeldL ts
 /-- …in an optional term. -/
-def hasHeldUnderO (env : Nat → Bool) : Option (Term S) → Bool
+def hasHeldO : Option (Term S) → Bool
   | none => false
-  | some t => hasHeldUnder env t
+  | some t => hasHeld t
 /-- …in a body. -/
-def hasHeldUnderB (env : Nat → Bool) : Body S → Bool
-  | .mk fs f w => decide (∃ k : {k // k ∈ fs}, hasHeldUnderS env (f k) = true) ||
-      hasHeldUnderO env w
+def hasHeldB : Body S → Bool
+  | .mk fs f w => decide (∃ k : {k // k ∈ fs}, hasHeldS (f k) = true) || hasHeldO w
 /-- …in a slot. -/
-def hasHeldUnderS (env : Nat → Bool) : ObjectSlot S → Bool
-  | .req t => hasHeldUnder env t
-  | .optional t => hasHeldUnder env t
+def hasHeldS : ObjectSlot S → Bool
+  | .req t => hasHeld t
+  | .optional t => hasHeld t
 end
 
 /-! ## A structural measure on terms

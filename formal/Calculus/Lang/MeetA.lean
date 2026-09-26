@@ -1141,8 +1141,8 @@ theorem admA_famSet [FormerAdmA S] [Shapes S] (a : Term S) {mt : Term S → Opti
             simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hh
             simp only [Option.some.injEq] at h; subst h
             exact AdmAAt_closed hv.1 hv.2 hh.2
-              (FormerAdmA.set_meet a y z' (HF_of_hasHeldUnder a _ hh.1.1.1)
-                (HF_of_hasHeldUnder y _ hh.1.1.2) (HF_of_hasHeldUnder z' _ hh.1.2)
+              (FormerAdmA.set_meet a y z' (HF_of_hasHeld a hh.1.1.1) (HF_of_hasHeld y hh.1.1.2)
+                (HF_of_hasHeld z' hh.1.2)
                 (fun u => by rw [← AdmA_closed z' hh.2 ρ'' [], ← ha, ← hy]; exact hm u))
       · exact nomatch h
   case opaq => simp [famSet] at h

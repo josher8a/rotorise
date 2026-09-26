@@ -523,9 +523,13 @@ Lemma 2.16). `certPair` meets the two caller views and the two stored views with
 through its views. On a term with no `held`, the caller view is the term itself. The
 view of a `union` is the union of the views of its options. The view of `mu b` is `mu` of the view
 of `b`, and a variable stays a variable, so a `held` below a recursion reaches the certificate too.
-The stored view keeps a predicate only where the inner term holds no `held` under one flag per
-binder. The flag says whether the binder's body holds a `held`, because a variable denotes a stage
-of its binder, and the stage holds a `held` only where the body holds one.
+
+**The stored view drops a predicate over a variable.** The stored view keeps a predicate only
+where the inner term holds no `held` and no variable. A variable denotes a stage of its binder,
+and the view reads each variable as a possible `held`. A finer view reads a variable as a `held`
+only where the binder's body holds one. The two views give one verdict except at a data predicate
+over a variable, and the host builds no data predicate. So no host-built term observes the
+narrowing, and a Lean example pins the pair that the certificate refuses there.
 
 **The meet reads a closure through its inner term.** The admission of a `refine` at a `closure`
 is a function. A refinement admits a part of what its inner term admits,
