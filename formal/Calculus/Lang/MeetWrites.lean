@@ -85,46 +85,55 @@ def WritesFam (x : Term S) (fam : Term S → Option (Term S)) : Prop :=
 
 mutual
 /-- Every row that reads the right operand alone names the family's member. -/
-theorem writes_meetSRight [Leaf S] {x : Term S} {fam : Term S → Option (Term S)} (hf : WritesFam x fam) :
-    ∀ (y : Term S) z, meetSRight fam y = some z → ∀ m : Sem.M S, μSyn z = some m →
+theorem writes_meetSRight [Leaf S] {x : Term S} {fam : Pairing → Term S → Option (Term S)}
+    (hf : ∀ q, WritesFam x (fam q)) :
+    ∀ (y : Term S) (p : Pairing) z, meetSRight fam p y = some z → ∀ m : Sem.M S,
+      μSyn z = some m →
       (∀ mx, μSyn x = some mx → mx = m) ∧ (∀ my, μSyn y = some my → my = m)
-  | .never, _, h, _, hz => by
+  | .never, _, _, h, _, hz => by
       simp only [meetSRight, Option.some.injEq] at h; subst h
       exact absurd hz (by simp [μSyn])
-  | .held _ _ _ _, _, h, _, _ => by simp [meetSRight] at h
-  | .refine y p, _, h, m, hz => by
+  | .held _ _ _ _, _, _, h, _, _ => by simp [meetSRight] at h
+  | .var _, _, _, h, _, _ => by simp [meetSRight] at h
+  -- the unfolded right operand names no member, so its half holds vacuously
+  | .mu b, p, _, h, m, hz => by
+      simp only [meetSRight] at h
+      exact ⟨(writes_meetSRight hf b (shiftR p) _ h m hz).1,
+        fun my hmy => absurd hmy (by simp [μSyn])⟩
+  | .refine y q, p, _, h, m, hz => by
       simp only [meetSRight] at h
       split at h
       · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
         replace hz := μSyn_refineOf hz
-        have ih := writes_meetSRight hf y w hw m hz
+        have ih := writes_meetSRight hf y p w hw m hz
         exact ⟨ih.1, fun my hmy => ih.2 my (by simpa [μSyn] using hmy)⟩
       · exact absurd h (by simp)
-  | .union os, _, h, m, hz => by
+  | .union os, p, _, h, m, hz => by
       obtain ⟨zs, hF, _, _, rfl⟩ := meetSRight_union h
       obtain ⟨w, hw, hwm⟩ := μSyn_ofOptions_mem hz
       obtain ⟨o, ho, hP⟩ :=
-        forall₂_mem_right (writes_meetSRightL hf os zs hF) (List.mem_of_mem_filter hw)
+        forall₂_mem_right (writes_meetSRightL hf os p zs hF) (List.mem_of_mem_filter hw)
       have ih := hP m hwm
       exact ⟨ih.1, fun my hmy => ih.2 my (μSyn_union_mem hmy o ho)⟩
-  | .prim g, _, h, m, hz => hf (.prim g) _ trivial h m hz
-  | .set b, _, h, m, hz => hf (.set b) _ trivial h m hz
-  | .opaq, _, h, m, hz => hf .opaq _ trivial h m hz
-  | .list p q s, _, h, m, hz => hf (.list p q s) _ trivial h m hz
-  | .object b, _, h, m, hz => hf (.object b) _ trivial h m hz
+  | .prim g, p, _, h, m, hz => hf p (.prim g) _ trivial h m hz
+  | .set b, p, _, h, m, hz => hf p (.set b) _ trivial h m hz
+  | .opaq, p, _, h, m, hz => hf p .opaq _ trivial h m hz
+  | .list pr q s, p, _, h, m, hz => hf p (.list pr q s) _ trivial h m hz
+  | .object b, p, _, h, m, hz => hf p (.object b) _ trivial h m hz
 termination_by structural y => y
 
 /-- The union row's options, lifted pointwise. -/
-theorem writes_meetSRightL [Leaf S] {x : Term S} {fam : Term S → Option (Term S)} (hf : WritesFam x fam) :
-    ∀ os zs, List.Forall₂ (fun t w => meetSRight fam t = some w) os zs →
+theorem writes_meetSRightL [Leaf S] {x : Term S} {fam : Pairing → Term S → Option (Term S)}
+    (hf : ∀ q, WritesFam x (fam q)) :
+    ∀ os (p : Pairing) zs, List.Forall₂ (fun t w => meetSRight fam p t = some w) os zs →
       List.Forall₂ (fun t w => ∀ m : Sem.M S, μSyn w = some m →
         (∀ mx, μSyn x = some mx → mx = m) ∧ (∀ my, μSyn t = some my → my = m)) os zs
-  | [], _, h => by cases h; exact .nil
-  | t :: ts, _, h => by
+  | [], _, _, h => by cases h; exact .nil
+  | t :: ts, p, _, h => by
       cases h with
       | cons hh ht =>
-          exact .cons (fun m hm => writes_meetSRight hf t _ hh m hm)
-            (writes_meetSRightL hf ts _ ht)
+          exact .cons (fun m hm => writes_meetSRight hf t p _ hh m hm)
+            (writes_meetSRightL hf ts p _ ht)
 termination_by structural os => os
 end
 
@@ -180,6 +189,8 @@ theorem writes_famSet (a : Term S) {mt : Term S → Option (Term S)}
   cases y <;> first | exact hd.elim | skip
   case set y =>
       simp only [famSet] at h
+      split at h
+      · exact nomatch h
       split at h
       · next z' hz' =>
         split at h
@@ -243,24 +254,45 @@ mutual
     hypothesis and not a conclusion, because the converse fails twice: a bottom names no member,
     so two factors naming different members meet at a term that names none, and a refinement over
     the bottom is not the bottom, so excluding `never` does not repair it. -/
-theorem meet_writes [Leaf S] [LeafWrites S] : ∀ (x y : Term S) z, Term.meet x y = some z → ∀ m : Sem.M S, μSyn z = some m →
+theorem meet_writes [Leaf S] [LeafWrites S] : ∀ (p : Pairing) (x y : Term S) z,
+    Term.meet p x y = some z → ∀ m : Sem.M S, μSyn z = some m →
     (∀ mx, μSyn x = some mx → mx = m) ∧ (∀ my, μSyn y = some my → my = m)
-  | .never, _, _, h, _, hz => by
+  | _, .never, _, _, h, _, hz => by
       simp only [Term.meet, Option.some.injEq] at h; subst h
       exact absurd hz (by simp [μSyn])
-  | .held _ _ _ _, y, _, h, _, hz => by
+  | _, .held _ _ _ _, y, _, h, _, hz => by
       cases y <;>
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h
              exact absurd hz (by simp [μSyn]))
           | exact absurd h (by simp [Term.meet])
-  | .mu _, y, _, h, _, hz => by
+  -- a variable names no member, and neither does the variable that two variables meet at
+  | _, .var _, y, _, h, _, hz => by
       cases y <;>
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h
              exact absurd hz (by simp [μSyn]))
+          | (simp only [Term.meet, Option.map_eq_some_iff] at h
+             obtain ⟨_, _, rfl⟩ := h
+             exact absurd hz (by simp [μSyn]))
           | exact absurd h (by simp [Term.meet])
-  | .refine x p, y, _, h, m, hz => by
+  -- a recursive term names no member; an unfolding carries the member of the body's meet
+  | p, .mu b, y, _, h, m, hz => by
+      cases y <;>
+        first
+          | (simp only [Term.meet, Option.some.injEq] at h; subst h
+             exact absurd hz (by simp [μSyn]))
+          | (simp only [Term.meet, Option.bind_eq_some_iff] at h
+             obtain ⟨w, -, hw⟩ := h
+             split at hw
+             · cases hw; exact absurd hz (by simp [μSyn])
+             · split at hw
+               · cases hw; exact absurd hz (by simp [μSyn])
+               · exact nomatch hw)
+          | (simp only [Term.meet] at h
+             exact ⟨fun mx hmx => absurd hmx (by simp [μSyn]),
+               (meet_writes (shiftL p) b _ _ h m hz).2⟩)
+  | p, .refine x q, y, _, h, m, hz => by
       cases y with
       | never =>
           simp only [Term.meet, Option.some.injEq] at h; subst h
@@ -270,10 +302,10 @@ theorem meet_writes [Leaf S] [LeafWrites S] : ∀ (x y : Term S) z, Term.meet x 
         split at h
         · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
           replace hz := μSyn_refineOf hz
-          have ih := meet_writes x _ w hw m hz
+          have ih := meet_writes p x _ w hw m hz
           exact ⟨fun mx hmx => ih.1 mx (by simpa [μSyn] using hmx), ih.2⟩
         · exact absurd h (by simp)
-  | .union os, y, _, h, m, hz => by
+  | p, .union os, y, _, h, m, hz => by
       cases y with
       | never =>
           simp only [Term.meet, Option.some.injEq] at h; subst h
@@ -282,42 +314,44 @@ theorem meet_writes [Leaf S] [LeafWrites S] : ∀ (x y : Term S) z, Term.meet x 
         obtain ⟨zs, hF, _, _, rfl⟩ := meet_union_of h (by simp)
         obtain ⟨w, hw, hwm⟩ := μSyn_ofOptions_mem hz
         obtain ⟨o, ho, hP⟩ :=
-          forall₂_mem_right (writes_meetL os _ zs hF) (List.mem_of_mem_filter hw)
+          forall₂_mem_right (writes_meetL p os _ zs hF) (List.mem_of_mem_filter hw)
         have ih := hP m hwm
         exact ⟨fun mx hmx => ih.1 mx (μSyn_union_mem hmx o ho), ih.2⟩
-  | .prim g, y, z, h, m, hz => writes_meetSRight (writes_famPrim g) y z h m hz
-  | .set a, y, z, h, m, hz =>
-      writes_meetSRight (writes_famSet a (fun u w hw => meet_writes a u w hw)) y z h m hz
-  | .opaq, y, z, h, m, hz => writes_meetSRight (writes_famOpaq) y z h m hz
-  | .list pre sp suf, y, z, h, m, hz => by
+  | p, .prim g, y, z, h, m, hz => writes_meetSRight (fun _ => writes_famPrim g) y p z h m hz
+  | p, .set a, y, z, h, m, hz =>
+      writes_meetSRight (fun q => writes_famSet a (fun u w hw => meet_writes q a u w hw))
+        y p z h m hz
+  | p, .opaq, y, z, h, m, hz => writes_meetSRight (fun _ => writes_famOpaq) y p z h m hz
+  | p, .list pre sp suf, y, z, h, m, hz => by
       cases sp with
       | none =>
-          exact writes_meetSRight (writes_famList (pre := pre) (sp := none) (suf := suf)
-            (fpre := Term.meetSTs pre) (fsp := none)
-            (fsuf := Term.meetSTs suf)) y z h m hz
+          exact writes_meetSRight (fun q => writes_famList (pre := pre) (sp := none) (suf := suf)
+            (fpre := Term.meetSTs q pre) (fsp := none)
+            (fsuf := Term.meetSTs q suf)) y p z h m hz
       | some t =>
-          exact writes_meetSRight (writes_famList (pre := pre) (sp := some t) (suf := suf)
-            (fpre := Term.meetSTs pre) (fsp := some (Term.meet t))
-            (fsuf := Term.meetSTs suf)) y z h m hz
-  | .object (.mk fs f none), y, z, h, m, hz =>
-      writes_meetSRight (writes_famObj (a := .mk fs f none)
-        (g := fun k => ObjectSlot.meet (f k)) (mw := fun _ => some .never)) y z h m hz
-  | .object (.mk fs f (some t)), y, z, h, m, hz =>
-      writes_meetSRight (writes_famObj (a := .mk fs f (some t))
-        (g := fun k => ObjectSlot.meet (f k)) (mw := Term.meet t)) y z h m hz
-termination_by structural x => x
+          exact writes_meetSRight (fun q => writes_famList (pre := pre) (sp := some t)
+            (suf := suf) (fpre := Term.meetSTs q pre) (fsp := some (Term.meet q t))
+            (fsuf := Term.meetSTs q suf)) y p z h m hz
+  | p, .object (.mk fs f none), y, z, h, m, hz =>
+      writes_meetSRight (fun q => writes_famObj (a := .mk fs f none)
+        (g := fun k => ObjectSlot.meet q (f k)) (mw := fun _ => some .never)) y p z h m hz
+  | p, .object (.mk fs f (some t)), y, z, h, m, hz =>
+      writes_meetSRight (fun q => writes_famObj (a := .mk fs f (some t))
+        (g := fun k => ObjectSlot.meet q (f k)) (mw := Term.meet q t)) y p z h m hz
+termination_by structural _ x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
-theorem writes_meetL [Leaf S] [LeafWrites S] : ∀ (os : List (Term S)) (y : Term S) (zs : List (Term S)),
-    List.Forall₂ (fun t w => Term.meet t y = some w) os zs →
+theorem writes_meetL [Leaf S] [LeafWrites S] : ∀ (p : Pairing) (os : List (Term S)) (y : Term S)
+    (zs : List (Term S)),
+    List.Forall₂ (fun t w => Term.meet p t y = some w) os zs →
     List.Forall₂ (fun t w => ∀ m : Sem.M S, μSyn w = some m →
       (∀ mx, μSyn t = some mx → mx = m) ∧ (∀ my, μSyn y = some my → my = m)) os zs
-  | [], _, _, h => by cases h; exact .nil
-  | t :: ts, y, _, h => by
+  | _, [], _, _, h => by cases h; exact .nil
+  | p, t :: ts, y, _, h => by
       cases h with
       | cons hh ht =>
-          exact .cons (fun m hm => meet_writes t y _ hh m hm) (writes_meetL ts y _ ht)
-termination_by structural os => os
+          exact .cons (fun m hm => meet_writes p t y _ hh m hm) (writes_meetL p ts y _ ht)
+termination_by structural _ os => os
 end
 
 end Calculus.Alg

@@ -88,33 +88,6 @@ variable {S : Syn}
 /-! ## Variables -/
 
 mutual
-/-- Whether a variable occurs in the term. A set whose element reads a variable occupies every
-    set shape, because the term does not give the variable's codec. -/
-def Term.hasVar : Term S → Bool
-  | .var _ => true
-  | .refine t _ | .mu t | .set t => Term.hasVar t
-  | .held t P _ _ => Term.hasVar t || Term.hasVar P
-  | .list pre sp suf => Term.hasVarL pre || Term.hasVarO sp || Term.hasVarL suf
-  | .object b => Body.hasVar b
-  | .union os => Term.hasVarL os
-  | .prim _ | .opaq | .never => false
-/-- …in a body: in a declared slot or in the open block. -/
-def Body.hasVar : Body S → Bool
-  | .mk fs f w => decide (∃ k : {k // k ∈ fs}, ObjectSlot.hasVar (f k) = true) || Term.hasVarO w
-/-- …in a slot's term. -/
-def ObjectSlot.hasVar : ObjectSlot S → Bool
-  | .req t | .optional t => Term.hasVar t
-/-- …in a list of terms. -/
-def Term.hasVarL : List (Term S) → Bool
-  | [] => false
-  | t :: ts => Term.hasVar t || Term.hasVarL ts
-/-- …in an optional term. -/
-def Term.hasVarO : Option (Term S) → Bool
-  | none => false
-  | some t => Term.hasVar t
-end
-
-mutual
 /-- A term that reads a variable at any level has a variable. -/
 theorem Term.hasVar_of_use : ∀ (t : Term S) (i : Nat), t.use i ≠ 0 → t.hasVar = true
   | .var _, _, _ => rfl
@@ -484,15 +457,15 @@ end
 
 /-- **The write occupancy contains the row.** A closed term's variables are the bottom, so no
     variable writes, and the open lemma lands in the occupancy. -/
-theorem occV_sound [PrimAdm S] (t : Term S) (v : S.V) (h : Adm t v = true) :
+theorem occV_sound [PrimAdm S] (t : Term S) (v : S.V) (h : Adm t [] v = true) :
     occV t (shapeV v) = true :=
-  (occV_open t [] v ((Adm_exact t v).mp h)).resolve_right
+  (occV_open t [] v ((Adm_exact t [] v).mp h)).resolve_right
     fun ⟨_, _, he⟩ => by simp [envAt, Codec.empty] at he
 
 /-- **The read occupancy contains the row.** The mirror of `occV_sound`. -/
-theorem occA_sound [PrimAdm S] [PrimAdmA S] (t : Term S) (a : Sem.A S) (h : AdmA t a = true) :
+theorem occA_sound [PrimAdm S] [PrimAdmA S] (t : Term S) (a : Sem.A S) (h : AdmA t [] a = true) :
     occA t (shapeA a) = true :=
-  (occA_open t [] a ((AdmA_exact t a).mp h)).resolve_right
+  (occA_open t [] a ((AdmA_exact t [] a).mp h)).resolve_right
     fun ⟨_, _, he⟩ => by simp [envAt, Codec.empty] at he
 
 end Soundness

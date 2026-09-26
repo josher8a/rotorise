@@ -64,7 +64,7 @@ import type {
     Term,
     Field as TermField,
 } from './term'
-import { below, heldFree, meetTerms } from './term'
+import { below, bindersOf, heldFree, meetTerms, type Scope } from './term'
 import { shapeOf } from './value'
 
 /**
@@ -438,71 +438,13 @@ const writesOnlyStrings = (t: Term | undefined): boolean => {
 /* ── terms ───────────────────────────────────────────────────────────────────────────────── */
 
 /**
- * **Where the printer is in a term**: the term objects that bind a variable, and the binders it is
- * inside, nearest last.
- *
- * A recursive host schema is a cycle of term objects closed by a thunk. The model names the cycle
- * with a binder: `Term.mu` at the object a thunk returns while that object is being printed, and
- * `Term.var k` at the thunk, where `k` counts the binders between the two. The model has no thunk,
- * so any other thunk prints the term it returns.
+ * The scope of a term printed at the top: its own binders, and no enclosing binder. A thunk that
+ * throws names a codec not yet declared, and the printer reports the throw.
  */
-type Scope = {
-    readonly binds: ReadonlySet<Term>
-    readonly inside: readonly Term[]
-}
-
-/**
- * **The binders of a term**: each term object that a thunk returns while that object is on the
- * stack of the walk. The walk forces each thunk and stops at a cycle, so it ends: a thunk memoizes
- * its codec, and every other edge of a term is built before the term.
- */
-const bindersOf = (root: Term): ReadonlySet<Term> => {
-    const binds = new Set<Term>()
-    const walk = (t: Term, stack: readonly Term[]): void => {
-        const on = [...stack, t]
-        const next = (one: Term) => walk(one, on)
-        switch (t.kind) {
-            case 'lazy': {
-                let target: Term
-                try {
-                    target = t.get()
-                } catch {
-                    // a thunk that throws names a codec not yet declared; the printer reports it
-                    return
-                }
-                if (on.includes(target)) binds.add(target)
-                else next(target)
-                return
-            }
-            case 'list':
-                for (const e of [...t.pre, ...t.suf]) next(e)
-                if (t.spread) next(t.spread)
-                return
-            case 'object':
-                for (const field of Object.values(t.body.fields)) next(field.t)
-                if (t.body.rest) next(t.body.rest)
-                return
-            case 'union':
-                for (const o of t.options) next(o)
-                return
-            case 'held':
-                next(t.inner)
-                next(t.outer)
-                return
-            case 'refine':
-            case 'legacy':
-                next(t.inner)
-                return
-            default:
-                return
-        }
-    }
-    walk(root, [])
-    return binds
-}
-
-/** The scope of a term printed at the top: its own binders, and no enclosing binder. */
-const topScope = (t: Term): Scope => ({ binds: bindersOf(t), inside: [] })
+const topScope = (t: Term): Scope => ({
+    binds: bindersOf(t) ?? new Set(),
+    inside: [],
+})
 
 /**
  * A `Term` — §3's syntax, from what the codec says it is.
@@ -1186,6 +1128,15 @@ export const leanMeet = ({ name, left, right }: MeetPair): string => {
     }
     const answer = meetTerms(one, other)
     const pair = `Term.meet (${leanTermOf(left, name)})\n      (${leanTermOf(right, name)})`
+    // a recursive answer is a thunk that the thunk in its body returns, so the answer is the
+    // binder, and the body spells under it
+    const body = answer?.kind === 'lazy' ? answer.get() : answer
+    const binds = answer === undefined ? undefined : bindersOf(answer)
+    if (answer && body?.kind === 'object' && binds?.has(answer))
+        return leanMeetObjects(name, pair, [body], [one, other], {
+            binds,
+            inside: [answer],
+        })
     const objects =
         answer?.kind === 'object'
             ? [answer]
@@ -1215,12 +1166,17 @@ export const leanMeet = ({ name, left, right }: MeetPair): string => {
  *
  * The names are every field name either operand mentions, which covers every name either answer
  * can declare. One more position past the last option states that no option follows.
+ *
+ * **An answer that is `mu` of an object is stated pointwise under the binder.** The statement
+ * opens the binder, and prints each slot inside the binder, where the thunk of the answer is
+ * `Term.var 0`.
  */
 const leanMeetObjects = (
     name: string,
     pair: string,
     options: readonly Extract<Term, { kind: 'object' }>[],
     operands: readonly Term[],
+    binder?: Scope,
 ): string => {
     const names = new Set<string>()
     for (const o of options)
@@ -1230,13 +1186,15 @@ const leanMeetObjects = (
         const block = answer.body.rest
         const at = `${name}.meet[${i}]`
         const blockTerm = block
-            ? leanTermOfTerm(block, `${at}.rest`, topScope(block))
+            ? leanTermOfTerm(block, `${at}.rest`, binder ?? topScope(block))
             : undefined
-        const option = `(${pair}).bind (·.optionAt ${i})`
+        const option = binder
+            ? `(${pair}).bind (fun t => match t with | .mu z => some z | _ => none)`
+            : `(${pair}).bind (·.optionAt ${i})`
         const slot = (k: string): string => {
             const field = answer.body.fields[k]
             return field
-                ? leanSlotOf(field, `${at}.${k}`, topScope(field.t))
+                ? leanSlotOf(field, `${at}.${k}`, binder ?? topScope(field.t))
                 : `ObjectSlot.optional (${blockTerm ?? 'Term.never'})`
         }
         return [

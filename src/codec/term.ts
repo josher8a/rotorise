@@ -246,10 +246,9 @@ export type Term =
      * This library supports a recursive entity through a thunk, and `codec.recursive.spec.ts`
      * declares one, so the thunk stays. **Everything else here reads through it.**
      * {@link occV}, {@link occA} and {@link ownsNullOf} answer what the term underneath answers,
-     * `meetTerms` reads through on either side and states no meet of a recursive one, and the
-     * emitter prints the binder at the term that closes the cycle. Only {@link member} answers
-     * `undefined`, because the host cannot force a thunk safely at declaration: forcing a recursive
-     * thunk can loop.
+     * and `meetTerms` and the emitter read the binder at the term that closes the cycle. Only
+     * {@link member} answers `undefined`, because the host cannot force a thunk safely at
+     * declaration: forcing a recursive thunk can loop.
      *
      * **The two projections answered `undefined` until it was measured, on the ground that
      * forcing would throw on the entity the thunk exists to allow. Both halves were wrong.**
@@ -923,13 +922,10 @@ const occupanciesApart = (x: Term, y: Term): boolean => {
  * **Whether a term reaches a subterm of one of these kinds**, at any depth, or reaches a thunk
  * that the walk cannot read.
  *
- * The model's `lazy` is transparent, so the walk forces each thunk once and reads through it. A
- * thunk that the walk meets again is recursive, and a thunk that throws names a codec that is not
- * yet declared. Each answers "reaches": the model's meet states no recursive term, and the host
- * shows only what the model can state. So `reaches(t, [])` answers whether a thunk is unreadable, and
- * {@link meetTerms} answers only where none is, because a meet of two recursive terms need not
- * end. `held` and `legacy` need no such guard there: the meet answers `undefined` at each.
- * {@link heldFree} asks for no adapter, because the model's confluence holds only there.
+ * The walk forces each thunk once and reads through it. A thunk that the walk meets again is
+ * recursive, and a thunk that throws names a codec that is not yet declared. Each answers
+ * "reaches". {@link heldFree} asks for no adapter, because the model's confluence holds only
+ * there.
  */
 const reaches = (
     t: Term,
@@ -1299,71 +1295,374 @@ export const meet = <A>(
  * fields and an `undefinable` field are each comparable in TypeScript and each answer `undefined`
  * here, because a row the model does not state is a rule this port would be inventing. The model's
  * `Field` has no `undefinable` mark.
+ *
+ * **A recursive term is met as the model spells it**: `mu` at the term object that a cycle
+ * returns to, and a variable at the thunk that closes the cycle ({@link Scope}). Two variables meet
+ * where the two binders were met together, and a variable beside any other term refuses. Two
+ * recursive terms meet at the recursive term of the two bodies met ({@link meetBinders}). A
+ * recursive term beside another term unfolds, and its binder pairs with nothing. A thunk that
+ * throws names a codec that is not yet declared, so no term states the meet.
  */
-export const meetTerms = (x: Term, y: Term): Term | undefined =>
+export const meetTerms = (x: Term, y: Term): Term | undefined => {
     // the bottom absorbs, on either side, before any thunk is read: the model's `never` rows sit
     // first, and a recursive term meets the bottom at the bottom
-    x.kind === 'never' || y.kind === 'never'
-        ? never
-        : // **A thunk the walk cannot read states no meet.** The meet forces each thunk it meets,
-          // and a recursive thunk would not end, so the meet asks {@link reaches} first.
-          // `undefined` is the conservative answer: no caller reads it as the bottom, so it
-          // certifies nothing
-          reaches(x, []) || reaches(y, [])
-          ? undefined
-          : meetWalk(x, y)
-
-const meetWalk = (x: Term, y: Term): Term | undefined => {
-    // the bottom absorbs, on either side
     if (x.kind === 'never' || y.kind === 'never') return never
-    // a thunk carries a plain term, so the meet reads through it. The model's `.lazy` row sits
-    // second on the left and after `held` on the right, and these two keep that precedence
-    if (x.kind === 'lazy') return meetWalk(x.get(), y)
+    const left = bindersOf(x)
+    const right = bindersOf(y)
+    // `undefined` certifies nothing: no caller reads it as the bottom
+    if (left === undefined || right === undefined) return undefined
+    return meetWalk(x, y, {
+        left: { binds: left, inside: [] },
+        right: { binds: right, inside: [] },
+        pairs: [],
+        variables: new Set(),
+    })
+}
+
+/**
+ * **Where a walk is in one operand**: the term objects that bind a variable, and the binders the
+ * walk is inside, nearest last.
+ *
+ * A recursive host schema is a cycle of term objects closed by a thunk. The model names the cycle
+ * with a binder: `Term.mu` at the object that a thunk returns while that object is on the walk,
+ * and `Term.var k` at the thunk, where `k` counts the binders between the two. Any other thunk is
+ * the term it returns. The meet and the emitter read one spelling, so both read it through this
+ * scope.
+ */
+export type Scope = {
+    readonly binds: ReadonlySet<Term>
+    readonly inside: readonly Term[]
+}
+
+/**
+ * **The binders of a term**: each term object that a thunk returns while that object is on the
+ * stack of the walk, or `undefined` where a thunk throws. The walk forces each thunk and stops at
+ * a cycle, so it ends: a thunk memoizes its codec, and every other edge of a term is built before
+ * the term.
+ */
+export const bindersOf = (root: Term): ReadonlySet<Term> | undefined => {
+    const binds = new Set<Term>()
+    // `false` where a thunk throws
+    const walk = (t: Term, stack: readonly Term[]): boolean => {
+        const on = [...stack, t]
+        const next = (one: Term) => walk(one, on)
+        switch (t.kind) {
+            case 'lazy': {
+                const target = force(t)
+                if (target === undefined) return false
+                if (!on.includes(target)) return next(target)
+                binds.add(target)
+                return true
+            }
+            case 'list':
+                return (
+                    [...t.pre, ...t.suf].every(next) &&
+                    (t.spread === undefined || next(t.spread))
+                )
+            case 'object':
+                return (
+                    Object.values(t.body.fields).every((field) =>
+                        next(field.t),
+                    ) &&
+                    (t.body.rest === undefined || next(t.body.rest))
+                )
+            case 'union':
+                return t.options.every(next)
+            case 'set':
+                return next(t.elem)
+            case 'held':
+                return next(t.inner) && next(t.outer)
+            case 'refine':
+            case 'legacy':
+                return next(t.inner)
+            default:
+                return true
+        }
+    }
+    return walk(root, []) ? binds : undefined
+}
+
+/** **A term as the model spells it at a scope**: a binder, a variable, or a constructor. */
+type Seen =
+    | { readonly kind: 'mu'; readonly body: Term; readonly scope: Scope }
+    | { readonly kind: 'var'; readonly binder: Term }
+    | { readonly kind: 'term'; readonly t: Term }
+
+/**
+ * A binder of the scope that the walk is not inside is `mu` of its body, and the walk is then
+ * inside the binder. A thunk that returns a binder the walk is inside is a variable. Any other
+ * thunk is the term it returns. {@link bindersOf} forced each thunk already, so no thunk throws.
+ */
+const see = (t: Term, scope: Scope): Seen => {
+    if (scope.binds.has(t) && !scope.inside.includes(t))
+        return {
+            kind: 'mu',
+            body: t,
+            scope: { binds: scope.binds, inside: [...scope.inside, t] },
+        }
+    if (t.kind !== 'lazy') return { kind: 'term', t }
+    const target = t.get()
+    return scope.inside.includes(target)
+        ? { kind: 'var', binder: target }
+        : see(target, scope)
+}
+
+/**
+ * **The pairing of binders**, the model's `Pairing`: the scope of each operand, and each pair of
+ * binders met together with the variable of the answer's binder.
+ */
+type Walk = {
+    readonly left: Scope
+    readonly right: Scope
+    readonly pairs: readonly {
+        readonly left: Term
+        readonly right: Term
+        readonly variable: Term
+    }[]
+    /** Every variable of an answer's binder in this meet. The walk of an answer stops at each. */
+    readonly variables: Set<Term>
+}
+
+/** The pairing with the two operands exchanged, for a row that meets the right operand first. */
+const flip = (w: Walk): Walk => ({
+    left: w.right,
+    right: w.left,
+    pairs: w.pairs.map(({ left, right, variable }) => ({
+        left: right,
+        right: left,
+        variable,
+    })),
+    variables: w.variables,
+})
+
+/**
+ * One row per pair of constructors, as the operands spell at the pairing.
+ *
+ * **The walk ends.** The spelling of each operand is a finite term, because {@link bindersOf}
+ * binds the target of every thunk that closes a cycle, and the spelling stops at each variable.
+ * Each call meets a strict subterm of one spelling, or of both, with the other spelling unchanged,
+ * so the sum of the two sizes falls at each call. An exchange of the operands keeps the sum.
+ */
+const meetWalk = (x: Term, y: Term, w: Walk): Term | undefined => {
+    const one = see(x, w.left)
+    const other = see(y, w.right)
+    // the bottom absorbs, on either side
+    if (
+        (one.kind === 'term' && one.t.kind === 'never') ||
+        (other.kind === 'term' && other.t.kind === 'never')
+    )
+        return never
+    // a variable admits what its binder admits, so a variable meets only the variable of the
+    // binder that its own binder was met with
+    if (one.kind === 'var')
+        return other.kind === 'var'
+            ? w.pairs.find(
+                  (pair) =>
+                      pair.left === one.binder && pair.right === other.binder,
+              )?.variable
+            : undefined
+    if (one.kind === 'mu')
+        return other.kind === 'mu'
+            ? meetBinders(one, other, w)
+            : // a recursive term beside another term unfolds, and its binder pairs with nothing
+              meetWalk(one.body, y, { ...w, left: one.scope })
+    const left = one.t
     // the three whose admission is a function and not data: a reader cannot say what they admit
     // without running them, so no term states the intersection
-    if (opaqueToReader(x) || opaqueToReader(y)) return undefined
-    if (y.kind === 'lazy') return meetWalk(x, y.get())
+    if (
+        opaqueToReader(left) ||
+        (other.kind === 'term' && opaqueToReader(other.t))
+    )
+        return undefined
     // a certified union distributes, on either side
-    if (x.kind === 'union') return distribute(x.options, y)
-    if (y.kind === 'union') return distribute(y.options, x)
+    if (left.kind === 'union') return distribute(left.options, y, w)
+    if (other.kind === 'term' && other.t.kind === 'union')
+        return distribute(other.t.options, left, flip(w))
     // a refinement conjoins: the predicate is data, so it rides on the meet of the inner terms
-    if (x.kind === 'refine') return overRefinement(x.inner, x.q, y)
-    if (y.kind === 'refine') return overRefinement(y.inner, y.q, x)
+    if (left.kind === 'refine') return overRefinement(left.inner, left.q, y, w)
+    // a constructor beside a variable refuses, and beside a recursive term the recursive term
+    // unfolds
+    if (other.kind === 'var') return undefined
+    if (other.kind === 'mu')
+        return meetWalk(left, other.body, { ...w, right: other.scope })
+    const right = other.t
+    if (right.kind === 'refine')
+        return overRefinement(right.inner, right.q, left, flip(w))
     // the ground bases: the same base is itself
-    if (x.kind === y.kind && groundBase(x)) return x
+    if (left.kind === right.kind && groundBase(left)) return left
     // **`string` and `decimal` part on the stored side.** Both admit text; `string` writes `S` and
     // `decimal` writes `N`, so a value they share is stored two ways and there is no meet. The
     // literal rows repeat it, because a literal at either base inherits the pair
-    if (x.kind === 'literal' && y.kind === 'literal') return meetLiterals(x, y)
-    if (x.kind === 'literal') return literalAgainstBase(x, y)
-    if (y.kind === 'literal') return literalAgainstBase(y, x)
-    if (x.kind === 'list' && y.kind === 'list') return meetLists(x, y)
+    if (left.kind === 'literal' && right.kind === 'literal')
+        return meetLiterals(left, right)
+    if (left.kind === 'literal') return literalAgainstBase(left, right)
+    if (right.kind === 'literal') return literalAgainstBase(right, left)
+    if (left.kind === 'list' && right.kind === 'list')
+        return meetLists(left, right, w)
     // **Two sets meet at their elements**, the model's `famSet`. An element meet at the bottom is a
     // set meet at the bottom, because a stored set is not empty. A set is stated only where the
-    // three terms are held-free, where each set writes and reads element by element
-    if (x.kind === 'set' && y.kind === 'set') {
-        const elem = meetWalk(x.elem, y.elem)
+    // three terms are held-free, where each set writes and reads element by element. An element
+    // that reads a variable refuses, because the set laws are stated over closed elements
+    if (left.kind === 'set' && right.kind === 'set') {
+        if (
+            spells(left.elem, w.left.inside, []) ||
+            spells(right.elem, w.right.inside, [])
+        )
+            return undefined
+        const elem = meetWalk(left.elem, right.elem, w)
         if (elem === undefined) return undefined
         if (elem.kind === 'never') return never
-        return reaches(x.elem, ['held']) ||
-            reaches(y.elem, ['held']) ||
-            reaches(elem, ['held'])
+        return spells(left.elem, w.left.inside, ['held']) ||
+            spells(right.elem, w.right.inside, ['held']) ||
+            spells(elem, [], ['held', 'lazy'])
             ? undefined
             : { kind: 'set', elem }
     }
-    if (x.kind === 'opaq' && y.kind === 'opaq') return x
-    if (x.kind === 'object' && y.kind === 'object')
-        return meetBodies(x.body, y.body)
+    if (left.kind === 'opaq' && right.kind === 'opaq') return left
+    if (left.kind === 'object' && right.kind === 'object')
+        return meetBodies(left.body, right.body, w)
     // **`opaque` against a ground base.** It admits every value of every self-identifying kind, so
     // at `string`, `boolean`, `binary`, `null` and `number` the base is the finer term. `decimal`
     // refuses for the reason `string ∧ decimal` refuses
-    if (x.kind === 'opaq') return opaqueAgainst(y)
-    if (y.kind === 'opaq') return opaqueAgainst(x)
+    if (left.kind === 'opaq') return opaqueAgainst(right)
+    if (right.kind === 'opaq') return opaqueAgainst(left)
     // **The `number` family and the `decimal` family never meet.** They write different value kinds,
     // so the bottom is right about the write side, and they read the same member `N`, so the bottom
     // is wrong about the read side: every stored numeral is an attribute both admit
     // everything left is two constructors that write different value kinds
     return never
+}
+
+/**
+ * **Two recursive terms meet at the recursive term of the two bodies met**, with the two binders
+ * paired. The answer is a thunk that returns the met body, and the variable of the pair is a thunk
+ * that returns the answer, so the answer closes its own cycle and spells as `mu` of the body.
+ *
+ * The answer is the bottom where the body is. It is a binder only where the model's guard accepts
+ * the binder: the body reads the variable under a container, and under no `held`.
+ *
+ * **A body that never reads the variable parts from the model.** The model answers `mu z` there.
+ * A host binder is a cycle, and such a body closes no cycle, so the host has no spelling for the
+ * binder and answers the body `z`. No corpus vector reaches this case.
+ */
+const meetBinders = (
+    one: Extract<Seen, { kind: 'mu' }>,
+    other: Extract<Seen, { kind: 'mu' }>,
+    w: Walk,
+): Term | undefined => {
+    let body: Term | undefined
+    const binder: Term = {
+        kind: 'lazy',
+        get: () => {
+            // the meet returns the binder only after it fills the body
+            if (body === undefined)
+                throw new Error('a recursive answer was read before its body')
+            return body
+        },
+    }
+    const variable: Term = { kind: 'lazy', get: () => binder }
+    w.variables.add(variable)
+    const z = meetWalk(one.body, other.body, {
+        left: one.scope,
+        right: other.scope,
+        pairs: [...w.pairs, { left: one.body, right: other.body, variable }],
+        variables: w.variables,
+    })
+    if (z === undefined || z.kind === 'never') return z
+    const reads = readsBinder(z, variable, w.variables)
+    if (reads === 0) return z
+    if (reads > 1) return undefined
+    body = z
+    return binder
+}
+
+/**
+ * **How an answer reads the variable of one binder**, the model's `Term.use`: `0` where the
+ * variable does not occur, `1` where each occurrence sits under a container and none under a
+ * `held`, `2` where an occurrence reads the input itself, and `3` where one sits under a `held`.
+ *
+ * An answer holds two kinds of thunk: the variable of a binder, where the walk stops, and a binder
+ * that the meet filled before, whose body the walk reads. So the walk ends where the answer ends.
+ */
+const readsBinder = (
+    t: Term,
+    variable: Term,
+    variables: ReadonlySet<Term>,
+): number => {
+    const on = (one: Term) => readsBinder(one, variable, variables)
+    const under = (use: number) => (use === 2 ? 1 : use)
+    const most = (ts: readonly Term[]) => Math.max(0, ...ts.map(on))
+    switch (t.kind) {
+        case 'lazy':
+            return variables.has(t) ? (t === variable ? 2 : 0) : on(t.get())
+        case 'set':
+            return under(on(t.elem))
+        case 'list':
+            return under(
+                most([
+                    ...t.pre,
+                    ...(t.spread === undefined ? [] : [t.spread]),
+                    ...t.suf,
+                ]),
+            )
+        case 'object':
+            return under(
+                most([
+                    ...Object.values(t.body.fields).map((field) => field.t),
+                    ...(t.body.rest === undefined ? [] : [t.body.rest]),
+                ]),
+            )
+        case 'union':
+            return most(t.options)
+        case 'refine':
+            return on(t.inner)
+        case 'held':
+            return most([t.inner, t.outer]) === 0 ? 0 : 3
+        default:
+            return 0
+    }
+}
+
+/**
+ * **Whether the spelling of a term at a scope reads a variable, or holds a subterm of one of these
+ * kinds**, the model's `hasVar` and `hasHeld`. A thunk that returns a term the walk is inside is a
+ * variable, and the walk stops there, so it ends where the spelling ends.
+ */
+const spells = (
+    t: Term,
+    inside: readonly Term[],
+    kinds: readonly Term['kind'][],
+): boolean => {
+    if (kinds.includes(t.kind)) return true
+    const on = (one: Term) => spells(one, [...inside, t], kinds)
+    switch (t.kind) {
+        case 'lazy': {
+            const target = t.get()
+            return inside.includes(target) || on(target)
+        }
+        case 'set':
+            return on(t.elem)
+        case 'list':
+            return (
+                t.pre.some(on) ||
+                (t.spread !== undefined && on(t.spread)) ||
+                t.suf.some(on)
+            )
+        case 'object':
+            return (
+                Object.values(t.body.fields).some((field) => on(field.t)) ||
+                (t.body.rest !== undefined && on(t.body.rest))
+            )
+        case 'union':
+            return t.options.some(on)
+        case 'held':
+            return on(t.inner) || on(t.outer)
+        case 'refine':
+        case 'legacy':
+            return on(t.inner)
+        default:
+            return false
+    }
 }
 
 const never: Term = { kind: 'never' }
@@ -1477,54 +1776,35 @@ const overRefinement = (
     inner: Term,
     q: Predicate,
     other: Term,
+    w: Walk,
 ): Term | undefined => {
     if (q.kind === 'closure') return undefined
-    const z = meetWalk(inner, other)
+    const z = meetWalk(inner, other, w)
     return z === undefined ? undefined : refineOf(z, q)
 }
 
 /**
- * **The meet at a union: the survivors, where both lists carry the certificate.**
+ * **The meet at a union: the survivors, with no certificate.** Each survivor admits a value where
+ * its option and the other term both admit the value. So a value that one option of the union
+ * admits is a value that one survivor at most admits, and the model's union row asks nothing more.
  *
- * The meet is the lattice's meet and an uncertified union is not in the lattice, so the pair has
- * no meet to state. Both lists are tested and not one.
+ * **A certificate here is a cycle.** The certificate of a union is {@link separable}, which reads
+ * this meet. A union that recurses through its own options then asks the certificate of the
+ * survivors, the certificate meets the same union again, and the walk does not end.
  */
 const distribute = (
     options: readonly Term[],
     other: Term,
+    w: Walk,
 ): Term | undefined => {
     const met: Term[] = []
     for (const option of options) {
-        const z = meetWalk(option, other)
+        const z = meetWalk(option, other, w)
         if (z === undefined) return undefined
         met.push(z)
     }
-    const survivors = met.filter((z) => z.kind !== 'never')
-    return unionOk(options) && unionOk(survivors)
-        ? ofOptions(survivors)
-        : undefined
+    return ofOptions(met.filter((z) => z.kind !== 'never'))
 }
-
-/**
- * **What a union must show for the meet to distribute over it**: each pair of options
- * {@link compatible}, as `union` asks at the declaration. Every union the builders can construct has
- * already shown it, so the conjunct bites on the survivor list rather than on the input.
- */
-const unionOk = (os: readonly Term[]): boolean =>
-    os.every((t, at) =>
-        os.every((u, other) => other <= at || compatible(t, u)),
-    ) && os.every((t) => !isOpenObject(t) && objectNamesAgree(t))
-
-const isOpenObject = (t: Term): boolean =>
-    t.kind === 'object' && t.body.rest !== undefined
-
-/**
- * Whether an object option's two halves answer the same question about names. A `withLegacyRead`
- * field is required by the write side and supplied by the read side.
- */
-const objectNamesAgree = (t: Term): boolean =>
-    t.kind !== 'object' ||
-    Object.values(t.body.fields).every((field) => field.mark !== 'fallback')
 
 /**
  * **A literal against a base is the literal at that base, and the bottom at any other.**
@@ -1613,10 +1893,11 @@ const rowOf = (
 const rowMeet = (
     a: readonly Term[],
     b: readonly Term[],
+    w: Walk,
 ): readonly Term[] | undefined => {
     const row: Term[] = []
     for (const [at, one] of a.entries()) {
-        const z = meetWalk(one, b[at] as Term)
+        const z = meetWalk(one, b[at] as Term, w)
         if (z === undefined) return undefined
         row.push(z)
     }
@@ -1654,19 +1935,20 @@ const dominates = (p1: number, s1: number, p2: number, s2: number): boolean =>
 const meetLists = (
     x: Extract<Term, { kind: 'list' }>,
     y: Extract<Term, { kind: 'list' }>,
+    w: Walk,
 ): Term | undefined => {
     if (x.spread !== undefined && y.spread !== undefined) {
         const p = Math.max(x.pre.length, y.pre.length)
         const s = Math.max(x.suf.length, y.suf.length)
         if (!dominates(x.pre.length, x.suf.length, y.pre.length, y.suf.length))
             return undefined
-        const spread = meetWalk(x.spread, y.spread)
+        const spread = meetWalk(x.spread, y.spread, w)
         if (spread === undefined) return undefined
         const rows = rowOf(x, p + s)
         const other = rowOf(y, p + s)
         // unreachable under dominance, where `p + s` is at least each side's declared length
         if (rows === undefined || other === undefined) return never
-        const row = rowMeet(rows, other)
+        const row = rowMeet(rows, other, w)
         return row === undefined
             ? undefined
             : listOf(row.slice(0, p), spread, row.slice(p))
@@ -1678,7 +1960,7 @@ const meetLists = (
     const rows = rowOf(x, n)
     const other = rowOf(y, n)
     if (rows === undefined || other === undefined) return never
-    const row = rowMeet(rows, other)
+    const row = rowMeet(rows, other, w)
     return row === undefined ? undefined : listOf(row, undefined, [])
 }
 
@@ -1697,15 +1979,15 @@ const meetLists = (
  * `undefinable` refuses because the model's `Field` has no such mark. Both are refusals this
  * library inherits rather than rules it states.
  */
-const meetFields = (a: Field, b: Field): Field | undefined => {
+const meetFields = (a: Field, b: Field, w: Walk): Field | undefined => {
     if (a.mark === 'undefinable' || b.mark === 'undefinable') return undefined
     if (a.mark === 'optional' && b.mark === 'optional')
-        return mark(meetWalk(a.t, b.t), 'optional')
+        return mark(meetWalk(a.t, b.t, w), 'optional')
     if (a.mark === 'fallback' || b.mark === 'fallback')
         return a.mark === 'req' || b.mark === 'req'
-            ? mark(meetWalk(a.t, b.t), 'req')
+            ? mark(meetWalk(a.t, b.t, w), 'req')
             : undefined
-    return mark(meetWalk(a.t, b.t), 'req')
+    return mark(meetWalk(a.t, b.t, w), 'req')
 }
 
 const mark = (
@@ -1739,7 +2021,7 @@ const fbShared = (a: Body, b: Body): boolean =>
  * A `withLegacyRead` name the other body does not declare refuses. The model's field has no such
  * mark, so the host keeps the refusal it inherits.
  */
-const meetBodies = (a: Body, b: Body): Term | undefined => {
+const meetBodies = (a: Body, b: Body, w: Walk): Term | undefined => {
     if (!fbShared(a, b) || !fbShared(b, a)) return undefined
     const aBlock = a.rest ?? never
     const bBlock = b.rest ?? never
@@ -1750,6 +2032,7 @@ const meetBodies = (a: Body, b: Body): Term | undefined => {
                 meetFields(
                     field,
                     b.fields[name] ?? { mark: 'optional', t: bBlock },
+                    w,
                 ),
             ],
         ),
@@ -1757,12 +2040,12 @@ const meetBodies = (a: Body, b: Body): Term | undefined => {
             .filter(([name]) => !(name in a.fields))
             .map(([name, field]): [string, Field | undefined] => [
                 name,
-                meetFields({ mark: 'optional', t: aBlock }, field),
+                meetFields({ mark: 'optional', t: aBlock }, field, w),
             ]),
     ]
     if (met.some(([, field]) => field !== undefined && isBottomField(field)))
         return never
-    const block = meetWalk(aBlock, bBlock)
+    const block = meetWalk(aBlock, bBlock, w)
     if (block === undefined) return undefined
     const closed = block.kind === 'never'
     const fields: Record<string, Field> = {}

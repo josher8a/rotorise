@@ -120,28 +120,29 @@ noncomputable instance dynPrimAdm : Alg.PrimAdm dynSyn where
           simp [AdmLit, denote_rows, literalCodec, baseCodec, inL,
                 stringCodec, booleanCodec, binaryCodec, nullCodec, inD]
 
-/-- **The joint admission predicate**: the generic row at DynamoDB. One structural recursion
+/-- **The joint admission predicate**: the generic row at DynamoDB, at the closed environment.
+    A corpus term is closed, so its variables are bound inside it. One structural recursion
     over the term, with the containers recursing through *this*, which is exactly what the
     retired per-aspect rows failed to do. **Every row is exact** (`Adm_exact`). -/
-abbrev Adm (t : Term) : VP := Alg.Adm t
+abbrev Adm (t : Term) : VP := Alg.Adm t []
 
 /-- The payload's row: the declared names are present, and every present name's value is
     admitted by its slot or by the open block. -/
-abbrev AdmBody (b : Body) : VP := Alg.AdmBody b
+abbrev AdmBody (b : Body) : VP := Alg.AdmBody b []
 
 /-- A slot's row is its term's. The presence marker is `valPresentT`'s business, so it does
     not reach this row. -/
-abbrev AdmField (s : ObjectSlot) : VP := Alg.AdmField s
+abbrev AdmField (s : ObjectSlot) : VP := Alg.AdmField s []
 
 /-- The open block's row, where the body has one: `rcOf`'s mirror. A body with no open
     block refuses, so an undeclared name is refused on the way *out* as well. -/
-abbrev AdmWild (w : Option Term) : Option VP := Alg.AdmWild w
+abbrev AdmWild (w : Option Term) : Option VP := Alg.AdmWild w []
 
 /-- The options' rows, in order: `denoteList`'s mirror. -/
-abbrev AdmList (ts : List Term) : List VP := Alg.AdmList ts
+abbrev AdmList (ts : List Term) : List VP := Alg.AdmList ts []
 
 /-- The spread's row, where there is one. -/
-abbrev AdmOptT (o : Option Term) : Option VP := Alg.AdmOptT o
+abbrev AdmOptT (o : Option Term) : Option VP := Alg.AdmOptT o []
 
 /-! ### The rows at the DynamoDB constructors
 
@@ -381,7 +382,7 @@ theorem filter_AdmList {opts : List Term} (h : ∀ t ∈ opts, ExactV t) (v : Va
     hypothesis. The term language proves it once for every universe (`Alg.Adm_exact`), from the
     exactness of the primitive rows, and this is that theorem at DynamoDB. `Adm_sound` is
     `(Adm_exact t v).mpr`. -/
-theorem Adm_exact (t : Term) : ExactV t := Alg.Adm_exact t
+theorem Adm_exact (t : Term) : ExactV t := Alg.Adm_exact t []
 
 /-- §5's empty-container argument, **derived**: the exact row still admits `[]`. -/
 theorem Adm_array_nil (c : Term) : Adm (.array c) (.arr []) = true := by

@@ -27,26 +27,26 @@ instance jsonLeaf : Alg.Leaf jsonSyn where
 
 /-- A kind admits a value of that kind, on the write side. -/
 theorem adm_prim (m : JMember) (v : Json) :
-    Alg.Adm (.prim m : Alg.Term jsonSyn) v = decide (v.member = m) := by
+    Alg.Adm (.prim m : Alg.Term jsonSyn) [] v = decide (v.member = m) := by
   simp [Alg.Adm, Alg.PrimAdm.admV]
 
 /-- …and on the read side. -/
 theorem admA_prim (m : JMember) (a : Json) :
-    Alg.AdmA (.prim m : Alg.Term jsonSyn) a = decide (a.member = m) := by
+    Alg.AdmA (.prim m : Alg.Term jsonSyn) [] a = decide (a.member = m) := by
   simp [Alg.AdmA, Alg.PrimAdmA.admA]
 
 /-- A term of a former that JSON lacks admits nothing: no set, no list, no object. -/
 theorem adm_former_empty (v : Json) :
-    (∀ t : Alg.Term jsonSyn, Alg.Adm (.set t) v = false) ∧
-    (∀ pre sp suf, Alg.Adm (.list pre sp suf : Alg.Term jsonSyn) v = false) ∧
-    (∀ b : Alg.Body jsonSyn, Alg.Adm (.object b) v = false) :=
+    (∀ t : Alg.Term jsonSyn, Alg.Adm (.set t) [] v = false) ∧
+    (∀ pre sp suf, Alg.Adm (.list pre sp suf : Alg.Term jsonSyn) [] v = false) ∧
+    (∀ b : Alg.Body jsonSyn, Alg.Adm (.object b) [] v = false) :=
   ⟨fun _ => rfl, fun _ _ _ => rfl, fun b => by cases b; rfl⟩
 
 /-- …and reads nothing. -/
 theorem admA_former_empty (a : Json) :
-    (∀ t : Alg.Term jsonSyn, Alg.AdmA (.set t) a = false) ∧
-    (∀ pre sp suf, Alg.AdmA (.list pre sp suf : Alg.Term jsonSyn) a = false) ∧
-    (∀ b : Alg.Body jsonSyn, Alg.AdmA (.object b) a = false) :=
+    (∀ t : Alg.Term jsonSyn, Alg.AdmA (.set t) [] a = false) ∧
+    (∀ pre sp suf, Alg.AdmA (.list pre sp suf : Alg.Term jsonSyn) [] a = false) ∧
+    (∀ b : Alg.Body jsonSyn, Alg.AdmA (.object b) [] a = false) :=
   ⟨fun _ => rfl, fun _ _ _ => rfl, fun b => by cases b; rfl⟩
 
 /-- **The shape classes of JSON.** Every value and every attribute is a primitive, and JSON has
@@ -156,7 +156,8 @@ instance jsonLeafAdmA : Alg.LeafAdmA jsonSyn where
             have h1 : a.member = m := of_decide_eq_true ha
             exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
   prim_top m _ := ⟨fun a => by
-      show Alg.AdmA (.prim m : Alg.Term jsonSyn) a = (Alg.AdmA (.prim m : Alg.Term jsonSyn) a && true)
+      show Alg.AdmA (.prim m : Alg.Term jsonSyn) [] a
+        = (Alg.AdmA (.prim m : Alg.Term jsonSyn) [] a && true)
       rw [Bool.and_true],
     fun a ha _ => by
       rw [admA_prim] at ha
@@ -176,19 +177,22 @@ instance jsonLeafWrites : Alg.LeafWrites jsonSyn where
     · exact nomatch hp
 
 /-- The meet computes at JSON: two kinds meet at the bottom. -/
-example : Alg.Term.meet (S := jsonSyn) (.prim .str) (.prim .num) = some .never := by rfl
+example : Alg.Term.meet (S := jsonSyn) Alg.pair0 (.prim .str) (.prim .num) = some .never := by rfl
 
 /-- …and a union meets a kind at the kind. -/
-example : Alg.Term.meet (S := jsonSyn) strOrNumTerm (.prim .str) = some (.prim .str) := by rfl
+example : Alg.Term.meet (S := jsonSyn) Alg.pair0 strOrNumTerm (.prim .str) = some (.prim .str) := by
+  rfl
 
 /-- **The meet at JSON admits exactly what both factors admit.** `Alg.Adm_meet` at `jsonSyn`. -/
-theorem adm_meet (x y z : Alg.Term jsonSyn) (h : Alg.Term.meet x y = some z) (v : Json) :
-    Alg.Adm z v = (Alg.Adm x v && Alg.Adm y v) :=
-  Alg.Adm_meet x y z h v
+theorem adm_meet (p : Alg.Pairing) (x y z : Alg.Term jsonSyn) (h : Alg.Term.meet p x y = some z)
+    {ρ ρ' ρ'' : List jsonSyn.C} (hp : Alg.PairedV p ρ ρ' ρ'') (v : Json) :
+    Alg.Adm z ρ'' v = (Alg.Adm x ρ v && Alg.Adm y ρ' v) :=
+  Alg.Adm_meet p x y z h ρ ρ' ρ'' hp v
 
 /-- **…reads exactly what both read, as each reads it.** `Alg.AdmA_meet_both` at `jsonSyn`. -/
-theorem admA_meet_both (x y z : Alg.Term jsonSyn) (h : Alg.Term.meet x y = some z) :
-    Alg.AdmAAt x y z :=
-  Alg.AdmA_meet_both x y z h
+theorem admA_meet_both (p : Alg.Pairing) (x y z : Alg.Term jsonSyn)
+    (h : Alg.Term.meet p x y = some z) {ρ ρ' ρ'' : List jsonSyn.C} (hp : Alg.PairedA p ρ ρ' ρ'') :
+    Alg.AdmAAt ρ ρ' ρ'' x y z :=
+  Alg.AdmA_meet_both p x y z h ρ ρ' ρ'' hp
 
 end Calculus.JSON

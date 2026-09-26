@@ -22,7 +22,7 @@ namespace Calculus
     `AdmA`'s `refine` row is this function, which is why the row survived the retirement of
     the per-aspect tables it was first written for. -/
 noncomputable abbrev refineReads (t : Term) (q : Value → Bool) : Attr → Bool :=
-  Alg.refineReads t q
+  Alg.refineReads t [] q
 
 @[AdmA_rows] theorem refineReads_eq (t : Term) (q : Value → Bool) (a : Attr) :
     refineReads t q a = match (denote t).p a with
@@ -30,7 +30,7 @@ noncomputable abbrev refineReads (t : Term) (q : Value → Bool) : Attr → Bool
       | none => false := by
   -- the two matches are different auxiliary definitions, and a match reduces only at a
   -- constructor
-  show Alg.refineReads t q a = _
+  show Alg.refineReads t [] q a = _
   unfold Alg.refineReads
   cases (Alg.denote t).p a <;> rfl
 
@@ -172,22 +172,22 @@ noncomputable instance dynPrimAdmA : Alg.PrimAdmA dynSyn where
     of `Adm` across §1's asymmetry, and it is not a symmetric mirror: `refine` **does** narrow
     here, because a row may decode and then ask `q` (`refineReads`). An alternate reader is
     `Codec.extendRead`, outside `Term`, so this table has no alternate-reader row. -/
-abbrev AdmA (t : Term) : AP := Alg.AdmA t
+abbrev AdmA (t : Term) : AP := Alg.AdmA t []
 
 /-- The read side's payload row; `AdmBody`'s mirror. -/
-abbrev AdmABody (b : Body) : AP := Alg.AdmABody b
+abbrev AdmABody (b : Body) : AP := Alg.AdmABody b []
 
 /-- A slot's read row is its term's. -/
-abbrev AdmAField (s : ObjectSlot) : AP := Alg.AdmAField s
+abbrev AdmAField (s : ObjectSlot) : AP := Alg.AdmAField s []
 
 /-- The open block's read row, where the body has one. -/
-abbrev AdmAWild (w : Option Term) : Option AP := Alg.AdmAWild w
+abbrev AdmAWild (w : Option Term) : Option AP := Alg.AdmAWild w []
 
 /-- The options' read rows, in order. -/
-abbrev AdmAList (ts : List Term) : List AP := Alg.AdmAList ts
+abbrev AdmAList (ts : List Term) : List AP := Alg.AdmAList ts []
 
 /-- The spread's read row, where there is one. -/
-abbrev AdmAOptT (o : Option Term) : Option AP := Alg.AdmAOptT o
+abbrev AdmAOptT (o : Option Term) : Option AP := Alg.AdmAOptT o []
 
 /-! ### The rows at the DynamoDB constructors
 
@@ -328,7 +328,7 @@ theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
     for every universe (`Alg.AdmA_exact`), and this is that theorem at DynamoDB. The numeric
     rows read the attribute payload directly, so a row reaches `dom(p)` with no appeal to the
     host's decimal reader. -/
-theorem AdmA_exact (t : Term) : ExactA t := Alg.AdmA_exact t
+theorem AdmA_exact (t : Term) : ExactA t := Alg.AdmA_exact t []
 
 /-! ### The same equation on the read side
 

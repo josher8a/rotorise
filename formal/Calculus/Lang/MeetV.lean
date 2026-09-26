@@ -20,7 +20,7 @@ namespace Calculus.Alg
 
 open Calculus (alignPL alignP zipP anyP objAdmV entryP)
 
-variable {S : Syn} [Sem S] [PrimAdm S]
+variable {S : Syn} [Sem S] [PrimAdm S] {ρ ρ' ρ'' : List S.C}
 
 noncomputable section
 
@@ -35,7 +35,7 @@ def mapOut (v : S.V) : Option (MapOf S.V) := (Sem.map (S := S)).bind (·.mV.out 
 /-- A `list` admits a value that the list former reads by the row of its positions. -/
 theorem Adm_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.V}
     {vs : List S.V} (h : listOut v = some vs) :
-    Adm (.list pre sp suf) v = alignPL (AdmList pre) (AdmOptT sp) (AdmList suf) vs := by
+    Adm (.list pre sp suf) ρ v = alignPL (AdmList pre ρ) (AdmOptT sp ρ) (AdmList suf ρ) vs := by
   unfold listOut at h
   rcases hL : Sem.list (S := S) with _ | L
   · rw [hL] at h; exact absurd h (by simp)
@@ -45,7 +45,7 @@ theorem Adm_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.
 
 /-- A `list` admits no value that the list former does not read. -/
 theorem Adm_list_of_none {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.V}
-    (h : listOut v = none) : Adm (.list pre sp suf) v = false := by
+    (h : listOut v = none) : Adm (.list pre sp suf) ρ v = false := by
   unfold listOut at h
   rcases hL : Sem.list (S := S) with _ | L
   · simp only [Adm, hL]
@@ -56,8 +56,8 @@ theorem Adm_list_of_none {pre suf : List (Term S)} {sp : Option (Term S)} {v : S
 /-- A body admits a value that the map former reads by two tests: the required names are
     present, and each present name passes its row. -/
 theorem AdmBody_of_out {b : Body S} {v : S.V} {m : MapOf S.V} (h : mapOut v = some m) :
-    AdmBody b v = (valPresentT b.fields b.at m.keys &&
-      objAdmV ⟨b.fields, fun k => AdmField (b.at k)⟩ (AdmWild b.wild) m.keys m.get) := by
+    AdmBody b ρ v = (valPresentT b.fields b.at m.keys &&
+      objAdmV ⟨b.fields, fun k => AdmField (b.at k) ρ⟩ (AdmWild b.wild ρ) m.keys m.get) := by
   unfold mapOut at h
   cases b with
   | mk fields fld wild =>
@@ -68,7 +68,8 @@ theorem AdmBody_of_out {b : Body S} {v : S.V} {m : MapOf S.V} (h : mapOut v = so
     simp only [AdmBody, hL, h, Body.fields_mk, Body.at_mk, Body.wild_mk]
 
 /-- A body admits no value that the map former does not read. -/
-theorem AdmBody_of_none {b : Body S} {v : S.V} (h : mapOut v = none) : AdmBody b v = false := by
+theorem AdmBody_of_none {b : Body S} {v : S.V} (h : mapOut v = none) :
+    AdmBody b ρ v = false := by
   unfold mapOut at h
   cases b with
   | mk fields fld wild =>
@@ -96,39 +97,41 @@ theorem valPresentT_req (fields : Finset String) (fld : {k // k ∈ fields} → 
     | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
 
 /-- The bottom admits nothing. -/
-@[simp] theorem Adm_never (v : S.V) : Adm (.never : Term S) v = false := by simp [Adm]
+@[simp] theorem Adm_never (v : S.V) : Adm (.never : Term S) ρ v = false := by simp [Adm]
 
 /-- `⋁` of `Adm` over a union's options. -/
-def AdmAny (ts : List (Term S)) (v : S.V) : Bool := anyP (AdmList ts) v
+def AdmAny (ts : List (Term S)) (ρ : List S.C) (v : S.V) : Bool := anyP (AdmList ts ρ) v
 
 /-- An empty list of options admits no value. -/
-@[simp] theorem AdmAny_nil (v : S.V) : AdmAny ([] : List (Term S)) v = false := rfl
+@[simp] theorem AdmAny_nil (v : S.V) : AdmAny ([] : List (Term S)) ρ v = false := rfl
 
 /-- The options admit where the first admits or the rest admit. -/
 @[simp] theorem AdmAny_cons (t : Term S) (ts : List (Term S)) (v : S.V) :
-    AdmAny (t :: ts) v = (Adm t v || AdmAny ts v) := rfl
+    AdmAny (t :: ts) ρ v = (Adm t ρ v || AdmAny ts ρ v) := rfl
 
 /-- A union admits where one of its options admits. -/
 theorem Adm_union (opts : List (Term S)) (v : S.V) :
-    Adm (.union opts) v = AdmAny opts v := by simp [Adm, AdmAny]
+    Adm (.union opts) ρ v = AdmAny opts ρ v := by simp [Adm, AdmAny]
 
 /-! ## The rows that the families read -/
 
 /-- The rows of a term list are that list mapped, so `rowOfG_map` carries a row of terms
     onto the row of rows the admission reads. -/
-theorem AdmList_eq_map (ts : List (Term S)) : AdmList ts = ts.map Adm := AdmList_eq ts
+theorem AdmList_eq_map (ts : List (Term S)) : AdmList ts ρ = ts.map (Adm · ρ) :=
+  AdmList_eq ρ ts
 
 /-- …and the same for the spread. -/
-theorem AdmOptT_eq_map (sp : Option (Term S)) : AdmOptT sp = sp.map Adm := by
+theorem AdmOptT_eq_map (sp : Option (Term S)) : AdmOptT sp ρ = sp.map (Adm · ρ) := by
   cases sp <;> rfl
 
 /-- **The suffix row meets position by position**, which is `alignP_meet_zip` for the half
     that carries no spread. Stated over terms, because the three rows the `list` meet
     compares are rows of terms. -/
 theorem zipP_meet {r₁ r₂ rz : List (Term S)} (hlen : r₁.length = r₂.length)
-    (hF : List.Forall₂ (fun (pq : Term S × Term S) w => ∀ u, Adm w u = (Adm pq.1 u && Adm pq.2 u))
+    (hF : List.Forall₂
+      (fun (pq : Term S × Term S) w => ∀ u, Adm w ρ'' u = (Adm pq.1 ρ u && Adm pq.2 ρ' u))
       (r₁.zip r₂) rz) :
-    ∀ ws, zipP (AdmList rz) ws = (zipP (AdmList r₁) ws && zipP (AdmList r₂) ws) := by
+    ∀ ws, zipP (AdmList rz ρ'') ws = (zipP (AdmList r₁ ρ) ws && zipP (AdmList r₂ ρ') ws) := by
   intro ws
   induction ws generalizing r₁ r₂ rz with
   | nil =>
@@ -164,7 +167,7 @@ theorem zipP_meet {r₁ r₂ rz : List (Term S)} (hlen : r₁.length = r₂.leng
 /-- A declared position that holds nothing empties the tuple: every list the tuple admits fills
     each declared position. -/
 theorem alignP_never_false : ∀ {ts : List (Term S)} {tail : Option (Term S)} {ws : List S.V},
-    ts.any Term.isNever = true → alignP (AdmList ts) (AdmOptT tail) ws = false := by
+    ts.any Term.isNever = true → alignP (AdmList ts ρ) (AdmOptT tail ρ) ws = false := by
   intro ts
   induction ts with
   | nil => intro _ _ h; simp at h
@@ -176,13 +179,13 @@ theorem alignP_never_false : ∀ {ts : List (Term S)} {tail : Option (Term S)} {
       simp only [List.any_cons, Bool.or_eq_true] at h
       simp only [AdmList, alignP]
       rcases h with ht | hrest
-      · rw [show t = Term.never from eq_never_of_isNever ht, show Adm .never _ = false from rfl, Bool.false_and]
+      · rw [show t = Term.never from eq_never_of_isNever ht, show Adm .never ρ _ = false from rfl, Bool.false_and]
       · rw [ih (tail := tail) (ws := ws') hrest, Bool.and_false]
 
 /-- A declared SUFFIX position that holds nothing empties the list, for the same reason:
     every value the list admits fills each suffix position too. -/
 theorem zipP_never_false : ∀ {suf : List (Term S)} {ws : List S.V},
-    suf.any Term.isNever = true → zipP (AdmList suf) ws = false := by
+    suf.any Term.isNever = true → zipP (AdmList suf ρ) ws = false := by
   intro suf
   induction suf with
   | nil => intro _ h; simp at h
@@ -195,12 +198,12 @@ theorem zipP_never_false : ∀ {suf : List (Term S)} {ws : List S.V},
       simp only [AdmList, zipP]
       rcases h with ht | hrest
       · rw [show t = Term.never from eq_never_of_isNever ht,
-          show Adm .never w = false from rfl, Bool.false_and]
+          show Adm .never ρ w = false from rfl, Bool.false_and]
       · rw [ih (ws := ws') hrest, Bool.and_false]
 
 /-- Normalising a list keeps what it admits. -/
 theorem Adm_listOf (pre : List (Term S)) (sp : Option (Term S)) (suf : List (Term S)) (v : S.V) :
-    Adm (Term.listOf pre sp suf) v = Adm (.list pre sp suf) v := by
+    Adm (Term.listOf pre sp suf) ρ v = Adm (.list pre sp suf) ρ v := by
   unfold Term.listOf
   split
   next hany =>
@@ -227,10 +230,11 @@ theorem Adm_list_rows {p₁ s₁ p₂ s₂ pz sz : List (Term S)} {q₁ q₂ qz 
     (hrel : ∀ n r₁ r₂ rz, rowOfG p₁ q₁ s₁ n = some r₁ → rowOfG p₂ q₂ s₂ n = some r₂ →
       rowOfG pz qz sz n = some rz →
       r₁.length = r₂.length ∧
-        List.Forall₂ (fun (pq : Term S × Term S) w => ∀ u, Adm w u = (Adm pq.1 u && Adm pq.2 u))
+        List.Forall₂
+          (fun (pq : Term S × Term S) w => ∀ u, Adm w ρ'' u = (Adm pq.1 ρ u && Adm pq.2 ρ' u))
           (r₁.zip r₂) rz)
     (v : S.V) :
-    Adm (.list pz qz sz) v = (Adm (.list p₁ q₁ s₁) v && Adm (.list p₂ q₂ s₂) v) := by
+    Adm (.list pz qz sz) ρ'' v = (Adm (.list p₁ q₁ s₁) ρ v && Adm (.list p₂ q₂ s₂) ρ' v) := by
   cases hv : listOut v with
   | none => simp [Adm_list_of_none hv]
   | some ws =>
@@ -263,7 +267,7 @@ theorem Adm_list_rows {p₁ s₁ p₂ s₂ pz sz : List (Term S)} {q₁ q₂ qz 
     answer exactly there, and `listMeetRow` reaches it from both flattening branches. -/
 theorem Adm_list_disjoint {p₁ s₁ p₂ s₂ : List (Term S)} {q₁ q₂ : Option (Term S)}
     (h : ∀ n, rowOfG p₁ q₁ s₁ n = none ∨ rowOfG p₂ q₂ s₂ n = none) (v : S.V) :
-    (Adm (.list p₁ q₁ s₁) v && Adm (.list p₂ q₂ s₂) v) = false := by
+    (Adm (.list p₁ q₁ s₁) ρ v && Adm (.list p₂ q₂ s₂) ρ' v) = false := by
   cases hv : listOut v with
   | none => simp [Adm_list_of_none hv]
   | some ws =>
@@ -279,7 +283,7 @@ fact about counting rather than about separation. -/
 
 /-- The options that survive are the ones that admit; the bottoms admit nothing. -/
 theorem AdmAny_filter_never : ∀ (ts : List (Term S)) (v : S.V),
-    AdmAny (ts.filter (fun z => !z.isNever)) v = AdmAny ts v
+    AdmAny (ts.filter (fun z => !z.isNever)) ρ v = AdmAny ts ρ v
   | [], _ => rfl
   | t :: ts, v => by
       cases ht : t.isNever with
@@ -295,18 +299,18 @@ theorem AdmAny_filter_never : ∀ (ts : List (Term S)) (v : S.V),
 
 /-- The join over the met options is the join over the options, met with the partner. -/
 theorem AdmAny_meet {y : Term S} (v : S.V) : ∀ {os zs : List (Term S)},
-    List.Forall₂ (fun t w => ∀ u, Adm w u = (Adm t u && Adm y u)) os zs →
-    AdmAny zs v = (AdmAny os v && Adm y v) := by
+    List.Forall₂ (fun t w => ∀ u, Adm w ρ'' u = (Adm t ρ u && Adm y ρ' u)) os zs →
+    AdmAny zs ρ'' v = (AdmAny os ρ v && Adm y ρ' v) := by
   intro os zs h
   induction h with
   | nil => simp
   | cons hh _ ihx =>
     rw [AdmAny_cons, AdmAny_cons, hh v, ihx]
-    cases Adm _ v <;> cases Adm y v <;> simp
+    cases Adm _ ρ v <;> cases Adm y ρ' v <;> simp
 
 /-- **`ofOptions` admits what its options admit**, and no certificate is spent. -/
 theorem Adm_ofOptions (ts : List (Term S)) (v : S.V) :
-    Adm (Term.ofOptions ts) v = AdmAny ts v := by
+    Adm (Term.ofOptions ts) ρ v = AdmAny ts ρ v := by
   match ts with
   | [] => rfl
   | [t] => simp only [Term.ofOptions, AdmAny_cons, AdmAny_nil, Bool.or_false]
@@ -315,9 +319,9 @@ theorem Adm_ofOptions (ts : List (Term S)) (v : S.V) :
 /-- **The coproduct row of the meet needs no certificate.** The bottoms admit nothing, and `&&`
     distributes over the options' disjunction. -/
 theorem union_meet_free {os zs : List (Term S)} {y : Term S} (v : S.V)
-    (hR : List.Forall₂ (fun t w => ∀ u, Adm w u = (Adm t u && Adm y u)) os zs) :
-    Adm (Term.ofOptions (zs.filter (fun z => !z.isNever))) v
-      = (Adm (.union os) v && Adm y v) := by
+    (hR : List.Forall₂ (fun t w => ∀ u, Adm w ρ'' u = (Adm t ρ u && Adm y ρ' u)) os zs) :
+    Adm (Term.ofOptions (zs.filter (fun z => !z.isNever))) ρ'' v
+      = (Adm (.union os) ρ v && Adm y ρ' v) := by
   rw [Adm_ofOptions, AdmAny_filter_never, AdmAny_meet v hR, Adm_union]
 
 
@@ -332,27 +336,29 @@ recursion that feeds the induction hypothesis at the subterm into the two. -/
 
 /-- `f` answers the meet with one term fixed on the left, at EVERY right operand. The container
     families need this of the call they carry, because they apply it to a subterm of any shape. -/
-def AdmSound (x : Term S) (f : Term S → Option (Term S)) : Prop :=
-  ∀ y z, f y = some z → ∀ v, Adm z v = (Adm x v && Adm y v)
+def AdmSound (ρ ρ' ρ'' : List S.C) (x : Term S) (f : Term S → Option (Term S)) : Prop :=
+  ∀ y z, f y = some z → ∀ v, Adm z ρ'' v = (Adm x ρ v && Adm y ρ' v)
 
 /-- `fam` answers the meet with one term fixed on the left, over the operands it is handed. -/
-def AdmFam (x : Term S) (fam : Term S → Option (Term S)) : Prop :=
-  ∀ y z, Delegated y → fam y = some z → ∀ v, Adm z v = (Adm x v && Adm y v)
+def AdmFam (ρ ρ' ρ'' : List S.C) (x : Term S) (fam : Term S → Option (Term S)) : Prop :=
+  ∀ y z, Delegated y → fam y = some z → ∀ v, Adm z ρ'' v = (Adm x ρ v && Adm y ρ' v)
 
 /-- Two terms that share no value meet at the bottom. -/
-theorem bottom_of_and_false {x y : Term S} {v : S.V} (h : (Adm x v && Adm y v) = false) :
-    Adm .never v = (Adm x v && Adm y v) := by rw [h, Adm_never]
+theorem bottom_of_and_false {x y : Term S} {v : S.V} (h : (Adm x ρ v && Adm y ρ' v) = false) :
+    Adm .never ρ'' v = (Adm x ρ v && Adm y ρ' v) := by rw [h, Adm_never]
 
 /-- …in either order. -/
-theorem bottom_of_and_false' {x y : Term S} {v : S.V} (h : (Adm y v && Adm x v) = false) :
-    Adm .never v = (Adm x v && Adm y v) := by rw [Bool.and_comm, h, Adm_never]
+theorem bottom_of_and_false' {x y : Term S} {v : S.V} (h : (Adm y ρ' v && Adm x ρ v) = false) :
+    Adm .never ρ'' v = (Adm x ρ v && Adm y ρ' v) := by rw [Bool.and_comm, h, Adm_never]
 
 /-- Two rows of terms, the left as partially applied meets, met position by position. -/
 theorem zipF_lift_terms :
     ∀ {ts us : List (Term S)} {fs : List (Term S → Option (Term S))} {vs : List (Term S)},
-      List.Forall₂ AdmSound ts fs →
-      List.Forall₂ (fun (p : (Term S → Option (Term S)) × Term S) v => p.1 p.2 = some v) (fs.zip us) vs →
-      List.Forall₂ (fun (pq : Term S × Term S) w => ∀ u, Adm w u = (Adm pq.1 u && Adm pq.2 u))
+      List.Forall₂ (AdmSound ρ ρ' ρ'') ts fs →
+      List.Forall₂ (fun (p : (Term S → Option (Term S)) × Term S) v => p.1 p.2 = some v)
+        (fs.zip us) vs →
+      List.Forall₂
+        (fun (pq : Term S × Term S) w => ∀ u, Adm w ρ'' u = (Adm pq.1 ρ u && Adm pq.2 ρ' u))
         (ts.zip us) vs := by
   intro ts
   induction ts with
@@ -371,9 +377,9 @@ theorem zipF_lift_terms :
 /-- **A body admits a map by its slots**: every name whose slot is required is present, and
     every present name passes its slot. -/
 theorem AdmBody_map_slots (c : Body S) {v : S.V} {m : MapOf S.V} (hm : mapOut v = some m) :
-    AdmBody c v = true ↔
+    AdmBody c ρ v = true ↔
       (∀ k, ObjectSlot.isReq (c.slotAt k) = true → k ∈ m.keys) ∧
-      ∀ k : {k // k ∈ m.keys}, AdmField (c.slotAt k.1) (m.get k) = true := by
+      ∀ k : {k // k ∈ m.keys}, AdmField (c.slotAt k.1) ρ (m.get k) = true := by
   rw [AdmBody_of_out hm, valPresentT_req, Bool.and_eq_true, reqs_slotAt]
   apply and_congr Iff.rfl
   unfold objAdmV; rw [decide_eq_true_iff]
@@ -388,10 +394,11 @@ theorem AdmBody_map_slots (c : Body S) {v : S.V} {m : MapOf S.V} (hm : mapOut v 
 
 /-- **Two bodies conjoined at every name are conjoined as bodies.** -/
 theorem AdmBody_of_slots {a b z : Body S}
-    (hS : ∀ k w, AdmField (z.slotAt k) w = (AdmField (a.slotAt k) w && AdmField (b.slotAt k) w))
+    (hS : ∀ k w, AdmField (z.slotAt k) ρ'' w
+      = (AdmField (a.slotAt k) ρ w && AdmField (b.slotAt k) ρ' w))
     (hR : ∀ k, ObjectSlot.isReq (z.slotAt k)
       = (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)))
-    (v : S.V) : AdmBody z v = (AdmBody a v && AdmBody b v) := by
+    (v : S.V) : AdmBody z ρ'' v = (AdmBody a ρ v && AdmBody b ρ' v) := by
   cases hv : mapOut v with
   | none => rw [AdmBody_of_none hv, AdmBody_of_none hv, AdmBody_of_none hv]; rfl
   | some m =>
@@ -410,10 +417,10 @@ theorem AdmBody_of_slots {a b z : Body S}
 
 /-- **A slot at the bottom empties the product**, at a name either body requires. -/
 theorem AdmBody_false_of_bottom {a b : Body S} {s : ObjectSlot S} {k : String}
-    (hs : ∀ w, AdmField s w = (AdmField (a.slotAt k) w && AdmField (b.slotAt k) w))
+    (hs : ∀ w, AdmField s ρ'' w = (AdmField (a.slotAt k) ρ w && AdmField (b.slotAt k) ρ' w))
     (hr : ObjectSlot.isReq s = (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)))
     (hbot : ObjectSlot.isBottom s = true) (v : S.V) :
-    (AdmBody a v && AdmBody b v) = false := by
+    (AdmBody a ρ v && AdmBody b ρ' v) = false := by
   refine Bool.eq_false_iff.mpr (fun hab => ?_)
   rw [Bool.and_eq_true] at hab
   obtain ⟨hA, hB⟩ := hab
@@ -438,12 +445,12 @@ theorem AdmBody_false_of_bottom {a b : Body S} {s : ObjectSlot S} {k : String}
 theorem objSlot_sound {a b : Body S} {g : {k // k ∈ a.fields} → ObjectSlot S → Option (ObjectSlot S)}
     {mw : Term S → Option (Term S)}
     (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot S), g k fl = some fm →
-      ∀ w, AdmField fm w = (AdmField (a.at k) w && AdmField fl w))
+      ∀ w, AdmField fm ρ'' w = (AdmField (a.at k) ρ w && AdmField fl ρ' w))
     (hgreq : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot S), g k fl = some fm →
       ObjectSlot.isReq fm = (ObjectSlot.isReq (a.at k) || ObjectSlot.isReq fl))
-    (hw : ∀ y z, mw y = some z → ∀ w, Adm z w = (Adm a.block w && Adm y w))
+    (hw : ∀ y z, mw y = some z → ∀ w, Adm z ρ'' w = (Adm a.block ρ w && Adm y ρ' w))
     {k : {k // k ∈ a.fields ∪ b.fields}} {s : ObjectSlot S} (h : objSlot a b g mw k = some s) :
-    (∀ w, AdmField s w = (AdmField (a.slotAt k.1) w && AdmField (b.slotAt k.1) w)) ∧
+    (∀ w, AdmField s ρ'' w = (AdmField (a.slotAt k.1) ρ w && AdmField (b.slotAt k.1) ρ' w)) ∧
     ObjectSlot.isReq s = (ObjectSlot.isReq (a.slotAt k.1) || ObjectSlot.isReq (b.slotAt k.1)) := by
   unfold objSlot at h
   split at h
@@ -476,23 +483,25 @@ end
     catch-all rows of the families read the disjointness of the former classes (`Shapes`). -/
 class FormerAdm (S : Syn) [Sem S] [PrimAdm S] : Prop where
   /-- Over held-free terms, the set of an element meet is the meet of the sets. -/
-  set_meet : ∀ a y z : Term S, HF a → HF y → HF z → (∀ u, Adm z u = (Adm a u && Adm y u)) →
-    ∀ v, Adm (.set z) v = (Adm (.set a) v && Adm (.set y) v)
+  set_meet : ∀ a y z : Term S, HF a → HF y → HF z →
+    (∀ u, Adm z [] u = (Adm a [] u && Adm y [] u)) →
+    ∀ v, Adm (.set z) [] v = (Adm (.set a) [] v && Adm (.set y) [] v)
   /-- Two sets whose elements share no value share no set. -/
-  set_never : ∀ a y : Term S, (∀ u, (Adm a u && Adm y u) = false) →
-    ∀ v, (Adm (.set a) v && Adm (.set y) v) = false
+  set_never : ∀ a y : Term S, (∀ u, (Adm a [] u && Adm y [] u) = false) →
+    ∀ v, (Adm (.set a) [] v && Adm (.set y) [] v) = false
 
-/-- **The write-side laws of a leaf meet**: each leaf answer is exact. -/
+/-- **The write-side laws of a leaf meet**: each leaf answer is exact. A primitive and the top
+    read no variable, so the laws are stated at the closed environment. -/
 class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] : Prop where
   /-- Two primitives met at a primitive admit what both admit. -/
   prim_some : ∀ g g' h : S.Ground, Leaf.prim g g' = some h →
-    ∀ v, Adm (.prim h : Term S) v = (Adm (.prim g : Term S) v && Adm (.prim g') v)
+    ∀ v, Adm (.prim h : Term S) [] v = (Adm (.prim g : Term S) [] v && Adm (.prim g') [] v)
   /-- Two primitives met at the bottom share no value. -/
   prim_none : ∀ g g' : S.Ground, Leaf.prim g g' = none →
-    ∀ v, (Adm (.prim g : Term S) v && Adm (.prim g') v) = false
+    ∀ v, (Adm (.prim g : Term S) [] v && Adm (.prim g') [] v) = false
   /-- A primitive that meets the top at itself is inside the top. -/
   prim_top : ∀ g : S.Ground, Leaf.primTop g = true →
-    ∀ v, Adm (.prim g : Term S) v = true → Adm (.opaq : Term S) v = true
+    ∀ v, Adm (.prim g : Term S) [] v = true → Adm (.opaq : Term S) [] v = true
   /-- Two predicates met at a predicate hold where both hold. -/
   pmeet_some : ∀ q p r : S.Pred, Leaf.pmeet q p = some (some r) →
     ∀ v, Sem.eval r v = (Sem.eval q v && Sem.eval p v)
@@ -529,10 +538,10 @@ noncomputable section
     `Adm_list_rows` states the whole obligation over those rows. -/
 theorem Adm_famList [Shapes S] {pre suf : List (Term S)} {sp : Option (Term S)}
     {fpre fsuf : List (Term S → Option (Term S))} {fsp : Option (Term S → Option (Term S))}
-    (hp : List.Forall₂ AdmSound pre fpre)
-    (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ AdmSound t f)
-    (hf : List.Forall₂ AdmSound suf fsuf) :
-    AdmFam (.list pre sp suf) (famList fpre fsp fsuf) := by
+    (hp : List.Forall₂ (AdmSound ρ ρ' ρ'') pre fpre)
+    (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ AdmSound ρ ρ' ρ'' t f)
+    (hf : List.Forall₂ (AdmSound ρ ρ' ρ'') suf fsuf) :
+    AdmFam ρ ρ' ρ'' (.list pre sp suf) (famList fpre fsp fsuf) := by
   have hlp := hp.length_eq
   have hlf := hf.length_eq
   intro y z hd h v
@@ -730,7 +739,8 @@ theorem Adm_famList [Shapes S] {pre suf : List (Term S)} {sp : Option (Term S)}
                         = max fpre.length pre₂.length + max fsuf.length suf₂.length :=
                       rowOfG_length hts
                     have hrel₀ := zipF_lift_terms htsF hFz
-                    have hspz : ∀ u, Adm spz u = (Adm t u && Adm c u) := hsound c spz hfc
+                    have hspz : ∀ u, Adm spz ρ'' u = (Adm t ρ u && Adm c ρ' u) :=
+                      hsound c spz hfc
                     have hdm := dominates_max hdom
                     rw [Adm_listOf]
                     refine Adm_list_rows (p₁ := pre) (q₁ := some t) (s₁ := suf) ?_ ?_ v
@@ -784,11 +794,11 @@ theorem Adm_famList [Shapes S] {pre suf : List (Term S)} {sp : Option (Term S)}
 theorem Adm_famObj [Shapes S] {a : Body S} {g : {k // k ∈ a.fields} → ObjectSlot S → Option (ObjectSlot S)}
     {mw : Term S → Option (Term S)}
     (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot S), g k fl = some fm →
-      ∀ w, AdmField fm w = (AdmField (a.at k) w && AdmField fl w))
+      ∀ w, AdmField fm ρ'' w = (AdmField (a.at k) ρ w && AdmField fl ρ' w))
     (hgreq : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot S), g k fl = some fm →
       ObjectSlot.isReq fm = (ObjectSlot.isReq (a.at k) || ObjectSlot.isReq fl))
-    (hw : ∀ y z, mw y = some z → ∀ w, Adm z w = (Adm a.block w && Adm y w)) :
-    AdmFam (.object a) (famObj a g mw) := by
+    (hw : ∀ y z, mw y = some z → ∀ w, Adm z ρ'' w = (Adm a.block ρ w && Adm y ρ' w)) :
+    AdmFam ρ ρ' ρ'' (.object a) (famObj a g mw) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
   case object b =>
@@ -808,15 +818,15 @@ theorem Adm_famObj [Shapes S] {a : Body S} {g : {k // k ∈ a.fields} → Object
           split at h
           next hall =>
             simp only [Option.some.injEq] at h; subst h
-            have hblkA : ∀ w, Adm (if zb.isNever then .never else zb) w
-                = (Adm a.block w && Adm b.block w) := by
+            have hblkA : ∀ w, Adm (if zb.isNever then .never else zb) ρ'' w
+                = (Adm a.block ρ w && Adm b.block ρ' w) := by
               intro w
               cases hn : zb.isNever
               · exact hw _ _ hwz w
               · rw [if_pos rfl, ← hw _ _ hwz w, eq_never_of_isNever hn]
             refine AdmBody_of_slots (fun k w => ?_) (fun k => ?_) v
-            · exact objObj_slots (P := fun k s => AdmField s w
-                  = (AdmField (a.slotAt k) w && AdmField (b.slotAt k) w))
+            · exact objObj_slots (P := fun k s => AdmField s ρ'' w
+                  = (AdmField (a.slotAt k) ρ w && AdmField (b.slotAt k) ρ' w))
                 (of_decide_eq_true hall) (fun k' s hs => (objSlot_sound hg hgreq hw hs).1 w)
                 (fun k' ha hb => by
                   rw [Body.slotAt_neg ha, Body.slotAt_neg hb]; exact hblkA w) k
@@ -829,12 +839,21 @@ theorem Adm_famObj [Shapes S] {a : Body S} {g : {k // k ∈ a.fields} → Object
   all_goals fam_bottom famObj
 
 /-- **Two sets meet at their elements**, and a set is at the bottom beside every other former. -/
-theorem Adm_famSet [FormerAdm S] [Shapes S] (a : Term S) {mt : Term S → Option (Term S)} (ih : AdmSound a mt) :
-    AdmFam (.set a) (famSet a mt) := by
+theorem Adm_famSet [FormerAdm S] [Shapes S] (a : Term S) {mt : Term S → Option (Term S)}
+    (ih : AdmSound ρ ρ' ρ'' a mt) : AdmFam ρ ρ' ρ'' (.set a) (famSet a mt) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
   case set y =>
       simp only [famSet] at h
+      split at h
+      · exact nomatch h
+      next hv =>
+      simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hv
+      -- the elements read no variable, so the closed laws of the universe apply
+      have ha := Adm_closed a hv.1 ρ []
+      have hy := Adm_closed y hv.2 ρ' []
+      have hsa := Adm_closed (.set a) hv.1 ρ []
+      have hsy := Adm_closed (.set y) hv.2 ρ' []
       split at h
       · next z' hz =>
         have hm := ih y z' hz
@@ -843,16 +862,19 @@ theorem Adm_famSet [FormerAdm S] [Shapes S] (a : Term S) {mt : Term S → Option
           simp only [Option.some.injEq] at h; subst h
           have hz' : z' = .never := eq_never_of_isNever hn
           subst hz'
+          rw [hsa, hsy]
           exact bottom_of_and_false
-            (FormerAdm.set_never a y (fun u => by rw [← hm u, Adm_never]) v)
+            (FormerAdm.set_never a y (fun u => by rw [← ha, ← hy, ← hm u, Adm_never]) v)
         · next hn =>
           split at h
           · exact nomatch h
           · next hh =>
             simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hh
             simp only [Option.some.injEq] at h; subst h
-            exact FormerAdm.set_meet a y z' (HF_of_hasHeld a hh.1.1) (HF_of_hasHeld y hh.1.2)
-              (HF_of_hasHeld z' hh.2) hm v
+            rw [Adm_closed (.set z') hh.2 ρ'' [], hsa, hsy]
+            exact FormerAdm.set_meet a y z' (HF_of_hasHeld a hh.1.1.1) (HF_of_hasHeld y hh.1.1.2)
+              (HF_of_hasHeld z' hh.1.2)
+              (fun u => by rw [← Adm_closed z' hh.2 ρ'' [], ← ha, ← hy]; exact hm u) v
       · exact nomatch h
   case opaq => simp [famSet] at h
   all_goals fam_bottom famSet
@@ -861,7 +883,7 @@ theorem Adm_famSet [FormerAdm S] [Shapes S] (a : Term S) {mt : Term S → Option
 
 /-- …and normalising a refinement keeps what it admits. -/
 theorem Adm_refineOf [Leaf S] [LeafAdm S] (z : Term S) (p : S.Pred) (v : S.V) :
-    Adm (Term.refineOf z p) v = Adm (.refine z p) v := by
+    Adm (Term.refineOf z p) ρ v = Adm (.refine z p) ρ v := by
   cases z <;>
     first
       | rfl
@@ -869,59 +891,153 @@ theorem Adm_refineOf [Leaf S] [LeafAdm S] (z : Term S) (p : S.Pred) (v : S.V) :
          rename_i z' q
          split
          · rename_i r hr
-           show (Adm z' v && Sem.eval r v) = ((Adm z' v && Sem.eval q v) && Sem.eval p v)
+           show (Adm z' ρ v && Sem.eval r v) = ((Adm z' ρ v && Sem.eval q v) && Sem.eval p v)
            rw [LeafAdm.pmeet_some q p r hr v, Bool.and_assoc]
          · rename_i hr
-           show Adm .never v = ((Adm z' v && Sem.eval q v) && Sem.eval p v)
+           show Adm .never ρ v = ((Adm z' ρ v && Sem.eval q v) && Sem.eval p v)
            rw [Bool.and_assoc, LeafAdm.pmeet_none q p hr v, Bool.and_false, Adm_never]
          · rfl)
 
+/-! ### The environments of a pairing, and the recursive rows -/
+
+/-- **The environments agree with the pairing on the write side**: the binder of the answer that
+    a pairing names writes where both binders it pairs write. -/
+def PairedV (p : Pairing) (ρ ρ' ρ'' : List S.C) : Prop :=
+  ∀ i j k, p i j = some k → ∀ v,
+    ((envAt ρ'' k).e v).isSome = (((envAt ρ i).e v).isSome && ((envAt ρ' j).e v).isSome)
+
+omit [PrimAdm S] in
+/-- Two closed terms pair no binder, so every three environments agree with the pairing. -/
+theorem PairedV.pair0 (ρ ρ' ρ'' : List S.C) : PairedV pair0 ρ ρ' ρ'' := fun _ _ _ h => nomatch h
+
+omit [PrimAdm S] in
+/-- An unfolding of the left operand binds a codec that pairs with nothing. -/
+theorem PairedV.left {p : Pairing} (h : PairedV p ρ ρ' ρ'') (c : S.C) :
+    PairedV (shiftL p) (c :: ρ) ρ' ρ'' := by
+  intro i j k hp v
+  match i, hp with
+  | 0, hp => exact nomatch hp
+  | i + 1, hp => exact h i j k hp v
+
+omit [PrimAdm S] in
+/-- An unfolding of the right operand binds a codec that pairs with nothing. -/
+theorem PairedV.right {p : Pairing} (h : PairedV p ρ ρ' ρ'') (c : S.C) :
+    PairedV (shiftR p) ρ (c :: ρ') ρ'' := by
+  intro i j k hp v
+  match i, j, hp with
+  | _, 0, hp => exact nomatch hp
+  | i, j + 1, hp => exact h i j k hp v
+
+omit [PrimAdm S] in
+/-- Under a `mu ∧ mu`, the two new binders pair at a codec that writes where both write. -/
+theorem PairedV.mu {p : Pairing} (h : PairedV p ρ ρ' ρ'') {c c' c'' : S.C}
+    (hc : ∀ v, (c''.e v).isSome = ((c.e v).isSome && (c'.e v).isSome)) :
+    PairedV (pairMu p) (c :: ρ) (c' :: ρ') (c'' :: ρ'') := by
+  intro i j k hp v
+  match i, j, hp with
+  | 0, 0, hp => cases hp; exact hc v
+  | i + 1, j + 1, hp =>
+    simp only [pairMu, Option.map_eq_some_iff] at hp
+    obtain ⟨k', hk, rfl⟩ := hp
+    exact h i j k' hk v
+  | 0, _ + 1, hp => exact nomatch hp
+  | _ + 1, 0, hp => exact nomatch hp
+
+omit [PrimAdm S] in
+/-- **The stage-wise meet, on the write side.** A body meet that meets the write domains carries
+    the meet to every stage. No guard and no chain: each stage is the body over the stage below. -/
+theorem stage_meetV {B B' B'' : S.C → S.C}
+    (hB : ∀ c c' c'', (∀ v, (c''.e v).isSome = ((c.e v).isSome && (c'.e v).isSome)) →
+      ∀ v, ((B'' c'').e v).isSome = (((B c).e v).isSome && ((B' c').e v).isSome)) :
+    ∀ n v, ((muStage B'' n).e v).isSome
+      = (((muStage B n).e v).isSome && ((muStage B' n).e v).isSome)
+  | 0, _ => rfl
+  | n + 1, v => hB _ _ _ (stage_meetV hB n) v
+
+/-- **A recursive term admits what its body admits over the stage below the value's depth.** The
+    limit reads a value at the stage that the value's depth names, and that stage is the body over
+    the stage below. So the unfolding needs no guard. -/
+theorem Adm_mu_unfold (b : Term S) (ρ : List S.C) (v : S.V) :
+    Adm (.mu b) ρ v = Adm b (muStage (fun c => denote b (c :: ρ)) (Sem.dV v - 1) :: ρ) v := by
+  rw [Adm_eq_isSome b]
+  show ((muStage (fun c => denote b (c :: ρ)) (Sem.dV v)).e v).isSome = _
+  obtain ⟨n, hn⟩ : ∃ n, Sem.dV v = n + 1 := ⟨Sem.dV v - 1, by have := Sem.dV_pos v; omega⟩
+  rw [hn, Nat.add_sub_cancel]
+  rfl
+
+/-- A recursive term over the bottom admits nothing: every stage is the bottom. -/
+theorem Adm_mu_never (ρ : List S.C) (v : S.V) : Adm (.mu (.never : Term S)) ρ v = false := by
+  show ((muStage (fun c => denote (.never : Term S) (c :: ρ)) (Sem.dV v)).e v).isSome = false
+  generalize Sem.dV v = n
+  cases n <;> rfl
+
+/-- **The `mu ∧ mu` row on the write side**: a body meet under every three environments that meet
+    at the new binders is a meet of the two recursive terms. -/
+theorem Adm_mu_meet {b b' w : Term S}
+    (hB : ∀ c c' c'', (∀ v, (c''.e v).isSome = ((c.e v).isSome && (c'.e v).isSome)) →
+      ∀ v, Adm w (c'' :: ρ'') v = (Adm b (c :: ρ) v && Adm b' (c' :: ρ') v)) (v : S.V) :
+    Adm (.mu w) ρ'' v = (Adm (.mu b) ρ v && Adm (.mu b') ρ' v) :=
+  stage_meetV (B := fun c => denote b (c :: ρ)) (B' := fun c => denote b' (c :: ρ'))
+    (B'' := fun c => denote w (c :: ρ''))
+    (fun c c' c'' hc u => by simpa only [Adm_eq_isSome] using hB c c' c'' hc u) (Sem.dV v) v
+
 mutual
-/-- Every row that reads the right operand alone is sound wherever the family is. -/
-theorem Adm_meetSRight [Leaf S] [LeafAdm S] {x : Term S} {fam : Term S → Option (Term S)} (hf : AdmFam x fam) :
-    ∀ (y : Term S) z, meetSRight fam y = some z → ∀ v, Adm z v = (Adm x v && Adm y v)
-  | .never, _, h, _ => by
+/-- Every row that reads the right operand alone is sound wherever the family is. A right
+    recursive term unfolds at the stage below the value's depth. -/
+theorem Adm_meetSRight [Leaf S] [LeafAdm S] {x : Term S}
+    {fam : Pairing → Term S → Option (Term S)}
+    (hf : ∀ q ρ' ρ'', PairedV q ρ ρ' ρ'' → AdmFam ρ ρ' ρ'' x (fam q)) :
+    ∀ (y : Term S) (p : Pairing) (ρ' ρ'' : List S.C) z, PairedV p ρ ρ' ρ'' →
+      meetSRight fam p y = some z → ∀ v, Adm z ρ'' v = (Adm x ρ v && Adm y ρ' v)
+  | .never, _, _, _, _, _, h, _ => by
       simp only [meetSRight, Option.some.injEq] at h; subst h; simp [Adm]
-  | .held _ _ _ _, _, h, _ => by simp [meetSRight] at h
-  | .var _, _, h, _ => by
-      simp only [meetSRight, Option.some.injEq] at h; subst h; simp [Adm]
-  | .mu _, _, h, _ => by simp [meetSRight] at h
-  | .refine y p, _, h, v => by
+  | .held _ _ _ _, _, _, _, _, _, h, _ => by simp [meetSRight] at h
+  | .var _, _, _, _, _, _, h, _ => by simp [meetSRight] at h
+  | .mu b, p, ρ', ρ'', _, hp, h, v => by
+      simp only [meetSRight] at h
+      rw [Adm_mu_unfold b ρ' v]
+      exact Adm_meetSRight hf b (shiftR p) _ ρ'' _ (hp.right _) h v
+  | .refine y q, p, ρ', ρ'', _, hp, h, v => by
       simp only [meetSRight] at h
       split at h
       · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-        have ihw := Adm_meetSRight hf y w hw v
+        have ihw := Adm_meetSRight hf y p ρ' ρ'' w hp hw v
         rw [Adm_refineOf]
         simp only [Adm, ihw]
         simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
       · exact absurd h (by simp)
-  | .union os, _, h, v => by
+  | .union os, p, ρ', ρ'', _, hp, h, v => by
       obtain ⟨zs, hF, rfl⟩ := meetSRight_union h
       rw [Bool.and_comm]
-      exact union_meet_free v (Adm_meetSRightL hf os _ hF)
-  | .prim g, _, h, v => hf (.prim g) _ trivial h v
-  | .set b, _, h, v => hf (.set b) _ trivial h v
-  | .opaq, _, h, v => hf .opaq _ trivial h v
-  | .list p q s, _, h, v => hf (.list p q s) _ trivial h v
-  | .object b, _, h, v => hf (.object b) _ trivial h v
+      exact union_meet_free v (Adm_meetSRightL hf os p ρ' ρ'' _ hp hF)
+  | .prim g, p, _, _, _, hp, h, v => hf p _ _ hp (.prim g) _ trivial h v
+  | .set b, p, _, _, _, hp, h, v => hf p _ _ hp (.set b) _ trivial h v
+  | .opaq, p, _, _, _, hp, h, v => hf p _ _ hp .opaq _ trivial h v
+  | .list pr q s, p, _, _, _, hp, h, v => hf p _ _ hp (.list pr q s) _ trivial h v
+  | .object b, p, _, _, _, hp, h, v => hf p _ _ hp (.object b) _ trivial h v
 termination_by structural y => y
 
 /-- The list companion: the union row's options, lifted pointwise. It recurses on the list and
     `Adm_meetSRight` on the term, as the definition's own pair does. -/
-theorem Adm_meetSRightL [Leaf S] [LeafAdm S] {x : Term S} {fam : Term S → Option (Term S)} (hf : AdmFam x fam) :
-    ∀ os zs, List.Forall₂ (fun t w => meetSRight fam t = some w) os zs →
-      List.Forall₂ (fun t w => ∀ u, Adm w u = (Adm t u && Adm x u)) os zs
-  | [], _, h => by cases h; exact .nil
-  | t :: ts, _, h => by
+theorem Adm_meetSRightL [Leaf S] [LeafAdm S] {x : Term S}
+    {fam : Pairing → Term S → Option (Term S)}
+    (hf : ∀ q ρ' ρ'', PairedV q ρ ρ' ρ'' → AdmFam ρ ρ' ρ'' x (fam q)) :
+    ∀ os (p : Pairing) (ρ' ρ'' : List S.C) zs, PairedV p ρ ρ' ρ'' →
+      List.Forall₂ (fun t w => meetSRight fam p t = some w) os zs →
+      List.Forall₂ (fun t w => ∀ u, Adm w ρ'' u = (Adm t ρ' u && Adm x ρ u)) os zs
+  | [], _, _, _, _, _, h => by cases h; exact .nil
+  | t :: ts, p, ρ', ρ'', _, hp, h => by
       cases h with
       | cons hh ht =>
-          exact .cons (fun u => by rw [Adm_meetSRight hf t _ hh u, Bool.and_comm])
-            (Adm_meetSRightL hf ts _ ht)
+          exact .cons (fun u => by rw [Adm_meetSRight hf t p ρ' ρ'' _ hp hh u, Bool.and_comm])
+            (Adm_meetSRightL hf ts p ρ' ρ'' _ hp ht)
 termination_by structural os => os
 end
 
-/-- **The one leaf family is exact wherever the leaf laws hold.** -/
-theorem Adm_famPrim [Leaf S] [LeafAdm S] [Shapes S] (g : S.Ground) : AdmFam (.prim g) (famPrim g) := by
+/-- **The one leaf family is exact wherever the leaf laws hold.** A primitive and the top read
+    no variable, so each row is the closed one. -/
+theorem Adm_famPrim [Leaf S] [LeafAdm S] [Shapes S] (g : S.Ground) :
+    AdmFam ρ ρ' ρ'' (.prim g) (famPrim g) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
   case prim g' =>
@@ -937,13 +1053,14 @@ theorem Adm_famPrim [Leaf S] [LeafAdm S] [Shapes S] (g : S.Ground) : AdmFam (.pr
       | true =>
           simp only [ht, if_true, Option.some.injEq] at h
           subst h
-          cases hg : Adm (.prim g : Term S) v
+          change Adm (.prim g) [] v = (Adm (.prim g) [] v && Adm .opaq [] v)
+          cases hg : Adm (.prim g : Term S) [] v
           · simp
           · simp [LeafAdm.prim_top g ht v hg]
   all_goals fam_bottom famPrim
 
 /-- The top meets itself, and a primitive where the leaf says so. -/
-theorem Adm_famOpaq [Leaf S] [LeafAdm S] : AdmFam (.opaq : Term S) famOpaq := by
+theorem Adm_famOpaq [Leaf S] [LeafAdm S] : AdmFam ρ ρ' ρ'' (.opaq : Term S) famOpaq := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
   case prim g =>
@@ -953,7 +1070,8 @@ theorem Adm_famOpaq [Leaf S] [LeafAdm S] : AdmFam (.opaq : Term S) famOpaq := by
       | true =>
           simp only [ht, if_true, Option.some.injEq] at h
           subst h
-          cases hg : Adm (.prim g : Term S) v
+          change Adm (.prim g) [] v = (Adm .opaq [] v && Adm (.prim g) [] v)
+          cases hg : Adm (.prim g : Term S) [] v
           · simp
           · simp [LeafAdm.prim_top g ht v hg]
   case opaq =>
@@ -964,24 +1082,48 @@ theorem Adm_famOpaq [Leaf S] [LeafAdm S] : AdmFam (.opaq : Term S) famOpaq := by
 /-! ### The outer theorem -/
 
 mutual
-/-- **`Adm` is a homomorphism from the meet to conjunction.** Where two terms have a meet,
-    the values it admits are exactly the values both admit. -/
-theorem Adm_meet [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] : ∀ (x y : Term S) z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x v && Adm y v)
-  | .never, _, _, h, _ => by
+/-- **`Adm` is a homomorphism from the meet to conjunction.** Where two terms have a meet at a
+    pairing, the values it admits are exactly the values both admit, under every three
+    environments that agree with the pairing. -/
+theorem Adm_meet [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
+    ∀ (p : Pairing) (x y z : Term S), Term.meet p x y = some z →
+      ∀ (ρ ρ' ρ'' : List S.C), PairedV p ρ ρ' ρ'' → ∀ v, Adm z ρ'' v = (Adm x ρ v && Adm y ρ' v)
+  | _, .never, _, _, h, _, _, _, _, _ => by
       simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm]
-  | .held _ _ _ _, y, _, h, v => by
+  | _, .held _ _ _ _, y, _, h, _, _, _, _, v => by
       cases y <;>
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
           | exact absurd h (by simp [Term.meet])
-  | .var _, _, _, h, _ => by
-      simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm]
-  | .mu _, y, _, h, v => by
+  -- two variables meet at the binder the pairing names, which writes where both write
+  | _, .var i, y, _, h, _, _, _, hp, v => by
       cases y <;>
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
+          | (simp only [Term.meet, Option.map_eq_some_iff] at h
+             obtain ⟨k, hk, rfl⟩ := h
+             exact hp i _ k hk v)
           | exact absurd h (by simp [Term.meet])
-  | .refine x p, y, _, h, v => by
+  -- two recursive terms meet stage by stage, and an unfolding meets the body
+  | p, .mu b, y, _, h, ρ, ρ', ρ'', hp, v => by
+      cases y <;>
+        first
+          | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
+          | (simp only [Term.meet, Option.bind_eq_some_iff] at h
+             obtain ⟨w, hw, hz⟩ := h
+             have hmu := Adm_mu_meet (ρ := ρ) (ρ' := ρ') (ρ'' := ρ'') (fun c c' c'' hc u =>
+               Adm_meet (pairMu p) b _ w hw (c :: ρ) (c' :: ρ') (c'' :: ρ'') (hp.mu hc) u) v
+             split at hz
+             · next hn =>
+                 cases hz
+                 rw [← hmu, eq_never_of_isNever hn, Adm_mu_never, Adm_never]
+             · split at hz
+               · cases hz; exact hmu
+               · exact nomatch hz)
+          | (simp only [Term.meet] at h
+             rw [Adm_mu_unfold b ρ v]
+             exact Adm_meet (shiftL p) b _ _ h _ ρ' ρ'' (hp.left _) v)
+  | p, .refine x q, y, _, h, ρ, ρ', ρ'', hp, v => by
       cases y with
       | never =>
           simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm]
@@ -989,76 +1131,91 @@ theorem Adm_meet [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] : ∀ (x y : Term
         simp only [Term.meet] at h
         split at h
         · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-          have ihw := Adm_meet x _ w hw v
+          have ihw := Adm_meet p x _ w hw ρ ρ' ρ'' hp v
           rw [Adm_refineOf]
           simp only [Adm, ihw]
           simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
         · exact absurd h (by simp)
-  | .union os, y, _, h, v => by
+  | p, .union os, y, _, h, ρ, ρ', ρ'', hp, v => by
       cases y with
       | never =>
           simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm]
       | _ =>
         obtain ⟨zs, hF, rfl⟩ := meet_union_of h (by simp)
-        exact union_meet_free v (Adm_meetL os _ _ hF)
-  | .prim g, y, z, h, v => Adm_meetSRight (Adm_famPrim g) y z h v
-  | .set a, y, z, h, v =>
-      Adm_meetSRight (Adm_famSet a (fun u w hw => Adm_meet a u w hw)) y z h v
-  | .opaq, y, z, h, v => Adm_meetSRight (Adm_famOpaq) y z h v
-  | .list pre sp suf, y, z, h, v => by
+        exact union_meet_free v (Adm_meetL p os _ _ hF ρ ρ' ρ'' hp)
+  | p, .prim g, y, z, h, ρ, ρ', ρ'', hp, v =>
+      Adm_meetSRight (ρ := ρ) (fun _ _ _ _ => Adm_famPrim g) y p ρ' ρ'' z hp h v
+  | p, .set a, y, z, h, ρ, ρ', ρ'', hp, v =>
+      Adm_meetSRight (ρ := ρ)
+        (fun q ρ₁ ρ₂ hq => Adm_famSet a (fun u w hw => Adm_meet q a u w hw ρ ρ₁ ρ₂ hq))
+        y p ρ' ρ'' z hp h v
+  | p, .opaq, y, z, h, ρ, ρ', ρ'', hp, v =>
+      Adm_meetSRight (ρ := ρ) (fun _ _ _ _ => Adm_famOpaq) y p ρ' ρ'' z hp h v
+  | p, .list pre sp suf, y, z, h, ρ, ρ', ρ'', hp, v => by
       cases sp with
       | none =>
-          exact Adm_meetSRight (Adm_famList (pre := pre) (sp := none) (suf := suf)
-            (Adm_meetSTs pre) (Or.inl ⟨rfl, rfl⟩) (Adm_meetSTs suf)) y z h v
+          exact Adm_meetSRight (ρ := ρ) (fun q ρ₁ ρ₂ hq => Adm_famList (pre := pre) (sp := none)
+            (suf := suf) (Adm_meetSTs q pre ρ ρ₁ ρ₂ hq) (Or.inl ⟨rfl, rfl⟩)
+            (Adm_meetSTs q suf ρ ρ₁ ρ₂ hq)) y p ρ' ρ'' z hp h v
       | some t =>
-          exact Adm_meetSRight (Adm_famList (pre := pre) (sp := some t) (suf := suf)
-            (Adm_meetSTs pre)
-            (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => Adm_meet t u w hw⟩)
-            (Adm_meetSTs suf)) y z h v
-  | .object (.mk fs f none), y, z, h, v =>
-      Adm_meetSRight (Adm_famObj (a := .mk fs f none)
-        (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
+          exact Adm_meetSRight (ρ := ρ) (fun q ρ₁ ρ₂ hq => Adm_famList (pre := pre)
+            (sp := some t) (suf := suf) (Adm_meetSTs q pre ρ ρ₁ ρ₂ hq)
+            (Or.inr ⟨t, Term.meet q t, rfl, rfl, fun u w hw => Adm_meet q t u w hw ρ ρ₁ ρ₂ hq⟩)
+            (Adm_meetSTs q suf ρ ρ₁ ρ₂ hq)) y p ρ' ρ'' z hp h v
+  | p, .object (.mk fs f none), y, z, h, ρ, ρ', ρ'', hp, v =>
+      Adm_meetSRight (ρ := ρ) (fun q ρ₁ ρ₂ hq => Adm_famObj (a := .mk fs f none)
+        (fun k fl fm hm w => Adm_Field_meet q (f k) fl fm hm ρ ρ₁ ρ₂ hq w)
         (fun _ _ _ hm => isReq_Field_meet hm)
-        (fun _ _ hz _ => by simp only [Option.some.injEq] at hz; subst hz; rfl)) y z h v
-  | .object (.mk fs f (some t)), y, z, h, v =>
-      Adm_meetSRight (Adm_famObj (a := .mk fs f (some t))
-        (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
+        (fun _ _ hz _ => by simp only [Option.some.injEq] at hz; subst hz; rfl))
+        y p ρ' ρ'' z hp h v
+  | p, .object (.mk fs f (some t)), y, z, h, ρ, ρ', ρ'', hp, v =>
+      Adm_meetSRight (ρ := ρ) (fun q ρ₁ ρ₂ hq => Adm_famObj (a := .mk fs f (some t))
+        (fun k fl fm hm w => Adm_Field_meet q (f k) fl fm hm ρ ρ₁ ρ₂ hq w)
         (fun _ _ _ hm => isReq_Field_meet hm)
-        (fun u w hw => Adm_meet t u w hw)) y z h v
-termination_by structural x => x
+        (fun u w hw => Adm_meet q t u w hw ρ ρ₁ ρ₂ hq)) y p ρ' ρ'' z hp h v
+termination_by structural _ x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
-theorem Adm_meetL [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] : ∀ (os : List (Term S)) (y : Term S) (zs : List (Term S)),
-    List.Forall₂ (fun t w => Term.meet t y = some w) os zs →
-    List.Forall₂ (fun t w => ∀ u, Adm w u = (Adm t u && Adm y u)) os zs
-  | [], _, _, h => by cases h; exact .nil
-  | t :: ts, y, _, h => by
+theorem Adm_meetL [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
+    ∀ (p : Pairing) (os : List (Term S)) (y : Term S) (zs : List (Term S)),
+    List.Forall₂ (fun t w => Term.meet p t y = some w) os zs →
+    ∀ (ρ ρ' ρ'' : List S.C), PairedV p ρ ρ' ρ'' →
+    List.Forall₂ (fun t w => ∀ u, Adm w ρ'' u = (Adm t ρ u && Adm y ρ' u)) os zs
+  | _, [], _, _, h, _, _, _, _ => by cases h; exact .nil
+  | p, t :: ts, y, _, h, ρ, ρ', ρ'', hp => by
       cases h with
-      | cons hh ht => exact .cons (fun u => Adm_meet t y _ hh u) (Adm_meetL ts y _ ht)
-termination_by structural os => os
+      | cons hh ht =>
+          exact .cons (fun u => Adm_meet p t y _ hh ρ ρ' ρ'' hp u)
+            (Adm_meetL p ts y _ ht ρ ρ' ρ'' hp)
+termination_by structural _ os => os
 
 /-- Every position of a tuple carries the meet at that position. -/
-theorem Adm_meetSTs [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] : ∀ ts : List (Term S), List.Forall₂ AdmSound ts (Term.meetSTs ts)
-  | [] => .nil
-  | t :: ts => .cons (fun u w hw => Adm_meet t u w hw) (Adm_meetSTs ts)
-termination_by structural ts => ts
+theorem Adm_meetSTs [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
+    ∀ (p : Pairing) (ts : List (Term S)) (ρ ρ' ρ'' : List S.C), PairedV p ρ ρ' ρ'' →
+      List.Forall₂ (AdmSound ρ ρ' ρ'') ts (Term.meetSTs p ts)
+  | _, [], _, _, _, _ => .nil
+  | p, t :: ts, ρ, ρ', ρ'', hp =>
+      .cons (fun u w hw => Adm_meet p t u w hw ρ ρ' ρ'' hp) (Adm_meetSTs p ts ρ ρ' ρ'' hp)
+termination_by structural _ ts => ts
 
 /-- Two fields at one name admit what both admit, at the stronger mark. -/
-theorem Adm_Field_meet [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] : ∀ (f fl : ObjectSlot S) (fm : ObjectSlot S), ObjectSlot.meet f fl = some fm →
-    ∀ w, AdmField fm w = (AdmField f w && AdmField fl w)
-  | .req x, .req y, _, h, w => by
+theorem Adm_Field_meet [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
+    ∀ (p : Pairing) (f fl : ObjectSlot S) (fm : ObjectSlot S), ObjectSlot.meet p f fl = some fm →
+    ∀ (ρ ρ' ρ'' : List S.C), PairedV p ρ ρ' ρ'' →
+    ∀ w, AdmField fm ρ'' w = (AdmField f ρ w && AdmField fl ρ' w)
+  | p, .req x, .req y, _, h, ρ, ρ', ρ'', hp, w => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact Adm_meet x y tz hz w
-  | .req x, .optional y, _, h, w => by
+      exact Adm_meet p x y tz hz ρ ρ' ρ'' hp w
+  | p, .req x, .optional y, _, h, ρ, ρ', ρ'', hp, w => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact Adm_meet x y tz hz w
-  | .optional x, .req y, _, h, w => by
+      exact Adm_meet p x y tz hz ρ ρ' ρ'' hp w
+  | p, .optional x, .req y, _, h, ρ, ρ', ρ'', hp, w => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact Adm_meet x y tz hz w
-  | .optional x, .optional y, _, h, w => by
+      exact Adm_meet p x y tz hz ρ ρ' ρ'' hp w
+  | p, .optional x, .optional y, _, h, ρ, ρ', ρ'', hp, w => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact Adm_meet x y tz hz w
-termination_by structural f => f
+      exact Adm_meet p x y tz hz ρ ρ' ρ'' hp w
+termination_by structural _ f => f
 end
 
 end

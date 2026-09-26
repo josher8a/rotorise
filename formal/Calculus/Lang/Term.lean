@@ -327,6 +327,33 @@ def Term.guardedO : Option (Term S) → Bool
 
 end
 
+mutual
+/-- Whether a variable occurs in the term. A term with no variable denotes one codec under every
+    environment (`denote_closed`). -/
+def Term.hasVar : Term S → Bool
+  | .var _ => true
+  | .refine t _ | .mu t | .set t => Term.hasVar t
+  | .held t P _ _ => Term.hasVar t || Term.hasVar P
+  | .list pre sp suf => Term.hasVarL pre || Term.hasVarO sp || Term.hasVarL suf
+  | .object b => Body.hasVar b
+  | .union os => Term.hasVarL os
+  | .prim _ | .opaq | .never => false
+/-- …in a body: in a declared slot or in the open block. -/
+def Body.hasVar : Body S → Bool
+  | .mk fs f w => decide (∃ k : {k // k ∈ fs}, ObjectSlot.hasVar (f k) = true) || Term.hasVarO w
+/-- …in a slot's term. -/
+def ObjectSlot.hasVar : ObjectSlot S → Bool
+  | .req t | .optional t => Term.hasVar t
+/-- …in a list of terms. -/
+def Term.hasVarL : List (Term S) → Bool
+  | [] => false
+  | t :: ts => Term.hasVar t || Term.hasVarL ts
+/-- …in an optional term. -/
+def Term.hasVarO : Option (Term S) → Bool
+  | none => false
+  | some t => Term.hasVar t
+end
+
 /-! ## A structural measure on terms
 
 `denote` recurses structurally and needs no measure. The **proofs** do: `soundness` recurses
@@ -520,6 +547,89 @@ noncomputable def denoteOpt : Option (Term S) → (ρ : List S.C := []) → Opti
 noncomputable def denoteμs : List (Term S) → (ρ : List S.C := []) → List (Option (Sem.M S))
   | [], _ => []
   | t :: ts, ρ => (denote t ρ).μ :: denoteμs ts ρ
+
+end
+
+/-! ## A term with no variable
+
+A term with no variable reads no binder, so the environment does not change the denotation. -/
+
+mutual
+
+/-- **A term with no variable is closed**: two environments give one codec. -/
+theorem denote_closed : ∀ (t : Term S), t.hasVar = false → ∀ ρ ρ' : List S.C,
+    denote t ρ = denote t ρ'
+  | .prim _, _, _, _ => rfl
+  | .opaq, _, _, _ => rfl
+  | .never, _, _, _ => rfl
+  | .var _, h, _, _ => nomatch h
+  | .set t, h, ρ, ρ' => by simp only [denote]; rw [denote_closed t h ρ ρ']
+  | .refine t _, h, ρ, ρ' => by simp only [denote]; rw [denote_closed t h ρ ρ']
+  | .mu b, h, ρ, ρ' => by
+      simp only [denote]
+      congr 1
+      funext c
+      exact denote_closed b h (c :: ρ) (c :: ρ')
+  | .held t P _ _, h, ρ, ρ' => by
+      simp only [Term.hasVar, Bool.or_eq_false_iff] at h
+      simp only [denote]
+      rw [denote_closed t h.1 ρ ρ', denote_closed P h.2 ρ ρ']
+  | .list pre sp suf, h, ρ, ρ' => by
+      simp only [Term.hasVar, Bool.or_eq_false_iff] at h
+      simp only [denote]
+      rw [denoteList_closed pre h.1.1 ρ ρ', denoteOpt_closed sp h.1.2 ρ ρ',
+        denoteList_closed suf h.2 ρ ρ']
+  | .object b, h, ρ, ρ' => bodySem_closed b h ρ ρ'
+  | .union os, h, ρ, ρ' => by
+      simp only [denote]
+      rw [denoteList_closed os h ρ ρ', denoteμs_closed os h ρ ρ']
+
+/-- …at a body. -/
+theorem bodySem_closed : ∀ (b : Body S), b.hasVar = false → ∀ ρ ρ' : List S.C,
+    bodySem b ρ = bodySem b ρ'
+  | .mk fields f wild, h, ρ, ρ' => by
+      simp only [Body.hasVar, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists,
+        Bool.not_eq_true] at h
+      have hf : (fun k => fieldSem (f k) ρ) = (fun k => fieldSem (f k) ρ') :=
+        funext fun k => fieldSem_closed (f k) (h.1 k) ρ ρ'
+      simp only [bodySem]
+      rw [hf, wildSem_closed wild h.2 ρ ρ']
+
+/-- …at a slot. -/
+theorem fieldSem_closed : ∀ (s : ObjectSlot S), s.hasVar = false → ∀ ρ ρ' : List S.C,
+    fieldSem s ρ = fieldSem s ρ'
+  | .req t, h, ρ, ρ' => by simp only [fieldSem]; rw [denote_closed t h ρ ρ']
+  | .optional t, h, ρ, ρ' => by simp only [fieldSem]; rw [denote_closed t h ρ ρ']
+
+/-- …at an open block. -/
+theorem wildSem_closed : ∀ (w : Option (Term S)), Term.hasVarO w = false → ∀ ρ ρ' : List S.C,
+    wildSem w ρ = wildSem w ρ'
+  | none, _, _, _ => rfl
+  | some t, h, ρ, ρ' => by simp only [wildSem]; rw [denote_closed t h ρ ρ']
+
+/-- …at a list of terms. -/
+theorem denoteList_closed : ∀ (ts : List (Term S)), Term.hasVarL ts = false →
+    ∀ ρ ρ' : List S.C, denoteList ts ρ = denoteList ts ρ'
+  | [], _, _, _ => rfl
+  | t :: ts, h, ρ, ρ' => by
+      simp only [Term.hasVarL, Bool.or_eq_false_iff] at h
+      simp only [denoteList]
+      rw [denote_closed t h.1 ρ ρ', denoteList_closed ts h.2 ρ ρ']
+
+/-- …at an optional term. -/
+theorem denoteOpt_closed : ∀ (sp : Option (Term S)), Term.hasVarO sp = false →
+    ∀ ρ ρ' : List S.C, denoteOpt sp ρ = denoteOpt sp ρ'
+  | none, _, _, _ => rfl
+  | some t, h, ρ, ρ' => by simp only [denoteOpt]; rw [denote_closed t h ρ ρ']
+
+/-- …at the members of a list of terms. -/
+theorem denoteμs_closed : ∀ (ts : List (Term S)), Term.hasVarL ts = false →
+    ∀ ρ ρ' : List S.C, denoteμs ts ρ = denoteμs ts ρ'
+  | [], _, _, _ => rfl
+  | t :: ts, h, ρ, ρ' => by
+      simp only [Term.hasVarL, Bool.or_eq_false_iff] at h
+      simp only [denoteμs]
+      rw [denote_closed t h.1 ρ ρ', denoteμs_closed ts h.2 ρ ρ']
 
 end
 

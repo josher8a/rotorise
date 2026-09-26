@@ -4,8 +4,9 @@ import Calculus.Lang.Term
 # The meet over a universe signature
 
 `Term.meet` is the intersection of two admissions, as a term, by structural recursion on the left
-operand. `some z` is a term that admits a value exactly where both factors admit the value, `some
-never` is the empty intersection, and `none` is a refusal: no term states the intersection.
+operand, at a pairing of the two operands' binders. `some z` is a term that admits a value exactly
+where both factors admit the value, under every three environments that agree with the pairing.
+`some never` is the empty intersection, and `none` is a refusal: no term states the intersection.
 
 Every row is structure except two leaves: a primitive met with a primitive or with the top, and a
 predicate met with a predicate. A universe supplies the two leaves in the class `Leaf`. The rows of
@@ -89,25 +90,60 @@ def zipF : List (Term S → Option (Term S)) → List (Term S) → List (Option 
   | [], _ => [] | _, [] => []
   | f :: fs, u :: us => f u :: zipF fs us
 
+/-! ## The pairing of binders
+
+The meet reads two open terms. A variable of the left operand and a variable of the right operand
+are one binder of the answer where the two binders were met together. A `Pairing` states that
+fact: `p i j = some k` says that the left variable `i` and the right variable `j` are the
+answer's variable `k`. A variable that no pairing names has no binder in the answer. -/
+
+/-- `p i j = some k`: the left variable `i` and the right variable `j` are one pair of binders,
+    bound in the answer at `k`. -/
+abbrev Pairing := Nat → Nat → Option Nat
+
+/-- Under a `mu ∧ mu`: the two new binders pair at `0`, and the pairs outside move up one. -/
+def pairMu (p : Pairing) : Pairing
+  | 0, 0 => some 0
+  | i + 1, j + 1 => (p i j).map (· + 1)
+  | _, _ => none
+
+/-- Under an unfolding of the left operand: the left binder `0` pairs with nothing. -/
+def shiftL (p : Pairing) : Pairing
+  | 0, _ => none
+  | i + 1, j => p i j
+
+/-- Under an unfolding of the right operand: the right binder `0` pairs with nothing. -/
+def shiftR (p : Pairing) : Pairing
+  | _, 0 => none
+  | i, j + 1 => p i j
+
+/-- The pairing of two closed terms: no binder. -/
+def pair0 : Pairing := fun _ _ => none
+
 mutual
 /-- **Every row that reads the right operand alone, written once.** The bottom, the four whose
     admission is a function, a variable, a recursive term, a refinement and a union answer the
     same way whatever the left operand is, so they are stated here rather than restated per left
-    constructor. `fam` carries the left operand, already applied. -/
-def meetSRight [Leaf S] (fam : Term S → Option (Term S)) : Term S → Option (Term S)
+    constructor. `fam` carries the left operand, already applied, at each pairing.
+
+    A variable admits what its binder admits, and a constructor on the left states no binder, so
+    the row refuses. A recursive term unfolds: its body is met, and its binder pairs with
+    nothing. -/
+def meetSRight [Leaf S] (fam : Pairing → Term S → Option (Term S)) (p : Pairing) :
+    Term S → Option (Term S)
   | .never => some .never
   | .held _ _ _ _ => none
-  -- a closed variable is the bottom, and the meet states no recursive term
-  | .var _ => some .never
-  | .mu _ => none
-  | .refine y p =>
-      if Leaf.isData p then (meetSRight fam y).map (fun z => Term.refineOf z p) else none
-  | .union os => (allSome (meetSRightL fam os)).bind
+  | .var _ => none
+  | .mu b => meetSRight fam (shiftR p) b
+  | .refine y q =>
+      if Leaf.isData q then (meetSRight fam p y).map (fun z => Term.refineOf z q) else none
+  | .union os => (allSome (meetSRightL fam p os)).bind
       (fun zs => some (Term.ofOptions (zs.filter (fun z => !z.isNever))))
-  | y => fam y
+  | y => fam p y
 /-- The list companion of `meetSRight`. -/
-def meetSRightL [Leaf S] (fam : Term S → Option (Term S)) : List (Term S) → List (Option (Term S))
-  | [] => [] | y :: ys => meetSRight fam y :: meetSRightL fam ys
+def meetSRightL [Leaf S] (fam : Pairing → Term S → Option (Term S)) (p : Pairing) :
+    List (Term S) → List (Option (Term S))
+  | [] => [] | y :: ys => meetSRight fam p y :: meetSRightL fam p ys
 end
 
 /-! ### The families: one per left constructor, flat and non-recursive. -/
@@ -151,12 +187,14 @@ end
     an element meet at the bottom is a set meet at the bottom, because a set former has no empty
     inhabitant. The row states a set only where the three terms are held-free: there each set
     writes and reads exactly where each element does, while an adapter element can collide two
-    values or change the stored member. -/
+    values or change the stored member. The row refuses an element that reads a variable, because
+    the set laws of a universe are stated over closed elements. -/
 def famSet (a : Term S) (mt : Term S → Option (Term S)) : Term S → Option (Term S)
-  | .set y => match mt y with
+  | .set y => if a.hasVar || y.hasVar then none else
+      match mt y with
       | some z =>
           if z.isNever then some .never
-          else if hasHeld a || hasHeld y || hasHeld z then none
+          else if hasHeld a || hasHeld y || hasHeld z || z.hasVar then none
           else some (.set z)
       | none => none
   | .opaq => none
@@ -308,46 +346,57 @@ def famObj (a : Body S) (g : {k // k ∈ a.fields} → ObjectSlot S → Option (
 
 mutual
 /-- **The intersection of two admissions, as a term**, by structural recursion on the left
-    operand. Every row keeps the left operand on the left. The leaf meet answers the primitives
-    and the predicates, and every other row is structure. -/
-def Term.meet [Leaf S] : Term S → Term S → Option (Term S)
+    operand, at a pairing of the two operands' binders. Every row keeps the left operand on the
+    left. The leaf meet answers the primitives and the predicates, and every other row is
+    structure.
+
+    Two variables meet where the pairing names them one binder. Two recursive terms meet at the
+    recursive term of the two bodies met, with the two binders paired. A recursive term met with
+    another constructor unfolds, and its binder pairs with nothing. The answer `mu z` is stated
+    only where `mu z` is guarded, because a derivation of `mu` asks the guard. -/
+def Term.meet [Leaf S] (p : Pairing) : Term S → Term S → Option (Term S)
   | .never, _ => some .never
   | .held _ _ _ _, .never => some .never
   | .held _ _ _ _, _ => none
-  | .var _, _ => some .never
+  | .var _, .never => some .never
+  | .var i, .var j => (p i j).map .var
+  | .var _, _ => none
   | .mu _, .never => some .never
-  | .mu _, _ => none
+  | .mu b, .mu b' => (Term.meet (pairMu p) b b').bind fun z =>
+      if z.isNever then some .never
+      else if (Term.mu z).guarded then some (.mu z) else none
+  | .mu b, y => Term.meet (shiftL p) b y
   | .refine _ _, .never => some .never
-  | .refine x p, y =>
-      if Leaf.isData p then (Term.meet x y).map (fun z => Term.refineOf z p) else none
+  | .refine x q, y =>
+      if Leaf.isData q then (Term.meet p x y).map (fun z => Term.refineOf z q) else none
   | .union _, .never => some .never
-  | .union os, y => (allSome (Term.meetSL os y)).bind
+  | .union os, y => (allSome (Term.meetSL p os y)).bind
       (fun zs => some (Term.ofOptions (zs.filter (fun z => !z.isNever))))
-  | .prim g, y => meetSRight (famPrim g) y
-  | .set a, y => meetSRight (famSet a (Term.meet a)) y
-  | .opaq, y => meetSRight famOpaq y
+  | .prim g, y => meetSRight (fun _ => famPrim g) p y
+  | .set a, y => meetSRight (fun q => famSet a (Term.meet q a)) p y
+  | .opaq, y => meetSRight (fun _ => famOpaq) p y
   | .list pre sp suf, y =>
-      meetSRight (famList (Term.meetSTs pre)
-        (match sp with | none => none | some t => some (Term.meet t))
-        (Term.meetSTs suf)) y
+      meetSRight (fun q => famList (Term.meetSTs q pre)
+        (match sp with | none => none | some t => some (Term.meet q t))
+        (Term.meetSTs q suf)) p y
   | .object (.mk fs f w), y =>
-      meetSRight (famObj (.mk fs f w) (fun k => ObjectSlot.meet (f k))
-        (match w with | none => fun _ => some .never | some t => Term.meet t)) y
+      meetSRight (fun q => famObj (.mk fs f w) (fun k => ObjectSlot.meet q (f k))
+        (match w with | none => fun _ => some .never | some t => Term.meet q t)) p y
 termination_by structural x _ => x
 /-- The meet of each option of a union with one right operand. -/
-def Term.meetSL [Leaf S] : List (Term S) → Term S → List (Option (Term S))
-  | [], _ => [] | x :: xs, y => Term.meet x y :: Term.meetSL xs y
+def Term.meetSL [Leaf S] (p : Pairing) : List (Term S) → Term S → List (Option (Term S))
+  | [], _ => [] | x :: xs, y => Term.meet p x y :: Term.meetSL p xs y
 termination_by structural xs _ => xs
 /-- The meet with each position of a row, partially applied. -/
-def Term.meetSTs [Leaf S] : List (Term S) → List (Term S → Option (Term S))
-  | [] => [] | t :: ts => Term.meet t :: Term.meetSTs ts
+def Term.meetSTs [Leaf S] (p : Pairing) : List (Term S) → List (Term S → Option (Term S))
+  | [] => [] | t :: ts => Term.meet p t :: Term.meetSTs p ts
 termination_by structural ts => ts
 /-- The complete two-mark slot meet. Required presence dominates optional presence. -/
-def ObjectSlot.meet [Leaf S] : ObjectSlot S → ObjectSlot S → Option (ObjectSlot S)
-  | .req x, .req y => (Term.meet x y).map .req
-  | .req x, .optional y => (Term.meet x y).map .req
-  | .optional x, .req y => (Term.meet x y).map .req
-  | .optional x, .optional y => (Term.meet x y).map .optional
+def ObjectSlot.meet [Leaf S] (p : Pairing) : ObjectSlot S → ObjectSlot S → Option (ObjectSlot S)
+  | .req x, .req y => (Term.meet p x y).map .req
+  | .req x, .optional y => (Term.meet p x y).map .req
+  | .optional x, .req y => (Term.meet p x y).map .req
+  | .optional x, .optional y => (Term.meet p x y).map .optional
 termination_by structural f _ => f
 end
 

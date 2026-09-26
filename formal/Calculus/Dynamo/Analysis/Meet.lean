@@ -100,8 +100,8 @@ open Alg (occV occA Orth1 occV_sound occA_sound occV_disjoint_of_Orth1 occA_disj
 
 export Alg (ObjectSlot.isBottom Term.ofOptions allSome Term.refineOf Term.listOf Term.tupleOf zipF
   meetSRight meetSRightL famPrim hasHeld famSet famOpaq rowOfG dominates listMeetRow famList
-  ObjectSlot.through objSlot ObjectSlot.isAbsentOpt objObj famObj Term.meet Term.meetSL Term.meetSTs
-  ObjectSlot.meet Term.slotAt Term.optionAt Term.blockOf)
+  ObjectSlot.through objSlot ObjectSlot.isAbsentOpt objObj famObj Term.meetSL Term.meetSTs
+  ObjectSlot.meet Term.slotAt Term.optionAt Term.blockOf Pairing pair0)
 
 
 /-! ## Reading a field and a term -/
@@ -499,6 +499,12 @@ def Ground.meetTop : Ground → Bool
 /-- **The leaf meet of DynamoDB.** -/
 instance dynLeaf : Alg.Leaf dynSyn := ⟨Ground.meet, Ground.meetTop, Pred.isData, Pred.meetM⟩
 
+/-- **The meet of two closed terms**: the generic meet at the closed pairing. A corpus term is
+    closed, so at the top no binder of one operand pairs with a binder of the other. The answer
+    type is spelled `Alg.Term dynSyn`, so field notation on the answer reaches the generic
+    projections and not their export aliases. -/
+def Term.meet (x y : Term) : Option (Alg.Term dynSyn) := Alg.Term.meet pair0 x y
+
 /-- A closed traversal and a traversal through a block that admits nothing agree. -/
 theorem objAdmV_none_never {α : Type} (fs : MapOf (α → Bool)) (keys : Finset Name)
     (g : {k // k ∈ keys} → α) :
@@ -616,7 +622,7 @@ def meetNever' (x y : Term) : Bool := (meet' x y).any Term.isNever
     readers. A `held` reaches the meet only through that row.
 
     **The shape test is the second disjunct, because the meet cannot state every pair.** The
-    meet states no recursion, and the meet refuses a closure. A `refine` at a `closure` has an
+    meet refuses a closure. A `refine` at a `closure` has an
     admission that is a function, so the meet answers `none` beside every term but the bottom.
     The occupancies read no predicate: `refine string (closure q)` beside
     `list [] (some number) []` writes `str` against `list` and reads `S` against `L`, so
@@ -646,11 +652,11 @@ theorem pairwise_of_certAll : ∀ {ts : List Term}, certAll ts = true →
       exact .cons (fun u hu => h.1 u hu) (pairwise_of_certAll h.2)
 
 /-- Required presence dominates optional presence. -/
-example : ObjectSlot.meet (ObjectSlot.optional .string) (ObjectSlot.req .string)
+example : ObjectSlot.meet pair0 (ObjectSlot.optional .string) (ObjectSlot.req .string)
     = some (ObjectSlot.req .string) := by rfl
 
 /-- Required slots meet without comparing values outside their carried terms. -/
-example : ObjectSlot.meet (ObjectSlot.req .string) (ObjectSlot.req .string)
+example : ObjectSlot.meet pair0 (ObjectSlot.req .string) (ObjectSlot.req .string)
     = some (ObjectSlot.req .string) := by rfl
 
 /-! ## What the rows answer
@@ -719,16 +725,16 @@ Four two-mark cells. Required presence dominates optional presence, and each cel
 carried terms. -/
 
 /-- The four two-mark rows reduce in the kernel. -/
-example : ObjectSlot.meet (ObjectSlot.req .string) (ObjectSlot.optional .string)
+example : ObjectSlot.meet pair0 (ObjectSlot.req .string) (ObjectSlot.optional .string)
     = some (ObjectSlot.req .string) := by rfl
-example : ObjectSlot.meet (ObjectSlot.optional .string) (ObjectSlot.req .string)
+example : ObjectSlot.meet pair0 (ObjectSlot.optional .string) (ObjectSlot.req .string)
     = some (ObjectSlot.req .string) := by rfl
-example : ObjectSlot.meet (ObjectSlot.optional .string) (ObjectSlot.optional .string) =
+example : ObjectSlot.meet pair0 (ObjectSlot.optional .string) (ObjectSlot.optional .string) =
     some (ObjectSlot.optional .string) := by rfl
 
 /-- A `req` slot over the bottom is still the bottom and not a refusal: both halves force the
     name present, so both agree that nothing satisfies the object. -/
-example : ObjectSlot.meet (ObjectSlot.req .string) (ObjectSlot.req .boolean)
+example : ObjectSlot.meet pair0 (ObjectSlot.req .string) (ObjectSlot.req .boolean)
     = some (ObjectSlot.req .never) := by rfl
 
 
@@ -1087,7 +1093,7 @@ instance dynLeafAdm : Alg.LeafAdm dynSyn where
     the values it admits are exactly the values both admit. `Alg.Adm_meet` at DynamoDB. -/
 theorem Adm_meet (x y : Term) (z : Term) (h : Term.meet x y = some z) (v : Value) :
     Adm z v = (Adm x v && Adm y v) :=
-  Alg.Adm_meet x y z h v
+  Alg.Adm_meet pair0 x y z h [] [] [] (Alg.PairedV.pair0 _ _ _) v
 
 /-! ## The member the meet names
 
@@ -1387,14 +1393,14 @@ instance dynLeafAdmA : Alg.LeafAdmA dynSyn where
 /-- **Where two terms have a meet, it reads exactly the attributes both read.** -/
 theorem AdmA_meet {x y z : Term} (h : Term.meet x y = some z) (a : Attr) :
     AdmA z a = (AdmA x a && AdmA y a) :=
-  (Alg.AdmA_meet_both x y z h).1 a
+  (Alg.AdmA_meet_both pair0 x y z h [] [] [] (Alg.PairedA.pair0 _ _ _)).1 a
 
 /-- **…and it reads them to the same value.** The read agreement is proved with the homomorphism
     and not after it: `AdmA (.refine t p) a` asks the predicate of what `t` decodes `a` to. -/
 theorem denote_meet_p {x y z : Term} (h : Term.meet x y = some z) {a : Attr}
     (hx : AdmA x a = true) (hy : AdmA y a = true) :
     (denote z).p a = (denote x).p a ∧ (denote z).p a = (denote y).p a :=
-  (Alg.AdmA_meet_both x y z h).2 a hx hy
+  (Alg.AdmA_meet_both pair0 x y z h [] [] [] (Alg.PairedA.pair0 _ _ _)).2 a hx hy
 
 
 /-! ## The bottom, and what a sub-selection keeps -/
@@ -1713,7 +1719,7 @@ theorem AdmA_meet' (x y z : Term) (h : meet' x y = some z) : AdmAAt x y z := by
     have := viewsNever_admA hv a
     rw [hx, hy] at this
     exact nomatch this
-  · exact Alg.AdmA_meet_both x y z h
+  · exact Alg.AdmA_meet_both pair0 x y z h [] [] [] (Alg.PairedA.pair0 _ _ _)
 
 /-- **A pair that `meet'` meets at the bottom separates, on both halves.** -/
 theorem separates_of_meetNever' {x y : Term} (h : meetNever' x y = true) : Separates x y := by
