@@ -21,7 +21,7 @@ abbrev RestSem := Alg.RestSem Value Attr Member
 /- The fields, the guards and the rest codec take the carriers as parameters. The aliases give
    them their names in this namespace. `FieldSem.codec` has no alias, because an alias captures
    field notation, and field notation reaches the generic name through the abbreviation. -/
-export Alg (valPresentAt reqPresentAt rcOf)
+export Alg (valPresentAt rcOf)
 
 namespace FieldSem
 export Alg.FieldSem (Rel)

@@ -140,7 +140,7 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
       exact decide_eq_decide.mpr Iff.rfl
   | m keys g =>
       -- the record's guard stays folded, for the reason `Adm_opaqUnfold` gives
-      have hp : reqPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
+      have hp : valPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [AdmA_opaq_m]
       simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBaseA, Term.array,

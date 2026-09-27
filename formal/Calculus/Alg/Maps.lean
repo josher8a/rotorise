@@ -281,15 +281,11 @@ def FieldSem.codec : FieldSem V A M → Codec V A M
   | .opt c => c
 
 /-- What each guard asks of one binding, named so the guards themselves are a single
-    quantifier over the key set rather than a `List.all` over a row. -/
+    quantifier over the key set rather than a `List.all` over a row. The write side and the
+    read side ask the same: a `req` name is present. -/
 def valPresentAt {κ : Type} [DecidableEq κ] (names : Finset κ) : κ → FieldSem V A M → Bool
   | _, .opt _ => true
   | k, _ => decide (k ∈ names)
-
-/-- The read-side guard of one binding: a `req` name is present on the stored side. -/
-def reqPresentAt {κ : Type} [DecidableEq κ] (names : Finset κ) : κ → FieldSem V A M → Bool
-  | k, .req _ => decide (k ∈ names)
-  | _, _ => true
 
 /-- The rest policy's codec, where it has one. -/
 def rcOf : RestSem V A M → Option (Codec V A M)
@@ -317,17 +313,10 @@ theorem FieldSem.Rel.codec : ∀ {f₁ f₂ : FieldSem V A M}, FieldSem.Rel R f�
   | .req _, .req _, h => h
   | .opt _, .opt _, h => h
 
-/-- The write-side presence guard reads the shape of a field, never its codec. -/
+/-- The presence guard reads the shape of a field, never its codec. -/
 theorem FieldSem.Rel.valPresentAt {κ : Type} [DecidableEq κ] (names : Finset κ) (k : κ) :
     ∀ {f₁ f₂ : FieldSem V A M}, FieldSem.Rel R f₁ f₂ →
       Alg.valPresentAt names k f₁ = Alg.valPresentAt names k f₂
-  | .req _, .req _, _ => rfl
-  | .opt _, .opt _, _ => rfl
-
-/-- The read-side presence guard reads the shape of a field, never its codec. -/
-theorem FieldSem.Rel.reqPresentAt {κ : Type} [DecidableEq κ] (names : Finset κ) (k : κ) :
-    ∀ {f₁ f₂ : FieldSem V A M}, FieldSem.Rel R f₁ f₂ →
-      Alg.reqPresentAt names k f₁ = Alg.reqPresentAt names k f₂
   | .req _, .req _, _ => rfl
   | .opt _, .opt _, _ => rfl
 

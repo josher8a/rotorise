@@ -20,12 +20,6 @@ class PrimAdmA (S : Syn) [Sem S] where
 
 variable {S : Syn}
 
-/-- The current-schema reader has the same required-name guard as the writer. -/
-def reqPresentT (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
-    (keys : Finset String) : Bool :=
-  decide (∀ k : {k // k ∈ fields},
-    (match fld k with | .req _ => decide (k.1 ∈ keys) | _ => true) = true)
-
 /-- **A sum reads exactly where one of its options reads.** -/
 theorem select_isSome_attemptA {V A M : Type} (os : List (Codec V A M)) (a : A) :
     (select os (·.p) a).isSome = true ↔ ∃ o ∈ os, (o.p a).isSome = true := by
@@ -48,16 +42,16 @@ noncomputable def refineReads (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a
   | some v => q v
   | none => false
 
-theorem reqPresentT_eq (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
+theorem valPresentT_eq_reqPresentB (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
     (keys : Finset String) {ρ : List S.C} :
-    reqPresentT fields fld keys = reqPresentB ⟨fields, fun k => fieldSem (fld k) ρ⟩ keys := by
-  simp only [reqPresentT, reqPresentB]
+    valPresentT fields fld keys = reqPresentB ⟨fields, fun k => fieldSem (fld k) ρ⟩ keys := by
+  simp only [valPresentT, reqPresentB]
   congr 1
   apply propext
   constructor <;> intro h k <;> have := h k <;>
     (cases hfd : fld k with
-      | req t => simp_all [reqPresentAt, fieldSem]
-      | optional t => simp_all [reqPresentAt, fieldSem])
+      | req t => simp_all [valPresentAt, fieldSem]
+      | optional t => simp_all [valPresentAt, fieldSem])
 
 /-- **The read side keeps every stored name.** An open block is a codec or nothing, so
     `objRead`'s filter is the identity on the key set, and the row owes it nothing. -/
@@ -101,7 +95,7 @@ def AdmABody : Body S → List S.C → Sem.A S → Bool
       | some F =>
           match F.mA.out a with
           | some m =>
-              reqPresentT fields fld m.keys &&
+              valPresentT fields fld m.keys &&
               objAdmV ⟨fields, fun k => AdmAField (fld k) ρ⟩ (AdmAWild wild ρ) m.keys m.get
           | none => false
       | none => false
@@ -271,7 +265,7 @@ theorem ExactA_object {fields : Finset String} {fld : {k // k ∈ fields} → Ob
     | none => simp
     | some m =>
       simp only [Option.bind_some, Option.isSome_map]
-      rw [reqPresentT_eq (ρ := ρ)]
+      rw [valPresentT_eq_reqPresentB (ρ := ρ)]
       simp only [objRead, objAdmV, Bool.and_eq_true, decide_eq_true_eq]
       by_cases hv : reqPresentB ⟨fields, fun k => fieldSem (fld k) ρ⟩ m.keys = true
       · rw [if_pos hv]

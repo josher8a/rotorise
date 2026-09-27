@@ -42,7 +42,8 @@ class PrimAdm (S : Syn) [Sem S] where
 
 variable {S : Syn}
 
-/-- `valPresentB`'s guard, read off the *term*'s field table: only `optional` may be absent. -/
+/-- The guard of `valPresentB` and of `reqPresentB`, read off the *term*'s field table: only
+    `optional` may be absent. -/
 def valPresentT (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
     (keys : Finset String) : Bool :=
   decide (∀ k : {k // k ∈ fields},
