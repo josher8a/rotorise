@@ -1,5 +1,7 @@
 import Calculus.Dynamo.Lang.Soundness
 
+variable {α : Calculus.Table}
+
 /-!
 # `HOpaque` and the empty set — a mechanization bug, closed by the type
 
@@ -116,7 +118,7 @@ set_option linter.unreachableTactic false in
 
     **What this does *not* say is `T = dom(e)`**, which is a different claim, proved by
     `typed_T_adm` (`Laminar.lean`). Reading (A) as (B) is the mistake §6's row made. -/
-theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T v
+theorem typed_T_eq : ∀ {t T μ}, Typed α t T μ → ∀ v, T v → (denote α t).T v
   | t, T, μ, h, v, hv => by
     cases h with
     | base _ => exact hv
@@ -138,7 +140,7 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
         (fun t' _ _ _ hty w hw => typed_T_eq hty w hw)
         (fun t' _ _ _ hty w hw => typed_T_eq hty w hw)
         (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) hall⟩
-    | @held t' I' μ' P f g h' => exact ⟨typed_T_eq h' (f v) hv.1, hv.2⟩
+    | @held t' I' μ' P k h' => exact ⟨typed_T_eq h' ((α.word k).1 v) hv.1, hv.2⟩
     | @refine t' T' μ' q h' => exact ⟨typed_T_eq h' v hv.1, hv.2⟩
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff wild =>
@@ -149,15 +151,15 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
         obtain ⟨hk, rfl⟩ := MapOf.at_eq_some.mp hm
         refine hreq ⟨k, hk⟩ (TypedField.true_of_not_optional (hfields ⟨k, hk⟩) ?_)
         intro t' hc
-        exact hno (denote t') (congrArg fieldSem hc)
+        exact hno (denote α t') (congrArg (fieldSem α) hc)
       · intro k
         have hentry := hall k
         by_cases hk : k.1 ∈ fields
         · rw [dif_pos hk] at hentry
           simp only [objEntryT,
-            MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem (ff k)⟩ :
+            MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem α (ff k)⟩ :
               MapOf FieldSem)) ⟨k.1, hk⟩]
-          obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields ⟨k.1, hk⟩)
+          obtain ⟨t', hty', hshape⟩ := TypedField.term (α := α) (hfields ⟨k.1, hk⟩)
           rcases hshape with heq | heq
           · rw [heq]; exact typed_T_eq hty' _ hentry
           · rw [heq]; exact typed_T_eq hty' _ hentry
@@ -171,13 +173,13 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
           | none => exact nomatch hR
           | @some t' T''' μ'' hty' =>
             obtain rfl : T''' = T'' := Option.some.inj hR
-            exact ⟨denote t', rfl, typed_T_eq hty' _ hT''⟩
+            exact ⟨denote α t', rfl, typed_T_eq hty' _ hT''⟩
     | @union opts Ts μs h' =>
       obtain ⟨T', hT', hTv⟩ := hv
       obtain ⟨tx, htx, hd⟩ :=
-        unionT_of_mem h' (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) v T' hT' hTv
+        unionT_of_mem (α := α) h' (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) v T' hT' hTv
       simp only [denote_rows, denoteList_eq]
-      refine ⟨denote tx, ?_, ?_⟩
+      refine ⟨denote α tx, ?_, ?_⟩
       · simp only [List.mem_map]; exact ⟨tx, htx, rfl⟩
       · exact hd
 termination_by t _ _ _ _ => Term.depth t
@@ -189,7 +191,7 @@ decreasing_by term_depth_wf
     the rules are the model's transcription of §3, and a judgement whose held set is spelled
     `(denote t).T` cannot be read against the document it transcribes. What the identity buys
     is that the reading is now checked rather than advertised. -/
-theorem typed_T_identity {t T μ} (h : Typed t T μ) (v : Value) : (denote t).T v ↔ T v :=
+theorem typed_T_identity {t T μ} (h : Typed α t T μ) (v : Value) : (denote α t).T v ↔ T v :=
   ⟨Alg.typed_TSub h v, typed_T_eq h v⟩
 
 /-! ## Which identity? §6's row is two of them

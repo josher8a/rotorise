@@ -5,6 +5,8 @@ import Calculus.Dynamo.Analysis.Merge
 import Calculus.Dynamo.Analysis.Orthogonality
 import Calculus.Dynamo.Analysis.Laminar
 
+variable {α : Calculus.Table}
+
 /-!
 # Disjointness at DynamoDB, and the union certificate
 
@@ -425,7 +427,7 @@ theorem objAdmV_none_never {α : Type} (fs : MapOf (α → Bool)) (keys : Finset
 
 /-- **The closed body is the open body whose block is `never`**, on the write side. -/
 theorem Adm_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → ObjectSlot) :
-    Adm (.object (.mk D f none)) = Adm (.object (.mk D f (some .never))) := by
+    Adm α (.object (.mk D f none)) = Adm α (.object (.mk D f (some .never))) := by
   funext v
   cases v with
   | map keys g =>
@@ -436,7 +438,7 @@ theorem Adm_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → Obje
 
 /-- …and on the read side. -/
 theorem AdmA_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → ObjectSlot) :
-    AdmA (.object (.mk D f none)) = AdmA (.object (.mk D f (some .never))) := by
+    AdmA α (.object (.mk D f none)) = AdmA α (.object (.mk D f (some .never))) := by
   funext a
   cases a with
   | m keys g =>
@@ -459,7 +461,7 @@ mutual
     recursive term admits what the term admits. The view holds no `held` (`HF_writeView`), so a
     set of the view writes element by element. -/
 def writeView : Term → Term
-  | .held _ P _ _ => writeView P
+  | .held _ P _ => writeView P
   | .refine t p => .refine (writeView t) p
   | .list pre sp suf => .list (writeViewL pre) (writeViewO sp) (writeViewL suf)
   | .object b => .object (writeViewB b)
@@ -497,7 +499,7 @@ mutual
     held-free inner term, so a predicate over a variable changes no verdict. An example after
     `separates_of_certPair` pins the narrowing. -/
 def readView : Term → Term
-  | .held t _ _ _ => readView t
+  | .held t _ _ => readView t
   | .refine t p => if hasHeld t || t.hasVar then readView t else .refine t p
   | .list pre sp suf => .list (readViewL pre) (readViewO sp) (readViewL suf)
   | .object b => .object (readViewB b)
@@ -593,12 +595,12 @@ example : Alg.Term.disjoint pair0
     (Term.object (.mk {"y"} (fun _ => .optional .string) (some .string))) = false := by rfl
 
 /-- The left body admits `{x := "1"}` through its declared slot… -/
-example : Adm (.object (.mk {"x"} (fun _ => .req .string) (some .string)))
+example : Adm α (.object (.mk {"x"} (fun _ => .req .string) (some .string)))
     (.map {"x"} (fun _ => .str "1")) = true := by
   simp [Adm_rows, valPresentT, objAdmV, entryP, MapOf.at, inBase]
 
 /-- …and the right body admits it through its open block, at a name it does not declare. -/
-example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (some .string)))
+example : Adm α (.object (.mk {"y"} (fun _ => .optional .string) (some .string)))
     (.map {"x"} (fun _ => .str "1")) = true := by
   simp [Adm_rows, valPresentT, objAdmV, entryP, MapOf.at]
   apply decide_eq_true
@@ -705,20 +707,20 @@ stored-side views differ in kind. -/
 
 /-- The test of the two terms does not certify the pair. -/
 theorem disjoint_heldNE_base :
-    Alg.Term.disjoint pair0 (.held (.set .string) (.list [.string] (some .string) []) id id : Term)
+    Alg.Term.disjoint pair0 (.held (.set .string) (.list [.string] (some .string) []) [] : Term)
         (.list [] (some .number) [] : Term) = false := by
   decide
 
 /-- **A caller side that requires one element or more is certified** beside a list of numbers. -/
 theorem certPair_heldNE :
-    certPair (.held (.set .string) (.list [.string] (some .string) []) id id)
+    certPair (.held (.set .string) (.list [.string] (some .string) []) [])
       (.list [] (some .number) []) = true := by
   decide
 
 /-- **A caller side that admits the empty list is refused**, because the list of numbers admits
     the empty list too. -/
 theorem certPair_heldAny :
-    certPair (.held (.set .string) (.list [] (some .string) []) id id)
+    certPair (.held (.set .string) (.list [] (some .string) []) [])
       (.list [] (some .number) []) = false := by
   decide
 
@@ -728,20 +730,20 @@ theorem certPair_heldAny :
     `literal "A" ∪ literal "B"`. -/
 theorem certPair_heldBelowMu :
     certPair (.union [.literal .string "A", .literal .string "B"])
-      (.mu (.union [.held .number (.literal .string "1") id id, .list [] (some (.var 0)) []]))
+      (.mu (.union [.held .number (.literal .string "1") [], .list [] (some (.var 0)) []]))
       = true := by
   decide
 
 /-- …and the pair is refused where the caller views share a value: the text `"1"`. -/
 theorem certPair_heldBelowMu_meets :
     certPair (.literal .string "1")
-      (.mu (.union [.held .number (.literal .string "1") id id, .list [] (some (.var 0)) []]))
+      (.mu (.union [.held .number (.literal .string "1") [], .list [] (some (.var 0)) []]))
       = false := by
   decide
 
 /-- **The test does not read a raw `held`.** A `held` carries host functions (`Term.lean`), so
     the test keeps it apart from the bottom alone. The views read it. -/
-example : Alg.Term.disjoint pair0 (Term.held .string .opaq (fun v => v) (fun v => v))
+example : Alg.Term.disjoint pair0 (Term.held .string .opaq [])
     Term.number = false := by rfl
 
 /-! ## The levers -/
@@ -752,21 +754,21 @@ example : Alg.Term.disjoint pair0 (Term.held .string .opaq (fun v => v) (fun v =
 reduces by `rfl`. -/
 
 /-- `opaque` writes every string, so `string` is the finer term. -/
-theorem Adm_opaq_str (s : String) : Adm .opaq (.str s) = true := rfl
+theorem Adm_opaq_str (s : String) : Adm α .opaq (.str s) = true := rfl
 
 /-- …every boolean. -/
-theorem Adm_opaq_bool (b : Bool) : Adm .opaq (.bool b) = true := rfl
+theorem Adm_opaq_bool (b : Bool) : Adm α .opaq (.bool b) = true := rfl
 
 /-- …every byte string. -/
-theorem Adm_opaq_bin (b : Bytes) : Adm .opaq (.bin b) = true := rfl
+theorem Adm_opaq_bin (b : Bytes) : Adm α .opaq (.bin b) = true := rfl
 
 /-- …and the null point. -/
-theorem Adm_opaq_null : Adm .opaq .null = true := rfl
+theorem Adm_opaq_null : Adm α .opaq .null = true := rfl
 
 /-- …and every numeral, exactly on `D`. -/
 theorem Adm_opaq_num (d : WFNumeral) :
-    Adm .opaq (.num d) = inD (.num d) := by
-  rw [show Adm .opaq (.num d) = true from rfl]
+    Adm α .opaq (.num d) = inD (.num d) := by
+  rw [show Adm α .opaq (.num d) = true from rfl]
   simp [inD]
 
 
@@ -778,42 +780,42 @@ fact about `inBase` and `inL`, and the set law is a fact about `setCodec`. The d
 two formers is a theorem of the shape classes (`dynShapes`). -/
 
 /-- `opaque`'s row is `dom(e)` of its codec. -/
-theorem Adm_opaq_eq (v : Value) : Adm .opaq v = (Ω.e v).isSome := rfl
+theorem Adm_opaq_eq (v : Value) : Adm α .opaq v = (Ω.e v).isSome := rfl
 
 /-- **`ofOptions` admits what its options admit**, and no certificate is spent. -/
 theorem Adm_ofOptions (ts : List Term) (v : Value) :
-    Adm (Term.ofOptions ts) v = AdmAny ts v := by
+    Adm α (Term.ofOptions ts) v = AdmAny α ts v := by
   match ts with
   | [] => rfl
   | [t] => simp only [Term.ofOptions, AdmAny_cons, AdmAny_nil, Bool.or_false]
   | _ :: _ :: _ => rfl
 
 /-- **Two sets whose elements share no value share no set**, because no set is empty. -/
-theorem Adm_set_and_false {a y : Term} (h : ∀ u, (Adm a u && Adm y u) = false) (v : Value) :
-    (Adm (.set a) v && Adm (.set y) v) = false := by
-  cases hA : Adm (.set a) v with
+theorem Adm_set_and_false {a y : Term} (h : ∀ u, (Adm α a u && Adm α y u) = false) (v : Value) :
+    (Adm α (.set a) v && Adm α (.set y) v) = false := by
+  cases hA : Adm α (.set a) v with
   | false => rfl
   | true =>
-  cases hY : Adm (.set y) v with
+  cases hY : Adm α (.set y) v with
   | false => rfl
   | true =>
   exfalso
   obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp hA
   obtain ⟨q, hq⟩ := Option.isSome_iff_exists.mp hY
-  have hne : ∀ w, ((denote a).e w).isSome = true → ((denote y).e w).isSome = true → False :=
+  have hne : ∀ w, ((denote α a).e w).isSome = true → ((denote α y).e w).isSome = true → False :=
     fun w h1 h2 => by
       have := h w
       rw [(Adm_exact a w).mpr h1, (Adm_exact y w).mpr h2] at this
       exact Bool.noConfusion this
   rcases setCodec_e_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
     obtain ⟨x, hx⟩ := S.2
-  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote y) (inj := Value.str) hq x hx)
-  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote y) (inj := Value.num) hq x hx)
-  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote y) (inj := Value.bin) hq x hx)
+  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote α y) (inj := Value.str) hq x hx)
+  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote α y) (inj := Value.num) hq x hx)
+  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote α y) (inj := Value.bin) hq x hx)
 
 /-- **Two primitives met at the bottom share no value.** -/
 theorem Adm_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
-    ∀ v, (Adm (.prim g) v && Adm (.prim g') v) = false
+    ∀ v, (Adm α (.prim g) v && Adm α (.prim g') v) = false
   | .base k, .base k', hp, v => by
       simp only [Ground.meet] at hp
       split at hp
@@ -899,30 +901,30 @@ together. -/
     the bottom. This closes every row that answers `never` because the two read different `Attr`
     constructors. -/
 theorem AdmA_and_false {x y : Term} {m m' : Member} (hne : m ≠ m')
-    (hx : ∀ a, AdmA x a = true → a.member = m) (hy : ∀ a, AdmA y a = true → a.member = m')
-    (a : Attr) : (AdmA x a && AdmA y a) = false := by
+    (hx : ∀ a, AdmA α x a = true → a.member = m) (hy : ∀ a, AdmA α y a = true → a.member = m')
+    (a : Attr) : (AdmA α x a && AdmA α y a) = false := by
   refine Bool.eq_false_iff.mpr fun h => hne ?_
   rw [Bool.and_eq_true] at h
   exact (hx a h.1).symm.trans (hy a h.2)
 
 /-- `opaque` reads an attribute exactly where its codec answers. -/
-theorem AdmA_opaq_eq (a : Attr) : AdmA .opaq a = (Ω.p a).isSome := rfl
+theorem AdmA_opaq_eq (a : Attr) : AdmA α .opaq a = (Ω.p a).isSome := rfl
 
 /-- It reads every stored string, -/
-theorem AdmA_opaq_str (s : String) : AdmA .opaq (.s s) = true := rfl
+theorem AdmA_opaq_str (s : String) : AdmA α .opaq (.s s) = true := rfl
 
 /-- …every stored boolean, -/
-theorem AdmA_opaq_bool (b : Bool) : AdmA .opaq (.bool b) = true := rfl
+theorem AdmA_opaq_bool (b : Bool) : AdmA α .opaq (.bool b) = true := rfl
 
 /-- …every stored byte string, -/
-theorem AdmA_opaq_bin (b : Bytes) : AdmA .opaq (.b b) = true := rfl
+theorem AdmA_opaq_bin (b : Bytes) : AdmA α .opaq (.b b) = true := rfl
 
 /-- …the stored null, -/
-theorem AdmA_opaq_null : AdmA .opaq .null = true := rfl
+theorem AdmA_opaq_null : AdmA α .opaq .null = true := rfl
 
 /-- …and every stored numeral, as `number` reads it. -/
 theorem AdmA_opaq_num (x : WFNumeral) :
-    AdmA .opaq (.n x) = (numberCodec.p (.n x)).isSome := rfl
+    AdmA α .opaq (.n x) = (numberCodec.p (.n x)).isSome := rfl
 
 /-- Where a literal reads, its base reads the same value: `literalCodec` is `baseCodec`
     restricted, and `Codec.restrict`'s `p` returns the base's own value where the guard passes. -/
@@ -936,8 +938,8 @@ theorem literal_p_base {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
 
 /-- Where a literal reads, its base reads: the literal's codec is the base's restricted. -/
 theorem AdmA_base_of_literal {k : GroundKind} {x : k.Carrier} {bt : Term} {a : Attr}
-    (hb : denote bt = baseCodec k) (h : AdmA (Term.literal k x) a = true) :
-    AdmA bt a = true := by
+    (hb : denote α bt = baseCodec k) (h : AdmA α (Term.literal k x) a = true) :
+    AdmA α bt a = true := by
   refine (AdmA_exact bt a).mpr ?_
   rw [hb]
   obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ a).mp h)
@@ -945,13 +947,13 @@ theorem AdmA_base_of_literal {k : GroundKind} {x : k.Carrier} {bt : Term} {a : A
   rfl
 
 /-- **A base reads only its own member.** -/
-theorem AdmA_base_member (k : GroundKind) (a : Attr) (h : AdmA (.base k) a = true) :
+theorem AdmA_base_member (k : GroundKind) (a : Attr) (h : AdmA α (.base k) a = true) :
     a.member = k.member := by
   cases k <;> cases a <;> first | rfl | exact nomatch h
 
 /-- **A literal reads only the member of its base**, because its base reads where it reads. -/
 theorem AdmA_literal_member (k : GroundKind) (x : k.Carrier) (a : Attr)
-    (h : AdmA (.literal k x) a = true) : a.member = k.member :=
+    (h : AdmA α (.literal k x) a = true) : a.member = k.member :=
   AdmA_base_member k a (AdmA_base_of_literal rfl h)
 
 /-- A literal's guard, read off a successful read: mirror of `literal_p_base`. -/
@@ -966,11 +968,11 @@ theorem literal_inL {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
 /-- **Two literals at one base and two values read nothing together.** Simp on `AdmALit` and
     `inL` does not reach the `number` row; exactness does. -/
 theorem AdmALit_never_of_ne {k : GroundKind} {x y : k.Carrier} (hne : ¬ (x = y)) (a : Attr) :
-    AdmA (.never : Term) a = (AdmA (Term.literal k x) a && AdmA (Term.literal k y) a) := by
-  cases hx : AdmA (Term.literal k x) a with
+    AdmA α (.never : Term) a = (AdmA α (Term.literal k x) a && AdmA α (Term.literal k y) a) := by
+  cases hx : AdmA α (Term.literal k x) a with
   | false => simp [AdmA_rows]
   | true =>
-      cases hy : AdmA (Term.literal k y) a with
+      cases hy : AdmA α (Term.literal k y) a with
       | false => simp [AdmA_rows]
       | true =>
           exfalso
@@ -985,31 +987,31 @@ theorem AdmALit_never_of_ne {k : GroundKind} {x y : k.Carrier} (hne : ¬ (x = y)
 
 /-- **Two sets whose elements read no common attribute read no common set**, because no set is
     empty. -/
-theorem AdmA_set_and_false {a y : Term} (h : ∀ u, (AdmA a u && AdmA y u) = false) (att : Attr) :
-    (AdmA (.set a) att && AdmA (.set y) att) = false := by
-  cases hA : AdmA (.set a) att with
+theorem AdmA_set_and_false {a y : Term} (h : ∀ u, (AdmA α a u && AdmA α y u) = false) (att : Attr) :
+    (AdmA α (.set a) att && AdmA α (.set y) att) = false := by
+  cases hA : AdmA α (.set a) att with
   | false => rfl
   | true =>
-  cases hY : AdmA (.set y) att with
+  cases hY : AdmA α (.set y) att with
   | false => rfl
   | true =>
   exfalso
   obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp hA
   obtain ⟨q, hq⟩ := Option.isSome_iff_exists.mp hY
-  have hne : ∀ w, ((denote a).p w).isSome = true → ((denote y).p w).isSome = true → False :=
+  have hne : ∀ w, ((denote α a).p w).isSome = true → ((denote α y).p w).isSome = true → False :=
     fun w h1 h2 => by
       have := h w
       rw [(AdmA_exact a w).mpr h1, (AdmA_exact y w).mpr h2] at this
       exact Bool.noConfusion this
   rcases setCodec_p_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
     obtain ⟨x, hx⟩ := S.2
-  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote y) (inj := Attr.s) hq x hx)
-  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote y) (inj := Attr.n) hq x hx)
-  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote y) (inj := Attr.b) hq x hx)
+  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote α y) (inj := Attr.s) hq x hx)
+  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote α y) (inj := Attr.n) hq x hx)
+  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote α y) (inj := Attr.b) hq x hx)
 
 /-- **Two primitives met at the bottom read nothing together.** -/
 theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
-    ∀ a, (AdmA (.prim g) a && AdmA (.prim g') a) = false
+    ∀ a, (AdmA α (.prim g) a && AdmA α (.prim g') a) = false
   | .base k, .base k', hp, a => by
       simp only [Ground.meet] at hp
       split at hp
@@ -1059,7 +1061,7 @@ mutual
 /-- **The caller-side view holds no `held`.** Each `held` becomes its caller-side view, and
     every other row keeps its constructor. -/
 theorem HF_writeView : ∀ t : Term, HF (writeView t)
-  | .held _ P _ _ => by simp only [writeView]; exact HF_writeView P
+  | .held _ P _ => by simp only [writeView]; exact HF_writeView P
   | .refine t _ => by simp only [writeView]; exact HF_writeView t
   | .list pre sp suf => by
       simp only [writeView, HF, hasHeld, Bool.or_eq_false_iff]
@@ -1091,7 +1093,7 @@ mutual
 /-- **The stored-side view holds no `held`.** A `refine` that the view keeps has an inner term
     with no `held`. -/
 theorem HF_readView : ∀ t : Term, HF (readView t)
-  | .held t _ _ _ => by simp only [readView]; exact HF_readView t
+  | .held t _ _ => by simp only [readView]; exact HF_readView t
   | .refine t _ => by
       simp only [readView]
       split
@@ -1207,17 +1209,17 @@ mutual
     environment of the view is a restriction of `Ω`, because the view holds no `held`, and the
     `set` row reads a restriction of `Ω` element by element. -/
 theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
-    RowLe (Alg.Adm t ρ) (Alg.Adm (writeView t) ρ')
-  | .held _ P _ _, ρ, ρ', he, hs => fun v h => by
+    RowLe (Alg.Adm α t ρ) (Alg.Adm α (writeView t) ρ')
+  | .held _ P _, ρ, ρ', he, hs => fun v h => by
       simp only [writeView]
       exact writeLeE P ρ ρ' he hs v (Bool.and_eq_true_iff.mp h).2
   | .var i, _, _, he, _ => fun v h => he i v h
   | .mu b, ρ, ρ', he, hs => fun v h => by
       simp only [writeView]
       rw [Alg.Adm_mu_unfold] at h ⊢
-      have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote b (c :: ρ)) n).e w).isSome = true →
-          ((Alg.muStage (fun c => Alg.denote (writeView b) (c :: ρ')) n).e w).isSome = true) ∧
-          Sub (Alg.muStage (fun c => Alg.denote (writeView b) (c :: ρ')) n) Ω := by
+      have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote α b (c :: ρ)) n).e w).isSome = true →
+          ((Alg.muStage (fun c => Alg.denote α (writeView b) (c :: ρ')) n).e w).isSome = true) ∧
+          Sub (Alg.muStage (fun c => Alg.denote α (writeView b) (c :: ρ')) n) Ω := by
         intro n
         induction n with
         | zero => exact ⟨(fun _ hw => nomatch hw), Alg.sub_empty⟩
@@ -1243,10 +1245,10 @@ theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSu
       cases v with
       | map keys g =>
         have h : (valPresentT fs f keys &&
-            objAdmV ⟨fs, fun k => Alg.AdmField (f k) ρ⟩ (Alg.AdmWild w ρ) keys g) = true := h
+            objAdmV ⟨fs, fun k => Alg.AdmField α (f k) ρ⟩ (Alg.AdmWild α w ρ) keys g) = true := h
         show (valPresentT fs (fun k => writeViewS (f k)) keys &&
-            objAdmV ⟨fs, fun k => Alg.AdmField (writeViewS (f k)) ρ'⟩
-              (Alg.AdmWild (writeViewO w) ρ') keys g) = true
+            objAdmV ⟨fs, fun k => Alg.AdmField α (writeViewS (f k)) ρ'⟩
+              (Alg.AdmWild α (writeViewO w) ρ') keys g) = true
         rw [Bool.and_eq_true] at h ⊢
         refine ⟨?_, objAdmV_mono (fun k => writeLeES (f k) ρ ρ' he hs) ?_ h.2⟩
         · refine decide_eq_true fun k => ?_
@@ -1261,7 +1263,7 @@ theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSu
   | .union os, ρ, ρ', he, hs => fun v h => anyP_mono (writeLeEL os ρ ρ' he hs) v h
   | .set t, ρ, ρ', he, hs => fun v h => by
       simp only [writeView]
-      exact setCodec_e_mono (c := Alg.denote t ρ)
+      exact setCodec_e_mono (c := Alg.denote α t ρ)
         (Alg.sub_denoteIn _ (HF_writeView t) ρ' hs)
         (fun w hw => by
           have := writeLeE t ρ ρ' he hs w (by rw [Alg.Adm_eq_isSome]; exact hw)
@@ -1271,23 +1273,23 @@ theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSu
   | .never, _, _, _, _ => fun _ h => h
 /-- `writeLeE` over a list. -/
 theorem writeLeEL : ∀ (ts : List Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
-    List.Forall₂ RowLe (Alg.AdmList ts ρ) (Alg.AdmList (writeViewL ts) ρ')
+    List.Forall₂ RowLe (Alg.AdmList α ts ρ) (Alg.AdmList α (writeViewL ts) ρ')
   | [], _, _, _, _ => .nil
   | t :: ts, ρ, ρ', he, hs => .cons (writeLeE t ρ ρ' he hs) (writeLeEL ts ρ ρ' he hs)
 /-- `writeLeE` at an optional term. -/
 theorem writeLeEO : ∀ (o : Option Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
-    Option.Rel RowLe (Alg.AdmOptT o ρ) (Alg.AdmOptT (writeViewO o) ρ')
+    Option.Rel RowLe (Alg.AdmOptT α o ρ) (Alg.AdmOptT α (writeViewO o) ρ')
   | none, _, _, _, _ => .none
   | some t, ρ, ρ', he, hs => .some (writeLeE t ρ ρ' he hs)
 /-- `writeLeE` at a slot. -/
 theorem writeLeES : ∀ (s : ObjectSlot) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
-    RowLe (Alg.AdmField s ρ) (Alg.AdmField (writeViewS s) ρ')
+    RowLe (Alg.AdmField α s ρ) (Alg.AdmField α (writeViewS s) ρ')
   | .req t, ρ, ρ', he, hs => writeLeE t ρ ρ' he hs
   | .optional t, ρ, ρ', he, hs => writeLeE t ρ ρ' he hs
 end
 
 /-- **The caller-side view admits each value that the term admits.** -/
-theorem writeLe_of (t : Term) : RowLe (Adm t) (Adm (writeView t)) :=
+theorem writeLe_of (t : Term) : RowLe (Adm α t) (Adm α (writeView t)) :=
   writeLeE t [] [] (fun _ _ h => h) EnvSub.nil
 
 mutual
@@ -1299,17 +1301,17 @@ mutual
     drops its predicate, because the stage of the view can decode where the stage of the term
     decodes through a `held`. -/
 theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
-    RowLe (Alg.AdmA t ρ) (Alg.AdmA (readView t) ρ')
-  | .held t _ _ _, ρ, ρ', he, hs => fun a h => by
+    RowLe (Alg.AdmA α t ρ) (Alg.AdmA α (readView t) ρ')
+  | .held t _ _, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
       exact readLeE t ρ ρ' he hs a (Bool.and_eq_true_iff.mp h).1
   | .var i, _, _, he, _ => fun a h => he i a h
   | .mu b, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
       rw [Alg.AdmA_mu_unfold] at h ⊢
-      have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote b (c :: ρ)) n).p w).isSome = true →
-          ((Alg.muStage (fun c => Alg.denote (readView b) (c :: ρ')) n).p w).isSome = true) ∧
-          Sub (Alg.muStage (fun c => Alg.denote (readView b) (c :: ρ')) n) Ω := by
+      have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote α b (c :: ρ)) n).p w).isSome = true →
+          ((Alg.muStage (fun c => Alg.denote α (readView b) (c :: ρ')) n).p w).isSome = true) ∧
+          Sub (Alg.muStage (fun c => Alg.denote α (readView b) (c :: ρ')) n) Ω := by
         intro n
         induction n with
         | zero => exact ⟨(fun _ hw => nomatch hw), Alg.sub_empty⟩
@@ -1339,10 +1341,10 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
       cases a with
       | m keys g =>
         have h : (valPresentT fs f keys &&
-            objAdmV ⟨fs, fun k => Alg.AdmAField (f k) ρ⟩ (Alg.AdmAWild w ρ) keys g) = true := h
+            objAdmV ⟨fs, fun k => Alg.AdmAField α (f k) ρ⟩ (Alg.AdmAWild α w ρ) keys g) = true := h
         show (valPresentT fs (fun k => readViewS (f k)) keys &&
-            objAdmV ⟨fs, fun k => Alg.AdmAField (readViewS (f k)) ρ'⟩
-              (Alg.AdmAWild (readViewO w) ρ') keys g) = true
+            objAdmV ⟨fs, fun k => Alg.AdmAField α (readViewS (f k)) ρ'⟩
+              (Alg.AdmAWild α (readViewO w) ρ') keys g) = true
         rw [Bool.and_eq_true] at h ⊢
         refine ⟨?_, objAdmV_mono (fun k => readLeES (f k) ρ ρ' he hs) ?_ h.2⟩
         · refine decide_eq_true fun k => ?_
@@ -1357,7 +1359,7 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
   | .union os, ρ, ρ', he, hs => fun a h => anyP_mono (readLeEL os ρ ρ' he hs) a h
   | .set t, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
-      exact setCodec_p_mono (c := Alg.denote t ρ)
+      exact setCodec_p_mono (c := Alg.denote α t ρ)
         (Alg.sub_denoteIn _ (HF_readView t) ρ' hs)
         (fun w hw => by
           have := readLeE t ρ ρ' he hs w (by rw [Alg.AdmA_eq_isSome]; exact hw)
@@ -1367,23 +1369,23 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
   | .never, _, _, _, _ => fun _ h => h
 /-- `readLeE` over a list. -/
 theorem readLeEL : ∀ (ts : List Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
-    List.Forall₂ RowLe (Alg.AdmAList ts ρ) (Alg.AdmAList (readViewL ts) ρ')
+    List.Forall₂ RowLe (Alg.AdmAList α ts ρ) (Alg.AdmAList α (readViewL ts) ρ')
   | [], _, _, _, _ => .nil
   | t :: ts, ρ, ρ', he, hs => .cons (readLeE t ρ ρ' he hs) (readLeEL ts ρ ρ' he hs)
 /-- `readLeE` at an optional term. -/
 theorem readLeEO : ∀ (o : Option Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
-    Option.Rel RowLe (Alg.AdmAOptT o ρ) (Alg.AdmAOptT (readViewO o) ρ')
+    Option.Rel RowLe (Alg.AdmAOptT α o ρ) (Alg.AdmAOptT α (readViewO o) ρ')
   | none, _, _, _, _ => .none
   | some t, ρ, ρ', he, hs => .some (readLeE t ρ ρ' he hs)
 /-- `readLeE` at a slot. -/
 theorem readLeES : ∀ (s : ObjectSlot) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
-    RowLe (Alg.AdmAField s ρ) (Alg.AdmAField (readViewS s) ρ')
+    RowLe (Alg.AdmAField α s ρ) (Alg.AdmAField α (readViewS s) ρ')
   | .req t, ρ, ρ', he, hs => readLeE t ρ ρ' he hs
   | .optional t, ρ, ρ', he, hs => readLeE t ρ ρ' he hs
 end
 
 /-- **The stored-side view reads each attribute that the term reads.** -/
-theorem readLe_of (t : Term) : RowLe (AdmA t) (AdmA (readView t)) :=
+theorem readLe_of (t : Term) : RowLe (AdmA α t) (AdmA α (readView t)) :=
   readLeE t [] [] (fun _ _ h => h) EnvSub.nil
 
 
@@ -1392,33 +1394,33 @@ theorem readLe_of (t : Term) : RowLe (AdmA t) (AdmA (readView t)) :=
 /-- **Orthogonal terms admit no common value.** A value that both terms admit is admitted by
     both caller-side views, and the views are disjoint. -/
 theorem viewsDisjoint_adm {x y : Term} (h : viewsDisjoint x y = true) (v : Value) :
-    (Adm x v && Adm y v) = false := by
+    (Adm α x v && Adm α y v) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
-  have hw := Alg.disjoint_sound pair0 _ _ h.1 [] [] (fun _ _ _ hp => nomatch hp) v
-  cases hx : Adm x v <;> cases hy : Adm y v <;> simp only [Bool.and_false, Bool.false_and,
+  have hw := Alg.disjoint_sound (α := α) pair0 _ _ h.1 [] [] (fun _ _ _ hp => nomatch hp) v
+  cases hx : Adm α x v <;> cases hy : Adm α y v <;> simp only [Bool.and_false, Bool.false_and,
     Bool.and_self]
-  have e1 : Alg.Adm (writeView x) [] v = true := writeLe_of x v hx
-  have e2 : Alg.Adm (writeView y) [] v = true := writeLe_of y v hy
+  have e1 : Alg.Adm α (writeView x) [] v = true := writeLe_of (α := α) x v hx
+  have e2 : Alg.Adm α (writeView y) [] v = true := writeLe_of (α := α) y v hy
   rw [e1, e2] at hw; exact nomatch hw
 
 /-- **Orthogonal terms read no common attribute.** An attribute that both terms read is read
     by both stored-side views, and the views are disjoint. -/
 theorem viewsDisjoint_admA {x y : Term} (h : viewsDisjoint x y = true) (a : Attr) :
-    (AdmA x a && AdmA y a) = false := by
+    (AdmA α x a && AdmA α y a) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
-  have hr := Alg.disjoint_soundA pair0 _ _ h.2 [] [] (fun _ _ _ hp => nomatch hp) a
-  cases hx : AdmA x a <;> cases hy : AdmA y a <;> simp only [Bool.and_false, Bool.false_and,
+  have hr := Alg.disjoint_soundA (α := α) pair0 _ _ h.2 [] [] (fun _ _ _ hp => nomatch hp) a
+  cases hx : AdmA α x a <;> cases hy : AdmA α y a <;> simp only [Bool.and_false, Bool.false_and,
     Bool.and_self]
-  have e1 : Alg.AdmA (readView x) [] a = true := readLe_of x a hx
-  have e2 : Alg.AdmA (readView y) [] a = true := readLe_of y a hy
+  have e1 : Alg.AdmA α (readView x) [] a = true := readLe_of (α := α) x a hx
+  have e2 : Alg.AdmA α (readView y) [] a = true := readLe_of (α := α) y a hy
   rw [e1, e2] at hr; exact nomatch hr
 
 /-- **The pair certificate is sound**: orthogonality separates the pair. -/
-theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates x y := by
+theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates α x y := by
   refine ⟨fun v hx hy => ?_, fun a hx hy => ?_⟩
-  · have := viewsDisjoint_adm h v
+  · have := viewsDisjoint_adm (α := α) h v
     rw [hx, hy] at this; exact nomatch this
-  · have := viewsDisjoint_admA h a
+  · have := viewsDisjoint_admA (α := α) h a
     rw [hx, hy] at this; exact nomatch this
 
 /-- **The certificate refuses a pair that only the model's caller carrier separates.** Each option
@@ -1428,9 +1430,9 @@ theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates
     two options write disjoint slots. The caller sides share `boolean`, so the caller views are
     not disjoint, and the certificate agrees with the host. -/
 example :
-    certPair (.set (.refine (.held .string (.union [.string, .boolean]) id id)
+    certPair (.set (.refine (.held .string (.union [.string, .boolean]) [])
         (.closure fun _ => true)))
-      (.set (.held .number (.union [.number, .boolean]) id id)) = false := by
+      (.set (.held .number (.union [.number, .boolean]) [])) = false := by
   decide
 
 /-- **The certificate refuses a separated pair at a data predicate over a variable.** The pair is
@@ -1447,7 +1449,7 @@ example :
 
 /-- **A certified union is separated**, which is the premise of `pairwiseCompat_of_separated`
     and of `admitsAtMostOne_of_separated`. -/
-theorem separated_of_unionOk {os : List Term} (h : unionOk os = true) : Separated os :=
+theorem separated_of_unionOk {os : List Term} (h : unionOk os = true) : Separated α os :=
   (pairwise_of_certAll h).imp separates_of_certPair
 
 

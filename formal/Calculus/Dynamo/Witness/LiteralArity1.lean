@@ -1,5 +1,7 @@
 import Calculus.Dynamo.Witness.Discharge
 
+variable {α : Calculus.Table}
+
 /-!
 # The n-ary literal is a union of singletons — what that union concludes
 
@@ -37,25 +39,25 @@ alternatives needed a lemma to collapse the existential. -/
 /-- Every option of a string literal set is derivable, at `S`. No premise: ~~LiteralD~~, the
     gate this used to carry beside the rule, was `true` at every base but `number`. -/
 theorem typedListμ_map_literal_str : ∀ (l : List String),
-    TypedListμ (l.map fun s => .literal .string s)
+    TypedListμ α (l.map fun s => .literal .string s)
       (l.map fun s => fun v => v = Value.str s)
       (l.map fun _ => some Member.S)
   | [] => .nil
   | s :: rest => by
       refine .cons ?_ (typedListμ_map_literal_str rest)
-      show Typed (Term.literal .string s) (fun v => v = Value.str s) (some .S)
+      show Typed α (Term.literal .string s) (fun v => v = Value.str s) (some .S)
       exact Typed.literal .string s
 
 /-- …and of a numeric one, at `N`, with no premise: the list is a `List WFNumeral`, so each
     element carries its own gate. -/
 theorem typedListμ_map_literal_num : ∀ (l : List WFNumeral),
-    TypedListμ (l.map fun d => .literal .number d)
+    TypedListμ α (l.map fun d => .literal .number d)
       (l.map fun d => fun v => v = Value.num d)
       (l.map fun _ => some Member.N)
   | [] => .nil
   | d :: rest => by
       refine .cons ?_ (typedListμ_map_literal_num rest)
-      show Typed (Term.literal .number d) (fun v => v = Value.num d) (some .N)
+      show Typed α (Term.literal .number d) (fun v => v = Value.num d) (some .N)
       exact Typed.literal .number d
 
 /-! ## The member and the held set -/
@@ -101,17 +103,17 @@ is what lets the term language carry no set at all. -/
     the member — comes from `Typed.literal` and `Typed.union`, with no premise ~~literalS~~ does not
     already have: `hne` is what `NEFinset` was carrying for the member. -/
 theorem typed_literalsS {l : List String} (hne : l ≠ []) :
-    Typed (.union (l.map fun s => .literal .string s))
+    Typed α (.union (l.map fun s => .literal .string s))
       (fun v => ∃ s, s ∈ l ∧ v = .str s) (some .S) := by
-  have h := Typed.union (typedListμ_map_literal_str l)
+  have h := Typed.union (α := α) (typedListμ_map_literal_str l)
   rw [hunion_map_literal_str, unanimous_map_const _ hne] at h
   exact h
 
 /-- **`(literal-N)` is derivable**, and §3's `ℓ ⊆ D` is the list's element type. -/
 theorem typed_literalsN {l : List WFNumeral} (hne : l ≠ []) :
-    Typed (.union (l.map fun d => .literal .number d))
+    Typed α (.union (l.map fun d => .literal .number d))
       (fun v => ∃ d, d ∈ l ∧ v = .num d) (some .N) := by
-  have h := Typed.union (typedListμ_map_literal_num l)
+  have h := Typed.union (α := α) (typedListμ_map_literal_num l)
   rw [hunion_map_literal_num, unanimous_map_const _ hne] at h
   exact h
 
@@ -139,7 +141,7 @@ base's own `inD`. -/
     literal is the one-alternative case of the same restriction: `literalCodec k x` is
     `(baseCodec k).restrict (inL k x)` by definition, and `inLs` at a singleton is `inL`. -/
 theorem denote_refine_ground_p (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
-    (denote (.refine (.base k) (.members k ls))).p a
+    (denote α (.refine (.base k) (.members k ls))).p a
       = ((baseCodec k).restrict (inLs k ls)).p a := by
   cases k <;> rfl
 

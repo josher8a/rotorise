@@ -1,6 +1,8 @@
 import Calculus.Dynamo.Analysis.Meet
 import Calculus.Dynamo.Analysis.Orthogonality
 
+variable {α : Calculus.Table}
+
 /-!
 # The slice of a certified union
 
@@ -106,8 +108,8 @@ theorem AltClause.exclude_sublist (c : AltClause) (opts : List Term) :
     splits on the answer; this one recurses on `List.Sublist`, which already carries the decision
     in its constructor, and inverts the judgement in each case. -/
 theorem TypedListμ.sublist {opts' opts : List Term} {Ts μs} (hsub : opts'.Sublist opts)
-    (h : TypedListμ opts Ts μs) :
-    ∃ Ts' μs', TypedListμ opts' Ts' μs' ∧ Ts'.Sublist Ts ∧ μs'.Sublist μs := by
+    (h : TypedListμ α opts Ts μs) :
+    ∃ Ts' μs', TypedListμ α opts' Ts' μs' ∧ Ts'.Sublist Ts ∧ μs'.Sublist μs := by
   -- the recursion runs on `hsub`: `TypedListμ` is mutually inductive with `Typed`, and the
   -- `induction` tactic declines a mutually inductive type
   induction hsub generalizing Ts μs with
@@ -128,17 +130,17 @@ theorem TypedListμ.sublist {opts' opts : List Term} {Ts μs} (hsub : opts'.Subl
     Nothing is proved about an option that was not proved before: each kept option carries the
     judgement it already had. The one lemma this needs is `TypedListμ.sublist` above. -/
 theorem typed_union_extract {opts : List Term} {Ts μs} (c : AltClause)
-    (h : TypedListμ opts Ts μs) :
+    (h : TypedListμ α opts Ts μs) :
     ∃ Ts' μs', Ts'.Sublist Ts ∧ μs'.Sublist μs ∧
-      Typed (.union (c.extract opts)) (HUnion Ts') (unanimous μs') := by
+      Typed α (.union (c.extract opts)) (HUnion Ts') (unanimous μs') := by
   obtain ⟨Ts', μs', hts, hsT, hsμ⟩ := h.sublist (c.extract_sublist opts)
   exact ⟨Ts', μs', hsT, hsμ, .union hts⟩
 
 /-- **The exclusion of a derivable union is derivable**, by the same argument at the complement. -/
 theorem typed_union_exclude {opts : List Term} {Ts μs} (c : AltClause)
-    (h : TypedListμ opts Ts μs) :
+    (h : TypedListμ α opts Ts μs) :
     ∃ Ts' μs', Ts'.Sublist Ts ∧ μs'.Sublist μs ∧
-      Typed (.union (c.exclude opts)) (HUnion Ts') (unanimous μs') := by
+      Typed α (.union (c.exclude opts)) (HUnion Ts') (unanimous μs') := by
   obtain ⟨Ts', μs', hts, hsT, hsμ⟩ := h.sublist (c.exclude_sublist opts)
   exact ⟨Ts', μs', hsT, hsμ, .union hts⟩
 
@@ -152,22 +154,22 @@ theorem hunion_sublist {Ts' Ts : List Held} (hs : Ts'.Sublist Ts) {v : Value}
 
 /-- **Separation survives the slice**, because it is `Pairwise`. -/
 theorem separated_sublist {opts' opts : List Term} (hs : opts'.Sublist opts)
-    (h : Separated opts) : Separated opts' :=
+    (h : Separated α opts) : Separated α opts' :=
   List.Pairwise.sublist hs h
 
 /-- **The union's obligation survives any sub-selection.** -/
 theorem pairwiseCompat_sublist {opts' opts : List Term} (hs : opts'.Sublist opts)
-    (h : PairwiseCompat opts) : PairwiseCompat opts' :=
+    (h : PairwiseCompat α opts) : PairwiseCompat α opts' :=
   fun s hs' t ht' => h s (hs.subset hs') t (hs.subset ht')
 
 /-- …so the extraction keeps it, with no certificate. -/
-theorem pairwiseCompat_extract {opts : List Term} (c : AltClause) (h : PairwiseCompat opts) :
-    PairwiseCompat (c.extract opts) :=
+theorem pairwiseCompat_extract {opts : List Term} (c : AltClause) (h : PairwiseCompat α opts) :
+    PairwiseCompat α (c.extract opts) :=
   pairwiseCompat_sublist (c.extract_sublist opts) h
 
 /-- ...and the exclusion, at the complement of the same predicate. -/
-theorem pairwiseCompat_exclude {opts : List Term} (c : AltClause) (h : PairwiseCompat opts) :
-    PairwiseCompat (c.exclude opts) :=
+theorem pairwiseCompat_exclude {opts : List Term} (c : AltClause) (h : PairwiseCompat α opts) :
+    PairwiseCompat α (c.exclude opts) :=
   pairwiseCompat_sublist (c.exclude_sublist opts) h
 
 
@@ -179,21 +181,21 @@ negation. The disjointness half does, because two options may share a value. -/
 /-- **A clause partitions a union's options, and the join is the union's admission.** Pure list
     algebra: `extract` and `exclude` filter by a predicate and its negation. -/
 theorem AdmAny_extract_or_exclude (c : AltClause) (opts : List Term) (v : Value) :
-    (AdmAny (c.extract opts) v || AdmAny (c.exclude opts) v) = AdmAny opts v := by
+    (AdmAny α (c.extract opts) v || AdmAny α (c.exclude opts) v) = AdmAny α opts v := by
   induction opts with
   | nil => rfl
   | cons t ts ih =>
     simp only [AltClause.extract, AltClause.exclude, List.filter_cons] at *
-    cases hc : c.admits t <;> simp_all [AdmAny_cons] <;> cases Adm t v <;> simp_all
+    cases hc : c.admits t <;> simp_all [AdmAny_cons] <;> cases Adm α t v <;> simp_all
 
 /-- …and the two halves of a slice share no value, because the certificate bounds the options
     that admit one at a single option and the clause keeps them apart. -/
 theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
     (hok : unionOk opts = true) (v : Value) :
-    (AdmAny (c.extract opts) v && AdmAny (c.exclude opts) v) = false := by
-  rcases hb : AdmAny (c.extract opts) v with _ | _
+    (AdmAny α (c.extract opts) v && AdmAny α (c.exclude opts) v) = false := by
+  rcases hb : AdmAny α (c.extract opts) v with _ | _
   · simp
-  rcases hb2 : AdmAny (c.exclude opts) v with _ | _
+  rcases hb2 : AdmAny α (c.exclude opts) v with _ | _
   · simp
   exfalso
   obtain ⟨t1, ht1, ha1⟩ := AdmAny_iff.mp hb
@@ -204,15 +206,15 @@ theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
   have hc2 : c.admits t2 = false := by
     have := (List.mem_filter.mp ht2).2; simpa using this
   have hne : t1 ≠ t2 := fun hh => by rw [hh, hc2] at hc1; exact Bool.noConfusion hc1
-  have hlen : (opts.filter (fun t => Adm t v)).length ≤ 1 := by
-    have hone := (admitsAtMostOne_of_separated (separated_of_unionOk hok)).1 v
+  have hlen : (opts.filter (fun t => Adm α t v)).length ≤ 1 := by
+    have hone := (admitsAtMostOne_of_separated (α := α) (separated_of_unionOk hok)).1 v
     rwa [filter_AdmList (fun t _ => Adm_exact t) v,
       List.length_map] at hone
-  have hf1 : t1 ∈ opts.filter (fun t => Adm t v) :=
+  have hf1 : t1 ∈ opts.filter (fun t => Adm α t v) :=
     List.mem_filter.mpr ⟨hm1, ha1⟩
-  have hf2 : t2 ∈ opts.filter (fun t => Adm t v) :=
+  have hf2 : t2 ∈ opts.filter (fun t => Adm α t v) :=
     List.mem_filter.mpr ⟨hm2, ha2⟩
-  match hL : opts.filter (fun t => Adm t v), hlen with
+  match hL : opts.filter (fun t => Adm α t v), hlen with
   | [], _ => rw [hL] at hf1; exact absurd hf1 (by simp)
   | [x], _ =>
       rw [hL, List.mem_singleton] at hf1 hf2
@@ -222,8 +224,8 @@ theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
 /-- **The two slices join to the union.** Stated on `Term.ofOptions`, because a slice of one
     option is that option and a slice of none is the bottom. -/
 theorem Adm_extract_or_exclude (c : AltClause) (opts : List Term) (v : Value) :
-    (Adm (Term.ofOptions (c.extract opts)) v || Adm (Term.ofOptions (c.exclude opts)) v)
-      = Adm (Term.ofOptions opts) v := by
+    (Adm α (Term.ofOptions (c.extract opts)) v || Adm α (Term.ofOptions (c.exclude opts)) v)
+      = Adm α (Term.ofOptions opts) v := by
   rw [Adm_ofOptions, Adm_ofOptions, Adm_ofOptions]
   exact AdmAny_extract_or_exclude c opts v
 
@@ -231,7 +233,7 @@ theorem Adm_extract_or_exclude (c : AltClause) (opts : List Term) (v : Value) :
     any slice and its complement. -/
 theorem Adm_extract_and_exclude {c : AltClause} {opts : List Term} (hok : unionOk opts = true)
     (v : Value) :
-    (Adm (Term.ofOptions (c.extract opts)) v && Adm (Term.ofOptions (c.exclude opts)) v)
+    (Adm α (Term.ofOptions (c.extract opts)) v && Adm α (Term.ofOptions (c.exclude opts)) v)
       = false := by
   rw [Adm_ofOptions, Adm_ofOptions]
   exact AdmAny_extract_and_exclude hok v

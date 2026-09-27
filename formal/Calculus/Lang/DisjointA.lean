@@ -21,7 +21,7 @@ namespace Calculus.Alg
 
 open Calculus (alignPL alignP zipP anyP objAdmV entryP)
 
-variable {S : Syn} [Sem S] [PrimAdm S] [PrimAdmA S] {ρ ρ' ρ'' : List S.C}
+variable {S : Syn} [Sem S] [PrimAdm S] [PrimAdmA S] {ρ ρ' ρ'' : List S.C} {α : Table S}
 
 noncomputable section
 
@@ -36,7 +36,7 @@ def mapOutA (a : Sem.A S) : Option (MapOf (Sem.A S)) := (Sem.map (S := S)).bind 
 /-- A `list` reads an attribute that the list former reads by the row of its positions. -/
 theorem AdmA_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {a : Sem.A S}
     {as : List (Sem.A S)} (h : listOutA a = some as) :
-    AdmA (.list pre sp suf) ρ a = alignPL (AdmAList pre ρ) (AdmAOptT sp ρ) (AdmAList suf ρ) as := by
+    AdmA α (.list pre sp suf) ρ a = alignPL (AdmAList α pre ρ) (AdmAOptT α sp ρ) (AdmAList α suf ρ) as := by
   unfold listOutA at h
   rcases hL : Sem.list (S := S) with _ | L
   · rw [hL] at h; exact absurd h (by simp)
@@ -46,7 +46,7 @@ theorem AdmA_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {a : S
 
 /-- A `list` reads no attribute that the list former does not read. -/
 theorem AdmA_list_of_none {pre suf : List (Term S)} {sp : Option (Term S)} {a : Sem.A S}
-    (h : listOutA a = none) : AdmA (.list pre sp suf) ρ a = false := by
+    (h : listOutA a = none) : AdmA α (.list pre sp suf) ρ a = false := by
   unfold listOutA at h
   rcases hL : Sem.list (S := S) with _ | L
   · simp only [AdmA, hL]
@@ -56,8 +56,8 @@ theorem AdmA_list_of_none {pre suf : List (Term S)} {sp : Option (Term S)} {a : 
 
 /-- A body reads an attribute that the map former reads by two tests. -/
 theorem AdmABody_of_out {b : Body S} {a : Sem.A S} {m : MapOf (Sem.A S)} (h : mapOutA a = some m) :
-    AdmABody b ρ a = (valPresentT b.fields b.at m.keys &&
-      objAdmV ⟨b.fields, fun k => AdmAField (b.at k) ρ⟩ (AdmAWild b.wild ρ) m.keys m.get) := by
+    AdmABody α b ρ a = (valPresentT b.fields b.at m.keys &&
+      objAdmV ⟨b.fields, fun k => AdmAField α (b.at k) ρ⟩ (AdmAWild α b.wild ρ) m.keys m.get) := by
   unfold mapOutA at h
   cases b with
   | mk fields fld wild =>
@@ -69,7 +69,7 @@ theorem AdmABody_of_out {b : Body S} {a : Sem.A S} {m : MapOf (Sem.A S)} (h : ma
 
 /-- A body reads no attribute that the map former does not read. -/
 theorem AdmABody_of_none {b : Body S} {a : Sem.A S} (h : mapOutA a = none) :
-    AdmABody b ρ a = false := by
+    AdmABody α b ρ a = false := by
   unfold mapOutA at h
   cases b with
   | mk fields fld wild =>
@@ -80,53 +80,54 @@ theorem AdmABody_of_none {b : Body S} {a : Sem.A S} (h : mapOutA a = none) :
     simp only [AdmABody, hL, h]
 
 /-- The bottom reads nothing. -/
-@[simp] theorem AdmA_never (a : Sem.A S) : AdmA (.never : Term S) ρ a = false := by simp [AdmA]
+@[simp] theorem AdmA_never (a : Sem.A S) : AdmA α (.never : Term S) ρ a = false := by simp [AdmA]
 
+variable (α) in
 /-- `⋁` of `AdmA` over a union's options. -/
-def AdmAAny (ts : List (Term S)) (ρ : List S.C) (a : Sem.A S) : Bool := anyP (AdmAList ts ρ) a
+def AdmAAny (ts : List (Term S)) (ρ : List S.C) (a : Sem.A S) : Bool := anyP (AdmAList α ts ρ) a
 
 /-- An empty list of options reads no attribute. -/
-@[simp] theorem AdmAAny_nil (a : Sem.A S) : AdmAAny ([] : List (Term S)) ρ a = false := rfl
+@[simp] theorem AdmAAny_nil (a : Sem.A S) : AdmAAny α ([] : List (Term S)) ρ a = false := rfl
 
 /-- The options read where the first reads or the rest read. -/
 @[simp] theorem AdmAAny_cons (t : Term S) (ts : List (Term S)) (a : Sem.A S) :
-    AdmAAny (t :: ts) ρ a = (AdmA t ρ a || AdmAAny ts ρ a) := rfl
+    AdmAAny α (t :: ts) ρ a = (AdmA α t ρ a || AdmAAny α ts ρ a) := rfl
 
 /-- A union reads where one of its options reads. -/
 theorem AdmA_union (opts : List (Term S)) (a : Sem.A S) :
-    AdmA (.union opts) ρ a = AdmAAny opts ρ a := by simp [AdmA, AdmAAny]
+    AdmA α (.union opts) ρ a = AdmAAny α opts ρ a := by simp [AdmA, AdmAAny]
 
 /-- The read-side rows of a term list are that list mapped. -/
-theorem AdmAList_eq_map (ts : List (Term S)) : AdmAList ts ρ = ts.map (AdmA · ρ) :=
+theorem AdmAList_eq_map (ts : List (Term S)) : AdmAList α ts ρ = ts.map (AdmA α · ρ) :=
   AdmAList_eq ρ ts
 
 /-- …and the same for the spread. -/
-theorem AdmAOptT_eq_map (sp : Option (Term S)) : AdmAOptT sp ρ = sp.map (AdmA · ρ) := by
+theorem AdmAOptT_eq_map (sp : Option (Term S)) : AdmAOptT α sp ρ = sp.map (AdmA α · ρ) := by
   cases sp <;> rfl
 
 omit [PrimAdm S] [PrimAdmA S] in
 /-- **A recursive term reads as its body reads over the stage below the attribute's depth.** -/
 theorem mu_p_unfold (b : Term S) (ρ : List S.C) (a : Sem.A S) :
-    (denote (.mu b) ρ).p a
-      = (denote b (muStage (fun c => denote b (c :: ρ)) (Sem.dA a - 1) :: ρ)).p a := by
-  show (muStage (fun c => denote b (c :: ρ)) (Sem.dA a)).p a = _
+    (denote α (.mu b) ρ).p a
+      = (denote α b (muStage (fun c => denote α b (c :: ρ)) (Sem.dA a - 1) :: ρ)).p a := by
+  show (muStage (fun c => denote α b (c :: ρ)) (Sem.dA a)).p a = _
   obtain ⟨n, hn⟩ : ∃ n, Sem.dA a = n + 1 := ⟨Sem.dA a - 1, by have := Sem.dA_pos a; omega⟩
   rw [hn, Nat.add_sub_cancel]
   rfl
 
 /-- …and so it reads where its body reads over that stage. -/
 theorem AdmA_mu_unfold (b : Term S) (ρ : List S.C) (a : Sem.A S) :
-    AdmA (.mu b) ρ a
-      = AdmA b (muStage (fun c => denote b (c :: ρ)) (Sem.dA a - 1) :: ρ) a := by
+    AdmA α (.mu b) ρ a
+      = AdmA α b (muStage (fun c => denote α b (c :: ρ)) (Sem.dA a - 1) :: ρ) a := by
   rw [AdmA_eq_isSome b, ← mu_p_unfold]
   rfl
 
 /-- **A body reads a map by its slots**, the read side's twin of `AdmBody_map_slots`. -/
 theorem AdmABody_map_slots (c : Body S) {x : Sem.A S} {m : MapOf (Sem.A S)}
     (hm : mapOutA x = some m) :
-    AdmABody c ρ x = true ↔
+    AdmABody α c ρ x = true ↔
       (∀ k, ObjectSlot.isReq (c.slotAt k) = true → k ∈ m.keys) ∧
-      ∀ k : {k // k ∈ m.keys}, AdmAField (c.slotAt k.1) ρ (m.get k) = true := by
+      ∀ k : {k // k ∈ m.keys}, AdmAField α (c.slotAt k.1) ρ (m.get k) = true := by
   rw [AdmABody_of_out hm, valPresentT_req, Bool.and_eq_true, reqs_slotAt]
   apply and_congr Iff.rfl
   unfold objAdmV; rw [decide_eq_true_iff]
@@ -147,15 +148,15 @@ end
     disjointness of the former classes (`Shapes`). -/
 class FormerAdmA (S : Syn) [Sem S] [PrimAdm S] [PrimAdmA S] : Prop where
   /-- Two sets whose elements share no attribute share no set. -/
-  set_never : ∀ a y : Term S, (∀ u, (AdmA a [] u && AdmA y [] u) = false) →
-    ∀ c, (AdmA (.set a) [] c && AdmA (.set y) [] c) = false
+  set_never : ∀ {α : Table S} (a y : Term S), (∀ u, (AdmA α a [] u && AdmA α y [] u) = false) →
+    ∀ c, (AdmA α (.set a) [] c && AdmA α (.set y) [] c) = false
 
 /-- **The read-side law of the leaves.** A primitive reads no variable, so the law is stated at
     the closed environment. -/
 class LeafAdmA (S : Syn) [Sem S] [PrimAdm S] [PrimAdmA S] [Leaf S] : Prop where
   /-- Two primitives met at the bottom share no attribute. -/
-  prim_none : ∀ g g' : S.Ground, Leaf.prim g g' = none →
-    ∀ c, (AdmA (.prim g : Term S) [] c && AdmA (.prim g') [] c) = false
+  prim_none : ∀ {α : Table S} (g g' : S.Ground), Leaf.prim g g' = none →
+    ∀ c, (AdmA α (.prim g : Term S) [] c && AdmA α (.prim g') [] c) = false
 
 /-! ## Soundness, on the read side -/
 
@@ -198,18 +199,19 @@ theorem ApartA.mu {p : Pairing} {ρ ρ' : List S.C} (h : ApartA p ρ ρ') {c c' 
   | 0, _ + 1, hp => exact nomatch hp
   | _ + 1, 0, hp => exact nomatch hp
 
+variable (α) in
 /-- A family is sound for `x` where every partner it accepts shares no value with `x`. -/
 def DisjSoundA (ρ ρ' : List S.C) (x : Term S) (f : Term S → Bool) : Prop :=
-  ∀ y, f y = true → ∀ v, (AdmA x ρ v && AdmA y ρ' v) = false
+  ∀ y, f y = true → ∀ v, (AdmA α x ρ v && AdmA α y ρ' v) = false
 
 /-- A refinement reads what its inner term reads to a value that its predicate holds on. -/
 theorem AdmA_refine_eq (t : Term S) (q : S.Pred) (ρ : List S.C) (v : Sem.A S) :
-    AdmA (.refine t q) ρ v = (AdmA t ρ v && refineReads t ρ (Sem.eval q) v) := rfl
+    AdmA α (.refine t q) ρ v = (AdmA α t ρ v && refineReads α t ρ (Sem.eval q) v) := rfl
 
 omit [PrimAdm S] [PrimAdmA S] in
 /-- A held-free closed term decodes an attribute as the top decodes it. -/
 theorem top_of_HF_closed [TopLaws S] {t : Term S} (hh : hasHeld t = false) (hv : t.hasVar = false)
-    (ρ : List S.C) {a : Sem.A S} {u : S.V} (h : (denote t ρ).p a = some u) :
+    (ρ : List S.C) {a : Sem.A S} {u : S.V} (h : (denote α t ρ).p a = some u) :
     (Sem.top (S := S)).p a = some u := by
   rw [denote_closed t hv ρ []] at h
   exact (sub_denoteIn t hh [] (fun i => by simp only [envAt, List.getD_nil]; exact sub_empty)).2 a u h
@@ -218,7 +220,7 @@ omit [PrimAdm S] [PrimAdmA S] in
 /-- A refinement over a held-free closed term reads only what the top reads to a value that
     satisfies the predicate. -/
 theorem refineReads_top [TopLaws S] {t : Term S} (hh : hasHeld t = false) (hv : t.hasVar = false)
-    {ρ : List S.C} {q : S.V → Bool} {a : Sem.A S} (h : refineReads t ρ q a = true) :
+    {ρ : List S.C} {q : S.V → Bool} {a : Sem.A S} (h : refineReads α t ρ q a = true) :
     ∃ u, (Sem.top (S := S)).p a = some u ∧ q u = true := by
   unfold refineReads at h
   split at h
@@ -240,9 +242,9 @@ mutual
 /-- **The rows of the right operand are sound**, given a sound family for every pairing that
     keeps the environments apart. -/
 theorem disjSRight_soundA {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
-    (hf : ∀ q ρ', ApartA q ρ ρ' → DisjSoundA ρ ρ' x (fam q)) :
+    (hf : ∀ q ρ', ApartA q ρ ρ' → DisjSoundA α ρ ρ' x (fam q)) :
     ∀ (y : Term S) (p : Pairing) (ρ' : List S.C), ApartA p ρ ρ' →
-      disjSRight fam p y = true → ∀ v, (AdmA x ρ v && AdmA y ρ' v) = false
+      disjSRight fam p y = true → ∀ v, (AdmA α x ρ v && AdmA α y ρ' v) = false
   | .never, _, _, _, _, v => by simp
   | .mu b, p, ρ', hp, h, v => by
       simp only [disjSRight] at h
@@ -258,15 +260,15 @@ theorem disjSRight_soundA {ρ : List S.C} {x : Term S} {fam : Pairing → Term S
   | .prim g, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .set t, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .list a b c, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
-  | .held a b c d, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
+  | .held a b k, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .opaq, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .object b, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .var j, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
 /-- …and over the options of a union. -/
 theorem disjSRightL_soundA {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
-    (hf : ∀ q ρ', ApartA q ρ ρ' → DisjSoundA ρ ρ' x (fam q)) :
+    (hf : ∀ q ρ', ApartA q ρ ρ' → DisjSoundA α ρ ρ' x (fam q)) :
     ∀ (ys : List (Term S)) (p : Pairing) (ρ' : List S.C), ApartA p ρ ρ' →
-      disjSRightL fam p ys = true → ∀ v, (AdmA x ρ v && AdmAAny ys ρ' v) = false
+      disjSRightL fam p ys = true → ∀ v, (AdmA α x ρ v && AdmAAny α ys ρ' v) = false
   | [], _, _, _, _, v => by simp
   | y :: ys, p, ρ', hp, h, v => by
       simp only [disjSRightL, Bool.and_eq_true] at h
@@ -277,8 +279,8 @@ end
 mutual
 /-- **The split of the right operand is sound**, given a sound family at the pairing. -/
 theorem splitR_soundA {ρ ρ' : List S.C} {x : Term S} {fam : Pairing → Term S → Bool} {p : Pairing}
-    (hf : DisjSoundA ρ ρ' x (fam p)) :
-    ∀ (y : Term S), splitR fam p y = true → ∀ v, (AdmA x ρ v && AdmA y ρ' v) = false
+    (hf : DisjSoundA α ρ ρ' x (fam p)) :
+    ∀ (y : Term S), splitR fam p y = true → ∀ v, (AdmA α x ρ v && AdmA α y ρ' v) = false
   | .never, _, v => by simp
   | .union os, h, v => by
       simp only [splitR] at h
@@ -289,14 +291,14 @@ theorem splitR_soundA {ρ ρ' : List S.C} {x : Term S} {fam : Pairing → Term S
   | .prim g, h, v => hf _ (by simpa only [splitR] using h) v
   | .set t, h, v => hf _ (by simpa only [splitR] using h) v
   | .list a b c, h, v => hf _ (by simpa only [splitR] using h) v
-  | .held a b c d, h, v => hf _ (by simpa only [splitR] using h) v
+  | .held a b k, h, v => hf _ (by simpa only [splitR] using h) v
   | .opaq, h, v => hf _ (by simpa only [splitR] using h) v
   | .object b, h, v => hf _ (by simpa only [splitR] using h) v
   | .var j, h, v => hf _ (by simpa only [splitR] using h) v
 /-- …and over the options of a union. -/
 theorem splitRL_soundA {ρ ρ' : List S.C} {x : Term S} {fam : Pairing → Term S → Bool} {p : Pairing}
-    (hf : DisjSoundA ρ ρ' x (fam p)) :
-    ∀ (ys : List (Term S)), splitRL fam p ys = true → ∀ v, (AdmA x ρ v && AdmAAny ys ρ' v) = false
+    (hf : DisjSoundA α ρ ρ' x (fam p)) :
+    ∀ (ys : List (Term S)), splitRL fam p ys = true → ∀ v, (AdmA α x ρ v && AdmAAny α ys ρ' v) = false
   | [], _, v => by simp
   | y :: ys, h, v => by
       simp only [splitRL, Bool.and_eq_true] at h
@@ -309,7 +311,7 @@ end
     value that the top reads. -/
 theorem predApart_soundA [Leaf S] [LeafAdm S] [TopLaws S] {q : S.Pred} {ρ' : List S.C} :
     ∀ (y : Term S), predApart q y = true → ∀ a u, (Sem.top (S := S)).p a = some u →
-      Sem.eval q u = true → AdmA y ρ' a = false
+      Sem.eval q u = true → AdmA α y ρ' a = false
   | .refine y q', h, a, u, htop, hq => by
       simp only [predApart, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
       rw [AdmA_refine_eq]
@@ -319,15 +321,15 @@ theorem predApart_soundA [Leaf S] [LeafAdm S] [TopLaws S] {q : S.Pred} {ρ' : Li
           | none => simp
           | some o => cases o <;> simp
         have hpm := LeafAdm.pmeet_none q q' hn u
-        cases hr : refineReads y ρ' (Sem.eval q') a with
+        cases hr : refineReads α y ρ' (Sem.eval q') a with
         | false => simp
         | true =>
-          obtain ⟨u', hu', hq'⟩ := refineReads_top hh hv hr
+          obtain ⟨u', hu', hq'⟩ := refineReads_top (α := α) hh hv hr
           rw [htop] at hu'; cases hu'
           rw [hq, hq'] at hpm; exact absurd hpm (by simp)
       · rw [predApart_soundA (ρ' := ρ') y h a u htop hq, Bool.false_and]
   | .prim _, h, _, _, _, _ | .never, h, _, _, _, _ | .set _, h, _, _, _, _
-  | .list _ _ _, h, _, _, _, _ | .held _ _ _ _, h, _, _, _, _
+  | .list _ _ _, h, _, _, _, _ | .held _ _ _, h, _, _, _, _
   | .opaq, h, _, _, _, _ | .object _, h, _, _, _, _ | .union _, h, _, _, _, _
   | .var _, h, _, _, _, _ | .mu _, h, _, _, _, _ => by
       simp [predApart] at h
@@ -335,12 +337,12 @@ theorem predApart_soundA [Leaf S] [LeafAdm S] [TopLaws S] {q : S.Pred} {ρ' : Li
 /-- **The leaf family is sound on the read side**: the leaf law, and the shape classes at every
     former. -/
 theorem famPrimD_soundA [Leaf S] [LeafAdmA S] [Shapes S] {ρ ρ' : List S.C} (g : S.Ground) :
-    DisjSoundA ρ ρ' (.prim g) (famPrimD g) := by
+    DisjSoundA α ρ ρ' (.prim g) (famPrimD g) := by
   intro y h v
   cases y with
   | prim g' =>
       simp only [famPrimD, Option.isNone_iff_eq_none] at h
-      exact LeafAdmA.prim_none g g' h v
+      exact LeafAdmA.prim_none (α := α) g g' h v
   | set t => exact Shapes.prim_setA g t v
   | list a b c => exact Shapes.prim_listA g a b c v
   | object b => exact Shapes.prim_objA g b v
@@ -348,7 +350,7 @@ theorem famPrimD_soundA [Leaf S] [LeafAdmA S] [Shapes S] {ρ ρ' : List S.C} (g 
 
 /-- **The variable family is sound**: a paired binder pair reads no attribute in common. -/
 theorem famVarD_soundA {ρ ρ' : List S.C} {i : Nat} {q : Pairing} (hq : ApartA q ρ ρ') :
-    DisjSoundA ρ ρ' (.var i) (famVarD i q) := by
+    DisjSoundA α ρ ρ' (.var i) (famVarD i q) := by
   intro y h v
   cases y with
   | var j =>
@@ -360,8 +362,8 @@ theorem famVarD_soundA {ρ ρ' : List S.C} {i : Nat} {q : Pairing} (hq : ApartA 
 /-- **The set family is sound**: the set law over closed elements, and the shape classes at
     every other former. -/
 theorem famSetD_soundA [FormerAdmA S] [Shapes S] {ρ ρ' : List S.C} (a : Term S)
-    {mt : Term S → Bool} (hmt : DisjSoundA ρ ρ' a mt) :
-    DisjSoundA ρ ρ' (.set a) (famSetD a mt) := by
+    {mt : Term S → Bool} (hmt : DisjSoundA α ρ ρ' a mt) :
+    DisjSoundA α ρ ρ' (.set a) (famSetD a mt) := by
   intro y h v
   cases y with
   | set y' =>
@@ -371,7 +373,7 @@ theorem famSetD_soundA [FormerAdmA S] [Shapes S] {ρ ρ' : List S.C} (a : Term S
         rw [← AdmA_closed a ha ρ [], ← AdmA_closed y' hy ρ' []]; exact hmt y' hm u) v
       rwa [AdmA_closed (.set a) ha ρ [], AdmA_closed (.set y') hy ρ' []]
   | prim g =>
-      have := Shapes.prim_setA (ρ := ρ') (ρ' := ρ) g a v
+      have := Shapes.prim_setA (α := α) (ρ := ρ') (ρ' := ρ) g a v
       rw [Bool.and_comm]; exact this
   | list x y z => exact Shapes.set_listA a x y z v
   | object b => exact Shapes.set_objA a b v
@@ -379,14 +381,15 @@ theorem famSetD_soundA [FormerAdmA S] [Shapes S] {ρ ρ' : List S.C} (a : Term S
 
 
 
+variable (α) in
 /-- Two rows of terms share no row of values. -/
 def RowsApartA (ρ ρ' : List S.C) (r₁ r₂ : List (Term S)) : Prop :=
-  ∀ ws : List (Sem.A S), (zipP (AdmAList r₁ ρ) ws && zipP (AdmAList r₂ ρ') ws) = false
+  ∀ ws : List (Sem.A S), (zipP (AdmAList α r₁ ρ) ws && zipP (AdmAList α r₂ ρ') ws) = false
 
 /-- One disjoint position keeps two rows of one length apart. -/
 theorem rowsApartA_of_anyZip {ρ ρ' : List S.C} :
-    ∀ {r₁ : List (Term S)} {fs : List (Term S → Bool)}, List.Forall₂ (DisjSoundA ρ ρ') r₁ fs →
-      ∀ {r₂ : List (Term S)}, anyZip fs r₂ = true → RowsApartA ρ ρ' r₁ r₂
+    ∀ {r₁ : List (Term S)} {fs : List (Term S → Bool)}, List.Forall₂ (DisjSoundA α ρ ρ') r₁ fs →
+      ∀ {r₂ : List (Term S)}, anyZip fs r₂ = true → RowsApartA α ρ ρ' r₁ r₂
   | _, _, .nil, _, h, _ => by simp [anyZip] at h
   | t :: r₁, f :: fs, .cons ht hr, r₂, h, ws => by
       cases r₂ with
@@ -399,15 +402,15 @@ theorem rowsApartA_of_anyZip {ρ ρ' : List S.C} :
           simp only [AdmAList, zipP]
           rcases h with h | h
           · have := ht u h w
-            cases h1 : AdmA t ρ w <;> cases h2 : AdmA u ρ' w <;> simp_all
+            cases h1 : AdmA α t ρ w <;> cases h2 : AdmA α u ρ' w <;> simp_all
           · have := rowsApartA_of_anyZip hr h ws
-            cases h1 : zipP (AdmAList r₁ ρ) ws <;> cases h2 : zipP (AdmAList r₂ ρ') ws <;>
+            cases h1 : zipP (AdmAList α r₁ ρ) ws <;> cases h2 : zipP (AdmAList α r₂ ρ') ws <;>
               simp_all
 
 /-- Two rows stay apart when a common prefix of equal length goes in front. -/
 theorem RowsApartA.append_left {ρ ρ' : List S.C} {A₁ A₂ X₁ X₂ : List (Term S)}
-    (hA : A₁.length = A₂.length) (h : RowsApartA ρ ρ' A₁ A₂) :
-    RowsApartA ρ ρ' (A₁ ++ X₁) (A₂ ++ X₂) := by
+    (hA : A₁.length = A₂.length) (h : RowsApartA α ρ ρ' A₁ A₂) :
+    RowsApartA α ρ ρ' (A₁ ++ X₁) (A₂ ++ X₂) := by
   intro ws
   rcases Nat.lt_or_ge ws.length A₁.length with hl | hl
   · rw [zipP_false_of_length_ne _ _ (by simp [AdmAList_eq]; omega), Bool.false_and]
@@ -416,13 +419,13 @@ theorem RowsApartA.append_left {ρ ρ' : List S.C} {A₁ A₂ X₁ X₂ : List (
       zipP_append _ _ _ _ (by simp; omega)]
     have := h (ws.take A₁.length)
     rw [AdmAList_eq, AdmAList_eq] at this
-    cases h1 : zipP (A₁.map (AdmA · ρ)) (ws.take A₁.length) <;>
-      cases h2 : zipP (A₂.map (AdmA · ρ')) (ws.take A₁.length) <;> simp_all
+    cases h1 : zipP (A₁.map (AdmA α · ρ)) (ws.take A₁.length) <;>
+      cases h2 : zipP (A₂.map (AdmA α · ρ')) (ws.take A₁.length) <;> simp_all
 
 /-- …and when a common suffix of equal length goes behind. -/
 theorem RowsApartA.append_right {ρ ρ' : List S.C} {B₁ B₂ X₁ X₂ : List (Term S)}
-    (hX : X₁.length = X₂.length) (h : RowsApartA ρ ρ' B₁ B₂) :
-    RowsApartA ρ ρ' (X₁ ++ B₁) (X₂ ++ B₂) := by
+    (hX : X₁.length = X₂.length) (h : RowsApartA α ρ ρ' B₁ B₂) :
+    RowsApartA α ρ ρ' (X₁ ++ B₁) (X₂ ++ B₂) := by
   intro ws
   rcases Nat.lt_or_ge ws.length X₁.length with hl | hl
   · rw [zipP_false_of_length_ne _ _ (by simp [AdmAList_eq]; omega), Bool.false_and]
@@ -431,14 +434,14 @@ theorem RowsApartA.append_right {ρ ρ' : List S.C} {B₁ B₂ X₁ X₂ : List 
       zipP_append _ _ _ _ (by simp; omega)]
     have := h (ws.drop X₁.length)
     rw [AdmAList_eq, AdmAList_eq] at this
-    cases h1 : zipP (B₁.map (AdmA · ρ)) (ws.drop X₁.length) <;>
-      cases h2 : zipP (B₂.map (AdmA · ρ')) (ws.drop X₁.length) <;> simp_all
+    cases h1 : zipP (B₁.map (AdmA α · ρ)) (ws.drop X₁.length) <;>
+      cases h2 : zipP (B₂.map (AdmA α · ρ')) (ws.drop X₁.length) <;> simp_all
 
 /-- Two `list` shapes whose rows are apart at every common length share no value. -/
 theorem AdmA_list_apart {ρ ρ' : List S.C} {p₁ s₁ p₂ s₂ : List (Term S)} {q₁ q₂ : Option (Term S)}
     (h : ∀ n r₁ r₂, rowOfG p₁ q₁ s₁ n = some r₁ → rowOfG p₂ q₂ s₂ n = some r₂ →
-      RowsApartA ρ ρ' r₁ r₂) (v : Sem.A S) :
-    (AdmA (.list p₁ q₁ s₁) ρ v && AdmA (.list p₂ q₂ s₂) ρ' v) = false := by
+      RowsApartA α ρ ρ' r₁ r₂) (v : Sem.A S) :
+    (AdmA α (.list p₁ q₁ s₁) ρ v && AdmA α (.list p₂ q₂ s₂) ρ' v) = false := by
   cases hv : listOutA v with
   | none => simp [AdmA_list_of_none hv]
   | some ws =>
@@ -459,10 +462,10 @@ theorem AdmA_list_apart {ρ ρ' : List S.C} {p₁ s₁ p₂ s₂ : List (Term S)
 theorem famListD_soundA [Shapes S] {ρ ρ' : List S.C} {pre suf : List (Term S)}
     {sp : Option (Term S)}
     {fpre fsuf : List (Term S → Bool)} {fsp : Option (Term S → Bool)}
-    (hp : List.Forall₂ (DisjSoundA ρ ρ') pre fpre)
-    (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ DisjSoundA ρ ρ' t f)
-    (hf : List.Forall₂ (DisjSoundA ρ ρ') suf fsuf) :
-    DisjSoundA ρ ρ' (.list pre sp suf) (famListD fpre fsp fsuf) := by
+    (hp : List.Forall₂ (DisjSoundA α ρ ρ') pre fpre)
+    (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ DisjSoundA α ρ ρ' t f)
+    (hf : List.Forall₂ (DisjSoundA α ρ ρ') suf fsuf) :
+    DisjSoundA α ρ ρ' (.list pre sp suf) (famListD fpre fsp fsuf) := by
   have hlp := hp.length_eq
   have hlf := hf.length_eq
   intro y h v
@@ -498,7 +501,7 @@ theorem famListD_soundA [Shapes S] {ρ ρ' : List S.C} {pre suf : List (Term S)}
             exact nomatch hfs
           | some fs =>
             rw [hfs] at h
-            have hF := rowOfG_forall₂ (R := DisjSoundA ρ ρ') hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf
+            have hF := rowOfG_forall₂ (R := DisjSoundA α ρ ρ') hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf
               h₁ hfs
             exact rowsApartA_of_anyZip hF h
         · exact nomatch h₂
@@ -515,7 +518,7 @@ theorem famListD_soundA [Shapes S] {ρ ρ' : List S.C} {pre suf : List (Term S)}
           · next fs us hfs hus =>
             obtain ⟨rN, hrN⟩ := rowOfG_total (pre := pre) (suf := suf) (c := t) (n := P + S')
               (by omega)
-            have hF := rowOfG_forall₂ (R := DisjSoundA ρ ρ') hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf
+            have hF := rowOfG_forall₂ (R := DisjSoundA α ρ ρ') hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf
               hrN hfs
             have hr₁ := rowOfG_respread (P := P) (S := S') (n := n) (by omega) (by omega)
               (by omega) hrN h₁
@@ -541,8 +544,8 @@ theorem famListD_soundA [Shapes S] {ρ ρ' : List S.C} {pre suf : List (Term S)}
     common map holds the name, and the two slots share no value there. -/
 theorem AdmABody_apart_at {ρ ρ' : List S.C} {a b : Body S} {k : String}
     (hr : (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)) = true)
-    (hs : ∀ w, (AdmAField (a.slotAt k) ρ w && AdmAField (b.slotAt k) ρ' w) = false) (v : Sem.A S) :
-    (AdmABody a ρ v && AdmABody b ρ' v) = false := by
+    (hs : ∀ w, (AdmAField α (a.slotAt k) ρ w && AdmAField α (b.slotAt k) ρ' w) = false) (v : Sem.A S) :
+    (AdmABody α a ρ v && AdmABody α b ρ' v) = false := by
   refine Bool.eq_false_iff.mpr (fun hab => ?_)
   rw [Bool.and_eq_true] at hab
   obtain ⟨hA, hB⟩ := hab
@@ -561,9 +564,9 @@ theorem AdmABody_apart_at {ρ ρ' : List S.C} {a b : Body S} {k : String}
 theorem famObjD_soundA [Shapes S] {ρ ρ' : List S.C} {a : Body S}
     {g : {k // k ∈ a.fields} → ObjectSlot S → Bool} {mw : Term S → Bool}
     (hg : ∀ k s, g k s = true → (ObjectSlot.isReq (a.at k) || ObjectSlot.isReq s) = true ∧
-      ∀ w, (AdmAField (a.at k) ρ w && AdmAField s ρ' w) = false)
-    (hmw : DisjSoundA ρ ρ' a.block mw) :
-    DisjSoundA ρ ρ' (.object a) (famObjD a g mw) := by
+      ∀ w, (AdmAField α (a.at k) ρ w && AdmAField α s ρ' w) = false)
+    (hmw : DisjSoundA α ρ ρ' a.block mw) :
+    DisjSoundA α ρ ρ' (.object a) (famObjD a g mw) := by
   intro y h v
   cases y with
   | prim g' => rw [Bool.and_comm]; exact Shapes.prim_objA g' a v
@@ -572,7 +575,7 @@ theorem famObjD_soundA [Shapes S] {ρ ρ' : List S.C} {a : Body S}
   | object b =>
     simp only [famObjD, decide_eq_true_eq] at h
     obtain ⟨⟨k, hk⟩, hd⟩ := h
-    show (AdmABody a ρ v && AdmABody b ρ' v) = false
+    show (AdmABody α a ρ v && AdmABody α b ρ' v) = false
     unfold slotD at hd
     split at hd
     · next ha =>
@@ -598,9 +601,9 @@ mutual
     apart. -/
 theorem disjoint_soundA [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] :
     ∀ (p : Pairing) (x y : Term S), Term.disjoint p x y = true →
-      ∀ (ρ ρ' : List S.C), ApartA p ρ ρ' → ∀ v, (AdmA x ρ v && AdmA y ρ' v) = false
+      ∀ (ρ ρ' : List S.C), ApartA p ρ ρ' → ∀ v, (AdmA α x ρ v && AdmA α y ρ' v) = false
   | _, .never, _, _, _, _, _, _ => by simp
-  | p, .held _ _ _ _, y, h, ρ, ρ', hp, v =>
+  | p, .held _ _ _, y, h, ρ, ρ', hp, v =>
       disjSRight_soundA (ρ := ρ) (fam := fun _ _ => false)
         (fun _ _ _ _ hh => nomatch hh) y p ρ' hp h v
   | p, .var i, y, h, ρ, ρ', hp, v =>
@@ -610,7 +613,7 @@ theorem disjoint_soundA [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes
       | mu b' =>
         simp only [Term.disjoint] at h
         have hB : ∀ c c', (∀ u, ((c.p u).isSome && (c'.p u).isSome) = false) →
-            ∀ u, (((denote b (c :: ρ)).p u).isSome && ((denote b' (c' :: ρ')).p u).isSome)
+            ∀ u, (((denote α b (c :: ρ)).p u).isSome && ((denote α b' (c' :: ρ')).p u).isSome)
               = false := fun c c' hc u => by
           have := disjoint_soundA (pairMu p) b b' h (c :: ρ) (c' :: ρ') (hp.mu hc) u
           rwa [AdmA_eq_isSome, AdmA_eq_isSome] at this
@@ -629,12 +632,12 @@ theorem disjoint_soundA [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes
       rw [AdmA_refine_eq]
       rcases hy with hy | ⟨⟨⟨-, hh⟩, hv⟩, hy⟩
       · have := disjoint_soundA p x y' hy ρ ρ' hp w
-        cases h1 : AdmA x ρ w <;> cases h2 : AdmA y' ρ' w <;> simp_all
-      · cases hr : refineReads x ρ (Sem.eval q) w with
+        cases h1 : AdmA α x ρ w <;> cases h2 : AdmA α y' ρ' w <;> simp_all
+      · cases hr : refineReads α x ρ (Sem.eval q) w with
         | false => simp
         | true =>
           simp only [Bool.not_eq_true'] at hh hv
-          obtain ⟨u, hu, hq⟩ := refineReads_top hh hv hr
+          obtain ⟨u, hu, hq⟩ := refineReads_top (α := α) hh hv hr
           rw [predApart_soundA (ρ' := ρ') y' hy w u hu hq]; simp
   | p, .union os, y, h, ρ, ρ', hp, v => by
       simp only [Term.disjoint] at h
@@ -673,19 +676,19 @@ termination_by structural _ x => x
 /-- …and a union, option by option. -/
 theorem disjointL_soundA [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] :
     ∀ (p : Pairing) (os : List (Term S)) (y : Term S), Term.disjointL p os y = true →
-      ∀ (ρ ρ' : List S.C), ApartA p ρ ρ' → ∀ v, (AdmAAny os ρ v && AdmA y ρ' v) = false
+      ∀ (ρ ρ' : List S.C), ApartA p ρ ρ' → ∀ v, (AdmAAny α os ρ v && AdmA α y ρ' v) = false
   | _, [], _, _, _, _, _, _ => by simp
   | p, x :: xs, y, h, ρ, ρ', hp, v => by
       simp only [Term.disjointL, Bool.and_eq_true] at h
       have h1 := disjoint_soundA p x y h.1 ρ ρ' hp v
       have h2 := disjointL_soundA p xs y h.2 ρ ρ' hp v
       rw [AdmAAny_cons]
-      cases a1 : AdmA x ρ v <;> cases a2 : AdmAAny xs ρ v <;> cases a3 : AdmA y ρ' v <;> simp_all
+      cases a1 : AdmA α x ρ v <;> cases a2 : AdmAAny α xs ρ v <;> cases a3 : AdmA α y ρ' v <;> simp_all
 termination_by structural _ os => os
 /-- …and each position of a row, partially applied. -/
 theorem disjointTs_soundA [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] :
     ∀ (p : Pairing) (ts : List (Term S)) (ρ ρ' : List S.C), ApartA p ρ ρ' →
-      List.Forall₂ (DisjSoundA ρ ρ') ts (Term.disjointTs p ts)
+      List.Forall₂ (DisjSoundA α ρ ρ') ts (Term.disjointTs p ts)
   | _, [], _, _, _ => .nil
   | p, t :: ts, ρ, ρ', hp =>
       .cons (fun u hu w => disjoint_soundA p t u hu ρ ρ' hp w) (disjointTs_soundA p ts ρ ρ' hp)
@@ -695,7 +698,7 @@ theorem slot_soundA [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S] 
     ∀ (p : Pairing) (s s' : ObjectSlot S), ObjectSlot.disjoint p s s' = true →
       ∀ (ρ ρ' : List S.C), ApartA p ρ ρ' →
         (ObjectSlot.isReq s || ObjectSlot.isReq s') = true ∧
-          ∀ w, (AdmAField s ρ w && AdmAField s' ρ' w) = false
+          ∀ w, (AdmAField α s ρ w && AdmAField α s' ρ' w) = false
   | p, .req x, .req y, h, ρ, ρ', hp =>
       ⟨rfl, fun w => disjoint_soundA p x y h ρ ρ' hp w⟩
   | p, .req x, .optional y, h, ρ, ρ', hp =>
@@ -712,8 +715,8 @@ end
     apart on the matching side. -/
 theorem disjoint_orthogonal [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdm S] [FormerAdmA S]
     [Shapes S] [TopLaws S] {p : Pairing} {x y : Term S} (h : Term.disjoint p x y = true) :
-    (∀ ρ ρ', ApartV p ρ ρ' → ∀ v, (Adm x ρ v && Adm y ρ' v) = false) ∧
-    (∀ ρ ρ', ApartA p ρ ρ' → ∀ a, (AdmA x ρ a && AdmA y ρ' a) = false) :=
+    (∀ ρ ρ', ApartV p ρ ρ' → ∀ v, (Adm α x ρ v && Adm α y ρ' v) = false) ∧
+    (∀ ρ ρ', ApartA p ρ ρ' → ∀ a, (AdmA α x ρ a && AdmA α y ρ' a) = false) :=
   ⟨fun ρ ρ' hp v => disjoint_sound p x y h ρ ρ' hp v,
    fun ρ ρ' hp a => disjoint_soundA p x y h ρ ρ' hp a⟩
 

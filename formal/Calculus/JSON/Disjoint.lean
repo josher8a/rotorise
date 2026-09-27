@@ -14,6 +14,8 @@ sides are empty.
 
 namespace Calculus.JSON
 
+variable {α : Alg.Table jsonSyn}
+
 /-- **The leaves of JSON.** Two kinds meet where they are one kind. -/
 instance jsonLeaf : Alg.Leaf jsonSyn where
   prim m m' := if m = m' then some m else none
@@ -22,26 +24,26 @@ instance jsonLeaf : Alg.Leaf jsonSyn where
 
 /-- A kind admits a value of that kind, on the write side. -/
 theorem adm_prim (m : JMember) (v : Json) :
-    Alg.Adm (.prim m : Alg.Term jsonSyn) [] v = decide (v.member = m) := by
+    Alg.Adm α (.prim m : Alg.Term jsonSyn) [] v = decide (v.member = m) := by
   simp [Alg.Adm, Alg.PrimAdm.admV]
 
 /-- …and on the read side. -/
 theorem admA_prim (m : JMember) (a : Json) :
-    Alg.AdmA (.prim m : Alg.Term jsonSyn) [] a = decide (a.member = m) := by
+    Alg.AdmA α (.prim m : Alg.Term jsonSyn) [] a = decide (a.member = m) := by
   simp [Alg.AdmA, Alg.PrimAdmA.admA]
 
 /-- A term of a former that JSON lacks admits nothing: no set, no list, no object. -/
 theorem adm_former_empty (v : Json) :
-    (∀ t : Alg.Term jsonSyn, Alg.Adm (.set t) [] v = false) ∧
-    (∀ pre sp suf, Alg.Adm (.list pre sp suf : Alg.Term jsonSyn) [] v = false) ∧
-    (∀ b : Alg.Body jsonSyn, Alg.Adm (.object b) [] v = false) :=
+    (∀ t : Alg.Term jsonSyn, Alg.Adm α (.set t) [] v = false) ∧
+    (∀ pre sp suf, Alg.Adm α (.list pre sp suf : Alg.Term jsonSyn) [] v = false) ∧
+    (∀ b : Alg.Body jsonSyn, Alg.Adm α (.object b) [] v = false) :=
   ⟨fun _ => rfl, fun _ _ _ => rfl, fun b => by cases b; rfl⟩
 
 /-- …and reads nothing. -/
 theorem admA_former_empty (a : Json) :
-    (∀ t : Alg.Term jsonSyn, Alg.AdmA (.set t) [] a = false) ∧
-    (∀ pre sp suf, Alg.AdmA (.list pre sp suf : Alg.Term jsonSyn) [] a = false) ∧
-    (∀ b : Alg.Body jsonSyn, Alg.AdmA (.object b) [] a = false) :=
+    (∀ t : Alg.Term jsonSyn, Alg.AdmA α (.set t) [] a = false) ∧
+    (∀ pre sp suf, Alg.AdmA α (.list pre sp suf : Alg.Term jsonSyn) [] a = false) ∧
+    (∀ b : Alg.Body jsonSyn, Alg.AdmA α (.object b) [] a = false) :=
   ⟨fun _ => rfl, fun _ _ _ => rfl, fun b => by cases b; rfl⟩
 
 /-- **The shape classes of JSON.** Every value and every attribute is a primitive, and JSON has
@@ -105,8 +107,8 @@ example : Alg.Term.disjoint (S := jsonSyn) Alg.pair0 strOrNumTerm (.prim .str) =
     `jsonSyn`: no value has two writers, and no attribute has two readers. -/
 theorem orthogonal (p : Alg.Pairing) (x y : Alg.Term jsonSyn)
     (h : Alg.Term.disjoint p x y = true) :
-    (∀ ρ ρ', Alg.ApartV p ρ ρ' → ∀ v, (Alg.Adm x ρ v && Alg.Adm y ρ' v) = false) ∧
-    (∀ ρ ρ', Alg.ApartA p ρ ρ' → ∀ a, (Alg.AdmA x ρ a && Alg.AdmA y ρ' a) = false) :=
+    (∀ ρ ρ', Alg.ApartV p ρ ρ' → ∀ v, (Alg.Adm α x ρ v && Alg.Adm α y ρ' v) = false) ∧
+    (∀ ρ ρ', Alg.ApartA p ρ ρ' → ∀ a, (Alg.AdmA α x ρ a && Alg.AdmA α y ρ' a) = false) :=
   Alg.disjoint_orthogonal h
 
 end Calculus.JSON

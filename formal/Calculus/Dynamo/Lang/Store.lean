@@ -434,8 +434,22 @@ def textOfNumeral : Value → Value := fun v =>
   | .num x => Value.str x.1
   | _ => v
 
+/-- **The adapters of the callers**: the two functions of the `n`th adapter that a caller
+    supplies. -/
+abbrev Callers : Type := Nat → (Value → Value) × (Value → Value)
+
+/-- **The table of the library**: `decimalText` is the text adapter, and a caller generator
+    reads the pair that the caller supplies. -/
+def libTable (κ : Callers) : Table
+  | .decimalText => (numeralOfStoredText, textOfNumeral)
+  | .caller n => κ n
+
+/-- **The caller table of a term with no caller adapter.** A vector that states a value states
+    it at a term that holds no caller generator, so no entry of this table is read. -/
+def noCallers : Callers := fun _ => (id, id)
+
 /-- `decimal`, as the surface ships it: the numeric base under the text adapter, with the
     caller side restricted to text. -/
-def decimalHeld : Term := Term.held Term.number Term.string numeralOfStoredText textOfNumeral
+def decimalHeld : Term := Term.held Term.number Term.string [(.decimalText, false)]
 
 end Calculus

@@ -456,11 +456,12 @@ const topScope = (t: Term): Scope => ({
 })
 
 /**
- * **The caller's functions that a quantified vector binds.** A caller closure and each function of
- * a caller adapter has no expression in the model, so the theorem binds one variable for each,
- * and the claim holds at every function. Keyed by the function, so one function is one variable
- * wherever the pair uses it. `Value` holds each value that a caller function receives, except a
- * JS float, so an adapter this library ships over a float is still refused.
+ * **The caller's functions that a quantified vector binds.** A caller closure has no expression in
+ * the model, so the theorem binds one variable for each, and the claim holds at every function.
+ * A caller adapter is a generator `caller n`, and the theorem quantifies its pair through the
+ * caller table. Keyed by the function, so one function is one variable or one generator wherever
+ * the pair uses it. `Value` holds each value that a caller function receives, except a JS float,
+ * so an adapter this library ships over a float is still refused.
  */
 type Bound = {
     readonly closures: Map<unknown, string>
@@ -483,14 +484,24 @@ const boundName = (
     return made
 }
 
+/**
+ * **The generator of one caller adapter**, made on the first use. The key is the term's caller-side
+ * function, which `held` builds once for each adapter, so one adapter is one generator wherever the
+ * pair uses it. The theorem quantifies the pair of each generator through the caller table.
+ */
+const callerOf = (generators: Map<unknown, string>, fn: unknown): string => {
+    const known = generators.get(fn)
+    if (known !== undefined) return known
+    const made = `${generators.size}`
+    generators.set(fn, made)
+    return made
+}
+
 /** The binders of a quantified theorem, or nothing where the vector binds no function. */
 const leanBinders = (bound: Bound): string => {
     const group = (names: Map<unknown, string>, type: string): string[] =>
         names.size === 0 ? [] : [`(${[...names.values()].join(' ')} : ${type})`]
-    return [
-        ...group(bound.closures, 'Value → Bool'),
-        ...group(bound.adapters, 'Value → Value'),
-    ].join(' ')
+    return [...group(bound.closures, 'Value → Bool')].join(' ')
 }
 
 /**
@@ -792,19 +803,20 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
          * is. `decimal` is `number` under the text adapter now, so refusing every `held` would
          * take every decimal vector with it.
          *
-         * A caller's pair prints two variables of a quantified vector, and is refused elsewhere.
+         * A caller's pair prints a generator `caller n` of a quantified vector, and is refused
+         * elsewhere.
          * The float adapter is refused everywhere, for a reason that is not about closures:
          * `Value` carries no float, so the conversion would be numeral to numeral and its content
          * is binary64 rounding. That is the host axiom this development deleted.
          */
         case 'held':
             if (t.via === undefined && scope.bound)
-                return `(Term.held (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) ${boundName(scope.bound.adapters, t.f, 'f')} ${boundName(scope.bound.adapters, t.g, 'f')})`
+                return `(Term.held (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) [(.caller ${callerOf(scope.bound.adapters, t.f)}, false)])`
             return t.via === 'decimalText'
-                ? `(Term.held (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) numeralOfStoredText textOfNumeral)`
+                ? `(Term.held (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) [(.decimalText, false)])`
                 : refuse(
                       at,
-                      "`Term.held` carries two `Value → Value` functions. The library ships one pair the model names, `numeralOfStoredText`/`textOfNumeral`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted",
+                      "`Term.held` carries a word of adapter generators, and a table gives each generator two `Value → Value` functions. The library ships one generator the model names, `decimalText`, whose pair is `numeralOfStoredText`/`textOfNumeral`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted",
                   )
         case 'legacy':
             return refuse(
@@ -916,7 +928,7 @@ export const leanVector = (
         protocol === 'equation'
             ? [
                   ...head,
-                  `    (denote (${term})).e`,
+                  `    (denote (libTable noCallers) (${term})).e`,
                   `      (${leanValueOf(value, name)})`,
                   `    = some (${leanAttrOf(attribute, name)}) := by`,
                   '  vector',
@@ -924,7 +936,7 @@ export const leanVector = (
             : [
                   ...head,
                   `    check ${fuelFor(attribute)}`,
-                  `      ((denote (${term})).e`,
+                  `      ((denote (libTable noCallers) (${term})).e`,
                   `        (${leanValueOf(value, name)}))`,
                   `      (some (${leanAttrOf(attribute, name)})) = .same := rfl`,
               ].join('\n')
@@ -996,7 +1008,7 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
     return [
         `/-- \`${name}\` — refused on both sides -/`,
         `theorem ${leanIdent(name)} :`,
-        `    (denote (${leanTermOf(codec, name)})).e`,
+        `    (denote (libTable noCallers) (${leanTermOf(codec, name)})).e`,
         `      (${leanValueOf(value, name)}) = none := rfl`,
     ].join('\n')
 }
@@ -1099,9 +1111,9 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
               )
     return [
         `/-- \`${name}\` — \`src/\` accepts this pair; the model proves it compatible -/`,
-        head,
-        `    (∀ t ∈ [${l}, ${r}], Lawful (denote t)) →`,
-        `      PairwiseCompat [${l}, ${r}] :=`,
+        `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} (κ : Callers) :`,
+        `    (∀ t ∈ [${l}, ${r}], Lawful (denote (libTable κ) t)) →`,
+        `      PairwiseCompat (libTable κ) [${l}, ${r}] :=`,
         `  ${warrant}`,
     ].join('\n')
 }
@@ -1110,8 +1122,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
  * The declaration verdicts as a module of their own, because they need the decision `compatPair`
  * and the dischargers of `PairwiseCompat`.
  *
- * The header imports `Calculus.Dynamo.Lang.Store` as well, because a `held` term spells
- * `numeralOfStoredText` and `textOfNumeral`, which the DynamoDB port defines, and
+ * The header imports `Calculus.Dynamo.Lang.Store` as well, because a verdict spells
+ * `libTable` and `Callers`, which the DynamoDB port defines, and
  * `Meet` does not reach them. Lean
  * auto-binds an unknown lower-case name, so the missing import reports a free variable in the
  * expected type of every verdict rather than an unknown identifier.
@@ -1264,7 +1276,7 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
     return [
         `/-- \`${name}\` — \`src/\` ${decodes ? 'decodes' : 'refuses'} this attribute -/`,
         `theorem ${leanIdent(name)} :`,
-        `    AdmA (${leanTermOf(codec, name)})`,
+        `    AdmA (libTable noCallers) (${leanTermOf(codec, name)})`,
         `      (${leanAttrOf(attribute, name)}) = ${decodes} := rfl`,
     ].join('\n')
 }
@@ -1335,7 +1347,7 @@ export const leanReadVector = ({ name, codec, value }: Vector): string => {
         `/-- \`${name}\` — read back through the term that wrote it -/`,
         `theorem ${leanIdent(name)}__reads :`,
         `    vcheck ${fuelForValue(read)}`,
-        `      ((denote (${leanTermOf(codec, name)})).p`,
+        `      ((denote (libTable noCallers) (${leanTermOf(codec, name)})).p`,
         `        (${leanAttrOf(attribute, name)}))`,
         `      (some (${leanValueOf(read, name)})) = .same := rfl`,
     ].join('\n')
@@ -1363,8 +1375,8 @@ export const readVectorIsUnstatable = (
 /**
  * The read vectors as a module, with what it could not state named in the header.
  *
- * The header imports `Calculus.Dynamo.Lang.Store` as well, because a `held` term spells
- * `numeralOfStoredText` and `textOfNumeral`, which the DynamoDB port defines, and `Vectors`
+ * The header imports `Calculus.Dynamo.Lang.Store` as well, because a vector spells
+ * `libTable` and `noCallers`, which the DynamoDB port defines, and `Vectors`
  * does not reach them. Lean auto-binds
  * an unknown lower-case name, so the missing import leaves `denote` stuck on a free variable and
  * each vector reports a failed definitional equality rather than an unknown identifier.
@@ -1457,13 +1469,13 @@ export const leanResolution = ({
         ? [
               ...head,
               `    check ${fuelFor(written as AttributeValue)}`,
-              `      ((denote (${term})).e`,
+              `      ((denote (libTable noCallers) (${term})).e`,
               `        (${leanValueOf(value, name)}))`,
               `      (some (${leanAttrOf(written as AttributeValue, name)})) = .same := rfl`,
           ].join('\n')
         : [
               ...head,
-              `    (denote (${term})).e`,
+              `    (denote (libTable noCallers) (${term})).e`,
               `      (${leanValueOf(value, name)}) = none := rfl`,
           ].join('\n')
 }
@@ -1498,13 +1510,13 @@ export const leanReadResolution = (one: ReadResolution): string => {
         ? [
               ...head,
               `    vcheck ${fuelForValue(read)}`,
-              `      ((denote (${leanTermOf(u, name)})).p`,
+              `      ((denote (libTable noCallers) (${leanTermOf(u, name)})).p`,
               `        (${leanAttrOf(attribute, name)}))`,
               `      (some (${leanValueOf(read, name)})) = .same := rfl`,
           ].join('\n')
         : [
               ...head,
-              `    (denote (${leanTermOf(u, name)})).p`,
+              `    (denote (libTable noCallers) (${leanTermOf(u, name)})).p`,
               `      (${leanAttrOf(attribute, name)}) = none := rfl`,
           ].join('\n')
 }

@@ -121,7 +121,7 @@ describe('terms', () => {
         expect(leanTermOf(erase(dynamoNumber))).toBe('Term.number')
         // `decimal` is an adapter over that native, and the model names its pair
         expect(leanTermOf(erase(decimal))).toBe(
-            '(Term.held (Term.number) (Term.string) numeralOfStoredText textOfNumeral)',
+            '(Term.held (Term.number) (Term.string) [(.decimalText, false)])',
         )
         expect(leanTermOf(erase(boolean))).toBe('Term.boolean')
         expect(leanTermOf(erase(binary))).toBe('Term.binary')
@@ -185,10 +185,10 @@ describe('terms', () => {
      */
     it('emits a decimal literal at the native base, under the named pair', () => {
         expect(leanTermOf(erase(decimal('-1.5')))).toBe(
-            '(Term.held (Term.literal GroundKind.number (WFNumeral.of "-1.5")) (Term.literal GroundKind.string "-1.5") numeralOfStoredText textOfNumeral)',
+            '(Term.held (Term.literal GroundKind.number (WFNumeral.of "-1.5")) (Term.literal GroundKind.string "-1.5") [(.decimalText, false)])',
         )
         expect(leanTermOf(erase(decimal('1', '2.5')))).toBe(
-            '(Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) numeralOfStoredText textOfNumeral)',
+            '(Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) [(.decimalText, false)])',
         )
     })
 
@@ -248,7 +248,7 @@ describe('terms', () => {
      */
     it('emits the set of a named adapter, and refuses the set of an unnamed one', () => {
         expect(leanTermOf(erase(decimal.set()))).toBe(
-            'Term.set ((Term.held (Term.number) (Term.string) numeralOfStoredText textOfNumeral))',
+            'Term.set ((Term.held (Term.number) (Term.string) [(.decimalText, false)]))',
         )
         const why = refusal(() => leanTermOf(erase(number.set()))).reason
         expect(why).toContain('numeralOfStoredText')
@@ -444,9 +444,7 @@ describe('terms', () => {
             left: textFlags,
             right: numberFlags,
         })
-        expect(verdict).toContain(
-            'theorem flags (q0 : Value → Bool) (f0 f1 f2 f3 : Value → Value) :',
-        )
+        expect(verdict).toContain('theorem flags (q0 : Value → Bool) :')
         expect(verdict.endsWith('= false := rfl')).toBe(true)
         expect(refusal(() => leanTermOf(textFlags)).reason).toContain(
             'Value → Bool',
@@ -631,7 +629,7 @@ describe('what cannot be emitted', () => {
             ]),
         )
         expect(leanTermOf(decimals)).toContain('Term.union')
-        expect(leanTermOf(decimals)).toContain('numeralOfStoredText')
+        expect(leanTermOf(decimals)).toContain('.decimalText')
 
         // and a string tag emits, which it always did
         expect(
@@ -709,7 +707,9 @@ describe('a whole vector', () => {
             value: 'hello',
         })
         expect(emitted).toContain('theorem scalar_string :')
-        expect(emitted).toContain('(denote (Term.string)).e')
+        expect(emitted).toContain(
+            '(denote (libTable noCallers) (Term.string)).e',
+        )
         expect(emitted).toContain('(Value.str "hello")')
         expect(emitted).toContain('(some (Attr.s "hello")) = .same')
     })
@@ -1667,7 +1667,7 @@ describe("the declaration guard, against the model's classifier", () => {
     it("accepts only pairs the model proves compatible, and refuses only pairs the model's decision refuses", () => {
         const emitted = separationPairs().map(leanSeparation)
         const accepted = emitted.filter((one) =>
-            one.includes('PairwiseCompat ['),
+            one.includes('PairwiseCompat (libTable κ) ['),
         )
         const refused = emitted.filter((one) =>
             /= false := (by decide|rfl)$/.test(one),
@@ -1724,8 +1724,8 @@ describe("the declaration guard, against the model's classifier", () => {
         expect(leanSeparationModule([])).toContain(
             'import Calculus.Dynamo.Analysis.Meet',
         )
-        // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
-        // without the import Lean auto-binds the name and every verdict fails to elaborate
+        // a verdict spells `libTable`, which only `Store` declares, and without the import
+        // Lean auto-binds the name and every verdict fails to elaborate
         expect(leanSeparationModule([])).toContain(
             'import Calculus.Dynamo.Lang.Store',
         )
@@ -1757,7 +1757,9 @@ describe("the declaration guard, against the model's classifier", () => {
             left: erase(string),
             right: erase(boolean),
         })
-        expect(accepted).toContain('PairwiseCompat [Term.string, Term.boolean]')
+        expect(accepted).toContain(
+            'PairwiseCompat (libTable κ) [Term.string, Term.boolean]',
+        )
         expect(accepted).toContain('pairwiseCompat_of_compatPair (by decide)')
         const refused = leanSeparation({
             name: 'refused',
@@ -1865,8 +1867,8 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
         }
         const module = leanReadVectorModule(sampleVectors.filter(emittable))
         expect(module).toContain('import Calculus.Bridge.Vectors')
-        // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
-        // without the import `denote` sticks on a free variable and no vector elaborates
+        // a vector spells `libTable noCallers`, which only `Store` declares, and without the import
+        // `denote` sticks on a free variable and no vector elaborates
         expect(module).toContain('import Calculus.Dynamo.Lang.Store')
         // the header states what it could not state, which for this corpus is nothing
         expect(module).toContain('every corpus codec round trips')

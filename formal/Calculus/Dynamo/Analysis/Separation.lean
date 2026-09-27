@@ -1,5 +1,7 @@
 import Calculus.Dynamo.Analysis.ExactA
 
+variable {α : Calculus.Table}
+
 /-!
 # Derivability, separation, and what the pair does not record
 
@@ -52,10 +54,10 @@ def vBoolAtA : Value := .map {"A"} (fun _ => .bool true)
 
 /-- `array` **is** the degenerate `tuple`: both builders write the same `list`, so the two
     rows are one term and the equation is `rfl`. -/
-theorem arrayRow (c : Term) (v : Value) : Adm (.array c) v = Adm (.tuple [] (some c)) v := rfl
+theorem arrayRow (c : Term) (v : Value) : Adm α (.array c) v = Adm α (.tuple [] (some c)) v := rfl
 
 /-- The same on the read side, and for the same reason. -/
-theorem arrayRowA (c : Term) (a : Attr) : AdmA (.array c) a = AdmA (.tuple [] (some c)) a := rfl
+theorem arrayRowA (c : Term) (a : Attr) : AdmA α (.array c) a = AdmA α (.tuple [] (some c)) a := rfl
 
 /-! ### `union` and domain equality
 
@@ -66,7 +68,7 @@ way, and `arrayRow` above is that equation. -/
 
 /-- `refine t ⊤` and `t` admit the same values at every point: the row is `Adm t v && true`,
     so the domains are equal with no hypothesis. -/
-theorem refine_top_row (t : Term) : Adm (.refine t (.closure qTop)) = Adm t := by
+theorem refine_top_row (t : Term) : Adm α (.refine t (.closure qTop)) = Adm α t := by
   funext v; simp [Adm_rows, Pred.eval, qTop]
 
 /-! ## Separation on the pair
@@ -83,22 +85,24 @@ included, is admitted by attempt, which is `Adm`/`AdmA` exactly. `admitV_le_Adm`
 /-! A dissection is a certified `union`. `AdmAny_iff` states that a union admits a value exactly
 when one of its options does. -/
 
+variable (α) in
 /-- **Separation on the joint predicate, value side — one clause.** §5's ~~SepV~~ offers a
     choice between disjoint kinds and disjoint admissible sets; `Adm` carries the kind gate
     in its own rows, so the first disjunct is subsumed (~~Adm_kind~~) and the definition
     collapses. -/
-def SepJV (x y : Term) : Prop := ∀ v, Adm x v = true → Adm y v = false
+def SepJV (x y : Term) : Prop := ∀ v, Adm α x v = true → Adm α y v = false
 
+variable (α) in
 /-- **…and attribute side, also one clause.** The former member disjunct described an
     alternate reader inside `Term`. The carrier split made that state unrepresentable. -/
-def SepJA (x y : Term) : Prop := ∀ a, AdmA x a = true → AdmA y a = false
+def SepJA (x y : Term) : Prop := ∀ a, AdmA α x a = true → AdmA α y a = false
 
 /-- A read channel that fires at `N` and nowhere else. -/
 def rNum : Attr → Option Value := fun a => match a with | .n _ => some (.str "x") | _ => none
 
 /-- An alternate reader may read outside the member of its current term. -/
 theorem extendRead_reads_n :
-    ((denote .string).extendRead rNum).p (.n (.of "1")) = some (.str "x") := rfl
+    ((denote α .string).extendRead rNum).p (.n (.of "1")) = some (.str "x") := rfl
 
 /-! ## What the pair does not record, and what to use instead
 
@@ -110,7 +114,7 @@ questions are different. -/
 
 /-- **How a term is written is not a function of what it admits.** Two terms, one a
     refinement of the other, agreeing on the joint predicate at every value. -/
-theorem Adm_string_eq_refine : Adm .string = Adm (.refine .string (.closure qTop)) :=
+theorem Adm_string_eq_refine : Adm α .string = Adm α (.refine .string (.closure qTop)) :=
   (refine_top_row .string).symm
 
 
@@ -122,21 +126,21 @@ theorem Adm_string_eq_refine : Adm .string = Adm (.refine .string (.closure qTop
     straight to the denotation: where `x` writes, `y` refuses. What a discharger consumes is
     disjointness of the *options* `select` builds, and every option, `object` included, is
     admitted by attempting its codec, so this is the same fact the discharger needs. -/
-theorem admitV_of_sepJV {x y : Term} (h : SepJV x y) (v : Value) (a : Attr)
-    (hx : (denote x).e v = some a) : ((denote y).e v).isSome = false := by
-  have hAx : Adm x v = true := Adm_sound x hx
-  have hAy : Adm y v = false := h v hAx
-  cases hy : (denote y).e v with
+theorem admitV_of_sepJV {x y : Term} (h : SepJV α x y) (v : Value) (a : Attr)
+    (hx : (denote α x).e v = some a) : ((denote α y).e v).isSome = false := by
+  have hAx : Adm α x v = true := Adm_sound (α := α) x hx
+  have hAy : Adm α y v = false := h v hAx
+  cases hy : (denote α y).e v with
   | none => rfl
   | some b => exact absurd (Adm_sound y hy) (by simp [hAy])
 
 /-- …and on the attribute side. -/
-theorem admitA_of_sepJA {x y : Term} (h : SepJA x y)
-    (a : Attr) (v : Value) (hx : (denote x).p a = some v) :
-    ((denote y).p a).isSome = false := by
-  have hAx : AdmA x a = true := AdmA_sound x hx
-  have hAy : AdmA y a = false := h a hAx
-  cases hy : (denote y).p a with
+theorem admitA_of_sepJA {x y : Term} (h : SepJA α x y)
+    (a : Attr) (v : Value) (hx : (denote α x).p a = some v) :
+    ((denote α y).p a).isSome = false := by
+  have hAx : AdmA α x a = true := AdmA_sound (α := α) x hx
+  have hAy : AdmA α y a = false := h a hAx
+  cases hy : (denote α y).p a with
   | none => rfl
   | some w => exact absurd (AdmA_sound y hy) (by simp [hAy])
 
@@ -148,12 +152,12 @@ every constructor: `admitV_le_Adm`/`admitA_le_AdmA` below hold unconditionally. 
 /-- **The containment the discharger needs, at every constructor.** Admission is attempted
     encoding, whatever the term, and exactness identifies it with the row. -/
 theorem admitV_le_Adm (t : Term) {v : Value}
-    (h : ((denote t).e v).isSome = true) : Adm t v = true :=
+    (h : ((denote α t).e v).isSome = true) : Adm α t v = true :=
   (Adm_exact t v).mpr h
 
 /-- …and its twin on the readable side. -/
 theorem admitA_le_AdmA (t : Term) {a : Attr}
-    (h : ((denote t).p a).isSome = true) : AdmA t a = true :=
+    (h : ((denote α t).p a).isSome = true) : AdmA α t a = true :=
   (AdmA_exact t a).mpr h
 
 /-! ### `Decides`, and why no table over the syntax decides it
@@ -172,28 +176,29 @@ therefore evidence.
 Whether an arbitrary `q : Value → Bool` narrows anything is not a syntactic question, so the
 notion is stated on the denotation. -/
 
+variable (α) in
 /-- **What "decides its own membership" actually says.** Two values of the *same kind*, one
     written and one refused: the kind does not settle admission, so an admission is
     evidence. This is the content §5 gestures at when it says a term decides its own
     membership, stated on the denotation. -/
 def Decides (t : Term) : Prop :=
-  ∃ v w, ((denote t).e v).isSome = true ∧ v.kind = w.kind ∧ ((denote t).e w).isSome = false
+  ∃ v w, ((denote α t).e v).isSome = true ∧ v.kind = w.kind ∧ ((denote α t).e w).isSome = false
 
 /-- A string `literal` decides, as §5 says. -/
-theorem decides_literalS : Decides (.literal .string "A") :=
+theorem decides_literalS : Decides α (.literal .string "A") :=
   ⟨.str "A", .str "B",
    by simp [denote_rows, literalCodec, baseCodec, Alg.Codec.restrict, inL, stringCodec],
    rfl,
    by simp [denote_rows, literalCodec, baseCodec, Alg.Codec.restrict, inL, stringCodec]⟩
 
 /-- `string` does not, as §5 also says. -/
-theorem not_decides_string : ¬ Decides .string := by
+theorem not_decides_string : ¬ Decides α .string := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
   cases v <;> cases w <;> simp_all [stringCodec, Value.kind]
 
 
-theorem not_decides_refine_top : ¬ Decides (.refine .string (.closure qTop)) := by
+theorem not_decides_refine_top : ¬ Decides α (.refine .string (.closure qTop)) := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
   cases v <;> cases w <;>
@@ -203,7 +208,7 @@ theorem not_decides_refine_top : ¬ Decides (.refine .string (.closure qTop)) :=
     populated one: two `map`s differing in admission, so a row that answers `false` at every
     `object` is wrong. -/
 theorem decides_object :
-    Decides (.object (.mk {"k"} (fun _ => .req .string) none)) := by
+    Decides α (.object (.mk {"k"} (fun _ => .req .string) none)) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)), ?_, rfl, ?_⟩
   · simp +contextual [denote_rows,
@@ -241,21 +246,26 @@ itself. -/
     would. -/
 def fSplit : Value → Value := fun v => match v with | .str "A" => .str "A" | _ => .bool true
 
+/-- The table that gives each generator the pair `fSplit`, `id`. -/
+def splitTable : Table := fun _ => (fSplit, id)
+
 /-- **The dual gap.** `held(string, string, fSplit, _)` writes `"A"` and refuses `"B"`: two values
     of one kind, differing in admission, so it decides. -/
-theorem decides_held : Decides (.held .string .string fSplit (fun v => v)) := by
+theorem decides_held : Decides splitTable (.held .string .string [(.caller 0, false)]) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
-  · simp [denote_rows, Alg.Codec.through, Alg.Codec.restrict, stringCodec, fSplit]
-  · simp [denote_rows, Alg.Codec.through, Alg.Codec.restrict, stringCodec, fSplit]
+  · simp [denote_rows, Alg.Table.word, Alg.Table.letter, splitTable, Alg.Codec.through,
+      Alg.Codec.restrict, stringCodec, fSplit]
+  · simp [denote_rows, Alg.Table.word, Alg.Table.letter, splitTable, Alg.Codec.through,
+      Alg.Codec.restrict, stringCodec, fSplit]
 
 
 /-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/
 theorem Adm_refine_adapt (t : Term) (p : Pred) (v : Value) :
-    Adm (.refine t p) v = ((partialId p.eval v).elim false (Adm t)) := by
+    Adm α (.refine t p) v = ((partialId p.eval v).elim false (Adm α t)) := by
   cases hq : p.eval v <;> simp [Adm_rows, partialId, hq]
 
-theorem Adm_held_adapt (t P : Term) (f g : Value → Value) (v : Value) :
-    Adm (.held t P f g) v = (((some (f v)).elim false (Adm t)) && Adm P v) := by
+theorem Adm_held_adapt (t P : Term) (k : Word) (v : Value) :
+    Adm α (.held t P k) v = (((some ((α.word k).1 v)).elim false (Adm α t)) && Adm α P v) := by
   simp [Adm_rows]
 
 /-! ### Adapters and alternatives, and why `alternate reader` is not an adapter
@@ -289,35 +299,35 @@ theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
 
     The literal sits at the element: `set(literal string "A")`. -/
 theorem sepJV_set_literals :
-    SepJV (.set (.literal .string "A")) (.set (.literal .string "B")) := by
+    SepJV α (.set (.literal .string "A")) (.set (.literal .string "B")) := by
   -- a string literal writes one string and no other value
-  have hlit : ∀ (c : String) (w : Value), ((denote (.literal .string c)).e w).isSome = true →
+  have hlit : ∀ (c : String) (w : Value), ((denote α (.literal .string c)).e w).isSome = true →
       w = .str c := fun c w h => by
-    have := (Adm_exact (.literal .string c) w).mpr h
+    have := (Adm_exact (α := α) (.literal .string c) w).mpr h
     cases w <;> simp_all [Adm_rows, AdmLit, inL]
   intro v hv
   cases v
   case strSet S =>
     obtain ⟨x, hx⟩ := S.2
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
-    have hA := hlit "A" _ (encSet_elem (c := denote (.literal .string "A")) ha x hx)
-    cases hb : Adm (.set (.literal .string "B")) (.strSet S) with
+    have hA := hlit "A" _ (encSet_elem (c := denote α (.literal .string "A")) ha x hx)
+    cases hb : Adm α (.set (.literal .string "B")) (.strSet S) with
     | false => rfl
     | true =>
       obtain ⟨b, hb'⟩ := Option.isSome_iff_exists.mp hb
-      have hB := hlit "B" _ (encSet_elem (c := denote (.literal .string "B")) hb' x hx)
+      have hB := hlit "B" _ (encSet_elem (c := denote α (.literal .string "B")) hb' x hx)
       exact absurd (hA.symm.trans hB) (by simp)
   -- the other two wire families are refused element by element, and `℘⁺fin` supplies the
   -- element
   case numSet S =>
     obtain ⟨x, hx⟩ := S.2
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
-    exact absurd (hlit "A" _ (encSet_elem (c := denote (.literal .string "A")) ha x hx))
+    exact absurd (hlit "A" _ (encSet_elem (c := denote α (.literal .string "A")) ha x hx))
       (by simp)
   case binSet S =>
     obtain ⟨x, hx⟩ := S.2
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
-    exact absurd (hlit "A" _ (encSet_elem (c := denote (.literal .string "A")) ha x hx))
+    exact absurd (hlit "A" _ (encSet_elem (c := denote α (.literal .string "A")) ha x hx))
       (by simp)
   all_goals simp [Adm_rows, setCodec] at hv
 
@@ -325,7 +335,7 @@ theorem sepJV_set_literals :
     separate, because both options admit `[]`. This is §5's empty-container argument in its
     correct scope — it is a fact about `array`, `record` and `object`, not about `set`. -/
 theorem not_sepJV_array_literals :
-    ¬ SepJV (.array (.literal .string "A")) (.array (.literal .string "B")) := by
+    ¬ SepJV α (.array (.literal .string "A")) (.array (.literal .string "B")) := by
   intro h
   exact absurd (h (.arr []) (Adm_array_nil _)) (by rw [Adm_array_nil]; exact fun hc => nomatch hc)
 

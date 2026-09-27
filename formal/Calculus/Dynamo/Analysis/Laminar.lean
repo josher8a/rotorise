@@ -1,6 +1,8 @@
 import Calculus.Dynamo.Lang.HeldSet
 import Calculus.Dynamo.Analysis.ExactV
 
+variable {α : Calculus.Table}
+
 /-!
 # (B): the held set is the admission
 
@@ -16,18 +18,19 @@ open Alg (ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Term.depth)
 /-! ## The held set is the admission -/
 
 
+variable (α) in
 /-- A term whose every held set is its admission. The induction hypothesis of `typed_T_adm`. -/
-def AdmIff (t : Term) : Prop := ∀ T μ, Typed t T μ → ∀ v, T v ↔ Adm t v = true
+def AdmIff (t : Term) : Prop := ∀ T μ, Typed α t T μ → ∀ v, T v ↔ Adm α t v = true
 
 /-- The rows of a term list are as many as the terms. -/
-theorem AdmList_length (ts : List Term) : (AdmList ts).length = ts.length := by
+theorem AdmList_length (ts : List Term) : (AdmList α ts).length = ts.length := by
   induction ts with
   | nil => rfl
   | cons t ts ihx => simp only [Adm_rows, List.length_cons, ihx]
 
 /-- A spread holds a list exactly where the spread's row admits each element. -/
-theorem htuple_nil_some_iff {t : Term} {T : Held} {μ} (hty : Typed t T μ) (ih : AdmIff t) :
-    ∀ vs, HTuple [] (some T) vs ↔ alignP [] (some (Adm t)) vs = true
+theorem htuple_nil_some_iff {t : Term} {T : Held} {μ} (hty : Typed α t T μ) (ih : AdmIff α t) :
+    ∀ vs, HTuple [] (some T) vs ↔ alignP [] (some (Adm α t)) vs = true
   | [] => by simp [HTuple, alignP]
   | x :: xs => by
       have := htuple_nil_some_iff hty ih xs
@@ -35,10 +38,10 @@ theorem htuple_nil_some_iff {t : Term} {T : Held} {μ} (hty : Typed t T μ) (ih 
       rw [ih _ _ hty x, this]
 
 /-- `HTuple` is `alignP` at terms whose held sets are their admissions. -/
-theorem htuple_iff {tail : Option Term} {Tt} (hopt : TypedOpt tail Tt)
-    (iht : ∀ t' ∈ tail, AdmIff t') :
-    ∀ {ts Ts}, TypedList ts Ts → (∀ t' ∈ ts, AdmIff t') →
-      ∀ vs, HTuple Ts Tt vs ↔ alignP (AdmList ts) (AdmOptT tail) vs = true
+theorem htuple_iff {tail : Option Term} {Tt} (hopt : TypedOpt α tail Tt)
+    (iht : ∀ t' ∈ tail, AdmIff α t') :
+    ∀ {ts Ts}, TypedList α ts Ts → (∀ t' ∈ ts, AdmIff α t') →
+      ∀ vs, HTuple Ts Tt vs ↔ alignP (AdmList α ts) (AdmOptT α tail) vs = true
   | _, _, .nil, _, vs => by
       cases hopt with
       | none => cases vs <;> simp [HTuple, alignP, Adm_rows]
@@ -50,8 +53,8 @@ theorem htuple_iff {tail : Option Term} {Tt} (hopt : TypedOpt tail Tt)
         htuple_iff hopt iht hs (fun t' h => ih t' (List.mem_cons_of_mem _ h)) vs]
 
 /-- The suffix's held set is `zipP` at terms whose held sets are their admissions. -/
-theorem zip_iff : ∀ {ts Ts}, TypedList ts Ts → (∀ t' ∈ ts, AdmIff t') →
-    ∀ back, List.Forall₂ (fun (T : Held) v => T v) Ts back ↔ zipP (AdmList ts) back = true
+theorem zip_iff : ∀ {ts Ts}, TypedList α ts Ts → (∀ t' ∈ ts, AdmIff α t') →
+    ∀ back, List.Forall₂ (fun (T : Held) v => T v) Ts back ↔ zipP (AdmList α ts) back = true
   | _, _, .nil, _, [] => by simp [Adm_rows, zipP]
   | _, _, .nil, _, _ :: _ => by simp [Adm_rows, zipP]
   | _, _, .cons _ _, _, [] => by simp [Adm_rows, zipP]
@@ -61,17 +64,17 @@ theorem zip_iff : ∀ {ts Ts}, TypedList ts Ts → (∀ t' ∈ ts, AdmIff t') �
         zip_iff hs (fun t' h => ih t' (List.mem_cons_of_mem _ h)) vs]
 
 /-- `HTupleL` is `alignPL` at terms whose held sets are their admissions. -/
-theorem htupleL_iff {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre)
-    (hs : TypedOpt sp Tsp) (hf : TypedList suf Tsuf)
-    (ihp : ∀ t' ∈ pre, AdmIff t') (ihs : ∀ t' ∈ sp, AdmIff t') (ihf : ∀ t' ∈ suf, AdmIff t')
+theorem htupleL_iff {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre)
+    (hs : TypedOpt α sp Tsp) (hf : TypedList α suf Tsuf)
+    (ihp : ∀ t' ∈ pre, AdmIff α t') (ihs : ∀ t' ∈ sp, AdmIff α t') (ihf : ∀ t' ∈ suf, AdmIff α t')
     (vs : List Value) :
-    HTupleL Tpre Tsp Tsuf vs ↔ alignPL (AdmList pre) (AdmOptT sp) (AdmList suf) vs = true := by
-  have hlen : (AdmList suf).length = Tsuf.length := by
+    HTupleL Tpre Tsp Tsuf vs ↔ alignPL (AdmList α pre) (AdmOptT α sp) (AdmList α suf) vs = true := by
+  have hlen : (AdmList α suf).length = Tsuf.length := by
     rw [AdmList_length, TypedList.length_eq hf]
   constructor
   · rintro ⟨front, back, rfl, hback, hfront⟩
     have hb : back.length = Tsuf.length := hback.length_eq.symm
-    have hn : (front ++ back).length - (AdmList suf).length = front.length := by
+    have hn : (front ++ back).length - (AdmList α suf).length = front.length := by
       rw [hlen, List.length_append, hb]; omega
     simp only [alignPL, hn, List.take_left', List.drop_left', Bool.and_eq_true]
     exact ⟨(htuple_iff hs ihs hp ihp front).mp hfront, (zip_iff hf ihf back).mp hback⟩
@@ -81,9 +84,9 @@ theorem htupleL_iff {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre)
       (htuple_iff hs ihs hp ihp _).mpr h.1⟩
 
 /-- A typed slot's mark is the slot's, and its held set is its admission. -/
-theorem typedField_adm {s : ObjectSlot} {T b μ} (h : TypedField s T b μ)
-    (ihr : ∀ t', s = .req t' → AdmIff t') (iho : ∀ t', s = .optional t' → AdmIff t') :
-    b = s.isReq ∧ ∀ v, T v ↔ AdmField s v = true := by
+theorem typedField_adm {s : ObjectSlot} {T b μ} (h : TypedField α s T b μ)
+    (ihr : ∀ t', s = .req t' → AdmIff α t') (iho : ∀ t', s = .optional t' → AdmIff α t') :
+    b = s.isReq ∧ ∀ v, T v ↔ AdmField α s v = true := by
   cases h with
   | req hty => exact ⟨rfl, fun v => ihr _ rfl _ _ hty v⟩
   | optional hty => exact ⟨rfl, fun v => iho _ rfl _ _ hty v⟩
@@ -92,10 +95,10 @@ theorem typedField_adm {s : ObjectSlot} {T b μ} (h : TypedField s T b μ)
 theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
     {wild : Option Term} {bind : {k // k ∈ fields} → Bool × Held} {R : Option Held}
     {μs : {k // k ∈ fields} → Option Member}
-    (hfields : ∀ k, TypedField (ff k) (bind k).2 (bind k).1 (μs k))
-    (ihr : ∀ k t', ff k = .req t' → AdmIff t') (iho : ∀ k t', ff k = .optional t' → AdmIff t')
-    (hrest : TypedWild wild R) (ihw : ∀ t', wild = some t' → AdmIff t') (v : Value) :
-    HObject fields bind R v ↔ AdmBody (.mk fields ff wild) v = true := by
+    (hfields : ∀ k, TypedField α (ff k) (bind k).2 (bind k).1 (μs k))
+    (ihr : ∀ k t', ff k = .req t' → AdmIff α t') (iho : ∀ k t', ff k = .optional t' → AdmIff α t')
+    (hrest : TypedWild α wild R) (ihw : ∀ t', wild = some t' → AdmIff α t') (v : Value) :
+    HObject fields bind R v ↔ AdmBody α (.mk fields ff wild) v = true := by
   have hF := fun k => typedField_adm (hfields k) (ihr k) (iho k)
   cases v with
   | map keys f =>
@@ -105,7 +108,7 @@ theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectS
       forall_congr' fun k => by rw [(hF k).1]
     have hent : ∀ k : {k // k ∈ keys},
         (if h : k.1 ∈ fields then (bind ⟨k.1, h⟩).2 (f k) else ∃ T, R = some T ∧ T (f k)) ↔
-        (entryP ⟨fields, fun k => AdmField (ff k)⟩ (AdmWild wild) k.1).any (· (f k)) = true := by
+        (entryP ⟨fields, fun k => AdmField α (ff k)⟩ (AdmWild α wild) k.1).any (· (f k)) = true := by
       intro k
       rcases Decidable.em (k.1 ∈ fields) with hk | hk
       · rw [dif_pos hk]
@@ -131,21 +134,21 @@ theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectS
     writes every element: (R) makes the element map injective, and the member law puts every
     element in one wire family. Without the obligations the row is narrower than `HSet`, because an
     element can collide two values or mix two members. -/
-theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed t T μ) (hob : Obligations (.set t))
-    (ih : ∀ w, T w ↔ Adm t w = true) (v : Value) : HSet T v ↔ Adm (.set t) v = true := by
+theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed α t T μ) (hob : Obligations α (.set t))
+    (ih : ∀ w, T w ↔ Adm α t w = true) (v : Value) : HSet T v ↔ Adm α (.set t) v = true := by
   obtain ⟨hob', hse⟩ := Obligations.set hob
-  have hl := (soundness hty hob').core
-  cases hμ : (denote t).μ with
+  have hl := (soundness (α := α) hty hob').core
+  cases hμ : (denote α t).μ with
   | none => simp [SetElem, hμ] at hse
   | some μ₀ =>
   cases hsm : setMember μ₀ with
   | none => simp [SetElem, hμ, hsm] at hse
   | some μS =>
-  have hw : ∀ x a, (denote t).e x = some a → a.member = μ₀ := fun _ _ h => hl.writes hμ h
-  have hin : ∀ w, T w ↔ ((denote t).e w).isSome = true := fun w => (ih w).trans (Adm_exact t w)
+  have hw : ∀ x a, (denote α t).e x = some a → a.member = μ₀ := fun _ _ h => hl.writes hμ h
+  have hin : ∀ w, T w ↔ ((denote α t).e w).isSome = true := fun w => (ih w).trans (Adm_exact t w)
   cases v with
   | strSet S =>
-    show HSet T (.strSet S) ↔ (encSet (denote t) Value.str S).isSome = true
+    show HSet T (.strSet S) ↔ (encSet (denote α t) Value.str S).isSome = true
     simp only [HSet, Value.strSet.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
       or_false]
     exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Value.str.inj h)
@@ -154,7 +157,7 @@ theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed t T μ) (hob : Obligati
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
         exact (hin _).mpr (encSet_elem ha x hx)⟩
   | numSet S =>
-    show HSet T (.numSet S) ↔ (encSet (denote t) Value.num S).isSome = true
+    show HSet T (.numSet S) ↔ (encSet (denote α t) Value.num S).isSome = true
     simp only [HSet, Value.numSet.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
       false_or, or_false]
     exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Value.num.inj h)
@@ -163,7 +166,7 @@ theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed t T μ) (hob : Obligati
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
         exact (hin _).mpr (encSet_elem ha x hx)⟩
   | binSet S =>
-    show HSet T (.binSet S) ↔ (encSet (denote t) Value.bin S).isSome = true
+    show HSet T (.binSet S) ↔ (encSet (denote α t) Value.bin S).isSome = true
     simp only [HSet, Value.binSet.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
       false_or]
     exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Value.bin.inj h)
@@ -175,15 +178,15 @@ theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed t T μ) (hob : Obligati
 
 /-- `HOpaque` is `opaque`'s admission: `opaque`'s held set is its write domain, and
     `opaq_T_identity` names that set. -/
-theorem hopaque_adm (v : Value) : HOpaque v ↔ Adm .opaq v = true :=
+theorem hopaque_adm (v : Value) : HOpaque v ↔ Adm α .opaq v = true :=
   (opaq_T_identity v).symm
 
 /-- A union's held set is the disjunction row of `Adm`. -/
-theorem hunion_iff : ∀ {opts Ts μs}, TypedListμ opts Ts μs → (∀ t ∈ opts, AdmIff t) →
-    ∀ v, HUnion Ts v ↔ AdmAny opts v = true
+theorem hunion_iff : ∀ {opts Ts μs}, TypedListμ α opts Ts μs → (∀ t ∈ opts, AdmIff α t) →
+    ∀ v, HUnion Ts v ↔ AdmAny α opts v = true
   -- by hand: `simp` closes `∃ T ∈ [], T v` through the classical `Nonempty` instance of `Held`
   | _, _, _, .nil, _, v => ⟨fun ⟨_, h, _⟩ => absurd h List.not_mem_nil, fun h => nomatch h⟩
-  | _, _, _, @TypedListμ.cons _ _ t ts _ _ _ _ hty hs, ih, v => by
+  | _, _, _, @TypedListμ.cons _ _ _ t ts _ _ _ _ hty hs, ih, v => by
       have hi := hunion_iff hs (fun t' h => ih t' (List.mem_cons_of_mem _ h)) v
       have hT := ih _ List.mem_cons_self _ _ hty v
       simp only [HUnion, List.mem_cons, exists_eq_or_imp, AdmAny_cons, Bool.or_eq_true] at hi ⊢
@@ -194,7 +197,7 @@ set_option linter.unreachableTactic false in
 /-- **(B): the held set is the admission, at every rule.** A derivable term whose obligations
     hold holds exactly the values it admits, so `T = dom(e)` by `Adm_exact`. `set` is the rule
     that reads the obligations (`hset_iff`); every other rule passes them to its subterms. -/
-theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → Obligations t → ∀ v, T v ↔ Adm t v = true
+theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t → ∀ v, T v ↔ Adm α t v = true
   | t, T, μ, h, hob, v => by
     cases h with
     | base k => cases k <;> cases v <;> simp [Adm_rows, inBase, stringCodec, numberCodec,
@@ -215,11 +218,11 @@ theorem typed_T_adm : ∀ {t T μ}, Typed t T μ → Obligations t → ∀ v, T 
           (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.1 t' ht') w)
           (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.2 t' ht') w) vs
       | _ => simp [HList, Adm_rows]
-    | @held t' I' μ' P f g h' =>
-      exact (and_congr (typed_T_adm h' hob.1 (f v)) (Adm_exact P v).symm).trans
+    | @held t' I' μ' P k h' =>
+      exact (and_congr (typed_T_adm h' hob.1 ((α.word k).1 v)) (Adm_exact P v).symm).trans
         Bool.and_eq_true_iff.symm
     | @refine t' T' μ' q h' =>
-      show (T' v ∧ q.eval v = true) ↔ (Adm t' v && q.eval v) = true
+      show (T' v ∧ q.eval v = true) ↔ (Adm α t' v && q.eval v) = true
       rw [Bool.and_eq_true, typed_T_adm h' hob v]
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff wild =>

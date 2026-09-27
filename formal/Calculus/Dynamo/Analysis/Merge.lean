@@ -1,5 +1,7 @@
 import Calculus.Dynamo.Lang.Typing
 
+variable {α : Calculus.Table}
+
 /-!
 # The merge of two object bodies
 
@@ -66,9 +68,9 @@ theorem typed_merge {a b : Body} (h : Disjoint a.fields b.fields)
     (ha : a.wild = none) (hb : b.wild = none)
     {binda : {k // k ∈ a.fields} → Bool × Held} {μa : {k // k ∈ a.fields} → Option Member}
     {bindb : {k // k ∈ b.fields} → Bool × Held} {μb : {k // k ∈ b.fields} → Option Member}
-    (hfa : ∀ k, TypedField (a.at k) (binda k).2 (binda k).1 (μa k))
-    (hfb : ∀ k, TypedField (b.at k) (bindb k).2 (bindb k).1 (μb k)) :
-    Typed (.object (Body.merge a b h ha hb))
+    (hfa : ∀ k, TypedField α (a.at k) (binda k).2 (binda k).1 (μa k))
+    (hfb : ∀ k, TypedField α (b.at k) (bindb k).2 (bindb k).1 (μb k)) :
+    Typed α (.object (Body.merge a b h ha hb))
       (HObject (Body.merge a b h ha hb).fields
         (bindMerge a.fields b.fields h binda bindb) none) (some .M) := by
   refine Typed.object (μs := bindMerge a.fields b.fields h μa μb) ?_ ?_
