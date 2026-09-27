@@ -22,10 +22,11 @@ two lawful closed options through the decision.
 namespace Calculus
 
 /-- **The DynamoDB oracles**: the caller-side views decide write orthogonality, the stored-side
-    views decide read orthogonality, and no adapter pair is known to be another. -/
+    views decide read orthogonality, and two adapter words are one adapter where they are one
+    word. -/
 def dynOracle : Alg.CompatOracle dynSyn :=
   ⟨fun x y => Alg.Term.disjoint pair0 (writeView x) (writeView y),
-   fun x y => Alg.Term.disjoint pair0 (readView x) (readView y), fun _ _ => false⟩
+   fun x y => Alg.Term.disjoint pair0 (readView x) (readView y), fun k k' => decide (k = k')⟩
 
 /-- **The DynamoDB oracles are sound**: each view admits what its term admits, so disjoint views
     give apart domains. -/
@@ -38,79 +39,12 @@ theorem dynOracle_sound : Alg.OracleSound dynOracle where
     rw [← Alg.AdmA_eq_isSome, ← Alg.AdmA_eq_isSome]
     exact Alg.apart_of_imp (readLe_of x a) (Alg.apart_of_imp' (readLe_of y a)
       (Alg.disjoint_soundA pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) a))
-  same _ _ h := nomatch h
+  same _ _ h := of_decide_eq_true h
 
 /-- **The decision discharges the union's obligation** of two lawful closed options. -/
 theorem pairwiseCompat_of_compatPair {x y : Term} (h : Alg.compatPair dynOracle x y = true)
     (hl : ∀ t ∈ [x, y], Lawful (denote α t)) : PairwiseCompat α [x, y] :=
   Alg.pairwiseCompat_of_compatPair dynOracle_sound h hl
-
-/-- **A `held` is monotone in both of its terms**: the same adapter over a smaller stored side and
-    a smaller held side is a smaller codec. -/
-theorem sub_held {i i' P P' : Term} {k : Word} (h : Sub (denote α i) (denote α i'))
-    (hP : Sub (denote α P) (denote α P')) :
-    Sub (denote α (.held i P k)) (denote α (.held i' P' k)) :=
-  ⟨fun _ _ he =>
-    let ⟨hq, he'⟩ := restrict_e.mp he
-    let ⟨a, ha⟩ := Option.isSome_iff_exists.mp hq
-    restrict_e.mpr ⟨Option.isSome_iff_exists.mpr ⟨a, hP.1 _ _ ha⟩, h.1 _ _ he'⟩,
-   fun _ _ hp =>
-    let ⟨w, hw, hv⟩ := through_p.mp (restrict_p.mp hp).1
-    let ⟨a, ha⟩ := Option.isSome_iff_exists.mp (restrict_p.mp hp).2
-    restrict_p.mpr ⟨through_p.mpr ⟨w, h.2 _ _ hw, hv⟩,
-      Option.isSome_iff_exists.mpr ⟨a, hP.1 _ _ ha⟩⟩⟩
-
-/-- **A union of options below one codec is below it**, because the join answers through one
-    option. -/
-theorem sub_union_of {os : List Term} {u : Codec} (h : ∀ o ∈ os, Sub (denote α o) u) :
-    Sub (denote α (.union os)) u :=
-  have hs : ∀ o ∈ denoteList α os, Sub o u := fun _ ho =>
-    let ⟨t, ht, hto⟩ := List.mem_map.mp ((denoteList_eq os) ▸ ho)
-    hto ▸ h t ht
-  ⟨fun _ _ he => let ⟨o, ho, he⟩ := select_some he; (hs o ho).1 _ _ he,
-   fun _ _ hp => let ⟨o, ho, hp⟩ := select_some hp; (hs o ho).2 _ _ hp⟩
-
-/-- **A codec below one option of a held-free union is below the union.** Each option is below
-    `Ω`, so the option that the union writes or reads through gives the answer of `o`. -/
-theorem sub_union_mem {x o : Term} {os : List Term} (h : Sub (denote α x) (denote α o)) (ho : o ∈ os)
-    (hf : HFL os) : Sub (denote α x) (denote α (.union os)) :=
-  have hΩ : ∀ c ∈ denoteList α os, Sub c Ω := (denoteList_eq (α := α) os) ▸
-    List.forall_mem_map.mpr fun t ht => sub_denote t (HFL_mem hf t ht)
-  have hm : denote α o ∈ denoteList α os := (denoteList_eq (α := α) os) ▸ List.mem_map_of_mem ho
-  ⟨fun _ _ he =>
-    let hoe := h.1 _ _ he
-    let ⟨o', hf'⟩ := find?_attempt_V hm hoe
-    let ⟨_, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find?_V hf')
-    altCodec_e.mpr ⟨o', hf', ((hΩ _ hm).1 _ _ hoe).symm.trans
-      ((hΩ _ (List.mem_of_find?_eq_some hf')).1 _ _ hb) ▸ hb⟩,
-   fun _ _ hp =>
-    let hop := h.2 _ _ hp
-    let ⟨o', hf'⟩ := find?_attempt_A hm hop
-    let ⟨_, hw⟩ := Option.isSome_iff_exists.mp (acts_of_find?_A hf')
-    altCodec_p.mpr ⟨o', hf', ((hΩ _ hm).2 _ _ hop).symm.trans
-      ((hΩ _ (List.mem_of_find?_eq_some hf')).2 _ _ hw) ▸ hw⟩⟩
-
-/-- **A literal is below its base.** -/
-theorem sub_literal_base (k : GroundKind) (x : k.Carrier) :
-    Sub (denote α (.literal k x)) (baseCodec k) :=
-  ⟨fun _ _ h => (restrict_e.mp h).2, fun _ _ h => (restrict_p.mp h).1⟩
-
-/-- **Two lawful options, one below the other, meet their obligation** (Lawson, Lemma 4.8): the
-    wider option is the common bound, and it reads canonically because it is lawful. -/
-theorem pairwiseCompat_of_sub {x y : Term} (h : Sub (denote α x) (denote α y))
-    (hl : ∀ t ∈ [x, y], Lawful (denote α t)) : PairwiseCompat α [x, y] :=
-  have hb : ∀ s ∈ [x, y], Sub (denote α s) (denote α y) :=
-    forall_mem_pair h ⟨fun _ _ h => h, fun _ _ h => h⟩
-  fun s hs t ht => compat_of_common_bound' (hb s hs) (hb t ht)
-    (fun _ _ hp => (hl y (List.mem_cons_of_mem x List.mem_cons_self)).canon hp) (hl t ht)
-
-/-- **…and with the wider option first.** -/
-theorem pairwiseCompat_of_sub' {x y : Term} (h : Sub (denote α y) (denote α x))
-    (hl : ∀ t ∈ [x, y], Lawful (denote α t)) : PairwiseCompat α [x, y] :=
-  have hb : ∀ s ∈ [x, y], Sub (denote α s) (denote α x) :=
-    forall_mem_pair ⟨fun _ _ h => h, fun _ _ h => h⟩ h
-  fun s hs t ht => compat_of_common_bound' (hb s hs) (hb t ht)
-    (fun _ _ hp => (hl x List.mem_cons_self).canon hp) (hl t ht)
 
 /-- **A schema people write, discharged with no certificate.**
     In `union(array(literal "A"), array(literal "B"))` both options write `[]`. Both write it
@@ -124,17 +58,6 @@ theorem pairwiseCompat_array_literals :
 /-- **`refine x Q` is below `x`.** -/
 theorem sub_denote_refine (x : Term) (Q : Pred) : Sub (denote α (.refine x Q)) (denote α x) :=
   sub_restrict_self _ _
-
-/-- **`held (refine t R) P k` is below `held t P k`.** -/
-theorem sub_held_refine (t P : Term) (R : Pred) (k : Word) :
-    Sub (denote α (.held (.refine t R) P k)) (denote α (.held t P k)) := by
-  refine ⟨fun v a h => ?_, fun a v h => ?_⟩
-  · obtain ⟨hq, he⟩ := restrict_e.mp h
-    exact restrict_e.mpr ⟨hq, (restrict_e.mp
-      (show (denote α (.refine t R)).e ((α.word k).1 v) = some a from he)).2⟩
-  · obtain ⟨hp, hq⟩ := restrict_p.mp h
-    obtain ⟨w, hw, rfl⟩ := through_p.mp hp
-    exact restrict_p.mpr ⟨through_p.mpr ⟨w, (restrict_p.mp hw).1, rfl⟩, hq⟩
 
 /-! ## An incompatible pair: `shout | string('X')`
 
@@ -299,8 +222,8 @@ example : certPair (Term.object (Body.mk {"a"} (fun _ => .optional swap) none))
 example : Alg.compatPair dynOracle shout litX = false ∧
     Alg.compatPair dynOracle Term.boolean flipBool = false := by decide
 
-/-- **Two restrictions of one adapter**: compatible through `swap`, and the decision does not see
-    it, because the oracle knows no adapter to be another. -/
-example : Alg.compatPair dynOracle sw1 sw2 = false := by decide
+/-- **Two restrictions of one adapter**: the decision accepts them, because the two words are one
+    word and the two stored sides agree. -/
+example : Alg.compatPair dynOracle sw1 sw2 = true := by decide
 
 end Calculus

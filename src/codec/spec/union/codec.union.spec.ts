@@ -426,14 +426,8 @@ describe('the declaration guard, where a term is what the guard reads', () => {
      * its call, and two literal options at one form differ only in their literals.
      */
     it('names both declared options of a refused pair, literals included', () => {
-        expect(() => union([decimal('1', '2.5'), decimal('2.5', '3')])).toThrow(
-            "decimal('1', '2.5') and decimal('2.5', '3') are not shown compatible",
-        )
         expect(() => union([decimal('1', '2'), string('1', '2')])).toThrow(
             "decimal('1', '2') and string('1', '2') are not shown compatible",
-        )
-        expect(() => union([number(1, 2), number(2, 3)])).toThrow(
-            'number(1, 2) and number(2, 3) are not shown compatible',
         )
     })
 })

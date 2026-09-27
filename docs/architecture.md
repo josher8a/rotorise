@@ -550,22 +550,17 @@ top. With no binder unfolded, the oracle `dynOracle` asks the test of the two vi
 `pairwiseCompat_of_compatPair` discharges the union's obligation of two lawful closed options.
 
 **The decision is the specification of the library's declaration-time guard, and a checked one.**
-The `union` combinator in `src/` accepts a pair on one of two warrants. It refuses every other
-pair, because the pair is not shown compatible.
+The `union` combinator in `src/` accepts a pair where `agrees(x, y)` holds, which is the model's
+`compatPair` at `dynOracle`, per half and per component. `pairwiseCompat_of_compatPair` proves each
+accepted pair compatible. The combinator refuses every other pair, because the pair is not shown
+compatible.
 
-| warrant | the host asks | the model proves the pair compatible by |
-| --- | --- | --- |
-| the decision | `agrees(x, y)`: the model's `compatPair` at `dynOracle`, per half and per component | `pairwiseCompat_of_compatPair` |
-| the common bound | `below(x, y)` or `below(y, x)` holds | `pairwiseCompat_of_sub`: the wider option is the bound |
-
-The host's rule `below(x, y)` in `src/codec/term.ts` is narrower than the model's `Sub`. It has
-five rows: a literal is below its base and below itself; a union is below a term that each of its
-options is below; a term is below a held-free union where the term is below one option; a `held` is
-below the same adapter where its stored side and its held side are each below; and a term with no
-payload is below itself. The union row asks for a held-free union, because `sub_union_mem` bounds
-the options by `opaque`, and an option with a `held` has no such bound. So `decimal('1')` beside
-`union([decimal('1', '2.5'), string('A')])` is refused, although the first is below one option of
-the second.
+**Two `held`s of one adapter agree where their stored sides agree.** A `held` carries an adapter
+word, and a table gives the word its two functions, so two `held`s of one word carry one pair.
+`dynOracle` compares two words by equality. The host's `sameAdapter(x, y)` is the same test: one
+library adapter by its name, or one pair of caller functions by identity. So `decimal('1')` beside
+`union([decimal('1', '2.5'), string('A')])` is accepted, and two caller adapters over one stored
+side are refused.
 
 **The host reads an unknown as a decline.** The read side of an alternate reader is caller code,
 and the declaration cannot bound its domain. So the host's test declines where it must read an

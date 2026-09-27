@@ -25,7 +25,7 @@
     "Calculus/Dynamo/Alg/Products.lean": 129,
     "Calculus/Dynamo/Alg/Recursion.lean": 36,
     "Calculus/Dynamo/Alg/Sums.lean": 0,
-    "Calculus/Dynamo/Analysis/Compat.lean": 20,
+    "Calculus/Dynamo/Analysis/Compat.lean": 17,
     "Calculus/Dynamo/Analysis/Confluence.lean": 28,
     "Calculus/Dynamo/Analysis/ExactA.lean": 49,
     "Calculus/Dynamo/Analysis/ExactV.lean": 45,
