@@ -894,34 +894,13 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
 /* ── the declaration guard ────────────────────────────────────────────────────────────── */
 
 /**
- * **Whether two options share no value and no attribute**, the host's certificate: the model's
- * `certPair`, and a row of the raw terms where the host has no views.
- *
- * `union` asks it of a pair that {@link compatible} shows by no other warrant. Where it answers
- * `true`, the model proves `PairwiseCompat` through `separates_of_certPair` and
- * `pairwiseCompat_of_separated`. For each pair `union` refuses, `formal/.separations.lean` pins that
- * `certPair` is `false`, so this never answers `false` where `certPair` answers `true`.
- *
- * **Two options with views: the two views are disjoint**, the model's `viewsDisjoint`. A term
- * denotes a partial isomorphism, the caller view states its domain, and the stored view states its
- * range. Two options whose domains are disjoint and whose ranges are disjoint are orthogonal: no
- * value has two writers, and no attribute has two readers.
- *
- * **The host keeps a row of the raw terms where the views do not exist.** {@link viewable}
- * refuses a `withLegacyRead` with a `held` below it, because the older reading reads an attribute
- * to a held value. {@link disjoint} reads such a term as disjoint from the bottom alone, so the raw
- * row certifies two objects only through another name, as two tags that differ. The model has no
- * `withLegacyRead`, so the model needs no such row.
- *
- * {@link disjoint} reads a closure through its inner term, so the certificate accepts
- * `union([refine(string, isNumeral), array(decimal)])`.
- */
-export const separable = (x: Term, y: Term): boolean =>
-    viewsDisjoint(x, y) ?? disjoint(x, y)
-
-/**
  * **Whether the two pairs of views are disjoint**, the model's `viewsDisjoint`, or `undefined`
  * where one term has no views ({@link viewable}).
+ *
+ * A term denotes a partial isomorphism, the caller view states its domain, and the stored view
+ * states its range. Two options whose domains are disjoint and whose ranges are disjoint are
+ * orthogonal: no value has two writers, and no attribute has two readers. {@link agrees} asks each
+ * half of it apart, where no binder is unfolded, as the model's oracle `dynOracle` does.
  */
 export const viewsDisjoint = (x: Term, y: Term): boolean | undefined =>
     viewable(x) && viewable(y)
@@ -1252,10 +1231,11 @@ const storedView = throughThunks((t, view) => {
 })
 
 /**
- * **Whether the walk shows a term held-free**, the model's `HF`. A `legacy` counts as an adapter,
- * and so does a thunk that the walk cannot read.
+ * **Whether the walk shows a term held-free**, the model's `HF`: the term as the model spells it
+ * holds no adapter ({@link holdsAdapter}).
  */
-export const heldFree = (t: Term): boolean => !reaches(t, ['held', 'legacy'])
+const heldFree = (t: Term): boolean =>
+    !holdsAdapter(t, { binds: bindersOf(t), inside: [] })
 
 /**
  * **Whether a `withLegacyRead` occurs in the term.** The model has no read widening in `Term`, so a
@@ -1316,20 +1296,404 @@ export const below = (x: Term, y: Term): boolean => {
 /**
  * **Whether the declaration shows two options compatible**, which is what `union` asks of a pair.
  *
- * A union is the join of its options, and the join of two lawful options is lawful exactly when
- * the two are compatible: each reading of one is a reading of the other wherever the other acts.
- * Four warrants show it, as the model's dischargers do. `never` is compatible with every option
- * (`pairwiseCompat_never_left`). Two held-free options sit below one canonical codec
- * (`pairwiseCompat_of_HF`). An option {@link below} the other has the other as that codec
- * (`pairwiseCompat_of_sub`). {@link separable} is the certificate (`pairwiseCompat_of_separated`).
+ * A union is the join of its options, and the join of two lawful options exists exactly when the
+ * two are compatible (Lawson: `s ∨ t` exists iff `s ∼ t`). Compatibility of two partial
+ * bijections is two halves of agreement: two writers of one value write one attribute, and two
+ * readers of one attribute read one value. {@link agrees} is the model's `compatPair`, which
+ * decides each half per component (`pairwiseCompat_of_compatPair`). An option {@link below} the
+ * other has the other as a common bound (`pairwiseCompat_of_sub`): the model's oracle knows no
+ * adapter to be another, so the decision leaves two restrictions of one adapter to this rule.
  */
 export const compatible = (x: Term, y: Term): boolean =>
-    x.kind === 'never' ||
-    y.kind === 'never' ||
-    (heldFree(x) && heldFree(y)) ||
-    below(x, y) ||
-    below(y, x) ||
-    separable(x, y)
+    agrees(x, y) || below(x, y) || below(y, x)
+
+/* ── the compatibility decision ───────────────────────────────────────────────────────── */
+
+/** One half of agreement. `write`: two writers of one value write one attribute. `read`: two
+ * readers of one attribute read one value. */
+type Half = 'write' | 'read'
+
+/**
+ * **Where the decision is in the two operands**: the scope of each operand, the binders unfolded
+ * together, and the two flags of the model. `top` says that no binder is unfolded, so the views
+ * apply. `bounded` says that the body of every binder unfolded so far holds no adapter, so each
+ * variable is below `opaque`.
+ */
+type Agreement = {
+    readonly left: Scope
+    readonly right: Scope
+    readonly pairs: Walk['pairs']
+    readonly top: boolean
+    readonly bounded: boolean
+}
+
+/**
+ * **Whether two closed options agree on both halves**, the model's `compatPair` at `dynOracle`.
+ * The decision reads each operand as the model spells it, as {@link disjoint} does.
+ */
+export const agrees = (x: Term, y: Term): boolean => {
+    const at: Agreement = {
+        left: { binds: bindersOf(x), inside: [] },
+        right: { binds: bindersOf(y), inside: [] },
+        pairs: [],
+        top: true,
+        bounded: true,
+    }
+    return agreeWalk('write', x, y, at) && agreeWalk('read', x, y, at)
+}
+
+/**
+ * **Whether the spelling of a term at a scope holds an adapter**, the model's `hasHeld`. A
+ * variable is not an adapter. The host reads three more terms as an adapter, because no bound
+ * below `opaque` covers each one. A free variable is a thunk that names a codec not yet declared,
+ * and that codec can hold a `held`. A `withLegacyRead` reads an attribute through caller code. A
+ * field with a fallback reads a map without the name to a value with the name.
+ */
+const holdsAdapter = (t: Term, scope: Scope): boolean => {
+    const one = see(t, scope)
+    switch (one.kind) {
+        case 'mu':
+            return holdsAdapter(one.body, one.scope)
+        case 'var':
+            return false
+        case 'free':
+            return true
+        case 'term':
+            break
+    }
+    const on = (inner: Term) => holdsAdapter(inner, scope)
+    const u = one.t
+    switch (u.kind) {
+        case 'held':
+        case 'legacy':
+            return true
+        case 'refine':
+            return on(u.inner)
+        case 'set':
+            return on(u.elem)
+        case 'list':
+            return (
+                u.pre.some(on) ||
+                (u.spread !== undefined && on(u.spread)) ||
+                u.suf.some(on)
+            )
+        case 'object':
+            return (
+                Object.values(u.body.fields).some(
+                    (field) => field.mark === 'fallback' || on(field.t),
+                ) ||
+                (u.body.rest !== undefined && on(u.body.rest))
+            )
+        case 'union':
+            return u.options.some(on)
+        default:
+            return false
+    }
+}
+
+/**
+ * **Whether the spelling of a term reads a free variable**: a thunk that names a codec not yet
+ * declared. The model spells such a thunk as a variable that no binder binds, and a closed
+ * denotation reads it as the bottom, where the host reads it as an unknown codec.
+ */
+export const readsFreeVariable = (t: Term): boolean => {
+    const walk = (u: Term, scope: Scope): boolean => {
+        const one = see(u, scope)
+        if (one.kind === 'mu') return walk(one.body, one.scope)
+        if (one.kind !== 'term') return one.kind === 'free'
+        const on = (inner: Term) => walk(inner, scope)
+        const v = one.t
+        switch (v.kind) {
+            case 'held':
+                return on(v.inner) || on(v.outer)
+            case 'refine':
+            case 'legacy':
+                return on(v.inner)
+            case 'set':
+                return on(v.elem)
+            case 'list':
+                return positionsOf(v).some(on)
+            case 'object':
+                return (
+                    Object.values(v.body.fields).some((field) => on(field.t)) ||
+                    (v.body.rest !== undefined && on(v.body.rest))
+                )
+            case 'union':
+                return v.options.some(on)
+            default:
+                return false
+        }
+    }
+    return walk(t, { binds: bindersOf(t), inside: [] })
+}
+
+/** The bottom, as the model spells it at the scope. */
+const isNeverAt = (t: Term, scope: Scope): boolean => {
+    const one = see(t, scope)
+    return one.kind === 'term' && one.t.kind === 'never'
+}
+
+/**
+ * **The term inside which a `held` acts on one half**, the model's `heldSide`: a `held` writes
+ * inside its held side and reads inside its stored side.
+ */
+const heldSide = (half: Half, t: Term, scope: Scope): Term | undefined => {
+    const one = see(t, scope)
+    if (one.kind !== 'term' || one.t.kind !== 'held') return undefined
+    return half === 'write' ? one.t.outer : one.t.inner
+}
+
+/**
+ * **The view of a term on one half**, or nothing where the term has no views ({@link viewable}).
+ * The caller view states the domain, and the stored view states the range.
+ */
+const viewOn = (half: Half, t: Term): Term | undefined =>
+    viewable(t) ? (half === 'write' ? callerView(t) : storedView(t)) : undefined
+
+/**
+ * **The rows that read no structure**, the model's `cbase`. The bottom agrees with every term.
+ * Two terms with no adapter below the top are bounded by the top. Two disjoint terms share
+ * nothing. With no binder unfolded, two disjoint views share nothing on their half. A `held`
+ * whose half is disjoint from the partner shares nothing there.
+ */
+const baseRows = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
+    if (isNeverAt(x, at.left) || isNeverAt(y, at.right)) return true
+    if (at.bounded && !holdsAdapter(x, at.left) && !holdsAdapter(y, at.right))
+        return true
+    const apart = (a: Term, b: Term) =>
+        disjointWalk(a, b, { left: at.left, right: at.right, pairs: [] })
+    if (apart(x, y)) return true
+    if (at.top) {
+        const vx = viewOn(half, x)
+        const vy = viewOn(half, y)
+        if (vx !== undefined && vy !== undefined && disjoint(vx, vy))
+            return true
+    }
+    const hx = heldSide(half, x, at.left)
+    if (hx !== undefined && apart(hx, y)) return true
+    const hy = heldSide(half, y, at.right)
+    return hy !== undefined && apart(x, hy)
+}
+
+/**
+ * **The rows of the right operand**, the model's `cmpR`. The bottom agrees with every term. A
+ * union agrees where each option does. A refinement is below its inner term. A recursive term
+ * unfolds, and its binder pairs with nothing. On the write half, a `withLegacyRead` writes what
+ * its inner term writes. `fam` answers every other spelling, and each spelling that it declines.
+ */
+const agreeRight = (
+    half: Half,
+    fam: (y: Term, at: Agreement) => boolean,
+    y: Term,
+    at: Agreement,
+): boolean => {
+    if (fam(y, at)) return true
+    const other = see(y, at.right)
+    if (other.kind === 'mu')
+        return agreeRight(half, fam, other.body, {
+            ...at,
+            right: other.scope,
+            top: false,
+            bounded: at.bounded && !holdsAdapter(y, at.right),
+        })
+    if (other.kind !== 'term') return false
+    switch (other.t.kind) {
+        case 'never':
+            return true
+        case 'union':
+            return other.t.options.every((option) =>
+                agreeRight(half, fam, option, at),
+            )
+        case 'refine':
+            return agreeRight(half, fam, other.t.inner, at)
+        case 'legacy':
+            return half === 'write' && agreeRight(half, fam, other.t.inner, at)
+        default:
+            return false
+    }
+}
+
+/** The right operand as the model spells it, where it is a constructor. */
+const termAt = (y: Term, at: Agreement): Term | undefined => {
+    const other = see(y, at.right)
+    return other.kind === 'term' ? other.t : undefined
+}
+
+/**
+ * **The compatibility decision, one half**, the model's `Term.compat`: one row per constructor of
+ * the left operand, as the operands spell at the pairing. The rows are the model's, in the
+ * model's order, and the host reads its own terms soundly. A `withLegacyRead` writes what its
+ * inner term writes, and its older reading is caller code, so its read half agrees by the rows
+ * that read no structure alone.
+ *
+ * **The walk ends**, for the reason {@link disjointWalk} ends: each call reads a strict subterm
+ * of one spelling, or of both, with the other spelling unchanged.
+ */
+const agreeWalk = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
+    const one = see(x, at.left)
+    const base = (y1: Term, at1: Agreement) => baseRows(half, x, y1, at1)
+    switch (one.kind) {
+        case 'mu': {
+            if (baseRows(half, x, y, at)) return true
+            const other = see(y, at.right)
+            const bounded = at.bounded && !holdsAdapter(x, at.left)
+            // two recursive terms: the bodies agree on both halves, with the two binders paired
+            if (other.kind === 'mu') {
+                const inner: Agreement = {
+                    left: one.scope,
+                    right: other.scope,
+                    pairs: [...at.pairs, { left: one.body, right: other.body }],
+                    top: false,
+                    bounded: bounded && !holdsAdapter(y, at.right),
+                }
+                return (
+                    agreeWalk('write', one.body, other.body, inner) &&
+                    agreeWalk('read', one.body, other.body, inner)
+                )
+            }
+            // a recursive term beside another term unfolds, and its binder pairs with nothing
+            return agreeWalk(half, one.body, y, {
+                ...at,
+                left: one.scope,
+                top: false,
+                bounded,
+            })
+        }
+        // a variable agrees with the variable of the binder that its own binder was unfolded with
+        case 'var':
+            return agreeRight(
+                half,
+                (y1, at1) => {
+                    if (base(y1, at1)) return true
+                    const other = see(y1, at1.right)
+                    return (
+                        other.kind === 'var' &&
+                        at1.pairs.some(
+                            (pair) =>
+                                pair.left === one.binder &&
+                                pair.right === other.binder,
+                        )
+                    )
+                },
+                y,
+                at,
+            )
+        case 'free':
+            return agreeRight(half, base, y, at)
+        case 'term':
+            break
+    }
+    const t = one.t
+    switch (t.kind) {
+        case 'never':
+            return true
+        case 'refine':
+            return base(y, at) || agreeWalk(half, t.inner, y, at)
+        case 'union':
+            return (
+                base(y, at) ||
+                t.options.every((option) => agreeWalk(half, option, y, at))
+            )
+        case 'legacy':
+            return half === 'write'
+                ? base(y, at) || agreeWalk(half, t.inner, y, at)
+                : agreeRight(half, base, y, at)
+        case 'set':
+            return agreeRight(
+                half,
+                (y1, at1) => {
+                    if (base(y1, at1)) return true
+                    const other = termAt(y1, at1)
+                    return (
+                        other?.kind === 'set' &&
+                        agreeWalk(half, t.elem, other.elem, at1)
+                    )
+                },
+                y,
+                at,
+            )
+        case 'list':
+            return agreeRight(
+                half,
+                (y1, at1) => {
+                    if (base(y1, at1)) return true
+                    const other = termAt(y1, at1)
+                    if (other?.kind !== 'list') return false
+                    const rights = positionsOf(other)
+                    return positionsOf(t).every((left) =>
+                        rights.every((right) =>
+                            agreeWalk(half, left, right, at1),
+                        ),
+                    )
+                },
+                y,
+                at,
+            )
+        case 'object':
+            return agreeRight(
+                half,
+                (y1, at1) => {
+                    if (base(y1, at1)) return true
+                    const other = termAt(y1, at1)
+                    return (
+                        other?.kind === 'object' &&
+                        bodiesAgree(half, t.body, other.body, at1)
+                    )
+                },
+                y,
+                at,
+            )
+        default:
+            return agreeRight(half, base, y, at)
+    }
+}
+
+/** Every position of a list shape: the prefix, the spread, and the suffix. */
+const positionsOf = (t: Extract<Term, { kind: 'list' }>): readonly Term[] => [
+    ...t.pre,
+    ...(t.spread === undefined ? [] : [t.spread]),
+    ...t.suf,
+]
+
+/**
+ * **Two fields at one name agree on one half**, the model's `ObjectSlot.compat`: the two terms
+ * agree, whatever the presence. A field with a fallback reads a map without the name to its
+ * stand-in, where every other field reads the map to a value without the name. So on the read
+ * half a field with a fallback agrees beside a `req` field, which reads no map without the name,
+ * and beside a field with the same stand-in.
+ */
+const fieldsAgree = (half: Half, a: Field, b: Field, at: Agreement): boolean =>
+    (half === 'write' || standInsAgree(a, b)) && agreeWalk(half, a.t, b.t, at)
+
+/** Two fields read a map without the name to one value, or one of the two reads no such map. */
+const standInsAgree = (a: Field, b: Field): boolean =>
+    a.mark === 'fallback'
+        ? b.mark === 'req' || (b.mark === 'fallback' && Object.is(a.v, b.v))
+        : b.mark !== 'fallback' || a.mark === 'req'
+
+/**
+ * **Two bodies agree on one half**, the model's object row: at each name that either body
+ * declares, the two fields agree, and the two open blocks agree. An undeclared name holds
+ * `optional` of the open block, which is `never` where the body is closed.
+ */
+const bodiesAgree = (half: Half, a: Body, b: Body, at: Agreement): boolean => {
+    const blockOf = (body: Body): Field => ({
+        mark: 'optional',
+        t: body.rest ?? never,
+    })
+    const names = new Set([...Object.keys(a.fields), ...Object.keys(b.fields)])
+    return (
+        [...names].every((name) =>
+            fieldsAgree(
+                half,
+                a.fields[name] ?? blockOf(a),
+                b.fields[name] ?? blockOf(b),
+                at,
+            ),
+        ) &&
+        (a.rest === undefined || agreeWalk(half, a.rest, b.rest ?? never, at))
+    )
+}
 
 /* ── disjointness ─────────────────────────────────────────────────────────────────────── */
 
@@ -1343,7 +1707,7 @@ export const compatible = (x: Term, y: Term): boolean =>
  *
  * **A `held`, a `withLegacyRead` and `opaque` are disjoint only from the bottom.** The admission
  * of the first two is a function that no reader can read without running it, and `opaque`
- * admits every value. The views read a `held` ({@link separable}).
+ * admits every value. The views read a `held` ({@link viewsDisjoint}).
  *
  * **A recursive term is read as the model spells it**: `mu` at the term object that a cycle
  * returns to, and a variable at the thunk that closes the cycle ({@link Scope}). Two variables are

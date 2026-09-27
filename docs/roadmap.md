@@ -48,25 +48,8 @@ statement exists, the re-founding pays the whole term language for a guarantee t
 already give.
 
 **What names the guarantee instead today.** `PairwiseCompat`, one `Prop` over the option list.
-`pairwiseCompat_of_HF` discharges it with no certificate, `pairwiseCompat_of_sub` through a common
-bound, and `pairwiseCompat_of_separated` with `separated_of_unionOk` through the certificate.
-
----
-
-## The host reads held-freeness through a binder
-
-**The future state.** The host's `heldFree(t)` reads through a recursive thunk, as the model's `HF`
-reads through `mu`. A pair of held-free options with a recursive one is then accepted on the
-held-free warrant (`pairwiseCompat_of_HF`), as the model already proves it compatible.
-
-**What stands today.** `heldFree(t)` answers `false` at a recursive thunk, because its walk treats an
-unreadable thunk as reaching an adapter. So the host refuses `union([array(string), json])`, while
-the model proves the pair compatible by `pairwiseCompat_of_HF` and declines it by `certPair`. The
-host is the narrower side, which is the safe direction.
-
-**What decides it.** The owner decides whether the held-free warrant extends to recursive
-options. The host then needs a walk that carries held-freeness from construction, so that the walk
-ends at a cycle without forcing it again.
+`pairwiseCompat_of_compatPair` discharges it through the decision, `pairwiseCompat_of_sub` through a
+common bound, and `pairwiseCompat_of_separated` with `separated_of_unionOk` through the certificate.
 
 ---
 

@@ -388,9 +388,8 @@ prints the term it returns, because the model has no thunk. Each recursive vecto
 guard accepts its term. The host's `union` refuses the two shapes the guard refuses. One is an
 option whose spine reaches a recursive thunk. The other is an option where a `held` sits between the
 term that a recursive thunk returns and the thunk. The host's `union` also refuses a thunk that
-throws. Recursion below a list or an object stays declared, and the certificate decides it. The
-host's `heldFree(t)` answers `false` at a recursive thunk. The model's `HF` reads through a binder,
-so the host is the narrower of the two.
+throws. Recursion below a list or an object stays declared, and the decision decides it. The
+host's `heldFree(t)` reads through a recursive thunk, as the model's `HF` reads through a binder.
 
 ---
 
@@ -541,16 +540,23 @@ is a function. A refinement admits a part of what its inner term admits, so the 
 disjoint from each partner that its inner term is disjoint from. A closure refinement beside an
 option that writes and reads other slots is disjoint from the option.
 
-**Its value is that it is half of the specification of the library's declaration-time guard, and
-a checked half.** The `union` combinator in `src/` accepts a pair on one of four warrants. It
-refuses every other pair, because the pair is not shown compatible.
+**The certificate is one row of the union's decision.** The union's one law is compatibility
+(Lawson: `s ∨ t` exists iff `s ∼ t`), and compatibility is two halves of agreement: two writers of
+one value write one attribute (`AgreeE`), and two readers of one attribute read one value
+(`AgreeP`). `Term.compat` decides each half per component: the two terms are disjoint there, or one
+codec bounds both there. The bottom agrees with every term. Two held-free terms are bounded by the
+top. With no binder unfolded, the oracle `dynOracle` asks the test of the two views of the half. A
+`held` whose half is disjoint from the partner agrees there. `compat_sound` proves each row, and
+`pairwiseCompat_of_compatPair` discharges the union's obligation of two lawful closed options.
+
+**The decision is the specification of the library's declaration-time guard, and a checked one.**
+The `union` combinator in `src/` accepts a pair on one of two warrants. It refuses every other
+pair, because the pair is not shown compatible.
 
 | warrant | the host asks | the model proves the pair compatible by |
 | --- | --- | --- |
-| the never side | one option is `never` | `pairwiseCompat_never_left`, `pairwiseCompat_never_right` |
-| held-free | both options are held-free | `pairwiseCompat_of_HF`: both sit below `opaque` |
+| the decision | `agrees(x, y)`: the model's `compatPair` at `dynOracle`, per half and per component | `pairwiseCompat_of_compatPair` |
 | the common bound | `below(x, y)` or `below(y, x)` holds | `pairwiseCompat_of_sub`: the wider option is the bound |
-| the certificate | `separable`: `certPair`, which asks that the views are disjoint, and the test of the raw terms where the host has no views | `pairwiseCompat_of_separated` |
 
 The host's rule `below(x, y)` in `src/codec/term.ts` is narrower than the model's `Sub`. It has
 five rows: a literal is below its base and below itself; a union is below a term that each of its
@@ -581,8 +587,10 @@ string literal it does not write. A caller-built `held` keeps the held side that
 **The bridge checks both directions.** The separation class in `src/codec/lean.ts` emits one
 theorem per emittable pair of the sample codecs, generated and elaborated by `formal/scripts/gate.sh`. For a
 pair the library accepts, the theorem states that the two terms meet `PairwiseCompat` where both
-denote lawful codecs, proved by the warrant the library used. For a pair the library refuses, the theorem states that `certPair` does
-not certify it.
+denote lawful codecs, proved by the warrant the library used. For a pair the library refuses, the
+theorem states that `compatPair dynOracle` refuses it. Where a term reads a thunk that throws, a
+closed denotation reads the variable as the bottom, so the theorem states the decision with both
+flags off, at an unknown environment of the variable.
 
 **`certPair` is sufficient and not necessary.** A decline by `certPair` is not a refutation of
 compatibility. Two restrictions of one adapter are compatible in the model

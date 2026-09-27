@@ -65,11 +65,12 @@ import type {
     Field as TermField,
 } from './term'
 import {
+    agrees,
     below,
     bindersOf,
     disjoint,
     force,
-    heldFree,
+    readsFreeVariable,
     type Scope,
     viewsDisjoint,
 } from './term'
@@ -1006,15 +1007,14 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  * **The bridge runs both ways, because the two host defects of the certificate lived in the
  * direction that the one-way bridge did not check.**
  *
- * - `src/` **accepts** the pair: the model proves `PairwiseCompat` for it, given lawful options,
- *   through the warrant the host used. `never` on a side is `pairwiseCompat_never_left` or
- *   `_right`. Two held-free options are `pairwiseCompat_of_HF`. An option {@link below} the other
- *   is `pairwiseCompat_of_sub` or `_sub'`, with the proof of `Sub` printed row by row. Any other
- *   accepted pair was accepted by `separable`, the host's `certPair`, and is
- *   `pairwiseCompat_of_separated` through
- *   `separated_of_unionOk`. A host warrant that the model does not prove stops the file.
- * - `src/` **refuses** the pair: the model's certificate must not certify it, `certPair x y =
- *   false`. A certificate that starts to certify a pair `src/` turns down stops the file.
+ * - `src/` **accepts** the pair: the model proves `PairwiseCompat` for it, given lawful options.
+ *   Where {@link agrees} holds, the host decided the model's `compatPair`, and the proof is
+ *   `pairwiseCompat_of_compatPair` over that decision. Two restrictions of one adapter are
+ *   accepted where an option is {@link below} the other, and the proof is `pairwiseCompat_of_sub`
+ *   or `_sub'`, with the proof of `Sub` printed row by row. A host warrant that the model does not
+ *   prove stops the file.
+ * - `src/` **refuses** the pair: the model's decision must refuse it too, `compatPair dynOracle x
+ *   y = false`. A decision that starts to accept a pair `src/` turns down stops the file.
  *
  * Compatibility is not decidable, so a refused pair carries no theorem that it is incompatible:
  * `not_compat_flip` and `not_compat_shout` are the model's witnesses of that class.
@@ -1065,29 +1065,38 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     const binders = leanBinders(bound)
     const head = `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`
     const reduce = binders === '' ? 'by decide' : 'rfl'
+    // a free variable names a codec not yet declared, which the host reads as unknown and a closed
+    // denotation reads as the bottom, so the verdict states the decision at an unknown environment
+    const decision =
+        readsFreeVariable(left.def) || readsFreeVariable(right.def)
+            ? (half: boolean) =>
+                  `Alg.Term.compat dynOracle ${half} pair0 false false (${l})\n        (${r})`
+            : undefined
     if (refused) {
         return [
-            `/-- \`${name}\` — \`src/\` refuses this pair; the model must not certify it -/`,
+            `/-- \`${name}\` — \`src/\` refuses this pair; the model's decision refuses it too -/`,
             head,
-            `    certPair (${l})`,
-            `      (${r}) = false := ${reduce}`,
+            ...(decision === undefined
+                ? [
+                      `    Alg.compatPair dynOracle (${l})`,
+                      `      (${r}) = false := ${reduce}`,
+                  ]
+                : [
+                      `    (${decision(true)} &&`,
+                      `      ${decision(false)}) = false := ${reduce}`,
+                  ]),
         ].join('\n')
     }
-    const isNever = (declared: AnyCodec): boolean => {
-        const def = declared.def
-        return !('mark' in def) && def.kind === 'never'
-    }
-    const warrant = isNever(left)
-        ? 'fun _ => pairwiseCompat_never_left _'
-        : isNever(right)
-          ? 'fun _ => pairwiseCompat_never_right _'
-          : heldFree(left.def) && heldFree(right.def)
-            ? 'fun hl => pairwiseCompat_of_HF rfl hl'
-            : below(left.def, right.def)
-              ? `fun hl => pairwiseCompat_of_sub (${leanBelow(left.def, right.def)}) hl`
-              : below(right.def, left.def)
-                ? `fun hl => pairwiseCompat_of_sub' (${leanBelow(right.def, left.def)}) hl`
-                : `fun hl => pairwiseCompat_of_separated hl (separated_of_unionOk (${reduce}))`
+    const warrant = agrees(left.def, right.def)
+        ? `fun hl => pairwiseCompat_of_compatPair (${reduce}) hl`
+        : below(left.def, right.def)
+          ? `fun hl => pairwiseCompat_of_sub (${leanBelow(left.def, right.def)}) hl`
+          : below(right.def, left.def)
+            ? `fun hl => pairwiseCompat_of_sub' (${leanBelow(right.def, left.def)}) hl`
+            : refuse(
+                  name,
+                  '`src/` accepts this pair on no warrant that the model proves: the decision refuses it, and neither option is below the other',
+              )
     return [
         `/-- \`${name}\` — \`src/\` accepts this pair; the model proves it compatible -/`,
         head,
@@ -1098,8 +1107,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
 }
 
 /**
- * The declaration verdicts as a module of their own, because they need `certPair` and the
- * dischargers of `PairwiseCompat`.
+ * The declaration verdicts as a module of their own, because they need the decision `compatPair`
+ * and the dischargers of `PairwiseCompat`.
  *
  * The header imports `Calculus.Dynamo.Lang.Store` as well, because a `held` term spells
  * `numeralOfStoredText` and `textOfNumeral`, which the DynamoDB port defines, and
@@ -1121,7 +1130,8 @@ import Calculus.Dynamo.Lang.Store
 
 **Generated — do not edit.** One theorem per option pair of the corpus. A pair \`src/\`'s \`union\`
 accepts carries the model's proof that the pair is compatible, through the warrant the host used.
-A pair \`src/\` refuses carries \`certPair x y = false\`: the model's certificate declines it too.
+A pair \`src/\` refuses carries \`compatPair dynOracle x y = false\`: the model's decision refuses
+it too.
 See \`src/codec/lean.ts\`'s \`Separation\`.
 -/
 

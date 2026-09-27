@@ -25,7 +25,7 @@ import {
     withLegacyRead,
 } from '../../codec'
 import type { Field, Term } from '../../term'
-import { disjoint, separable } from '../../term'
+import { disjoint, viewsDisjoint } from '../../term'
 
 const termOf = (codec: { readonly def: Term }): Term => codec.def
 
@@ -80,8 +80,8 @@ describe('an adapter is disjoint from the bottom alone, and the views read it', 
             [string.set(), decimal.set()],
         ] as const) {
             expect(apart(termOf(x), termOf(y))).toBe(false)
-            expect(separable(termOf(x), termOf(y))).toBe(false)
-            expect(separable(termOf(y), termOf(x))).toBe(false)
+            expect(viewsDisjoint(termOf(x), termOf(y))).toBe(false)
+            expect(viewsDisjoint(termOf(y), termOf(x))).toBe(false)
         }
     })
 
@@ -94,15 +94,15 @@ describe('an adapter is disjoint from the bottom alone, and the views read it', 
             [number, decimal],
             [number.set(), decimal.set()],
         ] as const) {
-            expect(separable(termOf(x), termOf(y))).toBe(false)
-            expect(separable(termOf(y), termOf(x))).toBe(false)
+            expect(viewsDisjoint(termOf(x), termOf(y))).toBe(false)
+            expect(viewsDisjoint(termOf(y), termOf(x))).toBe(false)
         }
     })
 
     /** `decimal` holds text and stores `N`, and `boolean` shares neither, so the views are apart. */
     it('certifies decimal beside boolean through the views, where the raw terms decline', () => {
         expect(apart(termOf(decimal), termOf(boolean))).toBe(false)
-        expect(separable(termOf(decimal), termOf(boolean))).toBe(true)
+        expect(viewsDisjoint(termOf(decimal), termOf(boolean))).toBe(true)
     })
 })
 

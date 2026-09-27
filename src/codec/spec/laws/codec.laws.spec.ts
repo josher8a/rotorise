@@ -565,9 +565,9 @@ describe('the laws that do NOT hold', () => {
      *
      * `union([array(string), array(number)])` is a list that is *homogeneously* one or the other;
      * `array(union([string, number]))` is a list whose elements are each either. Different types,
-     * different rows, and the first is the stricter claim — which is usually the one meant, and is
-     * also the one a `union` cannot resolve on the way in, because both options take an array and
-     * neither validates what is in it.
+     * different rows, and the first is the stricter claim — which is usually the one meant. The
+     * union is well formed: the two options share the empty list alone, and both write it to one
+     * attribute and read it back to one value, so the order of the options is unobservable.
      */
     it('a union of arrays is not an array of unions', () => {
         // the elementwise one is a codec, and holds a mixed list
@@ -580,9 +580,20 @@ describe('the laws that do NOT hold', () => {
             L: [{ S: 'a' }, { N: '1' }],
         })
 
-        // the homogeneous one is refused where it is written: both options are handed an array and
-        // neither checks what is in it, so no value chooses between them
-        expect(() => union([array(string), array(number)])).toThrow(CodecError)
+        // the homogeneous one holds no mixed list, on either side
+        const homogeneous = union([array(string), array(number)])
+        expect(() => homogeneous.unsafeEncode(['a', 1] as never)).toThrow(
+            CodecError,
+        )
+        expect(() =>
+            homogeneous.unsafeDecode({ L: [{ S: 'a' }, { N: '1' }] }),
+        ).toThrow(CodecError)
+        // and the one value both options admit is written and read the same in either order
+        const reversed = union([array(number), array(string)])
+        expect(homogeneous.unsafeEncode([])).toEqual({ L: [] })
+        expect(reversed.unsafeEncode([])).toEqual({ L: [] })
+        expect(homogeneous.unsafeDecode({ L: [] })).toEqual([])
+        expect(reversed.unsafeDecode({ L: [] })).toEqual([])
     })
 
     /**
@@ -609,10 +620,10 @@ describe('the laws that do NOT hold', () => {
      * are now false: the elements check, and the declaration guard asks whether the two are
      * separated by what they hold.
      *
-     * The asymmetry that survives is the sharper one, and it is admission's own: `[]` is admitted by
-     * every `array` and an empty `Set` is admitted by none, because **DynamoDB has no empty set**.
-     * So `union([array(string), array(number)])` stays refused — one shared value, and it is the
-     * one carrying nothing to tell them apart — while these two sets share no value at all.
+     * The asymmetry that survives is admission's own: `[]` is admitted by every `array` and an
+     * empty `Set` is admitted by none, because **DynamoDB has no empty set**. So
+     * `union([array(string), array(number)])` shares one value, which both options write to one
+     * attribute, while these two sets share no value at all.
      */
     it('a union of sets resolves, now that its elements check', () => {
         const either = union([string.set(), number.set()])
@@ -635,8 +646,10 @@ describe('the laws that do NOT hold', () => {
         expect(either.unsafeDecode({ SS: ['a'] })).toEqual(new Set(['a']))
         expect(either.unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
 
-        // and the container *with* an empty inhabitant is still refused, for that reason
-        expect(() => union([array(string), array(number)])).toThrow(CodecError)
+        // and the container *with* an empty inhabitant writes that inhabitant to one attribute
+        expect(union([array(string), array(number)]).unsafeEncode([])).toEqual({
+            L: [],
+        })
     })
 
     /**

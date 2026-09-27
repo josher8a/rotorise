@@ -16,7 +16,9 @@ import {
     decimal,
     held,
     object,
+    optional,
     string,
+    union,
     withLegacyRead,
 } from '../../codec'
 import type { StandardSchemaV1 } from '../../standard'
@@ -158,6 +160,27 @@ describe('an attribute the row does not have', () => {
             rate: { N: '1' },
         })
         expect(back.holding).toBeDefined()
+    })
+
+    /**
+     * **A union reads a row without the name to one value, so a stand-in needs a partner that
+     * reads no such row.** The field with a stand-in reads a map without the name to a value
+     * with the name. An `optional` field reads the same map to a value without the name, so the
+     * two options read one attribute to two values, and the order of the options would choose.
+     * A `req` field reads no map without the name, so the two agree.
+     */
+    it('refuses a union beside an optional field, and declares it beside a required one', () => {
+        const standIn = object({
+            a: withLegacyRead({ current: string, whenMissing: 'z' }),
+        })
+        expect(() => union([standIn, object({ a: optional(string) })])).toThrow(
+            CodecError,
+        )
+        const either = union([standIn, object({ a: string })])
+        expect(either.unsafeDecode({ M: {} })).toEqual({ a: 'z' })
+        expect(either.unsafeDecode({ M: { a: { S: 'b' } } })).toEqual({
+            a: 'b',
+        })
     })
 
     /**
