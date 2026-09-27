@@ -213,4 +213,50 @@ describe('a union that names itself', () => {
                 /^nullable:/,
             )
     })
+
+    /**
+     * **A refusal is a value inside the boundary.** The thunk runs at the first use, so a builder
+     * that refuses inside the thunk refuses at a decode or an encode. The safe pair returns that
+     * refusal, and only the unsafe pair throws.
+     */
+    it('returns the refusal of a thunk that a decode forces, and does not throw', () => {
+        type Node = { v: string; next: Node | null }
+        const List: AttributeCodec<Node> = lazy(() =>
+            object({ v: string, next: nullable(List) }),
+        )
+        const read = List.decode({ M: { v: { S: 'a' }, next: { NULL: true } } })
+        expect(read).toBeInstanceOf(CodecError)
+        expect(String(read)).toMatch(/nullable:/)
+        expect(List.encode({ v: 'a', next: null })).toBeInstanceOf(CodecError)
+    })
+
+    /**
+     * **A nullable recursive field defers the `nullable` call to a thunk of its own.** When that
+     * thunk runs, the outer thunk is resolved, so the null point is known. The refusal names this
+     * spelling, because `held(nullable(inner), …)` does not apply to a thunk.
+     */
+    it('declares a nullable recursive field as lazy(() => nullable(Self))', () => {
+        type Node = { v: string; next: Node | null }
+        const Refused: AttributeCodec<Node> = lazy(() =>
+            object({ v: string, next: nullable(Refused) }),
+        )
+        expect(() => Refused.unsafeEncode({ v: 'a', next: null })).toThrow(
+            'lazy(() => nullable(',
+        )
+
+        const List: AttributeCodec<Node> = lazy(() =>
+            object({ v: string, next: lazy(() => nullable(List)) }),
+        )
+        const chain: Node = { v: 'a', next: { v: 'b', next: null } }
+        expect(List.unsafeEncode(chain)).toEqual({
+            M: {
+                v: { S: 'a' },
+                next: { M: { v: { S: 'b' }, next: { NULL: true } } },
+            },
+        })
+        expect(List.unsafeDecode(List.unsafeEncode(chain))).toEqual(chain)
+        expect(
+            List.decode({ M: { v: { S: 'a' }, next: { S: 'b' } } }),
+        ).toBeInstanceOf(CodecError)
+    })
 })
