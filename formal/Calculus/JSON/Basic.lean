@@ -171,7 +171,7 @@ instance jsonSem : Alg.Sem jsonSyn where
   top_held _ _ := trivial
 
 /-- The laws of the identity codec that the held-free theory reads: each kind is below it. -/
-theorem id_topLaws : Alg.TopLaws jsonSyn where
+instance id_topLaws : Alg.TopLaws jsonSyn where
   ground := sub_ground_id
   list _ h := nomatch h
   map _ h := nomatch h
@@ -203,7 +203,7 @@ theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum := by
     · rcases List.mem_cons.mp hx with rfl | hx
       · trivial
       · exact nomatch hx
-  exact Alg.compat_of_HF id_topLaws canon_idCodec (hf s hs) (hf t ht) (hl t ht)
+  exact Alg.compat_of_HF canon_idCodec (hf s hs) (hf t ht) (hl t ht)
 
 /-! ## Exactness
 

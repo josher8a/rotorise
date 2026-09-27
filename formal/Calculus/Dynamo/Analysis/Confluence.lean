@@ -9,8 +9,7 @@ import Calculus.Dynamo.Analysis.Universal
 The payoffs follow from one fact: `opaque`'s pair is a bijection between `Value` and `Attr`.
 `Ω_onto` and `Ω_canon` prove the bijection. So two held-free terms that both write a value
 write one attribute (`write_agree`), and two that both read an attribute read one value
-(`read_agree`). `admAAt_of_HF` discharges the agreement conjunct of the read-side meet row at
-held-free terms.
+(`read_agree`).
 
 `held` is the one constructor outside the result. An adapter changes the carrier, so it is
 not a restriction of `opaque`. `held_violates_W` and `held_violates_R` are the control:
@@ -113,17 +112,6 @@ theorem HFL_mem : ∀ {ts : List Term}, HFL ts → ∀ t ∈ ts, HF t
       rcases List.mem_cons.mp hm with rfl | hm
       · exact h.1
       · exact HFL_mem h.2 t hm
-
-/-- The read-side meet row's agreement conjunct is free at held-free terms. -/
-theorem admAAt_of_HF {x y z : Term} (hx : HF x) (hy : HF y) (hz : HF z)
-    (h1 : ∀ a, AdmA z a = (AdmA x a && AdmA y a)) : AdmAAt x y z := by
-  refine ⟨h1, fun a hxa hya => ?_⟩
-  have hza : AdmA z a = true := by rw [h1, hxa, hya]; rfl
-  obtain ⟨u, hu⟩ := Option.isSome_iff_exists.mp ((AdmA_exact x a).mp hxa)
-  obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp ((AdmA_exact y a).mp hya)
-  obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp ((AdmA_exact z a).mp hza)
-  rw [hu, hw, hr, read_agree hz hx hr hu, read_agree hx hy hu hw]
-  exact ⟨rfl, rfl⟩
 
 
 /-! ## The false control: a `held` adapter is not a restriction of `opaque` -/

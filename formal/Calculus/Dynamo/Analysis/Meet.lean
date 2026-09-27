@@ -1173,15 +1173,10 @@ example : Term.meet (Term.refine .string (.members .string ⟨{"1"}, Finset.sing
 /-! ## The homomorphism on the read side
 
 `Alg.AdmA_meet_both` proves the read-side homomorphism and its reading agreement once, over any
-signature. DynamoDB supplies the laws of its formers (`dynFormerAdmA`) and of its leaf meet
-(`dynLeafAdmA`). A literal reads through its base's codec restricted, so a literal and its base
-read an attribute to one value, and two different literals at one base read nothing together. -/
-
-/-- The conclusion of the read-side homomorphism, at one pair. -/
-abbrev AdmAAt (x y z : Term) : Prop :=
-  (∀ a : Attr, AdmA z a = (AdmA x a && AdmA y a)) ∧
-  (∀ a : Attr, AdmA x a = true → AdmA y a = true →
-    (denote z).p a = (denote x).p a ∧ (denote z).p a = (denote y).p a)
+signature. DynamoDB supplies the read domains of its formers (`dynFormerAdmA`) and of its leaf
+meet (`dynLeafAdmA`). The agreement is generic: each term of a leaf row or a set row is held-free,
+so each reads as `Ω` reads. A literal reads through its base's codec restricted, so two different
+literals at one base read nothing together. -/
 
 /-- Two terms that read only two different members share no attribute, so their conjunction is
     the bottom. This closes every row that answers `never` because the two read different `Attr`
@@ -1221,13 +1216,6 @@ theorem literal_p_base {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
   cases hb : (baseCodec k).p a with
   | none => rw [hb] at h; simp at h
   | some w => rw [hb] at h; simp only [Option.bind] at h; split at h <;> simp_all
-
-/-- Where a literal reads, its base reads it to the same value. -/
-theorem literal_denote_agree {k : GroundKind} {x : k.Carrier} {a : Attr}
-    (h : AdmA (Term.literal k x) a = true) :
-    (denote (Term.literal k x)).p a = (baseCodec k).p a := by
-  obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ a).mp h)
-  rw [hw, literal_p_base (show (literalCodec k x).p a = some w from hw)]
 
 /-- Where a literal reads, its base reads: the literal's codec is the base's restricted. -/
 theorem AdmA_base_of_literal {k : GroundKind} {x : k.Carrier} {bt : Term} {a : Attr}
@@ -1302,72 +1290,58 @@ theorem AdmA_set_and_false {a y : Term} (h : ∀ u, (AdmA a u && AdmA y u) = fal
   · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote y) (inj := Attr.n) hq x hx)
   · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote y) (inj := Attr.b) hq x hx)
 
-/-- **Over held-free terms, the set of the element meet reads what both sets read**, and reads
-    it as both do: every held-free read is `Ω`'s. -/
+/-- **Over held-free terms, the set of the element meet reads what both sets read.** Each set
+    reads exactly where every element does (`setCodec_p_isSome_of_sub`), so the element equation
+    lifts. -/
 theorem admA_set_meet {a y z : Term} (ha : HF a) (hy : HF y) (hz : HF z)
-    (h : ∀ u, AdmA z u = (AdmA a u && AdmA y u)) : AdmAAt (.set a) (.set y) (.set z) := by
+    (h : ∀ u, AdmA z u = (AdmA a u && AdmA y u)) (att : Attr) :
+    AdmA (.set z) att = (AdmA (.set a) att && AdmA (.set y) att) := by
   have hr : ∀ t, ∀ w, ((denote t).p w).isSome = AdmA t w := fun t w =>
     Bool.coe_iff_coe.mp (by simpa using (AdmA_exact t w).symm)
-  have h1 : ∀ att, AdmA (.set z) att = (AdmA (.set a) att && AdmA (.set y) att) := fun att => by
-    apply Bool.eq_iff_iff.mpr
-    rw [Bool.and_eq_true]
-    show ((setCodec (denote z)).p att).isSome = true ↔
-      ((setCodec (denote a)).p att).isSome = true ∧ ((setCodec (denote y)).p att).isSome = true
-    rw [setCodec_p_isSome_of_sub (sub_denote z hz), setCodec_p_isSome_of_sub (sub_denote a ha),
-      setCodec_p_isSome_of_sub (sub_denote y hy)]
-    cases att <;> simp only [hr, h, Bool.and_eq_true, and_false, iff_self] <;>
-      exact ⟨fun H => ⟨fun x hx => (H x hx).1, fun x hx => (H x hx).2⟩,
-        fun H x hx => ⟨H.1 x hx, H.2 x hx⟩⟩
-  refine ⟨h1, fun att hA hY => ?_⟩
-  have hZ : AdmA (.set z) att = true := by rw [h1, hA, hY]; rfl
-  obtain ⟨vz, hvz⟩ := Option.isSome_iff_exists.mp hZ
-  obtain ⟨va, hva⟩ := Option.isSome_iff_exists.mp hA
-  obtain ⟨vy, hvy⟩ := Option.isSome_iff_exists.mp hY
-  have oz := (sub_setCodec (sub_denote z hz)).2 _ _ hvz
-  have oa := (sub_setCodec (sub_denote a ha)).2 _ _ hva
-  have oy := (sub_setCodec (sub_denote y hy)).2 _ _ hvy
-  refine ⟨?_, ?_⟩
-  · exact hvz.trans ((congrArg some (Option.some.inj (oz.symm.trans oa))).trans hva.symm)
-  · exact hvz.trans ((congrArg some (Option.some.inj (oz.symm.trans oy))).trans hvy.symm)
+  apply Bool.eq_iff_iff.mpr
+  rw [Bool.and_eq_true]
+  show ((setCodec (denote z)).p att).isSome = true ↔
+    ((setCodec (denote a)).p att).isSome = true ∧ ((setCodec (denote y)).p att).isSome = true
+  rw [setCodec_p_isSome_of_sub (sub_denote z hz), setCodec_p_isSome_of_sub (sub_denote a ha),
+    setCodec_p_isSome_of_sub (sub_denote y hy)]
+  cases att <;> simp only [hr, h, Bool.and_eq_true, and_false, iff_self] <;>
+    exact ⟨fun H => ⟨fun x hx => (H x hx).1, fun x hx => (H x hx).2⟩,
+      fun H x hx => ⟨H.1 x hx, H.2 x hx⟩⟩
 
-/-- **Two primitives met at a primitive read as each factor reads.** -/
+/-- **Two primitives met at a primitive read what both read.** -/
 theorem admA_prim_some : ∀ g g' h : Ground, Ground.meet g g' = some h →
-    AdmAAt (.prim g) (.prim g') (.prim h)
-  | .base k, .base k', h, hp => by
+    ∀ a, AdmA (.prim h) a = (AdmA (.prim g) a && AdmA (.prim g') a)
+  | .base k, .base k', h, hp, a => by
       simp only [Ground.meet] at hp
       split at hp
-      · next hk =>
-          simp only [Option.some.injEq] at hp; subst hp hk
-          exact ⟨fun a => (Bool.and_self _).symm, fun a _ _ => ⟨rfl, rfl⟩⟩
+      · next hk => simp only [Option.some.injEq] at hp; subst hp hk; exact (Bool.and_self _).symm
       · exact nomatch hp
-  | .base k, .literal k' x, h, hp => by
+  | .base k, .literal k' x, h, hp, a => by
       simp only [Ground.meet] at hp
       split at hp
       · next hk =>
           simp only [Option.some.injEq] at hp; subst hp hk
-          refine ⟨fun a => ?_, fun a ha hb => ⟨literal_denote_agree hb, rfl⟩⟩
           cases hx : AdmA (Term.literal _ x) a with
           | false => simp
           | true => rw [AdmA_base_of_literal rfl hx]; simp
       · exact nomatch hp
-  | .literal k x, .base k', h, hp => by
+  | .literal k x, .base k', h, hp, a => by
       simp only [Ground.meet] at hp
       split at hp
       · next hk =>
           simp only [Option.some.injEq] at hp; subst hp hk
-          refine ⟨fun a => ?_, fun a ha hb => ⟨rfl, literal_denote_agree ha⟩⟩
           cases hx : AdmA (Term.literal _ x) a with
           | false => simp
           | true => rw [AdmA_base_of_literal rfl hx]; simp
       · exact nomatch hp
-  | .literal k x, .literal k' x', h, hp => by
+  | .literal k x, .literal k' x', h, hp, a => by
       simp only [Ground.meet] at hp
       cases k <;> cases k' <;> simp only [Ground.meetLit, reduceCtorEq] at hp <;>
         (try split at hp) <;>
         first
           | (simp only [reduceCtorEq] at hp)
           | (simp only [Option.some.injEq] at hp; subst hp; subst_vars
-             exact ⟨fun a => (Bool.and_self _).symm, fun a _ _ => ⟨rfl, rfl⟩⟩)
+             exact (Bool.and_self _).symm)
 
 /-- **Two primitives met at the bottom read nothing together.** -/
 theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
@@ -1406,22 +1380,26 @@ theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
               (AdmA_literal_member _ _) a
           | (rename_i hne; rw [← AdmALit_never_of_ne hne a]; rfl)
 
-/-- **A base reads as the top reads it.** -/
-theorem admA_prim_top : ∀ g : Ground, Ground.meetTop g = true → AdmAAt (.prim g) .opaq (.prim g)
-  | .base k, _ => ⟨fun a => by cases k <;> cases a <;> rfl,
-      fun a ha hb => ⟨rfl, by cases k <;> cases a <;> first | rfl | cases ha⟩⟩
-  | .literal _ _, h => by simp [Ground.meetTop] at h
+/-- **A base reads only what the top reads.** -/
+theorem admA_prim_top : ∀ g : Ground, Ground.meetTop g = true →
+    ∀ a, AdmA (.prim g) a = true → AdmA .opaq a = true
+  | .base k, _, a, ha => by
+      have e : AdmA (.base k) a = (AdmA (.base k) a && AdmA .opaq a) := by
+        cases k <;> cases a <;> rfl
+      rw [ha, Bool.true_and] at e
+      exact e.symm
+  | .literal _ _, h, _, _ => by simp [Ground.meetTop] at h
 
 /-- The formers of DynamoDB, on the read side. -/
 instance dynFormerAdmA : Alg.FormerAdmA dynSyn where
-  set_meet _ _ _ ha hy hz h := admA_set_meet ha hy hz h
+  set_meet _ _ _ ha hy hz h c := admA_set_meet ha hy hz h c
   set_never _ _ h c := AdmA_set_and_false h c
 
-/-- The leaf meet of DynamoDB is exact on the read side, and reads as each factor reads. -/
+/-- The leaf meet of DynamoDB is exact on the read side. -/
 instance dynLeafAdmA : Alg.LeafAdmA dynSyn where
-  prim_some g g' h hp := admA_prim_some g g' h hp
+  prim_some g g' h hp c := admA_prim_some g g' h hp c
   prim_none g g' hp c := admA_prim_none g g' hp c
-  prim_top g hg := admA_prim_top g hg
+  prim_top g hg c hc := admA_prim_top g hg c hc
 
 
 /-- **Where two terms have a meet, it reads exactly the attributes both read.** -/
@@ -1645,7 +1623,7 @@ theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSu
           have he' := EnvLeV.cons ih.1 he
           have hs' := EnvSub.cons ih.2 hs
           refine ⟨fun w hw => ?_,
-            Alg.sub_denoteIn Ω_topLaws (writeView b) (HF_writeView b) _ hs'⟩
+            Alg.sub_denoteIn (writeView b) (HF_writeView b) _ hs'⟩
           have := writeLeE b _ _ he' hs' w (by rw [Alg.Adm_eq_isSome]; exact hw)
           rwa [Alg.Adm_eq_isSome] at this
       exact writeLeE b _ _ (EnvLeV.cons (hst _).1 he) (EnvSub.cons (hst _).2 hs) v h
@@ -1682,7 +1660,7 @@ theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSu
   | .set t, ρ, ρ', he, hs => fun v h => by
       simp only [writeView]
       exact setCodec_e_mono (c := Alg.denote t ρ)
-        (Alg.sub_denoteIn Ω_topLaws _ (HF_writeView t) ρ' hs)
+        (Alg.sub_denoteIn _ (HF_writeView t) ρ' hs)
         (fun w hw => by
           have := writeLeE t ρ ρ' he hs w (by rw [Alg.Adm_eq_isSome]; exact hw)
           rwa [Alg.Adm_eq_isSome] at this) h
@@ -1737,7 +1715,7 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
           have he' := EnvLeA.cons ih.1 he
           have hs' := EnvSub.cons ih.2 hs
           refine ⟨fun w hw => ?_,
-            Alg.sub_denoteIn Ω_topLaws (readView b) (HF_readView b) _ hs'⟩
+            Alg.sub_denoteIn (readView b) (HF_readView b) _ hs'⟩
           have := readLeE b _ _ he' hs' w (by rw [Alg.AdmA_eq_isSome]; exact hw)
           rwa [Alg.AdmA_eq_isSome] at this
       exact readLeE b _ _ (EnvLeA.cons (hst _).1 he) (EnvSub.cons (hst _).2 hs) a h
@@ -1778,7 +1756,7 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
   | .set t, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
       exact setCodec_p_mono (c := Alg.denote t ρ)
-        (Alg.sub_denoteIn Ω_topLaws _ (HF_readView t) ρ' hs)
+        (Alg.sub_denoteIn _ (HF_readView t) ρ' hs)
         (fun w hw => by
           have := readLeE t ρ ρ' he hs w (by rw [Alg.AdmA_eq_isSome]; exact hw)
           rwa [Alg.AdmA_eq_isSome] at this) h
