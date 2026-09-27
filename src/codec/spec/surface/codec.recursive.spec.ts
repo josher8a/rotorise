@@ -231,6 +231,26 @@ describe('a union that names itself', () => {
     })
 
     /**
+     * **A refusal is a value on the path that `at` returns.** The walk of `at` forces the thunk
+     * that the path crosses. The located codec returns that refusal from encode and decode, and
+     * keeps the path, because the path needs no codec.
+     */
+    it('returns the refusal of a thunk that the walk of at forces, and does not throw', () => {
+        type Node = { v: string; next: Node | null }
+        const List: AttributeCodec<Node> = lazy(() =>
+            object({ v: string, next: nullable(List) }),
+        )
+        const Doc = object({ head: List }).item
+        const located = Doc.at((p) => p.head.next.v)
+        expect(located.path()).toBe('head.next.v')
+        const written = located.encode('a')
+        expect(written).toBeInstanceOf(CodecError)
+        expect(String(written)).toMatch(/nullable:/)
+        expect(located.decode({ S: 'a' })).toBeInstanceOf(CodecError)
+        expect(() => located.unsafeEncode('a')).toThrow(/nullable:/)
+    })
+
+    /**
      * **A nullable recursive field defers the `nullable` call to a thunk of its own.** When that
      * thunk runs, the outer thunk is resolved, so the null point is known. The refusal names this
      * spelling, because `held(nullable(inner), …)` does not apply to a thunk.

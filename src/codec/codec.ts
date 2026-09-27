@@ -380,11 +380,15 @@ export const constantOf = (declared: ObjectSlot): unknown => {
  * not a codec. This used to be a `Def` kind, a pseudo-codec whose `encode` and `decode` both
  * threw, which meant every reader of a definition had to know about a definition that was not one.
  * The disagreement belongs to the walk, so it is the walk that carries it.
+ *
+ * **A refusal inside a thunk is a value.** The thunk is caller code, and a builder in the thunk
+ * refuses with a `CodecError` when the walk forces the thunk. The walk returns that refusal. Every
+ * other throw propagates, because an overflow or a defect of the caller is not a refusal.
  */
 const childrenOf = (
     codec: AnyCodec,
     segment: string | number,
-): readonly AnyCodec[] => {
+): readonly AnyCodec[] | CodecError => {
     const def = codec.def
     const one = (child: AnyCodec | undefined) => (child ? [child] : [])
     switch (def.kind) {
@@ -415,20 +419,53 @@ const childrenOf = (
         case 'refine':
         case 'legacy':
             return childrenOf(codecOfTerm(def.inner), segment)
-        case 'lazy':
-            return childrenOf(codecOfTerm(def.get()), segment)
+        case 'lazy': {
+            let resolved: Term
+            try {
+                resolved = def.get()
+            } catch (thrown) {
+                if (thrown instanceof CodecError) return thrown
+                throw thrown
+            }
+            return childrenOf(codecOfTerm(resolved), segment)
+        }
         default:
             return []
     }
 }
 
-/** What the variants reach, deduplicated — `Set` keeps insertion order, so the first declared wins. */
+/**
+ * What the variants reach, deduplicated — `Set` keeps insertion order, so the first declared wins.
+ * A variant that refuses makes the whole answer a refusal, because the reach of that variant is
+ * unknown.
+ */
 const acrossVariants = (
     variants: readonly AnyCodec[],
     segment: string | number,
-): readonly AnyCodec[] => [
-    ...new Set(variants.flatMap((variant) => childrenOf(variant, segment))),
-]
+): readonly AnyCodec[] | CodecError => {
+    const reached = new Set<AnyCodec>()
+    for (const variant of variants) {
+        const children = childrenOf(variant, segment)
+        if (children instanceof CodecError) return children
+        for (const child of children) reached.add(child)
+    }
+    return [...reached]
+}
+
+/**
+ * The codec at a path whose walk forced a thunk that refused. Both halves return the refusal, so
+ * no value is written and no attribute is read, and the term is **`never`** for the reason that
+ * {@link unresolvedAt} gives. Each call returns a new `CodecError`, because `under` changes the
+ * error that it receives.
+ */
+const refusedAt = (refusal: CodecError): AnyCodec => {
+    const refused = () => new CodecError(refusal.message)
+    return codec<never, AttributeValue>({
+        def: { kind: 'never' },
+        encode: refused,
+        decode: refused,
+    })
+}
 
 /**
  * A path several variants declare differently, which is still a path.
@@ -2964,21 +3001,29 @@ const objectFromMap = <
              * carried along and reported only if it survives to the end, where using it would mean
              * encoding with a codec nobody declared.
              */
-            let frontier: readonly AnyCodec[] = [self as unknown as AnyCodec]
-            for (const segment of segments) {
-                const next = [
-                    ...new Set(frontier.flatMap((c) => childrenOf(c, segment))),
+            const walk = (): AnyCodec => {
+                let frontier: readonly AnyCodec[] = [
+                    self as unknown as AnyCodec,
                 ]
-                if (next.length === 0) {
-                    throw new CodecError(
-                        `no attribute is declared at '${path}'`,
-                    )
+                for (const segment of segments) {
+                    const next = acrossVariants(frontier, segment)
+                    if (next instanceof CodecError) return refusedAt(next)
+                    if (next.length === 0) {
+                        throw new CodecError(
+                            `no attribute is declared at '${path}'`,
+                        )
+                    }
+                    frontier = next
                 }
-                frontier = next
+                const [first, ...ambiguous] = frontier as [
+                    AnyCodec,
+                    ...AnyCodec[],
+                ]
+                return ambiguous.length === 0
+                    ? first
+                    : unresolvedAt(String(path))
             }
-            const [first, ...ambiguous] = frontier as [AnyCodec, ...AnyCodec[]]
-            const here =
-                ambiguous.length === 0 ? first : unresolvedAt(String(path))
+            const here = walk()
 
             return {
                 ...(here as AttributeCodec<X>),
