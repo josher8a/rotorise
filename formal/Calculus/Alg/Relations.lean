@@ -24,6 +24,17 @@ def Sub (c d : Codec V A M) : Prop :=
 theorem sub_restrict_self (c : Codec V A M) (q : V → Bool) : Sub (c.restrict q) c :=
   ⟨fun _ _ h => (restrict_e.mp h).2, fun _ _ h => (restrict_p.mp h).1⟩
 
+/-- **Below one bound, the read domains decide the reads.** Three codecs below `u`, where the
+    third reads exactly where both others read: there the three read the value of `u`. -/
+theorem readAgree_of_sub {x y z u : Codec V A M} (hx : Sub x u) (hy : Sub y u) (hz : Sub z u)
+    (h1 : ∀ a, (z.p a).isSome = ((x.p a).isSome && (y.p a).isSome)) {a : A}
+    (ha : (x.p a).isSome = true) (hb : (y.p a).isSome = true) :
+    z.p a = x.p a ∧ z.p a = y.p a := by
+  have hc : (z.p a).isSome = true := by rw [h1, ha, hb]; rfl
+  have ez := (Option.some_get hc).symm.trans (hz.2 _ _ (Option.some_get hc).symm).symm
+  exact ⟨ez.trans ((hx.2 _ _ (Option.some_get ha).symm).trans (Option.some_get ha)),
+    ez.trans ((hy.2 _ _ (Option.some_get hb).symm).trans (Option.some_get hb))⟩
+
 /-! ### The information order
 
 The minimal requirement *any* such ccpo must meet — `e` and `p` grow from undefined, with

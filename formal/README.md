@@ -10,7 +10,7 @@ definition it touches.
 | --------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Calculus/Alg/Codec.lean`         | §2          | The generic layer starts here, in the namespace `Calculus.Alg`. The record `Codec` and its laws `Lawful`/`LawfulCore` over carriers `V`, `A` and `M`, with the member of an attribute as a parameter of `Lawful`. The module imports nothing |
 | `Calculus/Alg/Combinators.lean` | §3, §5      | `restrict`, `through`, `extendRead`, `pointCodec`, the union by the first admitter (`select`, `altCodec`), the side conditions (`Carrier`, `IsoCancels`, `ReadsCoherently`), and the law of each, over any carriers |
-| `Calculus/Alg/Relations.lean` | §5, §6      | `Sub`, `Codec.Approx`, `Codec.Equiv`, `Canon`, `Compat`, the laws of the join (`lawful_altCodec`) and the common bound (`compat_of_common_bound`), over any carriers |
+| `Calculus/Alg/Relations.lean` | §5, §6      | `Sub`, `Codec.Approx`, `Codec.Equiv`, `Canon`, `Compat`, the reads below one bound (`readAgree_of_sub`), the laws of the join (`lawful_altCodec`) and the common bound (`compat_of_common_bound`), over any carriers |
 | `Calculus/Alg/Lists.lean`    | —, §3       | `traverse` and its laws off the pivot `traverse_eq_some`, the `filter` facts, and `carriedCodec` with its instance at a traversal, `entrywise` (`lawful_entrywise`), over any carriers |
 | `Calculus/Alg/Positions.lean` | §3          | The positional theory: `align`, `slots`, `alignL`, `slotsL`, the zip laws, `tuple_retract` and `list_retract`, over any carriers |
 | `Calculus/Alg/Maps.lean`     | §3–§4       | `funImage` and `setImage` over any key type, `FieldSem` and `RestSem`, and the keyed map `MapOf`, which keeps the namespace `Calculus` so that field notation reaches its extensions |
@@ -27,7 +27,7 @@ definition it touches.
 | `Calculus/Lang/MeetRows.lean` | §5          | The rows of the meet that read no admission: `rowOfG` and its laws, dominance, and the answers of the list and object families |
 | `Calculus/Lang/Shapes.lean`   | §5          | The shape classes `Shapes` that a universe supplies: the former class of each value and attribute, and where each former lands. The six disjointness laws per side are theorems of them, at every signature |
 | `Calculus/Lang/MeetV.lean`    | §5          | `Adm_meet` at every signature, from the write-side laws `FormerAdm` and `LeafAdm` and the shape classes |
-| `Calculus/Lang/MeetA.lean`    | §5          | `AdmA_meet_both` at every signature: the read-side homomorphism and its reading agreement, from `FormerAdmA` and `LeafAdmA` |
+| `Calculus/Lang/MeetA.lean`    | §5          | `AdmA_meet_both` at every signature: the read-side homomorphism and its reading agreement, from `FormerAdmA`, `LeafAdmA` and `TopLaws` |
 | `Calculus/Lang/MeetWrites.lean` | §5        | `meet_writes` at every signature, from the member law `LeafWrites` |
 | `Calculus/Lang/MeetTyped.lean` | §5         | `typed_meet` at every signature: the typed fragment is closed under the meet, with no law |
 | `Calculus/Dynamo/Alg/Lists.lean`       | —           | The list plumbing at the DynamoDB carriers: the aliases of the generic traversal and `filter` facts, and the keyed clause `traverse_fst`, which reads `Name` |

@@ -9,7 +9,8 @@ subterm or composes subterms through the structure that `opaque` itself uses. So
 graph and the read graph of a held-free term lie inside the graphs of `opaque`.
 `confluence_W` and `confluence_R` state the two inclusions. `sub_denote` proves them from
 `Alg.sub_denote`, one mutual induction over `Term`, `Body`, `ObjectSlot`, the list and the
-option, for every universe. `Ω_topLaws` gives the laws of `Ω` that the induction reads.
+option, for every universe. The instance `Ω_topLaws` gives the laws of `Ω` that the induction
+reads.
 
 `Sub c d` is the inclusion of graphs on both halves. The set cases go through `encSet_congr` and
 `decSet_congr`.
@@ -131,7 +132,7 @@ export Alg (HF HFB HFS HFL HFO)
 
 /-- The laws of `Ω` that the held-free theory reads: each primitive is below `Ω`, `Ω` acts as the
     `arr` and `map` formers, and a set over a restriction of `Ω` is a restriction of `Ω`. -/
-theorem Ω_topLaws : Alg.TopLaws dynSyn where
+instance Ω_topLaws : Alg.TopLaws dynSyn where
   ground
     | .base k => sub_baseCodec k
     | .literal k x => sub_literal k x
@@ -141,7 +142,7 @@ theorem Ω_topLaws : Alg.TopLaws dynSyn where
 
 /-- **Confluence**, closed: the denotation of a held-free term is a restriction of `Ω`. -/
 theorem sub_denote (t : Term) (h : HF t) : Sub (denote t) Ω :=
-  Alg.sub_denote Ω_topLaws t h
+  Alg.sub_denote t h
 
 /-- **(W)**: a held-free term writes only what `opaque` writes. -/
 theorem confluence_W {t : Term} (h : HF t) {v a} (he : (denote t).e v = some a) :

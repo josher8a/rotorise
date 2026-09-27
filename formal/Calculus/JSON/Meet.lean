@@ -91,17 +91,15 @@ instance jsonLeafAdm : Alg.LeafAdm jsonSyn where
 
 /-- The formers of JSON, on the read side: every former term reads nothing. -/
 instance jsonFormerAdmA : Alg.FormerAdmA jsonSyn where
-  set_meet _ _ _ _ _ _ _ := ⟨fun a => by simp [(admA_former_empty a).1],
-    fun a ha _ => by simp [(admA_former_empty a).1] at ha⟩
+  set_meet _ _ _ _ _ _ _ a := by simp [(admA_former_empty a).1]
   set_never _ _ _ a := by simp [(admA_former_empty a).1]
 
-/-- The leaf meet of JSON is exact on the read side, and reads as each factor reads: a kind reads
-    an attribute of that kind as itself, and so does the top. -/
+/-- The leaf meet of JSON is exact on the read side. -/
 instance jsonLeafAdmA : Alg.LeafAdmA jsonSyn where
-  prim_some m m' h hp := by
+  prim_some m m' h hp a := by
     simp only [Alg.Leaf.prim] at hp
     split at hp
-    · next he => cases hp; subst he; exact ⟨fun a => (Bool.and_self _).symm, fun a _ _ => ⟨rfl, rfl⟩⟩
+    · next he => cases hp; subst he; exact (Bool.and_self _).symm
     · exact nomatch hp
   prim_none m m' hp a := by
     simp only [Alg.Leaf.prim] at hp
@@ -114,15 +112,7 @@ instance jsonLeafAdmA : Alg.LeafAdmA jsonSyn where
         | true =>
             have h1 : a.member = m := of_decide_eq_true ha
             exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
-  prim_top m _ := ⟨fun a => by
-      show Alg.AdmA (.prim m : Alg.Term jsonSyn) [] a
-        = (Alg.AdmA (.prim m : Alg.Term jsonSyn) [] a && true)
-      rw [Bool.and_true],
-    fun a ha _ => by
-      rw [admA_prim] at ha
-      refine ⟨rfl, ?_⟩
-      show gate m a = some a
-      exact gate_eq_some.mpr ⟨of_decide_eq_true ha, rfl⟩⟩
+  prim_top _ _ _ _ := rfl
 
 /-- A kind meets only its own kind, so the met kind is each factor's member. -/
 instance jsonLeafWrites : Alg.LeafWrites jsonSyn where

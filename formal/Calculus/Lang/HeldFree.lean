@@ -8,9 +8,10 @@ or composes subterms through the structure that the top itself uses, so the writ
 read graph of a held-free term lie inside the graphs of the top. `sub_denote` proves the two
 inclusions by one mutual induction over `Term`, `Body`, `ObjectSlot`, the list and the option.
 
-`TopLaws` states what the induction reads of the top, former by former. Neither soundness nor the
-judgement reads these laws, so they sit outside `Sem`. `compat_of_HF` adds that the top is
-canonical: two held-free terms below one canonical codec are compatible.
+`TopLaws` states what the induction reads of the top, former by former. A universe supplies the
+laws as an instance. Neither soundness nor the judgement reads these laws, so they sit outside
+`Sem`. `compat_of_HF` adds that the top is canonical: two held-free terms below one canonical
+codec are compatible.
 -/
 
 namespace Calculus.Alg
@@ -161,7 +162,7 @@ variable [Sem S]
 
 /-- The laws of the top that the held-free theory reads: each primitive is below the top, the
     top acts as the list and map formers, and the set lift keeps a codec below the top. -/
-structure TopLaws (S : Syn) [Sem S] : Prop where
+class TopLaws (S : Syn) [Sem S] : Prop where
   ground : ∀ g, Sub (Sem.ground g) (Sem.top (S := S))
   list : ∀ L ∈ Sem.list (S := S),
     (∀ vs, (Sem.top (S := S)).e (L.pV.into vs) = (traverse (Sem.top (S := S)).e vs).map L.pA.into) ∧
@@ -177,9 +178,9 @@ structure TopLaws (S : Syn) [Sem S] : Prop where
 mutual
 /-- **Confluence.** The denotation of a held-free term is a restriction of the top, on both
     halves, over an environment of restrictions of the top. -/
-theorem sub_denoteIn (hT : TopLaws S) : ∀ t : Term S, HF t → ∀ ρ : List S.C,
+theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (denote t ρ) (Sem.top (S := S))
-  | .prim g, _, _, _ => hT.ground g
+  | .prim g, _, _, _ => TopLaws.ground g
   | .opaq, _, _, _ => ⟨fun _ _ h => h, fun _ _ h => h⟩
   | .never, _, _, _ => sub_empty
   | .var i, _, _, henv => henv i
@@ -187,7 +188,7 @@ theorem sub_denoteIn (hT : TopLaws S) : ∀ t : Term S, HF t → ∀ ρ : List S
       simp only [denote]
       cases hL : Sem.set (S := S) with
       | none => exact sub_empty
-      | some L => exact hT.set L hL _ (sub_denoteIn hT t h ρ henv)
+      | some L => exact TopLaws.set L hL _ (sub_denoteIn t h ρ henv)
   -- each stage is a restriction by the body's case at the stage before, and the limit reads a
   -- stage at each input
   | .mu b, h, ρ, henv => by
@@ -195,26 +196,26 @@ theorem sub_denoteIn (hT : TopLaws S) : ∀ t : Term S, HF t → ∀ ρ : List S
         induction n with
         | zero => exact sub_empty
         | succ n ih =>
-          exact sub_denoteIn hT b h (_ :: ρ) fun i => match i with
+          exact sub_denoteIn b h (_ :: ρ) fun i => match i with
             | 0 => ih
             | i + 1 => henv i
       exact ⟨fun v a he => (hs _).1 v a he, fun a v hp => (hs _).2 a v hp⟩
   | .held _ _ _ _, h, _, _ => nomatch h
   | .refine t q, h, ρ, henv =>
-      sub_trans (sub_restrict_self _ _) (sub_denoteIn hT t h ρ henv)
+      sub_trans (sub_restrict_self _ _) (sub_denoteIn t h ρ henv)
   | .list pre sp suf, h, ρ, henv => by
       simp only [HF, hasHeld, Bool.or_eq_false_iff] at h
       simp only [denote]
       cases hL : Sem.list (S := S) with
       | none => exact sub_empty
       | some L =>
-        exact sub_listCodec (hT.list L hL).1 (hT.list L hL).2
-          (sub_denoteList hT pre h.1.1 ρ henv) (sub_denoteOpt hT sp h.1.2 ρ henv)
-          (sub_denoteList hT suf h.2 ρ henv)
-  | .object b, h, ρ, henv => sub_body hT b h ρ henv
-  | .union os, h, ρ, henv => sub_altCodec (sub_denoteList hT os h ρ henv) _
+        exact sub_listCodec (TopLaws.list L hL).1 (TopLaws.list L hL).2
+          (sub_denoteList pre h.1.1 ρ henv) (sub_denoteOpt sp h.1.2 ρ henv)
+          (sub_denoteList suf h.2 ρ henv)
+  | .object b, h, ρ, henv => sub_body b h ρ henv
+  | .union os, h, ρ, henv => sub_altCodec (sub_denoteList os h ρ henv) _
 /-- …at a body. -/
-theorem sub_body (hT : TopLaws S) : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
+theorem sub_body [TopLaws S] : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (bodySem b ρ) (Sem.top (S := S))
   | .mk fields f w, h, ρ, henv => by
       simp only [HFB, hasHeldB, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists] at h
@@ -222,44 +223,44 @@ theorem sub_body (hT : TopLaws S) : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
       cases hF : Sem.map (S := S) with
       | none => exact sub_empty
       | some F =>
-        exact sub_objectCodec (hT.map F hF).1 (hT.map F hF).2 (wildSem_ne_drop _)
-          (fun k => sub_slot hT (f k) (Bool.eq_false_iff.mpr (h.1 k)) ρ henv)
-          (sub_wild hT w h.2 ρ henv)
+        exact sub_objectCodec (TopLaws.map F hF).1 (TopLaws.map F hF).2 (wildSem_ne_drop _)
+          (fun k => sub_slot (f k) (Bool.eq_false_iff.mpr (h.1 k)) ρ henv)
+          (sub_wild w h.2 ρ henv)
 /-- …at a slot. -/
-theorem sub_slot (hT : TopLaws S) : ∀ s : ObjectSlot S, HFS s → ∀ ρ : List S.C,
+theorem sub_slot [TopLaws S] : ∀ s : ObjectSlot S, HFS s → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (fieldSem s ρ).codec (Sem.top (S := S))
-  | .req t, h, ρ, henv => sub_denoteIn hT t h ρ henv
-  | .optional t, h, ρ, henv => sub_denoteIn hT t h ρ henv
+  | .req t, h, ρ, henv => sub_denoteIn t h ρ henv
+  | .optional t, h, ρ, henv => sub_denoteIn t h ρ henv
 /-- …at an open block. -/
-theorem sub_wild (hT : TopLaws S) : ∀ w : Option (Term S), HFO w → ∀ ρ : List S.C,
+theorem sub_wild [TopLaws S] : ∀ w : Option (Term S), HFO w → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ rcOf (wildSem w ρ), Sub c (Sem.top (S := S))
   | none, _, _, _ => fun _ hc => nomatch hc
-  | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn hT t h ρ henv
+  | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn t h ρ henv
 /-- …at a list of terms. -/
-theorem sub_denoteList (hT : TopLaws S) : ∀ ts : List (Term S), HFL ts → ∀ ρ : List S.C,
+theorem sub_denoteList [TopLaws S] : ∀ ts : List (Term S), HFL ts → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ denoteList ts ρ, Sub c (Sem.top (S := S))
   | [], _, _, _ => fun _ hc => nomatch hc
   | t :: ts, h, ρ, henv => fun c hc => by
       simp only [HFL, hasHeldL, Bool.or_eq_false_iff] at h
       rcases List.mem_cons.mp hc with rfl | hc
-      · exact sub_denoteIn hT t h.1 ρ henv
-      · exact sub_denoteList hT ts h.2 ρ henv c hc
+      · exact sub_denoteIn t h.1 ρ henv
+      · exact sub_denoteList ts h.2 ρ henv c hc
 /-- …at an optional term. -/
-theorem sub_denoteOpt (hT : TopLaws S) : ∀ o : Option (Term S), HFO o → ∀ ρ : List S.C,
+theorem sub_denoteOpt [TopLaws S] : ∀ o : Option (Term S), HFO o → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ denoteOpt o ρ, Sub c (Sem.top (S := S))
   | none, _, _, _ => fun _ hc => nomatch hc
-  | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn hT t h ρ henv
+  | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn t h ρ henv
 end
 
 /-- **Confluence**, closed: the denotation of a held-free term is a restriction of the top. -/
-theorem sub_denote (hT : TopLaws S) (t : Term S) (h : HF t) : Sub (denote t) (Sem.top (S := S)) :=
-  sub_denoteIn hT t h [] fun _ => sub_empty
+theorem sub_denote [TopLaws S] (t : Term S) (h : HF t) : Sub (denote t) (Sem.top (S := S)) :=
+  sub_denoteIn t h [] fun _ => sub_empty
 
 /-- **Held-free lawful terms are pairwise compatible**: the common bound is the top, and the top
     is canonical. -/
-theorem compat_of_HF (hT : TopLaws S) (hcan : Canon (Sem.top (S := S))) {s t : Term S} (hs : HF s) (ht : HF t)
+theorem compat_of_HF [TopLaws S] (hcan : Canon (Sem.top (S := S))) {s t : Term S} (hs : HF s) (ht : HF t)
     (hlt : Lawful Sem.member (denote t)) : Compat (denote s) (denote t) :=
-  compat_of_common_bound' (sub_denote hT s hs) (sub_denote hT t ht) hcan hlt
+  compat_of_common_bound' (sub_denote s hs) (sub_denote t ht) hcan hlt
 
 end HeldFree
 

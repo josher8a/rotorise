@@ -96,7 +96,7 @@ compute with.
 | the set former | `Sem.set` as a `SetF`: a lift and its laws | `dSet`, over `setCodec` | none |
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
 | the top | `Sem.top`, `Sem.lawful_top`, `Sem.topHeld` | `Ω`, `HOpaque` | `idCodec` |
-| the top laws | `TopLaws`, proved once for each universe | `Ω_topLaws` | `id_topLaws` |
+| the top laws | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
 | the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `AdmLit`, `inBaseA` and `AdmALit` | the kind test |
 | the leaf meet: two primitives, a primitive and the top, two predicates | `Leaf` | `dynLeaf`: `Ground.meet`, `Ground.meetTop`, `Pred.isData`, `Pred.meetM` | `jsonLeaf`: one kind |
 | the laws of the leaf meet | `LeafAdm`, `LeafAdmA`, `LeafWrites` | `dynLeafAdm`, `dynLeafAdmA`, `dynLeafWrites` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafWrites` |
@@ -105,8 +105,8 @@ compute with.
 
 A former is an `Option`. A universe without a former denotes the term of that former as the
 bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only
-the held-free theory reads them. `PrimAdm` and `PrimAdmA` are outside `Sem` for the same reason:
-only exactness reads them.
+the held-free theory and the read side of the meet read them. `PrimAdm` and `PrimAdmA` are outside
+`Sem` for the same reason: only exactness reads them.
 
 **The meet is structural, and a universe supplies its leaves.** `Alg.Term.meet` has one row per
 constructor of the left operand. Only two rows read a fact of a universe: a primitive met with a
@@ -130,8 +130,11 @@ attributes (`PairedA`), and that the meet reads an attribute as each factor read
 proof recurses on the left operand, as the meet does. The laws are classes outside `Sem`, because
 only the theorems of the meet read them. `LeafAdm`, `LeafAdmA` and `LeafWrites` say that each
 leaf answer is exact. `FormerAdm` and `FormerAdmA` say that the set former carries an element meet
-to a set meet. At DynamoDB, a leaf law is a fact about `inBase` and `inL`, and a set law is a fact
-about `setCodec`. The DynamoDB theorems, such as `Adm_meet` and `AdmA_meet`, state the generic
+to a set meet. Each read-side law states a read domain only. The reading agreement at a leaf row
+and at a set row is no law of a universe: each term of the row is held-free, so each lies below
+the top, and below one bound the read domains decide the reads (`Alg.readAgree_of_sub`,
+`Alg.admAAt_of_HF`). At DynamoDB, a leaf law is a fact about `inBase` and `inL`, and a set law is
+a fact about `setCodec`. The DynamoDB theorems, such as `Adm_meet` and `AdmA_meet`, state the generic
 theorems at the DynamoDB names. At JSON, two kinds meet where they are one kind, and each set law
 holds because the signature has no former and both sides admit nothing.
 
@@ -911,10 +914,11 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New stratum in the term family → every companion in the table above, counted per side.
 - New law of the algebra → state it in an `Alg` module, which imports no instance module. A
   statement that needs a fact of a carrier belongs to that universe.
-- New universe → a `Syn`, a `Sem` instance, its `TopLaws` where the held-free theory must
-  hold, its `PrimAdm` and `PrimAdmA` where exactness must hold, its `Leaf` where the meet must
-  compute, and its `Shapes` and the laws of the meet where the theorems of the meet must hold.
-  Make the module reachable from `Axioms.lean`.
+- New universe → a `Syn`, a `Sem` instance, its `TopLaws` where the held-free theory or the read
+  side of the meet must hold, its `PrimAdm` and `PrimAdmA` where exactness must hold, its `Leaf`
+  where the meet must compute, and its `Shapes` and the laws of the meet where the theorems of the
+  meet must hold. A read-side law of the meet states a read domain only. Make the module reachable
+  from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.
 - New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness
