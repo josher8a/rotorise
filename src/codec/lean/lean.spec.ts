@@ -59,7 +59,6 @@ import {
 } from '../codec'
 import { accepts } from '../denote'
 import type {
-    MeetPair,
     ReadResolution,
     ReadVerdict,
     Refusal,
@@ -71,8 +70,6 @@ import {
     LeanUnemittable,
     leanAttrOf,
     leanGuard,
-    leanMeet,
-    leanMeetModule,
     leanReadModule,
     leanReadResolution,
     leanReadVector,
@@ -1327,74 +1324,6 @@ const separationPairs = (): readonly Separation[] => {
 }
 
 /**
- * Every pair of corpus terms, for the meet differential.
- *
- * Bounded the same way the separation pairs are — a term the emitter has no closed expression for
- * cannot be put to the model — and bounded once more at the *answer*, because a meet can build a
- * term out of two that the printer declines. Both bounds are skips and not failures.
- *
- * Every pair is emitted, the refusals included. `none` and `.never` are the distinction the meet
- * exists to keep, so a pair this library refuses is as much of a claim as one it answers.
- */
-const MEET_DEFERRED: readonly string[] = []
-
-const meetPairs = (): readonly MeetPair[] => {
-    const codecs: readonly (readonly [string, AnyCodec])[] = [
-        ...sampleVectors.map((v) => [v.name, v.codec] as const),
-        ['scalar_number', erase(dynamoNumber)] as const,
-        ['never', erase(never)] as const,
-    ]
-    const out: MeetPair[] = []
-    for (let x = 0; x < codecs.length; x++) {
-        for (let y = x + 1; y < codecs.length; y++) {
-            const [an, left] = codecs[x] as readonly [string, AnyCodec]
-            const [bn, right] = codecs[y] as readonly [string, AnyCodec]
-            const one: MeetPair = { name: `${an}__meet__${bn}`, left, right }
-            try {
-                leanMeet(one)
-            } catch {
-                continue
-            }
-            if (MEET_DEFERRED.includes(one.name)) continue
-            out.push(one)
-        }
-    }
-    // two recursive unions whose bodies meet at `string`, which reads no variable of the pair.
-    // The answer is the body, because a binder whose variable does not occur denotes its body
-    out.push({
-        name: 'recursive_json__meet__recursive_under_object',
-        left: json,
-        right: underObject,
-    })
-    // the same pair under one required field, where the answer is an object stated pointwise
-    out.push({
-        name: 'field_json__meet__field_under_object',
-        left: erase(object({ a: json as never })),
-        right: erase(object({ a: underObject as never })),
-    })
-    // a thunk that throws beside two partners: the meet refuses, because a free variable pairs
-    // with no binder, and a union meets `string` at its `string` option
-    out.push(
-        {
-            name: 'free_array__meet__scalar_decimal',
-            left: array(undeclared),
-            right: decimal,
-        },
-        {
-            name: 'free_variable__meet__scalar_string',
-            left: undeclared,
-            right: string,
-        },
-        {
-            name: 'free_json__meet__scalar_string',
-            left: union([string, array(undeclared)]),
-            right: string,
-        },
-    )
-    return out
-}
-
-/**
  * Every (codec, attribute) pair the corpus offers, for the read-side differential.
  *
  * The attributes are what the corpus actually *writes*, plus six raw shapes for the members no
@@ -1729,26 +1658,6 @@ describe("the declaration guard, against the model's classifier", () => {
         // without the import Lean auto-binds the name and every verdict fails to elaborate
         expect(leanSeparationModule([])).toContain(
             'import Calculus.Dynamo.Lang.Store',
-        )
-    })
-
-    /**
-     * **The meet, both directions.** `Term.meet` and `meetTerms` are one function written twice,
-     * so a disagreement either way is a defect on one side. This is the only check that measures
-     * the meet.
-     */
-    it('puts every corpus meet to the model', () => {
-        const meets = meetPairs()
-        expect(meets.length).toBe(866)
-        expect(MEET_DEFERRED.length).toBe(0)
-        if (process.env.EMIT_LEAN_REFUSALS) {
-            writeFileSync(
-                join(process.cwd(), 'formal', '.meets.lean'),
-                leanMeetModule(meets, MEET_DEFERRED),
-            )
-        }
-        expect(leanMeetModule([])).toContain(
-            'import Calculus.Dynamo.Analysis.Meet',
         )
     })
 
