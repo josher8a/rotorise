@@ -240,9 +240,6 @@ noncomputable def AdmAAny (ts : List Term) (a : Attr) : Bool := anyP (AdmAList t
 @[simp] theorem AdmAAny_cons (t : Term) (ts : List Term) (a : Attr) :
     AdmAAny (t :: ts) a = (AdmA t a || AdmAAny ts a) := rfl
 
-theorem AdmA_union (opts : List Term) (a : Attr) :
-    AdmA (.union opts) a = AdmAAny opts a := rfl
-
 /-- `AdmA`'s literal row, named — for the reason `Adm_literal` gives. -/
 @[simp, AdmA_rows] theorem AdmA_literal (k : GroundKind) (x : k.Carrier) (a : Attr) :
     AdmA (.literal k x) a = AdmALit k x a := rfl

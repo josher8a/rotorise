@@ -75,7 +75,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   run 'vector bridge' bash -c \
     'for f in lean.sample.check.lean lean.sample.lean .vectors.full.lean \
               .separations.lean .readverdicts.lean .resolutions.lean \
-              .readvectors.lean .meets.lean; do
+              .readvectors.lean; do
        [ -f "$f" ] || { echo "missing $f"; exit 1; }
        out=$(lake env lean "$f" 2>&1) || { echo "$out"; exit 1; }
        # warnings are failures here: the generated files are machine-written, so a warning is

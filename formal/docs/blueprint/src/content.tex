@@ -990,20 +990,20 @@ shown compatible.
 \begin{definition}[the certificate]
 \label{def:certificate}
 \uses{cond:compat,def:family}
-\lean{Calculus.certPair, Calculus.viewsNever, Calculus.readView, Calculus.Alg.hasHeld}
+\lean{Calculus.certPair, Calculus.viewsDisjoint, Calculus.Alg.Term.disjoint, Calculus.readView, Calculus.Alg.hasHeld}
 \leanok
 Two options are certified where they are orthogonal. A term denotes a partial isomorphism, and its caller view and its stored
-view are its domain and its range. Two terms whose domains and ranges meet at the bottom are
-orthogonal, and the meet of two orthogonal elements is the bottom (Lawson, \emph{Primer on inverse
-semigroups I}, Lemma 2.16). So the certificate meets the two pairs of views, and a \texttt{held}
-reaches the certificate through its views. On a held-free term the caller view is the term itself. The view of a union is
+view are its domain and its range. Two terms are orthogonal where the product of their domain
+idempotents is zero and the product of their range idempotents is zero (Lawson, \emph{Primer on
+inverse semigroups I}, Lemma 2.16). So the certificate asks the structural disjointness test of the
+two pairs of views, and a \texttt{held} reaches the certificate through its views. On a held-free term the caller view is the term itself. The view of a union is
 the union of its options' views, because a union admits where one of its options admits. The view
 of a recursive term is the recursion of the view of its body, so a \texttt{held} below a recursion
 reaches the certificate too. The stored view keeps a predicate only where the inner term holds no
 \texttt{held} and no variable. A finer view keeps a predicate over a variable whose binder holds no
-\texttt{held}. The host builds no data predicate over a variable, so no host-built term tells the
-two views apart. The
-meet refuses a closure beside a partner that its inner term does not meet at the bottom. A certified pair is separated
+\texttt{held}. The test compares two data predicates only over closed held-free inner terms, so the
+two views give one verdict. The
+test reads a closure through its inner term. A certified pair is separated
 (\texttt{separates\_of\_certPair}), so it is compatible. The certificate is sufficient and not
 necessary: two restrictions of one adapter that overlap are compatible, and no certificate reaches
 them.
@@ -1080,9 +1080,9 @@ terms force the point:
 What exactness costs is decidability. \texttt{held} carries an
 arbitrary \texttt{f}, \texttt{refine} an arbitrary \texttt{q}, so membership of an admissible set is not a question the
 declaration can answer. Admission \textbf{specifies} the two families. It does not decide them. What the
-certificate runs is the meet, and the meet is decided. The bottom rows of the
-meet at two formers read the shape classes of the universe, and the read-side proof of the DynamoDB
-leaf meet reads the member of each primitive.
+certificate runs is the disjointness test, and the test is decided. The rows of the
+test at two formers read the shape classes of the universe, and the read-side proof of the DynamoDB
+leaves reads the member of each primitive.
 
 \textbf{Admission is what a union consults, at every option.} A union attempts each option's codec, an
 object option included, so \texttt{V(c)} and \texttt{A(c)} are \emph{option} admission as well: \texttt{dom(e)} and
@@ -1092,8 +1092,8 @@ admits a map exactly where its codec writes or reads the map.
 One pair shows what the attempt decides. Take two objects declaring the same single \texttt{req} name and
 different field terms, \texttt{⟨a\ :\ String⟩} against \texttt{⟨a\ :\ Number⟩}. Their admissible sets are disjoint on
 both sides: a map the first writes carries a string at \texttt{a}, which the second's field term refuses. So
-\texttt{⟨a\ ↦\ "1"⟩} reaches the first option alone. Their meet is the bottom, because the two field terms meet
-at \texttt{never} at a required name, and the certificate accepts the pair on that meet.
+\texttt{⟨a\ ↦\ "1"⟩} reaches the first option alone. The two bodies are disjoint, because the two field terms are
+disjoint at a required name, and the certificate accepts the pair on that test.
 
 An open object's rest takes part in the attempt: an undeclared name reaches the option where its rest
 codec holds the name. An \texttt{opt} binding \textbf{widens} admission, which makes two options differing only
@@ -1115,7 +1115,7 @@ Two options separate when no value is admitted by both and no attribute is read 
 
 \textbf{On both sides at once, two options separate when one option requires a name the other does
 not declare.} The certificate asks the question through
-the meet: two closed bodies meet at the bottom where one requires a name that the other does not
+the test: two closed bodies are disjoint where one requires a name that the other does not
 declare. That is a question about two terms, answered by computation at the declaration. What it declines is an undischarged obligation, not a refusal of
 compatibility.
 

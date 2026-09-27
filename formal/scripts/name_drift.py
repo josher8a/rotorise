@@ -219,8 +219,6 @@ HOST = {
                     "names for one carrier, on the two sides of the bridge",
     "dynamoNumber": "`src/`'s codec at the native numeric base, whose term is `Term.number`. The "
                     "codec and the term are named on their own sides",
-    "MEET_LEMMAS": "`src/codec/lean.ts`'s list of the `simp` lemmas that the meet macro in "
-                   "`.meets.lean` names. The list is the host's, and each name in it is a model name",
     "sampleVectors": "`src/codec/lean/lean.spec.ts`'s differential corpus. The vectors it "
                      "generates are elaborated here; the list itself is the host's",
     "literalsOf": "`src/codec/term.ts`'s reader for the literals an object pins, at the caller's "

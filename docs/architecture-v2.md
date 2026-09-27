@@ -56,9 +56,9 @@ flowchart TB
   end
   LANG --> P1["the value projection<br/>a subset of the caller universe"]
   LANG --> P2["the attribute projection<br/>a subset of the stored universe"]
-  P1 --> MEET["the meet intersects BOTH projections"]
-  P2 --> MEET
-  MEET --> Q{"does the meet admit anything"}
+  P1 --> TEST["the test asks BOTH projections for disjointness"]
+  P2 --> TEST
+  TEST --> Q{"do the two options share anything"}
   LEAF["the one leaf nothing can decide<br/>a closure over an unbounded carrier"] -. "no information" .-> Q
   Q -- "no" --> YES["the options separate, the union is admitted"]
   Q -- "yes, or unknown" --> C{"are the options below one canonical codec"}
@@ -110,30 +110,26 @@ sets empty?** A union asks one more: **do the two options agree where they meet?
 
 ## 2. Where the certificate lives
 
-### One relation, three uses
+### The certificate is a zero test
 
-The meet is structural intersection. It takes two terms and returns the term that admits exactly
-what both admit, or reports that it cannot tell. Everything the calculus needs is a use of it.
+The disjointness test is structural. It takes two terms and decides that no value is admitted by
+both, or reports that it cannot tell. The admission of a term is its domain idempotent, so the
+test decides that the product of two idempotents is zero.
 
-    the meet         the intersection itself, as a term
-    the certificate  is that intersection inhabited
-    admission        does this value inhabit it
-    compatibility    does the meet exist, with the domain and the range of the two meets
+    the test         the product of two domain idempotents is zero
+    the certificate  the test on the two domains and on the two ranges
+    admission        does this value inhabit a domain
+    compatibility    do two options agree where they overlap
 
-The meet answers two questions. Its emptiness decides whether two options are orthogonal. Its
-existence decides whether they are compatible: two partial bijections are compatible exactly when
-their meet exists and its domain and range are the meets of theirs. A meet that cannot tell is a
-decline on both questions, not a refutation.
+A test that cannot tell is a decline, not a refutation.
 
-> ASPIRATION: no declaration decides compatibility through the meet, and the meet refuses an
-> adapter beside every term but the bottom. A meet row for two adapters must decide whether
-> their functions are equal, and a function has no decidable equality. The link between
-> compatibility and the meet is a theorem of inverse monoids, not yet of this development.
+> ASPIRATION: no declaration decides compatibility structurally. Two adapters are compatible
+> where their functions agree on the overlap, and a function has no decidable equality.
 
-There is no second apparatus: the certificate is the inhabitance of the meet. Two terms whose
-domains and ranges meet at the bottom are orthogonal, and the meet of two orthogonal elements is
-the bottom (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). The domain and the range of a
-term are its two views, so the certificate meets the views at the bottom.
+The certificate is orthogonality. Two terms are orthogonal where the product of their domain
+idempotents is zero and the product of their range idempotents is zero (Lawson, *Primer on
+inverse semigroups I*, Lemma 2.16). The domain and the range of a term are its two views, so the
+certificate asks the test of the two pairs of views. The test spells no product as a term.
 
 ### Admission is by attempt, at every constructor
 
@@ -160,7 +156,7 @@ case with no overlap.
 adapter, which is the same fact at a different bound. A lawful bound reads each value from one
 attribute (`Lawful.fmt_subsingleton`), and that is the fact the argument uses. So the decidable test
 has two halves: a shared canonical bound, or orthogonal views. An adapter beside a term that it
-does not bound, with views that meet, is refused.
+does not bound, with views that are not disjoint, is refused.
 
 > ASPIRATION: the library tests a bound only where the bound is `opaque`, or where its rule
 > `below(x, y)` shows one option below the other. The rule has five rows: a literal below its base
@@ -179,13 +175,13 @@ the order is observable, and the union is refused.
 Write `S t` for a set a term claims and `[t]` for its description, with `g` turning a description
 back into a set. Three laws carry the design.
 
-    S t  ⊆  g [t]                    a description OVER-approximates
-    g (a ⊓ b)  ⊇  g a ∩ g b          the meet over-approximates the intersection
-    g ⊥  =  ∅                        the bottom stands for the empty set
+    S t  ⊆  g [t]                             a description OVER-approximates
+    a # b  →  g a ∩ g b  =  ∅                 the test UNDER-approximates disjointness
+    g ⊥  =  ∅                                 the bottom stands for the empty set
 
 **The laws are generic in the side, and both instances are required.** `S` has two readings: the
 values a term writes, and the attributes a term reads. Each carries its own description, its own
-meet and its own bottom, and the three laws hold of each.
+test and its own bottom, and the three laws hold of each.
 
 With admission by attempt, `g` is the identity wherever a term names its own set: a carrier, an
 admissible set, a name, a position.
@@ -200,7 +196,7 @@ answers. The adapter's set stays unnamed, because the host function is arbitrary
 never asks for the set.
 
 > ASPIRATION: no theorem shows that an adapter is inhabited exactly when its inner term is,
-> and the meet refuses an adapter.
+> and the test keeps a raw adapter apart from the bottom alone.
 
 **`opaque` decides that question**, because its set is every value on both sides.
 
@@ -209,8 +205,8 @@ the function to each alternative of a finite admissible set, and the answer is e
 carrier with one inhabitant, or with two, is such a set. A closure answers with the top only over
 an unbounded carrier.
 
-> ASPIRATION: the meet refuses a closure beside every partner that its inner term does not meet
-> at the bottom, including a finite admissible set.
+> ASPIRATION: the test reads a closure through its inner term alone, so a closure beside a
+> finite admissible set is disjoint from it only where the inner term is.
 
 ```mermaid
 flowchart LR
@@ -226,13 +222,13 @@ not accumulate with depth, and it is the honest answer at that leaf. An unknown 
 rather than admits. Disjointness proved over descriptions transfers to the concrete sets and
 never upward, which is what an abstraction is:
 
-    ∅  =  g ⊥  =  g ([x] ⊓ [y])  ⊇  g [x] ∩ g [y]  ⊇  S x ∩ S y
+    [x] # [y]  →  g [x] ∩ g [y]  =  ∅  →  S x ∩ S y  =  ∅
 
 Nothing in that chain runs backwards.
 
-> ASPIRATION: the undecidable leaf is not the only place where the meet declines. The meet also
-> refuses an adapter, `opaque` beside a container or a literal, and a closure beside a finite
-> admissible set.
+> ASPIRATION: the undecidable leaf is not the only place where the test declines. The test also
+> declines at a raw adapter, at `opaque` beside every term but the bottom, and at a closure beside
+> a finite admissible set.
 
 ### What the ruling deletes
 
@@ -262,113 +258,94 @@ stop separating below some depth. It loses values that the options' own codecs w
 
 ### The constructors are universal constructions, and the laws arrive with them
 
-A constructor of the term language is one of five things, and which one it is fixes the laws the
-meet owes at that position before anybody writes the row.
+A constructor of the term language is one of five things, and which one it is fixes the row the
+test owes at that position before anybody writes the row.
 
-| construction | in the language | what the meet owes |
+| construction | in the language | what the test owes |
 | --- | --- | --- |
 | a base | a ground carrier, `opaque` | nothing beyond its own set |
-| a **product** | an object, a tuple, an array | meet componentwise; the bottom propagates at a required position and not at a variadic one |
-| a **coproduct** | a union, a name's absent-or-present | a unit law; disjoint injections; the meet distributes over it |
-| a **subobject** | a restriction | the predicates **meet**: idempotent and commutative |
-| a **composition** | an adapter | associative, unital, not commutative |
+| a **product** | an object, a tuple, an array | disjoint at one required position, and never through a variadic one |
+| a **coproduct** | a union, a name's absent-or-present | disjoint where each summand is |
+| a **subobject** | a restriction | disjoint where the inner term is, or where two predicates **meet** at the empty predicate |
+| a **composition** | an adapter | read through the views |
 
-Compare a term with itself and the meet returns a **normal form** rather than the term as
-written: a union of one option reduces to that option, a transparent wrapper disappears, and a
-restriction is carried as written. So the meet is not tested by syntactic equality, and a test
-that uses it reports a normalization as a broken law.
+**The test is sound at every construction above** (`disjoint_orthogonal`).
 
-**The meet obeys these laws at every construction above.** The gap is not in the meet.
+> ASPIRATION: the test has no adapter row. The test does not evaluate a data predicate at a
+> literal, so a literal outside a refinement's predicate is not kept apart from the refinement.
+> The test reads a closure refinement through its inner term.
 
-> ASPIRATION: the meet has no adapter row. The meet of a literal and a data refinement is a
-> refinement of the literal, in either order. The meet does not evaluate the predicate at the
-> literal, so a literal outside the predicate is not spelled as the bottom. The meet of a literal
-> and a closure refinement is no term.
+### The zero test reads the constructions, not a spelling
 
-### Testing for the bottom is exact over a normal form
+The certificate asks whether the product of two idempotents is zero. The test decides that fact
+row by row, and no term spells the product, so no normal form carries the answer.
 
-The certificate asks whether the intersection is inhabited. The bottom is the term that admits no
-value, so a test for the bottom is a test on the spelling. That test is exact where the meet
-spells an empty result as the bottom.
+**The rows are `D2`'s law.** A product is empty when one factor is, and a sum is empty only when
+every summand is. A required name and a fixed index are factors of a product. A variadic position
+and an optional name are summands, because the empty instance and the absent name inhabit them. So
+two one-position tuples over disjoint types are disjoint, two arrays over those types are not, and
+a union is disjoint from a partner where each option is.
 
-**The normal form is `D2`'s law, applied to the spelling.** A product is the bottom when either
-factor is, and a sum is the bottom only when both summands are. A required name and a fixed index
-are factors of a product. A variadic position and an optional name are summands, because the empty
-instance and the absent name inhabit them. So two one-position tuples over disjoint types meet at
-the bottom, two arrays over those types meet at an array of the bottom, a coproduct with no
-surviving option is the bottom, and a transparent wrapper passes the bottom through. The meet
-writes that form, and nothing states the law a second time.
-
-**So the missing object is not a decision procedure beside the meet. It is the rows of that rule
-the meet does not carry yet.** Two constructions fail to propagate, and each fails for a reason
+**So the missing object is not a decision procedure beside the test. It is the rows of that rule
+the test does not carry yet.** Two constructions fail to propagate, and each fails for a reason
 that names its own repair.
 
 A **restriction** propagates over data predicates. The predicate language has a meet, and two
-restrictions over one carrier pinned to disjoint sets reduce to the bottom. Two cases still stack:
-a literal under a refinement, which the meet leaves as a refinement of the literal, and a closure,
-which the meet cannot read. The repair is the admissible set of the term language.
+restrictions over closed held-free terms pinned to disjoint sets are disjoint. Two cases still
+decline: a literal beside a refinement, where the test does not evaluate the predicate at the
+literal, and a closure, which the test cannot read. The repair is the admissible set of the term
+language.
 
-An **adapter** fails because the meet refuses to compare two adapters. The refusal is right, since
-no rule reads a caller's function. The refusal is written at the adapter rather than at the bottom
-under it, and an adapter over the bottom admits nothing whatever its functions are.
+An **adapter** fails because the test does not compare two adapters. The decline is right, since
+no rule reads a caller's function. The views read the adapter instead.
 
-**The certificate is sound before either row lands.** The meet intersects admission on both
-projections, so a meet that reaches the bottom separates its operands. Neither row is a premise
-of that. The rows buy completeness, and completeness reaches as far as the leaves allow. Sound
-everywhere, and complete where no position answers the top: that is the obligation a pass can
-discharge. The stronger one stays out of reach while a closure over an unbounded carrier is a
-term.
+**The certificate is sound before either row lands.** The test is sound on both projections
+(`disjoint_sound`, `disjoint_soundA`), so a pair that the test keeps apart is separated. Neither
+row is a premise of that. The rows buy completeness, and completeness reaches as far as the leaves
+allow. Sound everywhere, and complete where no position answers the top: that is the obligation a
+pass can discharge. The stronger one stays out of reach while a closure over an unbounded carrier
+is a term.
 
-**The meet reads no certificate at its coproduct row, so the certificate is defined through the
-meet.** A meet at the bottom is one case of the certificate. A union admits exactly where one of
-its options admits, with no condition, so the meet is exact at that row with no certificate.
+**The test reads no certificate at its coproduct row.** A union admits exactly where one of its
+options admits, with no condition, so a union is disjoint from a partner where each option is.
 
 A constructor added later arrives with its row known in advance, because the propagation rule
-decides it. The meet is associative on both projections, and it distributes over a coproduct on
-the value side. The adapter's unit holds as a codec equation, and the meet has no adapter row that
-could state it.
+decides it.
 
 ### The two projections are inhabited together, so one decision settles both
 
-The meet intersects **both** projections, and each has its own homomorphism law: the values the
-meet admits are the values both factors admit, and the attributes the meet accepts are the
-attributes both factors accept.
+The certificate asks **both** projections, and the test is sound on each: the values that two
+disjoint terms admit are disjoint, and the attributes that two disjoint terms accept are disjoint.
 
 Now take any one term and use the retraction law and the definedness of reads alone.
 
     it admits a value      →  the value writes an attribute  →  retraction  →  that attribute is accepted
     it accepts an attribute →  the attribute reads a value   →  definedness →  that value is written
 
-**So a term's two projections are inhabited together.** Apply that to the meet of two options:
-the value projections are disjoint exactly when the meet admits no value, the attribute
-projections are disjoint exactly when the meet accepts no attribute, and those two conditions are
-the same condition.
+**So a term's two projections are inhabited together.** Apply that to the product of the two
+domain idempotents of two options: the value projections are disjoint exactly when the product
+admits no value, the attribute projections are disjoint exactly when the product accepts no
+attribute, and those two conditions are the same condition.
 
-**Separating on both sides is therefore one question about the meet rather than two.** It needs no
+**Separating on both sides is therefore one question rather than two.** It needs no
 attribute-side recursion, no comparison of shapes, and no assumption that acceptance is closed
 under anything.
 
-The read-side law says more than that the meet accepts what both accept: where both operands
-accept one attribute, the meet reads it to the same value each of them does. So an attribute the
-meet accepts is read to a value that both operands write, by definedness, and that value is one
-the meet admits. The contrapositive is the whole certificate: **a meet that admits no value
-accepts no attribute.**
-
 > ASPIRATION: no theorem derives the emptiness of the read side from the emptiness of the value
-> side. The tree tests each side at the spelling of the bottom, or separately.
+> side. The tree tests each side with `Term.disjoint`, on the view of that side.
 
 The premises are the definedness of reads on the two operands and nothing else. They belong to the weaker bundle
 that a term containing an alternate reader still satisfies, and the development already carries
-them wherever it reasons about a term. **No preservation theorem about the meet is required.**
+them wherever it reasons about a term. **No preservation theorem about a product term is required.**
 
 What remains is one computable question: whether a term admits any value. The structural admission
 that answers it at a given value is in the development already and is proved exact at every term.
-So the work is the meet's own missing rows rather than a new description beside it.
+So the work is the test's own missing rows rather than a new description beside it.
 
 > ASPIRATION: admission is not computable, and no declaration decides whether a term admits any
-> value. The tree tests the spelling of the bottom.
+> value. The tree tests disjointness row by row.
 
-**An adapter is the exception, and the reason is structural.** The meet cannot state an adapter,
+**An adapter is the exception, and the reason is structural.** The test cannot read an adapter,
 because its two sides lie in two universes, so one inhabitance decision does not settle both. The
 certificate reads an adapter through two views: the caller view replaces each adapter by the
 restriction that names the values it owns, and the stored view replaces it by the term inside.
@@ -513,7 +490,7 @@ the set. **A set of admissible values is one concept, a literal is its singleton
 carrier is the whole set.** A type and a discriminant stop being different kinds of thing. One
 relation over admissible sets decides both, at every depth, in every position.
 
-> ASPIRATION: a literal and a refinement are two constructors, and the meet does not unify them.
+> ASPIRATION: a literal and a refinement are two constructors, and the test does not unify them.
 
 An adapter does not restrict. It **re-indexes**, which is why it commutes with nothing: a
 refinement outside an adapter tests the caller's value and the same refinement inside tests the
@@ -525,12 +502,12 @@ carrier's. Those are different facts and both are wanted, so the two orders are 
 Those are different algebras, and the difference is the whole reason the two stay apart. The
 restrictions around one carrier form a meet-semilattice, so a run of them has one normal form
 and the order inside the run carries no information. **A run carried as written rather than
-reduced costs the certificate.** The reader tests the spelling, so a run over disjoint sets
-denotes the empty set while it is spelled as a restriction, and the test misses it. The adapters
+reduced costs the certificate.** The test reads the layers as written, so a run over disjoint
+sets denotes the empty set while it is spelled as a restriction, and the test misses it. The adapters
 form a monoid, so a run of them composes, and the order inside the run carries everything.
 
-> ASPIRATION: a run reduces only through the meet and only over data predicates. Two adapters
-> compose only up to a closure restriction outside them.
+> ASPIRATION: no function reduces a run. Two adapters compose only up to a closure restriction
+> outside them.
 
 Restrictions compose, because an adapter needs a second restriction naming the values it owns.
 
@@ -604,7 +581,7 @@ with a presence equality guarding the second. The guard is the absent summand, a
 hand is what makes a pair separated by the two summands together go unseen.
 
 > ASPIRATION: presence is a pair of flags in the body specification, and the literal test guards
-> on a presence equality. Only the meet treats a name as a sum.
+> on a presence equality. Only `Term.disjoint` treats a name as a sum.
 
 A name's description reaches the field's term, not a summary of it. Two objects declaring one
 name at two different types are separated by that name, at any depth, because the relation at
@@ -613,9 +590,9 @@ the name is the relation itself.
 A set of admissible values is not a new representation. The members of a refinement are already
 a finite set over the carrier's type, so unifying a literal with a refinement merges two
 representations rather than introducing one. **The merge adds one element that neither side
-carries: the empty set**, which is the bottom at a ground position. The meet of two disjoint
-member sets reduces to the bottom through the refinement, so the empty set is reached as the
-bottom rather than spelled as a set. What the unification inherits is `D6`'s discipline: quantify
+carries: the empty set**, which is the bottom at a ground position. Two refinements over
+disjoint member sets are disjoint through the predicate meet, so the empty set is reached as a
+verdict rather than spelled as a set. What the unification inherits is `D6`'s discipline: quantify
 by membership, decide equality by mutual inclusion, and never reach for the classical instance.
 
 ### A recursive term is a guarded binder
@@ -631,10 +608,10 @@ be disjoint from another, so it asks nothing of a union that a union does not al
 `opaque` is this construct at one fixed body. Its options are kind-disjoint, which gives each
 layer compatible options and so a lawful layer. The limit is the general theorem.
 
-Its body describes a recursive term. Its admissible set is its own codec's domain. The meet of two
-recursive terms is the recursive term of their bodies met, stage by stage. A recursive term beside
+Its body describes a recursive term. Its admissible set is its own codec's domain. Two recursive
+terms are disjoint where their bodies are disjoint, stage by stage. A recursive term beside
 another constructor unfolds at the stage below the depth of the input. So the certificate decides
-a pair with a recursive option by the meet.
+a pair with a recursive option by the test.
 
 ---
 
@@ -670,9 +647,9 @@ whose attributes are its own values, is a second universe under the same algebra
 language, the judgement and soundness take a universe signature as a parameter. DynamoDB and JSON
 are two instances of the signature.
 
-> ASPIRATION: the analyses are not parametric in the universe. The meet and its theorems are
-> parametric: a universe supplies the leaf meet, its shape classes and the laws of its leaves and
-> formers, and JSON has them.
+> ASPIRATION: the analyses are not parametric in the universe. The disjointness test and its
+> soundness are parametric: a universe supplies the leaves, its shape classes and the laws of its
+> leaves and formers, and JSON has them.
 > The separation rows and the certificate read the constructors of the DynamoDB carriers, so JSON
 > has none of them. The exactness rows are parametric, and JSON has them.
 

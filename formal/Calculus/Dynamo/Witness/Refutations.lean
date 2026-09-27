@@ -276,8 +276,8 @@ quietly succeeding.
 /-! ## `set(union(c₁, c₂))`: derivable, and refused by the store
 
 §6: "the premise on `set` demands a member, and a union of options writing different
-members has none." `μSyn` of a heterogeneous union is `none`, and `typed_μSyn` puts the same
-`none` in the judgement.
+members has none." `μSyn` of a heterogeneous union is `none`, and the judgement types the
+union at the same `none` (`typed_union_string_boolean`).
 
 `Term.set` takes any element term, so `set(union(string, boolean))` is a term, and the judgement
 types it at the member `none` (`setMember` of the union's `none`). The DynamoDB set obligation

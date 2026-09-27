@@ -1,26 +1,22 @@
 import Calculus.JSON.Basic
-import Calculus.Lang.MeetV
-import Calculus.Lang.MeetA
-import Calculus.Lang.MeetWrites
-import Calculus.Lang.MeetTyped
+import Calculus.Lang.DisjointA
 
 /-!
-# The meet at JSON
+# Disjointness at JSON
 
-The structural meet `Alg.Term.meet` and its theorems hold at every signature, and JSON supplies
-only its leaf meet and the laws of the leaf meet and of the formers. Two kinds meet at the kind
-where they are one kind, and at the bottom elsewhere. Every kind is inside the top, because the
-top is the identity codec. A JSON predicate is a function, so the meet carries no predicate. JSON
-has no set former, no list former and no map former in its signature, so a term of those formers
-admits nothing, and each former law holds because both sides are empty.
+The structural test `Alg.Term.disjoint` and its soundness hold at every signature, and JSON
+supplies only its leaves and the laws of the leaves and of the formers. Two kinds meet at the
+kind where they are one kind, and at the bottom elsewhere. A JSON predicate is a function, so the
+test compares no predicate. JSON has no set former, no list former and no map former in its
+signature, so a term of those formers admits nothing, and each former law holds because both
+sides are empty.
 -/
 
 namespace Calculus.JSON
 
-/-- **The leaf meet of JSON.** Two kinds meet where they are one kind. -/
+/-- **The leaves of JSON.** Two kinds meet where they are one kind. -/
 instance jsonLeaf : Alg.Leaf jsonSyn where
   prim m m' := if m = m' then some m else none
-  primTop _ := true
   isData _ := false
   pmeet _ _ := none
 
@@ -64,16 +60,10 @@ instance jsonShapes : Alg.Shapes jsonSyn where
 
 /-- The formers of JSON, on the write side: every former term admits nothing. -/
 instance jsonFormerAdm : Alg.FormerAdm jsonSyn where
-  set_meet _ _ _ _ _ _ _ v := by simp [(adm_former_empty v).1]
   set_never _ _ _ v := by simp [(adm_former_empty v).1]
 
-/-- The leaf meet of JSON is exact on the write side. -/
+/-- Two kinds that the leaf keeps apart share no value. -/
 instance jsonLeafAdm : Alg.LeafAdm jsonSyn where
-  prim_some m m' h hp v := by
-    simp only [Alg.Leaf.prim] at hp
-    split at hp
-    · next he => cases hp; subst he; exact (Bool.and_self _).symm
-    · exact nomatch hp
   prim_none m m' hp v := by
     simp only [Alg.Leaf.prim] at hp
     split at hp
@@ -85,22 +75,14 @@ instance jsonLeafAdm : Alg.LeafAdm jsonSyn where
         | true =>
             have h1 : v.member = m := of_decide_eq_true hv
             exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
-  prim_top _ _ _ _ := rfl
-  pmeet_some _ _ _ h := nomatch h
   pmeet_none _ _ h := nomatch h
 
 /-- The formers of JSON, on the read side: every former term reads nothing. -/
 instance jsonFormerAdmA : Alg.FormerAdmA jsonSyn where
-  set_meet _ _ _ _ _ _ _ a := by simp [(admA_former_empty a).1]
   set_never _ _ _ a := by simp [(admA_former_empty a).1]
 
-/-- The leaf meet of JSON is exact on the read side. -/
+/-- …and read no attribute in common. -/
 instance jsonLeafAdmA : Alg.LeafAdmA jsonSyn where
-  prim_some m m' h hp a := by
-    simp only [Alg.Leaf.prim] at hp
-    split at hp
-    · next he => cases hp; subst he; exact (Bool.and_self _).symm
-    · exact nomatch hp
   prim_none m m' hp a := by
     simp only [Alg.Leaf.prim] at hp
     split at hp
@@ -112,36 +94,19 @@ instance jsonLeafAdmA : Alg.LeafAdmA jsonSyn where
         | true =>
             have h1 : a.member = m := of_decide_eq_true ha
             exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
-  prim_top _ _ _ _ := rfl
 
-/-- A kind meets only its own kind, so the met kind is each factor's member. -/
-instance jsonLeafWrites : Alg.LeafWrites jsonSyn where
-  prim_μ m m' h hp k hk := by
-    simp only [Alg.Leaf.prim] at hp
-    split at hp
-    · next he =>
-        cases hp; subst he
-        exact ⟨fun _ h1 => Option.some.inj (h1.symm.trans hk),
-          fun _ h1 => Option.some.inj (h1.symm.trans hk)⟩
-    · exact nomatch hp
+/-- The test computes at JSON: two kinds are disjoint. -/
+example : Alg.Term.disjoint (S := jsonSyn) Alg.pair0 (.prim .str) (.prim .num) = true := by rfl
 
-/-- The meet computes at JSON: two kinds meet at the bottom. -/
-example : Alg.Term.meet (S := jsonSyn) Alg.pair0 (.prim .str) (.prim .num) = some .never := by rfl
+/-- …and a union that holds a kind is not disjoint from the kind. -/
+example : Alg.Term.disjoint (S := jsonSyn) Alg.pair0 strOrNumTerm (.prim .str) = false := by rfl
 
-/-- …and a union meets a kind at the kind. -/
-example : Alg.Term.meet (S := jsonSyn) Alg.pair0 strOrNumTerm (.prim .str) = some (.prim .str) := by
-  rfl
-
-/-- **The meet at JSON admits exactly what both factors admit.** `Alg.Adm_meet` at `jsonSyn`. -/
-theorem adm_meet (p : Alg.Pairing) (x y z : Alg.Term jsonSyn) (h : Alg.Term.meet p x y = some z)
-    {ρ ρ' ρ'' : List jsonSyn.C} (hp : Alg.PairedV p ρ ρ' ρ'') (v : Json) :
-    Alg.Adm z ρ'' v = (Alg.Adm x ρ v && Alg.Adm y ρ' v) :=
-  Alg.Adm_meet p x y z h ρ ρ' ρ'' hp v
-
-/-- **…reads exactly what both read, as each reads it.** `Alg.AdmA_meet_both` at `jsonSyn`. -/
-theorem admA_meet_both (p : Alg.Pairing) (x y z : Alg.Term jsonSyn)
-    (h : Alg.Term.meet p x y = some z) {ρ ρ' ρ'' : List jsonSyn.C} (hp : Alg.PairedA p ρ ρ' ρ'') :
-    Alg.AdmAAt ρ ρ' ρ'' x y z :=
-  Alg.AdmA_meet_both p x y z h ρ ρ' ρ'' hp
+/-- **Two terms that the test keeps apart at JSON are orthogonal.** `Alg.disjoint_orthogonal` at
+    `jsonSyn`: no value has two writers, and no attribute has two readers. -/
+theorem orthogonal (p : Alg.Pairing) (x y : Alg.Term jsonSyn)
+    (h : Alg.Term.disjoint p x y = true) :
+    (∀ ρ ρ', Alg.ApartV p ρ ρ' → ∀ v, (Alg.Adm x ρ v && Alg.Adm y ρ' v) = false) ∧
+    (∀ ρ ρ', Alg.ApartA p ρ ρ' → ∀ a, (Alg.AdmA x ρ a && Alg.AdmA y ρ' a) = false) :=
+  Alg.disjoint_orthogonal h
 
 end Calculus.JSON

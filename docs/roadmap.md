@@ -88,12 +88,12 @@ the gate's output, not this file's.
 
 ---
 
-## The term language separates a carrier from a restriction, and the certificate meets descriptions
+## The term language separates a carrier from a restriction, and the certificate tests descriptions
 
 **The future state.** `docs/architecture-v2.md` describes it in full and this entry does not
 repeat it. In one sentence: a literal is a refinement at a singleton, an adapter re-indexes
 rather than restricts, a name description is an admissible set rather than two coordinates, and
-the certificate meets descriptions rather than terms.
+the certificate tests descriptions for disjointness rather than terms.
 
 **Why it is a roadmap entry and not the architecture.** `architecture-v2.md` states the intent
 and does not govern. `architecture.md` governs. A reader who wants to know what the system is

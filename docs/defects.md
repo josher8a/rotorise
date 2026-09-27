@@ -111,25 +111,6 @@ The scalar half has no pin, and closing it means putting a scalar `dynamoNumber`
 
 ---
 
-## Known: the meet emitter's tactic swallows an unknown lemma name, and no guard reads the names
-
-**Observation.** `src/codec/lean.ts` writes a tactic macro into `.meets.lean`, and every meet
-theorem closes by that macro. The macro is `first | rfl | decide | (simp [MEET_LEMMAS] <;> decide)
-| (simp [MEET_LEMMAS] <;> rfl)`. An unknown constant in a `simp` list is an elaboration error, and
-`first` catches the error and tries the next alternative. Measured 2026-09-23 with `lake env lean`
-on a probe file: a `first` whose `simp` alternative names an undeclared constant, followed by `rfl`,
-closes `1 + 1 = 2` with no message. The same `simp` call alone reports `Unknown identifier`.
-
-**Effect.** A declaration that leaves the model and stays in `MEET_LEMMAS` leaves the bridge green.
-The `simp` alternatives stop contributing, and nothing reports it. `scripts/name_drift.py` does not
-close the gap: its targets are the documents and `Calculus/*.lean`, and neither `src/codec/lean.ts`
-nor a generated artifact is in that list.
-
-**Pin.** None. No check reports a name in `MEET_LEMMAS`, or in a `first` alternative of a macro in
-`Meet.lean`, that no declaration carries.
-
----
-
 ## Known: the iso premise of the wrapper rule is stronger than the proof consumes
 
 **Observation.** The specification's wrapper rule demands total cancellation on the two carriers:

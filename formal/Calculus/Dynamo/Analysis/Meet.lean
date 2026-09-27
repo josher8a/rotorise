@@ -1,7 +1,4 @@
-import Calculus.Lang.MeetV
-import Calculus.Lang.MeetWrites
-import Calculus.Lang.MeetA
-import Calculus.Lang.MeetTyped
+import Calculus.Lang.DisjointA
 import Calculus.Dynamo.Lang.HeldSet
 import Calculus.Dynamo.Lang.HeldFree
 import Calculus.Dynamo.Analysis.Merge
@@ -9,100 +6,37 @@ import Calculus.Dynamo.Analysis.Orthogonality
 import Calculus.Dynamo.Analysis.Laminar
 
 /-!
-# The meet
+# Disjointness at DynamoDB, and the union certificate
 
-`Term.meet` is the intersection of two admissions, as a term. It is a derived function and not a
-constructor: `some z` says a value satisfies `z` exactly when it satisfies both factors, `some
-never` says nothing satisfies both, and `none` is a
-refusal — the pair is one whose admission is a function rather than data, so no term states the
-intersection. `held` refuses on that ground at every partner, `opaq`
-refuses where its closed form cannot be compared with an exact held set, and `refine` at a
-`closure` refuses beside every partner that its inner term does not meet at the bottom. A pair
-that admits a common value and stores it at two members has no meet either, and that is a refusal
-and not an empty one.
+`Alg.Term.disjoint` decides that two terms share no value, and `Alg.disjoint_orthogonal` proves
+the decision sound over any signature. DynamoDB supplies the leaves (`dynLeaf`): two primitives
+meet at a primitive or at the bottom, and two data predicates meet at a predicate or at the empty
+predicate. DynamoDB supplies the laws of the leaves and of the set former (`dynLeafAdm`,
+`dynFormerAdm` and their read-side twins), and the shape classes (`dynShapes`).
 
-**The same on the read side, and `never` is the empty intersection of BOTH halves.** A pair
-disjoint on one half only is not disjoint. `never` is for a pair disjoint on both, and everything
-else refuses. The two halves part at a `held`: a `held` writes where its caller-side term writes
-and reads where its inner term reads, so an adapter and a native of the adapter's stored kind
-separate on the write half and not on the read half.
+**The certificate reads the views, not the terms.** A term denotes a partial isomorphism.
+`writeView` states its domain, and `readView` states its range. A `held` carries host functions,
+so the test reads a raw `held` as disjoint from the bottom alone. The views replace each `held`
+by a term that bounds its domain or its range, so the certificate asks the test of the two pairs
+of views (`certPair`). Two terms whose domains are disjoint and whose ranges are disjoint are
+orthogonal: no value has two writers, and no attribute has two readers.
 
-**The write side agrees only where both factors name a member**, and that is weaker than "all three
-write the same way". `μSyn` answers `none` for two different reasons — a term that writes no value
-at all (`never`) and a term that names no *single* stored member (`union`, `opaq`, `mu`)
-— so a factor answering `none` constrains nothing. The two examples at the foot of this
-file are the witnesses: `union [string, null] ∧ null` is `null` and `opaq ∧ string` is `string`,
-and in each the meet names a member neither shared with its `none`-answering factor.
-
-The condition the rows keep reads off the MEET and not off the factors: where the meet names a
-member, any member a factor names is that one, which is `meet_writes`. The other direction is
-false and the two examples beside that theorem are why. A bottom names no member, so two factors
-naming different members meet at a term that names none — `literal boolean ∧ string` is the
-bottom, and `BOOL` and `S` never have to agree. The bottom is the whole of the reason, and it is
-enough: a bottom names no member, so no pair whose meet is one can conclude anything about the
-factors. The meet normalises a refinement over the bottom to the bottom, so that shape no longer
-gives a second witness.
-
-**The meet of a union is the union of the meets.** `Adm (.union os)` is `AdmAny os`, which admits
-where one option admits, so the meet against a union is the meet against each option
-(`Adm_meet_union`), with no certificate.
-
-**The meet and the merge are two operations.** `Body.merge` (`Merge.lean`) joins two bodies over
-*disjoint* names and is the record product: its held set is the product of the factors' held sets
-through the split, and the map it admits is one neither factor admits. The meet intersects
-admissions. `array(string) ∧ tuple(string 'a')` is `tuple(string 'a')` and is a meet;
-`object {a} ⊗ object {b}` is `object {a, b}` and is a merge. The meet's object row does not call
-`Body.merge`; each reads the two open blocks first, and that is the one place the two agree.
-
-**An object's declared names meet by intersection, and only where both halves read the set the
-same way.** `objAdmV` quantifies over the names the *value* carries and `AdmWild` is `none` where
-the body declares no open block, so a closed object refuses an undeclared name on the value side:
-the declared set is an upper bound. Two upper bounds meet at their intersection. The required names
-unite, and **with both bodies closed** a required name outside the intersection makes the object
-`never`, because that name must be present and the other factor refuses it. An *open* factor
-refuses no name: its open block holds one the factor does not declare. So the open blocks are read
-first, and one on either side answers the refusal before the required-name test is consulted.
-
-The witness that the union of the declared names is wrong: `object {x : req string}` and
-`object {y : req string}`, both closed, against the value `{x := "1", y := "2"}`. Each factor
-refuses it, for the name the other declares. An object over the union of the two names admits it,
-so the union rule answers `true` where both factors answer `false`.
-
-**A shared name meets at the stronger core mark.** Both sides read the same presence fact.
-`req` dominates `optional`, so each shared name has one of four two-mark meet rows. No slot
-carries a reader. A closed body with an unshared required name meets at the bottom because one
-factor requires the name and the other refuses it.
-
-**The read side no longer parts from the write side at an undeclared name.** The read row used to
-filter the stored names, and the filter at the old `drop` policy kept the declared names alone, so
-such an object *skipped* an undeclared name rather than refusing it. The declared set then bounded
-the read from below where it bounded the write from above, and a further guard carried the
-condition under which the two halves agreed. That policy is gone. A body has one closed state, that
-state refuses an undeclared name on both halves, and the filter, the guard and the pairs they
-turned away go with the policy.
+**The two halves part at a `held`.** A `held` writes where its caller-side term writes and reads
+where its inner term reads, so an adapter and a native of the adapter's stored kind are disjoint
+on the write half and not on the read half. The certificate asks both halves.
 -/
 
 namespace Calculus
 
-open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Body.block
-  Body.slotAt Body.slotAt_pos Body.slotAt_neg listOf_cases alignPL_eq_rowOfG
-  rowOfG_length rowOfG_none_eq rowOfG_some_eq rowOfG_mem forall₂_replicate forall₂_append
-  forall₂_zip_append forall₂_zip_replicate forall₂_zip_take forall₂_zip_drop rowOfG_map
-  rowOfG_forall₂ rowOfG_forall₂_left rowOfG_some_isSome rowOfG_total rowOfG_respread dominates_max
-  listMeetRow_isList famList_isList allSome_map_forall₂ eq_never_of_isNever isReq_of_isBottom zipF_eq
-  reqs_slotAt objObj_slots meetSRightL_eq meetSRight_union isReq_Field_meet meetSL_eq
-  meet_union_of)
+open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Body.block)
 
-export Alg (ObjectSlot.isBottom Term.ofOptions allSome Term.refineOf Term.listOf Term.tupleOf zipF
-  meetSRight meetSRightL famPrim hasHeld famSet famOpaq rowOfG dominates listMeetRow famList
-  ObjectSlot.through objSlot ObjectSlot.isAbsentOpt objObj famObj Term.meetSL Term.meetSTs
-  ObjectSlot.meet pair0)
+export Alg (Term.ofOptions hasHeld pair0)
 
 
 /-! ## Reading a field and a term -/
 
-/-- Whether a predicate is data a term can carry through a meet. `closure` is the caller's own
-    function and is the one case `Pred` keeps open. -/
+/-- Whether a predicate is data that the test can compare with another. `closure` is the
+    caller's own function and is the one case `Pred` keeps open. -/
 def Pred.isData : Pred → Bool
   | .closure _ => false
   | _ => true
@@ -446,13 +380,6 @@ theorem meetM_ok : ∀ q p : Pred, MeetOk q p (Pred.meetM q p)
   | .except _ _,  .closure _ => trivial
   | .closure _, _ => trivial
 
-/-- The combined predicate holds exactly where both hold. -/
-theorem meetM_eval {q p r : Pred} (h : Pred.meetM q p = some (some r)) (v : Value) :
-    Pred.eval r v = (Pred.eval q v && Pred.eval p v) := by
-  have hok := meetM_ok q p
-  rw [h] at hok
-  exact hok v
-
 /-- Where the meet is empty, nothing satisfies both. -/
 theorem meetM_empty {q p : Pred} (h : Pred.meetM q p = some none) (v : Value) :
     (Pred.eval q v && Pred.eval p v) = false := by
@@ -461,10 +388,10 @@ theorem meetM_empty {q p : Pred} (h : Pred.meetM q p = some none) (v : Value) :
   exact hok v
 
 
-/-! ## The leaf meet of DynamoDB
+/-! ## The leaves of DynamoDB
 
-The meet is `Alg.Term.meet`, the structural meet over a universe signature. DynamoDB supplies the
-leaf meet `dynLeaf`: two primitives, a primitive and the top, and two predicates. -/
+The test is `Alg.Term.disjoint`, the structural test over a universe signature. DynamoDB supplies
+the leaves `dynLeaf`: two primitives, and two predicates. -/
 
 /-- Two literals: the same value at the same base, or `none` for the bottom. -/
 def Ground.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.Carrier →
@@ -485,20 +412,8 @@ def Ground.meet : Ground → Ground → Option Ground
   | .literal k v, .base k' => if k' = k then some (.literal k v) else none
   | .literal k v, .literal k' v' => Ground.meetLit k v k' v'
 
-/-- **A primitive met with the top.** A base is inside the top, so the pair meets at the base. A
-    literal refuses: the closed form of the top is not compared with an exact held set. -/
-def Ground.meetTop : Ground → Bool
-  | .base _ => true
-  | .literal _ _ => false
-
-/-- **The leaf meet of DynamoDB.** -/
-instance dynLeaf : Alg.Leaf dynSyn := ⟨Ground.meet, Ground.meetTop, Pred.isData, Pred.meetM⟩
-
-/-- **The meet of two closed terms**: the generic meet at the closed pairing. A corpus term is
-    closed, so at the top no binder of one operand pairs with a binder of the other. The answer
-    type is spelled `Alg.Term dynSyn`, so field notation on the answer reaches the generic
-    projections and not their export aliases. -/
-def Term.meet (x y : Term) : Option (Alg.Term dynSyn) := Alg.Term.meet pair0 x y
+/-- **The leaves of DynamoDB.** -/
+instance dynLeaf : Alg.Leaf dynSyn := ⟨Ground.meet, Pred.isData, Pred.meetM⟩
 
 /-- A closed traversal and a traversal through a block that admits nothing agree. -/
 theorem objAdmV_none_never {α : Type} (fs : MapOf (α → Bool)) (keys : Finset Name)
@@ -532,12 +447,7 @@ theorem AdmA_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → Obj
 
 /-! ## The union certificate
 
-The certificate is defined here, after the meet, because the meet meets the views. -/
-
-/-- **Whether two terms meet at the bottom.** A pair that the meet cannot state answers `false`,
-    so the pair is not certified. -/
-def meetNever (x y : Term) : Bool := (Term.meet x y).any Term.isNever
-
+The certificate is defined here, after the leaves, because the test of the views reads them. -/
 
 mutual
 /-- **The caller-side view**: each `held` becomes its caller-side term. The view admits each
@@ -581,12 +491,11 @@ mutual
     read test of the predicate decodes through `g`, so on the stored side the predicate is the
     closure `p ∘ g`, and the view keeps no closure. The view holds no `held` (`HF_readView`).
 
-    **The view is narrower than it can be, and no host-built term observes the difference.** A
+    **The view is narrower than it can be, and no certificate observes the difference.** A
     variable holds a `held` only where its binder's body holds one, so a finer view keeps more
-    predicates over a variable. The meet reads a closure through its inner term, so only a data
-    predicate over a variable changes a verdict. The host's public `refine` builds a closure, and
-    the host builds a `members` predicate only as the meet of two, so no host-built term holds a
-    data predicate. An example after `separates_of_certPair` pins the narrowing. -/
+    predicates over a variable. `Term.disjoint` compares a data predicate only over a closed
+    held-free inner term, so a predicate over a variable changes no verdict. An example after
+    `separates_of_certPair` pins the narrowing. -/
 def readView : Term → Term
   | .held t _ _ _ => readView t
   | .refine t p => if hasHeld t || t.hasVar then readView t else .refine t p
@@ -609,27 +518,27 @@ def readViewS : ObjectSlot → ObjectSlot
   | .optional t => .optional (readView t)
 end
 
-/-- **Whether the two pairs of views meet at the bottom.** A term denotes a partial isomorphism.
-    `writeView` states its domain and `readView` states its range. Two terms whose domains meet
-    at the bottom and whose ranges meet at the bottom are orthogonal. -/
-def viewsNever (x y : Term) : Bool :=
-  meetNever (writeView x) (writeView y) && meetNever (readView x) (readView y)
+/-- **Whether the two pairs of views are disjoint.** A term denotes a partial isomorphism.
+    `writeView` states its domain and `readView` states its range. Two terms whose domains are
+    disjoint and whose ranges are disjoint are orthogonal. -/
+def viewsDisjoint (x y : Term) : Bool :=
+  Alg.Term.disjoint pair0 (writeView x) (writeView y) &&
+    Alg.Term.disjoint pair0 (readView x) (readView y)
 
-/-- **The certificate for one pair of options**: orthogonality. The domains meet at the bottom
-    and the ranges meet at the bottom, as for two orthogonal elements of an inverse semigroup
-    (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). So no value has two writers and no
-    attribute has two readers (`viewsNever_adm`, `viewsNever_admA`).
+/-- **The certificate for one pair of options**: orthogonality. The domains are disjoint and the
+    ranges are disjoint, so the product of the two domain idempotents is zero and the product of
+    the two range idempotents is zero: the two options are orthogonal elements of an inverse
+    semigroup (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). So no value has two writers
+    and no attribute has two readers (`viewsDisjoint_adm`, `viewsDisjoint_admA`).
 
-    **The views state the domain and the range of a `held`**, which `Term.meet` refuses. On a term
-    with no `held`, the caller view is the term, and the stored view keeps each predicate that is
-    not over a variable. So the certificate refuses a pair that `Term.meet` meets at the bottom
-    only at a data predicate over a variable, which the host does not build (`readView`).
+    **The views state the domain and the range of a `held`**, which the test does not read on a
+    raw term. On a term with no `held`, the caller view is the term, and the stored view keeps
+    each predicate over a closed held-free inner term.
 
-    **A `refine` at a `closure` has an admission that is a function.** The meet answers the
-    bottom where the inner term meets the partner at the bottom, and `none` elsewhere. So
-    `refine string (closure q)` beside `list [] (some number) []` is certified, because `string`
-    beside the list meets at the bottom. -/
-def certPair (x y : Term) : Bool := viewsNever x y
+    **A `refine` at a `closure` has an admission that is a function.** The test reads it through
+    its inner term. So `refine string (closure q)` beside `list [] (some number) []` is
+    certified, because `string` beside the list is disjoint. -/
+def certPair (x y : Term) : Bool := viewsDisjoint x y
 
 /-- The certificate over a list of options, pair by pair. -/
 def certAll : List Term → Bool
@@ -653,59 +562,35 @@ theorem pairwise_of_certAll : ∀ {ts : List Term}, certAll ts = true →
       simp only [certAll, Bool.and_eq_true, List.all_eq_true] at h
       exact .cons (fun u hu => h.1 u hu) (pairwise_of_certAll h.2)
 
-/-- Required presence dominates optional presence. -/
-example : ObjectSlot.meet pair0 (ObjectSlot.optional .string) (ObjectSlot.req .string)
-    = some (ObjectSlot.req .string) := by rfl
-
-/-- Required slots meet without comparing values outside their carried terms. -/
-example : ObjectSlot.meet pair0 (ObjectSlot.req .string) (ObjectSlot.req .string)
-    = some (ObjectSlot.req .string) := by rfl
-
 /-! ## What the rows answer
 
-Worked pairs, one per class, checked by the equation compiler rather than described. The first is
-the example the meet exists for: an array admits every length and a tuple pins one, so the meet is
-the tuple. -/
+Worked pairs, one per class, checked by the kernel rather than described. -/
 
-example : Term.meet (Term.array .string) (Term.tuple [.literal .string "a"] none)
-    = some (Term.tuple [.literal .string "a"] none) := by rfl
+/-- Two value kinds share no value. -/
+example : Alg.Term.disjoint pair0 Term.string Term.number = true := by rfl
 
-/-- Two value kinds that never meet. -/
-example : Term.meet Term.string Term.number = some Term.never := by rfl
+/-- A literal shares its value with its own base… -/
+example : Alg.Term.disjoint pair0 (Term.literal .string "a") Term.string = false := by rfl
 
-/-- A literal against its own base is the literal: the finer of the two. -/
-example : Term.meet (Term.literal .string "a") Term.string
-    = some (Term.literal .string "a") := by rfl
+/-- …and shares nothing with another value of the same base. -/
+example : Alg.Term.disjoint pair0 (Term.literal .string "a") (Term.literal .string "b") = true := by
+  rfl
 
-/-- …and against another value of the same base, nothing. -/
-example : Term.meet (Term.literal .string "a") (Term.literal .string "b")
-    = some Term.never := by rfl
-
-/-- A literal at a base that shares nothing with the partner is still the bottom. -/
-example : Term.meet (Term.literal .string "1") Term.boolean = some Term.never := by rfl
+/-- A literal at a base that shares nothing with the partner is disjoint from it. -/
+example : Alg.Term.disjoint pair0 (Term.literal .string "1") Term.boolean = true := by rfl
 
 /-- **The null point needs no row of its own.** A null point is the null term joined by a union,
-    so the union rows distribute over it and the ground rows answer each cell. This is the pair
-    that had a row and got it wrong: the wrapper this replaced dropped the point at every
-    partner but another wrapper and a `null`, and `opaq` holds the point. -/
-example : Term.meet (Term.union [.string, .null]) Term.opaq
-    = some (Term.union [.string, .null]) := by rfl
+    so the union row reads each option. The top holds the null point, and a `null` shares it. -/
+example : Alg.Term.disjoint pair0 (Term.union [.string, .null]) Term.opaq = false := by rfl
 
-/-- …and against the null term alone the string cell is the bottom, so one option survives. -/
-example : Term.meet (Term.union [.string, .null]) Term.null = some Term.null := by rfl
+example : Alg.Term.disjoint pair0 (Term.union [.string, .null]) Term.null = false := by rfl
 
-/-- **Two open factors meet pointwise.** The left body requires `x` and the right does not
-    declare it, so `x` meets the right body's open block and stays required. `y` meets the left
-    body's block and stays optional, and the blocks meet to `string`. The two examples below are
-    a value both admit, which the meet admits too. -/
-example :
-    (Term.meet
-        (Term.object (.mk {"x"} (fun _ => .req .string) (some .string)))
-        (Term.object (.mk {"y"} (fun _ => .optional .string) (some .string)))).map
-      (fun z => match z with
-        | .object b => (decide ("x" ∈ b.fields), decide ("y" ∈ b.fields), b.wild.isSome)
-        | _ => (false, false, false))
-      = some (true, true, true) := by rfl
+/-- **Two open objects are not disjoint where each holds the other's names.** The left body
+    requires `x`, and the right body holds `x` in its open block. The two examples below are a
+    value both admit. -/
+example : Alg.Term.disjoint pair0
+    (Term.object (.mk {"x"} (fun _ => .req .string) (some .string)))
+    (Term.object (.mk {"y"} (fun _ => .optional .string) (some .string))) = false := by rfl
 
 /-- The left body admits `{x := "1"}` through its declared slot… -/
 example : Adm (.object (.mk {"x"} (fun _ => .req .string) (some .string)))
@@ -723,59 +608,44 @@ example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (some .string)))
 
 /-! ### The presence table
 
-Four two-mark cells. Required presence dominates optional presence, and each cell meets the
-carried terms. -/
+A slot pair is disjoint only where one slot requires the name: two optional slots both admit a
+map without the name. -/
 
-/-- The four two-mark rows reduce in the kernel. -/
-example : ObjectSlot.meet pair0 (ObjectSlot.req .string) (ObjectSlot.optional .string)
-    = some (ObjectSlot.req .string) := by rfl
-example : ObjectSlot.meet pair0 (ObjectSlot.optional .string) (ObjectSlot.req .string)
-    = some (ObjectSlot.req .string) := by rfl
-example : ObjectSlot.meet pair0 (ObjectSlot.optional .string) (ObjectSlot.optional .string) =
-    some (ObjectSlot.optional .string) := by rfl
+/-- A required slot beside an optional slot of a disjoint term is disjoint. -/
+example : Alg.ObjectSlot.disjoint pair0 (ObjectSlot.req .string) (ObjectSlot.optional .boolean)
+    = true := by rfl
 
-/-- A `req` slot over the bottom is still the bottom and not a refusal: both halves force the
-    name present, so both agree that nothing satisfies the object. -/
-example : ObjectSlot.meet pair0 (ObjectSlot.req .string) (ObjectSlot.req .boolean)
-    = some (ObjectSlot.req .never) := by rfl
+/-- Two optional slots are never disjoint. -/
+example : Alg.ObjectSlot.disjoint pair0 (ObjectSlot.optional .string)
+    (ObjectSlot.optional .boolean) = false := by rfl
 
-
-
-/-- **Two closed factors with no shared name meet at the closed body with no name.** Each name
-    meets the other body's default `never` at `optional never`, which is the default itself, so
-    the normal form drops the name. -/
-example :
-    (Term.meet
-        (Term.object (.mk {"x"} (fun _ => .optional .string) none))
-        (Term.object (.mk {"y"} (fun _ => .optional .string) none))).map
-      (fun z => match z with
-        | .object b => (decide ("x" ∈ b.fields), decide ("y" ∈ b.fields), b.wild.isSome)
-        | _ => (true, true, true))
-      = some (false, false, false) := by rfl
+/-- **Two closed objects with no shared name and no required name are not disjoint**: both
+    admit the empty map. -/
+example : Alg.Term.disjoint pair0
+    (Term.object (.mk {"x"} (fun _ => .optional .string) none))
+    (Term.object (.mk {"y"} (fun _ => .optional .string) none)) = false := by rfl
 
 /-- **Two objects that declare one name with one mark and no literal are certified**: the
-    required slot meets `string` with `boolean` at the bottom. -/
+    required slots hold `string` and `boolean`, which are disjoint. -/
 example : unionOk [.object (.mk {"a"} (fun _ => .req .string) none),
     .object (.mk {"a"} (fun _ => .req .boolean) none)] = true := by decide
 
-/-! ### The bottom bubbles up through a required slot
+/-! ### A required position and an element
 
-A slot that must hold a value passes the bottom up; a slot that may be empty stops it. So the
-meet's output is normal, and `Term.isNever` is the whole of the union guard's filter again. -/
+A position that must hold a value keeps two shapes apart where the two position terms are
+disjoint. An element of an `array` does not, because every array holds the empty list. -/
 
-/-- A tuple's declared position is such a slot… -/
-example : Term.meet (Term.tuple [.string] none) (Term.tuple [.boolean] none)
-    = some Term.never := by rfl
+/-- A tuple's declared position is such a position… -/
+example : Alg.Term.disjoint pair0 (Term.tuple [.string] none) (Term.tuple [.boolean] none)
+    = true := by rfl
 
-/-- …an `array`'s element is not, because an array over the bottom holds the empty list. -/
-example : Term.meet (Term.array .string) (Term.array .boolean) = some (Term.array .never) := by rfl
+/-- …an `array`'s element is not. -/
+example : Alg.Term.disjoint pair0 (Term.array .string) (Term.array .boolean) = false := by rfl
 
-/-- A refinement's inner term is such a slot, and this is the pair that made a union of empty
-    options: each option met the partner at a refinement over the bottom, which the filter could
-    not see. Both options now answer the bottom and the filter drops them. -/
-example : Term.meet
+/-- A refinement is disjoint from what its inner term is disjoint from. -/
+example : Alg.Term.disjoint pair0
     (Term.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)) Term.null
-      = some .never := by rfl
+      = true := by rfl
 
 example : unionOk [.object (.mk {"x"} (fun _ => .optional .string) none)] = true := by
   simp [unionOk, certAll]
@@ -793,7 +663,7 @@ example : unionOk [.object (.mk {"a"} (fun _ => .req .string) (some .string))]
 /-! ### Arrays told apart by a literal position
 
 The owner's witness. Each list below starts with a literal, and the empty list is an option of
-its own. Each pair meets at the bottom. -/
+its own. Each pair is disjoint. -/
 
 /-- The three options: a nonempty list of `"A"`, a nonempty list of `"B"`, and the empty list. -/
 def literalListOptions : List Term :=
@@ -801,42 +671,42 @@ def literalListOptions : List Term :=
    .list [.literal .string "B"] (some (.literal .string "B")) [],
    .list [] none []]
 
-/-- **The meet certifies the union**: each pair meets at the bottom. -/
+/-- **The test certifies the union**: each pair is disjoint. -/
 theorem unionOk_literalListOptions : unionOk literalListOptions = true := by decide
 
 /-- **The crossing control is not certified.** `array (literal "A")` and `array (literal "B")`
-    both hold `[]`, so the meet is `array never`, which holds `[]` and is not the bottom. -/
+    both hold `[]`. -/
 theorem not_unionOk_literalArrays :
     unionOk [.array (.literal .string "A"), .array (.literal .string "B")] = false := by decide
 
-/-! ### Two restricted sets, met at their elements
+/-! ### Two restricted sets, apart at their elements
 
-The meet certifies two string sets whose members are disjoint, because the elements meet at the
-bottom and no set is empty. -/
+The test certifies two string sets whose members are disjoint, because the elements are
+disjoint and no set is empty. -/
 
-/-- **Two string sets with disjoint members meet at the bottom.** -/
-theorem meetNever_disjointStringSets :
-    meetNever (.set (.refine .string (.members .string (NEFinset.of "a" {"b"}))))
-      (.set (.refine .string (.members .string (NEFinset.of "c" ∅)))) = true := by
+/-- **Two string sets with disjoint members are disjoint.** -/
+theorem disjoint_disjointStringSets :
+    Alg.Term.disjoint pair0 (.set (.refine .string (.members .string (NEFinset.of "a" {"b"}))) : Term)
+      (.set (.refine .string (.members .string (NEFinset.of "c" ∅))) : Term) = true := by
   decide
 
-/-- **Two string sets that share a member meet at the set of the shared members.** -/
-theorem meet_stringSets_shared :
-    Term.meet (Term.set (.refine .string (.members .string (NEFinset.of "a" {"b"}))))
-      (Term.set (.refine .string (.members .string (NEFinset.of "b" {"c"}))))
-      = some (Term.set (.refine .string (.members .string (NEFinset.of "b" ∅)))) := by
-  rfl
+/-- **Two string sets that share a member are not disjoint.** -/
+theorem not_disjoint_stringSets_shared :
+    Alg.Term.disjoint pair0 (.set (.refine .string (.members .string (NEFinset.of "a" {"b"}))) : Term)
+      (.set (.refine .string (.members .string (NEFinset.of "b" {"c"}))) : Term) = false := by
+  decide
 
 /-! ### The views certify a `held` whose caller side is precise
 
-A string set held as a list of strings, beside a list of numbers. Both terms write a list, so
-the meet of the two terms is not the bottom. The caller-side views meet at the bottom when the
-caller side requires one element or more, and the stored-side views differ in kind. -/
+A string set held as a list of strings, beside a list of numbers. Both terms write a list, and
+the test does not read a raw `held`, so the test of the two terms does not certify the pair. The
+caller-side views are disjoint when the caller side requires one element or more, and the
+stored-side views differ in kind. -/
 
-/-- The meet of the two terms does not certify the pair. -/
-theorem certPair_heldNE_base :
-    meetNever (.held (.set .string) (.list [.string] (some .string) []) id id)
-        (.list [] (some .number) []) = false := by
+/-- The test of the two terms does not certify the pair. -/
+theorem disjoint_heldNE_base :
+    Alg.Term.disjoint pair0 (.held (.set .string) (.list [.string] (some .string) []) id id : Term)
+        (.list [] (some .number) [] : Term) = false := by
   decide
 
 /-- **A caller side that requires one element or more is certified** beside a list of numbers. -/
@@ -854,47 +724,25 @@ theorem certPair_heldAny :
 
 /-- **A `held` below a recursion is certified where the views part.** The caller view of the
     recursive term is `mu (union [literal "1", list [] (some (var 0)) []])`, and the stored view
-    is `mu (union [number, list [] (some (var 0)) []])`. Each meets `literal "A" ∪ literal "B"` at
-    the bottom. -/
+    is `mu (union [number, list [] (some (var 0)) []])`. Each is disjoint from
+    `literal "A" ∪ literal "B"`. -/
 theorem certPair_heldBelowMu :
     certPair (.union [.literal .string "A", .literal .string "B"])
       (.mu (.union [.held .number (.literal .string "1") id id, .list [] (some (.var 0)) []]))
       = true := by
   decide
 
-/-- …and the pair is refused where the caller views meet: the text `"1"` is a value of both. -/
+/-- …and the pair is refused where the caller views share a value: the text `"1"`. -/
 theorem certPair_heldBelowMu_meets :
     certPair (.literal .string "1")
       (.mu (.union [.held .number (.literal .string "1") id id, .list [] (some (.var 0)) []]))
       = false := by
   decide
 
-/-! ### Why the write-agreement condition is conditional
-
-Two meets that are not the bottom and whose factor names no member. They are why the condition the
-rows keep is "where both factors name a member" rather than "all three name the same member": a
-`μSyn` of `none` is a term that names no single stored member, not a term that writes nothing. -/
-
-example : μSyn (Term.union [.string, .null]) = none := by simp [μSyn_rows, unanimous]
-
-example : ¬ (μSyn Term.null = μSyn (Term.union [.string, .null])) := by
-  simp [μSyn_rows, unanimous]
-
-example : Term.meet Term.opaq Term.string = some Term.string := by rfl
-
-/-- `held` still refuses, and the ground is its alone: it carries host
-    functions (`Term.lean`), so no term states the intersection of two of them. -/
-example : Term.meet (Term.held .string .opaq (fun v => v) (fun v => v)) Term.string = none := by rfl
-
-example : ¬ (μSyn Term.string = μSyn Term.opaq) := by simp [μSyn_rows]
-
-/-! ## The homomorphism
-
-`Adm` carries the meet to conjunction. `Alg.Adm_meet` proves the homomorphism once, over any
-signature, and recurses as the meet does. The rows below are the DynamoDB facts that its laws
-read.
--/
-
+/-- **The test does not read a raw `held`.** A `held` carries host functions (`Term.lean`), so
+    the test keeps it apart from the bottom alone. The views read it. -/
+example : Alg.Term.disjoint pair0 (Term.held .string .opaq (fun v => v) (fun v => v))
+    Term.number = false := by rfl
 
 /-! ## The levers -/
 
@@ -922,12 +770,12 @@ theorem Adm_opaq_num (d : WFNumeral) :
   simp [inD]
 
 
-/-! ## DynamoDB is an instance of the meet laws, on the write side
+/-! ## DynamoDB is an instance of the laws, on the write side
 
-`Alg.Adm_meet` proves the homomorphism once, over any signature. DynamoDB supplies the laws of its
-formers (`dynFormerAdm`) and of its leaf meet (`dynLeafAdm`). A primitive law is a fact about
-`inBase` and `inL`, and a set law is a fact about `setCodec`. The disjointness of two formers is
-a theorem of the shape classes (`dynShapes`). -/
+`Alg.disjoint_sound` proves the write side once, over any signature. DynamoDB supplies the law of
+its set former (`dynFormerAdm`) and the laws of its leaves (`dynLeafAdm`). A primitive law is a
+fact about `inBase` and `inL`, and the set law is a fact about `setCodec`. The disjointness of
+two formers is a theorem of the shape classes (`dynShapes`). -/
 
 /-- `opaque`'s row is `dom(e)` of its codec. -/
 theorem Adm_opaq_eq (v : Value) : Adm .opaq v = (Ω.e v).isSome := rfl
@@ -963,56 +811,6 @@ theorem Adm_set_and_false {a y : Term} (h : ∀ u, (Adm a u && Adm y u) = false)
   · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote y) (inj := Value.num) hq x hx)
   · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote y) (inj := Value.bin) hq x hx)
 
-/-- **Over held-free terms, the set of the element meet is the meet of the sets.** Each set
-    writes exactly where every element does (`setCodec_e_isSome_of_sub`), so the element
-    equation lifts. -/
-theorem Adm_set_meet {a y z : Term} (ha : HF a) (hy : HF y) (hz : HF z)
-    (h : ∀ u, Adm z u = (Adm a u && Adm y u)) (v : Value) :
-    Adm (.set z) v = (Adm (.set a) v && Adm (.set y) v) := by
-  have hr : ∀ t, HF t → ∀ w, ((denote t).e w).isSome = Adm t w := fun t _ w =>
-    isSome_e_eq_Adm (Adm_exact t) w
-  apply Bool.eq_iff_iff.mpr
-  rw [Bool.and_eq_true]
-  show ((setCodec (denote z)).e v).isSome = true ↔
-    ((setCodec (denote a)).e v).isSome = true ∧ ((setCodec (denote y)).e v).isSome = true
-  rw [setCodec_e_isSome_of_sub (sub_denote z hz), setCodec_e_isSome_of_sub (sub_denote a ha),
-    setCodec_e_isSome_of_sub (sub_denote y hy)]
-  cases v <;> simp only [hr z hz, hr a ha, hr y hy, h, Bool.and_eq_true, and_false, iff_self] <;>
-    exact ⟨fun H => ⟨fun x hx => (H x hx).1, fun x hx => (H x hx).2⟩,
-      fun H x hx => ⟨H.1 x hx, H.2 x hx⟩⟩
-
-/-- **Two primitives met at a primitive admit what both admit.** -/
-theorem Adm_prim_some : ∀ g g' h : Ground, Ground.meet g g' = some h →
-    ∀ v, Adm (.prim h) v = (Adm (.prim g) v && Adm (.prim g') v)
-  | .base k, .base k', h, hp, v => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · next hk => simp only [Option.some.injEq] at hp; subst hp hk; exact (Bool.and_self _).symm
-      · exact nomatch hp
-  | .base k, .literal k' x, h, hp, v => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · next hk =>
-          simp only [Option.some.injEq] at hp; subst hp
-          rw [Bool.and_comm]; exact ((inL_and_inBase x v).trans (if_pos hk)).symm
-      · exact nomatch hp
-  | .literal k x, .base k', h, hp, v => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · next hk =>
-          simp only [Option.some.injEq] at hp; subst hp
-          exact ((inL_and_inBase x v).trans (if_pos hk.symm)).symm
-      · exact nomatch hp
-  | .literal k x, .literal k' x', h, hp, v => by
-      simp only [Ground.meet] at hp
-      cases k <;> cases k' <;> simp only [Ground.meetLit, reduceCtorEq] at hp <;>
-        (try split at hp) <;>
-        first
-          | (simp only [reduceCtorEq] at hp)
-          | (simp only [Option.some.injEq] at hp
-             subst hp
-             cases v <;> simp_all [Adm_rows, AdmLit, inL])
-
 /-- **Two primitives met at the bottom share no value.** -/
 theorem Adm_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
     ∀ v, (Adm (.prim g) v && Adm (.prim g') v) = false
@@ -1037,15 +835,6 @@ theorem Adm_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
         (try split at hp) <;>
         (try (simp only [reduceCtorEq] at hp)) <;>
         (cases v <;> simp_all [Adm_rows, AdmLit, inL])
-
-/-- **A base is inside the top.** -/
-theorem Adm_prim_top : ∀ g : Ground, Ground.meetTop g = true →
-    ∀ v, Adm (.prim g) v = true → Adm .opaq v = true
-  | .base k, _, v, hv => by
-      have e : Adm (.base k) v = (Adm (.base k) v && Adm .opaq v) := by cases k <;> cases v <;> rfl
-      rw [hv, Bool.true_and] at e
-      exact e.symm
-  | .literal _ _, h, _, _ => by simp [Ground.meetTop] at h
 
 /-- The former class of a value: its root constructor. -/
 def Value.former : Value → Alg.Former
@@ -1090,88 +879,21 @@ noncomputable instance dynShapes : Alg.Shapes dynSyn where
   map F hF _ := by cases hF; rfl
   mapA F hF _ := by cases hF; rfl
 
-/-- The formers of DynamoDB: the set laws of `setCodec`. -/
+/-- The set former of DynamoDB: the set law of `setCodec`. -/
 instance dynFormerAdm : Alg.FormerAdm dynSyn where
-  set_meet _ _ _ ha hy hz h v := Adm_set_meet ha hy hz h v
   set_never _ _ h v := Adm_set_and_false h v
 
-/-- The leaf meet of DynamoDB is exact on the write side. -/
+/-- The leaves of DynamoDB keep apart what they meet at the bottom, on the write side. -/
 instance dynLeafAdm : Alg.LeafAdm dynSyn where
-  prim_some g g' h hp v := Adm_prim_some g g' h hp v
   prim_none g g' hp v := Adm_prim_none g g' hp v
-  prim_top g hg v hv := Adm_prim_top g hg v hv
-  pmeet_some _ _ _ h v := meetM_eval h v
   pmeet_none _ _ h v := meetM_empty h v
 
-/-- **`Adm` is a homomorphism from the meet to conjunction.** Where two terms have a meet,
-    the values it admits are exactly the values both admit. `Alg.Adm_meet` at DynamoDB. -/
-theorem Adm_meet (x y : Term) (z : Term) (h : Term.meet x y = some z) (v : Value) :
-    Adm z v = (Adm x v && Adm y v) :=
-  Alg.Adm_meet pair0 x y z h [] [] [] (Alg.PairedV.pair0 _ _ _) v
+/-! ## DynamoDB is an instance of the laws, on the read side
 
-/-! ## The member the meet names
-
-`Alg.meet_writes` proves the member law once, over any signature. DynamoDB supplies the law of its
-leaf meet: every primitive of a base names that base's member, and two primitives meet only at one
-base. -/
-
-/-- **Two primitives meet only at one base**, so the met primitive names the member of each. -/
-theorem Ground.meet_groundμ : ∀ g g' h : Ground, Ground.meet g g' = some h →
-    Alg.Sem.groundμ (S := dynSyn) h = Alg.Sem.groundμ (S := dynSyn) g ∧
-      Alg.Sem.groundμ (S := dynSyn) h = Alg.Sem.groundμ (S := dynSyn) g'
-  | .base k, .base k', h, hp => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · next hk => cases hp; subst hk; exact ⟨rfl, rfl⟩
-      · exact nomatch hp
-  | .base k, .literal k' x, h, hp => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · next hk => cases hp; subst hk; exact ⟨rfl, rfl⟩
-      · exact nomatch hp
-  | .literal k x, .base k', h, hp => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · next hk => cases hp; subst hk; exact ⟨rfl, rfl⟩
-      · exact nomatch hp
-  | .literal k x, .literal k' x', h, hp => by
-      simp only [Ground.meet] at hp
-      cases k <;> cases k' <;> simp only [Ground.meetLit, reduceCtorEq] at hp <;>
-        (try split at hp) <;>
-        first
-          | (simp only [reduceCtorEq] at hp)
-          | (cases hp; exact ⟨rfl, rfl⟩)
-
-/-- **The member law of the DynamoDB leaf meet.** -/
-instance dynLeafWrites : Alg.LeafWrites dynSyn where
-  prim_μ g g' h hp m hm := by
-    obtain ⟨h1, h2⟩ := Ground.meet_groundμ g g' h hp
-    exact ⟨fun mx hx => Option.some.inj ((h1.trans hx).symm.trans hm),
-      fun my hy => Option.some.inj ((h2.trans hy).symm.trans hm)⟩
-
-
-/-- **The converse is false, and a bottom is why.** Two factors naming different members meet at
-    the bottom, which names none, so a theorem concluding `mx = my` from the factors alone fails
-    here. -/
-example : Term.meet (Term.literal .boolean true) Term.string = some Term.never := by rfl
-
-example : μSyn Term.never = none := rfl
-
-/-- The refinement that used to be the second witness is now the bottom, because the meet
-    normalises: a refinement over the bottom holds nothing, so `Term.refineOf` answers the bottom.
-    The hypothesis form is still the right one — the first witness needs no wrapper — and this
-    example is kept because it pins the normalisation at the row that motivated it. -/
-example : Term.meet (Term.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩))
-    Term.boolean = some Term.never := by rfl
-
-
-/-! ## The homomorphism on the read side
-
-`Alg.AdmA_meet_both` proves the read-side homomorphism and its reading agreement once, over any
-signature. DynamoDB supplies the read domains of its formers (`dynFormerAdmA`) and of its leaf
-meet (`dynLeafAdmA`). The agreement is generic: each term of a leaf row or a set row is held-free,
-so each reads as `Ω` reads. A literal reads through its base's codec restricted, so two different
-literals at one base read nothing together. -/
+`Alg.disjoint_soundA` proves the read side once, over any signature. DynamoDB supplies the read
+law of its set former (`dynFormerAdmA`) and of its primitives (`dynLeafAdmA`). A literal reads
+through its base's codec restricted, so two different literals at one base read nothing
+together. -/
 
 /-- Two terms that read only two different members share no attribute, so their conjunction is
     the bottom. This closes every row that answers `never` because the two read different `Attr`
@@ -1285,59 +1007,6 @@ theorem AdmA_set_and_false {a y : Term} (h : ∀ u, (AdmA a u && AdmA y u) = fal
   · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote y) (inj := Attr.n) hq x hx)
   · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote y) (inj := Attr.b) hq x hx)
 
-/-- **Over held-free terms, the set of the element meet reads what both sets read.** Each set
-    reads exactly where every element does (`setCodec_p_isSome_of_sub`), so the element equation
-    lifts. -/
-theorem admA_set_meet {a y z : Term} (ha : HF a) (hy : HF y) (hz : HF z)
-    (h : ∀ u, AdmA z u = (AdmA a u && AdmA y u)) (att : Attr) :
-    AdmA (.set z) att = (AdmA (.set a) att && AdmA (.set y) att) := by
-  have hr : ∀ t, ∀ w, ((denote t).p w).isSome = AdmA t w := fun t w =>
-    Bool.coe_iff_coe.mp (by simpa using (AdmA_exact t w).symm)
-  apply Bool.eq_iff_iff.mpr
-  rw [Bool.and_eq_true]
-  show ((setCodec (denote z)).p att).isSome = true ↔
-    ((setCodec (denote a)).p att).isSome = true ∧ ((setCodec (denote y)).p att).isSome = true
-  rw [setCodec_p_isSome_of_sub (sub_denote z hz), setCodec_p_isSome_of_sub (sub_denote a ha),
-    setCodec_p_isSome_of_sub (sub_denote y hy)]
-  cases att <;> simp only [hr, h, Bool.and_eq_true, and_false, iff_self] <;>
-    exact ⟨fun H => ⟨fun x hx => (H x hx).1, fun x hx => (H x hx).2⟩,
-      fun H x hx => ⟨H.1 x hx, H.2 x hx⟩⟩
-
-/-- **Two primitives met at a primitive read what both read.** -/
-theorem admA_prim_some : ∀ g g' h : Ground, Ground.meet g g' = some h →
-    ∀ a, AdmA (.prim h) a = (AdmA (.prim g) a && AdmA (.prim g') a)
-  | .base k, .base k', h, hp, a => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · next hk => simp only [Option.some.injEq] at hp; subst hp hk; exact (Bool.and_self _).symm
-      · exact nomatch hp
-  | .base k, .literal k' x, h, hp, a => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · next hk =>
-          simp only [Option.some.injEq] at hp; subst hp hk
-          cases hx : AdmA (Term.literal _ x) a with
-          | false => simp
-          | true => rw [AdmA_base_of_literal rfl hx]; simp
-      · exact nomatch hp
-  | .literal k x, .base k', h, hp, a => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · next hk =>
-          simp only [Option.some.injEq] at hp; subst hp hk
-          cases hx : AdmA (Term.literal _ x) a with
-          | false => simp
-          | true => rw [AdmA_base_of_literal rfl hx]; simp
-      · exact nomatch hp
-  | .literal k x, .literal k' x', h, hp, a => by
-      simp only [Ground.meet] at hp
-      cases k <;> cases k' <;> simp only [Ground.meetLit, reduceCtorEq] at hp <;>
-        (try split at hp) <;>
-        first
-          | (simp only [reduceCtorEq] at hp)
-          | (simp only [Option.some.injEq] at hp; subst hp; subst_vars
-             exact (Bool.and_self _).symm)
-
 /-- **Two primitives met at the bottom read nothing together.** -/
 theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
     ∀ a, (AdmA (.prim g) a && AdmA (.prim g') a) = false
@@ -1375,69 +1044,14 @@ theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
               (AdmA_literal_member _ _) a
           | (rename_i hne; rw [← AdmALit_never_of_ne hne a]; rfl)
 
-/-- **A base reads only what the top reads.** -/
-theorem admA_prim_top : ∀ g : Ground, Ground.meetTop g = true →
-    ∀ a, AdmA (.prim g) a = true → AdmA .opaq a = true
-  | .base k, _, a, ha => by
-      have e : AdmA (.base k) a = (AdmA (.base k) a && AdmA .opaq a) := by
-        cases k <;> cases a <;> rfl
-      rw [ha, Bool.true_and] at e
-      exact e.symm
-  | .literal _ _, h, _, _ => by simp [Ground.meetTop] at h
-
-/-- The formers of DynamoDB, on the read side. -/
+/-- The set former of DynamoDB, on the read side. -/
 instance dynFormerAdmA : Alg.FormerAdmA dynSyn where
-  set_meet _ _ _ ha hy hz h c := admA_set_meet ha hy hz h c
   set_never _ _ h c := AdmA_set_and_false h c
 
-/-- The leaf meet of DynamoDB is exact on the read side. -/
+/-- The primitives of DynamoDB keep apart what they meet at the bottom, on the read side. -/
 instance dynLeafAdmA : Alg.LeafAdmA dynSyn where
-  prim_some g g' h hp c := admA_prim_some g g' h hp c
   prim_none g g' hp c := admA_prim_none g g' hp c
-  prim_top g hg c hc := admA_prim_top g hg c hc
 
-
-/-- **Where two terms have a meet, it reads exactly the attributes both read.** -/
-theorem AdmA_meet {x y z : Term} (h : Term.meet x y = some z) (a : Attr) :
-    AdmA z a = (AdmA x a && AdmA y a) :=
-  (Alg.AdmA_meet_both pair0 x y z h [] [] [] (Alg.PairedA.pair0 _ _ _)).1 a
-
-
-/-! ## The bottom, and what a sub-selection keeps -/
-
-/-- **The meet is the separation certificate, and this is its soundness half.** Where two terms
-    meet at the bottom, no value is admitted by both. `Adm_meet` makes the meet's row the
-    conjunction of the two rows, and the bottom admits nothing, so the conjunction is false at
-    every value. `Adm_meet` and `Adm_never` each take no hypothesis, so this takes none beyond
-    the meet and the test on it.
-
-    The premise is `isNever` rather than a literal `.never` because `isNever` is what a
-    certificate computes: it is the exact test over the normal form, and the literal case is
-    this theorem with `rfl`. -/
-theorem meet_separates {x y z : Term} (h : Term.meet x y = some z) (hz : z.isNever = true)
-    (v : Value) : (Adm x v && Adm y v) = false := by
-  rw [← Adm_meet x y z h v, eq_never_of_isNever hz]; exact Adm_never v
-
-/-- …and the attribute twin, over `AdmA_meet` and `AdmA_never`, equally unpremised. -/
-theorem meet_separates_A {x y z : Term} (h : Term.meet x y = some z) (hz : z.isNever = true)
-    (a : Attr) : (AdmA x a && AdmA y a) = false := by
-  rw [← AdmA_meet h a, eq_never_of_isNever hz]; exact AdmA_never a
-
-/-- **A pair that meets at the bottom separates, on both halves.** `meet_separates` and
-    `meet_separates_A` take the meet's answer; this reads the answer off `meetNever`. -/
-theorem separates_of_meetNever {x y : Term} (h : meetNever x y = true) : Separates x y := by
-  unfold meetNever at h
-  cases hm : Term.meet x y with
-  | none => rw [hm] at h; exact nomatch h
-  | some z =>
-    rw [hm] at h
-    refine ⟨fun v hx hy => ?_, fun a hx hy => ?_⟩
-    · have hs := meet_separates hm h v
-      rw [hx, hy] at hs
-      exact nomatch hs
-    · have hs := meet_separates_A hm h a
-      rw [hx, hy] at hs
-      exact nomatch hs
 
 /-! ## The views admit what the term admits -/
 
@@ -1776,43 +1390,43 @@ theorem readLe_of (t : Term) : RowLe (AdmA t) (AdmA (readView t)) :=
 /-! ## The orthogonal row -/
 
 /-- **Orthogonal terms admit no common value.** A value that both terms admit is admitted by
-    both caller-side views, and the views meet at the bottom. -/
-theorem viewsNever_adm {x y : Term} (h : viewsNever x y = true) (v : Value) :
+    both caller-side views, and the views are disjoint. -/
+theorem viewsDisjoint_adm {x y : Term} (h : viewsDisjoint x y = true) (v : Value) :
     (Adm x v && Adm y v) = false := by
-  simp only [viewsNever, Bool.and_eq_true] at h
-  have sw := separates_of_meetNever h.1
+  simp only [viewsDisjoint, Bool.and_eq_true] at h
+  have hw := Alg.disjoint_sound pair0 _ _ h.1 [] [] (fun _ _ _ hp => nomatch hp) v
   cases hx : Adm x v <;> cases hy : Adm y v <;> simp only [Bool.and_false, Bool.false_and,
     Bool.and_self]
-  have hx' := writeLe_of x v hx
-  have hy' := writeLe_of y v hy
-  exact absurd hy' (sw.1 v hx')
+  have e1 : Alg.Adm (writeView x) [] v = true := writeLe_of x v hx
+  have e2 : Alg.Adm (writeView y) [] v = true := writeLe_of y v hy
+  rw [e1, e2] at hw; exact nomatch hw
 
 /-- **Orthogonal terms read no common attribute.** An attribute that both terms read is read
-    by both stored-side views, and the views meet at the bottom. -/
-theorem viewsNever_admA {x y : Term} (h : viewsNever x y = true) (a : Attr) :
+    by both stored-side views, and the views are disjoint. -/
+theorem viewsDisjoint_admA {x y : Term} (h : viewsDisjoint x y = true) (a : Attr) :
     (AdmA x a && AdmA y a) = false := by
-  simp only [viewsNever, Bool.and_eq_true] at h
-  have sr := separates_of_meetNever h.2
+  simp only [viewsDisjoint, Bool.and_eq_true] at h
+  have hr := Alg.disjoint_soundA pair0 _ _ h.2 [] [] (fun _ _ _ hp => nomatch hp) a
   cases hx : AdmA x a <;> cases hy : AdmA y a <;> simp only [Bool.and_false, Bool.false_and,
     Bool.and_self]
-  have hx' := readLe_of x a hx
-  have hy' := readLe_of y a hy
-  exact absurd hy' (sr.2 a hx')
+  have e1 : Alg.AdmA (readView x) [] a = true := readLe_of x a hx
+  have e2 : Alg.AdmA (readView y) [] a = true := readLe_of y a hy
+  rw [e1, e2] at hr; exact nomatch hr
 
 /-- **The pair certificate is sound**: orthogonality separates the pair. -/
 theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates x y := by
   refine ⟨fun v hx hy => ?_, fun a hx hy => ?_⟩
-  · have := viewsNever_adm h v
+  · have := viewsDisjoint_adm h v
     rw [hx, hy] at this; exact nomatch this
-  · have := viewsNever_admA h a
+  · have := viewsDisjoint_admA h a
     rw [hx, hy] at this; exact nomatch this
 
 /-- **The certificate refuses a pair that only the model's caller carrier separates.** Each option
     is a set of adapters, and each caller side admits a boolean. The host builds `Set([true])` as
     a caller value of each option, and the two options write that value to `SS` and to `NS`. So
     the host refuses the union. The model's `Value` has no set of booleans, so in the model the
-    two options write disjoint slots. The caller sides share `boolean`, so the meet of the pair
-    is not the bottom, and the certificate agrees with the host. -/
+    two options write disjoint slots. The caller sides share `boolean`, so the caller views are
+    not disjoint, and the certificate agrees with the host. -/
 example :
     certPair (.set (.refine (.held .string (.union [.string, .boolean]) id id)
         (.closure fun _ => true)))
@@ -1820,117 +1434,21 @@ example :
   decide
 
 /-- **The certificate refuses a separated pair at a data predicate over a variable.** The pair is
-    separated, because the meet answers the bottom: `mu (refine (union [string, array (var 0)])
-    {a})` admits the string `"a"` and no other string, and `refine string {b}` admits the string
-    `"b"` alone. The stored view drops `{a}`, because the inner term holds a variable. So the
-    stored views share each string, and `certPair` answers `false`. The host builds no data
-    predicate over a variable, so no observable distinguishes this view from a finer view that
-    keeps `{a}`. A finer view becomes necessary only when the host builds such a term. -/
+    separated: `mu (refine (union [string, array (var 0)]) {a})` admits the string `"a"` and no
+    other string, and `refine string {b}` admits the string `"b"` alone. The test compares two
+    data predicates only over closed held-free inner terms, and this inner term holds a variable.
+    So `certPair` answers `false`. The host builds no data predicate over a variable, so no
+    observable distinguishes this test from a finer test. A finer test becomes necessary only
+    when the host builds such a term. -/
 example :
     certPair (.mu (.refine (.union [.string, .array (.var 0)]) (.members .string (NEFinset.of "a" ∅))))
-        (.refine .string (.members .string (NEFinset.of "b" ∅))) = false ∧
-      meetNever (.mu (.refine (.union [.string, .array (.var 0)]) (.members .string (NEFinset.of "a" ∅))))
-        (.refine .string (.members .string (NEFinset.of "b" ∅))) = true := by
+        (.refine .string (.members .string (NEFinset.of "b" ∅))) = false := by
   decide
 
 /-- **A certified union is separated**, which is the premise of `pairwiseCompat_of_separated`
     and of `admitsAtMostOne_of_separated`. -/
 theorem separated_of_unionOk {os : List Term} (h : unionOk os = true) : Separated os :=
   (pairwise_of_certAll h).imp separates_of_certPair
-
-
-/-! ## The laws, on admission
-
-`Adm_meet` is the homomorphism from the meet to conjunction, so each law below is the
-corresponding law of `Bool` read through it. Each is stated on both sides ANSWERING: whether the
-meet answers in one order when it answers in the other is a question about the rows, and the
-lattice does not need it.
--/
-
-/-- **The meet is commutative on admission.** Stated on both orders answering, because whether
-    the meet answers in one order when it answers in the other is a question about the rows and
-    not about the lattice. -/
-theorem Adm_meet_comm {x y z z' : Term} (h : Term.meet x y = some z)
-    (h' : Term.meet y x = some z') (v : Value) : Adm z v = Adm z' v := by
-  rw [Adm_meet _ _ _ h, Adm_meet _ _ _ h', Bool.and_comm]
-
-/-- **…and associative on admission**, both bracketings answering. -/
-theorem Adm_meet_assoc {x y z xy yz l r : Term}
-    (hxy : Term.meet x y = some xy) (hl : Term.meet xy z = some l)
-    (hyz : Term.meet y z = some yz) (hr : Term.meet x yz = some r) (v : Value) :
-    Adm l v = Adm r v := by
-  rw [Adm_meet _ _ _ hl, Adm_meet _ _ _ hxy, Adm_meet _ _ _ hr, Adm_meet _ _ _ hyz, Bool.and_assoc]
-
-/-- **…and idempotent.** -/
-theorem Adm_meet_self {x z : Term} (h : Term.meet x x = some z) (v : Value) :
-    Adm z v = Adm x v := by
-  rw [Adm_meet _ _ _ h, Bool.and_self]
-
-/-- **The bottom absorbs.** -/
-theorem Adm_meet_never {x z : Term} (h : Term.meet x .never = some z) (v : Value) :
-    Adm z v = false := by
-  rw [Adm_meet _ _ _ h, Adm_never, Bool.and_false]
-
-/-- **The meet distributes over a union.** `AdmAny` is the join of the options' admissions,
-    and `&&` distributes over `||`. -/
-theorem Adm_meet_union {x z : Term} {os : List Term}
-    (h : Term.meet x (.union os) = some z) (v : Value) :
-    Adm z v = (Adm x v && AdmAny os v) := by
-  rw [Adm_meet _ _ _ h, Adm_union]
-
-/-- …and the distribution, written so a reader sees it: the meet of a term with a join is the
-    join of the meets, one option at a time. -/
-theorem Adm_meet_union_distrib {x z o : Term} {os : List Term}
-    (h : Term.meet x (.union (o :: os)) = some z) (v : Value) :
-    Adm z v = ((Adm x v && Adm o v) || (Adm x v && AdmAny os v)) := by
-  rw [Adm_meet_union h, AdmAny_cons]
-  cases Adm x v <;> cases Adm o v <;> cases AdmAny os v <;> rfl
-
-/-! ## The laws, on reading
-
-`AdmA_meet` is the homomorphism from the meet to conjunction on the read side, so each law
-below is the corresponding law of `Bool` read through it, exactly as the admission laws are.
-Each is stated on both sides ANSWERING, for the same reason: whether the meet answers in one
-order when it answers in the other is a question about the rows, and the lattice does not need
-it.
--/
-
-/-- **The meet is commutative on reading.** -/
-theorem AdmA_meet_comm {x y z z' : Term} (h : Term.meet x y = some z)
-    (h' : Term.meet y x = some z') (a : Attr) : AdmA z a = AdmA z' a := by
-  rw [AdmA_meet h, AdmA_meet h', Bool.and_comm]
-
-/-- **…and associative on reading**, both bracketings answering. -/
-theorem AdmA_meet_assoc {x y z xy yz l r : Term}
-    (hxy : Term.meet x y = some xy) (hl : Term.meet xy z = some l)
-    (hyz : Term.meet y z = some yz) (hr : Term.meet x yz = some r) (a : Attr) :
-    AdmA l a = AdmA r a := by
-  rw [AdmA_meet hl, AdmA_meet hxy, AdmA_meet hr, AdmA_meet hyz, Bool.and_assoc]
-
-/-- **…and idempotent.** -/
-theorem AdmA_meet_self {x z : Term} (h : Term.meet x x = some z) (a : Attr) :
-    AdmA z a = AdmA x a := by
-  rw [AdmA_meet h, Bool.and_self]
-
-/-- **The bottom absorbs**, and it reads nothing. -/
-theorem AdmA_meet_never {x z : Term} (h : Term.meet x .never = some z) (a : Attr) :
-    AdmA z a = false := by
-  rw [AdmA_meet h, AdmA_never, Bool.and_false]
-
-/-- **The meet distributes over a union.** `AdmAAny` is the join of the options' readings,
-    and `&&` distributes over `||`. -/
-theorem AdmA_meet_union {x z : Term} {os : List Term}
-    (h : Term.meet x (.union os) = some z) (a : Attr) :
-    AdmA z a = (AdmA x a && AdmAAny os a) := by
-  rw [AdmA_meet h, AdmA_union os a]
-
-/-- …and the distribution, written so a reader sees it: the meet of a term with a join is the
-    join of the meets, one option at a time. -/
-theorem AdmA_meet_union_distrib {x z o : Term} {os : List Term}
-    (h : Term.meet x (.union (o :: os)) = some z) (a : Attr) :
-    AdmA z a = ((AdmA x a && AdmA o a) || (AdmA x a && AdmAAny os a)) := by
-  rw [AdmA_meet_union h, AdmAAny_cons]
-  cases AdmA x a <;> cases AdmA o a <;> cases AdmAAny os a <;> rfl
 
 
 end Calculus

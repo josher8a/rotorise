@@ -64,11 +64,12 @@ instance, and JSON is a second instance.
 | `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
 | `Lang/Term.lean`, `Lang/Typing.lean` | the term family over a signature, `denote`, the guard, `Typed` and `Obligations` |
 | `Lang/Guarded.lean`, `Lang/Sound.lean`, `Lang/HeldFree.lean` | `contractive_body`, `soundness`, and `compat_of_HF` |
-| `Lang/Meet.lean`, `Lang/MeetRows.lean` | the class `Leaf`, the structural meet `Term.meet` over a signature, and the rows of the meet that read no admission |
-| `Lang/MeetV.lean`, `Lang/MeetA.lean`, `Lang/MeetWrites.lean`, `Lang/MeetTyped.lean` | the theorems of the meet: `Adm_meet`, `AdmA_meet_both`, `meet_writes`, and `typed_meet` |
+| `Lang/Disjoint.lean` | the class `Leaf`, and the structural disjointness test `Term.disjoint` over a signature |
+| `Lang/DisjointV.lean`, `Lang/DisjointA.lean` | the soundness of the test: `disjoint_sound`, `disjoint_soundA`, and `disjoint_orthogonal` |
 
 `Rows.lean` is generic too, in the namespace `Calculus`. It states the row combinators of the
-analyses over one carrier type, and each side of the pair instantiates it.
+analyses over one carrier type, and each side of the pair instantiates it. It states the row
+`rowOfG` that a `list` shape assigns to a length, at any element type.
 
 `Lawful` takes the member of an attribute as a parameter. (W) reads that function, and no law
 reads more of the store.
@@ -80,7 +81,7 @@ depths, the formers and the top. The term family reads `Syn` alone. The compiled
 function over `Term S` takes `S` as a real argument, because `casesOn` takes the parameter of the
 family as a real argument. The semantic fields are `noncomputable` at DynamoDB: `inL`, `setCodec`,
 `Ω` and `Pred.eval` are. One structure would make each function over terms `noncomputable` at
-DynamoDB, `Term.meet` and `Term.hasVar` included. The split keeps a term as data that code can
+DynamoDB, `Term.disjoint` and `Term.hasVar` included. The split keeps a term as data that code can
 compute with.
 
 **A universe owns these facts, and the generic layer owns none of them.**
@@ -98,45 +99,44 @@ compute with.
 | the top | `Sem.top`, `Sem.lawful_top`, `Sem.topHeld` | `Ω`, `HOpaque` | `idCodec` |
 | the top laws | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
 | the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `AdmLit`, `inBaseA` and `AdmALit` | the kind test |
-| the leaf meet: two primitives, a primitive and the top, two predicates | `Leaf` | `dynLeaf`: `Ground.meet`, `Ground.meetTop`, `Pred.isData`, `Pred.meetM` | `jsonLeaf`: one kind |
-| the laws of the leaf meet | `LeafAdm`, `LeafAdmA`, `LeafWrites` | `dynLeafAdm`, `dynLeafAdmA`, `dynLeafWrites` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafWrites` |
-| the set laws that the meet reads | `FormerAdm`, `FormerAdmA` | `dynFormerAdm`, `dynFormerAdmA` | `jsonFormerAdm`, `jsonFormerAdmA` |
+| the leaves: two primitives, two predicates | `Leaf` | `dynLeaf`: `Ground.meet`, `Pred.isData`, `Pred.meetM` | `jsonLeaf`: one kind |
+| the laws of the leaves | `LeafAdm`, `LeafAdmA` | `dynLeafAdm`, `dynLeafAdmA` | `jsonLeafAdm`, `jsonLeafAdmA` |
+| the set laws that the test reads | `FormerAdm`, `FormerAdmA` | `dynFormerAdm`, `dynFormerAdmA` | `jsonFormerAdm`, `jsonFormerAdmA` |
 | the former class of each value and attribute, and where each former lands | `Shapes` | `dynShapes`: the root constructor | `jsonShapes`: every value is a primitive |
 
 A former is an `Option`. A universe without a former denotes the term of that former as the
 bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only
-the held-free theory and the read side of the meet read them. `PrimAdm` and `PrimAdmA` are outside
+the held-free theory and the read side of the disjointness test read them. `PrimAdm` and `PrimAdmA` are outside
 `Sem` for the same reason: only exactness reads them.
 
-**The meet is structural, and a universe supplies its leaves.** `Alg.Term.meet` has one row per
-constructor of the left operand. Only two rows read a fact of a universe: a primitive met with a
-primitive or with the top, and a predicate met with a predicate. `Leaf` holds those two meets and
-the test for a predicate that the meet can carry. `Leaf` is outside `Sem` and holds computable
-fields only, so the meet stays computable, and the kernel evaluates a closed pair. At DynamoDB,
-`Term.meet` is the generic meet at `dynLeaf` and at the closed pairing `pair0`.
+**The disjointness test is structural, and a universe supplies its leaves.** `Alg.Term.disjoint`
+has one row per constructor of the left operand, and decides that two terms share no value. Only
+two rows read a fact of a universe: a primitive beside a primitive, and a predicate beside a
+predicate. `Leaf` holds the two leaf meets and the test for a predicate that the test can compare.
+`Leaf` is outside `Sem` and holds computable fields only, so the test stays computable, and the
+kernel evaluates a closed pair.
 
-**The meet reads two open terms at a pairing of their binders.** `p i j = some k` says that the
-left variable `i` and the right variable `j` are the variable `k` of the answer. Two variables
-meet where the pairing names them one binder, and a variable beside a constructor refuses. Two
-recursive terms meet at the recursive term of their bodies met, with the two new binders paired.
-A recursive term beside another constructor unfolds, and its binder pairs with nothing. The set
-row refuses an element that reads a variable, because the set laws are stated over closed terms.
+**The test reads two open terms at a pairing of their binders.** `p i j = some k` says that the
+left variable `i` and the right variable `j` are one pair of binders. Two variables are disjoint
+where the pairing names them one pair, because the environments keep each pair apart. Two
+recursive terms are disjoint where their bodies are disjoint with the two new binders paired. A
+recursive term beside another constructor unfolds, and its binder pairs with nothing. The set row
+asks closed elements, because the set laws are stated over closed terms. A `held` and the top are
+disjoint only from the bottom, because their admission is a function that the test does not read.
 
-**The theorems of the meet hold at every signature, from the laws of the leaves and the formers.**
-`Alg.Adm_meet` says that the meet admits exactly the values that both factors admit, under every
-three environments that agree with the pairing (`PairedV`). `Alg.AdmA_meet_both` says the same of
-attributes (`PairedA`), and that the meet reads an attribute as each factor reads it. `Alg.meet_writes` says that a member the meet names is each factor's member.
-`Alg.typed_meet` says that the meet of two derivable terms is derivable, and reads no law. Each
-proof recurses on the left operand, as the meet does. The laws are classes outside `Sem`, because
-only the theorems of the meet read them. `LeafAdm`, `LeafAdmA` and `LeafWrites` say that each
-leaf answer is exact. `FormerAdm` and `FormerAdmA` say that the set former carries an element meet
-to a set meet. Each read-side law states a read domain only. The reading agreement at a leaf row
-and at a set row is no law of a universe: each term of the row is held-free, so each lies below
-the top, and below one bound the read domains decide the reads (`Alg.readAgree_of_sub`,
-`Alg.admAAt_of_HF`). At DynamoDB, a leaf law is a fact about `inBase` and `inL`, and a set law is
-a fact about `setCodec`. The DynamoDB theorems, such as `Adm_meet` and `AdmA_meet`, state the generic
-theorems at the DynamoDB names. At JSON, two kinds meet where they are one kind, and each set law
-holds because the signature has no former and both sides admit nothing.
+**The soundness of the test holds at every signature, from the laws of the leaves and the
+formers.** `Alg.disjoint_sound` says that two terms the test keeps apart share no value, under
+every two environments that keep each paired binder pair apart (`ApartV`). `Alg.disjoint_soundA`
+says the same of attributes (`ApartA`), and `Alg.disjoint_orthogonal` joins the two. Each proof
+recurses on the left operand, as the test does. The laws are classes outside `Sem`, because only
+the soundness theorems read them. `LeafAdm` and `LeafAdmA` say that two primitives met at the
+bottom share nothing, and `LeafAdm` says that two predicates met at the empty predicate hold
+together nowhere. `FormerAdm` and `FormerAdmA` say that two sets whose elements share nothing
+share no set. Two data predicates keep two refinements apart on the read side only where both
+inner terms are closed and held-free: each then reads as the top reads (`TopLaws`), so both read
+one value. At DynamoDB, a leaf law is a fact about `inBase` and `inL`, and a set law is a fact
+about `setCodec`. At JSON, two kinds meet where they are one kind, and each set law holds because
+the signature has no former and both sides admit nothing.
 
 **A universe is a container, and the disjointness of two formers is a theorem.** The carrier of a
 universe is the W-type of a container, and the member of a value is its root shape. Each former
@@ -144,7 +144,7 @@ lands in one class of root shapes: a primitive, a set, a list or an object. The 
 formers are disjoint, because the carrier is a coproduct. `Shapes` gives the class of each value
 and of each attribute, and the landing fact of each former: a primitive codec, the set lift, the
 list prism and the map prism. So two formers in different classes share no value and no attribute
-(`Shapes.prim_set`, `Shapes.prim_setA` and their companions), and the catch-all rows of the meet
+(`Shapes.prim_set`, `Shapes.prim_setA` and their companions), and the catch-all rows of the test
 read those theorems. A set and a keyed map are quotient containers, so the set laws stay a class
 of each universe. At DynamoDB, the class of a value or an attribute is its root constructor.
 
@@ -183,7 +183,7 @@ exactness of the primitive rows alone. A universe states the primitive rows, so 
 primitive reduces without the codec. The DynamoDB `Adm` and `AdmA` are the generic rows, and
 read their DynamoDB rows from a simp set, as `denote` does.
 
-**The other analyses are DynamoDB tables.** `Meet`, `Separation`, `Slice` and the certificate read
+**The other analyses are DynamoDB tables.** `Separation`, `Slice` and the certificate read
 the constructors of the DynamoDB carriers. No generic form of them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
 `Codec`, then the combinator algebra at the DynamoDB carriers as `Prisms`, `Products`, `Objects`,
 `Sums`, `Carriers`, `Lawful` and `Frontier`, and `Term`, then `Denote`, `Typing`, `Soundness`,
@@ -240,7 +240,7 @@ table over terms states every ground base in one row. `opaq` denotes the top of 
 `ObjectSlot` carries the current-schema rule only. A required slot remains required on both
 current-schema sides. An alternate reader is `Codec.extendRead`, over the codec of one current
 `Term`.
-Structural operations, including `meet` and union certification, operate on `Term`. The operations
+Structural operations, including disjointness and union certification, operate on `Term`. The operations
 cannot observe or propagate an alternate reader.
 
 `Body`'s projections `Body.fields`, `Body.at` and `Body.wild` are written by hand, because `Body`
@@ -372,13 +372,11 @@ at that body. Kind-disjointness gives the compatibility of its options (`compat_
 that `denote` takes. A variable asks the codec that the environment gives the variable, and a
 `mu` asks its own codec, as the rows of `opaque` do.
 
-**The meet reads a recursive term stage by stage.** Two recursive terms meet where their bodies
-meet under every three stages that meet, because each stage is the body over the stage below
-(`stage_meetV`, `stage_meetA`). A recursive term beside another constructor reads the stage below
-the depth of the input (`Adm_mu_unfold`, `mu_p_unfold`). Neither row needs the guard. Where the
-body met reads no variable of the pair, the answer is the body with its free variables lowered by
-one, because such a binder denotes its body on both sides (`denote_mu_vacuous`). Elsewhere the
-answer `mu z` is stated only where `mu z` is guarded, because `Typed.mu` asks the guard.
+**The test reads a recursive term stage by stage.** Two recursive terms are disjoint where their
+bodies are disjoint under every two stages that are disjoint, because each stage is the body over
+the stage below (`stage_apart`, `stage_apartA`). A recursive term beside another constructor reads
+the stage below the depth of the input (`Adm_mu_unfold`, `mu_p_unfold`). Neither row needs the
+guard.
 
 **The host spells recursion as a thunk, and the bridge prints the binder.** The emitter marks each
 term object that a thunk returns during the printing of that object. It prints `Term.mu` at the
@@ -416,10 +414,10 @@ is not a property of an option but a relation between two options at an input bo
 Indices make per-thing properties structural, and this is not one.
 
 **The discriminated union is the case that left the term language rather than crossing into it.**
-A dissection is a `union` of object members whose pairwise structural meet is empty: two members
+A dissection is a `union` of object members that are pairwise disjoint: two members
 differ at a required literal name with disjoint alternatives, or the name intervals they declare
 cannot be satisfied at once. `select` admits an object option by attempt, as it admits every other
-option. The meet certifies both cases: the two bodies meet at the bottom. A sub-selection of a
+option. The test certifies both cases: the two bodies are disjoint. A sub-selection of a
 certified union stays certified, because the certificate is `Pairwise` and `pairwiseCompat_sublist` carries the obligation under it. A
 tag table keyed by the discriminating literals is an index the host builds over such a union, and
 no term carries it.
@@ -501,7 +499,7 @@ union of lawful options meets its obligation.
 tighter test does not. The principle is why a certificate may be proved over an approximation at
 all. This development spends it once. `writeView`
 and `readView` admit each value and each attribute that the term admits (`writeLe_of`,
-`readLe_of`), so two views that meet at the bottom separate the terms.
+`readLe_of`), so two views that are disjoint separate the terms.
 
 **The outer carrier has a separate read-side fact.** An alternate reader can read an attribute
 outside the current term's member. `extendRead_reads_n` records a string core that reads a numeric
@@ -516,29 +514,29 @@ is the discharger stated on what `select` actually decides by.
 ### The classifier, and what it is the specification of
 
 The union obligation is compatibility, and the certificate is sufficient for it. `certPair`
-certifies a pair where the two terms are orthogonal (`viewsNever`).
+certifies a pair where the two terms are orthogonal (`viewsDisjoint`).
 
 **The certificate is orthogonality.** A term denotes a partial isomorphism. `writeView`
-states its domain and `readView` states its range. In an inverse semigroup, two elements whose
-domains and ranges are disjoint meet at the bottom (Lawson, *Primer on inverse semigroups I*,
-Lemma 2.16). `certPair` meets the two caller views and the two stored views with `Term.meet`.
-`Term.meet` refuses a `held`, and a view holds no `held`, so a `held` reaches the certificate
-through its views. On a term with no `held`, the caller view is the term itself. The
+states its domain and `readView` states its range. In an inverse semigroup, two elements are
+orthogonal where the product of their domain idempotents is zero and the product of their range
+idempotents is zero (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). `certPair` asks
+`Term.disjoint` of the two caller views and of the two stored views. `Term.disjoint` reads a raw
+`held` as disjoint from the bottom alone, and a view holds no `held`, so a `held` reaches the
+certificate through its views. On a term with no `held`, the caller view is the term itself. The
 view of a `union` is the union of the views of its options. The view of `mu b` is `mu` of the view
 of `b`, and a variable stays a variable, so a `held` below a recursion reaches the certificate too.
 
 **The stored view drops a predicate over a variable.** The stored view keeps a predicate only
 where the inner term holds no `held` and no variable. A variable denotes a stage of its binder,
 and the view reads each variable as a possible `held`. A finer view reads a variable as a `held`
-only where the binder's body holds one. The two views give one verdict except at a data predicate
-over a variable, and the host builds no data predicate. So no host-built term observes the
-narrowing, and a Lean example pins the pair that the certificate refuses there.
+only where the binder's body holds one. `Term.disjoint` compares two data predicates only over
+closed held-free inner terms, so the two views give one verdict. A Lean example pins the separated
+pair that the certificate refuses at a data predicate over a variable.
 
-**The meet reads a closure through its inner term.** The admission of a `refine` at a `closure`
-is a function. A refinement admits a part of what its inner term admits,
-so the meet answers the bottom where the inner term meets the partner at the bottom, and `none`
-elsewhere. A closure refinement beside an option that writes and reads other slots meets at the
-bottom.
+**The test reads a closure through its inner term.** The admission of a `refine` at a `closure`
+is a function. A refinement admits a part of what its inner term admits, so the refinement is
+disjoint from each partner that its inner term is disjoint from. A closure refinement beside an
+option that writes and reads other slots is disjoint from the option.
 
 **Its value is that it is half of the specification of the library's declaration-time guard, and
 a checked half.** The `union` combinator in `src/` accepts a pair on one of four warrants. It
@@ -549,7 +547,7 @@ refuses every other pair, because the pair is not shown compatible.
 | the never side | one option is `never` | `pairwiseCompat_never_left`, `pairwiseCompat_never_right` |
 | held-free | both options are held-free | `pairwiseCompat_of_HF`: both sit below `opaque` |
 | the common bound | `below(x, y)` or `below(y, x)` holds | `pairwiseCompat_of_sub`: the wider option is the bound |
-| the certificate | `separable`: `certPair`, which meets the views at the bottom, and the meet of the terms at the bottom where the host has no views | `pairwiseCompat_of_separated` |
+| the certificate | `separable`: `certPair`, which asks that the views are disjoint, and the meet of the terms at the bottom where the host has no views | `pairwiseCompat_of_separated` |
 
 The host's rule `below(x, y)` in `src/codec/term.ts` is narrower than the model's `Sub`. It has
 five rows: a literal is below its base and below itself; a union is below a term that each of its
@@ -567,8 +565,9 @@ term of another kind meets at the bottom, and reads no reader. An unknown read a
 the permissive direction, and so the unsound one.
 
 **The host reads a thunk that throws as a free variable.** At a declaration, a thunk that names
-the union under declaration throws. The model spells the thunk as a variable, and the theorems of
-the meet hold under every environment of the variables. So the host's meet reads the thunk as a
+the union under declaration throws. The model spells the thunk as a variable, and the soundness of
+`Term.disjoint` holds under every environment of a variable that pairs with no binder. So the
+host's meet reads the thunk as a
 variable that pairs with no binder. Beside the bottom the meet is the bottom, and beside any other
 term the meet refuses. A list of such a thunk beside a string meets at the bottom.
 
@@ -915,10 +914,9 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New law of the algebra → state it in an `Alg` module, which imports no instance module. A
   statement that needs a fact of a carrier belongs to that universe.
 - New universe → a `Syn`, a `Sem` instance, its `TopLaws` where the held-free theory or the read
-  side of the meet must hold, its `PrimAdm` and `PrimAdmA` where exactness must hold, its `Leaf`
-  where the meet must compute, and its `Shapes` and the laws of the meet where the theorems of the
-  meet must hold. A read-side law of the meet states a read domain only. Make the module reachable
-  from `Axioms.lean`.
+  side of the disjointness test must hold, its `PrimAdm` and `PrimAdmA` where exactness must hold,
+  its `Leaf` where the test must compute, and its `Shapes` and the laws of the leaves and the
+  formers where the soundness of the test must hold. Make the module reachable from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.
 - New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness
