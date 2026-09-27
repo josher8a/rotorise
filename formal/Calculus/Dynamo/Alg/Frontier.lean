@@ -367,14 +367,6 @@ two laws below are the generic ones at the `map` and `M` prisms. -/
 
 export Alg (valPresentB_of)
 
-/-- §4's held set follows from the entry carriers. The current-schema reader returns only stored
-    entries, so the object row needs no extra reader premise. -/
-theorem carrier_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
-    (hsems : ∀ k, Carrier (sems.2 k).codec)
-    (hrc : ∀ rc, rcOf rest = some rc → Carrier rc) :
-    Carrier (objectCodec sems rest) :=
-  Alg.carrier_objectCodec hsems hrc
-
 /-- The keyed product — the doc's current-schema `object`. -/
 theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hf : ∀ k, Lawful (sems.2 k).codec)

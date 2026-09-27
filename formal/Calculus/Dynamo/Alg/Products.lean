@@ -220,59 +220,6 @@ noncomputable def setCodec (c : Codec) : Codec :=
       | .bs S => decSet c Attr.b S
       | _ => none }
 
-/-! ### A set write, element by element -/
-
-/-- …and a read. -/
-theorem decSet_isSome_false {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
-    {x : α} (hx : x ∈ S.1) (h : c.p (inj x) = none) : (decSet c inj S).isSome = false := by
-  cases hd : decSet c inj S with
-  | none => rfl
-  | some v =>
-    have := decSet_elem hd x hx
-    rw [h] at this; exact absurd this (by simp)
-
-/-- Elements reading to strings take `decSet`'s first branch. The mirror of
-    `encSet_isSome_of` at the read side, and it takes injectivity as a hypothesis rather
-    than deriving it from `LawfulCore`: the read side's injectivity is **not** free —
-    `numberCodec.p` went through the host's decimal reader, which rounds. -/
-theorem decSet_isSome_str {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
-    (hall : ∀ x ∈ S.1, ((c.p (inj x)).bind vStr).isSome = true)
-    (hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y, (c.p (inj x₁)).bind vStr = some y →
-      (c.p (inj x₂)).bind vStr = some y → x₁ = x₂) :
-    (decSet c inj S).isSome = true := by
-  obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hall hinj)
-  unfold decSet
-  rw [(neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]
-  rfl
-
-/-- …elements reading to a numeral take the second, the string branch having failed. -/
-theorem decSet_isSome_num {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
-    {x₀ : α} (hx₀ : x₀ ∈ S.1)
-    (hs : (c.p (inj x₀)).bind vStr = none)
-    (hall : ∀ x ∈ S.1, ((c.p (inj x)).bind vNum).isSome = true)
-    (hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y, (c.p (inj x₁)).bind vNum = some y →
-      (c.p (inj x₂)).bind vNum = some y → x₁ = x₂) :
-    (decSet c inj S).isSome = true := by
-  obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hall hinj)
-  unfold decSet
-  rw [neSetImage_none (setImage_none_of hx₀ hs),
-    (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]
-  rfl
-
-/-- …and elements reading to bytes take the third, the two before it having failed. -/
-theorem decSet_isSome_bin {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
-    {x₀ : α} (hx₀ : x₀ ∈ S.1)
-    (hs : (c.p (inj x₀)).bind vStr = none) (hn : (c.p (inj x₀)).bind vNum = none)
-    (hall : ∀ x ∈ S.1, ((c.p (inj x)).bind vBin).isSome = true)
-    (hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y, (c.p (inj x₁)).bind vBin = some y →
-      (c.p (inj x₂)).bind vBin = some y → x₁ = x₂) :
-    (decSet c inj S).isSome = true := by
-  obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hall hinj)
-  unfold decSet
-  rw [neSetImage_none (setImage_none_of hx₀ hs), neSetImage_none (setImage_none_of hx₀ hn),
-    (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]
-  rfl
-
 /-! ### A codec carried between two prisms
 
 `carriedCodec` and `entrywise` take the carriers as parameters. The aliases give them their names
@@ -534,16 +481,6 @@ theorem listCodec_eq :
       (fun vs => ∃ ps, alignL pre sp suf vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2)
       (fun vs => (alignL pre sp suf vs).bind (traverse fun cv => cv.1.e cv.2))
       (fun as => (alignL pre sp suf as).bind (traverse fun ca => ca.1.p ca.2)) := rfl
-
-/-- A list is lawful: the alignment puts each position on its own codec. -/
-theorem lawful_listCodec (hpre : ∀ c ∈ pre, Lawful c) (hsp : ∀ c ∈ sp, Lawful c)
-    (hsuf : ∀ c ∈ suf, Lawful c) : Lawful (listCodec pre sp suf) :=
-  Alg.lawful_listCodec (fun _ => rfl) hpre hsp hsuf
-
-/-- Writing and reading a `list` puts every position on its own carrier. -/
-theorem carrier_listCodec (hpre : ∀ c ∈ pre, Carrier c) (hsp : ∀ c ∈ sp, Carrier c)
-    (hsuf : ∀ c ∈ suf, Carrier c) : Carrier (listCodec pre sp suf) :=
-  Alg.carrier_listCodec hpre hsp hsuf
 
 end ListShape
 

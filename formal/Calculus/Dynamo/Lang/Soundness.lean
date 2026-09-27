@@ -265,18 +265,6 @@ theorem unionT_of_mem : ∀ {opts : List Term} {Ts μs}, TypedListμ opts Ts μs
         unionT_of_mem hs (fun x hx => ih x (List.mem_cons_of_mem _ hx)) v T hT' hv
       exact ⟨t'', List.mem_cons_of_mem _ ht'', hd⟩
 
-/-- …and its twin where every option is at `M`. -/
-theorem unionMT_of_mem : ∀ {opts : List Term} {Ts}, TypedListM opts Ts →
-    (∀ t ∈ opts, ∀ (T : Held) (μ), Typed t T μ → ∀ v, T v → (denote t).T v) →
-    ∀ (v : Value) (T : Held), T ∈ Ts → T v → ∃ t ∈ opts, (denote t).T v
-  | _, _, .nil, _, _, _, hT, _ => nomatch hT
-  | _, _, .cons hty hs, ih, v, T, hT, hv => by
-    rcases List.mem_cons.mp hT with rfl | hT'
-    · exact ⟨_, List.mem_cons_self, ih _ (List.mem_cons_self) _ _ hty v hv⟩
-    · obtain ⟨t'', ht'', hd⟩ :=
-        unionMT_of_mem hs (fun x hx => ih x (List.mem_cons_of_mem _ hx)) v T hT' hv
-      exact ⟨t'', List.mem_cons_of_mem _ ht'', hd⟩
-
 
 
 /-- §3's `e : T ⇀ 𝔸`, at the judgement's own index: a derivable term writes only

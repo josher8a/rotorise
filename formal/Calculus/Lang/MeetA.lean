@@ -699,16 +699,6 @@ theorem union_meet_freeA {os zs : List (Term S)} {y : Term S} (a : Sem.A S)
       = (AdmA (.union os) ρ a && AdmA y ρ' a) := by
   rw [AdmA_ofOptions, AdmAAny_filter_never, AdmAAny_meet a hR, AdmA_union]
 
-/-- A `Forall₂` relates every left element to some right one. -/
-theorem forall₂_mem_left {α β : Type} {R : α → β → Prop} :
-    ∀ {as : List α} {bs : List β}, List.Forall₂ R as bs → ∀ {x}, x ∈ as → ∃ y ∈ bs, R x y
-  | _, _, .nil, _, hx => by simp at hx
-  | _, _, .cons hr hrest, x, hx => by
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · exact ⟨_, List.mem_cons_self, hr⟩
-      · obtain ⟨y, hy, hry⟩ := forall₂_mem_left hrest hx'
-        exact ⟨y, List.mem_cons_of_mem _ hy, hry⟩
-
 /-- **A union reads through its first reader.** -/
 theorem union_p_find (ts : List (Term S)) (a : Sem.A S) :
     (denote (.union ts) ρ).p a = (ts.find? (fun u => AdmA u ρ a)).bind (fun t => (denote t ρ).p a) := by
