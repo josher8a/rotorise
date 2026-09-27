@@ -128,7 +128,7 @@ theorem select_some {A B : Type} {os : List Codec} {run : Codec → A → Option
 
 -- A term is **held-free** when no `held` occurs in the term: `Alg.HF`, the test `hasHeld` at
 -- `false`. The names are aliases, so a closed term is shown held-free by `rfl`.
-export Alg (HF HFB HFS HFL HFO)
+export Alg (HF HFS HFL HFO)
 
 /-- The laws of `Ω` that the held-free theory reads: each primitive is below `Ω`, `Ω` acts as the
     `arr` and `map` formers, and a set over a restriction of `Ω` is a restriction of `Ω`. -/

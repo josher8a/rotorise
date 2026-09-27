@@ -44,8 +44,6 @@ theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy 
     whose set obligation is `SetElem`. -/
 abbrev Obligations : Term → optParam (List Codec) [] → Prop := @Alg.Obligations dynSyn _
 
-export Alg (ObligationsList)
-
 /-! ### The companions, as the quantifiers the rest of the file speaks in
 
 `ObligationsList` is what made the recursion structural; `∀ t ∈ ts, Obligations t` is what every

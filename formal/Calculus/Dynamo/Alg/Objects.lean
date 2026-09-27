@@ -24,11 +24,11 @@ abbrev RestSem := Alg.RestSem Value Attr Member
 export Alg (valPresentAt reqPresentAt rcOf)
 
 namespace FieldSem
-export Alg.FieldSem (req opt Rel)
+export Alg.FieldSem (Rel)
 end FieldSem
 
 namespace RestSem
-export Alg.RestSem (drop refuse codec Rel)
+export Alg.RestSem (Rel)
 end RestSem
 
 /-! ### The field table is a map, not a row

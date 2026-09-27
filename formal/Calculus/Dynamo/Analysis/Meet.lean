@@ -96,7 +96,7 @@ open Alg (Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk B
 export Alg (ObjectSlot.isBottom Term.ofOptions allSome Term.refineOf Term.listOf Term.tupleOf zipF
   meetSRight meetSRightL famPrim hasHeld famSet famOpaq rowOfG dominates listMeetRow famList
   ObjectSlot.through objSlot ObjectSlot.isAbsentOpt objObj famObj Term.meetSL Term.meetSTs
-  ObjectSlot.meet Term.slotAt Term.optionAt Term.blockOf Pairing pair0)
+  ObjectSlot.meet pair0)
 
 
 /-! ## Reading a field and a term -/

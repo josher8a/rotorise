@@ -115,11 +115,11 @@ abbrev TypedOpt : Option Term → Option Held → Prop := Alg.TypedOpt (S := dyn
 abbrev TypedField : ObjectSlot → Held → Bool → Option Member → Prop := Alg.TypedField (S := dynSyn)
 abbrev TypedWild : Option Term → Option Held → Prop := Alg.TypedWild (S := dynSyn)
 
-namespace TypedList export Alg.TypedList (nil cons «forall») end TypedList
-namespace TypedListμ export Alg.TypedListμ (nil cons «forall» mem) end TypedListμ
-namespace TypedOpt export Alg.TypedOpt (none some) end TypedOpt
+namespace TypedList export Alg.TypedList (nil cons) end TypedList
+namespace TypedListμ export Alg.TypedListμ (cons) end TypedListμ
+namespace TypedOpt export Alg.TypedOpt (some) end TypedOpt
 namespace TypedField
-export Alg.TypedField (req optional term true_of_not_optional)
+export Alg.TypedField (term true_of_not_optional)
 end TypedField
 namespace TypedWild export Alg.TypedWild (none some) end TypedWild
 
