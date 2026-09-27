@@ -1658,12 +1658,13 @@ describe("the declaration guard, against the model's classifier", () => {
     /**
      * **Each pair carries the warrant of the host's verdict**, and the gate elaborates each one.
      * An accepted pair carries the model's proof that the pair is compatible, through the warrant
-     * the host used. A refused pair carries `certPair x y = false`.
+     * the host used. A refused pair carries `compatPair dynOracle x y = false`: the host decides
+     * the model's decision, so the model refuses what the host refuses.
      *
      * **The counts pin a fact no law has, deliberately.** They are a property of this corpus, so
      * widening the corpus is meant to fail here and be looked at.
      */
-    it('accepts only pairs the model proves compatible, and refuses only pairs the certificate declines', () => {
+    it("accepts only pairs the model proves compatible, and refuses only pairs the model's decision refuses", () => {
         const emitted = separationPairs().map(leanSeparation)
         const accepted = emitted.filter((one) =>
             one.includes('PairwiseCompat ['),
@@ -1672,48 +1673,45 @@ describe("the declaration guard, against the model's classifier", () => {
             /= false := (by decide|rfl)$/.test(one),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([827, 48])
+        expect([accepted.length, refused.length]).toEqual([849, 26])
     })
 
     /**
-     * **A recursive option is certified exactly where the host accepts it.** The host reads a
-     * recursive union's occupancy through one level, where a thunk sits under a container, and the
-     * model reads `mu b` as the occupancy of `b`, whose variable sits under a container. So `json`
-     * beside a number is certified by the occupancies, and `json` beside `array(string)` is refused
-     * by both sides, because both write a list. The meet reads a recursive term as its binder, so
-     * a recursive option beside an object that the meet takes to the bottom is certified too.
+     * **A recursive option is decided per half, as the model decides it.** The model reads a
+     * variable as held-free, and bounds each stage of a held-free binder by `opaque`. So `json`
+     * beside `array(string)` is accepted: both options are held-free, and the top bounds both. `json`
+     * beside a number is accepted because the two are disjoint, and `json` beside `decimal` is
+     * refused, because `decimal` writes a text that `json` writes to another attribute.
      */
-    it('certifies a recursive option by the meet at the bottom or by the occupancies, as the model does', () => {
+    it('decides a recursive option per half, and bounds a held-free binder by the top, as the model does', () => {
         const recursive = separationPairs().filter((one) =>
             one.name.includes('recursive'),
         )
         const emitted = recursive.map(leanSeparation)
-        const byCertificate = emitted.filter((one) =>
-            one.includes('separated_of_unionOk'),
+        const byDecision = emitted.filter((one) =>
+            one.includes('pairwiseCompat_of_compatPair'),
         )
         const refused = emitted.filter((one) =>
             one.endsWith('= false := by decide'),
         )
-        const byBottom = emitted.filter((one) =>
-            one.includes('pairwiseCompat_never'),
-        )
-        expect([byCertificate.length, byBottom.length, refused.length]).toEqual(
-            [132, 5, 24],
-        )
-        expect(byCertificate.length + byBottom.length + refused.length).toBe(
-            recursive.length,
-        )
+        expect([byDecision.length, refused.length]).toEqual([158, 3])
+        expect(byDecision.length + refused.length).toBe(recursive.length)
         const verdict = (left: AnyCodec, right: AnyCodec) =>
             leanSeparation({ name: 'probe', left, right })
         expect(verdict(erase(dynamoNumber), json)).toContain(
-            'separated_of_unionOk',
+            'pairwiseCompat_of_compatPair',
         )
         expect(verdict(erase(array(string)), json)).toContain(
-            '= false := by decide',
+            'pairwiseCompat_of_compatPair',
         )
-        expect(verdict(erase(string), tree)).toContain('separated_of_unionOk')
-        // `tree` requires `v` and `Category` holds no `v`, so the two binders meet at the bottom
-        expect(verdict(tree, erase(Category))).toContain('separated_of_unionOk')
+        expect(verdict(erase(decimal), json)).toContain('= false := by decide')
+        expect(verdict(erase(string), tree)).toContain(
+            'pairwiseCompat_of_compatPair',
+        )
+        // `tree` requires `v` and `Category` holds no `v`, and both are held-free
+        expect(verdict(tree, erase(Category))).toContain(
+            'pairwiseCompat_of_compatPair',
+        )
     })
 
     it('emits them for the gate to elaborate', () => {
@@ -1752,7 +1750,7 @@ describe("the declaration guard, against the model's classifier", () => {
         )
     })
 
-    /** A pair `src/` accepts carries the warrant the host used, and a refused pair the certificate. */
+    /** A pair `src/` accepts carries the decision the host ran, and a refused pair its refusal. */
     it('states the warrant of each verdict, both ways', () => {
         const accepted = leanSeparation({
             name: 'accepted',
@@ -1760,13 +1758,15 @@ describe("the declaration guard, against the model's classifier", () => {
             right: erase(boolean),
         })
         expect(accepted).toContain('PairwiseCompat [Term.string, Term.boolean]')
-        expect(accepted).toContain('pairwiseCompat_of_HF')
+        expect(accepted).toContain('pairwiseCompat_of_compatPair (by decide)')
         const refused = leanSeparation({
             name: 'refused',
             left: erase(string),
             right: erase(decimal),
         })
-        expect(refused).toMatch(/^ {4}certPair \(Term\.string\)$/m)
+        expect(refused).toMatch(
+            /^ {4}Alg\.compatPair dynOracle \(Term\.string\)$/m,
+        )
         expect(refused.endsWith('= false := by decide')).toBe(true)
     })
 })

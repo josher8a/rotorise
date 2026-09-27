@@ -943,7 +943,8 @@ unions it covers:
 \toprule
 Discharger & Covers & From \\
 \midrule
-held-free options & every pair of terms with no \texttt{held} & both sit below \texttt{opaque}, which reads each value from one attribute (\texttt{pairwiseCompat\_of\_HF}) \\
+the decision & each half of agreement at each component: the two terms are disjoint there, or one codec bounds both there & \texttt{pairwiseCompat\_of\_compatPair}, over \texttt{Term.compat} and \texttt{compat\_sound} \\
+held-free options & every pair of terms with no \texttt{held} & both sit below \texttt{opaque}, which reads each value from one attribute (\texttt{compat\_of\_HF}) \\
 a common canonical bound & two restrictions of one adapter & \texttt{compat\_of\_common\_bound}; the library's warrant is \texttt{pairwiseCompat\_of\_sub}, where its rule \texttt{below(x,\ y)} shows one option below the other: a literal below its base, a union whose options are each below, the same adapter over sides that are each below, or a term with no payload below itself \\
 separation & two options that no input reaches both of & the certificate below (\texttt{pairwiseCompat\_of\_separated}) \\
 an empty option & a pair with \texttt{never} on a side & \texttt{pairwiseCompat\_never\_left}, \texttt{pairwiseCompat\_never\_right} \\

@@ -154,9 +154,10 @@ case with no overlap.
 **Two options below one canonical codec are compatible.** Every term with no adapter is below
 `opaque`, which is why such options never conflict. Two restrictions of one adapter are below that
 adapter, which is the same fact at a different bound. A lawful bound reads each value from one
-attribute (`Lawful.fmt_subsingleton`), and that is the fact the argument uses. So the decidable test
-has two halves: a shared canonical bound, or orthogonal views. An adapter beside a term that it
-does not bound, with views that are not disjoint, is refused.
+attribute (`Lawful.fmt_subsingleton`), and that is the fact the argument uses. So the decision asks
+each half of agreement at each component: one canonical codec bounds both terms there, or the two
+terms are disjoint there. The decision refuses an adapter beside a term where a component shares an
+input on one half and no bound covers the component.
 
 > ASPIRATION: the library tests a bound only where the bound is `opaque`, or where its rule
 > `below(x, y)` shows one option below the other. The rule has five rows: a literal below its base

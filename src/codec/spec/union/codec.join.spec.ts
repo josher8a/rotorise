@@ -363,8 +363,10 @@ describe('a union refuses a thunk it must read at its own input, because the mod
         expect(declare).toThrow(CodecError)
     })
 
-    // a thunk below a list names the union being declared, so the walk meets the thunk again
-    it('ends beside a union that recurses below a list, and refuses where the options overlap', () => {
+    // a thunk below a list names the union being declared, so the walk meets the thunk again. Two
+    // held-free options sit below `opaque` wherever they overlap, and an adapter that writes a text
+    // to another attribute does not
+    it('ends beside a union that recurses below a list, and refuses where an adapter overlaps it', () => {
         const json: AnyCodec = union([
             string,
             array(lazy(() => json as never)),
@@ -374,6 +376,9 @@ describe('a union refuses a thunk it must read at its own input, because the mod
         ).not.toThrow()
         expect(() =>
             union([array(string), json] as unknown as readonly AnyCodec[]),
+        ).not.toThrow()
+        expect(() =>
+            union([decimal, json] as unknown as readonly AnyCodec[]),
         ).toThrow(CodecError)
     })
 

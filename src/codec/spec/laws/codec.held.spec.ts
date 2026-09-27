@@ -555,8 +555,8 @@ describe('the held side is the write occupancy of a union option', () => {
     /**
      * A legacy read over `decimal` has no views: the legacy read reads an attribute to a held
      * value. The meet still answers the bottom, because the tags `'x'` and `'y'` meet at the
-     * bottom, and a slot at the bottom decides before a slot that refuses. The host keeps the meet
-     * row of `separable` for this pair.
+     * bottom, and a slot at the bottom decides before a slot that refuses. The decision keeps the
+     * row of the raw terms, `disjoint`, for this pair.
      */
     it('accepts two objects whose tags differ, where one object reads a legacy form of decimal', () => {
         const tagged = union([

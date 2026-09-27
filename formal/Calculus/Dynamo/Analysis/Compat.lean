@@ -8,7 +8,7 @@ import Calculus.Lang.Compat
 acts at the attribute or at the value. A union of pairwise compatible lawful options is lawful
 (`lawful_altCodec`). Two codecs below one canonical codec are compatible
 (`compat_of_common_bound`). Every held-free term is below `opaque`, so held-free lawful terms are
-pairwise compatible (`compat_of_HF`). Without compatibility, the order of the options is
+pairwise compatible (`Alg.compat_of_HF`). Without compatibility, the order of the options is
 observable (`flip_order_observable`).
 
 The decision `Alg.Term.compat` states the union's law at every universe. `dynOracle` is its
@@ -42,16 +42,6 @@ theorem dynOracle_sound : Alg.OracleSound dynOracle where
 theorem pairwiseCompat_of_compatPair {x y : Term} (h : Alg.compatPair dynOracle x y = true)
     (hl : ∀ t ∈ [x, y], Lawful (denote t)) : PairwiseCompat [x, y] :=
   Alg.pairwiseCompat_of_compatPair dynOracle_sound h hl
-
-/-- **Held-free lawful terms are pairwise `Compat`**: the common bound is `Ω`. -/
-theorem compat_of_HF {s t : Term} (hs : HF s) (ht : HF t) (hlt : Lawful (denote t)) :
-    Compat (denote s) (denote t) :=
-  Alg.compat_of_HF (fun _ _ h => Ω_canon h) hs ht hlt
-
-/-- **A held-free union of lawful options meets its obligation**, with no certificate. -/
-theorem pairwiseCompat_of_HF {opts : List Term} (h : HFL opts)
-    (hl : ∀ t ∈ opts, Lawful (denote t)) : PairwiseCompat opts :=
-  fun s hs t ht => compat_of_HF (HFL_mem h s hs) (HFL_mem h t ht) (hl t ht)
 
 /-- **A `held` is monotone in both of its terms**: the same adapter over a smaller stored side and
     a smaller held side is a smaller codec. -/
@@ -125,7 +115,7 @@ theorem pairwiseCompat_of_sub' {x y : Term} (h : Sub (denote y) (denote x))
     as the same attribute, so the options are compatible. -/
 theorem pairwiseCompat_array_literals :
     PairwiseCompat [Term.array (.literal .string "A"), Term.array (.literal .string "B")] :=
-  pairwiseCompat_of_HF rfl (forall_mem_pair
+  pairwiseCompat_of_compatPair (by decide) (forall_mem_pair
     (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _))
     (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _)))
 
