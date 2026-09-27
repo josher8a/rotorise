@@ -981,11 +981,6 @@ theorem Adm_set_meet {a y z : Term} (ha : HF a) (hy : HF y) (hz : HF z)
     exact ⟨fun H => ⟨fun x hx => (H x hx).1, fun x hx => (H x hx).2⟩,
       fun H x hx => ⟨H.1 x hx, H.2 x hx⟩⟩
 
-/-- The right operands `meetSRight` hands to a family: everything its own rows do not answer. -/
-def Delegated : Term → Prop
-  | .never | .held _ _ _ _ | .refine _ _ | .union _ | .var _ | .mu _ => False
-  | _ => True
-
 /-- **Two primitives met at a primitive admit what both admit.** -/
 theorem Adm_prim_some : ∀ g g' h : Ground, Ground.meet g g' = some h →
     ∀ v, Adm (.prim h) v = (Adm (.prim g) v && Adm (.prim g') v)
@@ -1406,13 +1401,6 @@ instance dynLeafAdmA : Alg.LeafAdmA dynSyn where
 theorem AdmA_meet {x y z : Term} (h : Term.meet x y = some z) (a : Attr) :
     AdmA z a = (AdmA x a && AdmA y a) :=
   (Alg.AdmA_meet_both pair0 x y z h [] [] [] (Alg.PairedA.pair0 _ _ _)).1 a
-
-/-- **…and it reads them to the same value.** The read agreement is proved with the homomorphism
-    and not after it: `AdmA (.refine t p) a` asks the predicate of what `t` decodes `a` to. -/
-theorem denote_meet_p {x y z : Term} (h : Term.meet x y = some z) {a : Attr}
-    (hx : AdmA x a = true) (hy : AdmA y a = true) :
-    (denote z).p a = (denote x).p a ∧ (denote z).p a = (denote y).p a :=
-  (Alg.AdmA_meet_both pair0 x y z h [] [] [] (Alg.PairedA.pair0 _ _ _)).2 a hx hy
 
 
 /-! ## The bottom, and what a sub-selection keeps -/
@@ -1849,16 +1837,6 @@ example :
     and of `admitsAtMostOne_of_separated`. -/
 theorem separated_of_unionOk {os : List Term} (h : unionOk os = true) : Separated os :=
   (pairwise_of_certAll h).imp separates_of_certPair
-
-/-- `certAll` from the pairwise form, which is what a sublist preserves. -/
-theorem certAll_of_pairwise : ∀ {ts : List Term},
-    List.Pairwise (fun x y => certPair x y = true) ts → certAll ts = true
-  | [], _ => rfl
-  | t :: ts, h => by
-      cases h with
-      | cons hh hrest =>
-        simp only [certAll, Bool.and_eq_true, List.all_eq_true]
-        exact ⟨fun u hu => hh u hu, certAll_of_pairwise hrest⟩
 
 
 /-! ## The laws, on admission

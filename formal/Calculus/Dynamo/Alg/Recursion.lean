@@ -119,33 +119,10 @@ export Alg (muStage muStage_induct carrier_muCodec agreeLe_altCodec)
 /-- **The recursive codec**: each input read at the stage its own depth names. -/
 abbrev muCodec (B : Codec → Codec) : Codec := Alg.muCodec Value.depth Attr.depth B
 
-/-- The limit writes a value at the stage the value's depth names. -/
-theorem muCodec_e (B : Codec → Codec) (v : Value) :
-    (muCodec B).e v = (muStage B (Value.depth v)).e v := rfl
-
-/-- The limit reads an attribute at the stage the attribute's depth names. -/
-theorem muCodec_p (B : Codec → Codec) (a : Attr) :
-    (muCodec B).p a = (muStage B (Attr.depth a)).p a := rfl
-
-/-- Each stage agrees with the next one below its own index. -/
-theorem muStage_stable {B : Codec → Codec} (hB : Contractive B) :
-    ∀ n, AgreeLe n (muStage B n) (muStage B (n + 1)) :=
-  Alg.muStage_stable Value.depth_pos Attr.depth_pos hB
-
 /-- **Stability.** Past the depth of the input, a later stage changes nothing. -/
 theorem muStage_agree {B : Codec → Codec} (hB : Contractive B) {d : Nat} :
     ∀ k, AgreeLe d (muStage B d) (muStage B (d + k)) :=
   Alg.muStage_agree Value.depth_pos Attr.depth_pos hB
-
-/-- Any two stages at or past `d` agree below `d`. -/
-theorem muStage_agree_le {B : Codec → Codec} (hB : Contractive B) {d n : Nat} (h : d ≤ n) :
-    AgreeLe d (muStage B d) (muStage B n) :=
-  Alg.muStage_agree_le Value.depth_pos Attr.depth_pos hB h
-
-/-- The limit agrees with the stage `n` below `n`. -/
-theorem muCodec_agree {B : Codec → Codec} (hB : Contractive B) (n : Nat) :
-    AgreeLe n (muCodec B) (muStage B n) :=
-  Alg.muCodec_agree Value.depth_pos Attr.depth_pos hB n
 
 /-- **The fixed point, write side.** The limit writes what its body writes over the limit. -/
 theorem muCodec_e_fix {B : Codec → Codec} (hB : Contractive B) (v : Value) :
@@ -219,15 +196,5 @@ theorem agreeLe_setCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂)
 /-! ### Objects
 
 An object reads its entry codecs at the entries of a map, one layer below the map. -/
-
-/-- An object reads each entry one layer below the map, so it turns agreement below `d` into
-    agreement below `d + 1`. -/
-theorem agreeLe_objectCodec {d : Nat} {keys : Finset Name} {F₁ F₂ : {k // k ∈ keys} → FieldSem}
-    {r₁ r₂ : RestSem} (hF : ∀ k, FieldSem.Rel (AgreeLe d) (F₁ k) (F₂ k))
-    (hr : RestSem.Rel (AgreeLe d) r₁ r₂) :
-    AgreeLe (d + 1) (objectCodec ⟨keys, F₁⟩ r₁) (objectCodec ⟨keys, F₂⟩ r₂) :=
-  Alg.agreeLe_objectCodec (mV := mapV) (mA := mA) (μM := .M)
-    (fun m k => Value.depth_map_entry (f := m.2) k)
-    (fun m k => Attr.depth_map_entry (f := m.2) k) hF hr
 
 end Calculus

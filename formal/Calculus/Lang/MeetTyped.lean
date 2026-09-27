@@ -73,15 +73,6 @@ theorem typed_ofOptions {ss : List (Term S)}
   · obtain ⟨Ts, μs, hL⟩ := typedListμ_of_all h
     exact ⟨_, _, Typed.union hL⟩
 
-/-- Each option of a derivable union is derivable. -/
-theorem typedListμ_mem : ∀ {os : List (Term S)} {Ts μs}, TypedListμ os Ts μs →
-    ∀ t ∈ os, ∃ T μ, Typed t T μ
-  | _, _, _, .nil, _, ht => nomatch ht
-  | _, _, _, .cons hty hs, t, ht => by
-    rcases List.mem_cons.mp ht with rfl | ht'
-    · exact ⟨_, _, hty⟩
-    · exact typedListμ_mem hs t ht'
-
 /-- …and the term under a refinement. -/
 theorem typed_refine_inv {a : Term S} {p : S.Pred} :
     (∃ T μ, Typed (.refine a p) T μ) → ∃ T μ, Typed a T μ

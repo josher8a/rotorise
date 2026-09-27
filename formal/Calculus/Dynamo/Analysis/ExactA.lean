@@ -34,16 +34,6 @@ noncomputable abbrev refineReads (t : Term) (q : Value → Bool) : Attr → Bool
   unfold Alg.refineReads
   cases (Alg.denote t).p a <;> rfl
 
-/-- The gate, unfolded at a successful read. -/
-theorem refineReads_some {t : Term} {q : Value → Bool} {a : Attr} {v : Value}
-    (h : (denote t).p a = some v) : refineReads t q a = q v := by
-  simp [AdmA_rows, h]
-
-/-- …and at a failed one. -/
-theorem refineReads_none {t : Term} {q : Value → Bool} {a : Attr}
-    (h : (denote t).p a = none) : refineReads t q a = false := by
-  simp [AdmA_rows, h]
-
 noncomputable section
 /-! ## The attribute side
 
@@ -257,31 +247,6 @@ noncomputable def AdmAAny (ts : List Term) (a : Attr) : Bool := anyP (AdmAList t
 theorem AdmA_union (opts : List Term) (a : Attr) :
     AdmA (.union opts) a = AdmAAny opts a := rfl
 
-/-- An option that admits makes the disjunction true. -/
-theorem AdmAAny_of_mem {t : Term} {ts : List Term} {a : Attr} (ht : t ∈ ts)
-    (h : AdmA t a = true) : AdmAAny ts a = true := by
-  induction ts with
-  | nil => exact absurd ht (by simp)
-  | cons t0 ts ih =>
-    rcases List.mem_cons.mp ht with rfl | h'
-    · simp [AdmAAny_cons, h]
-    · simp [AdmAAny_cons, ih h']
-
-/-- A list reads an attribute exactly when one of its terms does. -/
-theorem AdmAAny_iff : ∀ {os : List Term} {a : Attr},
-    AdmAAny os a = true ↔ ∃ t ∈ os, AdmA t a = true
-  | [], a => by simp
-  | t :: ts, a => by
-      rw [AdmAAny_cons, Bool.or_eq_true, AdmAAny_iff]
-      constructor
-      · rintro (h | ⟨u, hu, h⟩)
-        · exact ⟨t, by simp, h⟩
-        · exact ⟨u, by simp [hu], h⟩
-      · rintro ⟨u, hu, h⟩
-        rcases List.mem_cons.mp hu with rfl | hu'
-        · exact Or.inl h
-        · exact Or.inr ⟨u, hu', h⟩
-
 /-- `AdmA`'s literal row, named — for the reason `Adm_literal` gives. -/
 @[simp, AdmA_rows] theorem AdmA_literal (k : GroundKind) (x : k.Carrier) (a : Attr) :
     AdmA (.literal k x) a = AdmALit k x a := rfl
@@ -306,24 +271,6 @@ theorem filter_AdmAList {opts : List Term} (h : ∀ t ∈ opts, ExactA t) (a : A
     simp only [denote_rows, List.filter_cons, isSome_p_eq_AdmA ht, ih hts]
     cases hb : AdmA t a <;> simp []
 
-theorem reqPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
-    (keys : Finset Name) :
-    reqPresentT fields fld keys = reqPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys := by
-  simp only [reqPresentT, reqPresentB]
-  congr 1
-  apply propext
-  constructor <;> intro h k <;> have := h k <;>
-    (cases hfd : fld k with
-      | req t => simp_all [reqPresentAt, denote_rows]
-      | optional t => simp_all [reqPresentAt, denote_rows])
-
-/-- `allP` transported across the entry's exactness. -/
-theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
-    allP (AdmA c) as = true ↔ ∀ a ∈ as, ((denote c).p a).isSome = true := by
-  intro as; induction as with
-  | nil => simp [allP]
-  | cons a as ih => simp [allP, ih, h a]
-
 /-- **Every attribute row is exact**, as on the value side. The term language proves it once
     for every universe (`Alg.AdmA_exact`), and this is that theorem at DynamoDB. The numeric
     rows read the attribute payload directly, so a row reaches `dom(p)` with no appeal to the
@@ -335,13 +282,6 @@ theorem AdmA_exact (t : Term) : ExactA t := Alg.AdmA_exact t []
 The value side needs only `AdmWild`, which is `none` exactly where the body declares no open
 block. The read side reads the block the same way: an undeclared name under a closed body is
 refused, and each name's own presence pair handles a declared absent name. -/
-
-/-- `AdmABody` at a map, unfolded. -/
-theorem AdmABody_map {b : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr} :
-    AdmABody b (.m keys g)
-      = (reqPresentT b.fields b.at keys &&
-         objAdmV ⟨b.fields, fun k => AdmAField (b.at k)⟩ (AdmAWild b.wild) keys g) := by
-  cases b; rfl
 
 /-- One entry of the read-side object row — `objAdmV_row`'s twin. It took a keep filter as a
     hypothesis while `drop` made the two sides' filters differ; they do not differ now. -/

@@ -84,11 +84,6 @@ theorem sub_baseCodec : ∀ k, Sub (baseCodec k) Ω
 theorem sub_literal (k : GroundKind) (x : k.Carrier) : Sub (literalCodec k x) Ω :=
   sub_restrict (sub_baseCodec k) (inL k x)
 
-/-- A traversal keeps an inclusion of graphs. -/
-theorem traverse_sub {α β : Type} {f g : α → Option β} (h : ∀ x y, f x = some y → g x = some y)
-    {xs ys} (ht : traverse f xs = some ys) : traverse g xs = some ys :=
-  traverse_eq_some.mpr ((traverse_eq_some.mp ht).imp (fun _ _ => h _ _))
-
 /-- `encSet` keeps an inclusion of graphs. -/
 theorem encSet_sub {α : Type} {c d : Codec} (h : Sub c d) {inj : α → Value} {S : NEFinset α}
     {a : Attr} (he : encSet c inj S = some a) : encSet d inj S = some a := by

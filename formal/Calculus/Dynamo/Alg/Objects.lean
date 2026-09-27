@@ -69,16 +69,6 @@ theorem objectCodecCore_eq :
         (fun p => valPresentB sems p.1 = true ∧ ∀ k, objEntryT sems rc? (k.1, p.2 k))
         (objWrite sems rc?) (objRead sems rc? kn) := rfl
 
-/-- Inversion of an object-encode success: the value is a map, the guard held, and the
-    written item is the entrywise traversal. -/
-theorem objectCodecCore_e_inv {t a} (he : (objectCodecCore sems rc? kn).e t = some a) :
-    ∃ keys f g, t = Value.map keys f ∧ a = Attr.m keys g ∧
-      valPresentB sems keys = true ∧
-      funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.e (f k))) = some g := by
-  obtain ⟨p, q, hv, hw, rfl⟩ := carried_e.mp (objectCodecCore_eq ▸ he)
-  obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp hw
-  exact ⟨p.1, p.2, g, mapV.into_out hv, rfl, hval, hg⟩
-
 /-- **The empty body with an open block is the record.** `record` is not a term of its own: it
     is the object that declares no name and takes every key at one codec, and this is the
     equation that says so. Four components, and only the reading needs work: the keep filter is

@@ -217,20 +217,6 @@ theorem valPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → Ob
     | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
 
 
-/-- A declared name that must be present is present, read off the admission. -/
-theorem mem_keys_of_isReq {c : Body} {keys : Finset Name}
-    (hv : valPresentT c.fields c.at keys = true) {k : Name} (hc : k ∈ c.fields)
-    (hreq : ObjectSlot.isReq (c.at ⟨k, hc⟩) = true) : k ∈ keys := by
-  rw [valPresentT_req] at hv
-  exact of_decide_eq_true hv ⟨k, hc⟩ hreq
-
-/-- A body admits a map by two tests: the declared names that must be present are, and every present name passes its row. -/
-theorem AdmBody_map (c : Body) (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
-    AdmBody c (.map keys g)
-      = (valPresentT c.fields c.at keys
-         && objAdmV ⟨c.fields, fun k => AdmField (c.at k)⟩ (AdmWild c.wild) keys g) := by
-  cases c; rfl
-
 /-- A present name that the body declares goes through that name's field. -/
 theorem objAdmV_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Value}
     (hB : objAdmV ⟨c.fields, fun k => AdmField (c.at k)⟩ (AdmWild c.wild) keys g = true)
@@ -261,16 +247,6 @@ noncomputable def AdmAny (ts : List Term) (v : Value) : Bool := anyP (AdmList ts
 
 theorem Adm_union (opts : List Term) (v : Value) :
     Adm (.union opts) v = AdmAny opts v := rfl
-
-/-- An option that admits makes the disjunction true. -/
-theorem AdmAny_of_mem {t : Term} {ts : List Term} {v : Value} (ht : t ∈ ts)
-    (h : Adm t v = true) : AdmAny ts v = true := by
-  induction ts with
-  | nil => exact absurd ht (by simp)
-  | cons t0 ts ih =>
-    rcases List.mem_cons.mp ht with rfl | h'
-    · simp [AdmAny_cons, h]
-    · simp [AdmAny_cons, ih h']
 
 /-- A list admits a value exactly when one of its terms does. -/
 theorem AdmAny_iff : ∀ {os : List Term} {v : Value},
@@ -319,45 +295,6 @@ theorem traverse_isSome_iff {α β : Type} (f : α → Option β) : ∀ xs : Lis
         rintro z (rfl | hz)
         · rw [hx]; rfl
         · exact hall z hz
-
-/-- `allP` transported across the element's exactness. -/
-theorem AdmAll_iff {c : Term} (h : ExactV c) : ∀ xs : List Value,
-    allP (Adm c) xs = true ↔ ∀ x ∈ xs, ((denote c).e x).isSome = true := by
-  intro xs; induction xs with
-  | nil => simp [allP]
-  | cons x xs ih => simp [allP, ih, h x]
-
-theorem setImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
-    (hall : ∀ x ∈ S, (f x).isSome = true)
-    (hinj : ∀ x ∈ S, ∀ y ∈ S, f x = f y → x = y) : (setImage f S).isSome = true := by
-  unfold setImage
-  rw [dif_pos hall]
-  have hnd : (S.attach.val.map (fun x => (f x.1).get (hall x.1 x.2))).Nodup := by
-    refine Multiset.Nodup.map_on ?_ S.attach.nodup
-    intro x hx y hy hxy
-    apply Subtype.ext
-    refine hinj x.1 x.2 y.1 y.2 ?_
-    rw [← Option.some_get (hall x.1 x.2), ← Option.some_get (hall y.1 y.2), hxy]
-  rw [dif_pos hnd]
-  rfl
-
-theorem setImage_none_of_fail {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
-    {x : α} (hx : x ∈ S) (h : f x = none) : setImage f S = none := by
-  unfold setImage
-  rw [dif_neg]
-  intro hall
-  have := hall x hx
-  rw [h] at this
-  exact absurd this (by simp)
-
-theorem neSetImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Option β}
-    {S : NEFinset α} (hall : ∀ x ∈ S.1, (f x).isSome = true)
-    (hinj : ∀ x ∈ S.1, ∀ y ∈ S.1, f x = f y → x = y) : (neSetImage f S).isSome = true := by
-  obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of_inj hall hinj)
-  have h2 := (neSetImage_eq_setImage (f := f) (S := S)
-    (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT
-  rw [h2]
-  rfl
 
 /-- Each option's row *is* its attempt — given that option's exactness, which is where the
     exactness hypothesis is spent. -/
