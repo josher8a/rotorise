@@ -237,11 +237,33 @@ abbrev dMap : Alg.MapF Value Attr Member Attr.member Value.depth Attr.depth wher
   dV_lt m k := Value.depth_map_entry (f := m.2) k
   dA_lt m k := Attr.depth_map_entry (f := m.2) k
 
+/-- **Two element codecs that agree on the read half read a wire set to one value set.** -/
+theorem decSet_agree {α : Type} {c d : Codec} {inj : α → Attr} {S : NEFinset α} {t w : Value}
+    (h : Alg.AgreeP c d) (ht : decSet c inj S = some t) (hw : decSet d inj S = some w) : t = w :=
+  Option.some.inj <| (ht.symm.trans (decSet_congr fun x hx => by
+    obtain ⟨u, hu⟩ := Option.isSome_iff_exists.mp (decSet_elem ht x hx)
+    obtain ⟨u', hu'⟩ := Option.isSome_iff_exists.mp (decSet_elem hw x hx)
+    rw [hu, hu', h _ _ _ hu hu'])).trans hw
+
+/-- …and two that agree on the write half write a value set to one wire set. -/
+theorem encSet_agree {α : Type} {c d : Codec} {inj : α → Value} {S : NEFinset α} {a b : Attr}
+    (h : Alg.AgreeE c d) (ha : encSet c inj S = some a) (hb : encSet d inj S = some b) : a = b :=
+  Option.some.inj <| (ha.symm.trans (encSet_congr fun x hx => by
+    obtain ⟨u, hu⟩ := Option.isSome_iff_exists.mp (encSet_elem ha x hx)
+    obtain ⟨u', hu'⟩ := Option.isSome_iff_exists.mp (encSet_elem hb x hx)
+    rw [hu, hu', h _ _ _ hu hu'])).trans hb
+
 /-- The set former: the lift, with the store's set rule as the element's obligation. -/
 noncomputable abbrev dSet : Alg.SetF Value Attr Member Attr.member Value.depth Attr.depth where
   lift := setCodec
   lawful h := lawful_setCodec h
   agree h := agreeLe_setCodec h
+  agreeS {side c d} h := by
+    cases side
+    · intro a t w ht hw
+      cases a <;> first | exact decSet_agree h ht hw | exact nomatch ht
+    · intro v a b ha hb
+      cases v <;> first | exact encSet_agree h ha hb | exact nomatch ha
   elem := SetElem
   held := HSet
   member := setMember

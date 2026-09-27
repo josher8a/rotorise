@@ -1,5 +1,6 @@
 import Calculus.Alg.Containers
 import Calculus.Alg.Recursion
+import Calculus.Alg.Agree
 import Mathlib.Data.Finset.Lattice.Fold
 
 /-!
@@ -40,11 +41,15 @@ structure MapF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → Na
   dV_lt : ∀ (m : MapOf V) k, dV (m.get k) + 1 ≤ dV (mV.into m)
   dA_lt : ∀ (m : MapOf A) k, dA (m.get k) + 1 ≤ dA (mA.into m)
 
-/-- The set former of a universe: the lift, its law, and its agreement one layer down. -/
+/-- The set former of a universe: the lift, its law, its agreement one layer down, and each half
+    of agreement. -/
 structure SetF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → Nat) where
   lift : Codec V A M → Codec V A M
   lawful : ∀ {c}, Lawful member c → Lawful member (lift c)
   agree : ∀ {d c₁ c₂}, AgreeLe dV dA d c₁ c₂ → AgreeLe dV dA (d + 1) (lift c₁) (lift c₂)
+  /-- The lift keeps each half of agreement: two sets whose element codecs agree on a half agree
+      on that half. -/
+  agreeS : ∀ {side : Bool} {c d : Codec V A M}, AgreeS side c d → AgreeS side (lift c) (lift d)
   /-- The universe's own obligation on an element. Soundness does not read this field. -/
   elem : Codec V A M → Prop
   /-- The held set of a set, from the held set of its element. -/

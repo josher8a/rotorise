@@ -8,6 +8,7 @@ import Calculus.Alg.Lists
 import Calculus.Alg.Positions
 import Calculus.Alg.Containers
 import Calculus.Alg.Recursion
+import Calculus.Alg.Agree
 import Calculus.Lang.Term
 import Calculus.Lang.Typing
 import Calculus.Lang.Guarded
@@ -19,8 +20,10 @@ import Calculus.Lang.Shapes
 import Calculus.Lang.Disjoint
 import Calculus.Lang.DisjointV
 import Calculus.Lang.DisjointA
+import Calculus.Lang.Compat
 import Calculus.JSON.Basic
 import Calculus.JSON.Disjoint
+import Calculus.JSON.Compat
 import Calculus.Dynamo.Alg.Codec
 import Calculus.Dynamo.Alg.Prisms
 import Calculus.Dynamo.Alg.Products

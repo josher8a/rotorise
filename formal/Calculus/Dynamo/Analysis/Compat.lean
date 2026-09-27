@@ -1,4 +1,5 @@
 import Calculus.Dynamo.Analysis.Confluence
+import Calculus.Lang.Compat
 
 /-!
 # Compatibility of the options of a union
@@ -9,9 +10,38 @@ acts at the attribute or at the value. A union of pairwise compatible lawful opt
 (`compat_of_common_bound`). Every held-free term is below `opaque`, so held-free lawful terms are
 pairwise compatible (`compat_of_HF`). Without compatibility, the order of the options is
 observable (`flip_order_observable`).
+
+The decision `Alg.Term.compat` states the union's law at every universe. `dynOracle` is its
+DynamoDB oracle: the caller-side views decide write orthogonality, and the stored-side views
+decide read orthogonality. `pairwiseCompat_of_compatPair` discharges the union's obligation of
+two lawful closed options through the decision.
 -/
 
 namespace Calculus
+
+/-- **The DynamoDB oracles**: the caller-side views decide write orthogonality, the stored-side
+    views decide read orthogonality, and no adapter pair is known to be another. -/
+def dynOracle : Alg.CompatOracle dynSyn :=
+  ⟨fun x y => Alg.Term.disjoint pair0 (writeView x) (writeView y),
+   fun x y => Alg.Term.disjoint pair0 (readView x) (readView y), fun _ _ _ _ => false⟩
+
+/-- **The DynamoDB oracles are sound**: each view admits what its term admits, so disjoint views
+    give apart domains. -/
+theorem dynOracle_sound : Alg.OracleSound dynOracle where
+  e x y h v := by
+    rw [← Alg.Adm_eq_isSome, ← Alg.Adm_eq_isSome]
+    exact Alg.apart_of_imp (writeLe_of x v) (Alg.apart_of_imp' (writeLe_of y v)
+      (Alg.disjoint_sound pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) v))
+  p x y h a := by
+    rw [← Alg.AdmA_eq_isSome, ← Alg.AdmA_eq_isSome]
+    exact Alg.apart_of_imp (readLe_of x a) (Alg.apart_of_imp' (readLe_of y a)
+      (Alg.disjoint_soundA pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) a))
+  same _ _ _ _ h := nomatch h
+
+/-- **The decision discharges the union's obligation** of two lawful closed options. -/
+theorem pairwiseCompat_of_compatPair {x y : Term} (h : Alg.compatPair dynOracle x y = true)
+    (hl : ∀ t ∈ [x, y], Lawful (denote t)) : PairwiseCompat [x, y] :=
+  Alg.pairwiseCompat_of_compatPair dynOracle_sound h hl
 
 /-- **Held-free lawful terms are pairwise `Compat`**: the common bound is `Ω`. -/
 theorem compat_of_HF {s t : Term} (hs : HF s) (ht : HF t) (hlt : Lawful (denote t)) :
@@ -242,5 +272,36 @@ theorem pairwiseCompat_sw : PairwiseCompat [sw1, sw2] := by
 
 /-- **The certificate refuses the pair.** -/
 theorem certPair_sw : certPair sw1 sw2 = false := by decide
+
+/-! ## The decision at the witnesses
+
+`compatPair` certifies each pair below, and `certPair` certifies none of them. Each pair holds a
+`held`, so no held-free bound covers it: the decision agrees per half and per component. -/
+
+/-- `{a?: swap}` and `{a?: binary}`: the two slots agree, because the two terms are disjoint. -/
+example : Alg.compatPair dynOracle (Term.object (Body.mk {"a"} (fun _ => .optional swap) none))
+    (Term.object (Body.mk {"a"} (fun _ => .optional Term.binary) none)) = true := by decide
+/-- `binary` and `swap | binary`: the partner is an option of the union. -/
+example : Alg.compatPair dynOracle Term.binary (Term.union [swap, Term.binary]) = true := by decide
+/-- `array(swap)` and `array(boolean)`: the elements are disjoint, and the empty list is one
+    attribute. -/
+example : Alg.compatPair dynOracle (Term.array swap) (Term.array Term.boolean) = true := by decide
+/-- A recursive term and `array(never)`. -/
+example : Alg.compatPair dynOracle (Term.mu (.union [swap, .array (.var 0)]))
+    (Term.array .never) = true := by decide
+/-- …and the zero test certifies none of the four. -/
+example : certPair (Term.object (Body.mk {"a"} (fun _ => .optional swap) none))
+      (Term.object (Body.mk {"a"} (fun _ => .optional Term.binary) none)) = false ∧
+    certPair Term.binary (Term.union [swap, Term.binary]) = false ∧
+    certPair (Term.array swap) (Term.array Term.boolean) = false ∧
+    certPair (Term.mu (.union [swap, .array (.var 0)])) (Term.array .never) = false := by decide
+
+/-- **The decision refuses the two incompatible witnesses.** -/
+example : Alg.compatPair dynOracle shout litX = false ∧
+    Alg.compatPair dynOracle Term.boolean flipBool = false := by decide
+
+/-- **Two restrictions of one adapter**: compatible through `swap`, and the decision does not see
+    it, because the oracle knows no adapter to be another. -/
+example : Alg.compatPair dynOracle sw1 sw2 = false := by decide
 
 end Calculus

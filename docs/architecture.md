@@ -62,10 +62,12 @@ instance, and JSON is a second instance.
 | `Alg/Combinators.lean`, `Alg/Relations.lean` | the combinators, the join by the first admitter, the order, the equivalence, `Compat`, `Canon` and `Sub` |
 | `Alg/Lists.lean`, `Alg/Positions.lean`, `Alg/Maps.lean` | the traversal and `entrywise`, the positional theory, the image of a function over a key set, and `MapOf`, which keeps the namespace `Calculus` |
 | `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
+| `Alg/Agree.lean` | the two halves of agreement `AgreeE` and `AgreeP`, one lemma per combinator, and `compat_iff_agree` |
 | `Lang/Term.lean`, `Lang/Typing.lean` | the term family over a signature, `denote`, the guard, `Typed` and `Obligations` |
 | `Lang/Guarded.lean`, `Lang/Sound.lean`, `Lang/HeldFree.lean` | `contractive_body`, `soundness`, and `compat_of_HF` |
 | `Lang/Disjoint.lean` | the class `Leaf`, and the structural disjointness test `Term.disjoint` over a signature |
 | `Lang/DisjointV.lean`, `Lang/DisjointA.lean` | the soundness of the test: `disjoint_sound`, `disjoint_soundA`, and `disjoint_orthogonal` |
+| `Lang/Compat.lean` | the compatibility decision `Term.compat` over a signature, `compat_sound`, and `pairwiseCompat_of_compatPair` |
 
 `Rows.lean` is generic too, in the namespace `Calculus`. It states the row combinators of the
 analyses over one carrier type, and each side of the pair instantiates it. It states the row
@@ -96,6 +98,7 @@ compute with.
 | the list and map formers | `Sem.list` as a `ListF`, `Sem.map` as a `MapF`: a prism on each side | `dList`, `dMap` | none |
 | the set former | `Sem.set` as a `SetF`: a lift and its laws | `dSet`, over `setCodec` | none |
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
+| the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | `dynOracle`, over the two views | `jsonOracle`, which certifies nothing |
 | the top | `Sem.top`, `Sem.lawful_top`, `Sem.topHeld` | `Ω`, `HOpaque` | `idCodec` |
 | the top laws | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
 | the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `AdmLit`, `inBaseA` and `AdmALit` | the kind test |

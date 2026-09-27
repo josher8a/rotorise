@@ -20,6 +20,7 @@ import Calculus.Dynamo.Analysis.Kernel
 import Calculus.Dynamo.Analysis.Compat
 import Calculus.JSON.Basic
 import Calculus.JSON.Disjoint
+import Calculus.JSON.Compat
 import Calculus.Alg.Lists
 import Calculus.Alg.Positions
 import Calculus.Alg.Containers
