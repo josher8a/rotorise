@@ -1,5 +1,7 @@
 import Calculus.Dynamo.Analysis.Meet
 
+variable {α : Calculus.Table}
+
 /-!
 # `opaque` is the universal sum
 
@@ -39,7 +41,7 @@ theorem opaqUnfold_ok : unionOk (match opaqUnfold with | .union os => os | _ => 
 
 /-- `opaque` writes an array when `opaque` writes each element, at the element budget. -/
 theorem Adm_opaq_arr (vs : List Value) :
-    Adm .opaq (.arr vs) = decide (∀ x ∈ vs, Adm .opaq x = true) := by
+    Adm α .opaq (.arr vs) = decide (∀ x ∈ vs, Adm α .opaq x = true) := by
   rw [Adm_opaq_eq, Ωe_arr, Option.isSome_map]
   refine Bool.eq_iff_iff.mpr ((traverse_isSome_iff _ vs).trans ?_)
   simp only [decide_eq_true_eq]
@@ -47,7 +49,7 @@ theorem Adm_opaq_arr (vs : List Value) :
 
 /-- `opaque` writes a map when `opaque` writes each entry, at the entry budget. -/
 theorem Adm_opaq_map (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
-    Adm .opaq (.map keys g) = decide (∀ k, Adm .opaq (g k) = true) := by
+    Adm α .opaq (.map keys g) = decide (∀ k, Adm α .opaq (g k) = true) := by
   rw [Adm_opaq_eq, Ωe_map, Option.isSome_map]
   refine Bool.eq_iff_iff.mpr (funImage_isSome_iff.trans ?_)
   simp only [decide_eq_true_eq]
@@ -55,8 +57,8 @@ theorem Adm_opaq_map (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
 
 /-- **The unfolding lemma, write side.** `opaque` writes exactly the values that its
     unfolding writes. -/
-theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
-  have hu : Adm opaqUnfold v = AdmAny (match opaqUnfold with | .union os => os | _ => []) v :=
+theorem Adm_opaqUnfold (v : Value) : Adm α opaqUnfold v = Adm α .opaq v := by
+  have hu : Adm α opaqUnfold v = AdmAny α (match opaqUnfold with | .union os => os | _ => []) v :=
     rfl
   rw [hu]
   cases v with
@@ -94,7 +96,7 @@ theorem Adm_opaqUnfold (v : Value) : Adm opaqUnfold v = Adm .opaq v := by
 
 /-- `opaque` reads a wire list when `opaque` reads each element, at the element budget. -/
 theorem AdmA_opaq_l (as : List Attr) :
-    AdmA .opaq (.l as) = decide (∀ x ∈ as, AdmA .opaq x = true) := by
+    AdmA α .opaq (.l as) = decide (∀ x ∈ as, AdmA α .opaq x = true) := by
   rw [AdmA_opaq_eq, Ωp_l, Option.isSome_map]
   refine Bool.eq_iff_iff.mpr ((traverse_isSome_iff _ as).trans ?_)
   simp only [decide_eq_true_eq]
@@ -102,7 +104,7 @@ theorem AdmA_opaq_l (as : List Attr) :
 
 /-- `opaque` reads a wire map when `opaque` reads each entry, at the entry budget. -/
 theorem AdmA_opaq_m (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
-    AdmA .opaq (.m keys g) = decide (∀ k, AdmA .opaq (g k) = true) := by
+    AdmA α .opaq (.m keys g) = decide (∀ k, AdmA α .opaq (g k) = true) := by
   rw [AdmA_opaq_eq, Ωp_m, Option.isSome_map]
   refine Bool.eq_iff_iff.mpr (funImage_isSome_iff.trans ?_)
   simp only [decide_eq_true_eq]
@@ -110,9 +112,9 @@ theorem AdmA_opaq_m (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
 
 /-- **The unfolding lemma, read side.** `opaque` reads exactly the attributes that its
     unfolding reads. -/
-theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
-  have hu : AdmA opaqUnfold a
-      = AdmAAny (match opaqUnfold with | .union os => os | _ => []) a :=
+theorem AdmA_opaqUnfold (a : Attr) : AdmA α opaqUnfold a = AdmA α .opaq a := by
+  have hu : AdmA α opaqUnfold a
+      = AdmAAny α (match opaqUnfold with | .union os => os | _ => []) a :=
     rfl
   rw [hu]
   cases a with
@@ -148,7 +150,7 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA opaqUnfold a = AdmA .opaq a := by
       exact fun _ => hp
 
 /-- **`opaque` is total, write side.** `opaque` writes every value. -/
-theorem opaq_total : ∀ v : Value, Adm .opaq v = true
+theorem opaq_total : ∀ v : Value, Adm α .opaq v = true
   | .str s => Adm_opaq_str s
   | .bool b => Adm_opaq_bool b
   | .bin b => Adm_opaq_bin b
@@ -173,7 +175,7 @@ theorem opaq_total : ∀ v : Value, Adm .opaq v = true
 termination_by v => Value.depth v
 
 /-- **`opaque` is total, read side.** `opaque` reads every attribute. -/
-theorem opaqA_total : ∀ a : Attr, AdmA .opaq a = true
+theorem opaqA_total : ∀ a : Attr, AdmA α .opaq a = true
   | .s x => AdmA_opaq_str x
   | .bool b => AdmA_opaq_bool b
   | .b x => AdmA_opaq_bin x

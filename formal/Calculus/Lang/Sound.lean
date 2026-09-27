@@ -17,30 +17,30 @@ and of its top, and the positivity of its depths. The generic combinators supply
 
 namespace Calculus.Alg
 
-variable {S : Syn} [Sem S]
+variable {S : Syn} [Sem S] {α : Table S}
 
 /-! ## The companions, as mapped lists -/
 
 /-- The options' codecs are the mapped denotation. -/
 @[simp] theorem denoteList_eq {ρ : List S.C} :
-    ∀ ts : List (Term S), denoteList ts ρ = ts.map (denote · ρ)
+    ∀ ts : List (Term S), denoteList α ts ρ = ts.map (denote α · ρ)
   | [] => rfl
   | t :: ts => by simp only [denoteList, List.map]; rw [denoteList_eq ts]
 
 /-- The spread's codec is the mapped denotation. -/
 @[simp] theorem denoteOpt_eq {ρ : List S.C} :
-    ∀ tail : Option (Term S), denoteOpt tail ρ = tail.map (denote · ρ)
+    ∀ tail : Option (Term S), denoteOpt α tail ρ = tail.map (denote α · ρ)
   | none => rfl
   | some _ => rfl
 
 /-- The options' members are the mapped members. -/
 @[simp] theorem denoteμs_eq_map {ρ : List S.C} : ∀ opts : List (Term S),
-    denoteμs opts ρ = opts.map fun t => (denote t ρ).μ
+    denoteμs α opts ρ = opts.map fun t => (denote α t ρ).μ
   | [] => rfl
   | t :: ts => by simp only [denoteμs, List.map]; rw [denoteμs_eq_map ts]
 
 /-- A term's open block keeps every name. -/
-theorem wildSem_ne_drop (w : Option (Term S)) {ρ : List S.C} : wildSem w ρ ≠ .drop := by
+theorem wildSem_ne_drop (w : Option (Term S)) {ρ : List S.C} : wildSem α w ρ ≠ .drop := by
   cases w <;> exact fun h => nomatch h
 
 /-- A unanimous member is the member of every option. -/
@@ -71,8 +71,8 @@ hypothesis off the mapped list. -/
 set_option linter.unreachableTactic false in
 /-- Soundness over an environment: every term whose obligations hold at `ρ`, and whose free
     variables `ρ` gives lawful codecs, satisfies retract, canon and writes. -/
-theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed t T μ → Obligations t ρ →
-    (∀ i, Lawful Sem.member (envAt ρ i)) → Lawful Sem.member (denote t ρ)
+theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α t T μ → Obligations α t ρ →
+    (∀ i, Lawful Sem.member (envAt ρ i)) → Lawful Sem.member (denote α t ρ)
   | t, T, μ, ρ, h, hob, henv => by
     cases h with
     | prim g => exact Sem.lawful_ground g
@@ -96,13 +96,13 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed t T μ → 
       exact L.lawful (soundnessIn ρ h' hob.1 henv)
     | @refine t' T' μ' p h' =>
       exact (soundnessIn ρ h' hob henv).restrict (Sem.eval p)
-    | @held t' I' μ' P f g h' =>
+    | @held t' I' μ' P k h' =>
       exact ((soundnessIn ρ h' hob.1 henv).through hob.2).restrict _
     | @list L pre Tpre sp Tsp suf Tsuf hL hp hs hf =>
-      have ihp : ∀ t' ∈ pre, Lawful Sem.member (denote t' ρ) := fun t' ht' => by
-        obtain ⟨T', μ', hμ'⟩ := TypedList.forall hp t' ht'
+      have ihp : ∀ t' ∈ pre, Lawful Sem.member (denote α t' ρ) := fun t' ht' => by
+        obtain ⟨T', μ', hμ'⟩ := TypedList.forall (α := α) hp t' ht'
         exact soundnessIn ρ hμ' (obligationsList_iff.mp hob.1 t' ht') henv
-      have ihsp : ∀ t' ∈ sp, Lawful Sem.member (denote t' ρ) := fun t' ht' => by
+      have ihsp : ∀ t' ∈ sp, Lawful Sem.member (denote α t' ρ) := fun t' ht' => by
         cases sp with
         | none => exact nomatch ht'
         | some tx =>
@@ -110,8 +110,8 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed t T μ → 
           cases ht'
           cases hs with
           | some hμ' => exact soundnessIn ρ hμ' (obligationsOpt_iff.mp hob.2.1 t' rfl) henv
-      have ihf : ∀ t' ∈ suf, Lawful Sem.member (denote t' ρ) := fun t' ht' => by
-        obtain ⟨T', μ', hμ'⟩ := TypedList.forall hf t' ht'
+      have ihf : ∀ t' ∈ suf, Lawful Sem.member (denote α t' ρ) := fun t' ht' => by
+        obtain ⟨T', μ', hμ'⟩ := TypedList.forall (α := α) hf t' ht'
         exact soundnessIn ρ hμ' (obligationsList_iff.mp hob.2.2 t' ht') henv
       simp only [denote, hL, denoteList_eq, denoteOpt_eq]
       exact lawful_listCodec L.hμ
@@ -124,34 +124,34 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed t T μ → 
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest
       -- a field's codec is its term's denotation, and its laws reach it unchanged
-      have ihf : ∀ k, Lawful Sem.member (fieldSem (ff k) ρ).codec := by
+      have ihf : ∀ k, Lawful Sem.member (fieldSem α (ff k) ρ).codec := by
         intro k
         have hobf := hob.1 k
-        obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields k)
+        obtain ⟨t', hty', hshape⟩ := TypedField.term (α := α) (hfields k)
         rcases hshape with heq | heq
         · rw [heq] at hobf ⊢
           exact soundnessIn ρ hty' hobf henv
         · rw [heq] at hobf ⊢; exact soundnessIn ρ hty' hobf henv
-      have ihr : ∀ c, wildSem wild ρ = .codec c → Lawful Sem.member c := by
+      have ihr : ∀ c, wildSem α wild ρ = .codec c → Lawful Sem.member c := by
         intro c hcr
         cases hrest with
         | none => exact nomatch hcr
         | @some t' T' μ' hty =>
-          replace hcr : RestSem.codec (denote t' ρ) = RestSem.codec c := hcr
+          replace hcr : RestSem.codec (denote α t' ρ) = RestSem.codec c := hcr
           cases hcr
           exact soundnessIn ρ hty hob.2 henv
       simp only [denote, bodySem, hF]
       exact lawful_objectCodec F.hμ ihf ihr (wildSem_ne_drop _)
     | @union opts Ts μs hlist =>
-      have ihs : ∀ t' ∈ opts, Lawful Sem.member (denote t' ρ) := fun t' ht' => by
-        obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
+      have ihs : ∀ t' ∈ opts, Lawful Sem.member (denote α t' ρ) := fun t' ht' => by
+        obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall (α := α) hlist t' ht'
         exact soundnessIn ρ hμ' (obligationsList_iff.mp hob.1 t' ht') henv
-      have hC : ∀ o ∈ opts.map fun t' => denote t' ρ,
-          ∀ o' ∈ opts.map fun t' => denote t' ρ, Compat o o' := by
+      have hC : ∀ o ∈ opts.map fun t' => denote α t' ρ,
+          ∀ o' ∈ opts.map fun t' => denote α t' ρ, Compat o o' := by
         refine List.forall_mem_map.mpr fun s hs => List.forall_mem_map.mpr fun t' ht' => ?_
         exact hob.2 s hs t' ht'
-      have hW : ∀ m, unanimous (opts.map fun t' => (denote t' ρ).μ) = some m →
-          ∀ o ∈ opts.map fun t' => denote t' ρ,
+      have hW : ∀ m, unanimous (opts.map fun t' => (denote α t' ρ).μ) = some m →
+          ∀ o ∈ opts.map fun t' => denote α t' ρ,
             ∀ t' a, o.e t' = some a → Sem.member a = m := by
         intro m hm
         refine List.forall_mem_map.mpr fun tx htx t' a he' => ?_
@@ -164,8 +164,8 @@ termination_by t _ _ _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
 
 /-- Soundness: every closed term whose obligations hold satisfies retract, canon and writes. -/
-theorem soundness {t : Term S} {T μ} (h : Typed t T μ) (hob : Obligations t) :
-    Lawful Sem.member (denote t) :=
+theorem soundness {t : Term S} {T μ} (h : Typed α t T μ) (hob : Obligations α t) :
+    Lawful Sem.member (denote α t) :=
   soundnessIn [] h hob fun _ => Lawful.empty
 
 /-! ## The denotation's held set is the judgement's
@@ -195,13 +195,13 @@ theorem alignTail_TSub {c : S.C} {T' : S.V → Prop} (ih : ∀ v, c.T v → T' v
             (fun p hp => hall p (List.mem_cons_of_mem _ hp)) x hx'
 
 /-- `align`'s positional pairing is §3's `T₁ × … × Tₙ`, one position at a time. -/
-theorem align_TSub {tail : Option (Term S)} {Tt} (hopt : TypedOpt tail Tt)
+theorem align_TSub {tail : Option (Term S)} {Tt} (hopt : TypedOpt α tail Tt)
     (ihTail : ∀ t' ∈ tail, ∀ (T' : S.V → Prop) (μ' : Option (Sem.M S)),
-      Typed t' T' μ' → ∀ v, (denote t').T v → T' v) :
-    ∀ {ts : List (Term S)} {Ts}, TypedList ts Ts →
+      Typed α t' T' μ' → ∀ v, (denote α t').T v → T' v) :
+    ∀ {ts : List (Term S)} {Ts}, TypedList α ts Ts →
       (∀ t' ∈ ts, ∀ (T' : S.V → Prop) (μ' : Option (Sem.M S)),
-        Typed t' T' μ' → ∀ v, (denote t').T v → T' v) → ∀ {vs ps},
-      align (ts.map denote) (tail.map denote) vs = some ps →
+        Typed α t' T' μ' → ∀ v, (denote α t').T v → T' v) → ∀ {vs ps},
+      align (ts.map (denote α)) (tail.map (denote α)) vs = some ps →
       (∀ p ∈ ps, p.1.T p.2) → HTuple Ts Tt vs
   | _, _, .nil, _, vs, ps, hal, hall => by
       cases hopt with
@@ -217,13 +217,13 @@ theorem align_TSub {tail : Option (Term S)} {Tt} (hopt : TypedOpt tail Tt)
       cases vs with
       | nil => exact nomatch hal
       | cons v vs' =>
-        replace hal : (((align _ (tail.map denote) vs')).map
-          ((denote _, v) :: ·)) = some ps := hal
-        cases hal' : align _ (tail.map denote) vs' with
+        replace hal : (((align _ (tail.map (denote α)) vs')).map
+          ((denote α _, v) :: ·)) = some ps := hal
+        cases hal' : align _ (tail.map (denote α)) vs' with
         | none => rw [hal'] at hal; exact nomatch hal
         | some ps' =>
           rw [hal'] at hal
-          replace hal : some ((denote _, v) :: ps') = some ps := hal
+          replace hal : some ((denote α _, v) :: ps') = some ps := hal
           cases hal
           refine ⟨ih _ (List.mem_cons_self) _ _ hty v (hall _ (List.mem_cons_self)), ?_⟩
           exact align_TSub hopt ihTail hs
@@ -232,22 +232,22 @@ theorem align_TSub {tail : Option (Term S)} {Tt} (hopt : TypedOpt tail Tt)
 
 /-- The suffix's positions, read off the zipped row. -/
 theorem zipSuf_TSub :
-    ∀ {suf : List (Term S)} {Tsuf}, TypedList suf Tsuf →
+    ∀ {suf : List (Term S)} {Tsuf}, TypedList α suf Tsuf →
       (∀ t' ∈ suf, ∀ (T' : S.V → Prop) (μ' : Option (Sem.M S)),
-        Typed t' T' μ' → ∀ v, (denote t').T v → T' v) →
+        Typed α t' T' μ' → ∀ v, (denote α t').T v → T' v) →
       ∀ {back : List S.V}, back.length = suf.length →
-      (∀ p ∈ (suf.map denote).zip back, p.1.T p.2) →
+      (∀ p ∈ (suf.map (denote α)).zip back, p.1.T p.2) →
       List.Forall₂ (fun T v => T v) Tsuf back
   | _, _, .nil, _, back, hlen, _ => by
       cases back with
       | nil => exact .nil
       | cons _ _ =>
           exact absurd hlen (by simp only [List.length_cons, List.length_nil]; omega)
-  | _, _, @TypedList.cons _ _ t ts T Ts μ hty hs, ih, back, hlen, hall => by
+  | _, _, @TypedList.cons _ _ _ t ts T Ts μ hty hs, ih, back, hlen, hall => by
       cases back with
       | nil => exact absurd hlen (by simp only [List.length_cons, List.length_nil]; omega)
       | cons b bs =>
-        refine .cons (ih t (List.mem_cons_self) _ _ hty b (hall (denote t, b) ?_)) ?_
+        refine .cons (ih t (List.mem_cons_self) _ _ hty b (hall (denote α t, b) ?_)) ?_
         · simp only [List.map_cons, List.zip_cons_cons]
           exact List.mem_cons_self
         · exact zipSuf_TSub hs (fun t' ht' => ih t' (List.mem_cons_of_mem _ ht'))
@@ -257,16 +257,16 @@ theorem zipSuf_TSub :
               exact List.mem_cons_of_mem _ hp))
 
 /-- `alignL`'s pairing is §3's `(list)` held set, read off the alignment. -/
-theorem alignL_TSub {pre : List (Term S)} {Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre)
-    (hs : TypedOpt sp Tsp) (hf : TypedList suf Tsuf)
+theorem alignL_TSub {pre : List (Term S)} {Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre)
+    (hs : TypedOpt α sp Tsp) (hf : TypedList α suf Tsuf)
     (ihp : ∀ t' ∈ pre, ∀ (T' : S.V → Prop) (μ' : Option (Sem.M S)),
-      Typed t' T' μ' → ∀ v, (denote t').T v → T' v)
+      Typed α t' T' μ' → ∀ v, (denote α t').T v → T' v)
     (ihs : ∀ t' ∈ sp, ∀ (T' : S.V → Prop) (μ' : Option (Sem.M S)),
-      Typed t' T' μ' → ∀ v, (denote t').T v → T' v)
+      Typed α t' T' μ' → ∀ v, (denote α t').T v → T' v)
     (ihf : ∀ t' ∈ suf, ∀ (T' : S.V → Prop) (μ' : Option (Sem.M S)),
-      Typed t' T' μ' → ∀ v, (denote t').T v → T' v)
+      Typed α t' T' μ' → ∀ v, (denote α t').T v → T' v)
     {vs ps}
-    (hal : alignL (pre.map denote) (sp.map denote) (suf.map denote) vs = some ps)
+    (hal : alignL (pre.map (denote α)) (sp.map (denote α)) (suf.map (denote α)) vs = some ps)
     (hall : ∀ p ∈ ps, p.1.T p.2) : HTupleL Tpre Tsp Tsuf vs := by
   obtain ⟨front, back, psF, rfl, hblen, halF, rfl⟩ :=
     alignL_split _ _ _ _ _ hal
@@ -278,7 +278,7 @@ theorem alignL_TSub {pre : List (Term S)} {Tpre sp Tsp suf Tsuf} (hp : TypedList
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
 /-- The denotation's held set is inside the judgement's. -/
-theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed t T μ → ∀ v, (denote t).T v → T v
+theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed α t T μ → ∀ v, (denote α t).T v → T v
   | t, T, μ, h, v, hv => by
     cases h with
     | prim _ => exact hv
@@ -297,8 +297,8 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed t T μ → ∀ v, (denote t)
         (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
         (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
         (fun t' _ _ _ hty v hv => typed_TSub hty v hv) hal hall⟩
-    | @held t' I' μ' P f g h' =>
-      exact ⟨typed_TSub h' (f v) hv.1, hv.2⟩
+    | @held t' I' μ' P k h' =>
+      exact ⟨typed_TSub h' ((α.word k).1 v) hv.1, hv.2⟩
     | @refine t' T' μ' q h' => exact ⟨typed_TSub h' v hv.1, hv.2⟩
     | @object F body bind R μs hF hfields hrest =>
       cases body with | mk fields ff wild =>
@@ -311,9 +311,9 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed t T μ → ∀ v, (denote t)
       · -- every required binding's name is present, because its field is not `opt`
         intro k hreq
         have hty := hfields k
-        have hno : ∀ c, fieldSem (ff k) ≠ FieldSem.opt c := by
+        have hno : ∀ c, fieldSem α (ff k) ≠ FieldSem.opt c := by
           intro c hc
-          obtain ⟨t', -, hshape⟩ := TypedField.term hty
+          obtain ⟨t', -, hshape⟩ := TypedField.term (α := α) hty
           rcases hshape with heq | heq
           · rw [heq] at hc; exact nomatch hc
           · exact TypedField.not_optional hty hreq t' heq
@@ -325,9 +325,9 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed t T μ → ∀ v, (denote t)
         · -- declared: the entry holds its field's set, and the binding is at the same key
           rw [dif_pos hk]
           simp only [objEntryT,
-            MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem (ff k)⟩ :
+            MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem α (ff k)⟩ :
               MapOf (FieldSem S.V (Sem.A S) (Sem.M S)))) ⟨k.1, hk⟩] at hentry
-          obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields ⟨k.1, hk⟩)
+          obtain ⟨t', hty', hshape⟩ := TypedField.term (α := α) (hfields ⟨k.1, hk⟩)
           rcases hshape with heq | heq
           · rw [heq] at hentry; exact typed_TSub hty' _ hentry
           · rw [heq] at hentry; exact typed_TSub hty' _ hentry
@@ -338,7 +338,7 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed t T μ → ∀ v, (denote t)
           cases hrest with
           | none => exact nomatch hrc
           | @some t' T'' μ'' hty' =>
-            replace hrc : some (denote t') = some rc := hrc
+            replace hrc : some (denote α t') = some rc := hrc
             cases hrc
             exact ⟨T'', rfl, typed_TSub hty' _ hrcT⟩
     | @union opts Ts μs hlist =>
@@ -346,7 +346,7 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed t T μ → ∀ v, (denote t)
       obtain ⟨o, ho, hT⟩ := hv
       simp only [List.mem_map] at ho
       obtain ⟨tx, htx, rfl⟩ := ho
-      obtain ⟨T', hT', μ', hty⟩ := TypedListμ.mem hlist tx htx
+      obtain ⟨T', hT', μ', hty⟩ := TypedListμ.mem (α := α) hlist tx htx
       exact ⟨T', hT', typed_TSub hty v hT⟩
 
 termination_by t _ _ _ _ _ => Term.depth t
@@ -357,7 +357,7 @@ set_option linter.unreachableTactic false in
 /-- Every derivable term denotes a pair **on its carrier**: §3's `e : T ⇀ 𝔸`, `p : 𝔸 ⇀ T`. One
     walk of the derivation, dispatching to the `Carrier` lemmas, with `soundness` supplying the
     lawfulness that the `held` and `mu` cases need. -/
-theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed t T μ → Obligations t → Carrier (denote t)
+theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed α t T μ → Obligations α t → Carrier (denote α t)
   | t, T, μ, h, hob => by
     cases h with
     | prim g => exact Sem.carrier_ground g
@@ -374,7 +374,7 @@ theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed t T μ → Obligations t
       refine carrier_listCodec (List.forall_mem_map.mpr ?_) (forall_mem_map_option ?_)
         (List.forall_mem_map.mpr ?_)
       · intro t' ht'
-        obtain ⟨T', μ', hty⟩ := TypedList.forall hp t' ht'
+        obtain ⟨T', μ', hty⟩ := TypedList.forall (α := α) hp t' ht'
         exact carrier_denote hty (obligationsList_iff.mp hob.1 t' ht')
       · intro t' ht'
         cases sp with
@@ -385,9 +385,9 @@ theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed t T μ → Obligations t
           cases hs with
           | some hty => exact carrier_denote hty (obligationsOpt_iff.mp hob.2.1 t' rfl)
       · intro t' ht'
-        obtain ⟨T', μ', hty⟩ := TypedList.forall hf t' ht'
+        obtain ⟨T', μ', hty⟩ := TypedList.forall (α := α) hf t' ht'
         exact carrier_denote hty (obligationsList_iff.mp hob.2.2 t' ht')
-    | @held t' I' μ' P f g h' =>
+    | @held t' I' μ' P k h' =>
       exact carrier_restrict (carrier_through (carrier_denote h' hob.1)
         (soundness h' hob.1).core hob.2.2) _
     | @refine t' T' μ' p h' =>
@@ -395,20 +395,20 @@ theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed t T μ → Obligations t
     | @object F body bind R μs hF hfields hrest =>
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest
-      have hsems : ∀ k : {k // k ∈ fields}, Carrier (fieldSem (ff k)).codec := by
+      have hsems : ∀ k : {k // k ∈ fields}, Carrier (fieldSem α (ff k)).codec := by
         intro k
         have hobf := hob.1 k
-        obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields k)
+        obtain ⟨t', hty', hshape⟩ := TypedField.term (α := α) (hfields k)
         rcases hshape with heq | heq
         · rw [heq] at hobf ⊢
           exact carrier_denote hty' hobf
         · rw [heq] at hobf ⊢; exact carrier_denote hty' hobf
-      have hrc : ∀ rc, rcOf (wildSem wild) = some rc → Carrier rc := by
+      have hrc : ∀ rc, rcOf (wildSem α wild) = some rc → Carrier rc := by
         intro rc hcr
         cases hrest with
         | none => exact nomatch hcr
         | @some t' T' μ' hty =>
-          replace hcr : some (denote t') = some rc := hcr
+          replace hcr : some (denote α t') = some rc := hcr
           cases hcr
           exact carrier_denote hty hob.2
       simp only [denote, bodySem, hF]
@@ -416,7 +416,7 @@ theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed t T μ → Obligations t
     | @union opts Ts μs hlist =>
       simp only [denote, denoteList_eq]
       refine carrier_altCodec (List.forall_mem_map.mpr fun t' ht' => ?_)
-      obtain ⟨T', μ', hty⟩ := TypedListμ.forall hlist t' ht'
+      obtain ⟨T', μ', hty⟩ := TypedListμ.forall (α := α) hlist t' ht'
       exact carrier_denote hty (obligationsList_iff.mp hob.1 t' ht')
 
 termination_by t _ _ _ _ => Term.depth t

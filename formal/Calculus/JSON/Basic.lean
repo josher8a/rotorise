@@ -143,6 +143,14 @@ abbrev jsonSyn : Alg.Syn where
   V := Json
   Ground := JMember
   Pred := Json → Bool
+  Gen := Empty
+  decGen := inferInstance
+
+/-- **The one table of JSON**: the universe names no generator, so the only adapter word is the
+    empty word, the identity. -/
+def jsonTable : Alg.Table jsonSyn := fun g => nomatch g
+
+variable {α : Alg.Table jsonSyn}
 
 /-- **The JSON meaning** of that syntax. -/
 instance jsonSem : Alg.Sem jsonSyn where
@@ -181,17 +189,17 @@ instance id_topLaws : Alg.TopLaws jsonSyn where
 def strOrNumTerm : Alg.Term jsonSyn := .union [.prim .str, .prim .num]
 
 /-- A string or a number. -/
-noncomputable def strOrNum : Alg.Codec Json Json JMember := Alg.denote strOrNumTerm
+noncomputable def strOrNum : Alg.Codec Json Json JMember := Alg.denote jsonTable strOrNumTerm
 
 /-- **The union of the string codec and the number codec is lawful**, by the generic soundness:
     the two options are held-free, so the identity codec bounds both, and they are compatible. -/
 theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum := by
-  have hty : ∀ m, Alg.Typed (Alg.Term.prim (S := jsonSyn) m) (ground m).T (some m) :=
+  have hty : ∀ m, Alg.Typed jsonTable (Alg.Term.prim (S := jsonSyn) m) (ground m).T (some m) :=
     fun m => .prim m
   refine Alg.soundness (.union (.cons (hty _) (.cons (hty _) .nil))) ⟨⟨trivial, trivial, trivial⟩,
     fun s hs t ht => ?_⟩
   have hl : ∀ x ∈ [Alg.Term.prim (S := jsonSyn) .str, .prim .num],
-      Alg.Lawful Json.member (Alg.denote x) := fun x hx => by
+      Alg.Lawful Json.member (Alg.denote jsonTable x) := fun x hx => by
     rcases List.mem_cons.mp hx with rfl | hx
     · exact lawful_ground _
     · rcases List.mem_cons.mp hx with rfl | hx
@@ -227,7 +235,7 @@ instance jsonPrimAdmA : Alg.PrimAdmA jsonSyn where
 
 /-- The string-or-number term admits exactly what its codec writes, and reads exactly what its
     codec reads. -/
-theorem exact_strOrNum : Alg.ExactV strOrNumTerm [] ∧ Alg.ExactA strOrNumTerm [] :=
+theorem exact_strOrNum : Alg.ExactV α strOrNumTerm [] ∧ Alg.ExactA α strOrNumTerm [] :=
   ⟨Alg.Adm_exact _ _, Alg.AdmA_exact _ _⟩
 
 /-! ## Arrays -/

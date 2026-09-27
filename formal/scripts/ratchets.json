@@ -43,8 +43,8 @@
     "Calculus/Dynamo/Lang/HeldFree.lean": 72,
     "Calculus/Dynamo/Lang/HeldSet.lean": 42,
     "Calculus/Dynamo/Lang/Soundness.lean": 41,
-    "Calculus/Dynamo/Lang/Store.lean": 91,
-    "Calculus/Dynamo/Lang/Term.lean": 90,
+    "Calculus/Dynamo/Lang/Store.lean": 93,
+    "Calculus/Dynamo/Lang/Term.lean": 92,
     "Calculus/Dynamo/Lang/Typing.lean": 23,
     "Calculus/Dynamo/Witness/Discharge.lean": 2,
     "Calculus/Dynamo/Witness/LiteralArity1.lean": 8,
@@ -64,7 +64,7 @@
     "Calculus/Lang/HeldFree.lean": 67,
     "Calculus/Lang/Shapes.lean": 5,
     "Calculus/Lang/Sound.lean": 140,
-    "Calculus/Lang/Term.lean": 182,
+    "Calculus/Lang/Term.lean": 194,
     "Calculus/Lang/Typing.lean": 92
   },
   "retirement_marks": {

@@ -1,6 +1,8 @@
 import Calculus.Dynamo.Lang.Denote
 import Calculus.Lang.HeldFree
 
+variable {α : Calculus.Table}
+
 /-!
 # Held-free terms are restrictions of `opaque`
 
@@ -136,16 +138,16 @@ instance Ω_topLaws : Alg.TopLaws dynSyn where
   set L hL c hc := by cases hL; exact sub_setCodec hc
 
 /-- **Confluence**, closed: the denotation of a held-free term is a restriction of `Ω`. -/
-theorem sub_denote (t : Term) (h : HF t) : Sub (denote t) Ω :=
+theorem sub_denote (t : Term) (h : HF t) : Sub (denote α t) Ω :=
   Alg.sub_denote t h
 
 /-- **(W)**: a held-free term writes only what `opaque` writes. -/
-theorem confluence_W {t : Term} (h : HF t) {v a} (he : (denote t).e v = some a) :
-    (denote .opaq).e v = some a := (sub_denote t h).1 _ _ he
+theorem confluence_W {t : Term} (h : HF t) {v a} (he : (denote α t).e v = some a) :
+    (denote α .opaq).e v = some a := (sub_denote t h).1 _ _ he
 
 /-- **(R)**: a held-free term reads only what `opaque` reads. -/
-theorem confluence_R {t : Term} (h : HF t) {a v} (hp : (denote t).p a = some v) :
-    (denote .opaq).p a = some v := (sub_denote t h).2 _ _ hp
+theorem confluence_R {t : Term} (h : HF t) {a v} (hp : (denote α t).p a = some v) :
+    (denote α .opaq).p a = some v := (sub_denote t h).2 _ _ hp
 
 
 

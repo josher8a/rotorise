@@ -2,6 +2,8 @@ import Calculus.Dynamo.Lang.Denote
 import Calculus.Lang.Guarded
 import Calculus.Lang.Typing
 
+variable {α : Calculus.Table}
+
 /-!
 # §3–§5 — The judgement
 
@@ -106,14 +108,20 @@ def HObject (names : Finset Name) (b : {k // k ∈ names} → Bool × Held) (R :
 The judgement is `Alg.Typed` at the DynamoDB signature. Each rule below keeps its DynamoDB
 spelling at the DynamoDB held set, and `Typed.casesD` gives each case at the same held set. -/
 
+variable (α) in
 /-- The judgement of DynamoDB. -/
-abbrev Typed : Term → Held → Option Member → Prop := Alg.Typed (S := dynSyn)
-abbrev TypedList : List Term → List Held → Prop := Alg.TypedList (S := dynSyn)
+abbrev Typed : Term → Held → Option Member → Prop := Alg.Typed α (S := dynSyn)
+variable (α) in
+abbrev TypedList : List Term → List Held → Prop := Alg.TypedList α (S := dynSyn)
+variable (α) in
 abbrev TypedListμ : List Term → List Held → List (Option Member) → Prop :=
-  Alg.TypedListμ (S := dynSyn)
-abbrev TypedOpt : Option Term → Option Held → Prop := Alg.TypedOpt (S := dynSyn)
-abbrev TypedField : ObjectSlot → Held → Bool → Option Member → Prop := Alg.TypedField (S := dynSyn)
-abbrev TypedWild : Option Term → Option Held → Prop := Alg.TypedWild (S := dynSyn)
+  Alg.TypedListμ α (S := dynSyn)
+variable (α) in
+abbrev TypedOpt : Option Term → Option Held → Prop := Alg.TypedOpt α (S := dynSyn)
+variable (α) in
+abbrev TypedField : ObjectSlot → Held → Bool → Option Member → Prop := Alg.TypedField α (S := dynSyn)
+variable (α) in
+abbrev TypedWild : Option Term → Option Held → Prop := Alg.TypedWild α (S := dynSyn)
 
 namespace TypedList export Alg.TypedList (nil cons) end TypedList
 namespace TypedListμ export Alg.TypedListμ (cons) end TypedListμ
@@ -125,7 +133,7 @@ namespace TypedWild export Alg.TypedWild (none some) end TypedWild
 
 /-- §3's ground rules: the held set is the base codec's. At `number` that set is `D`, §1's
     numeral domain, and at `null` it is the point `{null}`. -/
-theorem Typed.base (k : GroundKind) : Typed (.base k) (baseCodec k).T (some k.member) :=
+theorem Typed.base (k : GroundKind) : Typed α (.base k) (baseCodec k).T (some k.member) :=
   Alg.Typed.prim (S := dynSyn) (Ground.base k)
 
 /-- **§3 `(literal)`, with no premise line left.**
@@ -146,7 +154,7 @@ theorem Typed.base (k : GroundKind) : Typed (.base k) (baseCodec k).T (some k.me
     **One value.** Several alternatives are a certified `union` of singletons, and
     `Calculus/Dynamo/Witness/LiteralArity1.lean` derives that rule from this one and `Typed.union`. -/
 theorem Typed.literal (k : GroundKind) (x : k.Carrier) :
-    Typed (.literal k x) (HLit k x) (some k.member) :=
+    Typed α (.literal k x) (HLit k x) (some k.member) :=
   Alg.Typed.prim (S := dynSyn) (Ground.literal k x)
 
 /-- §3 `(set)`: the element's judgement, lifted. The held set is `℘⁺fin` of the element's,
@@ -155,78 +163,78 @@ theorem Typed.literal (k : GroundKind) (x : k.Carrier) :
     **No premise names a base.** That a stored set holds elements of one member of `S`, `N`
     or `B` is the DynamoDB universe's rule, and `Obligations` carries it as `SetElem`, the
     way it carries `(union)`'s compatibility. -/
-theorem Typed.set {t T μ} (h : Typed t T μ) : Typed (.set t) (HSet T) (μ.bind setMember) :=
+theorem Typed.set {t T μ} (h : Typed α t T μ) : Typed α (.set t) (HSet T) (μ.bind setMember) :=
   Alg.Typed.set rfl h
 
 /-- `(list)`: `(array)`, `(tuple)` and `(tuple-tail)` were three rules of this one, and the
     theorems below recover each spelling. -/
-theorem Typed.list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre) (hs : TypedOpt sp Tsp)
-    (hf : TypedList suf Tsuf) : Typed (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L) :=
+theorem Typed.list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre) (hs : TypedOpt α sp Tsp)
+    (hf : TypedList α suf Tsuf) : Typed α (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L) :=
   Alg.Typed.list (S := dynSyn) (L := dList) rfl hp hs hf
 
 /-- `(held)`, at the DynamoDB denotation of the caller-side term. -/
-theorem Typed.held {t I μ P f g} (h : Typed t I μ) :
-    Typed (.held t P f g) (fun v => I (f v) ∧ ((denote P).e v).isSome) μ :=
+theorem Typed.held {t I μ P k} (h : Typed α t I μ) :
+    Typed α (.held t P k) (fun v => I ((α.word k).1 v) ∧ ((denote α P).e v).isSome) μ :=
   Alg.Typed.held h
 
 /-- `(refine)`: the held set is the premise's, cut by the predicate. -/
-theorem Typed.refine {t T μ p} (h : Typed t T μ) :
-    Typed (.refine t p) (fun v => T v ∧ p.eval v) μ :=
+theorem Typed.refine {t T μ p} (h : Typed α t T μ) :
+    Typed α (.refine t p) (fun v => T v ∧ p.eval v) μ :=
   Alg.Typed.refine h
 
 /-- §3 `(opaque)`: the held set is `HOpaque`. -/
-theorem Typed.opaq : Typed .opaq HOpaque none := Alg.Typed.opaq
+theorem Typed.opaq : Typed α .opaq HOpaque none := Alg.Typed.opaq
 
 /-- §5's bottom: it holds nothing and stores no member. -/
-theorem Typed.never : Typed .never HNever none := Alg.Typed.never
+theorem Typed.never : Typed α .never HNever none := Alg.Typed.never
 
 /-- §4 `(object)`, at the `map` prism. -/
 theorem Typed.object {body : Body} {bind R} {μs : {k // k ∈ body.fields} → Option Member}
-    (hf : ∀ k, TypedField (body.at k) (bind k).2 (bind k).1 (μs k))
-    (hr : TypedWild body.wild R) :
-    Typed (.object body) (HObject body.fields bind R) (some .M) :=
+    (hf : ∀ k, TypedField α (body.at k) (bind k).2 (bind k).1 (μs k))
+    (hr : TypedWild α body.wild R) :
+    Typed α (.object body) (HObject body.fields bind R) (some .M) :=
   Alg.Typed.object (S := dynSyn) (F := dMap) rfl hf hr
 
 /-- `(union)`: the union of the options' held sets, at their unanimous member. -/
-theorem Typed.union {opts Ts μs} (h : TypedListμ opts Ts μs) :
-    Typed (.union opts) (HUnion Ts) (unanimous μs) :=
+theorem Typed.union {opts Ts μs} (h : TypedListμ α opts Ts μs) :
+    Typed α (.union opts) (HUnion Ts) (unanimous μs) :=
   Alg.Typed.union h
 
 /-- A variable, read closed, holds nothing. -/
-theorem Typed.var (i : Nat) : Typed (.var i) HNever none := Alg.Typed.var i
+theorem Typed.var (i : Nat) : Typed α (.var i) HNever none := Alg.Typed.var i
 
 /-- `mu`, at the DynamoDB denotation of the binder. -/
-theorem Typed.mu {b T μ} (hg : (Term.mu b).guarded = true) (h : Typed b T μ) :
-    Typed (.mu b) (fun v => (denote (.mu b)).T v) none :=
+theorem Typed.mu {b T μ} (hg : (Term.mu b).guarded = true) (h : Typed α b T μ) :
+    Typed α (.mu b) (fun v => (denote α (.mu b)).T v) none :=
   Alg.Typed.mu hg h
 
 /-- **Case analysis on a DynamoDB judgement**, with the primitive rule split into `base` and
     `literal`, and each case at its DynamoDB held set. `cases` uses this eliminator for every
     `Typed`. -/
 @[elab_as_elim, cases_eliminator]
-theorem Typed.casesD {motive : ∀ t T μ, Typed t T μ → Prop}
+theorem Typed.casesD {motive : ∀ t T μ, Typed α t T μ → Prop}
     (base : ∀ k, motive (.base k) (baseCodec k).T (some k.member) (.base k))
     (literal : ∀ k x, motive (.literal k x) (HLit k x) (some k.member) (.literal k x))
-    (set : ∀ {t T μ} (h : Typed t T μ), motive (.set t) (HSet T) (μ.bind setMember) (.set h))
-    (list : ∀ {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre) (hs : TypedOpt sp Tsp)
-      (hf : TypedList suf Tsuf),
+    (set : ∀ {t T μ} (h : Typed α t T μ), motive (.set t) (HSet T) (μ.bind setMember) (.set h))
+    (list : ∀ {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre) (hs : TypedOpt α sp Tsp)
+      (hf : TypedList α suf Tsuf),
       motive (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L) (.list hp hs hf))
-    (held : ∀ {t I μ P f g} (h : Typed t I μ),
-      motive (.held t P f g) (fun v => I (f v) ∧ ((denote P).e v).isSome) μ (.held h))
-    (refine : ∀ {t T μ p} (h : Typed t T μ),
+    (held : ∀ {t I μ P k} (h : Typed α t I μ),
+      motive (.held t P k) (fun v => I ((α.word k).1 v) ∧ ((denote α P).e v).isSome) μ (.held h))
+    (refine : ∀ {t T μ p} (h : Typed α t T μ),
       motive (.refine t p) (fun v => T v ∧ p.eval v) μ (.refine h))
     (opaq : motive .opaq HOpaque none .opaq)
     (never : motive .never HNever none .never)
     (object : ∀ {body : Body} {bind R} {μs : {k // k ∈ body.fields} → Option Member}
-      (hf : ∀ k, TypedField (body.at k) (bind k).2 (bind k).1 (μs k))
-      (hr : TypedWild body.wild R),
+      (hf : ∀ k, TypedField α (body.at k) (bind k).2 (bind k).1 (μs k))
+      (hr : TypedWild α body.wild R),
       motive (.object body) (HObject body.fields bind R) (some .M) (.object hf hr))
-    (union : ∀ {opts Ts μs} (h : TypedListμ opts Ts μs),
+    (union : ∀ {opts Ts μs} (h : TypedListμ α opts Ts μs),
       motive (.union opts) (HUnion Ts) (unanimous μs) (.union h))
     (var : ∀ i, motive (.var i) HNever none (.var i))
-    (mu : ∀ {b T μ} (hg : (Term.mu b).guarded = true) (h : Typed b T μ),
-      motive (.mu b) (fun v => (denote (.mu b)).T v) none (.mu hg h)) :
-    ∀ {t T μ} (h : Typed t T μ), motive t T μ h := by
+    (mu : ∀ {b T μ} (hg : (Term.mu b).guarded = true) (h : Typed α b T μ),
+      motive (.mu b) (fun v => (denote α (.mu b)).T v) none (.mu hg h)) :
+    ∀ {t T μ} (h : Typed α t T μ), motive t T μ h := by
   intro t T μ h
   cases h with
   | prim g =>
@@ -244,9 +252,10 @@ theorem Typed.casesD {motive : ∀ t T μ, Typed t T μ → Prop}
   | var i => exact var i
   | mu hg h => exact mu hg h
 
+variable (α) in
 inductive TypedListM : List Term → List Held → Prop where
   | nil : TypedListM [] []
-  | cons {t ts T Ts} (h : Typed t T (some .M)) (hs : TypedListM ts Ts) :
+  | cons {t ts T Ts} (h : Typed α t T (some .M)) (hs : TypedListM ts Ts) :
       TypedListM (t :: ts) (T :: Ts)
 
 /-- **§3 `(record)`, derived.** `record` is the object that declares no name and takes every
@@ -272,7 +281,7 @@ theorem HObject_empty (b : {k // k ∈ (∅ : Finset Name)} → Bool × Held) (T
 
 /-- §3 `(record)` itself, at the held set the rule states: the object at the empty key set
     holds exactly the maps whose every entry the value term holds. -/
-theorem Typed.record {t T μ} (h : Typed t T μ) : Typed (.record t) (HMap T) (some .M) := by
+theorem Typed.record {t T μ} (h : Typed α t T μ) : Typed α (.record t) (HMap T) (some .M) := by
   rw [← HObject_empty (fun k => absurd k.2 (Finset.notMem_empty k.1)) T]
   exact Typed.object (μs := fun k => absurd k.2 (Finset.notMem_empty k.1))
     (fun k => absurd k.2 (Finset.notMem_empty k.1)) (TypedWild.some h)
@@ -285,12 +294,12 @@ two held sets are one. They exist so a statement about `.array` or `.tuple` read
 rule it belongs to, the way the `Obligations` unfoldings do. -/
 
 /-- `T*` (§3 `(array)`): the spread-only `list`. -/
-theorem Typed.array {t T μ} (h : Typed t T μ) : Typed (.array t) (HStar T) (some .L) :=
+theorem Typed.array {t T μ} (h : Typed α t T μ) : Typed α (.array t) (HStar T) (some .L) :=
   (HStar_eq_HList T) ▸ Typed.list TypedList.nil (TypedOpt.some h) TypedList.nil
 
 /-- `T₁ × … × Tₙ` (§3 `(tuple)`), and `… × T*` (`(tuple-tail)`): the suffix-free `list`. -/
-theorem Typed.tuple {ts Ts tail Tt} (h : TypedList ts Ts) (ht : TypedOpt tail Tt) :
-    Typed (.tuple ts tail) (HProd Ts Tt) (some .L) :=
+theorem Typed.tuple {ts Ts tail Tt} (h : TypedList α ts Ts) (ht : TypedOpt α tail Tt) :
+    Typed α (.tuple ts tail) (HProd Ts Tt) (some .L) :=
   (HProd_eq_HList Ts Tt) ▸ Typed.list h ht TypedList.nil
 
 end Calculus

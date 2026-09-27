@@ -68,8 +68,9 @@ end Held
 
 /-! ## The judgement -/
 
-variable {S : Syn} [Sem S]
+variable {S : Syn} [Sem S] {α : Table S}
 
+variable (α) in
 mutual
 
 inductive Typed : Term S → (S.V → Prop) → Option (Sem.M S) → Prop where
@@ -89,8 +90,8 @@ inductive Typed : Term S → (S.V → Prop) → Option (Sem.M S) → Prop where
       No premise relating `T` to `I`, because `Codec.through` *defines* `T := fun v => c.T (f v)`.
       `P` carries no judgement, as the predicate of `refine` carries none: the rule reads only the
       domain of its codec. -/
-  | held {t I μ P f g} (h : Typed t I μ) :
-      Typed (.held t P f g) (fun v => I (f v) ∧ ((denote P).e v).isSome) μ
+  | held {t I μ P k} (h : Typed t I μ) :
+      Typed (.held t P k) (fun v => I ((α.word k).1 v) ∧ ((denote α P).e v).isSome) μ
   | refine {t T μ p} (h : Typed t T μ) :
       Typed (.refine t p) (fun v => T v ∧ Sem.eval p v) μ
   | opaq : Typed .opaq Sem.topHeld none
@@ -116,7 +117,7 @@ inductive Typed : Term S → (S.V → Prop) → Option (Sem.M S) → Prop where
       is the guard, a checked condition on the syntax (`Term.guarded`), and it refuses an
       unguarded binder at construction. -/
   | mu {b T μ} (hg : (Term.mu b).guarded = true) (h : Typed b T μ) :
-      Typed (.mu b) (fun v => (denote (.mu b)).T v) none
+      Typed (.mu b) (fun v => (denote α (.mu b)).T v) none
 
 inductive TypedList : List (Term S) → List (S.V → Prop) → Prop where
   | nil : TypedList [] []
@@ -154,15 +155,15 @@ them a variable — so `cases` on it cannot eliminate. These two extract what th
 want without eliminating at the use site. -/
 
 /-- A typed field gives its term, that term's judgement, and its shape. -/
-theorem TypedField.term {fd : ObjectSlot S} {T π μ} (h : TypedField fd T π μ) :
-    ∃ t', Typed t' T μ ∧
+theorem TypedField.term {fd : ObjectSlot S} {T π μ} (h : TypedField α fd T π μ) :
+    ∃ t', Typed α t' T μ ∧
       (fd = .req t' ∨ fd = .optional t') := by
   cases h with
   | req h' => exact ⟨_, h', Or.inl rfl⟩
   | optional h' => exact ⟨_, h', Or.inr rfl⟩
 
 /-- …and a required one is not optional. -/
-theorem TypedField.not_optional {fd : ObjectSlot S} {T π μ} (h : TypedField fd T π μ)
+theorem TypedField.not_optional {fd : ObjectSlot S} {T π μ} (h : TypedField α fd T π μ)
     (hπ : π = true) : ∀ t', fd ≠ .optional t' := by
   cases h with
   | req _ => intro t' hc; exact nomatch hc
@@ -175,7 +176,7 @@ theorem TypedField.not_optional {fd : ObjectSlot S} {T π μ} (h : TypedField fd
     `object` case is where it is needed: there the map's key set is known to contain every
     required name and the guard `valPresentB` is stated by shape, so the two have to be
     exchanged in this direction. Both rows are `rfl`. -/
-theorem TypedField.true_of_not_optional {fd : ObjectSlot S} {T π μ} (h : TypedField fd T π μ)
+theorem TypedField.true_of_not_optional {fd : ObjectSlot S} {T π μ} (h : TypedField α fd T π μ)
     (hno : ∀ t', fd ≠ .optional t') : π = true := by
   cases h with
   | req _ => rfl
@@ -185,7 +186,7 @@ theorem TypedField.true_of_not_optional {fd : ObjectSlot S} {T π μ} (h : Typed
 /-! ## Reading the list judgements -/
 
 /-- Each element of a typed list is typed. -/
-theorem TypedList.forall : ∀ {ts : List (Term S)} {Ts}, TypedList ts Ts → ∀ t ∈ ts, ∃ T μ, Typed t T μ
+theorem TypedList.forall : ∀ {ts : List (Term S)} {Ts}, TypedList α ts Ts → ∀ t ∈ ts, ∃ T μ, Typed α t T μ
   | _, _, .nil, t, ht => absurd ht (by simp)
   | _, _, .cons h hs, t, ht => by
       rcases List.mem_cons.mp ht with rfl | ht'
@@ -193,8 +194,8 @@ theorem TypedList.forall : ∀ {ts : List (Term S)} {Ts}, TypedList ts Ts → �
       · exact TypedList.forall hs t ht'
 
 /-- Each option of a typed union is typed. -/
-theorem TypedListμ.forall : ∀ {ts : List (Term S)} {Ts μs}, TypedListμ ts Ts μs →
-    ∀ t ∈ ts, ∃ T μ, Typed t T μ
+theorem TypedListμ.forall : ∀ {ts : List (Term S)} {Ts μs}, TypedListμ α ts Ts μs →
+    ∀ t ∈ ts, ∃ T μ, Typed α t T μ
   | _, _, _, .nil, t, ht => absurd ht (by simp)
   | _, _, _, .cons h hs, t, ht => by
       rcases List.mem_cons.mp ht with rfl | ht'
@@ -202,8 +203,8 @@ theorem TypedListμ.forall : ∀ {ts : List (Term S)} {Ts μs}, TypedListμ ts T
       · exact TypedListμ.forall hs t ht'
 
 /-- A union option's held set is one of the rule's. -/
-theorem TypedListμ.mem : ∀ {ts : List (Term S)} {Ts μs}, TypedListμ ts Ts μs →
-    ∀ t ∈ ts, ∃ T ∈ Ts, ∃ μ, Typed t T μ
+theorem TypedListμ.mem : ∀ {ts : List (Term S)} {Ts μs}, TypedListμ α ts Ts μs →
+    ∀ t ∈ ts, ∃ T ∈ Ts, ∃ μ, Typed α t T μ
   | _, _, _, .nil, t, ht => absurd ht (by simp)
   | _, _, _, .cons h hs, t, ht => by
       rcases List.mem_cons.mp ht with rfl | ht'
@@ -223,7 +224,7 @@ def μSyn : Term S → Option (Sem.M S)
       | some L => (μSyn t).bind L.member
       | none => none
   | .list _ _ _ => (Sem.list (S := S)).map (·.μ)
-  | .held t _ _ _ => μSyn t
+  | .held t _ _ => μSyn t
   | .refine t _ => μSyn t
   | .opaq | .var _ | .mu _ | .never => none
   | .object _ => (Sem.map (S := S)).map (·.μ)
@@ -238,7 +239,7 @@ end
 mutual
 
 /-- Typing's member index is the syntactic one. -/
-theorem typed_μSyn : ∀ {t : Term S} {T μ}, Typed t T μ → μSyn t = μ
+theorem typed_μSyn : ∀ {t : Term S} {T μ}, Typed α t T μ → μSyn t = μ
   | _, _, _, .prim _ => rfl
   | _, _, _, .set hL h' => by simp only [μSyn, hL, typed_μSyn h']
   | _, _, _, .list hL _ _ _ => by simp only [μSyn, hL, Option.map_some]
@@ -249,7 +250,7 @@ theorem typed_μSyn : ∀ {t : Term S} {T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .union h => congrArg unanimous (typedListμ_μSyn h)
 
 /-- …and the options' members, per option. -/
-theorem typedListμ_μSyn : ∀ {ts : List (Term S)} {Ts μs}, TypedListμ ts Ts μs → μSynList ts = μs
+theorem typedListμ_μSyn : ∀ {ts : List (Term S)} {Ts μs}, TypedListμ α ts Ts μs → μSynList ts = μs
   | _, _, _, .nil => rfl
   | _, _, _, .cons h hs => by rw [μSynList, typed_μSyn h, typedListμ_μSyn hs]
 
@@ -257,9 +258,10 @@ end
 
 /-! ## Obligations -/
 
+variable (α) in
 /-- **The union's obligation**: its options are pairwise compatible. -/
 def PairwiseCompat (opts : List (Term S)) (ρ : List S.C := []) : Prop :=
-  ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote s ρ) (denote t ρ)
+  ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote α s ρ) (denote α t ρ)
 
 /-- The universe's own set obligation on an element, where the universe has a set former. -/
 def SetObl (c : S.C) : Prop :=
@@ -267,6 +269,7 @@ def SetObl (c : S.C) : Prop :=
   | some L => L.elem c
   | none => True
 
+variable (α) in
 mutual
 
 /-- The doc's semantic rule premises.
@@ -277,16 +280,16 @@ mutual
 def Obligations : Term S → (ρ : List S.C := []) → Prop
   | .prim _, _ | .opaq, _ | .never, _ | .var _, _ => True
   -- the element's premises, and the universe's set obligation
-  | .set t', ρ => Obligations t' ρ ∧ SetObl (denote t' ρ)
+  | .set t', ρ => Obligations t' ρ ∧ SetObl (denote α t' ρ)
   | .refine t' _, ρ => Obligations t' ρ
   | .list pre sp suf, ρ => ObligationsList pre ρ ∧ ObligationsOpt sp ρ ∧ ObligationsList suf ρ
   -- the caller-side term owes nothing: a restriction keeps the laws of any lawful codec
-  | .held t' _ f g, ρ => Obligations t' ρ ∧ IsoCancels (denote t' ρ) f g
+  | .held t' _ k, ρ => Obligations t' ρ ∧ IsoCancels (denote α t' ρ) (α.word k).1 (α.word k).2
   | .object b, ρ => ObligationsBody b ρ
-  | .union opts, ρ => ObligationsList opts ρ ∧ PairwiseCompat opts ρ
+  | .union opts, ρ => ObligationsList opts ρ ∧ PairwiseCompat α opts ρ
   -- the body's premises at each stage, given that the stage before is lawful
-  | .mu b, ρ => ∀ n, Lawful Sem.member (muStage (fun c => denote b (c :: ρ)) n) →
-      Obligations b (muStage (fun c => denote b (c :: ρ)) n :: ρ)
+  | .mu b, ρ => ∀ n, Lawful Sem.member (muStage (fun c => denote α b (c :: ρ)) n) →
+      Obligations b (muStage (fun c => denote α b (c :: ρ)) n :: ρ)
 
 /-- The payload's premises: every declared slot's, and the open block's. -/
 def ObligationsBody : Body S → (ρ : List S.C := []) → Prop
@@ -315,7 +318,7 @@ end
 
 /-- A list's premises are each element's. -/
 theorem obligationsList_iff {ρ : List S.C} : ∀ {ts : List (Term S)},
-    ObligationsList ts ρ ↔ ∀ t ∈ ts, Obligations t ρ
+    ObligationsList α ts ρ ↔ ∀ t ∈ ts, Obligations α t ρ
   | [] => by simp [ObligationsList]
   | t :: ts => by
       simp only [ObligationsList, List.mem_cons, forall_eq_or_imp]
@@ -323,7 +326,7 @@ theorem obligationsList_iff {ρ : List S.C} : ∀ {ts : List (Term S)},
 
 /-- An optional term's premises are the term's, where the term is present. -/
 theorem obligationsOpt_iff {ρ : List S.C} : ∀ {tail : Option (Term S)},
-    ObligationsOpt tail ρ ↔ ∀ t ∈ tail, Obligations t ρ
+    ObligationsOpt α tail ρ ↔ ∀ t ∈ tail, Obligations α t ρ
   | none => by simp [ObligationsOpt]
   | some _ => by simp [ObligationsOpt]
 

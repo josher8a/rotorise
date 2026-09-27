@@ -1,5 +1,7 @@
 import Calculus.Dynamo.Analysis.Confluence
 
+variable {α : Calculus.Table}
+
 /-!
 # The kernel of a read
 
@@ -18,8 +20,8 @@ namespace Calculus
 /-- **`ker p` is equality at a held-free term.** Two attributes that the term reads to one
     value are equal, by `confluence_R` and `Ω_canon`. -/
 theorem ker_eq_of_HF {t : Term} (h : HF t) {a a' : Attr} {v : Value}
-    (hp : (denote t).p a = some v) (hk : (denote t).Ker a' a) : a' = a := by
-  have hp' : (denote t).p a' = some v := Eq.trans hk hp
+    (hp : (denote α t).p a = some v) (hk : (denote α t).Ker a' a) : a' = a := by
+  have hp' : (denote α t).p a' = some v := Eq.trans hk hp
   have h1 := Ω_canon (confluence_R h hp)
   have h2 := Ω_canon (confluence_R h hp')
   exact Option.some.inj (h2.symm.trans h1)

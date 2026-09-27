@@ -1,6 +1,8 @@
 import Calculus.Dynamo.Analysis.Confluence
 import Calculus.Lang.Compat
 
+variable {α : Calculus.Table}
+
 /-!
 # Compatibility of the options of a union
 
@@ -23,7 +25,7 @@ namespace Calculus
     views decide read orthogonality, and no adapter pair is known to be another. -/
 def dynOracle : Alg.CompatOracle dynSyn :=
   ⟨fun x y => Alg.Term.disjoint pair0 (writeView x) (writeView y),
-   fun x y => Alg.Term.disjoint pair0 (readView x) (readView y), fun _ _ _ _ => false⟩
+   fun x y => Alg.Term.disjoint pair0 (readView x) (readView y), fun _ _ => false⟩
 
 /-- **The DynamoDB oracles are sound**: each view admits what its term admits, so disjoint views
     give apart domains. -/
@@ -36,18 +38,18 @@ theorem dynOracle_sound : Alg.OracleSound dynOracle where
     rw [← Alg.AdmA_eq_isSome, ← Alg.AdmA_eq_isSome]
     exact Alg.apart_of_imp (readLe_of x a) (Alg.apart_of_imp' (readLe_of y a)
       (Alg.disjoint_soundA pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) a))
-  same _ _ _ _ h := nomatch h
+  same _ _ h := nomatch h
 
 /-- **The decision discharges the union's obligation** of two lawful closed options. -/
 theorem pairwiseCompat_of_compatPair {x y : Term} (h : Alg.compatPair dynOracle x y = true)
-    (hl : ∀ t ∈ [x, y], Lawful (denote t)) : PairwiseCompat [x, y] :=
+    (hl : ∀ t ∈ [x, y], Lawful (denote α t)) : PairwiseCompat α [x, y] :=
   Alg.pairwiseCompat_of_compatPair dynOracle_sound h hl
 
 /-- **A `held` is monotone in both of its terms**: the same adapter over a smaller stored side and
     a smaller held side is a smaller codec. -/
-theorem sub_held {i i' P P' : Term} {f g : Value → Value} (h : Sub (denote i) (denote i'))
-    (hP : Sub (denote P) (denote P')) :
-    Sub (denote (.held i P f g)) (denote (.held i' P' f g)) :=
+theorem sub_held {i i' P P' : Term} {k : Word} (h : Sub (denote α i) (denote α i'))
+    (hP : Sub (denote α P) (denote α P')) :
+    Sub (denote α (.held i P k)) (denote α (.held i' P' k)) :=
   ⟨fun _ _ he =>
     let ⟨hq, he'⟩ := restrict_e.mp he
     let ⟨a, ha⟩ := Option.isSome_iff_exists.mp hq
@@ -60,9 +62,9 @@ theorem sub_held {i i' P P' : Term} {f g : Value → Value} (h : Sub (denote i) 
 
 /-- **A union of options below one codec is below it**, because the join answers through one
     option. -/
-theorem sub_union_of {os : List Term} {u : Codec} (h : ∀ o ∈ os, Sub (denote o) u) :
-    Sub (denote (.union os)) u :=
-  have hs : ∀ o ∈ denoteList os, Sub o u := fun _ ho =>
+theorem sub_union_of {os : List Term} {u : Codec} (h : ∀ o ∈ os, Sub (denote α o) u) :
+    Sub (denote α (.union os)) u :=
+  have hs : ∀ o ∈ denoteList α os, Sub o u := fun _ ho =>
     let ⟨t, ht, hto⟩ := List.mem_map.mp ((denoteList_eq os) ▸ ho)
     hto ▸ h t ht
   ⟨fun _ _ he => let ⟨o, ho, he⟩ := select_some he; (hs o ho).1 _ _ he,
@@ -70,11 +72,11 @@ theorem sub_union_of {os : List Term} {u : Codec} (h : ∀ o ∈ os, Sub (denote
 
 /-- **A codec below one option of a held-free union is below the union.** Each option is below
     `Ω`, so the option that the union writes or reads through gives the answer of `o`. -/
-theorem sub_union_mem {x o : Term} {os : List Term} (h : Sub (denote x) (denote o)) (ho : o ∈ os)
-    (hf : HFL os) : Sub (denote x) (denote (.union os)) :=
-  have hΩ : ∀ c ∈ denoteList os, Sub c Ω := (denoteList_eq os) ▸
+theorem sub_union_mem {x o : Term} {os : List Term} (h : Sub (denote α x) (denote α o)) (ho : o ∈ os)
+    (hf : HFL os) : Sub (denote α x) (denote α (.union os)) :=
+  have hΩ : ∀ c ∈ denoteList α os, Sub c Ω := (denoteList_eq (α := α) os) ▸
     List.forall_mem_map.mpr fun t ht => sub_denote t (HFL_mem hf t ht)
-  have hm : denote o ∈ denoteList os := (denoteList_eq os) ▸ List.mem_map_of_mem ho
+  have hm : denote α o ∈ denoteList α os := (denoteList_eq (α := α) os) ▸ List.mem_map_of_mem ho
   ⟨fun _ _ he =>
     let hoe := h.1 _ _ he
     let ⟨o', hf'⟩ := find?_attempt_V hm hoe
@@ -90,22 +92,22 @@ theorem sub_union_mem {x o : Term} {os : List Term} (h : Sub (denote x) (denote 
 
 /-- **A literal is below its base.** -/
 theorem sub_literal_base (k : GroundKind) (x : k.Carrier) :
-    Sub (denote (.literal k x)) (baseCodec k) :=
+    Sub (denote α (.literal k x)) (baseCodec k) :=
   ⟨fun _ _ h => (restrict_e.mp h).2, fun _ _ h => (restrict_p.mp h).1⟩
 
 /-- **Two lawful options, one below the other, meet their obligation** (Lawson, Lemma 4.8): the
     wider option is the common bound, and it reads canonically because it is lawful. -/
-theorem pairwiseCompat_of_sub {x y : Term} (h : Sub (denote x) (denote y))
-    (hl : ∀ t ∈ [x, y], Lawful (denote t)) : PairwiseCompat [x, y] :=
-  have hb : ∀ s ∈ [x, y], Sub (denote s) (denote y) :=
+theorem pairwiseCompat_of_sub {x y : Term} (h : Sub (denote α x) (denote α y))
+    (hl : ∀ t ∈ [x, y], Lawful (denote α t)) : PairwiseCompat α [x, y] :=
+  have hb : ∀ s ∈ [x, y], Sub (denote α s) (denote α y) :=
     forall_mem_pair h ⟨fun _ _ h => h, fun _ _ h => h⟩
   fun s hs t ht => compat_of_common_bound' (hb s hs) (hb t ht)
     (fun _ _ hp => (hl y (List.mem_cons_of_mem x List.mem_cons_self)).canon hp) (hl t ht)
 
 /-- **…and with the wider option first.** -/
-theorem pairwiseCompat_of_sub' {x y : Term} (h : Sub (denote y) (denote x))
-    (hl : ∀ t ∈ [x, y], Lawful (denote t)) : PairwiseCompat [x, y] :=
-  have hb : ∀ s ∈ [x, y], Sub (denote s) (denote x) :=
+theorem pairwiseCompat_of_sub' {x y : Term} (h : Sub (denote α y) (denote α x))
+    (hl : ∀ t ∈ [x, y], Lawful (denote α t)) : PairwiseCompat α [x, y] :=
+  have hb : ∀ s ∈ [x, y], Sub (denote α s) (denote α x) :=
     forall_mem_pair ⟨fun _ _ h => h, fun _ _ h => h⟩ h
   fun s hs t ht => compat_of_common_bound' (hb s hs) (hb t ht)
     (fun _ _ hp => (hl x List.mem_cons_self).canon hp) (hl t ht)
@@ -114,21 +116,22 @@ theorem pairwiseCompat_of_sub' {x y : Term} (h : Sub (denote y) (denote x))
     In `union(array(literal "A"), array(literal "B"))` both options write `[]`. Both write it
     as the same attribute, so the options are compatible. -/
 theorem pairwiseCompat_array_literals :
-    PairwiseCompat [Term.array (.literal .string "A"), Term.array (.literal .string "B")] :=
+    PairwiseCompat α [Term.array (.literal .string "A"), Term.array (.literal .string "B")] :=
   pairwiseCompat_of_compatPair (by decide) (forall_mem_pair
     (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _))
     (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _)))
 
 /-- **`refine x Q` is below `x`.** -/
-theorem sub_denote_refine (x : Term) (Q : Pred) : Sub (denote (.refine x Q)) (denote x) :=
+theorem sub_denote_refine (x : Term) (Q : Pred) : Sub (denote α (.refine x Q)) (denote α x) :=
   sub_restrict_self _ _
 
-/-- **`held (refine t R) P f g` is below `held t P f g`.** -/
-theorem sub_held_refine (t P : Term) (R : Pred) (f g : Value → Value) :
-    Sub (denote (.held (.refine t R) P f g)) (denote (.held t P f g)) := by
+/-- **`held (refine t R) P k` is below `held t P k`.** -/
+theorem sub_held_refine (t P : Term) (R : Pred) (k : Word) :
+    Sub (denote α (.held (.refine t R) P k)) (denote α (.held t P k)) := by
   refine ⟨fun v a h => ?_, fun a v h => ?_⟩
   · obtain ⟨hq, he⟩ := restrict_e.mp h
-    exact restrict_e.mpr ⟨hq, (restrict_e.mp (show (denote (.refine t R)).e (f v) = some a from he)).2⟩
+    exact restrict_e.mpr ⟨hq, (restrict_e.mp
+      (show (denote α (.refine t R)).e ((α.word k).1 v) = some a from he)).2⟩
   · obtain ⟨hp, hq⟩ := restrict_p.mp h
     obtain ⟨w, hw, rfl⟩ := through_p.mp hp
     exact restrict_p.mpr ⟨through_p.mpr ⟨w, (restrict_p.mp hw).1, rfl⟩, hq⟩
@@ -152,31 +155,34 @@ theorem swX_invol (v : Value) : swX (swX v) = v := by
       split_ifs <;> simp_all
   | _ => rfl
 
+/-- The table that gives each generator the pair `swX`, `swX`. -/
+def swTable : Table := fun _ => (swX, swX)
+
 /-- The held that holds `"x"` and stores `"X"`. -/
-def shout : Term := .held (.literal .string "X") (.literal .string "x") swX swX
+def shout : Term := .held (.literal .string "X") (.literal .string "x") [(.caller 0, false)]
 
 /-- The literal `"X"`. -/
 def litX : Term := .literal .string "X"
 
 /-- **`shout` reads `"X"` as `"x"`.** -/
-theorem shout_p : (denote shout).p (.s "X") = some (.str "x") := rfl
+theorem shout_p : (denote swTable shout).p (.s "X") = some (.str "x") := rfl
 /-- **`litX` reads `"X"` as `"X"`.** -/
-theorem litX_p : (denote litX).p (.s "X") = some (.str "X") := rfl
+theorem litX_p : (denote swTable litX).p (.s "X") = some (.str "X") := rfl
 /-- **`shout` writes `"x"` as `"X"`.** -/
-theorem shout_e : (denote shout).e (.str "x") = some (.s "X") := rfl
+theorem shout_e : (denote swTable shout).e (.str "x") = some (.s "X") := rfl
 /-- **`litX` declines `"x"`.** -/
-theorem litX_e : (denote litX).e (.str "x") = none := rfl
+theorem litX_e : (denote swTable litX).e (.str "x") = none := rfl
 
 /-- **The `shout` adapter cancels over the literal.** -/
-theorem iso_shout : IsoCancels (denote (.literal .string "X")) swX swX :=
+theorem iso_shout : IsoCancels (denote swTable (.literal .string "X")) swX swX :=
   ⟨fun v _ => swX_invol v, fun v _ => swX_invol v⟩
 
 /-- **`shout` is lawful.** -/
-theorem lawful_shout : Lawful (denote shout) :=
+theorem lawful_shout : Lawful (denote swTable shout) :=
   (Alg.Lawful.through (lawful_literal _ _) iso_shout).restrict _
 
 /-- **The shout pair is not `Compat`**: the two options read `"X"` to two values. -/
-theorem not_compat_shout : ¬ Compat (denote shout) (denote litX) := by
+theorem not_compat_shout : ¬ Compat (denote swTable shout) (denote swTable litX) := by
   intro h
   have := Value.str.inj (h.p_agree shout_p litX_p)
   exact absurd this (by decide)
@@ -189,29 +195,32 @@ def notV : Value → Value := fun v =>
   | .bool b => .bool (!b)
   | _ => v
 
+/-- The table that gives each generator the pair `notV`, `notV`. -/
+def flipTable : Table := fun _ => (notV, notV)
+
 /-- The held that stores the negation of a boolean. -/
-def flipBool : Term := .held .boolean .boolean notV notV
+def flipBool : Term := .held .boolean .boolean [(.caller 0, false)]
 
 /-- **The `flipBool` adapter cancels over `boolean`.** -/
-theorem iso_flip : IsoCancels (denote .boolean) notV notV := by
+theorem iso_flip : IsoCancels (denote flipTable .boolean) notV notV := by
   refine ⟨fun v _ => ?_, fun v _ => ?_⟩ <;> cases v <;> simp [notV]
 
 /-- **`flipBool` is lawful.** -/
-theorem lawful_flip : Lawful (denote flipBool) :=
+theorem lawful_flip : Lawful (denote flipTable flipBool) :=
   (Alg.Lawful.through (lawful_base .boolean) iso_flip).restrict _
 
 /-- **`boolean` and `flipBool` are not `Compat`**: the two read `true` to two values. -/
-theorem not_compat_flip : ¬ Compat (denote .boolean) (denote flipBool) := by
+theorem not_compat_flip : ¬ Compat (denote flipTable .boolean) (denote flipTable flipBool) := by
   intro h
-  have hb : (denote .boolean).p (.bool true) = some (.bool true) := rfl
-  have hf : (denote flipBool).p (.bool true) = some (.bool false) := rfl
+  have hb : (denote flipTable .boolean).p (.bool true) = some (.bool true) := rfl
+  have hf : (denote flipTable flipBool).p (.bool true) = some (.bool false) := rfl
   exact absurd (Value.bool.inj (h.p_agree hb hf)) (by decide)
 
 /-- **Without `Compat`, the order of the options is observable**: the union writes `true`
     through the first option that writes it. -/
 theorem flip_order_observable :
-    (altCodec [denote .boolean, denote flipBool] none).e (.bool true)
-      ≠ (altCodec [denote flipBool, denote .boolean] none).e (.bool true) := by
+    (altCodec [denote flipTable .boolean, denote flipTable flipBool] none).e (.bool true)
+      ≠ (altCodec [denote flipTable flipBool, denote flipTable .boolean] none).e (.bool true) := by
   show some (Attr.bool true) ≠ some (Attr.bool false); simp
 
 /-! ## Compatible, and refused by `certPair`
@@ -219,7 +228,7 @@ theorem flip_order_observable :
 Two overlapping `refine`s of one `held` swap sit below one canonical bound. -/
 
 /-- The adapter: `string` stored, `string` held, `"x"` and `"X"` swapped. -/
-def swap : Term := .held .string .string swX swX
+def swap : Term := .held .string .string [(.caller 0, false)]
 
 /-- The members `"x"` and `"y"`. -/
 def q1 : Pred := .members .string (NEFinset.of "x" {"y"})
@@ -232,31 +241,31 @@ def sw1 : Term := .refine swap q1
 def sw2 : Term := .refine swap q2
 
 /-- **The `swap` adapter cancels over `string`.** -/
-theorem iso_swap : IsoCancels (denote .string) swX swX :=
+theorem iso_swap : IsoCancels (denote swTable .string) swX swX :=
   ⟨fun v _ => swX_invol v, fun v _ => swX_invol v⟩
 
 /-- **`swap` is lawful.** -/
-theorem lawful_swap : Lawful (denote swap) :=
+theorem lawful_swap : Lawful (denote swTable swap) :=
   (Alg.Lawful.through (lawful_base .string) iso_swap).restrict _
 
 /-- **`swap` is a canonical bound.** -/
-theorem canon_swap : Canon (denote swap) := fun _ _ hp => lawful_swap.canon hp
+theorem canon_swap : Canon (denote swTable swap) := fun _ _ hp => lawful_swap.canon hp
 
 /-- **The two restrictions overlap at `"x"`**: both read the stored `"X"` to `"x"`. -/
-theorem sw_overlap : (denote sw1).p (.s "X") = some (.str "x") ∧
-    (denote sw2).p (.s "X") = some (.str "x") := ⟨rfl, rfl⟩
+theorem sw_overlap : (denote swTable sw1).p (.s "X") = some (.str "x") ∧
+    (denote swTable sw2).p (.s "X") = some (.str "x") := ⟨rfl, rfl⟩
 
 /-- **`sw1` and `sw2` are pairwise `Compat`**, through the common bound `swap`. -/
 theorem compat_sw (x y : Term) (hx : x = sw1 ∨ x = sw2) (hy : y = sw1 ∨ y = sw2) :
-    Compat (denote x) (denote y) := by
-  have hsub : ∀ z, z = sw1 ∨ z = sw2 → Sub (denote z) (denote swap) := by
+    Compat (denote swTable x) (denote swTable y) := by
+  have hsub : ∀ z, z = sw1 ∨ z = sw2 → Sub (denote swTable z) (denote swTable swap) := by
     rintro z (rfl | rfl) <;> exact sub_denote_refine _ _
-  have hlaw : ∀ z, z = sw1 ∨ z = sw2 → Lawful (denote z) := by
+  have hlaw : ∀ z, z = sw1 ∨ z = sw2 → Lawful (denote swTable z) := by
     rintro z (rfl | rfl) <;> exact lawful_swap.restrict _
   exact compat_of_common_bound' (hsub x hx) (hsub y hy) canon_swap (hlaw y hy)
 
 /-- **The pair meets the union's obligation** through the common bound, with no certificate. -/
-theorem pairwiseCompat_sw : PairwiseCompat [sw1, sw2] := by
+theorem pairwiseCompat_sw : PairwiseCompat swTable [sw1, sw2] := by
   have hm : ∀ z ∈ [sw1, sw2], z = sw1 ∨ z = sw2 := by simp
   exact fun s hs t ht => compat_sw s t (hm s hs) (hm t ht)
 

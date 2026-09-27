@@ -1,6 +1,8 @@
 import Calculus.Dynamo.Lang.Denote
 import Calculus.Dynamo.Alg.Opaque
 
+variable {α : Calculus.Table}
+
 /-!
 # §6 — Equations
 
@@ -41,7 +43,7 @@ rather than a reason to skip it, and it is what makes the row five of five. -/
 
 /-- §4 `(opt)`: an optional attribute is still stored somewhere, and where is the
     subterm's member. -/
-theorem optional_μ (t : Term) : (fieldSem (.optional t)).codec.μ = (denote t).μ := rfl
+theorem optional_μ (t : Term) : (fieldSem α (.optional t)).codec.μ = (denote α t).μ := rfl
 
 /-! ## `union` is associative
 
@@ -104,8 +106,8 @@ section Terms
 /-- §6: `held(c, P, id, id) ≡ refine(c, P)`. The identity transform leaves the caller-side
     restriction, and that restriction is a `refine` by the admission of `P`. -/
 theorem equiv_denote_held_id (t P : Term) :
-    Codec.Equiv (denote (.held t P id id))
-      (denote (.refine t (.closure fun v => ((denote P).e v).isSome))) := by
+    Codec.Equiv (denote α (.held t P []))
+      (denote α (.refine t (.closure fun v => ((denote α P).e v).isSome))) := by
   refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩
   · intro v a a' h h'
     exact Option.some.inj ((through_e.mp (restrict_e.mp h).2).symm.trans (restrict_e.mp h').2)
@@ -113,13 +115,15 @@ theorem equiv_denote_held_id (t P : Term) :
     obtain ⟨w, hw, rfl⟩ := through_p.mp (restrict_p.mp h).1
     exact Option.some.inj (hw.symm.trans (restrict_p.mp h').1)
 
-/-- §6: `held(held(c, P, f, g), P′, f′, g′) ≡ refine(held(c, P′, f ∘ f′, g′ ∘ g), P ∘ f′)`.
-    The transforms compose, and the inner caller-side restriction pulls back along `f′`. The
-    pullback is a predicate and no term, so the right side carries it as a `refine`. -/
-theorem equiv_denote_held_comp (t P P' : Term) (f g f' g' : Value → Value) :
-    Codec.Equiv (denote (.held (.held t P f g) P' f' g'))
-      (denote (.refine (.held t P' (f ∘ f') (g' ∘ g))
-        (.closure fun v => ((denote P).e (f' v)).isSome))) := by
+/-- §6: `held(held(c, P, k), P′, k′) ≡ refine(held(c, P′, k ++ k′), P ∘ f′)`, where `f′` is
+    the caller-side function of `k′`. The words concatenate, so the transforms compose, and the
+    inner caller-side restriction pulls back along `f′`. The pullback is a predicate and no
+    term, so the right side carries it as a `refine`. -/
+theorem equiv_denote_held_comp (t P P' : Term) (k k' : Word) :
+    Codec.Equiv (denote α (.held (.held t P k) P' k'))
+      (denote α (.refine (.held t P' (k ++ k'))
+        (.closure fun v => ((denote α P).e ((α.word k').1 v)).isSome))) := by
+  simp only [denote_rows, Alg.Table.word_append]
   refine ⟨fun _ => ⟨fun ⟨⟨h1, h2⟩, h3⟩ => ⟨⟨h1, h3⟩, h2⟩, fun ⟨⟨h1, h3⟩, h2⟩ => ⟨⟨h1, h2⟩, h3⟩⟩,
     rfl, ?_, ?_⟩
   · intro v a a' h h'
@@ -146,23 +150,23 @@ theorem equiv_denote_held_comp (t P P' : Term) (f g f' g' : Value → Value) :
     needs that reduction states it as a lemma about `Pred`, and `Pred` stays one to one with
     the host's three cases, which is the whole reason it has three. -/
 theorem equiv_denote_refine_meet (t : Term) (p p' : Pred) :
-    Codec.Equiv (denote (.refine (.refine t p) p'))
-      (denote (.refine t (.closure (fun v => p.eval v && p'.eval v)))) :=
+    Codec.Equiv (denote α (.refine (.refine t p) p'))
+      (denote α (.refine t (.closure (fun v => p.eval v && p'.eval v)))) :=
   equiv_restrict_meet _ _ _
 
 /-- §6: `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. The premise is the row's, read off the
     denotation rather than the judgement — `typed_TSub` is what connects the two. -/
 theorem equiv_denote_refine_full (t : Term) (p : Pred)
-    (hq : ∀ v, (denote t).T v ↔ p.eval v = true) :
-    Codec.Equiv (denote (.refine t p)) (denote t) := equiv_restrict_full _ _ hq
+    (hq : ∀ v, (denote α t).T v ↔ p.eval v = true) :
+    Codec.Equiv (denote α (.refine t p)) (denote α t) := equiv_restrict_full _ _ hq
 
 /-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
     `optional_μ` and `optional_μ`, which are already stated over a denotation. -/
-theorem denote_held_μ (t P : Term) (f g : Value → Value) :
-    (denote (.held t P f g)).μ = (denote t).μ := rfl
+theorem denote_held_μ (t P : Term) (k : Word) :
+    (denote α (.held t P k)).μ = (denote α t).μ := rfl
 
 theorem denote_refine_μ (t : Term) (p : Pred) :
-    (denote (.refine t p)).μ = (denote t).μ := rfl
+    (denote α (.refine t p)).μ = (denote α t).μ := rfl
 
 end Terms
 

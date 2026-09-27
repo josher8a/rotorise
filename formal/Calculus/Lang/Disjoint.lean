@@ -34,7 +34,7 @@ class Leaf (S : Syn) where
   /-- Two predicates met: `none` refuses, `some none` is empty, `some (some r)` is `r`. -/
   pmeet : S.Pred → S.Pred → Option (Option S.Pred)
 
-variable {S : Syn}
+variable {S : Syn} {α : Table S}
 
 /-- A union of what survived a distribution: nothing is the bottom, one survivor is itself, and
     the rest are a union again. -/
@@ -239,7 +239,7 @@ mutual
     predicate of the partner hold together nowhere. -/
 def Term.disjoint [Leaf S] (p : Pairing) : Term S → Term S → Bool
   | .never, _ => true
-  | .held _ _ _ _, y => disjSRight (fun _ _ => false) p y
+  | .held _ _ _, y => disjSRight (fun _ _ => false) p y
   | .var i, y => disjSRight (famVarD i) p y
   | .mu b, .mu b' => Term.disjoint (pairMu p) b b'
   | .mu b, y => Term.disjoint (shiftL p) b y

@@ -2,6 +2,8 @@ import Calculus.Dynamo.Lang.Equations
 import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Witness.Discharge
 
+variable {α : Calculus.Table}
+
 /-!
 # §6's "Do not hold" table, refuted
 
@@ -150,7 +152,7 @@ Not closed under extension. The held set grows, so `≡` fails before any obliga
 §6 justifies the row by well-formedness, and the model shows it fails for a more basic reason. -/
 
 theorem not_equiv_union_extend :
-    ¬ Codec.Equiv (denote (.union [.string])) (denote (.union [.string, .boolean])) := by
+    ¬ Codec.Equiv (denote α (.union [.string])) (denote α (.union [.string, .boolean])) := by
   intro h
   have hb := (h.heldSet (.bool true)).mpr
   simp [denote_rows,
@@ -164,8 +166,8 @@ elementwise." The witness is the shortest heterogeneous sequence. -/
 /-- `["A", "B"]` is an array of either literal, but homogeneous in neither. -/
 theorem not_equiv_union_array :
     ¬ Codec.Equiv
-        (denote (.union [.array (.literal .string "A"), .array (.literal .string "B")]))
-        (denote (.array (.union [.literal .string "A", .literal .string "B"]))) := by
+        (denote α (.union [.array (.literal .string "A"), .array (.literal .string "B")]))
+        (denote α (.array (.union [.literal .string "A", .literal .string "B"]))) := by
   intro h
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
   simp [Term.array, ← arrayCodec_eq_listCodec, denote_rows,
@@ -181,8 +183,8 @@ isolates the missing feature. -/
 /-- Against the plain tuple: a second element the tail accepts and the tuple has no
     position for. -/
 theorem not_equiv_tupleTail_tuple :
-    ¬ Codec.Equiv (denote (.tuple [.string] (some .string)))
-                  (denote (.tuple [.string] none)) := by
+    ¬ Codec.Equiv (denote α (.tuple [.string] (some .string)))
+                  (denote α (.tuple [.string] none)) := by
   intro h
   have hv := (h.heldSet (.arr [.str "a", .str "b"])).mp
   -- `simp`'s classical push-neg turned this into an existential and pulled
@@ -195,8 +197,8 @@ theorem not_equiv_tupleTail_tuple :
 
 /-- Against the array: the empty sequence, which an array holds and a fixed head cannot. -/
 theorem not_equiv_tupleTail_array :
-    ¬ Codec.Equiv (denote (.tuple [.string] (some .string)))
-                  (denote (.array (.union [.string]))) := by
+    ¬ Codec.Equiv (denote α (.tuple [.string] (some .string)))
+                  (denote α (.array (.union [.string]))) := by
   intro h
   have hv := (h.heldSet (.arr [])).mpr
   simp [Term.tuple, Term.array, ← tupleCodec_eq_listCodec, ← arrayCodec_eq_listCodec,
@@ -218,14 +220,18 @@ def predA : Value → Bool
   | .str s => s == "A"
   | _ => false
 
+/-- The table that gives each generator the pair `isoF`, `id`. -/
+def isoTable : Table := fun _ => (isoF, id)
+
 /-- At `"B"`: the outer refinement rejects it, the inner one never sees it — `f` has
     already replaced it with `"A"`. -/
 theorem not_equiv_refine_held :
-    ¬ Codec.Equiv (denote (.refine (.held .string .string isoF id) (.closure predA)))
-                  (denote (.held (.refine .string (.closure predA)) .string isoF id)) := by
+    ¬ Codec.Equiv (denote isoTable (.refine (.held .string .string [(.caller 0, false)]) (.closure predA)))
+                  (denote isoTable (.held (.refine .string (.closure predA)) .string [(.caller 0, false)])) := by
   intro h
   have hv := (h.heldSet (.str "B")).mpr
-  simp [denote_rows, Alg.Codec.through, Alg.Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv
+  simp [denote_rows, Alg.Table.word, Alg.Table.letter, isoTable, Alg.Codec.through,
+    Alg.Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv
 
 /-! ## `legacy(c, r)` breaks canonical reads, and `e ∘ p ≢ id`
 
@@ -239,7 +245,7 @@ def migrateNtoS : Attr → Option Value
   | _ => none
 
 /-- `string` with `migrateNtoS` as its alternate reader. -/
-noncomputable def migration : Codec := (denote .string).extendRead migrateNtoS
+noncomputable def migration : Codec := (baseCodec .string).extendRead migrateNtoS
 
 theorem legacy_p_n : migration.p (.n (.of "1")) = some (.str "x") := rfl
 
@@ -286,21 +292,21 @@ types it at the member `none` (`setMember` of the union's `none`). The DynamoDB 
 
 /-- **A heterogeneous union fails the DynamoDB set obligation**, because the union names no single
     member. -/
-theorem setElem_union_refused : ¬ SetElem (denote (.union [.string, .boolean])) := by
+theorem setElem_union_refused : ¬ SetElem (denote α (.union [.string, .boolean])) := by
   intro h
   rw [SetElem, denote_μ] at h
   exact absurd h (by decide)
 
 /-- The union on its own is typed, and so is the `set` above it: the store refuses the set. -/
 theorem typed_union_string_boolean :
-    Typed (.union [.string, .boolean])
+    Typed α (.union [.string, .boolean])
       (HUnion [fun v => ∃ s, v = .str s, fun v => ∃ b, v = .bool b]) none :=
   .union (.cons (Typed.base _) (.cons (Typed.base _) .nil))
 
 /-- **An empty option is the unit of the sum.** The bottom holds nothing, so it changes no
     union's `HUnion`. The meet builds such a union whenever a surviving option's predicate
     holds of nothing. -/
-example : ∃ T μ, Typed (.union [.string, .never]) T μ :=
+example : ∃ T μ, Typed α (.union [.string, .never]) T μ :=
   ⟨_, _, .union (.cons (Typed.base _) (.cons .never .nil))⟩
 
 /-! ## `≡` is not transitive

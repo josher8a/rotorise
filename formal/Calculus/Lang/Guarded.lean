@@ -17,7 +17,7 @@ the depth facts of the keyed-map prisms, and the agreement law of the set lift.
 
 namespace Calculus.Alg
 
-variable {S : Syn} [Sem S]
+variable {S : Syn} [Sem S] {α : Table S}
 
 /-- What a level of `Term.use` asks of the two codecs that stand for one variable: nothing where
     the variable does not occur, agreement one layer down under a container, agreement at the
@@ -93,7 +93,7 @@ mutual
     give one answer below `d`. -/
 theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (t.use i) d (envAt ρ₁ i) (envAt ρ₂ i)) →
-    AgreeLe Sem.dV Sem.dA d (denote t ρ₁) (denote t ρ₂)
+    AgreeLe Sem.dV Sem.dA d (denote α t ρ₁) (denote α t ρ₂)
   | .prim _, _, _, _, _, _ => .refl _ _
   | .opaq, _, _, _, _, _ => .refl _ _
   | .never, _, _, _, _, _ => .refl _ _
@@ -109,7 +109,7 @@ theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ�
       | 0 => exact UseAgree.mono (u' := 2) hc (by omega)
       | i + 1 => exact h i
   | .refine t p, hg, d, ρ₁, ρ₂, h => agreeLe_restrict (denote_agree t hg d ρ₁ ρ₂ h) (Sem.eval p)
-  | .held t P f g, hg, _, ρ₁, ρ₂, h => by
+  | .held t P k, hg, _, ρ₁, ρ₂, h => by
       simp only [Term.guarded, Bool.and_eq_true] at hg
       have ht := AgreeLe.eq_of_forall fun d' =>
         denote_agree t hg.1 d' ρ₁ ρ₂ fun i => UseAgree.of_held (h i)
@@ -151,7 +151,7 @@ theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ�
 /-- The payload's congruence: each slot and the open block read one layer below the map. -/
 theorem bodySem_agree : ∀ (b : Body S), b.guarded = true → ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (useUnder (b.use i)) (d + 1) (envAt ρ₁ i) (envAt ρ₂ i)) →
-    AgreeLe Sem.dV Sem.dA (d + 1) (bodySem b ρ₁) (bodySem b ρ₂)
+    AgreeLe Sem.dV Sem.dA (d + 1) (bodySem α b ρ₁) (bodySem α b ρ₂)
   | .mk fields f wild, hg, d, ρ₁, ρ₂, h => by
       simp only [Body.guarded, Bool.and_eq_true, decide_eq_true_eq] at hg
       simp only [bodySem]
@@ -168,7 +168,7 @@ theorem bodySem_agree : ∀ (b : Body S), b.guarded = true → ∀ (d : Nat) (ρ
 theorem fieldSem_agree : ∀ (s : ObjectSlot S), s.guarded = true →
     ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (s.use i) d (envAt ρ₁ i) (envAt ρ₂ i)) →
-    FieldSem.Rel (AgreeLe Sem.dV Sem.dA d) (fieldSem s ρ₁) (fieldSem s ρ₂)
+    FieldSem.Rel (AgreeLe Sem.dV Sem.dA d) (fieldSem α s ρ₁) (fieldSem α s ρ₂)
   | .req t, hg, d, ρ₁, ρ₂, h => denote_agree t hg d ρ₁ ρ₂ h
   | .optional t, hg, d, ρ₁, ρ₂, h => denote_agree t hg d ρ₁ ρ₂ h
 
@@ -176,7 +176,7 @@ theorem fieldSem_agree : ∀ (s : ObjectSlot S), s.guarded = true →
 theorem wildSem_agree : ∀ (w : Option (Term S)), Term.guardedO w = true →
     ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (Term.useO i w) d (envAt ρ₁ i) (envAt ρ₂ i)) →
-    RestSem.Rel (AgreeLe Sem.dV Sem.dA d) (wildSem w ρ₁) (wildSem w ρ₂)
+    RestSem.Rel (AgreeLe Sem.dV Sem.dA d) (wildSem α w ρ₁) (wildSem α w ρ₂)
   | none, _, _, _, _, _ => trivial
   | some t, hg, d, ρ₁, ρ₂, h => denote_agree t hg d ρ₁ ρ₂ h
 
@@ -184,7 +184,7 @@ theorem wildSem_agree : ∀ (w : Option (Term S)), Term.guardedO w = true →
 theorem denoteList_agree : ∀ (ts : List (Term S)), Term.guardedL ts = true →
     ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (Term.useL i ts) d (envAt ρ₁ i) (envAt ρ₂ i)) →
-    List.Forall₂ (AgreeLe Sem.dV Sem.dA d) (denoteList ts ρ₁) (denoteList ts ρ₂)
+    List.Forall₂ (AgreeLe Sem.dV Sem.dA d) (denoteList α ts ρ₁) (denoteList α ts ρ₂)
   | [], _, _, _, _, _ => .nil
   | t :: ts, hg, d, ρ₁, ρ₂, h => by
       simp only [Term.guardedL, Bool.and_eq_true] at hg
@@ -195,7 +195,7 @@ theorem denoteList_agree : ∀ (ts : List (Term S)), Term.guardedL ts = true →
 theorem denoteOpt_agree : ∀ (sp : Option (Term S)), Term.guardedO sp = true →
     ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (Term.useO i sp) d (envAt ρ₁ i) (envAt ρ₂ i)) →
-    Option.Rel (AgreeLe Sem.dV Sem.dA d) (denoteOpt sp ρ₁) (denoteOpt sp ρ₂)
+    Option.Rel (AgreeLe Sem.dV Sem.dA d) (denoteOpt α sp ρ₁) (denoteOpt α sp ρ₂)
   | none, _, _, _, _, _ => .none
   | some t, hg, d, ρ₁, ρ₂, h => .some (denote_agree t hg d ρ₁ ρ₂ h)
 
@@ -204,7 +204,7 @@ end
 /-- **The guard gives a contractive body.** At a guarded `mu b`, the body reads its variable one
     layer down, and every other variable is the same on both sides. -/
 theorem contractive_body {b : Term S} (hg : (Term.mu b).guarded = true) (ρ : List S.C) :
-    Contractive Sem.dV Sem.dA fun c => denote b (c :: ρ) := by
+    Contractive Sem.dV Sem.dA fun c => denote α b (c :: ρ) := by
   simp only [Term.guarded, Bool.and_eq_true, decide_eq_true_eq] at hg
   intro d c₁ c₂ hc
   refine denote_agree b hg.2 (d + 1) (c₁ :: ρ) (c₂ :: ρ) fun i => ?_

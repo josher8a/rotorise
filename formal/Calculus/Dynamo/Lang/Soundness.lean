@@ -1,6 +1,8 @@
 import Calculus.Dynamo.Lang.Typing
 import Calculus.Lang.Sound
 
+variable {α : Calculus.Table}
+
 /-!
 # §5 — Soundness
 
@@ -25,9 +27,10 @@ open Alg (Body.fields_mk Body.wild_mk Body.at_mk Term.depth)
 /-! ## Obligations -/
 
 
+variable (α) in
 /-- **The union's obligation**: its options are pairwise compatible. -/
 def PairwiseCompat (opts : List Term) (ρ : List Codec := []) : Prop :=
-  ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote s ρ) (denote t ρ)
+  ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote α s ρ) (denote α t ρ)
 
 /-- A premise of the form `∀ t ∈ [x, y], P t`, checked at the two options. -/
 theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy : P y) :
@@ -40,9 +43,10 @@ theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy 
     · exact absurd hz (by simp)
 
 
+variable (α) in
 /-- The doc's semantic rule premises, at DynamoDB: `Alg.Obligations` at the DynamoDB signature,
     whose set obligation is `SetElem`. -/
-abbrev Obligations : Term → optParam (List Codec) [] → Prop := @Alg.Obligations dynSyn _
+abbrev Obligations : Term → optParam (List Codec) [] → Prop := @Alg.Obligations dynSyn _ α
 
 /-! ### The companions, as the quantifiers the rest of the file speaks in
 
@@ -60,53 +64,53 @@ rule, and they read as the rule they belong to. Each is `:= h`. -/
 
 namespace Obligations
 
-theorem array {t} (h : Obligations (.array t)) : Obligations t := h.2.1
-theorem record {t} (h : Obligations (.record t)) : Obligations t := h.2
-theorem refine {t q ρ} (h : Obligations (.refine t q) ρ) : Obligations t ρ := h
+theorem array {t} (h : Obligations α (.array t)) : Obligations α t := h.2.1
+theorem record {t} (h : Obligations α (.record t)) : Obligations α t := h.2
+theorem refine {t q ρ} (h : Obligations α (.refine t q) ρ) : Obligations α t ρ := h
 
 /-- §3 `(set)`: the element's premises, and the DynamoDB set rule. -/
-theorem set {t ρ} (h : Obligations (.set t) ρ) : Obligations t ρ ∧ SetElem (denote t ρ) :=
+theorem set {t ρ} (h : Obligations α (.set t) ρ) : Obligations α t ρ ∧ SetElem (denote α t ρ) :=
   ⟨h.1, h.2⟩
 
-theorem tuple {ts tail} (h : Obligations (.tuple ts tail)) :
-    (∀ t ∈ ts, Obligations t) ∧ (∀ t ∈ tail, Obligations t) :=
+theorem tuple {ts tail} (h : Obligations α (.tuple ts tail)) :
+    (∀ t ∈ ts, Obligations α t) ∧ (∀ t ∈ tail, Obligations α t) :=
   ⟨obligationsList_iff.mp h.1, obligationsOpt_iff.mp h.2.1⟩
 
 /-- §3 `(list)`: one premise per declared position, the spread's, and the suffix's. -/
-theorem list {pre sp suf ρ} (h : Obligations (.list pre sp suf) ρ) :
-    (∀ t ∈ pre, Obligations t ρ) ∧ (∀ t ∈ sp, Obligations t ρ) ∧ (∀ t ∈ suf, Obligations t ρ) :=
+theorem list {pre sp suf ρ} (h : Obligations α (.list pre sp suf) ρ) :
+    (∀ t ∈ pre, Obligations α t ρ) ∧ (∀ t ∈ sp, Obligations α t ρ) ∧ (∀ t ∈ suf, Obligations α t ρ) :=
   ⟨obligationsList_iff.mp h.1, obligationsOpt_iff.mp h.2.1, obligationsList_iff.mp h.2.2⟩
 
 /-- §3 `(held)`: the subterm's premises, and the iso cancelling on the carriers. -/
-theorem held {t P f g ρ} (h : Obligations (.held t P f g) ρ) :
-    Obligations t ρ ∧ IsoCancels (denote t ρ) f g :=
+theorem held {t P k ρ} (h : Obligations α (.held t P k) ρ) :
+    Obligations α t ρ ∧ IsoCancels (denote α t ρ) (α.word k).1 (α.word k).2 :=
   ⟨h.1, h.2⟩
 
 /-- §5 `(union)`: one premise per option, and pairwise compatibility. -/
-theorem union {opts ρ} (h : Obligations (.union opts) ρ) :
-    (∀ t ∈ opts, Obligations t ρ) ∧ PairwiseCompat opts ρ :=
+theorem union {opts ρ} (h : Obligations α (.union opts) ρ) :
+    (∀ t ∈ opts, Obligations α t ρ) ∧ PairwiseCompat α opts ρ :=
   ⟨obligationsList_iff.mp h.1, h.2⟩
 
 /-- A binder's premises: the body's, at each stage whose stage before is lawful. -/
-theorem mu {b ρ} (h : Obligations (.mu b) ρ) : ∀ n, Lawful (muStage (fun c => denote b (c :: ρ)) n) →
-    Obligations b (muStage (fun c => denote b (c :: ρ)) n :: ρ) := h
+theorem mu {b ρ} (h : Obligations α (.mu b) ρ) : ∀ n, Lawful (muStage (fun c => denote α b (c :: ρ)) n) →
+    Obligations α b (muStage (fun c => denote α b (c :: ρ)) n :: ρ) := h
 
 end Obligations
 
 /-! ## Ground-term lemmas -/
 
 /-- Each ground base is lawful: the term denotes the base codec. -/
-theorem lawful_base (k : GroundKind) : Lawful (denote (.base k)) := lawful_baseCodec k
+theorem lawful_base (k : GroundKind) : Lawful (denote α (.base k)) := lawful_baseCodec k
 
 /-- One where there were two, at every base rather than the two commonest. -/
 theorem lawful_literal (k : GroundKind) (x : k.Carrier) :
-    Lawful (denote (.literal k x)) := by
+    Lawful (denote α (.literal k x)) := by
   simp only [denote_rows]; exact lawful_literalCodec k x
 
 /-! ## Inversion and dispatch helpers -/
 
-theorem TypedListM.forall : ∀ {ts Ts}, TypedListM ts Ts →
-    ∀ t ∈ ts, ∃ T, Typed t T (some .M)
+theorem TypedListM.forall : ∀ {ts Ts}, TypedListM α ts Ts →
+    ∀ t ∈ ts, ∃ T, Typed α t T (some .M)
   | _, _, .nil, t, ht => absurd ht (by simp)
   | _, _, .cons h hs, t, ht => by
       rcases List.mem_cons.mp ht with rfl | ht'
@@ -120,7 +124,7 @@ theorem TypedListM.forall : ∀ {ts Ts}, TypedListM ts Ts →
 
 
 /-- Soundness: every closed term whose obligations hold satisfies retract, canon and writes. -/
-theorem soundness {t T μ} (h : Typed t T μ) (hob : Obligations t) : Lawful (denote t) :=
+theorem soundness {t T μ} (h : Typed α t T μ) (hob : Obligations α t) : Lawful (denote α t) :=
   Alg.soundnessIn [] h hob fun _ => Lawful.empty
 
 /-! ## The denotation's held set is the judgement's
@@ -154,14 +158,14 @@ theorem alignTail_T {c : Codec} {T' : Held} (ih : ∀ v, T' v → c.T v) :
     the head lists are the same length by construction, and a tail accepts whatever is left,
     so the `none` rows of `align` are unreachable under the hypothesis. `align_TSub` never
     has to know that — it is handed the `some`. -/
-theorem align_T_of_HTuple {tail Tt} (hopt : TypedOpt tail Tt)
+theorem align_T_of_HTuple {tail Tt} (hopt : TypedOpt α tail Tt)
     (ihTail : ∀ t' ∈ tail, ∀ (T' : Held) (μ' : Option Member),
-      Typed t' T' μ' → ∀ v, T' v → (denote t').T v) :
-    ∀ {ts Ts}, TypedList ts Ts →
+      Typed α t' T' μ' → ∀ v, T' v → (denote α t').T v) :
+    ∀ {ts Ts}, TypedList α ts Ts →
       (∀ t' ∈ ts, ∀ (T' : Held) (μ' : Option Member),
-        Typed t' T' μ' → ∀ v, T' v → (denote t').T v) →
+        Typed α t' T' μ' → ∀ v, T' v → (denote α t').T v) →
       ∀ (vs : List Value), HTuple Ts Tt vs →
-      ∃ ps, align (ts.map denote) (tail.map denote) vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2
+      ∃ ps, align (ts.map (denote α)) (tail.map (denote α)) vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2
   | _, _, .nil, _, vs, hall => by
       cases hopt with
       | none =>
@@ -169,14 +173,14 @@ theorem align_T_of_HTuple {tail Tt} (hopt : TypedOpt tail Tt)
         exact ⟨[], rfl, by simp⟩
       | @some t' T' μ' hty =>
         exact alignTail_T (ihTail _ rfl _ _ hty) vs hall
-  | _, _, @TypedList.cons _ _ tx tsx Tx Tsx μx hty hs, ih, vs, hall => by
+  | _, _, @TypedList.cons _ _ _ tx tsx Tx Tsx μx hty hs, ih, vs, hall => by
       cases vs with
       | nil => exact nomatch hall
       | cons v vs' =>
         obtain ⟨ps, hal, hps⟩ :=
           align_T_of_HTuple hopt ihTail hs
             (fun x hx => ih x (List.mem_cons_of_mem _ hx)) vs' hall.2
-        refine ⟨(denote tx, v) :: ps, ?_, ?_⟩
+        refine ⟨(denote α tx, v) :: ps, ?_, ?_⟩
         · simp only [List.map_cons, align, hal, Option.map_some]
         · intro p hp
           rcases List.mem_cons.mp hp with rfl | hp'
@@ -191,20 +195,20 @@ theorem align_T_of_HTuple {tail Tt} (hopt : TypedOpt tail Tt)
 half is restated. -/
 
 /-- The declared length of a judgement's row is the row's. -/
-theorem TypedList.length_eq : ∀ {ts Ts}, TypedList ts Ts → ts.length = Ts.length
+theorem TypedList.length_eq : ∀ {ts Ts}, TypedList α ts Ts → ts.length = Ts.length
   | _, _, .nil => rfl
   | _, _, .cons _ hs => by simp [TypedList.length_eq hs]
 
 /-- …and the same suffix, built rather than read. -/
 theorem zipSuf_T :
-    ∀ {suf Tsuf}, TypedList suf Tsuf →
+    ∀ {suf Tsuf}, TypedList α suf Tsuf →
       (∀ t' ∈ suf, ∀ (T' : Held) (μ' : Option Member),
-        Typed t' T' μ' → ∀ v, T' v → (denote t').T v) →
+        Typed α t' T' μ' → ∀ v, T' v → (denote α t').T v) →
       ∀ {back : List Value}, List.Forall₂ (fun T v => T v) Tsuf back →
-      back.length = suf.length ∧ ∀ p ∈ (suf.map denote).zip back, p.1.T p.2
+      back.length = suf.length ∧ ∀ p ∈ (suf.map (denote α)).zip back, p.1.T p.2
   | _, _, .nil, _, back, hb => by
       cases hb; exact ⟨rfl, by simp⟩
-  | _, _, @TypedList.cons _ _ t ts T Ts μ hty hs, ih, back, hb => by
+  | _, _, @TypedList.cons _ _ _ t ts T Ts μ hty hs, ih, back, hb => by
       cases hb with
       | cons hhead htail =>
         obtain ⟨hlen, hall⟩ :=
@@ -217,28 +221,28 @@ theorem zipSuf_T :
         · exact hall p hp'
 
 /-- …and the same held set built rather than read: the `list` aligns whenever it holds. -/
-theorem alignL_T_of_HTupleL {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre)
-    (hs : TypedOpt sp Tsp) (hf : TypedList suf Tsuf)
+theorem alignL_T_of_HTupleL {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre)
+    (hs : TypedOpt α sp Tsp) (hf : TypedList α suf Tsuf)
     (ihp : ∀ t' ∈ pre, ∀ (T' : Held) (μ' : Option Member),
-      Typed t' T' μ' → ∀ v, T' v → (denote t').T v)
+      Typed α t' T' μ' → ∀ v, T' v → (denote α t').T v)
     (ihs : ∀ t' ∈ sp, ∀ (T' : Held) (μ' : Option Member),
-      Typed t' T' μ' → ∀ v, T' v → (denote t').T v)
+      Typed α t' T' μ' → ∀ v, T' v → (denote α t').T v)
     (ihf : ∀ t' ∈ suf, ∀ (T' : Held) (μ' : Option Member),
-      Typed t' T' μ' → ∀ v, T' v → (denote t').T v)
+      Typed α t' T' μ' → ∀ v, T' v → (denote α t').T v)
     {vs} (hh : HTupleL Tpre Tsp Tsuf vs) :
-    ∃ ps, alignL (pre.map denote) (sp.map denote) (suf.map denote) vs = some ps
+    ∃ ps, alignL (pre.map (denote α)) (sp.map (denote α)) (suf.map (denote α)) vs = some ps
       ∧ ∀ p ∈ ps, p.1.T p.2 := by
   obtain ⟨front, back, rfl, hback, hfront⟩ := hh
-  obtain ⟨hblen, hzip⟩ := zipSuf_T hf ihf hback
-  obtain ⟨psF, halF, hpsF⟩ := align_T_of_HTuple hs ihs hp ihp front hfront
-  refine ⟨psF ++ (suf.map denote).zip back, alignL_of_split (by simpa using hblen) halF, ?_⟩
+  obtain ⟨hblen, hzip⟩ := zipSuf_T (α := α) hf ihf hback
+  obtain ⟨psF, halF, hpsF⟩ := align_T_of_HTuple (α := α) hs ihs hp ihp front hfront
+  refine ⟨psF ++ (suf.map (denote α)).zip back, alignL_of_split (by simpa using hblen) halF, ?_⟩
   intro p hp
   rcases List.mem_append.mp hp with hp' | hp'
   · exact hpsF p hp'
   · exact hzip p hp'
 
-theorem TypedListM.mem : ∀ {ts Ts}, TypedListM ts Ts →
-    ∀ t ∈ ts, ∃ T ∈ Ts, Typed t T (some .M)
+theorem TypedListM.mem : ∀ {ts Ts}, TypedListM α ts Ts →
+    ∀ t ∈ ts, ∃ T ∈ Ts, Typed α t T (some .M)
   | _, _, .nil, t, ht => absurd ht (by simp)
   | _, _, .cons h hs, t, ht => by
       rcases List.mem_cons.mp ht with rfl | ht'
@@ -254,9 +258,9 @@ theorem TypedListM.mem : ∀ {ts Ts}, TypedListM ts Ts →
     membership in `Ts` names no term, so this cannot be `mem` applied backwards and is a
     recursion of its own. The denotation argument arrives as `ih` rather than being taken
     here, because the caller is the one with the depth measure. -/
-theorem unionT_of_mem : ∀ {opts : List Term} {Ts μs}, TypedListμ opts Ts μs →
-    (∀ t ∈ opts, ∀ (T : Held) (μ), Typed t T μ → ∀ v, T v → (denote t).T v) →
-    ∀ (v : Value) (T : Held), T ∈ Ts → T v → ∃ t ∈ opts, (denote t).T v
+theorem unionT_of_mem : ∀ {opts : List Term} {Ts μs}, TypedListμ α opts Ts μs →
+    (∀ t ∈ opts, ∀ (T : Held) (μ), Typed α t T μ → ∀ v, T v → (denote α t).T v) →
+    ∀ (v : Value) (T : Held), T ∈ Ts → T v → ∃ t ∈ opts, (denote α t).T v
   | _, _, _, .nil, _, _, _, hT, _ => nomatch hT
   | _, _, _, .cons hty hs, ih, v, T, hT, hv => by
     rcases List.mem_cons.mp hT with rfl | hT'
@@ -269,21 +273,21 @@ theorem unionT_of_mem : ∀ {opts : List Term} {Ts μs}, TypedListμ opts Ts μs
 
 /-- §3's `e : T ⇀ 𝔸`, at the judgement's own index: a derivable term writes only
     values of the held set it names. -/
-theorem typed_e_mem {t T μ} (h : Typed t T μ) (hob : Obligations t)
-    {v a} (he : (denote t).e v = some a) : T v :=
+theorem typed_e_mem {t T μ} (h : Typed α t T μ) (hob : Obligations α t)
+    {v a} (he : (denote α t).e v = some a) : T v :=
   Alg.typed_TSub h v ((Alg.carrier_denote h hob).domE he)
 
 /-- §3's `p : 𝔸 ⇀ T`, at the judgement's own index: a derivable term reads only into
     the held set it names. -/
-theorem typed_p_mem {t T μ} (h : Typed t T μ) (hob : Obligations t)
-    {a v} (hp : (denote t).p a = some v) : T v :=
+theorem typed_p_mem {t T μ} (h : Typed α t T μ) (hob : Obligations α t)
+    {a v} (hp : (denote α t).p a = some v) : T v :=
   Alg.typed_TSub h v ((Alg.carrier_denote h hob).ranP hp)
 
 /-- §3 `(alternate reader)`: an alternate reader over a derivable term preserves the three
     core laws under its coherence condition. -/
-theorem extendRead_lawfulCore {t T μ} (ht : Typed t T μ) (hob : Obligations t)
-    {r : Attr → Option Value} (hr : ReadsCoherently (denote t) r) :
-    LawfulCore ((denote t).extendRead r) :=
+theorem extendRead_lawfulCore {t T μ} (ht : Typed α t T μ) (hob : Obligations α t)
+    {r : Attr → Option Value} (hr : ReadsCoherently (denote α t) r) :
+    LawfulCore ((denote α t).extendRead r) :=
   Alg.LawfulCore.extendRead (soundness ht hob).core hr.1
 
 end Calculus

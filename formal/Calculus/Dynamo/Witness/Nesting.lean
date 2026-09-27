@@ -2,6 +2,8 @@ import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Lang.Store
 import Calculus.Dynamo.Analysis.ExactV
 
+variable {α : Calculus.Table}
+
 /-!
 # §1's nesting bound, and the claim the calculus cannot make
 
@@ -100,17 +102,17 @@ theorem nesting_deepA : ∀ n, Attr.nesting (deepA n) = n
     rw [nesting_deepA n]; simp
 
 /-- Every one of them is derivable. -/
-theorem typed_deepT : ∀ n, ∃ T μ, Typed (deepT n) T μ
+theorem typed_deepT : ∀ n, ∃ T μ, Typed α (deepT n) T μ
   | 0 => ⟨_, _, Typed.base .string⟩
   | n + 1 => by
     obtain ⟨T, μ, h⟩ := typed_deepT n
     exact ⟨_, _, Typed.array h⟩
 
 /-- And every one of them writes what the index says. -/
-theorem deepT_e : ∀ n, (denote (deepT n)).e (deepV n) = some (deepA n)
+theorem deepT_e : ∀ n, (denote α (deepT n)).e (deepV n) = some (deepA n)
   | 0 => rfl
   | n + 1 => by
-    show (arrayCodec (denote (deepT n))).e (.arr [deepV n]) = some (.l [deepA n])
+    show (arrayCodec (denote α (deepT n))).e (.arr [deepV n]) = some (.l [deepA n])
     simp only [arrayCodec, traverse, deepT_e n]
     rfl
 
@@ -123,8 +125,8 @@ theorem deepT_e : ∀ n, (denote (deepT n)).e (deepV n) = some (deepA n)
     discharge, it is absent from the rules, and no derivation can be blamed. -/
 theorem not_storable_of_typed (bound : Nat) :
     ∃ (t : Term) (T : Held) (μ : Option Member) (v : Value) (a : Attr),
-      Typed t T μ ∧ (denote t).e v = some a ∧ ¬ Attr.Storable bound a := by
-  obtain ⟨T, μ, hty⟩ := typed_deepT (bound + 1)
+      Typed α t T μ ∧ (denote α t).e v = some a ∧ ¬ Attr.Storable bound a := by
+  obtain ⟨T, μ, hty⟩ := typed_deepT (α := α) (bound + 1)
   refine ⟨_, T, μ, deepV (bound + 1), deepA (bound + 1), hty, deepT_e (bound + 1), ?_⟩
   show ¬ Attr.nesting (deepA (bound + 1)) ≤ bound
   rw [nesting_deepA]
@@ -142,7 +144,7 @@ namespace Calculus.DynamoDB
 /-- At the store's bound, a derivable term writes an attribute that DynamoDB refuses. -/
 theorem not_storable_of_typed :
     ∃ (t : Term) (T : Held) (μ : Option Member) (v : Value) (a : Attr),
-      Typed t T μ ∧ (denote t).e v = some a ∧ ¬ Attr.Storable maxNesting a :=
+      Typed α t T μ ∧ (denote α t).e v = some a ∧ ¬ Attr.Storable maxNesting a :=
   Calculus.not_storable_of_typed maxNesting
 
 end Calculus.DynamoDB
@@ -151,9 +153,9 @@ namespace Calculus
 
 /-- `decimalHeld` admits the stored spellings and nothing else, which is what `decimal`
     promises. -/
-example : Adm decimalHeld (Value.str "1.5") = true := by decide
-example : Adm decimalHeld (Value.str "1.50") = false := by decide
-example : Adm decimalHeld (Value.str "abc") = false := by decide
-example : Adm decimalHeld (Value.num (WFNumeral.of "1.5")) = false := by decide
+example : Adm (libTable noCallers) decimalHeld (Value.str "1.5") = true := by decide
+example : Adm (libTable noCallers) decimalHeld (Value.str "1.50") = false := by decide
+example : Adm (libTable noCallers) decimalHeld (Value.str "abc") = false := by decide
+example : Adm (libTable noCallers) decimalHeld (Value.num (WFNumeral.of "1.5")) = false := by decide
 
 end Calculus

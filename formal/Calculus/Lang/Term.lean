@@ -68,6 +68,53 @@ structure Syn where
   V : Type
   Ground : Type
   Pred : Type
+  /-- The generators of the adapters: a `held` carries a word over them, and a table gives each
+      generator its two functions. -/
+  Gen : Type
+  decGen : DecidableEq Gen
+
+instance (S : Syn) : DecidableEq S.Gen := S.decGen
+
+/-- **A table of adapters**: the caller-side function and the stored-side function of each
+    generator. `denote` reads a table as it reads the environment of the bound variables. -/
+abbrev Table (S : Syn) : Type := S.Gen → (S.V → S.V) × (S.V → S.V)
+
+/-- **An adapter word**: a word over the signed generators. The sign `true` names the converse
+    of the generator, the pair with its two functions swapped. -/
+abbrev Word (S : Syn) : Type := List (S.Gen × Bool)
+
+/-- **The involution of a word**: the letters in reverse order, each with its sign flipped. -/
+def Word.dagger {S : Syn} (k : Word S) : Word S := k.reverse.map fun x => (x.1, !x.2)
+
+/-- The pair of one signed generator: the converse swaps the two functions. -/
+def Table.letter {S : Syn} (α : Table S) (x : S.Gen × Bool) : (S.V → S.V) × (S.V → S.V) :=
+  if x.2 then ((α x.1).2, (α x.1).1) else α x.1
+
+/-- **The pair of a word**: the empty word is the identity, and a word composes its letters,
+    the first letter outermost on the caller side. -/
+def Table.word {S : Syn} (α : Table S) : Word S → (S.V → S.V) × (S.V → S.V)
+  | [] => (id, id)
+  | x :: k => ((α.letter x).1 ∘ (Table.word α k).1, (Table.word α k).2 ∘ (α.letter x).2)
+
+/-- **A word of two words is the composite of the two pairs.** -/
+theorem Table.word_append {S : Syn} (α : Table S) (k k' : Word S) :
+    α.word (k ++ k') = ((α.word k).1 ∘ (α.word k').1, (α.word k').2 ∘ (α.word k).2) := by
+  induction k with
+  | nil => rfl
+  | cons x k ih => simp only [List.cons_append, Table.word, ih]; rfl
+
+/-- **The dagger law**: the pair of the involution of a word is the pair of the word, swapped. -/
+theorem Table.word_dagger {S : Syn} (α : Table S) (k : Word S) :
+    α.word k.dagger = ((α.word k).2, (α.word k).1) := by
+  induction k with
+  | nil => rfl
+  | cons x k ih =>
+      have hx : α.word [(x.1, !x.2)] = ((α.letter x).2, (α.letter x).1) := by
+        obtain ⟨a, b⟩ := x
+        cases b <;> rfl
+      simp only [Word.dagger, List.reverse_cons, List.map_append] at ih ⊢
+      rw [Table.word_append, ih]
+      simp only [List.map_cons, List.map_nil, hx, Table.word]
 
 /-- **The meaning of a universe**: the stored carrier, the member, and the codec of each part of
     the syntax. A class over the syntax, so `denote t` finds the meaning from the term's own
@@ -135,10 +182,11 @@ inductive Term (S : Syn) where
       keeps its spelling. -/
   | list     (pre : List (Term S)) (spread : Option (Term S)) (suf : List (Term S))
   /-- §3 `(held)`: a morphism between two restrictions. `inner` restricts the stored side,
-      `outer` restricts the caller side, and `f` and `g` only transform between the two. The
-      caller side has no unrestricted spelling: a caller that states no restriction writes
+      `outer` restricts the caller side, and the adapter word `k` only transforms between the
+      two. A table gives the word its two functions, so two `held`s of one word carry one pair.
+      The caller side has no unrestricted spelling: a caller that states no restriction writes
       `.opaq` as `outer`. -/
-  | held     (inner : Term S) (outer : Term S) (f : S.V → S.V) (g : S.V → S.V)
+  | held     (inner : Term S) (outer : Term S) (k : Word S)
   | refine   (inner : Term S) (p : S.Pred)
   /-- §3 `(opaque)`: the universal sum. The number option is `numberCodec`, so `opaque`
       writes every `Value` (`opaq_total`). -/
@@ -279,7 +327,7 @@ def Term.use (i : Nat) : Term S → Nat
   | .set t => useUnder (Term.use i t)
   | .mu t => Term.use (i + 1) t
   | .refine t _ => Term.use i t
-  | .held t P _ _ => useHeld (max (Term.use i t) (Term.use i P))
+  | .held t P _ => useHeld (max (Term.use i t) (Term.use i P))
   | .list pre sp suf =>
       useUnder (max (Term.useL i pre) (max (Term.useO i sp) (Term.useL i suf)))
   | .union opts => Term.useL i opts
@@ -310,7 +358,7 @@ def Term.guarded : Term S → Bool
   | .mu t => decide (Term.use 0 t ≤ 1) && Term.guarded t
   | .set t => Term.guarded t
   | .refine t _ => Term.guarded t
-  | .held t P _ _ => Term.guarded t && Term.guarded P
+  | .held t P _ => Term.guarded t && Term.guarded P
   | .list pre sp suf => Term.guardedL pre && Term.guardedO sp && Term.guardedL suf
   | .union opts => Term.guardedL opts
   | .object b => Body.guarded b
@@ -340,7 +388,7 @@ mutual
 def Term.hasVar : Term S → Bool
   | .var _ => true
   | .refine t _ | .mu t | .set t => Term.hasVar t
-  | .held t P _ _ => Term.hasVar t || Term.hasVar P
+  | .held t P _ => Term.hasVar t || Term.hasVar P
   | .list pre sp suf => Term.hasVarL pre || Term.hasVarO sp || Term.hasVarL suf
   | .object b => Body.hasVar b
   | .union os => Term.hasVarL os
@@ -365,7 +413,7 @@ mutual
 /-- **Whether a `held` occurs in the term.** A variable is not a `held`. A term is held-free
     (`HF`) where this test answers `false`. -/
 def hasHeld : Term S → Bool
-  | .held _ _ _ _ => true
+  | .held _ _ _ => true
   | .refine t _ => hasHeld t
   | .mu b => hasHeld b
   | .list pre sp suf => hasHeldL pre || hasHeldO sp || hasHeldL suf
@@ -409,7 +457,7 @@ def Term.depth : Term S → Nat
   | .prim _ | .opaq | .never | .var _ => 1
   | .mu t => Term.depth t + 1
   | .set t => Term.depth t + 1
-  | .held t P _ _ => max (Term.depth t) (Term.depth P) + 1
+  | .held t P _ => max (Term.depth t) (Term.depth P) + 1
   | .refine t _ => Term.depth t + 1
   | .list pre sp suf =>
       max (Term.depthL pre) (max (Term.depthO sp) (Term.depthL suf)) + 1
@@ -522,7 +570,7 @@ def unanimous {M : Type} [DecidableEq M] : List (Option M) → Option M
 def envAt {V A M : Type} (ρ : List (Codec V A M)) (i : Nat) : Codec V A M := ρ.getD i .empty
 
 section Denote
-variable {S : Syn} [Sem S]
+variable {S : Syn} [Sem S] (α : Table S)
 
 mutual
 
@@ -538,8 +586,9 @@ noncomputable def denote : Term S → (ρ : List S.C := []) → S.C
       | some L => listCodec L.pV L.pA L.μ (denoteList pre ρ) (denoteOpt spread ρ) (denoteList suf ρ)
       | none => .empty
   -- the caller-side restriction is a `restrict`, the combinator of the `refine` row
-  | .held inner outer f g, ρ =>
-      ((denote inner ρ).through f g).restrict fun v => ((denote outer ρ).e v).isSome
+  | .held inner outer k, ρ =>
+      ((denote inner ρ).through (α.word k).1 (α.word k).2).restrict
+        fun v => ((denote outer ρ).e v).isSome
   | .refine inner p, ρ => (denote inner ρ).restrict (Sem.eval p)
   | .opaq, _ => Sem.top (S := S)
   | .object b, ρ => bodySem b ρ
@@ -586,6 +635,8 @@ noncomputable def denoteμs : List (Term S) → (ρ : List S.C := []) → List (
 
 end
 
+variable {α}
+
 /-! ## A term with no variable
 
 A term with no variable reads no binder, so the environment does not change the denotation. -/
@@ -594,7 +645,7 @@ mutual
 
 /-- **A term with no variable is closed**: two environments give one codec. -/
 theorem denote_closed : ∀ (t : Term S), t.hasVar = false → ∀ ρ ρ' : List S.C,
-    denote t ρ = denote t ρ'
+    denote α t ρ = denote α t ρ'
   | .prim _, _, _, _ => rfl
   | .opaq, _, _, _ => rfl
   | .never, _, _, _ => rfl
@@ -606,7 +657,7 @@ theorem denote_closed : ∀ (t : Term S), t.hasVar = false → ∀ ρ ρ' : List
       congr 1
       funext c
       exact denote_closed b h (c :: ρ) (c :: ρ')
-  | .held t P _ _, h, ρ, ρ' => by
+  | .held t P _, h, ρ, ρ' => by
       simp only [Term.hasVar, Bool.or_eq_false_iff] at h
       simp only [denote]
       rw [denote_closed t h.1 ρ ρ', denote_closed P h.2 ρ ρ']
@@ -622,30 +673,30 @@ theorem denote_closed : ∀ (t : Term S), t.hasVar = false → ∀ ρ ρ' : List
 
 /-- …at a body. -/
 theorem bodySem_closed : ∀ (b : Body S), b.hasVar = false → ∀ ρ ρ' : List S.C,
-    bodySem b ρ = bodySem b ρ'
+    bodySem α b ρ = bodySem α b ρ'
   | .mk fields f wild, h, ρ, ρ' => by
       simp only [Body.hasVar, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists,
         Bool.not_eq_true] at h
-      have hf : (fun k => fieldSem (f k) ρ) = (fun k => fieldSem (f k) ρ') :=
+      have hf : (fun k => fieldSem α (f k) ρ) = (fun k => fieldSem α (f k) ρ') :=
         funext fun k => fieldSem_closed (f k) (h.1 k) ρ ρ'
       simp only [bodySem]
       rw [hf, wildSem_closed wild h.2 ρ ρ']
 
 /-- …at a slot. -/
 theorem fieldSem_closed : ∀ (s : ObjectSlot S), s.hasVar = false → ∀ ρ ρ' : List S.C,
-    fieldSem s ρ = fieldSem s ρ'
+    fieldSem α s ρ = fieldSem α s ρ'
   | .req t, h, ρ, ρ' => by simp only [fieldSem]; rw [denote_closed t h ρ ρ']
   | .optional t, h, ρ, ρ' => by simp only [fieldSem]; rw [denote_closed t h ρ ρ']
 
 /-- …at an open block. -/
 theorem wildSem_closed : ∀ (w : Option (Term S)), Term.hasVarO w = false → ∀ ρ ρ' : List S.C,
-    wildSem w ρ = wildSem w ρ'
+    wildSem α w ρ = wildSem α w ρ'
   | none, _, _, _ => rfl
   | some t, h, ρ, ρ' => by simp only [wildSem]; rw [denote_closed t h ρ ρ']
 
 /-- …at a list of terms. -/
 theorem denoteList_closed : ∀ (ts : List (Term S)), Term.hasVarL ts = false →
-    ∀ ρ ρ' : List S.C, denoteList ts ρ = denoteList ts ρ'
+    ∀ ρ ρ' : List S.C, denoteList α ts ρ = denoteList α ts ρ'
   | [], _, _, _ => rfl
   | t :: ts, h, ρ, ρ' => by
       simp only [Term.hasVarL, Bool.or_eq_false_iff] at h
@@ -654,13 +705,13 @@ theorem denoteList_closed : ∀ (ts : List (Term S)), Term.hasVarL ts = false �
 
 /-- …at an optional term. -/
 theorem denoteOpt_closed : ∀ (sp : Option (Term S)), Term.hasVarO sp = false →
-    ∀ ρ ρ' : List S.C, denoteOpt sp ρ = denoteOpt sp ρ'
+    ∀ ρ ρ' : List S.C, denoteOpt α sp ρ = denoteOpt α sp ρ'
   | none, _, _, _ => rfl
   | some t, h, ρ, ρ' => by simp only [denoteOpt]; rw [denote_closed t h ρ ρ']
 
 /-- …at the members of a list of terms. -/
 theorem denoteμs_closed : ∀ (ts : List (Term S)), Term.hasVarL ts = false →
-    ∀ ρ ρ' : List S.C, denoteμs ts ρ = denoteμs ts ρ'
+    ∀ ρ ρ' : List S.C, denoteμs α ts ρ = denoteμs α ts ρ'
   | [], _, _, _ => rfl
   | t :: ts, h, ρ, ρ' => by
       simp only [Term.hasVarL, Bool.or_eq_false_iff] at h

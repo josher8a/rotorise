@@ -1,5 +1,7 @@
 import Calculus.Dynamo.Analysis.ExactA
 
+variable {α : Calculus.Table}
+
 /-!
 # Orthogonality: separation
 
@@ -33,12 +35,14 @@ namespace Calculus
 
 Two options are separated when no input is admitted by both. -/
 
+variable (α) in
 /-- **What the discharger consumes.** Both families disjoint, as a `Prop`, of which the
     certificate is the decidable part. A new certificate is a new theorem producing `Separates`,
     not a new case in `pairwiseCompat_of_separated`. -/
 def Separates (x y : Term) : Prop :=
-  (∀ v, Adm x v = true → ¬ Adm y v = true) ∧ (∀ a, AdmA x a = true → ¬ AdmA y a = true)
+  (∀ v, Adm α x v = true → ¬ Adm α y v = true) ∧ (∀ a, AdmA α x a = true → ¬ AdmA α y a = true)
 
+variable (α) in
 /-- **The whole premise the discharger takes**, as one name: every pair of options separated.
 
     `Separates` is the rule for a pair and this is the rule for a list, so the certificate
@@ -58,28 +62,28 @@ def Separates (x y : Term) : Prop :=
     block: either all elements of the block must be inductive/structure declarations, or they must
     all be definitions`. The one shape that works is a pre-term with a well-formedness subtype, and
     that re-founds the term language. -/
-def Separated (opts : List Term) : Prop := List.Pairwise Separates opts
+def Separated (opts : List Term) : Prop := List.Pairwise (Separates α) opts
 
 /-- **Pairwise separation bounds the admitters at one.** Separation says no two options admit
     one input. -/
-theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated opts) :
-    AdmitsAtMostOne (denoteList opts) := by
+theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated α opts) :
+    AdmitsAtMostOne (denoteList α opts) := by
   constructor
   · intro v
     rw [filter_AdmList (fun t _ => Adm_exact t) v, List.length_map]
     refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
       (List.Pairwise.filter _ (h.imp fun hs => hs.1 v)))
     intro x y hx hy hxy
-    have hax : Adm x v = true := (List.mem_filter.mp hx).2
-    have hay : Adm y v = true := (List.mem_filter.mp hy).2
+    have hax : Adm α x v = true := (List.mem_filter.mp hx).2
+    have hay : Adm α y v = true := (List.mem_filter.mp hy).2
     exact hxy hax hay
   · intro a
     rw [filter_AdmAList (fun t _ => AdmA_exact t) a, List.length_map]
     refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
       (List.Pairwise.filter _ (h.imp fun hs => hs.2 a)))
     intro x y hx hy hxy
-    have hax : AdmA x a = true := (List.mem_filter.mp hx).2
-    have hay : AdmA y a = true := (List.mem_filter.mp hy).2
+    have hax : AdmA α x a = true := (List.mem_filter.mp hx).2
+    have hay : AdmA α y a = true := (List.mem_filter.mp hy).2
     exact hxy hax hay
 
 /-- Two members that both meet `P`, in a list where no related pair both meets `P`, are one. -/
@@ -98,17 +102,17 @@ theorem eq_of_pairwise_excl {α : Type} {P : α → Prop} {R : α → α → Pro
 /-- **Pairwise separation gives the union's obligation.** No input reaches two separated
     options, so an option never acts where another reads. -/
 theorem pairwiseCompat_of_separated {opts : List Term}
-    (hlaw : ∀ t ∈ opts, Lawful (denote t)) (h : Separated opts) : PairwiseCompat opts := by
+    (hlaw : ∀ t ∈ opts, Lawful (denote α t)) (h : Separated α opts) : PairwiseCompat α opts := by
   intro s hs t ht a v hp hact
-  have hsA : AdmA s a = true := (AdmA_exact s a).mpr (by rw [hp]; rfl)
-  have hsV : Adm s v = true := (Adm_exact s v).mpr ((hlaw s hs).defined hp)
+  have hsA : AdmA α s a = true := (AdmA_exact (α := α) s a).mpr (by rw [hp]; rfl)
+  have hsV : Adm α s v = true := (Adm_exact (α := α) s v).mpr ((hlaw s hs).defined hp)
   have hst : t = s := by
     rcases hact with hq | he
-    · have htA : AdmA t a = true := (AdmA_exact t a).mpr hq
-      exact eq_of_pairwise_excl (P := fun u => AdmA u a = true)
+    · have htA : AdmA α t a = true := (AdmA_exact (α := α) t a).mpr hq
+      exact eq_of_pairwise_excl (P := fun u => AdmA α u a = true)
         (fun x y hxy px py => hxy.2 a px py) h t ht s hs htA hsA
-    · have htV : Adm t v = true := (Adm_exact t v).mpr he
-      exact eq_of_pairwise_excl (P := fun u => Adm u v = true)
+    · have htV : Adm α t v = true := (Adm_exact (α := α) t v).mpr he
+      exact eq_of_pairwise_excl (P := fun u => Adm α u v = true)
         (fun x y hxy px py => hxy.1 v px py) h t ht s hs htV hsV
   subst hst; exact hp
 
@@ -117,21 +121,21 @@ theorem compat_self (c : Codec) : Compat c c := fun _ _ hp _ => hp
 
 /-- **An empty option is compatible with every option**: `never` reads nothing and writes
     nothing, so neither side of `Compat` has a case. -/
-theorem compat_never_left (c : Codec) : Compat (denote .never) c := fun _ _ hp _ => nomatch hp
+theorem compat_never_left (c : Codec) : Compat (denote α .never) c := fun _ _ hp _ => nomatch hp
 
 /-- …and on the other side. -/
-theorem compat_never_right (c : Codec) : Compat c (denote .never) := fun _ _ _ hact => by
+theorem compat_never_right (c : Codec) : Compat c (denote α .never) := fun _ _ _ hact => by
   rcases hact with h | h <;> exact nomatch h
 
 /-- **A union with an empty option meets its obligation**, whatever the other option is. -/
-theorem pairwiseCompat_never_right (x : Term) : PairwiseCompat [x, .never] := by
+theorem pairwiseCompat_never_right (x : Term) : PairwiseCompat α [x, .never] := by
   intro s hs t ht
   simp only [List.mem_cons, List.not_mem_nil, or_false] at hs ht
   rcases hs with rfl | rfl <;> rcases ht with rfl | rfl <;>
     first | exact compat_self _ | exact compat_never_left _ | exact compat_never_right _
 
 /-- …and with the empty option first. -/
-theorem pairwiseCompat_never_left (x : Term) : PairwiseCompat [.never, x] := by
+theorem pairwiseCompat_never_left (x : Term) : PairwiseCompat α [.never, x] := by
   intro s hs t ht
   simp only [List.mem_cons, List.not_mem_nil, or_false] at hs ht
   rcases hs with rfl | rfl <;> rcases ht with rfl | rfl <;>

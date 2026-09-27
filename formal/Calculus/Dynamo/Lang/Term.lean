@@ -275,11 +275,22 @@ noncomputable abbrev dSet : Alg.SetF Value Attr Member Attr.member Value.depth A
       | exact Or.inr (Or.inr ⟨_, rfl, fun x hx => ih _ (hv x hx)⟩)
       | exact nomatch hv
 
-/-- **The DynamoDB syntax**: values, the ground primitives, and the data predicates. -/
+/-- **The generators of the DynamoDB adapters.** `decimalText` is the text adapter that the
+    library ships as `decimal`. `caller n` is the `n`th adapter that a caller supplies, and a
+    vector quantifies its two functions through the table. -/
+inductive DynGen where
+  | decimalText
+  | caller (n : Nat)
+  deriving DecidableEq
+
+/-- **The DynamoDB syntax**: values, the ground primitives, the data predicates, and the
+    generators of the adapters. -/
 abbrev dynSyn : Alg.Syn where
   V := Value
   Ground := Ground
   Pred := Pred
+  Gen := DynGen
+  decGen := inferInstance
 
 /-- **The DynamoDB meaning** of that syntax. -/
 @[reducible] noncomputable instance dynSem : Alg.Sem dynSyn where
@@ -315,6 +326,10 @@ suf` or `.string` matches as it did. -/
 
 /-- The term language of DynamoDB. -/
 abbrev Term := Alg.Term dynSyn
+/-- A table of the DynamoDB adapters: the two functions of each generator. -/
+abbrev Table := Alg.Table dynSyn
+/-- An adapter word of DynamoDB. -/
+abbrev Word := Alg.Word dynSyn
 /-- An object payload of DynamoDB. -/
 abbrev Body := Alg.Body dynSyn
 /-- An object slot of DynamoDB. -/
@@ -326,8 +341,8 @@ abbrev ObjectSlot := Alg.ObjectSlot dynSyn
 @[match_pattern] abbrev Term.set (elem : Term) : Term := Alg.Term.set elem
 @[match_pattern] abbrev Term.list (pre : List Term) (spread : Option Term) (suf : List Term) :
     Term := Alg.Term.list pre spread suf
-@[match_pattern] abbrev Term.held (inner outer : Term) (f g : Value → Value) : Term :=
-  Alg.Term.held inner outer f g
+@[match_pattern] abbrev Term.held (inner outer : Term) (k : Word) : Term :=
+  Alg.Term.held inner outer k
 @[match_pattern] abbrev Term.refine (inner : Term) (p : Pred) : Term := Alg.Term.refine inner p
 @[match_pattern] abbrev Term.opaq : Term := Alg.Term.opaq
 @[match_pattern] abbrev Term.object (b : Body) : Term := Alg.Term.object b
@@ -347,7 +362,7 @@ abbrev ObjectSlot := Alg.ObjectSlot dynSyn
 def Term.casesD {motive : Term → Sort _} (base : ∀ k, motive (.base k))
     (literal : ∀ k v, motive (.literal k v)) (set : ∀ elem, motive (.set elem))
     (list : ∀ pre spread suf, motive (.list pre spread suf))
-    (held : ∀ inner outer f g, motive (.held inner outer f g))
+    (held : ∀ inner outer k, motive (.held inner outer k))
     (refine : ∀ inner p, motive (.refine inner p)) (opaq : motive .opaq)
     (object : ∀ b, motive (.object b)) (union : ∀ options, motive (.union options))
     (never : motive .never) (var : ∀ i, motive (.var i)) (mu : ∀ body, motive (.mu body)) :
@@ -356,7 +371,7 @@ def Term.casesD {motive : Term → Sort _} (base : ∀ k, motive (.base k))
   | .literal k v => literal k v
   | .set e => set e
   | .list pre sp suf => list pre sp suf
-  | .held i o f g => held i o f g
+  | .held i o k => held i o k
   | .refine i p => refine i p
   | .opaq => opaq
   | .object b => object b
