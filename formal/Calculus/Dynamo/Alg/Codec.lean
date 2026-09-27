@@ -27,27 +27,19 @@ abbrev LawfulCore := Alg.LawfulCore (V := Value) Attr.member
    caller reaches by field notation get an alias. Field notation reaches the others through the
    abbreviation. -/
 export Alg (Can IsoCancels ReadsCoherently Carrier SurvivesStore Ctor pointCodec partialId
-  through_e_adapt restrict_e_adapt restrict_e_isSome through_e through_p restrict_e restrict_p
+  through_e through_p restrict_e restrict_p
   length_le_one_of_pairwise_false AdmitsAtMostOne select altCodec select_admits altCodec_e
-  altCodec_p altCodec_e_admits altCodec_p_admits carrier_pointCodec carrier_restrict
+  altCodec_p carrier_pointCodec carrier_restrict
   carrier_altCodec lawful_pointCodec funImage funImage_some funImage_isSome funImage_isSome_iff
-  funImage_eq Sub sub_restrict_self optBot selectF ConfluentAt selectF_mono_list
-  selectF_continuous_list Compat find?_attempt_V find?_attempt_A acts_of_find?_V acts_of_find?_A
-  Canon lawful_altCodec compat_of_exclusive compat_of_common_bound compat_of_common_bound'
-  altCodec_perm equiv_restrict_meet equiv_restrict_full altCodec_nest_e altCodec_nest_p
+  funImage_eq Sub sub_restrict_self optBot selectF ConfluentAt
+  Compat find?_attempt_V find?_attempt_A acts_of_find?_V acts_of_find?_A
+  Canon lawful_altCodec compat_of_exclusive compat_of_common_bound'
+  equiv_restrict_meet equiv_restrict_full altCodec_nest_e altCodec_nest_p
   altCodec_assoc_heldSet)
 
 namespace Codec
-export Alg.Codec (ext empty Ker.refl Ker.symm Ker.trans Approx.refl Equiv Equiv.refl Equiv.symm)
+export Alg.Codec (ext empty Equiv)
 end Codec
-
-namespace ConfluentAt
-export Alg.ConfluentAt (tail)
-end ConfluentAt
-
-namespace Compat
-export Alg.Compat (cross)
-end Compat
 
 namespace Lawful
 export Alg.Lawful (empty congr)

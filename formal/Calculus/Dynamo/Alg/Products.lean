@@ -446,8 +446,8 @@ position by position over the codec row, exactly as they do for `array`. -/
 
 /- The positional theory takes the carriers as parameters. The aliases give it its names in this
    namespace. -/
-export Alg (align slots slots_all align_eq_some align_of_slots zip_canonS zip_domE zip_ranP
-  tuple_retract slotsL alignL alignL_nil_suf alignL_split alignL_of_split traverse_replicate_zip
+export Alg (align slots_all align_eq_some align_of_slots zip_canonS zip_domE zip_ranP
+  tuple_retract alignL alignL_nil_suf alignL_of_split traverse_replicate_zip
   alignL_spread mem_replicate_zip)
 
 def tupleCodec (cs : List Codec) (tail : Option Codec) : Codec :=
