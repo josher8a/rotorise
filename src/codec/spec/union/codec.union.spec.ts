@@ -370,22 +370,31 @@ describe('the declaration guard, where a term is what the guard reads', () => {
     })
 
     /**
-     * **An unknown read side meets every read side.** A field with a stand-in for an absent
-     * attribute reads what no term states, so the meet of two objects has no row for it, and the
-     * occupancies of two objects meet at `M`. Beside an object that holds an adapter, no warrant
-     * shows the pair compatible.
+     * **A closed body refuses a name it does not declare, on both sides.** The stand-in reads a
+     * map without `a`, so the stand-in field alone keeps nothing apart. `priced` requires `b`,
+     * and `standIn` is closed, so it neither writes nor reads a map that holds `b`. The two
+     * options share no value and no attribute, and the certificate accepts the pair.
      */
-    it('refuses an object with a stand-in field beside an object that holds an adapter', () => {
+    it('accepts an object with a stand-in field beside a closed object that requires another name', () => {
         const standIn = object({
             a: withLegacyRead({ current: string, whenMissing: 'stand-in' }),
         })
         const priced = object({ b: decimal })
-        expect(() => union([standIn, priced])).toThrow(
-            /are not shown compatible/,
-        )
-        expect(() => union([priced, standIn])).toThrow(
-            /are not shown compatible/,
-        )
+        for (const either of [
+            union([standIn, priced]),
+            union([priced, standIn]),
+        ]) {
+            expect(either.unsafeEncode({ a: 'x' })).toEqual({
+                M: { a: { S: 'x' } },
+            })
+            expect(either.unsafeEncode({ b: '1.5' })).toEqual({
+                M: { b: { N: '1.5' } },
+            })
+            expect(either.unsafeDecode({ M: {} })).toEqual({ a: 'stand-in' })
+            expect(either.unsafeDecode({ M: { b: { N: '1.5' } } })).toEqual({
+                b: '1.5',
+            })
+        }
     })
 
     /**

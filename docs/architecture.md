@@ -547,7 +547,7 @@ refuses every other pair, because the pair is not shown compatible.
 | the never side | one option is `never` | `pairwiseCompat_never_left`, `pairwiseCompat_never_right` |
 | held-free | both options are held-free | `pairwiseCompat_of_HF`: both sit below `opaque` |
 | the common bound | `below(x, y)` or `below(y, x)` holds | `pairwiseCompat_of_sub`: the wider option is the bound |
-| the certificate | `separable`: `certPair`, which asks that the views are disjoint, and the meet of the terms at the bottom where the host has no views | `pairwiseCompat_of_separated` |
+| the certificate | `separable`: `certPair`, which asks that the views are disjoint, and the test of the raw terms where the host has no views | `pairwiseCompat_of_separated` |
 
 The host's rule `below(x, y)` in `src/codec/term.ts` is narrower than the model's `Sub`. It has
 five rows: a literal is below its base and below itself; a union is below a term that each of its
@@ -558,18 +558,18 @@ the options by `opaque`, and an option with a `held` has no such bound. So `deci
 `union([decimal('1', '2.5'), string('A')])` is refused, although the first is below one option of
 the second.
 
-**The host reads an unknown as a refusal.** The read side of an alternate reader is caller code,
-and the declaration cannot bound its domain. So the host's meet refuses where it must read an
-alternate reader, and a refusal certifies nothing. A container of an alternate reader beside a
-term of another kind meets at the bottom, and reads no reader. An unknown read as "no meeting" is
-the permissive direction, and so the unsound one.
+**The host reads an unknown as a decline.** The read side of an alternate reader is caller code,
+and the declaration cannot bound its domain. So the host's test declines where it must read an
+alternate reader, and a decline certifies nothing. A container of an alternate reader beside a
+term of another shape class is disjoint from it, and reads no reader. An unknown read as
+"disjoint" is the permissive direction, and so the unsound one.
 
 **The host reads a thunk that throws as a free variable.** At a declaration, a thunk that names
 the union under declaration throws. The model spells the thunk as a variable, and the soundness of
 `Term.disjoint` holds under every environment of a variable that pairs with no binder. So the
-host's meet reads the thunk as a
-variable that pairs with no binder. Beside the bottom the meet is the bottom, and beside any other
-term the meet refuses. A list of such a thunk beside a string meets at the bottom.
+host's test reads the thunk as a variable that pairs with no binder. Beside the bottom the
+variable is disjoint, and beside any other term the test declines. A list of such a thunk beside a
+string is disjoint from it.
 
 **The caller view of a `held` is its held side.** The host's `decimal` over literals records the
 string literals of its texts there, so its caller view is exact, and the views certify it beside a

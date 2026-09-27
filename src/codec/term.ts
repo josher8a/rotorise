@@ -110,7 +110,7 @@ export type Alternatives =
  * §3 `(refine)`'s `q`, as the term carries it.
  *
  * The model's `q` is a bare `Value → Bool` and the host's used to be the caller's closure. Neither
- * is enough, because **the meet has to read the predicate as data**: a closure decides nothing a
+ * is enough, because **the certificate has to read the predicate as data**: a closure decides nothing a
  * declaration can see. `Pred.members` is the case that forced this: its `ls` is a `NEFinset`
  * and not a function.
  *
@@ -247,7 +247,7 @@ export type Term =
      * This library supports a recursive entity through a thunk, and `codec.recursive.spec.ts`
      * declares one, so the thunk stays. **Everything else here reads through it.**
      * {@link occV}, {@link occA} and {@link ownsNullOf} answer what the term underneath answers,
-     * and `meetTerms` and the emitter read the binder at the term that closes the cycle. Only
+     * and {@link disjoint} and the emitter read the binder at the term that closes the cycle. Only
      * {@link member} answers `undefined`, because the host cannot force a thunk safely at
      * declaration: forcing a recursive thunk can loop.
      *
@@ -660,7 +660,7 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
  * The names an object option answers to, each with whether the item must carry it.
  *
  * `undefined` for a non-object. The certificate reads these names and the literals an object
- * pins (the model reads them through the meet of two bodies). Selection itself is by attempt at every option, objects
+ * pins (the model reads them through the disjointness of two bodies). Selection itself is by attempt at every option, objects
  * included. An `optional` binding is declared and not required, and that is
  * the ambiguity §5 names in the same words: two objects declaring only optional names both admit
  * the empty map, however disjoint their names.
@@ -895,41 +895,39 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
 
 /**
  * **Whether two options share no value and no attribute**, the host's certificate: the model's
- * `certPair`, and a meet row where the host has no views.
+ * `certPair`, and a row of the raw terms where the host has no views.
  *
  * `union` asks it of a pair that {@link compatible} shows by no other warrant. Where it answers
  * `true`, the model proves `PairwiseCompat` through `separates_of_certPair` and
  * `pairwiseCompat_of_separated`. For each pair `union` refuses, `formal/.separations.lean` pins that
  * `certPair` is `false`, so this never answers `false` where `certPair` answers `true`.
  *
- * Two rows. The model's `certPair` is the second row alone: `viewsNever`.
+ * **Two options with views: the two views are disjoint**, the model's `viewsDisjoint`. A term
+ * denotes a partial isomorphism, the caller view states its domain, and the stored view states its
+ * range. Two options whose domains are disjoint and whose ranges are disjoint are orthogonal: no
+ * value has two writers, and no attribute has two readers.
  *
- * **Two options that meet at the bottom**, the model's `meetNever`. `Adm_meet` and `AdmA_meet`
- * make the meet's admission the conjunction of the two, so a meet at `never` admits no common
- * value and reads no common attribute. An option inside another meets the other at the option
- * itself, and not at the bottom, so no row certifies a literal beside its base.
+ * **The host keeps a row of the raw terms where the views do not exist.** {@link viewable}
+ * refuses a `withLegacyRead` with a `held` below it, because the older reading reads an attribute
+ * to a held value. {@link disjoint} reads such a term as disjoint from the bottom alone, so the raw
+ * row certifies two objects only through another name, as two tags that differ. The model has no
+ * `withLegacyRead`, so the model needs no such row.
  *
- * **The host keeps this row where the views do not exist.** {@link viewable} refuses a `legacy`
- * with a `held` below it. The meet still answers the bottom at two objects whose tags meet at the
- * bottom, because a slot at the bottom decides before a slot that refuses. The model has no
- * `legacy`, so the model needs no such row.
- *
- * **Two options, one of which holds a `held`: the two views**, the model's `viewsNever`. A `held`
- * writes where its held side does and reads where its inner term does, so the caller views answer
- * the write question and the stored views answer the read question. Both pairs of views must meet
- * at the bottom. The host asks the row only where one option holds a `held`. On a held-free term
- * the caller view is the term itself, so there the first row certifies each pair that the views
- * certify.
- *
- * The meet refuses a closure beside a partner that its inner term does not meet at the bottom, so
- * the first row certifies `union([refine(string, isNumeral), array(decimal)])`.
+ * {@link disjoint} reads a closure through its inner term, so the certificate accepts
+ * `union([refine(string, isNumeral), array(decimal)])`.
  */
 export const separable = (x: Term, y: Term): boolean =>
-    meetsAtBottom(x, y) || viewsApart(x, y)
+    viewsDisjoint(x, y) ?? disjoint(x, y)
 
-/** The model's `meetNever`: the meet states the pair, and the meet is the bottom. */
-const meetsAtBottom = (x: Term, y: Term): boolean =>
-    meetTerms(x, y)?.kind === 'never'
+/**
+ * **Whether the two pairs of views are disjoint**, the model's `viewsDisjoint`, or `undefined`
+ * where one term has no views ({@link viewable}).
+ */
+export const viewsDisjoint = (x: Term, y: Term): boolean | undefined =>
+    viewable(x) && viewable(y)
+        ? disjoint(callerView(x), callerView(y)) &&
+          disjoint(storedView(x), storedView(y))
+        : undefined
 
 /**
  * **Whether a term reaches a subterm of one of these kinds**, at any depth, or reaches a thunk
@@ -1108,7 +1106,7 @@ export const heldOnRecursivePath = (root: Term): boolean => {
  * one of its options admits. A `legacy` with a `held` below it has no view: its `r` reads an
  * attribute to a held value, so the read widens on both sides. A thunk has the view of the term
  * it returns. A thunk that throws is a free variable, and the view of a variable is the variable:
- * {@link meetTerms} reads the view of the thunk as a free variable too.
+ * {@link disjoint} reads the view of the thunk as a free variable too.
  *
  * The walk forces each thunk once, so it ends: a thunk memoizes its codec, and every other edge
  * of a term is built before the term.
@@ -1188,15 +1186,15 @@ const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
  * **A view that reads through a thunk**, as the model's views read through `mu`: the view of a
  * thunk is a thunk that returns the view of the term that the first thunk returns. Each term
  * object has one view object, so a cycle of the term is a cycle of the view, closed at the view
- * of the same binder. {@link meetTerms} then reads the view as `mu` of the view of the body, and
+ * of the same binder. {@link disjoint} then reads the view as `mu` of the view of the body, and
  * a variable of the view at the thunk.
  *
  * The build forces no thunk, so it ends: it recurses only through the edges that are not a
  * thunk, and every such edge of a term is built before the term. A thunk of the view forces its
- * thunk when {@link meetTerms} reads it, and {@link viewable} forced each such thunk already. A
- * thunk that throws throws again there, and {@link meetTerms} reads it as a free variable. So the
+ * thunk when {@link disjoint} reads it, and {@link viewable} forced each such thunk already. A
+ * thunk that throws throws again there, and {@link disjoint} reads it as a free variable. So the
  * thunk of the view forces its thunk directly and not through {@link force}: the throw must reach
- * the {@link force} of {@link meetTerms} at the thunk of the view.
+ * the {@link force} of {@link disjoint} at the thunk of the view.
  */
 const throughThunks =
     (row: (t: Term, view: (t: Term) => Term) => Term) =>
@@ -1239,7 +1237,7 @@ const callerView = throughThunks((t, view) => {
  * term**: where the inner term reaches no `held` and closes no cycle. A thunk that closes a cycle
  * is a variable of the model, and the variable denotes a stage of its binder, which can hold a
  * `held`. {@link reaches} counts such a thunk as a `held`. Elsewhere the view drops the
- * predicate, because data exists only on the side where it was stated: the stored side meets the
+ * predicate, because data exists only on the side where it was stated: the stored side reads the
  * predicate only through `g`, and the view keeps no closure.
  */
 const storedView = throughThunks((t, view) => {
@@ -1252,18 +1250,6 @@ const storedView = throughThunks((t, view) => {
             return mapChildren(t, view)
     }
 })
-
-/**
- * **The model's `viewsNever`, where one option holds a `held`**: both are
- * {@link viewable}, the caller views meet at the bottom, and the stored views meet at the bottom.
- * Then no caller value is admitted by both options, and no attribute is read by both.
- */
-const viewsApart = (x: Term, y: Term): boolean =>
-    (reaches(x, ['held']) || reaches(y, ['held'])) &&
-    viewable(x) &&
-    viewable(y) &&
-    meetsAtBottom(callerView(x), callerView(y)) &&
-    meetsAtBottom(storedView(x), storedView(y))
 
 /**
  * **Whether the walk shows a term held-free**, the model's `HF`. A `legacy` counts as an adapter,
@@ -1345,48 +1331,39 @@ export const compatible = (x: Term, y: Term): boolean =>
     below(y, x) ||
     separable(x, y)
 
-/* ── the meet ─────────────────────────────────────────────────────────────────────────── */
+/* ── disjointness ─────────────────────────────────────────────────────────────────────── */
 
 /**
- * **The intersection of two admissions, as a term** — `Calculus.Term.meet`, one row per pair of
- * constructors.
+ * **Whether two terms share no value and no attribute** — `Calculus.Alg.Term.disjoint` at the
+ * closed pairing, one row per constructor of the left operand.
  *
- * `undefined` is the model's `none` and is **not** the bottom. It says no term states this
- * intersection, which happens for two reasons: a factor whose admission is a function nobody can
- * read, and a pair that shares a value or a stored attribute it writes or reads two ways. `never`
- * is the empty intersection alone. Conflating the two is the defect this development found four
- * separate times, each time by writing the homomorphism equation rather than by reading the table.
+ * `true` says that no value is admitted by both terms and no attribute is read by both.
+ * `false` states nothing: the test is sound, not complete. The admission of a term is its domain
+ * idempotent, so the test decides that the product of two idempotents is zero.
  *
- * **Where the host could answer and the model has no row, this refuses.** Two `withLegacyRead`
- * fields and an `undefinable` field are each comparable in TypeScript and each answer `undefined`
- * here, because a row the model does not state is a rule this port would be inventing. The model's
- * `Field` has no `undefinable` mark.
+ * **A `held`, a `withLegacyRead` and `opaque` are disjoint only from the bottom.** The admission
+ * of the first two is a function that no reader can read without running it, and `opaque`
+ * admits every value. The views read a `held` ({@link separable}).
  *
- * **A recursive term is met as the model spells it**: `mu` at the term object that a cycle
- * returns to, and a variable at the thunk that closes the cycle ({@link Scope}). Two variables meet
- * where the two binders were met together, and a variable beside any other term refuses. Two
- * recursive terms meet at the recursive term of the two bodies met ({@link meetBinders}). A
- * recursive term beside another term unfolds, and its binder pairs with nothing.
+ * **A recursive term is read as the model spells it**: `mu` at the term object that a cycle
+ * returns to, and a variable at the thunk that closes the cycle ({@link Scope}). Two variables are
+ * disjoint where the two binders were unfolded together, because the model's environments keep
+ * each such pair apart. Two recursive terms are disjoint where their bodies are, with the two
+ * binders paired. A recursive term beside another term unfolds, and its binder pairs with nothing.
  *
  * **A thunk that throws is a free variable that pairs with nothing.** The thunk names a codec that
- * is not yet declared, so the host cannot read the term that the thunk returns. The model's meet
- * holds under every environment of its variables, so a meet that reads no such variable holds
- * whatever the thunk returns later. The walk reads the variable as the model reads a variable
- * under `pair0`: beside the bottom the meet is the bottom, and beside any other term the meet
- * refuses. A container of the variable beside a constructor of another kind meets at the bottom,
- * and reads no variable.
+ * is not yet declared, so the host cannot read the term that the thunk returns. The soundness of
+ * the model's test holds under every environment of its variables, so a verdict that reads no
+ * such variable holds whatever the thunk returns later. Beside the bottom a free variable is
+ * disjoint, and beside any other term it is not. A container of the variable beside a
+ * constructor of another shape class is disjoint, and reads no variable.
  */
-export const meetTerms = (x: Term, y: Term): Term | undefined => {
-    // the bottom absorbs, on either side, before any thunk is read: the model's `never` rows sit
-    // first, and a recursive term meets the bottom at the bottom
-    if (x.kind === 'never' || y.kind === 'never') return never
-    return meetWalk(x, y, {
+export const disjoint = (x: Term, y: Term): boolean =>
+    disjointWalk(x, y, {
         left: { binds: bindersOf(x), inside: [] },
         right: { binds: bindersOf(y), inside: [] },
         pairs: [],
-        variables: new Set(),
     })
-}
 
 /**
  * **Where a walk is in one operand**: the term objects that bind a variable, and the binders the
@@ -1395,7 +1372,7 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
  * A recursive host schema is a cycle of term objects closed by a thunk. The model names the cycle
  * with a binder: `Term.mu` at the object that a thunk returns while that object is on the walk,
  * and `Term.var k` at the thunk, where `k` counts the binders between the two. Any other thunk is
- * the term it returns. The meet and the emitter read one spelling, so both read it through this
+ * the term it returns. The test and the emitter read one spelling, so both read it through this
  * scope.
  */
 export type Scope = {
@@ -1481,223 +1458,334 @@ const see = (t: Term, scope: Scope): Seen => {
 
 /**
  * **The pairing of binders**, the model's `Pairing`: the scope of each operand, and each pair of
- * binders met together with the variable of the answer's binder.
+ * binders unfolded together.
  */
 type Walk = {
     readonly left: Scope
     readonly right: Scope
-    readonly pairs: readonly {
-        readonly left: Term
-        readonly right: Term
-        readonly variable: Term
-    }[]
-    /** Every variable of an answer's binder in this meet. The walk of an answer stops at each. */
-    readonly variables: Set<Term>
+    readonly pairs: readonly { readonly left: Term; readonly right: Term }[]
 }
 
-/** The pairing with the two operands exchanged, for a row that meets the right operand first. */
-const flip = (w: Walk): Walk => ({
-    left: w.right,
-    right: w.left,
-    pairs: w.pairs.map(({ left, right, variable }) => ({
-        left: right,
-        right: left,
-        variable,
-    })),
-    variables: w.variables,
-})
-
 /**
- * One row per pair of constructors, as the operands spell at the pairing.
+ * One row per constructor of the left operand, as the operands spell at the pairing. The rows
+ * are the model's, in the model's order.
  *
  * **The walk ends.** The spelling of each operand is a finite term, because {@link bindersOf}
  * binds the target of every thunk that closes a cycle, and the spelling stops at each variable.
- * Each call meets a strict subterm of one spelling, or of both, with the other spelling unchanged,
- * so the sum of the two sizes falls at each call. An exchange of the operands keeps the sum.
+ * Each call reads a strict subterm of one spelling, or of both, with the other spelling
+ * unchanged, so the sum of the two sizes falls at each call.
  */
-const meetWalk = (x: Term, y: Term, w: Walk): Term | undefined => {
+const disjointWalk = (x: Term, y: Term, w: Walk): boolean => {
     const one = see(x, w.left)
-    const other = see(y, w.right)
-    // the bottom absorbs, on either side
-    if (
-        (one.kind === 'term' && one.t.kind === 'never') ||
-        (other.kind === 'term' && other.t.kind === 'never')
-    )
-        return never
-    // a free variable pairs with no binder, so beside any term but the bottom the meet refuses
-    if (one.kind === 'free' || other.kind === 'free') return undefined
-    // a variable admits what its binder admits, so a variable meets only the variable of the
-    // binder that its own binder was met with
-    if (one.kind === 'var')
-        return other.kind === 'var'
-            ? w.pairs.find(
-                  (pair) =>
-                      pair.left === one.binder && pair.right === other.binder,
-              )?.variable
-            : undefined
-    if (one.kind === 'mu')
-        return other.kind === 'mu'
-            ? meetBinders(one, other, w)
-            : // a recursive term beside another term unfolds, and its binder pairs with nothing
-              meetWalk(one.body, y, { ...w, left: one.scope })
-    const left = one.t
-    // the three whose admission is a function and not data: a reader cannot say what they admit
-    // without running them, so no term states the intersection
-    if (
-        opaqueToReader(left) ||
-        (other.kind === 'term' && opaqueToReader(other.t))
-    )
-        return undefined
-    // a certified union distributes, on either side
-    if (left.kind === 'union') return distribute(left.options, y, w)
-    if (other.kind === 'term' && other.t.kind === 'union')
-        return distribute(other.t.options, left, flip(w))
-    // a refinement conjoins: a predicate that is data rides on the meet of the inner terms
-    if (left.kind === 'refine') return overRefinement(left.inner, left.q, y, w)
-    // a constructor beside a variable refuses, and beside a recursive term the recursive term
-    // unfolds
-    if (other.kind === 'var') return undefined
-    if (other.kind === 'mu')
-        return meetWalk(left, other.body, { ...w, right: other.scope })
-    const right = other.t
-    if (right.kind === 'refine')
-        return overRefinement(right.inner, right.q, left, flip(w))
-    // the ground bases: the same base is itself
-    if (left.kind === right.kind && groundBase(left)) return left
-    // **`string` and `decimal` part on the stored side.** Both admit text; `string` writes `S` and
-    // `decimal` writes `N`, so a value they share is stored two ways and there is no meet. The
-    // literal rows repeat it, because a literal at either base inherits the pair
-    if (left.kind === 'literal' && right.kind === 'literal')
-        return meetLiterals(left, right)
-    if (left.kind === 'literal') return literalAgainstBase(left, right)
-    if (right.kind === 'literal') return literalAgainstBase(right, left)
-    if (left.kind === 'list' && right.kind === 'list')
-        return meetLists(left, right, w)
-    // **Two sets meet at their elements**, the model's `famSet`. An element meet at the bottom is a
-    // set meet at the bottom, because a stored set is not empty. A set is stated only where the
-    // three terms are held-free, where each set writes and reads element by element. An element
-    // that reads a variable refuses, because the set laws are stated over closed elements
-    if (left.kind === 'set' && right.kind === 'set') {
-        if (
-            spells(left.elem, w.left.inside, []) ||
-            spells(right.elem, w.right.inside, [])
-        )
-            return undefined
-        const elem = meetWalk(left.elem, right.elem, w)
-        if (elem === undefined) return undefined
-        if (elem.kind === 'never') return never
-        return spells(left.elem, w.left.inside, ['held']) ||
-            spells(right.elem, w.right.inside, ['held']) ||
-            spells(elem, [], ['held', 'lazy'])
-            ? undefined
-            : { kind: 'set', elem }
-    }
-    if (left.kind === 'opaq' && right.kind === 'opaq') return left
-    if (left.kind === 'object' && right.kind === 'object')
-        return meetBodies(left.body, right.body, w)
-    // **`opaque` against a ground base.** It admits every value of every self-identifying kind, so
-    // at `string`, `boolean`, `binary`, `null` and `number` the base is the finer term. `decimal`
-    // refuses for the reason `string ∧ decimal` refuses
-    if (left.kind === 'opaq') return opaqueAgainst(right)
-    if (right.kind === 'opaq') return opaqueAgainst(left)
-    // **The `number` family and the `decimal` family never meet.** They write different value kinds,
-    // so the bottom is right about the write side, and they read the same member `N`, so the bottom
-    // is wrong about the read side: every stored numeral is an attribute both admit
-    // everything left is two constructors that write different value kinds
-    return never
-}
-
-/**
- * **Two recursive terms meet at the recursive term of the two bodies met**, with the two binders
- * paired. The answer is a thunk that returns the met body, and the variable of the pair is a thunk
- * that returns the answer, so the answer closes its own cycle and spells as `mu` of the body.
- *
- * The answer is the bottom where the body is. It is a binder only where the model's guard accepts
- * the binder: the body reads the variable under a container, and under no `held`.
- *
- * **A body that never reads the variable is the answer.** A binder whose variable does not occur
- * denotes its body. The host has no cycle to spell there, and the model answers the body with its
- * free variables lowered by one.
- */
-const meetBinders = (
-    one: Extract<Seen, { kind: 'mu' }>,
-    other: Extract<Seen, { kind: 'mu' }>,
-    w: Walk,
-): Term | undefined => {
-    let body: Term | undefined
-    const binder: Term = {
-        kind: 'lazy',
-        get: () => {
-            // the meet returns the binder only after it fills the body
-            if (body === undefined)
-                throw new Error('a recursive answer was read before its body')
-            return body
-        },
-    }
-    const variable: Term = { kind: 'lazy', get: () => binder }
-    w.variables.add(variable)
-    const z = meetWalk(one.body, other.body, {
-        left: one.scope,
-        right: other.scope,
-        pairs: [...w.pairs, { left: one.body, right: other.body, variable }],
-        variables: w.variables,
-    })
-    if (z === undefined || z.kind === 'never') return z
-    const reads = readsBinder(z, variable, w.variables)
-    if (reads === 0) return z
-    if (reads > 1) return undefined
-    body = z
-    return binder
-}
-
-/**
- * **How an answer reads the variable of one binder**, the model's `Term.use`: `0` where the
- * variable does not occur, `1` where each occurrence sits under a container and none under a
- * `held`, `2` where an occurrence reads the input itself, and `3` where one sits under a `held`.
- *
- * An answer holds two kinds of thunk: the variable of a binder, where the walk stops, and a binder
- * that the meet filled before, whose body the walk reads. So the walk ends where the answer ends.
- * The meet builds both kinds, and an answer holds no thunk of an operand. So the walk forces each
- * thunk directly, and no caller code runs.
- */
-const readsBinder = (
-    t: Term,
-    variable: Term,
-    variables: ReadonlySet<Term>,
-): number => {
-    const on = (one: Term) => readsBinder(one, variable, variables)
-    const under = (use: number) => (use === 2 ? 1 : use)
-    const most = (ts: readonly Term[]) => Math.max(0, ...ts.map(on))
-    switch (t.kind) {
-        case 'lazy':
-            return variables.has(t) ? (t === variable ? 2 : 0) : on(t.get())
-        case 'set':
-            return under(on(t.elem))
-        case 'list':
-            return under(
-                most([
-                    ...t.pre,
-                    ...(t.spread === undefined ? [] : [t.spread]),
-                    ...t.suf,
-                ]),
+    switch (one.kind) {
+        // a free variable pairs with no binder, so it is disjoint from the bottom alone
+        case 'free':
+            return rightRows(() => false, y, w)
+        // a variable admits what its binder admits, so it is disjoint from the variable of the
+        // binder that its own binder was unfolded with
+        case 'var':
+            return rightRows(
+                (other, v) =>
+                    other.kind === 'var' &&
+                    v.pairs.some(
+                        (pair) =>
+                            pair.left === one.binder &&
+                            pair.right === other.binder,
+                    ),
+                y,
+                w,
             )
-        case 'object':
-            return under(
-                most([
-                    ...Object.values(t.body.fields).map((field) => field.t),
-                    ...(t.body.rest === undefined ? [] : [t.body.rest]),
-                ]),
+        case 'mu': {
+            const other = see(y, w.right)
+            // two recursive terms: the bodies, with the two binders paired
+            if (other.kind === 'mu')
+                return disjointWalk(one.body, other.body, {
+                    left: one.scope,
+                    right: other.scope,
+                    pairs: [...w.pairs, { left: one.body, right: other.body }],
+                })
+            // a recursive term beside another term unfolds, and its binder pairs with nothing
+            return disjointWalk(one.body, y, { ...w, left: one.scope })
+        }
+        case 'term':
+            return termRow(one.t, y, w)
+    }
+}
+
+/** The rows of a left operand that is a constructor. */
+const termRow = (x: Term, y: Term, w: Walk): boolean => {
+    switch (x.kind) {
+        case 'never':
+            return true
+        // the admission is a function, or every value: disjoint from the bottom alone
+        case 'held':
+        case 'legacy':
+        case 'opaq':
+        case 'lazy':
+            return rightRows(() => false, y, w)
+        // **A refinement is disjoint where its inner term is**, or where its data predicate and a
+        // data predicate of the partner hold together nowhere. The second reading needs a closed
+        // held-free inner term on each side, which reads each attribute as the top reads it
+        case 'refine':
+            return splitRight(
+                (other, v) =>
+                    disjointWalk(x.inner, other, v) ||
+                    (x.q.kind === 'members' &&
+                        !spells(x.inner, v.left.inside, ['held', 'legacy']) &&
+                        predicateApart(x.q, other, v)),
+                y,
+                w,
             )
         case 'union':
-            return most(t.options)
-        case 'refine':
-            return on(t.inner)
-        case 'held':
-            return most([t.inner, t.outer]) === 0 ? 0 : 3
+            return x.options.every((option) => disjointWalk(option, y, w))
+        case 'set':
+            return rightRows(
+                (other, v) =>
+                    other.kind === 'term' &&
+                    (other.t.kind === 'set'
+                        ? !spells(x.elem, v.left.inside, []) &&
+                          !spells(other.t.elem, v.right.inside, []) &&
+                          disjointWalk(x.elem, other.t.elem, v)
+                        : otherShape(other.t, ['prim', 'list', 'object'])),
+                y,
+                w,
+            )
+        case 'list':
+            return rightRows(
+                (other, v) =>
+                    other.kind === 'term' &&
+                    (other.t.kind === 'list'
+                        ? listsApart(x, other.t, v)
+                        : otherShape(other.t, ['prim', 'set', 'object'])),
+                y,
+                w,
+            )
+        case 'object':
+            return rightRows(
+                (other, v) =>
+                    other.kind === 'term' &&
+                    (other.t.kind === 'object'
+                        ? bodiesApart(x.body, other.t.body, v)
+                        : otherShape(other.t, ['prim', 'set', 'list'])),
+                y,
+                w,
+            )
         default:
-            return 0
+            return rightRows(
+                (other) =>
+                    other.kind === 'term' &&
+                    (isPrim(other.t)
+                        ? primsApart(x, other.t)
+                        : otherShape(other.t, ['set', 'list', 'object'])),
+                y,
+                w,
+            )
     }
 }
+
+/**
+ * **Every row that reads the right operand alone**, the model's `disjSRight`. The bottom admits
+ * nothing. A union is disjoint from the left operand where each option is. A recursive term
+ * unfolds, and its binder pairs with nothing. A refinement admits a part of what its inner term
+ * admits, so the inner term bounds it. `fam` answers every other spelling.
+ */
+const rightRows = (
+    fam: (other: Exclude<Seen, { kind: 'mu' }>, w: Walk) => boolean,
+    y: Term,
+    w: Walk,
+): boolean => {
+    const other = see(y, w.right)
+    if (other.kind === 'mu')
+        return rightRows(fam, other.body, { ...w, right: other.scope })
+    if (other.kind === 'term')
+        switch (other.t.kind) {
+            case 'never':
+                return true
+            case 'refine':
+                return rightRows(fam, other.t.inner, w)
+            case 'union':
+                return other.t.options.every((option) =>
+                    rightRows(fam, option, w),
+                )
+        }
+    return fam(other, w)
+}
+
+/**
+ * **The bottom and a union of the right operand, and nothing else**, the model's `splitR`. The
+ * refinement row hands each option whole to `fam`.
+ */
+const splitRight = (
+    fam: (other: Term, w: Walk) => boolean,
+    y: Term,
+    w: Walk,
+): boolean => {
+    const other = see(y, w.right)
+    if (other.kind === 'term' && other.t.kind === 'never') return true
+    if (other.kind === 'term' && other.t.kind === 'union')
+        return other.t.options.every((option) => splitRight(fam, option, w))
+    return fam(y, w)
+}
+
+/**
+ * **A data predicate that no value of the right refinement chain satisfies with `q`**, the
+ * model's `predApart`. A refinement of the chain counts only over a closed held-free inner term.
+ */
+const predicateApart = (q: Predicate, y: Term, w: Walk): boolean => {
+    const other = see(y, w.right)
+    if (other.kind !== 'term' || other.t.kind !== 'refine') return false
+    return (
+        (!spells(other.t.inner, w.right.inside, ['held', 'legacy']) &&
+            predicatesApart(q, other.t.q)) ||
+        predicateApart(q, other.t.inner, w)
+    )
+}
+
+/**
+ * **Two predicates that hold together nowhere**: the model's `Pred.meetM` at the empty predicate.
+ * Two `members` sets at two bases share no value, and at one base they share a value where they
+ * share an alternative. A `closure` is not data.
+ */
+const predicatesApart = (q: Predicate, p: Predicate): boolean =>
+    q.kind === 'members' &&
+    p.kind === 'members' &&
+    (q.literal.base !== p.literal.base ||
+        !q.literal.ls.some((one: LiteralValue) =>
+            p.literal.ls.some((other: LiteralValue) => sameLiteral(one, other)),
+        ))
+
+/** The primitives: the ground bases and the literals. */
+const isPrim = (t: Term): boolean =>
+    t.kind === 'string' ||
+    t.kind === 'number' ||
+    t.kind === 'boolean' ||
+    t.kind === 'binary' ||
+    t.kind === 'null' ||
+    t.kind === 'literal'
+
+/**
+ * **A constructor of another shape class**, which shares no value with the left former: the
+ * classes of two formers are disjoint, because the carrier is a coproduct (`Shapes`).
+ */
+const otherShape = (
+    t: Term,
+    classes: readonly ('prim' | 'set' | 'list' | 'object')[],
+): boolean =>
+    (isPrim(t) && classes.includes('prim')) ||
+    ((t.kind === 'set' || t.kind === 'list' || t.kind === 'object') &&
+        classes.includes(t.kind))
+
+/**
+ * **Two primitives apart**, the model's `Ground.meet` at `none`: two bases of different kinds,
+ * a literal beside another base, and two literals of different values.
+ */
+const primsApart = (x: Term, y: Term): boolean => {
+    const base = (t: Term) => (t.kind === 'literal' ? t.base : t.kind)
+    if (base(x) !== base(y)) return true
+    return (
+        x.kind === 'literal' && y.kind === 'literal' && !sameLiteral(x.v, y.v)
+    )
+}
+
+/**
+ * **The row a list shape assigns to `n` positions**: the prefix, the spread as often as the middle
+ * needs, then the suffix. `undefined` is a length the shape refuses.
+ */
+const rowOf = (
+    t: Extract<Term, { kind: 'list' }>,
+    n: number,
+): readonly Term[] | undefined => {
+    const declared = t.pre.length + t.suf.length
+    if (t.spread === undefined)
+        return n === declared ? [...t.pre, ...t.suf] : undefined
+    if (n < declared) return undefined
+    const spread = t.spread
+    return [
+        ...t.pre,
+        ...Array.from({ length: n - declared }, () => spread),
+        ...t.suf,
+    ]
+}
+
+/**
+ * **One side dominates the other**, in the prefix and in the suffix at once: the model's
+ * `dominates`. Where both shapes spread and one dominates, every common length re-spreads the row
+ * at `max p1 p2 + max s1 s2` (`dominates_max`).
+ */
+const dominates = (p1: number, s1: number, p2: number, s2: number): boolean =>
+    (p2 <= p1 && s2 <= s1) || (p1 <= p2 && s1 <= s2)
+
+/** Some position of two aligned rows is disjoint, the left row's term on the left. */
+const rowsApart = (a: readonly Term[], b: readonly Term[], w: Walk): boolean =>
+    a.some((one, at) => disjointWalk(one, b[at] as Term, w))
+
+/**
+ * **Two list shapes apart**, the model's `listDisjRow`. Two values of different lengths differ,
+ * so the shapes are disjoint where one position of each common length is. **Either side without
+ * a spread** fixes the one length, and a length the other side refuses is disjoint outright.
+ * **Both spreading**: where one side dominates, one disjoint position of the row at
+ * `max p1 p2 + max s1 s2` decides. Where no side dominates, the test answers `false`.
+ */
+const listsApart = (
+    x: Extract<Term, { kind: 'list' }>,
+    y: Extract<Term, { kind: 'list' }>,
+    w: Walk,
+): boolean => {
+    if (x.spread !== undefined && y.spread !== undefined) {
+        if (!dominates(x.pre.length, x.suf.length, y.pre.length, y.suf.length))
+            return false
+        const n =
+            Math.max(x.pre.length, y.pre.length) +
+            Math.max(x.suf.length, y.suf.length)
+        const rows = rowOf(x, n)
+        const other = rowOf(y, n)
+        return (
+            rows !== undefined &&
+            other !== undefined &&
+            rowsApart(rows, other, w)
+        )
+    }
+    const fixed = x.spread === undefined ? x : y
+    const n = fixed.pre.length + fixed.suf.length
+    const rows = rowOf(x, n)
+    const other = rowOf(y, n)
+    return (
+        rows === undefined || other === undefined || rowsApart(rows, other, w)
+    )
+}
+
+/**
+ * **Two fields at one name apart**, the model's `ObjectSlot.disjoint`: one field requires the
+ * name, and the terms are disjoint. Two fields that both admit a map without the name share it.
+ * A `withLegacyRead` field reads a map without the name, so only `req` requires the name.
+ * `undefinable` has no model mark, and the host keeps no row for it.
+ */
+const fieldsApart = (a: Field, b: Field, w: Walk): boolean =>
+    a.mark !== 'undefinable' &&
+    b.mark !== 'undefinable' &&
+    (a.mark === 'req' || b.mark === 'req') &&
+    disjointWalk(a.t, b.t, w)
+
+/**
+ * **Two bodies apart at one name**, the model's `famObjD`. A body is a total function from the
+ * key space to a field: a declared name holds its field, and an undeclared name holds `optional`
+ * of the open block, which is `never` where the body is closed. So two bodies share no map where
+ * one name of either body holds two fields apart.
+ */
+const bodiesApart = (a: Body, b: Body, w: Walk): boolean =>
+    Object.entries(a.fields).some(([name, field]) =>
+        fieldsApart(
+            field,
+            b.fields[name] ?? { mark: 'optional', t: b.rest ?? never },
+            w,
+        ),
+    ) ||
+    Object.entries(b.fields).some(
+        ([name, field]) =>
+            !(name in a.fields) &&
+            field.mark === 'req' &&
+            (a.rest === undefined || disjointWalk(a.rest, field.t, w)),
+    )
 
 /**
  * **Whether the spelling of a term at a scope reads a variable, or holds a subterm of one of these
@@ -1744,400 +1832,3 @@ const spells = (
 }
 
 const never: Term = { kind: 'never' }
-
-const opaqueToReader = (t: Term): boolean =>
-    t.kind === 'held' || t.kind === 'legacy'
-
-const groundBase = (t: Term): boolean =>
-    t.kind === 'string' ||
-    t.kind === 'number' ||
-    t.kind === 'boolean' ||
-    t.kind === 'binary' ||
-    t.kind === 'null'
-
-/**
- * **A refinement over the bottom is the bottom, and two refinements over one term meet.** The
- * model's `Term.refineOf`: a second refinement does not stack where the two predicates meet, and
- * where no value satisfies both the result is the bottom.
- */
-const refineOf = (z: Term, q: Predicate): Term => {
-    if (z.kind === 'never') return never
-    if (z.kind !== 'refine') return { kind: 'refine', inner: z, q }
-    const met = meetPredicates(z.q, q)
-    return met === undefined
-        ? { kind: 'refine', inner: z, q }
-        : met === null
-          ? never
-          : { kind: 'refine', inner: z.inner, q: met }
-}
-
-/**
- * **Two predicates, met** — the model's `Pred.meetM`. `undefined` is a refusal to combine,
- * `null` says that no value satisfies both, and a predicate is the combined one. `members` meets
- * `members` at any two bases. A `closure` refuses.
- */
-const meetPredicates = (
-    q: Predicate,
-    p: Predicate,
-): Predicate | null | undefined => {
-    if (q.kind === 'closure' || p.kind === 'closure') return undefined
-    const met = meetAlternatives(q.literal, p.literal)
-    return met === null ? null : { kind: 'members', literal: met }
-}
-
-/** Two alternative sets: the alternatives of the first that the second holds, or nothing. */
-const meetAlternatives = (
-    a: Alternatives,
-    b: Alternatives,
-): Alternatives | null => {
-    if (a.base !== b.base) return null
-    switch (a.base) {
-        case 'string': {
-            const ls = kept(a.ls, b.ls)
-            return ls ? { kind: 'alternatives', base: 'string', ls } : null
-        }
-        case 'number': {
-            const ls = kept(a.ls, b.ls)
-            return ls ? { kind: 'alternatives', base: 'number', ls } : null
-        }
-        case 'boolean': {
-            const ls = kept(a.ls, b.ls)
-            return ls ? { kind: 'alternatives', base: 'boolean', ls } : null
-        }
-        case 'binary': {
-            const ls = kept(a.ls, b.ls)
-            return ls ? { kind: 'alternatives', base: 'binary', ls } : null
-        }
-    }
-}
-
-/** The members of `ls` that `other` holds, in order, or nothing where none is left. */
-const kept = <A extends LiteralValue>(
-    ls: NonEmpty<A>,
-    other: readonly LiteralValue[],
-): NonEmpty<A> | undefined => {
-    const [head, ...tail] = ls.filter((one) =>
-        other.some((candidate) => sameLiteral(one, candidate)),
-    )
-    return head === undefined ? undefined : [head, ...tail]
-}
-
-/**
- * **A list with a declared position at the bottom is the bottom.**
- *
- * Every value the list admits fills each declared position, so one position holding nothing empties
- * the list. The *spread* is not such a position: a value of exactly the declared length omits every
- * spread position, so a spread at the bottom reads "exactly the declared positions" rather than
- * "nothing". The prefix and the suffix are declared; the spread is not. `Term.listOf` is the
- * model's name for this normalisation, and every list the meet builds goes through it.
- */
-const listOf = (
-    pre: readonly Term[],
-    spread: Term | undefined,
-    suf: readonly Term[],
-): Term =>
-    pre.some((t) => t.kind === 'never') || suf.some((t) => t.kind === 'never')
-        ? never
-        : spread === undefined
-          ? { kind: 'list', pre, suf }
-          : { kind: 'list', pre, spread, suf }
-
-/** A union of what survived a distribution: nothing is the bottom, and one survivor is itself. */
-const ofOptions = (ts: readonly Term[]): Term =>
-    ts.length === 0
-        ? never
-        : ts.length === 1
-          ? (ts[0] as Term)
-          : { kind: 'union', options: ts }
-
-const overRefinement = (
-    inner: Term,
-    q: Predicate,
-    other: Term,
-    w: Walk,
-): Term | undefined => {
-    const z = meetWalk(inner, other, w)
-    if (z === undefined) return undefined
-    // a refinement admits a part of what its inner term admits, so an inner meet at the bottom is
-    // the bottom whatever the predicate is. A closure is not data, so any other meet refuses
-    if (q.kind === 'closure') return z.kind === 'never' ? never : undefined
-    return refineOf(z, q)
-}
-
-/**
- * **The meet at a union: the survivors, with no certificate.** Each survivor admits a value where
- * its option and the other term both admit the value. So a value that one option of the union
- * admits is a value that one survivor at most admits, and the model's union row asks nothing more.
- *
- * **A certificate here is a cycle.** The certificate of a union is {@link separable}, which reads
- * this meet. A union that recurses through its own options then asks the certificate of the
- * survivors, the certificate meets the same union again, and the walk does not end.
- */
-const distribute = (
-    options: readonly Term[],
-    other: Term,
-    w: Walk,
-): Term | undefined => {
-    const met: Term[] = []
-    for (const option of options) {
-        const z = meetWalk(option, other, w)
-        if (z === undefined) return undefined
-        met.push(z)
-    }
-    return ofOptions(met.filter((z) => z.kind !== 'never'))
-}
-
-/**
- * **A literal against a base is the literal at that base, and the bottom at any other.**
- *
- * There is no pair left that shares values and refuses. `string` and `decimal` were that pair
- * while `decimal` held text, and `number` and `decimal` were the pair that shared a member;
- * `decimal` is an adapter now, so every base is disjoint from every other on both halves and the
- * bottom is right at each cross.
- */
-const literalAgainstBase = (lit: Literal, base: Term): Term | undefined => {
-    switch (base.kind) {
-        case 'string':
-            return lit.base === 'string' ? lit : never
-        case 'number':
-            return lit.base === 'number' ? lit : never
-        case 'boolean':
-            return lit.base === 'boolean' ? lit : never
-        case 'binary':
-            return lit.base === 'binary' ? lit : never
-        // **`opaque` is not "any other base".** The model enumerates the literal rows against the
-        // ground bases and nothing else, so a literal against `opaq` falls through them to the
-        // `opaq` row, which refuses. Answering the bottom here would claim the two share no value
-        // while `opaque` admits every value the literal does
-        case 'opaq':
-            return undefined
-        default:
-            return never
-    }
-}
-
-/**
- * **Two literals: the same value, or the bottom**, as the model's `Ground.meetLit`. A `number`
- * literal is a {@link DynamoNumber}, normalised at construction, so its digits are the numeral the
- * emitter prints and the equality is the model's.
- */
-const meetLiterals = (x: Literal, y: Literal): Term | undefined => {
-    if (x.base !== y.base) return never
-    if (x.base === 'number' && y.base === 'number')
-        return x.v.equals(y.v) ? x : never
-    const other = (y as { readonly v: unknown }).v
-    return sameValue(x.v, other) ? x : never
-}
-
-/** Two literal values, compared the way the base compares them: bytes for `binary`, `===` else. */
-const sameValue = (one: unknown, other: unknown): boolean =>
-    one instanceof Uint8Array
-        ? other instanceof Uint8Array &&
-          one.length === other.length &&
-          one.every((byte, at) => byte === other[at])
-        : one === other
-
-const opaqueAgainst = (other: Term): Term | undefined => {
-    switch (other.kind) {
-        case 'string':
-        case 'boolean':
-        case 'binary':
-        case 'null':
-        case 'number':
-            return other
-        default:
-            return undefined
-    }
-}
-
-/**
- * **The row a list shape assigns to `n` positions**: the prefix, the spread as often as the middle
- * needs, then the suffix. `undefined` is a length the shape refuses.
- */
-const rowOf = (
-    t: Extract<Term, { kind: 'list' }>,
-    n: number,
-): readonly Term[] | undefined => {
-    const declared = t.pre.length + t.suf.length
-    if (t.spread === undefined)
-        return n === declared ? [...t.pre, ...t.suf] : undefined
-    if (n < declared) return undefined
-    const spread = t.spread
-    return [
-        ...t.pre,
-        ...Array.from({ length: n - declared }, () => spread),
-        ...t.suf,
-    ]
-}
-
-/** Two rows met position for position, or nothing where a position refuses. */
-const rowMeet = (
-    a: readonly Term[],
-    b: readonly Term[],
-    w: Walk,
-): readonly Term[] | undefined => {
-    const row: Term[] = []
-    for (const [at, one] of a.entries()) {
-        const z = meetWalk(one, b[at] as Term, w)
-        if (z === undefined) return undefined
-        row.push(z)
-    }
-    return row
-}
-
-/**
- * **One side dominates the other**, in the prefix and in the suffix at once.
- *
- * This is the whole of the list meet's refusal, and it is a fact about lengths alone. With both
- * shapes spreading, the meet admits a value of length `n` exactly when `n >= max (p1+s1) (p2+s2)`,
- * while the widest list the answer can spell admits `n >= max p1 p2 + max s1 s2`. The second is
- * never smaller, and the two are equal exactly when one side's prefix and suffix are both at least
- * the other's. Elsewhere a window of lengths sits in the intersection that no single list states,
- * because a list carries one prefix and one suffix and the window needs two shapes. There the meet
- * refuses. `dominates` and `dominates_max` are the model's pair.
- */
-const dominates = (p1: number, s1: number, p2: number, s2: number): boolean =>
-    (p2 <= p1 && s2 <= s1) || (p1 <= p2 && s1 <= s2)
-
-/**
- * **Two list shapes met**, which is `listMeetRow` in the model.
- *
- * Three branches, and only the first can refuse. **Both spreading**: the answer is the row at
- * `max p1 p2 + max s1 s2`, split back into that prefix and that suffix, with the spreads met.
- * **Either side without a spread**: that side's arity is fixed, so the answer *flattens* to one
- * prefix of exactly that length with no spread and no suffix; a length the other side cannot reach
- * is the empty intersection, which is the bottom. Flattening rather than keeping the longer prefix
- * and the longer suffix is what the fixed arity needs: the two overhangs can collide, and at a
- * fixed arity there is no spread to meet them against.
- *
- * The rows are zipped left operand first, because every cell of the meet keeps the left operand on
- * the left and two refinements nest in argument order.
- */
-const meetLists = (
-    x: Extract<Term, { kind: 'list' }>,
-    y: Extract<Term, { kind: 'list' }>,
-    w: Walk,
-): Term | undefined => {
-    if (x.spread !== undefined && y.spread !== undefined) {
-        const p = Math.max(x.pre.length, y.pre.length)
-        const s = Math.max(x.suf.length, y.suf.length)
-        if (!dominates(x.pre.length, x.suf.length, y.pre.length, y.suf.length))
-            return undefined
-        const spread = meetWalk(x.spread, y.spread, w)
-        if (spread === undefined) return undefined
-        const rows = rowOf(x, p + s)
-        const other = rowOf(y, p + s)
-        // unreachable under dominance, where `p + s` is at least each side's declared length
-        if (rows === undefined || other === undefined) return never
-        const row = rowMeet(rows, other, w)
-        return row === undefined
-            ? undefined
-            : listOf(row.slice(0, p), spread, row.slice(p))
-    }
-    // the side without a spread fixes the arity, and a shape that refuses that length shares no
-    // value with it
-    const fixed = x.spread === undefined ? x : y
-    const n = fixed.pre.length + fixed.suf.length
-    const rows = rowOf(x, n)
-    const other = rowOf(y, n)
-    if (rows === undefined || other === undefined) return never
-    const row = rowMeet(rows, other, w)
-    return row === undefined ? undefined : listOf(row, undefined, [])
-}
-
-/**
- * **Two fields at one name: the meet of the terms, at the stronger mark.**
- *
- * A mark carries two presence bits, whether the name must be present when the object is written and
- * whether it must be present when it is read. `optional` forces neither, `withLegacyRead` forces the write
- * alone, and `req` forces both, so the three are a chain and the meet takes the stronger.
- *
- * **`optional` against `withLegacyRead` refuses, and the presence bits are not why.** Both admit a map
- * omitting the name. They part on what they *read* there: `optional` reads a map without it and
- * `withLegacyRead` reads a map carrying the stand-in, so the pair shares attributes it reads two ways.
- *
- * Two `withLegacyRead` fields refuse because the model has no equality on its stand-ins, and
- * `undefinable` refuses because the model's `Field` has no such mark. Both are refusals this
- * library inherits rather than rules it states.
- */
-const meetFields = (a: Field, b: Field, w: Walk): Field | undefined => {
-    if (a.mark === 'undefinable' || b.mark === 'undefinable') return undefined
-    if (a.mark === 'optional' && b.mark === 'optional')
-        return mark(meetWalk(a.t, b.t, w), 'optional')
-    if (a.mark === 'fallback' || b.mark === 'fallback')
-        return a.mark === 'req' || b.mark === 'req'
-            ? mark(meetWalk(a.t, b.t, w), 'req')
-            : undefined
-    return mark(meetWalk(a.t, b.t, w), 'req')
-}
-
-const mark = (
-    t: Term | undefined,
-    of: 'req' | 'optional',
-): Field | undefined => (t === undefined ? undefined : { mark: of, t })
-
-/** Whether a field admits nothing at a name that must be present. */
-const isBottomField = (field: Field): boolean =>
-    field.mark !== 'optional' && field.t.kind === 'never'
-
-/** Whether every `withLegacyRead` name one body declares is a name the other declares too. */
-const fbShared = (a: Body, b: Body): boolean =>
-    Object.entries(a.fields).every(
-        ([name, field]) => field.mark !== 'fallback' || name in b.fields,
-    )
-
-/**
- * **Two bodies, met pointwise**, as `objObj` states it.
- *
- * A body is a total function from the key space to a field: a declared name holds its field, and
- * an undeclared name holds `optional` of the open block, which is `never` where the body is closed.
- * So every name of either body meets at its two fields, a name only the right body declares meets
- * the left body's block, and the blocks meet as the default. A field at the bottom decides before a
- * field that refuses, because a product is the bottom when any factor is.
- *
- * **The normal form drops a name that states the default**, where the default is `never`: in a
- * closed body `optional never` is what an undeclared name already holds. An open default has no
- * equality to test, so there every name is kept as written.
- *
- * A `withLegacyRead` name the other body does not declare refuses. The model's field has no such
- * mark, so the host keeps the refusal it inherits.
- */
-const meetBodies = (a: Body, b: Body, w: Walk): Term | undefined => {
-    if (!fbShared(a, b) || !fbShared(b, a)) return undefined
-    const aBlock = a.rest ?? never
-    const bBlock = b.rest ?? never
-    const met: [string, Field | undefined][] = [
-        ...Object.entries(a.fields).map(
-            ([name, field]): [string, Field | undefined] => [
-                name,
-                meetFields(
-                    field,
-                    b.fields[name] ?? { mark: 'optional', t: bBlock },
-                    w,
-                ),
-            ],
-        ),
-        ...Object.entries(b.fields)
-            .filter(([name]) => !(name in a.fields))
-            .map(([name, field]): [string, Field | undefined] => [
-                name,
-                meetFields({ mark: 'optional', t: aBlock }, field, w),
-            ]),
-    ]
-    if (met.some(([, field]) => field !== undefined && isBottomField(field)))
-        return never
-    const block = meetWalk(aBlock, bBlock, w)
-    if (block === undefined) return undefined
-    const closed = block.kind === 'never'
-    const fields: Record<string, Field> = {}
-    for (const [name, field] of met) {
-        if (field === undefined) return undefined
-        if (closed && field.mark === 'optional' && field.t.kind === 'never')
-            continue
-        fields[name] = field
-    }
-    return {
-        kind: 'object',
-        body: closed ? { fields } : { fields, rest: block },
-    }
-}

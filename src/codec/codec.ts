@@ -3878,7 +3878,7 @@ const dissect = <T extends Record<string, unknown>>(
     // **every member's assignment, read off the member's own body, and no two alike.** Both rules
     // are the index's, not the union's: the one-key refusals `discriminatedUnion` used to spell
     // inline are these two at one key. The union's own gate does not replace them, because a
-    // duplicated index key is a different fact from a non-empty structural meet, and the index is
+    // duplicated index key is a different fact from two members that are not disjoint, and the index is
     // what needs it.
     const members = membersOf(
         ks,

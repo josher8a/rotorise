@@ -64,7 +64,15 @@ import type {
     Term,
     Field as TermField,
 } from './term'
-import { below, bindersOf, force, heldFree, type Scope } from './term'
+import {
+    below,
+    bindersOf,
+    disjoint,
+    force,
+    heldFree,
+    type Scope,
+    viewsDisjoint,
+} from './term'
 import { shapeOf } from './value'
 
 /**
@@ -513,7 +521,7 @@ const leanBinders = (bound: Bound): string => {
  *   three internally. A declaration verdict passes a {@link Bound}, and there a caller's closure
  *   and a caller's adapter print as variables that the theorem binds.
  * - **A thunk that throws is not here.** It names a codec not yet declared, and it prints as a
- *   variable that no binder of the term binds, as the host's meet reads it.
+ *   variable that no binder of the term binds, as the host's disjointness test reads it.
  *
  * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
  * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
@@ -1153,6 +1161,91 @@ export type ReadVerdict = {
     readonly codec: AnyCodec
     readonly attribute: AttributeValue
 }
+
+/**
+ * A pair of corpus terms, put to the model's disjointness test with the answers `src/` computes.
+ *
+ * The separations bridge checks the host's verdict on a union. This one checks the test itself,
+ * both ways, at every pair: `Calculus.Alg.Term.disjoint` and {@link disjoint} are the *same
+ * function* stated twice, so a disagreement in either direction is a defect on one side. The test
+ * of the raw terms and the test of the two pairs of views are asserted apart, because the
+ * certificate reads the views and a raw `held` is disjoint from the bottom alone.
+ */
+export type DisjointPair = {
+    /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
+    readonly name: string
+    readonly left: AnyCodec
+    readonly right: AnyCodec
+}
+
+/**
+ * One pair, as a Lean `theorem`: the two terms, and the two answers this library gives.
+ *
+ * `false` is asserted as much as `true` is. `false` states nothing about the pair, but a port
+ * that certified a pair the model declines would fail here on that pair.
+ */
+export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
+    const one = left.def
+    const other = right.def
+    if ('mark' in one || 'mark' in other) {
+        throw new LeanUnemittable(
+            name,
+            'a §4 *field*, not a term — no `Term` position accepts one, so the test has no pair to state',
+        )
+    }
+    const views = viewsDisjoint(one, other)
+    if (views === undefined) {
+        throw new LeanUnemittable(
+            name,
+            'a term with no views: a `withLegacyRead` with a `held` below it',
+        )
+    }
+    // a caller's function is a variable of the theorem, and the kernel's `decide` refuses a goal
+    // with a free variable, so a quantified pair reduces by `rfl`
+    const bound: Bound = { closures: new Map(), adapters: new Map() }
+    const l = leanTermOf(left, name, bound)
+    const r = leanTermOf(right, name, bound)
+    const binders = leanBinders(bound)
+    return [
+        `/-- \`${name}\` — the answers \`src/\` computes, put to the model -/`,
+        `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
+        `    Alg.Term.disjoint pair0 (${l})`,
+        `        (${r}) = ${disjoint(one, other)} ∧`,
+        `      viewsDisjoint (${l})`,
+        `        (${r}) = ${views} := ${binders === '' ? 'by decide' : '⟨rfl, rfl⟩'}`,
+    ].join('\n')
+}
+
+/**
+ * The disjointness pairs as a module of their own.
+ *
+ * Generated at gate time and elaborated, never committed.
+ */
+export const leanDisjointModule = (pairs: readonly DisjointPair[]): string =>
+    `import Calculus.Dynamo.Analysis.Meet
+import Calculus.Dynamo.Lang.Store
+
+/-!
+# Disjointness, proposed to the model
+
+**Generated — do not edit.** One theorem per pair of corpus terms, asserting that
+\`Calculus.Alg.Term.disjoint\` answers what \`src/\`'s \`disjoint\` answered on the two terms, and
+that \`Calculus.viewsDisjoint\` answers what \`src/\`'s \`viewsDisjoint\` answered on the two pairs of
+views. The two sides are one function written twice, so this runs in both directions.
+-/
+
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
+set_option linter.style.nameCheck false
+
+namespace Calculus
+
+${pairs.map(leanDisjoint).join('\n\n')}
+
+end Calculus
+`
 
 /** One read verdict, as a Lean `theorem`; `src/`'s answer is taken by running `decode`. */
 export const leanReadVerdict = (one: ReadVerdict): string => {
