@@ -283,7 +283,7 @@ theorem valPresentB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) (names : 
 /-- Two tables of one shape guard the read side alike. -/
 theorem reqPresentB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) (names : Finset String) :
     reqPresentB ⟨keys, F₁⟩ names = reqPresentB ⟨keys, F₂⟩ names :=
-  decide_eq_decide.mpr (forall_congr' fun k => by rw [(hF k).reqPresentAt names k.1])
+  decide_eq_decide.mpr (forall_congr' fun k => by rw [(hF k).valPresentAt names k.1])
 
 /-- Two tables of one shape filter the names alike. -/
 theorem keepB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) :

@@ -57,10 +57,6 @@ spends on the filter. -/
 /-- An attribute-side row, once the subterms' rows are known. -/
 abbrev AP := Attr → Bool
 
-/- `reqPresentT` is the generic guard of `Calculus.Lang.ExactA`, and no caller reaches it by
-   field notation. -/
-export Alg (reqPresentT)
-
 /-- What the literal codec **reads**, exactly.
 
     Each row is membership. `N` is carried exactly, so the `number` row compares the payload
@@ -219,7 +215,7 @@ variable (t : Term) (ts : List Term)
     (wild : Option Term) : AdmABody (.mk fields fld wild) = fun a =>
       match a with
       | .m keys g =>
-          reqPresentT fields fld keys &&
+          valPresentT fields fld keys &&
           objAdmV ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) keys g
       | _ => false := by
   funext a; cases a <;> rfl

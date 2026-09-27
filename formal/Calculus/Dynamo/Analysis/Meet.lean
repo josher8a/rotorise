@@ -525,8 +525,8 @@ theorem AdmA_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → Obj
   funext a
   cases a with
   | m keys g =>
-      show (reqPresentT D f keys && objAdmV _ none keys g) =
-        (reqPresentT D f keys && objAdmV _ (some (fun _ => false)) keys g)
+      show (valPresentT D f keys && objAdmV _ none keys g) =
+        (valPresentT D f keys && objAdmV _ (some (fun _ => false)) keys g)
       rw [objAdmV_none_never]
   | _ => rfl
 
@@ -1724,9 +1724,9 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
   | .object (.mk fs f w), ρ, ρ', he, hs => fun a h => by
       cases a with
       | m keys g =>
-        have h : (reqPresentT fs f keys &&
+        have h : (valPresentT fs f keys &&
             objAdmV ⟨fs, fun k => Alg.AdmAField (f k) ρ⟩ (Alg.AdmAWild w ρ) keys g) = true := h
-        show (reqPresentT fs (fun k => readViewS (f k)) keys &&
+        show (valPresentT fs (fun k => readViewS (f k)) keys &&
             objAdmV ⟨fs, fun k => Alg.AdmAField (readViewS (f k)) ρ'⟩
               (Alg.AdmAWild (readViewO w) ρ') keys g) = true
         rw [Bool.and_eq_true] at h ⊢

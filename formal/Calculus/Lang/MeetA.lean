@@ -56,7 +56,7 @@ theorem AdmA_list_of_none {pre suf : List (Term S)} {sp : Option (Term S)} {a : 
 
 /-- A body reads an attribute that the map former reads by two tests. -/
 theorem AdmABody_of_out {b : Body S} {a : Sem.A S} {m : MapOf (Sem.A S)} (h : mapOutA a = some m) :
-    AdmABody b ρ a = (reqPresentT b.fields b.at m.keys &&
+    AdmABody b ρ a = (valPresentT b.fields b.at m.keys &&
       objAdmV ⟨b.fields, fun k => AdmAField (b.at k) ρ⟩ (AdmAWild b.wild ρ) m.keys m.get) := by
   unfold mapOutA at h
   cases b with
@@ -119,23 +119,6 @@ theorem refineReads_none {t : Term S} {q : S.V → Bool} {a : Sem.A S}
 /-- A term reads an attribute exactly where its codec reads it. -/
 theorem isSome_p_eq_AdmA (t : Term S) (a : Sem.A S) : ((denote t ρ).p a).isSome = AdmA t ρ a :=
   (AdmA_eq_isSome t ρ a).symm
-
-omit [Sem S] [PrimAdm S] [PrimAdmA S] in
-/-- `reqPresentT` in the form the object row uses: a declared name that must be read is
-    present. -/
-theorem reqPresentT_req (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
-    (keys : Finset String) :
-    reqPresentT fields fld keys
-      = decide (∀ k : {k // k ∈ fields}, ObjectSlot.isReq (fld k) = true → k.1 ∈ keys) := by
-  unfold reqPresentT
-  refine decide_eq_decide.mpr ⟨fun hh k hreq => ?_, fun hh k => ?_⟩
-  · have hk := hh k
-    cases hf : fld k with
-    | req t => rw [hf] at hk; exact of_decide_eq_true hk
-    | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReq])
-  · cases hf : fld k with
-    | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
-    | optional t => rfl
 
 /-- Every row that answers the bottom owes only its first half: the second is vacuous, because
     the first says no attribute is read by both factors. -/
@@ -1463,7 +1446,7 @@ theorem AdmABody_map_slots (c : Body S) {x : Sem.A S} {m : MapOf (Sem.A S)}
     AdmABody c ρ x = true ↔
       (∀ k, ObjectSlot.isReq (c.slotAt k) = true → k ∈ m.keys) ∧
       ∀ k : {k // k ∈ m.keys}, AdmAField (c.slotAt k.1) ρ (m.get k) = true := by
-  rw [AdmABody_of_out hm, reqPresentT_req, Bool.and_eq_true, reqs_slotAt]
+  rw [AdmABody_of_out hm, valPresentT_req, Bool.and_eq_true, reqs_slotAt]
   apply and_congr Iff.rfl
   unfold objAdmV; rw [decide_eq_true_iff]
   refine forall_congr' fun k => ?_
@@ -1549,7 +1532,7 @@ theorem reqPresentB_of_AdmABody {c : Body S} {x : Sem.A S} {m : MapOf (Sem.A S)}
     (hm : mapOutA x = some m) (h : AdmABody c ρ x = true) :
     reqPresentB ⟨c.fields, fun k => fieldSem (c.at k) ρ⟩ m.keys = true := by
   rw [AdmABody_of_out hm, Bool.and_eq_true] at h
-  rw [← reqPresentT_eq]; exact h.1
+  rw [← valPresentT_eq_reqPresentB]; exact h.1
 
 /-- **Two objects conjoined at every name, read side**: the rows conjoin, and where both
     factors read a map the meet reads it as each of them does. -/

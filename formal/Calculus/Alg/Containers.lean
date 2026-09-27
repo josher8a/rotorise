@@ -79,7 +79,7 @@ def valPresentB (sems : MapOf (FieldSem V A M)) (names : Finset String) : Bool :
 
 /-- Every `req` name present on the stored side. -/
 def reqPresentB (sems : MapOf (FieldSem V A M)) (names : Finset String) : Bool :=
-  decide (∀ k : {k // k ∈ sems.1}, reqPresentAt names k.1 (sems.2 k) = true)
+  decide (∀ k : {k // k ∈ sems.1}, valPresentAt names k.1 (sems.2 k) = true)
 
 /-- The name filter: `drop` keeps declared names only; the others keep everything.
     A filter, never a traversal mode (§4). -/
@@ -218,8 +218,8 @@ theorem reqPresentB_of {names : Finset String}
     reqPresentB sems names = true := by
   refine decide_eq_true fun k => ?_
   cases hs : sems.2 k with
-  | req c => simpa [reqPresentAt, hs] using h k.1 c (by rw [MapOf.at_of_mem k, hs])
-  | opt c => simp [reqPresentAt]
+  | req c => simpa [valPresentAt, hs] using h k.1 c (by rw [MapOf.at_of_mem k, hs])
+  | opt c => simp [valPresentAt]
 
 /-- The held set of an entry follows from the carrier of its codec, on the write step. -/
 theorem entry_domE' (hs : ∀ k, Carrier (sems.2 k).codec) (hrc : ∀ c ∈ rc?, Carrier c)
