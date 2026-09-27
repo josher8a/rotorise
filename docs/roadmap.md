@@ -48,8 +48,8 @@ statement exists, the re-founding pays the whole term language for a guarantee t
 already give.
 
 **What names the guarantee instead today.** `PairwiseCompat`, one `Prop` over the option list.
-`pairwiseCompat_of_compatPair` discharges it through the decision, `pairwiseCompat_of_sub` through a
-common bound, and `pairwiseCompat_of_separated` with `separated_of_unionOk` through the certificate.
+`pairwiseCompat_of_compatPair` discharges it through the decision, and `pairwiseCompat_of_separated`
+with `separated_of_unionOk` through the certificate.
 
 ---
 

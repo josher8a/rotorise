@@ -66,7 +66,6 @@ import type {
 } from './term'
 import {
     agrees,
-    below,
     bindersOf,
     disjoint,
     force,
@@ -1021,9 +1020,7 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  *
  * - `src/` **accepts** the pair: the model proves `PairwiseCompat` for it, given lawful options.
  *   Where {@link agrees} holds, the host decided the model's `compatPair`, and the proof is
- *   `pairwiseCompat_of_compatPair` over that decision. Two restrictions of one adapter are
- *   accepted where an option is {@link below} the other, and the proof is `pairwiseCompat_of_sub`
- *   or `_sub'`, with the proof of `Sub` printed row by row. A host warrant that the model does not
+ *   `pairwiseCompat_of_compatPair` over that decision. A host warrant that the model does not
  *   prove stops the file.
  * - `src/` **refuses** the pair: the model's decision must refuse it too, `compatPair dynOracle x
  *   y = false`. A decision that starts to accept a pair `src/` turns down stops the file.
@@ -1036,29 +1033,6 @@ export type Separation = {
     readonly name: string
     readonly left: AnyCodec
     readonly right: AnyCodec
-}
-
-/**
- * The proof of `Sub (denote x) (denote y)` where {@link below} holds, one lemma per row of `below`.
- */
-const leanBelow = (x: Term, y: Term): string => {
-    if (x.kind === 'union')
-        return `sub_union_of ${x.options.reduceRight(
-            (rest, one) =>
-                `(List.forall_mem_cons.mpr ⟨${leanBelow(one, y)}, ${rest}⟩)`,
-            '(fun _ h => nomatch h)',
-        )}`
-    if (y.kind === 'union')
-        for (const [at, one] of y.options.entries())
-            if (below(x, one))
-                return `sub_union_mem (${leanBelow(x, one)}) (${'List.mem_cons_of_mem _ ('.repeat(at)}List.mem_cons_self${')'.repeat(at)}) rfl`
-    if (x.kind === 'literal')
-        return y.kind === 'literal'
-            ? '⟨fun _ _ h => h, fun _ _ h => h⟩'
-            : 'sub_literal_base _ _'
-    if (x.kind === 'held' && y.kind === 'held')
-        return `sub_held (${leanBelow(x.inner, y.inner)}) (${leanBelow(x.outer, y.outer)})`
-    return '⟨fun _ _ h => h, fun _ _ h => h⟩'
 }
 
 /** One declaration verdict, as a Lean `theorem`, with the `src/` side decided here. */
@@ -1101,14 +1075,10 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     }
     const warrant = agrees(left.def, right.def)
         ? `fun hl => pairwiseCompat_of_compatPair (${reduce}) hl`
-        : below(left.def, right.def)
-          ? `fun hl => pairwiseCompat_of_sub (${leanBelow(left.def, right.def)}) hl`
-          : below(right.def, left.def)
-            ? `fun hl => pairwiseCompat_of_sub' (${leanBelow(right.def, left.def)}) hl`
-            : refuse(
-                  name,
-                  '`src/` accepts this pair on no warrant that the model proves: the decision refuses it, and neither option is below the other',
-              )
+        : refuse(
+              name,
+              '`src/` accepts this pair on no warrant that the model proves: the decision refuses it',
+          )
     return [
         `/-- \`${name}\` — \`src/\` accepts this pair; the model proves it compatible -/`,
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} (κ : Callers) :`,

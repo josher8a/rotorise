@@ -1243,21 +1243,11 @@ const heldFree = (t: Term): boolean =>
  */
 export const widensRead = (t: Term): boolean => reaches(t, ['legacy'])
 
-/** The terms with no payload, where the kind alone names the term. */
-const leaves: readonly Term['kind'][] = [
-    'string',
-    'number',
-    'boolean',
-    'binary',
-    'null',
-    'opaq',
-    'never',
-]
-
 /**
- * **Whether two `held` terms are one adapter.** A library adapter names its pair in `via`, and the
- * model carries one pair for each name. A caller's adapter is one adapter where both halves are
- * the same function values.
+ * **Whether two `held` terms are one adapter**: the tag test of the held row, which mirrors the
+ * model's `dynOracle.same`. The tag of a library adapter is its `via` name, and the model carries
+ * one generator for each name. The tag of a caller's adapter is the pair of functions that
+ * `held` builds once for each call, so two terms of one call are one adapter.
  */
 const sameAdapter = (
     x: Extract<Term, { kind: 'held' }>,
@@ -1266,46 +1256,15 @@ const sameAdapter = (
     (x.via !== undefined && x.via === y.via) || (x.f === y.f && x.g === y.g)
 
 /**
- * **Whether `x` is below `y` by a rule the model proves**: a literal is below its base and below
- * itself, a union is below a term that each of its options is below, a term is below a held-free
- * union where the term is below one option, and a `held` is below the same adapter over a wider
- * stored side and a wider held side (`sub_literal_base`, `sub_union_of`, `sub_union_mem`,
- * `sub_held`). A term with no payload is below itself. Nothing else is shown.
- *
- * The union must be held-free, because the model's proof bounds its options by `opaque`. An option
- * with a `held` has no such bound. The proof then needs each option lawful and the options
- * compatible, and a verdict states lawfulness only of the two terms of the pair.
- */
-export const below = (x: Term, y: Term): boolean => {
-    if (x.kind === 'union') return x.options.every((one) => below(one, y))
-    if (y.kind === 'union')
-        return heldFree(y) && y.options.some((one) => below(x, one))
-    if (x.kind === 'literal')
-        return (
-            y.kind === x.base || (y.kind === 'literal' && sameLiteral(x.v, y.v))
-        )
-    if (x.kind === 'held' && y.kind === 'held')
-        return (
-            sameAdapter(x, y) &&
-            below(x.inner, y.inner) &&
-            below(x.outer, y.outer)
-        )
-    return leaves.includes(x.kind) && x.kind === y.kind
-}
-
-/**
  * **Whether the declaration shows two options compatible**, which is what `union` asks of a pair.
  *
  * A union is the join of its options, and the join of two lawful options exists exactly when the
  * two are compatible (Lawson: `s ∨ t` exists iff `s ∼ t`). Compatibility of two partial
  * bijections is two halves of agreement: two writers of one value write one attribute, and two
  * readers of one attribute read one value. {@link agrees} is the model's `compatPair`, which
- * decides each half per component (`pairwiseCompat_of_compatPair`). An option {@link below} the
- * other has the other as a common bound (`pairwiseCompat_of_sub`): the model's oracle knows no
- * adapter to be another, so the decision leaves two restrictions of one adapter to this rule.
+ * decides each half per component (`pairwiseCompat_of_compatPair`).
  */
-export const compatible = (x: Term, y: Term): boolean =>
-    agrees(x, y) || below(x, y) || below(y, x)
+export const compatible = (x: Term, y: Term): boolean => agrees(x, y)
 
 /* ── the compatibility decision ───────────────────────────────────────────────────────── */
 
@@ -1638,6 +1597,22 @@ const agreeWalk = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
                     return (
                         other?.kind === 'object' &&
                         bodiesAgree(half, t.body, other.body, at1)
+                    )
+                },
+                y,
+                at,
+            )
+        // two `held`s of one adapter agree where their stored sides agree
+        case 'held':
+            return agreeRight(
+                half,
+                (y1, at1) => {
+                    if (base(y1, at1)) return true
+                    const other = termAt(y1, at1)
+                    return (
+                        other?.kind === 'held' &&
+                        sameAdapter(t, other) &&
+                        agreeWalk(half, t.inner, other.inner, at1)
                     )
                 },
                 y,

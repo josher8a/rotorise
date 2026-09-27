@@ -270,24 +270,69 @@ describe('a union of two restrictions of one adapter is the adapter, whatever th
         ])
     })
 
-    // the two options share `2.5`, and neither is below the other, so no warrant shows them compatible
-    it('refuses two literal decimals that overlap where neither is below the other', () => {
-        expect(() =>
-            union([
-                decimal('1', '2.5'),
-                decimal('2.5', '3'),
-            ] as unknown as readonly AnyCodec[]),
-        ).toThrow(/not shown compatible/)
+    // the two options share `2.5` under one adapter, and their stored sides agree, so both write
+    // `2.5` to one attribute and read that attribute to one value
+    it('writes and reads two overlapping literal decimals the same way in each order', () => {
+        const values = ['1', '2.5', '3']
+        const attributes: AttributeValue[] = [
+            { N: '1' },
+            { N: '2.5' },
+            { N: '3' },
+        ]
+        const answers = sameUnderEveryOrder(
+            [decimal('1', '2.5'), decimal('2.5', '3')],
+            (codec) => [
+                ...values.map((v) => codec.encode(v)),
+                ...attributes.map((a) => codec.decode(a)),
+            ],
+        )
+        expect(answers).toEqual([
+            { N: '1' },
+            { N: '2.5' },
+            { N: '3' },
+            '1',
+            '2.5',
+            '3',
+        ])
     })
 
-    // the model bounds the options of a union by `opaque`, and an option with a `held` has no such
-    // bound, so a term below one such option is not shown below the union
-    it('refuses a literal decimal beside a union whose wider option holds an adapter', () => {
+    // the held row reads the one adapter, and the stored sides of the two decimals agree beside
+    // the other option, so a literal decimal beside a union that holds a wider decimal declares
+    it('declares a literal decimal beside a union whose wider option holds the same adapter', () => {
         expect(() =>
             union([
                 decimal('1'),
                 union([decimal('1', '2.5'), string('A')]),
             ] as unknown as readonly AnyCodec[]),
+        ).not.toThrow()
+    })
+
+    // the business rule of the held row: two options under one adapter whose stored sides agree
+    // are compatible, whatever else the union holds
+    it('accepts a decimal beside a union of a decimal and a boolean, and answers the same in each order', () => {
+        const values = ['1.5', true]
+        const attributes: AttributeValue[] = [{ N: '1.5' }, { BOOL: true }]
+        const answers = sameUnderEveryOrder(
+            [decimal, union([decimal, boolean(true)])],
+            (codec) => [
+                ...values.map((v) => codec.encode(v)),
+                ...attributes.map((a) => codec.decode(a)),
+            ],
+        )
+        expect(answers).toEqual([{ N: '1.5' }, { BOOL: true }, '1.5', true])
+    })
+
+    // two caller adapters over one stored side are two tags: `swap` reads the stored `X` as `x`,
+    // and `id` reads it as `X`, so one attribute reads to two values
+    it('refuses two caller adapters over one stored side, which read one attribute two ways', () => {
+        const swapX = (s: string) => (s === 'x' ? 'X' : s === 'X' ? 'x' : s)
+        const swap = held(string, string, { encode: swapX, decode: swapX })
+        const id = held(string, string, {
+            encode: (s: string) => s,
+            decode: (s: string) => s,
+        })
+        expect(() =>
+            union([swap, id] as unknown as readonly AnyCodec[]),
         ).toThrow(/not shown compatible/)
     })
 
