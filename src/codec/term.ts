@@ -474,7 +474,8 @@ const joined = <A>(
  * A `held` answers the occupancy of its held side, the term `outer`: the held side restricts
  * every value that `f` receives. A foreign schema records `opaque` there, so the answer is every
  * slot. `opaque` accepts every kind by design, and its row answers that closed form, not `undefined`.
- * A thunk reads through to its subterm, as the model reads the term a thunk returns.
+ * A thunk reads through to its subterm, as the model reads the term a thunk returns. A thunk that
+ * names a codec not yet declared is a free variable, and a free variable may write every slot.
  */
 export const occV = (t: Term): readonly SetSlot[] => {
     switch (t.kind) {
@@ -515,8 +516,10 @@ export const occV = (t: Term): readonly SetSlot[] => {
         // a thunk carries a term, so it answers what that term answers. `Meet.lean` heads the
         // section `lazy` is transparent, and it constrains nothing: the model reads through on
         // both projections and only the member is lost
-        case 'lazy':
-            return occV(t.get())
+        case 'lazy': {
+            const forced = force(t)
+            return forced === undefined ? everySlot : occV(forced)
+        }
         case 'refine':
         case 'legacy':
             return occV(t.inner)
@@ -542,7 +545,9 @@ export const occV = (t: Term): readonly SetSlot[] => {
  * `undefined` is *not determined by the term*, and it is what makes {@link nullable} refuse at
  * construction rather than guess. `withLegacyRead` answers it, because its older reader is the
  * caller's function. `refine` and `union` answer it through their subterms, as the next paragraph
- * says. A `held` answers from the slots it declares, and `lazy` reads through the thunk.
+ * says. A `held` answers from the slots it declares, and `lazy` reads through the thunk. A thunk
+ * that names a codec not yet declared is a free variable, and the term does not determine whether a
+ * free variable reaches the point.
  *
  * `refine` answers `false` through its subterm and `undefined` otherwise: a predicate narrows, so
  * a subterm that does not reach the point keeps not reaching it, while one that does may or may not
@@ -585,8 +590,10 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
         }
         case 'legacy':
             return undefined
-        case 'lazy':
-            return ownsNullOf(t.get())
+        case 'lazy': {
+            const forced = force(t)
+            return forced === undefined ? undefined : ownsNullOf(forced)
+        }
     }
 }
 
@@ -628,9 +635,11 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
             return ['M']
         case 'legacy':
             return undefined
-        // transparent, as on the write side
-        case 'lazy':
-            return occA(t.get())
+        // transparent, as on the write side. A free variable may read every member
+        case 'lazy': {
+            const forced = force(t)
+            return forced === undefined ? undefined : occA(forced)
+        }
         case 'refine':
         case 'held':
             return occA(t.inner)
@@ -1185,7 +1194,9 @@ const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
  * The build forces no thunk, so it ends: it recurses only through the edges that are not a
  * thunk, and every such edge of a term is built before the term. A thunk of the view forces its
  * thunk when {@link meetTerms} reads it, and {@link viewable} forced each such thunk already. A
- * thunk that throws throws again there, and {@link meetTerms} reads it as a free variable.
+ * thunk that throws throws again there, and {@link meetTerms} reads it as a free variable. So the
+ * thunk of the view forces its thunk directly and not through {@link force}: the throw must reach
+ * the {@link force} of {@link meetTerms} at the thunk of the view.
  */
 const throughThunks =
     (row: (t: Term, view: (t: Term) => Term) => Term) =>
@@ -1646,6 +1657,8 @@ const meetBinders = (
  *
  * An answer holds two kinds of thunk: the variable of a binder, where the walk stops, and a binder
  * that the meet filled before, whose body the walk reads. So the walk ends where the answer ends.
+ * The meet builds both kinds, and an answer holds no thunk of an operand. So the walk forces each
+ * thunk directly, and no caller code runs.
  */
 const readsBinder = (
     t: Term,

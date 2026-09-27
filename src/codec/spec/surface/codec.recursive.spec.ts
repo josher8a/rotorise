@@ -14,6 +14,7 @@ import {
     CodecError,
     decimal,
     lazy,
+    nullable,
     object,
     optional,
     string,
@@ -181,5 +182,35 @@ describe('a union that names itself', () => {
             throw new TypeError('the caller code is wrong')
         })
         expect(() => union([decimal, array(Broken)])).toThrow(TypeError)
+    })
+
+    /**
+     * **A thunk that names a codec not yet declared is a free variable, and the term of a free
+     * variable does not say whether the variable reaches null.** So `nullable` refuses at
+     * construction, as for any inner term that decides the null point by a function.
+     */
+    it('refuses a nullable of a codec not yet declared, because the null point is unknown', () => {
+        const declare = () => {
+            const Self: AttributeCodec<string | null> = nullable(
+                lazy(() => Self),
+            )
+            return Self
+        }
+        expect(declare).toThrow(CodecError)
+    })
+
+    /**
+     * The same refusal holds for a thunk that its own resolution forces again. The refusal reaches
+     * the caller at each use, as a `CodecError` that names `nullable`.
+     */
+    it('refuses a nullable of the thunk under resolution at each use', () => {
+        type Node = { v: string; next: Node | null }
+        const List: AttributeCodec<Node> = lazy(() =>
+            object({ v: string, next: nullable(List) }),
+        )
+        for (let use = 0; use < 2; use++)
+            expect(() => List.unsafeEncode({ v: 'a', next: null })).toThrow(
+                /^nullable:/,
+            )
     })
 })

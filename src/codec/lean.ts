@@ -1196,7 +1196,8 @@ export const leanMeet = ({ name, left, right }: MeetPair): string => {
     const answer = meetTerms(one, other)
     const pair = `Term.meet (${leanTermOf(left, name)})\n      (${leanTermOf(right, name)})`
     // a recursive answer is a thunk that the thunk in its body returns, so the answer is the
-    // binder, and the body spells under it
+    // binder, and the body spells under it. The meet built the thunk and filled its body, so the
+    // force runs no caller code
     const body = answer?.kind === 'lazy' ? answer.get() : answer
     const binds = answer === undefined ? undefined : bindersOf(answer)
     if (answer && body?.kind === 'object' && binds?.has(answer))
