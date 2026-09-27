@@ -45,6 +45,7 @@ import {
     clauseForm,
     clauseLiteralsOf,
     compatible,
+    force,
     heldOnRecursivePath,
     literalAlternatives,
     member as memberOf,
@@ -2049,18 +2050,25 @@ export const undefinable = <const C extends AnyCodec>(
  * point, and one that read some attribute to `null` would write the point by **(C)** and own it
  * again. Both hypotheses are refuted by the guard rather than required of the caller.
  *
- * **The question is asked once, at first use rather than at construction.** `owns` is a property
- * of the pair and the probes are two calls, so asking repeatedly would be a walk with a known
- * answer. It is not asked *at* construction because {@link lazy} exists: a recursive declaration
- * forces its thunk when probed, and at module-evaluation time that is a reference to a binding
- * that does not exist yet. Deferring costs one boolean test per call and is the difference
- * between answering the question and catching an error from having asked it too early.
+ * **The question is asked once, at construction.** The term answers the question, and an answer
+ * that the term does not determine is a refusal. A thunk that cannot be forced yet is such an
+ * answer: the thunk of a recursive declaration under its own resolution, or a thunk that names a
+ * binding not yet declared. A nullable recursive field therefore defers the call to a thunk of its
+ * own, as in `lazy(() => nullable(Self))`. That thunk runs after `Self` resolves, so the term
+ * answers the question.
  */
 export const nullable = <T, A extends AttributeValue>(
     inner: AttributeCodec<T, A>,
 ): AttributeCodec<T | null, A | Attribute<'NULL'>> => {
     const t = termOf(inner as unknown as AnyCodec)
     const owns = ownsNullOf(t)
+    if (owns === undefined && t.kind === 'lazy' && force(t) === undefined) {
+        throw new CodecError(
+            'nullable: the thunk cannot be forced yet, because its codec is under resolution or not yet declared, ' +
+                'so whether the union would be certified is unknown. ' +
+                'Defer the call to a thunk of its own, as in lazy(() => nullable(Self)).',
+        )
+    }
     if (owns === undefined) {
         throw new CodecError(
             `nullable: ${t.kind} decides the null point by running a function this cannot read, ` +

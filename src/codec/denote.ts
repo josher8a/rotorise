@@ -1153,12 +1153,35 @@ export const denote = (def: Term): Pair => {
          * `def.get()` is forced once per level of the value, and a value is finite. The model has no
          * thunk: a thunk that closes a cycle is the variable of a binder there (`Term.mu`), and any
          * other thunk is the term it returns.
+         *
+         * **A refusal inside the thunk is a value.** The thunk is caller code, and a builder in the
+         * thunk refuses with a `CodecError` at the first use. The row returns that refusal. Every
+         * other throw propagates, because an overflow or a defect of the caller is not a refusal.
          */
-        case 'lazy':
-            return {
-                encode: (value) => codecOfTerm(def.get()).encode(value),
-                decode: (attribute) => codecOfTerm(def.get()).decode(attribute),
+        case 'lazy': {
+            const resolved = (): Term | CodecError => {
+                try {
+                    return def.get()
+                } catch (thrown) {
+                    if (thrown instanceof CodecError) return thrown
+                    throw thrown
+                }
             }
+            return {
+                encode: (value) => {
+                    const t = resolved()
+                    return t instanceof CodecError
+                        ? t
+                        : codecOfTerm(t).encode(value)
+                },
+                decode: (attribute) => {
+                    const t = resolved()
+                    return t instanceof CodecError
+                        ? t
+                        : codecOfTerm(t).decode(attribute)
+                },
+            }
+        }
         /**
          * §3 `(union)`: the join, resolved by the first option that admits. `lawful_altCodec` is the lemma and
          * `altSem` is the resolution — one rule, serving both the attribute pair here and the item
