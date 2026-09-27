@@ -127,8 +127,8 @@ export const literalCodec = <T extends LiteralValue>(
 
 /**
  * **One literal, or a union of them.** A literal carries one value, so several alternatives are a
- * union of singletons — a certified union, because two singletons with different values meet at
- * the bottom.
+ * union of singletons — a certified union, because two singletons with different values are
+ * disjoint.
  *
  * The builder stays a builder rather than asking the caller to write the union: measured on a
  * twenty-six alternative discriminator, the hand-written union costs the type checker 26.8 times
@@ -640,8 +640,7 @@ export const altSem = (
      * If it leaves several, they are **tried**, and the first that succeeds answers. The options of
      * every union this library builds are compatible, so two that both read an attribute read it
      * to one value, and the order is not observable. `union` shows it at the declaration, `opaque`'s
-     * options are compatible by kind, and a meet or a slice keeps restrictions of compatible
-     * options.
+     * options are compatible by kind, and a slice keeps restrictions of compatible options.
      *
      * **This is the read side.** The write side decides instead, {@link onlyAdmitting}, and this
      * one attempts because there is no `AdmA` in `src/` to decide a stored attribute with.
@@ -751,7 +750,7 @@ export const altSem = (
  * The assignment chooses the member, and the choice is a **lookup** rather than an attempt.
  *
  * **The index is the host's, and the model has no such term.** A dissection is a `Term.union` of
- * members whose structures do not meet, certified by `Calculus.certPair`; this table is an index
+ * members whose structures are disjoint, certified by `Calculus.certPair`; this table is an index
  * built over that union, so nothing in the model states it and nothing in the model needs it. What
  * makes the lookup answer the same question the union answers is the refusal at construction: two
  * members carrying one assignment are refused, so at most one member is reached either way.

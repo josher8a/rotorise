@@ -59,6 +59,7 @@ import {
 } from '../codec'
 import { accepts } from '../denote'
 import type {
+    DisjointPair,
     ReadResolution,
     ReadVerdict,
     Refusal,
@@ -69,6 +70,8 @@ import type {
 import {
     LeanUnemittable,
     leanAttrOf,
+    leanDisjoint,
+    leanDisjointModule,
     leanGuard,
     leanReadModule,
     leanReadResolution,
@@ -1324,6 +1327,75 @@ const separationPairs = (): readonly Separation[] => {
 }
 
 /**
+ * Every pair of corpus terms, for the disjointness differential.
+ *
+ * Bounded the same way the separation pairs are — a term the emitter has no closed expression for
+ * cannot be put to the model. The bound is a skip and not a failure.
+ *
+ * Every pair is emitted, the declines included: `false` states nothing about a pair, and a port
+ * that answered `true` where the model answers `false` would be unsound.
+ */
+const disjointPairs = (): readonly DisjointPair[] => {
+    const codecs: readonly (readonly [string, AnyCodec])[] = [
+        ...sampleVectors.map((v) => [v.name, v.codec] as const),
+        ['scalar_number', erase(dynamoNumber)] as const,
+        ['never', erase(never)] as const,
+    ]
+    const out: DisjointPair[] = []
+    for (let x = 0; x < codecs.length; x++) {
+        for (let y = x + 1; y < codecs.length; y++) {
+            const [an, left] = codecs[x] as readonly [string, AnyCodec]
+            const [bn, right] = codecs[y] as readonly [string, AnyCodec]
+            const one: DisjointPair = {
+                name: `${an}__disjoint__${bn}`,
+                left,
+                right,
+            }
+            try {
+                leanDisjoint(one)
+            } catch {
+                continue
+            }
+            out.push(one)
+        }
+    }
+    // two recursive unions whose bodies share `string`, and the same pair under one required field
+    out.push(
+        {
+            name: 'recursive_json__disjoint__recursive_under_object',
+            left: json,
+            right: underObject,
+        },
+        {
+            name: 'field_json__disjoint__field_under_object',
+            left: erase(object({ a: json as never })),
+            right: erase(object({ a: underObject as never })),
+        },
+    )
+    // a thunk that throws beside three partners: a free variable pairs with no binder, so the
+    // test declines beside every term but the bottom. A list of such a thunk beside a scalar is
+    // disjoint, because the two shape classes are
+    out.push(
+        {
+            name: 'free_array__disjoint__scalar_decimal',
+            left: array(undeclared),
+            right: decimal,
+        },
+        {
+            name: 'free_variable__disjoint__scalar_string',
+            left: undeclared,
+            right: string,
+        },
+        {
+            name: 'free_json__disjoint__scalar_string',
+            left: union([string, array(undeclared)]),
+            right: string,
+        },
+    )
+    return out
+}
+
+/**
  * Every (codec, attribute) pair the corpus offers, for the read-side differential.
  *
  * The attributes are what the corpus actually *writes*, plus six raw shapes for the members no
@@ -1658,6 +1730,25 @@ describe("the declaration guard, against the model's classifier", () => {
         // without the import Lean auto-binds the name and every verdict fails to elaborate
         expect(leanSeparationModule([])).toContain(
             'import Calculus.Dynamo.Lang.Store',
+        )
+    })
+
+    /**
+     * **Disjointness, both directions.** `Term.disjoint` and `disjoint` are one function written
+     * twice, so a disagreement either way is a defect on one side. The raw terms and the two pairs
+     * of views are asserted apart.
+     */
+    it("puts every corpus pair to the model's disjointness test", () => {
+        const pairs = disjointPairs()
+        expect(pairs.length).toBe(866)
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.disjoints.lean'),
+                leanDisjointModule(pairs),
+            )
+        }
+        expect(leanDisjointModule([])).toContain(
+            'import Calculus.Dynamo.Analysis.Meet',
         )
     })
 
