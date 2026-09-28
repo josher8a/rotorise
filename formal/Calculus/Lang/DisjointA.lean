@@ -27,32 +27,7 @@ variable {S : Syn} [Sem S] [PrimAdmA S] {ρ ρ' ρ'' : List S.C}
 
 noncomputable section
 
-/-! ## The rows that the soundness proof reads -/
-
-/-- The bottom reads nothing. -/
-@[simp] theorem AdmA_never (a : Syn.A S) : AdmA α β (.never : Term S) ρ a = false := rfl
-
-variable (α β) in
-/-- `⋁` of `AdmA` over a union's options: `AdmAny` of the dual. -/
-def AdmAAny (ts : List (Term S)) (ρ : List S.C) (a : Syn.A S) : Bool :=
-  AdmAny β α ts (ρ.map convU) a
-
-/-- An empty list of options reads no attribute. -/
-@[simp] theorem AdmAAny_nil (a : Syn.A S) : AdmAAny α β ([] : List (Term S)) ρ a = false := rfl
-
-/-- The options read where the first reads or the rest read. -/
-@[simp] theorem AdmAAny_cons (t : Term S) (ts : List (Term S)) (a : Syn.A S) :
-    AdmAAny α β (t :: ts) ρ a = (AdmA α β t ρ a || AdmAAny α β ts ρ a) := rfl
-
-/-- A union reads where one of its options reads. -/
-theorem AdmA_union (opts : List (Term S)) (a : Syn.A S) :
-    AdmA α β (.union opts) ρ a = AdmAAny α β opts ρ a := rfl
-
-omit [PrimAdmA S] in
-/-- Every environment of the dual has the converse graph of the environment of its inverse
-    converses. -/
-theorem unconvEnv_R (ρ'' : List S.op.C) : List.Forall₂ R ρ'' (ρ''.map convU : List S.C) :=
-  List.forall₂_map_right_iff.mpr (List.forall₂_same.mpr fun _ _ => ⟨rfl, rfl⟩)
+/-! ## The rows of the read side -/
 
 /-- The dual admits one set under two environments with one converse graph. -/
 theorem adm_op_env {ρ₁ ρ₂ : List S.op.C} {σ : List S.C} (h₁ : List.Forall₂ R ρ₁ σ)
