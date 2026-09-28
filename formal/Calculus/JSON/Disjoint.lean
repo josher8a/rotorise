@@ -80,7 +80,7 @@ instance jsonLeafAdm : Alg.LeafAdm jsonSyn where
 
 /-- The formers of JSON, on the read side: every former term reads nothing. -/
 instance jsonFormerAdmA : Alg.FormerAdmA jsonSyn where
-  set_never _ _ _ a := by simp [(admA_former_empty a).1]
+  set_never _ _ _ _ := rfl
 
 /-- …and read no attribute in common. -/
 instance jsonLeafAdmA : Alg.LeafAdmA jsonSyn where

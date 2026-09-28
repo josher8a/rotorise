@@ -145,13 +145,13 @@ every two environments that keep each paired binder pair apart (`ApartV`). `Alg.
 says the same of attributes (`ApartA`), and `Alg.disjoint_orthogonal` joins the two. Each proof
 recurses on the left operand, as the test does. The laws are classes outside `Sem`, because only
 the soundness theorems read them. `LeafAdm` says that two primitives met at the bottom share
-nothing, and that two predicates met at the empty predicate hold together nowhere. `LeafAdmA` is
-`LeafAdm` of the dual. `FormerAdm` and `FormerAdmA` say that two sets whose elements share nothing
-share no set. Two data predicates keep two refinements apart on the read side only where both
-inner terms are closed and held-free: each then reads as the top reads (`TopLaws`), so both read
-one value. At DynamoDB, a leaf law is a fact about `inBase` and `inL`, and a set law is a fact
-about `setCodec`. At JSON, two kinds meet where they are one kind, and each set law holds because
-the signature has no former and both sides admit nothing.
+nothing, and that two predicates met at the empty predicate hold together nowhere. `FormerAdm`
+says that two sets whose elements share nothing share no set. `LeafAdmA` and `FormerAdmA` are
+`LeafAdm` and `FormerAdm` of the dual. Two data predicates keep two refinements apart on the read
+side only where both inner terms are closed and held-free: each then reads as the top reads
+(`TopLaws`), so both read one value. At DynamoDB, a leaf law is a fact about `inBase` and `inL`,
+and a set law is a fact about `setCodec`. At JSON, two kinds meet where they are one kind, and each
+set law holds because the signature has no former and both sides admit nothing.
 
 **A universe is a container, and the disjointness of two formers is a theorem.** The carrier of a
 universe is the W-type of a container, and the member of a value is its root shape. Each former
