@@ -76,7 +76,9 @@ instance jsonLeafAdm : Alg.LeafAdm jsonSyn where
         | true =>
             have h1 : v.member = m := of_decide_eq_true hv
             exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
-  pmeet_none _ _ h := nomatch h
+
+/-- A JSON predicate is a function, so the leaves meet no predicate. -/
+instance jsonLeafMeet : Alg.LeafMeet jsonSig := ⟨fun _ _ _ h => nomatch h⟩
 
 /-- The formers of JSON, on the read side: every former term reads nothing. -/
 instance jsonFormerAdmA : Alg.FormerAdmA jsonSyn where
@@ -96,7 +98,6 @@ instance jsonLeafAdmA : Alg.LeafAdmA jsonSyn where
         | true =>
             have h1 : a.member = m := of_decide_eq_true ha
             exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
-  pmeet_none _ _ h := nomatch h
 
 /-- The test computes at JSON: two kinds are disjoint. -/
 example : Alg.Term.disjoint (S := jsonSyn) Alg.pair0 (.prim .str) (.prim .num) = true := by rfl
