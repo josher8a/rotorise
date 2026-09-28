@@ -127,30 +127,30 @@ variable (α) in
     A corpus term is closed, so its variables are bound inside it. One structural recursion
     over the term, with the containers recursing through *this*, which is exactly what the
     retired per-aspect rows failed to do. **Every row is exact** (`Adm_exact`). -/
-abbrev Adm (t : Term) : VP := Alg.Adm α t []
+abbrev Adm (t : Term) : VP := Alg.Adm α dynTableA t []
 
 variable (α) in
 /-- The payload's row: the declared names are present, and every present name's value is
     admitted by its slot or by the open block. -/
-abbrev AdmBody (b : Body) : VP := Alg.AdmBody α b []
+abbrev AdmBody (b : Body) : VP := Alg.AdmBody α dynTableA b []
 
 variable (α) in
 /-- A slot's row is its term's. The presence marker is `valPresentT`'s business, so it does
     not reach this row. -/
-abbrev AdmField (s : ObjectSlot) : VP := Alg.AdmField α s []
+abbrev AdmField (s : ObjectSlot) : VP := Alg.AdmField α dynTableA s []
 
 variable (α) in
 /-- The open block's row, where the body has one: `rcOf`'s mirror. A body with no open
     block refuses, so an undeclared name is refused on the way *out* as well. -/
-abbrev AdmWild (w : Option Term) : Option VP := Alg.AdmWild α w []
+abbrev AdmWild (w : Option Term) : Option VP := Alg.AdmWild α dynTableA w []
 
 variable (α) in
 /-- The options' rows, in order: `denoteList`'s mirror. -/
-abbrev AdmList (ts : List Term) : List VP := Alg.AdmList α ts []
+abbrev AdmList (ts : List Term) : List VP := Alg.AdmList α dynTableA ts []
 
 variable (α) in
 /-- The spread's row, where there is one. -/
-abbrev AdmOptT (o : Option Term) : Option VP := Alg.AdmOptT α o []
+abbrev AdmOptT (o : Option Term) : Option VP := Alg.AdmOptT α dynTableA o []
 
 /-! ### The rows at the DynamoDB constructors
 
@@ -163,10 +163,21 @@ variable (t : Term) (ts : List Term)
 @[Adm_rows] theorem Adm_base (k : GroundKind) : Adm α (.base k) = inBase k := rfl
 /-- The bottom admits no value, and the row is that sentence. -/
 @[Adm_rows] theorem Adm_never (v : Value) : Adm α .never v = false := rfl
-@[Adm_rows] theorem Adm_refine (p : Pred) : Adm α (.refine t p) = fun v => Adm α t v && p.eval v :=
+/-- The stored predicate is the truth, so the row of `refine` is the caller-side row. -/
+@[Adm_rows] theorem Adm_refine (p : Pred) (pA : Alg.SynA.PredA dynSyn) :
+    Adm α (.refine t p pA) = fun v => Adm α t v && p.eval v := by
+  funext v
+  have h : Alg.gate (Alg.denote α dynTableA t []) (fun _ => true) v =
+      Alg.Adm α dynTableA t [] v :=
+    (Alg.gate_true _ _).trans (Alg.Adm_eq_isSome t [] v).symm
+  simp only [Adm, Alg.Adm, Alg.SemA.evalA, h]
+  cases Alg.Adm α dynTableA t [] v <;> simp [Alg.Sem.eval]
+/-- The stored word is the identity, so the stored gate reads the stored outer at the write. -/
+@[Adm_rows] theorem Adm_held (P PA : Term) (k : Word) (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+    Adm α (.held t P PA k kA) = fun v => Adm α t ((α.word k).1 v) && Adm α P v &&
+      Alg.gate (denote α t) (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v) := by
+  simp only [Adm, Alg.Adm, dynTableA_word]
   rfl
-@[Adm_rows] theorem Adm_held (P : Term) (k : Word) :
-    Adm α (.held t P k) = fun v => Adm α t ((α.word k).1 v) && Adm α P v := rfl
 /-- `select` attempts every option, so the row is the disjunction of the options' rows. -/
 @[Adm_rows] theorem Adm_union_row : Adm α (.union ts) = fun v => anyP (AdmList α ts) v := rfl
 /-- **`set` asks its own codec**, as `opaq` and `mu` do. A row over the elements alone is exact

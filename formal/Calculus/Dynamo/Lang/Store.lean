@@ -451,6 +451,6 @@ def noCallers : Callers := fun _ => (id, id)
 
 /-- `decimal`, as the surface ships it: the numeric base under the text adapter, with the
     caller side restricted to text. -/
-def decimalHeld : Term := Term.held Term.number Term.string [(.decimalText, false)]
+def decimalHeld : Term := Term.held Term.number Term.string Term.opaq [(.decimalText, false)] []
 
 end Calculus

@@ -798,7 +798,8 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
                     `${shippedPredicates.get(t.q.q.is)?.what ?? 'this predicate'} decides a *string*, and this refinement's inner term writes values that are not strings — where JavaScript would coerce and the model would not, so the two predicates would part company`,
                 )
             }
-            return `Term.refine (${leanTermOfTerm(t.inner, `${at}.inner`, scope)}) ${q}`
+            // the stored predicate is the top of the store universe: the truth, which is `()`
+            return `Term.refine (${leanTermOfTerm(t.inner, `${at}.inner`, scope)}) ${q} ()`
         }
         /**
          * **An adapter this library ships is printed by name**, the way a recognised predicate
@@ -810,12 +811,15 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
          * The float adapter is refused everywhere, for a reason that is not about closures:
          * `Value` carries no float, so the conversion would be numeral to numeral and its content
          * is binary64 rounding. That is the host axiom this development deleted.
+         *
+         * The stored halves are the top of the store universe: `Term.opaq` as the stored outer,
+         * which reads every attribute, and the empty stored word.
          */
         case 'held':
             if (t.via === undefined && scope.bound)
-                return `(Term.held (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) [(.caller ${callerOf(scope.bound.adapters, t.f)}, false)])`
+                return `(Term.held (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) Term.opaq [(.caller ${callerOf(scope.bound.adapters, t.f)}, false)] [])`
             return t.via === 'decimalText'
-                ? `(Term.held (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) [(.decimalText, false)])`
+                ? `(Term.held (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) Term.opaq [(.decimalText, false)] [])`
                 : refuse(
                       at,
                       "`Term.held` carries a word of adapter generators, and a table gives each generator two `Value → Value` functions. The library ships one generator the model names, `decimalText`, whose pair is `numeralOfStoredText`/`textOfNumeral`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted",

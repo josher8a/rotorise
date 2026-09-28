@@ -9,7 +9,9 @@ import Calculus.Alg.Positions
 import Calculus.Alg.Containers
 import Calculus.Alg.Recursion
 import Calculus.Alg.Agree
+import Calculus.Alg.Converse
 import Calculus.Lang.Term
+import Calculus.Lang.Converse
 import Calculus.Lang.Typing
 import Calculus.Lang.Guarded
 import Calculus.Lang.Sound

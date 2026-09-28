@@ -227,12 +227,13 @@ def isoTable : Table := fun _ => (isoF, id)
 /-- At `"B"`: the outer refinement rejects it, the inner one never sees it — `f` has
     already replaced it with `"A"`. -/
 theorem not_equiv_refine_held :
-    ¬ Codec.Equiv (denote isoTable (.refine (.held .string .string [(.caller 0, false)]) (.closure predA)))
-                  (denote isoTable (.held (.refine .string (.closure predA)) .string [(.caller 0, false)])) := by
+    ¬ Codec.Equiv
+        (denote isoTable (.refine (.held .string .string .opaq [(.caller 0, false)] []) (.closure predA) ()))
+        (denote isoTable (.held (.refine .string (.closure predA) ()) .string .opaq [(.caller 0, false)] [])) := by
   intro h
   have hv := (h.heldSet (.str "B")).mpr
   simp [denote_rows, Alg.Table.word, Alg.Table.letter, isoTable, Alg.Codec.through,
-    Alg.Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv
+    Alg.Codec.restrict, Alg.refine2, Pred.eval, stringCodec, isoF, predA] at hv
 
 /-! ## `legacy(c, r)` breaks canonical reads, and `e ∘ p ≢ id`
 

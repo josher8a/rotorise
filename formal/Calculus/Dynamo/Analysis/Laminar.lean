@@ -186,19 +186,59 @@ theorem hunion_iff : ∀ {opts Ts μs}, TypedListμ α opts Ts μs → (∀ t �
     ∀ v, HUnion Ts v ↔ AdmAny α opts v = true
   -- by hand: `simp` closes `∃ T ∈ [], T v` through the classical `Nonempty` instance of `Held`
   | _, _, _, .nil, _, v => ⟨fun ⟨_, h, _⟩ => absurd h List.not_mem_nil, fun h => nomatch h⟩
-  | _, _, _, @TypedListμ.cons _ _ _ t ts _ _ _ _ hty hs, ih, v => by
+  | _, _, _, @TypedListμ.cons _ _ _ _ _ _ t ts _ _ _ _ hty hs, ih, v => by
       have hi := hunion_iff hs (fun t' h => ih t' (List.mem_cons_of_mem _ h)) v
       have hT := ih _ List.mem_cons_self _ _ hty v
       simp only [HUnion, List.mem_cons, exists_eq_or_imp, AdmAny_cons, Bool.or_eq_true] at hi ⊢
       rw [hT, hi]
 
+variable (α) in
+mutual
+/-- **Every stored outer admits the writes of its inner term.** The held set reads the caller
+    side only, and the stored outer of a `held` restricts the writes. So the held set is the
+    admission only where no stored outer refuses a write. The stored predicate of DynamoDB is
+    the truth, and its stored word is the identity, so the stored outer is the one stored
+    restriction. -/
+def StoredAdmits : Term → Prop
+  | .held t _ PA _ _ =>
+      StoredAdmits t ∧ ∀ v a, (denote α t).e v = some a → ((denote α PA).p a).isSome = true
+  | .refine t _ _ | .set t => StoredAdmits t
+  | .list pre sp suf => StoredAdmitsL pre ∧ StoredAdmitsO sp ∧ StoredAdmitsL suf
+  | .object b => StoredAdmitsB b
+  | .union os => StoredAdmitsL os
+  | _ => True
+/-- …at each slot and at the open block of a body. -/
+def StoredAdmitsB : Body → Prop
+  | .mk _ f w => (∀ k, StoredAdmitsS (f k)) ∧ StoredAdmitsO w
+/-- …at the term of a slot. -/
+def StoredAdmitsS : ObjectSlot → Prop
+  | .req t | .optional t => StoredAdmits t
+/-- …at each term of a list. -/
+def StoredAdmitsL : List Term → Prop
+  | [] => True
+  | t :: ts => StoredAdmits t ∧ StoredAdmitsL ts
+/-- …at an optional term. -/
+def StoredAdmitsO : Option Term → Prop
+  | none => True
+  | some t => StoredAdmits t
+end
+
+/-- Each term of a list whose stored outers admit its writes admits them too. -/
+theorem storedAdmitsL_mem : ∀ {ts : List Term}, StoredAdmitsL α ts → ∀ t ∈ ts, StoredAdmits α t
+  | _ :: _, h, _, ht => by
+      rcases List.mem_cons.mp ht with rfl | ht'
+      · exact h.1
+      · exact storedAdmitsL_mem h.2 _ ht'
+
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
 /-- **(B): the held set is the admission, at every rule.** A derivable term whose obligations
-    hold holds exactly the values it admits, so `T = dom(e)` by `Adm_exact`. `set` is the rule
-    that reads the obligations (`hset_iff`); every other rule passes them to its subterms. -/
-theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t → ∀ v, T v ↔ Adm α t v = true
-  | t, T, μ, h, hob, v => by
+    hold, and whose stored outers admit the writes of their inner terms, holds exactly the values
+    it admits, so `T = dom(e)` by `Adm_exact`. `set` is the rule that reads the obligations
+    (`hset_iff`); every other rule passes them to its subterms. -/
+theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t → StoredAdmits α t →
+    ∀ v, T v ↔ Adm α t v = true
+  | t, T, μ, h, hob, hst, v => by
     cases h with
     | base k => cases k <;> cases v <;> simp [Adm_rows, inBase, stringCodec, numberCodec,
         booleanCodec, binaryCodec, nullCodec, -Subtype.exists]
@@ -208,34 +248,43 @@ theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t → ∀
     | var _ => simp [HNever, Adm_rows]
     -- a `mu`'s held set is its write domain, which is its row
     | mu _ _ => exact Iff.rfl
-    | @set t' T' μ' h' => exact hset_iff h' hob (typed_T_adm h' hob.1) v
+    | @set t' T' μ' h' => exact hset_iff h' hob (typed_T_adm h' hob.1 hst) v
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       cases v with
       | arr vs =>
         simp only [HList, Adm_rows, Value.arr.injEq, exists_eq_left']
         exact htupleL_iff hp hs hf
-          (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).1 t' ht') w)
-          (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.1 t' ht') w)
-          (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.2 t' ht') w) vs
+          (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).1 t' ht')
+            (storedAdmitsL_mem hst.1 t' ht') w)
+          (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.1 t' ht')
+            (by obtain rfl := Option.mem_def.mp ht'; exact hst.2.1) w)
+          (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.2 t' ht')
+            (storedAdmitsL_mem hst.2.2 t' ht') w) vs
       | _ => simp [HList, Adm_rows]
-    | @held t' I' μ' P k h' =>
-      exact (and_congr (typed_T_adm h' hob.1 ((α.word k).1 v)) (Adm_exact P v).symm).trans
-        Bool.and_eq_true_iff.symm
-    | @refine t' T' μ' q h' =>
-      show (T' v ∧ q.eval v = true) ↔ (Adm α t' v && q.eval v) = true
-      rw [Bool.and_eq_true, typed_T_adm h' hob v]
+    | @held t' I' μ' P PA k kA h' =>
+      have hg : Alg.gate (denote α t') (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v) =
+          Adm α t' ((α.word k).1 v) :=
+        (Alg.gate_eq_isSome fun a ha => hst.2 _ a ha).trans (Alg.Adm_eq_isSome t' [] _).symm
+      simp only [Adm_held, hg, Bool.and_eq_true, typed_T_adm h' hob.1 hst.1 ((α.word k).1 v),
+        Adm_exact P v]
+      exact ⟨fun ⟨h1, h2⟩ => ⟨⟨h1, h2⟩, h1⟩, fun ⟨h1, _⟩ => h1⟩
+    | @refine t' T' μ' q qA h' =>
+      simp only [Adm_refine, Bool.and_eq_true, typed_T_adm h' hob hst v]
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest ⊢
       exact hobject_iff hfields
-        (fun k t' he _ _ hty w => typed_T_adm hty (by have := hob.1 k; rw [he] at this; exact this) w)
-        (fun k t' he _ _ hty w => typed_T_adm hty (by have := hob.1 k; rw [he] at this; exact this) w)
-        hrest (fun t' he _ _ hty w => typed_T_adm hty (by have := hob.2; rw [he] at this; exact this) w) v
+        (fun k t' he _ _ hty w => typed_T_adm hty (by have := hob.1 k; rw [he] at this; exact this)
+          (by have := hst.1 k; rw [he] at this; exact this) w)
+        (fun k t' he _ _ hty w => typed_T_adm hty (by have := hob.1 k; rw [he] at this; exact this)
+          (by have := hst.1 k; rw [he] at this; exact this) w)
+        hrest (fun t' he _ _ hty w => typed_T_adm hty (by have := hob.2; rw [he] at this; exact this)
+          (by have := hst.2; rw [he] at this; exact this) w) v
     | @union opts Ts μs h' =>
       exact (hunion_iff h' (fun t' ht' _ _ hty w =>
-          typed_T_adm hty ((Obligations.union hob).1 t' ht') w) v).trans
+          typed_T_adm hty ((Obligations.union hob).1 t' ht') (storedAdmitsL_mem hst t' ht') w) v).trans
         (by rw [Adm_union])
-termination_by t _ _ _ _ => Term.depth t
+termination_by t _ _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
 
 

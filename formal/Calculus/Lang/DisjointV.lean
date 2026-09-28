@@ -22,7 +22,8 @@ namespace Calculus.Alg
 
 open Calculus (alignPL alignP zipP anyP objAdmV entryP)
 
-variable {S : Syn} [Sem S] [PrimAdm S] {ρ ρ' ρ'' : List S.C} {α : Table S}
+variable {S : Syn} [Sem S] [PrimAdm S] [SynA S] [SemA S] {ρ ρ' ρ'' : List S.C} {α : Table S}
+  {β : Table S.op}
 
 noncomputable section
 
@@ -37,7 +38,7 @@ def mapOut (v : S.V) : Option (MapOf S.V) := (Sem.map (S := S)).bind (·.mV.out 
 /-- A `list` admits a value that the list former reads by the row of its positions. -/
 theorem Adm_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.V}
     {vs : List S.V} (h : listOut v = some vs) :
-    Adm α (.list pre sp suf) ρ v = alignPL (AdmList α pre ρ) (AdmOptT α sp ρ) (AdmList α suf ρ) vs := by
+    Adm α β (.list pre sp suf) ρ v = alignPL (AdmList α β pre ρ) (AdmOptT α β sp ρ) (AdmList α β suf ρ) vs := by
   unfold listOut at h
   rcases hL : Sem.list (S := S) with _ | L
   · rw [hL] at h; exact absurd h (by simp)
@@ -47,7 +48,7 @@ theorem Adm_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.
 
 /-- A `list` admits no value that the list former does not read. -/
 theorem Adm_list_of_none {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.V}
-    (h : listOut v = none) : Adm α (.list pre sp suf) ρ v = false := by
+    (h : listOut v = none) : Adm α β (.list pre sp suf) ρ v = false := by
   unfold listOut at h
   rcases hL : Sem.list (S := S) with _ | L
   · simp only [Adm, hL]
@@ -58,8 +59,8 @@ theorem Adm_list_of_none {pre suf : List (Term S)} {sp : Option (Term S)} {v : S
 /-- A body admits a value that the map former reads by two tests: the required names are
     present, and each present name passes its row. -/
 theorem AdmBody_of_out {b : Body S} {v : S.V} {m : MapOf S.V} (h : mapOut v = some m) :
-    AdmBody α b ρ v = (valPresentT b.fields b.at m.keys &&
-      objAdmV ⟨b.fields, fun k => AdmField α (b.at k) ρ⟩ (AdmWild α b.wild ρ) m.keys m.get) := by
+    AdmBody α β b ρ v = (valPresentT b.fields b.at m.keys &&
+      objAdmV ⟨b.fields, fun k => AdmField α β (b.at k) ρ⟩ (AdmWild α β b.wild ρ) m.keys m.get) := by
   unfold mapOut at h
   cases b with
   | mk fields fld wild =>
@@ -71,7 +72,7 @@ theorem AdmBody_of_out {b : Body S} {v : S.V} {m : MapOf S.V} (h : mapOut v = so
 
 /-- A body admits no value that the map former does not read. -/
 theorem AdmBody_of_none {b : Body S} {v : S.V} (h : mapOut v = none) :
-    AdmBody α b ρ v = false := by
+    AdmBody α β b ρ v = false := by
   unfold mapOut at h
   cases b with
   | mk fields fld wild =>
@@ -99,30 +100,30 @@ theorem valPresentT_req (fields : Finset String) (fld : {k // k ∈ fields} → 
     | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
 
 /-- The bottom admits nothing. -/
-@[simp] theorem Adm_never (v : S.V) : Adm α (.never : Term S) ρ v = false := by simp [Adm]
+@[simp] theorem Adm_never (v : S.V) : Adm α β (.never : Term S) ρ v = false := by simp [Adm]
 
-variable (α) in
+variable (α β) in
 /-- `⋁` of `Adm` over a union's options. -/
-def AdmAny (ts : List (Term S)) (ρ : List S.C) (v : S.V) : Bool := anyP (AdmList α ts ρ) v
+def AdmAny (ts : List (Term S)) (ρ : List S.C) (v : S.V) : Bool := anyP (AdmList α β ts ρ) v
 
 /-- An empty list of options admits no value. -/
-@[simp] theorem AdmAny_nil (v : S.V) : AdmAny α ([] : List (Term S)) ρ v = false := rfl
+@[simp] theorem AdmAny_nil (v : S.V) : AdmAny α β ([] : List (Term S)) ρ v = false := rfl
 
 /-- The options admit where the first admits or the rest admit. -/
 @[simp] theorem AdmAny_cons (t : Term S) (ts : List (Term S)) (v : S.V) :
-    AdmAny α (t :: ts) ρ v = (Adm α t ρ v || AdmAny α ts ρ v) := rfl
+    AdmAny α β (t :: ts) ρ v = (Adm α β t ρ v || AdmAny α β ts ρ v) := rfl
 
 /-- A union admits where one of its options admits. -/
 theorem Adm_union (opts : List (Term S)) (v : S.V) :
-    Adm α (.union opts) ρ v = AdmAny α opts ρ v := by simp [Adm, AdmAny]
+    Adm α β (.union opts) ρ v = AdmAny α β opts ρ v := by simp [Adm, AdmAny]
 
 /-- The rows of a term list are that list mapped, so `rowOfG_map` carries a row of terms
     onto the row of rows the admission reads. -/
-theorem AdmList_eq_map (ts : List (Term S)) : AdmList α ts ρ = ts.map (Adm α · ρ) :=
+theorem AdmList_eq_map (ts : List (Term S)) : AdmList α β ts ρ = ts.map (Adm α β · ρ) :=
   AdmList_eq ρ ts
 
 /-- …and the same for the spread. -/
-theorem AdmOptT_eq_map (sp : Option (Term S)) : AdmOptT α sp ρ = sp.map (Adm α · ρ) := by
+theorem AdmOptT_eq_map (sp : Option (Term S)) : AdmOptT α β sp ρ = sp.map (Adm α β · ρ) := by
   cases sp <;> rfl
 
 omit [Sem S] [PrimAdm S] in
@@ -141,9 +142,9 @@ theorem reqs_slotAt (c : Body S) (keys : Finset String) :
 /-- **A body admits a map by its slots**: every name whose slot is required is present, and
     every present name passes its slot. -/
 theorem AdmBody_map_slots (c : Body S) {v : S.V} {m : MapOf S.V} (hm : mapOut v = some m) :
-    AdmBody α c ρ v = true ↔
+    AdmBody α β c ρ v = true ↔
       (∀ k, ObjectSlot.isReq (c.slotAt k) = true → k ∈ m.keys) ∧
-      ∀ k : {k // k ∈ m.keys}, AdmField α (c.slotAt k.1) ρ (m.get k) = true := by
+      ∀ k : {k // k ∈ m.keys}, AdmField α β (c.slotAt k.1) ρ (m.get k) = true := by
   rw [AdmBody_of_out hm, valPresentT_req, Bool.and_eq_true, reqs_slotAt]
   apply and_congr Iff.rfl
   unfold objAdmV; rw [decide_eq_true_iff]
@@ -160,9 +161,9 @@ theorem AdmBody_map_slots (c : Body S) {v : S.V} {m : MapOf S.V} (hm : mapOut v 
     limit reads a value at the stage that the value's depth names, and that stage is the body over
     the stage below. So the unfolding needs no guard. -/
 theorem Adm_mu_unfold (b : Term S) (ρ : List S.C) (v : S.V) :
-    Adm α (.mu b) ρ v = Adm α b (muStage (fun c => denote α b (c :: ρ)) (Sem.dV v - 1) :: ρ) v := by
+    Adm α β (.mu b) ρ v = Adm α β b (muStage (fun c => denote α β b (c :: ρ)) (Sem.dV v - 1) :: ρ) v := by
   rw [Adm_eq_isSome b]
-  show ((muStage (fun c => denote α b (c :: ρ)) (Sem.dV v)).e v).isSome = _
+  show ((muStage (fun c => denote α β b (c :: ρ)) (Sem.dV v)).e v).isSome = _
   obtain ⟨n, hn⟩ : ∃ n, Sem.dV v = n + 1 := ⟨Sem.dV v - 1, by have := Sem.dV_pos v; omega⟩
   rw [hn, Nat.add_sub_cancel]
   rfl
@@ -173,17 +174,17 @@ end
 
 /-- **The write-side law of the set former.** The catch-all rows of the families read the
     disjointness of the former classes (`Shapes`). -/
-class FormerAdm (S : Syn) [Sem S] [PrimAdm S] : Prop where
+class FormerAdm (S : Syn) [Sem S] [PrimAdm S] [SynA S] [SemA S] : Prop where
   /-- Two sets whose elements share no value share no set. -/
-  set_never : ∀ {α : Table S} (a y : Term S), (∀ u, (Adm α a [] u && Adm α y [] u) = false) →
-    ∀ v, (Adm α (.set a) [] v && Adm α (.set y) [] v) = false
+  set_never : ∀ {α : Table S} {β : Table S.op} (a y : Term S), (∀ u, (Adm α β a [] u && Adm α β y [] u) = false) →
+    ∀ v, (Adm α β (.set a) [] v && Adm α β (.set y) [] v) = false
 
 /-- **The write-side laws of the leaves.** A primitive reads no variable, so the laws are
     stated at the closed environment. -/
-class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] : Prop where
+class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] [SynA S] [SemA S] : Prop where
   /-- Two primitives met at the bottom share no value. -/
-  prim_none : ∀ {α : Table S} (g g' : S.Ground), Leaf.prim g g' = none →
-    ∀ v, (Adm α (.prim g : Term S) [] v && Adm α (.prim g') [] v) = false
+  prim_none : ∀ {α : Table S} {β : Table S.op} (g g' : S.Ground), Leaf.prim g g' = none →
+    ∀ v, (Adm α β (.prim g : Term S) [] v && Adm α β (.prim g') [] v) = false
   /-- Two predicates met at the empty predicate hold together nowhere. -/
   pmeet_none : ∀ q p : S.Pred, Leaf.pmeet q p = some none →
     ∀ v, (Sem.eval q v && Sem.eval p v) = false
@@ -195,7 +196,7 @@ class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] : Prop where
 def ApartV (p : Pairing) (ρ ρ' : List S.C) : Prop :=
   ∀ i j k, p i j = some k → ∀ v, (((envAt ρ i).e v).isSome && ((envAt ρ' j).e v).isSome) = false
 
-omit [PrimAdm S] in
+omit [PrimAdm S] [SynA S] [SemA S] in
 /-- Apart environments stay apart when the left operand unfolds: its new binder pairs with
     nothing. -/
 theorem ApartV.left {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') (c : S.C) :
@@ -205,7 +206,7 @@ theorem ApartV.left {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') (c :
   | 0, hp => exact nomatch hp
   | i + 1, hp => exact h i j k hp v
 
-omit [PrimAdm S] in
+omit [PrimAdm S] [SynA S] [SemA S] in
 /-- …and when the right operand unfolds. -/
 theorem ApartV.right {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') (c : S.C) :
     ApartV (shiftR p) ρ (c :: ρ') := by
@@ -214,7 +215,7 @@ theorem ApartV.right {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') (c 
   | _, 0, hp => exact nomatch hp
   | i, j + 1, hp => exact h i j k hp v
 
-omit [PrimAdm S] in
+omit [PrimAdm S] [SynA S] [SemA S] in
 /-- Two new binders that share no value extend two apart environments at a paired binder. -/
 theorem ApartV.mu {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') {c c' : S.C}
     (hc : ∀ v, ((c.e v).isSome && (c'.e v).isSome) = false) :
@@ -229,16 +230,19 @@ theorem ApartV.mu {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') {c c' 
   | 0, _ + 1, hp => exact nomatch hp
   | _ + 1, 0, hp => exact nomatch hp
 
-variable (α) in
+variable (α β) in
 /-- A family is sound for `x` where every partner it accepts shares no value with `x`. -/
 def DisjSound (ρ ρ' : List S.C) (x : Term S) (f : Term S → Bool) : Prop :=
-  ∀ y, f y = true → ∀ v, (Adm α x ρ v && Adm α y ρ' v) = false
+  ∀ y, f y = true → ∀ v, (Adm α β x ρ v && Adm α β y ρ' v) = false
 
-/-- A refinement admits what its inner term admits and its predicate holds on. -/
-theorem Adm_refine_eq (t : Term S) (q : S.Pred) (ρ : List S.C) (v : S.V) :
-    Adm α (.refine t q) ρ v = (Adm α t ρ v && Sem.eval q v) := rfl
+/-- A refinement admits what its inner term admits, its predicate holds on, and its stored
+    predicate holds on the write. -/
+theorem Adm_refine_eq (t : Term S) (q : S.Pred) (qA : SynA.PredA S) (ρ : List S.C) (v : S.V) :
+    Adm α β (.refine t q qA) ρ v =
+      (Adm α β t ρ v && (Sem.eval q v && gate (denote α β t ρ) (SemA.evalA qA) v)) := by
+  simp only [Adm, Bool.and_assoc]
 
-omit [PrimAdm S] in
+omit [PrimAdm S] [SynA S] [SemA S] in
 /-- **Two recursive terms are disjoint stage by stage.** Where the two bodies keep apart every
     two binders that share no value, each two stages of the same index share no value. -/
 theorem stage_apart {B B' : S.C → S.C}
@@ -252,15 +256,15 @@ mutual
 /-- **The rows of the right operand are sound**, given a sound family for every pairing that
     keeps the environments apart. -/
 theorem disjSRight_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
-    (hf : ∀ q ρ', ApartV q ρ ρ' → DisjSound α ρ ρ' x (fam q)) :
+    (hf : ∀ q ρ', ApartV q ρ ρ' → DisjSound α β ρ ρ' x (fam q)) :
     ∀ (y : Term S) (p : Pairing) (ρ' : List S.C), ApartV p ρ ρ' →
-      disjSRight fam p y = true → ∀ v, (Adm α x ρ v && Adm α y ρ' v) = false
+      disjSRight fam p y = true → ∀ v, (Adm α β x ρ v && Adm α β y ρ' v) = false
   | .never, _, _, _, _, v => by simp
   | .mu b, p, ρ', hp, h, v => by
       simp only [disjSRight] at h
       rw [Adm_mu_unfold b ρ' v]
       exact disjSRight_sound hf b (shiftR p) _ (hp.right _) h v
-  | .refine y q, p, ρ', hp, h, v => by
+  | .refine y q _, p, ρ', hp, h, v => by
       simp only [disjSRight] at h
       rw [Adm_refine_eq, ← Bool.and_assoc, disjSRight_sound hf y p ρ' hp h v, Bool.false_and]
   | .union os, p, ρ', hp, h, v => by
@@ -270,15 +274,15 @@ theorem disjSRight_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S 
   | .prim g, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .set t, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .list a b c, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
-  | .held a b k, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
+  | .held a b _ k _, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .opaq, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .object b, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .var j, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
 /-- …and over the options of a union. -/
 theorem disjSRightL_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
-    (hf : ∀ q ρ', ApartV q ρ ρ' → DisjSound α ρ ρ' x (fam q)) :
+    (hf : ∀ q ρ', ApartV q ρ ρ' → DisjSound α β ρ ρ' x (fam q)) :
     ∀ (ys : List (Term S)) (p : Pairing) (ρ' : List S.C), ApartV p ρ ρ' →
-      disjSRightL fam p ys = true → ∀ v, (Adm α x ρ v && AdmAny α ys ρ' v) = false
+      disjSRightL fam p ys = true → ∀ v, (Adm α β x ρ v && AdmAny α β ys ρ' v) = false
   | [], _, _, _, _, v => by simp
   | y :: ys, p, ρ', hp, h, v => by
       simp only [disjSRightL, Bool.and_eq_true] at h
@@ -289,26 +293,26 @@ end
 mutual
 /-- **The split of the right operand is sound**, given a sound family at the pairing. -/
 theorem splitR_sound {ρ ρ' : List S.C} {x : Term S} {fam : Pairing → Term S → Bool} {p : Pairing}
-    (hf : DisjSound α ρ ρ' x (fam p)) :
-    ∀ (y : Term S), splitR fam p y = true → ∀ v, (Adm α x ρ v && Adm α y ρ' v) = false
+    (hf : DisjSound α β ρ ρ' x (fam p)) :
+    ∀ (y : Term S), splitR fam p y = true → ∀ v, (Adm α β x ρ v && Adm α β y ρ' v) = false
   | .never, _, v => by simp
   | .union os, h, v => by
       simp only [splitR] at h
       rw [Adm_union]
       exact splitRL_sound hf os h v
   | .mu b, h, v => hf _ (by simpa only [splitR] using h) v
-  | .refine y q, h, v => hf _ (by simpa only [splitR] using h) v
+  | .refine y q _, h, v => hf _ (by simpa only [splitR] using h) v
   | .prim g, h, v => hf _ (by simpa only [splitR] using h) v
   | .set t, h, v => hf _ (by simpa only [splitR] using h) v
   | .list a b c, h, v => hf _ (by simpa only [splitR] using h) v
-  | .held a b k, h, v => hf _ (by simpa only [splitR] using h) v
+  | .held a b _ k _, h, v => hf _ (by simpa only [splitR] using h) v
   | .opaq, h, v => hf _ (by simpa only [splitR] using h) v
   | .object b, h, v => hf _ (by simpa only [splitR] using h) v
   | .var j, h, v => hf _ (by simpa only [splitR] using h) v
 /-- …and over the options of a union. -/
 theorem splitRL_sound {ρ ρ' : List S.C} {x : Term S} {fam : Pairing → Term S → Bool} {p : Pairing}
-    (hf : DisjSound α ρ ρ' x (fam p)) :
-    ∀ (ys : List (Term S)), splitRL fam p ys = true → ∀ v, (Adm α x ρ v && AdmAny α ys ρ' v) = false
+    (hf : DisjSound α β ρ ρ' x (fam p)) :
+    ∀ (ys : List (Term S)), splitRL fam p ys = true → ∀ v, (Adm α β x ρ v && AdmAny α β ys ρ' v) = false
   | [], _, v => by simp
   | y :: ys, h, v => by
       simp only [splitRL, Bool.and_eq_true] at h
@@ -319,8 +323,8 @@ end
 /-- **Two data predicates that meet at the empty predicate keep a refinement chain apart**: no
     value satisfies `q` and a refinement of the chain. -/
 theorem predApart_sound [Leaf S] [LeafAdm S] {q : S.Pred} {ρ' : List S.C} :
-    ∀ (y : Term S), predApart q y = true → ∀ v, (Sem.eval q v && Adm α y ρ' v) = false
-  | .refine y q', h, v => by
+    ∀ (y : Term S), predApart q y = true → ∀ v, (Sem.eval q v && Adm α β y ρ' v) = false
+  | .refine y q' _, h, v => by
       simp only [predApart, Bool.or_eq_true, Bool.and_eq_true] at h
       rw [Adm_refine_eq]
       rcases h with ⟨-, hm⟩ | h
@@ -331,19 +335,19 @@ theorem predApart_sound [Leaf S] [LeafAdm S] {q : S.Pred} {ρ' : List S.C} :
         have := LeafAdm.pmeet_none q q' hn v
         cases hq : Sem.eval q v <;> cases hq' : Sem.eval q' v <;> simp_all
       · have := predApart_sound (ρ' := ρ') y h v
-        cases hq : Sem.eval q v <;> cases ha : Adm α y ρ' v <;> simp_all
-  | .prim _, h, _ | .never, h, _ | .set _, h, _ | .list _ _ _, h, _ | .held _ _ _, h, _
+        cases hq : Sem.eval q v <;> cases ha : Adm α β y ρ' v <;> simp_all
+  | .prim _, h, _ | .never, h, _ | .set _, h, _ | .list _ _ _, h, _ | .held _ _ _ _ _, h, _
   | .opaq, h, _ | .object _, h, _ | .union _, h, _ | .var _, h, _ | .mu _, h, _ => by
       simp [predApart] at h
 
 /-- **The leaf family is sound**: the leaf law, and the shape classes at every former. -/
 theorem famPrimD_sound [Leaf S] [LeafAdm S] [Shapes S] {ρ ρ' : List S.C} (g : S.Ground) :
-    DisjSound α ρ ρ' (.prim g) (famPrimD g) := by
+    DisjSound α β ρ ρ' (.prim g) (famPrimD g) := by
   intro y h v
   cases y with
   | prim g' =>
       simp only [famPrimD, Option.isNone_iff_eq_none] at h
-      exact LeafAdm.prim_none (α := α) g g' h v
+      exact LeafAdm.prim_none (α := α) (β := β) g g' h v
   | set t => exact Shapes.prim_set g t v
   | list a b c => exact Shapes.prim_list g a b c v
   | object b => exact Shapes.prim_obj g b v
@@ -351,7 +355,7 @@ theorem famPrimD_sound [Leaf S] [LeafAdm S] [Shapes S] {ρ ρ' : List S.C} (g : 
 
 /-- **The variable family is sound**: a paired binder pair shares no value. -/
 theorem famVarD_sound {ρ ρ' : List S.C} {i : Nat} {q : Pairing} (hq : ApartV q ρ ρ') :
-    DisjSound α ρ ρ' (.var i) (famVarD i q) := by
+    DisjSound α β ρ ρ' (.var i) (famVarD i q) := by
   intro y h v
   cases y with
   | var j =>
@@ -363,8 +367,8 @@ theorem famVarD_sound {ρ ρ' : List S.C} {i : Nat} {q : Pairing} (hq : ApartV q
 /-- **The set family is sound**: the set law over closed elements, and the shape classes at
     every other former. -/
 theorem famSetD_sound [FormerAdm S] [Shapes S] {ρ ρ' : List S.C} (a : Term S)
-    {mt : Term S → Bool} (hmt : DisjSound α ρ ρ' a mt) :
-    DisjSound α ρ ρ' (.set a) (famSetD a mt) := by
+    {mt : Term S → Bool} (hmt : DisjSound α β ρ ρ' a mt) :
+    DisjSound α β ρ ρ' (.set a) (famSetD a mt) := by
   intro y h v
   cases y with
   | set y' =>
@@ -374,7 +378,7 @@ theorem famSetD_sound [FormerAdm S] [Shapes S] {ρ ρ' : List S.C} (a : Term S)
         rw [← Adm_closed a ha ρ [], ← Adm_closed y' hy ρ' []]; exact hmt y' hm u) v
       rwa [Adm_closed (.set a) ha ρ [], Adm_closed (.set y') hy ρ' []]
   | prim g =>
-      have := Shapes.prim_set (α := α) (ρ := ρ') (ρ' := ρ) g a v
+      have := Shapes.prim_set (α := α) (β := β) (ρ := ρ') (ρ' := ρ) g a v
       rw [Bool.and_comm]; exact this
   | list x y z => exact Shapes.set_list a x y z v
   | object b => exact Shapes.set_obj a b v
@@ -382,15 +386,15 @@ theorem famSetD_sound [FormerAdm S] [Shapes S] {ρ ρ' : List S.C} (a : Term S)
 
 
 
-variable (α) in
+variable (α β) in
 /-- Two rows of terms share no row of values. -/
 def RowsApart (ρ ρ' : List S.C) (r₁ r₂ : List (Term S)) : Prop :=
-  ∀ ws : List S.V, (zipP (AdmList α r₁ ρ) ws && zipP (AdmList α r₂ ρ') ws) = false
+  ∀ ws : List S.V, (zipP (AdmList α β r₁ ρ) ws && zipP (AdmList α β r₂ ρ') ws) = false
 
 /-- One disjoint position keeps two rows of one length apart. -/
 theorem rowsApart_of_anyZip {ρ ρ' : List S.C} :
-    ∀ {r₁ : List (Term S)} {fs : List (Term S → Bool)}, List.Forall₂ (DisjSound α ρ ρ') r₁ fs →
-      ∀ {r₂ : List (Term S)}, anyZip fs r₂ = true → RowsApart α ρ ρ' r₁ r₂
+    ∀ {r₁ : List (Term S)} {fs : List (Term S → Bool)}, List.Forall₂ (DisjSound α β ρ ρ') r₁ fs →
+      ∀ {r₂ : List (Term S)}, anyZip fs r₂ = true → RowsApart α β ρ ρ' r₁ r₂
   | _, _, .nil, _, h, _ => by simp [anyZip] at h
   | t :: r₁, f :: fs, .cons ht hr, r₂, h, ws => by
       cases r₂ with
@@ -403,15 +407,15 @@ theorem rowsApart_of_anyZip {ρ ρ' : List S.C} :
           simp only [AdmList, zipP]
           rcases h with h | h
           · have := ht u h w
-            cases h1 : Adm α t ρ w <;> cases h2 : Adm α u ρ' w <;> simp_all
+            cases h1 : Adm α β t ρ w <;> cases h2 : Adm α β u ρ' w <;> simp_all
           · have := rowsApart_of_anyZip hr h ws
-            cases h1 : zipP (AdmList α r₁ ρ) ws <;> cases h2 : zipP (AdmList α r₂ ρ') ws <;>
+            cases h1 : zipP (AdmList α β r₁ ρ) ws <;> cases h2 : zipP (AdmList α β r₂ ρ') ws <;>
               simp_all
 
 /-- Two rows stay apart when a common prefix of equal length goes in front. -/
 theorem RowsApart.append_left {ρ ρ' : List S.C} {A₁ A₂ X₁ X₂ : List (Term S)}
-    (hA : A₁.length = A₂.length) (h : RowsApart α ρ ρ' A₁ A₂) :
-    RowsApart α ρ ρ' (A₁ ++ X₁) (A₂ ++ X₂) := by
+    (hA : A₁.length = A₂.length) (h : RowsApart α β ρ ρ' A₁ A₂) :
+    RowsApart α β ρ ρ' (A₁ ++ X₁) (A₂ ++ X₂) := by
   intro ws
   rcases Nat.lt_or_ge ws.length A₁.length with hl | hl
   · rw [zipP_false_of_length_ne _ _ (by simp [AdmList_eq]; omega), Bool.false_and]
@@ -420,13 +424,13 @@ theorem RowsApart.append_left {ρ ρ' : List S.C} {A₁ A₂ X₁ X₂ : List (T
       zipP_append _ _ _ _ (by simp; omega)]
     have := h (ws.take A₁.length)
     rw [AdmList_eq, AdmList_eq] at this
-    cases h1 : zipP (A₁.map (Adm α · ρ)) (ws.take A₁.length) <;>
-      cases h2 : zipP (A₂.map (Adm α · ρ')) (ws.take A₁.length) <;> simp_all
+    cases h1 : zipP (A₁.map (Adm α β · ρ)) (ws.take A₁.length) <;>
+      cases h2 : zipP (A₂.map (Adm α β · ρ')) (ws.take A₁.length) <;> simp_all
 
 /-- …and when a common suffix of equal length goes behind. -/
 theorem RowsApart.append_right {ρ ρ' : List S.C} {B₁ B₂ X₁ X₂ : List (Term S)}
-    (hX : X₁.length = X₂.length) (h : RowsApart α ρ ρ' B₁ B₂) :
-    RowsApart α ρ ρ' (X₁ ++ B₁) (X₂ ++ B₂) := by
+    (hX : X₁.length = X₂.length) (h : RowsApart α β ρ ρ' B₁ B₂) :
+    RowsApart α β ρ ρ' (X₁ ++ B₁) (X₂ ++ B₂) := by
   intro ws
   rcases Nat.lt_or_ge ws.length X₁.length with hl | hl
   · rw [zipP_false_of_length_ne _ _ (by simp [AdmList_eq]; omega), Bool.false_and]
@@ -435,14 +439,14 @@ theorem RowsApart.append_right {ρ ρ' : List S.C} {B₁ B₂ X₁ X₂ : List (
       zipP_append _ _ _ _ (by simp; omega)]
     have := h (ws.drop X₁.length)
     rw [AdmList_eq, AdmList_eq] at this
-    cases h1 : zipP (B₁.map (Adm α · ρ)) (ws.drop X₁.length) <;>
-      cases h2 : zipP (B₂.map (Adm α · ρ')) (ws.drop X₁.length) <;> simp_all
+    cases h1 : zipP (B₁.map (Adm α β · ρ)) (ws.drop X₁.length) <;>
+      cases h2 : zipP (B₂.map (Adm α β · ρ')) (ws.drop X₁.length) <;> simp_all
 
 /-- Two `list` shapes whose rows are apart at every common length share no value. -/
 theorem Adm_list_apart {ρ ρ' : List S.C} {p₁ s₁ p₂ s₂ : List (Term S)} {q₁ q₂ : Option (Term S)}
     (h : ∀ n r₁ r₂, rowOfG p₁ q₁ s₁ n = some r₁ → rowOfG p₂ q₂ s₂ n = some r₂ →
-      RowsApart α ρ ρ' r₁ r₂) (v : S.V) :
-    (Adm α (.list p₁ q₁ s₁) ρ v && Adm α (.list p₂ q₂ s₂) ρ' v) = false := by
+      RowsApart α β ρ ρ' r₁ r₂) (v : S.V) :
+    (Adm α β (.list p₁ q₁ s₁) ρ v && Adm α β (.list p₂ q₂ s₂) ρ' v) = false := by
   cases hv : listOut v with
   | none => simp [Adm_list_of_none hv]
   | some ws =>
@@ -487,10 +491,10 @@ theorem rowOfG_isSome_len {α : Type} {pre suf : List α} {sp : Option α} {n : 
 theorem famListD_sound [Shapes S] {ρ ρ' : List S.C} {pre suf : List (Term S)}
     {sp : Option (Term S)}
     {fpre fsuf : List (Term S → Bool)} {fsp : Option (Term S → Bool)}
-    (hp : List.Forall₂ (DisjSound α ρ ρ') pre fpre)
-    (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ DisjSound α ρ ρ' t f)
-    (hf : List.Forall₂ (DisjSound α ρ ρ') suf fsuf) :
-    DisjSound α ρ ρ' (.list pre sp suf) (famListD fpre fsp fsuf) := by
+    (hp : List.Forall₂ (DisjSound α β ρ ρ') pre fpre)
+    (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ DisjSound α β ρ ρ' t f)
+    (hf : List.Forall₂ (DisjSound α β ρ ρ') suf fsuf) :
+    DisjSound α β ρ ρ' (.list pre sp suf) (famListD fpre fsp fsuf) := by
   have hlp := hp.length_eq
   have hlf := hf.length_eq
   intro y h v
@@ -526,7 +530,7 @@ theorem famListD_sound [Shapes S] {ρ ρ' : List S.C} {pre suf : List (Term S)}
             exact nomatch hfs
           | some fs =>
             rw [hfs] at h
-            have hF := rowOfG_forall₂ (R := DisjSound α ρ ρ') hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf
+            have hF := rowOfG_forall₂ (R := DisjSound α β ρ ρ') hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf
               h₁ hfs
             exact rowsApart_of_anyZip hF h
         · exact nomatch h₂
@@ -543,7 +547,7 @@ theorem famListD_sound [Shapes S] {ρ ρ' : List S.C} {pre suf : List (Term S)}
           · next fs us hfs hus =>
             obtain ⟨rN, hrN⟩ := rowOfG_total (pre := pre) (suf := suf) (c := t) (n := P + S')
               (by omega)
-            have hF := rowOfG_forall₂ (R := DisjSound α ρ ρ') hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf
+            have hF := rowOfG_forall₂ (R := DisjSound α β ρ ρ') hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf
               hrN hfs
             have hr₁ := rowOfG_respread (P := P) (S := S') (n := n) (by omega) (by omega)
               (by omega) hrN h₁
@@ -569,8 +573,8 @@ theorem famListD_sound [Shapes S] {ρ ρ' : List S.C} {pre suf : List (Term S)}
     common map holds the name, and the two slots share no value there. -/
 theorem AdmBody_apart_at {ρ ρ' : List S.C} {a b : Body S} {k : String}
     (hr : (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)) = true)
-    (hs : ∀ w, (AdmField α (a.slotAt k) ρ w && AdmField α (b.slotAt k) ρ' w) = false) (v : S.V) :
-    (AdmBody α a ρ v && AdmBody α b ρ' v) = false := by
+    (hs : ∀ w, (AdmField α β (a.slotAt k) ρ w && AdmField α β (b.slotAt k) ρ' w) = false) (v : S.V) :
+    (AdmBody α β a ρ v && AdmBody α β b ρ' v) = false := by
   refine Bool.eq_false_iff.mpr (fun hab => ?_)
   rw [Bool.and_eq_true] at hab
   obtain ⟨hA, hB⟩ := hab
@@ -589,9 +593,9 @@ theorem AdmBody_apart_at {ρ ρ' : List S.C} {a b : Body S} {k : String}
 theorem famObjD_sound [Shapes S] {ρ ρ' : List S.C} {a : Body S}
     {g : {k // k ∈ a.fields} → ObjectSlot S → Bool} {mw : Term S → Bool}
     (hg : ∀ k s, g k s = true → (ObjectSlot.isReq (a.at k) || ObjectSlot.isReq s) = true ∧
-      ∀ w, (AdmField α (a.at k) ρ w && AdmField α s ρ' w) = false)
-    (hmw : DisjSound α ρ ρ' a.block mw) :
-    DisjSound α ρ ρ' (.object a) (famObjD a g mw) := by
+      ∀ w, (AdmField α β (a.at k) ρ w && AdmField α β s ρ' w) = false)
+    (hmw : DisjSound α β ρ ρ' a.block mw) :
+    DisjSound α β ρ ρ' (.object a) (famObjD a g mw) := by
   intro y h v
   cases y with
   | prim g' => rw [Bool.and_comm]; exact Shapes.prim_obj g' a v
@@ -600,7 +604,7 @@ theorem famObjD_sound [Shapes S] {ρ ρ' : List S.C} {a : Body S}
   | object b =>
     simp only [famObjD, decide_eq_true_eq] at h
     obtain ⟨⟨k, hk⟩, hd⟩ := h
-    show (AdmBody α a ρ v && AdmBody α b ρ' v) = false
+    show (AdmBody α β a ρ v && AdmBody α β b ρ' v) = false
     unfold slotD at hd
     split at hd
     · next ha =>
@@ -626,9 +630,9 @@ mutual
     apart. -/
 theorem disjoint_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
     ∀ (p : Pairing) (x y : Term S), Term.disjoint p x y = true →
-      ∀ (ρ ρ' : List S.C), ApartV p ρ ρ' → ∀ v, (Adm α x ρ v && Adm α y ρ' v) = false
+      ∀ (ρ ρ' : List S.C), ApartV p ρ ρ' → ∀ v, (Adm α β x ρ v && Adm α β y ρ' v) = false
   | _, .never, _, _, _, _, _, _ => by simp
-  | p, .held _ _ _, y, h, ρ, ρ', hp, v =>
+  | p, .held _ _ _ _ _, y, h, ρ, ρ', hp, v =>
       disjSRight_sound (ρ := ρ) (fam := fun _ _ => false)
         (fun _ _ _ _ hh => nomatch hh) y p ρ' hp h v
   | p, .var i, y, h, ρ, ρ', hp, v =>
@@ -638,7 +642,7 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
       | mu b' =>
         simp only [Term.disjoint] at h
         have hB : ∀ c c', (∀ u, ((c.e u).isSome && (c'.e u).isSome) = false) →
-            ∀ u, (((denote α b (c :: ρ)).e u).isSome && ((denote α b' (c' :: ρ')).e u).isSome)
+            ∀ u, (((denote α β b (c :: ρ)).e u).isSome && ((denote α β b' (c' :: ρ')).e u).isSome)
               = false := fun c c' hc u => by
           have := disjoint_sound (pairMu p) b b' h (c :: ρ) (c' :: ρ') (hp.mu hc) u
           rwa [Adm_eq_isSome, Adm_eq_isSome] at this
@@ -649,17 +653,17 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
         simp only [Term.disjoint] at h
         rw [Adm_mu_unfold b ρ v]
         exact disjoint_sound (shiftL p) b _ h _ ρ' (hp.left _) v
-  | p, .refine x q, y, h, ρ, ρ', hp, v => by
+  | p, .refine x q qA, y, h, ρ, ρ', hp, v => by
       simp only [Term.disjoint] at h
-      refine splitR_sound (ρ := ρ) (ρ' := ρ') (x := .refine x q) (p := p) ?_ y h v
+      refine splitR_sound (ρ := ρ) (ρ' := ρ') (x := .refine x q qA) (p := p) ?_ y h v
       intro y' hy w
       rw [Bool.or_eq_true, Bool.and_eq_true] at hy
       rw [Adm_refine_eq]
       rcases hy with hy | ⟨-, hy⟩
       · have := disjoint_sound p x y' hy ρ ρ' hp w
-        cases h1 : Adm α x ρ w <;> cases h2 : Adm α y' ρ' w <;> simp_all
-      · have := predApart_sound (α := α) (ρ' := ρ') y' hy w
-        cases h1 : Sem.eval q w <;> cases h2 : Adm α y' ρ' w <;> simp_all
+        cases h1 : Adm α β x ρ w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
+      · have := predApart_sound (α := α) (β := β) (ρ' := ρ') y' hy w
+        cases h1 : Sem.eval q w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
   | p, .union os, y, h, ρ, ρ', hp, v => by
       simp only [Term.disjoint] at h
       rw [Adm_union]
@@ -697,19 +701,19 @@ termination_by structural _ x => x
 /-- …and a union, option by option. -/
 theorem disjointL_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
     ∀ (p : Pairing) (os : List (Term S)) (y : Term S), Term.disjointL p os y = true →
-      ∀ (ρ ρ' : List S.C), ApartV p ρ ρ' → ∀ v, (AdmAny α os ρ v && Adm α y ρ' v) = false
+      ∀ (ρ ρ' : List S.C), ApartV p ρ ρ' → ∀ v, (AdmAny α β os ρ v && Adm α β y ρ' v) = false
   | _, [], _, _, _, _, _, _ => by simp
   | p, x :: xs, y, h, ρ, ρ', hp, v => by
       simp only [Term.disjointL, Bool.and_eq_true] at h
       have h1 := disjoint_sound p x y h.1 ρ ρ' hp v
       have h2 := disjointL_sound p xs y h.2 ρ ρ' hp v
       rw [AdmAny_cons]
-      cases a1 : Adm α x ρ v <;> cases a2 : AdmAny α xs ρ v <;> cases a3 : Adm α y ρ' v <;> simp_all
+      cases a1 : Adm α β x ρ v <;> cases a2 : AdmAny α β xs ρ v <;> cases a3 : Adm α β y ρ' v <;> simp_all
 termination_by structural _ os => os
 /-- …and each position of a row, partially applied. -/
 theorem disjointTs_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
     ∀ (p : Pairing) (ts : List (Term S)) (ρ ρ' : List S.C), ApartV p ρ ρ' →
-      List.Forall₂ (DisjSound α ρ ρ') ts (Term.disjointTs p ts)
+      List.Forall₂ (DisjSound α β ρ ρ') ts (Term.disjointTs p ts)
   | _, [], _, _, _ => .nil
   | p, t :: ts, ρ, ρ', hp =>
       .cons (fun u hu w => disjoint_sound p t u hu ρ ρ' hp w) (disjointTs_sound p ts ρ ρ' hp)
@@ -719,7 +723,7 @@ theorem slot_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
     ∀ (p : Pairing) (s s' : ObjectSlot S), ObjectSlot.disjoint p s s' = true →
       ∀ (ρ ρ' : List S.C), ApartV p ρ ρ' →
         (ObjectSlot.isReq s || ObjectSlot.isReq s') = true ∧
-          ∀ w, (AdmField α s ρ w && AdmField α s' ρ' w) = false
+          ∀ w, (AdmField α β s ρ w && AdmField α β s' ρ' w) = false
   | p, .req x, .req y, h, ρ, ρ', hp =>
       ⟨rfl, fun w => disjoint_sound p x y h ρ ρ' hp w⟩
   | p, .req x, .optional y, h, ρ, ρ', hp =>

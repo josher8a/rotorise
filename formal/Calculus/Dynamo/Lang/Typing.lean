@@ -110,18 +110,18 @@ spelling at the DynamoDB held set, and `Typed.casesD` gives each case at the sam
 
 variable (α) in
 /-- The judgement of DynamoDB. -/
-abbrev Typed : Term → Held → Option Member → Prop := Alg.Typed α (S := dynSyn)
+abbrev Typed : Term → Held → Option Member → Prop := Alg.Typed α dynTableA (S := dynSyn)
 variable (α) in
-abbrev TypedList : List Term → List Held → Prop := Alg.TypedList α (S := dynSyn)
+abbrev TypedList : List Term → List Held → Prop := Alg.TypedList α dynTableA (S := dynSyn)
 variable (α) in
 abbrev TypedListμ : List Term → List Held → List (Option Member) → Prop :=
-  Alg.TypedListμ α (S := dynSyn)
+  Alg.TypedListμ α dynTableA (S := dynSyn)
 variable (α) in
-abbrev TypedOpt : Option Term → Option Held → Prop := Alg.TypedOpt α (S := dynSyn)
+abbrev TypedOpt : Option Term → Option Held → Prop := Alg.TypedOpt α dynTableA (S := dynSyn)
 variable (α) in
-abbrev TypedField : ObjectSlot → Held → Bool → Option Member → Prop := Alg.TypedField α (S := dynSyn)
+abbrev TypedField : ObjectSlot → Held → Bool → Option Member → Prop := Alg.TypedField α dynTableA (S := dynSyn)
 variable (α) in
-abbrev TypedWild : Option Term → Option Held → Prop := Alg.TypedWild α (S := dynSyn)
+abbrev TypedWild : Option Term → Option Held → Prop := Alg.TypedWild α dynTableA (S := dynSyn)
 
 namespace TypedList export Alg.TypedList (nil cons) end TypedList
 namespace TypedListμ export Alg.TypedListμ (cons) end TypedListμ
@@ -173,13 +173,13 @@ theorem Typed.list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre) (hs :
   Alg.Typed.list (S := dynSyn) (L := dList) rfl hp hs hf
 
 /-- `(held)`, at the DynamoDB denotation of the caller-side term. -/
-theorem Typed.held {t I μ P k} (h : Typed α t I μ) :
-    Typed α (.held t P k) (fun v => I ((α.word k).1 v) ∧ ((denote α P).e v).isSome) μ :=
+theorem Typed.held {t I μ P PA k kA} (h : Typed α t I μ) :
+    Typed α (.held t P PA k kA) (fun v => I ((α.word k).1 v) ∧ ((denote α P).e v).isSome) μ :=
   Alg.Typed.held h
 
 /-- `(refine)`: the held set is the premise's, cut by the predicate. -/
-theorem Typed.refine {t T μ p} (h : Typed α t T μ) :
-    Typed α (.refine t p) (fun v => T v ∧ p.eval v) μ :=
+theorem Typed.refine {t T μ p pA} (h : Typed α t T μ) :
+    Typed α (.refine t p pA) (fun v => T v ∧ p.eval v) μ :=
   Alg.Typed.refine h
 
 /-- §3 `(opaque)`: the held set is `HOpaque`. -/
@@ -219,10 +219,11 @@ theorem Typed.casesD {motive : ∀ t T μ, Typed α t T μ → Prop}
     (list : ∀ {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre) (hs : TypedOpt α sp Tsp)
       (hf : TypedList α suf Tsuf),
       motive (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L) (.list hp hs hf))
-    (held : ∀ {t I μ P k} (h : Typed α t I μ),
-      motive (.held t P k) (fun v => I ((α.word k).1 v) ∧ ((denote α P).e v).isSome) μ (.held h))
-    (refine : ∀ {t T μ p} (h : Typed α t T μ),
-      motive (.refine t p) (fun v => T v ∧ p.eval v) μ (.refine h))
+    (held : ∀ {t I μ P PA k kA} (h : Typed α t I μ),
+      motive (.held t P PA k kA) (fun v => I ((α.word k).1 v) ∧ ((denote α P).e v).isSome) μ
+        (.held h))
+    (refine : ∀ {t T μ p pA} (h : Typed α t T μ),
+      motive (.refine t p pA) (fun v => T v ∧ p.eval v) μ (.refine h))
     (opaq : motive .opaq HOpaque none .opaq)
     (never : motive .never HNever none .never)
     (object : ∀ {body : Body} {bind R} {μs : {k // k ∈ body.fields} → Option Member}

@@ -125,28 +125,6 @@ theorem agreeS_mu_right {side : Bool} {dV : V → Nat} {dA : A → Nat} {B : Cod
   · intro a t w ht hw; exact (h (dA a) : AgreeP _ _) a t w ht hw
   · intro v a b ha hb; exact (h (dV v) : AgreeE _ _) v a b ha hb
 
-/-- **One adapter over two agreeing stored sides agrees**, whatever the two caller sides. -/
-theorem agreeS_held {side : Bool} {c c' : Codec V A M} {f g : V → V} {q q' : V → Bool}
-    (h : AgreeS side c c') :
-    AgreeS side ((c.through f g).restrict q) ((c'.through f g).restrict q') := by
-  refine agreeS_sub_left (sub_restrict_self _ _) (agreeS_sub_right (sub_restrict_self _ _) ?_)
-  cases side
-  · intro a t w ht hw
-    obtain ⟨u, hu, rfl⟩ := through_p.mp ht
-    obtain ⟨u', hu', rfl⟩ := through_p.mp hw
-    rw [(h : AgreeP c c') a u u' hu hu']
-  · intro v a b ha hb; exact (h : AgreeE c c') (f v) a b ha hb
-
-/-- A `held` writes only where its caller side writes. -/
-theorem held_e_dom {c P : Codec V A M} {f g : V → V} {v : V} {a : A}
-    (h : ((c.through f g).restrict fun v => (P.e v).isSome).e v = some a) : (P.e v).isSome = true :=
-  (restrict_e.mp h).1
-
-/-- …and reads only where its stored side reads. -/
-theorem held_p_dom {c : Codec V A M} {f g : V → V} {q : V → Bool} {a : A} {t : V}
-    (h : ((c.through f g).restrict q).p a = some t) : (c.p a).isSome = true := by
-  obtain ⟨w, hw, _⟩ := through_p.mp (restrict_p.mp h).1; rw [hw]; rfl
-
 /-- Two carried codecs over one prism pair agree where their payload pairs agree. -/
 theorem agreeE_carried {γ δ : Type} {pV : Ctor γ V} {pA : Ctor δ A} {μ₀ : M}
     {P₁ P₂ : γ → Prop} {E₁ E₂ : γ → Option δ} {D₁ D₂ : δ → Option γ}

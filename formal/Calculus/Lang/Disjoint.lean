@@ -34,7 +34,7 @@ class Leaf (S : Syn) where
   /-- Two predicates met: `none` refuses, `some none` is empty, `some (some r)` is `r`. -/
   pmeet : S.Pred → S.Pred → Option (Option S.Pred)
 
-variable {S : Syn} {α : Table S}
+variable {S : Syn} [SynA S]
 
 /-- A union of what survived a distribution: nothing is the bottom, one survivor is itself, and
     the rest are a union again. -/
@@ -109,7 +109,7 @@ mutual
 def disjSRight (fam : Pairing → Term S → Bool) (p : Pairing) : Term S → Bool
   | .never => true
   | .mu b => disjSRight fam (shiftR p) b
-  | .refine y _ => disjSRight fam p y
+  | .refine y _ _ => disjSRight fam p y
   | .union os => disjSRightL fam p os
   | y => fam p y
 /-- The list companion of `disjSRight`: each option is disjoint from the left operand. -/
@@ -139,7 +139,7 @@ end
     refinement counts only over a held-free closed term, which reads each attribute as the top
     reads it, so two such refinements read one value. -/
 def predApart [Leaf S] (q : S.Pred) : Term S → Bool
-  | .refine y q' => (Leaf.isData q' && !hasHeld y && !y.hasVar &&
+  | .refine y q' _ => (Leaf.isData q' && !hasHeld y && !y.hasVar &&
       (match Leaf.pmeet q q' with | some none => true | _ => false)) || predApart q y
   | _ => false
 
@@ -239,11 +239,11 @@ mutual
     predicate of the partner hold together nowhere. -/
 def Term.disjoint [Leaf S] (p : Pairing) : Term S → Term S → Bool
   | .never, _ => true
-  | .held _ _ _, y => disjSRight (fun _ _ => false) p y
+  | .held _ _ _ _ _, y => disjSRight (fun _ _ => false) p y
   | .var i, y => disjSRight (famVarD i) p y
   | .mu b, .mu b' => Term.disjoint (pairMu p) b b'
   | .mu b, y => Term.disjoint (shiftL p) b y
-  | .refine x q, y =>
+  | .refine x q _, y =>
       splitR (fun p' y' => Term.disjoint p' x y' ||
         (Leaf.isData q && !hasHeld x && !x.hasVar && predApart q y')) p y
   | .union os, y => Term.disjointL p os y
