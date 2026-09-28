@@ -12,6 +12,8 @@ nothing: the test is sound, not complete.
 A term denotes a partial isomorphism, and its admission is the domain idempotent. Two terms are
 disjoint where the product of the two idempotents is zero, which is orthogonality in an inverse
 semigroup. The union certificate asks the test of the two pairs of views (`Calculus.certPair`).
+Orthogonality is self-dual, so the test reads no orientation: each two-sided row reads both
+absolute sides, and the test at the dual universe is the test.
 
 Every row is structure except two leaves: two primitives apart, and two predicates apart. A
 universe supplies the two leaves in the class `Leaf`. The rows of `held`, `refine`, `union`,
@@ -136,14 +138,19 @@ end
 
 /-! ## The families: one per left constructor, flat and non-recursive -/
 
-/-- **A data predicate that no value of the right refinement chain satisfies with `q`.** A
-    refinement counts only over a held-free closed term, which reads each attribute as the top
-    reads it, so two such refinements read one value. -/
-def predApart {S : Syn} [Leaf S] (q : S.Pred) : Term S → Bool
-  | .refine y q' qA' => (Leaf.isData S.o.c (half S.o.c q' qA') && !hasHeld y && !y.hasVar &&
-      (match Leaf.pmeet S.o.c q (half S.o.c q' qA') with | some none => true | _ => false)) ||
-        predApart q y
+/-- **A data predicate at the side `s` that no element of the right refinement chain satisfies
+    with `q`.** A refinement counts only over a held-free closed term, which lies below the top,
+    so two such refinements send one value and one attribute to each other. -/
+def predApart [Leaf S] (s : Bool) (q : S.P s) : Term S → Bool
+  | .refine y q' qA' => (Leaf.isData s (half s q' qA') && !hasHeld y && !y.hasVar &&
+      (match Leaf.pmeet s q (half s q' qA') with | some none => true | _ => false)) ||
+        predApart s q y
   | _ => false
+
+/-- **A refinement is apart from the right operand at the side `s`**: the refinement's data
+    predicate at `s` holds with no predicate of the right chain, over a held-free closed term. -/
+def dataApart [Leaf S] (x : Term S) (s : Bool) (q : S.P s) (y : Term S) : Bool :=
+  Leaf.isData s q && !hasHeld x && !x.hasVar && predApart s q y
 
 /-- **The one leaf family**: a primitive is disjoint from a primitive where the leaf says so,
     and from every former, because two formers of different shape classes share no value. The
@@ -237,18 +244,17 @@ mutual
     function that the test does not read. Two recursive terms are disjoint where their bodies
     are disjoint with the two binders paired, because then each two stages are disjoint. A
     recursive term beside another constructor unfolds, and its binder pairs with nothing. A
-    refinement is disjoint where its inner term is, or where its data predicate and a data
-    predicate of the partner hold together nowhere. -/
-def Term.disjoint {S : Syn} [Leaf S] (p : Pairing) : Term S → Term S → Bool
+    refinement is disjoint where its inner term is, or where its data predicate at one absolute
+    side and a data predicate of the partner at that side hold together nowhere. -/
+def Term.disjoint [Leaf S] (p : Pairing) : Term S → Term S → Bool
   | .never, _ => true
   | .held _ _ _ _ _, y => disjSRight (fun _ _ => false) p y
   | .var i, y => disjSRight (famVarD i) p y
   | .mu b, .mu b' => Term.disjoint (pairMu p) b b'
   | .mu b, y => Term.disjoint (shiftL p) b y
   | .refine x q qA, y =>
-      splitR (fun p' y' => Term.disjoint p' x y' ||
-        (Leaf.isData S.o.c (half S.o.c q qA) && !hasHeld x && !x.hasVar &&
-          predApart (half S.o.c q qA) y')) p y
+      splitR (fun p' y' => Term.disjoint p' x y' || dataApart x false q y' ||
+        dataApart x true qA y') p y
   | .union os, y => Term.disjointL p os y
   | .prim g, y => disjSRight (fun _ => famPrimD g) p y
   | .set a, y => disjSRight (fun q => famSetD a (Term.disjoint q a)) p y
@@ -262,16 +268,16 @@ def Term.disjoint {S : Syn} [Leaf S] (p : Pairing) : Term S → Term S → Bool
         (match w with | none => fun _ => true | some t => Term.disjoint q t)) p y
 termination_by structural x _ => x
 /-- A union is disjoint from the right operand where each option is. -/
-def Term.disjointL {S : Syn} [Leaf S] (p : Pairing) : List (Term S) → Term S → Bool
+def Term.disjointL [Leaf S] (p : Pairing) : List (Term S) → Term S → Bool
   | [], _ => true
   | x :: xs, y => Term.disjoint p x y && Term.disjointL p xs y
 termination_by structural xs _ => xs
 /-- The test against each position of a row, partially applied. -/
-def Term.disjointTs {S : Syn} [Leaf S] (p : Pairing) : List (Term S) → List (Term S → Bool)
+def Term.disjointTs [Leaf S] (p : Pairing) : List (Term S) → List (Term S → Bool)
   | [] => [] | t :: ts => Term.disjoint p t :: Term.disjointTs p ts
 termination_by structural ts => ts
 /-- Two slots are disjoint where one requires the name and the terms are disjoint. -/
-def ObjectSlot.disjoint {S : Syn} [Leaf S] (p : Pairing) : ObjectSlot S → ObjectSlot S → Bool
+def ObjectSlot.disjoint [Leaf S] (p : Pairing) : ObjectSlot S → ObjectSlot S → Bool
   | .req x, .req y => Term.disjoint p x y
   | .req x, .optional y => Term.disjoint p x y
   | .optional x, .req y => Term.disjoint p x y

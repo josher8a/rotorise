@@ -896,12 +896,18 @@ instance dynLeafAdm : Alg.LeafAdm dynSyn where
   prim_none {_ β} g g' hp v := by
     obtain rfl : β = dynTableA := funext fun g => nomatch g
     exact Adm_prim_none g g' hp v
-  pmeet_none _ _ h v := meetM_empty h v
+
+/-- The predicate leaves of DynamoDB hold together nowhere where they meet at the empty
+    predicate. The store names no predicate but the truth, so no stored predicate meets. -/
+instance dynLeafMeet : Alg.LeafMeet dynSig where
+  pmeet_none
+    | false, _, _, h, v => meetM_empty h v
+    | true, _, _, h, _ => nomatch h
 
 /-! ## DynamoDB is an instance of the laws, on the read side
 
 `Alg.disjoint_soundA` proves the read side once, over any signature. DynamoDB supplies the read
-law of its set former (`dynFormerAdmA`) and of its leaves (`dynLeafAdmA`). A literal reads
+law of its set former (`dynFormerAdmA`) and of its primitives (`dynLeafAdmA`). A literal reads
 through its base's codec restricted, so two different literals at one base read nothing
 together. -/
 
@@ -1060,13 +1066,11 @@ instance dynFormerAdmA : Alg.FormerAdmA dynSyn where
     obtain rfl : β = dynTableA := funext fun g => nomatch g
     exact AdmA_set_and_false h c
 
-/-- The leaves of DynamoDB keep apart what they meet at the bottom, on the read side. The store
-    names no predicate but the truth, and two stored predicates never meet at the empty one. -/
+/-- The primitives of DynamoDB keep apart what they meet at the bottom, on the read side. -/
 instance dynLeafAdmA : Alg.LeafAdmA dynSyn where
   prim_none {β _} g g' hp c := by
     obtain rfl : β = dynTableA := funext fun g => nomatch g
     exact admA_prim_none g g' hp c
-  pmeet_none _ _ h := nomatch h
 
 
 /-! ## The views admit what the term admits -/

@@ -114,14 +114,14 @@ its own.
 | the top laws | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
 | the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `AdmLit`, `inBaseA` and `AdmALit` | the kind test |
 | the leaves: two primitives, two predicates | `Leaf` | `dynLeaf`: `Ground.meet`, `Pred.isData`, `Pred.meetM` | `jsonLeaf`: one kind |
-| the laws of the leaves | `LeafAdm`, `LeafAdmA` | `dynLeafAdm`, `dynLeafAdmA` | `jsonLeafAdm`, `jsonLeafAdmA` |
+| the laws of the leaves | `LeafAdm`, `LeafAdmA`, `LeafMeet` | `dynLeafAdm`, `dynLeafAdmA`, `dynLeafMeet` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafMeet` |
 | the set laws that the test reads | `FormerAdm`, `FormerAdmA` | `dynFormerAdm`, `dynFormerAdmA` | `jsonFormerAdm`, `jsonFormerAdmA` |
 | the former class of each value and attribute, and where each former lands | `Shapes` | `dynShapes`: the root constructor | `jsonShapes`: every value is a primitive |
 
 A former is an `Option`. A universe without a former denotes the term of that former as the
 bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only
-the held-free theory and the read side of the disjointness test read them. `PrimAdm` and `PrimAdmA` are outside
-`Sem` for the same reason: only exactness reads them.
+the held-free theory and the soundness of the disjointness test read them. `PrimAdm` and
+`PrimAdmA` are outside `Sem` for the same reason: only exactness reads them.
 
 **The disjointness test is structural, and a universe supplies its leaves.** `Alg.Term.disjoint`
 has one row per constructor of the left operand, and decides that two terms share no value. Only
@@ -145,11 +145,14 @@ every two environments that keep each paired binder pair apart (`ApartV`). `Alg.
 says the same of attributes (`ApartA`), and `Alg.disjoint_orthogonal` joins the two. Each proof
 recurses on the left operand, as the test does. The laws are classes outside `Sem`, because only
 the soundness theorems read them. `LeafAdm` says that two primitives met at the bottom share
-nothing, and that two predicates met at the empty predicate hold together nowhere. `FormerAdm`
-says that two sets whose elements share nothing share no set. `LeafAdmA` and `FormerAdmA` are
-`LeafAdm` and `FormerAdm` of the dual. Two data predicates keep two refinements apart on the read
-side only where both inner terms are closed and held-free: each then reads as the top reads
-(`TopLaws`), so both read one value. At DynamoDB, a leaf law is a fact about `inBase` and `inL`,
+nothing. `LeafMeet` says, at each absolute side, that two predicates met at the empty predicate
+hold together nowhere. `FormerAdm` says that two sets whose elements share nothing share no set.
+`LeafAdmA` and `FormerAdmA` are `LeafAdm` and `FormerAdm` of the dual. The test reads no
+orientation, because orthogonality is self-dual, so `Alg.disjoint_soundA` is `Alg.disjoint_sound`
+at the dual. The `refine` row reads a data predicate at each absolute side. Two data predicates
+keep two refinements apart only where both inner terms are closed and held-free: the graph of each
+then lies inside the graph of the top (`TopBound`), so a predicate at either side reads one
+element. At DynamoDB, a leaf law is a fact about `inBase` and `inL`,
 and a set law is a fact about `setCodec`. At JSON, two kinds meet where they are one kind, and each
 set law holds because the signature has no former and both sides admit nothing.
 
@@ -410,7 +413,7 @@ that `denote` takes. A variable asks the codec that the environment gives the va
 
 **The test reads a recursive term stage by stage.** Two recursive terms are disjoint where their
 bodies are disjoint under every two stages that are disjoint, because each stage is the body over
-the stage below (`stage_apart`, `stage_apartA`). A recursive term beside another constructor reads
+the stage below (`stage_apart`). A recursive term beside another constructor reads
 the stage below the depth of the input (`Adm_mu_unfold`, `AdmA_mu_unfold`). Neither row needs the
 guard.
 
@@ -954,7 +957,7 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New law of the algebra → state it in an `Alg` module, which imports no instance module. A
   statement that needs a fact of a carrier belongs to that universe.
 - New universe → a `Sig`, a `Mean` instance over it, a `Syn` at the host orientation, its
-  `TopLaws` where the held-free theory or the read side of the disjointness test must hold, its
+  `TopLaws` where the held-free theory or the soundness of the disjointness test must hold, its
   `PrimAdm` and `PrimAdmA` where exactness must hold,
   its `Leaf` where the test must compute, and its `Shapes` and the laws of the leaves and the
   formers where the soundness of the test must hold. Make the module reachable from `Axioms.lean`.

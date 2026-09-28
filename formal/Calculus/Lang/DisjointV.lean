@@ -10,12 +10,16 @@ answers `true`, no value is admitted by both operands, under every two environme
 each paired binder pair apart (`ApartV`). The proof recurses on the left operand, as the test
 does, and every row is structure except the leaves.
 
-A universe supplies the laws in two classes. `FormerAdm` holds the set law: two sets whose
-elements share no value share no set. `LeafAdm` holds the laws of the leaves: two primitives
-that the leaf keeps apart share no value, and two predicates that meet at the empty predicate
-hold together nowhere. Both classes are outside `Sem` and outside `Leaf`, because only the
-soundness theorems read the laws. Two formers in different classes share no value, and that
-fact is a theorem of the shape classes (`Shapes`).
+A universe supplies the laws in three classes. `FormerAdm` holds the set law: two sets whose
+elements share no value share no set. `LeafAdm` holds the primitive law: two primitives that the
+leaf keeps apart share no value. `LeafMeet` holds the predicate law at each absolute side: two
+predicates that meet at the empty predicate hold together nowhere. The classes are outside `Sem`
+and outside `Leaf`, because only the soundness theorems read the laws. Two formers in different
+classes share no value, and that fact is a theorem of the shape classes (`Shapes`).
+
+The row of `refine` reads a data predicate at each side. A caller-side predicate reads the value.
+A stored-side predicate reads the attribute that the inner term writes. Two held-free closed terms
+lie below the top (`TopBound`), so both write the one attribute that the top writes.
 -/
 
 namespace Calculus.Alg
@@ -179,15 +183,26 @@ class FormerAdm (S : Syn) [Sem S] [PrimAdm S] : Prop where
   set_never : ∀ {α : Table S} {β : Table S.op} (a y : Term S), (∀ u, (Adm α β a [] u && Adm α β y [] u) = false) →
     ∀ v, (Adm α β (.set a) [] v && Adm α β (.set y) [] v) = false
 
-/-- **The write-side laws of the leaves.** A primitive reads no variable, so the laws are
+/-- **The write-side law of the primitive leaves.** A primitive reads no variable, so the law is
     stated at the closed environment. -/
 class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] : Prop where
   /-- Two primitives met at the bottom share no value. -/
   prim_none : ∀ {α : Table S} {β : Table S.op} (g g' : S.Ground), Leaf.prim g g' = none →
     ∀ v, (Adm α β (.prim g : Term S) [] v && Adm α β (.prim g') [] v) = false
-  /-- Two predicates met at the empty predicate hold together nowhere. -/
-  pmeet_none : ∀ q p : S.Pred, Leaf.pmeet S.o.c q p = some none →
-    ∀ v, (Syn.eval q v && Syn.eval p v) = false
+
+/-- **The law of the predicate leaves**, at each absolute side: two predicates met at the empty
+    predicate hold together nowhere. The law is a fact of the signature and its meaning, so the
+    dual universe has the law of the universe. -/
+class LeafMeet (B : Sig) [Mean B] [Leaf B] : Prop where
+  pmeet_none : ∀ (s : Bool) (q p : B.P s), Leaf.pmeet s q p = some none →
+    ∀ x, (Mean.eval s q x && Mean.eval s p x) = false
+
+/-- **A held-free closed term lies below the top**: its graph is inside the graph of the top.
+    Two such terms therefore write one value to one attribute and read one attribute to one
+    value, and a predicate at either side reads that one element. -/
+class TopBound (S : Syn) [Sem S] : Prop where
+  sub_top : ∀ {α : Table S} {β : Table S.op} (t : Term S), hasHeld t = false →
+    t.hasVar = false → ∀ ρ : List S.C, Sub (denote α β t ρ) (Syn.top (S := S))
 
 
 /-! ## Soundness, on the write side -/
@@ -324,8 +339,8 @@ end
 
 /-- **Two data predicates that meet at the empty predicate keep a refinement chain apart**: no
     value satisfies `q` and a refinement of the chain. -/
-theorem predApart_sound [Leaf S] [LeafAdm S] {q : S.Pred} {ρ' : List S.C} :
-    ∀ (y : Term S), predApart q y = true → ∀ v, (Syn.eval q v && Adm α β y ρ' v) = false
+theorem predApart_sound [Leaf S] [LeafMeet S] {q : S.Pred} {ρ' : List S.C} :
+    ∀ (y : Term S), predApart S.o.c q y = true → ∀ v, (Syn.eval q v && Adm α β y ρ' v) = false
   | .refine y q₁ q₂, h, v => by
       simp only [predApart, Bool.or_eq_true, Bool.and_eq_true] at h
       rw [Adm_refine_eq]
@@ -335,13 +350,57 @@ theorem predApart_sound [Leaf S] [LeafAdm S] {q : S.Pred} {ρ' : List S.C} :
           revert hm; cases Leaf.pmeet S.o.c q q' with
           | none => simp
           | some o => cases o <;> simp
-        have := LeafAdm.pmeet_none q q' hn v
+        have := LeafMeet.pmeet_none S.o.c q q' hn v
         cases hq : Syn.eval q v <;> cases hq' : Syn.eval q' v <;> simp_all
       · have := predApart_sound (ρ' := ρ') y h v
         cases hq : Syn.eval q v <;> cases ha : Adm α β y ρ' v <;> simp_all
   | .prim _, h, _ | .never, h, _ | .set _, h, _ | .list _ _ _, h, _ | .held _ _ _ _ _, h, _
   | .opaq, h, _ | .object _, h, _ | .union _, h, _ | .var _, h, _ | .mu _, h, _ => by
       simp [predApart] at h
+
+/-- **Two stored-side data predicates that meet at the empty predicate keep two refinements apart
+    on the write side**, where both inner terms are closed and held-free: both then write the
+    attribute that the top writes. -/
+theorem predApart_soundS [Leaf S] [LeafMeet S] [TopBound S] {q : S.PredA} {ρ' : List S.C} :
+    ∀ (y : Term S), predApart S.o.s q y = true → ∀ v a, (Syn.top (S := S)).e v = some a →
+      Syn.evalA q a = true → Adm α β y ρ' v = false
+  | .refine y q₁ q₂, h, v, a, htop, hq => by
+      simp only [predApart, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
+      rw [Adm_refine_eq]
+      rcases h with ⟨⟨⟨-, hh⟩, hv⟩, hm⟩ | h
+      · have hn : Leaf.pmeet S.o.s q (half S.o.s q₁ q₂) = some none := by
+          revert hm; cases Leaf.pmeet S.o.s q (half S.o.s q₁ q₂) with
+          | none => simp
+          | some o => cases o <;> simp
+        have hpm := LeafMeet.pmeet_none S.o.s q _ hn a
+        simp only [Syn.evalA] at hq
+        rw [hq, Bool.true_and] at hpm
+        have hg : gate (denote α β y ρ') (Syn.evalA (half S.o.s q₁ q₂)) v = false := by
+          unfold gate
+          cases he : (denote α β y ρ').e v with
+          | none => rfl
+          | some a' =>
+            have := (TopBound.sub_top y hh hv ρ').1 v a' he
+            rw [htop] at this; cases this
+            exact hpm
+        rw [hg]; simp
+      · rw [predApart_soundS (ρ' := ρ') y h v a htop hq, Bool.false_and]
+  | .prim _, h, _, _, _, _ | .never, h, _, _, _, _ | .set _, h, _, _, _, _
+  | .list _ _ _, h, _, _, _, _ | .held _ _ _ _ _, h, _, _, _, _
+  | .opaq, h, _, _, _, _ | .object _, h, _, _, _, _ | .union _, h, _, _, _, _
+  | .var _, h, _, _, _, _ | .mu _, h, _, _, _, _ => by
+      simp [predApart] at h
+
+/-- The two absolute sides of a pair, read at an orientation: the caller side and the stored
+    side. -/
+theorem half_sides {X : Bool → Type} (o : Orient) (f : (s : Bool) → X s → Bool) (a : X false)
+    (b : X true) : (f false a || f true b) = (f o.c (half o.c a b) || f o.s (half o.s a b)) := by
+  obtain ⟨⟨c, s⟩, h⟩ := o
+  cases c <;> cases s
+  · exact absurd rfl h
+  · rfl
+  · exact Bool.or_comm _ _
+  · exact absurd rfl h
 
 /-- **The leaf family is sound**: the leaf law, and the shape classes at every former. -/
 theorem famPrimD_sound [Leaf S] [LeafAdm S] [Shapes S] {ρ ρ' : List S.C} (g : S.Ground) :
@@ -631,7 +690,7 @@ mutual
 /-- **Soundness of the zero test, on the write side.** Where `disjoint` answers `true`, no value
     is admitted by both operands, under every two environments that keep the paired binders
     apart. -/
-theorem disjoint_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
+theorem disjoint_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S] [TopBound S] :
     ∀ (p : Pairing) (x y : Term S), Term.disjoint p x y = true →
       ∀ (ρ ρ' : List S.C), ApartV p ρ ρ' → ∀ v, (Adm α β x ρ v && Adm α β y ρ' v) = false
   | _, .never, _, _, _, _, _, _ => by simp
@@ -660,14 +719,24 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
       simp only [Term.disjoint] at h
       refine splitR_sound (ρ := ρ) (ρ' := ρ') (x := .refine x q qA) (p := p) ?_ y h v
       intro y' hy w
-      rw [Bool.or_eq_true, Bool.and_eq_true] at hy
+      simp only at hy
+      rw [Bool.or_assoc, half_sides S.o (fun s r => dataApart x s r y') q qA] at hy
+      simp only [dataApart, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at hy
       rw [Adm_refine_eq]
-      set q' := half S.o.c q qA
-      rcases hy with hy | ⟨-, hy⟩
+      rcases hy with hy | ⟨-, hy⟩ | ⟨⟨⟨-, hh⟩, hv⟩, hy⟩
       · have := disjoint_sound p x y' hy ρ ρ' hp w
         cases h1 : Adm α β x ρ w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
       · have := predApart_sound (α := α) (β := β) (ρ' := ρ') y' hy w
-        cases h1 : Syn.eval q' w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
+        cases h1 : Syn.eval (half S.o.c q qA) w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
+      · unfold gate
+        cases he : (denote α β x ρ).e w with
+        | none => simp
+        | some a =>
+          cases hq : Syn.evalA (half S.o.s q qA) a with
+          | false => simp [hq]
+          | true =>
+            have htop := (TopBound.sub_top x hh hv ρ).1 w a he
+            rw [predApart_soundS (ρ' := ρ') y' hy w a htop hq]; simp
   | p, .union os, y, h, ρ, ρ', hp, v => by
       simp only [Term.disjoint] at h
       rw [Adm_union]
@@ -703,7 +772,7 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
         (fun u hu w => disjoint_sound q t u hu ρ ρ₁ hq w)) y p ρ' hp h v
 termination_by structural _ x => x
 /-- …and a union, option by option. -/
-theorem disjointL_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
+theorem disjointL_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S] [TopBound S] :
     ∀ (p : Pairing) (os : List (Term S)) (y : Term S), Term.disjointL p os y = true →
       ∀ (ρ ρ' : List S.C), ApartV p ρ ρ' → ∀ v, (AdmAny α β os ρ v && Adm α β y ρ' v) = false
   | _, [], _, _, _, _, _, _ => by simp
@@ -715,7 +784,7 @@ theorem disjointL_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
       cases a1 : Adm α β x ρ v <;> cases a2 : AdmAny α β xs ρ v <;> cases a3 : Adm α β y ρ' v <;> simp_all
 termination_by structural _ os => os
 /-- …and each position of a row, partially applied. -/
-theorem disjointTs_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
+theorem disjointTs_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S] [TopBound S] :
     ∀ (p : Pairing) (ts : List (Term S)) (ρ ρ' : List S.C), ApartV p ρ ρ' →
       List.Forall₂ (DisjSound α β ρ ρ') ts (Term.disjointTs p ts)
   | _, [], _, _, _ => .nil
@@ -723,7 +792,7 @@ theorem disjointTs_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
       .cons (fun u hu w => disjoint_sound p t u hu ρ ρ' hp w) (disjointTs_sound p ts ρ ρ' hp)
 termination_by structural _ ts => ts
 /-- …and two slots, where one requires the name. -/
-theorem slot_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
+theorem slot_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S] [TopBound S] :
     ∀ (p : Pairing) (s s' : ObjectSlot S), ObjectSlot.disjoint p s s' = true →
       ∀ (ρ ρ' : List S.C), ApartV p ρ ρ' →
         (ObjectSlot.isReq s || ObjectSlot.isReq s') = true ∧

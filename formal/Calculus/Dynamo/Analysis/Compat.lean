@@ -35,12 +35,12 @@ theorem dynOracle_sound : Alg.OracleSound dynOracle where
     obtain rfl : β = dynTableA := funext fun g => nomatch g
     rw [← Alg.Adm_eq_isSome, ← Alg.Adm_eq_isSome]
     exact Alg.apart_of_imp (writeLe_of x v) (Alg.apart_of_imp' (writeLe_of y v)
-      (Alg.disjoint_sound pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) v))
+      (Alg.disjoint_sound (S := dynSyn) pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) v))
   p {_ β} x y h a := by
     obtain rfl : β = dynTableA := funext fun g => nomatch g
     rw [← Alg.AdmA_eq_isSome (S := dynSyn), ← Alg.AdmA_eq_isSome (S := dynSyn)]
     exact Alg.apart_of_imp (readLe_of x a) (Alg.apart_of_imp' (readLe_of y a)
-      (Alg.disjoint_soundA pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) a))
+      (Alg.disjoint_soundA (S := dynSyn) pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) a))
   same _ _ h := of_decide_eq_true h
 
 /-- **The decision discharges the union's obligation** of two lawful closed options. -/

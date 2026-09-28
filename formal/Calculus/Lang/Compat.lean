@@ -231,13 +231,14 @@ theorem CEnv.mu {p : Pairing} {top s s' : Bool} {ρ ρ' : List S.C} (he : CEnv p
   top h := nomatch h
 
 /-- A disjoint pair has apart write domains, over every two environments. -/
-theorem disjoint_domE [PrimAdm S] [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] {x y : Term S} (h : Term.disjoint pair0 x y = true) (ρ ρ' : List S.C) (v : S.V) :
+theorem disjoint_domE [PrimAdm S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S]
+    [TopLaws S] {x y : Term S} (h : Term.disjoint pair0 x y = true) (ρ ρ' : List S.C) (v : S.V) :
     (((denote α β x ρ).e v).isSome && ((denote α β y ρ').e v).isSome) = false := by
   have := disjoint_sound (α := α) (β := β) pair0 x y h ρ ρ' (fun _ _ _ hp => nomatch hp) v
   rwa [Adm_eq_isSome, Adm_eq_isSome] at this
 
 /-- …and apart read domains. -/
-theorem disjoint_domP [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S]
+theorem disjoint_domP [PrimAdmA S] [Leaf S] [LeafMeet S] [LeafAdmA S] [FormerAdmA S] [Shapes S]
     [TopLaws S] {x y : Term S} (h : Term.disjoint pair0 x y = true) (ρ ρ' : List S.C) (a : Syn.A S) :
     (((denote α β x ρ).p a).isSome && ((denote α β y ρ').p a).isSome) = false := by
   have := disjoint_soundA (α := α) (β := β) pair0 x y h ρ ρ' (fun _ _ _ hp => nomatch hp) a
@@ -254,7 +255,7 @@ theorem apart_of_imp' {x y y' : Bool} (h : y = true → y' = true) (h' : (x && y
   cases x <;> cases y <;> simp_all
 
 /-- **The rows that read no structure are sound.** -/
-theorem cbase_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
+theorem cbase_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) {side top s : Bool}
     {x y : Term S} (h : cbase o side top s x y = true) {p : Pairing} {ρ ρ' : List S.C}
     (he : CEnv p top s ρ ρ') : AgreeS side (denote α β x ρ) (denote α β y ρ') := by
@@ -407,7 +408,7 @@ mutual
 /-- **Soundness of the compatibility decision.** Where the decision answers `true` for one half,
     the two denotations agree on that half, over every two environments that the pairing and
     the flags admit. -/
-theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
+theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (x : Term S) (side : Bool) (p : Pairing) (top s : Bool) (y : Term S) (ρ ρ' : List S.C),
       Term.compat o side p top s x y = true → CEnv p top s ρ ρ' →
@@ -589,7 +590,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
             exact compatW_sound ho w side p' t' s' _ ρ ρ'' hw he' c₁ hc₁
 termination_by structural x => x
 /-- …option by option. -/
-theorem compatL_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
+theorem compatL_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (xs : List (Term S)) (side : Bool) (p : Pairing) (top s : Bool) (y : Term S)
       (ρ ρ' : List S.C), Term.compatL o side p top s xs y = true → CEnv p top s ρ ρ' →
@@ -604,7 +605,7 @@ theorem compatL_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S
       · exact compatL_sound ho xs side p top s y ρ ρ' h.2 he c hc
 termination_by structural xs => xs
 /-- …position by position. -/
-theorem compatTs_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
+theorem compatTs_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (ts : List (Term S)) (side : Bool) (p : Pairing) (top s : Bool) (ρ ρ' : List S.C)
       (ys : List (Term S)), (∀ f ∈ Term.compatTs o side p top s ts, ∀ y ∈ ys, f y = true) →
@@ -620,7 +621,7 @@ theorem compatTs_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm 
           (fun f hf y hy => h f (by simp [Term.compatTs, hf]) y hy) he c hc y hy
 termination_by structural ts => ts
 /-- …at the spread. -/
-theorem compatO_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
+theorem compatO_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (t? : Option (Term S)) (side : Bool) (p : Pairing) (top s : Bool) (ρ ρ' : List S.C)
       (ys : List (Term S)), (∀ f ∈ Term.compatO o side p top s t?, ∀ y ∈ ys, f y = true) →
@@ -633,7 +634,7 @@ theorem compatO_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S
       exact compat_sound ho t side p top s y ρ ρ' (h _ (by simp [Term.compatO]) y hy) he
 termination_by structural t? => t?
 /-- …at the open block. -/
-theorem compatW_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
+theorem compatW_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (w : Option (Term S)) (side : Bool) (p : Pairing) (top s : Bool) (y : Term S)
       (ρ ρ' : List S.C), Term.compatW o side p top s w y = true → CEnv p top s ρ ρ' →
@@ -646,7 +647,7 @@ theorem compatW_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S
       exact compat_sound ho t side p top s y ρ ρ' h he
 termination_by structural w => w
 /-- …at one name. -/
-theorem cslot_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
+theorem cslot_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (f : ObjectSlot S) (side : Bool) (p : Pairing) (top s : Bool) (y : ObjectSlot S)
       (ρ ρ' : List S.C), ObjectSlot.compat o side p top s f y = true → CEnv p top s ρ ρ' →
@@ -658,7 +659,7 @@ termination_by structural f => f
 end
 
 /-- **The decision at two closed options gives agreement on both halves.** -/
-theorem compatPair_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
+theorem compatPair_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) {x y : Term S}
     (h : compatPair o x y = true) :
     AgreeE (denote α β x) (denote α β y) ∧ AgreeP (denote α β x) (denote α β y) := by
@@ -671,7 +672,7 @@ theorem compatPair_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAd
 
 /-- **The decision discharges the union's obligation** of two lawful closed options: both halves
     agree, and over two lawful codecs the two halves are `Compat` in each order. -/
-theorem pairwiseCompat_of_compatPair [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
+theorem pairwiseCompat_of_compatPair [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) {x y : Term S}
     (h : compatPair o x y = true) (hl : ∀ t ∈ [x, y], Lawful Syn.member (denote α β t)) :
     PairwiseCompat α β [x, y] := by
