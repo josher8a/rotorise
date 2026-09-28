@@ -61,9 +61,9 @@ structure SetF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → Na
   /-- The lift's held set is inside `held` of any bound on the element's held set. -/
   held_of : ∀ {c : Codec V A M} {T : V → Prop}, (∀ v, c.T v → T v) → ∀ v, (lift c).T v → held T v
 
-/-- **The syntax of a universe**: the values a `held` maps, the primitives, and the predicates.
-    The term language reads no more than this, so a term over a universe is data that code can
-    compute with, whatever the universe's codecs are. -/
+/-- **The syntax of a universe**: the values a `held` maps, the primitives, the predicates, and
+    the generators of the adapters. The term language reads no more than this, so a term over a
+    universe is data that code can compute with, whatever the universe's codecs are. -/
 structure Syn where
   V : Type
   Ground : Type
@@ -163,7 +163,7 @@ inductive Term (S : Syn) where
       `SetElem`, the way `(union)`'s compatibility is stated. The three element types and the
       absent empty set are the carrier's (`Value.strSet`, `numSet`, `binSet`). So a restricted
       element, a literal element and an adapter element are each spelled at the element:
-      `set(refine(string, q))`, `set(literal k v)` and `set(held number string f g)`. -/
+      `set(refine(string, q))`, `set(literal k v)` and `set(held number string k)`. -/
   | set      (elem : Term S)
   /-- §3 `(list)`: the one positional container, as a prefix, at most one spread, and a
       suffix. `array`, `(tuple)` and `(tuple-tail)` were three shapes of one thing, and

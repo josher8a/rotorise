@@ -18,9 +18,9 @@ and bridging from a `NEFinset` is `Finset.toList`, which is `Multiset.toList`, w
 `Quotient.out` — `Classical.choice`. The first draft of this file was stated over `NEFinset` and
 `#assert_axioms_all` rejected five theorems for exactly that. Stated over `(l : List α)` with
 `l.Nodup` and `l ≠ []`, as it is here, it is choice-free, and those two premises are precisely the
-gates the `℘⁺fin` repair had deleted. `Term` cannot have `DecidableEq` either (`Term.held`
-carries two functions on `Value`, and `Pred.closure` carries one), so `union` could not take a
-`NEFinset Term` and close the gap that way.
+gates the `℘⁺fin` repair had deleted. `Term` cannot have `DecidableEq` either (`Pred.closure`
+carries a function on `Value`), so `union` could not take a `NEFinset Term` and close the gap
+that way.
 
 **That obstruction is why the literal held a set for as long as it did, and it is why the set
 could go.** The bridge is needed only to prove an n-ary *constructor* equal to the union. With one

@@ -81,7 +81,8 @@ theorem list {pre sp suf ρ} (h : Obligations α (.list pre sp suf) ρ) :
     (∀ t ∈ pre, Obligations α t ρ) ∧ (∀ t ∈ sp, Obligations α t ρ) ∧ (∀ t ∈ suf, Obligations α t ρ) :=
   ⟨obligationsList_iff.mp h.1, obligationsOpt_iff.mp h.2.1, obligationsList_iff.mp h.2.2⟩
 
-/-- §3 `(held)`: the subterm's premises, and the iso cancelling on the carriers. -/
+/-- §3 `(held)`: the subterm's premises, and the iso of the whole word cancelling on the
+    carriers. -/
 theorem held {t P k ρ} (h : Obligations α (.held t P k) ρ) :
     Obligations α t ρ ∧ IsoCancels (denote α t ρ) (α.word k).1 (α.word k).2 :=
   ⟨h.1, h.2⟩

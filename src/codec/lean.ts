@@ -517,10 +517,12 @@ const leanBinders = (bound: Bound): string => {
  * - **`number` and a numeric `literal` are *not* here.** `Term.number` is a closed term, and a
  *   numeric alternative is `WFNumeral.of`, so both emit. A JS number *value* is what has no
  *   exact image, and `leanValueOf` refuses it, so the refusal is reported where it lives.
- * - **`held`, `legacy`.** Two of §3's constructors carry *functions* —
- *   `f g : Value → Value` and `r : Attr → Option Value` — and this library carries
- *   JavaScript closures in the same positions. There is no expression in Lean for an arbitrary
- *   closure. `legacy` used to be the worse of the two for a second reason, and is not any more:
+ * - **`held`, `legacy`.** This library carries JavaScript closures in both. The model's `held`
+ *   carries an adapter word, and a table gives the word its pair `f g : Value → Value`. So a
+ *   caller's adapter prints as a generator `caller n` inside a quantified verdict, and the
+ *   emitter refuses a caller's adapter elsewhere. The model's `legacy` carries
+ *   `r : Attr → Option Value`, and there is no expression in Lean for an arbitrary closure.
+ *   `legacy` used to be the worse of the two for a second reason, and is not any more:
  *   the definition dropped the older readers entirely, so there was nothing to be refused about.
  *   It carries `older` now, and the refusal below names it.
  * - **`refine`, unless the predicate is one this library shipped.** The third
@@ -530,7 +532,8 @@ const leanBinders = (bound: Bound): string => {
  *   boundary is no longer "all refinements" but "refinements this library did not build", which is
  *   the honest line — and it is only two predicates wide, because `src/` constructs none of these
  *   three internally. A declaration verdict passes a {@link Bound}, and there a caller's closure
- *   and a caller's adapter print as variables that the theorem binds.
+ *   prints as a variable that the theorem binds, and a caller's adapter prints as a generator
+ *   `caller n` whose pair the theorem quantifies through the caller table.
  * - **A thunk that throws is not here.** It names a codec not yet declared, and it prints as a
  *   variable that no binder of the term binds, as the host's disjointness test reads it.
  *

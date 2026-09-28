@@ -188,7 +188,7 @@ export type Term =
           readonly inner: Term
           /**
            * **The held side, as a term.** The write occupancy of a `held` is the occupancy of this
-           * term, as the model's `occV (held t P f g) = occV P` states. A library adapter records
+           * term, as the model's `occV (held t P k) = occV P` states. A library adapter records
            * the base it hands to the caller. A foreign schema records `opaque`, the top, because
            * the library cannot read which kinds of value a foreign schema admits.
            */
@@ -510,7 +510,7 @@ export const occV = (t: Term): readonly SetSlot[] => {
             return ['array']
         case 'object':
             return ['map']
-        // the held side restricts every value `f` receives, as `occV (held t P f g) = occV P`
+        // the held side restricts every value `f` receives, as `occV (held t P k) = occV P`
         case 'held':
             return occV(t.outer)
         // a thunk carries a term, so it answers what that term answers. `Meet.lean` heads the

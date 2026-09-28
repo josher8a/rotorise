@@ -103,8 +103,9 @@ the representation audit asked for — both halves of §6 in one language. -/
 
 section Terms
 
-/-- §6: `held(c, P, id, id) ≡ refine(c, P)`. The identity transform leaves the caller-side
-    restriction, and that restriction is a `refine` by the admission of `P`. -/
+/-- §6: `held(c, P, []) ≡ refine(c, P)`. The empty word is the identity transform at every
+    table, so it leaves the caller-side restriction, and that restriction is a `refine` by the
+    admission of `P`. -/
 theorem equiv_denote_held_id (t P : Term) :
     Codec.Equiv (denote α (.held t P []))
       (denote α (.refine t (.closure fun v => ((denote α P).e v).isSome))) := by

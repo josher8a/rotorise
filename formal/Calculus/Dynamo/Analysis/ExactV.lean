@@ -86,11 +86,11 @@ noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
 
     ### What "unanalysable" turned out to mean
 
-    `held` was on the unanalysable list because it carries Lean functions, and
+    `held` was on the unanalysable list because its adapter is a pair of Lean functions, and
     a function is not something a reader can look inside. But a row is not a reader: it is a
-    function with the term in hand, and the term *carries* `f` and `g` as data. It can
-    apply them. `(c.through f g).e v = c.e (f v)` holds by `Iff.rfl`, so `held`'s writable
-    set is the subterm's pulled back along `f` and cut by the caller-side term's row, with no
+    function with the term and the table in hand, and the table gives the word of the term its
+    pair `f` and `g` as data. It can apply them. `(c.through f g).e v = c.e (f v)` holds by
+    `Iff.rfl`, so `held`'s writable set is the subterm's pulled back along `f` and cut by the caller-side term's row, with no
     appeal to `held`'s iso obligation.
 
     Three senses had been running together: (i) the term does not carry the information —
