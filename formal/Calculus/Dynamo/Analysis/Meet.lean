@@ -1357,12 +1357,11 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
   | .object (.mk fs f w), ρ, ρ', he, hs => fun a h => by
       cases a with
       | m keys g =>
-        change (valPresentT fs (fun k => Alg.tconvS (f k)) keys &&
+        change (valPresentT fs f keys &&
             objAdmV ⟨fs, fun k => Alg.AdmAField α dynTableA (f k) ρ⟩ (Alg.AdmAWild α dynTableA w ρ) keys g) = true at h
-        change (valPresentT fs (fun k => Alg.tconvS (readViewS (f k))) keys &&
+        change (valPresentT fs (fun k => readViewS (f k)) keys &&
             objAdmV ⟨fs, fun k => Alg.AdmAField α dynTableA (readViewS (f k)) ρ'⟩
               (Alg.AdmAWild α dynTableA (readViewO w) ρ') keys g) = true
-        rw [Alg.valPresentT_tconv] at h ⊢
         rw [Bool.and_eq_true] at h ⊢
         refine ⟨?_, objAdmV_mono (fun k => readLeES (f k) ρ ρ' he hs) ?_ h.2⟩
         · refine decide_eq_true fun k => ?_

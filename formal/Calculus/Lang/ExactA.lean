@@ -5,9 +5,9 @@ import Calculus.Lang.Converse
 # Exactness on the attribute side, over a universe signature
 
 `AdmA` is the attribute half of `Adm`: a row per constructor that equals `dom(p)` of
-`denote t`. The attribute row of a term is the value row of its converse in the dual universe,
+`denote t`. The attribute row of a term is the value row of the same term in the dual universe,
 under the environment of converses. So `AdmA_exact` is `Adm_exact` at the dual, composed with
-`denote_tconv`, and the attribute side owns no induction. A universe supplies the value rows of
+`denote_R`, and the attribute side owns no induction. A universe supplies the value rows of
 the primitives of its dual (`PrimAdmA`), and nothing else.
 -/
 
@@ -30,18 +30,12 @@ noncomputable def refineReads (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a
     Bool :=
   gate (conv (denote α β t ρ)) q a
 
-/-- `refineReads` is the gate of the converse term. -/
+/-- `refineReads` is the gate of the term at the dual orientation. -/
 theorem refineReads_eq_gate (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a : Syn.A S) :
-    gate (denote β α (tconv t) (ρ.map convU)) q a = refineReads α β t ρ q a := by
+    gate (denote β α t (ρ.map convU)) q a = refineReads α β t ρ q a := by
   unfold refineReads gate
-  rw [(denote_tconv α β t (convEnv_R ρ)).1]
+  rw [(denote_R α β t (convEnv_R ρ)).1]
   rfl
-
-omit [Sem S] in
-/-- The guard of the payload row reads the kind of each slot, and the converse keeps the kind. -/
-theorem valPresentT_tconv (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
-    (keys : Finset String) :
-    valPresentT fields (fun k => tconvS (fld k)) keys = valPresentT fields fld keys := rfl
 
 variable [PrimAdmA S]
 
@@ -49,32 +43,32 @@ noncomputable section
 
 variable (α β) in
 /-- **The joint admission predicate, attribute side**, under an environment `ρ`: the value row
-    of the converse term in the dual universe, under the environment of converses. -/
-def AdmA (t : Term S) (ρ : List S.C) : Syn.A S → Bool := Adm β α (tconv t) (ρ.map convU)
+    of the term in the dual universe, under the environment of converses. -/
+def AdmA (t : Term S) (ρ : List S.C) : Syn.A S → Bool := Adm β α t (ρ.map convU)
 
 variable (α β) in
 /-- The read side's payload row; `AdmBody`'s mirror. -/
-def AdmABody (b : Body S) (ρ : List S.C) : Syn.A S → Bool := AdmBody β α (tconvB b) (ρ.map convU)
+def AdmABody (b : Body S) (ρ : List S.C) : Syn.A S → Bool := AdmBody β α b (ρ.map convU)
 
 variable (α β) in
 /-- A slot's read row is its term's. -/
 def AdmAField (s : ObjectSlot S) (ρ : List S.C) : Syn.A S → Bool :=
-  AdmField β α (tconvS s) (ρ.map convU)
+  AdmField β α s (ρ.map convU)
 
 variable (α β) in
 /-- The open block's read row, where the body has one. -/
 def AdmAWild (w : Option (Term S)) (ρ : List S.C) : Option (Syn.A S → Bool) :=
-  AdmWild β α (tconvO w) (ρ.map convU)
+  AdmWild β α w (ρ.map convU)
 
 variable (α β) in
 /-- The options' read rows, in order. -/
 def AdmAList (ts : List (Term S)) (ρ : List S.C) : List (Syn.A S → Bool) :=
-  AdmList β α (tconvL ts) (ρ.map convU)
+  AdmList β α ts (ρ.map convU)
 
 variable (α β) in
 /-- The spread's read row, where there is one. -/
 def AdmAOptT (o : Option (Term S)) (ρ : List S.C) : Option (Syn.A S → Bool) :=
-  AdmOptT β α (tconvO o) (ρ.map convU)
+  AdmOptT β α o (ρ.map convU)
 
 @[simp] theorem AdmAList_eq (ρ : List S.C) :
     ∀ ts : List (Term S), AdmAList α β ts ρ = ts.map (AdmA α β · ρ)
@@ -89,7 +83,7 @@ theorem AdmA_refine_eq (t : Term S) (p : S.sig.P false) (pA : S.sig.P true) (ρ 
       (AdmA α β t ρ a && (Syn.evalA (half S.o.s p pA) a &&
         refineReads α β t ρ (Syn.eval (half S.o.c p pA)) a)) := by
   rw [← refineReads_eq_gate]
-  simp only [AdmA, tconv, Adm, Bool.and_assoc]
+  simp only [AdmA, Adm, Bool.and_assoc]
 
 /-- A held term reads what its stored outer reads, where the inner term reads the stored word's
     image, and the caller outer admits the caller word's image of the read. -/
@@ -100,16 +94,16 @@ theorem AdmA_held_eq [PrimAdm S] (t P PA : Term S) (k : List (S.sig.G false × B
         AdmA α β t ρ ((β.word (halfK S.o.s k kA)).1 a) &&
         refineReads α β t ρ (fun w => half2 S.o.c (Adm α β P ρ ((α.word (halfK S.o.c k kA)).2 w))
           (Adm α β PA ρ ((α.word (halfK S.o.c k kA)).2 w))) ((β.word (halfK S.o.s k kA)).1 a)) := by
-  have hP : (fun w => ((half2 S.o.c (denote β α (tconv P) (ρ.map convU))
-      (denote β α (tconv PA) (ρ.map convU))).p ((α.word (halfK S.o.c k kA)).2 w)).isSome) =
+  have hP : (fun w => ((half2 S.o.c (denote β α P (ρ.map convU))
+      (denote β α PA (ρ.map convU))).p ((α.word (halfK S.o.c k kA)).2 w)).isSome) =
       fun w => half2 S.o.c (Adm α β P ρ ((α.word (halfK S.o.c k kA)).2 w))
         (Adm α β PA ρ ((α.word (halfK S.o.c k kA)).2 w)) := by
     funext w
     rw [half2_apply Codec.p, half2_app, half2_apply Option.isSome,
-      (denote_tconv α β P (convEnv_R ρ)).2, (denote_tconv α β PA (convEnv_R ρ)).2, Adm_eq_isSome,
+      (denote_R α β P (convEnv_R ρ)).2, (denote_R α β PA (convEnv_R ρ)).2, Adm_eq_isSome,
       Adm_eq_isSome]
   rw [← hP, ← refineReads_eq_gate]
-  simp only [AdmA, tconv, Adm]
+  simp only [AdmA, Adm]
   rw [Bool.and_comm (Adm β α t _ _)]
 
 variable (α β) in
@@ -118,9 +112,9 @@ def ExactA (t : Term S) (ρ : List S.C) : Prop :=
   ∀ a, AdmA α β t ρ a = true ↔ ((denote α β t ρ).p a).isSome
 
 /-- **Every attribute row is exact**, at every universe: the value law at the dual, through
-    `denote_tconv`. -/
+    `denote_R`. -/
 theorem AdmA_exact (t : Term S) (ρ : List S.C) : ExactA α β t ρ := fun a =>
-  (Adm_exact (α := β) (β := α) (tconv t) (ρ.map convU) a).trans (by rw [(denote_tconv α β t (convEnv_R ρ)).1])
+  (Adm_exact (α := β) (β := α) t (ρ.map convU) a).trans (by rw [(denote_R α β t (convEnv_R ρ)).1])
 
 /-- The row, read as a Boolean: the read domain of the denotation. -/
 theorem AdmA_eq_isSome (t : Term S) (ρ : List S.C) (a : Syn.A S) :
