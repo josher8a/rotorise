@@ -415,7 +415,11 @@ def Ground.meet : Ground → Ground → Option Ground
   | .literal k v, .literal k' v' => Ground.meetLit k v k' v'
 
 /-- **The leaves of DynamoDB.** -/
-instance dynLeaf : Alg.Leaf dynSyn := ⟨Ground.meet, Pred.isData, Pred.meetM⟩
+instance dynLeaf : Alg.Leaf dynSig where
+  prim := Ground.meet
+  isData s := Alg.half (X := fun s => dynP s → Bool) s Pred.isData fun _ => false
+  pmeet s := Alg.half (X := fun s => dynP s → dynP s → Option (Option (dynP s))) s Pred.meetM
+    fun _ _ => none
 
 /-- A closed traversal and a traversal through a block that admits nothing agree. -/
 theorem objAdmV_none_never {α : Type} (fs : MapOf (α → Bool)) (keys : Finset Name)
@@ -897,7 +901,7 @@ instance dynLeafAdm : Alg.LeafAdm dynSyn where
 /-! ## DynamoDB is an instance of the laws, on the read side
 
 `Alg.disjoint_soundA` proves the read side once, over any signature. DynamoDB supplies the read
-law of its set former (`dynFormerAdmA`) and of its primitives (`dynLeafAdmA`). A literal reads
+law of its set former (`dynFormerAdmA`) and of its leaves (`dynLeafAdmA`). A literal reads
 through its base's codec restricted, so two different literals at one base read nothing
 together. -/
 
@@ -1056,11 +1060,13 @@ instance dynFormerAdmA : Alg.FormerAdmA dynSyn where
     obtain rfl : β = dynTableA := funext fun g => nomatch g
     exact AdmA_set_and_false h c
 
-/-- The primitives of DynamoDB keep apart what they meet at the bottom, on the read side. -/
+/-- The leaves of DynamoDB keep apart what they meet at the bottom, on the read side. The store
+    names no predicate but the truth, and two stored predicates never meet at the empty one. -/
 instance dynLeafAdmA : Alg.LeafAdmA dynSyn where
-  prim_none {_ β} g g' hp c := by
+  prim_none {β _} g g' hp c := by
     obtain rfl : β = dynTableA := funext fun g => nomatch g
     exact admA_prim_none g g' hp c
+  pmeet_none _ _ h := nomatch h
 
 
 /-! ## The views admit what the term admits -/

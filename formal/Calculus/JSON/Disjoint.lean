@@ -17,10 +17,10 @@ namespace Calculus.JSON
 variable {α : Alg.Table jsonSyn} {β : Alg.Table jsonSyn.op}
 
 /-- **The leaves of JSON.** Two kinds meet where they are one kind. -/
-instance jsonLeaf : Alg.Leaf jsonSyn where
+instance jsonLeaf : Alg.Leaf jsonSig where
   prim m m' := if m = m' then some m else none
-  isData _ := false
-  pmeet _ _ := none
+  isData _ _ := false
+  pmeet _ _ _ := none
 
 /-- A kind admits a value of that kind, on the write side. -/
 theorem adm_prim (m : JMember) (v : Json) :
@@ -84,7 +84,8 @@ instance jsonFormerAdmA : Alg.FormerAdmA jsonSyn where
 
 /-- …and read no attribute in common. -/
 instance jsonLeafAdmA : Alg.LeafAdmA jsonSyn where
-  prim_none m m' hp a := by
+  prim_none {β α} m m' hp a := by
+    change (Alg.AdmA α β (.prim m : Alg.Term jsonSyn) [] a && Alg.AdmA α β (.prim m') [] a) = false
     simp only [Alg.Leaf.prim] at hp
     split at hp
     · exact nomatch hp
@@ -95,6 +96,7 @@ instance jsonLeafAdmA : Alg.LeafAdmA jsonSyn where
         | true =>
             have h1 : a.member = m := of_decide_eq_true ha
             exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
+  pmeet_none _ _ h := nomatch h
 
 /-- The test computes at JSON: two kinds are disjoint. -/
 example : Alg.Term.disjoint (S := jsonSyn) Alg.pair0 (.prim .str) (.prim .num) = true := by rfl

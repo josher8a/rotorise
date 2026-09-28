@@ -127,8 +127,9 @@ the held-free theory and the read side of the disjointness test read them. `Prim
 has one row per constructor of the left operand, and decides that two terms share no value. Only
 two rows read a fact of a universe: a primitive beside a primitive, and a predicate beside a
 predicate. `Leaf` holds the two leaf meets and the test for a predicate that the test can compare.
-`Leaf` is outside `Sem` and holds computable fields only, so the test stays computable, and the
-kernel evaluates a closed pair.
+`Leaf` is a fact of the signature at each absolute side, so the dual universe has the leaves of the
+universe. `Leaf` is outside `Sem` and holds computable fields only, so the test stays computable,
+and the kernel evaluates a closed pair.
 
 **The test reads two open terms at a pairing of their binders.** `p i j = some k` says that the
 left variable `i` and the right variable `j` are one pair of binders. Two variables are disjoint
@@ -143,9 +144,9 @@ formers.** `Alg.disjoint_sound` says that two terms the test keeps apart share n
 every two environments that keep each paired binder pair apart (`ApartV`). `Alg.disjoint_soundA`
 says the same of attributes (`ApartA`), and `Alg.disjoint_orthogonal` joins the two. Each proof
 recurses on the left operand, as the test does. The laws are classes outside `Sem`, because only
-the soundness theorems read them. `LeafAdm` and `LeafAdmA` say that two primitives met at the
-bottom share nothing, and `LeafAdm` says that two predicates met at the empty predicate hold
-together nowhere. `FormerAdm` and `FormerAdmA` say that two sets whose elements share nothing
+the soundness theorems read them. `LeafAdm` says that two primitives met at the bottom share
+nothing, and that two predicates met at the empty predicate hold together nowhere. `LeafAdmA` is
+`LeafAdm` of the dual. `FormerAdm` and `FormerAdmA` say that two sets whose elements share nothing
 share no set. Two data predicates keep two refinements apart on the read side only where both
 inner terms are closed and held-free: each then reads as the top reads (`TopLaws`), so both read
 one value. At DynamoDB, a leaf law is a fact about `inBase` and `inL`, and a set law is a fact
