@@ -119,16 +119,17 @@ The mechanization asks for less. `IsoCancels` in `Codec.lean` restricts both dir
 values the write half accepts — one clause per direction, each guarded by the encode being defined
 — and its own docstring says it is the domain-restricted form the laws actually need.
 
-**Effect.** A caller pays a premise the proof does not use. The two theorems that consume the
-premise, `LawfulCore.through` and `Lawful.through`, close on the restricted form alone, so the
-totality the specification asks for is never appealed to. This is the mirror of a premise that is
-too weak, and the same defect class: a rule and its mechanization disagree about the strength of
-an obligation, and the disagreement is in the direction that costs a user rather than the model.
+**Effect.** A caller pays a premise the proof does not use. The theorems that consume the premise,
+`Lawful.adapt2` through `Obl2`, `LawfulCore.through` and `Lawful.through`, close on the restricted
+form alone, so the totality the specification asks for is never appealed to. This is the mirror of a
+premise that is too weak, and the same defect class: a rule and its mechanization disagree about the
+strength of an obligation, and the disagreement is in the direction that costs a user rather than
+the model.
 
 **Pin.** The blueprint asserts the gap and no theorem does. The `(held)` node in
 `formal/docs/blueprint/src/content.tex` shows the total premise, links `IsoCancels`, and carries no
 `\leanok`, so the rendered graph marks the rule stated rather than formalised as written.
-`IsoCancels` is the restricted statement and the two `through` theorems are the evidence that the
+`IsoCancels` is the restricted statement and the three theorems above are the evidence that the
 restriction suffices, but no theorem states that the total form is unnecessary.
 
 **Open.** Either the specification's premise is loosened to what the proof uses, or the model is

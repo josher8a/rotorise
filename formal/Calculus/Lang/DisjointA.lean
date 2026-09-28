@@ -61,16 +61,6 @@ theorem adm_op_env {ρ₁ ρ₂ : List S.op.C} {σ : List S.C} (h₁ : List.Fora
     Bool.eq_iff_iff.mpr (Adm_exact (S := S.op) (α := β) (β := α) y ρ₂ v),
     (denote_R α β y h₁).1, (denote_R α β y h₂).1]
 
-omit [PrimAdmA S] in
-/-- **A recursive term reads as its body reads over the stage below the attribute's depth.** -/
-theorem mu_p_unfold (b : Term S) (ρ : List S.C) (a : Syn.A S) :
-    (denote α β (.mu b) ρ).p a
-      = (denote α β b (muStage (fun c => denote α β b (c :: ρ)) (Syn.dA a - 1) :: ρ)).p a := by
-  show (muStage (fun c => denote α β b (c :: ρ)) (Syn.dA a)).p a = _
-  obtain ⟨n, hn⟩ : ∃ n, Syn.dA a = n + 1 := ⟨Syn.dA a - 1, by have := Syn.dA_pos a; omega⟩
-  rw [hn, Nat.add_sub_cancel]
-  rfl
-
 /-- **A recursive term reads where its body reads over the stage below the attribute's depth**:
     the write-side unfolding of the dual. -/
 theorem AdmA_mu_unfold (b : Term S) (ρ : List S.C) (a : Syn.A S) :

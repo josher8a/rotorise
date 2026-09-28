@@ -14,8 +14,9 @@ Each row of the decision is one of two warrants, per half and per component: the
 **disjoint** there, or both are **bounded** by one codec there. The bottom agrees with every term.
 Two held-free terms below the top are bounded by the top. `Term.disjoint` is the disjoint row. A
 closed-context oracle of the universe decides orthogonality of each half. A `held` writes inside
-its caller-side term and reads inside its stored-side term, so a `held` whose half is disjoint from
-the partner agrees there. Two `held`s of one adapter agree where their stored sides agree. A
+its caller outer. It reads inside its inner term where its stored word is empty, and inside its
+stored outer otherwise. So a `held` whose half is disjoint from the partner agrees there. Two
+`held`s of one adapter agree where their inner terms agree. A
 container agrees with a container of its former where the components agree.
 
 The flags: `top` says that both environments are empty, so the oracle applies. `s` says that every

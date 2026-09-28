@@ -561,9 +561,10 @@ subterm's member this way.
 ─────────────────────────────────────────────────────────────────────── (held)
 ⊢ held(c, f, g) : T ⇝ μ
 \end{verbatim}
-The term carries an adapter word \texttt{k}, and a table \texttt{α} gives the word its pair:
-\texttt{(f,\ g)\ =\ α.word\ k}. The premise \texttt{g\ ∘\ f\ =\ id\_T}, \texttt{f\ ∘\ g\ =\ id\_I} is
-\texttt{IsoCancels} on the pair of the whole word. In the rest of this document, the notation
+The term carries an adapter word at each side, and a table \texttt{α} gives the caller word
+\texttt{k} its pair: \texttt{(f,\ g)\ =\ α.word\ k}. At DynamoDB the store names no generator, so
+the stored word is empty. The premise \texttt{g\ ∘\ f\ =\ id\_T}, \texttt{f\ ∘\ g\ =\ id\_I} is
+then \texttt{IsoCancels} on the pair of the caller word. In the rest of this document, the notation
 \texttt{held(c,\ f,\ g)} names the \texttt{held} whose word the table sends to \texttt{(f,\ g)}.
 \end{definition}
 

@@ -1,19 +1,21 @@
 import Calculus.Alg.Agree
 
 /-!
-# The converse of a codec, and the two-sided wrappers
+# The two-sided wrappers, and the containers that keep the converse
 
-`conv c` swaps the two halves of a codec. `R c' c` says that `c'` has the converse graph of `c`:
-the write of `c'` is the read of `c`, and the read of `c'` is the write of `c`.
+The converse `conv`, the converse graph `R` and the two-sided restriction `refine2` are in
+`Combinators`. This module holds the laws of the converse, and the two-sided wrappers over it.
 
-`refine2` and `adapt2` are the two-sided forms of `restrict` and `through`. Each side of a codec
-holds one pair, and each pair reads from its own side: the first function acts on the value that
-enters from the side, and the second on the value that exits to the side. So the converse swaps
-the two halves and changes no pair (`R.refine2`, `R.adapt2`). At the top of the stored side, the
-two-sided form is the one-sided form (`refine2_host`, `adapt2_host`).
+`adapt2` is the two-sided form of `through`, and `held2` restricts `adapt2` on each side by an
+outer codec. Each side of a codec holds one pair, and each pair reads from its own side: the
+first function acts on the value that enters from the side, and the second on the value that
+exits to the side. So the converse swaps the two halves and changes no pair (`R.adapt2`,
+`R.held2`). `Obl2` is the obligation of the two-sided adapter: one `IsoCancels` per half, and
+the member fact of the stored exit function. Where the stored pair is the identity, the
+two-sided form is the host form (`adapt2_host`, `held2_host`, `obl2_host`).
 
-Each constructor of the term language has a converse that is the same constructor over the
-converses of its parts (`altCodec_R`, `muCodec_R`, `listCodec_R`, `objectCodec_R`).
+A list and an object keep the converse: each is the same constructor over the converses of its
+parts (`listCodec_R`, `objectCodec_R`).
 -/
 
 namespace Calculus.Alg

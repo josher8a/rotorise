@@ -151,10 +151,10 @@ halves by construction, which is what §3 argues an ad-hoc gate forgets. -/
 total, so `dom(p)` is the subterm's exactly. It is cited as a result now, so it is guarded
 like one. -/
 
-/-! `AdmA`'s `held` row, both directions. §5 gave `held` one `⊤` row on both sides; its
-opacity is one-sided — `f` gates the write, `g` only post-processes the read — so the
-readable side passes through, and these two are the pair it separates and the pair it
-still does not. -/
+/-! `AdmA`'s `held` row, both directions. §5 gave `held` one `⊤` row on both sides. A `held`
+restricts both sides. The read row asks the stored outer of the attribute, the inner term of
+the image under the stored word, and the caller outer of the value that the read gives
+(`AdmA_held_eq`). -/
 
 /-! The lemmas that pin §5's declaration-time devices to the denotation. Without them a row
 is a transcription of a table rather than a claim about the model, so their axiom base is

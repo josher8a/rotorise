@@ -95,38 +95,6 @@ do not exist and nothing reports it, which is stated at its head.
 
 ---
 
-## The value side and the attribute side are one parametrised development
-
-**The future state.** The analysis is written once and instantiated at the value side and at the
-attribute side, rather than written twice.
-
-**The ruling today is no, on measurement.** The twins that are cheap to merge are cheap because
-there is nothing in them: membership lemmas, wrappers, and one-line abbreviations. The twins that
-hold the bulk of the mass are twins in name only, and the largest are the least alike —
-`AdmLit` against `AdmALit`, `Adm` against `AdmA`. A parametrised development would abstract the boilerplate and leave the content
-untouched.
-
-**The row combinators are one development already.** `Rows.lean` states `RowLe`, `allP`, `anyP`,
-`zipP`, `alignP` and `alignPL` one time over a carrier type, and each side instantiates them. The
-twins that remain state `Adm` or `AdmA` facts, or differ in their bodies.
-
-**This is the same fact the codec algebra states from the other side.** `carriedCodec` states one
-codec for both sides precisely where the two sides are the same. Where they are not, the doubling is
-content rather than repetition. The side split stays local: it does not thread through the codec
-algebra. `setCodec` in `Products.lean` is the standing exception, the one product that is not an
-instance.
-
-**Do not cost this on a pair count.** A pair count is an artifact of the transform that produces it,
-and successive passes have produced different ones from the same tree. Two passes over the same
-bodies, differing only in whether the value-side names were renamed before comparing, disagreed on
-how many pairs are near-identical and agreed on which twins sit at the bottom. The
-size-against-similarity ordering is the dimension; no single count is.
-
-**What decides it.** An ordering that survives a change of transform and puts the bulk of the twin
-mass at high similarity. Until then the merge abstracts what does not matter.
-
----
-
 ## The development carries its own constructive `Finset` layer
 
 Mathlib resolves `k ∈ (s : Finset α)` through `Finset.instSetLike`, whose injectivity field

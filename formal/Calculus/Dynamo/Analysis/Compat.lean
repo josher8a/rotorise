@@ -228,8 +228,8 @@ example : certPair (Term.object (Body.mk {"a"} (fun _ => .optional swap) none))
 example : Alg.compatPair dynOracle shout litX = false ∧
     Alg.compatPair dynOracle Term.boolean flipBool = false := by decide
 
-/-- **Two restrictions of one adapter**: the decision accepts them, because the two words are one
-    word and the two stored sides agree. -/
+/-- **Two restrictions of one adapter**: the decision accepts them, because the two `held`s carry
+    one adapter and their inner terms agree. -/
 example : Alg.compatPair dynOracle sw1 sw2 = true := by decide
 
 end Calculus
