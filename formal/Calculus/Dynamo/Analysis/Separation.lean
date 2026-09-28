@@ -68,7 +68,7 @@ way, and `arrayRow` above is that equation. -/
 
 /-- `refine t ⊤` and `t` admit the same values at every point: the row is `Adm t v && true`,
     so the domains are equal with no hypothesis. -/
-theorem refine_top_row (t : Term) : Adm α (.refine t (.closure qTop)) = Adm α t := by
+theorem refine_top_row (t : Term) : Adm α (.refine t (.closure qTop) ()) = Adm α t := by
   funext v; simp [Adm_rows, Pred.eval, qTop]
 
 /-! ## Separation on the pair
@@ -114,7 +114,7 @@ questions are different. -/
 
 /-- **How a term is written is not a function of what it admits.** Two terms, one a
     refinement of the other, agreeing on the joint predicate at every value. -/
-theorem Adm_string_eq_refine : Adm α .string = Adm α (.refine .string (.closure qTop)) :=
+theorem Adm_string_eq_refine : Adm α .string = Adm α (.refine .string (.closure qTop) ()) :=
   (refine_top_row .string).symm
 
 
@@ -198,7 +198,7 @@ theorem not_decides_string : ¬ Decides α .string := by
   cases v <;> cases w <;> simp_all [stringCodec, Value.kind]
 
 
-theorem not_decides_refine_top : ¬ Decides α (.refine .string (.closure qTop)) := by
+theorem not_decides_refine_top : ¬ Decides α (.refine .string (.closure qTop) ()) := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
   cases v <;> cases w <;>
@@ -239,7 +239,7 @@ witnesses are duals:
 `Adm` has no such split. `Adm_refine_adapt` and `Adm_held_adapt` show it doing the one
 thing `adapt` describes on both rows, apply the adapter and then ask the subterm, which is
 why it carries `q` and `f`. The `held` row also asks the caller-side term at the value
-itself. -/
+itself, and the stored outer at the write. -/
 
 /-- An adapter that sends one string to itself and everything else off `string`'s carrier.
     Total, so this is a `held` and not a `refine` — and it narrows exactly as a refinement
@@ -251,21 +251,26 @@ def splitTable : Table := fun _ => (fSplit, id)
 
 /-- **The dual gap.** `held(string, string, fSplit, _)` writes `"A"` and refuses `"B"`: two values
     of one kind, differing in admission, so it decides. -/
-theorem decides_held : Decides splitTable (.held .string .string [(.caller 0, false)]) := by
+theorem decides_held :
+    Decides splitTable (.held .string .string .opaq [(.caller 0, false)] []) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
   · simp [denote_rows, Alg.Table.word, Alg.Table.letter, splitTable, Alg.Codec.through,
-      Alg.Codec.restrict, stringCodec, fSplit]
+      Alg.refine2, stringCodec, fSplit]
+    have h : ((muCodec opaqStep).p (Attr.s "A")).isSome = true := rfl
+    simp [h]
   · simp [denote_rows, Alg.Table.word, Alg.Table.letter, splitTable, Alg.Codec.through,
-      Alg.Codec.restrict, stringCodec, fSplit]
+      Alg.refine2, stringCodec, fSplit]
 
 
 /-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/
 theorem Adm_refine_adapt (t : Term) (p : Pred) (v : Value) :
-    Adm α (.refine t p) v = ((partialId p.eval v).elim false (Adm α t)) := by
+    Adm α (.refine t p ()) v = ((partialId p.eval v).elim false (Adm α t)) := by
   cases hq : p.eval v <;> simp [Adm_rows, partialId, hq]
 
-theorem Adm_held_adapt (t P : Term) (k : Word) (v : Value) :
-    Adm α (.held t P k) v = (((some ((α.word k).1 v)).elim false (Adm α t)) && Adm α P v) := by
+theorem Adm_held_adapt (t P PA : Term) (k : Word) (kA : List (Alg.SynA.GenA dynSyn × Bool))
+    (v : Value) :
+    Adm α (.held t P PA k kA) v = (((some ((α.word k).1 v)).elim false (Adm α t)) && Adm α P v &&
+      Alg.gate (denote α t) (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v)) := by
   simp [Adm_rows]
 
 /-! ### Adapters and alternatives, and why `alternate reader` is not an adapter

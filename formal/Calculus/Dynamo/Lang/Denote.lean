@@ -74,9 +74,11 @@ variable (k : GroundKind) (t : Term) (ts : List Term)
 @[μSyn_rows] theorem μSyn_set : μSyn (.set t) = (μSyn t).bind setMember := rfl
 @[μSyn_rows] theorem μSyn_list (pre suf : List Term) (sp : Option Term) :
     μSyn (.list pre sp suf) = some .L := rfl
-@[μSyn_rows] theorem μSyn_held (P : Term) (k : Word) :
-    μSyn (.held t P k) = μSyn t := rfl
-@[μSyn_rows] theorem μSyn_refine (p : Pred) : μSyn (.refine t p) = μSyn t := rfl
+@[μSyn_rows] theorem μSyn_held (P PA : Term) (k : Word)
+    (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+    μSyn (.held t P PA k kA) = μSyn t := rfl
+@[μSyn_rows] theorem μSyn_refine (p : Pred) (pA : Alg.SynA.PredA dynSyn) :
+    μSyn (.refine t p pA) = μSyn t := rfl
 @[μSyn_rows] theorem μSyn_opaq : μSyn .opaq = none := rfl
 /-- A closed term reads an unbound variable as the bottom, and a recursive term concludes `⊤`. -/
 @[μSyn_rows] theorem μSyn_var (i : Nat) : μSyn (.var i) = none := rfl
@@ -114,36 +116,36 @@ export Alg (envAt)
 
 variable (α) in
 /-- Each term, at its certified combinator: the generic denotation at DynamoDB. -/
-abbrev denote (t : Term) (ρ : List Codec := []) : Codec := Alg.denote α t ρ
+abbrev denote (t : Term) (ρ : List Codec := []) : Codec := Alg.denote α dynTableA t ρ
 
 variable (α) in
 /-- The payload's semantics: the slot table and the open block, each through its own
     companion. The recursion has to be passed *applied*, so `denote`'s `.object` row delegates
     to this companion, alongside `fieldSem` and `wildSem`. -/
-abbrev bodySem (b : Body) (ρ : List Codec := []) : Codec := Alg.bodySem α b ρ
+abbrev bodySem (b : Body) (ρ : List Codec := []) : Codec := Alg.bodySem α dynTableA b ρ
 
 variable (α) in
 /-- A field's semantics. A companion of `denote` rather than a function of one, which is what
     removed the fuel. -/
-abbrev fieldSem (s : ObjectSlot) (ρ : List Codec := []) : FieldSem := Alg.fieldSem α s ρ
+abbrev fieldSem (s : ObjectSlot) (ρ : List Codec := []) : FieldSem := Alg.fieldSem α dynTableA s ρ
 
 variable (α) in
 /-- The open block's semantics. **A body with no open block refuses**: a name the body does not
     claim is a name the body refuses, in both directions. -/
-abbrev wildSem (w : Option Term) (ρ : List Codec := []) : RestSem := Alg.wildSem α w ρ
+abbrev wildSem (w : Option Term) (ρ : List Codec := []) : RestSem := Alg.wildSem α dynTableA w ρ
 
 variable (α) in
 /-- The options' codecs, in order. -/
-abbrev denoteList (ts : List Term) (ρ : List Codec := []) : List Codec := Alg.denoteList α ts ρ
+abbrev denoteList (ts : List Term) (ρ : List Codec := []) : List Codec := Alg.denoteList α dynTableA ts ρ
 
 variable (α) in
 /-- The spread's codec, where there is one. -/
-abbrev denoteOpt (o : Option Term) (ρ : List Codec := []) : Option Codec := Alg.denoteOpt α o ρ
+abbrev denoteOpt (o : Option Term) (ρ : List Codec := []) : Option Codec := Alg.denoteOpt α dynTableA o ρ
 
 variable (α) in
 /-- The options' members, in order. -/
 abbrev denoteμs (ts : List Term) (ρ : List Codec := []) : List (Option Member) :=
-  Alg.denoteμs α ts ρ
+  Alg.denoteμs α dynTableA ts ρ
 
 /-! ### The rows at the DynamoDB constructors
 
@@ -154,6 +156,13 @@ these rows are the translation between the two. -/
 section Rows
 variable (t : Term) (ts : List Term) (ρ : List Codec)
 
+/-- **Every stored word of DynamoDB is the identity**: the store names no generator. -/
+@[denote_rows] theorem dynTableA_word (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+    dynTableA.word kA = (id, id) := by
+  cases kA with
+  | nil => rfl
+  | cons x _ => exact x.1.elim
+
 @[denote_rows] theorem denote_base (k : GroundKind) : denote α (.base k) ρ = baseCodec k := rfl
 @[denote_rows] theorem denote_literal (k : GroundKind) (x : k.Carrier) :
     denote α (.literal k x) ρ = literalCodec k x := rfl
@@ -163,15 +172,19 @@ variable (t : Term) (ts : List Term) (ρ : List Codec)
 @[denote_rows] theorem denote_list (pre : List Term) (spread : Option Term) (suf : List Term) :
     denote α (.list pre spread suf) ρ
       = listCodec (denoteList α pre ρ) (denoteOpt α spread ρ) (denoteList α suf ρ) := rfl
-/-- `held` denotes `through`, restricted by the admission of the caller-side term. -/
-@[denote_rows] theorem denote_held (P : Term) (k : Word) :
-    denote α (.held t P k) ρ
-      = ((denote α t ρ).through (α.word k).1 (α.word k).2).restrict
-          fun v => ((denote α P ρ).e v).isSome := rfl
-/-- `refine` denotes `restrict`, of the predicate's meaning. This is the whole of what `Pred`
-    cost the codec layer: one `.eval`. -/
-@[denote_rows] theorem denote_refine (p : Pred) :
-    denote α (.refine t p) ρ = (denote α t ρ).restrict p.eval := rfl
+/-- `held` denotes `through`, restricted by the write domain of the caller outer and the read
+    domain of the stored outer. The stored word is the identity. -/
+@[denote_rows] theorem denote_held (P PA : Term) (k : Word)
+    (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+    denote α (.held t P PA k kA) ρ
+      = Alg.refine2 ((denote α t ρ).through (α.word k).1 (α.word k).2)
+          (fun v => ((denote α P ρ).e v).isSome) fun a => ((denote α PA ρ).p a).isSome := by
+  simp only [denote, Alg.denote, dynTableA_word, Alg.held2, Alg.adapt2_host]; rfl
+/-- `refine` denotes `restrict`, of the predicate's meaning: the stored predicate is the truth.
+    This is the whole of what `Pred` cost the codec layer: one `.eval`. -/
+@[denote_rows] theorem denote_refine (p : Pred) (pA : Alg.SynA.PredA dynSyn) :
+    denote α (.refine t p pA) ρ = (denote α t ρ).restrict p.eval :=
+  Alg.refine2_host _ _
 /-- `opaque` denotes the recursive codec of its body `opaqStep` (`Opaque.lean`). -/
 @[denote_rows] theorem denote_opaq : denote α .opaq ρ = muCodec opaqStep := rfl
 /-- `object` denotes its payload's semantics. -/
@@ -222,8 +235,8 @@ theorem denote_μ : ∀ t : Term, (denote α t).μ = μSyn t
   | .base k => by cases k <;> rfl
   | .set t => by show (denote α t).μ.bind setMember = _; rw [denote_μ t]; rfl
   | .list _ _ _ => rfl
-  | .held t' _ _ => denote_μ t'
-  | .refine t' _ => denote_μ t'
+  | .held t' _ _ _ _ => denote_μ t'
+  | .refine t' _ _ => denote_μ t'
   | .opaq | .never | .var _ | .mu _ => rfl
   | .object b => bodySem_μ b
   | .union opts => by
@@ -287,20 +300,20 @@ end Bridge
 /-! ### The companions are the old mapped forms
 
 `denote` had to name its list companions to become structural, and every proof downstream was
-written against `opts.map (denote fuel)`. These four are that bridge, `@[simp]` so nothing else
-has to know the companions exist. -/
+written against `opts.map (denote fuel)`. These four are that bridge. The generic `@[simp]`
+forms in `Alg` fire at DynamoDB, so nothing else has to know the companions exist. -/
 
-@[simp] theorem denoteList_eq {ρ : List Codec} :
+theorem denoteList_eq {ρ : List Codec} :
     ∀ ts : List Term, denoteList α ts ρ = ts.map (denote α · ρ)
   | [] => rfl
   | t :: ts => by simp only [denote_rows, List.map]; rw [denoteList_eq ts]
 
-@[simp] theorem denoteOpt_eq {ρ : List Codec} :
+theorem denoteOpt_eq {ρ : List Codec} :
     ∀ tail : Option Term, denoteOpt α tail ρ = tail.map (denote α · ρ)
   | none => rfl
   | some _ => rfl
 
-@[simp] theorem denoteμs_eq_map {ρ : List Codec} : ∀ opts : List Term,
+theorem denoteμs_eq_map {ρ : List Codec} : ∀ opts : List Term,
     denoteμs α opts ρ = opts.map fun t => (denote α t ρ).μ
   | [] => rfl
   | t :: ts => by simp only [denote_rows, List.map]; rw [denoteμs_eq_map ts]

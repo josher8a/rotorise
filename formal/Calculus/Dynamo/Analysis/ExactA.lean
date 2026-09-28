@@ -25,7 +25,7 @@ variable (α) in
     `AdmA`'s `refine` row is this function, which is why the row survived the retirement of
     the per-aspect tables it was first written for. -/
 noncomputable abbrev refineReads (t : Term) (q : Value → Bool) : Attr → Bool :=
-  Alg.refineReads α t [] q
+  Alg.refineReads α dynTableA t [] q
 
 @[AdmA_rows] theorem refineReads_eq (t : Term) (q : Value → Bool) (a : Attr) :
     refineReads α t q a = match (denote α t).p a with
@@ -33,9 +33,9 @@ noncomputable abbrev refineReads (t : Term) (q : Value → Bool) : Attr → Bool
       | none => false := by
   -- the two matches are different auxiliary definitions, and a match reduces only at a
   -- constructor
-  show Alg.refineReads α t [] q a = _
+  show Alg.refineReads α dynTableA t [] q a = _
   unfold Alg.refineReads
-  cases (Alg.denote α t).p a <;> rfl
+  cases (Alg.denote α dynTableA t).p a <;> rfl
 
 noncomputable section
 /-! ## The attribute side
@@ -162,27 +162,27 @@ variable (α) in
     of `Adm` across §1's asymmetry, and it is not a symmetric mirror: `refine` **does** narrow
     here, because a row may decode and then ask `q` (`refineReads`). An alternate reader is
     `Codec.extendRead`, outside `Term`, so this table has no alternate-reader row. -/
-abbrev AdmA (t : Term) : AP := Alg.AdmA α t []
+abbrev AdmA (t : Term) : AP := Alg.AdmA α dynTableA t []
 
 variable (α) in
 /-- The read side's payload row; `AdmBody`'s mirror. -/
-abbrev AdmABody (b : Body) : AP := Alg.AdmABody α b []
+abbrev AdmABody (b : Body) : AP := Alg.AdmABody α dynTableA b []
 
 variable (α) in
 /-- A slot's read row is its term's. -/
-abbrev AdmAField (s : ObjectSlot) : AP := Alg.AdmAField α s []
+abbrev AdmAField (s : ObjectSlot) : AP := Alg.AdmAField α dynTableA s []
 
 variable (α) in
 /-- The open block's read row, where the body has one. -/
-abbrev AdmAWild (w : Option Term) : Option AP := Alg.AdmAWild α w []
+abbrev AdmAWild (w : Option Term) : Option AP := Alg.AdmAWild α dynTableA w []
 
 variable (α) in
 /-- The options' read rows, in order. -/
-abbrev AdmAList (ts : List Term) : List AP := Alg.AdmAList α ts []
+abbrev AdmAList (ts : List Term) : List AP := Alg.AdmAList α dynTableA ts []
 
 variable (α) in
 /-- The spread's read row, where there is one. -/
-abbrev AdmAOptT (o : Option Term) : Option AP := Alg.AdmAOptT α o []
+abbrev AdmAOptT (o : Option Term) : Option AP := Alg.AdmAOptT α dynTableA o []
 
 /-! ### The rows at the DynamoDB constructors
 
@@ -196,11 +196,18 @@ variable (t : Term) (ts : List Term)
 /-- The bottom reads no attribute back, and the row is that sentence. -/
 @[AdmA_rows] theorem AdmA_never (a : Attr) : AdmA α .never a = false := rfl
 /-- The read side of the caller-side restriction: decode, transform, then ask `P`'s row. -/
-@[AdmA_rows] theorem AdmA_held (P : Term) (k : Word) :
-    AdmA α (.held t P k) =
-      fun a => AdmA α t a && refineReads α t (fun w => Adm α P ((α.word k).2 w)) a := rfl
-@[AdmA_rows] theorem AdmA_refine (p : Pred) :
-    AdmA α (.refine t p) = fun a => AdmA α t a && refineReads α t p.eval a := rfl
+@[AdmA_rows] theorem AdmA_held (P PA : Term) (k : Word) (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+    AdmA α (.held t P PA k kA) =
+      fun a => AdmA α PA a && AdmA α t a &&
+        refineReads α t (fun w => Adm α P ((α.word k).2 w)) a := by
+  simp only [AdmA, Alg.AdmA, dynTableA_word]
+  rfl
+/-- The stored predicate is the truth, so the read row of `refine` asks the caller predicate of
+    the read alone. -/
+@[AdmA_rows] theorem AdmA_refine (p : Pred) (pA : Alg.SynA.PredA dynSyn) :
+    AdmA α (.refine t p pA) = fun a => AdmA α t a && refineReads α t p.eval a := by
+  simp only [AdmA, Alg.AdmA, Alg.SemA.evalA, Bool.and_true]
+  rfl
 /-- The read side of the same disjunction; every option, object included, is admitted by
     attempt. -/
 @[AdmA_rows] theorem AdmA_union_row : AdmA α (.union ts) = fun a => anyP (AdmAList α ts) a := rfl
@@ -317,7 +324,7 @@ theorem AdmA_sound (t : Term) {a v} (hp : (denote α t).p a = some v) : AdmA α 
 /-- **The witness that is now a theorem the other way.** `refine(string, ⊥)` reads nothing,
     and `AdmA` says so: the row decodes with `stringCodec` and applies `⊥`. This used to be
     ~~not_ExactA_refine~~, stated as "`AdmA` cannot see it". -/
-theorem AdmA_refine_bot (a : Attr) : AdmA α (.refine .string (.closure (fun _ => false))) a = false := by
+theorem AdmA_refine_bot (a : Attr) : AdmA α (.refine .string (.closure (fun _ => false)) ()) a = false := by
   simp [AdmA_rows, Pred.eval]
   cases a <;> simp [denote_rows, stringCodec]
 

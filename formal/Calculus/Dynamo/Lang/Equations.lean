@@ -103,38 +103,42 @@ the representation audit asked for — both halves of §6 in one language. -/
 
 section Terms
 
-/-- §6: `held(c, P, []) ≡ refine(c, P)`. The empty word is the identity transform at every
-    table, so it leaves the caller-side restriction, and that restriction is a `refine` by the
-    admission of `P`. -/
-theorem equiv_denote_held_id (t P : Term) :
-    Codec.Equiv (denote α (.held t P []))
-      (denote α (.refine t (.closure fun v => ((denote α P).e v).isSome))) := by
+/-- §6: `held(c, P, PA, [], kA) ≡ refine(c, P)`. The empty word is the identity transform at
+    every table, and every stored word of DynamoDB is the identity, so the `held` leaves the
+    caller-side restriction, and that restriction is a `refine` by the admission of `P`. The
+    stored outer only shrinks the graph, and `≡` asks agreement where both codecs are defined. -/
+theorem equiv_denote_held_id (t P PA : Term) (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+    Codec.Equiv (denote α (.held t P PA [] kA))
+      (denote α (.refine t (.closure fun v => ((denote α P).e v).isSome) ())) := by
+  simp only [denote_rows]
   refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩
   · intro v a a' h h'
-    exact Option.some.inj ((through_e.mp (restrict_e.mp h).2).symm.trans (restrict_e.mp h').2)
+    exact Option.some.inj ((through_e.mp (Alg.refine2_e.mp h).2.1).symm.trans (restrict_e.mp h').2)
   · intro a v v' h h'
-    obtain ⟨w, hw, rfl⟩ := through_p.mp (restrict_p.mp h).1
+    obtain ⟨w, hw, rfl⟩ := through_p.mp (Alg.refine2_p.mp h).2.1
     exact Option.some.inj (hw.symm.trans (restrict_p.mp h').1)
 
-/-- §6: `held(held(c, P, k), P′, k′) ≡ refine(held(c, P′, k ++ k′), P ∘ f′)`, where `f′` is
-    the caller-side function of `k′`. The words concatenate, so the transforms compose, and the
-    inner caller-side restriction pulls back along `f′`. The pullback is a predicate and no
-    term, so the right side carries it as a `refine`. -/
-theorem equiv_denote_held_comp (t P P' : Term) (k k' : Word) :
-    Codec.Equiv (denote α (.held (.held t P k) P' k'))
-      (denote α (.refine (.held t P' (k ++ k'))
-        (.closure fun v => ((denote α P).e ((α.word k').1 v)).isSome))) := by
+/-- §6: `held(held(c, P, PA, k), P′, PA′, k′) ≡ refine(held(c, P′, PA′, k ++ k′), P ∘ f′)`, where
+    `f′` is the caller-side function of `k′`. The words concatenate, so the transforms compose,
+    and the inner caller-side restriction pulls back along `f′`. The pullback is a predicate and
+    no term, so the right side carries it as a `refine`. The inner stored outer only shrinks the
+    graph. -/
+theorem equiv_denote_held_comp (t P PA P' PA' : Term) (k k' : Word)
+    (kA kA' : List (Alg.SynA.GenA dynSyn × Bool)) :
+    Codec.Equiv (denote α (.held (.held t P PA k kA) P' PA' k' kA'))
+      (denote α (.refine (.held t P' PA' (k ++ k') [])
+        (.closure fun v => ((denote α P).e ((α.word k').1 v)).isSome) ())) := by
   simp only [denote_rows, Alg.Table.word_append]
   refine ⟨fun _ => ⟨fun ⟨⟨h1, h2⟩, h3⟩ => ⟨⟨h1, h3⟩, h2⟩, fun ⟨⟨h1, h3⟩, h2⟩ => ⟨⟨h1, h2⟩, h3⟩⟩,
     rfl, ?_, ?_⟩
   · intro v a a' h h'
-    have hl := (restrict_e.mp (through_e.mp (restrict_e.mp h).2)).2
-    have hr := (restrict_e.mp (restrict_e.mp h').2).2
+    have hl := (Alg.refine2_e.mp (through_e.mp (Alg.refine2_e.mp h).2.1)).2.1
+    have hr := (Alg.refine2_e.mp (restrict_e.mp h').2).2.1
     exact Option.some.inj ((through_e.mp hl).symm.trans hr)
   · intro a v v' h h'
-    obtain ⟨w, hw, rfl⟩ := through_p.mp (restrict_p.mp h).1
-    obtain ⟨x, hx, rfl⟩ := through_p.mp (restrict_p.mp hw).1
-    obtain ⟨y, hy, rfl⟩ := through_p.mp (restrict_p.mp (restrict_p.mp h').1).1
+    obtain ⟨w, hw, rfl⟩ := through_p.mp (Alg.refine2_p.mp h).2.1
+    obtain ⟨x, hx, rfl⟩ := through_p.mp (Alg.refine2_p.mp hw).2.1
+    obtain ⟨y, hy, rfl⟩ := through_p.mp (Alg.refine2_p.mp (restrict_p.mp h').1).2.1
     rw [hx] at hy
     cases hy
     rfl
@@ -151,23 +155,26 @@ theorem equiv_denote_held_comp (t P P' : Term) (k k' : Word) :
     needs that reduction states it as a lemma about `Pred`, and `Pred` stays one to one with
     the host's three cases, which is the whole reason it has three. -/
 theorem equiv_denote_refine_meet (t : Term) (p p' : Pred) :
-    Codec.Equiv (denote α (.refine (.refine t p) p'))
-      (denote α (.refine t (.closure (fun v => p.eval v && p'.eval v)))) :=
-  equiv_restrict_meet _ _ _
+    Codec.Equiv (denote α (.refine (.refine t p ()) p' ()))
+      (denote α (.refine t (.closure (fun v => p.eval v && p'.eval v)) ())) := by
+  simp only [denote_rows]
+  exact equiv_restrict_meet _ _ _
 
 /-- §6: `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. The premise is the row's, read off the
     denotation rather than the judgement — `typed_TSub` is what connects the two. -/
 theorem equiv_denote_refine_full (t : Term) (p : Pred)
     (hq : ∀ v, (denote α t).T v ↔ p.eval v = true) :
-    Codec.Equiv (denote α (.refine t p)) (denote α t) := equiv_restrict_full _ _ hq
+    Codec.Equiv (denote α (.refine t p ())) (denote α t) := by
+  simp only [denote_rows]
+  exact equiv_restrict_full _ _ hq
 
 /-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
     `optional_μ` and `optional_μ`, which are already stated over a denotation. -/
-theorem denote_held_μ (t P : Term) (k : Word) :
-    (denote α (.held t P k)).μ = (denote α t).μ := rfl
+theorem denote_held_μ (t P PA : Term) (k : Word) (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+    (denote α (.held t P PA k kA)).μ = (denote α t).μ := rfl
 
 theorem denote_refine_μ (t : Term) (p : Pred) :
-    (denote α (.refine t p)).μ = (denote α t).μ := rfl
+    (denote α (.refine t p ())).μ = (denote α t).μ := rfl
 
 end Terms
 

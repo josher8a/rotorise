@@ -46,7 +46,7 @@ theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy 
 variable (α) in
 /-- The doc's semantic rule premises, at DynamoDB: `Alg.Obligations` at the DynamoDB signature,
     whose set obligation is `SetElem`. -/
-abbrev Obligations : Term → optParam (List Codec) [] → Prop := @Alg.Obligations dynSyn _ α
+abbrev Obligations : Term → optParam (List Codec) [] → Prop := @Alg.Obligations dynSyn _ _ _ α dynTableA
 
 /-! ### The companions, as the quantifiers the rest of the file speaks in
 
@@ -66,7 +66,7 @@ namespace Obligations
 
 theorem array {t} (h : Obligations α (.array t)) : Obligations α t := h.2.1
 theorem record {t} (h : Obligations α (.record t)) : Obligations α t := h.2
-theorem refine {t q ρ} (h : Obligations α (.refine t q) ρ) : Obligations α t ρ := h
+theorem refine {t q qA ρ} (h : Obligations α (.refine t q qA) ρ) : Obligations α t ρ := h
 
 /-- §3 `(set)`: the element's premises, and the DynamoDB set rule. -/
 theorem set {t ρ} (h : Obligations α (.set t) ρ) : Obligations α t ρ ∧ SetElem (denote α t ρ) :=
@@ -83,9 +83,9 @@ theorem list {pre sp suf ρ} (h : Obligations α (.list pre sp suf) ρ) :
 
 /-- §3 `(held)`: the subterm's premises, and the iso of the whole word cancelling on the
     carriers. -/
-theorem held {t P k ρ} (h : Obligations α (.held t P k) ρ) :
+theorem held {t P PA k kA ρ} (h : Obligations α (.held t P PA k kA) ρ) :
     Obligations α t ρ ∧ IsoCancels (denote α t ρ) (α.word k).1 (α.word k).2 :=
-  ⟨h.1, h.2⟩
+  ⟨h.1, h.2.1⟩
 
 /-- §5 `(union)`: one premise per option, and pairwise compatibility. -/
 theorem union {opts ρ} (h : Obligations α (.union opts) ρ) :
@@ -174,7 +174,7 @@ theorem align_T_of_HTuple {tail Tt} (hopt : TypedOpt α tail Tt)
         exact ⟨[], rfl, by simp⟩
       | @some t' T' μ' hty =>
         exact alignTail_T (ihTail _ rfl _ _ hty) vs hall
-  | _, _, @TypedList.cons _ _ _ tx tsx Tx Tsx μx hty hs, ih, vs, hall => by
+  | _, _, @TypedList.cons _ _ _ _ _ _ tx tsx Tx Tsx μx hty hs, ih, vs, hall => by
       cases vs with
       | nil => exact nomatch hall
       | cons v vs' =>
@@ -209,7 +209,7 @@ theorem zipSuf_T :
       back.length = suf.length ∧ ∀ p ∈ (suf.map (denote α)).zip back, p.1.T p.2
   | _, _, .nil, _, back, hb => by
       cases hb; exact ⟨rfl, by simp⟩
-  | _, _, @TypedList.cons _ _ _ t ts T Ts μ hty hs, ih, back, hb => by
+  | _, _, @TypedList.cons _ _ _ _ _ _ t ts T Ts μ hty hs, ih, back, hb => by
       cases hb with
       | cons hhead htail =>
         obtain ⟨hlen, hall⟩ :=

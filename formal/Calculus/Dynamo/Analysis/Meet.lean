@@ -461,8 +461,8 @@ mutual
     recursive term admits what the term admits. The view holds no `held` (`HF_writeView`), so a
     set of the view writes element by element. -/
 def writeView : Term → Term
-  | .held _ P _ => writeView P
-  | .refine t p => .refine (writeView t) p
+  | .held _ P _ _ _ => writeView P
+  | .refine t p pA => .refine (writeView t) p pA
   | .list pre sp suf => .list (writeViewL pre) (writeViewO sp) (writeViewL suf)
   | .object b => .object (writeViewB b)
   | .union os => .union (writeViewL os)
@@ -499,8 +499,8 @@ mutual
     held-free inner term, so a predicate over a variable changes no verdict. An example after
     `separates_of_certPair` pins the narrowing. -/
 def readView : Term → Term
-  | .held t _ _ => readView t
-  | .refine t p => if hasHeld t || t.hasVar then readView t else .refine t p
+  | .held t _ _ _ _ => readView t
+  | .refine t p pA => if hasHeld t || t.hasVar then readView t else .refine t p pA
   | .list pre sp suf => .list (readViewL pre) (readViewO sp) (readViewL suf)
   | .object b => .object (readViewB b)
   | .union os => .union (readViewL os)
@@ -646,7 +646,7 @@ example : Alg.Term.disjoint pair0 (Term.array .string) (Term.array .boolean) = f
 
 /-- A refinement is disjoint from what its inner term is disjoint from. -/
 example : Alg.Term.disjoint pair0
-    (Term.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)) Term.null
+    (Term.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩) ()) Term.null
       = true := by rfl
 
 example : unionOk [.object (.mk {"x"} (fun _ => .optional .string) none)] = true := by
@@ -688,14 +688,14 @@ disjoint and no set is empty. -/
 
 /-- **Two string sets with disjoint members are disjoint.** -/
 theorem disjoint_disjointStringSets :
-    Alg.Term.disjoint pair0 (.set (.refine .string (.members .string (NEFinset.of "a" {"b"}))) : Term)
-      (.set (.refine .string (.members .string (NEFinset.of "c" ∅))) : Term) = true := by
+    Alg.Term.disjoint pair0 (.set (.refine .string (.members .string (NEFinset.of "a" {"b"})) ()) : Term)
+      (.set (.refine .string (.members .string (NEFinset.of "c" ∅)) ()) : Term) = true := by
   decide
 
 /-- **Two string sets that share a member are not disjoint.** -/
 theorem not_disjoint_stringSets_shared :
-    Alg.Term.disjoint pair0 (.set (.refine .string (.members .string (NEFinset.of "a" {"b"}))) : Term)
-      (.set (.refine .string (.members .string (NEFinset.of "b" {"c"}))) : Term) = false := by
+    Alg.Term.disjoint pair0 (.set (.refine .string (.members .string (NEFinset.of "a" {"b"})) ()) : Term)
+      (.set (.refine .string (.members .string (NEFinset.of "b" {"c"})) ()) : Term) = false := by
   decide
 
 /-! ### The views certify a `held` whose caller side is precise
@@ -707,20 +707,20 @@ stored-side views differ in kind. -/
 
 /-- The test of the two terms does not certify the pair. -/
 theorem disjoint_heldNE_base :
-    Alg.Term.disjoint pair0 (.held (.set .string) (.list [.string] (some .string) []) [] : Term)
+    Alg.Term.disjoint pair0 (.held (.set .string) (.list [.string] (some .string) []) .opaq [] [] : Term)
         (.list [] (some .number) [] : Term) = false := by
   decide
 
 /-- **A caller side that requires one element or more is certified** beside a list of numbers. -/
 theorem certPair_heldNE :
-    certPair (.held (.set .string) (.list [.string] (some .string) []) [])
+    certPair (.held (.set .string) (.list [.string] (some .string) []) .opaq [] [])
       (.list [] (some .number) []) = true := by
   decide
 
 /-- **A caller side that admits the empty list is refused**, because the list of numbers admits
     the empty list too. -/
 theorem certPair_heldAny :
-    certPair (.held (.set .string) (.list [] (some .string) []) [])
+    certPair (.held (.set .string) (.list [] (some .string) []) .opaq [] [])
       (.list [] (some .number) []) = false := by
   decide
 
@@ -730,20 +730,20 @@ theorem certPair_heldAny :
     `literal "A" ∪ literal "B"`. -/
 theorem certPair_heldBelowMu :
     certPair (.union [.literal .string "A", .literal .string "B"])
-      (.mu (.union [.held .number (.literal .string "1") [], .list [] (some (.var 0)) []]))
+      (.mu (.union [.held .number (.literal .string "1") .opaq [] [], .list [] (some (.var 0)) []]))
       = true := by
   decide
 
 /-- …and the pair is refused where the caller views share a value: the text `"1"`. -/
 theorem certPair_heldBelowMu_meets :
     certPair (.literal .string "1")
-      (.mu (.union [.held .number (.literal .string "1") [], .list [] (some (.var 0)) []]))
+      (.mu (.union [.held .number (.literal .string "1") .opaq [] [], .list [] (some (.var 0)) []]))
       = false := by
   decide
 
 /-- **The test does not read a raw `held`.** A `held` carries an adapter word, and the test reads
     no table, so the test keeps the `held` apart from the bottom alone. The views read it. -/
-example : Alg.Term.disjoint pair0 (Term.held .string .opaq [])
+example : Alg.Term.disjoint pair0 (Term.held .string .opaq .opaq [] [])
     Term.number = false := by rfl
 
 /-! ## The levers -/
@@ -883,11 +883,15 @@ noncomputable instance dynShapes : Alg.Shapes dynSyn where
 
 /-- The set former of DynamoDB: the set law of `setCodec`. -/
 instance dynFormerAdm : Alg.FormerAdm dynSyn where
-  set_never _ _ h v := Adm_set_and_false h v
+  set_never {_ β} _ _ h v := by
+    obtain rfl : β = dynTableA := funext fun g => nomatch g
+    exact Adm_set_and_false h v
 
 /-- The leaves of DynamoDB keep apart what they meet at the bottom, on the write side. -/
 instance dynLeafAdm : Alg.LeafAdm dynSyn where
-  prim_none g g' hp v := Adm_prim_none g g' hp v
+  prim_none {_ β} g g' hp v := by
+    obtain rfl : β = dynTableA := funext fun g => nomatch g
+    exact Adm_prim_none g g' hp v
   pmeet_none _ _ h v := meetM_empty h v
 
 /-! ## DynamoDB is an instance of the laws, on the read side
@@ -1048,11 +1052,15 @@ theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
 
 /-- The set former of DynamoDB, on the read side. -/
 instance dynFormerAdmA : Alg.FormerAdmA dynSyn where
-  set_never _ _ h c := AdmA_set_and_false h c
+  set_never {_ β} _ _ h c := by
+    obtain rfl : β = dynTableA := funext fun g => nomatch g
+    exact AdmA_set_and_false h c
 
 /-- The primitives of DynamoDB keep apart what they meet at the bottom, on the read side. -/
 instance dynLeafAdmA : Alg.LeafAdmA dynSyn where
-  prim_none g g' hp c := admA_prim_none g g' hp c
+  prim_none {_ β} g g' hp c := by
+    obtain rfl : β = dynTableA := funext fun g => nomatch g
+    exact admA_prim_none g g' hp c
 
 
 /-! ## The views admit what the term admits -/
@@ -1061,8 +1069,8 @@ mutual
 /-- **The caller-side view holds no `held`.** Each `held` becomes its caller-side view, and
     every other row keeps its constructor. -/
 theorem HF_writeView : ∀ t : Term, HF (writeView t)
-  | .held _ P _ => by simp only [writeView]; exact HF_writeView P
-  | .refine t _ => by simp only [writeView]; exact HF_writeView t
+  | .held _ P _ _ _ => by simp only [writeView]; exact HF_writeView P
+  | .refine t _ _ => by simp only [writeView]; exact HF_writeView t
   | .list pre sp suf => by
       simp only [writeView, HF, hasHeld, Bool.or_eq_false_iff]
       exact ⟨⟨HF_writeViewL pre, HF_writeViewO sp⟩, HF_writeViewL suf⟩
@@ -1093,8 +1101,8 @@ mutual
 /-- **The stored-side view holds no `held`.** A `refine` that the view keeps has an inner term
     with no `held`. -/
 theorem HF_readView : ∀ t : Term, HF (readView t)
-  | .held t _ _ => by simp only [readView]; exact HF_readView t
-  | .refine t _ => by
+  | .held t _ _ _ _ => by simp only [readView]; exact HF_readView t
+  | .refine t _ _ => by
       simp only [readView]
       split
       · exact HF_readView t
@@ -1209,17 +1217,17 @@ mutual
     environment of the view is a restriction of `Ω`, because the view holds no `held`, and the
     `set` row reads a restriction of `Ω` element by element. -/
 theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
-    RowLe (Alg.Adm α t ρ) (Alg.Adm α (writeView t) ρ')
-  | .held _ P _, ρ, ρ', he, hs => fun v h => by
+    RowLe (Alg.Adm α dynTableA t ρ) (Alg.Adm α dynTableA (writeView t) ρ')
+  | .held _ P _ _ _, ρ, ρ', he, hs => fun v h => by
       simp only [writeView]
-      exact writeLeE P ρ ρ' he hs v (Bool.and_eq_true_iff.mp h).2
+      exact writeLeE P ρ ρ' he hs v (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).2
   | .var i, _, _, he, _ => fun v h => he i v h
   | .mu b, ρ, ρ', he, hs => fun v h => by
       simp only [writeView]
       rw [Alg.Adm_mu_unfold] at h ⊢
-      have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote α b (c :: ρ)) n).e w).isSome = true →
-          ((Alg.muStage (fun c => Alg.denote α (writeView b) (c :: ρ')) n).e w).isSome = true) ∧
-          Sub (Alg.muStage (fun c => Alg.denote α (writeView b) (c :: ρ')) n) Ω := by
+      have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote α dynTableA b (c :: ρ)) n).e w).isSome = true →
+          ((Alg.muStage (fun c => Alg.denote α dynTableA (writeView b) (c :: ρ')) n).e w).isSome = true) ∧
+          Sub (Alg.muStage (fun c => Alg.denote α dynTableA (writeView b) (c :: ρ')) n) Ω := by
         intro n
         induction n with
         | zero => exact ⟨(fun _ hw => nomatch hw), Alg.sub_empty⟩
@@ -1231,10 +1239,13 @@ theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSu
           have := writeLeE b _ _ he' hs' w (by rw [Alg.Adm_eq_isSome]; exact hw)
           rwa [Alg.Adm_eq_isSome] at this
       exact writeLeE b _ _ (EnvLeV.cons (hst _).1 he) (EnvSub.cons (hst _).2 hs) v h
-  | .refine t p, ρ, ρ', he, hs => fun v h => by
+  | .refine t p _, ρ, ρ', he, hs => fun v h => by
       simp only [writeView]
-      have h' := Bool.and_eq_true_iff.mp h
-      exact Bool.and_eq_true_iff.mpr ⟨writeLeE t ρ ρ' he hs v h'.1, h'.2⟩
+      have h' := Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1
+      have hw := writeLeE t ρ ρ' he hs v h'.1
+      refine Bool.and_eq_true_iff.mpr ⟨Bool.and_eq_true_iff.mpr ⟨hw, h'.2⟩, ?_⟩
+      rw [Alg.Adm_eq_isSome] at hw
+      exact (Alg.gate_true _ _).trans hw
   | .list pre sp suf, ρ, ρ', he, hs => fun v h => by
       cases v with
       | arr vs =>
@@ -1245,10 +1256,10 @@ theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSu
       cases v with
       | map keys g =>
         have h : (valPresentT fs f keys &&
-            objAdmV ⟨fs, fun k => Alg.AdmField α (f k) ρ⟩ (Alg.AdmWild α w ρ) keys g) = true := h
+            objAdmV ⟨fs, fun k => Alg.AdmField α dynTableA (f k) ρ⟩ (Alg.AdmWild α dynTableA w ρ) keys g) = true := h
         show (valPresentT fs (fun k => writeViewS (f k)) keys &&
-            objAdmV ⟨fs, fun k => Alg.AdmField α (writeViewS (f k)) ρ'⟩
-              (Alg.AdmWild α (writeViewO w) ρ') keys g) = true
+            objAdmV ⟨fs, fun k => Alg.AdmField α dynTableA (writeViewS (f k)) ρ'⟩
+              (Alg.AdmWild α dynTableA (writeViewO w) ρ') keys g) = true
         rw [Bool.and_eq_true] at h ⊢
         refine ⟨?_, objAdmV_mono (fun k => writeLeES (f k) ρ ρ' he hs) ?_ h.2⟩
         · refine decide_eq_true fun k => ?_
@@ -1263,7 +1274,7 @@ theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSu
   | .union os, ρ, ρ', he, hs => fun v h => anyP_mono (writeLeEL os ρ ρ' he hs) v h
   | .set t, ρ, ρ', he, hs => fun v h => by
       simp only [writeView]
-      exact setCodec_e_mono (c := Alg.denote α t ρ)
+      exact setCodec_e_mono (c := Alg.denote α dynTableA t ρ)
         (Alg.sub_denoteIn _ (HF_writeView t) ρ' hs)
         (fun w hw => by
           have := writeLeE t ρ ρ' he hs w (by rw [Alg.Adm_eq_isSome]; exact hw)
@@ -1273,17 +1284,17 @@ theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSu
   | .never, _, _, _, _ => fun _ h => h
 /-- `writeLeE` over a list. -/
 theorem writeLeEL : ∀ (ts : List Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
-    List.Forall₂ RowLe (Alg.AdmList α ts ρ) (Alg.AdmList α (writeViewL ts) ρ')
+    List.Forall₂ RowLe (Alg.AdmList α dynTableA ts ρ) (Alg.AdmList α dynTableA (writeViewL ts) ρ')
   | [], _, _, _, _ => .nil
   | t :: ts, ρ, ρ', he, hs => .cons (writeLeE t ρ ρ' he hs) (writeLeEL ts ρ ρ' he hs)
 /-- `writeLeE` at an optional term. -/
 theorem writeLeEO : ∀ (o : Option Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
-    Option.Rel RowLe (Alg.AdmOptT α o ρ) (Alg.AdmOptT α (writeViewO o) ρ')
+    Option.Rel RowLe (Alg.AdmOptT α dynTableA o ρ) (Alg.AdmOptT α dynTableA (writeViewO o) ρ')
   | none, _, _, _, _ => .none
   | some t, ρ, ρ', he, hs => .some (writeLeE t ρ ρ' he hs)
 /-- `writeLeE` at a slot. -/
 theorem writeLeES : ∀ (s : ObjectSlot) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
-    RowLe (Alg.AdmField α s ρ) (Alg.AdmField α (writeViewS s) ρ')
+    RowLe (Alg.AdmField α dynTableA s ρ) (Alg.AdmField α dynTableA (writeViewS s) ρ')
   | .req t, ρ, ρ', he, hs => writeLeE t ρ ρ' he hs
   | .optional t, ρ, ρ', he, hs => writeLeE t ρ ρ' he hs
 end
@@ -1301,17 +1312,19 @@ mutual
     drops its predicate, because the stage of the view can decode where the stage of the term
     decodes through a `held`. -/
 theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
-    RowLe (Alg.AdmA α t ρ) (Alg.AdmA α (readView t) ρ')
-  | .held t _ _, ρ, ρ', he, hs => fun a h => by
+    RowLe (Alg.AdmA α dynTableA t ρ) (Alg.AdmA α dynTableA (readView t) ρ')
+  | .held t _ _ _ _, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
-      exact readLeE t ρ ρ' he hs a (Bool.and_eq_true_iff.mp h).1
+      have h' := (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).2
+      rw [dynTableA_word] at h'
+      exact readLeE t ρ ρ' he hs a h'
   | .var i, _, _, he, _ => fun a h => he i a h
   | .mu b, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
       rw [Alg.AdmA_mu_unfold] at h ⊢
-      have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote α b (c :: ρ)) n).p w).isSome = true →
-          ((Alg.muStage (fun c => Alg.denote α (readView b) (c :: ρ')) n).p w).isSome = true) ∧
-          Sub (Alg.muStage (fun c => Alg.denote α (readView b) (c :: ρ')) n) Ω := by
+      have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote α dynTableA b (c :: ρ)) n).p w).isSome = true →
+          ((Alg.muStage (fun c => Alg.denote α dynTableA (readView b) (c :: ρ')) n).p w).isSome = true) ∧
+          Sub (Alg.muStage (fun c => Alg.denote α dynTableA (readView b) (c :: ρ')) n) Ω := by
         intro n
         induction n with
         | zero => exact ⟨(fun _ hw => nomatch hw), Alg.sub_empty⟩
@@ -1323,14 +1336,14 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
           have := readLeE b _ _ he' hs' w (by rw [Alg.AdmA_eq_isSome]; exact hw)
           rwa [Alg.AdmA_eq_isSome] at this
       exact readLeE b _ _ (EnvLeA.cons (hst _).1 he) (EnvSub.cons (hst _).2 hs) a h
-  | .refine t p, ρ, ρ', he, hs => fun a h => by
+  | .refine t p pA, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
       split
-      · exact readLeE t ρ ρ' he hs a (Bool.and_eq_true_iff.mp h).1
+      · exact readLeE t ρ ρ' he hs a (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).1
       · next hv =>
         simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hv
         rw [Alg.AdmA_eq_isSome] at h ⊢
-        rwa [← Alg.denote_closed (.refine t p) hv.2 ρ ρ']
+        rwa [← Alg.denote_closed (.refine t p pA) hv.2 ρ ρ']
   | .list pre sp suf, ρ, ρ', he, hs => fun a h => by
       cases a with
       | l as =>
@@ -1341,10 +1354,10 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
       cases a with
       | m keys g =>
         have h : (valPresentT fs f keys &&
-            objAdmV ⟨fs, fun k => Alg.AdmAField α (f k) ρ⟩ (Alg.AdmAWild α w ρ) keys g) = true := h
+            objAdmV ⟨fs, fun k => Alg.AdmAField α dynTableA (f k) ρ⟩ (Alg.AdmAWild α dynTableA w ρ) keys g) = true := h
         show (valPresentT fs (fun k => readViewS (f k)) keys &&
-            objAdmV ⟨fs, fun k => Alg.AdmAField α (readViewS (f k)) ρ'⟩
-              (Alg.AdmAWild α (readViewO w) ρ') keys g) = true
+            objAdmV ⟨fs, fun k => Alg.AdmAField α dynTableA (readViewS (f k)) ρ'⟩
+              (Alg.AdmAWild α dynTableA (readViewO w) ρ') keys g) = true
         rw [Bool.and_eq_true] at h ⊢
         refine ⟨?_, objAdmV_mono (fun k => readLeES (f k) ρ ρ' he hs) ?_ h.2⟩
         · refine decide_eq_true fun k => ?_
@@ -1359,7 +1372,7 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
   | .union os, ρ, ρ', he, hs => fun a h => anyP_mono (readLeEL os ρ ρ' he hs) a h
   | .set t, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
-      exact setCodec_p_mono (c := Alg.denote α t ρ)
+      exact setCodec_p_mono (c := Alg.denote α dynTableA t ρ)
         (Alg.sub_denoteIn _ (HF_readView t) ρ' hs)
         (fun w hw => by
           have := readLeE t ρ ρ' he hs w (by rw [Alg.AdmA_eq_isSome]; exact hw)
@@ -1369,17 +1382,17 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
   | .never, _, _, _, _ => fun _ h => h
 /-- `readLeE` over a list. -/
 theorem readLeEL : ∀ (ts : List Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
-    List.Forall₂ RowLe (Alg.AdmAList α ts ρ) (Alg.AdmAList α (readViewL ts) ρ')
+    List.Forall₂ RowLe (Alg.AdmAList α dynTableA ts ρ) (Alg.AdmAList α dynTableA (readViewL ts) ρ')
   | [], _, _, _, _ => .nil
   | t :: ts, ρ, ρ', he, hs => .cons (readLeE t ρ ρ' he hs) (readLeEL ts ρ ρ' he hs)
 /-- `readLeE` at an optional term. -/
 theorem readLeEO : ∀ (o : Option Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
-    Option.Rel RowLe (Alg.AdmAOptT α o ρ) (Alg.AdmAOptT α (readViewO o) ρ')
+    Option.Rel RowLe (Alg.AdmAOptT α dynTableA o ρ) (Alg.AdmAOptT α dynTableA (readViewO o) ρ')
   | none, _, _, _, _ => .none
   | some t, ρ, ρ', he, hs => .some (readLeE t ρ ρ' he hs)
 /-- `readLeE` at a slot. -/
 theorem readLeES : ∀ (s : ObjectSlot) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
-    RowLe (Alg.AdmAField α s ρ) (Alg.AdmAField α (readViewS s) ρ')
+    RowLe (Alg.AdmAField α dynTableA s ρ) (Alg.AdmAField α dynTableA (readViewS s) ρ')
   | .req t, ρ, ρ', he, hs => readLeE t ρ ρ' he hs
   | .optional t, ρ, ρ', he, hs => readLeE t ρ ρ' he hs
 end
@@ -1396,11 +1409,11 @@ theorem readLe_of (t : Term) : RowLe (AdmA α t) (AdmA α (readView t)) :=
 theorem viewsDisjoint_adm {x y : Term} (h : viewsDisjoint x y = true) (v : Value) :
     (Adm α x v && Adm α y v) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
-  have hw := Alg.disjoint_sound (α := α) pair0 _ _ h.1 [] [] (fun _ _ _ hp => nomatch hp) v
+  have hw := Alg.disjoint_sound (α := α) (β := dynTableA) pair0 _ _ h.1 [] [] (fun _ _ _ hp => nomatch hp) v
   cases hx : Adm α x v <;> cases hy : Adm α y v <;> simp only [Bool.and_false, Bool.false_and,
     Bool.and_self]
-  have e1 : Alg.Adm α (writeView x) [] v = true := writeLe_of (α := α) x v hx
-  have e2 : Alg.Adm α (writeView y) [] v = true := writeLe_of (α := α) y v hy
+  have e1 : Alg.Adm α dynTableA (writeView x) [] v = true := writeLe_of (α := α) x v hx
+  have e2 : Alg.Adm α dynTableA (writeView y) [] v = true := writeLe_of (α := α) y v hy
   rw [e1, e2] at hw; exact nomatch hw
 
 /-- **Orthogonal terms read no common attribute.** An attribute that both terms read is read
@@ -1408,11 +1421,11 @@ theorem viewsDisjoint_adm {x y : Term} (h : viewsDisjoint x y = true) (v : Value
 theorem viewsDisjoint_admA {x y : Term} (h : viewsDisjoint x y = true) (a : Attr) :
     (AdmA α x a && AdmA α y a) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
-  have hr := Alg.disjoint_soundA (α := α) pair0 _ _ h.2 [] [] (fun _ _ _ hp => nomatch hp) a
+  have hr := Alg.disjoint_soundA (α := α) (β := dynTableA) pair0 _ _ h.2 [] [] (fun _ _ _ hp => nomatch hp) a
   cases hx : AdmA α x a <;> cases hy : AdmA α y a <;> simp only [Bool.and_false, Bool.false_and,
     Bool.and_self]
-  have e1 : Alg.AdmA α (readView x) [] a = true := readLe_of (α := α) x a hx
-  have e2 : Alg.AdmA α (readView y) [] a = true := readLe_of (α := α) y a hy
+  have e1 : Alg.AdmA α dynTableA (readView x) [] a = true := readLe_of (α := α) x a hx
+  have e2 : Alg.AdmA α dynTableA (readView y) [] a = true := readLe_of (α := α) y a hy
   rw [e1, e2] at hr; exact nomatch hr
 
 /-- **The pair certificate is sound**: orthogonality separates the pair. -/
@@ -1430,9 +1443,9 @@ theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates
     two options write disjoint slots. The caller sides share `boolean`, so the caller views are
     not disjoint, and the certificate agrees with the host. -/
 example :
-    certPair (.set (.refine (.held .string (.union [.string, .boolean]) [])
-        (.closure fun _ => true)))
-      (.set (.held .number (.union [.number, .boolean]) [])) = false := by
+    certPair (.set (.refine (.held .string (.union [.string, .boolean]) .opaq [] [])
+        (.closure fun _ => true) ()))
+      (.set (.held .number (.union [.number, .boolean]) .opaq [] [])) = false := by
   decide
 
 /-- **The certificate refuses a separated pair at a data predicate over a variable.** The pair is
@@ -1443,8 +1456,8 @@ example :
     observable distinguishes this test from a finer test. A finer test becomes necessary only
     when the host builds such a term. -/
 example :
-    certPair (.mu (.refine (.union [.string, .array (.var 0)]) (.members .string (NEFinset.of "a" ∅))))
-        (.refine .string (.members .string (NEFinset.of "b" ∅))) = false := by
+    certPair (.mu (.refine (.union [.string, .array (.var 0)]) (.members .string (NEFinset.of "a" ∅)) ()))
+        (.refine .string (.members .string (NEFinset.of "b" ∅)) ()) = false := by
   decide
 
 /-- **A certified union is separated**, which is the premise of `pairwiseCompat_of_separated`

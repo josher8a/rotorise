@@ -150,6 +150,13 @@ abbrev jsonSyn : Alg.Syn where
     empty word, the identity. -/
 def jsonTable : Alg.Table jsonSyn := fun g => nomatch g
 
+/-- **The JSON stored-side syntax**: a stored predicate is a function, and the store names no
+    generator. -/
+instance jsonSynA : Alg.SynA jsonSyn where
+  PredA := Json → Bool
+  GenA := Empty
+  decGenA := inferInstance
+
 variable {α : Alg.Table jsonSyn}
 
 /-- **The JSON meaning** of that syntax. -/
@@ -178,6 +185,22 @@ instance jsonSem : Alg.Sem jsonSyn where
   topHeld _ := True
   top_held _ _ := trivial
 
+/-- **The JSON stored-side meaning**: a stored predicate is its own meaning. -/
+instance jsonSemA : Alg.SemA jsonSyn where
+  evalA q := q
+  truth _ := true
+  eval_truth _ := rfl
+  truthA _ := true
+  evalA_truthA _ := rfl
+
+/-- **The JSON top reads every attribute**: the top is the identity codec. -/
+instance jsonTopReads : Alg.TopReads jsonSyn := ⟨fun _ => rfl⟩
+
+/-- **The one stored table of JSON**: the store names no generator. -/
+def jsonTableA : Alg.Table jsonSyn.op := fun g => nomatch g
+
+variable {β : Alg.Table jsonSyn.op}
+
 /-- The laws of the identity codec that the held-free theory reads: each kind is below it. -/
 instance id_topLaws : Alg.TopLaws jsonSyn where
   ground := sub_ground_id
@@ -189,17 +212,17 @@ instance id_topLaws : Alg.TopLaws jsonSyn where
 def strOrNumTerm : Alg.Term jsonSyn := .union [.prim .str, .prim .num]
 
 /-- A string or a number. -/
-noncomputable def strOrNum : Alg.Codec Json Json JMember := Alg.denote jsonTable strOrNumTerm
+noncomputable def strOrNum : Alg.Codec Json Json JMember := Alg.denote jsonTable jsonTableA strOrNumTerm
 
 /-- **The union of the string codec and the number codec is lawful**, by the generic soundness:
     the two options are held-free, so the identity codec bounds both, and they are compatible. -/
 theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum := by
-  have hty : ∀ m, Alg.Typed jsonTable (Alg.Term.prim (S := jsonSyn) m) (ground m).T (some m) :=
+  have hty : ∀ m, Alg.Typed jsonTable jsonTableA (Alg.Term.prim (S := jsonSyn) m) (ground m).T (some m) :=
     fun m => .prim m
   refine Alg.soundness (.union (.cons (hty _) (.cons (hty _) .nil))) ⟨⟨trivial, trivial, trivial⟩,
     fun s hs t ht => ?_⟩
   have hl : ∀ x ∈ [Alg.Term.prim (S := jsonSyn) .str, .prim .num],
-      Alg.Lawful Json.member (Alg.denote jsonTable x) := fun x hx => by
+      Alg.Lawful Json.member (Alg.denote jsonTable jsonTableA x) := fun x hx => by
     rcases List.mem_cons.mp hx with rfl | hx
     · exact lawful_ground _
     · rcases List.mem_cons.mp hx with rfl | hx
@@ -235,7 +258,7 @@ instance jsonPrimAdmA : Alg.PrimAdmA jsonSyn where
 
 /-- The string-or-number term admits exactly what its codec writes, and reads exactly what its
     codec reads. -/
-theorem exact_strOrNum : Alg.ExactV α strOrNumTerm [] ∧ Alg.ExactA α strOrNumTerm [] :=
+theorem exact_strOrNum : Alg.ExactV α β strOrNumTerm [] ∧ Alg.ExactA α β strOrNumTerm [] :=
   ⟨Alg.Adm_exact _ _, Alg.AdmA_exact _ _⟩
 
 /-! ## Arrays -/

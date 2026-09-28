@@ -141,7 +141,7 @@ base's own `inD`. -/
     literal is the one-alternative case of the same restriction: `literalCodec k x` is
     `(baseCodec k).restrict (inL k x)` by definition, and `inLs` at a singleton is `inL`. -/
 theorem denote_refine_ground_p (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
-    (denote α (.refine (.base k) (.members k ls))).p a
+    (denote α (.refine (.base k) (.members k ls) ())).p a
       = ((baseCodec k).restrict (inLs k ls)).p a := by
   cases k <;> rfl
 

@@ -31,11 +31,13 @@ def dynOracle : Alg.CompatOracle dynSyn :=
 /-- **The DynamoDB oracles are sound**: each view admits what its term admits, so disjoint views
     give apart domains. -/
 theorem dynOracle_sound : Alg.OracleSound dynOracle where
-  e x y h v := by
+  e {_ β} x y h v := by
+    obtain rfl : β = dynTableA := funext fun g => nomatch g
     rw [← Alg.Adm_eq_isSome, ← Alg.Adm_eq_isSome]
     exact Alg.apart_of_imp (writeLe_of x v) (Alg.apart_of_imp' (writeLe_of y v)
       (Alg.disjoint_sound pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) v))
-  p x y h a := by
+  p {_ β} x y h a := by
+    obtain rfl : β = dynTableA := funext fun g => nomatch g
     rw [← Alg.AdmA_eq_isSome, ← Alg.AdmA_eq_isSome]
     exact Alg.apart_of_imp (readLe_of x a) (Alg.apart_of_imp' (readLe_of y a)
       (Alg.disjoint_soundA pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) a))
@@ -56,8 +58,9 @@ theorem pairwiseCompat_array_literals :
     (denote_array _ ▸ lawful_arrayCodec (lawful_literal _ _)))
 
 /-- **`refine x Q` is below `x`.** -/
-theorem sub_denote_refine (x : Term) (Q : Pred) : Sub (denote α (.refine x Q)) (denote α x) :=
-  sub_restrict_self _ _
+theorem sub_denote_refine (x : Term) (Q : Pred) : Sub (denote α (.refine x Q ())) (denote α x) := by
+  rw [denote_refine]
+  exact sub_restrict_self _ _
 
 /-! ## An incompatible pair: `shout | string('X')`
 
@@ -82,7 +85,7 @@ theorem swX_invol (v : Value) : swX (swX v) = v := by
 def swTable : Table := fun _ => (swX, swX)
 
 /-- The held that holds `"x"` and stores `"X"`. -/
-def shout : Term := .held (.literal .string "X") (.literal .string "x") [(.caller 0, false)]
+def shout : Term := .held (.literal .string "X") (.literal .string "x") .opaq [(.caller 0, false)] []
 
 /-- The literal `"X"`. -/
 def litX : Term := .literal .string "X"
@@ -101,8 +104,9 @@ theorem iso_shout : IsoCancels (denote swTable (.literal .string "X")) swX swX :
   ⟨fun v _ => swX_invol v, fun v _ => swX_invol v⟩
 
 /-- **`shout` is lawful.** -/
-theorem lawful_shout : Lawful (denote swTable shout) :=
-  (Alg.Lawful.through (lawful_literal _ _) iso_shout).restrict _
+theorem lawful_shout : Lawful (denote swTable shout) := by
+  rw [shout, denote_held]
+  exact (Alg.Lawful.through (lawful_literal _ _) iso_shout).refine2 _ _
 
 /-- **The shout pair is not `Compat`**: the two options read `"X"` to two values. -/
 theorem not_compat_shout : ¬ Compat (denote swTable shout) (denote swTable litX) := by
@@ -122,15 +126,16 @@ def notV : Value → Value := fun v =>
 def flipTable : Table := fun _ => (notV, notV)
 
 /-- The held that stores the negation of a boolean. -/
-def flipBool : Term := .held .boolean .boolean [(.caller 0, false)]
+def flipBool : Term := .held .boolean .boolean .opaq [(.caller 0, false)] []
 
 /-- **The `flipBool` adapter cancels over `boolean`.** -/
 theorem iso_flip : IsoCancels (denote flipTable .boolean) notV notV := by
   refine ⟨fun v _ => ?_, fun v _ => ?_⟩ <;> cases v <;> simp [notV]
 
 /-- **`flipBool` is lawful.** -/
-theorem lawful_flip : Lawful (denote flipTable flipBool) :=
-  (Alg.Lawful.through (lawful_base .boolean) iso_flip).restrict _
+theorem lawful_flip : Lawful (denote flipTable flipBool) := by
+  rw [flipBool, denote_held]
+  exact (Alg.Lawful.through (lawful_base .boolean) iso_flip).refine2 _ _
 
 /-- **`boolean` and `flipBool` are not `Compat`**: the two read `true` to two values. -/
 theorem not_compat_flip : ¬ Compat (denote flipTable .boolean) (denote flipTable flipBool) := by
@@ -151,7 +156,7 @@ theorem flip_order_observable :
 Two overlapping `refine`s of one `held` swap sit below one canonical bound. -/
 
 /-- The adapter: `string` stored, `string` held, `"x"` and `"X"` swapped. -/
-def swap : Term := .held .string .string [(.caller 0, false)]
+def swap : Term := .held .string .string .opaq [(.caller 0, false)] []
 
 /-- The members `"x"` and `"y"`. -/
 def q1 : Pred := .members .string (NEFinset.of "x" {"y"})
@@ -159,17 +164,18 @@ def q1 : Pred := .members .string (NEFinset.of "x" {"y"})
 def q2 : Pred := .members .string (NEFinset.of "x" {"z"})
 
 /-- `swap` refined to `q1`. -/
-def sw1 : Term := .refine swap q1
+def sw1 : Term := .refine swap q1 ()
 /-- `swap` refined to `q2`. -/
-def sw2 : Term := .refine swap q2
+def sw2 : Term := .refine swap q2 ()
 
 /-- **The `swap` adapter cancels over `string`.** -/
 theorem iso_swap : IsoCancels (denote swTable .string) swX swX :=
   ⟨fun v _ => swX_invol v, fun v _ => swX_invol v⟩
 
 /-- **`swap` is lawful.** -/
-theorem lawful_swap : Lawful (denote swTable swap) :=
-  (Alg.Lawful.through (lawful_base .string) iso_swap).restrict _
+theorem lawful_swap : Lawful (denote swTable swap) := by
+  rw [swap, denote_held]
+  exact (Alg.Lawful.through (lawful_base .string) iso_swap).refine2 _ _
 
 /-- **`swap` is a canonical bound.** -/
 theorem canon_swap : Canon (denote swTable swap) := fun _ _ hp => lawful_swap.canon hp
@@ -184,7 +190,7 @@ theorem compat_sw (x y : Term) (hx : x = sw1 ∨ x = sw2) (hy : y = sw1 ∨ y = 
   have hsub : ∀ z, z = sw1 ∨ z = sw2 → Sub (denote swTable z) (denote swTable swap) := by
     rintro z (rfl | rfl) <;> exact sub_denote_refine _ _
   have hlaw : ∀ z, z = sw1 ∨ z = sw2 → Lawful (denote swTable z) := by
-    rintro z (rfl | rfl) <;> exact lawful_swap.restrict _
+    rintro z (rfl | rfl) <;> simp only [sw1, sw2, denote_refine] <;> exact lawful_swap.restrict _
   exact compat_of_common_bound' (hsub x hx) (hsub y hy) canon_swap (hlaw y hy)
 
 /-- **The pair meets the union's obligation** through the common bound, with no certificate. -/

@@ -319,6 +319,25 @@ abbrev dynSyn : Alg.Syn where
   topHeld := HOpaque
   top_held := opaq_TSubω
 
+/-- **The DynamoDB stored-side syntax**: the store names no predicate but the truth, and no
+    generator, so the stored predicate of a `refine` admits every attribute and the stored word
+    of a `held` is the empty word. -/
+instance dynSynA : Alg.SynA dynSyn where
+  PredA := Unit
+  GenA := Empty
+  decGenA := inferInstance
+
+/-- **The DynamoDB stored-side meaning**, and the truth predicate on each side. -/
+instance dynSemA : Alg.SemA dynSyn where
+  evalA _ _ := true
+  truth := .closure fun _ => true
+  eval_truth _ := rfl
+  truthA := ()
+  evalA_truthA _ := rfl
+
+/-- **The one stored table of DynamoDB**: the store names no generator. -/
+def dynTableA : Alg.Table dynSyn.op := fun g => nomatch g
+
 /-! ## The term language at DynamoDB
 
 Each constructor keeps its spelling, as a `match_pattern` abbreviation: a pattern `.list pre sp
@@ -341,9 +360,11 @@ abbrev ObjectSlot := Alg.ObjectSlot dynSyn
 @[match_pattern] abbrev Term.set (elem : Term) : Term := Alg.Term.set elem
 @[match_pattern] abbrev Term.list (pre : List Term) (spread : Option Term) (suf : List Term) :
     Term := Alg.Term.list pre spread suf
-@[match_pattern] abbrev Term.held (inner outer : Term) (k : Word) : Term :=
-  Alg.Term.held inner outer k
-@[match_pattern] abbrev Term.refine (inner : Term) (p : Pred) : Term := Alg.Term.refine inner p
+@[match_pattern] abbrev Term.held (inner outer outerA : Term) (k : Word)
+    (kA : List (Alg.SynA.GenA dynSyn × Bool)) : Term :=
+  Alg.Term.held inner outer outerA k kA
+@[match_pattern] abbrev Term.refine (inner : Term) (p : Pred) (pA : Alg.SynA.PredA dynSyn) :
+    Term := Alg.Term.refine inner p pA
 @[match_pattern] abbrev Term.opaq : Term := Alg.Term.opaq
 @[match_pattern] abbrev Term.object (b : Body) : Term := Alg.Term.object b
 @[match_pattern] abbrev Term.union (options : List Term) : Term := Alg.Term.union options
@@ -362,8 +383,8 @@ abbrev ObjectSlot := Alg.ObjectSlot dynSyn
 def Term.casesD {motive : Term → Sort _} (base : ∀ k, motive (.base k))
     (literal : ∀ k v, motive (.literal k v)) (set : ∀ elem, motive (.set elem))
     (list : ∀ pre spread suf, motive (.list pre spread suf))
-    (held : ∀ inner outer k, motive (.held inner outer k))
-    (refine : ∀ inner p, motive (.refine inner p)) (opaq : motive .opaq)
+    (held : ∀ inner outer outerA k kA, motive (.held inner outer outerA k kA))
+    (refine : ∀ inner p pA, motive (.refine inner p pA)) (opaq : motive .opaq)
     (object : ∀ b, motive (.object b)) (union : ∀ options, motive (.union options))
     (never : motive .never) (var : ∀ i, motive (.var i)) (mu : ∀ body, motive (.mu body)) :
     (t : Term) → motive t
@@ -371,8 +392,8 @@ def Term.casesD {motive : Term → Sort _} (base : ∀ k, motive (.base k))
   | .literal k v => literal k v
   | .set e => set e
   | .list pre sp suf => list pre sp suf
-  | .held i o k => held i o k
-  | .refine i p => refine i p
+  | .held i o oA k kA => held i o oA k kA
+  | .refine i p pA => refine i p pA
   | .opaq => opaq
   | .object b => object b
   | .union os => union os

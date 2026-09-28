@@ -143,7 +143,7 @@ end Combinators
 /-! ## Held-free terms -/
 
 section HeldFree
-variable {S : Syn} {α : Table S}
+variable {S : Syn} [SynA S] {α : Table S}
 
 /-- A term is **held-free** when no `held` occurs in the term: the test `hasHeld` answers
     `false`. A held-free term does not change the carrier, so the term is a restriction of the
@@ -175,11 +175,13 @@ class TopLaws (S : Syn) [Sem S] : Prop where
   set : ∀ L ∈ Sem.set (S := S), ∀ c : S.C, Sub c (Sem.top (S := S)) →
     Sub (L.lift c) (Sem.top (S := S))
 
+variable [SemA S] {β : Table S.op}
+
 mutual
 /-- **Confluence.** The denotation of a held-free term is a restriction of the top, on both
     halves, over an environment of restrictions of the top. -/
 theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
-    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (denote α t ρ) (Sem.top (S := S))
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (denote α β t ρ) (Sem.top (S := S))
   | .prim g, _, _, _ => TopLaws.ground g
   | .opaq, _, _, _ => ⟨fun _ _ h => h, fun _ _ h => h⟩
   | .never, _, _, _ => sub_empty
@@ -192,7 +194,7 @@ theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
   -- each stage is a restriction by the body's case at the stage before, and the limit reads a
   -- stage at each input
   | .mu b, h, ρ, henv => by
-      have hs : ∀ n, Sub (muStage (fun c => denote α b (c :: ρ)) n) (Sem.top (S := S)) := fun n => by
+      have hs : ∀ n, Sub (muStage (fun c => denote α β b (c :: ρ)) n) (Sem.top (S := S)) := fun n => by
         induction n with
         | zero => exact sub_empty
         | succ n ih =>
@@ -200,9 +202,9 @@ theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
             | 0 => ih
             | i + 1 => henv i
       exact ⟨fun v a he => (hs _).1 v a he, fun a v hp => (hs _).2 a v hp⟩
-  | .held _ _ _, h, _, _ => nomatch h
-  | .refine t q, h, ρ, henv =>
-      sub_trans (sub_restrict_self _ _) (sub_denoteIn t h ρ henv)
+  | .held _ _ _ _ _, h, _, _ => nomatch h
+  | .refine t _ _, h, ρ, henv =>
+      sub_trans (sub_refine2_self _ _ _) (sub_denoteIn t h ρ henv)
   | .list pre sp suf, h, ρ, henv => by
       simp only [HF, hasHeld, Bool.or_eq_false_iff] at h
       simp only [denote]
@@ -216,7 +218,7 @@ theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
   | .union os, h, ρ, henv => sub_altCodec (sub_denoteList os h ρ henv) _
 /-- …at a body. -/
 theorem sub_body [TopLaws S] : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
-    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (bodySem α b ρ) (Sem.top (S := S))
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (bodySem α β b ρ) (Sem.top (S := S))
   | .mk fields f w, h, ρ, henv => by
       simp only [HFB, hasHeldB, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists] at h
       simp only [bodySem]
@@ -228,17 +230,17 @@ theorem sub_body [TopLaws S] : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
           (sub_wild w h.2 ρ henv)
 /-- …at a slot. -/
 theorem sub_slot [TopLaws S] : ∀ s : ObjectSlot S, HFS s → ∀ ρ : List S.C,
-    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (fieldSem α s ρ).codec (Sem.top (S := S))
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → Sub (fieldSem α β s ρ).codec (Sem.top (S := S))
   | .req t, h, ρ, henv => sub_denoteIn t h ρ henv
   | .optional t, h, ρ, henv => sub_denoteIn t h ρ henv
 /-- …at an open block. -/
 theorem sub_wild [TopLaws S] : ∀ w : Option (Term S), HFO w → ∀ ρ : List S.C,
-    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ rcOf (wildSem α w ρ), Sub c (Sem.top (S := S))
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ rcOf (wildSem α β w ρ), Sub c (Sem.top (S := S))
   | none, _, _, _ => fun _ hc => nomatch hc
   | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn t h ρ henv
 /-- …at a list of terms. -/
 theorem sub_denoteList [TopLaws S] : ∀ ts : List (Term S), HFL ts → ∀ ρ : List S.C,
-    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ denoteList α ts ρ, Sub c (Sem.top (S := S))
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ denoteList α β ts ρ, Sub c (Sem.top (S := S))
   | [], _, _, _ => fun _ hc => nomatch hc
   | t :: ts, h, ρ, henv => fun c hc => by
       simp only [HFL, hasHeldL, Bool.or_eq_false_iff] at h
@@ -247,19 +249,19 @@ theorem sub_denoteList [TopLaws S] : ∀ ts : List (Term S), HFL ts → ∀ ρ :
       · exact sub_denoteList ts h.2 ρ henv c hc
 /-- …at an optional term. -/
 theorem sub_denoteOpt [TopLaws S] : ∀ o : Option (Term S), HFO o → ∀ ρ : List S.C,
-    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ denoteOpt α o ρ, Sub c (Sem.top (S := S))
+    (∀ i, Sub (envAt ρ i) (Sem.top (S := S))) → ∀ c ∈ denoteOpt α β o ρ, Sub c (Sem.top (S := S))
   | none, _, _, _ => fun _ hc => nomatch hc
   | some t, h, ρ, henv => fun c hc => by cases hc; exact sub_denoteIn t h ρ henv
 end
 
 /-- **Confluence**, closed: the denotation of a held-free term is a restriction of the top. -/
-theorem sub_denote [TopLaws S] (t : Term S) (h : HF t) : Sub (denote α t) (Sem.top (S := S)) :=
+theorem sub_denote [TopLaws S] (t : Term S) (h : HF t) : Sub (denote α β t) (Sem.top (S := S)) :=
   sub_denoteIn t h [] fun _ => sub_empty
 
 /-- **Held-free lawful terms are pairwise compatible**: the common bound is the top, and the top
     is canonical. -/
 theorem compat_of_HF [TopLaws S] (hcan : Canon (Sem.top (S := S))) {s t : Term S} (hs : HF s) (ht : HF t)
-    (hlt : Lawful Sem.member (denote α t)) : Compat (denote α s) (denote α t) :=
+    (hlt : Lawful Sem.member (denote α β t)) : Compat (denote α β s) (denote α β t) :=
   compat_of_common_bound' (sub_denote s hs) (sub_denote t ht) hcan hlt
 
 end HeldFree
