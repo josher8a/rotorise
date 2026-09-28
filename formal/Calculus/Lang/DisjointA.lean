@@ -109,6 +109,20 @@ theorem AdmA_union (opts : List (Term S)) (a : Sem.A S) :
     AdmA α β (.union opts) ρ a = AdmAAny α β opts ρ a := rfl
 
 omit [PrimAdmA S] in
+/-- Every environment of the dual has the converse graph of the environment of its inverse
+    converses. -/
+theorem unconvEnv_R (ρ'' : List S.op.C) : List.Forall₂ R ρ'' (ρ''.map unconv : List S.C) :=
+  List.forall₂_map_right_iff.mpr (List.forall₂_same.mpr fun _ _ => ⟨rfl, rfl⟩)
+
+/-- The dual admits one set under two environments with one converse graph. -/
+theorem adm_op_env {ρ₁ ρ₂ : List S.op.C} {σ : List S.C} (h₁ : List.Forall₂ R ρ₁ σ)
+    (h₂ : List.Forall₂ R ρ₂ σ) (y : Term S.op) (v : Sem.A S) :
+    Adm (S := S.op) β α y ρ₁ v = Adm (S := S.op) β α y ρ₂ v := by
+  rw [Bool.eq_iff_iff.mpr (Adm_exact (S := S.op) (α := β) (β := α) y ρ₁ v),
+    Bool.eq_iff_iff.mpr (Adm_exact (S := S.op) (α := β) (β := α) y ρ₂ v),
+    ← tconv_tconv_op y, (denote_tconv α β _ h₁).1, (denote_tconv α β _ h₂).1]
+
+omit [PrimAdmA S] in
 /-- **A recursive term reads as its body reads over the stage below the attribute's depth.** -/
 theorem mu_p_unfold (b : Term S) (ρ : List S.C) (a : Sem.A S) :
     (denote α β (.mu b) ρ).p a
@@ -118,11 +132,16 @@ theorem mu_p_unfold (b : Term S) (ρ : List S.C) (a : Sem.A S) :
   rw [hn, Nat.add_sub_cancel]
   rfl
 
-/-- …and so it reads where its body reads over that stage. -/
+/-- **A recursive term reads where its body reads over the stage below the attribute's depth**:
+    the write-side unfolding of the dual. -/
 theorem AdmA_mu_unfold (b : Term S) (ρ : List S.C) (a : Sem.A S) :
     AdmA α β (.mu b) ρ a
       = AdmA α β b (muStage (fun c => denote α β b (c :: ρ)) (Sem.dA a - 1) :: ρ) a := by
-  rw [AdmA_eq_isSome, AdmA_eq_isSome, mu_p_unfold]
+  have hR := muStage_R (fun c => denote α β b (c :: ρ))
+    (fun c' => denote β α (tconv b) (c' :: ρ.map conv))
+    (fun _ _ h => denote_tconv α β b (.cons h (convEnv_R ρ))) (Sem.dA a - 1)
+  exact (Adm_mu_unfold (S := S.op) (α := β) (β := α) (tconv b) (ρ.map conv) a).trans
+    (adm_op_env (.cons hR (convEnv_R ρ)) (convEnv_R (_ :: ρ)) _ a)
 
 end
 
@@ -237,43 +256,59 @@ theorem stage_apartA {B B' : S.C → S.C}
   | 0, _ => rfl
   | n + 1, u => hB _ _ (stage_apartA hB n) u
 
+omit [PrimAdmA S] in
 mutual
+/-- The right-operand walk of the dual reads the converse of each term. -/
+theorem disjSRight_tconv (fam : Pairing → Term S → Bool) :
+    ∀ (p : Pairing) (y : Term S),
+      disjSRight (fun q y' => fam q (tconv y')) p (tconv y) = disjSRight fam p y
+  | _, .never => rfl
+  | p, .mu b => disjSRight_tconv fam (shiftR p) b
+  | p, .refine y _ _ => disjSRight_tconv fam p y
+  | p, .union os => disjSRightL_tconv fam p os
+  | p, .prim _ | p, .set _ | p, .list _ _ _ | p, .held _ _ _ _ _ | p, .opaq | p, .object _
+  | p, .var _ => congrArg (fam p) (tconv_tconv _)
+/-- …and each option of a union. -/
+theorem disjSRightL_tconv (fam : Pairing → Term S → Bool) :
+    ∀ (p : Pairing) (ys : List (Term S)),
+      disjSRightL (fun q y' => fam q (tconv y')) p (tconvL ys) = disjSRightL fam p ys
+  | _, [] => rfl
+  | p, y :: ys => by
+      simp only [tconvL, disjSRightL, disjSRight_tconv fam p y, disjSRightL_tconv fam p ys]
+end
+
+/-- **A read-side family sound at every apart pairing is a write-side family of the dual**, sound
+    at every apart pairing of the dual. -/
+theorem disjSoundA_op {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
+    (hf : ∀ q ρ', ApartA q ρ ρ' → DisjSoundA α β ρ ρ' x (fam q)) (q : Pairing)
+    (ρ'' : List S.op.C) (hq : ApartV (S := S.op) q (ρ.map conv) ρ'') :
+    DisjSound (S := S.op) β α (ρ.map conv) ρ'' (tconv x) (fun y' => fam q (tconv y')) := by
+  intro y' hy u
+  have hq' : ApartA q ρ (ρ''.map unconv) := fun i j k hk w => by
+    rw [(envAt_R (convEnv_R (ρ''.map unconv)) j).1, ← (envAt_R (unconvEnv_R ρ'') j).1]
+    exact hq i j k hk w
+  have := hf q _ hq' (tconv y') hy u
+  rwa [AdmA, AdmA, tconv_tconv_op,
+    adm_op_env (convEnv_R (ρ''.map unconv)) (unconvEnv_R ρ'')] at this
+
 /-- **The rows of the right operand are sound**, given a sound family for every pairing that
-    keeps the environments apart. -/
+    keeps the environments apart: the write-side rows of the dual. -/
 theorem disjSRight_soundA {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
-    (hf : ∀ q ρ', ApartA q ρ ρ' → DisjSoundA α β ρ ρ' x (fam q)) :
-    ∀ (y : Term S) (p : Pairing) (ρ' : List S.C), ApartA p ρ ρ' →
-      disjSRight fam p y = true → ∀ v, (AdmA α β x ρ v && AdmA α β y ρ' v) = false
-  | .never, _, _, _, _, v => by simp
-  | .mu b, p, ρ', hp, h, v => by
-      simp only [disjSRight] at h
-      rw [AdmA_mu_unfold b ρ' v]
-      exact disjSRight_soundA hf b (shiftR p) _ (hp.right _) h v
-  | .refine y q _, p, ρ', hp, h, v => by
-      simp only [disjSRight] at h
-      rw [AdmA_refine_eq, ← Bool.and_assoc, disjSRight_soundA hf y p ρ' hp h v, Bool.false_and]
-  | .union os, p, ρ', hp, h, v => by
-      simp only [disjSRight] at h
-      rw [AdmA_union]
-      exact disjSRightL_soundA hf os p ρ' hp h v
-  | .prim g, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
-  | .set t, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
-  | .list a b c, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
-  | .held a b _ k _, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
-  | .opaq, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
-  | .object b, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
-  | .var j, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
+    (hf : ∀ q ρ', ApartA q ρ ρ' → DisjSoundA α β ρ ρ' x (fam q))
+    (y : Term S) (p : Pairing) (ρ' : List S.C) (hp : ApartA p ρ ρ')
+    (h : disjSRight fam p y = true) (v : Sem.A S) :
+    (AdmA α β x ρ v && AdmA α β y ρ' v) = false :=
+  disjSRight_sound (S := S.op) (disjSoundA_op hf) (tconv y) p (ρ'.map conv) hp
+    (by rw [disjSRight_tconv]; exact h) v
+
 /-- …and over the options of a union. -/
 theorem disjSRightL_soundA {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
-    (hf : ∀ q ρ', ApartA q ρ ρ' → DisjSoundA α β ρ ρ' x (fam q)) :
-    ∀ (ys : List (Term S)) (p : Pairing) (ρ' : List S.C), ApartA p ρ ρ' →
-      disjSRightL fam p ys = true → ∀ v, (AdmA α β x ρ v && AdmAAny α β ys ρ' v) = false
-  | [], _, _, _, _, v => by simp
-  | y :: ys, p, ρ', hp, h, v => by
-      simp only [disjSRightL, Bool.and_eq_true] at h
-      rw [AdmAAny_cons, Bool.and_or_distrib_left, disjSRight_soundA hf y p ρ' hp h.1 v,
-        disjSRightL_soundA hf ys p ρ' hp h.2 v, Bool.false_or]
-end
+    (hf : ∀ q ρ', ApartA q ρ ρ' → DisjSoundA α β ρ ρ' x (fam q))
+    (ys : List (Term S)) (p : Pairing) (ρ' : List S.C) (hp : ApartA p ρ ρ')
+    (h : disjSRightL fam p ys = true) (v : Sem.A S) :
+    (AdmA α β x ρ v && AdmAAny α β ys ρ' v) = false :=
+  disjSRightL_sound (S := S.op) (disjSoundA_op hf) (tconvL ys) p (ρ'.map conv) hp
+    (by rw [disjSRightL_tconv]; exact h) v
 
 omit [PrimAdmA S] in
 mutual
