@@ -256,8 +256,8 @@ theorem carried_e {v a} :
 /-- What it reads: the mirror. -/
 theorem carried_p {a v} :
     (carriedCodec pV pA μ₀ P E D).p a = some v ↔
-      ∃ y x, pA.out a = some y ∧ D y = some x ∧ v = pV.into x := by
-  simp [carriedCodec, Option.bind_eq_some_iff, Option.map_eq_some_iff, eq_comm (a := v)]
+      ∃ y x, pA.out a = some y ∧ D y = some x ∧ v = pV.into x :=
+  carried_e (pV := pA) (pA := pV) (μ₀ := ()) (P := fun _ => True) (E := D) (D := E)
 
 /-- (R), (C) and (W) are the payload pair's own, plus the member the attribute
     constructor stamps. The prisms contribute nothing but their two laws. -/

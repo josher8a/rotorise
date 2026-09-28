@@ -87,6 +87,44 @@ theorem muCodec_e (B : Codec V A M → Codec V A M) (v : V) :
 theorem muCodec_p (B : Codec V A M → Codec V A M) (a : A) :
     (muCodec dV dA B).p a = (muStage B (dA a)).p a := rfl
 
+/-! ### The converse of the construct -/
+
+/-- The stage of the converse body is the converse of the stage. -/
+theorem muStage_R {N' : Type} (B : Codec V A M → Codec V A M) (B' : Codec A V N' → Codec A V N')
+    (h : ∀ c' c, R c' c → R (B' c') (B c)) : ∀ n, R (muStage B' n) (muStage B n)
+  | 0 => ⟨rfl, rfl⟩
+  | n + 1 => h _ _ (muStage_R B B' h n)
+
+/-- **The converse of a fixed point is the fixed point of the converse body**, with the two
+    depth functions swapped. -/
+theorem muCodec_R {N' : Type} (dV : V → Nat) (dA : A → Nat) (B : Codec V A M → Codec V A M)
+    (B' : Codec A V N' → Codec A V N') (h : ∀ c' c, R c' c → R (B' c') (B c)) :
+    R (muCodec dA dV B') (muCodec dV dA B) :=
+  ⟨funext fun a => by
+      simp only [muCodec]
+      rw [(muStage_R B B' h _).1],
+   funext fun v => by
+      simp only [muCodec]
+      rw [(muStage_R B B' h _).2]⟩
+
+/-- The converse body: unconvert, apply, convert. -/
+def convB (B : Codec V A M → Codec V A M) : Codec A V Unit → Codec A V Unit :=
+  fun c' => conv (B (unconv c'))
+
+/-- A contractive body reads only the graph of its argument. -/
+theorem contractive_graph {B : Codec V A M → Codec V A M} (hB : Contractive dV dA B)
+    {c d : Codec V A M} (he : c.e = d.e) (hp : c.p = d.p) : (B c).e = (B d).e ∧ (B c).p = (B d).p :=
+  have h : ∀ n, AgreeLe dV dA (n + 1) (B c) (B d) := fun n =>
+    hB n c d ⟨fun v _ => congrFun he v, fun a _ => congrFun hp a⟩
+  ⟨funext fun v => (h (dV v)).e v (by omega), funext fun a => (h (dA a)).p a (by omega)⟩
+
+/-- The converse body of a contractive body is contractive, with the two depths swapped. -/
+theorem contractive_conv {B : Codec V A M → Codec V A M} (hB : Contractive dV dA B) :
+    Contractive dA dV (convB B) :=
+  fun n c₁ c₂ h =>
+    let h' := hB n (unconv c₁) (unconv c₂) ⟨h.p, h.e⟩
+    ⟨h'.p, h'.e⟩
+
 section Stages
 variable (hV : ∀ v, 0 < dV v) (hA : ∀ a, 0 < dA a) {B : Codec V A M → Codec V A M}
 include hV hA
@@ -122,12 +160,16 @@ theorem muCodec_e_fix (hB : Contractive dV dA B) (v : V) :
   rw [muCodec_e, hk]
   exact (hB k _ _ (muCodec_agree hV hA hB k).symm).e v (by omega)
 
-/-- **The fixed point, read side.** -/
+/-- **The fixed point, read side**: the write-side fixed point of the converse body. -/
 theorem muCodec_p_fix (hB : Contractive dV dA B) (a : A) :
     (muCodec dV dA B).p a = (B (muCodec dV dA B)).p a := by
-  obtain ⟨k, hk⟩ : ∃ k, dA a = k + 1 := ⟨dA a - 1, by have := hA a; omega⟩
-  rw [muCodec_p, hk]
-  exact (hB k _ _ (muCodec_agree hV hA hB k).symm).p a (by omega)
+  have hR : ∀ c' c, R c' c → R (convB B c') (B c) := fun c' c h =>
+    let g := contractive_graph hB (c := unconv c') (d := c) h.2 h.1
+    ⟨g.2, g.1⟩
+  have hm := muCodec_R dV dA B (convB B) hR
+  rw [← hm.1, muCodec_e_fix hA hV (contractive_conv hB) a]
+  exact congrFun (contractive_graph hB (c := (unconv (muCodec dA dV (convB B)) : Codec V A M))
+    (d := muCodec dV dA B) hm.2 hm.1).2 a
 
 /-- **Lawful stages give a lawful limit.** The write side reads at the depth of the value and
     the read side at the depth of the attribute. Stability moves both answers to the stage

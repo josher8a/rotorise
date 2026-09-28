@@ -266,7 +266,7 @@ theorem acts_of_find?_V {os : List (Codec V A M)} {o v}
 /-- …and the first reader reads. -/
 theorem acts_of_find?_A {os : List (Codec V A M)} {o a}
     (hf : os.find? (fun c => (c.p a).isSome) = some o) : (o.p a).isSome = true :=
-  List.find?_some (p := fun c : Codec V A M => (c.p a).isSome) hf
+  acts_of_find?_V (os := os.map conv) (o := conv o) (by rw [List.find?_map]; exact hf ▸ rfl)
 
 /-- Canonical reads: the codec writes each value that the codec reads at the attribute that
     the codec read. -/
@@ -629,11 +629,10 @@ theorem altCodec_nest_e (o₁ o₂ o₃ : Codec V A M) (μ μ' μf : Option M) (
 
 theorem altCodec_nest_p (o₁ o₂ o₃ : Codec V A M) (μ μ' μf : Option M) (a : A) :
     (altCodec [o₁, (altCodec [o₂, o₃] μ')] μ).p a = (altCodec [o₁, o₂, o₃] μf).p a := by
-  show select _ _ a = select _ _ a
-  rw [select_cons, select_cons, select_cons, select_nil_eq]
-  show (if _ then _ else if ((select [o₂, o₃] (·.p) a).isSome) then
-    select [o₂, o₃] (·.p) a else none) = _
-  cases select [o₂, o₃] (·.p) a <;> simp
+  have r3 := (List.Forall₂.cons (R_conv o₂) (.cons (R_conv o₃) .nil))
+  rw [← (altCodec_R none μ (.cons (R_conv o₁) (.cons (altCodec_R none μ' r3) .nil))).1,
+    ← (altCodec_R none μf (.cons (R_conv o₁) r3)).1]
+  exact altCodec_nest_e _ _ _ none none none a
 
 /-- The held sets coincide. Nesting a union changes how it *resolves*, never what it
     holds — which is why this half needs no side condition at all. -/

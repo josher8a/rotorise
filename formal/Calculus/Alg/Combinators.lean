@@ -1,3 +1,4 @@
+import Mathlib.Data.List.Forall2
 import Calculus.Alg.Codec
 
 /-!
@@ -161,12 +162,107 @@ theorem restrict_p_adapt {c : Codec V A M} (q : V → Bool) :
     (c.restrict q).p = (c.adapt (partialId q) (partialId q)).p := by
   funext a; simp only [Codec.restrict, Codec.adapt, partialId]; rfl
 
+/-! ### The converse, and the two-sided restriction
+
+`conv c` swaps the two halves of a codec. `R c' c` says that `c'` has the converse graph of `c`.
+Each read-side fact below is the write-side fact of the converse. -/
+
+/-- **The converse of a codec**: the read is the write, and the write is the read. The member
+    names nothing on the stored side of the converse, so it is `Unit`. -/
+def conv (c : Codec V A M) : Codec A V Unit :=
+  { T := fun _ => True, μ := c.μ.map (fun _ => ()), e := c.p, p := c.e }
+
+/-- `c'` has the converse graph of `c`. -/
+def R {X Y N N' : Type} (c' : Codec Y X N') (c : Codec X Y N) : Prop := c'.e = c.p ∧ c'.p = c.e
+
+/-- The converse graph is symmetric. -/
+theorem R.symm {X Y N N' : Type} {c' : Codec Y X N'} {c : Codec X Y N} (h : R c' c) : R c c' :=
+  ⟨h.2.symm, h.1.symm⟩
+
+/-- The converse has the converse graph. -/
+theorem R_conv (c : Codec V A M) : R (conv c) c := ⟨rfl, rfl⟩
+
+/-- The converse of a codec on the dual carriers, back on the original carriers. -/
+def unconv (c : Codec A V Unit) : Codec V A M :=
+  { T := fun _ => True, μ := none, e := c.p, p := c.e }
+
+/-- **The two-sided restriction** `[qA] ∘ c ∘ [qV]`: `qV` restricts the caller side, and `qA`
+    restricts the stored side. -/
+def refine2 (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) : Codec V A M :=
+  { T := fun v => c.T v ∧ qV v
+    μ := c.μ
+    e := fun v => if qV v then (c.e v).bind (fun a => if qA a then some a else none) else none
+    p := fun a => if qA a then (c.p a).bind (fun v => if qV v then some v else none) else none }
+
+/-- **The converse of the two-sided restriction swaps the halves**, over any codec with the
+    converse graph. -/
+theorem R.refine2 {N : Type} {c' : Codec A V N} {c : Codec V A M} (h : R c' c)
+    (qV : V → Bool) (qA : A → Bool) : R (refine2 c' qA qV) (refine2 c qV qA) := by
+  obtain ⟨T, μ, e, p⟩ := c'
+  obtain ⟨h1, h2⟩ := h
+  subst h1 h2
+  exact ⟨rfl, rfl⟩
+
+/-- **The host `refine` is the one-sided restriction**: the stored predicate admits every
+    attribute. -/
+theorem refine2_host (c : Codec V A M) (q : V → Bool) :
+    refine2 c q (fun _ => true) = c.restrict q := by
+  obtain ⟨T, μ, e, p⟩ := c
+  simp only [refine2, Codec.restrict, Codec.mk.injEq, true_and]
+  refine ⟨funext fun v => ?_, funext fun a => ?_⟩
+  · cases e v <;> rfl
+  · rfl
+
+/-- The write of the two-sided restriction. -/
+theorem refine2_e {c : Codec V A M} {qV : V → Bool} {qA : A → Bool} {v : V} {a : A} :
+    (refine2 c qV qA).e v = some a ↔ qV v = true ∧ c.e v = some a ∧ qA a = true := by
+  simp only [refine2]
+  cases hq : qV v
+  · simp
+  · cases c.e v with
+    | none => simp
+    | some a' => cases hqa : qA a' <;> simp [hqa] <;> intro hh <;> subst hh <;> assumption
+
+/-- The read of the two-sided restriction. -/
+theorem refine2_p {c : Codec V A M} {qV : V → Bool} {qA : A → Bool} {v : V} {a : A} :
+    (refine2 c qV qA).p a = some v ↔ qA a = true ∧ c.p a = some v ∧ qV v = true := by
+  rw [← (R.refine2 (R_conv c) qV qA).1]; exact refine2_e
+
+/-- **The stored-side gate**: the codec writes, and the predicate admits the write. The gate of
+    the converse reads, and the predicate admits the read. -/
+def gate {X Y N : Type} (c : Codec X Y N) (q : Y → Bool) (x : X) : Bool :=
+  match c.e x with
+  | some y => q y
+  | none => false
+
+/-- The gate of the truth predicate is the write domain. -/
+theorem gate_true {X Y N : Type} (c : Codec X Y N) (x : X) :
+    gate c (fun _ => true) x = (c.e x).isSome := by
+  unfold gate
+  cases c.e x <;> rfl
+
+/-- The write domain of the two-sided restriction: the caller predicate, and the gate of the
+    stored predicate. -/
+theorem refine2_e_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (v : V) :
+    ((refine2 c qV qA).e v).isSome = (qV v && gate c qA v) := by
+  simp only [refine2, gate]
+  cases qV v
+  · rfl
+  · cases c.e v with
+    | none => rfl
+    | some a => cases h : qA a <;> simp [h]
+
+/-- The read domain of the two-sided restriction: the stored predicate, and the gate of the
+    caller predicate on the converse. -/
+theorem refine2_p_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (a : A) :
+    ((refine2 c qV qA).p a).isSome = (qA a && gate (conv c) qV a) := by
+  rw [← (R.refine2 (R_conv c) qV qA).1]; exact refine2_e_isSome (conv c) qA qV a
+
 /-- A refinement writes where the gate passes and the base writes, so a row can read off a
     refinement without unfolding it. -/
 @[simp] theorem restrict_e_isSome {c : Codec V A M} {q : V → Bool} (v : V) :
     ((c.restrict q).e v).isSome = (q v && (c.e v).isSome) := by
-  simp only [Codec.restrict]
-  by_cases h : q v = true <;> simp [h]
+  rw [← refine2_host, refine2_e_isSome, gate_true]
 
 /-- `alternate reader`: extend the reading. With §3's coherence premise this presentation equals
     the order-free `p ∪ r`. -/
@@ -200,23 +296,18 @@ theorem through_p {f g : V → V} {a v} :
     was `@[simp]` and the read half was not there. -/
 @[simp] theorem restrict_p_isSome {c : Codec V A M} {q : V → Bool} (a : A) :
     ((c.restrict q).p a).isSome = ((c.p a).elim false q) := by
-  simp only [Codec.restrict]
-  cases c.p a with
-  | none => rfl
-  | some v => cases hq : q v <;> simp [hq]
+  rw [← refine2_host, refine2_p_isSome, Bool.true_and]
+  simp only [gate, conv]; cases c.p a <;> rfl
 
 /-- `refine` writes only what passes the prism… -/
 theorem restrict_e {q : V → Bool} {v a} :
     (c.restrict q).e v = some a ↔ q v = true ∧ c.e v = some a := by
-  simp only [Codec.restrict]; split <;> simp_all
+  rw [← refine2_host, refine2_e]; simp
 
 /-- …and reads only into it. -/
 theorem restrict_p {q : V → Bool} {a v} :
     (c.restrict q).p a = some v ↔ c.p a = some v ∧ q v = true := by
-  simp only [Codec.restrict, Option.bind_eq_some_iff]
-  constructor
-  · rintro ⟨w, hw, h⟩; split at h <;> simp_all
-  · rintro ⟨h, hq⟩; exact ⟨v, h, by simp [hq]⟩
+  rw [← refine2_host, refine2_p]; simp
 
 /-- `alternate reader` does not touch the writing at all — §5's whole point. -/
 theorem extendRead_e {r : A → Option V} {v a} :
@@ -269,7 +360,7 @@ def AdmitsAtMostOne (os : List (Codec V A M)) : Prop :=
 
 /-- **One side of a sum.** Both halves of `altCodec` are this: act through the first option
     that admits by the admission *that side* reads. Stating the shape once is what lets
-    `altCodec_e` and `altCodec_p` be the same theorem at two instances. -/
+    `altCodec_e_admits` and `altCodec_p_admits` be the same theorem at two instances. -/
 def select {X Y : Type} (os : List (Codec V A M)) (run : Codec V A M → X → Option Y) (x : X) :
     Option Y :=
   (os.find? (fun c => (run c x).isSome)).bind (run · x)
@@ -306,10 +397,37 @@ theorem altCodec_e {os : List (Codec V A M)} {μA : Option M} {v a} :
     (altCodec os μA).e v = some a ↔
       ∃ o, os.find? (fun c => (c.e v).isSome) = some o ∧ o.e v = some a := select_eq_some
 
-/-- **What a union reads**: the same theorem, on the attribute side. -/
+/-- `select` on the write of the converses is `select` on the read of the originals. -/
+theorem select_R_e {N' : Type} : ∀ {os' : List (Codec A V N')} {os : List (Codec V A M)},
+    List.Forall₂ R os' os → ∀ a, select os' (·.e) a = select os (·.p) a
+  | [], [], .nil, _ => rfl
+  | o' :: os', o :: os, .cons h hs, a => by
+      unfold select at *
+      simp only [List.find?_cons, h.1]
+      split
+      · exact congrFun h.1 a
+      · exact select_R_e hs a
+
+/-- `select` on the read of the converses is `select` on the write of the originals. -/
+theorem select_R_p {N' : Type} {os' : List (Codec A V N')} {os : List (Codec V A M)}
+    (h : List.Forall₂ R os' os) (v : V) : select os' (·.p) v = select os (·.e) v :=
+  (select_R_e (h.flip.imp fun _ _ hr => R.symm hr) v).symm
+
+/-- **The converse of a union is the union of the converses**, whatever the two members. -/
+theorem altCodec_R {N' : Type} {os' : List (Codec A V N')} {os : List (Codec V A M)}
+    (μ' : Option N') (μ : Option M) (h : List.Forall₂ R os' os) :
+    R (altCodec os' μ') (altCodec os μ) :=
+  ⟨funext (select_R_e h), funext (select_R_p h)⟩
+
+/-- **What a union reads**: what the union of the converses writes. -/
 theorem altCodec_p {os : List (Codec V A M)} {μA : Option M} {a v} :
     (altCodec os μA).p a = some v ↔
-      ∃ o, os.find? (fun c => (c.p a).isSome) = some o ∧ o.p a = some v := select_eq_some
+      ∃ o, os.find? (fun c => (c.p a).isSome) = some o ∧ o.p a = some v := by
+  have hR : List.Forall₂ R (os.map conv) os := List.forall₂_map_left_iff.mpr
+    (List.forall₂_same.mpr fun c _ => R_conv c)
+  rw [← (altCodec_R none μA hR).1, altCodec_e, List.find?_map]
+  simp only [Option.map_eq_some_iff]
+  exact ⟨fun ⟨_, ⟨o, h, rfl⟩, h'⟩ => ⟨o, h, h'⟩, fun ⟨o, h, h'⟩ => ⟨_, ⟨o, h, rfl⟩, h'⟩⟩
 
 /-- A sum's encode routes through an option that writes. -/
 theorem altCodec_e_admits {os : List (Codec V A M)} {μA : Option M} {v a}

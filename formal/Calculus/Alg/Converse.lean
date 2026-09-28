@@ -22,21 +22,6 @@ variable {V A M : Type}
 
 /-! ## The converse -/
 
-/-- **The converse of a codec**: the read is the write, and the write is the read. The member
-    names nothing on the stored side of the converse, so it is `Unit`. -/
-def conv (c : Codec V A M) : Codec A V Unit :=
-  { T := fun _ => True, μ := c.μ.map (fun _ => ()), e := c.p, p := c.e }
-
-/-- `c'` has the converse graph of `c`. -/
-def R {X Y N N' : Type} (c' : Codec Y X N') (c : Codec X Y N) : Prop := c'.e = c.p ∧ c'.p = c.e
-
-/-- The converse graph is symmetric. -/
-theorem R.symm {X Y N N' : Type} {c' : Codec Y X N'} {c : Codec X Y N} (h : R c' c) : R c c' :=
-  ⟨h.2.symm, h.1.symm⟩
-
-/-- The converse has the converse graph. -/
-theorem R_conv (c : Codec V A M) : R (conv c) c := ⟨rfl, rfl⟩
-
 /-- The converse of a lawful codec is lawful, with the trivial member. -/
 theorem Lawful.conv {member : A → M} {c : Codec V A M} (h : Lawful member c) :
     Lawful (fun _ : V => ()) (conv c) where
@@ -46,10 +31,6 @@ theorem Lawful.conv {member : A → M} {c : Codec V A M} (h : Lawful member c) :
 
 /-- The converse holds every value, so it is on its carrier. -/
 theorem carrier_conv (c : Codec V A M) : Carrier (conv c) := ⟨fun _ => trivial, fun _ => trivial⟩
-
-/-- The converse of a codec on the dual carriers, back on the original carriers. -/
-def unconv (c : Codec A V Unit) : Codec V A M :=
-  { T := fun _ => True, μ := none, e := c.p, p := c.e }
 
 /-- The inverse converse of a lawful codec is lawful, and names no member. -/
 theorem Lawful.unconv {member : A → M} {c : Codec A V Unit} (h : Lawful (fun _ : V => ()) c) :
@@ -69,14 +50,6 @@ theorem agreeS_conv {side : Bool} {c d : Codec V A M} (h : AgreeS (!side) c d) :
 
 /-! ## The two-sided wrappers -/
 
-/-- **The two-sided restriction** `[qA] ∘ c ∘ [qV]`: `qV` restricts the caller side, and `qA`
-    restricts the stored side. -/
-def refine2 (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) : Codec V A M :=
-  { T := fun v => c.T v ∧ qV v
-    μ := c.μ
-    e := fun v => if qV v then (c.e v).bind (fun a => if qA a then some a else none) else none
-    p := fun a => if qA a then (c.p a).bind (fun v => if qV v then some v else none) else none }
-
 /-- **The two-sided adapter.** The caller pair is `(fV, gV)`: `fV` on entry from `V`, `gV` on exit
     to `V`. The stored pair is `(hA, kA)`: `hA` on entry from `A`, `kA` on exit to `A`. -/
 def adapt2 (c : Codec V A M) (fV gV : V → V) (hA kA : A → A) : Codec V A M :=
@@ -90,15 +63,6 @@ def adapt2 (c : Codec V A M) (fV gV : V → V) (hA kA : A → A) : Codec V A M :
 def held2 {M₁ M₂ : Type} (c : Codec V A M) (oV : Codec V A M₁) (oA : Codec V A M₂)
     (fV gV : V → V) (hA kA : A → A) : Codec V A M :=
   refine2 (adapt2 c fV gV hA kA) (fun v => (oV.e v).isSome) (fun a => (oA.p a).isSome)
-
-/-- **The converse of the two-sided restriction swaps the halves**, over any codec with the
-    converse graph. -/
-theorem R.refine2 {N : Type} {c' : Codec A V N} {c : Codec V A M} (h : R c' c)
-    (qV : V → Bool) (qA : A → Bool) : R (refine2 c' qA qV) (refine2 c qV qA) := by
-  obtain ⟨T, μ, e, p⟩ := c'
-  obtain ⟨h1, h2⟩ := h
-  subst h1 h2
-  exact ⟨rfl, rfl⟩
 
 /-- **The converse of the two-sided adapter swaps the halves**, with no dagger. -/
 theorem R.adapt2 {N : Type} {c' : Codec A V N} {c : Codec V A M} (h : R c' c)
@@ -122,16 +86,6 @@ theorem R.held2 {N M₁ M₂ N₁ N₂ : Type} {c' : Codec A V N} {c : Codec V A
   subst h1 h2
   exact R.refine2 (R.adapt2 h fV gV hA' kA) _ _
 
-/-- **The host `refine` is the one-sided restriction**: the stored predicate admits every
-    attribute. -/
-theorem refine2_host (c : Codec V A M) (q : V → Bool) :
-    refine2 c q (fun _ => true) = c.restrict q := by
-  obtain ⟨T, μ, e, p⟩ := c
-  simp only [refine2, Codec.restrict, Codec.mk.injEq, true_and]
-  refine ⟨funext fun v => ?_, funext fun a => ?_⟩
-  · cases e v <;> rfl
-  · rfl
-
 /-- **The host adapter is `through`**: the stored pair is the identity. -/
 theorem adapt2_host (c : Codec V A M) (f g : V → V) : adapt2 c f g id id = c.through f g := by
   obtain ⟨T, μ, e, p⟩ := c
@@ -146,26 +100,6 @@ theorem held2_host {M₁ M₂ : Type} (c : Codec V A M) (o : Codec V A M₁) (oA
     held2 c o oA f g id id = (c.through f g).restrict fun v => (o.e v).isSome := by
   have : (fun a => (oA.p a).isSome) = fun _ => true := funext htop
   rw [held2, this, adapt2_host, refine2_host]
-
-/-- The write of the two-sided restriction. -/
-theorem refine2_e {c : Codec V A M} {qV : V → Bool} {qA : A → Bool} {v : V} {a : A} :
-    (refine2 c qV qA).e v = some a ↔ qV v = true ∧ c.e v = some a ∧ qA a = true := by
-  simp only [refine2]
-  cases hq : qV v
-  · simp
-  · cases c.e v with
-    | none => simp
-    | some a' => cases hqa : qA a' <;> simp [hqa] <;> intro hh <;> subst hh <;> assumption
-
-/-- The read of the two-sided restriction. -/
-theorem refine2_p {c : Codec V A M} {qV : V → Bool} {qA : A → Bool} {v : V} {a : A} :
-    (refine2 c qV qA).p a = some v ↔ qA a = true ∧ c.p a = some v ∧ qV v = true := by
-  simp only [refine2]
-  cases hq : qA a
-  · simp
-  · cases c.p a with
-    | none => simp
-    | some v' => cases hqv : qV v' <;> simp [hqv] <;> intro hh <;> subst hh <;> assumption
 
 /-- The two-sided restriction keeps the laws, and owes nothing. -/
 theorem Lawful.refine2 {member : A → M} {c : Codec V A M} (hc : Lawful member c)
@@ -183,19 +117,6 @@ theorem sub_refine2_self (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) :
     Sub (refine2 c qV qA) c :=
   ⟨fun _ _ h => (refine2_e.mp h).2.1, fun _ _ h => (refine2_p.mp h).2.1⟩
 
-/-- **The stored-side gate**: the codec writes, and the predicate admits the write. The gate of
-    the converse reads, and the predicate admits the read. -/
-def gate {X Y N : Type} (c : Codec X Y N) (q : Y → Bool) (x : X) : Bool :=
-  match c.e x with
-  | some y => q y
-  | none => false
-
-/-- The gate of the truth predicate is the write domain. -/
-theorem gate_true {X Y N : Type} (c : Codec X Y N) (x : X) :
-    gate c (fun _ => true) x = (c.e x).isSome := by
-  unfold gate
-  cases c.e x <;> rfl
-
 /-- A gate whose predicate admits the write is the write domain. -/
 theorem gate_eq_isSome {X Y N : Type} {c : Codec X Y N} {q : Y → Bool} {x : X}
     (h : ∀ y, c.e x = some y → q y = true) : gate c q x = (c.e x).isSome := by
@@ -211,28 +132,6 @@ theorem gate_isSome {X Y N : Type} {c : Codec X Y N} {q : Y → Bool} {x : X}
   unfold gate
   cases c.e x <;> simp
 
-/-- The write domain of the two-sided restriction: the caller predicate, and the gate of the
-    stored predicate. -/
-theorem refine2_e_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (v : V) :
-    ((refine2 c qV qA).e v).isSome = (qV v && gate c qA v) := by
-  simp only [refine2, gate]
-  cases qV v
-  · rfl
-  · cases c.e v with
-    | none => rfl
-    | some a => cases h : qA a <;> simp [h]
-
-/-- The read domain of the two-sided restriction: the stored predicate, and the gate of the
-    caller predicate on the converse. -/
-theorem refine2_p_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (a : A) :
-    ((refine2 c qV qA).p a).isSome = (qA a && gate (conv c) qV a) := by
-  simp only [refine2, gate, conv]
-  cases qA a
-  · rfl
-  · cases c.p a with
-    | none => rfl
-    | some v => cases h : qV v <;> simp [h]
-
 /-- The gate of the two-sided adapter is the gate of its inner codec, through the two entry and
     exit functions. -/
 theorem adapt2_gate (c : Codec V A M) (fV gV : V → V) (hA kA : A → A) (q : A → Bool) (v : V) :
@@ -242,9 +141,8 @@ theorem adapt2_gate (c : Codec V A M) (fV gV : V → V) (hA kA : A → A) (q : A
 
 /-- The gate of the converse of the two-sided adapter, on the read side. -/
 theorem adapt2_gateA (c : Codec V A M) (fV gV : V → V) (hA kA : A → A) (q : V → Bool) (a : A) :
-    gate (conv (adapt2 c fV gV hA kA)) q a = gate (conv c) (q ∘ gV) (hA a) := by
-  simp only [gate, adapt2, conv]
-  cases c.p (hA a) <;> rfl
+    gate (conv (adapt2 c fV gV hA kA)) q a = gate (conv c) (q ∘ gV) (hA a) :=
+  adapt2_gate (conv c) hA kA fV gV q a
 
 /-- **One two-sided adapter over two agreeing inner codecs agrees.** -/
 theorem agreeS_adapt2 {side : Bool} {c c' : Codec V A M} {fV gV : V → V} {hA kA : A → A}
@@ -348,52 +246,6 @@ theorem agreeLe_refine2 {dV : V → Nat} {dA : A → Nat} {d : Nat} {c₁ c₂ :
 
 Each lemma says: the constructor over the converses of its parts is the converse of the
 constructor over the parts. -/
-
-/-- `select` on the write of the converses is `select` on the read of the originals. -/
-theorem select_R_e {N' : Type} : ∀ {os' : List (Codec A V N')} {os : List (Codec V A M)},
-    List.Forall₂ R os' os → ∀ a, select os' (·.e) a = select os (·.p) a
-  | [], [], .nil, _ => rfl
-  | o' :: os', o :: os, .cons h hs, a => by
-      unfold select at *
-      simp only [List.find?_cons, h.1]
-      split
-      · exact congrFun h.1 a
-      · exact select_R_e hs a
-
-/-- `select` on the read of the converses is `select` on the write of the originals. -/
-theorem select_R_p {N' : Type} : ∀ {os' : List (Codec A V N')} {os : List (Codec V A M)},
-    List.Forall₂ R os' os → ∀ v, select os' (·.p) v = select os (·.e) v
-  | [], [], .nil, _ => rfl
-  | o' :: os', o :: os, .cons h hs, v => by
-      unfold select at *
-      simp only [List.find?_cons, h.2]
-      split
-      · exact congrFun h.2 v
-      · exact select_R_p hs v
-
-/-- **The converse of a union is the union of the converses**, whatever the two members. -/
-theorem altCodec_R {N' : Type} {os' : List (Codec A V N')} {os : List (Codec V A M)}
-    (μ' : Option N') (μ : Option M) (h : List.Forall₂ R os' os) :
-    R (altCodec os' μ') (altCodec os μ) :=
-  ⟨funext (select_R_e h), funext (select_R_p h)⟩
-
-/-- The stage of the converse body is the converse of the stage. -/
-theorem muStage_R {N' : Type} (B : Codec V A M → Codec V A M) (B' : Codec A V N' → Codec A V N')
-    (h : ∀ c' c, R c' c → R (B' c') (B c)) : ∀ n, R (muStage B' n) (muStage B n)
-  | 0 => ⟨rfl, rfl⟩
-  | n + 1 => h _ _ (muStage_R B B' h n)
-
-/-- **The converse of a fixed point is the fixed point of the converse body**, with the two
-    depth functions swapped. -/
-theorem muCodec_R {N' : Type} (dV : V → Nat) (dA : A → Nat) (B : Codec V A M → Codec V A M)
-    (B' : Codec A V N' → Codec A V N') (h : ∀ c' c, R c' c → R (B' c') (B c)) :
-    R (muCodec dA dV B') (muCodec dV dA B) :=
-  ⟨funext fun a => by
-      simp only [muCodec]
-      rw [(muStage_R B B' h _).1],
-   funext fun v => by
-      simp only [muCodec]
-      rw [(muStage_R B B' h _).2]⟩
 
 /-- Two fields of one shape whose codecs have the converse graphs. -/
 def FieldR {N' : Type} : FieldSem A V N' → FieldSem V A M → Prop
@@ -534,14 +386,11 @@ theorem trav_R_e {N' : Type} : ∀ {ds' : List (Codec A V N')} {ds : List (Codec
       simp only [List.zip_cons_cons, traverse, h.1, trav_R_e hs xs]
 
 /-- The traversal of the converse positions by the read is the traversal by the write. -/
-theorem trav_R_p {N' : Type} : ∀ {ds' : List (Codec A V N')} {ds : List (Codec V A M)},
-    List.Forall₂ R ds' ds → ∀ xs : List V,
-      traverse (fun ca : Codec A V N' × V => ca.1.p ca.2) (ds'.zip xs) =
-        traverse (fun ca : Codec V A M × V => ca.1.e ca.2) (ds.zip xs)
-  | [], [], .nil, _ => rfl
-  | _ :: _, _ :: _, .cons _ _, [] => rfl
-  | _ :: _, _ :: _, .cons h hs, x :: xs => by
-      simp only [List.zip_cons_cons, traverse, h.2, trav_R_p hs xs]
+theorem trav_R_p {N' : Type} {ds' : List (Codec A V N')} {ds : List (Codec V A M)}
+    (h : List.Forall₂ R ds' ds) (xs : List V) :
+    traverse (fun ca : Codec A V N' × V => ca.1.p ca.2) (ds'.zip xs) =
+      traverse (fun ca : Codec V A M × V => ca.1.e ca.2) (ds.zip xs) :=
+  (trav_R_e (h.flip.imp fun _ _ hr => R.symm hr) xs).symm
 
 /-- A row of converse positions traverses by the write as the row traverses by the read. -/
 theorem rowtrav_e {N' : Type} :
