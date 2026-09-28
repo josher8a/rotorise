@@ -240,7 +240,6 @@ variable (t : Term) (ts : List Term)
       | _ => false := by
   funext a
   cases a
-  case m keys g => exact congrArg (· && _) (Alg.valPresentT_tconv fields fld keys)
   all_goals rfl
 @[AdmA_rows] theorem AdmAField_req : AdmAField α (.req t) = AdmA α t := rfl
 @[AdmA_rows] theorem AdmAField_optional : AdmAField α (.optional t) = AdmA α t := rfl

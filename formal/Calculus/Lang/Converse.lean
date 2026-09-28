@@ -8,9 +8,9 @@ stored carrier as its caller carrier, and the stored half of each two-sided row 
 half. The meaning is one absolute structure, and the dual reads that structure at the dual
 orientation, with no new data.
 
-`tconv` sends a term to the dual term, and the dual term is the term. `denote_tconv` says that
-the dual term denotes the converse codec, where the dual reads the stored table as its caller
-table and the caller table as its stored table.
+A term of `S` is a term of `S.op`, because the term stores each half at its absolute side.
+`denote_R` says that the term at the dual orientation denotes the converse codec, where the dual
+reads the stored table as its caller table and the caller table as its stored table.
 -/
 
 namespace Calculus.Alg
@@ -73,47 +73,6 @@ theorem half2_R {X Y N N' : Type} (o : Orient) {a' b' : Codec Y X N'} {a b : Cod
     R (half2 o.c a' b') (half2 o.c a b) ∧ R (half2 o.s a' b') (half2 o.s a b) := by
   cases o.c <;> cases o.s <;> exact ⟨by assumption, by assumption⟩
 
-/-! ## The converse of a term -/
-
-section Tconv
-variable {S : Syn}
-
-/-- **The converse of a term is the term.** The raw term stores each half at its absolute side,
-    and the dual universe reads the other half. -/
-def tconv (t : Term S) : Term S.op := t
-
-/-- The converse of a body. -/
-def tconvB (b : Body S) : Body S.op := b
-
-/-- The converse of a slot. -/
-def tconvS (s : ObjectSlot S) : ObjectSlot S.op := s
-
-/-- The converse of each term of a list. -/
-def tconvL (ts : List (Term S)) : List (Term S.op) := ts
-
-/-- The converse of an optional term. -/
-def tconvO (o : Option (Term S)) : Option (Term S.op) := o
-
-/-- **The converse is an involution** on terms, on the nose. -/
-theorem tconv_tconv (t : Term S) : tconv (tconv t) = t := rfl
-
-/-- …at a body. -/
-theorem tconvB_tconvB (b : Body S) : tconvB (tconvB b) = b := rfl
-
-/-- …at a slot. -/
-theorem tconvS_tconvS (s : ObjectSlot S) : tconvS (tconvS s) = s := rfl
-
-/-- …at a list. -/
-theorem tconvL_tconvL (ts : List (Term S)) : tconvL (tconvL ts) = ts := rfl
-
-/-- …at an optional term. -/
-theorem tconvO_tconvO (o : Option (Term S)) : tconvO (tconvO o) = o := rfl
-
-/-- **The converse is an involution on the terms of the dual.** -/
-theorem tconv_tconv_op (t : Term S.op) : tconv (S := S) (tconv (S := S.op) t) = t := rfl
-
-end Tconv
-
 /-! ## The converse of a codec at a universe -/
 
 section ConvU
@@ -134,74 +93,74 @@ end ConvU
 
 /-! ## The denotation of the converse -/
 
-section DenoteTconv
+section DenoteR
 variable {S : Syn} [Sem S] (α : Table S) (β : Table S.op)
 
 mutual
-/-- **The denotation of the converse is the converse of the denotation.** The dual reads the
-    stored table as its caller table, and the caller table as its stored table, under an
+/-- **The denotation at the dual orientation is the converse of the denotation.** The dual reads
+    the stored table as its caller table, and the caller table as its stored table, under an
     environment of converses. -/
-theorem denote_tconv : ∀ (t : Term S) {ρ' : List S.op.C} {ρ : List S.C},
-    List.Forall₂ R ρ' ρ → R (denote β α (tconv t) ρ') (denote α β t ρ)
+theorem denote_R : ∀ (t : Term S) {ρ' : List S.op.C} {ρ : List S.C},
+    List.Forall₂ R ρ' ρ → R (denote β α t ρ') (denote α β t ρ)
   | .prim g, _, _, _ => readC_R S.o (Mean.ground g)
   | .opaq, _, _, _ => readC_R S.o Mean.top
   | .never, _, _, _ => ⟨rfl, rfl⟩
   | .var i, _, _, h => envAt_R h i
   | .set t, _, _, h => by
-      simp only [tconv, denote, Syn.set]
+      simp only [denote, Syn.set]
       cases Mean.set (B := S.sig) with
       | none => exact ⟨rfl, rfl⟩
-      | some L => exact setAt_R L Mean.d_pos S.o (denote_tconv t h)
+      | some L => exact setAt_R L Mean.d_pos S.o (denote_R t h)
   | .list pre sp suf, _, _, h => by
-      simp only [tconv, denote, Syn.list]
+      simp only [denote, Syn.list]
       cases Mean.list (B := S.sig) with
       | none => exact ⟨rfl, rfl⟩
       | some L =>
           exact listCodec_R (L.p S.o.c) (L.p S.o.s) (μAt S.o.s L.μ) (μAt S.o.c L.μ)
-            (denoteList_tconv pre h) (denoteOpt_tconv sp h) (denoteList_tconv suf h)
+            (denoteList_R pre h) (denoteOpt_R sp h) (denoteList_R suf h)
   | .held t P PA _ _, _, _, h =>
-      let hh := half2_R S.o (denote_tconv P h) (denote_tconv PA h)
-      R.held2 (denote_tconv t h) hh.2 hh.1 _ _ _ _
-  | .refine t _ _, _, _, h => R.refine2 (denote_tconv t h) _ _
-  | .object b, _, _, h => bodySem_tconv b h
-  | .union ts, _, _, h => altCodec_R _ _ (denoteList_tconv ts h)
-  | .mu b, _, _, h => muCodec_R Syn.dV Syn.dA _ _ fun _ _ hc => denote_tconv b (.cons hc h)
+      let hh := half2_R S.o (denote_R P h) (denote_R PA h)
+      R.held2 (denote_R t h) hh.2 hh.1 _ _ _ _
+  | .refine t _ _, _, _, h => R.refine2 (denote_R t h) _ _
+  | .object b, _, _, h => bodySem_R b h
+  | .union ts, _, _, h => altCodec_R _ _ (denoteList_R ts h)
+  | .mu b, _, _, h => muCodec_R Syn.dV Syn.dA _ _ fun _ _ hc => denote_R b (.cons hc h)
 
 /-- …at a body: the converse fields and the converse open block. -/
-theorem bodySem_tconv : ∀ (b : Body S) {ρ' : List S.op.C} {ρ : List S.C},
-    List.Forall₂ R ρ' ρ → R (bodySem β α (tconvB b) ρ') (bodySem α β b ρ)
+theorem bodySem_R : ∀ (b : Body S) {ρ' : List S.op.C} {ρ : List S.C},
+    List.Forall₂ R ρ' ρ → R (bodySem β α b ρ') (bodySem α β b ρ)
   | .mk _ f wild, _, _, h => by
-      simp only [tconvB, bodySem, Syn.map]
+      simp only [bodySem, Syn.map]
       cases Mean.map (B := S.sig) with
       | none => exact ⟨rfl, rfl⟩
       | some F =>
           exact objectCodec_R (F.m S.o.c) (F.m S.o.s) (μAt S.o.c F.μ) (μAt S.o.s F.μ)
-            (fun k => fieldSem_tconv (f k) h) (wildSem_tconv wild h) (by cases wild <;> simp [wildSem])
+            (fun k => fieldSem_R (f k) h) (wildSem_R wild h) (by cases wild <;> simp [wildSem])
 
 /-- …at a slot. -/
-theorem fieldSem_tconv : ∀ (s : ObjectSlot S) {ρ' : List S.op.C} {ρ : List S.C},
-    List.Forall₂ R ρ' ρ → FieldR (fieldSem β α (tconvS s) ρ') (fieldSem α β s ρ)
-  | .req t, _, _, h | .optional t, _, _, h => denote_tconv t h
+theorem fieldSem_R : ∀ (s : ObjectSlot S) {ρ' : List S.op.C} {ρ : List S.C},
+    List.Forall₂ R ρ' ρ → FieldR (fieldSem β α s ρ') (fieldSem α β s ρ)
+  | .req t, _, _, h | .optional t, _, _, h => denote_R t h
 
 /-- …at an open block. -/
-theorem wildSem_tconv : ∀ (w : Option (Term S)) {ρ' : List S.op.C} {ρ : List S.C},
-    List.Forall₂ R ρ' ρ → RestR (wildSem β α (tconvO w) ρ') (wildSem α β w ρ)
+theorem wildSem_R : ∀ (w : Option (Term S)) {ρ' : List S.op.C} {ρ : List S.C},
+    List.Forall₂ R ρ' ρ → RestR (wildSem β α w ρ') (wildSem α β w ρ)
   | none, _, _, _ => trivial
-  | some t, _, _, h => denote_tconv t h
+  | some t, _, _, h => denote_R t h
 
 /-- …at a list. -/
-theorem denoteList_tconv : ∀ (ts : List (Term S)) {ρ' : List S.op.C} {ρ : List S.C},
-    List.Forall₂ R ρ' ρ → List.Forall₂ R (denoteList β α (tconvL ts) ρ') (denoteList α β ts ρ)
+theorem denoteList_R : ∀ (ts : List (Term S)) {ρ' : List S.op.C} {ρ : List S.C},
+    List.Forall₂ R ρ' ρ → List.Forall₂ R (denoteList β α ts ρ') (denoteList α β ts ρ)
   | [], _, _, _ => .nil
-  | t :: ts, _, _, h => .cons (denote_tconv t h) (denoteList_tconv ts h)
+  | t :: ts, _, _, h => .cons (denote_R t h) (denoteList_R ts h)
 
 /-- …at an optional term. -/
-theorem denoteOpt_tconv : ∀ (o : Option (Term S)) {ρ' : List S.op.C} {ρ : List S.C},
-    List.Forall₂ R ρ' ρ → Option.Rel R (denoteOpt β α (tconvO o) ρ') (denoteOpt α β o ρ)
+theorem denoteOpt_R : ∀ (o : Option (Term S)) {ρ' : List S.op.C} {ρ : List S.C},
+    List.Forall₂ R ρ' ρ → Option.Rel R (denoteOpt β α o ρ') (denoteOpt α β o ρ)
   | none, _, _, _ => .none
-  | some t, _, _, h => .some (denote_tconv t h)
+  | some t, _, _, h => .some (denote_R t h)
 end
 
-end DenoteTconv
+end DenoteR
 
 end Calculus.Alg

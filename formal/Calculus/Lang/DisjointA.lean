@@ -24,44 +24,6 @@ open Calculus (alignPL alignP zipP anyP objAdmV entryP)
 variable {S : Syn} [Sem S] [PrimAdmA S] {ρ ρ' ρ'' : List S.C}
   {α : Table S} {β : Table S.op}
 
-/-! ## The converse of the syntax that the test reads -/
-
-section Syntax
-omit [Sem S] [PrimAdmA S]
-
-/-- The converse of a list of terms is the list of the converses. -/
-theorem tconvL_eq_map : ∀ ts : List (Term S), tconvL ts = ts.map tconv
-  | [] => rfl
-  | t :: ts => congrArg (tconv t :: ·) (tconvL_eq_map ts)
-
-/-- The converse of an optional term is the optional converse. -/
-theorem tconvO_eq_map : ∀ o : Option (Term S), tconvO o = o.map tconv
-  | none => rfl
-  | some _ => rfl
-
-/-- The converse keeps the kind of a slot. -/
-theorem isReq_tconvS (s : ObjectSlot S) : (tconvS s).isReq = s.isReq := rfl
-
-/-- The converse of a body gives each name the converse slot. -/
-theorem slotAt_tconvB (c : Body S) (k : String) : (tconvB c).slotAt k = tconvS (c.slotAt k) := rfl
-
-/-- **The converse keeps the variables of a term.** -/
-theorem hasVar_tconv (t : Term S) : (tconv t).hasVar = t.hasVar := rfl
-
-/-- …of a body. -/
-theorem hasVarB_tconv (b : Body S) : (tconvB b).hasVar = b.hasVar := rfl
-
-/-- …of a slot. -/
-theorem hasVarS_tconv (s : ObjectSlot S) : (tconvS s).hasVar = s.hasVar := rfl
-
-/-- …of a list. -/
-theorem hasVarL_tconv (ts : List (Term S)) : Term.hasVarL (tconvL ts) = Term.hasVarL ts := rfl
-
-/-- …of an optional term. -/
-theorem hasVarO_tconv (o : Option (Term S)) : Term.hasVarO (tconvO o) = Term.hasVarO o := rfl
-
-end Syntax
-
 noncomputable section
 
 /-! ## The rows that the soundness proof reads -/
@@ -72,7 +34,7 @@ noncomputable section
 variable (α β) in
 /-- `⋁` of `AdmA` over a union's options: `AdmAny` of the dual. -/
 def AdmAAny (ts : List (Term S)) (ρ : List S.C) (a : Syn.A S) : Bool :=
-  AdmAny β α (tconvL ts) (ρ.map convU) a
+  AdmAny β α ts (ρ.map convU) a
 
 /-- An empty list of options reads no attribute. -/
 @[simp] theorem AdmAAny_nil (a : Syn.A S) : AdmAAny α β ([] : List (Term S)) ρ a = false := rfl
@@ -97,7 +59,7 @@ theorem adm_op_env {ρ₁ ρ₂ : List S.op.C} {σ : List S.C} (h₁ : List.Fora
     Adm (S := S.op) β α y ρ₁ v = Adm (S := S.op) β α y ρ₂ v := by
   rw [Bool.eq_iff_iff.mpr (Adm_exact (S := S.op) (α := β) (β := α) y ρ₁ v),
     Bool.eq_iff_iff.mpr (Adm_exact (S := S.op) (α := β) (β := α) y ρ₂ v),
-    ← tconv_tconv_op y, (denote_tconv α β _ h₁).1, (denote_tconv α β _ h₂).1]
+    (denote_R α β y h₁).1, (denote_R α β y h₂).1]
 
 omit [PrimAdmA S] in
 /-- **A recursive term reads as its body reads over the stage below the attribute's depth.** -/
@@ -115,9 +77,9 @@ theorem AdmA_mu_unfold (b : Term S) (ρ : List S.C) (a : Syn.A S) :
     AdmA α β (.mu b) ρ a
       = AdmA α β b (muStage (fun c => denote α β b (c :: ρ)) (Syn.dA a - 1) :: ρ) a := by
   have hR := muStage_R (fun c => denote α β b (c :: ρ))
-    (fun c' => denote β α (tconv b) (c' :: ρ.map convU))
-    (fun _ _ h => denote_tconv α β b (.cons h (convEnv_R ρ))) (Syn.dA a - 1)
-  exact (Adm_mu_unfold (S := S.op) (α := β) (β := α) (tconv b) (ρ.map convU) a).trans
+    (fun c' => denote β α b (c' :: ρ.map convU))
+    (fun _ _ h => denote_R α β b (.cons h (convEnv_R ρ))) (Syn.dA a - 1)
+  exact (Adm_mu_unfold (S := S.op) (α := β) (β := α) b (ρ.map convU) a).trans
     (adm_op_env (.cons hR (convEnv_R ρ)) (convEnv_R (_ :: ρ)) _ a)
 
 end
@@ -188,16 +150,11 @@ variable (α β) in
 def DisjSoundA (ρ ρ' : List S.C) (x : Term S) (f : Term S → Bool) : Prop :=
   ∀ y, f y = true → ∀ v, (AdmA α β x ρ v && AdmA α β y ρ' v) = false
 
-/-- **A read-side family is a write-side family of the dual**, where the dual family answers
-    at each converse term what the family answers at the term. -/
-theorem DisjSoundA_iff {x : Term S} {f : Term S → Bool} {f' : Term S.op → Bool}
-    (hf : ∀ y, f' (tconv y) = f y) :
-    DisjSoundA α β ρ ρ' x f ↔ DisjSound (S := S.op) β α (ρ.map convU) (ρ'.map convU) (tconv x) f' := by
-  constructor
-  · intro h y' hy v
-    exact h (tconv y') (by rw [← hf]; exact hy) v
-  · intro h y hy v
-    exact h (tconv y) (by rw [hf]; exact hy) v
+/-- **A read-side family is a write-side family of the dual**, at the same term and the same
+    family. -/
+theorem DisjSoundA_iff {x : Term S} {f : Term S → Bool} :
+    DisjSoundA α β ρ ρ' x f ↔ DisjSound (S := S.op) β α (ρ.map convU) (ρ'.map convU) x f :=
+  Iff.rfl
 
 omit [PrimAdmA S] in
 /-- A held-free closed term decodes an attribute as the top decodes it. -/
@@ -229,27 +186,17 @@ theorem stage_apartA {B B' : S.C → S.C}
   | 0, _ => rfl
   | n + 1, u => hB _ _ (stage_apartA hB n) u
 
-omit [Sem S] [PrimAdmA S] in
-/-- The right-operand walk of the dual reads the converse of each term. -/
-theorem disjSRight_tconv (fam : Pairing → Term S → Bool) (p : Pairing) (y : Term S) :
-    disjSRight (fun q y' => fam q (tconv y')) p (tconv y) = disjSRight fam p y := rfl
-
-omit [Sem S] [PrimAdmA S] in
-/-- …and each option of a union. -/
-theorem disjSRightL_tconv (fam : Pairing → Term S → Bool) (p : Pairing) (ys : List (Term S)) :
-    disjSRightL (fun q y' => fam q (tconv y')) p (tconvL ys) = disjSRightL fam p ys := rfl
-
 /-- **A read-side family sound at every apart pairing is a write-side family of the dual**, sound
     at every apart pairing of the dual. -/
 theorem disjSoundA_op {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
     (hf : ∀ q ρ', ApartA q ρ ρ' → DisjSoundA α β ρ ρ' x (fam q)) (q : Pairing)
     (ρ'' : List S.op.C) (hq : ApartV (S := S.op) q (ρ.map convU) ρ'') :
-    DisjSound (S := S.op) β α (ρ.map convU) ρ'' (tconv x) (fun y' => fam q (tconv y')) := by
+    DisjSound (S := S.op) β α (ρ.map convU) ρ'' x (fam q) := by
   intro y' hy u
   have hq' : ApartA q ρ (ρ''.map convU) := fun i j k hk w => by
     rw [(envAt_R (convEnv_R (ρ''.map convU)) j).1, ← (envAt_R (unconvEnv_R ρ'') j).1]
     exact hq i j k hk w
-  have := hf q _ hq' (tconv y') hy u
+  have := hf q _ hq' y' hy u
   rwa [AdmA, AdmA, adm_op_env (convEnv_R (ρ''.map convU)) (unconvEnv_R ρ'')] at this
 
 /-- **The rows of the right operand are sound**, given a sound family for every pairing that
@@ -259,8 +206,7 @@ theorem disjSRight_soundA {ρ : List S.C} {x : Term S} {fam : Pairing → Term S
     (y : Term S) (p : Pairing) (ρ' : List S.C) (hp : ApartA p ρ ρ')
     (h : disjSRight fam p y = true) (v : Syn.A S) :
     (AdmA α β x ρ v && AdmA α β y ρ' v) = false :=
-  disjSRight_sound (S := S.op) (disjSoundA_op hf) (tconv y) p (ρ'.map convU) hp
-    ((disjSRight_tconv fam p y).trans h) v
+  disjSRight_sound (S := S.op) (disjSoundA_op hf) y p (ρ'.map convU) hp h v
 
 /-- …and over the options of a union. -/
 theorem disjSRightL_soundA {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
@@ -268,27 +214,14 @@ theorem disjSRightL_soundA {ρ : List S.C} {x : Term S} {fam : Pairing → Term 
     (ys : List (Term S)) (p : Pairing) (ρ' : List S.C) (hp : ApartA p ρ ρ')
     (h : disjSRightL fam p ys = true) (v : Syn.A S) :
     (AdmA α β x ρ v && AdmAAny α β ys ρ' v) = false :=
-  disjSRightL_sound (S := S.op) (disjSoundA_op hf) (tconvL ys) p (ρ'.map convU) hp
-    ((disjSRightL_tconv fam p ys).trans h) v
-
-omit [Sem S] [PrimAdmA S] in
-/-- The split of the right operand of the dual reads the converse of each option. -/
-theorem splitR_tconv (fam : Pairing → Term S → Bool) (p : Pairing) (y : Term S) :
-    splitR (fun q y' => fam q (tconv y')) p (tconv y) = splitR fam p y := rfl
-
-omit [Sem S] [PrimAdmA S] in
-/-- …and each option of a union. -/
-theorem splitRL_tconv (fam : Pairing → Term S → Bool) (p : Pairing) (ys : List (Term S)) :
-    splitRL (fun q y' => fam q (tconv y')) p (tconvL ys) = splitRL fam p ys := rfl
+  disjSRightL_sound (S := S.op) (disjSoundA_op hf) ys p (ρ'.map convU) hp h v
 
 /-- **The split of the right operand is sound**, given a sound family at the pairing: the
     write-side law of the dual. -/
 theorem splitR_soundA {ρ ρ' : List S.C} {x : Term S} {fam : Pairing → Term S → Bool} {p : Pairing}
     (hf : DisjSoundA α β ρ ρ' x (fam p)) (y : Term S) (h : splitR fam p y = true) (v : Syn.A S) :
     (AdmA α β x ρ v && AdmA α β y ρ' v) = false :=
-  splitR_sound (S := S.op) (fam := fun q y' => fam q (tconv y'))
-    ((DisjSoundA_iff fun y => congrArg (fam p) (tconv_tconv y)).mp hf) (tconv y)
-    ((splitR_tconv fam p y).trans h) v
+  splitR_sound (S := S.op) (fam := fam) hf y h v
 
 /-- **Two data predicates that meet at the empty predicate keep two refinements apart on the
     read side**, where both inner terms are closed and held-free: both then read one value, the
@@ -322,37 +255,18 @@ theorem predApart_soundA [PrimAdm S] [Leaf S] [LeafAdm S] [TopLaws S] {q : S.Pre
 /-- **The leaf family is sound on the read side**: the leaf family of the dual. -/
 theorem famPrimD_soundA [Leaf S] [LeafAdmA S] [Shapes S] {ρ ρ' : List S.C} (g : S.Ground) :
     DisjSoundA α β ρ ρ' (.prim g) (famPrimD g) :=
-  (DisjSoundA_iff (f' := famPrimD (S := S.op) g) fun y => by cases y <;> rfl).mpr
-    (famPrimD_sound (S := S.op) g)
+  DisjSoundA_iff.mpr fun y hy => famPrimD_sound (S := S.op) g y (by cases y <;> exact hy)
 
 /-- **The variable family is sound**: the variable family of the dual. -/
 theorem famVarD_soundA {ρ ρ' : List S.C} {i : Nat} {q : Pairing} (hq : ApartA q ρ ρ') :
     DisjSoundA α β ρ ρ' (.var i) (famVarD i q) :=
-  (DisjSoundA_iff (f' := famVarD (S := S.op) i q) fun y => by cases y <;> rfl).mpr
-    (famVarD_sound (S := S.op) hq)
+  DisjSoundA_iff.mpr (famVarD_sound (S := S.op) hq)
 
 /-- **The set family is sound**: the set family of the dual. -/
 theorem famSetD_soundA [FormerAdmA S] [Shapes S] {ρ ρ' : List S.C} (a : Term S)
     {mt : Term S → Bool} (hmt : DisjSoundA α β ρ ρ' a mt) :
-    DisjSoundA α β ρ ρ' (.set a) (famSetD a mt) := by
-  exact (DisjSoundA_iff (f' := famSetD (tconv a) fun y' => mt (tconv y')) fun _ => rfl).mpr
-    (famSetD_sound (S := S.op) (tconv a) ((DisjSoundA_iff fun y => congrArg mt (tconv_tconv y)).mp hmt))
-
-omit [Sem S] [PrimAdmA S] in
-/-- One disjoint position of the dual rows is one disjoint position of the rows. -/
-theorem anyZip_tconv (fs : List (Term S → Bool)) (us : List (Term S)) :
-    anyZip (fs.map fun f y' => f (tconv y')) (us.map tconv) = anyZip fs us := by
-  show anyZip (fs.map fun f => f) (us.map fun u => u) = _
-  rw [List.map_id', List.map_id']
-
-omit [Sem S] [PrimAdmA S] in
-/-- **The list test of the dual reads the converse rows.** -/
-theorem famListD_tconv (fpre fsuf : List (Term S → Bool)) (fsp : Option (Term S → Bool))
-    (y : Term S) :
-    famListD (fpre.map fun f y' => f (tconv y')) (fsp.map fun f y' => f (tconv y'))
-      (fsuf.map fun f y' => f (tconv y')) (tconv y) = famListD fpre fsp fsuf y := by
-  show famListD (fpre.map fun f => f) (fsp.map fun f => f) (fsuf.map fun f => f) y = _
-  rw [List.map_id', Option.map_id', List.map_id']
+    DisjSoundA α β ρ ρ' (.set a) (famSetD a mt) :=
+  DisjSoundA_iff.mpr (famSetD_sound (S := S.op) a hmt)
 
 /-- **The list family is sound on the read side**: the list family of the dual. -/
 theorem famListD_soundA [Shapes S] {ρ ρ' : List S.C} {pre suf : List (Term S)}
@@ -361,27 +275,8 @@ theorem famListD_soundA [Shapes S] {ρ ρ' : List S.C} {pre suf : List (Term S)}
     (hp : List.Forall₂ (DisjSoundA α β ρ ρ') pre fpre)
     (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ DisjSoundA α β ρ ρ' t f)
     (hf : List.Forall₂ (DisjSoundA α β ρ ρ') suf fsuf) :
-    DisjSoundA α β ρ ρ' (.list pre sp suf) (famListD fpre fsp fsuf) := by
-  have hd {t : Term S} {f : Term S → Bool} :=
-    DisjSoundA_iff (α := α) (β := β) (ρ := ρ) (ρ' := ρ') (x := t) (f := f)
-      (f' := fun y' => f (tconv y')) fun y => congrArg f (tconv_tconv y)
-  have hl {ts : List (Term S)} {fs : List (Term S → Bool)} (h : List.Forall₂ (DisjSoundA α β ρ ρ') ts fs) :
-      List.Forall₂ (DisjSound (S := S.op) β α (ρ.map convU) (ρ'.map convU)) (tconvL ts)
-        (fs.map fun f y' => f (tconv y')) := by
-    rw [tconvL_eq_map, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    exact h.imp fun _ _ h => hd.mp h
-  refine (DisjSoundA_iff (famListD_tconv fpre fsuf fsp)).mpr
-    (famListD_sound (S := S.op) (sp := tconvO sp) (hl hp) ?_ (hl hf))
-  rcases hs with ⟨rfl, rfl⟩ | ⟨t, f, rfl, rfl, htf⟩
-  · exact Or.inl ⟨rfl, rfl⟩
-  · exact Or.inr ⟨tconv t, _, rfl, rfl, hd.mp htf⟩
-
-omit [Sem S] [PrimAdmA S] in
-/-- **The object test of the dual reads the converse slots.** -/
-theorem famObjD_tconv (fa : Finset String) (f : {k // k ∈ fa} → ObjectSlot S) (wa : Option (Term S))
-    (g : {k // k ∈ fa} → ObjectSlot S → Bool) (mw : Term S → Bool) (y : Term S) :
-    famObjD (tconvB (.mk fa f wa)) (fun k s => g k (tconvS s)) (fun y' => mw (tconv y')) (tconv y) =
-      famObjD (.mk fa f wa) g mw y := rfl
+    DisjSoundA α β ρ ρ' (.list pre sp suf) (famListD fpre fsp fsuf) :=
+  DisjSoundA_iff.mpr (famListD_sound (S := S.op) (sp := sp) hp hs hf)
 
 /-- **The object family is sound**: the object family of the dual. -/
 theorem famObjD_soundA [Shapes S] {ρ ρ' : List S.C} {fa : Finset String}
@@ -391,13 +286,11 @@ theorem famObjD_soundA [Shapes S] {ρ ρ' : List S.C} {fa : Finset String}
       ∀ w, (AdmAField α β (f k) ρ w && AdmAField α β s ρ' w) = false)
     (hmw : DisjSoundA α β ρ ρ' (Body.mk fa f wa).block mw) :
     DisjSoundA α β ρ ρ' (.object (.mk fa f wa)) (famObjD (.mk fa f wa) g mw) := by
-  refine (DisjSoundA_iff (famObjD_tconv fa f wa g mw)).mpr
-    (famObjD_sound (S := S.op) (fun k s h => ?_) ?_)
-  · obtain ⟨hr, hs⟩ := hg k (tconvS s) h
-    refine ⟨by simpa only [tconvB, Body.at_mk, isReq_tconvS] using hr, fun w => ?_⟩
-    have := hs w
-    cases s <;> simpa only [AdmAField, tconvS, tconv_tconv_op, tconvB, Body.at_mk] using this
-  · exact (DisjSoundA_iff fun y => congrArg mw (tconv_tconv y)).mp hmw
+  refine DisjSoundA_iff.mpr (famObjD_sound (S := S.op) (fun k s h => ?_) hmw)
+  obtain ⟨hr, hs⟩ := hg k s h
+  refine ⟨by simpa only [Body.at_mk] using hr, fun w => ?_⟩
+  have := hs w
+  cases s <;> simpa only [AdmAField, Body.at_mk] using this
 
 mutual
 /-- **Soundness of the zero test, on the write side.** Where `disjoint` answers `true`, no value

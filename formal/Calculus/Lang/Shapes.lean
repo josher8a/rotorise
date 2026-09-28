@@ -167,31 +167,31 @@ instance op : Shapes S.op where
 
 /-- A primitive and a set share no attribute. -/
 theorem prim_setA (g : S.Ground) (t : Term S) c : (AdmA α β (.prim g) ρ c && AdmA α β (.set t) ρ' c) = false :=
-  prim_set (S := S.op) g (tconv t) c
+  prim_set (S := S.op) g t c
 
 /-- A primitive and a list share no attribute. -/
 theorem prim_listA (g : S.Ground) (pre : List (Term S)) sp suf c :
     (AdmA α β (.prim g) ρ c && AdmA α β (.list pre sp suf) ρ' c) = false :=
-  prim_list (S := S.op) g (tconvL pre) (tconvO sp) (tconvL suf) c
+  prim_list (S := S.op) g pre sp suf c
 
 /-- A primitive and an object share no attribute. -/
 theorem prim_objA (g : S.Ground) (b : Body S) c :
     (AdmA α β (.prim g) ρ c && AdmA α β (.object b) ρ' c) = false :=
-  prim_obj (S := S.op) g (tconvB b) c
+  prim_obj (S := S.op) g b c
 
 /-- A set and a list share no attribute. -/
 theorem set_listA (t : Term S) pre sp suf c :
     (AdmA α β (.set t) ρ c && AdmA α β (.list pre sp suf) ρ' c) = false :=
-  set_list (S := S.op) (tconv t) (tconvL pre) (tconvO sp) (tconvL suf) c
+  set_list (S := S.op) t pre sp suf c
 
 /-- A set and an object share no attribute. -/
 theorem set_objA (t : Term S) (b : Body S) c : (AdmA α β (.set t) ρ c && AdmA α β (.object b) ρ' c) = false :=
-  set_obj (S := S.op) (tconv t) (tconvB b) c
+  set_obj (S := S.op) t b c
 
 /-- A list and an object share no attribute. -/
 theorem list_objA (pre : List (Term S)) sp suf (b : Body S) c :
     (AdmA α β (.list pre sp suf) ρ c && AdmA α β (.object b) ρ' c) = false :=
-  list_obj (S := S.op) (tconvL pre) (tconvO sp) (tconvL suf) (tconvB b) c
+  list_obj (S := S.op) pre sp suf b c
 
 end Attr
 
