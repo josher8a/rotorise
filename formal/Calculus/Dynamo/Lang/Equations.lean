@@ -107,7 +107,7 @@ section Terms
     every table, and every stored word of DynamoDB is the identity, so the `held` leaves the
     caller-side restriction, and that restriction is a `refine` by the admission of `P`. The
     stored outer only shrinks the graph, and `≡` asks agreement where both codecs are defined. -/
-theorem equiv_denote_held_id (t P PA : Term) (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+theorem equiv_denote_held_id (t P PA : Term) (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
     Codec.Equiv (denote α (.held t P PA [] kA))
       (denote α (.refine t (.closure fun v => ((denote α P).e v).isSome) ())) := by
   simp only [denote_rows]
@@ -124,7 +124,7 @@ theorem equiv_denote_held_id (t P PA : Term) (kA : List (Alg.SynA.GenA dynSyn ×
     no term, so the right side carries it as a `refine`. The inner stored outer only shrinks the
     graph. -/
 theorem equiv_denote_held_comp (t P PA P' PA' : Term) (k k' : Word)
-    (kA kA' : List (Alg.SynA.GenA dynSyn × Bool)) :
+    (kA kA' : List (Alg.Syn.GenA dynSyn × Bool)) :
     Codec.Equiv (denote α (.held (.held t P PA k kA) P' PA' k' kA'))
       (denote α (.refine (.held t P' PA' (k ++ k') [])
         (.closure fun v => ((denote α P).e ((α.word k').1 v)).isSome) ())) := by
@@ -170,7 +170,7 @@ theorem equiv_denote_refine_full (t : Term) (p : Pred)
 
 /-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
     `optional_μ` and `optional_μ`, which are already stated over a denotation. -/
-theorem denote_held_μ (t P PA : Term) (k : Word) (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+theorem denote_held_μ (t P PA : Term) (k : Word) (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
     (denote α (.held t P PA k kA)).μ = (denote α t).μ := rfl
 
 theorem denote_refine_μ (t : Term) (p : Pred) :

@@ -263,7 +263,7 @@ theorem Adm_refine_adapt (t : Term) (p : Pred) (v : Value) :
     Adm α (.refine t p ()) v = ((partialId p.eval v).elim false (Adm α t)) := by
   cases hq : p.eval v <;> simp [Adm_rows, partialId, hq]
 
-theorem Adm_held_adapt (t P PA : Term) (k : Word) (kA : List (Alg.SynA.GenA dynSyn × Bool))
+theorem Adm_held_adapt (t P PA : Term) (k : Word) (kA : List (Alg.Syn.GenA dynSyn × Bool))
     (v : Value) :
     Adm α (.held t P PA k kA) v = (((some ((α.word k).1 v)).elim false (Adm α t)) && Adm α P v &&
       Alg.gate (denote α t) (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v)) := by

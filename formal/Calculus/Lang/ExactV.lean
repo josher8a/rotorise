@@ -38,13 +38,13 @@ class PrimAdm (S : Syn) [Sem S] where
   /-- The values that a primitive writes. -/
   admV : S.Ground → S.V → Bool
   /-- The row is the write domain of the primitive's codec. -/
-  admV_exact : ∀ g v, admV g v = true ↔ ((Sem.ground g).e v).isSome = true
+  admV_exact : ∀ g v, admV g v = true ↔ ((Syn.ground g).e v).isSome = true
 
-variable {S : Syn} [SynA S] {α : Table S}
+variable {S : Syn}
 
 /-- The guard of `valPresentB` and of `reqPresentB`, read off the *term*'s field table: only
     `optional` may be absent. -/
-def valPresentT (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
+def valPresentT {S : Sig} (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
     (keys : Finset String) : Bool :=
   decide (∀ k : {k // k ∈ fields},
     (match fld k with | .optional _ => true | _ => decide (k.1 ∈ keys)) = true)
@@ -68,7 +68,7 @@ theorem select_isSome_attempt {V A M : Type} (os : List (Codec V A M)) (v : V) :
     obtain ⟨o', hf⟩ := find?_attempt_V ho ha
     unfold select; rw [hf]; exact acts_of_find?_V hf
 
-variable [Sem S] [PrimAdm S] [SemA S] {β : Table S.op}
+variable [Sem S] [PrimAdm S] {α : Table S} {β : Table S.op}
 
 noncomputable section
 
@@ -83,22 +83,25 @@ def Adm : Term S → List S.C → S.V → Bool
   | .prim g, _ => PrimAdm.admV g
   | .never, _ => fun _ => false
   | .refine t p pA, ρ => fun v =>
-      Adm t ρ v && Sem.eval p v && gate (denote α β t ρ) (SemA.evalA pA) v
+      Adm t ρ v && Syn.eval (half S.o.c p pA) v &&
+        gate (denote α β t ρ) (Syn.evalA (half S.o.s p pA)) v
   | .held t P PA k kA, ρ => fun v =>
-      Adm t ρ ((α.word k).1 v) && Adm P ρ v &&
-        gate (denote α β t ρ) (fun a => ((denote α β PA ρ).p ((β.word kA).2 a)).isSome)
-          ((α.word k).1 v)
+      Adm t ρ ((α.word (halfK S.o.c k kA)).1 v) && half2 S.o.c (Adm P ρ v) (Adm PA ρ v) &&
+        gate (denote α β t ρ)
+          (fun a => ((half2 S.o.s (denote α β P ρ) (denote α β PA ρ)).p
+            ((β.word (halfK S.o.s k kA)).2 a)).isSome)
+          ((α.word (halfK S.o.c k kA)).1 v)
   | .union opts, ρ => fun v => anyP (AdmList opts ρ) v
   | .set t, ρ => fun v => ((denote α β (.set t) ρ).e v).isSome
   | .list pre sp suf, ρ => fun v =>
-      match Sem.list (S := S) with
+      match Syn.list (S := S) with
       | some L =>
           match L.pV.out v with
           | some vs => alignPL (AdmList pre ρ) (AdmOptT sp ρ) (AdmList suf ρ) vs
           | none => false
       | none => false
   | .object b, ρ => AdmBody b ρ
-  | .opaq, _ => fun v => ((Sem.top (S := S)).e v).isSome
+  | .opaq, _ => fun v => ((Syn.top (S := S)).e v).isSome
   | .var i, ρ => fun v => ((envAt ρ i).e v).isSome
   | .mu b, ρ => fun v => ((denote α β (.mu b) ρ).e v).isSome
 
@@ -106,7 +109,7 @@ def Adm : Term S → List S.C → S.V → Bool
     value is admitted by its slot or by the open block. -/
 def AdmBody : Body S → List S.C → S.V → Bool
   | .mk fields fld wild, ρ => fun v =>
-      match Sem.map (S := S) with
+      match Syn.map (S := S) with
       | some F =>
           match F.mV.out v with
           | some m =>
@@ -243,7 +246,7 @@ theorem ExactV_list {pre : List (Term S)} {sp : Option (Term S)} {suf : List (Te
     ExactV α β (.list pre sp suf) ρ := by
   intro v
   simp only [Adm, denote]
-  cases Sem.list (S := S) with
+  cases Syn.list (S := S) with
   | none => simp [Codec.empty]
   | some L =>
     simp only [listCodec, carriedCodec]
@@ -294,7 +297,7 @@ theorem ExactV_object {fields : Finset String} {fld : {k // k ∈ fields} → Ob
     ExactV α β (.object (.mk fields fld wild)) ρ := by
   intro v
   simp only [Adm, AdmBody, denote, bodySem]
-  cases Sem.map (S := S) with
+  cases Syn.map (S := S) with
   | none => simp [Codec.empty]
   | some F =>
     simp only [objectCodec, objectCodecCore, carriedCodec]
@@ -366,7 +369,7 @@ theorem Adm_exact : ∀ (t : Term S) (ρ : List S.C), ExactV α β t ρ
         Bool.eq_iff_iff.mpr (Adm_exact c ρ v)
       intro v
       simp only [Adm, denote, refine2_e_isSome, hc]
-      cases h : gate (denote α β c ρ) (SemA.evalA pA) v
+      cases h : gate (denote α β c ρ) (Syn.evalA (half S.o.s p pA)) v
       · simp
       · simp [gate_isSome h]
   | .held c P PA k kA, ρ => by
@@ -374,10 +377,15 @@ theorem Adm_exact : ∀ (t : Term S) (ρ : List S.C), ExactV α β t ρ
         Bool.eq_iff_iff.mpr (Adm_exact c ρ v)
       have hP v : Adm α β P ρ v = ((denote α β P ρ).e v).isSome :=
         Bool.eq_iff_iff.mpr (Adm_exact P ρ v)
+      have hPA v : Adm α β PA ρ v = ((denote α β PA ρ).e v).isSome :=
+        Bool.eq_iff_iff.mpr (Adm_exact PA ρ v)
       intro v
-      simp only [Adm, denote, held2, refine2_e_isSome, adapt2_gate, Function.comp_def, hc, hP]
-      cases h : gate (denote α β c ρ) (fun a => ((denote α β PA ρ).p ((β.word kA).2 a)).isSome)
-        ((α.word k).1 v)
+      simp only [Adm, denote, held2, refine2_e_isSome, adapt2_gate, Function.comp_def, hc, hP, hPA,
+        ← half2_apply (fun c : S.C => (c.e v).isSome)]
+      cases h : gate (denote α β c ρ)
+        (fun a => ((half2 S.o.s (denote α β P ρ) (denote α β PA ρ)).p
+          ((β.word (halfK S.o.s k kA)).2 a)).isSome)
+        ((α.word (halfK S.o.c k kA)).1 v)
       · simp
       · simp [gate_isSome h]
 
