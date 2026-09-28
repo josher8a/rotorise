@@ -208,6 +208,14 @@ theorem tconvO_tconvO : ∀ o : Option (Term S), tconvO (tconvO o) = o
   | some t => congrArg some (tconv_tconv t)
 end
 
+/-- **The converse is an involution on the terms of the dual**, where the outer converse reads
+    the meaning of the universe. The converse of the dual is injective, because the converse of
+    its dual inverts it. -/
+theorem tconv_tconv_op (t : Term S.op) : tconv (S := S) (tconv (S := S.op) t) = t := by
+  have inj : ∀ x y : Term S.op, tconv x = tconv y → x = y := fun x y h =>
+    (tconv_tconv x).symm.trans ((congrArg (@tconv S.op.op (opSem S.op) _) h).trans (tconv_tconv y))
+  exact inj _ _ (tconv_tconv (S := S) (tconv (S := S.op) t))
+
 end Tconv
 
 /-! ## The denotation of the converse -/

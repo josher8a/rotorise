@@ -50,18 +50,14 @@ theorem forall₂_zip_e {u : Codec V A M} : ∀ (ds : List (Codec V A M)) (vs : 
   | _ :: _, [], _, hl, _, _ => nomatch hl
   | _ :: _, _ :: _, [], _, _, h => nomatch h
 
-/-- …and the same on the read side. -/
-theorem forall₂_zip_p {u : Codec V A M} : ∀ (ds : List (Codec V A M)) (as : List A) (vs : List V),
-    ds.length = as.length → (∀ c ∈ ds, Sub c u) →
-    List.Forall₂ (fun (ca : Codec V A M × A) v => ca.1.p ca.2 = some v) (ds.zip as) vs →
-    List.Forall₂ (fun a v => u.p a = some v) as vs
-  | [], [], _, _, _, h => by cases h; exact .nil
-  | d :: ds, a :: as, v :: vs, hl, hd, .cons h1 h2 =>
-      .cons ((hd d (by simp)).2 _ _ h1)
-        (forall₂_zip_p ds as vs (by simpa using hl) (fun c hc => hd c (by simp [hc])) h2)
-  | [], _ :: _, _, hl, _, _ => nomatch hl
-  | _ :: _, [], _, hl, _, _ => nomatch hl
-  | _ :: _, _ :: _, [], _, _, h => nomatch h
+/-- …and the same on the read side: the write side of the converses. -/
+theorem forall₂_zip_p {u : Codec V A M} (ds : List (Codec V A M)) (as : List A) (vs : List V)
+    (hl : ds.length = as.length) (hd : ∀ c ∈ ds, Sub c u)
+    (h : List.Forall₂ (fun (ca : Codec V A M × A) v => ca.1.p ca.2 = some v) (ds.zip as) vs) :
+    List.Forall₂ (fun a v => u.p a = some v) as vs :=
+  forall₂_zip_e (u := conv u) (ds.map conv) as vs (by simpa using hl)
+    (List.forall_mem_map.mpr fun c hc => ⟨(hd c hc).2, (hd c hc).1⟩)
+    (by rw [List.zip_map_left, List.forall₂_map_left_iff]; exact h)
 
 /-- A list whose every slot is below a top that acts as the list former is below the top. -/
 theorem sub_listCodec {pV : Ctor (List V) V} {pA : Ctor (List A) A} {μL : M} {u : Codec V A M}

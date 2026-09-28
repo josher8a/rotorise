@@ -29,8 +29,7 @@ theorem adm_prim (m : JMember) (v : Json) :
 
 /-- …and on the read side. -/
 theorem admA_prim (m : JMember) (a : Json) :
-    Alg.AdmA α β (.prim m : Alg.Term jsonSyn) [] a = decide (a.member = m) := by
-  simp [Alg.AdmA, Alg.PrimAdmA.admA]
+    Alg.AdmA α β (.prim m : Alg.Term jsonSyn) [] a = decide (a.member = m) := rfl
 
 /-- A term of a former that JSON lacks admits nothing: no set, no list, no object. -/
 theorem adm_former_empty (v : Json) :

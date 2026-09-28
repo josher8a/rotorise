@@ -208,4 +208,9 @@ theorem opaqA_total : ∀ a : Attr, AdmA α .opaq a = true
         opaqA_total (g k))
 termination_by a => Attr.depth a
 
+/-- **The top of DynamoDB reads every attribute**, so the top is the stored outer that restricts
+    nothing. -/
+instance dynTopReads : Alg.TopReads dynSyn :=
+  ⟨fun a => (AdmA_exact (α := fun _ => (id, id)) .opaq a).mp (opaqA_total a)⟩
+
 end Calculus

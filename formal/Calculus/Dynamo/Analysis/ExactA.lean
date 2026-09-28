@@ -33,8 +33,7 @@ noncomputable abbrev refineReads (t : Term) (q : Value → Bool) : Attr → Bool
       | none => false := by
   -- the two matches are different auxiliary definitions, and a match reduces only at a
   -- constructor
-  show Alg.refineReads α dynTableA t [] q a = _
-  unfold Alg.refineReads
+  simp only [refineReads, Alg.refineReads, Alg.gate, Alg.conv]
   cases (Alg.denote α dynTableA t).p a <;> rfl
 
 noncomputable section
@@ -54,8 +53,8 @@ then applies `q`. Each is a row here rather than a remark. -/
 The attribute side reads the combinators of the value side at the carrier `Attr`. `objRead`
 still filters the *stored* names through `keepB`, and the row carries no filter to match it:
 `keepB` is the constant `true` at every body, because `drop` was the one policy that dropped a
-name and an open block is a codec or nothing. `keepB_wild` states that, and it is what the object proof
-spends on the filter. -/
+name and an open block is a codec or nothing. The attribute row is the value row of the dual,
+so the exactness of the object row owes the filter no proof of its own. -/
 
 /-- An attribute-side row, once the subterms' rows are known. -/
 abbrev AP := Attr → Bool
@@ -126,13 +125,23 @@ The structure of `AdmA` and its exactness are the term language's (`Alg.AdmA`,
 `Alg.AdmA_exact`). DynamoDB supplies the primitive rows, `inBaseA` and `AdmALit`, and their
 exactness. -/
 
+/-! The dual of DynamoDB is the generic dual. The instance search does not find the generic one:
+`Syn.op` is reducible, and at `dynSyn` its carrier reduces through `dynSem` to `Attr`. -/
+
+/-- The stored-side syntax of the dual of DynamoDB. -/
+instance dynSynAOp : Alg.SynA dynSyn.op := Alg.opSynA dynSyn
+/-- The meaning of the dual of DynamoDB. -/
+noncomputable instance dynSemOp : Alg.Sem dynSyn.op := Alg.opSem dynSyn
+/-- The stored-side meaning of the dual of DynamoDB. -/
+instance dynSemAOp : Alg.SemA dynSyn.op := Alg.opSemA dynSyn
+
 /-- The DynamoDB primitive rows on the read side: `inBaseA` at a base and `AdmALit` at a
     literal. -/
 noncomputable instance dynPrimAdmA : Alg.PrimAdmA dynSyn where
-  admA
+  admV
     | .base k => inBaseA k
     | .literal k x => AdmALit k x
-  admA_exact
+  admV_exact
     | .base k, a => by
         show inBaseA k a = true ↔ ((denote (fun _ => (id, id)) (.base k)).p a).isSome = true
         cases k <;> cases a <;> simp [inBaseA, denote_rows, stringCodec, numberCodec,
@@ -187,7 +196,7 @@ abbrev AdmAOptT (o : Option Term) : Option AP := Alg.AdmAOptT α dynTableA o []
 /-! ### The rows at the DynamoDB constructors
 
 Each row is the generic row at `dynSyn`, stated at the DynamoDB carriers: `Attr.l` and `Attr.m`
-in place of the formers' prisms, and the primitive row in place of `PrimAdmA.admA`. -/
+in place of the formers' prisms, and the primitive row in place of `PrimAdm.admV`. -/
 
 section Rows
 variable (t : Term) (ts : List Term)
@@ -200,13 +209,16 @@ variable (t : Term) (ts : List Term)
     AdmA α (.held t P PA k kA) =
       fun a => AdmA α PA a && AdmA α t a &&
         refineReads α t (fun w => Adm α P ((α.word k).2 w)) a := by
-  simp only [AdmA, Alg.AdmA, dynTableA_word]
+  funext a
+  rw [AdmA, Alg.AdmA_held_eq (S := dynSyn), dynTableA_word]
   rfl
 /-- The stored predicate is the truth, so the read row of `refine` asks the caller predicate of
     the read alone. -/
 @[AdmA_rows] theorem AdmA_refine (p : Pred) (pA : Alg.SynA.PredA dynSyn) :
     AdmA α (.refine t p pA) = fun a => AdmA α t a && refineReads α t p.eval a := by
-  simp only [AdmA, Alg.AdmA, Alg.SemA.evalA, Bool.and_true]
+  funext a
+  rw [AdmA, Alg.AdmA_refine_eq (S := dynSyn)]
+  simp only [Alg.SemA.evalA, Bool.true_and]
   rfl
 /-- The read side of the same disjunction; every option, object included, is admitted by
     attempt. -/
@@ -214,7 +226,7 @@ variable (t : Term) (ts : List Term)
 /-- **`set` asks its own codec**, for the reason the value side gives: a read over the elements
     alone is exact only where the element reads injectively and at one member. -/
 @[AdmA_rows] theorem AdmA_set : AdmA α (.set t) = fun a => ((setCodec (denote α t)).p a).isSome :=
-  rfl
+  funext (Alg.AdmA_eq_isSome (.set t) [])
 /-- **One row**, for the reason the value side gives. -/
 @[AdmA_rows] theorem AdmA_list (pre suf : List Term) (sp : Option Term) :
     AdmA α (.list pre sp suf) = fun a =>
@@ -227,7 +239,9 @@ variable (t : Term) (ts : List Term)
 @[AdmA_rows] theorem AdmA_opaq : AdmA α .opaq = fun a => ((muCodec opaqStep).p a).isSome := rfl
 /-- A closed variable is the bottom, and `mu` asks its own codec, as `opaq` does. -/
 @[AdmA_rows] theorem AdmA_var (i : Nat) : AdmA α (.var i) = fun _ => false := rfl
-@[AdmA_rows] theorem AdmA_mu : AdmA α (.mu t) = fun a => ((denote α (.mu t)).p a).isSome := rfl
+@[AdmA_rows] theorem AdmA_mu : AdmA α (.mu t) = fun a => ((denote α (.mu t)).p a).isSome :=
+  funext (Alg.AdmA_eq_isSome (.mu t) [])
+/-- The payload row reads a map attribute by its names, and reads no other attribute. -/
 @[AdmA_rows] theorem AdmABody_mk (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
     (wild : Option Term) : AdmABody α (.mk fields fld wild) = fun a =>
       match a with
@@ -235,7 +249,10 @@ variable (t : Term) (ts : List Term)
           valPresentT fields fld keys &&
           objAdmV ⟨fields, fun k => AdmAField α (fld k)⟩ (AdmAWild α wild) keys g
       | _ => false := by
-  funext a; cases a <;> rfl
+  funext a
+  cases a
+  case m keys g => exact congrArg (· && _) (Alg.valPresentT_tconv fields fld keys)
+  all_goals rfl
 @[AdmA_rows] theorem AdmAField_req : AdmAField α (.req t) = AdmA α t := rfl
 @[AdmA_rows] theorem AdmAField_optional : AdmAField α (.optional t) = AdmA α t := rfl
 @[AdmA_rows] theorem AdmAWild_none : AdmAWild α none = none := rfl
@@ -271,17 +288,15 @@ theorem isSome_p_eq_AdmA {t : Term} (h : ExactA α t) (a : Attr) :
     ((denote α t).p a).isSome = AdmA α t a := by
   exact Bool.coe_iff_coe.mp (by simpa using (h a).symm)
 
-/-- `select`'s filter is the term list's, mapped — `filter_AdmList`'s twin. -/
-theorem filter_AdmAList {opts : List Term} (h : ∀ t ∈ opts, ExactA α t) (a : Attr) :
+/-- `select`'s filter is the term list's, mapped — `filter_AdmList`'s twin. Every row is exact,
+    so the filter moves through the map with no hypothesis. -/
+theorem filter_AdmAList (opts : List Term) (a : Attr) :
     (denoteList α opts).filter (fun c => (c.p a).isSome)
       = (opts.filter (fun t => AdmA α t a)).map (denote α) := by
-  induction opts with
-  | nil => rfl
-  | cons t ts ih =>
-    have ht : ExactA α t := h t (by simp)
-    have hts : ∀ t' ∈ ts, ExactA α t' := fun t' h' => h t' (by simp [h'])
-    simp only [denote_rows, List.filter_cons, isSome_p_eq_AdmA ht, ih hts]
-    cases hb : AdmA α t a <;> simp []
+  rw [denoteList_eq, List.filter_map]
+  congr 2
+  funext t
+  exact (Alg.AdmA_eq_isSome t [] a).symm
 
 /-- **Every attribute row is exact**, as on the value side. The term language proves it once
     for every universe (`Alg.AdmA_exact`), and this is that theorem at DynamoDB. The numeric
