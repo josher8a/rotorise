@@ -131,73 +131,51 @@ theorem list_obj (pre : List (Term S)) sp suf (b : Body S) v :
 end Value
 
 section Attr
-variable [PrimAdm S] [PrimAdmA S] {ρ ρ' : List S.C}
+variable [PrimAdmA S] {ρ ρ' : List S.C}
 
-/-- A primitive reads only primitive attributes. -/
-theorem admA_prim (g : S.Ground) (a : Sem.A S) (h : AdmA α β (.prim g) ρ a = true) :
-    formerA a = .prim :=
-  Shapes.primA g a ((PrimAdmA.admA_exact g a).mp h)
+/-- **The shape classes of the dual**: the attribute classes are the value classes, and each
+    landing fact of the stored side is a landing fact of the caller side. -/
+instance op : Shapes S.op where
+  former := formerA (S := S)
+  formerA := former (S := S)
+  prim := primA (S := S)
+  primA := prim (S := S)
+  set := Option.forall_mem_map.mpr fun L hL c a => setA (S := S) L hL (unconv c) a
+  setA := Option.forall_mem_map.mpr fun L hL c v => set (S := S) L hL (unconv c) v
+  list := Option.forall_mem_map.mpr fun L hL => listA (S := S) L hL
+  listA := Option.forall_mem_map.mpr fun L hL => list (S := S) L hL
+  map := Option.forall_mem_map.mpr fun F hF => mapA (S := S) F hF
+  mapA := Option.forall_mem_map.mpr fun F hF => map (S := S) F hF
 
-/-- A set reads only set attributes. -/
-theorem admA_set (t : Term S) (a : Sem.A S) (h : AdmA α β (.set t) ρ a = true) :
-    formerA a = .set := by
-  simp only [AdmA, denote] at h
-  split at h
-  · next L hL => exact Shapes.setA L hL _ a h
-  · exact nomatch h
-
-/-- A list reads only list attributes. -/
-theorem admA_list (pre : List (Term S)) sp suf (a : Sem.A S)
-    (h : AdmA α β (.list pre sp suf) ρ a = true) : formerA a = .list := by
-  simp only [AdmA] at h
-  split at h
-  · next L hL =>
-      split at h
-      · next as ha => rw [L.pA.into_out ha]; exact Shapes.listA L hL as
-      · exact nomatch h
-  · exact nomatch h
-
-/-- An object reads only object attributes. -/
-theorem admA_object (b : Body S) (a : Sem.A S) (h : AdmA α β (.object b) ρ a = true) :
-    formerA a = .object := by
-  cases b
-  simp only [AdmA, AdmABody] at h
-  split at h
-  · next F hF =>
-      split at h
-      · next m hm => rw [F.mA.into_out hm]; exact Shapes.mapA F hF m
-      · exact nomatch h
-  · exact nomatch h
-
-/-! ## The six disjointness laws, on the read side -/
+/-! ## The six disjointness laws, on the read side: the laws of the dual -/
 
 /-- A primitive and a set share no attribute. -/
 theorem prim_setA (g : S.Ground) (t : Term S) c : (AdmA α β (.prim g) ρ c && AdmA α β (.set t) ρ' c) = false :=
-  and_false_of_ne (by decide) (admA_prim g) (admA_set t) c
+  prim_set (S := S.op) g (tconv t) c
 
 /-- A primitive and a list share no attribute. -/
 theorem prim_listA (g : S.Ground) (pre : List (Term S)) sp suf c :
     (AdmA α β (.prim g) ρ c && AdmA α β (.list pre sp suf) ρ' c) = false :=
-  and_false_of_ne (by decide) (admA_prim g) (admA_list pre sp suf) c
+  prim_list (S := S.op) g (tconvL pre) (tconvO sp) (tconvL suf) c
 
 /-- A primitive and an object share no attribute. -/
 theorem prim_objA (g : S.Ground) (b : Body S) c :
     (AdmA α β (.prim g) ρ c && AdmA α β (.object b) ρ' c) = false :=
-  and_false_of_ne (by decide) (admA_prim g) (admA_object b) c
+  prim_obj (S := S.op) g (tconvB b) c
 
 /-- A set and a list share no attribute. -/
 theorem set_listA (t : Term S) pre sp suf c :
     (AdmA α β (.set t) ρ c && AdmA α β (.list pre sp suf) ρ' c) = false :=
-  and_false_of_ne (by decide) (admA_set t) (admA_list pre sp suf) c
+  set_list (S := S.op) (tconv t) (tconvL pre) (tconvO sp) (tconvL suf) c
 
 /-- A set and an object share no attribute. -/
 theorem set_objA (t : Term S) (b : Body S) c : (AdmA α β (.set t) ρ c && AdmA α β (.object b) ρ' c) = false :=
-  and_false_of_ne (by decide) (admA_set t) (admA_object b) c
+  set_obj (S := S.op) (tconv t) (tconvB b) c
 
 /-- A list and an object share no attribute. -/
 theorem list_objA (pre : List (Term S)) sp suf (b : Body S) c :
     (AdmA α β (.list pre sp suf) ρ c && AdmA α β (.object b) ρ' c) = false :=
-  and_false_of_ne (by decide) (admA_list pre sp suf) (admA_object b) c
+  list_obj (S := S.op) (tconvL pre) (tconvO sp) (tconvL suf) (tconvB b) c
 
 end Attr
 

@@ -137,12 +137,8 @@ theorem admitV_of_sepJV {x y : Term} (h : SepJV α x y) (v : Value) (a : Attr)
 /-- …and on the attribute side. -/
 theorem admitA_of_sepJA {x y : Term} (h : SepJA α x y)
     (a : Attr) (v : Value) (hx : (denote α x).p a = some v) :
-    ((denote α y).p a).isSome = false := by
-  have hAx : AdmA α x a = true := AdmA_sound (α := α) x hx
-  have hAy : AdmA α y a = false := h a hAx
-  cases hy : (denote α y).p a with
-  | none => rfl
-  | some w => exact absurd (AdmA_sound y hy) (by simp [hAy])
+    ((denote α y).p a).isSome = false :=
+  (Alg.AdmA_eq_isSome (S := dynSyn) y [] a).symm.trans (h a (AdmA_sound (α := α) x hx))
 
 /-! ### …and it suffices for the discharger, at every constructor
 

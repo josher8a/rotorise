@@ -442,8 +442,8 @@ theorem AdmA_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → Obj
   funext a
   cases a with
   | m keys g =>
-      show (valPresentT D f keys && objAdmV _ none keys g) =
-        (valPresentT D f keys && objAdmV _ (some (fun _ => false)) keys g)
+      change (valPresentT D _ keys && objAdmV _ none keys g) =
+        (valPresentT D _ keys && objAdmV _ (some (fun _ => false)) keys g)
       rw [objAdmV_none_never]
   | _ => rfl
 
@@ -864,7 +864,7 @@ noncomputable instance dynShapes : Alg.Shapes dynSyn where
     | literal k x =>
         cases k <;> cases v <;> first | rfl | simp [Alg.PrimAdm.admV, AdmLit, inL] at h'
   primA g a h := by
-    have h' := (Alg.PrimAdmA.admA_exact (S := dynSyn) g a).mpr h
+    have h' := (Alg.PrimAdm.admV_exact (S := dynSyn.op) g a).mpr h
     cases g with
     | base k => cases k <;> cases a <;> first | rfl | exact nomatch h'
     | literal k x => cases k <;> cases a <;> first | rfl | exact nomatch h'
@@ -1000,8 +1000,8 @@ theorem AdmA_set_and_false {a y : Term} (h : ∀ u, (AdmA α a u && AdmA α y u)
   | false => rfl
   | true =>
   exfalso
-  obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp hA
-  obtain ⟨q, hq⟩ := Option.isSome_iff_exists.mp hY
+  obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ att).mp hA)
+  obtain ⟨q, hq⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ att).mp hY)
   have hne : ∀ w, ((denote α a).p w).isSome = true → ((denote α y).p w).isSome = true → False :=
     fun w h1 h2 => by
       have := h w
@@ -1315,13 +1315,16 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
     RowLe (Alg.AdmA α dynTableA t ρ) (Alg.AdmA α dynTableA (readView t) ρ')
   | .held t _ _ _ _, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
+      rw [Alg.AdmA_held_eq (S := dynSyn)] at h
       have h' := (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).2
       rw [dynTableA_word] at h'
       exact readLeE t ρ ρ' he hs a h'
-  | .var i, _, _, he, _ => fun a h => he i a h
+  | .var i, _, _, he, _ => fun a h => by
+      rw [Alg.AdmA_eq_isSome (S := dynSyn)] at h ⊢
+      exact he i a h
   | .mu b, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
-      rw [Alg.AdmA_mu_unfold] at h ⊢
+      rw [Alg.AdmA_mu_unfold (S := dynSyn)] at h ⊢
       have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote α dynTableA b (c :: ρ)) n).p w).isSome = true →
           ((Alg.muStage (fun c => Alg.denote α dynTableA (readView b) (c :: ρ')) n).p w).isSome = true) ∧
           Sub (Alg.muStage (fun c => Alg.denote α dynTableA (readView b) (c :: ρ')) n) Ω := by
@@ -1333,16 +1336,17 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
           have hs' := EnvSub.cons ih.2 hs
           refine ⟨fun w hw => ?_,
             Alg.sub_denoteIn (readView b) (HF_readView b) _ hs'⟩
-          have := readLeE b _ _ he' hs' w (by rw [Alg.AdmA_eq_isSome]; exact hw)
-          rwa [Alg.AdmA_eq_isSome] at this
+          have := readLeE b _ _ he' hs' w (by rw [Alg.AdmA_eq_isSome (S := dynSyn)]; exact hw)
+          rwa [Alg.AdmA_eq_isSome (S := dynSyn)] at this
       exact readLeE b _ _ (EnvLeA.cons (hst _).1 he) (EnvSub.cons (hst _).2 hs) a h
   | .refine t p pA, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
       split
-      · exact readLeE t ρ ρ' he hs a (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).1
+      · rw [Alg.AdmA_refine_eq (S := dynSyn)] at h
+        exact readLeE t ρ ρ' he hs a (Bool.and_eq_true_iff.mp h).1
       · next hv =>
         simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hv
-        rw [Alg.AdmA_eq_isSome] at h ⊢
+        rw [Alg.AdmA_eq_isSome (S := dynSyn)] at h ⊢
         rwa [← Alg.denote_closed (.refine t p pA) hv.2 ρ ρ']
   | .list pre sp suf, ρ, ρ', he, hs => fun a h => by
       cases a with
@@ -1353,11 +1357,12 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
   | .object (.mk fs f w), ρ, ρ', he, hs => fun a h => by
       cases a with
       | m keys g =>
-        have h : (valPresentT fs f keys &&
-            objAdmV ⟨fs, fun k => Alg.AdmAField α dynTableA (f k) ρ⟩ (Alg.AdmAWild α dynTableA w ρ) keys g) = true := h
-        show (valPresentT fs (fun k => readViewS (f k)) keys &&
+        change (valPresentT fs (fun k => Alg.tconvS (f k)) keys &&
+            objAdmV ⟨fs, fun k => Alg.AdmAField α dynTableA (f k) ρ⟩ (Alg.AdmAWild α dynTableA w ρ) keys g) = true at h
+        change (valPresentT fs (fun k => Alg.tconvS (readViewS (f k))) keys &&
             objAdmV ⟨fs, fun k => Alg.AdmAField α dynTableA (readViewS (f k)) ρ'⟩
               (Alg.AdmAWild α dynTableA (readViewO w) ρ') keys g) = true
+        rw [Alg.valPresentT_tconv] at h ⊢
         rw [Bool.and_eq_true] at h ⊢
         refine ⟨?_, objAdmV_mono (fun k => readLeES (f k) ρ ρ' he hs) ?_ h.2⟩
         · refine decide_eq_true fun k => ?_
@@ -1372,11 +1377,12 @@ theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub
   | .union os, ρ, ρ', he, hs => fun a h => anyP_mono (readLeEL os ρ ρ' he hs) a h
   | .set t, ρ, ρ', he, hs => fun a h => by
       simp only [readView]
+      rw [Alg.AdmA_eq_isSome (S := dynSyn)] at h ⊢
       exact setCodec_p_mono (c := Alg.denote α dynTableA t ρ)
         (Alg.sub_denoteIn _ (HF_readView t) ρ' hs)
         (fun w hw => by
-          have := readLeE t ρ ρ' he hs w (by rw [Alg.AdmA_eq_isSome]; exact hw)
-          rwa [Alg.AdmA_eq_isSome] at this) h
+          have := readLeE t ρ ρ' he hs w (by rw [Alg.AdmA_eq_isSome (S := dynSyn)]; exact hw)
+          rwa [Alg.AdmA_eq_isSome (S := dynSyn)] at this) h
   | .prim _, _, _, _, _ => fun _ h => h
   | .opaq, _, _, _, _ => fun _ h => h
   | .never, _, _, _, _ => fun _ h => h

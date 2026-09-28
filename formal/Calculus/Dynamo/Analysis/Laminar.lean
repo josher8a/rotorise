@@ -223,6 +223,62 @@ def StoredAdmitsO : Option Term → Prop
   | some t => StoredAdmits t
 end
 
+variable (α) in
+mutual
+/-- **A term that the host builds**, at the positions that `StoredAdmits` reads: the stored outer
+    of each `held` is the top. The stored predicate of DynamoDB is the truth and its stored word
+    is empty by their types, so the host fixes nothing else. -/
+def HostBuilt : Term → Prop
+  | .held t _ PA _ _ => HostBuilt t ∧ PA = .opaq
+  | .refine t _ _ | .set t => HostBuilt t
+  | .list pre sp suf => HostBuiltL pre ∧ HostBuiltO sp ∧ HostBuiltL suf
+  | .object b => HostBuiltB b
+  | .union os => HostBuiltL os
+  | _ => True
+/-- …at each slot and at the open block of a body. -/
+def HostBuiltB : Body → Prop
+  | .mk _ f w => (∀ k, HostBuiltS (f k)) ∧ HostBuiltO w
+/-- …at the term of a slot. -/
+def HostBuiltS : ObjectSlot → Prop
+  | .req t | .optional t => HostBuilt t
+/-- …at each term of a list. -/
+def HostBuiltL : List Term → Prop
+  | [] => True
+  | t :: ts => HostBuilt t ∧ HostBuiltL ts
+/-- …at an optional term. -/
+def HostBuiltO : Option Term → Prop
+  | none => True
+  | some t => HostBuilt t
+end
+
+mutual
+/-- **The stored outers of a term that the host builds admit every write**: each stored outer
+    is the top, and the top reads every attribute. So no caller discharges `StoredAdmits` by
+    hand. -/
+theorem storedAdmits_host [Alg.TopReads dynSyn] : ∀ t : Term, HostBuilt t → StoredAdmits α t
+  | .held t _ _ _ _, ⟨h, rfl⟩ => ⟨storedAdmits_host t h, fun _ a _ => Alg.TopReads.reads (S := dynSyn) a⟩
+  | .refine t _ _, h | .set t, h => storedAdmits_host t h
+  | .list pre sp suf, ⟨hp, hs, hf⟩ =>
+      ⟨storedAdmitsL_host pre hp, storedAdmitsO_host sp hs, storedAdmitsL_host suf hf⟩
+  | .object b, h => storedAdmitsB_host b h
+  | .union os, h => storedAdmitsL_host os h
+  | .prim _, _ | .opaq, _ | .never, _ | .var _, _ | .mu _, _ => trivial
+/-- …at a body. -/
+theorem storedAdmitsB_host [Alg.TopReads dynSyn] : ∀ b : Body, HostBuiltB b → StoredAdmitsB α b
+  | .mk _ f w, ⟨hf, hw⟩ => ⟨fun k => storedAdmitsS_host (f k) (hf k), storedAdmitsO_host w hw⟩
+/-- …at a slot. -/
+theorem storedAdmitsS_host [Alg.TopReads dynSyn] : ∀ s : ObjectSlot, HostBuiltS s → StoredAdmitsS α s
+  | .req t, h | .optional t, h => storedAdmits_host t h
+/-- …at a list. -/
+theorem storedAdmitsL_host [Alg.TopReads dynSyn] : ∀ ts : List Term, HostBuiltL ts → StoredAdmitsL α ts
+  | [], _ => trivial
+  | t :: ts, ⟨h, hs⟩ => ⟨storedAdmits_host t h, storedAdmitsL_host ts hs⟩
+/-- …at an optional term. -/
+theorem storedAdmitsO_host [Alg.TopReads dynSyn] : ∀ o : Option Term, HostBuiltO o → StoredAdmitsO α o
+  | none, _ => trivial
+  | some t, h => storedAdmits_host t h
+end
+
 /-- Each term of a list whose stored outers admit its writes admits them too. -/
 theorem storedAdmitsL_mem : ∀ {ts : List Term}, StoredAdmitsL α ts → ∀ t ∈ ts, StoredAdmits α t
   | _ :: _, h, _, ht => by

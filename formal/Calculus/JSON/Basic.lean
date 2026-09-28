@@ -251,10 +251,20 @@ instance jsonPrimAdm : Alg.PrimAdm jsonSyn where
   admV m v := decide (v.member = m)
   admV_exact m v := by rw [show (Alg.Sem.ground m).e v = gate m v from rfl, gate_isSome]
 
+/-! The dual of JSON is the generic dual, declared here because the instance search does not
+find the generic one at a universe whose carrier reduces. -/
+
+/-- The stored-side syntax of the dual of JSON. -/
+instance jsonSynAOp : Alg.SynA jsonSyn.op := Alg.opSynA jsonSyn
+/-- The meaning of the dual of JSON. -/
+noncomputable instance jsonSemOp : Alg.Sem jsonSyn.op := Alg.opSem jsonSyn
+/-- The stored-side meaning of the dual of JSON. -/
+instance jsonSemAOp : Alg.SemA jsonSyn.op := Alg.opSemA jsonSyn
+
 /-- The attribute-side row of a kind: the stored value is the caller value. -/
 instance jsonPrimAdmA : Alg.PrimAdmA jsonSyn where
-  admA m a := decide (a.member = m)
-  admA_exact m a := by rw [show (Alg.Sem.ground m).p a = gate m a from rfl, gate_isSome]
+  admV m a := decide (a.member = m)
+  admV_exact m a := by rw [show (Alg.Sem.ground (S := jsonSyn.op) m).e a = gate m a from rfl, gate_isSome]
 
 /-- The string-or-number term admits exactly what its codec writes, and reads exactly what its
     codec reads. -/

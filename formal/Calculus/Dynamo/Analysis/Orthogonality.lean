@@ -78,7 +78,7 @@ theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated α opts) 
     have hay : Adm α y v = true := (List.mem_filter.mp hy).2
     exact hxy hax hay
   · intro a
-    rw [filter_AdmAList (fun t _ => AdmA_exact t) a, List.length_map]
+    rw [filter_AdmAList _ a, List.length_map]
     refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
       (List.Pairwise.filter _ (h.imp fun hs => hs.2 a)))
     intro x y hx hy hxy

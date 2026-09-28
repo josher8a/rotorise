@@ -38,7 +38,7 @@ theorem dynOracle_sound : Alg.OracleSound dynOracle where
       (Alg.disjoint_sound pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) v))
   p {_ β} x y h a := by
     obtain rfl : β = dynTableA := funext fun g => nomatch g
-    rw [← Alg.AdmA_eq_isSome, ← Alg.AdmA_eq_isSome]
+    rw [← Alg.AdmA_eq_isSome (S := dynSyn), ← Alg.AdmA_eq_isSome (S := dynSyn)]
     exact Alg.apart_of_imp (readLe_of x a) (Alg.apart_of_imp' (readLe_of y a)
       (Alg.disjoint_soundA pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) a))
   same _ _ h := of_decide_eq_true h
