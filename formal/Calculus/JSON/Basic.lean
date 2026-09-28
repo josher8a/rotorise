@@ -138,42 +138,32 @@ The term language and its soundness are the generic ones at `jsonSyn`. JSON's pr
 kinds, and a predicate is a function. The term language has no list, map or set former here, and
 the top is the identity codec. -/
 
-/-- **The JSON syntax**: values, the kinds, and the predicates. -/
-abbrev jsonSyn : Alg.Syn where
-  V := Json
+/-- **The JSON signature**: the kinds, a predicate at each side, and no generator. -/
+abbrev jsonSig : Alg.Sig where
   Ground := JMember
-  Pred := Json → Bool
-  Gen := Empty
-  decGen := inferInstance
+  P _ := Json → Bool
+  G _ := Empty
+  decG _ := inferInstance
 
-/-- **The one table of JSON**: the universe names no generator, so the only adapter word is the
-    empty word, the identity. -/
-def jsonTable : Alg.Table jsonSyn := fun g => nomatch g
+/-- **The JSON syntax**: the signature at the host orientation. -/
+abbrev jsonSyn : Alg.Syn := ⟨jsonSig, .host⟩
 
-/-- **The JSON stored-side syntax**: a stored predicate is a function, and the store names no
-    generator. -/
-instance jsonSynA : Alg.SynA jsonSyn where
-  PredA := Json → Bool
-  GenA := Empty
-  decGenA := inferInstance
-
-variable {α : Alg.Table jsonSyn}
-
-/-- **The JSON meaning** of that syntax. -/
-instance jsonSem : Alg.Sem jsonSyn where
-  A := Json
-  M := JMember
-  member := Json.member
+/-- **The JSON meaning** of that signature. Both carriers are `Json`, and a predicate is its own
+    meaning. -/
+instance jsonSem : Alg.Mean jsonSig where
+  Car _ := Json
+  Mem := JMember
+  mem := Json.member
   decM := inferInstance
   ground := ground
   lawful_ground := lawful_ground
   carrier_ground _ := ⟨fun he => (gate_eq_some.mp he).1, fun hp => (gate_eq_some.mp hp).2 ▸
     (gate_eq_some.mp hp).1⟩
-  eval q := q
-  dV _ := 1
-  dA _ := 1
-  dV_pos _ := Nat.one_pos
-  dA_pos _ := Nat.one_pos
+  eval _ q := q
+  truth _ _ := true
+  eval_truth _ _ := rfl
+  d _ _ := 1
+  d_pos _ _ := Nat.one_pos
   list := none
   map := none
   set := none
@@ -185,13 +175,11 @@ instance jsonSem : Alg.Sem jsonSyn where
   topHeld _ := True
   top_held _ _ := trivial
 
-/-- **The JSON stored-side meaning**: a stored predicate is its own meaning. -/
-instance jsonSemA : Alg.SemA jsonSyn where
-  evalA q := q
-  truth _ := true
-  eval_truth _ := rfl
-  truthA _ := true
-  evalA_truthA _ := rfl
+/-- **The one table of JSON**: the universe names no generator, so the only adapter word is the
+    empty word, the identity. -/
+def jsonTable : Alg.Table jsonSyn := fun g => nomatch g
+
+variable {α : Alg.Table jsonSyn}
 
 /-- **The JSON top reads every attribute**: the top is the identity codec. -/
 instance jsonTopReads : Alg.TopReads jsonSyn := ⟨fun _ => rfl⟩
@@ -234,7 +222,7 @@ theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum := by
     · rcases List.mem_cons.mp hx with rfl | hx
       · trivial
       · exact nomatch hx
-  exact Alg.compat_of_HF canon_idCodec (hf s hs) (hf t ht) (hl t ht)
+  exact Alg.compat_of_HF (S := jsonSyn) canon_idCodec (hf s hs) (hf t ht) (hl t ht)
 
 /-! ## Exactness
 
@@ -249,22 +237,12 @@ theorem gate_isSome (m : JMember) (v : Json) : (gate m v).isSome = decide (v.mem
 /-- The value-side row of a kind. -/
 instance jsonPrimAdm : Alg.PrimAdm jsonSyn where
   admV m v := decide (v.member = m)
-  admV_exact m v := by rw [show (Alg.Sem.ground m).e v = gate m v from rfl, gate_isSome]
-
-/-! The dual of JSON is the generic dual, declared here because the instance search does not
-find the generic one at a universe whose carrier reduces. -/
-
-/-- The stored-side syntax of the dual of JSON. -/
-instance jsonSynAOp : Alg.SynA jsonSyn.op := Alg.opSynA jsonSyn
-/-- The meaning of the dual of JSON. -/
-noncomputable instance jsonSemOp : Alg.Sem jsonSyn.op := Alg.opSem jsonSyn
-/-- The stored-side meaning of the dual of JSON. -/
-instance jsonSemAOp : Alg.SemA jsonSyn.op := Alg.opSemA jsonSyn
+  admV_exact m v := by rw [show (Alg.Syn.ground m).e v = gate m v from rfl, gate_isSome]
 
 /-- The attribute-side row of a kind: the stored value is the caller value. -/
 instance jsonPrimAdmA : Alg.PrimAdmA jsonSyn where
   admV m a := decide (a.member = m)
-  admV_exact m a := by rw [show (Alg.Sem.ground (S := jsonSyn.op) m).e a = gate m a from rfl, gate_isSome]
+  admV_exact m a := by rw [show (Alg.Syn.ground (S := jsonSyn.op) m).e a = gate m a from rfl, gate_isSome]
 
 /-- The string-or-number term admits exactly what its codec writes, and reads exactly what its
     codec reads. -/

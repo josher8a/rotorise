@@ -7,14 +7,18 @@ import Mathlib.Data.Finset.Lattice.Fold
 /-!
 # The term language over a universe signature
 
-A universe is a syntax and a meaning. `Syn` holds the values that a `held` maps, the primitives
-and the predicates, and `SynA` holds the predicates and the generators of the stored side: the
-term language `Term S` reads nothing else, so a term is data that code can compute with. `Sem S` holds the stored carrier, the member, the codec of each primitive, one
-former record per container, and the canonical top. `denote` builds each former from the generic
-combinators, so a universe writes no denotation.
+A universe is a signature, an orientation, and a meaning. The signature `Sig` holds the
+primitives, and the predicates and the adapter generators at each absolute side: the term
+language `Term B` reads nothing else, so a term is data that code can compute with. A two-sided
+row of a term stores one half at each absolute side. The syntax `Syn` is a signature and an
+orientation, and the dual syntax flips the orientation. So the dual term type is the term type.
 
-`Sem` is a class over the syntax, so `denote t` finds its meaning from the term's own universe.
-The term family carries one instance argument, the stored-side syntax `SynA`, and no meaning.
+The meaning `Mean B` holds a carrier at each absolute side, the member of the side `true`, the
+codec of each primitive, one former record per container, and the canonical top. The class
+`Sem S` holds the meaning of the signature of a universe, and one instance serves every
+orientation. Each reading in the namespace `Syn` is the meaning at the orientation of the
+universe. `denote` builds each former from the generic combinators, so a universe writes no
+denotation.
 
 A former is an `Option`: a universe without the former denotes the term as the bottom. A
 carrier can hold no `Finset` of itself, because the kernel refuses the nested occurrence, so
@@ -23,8 +27,140 @@ the set former is a codec transformer with its law, and not a prism.
 
 namespace Calculus.Alg
 
-/-- The list former of a universe: a prism from each carrier onto `List`, the member that the
-    stored side stamps, and the fact that an element is one layer below its list. -/
+/-! ## The two halves of a pair
+
+A two-sided row of a term stores one half at each absolute side: `false` and `true`. An
+orientation reads the half of each side. -/
+
+/-- The half of a pair of side-indexed values at one absolute side. -/
+def half {X : Bool → Type} : (s : Bool) → X false → X true → X s
+  | false, a, _ => a
+  | true, _, b => b
+
+/-- The half of a pair of one type at one absolute side. -/
+abbrev half2 {Z : Type} (s : Bool) (a b : Z) : Z := half (X := fun _ => Z) s a b
+
+/-- A function of the half is the half of the function. -/
+theorem half2_apply {Z W : Type} (f : Z → W) (s : Bool) (a b : Z) :
+    f (half2 s a b) = half2 s (f a) (f b) := by
+  cases s <;> rfl
+
+/-- The half of two functions, at an argument, is the half of the two values. -/
+theorem half2_app {Z W : Type} (s : Bool) (f g : Z → W) (x : Z) :
+    half2 s f g x = half2 s (f x) (g x) := by
+  cases s <;> rfl
+
+/-! ## The orientation -/
+
+/-- **An orientation**: the absolute side of the caller and the absolute side of the stored
+    carrier. The two sides differ, so an orientation is one of two values. -/
+abbrev Orient : Type := {p : Bool × Bool // p.1 ≠ p.2}
+
+/-- The dual orientation: the caller side and the stored side swap. -/
+abbrev Orient.op (o : Orient) : Orient := ⟨(o.1.2, o.1.1), fun h => o.2 h.symm⟩
+
+/-- The host orientation: the caller side is `false`, and the stored side is `true`. -/
+abbrev Orient.host : Orient := ⟨(false, true), Bool.false_ne_true⟩
+
+/-- The dual of the host. -/
+abbrev Orient.dual : Orient := Orient.host.op
+
+/-- **The dual of the dual is the orientation, on the nose.** -/
+theorem Orient.op_op (o : Orient) : o.op.op = o := rfl
+
+/-- The caller side of an orientation. -/
+abbrev Orient.c (o : Orient) : Bool := o.1.1
+
+/-- The stored side of an orientation. -/
+abbrev Orient.s (o : Orient) : Bool := o.1.2
+
+/-! ## The signature and the universe -/
+
+/-- **The signature of a universe**: the primitives, and the predicates and the adapter
+    generators at each absolute side. The term language reads this and nothing else, so a term
+    is data that code can compute with. The signature names no orientation. -/
+structure Sig where
+  Ground : Type
+  P : Bool → Type
+  G : Bool → Type
+  decG : (s : Bool) → DecidableEq (G s)
+
+instance (B : Sig) (s : Bool) : DecidableEq (B.G s) := B.decG s
+
+/-- **The syntax of a universe**: a signature and an orientation. The dual universe keeps the
+    signature and flips the orientation, so the dual term type is the term type. -/
+structure Syn where
+  sig : Sig
+  o : Orient
+
+instance : CoeOut Syn Sig := ⟨Syn.sig⟩
+
+/-- **The dual syntax**: the signature, at the dual orientation. -/
+abbrev Syn.op (S : Syn) : Syn := ⟨S.sig, S.o.op⟩
+
+/-- **The dual of the dual is the syntax, on the nose.** -/
+theorem Syn.op_op (S : Syn) : S.op.op = S := rfl
+
+/-- The primitives of a universe. -/
+abbrev Syn.Ground (S : Syn) : Type := S.sig.Ground
+
+/-- The caller-side predicates. -/
+abbrev Syn.Pred (S : Syn) : Type := S.sig.P S.o.c
+
+/-- The stored-side predicates. -/
+abbrev Syn.PredA (S : Syn) : Type := S.sig.P S.o.s
+
+/-- The caller-side generators of the adapters. -/
+abbrev Syn.Gen (S : Syn) : Type := S.sig.G S.o.c
+
+/-- The stored-side generators of the adapters. -/
+abbrev Syn.GenA (S : Syn) : Type := S.sig.G S.o.s
+
+/-- **An adapter word**: a word over the signed generators. The sign `true` names the converse
+    of the generator, the pair with its two functions swapped. -/
+abbrev Word (S : Syn) : Type := List (S.Gen × Bool)
+
+/-- **The involution of a word**: the letters in reverse order, each with its sign flipped. -/
+def Word.dagger {S : Syn} (k : Word S) : Word S := k.reverse.map fun x => (x.1, !x.2)
+
+/-- The half of a pair of words at one absolute side. -/
+abbrev halfK {B : Sig} (s : Bool) (k : List (B.G false × Bool)) (kA : List (B.G true × Bool)) :
+    List (B.G s × Bool) :=
+  half (X := fun s => List (B.G s × Bool)) s k kA
+
+/-! ## The member at an absolute side
+
+The stored side `true` of the host holds the member of the universe. The side `false` names no
+member. So the member reads by the stored side of an orientation. -/
+
+/-- The member type at an absolute side. -/
+abbrev MemAt (Mem : Type) : Bool → Type
+  | false => Unit
+  | true => Mem
+
+/-- The member function at an absolute side. -/
+def memAt {Car : Bool → Type} {Mem : Type} (mem : Car true → Mem) :
+    (s : Bool) → Car s → MemAt Mem s
+  | false, _ => ()
+  | true, a => mem a
+
+/-- A member of the universe, read at an absolute side. -/
+def μAt {Mem : Type} : (s : Bool) → Mem → MemAt Mem s
+  | false, _ => ()
+  | true, m => m
+
+/-- Equality of members is decidable at each side. -/
+def decAt {Mem : Type} (dec : DecidableEq Mem) : (s : Bool) → DecidableEq (MemAt Mem s)
+  | false => fun _ _ => isTrue rfl
+  | true => dec
+
+/-! ## The formers
+
+A former of the meaning holds one prism per absolute side and the member at the side `true`. An
+orientation reads the former as the one-sided record below. -/
+
+/-- The list former at an orientation: a prism from each carrier onto `List`, the member that
+    the stored side stamps, and the fact that an element is one layer below its list. -/
 structure ListF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → Nat) where
   pV : Ctor (List V) V
   pA : Ctor (List A) A
@@ -33,7 +169,7 @@ structure ListF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → N
   dV_lt : ∀ vs, ∀ x ∈ vs, dV x + 1 ≤ dV (pV.into vs)
   dA_lt : ∀ as, ∀ x ∈ as, dA x + 1 ≤ dA (pA.into as)
 
-/-- The keyed-map former of a universe: the same four facts onto `MapOf`. -/
+/-- The keyed-map former at an orientation: the same four facts onto `MapOf`. -/
 structure MapF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → Nat) where
   mV : Ctor (MapOf V) V
   mA : Ctor (MapOf A) A
@@ -62,51 +198,288 @@ structure SetF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → Na
   /-- The lift's held set is inside `held` of any bound on the element's held set. -/
   held_of : ∀ {c : Codec V A M} {T : V → Prop}, (∀ v, c.T v → T v) → ∀ v, (lift c).T v → held T v
 
-/-- **The syntax of a universe**: the values a `held` maps, the primitives, the predicates, and
-    the generators of the adapters. The term language reads this and the stored-side syntax
-    `SynA`, so a term over a universe is data that code can compute with, whatever the
-    universe's codecs are. -/
-structure Syn where
-  V : Type
-  Ground : Type
-  Pred : Type
-  /-- The generators of the adapters: a `held` carries a word over them, and a table gives each
-      generator its two functions. -/
-  Gen : Type
-  decGen : DecidableEq Gen
+section Formers
+variable {V A M : Type}
 
-instance (S : Syn) : DecidableEq S.Gen := S.decGen
+/-- The set former, transported through the converse. The held set, the element obligation and
+    the member are the trivial ones: the caller-side held set has no stored-side image. -/
+def SetF.op {member : A → M} {dV : V → Nat} {dA : A → Nat} (L : SetF V A M member dV dA) :
+    SetF A V Unit (fun _ => ()) dA dV :=
+  { lift := fun c => conv (L.lift (unconv c))
+    lawful := fun h => Lawful.conv (L.lawful (Lawful.unconv h))
+    agree := fun h => ⟨(L.agree ⟨h.p, h.e⟩).p, (L.agree ⟨h.p, h.e⟩).e⟩
+    agreeS := fun h => agreeS_conv (L.agreeS (agreeS_unconv h))
+    elem := fun _ => True
+    held := fun _ _ => True
+    member := fun _ => some ()
+    carrier := fun _ => carrier_conv _
+    held_of := fun _ _ _ => trivial }
+
+end Formers
+
+/-- **The list former of a meaning**: one prism per absolute side, the member at the side `true`,
+    and one depth law for both sides. -/
+structure ListA (Car : Bool → Type) (Mem : Type) (mem : Car true → Mem)
+    (d : (s : Bool) → Car s → Nat) where
+  p : (s : Bool) → Ctor (List (Car s)) (Car s)
+  μ : Mem
+  hμ : ∀ y, mem ((p true).into y) = μ
+  d_lt : ∀ s xs, ∀ x ∈ xs, d s x + 1 ≤ d s ((p s).into xs)
+
+/-- **The keyed-map former of a meaning**: the same four facts onto `MapOf`. -/
+structure MapA (Car : Bool → Type) (Mem : Type) (mem : Car true → Mem)
+    (d : (s : Bool) → Car s → Nat) where
+  m : (s : Bool) → Ctor (MapOf (Car s)) (Car s)
+  μ : Mem
+  hμ : ∀ y, mem ((m true).into y) = μ
+  d_lt : ∀ s (x : MapOf (Car s)) k, d s (x.get k) + 1 ≤ d s ((m s).into x)
+
+section Readings
+variable {Car : Bool → Type} {Mem : Type} {mem : Car true → Mem} {d : (s : Bool) → Car s → Nat}
+
+/-- **The member law of a former, at each side**, as one statement for every payload: the
+    stored prism stamps the member, and the value prism stamps the unit. -/
+theorem memAt_into {X : Bool → Type} (p : (s : Bool) → Ctor (X s) (Car s)) {μ : Mem}
+    (h : ∀ y, mem ((p true).into y) = μ) : ∀ s y, memAt mem s ((p s).into y) = μAt s μ
+  | false, _ => rfl
+  | true, y => h y
+
+/-- **The list former read at an orientation.** -/
+def ListA.at (L : ListA Car Mem mem d) (o : Orient) :
+    ListF (Car o.c) (Car o.s) (MemAt Mem o.s) (memAt mem o.s) (d o.c) (d o.s) :=
+  { pV := L.p o.c, pA := L.p o.s, μ := μAt o.s L.μ
+    hμ := memAt_into (X := fun s => List (Car s)) L.p L.hμ o.s
+    dV_lt := L.d_lt o.c, dA_lt := L.d_lt o.s }
+
+/-- **The keyed-map former read at an orientation.** -/
+def MapA.at (F : MapA Car Mem mem d) (o : Orient) :
+    MapF (Car o.c) (Car o.s) (MemAt Mem o.s) (memAt mem o.s) (d o.c) (d o.s) :=
+  { mV := F.m o.c, mA := F.m o.s, μ := μAt o.s F.μ
+    hμ := memAt_into (X := fun s => MapOf (Car s)) F.m F.hμ o.s
+    dV_lt := F.d_lt o.c, dA_lt := F.d_lt o.s }
+
+/-- **The set former read at an orientation.** The set former is a codec transformer at the
+    host, so the dual reads the transformer through the converse. -/
+def setAt (L : SetF (Car false) (Car true) Mem mem (d false) (d true)) :
+    (o : Orient) → SetF (Car o.c) (Car o.s) (MemAt Mem o.s) (memAt mem o.s) (d o.c) (d o.s)
+  | ⟨(false, true), _⟩ => L
+  | ⟨(true, false), _⟩ => SetF.op L
+  | ⟨(false, false), h⟩ => absurd rfl h
+  | ⟨(true, true), h⟩ => absurd rfl h
+
+/-- **A host codec read at an orientation**: the codec at the host, and its converse at the
+    dual. -/
+def readC : (o : Orient) → Codec (Car false) (Car true) Mem → Codec (Car o.c) (Car o.s) (MemAt Mem o.s)
+  | ⟨(false, true), _⟩, c => c
+  | ⟨(true, false), _⟩, c => conv c
+  | ⟨(false, false), h⟩, _ => absurd rfl h
+  | ⟨(true, true), h⟩, _ => absurd rfl h
+
+/-- **A lawful host codec is lawful at every orientation.** -/
+theorem lawful_readC : ∀ (o : Orient) {c : Codec (Car false) (Car true) Mem}, Lawful mem c →
+    Lawful (memAt mem o.s) (readC o c)
+  | ⟨(false, true), _⟩, _, h => h
+  | ⟨(true, false), _⟩, _, h => Lawful.conv h
+  | ⟨(false, false), h⟩, _, _ => absurd rfl h
+  | ⟨(true, true), h⟩, _, _ => absurd rfl h
+
+/-- A host codec on its carrier is on its carrier at every orientation. -/
+theorem carrier_readC : ∀ (o : Orient) {c : Codec (Car false) (Car true) Mem}, Carrier c →
+    Carrier (readC o c)
+  | ⟨(false, true), _⟩, _, h => h
+  | ⟨(true, false), _⟩, c, _ => carrier_conv c
+  | ⟨(false, false), h⟩, _, _ => absurd rfl h
+  | ⟨(true, true), h⟩, _, _ => absurd rfl h
+
+/-- **A host held set read at an orientation**: the held set at the host, and every value at the
+    dual, where the caller-side held set has no stored-side image. -/
+def heldAt : (o : Orient) → (Car false → Prop) → Car o.c → Prop
+  | ⟨(false, true), _⟩, T => T
+  | ⟨(true, false), _⟩, _ => fun _ => True
+  | ⟨(false, false), h⟩, _ => absurd rfl h
+  | ⟨(true, true), h⟩, _ => absurd rfl h
+
+/-- A bound on the held set of a host codec bounds its reading at every orientation. -/
+theorem heldAt_readC : ∀ (o : Orient) {c : Codec (Car false) (Car true) Mem} {T : Car false → Prop},
+    (∀ v, c.T v → T v) → ∀ v, (readC o c).T v → heldAt o T v
+  | ⟨(false, true), _⟩, _, _, h => h
+  | ⟨(true, false), _⟩, _, _, _ => fun _ _ => trivial
+  | ⟨(false, false), h⟩, _, _, _ => absurd rfl h
+  | ⟨(true, true), h⟩, _, _, _ => absurd rfl h
+
+end Readings
+
+/-! ## The meaning -/
+
+/-- **The meaning of a signature**: a carrier at each absolute side, the member of the side
+    `true`, and the codec of each part of the signature from the side `false` to the side
+    `true`. A class over the signature, so the dual universe finds the meaning of the universe,
+    and a term family carries no meaning. -/
+class Mean (B : Sig) where
+  Car : Bool → Type
+  Mem : Type
+  mem : Car true → Mem
+  decM : DecidableEq Mem
+  ground : B.Ground → Codec (Car false) (Car true) Mem
+  lawful_ground : ∀ g, Lawful mem (ground g)
+  carrier_ground : ∀ g, Carrier (ground g)
+  eval : (s : Bool) → B.P s → Car s → Bool
+  /-- The predicate at each side that admits every element. -/
+  truth : (s : Bool) → B.P s
+  eval_truth : ∀ s x, eval s (truth s) x = true
+  d : (s : Bool) → Car s → Nat
+  d_pos : ∀ s x, 0 < d s x
+  list : Option (ListA Car Mem mem d)
+  map : Option (MapA Car Mem mem d)
+  set : Option (SetF (Car false) (Car true) Mem mem (d false) (d true))
+  /-- The member that the judgement gives a primitive. -/
+  groundμ : B.Ground → Option Mem
+  top : Codec (Car false) (Car true) Mem
+  lawful_top : Lawful mem top
+  carrier_top : Carrier top
+  /-- The held set that the judgement gives the top, and the top's held set lies inside it. -/
+  topHeld : Car false → Prop
+  top_held : ∀ v, top.T v → topHeld v
+
+/-- **The meaning of a universe**: the meaning of its signature. One instance serves every
+    orientation, so the dual universe finds the meaning of the universe, and a lemma finds its
+    universe by unification before the instance search. -/
+class Sem (S : Syn) where
+  mean : Mean S.sig
+
+/-- A meaning of a signature is a meaning of the signature at every orientation. -/
+instance Sem.ofMean (B : Sig) (o : Orient) [m : Mean B] : Sem ⟨B, o⟩ := ⟨m⟩
+
+/-- The meaning of the signature of a universe. -/
+instance (priority := low) Sem.toMean (S : Syn) [h : Sem S] : Mean S.sig := h.mean
+
+/-! ## The meaning read at a universe
+
+Each reading below is the meaning at the orientation of the universe. The caller carrier is the
+carrier of the caller side, and the member is the member of the stored side. -/
+
+namespace Syn
+
+section
+variable (S : Syn) [Sem S]
+
+/-- The caller carrier of a universe. -/
+abbrev V : Type := Mean.Car (B := S.sig) S.o.c
+
+/-- The stored carrier of a universe. -/
+abbrev A : Type := Mean.Car (B := S.sig) S.o.s
+
+/-- The member of a universe: the member of its stored side. -/
+abbrev M : Type := MemAt (Mean.Mem (B := S.sig)) S.o.s
+
+/-- The codecs of a universe. -/
+abbrev C : Type := Codec S.V S.A S.M
+end
+
+variable {S : Syn} [Sem S]
+
+/-- The member of a stored element. -/
+abbrev member : S.A → S.M := memAt Mean.mem S.o.s
+
+instance decM : DecidableEq S.M := decAt Mean.decM S.o.s
+
+/-- The codec of a primitive. -/
+abbrev ground (g : S.Ground) : S.C := readC S.o (Mean.ground g)
+
+/-- The codec of a primitive is lawful at every orientation. -/
+theorem lawful_ground (g : S.Ground) : Lawful Syn.member (Syn.ground g) :=
+  lawful_readC S.o (Mean.lawful_ground g)
+
+/-- The codec of a primitive is on its carrier at every orientation. -/
+theorem carrier_ground (g : S.Ground) : Carrier (Syn.ground g) :=
+  carrier_readC S.o (Mean.carrier_ground g)
+
+/-- The meaning of a caller-side predicate. -/
+abbrev eval : S.Pred → S.V → Bool := Mean.eval S.o.c
+
+/-- The meaning of a stored-side predicate. -/
+abbrev evalA : S.PredA → S.A → Bool := Mean.eval S.o.s
+
+/-- The caller-side predicate that admits every value. -/
+abbrev truth : S.Pred := Mean.truth S.o.c
+
+/-- The caller-side truth admits every value. -/
+theorem eval_truth (v : S.V) : Syn.eval Syn.truth v = true := Mean.eval_truth S.o.c v
+
+/-- The stored-side predicate that admits every attribute. -/
+abbrev truthA : S.PredA := Mean.truth S.o.s
+
+/-- The stored-side truth admits every attribute. -/
+theorem evalA_truthA (a : S.A) : Syn.evalA Syn.truthA a = true := Mean.eval_truth S.o.s a
+
+/-- The depth of a caller value. -/
+abbrev dV : S.V → Nat := Mean.d S.o.c
+
+/-- The depth of a stored attribute. -/
+abbrev dA : S.A → Nat := Mean.d S.o.s
+
+/-- A caller value has a positive depth. -/
+theorem dV_pos (v : S.V) : 0 < Syn.dV v := Mean.d_pos S.o.c v
+
+/-- A stored attribute has a positive depth. -/
+theorem dA_pos (a : S.A) : 0 < Syn.dA a := Mean.d_pos S.o.s a
+
+/-- The list former of a universe. -/
+abbrev list : Option (ListF S.V S.A S.M Syn.member Syn.dV Syn.dA) :=
+  (Mean.list (B := S.sig)).map (·.at S.o)
+
+/-- The keyed-map former of a universe. -/
+abbrev map : Option (MapF S.V S.A S.M Syn.member Syn.dV Syn.dA) :=
+  (Mean.map (B := S.sig)).map (·.at S.o)
+
+/-- The set former of a universe. -/
+abbrev set : Option (SetF S.V S.A S.M Syn.member Syn.dV Syn.dA) :=
+  (Mean.set (B := S.sig)).map (setAt · S.o)
+
+/-- The member that the judgement gives a primitive. -/
+abbrev groundμ (g : S.Ground) : Option S.M := (Mean.groundμ g).map (μAt S.o.s)
+
+/-- The canonical top of a universe. -/
+abbrev top : S.C := readC S.o (Mean.top (B := S.sig))
+
+/-- The top is lawful at every orientation. -/
+theorem lawful_top : Lawful Syn.member (Syn.top (S := S)) := lawful_readC S.o Mean.lawful_top
+
+/-- The top is on its carrier at every orientation. -/
+theorem carrier_top : Carrier (Syn.top (S := S)) := carrier_readC S.o Mean.carrier_top
+
+/-- The held set that the judgement gives the top. -/
+abbrev topHeld : S.V → Prop := heldAt S.o (Mean.topHeld (B := S.sig))
+
+/-- The held set of the top lies inside the held set that the judgement gives the top. -/
+theorem top_held (v : S.V) : (Syn.top (S := S)).T v → Syn.topHeld v :=
+  heldAt_readC S.o Mean.top_held v
+
+end Syn
 
 /-- **A table of adapters**: the caller-side function and the stored-side function of each
     generator. `denote` reads a table as it reads the environment of the bound variables. -/
-abbrev Table (S : Syn) : Type := S.Gen → (S.V → S.V) × (S.V → S.V)
-
-/-- **An adapter word**: a word over the signed generators. The sign `true` names the converse
-    of the generator, the pair with its two functions swapped. -/
-abbrev Word (S : Syn) : Type := List (S.Gen × Bool)
-
-/-- **The involution of a word**: the letters in reverse order, each with its sign flipped. -/
-def Word.dagger {S : Syn} (k : Word S) : Word S := k.reverse.map fun x => (x.1, !x.2)
+abbrev Table (S : Syn) [Sem S] : Type := S.Gen → (S.V → S.V) × (S.V → S.V)
 
 /-- The pair of one signed generator: the converse swaps the two functions. -/
-def Table.letter {S : Syn} (α : Table S) (x : S.Gen × Bool) : (S.V → S.V) × (S.V → S.V) :=
+def Table.letter {S : Syn} [Sem S] (α : Table S) (x : S.Gen × Bool) : (S.V → S.V) × (S.V → S.V) :=
   if x.2 then ((α x.1).2, (α x.1).1) else α x.1
 
 /-- **The pair of a word**: the empty word is the identity, and a word composes its letters,
     the first letter outermost on the caller side. -/
-def Table.word {S : Syn} (α : Table S) : Word S → (S.V → S.V) × (S.V → S.V)
+def Table.word {S : Syn} [Sem S] (α : Table S) : Word S → (S.V → S.V) × (S.V → S.V)
   | [] => (id, id)
   | x :: k => ((α.letter x).1 ∘ (Table.word α k).1, (Table.word α k).2 ∘ (α.letter x).2)
 
 /-- **A word of two words is the composite of the two pairs.** -/
-theorem Table.word_append {S : Syn} (α : Table S) (k k' : Word S) :
+theorem Table.word_append {S : Syn} [Sem S] (α : Table S) (k k' : Word S) :
     α.word (k ++ k') = ((α.word k).1 ∘ (α.word k').1, (α.word k').2 ∘ (α.word k).2) := by
   induction k with
   | nil => rfl
   | cons x k ih => simp only [List.cons_append, Table.word, ih]; rfl
 
 /-- **The dagger law**: the pair of the involution of a word is the pair of the word, swapped. -/
-theorem Table.word_dagger {S : Syn} (α : Table S) (k : Word S) :
+theorem Table.word_dagger {S : Syn} [Sem S] (α : Table S) (k : Word S) :
     α.word k.dagger = ((α.word k).2, (α.word k).1) := by
   induction k with
   | nil => rfl
@@ -118,77 +491,16 @@ theorem Table.word_dagger {S : Syn} (α : Table S) (k : Word S) :
       rw [Table.word_append, ih]
       simp only [List.map_cons, List.map_nil, hx, Table.word]
 
-/-- **The meaning of a universe**: the stored carrier, the member, and the codec of each part of
-    the syntax. A class over the syntax, so `denote t` finds the meaning from the term's own
-    universe, and the term family carries no `Sem` argument. -/
-class Sem (S : Syn) where
-  A : Type
-  M : Type
-  member : A → M
-  decM : DecidableEq M
-  ground : S.Ground → Codec S.V A M
-  lawful_ground : ∀ g, Lawful member (ground g)
-  carrier_ground : ∀ g, Carrier (ground g)
-  eval : S.Pred → S.V → Bool
-  dV : S.V → Nat
-  dA : A → Nat
-  dV_pos : ∀ v, 0 < dV v
-  dA_pos : ∀ a, 0 < dA a
-  list : Option (ListF S.V A M member dV dA)
-  map : Option (MapF S.V A M member dV dA)
-  set : Option (SetF S.V A M member dV dA)
-  /-- The member that the judgement gives a primitive. -/
-  groundμ : S.Ground → Option M
-  top : Codec S.V A M
-  lawful_top : Lawful member top
-  carrier_top : Carrier top
-  /-- The held set that the judgement gives the top, and the top's held set lies inside it. -/
-  topHeld : S.V → Prop
-  top_held : ∀ v, top.T v → topHeld v
-
-instance (S : Syn) [Sem S] : DecidableEq (Sem.M S) := Sem.decM
-
-/-- The codecs of a universe. -/
-abbrev Syn.C (S : Syn) [Sem S] : Type := Codec S.V (Sem.A S) (Sem.M S)
-
-/-- **The syntax of the stored side**: the predicates and the adapter generators that act on the
-    stored carrier. A term reads this class and no meaning, so a term over a universe stays data
-    that code can compute with. -/
-class SynA (S : Syn) where
-  PredA : Type
-  GenA : Type
-  decGenA : DecidableEq GenA
-
-instance (S : Syn) [SynA S] : DecidableEq (SynA.GenA S) := SynA.decGenA
-
-/-- **The meaning of the stored-side syntax**, and the truth predicate on each side. The truth
-    predicates and the top are the stored halves of a term that restricts nothing on the stored
-    side. -/
-class SemA (S : Syn) [Sem S] [SynA S] where
-  evalA : SynA.PredA S → Sem.A S → Bool
-  /-- The caller-side predicate that admits every value. -/
-  truth : S.Pred
-  eval_truth : ∀ v, Sem.eval truth v = true
-  /-- The stored-side predicate that admits every attribute. -/
-  truthA : SynA.PredA S
-  evalA_truthA : ∀ a, evalA truthA a = true
-
 /-- **The top reads every attribute**: the law that makes the top the stored outer that restricts
     nothing. -/
 class TopReads (S : Syn) [Sem S] : Prop where
-  reads : ∀ a, ((Sem.top (S := S)).p a).isSome = true
-
-/-- **The dual syntax**: the stored carrier is the caller carrier, and the stored-side predicates
-    and generators are the caller-side ones. -/
-abbrev Syn.op (S : Syn) [Sem S] [SynA S] : Syn :=
-  { V := Sem.A S, Ground := S.Ground, Pred := SynA.PredA S, Gen := SynA.GenA S,
-    decGen := SynA.decGenA }
+  reads : ∀ a, ((Syn.top (S := S)).p a).isSome = true
 
 mutual
 
-inductive Term (S : Syn) [SynA S] where
+inductive Term (S : Sig) where
   /-- §3's ground rules, as one row: a primitive of the universe. A universe names its primitives
-      (`Syn.Ground`) and the codec of each (`Sem.ground`). -/
+      (`Syn.Ground`) and the codec of each (`Mean.ground`). -/
   | prim (g : S.Ground)
   /-- §3 `(set)`: the finite-powerset lift of an element term. A lawful element gives a lawful
       set (`lawful_setCodec`), and that law reads nothing about the element's base.
@@ -221,10 +533,10 @@ inductive Term (S : Syn) [SynA S] where
       `k` and the stored word `kA` only transform. A table gives each word its two functions, so
       two `held`s of one word carry one pair. A side that states no restriction writes `.opaq`
       as its outer, and a side with no adapter writes the empty word. -/
-  | held     (inner : Term S) (outer : Term S) (outerA : Term S) (k : Word S)
-      (kA : List (SynA.GenA S × Bool))
+  | held     (inner : Term S) (outer : Term S) (outerA : Term S) (k : List (S.G false × Bool))
+      (kA : List (S.G true × Bool))
   /-- §3 `(refine)`: the restriction of each side by a predicate of that side. -/
-  | refine   (inner : Term S) (p : S.Pred) (pA : SynA.PredA S)
+  | refine   (inner : Term S) (p : S.P false) (pA : S.P true)
   /-- §3 `(opaque)`: the universal sum. The number option is `numberCodec`, so `opaque`
       writes every `Value` (`opaq_total`). -/
   | opaq
@@ -274,17 +586,17 @@ inductive Term (S : Syn) [SynA S] where
     `String` and so infinite, which is why two open blocks always intersect, and why one block
     is all a body can ever carry. A key pattern other than "every undeclared name", a template
     or a regular expression, is a change to this constructor. -/
-inductive Body (S : Syn) [SynA S] where
+inductive Body (S : Sig) where
   | mk (fields : Finset String) (f : {k // k ∈ fields} → ObjectSlot S) (wild : Option (Term S))
 
 /-- §4's current-schema slot. A required name is required on both current-schema sides. -/
-inductive ObjectSlot (S : Syn) [SynA S] where
+inductive ObjectSlot (S : Sig) where
   | req      (t : Term S)
   | optional (t : Term S)
 
 end
 
-variable {S : Syn} [SynA S]
+variable {S : Sig}
 
 /-- Whether a term is the bottom, as a `Bool` the object presence rows branch on. -/
 def Term.isNever : Term S → Bool
@@ -607,51 +919,54 @@ def unanimous {M : Type} [DecidableEq M] : List (Option M) → Option M
 def envAt {V A M : Type} (ρ : List (Codec V A M)) (i : Nat) : Codec V A M := ρ.getD i .empty
 
 section Denote
-variable {S : Syn} [Sem S] [SynA S] [SemA S] (α : Table S) (β : Table S.op)
+variable {S : Syn} [Sem S] (α : Table S) (β : Table S.op)
 
 mutual
 
 /-- Each term, at its certified combinator. -/
 noncomputable def denote : Term S → (ρ : List S.C := []) → S.C
-  | .prim g, _ => Sem.ground g
+  | .prim g, _ => Syn.ground g
   | .set t, ρ =>
-      match Sem.set (S := S) with
+      match Syn.set (S := S) with
       | some L => L.lift (denote t ρ)
       | none => .empty
   | .list pre spread suf, ρ =>
-      match Sem.list (S := S) with
+      match Syn.list (S := S) with
       | some L => listCodec L.pV L.pA L.μ (denoteList pre ρ) (denoteOpt spread ρ) (denoteList suf ρ)
       | none => .empty
-  -- each side reads its own word from its own table
+  -- each side reads its own half, and its own word from its own table
   | .held inner outer outerA k kA, ρ =>
-      held2 (denote inner ρ) (denote outer ρ) (denote outerA ρ) (α.word k).1 (α.word k).2
-        (β.word kA).1 (β.word kA).2
-  | .refine inner p pA, ρ => refine2 (denote inner ρ) (Sem.eval p) (SemA.evalA pA)
-  | .opaq, _ => Sem.top (S := S)
+      held2 (denote inner ρ) (half2 S.o.c (denote outer ρ) (denote outerA ρ))
+        (half2 S.o.s (denote outer ρ) (denote outerA ρ))
+        (α.word (halfK S.o.c k kA)).1 (α.word (halfK S.o.c k kA)).2
+        (β.word (halfK S.o.s k kA)).1 (β.word (halfK S.o.s k kA)).2
+  | .refine inner p pA, ρ =>
+      refine2 (denote inner ρ) (Syn.eval (half S.o.c p pA)) (Syn.evalA (half S.o.s p pA))
+  | .opaq, _ => Syn.top (S := S)
   | .object b, ρ => bodySem b ρ
   | .union opts, ρ => altCodec (denoteList opts ρ) (unanimous (denoteμs opts ρ))
   -- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously
   | .never, _ => .empty
   | .var i, ρ => envAt ρ i
   -- each input reads the stage of the body that its own depth names
-  | .mu b, ρ => muCodec Sem.dV (Sem.dA (S := S)) fun c => denote b (c :: ρ)
+  | .mu b, ρ => muCodec Syn.dV (Syn.dA (S := S)) fun c => denote b (c :: ρ)
 
 /-- The payload's semantics: the slot table and the open block, each through its own
     companion. -/
 noncomputable def bodySem : Body S → (ρ : List S.C := []) → S.C
   | .mk fields f wild, ρ =>
-      match Sem.map (S := S) with
+      match Syn.map (S := S) with
       | some F => objectCodec F.mV F.mA F.μ ⟨fields, fun k => fieldSem (f k) ρ⟩ (wildSem wild ρ)
       | none => .empty
 
 /-- A field's semantics. A companion of `denote` rather than a function of one, which is what
     removed the fuel. -/
-noncomputable def fieldSem : ObjectSlot S → (ρ : List S.C := []) → FieldSem S.V (Sem.A S) (Sem.M S)
+noncomputable def fieldSem : ObjectSlot S → (ρ : List S.C := []) → FieldSem S.V (Syn.A S) (Syn.M S)
   | .req t, ρ => .req (denote t ρ)
   | .optional t, ρ => .opt (denote t ρ)
 
 /-- The open block's semantics. **A body with no open block refuses.** -/
-noncomputable def wildSem : Option (Term S) → (ρ : List S.C := []) → RestSem S.V (Sem.A S) (Sem.M S)
+noncomputable def wildSem : Option (Term S) → (ρ : List S.C := []) → RestSem S.V (Syn.A S) (Syn.M S)
   | none, _ => .refuse
   | some t, ρ => .codec (denote t ρ)
 
@@ -666,7 +981,7 @@ noncomputable def denoteOpt : Option (Term S) → (ρ : List S.C := []) → Opti
   | some t, ρ => some (denote t ρ)
 
 /-- The options' members, in order. -/
-noncomputable def denoteμs : List (Term S) → (ρ : List S.C := []) → List (Option (Sem.M S))
+noncomputable def denoteμs : List (Term S) → (ρ : List S.C := []) → List (Option (Syn.M S))
   | [], _ => []
   | t :: ts, ρ => (denote t ρ).μ :: denoteμs ts ρ
 
@@ -759,23 +1074,32 @@ end
 
 /-! ## The host rows
 
-At the host, the stored halves of a term are the top of the universe: the truth predicate, the
-top as the stored outer, and the empty word. There, each two-sided row is the one-sided row. -/
+At the host orientation, the caller half of a two-sided row is the half `false`, and the stored
+half is the half `true`. Where the stored halves are the top of the universe, the truth
+predicate, the top as the stored outer, and the empty word, each two-sided row is the one-sided
+row. -/
+
+section Host
+variable {B : Sig} [Mean B] {α : Table ⟨B, .host⟩} {β : Table (Syn.op ⟨B, .host⟩)}
 
 /-- **The host `refine` is the caller-side restriction.** -/
-theorem denote_refine_host (t : Term S) (p : S.Pred) (ρ : List S.C) :
-    denote α β (.refine t p SemA.truthA) ρ = (denote α β t ρ).restrict (Sem.eval p) := by
-  have h : SemA.evalA (S := S) SemA.truthA = fun _ => true := funext SemA.evalA_truthA
-  rw [denote, h]
-  exact refine2_host _ _
+theorem denote_refine_host (t : Term B) (p : B.P false) (ρ : List (Syn.C ⟨B, .host⟩)) :
+    denote α β (S := ⟨B, .host⟩) (.refine t p (Mean.truth true)) ρ =
+      (denote α β t ρ).restrict (Mean.eval false p) := by
+  have h : Mean.eval (B := B) true (Mean.truth true) = fun _ => true := funext (Mean.eval_truth true)
+  rw [denote]
+  exact (congrArg _ h).trans (refine2_host _ _)
 
 /-- **The host `held` is the caller-side adapter, restricted by the caller outer**, where the top
     reads every attribute. -/
-theorem denote_held_host [TopReads S] (t P : Term S) (k : Word S) (ρ : List S.C) :
-    denote α β (.held t P .opaq k []) ρ =
+theorem denote_held_host [TopReads ⟨B, .host⟩] (t P : Term B) (k : Word ⟨B, .host⟩)
+    (ρ : List (Syn.C ⟨B, .host⟩)) :
+    denote α β (S := ⟨B, .host⟩) (.held t P .opaq k []) ρ =
       ((denote α β t ρ).through (α.word k).1 (α.word k).2).restrict
         fun v => ((denote α β P ρ).e v).isSome :=
-  held2_host _ _ _ TopReads.reads _ _
+  held2_host _ _ _ (TopReads.reads (S := ⟨B, .host⟩)) _ _
+
+end Host
 
 end Denote
 

@@ -46,7 +46,7 @@ theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy 
 variable (α) in
 /-- The doc's semantic rule premises, at DynamoDB: `Alg.Obligations` at the DynamoDB signature,
     whose set obligation is `SetElem`. -/
-abbrev Obligations : Term → optParam (List Codec) [] → Prop := @Alg.Obligations dynSyn _ _ _ α dynTableA
+abbrev Obligations : Term → optParam (List Codec) [] → Prop := @Alg.Obligations dynSyn _ α dynTableA
 
 /-! ### The companions, as the quantifiers the rest of the file speaks in
 
@@ -174,7 +174,7 @@ theorem align_T_of_HTuple {tail Tt} (hopt : TypedOpt α tail Tt)
         exact ⟨[], rfl, by simp⟩
       | @some t' T' μ' hty =>
         exact alignTail_T (ihTail _ rfl _ _ hty) vs hall
-  | _, _, @TypedList.cons _ _ _ _ _ _ tx tsx Tx Tsx μx hty hs, ih, vs, hall => by
+  | _, _, @TypedList.cons _ _ _ _ tx tsx Tx Tsx μx hty hs, ih, vs, hall => by
       cases vs with
       | nil => exact nomatch hall
       | cons v vs' =>
@@ -209,7 +209,7 @@ theorem zipSuf_T :
       back.length = suf.length ∧ ∀ p ∈ (suf.map (denote α)).zip back, p.1.T p.2
   | _, _, .nil, _, back, hb => by
       cases hb; exact ⟨rfl, by simp⟩
-  | _, _, @TypedList.cons _ _ _ _ _ _ t ts T Ts μ hty hs, ih, back, hb => by
+  | _, _, @TypedList.cons _ _ _ _ t ts T Ts μ hty hs, ih, back, hb => by
       cases hb with
       | cons hhead htail =>
         obtain ⟨hlen, hall⟩ :=

@@ -76,31 +76,35 @@ analyses over one carrier type, and each side of the pair instantiates it. It st
 `Lawful` takes the member of an attribute as a parameter. (W) reads that function, and no law
 reads more of the store.
 
-**A universe is a signature in two parts.** `Syn` holds the syntax: the values that a `held` maps,
-the primitives, the predicates, and the generators of the adapters. The class `Sem` over a `Syn`
-holds the meaning: the stored carrier, the member, the codec of each primitive, the evaluation of a
-predicate, the depths, the formers and the top. The term family reads `Syn` alone. The compiled
-code of a function over `Term S` takes `S` as a real argument, because `casesOn` takes the
-parameter of the family as a real argument. The semantic fields are `noncomputable` at DynamoDB:
-`inL`, `setCodec`, `Ω` and `Pred.eval` are. One structure would make each function over terms
-`noncomputable` at DynamoDB, `Term.disjoint` and `Term.hasVar` included. The split keeps a term as
-data that code can compute with.
+**A universe is a signature, a meaning, and an orientation.** The signature `Sig` holds the
+syntax: the primitives, and the predicates and the adapter generators at each absolute side. The
+term family reads `Sig` alone, and names no orientation. The class `Mean` over a `Sig` holds the
+absolute meaning: the carrier of each side, the member of the stored side, the codec of each
+primitive, the evaluation of a predicate at each side, the depths, the formers and the top. A
+universe `Syn` is a signature and an orientation `Orient`, a pair of two different sides. The
+readings in the namespace `Syn` read the meaning at the orientation: the caller carrier is the
+carrier of the caller side, and the member is the member of the stored side. The dual universe
+`Syn.op` keeps the signature and swaps the orientation, so the dual term type is the term type, and
+the converse of a term is the term. The compiled code of a function over `Term S` takes `S` as a
+real argument, because `casesOn` takes the parameter of the family as a real argument. The meaning
+is `noncomputable` at DynamoDB: `inL`, `setCodec`, `Ω` and `Pred.eval` are. The split keeps a term
+as data that code can compute with.
 
 **A universe owns these facts, and the generic layer owns none of them.**
 
 | the fact | the field | at DynamoDB | at JSON |
 | --- | --- | --- | --- |
-| the carriers | `Syn.V`, `Sem.A`, `Sem.M` | `Value`, `Attr`, `Member` | `Json`, `Json`, `JMember` |
-| the member of an attribute | `Sem.member` | `Attr.member` | `Json.member` |
-| the primitives and their codecs | `Syn.Ground`, `Sem.ground`, `Sem.lawful_ground` | `Ground`, `groundCodec` | `JMember`, `ground` |
-| the predicates | `Syn.Pred`, `Sem.eval` | `Pred`, `Pred.eval` | a function on `Json` |
-| the generators of the adapters | `Syn.Gen`, `Syn.decGen` | `DynGen` | `Empty` |
-| the depths | `Sem.dV`, `Sem.dA` | `Value.depth`, `Attr.depth` | a constant |
-| the list and map formers | `Sem.list` as a `ListF`, `Sem.map` as a `MapF`: a prism on each side | `dList`, `dMap` | none |
-| the set former | `Sem.set` as a `SetF`: a lift and its laws | `dSet`, over `setCodec` | none |
+| the carriers | `Mean.Car`, `Mean.Mem`, read as `Syn.V`, `Syn.A`, `Syn.M` | `Value`, `Attr`, `Member` | `Json`, `Json`, `JMember` |
+| the member of an attribute | `Mean.mem`, read as `Syn.member` | `Attr.member` | `Json.member` |
+| the primitives and their codecs | `Sig.Ground`, `Mean.ground`, `Mean.lawful_ground` | `Ground`, `groundCodec` | `JMember`, `ground` |
+| the predicates | `Sig.P`, `Mean.eval`, at each absolute side | `Pred`, `Pred.eval` | a function on `Json` |
+| the generators of the adapters | `Sig.G`, `Sig.decG`, at each absolute side | `DynGen` | `Empty` |
+| the depths | `Mean.d`, at each absolute side | `Value.depth`, `Attr.depth` | a constant |
+| the list and map formers | `Mean.list` as a `ListA`, `Mean.map` as a `MapA`: a prism at each absolute side | `dList`, `dMap` | none |
+| the set former | `Mean.set` as a `SetF` at the host, and its transport `SetF.op` at the dual: a lift and its laws | `dSet`, over `setCodec` | none |
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
 | the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | `dynOracle`, over the two views | `jsonOracle`, which certifies nothing |
-| the top | `Sem.top`, `Sem.lawful_top`, `Sem.topHeld` | `Ω`, `HOpaque` | `idCodec` |
+| the top | `Mean.top`, `Mean.lawful_top`, `Mean.topHeld` | `Ω`, `HOpaque` | `idCodec` |
 | the top laws | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
 | the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `AdmLit`, `inBaseA` and `AdmALit` | the kind test |
 | the leaves: two primitives, two predicates | `Leaf` | `dynLeaf`: `Ground.meet`, `Pred.isData`, `Pred.meetM` | `jsonLeaf`: one kind |
@@ -339,8 +343,8 @@ What matters is that the measure is **derived from the term**, so it appears in 
 it, and an inequality the block does not offer goes beside `Term.depth` rather than inline.
 
 A recursive term recurses on its input, not on the term. `muCodec` reads each input at the stage
-that the input's own depth names, by the depths of the universe: `Sem.dV` on the write side and
-`Sem.dA` on the read side, which are `Value.depth` and `Attr.depth` at DynamoDB.
+that the input's own depth names, by the depths of the universe: `Syn.dV` on the write side and
+`Syn.dA` on the read side, which are `Value.depth` and `Attr.depth` at DynamoDB.
 That budget is a structural recursion on the input, so a closed recursive term still reduces by
 `rfl`, and the bridge states its vectors. A well-founded budget evaluates and does not reduce in
 the kernel.

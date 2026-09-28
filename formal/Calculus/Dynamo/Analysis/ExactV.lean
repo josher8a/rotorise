@@ -164,16 +164,19 @@ variable (t : Term) (ts : List Term)
 /-- The bottom admits no value, and the row is that sentence. -/
 @[Adm_rows] theorem Adm_never (v : Value) : Adm α .never v = false := rfl
 /-- The stored predicate is the truth, so the row of `refine` is the caller-side row. -/
-@[Adm_rows] theorem Adm_refine (p : Pred) (pA : Alg.SynA.PredA dynSyn) :
+@[Adm_rows] theorem Adm_refine (p : Pred) (pA : Alg.Syn.PredA dynSyn) :
     Adm α (.refine t p pA) = fun v => Adm α t v && p.eval v := by
   funext v
   have h : Alg.gate (Alg.denote α dynTableA t []) (fun _ => true) v =
       Alg.Adm α dynTableA t [] v :=
     (Alg.gate_true _ _).trans (Alg.Adm_eq_isSome t [] v).symm
-  simp only [Adm, Alg.Adm, Alg.SemA.evalA, h]
-  cases Alg.Adm α dynTableA t [] v <;> simp [Alg.Sem.eval]
+  show (Alg.Adm α dynTableA t [] v && p.eval v &&
+    Alg.gate (Alg.denote α dynTableA t []) (fun _ => true) v) =
+    (Alg.Adm α dynTableA t [] v && p.eval v)
+  rw [h]
+  cases Alg.Adm α dynTableA t [] v <;> simp
 /-- The stored word is the identity, so the stored gate reads the stored outer at the write. -/
-@[Adm_rows] theorem Adm_held (P PA : Term) (k : Word) (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+@[Adm_rows] theorem Adm_held (P PA : Term) (k : Word) (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
     Adm α (.held t P PA k kA) = fun v => Adm α t ((α.word k).1 v) && Adm α P v &&
       Alg.gate (denote α t) (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v) := by
   simp only [Adm, Alg.Adm, dynTableA_word]

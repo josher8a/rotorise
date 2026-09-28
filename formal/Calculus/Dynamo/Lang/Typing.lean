@@ -170,7 +170,7 @@ theorem Typed.set {t T μ} (h : Typed α t T μ) : Typed α (.set t) (HSet T) (�
     theorems below recover each spelling. -/
 theorem Typed.list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre) (hs : TypedOpt α sp Tsp)
     (hf : TypedList α suf Tsuf) : Typed α (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L) :=
-  Alg.Typed.list (S := dynSyn) (L := dList) rfl hp hs hf
+  Alg.Typed.list (S := dynSyn) (L := dList.at .host) rfl hp hs hf
 
 /-- `(held)`, at the DynamoDB denotation of the caller-side term. -/
 theorem Typed.held {t I μ P PA k kA} (h : Typed α t I μ) :
@@ -193,7 +193,7 @@ theorem Typed.object {body : Body} {bind R} {μs : {k // k ∈ body.fields} → 
     (hf : ∀ k, TypedField α (body.at k) (bind k).2 (bind k).1 (μs k))
     (hr : TypedWild α body.wild R) :
     Typed α (.object body) (HObject body.fields bind R) (some .M) :=
-  Alg.Typed.object (S := dynSyn) (F := dMap) rfl hf hr
+  Alg.Typed.object (S := dynSyn) (F := dMap.at .host) rfl hf hr
 
 /-- `(union)`: the union of the options' held sets, at their unanimous member. -/
 theorem Typed.union {opts Ts μs} (h : TypedListμ α opts Ts μs) :

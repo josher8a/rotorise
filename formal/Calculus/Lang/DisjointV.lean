@@ -22,7 +22,7 @@ namespace Calculus.Alg
 
 open Calculus (alignPL alignP zipP anyP objAdmV entryP)
 
-variable {S : Syn} [Sem S] [PrimAdm S] [SynA S] [SemA S] {ρ ρ' ρ'' : List S.C} {α : Table S}
+variable {S : Syn} [Sem S] [PrimAdm S] {ρ ρ' ρ'' : List S.C} {α : Table S}
   {β : Table S.op}
 
 noncomputable section
@@ -30,17 +30,17 @@ noncomputable section
 /-! ## Reading a value through a former -/
 
 /-- The elements of a value, where the list former reads one. -/
-def listOut (v : S.V) : Option (List S.V) := (Sem.list (S := S)).bind (·.pV.out v)
+def listOut (v : S.V) : Option (List S.V) := (Syn.list (S := S)).bind (·.pV.out v)
 
 /-- The entries of a value, where the map former reads one. -/
-def mapOut (v : S.V) : Option (MapOf S.V) := (Sem.map (S := S)).bind (·.mV.out v)
+def mapOut (v : S.V) : Option (MapOf S.V) := (Syn.map (S := S)).bind (·.mV.out v)
 
 /-- A `list` admits a value that the list former reads by the row of its positions. -/
 theorem Adm_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.V}
     {vs : List S.V} (h : listOut v = some vs) :
     Adm α β (.list pre sp suf) ρ v = alignPL (AdmList α β pre ρ) (AdmOptT α β sp ρ) (AdmList α β suf ρ) vs := by
   unfold listOut at h
-  rcases hL : Sem.list (S := S) with _ | L
+  rcases hL : Syn.list (S := S) with _ | L
   · rw [hL] at h; exact absurd h (by simp)
   · rw [hL] at h
     simp only [Option.bind_some] at h
@@ -50,7 +50,7 @@ theorem Adm_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.
 theorem Adm_list_of_none {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.V}
     (h : listOut v = none) : Adm α β (.list pre sp suf) ρ v = false := by
   unfold listOut at h
-  rcases hL : Sem.list (S := S) with _ | L
+  rcases hL : Syn.list (S := S) with _ | L
   · simp only [Adm, hL]
   · rw [hL] at h
     simp only [Option.bind_some] at h
@@ -64,7 +64,7 @@ theorem AdmBody_of_out {b : Body S} {v : S.V} {m : MapOf S.V} (h : mapOut v = so
   unfold mapOut at h
   cases b with
   | mk fields fld wild =>
-  rcases hL : Sem.map (S := S) with _ | F
+  rcases hL : Syn.map (S := S) with _ | F
   · rw [hL] at h; exact absurd h (by simp)
   · rw [hL] at h
     simp only [Option.bind_some] at h
@@ -76,7 +76,7 @@ theorem AdmBody_of_none {b : Body S} {v : S.V} (h : mapOut v = none) :
   unfold mapOut at h
   cases b with
   | mk fields fld wild =>
-  rcases hL : Sem.map (S := S) with _ | F
+  rcases hL : Syn.map (S := S) with _ | F
   · simp only [AdmBody, hL]
   · rw [hL] at h
     simp only [Option.bind_some] at h
@@ -161,10 +161,10 @@ theorem AdmBody_map_slots (c : Body S) {v : S.V} {m : MapOf S.V} (hm : mapOut v 
     limit reads a value at the stage that the value's depth names, and that stage is the body over
     the stage below. So the unfolding needs no guard. -/
 theorem Adm_mu_unfold (b : Term S) (ρ : List S.C) (v : S.V) :
-    Adm α β (.mu b) ρ v = Adm α β b (muStage (fun c => denote α β b (c :: ρ)) (Sem.dV v - 1) :: ρ) v := by
+    Adm α β (.mu b) ρ v = Adm α β b (muStage (fun c => denote α β b (c :: ρ)) (Syn.dV v - 1) :: ρ) v := by
   rw [Adm_eq_isSome b]
-  show ((muStage (fun c => denote α β b (c :: ρ)) (Sem.dV v)).e v).isSome = _
-  obtain ⟨n, hn⟩ : ∃ n, Sem.dV v = n + 1 := ⟨Sem.dV v - 1, by have := Sem.dV_pos v; omega⟩
+  show ((muStage (fun c => denote α β b (c :: ρ)) (Syn.dV v)).e v).isSome = _
+  obtain ⟨n, hn⟩ : ∃ n, Syn.dV v = n + 1 := ⟨Syn.dV v - 1, by have := Syn.dV_pos v; omega⟩
   rw [hn, Nat.add_sub_cancel]
   rfl
 
@@ -174,20 +174,20 @@ end
 
 /-- **The write-side law of the set former.** The catch-all rows of the families read the
     disjointness of the former classes (`Shapes`). -/
-class FormerAdm (S : Syn) [Sem S] [PrimAdm S] [SynA S] [SemA S] : Prop where
+class FormerAdm (S : Syn) [Sem S] [PrimAdm S] : Prop where
   /-- Two sets whose elements share no value share no set. -/
   set_never : ∀ {α : Table S} {β : Table S.op} (a y : Term S), (∀ u, (Adm α β a [] u && Adm α β y [] u) = false) →
     ∀ v, (Adm α β (.set a) [] v && Adm α β (.set y) [] v) = false
 
 /-- **The write-side laws of the leaves.** A primitive reads no variable, so the laws are
     stated at the closed environment. -/
-class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] [SynA S] [SemA S] : Prop where
+class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] : Prop where
   /-- Two primitives met at the bottom share no value. -/
   prim_none : ∀ {α : Table S} {β : Table S.op} (g g' : S.Ground), Leaf.prim g g' = none →
     ∀ v, (Adm α β (.prim g : Term S) [] v && Adm α β (.prim g') [] v) = false
   /-- Two predicates met at the empty predicate hold together nowhere. -/
   pmeet_none : ∀ q p : S.Pred, Leaf.pmeet q p = some none →
-    ∀ v, (Sem.eval q v && Sem.eval p v) = false
+    ∀ v, (Syn.eval q v && Syn.eval p v) = false
 
 
 /-! ## Soundness, on the write side -/
@@ -196,7 +196,7 @@ class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] [SynA S] [SemA S] : Prop wh
 def ApartV (p : Pairing) (ρ ρ' : List S.C) : Prop :=
   ∀ i j k, p i j = some k → ∀ v, (((envAt ρ i).e v).isSome && ((envAt ρ' j).e v).isSome) = false
 
-omit [PrimAdm S] [SynA S] [SemA S] in
+omit [PrimAdm S] in
 /-- Apart environments stay apart when the left operand unfolds: its new binder pairs with
     nothing. -/
 theorem ApartV.left {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') (c : S.C) :
@@ -206,7 +206,7 @@ theorem ApartV.left {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') (c :
   | 0, hp => exact nomatch hp
   | i + 1, hp => exact h i j k hp v
 
-omit [PrimAdm S] [SynA S] [SemA S] in
+omit [PrimAdm S] in
 /-- …and when the right operand unfolds. -/
 theorem ApartV.right {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') (c : S.C) :
     ApartV (shiftR p) ρ (c :: ρ') := by
@@ -215,7 +215,7 @@ theorem ApartV.right {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') (c 
   | _, 0, hp => exact nomatch hp
   | i, j + 1, hp => exact h i j k hp v
 
-omit [PrimAdm S] [SynA S] [SemA S] in
+omit [PrimAdm S] in
 /-- Two new binders that share no value extend two apart environments at a paired binder. -/
 theorem ApartV.mu {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') {c c' : S.C}
     (hc : ∀ v, ((c.e v).isSome && (c'.e v).isSome) = false) :
@@ -237,12 +237,14 @@ def DisjSound (ρ ρ' : List S.C) (x : Term S) (f : Term S → Bool) : Prop :=
 
 /-- A refinement admits what its inner term admits, its predicate holds on, and its stored
     predicate holds on the write. -/
-theorem Adm_refine_eq (t : Term S) (q : S.Pred) (qA : SynA.PredA S) (ρ : List S.C) (v : S.V) :
-    Adm α β (.refine t q qA) ρ v =
-      (Adm α β t ρ v && (Sem.eval q v && gate (denote α β t ρ) (SemA.evalA qA) v)) := by
+theorem Adm_refine_eq (t : Term S) (p : S.sig.P false) (pA : S.sig.P true) (ρ : List S.C)
+    (v : S.V) :
+    Adm α β (.refine t p pA) ρ v =
+      (Adm α β t ρ v && (Syn.eval (half S.o.c p pA) v &&
+        gate (denote α β t ρ) (Syn.evalA (half S.o.s p pA)) v)) := by
   simp only [Adm, Bool.and_assoc]
 
-omit [PrimAdm S] [SynA S] [SemA S] in
+omit [PrimAdm S] in
 /-- **Two recursive terms are disjoint stage by stage.** Where the two bodies keep apart every
     two binders that share no value, each two stages of the same index share no value. -/
 theorem stage_apart {B B' : S.C → S.C}
@@ -323,19 +325,20 @@ end
 /-- **Two data predicates that meet at the empty predicate keep a refinement chain apart**: no
     value satisfies `q` and a refinement of the chain. -/
 theorem predApart_sound [Leaf S] [LeafAdm S] {q : S.Pred} {ρ' : List S.C} :
-    ∀ (y : Term S), predApart q y = true → ∀ v, (Sem.eval q v && Adm α β y ρ' v) = false
-  | .refine y q' _, h, v => by
+    ∀ (y : Term S), predApart q y = true → ∀ v, (Syn.eval q v && Adm α β y ρ' v) = false
+  | .refine y q₁ q₂, h, v => by
       simp only [predApart, Bool.or_eq_true, Bool.and_eq_true] at h
       rw [Adm_refine_eq]
+      set q' := half S.o.c q₁ q₂
       rcases h with ⟨-, hm⟩ | h
       · have hn : Leaf.pmeet q q' = some none := by
           revert hm; cases Leaf.pmeet q q' with
           | none => simp
           | some o => cases o <;> simp
         have := LeafAdm.pmeet_none q q' hn v
-        cases hq : Sem.eval q v <;> cases hq' : Sem.eval q' v <;> simp_all
+        cases hq : Syn.eval q v <;> cases hq' : Syn.eval q' v <;> simp_all
       · have := predApart_sound (ρ' := ρ') y h v
-        cases hq : Sem.eval q v <;> cases ha : Adm α β y ρ' v <;> simp_all
+        cases hq : Syn.eval q v <;> cases ha : Adm α β y ρ' v <;> simp_all
   | .prim _, h, _ | .never, h, _ | .set _, h, _ | .list _ _ _, h, _ | .held _ _ _ _ _, h, _
   | .opaq, h, _ | .object _, h, _ | .union _, h, _ | .var _, h, _ | .mu _, h, _ => by
       simp [predApart] at h
@@ -646,7 +649,7 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
               = false := fun c c' hc u => by
           have := disjoint_sound (pairMu p) b b' h (c :: ρ) (c' :: ρ') (hp.mu hc) u
           rwa [Adm_eq_isSome, Adm_eq_isSome] at this
-        have := stage_apart hB (Sem.dV v) v
+        have := stage_apart hB (Syn.dV v) v
         rw [Adm_eq_isSome, Adm_eq_isSome]
         exact this
       | _ =>
@@ -659,11 +662,12 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] :
       intro y' hy w
       rw [Bool.or_eq_true, Bool.and_eq_true] at hy
       rw [Adm_refine_eq]
+      set q' := half S.o.c q qA
       rcases hy with hy | ⟨-, hy⟩
       · have := disjoint_sound p x y' hy ρ ρ' hp w
         cases h1 : Adm α β x ρ w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
       · have := predApart_sound (α := α) (β := β) (ρ' := ρ') y' hy w
-        cases h1 : Sem.eval q w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
+        cases h1 : Syn.eval q' w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
   | p, .union os, y, h, ρ, ρ', hp, v => by
       simp only [Term.disjoint] at h
       rw [Adm_union]

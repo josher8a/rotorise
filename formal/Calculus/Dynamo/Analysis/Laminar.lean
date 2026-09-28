@@ -44,11 +44,12 @@ theorem htuple_iff {tail : Option Term} {Tt} (hopt : TypedOpt α tail Tt)
       ∀ vs, HTuple Ts Tt vs ↔ alignP (AdmList α ts) (AdmOptT α tail) vs = true
   | _, _, .nil, _, vs => by
       cases hopt with
-      | none => cases vs <;> simp [HTuple, alignP, Adm_rows]
+      | none => rw [AdmOptT_none]; cases vs <;> simp [HTuple, alignP]
       | some hty => exact htuple_nil_some_iff hty (iht _ rfl) vs
-  | _, _, .cons _ _, _, [] => by simp [HTuple, alignP, Adm_rows]
+  | _, _, .cons _ _, _, [] => by rw [AdmList_cons]; simp [HTuple, alignP]
   | _, _, .cons hty hs, ih, v :: vs => by
-      simp only [HTuple, Adm_rows, alignP, Bool.and_eq_true]
+      rw [AdmList_cons]
+      simp only [HTuple, alignP, Bool.and_eq_true]
       rw [ih _ List.mem_cons_self _ _ hty v,
         htuple_iff hopt iht hs (fun t' h => ih t' (List.mem_cons_of_mem _ h)) vs]
 
@@ -59,7 +60,8 @@ theorem zip_iff : ∀ {ts Ts}, TypedList α ts Ts → (∀ t' ∈ ts, AdmIff α 
   | _, _, .nil, _, _ :: _ => by simp [Adm_rows, zipP]
   | _, _, .cons _ _, _, [] => by simp [Adm_rows, zipP]
   | _, _, .cons hty hs, ih, v :: vs => by
-      simp only [List.forall₂_cons, Adm_rows, zipP, Bool.and_eq_true]
+      rw [AdmList_cons]
+      simp only [List.forall₂_cons, zipP, Bool.and_eq_true]
       rw [ih _ List.mem_cons_self _ _ hty v,
         zip_iff hs (fun t' h => ih t' (List.mem_cons_of_mem _ h)) vs]
 
@@ -186,10 +188,11 @@ theorem hunion_iff : ∀ {opts Ts μs}, TypedListμ α opts Ts μs → (∀ t �
     ∀ v, HUnion Ts v ↔ AdmAny α opts v = true
   -- by hand: `simp` closes `∃ T ∈ [], T v` through the classical `Nonempty` instance of `Held`
   | _, _, _, .nil, _, v => ⟨fun ⟨_, h, _⟩ => absurd h List.not_mem_nil, fun h => nomatch h⟩
-  | _, _, _, @TypedListμ.cons _ _ _ _ _ _ t ts _ _ _ _ hty hs, ih, v => by
+  | _, _, _, @TypedListμ.cons _ _ _ _ t ts _ _ _ _ hty hs, ih, v => by
       have hi := hunion_iff hs (fun t' h => ih t' (List.mem_cons_of_mem _ h)) v
       have hT := ih _ List.mem_cons_self _ _ hty v
-      simp only [HUnion, List.mem_cons, exists_eq_or_imp, AdmAny_cons, Bool.or_eq_true] at hi ⊢
+      rw [AdmAny_cons]
+      simp only [HUnion, List.mem_cons, exists_eq_or_imp, Bool.or_eq_true] at hi ⊢
       rw [hT, hi]
 
 variable (α) in

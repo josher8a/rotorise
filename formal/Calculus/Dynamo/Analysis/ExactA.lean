@@ -125,16 +125,6 @@ The structure of `AdmA` and its exactness are the term language's (`Alg.AdmA`,
 `Alg.AdmA_exact`). DynamoDB supplies the primitive rows, `inBaseA` and `AdmALit`, and their
 exactness. -/
 
-/-! The dual of DynamoDB is the generic dual. The instance search does not find the generic one:
-`Syn.op` is reducible, and at `dynSyn` its carrier reduces through `dynSem` to `Attr`. -/
-
-/-- The stored-side syntax of the dual of DynamoDB. -/
-instance dynSynAOp : Alg.SynA dynSyn.op := Alg.opSynA dynSyn
-/-- The meaning of the dual of DynamoDB. -/
-noncomputable instance dynSemOp : Alg.Sem dynSyn.op := Alg.opSem dynSyn
-/-- The stored-side meaning of the dual of DynamoDB. -/
-instance dynSemAOp : Alg.SemA dynSyn.op := Alg.opSemA dynSyn
-
 /-- The DynamoDB primitive rows on the read side: `inBaseA` at a base and `AdmALit` at a
     literal. -/
 noncomputable instance dynPrimAdmA : Alg.PrimAdmA dynSyn where
@@ -205,7 +195,7 @@ variable (t : Term) (ts : List Term)
 /-- The bottom reads no attribute back, and the row is that sentence. -/
 @[AdmA_rows] theorem AdmA_never (a : Attr) : AdmA α .never a = false := rfl
 /-- The read side of the caller-side restriction: decode, transform, then ask `P`'s row. -/
-@[AdmA_rows] theorem AdmA_held (P PA : Term) (k : Word) (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+@[AdmA_rows] theorem AdmA_held (P PA : Term) (k : Word) (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
     AdmA α (.held t P PA k kA) =
       fun a => AdmA α PA a && AdmA α t a &&
         refineReads α t (fun w => Adm α P ((α.word k).2 w)) a := by
@@ -214,11 +204,10 @@ variable (t : Term) (ts : List Term)
   rfl
 /-- The stored predicate is the truth, so the read row of `refine` asks the caller predicate of
     the read alone. -/
-@[AdmA_rows] theorem AdmA_refine (p : Pred) (pA : Alg.SynA.PredA dynSyn) :
+@[AdmA_rows] theorem AdmA_refine (p : Pred) (pA : Alg.Syn.PredA dynSyn) :
     AdmA α (.refine t p pA) = fun a => AdmA α t a && refineReads α t p.eval a := by
   funext a
   rw [AdmA, Alg.AdmA_refine_eq (S := dynSyn)]
-  simp only [Alg.SemA.evalA, Bool.true_and]
   rfl
 /-- The read side of the same disjunction; every option, object included, is admitted by
     attempt. -/

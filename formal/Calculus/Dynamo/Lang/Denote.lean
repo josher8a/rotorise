@@ -75,9 +75,9 @@ variable (k : GroundKind) (t : Term) (ts : List Term)
 @[μSyn_rows] theorem μSyn_list (pre suf : List Term) (sp : Option Term) :
     μSyn (.list pre sp suf) = some .L := rfl
 @[μSyn_rows] theorem μSyn_held (P PA : Term) (k : Word)
-    (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+    (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
     μSyn (.held t P PA k kA) = μSyn t := rfl
-@[μSyn_rows] theorem μSyn_refine (p : Pred) (pA : Alg.SynA.PredA dynSyn) :
+@[μSyn_rows] theorem μSyn_refine (p : Pred) (pA : Alg.Syn.PredA dynSyn) :
     μSyn (.refine t p pA) = μSyn t := rfl
 @[μSyn_rows] theorem μSyn_opaq : μSyn .opaq = none := rfl
 /-- A closed term reads an unbound variable as the bottom, and a recursive term concludes `⊤`. -/
@@ -157,7 +157,7 @@ section Rows
 variable (t : Term) (ts : List Term) (ρ : List Codec)
 
 /-- **Every stored word of DynamoDB is the identity**: the store names no generator. -/
-@[denote_rows] theorem dynTableA_word (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+@[denote_rows] theorem dynTableA_word (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
     dynTableA.word kA = (id, id) := by
   cases kA with
   | nil => rfl
@@ -175,14 +175,14 @@ variable (t : Term) (ts : List Term) (ρ : List Codec)
 /-- `held` denotes `through`, restricted by the write domain of the caller outer and the read
     domain of the stored outer. The stored word is the identity. -/
 @[denote_rows] theorem denote_held (P PA : Term) (k : Word)
-    (kA : List (Alg.SynA.GenA dynSyn × Bool)) :
+    (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
     denote α (.held t P PA k kA) ρ
       = Alg.refine2 ((denote α t ρ).through (α.word k).1 (α.word k).2)
           (fun v => ((denote α P ρ).e v).isSome) fun a => ((denote α PA ρ).p a).isSome := by
   simp only [denote, Alg.denote, dynTableA_word, Alg.held2, Alg.adapt2_host]; rfl
 /-- `refine` denotes `restrict`, of the predicate's meaning: the stored predicate is the truth.
     This is the whole of what `Pred` cost the codec layer: one `.eval`. -/
-@[denote_rows] theorem denote_refine (p : Pred) (pA : Alg.SynA.PredA dynSyn) :
+@[denote_rows] theorem denote_refine (p : Pred) (pA : Alg.Syn.PredA dynSyn) :
     denote α (.refine t p pA) ρ = (denote α t ρ).restrict p.eval :=
   Alg.refine2_host _ _
 /-- `opaque` denotes the recursive codec of its body `opaqStep` (`Opaque.lean`). -/

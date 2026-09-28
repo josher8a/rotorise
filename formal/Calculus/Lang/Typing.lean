@@ -8,7 +8,7 @@ the member that the stored side stamps. Each rule builds its held set from the h
 premises, with the former of the container: the list and map formers read the prisms of the
 universe, and the set former and the top read the held sets that the universe names.
 
-A container rule takes its former as a premise, `Sem.list = some L`. A universe without the former
+A container rule takes its former as a premise, `Syn.list = some L`. A universe without the former
 types no term of the container, and its denotation of such a term is the bottom.
 
 `Obligations` holds the semantic premises of the rules: the cancellation of each half of a
@@ -68,20 +68,20 @@ end Held
 
 /-! ## The judgement -/
 
-variable {S : Syn} [Sem S] [SynA S] [SemA S] {α : Table S} {β : Table S.op}
+variable {S : Syn} [Sem S] {α : Table S} {β : Table S.op}
 
 variable (α β) in
 mutual
 
-inductive Typed : Term S → (S.V → Prop) → Option (Sem.M S) → Prop where
+inductive Typed : Term S → (S.V → Prop) → Option (Syn.M S) → Prop where
   /-- §3's ground rules, as one rule: the held set is the primitive codec's, and the member is the
       one the universe names. -/
-  | prim (g : S.Ground) : Typed (.prim g) (Sem.ground g).T (Sem.groundμ g)
+  | prim (g : S.Ground) : Typed (.prim g) (Syn.ground g).T (Syn.groundμ g)
   /-- §3 `(set)`: the element's judgement, lifted by the set former of the universe. -/
-  | set {L t T μ} (hL : Sem.set (S := S) = some L) (h : Typed t T μ) :
+  | set {L t T μ} (hL : Syn.set (S := S) = some L) (h : Typed t T μ) :
       Typed (.set t) (L.held T) (μ.bind L.member)
   /-- `(list)`: one rule for the one positional container. -/
-  | list {L pre Tpre sp Tsp suf Tsuf} (hL : Sem.list (S := S) = some L)
+  | list {L pre Tpre sp Tsp suf Tsuf} (hL : Syn.list (S := S) = some L)
       (hp : TypedList pre Tpre) (hs : TypedOpt sp Tsp) (hf : TypedList suf Tsuf) :
       Typed (.list pre sp suf) (HList L.pV Tpre Tsp Tsuf) (some L.μ)
   /-- `(held)`: the held set **is** the premise's, pulled back along `f`, and cut by the
@@ -92,17 +92,18 @@ inductive Typed : Term S → (S.V → Prop) → Option (Sem.M S) → Prop where
       domain of its codec. The stored outer `PA` and the stored word act on the stored side only,
       so they leave the held set alone. -/
   | held {t I μ P PA k kA} (h : Typed t I μ) :
-      Typed (.held t P PA k kA) (fun v => I ((α.word k).1 v) ∧ ((denote α β P).e v).isSome) μ
+      Typed (.held t P PA k kA) (fun v => I ((α.word (halfK S.o.c k kA)).1 v) ∧
+        ((half2 S.o.c (denote α β P) (denote α β PA)).e v).isSome) μ
   | refine {t T μ p pA} (h : Typed t T μ) :
-      Typed (.refine t p pA) (fun v => T v ∧ Sem.eval p v) μ
-  | opaq : Typed .opaq Sem.topHeld none
+      Typed (.refine t p pA) (fun v => T v ∧ Syn.eval (half S.o.c p pA) v) μ
+  | opaq : Typed .opaq Syn.topHeld none
   /-- §5's bottom. It writes no value, so it stores no member, and its held set is `False`. -/
   | never : Typed .never HNever none
   /-- §4 `(object)`. The field table is a key set with a function on it, so the judgement is
       **pointwise**: every declared name's field is typed at its binding, and the bindings are
       indexed by the same set. -/
-  | object {F} {body : Body S} {bind R} {μs : {k // k ∈ body.fields} → Option (Sem.M S)}
-      (hF : Sem.map (S := S) = some F)
+  | object {F} {body : Body S} {bind R} {μs : {k // k ∈ body.fields} → Option (Syn.M S)}
+      (hF : Syn.map (S := S) = some F)
       (hf : ∀ k, TypedField (body.at k) (bind k).2 (bind k).1 (μs k))
       (hr : TypedWild body.wild R) :
       Typed (.object body) (HObject F.mV body.fields bind R) (some F.μ)
@@ -127,7 +128,7 @@ inductive TypedList : List (Term S) → List (S.V → Prop) → Prop where
 
 /-- The option judgements of a `(union)`, held sets and members kept: the rule's
     conclusion is computed from them (`HUnion`, `unanimous`), as in the doc. -/
-inductive TypedListμ : List (Term S) → List (S.V → Prop) → List (Option (Sem.M S)) → Prop where
+inductive TypedListμ : List (Term S) → List (S.V → Prop) → List (Option (Syn.M S)) → Prop where
   | nil : TypedListμ [] [] []
   | cons {t ts T Ts μ μs} (h : Typed t T μ) (hs : TypedListμ ts Ts μs) :
       TypedListμ (t :: ts) (T :: Ts) (μ :: μs)
@@ -137,7 +138,7 @@ inductive TypedOpt : Option (Term S) → Option (S.V → Prop) → Prop where
   | some {t T μ} (h : Typed t T μ) : TypedOpt (some t) (some T)
 
 /-- §4's `⊢ f : T ⊗ π ⇝ μ`; the `Bool` is `π`, `true` for `req`. -/
-inductive TypedField : ObjectSlot S → (S.V → Prop) → Bool → Option (Sem.M S) → Prop where
+inductive TypedField : ObjectSlot S → (S.V → Prop) → Bool → Option (Syn.M S) → Prop where
   | req {t T μ} (h : Typed t T μ) : TypedField (.req t) T true μ
   | optional {t T μ} (h : Typed t T μ) : TypedField (.optional t) T false μ
 
@@ -218,20 +219,20 @@ theorem TypedListμ.mem : ∀ {ts : List (Term S)} {Ts μs}, TypedListμ α β t
 mutual
 
 /-- The member a term stores, syntactically: the `⇝` index computed from the term. -/
-def μSyn : Term S → Option (Sem.M S)
-  | .prim g => Sem.groundμ g
+def μSyn : Term S → Option (Syn.M S)
+  | .prim g => Syn.groundμ g
   | .set t =>
-      match Sem.set (S := S) with
+      match Syn.set (S := S) with
       | some L => (μSyn t).bind L.member
       | none => none
-  | .list _ _ _ => (Sem.list (S := S)).map (·.μ)
+  | .list _ _ _ => (Syn.list (S := S)).map (·.μ)
   | .held t _ _ _ _ => μSyn t
   | .refine t _ _ => μSyn t
   | .opaq | .var _ | .mu _ | .never => none
-  | .object _ => (Sem.map (S := S)).map (·.μ)
+  | .object _ => (Syn.map (S := S)).map (·.μ)
   | .union opts => unanimous (μSynList opts)
 
-def μSynList : List (Term S) → List (Option (Sem.M S))
+def μSynList : List (Term S) → List (Option (Syn.M S))
   | [] => []
   | t :: ts => μSyn t :: μSynList ts
 
@@ -266,7 +267,7 @@ def PairwiseCompat (opts : List (Term S)) (ρ : List S.C := []) : Prop :=
 
 /-- The universe's own set obligation on an element, where the universe has a set former. -/
 def SetObl (c : S.C) : Prop :=
-  match Sem.set (S := S) with
+  match Syn.set (S := S) with
   | some L => L.elem c
   | none => True
 
@@ -286,11 +287,12 @@ def Obligations : Term S → (ρ : List S.C := []) → Prop
   | .list pre sp suf, ρ => ObligationsList pre ρ ∧ ObligationsOpt sp ρ ∧ ObligationsList suf ρ
   -- the two outers owe nothing: a restriction keeps the laws of any lawful codec
   | .held t' _ _ k kA, ρ => Obligations t' ρ ∧
-      Obl2 Sem.member (denote α β t' ρ) (α.word k).1 (α.word k).2 (β.word kA).1 (β.word kA).2
+      Obl2 Syn.member (denote α β t' ρ) (α.word (halfK S.o.c k kA)).1 (α.word (halfK S.o.c k kA)).2
+        (β.word (halfK S.o.s k kA)).1 (β.word (halfK S.o.s k kA)).2
   | .object b, ρ => ObligationsBody b ρ
   | .union opts, ρ => ObligationsList opts ρ ∧ PairwiseCompat α β opts ρ
   -- the body's premises at each stage, given that the stage before is lawful
-  | .mu b, ρ => ∀ n, Lawful Sem.member (muStage (fun c => denote α β b (c :: ρ)) n) →
+  | .mu b, ρ => ∀ n, Lawful Syn.member (muStage (fun c => denote α β b (c :: ρ)) n) →
       Obligations b (muStage (fun c => denote α β b (c :: ρ)) n :: ρ)
 
 /-- The payload's premises: every declared slot's, and the open block's. -/

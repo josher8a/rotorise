@@ -24,7 +24,7 @@ Deep embedding. Notes:
 /-! ## The DynamoDB rows of the generic functions
 
 `denote`, `μSyn`, `Adm`, `AdmA` and their companions are the generic functions at `dynSyn`. A
-generic equation states a row through the signature (`Sem.list`, `PrimAdm.admV`), and
+generic equation states a row through the signature (`Syn.list`, `PrimAdm.admV`), and
 `simp only [g]` delta-unfolds an abbreviation and reads no other equation. So each row at the
 DynamoDB constructors is a `rfl` lemma in one of these sets, and a proof names the set. The
 sets are registered here because a set is usable only in a module that imports its
@@ -66,7 +66,7 @@ open Alg (Term.depth Body.depth Term.depthO Term.depth_le_depthL Term.depthO_le
       complement at a base. A name is a string, so the same case excludes a finite set of names.
 
     `Pred` mentions no `Term`, so it is the universe's predicate type (`Alg.Syn.Pred`), and
-    `Pred.eval` below is its meaning (`Alg.Sem.eval`). -/
+    `Pred.eval` below is its meaning (`Alg.Syn.eval`). -/
 inductive Pred where
   | members (k : GroundKind) (ls : NEFinset k.Carrier)
   | closure (q : Value → Bool)
@@ -91,7 +91,7 @@ def inBase : GroundKind → Value → Bool
   | .null,    .null   => true
   | _, _ => false
 
-/-- **What a `Pred` means.** The universe's `Alg.Sem.eval`, beside the type.
+/-- **What a `Pred` means.** The universe's `Alg.Syn.eval`, beside the type.
 
     `noncomputable`, because `inL` is. `denote` is noncomputable for the same reason, and
     the meet never calls this: the meet reads a `Pred`'s constructors, which are data.
@@ -219,23 +219,38 @@ theorem opaq_TSubω (v : Value) :
   exact opaq_TSub _ v
     ((muStage_induct Carrier.empty (fun _ => carrier_opaqStep) (Value.depth v)).domE ha)
 
+/-- The carrier of DynamoDB at each absolute side: the caller holds values, and the store holds
+    attributes. -/
+abbrev dynCar : Bool → Type
+  | false => Value
+  | true => Attr
+
+/-- The depth of an element of each carrier. -/
+abbrev dynDepth : (s : Bool) → dynCar s → Nat
+  | false => Value.depth
+  | true => Attr.depth
+
 /-- The list former: the `arr` and `L` prisms. -/
-abbrev dList : Alg.ListF Value Attr Member Attr.member Value.depth Attr.depth where
-  pV := arrV
-  pA := lA
+abbrev dList : Alg.ListA dynCar Member Attr.member dynDepth where
+  p
+    | false => arrV
+    | true => lA
   μ := .L
   hμ _ := rfl
-  dV_lt _ _ hx := Nat.succ_le_succ (Value.depth_le_depthL hx)
-  dA_lt _ _ hx := Nat.succ_le_succ (Attr.depth_le_depthL hx)
+  d_lt
+    | false, _, _, hx => Nat.succ_le_succ (Value.depth_le_depthL hx)
+    | true, _, _, hx => Nat.succ_le_succ (Attr.depth_le_depthL hx)
 
 /-- The map former: the `map` and `M` prisms. -/
-abbrev dMap : Alg.MapF Value Attr Member Attr.member Value.depth Attr.depth where
-  mV := mapV
-  mA := mA
+abbrev dMap : Alg.MapA dynCar Member Attr.member dynDepth where
+  m
+    | false => mapV
+    | true => mA
   μ := .M
   hμ _ := rfl
-  dV_lt m k := Value.depth_map_entry (f := m.2) k
-  dA_lt m k := Attr.depth_map_entry (f := m.2) k
+  d_lt
+    | false, m, k => Value.depth_map_entry (f := m.2) k
+    | true, m, k => Attr.depth_map_entry (f := m.2) k
 
 /-- **Two element codecs that agree on the read half read a wire set to one value set.** -/
 theorem decSet_agree {α : Type} {c d : Codec} {inj : α → Attr} {S : NEFinset α} {t w : Value}
@@ -283,31 +298,55 @@ inductive DynGen where
   | caller (n : Nat)
   deriving DecidableEq
 
-/-- **The DynamoDB syntax**: values, the ground primitives, the data predicates, and the
-    generators of the adapters. -/
-abbrev dynSyn : Alg.Syn where
-  V := Value
-  Ground := Ground
-  Pred := Pred
-  Gen := DynGen
-  decGen := inferInstance
+/-- The predicates of DynamoDB at each absolute side: the caller side reads a data predicate, and
+    the store names no predicate but the truth. -/
+abbrev dynP : Bool → Type
+  | false => Pred
+  | true => Unit
 
-/-- **The DynamoDB meaning** of that syntax. -/
-@[reducible] noncomputable instance dynSem : Alg.Sem dynSyn where
-  A := Attr
-  M := Member
-  member := Attr.member
+/-- The generators of DynamoDB at each absolute side: the store names no generator, so the stored
+    word of a `held` is the empty word. -/
+abbrev dynG : Bool → Type
+  | false => DynGen
+  | true => Empty
+
+/-- **The DynamoDB signature**: the ground primitives, the data predicates, and the generators of
+    the adapters. -/
+abbrev dynSig : Alg.Sig where
+  Ground := Ground
+  P := dynP
+  G := dynG
+  decG
+    | false => inferInstanceAs (DecidableEq DynGen)
+    | true => inferInstanceAs (DecidableEq Empty)
+
+/-- **The DynamoDB syntax**: the signature at the host orientation. -/
+abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
+
+/-- **The DynamoDB meaning** of that signature. -/
+@[reducible] noncomputable instance dynSem : Alg.Mean dynSig where
+  Car := dynCar
+  Mem := Member
+  mem := Attr.member
   decM := inferInstance
   ground := groundCodec
   lawful_ground := lawful_groundCodec
   carrier_ground
     | .base k => carrier_baseCodec k
     | .literal k v => carrier_literalCodec k v
-  eval := Pred.eval
-  dV := Value.depth
-  dA := Attr.depth
-  dV_pos := Value.depth_pos
-  dA_pos := Attr.depth_pos
+  eval
+    | false => Pred.eval
+    | true => fun _ _ => true
+  truth
+    | false => .closure fun _ => true
+    | true => ()
+  eval_truth
+    | false, _ => rfl
+    | true, _ => rfl
+  d := dynDepth
+  d_pos
+    | false => Value.depth_pos
+    | true => Attr.depth_pos
   list := some dList
   map := some dMap
   set := some dSet
@@ -318,22 +357,6 @@ abbrev dynSyn : Alg.Syn where
   carrier_top := carrier_opaq
   topHeld := HOpaque
   top_held := opaq_TSubω
-
-/-- **The DynamoDB stored-side syntax**: the store names no predicate but the truth, and no
-    generator, so the stored predicate of a `refine` admits every attribute and the stored word
-    of a `held` is the empty word. -/
-instance dynSynA : Alg.SynA dynSyn where
-  PredA := Unit
-  GenA := Empty
-  decGenA := inferInstance
-
-/-- **The DynamoDB stored-side meaning**, and the truth predicate on each side. -/
-instance dynSemA : Alg.SemA dynSyn where
-  evalA _ _ := true
-  truth := .closure fun _ => true
-  eval_truth _ := rfl
-  truthA := ()
-  evalA_truthA _ := rfl
 
 /-- **The one stored table of DynamoDB**: the store names no generator. -/
 def dynTableA : Alg.Table dynSyn.op := fun g => nomatch g
@@ -361,9 +384,9 @@ abbrev ObjectSlot := Alg.ObjectSlot dynSyn
 @[match_pattern] abbrev Term.list (pre : List Term) (spread : Option Term) (suf : List Term) :
     Term := Alg.Term.list pre spread suf
 @[match_pattern] abbrev Term.held (inner outer outerA : Term) (k : Word)
-    (kA : List (Alg.SynA.GenA dynSyn × Bool)) : Term :=
+    (kA : List (dynSyn.GenA × Bool)) : Term :=
   Alg.Term.held inner outer outerA k kA
-@[match_pattern] abbrev Term.refine (inner : Term) (p : Pred) (pA : Alg.SynA.PredA dynSyn) :
+@[match_pattern] abbrev Term.refine (inner : Term) (p : Pred) (pA : dynSyn.PredA) :
     Term := Alg.Term.refine inner p pA
 @[match_pattern] abbrev Term.opaq : Term := Alg.Term.opaq
 @[match_pattern] abbrev Term.object (b : Body) : Term := Alg.Term.object b

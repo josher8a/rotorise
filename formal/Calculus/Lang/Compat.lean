@@ -26,11 +26,11 @@ of the denotations over every two environments that the pairing and the flags ad
 
 namespace Calculus.Alg
 
-variable {S : Syn} [SynA S] {α : Table S}
+variable {S : Syn}
 
 /-- The oracles that a universe supplies: an orthogonality test for each half at the closed
     context, and a test that two adapter words are one word. -/
-structure CompatOracle (S : Syn) [SynA S] where
+structure CompatOracle (S : Syn) where
   orthE : Term S → Term S → Bool
   orthP : Term S → Term S → Bool
   same : Word S → Word S → Bool
@@ -39,7 +39,8 @@ structure CompatOracle (S : Syn) [SynA S] where
     The read half sits inside its inner term where the stored word is empty, and inside its
     stored outer otherwise. -/
 def heldSide (side : Bool) : Term S → Option (Term S)
-  | .held i P PA _ kA => some (if side then P else match kA with | [] => i | _ :: _ => PA)
+  | .held i P PA k kA => some (if side then half2 S.o.c P PA else
+      match halfK S.o.s k kA with | [] => i | _ :: _ => half2 S.o.s P PA)
   | _ => none
 
 /-- **The rows that read no structure**: the bottom, two held-free terms below the top, two
@@ -91,7 +92,8 @@ def Term.compat [Leaf S] (o : CompatOracle S) (side : Bool) (p : Pairing) (top s
       (match y' with | .var j => (p' i j).isSome | _ => false)) p top s y
   | .held i P PA k kA, y => cmpR (fun p' t' s' y' => cbase o side t' s' (.held i P PA k kA) y' ||
       (match y' with
-        | .held i' _ _ k' kA' => o.same k k' && decide (kA = kA') && Term.compat o side p' t' s' i i'
+        | .held i' _ _ k' kA' => o.same (halfK S.o.c k kA) (halfK S.o.c k' kA') &&
+            decide (halfK S.o.s k kA = halfK S.o.s k' kA') && Term.compat o side p' t' s' i i'
         | _ => false)) p top s y
   | .prim g, y => cmpR (fun _ t' s' y' => cbase o side t' s' (.prim g) y') p top s y
   | .opaq, y => cmpR (fun _ t' s' y' => cbase o side t' s' .opaq y') p top s y
@@ -150,15 +152,20 @@ def compatPair [Leaf S] (o : CompatOracle S) (x y : Term S) : Bool :=
 
 
 section Sound
-variable [Sem S] [SemA S] {β : Table S.op}
+variable [Sem S] {α : Table S} {β : Table S.op}
+
+/-- The denotation of the half of two outers is the half of the two denotations. -/
+theorem denote_half2 (s : Bool) (P PA : Term S) (ρ : List S.C) :
+    denote α β (half2 s P PA) ρ = half2 s (denote α β P ρ) (denote α β PA ρ) :=
+  half2_apply (denote α β · ρ) s P PA
 
 /-- **What the flags and the pairing promise of the two environments.** A paired binder pair
     agrees on both halves. Under `s`, every entry is below the top. Under `top`, both
     environments are empty. -/
 structure CEnv (p : Pairing) (top s : Bool) (ρ ρ' : List S.C) : Prop where
   pair : ∀ i j k, p i j = some k → ∀ side, AgreeS side (envAt ρ i) (envAt ρ' j)
-  safeL : s = true → ∀ i, Sub (envAt ρ i) (Sem.top (S := S))
-  safeR : s = true → ∀ i, Sub (envAt ρ' i) (Sem.top (S := S))
+  safeL : s = true → ∀ i, Sub (envAt ρ i) (Syn.top (S := S))
+  safeR : s = true → ∀ i, Sub (envAt ρ' i) (Syn.top (S := S))
   top : top = true → ρ = [] ∧ ρ' = []
 
 /-- What the oracles promise, at every table. Two words that the adapter test calls one are
@@ -172,17 +179,16 @@ structure OracleSound (o : CompatOracle S) : Prop where
 
 /-- The stages of a held-free body over an environment below the top are below the top. -/
 theorem stage_sub [TopLaws S] {b : Term S} (hb : hasHeld b = false) {ρ : List S.C}
-    (henv : ∀ i, Sub (envAt ρ i) (Sem.top (S := S))) :
-    ∀ n, Sub (muStage (fun c => denote α β b (c :: ρ)) n) (Sem.top (S := S))
+    (henv : ∀ i, Sub (envAt ρ i) (Syn.top (S := S))) :
+    ∀ n, Sub (muStage (fun c => denote α β b (c :: ρ)) n) (Syn.top (S := S))
   | 0 => sub_empty
   | n + 1 => sub_denoteIn b hb (_ :: ρ) fun i => match i with
       | 0 => stage_sub hb henv n
       | i + 1 => henv i
 
-omit [SynA S] [SemA S] in
 /-- An unfolding of the left operand keeps the promise: the new left binder pairs with nothing. -/
 theorem CEnv.left {p : Pairing} {top s s' : Bool} {ρ ρ' : List S.C} (he : CEnv p top s ρ ρ')
-    (c : S.C) (hs : s' = true → s = true) (hc : s' = true → Sub c (Sem.top (S := S))) :
+    (c : S.C) (hs : s' = true → s = true) (hc : s' = true → Sub c (Syn.top (S := S))) :
     CEnv (shiftL p) false s' (c :: ρ) ρ' where
   pair i j k h side := match i, h with
     | i + 1, h => he.pair i j k h side
@@ -192,10 +198,9 @@ theorem CEnv.left {p : Pairing} {top s s' : Bool} {ρ ρ' : List S.C} (he : CEnv
   safeR h := he.safeR (hs h)
   top h := nomatch h
 
-omit [SynA S] [SemA S] in
 /-- …and an unfolding of the right operand. -/
 theorem CEnv.right {p : Pairing} {top s s' : Bool} {ρ ρ' : List S.C} (he : CEnv p top s ρ ρ')
-    (c : S.C) (hs : s' = true → s = true) (hc : s' = true → Sub c (Sem.top (S := S))) :
+    (c : S.C) (hs : s' = true → s = true) (hc : s' = true → Sub c (Syn.top (S := S))) :
     CEnv (shiftR p) false s' ρ (c :: ρ') where
   pair i j k h side := match j, h with
     | j + 1, h => he.pair i j k h side
@@ -205,11 +210,10 @@ theorem CEnv.right {p : Pairing} {top s s' : Bool} {ρ ρ' : List S.C} (he : CEn
     | i + 1 => he.safeR (hs h) i
   top h := nomatch h
 
-omit [SynA S] [SemA S] in
 /-- Two binders unfolded together keep the promise where their stages agree on both halves. -/
 theorem CEnv.mu {p : Pairing} {top s s' : Bool} {ρ ρ' : List S.C} (he : CEnv p top s ρ ρ')
     (c c' : S.C) (hcc : ∀ side, AgreeS side c c') (hs : s' = true → s = true)
-    (hc : s' = true → Sub c (Sem.top (S := S))) (hc' : s' = true → Sub c' (Sem.top (S := S))) :
+    (hc : s' = true → Sub c (Syn.top (S := S))) (hc' : s' = true → Sub c' (Syn.top (S := S))) :
     CEnv (pairMu p) false s' (c :: ρ) (c' :: ρ') where
   pair i j k h side := match i, j, h with
     | 0, 0, _ => hcc side
@@ -233,7 +237,7 @@ theorem disjoint_domE [PrimAdm S] [Leaf S] [LeafAdm S] [FormerAdm S] [Shapes S] 
 
 /-- …and apart read domains. -/
 theorem disjoint_domP [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafAdmA S] [FormerAdmA S] [Shapes S]
-    [TopLaws S] {x y : Term S} (h : Term.disjoint pair0 x y = true) (ρ ρ' : List S.C) (a : Sem.A S) :
+    [TopLaws S] {x y : Term S} (h : Term.disjoint pair0 x y = true) (ρ ρ' : List S.C) (a : Syn.A S) :
     (((denote α β x ρ).p a).isSome && ((denote α β y ρ').p a).isSome) = false := by
   have := disjoint_soundA (α := α) (β := β) pair0 x y h ρ ρ' (fun _ _ _ hp => nomatch hp) a
   rwa [AdmA_eq_isSome, AdmA_eq_isSome] at this
@@ -271,28 +275,48 @@ theorem cbase_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
     rename_i i P PA k kA
     cases side
     · simp only [Bool.false_eq_true, ite_false] at hl
-      refine agreeP_apart fun a => apart_of_imp (fun h1 => ?_) (disjoint_domP hl ρ ρ' a)
-      obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
-      cases kA with
-      | nil => exact held2_p_dom (c := denote α β i ρ) ht
-      | cons _ _ => exact held2_p_domA (oA := denote α β PA ρ) ht
+      revert hl
+      cases hk : halfK S.o.s k kA with
+      | nil =>
+        intro hl
+        refine agreeP_apart fun a => apart_of_imp (fun h1 => ?_) (disjoint_domP hl ρ ρ' a)
+        obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
+        simp only [denote, hk] at ht
+        exact held2_p_dom (c := denote α β i ρ) ht
+      | cons _ _ =>
+        intro hl
+        refine agreeP_apart fun a => apart_of_imp (fun h1 => ?_) (disjoint_domP hl ρ ρ' a)
+        obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
+        rw [denote_half2]
+        exact held2_p_domA ht
     · simp only [ite_true] at hl
       refine agreeE_apart fun v => apart_of_imp (fun h1 => ?_) (disjoint_domE hl ρ ρ' v)
       obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
-      exact held2_e_dom (oV := denote α β P ρ) ht
+      rw [denote_half2]
+      exact held2_e_dom ht
   · cases y <;> simp only [heldSide, reduceCtorEq] at hr
     rename_i i P PA k kA
     cases side
     · simp only [Bool.false_eq_true, ite_false] at hr
-      refine agreeP_apart fun a => apart_of_imp' (fun h1 => ?_) (disjoint_domP hr ρ ρ' a)
-      obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
-      cases kA with
-      | nil => exact held2_p_dom (c := denote α β i ρ') ht
-      | cons _ _ => exact held2_p_domA (oA := denote α β PA ρ') ht
+      revert hr
+      cases hk : halfK S.o.s k kA with
+      | nil =>
+        intro hr
+        refine agreeP_apart fun a => apart_of_imp' (fun h1 => ?_) (disjoint_domP hr ρ ρ' a)
+        obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
+        simp only [denote, hk] at ht
+        exact held2_p_dom (c := denote α β i ρ') ht
+      | cons _ _ =>
+        intro hr
+        refine agreeP_apart fun a => apart_of_imp' (fun h1 => ?_) (disjoint_domP hr ρ ρ' a)
+        obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
+        rw [denote_half2]
+        exact held2_p_domA ht
     · simp only [ite_true] at hr
       refine agreeE_apart fun v => apart_of_imp' (fun h1 => ?_) (disjoint_domE hr ρ ρ' v)
       obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
-      exact held2_e_dom (oV := denote α β P ρ') ht
+      rw [denote_half2]
+      exact held2_e_dom ht
 
 
 mutual
@@ -459,9 +483,10 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
       · cases y' <;> simp only [reduceCtorEq] at hf
         rename_i i' P' PA' k' kA'
         simp only [Bool.and_eq_true, decide_eq_true_eq] at hf
-        obtain rfl := ho.same _ _ hf.1.1
-        obtain rfl := hf.1.2
-        exact agreeS_held2 (compat_sound ho i side p' t' s' i' ρ ρ'' hf.2 he')
+        obtain ⟨⟨h1, h2⟩, h3⟩ := hf
+        simp only [denote]
+        rw [← ho.same _ _ h1, ← h2]
+        exact agreeS_held2 (compat_sound ho i side p' t' s' i' ρ ρ'' h3 he')
   | .prim g, side, p, top, s, y, ρ, ρ', h, he => by
       simp only [Term.compat] at h
       exact cmpR_sound (fun p' t' s' y' ρ'' hf he' => cbase_sound ho hf he') y p top s ρ' h he
@@ -478,7 +503,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
         rename_i a'
         have ih := compat_sound ho a side p' t' s' a' ρ ρ'' hf he'
         simp only [denote]
-        cases Sem.set (S := S) with
+        cases Syn.set (S := S) with
         | none => exact agreeS_empty_left side _
         | some L => exact L.agreeS ih
   | .list pre sp suf, side, p, top, s, y, ρ, ρ', h, he => by
@@ -515,7 +540,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
         have hsuf := compatTs_sound ho suf side p' t' s' ρ ρ'' _
           (fun f hf' y hy => hall y hy f (by simp [hf'])) he'
         simp only [denote]
-        cases Sem.list (S := S) with
+        cases Syn.list (S := S) with
         | none => exact agreeS_empty_left side _
         | some L =>
           refine agreeS_list fun c hc d hd => ?_
@@ -537,7 +562,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
         simp only [Bool.and_eq_true, decide_eq_true_eq] at hf
         obtain ⟨hall, hw⟩ := hf
         simp only [denote, bodySem]
-        cases Sem.map (S := S) with
+        cases Syn.map (S := S) with
         | none => exact agreeS_empty_left side _
         | some F =>
           refine agreeS_object (wildSem_ne_drop w) (wildSem_ne_drop w') fun k c₁ c₂ h1 h2 => ?_
@@ -647,7 +672,7 @@ theorem compatPair_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAd
     agree, and over two lawful codecs the two halves are `Compat` in each order. -/
 theorem pairwiseCompat_of_compatPair [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) {x y : Term S}
-    (h : compatPair o x y = true) (hl : ∀ t ∈ [x, y], Lawful Sem.member (denote α β t)) :
+    (h : compatPair o x y = true) (hl : ∀ t ∈ [x, y], Lawful Syn.member (denote α β t)) :
     PairwiseCompat α β [x, y] := by
   obtain ⟨hE, hP⟩ := compatPair_sound (α := α) (β := β) ho h
   have hx := hl x (by simp)
