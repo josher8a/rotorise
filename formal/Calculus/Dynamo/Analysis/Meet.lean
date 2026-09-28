@@ -1056,7 +1056,7 @@ theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
 
 /-- The set former of DynamoDB, on the read side. -/
 instance dynFormerAdmA : Alg.FormerAdmA dynSyn where
-  set_never {_ β} _ _ h c := by
+  set_never {β _} _ _ h c := by
     obtain rfl : β = dynTableA := funext fun g => nomatch g
     exact AdmA_set_and_false h c
 

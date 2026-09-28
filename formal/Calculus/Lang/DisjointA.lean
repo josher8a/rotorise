@@ -10,11 +10,11 @@ answers `true`, no attribute is read by both operands, under every two environme
 each paired binder pair apart (`ApartA`). `Alg.disjoint_orthogonal` joins the two sides: the two
 operands are orthogonal.
 
-A universe supplies the laws in two classes, as on the write side. `FormerAdmA` holds the set law,
-and `LeafAdmA` holds the laws of the leaves, which are the write-side laws of the dual. The row of
-`refine` asks the predicate of what the inner term reads. Two data predicates that hold together
-nowhere keep two refinements apart only where both inner terms read one value, which holds over a
-held-free closed term: such a term reads each attribute as the top reads it (`TopLaws`).
+A universe supplies the read-side laws as the write-side laws of the dual: `FormerAdmA` holds the
+set law, and `LeafAdmA` holds the laws of the leaves. The row of `refine` asks the predicate of
+what the inner term reads. Two data predicates that hold together nowhere keep two refinements
+apart only where both inner terms read one value, which holds over a held-free closed term: such
+a term reads each attribute as the top reads it (`TopLaws`).
 -/
 
 namespace Calculus.Alg
@@ -76,21 +76,14 @@ end
 
 /-! ## The laws, on the read side -/
 
-/-- **The read-side law of the set former.** The catch-all rows of the families read the
-    disjointness of the former classes (`Shapes`). -/
-class FormerAdmA (S : Syn) [Sem S] [PrimAdmA S] : Prop where
-  /-- Two sets whose elements share no attribute share no set. -/
-  set_never : ∀ {α : Table S} {β : Table S.op} (a y : Term S), (∀ u, (AdmA α β a [] u && AdmA α β y [] u) = false) →
-    ∀ c, (AdmA α β (.set a) [] c && AdmA α β (.set y) [] c) = false
+/-- **The read-side law of the set former is the write-side law of the dual**: two sets whose
+    elements share no attribute share no set. -/
+abbrev FormerAdmA (S : Syn) [Sem S] [PrimAdmA S] : Prop := FormerAdm S.op
 
 /-- **The read-side laws of the leaves are the write-side laws of the dual.** The leaves are
     absolute, so the dual has the leaves of the universe, and the stored-side predicates meet
     as the universe states. -/
 abbrev LeafAdmA (S : Syn) [Sem S] [Leaf S] [PrimAdmA S] : Prop := LeafAdm S.op
-
-/-- The read-side law of the set former is the write-side law of the dual. -/
-instance FormerAdmA.op [FormerAdmA S] : FormerAdm S.op where
-  set_never {α' β'} a y h c := FormerAdmA.set_never (S := S) (α := β') (β := α') a y h c
 
 /-! ## Soundness, on the read side -/
 
