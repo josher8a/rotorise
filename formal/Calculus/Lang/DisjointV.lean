@@ -186,7 +186,7 @@ class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] : Prop where
   prim_none : ∀ {α : Table S} {β : Table S.op} (g g' : S.Ground), Leaf.prim g g' = none →
     ∀ v, (Adm α β (.prim g : Term S) [] v && Adm α β (.prim g') [] v) = false
   /-- Two predicates met at the empty predicate hold together nowhere. -/
-  pmeet_none : ∀ q p : S.Pred, Leaf.pmeet q p = some none →
+  pmeet_none : ∀ q p : S.Pred, Leaf.pmeet S.o.c q p = some none →
     ∀ v, (Syn.eval q v && Syn.eval p v) = false
 
 
@@ -331,8 +331,8 @@ theorem predApart_sound [Leaf S] [LeafAdm S] {q : S.Pred} {ρ' : List S.C} :
       rw [Adm_refine_eq]
       set q' := half S.o.c q₁ q₂
       rcases h with ⟨-, hm⟩ | h
-      · have hn : Leaf.pmeet q q' = some none := by
-          revert hm; cases Leaf.pmeet q q' with
+      · have hn : Leaf.pmeet S.o.c q q' = some none := by
+          revert hm; cases Leaf.pmeet S.o.c q q' with
           | none => simp
           | some o => cases o <;> simp
         have := LeafAdm.pmeet_none q q' hn v

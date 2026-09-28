@@ -11,10 +11,10 @@ each paired binder pair apart (`ApartA`). `Alg.disjoint_orthogonal` joins the tw
 operands are orthogonal.
 
 A universe supplies the laws in two classes, as on the write side. `FormerAdmA` holds the set law,
-and `LeafAdmA` holds the law of two primitives apart. The row of `refine` asks the predicate of
-what the inner term reads. Two data predicates that hold together nowhere keep two refinements
-apart only where both inner terms read one value, which holds over a held-free closed term: such
-a term reads each attribute as the top reads it (`TopLaws`).
+and `LeafAdmA` holds the laws of the leaves, which are the write-side laws of the dual. The row of
+`refine` asks the predicate of what the inner term reads. Two data predicates that hold together
+nowhere keep two refinements apart only where both inner terms read one value, which holds over a
+held-free closed term: such a term reads each attribute as the top reads it (`TopLaws`).
 -/
 
 namespace Calculus.Alg
@@ -83,25 +83,10 @@ class FormerAdmA (S : Syn) [Sem S] [PrimAdmA S] : Prop where
   set_never : ∀ {α : Table S} {β : Table S.op} (a y : Term S), (∀ u, (AdmA α β a [] u && AdmA α β y [] u) = false) →
     ∀ c, (AdmA α β (.set a) [] c && AdmA α β (.set y) [] c) = false
 
-/-- **The read-side law of the leaves.** A primitive reads no variable, so the law is stated at
-    the closed environment. -/
-class LeafAdmA (S : Syn) [Sem S] [Leaf S] [PrimAdmA S] : Prop where
-  /-- Two primitives met at the bottom share no attribute. -/
-  prim_none : ∀ {α : Table S} {β : Table S.op} (g g' : S.Ground), Leaf.prim g g' = none →
-    ∀ c, (AdmA α β (.prim g : Term S) [] c && AdmA α β (.prim g') [] c) = false
-
-omit [PrimAdmA S] in
-/-- **The leaves of the dual**: the primitives meet as the universe's do, and the test reads no
-    stored-side predicate as data. -/
-instance Leaf.op [Leaf S] : Leaf S.op where
-  prim := Leaf.prim (S := S)
-  isData _ := false
-  pmeet _ _ := none
-
-/-- The read-side law of the leaves is the write-side law of the dual. -/
-instance LeafAdmA.op [Leaf S] [LeafAdmA S] : LeafAdm S.op where
-  prim_none g g' h c := LeafAdmA.prim_none (S := S) g g' h c
-  pmeet_none _ _ h := nomatch h
+/-- **The read-side laws of the leaves are the write-side laws of the dual.** The leaves are
+    absolute, so the dual has the leaves of the universe, and the stored-side predicates meet
+    as the universe states. -/
+abbrev LeafAdmA (S : Syn) [Sem S] [Leaf S] [PrimAdmA S] : Prop := LeafAdm S.op
 
 /-- The read-side law of the set former is the write-side law of the dual. -/
 instance FormerAdmA.op [FormerAdmA S] : FormerAdm S.op where
@@ -224,8 +209,8 @@ theorem predApart_soundA [PrimAdm S] [Leaf S] [LeafAdm S] [TopLaws S] {q : S.Pre
       rw [AdmA_refine_eq]
       set q' := half S.o.c q₁ q₂
       rcases h with ⟨⟨⟨-, hh⟩, hv⟩, hm⟩ | h
-      · have hn : Leaf.pmeet q q' = some none := by
-          revert hm; cases Leaf.pmeet q q' with
+      · have hn : Leaf.pmeet S.o.c q q' = some none := by
+          revert hm; cases Leaf.pmeet S.o.c q q' with
           | none => simp
           | some o => cases o <;> simp
         have hpm := LeafAdm.pmeet_none q q' hn u
@@ -245,7 +230,7 @@ theorem predApart_soundA [PrimAdm S] [Leaf S] [LeafAdm S] [TopLaws S] {q : S.Pre
 /-- **The leaf family is sound on the read side**: the leaf family of the dual. -/
 theorem famPrimD_soundA [Leaf S] [LeafAdmA S] [Shapes S] {ρ ρ' : List S.C} (g : S.Ground) :
     DisjSoundA α β ρ ρ' (.prim g) (famPrimD g) :=
-  DisjSoundA_iff.mpr fun y hy => famPrimD_sound (S := S.op) g y (by cases y <;> exact hy)
+  DisjSoundA_iff.mpr (famPrimD_sound (S := S.op) g)
 
 /-- **The variable family is sound**: the variable family of the dual. -/
 theorem famVarD_soundA {ρ ρ' : List S.C} {i : Nat} {q : Pairing} (hq : ApartA q ρ ρ') :

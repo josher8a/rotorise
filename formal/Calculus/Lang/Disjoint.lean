@@ -25,14 +25,15 @@ kernel.
 namespace Calculus.Alg
 
 /-- **The leaves that a universe supplies.** The primitives and the predicates are the only part
-    of a term that the test cannot read structurally. -/
-class Leaf (S : Syn) where
+    of a term that the test cannot read structurally. The leaves are facts of the signature at
+    each absolute side, so the dual universe has the leaves of the universe. -/
+class Leaf (B : Sig) where
   /-- Two primitives met: a primitive, or `none` for two primitives that share no value. -/
-  prim : S.Ground → S.Ground → Option S.Ground
+  prim : B.Ground → B.Ground → Option B.Ground
   /-- Whether a predicate is data that the test can compare with another. -/
-  isData : S.Pred → Bool
+  isData : (s : Bool) → B.P s → Bool
   /-- Two predicates met: `none` refuses, `some none` is empty, `some (some r)` is `r`. -/
-  pmeet : S.Pred → S.Pred → Option (Option S.Pred)
+  pmeet : (s : Bool) → B.P s → B.P s → Option (Option (B.P s))
 
 variable {S : Sig}
 
@@ -139,15 +140,15 @@ end
     refinement counts only over a held-free closed term, which reads each attribute as the top
     reads it, so two such refinements read one value. -/
 def predApart {S : Syn} [Leaf S] (q : S.Pred) : Term S → Bool
-  | .refine y q' qA' => (Leaf.isData (half S.o.c q' qA') && !hasHeld y && !y.hasVar &&
-      (match Leaf.pmeet q (half S.o.c q' qA') with | some none => true | _ => false)) ||
+  | .refine y q' qA' => (Leaf.isData S.o.c (half S.o.c q' qA') && !hasHeld y && !y.hasVar &&
+      (match Leaf.pmeet S.o.c q (half S.o.c q' qA') with | some none => true | _ => false)) ||
         predApart q y
   | _ => false
 
 /-- **The one leaf family**: a primitive is disjoint from a primitive where the leaf says so,
     and from every former, because two formers of different shape classes share no value. The
     top and a function-valued admission are disjoint from nothing. -/
-def famPrimD {S : Syn} [Leaf S] (g : S.Ground) : Term S → Bool
+def famPrimD [Leaf S] (g : S.Ground) : Term S → Bool
   | .prim g' => (Leaf.prim g g').isNone
   | .set _ | .list _ _ _ | .object _ => true
   | _ => false
@@ -246,7 +247,7 @@ def Term.disjoint {S : Syn} [Leaf S] (p : Pairing) : Term S → Term S → Bool
   | .mu b, y => Term.disjoint (shiftL p) b y
   | .refine x q qA, y =>
       splitR (fun p' y' => Term.disjoint p' x y' ||
-        (Leaf.isData (half S.o.c q qA) && !hasHeld x && !x.hasVar &&
+        (Leaf.isData S.o.c (half S.o.c q qA) && !hasHeld x && !x.hasVar &&
           predApart (half S.o.c q qA) y')) p y
   | .union os, y => Term.disjointL p os y
   | .prim g, y => disjSRight (fun _ => famPrimD g) p y
