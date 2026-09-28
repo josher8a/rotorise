@@ -90,6 +90,12 @@ real argument, because `casesOn` takes the parameter of the family as a real arg
 is `noncomputable` at DynamoDB: `inL`, `setCodec`, `Ω` and `Pred.eval` are. The split keeps a term
 as data that code can compute with.
 
+**Each stored-side law of the generic layer is the caller-side law at the dual universe.** `AdmA`
+is `Adm` at `S.op`, and so is each stored-side law that the generic layer states. At DynamoDB the
+two carriers differ, `Value` on the caller side and `Attr` on the stored side, because the wire
+format fixes `Attr`. There the lemmas of each side are content, not repetition, and each side keeps
+its own.
+
 **A universe owns these facts, and the generic layer owns none of them.**
 
 | the fact | the field | at DynamoDB | at JSON |
@@ -194,8 +200,10 @@ The empty word is the identity at every table. The pair of two words in sequence
 of the two pairs (`Table.word_append`). So two nested `held`s are one `held` of the concatenated
 word, under a `refine` by the inner caller-side restriction (`equiv_denote_held_comp`). The dagger
 of a word (`Word.dagger`) reverses the letters and flips each sign. The dagger law states that the
-pair of the dagger is the pair of the word, swapped (`Table.word_dagger`). The iso obligation of a
-`held` is `IsoCancels` on the pair of the whole word, as `Obligations` states.
+pair of the dagger is the pair of the word, swapped (`Table.word_dagger`). A `held` carries a
+caller word and a stored word. Its obligation is `Obl2`: `IsoCancels` on the pair of each word,
+and the member fact of the stored exit function, as `Obligations` states. At the host the stored
+word is empty, and the obligation is `IsoCancels` on the pair of the caller word (`obl2_host`).
 
 At DynamoDB, `libTable κ` gives `decimalText` the text adapter, and gives `caller n` the pair that
 the caller table `κ` supplies. A verdict vector prints a caller adapter as `caller n`, and the
@@ -402,7 +410,7 @@ that `denote` takes. A variable asks the codec that the environment gives the va
 **The test reads a recursive term stage by stage.** Two recursive terms are disjoint where their
 bodies are disjoint under every two stages that are disjoint, because each stage is the body over
 the stage below (`stage_apart`, `stage_apartA`). A recursive term beside another constructor reads
-the stage below the depth of the input (`Adm_mu_unfold`, `mu_p_unfold`). Neither row needs the
+the stage below the depth of the input (`Adm_mu_unfold`, `AdmA_mu_unfold`). Neither row needs the
 guard.
 
 **The host spells recursion as a thunk, and the bridge prints the binder.** The emitter marks each
@@ -579,9 +587,10 @@ The `union` combinator in `src/` accepts a pair where `agrees(x, y)` holds, whic
 accepted pair compatible. The combinator refuses every other pair, because the pair is not shown
 compatible.
 
-**Two `held`s of one adapter agree where their stored sides agree.** A `held` carries an adapter
-word, and a table gives the word its two functions, so two `held`s of one word carry one pair.
-`dynOracle` compares two words by equality. The host's `sameAdapter(x, y)` is the same test: one
+**Two `held`s of one adapter agree where their inner terms agree.** A `held` carries an adapter
+word at each side, and a table gives each word its two functions, so two `held`s of one pair of
+words carry one adapter. `dynOracle` compares two caller words by equality, and the row compares
+two stored words by equality. The host's `sameAdapter(x, y)` is the same test: one
 library adapter by its name, or one pair of caller functions by identity. So `decimal('1')` beside
 `union([decimal('1', '2.5'), string('A')])` is accepted, and two caller adapters over one stored
 side are refused.
@@ -615,8 +624,8 @@ flags off, at an unknown environment of the variable.
 compatibility. Two restrictions of one adapter are compatible in the model
 (`compat_of_common_bound`), and no certificate reaches such a pair where the two overlap. The
 decision reaches such a pair through the held row: `decimal('1', '2.5')` beside
-`decimal('2.5', '3')` is accepted, because the two `held`s carry one word and their stored sides
-agree.
+`decimal('2.5', '3')` is accepted, because the two `held`s carry one adapter and their inner
+terms agree.
 
 `Separated` is what names the separation guarantee over the option list, with
 `separated_of_unionOk` as the certificate's bridge into it.
@@ -943,8 +952,9 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New stratum in the term family → every companion in the table above, counted per side.
 - New law of the algebra → state it in an `Alg` module, which imports no instance module. A
   statement that needs a fact of a carrier belongs to that universe.
-- New universe → a `Syn`, a `Sem` instance, its `TopLaws` where the held-free theory or the read
-  side of the disjointness test must hold, its `PrimAdm` and `PrimAdmA` where exactness must hold,
+- New universe → a `Sig`, a `Mean` instance over it, a `Syn` at the host orientation, its
+  `TopLaws` where the held-free theory or the read side of the disjointness test must hold, its
+  `PrimAdm` and `PrimAdmA` where exactness must hold,
   its `Leaf` where the test must compute, and its `Shapes` and the laws of the leaves and the
   formers where the soundness of the test must hold. Make the module reachable from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.

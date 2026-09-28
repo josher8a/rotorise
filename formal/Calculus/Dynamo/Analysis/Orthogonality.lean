@@ -14,8 +14,8 @@ This module holds `Separates` and the two theorems that the discharger reads fro
 
 ## Sound, never complete, and why there is no `unknown`
 
-Semantic orthogonality is undecidable in this language — `refine t q` carries an arbitrary
-`Value → Bool` and `held t P k` reads an arbitrary pair of maps from the table. So the
+Semantic orthogonality is undecidable in this language: `refine t q ()` carries an arbitrary
+`Value → Bool`, and `held t P PA k []` reads an arbitrary pair of maps from the table. So the
 certificate answers a *narrower* question, and the answer `false` means "no certificate", never "not orthogonal".
 An opaque subterm admits every input, so a pair with an opaque option and a nonempty partner is
 not separated.
@@ -24,9 +24,9 @@ not separated.
 
 `Separates` takes **two** families, one over `Value` and one over `Attr`, and asks each to be
 pairwise disjoint. A pair can be separated on one side and not on the other, and then it is not
-separated. `held` is the witness: it writes what its caller-side term admits, and it reads what
-its stored-side term reads. So `union(held(string, number, k), string)`, the decimal adapter
-against a string, separates on the write side and meets on the read side.
+separated. `held` is the witness: it writes inside what its caller outer admits, and it reads
+inside what its inner term reads, because the DynamoDB stored word is empty. So the decimal
+adapter beside a string separates on the write side and meets on the read side.
 -/
 
 namespace Calculus
