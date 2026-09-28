@@ -17,8 +17,8 @@ predicate. DynamoDB supplies the laws of the leaves and of the set former (`dynL
 `dynFormerAdm` and their read-side twins), and the shape classes (`dynShapes`).
 
 **The certificate reads the views, not the terms.** A term denotes a partial isomorphism.
-`writeView` states its domain, and `readView` states its range. A `held` carries host functions,
-so the test reads a raw `held` as disjoint from the bottom alone. The views replace each `held`
+`writeView` states its domain, and `readView` states its range. A `held` carries an adapter word,
+and the test reads no table, so the test reads a raw `held` as disjoint from the bottom alone. The views replace each `held`
 by a term that bounds its domain or its range, so the certificate asks the test of the two pairs
 of views (`certPair`). Two terms whose domains are disjoint and whose ranges are disjoint are
 orthogonal: no value has two writers, and no attribute has two readers.
@@ -741,8 +741,8 @@ theorem certPair_heldBelowMu_meets :
       = false := by
   decide
 
-/-- **The test does not read a raw `held`.** A `held` carries host functions (`Term.lean`), so
-    the test keeps it apart from the bottom alone. The views read it. -/
+/-- **The test does not read a raw `held`.** A `held` carries an adapter word, and the test reads
+    no table, so the test keeps the `held` apart from the bottom alone. The views read it. -/
 example : Alg.Term.disjoint pair0 (Term.held .string .opaq [])
     Term.number = false := by rfl
 

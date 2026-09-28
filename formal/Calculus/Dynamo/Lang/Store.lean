@@ -402,10 +402,11 @@ theorem not_retract_through_store_numberCodec {η : Attr → Attr}
 
 /-! ## The adapters this library ships, named so a vector can cite them
 
-`src/codec/lean.ts` prints `held` for a pair it recognises, the way it already prints a predicate
-it ships as `Numeral.WF` or `Numeral.Stored`. `number` and `decimal` are adapters over the
-one numeric base on that surface, so the pair each carries needs a name here or no vector at that
-base can be stated at all.
+`src/codec/lean.ts` prints `held` with the generator `decimalText` for the adapter it recognises,
+the way it already prints a predicate it ships as `Numeral.WF` or `Numeral.Stored`. `number` and
+`decimal` are adapters over the one numeric base on that surface, so the pair of each needs a name
+here, or no vector at that base can be stated at all. `libTable` gives the named pair to the
+generator.
 
 **The text adapter only.** A caller holding a JS float has no adapter here and cannot have one:
 `Value` carries no float, so the conversion would be numeral to numeral and its content is

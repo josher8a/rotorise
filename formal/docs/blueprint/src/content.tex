@@ -398,7 +398,7 @@ A subset of the numerals chosen by the caller — a finite set of admitted numbe
 numeral it read \emph{without} verifying membership in \texttt{T} would break \rulelink{cond:C}{\textbf{(C)}}, and with it the
 claim that \texttt{:\ T} says anything; a term that does verify is \texttt{refine(number,\ T)} on all four fields. An
 unchecked narrowing of a read is a cast, and a cast belongs to \texttt{refine}, which does the check, or to
-\texttt{held}, which is where the caller's own functions live.
+\texttt{held}, whose table holds the caller's own functions.
 
 \texttt{decimal} holds a numeral as text. It is \rulelink{rule:held}{\texttt{(held)}} over \texttt{number} at the text adapter
 \texttt{numeralOfStoredText}/\texttt{textOfNumeral}, so it holds text and stores \texttt{N}.
@@ -561,6 +561,10 @@ subterm's member this way.
 ─────────────────────────────────────────────────────────────────────── (held)
 ⊢ held(c, f, g) : T ⇝ μ
 \end{verbatim}
+The term carries an adapter word \texttt{k}, and a table \texttt{α} gives the word its pair:
+\texttt{(f,\ g)\ =\ α.word\ k}. The premise \texttt{g\ ∘\ f\ =\ id\_T}, \texttt{f\ ∘\ g\ =\ id\_I} is
+\texttt{IsoCancels} on the pair of the whole word. In the rest of this document, the notation
+\texttt{held(c,\ f,\ g)} names the \texttt{held} whose word the table sends to \texttt{(f,\ g)}.
 \end{definition}
 
 \begin{definition}[(refine)]
@@ -638,7 +642,7 @@ the body on both sides, and lawful stages give a lawful limit. No two options of
 \end{definition}
 
 These \texttt{⊤}s are forced for different reasons, and the distinction matters. \texttt{mu} concludes \texttt{⊤}, because its
-stages need not agree on one member. \texttt{held} carries a pair of opaque maps and there is nothing to ask, which is also why its
+stages need not agree on one member. The table gives \texttt{held} a pair of opaque maps and there is nothing to ask, which is also why its
 premise is the cancellation law itself: nothing structural guarantees it, so the rule demands it.
 Demanding \rulelink{cond:R}{\textbf{(R)}} alone would under-demand, deriving a \texttt{⊤} term free to change stored members — the
 exact term §2's argument for \texttt{opaque} says cannot exist. (\rulelink{cond:W}{\textbf{(W)}} is vacuous at \texttt{⊤}, so the three
@@ -1078,7 +1082,7 @@ terms force the point:
   value comes out and never which attributes go in, and \texttt{A} passes through.
 \end{itemize}
 
-What exactness costs is decidability. \texttt{held} carries an
+What exactness costs is decidability. The table gives \texttt{held} an
 arbitrary \texttt{f}, \texttt{refine} an arbitrary \texttt{q}, so membership of an admissible set is not a question the
 declaration can answer. Admission \textbf{specifies} the two families. It does not decide them. What the
 certificate runs is the disjointness test, and the test is decided. The rows of the
@@ -1597,7 +1601,8 @@ attributes. A product traverses. Reading a discriminator's tag is one lookup, sp
 carrier.
 
 Exactly two term constructors break it: \texttt{held} and \texttt{refine}. Each
-constructor carries a \textbf{caller's function that is not itself a codec}. \texttt{held}'s \texttt{f}
+constructor reads a \textbf{caller's function that is not itself a codec}: \texttt{held} reads the
+function from the table, and \texttt{refine} carries the function. \texttt{held}'s \texttt{f}
 gates the writing while \texttt{g} only post-processes the reading, which is why the readable side sees
 through it and the writable one cannot (§5). \texttt{refine}'s
 \texttt{q} is a predicate on \emph{values}, so it gates one carrier directly and the other only after a read.

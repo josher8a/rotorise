@@ -206,10 +206,11 @@ theorem not_equiv_tupleTail_array :
         altCodec, tupleCodec, align, arrayCodec,
         stringCodec] at hv
 
-/-! ## `refine(held(c, P, f, g), q) ≢ held(refine(c, q), P, f, g)`
+/-! ## `refine(held(c, P, k), q) ≢ held(refine(c, q), P, k)`
 
 §6: "the refinement applies on opposite sides of the iso, so `q` is a subset of different
-sets." The model makes that literal — one held set says `q v`, the other says `q (f v)`. -/
+sets." The model makes that literal — one held set says `q v`, the other says `q (f v)`, where
+`f` is the caller-side function that the table gives the word `k`. -/
 
 /-- A constant-on-strings iso half, and a predicate that tells `"A"` from `"B"`. -/
 def isoF : Value → Value

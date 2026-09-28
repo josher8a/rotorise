@@ -76,15 +76,15 @@ analyses over one carrier type, and each side of the pair instantiates it. It st
 `Lawful` takes the member of an attribute as a parameter. (W) reads that function, and no law
 reads more of the store.
 
-**A universe is a signature in two parts.** `Syn` holds the syntax: the values that a `held`
-maps, the primitives, and the predicates. The class `Sem` over a `Syn` holds the meaning: the
-stored carrier, the member, the codec of each primitive, the evaluation of a predicate, the
-depths, the formers and the top. The term family reads `Syn` alone. The compiled code of a
-function over `Term S` takes `S` as a real argument, because `casesOn` takes the parameter of the
-family as a real argument. The semantic fields are `noncomputable` at DynamoDB: `inL`, `setCodec`,
-`Ω` and `Pred.eval` are. One structure would make each function over terms `noncomputable` at
-DynamoDB, `Term.disjoint` and `Term.hasVar` included. The split keeps a term as data that code can
-compute with.
+**A universe is a signature in two parts.** `Syn` holds the syntax: the values that a `held` maps,
+the primitives, the predicates, and the generators of the adapters. The class `Sem` over a `Syn`
+holds the meaning: the stored carrier, the member, the codec of each primitive, the evaluation of a
+predicate, the depths, the formers and the top. The term family reads `Syn` alone. The compiled
+code of a function over `Term S` takes `S` as a real argument, because `casesOn` takes the
+parameter of the family as a real argument. The semantic fields are `noncomputable` at DynamoDB:
+`inL`, `setCodec`, `Ω` and `Pred.eval` are. One structure would make each function over terms
+`noncomputable` at DynamoDB, `Term.disjoint` and `Term.hasVar` included. The split keeps a term as
+data that code can compute with.
 
 **A universe owns these facts, and the generic layer owns none of them.**
 
@@ -94,6 +94,7 @@ compute with.
 | the member of an attribute | `Sem.member` | `Attr.member` | `Json.member` |
 | the primitives and their codecs | `Syn.Ground`, `Sem.ground`, `Sem.lawful_ground` | `Ground`, `groundCodec` | `JMember`, `ground` |
 | the predicates | `Syn.Pred`, `Sem.eval` | `Pred`, `Pred.eval` | a function on `Json` |
+| the generators of the adapters | `Syn.Gen`, `Syn.decGen` | `DynGen` | `Empty` |
 | the depths | `Sem.dV`, `Sem.dA` | `Value.depth`, `Attr.depth` | a constant |
 | the list and map formers | `Sem.list` as a `ListF`, `Sem.map` as a `MapF`: a prism on each side | `dList`, `dMap` | none |
 | the set former | `Sem.set` as a `SetF`: a lift and its laws | `dSet`, over `setCodec` | none |
@@ -179,6 +180,24 @@ equation. So each row at the DynamoDB constructors is a `rfl` lemma in a registe
 `denote_rows`, `μSyn_rows`, `Adm_rows` or `AdmA_rows`. A proof names the set where it named the
 function. `rw` matches the head symbol, so a lemma stated at an abbreviation does not rewrite the
 generic head. `exact` compares up to unfolding, and accepts both.
+
+**A `held` carries an adapter word, and `denote` reads a table.** A word is a list of signed
+generators. The sign `true` names the converse of a generator: the pair of the generator with its
+two functions swapped. A table `α` gives each generator its caller-side function and its
+stored-side function, and `denote` reads the table as it reads the environment of the variables.
+`Table.word` interprets a word by composition, with the first letter outermost on the caller side.
+The empty word is the identity at every table. The pair of two words in sequence is the composite
+of the two pairs (`Table.word_append`). So two nested `held`s are one `held` of the concatenated
+word, under a `refine` by the inner caller-side restriction (`equiv_denote_held_comp`). The dagger
+of a word (`Word.dagger`) reverses the letters and flips each sign. The dagger law states that the
+pair of the dagger is the pair of the word, swapped (`Table.word_dagger`). The iso obligation of a
+`held` is `IsoCancels` on the pair of the whole word, as `Obligations` states.
+
+At DynamoDB, `libTable κ` gives `decimalText` the text adapter, and gives `caller n` the pair that
+the caller table `κ` supplies. A verdict vector prints a caller adapter as `caller n`, and the
+theorem of an accepted pair quantifies `κ`, so the verdict holds at every pair of functions. An
+evaluation vector reads `libTable noCallers`, because the emitter refuses a caller adapter outside
+a verdict.
 
 **Exactness holds at every signature.** `Alg.Adm` and `Alg.AdmA` give a row per constructor, and
 `Alg.Adm_exact` and `Alg.AdmA_exact` prove each row equal to the domain of `denote t`, from the
@@ -344,8 +363,9 @@ It refuses two shapes, and `Discharge.lean` pins each refusal:
 - a variable that reads the binder's own input, as in `mu (var 0)` (`not_typed_unguarded_binder`)
   and `mu (union [var 0, string])` (`guard_refuses_option_at_binder_input`). The stages of such a
   term never grow;
-- a `held` between the binder and its variable (`guard_refuses_held_on_path`). The `f` of a
-  `held` can make the input deeper, so a container on the path does not bound the depth.
+- a `held` between the binder and its variable (`guard_refuses_held_on_path`). The caller-side
+  function of a `held` can make the input deeper, so a container on the path does not bound the
+  depth.
 
 `Typed.mu` carries the guard as a premise, because the guard is decidable from the term. A type
 would need a second term family for the body of a binder, and every table over terms would gain a
@@ -590,9 +610,9 @@ flags off, at an unknown environment of the variable.
 **`certPair` is sufficient and not necessary.** A decline by `certPair` is not a refutation of
 compatibility. Two restrictions of one adapter are compatible in the model
 (`compat_of_common_bound`), and no certificate reaches such a pair where the two overlap. The
-library accepts such a pair where `below(x, y)` shows one option below the other, as
-`decimal('1', '2.5')` beside `decimal`. It refuses every other overlapping pair, as
-`decimal('1', '2.5')` beside `decimal('2.5', '3')`.
+decision reaches such a pair through the held row: `decimal('1', '2.5')` beside
+`decimal('2.5', '3')` is accepted, because the two `held`s carry one word and their stored sides
+agree.
 
 `Separated` is what names the separation guarantee over the option list, with
 `separated_of_unionOk` as the certificate's bridge into it.
