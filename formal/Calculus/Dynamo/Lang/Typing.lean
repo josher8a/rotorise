@@ -173,8 +173,9 @@ theorem Typed.list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre) (hs :
   Alg.Typed.list (S := dynSyn) (L := dList) rfl hp hs hf
 
 /-- `(held)`, at the DynamoDB denotation of the caller-side term. -/
-theorem Typed.held {t I μ P PA k kA} (h : Typed α t I μ) :
-    Typed α (.held t P PA k kA) (fun v => I ((α.word k).1 v) ∧ ((denote α P).e v).isSome) μ :=
+theorem Typed.held {t I μ P k₀ k} (h : Typed α t I μ) :
+    Typed α (.held false t P k₀ k)
+      (fun v => I ((α.word (k₀ :: k)).1 v) ∧ ((denote α P).e v).isSome) μ :=
   Alg.Typed.held h
 
 /-- `(refine)`: the held set is the premise's, cut by the predicate. -/
@@ -219,9 +220,9 @@ theorem Typed.casesD {motive : ∀ t T μ, Typed α t T μ → Prop}
     (list : ∀ {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre) (hs : TypedOpt α sp Tsp)
       (hf : TypedList α suf Tsuf),
       motive (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L) (.list hp hs hf))
-    (held : ∀ {t I μ P PA k kA} (h : Typed α t I μ),
-      motive (.held t P PA k kA) (fun v => I ((α.word k).1 v) ∧ ((denote α P).e v).isSome) μ
-        (.held h))
+    (held : ∀ {t I μ P k₀ k} (h : Typed α t I μ),
+      motive (.held false t P k₀ k)
+        (fun v => I ((α.word (k₀ :: k)).1 v) ∧ ((denote α P).e v).isSome) μ (.held h))
     (refine : ∀ {t T μ p pA} (h : Typed α t T μ),
       motive (.refine t p pA) (fun v => T v ∧ p.eval v) μ (.refine h))
     (opaq : motive .opaq HOpaque none .opaq)
@@ -244,7 +245,10 @@ theorem Typed.casesD {motive : ∀ t T μ, Typed α t T μ → Prop}
     | literal k x => exact literal k x
   | set hL h => cases hL; exact set h
   | list hL hp hs hf => cases hL; exact list hp hs hf
-  | held h => exact held h
+  | @held s _ _ _ _ k₀ _ h =>
+    cases s
+    · exact held h
+    · exact nomatch k₀.1
   | refine h => exact refine h
   | opaq => exact opaq
   | never => exact never

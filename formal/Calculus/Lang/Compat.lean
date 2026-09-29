@@ -13,10 +13,10 @@ value.
 Each row of the decision is one of two warrants, per half and per component: the two terms are
 **disjoint** there, or both are **bounded** by one codec there. The bottom agrees with every term.
 Two held-free terms below the top are bounded by the top. `Term.disjoint` is the disjoint row. A
-closed-context oracle of the universe decides orthogonality of each half. A `held` writes inside
-its caller outer. It reads inside its inner term where its stored word is empty, and inside its
-stored outer otherwise. So a `held` whose half is disjoint from the partner agrees there. Two
-`held`s of one adapter agree where their inner terms agree. A
+closed-context oracle of the universe decides orthogonality of each half. A `held` acts inside
+its outer on the half at its side, and inside its inner term on the other half. So a `held` whose
+half is disjoint from the partner agrees there. Two `held`s of one side and one word agree where
+their inner terms agree. A
 container agrees with a container of its former where the components agree.
 
 The flags: `top` says that both environments are empty, so the oracle applies. `s` says that every
@@ -30,18 +30,17 @@ namespace Calculus.Alg
 variable {S : Syn}
 
 /-- The oracles that a universe supplies: an orthogonality test for each half at the closed
-    context, and a test that two adapter words are one word. -/
+    context. -/
 structure CompatOracle (S : Syn) where
   orthE : Term S → Term S → Bool
   orthP : Term S → Term S → Bool
-  same : Word S → Word S → Bool
 
-/-- The row a `held` gives one half: the write half of a `held` sits inside its caller outer.
-    The read half sits inside its inner term where the stored word is empty, and inside its
-    stored outer otherwise. -/
+/-- The row a `held` gives one half. A half reads the caller side of its orientation: the write
+    half reads the caller side of the universe, and the read half reads the stored side. The half
+    at the side of the `held` sits inside its outer, and the other half sits inside its inner
+    term, because the other side has no adapter. -/
 def heldSide (side : Bool) : Term S → Option (Term S)
-  | .held i P PA k kA => some (if side then half2 S.o.c P PA else
-      match halfK S.o.s k kA with | [] => i | _ :: _ => half2 S.o.s P PA)
+  | .held sd i P _ _ => some (if (bif side then S.o else S.o.op).c == sd then P else i)
   | _ => none
 
 /-- **The rows that read no structure**: the bottom, two held-free terms below the top, two
@@ -91,10 +90,11 @@ def Term.compat [Leaf S] (o : CompatOracle S) (side : Bool) (p : Pairing) (top s
       Term.compat o side (shiftL p) false (s && !hasHeld b) b y
   | .var i, y => cmpR (fun p' t' s' y' => cbase o side t' s' (.var i) y' ||
       (match y' with | .var j => (p' i j).isSome | _ => false)) p top s y
-  | .held i P PA k kA, y => cmpR (fun p' t' s' y' => cbase o side t' s' (.held i P PA k kA) y' ||
+  | .held sd i P k₀ k, y => cmpR (fun p' t' s' y' => cbase o side t' s' (.held sd i P k₀ k) y' ||
       (match y' with
-        | .held i' _ _ k' kA' => o.same (halfK S.o.c k kA) (halfK S.o.c k' kA') &&
-            decide (halfK S.o.s k kA = halfK S.o.s k' kA') && Term.compat o side p' t' s' i i'
+        | .held sd' i' _ k₀' k' =>
+            decide ((⟨sd, k₀ :: k⟩ : (sd : Bool) × List (S.sig.G sd × Bool)) = ⟨sd', k₀' :: k'⟩) &&
+              Term.compat o side p' t' s' i i'
         | _ => false)) p top s y
   | .prim g, y => cmpR (fun _ t' s' y' => cbase o side t' s' (.prim g) y') p top s y
   | .opaq, y => cmpR (fun _ t' s' y' => cbase o side t' s' .opaq y') p top s y
@@ -160,11 +160,6 @@ abbrev AgreeHalf (S : Syn) {V A M : Type} (side : Bool) (c d : Codec V A M) : Pr
 section Sound
 variable [Sem S] {α : Table S} {β : Table S.op}
 
-/-- The denotation of the half of two outers is the half of the two denotations. -/
-theorem denote_half2 (s : Bool) (P PA : Term S) (ρ : List S.C) :
-    denote α β (half2 s P PA) ρ = half2 s (denote α β P ρ) (denote α β PA ρ) :=
-  half2_apply (denote α β · ρ) s P PA
-
 /-- **What the flags and the pairing promise of the two environments.** A paired binder pair
     agrees on both halves. Under `s`, every entry is below the top. Under `top`, both
     environments are empty. -/
@@ -174,14 +169,12 @@ structure CEnv (p : Pairing) (top s : Bool) (ρ ρ' : List S.C) : Prop where
   safeR : s = true → ∀ i, Sub (envAt ρ' i) (Syn.top (S := S))
   top : top = true → ρ = [] ∧ ρ' = []
 
-/-- What the oracles promise, at every table. Two words that the adapter test calls one are
-    one word, so a table gives them one pair. -/
+/-- What the oracles promise, at every table. -/
 structure OracleSound (o : CompatOracle S) : Prop where
   e : ∀ {α : Table S} {β : Table S.op} x y, o.orthE x y = true → ∀ v,
     (((denote α β x []).f S.o v).isSome && ((denote α β y []).f S.o v).isSome) = false
   p : ∀ {α : Table S} {β : Table S.op} x y, o.orthP x y = true → ∀ a,
     (((denote α β x []).f S.o.op a).isSome && ((denote α β y []).f S.o.op a).isSome) = false
-  same : ∀ k k', o.same k k' = true → k = k'
 
 /-- The stages of a held-free body over an environment below the top are below the top. -/
 theorem stage_sub [TopLaws S] {b : Term S} (hb : hasHeld b = false) {ρ : List S.C}
@@ -259,31 +252,29 @@ theorem apart_of_imp' {x y y' : Bool} (h : y = true → y' = true) (h' : (x && y
     (x && y) = false := by
   cases x <;> cases y <;> simp_all
 
-/-- A `held` acts at an orientation only where the outer of the caller side of the orientation
-    acts. -/
-theorem held_dom_outer {i P PA : Term S} {k : List (S.sig.G false × Bool)}
-    {kA : List (S.sig.G true × Bool)} {ρ : List S.C} (o : Orient) (x : Mean.Car (B := S.sig) o.c)
-    (h : ((denote α β (.held i P PA k kA) ρ).f o x).isSome = true) :
-    ((denote α β (half2 o.c P PA) ρ).f o x).isSome = true := by
-  have h' : ((held2 (denote α β i ρ) (denote α β P ρ) (denote α β PA ρ)
-      ((tables S.o α β false).word k).1 ((tables S.o α β false).word k).2
-      ((tables S.o α β true).word kA).1 ((tables S.o α β true).word kA).2).f o x).isSome = true := h
-  rw [held2_f_isSome, Bool.and_eq_true] at h'
-  rw [denote_half2, half2_f, half2_apply Option.isSome]
-  exact h'.1
-
-/-- …and, where the word of the caller side of the orientation is empty, only where the inner
-    term acts. -/
-theorem held_dom_inner {i P PA : Term S} {k : List (S.sig.G false × Bool)}
-    {kA : List (S.sig.G true × Bool)} {ρ : List S.C} (o : Orient) (x : Mean.Car (B := S.sig) o.c)
-    (hk : halfK o.c k kA = [])
-    (h : ((denote α β (.held i P PA k kA) ρ).f o x).isSome = true) :
-    ((denote α β i ρ).f o x).isSome = true := by
-  have h' : ((held2 (denote α β i ρ) (denote α β P ρ) (denote α β PA ρ)
-      ((tables S.o α β false).word k).1 ((tables S.o α β false).word k).2
-      ((tables S.o α β true).word kA).1 ((tables S.o α β true).word kA).2).f o x).isSome = true := h
-  rw [held2_f_isSome, Bool.and_eq_true, hk] at h'
-  exact gate_isSome h'.2
+/-- **A `held` acts at an orientation only where its outer acts**, where its side is the caller
+    side of the orientation, and only where its inner term acts otherwise. -/
+theorem held_dom {sd : Bool} {i P : Term S} {k₀ : S.sig.G sd × Bool} {k : List (S.sig.G sd × Bool)}
+    {ρ : List S.C} (o : Orient) (x : Mean.Car (B := S.sig) o.c)
+    (h : ((denote α β (.held sd i P k₀ k) ρ).f o x).isSome = true) :
+    ((denote α β (if o.c == sd then P else i) ρ).f o x).isSome = true := by
+  have h' : ((held1 sd (denote α β i ρ) (denote α β P ρ)
+      ((tables S.o α β sd).word (k₀ :: k))).f o x).isSome = true := h
+  rw [held1_f_isSome, Bool.and_eq_true] at h'
+  -- by the four cases: the lemmas of a lawful BEq reach the choice axiom through an order instance
+  have hne : ∀ a b : Bool, (a == b) = false → a ≠ b
+    | false, false, h, _ | true, true, h, _ => nomatch h
+  have heq : ∀ a b : Bool, (a == b) = true → a = b
+    | false, false, _ | true, true, _ => rfl
+    | false, true, h | true, false, h => nomatch h
+  cases hs : (o.c == sd)
+  · rw [PairAt.one_ne _ _ _ (hne _ _ hs)] at h'
+    rw [if_neg Bool.false_ne_true]
+    exact gate_isSome h'.2
+  · obtain rfl := heq _ _ hs
+    rw [if_pos rfl]
+    rw [bne, hs, Bool.not_true, Bool.false_or] at h'
+    exact h'.1
 
 /-- **The rows that read no structure are sound.** -/
 theorem cbase_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
@@ -305,37 +296,13 @@ theorem cbase_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [
     · exact agree_apart (ho.p x y ho')
     · exact agree_apart (ho.e x y ho')
   · cases x <;> simp only [heldSide, reduceCtorEq] at hl
-    rename_i i P PA k kA
     cases side
-    · simp only [Bool.false_eq_true, ite_false] at hl
-      revert hl
-      cases hk : halfK S.o.s k kA with
-      | nil =>
-        intro hl
-        exact agree_apart fun a =>
-          apart_of_imp (held_dom_inner S.o.op a hk) (disjoint_domP hl ρ ρ' a)
-      | cons _ _ =>
-        intro hl
-        exact agree_apart fun a => apart_of_imp (held_dom_outer S.o.op a) (disjoint_domP hl ρ ρ' a)
-    · simp only [ite_true] at hl
-      exact agree_apart fun v => apart_of_imp (held_dom_outer S.o v) (disjoint_domE hl ρ ρ' v)
+    · exact agree_apart fun a => apart_of_imp (held_dom S.o.op a) (disjoint_domP hl ρ ρ' a)
+    · exact agree_apart fun v => apart_of_imp (held_dom S.o v) (disjoint_domE hl ρ ρ' v)
   · cases y <;> simp only [heldSide, reduceCtorEq] at hr
-    rename_i i P PA k kA
     cases side
-    · simp only [Bool.false_eq_true, ite_false] at hr
-      revert hr
-      cases hk : halfK S.o.s k kA with
-      | nil =>
-        intro hr
-        exact agree_apart fun a =>
-          apart_of_imp' (held_dom_inner S.o.op a hk) (disjoint_domP hr ρ ρ' a)
-      | cons _ _ =>
-        intro hr
-        exact agree_apart fun a =>
-          apart_of_imp' (held_dom_outer S.o.op a) (disjoint_domP hr ρ ρ' a)
-    · simp only [ite_true] at hr
-      exact agree_apart fun v => apart_of_imp' (held_dom_outer S.o v) (disjoint_domE hr ρ ρ' v)
-
+    · exact agree_apart fun a => apart_of_imp' (held_dom S.o.op a) (disjoint_domP hr ρ ρ' a)
+    · exact agree_apart fun v => apart_of_imp' (held_dom S.o v) (disjoint_domE hr ρ ρ' v)
 
 mutual
 /-- **The rows of the right operand are sound**, for a left codec that the family is sound for. -/
@@ -490,18 +457,18 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
         rename_i j
         obtain ⟨k, hk⟩ := Option.isSome_iff_exists.mp hf
         exact he'.pair i j k hk _
-  | .held i P _ k _, side, p, top, s, y, ρ, ρ', h, he => by
+  | .held sd i P k₀ k, side, p, top, s, y, ρ, ρ', h, he => by
       simp only [Term.compat] at h
       refine cmpR_sound (fun p' t' s' y' ρ'' hf he' => ?_) y p top s ρ' h he
       simp only [Bool.or_eq_true] at hf
       rcases hf with hf | hf
       · exact cbase_sound ho hf he'
       · cases y' <;> simp only [reduceCtorEq] at hf
-        rename_i i' P' PA' k' kA'
+        rename_i sd' i' P' k₀' k'
         simp only [Bool.and_eq_true, decide_eq_true_eq] at hf
-        obtain ⟨⟨h1, h2⟩, h3⟩ := hf
-        obtain ⟨rfl, rfl⟩ := halfK_eq S.o (ho.same _ _ h1) h2
-        exact agree_of_agreeS (fun _ => agreeS_held2) _ (compat_sound ho i side p' t' s' i' ρ ρ'' h3 he')
+        obtain ⟨h1, h3⟩ := hf
+        cases h1
+        exact agree_of_agreeS (fun _ => agreeS_held1) _ (compat_sound ho i side p' t' s' i' ρ ρ'' h3 he')
   | .prim g, side, p, top, s, y, ρ, ρ', h, he => by
       simp only [Term.compat] at h
       exact cmpR_sound (fun p' t' s' y' ρ'' hf he' => cbase_sound ho hf he') y p top s ρ' h he

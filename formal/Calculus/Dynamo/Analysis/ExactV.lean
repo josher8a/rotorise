@@ -175,12 +175,16 @@ variable (t : Term) (ts : List Term)
     (Alg.Adm α dynTableA t [] v && p.eval v)
   rw [h]
   cases Alg.Adm α dynTableA t [] v <;> simp
-/-- The stored word is the identity, so the stored gate reads the stored outer at the write. -/
-@[Adm_rows] theorem Adm_held (P PA : Term) (k : Word) (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
-    Adm α (.held t P PA k kA) = fun v => Adm α t ((α.word k).1 v) && Adm α P v &&
-      Alg.gate (denote α t).e (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v) := by
-  simp only [Adm, Alg.Adm, dynTableA_word]
-  rfl
+/-- A `held` admits where its inner term admits the entry image and its outer admits the input.
+    The stored side has no restriction, so the stored gate passes. -/
+@[Adm_rows] theorem Adm_held (P : Term) (k₀ : DynGen × Bool) (k : Word) :
+    Adm α (.held false t P k₀ k) = fun v => Adm α t ((α.word (k₀ :: k)).1 v) && Adm α P v := by
+  funext v
+  have h : Alg.gate (Alg.denote α dynTableA t []).e (fun _ => true) ((α.word (k₀ :: k)).1 v) =
+      Alg.Adm α dynTableA t [] ((α.word (k₀ :: k)).1 v) :=
+    (Alg.gate_true _ _).trans (Alg.Adm_eq_isSome t [] _).symm
+  have hb : ∀ x y : Bool, (x && y && x) = (x && y) := by decide
+  exact (congrArg (_ && ·) h).trans (hb _ _)
 /-- `select` attempts every option, so the row is the disjunction of the options' rows. -/
 @[Adm_rows] theorem Adm_union_row : Adm α (.union ts) = fun v => anyP (AdmList α ts) v := rfl
 /-- **`set` asks its own codec**, as `opaq` and `mu` do. A row over the elements alone is exact

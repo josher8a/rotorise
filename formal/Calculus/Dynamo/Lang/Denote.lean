@@ -74,9 +74,8 @@ variable (k : GroundKind) (t : Term) (ts : List Term)
 @[μSyn_rows] theorem μSyn_set : μSyn (.set t) = (μSyn t).bind setMember := rfl
 @[μSyn_rows] theorem μSyn_list (pre suf : List Term) (sp : Option Term) :
     μSyn (.list pre sp suf) = some .L := rfl
-@[μSyn_rows] theorem μSyn_held (P PA : Term) (k : Word)
-    (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
-    μSyn (.held t P PA k kA) = μSyn t := rfl
+@[μSyn_rows] theorem μSyn_held (P : Term) (k₀ : DynGen × Bool) (k : Word) :
+    μSyn (.held false t P k₀ k) = μSyn t := rfl
 @[μSyn_rows] theorem μSyn_refine (p : Pred) (pA : Alg.Syn.PredA dynSyn) :
     μSyn (.refine t p pA) = μSyn t := rfl
 @[μSyn_rows] theorem μSyn_opaq : μSyn .opaq = none := rfl
@@ -156,13 +155,6 @@ these rows are the translation between the two. -/
 section Rows
 variable (t : Term) (ts : List Term) (ρ : List Codec)
 
-/-- **Every stored word of DynamoDB is the identity**: the store names no generator. -/
-@[denote_rows] theorem dynTableA_word (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
-    dynTableA.word kA = (id, id) := by
-  cases kA with
-  | nil => rfl
-  | cons x _ => exact x.1.elim
-
 @[denote_rows] theorem denote_base (k : GroundKind) : denote α (.base k) ρ = baseCodec k := rfl
 @[denote_rows] theorem denote_literal (k : GroundKind) (x : k.Carrier) :
     denote α (.literal k x) ρ = literalCodec k x := rfl
@@ -172,16 +164,12 @@ variable (t : Term) (ts : List Term) (ρ : List Codec)
 @[denote_rows] theorem denote_list (pre : List Term) (spread : Option Term) (suf : List Term) :
     denote α (.list pre spread suf) ρ
       = listCodec (denoteList α pre ρ) (denoteOpt α spread ρ) (denoteList α suf ρ) := rfl
-/-- `held` denotes `through`, restricted by the write domain of the caller outer and the read
-    domain of the stored outer. The stored word is the identity. -/
-@[denote_rows] theorem denote_held (P PA : Term) (k : Word)
-    (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
-    denote α (.held t P PA k kA) ρ
-      = Alg.refine2 ((denote α t ρ).through (α.word k).1 (α.word k).2)
-          (fun v => ((denote α P ρ).e v).isSome) fun a => ((denote α PA ρ).p a).isSome := by
-  show Alg.held2 (denote α t ρ) (denote α P ρ) (denote α PA ρ) (α.word k).1 (α.word k).2
-    (dynTableA.word kA).1 (dynTableA.word kA).2 = _
-  rw [dynTableA_word, Alg.held2, Alg.adapt2_host]
+/-- `held` denotes `through`, restricted by the write domain of the outer. -/
+@[denote_rows] theorem denote_held (P : Term) (k₀ : DynGen × Bool) (k : Word) :
+    denote α (.held false t P k₀ k) ρ
+      = ((denote α t ρ).through (α.word (k₀ :: k)).1 (α.word (k₀ :: k)).2).restrict
+          fun v => ((denote α P ρ).e v).isSome :=
+  Alg.held1_host _ _ _
 /-- `refine` denotes `restrict`, of the predicate's meaning: the stored predicate is the truth.
     This is the whole of what `Pred` cost the codec layer: one `.eval`. -/
 @[denote_rows] theorem denote_refine (p : Pred) (pA : Alg.Syn.PredA dynSyn) :
@@ -237,7 +225,7 @@ theorem denote_μ : ∀ t : Term, (denote α t).μ = μSyn t
   | .base k => by cases k <;> rfl
   | .set t => by show (denote α t).μ.bind setMember = _; rw [denote_μ t]; rfl
   | .list _ _ _ => rfl
-  | .held t' _ _ _ _ => denote_μ t'
+  | .held _ t' _ _ _ => denote_μ t'
   | .refine t' _ _ => denote_μ t'
   | .opaq | .never | .var _ | .mu _ => rfl
   | .object b => bodySem_μ b

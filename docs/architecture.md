@@ -207,10 +207,14 @@ The empty word is the identity at every table. The pair of two words in sequence
 of the two pairs (`TableAt.word_append`). So two nested `held`s are one `held` of the concatenated
 word, under a `refine` by the inner caller-side restriction (`equiv_denote_held_comp`). The dagger
 of a word (`Word.dagger`) reverses the letters and flips each sign. The dagger law states that the
-pair of the dagger is the pair of the word, swapped (`Table.word_dagger`). A `held` carries a
-caller word and a stored word. Its obligation is `Obl2`: `IsoCancels` on the pair of each word,
-and the member fact of the stored exit function, as `Obligations` states. At the host the stored
-word is empty, and the obligation is `IsoCancels` on the pair of the caller word (`obl2_host`).
+pair of the dagger is the pair of the word, swapped (`Table.word_dagger`). A `held` carries one
+absolute side `s` and a non-empty word at `s`. The other side has no adapter and no restriction.
+A `held` with the empty word has no representation, and a restriction with no adapter is a
+`refine`. A two-sided adapter is two nested `held`s (`held1_nest`). The obligation of a `held` is
+`Obl1`: `IsoCancelsAt` on the pair of the word at the orientation whose caller side is `s`, and
+the member fact of the exit function where `s` is the side of the attributes. A `held` owes one
+obligation for one half, because caller code is opaque. The store of DynamoDB names no generator,
+so each `held` of DynamoDB is at the side `false`, and its obligation is `IsoCancels`.
 
 At DynamoDB, `libTable κ` gives `decimalText` the text adapter, and gives `caller n` the pair that
 the caller table `κ` supplies. A verdict vector prints a caller adapter as `caller n`, and the
@@ -597,9 +601,9 @@ accepted pair compatible. The combinator refuses every other pair, because the p
 compatible.
 
 **Two `held`s of one adapter agree where their inner terms agree.** A `held` carries an adapter
-word at each side, and a table gives each word its two functions, so two `held`s of one pair of
-words carry one adapter. `dynOracle` compares two caller words by equality, and the row compares
-two stored words by equality. The host's `sameAdapter(x, y)` is the same test: one
+word at one side, and a table gives each word its two functions, so two `held`s of one side and
+one word carry one adapter. The row compares the two sides and the two words by equality. The
+host's `sameAdapter(x, y)` is the same test: one
 library adapter by its name, or one pair of caller functions by identity. So `decimal('1')` beside
 `union([decimal('1', '2.5'), string('A')])` is accepted, and two caller adapters over one stored
 side are refused.

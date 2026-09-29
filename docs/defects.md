@@ -120,7 +120,7 @@ values the write half accepts — one clause per direction, each guarded by the 
 — and its own docstring says it is the domain-restricted form the laws actually need.
 
 **Effect.** A caller pays a premise the proof does not use. The theorems that consume the premise,
-`Lawful.adapt2` through `Obl2`, `LawfulCore.through` and `Lawful.through`, close on the restricted
+`Lawful.held1` through `Obl1`, `LawfulCore.through` and `Lawful.through`, close on the restricted
 form alone, so the totality the specification asks for is never appealed to. This is the mirror of a
 premise that is too weak, and the same defect class: a rule and its mechanization disagree about the
 strength of an obligation, and the disagreement is in the direction that costs a user rather than

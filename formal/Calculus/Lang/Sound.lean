@@ -92,8 +92,8 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
       exact L.lawful (soundnessIn ρ h' hob.1 henv)
     | @refine t' T' μ' p pA h' =>
       exact (soundnessIn ρ h' hob henv).refine2 _ _
-    | @held t' I' μ' P PA k kA h' =>
-      exact ((soundnessIn ρ h' hob.1 henv).adapt2 hob.2).refine2 _ _
+    | @held s t' I' μ' P k₀ k h' =>
+      exact (soundnessIn ρ h' hob.1 henv).held1 _ hob.2
     | @list L pre Tpre sp Tsp suf Tsuf hL hp hs hf =>
       have ihp : ∀ t' ∈ pre, Lawful Mean.mem (denote α β t' ρ) := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedList.forall (α := α) (β := β) hp t' ht'
@@ -293,8 +293,8 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed α β t T μ → ∀ v, (den
         (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
         (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
         (fun t' _ _ _ hty v hv => typed_TSub hty v hv) hal hall⟩
-    | @held t' I' μ' P PA k kA h' =>
-      exact ⟨typed_TSub h' (((tables S.o α β false).word k).1 v) hv.1, hv.2⟩
+    | @held s t' I' μ' P k₀ k h' =>
+      exact ⟨typed_TSub h' _ hv.1, hv.2⟩
     | @refine t' T' μ' q qA h' => exact ⟨typed_TSub h' v hv.1, hv.2⟩
     | @object F body bind R μs hF hfields hrest =>
       cases body with | mk fields ff wild =>
@@ -383,9 +383,8 @@ theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed α β t T μ → Obligat
       · intro t' ht'
         obtain ⟨T', μ', hty⟩ := TypedList.forall (α := α) (β := β) hf t' ht'
         exact carrier_denote hty (obligationsList_iff.mp hob.2.2 t' ht')
-    | @held t' I' μ' P PA k kA h' =>
-      exact carrier_refine2 (carrier_adapt2 (carrier_denote h' hob.1)
-        (soundness h' hob.1).core _ _ hob.2.1.2) _ _
+    | @held s t' I' μ' P k₀ k h' =>
+      exact carrier_held1 (carrier_denote h' hob.1) (soundness h' hob.1).core _ hob.2
     | @refine t' T' μ' p pA h' =>
       exact carrier_refine2 (carrier_denote h' hob) _ _
     | @object F body bind R μs hF hfields hrest =>

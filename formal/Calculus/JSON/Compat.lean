@@ -5,39 +5,26 @@ import Calculus.Lang.Compat
 # Compatibility at JSON
 
 The decision `Alg.Term.compat` and its soundness hold at every signature. JSON supplies an oracle
-that knows no orthogonality beyond the structural test, and no adapter pair to be another, so
-every answer of the decision at JSON comes from its structural rows.
+that knows no orthogonality beyond the structural test, so every answer of the decision at JSON
+comes from its structural rows. JSON has no `held`, because it names no generator.
 -/
 
 namespace Calculus.JSON
 
 variable {α : Alg.Table jsonSyn} {β : Alg.Table jsonSyn.op}
 
-/-- **The JSON oracle**: no closed-context orthogonality, and no adapter pair known to be
-    another. -/
+/-- **The JSON oracle**: no closed-context orthogonality. -/
 def jsonOracle : Alg.CompatOracle jsonSyn :=
-  ⟨fun _ _ => false, fun _ _ => false, fun _ _ => false⟩
+  ⟨fun _ _ => false, fun _ _ => false⟩
 
 /-- The JSON oracle is sound, because it certifies nothing. -/
 theorem jsonOracle_sound : Alg.OracleSound jsonOracle where
   e _ _ h := nomatch h
   p _ _ h := nomatch h
-  same _ _ h := nomatch h
 
-/-- A string held as itself, beside a number: the caller side of the `held` is disjoint from the
-    number on the write half, and the stored side is disjoint on the read half. -/
-example : Alg.compatPair jsonOracle (.held (.prim .str) (.prim .str) .opaq [] [] : Alg.Term jsonSyn)
-    (.prim .num) = true := by decide
-
-/-- …and beside a string, the decision refuses: no row bounds the `held`. -/
-example : Alg.compatPair jsonOracle (.held (.prim .str) (.prim .str) .opaq [] [] : Alg.Term jsonSyn)
-    (.prim .str) = false := by decide
-
-/-- **The decision discharges a JSON union's obligation**: the `held` string beside the number. -/
-theorem pairwiseCompat_held_num
-    (hl : ∀ t ∈ [(.held (.prim .str) (.prim .str) .opaq [] [] : Alg.Term jsonSyn), .prim .num],
-      Alg.Lawful Json.member (Alg.denote α β t)) :
-    Alg.PairwiseCompat α β [(.held (.prim .str) (.prim .str) .opaq [] [] : Alg.Term jsonSyn), .prim .num] :=
-  Alg.pairwiseCompat_of_compatPair jsonOracle_sound (by decide) hl
+/-- **JSON has no `held`**: the universe names no generator at either side, so a `held` has no
+    first letter. -/
+theorem no_held (s : Bool) (k₀ : jsonSig.G s × Bool) : False :=
+  k₀.1.elim
 
 end Calculus.JSON

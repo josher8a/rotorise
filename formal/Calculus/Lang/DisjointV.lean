@@ -302,7 +302,7 @@ theorem disjSRight_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S 
   | .prim g, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .set t, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .list a b c, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
-  | .held a b _ k _, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
+  | .held _ _ _ _ _, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .opaq, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .object b, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .var j, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
@@ -333,7 +333,7 @@ theorem splitR_sound {ρ ρ' : List S.C} {x : Term S} {fam : Pairing → Term S 
   | .prim g, h, v => hf _ (by simpa only [splitR] using h) v
   | .set t, h, v => hf _ (by simpa only [splitR] using h) v
   | .list a b c, h, v => hf _ (by simpa only [splitR] using h) v
-  | .held a b _ k _, h, v => hf _ (by simpa only [splitR] using h) v
+  | .held _ _ _ _ _, h, v => hf _ (by simpa only [splitR] using h) v
   | .opaq, h, v => hf _ (by simpa only [splitR] using h) v
   | .object b, h, v => hf _ (by simpa only [splitR] using h) v
   | .var j, h, v => hf _ (by simpa only [splitR] using h) v

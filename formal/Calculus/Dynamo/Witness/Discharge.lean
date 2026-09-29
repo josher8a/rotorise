@@ -34,7 +34,7 @@ theorem guard_refuses_option_at_binder_input :
 /-- **A `held` between the binder and its variable is refused**, although a container guards
     the variable: `f` can make the input deeper, so the stages need not agree. -/
 theorem guard_refuses_held_on_path :
-    (Term.mu (.array (.held (.var 0) .opaq .opaq [] []))).guarded = false := rfl
+    (Term.mu (.array (.held false (.var 0) .opaq (.caller 0, false) []))).guarded = false := rfl
 
 /-- A variable under a container is guarded, and so is an inner binder that reads an outer
     variable under a container. -/

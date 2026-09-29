@@ -38,24 +38,6 @@ def half {X : Bool → Type} : (s : Bool) → X false → X true → X s
   | false, a, _ => a
   | true, _, b => b
 
-/-- The half of a pair of one type at one absolute side. -/
-abbrev half2 {Z : Type} (s : Bool) (a b : Z) : Z := half (X := fun _ => Z) s a b
-
-/-- A function of the half is the half of the function. -/
-theorem half2_apply {Z W : Type} (f : Z → W) (s : Bool) (a b : Z) :
-    f (half2 s a b) = half2 s (f a) (f b) := by
-  cases s <;> rfl
-
-/-- The half of two functions, at an argument, is the half of the two values. -/
-theorem half2_app {Z W : Type} (s : Bool) (f g : Z → W) (x : Z) :
-    half2 s f g x = half2 s (f x) (g x) := by
-  cases s <;> rfl
-
-/-- The map of the half of two codecs is the half of the two maps. -/
-theorem half2_f {V A M : Type} (s : Bool) (c d : Codec V A M) (o : Orient) (x : Side V A o.c) :
-    (half2 s c d).f o x = half2 s (c.f o x) (d.f o x) := by
-  cases s <;> rfl
-
 /-! ## The signature and the universe -/
 
 /-- **The signature of a universe**: the primitives, and the predicates and the adapter
@@ -104,20 +86,6 @@ abbrev Word (S : Syn) : Type := List (S.Gen × Bool)
 
 /-- **The involution of a word**: the letters in reverse order, each with its sign flipped. -/
 def Word.dagger {S : Syn} (k : Word S) : Word S := k.reverse.map fun x => (x.1, !x.2)
-
-/-- The half of a pair of words at one absolute side. -/
-abbrev halfK {B : Sig} (s : Bool) (k : List (B.G false × Bool)) (kA : List (B.G true × Bool)) :
-    List (B.G s × Bool) :=
-  half (X := fun s => List (B.G s × Bool)) s k kA
-
-/-- **A pair of words is determined by its halves at an orientation.** -/
-theorem halfK_eq {B : Sig} : ∀ (o : Orient) {k k' : List (B.G false × Bool)}
-    {kA kA' : List (B.G true × Bool)}, halfK o.c k kA = halfK o.c k' kA' →
-    halfK o.s k kA = halfK o.s k' kA' → k = k' ∧ kA = kA'
-  | ⟨(false, true), _⟩, _, _, _, _, h, h' => ⟨h, h'⟩
-  | ⟨(true, false), _⟩, _, _, _, _, h, h' => ⟨h', h⟩
-  | ⟨(false, false), hn⟩, _, _, _, _, _, _ => absurd rfl hn
-  | ⟨(true, true), hn⟩, _, _, _, _, _, _ => absurd rfl hn
 
 /-! ## The formers
 
@@ -358,11 +326,6 @@ theorem Table.word_dagger {S : Syn} [Sem S] (α : Table S) (k : Word S) :
       rw [TableAt.word_append, ih]
       simp only [List.map_cons, List.map_nil, hx, TableAt.word]
 
-/-- **The top reads every attribute**: the law that makes the top the stored outer that restricts
-    nothing. -/
-class TopReads (S : Syn) [Sem S] : Prop where
-  reads : ∀ a, ((Syn.top (S := S)).p a).isSome = true
-
 mutual
 
 inductive Term (S : Sig) where
@@ -395,13 +358,16 @@ inductive Term (S : Sig) where
       `array` and `tuple` survive below as *builders*, so a statement that spells either
       keeps its spelling. -/
   | list     (pre : List (Term S)) (spread : Option (Term S)) (suf : List (Term S))
-  /-- §3 `(held)`: a morphism between two restrictions. `outer` restricts the caller side by its
-      write domain, and `outerA` restricts the stored side by its read domain. The caller word
-      `k` and the stored word `kA` only transform. A table gives each word its two functions, so
-      two `held`s of one word carry one pair. A side that states no restriction writes `.opaq`
-      as its outer, and a side with no adapter writes the empty word. -/
-  | held     (inner : Term S) (outer : Term S) (outerA : Term S) (k : List (S.G false × Bool))
-      (kA : List (S.G true × Bool))
+  /-- §3 `(held)`: an adapter at one absolute side `s`, and a restriction of that side. `outer`
+      restricts the side `s` by its domain at `s`, and the word `k₀ :: k` only transforms. A table
+      gives each word its two functions, so two `held`s of one word carry one pair. The other side
+      has no adapter and no restriction.
+
+      **A state with no adapter has no representation.** The word is not empty, and a restriction
+      with no adapter is a `refine`. A side whose signature names no generator has no `held` at
+      that side. A two-sided adapter is two nested `held`s (`held1_nest`). -/
+  | held     (s : Bool) (inner : Term S) (outer : Term S) (k₀ : S.G s × Bool)
+      (k : List (S.G s × Bool))
   /-- §3 `(refine)`: the restriction of each side by a predicate of that side. -/
   | refine   (inner : Term S) (p : S.P false) (pA : S.P true)
   /-- §3 `(opaque)`: the universal sum. The number option is `numberCodec`, so `opaque`
@@ -543,7 +509,7 @@ def Term.use (i : Nat) : Term S → Nat
   | .set t => useUnder (Term.use i t)
   | .mu t => Term.use (i + 1) t
   | .refine t _ _ => Term.use i t
-  | .held t P PA _ _ => useHeld (max (Term.use i t) (max (Term.use i P) (Term.use i PA)))
+  | .held _ t P _ _ => useHeld (max (Term.use i t) (Term.use i P))
   | .list pre sp suf =>
       useUnder (max (Term.useL i pre) (max (Term.useO i sp) (Term.useL i suf)))
   | .union opts => Term.useL i opts
@@ -574,7 +540,7 @@ def Term.guarded : Term S → Bool
   | .mu t => decide (Term.use 0 t ≤ 1) && Term.guarded t
   | .set t => Term.guarded t
   | .refine t _ _ => Term.guarded t
-  | .held t P PA _ _ => Term.guarded t && Term.guarded P && Term.guarded PA
+  | .held _ t P _ _ => Term.guarded t && Term.guarded P
   | .list pre sp suf => Term.guardedL pre && Term.guardedO sp && Term.guardedL suf
   | .union opts => Term.guardedL opts
   | .object b => Body.guarded b
@@ -604,7 +570,7 @@ mutual
 def Term.hasVar : Term S → Bool
   | .var _ => true
   | .refine t _ _ | .mu t | .set t => Term.hasVar t
-  | .held t P PA _ _ => Term.hasVar t || Term.hasVar P || Term.hasVar PA
+  | .held _ t P _ _ => Term.hasVar t || Term.hasVar P
   | .list pre sp suf => Term.hasVarL pre || Term.hasVarO sp || Term.hasVarL suf
   | .object b => Body.hasVar b
   | .union os => Term.hasVarL os
@@ -673,7 +639,7 @@ def Term.depth : Term S → Nat
   | .prim _ | .opaq | .never | .var _ => 1
   | .mu t => Term.depth t + 1
   | .set t => Term.depth t + 1
-  | .held t P PA _ _ => max (Term.depth t) (max (Term.depth P) (Term.depth PA)) + 1
+  | .held _ t P _ _ => max (Term.depth t) (Term.depth P) + 1
   | .refine t _ _ => Term.depth t + 1
   | .list pre sp suf =>
       max (Term.depthL pre) (max (Term.depthO sp) (Term.depthL suf)) + 1
@@ -804,10 +770,9 @@ noncomputable def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C
       | some L => listCodec (L.p false) (L.p true) L.μ (denoteListAbs pre ρ) (denoteOptAbs spread ρ)
           (denoteListAbs suf ρ)
       | none => .empty
-  -- each side reads its own outer, and its own word from its own table
-  | .held inner outer outerA k kA, ρ =>
-      held2 (denoteAbs inner ρ) (denoteAbs outer ρ) (denoteAbs outerA ρ)
-        ((τ false).word k).1 ((τ false).word k).2 ((τ true).word kA).1 ((τ true).word kA).2
+  -- the side `s` reads its outer, and its word from its own table
+  | .held s inner outer k₀ k, ρ =>
+      held1 s (denoteAbs inner ρ) (denoteAbs outer ρ) ((τ s).word (k₀ :: k))
   | .refine inner p pA, ρ => refine2 (denoteAbs inner ρ) (Mean.eval false p) (Mean.eval true pA)
   | .opaq, _ => Mean.top
   | .object b, ρ => bodySemAbs b ρ
@@ -882,11 +847,10 @@ theorem denoteAbs_closed : ∀ (t : Term B), t.hasVar = false → ∀ ρ ρ' : L
       congr 1
       funext c
       exact denoteAbs_closed b h (c :: ρ) (c :: ρ')
-  | .held t P PA _ _, h, ρ, ρ' => by
+  | .held _ t P _ _, h, ρ, ρ' => by
       simp only [Term.hasVar, Bool.or_eq_false_iff] at h
       simp only [denoteAbs]
-      rw [denoteAbs_closed t h.1.1 ρ ρ', denoteAbs_closed P h.1.2 ρ ρ',
-        denoteAbs_closed PA h.2 ρ ρ']
+      rw [denoteAbs_closed t h.1 ρ ρ', denoteAbs_closed P h.2 ρ ρ']
   | .list pre sp suf, h, ρ, ρ' => by
       simp only [Term.hasVar, Bool.or_eq_false_iff] at h
       simp only [denoteAbs]
@@ -1011,9 +975,8 @@ theorem denote_closed (t : Term S) (h : t.hasVar = false) (ρ ρ' : List S.C) :
 /-! ## The host rows
 
 At the host orientation, the caller half of a two-sided row is the half `false`, and the stored
-half is the half `true`. Where the stored halves are the top of the universe, the truth
-predicate, the top as the stored outer, and the empty word, each two-sided row is the one-sided
-row. -/
+half is the half `true`. Where the stored predicate is the truth, the two-sided `refine` is the
+one-sided row. A `held` at the side `false` is the host `held`. -/
 
 section Host
 variable {B : Sig} [Mean B] {α : Table ⟨B, .host⟩} {β : Table (Syn.op ⟨B, .host⟩)}
@@ -1025,14 +988,13 @@ theorem denote_refine_host (t : Term B) (p : B.P false) (ρ : List (Syn.C ⟨B, 
   have h : Mean.eval (B := B) true (Mean.truth true) = fun _ => true := funext (Mean.eval_truth true)
   exact congrArg (refine2 (denote α β t ρ) (Mean.eval false p)) h
 
-/-- **The host `held` is the caller-side adapter, restricted by the caller outer**, where the top
-    reads every attribute. -/
-theorem denote_held_host [TopReads ⟨B, .host⟩] (t P : Term B) (k : Word ⟨B, .host⟩)
+/-- **The host `held` is the caller-side adapter, restricted by the outer.** -/
+theorem denote_held_host (t P : Term B) (k₀ : B.G false × Bool) (k : List (B.G false × Bool))
     (ρ : List (Syn.C ⟨B, .host⟩)) :
-    denote α β (S := ⟨B, .host⟩) (.held t P .opaq k []) ρ =
-      ((denote α β t ρ).through (α.word k).1 (α.word k).2).restrict
+    denote α β (S := ⟨B, .host⟩) (.held false t P k₀ k) ρ =
+      ((denote α β t ρ).through (α.word (k₀ :: k)).1 (α.word (k₀ :: k)).2).restrict
         fun v => ((denote α β P ρ).e v).isSome :=
-  held2_host _ _ _ (TopReads.reads (S := ⟨B, .host⟩)) _ _
+  held1_host _ _ _
 
 end Host
 

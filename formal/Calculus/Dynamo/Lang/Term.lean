@@ -298,8 +298,8 @@ abbrev dynP : Bool → Type
   | false => Pred
   | true => Unit
 
-/-- The generators of DynamoDB at each absolute side: the store names no generator, so the stored
-    word of a `held` is the empty word. -/
+/-- The generators of DynamoDB at each absolute side: the store names no generator, so a `held`
+    at the side `true` has no representation. -/
 abbrev dynG : Bool → Type
   | false => DynGen
   | true => Empty
@@ -378,9 +378,9 @@ abbrev ObjectSlot := Alg.ObjectSlot dynSyn
 @[match_pattern] abbrev Term.set (elem : Term) : Term := Alg.Term.set elem
 @[match_pattern] abbrev Term.list (pre : List Term) (spread : Option Term) (suf : List Term) :
     Term := Alg.Term.list pre spread suf
-@[match_pattern] abbrev Term.held (inner outer outerA : Term) (k : Word)
-    (kA : List (dynSyn.GenA × Bool)) : Term :=
-  Alg.Term.held inner outer outerA k kA
+@[match_pattern] abbrev Term.held (s : Bool) (inner outer : Term) (k₀ : dynSig.G s × Bool)
+    (k : List (dynSig.G s × Bool)) : Term :=
+  Alg.Term.held s inner outer k₀ k
 @[match_pattern] abbrev Term.refine (inner : Term) (p : Pred) (pA : dynSyn.PredA) :
     Term := Alg.Term.refine inner p pA
 @[match_pattern] abbrev Term.opaq : Term := Alg.Term.opaq
@@ -396,12 +396,13 @@ abbrev ObjectSlot := Alg.ObjectSlot dynSyn
 
 /-- **Case analysis on a DynamoDB term**, with the primitive split into its two rows, and each
     field at its DynamoDB type. `cases` uses this eliminator for every `Term`, so a case reads
-    `base k` and `literal k v`, and a field reads the DynamoDB tables by field notation. -/
+    `base k` and `literal k v`, and a field reads the DynamoDB tables by field notation. A `held`
+    has one case, at the side `false`: the side `true` names no generator. -/
 @[elab_as_elim, cases_eliminator]
 def Term.casesD {motive : Term → Sort _} (base : ∀ k, motive (.base k))
     (literal : ∀ k v, motive (.literal k v)) (set : ∀ elem, motive (.set elem))
     (list : ∀ pre spread suf, motive (.list pre spread suf))
-    (held : ∀ inner outer outerA k kA, motive (.held inner outer outerA k kA))
+    (held : ∀ inner outer k₀ k, motive (.held false inner outer k₀ k))
     (refine : ∀ inner p pA, motive (.refine inner p pA)) (opaq : motive .opaq)
     (object : ∀ b, motive (.object b)) (union : ∀ options, motive (.union options))
     (never : motive .never) (var : ∀ i, motive (.var i)) (mu : ∀ body, motive (.mu body)) :
@@ -410,7 +411,8 @@ def Term.casesD {motive : Term → Sort _} (base : ∀ k, motive (.base k))
   | .literal k v => literal k v
   | .set e => set e
   | .list pre sp suf => list pre sp suf
-  | .held i o oA k kA => held i o oA k kA
+  | .held false i o k₀ k => held i o k₀ k
+  | .held true _ _ k₀ _ => nomatch k₀.1
   | .refine i p pA => refine i p pA
   | .opaq => opaq
   | .object b => object b

@@ -456,7 +456,8 @@ theorem AdmA_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → Obj
 The certificate is defined here, after the leaves, because the test of the views reads them. -/
 
 mutual
-/-- **The caller-side view**: each `held` becomes its caller-side term. The view admits each
+/-- **The caller-side view**: each `held` becomes its term at the caller side: its outer where its
+    side is the caller side, and its inner term otherwise. The view admits each
     value that the term admits. The view of a `union` is the union of the views, because a union
     admits where one of its options admits.
 
@@ -465,7 +466,7 @@ mutual
     recursive term admits what the term admits. The view holds no `held` (`HF_writeView`), so a
     set of the view writes element by element. -/
 def writeView : Term → Term
-  | .held _ P _ _ _ => writeView P
+  | .held s t P _ _ => bif s then writeView t else writeView P
   | .refine t p pA => .refine (writeView t) p pA
   | .list pre sp suf => .list (writeViewL pre) (writeViewO sp) (writeViewL suf)
   | .object b => .object (writeViewB b)
@@ -487,7 +488,8 @@ def writeViewS : ObjectSlot → ObjectSlot
 end
 
 mutual
-/-- **The stored-side view**: each `held` becomes its inner term. The view of `mu b` is `mu` of
+/-- **The stored-side view**: each `held` becomes its term at the stored side: its outer where its
+    side is the stored side, and its inner term otherwise. The view of `mu b` is `mu` of
     the view of `b`, and a variable stays a variable, as in `writeView`.
 
     **The view keeps a predicate only where the inner term decodes the same in the view as in the
@@ -503,7 +505,7 @@ mutual
     held-free inner term, so a predicate over a variable changes no verdict. An example after
     `separates_of_certPair` pins the narrowing. -/
 def readView : Term → Term
-  | .held t _ _ _ _ => readView t
+  | .held s t P _ _ => bif s then readView P else readView t
   | .refine t p pA => if hasHeld t || t.hasVar then readView t else .refine t p pA
   | .list pre sp suf => .list (readViewL pre) (readViewO sp) (readViewL suf)
   | .object b => .object (readViewB b)
@@ -711,20 +713,20 @@ stored-side views differ in kind. -/
 
 /-- The test of the two terms does not certify the pair. -/
 theorem disjoint_heldNE_base :
-    Alg.Term.disjoint pair0 (.held (.set .string) (.list [.string] (some .string) []) .opaq [] [] : Term)
+    Alg.Term.disjoint pair0 (.held false (.set .string) (.list [.string] (some .string) []) (.caller 0, false) [] : Term)
         (.list [] (some .number) [] : Term) = false := by
   decide
 
 /-- **A caller side that requires one element or more is certified** beside a list of numbers. -/
 theorem certPair_heldNE :
-    certPair (.held (.set .string) (.list [.string] (some .string) []) .opaq [] [])
+    certPair (.held false (.set .string) (.list [.string] (some .string) []) (.caller 0, false) [])
       (.list [] (some .number) []) = true := by
   decide
 
 /-- **A caller side that admits the empty list is refused**, because the list of numbers admits
     the empty list too. -/
 theorem certPair_heldAny :
-    certPair (.held (.set .string) (.list [] (some .string) []) .opaq [] [])
+    certPair (.held false (.set .string) (.list [] (some .string) []) (.caller 0, false) [])
       (.list [] (some .number) []) = false := by
   decide
 
@@ -734,20 +736,20 @@ theorem certPair_heldAny :
     `literal "A" ∪ literal "B"`. -/
 theorem certPair_heldBelowMu :
     certPair (.union [.literal .string "A", .literal .string "B"])
-      (.mu (.union [.held .number (.literal .string "1") .opaq [] [], .list [] (some (.var 0)) []]))
+      (.mu (.union [.held false .number (.literal .string "1") (.caller 0, false) [], .list [] (some (.var 0)) []]))
       = true := by
   decide
 
 /-- …and the pair is refused where the caller views share a value: the text `"1"`. -/
 theorem certPair_heldBelowMu_meets :
     certPair (.literal .string "1")
-      (.mu (.union [.held .number (.literal .string "1") .opaq [] [], .list [] (some (.var 0)) []]))
+      (.mu (.union [.held false .number (.literal .string "1") (.caller 0, false) [], .list [] (some (.var 0)) []]))
       = false := by
   decide
 
 /-- **The test does not read a raw `held`.** A `held` carries an adapter word, and the test reads
     no table, so the test keeps the `held` apart from the bottom alone. The views read it. -/
-example : Alg.Term.disjoint pair0 (Term.held .string .opaq .opaq [] [])
+example : Alg.Term.disjoint pair0 (Term.held false .string .opaq (.caller 0, false) [])
     Term.number = false := by rfl
 
 /-! ## The levers -/
@@ -1079,7 +1081,7 @@ mutual
 /-- **The caller-side view holds no `held`.** Each `held` becomes its caller-side view, and
     every other row keeps its constructor. -/
 theorem HF_writeView : ∀ t : Term, HF (writeView t)
-  | .held _ P _ _ _ => by simp only [writeView]; exact HF_writeView P
+  | .held s t P _ _ => by cases s; exacts [HF_writeView P, HF_writeView t]
   | .refine t _ _ => by simp only [writeView]; exact HF_writeView t
   | .list pre sp suf => by
       simp only [writeView, HF, hasHeld, Bool.or_eq_false_iff]
@@ -1111,7 +1113,7 @@ mutual
 /-- **The stored-side view holds no `held`.** A `refine` that the view keeps has an inner term
     with no `held`. -/
 theorem HF_readView : ∀ t : Term, HF (readView t)
-  | .held t _ _ _ _ => by simp only [readView]; exact HF_readView t
+  | .held s t P _ _ => by cases s; exacts [HF_readView t, HF_readView P]
   | .refine t _ _ => by
       simp only [readView]
       split
@@ -1228,9 +1230,9 @@ mutual
     `set` row reads a restriction of `Ω` element by element. -/
 theorem writeLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeV ρ ρ' → EnvSub ρ' →
     RowLe (Alg.Adm α dynTableA t ρ) (Alg.Adm α dynTableA (writeView t) ρ')
-  | .held _ P _ _ _, ρ, ρ', he, hs => fun v h => by
-      simp only [writeView]
-      exact writeLeE P ρ ρ' he hs v (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).2
+  | .held false _ P _ _, ρ, ρ', he, hs => fun v h =>
+      writeLeE P ρ ρ' he hs v (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).2
+  | .held true _ _ k₀ _, _, _, _, _ => nomatch k₀.1
   | .var i, _, _, he, _ => fun v h => he i v h
   | .mu b, ρ, ρ', he, hs => fun v h => by
       simp only [writeView]
@@ -1323,12 +1325,10 @@ mutual
     decodes through a `held`. -/
 theorem readLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLeA ρ ρ' → EnvSub ρ' →
     RowLe (Alg.AdmA α dynTableA t ρ) (Alg.AdmA α dynTableA (readView t) ρ')
-  | .held t _ _ _ _, ρ, ρ', he, hs => fun a h => by
-      simp only [readView]
+  | .held false t _ _ _, ρ, ρ', he, hs => fun a h => by
       rw [Alg.AdmA_held_eq (S := dynSyn)] at h
-      have h' := (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).2
-      rw [dynTableA_word] at h'
-      exact readLeE t ρ ρ' he hs a h'
+      exact readLeE t ρ ρ' he hs a (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).2
+  | .held true _ _ k₀ _, _, _, _, _ => nomatch k₀.1
   | .var i, _, _, he, _ => fun a h => by
       rw [Alg.AdmA_eq_isSome (S := dynSyn)] at h ⊢
       exact he i a h
@@ -1458,9 +1458,9 @@ theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates
     two options write disjoint slots. The caller sides share `boolean`, so the caller views are
     not disjoint, and the certificate agrees with the host. -/
 example :
-    certPair (.set (.refine (.held .string (.union [.string, .boolean]) .opaq [] [])
+    certPair (.set (.refine (.held false .string (.union [.string, .boolean]) (.caller 0, false) [])
         (.closure fun _ => true) ()))
-      (.set (.held .number (.union [.number, .boolean]) .opaq [] [])) = false := by
+      (.set (.held false .number (.union [.number, .boolean]) (.caller 1, false) [])) = false := by
   decide
 
 /-- **The certificate refuses a separated pair at a data predicate over a variable.** The pair is

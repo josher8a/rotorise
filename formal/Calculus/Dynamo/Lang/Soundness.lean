@@ -83,8 +83,8 @@ theorem list {pre sp suf ρ} (h : Obligations α (.list pre sp suf) ρ) :
 
 /-- §3 `(held)`: the subterm's premises, and the iso of the whole word cancelling on the
     carriers. -/
-theorem held {t P PA k kA ρ} (h : Obligations α (.held t P PA k kA) ρ) :
-    Obligations α t ρ ∧ IsoCancels (denote α t ρ) (α.word k).1 (α.word k).2 :=
+theorem held {t P k₀ k ρ} (h : Obligations α (.held false t P k₀ k) ρ) :
+    Obligations α t ρ ∧ IsoCancels (denote α t ρ) (α.word (k₀ :: k)).1 (α.word (k₀ :: k)).2 :=
   ⟨h.1, h.2.1⟩
 
 /-- §5 `(union)`: one premise per option, and pairwise compatibility. -/
