@@ -103,7 +103,7 @@ def KeepsMember (member : A → M) (c : Codec V A M) (k : A → A) : Prop :=
 /-- **The obligation of the two-sided adapter**: one `IsoCancels` per half, and the member fact
     of the stored exit function. -/
 def Obl2 (member : A → M) (c : Codec V A M) (fV gV : V → V) (hA kA : A → A) : Prop :=
-  IsoCancels c fV gV ∧ IsoCancels (conv c) hA kA ∧ KeepsMember member c kA
+  IsoCancels c fV gV ∧ IsoCancelsAt Orient.dual c hA kA ∧ KeepsMember member c kA
 
 /-- **The two-sided adapter keeps the laws**, from the obligation per half. -/
 theorem Lawful.adapt2 {member : A → M} {c : Codec V A M} (hc : Lawful member c)
@@ -113,13 +113,13 @@ theorem Lawful.adapt2 {member : A → M} {c : Codec V A M} (hc : Lawful member c
   refine .ofRC (fun {v a'} he => ?_) (fun {a' w} hp => ?_) (fun {μ} hμ {v a'} he => ?_)
   · obtain ⟨a, ha, rfl⟩ := Option.map_eq_some_iff.mp he
     have hr := hc.retract ha
-    have hk : hA (kA a) = a := hA2 a (by simp only [Alg.conv, Codec.ofEP_e, hr, Option.isSome_some])
-    simp only [Alg.adapt2, Codec.ofEP_p, hk, hr, Option.map_some, hV1 v (by rw [ha]; rfl)]
+    have hk : hA (kA a) = a := hA2 a (Option.isSome_iff_exists.mpr ⟨_, hr⟩)
+    simp only [Alg.adapt2, Codec.ofEP_p, hk, hr, Option.map_some, hV1 v (Option.isSome_iff_exists.mpr ⟨_, ha⟩)]
   · obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp hp
     have hcu := hc.canon hu
-    have hfg : fV (gV u) = u := hV2 u (by rw [hcu]; rfl)
+    have hfg : fV (gV u) = u := hV2 u (Option.isSome_iff_exists.mpr ⟨_, hcu⟩)
     simp only [Alg.adapt2, Codec.ofEP_e, hfg, hcu, Option.map_some,
-      hA1 a' (by simp only [Alg.conv, Codec.ofEP_e, hu, Option.isSome_some])]
+      hA1 a' (Option.isSome_iff_exists.mpr ⟨_, hu⟩)]
   · obtain ⟨a, ha, rfl⟩ := Option.map_eq_some_iff.mp he
     rw [hm (fV v) a ha]
     exact hc.writes hμ ha

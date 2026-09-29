@@ -32,7 +32,7 @@ export Alg (Can IsoCancels ReadsCoherently Carrier SurvivesStore Ctor pointCodec
   carrier_pointCodec carrier_restrict
   carrier_altCodec lawful_pointCodec funImage funImage_some funImage_isSome funImage_isSome_iff
   funImage_eq Sub sub_restrict_self optBot selectF ConfluentAt
-  Compat find?_attempt_V find?_attempt_A acts_of_find?_V acts_of_find?_A
+  Compat
   Canon lawful_altCodec compat_of_exclusive compat_of_common_bound'
   equiv_restrict_meet equiv_restrict_full altCodec_nest
   altCodec_assoc_heldSet)

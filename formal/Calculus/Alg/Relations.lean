@@ -246,25 +246,17 @@ theorem Compat.p_agree {c d : Codec V A M} (h : Compat c d) {a t w}
   have := h a t hc (Or.inl (by rw [hd]; rfl))
   rw [hd] at this; exact Option.some.inj this
 
-/-- A family has a first writer wherever one of its options writes. -/
-theorem find?_attempt_V {os : List (Codec V A M)} {o v a} (ho : o ∈ os) (he : o.e v = some a) :
-    ∃ o', os.find? (fun c => (c.e v).isSome) = some o' :=
-  Option.isSome_iff_exists.mp (List.find?_isSome.mpr ⟨o, ho, by simp [he]⟩)
+/-- A family has a first option that answers at the orientation `o`, wherever one of its options
+    answers there. -/
+theorem find?_attempt (o : Orient) {os : List (Codec V A M)} {c : Codec V A M} {x y}
+    (hc : c ∈ os) (h : c.f o x = some y) :
+    ∃ c', os.find? (fun d => (d.f o x).isSome) = some c' :=
+  Option.isSome_iff_exists.mp (List.find?_isSome.mpr ⟨c, hc, by simp [h]⟩)
 
-/-- …and a first reader wherever one of its options reads. -/
-theorem find?_attempt_A {os : List (Codec V A M)} {o a v} (ho : o ∈ os) (hp : o.p a = some v) :
-    ∃ o', os.find? (fun c => (c.p a).isSome) = some o' :=
-  Option.isSome_iff_exists.mp (List.find?_isSome.mpr ⟨o, ho, by simp [hp]⟩)
-
-/-- The first writer writes. -/
-theorem acts_of_find?_V {os : List (Codec V A M)} {o v}
-    (hf : os.find? (fun c => (c.e v).isSome) = some o) : (o.e v).isSome = true :=
-  List.find?_some (p := fun c : Codec V A M => (c.e v).isSome) hf
-
-/-- …and the first reader reads. -/
-theorem acts_of_find?_A {os : List (Codec V A M)} {o a}
-    (hf : os.find? (fun c => (c.p a).isSome) = some o) : (o.p a).isSome = true :=
-  acts_of_find?_V (os := os.map conv) (o := conv o) (by rw [List.find?_map]; exact hf ▸ rfl)
+/-- The first option that answers at the orientation `o` answers. -/
+theorem acts_of_find? (o : Orient) {os : List (Codec V A M)} {c : Codec V A M} {x}
+    (hf : os.find? (fun d => (d.f o x).isSome) = some c) : (c.f o x).isSome = true :=
+  List.find?_some (p := fun d : Codec V A M => (d.f o x).isSome) hf
 
 /-- Canonical reads: the codec writes each value that the codec reads at the attribute that
     the codec read. -/
@@ -288,16 +280,16 @@ theorem altCodec_of_mem {os : List (Codec V A M)} {μA : Option M}
       c.f o x = some y → (altCodec os μA).f o x = some y :=
   Orient.both
     (fun {v a} he => by
-      obtain ⟨o', hf⟩ := find?_attempt_V hc he
+      obtain ⟨o', hf⟩ := find?_attempt .host hc he
       have ho' := List.mem_of_find?_eq_some hf
-      obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find?_V hf)
+      obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find? .host hf)
       rw [(hC c hc o' ho').e_agree (hl c hc).core (fun _ _ hp => (hl o' ho').canon hp) he hb]
         at hb
       exact altCodec_f.mpr ⟨o', hf, hb⟩)
     (fun {a v} hp => by
-      obtain ⟨o', hf⟩ := find?_attempt_A hc hp
+      obtain ⟨o', hf⟩ := find?_attempt .dual hc hp
       have ho' := List.mem_of_find?_eq_some hf
-      exact altCodec_f.mpr ⟨o', hf, hC c hc o' ho' _ _ hp (Or.inl (acts_of_find?_A hf))⟩)
+      exact altCodec_f.mpr ⟨o', hf, hC c hc o' ho' _ _ hp (Or.inl (acts_of_find? .dual hf))⟩)
 
 /-- The sum's core laws. Compatibility is what makes them hold: the option that reads the
     attribute of a write reads the value back, whichever option wrote. -/
@@ -309,14 +301,14 @@ theorem lawfulCore_altCodec {os : List (Codec V A M)} {μA : Option M}
   retract he := by
     obtain ⟨o, ho, -, hoe⟩ := altCodec_admits he
     have hop := (h o ho).retract hoe
-    obtain ⟨o', hf'⟩ := find?_attempt_A ho hop
+    obtain ⟨o', hf'⟩ := find?_attempt .dual ho hop
     have ho' := List.mem_of_find?_eq_some hf'
-    exact altCodec_f.mpr ⟨o', hf', hC o ho o' ho' _ _ hop (Or.inl (acts_of_find?_A hf'))⟩
+    exact altCodec_f.mpr ⟨o', hf', hC o ho o' ho' _ _ hop (Or.inl (acts_of_find? .dual hf'))⟩
   canon hp := by
     obtain ⟨o, ho, -, hop⟩ := altCodec_admits hp
     obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((h o ho).canon hop)
-    obtain ⟨o', hf'⟩ := find?_attempt_V ho ha'
-    obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find?_V hf')
+    obtain ⟨o', hf'⟩ := find?_attempt .host ho ha'
+    obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find? .host hf')
     exact Option.isSome_iff_exists.mpr ⟨b, altCodec_f.mpr ⟨o', hf', hb⟩⟩
   writes := by
     intro μ hμ t a he
