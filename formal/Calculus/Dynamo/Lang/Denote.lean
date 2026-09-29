@@ -179,7 +179,9 @@ variable (t : Term) (ts : List Term) (ρ : List Codec)
     denote α (.held t P PA k kA) ρ
       = Alg.refine2 ((denote α t ρ).through (α.word k).1 (α.word k).2)
           (fun v => ((denote α P ρ).e v).isSome) fun a => ((denote α PA ρ).p a).isSome := by
-  simp only [denote, Alg.denote, dynTableA_word, Alg.held2, Alg.adapt2_host]; rfl
+  show Alg.held2 (denote α t ρ) (denote α P ρ) (denote α PA ρ) (α.word k).1 (α.word k).2
+    (dynTableA.word kA).1 (dynTableA.word kA).2 = _
+  rw [dynTableA_word, Alg.held2, Alg.adapt2_host]
 /-- `refine` denotes `restrict`, of the predicate's meaning: the stored predicate is the truth.
     This is the whole of what `Pred` cost the codec layer: one `.eval`. -/
 @[denote_rows] theorem denote_refine (p : Pred) (pA : Alg.Syn.PredA dynSyn) :

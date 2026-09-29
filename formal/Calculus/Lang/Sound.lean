@@ -25,7 +25,7 @@ variable {S : Syn} [Sem S] {α : Table S} {β : Table S.op}
 @[simp] theorem denoteList_eq {ρ : List S.C} :
     ∀ ts : List (Term S), denoteList α β ts ρ = ts.map (denote α β · ρ)
   | [] => rfl
-  | t :: ts => by simp only [denoteList, List.map]; rw [denoteList_eq ts]
+  | t :: ts => congrArg (denote α β t ρ :: ·) (denoteList_eq ts)
 
 /-- The spread's codec is the mapped denotation. -/
 @[simp] theorem denoteOpt_eq {ρ : List S.C} :
@@ -37,7 +37,7 @@ variable {S : Syn} [Sem S] {α : Table S} {β : Table S.op}
 @[simp] theorem denoteμs_eq_map {ρ : List S.C} : ∀ opts : List (Term S),
     denoteμs α β opts ρ = opts.map fun t => (denote α β t ρ).μ
   | [] => rfl
-  | t :: ts => by simp only [denoteμs, List.map]; rw [denoteμs_eq_map ts]
+  | t :: ts => congrArg ((denote α β t ρ).μ :: ·) (denoteμs_eq_map ts)
 
 /-- A term's open block keeps every name. -/
 theorem wildSem_ne_drop (w : Option (Term S)) {ρ : List S.C} : wildSem α β w ρ ≠ .drop := by
@@ -72,18 +72,18 @@ set_option linter.unreachableTactic false in
 /-- Soundness over an environment: every term whose obligations hold at `ρ`, and whose free
     variables `ρ` gives lawful codecs, satisfies retract, canon and writes. -/
 theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T μ → Obligations α β t ρ →
-    (∀ i, Lawful Syn.member (envAt ρ i)) → Lawful Syn.member (denote α β t ρ)
+    (∀ i, Lawful Mean.mem (envAt ρ i)) → Lawful Mean.mem (denote α β t ρ)
   | t, T, μ, ρ, h, hob, henv => by
     cases h with
-    | prim g => exact Syn.lawful_ground g
+    | prim g => exact Mean.lawful_ground g
     -- the bottom's domains are empty, so every law holds vacuously
     | never => exact Lawful.empty
-    | opaq => exact Syn.lawful_top
+    | opaq => exact Mean.lawful_top
     | var i => exact henv i
     -- each stage is lawful by the body's soundness at the stage before, and the guard carries
     -- the laws to the limit
     | @mu b T' μ' hg h' =>
-      refine lawful_muCodec Syn.dV_pos Syn.dA_pos (contractive_body hg ρ) fun n => ?_
+      refine lawful_muCodec (Mean.d_pos false) (Mean.d_pos true) (contractive_body hg ρ) fun n => ?_
       induction n with
       | zero => exact Lawful.empty
       | succ n ih =>
@@ -92,17 +92,17 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
           | i + 1 => henv i
     -- the lift of a lawful element is lawful, and the universe's set obligation is not read
     | @set L t' T' μ' hL h' =>
-      simp only [denote, hL]
+      simp only [denote, denoteAbs, hL]
       exact L.lawful (soundnessIn ρ h' hob.1 henv)
     | @refine t' T' μ' p pA h' =>
       exact (soundnessIn ρ h' hob henv).refine2 _ _
     | @held t' I' μ' P PA k kA h' =>
       exact ((soundnessIn ρ h' hob.1 henv).adapt2 hob.2).refine2 _ _
     | @list L pre Tpre sp Tsp suf Tsuf hL hp hs hf =>
-      have ihp : ∀ t' ∈ pre, Lawful Syn.member (denote α β t' ρ) := fun t' ht' => by
+      have ihp : ∀ t' ∈ pre, Lawful Mean.mem (denote α β t' ρ) := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedList.forall (α := α) (β := β) hp t' ht'
         exact soundnessIn ρ hμ' (obligationsList_iff.mp hob.1 t' ht') henv
-      have ihsp : ∀ t' ∈ sp, Lawful Syn.member (denote α β t' ρ) := fun t' ht' => by
+      have ihsp : ∀ t' ∈ sp, Lawful Mean.mem (denote α β t' ρ) := fun t' ht' => by
         cases sp with
         | none => exact nomatch ht'
         | some tx =>
@@ -110,10 +110,10 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
           cases ht'
           cases hs with
           | some hμ' => exact soundnessIn ρ hμ' (obligationsOpt_iff.mp hob.2.1 t' rfl) henv
-      have ihf : ∀ t' ∈ suf, Lawful Syn.member (denote α β t' ρ) := fun t' ht' => by
+      have ihf : ∀ t' ∈ suf, Lawful Mean.mem (denote α β t' ρ) := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedList.forall (α := α) (β := β) hf t' ht'
         exact soundnessIn ρ hμ' (obligationsList_iff.mp hob.2.2 t' ht') henv
-      simp only [denote, hL, denoteList_eq, denoteOpt_eq]
+      simp only [denote, denoteAbs, hL, denoteList_eq, denoteOpt_eq]
       exact lawful_listCodec L.hμ
           (List.forall_mem_map.mpr fun t' ht' => ihp t' ht')
           (forall_mem_map_option fun t' ht' => ihsp t' ht')
@@ -124,7 +124,7 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest
       -- a field's codec is its term's denotation, and its laws reach it unchanged
-      have ihf : ∀ k, Lawful Syn.member (fieldSem α β (ff k) ρ).codec := by
+      have ihf : ∀ k, Lawful Mean.mem (fieldSem α β (ff k) ρ).codec := by
         intro k
         have hobf := hob.1 k
         obtain ⟨t', hty', hshape⟩ := TypedField.term (α := α) (β := β) (hfields k)
@@ -132,7 +132,7 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
         · rw [heq] at hobf ⊢
           exact soundnessIn ρ hty' hobf henv
         · rw [heq] at hobf ⊢; exact soundnessIn ρ hty' hobf henv
-      have ihr : ∀ c, wildSem α β wild ρ = .codec c → Lawful Syn.member c := by
+      have ihr : ∀ c, wildSem α β wild ρ = .codec c → Lawful Mean.mem c := by
         intro c hcr
         cases hrest with
         | none => exact nomatch hcr
@@ -140,10 +140,10 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
           replace hcr : RestSem.codec (denote α β t' ρ) = RestSem.codec c := hcr
           cases hcr
           exact soundnessIn ρ hty hob.2 henv
-      simp only [denote, bodySem, hF]
+      simp only [denote, denoteAbs, bodySemAbs, hF]
       exact lawful_objectCodec F.hμ ihf ihr (wildSem_ne_drop _)
     | @union opts Ts μs hlist =>
-      have ihs : ∀ t' ∈ opts, Lawful Syn.member (denote α β t' ρ) := fun t' ht' => by
+      have ihs : ∀ t' ∈ opts, Lawful Mean.mem (denote α β t' ρ) := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall (α := α) (β := β) hlist t' ht'
         exact soundnessIn ρ hμ' (obligationsList_iff.mp hob.1 t' ht') henv
       have hC : ∀ o ∈ opts.map fun t' => denote α β t' ρ,
@@ -152,12 +152,12 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
         exact hob.2 s hs t' ht'
       have hW : ∀ m, unanimous (opts.map fun t' => (denote α β t' ρ).μ) = some m →
           ∀ o ∈ opts.map fun t' => denote α β t' ρ,
-            ∀ t' a, o.e t' = some a → Syn.member a = m := by
+            ∀ t' a, o.e t' = some a → Mean.mem a = m := by
         intro m hm
         refine List.forall_mem_map.mpr fun tx htx t' a he' => ?_
         exact (ihs tx htx).writes
           (unanimous_spec hm _ (List.mem_map.mpr ⟨tx, htx, rfl⟩)) he'
-      simp only [denote, denoteList_eq, denoteμs_eq_map]
+      simp only [denote, denoteAbs, denoteList_eq, denoteμs_eq_map]
       exact lawful_altCodec (List.forall_mem_map.mpr fun t' ht' => ihs t' ht') hC hW
 
 termination_by t _ _ _ _ _ _ => Term.depth t
@@ -165,7 +165,7 @@ decreasing_by term_depth_wf
 
 /-- Soundness: every closed term whose obligations hold satisfies retract, canon and writes. -/
 theorem soundness {t : Term S} {T μ} (h : Typed α β t T μ) (hob : Obligations α β t) :
-    Lawful Syn.member (denote α β t) :=
+    Lawful Mean.mem (denote α β t) :=
   soundnessIn [] h hob fun _ => Lawful.empty
 
 /-! ## The denotation's held set is the judgement's
@@ -177,8 +177,8 @@ most cases are pointwise. Three are not: `list` (positional through `align`), `o
 (name-dispatched) and the top, which is the universe's law. -/
 
 /-- The uniform tail of a `(tuple-tail)`: every trailing position is the tail's. -/
-theorem alignTail_TSub {c : S.C} {T' : S.V → Prop} (ih : ∀ v, c.T v → T' v) :
-    ∀ {vs : List S.V} {ps}, align [] (some c) vs = some ps → (∀ p ∈ ps, p.1.T p.2) →
+theorem alignTail_TSub {c : S.C} {T' : Mean.V (B := S.sig) → Prop} (ih : ∀ v, c.T v → T' v) :
+    ∀ {vs : List (Mean.V (B := S.sig))} {ps}, align [] (some c) vs = some ps → (∀ p ∈ ps, p.1.T p.2) →
       ∀ x ∈ vs, T' x
   | [], _, _, _, x, hx => absurd hx (by simp)
   | v :: vs, ps, hal, hall, x, hx => by
@@ -196,10 +196,10 @@ theorem alignTail_TSub {c : S.C} {T' : S.V → Prop} (ih : ∀ v, c.T v → T' v
 
 /-- `align`'s positional pairing is §3's `T₁ × … × Tₙ`, one position at a time. -/
 theorem align_TSub {tail : Option (Term S)} {Tt} (hopt : TypedOpt α β tail Tt)
-    (ihTail : ∀ t' ∈ tail, ∀ (T' : S.V → Prop) (μ' : Option (Syn.M S)),
+    (ihTail : ∀ t' ∈ tail, ∀ (T' : Mean.V (B := S.sig) → Prop) (μ' : Option (Syn.M S)),
       Typed α β t' T' μ' → ∀ v, (denote α β t').T v → T' v) :
     ∀ {ts : List (Term S)} {Ts}, TypedList α β ts Ts →
-      (∀ t' ∈ ts, ∀ (T' : S.V → Prop) (μ' : Option (Syn.M S)),
+      (∀ t' ∈ ts, ∀ (T' : Mean.V (B := S.sig) → Prop) (μ' : Option (Syn.M S)),
         Typed α β t' T' μ' → ∀ v, (denote α β t').T v → T' v) → ∀ {vs ps},
       align (ts.map (denote α β)) (tail.map (denote α β)) vs = some ps →
       (∀ p ∈ ps, p.1.T p.2) → HTuple Ts Tt vs
@@ -233,9 +233,9 @@ theorem align_TSub {tail : Option (Term S)} {Tt} (hopt : TypedOpt α β tail Tt)
 /-- The suffix's positions, read off the zipped row. -/
 theorem zipSuf_TSub :
     ∀ {suf : List (Term S)} {Tsuf}, TypedList α β suf Tsuf →
-      (∀ t' ∈ suf, ∀ (T' : S.V → Prop) (μ' : Option (Syn.M S)),
+      (∀ t' ∈ suf, ∀ (T' : Mean.V (B := S.sig) → Prop) (μ' : Option (Syn.M S)),
         Typed α β t' T' μ' → ∀ v, (denote α β t').T v → T' v) →
-      ∀ {back : List S.V}, back.length = suf.length →
+      ∀ {back : List (Mean.V (B := S.sig))}, back.length = suf.length →
       (∀ p ∈ (suf.map (denote α β)).zip back, p.1.T p.2) →
       List.Forall₂ (fun T v => T v) Tsuf back
   | _, _, .nil, _, back, hlen, _ => by
@@ -259,11 +259,11 @@ theorem zipSuf_TSub :
 /-- `alignL`'s pairing is §3's `(list)` held set, read off the alignment. -/
 theorem alignL_TSub {pre : List (Term S)} {Tpre sp Tsp suf Tsuf} (hp : TypedList α β pre Tpre)
     (hs : TypedOpt α β sp Tsp) (hf : TypedList α β suf Tsuf)
-    (ihp : ∀ t' ∈ pre, ∀ (T' : S.V → Prop) (μ' : Option (Syn.M S)),
+    (ihp : ∀ t' ∈ pre, ∀ (T' : Mean.V (B := S.sig) → Prop) (μ' : Option (Syn.M S)),
       Typed α β t' T' μ' → ∀ v, (denote α β t').T v → T' v)
-    (ihs : ∀ t' ∈ sp, ∀ (T' : S.V → Prop) (μ' : Option (Syn.M S)),
+    (ihs : ∀ t' ∈ sp, ∀ (T' : Mean.V (B := S.sig) → Prop) (μ' : Option (Syn.M S)),
       Typed α β t' T' μ' → ∀ v, (denote α β t').T v → T' v)
-    (ihf : ∀ t' ∈ suf, ∀ (T' : S.V → Prop) (μ' : Option (Syn.M S)),
+    (ihf : ∀ t' ∈ suf, ∀ (T' : Mean.V (B := S.sig) → Prop) (μ' : Option (Syn.M S)),
       Typed α β t' T' μ' → ∀ v, (denote α β t').T v → T' v)
     {vs ps}
     (hal : alignL (pre.map (denote α β)) (sp.map (denote α β)) (suf.map (denote α β)) vs = some ps)
@@ -283,27 +283,27 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed α β t T μ → ∀ v, (den
     cases h with
     | prim _ => exact hv
     | never => exact hv
-    | opaq => exact Syn.top_held v hv
+    | opaq => exact Mean.top_held v hv
     -- a closed variable is the bottom, and a `mu`'s index is its codec's held set
     | var _ => exact False.elim hv
     | mu _ _ => exact hv
     | @set L t' T' μ' hL h' =>
-      simp only [denote, hL] at hv
+      simp only [denote, denoteAbs, hL] at hv
       exact L.held_of (fun w hw => typed_TSub h' w hw) v hv
     | @list L pre Tpre sp Tsp suf Tsuf hL hp hs hf =>
-      simp only [denote, hL, denoteList_eq, denoteOpt_eq] at hv
+      simp only [denote, denoteAbs, hL, denoteList_eq, denoteOpt_eq] at hv
       obtain ⟨vs, rfl, ps, hal, hall⟩ := hv
       exact ⟨_, rfl, alignL_TSub hp hs hf
         (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
         (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
         (fun t' _ _ _ hty v hv => typed_TSub hty v hv) hal hall⟩
     | @held t' I' μ' P PA k kA h' =>
-      exact ⟨typed_TSub h' ((α.word (halfK S.o.c k kA)).1 v) hv.1, hv.2⟩
+      exact ⟨typed_TSub h' (((tables S.o α β false).word k).1 v) hv.1, hv.2⟩
     | @refine t' T' μ' q qA h' => exact ⟨typed_TSub h' v hv.1, hv.2⟩
     | @object F body bind R μs hF hfields hrest =>
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest ⊢
-      simp only [denote, bodySem, hF] at hv
+      simp only [denote, denoteAbs, bodySemAbs, hF] at hv
       -- No case split on `v`: the object's `T` is `carriedCodec`'s, so it *hands over*
       -- the payload, a key set and a function on it, which is exactly `HObject`'s witness.
       obtain ⟨⟨keys, kvs⟩, hvp, hval, hall⟩ := hv
@@ -326,7 +326,7 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed α β t T μ → ∀ v, (den
           rw [dif_pos hk]
           simp only [objEntryT,
             MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem α β (ff k)⟩ :
-              MapOf (FieldSem S.V (Syn.A S) (Syn.M S)))) ⟨k.1, hk⟩] at hentry
+              MapOf (FieldSem (Mean.V (B := S.sig)) (Mean.A (B := S.sig)) S.M))) ⟨k.1, hk⟩] at hentry
           obtain ⟨t', hty', hshape⟩ := TypedField.term (α := α) (β := β) (hfields ⟨k.1, hk⟩)
           rcases hshape with heq | heq
           · rw [heq] at hentry; exact typed_TSub hty' _ hentry
@@ -342,7 +342,7 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed α β t T μ → ∀ v, (den
             cases hrc
             exact ⟨T'', rfl, typed_TSub hty' _ hrcT⟩
     | @union opts Ts μs hlist =>
-      simp only [denote, denoteList_eq, denoteμs_eq_map] at hv
+      simp only [denote, denoteAbs, denoteList_eq, denoteμs_eq_map] at hv
       obtain ⟨o, ho, hT⟩ := hv
       simp only [List.mem_map] at ho
       obtain ⟨tx, htx, rfl⟩ := ho
@@ -360,17 +360,17 @@ set_option linter.unreachableTactic false in
 theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed α β t T μ → Obligations α β t → Carrier (denote α β t)
   | t, T, μ, h, hob => by
     cases h with
-    | prim g => exact Syn.carrier_ground g
+    | prim g => exact Mean.carrier_ground g
     | never => exact Carrier.empty
-    | opaq => exact Syn.carrier_top
+    | opaq => exact Mean.carrier_top
     -- a closed variable is the bottom, and a lawful `mu` is on its held set, its write domain
     | var _ => exact Carrier.empty
     | @mu b T' μ' hg h' => exact carrier_muCodec (soundness (.mu hg h') hob)
     | @set L t' T' μ' hL h' =>
-      simp only [denote, hL]
+      simp only [denote, denoteAbs, hL]
       exact L.carrier (carrier_denote h' hob.1)
     | @list L pre Tpre sp Tsp suf Tsuf hL hp hs hf =>
-      simp only [denote, hL, denoteList_eq, denoteOpt_eq]
+      simp only [denote, denoteAbs, hL, denoteList_eq, denoteOpt_eq]
       refine carrier_listCodec (List.forall_mem_map.mpr ?_) (forall_mem_map_option ?_)
         (List.forall_mem_map.mpr ?_)
       · intro t' ht'
@@ -411,10 +411,10 @@ theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed α β t T μ → Obligat
           replace hcr : some (denote α β t') = some rc := hcr
           cases hcr
           exact carrier_denote hty hob.2
-      simp only [denote, bodySem, hF]
+      simp only [denote, denoteAbs, bodySemAbs, hF]
       exact carrier_objectCodec hsems hrc
     | @union opts Ts μs hlist =>
-      simp only [denote, denoteList_eq]
+      simp only [denote, denoteAbs, denoteList_eq]
       refine carrier_altCodec (List.forall_mem_map.mpr fun t' ht' => ?_)
       obtain ⟨T', μ', hty⟩ := TypedListμ.forall (α := α) (β := β) hlist t' ht'
       exact carrier_denote hty (obligationsList_iff.mp hob.1 t' ht')

@@ -155,15 +155,15 @@ variable [Sem S] {α : Table S}
     top acts as the list and map formers, and the set lift keeps a codec below the top. -/
 class TopLaws (S : Syn) [Sem S] : Prop where
   ground : ∀ g, Sub (Syn.ground g) (Syn.top (S := S))
-  list : ∀ L ∈ Syn.list (S := S),
-    (∀ vs, (Syn.top (S := S)).e (L.pV.into vs) = (traverse (Syn.top (S := S)).e vs).map L.pA.into) ∧
-    (∀ as, (Syn.top (S := S)).p (L.pA.into as) = (traverse (Syn.top (S := S)).p as).map L.pV.into)
-  map : ∀ F ∈ Syn.map (S := S),
-    (∀ m : MapOf S.V, (Syn.top (S := S)).e (F.mV.into m) =
-      (funImage fun k => (Syn.top (S := S)).e (m.get k)).map fun g => F.mA.into ⟨m.keys, g⟩) ∧
-    (∀ m : MapOf (Syn.A S), (Syn.top (S := S)).p (F.mA.into m) =
-      (funImage fun k => (Syn.top (S := S)).p (m.get k)).map fun g => F.mV.into ⟨m.keys, g⟩)
-  set : ∀ L ∈ Syn.set (S := S), ∀ c : S.C, Sub c (Syn.top (S := S)) →
+  list : ∀ L ∈ Mean.list (B := S.sig),
+    (∀ vs, (Syn.top (S := S)).e ((L.p false).into vs) = (traverse (Syn.top (S := S)).e vs).map (L.p true).into) ∧
+    (∀ as, (Syn.top (S := S)).p ((L.p true).into as) = (traverse (Syn.top (S := S)).p as).map (L.p false).into)
+  map : ∀ F ∈ Mean.map (B := S.sig),
+    (∀ m : MapOf (Mean.V (B := S.sig)), (Syn.top (S := S)).e ((F.m false).into m) =
+      (funImage fun k => (Syn.top (S := S)).e (m.get k)).map fun g => (F.m true).into ⟨m.keys, g⟩) ∧
+    (∀ m : MapOf (Mean.A (B := S.sig)), (Syn.top (S := S)).p ((F.m true).into m) =
+      (funImage fun k => (Syn.top (S := S)).p (m.get k)).map fun g => (F.m false).into ⟨m.keys, g⟩)
+  set : ∀ L ∈ Mean.set (B := S.sig), ∀ c : S.C, Sub c (Syn.top (S := S)) →
     Sub (L.lift c) (Syn.top (S := S))
 
 variable {β : Table S.op}
@@ -178,8 +178,8 @@ theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
   | .never, _, _, _ => sub_empty
   | .var i, _, _, henv => henv i
   | .set t, h, ρ, henv => by
-      simp only [denote]
-      cases hL : Syn.set (S := S) with
+      simp only [denote, denoteAbs]
+      cases hL : Mean.set (B := S.sig) with
       | none => exact sub_empty
       | some L => exact TopLaws.set L hL _ (sub_denoteIn t h ρ henv)
   -- each stage is a restriction by the body's case at the stage before, and the limit reads a
@@ -198,8 +198,8 @@ theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
       sub_trans (sub_refine2_self _ _ _) (sub_denoteIn t h ρ henv)
   | .list pre sp suf, h, ρ, henv => by
       simp only [HF, hasHeld, Bool.or_eq_false_iff] at h
-      simp only [denote]
-      cases hL : Syn.list (S := S) with
+      simp only [denote, denoteAbs]
+      cases hL : Mean.list (B := S.sig) with
       | none => exact sub_empty
       | some L =>
         exact sub_listCodec (TopLaws.list L hL).1 (TopLaws.list L hL).2
@@ -212,8 +212,8 @@ theorem sub_body [TopLaws S] : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Syn.top (S := S))) → Sub (bodySem α β b ρ) (Syn.top (S := S))
   | .mk fields f w, h, ρ, henv => by
       simp only [HFB, hasHeldB, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists] at h
-      simp only [bodySem]
-      cases hF : Syn.map (S := S) with
+      simp only [bodySem, bodySemAbs]
+      cases hF : Mean.map (B := S.sig) with
       | none => exact sub_empty
       | some F =>
         exact sub_objectCodec (TopLaws.map F hF).1 (TopLaws.map F hF).2 (wildSem_ne_drop _)
@@ -252,7 +252,7 @@ theorem sub_denote [TopLaws S] (t : Term S) (h : HF t) : Sub (denote α β t) (S
 /-- **Held-free lawful terms are pairwise compatible**: the common bound is the top, and the top
     is canonical. -/
 theorem compat_of_HF [TopLaws S] (hcan : Canon (Syn.top (S := S))) {s t : Term S} (hs : HF s) (ht : HF t)
-    (hlt : Lawful Syn.member (denote α β t)) : Compat (denote α β s) (denote α β t) :=
+    (hlt : Lawful Mean.mem (denote α β t)) : Compat (denote α β s) (denote α β t) :=
   compat_of_common_bound' (sub_denote s hs) (sub_denote t ht) hcan hlt
 
 end HeldFree

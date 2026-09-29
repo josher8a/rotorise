@@ -247,35 +247,41 @@ theorem R.refine2 {N : Type} {c' : Codec A V N} {c : Codec V A M} (h : R c' c)
   obtain ⟨h1, h2⟩ := h
   exact ⟨by rw [refine2_e_def, refine2_p_def, h1], by rw [refine2_p_def, refine2_e_def, h2]⟩
 
-/-- **The stored-side gate**: the codec writes, and the predicate admits the write. The gate of
-    the converse reads, and the predicate admits the read. -/
-def gate {X Y N : Type} (c : Codec X Y N) (q : Y → Bool) (x : X) : Bool :=
-  match c.e x with
+/-- **The stored-side gate**: the partial map sends the input, and the predicate admits the
+    output. The gate of the write reads the write, and the gate of the read reads the read. -/
+def gate {X Y : Type} (m : X → Option Y) (q : Y → Bool) (x : X) : Bool :=
+  match m x with
   | some y => q y
   | none => false
 
-/-- The gate of the truth predicate is the write domain. -/
-theorem gate_true {X Y N : Type} (c : Codec X Y N) (x : X) :
-    gate c (fun _ => true) x = (c.e x).isSome := by
+/-- The gate of the truth predicate is the domain of the map. -/
+theorem gate_true {X Y : Type} (m : X → Option Y) (x : X) :
+    gate m (fun _ => true) x = (m x).isSome := by
   unfold gate
-  cases c.e x <;> rfl
+  cases m x <;> rfl
 
-/-- The write domain of the two-sided restriction: the caller predicate, and the gate of the
-    stored predicate. -/
-theorem refine2_e_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (v : V) :
-    ((refine2 c qV qA).e v).isSome = (qV v && gate c qA v) := by
-  simp only [refine2_e_def, gate]
-  cases qV v
+/-- **The domain of the two-sided restriction at an orientation**: the predicate of the caller
+    side, and the gate of the predicate of the stored side. -/
+theorem refine2_f_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (o : Orient)
+    (x : Side V A o.c) :
+    ((refine2 c qV qA).f o x).isSome =
+      (Side.elim qV qA o.c x && gate (c.f o) (Side.elim qV qA o.s) x) := by
+  simp only [refine2, gate]
+  cases Side.elim qV qA o.c x
   · rfl
-  · cases c.e v with
+  · cases c.f o x with
     | none => rfl
-    | some a => cases h : qA a <;> simp [h]
+    | some y => cases h : Side.elim qV qA o.s y <;> simp [h]
 
-/-- The read domain of the two-sided restriction: the stored predicate, and the gate of the
-    caller predicate on the converse. -/
+/-- The write domain of the two-sided restriction: the domain at the host. -/
+theorem refine2_e_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (v : V) :
+    ((refine2 c qV qA).e v).isSome = (qV v && gate c.e qA v) :=
+  refine2_f_isSome c qV qA .host v
+
+/-- The read domain of the two-sided restriction: the domain at the dual. -/
 theorem refine2_p_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (a : A) :
-    ((refine2 c qV qA).p a).isSome = (qA a && gate (conv c) qV a) := by
-  rw [← (R.refine2 (R_conv c) qV qA).1]; exact refine2_e_isSome (conv c) qA qV a
+    ((refine2 c qV qA).p a).isSome = (qA a && gate c.p qV a) :=
+  refine2_f_isSome c qV qA .dual a
 
 /-- A refinement writes where the gate passes and the base writes, so a row can read off a
     refinement without unfolding it. -/
@@ -317,7 +323,7 @@ theorem through_p {f g : V → V} {a v} :
 @[simp] theorem restrict_p_isSome {c : Codec V A M} {q : V → Bool} (a : A) :
     ((c.restrict q).p a).isSome = ((c.p a).elim false q) := by
   rw [Codec.restrict, refine2_p_isSome, Bool.true_and]
-  simp only [gate, conv, Codec.ofEP_e]; cases c.p a <;> rfl
+  simp only [gate]; cases c.p a <;> rfl
 
 /-- `alternate reader` does not touch the writing at all — §5's whole point. -/
 theorem extendRead_e {r : A → Option V} {v a} :

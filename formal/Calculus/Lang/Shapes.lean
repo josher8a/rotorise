@@ -28,22 +28,23 @@ class Shapes (S : Syn) [Sem S] where
   /-- The former class of an attribute. -/
   formerA : Syn.A S → Former
   /-- A primitive writes only primitive values. -/
-  prim : ∀ g v, ((Syn.ground g).e v).isSome = true → former v = .prim
+  prim : ∀ g v, ((Syn.ground g).f S.o v).isSome = true → former v = .prim
   /-- A primitive reads only primitive attributes. -/
-  primA : ∀ g a, ((Syn.ground g).p a).isSome = true → formerA a = .prim
+  primA : ∀ g a, ((Syn.ground g).f S.o.op a).isSome = true → formerA a = .prim
   /-- A set lift writes only set values. -/
-  set : ∀ L, Syn.set (S := S) = some L → ∀ c v, ((L.lift c).e v).isSome = true → former v = .set
+  set : ∀ L, Mean.set (B := S.sig) = some L → ∀ c v, ((L.lift c).f S.o v).isSome = true →
+    former v = .set
   /-- A set lift reads only set attributes. -/
-  setA : ∀ L, Syn.set (S := S) = some L → ∀ c a, ((L.lift c).p a).isSome = true →
+  setA : ∀ L, Mean.set (B := S.sig) = some L → ∀ c a, ((L.lift c).f S.o.op a).isSome = true →
     formerA a = .set
   /-- The list prism builds list values. -/
-  list : ∀ L, Syn.list (S := S) = some L → ∀ vs, former (L.pV.into vs) = .list
+  list : ∀ L, Mean.list (B := S.sig) = some L → ∀ vs, former ((L.p S.o.c).into vs) = .list
   /-- The list prism builds list attributes. -/
-  listA : ∀ L, Syn.list (S := S) = some L → ∀ as, formerA (L.pA.into as) = .list
+  listA : ∀ L, Mean.list (B := S.sig) = some L → ∀ as, formerA ((L.p S.o.s).into as) = .list
   /-- The map prism builds object values. -/
-  map : ∀ F, Syn.map (S := S) = some F → ∀ m, former (F.mV.into m) = .object
+  map : ∀ F, Mean.map (B := S.sig) = some F → ∀ m, former ((F.m S.o.c).into m) = .object
   /-- The map prism builds object attributes. -/
-  mapA : ∀ F, Syn.map (S := S) = some F → ∀ m, formerA (F.mA.into m) = .object
+  mapA : ∀ F, Mean.map (B := S.sig) = some F → ∀ m, formerA ((F.m S.o.s).into m) = .object
 
 namespace Shapes
 
@@ -71,7 +72,7 @@ theorem adm_prim (g : S.Ground) (v : S.V) (h : Adm α β (.prim g) ρ v = true) 
 
 /-- A set admits only set values. -/
 theorem adm_set (t : Term S) (v : S.V) (h : Adm α β (.set t) ρ v = true) : former v = .set := by
-  simp only [Adm, denote] at h
+  simp only [Adm, denote, denoteAbs] at h
   split at h
   · next L hL => exact Shapes.set L hL _ v h
   · exact nomatch h
@@ -83,7 +84,7 @@ theorem adm_list (pre : List (Term S)) sp suf (v : S.V) (h : Adm α β (.list pr
   split at h
   · next L hL =>
       split at h
-      · next vs hv => rw [L.pV.into_out hv]; exact Shapes.list L hL vs
+      · next vs hv => rw [(L.p S.o.c).into_out hv]; exact Shapes.list L hL vs
       · exact nomatch h
   · exact nomatch h
 
@@ -95,7 +96,7 @@ theorem adm_object (b : Body S) (v : S.V) (h : Adm α β (.object b) ρ v = true
   split at h
   · next F hF =>
       split at h
-      · next m hm => rw [F.mV.into_out hm]; exact Shapes.map F hF m
+      · next m hm => rw [(F.m S.o.c).into_out hm]; exact Shapes.map F hF m
       · exact nomatch h
   · exact nomatch h
 
@@ -134,34 +135,18 @@ section Attr
 variable [PrimAdmA S] {ρ ρ' : List S.C}
 
 /-- **The shape classes of the dual**: the attribute classes are the value classes, and each
-    landing fact of the stored side is a landing fact of the caller side. -/
+    landing fact of the stored side is a landing fact of the caller side, on the same codecs. -/
 instance op : Shapes S.op where
   former := formerA (S := S)
   formerA := former (S := S)
-  prim g v h := primA (S := S) g v (by rwa [(readC_R (Car := Mean.Car) S.o (Mean.ground g)).1] at h)
-  primA g a h := prim (S := S) g a (by rwa [(readC_R (Car := Mean.Car) S.o (Mean.ground g)).2] at h)
-  set L' hL' c a h := by
-    obtain ⟨L, hL, rfl⟩ := Option.map_eq_some_iff.mp hL'
-    have hR := setAt_R L Mean.d_pos S.o (R_convU (S := S.op) c).symm
-    exact setA (S := S) (setAt L S.o) (by simp only [Syn.set, hL, Option.map_some]) _ a
-      (by rwa [hR.1] at h)
-  setA L' hL' c v h := by
-    obtain ⟨L, hL, rfl⟩ := Option.map_eq_some_iff.mp hL'
-    have hR := setAt_R L Mean.d_pos S.o (R_convU (S := S.op) c).symm
-    exact set (S := S) (setAt L S.o) (by simp only [Syn.set, hL, Option.map_some]) _ v
-      (by rwa [hR.2] at h)
-  list L' hL' := by
-    obtain ⟨L, hL, rfl⟩ := Option.map_eq_some_iff.mp hL'
-    exact listA (S := S) (L.at S.o) (by simp only [Syn.list, hL, Option.map_some])
-  listA L' hL' := by
-    obtain ⟨L, hL, rfl⟩ := Option.map_eq_some_iff.mp hL'
-    exact list (S := S) (L.at S.o) (by simp only [Syn.list, hL, Option.map_some])
-  map F' hF' := by
-    obtain ⟨F, hF, rfl⟩ := Option.map_eq_some_iff.mp hF'
-    exact mapA (S := S) (F.at S.o) (by simp only [Syn.map, hF, Option.map_some])
-  mapA F' hF' := by
-    obtain ⟨F, hF, rfl⟩ := Option.map_eq_some_iff.mp hF'
-    exact map (S := S) (F.at S.o) (by simp only [Syn.map, hF, Option.map_some])
+  prim := primA (S := S)
+  primA := prim (S := S)
+  set := setA (S := S)
+  setA := set (S := S)
+  list := listA (S := S)
+  listA := list (S := S)
+  map := mapA (S := S)
+  mapA := map (S := S)
 
 /-! ## The six disjointness laws, on the read side: the laws of the dual -/
 

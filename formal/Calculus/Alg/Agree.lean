@@ -30,6 +30,20 @@ def Agree (o : Orient) (c d : Codec V A M) : Prop :=
 abbrev AgreeS (side : Bool) : Codec V A M → Codec V A M → Prop :=
   Agree (bif side then Orient.host else Orient.dual)
 
+/-- **A congruence of agreement on each half is a congruence at every orientation.** A lemma
+    that reads the asymmetric write and read of a combinator states the two halves apart. -/
+theorem agree_of_agreeS {c d c' d' : Codec V A M}
+    (h : ∀ side, AgreeS side c d → AgreeS side c' d') : ∀ o, Agree o c d → Agree o c' d' :=
+  Orient.both (P := fun o => Agree o c d → Agree o c' d') (h true) (h false)
+
+/-- **Agreement at an orientation and at its dual is agreement at every orientation.** -/
+theorem agree_all {c d : Codec V A M} :
+    ∀ {o : Orient}, Agree o c d → Agree o.op c d → ∀ o', Agree o' c d
+  | ⟨(false, true), _⟩, h, h', o' => Orient.both (P := fun o' => Agree o' c d) h h' o'
+  | ⟨(true, false), _⟩, h, h', o' => Orient.both (P := fun o' => Agree o' c d) h' h o'
+  | ⟨(false, false), hn⟩, _, _, _ => absurd rfl hn
+  | ⟨(true, true), hn⟩, _, _, _ => absurd rfl hn
+
 /-- The empty codec agrees with every codec at each orientation. -/
 theorem agree_empty_left (o : Orient) (d : Codec V A M) : Agree o .empty d :=
   fun _ _ _ h => nomatch h
@@ -131,22 +145,18 @@ theorem zip_agree {X Y : Type} (run : Codec V A M → X → Option Y) (R : Codec
   | _ :: _, [], _, _, _, hl1, _, _, _, _ => absurd hl1 (Nat.succ_ne_zero _).symm
   | _ :: _, _ :: _, [], _, _, _, hl2, _, _, _ => absurd hl2 (Nat.succ_ne_zero _).symm
 
-/-- **Two lists agree where every codec of one row agrees with every codec of the other.** -/
-theorem agreeS_list {side : Bool} {pV : Ctor (List V) V} {pA : Ctor (List A) A} {μL : M}
+/-- **Two lists agree where every codec of one row agrees with every codec of the other**, at
+    each orientation. -/
+theorem agree_list {o : Orient} {pV : Ctor (List V) V} {pA : Ctor (List A) A} {μL : M}
     {pre suf pre' suf' : List (Codec V A M)} {sp sp' : Option (Codec V A M)}
     (h : ∀ c, (c ∈ pre ∨ sp = some c ∨ c ∈ suf) → ∀ d, (d ∈ pre' ∨ sp' = some d ∨ d ∈ suf') →
-      AgreeS side c d) :
-    AgreeS side (listCodec pV pA μL pre sp suf) (listCodec pV pA μL pre' sp' suf') := by
-  cases side
-  · refine agreeP_carried fun as d₁ d₂ h1 h2 => ?_
-    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp h1
-    obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
-    obtain ⟨ps', hal', htr'⟩ := Option.bind_eq_some_iff.mp h2
-    obtain ⟨ds', hs', hlen', rfl⟩ := alignL_eq_some.mp hal'
-    exact zip_agree (fun c a => c.p a) (Agree .dual) (fun c d hcd a y y' hy hy' => hcd a y y' hy hy')
-      as ds ds' d₁ d₂ hlen hlen'
-      (fun c hc d hd => h c (slotsL_mem _ _ _ _ _ hs c hc) d (slotsL_mem _ _ _ _ _ hs' d hd))
-      htr htr'
+      Agree o c d) :
+    Agree o (listCodec pV pA μL pre sp suf) (listCodec pV pA μL pre' sp' suf') := by
+  revert h
+  refine Orient.both (P := fun o => (∀ c, (c ∈ pre ∨ sp = some c ∨ c ∈ suf) →
+      ∀ d, (d ∈ pre' ∨ sp' = some d ∨ d ∈ suf') → Agree o c d) →
+      Agree o (listCodec pV pA μL pre sp suf) (listCodec pV pA μL pre' sp' suf')) ?_ ?_ o <;>
+    intro h
   · refine agreeE_carried fun vs d₁ d₂ h1 h2 => ?_
     obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp h1
     obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
@@ -154,6 +164,15 @@ theorem agreeS_list {side : Bool} {pV : Ctor (List V) V} {pA : Ctor (List A) A} 
     obtain ⟨ds', hs', hlen', rfl⟩ := alignL_eq_some.mp hal'
     exact zip_agree (fun c v => c.e v) (Agree .host) (fun c d hcd v y y' hy hy' => hcd v y y' hy hy')
       vs ds ds' d₁ d₂ hlen hlen'
+      (fun c hc d hd => h c (slotsL_mem _ _ _ _ _ hs c hc) d (slotsL_mem _ _ _ _ _ hs' d hd))
+      htr htr'
+  · refine agreeP_carried fun as d₁ d₂ h1 h2 => ?_
+    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp h1
+    obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
+    obtain ⟨ps', hal', htr'⟩ := Option.bind_eq_some_iff.mp h2
+    obtain ⟨ds', hs', hlen', rfl⟩ := alignL_eq_some.mp hal'
+    exact zip_agree (fun c a => c.p a) (Agree .dual) (fun c d hcd a y y' hy hy' => hcd a y y' hy hy')
+      as ds ds' d₁ d₂ hlen hlen'
       (fun c hc d hd => h c (slotsL_mem _ _ _ _ _ hs c hc) d (slotsL_mem _ _ _ _ _ hs' d hd))
       htr htr'
 
@@ -165,28 +184,24 @@ theorem keepB_of_ne_drop {rest : RestSem V A M} (h : rest ≠ .drop) (sems : Map
   | refuse => rfl
   | codec _ => rfl
 
-/-- **Two objects agree where the two codecs of each name agree.** -/
-theorem agreeS_object {side : Bool} {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM : M}
+/-- **Two objects agree where the two codecs of each name agree**, at each orientation. -/
+theorem agree_object {o : Orient} {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM : M}
     {sems₁ sems₂ : MapOf (FieldSem V A M)} {rest₁ rest₂ : RestSem V A M}
     (hd₁ : rest₁ ≠ .drop) (hd₂ : rest₂ ≠ .drop)
     (h : ∀ k c₁ c₂, entryCodec sems₁ (rcOf rest₁) k = some c₁ →
-      entryCodec sems₂ (rcOf rest₂) k = some c₂ → AgreeS side c₁ c₂) :
-    AgreeS side (objectCodec mV mA μM sems₁ rest₁) (objectCodec mV mA μM sems₂ rest₂) := by
+      entryCodec sems₂ (rcOf rest₂) k = some c₂ → Agree o c₁ c₂) :
+    Agree o (objectCodec mV mA μM sems₁ rest₁) (objectCodec mV mA μM sems₂ rest₂) := by
   simp only [objectCodec, objectCodecCore, keepB_of_ne_drop hd₁, keepB_of_ne_drop hd₂]
-  cases side
-  · refine agreeP_carried fun m d₁ d₂ h1 h2 => ?_
-    unfold objRead at h1 h2
-    split at h1 <;> [skip; exact nomatch h1]
-    split at h2 <;> [skip; exact nomatch h2]
-    obtain ⟨G1, hG1, rfl⟩ := Option.map_eq_some_iff.mp h1
-    obtain ⟨G2, hG2, rfl⟩ := Option.map_eq_some_iff.mp h2
-    have : G1 = G2 := funext fun k => by
-      have e1 := funImage_some hG1 k
-      have e2 := funImage_some hG2 k
-      obtain ⟨c₁, hc₁, hr₁⟩ := Option.bind_eq_some_iff.mp e1
-      obtain ⟨c₂, hc₂, hr₂⟩ := Option.bind_eq_some_iff.mp e2
-      exact (h k.1 c₁ c₂ hc₁ hc₂ : Agree .dual c₁ c₂) _ _ _ hr₁ hr₂
-    rw [this]
+  revert h
+  refine Orient.both (P := fun o => (∀ k c₁ c₂, entryCodec sems₁ (rcOf rest₁) k = some c₁ →
+      entryCodec sems₂ (rcOf rest₂) k = some c₂ → Agree o c₁ c₂) →
+      Agree o (carriedCodec mV mA μM
+        (fun p => valPresentB sems₁ p.1 = true ∧ ∀ k, objEntryT sems₁ (rcOf rest₁) (k.1, p.2 k))
+        (objWrite sems₁ (rcOf rest₁)) (objRead sems₁ (rcOf rest₁) fun _ => true))
+      (carriedCodec mV mA μM
+        (fun p => valPresentB sems₂ p.1 = true ∧ ∀ k, objEntryT sems₂ (rcOf rest₂) (k.1, p.2 k))
+        (objWrite sems₂ (rcOf rest₂)) (objRead sems₂ (rcOf rest₂) fun _ => true))) ?_ ?_ o <;>
+    intro h
   · refine agreeE_carried fun m d₁ d₂ h1 h2 => ?_
     unfold objWrite at h1 h2
     split at h1 <;> [skip; exact nomatch h1]
@@ -199,6 +214,19 @@ theorem agreeS_object {side : Bool} {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A)
       obtain ⟨c₁, hc₁, hr₁⟩ := Option.bind_eq_some_iff.mp e1
       obtain ⟨c₂, hc₂, hr₂⟩ := Option.bind_eq_some_iff.mp e2
       exact (h k.1 c₁ c₂ hc₁ hc₂ : Agree .host c₁ c₂) _ _ _ hr₁ hr₂
+    rw [this]
+  · refine agreeP_carried fun m d₁ d₂ h1 h2 => ?_
+    unfold objRead at h1 h2
+    split at h1 <;> [skip; exact nomatch h1]
+    split at h2 <;> [skip; exact nomatch h2]
+    obtain ⟨G1, hG1, rfl⟩ := Option.map_eq_some_iff.mp h1
+    obtain ⟨G2, hG2, rfl⟩ := Option.map_eq_some_iff.mp h2
+    have : G1 = G2 := funext fun k => by
+      have e1 := funImage_some hG1 k
+      have e2 := funImage_some hG2 k
+      obtain ⟨c₁, hc₁, hr₁⟩ := Option.bind_eq_some_iff.mp e1
+      obtain ⟨c₂, hc₂, hr₂⟩ := Option.bind_eq_some_iff.mp e2
+      exact (h k.1 c₁ c₂ hc₁ hc₂ : Agree .dual c₁ c₂) _ _ _ hr₁ hr₂
     rw [this]
 
 /-- **The codec lemma.** Over two lawful codecs, the tree's `Compat` is exactly agreement on

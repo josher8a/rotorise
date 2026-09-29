@@ -126,7 +126,7 @@ theorem equiv_denote_held_comp (t P PA P' PA' : Term) (k k' : Word)
     Codec.Equiv (denote α (.held (.held t P PA k kA) P' PA' k' kA'))
       (denote α (.refine (.held t P' PA' (k ++ k') [])
         (.closure fun v => ((denote α P).e ((α.word k').1 v)).isSome) ())) := by
-  simp only [denote_rows, Alg.Table.word_append]
+  simp only [denote_rows, Alg.TableAt.word_append]
   refine ⟨fun _ => ⟨fun ⟨⟨h1, h2⟩, h3⟩ => ⟨⟨h1, h3⟩, h2⟩, fun ⟨⟨h1, h3⟩, h2⟩ => ⟨⟨h1, h2⟩, h3⟩⟩,
     rfl, ?_, ?_⟩
   · intro v a a' h h'

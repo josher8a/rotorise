@@ -76,19 +76,21 @@ analyses over one carrier type, and each side of the pair instantiates it. It st
 `Lawful` takes the member of an attribute as a parameter. (W) reads that function, and no law
 reads more of the store.
 
-**A universe is a signature, a meaning, and an orientation.** The signature `Sig` holds the
-syntax: the primitives, and the predicates and the adapter generators at each absolute side. The
-term family reads `Sig` alone, and names no orientation. The class `Mean` over a `Sig` holds the
-absolute meaning: the carrier of each side, the member of the stored side, the codec of each
-primitive, the evaluation of a predicate at each side, the depths, the formers and the top. A
-universe `Syn` is a signature and an orientation `Orient`, a pair of two different sides. The
-readings in the namespace `Syn` read the meaning at the orientation: the caller carrier is the
-carrier of the caller side, and the member is the member of the stored side. The dual universe
-`Syn.op` keeps the signature and swaps the orientation, so the dual term type is the term type, and
-the converse of a term is the term. The compiled code of a function over `Term S` takes `S` as a
-real argument, because `casesOn` takes the parameter of the family as a real argument. The meaning
-is `noncomputable` at DynamoDB: `inL`, `setCodec`, `Ω` and `Pred.eval` are. The split keeps a term
-as data that code can compute with.
+**A universe is a signature, a meaning, and an orientation.** The signature `Sig` holds the syntax:
+the primitives, and the predicates and the adapter generators at each absolute side. The term family
+reads `Sig` alone, and names no orientation. The class `Mean` over a `Sig` holds the absolute
+meaning: the carrier of each side, the member of the stored side, the codec of each primitive, the
+evaluation of a predicate at each side, the depths, the formers and the top. A universe `Syn` is a
+signature and an orientation `Orient`, a pair of two different sides. The readings in the namespace
+`Syn` read the carriers, the predicates and the depths at the orientation: the caller carrier is the
+carrier of the caller side. The codecs and the member are the meaning itself at every orientation,
+and an analysis reads a codec at its orientation. The dual universe `Syn.op` keeps the signature and
+swaps the orientation, so the dual term type is the term type, and the converse of a term is the
+term. `denote` reads the table of each absolute side, so the dual, with the two tables swapped,
+denotes each term by the same codec (`denote_op`). The compiled code of a function over `Term S`
+takes `S` as a real argument, because `casesOn` takes the parameter of the family as a real
+argument. The meaning is `noncomputable` at DynamoDB: `inL`, `setCodec`, `Ω` and `Pred.eval` are.
+The split keeps a term as data that code can compute with.
 
 **Each stored-side law of the generic layer is the caller-side law at the dual universe.** `AdmA`
 is `Adm` at `S.op`, and so is each stored-side law that the generic layer states. At DynamoDB the
@@ -101,13 +103,13 @@ its own.
 | the fact | the field | at DynamoDB | at JSON |
 | --- | --- | --- | --- |
 | the carriers | `Mean.Car`, `Mean.Mem`, read as `Syn.V`, `Syn.A`, `Syn.M` | `Value`, `Attr`, `Member` | `Json`, `Json`, `JMember` |
-| the member of an attribute | `Mean.mem`, read as `Syn.member` | `Attr.member` | `Json.member` |
+| the member of an attribute | `Mean.mem` | `Attr.member` | `Json.member` |
 | the primitives and their codecs | `Sig.Ground`, `Mean.ground`, `Mean.lawful_ground` | `Ground`, `groundCodec` | `JMember`, `ground` |
 | the predicates | `Sig.P`, `Mean.eval`, at each absolute side | `Pred`, `Pred.eval` | a function on `Json` |
 | the generators of the adapters | `Sig.G`, `Sig.decG`, at each absolute side | `DynGen` | `Empty` |
 | the depths | `Mean.d`, at each absolute side | `Value.depth`, `Attr.depth` | a constant |
 | the list and map formers | `Mean.list` as a `ListA`, `Mean.map` as a `MapA`: a prism at each absolute side | `dList`, `dMap` | none |
-| the set former | `Mean.set` as a `SetF` at the host, and its transport `SetF.op` at the dual: a lift and its laws | `dSet`, over `setCodec` | none |
+| the set former | `Mean.set` as a `SetF` over the carriers of the meaning: a lift and its laws | `dSet`, over `setCodec` | none |
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
 | the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | `dynOracle`, over the two views | `jsonOracle`, which certifies nothing |
 | the top | `Mean.top`, `Mean.lawful_top`, `Mean.topHeld` | `Ω`, `HOpaque` | `idCodec` |
@@ -199,9 +201,10 @@ generic head. `exact` compares up to unfolding, and accepts both.
 generators. The sign `true` names the converse of a generator: the pair of the generator with its
 two functions swapped. A table `α` gives each generator its caller-side function and its
 stored-side function, and `denote` reads the table as it reads the environment of the variables.
-`Table.word` interprets a word by composition, with the first letter outermost on the caller side.
+`TableAt.word` interprets a word by composition, with the first letter outermost on the caller
+side.
 The empty word is the identity at every table. The pair of two words in sequence is the composite
-of the two pairs (`Table.word_append`). So two nested `held`s are one `held` of the concatenated
+of the two pairs (`TableAt.word_append`). So two nested `held`s are one `held` of the concatenated
 word, under a `refine` by the inner caller-side restriction (`equiv_denote_held_comp`). The dagger
 of a word (`Word.dagger`) reverses the letters and flips each sign. The dagger law states that the
 pair of the dagger is the pair of the word, swapped (`Table.word_dagger`). A `held` carries a

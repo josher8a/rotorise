@@ -24,9 +24,9 @@ variable {S : Syn} [Sem S] {α : Table S}
     input's depth where it reads the input, and agreement everywhere under a `held`. -/
 def UseAgree : Nat → Nat → S.C → S.C → Prop
   | 0, _, _, _ => True
-  | 1, d, c₁, c₂ => AgreeLe Syn.dV Syn.dA (d - 1) c₁ c₂
-  | 2, d, c₁, c₂ => AgreeLe Syn.dV Syn.dA d c₁ c₂
-  | _ + 3, _, c₁, c₂ => ∀ d', AgreeLe Syn.dV Syn.dA d' c₁ c₂
+  | 1, d, c₁, c₂ => AgreeLe (Mean.d (B := S.sig) false) (Mean.d true) (d - 1) c₁ c₂
+  | 2, d, c₁, c₂ => AgreeLe (Mean.d (B := S.sig) false) (Mean.d true) d c₁ c₂
+  | _ + 3, _, c₁, c₂ => ∀ d', AgreeLe (Mean.d (B := S.sig) false) (Mean.d true) d' c₁ c₂
 
 namespace UseAgree
 
@@ -41,7 +41,8 @@ theorem refl (u d : Nat) (c : S.C) : UseAgree u d c c :=
   | _ + 3 => fun _ => AgreeLe.refl _ _
 
 /-- Agreement everywhere meets every level. -/
-theorem of_all {u : Nat} (h : ∀ d', AgreeLe Syn.dV Syn.dA d' c₁ c₂) : UseAgree u d c₁ c₂ :=
+theorem of_all {u : Nat} (h : ∀ d', AgreeLe (Mean.d (B := S.sig) false) (Mean.d true) d' c₁ c₂) :
+    UseAgree u d c₁ c₂ :=
   match u with
   | 0 => trivial
   | 1 => h _
@@ -84,8 +85,8 @@ end UseAgree
 
 /-- Any two codecs agree below depth zero, because every input of a universe has a depth of at
     least one. -/
-theorem agreeLe_zero (c₁ c₂ : S.C) : AgreeLe Syn.dV Syn.dA 0 c₁ c₂ :=
-  AgreeLe.zero Syn.dV_pos Syn.dA_pos c₁ c₂
+theorem agreeLe_zero (c₁ c₂ : S.C) : AgreeLe (Mean.d (B := S.sig) false) (Mean.d true) 0 c₁ c₂ :=
+  AgreeLe.zero (Mean.d_pos false) (Mean.d_pos true) c₁ c₂
 
 variable {β : Table S.op}
 
@@ -95,7 +96,7 @@ mutual
     give one answer below `d`. -/
 theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (t.use i) d (envAt ρ₁ i) (envAt ρ₂ i)) →
-    AgreeLe Syn.dV Syn.dA d (denote α β t ρ₁) (denote α β t ρ₂)
+    AgreeLe (Mean.d (B := S.sig) false) (Mean.d true) d (denote α β t ρ₁) (denote α β t ρ₂)
   | .prim _, _, _, _, _, _ => .refl _ _
   | .opaq, _, _, _, _, _ => .refl _ _
   | .never, _, _, _, _, _ => .refl _ _
@@ -111,8 +112,7 @@ theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ�
       | 0 => exact UseAgree.mono (u' := 2) hc (by omega)
       | i + 1 => exact h i
   | .refine t p pA, hg, d, ρ₁, ρ₂, h =>
-      agreeLe_refine2 (denote_agree t hg d ρ₁ ρ₂ h) (Syn.eval (half S.o.c p pA))
-        (Syn.evalA (half S.o.s p pA))
+      agreeLe_refine2 (denote_agree t hg d ρ₁ ρ₂ h) (Mean.eval false p) (Mean.eval true pA)
   | .held t P PA k kA, hg, _, ρ₁, ρ₂, h => by
       simp only [Term.guarded, Bool.and_eq_true] at hg
       have ht := AgreeLe.eq_of_forall fun d' =>
@@ -125,20 +125,20 @@ theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ�
           UseAgree.of_held (v := max (t.use i) (P.use i))
             (by rw [Nat.max_left_comm, Nat.max_comm (PA.use i)]; exact h i)
       refine AgreeLe.of_eq ?_ ?_
-      · simp only [denote, held2, refine2_e_def, adapt2, half2_apply Codec.e, half2_apply Codec.p,
-          ht.1, hP.1, hP.2, hPA.1, hPA.2, Codec.ofEP_e]
-      · simp only [denote, held2, refine2_p_def, adapt2, half2_apply Codec.e, half2_apply Codec.p,
-          ht.2, hP.1, hP.2, hPA.1, hPA.2, Codec.ofEP_p]
+      · simp only [denote, denoteAbs, held2, refine2_e_def, adapt2, ht.1, hP.1, hPA.2,
+          Codec.ofEP_e]
+      · simp only [denote, denoteAbs, held2, refine2_p_def, adapt2, ht.2, hP.1, hPA.2,
+          Codec.ofEP_p]
   | .list pre sp suf, hg, d, ρ₁, ρ₂, h => by
       simp only [Term.guarded, Bool.and_eq_true] at hg
       match d with
       | 0 => exact agreeLe_zero _ _
       | d + 1 =>
-        simp only [denote]
-        cases Syn.list (S := S) with
+        simp only [denote, denoteAbs]
+        cases Mean.list (B := S.sig) with
         | none => exact AgreeLe.refl _ _
         | some L =>
-          exact agreeLe_listCodec L.dV_lt L.dA_lt
+          exact agreeLe_listCodec (L.d_lt false) (L.d_lt true)
             (denoteList_agree pre hg.1.1 d ρ₁ ρ₂ fun i => UseAgree.of_under (h i) (by omega))
             (denoteOpt_agree sp hg.1.2 d ρ₁ ρ₂ fun i => UseAgree.of_under (h i) (by omega))
             (denoteList_agree suf hg.2 d ρ₁ ρ₂ fun i => UseAgree.of_under (h i) (by omega))
@@ -146,8 +146,8 @@ theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ�
       match d with
       | 0 => exact agreeLe_zero _ _
       | d + 1 =>
-        simp only [denote]
-        cases Syn.set (S := S) with
+        simp only [denote, denoteAbs]
+        cases Mean.set (B := S.sig) with
         | none => exact AgreeLe.refl _ _
         | some L =>
           exact L.agree (denote_agree t hg d ρ₁ ρ₂ fun i => UseAgree.of_under (h i) le_rfl)
@@ -161,14 +161,14 @@ theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ�
 /-- The payload's congruence: each slot and the open block read one layer below the map. -/
 theorem bodySem_agree : ∀ (b : Body S), b.guarded = true → ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (useUnder (b.use i)) (d + 1) (envAt ρ₁ i) (envAt ρ₂ i)) →
-    AgreeLe Syn.dV Syn.dA (d + 1) (bodySem α β b ρ₁) (bodySem α β b ρ₂)
+    AgreeLe (Mean.d (B := S.sig) false) (Mean.d true) (d + 1) (bodySem α β b ρ₁) (bodySem α β b ρ₂)
   | .mk fields f wild, hg, d, ρ₁, ρ₂, h => by
       simp only [Body.guarded, Bool.and_eq_true, decide_eq_true_eq] at hg
-      simp only [bodySem]
-      cases Syn.map (S := S) with
+      simp only [bodySem, bodySemAbs]
+      cases Mean.map (B := S.sig) with
       | none => exact AgreeLe.refl _ _
       | some F =>
-        exact agreeLe_objectCodec F.dV_lt F.dA_lt
+        exact agreeLe_objectCodec (F.d_lt false) (F.d_lt true)
           (fun k => fieldSem_agree (f k) (hg.1 k) d ρ₁ ρ₂ fun i => UseAgree.of_under (h i)
             (le_max_of_le_left (Finset.le_sup (f := fun k => ObjectSlot.use i (f k))
               (Finset.mem_attach _ k))))
@@ -178,7 +178,8 @@ theorem bodySem_agree : ∀ (b : Body S), b.guarded = true → ∀ (d : Nat) (ρ
 theorem fieldSem_agree : ∀ (s : ObjectSlot S), s.guarded = true →
     ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (s.use i) d (envAt ρ₁ i) (envAt ρ₂ i)) →
-    FieldSem.Rel (AgreeLe Syn.dV Syn.dA d) (fieldSem α β s ρ₁) (fieldSem α β s ρ₂)
+    FieldSem.Rel (AgreeLe (Mean.d (B := S.sig) false) (Mean.d true) d) (fieldSem α β s ρ₁)
+      (fieldSem α β s ρ₂)
   | .req t, hg, d, ρ₁, ρ₂, h => denote_agree t hg d ρ₁ ρ₂ h
   | .optional t, hg, d, ρ₁, ρ₂, h => denote_agree t hg d ρ₁ ρ₂ h
 
@@ -186,7 +187,8 @@ theorem fieldSem_agree : ∀ (s : ObjectSlot S), s.guarded = true →
 theorem wildSem_agree : ∀ (w : Option (Term S)), Term.guardedO w = true →
     ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (Term.useO i w) d (envAt ρ₁ i) (envAt ρ₂ i)) →
-    RestSem.Rel (AgreeLe Syn.dV Syn.dA d) (wildSem α β w ρ₁) (wildSem α β w ρ₂)
+    RestSem.Rel (AgreeLe (Mean.d (B := S.sig) false) (Mean.d true) d) (wildSem α β w ρ₁)
+      (wildSem α β w ρ₂)
   | none, _, _, _, _, _ => trivial
   | some t, hg, d, ρ₁, ρ₂, h => denote_agree t hg d ρ₁ ρ₂ h
 
@@ -194,7 +196,8 @@ theorem wildSem_agree : ∀ (w : Option (Term S)), Term.guardedO w = true →
 theorem denoteList_agree : ∀ (ts : List (Term S)), Term.guardedL ts = true →
     ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (Term.useL i ts) d (envAt ρ₁ i) (envAt ρ₂ i)) →
-    List.Forall₂ (AgreeLe Syn.dV Syn.dA d) (denoteList α β ts ρ₁) (denoteList α β ts ρ₂)
+    List.Forall₂ (AgreeLe (Mean.d (B := S.sig) false) (Mean.d true) d) (denoteList α β ts ρ₁)
+      (denoteList α β ts ρ₂)
   | [], _, _, _, _, _ => .nil
   | t :: ts, hg, d, ρ₁, ρ₂, h => by
       simp only [Term.guardedL, Bool.and_eq_true] at hg
@@ -205,7 +208,8 @@ theorem denoteList_agree : ∀ (ts : List (Term S)), Term.guardedL ts = true →
 theorem denoteOpt_agree : ∀ (sp : Option (Term S)), Term.guardedO sp = true →
     ∀ (d : Nat) (ρ₁ ρ₂ : List S.C),
     (∀ i, UseAgree (Term.useO i sp) d (envAt ρ₁ i) (envAt ρ₂ i)) →
-    Option.Rel (AgreeLe Syn.dV Syn.dA d) (denoteOpt α β sp ρ₁) (denoteOpt α β sp ρ₂)
+    Option.Rel (AgreeLe (Mean.d (B := S.sig) false) (Mean.d true) d) (denoteOpt α β sp ρ₁)
+      (denoteOpt α β sp ρ₂)
   | none, _, _, _, _, _ => .none
   | some t, hg, d, ρ₁, ρ₂, h => .some (denote_agree t hg d ρ₁ ρ₂ h)
 
@@ -214,7 +218,7 @@ end
 /-- **The guard gives a contractive body.** At a guarded `mu b`, the body reads its variable one
     layer down, and every other variable is the same on both sides. -/
 theorem contractive_body {b : Term S} (hg : (Term.mu b).guarded = true) (ρ : List S.C) :
-    Contractive Syn.dV Syn.dA fun c => denote α β b (c :: ρ) := by
+    Contractive (Mean.d (B := S.sig) false) (Mean.d true) fun c => denote α β b (c :: ρ) := by
   simp only [Term.guarded, Bool.and_eq_true, decide_eq_true_eq] at hg
   intro d c₁ c₂ hc
   refine denote_agree b hg.2 (d + 1) (c₁ :: ρ) (c₂ :: ρ) fun i => ?_

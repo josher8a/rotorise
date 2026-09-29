@@ -4,14 +4,14 @@ import Calculus.Alg.Rows
 /-!
 # Exactness on the value side, over a universe signature
 
-`Adm t` is admission as a *domain*: a row per constructor that equals `dom(e)` of `denote t`.
-Every row except the primitive row is a combinator on the rows of the subterms, or asks its own
-codec. So the structure is proved here one time, for every universe.
+`Adm t` is admission as a *domain*: a row per constructor that equals the domain of `denote t` at
+the orientation of the universe, `dom(e)` at the host. Every row except the primitive row is a
+combinator on the rows of the subterms, or asks its own codec. So the structure is proved here one
+time, for every universe.
 
-A universe supplies the row of each primitive and the exactness of that row (`PrimAdm`). That is
-the only fact of a universe that the value side reads. A universe can state the primitive row
-syntactically, so that a verdict reduces without the codec, and the law pins the row to the
-codec.
+A universe supplies the row of each primitive and the exactness of that row (`PrimAdm`). That is the
+only fact of a universe that the value side reads. A universe can state the primitive row
+syntactically, so that a verdict reduces without the codec, and the law pins the row to the codec.
 -/
 
 namespace Calculus
@@ -37,8 +37,8 @@ namespace Calculus.Alg
 class PrimAdm (S : Syn) [Sem S] where
   /-- The values that a primitive writes. -/
   admV : S.Ground → S.V → Bool
-  /-- The row is the write domain of the primitive's codec. -/
-  admV_exact : ∀ g v, admV g v = true ↔ ((Syn.ground g).e v).isSome = true
+  /-- The row is the domain of the primitive's codec at the orientation of the universe. -/
+  admV_exact : ∀ g v, admV g v = true ↔ ((Syn.ground g).f S.o v).isSome = true
 
 variable {S : Syn}
 
@@ -55,18 +55,53 @@ theorem traverse_cons_isSome {α β : Type} (f : α → Option β) (x : α) (xs 
   simp only [traverse]
   cases hx : f x <;> cases hxs : traverse f xs <;> simp
 
-/-- **A sum writes exactly where one of its options writes.** -/
-theorem select_isSome_attempt {V A M : Type} (os : List (Codec V A M)) (v : V) :
-    (select os (·.e) v).isSome = true ↔ ∃ o ∈ os, (o.e v).isSome = true := by
+/-- **A sum acts exactly where one of its options acts.** -/
+theorem select_isSome_attempt {V A M X Y : Type} (os : List (Codec V A M))
+    (run : Codec V A M → X → Option Y) (x : X) :
+    (select os run x).isSome = true ↔ ∃ o ∈ os, (run o x).isSome = true := by
   constructor
   · intro h
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
     obtain ⟨o, ho, -, he⟩ := select_admits ha
     exact ⟨o, ho, by rw [he]; rfl⟩
   · rintro ⟨o, ho, he⟩
-    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
-    obtain ⟨o', hf⟩ := find?_attempt_V ho ha
-    unfold select; rw [hf]; exact acts_of_find?_V hf
+    obtain ⟨o', hf⟩ := Option.isSome_iff_exists.mp
+      (List.find?_isSome.mpr ⟨o, ho, he⟩ : (os.find? fun c => (run c x).isSome).isSome = true)
+    unfold select; rw [hf]; exact List.find?_some (p := fun c => (run c x).isSome) hf
+
+/-- **The list codec at an orientation**: read the caller prism, align, run each position at the
+    orientation, and build with the stored prism. -/
+theorem listCodec_f {V A M : Type} (p : (s : Bool) → Ctor (List (Side V A s)) (Side V A s))
+    (μL : M) (pre : List (Codec V A M)) (sp : Option (Codec V A M)) (suf : List (Codec V A M)) :
+    ∀ (o : Orient) (x : Side V A o.c), (listCodec (p false) (p true) μL pre sp suf).f o x =
+      (((p o.c).out x).bind fun xs =>
+        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map (p o.s).into :=
+  Orient.both (P := fun o => ∀ x, (listCodec (p false) (p true) μL pre sp suf).f o x =
+      (((p o.c).out x).bind fun xs =>
+        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map (p o.s).into)
+    (fun _ => rfl) (fun _ => rfl)
+
+/-- **The domain of the two-sided `held` at an orientation**: the caller outer admits the input,
+    and the inner codec sends the entry image to an output whose exit image the stored outer
+    reads back. Each side reads its own word from the table of its own side. -/
+theorem held2_f_isSome {B : Sig} [Mean B] (τ : (s : Bool) → TableAt B s) (c P PA : Mean.C B)
+    (k : List (B.G false × Bool)) (kA : List (B.G true × Bool)) :
+    ∀ (o : Orient) (x : Mean.Car (B := B) o.c),
+      ((held2 c P PA ((τ false).word k).1 ((τ false).word k).2 ((τ true).word kA).1
+        ((τ true).word kA).2).f o x).isSome =
+      (half2 o.c (P.f o x).isSome (PA.f o x).isSome &&
+        gate (c.f o)
+          (fun a => ((half2 o.s P PA).f o.op (((τ o.s).word (halfK o.s k kA)).2 a)).isSome)
+          (((τ o.c).word (halfK o.c k kA)).1 x)) :=
+  Orient.both (P := fun o => ∀ (x : Mean.Car (B := B) o.c),
+      ((held2 c P PA ((τ false).word k).1 ((τ false).word k).2 ((τ true).word kA).1
+        ((τ true).word kA).2).f o x).isSome =
+      (half2 o.c (P.f o x).isSome (PA.f o x).isSome &&
+        gate (c.f o)
+          (fun a => ((half2 o.s P PA).f o.op (((τ o.s).word (halfK o.s k kA)).2 a)).isSome)
+          (((τ o.c).word (halfK o.c k kA)).1 x)))
+    (fun v => by rw [held2, refine2_e_isSome, adapt2_gate]; rfl)
+    (fun a => by rw [held2, refine2_p_isSome, adapt2_gateA]; rfl)
 
 variable [Sem S] [PrimAdm S] {α : Table S} {β : Table S.op}
 
@@ -84,34 +119,34 @@ def Adm : Term S → List S.C → S.V → Bool
   | .never, _ => fun _ => false
   | .refine t p pA, ρ => fun v =>
       Adm t ρ v && Syn.eval (half S.o.c p pA) v &&
-        gate (denote α β t ρ) (Syn.evalA (half S.o.s p pA)) v
+        gate ((denote α β t ρ).f S.o) (Syn.evalA (half S.o.s p pA)) v
   | .held t P PA k kA, ρ => fun v =>
       Adm t ρ ((α.word (halfK S.o.c k kA)).1 v) && half2 S.o.c (Adm P ρ v) (Adm PA ρ v) &&
-        gate (denote α β t ρ)
-          (fun a => ((half2 S.o.s (denote α β P ρ) (denote α β PA ρ)).p
+        gate ((denote α β t ρ).f S.o)
+          (fun a => ((half2 S.o.s (denote α β P ρ) (denote α β PA ρ)).f S.o.op
             ((β.word (halfK S.o.s k kA)).2 a)).isSome)
           ((α.word (halfK S.o.c k kA)).1 v)
   | .union opts, ρ => fun v => anyP (AdmList opts ρ) v
-  | .set t, ρ => fun v => ((denote α β (.set t) ρ).e v).isSome
+  | .set t, ρ => fun v => ((denote α β (.set t) ρ).f S.o v).isSome
   | .list pre sp suf, ρ => fun v =>
-      match Syn.list (S := S) with
+      match Mean.list (B := S.sig) with
       | some L =>
-          match L.pV.out v with
+          match (L.p S.o.c).out v with
           | some vs => alignPL (AdmList pre ρ) (AdmOptT sp ρ) (AdmList suf ρ) vs
           | none => false
       | none => false
   | .object b, ρ => AdmBody b ρ
-  | .opaq, _ => fun v => ((Syn.top (S := S)).e v).isSome
-  | .var i, ρ => fun v => ((envAt ρ i).e v).isSome
-  | .mu b, ρ => fun v => ((denote α β (.mu b) ρ).e v).isSome
+  | .opaq, _ => fun v => ((Syn.top (S := S)).f S.o v).isSome
+  | .var i, ρ => fun v => ((envAt ρ i).f S.o v).isSome
+  | .mu b, ρ => fun v => ((denote α β (.mu b) ρ).f S.o v).isSome
 
 /-- The payload's row: the declared names that must be present are, and every present name's
     value is admitted by its slot or by the open block. -/
 def AdmBody : Body S → List S.C → S.V → Bool
   | .mk fields fld wild, ρ => fun v =>
-      match Syn.map (S := S) with
+      match Mean.map (B := S.sig) with
       | some F =>
-          match F.mV.out v with
+          match (F.m S.o.c).out v with
           | some m =>
               valPresentT fields fld m.keys &&
               objAdmV ⟨fields, fun k => AdmField (fld k) ρ⟩ (AdmWild wild ρ) m.keys m.get
@@ -145,9 +180,10 @@ end
   | t :: ts => by simp only [AdmList, List.map]; rw [AdmList_eq ρ ts]
 
 variable (α β) in
-/-- The row is `dom(e)`, not merely a bound on it, under the environment `ρ`. -/
+/-- The row is the domain of the map at the orientation, not merely a bound on it, under the
+    environment `ρ`. -/
 def ExactV (t : Term S) (ρ : List S.C) : Prop :=
-  ∀ v, Adm α β t ρ v = true ↔ ((denote α β t ρ).e v).isSome
+  ∀ v, Adm α β t ρ v = true ↔ ((denote α β t ρ).f S.o v).isSome
 
 variable {ρ : List S.C}
 
@@ -156,18 +192,18 @@ theorem alignP_iff (tail : Option (Term S)) (htl : ∀ t ∈ tail, ExactV α β 
     ∀ (ts : List (Term S)) (vs : List S.V), (∀ t ∈ ts, ExactV α β t ρ) →
       (alignP (AdmList α β ts ρ) (AdmOptT α β tail ρ) vs = true ↔
         ((align (denoteList α β ts ρ) (denoteOpt α β tail ρ) vs).bind
-          (traverse fun cv => cv.1.e cv.2)).isSome = true)
+          (traverse fun cv => cv.1.f S.o cv.2)).isSome = true)
   | [], [], _ => by
-      cases tail <;> simp [alignP, AdmList, AdmOptT, align, denoteList, denoteOpt, traverse]
+      cases tail <;> simp [alignP, AdmList, AdmOptT, align, traverse]
   | [], v :: vs, _ => by
       cases htail : tail with
-      | none => simp [alignP, AdmList, AdmOptT, align, denoteList, denoteOpt]
+      | none => simp [alignP, AdmList, AdmOptT, align]
       | some t =>
         have ht : ExactV α β t ρ := htl t (by simp [htail])
         have ih := alignP_iff tail htl [] vs (by simp)
         rw [htail] at ih
-        simp only [AdmList, AdmOptT, denoteList, denoteOpt] at ih
-        simp only [alignP, AdmList, AdmOptT, align, denoteList, denoteOpt,
+        simp only [AdmList, AdmOptT, denoteList_nil, denoteOpt_some] at ih
+        simp only [alignP, AdmList, AdmOptT, align, denoteList_nil, denoteOpt_some,
           Bool.and_eq_true]
         cases hal : align [] (some (denote α β t ρ)) vs with
         | none =>
@@ -179,11 +215,11 @@ theorem alignP_iff (tail : Option (Term S)) (htl : ∀ t ∈ tail, ExactV α β 
           simp only [Option.map_some, Option.bind_some] at ih ⊢
           rw [traverse_cons_isSome, Bool.and_eq_true, ← ht v, ← ih]
   | t :: ts, [], _ => by
-      cases tail <;> simp [alignP, AdmList, AdmOptT, align, denoteList, denoteOpt]
+      cases tail <;> simp [alignP, AdmList, AdmOptT, align]
   | t :: ts, v :: vs, h => by
       have ht : ExactV α β t ρ := h t (by simp)
       have ih := alignP_iff tail htl ts vs (fun t' ht' => h t' (by simp [ht']))
-      simp only [alignP, AdmList, align, denoteList, Bool.and_eq_true]
+      simp only [alignP, AdmList, align, denoteList_cons, Bool.and_eq_true]
       cases hal : align (denoteList α β ts ρ) (denoteOpt α β tail ρ) vs with
       | none =>
         simp only [hal, Option.map_none, Option.bind_none, Option.isSome_none] at ih ⊢
@@ -199,15 +235,15 @@ theorem alignP_iff (tail : Option (Term S)) (htl : ∀ t ∈ tail, ExactV α β 
 theorem zipP_iff : ∀ (suf : List (Term S)), (∀ t ∈ suf, ExactV α β t ρ) → ∀ (back : List S.V),
     back.length = suf.length →
     (zipP (AdmList α β suf ρ) back = true ↔
-      (traverse (fun cv : S.C × S.V => cv.1.e cv.2)
+      (traverse (fun cv : S.C × S.V => cv.1.f S.o cv.2)
         ((denoteList α β suf ρ).zip back)).isSome = true)
-  | [], _, [], _ => by simp [zipP, AdmList, denoteList]
+  | [], _, [], _ => by simp [zipP, AdmList]
   | [], _, _ :: _, h => by
       exact absurd h (by simp only [List.length_cons, List.length_nil]; omega)
   | _ :: _, _, [], h => by
       exact absurd h (by simp only [List.length_cons, List.length_nil]; omega)
   | t :: ts, h, v :: vs, hlen => by
-      simp only [AdmList, denoteList, zipP, List.zip_cons_cons, Bool.and_eq_true,
+      simp only [AdmList, denoteList_cons, zipP, List.zip_cons_cons, Bool.and_eq_true,
         traverse_cons_isSome]
       rw [zipP_iff ts (fun t' ht' => h t' (List.mem_cons_of_mem _ ht')) vs
           (by simp only [List.length_cons] at hlen; omega),
@@ -219,7 +255,7 @@ theorem alignPL_iff (pre : List (Term S)) (sp : Option (Term S)) (suf : List (Te
     (vs : List S.V) :
     alignPL (AdmList α β pre ρ) (AdmOptT α β sp ρ) (AdmList α β suf ρ) vs = true ↔
       ((alignL (denoteList α β pre ρ) (denoteOpt α β sp ρ) (denoteList α β suf ρ) vs).bind
-        (traverse fun cv => cv.1.e cv.2)).isSome = true := by
+        (traverse fun cv => cv.1.f S.o cv.2)).isSome = true := by
   have hlenA : (AdmList α β suf ρ).length = suf.length := by simp
   have hlenD : (denoteList α β suf ρ).length = suf.length := by simp
   unfold alignPL
@@ -245,21 +281,20 @@ theorem ExactV_list {pre : List (Term S)} {sp : Option (Term S)} {suf : List (Te
     (hpre : ∀ t ∈ pre, ExactV α β t ρ) (hsp : ∀ t ∈ sp, ExactV α β t ρ) (hsuf : ∀ t ∈ suf, ExactV α β t ρ) :
     ExactV α β (.list pre sp suf) ρ := by
   intro v
-  simp only [Adm, denote]
-  cases Syn.list (S := S) with
+  simp only [Adm, denote, denoteAbs]
+  cases Mean.list (B := S.sig) with
   | none => simp [Codec.empty]
   | some L =>
-    simp only [listCodec, carriedCodec, Codec.ofEP_e]
-    cases L.pV.out v with
-    | none => simp
-    | some vs =>
-      simp only [Option.bind_some, Option.isSome_map]
+    rw [listCodec_f]
+    rcases hv : (L.p S.o.c).out v with _ | vs
+    · simp [hv]
+    · simp only [hv, Option.bind_some, Option.isSome_map]
       exact alignPL_iff pre sp suf hpre hsp hsuf vs
 
 variable (α β) in
 /-- A slot's row is exact when the term it carries is. -/
 def ExactField (fd : ObjectSlot S) (ρ : List S.C) : Prop :=
-  ∀ v, AdmField α β fd ρ v = true ↔ (((fieldSem α β fd ρ).codec).e v).isSome
+  ∀ v, AdmField α β fd ρ v = true ↔ (((fieldSem α β fd ρ).codec).f S.o v).isSome
 
 omit [PrimAdm S] in
 theorem valPresentT_eq (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
@@ -270,8 +305,8 @@ theorem valPresentT_eq (fields : Finset String) (fld : {k // k ∈ fields} → O
   apply propext
   constructor <;> intro h k <;> have := h k <;>
     (cases hfd : fld k with
-      | req t => simp_all [valPresentAt, fieldSem]
-      | optional t => simp_all [valPresentAt, fieldSem])
+      | req t => simp_all [valPresentAt, fieldSem, fieldSemAbs]
+      | optional t => simp_all [valPresentAt, fieldSem, fieldSemAbs])
 
 theorem entry_iff {fields : Finset String} {fld : {k // k ∈ fields} → ObjectSlot S}
     {wild : Option (Term S)}
@@ -279,15 +314,15 @@ theorem entry_iff {fields : Finset String} {fld : {k // k ∈ fields} → Object
     (hr : ∀ t, wild = some t → ExactV α β t ρ) (k : String) (v : S.V) :
     (entryP ⟨fields, fun k => AdmField α β (fld k) ρ⟩ (AdmWild α β wild ρ) k).any (· v) = true ↔
     ((entryCodec ⟨fields, fun k => fieldSem α β (fld k) ρ⟩ (rcOf (wildSem α β wild ρ)) k).bind
-      (fun c => c.e v)).isSome = true := by
+      (fun c => c.f S.o v)).isSome = true := by
   simp only [entryP, entryCodec, MapOf.at]
   by_cases hk : k ∈ fields
   · rw [dif_pos hk, dif_pos hk]
     simpa using hf ⟨k, hk⟩ v
   · rw [dif_neg hk, dif_neg hk]
     cases wild with
-    | none => simp [AdmWild, wildSem, rcOf]
-    | some pt => simpa [AdmWild, wildSem, rcOf] using hr pt rfl v
+    | none => simp [AdmWild, wildSem, wildSemAbs, rcOf]
+    | some pt => simpa [AdmWild, wildSem, wildSemAbs, rcOf] using hr pt rfl v
 
 /-- **`object` is exact** once its slots and its open block are. -/
 theorem ExactV_object {fields : Finset String} {fld : {k // k ∈ fields} → ObjectSlot S}
@@ -296,17 +331,17 @@ theorem ExactV_object {fields : Finset String} {fld : {k // k ∈ fields} → Ob
     (hr : ∀ t, wild = some t → ExactV α β t ρ) :
     ExactV α β (.object (.mk fields fld wild)) ρ := by
   intro v
-  simp only [Adm, AdmBody, denote, bodySem]
-  cases Syn.map (S := S) with
+  have hd : wildSemAbs (tables S.o α β) wild ρ ≠ .drop := wildSem_ne_drop wild
+  simp only [Adm, AdmBody, denote, denoteAbs, bodySemAbs]
+  cases Mean.map (B := S.sig) with
   | none => simp [Codec.empty]
   | some F =>
-    simp only [objectCodec, objectCodecCore, carriedCodec, Codec.ofEP_e]
-    cases F.mV.out v with
-    | none => simp
-    | some m =>
-      simp only [Option.bind_some, Option.isSome_map]
+    rw [objectCodec_f _ _ _ hd]
+    rcases hv : (F.m S.o.c).out v with _ | m
+    · simp [hv]
+    · simp only [hv, Option.bind_some, Option.isSome_map]
       rw [valPresentT_eq (α := α) (β := β) (ρ := ρ)]
-      simp only [objWrite, objAdmV, Bool.and_eq_true, decide_eq_true_eq]
+      simp only [objAdmV, Bool.and_eq_true, decide_eq_true_eq]
       by_cases hv : valPresentB ⟨fields, fun k => fieldSem α β (fld k) ρ⟩ m.keys = true
       · rw [if_pos hv]
         simp only [hv, true_and, Option.isSome_map, funImage_isSome_iff]
@@ -319,12 +354,12 @@ theorem ExactV_object {fields : Finset String} {fld : {k // k ∈ fields} → Ob
 theorem ExactV_union {opts : List (Term S)} (h : ∀ t ∈ opts, ExactV α β t ρ) :
     ExactV α β (.union opts) ρ := by
   intro v
-  show anyP (AdmList α β opts ρ) v = true ↔ (select (denoteList α β opts ρ) (·.e) v).isSome = true
+  show anyP (AdmList α β opts ρ) v = true ↔ (select (denoteList α β opts ρ) (·.f S.o) v).isSome = true
   rw [select_isSome_attempt]
   induction opts with
-  | nil => simp [anyP, AdmList, denoteList]
+  | nil => simp [anyP, AdmList]
   | cons t ts ih =>
-    simp only [AdmList, anyP, denoteList, Bool.or_eq_true, List.mem_cons, exists_eq_or_imp]
+    simp only [AdmList, anyP, denoteList_cons, Bool.or_eq_true, List.mem_cons, exists_eq_or_imp]
     rw [h t List.mem_cons_self v, ih (fun t' ht' => h t' (List.mem_cons_of_mem _ ht'))]
 
 variable (α β) in
@@ -365,25 +400,28 @@ theorem Adm_exact : ∀ (t : Term S) (ρ : List S.C), ExactV α β t ρ
   -- `set`, `opaq`, `mu` and a variable ask their own codec, and the bottom is empty
   | .set _, _ | .opaq, _ | .mu _, _ | .never, _ | .var _, _ => fun _ => Iff.rfl
   | .refine c p pA, ρ => by
-      have hc v : Adm α β c ρ v = ((denote α β c ρ).e v).isSome :=
+      have hc v : Adm α β c ρ v = ((denote α β c ρ).f S.o v).isSome :=
         Bool.eq_iff_iff.mpr (Adm_exact c ρ v)
       intro v
-      simp only [Adm, denote, refine2_e_isSome, hc]
-      cases h : gate (denote α β c ρ) (Syn.evalA (half S.o.s p pA)) v
+      simp only [Adm, denote, denoteAbs]
+      rw [refine2_f_isSome, Mean.eval_half, Mean.eval_half]
+      simp only [hc]
+      cases h : gate ((denote α β c ρ).f S.o) (Syn.evalA (half S.o.s p pA)) v
       · simp
       · simp [gate_isSome h]
   | .held c P PA k kA, ρ => by
-      have hc v : Adm α β c ρ v = ((denote α β c ρ).e v).isSome :=
+      have hc v : Adm α β c ρ v = ((denote α β c ρ).f S.o v).isSome :=
         Bool.eq_iff_iff.mpr (Adm_exact c ρ v)
-      have hP v : Adm α β P ρ v = ((denote α β P ρ).e v).isSome :=
+      have hP v : Adm α β P ρ v = ((denote α β P ρ).f S.o v).isSome :=
         Bool.eq_iff_iff.mpr (Adm_exact P ρ v)
-      have hPA v : Adm α β PA ρ v = ((denote α β PA ρ).e v).isSome :=
+      have hPA v : Adm α β PA ρ v = ((denote α β PA ρ).f S.o v).isSome :=
         Bool.eq_iff_iff.mpr (Adm_exact PA ρ v)
       intro v
-      simp only [Adm, denote, held2, refine2_e_isSome, adapt2_gate, Function.comp_def, hc, hP, hPA,
-        ← half2_apply (fun c : S.C => (c.e v).isSome)]
-      cases h : gate (denote α β c ρ)
-        (fun a => ((half2 S.o.s (denote α β P ρ) (denote α β PA ρ)).p
+      simp only [Adm, denote, denoteAbs]
+      rw [held2_f_isSome, tables_c, tables_s]
+      simp only [hc, hP, hPA]
+      cases h : gate ((denote α β c ρ).f S.o)
+        (fun a => ((half2 S.o.s (denote α β P ρ) (denote α β PA ρ)).f S.o.op
           ((β.word (halfK S.o.s k kA)).2 a)).isSome)
         ((α.word (halfK S.o.c k kA)).1 v)
       · simp
@@ -413,7 +451,7 @@ end
 
 /-- The row, read as a Boolean: the write domain of the denotation. -/
 theorem Adm_eq_isSome (t : Term S) (ρ : List S.C) (v : S.V) :
-    Adm α β t ρ v = ((denote α β t ρ).e v).isSome :=
+    Adm α β t ρ v = ((denote α β t ρ).f S.o v).isSome :=
   Bool.eq_iff_iff.mpr (Adm_exact t ρ v)
 
 /-- **A term with no variable admits one set of values under every environment.** -/

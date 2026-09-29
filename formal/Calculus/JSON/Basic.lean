@@ -242,12 +242,13 @@ theorem gate_isSome (m : JMember) (v : Json) : (gate m v).isSome = decide (v.mem
 /-- The value-side row of a kind. -/
 instance jsonPrimAdm : Alg.PrimAdm jsonSyn where
   admV m v := decide (v.member = m)
-  admV_exact m v := by rw [show (Alg.Syn.ground m).e v = gate m v from rfl, gate_isSome]
+  admV_exact m v := by rw [show (Alg.Syn.ground m).f jsonSyn.o v = gate m v from rfl, gate_isSome]
 
 /-- The attribute-side row of a kind: the stored value is the caller value. -/
 instance jsonPrimAdmA : Alg.PrimAdmA jsonSyn where
   admV m a := decide (a.member = m)
-  admV_exact m a := by rw [show (Alg.Syn.ground (S := jsonSyn.op) m).e a = gate m a from rfl, gate_isSome]
+  admV_exact m a := by
+    rw [show (Alg.Syn.ground (S := jsonSyn.op) m).f jsonSyn.op.o a = gate m a from rfl, gate_isSome]
 
 /-- The string-or-number term admits exactly what its codec writes, and reads exactly what its
     codec reads. -/

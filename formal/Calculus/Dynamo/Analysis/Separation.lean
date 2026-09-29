@@ -252,11 +252,11 @@ def splitTable : Table := fun _ => (fSplit, id)
 theorem decides_held :
     Decides splitTable (.held .string .string .opaq [(.caller 0, false)] []) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
-  · simp [denote_rows, Alg.Table.word, Alg.Table.letter, splitTable, Alg.Codec.through,
+  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through,
       Alg.refine2_e_def, stringCodec, fSplit]
     have h : ((muCodec opaqStep).p (Attr.s "A")).isSome = true := rfl
     simp [h]
-  · simp [denote_rows, Alg.Table.word, Alg.Table.letter, splitTable, Alg.Codec.through,
+  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through,
       Alg.refine2_e_def, stringCodec, fSplit]
 
 
@@ -268,7 +268,7 @@ theorem Adm_refine_adapt (t : Term) (p : Pred) (v : Value) :
 theorem Adm_held_adapt (t P PA : Term) (k : Word) (kA : List (Alg.Syn.GenA dynSyn × Bool))
     (v : Value) :
     Adm α (.held t P PA k kA) v = (((some ((α.word k).1 v)).elim false (Adm α t)) && Adm α P v &&
-      Alg.gate (denote α t) (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v)) := by
+      Alg.gate (denote α t).e (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v)) := by
   simp [Adm_rows]
 
 /-! ### Adapters and alternatives, and why `alternate reader` is not an adapter
