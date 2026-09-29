@@ -237,8 +237,7 @@ witnesses are duals:
 
 `Adm` has no such split. `Adm_refine_adapt` and `Adm_held_adapt` show it doing the one
 thing `adapt` describes on both rows, apply the adapter and then ask the subterm, which is
-why it carries `q` and `f`. The `held` row also asks the caller-side term at the value
-itself, and the stored outer at the write. -/
+why it carries `q` and `f`. The `held` row also asks the outer at the value itself. -/
 
 /-- An adapter that sends one string to itself and everything else off `string`'s carrier.
     Total, so this is a `held` and not a `refine` — and it narrows exactly as a refinement
@@ -251,14 +250,12 @@ def splitTable : Table := fun _ => (fSplit, id)
 /-- **The dual gap.** `held(string, string, fSplit, _)` writes `"A"` and refuses `"B"`: two values
     of one kind, differing in admission, so it decides. -/
 theorem decides_held :
-    Decides splitTable (.held .string .string .opaq [(.caller 0, false)] []) := by
+    Decides splitTable (.held false .string .string (.caller 0, false) []) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
   · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through,
-      Alg.refine2_e_def, stringCodec, fSplit]
-    have h : ((muCodec opaqStep).p (Attr.s "A")).isSome = true := rfl
-    simp [h]
+      stringCodec, fSplit]
   · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through,
-      Alg.refine2_e_def, stringCodec, fSplit]
+      stringCodec, fSplit]
 
 
 /-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/
@@ -266,10 +263,9 @@ theorem Adm_refine_adapt (t : Term) (p : Pred) (v : Value) :
     Adm α (.refine t p ()) v = ((partialId p.eval v).elim false (Adm α t)) := by
   cases hq : p.eval v <;> simp [Adm_rows, partialId, hq]
 
-theorem Adm_held_adapt (t P PA : Term) (k : Word) (kA : List (Alg.Syn.GenA dynSyn × Bool))
-    (v : Value) :
-    Adm α (.held t P PA k kA) v = (((some ((α.word k).1 v)).elim false (Adm α t)) && Adm α P v &&
-      Alg.gate (denote α t).e (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v)) := by
+theorem Adm_held_adapt (t P : Term) (k₀ : DynGen × Bool) (k : Word) (v : Value) :
+    Adm α (.held false t P k₀ k) v =
+      (((some ((α.word (k₀ :: k)).1 v)).elim false (Adm α t)) && Adm α P v) := by
   simp [Adm_rows]
 
 /-! ### Adapters and alternatives, and why `alternate reader` is not an adapter

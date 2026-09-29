@@ -81,28 +81,6 @@ theorem listCodec_f {V A M : Type} (p : (s : Bool) → Ctor (List (Side V A s)) 
         (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map (p o.s).into)
     (fun _ => rfl) (fun _ => rfl)
 
-/-- **The domain of the two-sided `held` at an orientation**: the caller outer admits the input,
-    and the inner codec sends the entry image to an output whose exit image the stored outer
-    reads back. Each side reads its own word from the table of its own side. -/
-theorem held2_f_isSome {B : Sig} [Mean B] (τ : (s : Bool) → TableAt B s) (c P PA : Mean.C B)
-    (k : List (B.G false × Bool)) (kA : List (B.G true × Bool)) :
-    ∀ (o : Orient) (x : Mean.Car (B := B) o.c),
-      ((held2 c P PA ((τ false).word k).1 ((τ false).word k).2 ((τ true).word kA).1
-        ((τ true).word kA).2).f o x).isSome =
-      (half2 o.c (P.f o x).isSome (PA.f o x).isSome &&
-        gate (c.f o)
-          (fun a => ((half2 o.s P PA).f o.op (((τ o.s).word (halfK o.s k kA)).2 a)).isSome)
-          (((τ o.c).word (halfK o.c k kA)).1 x)) :=
-  Orient.both (P := fun o => ∀ (x : Mean.Car (B := B) o.c),
-      ((held2 c P PA ((τ false).word k).1 ((τ false).word k).2 ((τ true).word kA).1
-        ((τ true).word kA).2).f o x).isSome =
-      (half2 o.c (P.f o x).isSome (PA.f o x).isSome &&
-        gate (c.f o)
-          (fun a => ((half2 o.s P PA).f o.op (((τ o.s).word (halfK o.s k kA)).2 a)).isSome)
-          (((τ o.c).word (halfK o.c k kA)).1 x)))
-    (fun v => by rw [held2, refine2_e_isSome, adapt2_gate]; rfl)
-    (fun a => by rw [held2, refine2_p_isSome, adapt2_gateA]; rfl)
-
 variable [Sem S] [PrimAdm S] {α : Table S} {β : Table S.op}
 
 noncomputable section
@@ -120,12 +98,13 @@ def Adm : Term S → List S.C → S.V → Bool
   | .refine t p pA, ρ => fun v =>
       Adm t ρ v && Syn.eval (half S.o.c p pA) v &&
         gate ((denote α β t ρ).f S.o) (Syn.evalA (half S.o.s p pA)) v
-  | .held t P PA k kA, ρ => fun v =>
-      Adm t ρ ((α.word (halfK S.o.c k kA)).1 v) && half2 S.o.c (Adm P ρ v) (Adm PA ρ v) &&
+  | .held s t P k₀ k, ρ => fun v =>
+      Adm t ρ ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.c).1 v) &&
+        (S.o.c != s || Adm P ρ v) &&
         gate ((denote α β t ρ).f S.o)
-          (fun a => ((half2 S.o.s (denote α β P ρ) (denote α β PA ρ)).f S.o.op
-            ((β.word (halfK S.o.s k kA)).2 a)).isSome)
-          ((α.word (halfK S.o.c k kA)).1 v)
+          (fun a => S.o.s != s || ((denote α β P ρ).f S.o.op
+            ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.s).2 a)).isSome)
+          ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.c).1 v)
   | .union opts, ρ => fun v => anyP (AdmList opts ρ) v
   | .set t, ρ => fun v => ((denote α β (.set t) ρ).f S.o v).isSome
   | .list pre sp suf, ρ => fun v =>
@@ -408,21 +387,19 @@ theorem Adm_exact : ∀ (t : Term S) (ρ : List S.C), ExactV α β t ρ
       cases h : gate ((denote α β c ρ).f S.o) (Syn.evalA (half S.o.s p pA)) v
       · simp
       · simp [gate_isSome h]
-  | .held c P PA k kA, ρ => by
+  | .held s c P k₀ k, ρ => by
       have hc v : Adm α β c ρ v = ((denote α β c ρ).f S.o v).isSome :=
         Bool.eq_iff_iff.mpr (Adm_exact c ρ v)
       have hP v : Adm α β P ρ v = ((denote α β P ρ).f S.o v).isSome :=
         Bool.eq_iff_iff.mpr (Adm_exact P ρ v)
-      have hPA v : Adm α β PA ρ v = ((denote α β PA ρ).f S.o v).isSome :=
-        Bool.eq_iff_iff.mpr (Adm_exact PA ρ v)
       intro v
       simp only [Adm, denote, denoteAbs]
-      rw [held2_f_isSome]; simp only [tables, Orient.place_c, Orient.place_s]
-      simp only [hc, hP, hPA]
+      rw [held1_f_isSome]
+      simp only [hc, hP]
       cases h : gate ((denote α β c ρ).f S.o)
-        (fun a => ((half2 S.o.s (denote α β P ρ) (denote α β PA ρ)).f S.o.op
-          ((β.word (halfK S.o.s k kA)).2 a)).isSome)
-        ((α.word (halfK S.o.c k kA)).1 v)
+        (fun a => S.o.s != s || ((denote α β P ρ).f S.o.op
+          ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.s).2 a)).isSome)
+        ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.c).1 v)
       · simp
       · simp [gate_isSome h]
 

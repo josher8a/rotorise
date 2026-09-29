@@ -85,16 +85,18 @@ inductive Typed : Term S → (Mean.V (B := S.sig) → Prop) → Option (Syn.M S)
   | list {L pre Tpre sp Tsp suf Tsuf} (hL : Mean.list (B := S.sig) = some L)
       (hp : TypedList pre Tpre) (hs : TypedOpt sp Tsp) (hf : TypedList suf Tsuf) :
       Typed (.list pre sp suf) (HList (L.p false) Tpre Tsp Tsuf) (some L.μ)
-  /-- `(held)`: the held set **is** the premise's, pulled back along `f`, and cut by the
-      admission of the caller-side term `P`; the cancellation laws are `Obligations`'.
+  /-- `(held)`: the held set **is** the premise's, pulled back along the entry function of the
+      side `false`, and cut by the write domain of `P` where `s` is the side `false`; the
+      cancellation laws are `Obligations`'.
 
       No premise relating `T` to `I`, because `adapt2` *defines* `T := fun v => c.T (f v)`.
       `P` carries no judgement, as the predicate of `refine` carries none: the rule reads only the
-      domain of its codec. The stored outer `PA` and the stored word act on the stored side only,
-      so they leave the held set alone. -/
-  | held {t I μ P PA k kA} (h : Typed t I μ) :
-      Typed (.held t P PA k kA) (fun v => I (((tables S.o α β false).word k).1 v) ∧
-        ((denote α β P).e v).isSome) μ
+      domain of its codec. A `held` at the side `true` acts on the attributes only, so its entry
+      function at the side `false` is the identity, and it leaves the held set alone. -/
+  | held {s t I μ P k₀ k} (h : Typed t I μ) :
+      Typed (.held s t P k₀ k) (fun v =>
+        I ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) false).1 v) ∧
+        (false != s || ((denote α β P).e v).isSome)) μ
   | refine {t T μ p pA} (h : Typed t T μ) :
       Typed (.refine t p pA) (fun v => T v ∧ Mean.eval false p v) μ
   | opaq : Typed .opaq Syn.topHeld none
@@ -229,7 +231,7 @@ def μSyn : Term S → Option (Syn.M S)
       | some L => (μSyn t).bind L.member
       | none => none
   | .list _ _ _ => (Mean.list (B := S.sig)).map (·.μ)
-  | .held t _ _ _ _ => μSyn t
+  | .held _ t _ _ _ => μSyn t
   | .refine t _ _ => μSyn t
   | .opaq | .var _ | .mu _ | .never => none
   | .object _ => (Mean.map (B := S.sig)).map (·.μ)
@@ -288,11 +290,9 @@ def Obligations : Term S → (ρ : List S.C := []) → Prop
   | .set t', ρ => Obligations t' ρ ∧ SetObl (denote α β t' ρ)
   | .refine t' _ _, ρ => Obligations t' ρ
   | .list pre sp suf, ρ => ObligationsList pre ρ ∧ ObligationsOpt sp ρ ∧ ObligationsList suf ρ
-  -- the two outers owe nothing: a restriction keeps the laws of any lawful codec
-  | .held t' _ _ k kA, ρ => Obligations t' ρ ∧
-      Obl2 Mean.mem (denote α β t' ρ) ((tables S.o α β false).word k).1
-        ((tables S.o α β false).word k).2 ((tables S.o α β true).word kA).1
-        ((tables S.o α β true).word kA).2
+  -- the outer owes nothing: a restriction keeps the laws of any lawful codec
+  | .held s t' _ k₀ k, ρ => Obligations t' ρ ∧
+      Obl1 Mean.mem (denote α β t' ρ) s ((tables S.o α β s).word (k₀ :: k))
   | .object b, ρ => ObligationsBody b ρ
   | .union opts, ρ => ObligationsList opts ρ ∧ PairwiseCompat α β opts ρ
   -- the body's premises at each stage, given that the stage before is lawful

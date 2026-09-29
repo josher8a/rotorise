@@ -194,12 +194,11 @@ variable (t : Term) (ts : List Term)
 /-- The bottom reads no attribute back, and the row is that sentence. -/
 @[AdmA_rows] theorem AdmA_never (a : Attr) : AdmA α .never a = false := rfl
 /-- The read side of the caller-side restriction: decode, transform, then ask `P`'s row. -/
-@[AdmA_rows] theorem AdmA_held (P PA : Term) (k : Word) (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
-    AdmA α (.held t P PA k kA) =
-      fun a => AdmA α PA a && AdmA α t a &&
-        refineReads α t (fun w => Adm α P ((α.word k).2 w)) a := by
+@[AdmA_rows] theorem AdmA_held (P : Term) (k₀ : DynGen × Bool) (k : Word) :
+    AdmA α (.held false t P k₀ k) =
+      fun a => AdmA α t a && refineReads α t (fun w => Adm α P ((α.word (k₀ :: k)).2 w)) a := by
   funext a
-  rw [AdmA, Alg.AdmA_held_eq (S := dynSyn), dynTableA_word]
+  rw [AdmA, Alg.AdmA_held_eq (S := dynSyn)]
   rfl
 /-- The stored predicate is the truth, so the read row of `refine` asks the caller predicate of
     the read alone. -/

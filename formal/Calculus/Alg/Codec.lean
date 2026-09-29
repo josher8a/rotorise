@@ -45,6 +45,9 @@ abbrev Orient.c (o : Orient) : Bool := o.1.1
 /-- The stored side of an orientation. -/
 abbrev Orient.s (o : Orient) : Bool := o.1.2
 
+/-- The orientation whose caller side is the absolute side `s`. -/
+abbrev Orient.at (s : Bool) : Orient := ⟨(s, !s), by cases s <;> decide⟩
+
 /-- **The two values of an orientation, placed at their absolute sides**: the caller value at
     the caller side, and the stored value at the stored side. -/
 def Orient.place {X : Bool → Type} : (o : Orient) → X o.c → X o.s → (s : Bool) → X s

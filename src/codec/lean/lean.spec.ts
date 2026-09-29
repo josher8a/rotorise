@@ -121,7 +121,7 @@ describe('terms', () => {
         expect(leanTermOf(erase(dynamoNumber))).toBe('Term.number')
         // `decimal` is an adapter over that native, and the model names its pair
         expect(leanTermOf(erase(decimal))).toBe(
-            '(Term.held (Term.number) (Term.string) Term.opaq [(.decimalText, false)] [])',
+            '(Term.held false (Term.number) (Term.string) (.decimalText, false) [])',
         )
         expect(leanTermOf(erase(boolean))).toBe('Term.boolean')
         expect(leanTermOf(erase(binary))).toBe('Term.binary')
@@ -185,10 +185,10 @@ describe('terms', () => {
      */
     it('emits a decimal literal at the native base, under the named pair', () => {
         expect(leanTermOf(erase(decimal('-1.5')))).toBe(
-            '(Term.held (Term.literal GroundKind.number (WFNumeral.of "-1.5")) (Term.literal GroundKind.string "-1.5") Term.opaq [(.decimalText, false)] [])',
+            '(Term.held false (Term.literal GroundKind.number (WFNumeral.of "-1.5")) (Term.literal GroundKind.string "-1.5") (.decimalText, false) [])',
         )
         expect(leanTermOf(erase(decimal('1', '2.5')))).toBe(
-            '(Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) Term.opaq [(.decimalText, false)] [])',
+            '(Term.held false (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) (.decimalText, false) [])',
         )
     })
 
@@ -248,7 +248,7 @@ describe('terms', () => {
      */
     it('emits the set of a named adapter, and refuses the set of an unnamed one', () => {
         expect(leanTermOf(erase(decimal.set()))).toBe(
-            'Term.set ((Term.held (Term.number) (Term.string) Term.opaq [(.decimalText, false)] []))',
+            'Term.set ((Term.held false (Term.number) (Term.string) (.decimalText, false) []))',
         )
         const why = refusal(() => leanTermOf(erase(number.set()))).reason
         expect(why).toContain('numeralOfStoredText')

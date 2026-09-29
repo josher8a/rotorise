@@ -152,9 +152,9 @@ total, so `dom(p)` is the subterm's exactly. It is cited as a result now, so it 
 like one. -/
 
 /-! `AdmA`'s `held` row, both directions. §5 gave `held` one `⊤` row on both sides. A `held`
-restricts both sides. The read row asks the stored outer of the attribute, the inner term of
-the image under the stored word, and the caller outer of the value that the read gives
-(`AdmA_held_eq`). -/
+restricts its side. The read row asks the outer of the attribute where the side of the `held` is
+the stored side, the inner term of the entry image, and the outer of the value that the read
+gives where the side is the caller side (`AdmA_held_eq`). -/
 
 /-! The lemmas that pin §5's declaration-time devices to the denotation. Without them a row
 is a transcription of a table rather than a claim about the model, so their axiom base is

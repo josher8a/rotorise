@@ -113,22 +113,16 @@ theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ�
       | i + 1 => exact h i
   | .refine t p pA, hg, d, ρ₁, ρ₂, h =>
       agreeLe_refine2 (denote_agree t hg d ρ₁ ρ₂ h) (Mean.eval false p) (Mean.eval true pA)
-  | .held t P PA k kA, hg, _, ρ₁, ρ₂, h => by
+  | .held s t P k₀ k, hg, _, ρ₁, ρ₂, h => by
       simp only [Term.guarded, Bool.and_eq_true] at hg
       have ht := AgreeLe.eq_of_forall fun d' =>
-        denote_agree t hg.1.1 d' ρ₁ ρ₂ fun i => UseAgree.of_held (h i)
+        denote_agree t hg.1 d' ρ₁ ρ₂ fun i => UseAgree.of_held (h i)
       have hP := AgreeLe.eq_of_forall fun d' =>
-        denote_agree P hg.1.2 d' ρ₁ ρ₂ fun i =>
-          UseAgree.of_held (v := max (t.use i) (PA.use i)) (by rw [Nat.max_left_comm]; exact h i)
-      have hPA := AgreeLe.eq_of_forall fun d' =>
-        denote_agree PA hg.2 d' ρ₁ ρ₂ fun i =>
-          UseAgree.of_held (v := max (t.use i) (P.use i))
-            (by rw [Nat.max_left_comm, Nat.max_comm (PA.use i)]; exact h i)
+        denote_agree P hg.2 d' ρ₁ ρ₂ fun i =>
+          UseAgree.of_held (v := t.use i) (by rw [Nat.max_comm]; exact h i)
       refine AgreeLe.of_eq ?_ ?_
-      · simp only [denote, denoteAbs, held2, refine2_e_def, adapt2, ht.1, hP.1, hPA.2,
-          Codec.ofEP_e]
-      · simp only [denote, denoteAbs, held2, refine2_p_def, adapt2, ht.2, hP.1, hPA.2,
-          Codec.ofEP_p]
+      · simp only [denote, denoteAbs, held1, refine2_e_def, adapt2_f, ht.1, hP.1, hP.2]
+      · simp only [denote, denoteAbs, held1, refine2_p_def, adapt2_f, ht.2, hP.1, hP.2]
   | .list pre sp suf, hg, d, ρ₁, ρ₂, h => by
       simp only [Term.guarded, Bool.and_eq_true] at hg
       match d with

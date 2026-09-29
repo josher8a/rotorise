@@ -21,12 +21,11 @@ two lawful closed options through the decision.
 
 namespace Calculus
 
-/-- **The DynamoDB oracles**: the caller-side views decide write orthogonality, the stored-side
-    views decide read orthogonality, and two adapter words are one adapter where they are one
-    word. -/
+/-- **The DynamoDB oracles**: the caller-side views decide write orthogonality, and the
+    stored-side views decide read orthogonality. -/
 def dynOracle : Alg.CompatOracle dynSyn :=
   ⟨fun x y => Alg.Term.disjoint pair0 (writeView x) (writeView y),
-   fun x y => Alg.Term.disjoint pair0 (readView x) (readView y), fun k k' => decide (k = k')⟩
+   fun x y => Alg.Term.disjoint pair0 (readView x) (readView y)⟩
 
 /-- **The DynamoDB oracles are sound**: each view admits what its term admits, so disjoint views
     give apart domains. -/
@@ -41,7 +40,6 @@ theorem dynOracle_sound : Alg.OracleSound dynOracle where
     rw [← Alg.AdmA_eq_isSome (S := dynSyn), ← Alg.AdmA_eq_isSome (S := dynSyn)]
     exact Alg.apart_of_imp (readLe_of x a) (Alg.apart_of_imp' (readLe_of y a)
       (Alg.disjoint_soundA (S := dynSyn) pair0 _ _ h [] [] (fun _ _ _ hp => nomatch hp) a))
-  same _ _ h := of_decide_eq_true h
 
 /-- **The decision discharges the union's obligation** of two lawful closed options. -/
 theorem pairwiseCompat_of_compatPair {x y : Term} (h : Alg.compatPair dynOracle x y = true)
@@ -85,7 +83,7 @@ theorem swX_invol (v : Value) : swX (swX v) = v := by
 def swTable : Table := fun _ => (swX, swX)
 
 /-- The held that holds `"x"` and stores `"X"`. -/
-def shout : Term := .held (.literal .string "X") (.literal .string "x") .opaq [(.caller 0, false)] []
+def shout : Term := .held false (.literal .string "X") (.literal .string "x") (.caller 0, false) []
 
 /-- The literal `"X"`. -/
 def litX : Term := .literal .string "X"
@@ -126,7 +124,7 @@ def notV : Value → Value := fun v =>
 def flipTable : Table := fun _ => (notV, notV)
 
 /-- The held that stores the negation of a boolean. -/
-def flipBool : Term := .held .boolean .boolean .opaq [(.caller 0, false)] []
+def flipBool : Term := .held false .boolean .boolean (.caller 0, false) []
 
 /-- **The `flipBool` adapter cancels over `boolean`.** -/
 theorem iso_flip : IsoCancels (denote flipTable .boolean) notV notV := by
@@ -156,7 +154,7 @@ theorem flip_order_observable :
 Two overlapping `refine`s of one `held` swap sit below one canonical bound. -/
 
 /-- The adapter: `string` stored, `string` held, `"x"` and `"X"` swapped. -/
-def swap : Term := .held .string .string .opaq [(.caller 0, false)] []
+def swap : Term := .held false .string .string (.caller 0, false) []
 
 /-- The members `"x"` and `"y"`. -/
 def q1 : Pred := .members .string (NEFinset.of "x" {"y"})

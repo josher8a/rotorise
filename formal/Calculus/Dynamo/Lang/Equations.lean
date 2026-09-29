@@ -18,9 +18,10 @@ rows are cited elsewhere as load-bearing and came first:
   (`altCodec_perm`), not merely `≡`, over pairwise compatible, lawful options. Deriving the general case from the adjacent one would
   need `≡` to compose, and `Refutations.not_equiv_trans` says it does not.
 
-The remaining rows: `held`'s identity and composition, `refine`'s meet and its full case,
+The remaining rows: `held`'s composition, `refine`'s meet and its full case,
 `alternate reader` with its own reading (and `≈` on `Can(c)`), `union` of one, and the member
-preservation of the three codec wrappers.
+preservation of the three codec wrappers. `held`'s identity is a row of the codecs
+(`equiv_through_id`) and no row of the terms: a `held` with the empty word has no term.
 
 The last row, `union` associativity, needs no condition: a nested union and its flattening
 consult the same options in the same order, so the two are equal on both halves.
@@ -100,33 +101,16 @@ the representation audit asked for — both halves of §6 in one language. -/
 
 section Terms
 
-/-- §6: `held(c, P, PA, [], kA) ≡ refine(c, P)`. The empty word is the identity transform at
-    every table, and every stored word of DynamoDB is the identity, so the `held` leaves the
-    caller-side restriction, and that restriction is a `refine` by the admission of `P`. The
-    stored outer only shrinks the graph, and `≡` asks agreement where both codecs are defined. -/
-theorem equiv_denote_held_id (t P PA : Term) (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
-    Codec.Equiv (denote α (.held t P PA [] kA))
-      (denote α (.refine t (.closure fun v => ((denote α P).e v).isSome) ())) := by
+/-- §6: `held(held(c, P, k), P′, k′) ≡ refine(held(c, P′, k ++ k′), P ∘ f′)`, where `f′` is
+    the caller-side function of `k′`. The words concatenate, so the transforms compose, and the
+    inner restriction pulls back along `f′`. The pullback is a predicate and no term, so the right
+    side carries it as a `refine`. -/
+theorem equiv_denote_held_comp (t P P' : Term) (k₀ k₀' : DynGen × Bool) (k k' : Word) :
+    Codec.Equiv (denote α (.held false (.held false t P k₀ k) P' k₀' k'))
+      (denote α (.refine (.held false t P' k₀ (k ++ k₀' :: k'))
+        (.closure fun v => ((denote α P).e ((α.word (k₀' :: k')).1 v)).isSome) ())) := by
   simp only [denote_rows]
-  refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩
-  · intro v a a' h h'
-    exact Option.some.inj
-      ((through_e.mp (Alg.refine2_f.mp h).2.1).symm.trans (refine2_f.mp h').2.1)
-  · intro a v v' h h'
-    obtain ⟨w, hw, rfl⟩ := through_p.mp (Alg.refine2_f.mp h).2.1
-    exact Option.some.inj (hw.symm.trans (refine2_f.mp h').2.1)
-
-/-- §6: `held(held(c, P, PA, k), P′, PA′, k′) ≡ refine(held(c, P′, PA′, k ++ k′), P ∘ f′)`, where
-    `f′` is the caller-side function of `k′`. The words concatenate, so the transforms compose,
-    and the inner caller-side restriction pulls back along `f′`. The pullback is a predicate and
-    no term, so the right side carries it as a `refine`. The inner stored outer only shrinks the
-    graph. -/
-theorem equiv_denote_held_comp (t P PA P' PA' : Term) (k k' : Word)
-    (kA kA' : List (Alg.Syn.GenA dynSyn × Bool)) :
-    Codec.Equiv (denote α (.held (.held t P PA k kA) P' PA' k' kA'))
-      (denote α (.refine (.held t P' PA' (k ++ k') [])
-        (.closure fun v => ((denote α P).e ((α.word k').1 v)).isSome) ())) := by
-  simp only [denote_rows, Alg.TableAt.word_append]
+  rw [← List.cons_append, Alg.TableAt.word_append]
   refine ⟨fun _ => ⟨fun ⟨⟨h1, h2⟩, h3⟩ => ⟨⟨h1, h3⟩, h2⟩, fun ⟨⟨h1, h3⟩, h2⟩ => ⟨⟨h1, h2⟩, h3⟩⟩,
     rfl, ?_, ?_⟩
   · intro v a a' h h'
@@ -168,8 +152,8 @@ theorem equiv_denote_refine_full (t : Term) (p : Pred)
 
 /-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
     `optional_μ` and `optional_μ`, which are already stated over a denotation. -/
-theorem denote_held_μ (t P PA : Term) (k : Word) (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
-    (denote α (.held t P PA k kA)).μ = (denote α t).μ := rfl
+theorem denote_held_μ (t P : Term) (k₀ : DynGen × Bool) (k : Word) :
+    (denote α (.held false t P k₀ k)).μ = (denote α t).μ := rfl
 
 theorem denote_refine_μ (t : Term) (p : Pred) :
     (denote α (.refine t p ())).μ = (denote α t).μ := rfl

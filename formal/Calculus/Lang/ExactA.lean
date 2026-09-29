@@ -78,23 +78,26 @@ theorem AdmA_refine_eq (t : Term S) (p : S.sig.P false) (pA : S.sig.P true) (ρ 
   rw [← refineReads_eq_gate]
   simp only [AdmA, Adm, Bool.and_assoc]
 
-/-- A held term reads what its stored outer reads, where the inner term reads the stored word's
-    image, and the caller outer admits the caller word's image of the read. -/
-theorem AdmA_held_eq [PrimAdm S] (t P PA : Term S) (k : List (S.sig.G false × Bool))
-    (kA : List (S.sig.G true × Bool)) (ρ : List S.C) (a : Syn.A S) :
-    AdmA α β (.held t P PA k kA) ρ a =
-      (half2 S.o.s (AdmA α β P ρ a) (AdmA α β PA ρ a) &&
-        AdmA α β t ρ ((β.word (halfK S.o.s k kA)).1 a) &&
-        refineReads α β t ρ (fun w => half2 S.o.c (Adm α β P ρ ((α.word (halfK S.o.c k kA)).2 w))
-          (Adm α β PA ρ ((α.word (halfK S.o.c k kA)).2 w))) ((β.word (halfK S.o.s k kA)).1 a)) := by
-  have hP : (fun w => ((half2 S.o.c (denote (S := S.op) β α P ρ)
-      (denote (S := S.op) β α PA ρ)).f S.o ((α.word (halfK S.o.c k kA)).2 w)).isSome) =
-      fun w => half2 S.o.c (Adm α β P ρ ((α.word (halfK S.o.c k kA)).2 w))
-        (Adm α β PA ρ ((α.word (halfK S.o.c k kA)).2 w)) := by
+/-- A held term reads what its outer reads where its side is the stored side, where the inner
+    term reads the entry image, and where the outer admits the exit image of the read where its
+    side is the caller side. -/
+theorem AdmA_held_eq [PrimAdm S] (s : Bool) (t P : Term S) (k₀ : S.sig.G s × Bool)
+    (k : List (S.sig.G s × Bool)) (ρ : List S.C) (a : Syn.A S) :
+    AdmA α β (.held s t P k₀ k) ρ a =
+      ((S.o.s != s || AdmA α β P ρ a) &&
+        AdmA α β t ρ ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.s).1 a) &&
+        refineReads α β t ρ (fun w => S.o.c != s ||
+          Adm α β P ρ ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.c).2 w))
+          ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.s).1 a)) := by
+  have hτ : tables S.o.op β α = tables S.o α β := Orient.place_op _ _ _
+  have hP : (fun w => S.o.c != s || ((denote (S := S.op) β α P ρ).f S.o
+      ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.c).2 w)).isSome) =
+      fun w => S.o.c != s ||
+        Adm α β P ρ ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.c).2 w) := by
     funext w
-    rw [denote_op, denote_op, half2_f, half2_apply Option.isSome, Adm_eq_isSome, Adm_eq_isSome]
+    rw [denote_op, Adm_eq_isSome]
   rw [← hP, ← refineReads_eq_gate]
-  simp only [AdmA, Adm]
+  simp only [AdmA, Adm, hτ]
   rw [Bool.and_comm (Adm (S := S.op) β α t _ _)]
 
 variable (α β) in

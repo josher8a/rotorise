@@ -229,8 +229,8 @@ def isoTable : Table := fun _ => (isoF, id)
     already replaced it with `"A"`. -/
 theorem not_equiv_refine_held :
     ¬ Codec.Equiv
-        (denote isoTable (.refine (.held .string .string .opaq [(.caller 0, false)] []) (.closure predA) ()))
-        (denote isoTable (.held (.refine .string (.closure predA) ()) .string .opaq [(.caller 0, false)] [])) := by
+        (denote isoTable (.refine (.held false .string .string (.caller 0, false) []) (.closure predA) ()))
+        (denote isoTable (.held false (.refine .string (.closure predA) ()) .string (.caller 0, false) [])) := by
   intro h
   have hv := (h.heldSet (.str "B")).mpr
   simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, isoTable, Alg.Codec.through,

@@ -180,14 +180,10 @@ instance jsonSem : Alg.Mean jsonSig where
   topHeld _ := True
   top_held _ _ := trivial
 
-/-- **The one table of JSON**: the universe names no generator, so the only adapter word is the
-    empty word, the identity. -/
+/-- **The one table of JSON**: the universe names no generator, so it has no `held`. -/
 def jsonTable : Alg.Table jsonSyn := fun g => nomatch g
 
 variable {α : Alg.Table jsonSyn}
-
-/-- **The JSON top reads every attribute**: the top is the identity codec. -/
-instance jsonTopReads : Alg.TopReads jsonSyn := ⟨fun _ => rfl⟩
 
 /-- **The one stored table of JSON**: the store names no generator. -/
 def jsonTableA : Alg.Table jsonSyn.op := fun g => nomatch g
