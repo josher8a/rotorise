@@ -184,7 +184,7 @@ variable (t : Term) (ts : List Term) (ρ : List Codec)
     This is the whole of what `Pred` cost the codec layer: one `.eval`. -/
 @[denote_rows] theorem denote_refine (p : Pred) (pA : Alg.Syn.PredA dynSyn) :
     denote α (.refine t p pA) ρ = (denote α t ρ).restrict p.eval :=
-  Alg.refine2_host _ _
+  rfl
 /-- `opaque` denotes the recursive codec of its body `opaqStep` (`Opaque.lean`). -/
 @[denote_rows] theorem denote_opaq : denote α .opaq ρ = muCodec opaqStep := rfl
 /-- `object` denotes its payload's semantics. -/

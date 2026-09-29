@@ -3,11 +3,10 @@ import Calculus.Alg.Combinators
 /-!
 # The order, the equivalence and compatibility, over any carriers
 
-Three relations between two codecs: graph inclusion `Sub` and the information order
-`Codec.Approx`, §6's `Codec.Equiv`, and the compatibility `Compat` that makes a union of lawful
-options lawful. Each relation reads only the pair, the held set and the member, so each one
-takes the carriers as parameters: `V` the caller's values, `A` the stored attributes, and `M`
-the members.
+Three relations between two codecs: graph inclusion `Sub`, which is also the information order,
+§6's `Codec.Equiv`, and the compatibility `Compat` that makes a union of lawful options lawful.
+Each relation reads only the pair, the held set and the member, so each one takes the carriers
+as parameters: `V` the caller's values, `A` the stored attributes, and `M` the members.
 -/
 
 namespace Calculus.Alg
@@ -27,9 +26,14 @@ theorem Sub.ofEP {c d : Codec V A M} (he : ∀ v a, c.e v = some a → d.e v = s
     (hp : ∀ a v, c.p a = some v → d.p a = some v) : Sub c d :=
   Orient.both (P := fun o => ∀ x y, c.f o x = some y → d.f o x = some y) he hp
 
+/-- **A two-sided restriction is below the codec that it restricts.** -/
+theorem sub_refine2_self (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) :
+    Sub (refine2 c qV qA) c :=
+  fun _ _ _ h => (refine2_f.mp h).2.1
+
 /-- **A restriction is below the codec that it restricts.** -/
 theorem sub_restrict_self (c : Codec V A M) (q : V → Bool) : Sub (c.restrict q) c :=
-  .ofEP (fun _ _ h => (restrict_e.mp h).2) (fun _ _ h => (restrict_p.mp h).1)
+  sub_refine2_self c q _
 
 /-- **Below one bound, the read domains decide the reads.** Three codecs below `u`, where the
     third reads exactly where both others read: there the three read the value of `u`. -/
@@ -44,22 +48,16 @@ theorem readAgree_of_sub {x y z u : Codec V A M} (hx : Sub x u) (hy : Sub y u) (
 
 /-! ### The information order
 
-The minimal requirement *any* such ccpo must meet — `e` and `p` grow from undefined, with
-`Codec.empty` at the bottom — stated positively, so nothing here depends on which ccpo one
-picks. -/
-structure Codec.Approx (c c' : Codec V A M) : Prop where
-  /-- Everything `c` encodes, `c'` encodes the same way. -/
-  e : ∀ {v a}, c.e v = some a → c'.e v = some a
-  /-- Everything `c` decodes, `c'` decodes the same way. -/
-  p : ∀ {a v}, c.p a = some v → c'.p a = some v
+`Sub` is the information order: the minimal requirement that any ccpo on codecs meets. The map
+at each orientation grows from undefined, with `Codec.empty` at the bottom. -/
 
-theorem Codec.Approx.refl (c : Codec V A M) : Codec.Approx c c :=
-  ⟨fun h => h, fun h => h⟩
+/-- A codec is below itself. -/
+theorem sub_refl (c : Codec V A M) : Sub c c := fun _ _ _ h => h
 
-/-- `Codec.empty` is below everything: the bottom of any such order, and what a staged
-    definition would start from. -/
-theorem Codec.Approx.empty_le (c : Codec V A M) : Codec.Approx Codec.empty c := by
-  refine ⟨?_, ?_⟩ <;> intro _ _ h <;> exact nomatch h
+/-- The empty codec is below every codec: the bottom of the order, and what a staged definition
+    starts from. -/
+theorem sub_empty {u : Codec V A M} : Sub Codec.empty u :=
+  fun _ _ _ h => nomatch h
 
 /-- The growing option, before unfolding: undefined everywhere. -/
 def optBot : Codec V A M := Codec.empty
@@ -81,15 +79,8 @@ theorem muStage_induct {B : Codec V A M → Codec V A M} {P : Codec V A M → Pr
     decodes, the migration decodes the same way, and the writing half is untouched. §3's
     `(alternate reader)` coherence premise is what makes this an *extension* rather than a
     replacement, and this is that fact in the information order. -/
-theorem approx_extendRead (c : Codec V A M) (r : A → Option V) :
-    Codec.Approx c (c.extendRead r) :=
-  ⟨fun h => h, fun h => by simp only [Codec.extendRead, Codec.ofEP_p, h]⟩
-
-/-- **`refine` is a step down.** The prism only ever removes, on both halves — which is
-    why §6's `refine(c, T) ≡ c` is the top of a descending chain and not a coincidence. -/
-theorem approx_restrict (c : Codec V A M) (q : V → Bool) :
-    Codec.Approx (c.restrict q) c :=
-  ⟨fun h => (restrict_e.mp h).2, fun h => (restrict_p.mp h).1⟩
+theorem sub_extendRead (c : Codec V A M) (r : A → Option V) : Sub c (c.extendRead r) :=
+  .ofEP (fun _ _ h => h) (fun _ _ h => by simp only [Codec.extendRead, Codec.ofEP_p, h])
 
 /-! ### First-match resolution under the obligation
 
@@ -120,12 +111,12 @@ theorem selectF_skip {o : Codec V A M} {os : List (Codec V A M)} {v : V}
     answers throughout. Confluence is used in exactly one of the three cases: where growth newly
     admits at a value another option was already answering. -/
 theorem selectF_mono {o₁ o₁' o₂ : Codec V A M} {v : V} {a : A}
-    (hap : Codec.Approx o₁ o₁')
+    (hap : Sub o₁ o₁')
     (hc : ConfluentAt [o₁', o₂] v)
     (h : selectF [o₁, o₂] v = some a) : selectF [o₁', o₂] v = some a := by
   have hadm : (o₁.e v).isSome = true → (o₁'.e v).isSome = true := fun h1 =>
     let ⟨b, hb⟩ := Option.isSome_iff_exists.mp h1
-    by rw [hap.e hb]; rfl
+    Option.isSome_iff_exists.mpr ⟨b, hap .host _ _ hb⟩
   cases h1' : (o₁'.e v).isSome with
   | false =>
     have h1 : (o₁.e v).isSome = false := by
@@ -135,7 +126,7 @@ theorem selectF_mono {o₁ o₁' o₂ : Codec V A M} {v : V} {a : A}
     rw [selectF_skip h1']; rw [selectF_skip h1] at h; exact h
   | true =>
     cases h1 : (o₁.e v).isSome with
-    | true => rw [selectF_admit h1']; rw [selectF_admit h1] at h; exact hap.e h
+    | true => rw [selectF_admit h1']; rw [selectF_admit h1] at h; exact hap .host _ _ h
     | false =>
       rw [selectF_admit h1']; rw [selectF_skip h1] at h
       cases h2 : (o₂.e v).isSome with
@@ -144,13 +135,13 @@ theorem selectF_mono {o₁ o₁' o₂ : Codec V A M} {v : V} {a : A}
         rw [selectF_admit h2] at h
         rw [hc o₁' (by simp) o₂ (by simp) h1' h2]; exact h
 
-/-- Directed continuity, stated **without constructing sups** — this file defines `Codec.Approx`
+/-- Directed continuity, stated **without constructing sups**: this file defines the order `Sub`
     and deliberately no ccpo. `oω` is an upper bound that is *least at `v`*: every answer
     it gives, some finite stage already gave. In the flat `Option` order that is the whole sup
     condition. -/
 structure IsSupAt (f : Nat → Codec V A M) (oω : Codec V A M) (v : V) : Prop where
   /-- an upper bound of the chain -/
-  ub : ∀ i, Codec.Approx (f i) oω
+  ub : ∀ i, Sub (f i) oω
   /-- …and least at `v`: the limit adds no answer the chain did not have -/
   least : ∀ a, oω.e v = some a → ∃ i, (f i).e v = some a
 
@@ -163,7 +154,7 @@ theorem selectF_continuous {f : Nat → Codec V A M} {oω o₂ : Codec V A M} {v
     (h : selectF [oω, o₂] v = some a) : ∃ i, selectF [f i, o₂] v = some a := by
   have hadm : ∀ i, ((f i).e v).isSome = true → (oω.e v).isSome = true := fun i h1 =>
     let ⟨b, hb⟩ := Option.isSome_iff_exists.mp h1
-    by rw [(hs.ub i).e hb]; rfl
+    Option.isSome_iff_exists.mpr ⟨b, hs.ub i .host _ _ hb⟩
   cases hω : (oω.e v).isSome with
   | true =>
     rw [selectF_admit hω] at h
@@ -218,13 +209,13 @@ theorem selectF_of_mem : ∀ {os : List (Codec V A M)} {v : V} {o : Codec V A M}
     under the obligation any admitter's answer is the answer. -/
 theorem selectF_mono_list {os : List (Codec V A M)} {g : Codec V A M → Codec V A M}
     {v : V} {a : A}
-    (hap : ∀ o ∈ os, Codec.Approx o (g o))
+    (hap : ∀ o ∈ os, Sub o (g o))
     (hc : ConfluentAt (os.map g) v)
     (h : selectF os v = some a) : selectF (os.map g) v = some a := by
   obtain ⟨o, ho, -, hoe⟩ := selectF_mem h
   have hmem : g o ∈ os.map g := List.mem_map_of_mem ho
-  rw [selectF_of_mem hc hmem (by rw [(hap o ho).e hoe]; rfl)]
-  exact (hap o ho).e hoe
+  rw [selectF_of_mem hc hmem (Option.isSome_iff_exists.mpr ⟨a, hap o ho .host _ _ hoe⟩)]
+  exact hap o ho .host _ _ hoe
 
 /-- **Continuity, in general — and it does need the obligation at each stage.** See the note
     above: `selectF_continuous` escaped it by putting the growing option first. -/
@@ -287,24 +278,26 @@ theorem Compat.e_agree {c d : Codec V A M} (h : Compat c d) (hc : LawfulCore mem
   have := hd a v hp
   rw [hb] at this; exact Option.some.inj this
 
-/-- **A union writes what any option writes**, over pairwise compatible, canonical options. -/
-theorem altCodec_e_of_mem {os : List (Codec V A M)} {μA : Option M}
+/-- **A union sends what any option sends**, over lawful, pairwise compatible options. `Compat`
+    is stated at the read, so the write and the read take two proofs: the write reads back
+    through the canonical reads of the first writer. -/
+theorem altCodec_of_mem {os : List (Codec V A M)} {μA : Option M}
     (hl : ∀ o ∈ os, Lawful member o)
-    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o')
-    {o v a} (ho : o ∈ os) (he : o.e v = some a) : (altCodec os μA).e v = some a := by
-  obtain ⟨o', hf⟩ := find?_attempt_V ho he
-  have ho' := List.mem_of_find?_eq_some hf
-  obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find?_V hf)
-  rw [(hC o ho o' ho').e_agree (hl o ho).core (fun _ _ hp => (hl o' ho').canon hp) he hb] at hb
-  exact altCodec_e.mpr ⟨o', hf, hb⟩
-
-/-- **A union reads what any option reads**, over pairwise compatible options. -/
-theorem altCodec_p_of_mem {os : List (Codec V A M)} {μA : Option M}
-    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o')
-    {o a v} (ho : o ∈ os) (hp : o.p a = some v) : (altCodec os μA).p a = some v := by
-  obtain ⟨o', hf⟩ := find?_attempt_A ho hp
-  have ho' := List.mem_of_find?_eq_some hf
-  exact altCodec_p.mpr ⟨o', hf, hC o ho o' ho' _ _ hp (Or.inl (acts_of_find?_A hf))⟩
+    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o') {c : Codec V A M} (hc : c ∈ os) :
+    ∀ (o : Orient) {x : Side V A o.c} {y : Side V A o.s},
+      c.f o x = some y → (altCodec os μA).f o x = some y :=
+  Orient.both
+    (fun {v a} he => by
+      obtain ⟨o', hf⟩ := find?_attempt_V hc he
+      have ho' := List.mem_of_find?_eq_some hf
+      obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find?_V hf)
+      rw [(hC c hc o' ho').e_agree (hl c hc).core (fun _ _ hp => (hl o' ho').canon hp) he hb]
+        at hb
+      exact altCodec_f.mpr ⟨o', hf, hb⟩)
+    (fun {a v} hp => by
+      obtain ⟨o', hf⟩ := find?_attempt_A hc hp
+      have ho' := List.mem_of_find?_eq_some hf
+      exact altCodec_f.mpr ⟨o', hf, hC c hc o' ho' _ _ hp (Or.inl (acts_of_find?_A hf))⟩)
 
 /-- The sum's core laws. Compatibility is what makes them hold: the option that reads the
     attribute of a write reads the value back, whichever option wrote. -/
@@ -314,38 +307,33 @@ theorem lawfulCore_altCodec {os : List (Codec V A M)} {μA : Option M}
     (hW : ∀ m, μA = some m → ∀ o ∈ os, ∀ t a, o.e t = some a → member a = m) :
     LawfulCore member (altCodec os μA) where
   retract he := by
-    obtain ⟨o, hf, hoe⟩ := altCodec_e.mp he
-    have ho := List.mem_of_find?_eq_some hf
+    obtain ⟨o, ho, -, hoe⟩ := altCodec_admits he
     have hop := (h o ho).retract hoe
     obtain ⟨o', hf'⟩ := find?_attempt_A ho hop
     have ho' := List.mem_of_find?_eq_some hf'
-    exact altCodec_p.mpr ⟨o', hf', hC o ho o' ho' _ _ hop (Or.inl (acts_of_find?_A hf'))⟩
+    exact altCodec_f.mpr ⟨o', hf', hC o ho o' ho' _ _ hop (Or.inl (acts_of_find?_A hf'))⟩
   canon hp := by
-    obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
-    have ho := List.mem_of_find?_eq_some hf
+    obtain ⟨o, ho, -, hop⟩ := altCodec_admits hp
     obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((h o ho).canon hop)
     obtain ⟨o', hf'⟩ := find?_attempt_V ho ha'
     obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find?_V hf')
-    exact Option.isSome_iff_exists.mpr ⟨b, altCodec_e.mpr ⟨o', hf', hb⟩⟩
+    exact Option.isSome_iff_exists.mpr ⟨b, altCodec_f.mpr ⟨o', hf', hb⟩⟩
   writes := by
     intro μ hμ t a he
-    obtain ⟨o, hf, hoe⟩ := altCodec_e.mp he
-    exact hW μ hμ o (List.mem_of_find?_eq_some hf) t a hoe
+    obtain ⟨o, ho, -, hoe⟩ := altCodec_admits he
+    exact hW μ hμ o ho t a hoe
 
-/-- …and canonical reads: the option that read `a` as `t` writes `t` at `a`, and compatibility
-    makes the option that the union writes through agree. -/
+/-- …and the laws: the option that sends the input inverts the output, and the union sends
+    what any option sends. One proof serves each orientation. -/
 theorem lawful_altCodec {os : List (Codec V A M)} {μA : Option M}
     (h : ∀ o ∈ os, Lawful member o)
     (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o')
     (hW : ∀ m, μA = some m → ∀ o ∈ os, ∀ t a, o.e t = some a → member a = m) :
-    Lawful member (altCodec os μA) :=
-  .ofRC (lawfulCore_altCodec (fun o ho => (h o ho).core) hC hW).retract
-    (by
-      intro a t hp
-      obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
-      have ho := List.mem_of_find?_eq_some hf
-      exact altCodec_e_of_mem h hC ho ((h o ho).canon hop))
-    (lawfulCore_altCodec (fun o ho => (h o ho).core) hC hW).writes
+    Lawful member (altCodec os μA) where
+  inv hxy :=
+    let ⟨c, hc, _, hcy⟩ := altCodec_admits hxy
+    altCodec_of_mem h hC hc _ ((h c hc).inv hcy)
+  writes hμ _ _ he := let ⟨c, hc, _, hce⟩ := altCodec_admits he; hW _ hμ c hc _ _ hce
 
 /-- **Exclusive admission gives compatibility.** Where the option that admits an input is the
     only one, the other option never acts where the first reads. -/
@@ -463,22 +451,16 @@ theorem altCodec_perm {os os' : List (Codec V A M)} (h : os.Perm os') (μA : Opt
   have hl' : ∀ o ∈ os', Lawful member o := fun o ho => hl o ((m o).mpr ho)
   have hC' : ∀ o ∈ os', ∀ o' ∈ os', Compat o o' :=
     fun o ho o' ho' => hC o ((m o).mpr ho) o' ((m o').mpr ho')
-  refine Codec.ext ?_ rfl ?_ ?_
+  have hf : ∀ (o : Orient) x, (altCodec os μA).f o x = (altCodec os' μA).f o x := fun o x =>
+    option_eq_of_some_iff fun b => ⟨fun h => ?_, fun h => ?_⟩
+  refine Codec.ext ?_ rfl (funext (hf .host)) (funext (hf .dual))
   · funext v
     exact propext ⟨fun ⟨o, ho, hT⟩ => ⟨o, (m o).mp ho, hT⟩,
       fun ⟨o, ho, hT⟩ => ⟨o, (m o).mpr ho, hT⟩⟩
-  · funext v
-    refine option_eq_of_some_iff fun b => ⟨fun he => ?_, fun he => ?_⟩
-    · obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
-      exact altCodec_e_of_mem hl' hC' ((m o).mp ho) hoe
-    · obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
-      exact altCodec_e_of_mem hl hC ((m o).mpr ho) hoe
-  · funext a
-    refine option_eq_of_some_iff fun b => ⟨fun hp => ?_, fun hp => ?_⟩
-    · obtain ⟨o, ho, -, hop⟩ := altCodec_p_admits hp
-      exact altCodec_p_of_mem hC' ((m o).mp ho) hop
-    · obtain ⟨o, ho, -, hop⟩ := altCodec_p_admits hp
-      exact altCodec_p_of_mem hC ((m o).mpr ho) hop
+  · obtain ⟨c, hc, -, hcb⟩ := altCodec_admits h
+    exact altCodec_of_mem hl' hC' ((m c).mp hc) o hcb
+  · obtain ⟨c, hc, -, hcb⟩ := altCodec_admits h
+    exact altCodec_of_mem hl hC ((m c).mpr hc) o hcb
 
 /-- The row as §6 states it, in `≡`: `Codec.Equiv.refl` transported along the equality. -/
 theorem equiv_altCodec_perm {os os' : List (Codec V A M)} (h : os.Perm os') (μA : Option M)
@@ -535,11 +517,11 @@ theorem equiv_restrict_meet (c : Codec V A M) (q q' : V → Bool) :
       simp only [Bool.and_eq_true] at hqq
       exact ⟨⟨hT, hqq.1⟩, hqq.2⟩
   · intro v a a' h h'
-    obtain ⟨-, hin⟩ := restrict_e.mp h
-    exact Option.some.inj ((restrict_e.mp hin).2.symm.trans (restrict_e.mp h').2)
+    obtain ⟨-, hin, -⟩ := refine2_f.mp h
+    exact Option.some.inj ((refine2_f.mp hin).2.1.symm.trans (refine2_f.mp h').2.1)
   · intro a v v' h h'
-    obtain ⟨hin, -⟩ := restrict_p.mp h
-    exact Option.some.inj ((restrict_p.mp hin).1.symm.trans (restrict_p.mp h').1)
+    obtain ⟨-, hin, -⟩ := refine2_f.mp h
+    exact Option.some.inj ((refine2_f.mp hin).2.1.symm.trans (refine2_f.mp h').2.1)
 
 /-- §6: `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. A refinement admitting everything the codec
     holds is no refinement — and note the premise needed is only that `q` agrees with `T`,
@@ -548,8 +530,8 @@ theorem equiv_restrict_meet (c : Codec V A M) (q q' : V → Bool) :
 theorem equiv_restrict_full (c : Codec V A M) (q : V → Bool)
     (hq : ∀ v, c.T v ↔ q v = true) : Codec.Equiv (c.restrict q) c := by
   refine ⟨fun v => ⟨fun h => h.1, fun h => ⟨h, (hq v).mp h⟩⟩, rfl, ?_, ?_⟩
-  · exact fun h h' => Option.some.inj ((restrict_e.mp h).2.symm.trans h')
-  · exact fun h h' => Option.some.inj ((restrict_p.mp h).1.symm.trans h')
+  · exact fun h h' => Option.some.inj ((refine2_f.mp h).2.1.symm.trans h')
+  · exact fun h h' => Option.some.inj ((refine2_f.mp h).2.1.symm.trans h')
 
 /-! ### `alternate reader` with its own reading -/
 
@@ -594,12 +576,12 @@ theorem equiv_altCodec_single (o : Codec V A M) :
       · exact absurd hx' (by simp)
     · exact fun h => ⟨o, List.mem_cons_self, h⟩
   · intro v a a' h h'
-    obtain ⟨x, hf, hxe⟩ := altCodec_e.mp h
-    obtain rfl : x = o := by simpa using List.mem_of_find?_eq_some hf
+    obtain ⟨x, hx, -, hxe⟩ := altCodec_admits h
+    obtain rfl : x = o := by simpa using hx
     exact Option.some.inj (hxe.symm.trans h')
   · intro a v v' h h'
-    obtain ⟨x, hf, hxp⟩ := altCodec_p.mp h
-    obtain rfl : x = o := by simpa using List.mem_of_find?_eq_some hf
+    obtain ⟨x, hx, -, hxp⟩ := altCodec_admits h
+    obtain rfl : x = o := by simpa using hx
     exact Option.some.inj (hxp.symm.trans h')
 
 /-! ### The codec wrappers preserve the member -/
@@ -627,20 +609,15 @@ theorem select_cons {X Y : Type} (o : Codec V A M) (os : List (Codec V A M))
     select (o :: os) run x = if (run o x).isSome then run o x else select os run x := by
   unfold select; cases h : (run o x).isSome <;> simp [List.find?, h]
 
-theorem altCodec_nest_e (o₁ o₂ o₃ : Codec V A M) (μ μ' μf : Option M) (v : V) :
-    (altCodec [o₁, (altCodec [o₂, o₃] μ')] μ).e v = (altCodec [o₁, o₂, o₃] μf).e v := by
-  show select _ _ v = select _ _ v
+/-- A nested union sends as the flat union, at each orientation. -/
+theorem altCodec_nest (o₁ o₂ o₃ : Codec V A M) (μ μ' μf : Option M) {o : Orient}
+    (x : Side V A o.c) :
+    (altCodec [o₁, (altCodec [o₂, o₃] μ')] μ).f o x = (altCodec [o₁, o₂, o₃] μf).f o x := by
+  show select _ _ x = select _ _ x
   rw [select_cons, select_cons, select_cons, select_nil_eq]
-  show (if _ then _ else if ((select [o₂, o₃] (·.e) v).isSome) then
-    select [o₂, o₃] (·.e) v else none) = _
-  cases select [o₂, o₃] (·.e) v <;> simp
-
-theorem altCodec_nest_p (o₁ o₂ o₃ : Codec V A M) (μ μ' μf : Option M) (a : A) :
-    (altCodec [o₁, (altCodec [o₂, o₃] μ')] μ).p a = (altCodec [o₁, o₂, o₃] μf).p a := by
-  have r3 := (List.Forall₂.cons (R_conv o₂) (.cons (R_conv o₃) .nil))
-  rw [← (altCodec_R none μ (.cons (R_conv o₁) (.cons (altCodec_R none μ' r3) .nil))).1,
-    ← (altCodec_R none μf (.cons (R_conv o₁) r3)).1]
-  exact altCodec_nest_e _ _ _ none none none a
+  show (if _ then _ else if ((select [o₂, o₃] (·.f o) x).isSome) then
+    select [o₂, o₃] (·.f o) x else none) = _
+  cases select [o₂, o₃] (·.f o) x <;> simp
 
 /-- The held sets coincide. Nesting a union changes how it *resolves*, never what it
     holds — which is why this half needs no side condition at all. -/

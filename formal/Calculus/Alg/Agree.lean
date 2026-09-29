@@ -60,53 +60,33 @@ theorem agree_apart {o : Orient} {c d : Codec V A M}
   intro x y z hy hz; have := h x; rw [hy, hz] at this; exact nomatch this
 
 /-- A union agrees with a partner where each option does. -/
-theorem agreeS_alt_left {side : Bool} {os : List (Codec V A M)} {μ : Option M} {d : Codec V A M}
-    (h : ∀ o ∈ os, AgreeS side o d) : AgreeS side (altCodec os μ) d := by
-  cases side
-  · intro a t w ht hw
-    have ht' : select os (fun c => c.p) a = some t := ht
-    obtain ⟨o, ho, -, hot⟩ := select_admits ht'
-    exact (h o ho : Agree .dual o d) a t w hot hw
-  · intro v a b ha hb
-    have ha' : select os (fun c => c.e) v = some a := ha
-    obtain ⟨o, ho, -, hoa⟩ := select_admits ha'
-    exact (h o ho : Agree .host o d) v a b hoa hb
+theorem agree_alt_left {o : Orient} {os : List (Codec V A M)} {μ : Option M} {d : Codec V A M}
+    (h : ∀ c ∈ os, Agree o c d) : Agree o (altCodec os μ) d := fun x y z hy hz =>
+  let ⟨c, hc, _, hcy⟩ := altCodec_admits hy
+  h c hc x y z hcy hz
 
 /-- …and on the right. -/
-theorem agreeS_alt_right {side : Bool} {os : List (Codec V A M)} {μ : Option M} {c : Codec V A M}
-    (h : ∀ o ∈ os, AgreeS side c o) : AgreeS side c (altCodec os μ) := by
-  cases side
-  · intro a t w ht hw
-    have hw' : select os (fun c => c.p) a = some w := hw
-    obtain ⟨o, ho, -, how⟩ := select_admits hw'
-    exact (h o ho : Agree .dual c o) a t w ht how
-  · intro v a b ha hb
-    have hb' : select os (fun c => c.e) v = some b := hb
-    obtain ⟨o, ho, -, hob⟩ := select_admits hb'
-    exact (h o ho : Agree .host c o) v a b ha hob
+theorem agree_alt_right {o : Orient} {os : List (Codec V A M)} {μ : Option M} {c : Codec V A M}
+    (h : ∀ d ∈ os, Agree o c d) : Agree o c (altCodec os μ) := fun x y z hy hz =>
+  let ⟨d, hd, _, hdz⟩ := altCodec_admits hz
+  h d hd x y z hy hdz
 
 /-- **Two recursive codecs agree where their stages agree**: each input reads the stage of its
-    own depth on both sides. -/
-theorem agreeS_mu {side : Bool} {dV : V → Nat} {dA : A → Nat} {B B' : Codec V A M → Codec V A M}
-    (h : ∀ n, AgreeS side (muStage B n) (muStage B' n)) :
-    AgreeS side (muCodec dV dA B) (muCodec dV dA B') := by
-  cases side
-  · intro a t w ht hw; exact (h (dA a) : Agree .dual _ _) a t w ht hw
-  · intro v a b ha hb; exact (h (dV v) : Agree .host _ _) v a b ha hb
+    own depth, at each orientation. -/
+theorem agree_mu {o : Orient} {dV : V → Nat} {dA : A → Nat} {B B' : Codec V A M → Codec V A M}
+    (h : ∀ n, Agree o (muStage B n) (muStage B' n)) :
+    Agree o (muCodec dV dA B) (muCodec dV dA B') :=
+  fun x => h (Side.elim dV dA o.c x) x
 
 /-- …and a recursive codec agrees with a partner that every stage agrees with. -/
-theorem agreeS_mu_left {side : Bool} {dV : V → Nat} {dA : A → Nat} {B : Codec V A M → Codec V A M}
-    {d : Codec V A M} (h : ∀ n, AgreeS side (muStage B n) d) : AgreeS side (muCodec dV dA B) d := by
-  cases side
-  · intro a t w ht hw; exact (h (dA a) : Agree .dual _ _) a t w ht hw
-  · intro v a b ha hb; exact (h (dV v) : Agree .host _ _) v a b ha hb
+theorem agree_mu_left {o : Orient} {dV : V → Nat} {dA : A → Nat} {B : Codec V A M → Codec V A M}
+    {d : Codec V A M} (h : ∀ n, Agree o (muStage B n) d) : Agree o (muCodec dV dA B) d :=
+  fun x => h (Side.elim dV dA o.c x) x
 
 /-- …on the right. -/
-theorem agreeS_mu_right {side : Bool} {dV : V → Nat} {dA : A → Nat} {B : Codec V A M → Codec V A M}
-    {c : Codec V A M} (h : ∀ n, AgreeS side c (muStage B n)) : AgreeS side c (muCodec dV dA B) := by
-  cases side
-  · intro a t w ht hw; exact (h (dA a) : Agree .dual _ _) a t w ht hw
-  · intro v a b ha hb; exact (h (dV v) : Agree .host _ _) v a b ha hb
+theorem agree_mu_right {o : Orient} {dV : V → Nat} {dA : A → Nat} {B : Codec V A M → Codec V A M}
+    {c : Codec V A M} (h : ∀ n, Agree o c (muStage B n)) : Agree o c (muCodec dV dA B) :=
+  fun x => h (Side.elim dV dA o.c x) x
 
 /-- Two carried codecs over one prism pair agree where their payload pairs agree. -/
 theorem agreeE_carried {γ δ : Type} {pV : Ctor γ V} {pA : Ctor δ A} {μ₀ : M}

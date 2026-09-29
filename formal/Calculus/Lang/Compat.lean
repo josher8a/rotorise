@@ -335,7 +335,7 @@ theorem cmpR_sound [TopLaws S] {side : Bool} {X : S.C} {ρ : List S.C}
       rcases h with h | h
       · exact hfam _ _ _ _ _ h he
       · simp only [denote]
-        exact agreeS_alt_right (cmpRL_sound hfam os p top s ρ' h he)
+        exact agree_alt_right (cmpRL_sound hfam os p top s ρ' h he)
   | .refine y q _, p, top, s, ρ', h, he => by
       simp only [cmpR, Bool.or_eq_true] at h
       rcases h with h | h
@@ -347,7 +347,7 @@ theorem cmpR_sound [TopLaws S] {side : Bool} {X : S.C} {ρ : List S.C}
       rcases h with h | h
       · exact hfam _ _ _ _ _ h he
       · simp only [denote]
-        refine agreeS_mu_right fun n => ?_
+        refine agree_mu_right fun n => ?_
         cases n with
         | zero => exact agree_empty_right _ X
         | succ n =>
@@ -425,7 +425,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
       rcases h with h | h
       · exact cbase_sound ho h he
       · simp only [denote]
-        exact agreeS_alt_left (compatL_sound ho os side p top s y ρ ρ' h he)
+        exact agree_alt_left (compatL_sound ho os side p top s y ρ ρ' h he)
   | .mu b, side, p, top, s, y, ρ, ρ', h, he => by
       cases y with
       | mu b' =>
@@ -451,13 +451,13 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
               · exact compat_sound ho b false _ _ _ b' _ _ hP he'
               · exact compat_sound ho b true _ _ _ b' _ _ hE he'
           simp only [denote]
-          exact agreeS_mu fun n => hs n side
+          exact agree_mu fun n => hs n side
       | _ =>
         simp only [Term.compat, Bool.or_eq_true] at h
         rcases h with h | h
         · exact cbase_sound ho h he
         · simp only [denote]
-          refine agreeS_mu_left fun n => ?_
+          refine agree_mu_left fun n => ?_
           cases n with
           | zero => exact agree_empty_left _ _
           | succ n =>

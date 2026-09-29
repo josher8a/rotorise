@@ -315,10 +315,7 @@ theorem literalCodec_p_restrict (k : GroundKind) (x : k.Carrier) :
 theorem inL_of_literalCodec_e {k : GroundKind} {x : k.Carrier} {v a}
     (he : (literalCodec k x).e v = some a) : inL k x v = true := by
   rw [literalCodec_e_restrict] at he
-  simp only [Alg.Codec.restrict, Alg.Codec.ofEP_e] at he
-  split at he
-  · assumption
-  · exact absurd he (by simp)
+  exact (Alg.refine2_f.mp he).1
 
 /-- The member is the base's, and the base's is the index's. -/
 theorem literalCodec_μ (k : GroundKind) (x : k.Carrier) :

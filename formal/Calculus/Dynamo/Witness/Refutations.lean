@@ -172,7 +172,7 @@ theorem not_equiv_union_array :
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
   simp [Term.array, ← arrayCodec_eq_listCodec, denote_rows,
         altCodec, arrayCodec, literalCodec,
-        baseCodec, Alg.Codec.restrict, inL, stringCodec, HLit] at hv
+        baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, stringCodec, HLit] at hv
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
 

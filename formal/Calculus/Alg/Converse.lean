@@ -96,24 +96,7 @@ theorem held2_host {M₁ M₂ : Type} (c : Codec V A M) (o : Codec V A M₁) (oA
     (htop : ∀ a, (oA.p a).isSome = true) (f g : V → V) :
     held2 c o oA f g id id = (c.through f g).restrict fun v => (o.e v).isSome := by
   have : (fun a => (oA.p a).isSome) = fun _ => true := funext htop
-  rw [held2, this, adapt2_host, refine2_host]
-
-/-- The two-sided restriction keeps the laws, and owes nothing. -/
-theorem Lawful.refine2 {member : A → M} {c : Codec V A M} (hc : Lawful member c)
-    (qV : V → Bool) (qA : A → Bool) : Lawful member (refine2 c qV qA) :=
-  .ofRC
-    (fun he =>
-      let ⟨hq, he', hqa⟩ := refine2_e.mp he
-      refine2_p.mpr ⟨hqa, hc.retract he', hq⟩)
-    (fun hp =>
-      let ⟨hqa, hp', hq⟩ := refine2_p.mp hp
-      refine2_e.mpr ⟨hq, hc.canon hp', hqa⟩)
-    (fun hμ _ _ he => hc.writes hμ (refine2_e.mp he).2.1)
-
-/-- **A two-sided restriction is below the codec that it restricts.** -/
-theorem sub_refine2_self (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) :
-    Sub (refine2 c qV qA) c :=
-  .ofEP (fun _ _ h => (refine2_e.mp h).2.1) (fun _ _ h => (refine2_p.mp h).2.1)
+  rw [held2, this, adapt2_host]; rfl
 
 /-- A gate whose predicate admits the write is the write domain. -/
 theorem gate_eq_isSome {X Y N : Type} {c : Codec X Y N} {q : Y → Bool} {x : X}
@@ -167,19 +150,19 @@ theorem agreeS_held2 {side : Bool} {M₁ M₂ M₁' M₂' : Type} {c c' : Codec 
 theorem held2_e_dom {M₁ M₂ : Type} {c : Codec V A M} {oV : Codec V A M₁} {oA : Codec V A M₂}
     {fV gV : V → V} {hA kA : A → A} {v : V} {a : A}
     (h : (held2 c oV oA fV gV hA kA).e v = some a) : (oV.e v).isSome = true :=
-  (refine2_e.mp h).1
+  (refine2_f.mp h).1
 
 /-- …and reads only where its stored outer reads. -/
 theorem held2_p_domA {M₁ M₂ : Type} {c : Codec V A M} {oV : Codec V A M₁} {oA : Codec V A M₂}
     {fV gV : V → V} {hA kA : A → A} {a : A} {t : V}
     (h : (held2 c oV oA fV gV hA kA).p a = some t) : (oA.p a).isSome = true :=
-  (refine2_p.mp h).1
+  (refine2_f.mp h).1
 
 /-- …and, with no stored entry function, only where its inner codec reads. -/
 theorem held2_p_dom {M₁ M₂ : Type} {c : Codec V A M} {oV : Codec V A M₁} {oA : Codec V A M₂}
     {fV gV : V → V} {kA : A → A} {a : A} {t : V}
     (h : (held2 c oV oA fV gV id kA).p a = some t) : (c.p a).isSome = true := by
-  obtain ⟨w, hw, _⟩ := Option.map_eq_some_iff.mp (refine2_p.mp h).2.1
+  obtain ⟨w, hw, _⟩ := Option.map_eq_some_iff.mp (refine2_f.mp h).2.1
   rw [id] at hw
   rw [hw]; rfl
 
@@ -216,12 +199,6 @@ theorem obl2_host (member : A → M) (c : Codec V A M) (f g : V → V) :
     Obl2 member c f g id id ↔ IsoCancels c f g :=
   ⟨fun h => h.1, fun h => ⟨h, ⟨fun _ _ => rfl, fun _ _ => rfl⟩, fun _ _ _ => rfl⟩⟩
 
-/-- The two-sided restriction is on its carrier when the inner codec is. -/
-theorem carrier_refine2 {c : Codec V A M} (h : Carrier c) (qV : V → Bool) (qA : A → Bool) :
-    Carrier (refine2 c qV qA) where
-  domE he := let ⟨hq, he', _⟩ := refine2_e.mp he; ⟨h.domE he', hq⟩
-  ranP hp := let ⟨_, hp', hq⟩ := refine2_p.mp hp; ⟨h.ranP hp', hq⟩
-
 /-- The two-sided adapter is on its carrier when the inner codec is, and the caller pair cancels
     on the written values. -/
 theorem carrier_adapt2 {member : A → M} {c : Codec V A M} (hc : Carrier c)
@@ -233,13 +210,6 @@ theorem carrier_adapt2 {member : A → M} {c : Codec V A M} (hc : Carrier c)
     have hT : c.T w := hc.ranP hw
     rw [← hfg w (hlaw.canon hw)] at hT
     exact hT
-
-/-- The two-sided restriction keeps agreement below a depth. -/
-theorem agreeLe_refine2 {dV : V → Nat} {dA : A → Nat} {d : Nat} {c₁ c₂ : Codec V A M}
-    (h : AgreeLe dV dA d c₁ c₂) (qV : V → Bool) (qA : A → Bool) :
-    AgreeLe dV dA d (refine2 c₁ qV qA) (refine2 c₂ qV qA) :=
-  ⟨fun v hv => by simp only [refine2, Codec.ofEP_e, h.e v hv],
-    fun a ha => by simp only [refine2, Codec.ofEP_p, h.p a ha]⟩
 
 /-! ## The constructors that keep the converse
 

@@ -183,9 +183,11 @@ def Decides (t : Term) : Prop :=
 /-- A string `literal` decides, as §5 says. -/
 theorem decides_literalS : Decides α (.literal .string "A") :=
   ⟨.str "A", .str "B",
-   by simp [denote_rows, literalCodec, baseCodec, Alg.Codec.restrict, inL, stringCodec],
+   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL,
+     stringCodec],
    rfl,
-   by simp [denote_rows, literalCodec, baseCodec, Alg.Codec.restrict, inL, stringCodec]⟩
+   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL,
+     stringCodec]⟩
 
 /-- `string` does not, as §5 also says. -/
 theorem not_decides_string : ¬ Decides α .string := by
@@ -198,7 +200,7 @@ theorem not_decides_refine_top : ¬ Decides α (.refine .string (.closure qTop) 
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
   cases v <;> cases w <;>
-    simp_all [Alg.Codec.restrict, Pred.eval, stringCodec, qTop, Value.kind]
+    simp_all [Alg.restrict_e_def, Pred.eval, stringCodec, qTop, Value.kind]
 
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one: two `map`s differing in admission, so a row that answers `false` at every
@@ -251,11 +253,11 @@ theorem decides_held :
     Decides splitTable (.held .string .string .opaq [(.caller 0, false)] []) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
   · simp [denote_rows, Alg.Table.word, Alg.Table.letter, splitTable, Alg.Codec.through,
-      Alg.refine2, stringCodec, fSplit]
+      Alg.refine2_e_def, stringCodec, fSplit]
     have h : ((muCodec opaqStep).p (Attr.s "A")).isSome = true := rfl
     simp [h]
   · simp [denote_rows, Alg.Table.word, Alg.Table.letter, splitTable, Alg.Codec.through,
-      Alg.refine2, stringCodec, fSplit]
+      Alg.refine2_e_def, stringCodec, fSplit]
 
 
 /-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/

@@ -157,7 +157,7 @@ theorem decimalCodec_e_restrict : decimalCodec.e = (numberCodec.restrict isStore
   funext v; cases v with
   | num x =>
     cases hs : Numeral.Stored x.1 <;>
-      simp [decimalCodec, numberCodec, Alg.Codec.restrict, isStored, hs]
+      simp [decimalCodec, numberCodec, Alg.restrict_e_def, isStored, hs]
   | _ => rfl
 
 /-- …and on the reading half. -/
@@ -165,7 +165,7 @@ theorem decimalCodec_p_restrict : decimalCodec.p = (numberCodec.restrict isStore
   funext a; cases a with
   | n x =>
     cases hs : Numeral.Stored x.1 <;>
-      simp [decimalCodec, numberCodec, Alg.Codec.restrict, isStored, hs]
+      simp [decimalCodec, numberCodec, Alg.restrict_p_def, isStored, hs]
   | _ => rfl
 
 theorem carrier_decimalCodec : Carrier decimalCodec := by

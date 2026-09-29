@@ -47,7 +47,7 @@ true if a primitive's shape changes. Every one of them computes through the same
 definitions, so those are a local `simp` set for the section. -/
 
 section Unfoldings
-attribute [local simp] opaqStep opaqOptions altCodec select stringCodec booleanCodec
+attribute [local simp] opaqStep opaqOptions Alg.altCodec_f_def select stringCodec booleanCodec
   binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec
 
 /-- §3 `(opaque)`, write side at kind `set`: the wire member is computed from the elements (`setCodec`), which is why one option covers `SS`, `NS` and `BS`. -/
@@ -95,7 +95,7 @@ Kind-disjointness is the same argument — each attribute constructor is accepte
 of the eight. -/
 
 section UnfoldingsA
-attribute [local simp] opaqStep opaqOptions altCodec select stringCodec booleanCodec
+attribute [local simp] opaqStep opaqOptions Alg.altCodec_f_def select stringCodec booleanCodec
   binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec
 
 /-- §3 `(opaque)`, read side at member `SS` — one of the three members routing to the single `set` option. -/
@@ -154,10 +154,10 @@ theorem lawful_opaq : Lawful Ω :=
 theorem carrier_opaq : Carrier Ω := carrier_muCodec lawful_opaq
 
 /-- **The fixed point, write side**: `opaque` writes what one layer over `opaque` writes. -/
-theorem Ωe_fix (v : Value) : Ω.e v = (opaqStep Ω).e v := muCodec_e_fix contractive_opaqStep v
+theorem Ωe_fix (v : Value) : Ω.e v = (opaqStep Ω).e v := muCodec_fix contractive_opaqStep .host v
 
 /-- **The fixed point, read side.** -/
-theorem Ωp_fix (a : Attr) : Ω.p a = (opaqStep Ω).p a := muCodec_p_fix contractive_opaqStep a
+theorem Ωp_fix (a : Attr) : Ω.p a = (opaqStep Ω).p a := muCodec_fix contractive_opaqStep .dual a
 
 /-- `Ω` writes an array element by element, through `Ω` itself. -/
 theorem Ωe_arr (vs : List Value) : Ω.e (.arr vs) = (traverse Ω.e vs).map Attr.l := by

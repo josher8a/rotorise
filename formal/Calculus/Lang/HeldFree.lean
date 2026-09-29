@@ -25,17 +25,12 @@ variable {V A M : Type}
 theorem sub_trans {c d u : Codec V A M} (h : Sub c d) (h' : Sub d u) : Sub c u :=
   fun o x y hxy => h' o x y (h o x y hxy)
 
-/-- The empty codec is below every codec. -/
-theorem sub_empty {u : Codec V A M} : Sub Codec.empty u :=
-  fun _ _ _ h => nomatch h
-
 /-- A union of codecs below `u` is below `u`, because the selector returns the answer of one
     option. -/
 theorem sub_altCodec {os : List (Codec V A M)} {u : Codec V A M} (h : ∀ o ∈ os, Sub o u)
-    (μ : Option M) : Sub (altCodec os μ) u := by
-  refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
-  · obtain ⟨o, ho, -, he⟩ := select_admits he; exact (h o ho) .host _ _ he
-  · obtain ⟨o, ho, -, hp⟩ := select_admits hp; exact (h o ho) .dual _ _ hp
+    (μ : Option M) : Sub (altCodec os μ) u := fun o x y hxy =>
+  let ⟨c, hc, _, hcy⟩ := altCodec_admits hxy
+  h c hc o x y hcy
 
 /-- A zipped traversal whose every row codec is below `u` is a traversal of `u`. -/
 theorem forall₂_zip_e {u : Codec V A M} : ∀ (ds : List (Codec V A M)) (vs : List V) (as : List A),
@@ -197,7 +192,7 @@ theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
           exact sub_denoteIn b h (_ :: ρ) fun i => match i with
             | 0 => ih
             | i + 1 => henv i
-      exact .ofEP (fun v a he => hs _ .host v a he) (fun a v hp => hs _ .dual a v hp)
+      exact fun o x y h => hs _ o x y h
   | .held _ _ _ _ _, h, _, _ => nomatch h
   | .refine t _ _, h, ρ, henv =>
       sub_trans (sub_refine2_self _ _ _) (sub_denoteIn t h ρ henv)

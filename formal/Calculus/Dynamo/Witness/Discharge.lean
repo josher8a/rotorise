@@ -70,7 +70,8 @@ theorem lawful_json : Lawful (denote α jsonTerm) := soundness (α := α) typed_
 /-- **`jsonTerm` is a fixed point**: it writes what one layer over `jsonTerm` writes. -/
 theorem json_e_fix (v : Value) :
     (denote α jsonTerm).e v = (denote α (.union [.string, .array (.var 0)]) [denote α jsonTerm]).e v :=
-  muCodec_e_fix (Alg.contractive_body (b := (.union [.string, .array (.var 0)] : Term)) rfl []) v
+  muCodec_fix (Alg.contractive_body (b := (.union [.string, .array (.var 0)] : Term)) rfl [])
+    .host v
 
 /-- `jsonTerm` writes a nested array through itself, and refuses an element it does not hold. -/
 theorem json_vectors :
