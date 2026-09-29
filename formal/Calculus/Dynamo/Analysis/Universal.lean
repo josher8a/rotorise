@@ -184,15 +184,15 @@ theorem opaqA_total : ∀ a : Attr, AdmA α .opaq a = true
   -- `opaque` is a restriction of itself, so a wire set reads where each payload does
   | .ss S => by
       rw [AdmA_opaq_eq, Ωp_ss]
-      exact (setCodec_p_isSome_of_sub (c := Ω) ⟨fun _ _ h => h, fun _ _ h => h⟩ (.ss S)).mpr
+      exact (setCodec_p_isSome_of_sub (c := Ω) (fun _ _ _ h => h) (.ss S)).mpr
         fun _ _ => rfl
   | .ns S => by
       rw [AdmA_opaq_eq, Ωp_ns]
-      exact (setCodec_p_isSome_of_sub (c := Ω) ⟨fun _ _ h => h, fun _ _ h => h⟩ (.ns S)).mpr
+      exact (setCodec_p_isSome_of_sub (c := Ω) (fun _ _ _ h => h) (.ns S)).mpr
         fun _ _ => rfl
   | .bs S => by
       rw [AdmA_opaq_eq, Ωp_bs]
-      exact (setCodec_p_isSome_of_sub (c := Ω) ⟨fun _ _ h => h, fun _ _ h => h⟩ (.bs S)).mpr
+      exact (setCodec_p_isSome_of_sub (c := Ω) (fun _ _ _ h => h) (.bs S)).mpr
         fun _ _ => rfl
   | .l as => by
       rw [AdmA_opaq_l]

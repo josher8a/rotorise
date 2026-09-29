@@ -80,8 +80,8 @@ instance TopBound.op [TopLaws S] : TopBound S.op where
     have hR := denote_R (S := S) β' α' t (ρ' := []) (ρ := []) .nil
     have hT := readC_R S.o (Mean.top (B := S.sig))
     have hs := TopBound.sub_top (S := S) (α := β') (β := α') t hh hv []
-    exact ⟨fun v a h => by rw [hT.1]; rw [hR.1] at h; exact hs.2 v a h,
-      fun a v h => by rw [hT.2]; rw [hR.2] at h; exact hs.1 a v h⟩
+    exact .ofEP (fun v a h => by rw [hT.1]; rw [hR.1] at h; exact hs .dual v a h)
+      (fun a v h => by rw [hT.2]; rw [hR.2] at h; exact hs .host a v h)
 
 /-! ## Soundness, on the read side -/
 

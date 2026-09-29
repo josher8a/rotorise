@@ -176,7 +176,7 @@ theorem muCodec_p_fix (hB : Contractive dV dA B) (a : A) :
     at the larger of the two depths, and that stage is lawful. -/
 theorem lawful_muCodec (hB : Contractive dV dA B)
     (hs : ∀ n, Lawful member (muStage B n)) : Lawful member (muCodec dV dA B) := by
-  refine ⟨fun {v a} he => ?_, fun {a v} hp => ?_, fun hμ => nomatch hμ⟩
+  refine .ofRC (fun {v a} he => ?_) (fun {a v} hp => ?_) (fun hμ => nomatch hμ)
   · have hN := muStage_agree_le hV hA hB (Nat.le_max_left (dV v) (dA a))
     rw [muCodec_e, hN.e v le_rfl] at he
     rw [muCodec_p, (muStage_agree_le hV hA hB (Nat.le_max_right (dV v) (dA a))).p a le_rfl]

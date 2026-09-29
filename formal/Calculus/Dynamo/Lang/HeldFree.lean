@@ -47,34 +47,34 @@ theorem Ωp_null : Ω.p .null = some .null := rfl
 
 /-- `string` is a restriction of `Ω`. -/
 theorem sub_string : Sub stringCodec Ω :=
-  ⟨fun v a h => (by cases v <;> simp [stringCodec] at h; subst h; rfl),
-   fun a v h => (by cases a <;> simp [stringCodec] at h; subst h; rfl)⟩
+  .ofEP (fun v a h => (by cases v <;> simp [stringCodec] at h; subst h; rfl))
+    (fun a v h => (by cases a <;> simp [stringCodec] at h; subst h; rfl))
 /-- `number` is a restriction of `Ω`. -/
 theorem sub_number : Sub numberCodec Ω :=
-  ⟨fun v a h => (by cases v <;> simp [numberCodec] at h; subst h; rfl),
-   fun a v h => (by cases a <;> simp [numberCodec] at h; subst h; rfl)⟩
+  .ofEP (fun v a h => (by cases v <;> simp [numberCodec] at h; subst h; rfl))
+    (fun a v h => (by cases a <;> simp [numberCodec] at h; subst h; rfl))
 /-- `boolean` is a restriction of `Ω`. -/
 theorem sub_boolean : Sub booleanCodec Ω :=
-  ⟨fun v a h => (by cases v <;> simp [booleanCodec] at h; subst h; rfl),
-   fun a v h => (by cases a <;> simp [booleanCodec] at h; subst h; rfl)⟩
+  .ofEP (fun v a h => (by cases v <;> simp [booleanCodec] at h; subst h; rfl))
+    (fun a v h => (by cases a <;> simp [booleanCodec] at h; subst h; rfl))
 /-- `binary` is a restriction of `Ω`. -/
 theorem sub_binary : Sub binaryCodec Ω :=
-  ⟨fun v a h => (by cases v <;> simp [binaryCodec] at h; subst h; rfl),
-   fun a v h => (by cases a <;> simp [binaryCodec] at h; subst h; rfl)⟩
+  .ofEP (fun v a h => (by cases v <;> simp [binaryCodec] at h; subst h; rfl))
+    (fun a v h => (by cases a <;> simp [binaryCodec] at h; subst h; rfl))
 /-- `null` is a restriction of `Ω`. -/
 theorem sub_null : Sub nullCodec Ω :=
-  ⟨fun v a h => (by cases v <;> simp [nullCodec] at h; subst h; rfl),
-   fun a v h => (by cases a <;> simp [nullCodec] at h; subst h; rfl)⟩
+  .ofEP (fun v a h => (by cases v <;> simp [nullCodec] at h; subst h; rfl))
+    (fun a v h => (by cases a <;> simp [nullCodec] at h; subst h; rfl))
 
 /-- A restriction of a restriction of `Ω` is a restriction of `Ω`. -/
 theorem sub_restrict {c : Codec} (h : Sub c Ω) (q : Value → Bool) : Sub (c.restrict q) Ω := by
-  refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
+  refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
   · simp only [Alg.Codec.restrict, Alg.Codec.ofEP_e] at he; split at he
-    · exact h.1 _ _ he
+    · exact h .host _ _ he
     · exact nomatch he
   · simp only [Alg.Codec.restrict, Option.bind_eq_some_iff, Alg.Codec.ofEP_p] at hp
     obtain ⟨w, hw, hq⟩ := hp; split at hq
-    · cases hq; exact h.2 _ _ hw
+    · cases hq; exact h .dual _ _ hw
     · exact nomatch hq
 
 /-- Each ground base is a restriction of `Ω`. -/
@@ -91,7 +91,7 @@ theorem encSet_sub {α : Type} {c d : Codec} (h : Sub c d) {inj : α → Value} 
     {a : Attr} (he : encSet c inj S = some a) : encSet d inj S = some a := by
   rw [← encSet_congr (c := c) (fun x hx => by
     obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (encSet_elem he x hx)
-    rw [hy, h.1 _ _ hy])]
+    rw [hy, show d.e _ = _ from h .host _ _ hy])]
   exact he
 
 /-- `decSet` keeps an inclusion of graphs. -/
@@ -99,12 +99,12 @@ theorem decSet_sub {α : Type} {c d : Codec} (h : Sub c d) {inj : α → Attr} {
     {v : Value} (hp : decSet c inj S = some v) : decSet d inj S = some v := by
   rw [← decSet_congr (c := c) (fun x hx => by
     obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (decSet_elem hp x hx)
-    rw [hy, h.2 _ _ hy])]
+    rw [hy, show d.p _ = _ from h .dual _ _ hy])]
   exact hp
 
 /-- A set over a restriction of `Ω` is a restriction of `Ω`. -/
 theorem sub_setCodec {c : Codec} (h : Sub c Ω) : Sub (setCodec c) Ω := by
-  refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
+  refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
   · rcases setCodec_e_eq.mp he with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩
     · rw [Ωe_strSet]; exact encSet_sub h hS
     · rw [Ωe_numSet]; exact encSet_sub h hS
@@ -143,11 +143,11 @@ theorem sub_denote (t : Term) (h : HF t) : Sub (denote α t) Ω :=
 
 /-- **(W)**: a held-free term writes only what `opaque` writes. -/
 theorem confluence_W {t : Term} (h : HF t) {v a} (he : (denote α t).e v = some a) :
-    (denote α .opaq).e v = some a := (sub_denote t h).1 _ _ he
+    (denote α .opaq).e v = some a := sub_denote t h .host _ _ he
 
 /-- **(R)**: a held-free term reads only what `opaque` reads. -/
 theorem confluence_R {t : Term} (h : HF t) {a v} (hp : (denote α t).p a = some v) :
-    (denote α .opaq).p a = some v := (sub_denote t h).2 _ _ hp
+    (denote α .opaq).p a = some v := sub_denote t h .dual _ _ hp
 
 
 
@@ -168,17 +168,17 @@ these. -/
 /-- A restriction of `Ω` writes a string as `S`. -/
 theorem sub_e_str {c : Codec} (h : Sub c Ω) {s : String} {a : Attr}
     (he : c.e (.str s) = some a) : a = .s s := by
-  have := h.1 _ _ he; rw [Ωe_str] at this; exact (Option.some.inj this).symm
+  have : Ω.e (.str s) = some a := h .host _ _ he; rw [Ωe_str] at this; exact (Option.some.inj this).symm
 
 /-- …a number as `N`. -/
 theorem sub_e_num {c : Codec} (h : Sub c Ω) {x : WFNumeral} {a : Attr}
     (he : c.e (.num x) = some a) : a = .n x := by
-  have := h.1 _ _ he; rw [Ωe_num] at this; exact (Option.some.inj this).symm
+  have : Ω.e (.num x) = some a := h .host _ _ he; rw [Ωe_num] at this; exact (Option.some.inj this).symm
 
 /-- …a byte string as `B`. -/
 theorem sub_e_bin {c : Codec} (h : Sub c Ω) {b : Bytes} {a : Attr}
     (he : c.e (.bin b) = some a) : a = .b b := by
-  have := h.1 _ _ he; rw [Ωe_bin] at this; exact (Option.some.inj this).symm
+  have : Ω.e (.bin b) = some a := h .host _ _ he; rw [Ωe_bin] at this; exact (Option.some.inj this).symm
 
 /-- **Over a restriction of `Ω`, a set writes exactly where every element does.** -/
 theorem setCodec_e_isSome_of_sub {c : Codec} (h : Sub c Ω) (v : Value) :
@@ -235,17 +235,17 @@ theorem setCodec_e_isSome_of_sub {c : Codec} (h : Sub c Ω) (v : Value) :
 /-- A restriction of `Ω` reads `S` as a string. -/
 theorem sub_p_s {c : Codec} (h : Sub c Ω) {s : String} {v : Value}
     (hp : c.p (.s s) = some v) : v = .str s := by
-  have := h.2 _ _ hp; rw [Ωp_s] at this; exact (Option.some.inj this).symm
+  have : Ω.p (.s s) = some v := h .dual _ _ hp; rw [Ωp_s] at this; exact (Option.some.inj this).symm
 
 /-- …`N` as a number. -/
 theorem sub_p_n {c : Codec} (h : Sub c Ω) {x : WFNumeral} {v : Value}
     (hp : c.p (.n x) = some v) : v = .num x := by
-  have := h.2 _ _ hp; rw [Ωp_n] at this; exact (Option.some.inj this).symm
+  have : Ω.p (.n x) = some v := h .dual _ _ hp; rw [Ωp_n] at this; exact (Option.some.inj this).symm
 
 /-- …`B` as a byte string. -/
 theorem sub_p_b {c : Codec} (h : Sub c Ω) {b : Bytes} {v : Value}
     (hp : c.p (.b b) = some v) : v = .bin b := by
-  have := h.2 _ _ hp; rw [Ωp_b] at this; exact (Option.some.inj this).symm
+  have : Ω.p (.b b) = some v := h .dual _ _ hp; rw [Ωp_b] at this; exact (Option.some.inj this).symm
 
 /-- **Over a restriction of `Ω`, a set reads exactly where every element does.** -/
 theorem setCodec_p_isSome_of_sub {c : Codec} (h : Sub c Ω) (a : Attr) :

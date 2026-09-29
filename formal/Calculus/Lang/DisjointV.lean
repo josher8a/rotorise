@@ -380,7 +380,7 @@ theorem predApart_soundS [Leaf S] [LeafMeet S] [TopBound S] {q : S.PredA} {ρ' :
           cases he : (denote α β y ρ').e v with
           | none => rfl
           | some a' =>
-            have := (TopBound.sub_top y hh hv ρ').1 v a' he
+            have : (Syn.top (S := S)).e v = some a' := TopBound.sub_top y hh hv ρ' .host v a' he
             rw [htop] at this; cases this
             exact hpm
         rw [hg]; simp
@@ -735,7 +735,7 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S
           cases hq : Syn.evalA (half S.o.s q qA) a with
           | false => simp [hq]
           | true =>
-            have htop := (TopBound.sub_top x hh hv ρ).1 w a he
+            have htop := TopBound.sub_top x hh hv ρ .host w a he
             rw [predApart_soundS (ρ' := ρ') y' hy w a htop hq]; simp
   | p, .union os, y, h, ρ, ρ', hp, v => by
       simp only [Term.disjoint] at h

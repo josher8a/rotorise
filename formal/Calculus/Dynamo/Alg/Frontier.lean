@@ -356,7 +356,7 @@ theorem set_canon {c : Codec} (h : Lawful c) :
 /-- **`setCodec` is lawful.** The member law comes from `set_writes`, and canonical reads from
     `set_canon`; neither needs the element codec's index. -/
 theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) :=
-  ⟨set_retract h.core, set_canon h, set_writes h.core⟩
+  .ofRC (set_retract h.core) (set_canon h) (set_writes h.core)
 
 
 /-! ### The keyed product

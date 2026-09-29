@@ -353,10 +353,10 @@ def cB : Codec :=
 def cMid : Codec :=
   Alg.Codec.ofEP (T := fun v => v = .null) (μ := none) (e := fun _ => none) (p := fun _ => none)
 
-theorem lawful_cA : Lawful cA where
-  retract := by intro t a he; cases t <;> simp_all [cA]; subst_vars; simp
-  canon := by
-    intro a t hp
+theorem lawful_cA : Lawful cA := by
+  refine .ofRC ?_ ?_ ?_
+  · intro t a he; cases t <;> simp_all [cA]; subst_vars; simp
+  · intro a t hp
     cases a with
     | s x =>
       simp only [cA, Alg.Codec.ofEP_p] at hp
@@ -364,12 +364,12 @@ theorem lawful_cA : Lawful cA where
       · next hx => cases hp; subst hx; rfl
       · exact nomatch hp
     | _ => simp [cA] at hp
-  writes := by intro μ hμ; exact nomatch hμ
+  · intro μ hμ; exact nomatch hμ
 
-theorem lawful_cB : Lawful cB where
-  retract := by intro t a he; cases t <;> simp_all [cB]; subst_vars; simp
-  canon := by
-    intro a t hp
+theorem lawful_cB : Lawful cB := by
+  refine .ofRC ?_ ?_ ?_
+  · intro t a he; cases t <;> simp_all [cB]; subst_vars; simp
+  · intro a t hp
     cases a with
     | s x =>
       simp only [cB, Alg.Codec.ofEP_p] at hp
@@ -377,10 +377,10 @@ theorem lawful_cB : Lawful cB where
       · next hx => cases hp; subst hx; rfl
       · exact nomatch hp
     | _ => simp [cB] at hp
-  writes := by intro μ hμ; exact nomatch hμ
+  · intro μ hμ; exact nomatch hμ
 
 theorem lawful_cMid : Lawful cMid := by
-  refine ⟨?_, ?_, ?_⟩ <;> intros <;> simp_all [cMid]
+  refine .ofRC ?_ ?_ ?_ <;> intros <;> simp_all [cMid]
 
 theorem carrier_cA : Carrier cA where
   domE := by intro v a he; cases v <;> simp_all [cA]

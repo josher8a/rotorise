@@ -262,17 +262,17 @@ theorem cbase_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [
   simp only [cbase, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
   rcases h with ((((((hx | hy) | ⟨⟨hs, hx⟩, hy⟩) | hd) | ⟨ht, ho'⟩) | hl) | hr)
   · cases x <;> simp only [Term.isNever, reduceCtorEq] at hx
-    exact agreeS_empty_left side _
+    exact agree_empty_left _ _
   · cases y <;> simp only [Term.isNever, reduceCtorEq] at hy
-    exact agreeS_empty_right side _
-  · exact agreeS_bound (sub_denoteIn x hx ρ (he.safeL hs)) (sub_denoteIn y hy ρ' (he.safeR hs))
+    exact agree_empty_right _ _
+  · exact agree_bound (sub_denoteIn x hx ρ (he.safeL hs)) (sub_denoteIn y hy ρ' (he.safeR hs))
   · cases side
-    · exact agreeP_apart (disjoint_domP hd ρ ρ')
-    · exact agreeE_apart (disjoint_domE hd ρ ρ')
+    · exact agree_apart (disjoint_domP hd ρ ρ')
+    · exact agree_apart (disjoint_domE hd ρ ρ')
   · obtain ⟨rfl, rfl⟩ := he.top ht
     cases side
-    · exact agreeP_apart (ho.p x y ho')
-    · exact agreeE_apart (ho.e x y ho')
+    · exact agree_apart (ho.p x y ho')
+    · exact agree_apart (ho.e x y ho')
   · cases x <;> simp only [heldSide, reduceCtorEq] at hl
     rename_i i P PA k kA
     cases side
@@ -281,18 +281,18 @@ theorem cbase_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [
       cases hk : halfK S.o.s k kA with
       | nil =>
         intro hl
-        refine agreeP_apart fun a => apart_of_imp (fun h1 => ?_) (disjoint_domP hl ρ ρ' a)
+        refine agree_apart fun a => apart_of_imp (fun h1 => ?_) (disjoint_domP hl ρ ρ' a)
         obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
         simp only [denote, hk] at ht
         exact held2_p_dom (c := denote α β i ρ) ht
       | cons _ _ =>
         intro hl
-        refine agreeP_apart fun a => apart_of_imp (fun h1 => ?_) (disjoint_domP hl ρ ρ' a)
+        refine agree_apart fun a => apart_of_imp (fun h1 => ?_) (disjoint_domP hl ρ ρ' a)
         obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
         rw [denote_half2]
         exact held2_p_domA ht
     · simp only [ite_true] at hl
-      refine agreeE_apart fun v => apart_of_imp (fun h1 => ?_) (disjoint_domE hl ρ ρ' v)
+      refine agree_apart fun v => apart_of_imp (fun h1 => ?_) (disjoint_domE hl ρ ρ' v)
       obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
       rw [denote_half2]
       exact held2_e_dom ht
@@ -304,18 +304,18 @@ theorem cbase_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [
       cases hk : halfK S.o.s k kA with
       | nil =>
         intro hr
-        refine agreeP_apart fun a => apart_of_imp' (fun h1 => ?_) (disjoint_domP hr ρ ρ' a)
+        refine agree_apart fun a => apart_of_imp' (fun h1 => ?_) (disjoint_domP hr ρ ρ' a)
         obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
         simp only [denote, hk] at ht
         exact held2_p_dom (c := denote α β i ρ') ht
       | cons _ _ =>
         intro hr
-        refine agreeP_apart fun a => apart_of_imp' (fun h1 => ?_) (disjoint_domP hr ρ ρ' a)
+        refine agree_apart fun a => apart_of_imp' (fun h1 => ?_) (disjoint_domP hr ρ ρ' a)
         obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
         rw [denote_half2]
         exact held2_p_domA ht
     · simp only [ite_true] at hr
-      refine agreeE_apart fun v => apart_of_imp' (fun h1 => ?_) (disjoint_domE hr ρ ρ' v)
+      refine agree_apart fun v => apart_of_imp' (fun h1 => ?_) (disjoint_domE hr ρ ρ' v)
       obtain ⟨t, ht⟩ := Option.isSome_iff_exists.mp h1
       rw [denote_half2]
       exact held2_e_dom ht
@@ -329,7 +329,7 @@ theorem cmpR_sound [TopLaws S] {side : Bool} {X : S.C} {ρ : List S.C}
       AgreeS side X (denote α β y' ρ')) :
     ∀ (y : Term S) (p : Pairing) (top s : Bool) (ρ' : List S.C), cmpR fam p top s y = true →
       CEnv p top s ρ ρ' → AgreeS side X (denote α β y ρ')
-  | .never, _, _, _, _, _, _ => agreeS_empty_right side X
+  | .never, _, _, _, _, _, _ => agree_empty_right _ X
   | .union os, p, top, s, ρ', h, he => by
       simp only [cmpR, Bool.or_eq_true] at h
       rcases h with h | h
@@ -341,7 +341,7 @@ theorem cmpR_sound [TopLaws S] {side : Bool} {X : S.C} {ρ : List S.C}
       rcases h with h | h
       · exact hfam _ _ _ _ _ h he
       · simp only [denote]
-        exact agreeS_sub_right (sub_refine2_self _ _ _) (cmpR_sound hfam y p top s ρ' h he)
+        exact agree_sub_right (sub_refine2_self _ _ _) (cmpR_sound hfam y p top s ρ' h he)
   | .mu b, p, top, s, ρ', h, he => by
       simp only [cmpR, Bool.or_eq_true] at h
       rcases h with h | h
@@ -349,7 +349,7 @@ theorem cmpR_sound [TopLaws S] {side : Bool} {X : S.C} {ρ : List S.C}
       · simp only [denote]
         refine agreeS_mu_right fun n => ?_
         cases n with
-        | zero => exact agreeS_empty_right side X
+        | zero => exact agree_empty_right _ X
         | succ n =>
           exact cmpR_sound hfam b (shiftR p) false (s && !hasHeld b) (_ :: ρ') h
             (he.right _ (fun hs => by simp only [Bool.and_eq_true] at hs; exact hs.1)
@@ -413,13 +413,13 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
     ∀ (x : Term S) (side : Bool) (p : Pairing) (top s : Bool) (y : Term S) (ρ ρ' : List S.C),
       Term.compat o side p top s x y = true → CEnv p top s ρ ρ' →
         AgreeS side (denote α β x ρ) (denote α β y ρ')
-  | .never, side, _, _, _, _, _, _, _, _ => agreeS_empty_left side _
+  | .never, side, _, _, _, _, _, _, _, _ => agree_empty_left _ _
   | .refine x q _, side, p, top, s, y, ρ, ρ', h, he => by
       simp only [Term.compat, Bool.or_eq_true] at h
       rcases h with h | h
       · exact cbase_sound ho h he
       · simp only [denote]
-        exact agreeS_sub_left (sub_refine2_self _ _ _) (compat_sound ho x side p top s y ρ ρ' h he)
+        exact agree_sub_left (sub_refine2_self _ _ _) (compat_sound ho x side p top s y ρ ρ' h he)
   | .union os, side, p, top, s, y, ρ, ρ', h, he => by
       simp only [Term.compat, Bool.or_eq_true] at h
       rcases h with h | h
@@ -436,7 +436,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
               (muStage (fun c => denote α β b' (c :: ρ')) n)) := by
             intro n
             induction n with
-            | zero => exact fun sd => agreeS_empty_left sd _
+            | zero => exact fun sd => agree_empty_left _ _
             | succ n ih =>
               have he' := he.mu (s' := s && !hasHeld b && !hasHeld b') _ _ ih
                 (fun hs => by simp only [Bool.and_eq_true] at hs; exact hs.1.1)
@@ -459,7 +459,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
         · simp only [denote]
           refine agreeS_mu_left fun n => ?_
           cases n with
-          | zero => exact agreeS_empty_left side _
+          | zero => exact agree_empty_left _ _
           | succ n =>
             refine compat_sound ho b side (shiftL p) false (s && !hasHeld b) _ _ ρ' h
               (he.left _ (fun hs => by simp only [Bool.and_eq_true] at hs; exact hs.1)
@@ -506,7 +506,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
         have ih := compat_sound ho a side p' t' s' a' ρ ρ'' hf he'
         simp only [denote]
         cases Syn.set (S := S) with
-        | none => exact agreeS_empty_left side _
+        | none => exact agree_empty_left _ _
         | some L => exact L.agreeS ih
   | .list pre sp suf, side, p, top, s, y, ρ, ρ', h, he => by
       simp only [Term.compat] at h
@@ -543,7 +543,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
           (fun f hf' y hy => hall y hy f (by simp [hf'])) he'
         simp only [denote]
         cases Syn.list (S := S) with
-        | none => exact agreeS_empty_left side _
+        | none => exact agree_empty_left _ _
         | some L =>
           refine agreeS_list fun c hc d hd => ?_
           obtain ⟨y, hy, rfl⟩ := hr d hd
@@ -565,7 +565,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
         obtain ⟨hall, hw⟩ := hf
         simp only [denote, bodySem]
         cases Syn.map (S := S) with
-        | none => exact agreeS_empty_left side _
+        | none => exact agree_empty_left _ _
         | some F =>
           refine agreeS_object (wildSem_ne_drop w) (wildSem_ne_drop w') fun k c₁ c₂ h1 h2 => ?_
           rcases entry_cases h1 with ⟨hk, rfl⟩ | ⟨hk, hc₁⟩ <;>
@@ -662,7 +662,7 @@ end
 theorem compatPair_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) {x y : Term S}
     (h : compatPair o x y = true) :
-    AgreeE (denote α β x) (denote α β y) ∧ AgreeP (denote α β x) (denote α β y) := by
+    Agree .host (denote α β x) (denote α β y) ∧ Agree .dual (denote α β x) (denote α β y) := by
   simp only [compatPair, Bool.and_eq_true] at h
   have he : CEnv pair0 true true ([] : List S.C) [] :=
     ⟨fun _ _ _ hp => (nomatch hp), fun _ _ => sub_empty, fun _ _ => sub_empty, fun _ => ⟨rfl, rfl⟩⟩
