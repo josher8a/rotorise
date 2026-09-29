@@ -138,8 +138,8 @@ variable [PrimAdmA S] {ρ ρ' : List S.C}
 instance op : Shapes S.op where
   former := formerA (S := S)
   formerA := former (S := S)
-  prim g v h := primA (S := S) g v (by rwa [(readC_R S.o (Mean.ground g)).1] at h)
-  primA g a h := prim (S := S) g a (by rwa [(readC_R S.o (Mean.ground g)).2] at h)
+  prim g v h := primA (S := S) g v (by rwa [(readC_R (Car := Mean.Car) S.o (Mean.ground g)).1] at h)
+  primA g a h := prim (S := S) g a (by rwa [(readC_R (Car := Mean.Car) S.o (Mean.ground g)).2] at h)
   set L' hL' c a h := by
     obtain ⟨L, hL, rfl⟩ := Option.map_eq_some_iff.mp hL'
     have hR := setAt_R L Mean.d_pos S.o (R_convU (S := S.op) c).symm

@@ -102,8 +102,8 @@ mutual
     environment of converses. -/
 theorem denote_R : ∀ (t : Term S) {ρ' : List S.op.C} {ρ : List S.C},
     List.Forall₂ R ρ' ρ → R (denote β α t ρ') (denote α β t ρ)
-  | .prim g, _, _, _ => readC_R S.o (Mean.ground g)
-  | .opaq, _, _, _ => readC_R S.o Mean.top
+  | .prim g, _, _, _ => readC_R (Car := Mean.Car) S.o (Mean.ground g)
+  | .opaq, _, _, _ => readC_R (Car := Mean.Car) S.o Mean.top
   | .never, _, _, _ => ⟨rfl, rfl⟩
   | .var i, _, _, h => envAt_R h i
   | .set t, _, _, h => by
