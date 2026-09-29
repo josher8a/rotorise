@@ -321,7 +321,7 @@ theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t → Sto
             (storedAdmitsL_mem hst.2.2 t' ht') w) vs
       | _ => simp [HList, Adm_rows]
     | @held t' I' μ' P PA k kA h' =>
-      have hg : Alg.gate (denote α t') (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v) =
+      have hg : Alg.gate (denote α t').e (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v) =
           Adm α t' ((α.word k).1 v) :=
         (Alg.gate_eq_isSome fun a ha => hst.2 _ a ha).trans (Alg.Adm_eq_isSome t' [] _).symm
       simp only [Adm_held, hg, Bool.and_eq_true, typed_T_adm h' hob.1 hst.1 ((α.word k).1 v),

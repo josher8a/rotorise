@@ -98,32 +98,33 @@ theorem held2_host {M₁ M₂ : Type} (c : Codec V A M) (o : Codec V A M₁) (oA
   have : (fun a => (oA.p a).isSome) = fun _ => true := funext htop
   rw [held2, this, adapt2_host]; rfl
 
-/-- A gate whose predicate admits the write is the write domain. -/
-theorem gate_eq_isSome {X Y N : Type} {c : Codec X Y N} {q : Y → Bool} {x : X}
-    (h : ∀ y, c.e x = some y → q y = true) : gate c q x = (c.e x).isSome := by
+/-- A gate whose predicate admits every output is the domain of the map. -/
+theorem gate_eq_isSome {X Y : Type} {m : X → Option Y} {q : Y → Bool} {x : X}
+    (h : ∀ y, m x = some y → q y = true) : gate m q x = (m x).isSome := by
   unfold gate
-  cases hx : c.e x with
+  cases hx : m x with
   | none => rfl
   | some y => exact h y hx
 
-/-- A gate that passes sees a write. -/
-theorem gate_isSome {X Y N : Type} {c : Codec X Y N} {q : Y → Bool} {x : X}
-    (h : gate c q x = true) : (c.e x).isSome = true := by
+/-- A gate that passes sees an output. -/
+theorem gate_isSome {X Y : Type} {m : X → Option Y} {q : Y → Bool} {x : X}
+    (h : gate m q x = true) : (m x).isSome = true := by
   revert h
   unfold gate
-  cases c.e x <;> simp
+  cases m x <;> simp
 
-/-- The gate of the two-sided adapter is the gate of its inner codec, through the two entry and
-    exit functions. -/
+/-- The gate of the write of the two-sided adapter is the gate of the write of its inner codec,
+    through the two entry and exit functions. -/
 theorem adapt2_gate (c : Codec V A M) (fV gV : V → V) (hA kA : A → A) (q : A → Bool) (v : V) :
-    gate (adapt2 c fV gV hA kA) q v = gate c (q ∘ kA) (fV v) := by
+    gate (adapt2 c fV gV hA kA).e q v = gate c.e (q ∘ kA) (fV v) := by
   simp only [gate, adapt2, Codec.ofEP_e]
   cases c.e (fV v) <;> rfl
 
-/-- The gate of the converse of the two-sided adapter, on the read side. -/
+/-- …and the gate of its read, on the read side. -/
 theorem adapt2_gateA (c : Codec V A M) (fV gV : V → V) (hA kA : A → A) (q : V → Bool) (a : A) :
-    gate (conv (adapt2 c fV gV hA kA)) q a = gate (conv c) (q ∘ gV) (hA a) :=
-  adapt2_gate (conv c) hA kA fV gV q a
+    gate (adapt2 c fV gV hA kA).p q a = gate c.p (q ∘ gV) (hA a) := by
+  simp only [gate, adapt2, Codec.ofEP_p]
+  cases c.p (hA a) <;> rfl
 
 /-- **One two-sided adapter over two agreeing inner codecs agrees.** -/
 theorem agreeS_adapt2 {side : Bool} {c c' : Codec V A M} {fV gV : V → V} {hA kA : A → A}
@@ -145,26 +146,6 @@ theorem agreeS_held2 {side : Bool} {M₁ M₂ M₁' M₂' : Type} {c c' : Codec 
     AgreeS side (held2 c oV oA fV gV hA kA) (held2 c' oV' oA' fV gV hA kA) :=
   agree_sub_left (sub_refine2_self _ _ _)
     (agree_sub_right (sub_refine2_self _ _ _) (agreeS_adapt2 h))
-
-/-- A `held` writes only where its caller outer writes. -/
-theorem held2_e_dom {M₁ M₂ : Type} {c : Codec V A M} {oV : Codec V A M₁} {oA : Codec V A M₂}
-    {fV gV : V → V} {hA kA : A → A} {v : V} {a : A}
-    (h : (held2 c oV oA fV gV hA kA).e v = some a) : (oV.e v).isSome = true :=
-  (refine2_f.mp h).1
-
-/-- …and reads only where its stored outer reads. -/
-theorem held2_p_domA {M₁ M₂ : Type} {c : Codec V A M} {oV : Codec V A M₁} {oA : Codec V A M₂}
-    {fV gV : V → V} {hA kA : A → A} {a : A} {t : V}
-    (h : (held2 c oV oA fV gV hA kA).p a = some t) : (oA.p a).isSome = true :=
-  (refine2_f.mp h).1
-
-/-- …and, with no stored entry function, only where its inner codec reads. -/
-theorem held2_p_dom {M₁ M₂ : Type} {c : Codec V A M} {oV : Codec V A M₁} {oA : Codec V A M₂}
-    {fV gV : V → V} {kA : A → A} {a : A} {t : V}
-    (h : (held2 c oV oA fV gV id kA).p a = some t) : (c.p a).isSome = true := by
-  obtain ⟨w, hw, _⟩ := Option.map_eq_some_iff.mp (refine2_f.mp h).2.1
-  rw [id] at hw
-  rw [hw]; rfl
 
 /-- The stored exit function keeps the member of every written attribute. -/
 def KeepsMember (member : A → M) (c : Codec V A M) (k : A → A) : Prop :=
@@ -318,6 +299,31 @@ theorem objectCodec_R {N' : Type} (mV : Ctor (MapOf V) V) (mA : Ctor (MapOf A) A
     cases hk with
     | none => exact .none
     | some hR => exact .some hR.symm
+
+/-- **The object codec at an orientation**: read the caller prism, pass the presence guard, run
+    each entry at the orientation, and build with the stored prism. The rest policy is not
+    `drop`, so the read keeps every name. -/
+theorem objectCodec_f (m : (s : Bool) → Ctor (MapOf (Side V A s)) (Side V A s)) (μM : M)
+    (sems : MapOf (FieldSem V A M)) {rest : RestSem V A M} (hd : rest ≠ .drop) :
+    ∀ (o : Orient) (x : Side V A o.c), (objectCodec (m false) (m true) μM sems rest).f o x =
+      (((m o.c).out x).bind fun q => if valPresentB sems q.1 = true then
+        (funImage fun k => (entryCodec sems (rcOf rest) k.1).bind fun c => c.f o (q.2 k)).map
+          (fun g => (⟨q.1, g⟩ : MapOf (Side V A o.s))) else none).map (m o.s).into :=
+  Orient.both (P := fun o => ∀ x, (objectCodec (m false) (m true) μM sems rest).f o x =
+      (((m o.c).out x).bind fun q => if valPresentB sems q.1 = true then
+        (funImage fun k => (entryCodec sems (rcOf rest) k.1).bind fun c => c.f o (q.2 k)).map
+          (fun g => (⟨q.1, g⟩ : MapOf (Side V A o.s))) else none).map (m o.s).into)
+    (fun _ => rfl)
+    (fun a => by
+      simp only [objectCodec, objectCodecCore, keepB_of_ne_drop hd, carriedCodec, Codec.ofEP_p]
+      congr 2; funext q
+      unfold objRead
+      rw [show reqPresentB sems q.1 = valPresentB sems q.1 from rfl]
+      cases valPresentB sems q.1
+      · rfl
+      · -- the multiset form: `Finset.filter_true_of_mem` reaches `Classical.choice`
+        refine funImage_map_mk (Finset.eq_of_veq (Multiset.filter_eq_self.mpr fun _ _ => rfl)) _ _
+          fun _ _ _ => rfl)
 
 /-- `Option.map` keeps a relation that the two functions carry. -/
 theorem rel_map {α β α' β' : Type} {r : α → β → Prop} {r' : α' → β' → Prop} {f : α → α'}

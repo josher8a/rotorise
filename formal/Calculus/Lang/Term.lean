@@ -16,9 +16,10 @@ orientation, and the dual syntax flips the orientation. So the dual term type is
 The meaning `Mean B` holds a carrier at each absolute side, the member of the side `true`, the
 codec of each primitive, one former record per container, and the canonical top. The class
 `Sem S` holds the meaning of the signature of a universe, and one instance serves every
-orientation. Each reading in the namespace `Syn` is the meaning at the orientation of the
-universe. `denote` builds each former from the generic combinators, so a universe writes no
-denotation.
+orientation. The codecs of a universe are the codecs of the meaning at every orientation, and the
+readings in the namespace `Syn` read the carriers, the predicates and the depths at the
+orientation of the universe. `denote` builds each former from the generic combinators, so a
+universe writes no denotation.
 
 A former is an `Option`: a universe without the former denotes the term as the bottom. A
 carrier can hold no `Finset` of itself, because the kernel refuses the nested occurrence, so
@@ -48,6 +49,11 @@ theorem half2_apply {Z W : Type} (f : Z → W) (s : Bool) (a b : Z) :
 /-- The half of two functions, at an argument, is the half of the two values. -/
 theorem half2_app {Z W : Type} (s : Bool) (f g : Z → W) (x : Z) :
     half2 s f g x = half2 s (f x) (g x) := by
+  cases s <;> rfl
+
+/-- The map of the half of two codecs is the half of the two maps. -/
+theorem half2_f {V A M : Type} (s : Bool) (c d : Codec V A M) (o : Orient) (x : Side V A o.c) :
+    (half2 s c d).f o x = half2 s (c.f o x) (d.f o x) := by
   cases s <;> rfl
 
 /-! ## The signature and the universe -/
@@ -104,55 +110,19 @@ abbrev halfK {B : Sig} (s : Bool) (k : List (B.G false × Bool)) (kA : List (B.G
     List (B.G s × Bool) :=
   half (X := fun s => List (B.G s × Bool)) s k kA
 
-/-! ## The member at an absolute side
-
-The stored side `true` of the host holds the member of the universe. The side `false` names no
-member. So the member reads by the stored side of an orientation. -/
-
-/-- The member type at an absolute side. -/
-abbrev MemAt (Mem : Type) : Bool → Type
-  | false => Unit
-  | true => Mem
-
-/-- The member function at an absolute side. -/
-def memAt {Car : Bool → Type} {Mem : Type} (mem : Car true → Mem) :
-    (s : Bool) → Car s → MemAt Mem s
-  | false, _ => ()
-  | true, a => mem a
-
-/-- A member of the universe, read at an absolute side. -/
-def μAt {Mem : Type} : (s : Bool) → Mem → MemAt Mem s
-  | false, _ => ()
-  | true, m => m
-
-/-- Equality of members is decidable at each side. -/
-def decAt {Mem : Type} (dec : DecidableEq Mem) : (s : Bool) → DecidableEq (MemAt Mem s)
-  | false => fun _ _ => isTrue rfl
-  | true => dec
+/-- **A pair of words is determined by its halves at an orientation.** -/
+theorem halfK_eq {B : Sig} : ∀ (o : Orient) {k k' : List (B.G false × Bool)}
+    {kA kA' : List (B.G true × Bool)}, halfK o.c k kA = halfK o.c k' kA' →
+    halfK o.s k kA = halfK o.s k' kA' → k = k' ∧ kA = kA'
+  | ⟨(false, true), _⟩, _, _, _, _, h, h' => ⟨h, h'⟩
+  | ⟨(true, false), _⟩, _, _, _, _, h, h' => ⟨h', h⟩
+  | ⟨(false, false), hn⟩, _, _, _, _, _, _ => absurd rfl hn
+  | ⟨(true, true), hn⟩, _, _, _, _, _, _ => absurd rfl hn
 
 /-! ## The formers
 
-A former of the meaning holds one prism per absolute side and the member at the side `true`. An
-orientation reads the former as the one-sided record below. -/
-
-/-- The list former at an orientation: a prism from each carrier onto `List`, the member that
-    the stored side stamps, and the fact that an element is one layer below its list. -/
-structure ListF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → Nat) where
-  pV : Ctor (List V) V
-  pA : Ctor (List A) A
-  μ : M
-  hμ : ∀ y, member (pA.into y) = μ
-  dV_lt : ∀ vs, ∀ x ∈ vs, dV x + 1 ≤ dV (pV.into vs)
-  dA_lt : ∀ as, ∀ x ∈ as, dA x + 1 ≤ dA (pA.into as)
-
-/-- The keyed-map former at an orientation: the same four facts onto `MapOf`. -/
-structure MapF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → Nat) where
-  mV : Ctor (MapOf V) V
-  mA : Ctor (MapOf A) A
-  μ : M
-  hμ : ∀ y, member (mA.into y) = μ
-  dV_lt : ∀ (m : MapOf V) k, dV (m.get k) + 1 ≤ dV (mV.into m)
-  dA_lt : ∀ (m : MapOf A) k, dA (m.get k) + 1 ≤ dA (mA.into m)
+A former of the meaning holds one prism per absolute side and the member at the side `true`. The
+set former is a codec transformer over the carriers of the meaning. -/
 
 /-- The set former of a universe: the lift, its law, its agreement one layer down, and each half
     of agreement. -/
@@ -174,25 +144,6 @@ structure SetF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → Na
   /-- The lift's held set is inside `held` of any bound on the element's held set. -/
   held_of : ∀ {c : Codec V A M} {T : V → Prop}, (∀ v, c.T v → T v) → ∀ v, (lift c).T v → held T v
 
-section Formers
-variable {V A M : Type}
-
-/-- The set former, transported through the converse. The held set, the element obligation and
-    the member are the trivial ones: the caller-side held set has no stored-side image. -/
-def SetF.op {member : A → M} {dV : V → Nat} {dA : A → Nat} (L : SetF V A M member dV dA) :
-    SetF A V Unit (fun _ => ()) dA dV :=
-  { lift := fun c => conv (L.lift (unconv c))
-    lawful := fun h => Lawful.conv (L.lawful (Lawful.unconv h))
-    agree := fun h => ⟨(L.agree ⟨h.p, h.e⟩).p, (L.agree ⟨h.p, h.e⟩).e⟩
-    agreeS := fun h => agreeS_conv (L.agreeS (agreeS_unconv h))
-    elem := fun _ => True
-    held := fun _ _ => True
-    member := fun _ => some ()
-    carrier := fun _ => carrier_conv _
-    held_of := fun _ _ _ => trivial }
-
-end Formers
-
 /-- **The list former of a meaning**: one prism per absolute side, the member at the side `true`,
     and one depth law for both sides. -/
 structure ListA (Car : Bool → Type) (Mem : Type) (mem : Car true → Mem)
@@ -209,81 +160,6 @@ structure MapA (Car : Bool → Type) (Mem : Type) (mem : Car true → Mem)
   μ : Mem
   hμ : ∀ y, mem ((m true).into y) = μ
   d_lt : ∀ s (x : MapOf (Car s)) k, d s (x.get k) + 1 ≤ d s ((m s).into x)
-
-section Readings
-variable {Car : Bool → Type} {Mem : Type} {mem : Car true → Mem} {d : (s : Bool) → Car s → Nat}
-
-/-- **The member law of a former, at each side**, as one statement for every payload: the
-    stored prism stamps the member, and the value prism stamps the unit. -/
-theorem memAt_into {X : Bool → Type} (p : (s : Bool) → Ctor (X s) (Car s)) {μ : Mem}
-    (h : ∀ y, mem ((p true).into y) = μ) : ∀ s y, memAt mem s ((p s).into y) = μAt s μ
-  | false, _ => rfl
-  | true, y => h y
-
-/-- **The list former read at an orientation.** -/
-def ListA.at (L : ListA Car Mem mem d) (o : Orient) :
-    ListF (Car o.c) (Car o.s) (MemAt Mem o.s) (memAt mem o.s) (d o.c) (d o.s) :=
-  { pV := L.p o.c, pA := L.p o.s, μ := μAt o.s L.μ
-    hμ := memAt_into (X := fun s => List (Car s)) L.p L.hμ o.s
-    dV_lt := L.d_lt o.c, dA_lt := L.d_lt o.s }
-
-/-- **The keyed-map former read at an orientation.** -/
-def MapA.at (F : MapA Car Mem mem d) (o : Orient) :
-    MapF (Car o.c) (Car o.s) (MemAt Mem o.s) (memAt mem o.s) (d o.c) (d o.s) :=
-  { mV := F.m o.c, mA := F.m o.s, μ := μAt o.s F.μ
-    hμ := memAt_into (X := fun s => MapOf (Car s)) F.m F.hμ o.s
-    dV_lt := F.d_lt o.c, dA_lt := F.d_lt o.s }
-
-/-- **The set former read at an orientation.** The set former is a codec transformer at the
-    host, so the dual reads the transformer through the converse. -/
-def setAt (L : SetF (Car false) (Car true) Mem mem (d false) (d true)) :
-    (o : Orient) → SetF (Car o.c) (Car o.s) (MemAt Mem o.s) (memAt mem o.s) (d o.c) (d o.s)
-  | ⟨(false, true), _⟩ => L
-  | ⟨(true, false), _⟩ => SetF.op L
-  | ⟨(false, false), h⟩ => absurd rfl h
-  | ⟨(true, true), h⟩ => absurd rfl h
-
-/-- **A host codec read at an orientation**: the codec at the host, and its converse at the
-    dual. -/
-def readC : (o : Orient) → Codec (Car false) (Car true) Mem → Codec (Car o.c) (Car o.s) (MemAt Mem o.s)
-  | ⟨(false, true), _⟩, c => c
-  | ⟨(true, false), _⟩, c => conv c
-  | ⟨(false, false), h⟩, _ => absurd rfl h
-  | ⟨(true, true), h⟩, _ => absurd rfl h
-
-/-- **A lawful host codec is lawful at every orientation.** -/
-theorem lawful_readC : ∀ (o : Orient) {c : Codec (Car false) (Car true) Mem}, Lawful mem c →
-    Lawful (memAt mem o.s) (readC o c)
-  | ⟨(false, true), _⟩, _, h => h
-  | ⟨(true, false), _⟩, _, h => Lawful.conv h
-  | ⟨(false, false), h⟩, _, _ => absurd rfl h
-  | ⟨(true, true), h⟩, _, _ => absurd rfl h
-
-/-- A host codec on its carrier is on its carrier at every orientation. -/
-theorem carrier_readC : ∀ (o : Orient) {c : Codec (Car false) (Car true) Mem}, Carrier c →
-    Carrier (readC o c)
-  | ⟨(false, true), _⟩, _, h => h
-  | ⟨(true, false), _⟩, c, _ => carrier_conv c
-  | ⟨(false, false), h⟩, _, _ => absurd rfl h
-  | ⟨(true, true), h⟩, _, _ => absurd rfl h
-
-/-- **A host held set read at an orientation**: the held set at the host, and every value at the
-    dual, where the caller-side held set has no stored-side image. -/
-def heldAt : (o : Orient) → (Car false → Prop) → Car o.c → Prop
-  | ⟨(false, true), _⟩, T => T
-  | ⟨(true, false), _⟩, _ => fun _ => True
-  | ⟨(false, false), h⟩, _ => absurd rfl h
-  | ⟨(true, true), h⟩, _ => absurd rfl h
-
-/-- A bound on the held set of a host codec bounds its reading at every orientation. -/
-theorem heldAt_readC : ∀ (o : Orient) {c : Codec (Car false) (Car true) Mem} {T : Car false → Prop},
-    (∀ v, c.T v → T v) → ∀ v, (readC o c).T v → heldAt o T v
-  | ⟨(false, true), _⟩, _, _, h => h
-  | ⟨(true, false), _⟩, _, _, _ => fun _ _ => trivial
-  | ⟨(false, false), h⟩, _, _, _ => absurd rfl h
-  | ⟨(true, true), h⟩, _, _, _ => absurd rfl h
-
-end Readings
 
 /-! ## The meaning -/
 
@@ -324,6 +200,25 @@ class Mean (B : Sig) where
     carrier at `true`. -/
 abbrev Mean.Car {B : Sig} [Mean B] : Bool → Type := Side (Mean.V (B := B)) (Mean.A (B := B))
 
+/-- The codecs of a meaning: from the caller carrier to the stored carrier, with the member of the
+    meaning. -/
+abbrev Mean.C (B : Sig) [Mean B] : Type :=
+  Codec (Mean.V (B := B)) (Mean.A (B := B)) (Mean.Mem (B := B))
+
+instance Mean.instDecM {B : Sig} [Mean B] : DecidableEq (Mean.Mem (B := B)) := Mean.decM
+
+/-- The predicate of each absolute side is the predicate at that side of a pair. -/
+theorem Mean.eval_half {B : Sig} [Mean B] (p : B.P false) (pA : B.P true) :
+    ∀ s, Side.elim (Mean.eval false p) (Mean.eval true pA) s = Mean.eval s (half s p pA)
+  | false => rfl
+  | true => rfl
+
+/-- The depth of each absolute side is the depth at that side. -/
+theorem Mean.d_elim {B : Sig} [Mean B] :
+    ∀ s, Side.elim (Mean.d (B := B) false) (Mean.d true) s = Mean.d s
+  | false => rfl
+  | true => rfl
+
 /-- **The meaning of a universe**: the meaning of its signature. One instance serves every
     orientation, so the dual universe finds the meaning of the universe, and a lemma finds its
     universe by unification before the instance search. -/
@@ -338,8 +233,10 @@ instance (priority := low) Sem.toMean (S : Syn) [h : Sem S] : Mean S.sig := h.me
 
 /-! ## The meaning read at a universe
 
-Each reading below is the meaning at the orientation of the universe. The caller carrier is the
-carrier of the caller side, and the member is the member of the stored side. -/
+The codecs, the top and the member are the meaning itself, at every orientation, and a universe
+reads its formers from the meaning (`Mean.list`, `Mean.map`, `Mean.set`). The caller carrier, the
+stored carrier, the predicates and the depths are read at the orientation of the universe: the
+analyses read a codec at its caller side. -/
 
 namespace Syn
 
@@ -352,30 +249,17 @@ abbrev V : Type := Mean.Car (B := S.sig) S.o.c
 /-- The stored carrier of a universe. -/
 abbrev A : Type := Mean.Car (B := S.sig) S.o.s
 
-/-- The member of a universe: the member of its stored side. -/
-abbrev M : Type := MemAt (Mean.Mem (B := S.sig)) S.o.s
+/-- The member of a universe: the member of its meaning. -/
+abbrev M : Type := Mean.Mem (B := S.sig)
 
-/-- The codecs of a universe. -/
-abbrev C : Type := Codec S.V S.A S.M
+/-- The codecs of a universe: the codecs of its meaning, at every orientation. -/
+abbrev C : Type := Mean.C S.sig
 end
 
 variable {S : Syn} [Sem S]
 
-/-- The member of a stored element. -/
-abbrev member : S.A → S.M := memAt Mean.mem S.o.s
-
-instance decM : DecidableEq S.M := decAt Mean.decM S.o.s
-
 /-- The codec of a primitive. -/
-abbrev ground (g : S.Ground) : S.C := readC S.o (Mean.ground g)
-
-/-- The codec of a primitive is lawful at every orientation. -/
-theorem lawful_ground (g : S.Ground) : Lawful Syn.member (Syn.ground g) :=
-  lawful_readC S.o (Mean.lawful_ground g)
-
-/-- The codec of a primitive is on its carrier at every orientation. -/
-theorem carrier_ground (g : S.Ground) : Carrier (Syn.ground g) :=
-  carrier_readC S.o (Mean.carrier_ground g)
+abbrev ground (g : S.Ground) : S.C := Mean.ground g
 
 /-- The meaning of a caller-side predicate. -/
 abbrev eval : S.Pred → S.V → Bool := Mean.eval S.o.c
@@ -404,62 +288,87 @@ abbrev dA : S.A → Nat := Mean.d S.o.s
 /-- A caller value has a positive depth. -/
 theorem dV_pos (v : S.V) : 0 < Syn.dV v := Mean.d_pos S.o.c v
 
-/-- A stored attribute has a positive depth. -/
-theorem dA_pos (a : S.A) : 0 < Syn.dA a := Mean.d_pos S.o.s a
-
-/-- The list former of a universe. -/
-abbrev list : Option (ListF S.V S.A S.M Syn.member Syn.dV Syn.dA) :=
-  (Mean.list (B := S.sig)).map (·.at S.o)
-
-/-- The keyed-map former of a universe. -/
-abbrev map : Option (MapF S.V S.A S.M Syn.member Syn.dV Syn.dA) :=
-  (Mean.map (B := S.sig)).map (·.at S.o)
-
-/-- The set former of a universe. -/
-abbrev set : Option (SetF S.V S.A S.M Syn.member Syn.dV Syn.dA) :=
-  (Mean.set (B := S.sig)).map (setAt · S.o)
-
 /-- The member that the judgement gives a primitive. -/
-abbrev groundμ (g : S.Ground) : Option S.M := (Mean.groundμ g).map (μAt S.o.s)
+abbrev groundμ (g : S.Ground) : Option S.M := Mean.groundμ g
 
 /-- The canonical top of a universe. -/
-abbrev top : S.C := readC S.o (Mean.top (B := S.sig))
-
-/-- The top is lawful at every orientation. -/
-theorem lawful_top : Lawful Syn.member (Syn.top (S := S)) := lawful_readC S.o Mean.lawful_top
-
-/-- The top is on its carrier at every orientation. -/
-theorem carrier_top : Carrier (Syn.top (S := S)) := carrier_readC S.o Mean.carrier_top
+abbrev top : S.C := Mean.top (B := S.sig)
 
 /-- The held set that the judgement gives the top. -/
-abbrev topHeld : S.V → Prop := heldAt S.o (Mean.topHeld (B := S.sig))
-
-/-- The held set of the top lies inside the held set that the judgement gives the top. -/
-theorem top_held (v : S.V) : (Syn.top (S := S)).T v → Syn.topHeld v :=
-  heldAt_readC S.o Mean.top_held v
+abbrev topHeld : Mean.V (B := S.sig) → Prop := Mean.topHeld (B := S.sig)
 
 end Syn
 
-/-- **A table of adapters**: the caller-side function and the stored-side function of each
-    generator. `denote` reads a table as it reads the environment of the bound variables. -/
-abbrev Table (S : Syn) [Sem S] : Type := S.Gen → (S.V → S.V) × (S.V → S.V)
+/-! ## The tables of adapters
+
+A table gives each generator of one absolute side its entry function and its exit function. A
+universe holds the table of its caller side and the table of its stored side. The denotation
+reads the tables at the absolute sides, so the dual universe reads the two tables swapped and
+denotes each term by the same codec. -/
+
+/-- **A table of adapters at an absolute side**: the entry function and the exit function of each
+    generator of the side. -/
+abbrev TableAt (B : Sig) [Mean B] (s : Bool) : Type :=
+  B.G s → (Mean.Car (B := B) s → Mean.Car (B := B) s) × (Mean.Car (B := B) s → Mean.Car (B := B) s)
+
+/-- **A table of adapters of a universe**: the table at its caller side. The table of the dual
+    universe is the table at the stored side. `denote` reads a table as it reads the environment
+    of the bound variables. -/
+abbrev Table (S : Syn) [Sem S] : Type := TableAt S.sig S.o.c
+
+section Tables
+variable {B : Sig} [Mean B] {s : Bool}
 
 /-- The pair of one signed generator: the converse swaps the two functions. -/
-def Table.letter {S : Syn} [Sem S] (α : Table S) (x : S.Gen × Bool) : (S.V → S.V) × (S.V → S.V) :=
+def TableAt.letter (α : TableAt B s) (x : B.G s × Bool) :
+    (Mean.Car (B := B) s → Mean.Car (B := B) s) × (Mean.Car (B := B) s → Mean.Car (B := B) s) :=
   if x.2 then ((α x.1).2, (α x.1).1) else α x.1
 
 /-- **The pair of a word**: the empty word is the identity, and a word composes its letters,
     the first letter outermost on the caller side. -/
-def Table.word {S : Syn} [Sem S] (α : Table S) : Word S → (S.V → S.V) × (S.V → S.V)
+def TableAt.word (α : TableAt B s) : List (B.G s × Bool) →
+    (Mean.Car (B := B) s → Mean.Car (B := B) s) × (Mean.Car (B := B) s → Mean.Car (B := B) s)
   | [] => (id, id)
-  | x :: k => ((α.letter x).1 ∘ (Table.word α k).1, (Table.word α k).2 ∘ (α.letter x).2)
+  | x :: k => ((α.letter x).1 ∘ (α.word k).1, (α.word k).2 ∘ (α.letter x).2)
 
 /-- **A word of two words is the composite of the two pairs.** -/
-theorem Table.word_append {S : Syn} [Sem S] (α : Table S) (k k' : Word S) :
+theorem TableAt.word_append (α : TableAt B s) (k k' : List (B.G s × Bool)) :
     α.word (k ++ k') = ((α.word k).1 ∘ (α.word k').1, (α.word k').2 ∘ (α.word k).2) := by
   induction k with
   | nil => rfl
-  | cons x k ih => simp only [List.cons_append, Table.word, ih]; rfl
+  | cons x k ih => simp only [List.cons_append, TableAt.word, ih]; rfl
+
+/-- **The tables at each absolute side**, from the table at the caller side of an orientation
+    and the table at its stored side. -/
+def tables : (o : Orient) → TableAt B o.c → TableAt B o.s → (s : Bool) → TableAt B s
+  | ⟨(false, true), _⟩, α, β => fun s => half (X := TableAt B) s α β
+  | ⟨(true, false), _⟩, α, β => fun s => half (X := TableAt B) s β α
+  | ⟨(false, false), h⟩, _, _ => absurd rfl h
+  | ⟨(true, true), h⟩, _, _ => absurd rfl h
+
+/-- **The dual orientation with the two tables swapped gives the same tables.** -/
+theorem tables_op : ∀ (o : Orient) (α : TableAt B o.c) (β : TableAt B o.s),
+    tables o.op β α = tables o α β
+  | ⟨(false, true), _⟩, _, _ => rfl
+  | ⟨(true, false), _⟩, _, _ => rfl
+  | ⟨(false, false), h⟩, _, _ => absurd rfl h
+  | ⟨(true, true), h⟩, _, _ => absurd rfl h
+
+/-- The table at the caller side of the orientation is the caller table. -/
+theorem tables_c : ∀ (o : Orient) (α : TableAt B o.c) (β : TableAt B o.s), tables o α β o.c = α
+  | ⟨(false, true), _⟩, _, _ => rfl
+  | ⟨(true, false), _⟩, _, _ => rfl
+  | ⟨(false, false), h⟩, _, _ => absurd rfl h
+  | ⟨(true, true), h⟩, _, _ => absurd rfl h
+
+/-- The table at the stored side of the orientation is the stored table. -/
+theorem tables_s : ∀ (o : Orient) (α : TableAt B o.c) (β : TableAt B o.s), tables o α β o.s = β
+  | ⟨(false, true), _⟩, _, _ => rfl
+  | ⟨(true, false), _⟩, _, _ => rfl
+  | ⟨(false, false), h⟩, _, _ => absurd rfl h
+  | ⟨(true, true), h⟩, _, _ => absurd rfl h
+
+end Tables
 
 /-- **The dagger law**: the pair of the involution of a word is the pair of the word, swapped. -/
 theorem Table.word_dagger {S : Syn} [Sem S] (α : Table S) (k : Word S) :
@@ -471,8 +380,8 @@ theorem Table.word_dagger {S : Syn} [Sem S] (α : Table S) (k : Word S) :
         obtain ⟨a, b⟩ := x
         cases b <;> rfl
       simp only [Word.dagger, List.reverse_cons, List.map_append] at ih ⊢
-      rw [Table.word_append, ih]
-      simp only [List.map_cons, List.map_nil, hx, Table.word]
+      rw [TableAt.word_append, ih]
+      simp only [List.map_cons, List.map_nil, hx, TableAt.word]
 
 /-- **The top reads every attribute**: the law that makes the top the stored outer that restricts
     nothing. -/
@@ -901,159 +810,228 @@ def unanimous {M : Type} [DecidableEq M] : List (Option M) → Option M
 /-- The codec an environment gives the variable `i`: the bottom where no binder is. -/
 def envAt {V A M : Type} (ρ : List (Codec V A M)) (i : Nat) : Codec V A M := ρ.getD i .empty
 
-section Denote
-variable {S : Syn} [Sem S] (α : Table S) (β : Table S.op)
+section DenoteAbs
+variable {B : Sig} [Mean B] (τ : (s : Bool) → TableAt B s)
 
 mutual
 
-/-- Each term, at its certified combinator. -/
-noncomputable def denote : Term S → (ρ : List S.C := []) → S.C
-  | .prim g, _ => Syn.ground g
+/-- **Each term, at its certified combinator**, over the tables of each absolute side. The
+    denotation reads no orientation: each former reads its prism at each absolute side, and a
+    two-sided row stores each half at its absolute side. -/
+noncomputable def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C B
+  | .prim g, _ => Mean.ground g
   | .set t, ρ =>
-      match Syn.set (S := S) with
-      | some L => L.lift (denote t ρ)
+      match Mean.set (B := B) with
+      | some L => L.lift (denoteAbs t ρ)
       | none => .empty
   | .list pre spread suf, ρ =>
-      match Syn.list (S := S) with
-      | some L => listCodec L.pV L.pA L.μ (denoteList pre ρ) (denoteOpt spread ρ) (denoteList suf ρ)
+      match Mean.list (B := B) with
+      | some L => listCodec (L.p false) (L.p true) L.μ (denoteListAbs pre ρ) (denoteOptAbs spread ρ)
+          (denoteListAbs suf ρ)
       | none => .empty
-  -- each side reads its own half, and its own word from its own table
+  -- each side reads its own outer, and its own word from its own table
   | .held inner outer outerA k kA, ρ =>
-      held2 (denote inner ρ) (half2 S.o.c (denote outer ρ) (denote outerA ρ))
-        (half2 S.o.s (denote outer ρ) (denote outerA ρ))
-        (α.word (halfK S.o.c k kA)).1 (α.word (halfK S.o.c k kA)).2
-        (β.word (halfK S.o.s k kA)).1 (β.word (halfK S.o.s k kA)).2
-  | .refine inner p pA, ρ =>
-      refine2 (denote inner ρ) (Syn.eval (half S.o.c p pA)) (Syn.evalA (half S.o.s p pA))
-  | .opaq, _ => Syn.top (S := S)
-  | .object b, ρ => bodySem b ρ
-  | .union opts, ρ => altCodec (denoteList opts ρ) (unanimous (denoteμs opts ρ))
+      held2 (denoteAbs inner ρ) (denoteAbs outer ρ) (denoteAbs outerA ρ)
+        ((τ false).word k).1 ((τ false).word k).2 ((τ true).word kA).1 ((τ true).word kA).2
+  | .refine inner p pA, ρ => refine2 (denoteAbs inner ρ) (Mean.eval false p) (Mean.eval true pA)
+  | .opaq, _ => Mean.top
+  | .object b, ρ => bodySemAbs b ρ
+  | .union opts, ρ => altCodec (denoteListAbs opts ρ) (unanimous (denoteμsAbs opts ρ))
   -- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously
   | .never, _ => .empty
   | .var i, ρ => envAt ρ i
   -- each input reads the stage of the body that its own depth names
-  | .mu b, ρ => muCodec Syn.dV (Syn.dA (S := S)) fun c => denote b (c :: ρ)
+  | .mu b, ρ => muCodec (Mean.d false) (Mean.d true) fun c => denoteAbs b (c :: ρ)
 
 /-- The payload's semantics: the slot table and the open block, each through its own
     companion. -/
-noncomputable def bodySem : Body S → (ρ : List S.C := []) → S.C
+noncomputable def bodySemAbs : Body B → (ρ : List (Mean.C B) := []) → Mean.C B
   | .mk fields f wild, ρ =>
-      match Syn.map (S := S) with
-      | some F => objectCodec F.mV F.mA F.μ ⟨fields, fun k => fieldSem (f k) ρ⟩ (wildSem wild ρ)
+      match Mean.map (B := B) with
+      | some F =>
+          objectCodec (F.m false) (F.m true) F.μ ⟨fields, fun k => fieldSemAbs (f k) ρ⟩
+            (wildSemAbs wild ρ)
       | none => .empty
 
-/-- A field's semantics. A companion of `denote` rather than a function of one, which is what
+/-- A field's semantics. A companion of `denoteAbs` rather than a function of one, which is what
     removed the fuel. -/
-noncomputable def fieldSem : ObjectSlot S → (ρ : List S.C := []) → FieldSem S.V (Syn.A S) (Syn.M S)
-  | .req t, ρ => .req (denote t ρ)
-  | .optional t, ρ => .opt (denote t ρ)
+noncomputable def fieldSemAbs : ObjectSlot B → (ρ : List (Mean.C B) := []) →
+    FieldSem (Mean.V (B := B)) (Mean.A (B := B)) (Mean.Mem (B := B))
+  | .req t, ρ => .req (denoteAbs t ρ)
+  | .optional t, ρ => .opt (denoteAbs t ρ)
 
 /-- The open block's semantics. **A body with no open block refuses.** -/
-noncomputable def wildSem : Option (Term S) → (ρ : List S.C := []) → RestSem S.V (Syn.A S) (Syn.M S)
+noncomputable def wildSemAbs : Option (Term B) → (ρ : List (Mean.C B) := []) →
+    RestSem (Mean.V (B := B)) (Mean.A (B := B)) (Mean.Mem (B := B))
   | none, _ => .refuse
-  | some t, ρ => .codec (denote t ρ)
+  | some t, ρ => .codec (denoteAbs t ρ)
 
 /-- The options' codecs, in order. -/
-noncomputable def denoteList : List (Term S) → (ρ : List S.C := []) → List S.C
+noncomputable def denoteListAbs : List (Term B) → (ρ : List (Mean.C B) := []) → List (Mean.C B)
   | [], _ => []
-  | t :: ts, ρ => denote t ρ :: denoteList ts ρ
+  | t :: ts, ρ => denoteAbs t ρ :: denoteListAbs ts ρ
 
 /-- The spread's codec, where there is one. -/
-noncomputable def denoteOpt : Option (Term S) → (ρ : List S.C := []) → Option S.C
+noncomputable def denoteOptAbs : Option (Term B) → (ρ : List (Mean.C B) := []) →
+    Option (Mean.C B)
   | none, _ => none
-  | some t, ρ => some (denote t ρ)
+  | some t, ρ => some (denoteAbs t ρ)
 
 /-- The options' members, in order. -/
-noncomputable def denoteμs : List (Term S) → (ρ : List S.C := []) → List (Option (Syn.M S))
+noncomputable def denoteμsAbs : List (Term B) → (ρ : List (Mean.C B) := []) →
+    List (Option (Mean.Mem (B := B)))
   | [], _ => []
-  | t :: ts, ρ => (denote t ρ).μ :: denoteμs ts ρ
+  | t :: ts, ρ => (denoteAbs t ρ).μ :: denoteμsAbs ts ρ
 
 end
-
-variable {α β}
 
 /-! ## A term with no variable
 
 A term with no variable reads no binder, so the environment does not change the denotation. -/
 
+variable {τ}
+
 mutual
 
 /-- **A term with no variable is closed**: two environments give one codec. -/
-theorem denote_closed : ∀ (t : Term S), t.hasVar = false → ∀ ρ ρ' : List S.C,
-    denote α β t ρ = denote α β t ρ'
+theorem denoteAbs_closed : ∀ (t : Term B), t.hasVar = false → ∀ ρ ρ' : List (Mean.C B),
+    denoteAbs τ t ρ = denoteAbs τ t ρ'
   | .prim _, _, _, _ => rfl
   | .opaq, _, _, _ => rfl
   | .never, _, _, _ => rfl
   | .var _, h, _, _ => nomatch h
-  | .set t, h, ρ, ρ' => by simp only [denote]; rw [denote_closed t h ρ ρ']
-  | .refine t _ _, h, ρ, ρ' => by simp only [denote]; rw [denote_closed t h ρ ρ']
+  | .set t, h, ρ, ρ' => by simp only [denoteAbs]; rw [denoteAbs_closed t h ρ ρ']
+  | .refine t _ _, h, ρ, ρ' => by simp only [denoteAbs]; rw [denoteAbs_closed t h ρ ρ']
   | .mu b, h, ρ, ρ' => by
-      simp only [denote]
+      simp only [denoteAbs]
       congr 1
       funext c
-      exact denote_closed b h (c :: ρ) (c :: ρ')
+      exact denoteAbs_closed b h (c :: ρ) (c :: ρ')
   | .held t P PA _ _, h, ρ, ρ' => by
       simp only [Term.hasVar, Bool.or_eq_false_iff] at h
-      simp only [denote]
-      rw [denote_closed t h.1.1 ρ ρ', denote_closed P h.1.2 ρ ρ', denote_closed PA h.2 ρ ρ']
+      simp only [denoteAbs]
+      rw [denoteAbs_closed t h.1.1 ρ ρ', denoteAbs_closed P h.1.2 ρ ρ',
+        denoteAbs_closed PA h.2 ρ ρ']
   | .list pre sp suf, h, ρ, ρ' => by
       simp only [Term.hasVar, Bool.or_eq_false_iff] at h
-      simp only [denote]
-      rw [denoteList_closed pre h.1.1 ρ ρ', denoteOpt_closed sp h.1.2 ρ ρ',
-        denoteList_closed suf h.2 ρ ρ']
-  | .object b, h, ρ, ρ' => bodySem_closed b h ρ ρ'
+      simp only [denoteAbs]
+      rw [denoteListAbs_closed pre h.1.1 ρ ρ', denoteOptAbs_closed sp h.1.2 ρ ρ',
+        denoteListAbs_closed suf h.2 ρ ρ']
+  | .object b, h, ρ, ρ' => bodySemAbs_closed b h ρ ρ'
   | .union os, h, ρ, ρ' => by
-      simp only [denote]
-      rw [denoteList_closed os h ρ ρ', denoteμs_closed os h ρ ρ']
+      simp only [denoteAbs]
+      rw [denoteListAbs_closed os h ρ ρ', denoteμsAbs_closed os h ρ ρ']
 
 /-- …at a body. -/
-theorem bodySem_closed : ∀ (b : Body S), b.hasVar = false → ∀ ρ ρ' : List S.C,
-    bodySem α β b ρ = bodySem α β b ρ'
+theorem bodySemAbs_closed : ∀ (b : Body B), b.hasVar = false → ∀ ρ ρ' : List (Mean.C B),
+    bodySemAbs τ b ρ = bodySemAbs τ b ρ'
   | .mk fields f wild, h, ρ, ρ' => by
       simp only [Body.hasVar, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists,
         Bool.not_eq_true] at h
-      have hf : (fun k => fieldSem α β (f k) ρ) = (fun k => fieldSem α β (f k) ρ') :=
-        funext fun k => fieldSem_closed (f k) (h.1 k) ρ ρ'
-      simp only [bodySem]
-      rw [hf, wildSem_closed wild h.2 ρ ρ']
+      have hf : (fun k => fieldSemAbs τ (f k) ρ) = (fun k => fieldSemAbs τ (f k) ρ') :=
+        funext fun k => fieldSemAbs_closed (f k) (h.1 k) ρ ρ'
+      simp only [bodySemAbs]
+      rw [hf, wildSemAbs_closed wild h.2 ρ ρ']
 
 /-- …at a slot. -/
-theorem fieldSem_closed : ∀ (s : ObjectSlot S), s.hasVar = false → ∀ ρ ρ' : List S.C,
-    fieldSem α β s ρ = fieldSem α β s ρ'
-  | .req t, h, ρ, ρ' => by simp only [fieldSem]; rw [denote_closed t h ρ ρ']
-  | .optional t, h, ρ, ρ' => by simp only [fieldSem]; rw [denote_closed t h ρ ρ']
+theorem fieldSemAbs_closed : ∀ (s : ObjectSlot B), s.hasVar = false →
+    ∀ ρ ρ' : List (Mean.C B), fieldSemAbs τ s ρ = fieldSemAbs τ s ρ'
+  | .req t, h, ρ, ρ' => by simp only [fieldSemAbs]; rw [denoteAbs_closed t h ρ ρ']
+  | .optional t, h, ρ, ρ' => by simp only [fieldSemAbs]; rw [denoteAbs_closed t h ρ ρ']
 
 /-- …at an open block. -/
-theorem wildSem_closed : ∀ (w : Option (Term S)), Term.hasVarO w = false → ∀ ρ ρ' : List S.C,
-    wildSem α β w ρ = wildSem α β w ρ'
+theorem wildSemAbs_closed : ∀ (w : Option (Term B)), Term.hasVarO w = false →
+    ∀ ρ ρ' : List (Mean.C B), wildSemAbs τ w ρ = wildSemAbs τ w ρ'
   | none, _, _, _ => rfl
-  | some t, h, ρ, ρ' => by simp only [wildSem]; rw [denote_closed t h ρ ρ']
+  | some t, h, ρ, ρ' => by simp only [wildSemAbs]; rw [denoteAbs_closed t h ρ ρ']
 
 /-- …at a list of terms. -/
-theorem denoteList_closed : ∀ (ts : List (Term S)), Term.hasVarL ts = false →
-    ∀ ρ ρ' : List S.C, denoteList α β ts ρ = denoteList α β ts ρ'
+theorem denoteListAbs_closed : ∀ (ts : List (Term B)), Term.hasVarL ts = false →
+    ∀ ρ ρ' : List (Mean.C B), denoteListAbs τ ts ρ = denoteListAbs τ ts ρ'
   | [], _, _, _ => rfl
   | t :: ts, h, ρ, ρ' => by
       simp only [Term.hasVarL, Bool.or_eq_false_iff] at h
-      simp only [denoteList]
-      rw [denote_closed t h.1 ρ ρ', denoteList_closed ts h.2 ρ ρ']
+      simp only [denoteListAbs]
+      rw [denoteAbs_closed t h.1 ρ ρ', denoteListAbs_closed ts h.2 ρ ρ']
 
 /-- …at an optional term. -/
-theorem denoteOpt_closed : ∀ (sp : Option (Term S)), Term.hasVarO sp = false →
-    ∀ ρ ρ' : List S.C, denoteOpt α β sp ρ = denoteOpt α β sp ρ'
+theorem denoteOptAbs_closed : ∀ (sp : Option (Term B)), Term.hasVarO sp = false →
+    ∀ ρ ρ' : List (Mean.C B), denoteOptAbs τ sp ρ = denoteOptAbs τ sp ρ'
   | none, _, _, _ => rfl
-  | some t, h, ρ, ρ' => by simp only [denoteOpt]; rw [denote_closed t h ρ ρ']
+  | some t, h, ρ, ρ' => by simp only [denoteOptAbs]; rw [denoteAbs_closed t h ρ ρ']
 
 /-- …at the members of a list of terms. -/
-theorem denoteμs_closed : ∀ (ts : List (Term S)), Term.hasVarL ts = false →
-    ∀ ρ ρ' : List S.C, denoteμs α β ts ρ = denoteμs α β ts ρ'
+theorem denoteμsAbs_closed : ∀ (ts : List (Term B)), Term.hasVarL ts = false →
+    ∀ ρ ρ' : List (Mean.C B), denoteμsAbs τ ts ρ = denoteμsAbs τ ts ρ'
   | [], _, _, _ => rfl
   | t :: ts, h, ρ, ρ' => by
       simp only [Term.hasVarL, Bool.or_eq_false_iff] at h
-      simp only [denoteμs]
-      rw [denote_closed t h.1 ρ ρ', denoteμs_closed ts h.2 ρ ρ']
+      simp only [denoteμsAbs]
+      rw [denoteAbs_closed t h.1 ρ ρ', denoteμsAbs_closed ts h.2 ρ ρ']
 
 end
+
+end DenoteAbs
+
+/-! ## The denotation of a universe
+
+A universe holds the table of its caller side and the table of its stored side. Its denotation is
+the absolute denotation at the tables of each absolute side, so the dual universe, with the two
+tables swapped, denotes each term by the same codec. -/
+
+section Denote
+variable {S : Syn} [Sem S] (α : Table S) (β : Table S.op)
+
+/-- Each term, at its certified combinator. -/
+noncomputable abbrev denote (t : Term S) (ρ : List S.C := []) : S.C :=
+  denoteAbs (tables S.o α β) t ρ
+
+/-- The payload's semantics. -/
+noncomputable abbrev bodySem (b : Body S) (ρ : List S.C := []) : S.C :=
+  bodySemAbs (tables S.o α β) b ρ
+
+/-- A field's semantics. -/
+noncomputable abbrev fieldSem (s : ObjectSlot S) (ρ : List S.C := []) :
+    FieldSem (Mean.V (B := S.sig)) (Mean.A (B := S.sig)) S.M :=
+  fieldSemAbs (tables S.o α β) s ρ
+
+/-- The open block's semantics. -/
+noncomputable abbrev wildSem (w : Option (Term S)) (ρ : List S.C := []) :
+    RestSem (Mean.V (B := S.sig)) (Mean.A (B := S.sig)) S.M :=
+  wildSemAbs (tables S.o α β) w ρ
+
+/-- The options' codecs, in order. -/
+noncomputable abbrev denoteList (ts : List (Term S)) (ρ : List S.C := []) : List S.C :=
+  denoteListAbs (tables S.o α β) ts ρ
+
+/-- The spread's codec, where there is one. -/
+noncomputable abbrev denoteOpt (sp : Option (Term S)) (ρ : List S.C := []) : Option S.C :=
+  denoteOptAbs (tables S.o α β) sp ρ
+
+/-- The options' members, in order. -/
+noncomputable abbrev denoteμs (ts : List (Term S)) (ρ : List S.C := []) : List (Option S.M) :=
+  denoteμsAbs (tables S.o α β) ts ρ
+
+/-- The options of no term are no codecs. -/
+@[simp] theorem denoteList_nil (ρ : List S.C) : denoteList α β [] ρ = [] := rfl
+
+/-- The options of a list of terms are the codec of the head and the options of the tail. -/
+@[simp] theorem denoteList_cons (t : Term S) (ts : List (Term S)) (ρ : List S.C) :
+    denoteList α β (t :: ts) ρ = denote α β t ρ :: denoteList α β ts ρ := rfl
+
+/-- No spread has no codec. -/
+@[simp] theorem denoteOpt_none (ρ : List S.C) : denoteOpt α β none ρ = none := rfl
+
+/-- A spread has the codec of its term. -/
+@[simp] theorem denoteOpt_some (t : Term S) (ρ : List S.C) :
+    denoteOpt α β (some t) ρ = some (denote α β t ρ) := rfl
+
+variable {α β}
+
+/-- **A term with no variable is closed**: two environments give one codec. -/
+theorem denote_closed (t : Term S) (h : t.hasVar = false) (ρ ρ' : List S.C) :
+    denote α β t ρ = denote α β t ρ' :=
+  denoteAbs_closed t h ρ ρ'
 
 /-! ## The host rows
 
@@ -1070,8 +1048,7 @@ theorem denote_refine_host (t : Term B) (p : B.P false) (ρ : List (Syn.C ⟨B, 
     denote α β (S := ⟨B, .host⟩) (.refine t p (Mean.truth true)) ρ =
       (denote α β t ρ).restrict (Mean.eval false p) := by
   have h : Mean.eval (B := B) true (Mean.truth true) = fun _ => true := funext (Mean.eval_truth true)
-  rw [denote]
-  exact congrArg _ h
+  exact congrArg (refine2 (denote α β t ρ) (Mean.eval false p)) h
 
 /-- **The host `held` is the caller-side adapter, restricted by the caller outer**, where the top
     reads every attribute. -/

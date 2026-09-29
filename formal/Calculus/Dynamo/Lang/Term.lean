@@ -24,7 +24,7 @@ Deep embedding. Notes:
 /-! ## The DynamoDB rows of the generic functions
 
 `denote`, `μSyn`, `Adm`, `AdmA` and their companions are the generic functions at `dynSyn`. A
-generic equation states a row through the signature (`Syn.list`, `PrimAdm.admV`), and
+generic equation states a row through the signature (`Mean.list`, `PrimAdm.admV`), and
 `simp only [g]` delta-unfolds an abbreviation and reads no other equation. So each row at the
 DynamoDB constructors is a `rfl` lemma in one of these sets, and a proof names the set. The
 sets are registered here because a set is usable only in a module that imports its

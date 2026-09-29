@@ -14,8 +14,8 @@ The test reads no orientation, so the read-side soundness is the write-side soun
 and this module owns no induction. A universe supplies the read-side laws as the write-side laws of
 the dual: `FormerAdmA` holds the set law, and `LeafAdmA` holds the primitive law. The write side at
 the dual reads the top bound at the dual (`TopBound.op`). The graph of a held-free closed term lies
-inside the graph of the top at either orientation, because the dual denotation and the dual top
-are the converses of the denotation and the top (`TopLaws`).
+inside the graph of the top at either orientation, because the dual denotes each term by the same
+codec (`TopLaws`).
 -/
 
 namespace Calculus.Alg
@@ -29,24 +29,16 @@ noncomputable section
 
 /-! ## The rows of the read side -/
 
-/-- The dual admits one set under two environments with one converse graph. -/
-theorem adm_op_env {ρ₁ ρ₂ : List S.op.C} {σ : List S.C} (h₁ : List.Forall₂ R ρ₁ σ)
-    (h₂ : List.Forall₂ R ρ₂ σ) (y : Term S.op) (v : Syn.A S) :
-    Adm (S := S.op) β α y ρ₁ v = Adm (S := S.op) β α y ρ₂ v := by
-  rw [Bool.eq_iff_iff.mpr (Adm_exact (S := S.op) (α := β) (β := α) y ρ₁ v),
-    Bool.eq_iff_iff.mpr (Adm_exact (S := S.op) (α := β) (β := α) y ρ₂ v),
-    (denote_R α β y h₁).1, (denote_R α β y h₂).1]
-
 /-- **A recursive term reads where its body reads over the stage below the attribute's depth**:
     the write-side unfolding of the dual. -/
 theorem AdmA_mu_unfold (b : Term S) (ρ : List S.C) (a : Syn.A S) :
     AdmA α β (.mu b) ρ a
       = AdmA α β b (muStage (fun c => denote α β b (c :: ρ)) (Syn.dA a - 1) :: ρ) a := by
-  have hR := muStage_R (fun c => denote α β b (c :: ρ))
-    (fun c' => denote β α b (c' :: ρ.map convU))
-    (fun _ _ h => denote_R α β b (.cons h (convEnv_R ρ))) (Syn.dA a - 1)
-  exact (Adm_mu_unfold (S := S.op) (α := β) (β := α) b (ρ.map convU) a).trans
-    (adm_op_env (.cons hR (convEnv_R ρ)) (convEnv_R (_ :: ρ)) _ a)
+  have hB : (fun c => denote (S := S.op) β α b (c :: ρ)) = fun c => denote α β b (c :: ρ) :=
+    funext fun c => denote_op b (c :: ρ)
+  have h := Adm_mu_unfold (S := S.op) (α := β) (β := α) b ρ a
+  rw [hB] at h
+  exact h
 
 end
 
@@ -73,22 +65,18 @@ instance TopBound.ofLaws [TopLaws S] : TopBound S where
 
 omit [PrimAdmA S] in
 /-- **The graph of a term is absolute**: at the dual, a held-free closed term lies below the top,
-    because the denotation and the top at the dual are the converses of those at the universe. -/
+    because the dual denotes each term by the same codec, and the top is the top of the meaning. -/
 instance TopBound.op [TopLaws S] : TopBound S.op where
   sub_top {α' β'} t hh hv ρ := by
-    rw [denote_closed (S := S.op) t hv ρ []]
-    have hR := denote_R (S := S) β' α' t (ρ' := []) (ρ := []) .nil
-    have hT := readC_R (Car := Mean.Car) S.o (Mean.top (B := S.sig))
-    have hs := TopBound.sub_top (S := S) (α := β') (β := α') t hh hv []
-    exact .ofEP (fun v a h => by rw [hT.1]; rw [hR.1] at h; exact hs .dual v a h)
-      (fun a v h => by rw [hT.2]; rw [hR.2] at h; exact hs .host a v h)
+    rw [denote_op]
+    exact TopBound.sub_top (S := S) t hh hv ρ
 
 /-! ## Soundness, on the read side -/
 
 /-- The environments keep each paired binder pair apart: no attribute read by both. The
-    environments of converses of the dual keep the binders apart on the write side. -/
+    environments keep the binders apart on the write side of the dual. -/
 def ApartA (p : Pairing) (ρ ρ' : List S.C) : Prop :=
-  ApartV (S := S.op) p (ρ.map convU) (ρ'.map convU)
+  ApartV (S := S.op) p ρ ρ'
 
 /-- **Soundness of the zero test, on the read side**: the write-side soundness of the dual. The
     test reads no orientation, so the test at the dual is the test. Where `disjoint` answers
@@ -98,7 +86,7 @@ theorem disjoint_soundA [Leaf S] [LeafAdmA S] [LeafMeet S] [FormerAdmA S] [Shape
     ∀ (p : Pairing) (x y : Term S), Term.disjoint p x y = true →
       ∀ (ρ ρ' : List S.C), ApartA p ρ ρ' → ∀ v, (AdmA α β x ρ v && AdmA α β y ρ' v) = false :=
   fun p x y h ρ ρ' hp v =>
-    disjoint_sound (S := S.op) (α := β) (β := α) p x y h (ρ.map convU) (ρ'.map convU) hp v
+    disjoint_sound (S := S.op) (α := β) (β := α) p x y h ρ ρ' hp v
 
 /-- **Orthogonality, decided.** Where `disjoint` answers `true`, no value is written by both
     operands and no attribute is read by both, under environments that keep the paired binders

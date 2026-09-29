@@ -34,17 +34,18 @@ noncomputable section
 /-! ## Reading a value through a former -/
 
 /-- The elements of a value, where the list former reads one. -/
-def listOut (v : S.V) : Option (List S.V) := (Syn.list (S := S)).bind (·.pV.out v)
+def listOut (v : S.V) : Option (List S.V) :=
+  (Mean.list (B := S.sig)).bind fun L => (L.p S.o.c).out v
 
 /-- The entries of a value, where the map former reads one. -/
-def mapOut (v : S.V) : Option (MapOf S.V) := (Syn.map (S := S)).bind (·.mV.out v)
+def mapOut (v : S.V) : Option (MapOf S.V) := (Mean.map (B := S.sig)).bind fun F => (F.m S.o.c).out v
 
 /-- A `list` admits a value that the list former reads by the row of its positions. -/
 theorem Adm_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.V}
     {vs : List S.V} (h : listOut v = some vs) :
     Adm α β (.list pre sp suf) ρ v = alignPL (AdmList α β pre ρ) (AdmOptT α β sp ρ) (AdmList α β suf ρ) vs := by
   unfold listOut at h
-  rcases hL : Syn.list (S := S) with _ | L
+  rcases hL : Mean.list (B := S.sig) with _ | L
   · rw [hL] at h; exact absurd h (by simp)
   · rw [hL] at h
     simp only [Option.bind_some] at h
@@ -54,7 +55,7 @@ theorem Adm_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.
 theorem Adm_list_of_none {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.V}
     (h : listOut v = none) : Adm α β (.list pre sp suf) ρ v = false := by
   unfold listOut at h
-  rcases hL : Syn.list (S := S) with _ | L
+  rcases hL : Mean.list (B := S.sig) with _ | L
   · simp only [Adm, hL]
   · rw [hL] at h
     simp only [Option.bind_some] at h
@@ -68,7 +69,7 @@ theorem AdmBody_of_out {b : Body S} {v : S.V} {m : MapOf S.V} (h : mapOut v = so
   unfold mapOut at h
   cases b with
   | mk fields fld wild =>
-  rcases hL : Syn.map (S := S) with _ | F
+  rcases hL : Mean.map (B := S.sig) with _ | F
   · rw [hL] at h; exact absurd h (by simp)
   · rw [hL] at h
     simp only [Option.bind_some] at h
@@ -80,7 +81,7 @@ theorem AdmBody_of_none {b : Body S} {v : S.V} (h : mapOut v = none) :
   unfold mapOut at h
   cases b with
   | mk fields fld wild =>
-  rcases hL : Syn.map (S := S) with _ | F
+  rcases hL : Mean.map (B := S.sig) with _ | F
   · simp only [AdmBody, hL]
   · rw [hL] at h
     simp only [Option.bind_some] at h
@@ -161,13 +162,21 @@ theorem AdmBody_map_slots (c : Body S) {v : S.V} {m : MapOf S.V} (hm : mapOut v 
     | none => simp [AdmWild, Body.block, hw, AdmField]
     | some t => simp [AdmWild, Body.block, hw, AdmField]
 
+omit [PrimAdm S] in
+/-- A recursive term reads each value at the stage of its body that the depth of the value
+    names. -/
+theorem denote_mu_f (b : Term S) (ρ : List S.C) (v : S.V) :
+    (denote α β (.mu b) ρ).f S.o v =
+      (muStage (fun c => denote α β b (c :: ρ)) (Syn.dV v)).f S.o v :=
+  congrArg (fun n => (muStage (fun c => denote α β b (c :: ρ)) n).f S.o v)
+    (congrFun (Mean.d_elim S.o.c) v)
+
 /-- **A recursive term admits what its body admits over the stage below the value's depth.** The
     limit reads a value at the stage that the value's depth names, and that stage is the body over
     the stage below. So the unfolding needs no guard. -/
 theorem Adm_mu_unfold (b : Term S) (ρ : List S.C) (v : S.V) :
     Adm α β (.mu b) ρ v = Adm α β b (muStage (fun c => denote α β b (c :: ρ)) (Syn.dV v - 1) :: ρ) v := by
-  rw [Adm_eq_isSome b]
-  show ((muStage (fun c => denote α β b (c :: ρ)) (Syn.dV v)).e v).isSome = _
+  rw [Adm_eq_isSome (.mu b), denote_mu_f, Adm_eq_isSome b]
   obtain ⟨n, hn⟩ : ∃ n, Syn.dV v = n + 1 := ⟨Syn.dV v - 1, by have := Syn.dV_pos v; omega⟩
   rw [hn, Nat.add_sub_cancel]
   rfl
@@ -209,7 +218,7 @@ class TopBound (S : Syn) [Sem S] : Prop where
 
 /-- The environments keep each paired binder pair apart: no value written by both. -/
 def ApartV (p : Pairing) (ρ ρ' : List S.C) : Prop :=
-  ∀ i j k, p i j = some k → ∀ v, (((envAt ρ i).e v).isSome && ((envAt ρ' j).e v).isSome) = false
+  ∀ i j k, p i j = some k → ∀ v, (((envAt ρ i).f S.o v).isSome && ((envAt ρ' j).f S.o v).isSome) = false
 
 omit [PrimAdm S] in
 /-- Apart environments stay apart when the left operand unfolds: its new binder pairs with
@@ -233,7 +242,7 @@ theorem ApartV.right {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') (c 
 omit [PrimAdm S] in
 /-- Two new binders that share no value extend two apart environments at a paired binder. -/
 theorem ApartV.mu {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') {c c' : S.C}
-    (hc : ∀ v, ((c.e v).isSome && (c'.e v).isSome) = false) :
+    (hc : ∀ v, ((c.f S.o v).isSome && (c'.f S.o v).isSome) = false) :
     ApartV (pairMu p) (c :: ρ) (c' :: ρ') := by
   intro i j k hp v
   match i, j, hp with
@@ -256,16 +265,16 @@ theorem Adm_refine_eq (t : Term S) (p : S.sig.P false) (pA : S.sig.P true) (ρ :
     (v : S.V) :
     Adm α β (.refine t p pA) ρ v =
       (Adm α β t ρ v && (Syn.eval (half S.o.c p pA) v &&
-        gate (denote α β t ρ) (Syn.evalA (half S.o.s p pA)) v)) := by
+        gate ((denote α β t ρ).f S.o) (Syn.evalA (half S.o.s p pA)) v)) := by
   simp only [Adm, Bool.and_assoc]
 
 omit [PrimAdm S] in
 /-- **Two recursive terms are disjoint stage by stage.** Where the two bodies keep apart every
     two binders that share no value, each two stages of the same index share no value. -/
 theorem stage_apart {B B' : S.C → S.C}
-    (hB : ∀ c c', (∀ u, ((c.e u).isSome && (c'.e u).isSome) = false) →
-      ∀ u, (((B c).e u).isSome && ((B' c').e u).isSome) = false) :
-    ∀ n u, (((muStage B n).e u).isSome && ((muStage B' n).e u).isSome) = false
+    (hB : ∀ c c', (∀ u, ((c.f S.o u).isSome && (c'.f S.o u).isSome) = false) →
+      ∀ u, (((B c).f S.o u).isSome && ((B' c').f S.o u).isSome) = false) :
+    ∀ n u, (((muStage B n).f S.o u).isSome && ((muStage B' n).f S.o u).isSome) = false
   | 0, _ => rfl
   | n + 1, u => hB _ _ (stage_apart hB n) u
 
@@ -362,7 +371,7 @@ theorem predApart_sound [Leaf S] [LeafMeet S] {q : S.Pred} {ρ' : List S.C} :
     on the write side**, where both inner terms are closed and held-free: both then write the
     attribute that the top writes. -/
 theorem predApart_soundS [Leaf S] [LeafMeet S] [TopBound S] {q : S.PredA} {ρ' : List S.C} :
-    ∀ (y : Term S), predApart S.o.s q y = true → ∀ v a, (Syn.top (S := S)).e v = some a →
+    ∀ (y : Term S), predApart S.o.s q y = true → ∀ v a, (Syn.top (S := S)).f S.o v = some a →
       Syn.evalA q a = true → Adm α β y ρ' v = false
   | .refine y q₁ q₂, h, v, a, htop, hq => by
       simp only [predApart, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
@@ -375,12 +384,12 @@ theorem predApart_soundS [Leaf S] [LeafMeet S] [TopBound S] {q : S.PredA} {ρ' :
         have hpm := LeafMeet.pmeet_none S.o.s q _ hn a
         simp only [Syn.evalA] at hq
         rw [hq, Bool.true_and] at hpm
-        have hg : gate (denote α β y ρ') (Syn.evalA (half S.o.s q₁ q₂)) v = false := by
+        have hg : gate ((denote α β y ρ').f S.o) (Syn.evalA (half S.o.s q₁ q₂)) v = false := by
           unfold gate
-          cases he : (denote α β y ρ').e v with
+          cases he : (denote α β y ρ').f S.o v with
           | none => rfl
           | some a' =>
-            have : (Syn.top (S := S)).e v = some a' := TopBound.sub_top y hh hv ρ' .host v a' he
+            have : (Syn.top (S := S)).f S.o v = some a' := TopBound.sub_top y hh hv ρ' S.o v a' he
             rw [htop] at this; cases this
             exact hpm
         rw [hg]; simp
@@ -703,13 +712,13 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S
       cases y with
       | mu b' =>
         simp only [Term.disjoint] at h
-        have hB : ∀ c c', (∀ u, ((c.e u).isSome && (c'.e u).isSome) = false) →
-            ∀ u, (((denote α β b (c :: ρ)).e u).isSome && ((denote α β b' (c' :: ρ')).e u).isSome)
-              = false := fun c c' hc u => by
+        have hB : ∀ c c', (∀ u, ((c.f S.o u).isSome && (c'.f S.o u).isSome) = false) →
+            ∀ u, (((denote α β b (c :: ρ)).f S.o u).isSome &&
+              ((denote α β b' (c' :: ρ')).f S.o u).isSome) = false := fun c c' hc u => by
           have := disjoint_sound (pairMu p) b b' h (c :: ρ) (c' :: ρ') (hp.mu hc) u
           rwa [Adm_eq_isSome, Adm_eq_isSome] at this
         have := stage_apart hB (Syn.dV v) v
-        rw [Adm_eq_isSome, Adm_eq_isSome]
+        rw [Adm_eq_isSome, Adm_eq_isSome, denote_mu_f, denote_mu_f]
         exact this
       | _ =>
         simp only [Term.disjoint] at h
@@ -729,13 +738,13 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S
       · have := predApart_sound (α := α) (β := β) (ρ' := ρ') y' hy w
         cases h1 : Syn.eval (half S.o.c q qA) w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
       · unfold gate
-        cases he : (denote α β x ρ).e w with
+        cases he : (denote α β x ρ).f S.o w with
         | none => simp
         | some a =>
           cases hq : Syn.evalA (half S.o.s q qA) a with
           | false => simp [hq]
           | true =>
-            have htop := TopBound.sub_top x hh hv ρ .host w a he
+            have htop := TopBound.sub_top x hh hv ρ S.o w a he
             rw [predApart_soundS (ρ' := ρ') y' hy w a htop hq]; simp
   | p, .union os, y, h, ρ, ρ', hp, v => by
       simp only [Term.disjoint] at h

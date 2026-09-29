@@ -233,7 +233,7 @@ theorem not_equiv_refine_held :
         (denote isoTable (.held (.refine .string (.closure predA) ()) .string .opaq [(.caller 0, false)] [])) := by
   intro h
   have hv := (h.heldSet (.str "B")).mpr
-  simp [denote_rows, Alg.Table.word, Alg.Table.letter, isoTable, Alg.Codec.through,
+  simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, isoTable, Alg.Codec.through,
     Alg.Codec.restrict, Alg.refine2, Pred.eval, stringCodec, isoF, predA] at hv
 
 /-! ## `legacy(c, r)` breaks canonical reads, and `e ∘ p ≢ id`

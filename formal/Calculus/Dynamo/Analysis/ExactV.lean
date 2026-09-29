@@ -167,18 +167,18 @@ variable (t : Term) (ts : List Term)
 @[Adm_rows] theorem Adm_refine (p : Pred) (pA : Alg.Syn.PredA dynSyn) :
     Adm α (.refine t p pA) = fun v => Adm α t v && p.eval v := by
   funext v
-  have h : Alg.gate (Alg.denote α dynTableA t []) (fun _ => true) v =
+  have h : Alg.gate (Alg.denote α dynTableA t []).e (fun _ => true) v =
       Alg.Adm α dynTableA t [] v :=
     (Alg.gate_true _ _).trans (Alg.Adm_eq_isSome t [] v).symm
   show (Alg.Adm α dynTableA t [] v && p.eval v &&
-    Alg.gate (Alg.denote α dynTableA t []) (fun _ => true) v) =
+    Alg.gate (Alg.denote α dynTableA t []).e (fun _ => true) v) =
     (Alg.Adm α dynTableA t [] v && p.eval v)
   rw [h]
   cases Alg.Adm α dynTableA t [] v <;> simp
 /-- The stored word is the identity, so the stored gate reads the stored outer at the write. -/
 @[Adm_rows] theorem Adm_held (P PA : Term) (k : Word) (kA : List (Alg.Syn.GenA dynSyn × Bool)) :
     Adm α (.held t P PA k kA) = fun v => Adm α t ((α.word k).1 v) && Adm α P v &&
-      Alg.gate (denote α t) (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v) := by
+      Alg.gate (denote α t).e (fun a => ((denote α PA).p a).isSome) ((α.word k).1 v) := by
   simp only [Adm, Alg.Adm, dynTableA_word]
   rfl
 /-- `select` attempts every option, so the row is the disjunction of the options' rows. -/

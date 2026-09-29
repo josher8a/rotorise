@@ -4,11 +4,11 @@ import Calculus.Lang.Converse
 /-!
 # Exactness on the attribute side, over a universe signature
 
-`AdmA` is the attribute half of `Adm`: a row per constructor that equals `dom(p)` of
-`denote t`. The attribute row of a term is the value row of the same term in the dual universe,
-under the environment of converses. So `AdmA_exact` is `Adm_exact` at the dual, composed with
-`denote_R`, and the attribute side owns no induction. A universe supplies the value rows of
-the primitives of its dual (`PrimAdmA`), and nothing else.
+`AdmA` is the attribute half of `Adm`: a row per constructor that equals the domain of `denote t` at
+the dual orientation, `dom(p)` at the host. The attribute row of a term is the value row of the same
+term in the dual universe, under the same environment. So `AdmA_exact` is `Adm_exact` at the dual,
+composed with `denote_op`, and the attribute side owns no induction. A universe supplies the value
+rows of the primitives of its dual (`PrimAdmA`), and nothing else.
 -/
 
 namespace Calculus.Alg
@@ -19,23 +19,16 @@ abbrev PrimAdmA (S : Syn) [Sem S] := PrimAdm S.op
 
 variable {S : Syn} [Sem S] {α : Table S} {β : Table S.op}
 
-/-- The environment of converses is related to the environment by the converse graph. -/
-theorem convEnv_R : ∀ ρ : List S.C, List.Forall₂ R (ρ.map convU) ρ
-  | [] => .nil
-  | c :: ρ => .cons (R_convU c) (convEnv_R ρ)
-
 variable (α β) in
 /-- **`refine`'s read-side gate**: decode with the base, then apply `q` to what comes out. -/
 noncomputable def refineReads (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a : Syn.A S) :
     Bool :=
-  gate (conv (denote α β t ρ)) q a
+  gate ((denote α β t ρ).f S.o.op) q a
 
 /-- `refineReads` is the gate of the term at the dual orientation. -/
 theorem refineReads_eq_gate (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a : Syn.A S) :
-    gate (denote β α t (ρ.map convU)) q a = refineReads α β t ρ q a := by
-  unfold refineReads gate
-  rw [(denote_R α β t (convEnv_R ρ)).1]
-  rfl
+    gate ((denote (S := S.op) β α t ρ).f S.o.op) q a = refineReads α β t ρ q a := by
+  rw [denote_op]; rfl
 
 variable [PrimAdmA S]
 
@@ -43,32 +36,32 @@ noncomputable section
 
 variable (α β) in
 /-- **The joint admission predicate, attribute side**, under an environment `ρ`: the value row
-    of the term in the dual universe, under the environment of converses. -/
-def AdmA (t : Term S) (ρ : List S.C) : Syn.A S → Bool := Adm β α t (ρ.map convU)
+    of the term in the dual universe, under the same environment. -/
+def AdmA (t : Term S) (ρ : List S.C) : Syn.A S → Bool := Adm (S := S.op) β α t ρ
 
 variable (α β) in
 /-- The read side's payload row; `AdmBody`'s mirror. -/
-def AdmABody (b : Body S) (ρ : List S.C) : Syn.A S → Bool := AdmBody β α b (ρ.map convU)
+def AdmABody (b : Body S) (ρ : List S.C) : Syn.A S → Bool := AdmBody (S := S.op) β α b ρ
 
 variable (α β) in
 /-- A slot's read row is its term's. -/
 def AdmAField (s : ObjectSlot S) (ρ : List S.C) : Syn.A S → Bool :=
-  AdmField β α s (ρ.map convU)
+  AdmField (S := S.op) β α s ρ
 
 variable (α β) in
 /-- The open block's read row, where the body has one. -/
 def AdmAWild (w : Option (Term S)) (ρ : List S.C) : Option (Syn.A S → Bool) :=
-  AdmWild β α w (ρ.map convU)
+  AdmWild (S := S.op) β α w ρ
 
 variable (α β) in
 /-- The options' read rows, in order. -/
 def AdmAList (ts : List (Term S)) (ρ : List S.C) : List (Syn.A S → Bool) :=
-  AdmList β α ts (ρ.map convU)
+  AdmList (S := S.op) β α ts ρ
 
 variable (α β) in
 /-- The spread's read row, where there is one. -/
 def AdmAOptT (o : Option (Term S)) (ρ : List S.C) : Option (Syn.A S → Bool) :=
-  AdmOptT β α o (ρ.map convU)
+  AdmOptT (S := S.op) β α o ρ
 
 @[simp] theorem AdmAList_eq (ρ : List S.C) :
     ∀ ts : List (Term S), AdmAList α β ts ρ = ts.map (AdmA α β · ρ)
@@ -94,31 +87,30 @@ theorem AdmA_held_eq [PrimAdm S] (t P PA : Term S) (k : List (S.sig.G false × B
         AdmA α β t ρ ((β.word (halfK S.o.s k kA)).1 a) &&
         refineReads α β t ρ (fun w => half2 S.o.c (Adm α β P ρ ((α.word (halfK S.o.c k kA)).2 w))
           (Adm α β PA ρ ((α.word (halfK S.o.c k kA)).2 w))) ((β.word (halfK S.o.s k kA)).1 a)) := by
-  have hP : (fun w => ((half2 S.o.c (denote β α P (ρ.map convU))
-      (denote β α PA (ρ.map convU))).p ((α.word (halfK S.o.c k kA)).2 w)).isSome) =
+  have hP : (fun w => ((half2 S.o.c (denote (S := S.op) β α P ρ)
+      (denote (S := S.op) β α PA ρ)).f S.o ((α.word (halfK S.o.c k kA)).2 w)).isSome) =
       fun w => half2 S.o.c (Adm α β P ρ ((α.word (halfK S.o.c k kA)).2 w))
         (Adm α β PA ρ ((α.word (halfK S.o.c k kA)).2 w)) := by
     funext w
-    rw [half2_apply Codec.p, half2_app, half2_apply Option.isSome,
-      (denote_R α β P (convEnv_R ρ)).2, (denote_R α β PA (convEnv_R ρ)).2, Adm_eq_isSome,
-      Adm_eq_isSome]
+    rw [denote_op, denote_op, half2_f, half2_apply Option.isSome, Adm_eq_isSome, Adm_eq_isSome]
   rw [← hP, ← refineReads_eq_gate]
   simp only [AdmA, Adm]
-  rw [Bool.and_comm (Adm β α t _ _)]
+  rw [Bool.and_comm (Adm (S := S.op) β α t _ _)]
 
 variable (α β) in
-/-- The row is `dom(p)`, not a bound on it, under the environment `ρ`. -/
+/-- The row is the domain at the dual orientation, not a bound on it, under the environment
+    `ρ`. -/
 def ExactA (t : Term S) (ρ : List S.C) : Prop :=
-  ∀ a, AdmA α β t ρ a = true ↔ ((denote α β t ρ).p a).isSome
+  ∀ a, AdmA α β t ρ a = true ↔ ((denote α β t ρ).f S.o.op a).isSome
 
 /-- **Every attribute row is exact**, at every universe: the value law at the dual, through
-    `denote_R`. -/
+    `denote_op`. -/
 theorem AdmA_exact (t : Term S) (ρ : List S.C) : ExactA α β t ρ := fun a =>
-  (Adm_exact (α := β) (β := α) t (ρ.map convU) a).trans (by rw [(denote_R α β t (convEnv_R ρ)).1])
+  (Adm_exact (S := S.op) (α := β) (β := α) t ρ a).trans (by rw [denote_op])
 
 /-- The row, read as a Boolean: the read domain of the denotation. -/
 theorem AdmA_eq_isSome (t : Term S) (ρ : List S.C) (a : Syn.A S) :
-    AdmA α β t ρ a = ((denote α β t ρ).p a).isSome :=
+    AdmA α β t ρ a = ((denote α β t ρ).f S.o.op a).isSome :=
   Bool.eq_iff_iff.mpr (AdmA_exact t ρ a)
 
 /-- **A term with no variable reads one set of attributes under every environment.** -/
