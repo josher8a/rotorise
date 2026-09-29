@@ -286,11 +286,6 @@ theorem valPresentB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) (names : 
     valPresentB ⟨keys, F₁⟩ names = valPresentB ⟨keys, F₂⟩ names :=
   decide_eq_decide.mpr (forall_congr' fun k => by rw [(hF k).valPresentAt names k.1])
 
-/-- Two tables of one shape guard the read side alike. -/
-theorem reqPresentB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) (names : Finset String) :
-    reqPresentB ⟨keys, F₁⟩ names = reqPresentB ⟨keys, F₂⟩ names :=
-  decide_eq_decide.mpr (forall_congr' fun k => by rw [(hF k).valPresentAt names k.1])
-
 end ObjectAgree
 
 /-- An object reads each entry one layer below the map, so it turns agreement below `d` into
@@ -318,7 +313,7 @@ theorem agreeLe_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM
     | some m =>
       have hvv := mV.into_out h
       refine congrArg (Option.map mA.into) ?_
-      simp only [Option.bind_some, objWrite, valPresentB_rel hF]
+      simp only [Option.bind_some, objWrite, objAt, valPresentB_rel hF]
       split
       · congr 2
         funext k
@@ -331,7 +326,7 @@ theorem agreeLe_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM
     | some m =>
       have haa := mA.into_out h
       refine congrArg (Option.map mV.into) ?_
-      simp only [Option.bind_some, objRead, reqPresentB_rel hF]
+      simp only [Option.bind_some, objRead, objAt, valPresentB_rel hF]
       split
       · congr 2
         funext k

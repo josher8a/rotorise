@@ -86,14 +86,14 @@ theorem sub_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM : M
     Sub (objectCodec mV mA μM sems rest) u := by
   refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
   · obtain ⟨x, y, hv, hE, rfl⟩ := carried_e.mp he
-    obtain ⟨-, g, hg, rfl⟩ := objWrite_eq.mp hE
+    obtain ⟨-, g, hg, rfl⟩ := objAt_eq.mp hE
     rw [mV.into_out hv, hue, funImage_eq (f := g) (fun k => ?_)]
     · rfl
     have hk := funImage_some hg k
     obtain ⟨c, hc, hce⟩ := Option.bind_eq_some_iff.mp hk
     exact (entryCodec_of (Q := fun c => Sub c u) hf hw hc) .host _ _ hce
   · obtain ⟨y, x, ha, hD, rfl⟩ := carried_p.mp hp
-    obtain ⟨-, d, hd, rfl⟩ := objRead_eq.mp hD
+    obtain ⟨-, d, hd, rfl⟩ := objAt_eq.mp hD
     rw [mA.into_out ha, hup, funImage_eq (f := d) (fun k => ?_)]
     · rfl
     have hk := funImage_some hd k
