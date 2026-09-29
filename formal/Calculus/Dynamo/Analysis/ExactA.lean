@@ -52,10 +52,8 @@ then applies `q`. Each is a row here rather than a remark. -/
 /-! ### The attribute side's rows, and the three that are not the value side's
 
 The attribute side reads the combinators of the value side at the carrier `Attr`. `objRead`
-still filters the *stored* names through `keepB`, and the row carries no filter to match it:
-`keepB` is the constant `true` at every body, because `drop` was the one policy that dropped a
-name and an open block is a codec or nothing. The attribute row is the value row of the dual,
-so the exactness of the object row owes the filter no proof of its own. -/
+reads every stored name, because a rest policy refuses an undeclared name or reads it with the
+codec of the open block. The attribute row is the value row of the dual. -/
 
 /-- An attribute-side row, once the subterms' rows are known. -/
 abbrev AP := Attr → Bool
@@ -299,8 +297,7 @@ The value side needs only `AdmWild`, which is `none` exactly where the body decl
 block. The read side reads the block the same way: an undeclared name under a closed body is
 refused, and each name's own presence pair handles a declared absent name. -/
 
-/-- One entry of the read-side object row — `objAdmV_row`'s twin. It took a keep filter as a
-    hypothesis while `drop` made the two sides' filters differ; they do not differ now. -/
+/-- One entry of the read-side object row — `objAdmV_row`'s twin. -/
 theorem objAdmA_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (hB : objAdmV ⟨c.fields, fun k => AdmAField α (c.at k)⟩ (AdmAWild α c.wild) keys g = true)
     {k : Name} (hk : k ∈ keys) (hc : k ∈ c.fields) :

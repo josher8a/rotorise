@@ -370,9 +370,9 @@ export Alg (valPresentB_of)
 /-- The keyed product — the doc's current-schema `object`. -/
 theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hf : ∀ k, Lawful (sems.2 k).codec)
-    (hrest : ∀ c, rest = .codec c → Lawful c) (hnd : rest ≠ .drop) :
+    (hrest : ∀ c, rest = .codec c → Lawful c) :
     Lawful (objectCodec sems rest) :=
-  Alg.lawful_objectCodec (fun _ => rfl) hf hrest hnd
+  Alg.lawful_objectCodec (fun _ => rfl) hf hrest
 
 /-! ### Kind separation, and `opaque`'s fixpoint
 

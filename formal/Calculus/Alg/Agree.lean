@@ -176,31 +176,22 @@ theorem agree_list {o : Orient} {pV : Ctor (List V) V} {pA : Ctor (List A) A} {�
       (fun c hc d hd => h c (slotsL_mem _ _ _ _ _ hs c hc) d (slotsL_mem _ _ _ _ _ hs' d hd))
       htr htr'
 
-/-- The name filter of a rest policy that is not `drop` keeps every name. -/
-theorem keepB_of_ne_drop {rest : RestSem V A M} (h : rest ≠ .drop) (sems : MapOf (FieldSem V A M)) :
-    keepB rest sems = fun _ => true := by
-  cases rest with
-  | drop => exact absurd rfl h
-  | refuse => rfl
-  | codec _ => rfl
-
 /-- **Two objects agree where the two codecs of each name agree**, at each orientation. -/
 theorem agree_object {o : Orient} {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM : M}
     {sems₁ sems₂ : MapOf (FieldSem V A M)} {rest₁ rest₂ : RestSem V A M}
-    (hd₁ : rest₁ ≠ .drop) (hd₂ : rest₂ ≠ .drop)
     (h : ∀ k c₁ c₂, entryCodec sems₁ (rcOf rest₁) k = some c₁ →
       entryCodec sems₂ (rcOf rest₂) k = some c₂ → Agree o c₁ c₂) :
     Agree o (objectCodec mV mA μM sems₁ rest₁) (objectCodec mV mA μM sems₂ rest₂) := by
-  simp only [objectCodec, objectCodecCore, keepB_of_ne_drop hd₁, keepB_of_ne_drop hd₂]
+  simp only [objectCodec, objectCodecCore]
   revert h
   refine Orient.both (P := fun o => (∀ k c₁ c₂, entryCodec sems₁ (rcOf rest₁) k = some c₁ →
       entryCodec sems₂ (rcOf rest₂) k = some c₂ → Agree o c₁ c₂) →
       Agree o (carriedCodec mV mA μM
         (fun p => valPresentB sems₁ p.1 = true ∧ ∀ k, objEntryT sems₁ (rcOf rest₁) (k.1, p.2 k))
-        (objWrite sems₁ (rcOf rest₁)) (objRead sems₁ (rcOf rest₁) fun _ => true))
+        (objWrite sems₁ (rcOf rest₁)) (objRead sems₁ (rcOf rest₁)))
       (carriedCodec mV mA μM
         (fun p => valPresentB sems₂ p.1 = true ∧ ∀ k, objEntryT sems₂ (rcOf rest₂) (k.1, p.2 k))
-        (objWrite sems₂ (rcOf rest₂)) (objRead sems₂ (rcOf rest₂) fun _ => true))) ?_ ?_ o <;>
+        (objWrite sems₂ (rcOf rest₂)) (objRead sems₂ (rcOf rest₂)))) ?_ ?_ o <;>
     intro h
   · refine agreeE_carried fun m d₁ d₂ h1 h2 => ?_
     unfold objWrite at h1 h2

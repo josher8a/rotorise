@@ -291,13 +291,6 @@ theorem reqPresentB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) (names : 
     reqPresentB ⟨keys, F₁⟩ names = reqPresentB ⟨keys, F₂⟩ names :=
   decide_eq_decide.mpr (forall_congr' fun k => by rw [(hF k).valPresentAt names k.1])
 
-/-- Two tables of one shape filter the names alike. -/
-theorem keepB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) :
-    ∀ {r₁ r₂ : RestSem V A M}, RestSem.Rel R r₁ r₂ → keepB r₁ ⟨keys, F₁⟩ = keepB r₂ ⟨keys, F₂⟩
-  | .drop, .drop, _ => funext fun k => optionRel_isSome (mapOf_at_rel hF k)
-  | .refuse, .refuse, _ => rfl
-  | .codec _, .codec _, _ => rfl
-
 end ObjectAgree
 
 /-- An object reads each entry one layer below the map, so it turns agreement below `d` into
@@ -318,7 +311,6 @@ theorem agreeLe_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM
         = (entryCodec ⟨keys, F₂⟩ (rcOf r₂) k).bind (run · x) := fun run x hrun k =>
     optionRel_bind (fun _ _ h => hrun _ _ h) (hent k)
   unfold objectCodec
-  rw [keepB_rel hF hr]
   refine ⟨fun v hv => ?_, fun a ha => ?_⟩
   · show ((mV.out v).bind _).map mA.into = ((mV.out v).bind _).map mA.into
     cases h : mV.out v with
@@ -343,8 +335,8 @@ theorem agreeLe_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM
       split
       · congr 2
         funext k
-        exact hbind (·.p ·) _ (fun _ _ h => h.p _ (by
-          have := hdA m ⟨k.1, (Finset.mem_filter.mp k.2).1⟩; rw [← haa] at this; omega)) k.1
+        exact hbind (·.p ·) (m.get k) (fun _ _ h => h.p _ (by
+          have := hdA m k; rw [← haa] at this; omega)) k.1
       · rfl
 
 end Calculus.Alg

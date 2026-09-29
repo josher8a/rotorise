@@ -580,7 +580,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
         cases Mean.map (B := S.sig) with
         | none => exact agree_empty_left _ _
         | some F =>
-          refine agree_object (wildSem_ne_drop w) (wildSem_ne_drop w') fun k c₁ c₂ h1 h2 => ?_
+          refine agree_object fun k c₁ c₂ h1 h2 => ?_
           rcases entry_cases h1 with ⟨hk, rfl⟩ | ⟨hk, hc₁⟩ <;>
             rcases entry_cases h2 with ⟨hk', rfl⟩ | ⟨hk', hc₂⟩
           · have := hall ⟨k, Finset.mem_union.mpr (Or.inl hk)⟩

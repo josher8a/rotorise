@@ -92,7 +92,7 @@ def HMap (T : Held) : Held :=
   fun v => ∃ keys f, v = .map keys f ∧ ∀ k, T (f k)
 
 /-- `⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ)` (§4 `(object)`). A binding is `(name, required?,
-    held set)`; `R` is the open part — `none` for `drop`/`refuse`, the rest codec's held
+    held set)`; `R` is the open part — `none` for `refuse`, the rest codec's held
     set otherwise. Every `req` name is present, and every present name is either
     declared (and holds its own set) or falls to the open part. -/
 def HObject (names : Finset Name) (b : {k // k ∈ names} → Bool × Held) (R : Option Held) :

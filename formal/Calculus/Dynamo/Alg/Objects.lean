@@ -38,43 +38,29 @@ end RestSem
 pair read no carrier constructor, so they are the generic layer's (`Alg.objWrite` and its
 neighbours), and the aliases below give them their names in this namespace. -/
 
-export Alg (valPresentB reqPresentB keepB objEntryT entryCodec objWrite objRead objWrite_eq)
+export Alg (valPresentB reqPresentB objEntryT entryCodec objWrite objRead objWrite_eq)
 
 section Object
-variable {sems : MapOf FieldSem} {rc? : Option Codec} {kn : Name → Bool}
-
-/-- A filter that keeps every name transports an entrywise read to a record read. -/
-theorem funImage_record_congr {S T : Finset Name} (hS : S = T)
-    {g : {k // k ∈ S} → Option Value} {g' : {k // k ∈ T} → Option Value}
-    (hg : ∀ (k : Name) (h : k ∈ S) (h' : k ∈ T), g ⟨k, h⟩ = g' ⟨k, h'⟩) :
-    (funImage g).map (Value.map S) = (funImage g').map (Value.map T) := by
-  subst hS
-  have himg : g = g' := funext fun k => hg k.1 k.2 k.2
-  subst himg
-  rfl
+variable {sems : MapOf FieldSem} {rc? : Option Codec}
 
 /-- The object is `carriedCodec` between `map` and `M`, at that pair: the generic object at the
     `map` and `M` prisms. -/
-noncomputable abbrev objectCodecCore (sems : MapOf FieldSem) (rc? : Option Codec)
-    (kn : Name → Bool) : Codec :=
-  Alg.objectCodecCore mapV mA .M sems rc? kn
+noncomputable abbrev objectCodecCore (sems : MapOf FieldSem) (rc? : Option Codec) : Codec :=
+  Alg.objectCodecCore mapV mA .M sems rc?
 
 /-- §4's `object`, at the `map` and `M` prisms. -/
 noncomputable abbrev objectCodec (sems : MapOf FieldSem) (rest : RestSem) : Codec :=
   Alg.objectCodec mapV mA .M sems rest
 
 theorem objectCodecCore_eq :
-    objectCodecCore sems rc? kn =
+    objectCodecCore sems rc? =
       carriedCodec mapV mA .M
         (fun p => valPresentB sems p.1 = true ∧ ∀ k, objEntryT sems rc? (k.1, p.2 k))
-        (objWrite sems rc?) (objRead sems rc? kn) := rfl
+        (objWrite sems rc?) (objRead sems rc?) := rfl
 
 /-- **The empty body with an open block is the record.** `record` is not a term of its own: it
     is the object that declares no name and takes every key at one codec, and this is the
-    equation that says so. Four components, and only the reading needs work: the keep filter is
-    constantly true at an open block, so it drops no name. The output key set is therefore the
-    map's own. `funImage_record_congr` carries the filter as a variable, which keeps the
-    transport out of a dependent rewrite. -/
+    equation that says so. -/
 theorem objectCodec_empty_codec (c : Codec) :
     objectCodec ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ (.codec c) = recordCodec c := by
   -- A quantifier over the empty key set is vacuous, and simp discharges one through an
@@ -111,20 +97,16 @@ theorem objectCodec_empty_codec (c : Codec) :
     rename_i keys f
     simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, mapV, mA,
         Option.bind,
-               objRead, rcOf, recordCodec, Alg.Codec.ofEP_p]
+               objRead, rcOf, entryCodec, MapOf.at, recordCodec, Alg.Codec.ofEP_p]
     -- simp over a vacuous `Finset ∅` goal reaches `Classical.choice` through three filter
     -- lemmas this development does not advertise. Each fact below is the direct term instead.
     rw [if_pos (show reqPresentB (⟨(∅ : Finset Name),
         fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ : MapOf FieldSem) keys = true from
       decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1)))]
-    have hkeep : keys.filter
-        (keepB (.codec c)
-          (⟨(∅ : Finset Name), fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ : MapOf FieldSem) ·)
-          = keys :=
-      Finset.ext fun k =>
-        ⟨fun hk => (Finset.mem_filter.mp hk).1, fun hk => Finset.mem_filter.mpr ⟨hk, rfl⟩⟩
     rw [Option.map_map]
-    exact funImage_record_congr hkeep (fun k h h' => rfl)
+    refine congrArg (fun F => Option.map F _) (funext fun _ => rfl) |>.trans ?_
+    exact congrArg (Option.map _) (congrArg funImage
+      (funext fun k => by rw [dif_neg (Finset.notMem_empty k.1)]))
 
 end Object
 
