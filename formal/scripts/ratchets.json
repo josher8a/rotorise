@@ -1,8 +1,8 @@
 {
   "_comment": "Per-file ratchet baselines. See scripts/ratchet.py \u2014 a rise fails the build; move a number only with --accept.",
   "branches": {
-    "Calculus/Alg/Agree.lean": 57,
-    "Calculus/Alg/Codec.lean": 15,
+    "Calculus/Alg/Agree.lean": 47,
+    "Calculus/Alg/Codec.lean": 14,
     "Calculus/Alg/Combinators.lean": 68,
     "Calculus/Alg/Containers.lean": 71,
     "Calculus/Alg/Converse.lean": 77,

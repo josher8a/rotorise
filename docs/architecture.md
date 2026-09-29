@@ -582,9 +582,10 @@ option that writes and reads other slots is disjoint from the option.
 one value write one attribute (`Agree` at the host), and two readers of one attribute read one
 value (`Agree` at the dual). `Term.compat` decides each half per component: the two terms are
 disjoint there, or one codec bounds both there. The bottom agrees with every term. Two held-free
-terms are bounded by the top. With no binder unfolded, the oracle `dynOracle` asks the test of the two views of the half. A
-`held` whose half is disjoint from the partner agrees there. `compat_sound` proves each row, and
-`pairwiseCompat_of_compatPair` discharges the union's obligation of two lawful closed options.
+terms are bounded by the top. With no binder unfolded, the oracle `dynOracle` asks the test of the
+two views of the half. A `held` whose half is disjoint from the partner agrees there.
+`compat_sound` proves each row, and `pairwiseCompat_of_compatPair` discharges the union's
+obligation of two lawful closed options.
 
 **The decision is the specification of the library's declaration-time guard, and a checked one.**
 The `union` combinator in `src/` accepts a pair where `agrees(x, y)` holds, which is the model's
