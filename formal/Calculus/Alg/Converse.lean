@@ -1,52 +1,21 @@
 import Calculus.Alg.Agree
 
 /-!
-# The two-sided wrappers, and the containers that keep the converse
-
-The converse `conv`, the converse graph `R` and the two-sided restriction `refine2` are in
-`Combinators`. This module holds the laws of the converse, and the two-sided wrappers over it.
+# The two-sided wrappers
 
 `adapt2` is the two-sided form of `through`, and `held2` restricts `adapt2` on each side by an
 outer codec. Each side of a codec holds one pair, and each pair reads from its own side: the
 first function acts on the value that enters from the side, and the second on the value that
-exits to the side. So the converse swaps the two halves and changes no pair (`R.adapt2`,
-`R.held2`). `Obl2` is the obligation of the two-sided adapter: one `IsoCancels` per half, and
-the member fact of the stored exit function. Where the stored pair is the identity, the
+exits to the side. `Obl2` is the obligation of the two-sided adapter: one `IsoCancels` per half,
+and the member fact of the stored exit function. Where the stored pair is the identity, the
 two-sided form is the host form (`adapt2_host`, `held2_host`, `obl2_host`).
 
-A list and an object keep the converse: each is the same constructor over the converses of its
-parts (`listCodec_R`, `objectCodec_R`).
+The object codec reads the map payload at each orientation (`objectCodec_f`).
 -/
 
 namespace Calculus.Alg
 
 variable {V A M : Type}
-
-/-! ## The converse -/
-
-/-- The converse of a lawful codec is lawful, with the trivial member. -/
-theorem Lawful.conv {member : A → M} {c : Codec V A M} (h : Lawful member c) :
-    Lawful (fun _ : V => ()) (conv c) :=
-  .ofRC h.canon h.retract fun _ _ _ _ => rfl
-
-/-- The converse holds every value, so it is on its carrier. -/
-theorem carrier_conv (c : Codec V A M) : Carrier (conv c) := ⟨fun _ => trivial, fun _ => trivial⟩
-
-/-- The inverse converse of a lawful codec is lawful, and names no member. -/
-theorem Lawful.unconv {member : A → M} {c : Codec A V Unit} (h : Lawful (fun _ : V => ()) c) :
-    Lawful member (unconv c : Codec V A M) :=
-  .ofRC h.canon h.retract fun hμ => nomatch hμ
-
-/-- Agreement on one half of two codecs is agreement on the other half of their inverse
-    converses. -/
-theorem agreeS_unconv {side : Bool} {c d : Codec A V Unit} (h : AgreeS side c d) :
-    AgreeS (!side) (unconv c : Codec V A M) (unconv d) := by
-  cases side <;> exact h
-
-/-- Agreement on one half of two codecs is agreement on the other half of their converses. -/
-theorem agreeS_conv {side : Bool} {c d : Codec V A M} (h : AgreeS (!side) c d) :
-    AgreeS side (conv c) (conv d) := by
-  cases side <;> exact h
 
 /-! ## The two-sided wrappers -/
 
@@ -63,26 +32,6 @@ def adapt2 (c : Codec V A M) (fV gV : V → V) (hA kA : A → A) : Codec V A M :
 def held2 {M₁ M₂ : Type} (c : Codec V A M) (oV : Codec V A M₁) (oA : Codec V A M₂)
     (fV gV : V → V) (hA kA : A → A) : Codec V A M :=
   refine2 (adapt2 c fV gV hA kA) (fun v => (oV.e v).isSome) (fun a => (oA.p a).isSome)
-
-/-- **The converse of the two-sided adapter swaps the halves**, with no dagger. -/
-theorem R.adapt2 {N : Type} {c' : Codec A V N} {c : Codec V A M} (h : R c' c)
-    (fV gV : V → V) (hA kA : A → A) : R (adapt2 c' hA kA fV gV) (adapt2 c fV gV hA kA) := by
-  obtain ⟨h1, h2⟩ := h
-  exact ⟨by simp only [Alg.adapt2, Codec.ofEP_e, Codec.ofEP_p, h1],
-    by simp only [Alg.adapt2, Codec.ofEP_e, Codec.ofEP_p, h2]⟩
-
-/-- **The converse of the two-sided `held` swaps the halves, the outers included.** The caller
-    outer of the dual is the converse of the stored outer, and its stored outer the converse of
-    the caller outer. -/
-theorem R.held2 {N M₁ M₂ N₁ N₂ : Type} {c' : Codec A V N} {c : Codec V A M}
-    {oV : Codec V A M₁} {oA : Codec V A M₂} {oV' : Codec A V N₁} {oA' : Codec A V N₂}
-    (h : R c' c) (hV : R oV' oA) (hA : R oA' oV) (fV gV : V → V) (hA' kA : A → A) :
-    R (held2 c' oV' oA' hA' kA fV gV) (held2 c oV oA fV gV hA' kA) := by
-  obtain ⟨h1, -⟩ := hV
-  obtain ⟨-, h2⟩ := hA
-  unfold Alg.held2
-  rw [h1, h2]
-  exact R.refine2 (R.adapt2 h fV gV hA' kA) _ _
 
 /-- **The host adapter is `through`**: the stored pair is the identity. -/
 theorem adapt2_host (c : Codec V A M) (f g : V → V) : adapt2 c f g id id = c.through f g := by
@@ -192,52 +141,7 @@ theorem carrier_adapt2 {member : A → M} {c : Codec V A M} (hc : Carrier c)
     rw [← hfg w (hlaw.canon hw)] at hT
     exact hT
 
-/-! ## The constructors that keep the converse
-
-Each lemma says: the constructor over the converses of its parts is the converse of the
-constructor over the parts. -/
-
-/-- Two fields of one shape whose codecs have the converse graphs. -/
-def FieldR {N' : Type} : FieldSem A V N' → FieldSem V A M → Prop
-  | .req c', .req c => R c' c
-  | .opt c', .opt c => R c' c
-  | _, _ => False
-
-/-- Two rest policies of one shape whose codecs have the converse graphs. -/
-def RestR {N' : Type} : RestSem A V N' → RestSem V A M → Prop
-  | .drop, .drop | .refuse, .refuse => True
-  | .codec c', .codec c => R c' c
-  | _, _ => False
-
-/-- Two fields of one shape have one presence. -/
-theorem FieldR.valPresentAt {N' : Type} {f' : FieldSem A V N'} {f : FieldSem V A M}
-    (h : FieldR f' f) (names : Finset String) (k : String) :
-    valPresentAt names k f' = valPresentAt names k f := by
-  cases f' <;> cases f <;> first | rfl | exact h.elim
-
-/-- The entry codec of a table of converse fields is the converse of the entry codec. -/
-theorem entry_R {N' : Type} {keys : Finset String} {s' : {k // k ∈ keys} → FieldSem A V N'}
-    {s : {k // k ∈ keys} → FieldSem V A M} (hF : ∀ k, FieldR (s' k) (s k))
-    {rest' : RestSem A V N'} {rest : RestSem V A M} (hr : RestR rest' rest) (k : String) :
-    Option.Rel R (entryCodec ⟨keys, s'⟩ (rcOf rest') k) (entryCodec ⟨keys, s⟩ (rcOf rest) k) := by
-  have hat : Option.Rel FieldR ((⟨keys, s'⟩ : MapOf (FieldSem A V N')).at k)
-      ((⟨keys, s⟩ : MapOf (FieldSem V A M)).at k) := by
-    unfold MapOf.at
-    split
-    · exact .some (hF _)
-    · exact .none
-  unfold entryCodec
-  revert hat
-  generalize (⟨keys, s'⟩ : MapOf (FieldSem A V N')).at k = x'
-  generalize (⟨keys, s⟩ : MapOf (FieldSem V A M)).at k = x
-  intro hat
-  cases hat with
-  | some h =>
-    rename_i f' f
-    cases f' <;> cases f <;> first | exact h.elim | exact .some h
-  | none =>
-    revert hr
-    cases rest' <;> cases rest <;> intro hr <;> first | exact hr.elim | exact .none | exact .some hr
+/-! ## The object codec at an orientation -/
 
 /-- A map payload over a key set equal to another is the payload over that set. -/
 theorem funImage_map_mk {β : Type} {s' s : Finset String} (h : s' = s)
@@ -247,58 +151,6 @@ theorem funImage_map_mk {β : Type} {s' s : Finset String} (h : s' = s)
   subst h
   have : G' = G := funext fun k => hG k.1 k.2 k.2
   rw [this]
-
-/-- The read of an object with no name filter is the write of the converse object. -/
-theorem objRead_true {N' : Type} (s₁ : MapOf (FieldSem V A M)) (rc₁ : Option (Codec V A M))
-    (s₂ : MapOf (FieldSem A V N')) (rc₂ : Option (Codec A V N'))
-    (hg : ∀ names, reqPresentB s₁ names = valPresentB s₂ names)
-    (he : ∀ k, Option.Rel R (entryCodec s₂ rc₂ k) (entryCodec s₁ rc₁ k)) (q : MapOf A) :
-    objRead s₁ rc₁ (fun _ => true) q = objWrite s₂ rc₂ q := by
-  unfold objRead objWrite
-  rw [hg]
-  split
-  · -- the multiset form: `Finset.filter_true_of_mem` reaches `Classical.choice`
-    refine funImage_map_mk (Finset.eq_of_veq (Multiset.filter_eq_self.mpr fun _ _ => rfl)) _ _
-      fun k h₁ h₂ => ?_
-    have hk := he k
-    revert hk
-    generalize entryCodec s₂ rc₂ k = x₂
-    generalize entryCodec s₁ rc₁ k = x₁
-    intro hk
-    cases hk with
-    | none => rfl
-    | some hR => exact (congrFun hR.1 _).symm
-  · rfl
-
-/-- **The converse of an object is the object of the converse fields**, when the rest policy is
-    not `drop`. The term language builds `refuse` or `codec`, never `drop`. -/
-theorem objectCodec_R {N' : Type} (mV : Ctor (MapOf V) V) (mA : Ctor (MapOf A) A) (μ' : N')
-    (μM : M) {keys : Finset String} {s' : {k // k ∈ keys} → FieldSem A V N'}
-    {s : {k // k ∈ keys} → FieldSem V A M} (hF : ∀ k, FieldR (s' k) (s k))
-    {rest' : RestSem A V N'} {rest : RestSem V A M} (hr : RestR rest' rest) (hd : rest ≠ .drop) :
-    R (objectCodec mA mV μ' ⟨keys, s'⟩ rest') (objectCodec mV mA μM ⟨keys, s⟩ rest) := by
-  have hd' : rest' ≠ .drop := by
-    revert hr hd; cases rest' <;> cases rest <;> simp [RestR]
-  simp only [objectCodec, objectCodecCore, keepB_of_ne_drop hd, keepB_of_ne_drop hd']
-  have hpres : ∀ n, valPresentB ⟨keys, s'⟩ n = reqPresentB ⟨keys, s⟩ n := fun n =>
-    decide_eq_decide.mpr (forall_congr' fun k => by rw [(hF k).valPresentAt n k.1])
-  have hpres' : ∀ n, reqPresentB ⟨keys, s'⟩ n = valPresentB ⟨keys, s⟩ n := fun n =>
-    decide_eq_decide.mpr (forall_congr' fun k => by rw [(hF k).valPresentAt n k.1])
-  refine ⟨funext fun a => ?_, funext fun v => ?_⟩
-  · simp only [carriedCodec, Codec.ofEP_e]
-    congr 2; funext q
-    exact (objRead_true _ _ _ _ (fun n => (hpres n).symm) (entry_R hF hr) q).symm
-  · simp only [carriedCodec, Codec.ofEP_p]
-    congr 2; funext q
-    refine objRead_true _ _ _ _ hpres' (fun k => ?_) q
-    have hk := entry_R hF hr k
-    revert hk
-    generalize entryCodec ⟨keys, s'⟩ (rcOf rest') k = x₂
-    generalize entryCodec ⟨keys, s⟩ (rcOf rest) k = x₁
-    intro hk
-    cases hk with
-    | none => exact .none
-    | some hR => exact .some hR.symm
 
 /-- **The object codec at an orientation**: read the caller prism, pass the presence guard, run
     each entry at the orientation, and build with the stored prism. The rest policy is not
@@ -324,89 +176,5 @@ theorem objectCodec_f (m : (s : Bool) → Ctor (MapOf (Side V A s)) (Side V A s)
       · -- the multiset form: `Finset.filter_true_of_mem` reaches `Classical.choice`
         refine funImage_map_mk (Finset.eq_of_veq (Multiset.filter_eq_self.mpr fun _ _ => rfl)) _ _
           fun _ _ _ => rfl)
-
-/-- `Option.map` keeps a relation that the two functions carry. -/
-theorem rel_map {α β α' β' : Type} {r : α → β → Prop} {r' : α' → β' → Prop} {f : α → α'}
-    {g : β → β'} (hfg : ∀ a b, r a b → r' (f a) (g b)) :
-    ∀ {x : Option α} {y : Option β}, Option.Rel r x y → Option.Rel r' (x.map f) (y.map g)
-  | _, _, .none => .none
-  | _, _, .some h => .some (hfg _ _ h)
-
-/-- The slots of the converse positions are the converses of the slots. -/
-theorem slots_R {N' : Type} : ∀ {cs' : List (Codec A V N')} {cs : List (Codec V A M)}
-    {t' : Option (Codec A V N')} {t : Option (Codec V A M)},
-    List.Forall₂ R cs' cs → Option.Rel R t' t → ∀ n,
-      Option.Rel (List.Forall₂ R) (slots cs' t' n) (slots cs t n)
-  | [], [], none, none, .nil, .none, 0 => .some .nil
-  | [], [], some _, some _, .nil, .some _, 0 => .some .nil
-  | [], [], none, none, .nil, .none, _ + 1 => .none
-  | [], [], some c', some c, .nil, .some h, n + 1 => by
-      have ih := slots_R (.nil) (.some h) n
-      simp only [slots]
-      exact rel_map (fun _ _ hr => .cons h hr) ih
-  | _ :: _, _ :: _, _, _, .cons _ _, _, 0 => .none
-  | c' :: cs', c :: cs, _, _, .cons h hs, ht, n + 1 => by
-      have ih := slots_R hs ht n
-      simp only [slots]
-      exact rel_map (fun _ _ hr => .cons h hr) ih
-
-/-- The traversal of the converse positions by the write is the traversal by the read. -/
-theorem trav_R_e {N' : Type} : ∀ {ds' : List (Codec A V N')} {ds : List (Codec V A M)},
-    List.Forall₂ R ds' ds → ∀ xs : List A,
-      traverse (fun ca : Codec A V N' × A => ca.1.e ca.2) (ds'.zip xs) =
-        traverse (fun ca : Codec V A M × A => ca.1.p ca.2) (ds.zip xs)
-  | [], [], .nil, _ => rfl
-  | _ :: _, _ :: _, .cons _ _, [] => rfl
-  | _ :: _, _ :: _, .cons h hs, x :: xs => by
-      simp only [List.zip_cons_cons, traverse, h.1, trav_R_e hs xs]
-
-/-- The traversal of the converse positions by the read is the traversal by the write. -/
-theorem trav_R_p {N' : Type} {ds' : List (Codec A V N')} {ds : List (Codec V A M)}
-    (h : List.Forall₂ R ds' ds) (xs : List V) :
-    traverse (fun ca : Codec A V N' × V => ca.1.p ca.2) (ds'.zip xs) =
-      traverse (fun ca : Codec V A M × V => ca.1.e ca.2) (ds.zip xs) :=
-  (trav_R_e (h.flip.imp fun _ _ hr => R.symm hr) xs).symm
-
-/-- A row of converse positions traverses by the write as the row traverses by the read. -/
-theorem rowtrav_e {N' : Type} :
-    ∀ {x : Option (List (Codec A V N'))} {y : Option (List (Codec V A M))},
-    Option.Rel (List.Forall₂ R) x y → ∀ as : List A,
-      (x.map (·.zip as)).bind (traverse fun ca : Codec A V N' × A => ca.1.e ca.2) =
-        (y.map (·.zip as)).bind (traverse fun ca : Codec V A M × A => ca.1.p ca.2)
-  | _, _, .none, _ => rfl
-  | _, _, .some h, as => trav_R_e h as
-
-/-- A row of converse positions traverses by the read as the row traverses by the write. -/
-theorem rowtrav_p {N' : Type} :
-    ∀ {x : Option (List (Codec A V N'))} {y : Option (List (Codec V A M))},
-    Option.Rel (List.Forall₂ R) x y → ∀ vs : List V,
-      (x.map (·.zip vs)).bind (traverse fun ca : Codec A V N' × V => ca.1.p ca.2) =
-        (y.map (·.zip vs)).bind (traverse fun ca : Codec V A M × V => ca.1.e ca.2)
-  | _, _, .none, _ => rfl
-  | _, _, .some h, vs => trav_R_p h vs
-
-/-- **The converse of a list is the list of the converse positions**, with the two prisms
-    swapped. -/
-theorem listCodec_R {N' : Type} (pV : Ctor (List V) V) (pA : Ctor (List A) A) (μL : M) (μ' : N')
-    {pre' suf' : List (Codec A V N')} {sp' : Option (Codec A V N')}
-    {pre suf : List (Codec V A M)} {sp : Option (Codec V A M)}
-    (hpre : List.Forall₂ R pre' pre) (hsp : Option.Rel R sp' sp) (hsuf : List.Forall₂ R suf' suf) :
-    R (listCodec pA pV μ' pre' sp' suf') (listCodec pV pA μL pre sp suf) := by
-  have hrow : ∀ n, Option.Rel (List.Forall₂ R) (slotsL pre' sp' suf' n) (slotsL pre sp suf n) := by
-    intro n
-    unfold slotsL
-    rw [hsuf.length_eq]
-    split
-    · exact .none
-    · exact rel_map (fun _ _ hr => List.rel_append hr hsuf) (slots_R hpre hsp (n - suf.length))
-  refine ⟨funext fun a => ?_, funext fun v => ?_⟩
-  · simp only [listCodec, carriedCodec, Codec.ofEP_e]
-    congr 2; funext as
-    unfold alignL
-    exact rowtrav_e (hrow as.length) as
-  · simp only [listCodec, carriedCodec, Codec.ofEP_p]
-    congr 2; funext vs
-    unfold alignL
-    exact rowtrav_p (hrow vs.length) vs
 
 end Calculus.Alg

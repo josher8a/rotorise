@@ -218,34 +218,12 @@ theorem restrict_p_adapt {c : Codec V A M} (q : V → Bool) :
 
 /-! ### The converse, and the two-sided restriction
 
-`conv c` swaps the two halves of a codec. `R c' c` says that `c'` has the converse graph of `c`.
-Each read-side fact below is the write-side fact of the converse. -/
+`conv c` swaps the two halves of a codec. -/
 
 /-- **The converse of a codec**: the read is the write, and the write is the read. The member
     names nothing on the stored side of the converse, so it is `Unit`. -/
 def conv (c : Codec V A M) : Codec A V Unit :=
   Codec.ofEP (T := fun _ => True) (μ := c.μ.map (fun _ => ())) (e := c.p) (p := c.e)
-
-/-- `c'` has the converse graph of `c`. -/
-def R {X Y N N' : Type} (c' : Codec Y X N') (c : Codec X Y N) : Prop := c'.e = c.p ∧ c'.p = c.e
-
-/-- The converse graph is symmetric. -/
-theorem R.symm {X Y N N' : Type} {c' : Codec Y X N'} {c : Codec X Y N} (h : R c' c) : R c c' :=
-  ⟨h.2.symm, h.1.symm⟩
-
-/-- The converse has the converse graph. -/
-theorem R_conv (c : Codec V A M) : R (conv c) c := ⟨rfl, rfl⟩
-
-/-- The converse of a codec on the dual carriers, back on the original carriers. -/
-def unconv (c : Codec A V Unit) : Codec V A M :=
-  Codec.ofEP (T := fun _ => True) (μ := none) (e := c.p) (p := c.e)
-
-/-- **The converse of the two-sided restriction swaps the halves**, over any codec with the
-    converse graph. -/
-theorem R.refine2 {N : Type} {c' : Codec A V N} {c : Codec V A M} (h : R c' c)
-    (qV : V → Bool) (qA : A → Bool) : R (refine2 c' qA qV) (refine2 c qV qA) := by
-  obtain ⟨h1, h2⟩ := h
-  exact ⟨by rw [refine2_e_def, refine2_p_def, h1], by rw [refine2_p_def, refine2_e_def, h2]⟩
 
 /-- **The stored-side gate**: the partial map sends the input, and the predicate admits the
     output. The gate of the write reads the write, and the gate of the read reads the read. -/
@@ -411,28 +389,6 @@ theorem altCodec_f {os : List (Codec V A M)} {μA : Option M} {o : Orient} {x : 
     {y : Side V A o.s} :
     (altCodec os μA).f o x = some y ↔
       ∃ c, os.find? (fun c => (c.f o x).isSome) = some c ∧ c.f o x = some y := select_eq_some
-
-/-- `select` on the write of the converses is `select` on the read of the originals. -/
-theorem select_R_e {N' : Type} : ∀ {os' : List (Codec A V N')} {os : List (Codec V A M)},
-    List.Forall₂ R os' os → ∀ a, select os' (·.e) a = select os (·.p) a
-  | [], [], .nil, _ => rfl
-  | o' :: os', o :: os, .cons h hs, a => by
-      unfold select at *
-      simp only [List.find?_cons, h.1]
-      split
-      · exact congrFun h.1 a
-      · exact select_R_e hs a
-
-/-- `select` on the read of the converses is `select` on the write of the originals. -/
-theorem select_R_p {N' : Type} {os' : List (Codec A V N')} {os : List (Codec V A M)}
-    (h : List.Forall₂ R os' os) (v : V) : select os' (·.p) v = select os (·.e) v :=
-  (select_R_e (h.flip.imp fun _ _ hr => R.symm hr) v).symm
-
-/-- **The converse of a union is the union of the converses**, whatever the two members. -/
-theorem altCodec_R {N' : Type} {os' : List (Codec A V N')} {os : List (Codec V A M)}
-    (μ' : Option N') (μ : Option M) (h : List.Forall₂ R os' os) :
-    R (altCodec os' μ') (altCodec os μ) :=
-  ⟨funext (select_R_e h), funext (select_R_p h)⟩
 
 /-- The map of a union at an orientation, for a rewrite. The lemma rewrites the write and the
     read, because `e` and `p` reduce to `f`. -/
