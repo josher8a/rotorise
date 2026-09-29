@@ -32,27 +32,20 @@ theorem sub_altCodec {os : List (Codec V A M)} {u : Codec V A M} (h : ∀ o ∈ 
   let ⟨c, hc, _, hcy⟩ := altCodec_admits hxy
   h c hc o x y hcy
 
-/-- A zipped traversal whose every row codec is below `u` is a traversal of `u`. -/
-theorem forall₂_zip_e {u : Codec V A M} : ∀ (ds : List (Codec V A M)) (vs : List V) (as : List A),
-    ds.length = vs.length → (∀ c ∈ ds, Sub c u) →
-    List.Forall₂ (fun (cv : Codec V A M × V) a => cv.1.e cv.2 = some a) (ds.zip vs) as →
-    List.Forall₂ (fun v a => u.e v = some a) vs as
+/-- A zipped traversal at the orientation `o` whose every row codec is below `u` is a traversal
+    of `u` at `o`. -/
+theorem forall₂_zip (o : Orient) {u : Codec V A M} :
+    ∀ (ds : List (Codec V A M)) (xs : List (Side V A o.c)) (ys : List (Side V A o.s)),
+    ds.length = xs.length → (∀ c ∈ ds, Sub c u) →
+    List.Forall₂ (fun (cx : Codec V A M × Side V A o.c) y => cx.1.f o cx.2 = some y) (ds.zip xs) ys →
+    List.Forall₂ (fun x y => u.f o x = some y) xs ys
   | [], [], _, _, _, h => by cases h; exact .nil
-  | d :: ds, v :: vs, a :: as, hl, hd, .cons h1 h2 =>
-      .cons ((hd d (by simp)) .host _ _ h1)
-        (forall₂_zip_e ds vs as (by simpa using hl) (fun c hc => hd c (by simp [hc])) h2)
+  | d :: ds, x :: xs, y :: ys, hl, hd, .cons h1 h2 =>
+      .cons ((hd d (by simp)) o _ _ h1)
+        (forall₂_zip o ds xs ys (by simpa using hl) (fun c hc => hd c (by simp [hc])) h2)
   | [], _ :: _, _, hl, _, _ => nomatch hl
   | _ :: _, [], _, hl, _, _ => nomatch hl
   | _ :: _, _ :: _, [], _, _, h => nomatch h
-
-/-- …and the same on the read side: the write side of the converses. -/
-theorem forall₂_zip_p {u : Codec V A M} (ds : List (Codec V A M)) (as : List A) (vs : List V)
-    (hl : ds.length = as.length) (hd : ∀ c ∈ ds, Sub c u)
-    (h : List.Forall₂ (fun (ca : Codec V A M × A) v => ca.1.p ca.2 = some v) (ds.zip as) vs) :
-    List.Forall₂ (fun a v => u.p a = some v) as vs :=
-  forall₂_zip_e (u := conv u) (ds.map conv) as vs (by simpa using hl)
-    (List.forall_mem_map.mpr fun c hc => .ofEP (hd c hc .dual) (hd c hc .host))
-    (by rw [List.zip_map_left, List.forall₂_map_left_iff]; exact h)
 
 /-- A list whose every slot is below a top that acts as the list former is below the top. -/
 theorem sub_listCodec {pV : Ctor (List V) V} {pA : Ctor (List A) A} {μL : M} {u : Codec V A M}
@@ -70,13 +63,13 @@ theorem sub_listCodec {pV : Ctor (List V) V} {pA : Ctor (List A) A} {μL : M} {u
   · obtain ⟨vs, as, hv, hE, rfl⟩ := carried_e.mp he
     simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hE
     obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hE
-    rw [pV.into_out hv, hue, traverse_eq_some.mpr (forall₂_zip_e ds vs as
+    rw [pV.into_out hv, hue, traverse_eq_some.mpr (forall₂_zip .host ds vs as
       (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
     rfl
   · obtain ⟨as, vs, ha, hD, rfl⟩ := carried_p.mp hp
     simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hD
     obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hD
-    rw [pA.into_out ha, hup, traverse_eq_some.mpr (forall₂_zip_p ds as vs
+    rw [pA.into_out ha, hup, traverse_eq_some.mpr (forall₂_zip .dual ds as vs
       (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
     rfl
 

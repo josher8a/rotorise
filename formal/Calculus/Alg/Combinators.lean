@@ -25,9 +25,12 @@ condition it is consuming. -/
 /-- §3 `(held)`: the iso cancels **on the carriers** — `T ≃ I`, in the domain-restricted
     form the laws actually need. `g ∘ f = id` where `f` lands writable, `f ∘ g = id` on
     the writable values themselves. -/
-def IsoCancels (c : Codec V A M) (f g : V → V) : Prop :=
-  (∀ v, (c.e (f v)).isSome → g (f v) = v) ∧
-  (∀ v, (c.e v).isSome → f (g v) = v)
+def IsoCancelsAt (o : Orient) (c : Codec V A M) (f g : Side V A o.c → Side V A o.c) : Prop :=
+  (∀ x, (c.f o (f x)).isSome → g (f x) = x) ∧
+  (∀ x, (c.f o x).isSome → f (g x) = x)
+
+/-- The obligation at the host: the caller pair cancels on the values that the codec writes. -/
+abbrev IsoCancels (c : Codec V A M) (f g : V → V) : Prop := IsoCancelsAt Orient.host c f g
 
 /-- §3 `(alternate reader)`: `ran(r) ⊆ dom(e)` — a migration lands on writable values — and
     coherence, the legacy reading agreeing with the current one on their overlap. -/
@@ -216,14 +219,7 @@ theorem restrict_e_adapt {c : Codec V A M} (q : V → Bool) :
 theorem restrict_p_adapt {c : Codec V A M} (q : V → Bool) :
     (c.restrict q).p = (c.adapt (partialId q) (partialId q)).p := rfl
 
-/-! ### The converse, and the two-sided restriction
-
-`conv c` swaps the two halves of a codec. -/
-
-/-- **The converse of a codec**: the read is the write, and the write is the read. The member
-    names nothing on the stored side of the converse, so it is `Unit`. -/
-def conv (c : Codec V A M) : Codec A V Unit :=
-  Codec.ofEP (T := fun _ => True) (μ := c.μ.map (fun _ => ())) (e := c.p) (p := c.e)
+/-! ### The stored-side gate -/
 
 /-- **The stored-side gate**: the partial map sends the input, and the predicate admits the
     output. The gate of the write reads the write, and the gate of the read reads the read. -/
@@ -479,7 +475,7 @@ theorem LawfulCore.through {c : Codec V A M} (h : LawfulCore member c) {f g : V 
     (hiso : IsoCancels c f g) :
     LawfulCore member (c.through f g) where
   retract he := through_p.mpr ⟨_, h.retract (through_e.mp he),
-    (hiso.1 _ (by rw [through_e.mp he]; rfl)).symm⟩
+    (hiso.1 _ (Option.isSome_iff_exists.mpr ⟨_, through_e.mp he⟩)).symm⟩
   canon hp := by
     obtain ⟨w, hw, rfl⟩ := through_p.mp hp
     show (c.e (f (g w))).isSome
