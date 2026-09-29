@@ -17,9 +17,11 @@ predicates that meet at the empty predicate hold together nowhere. The classes a
 and outside `Leaf`, because only the soundness theorems read the laws. Two formers in different
 classes share no value, and that fact is a theorem of the shape classes (`Shapes`).
 
-The row of `refine` reads a data predicate at each side. A caller-side predicate reads the value.
-A stored-side predicate reads the attribute that the inner term writes. Two held-free closed terms
-lie below the top (`TopBound`), so both write the one attribute that the top writes.
+The row of `refine` reads a data predicate at each absolute side, through one lemma for every
+side (`predApart_sound`, `dataApart_sound`). Two held-free closed terms lie below the top
+(`TopBound`), so a value that both admit and its image are one pair of the top. The absolute point
+of that pair (`Orient.place`) holds the value at the caller side and the image at the stored side,
+and a predicate at a side reads the point at that side (`refine2_rect`).
 -/
 
 namespace Calculus.Alg
@@ -346,70 +348,55 @@ theorem splitRL_sound {ρ ρ' : List S.C} {x : Term S} {fam : Pairing → Term S
         splitRL_sound hf ys h.2 v, Bool.false_or]
 end
 
-/-- **Two data predicates that meet at the empty predicate keep a refinement chain apart**: no
-    value satisfies `q` and a refinement of the chain. -/
-theorem predApart_sound [Leaf S] [LeafMeet S] {q : S.Pred} {ρ' : List S.C} :
-    ∀ (y : Term S), predApart S.o.c q y = true → ∀ v, (Syn.eval q v && Adm α β y ρ' v) = false
-  | .refine y q₁ q₂, h, v => by
-      simp only [predApart, Bool.or_eq_true, Bool.and_eq_true] at h
-      rw [Adm_refine_eq]
-      set q' := half S.o.c q₁ q₂
-      rcases h with ⟨-, hm⟩ | h
-      · have hn : Leaf.pmeet S.o.c q q' = some none := by
-          revert hm; cases Leaf.pmeet S.o.c q q' with
-          | none => simp
-          | some o => cases o <;> simp
-        have := LeafMeet.pmeet_none S.o.c q q' hn v
-        cases hq : Syn.eval q v <;> cases hq' : Syn.eval q' v <;> simp_all
-      · have := predApart_sound (ρ' := ρ') y h v
-        cases hq : Syn.eval q v <;> cases ha : Adm α β y ρ' v <;> simp_all
-  | .prim _, h, _ | .never, h, _ | .set _, h, _ | .list _ _ _, h, _ | .held _ _ _ _ _, h, _
-  | .opaq, h, _ | .object _, h, _ | .union _, h, _ | .var _, h, _ | .mu _, h, _ => by
-      simp [predApart] at h
-
-/-- **Two stored-side data predicates that meet at the empty predicate keep two refinements apart
-    on the write side**, where both inner terms are closed and held-free: both then write the
-    attribute that the top writes. -/
-theorem predApart_soundS [Leaf S] [LeafMeet S] [TopBound S] {q : S.PredA} {ρ' : List S.C} :
-    ∀ (y : Term S), predApart S.o.s q y = true → ∀ v a, (Syn.top (S := S)).f S.o v = some a →
-      Syn.evalA q a = true → Adm α β y ρ' v = false
+/-- **Two data predicates at one absolute side that meet at the empty predicate keep a refinement
+    chain apart**, over held-free closed inner terms. Such a term lies below the top, so the pair
+    that it sends is the pair of the top, and each predicate reads that pair at the side `s`. -/
+theorem predApart_sound [Leaf S] [LeafMeet S] [TopBound S] (s : Bool) {q : S.sig.P s}
+    {ρ' : List S.C} : ∀ (y : Term S), predApart s q y = true → ∀ v a,
+      (Syn.top (S := S)).f S.o v = some a → Mean.eval s q (Orient.place S.o v a s) = true →
+      Adm α β y ρ' v = false
   | .refine y q₁ q₂, h, v, a, htop, hq => by
       simp only [predApart, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
-      rw [Adm_refine_eq]
       rcases h with ⟨⟨⟨-, hh⟩, hv⟩, hm⟩ | h
-      · have hn : Leaf.pmeet S.o.s q (half S.o.s q₁ q₂) = some none := by
-          revert hm; cases Leaf.pmeet S.o.s q (half S.o.s q₁ q₂) with
+      · have hn : Leaf.pmeet s q (half s q₁ q₂) = some none := by
+          revert hm; cases Leaf.pmeet s q (half s q₁ q₂) with
           | none => simp
           | some o => cases o <;> simp
-        have hpm := LeafMeet.pmeet_none S.o.s q _ hn a
-        simp only [Syn.evalA] at hq
-        rw [hq, Bool.true_and] at hpm
-        have hg : gate ((denote α β y ρ').f S.o) (Syn.evalA (half S.o.s q₁ q₂)) v = false := by
-          unfold gate
-          cases he : (denote α β y ρ').f S.o v with
-          | none => rfl
-          | some a' =>
-            have : (Syn.top (S := S)).f S.o v = some a' := TopBound.sub_top y hh hv ρ' S.o v a' he
-            rw [htop] at this; cases this
-            exact hpm
-        rw [hg]; simp
-      · rw [predApart_soundS (ρ' := ρ') y h v a htop hq, Bool.false_and]
+        cases hA : Adm α β (.refine y q₁ q₂) ρ' v with
+        | false => rfl
+        | true =>
+          rw [Adm_eq_isSome] at hA
+          obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp hA
+          have htop' := TopBound.sub_top (.refine y q₁ q₂) hh hv ρ' S.o v a' ha'
+          rw [htop] at htop'; cases htop'
+          have hr := refine2_rect (c := denote α β y ρ') ha' s
+          rw [Mean.eval_half] at hr
+          have := LeafMeet.pmeet_none s q _ hn (Orient.place S.o v a s)
+          rw [hq, hr] at this; exact nomatch this
+      · rw [Adm_refine_eq, predApart_sound s y h v a htop hq, Bool.false_and]
   | .prim _, h, _, _, _, _ | .never, h, _, _, _, _ | .set _, h, _, _, _, _
   | .list _ _ _, h, _, _, _, _ | .held _ _ _ _ _, h, _, _, _, _
   | .opaq, h, _, _, _, _ | .object _, h, _, _, _, _ | .union _, h, _, _, _, _
   | .var _, h, _, _, _, _ | .mu _, h, _, _, _, _ => by
       simp [predApart] at h
 
-/-- The two absolute sides of a pair, read at an orientation: the caller side and the stored
-    side. -/
-theorem half_sides {X : Bool → Type} (o : Orient) (f : (s : Bool) → X s → Bool) (a : X false)
-    (b : X true) : (f false a || f true b) = (f o.c (half o.c a b) || f o.s (half o.s a b)) := by
-  obtain ⟨⟨c, s⟩, h⟩ := o
-  cases c <;> cases s
-  · exact absurd rfl h
-  · rfl
-  · exact Bool.or_comm _ _
-  · exact absurd rfl h
+/-- **A refinement apart from the partner at the side `s` shares no value with it.** The
+    refinement lies below the top, so the value that it admits and its image are a pair of the
+    top, and its predicate at `s` holds on that pair. -/
+theorem dataApart_sound [Leaf S] [LeafMeet S] [TopBound S] {x y : Term S} {q : S.sig.P false}
+    {qA : S.sig.P true} {ρ ρ' : List S.C} (s : Bool) (h : dataApart x s (half s q qA) y = true)
+    (w : S.V) : (Adm α β (.refine x q qA) ρ w && Adm α β y ρ' w) = false := by
+  simp only [dataApart, Bool.and_eq_true, Bool.not_eq_true'] at h
+  obtain ⟨⟨⟨-, hh⟩, hv⟩, hy⟩ := h
+  cases hA : Adm α β (.refine x q qA) ρ w with
+  | false => rfl
+  | true =>
+    rw [Adm_eq_isSome] at hA
+    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hA
+    have htop := TopBound.sub_top (.refine x q qA) hh hv ρ S.o w a ha
+    have hr := refine2_rect (c := denote α β x ρ) ha s
+    rw [Mean.eval_half] at hr
+    rw [predApart_sound s y hy w a htop hr]; rfl
 
 /-- **The leaf family is sound**: the leaf law, and the shape classes at every former. -/
 theorem famPrimD_sound [Leaf S] [LeafAdm S] [Shapes S] {ρ ρ' : List S.C} (g : S.Ground) :
@@ -728,24 +715,13 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S
       simp only [Term.disjoint] at h
       refine splitR_sound (ρ := ρ) (ρ' := ρ') (x := .refine x q qA) (p := p) ?_ y h v
       intro y' hy w
-      simp only at hy
-      rw [Bool.or_assoc, half_sides S.o (fun s r => dataApart x s r y') q qA] at hy
-      simp only [dataApart, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at hy
-      rw [Adm_refine_eq]
-      rcases hy with hy | ⟨-, hy⟩ | ⟨⟨⟨-, hh⟩, hv⟩, hy⟩
-      · have := disjoint_sound p x y' hy ρ ρ' hp w
+      simp only [Bool.or_eq_true] at hy
+      rcases hy with (hy | hy) | hy
+      · rw [Adm_refine_eq]
+        have := disjoint_sound p x y' hy ρ ρ' hp w
         cases h1 : Adm α β x ρ w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
-      · have := predApart_sound (α := α) (β := β) (ρ' := ρ') y' hy w
-        cases h1 : Syn.eval (half S.o.c q qA) w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
-      · unfold gate
-        cases he : (denote α β x ρ).f S.o w with
-        | none => simp
-        | some a =>
-          cases hq : Syn.evalA (half S.o.s q qA) a with
-          | false => simp [hq]
-          | true =>
-            have htop := TopBound.sub_top x hh hv ρ S.o w a he
-            rw [predApart_soundS (ρ' := ρ') y' hy w a htop hq]; simp
+      · exact dataApart_sound false hy w
+      · exact dataApart_sound true hy w
   | p, .union os, y, h, ρ, ρ', hp, v => by
       simp only [Term.disjoint] at h
       rw [Adm_union]

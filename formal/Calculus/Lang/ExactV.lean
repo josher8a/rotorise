@@ -418,7 +418,7 @@ theorem Adm_exact : ∀ (t : Term S) (ρ : List S.C), ExactV α β t ρ
         Bool.eq_iff_iff.mpr (Adm_exact PA ρ v)
       intro v
       simp only [Adm, denote, denoteAbs]
-      rw [held2_f_isSome, tables_c, tables_s]
+      rw [held2_f_isSome]; simp only [tables, Orient.place_c, Orient.place_s]
       simp only [hc, hP, hPA]
       cases h : gate ((denote α β c ρ).f S.o)
         (fun a => ((half2 S.o.s (denote α β P ρ) (denote α β PA ρ)).f S.o.op

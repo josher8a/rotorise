@@ -18,6 +18,6 @@ variable {S : Syn} [Sem S] {α : Table S} {β : Table S.op}
     caller table and the caller table as its stored table, and the tables of each absolute side
     are the same. -/
 theorem denote_op (t : Term S) (ρ : List S.C) : denote (S := S.op) β α t ρ = denote α β t ρ :=
-  congrArg (denoteAbs · t ρ) (tables_op S.o α β)
+  congrArg (denoteAbs · t ρ) (Orient.place_op S.o α β)
 
 end Calculus.Alg

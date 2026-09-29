@@ -152,6 +152,16 @@ theorem refine2_f {c : Codec V A M} {qV : V → Bool} {qA : A → Bool} {o : Ori
     | some y' =>
       cases hq : Side.elim qV qA o.s y' <;> simp [hq] <;> intro hh <;> subst hh <;> assumption
 
+/-- **The rectangle**: a pair that the two-sided restriction sends satisfies the predicate at
+    each absolute side. -/
+theorem refine2_rect {c : Codec V A M} {qV : V → Bool} {qA : A → Bool} {o : Orient}
+    {x : Side V A o.c} {y : Side V A o.s} (h : (refine2 c qV qA).f o x = some y) (s : Bool) :
+    Side.elim qV qA s (Orient.place o x y s) = true := by
+  obtain ⟨hx, -, hy⟩ := refine2_f.mp h
+  rcases Orient.side_of o s with rfl | rfl
+  · rw [Orient.place_c]; exact hx
+  · rw [Orient.place_s]; exact hy
+
 /-- The write of the two-sided restriction, for a rewrite. -/
 theorem refine2_e_def (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) :
     (refine2 c qV qA).e =

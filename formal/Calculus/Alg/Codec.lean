@@ -45,6 +45,37 @@ abbrev Orient.c (o : Orient) : Bool := o.1.1
 /-- The stored side of an orientation. -/
 abbrev Orient.s (o : Orient) : Bool := o.1.2
 
+/-- **The two values of an orientation, placed at their absolute sides**: the caller value at
+    the caller side, and the stored value at the stored side. -/
+def Orient.place {X : Bool → Type} : (o : Orient) → X o.c → X o.s → (s : Bool) → X s
+  | ⟨(false, true), _⟩, x, y => fun | false => x | true => y
+  | ⟨(true, false), _⟩, x, y => fun | false => y | true => x
+  | ⟨(false, false), h⟩, _, _ => absurd rfl h
+  | ⟨(true, true), h⟩, _, _ => absurd rfl h
+
+/-- The caller side holds the caller value. -/
+theorem Orient.place_c {X : Bool → Type} : ∀ (o : Orient) (x : X o.c) (y : X o.s),
+    Orient.place o x y o.c = x :=
+  Orient.both (P := fun o => ∀ (x : X o.c) (y : X o.s), Orient.place o x y o.c = x)
+    (fun _ _ => rfl) (fun _ _ => rfl)
+
+/-- The stored side holds the stored value. -/
+theorem Orient.place_s {X : Bool → Type} : ∀ (o : Orient) (x : X o.c) (y : X o.s),
+    Orient.place o x y o.s = y :=
+  Orient.both (P := fun o => ∀ (x : X o.c) (y : X o.s), Orient.place o x y o.s = y)
+    (fun _ _ => rfl) (fun _ _ => rfl)
+
+/-- **The dual orientation with the two values swapped places them at the same sides.** -/
+theorem Orient.place_op {X : Bool → Type} : ∀ (o : Orient) (x : X o.c) (y : X o.s),
+    Orient.place o.op y x = Orient.place o x y :=
+  Orient.both (P := fun o => ∀ (x : X o.c) (y : X o.s), Orient.place o.op y x = Orient.place o x y)
+    (fun _ _ => funext fun s => by cases s <;> rfl) (fun _ _ => funext fun s => by cases s <;> rfl)
+
+/-- Each absolute side is the caller side or the stored side of an orientation. -/
+theorem Orient.side_of : ∀ (o : Orient) (s : Bool), s = o.c ∨ s = o.s :=
+  Orient.both (P := fun o => ∀ s, s = o.c ∨ s = o.s)
+    (fun s => by cases s <;> simp) (fun s => by cases s <;> simp)
+
 /-- The carrier at an absolute side: the values `V` at `false`, and the attributes `A` at
     `true`. -/
 abbrev Side (V A : Type) : Bool → Type

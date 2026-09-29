@@ -340,33 +340,8 @@ theorem TableAt.word_append (α : TableAt B s) (k k' : List (B.G s × Bool)) :
 
 /-- **The tables at each absolute side**, from the table at the caller side of an orientation
     and the table at its stored side. -/
-def tables : (o : Orient) → TableAt B o.c → TableAt B o.s → (s : Bool) → TableAt B s
-  | ⟨(false, true), _⟩, α, β => fun s => half (X := TableAt B) s α β
-  | ⟨(true, false), _⟩, α, β => fun s => half (X := TableAt B) s β α
-  | ⟨(false, false), h⟩, _, _ => absurd rfl h
-  | ⟨(true, true), h⟩, _, _ => absurd rfl h
-
-/-- **The dual orientation with the two tables swapped gives the same tables.** -/
-theorem tables_op : ∀ (o : Orient) (α : TableAt B o.c) (β : TableAt B o.s),
-    tables o.op β α = tables o α β
-  | ⟨(false, true), _⟩, _, _ => rfl
-  | ⟨(true, false), _⟩, _, _ => rfl
-  | ⟨(false, false), h⟩, _, _ => absurd rfl h
-  | ⟨(true, true), h⟩, _, _ => absurd rfl h
-
-/-- The table at the caller side of the orientation is the caller table. -/
-theorem tables_c : ∀ (o : Orient) (α : TableAt B o.c) (β : TableAt B o.s), tables o α β o.c = α
-  | ⟨(false, true), _⟩, _, _ => rfl
-  | ⟨(true, false), _⟩, _, _ => rfl
-  | ⟨(false, false), h⟩, _, _ => absurd rfl h
-  | ⟨(true, true), h⟩, _, _ => absurd rfl h
-
-/-- The table at the stored side of the orientation is the stored table. -/
-theorem tables_s : ∀ (o : Orient) (α : TableAt B o.c) (β : TableAt B o.s), tables o α β o.s = β
-  | ⟨(false, true), _⟩, _, _ => rfl
-  | ⟨(true, false), _⟩, _, _ => rfl
-  | ⟨(false, false), h⟩, _, _ => absurd rfl h
-  | ⟨(true, true), h⟩, _, _ => absurd rfl h
+abbrev tables (o : Orient) (α : TableAt B o.c) (β : TableAt B o.s) : (s : Bool) → TableAt B s :=
+  Orient.place o α β
 
 end Tables
 
