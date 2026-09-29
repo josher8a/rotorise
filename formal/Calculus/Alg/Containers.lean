@@ -77,10 +77,6 @@ section Object
 def valPresentB (sems : MapOf (FieldSem V A M)) (names : Finset String) : Bool :=
   decide (∀ k : {k // k ∈ sems.1}, valPresentAt names k.1 (sems.2 k) = true)
 
-/-- Every `req` name present on the stored side. -/
-def reqPresentB (sems : MapOf (FieldSem V A M)) (names : Finset String) : Bool :=
-  decide (∀ k : {k // k ∈ sems.1}, valPresentAt names k.1 (sems.2 k) = true)
-
 /-- The per-name half of §4's held set: a declared name holds its field's set, an
     undeclared one falls to the open part `R(ρ)`. -/
 def objEntryT (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) :
@@ -114,43 +110,32 @@ theorem objEntryT_eq {kv} :
   simp only [objEntryT, entryCodec]
   cases sems.at kv.1 <;> simp
 
-/-- The object's payload pair, going out: the value-side presence guard, then the
-    name-dispatched steps. -/
-noncomputable def objWrite (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) :
-    MapOf V → Option (MapOf A) := fun p =>
+/-- **The object's payload pair at an orientation**: the presence guard, then each entry at the
+    orientation. The write is the pair at the host, and the read is the pair at the dual. -/
+noncomputable def objAt (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) (o : Orient) :
+    MapOf (Side V A o.c) → Option (MapOf (Side V A o.s)) := fun p =>
   if valPresentB sems p.1 = true then
-    (funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.e (p.2 k)))).map
+    (funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.f o (p.2 k)))).map
       (fun g => ⟨p.1, g⟩)
   else none
 
-/-- …and coming back: the stored-side guard, then the entrywise steps. -/
-noncomputable def objRead (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) :
-    MapOf A → Option (MapOf V) := fun p =>
-  if reqPresentB sems p.1 = true then
-    (funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.p (p.2 k)))).map
-      (fun d => ⟨p.1, d⟩)
-  else none
+/-- The payload pair, going out. -/
+noncomputable abbrev objWrite (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) :
+    MapOf V → Option (MapOf A) := objAt sems rc? Orient.host
 
-/-- What the payload pair writes: the guard held, and the entrywise image. -/
-theorem objWrite_eq {p : MapOf V} {q : MapOf A} :
-    objWrite sems rc? p = some q ↔
+/-- …and coming back. -/
+noncomputable abbrev objRead (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) :
+    MapOf A → Option (MapOf V) := objAt sems rc? Orient.dual
+
+/-- What the payload pair sends at an orientation: the guard held, and the entrywise image. -/
+theorem objAt_eq {o : Orient} {p : MapOf (Side V A o.c)} {q : MapOf (Side V A o.s)} :
+    objAt sems rc? o p = some q ↔
       valPresentB sems p.1 = true ∧ ∃ g,
-        funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.e (p.2 k))) = some g ∧
+        funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.f o (p.2 k))) = some g ∧
         q = ⟨p.1, g⟩ := by
-  simp only [objWrite]
+  simp only [objAt]
   split
   · next hg => simp [hg, Option.map_eq_some_iff, eq_comm (a := q)]
-  · next hg => simp [hg]
-
-/-- What the payload pair reads: the guard held, and the entrywise image. -/
-theorem objRead_eq {q : MapOf A} {p : MapOf V} :
-    objRead sems rc? q = some p ↔
-      reqPresentB sems q.1 = true ∧ ∃ d,
-        funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.p (q.2 k))) = some d ∧
-        p = ⟨q.1, d⟩ := by
-  simp only [objRead]
-  split
-  · next hg => simp [hg, Option.map_eq_some_iff, eq_comm (a := p)]
   · next hg => simp [hg]
 
 variable (mV : Ctor (MapOf V) V) (mA : Ctor (MapOf A) A) (μM : M)
@@ -192,19 +177,19 @@ theorem valPresentB_of {names : Finset String}
     simpa [valPresentAt, hs] using
       h k.1 (.req c) (by rw [MapOf.at_of_mem k, hs]) (fun _ h' => nomatch h')
 
-/-- A `req` name that the stored-side guard passes is present. -/
-theorem reqPresentB_spec {names : Finset String}
-    (h : reqPresentB sems names = true) {k c} (hm : sems.at k = some (.req c)) :
+/-- A `req` name that the presence guard passes is present. -/
+theorem valPresentB_spec_req {names : Finset String}
+    (h : valPresentB sems names = true) {k c} (hm : sems.at k = some (.req c)) :
     k ∈ names := by
   obtain ⟨hk, hs⟩ := MapOf.at_eq_some.mp hm
   have hb := of_decide_eq_true h ⟨k, hk⟩
   rw [hs] at hb
   exact of_decide_eq_true hb
 
-/-- The stored-side guard passes where every `req` name is present. -/
-theorem reqPresentB_of {names : Finset String}
+/-- The presence guard passes where every `req` name is present. -/
+theorem valPresentB_of_req {names : Finset String}
     (h : ∀ k c, sems.at k = some (.req c) → k ∈ names) :
-    reqPresentB sems names = true := by
+    valPresentB sems names = true := by
   refine decide_eq_true fun k => ?_
   cases hs : sems.2 k with
   | req c => simpa [valPresentAt, hs] using h k.1 c (by rw [MapOf.at_of_mem k, hs])
@@ -240,62 +225,42 @@ theorem carrier_objectCodec {rest : RestSem V A M}
     Carrier (objectCodec mV mA μM sems rest) := by
   refine carrier_carried ?_ ?_
   · rintro p q h
-    obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp h
+    obtain ⟨hval, g, hg, rfl⟩ := objAt_eq.mp h
     exact ⟨hval, fun k => entry_domE' hsems hrc (funImage_some hg k)⟩
   · rintro q p h
-    obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
+    obtain ⟨hreq, d, hd, rfl⟩ := objAt_eq.mp h
     constructor
     · refine valPresentB_of fun k fs hm hno => ?_
       cases fs with
       | opt c => exact absurd rfl (hno c)
-      | req c => exact reqPresentB_spec hreq hm
+      | req c => exact valPresentB_spec_req hreq hm
     · intro k
       exact entry_ranP' hsems hrc (funImage_some hd k)
 
 /-! ### §2's clauses for the object's payload pair -/
 
-/-- (R): a written row is complete, so reading it back is the entrywise round trip. -/
-theorem object_retract {rest : RestSem V A M} (hf : ∀ k, LawfulCore member (sems.2 k).codec)
-    (hrc : ∀ c ∈ rcOf rest, LawfulCore member c) :
-    ∀ p q, objWrite sems (rcOf rest) p = some q → objRead sems (rcOf rest) q = some p := by
+/-- **The inverse law of the payload pair**, at every orientation. The guard reads one key set
+    on both sides, and each entry inverts its own map. -/
+theorem object_inv {rest : RestSem V A M} (hf : ∀ k, Lawful member (sems.2 k).codec)
+    (hrc : ∀ c ∈ rcOf rest, Lawful member c) (o : Orient) :
+    ∀ p q, objAt sems (rcOf rest) o p = some q → objAt sems (rcOf rest) o.op q = some p := by
   rintro p q h
-  obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp h
-  refine objRead_eq.mpr ⟨reqPresentB_of fun k c hm =>
-    valPresentB_spec hval hm (fun _ h' => nomatch h'), p.2, funImage_eq fun k => ?_, rfl⟩
+  obtain ⟨hval, g, hg, rfl⟩ := objAt_eq.mp h
+  refine objAt_eq.mpr ⟨hval, p.2, funImage_eq fun k => ?_, rfl⟩
   have hw := funImage_some hg k
   cases hc : entryCodec sems (rcOf rest) k.1 with
   | none => rw [hc] at hw; exact nomatch hw
   | some c =>
     simp only [hc, Option.bind_some] at hw ⊢
-    exact (entryCodec_of hf hrc hc).retract hw
-
-/-- Canonical reads: the object writes back the map that it read. -/
-theorem object_canonS {rest : RestSem V A M} (hf : ∀ k, Lawful member (sems.2 k).codec)
-    (hrc : ∀ c ∈ rcOf rest, Lawful member c) :
-    ∀ q p, objRead sems (rcOf rest) q = some p → objWrite sems (rcOf rest) p = some q := by
-  rintro q p h
-  obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
-  have hval : valPresentB sems q.1 = true := by
-    refine valPresentB_of fun k fs hm hno => ?_
-    cases fs with
-    | opt c => exact absurd rfl (hno c)
-    | req c => exact reqPresentB_spec hreq hm
-  refine objWrite_eq.mpr ⟨hval, q.2, funImage_eq fun k => ?_, rfl⟩
-  have hp := funImage_some hd k
-  cases hc : entryCodec sems (rcOf rest) k.1 with
-  | none => rw [hc] at hp; exact nomatch hp
-  | some c =>
-    simp only [hc, Option.bind_some] at hp ⊢
-    exact (entryCodec_of hf hrc hc).canon hp
+    exact (entryCodec_of hf hrc hc).inv hw
 
 /-- The keyed product: the doc's current-schema `object`. -/
 theorem lawful_objectCodec (hμ : ∀ y, member (mA.into y) = μM) {rest : RestSem V A M}
     (hf : ∀ k, Lawful member (sems.2 k).codec)
     (hrest : ∀ c, rest = .codec c → Lawful member c) :
     Lawful member (objectCodec mV mA μM sems rest) := by
-  have hf' := fun k => (hf k).core
-  have hrc' := fun c hc => ((rcOf_forall hrest) c hc).core
-  exact lawful_carried hμ (object_retract hf' hrc') (object_canonS hf (rcOf_forall hrest))
+  exact lawful_carried hμ (object_inv hf (rcOf_forall hrest) .host)
+    (object_inv hf (rcOf_forall hrest) .dual)
 
 end Object
 

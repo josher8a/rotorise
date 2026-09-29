@@ -194,7 +194,7 @@ theorem agree_object {o : Orient} {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A
         (objWrite sems₂ (rcOf rest₂)) (objRead sems₂ (rcOf rest₂)))) ?_ ?_ o <;>
     intro h
   · refine agreeE_carried fun m d₁ d₂ h1 h2 => ?_
-    unfold objWrite at h1 h2
+    unfold objWrite objAt at h1 h2
     split at h1 <;> [skip; exact nomatch h1]
     split at h2 <;> [skip; exact nomatch h2]
     obtain ⟨G1, hG1, rfl⟩ := Option.map_eq_some_iff.mp h1
@@ -207,7 +207,7 @@ theorem agree_object {o : Orient} {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A
       exact (h k.1 c₁ c₂ hc₁ hc₂ : Agree .host c₁ c₂) _ _ _ hr₁ hr₂
     rw [this]
   · refine agreeP_carried fun m d₁ d₂ h1 h2 => ?_
-    unfold objRead at h1 h2
+    unfold objRead objAt at h1 h2
     split at h1 <;> [skip; exact nomatch h1]
     split at h2 <;> [skip; exact nomatch h2]
     obtain ⟨G1, hG1, rfl⟩ := Option.map_eq_some_iff.mp h1

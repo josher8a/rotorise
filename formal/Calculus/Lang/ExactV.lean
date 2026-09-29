@@ -42,7 +42,7 @@ class PrimAdm (S : Syn) [Sem S] where
 
 variable {S : Syn}
 
-/-- The guard of `valPresentB` and of `reqPresentB`, read off the *term*'s field table: only
+/-- The guard of `valPresentB` and of `valPresentB`, read off the *term*'s field table: only
     `optional` may be absent. -/
 def valPresentT {S : Sig} (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
     (keys : Finset String) : Bool :=
