@@ -90,20 +90,6 @@ theorem muCodec_f (B : Codec V A M → Codec V A M) (o : Orient) (x : Side V A o
 
 /-! ### The converse of the construct -/
 
-/-- The stage of the converse body is the converse of the stage. -/
-theorem muStage_R {N' : Type} (B : Codec V A M → Codec V A M) (B' : Codec A V N' → Codec A V N')
-    (h : ∀ c' c, R c' c → R (B' c') (B c)) : ∀ n, R (muStage B' n) (muStage B n)
-  | 0 => ⟨rfl, rfl⟩
-  | n + 1 => h _ _ (muStage_R B B' h n)
-
-/-- **The converse of a fixed point is the fixed point of the converse body**, with the two
-    depth functions swapped. -/
-theorem muCodec_R {N' : Type} (dV : V → Nat) (dA : A → Nat) (B : Codec V A M → Codec V A M)
-    (B' : Codec A V N' → Codec A V N') (h : ∀ c' c, R c' c → R (B' c') (B c)) :
-    R (muCodec dA dV B') (muCodec dV dA B) :=
-  ⟨funext fun a => congrFun (muStage_R B B' h (dA a)).1 a,
-   funext fun v => congrFun (muStage_R B B' h (dV v)).2 v⟩
-
 section Stages
 variable (hV : ∀ v, 0 < dV v) (hA : ∀ a, 0 < dA a) {B : Codec V A M → Codec V A M}
 include hV hA
