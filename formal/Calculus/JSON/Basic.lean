@@ -151,7 +151,8 @@ abbrev jsonSyn : Alg.Syn := ⟨jsonSig, .host⟩
 /-- **The JSON meaning** of that signature. Both carriers are `Json`, and a predicate is its own
     meaning. -/
 instance jsonSem : Alg.Mean jsonSig where
-  Car _ := Json
+  V := Json
+  A := Json
   Mem := JMember
   mem := Json.member
   decM := inferInstance
@@ -159,9 +160,13 @@ instance jsonSem : Alg.Mean jsonSig where
   lawful_ground := lawful_ground
   carrier_ground _ := ⟨fun he => (gate_eq_some.mp he).1, fun hp => (gate_eq_some.mp hp).2 ▸
     (gate_eq_some.mp hp).1⟩
-  eval _ q := q
+  eval
+    | false, q => q
+    | true, q => q
   truth _ _ := true
-  eval_truth _ _ := rfl
+  eval_truth
+    | false, _ => rfl
+    | true, _ => rfl
   d _ _ := 1
   d_pos _ _ := Nat.one_pos
   list := none

@@ -219,19 +219,13 @@ theorem opaq_TSubω (v : Value) :
   exact opaq_TSub _ v
     ((muStage_induct Carrier.empty (fun _ => carrier_opaqStep) (Value.depth v)).domE ha)
 
-/-- The carrier of DynamoDB at each absolute side: the caller holds values, and the store holds
-    attributes. -/
-abbrev dynCar : Bool → Type
-  | false => Value
-  | true => Attr
-
 /-- The depth of an element of each carrier. -/
-abbrev dynDepth : (s : Bool) → dynCar s → Nat
+abbrev dynDepth : (s : Bool) → Alg.Side Value Attr s → Nat
   | false => Value.depth
   | true => Attr.depth
 
 /-- The list former: the `arr` and `L` prisms. -/
-abbrev dList : Alg.ListA dynCar Member Attr.member dynDepth where
+abbrev dList : Alg.ListA (Alg.Side Value Attr) Member Attr.member dynDepth where
   p
     | false => arrV
     | true => lA
@@ -242,7 +236,7 @@ abbrev dList : Alg.ListA dynCar Member Attr.member dynDepth where
     | true, _, _, hx => Nat.succ_le_succ (Attr.depth_le_depthL hx)
 
 /-- The map former: the `map` and `M` prisms. -/
-abbrev dMap : Alg.MapA dynCar Member Attr.member dynDepth where
+abbrev dMap : Alg.MapA (Alg.Side Value Attr) Member Attr.member dynDepth where
   m
     | false => mapV
     | true => mA
@@ -325,7 +319,8 @@ abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
 
 /-- **The DynamoDB meaning** of that signature. -/
 @[reducible] noncomputable instance dynSem : Alg.Mean dynSig where
-  Car := dynCar
+  V := Value
+  A := Attr
   Mem := Member
   mem := Attr.member
   decM := inferInstance

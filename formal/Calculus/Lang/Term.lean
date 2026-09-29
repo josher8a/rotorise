@@ -292,30 +292,37 @@ end Readings
     `true`. A class over the signature, so the dual universe finds the meaning of the universe,
     and a term family carries no meaning. -/
 class Mean (B : Sig) where
-  Car : Bool → Type
+  /-- The caller carrier: the carrier of the side `false`. -/
+  V : Type
+  /-- The stored carrier: the carrier of the side `true`. -/
+  A : Type
   Mem : Type
-  mem : Car true → Mem
+  mem : A → Mem
   decM : DecidableEq Mem
-  ground : B.Ground → Codec (Car false) (Car true) Mem
+  ground : B.Ground → Codec V A Mem
   lawful_ground : ∀ g, Lawful mem (ground g)
   carrier_ground : ∀ g, Carrier (ground g)
-  eval : (s : Bool) → B.P s → Car s → Bool
+  eval : (s : Bool) → B.P s → Side V A s → Bool
   /-- The predicate at each side that admits every element. -/
   truth : (s : Bool) → B.P s
   eval_truth : ∀ s x, eval s (truth s) x = true
-  d : (s : Bool) → Car s → Nat
+  d : (s : Bool) → Side V A s → Nat
   d_pos : ∀ s x, 0 < d s x
-  list : Option (ListA Car Mem mem d)
-  map : Option (MapA Car Mem mem d)
-  set : Option (SetF (Car false) (Car true) Mem mem (d false) (d true))
+  list : Option (ListA (Side V A) Mem mem d)
+  map : Option (MapA (Side V A) Mem mem d)
+  set : Option (SetF V A Mem mem (d false) (d true))
   /-- The member that the judgement gives a primitive. -/
   groundμ : B.Ground → Option Mem
-  top : Codec (Car false) (Car true) Mem
+  top : Codec V A Mem
   lawful_top : Lawful mem top
   carrier_top : Carrier top
   /-- The held set that the judgement gives the top, and the top's held set lies inside it. -/
-  topHeld : Car false → Prop
+  topHeld : V → Prop
   top_held : ∀ v, top.T v → topHeld v
+
+/-- The carrier of a meaning at each absolute side: the caller carrier at `false`, and the stored
+    carrier at `true`. -/
+abbrev Mean.Car {B : Sig} [Mean B] : Bool → Type := Side (Mean.V (B := B)) (Mean.A (B := B))
 
 /-- **The meaning of a universe**: the meaning of its signature. One instance serves every
     orientation, so the dual universe finds the meaning of the universe, and a lemma finds its
