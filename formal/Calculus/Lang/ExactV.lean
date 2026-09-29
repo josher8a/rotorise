@@ -249,7 +249,7 @@ theorem ExactV_list {pre : List (Term S)} {sp : Option (Term S)} {suf : List (Te
   cases Syn.list (S := S) with
   | none => simp [Codec.empty]
   | some L =>
-    simp only [listCodec, carriedCodec]
+    simp only [listCodec, carriedCodec, Codec.ofEP_e]
     cases L.pV.out v with
     | none => simp
     | some vs =>
@@ -300,7 +300,7 @@ theorem ExactV_object {fields : Finset String} {fld : {k // k ∈ fields} → Ob
   cases Syn.map (S := S) with
   | none => simp [Codec.empty]
   | some F =>
-    simp only [objectCodec, objectCodecCore, carriedCodec]
+    simp only [objectCodec, objectCodecCore, carriedCodec, Codec.ofEP_e]
     cases F.mV.out v with
     | none => simp
     | some m =>

@@ -72,10 +72,10 @@ def Contractive (B : Codec V A M → Codec V A M) : Prop :=
     `⊤`, because the stages need not agree on one. The held set is the write domain, so the held
     set of a recursive term is its admission with no induction over the stages. -/
 def muCodec (B : Codec V A M → Codec V A M) : Codec V A M :=
-  { T := fun v => ((muStage B (dV v)).e v).isSome = true
-    μ := none
-    e := fun v => (muStage B (dV v)).e v
-    p := fun a => (muStage B (dA a)).p a }
+  Codec.ofEP (T := fun v => ((muStage B (dV v)).e v).isSome = true)
+    (μ := none)
+    (e := fun v => (muStage B (dV v)).e v)
+    (p := fun a => (muStage B (dA a)).p a)
 
 variable {dV dA}
 
@@ -101,10 +101,10 @@ theorem muCodec_R {N' : Type} (dV : V → Nat) (dA : A → Nat) (B : Codec V A M
     (B' : Codec A V N' → Codec A V N') (h : ∀ c' c, R c' c → R (B' c') (B c)) :
     R (muCodec dA dV B') (muCodec dV dA B) :=
   ⟨funext fun a => by
-      simp only [muCodec]
+      simp only [muCodec, Codec.ofEP_e, Codec.ofEP_p]
       rw [(muStage_R B B' h _).1],
    funext fun v => by
-      simp only [muCodec]
+      simp only [muCodec, Codec.ofEP_e, Codec.ofEP_p]
       rw [(muStage_R B B' h _).2]⟩
 
 /-- The converse body: unconvert, apply, convert. -/

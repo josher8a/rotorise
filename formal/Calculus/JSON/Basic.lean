@@ -64,10 +64,10 @@ theorem gate_eq_some {m : JMember} {v a : Json} :
 
 /-- The ground codec of one kind: the caller value is the stored value. -/
 def ground (m : JMember) : Alg.Codec Json Json JMember :=
-  { T := fun v => v.member = m
-    μ := some m
-    e := gate m
-    p := gate m }
+  Alg.Codec.ofEP (T := fun v => v.member = m)
+    (μ := some m)
+    (e := gate m)
+    (p := gate m)
 
 /-- A ground codec is lawful: the gate is its own inverse, and the gate passes one kind. -/
 theorem lawful_ground (m : JMember) : Alg.Lawful Json.member (ground m) where
@@ -123,7 +123,7 @@ theorem lawful_negNum : Alg.Lawful Json.member negNum :=
 /-- The identity codec. Each ground codec is below the identity codec, because the caller
     carrier is the stored carrier. -/
 def idCodec : Alg.Codec Json Json JMember :=
-  { T := fun _ => True, μ := none, e := some, p := some }
+  Alg.Codec.ofEP (T := fun _ => True) (μ := none) (e := some) (p := some)
 
 /-- The identity codec reads canonically. -/
 theorem canon_idCodec : Alg.Canon idCodec := fun _ _ h => (Option.some.inj h).symm ▸ rfl

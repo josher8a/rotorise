@@ -50,30 +50,6 @@ theorem half2_app {Z W : Type} (s : Bool) (f g : Z → W) (x : Z) :
     half2 s f g x = half2 s (f x) (g x) := by
   cases s <;> rfl
 
-/-! ## The orientation -/
-
-/-- **An orientation**: the absolute side of the caller and the absolute side of the stored
-    carrier. The two sides differ, so an orientation is one of two values. -/
-abbrev Orient : Type := {p : Bool × Bool // p.1 ≠ p.2}
-
-/-- The dual orientation: the caller side and the stored side swap. -/
-abbrev Orient.op (o : Orient) : Orient := ⟨(o.1.2, o.1.1), fun h => o.2 h.symm⟩
-
-/-- The host orientation: the caller side is `false`, and the stored side is `true`. -/
-abbrev Orient.host : Orient := ⟨(false, true), Bool.false_ne_true⟩
-
-/-- The dual of the host. -/
-abbrev Orient.dual : Orient := Orient.host.op
-
-/-- **The dual of the dual is the orientation, on the nose.** -/
-theorem Orient.op_op (o : Orient) : o.op.op = o := rfl
-
-/-- The caller side of an orientation. -/
-abbrev Orient.c (o : Orient) : Bool := o.1.1
-
-/-- The stored side of an orientation. -/
-abbrev Orient.s (o : Orient) : Bool := o.1.2
-
 /-! ## The signature and the universe -/
 
 /-- **The signature of a universe**: the primitives, and the predicates and the adapter

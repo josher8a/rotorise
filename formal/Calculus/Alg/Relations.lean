@@ -76,7 +76,7 @@ theorem muStage_induct {B : Codec V A M → Codec V A M} {P : Codec V A M → Pr
     replacement, and this is that fact in the information order. -/
 theorem approx_extendRead (c : Codec V A M) (r : A → Option V) :
     Codec.Approx c (c.extendRead r) :=
-  ⟨fun h => h, fun h => by simp only [Codec.extendRead, h]⟩
+  ⟨fun h => h, fun h => by simp only [Codec.extendRead, Codec.ofEP_p, h]⟩
 
 /-- **`refine` is a step down.** The prism only ever removes, on both halves — which is
     why §6's `refine(c, T) ≡ c` is the top of a descending chain and not a coincidence. -/
@@ -549,7 +549,7 @@ theorem equiv_restrict_full (c : Codec V A M) (q : V → Bool)
     `c.p a`, so re-reading through `c`'s own `p` adds nothing at all. -/
 theorem extendRead_self_p (c : Codec V A M) : (c.extendRead c.p).p = c.p := by
   funext a
-  simp only [Codec.extendRead]
+  simp only [Codec.extendRead, Codec.ofEP_p]
   cases c.p a <;> rfl
 
 /-- §6: `legacy(c, p_c) ≡ c`. -/
@@ -569,7 +569,7 @@ theorem extendRead_eq_on_can (c : Codec V A M) (r : A → Option V) (hc : Lawful
     {a : A} (ha : Can c a) : (c.extendRead r).p a = c.p a := by
   obtain ⟨v, hv⟩ := ha
   have hp : c.p a = some v := hc.retract hv
-  simp only [Codec.extendRead, hp]
+  simp only [Codec.extendRead, Codec.ofEP_p, hp]
 
 /-! ### `union` of one -/
 

@@ -125,48 +125,48 @@ under Products) rather than two. -/
 /-! ## Ground codecs (§3) -/
 
 def stringCodec : Codec :=
-  { T := fun v => ∃ s, v = .str s
-    μ := some .S
-    e := fun v => match v with | .str s => some (.s s) | _ => none
-    p := fun a => match a with | .s s => some (.str s) | _ => none }
+  Alg.Codec.ofEP (T := fun v => ∃ s, v = .str s)
+    (μ := some .S)
+    (e := fun v => match v with | .str s => some (.s s) | _ => none)
+    (p := fun a => match a with | .s s => some (.str s) | _ => none)
 
 /-- §3 `(number)`. The held set is `D`, §1's numeral domain, and the carrier is `WFNumeral`,
     so `e` and `p` are constructor wrappers with no gate. -/
 def numberCodec : Codec :=
-  { T := fun v => ∃ x : WFNumeral, v = .num x
-    μ := some .N
+  Alg.Codec.ofEP (T := fun v => ∃ x : WFNumeral, v = .num x)
+    (μ := some .N)
     -- **No gate on either half.** The carrier is `WFNumeral`, so the proof `Attr.n` demands
     -- arrives with the value and the read hands the same subtype straight back. The `dite`
     -- that used to make the check and throw it away has nothing left to check.
-    e := fun v => match v with
+    (e := fun v => match v with
       | .num x => some (.n x)
-      | _ => none
-    p := fun a => match a with
+      | _ => none)
+    (p := fun a => match a with
       | .n x => some (.num x)
-      | _ => none }
+      | _ => none)
 
 theorem numberCodec_e_num (x : WFNumeral) : numberCodec.e (.num x) = some (.n x) := rfl
 
 theorem numberCodec_p_n (x : WFNumeral) : numberCodec.p (.n x) = some (.num x) := rfl
 
 def booleanCodec : Codec :=
-  { T := fun v => ∃ b, v = .bool b
-    μ := some .BOOL
-    e := fun v => match v with | .bool b => some (.bool b) | _ => none
-    p := fun a => match a with | .bool b => some (.bool b) | _ => none }
+  Alg.Codec.ofEP (T := fun v => ∃ b, v = .bool b)
+    (μ := some .BOOL)
+    (e := fun v => match v with | .bool b => some (.bool b) | _ => none)
+    (p := fun a => match a with | .bool b => some (.bool b) | _ => none)
 
 def binaryCodec : Codec :=
-  { T := fun v => ∃ b, v = .bin b
-    μ := some .B
-    e := fun v => match v with | .bin b => some (.b b) | _ => none
-    p := fun a => match a with | .b b => some (.bin b) | _ => none }
+  Alg.Codec.ofEP (T := fun v => ∃ b, v = .bin b)
+    (μ := some .B)
+    (e := fun v => match v with | .bin b => some (.b b) | _ => none)
+    (p := fun a => match a with | .b b => some (.bin b) | _ => none)
 
 /-- The `NULL` point: one value, one attribute. A building block of `opaqStep`. -/
 def nullCodec : Codec :=
-  { T := fun v => v = .null
-    μ := some .NULL
-    e := fun v => match v with | .null => some .null | _ => none
-    p := fun a => match a with | .null => some .null | _ => none }
+  Alg.Codec.ofEP (T := fun v => v = .null)
+    (μ := some .NULL)
+    (e := fun v => match v with | .null => some .null | _ => none)
+    (p := fun a => match a with | .null => some .null | _ => none)
 
 /-- The pair a literal refines: its base's, chosen by the index.
 
@@ -279,7 +279,8 @@ than a carried one. -/
     only values `numberCodec` writes. The transcription that used to exhibit (B) failing here
     is retired, because the value carrier is `D` and there is no outside to point at. -/
 noncomputable def literalCodec (k : GroundKind) (x : k.Carrier) : Codec :=
-  { (baseCodec k).restrict (inL k x) with T := HLit k x }
+  Alg.Codec.ofEP (T := HLit k x) (μ := ((baseCodec k).restrict (inL k x)).μ)
+    (e := ((baseCodec k).restrict (inL k x)).e) (p := ((baseCodec k).restrict (inL k x)).p)
 
 theorem literalNCodec_p_n (y : WFNumeral) (x : WFNumeral) :
     (literalCodec .number y).p (.n x) =
@@ -314,7 +315,7 @@ theorem literalCodec_p_restrict (k : GroundKind) (x : k.Carrier) :
 theorem inL_of_literalCodec_e {k : GroundKind} {x : k.Carrier} {v a}
     (he : (literalCodec k x).e v = some a) : inL k x v = true := by
   rw [literalCodec_e_restrict] at he
-  simp only [Alg.Codec.restrict] at he
+  simp only [Alg.Codec.restrict, Alg.Codec.ofEP_e] at he
   split at he
   · assumption
   · exact absurd he (by simp)

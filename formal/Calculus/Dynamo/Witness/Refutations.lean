@@ -42,11 +42,11 @@ write lands on another attribute. That is the same residue `alternate reader` le
 
 /-- **(R) fails alone.** Every string is written to one attribute, so the write forgets which
     string it was; nothing else notices. -/
-def cR : Codec where
-  T := fun _ => True
-  μ := some Member.S
-  e := fun v => (match v with | .str _ => some (.s "x") | _ => none)
-  p := fun a => (match a with | .s "x" => some (.str "a") | _ => none)
+def cR : Codec :=
+  Alg.Codec.ofEP (T := fun _ => True)
+    (μ := some Member.S)
+    (e := fun v => (match v with | .str _ => some (.s "x") | _ => none))
+    (p := fun a => (match a with | .s "x" => some (.str "a") | _ => none))
 
 /-- `cR` loses the value: `"b"` is written and `"a"` is read back. -/
 theorem cR_notR : ¬ (∀ {t a}, cR.e t = some a → cR.p a = some t) := by
@@ -59,11 +59,11 @@ theorem cR_W : ∀ {μ}, cR.μ = some μ → ∀ {t a}, cR.e t = some a → a.me
   intro μ hμ t a h; cases t <;> simp [cR] at h hμ; subst h; subst hμ; rfl
 
 /-- **(C) fails alone.** Reads every `S`, writes only `"a"` — so `p` escapes `dom(e)`. -/
-def cC : Codec where
-  T := fun _ => True
-  μ := some Member.S
-  e := fun v => (match v with | .str "a" => some (.s "a") | _ => none)
-  p := fun a => (match a with | .s s => some (.str s) | _ => none)
+def cC : Codec :=
+  Alg.Codec.ofEP (T := fun _ => True)
+    (μ := some Member.S)
+    (e := fun v => (match v with | .str "a" => some (.s "a") | _ => none))
+    (p := fun a => (match a with | .s s => some (.str s) | _ => none))
 
 /-- `cC` retracts on the one value it writes. -/
 theorem cC_R : ∀ {t a}, cC.e t = some a → cC.p a = some t := by
@@ -77,16 +77,16 @@ theorem cC_notCanon : ¬ (∀ {a t}, cC.p a = some t → cC.e t = some a) := by
 
 /-- **(W) fails alone.** A bijection on its domain that declares `μ = S` and writes `"z"` to
     `BOOL`. The pair is as well behaved as a pair can be; only the *declaration* is a lie. -/
-def cW : Codec where
-  T := fun _ => True
-  μ := some Member.S
-  e := fun v =>
-    (match v with | .str s => if s = "z" then some (.bool true) else some (.s s) | _ => none)
-  p := fun a =>
-    (match a with
-     | .bool true => some (.str "z")
-     | .s s => if s = "z" then none else some (.str s)
-     | _ => none)
+def cW : Codec :=
+  Alg.Codec.ofEP (T := fun _ => True)
+    (μ := some Member.S)
+    (e := fun v =>
+      (match v with | .str s => if s = "z" then some (.bool true) else some (.s s) | _ => none))
+    (p := fun a =>
+      (match a with
+       | .bool true => some (.str "z")
+       | .s s => if s = "z" then none else some (.str s)
+       | _ => none))
 
 /-- `cW` writes `⟨BOOL, true⟩` while naming `S`. -/
 theorem cW_notW : ¬ (∀ {μ}, cW.μ = some μ → ∀ {t a}, cW.e t = some a → a.member = μ) := by
@@ -94,20 +94,20 @@ theorem cW_notW : ¬ (∀ {μ}, cW.μ = some μ → ∀ {t a}, cW.e t = some a �
 /-- …and is a retraction all the same: the two branches are disjoint by construction. -/
 theorem cW_R : ∀ {t a}, cW.e t = some a → cW.p a = some t := by
   intro t a h
-  cases t <;> simp only [cW] at h
+  cases t <;> simp only [cW, Alg.Codec.ofEP_e] at h
   case str s =>
     split at h
     · next hz => subst hz; cases h; rfl
-    · next hz => cases h; simp only [cW]; rw [if_neg hz]
+    · next hz => cases h; simp only [cW, Alg.Codec.ofEP_p]; rw [if_neg hz]
   all_goals exact absurd h (by simp)
 /-- …and every read value writes the attribute it was read from. -/
 theorem cW_canon : ∀ {a t}, cW.p a = some t → cW.e t = some a := by
   intro a t h
-  cases a <;> simp only [cW] at h
+  cases a <;> simp only [cW, Alg.Codec.ofEP_p] at h
   case s s =>
     split at h
     · exact absurd h (by simp)
-    · next hz => cases h; simp only [cW]; rw [if_neg hz]
+    · next hz => cases h; simp only [cW, Alg.Codec.ofEP_e]; rw [if_neg hz]
   case bool b =>
     cases b
     · exact absurd h (by simp)
@@ -116,12 +116,12 @@ theorem cW_canon : ∀ {a t}, cW.p a = some t → cW.e t = some a := by
 
 /-- **Definedness without canonical reads.** Declares no member, and reads `⟨BOOL, true⟩` back
     as a string it writes to `S` — so a stored `BOOL` becomes an `S` on the way through. -/
-def cM : Codec where
-  T := fun _ => True
-  μ := none
-  e := fun v => (match v with | .str s => some (.s s) | _ => none)
-  p := fun a =>
-    (match a with | .s s => some (.str s) | .bool true => some (.str "z") | _ => none)
+def cM : Codec :=
+  Alg.Codec.ofEP (T := fun _ => True)
+    (μ := none)
+    (e := fun v => (match v with | .str s => some (.s s) | _ => none))
+    (p := fun a =>
+      (match a with | .s s => some (.str s) | .bool true => some (.str "z") | _ => none))
 
 /-- `cM` retracts. -/
 theorem cM_R : ∀ {t a}, cM.e t = some a → cM.p a = some t := by
@@ -191,7 +191,8 @@ theorem not_equiv_tupleTail_tuple :
   -- `Classical.choice` in with it; the implication is the constructive shape.
   simp only [Term.tuple, ← tupleCodec_eq_listCodec, denote_rows,
     tupleCodec, align, Option.map_some,
-    Option.some.injEq, exists_eq_left', List.mem_cons, List.not_mem_nil, or_false] at hv
+    Option.some.injEq, exists_eq_left', List.mem_cons, List.not_mem_nil, or_false,
+    Alg.Codec.ofEP_T] at hv
   exact absurd (hv (by rintro p (rfl | rfl) <;> exact ⟨_, rfl⟩))
     (by rintro ⟨ps, hps, -⟩; simp at hps)
 
@@ -337,20 +338,20 @@ that, so this refutation does not decide the restricted question. -/
 
 /-- Writes `null` as `S "A"`, and reads only that attribute — lawful, and on its carrier. -/
 def cA : Codec :=
-  { T := fun v => v = .null, μ := none,
-    e := fun v => match v with | .null => some (.s "A") | _ => none,
-    p := fun a => match a with | .s x => if x = "A" then some .null else none | _ => none }
+  Alg.Codec.ofEP (T := fun v => v = .null) (μ := none)
+    (e := fun v => match v with | .null => some (.s "A") | _ => none)
+    (p := fun a => match a with | .s x => if x = "A" then some .null else none | _ => none)
 
 /-- The same, at `S "B"`. It disagrees with `cA` on the one value both write. -/
 def cB : Codec :=
-  { T := fun v => v = .null, μ := none,
-    e := fun v => match v with | .null => some (.s "B") | _ => none,
-    p := fun a => match a with | .s x => if x = "B" then some .null else none | _ => none }
+  Alg.Codec.ofEP (T := fun v => v = .null) (μ := none)
+    (e := fun v => match v with | .null => some (.s "B") | _ => none)
+    (p := fun a => match a with | .s x => if x = "B" then some .null else none | _ => none)
 
 /-- The middle: the same held set, and no `e` or `p` anywhere. Every law of §2 is vacuous
     on it, which is exactly what makes it `≡` to both of the others. -/
 def cMid : Codec :=
-  { T := fun v => v = .null, μ := none, e := fun _ => none, p := fun _ => none }
+  Alg.Codec.ofEP (T := fun v => v = .null) (μ := none) (e := fun _ => none) (p := fun _ => none)
 
 theorem lawful_cA : Lawful cA where
   retract := by intro t a he; cases t <;> simp_all [cA]; subst_vars; simp
@@ -358,7 +359,7 @@ theorem lawful_cA : Lawful cA where
     intro a t hp
     cases a with
     | s x =>
-      simp only [cA] at hp
+      simp only [cA, Alg.Codec.ofEP_p] at hp
       split at hp
       · next hx => cases hp; subst hx; rfl
       · exact nomatch hp
@@ -371,7 +372,7 @@ theorem lawful_cB : Lawful cB where
     intro a t hp
     cases a with
     | s x =>
-      simp only [cB] at hp
+      simp only [cB, Alg.Codec.ofEP_p] at hp
       split at hp
       · next hx => cases hp; subst hx; rfl
       · exact nomatch hp

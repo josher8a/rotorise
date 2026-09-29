@@ -113,7 +113,7 @@ theorem deepT_e : ∀ n, (denote α (deepT n)).e (deepV n) = some (deepA n)
   | 0 => rfl
   | n + 1 => by
     show (arrayCodec (denote α (deepT n))).e (.arr [deepV n]) = some (.l [deepA n])
-    simp only [arrayCodec, traverse, deepT_e n]
+    simp only [arrayCodec, traverse, deepT_e n, Alg.Codec.ofEP_e]
     rfl
 
 /-- **The claim the calculus cannot make.** At every bound, a derivable term, a value it

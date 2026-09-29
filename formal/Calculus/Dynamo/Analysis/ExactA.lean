@@ -33,7 +33,7 @@ noncomputable abbrev refineReads (t : Term) (q : Value → Bool) : Attr → Bool
       | none => false := by
   -- the two matches are different auxiliary definitions, and a match reduces only at a
   -- constructor
-  simp only [refineReads, Alg.refineReads, Alg.gate, Alg.conv]
+  simp only [refineReads, Alg.refineReads, Alg.gate, Alg.conv, Alg.Codec.ofEP_e]
   cases (Alg.denote α dynTableA t).p a <;> rfl
 
 noncomputable section

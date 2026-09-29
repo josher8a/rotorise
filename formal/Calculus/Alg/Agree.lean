@@ -131,7 +131,7 @@ theorem agreeE_carried {γ δ : Type} {pV : Ctor γ V} {pA : Ctor δ A} {μ₀ :
     (h : ∀ x d₁ d₂, E₁ x = some d₁ → E₂ x = some d₂ → d₁ = d₂) :
     AgreeE (carriedCodec pV pA μ₀ P₁ E₁ D₁) (carriedCodec pV pA μ₀ P₂ E₂ D₂) := by
   intro v a b ha hb
-  simp only [carriedCodec, Option.map_eq_some_iff, Option.bind_eq_some_iff] at ha hb
+  simp only [carriedCodec, Option.map_eq_some_iff, Option.bind_eq_some_iff, Codec.ofEP_e] at ha hb
   obtain ⟨d₁, ⟨x, hx, h1⟩, rfl⟩ := ha
   obtain ⟨d₂, ⟨x', hx', h2⟩, rfl⟩ := hb
   rw [hx] at hx'; cases hx'
@@ -143,7 +143,7 @@ theorem agreeP_carried {γ δ : Type} {pV : Ctor γ V} {pA : Ctor δ A} {μ₀ :
     (h : ∀ x d₁ d₂, D₁ x = some d₁ → D₂ x = some d₂ → d₁ = d₂) :
     AgreeP (carriedCodec pV pA μ₀ P₁ E₁ D₁) (carriedCodec pV pA μ₀ P₂ E₂ D₂) := by
   intro a t w ht hw
-  simp only [carriedCodec, Option.map_eq_some_iff, Option.bind_eq_some_iff] at ht hw
+  simp only [carriedCodec, Option.map_eq_some_iff, Option.bind_eq_some_iff, Codec.ofEP_p] at ht hw
   obtain ⟨d₁, ⟨x, hx, h1⟩, rfl⟩ := ht
   obtain ⟨d₂, ⟨x', hx', h2⟩, rfl⟩ := hw
   rw [hx] at hx'; cases hx'

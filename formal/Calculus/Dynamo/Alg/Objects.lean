@@ -101,7 +101,7 @@ theorem objectCodec_empty_codec (c : Codec) :
     rename_i keys f
     simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, recordCodec,
         Option.bind,
-          objWrite, rcOf, entryCodec, MapOf.at, mapV, mA]
+          objWrite, rcOf, entryCodec, MapOf.at, mapV, mA, Alg.Codec.ofEP_e]
     rw [if_pos (hval keys), Option.map_map]
     refine congrArg (fun F => Option.map F _) (funext fun _ => rfl) |>.trans ?_
     exact congrArg (Option.map _) (congrArg funImage
@@ -111,7 +111,7 @@ theorem objectCodec_empty_codec (c : Codec) :
     rename_i keys f
     simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, mapV, mA,
         Option.bind,
-               objRead, rcOf, recordCodec]
+               objRead, rcOf, recordCodec, Alg.Codec.ofEP_p]
     -- simp over a vacuous `Finset ∅` goal reaches `Classical.choice` through three filter
     -- lemmas this development does not advertise. Each fact below is the direct term instead.
     rw [if_pos (show reqPresentB (⟨(∅ : Finset Name),

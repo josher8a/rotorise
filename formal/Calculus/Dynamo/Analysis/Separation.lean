@@ -289,7 +289,7 @@ subterm's read domain is unsound, not coarse: `extendRead (literal "A") r`, with
 theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
     ((c.adapt f g).p a).isSome = true → (c.p a).isSome = true := by
   intro h
-  simp only [Alg.Codec.adapt] at h
+  simp only [Alg.Codec.adapt, Alg.Codec.ofEP_p] at h
   cases hc : c.p a with
   | none => rw [hc] at h; simp at h
   | some _ => rfl

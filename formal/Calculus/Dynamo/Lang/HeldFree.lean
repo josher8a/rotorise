@@ -69,10 +69,10 @@ theorem sub_null : Sub nullCodec Ω :=
 /-- A restriction of a restriction of `Ω` is a restriction of `Ω`. -/
 theorem sub_restrict {c : Codec} (h : Sub c Ω) (q : Value → Bool) : Sub (c.restrict q) Ω := by
   refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
-  · simp only [Alg.Codec.restrict] at he; split at he
+  · simp only [Alg.Codec.restrict, Alg.Codec.ofEP_e] at he; split at he
     · exact h.1 _ _ he
     · exact nomatch he
-  · simp only [Alg.Codec.restrict, Option.bind_eq_some_iff] at hp
+  · simp only [Alg.Codec.restrict, Option.bind_eq_some_iff, Alg.Codec.ofEP_p] at hp
     obtain ⟨w, hw, hq⟩ := hp; split at hq
     · cases hq; exact h.2 _ _ hw
     · exact nomatch hq

@@ -169,13 +169,13 @@ theorem agreeLe_recordCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c�
     | map keys f =>
       have hk : ∀ k, c₁.e (f k) = c₂.e (f k) := fun k =>
         h.e _ (by have := Value.depth_map_entry (f := f) k; omega)
-      simp only [recordCodec, hk]
+      simp only [recordCodec, hk, Alg.Codec.ofEP_e]
     | _ => rfl
   · cases a with
     | m keys g =>
       have hk : ∀ k, c₁.p (g k) = c₂.p (g k) := fun k =>
         h.p _ (by have := Attr.depth_map_entry (f := g) k; omega)
-      simp only [recordCodec, hk]
+      simp only [recordCodec, hk, Alg.Codec.ofEP_p]
     | _ => rfl
 
 /-- A set reads its element codec at scalars, which are one layer below the set. -/
