@@ -331,12 +331,11 @@ theorem ExactV_object {fields : Finset String} {fld : {k // k ∈ fields} → Ob
     (hr : ∀ t, wild = some t → ExactV α β t ρ) :
     ExactV α β (.object (.mk fields fld wild)) ρ := by
   intro v
-  have hd : wildSemAbs (tables S.o α β) wild ρ ≠ .drop := wildSem_ne_drop wild
   simp only [Adm, AdmBody, denote, denoteAbs, bodySemAbs]
   cases Mean.map (B := S.sig) with
   | none => simp [Codec.empty]
   | some F =>
-    rw [objectCodec_f _ _ _ hd]
+    rw [objectCodec_f]
     rcases hv : (F.m S.o.c).out v with _ | m
     · simp [hv]
     · simp only [hv, Option.bind_some, Option.isSome_map]

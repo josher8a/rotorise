@@ -8,8 +8,7 @@ The traversal toolkit and the products built on it. `carriedCodec`, a payload pa
 between two prisms, is the shape underneath all of them: `entrywise` is it at a traversal,
 hence `arrayCodec` and `recordCodec`, and `tupleCodec` is it at `align` plus a traversal,
 where the one fact worth proving is that alignment depends on a row's *length* alone.
-`setCodec` is argued on its own. `drop` is a *filter* and not a traversal mode, so nothing
-here needs a second toolkit.
+`setCodec` is argued on its own.
 
 `traverse`, `carriedCodec`, `entrywise`, `setImage`, and the alignment of a positional row take
 the carriers as parameters, so they live in the generic layer. This file instantiates them at the

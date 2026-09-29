@@ -269,7 +269,7 @@ inductive FieldSem (V A M : Type) where
 
 /-- A rest policy, denoted. -/
 inductive RestSem (V A M : Type) where
-  | drop | refuse
+  | refuse
   | codec (c : Codec V A M)
 
 section Fields
@@ -300,7 +300,6 @@ def FieldSem.Rel (R : Codec V A M → Codec V A M → Prop) : FieldSem V A M →
 
 /-- Two rest policies of one shape whose codecs stand in `R`. -/
 def RestSem.Rel (R : Codec V A M → Codec V A M → Prop) : RestSem V A M → RestSem V A M → Prop
-  | .drop, .drop => True
   | .refuse, .refuse => True
   | .codec c₁, .codec c₂ => R c₁ c₂
   | _, _ => False
@@ -323,7 +322,6 @@ theorem FieldSem.Rel.valPresentAt {κ : Type} [DecidableEq κ] (names : Finset �
 /-- Related rest policies give related rest codecs. -/
 theorem RestSem.Rel.rcOf : ∀ {r₁ r₂ : RestSem V A M}, RestSem.Rel R r₁ r₂ →
     Option.Rel R (Alg.rcOf r₁) (Alg.rcOf r₂)
-  | .drop, .drop, _ => .none
   | .refuse, .refuse, _ => .none
   | .codec _, .codec _, h => .some h
 
@@ -336,7 +334,6 @@ theorem rcOf_forall {P : Codec V A M → Prop} {rest : RestSem V A M}
     replace hc : some c' = some c := hc
     cases hc
     exact h c rfl
-  | drop => exact nomatch hc
   | refuse => exact nomatch hc
 
 end Fields

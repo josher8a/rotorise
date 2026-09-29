@@ -73,16 +73,6 @@ theorem sub_listCodec {pV : Ctor (List V) V} {pA : Ctor (List A) A} {μL : M} {u
       (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
     rfl
 
-/-- A key-set equation transports a keyed read. -/
-theorem funImage_mapOf_congr {β γ : Type} (into : MapOf β → γ) {S T : Finset String} (hS : S = T)
-    {g : {k // k ∈ S} → Option β} {g' : {k // k ∈ T} → Option β}
-    (hg : ∀ (k : String) (h : k ∈ S) (h' : k ∈ T), g ⟨k, h⟩ = g' ⟨k, h'⟩) :
-    (funImage g).map (fun d => into ⟨S, d⟩) = (funImage g').map (fun d => into ⟨T, d⟩) := by
-  subst hS
-  have himg : g = g' := funext fun k => hg k.1 k.2 k.2
-  subst himg
-  rfl
-
 /-- An object whose every entry codec is below a top that acts as the map former is below the
     top. -/
 theorem sub_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM : M}
@@ -91,7 +81,7 @@ theorem sub_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM : M
       (funImage fun k => u.e (m.get k)).map fun g => mA.into ⟨m.keys, g⟩)
     (hup : ∀ m : MapOf A, u.p (mA.into m) =
       (funImage fun k => u.p (m.get k)).map fun g => mV.into ⟨m.keys, g⟩)
-    {sems : MapOf (FieldSem V A M)} {rest : RestSem V A M} (hnd : rest ≠ .drop)
+    {sems : MapOf (FieldSem V A M)} {rest : RestSem V A M}
     (hf : ∀ k, Sub (sems.2 k).codec u) (hw : ∀ c ∈ rcOf rest, Sub c u) :
     Sub (objectCodec mV mA μM sems rest) u := by
   refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
@@ -104,21 +94,9 @@ theorem sub_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM : M
     exact (entryCodec_of (Q := fun c => Sub c u) hf hw hc) .host _ _ hce
   · obtain ⟨y, x, ha, hD, rfl⟩ := carried_p.mp hp
     obtain ⟨-, d, hd, rfl⟩ := objRead_eq.mp hD
-    have hkeep : ∀ k, keepB rest sems k = true := by
-      intro k; cases rest with
-      | drop => exact absurd rfl hnd
-      | refuse => rfl
-      | codec _ => rfl
-    have hS : y.1 = y.1.filter (keepB rest sems ·) :=
-      (Finset.filter_eq_self.mpr fun k _ => by simpa using hkeep k).symm
-    rw [mA.into_out ha, hup]
-    rw [funImage_mapOf_congr mV.into hS
-        (g' := fun k : {k // k ∈ y.1.filter (keepB rest sems ·)} =>
-          (entryCodec sems (rcOf rest) k.1).bind
-            (fun c => c.p (y.2 ⟨k.1, (Finset.mem_filter.mp k.2).1⟩))) (fun k h h' => ?_), hd]
+    rw [mA.into_out ha, hup, funImage_eq (f := d) (fun k => ?_)]
     · rfl
-    have hk := funImage_some hd ⟨k, h'⟩
-    rw [hk]
+    have hk := funImage_some hd k
     obtain ⟨c, hc, hcp⟩ := Option.bind_eq_some_iff.mp hk
     exact (entryCodec_of (Q := fun c => Sub c u) hf hw hc) .dual _ _ hcp
 
@@ -209,7 +187,7 @@ theorem sub_body [TopLaws S] : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
       cases hF : Mean.map (B := S.sig) with
       | none => exact sub_empty
       | some F =>
-        exact sub_objectCodec (TopLaws.map F hF).1 (TopLaws.map F hF).2 (wildSem_ne_drop _)
+        exact sub_objectCodec (TopLaws.map F hF).1 (TopLaws.map F hF).2
           (fun k => sub_slot (f k) (Bool.eq_false_iff.mpr (h.1 k)) ρ henv)
           (sub_wild w h.2 ρ henv)
 /-- …at a slot. -/

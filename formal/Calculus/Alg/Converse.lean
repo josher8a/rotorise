@@ -143,20 +143,10 @@ theorem carrier_adapt2 {member : A → M} {c : Codec V A M} (hc : Carrier c)
 
 /-! ## The object codec at an orientation -/
 
-/-- A map payload over a key set equal to another is the payload over that set. -/
-theorem funImage_map_mk {β : Type} {s' s : Finset String} (h : s' = s)
-    (G' : {k // k ∈ s'} → Option β) (G : {k // k ∈ s} → Option β)
-    (hG : ∀ k (h₁ : k ∈ s') (h₂ : k ∈ s), G' ⟨k, h₁⟩ = G ⟨k, h₂⟩) :
-    (funImage G').map (fun d => (⟨s', d⟩ : MapOf β)) = (funImage G).map (fun g => ⟨s, g⟩) := by
-  subst h
-  have : G' = G := funext fun k => hG k.1 k.2 k.2
-  rw [this]
-
 /-- **The object codec at an orientation**: read the caller prism, pass the presence guard, run
-    each entry at the orientation, and build with the stored prism. The rest policy is not
-    `drop`, so the read keeps every name. -/
+    each entry at the orientation, and build with the stored prism. -/
 theorem objectCodec_f (m : (s : Bool) → Ctor (MapOf (Side V A s)) (Side V A s)) (μM : M)
-    (sems : MapOf (FieldSem V A M)) {rest : RestSem V A M} (hd : rest ≠ .drop) :
+    (sems : MapOf (FieldSem V A M)) {rest : RestSem V A M} :
     ∀ (o : Orient) (x : Side V A o.c), (objectCodec (m false) (m true) μM sems rest).f o x =
       (((m o.c).out x).bind fun q => if valPresentB sems q.1 = true then
         (funImage fun k => (entryCodec sems (rcOf rest) k.1).bind fun c => c.f o (q.2 k)).map
@@ -166,15 +156,6 @@ theorem objectCodec_f (m : (s : Bool) → Ctor (MapOf (Side V A s)) (Side V A s)
         (funImage fun k => (entryCodec sems (rcOf rest) k.1).bind fun c => c.f o (q.2 k)).map
           (fun g => (⟨q.1, g⟩ : MapOf (Side V A o.s))) else none).map (m o.s).into)
     (fun _ => rfl)
-    (fun a => by
-      simp only [objectCodec, objectCodecCore, keepB_of_ne_drop hd, carriedCodec, Codec.ofEP_p]
-      congr 2; funext q
-      unfold objRead
-      rw [show reqPresentB sems q.1 = valPresentB sems q.1 from rfl]
-      cases valPresentB sems q.1
-      · rfl
-      · -- the multiset form: `Finset.filter_true_of_mem` reaches `Classical.choice`
-        refine funImage_map_mk (Finset.eq_of_veq (Multiset.filter_eq_self.mpr fun _ _ => rfl)) _ _
-          fun _ _ _ => rfl)
+    (fun _ => rfl)
 
 end Calculus.Alg

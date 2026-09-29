@@ -12,9 +12,10 @@ non-malleability in its equality form, the form the verified-formats community s
 * **`η` is renamed, not removed.** `survivesStore_iff` is §1's `η ⊆ ker p` against fibres. Under
   a canonical codec a fibre is one attribute, so the store must fix each attribute the codec
   writes. That is why `decimal`'s held set is the numerals the store returns unchanged.
-* **`drop` is not lawful** (`not_lawful_dropAll`). `objectCodec` under `.drop` with an empty
-  field table reads every `M` attribute to the empty map, so its `M` fragment is one fibre. No
-  term denotes it: a term's rest policy is `refuse` or a codec.
+* **A reader that drops names is not lawful** (`not_lawful_dropAll`). A reader that discards
+  every name reads every `M` attribute to the empty map, so its `M` fragment is one fibre. So the
+  model has no such rest policy: a rest policy refuses an undeclared name, or reads it with a
+  codec in the open block.
 -/
 
 namespace Calculus
@@ -85,67 +86,29 @@ theorem Lawful.fmt_subsingleton {c : Codec} (h : Lawful c) {v a a'}
   rw [h.canon (mem_Fmt.mp ha')] at e1
   exact (Option.some.inj e1).symm
 
-/-! ### Where it breaks: `drop`
+/-! ### Where it breaks: a reader that drops names
 
-`keepB .drop sems` keeps declared names only, so an object with an empty field table discards
-everything it is given. Its `M` fragment is a single fibre. -/
+A reader that keeps no name discards everything it is given, so its `M` fragment is a single
+fibre. The model gives this reader no term. The witness below is built by hand. -/
 
 /-- The empty binding, at any payload type: `∅` names no key, so the payload function is
     total by vacuity. -/
 def noEntries {α : Type} : MapOf α := ⟨∅, fun k => (Finset.notMem_empty _ k.2).elim⟩
 
-/-- **The object that declares nothing and drops everything.** Chosen because it makes the
-    failure minimal: no field is involved, so nothing about any particular field's codec is
-    doing the work — the rest policy alone is. -/
-noncomputable def dropAll : Codec := objectCodec noEntries .drop
+/-- **The reader that drops every name**: it reads each `M` attribute to the empty map, and it
+    writes nothing. -/
+def dropAll : Codec :=
+  Alg.Codec.ofEP (T := fun _ => True) (μ := none) (e := fun _ => none)
+    (p := fun a => match a with
+      | .m _ _ => some (mapV.into noEntries)
+      | _ => none)
 
-/-- No name survives the `drop` filter when nothing is declared. -/
-theorem keepB_noEntries (k : Name) : keepB .drop (noEntries (α := FieldSem)) k = false := by
-  simp [keepB, noEntries, MapOf.at]
-
-/-- A binding whose key set is empty is *the* empty binding — the dependent rewrite the
-    computation below needs, isolated so it happens once. `Finset` equality cannot be
-    rewritten under the payload function without it. -/
-theorem mapOf_of_keys_empty {α : Type} {s : Finset Name} (h : s = ∅)
-    (g : {k // k ∈ s} → α) : (⟨s, g⟩ : MapOf α) = noEntries := by
-  subst h
-  have hg : g = fun k => (Finset.notMem_empty _ k.2).elim :=
-    funext fun k => (Finset.notMem_empty _ k.2).elim
-  rw [hg]
-  rfl
-
-/-- No name survives the filter, whatever the stored item carried. -/
-theorem filter_keepB_noEntries (keys : Finset Name) :
-    keys.filter (fun k => keepB .drop (noEntries (α := FieldSem)) k = true) = ∅ :=
-  Finset.filter_false_of_mem fun k _ => by simp [keepB_noEntries k]
-
-/-- The stored-side guard is vacuous: it quantifies over the declared names, and there are
-    none. -/
-theorem reqPresentB_noEntries (keys : Finset Name) :
-    reqPresentB (noEntries (α := FieldSem)) keys = true := by
-  unfold reqPresentB
-  exact decide_eq_true fun k => (Finset.notMem_empty _ k.2).elim
-
-/-- **Every `M` attribute reads to the empty map.** The guard is vacuous and the filter is empty,
-    so nothing from the stored item reaches the value. This one equation is the fibre. -/
+/-- **Every `M` attribute reads to the empty map.** This one equation is the fibre. -/
 theorem dropAll_p (keys : Finset Name) (f : {k // k ∈ keys} → Attr) :
-    dropAll.p (.m keys f) = some (mapV.into noEntries) := by
-  show (objRead noEntries (rcOf .drop) (keepB .drop noEntries) ⟨keys, f⟩).map mapV.into
-      = some (mapV.into noEntries)
-  have hemp : ∀ k : {k // k ∈ keys.filter
-      (fun k => keepB .drop (noEntries (α := FieldSem)) k = true)}, False :=
-    fun k => by
-      have hk := (Finset.mem_filter.mp k.2).2
-      rw [keepB_noEntries] at hk
-      exact Bool.noConfusion hk
-  simp only [objRead, if_pos (reqPresentB_noEntries keys)]
-  obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (funImage_isSome fun k => (hemp k).elim)
-  rw [hd]
-  refine congrArg (fun m => some (mapV.into m)) (mapOf_of_keys_empty ?_ _)
-  rw [filter_keepB_noEntries]
+    dropAll.p (.m keys f) = some (mapV.into noEntries) := rfl
 
-/-- **`drop` is not lawful**: two maps read to the empty map, and the empty map writes one of
-    them. This is why `lawful_objectCodec` takes `rest ≠ .drop`. -/
+/-- **A reader that drops names is not lawful**: two maps read to the empty map, and the empty
+    map writes one of them. -/
 theorem not_lawful_dropAll : ¬ Lawful dropAll := by
   intro h
   have h1 := h.canon (dropAll_p {"x"} (fun _ => .null))

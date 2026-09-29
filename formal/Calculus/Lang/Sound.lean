@@ -39,10 +39,6 @@ variable {S : Syn} [Sem S] {α : Table S} {β : Table S.op}
   | [] => rfl
   | t :: ts => congrArg ((denote α β t ρ).μ :: ·) (denoteμs_eq_map ts)
 
-/-- A term's open block keeps every name. -/
-theorem wildSem_ne_drop (w : Option (Term S)) {ρ : List S.C} : wildSem α β w ρ ≠ .drop := by
-  cases w <;> exact fun h => nomatch h
-
 /-- A unanimous member is the member of every option. -/
 theorem unanimous_spec {M : Type} [DecidableEq M] : ∀ {l : List (Option M)} {m},
     unanimous l = some m → ∀ x ∈ l, x = some m
@@ -141,7 +137,7 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
           cases hcr
           exact soundnessIn ρ hty hob.2 henv
       simp only [denote, denoteAbs, bodySemAbs, hF]
-      exact lawful_objectCodec F.hμ ihf ihr (wildSem_ne_drop _)
+      exact lawful_objectCodec F.hμ ihf ihr
     | @union opts Ts μs hlist =>
       have ihs : ∀ t' ∈ opts, Lawful Mean.mem (denote α β t' ρ) := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall (α := α) (β := β) hlist t' ht'
