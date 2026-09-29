@@ -67,15 +67,8 @@ theorem sub_null : Sub nullCodec Ω :=
     (fun a v h => (by cases a <;> simp [nullCodec] at h; subst h; rfl))
 
 /-- A restriction of a restriction of `Ω` is a restriction of `Ω`. -/
-theorem sub_restrict {c : Codec} (h : Sub c Ω) (q : Value → Bool) : Sub (c.restrict q) Ω := by
-  refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
-  · simp only [Alg.Codec.restrict, Alg.Codec.ofEP_e] at he; split at he
-    · exact h .host _ _ he
-    · exact nomatch he
-  · simp only [Alg.Codec.restrict, Option.bind_eq_some_iff, Alg.Codec.ofEP_p] at hp
-    obtain ⟨w, hw, hq⟩ := hp; split at hq
-    · cases hq; exact h .dual _ _ hw
-    · exact nomatch hq
+theorem sub_restrict {c : Codec} (h : Sub c Ω) (q : Value → Bool) : Sub (c.restrict q) Ω :=
+  Alg.sub_trans (sub_restrict_self c q) h
 
 /-- Each ground base is a restriction of `Ω`. -/
 theorem sub_baseCodec : ∀ k, Sub (baseCodec k) Ω
@@ -84,7 +77,8 @@ theorem sub_baseCodec : ∀ k, Sub (baseCodec k) Ω
 
 /-- A literal is a restriction of `Ω`, because a literal restricts its base. -/
 theorem sub_literal (k : GroundKind) (x : k.Carrier) : Sub (literalCodec k x) Ω :=
-  sub_restrict (sub_baseCodec k) (inL k x)
+  have h := sub_restrict (sub_baseCodec k) (inL k x)
+  .ofEP (h .host) (h .dual)
 
 /-- `encSet` keeps an inclusion of graphs. -/
 theorem encSet_sub {α : Type} {c d : Codec} (h : Sub c d) {inj : α → Value} {S : NEFinset α}

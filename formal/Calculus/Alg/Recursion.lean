@@ -55,6 +55,12 @@ theorem zero (hV : ∀ v, 0 < dV v) (hA : ∀ a, 0 < dA a) (c₁ c₂ : Codec V 
 theorem of_eq (he : c₁.e = c₂.e) (hp : c₁.p = c₂.p) : AgreeLe dV dA d c₁ c₂ :=
   ⟨fun v _ => congrFun he v, fun a _ => congrFun hp a⟩
 
+/-- Agreement below a depth, at an orientation: the two maps at `o` agree at each input of
+    depth at most `d`. -/
+theorem f (h : AgreeLe dV dA d c₁ c₂) :
+    ∀ (o : Orient) (x : Side V A o.c), Side.elim dV dA o.c x ≤ d → c₁.f o x = c₂.f o x :=
+  Orient.both h.e h.p
+
 /-- …and agreement at every depth is one pair of halves, because every input has a depth. -/
 theorem eq_of_forall (h : ∀ d, AgreeLe dV dA d c₁ c₂) : c₁.e = c₂.e ∧ c₁.p = c₂.p :=
   ⟨funext fun v => (h _).e v le_rfl, funext fun a => (h _).p a le_rfl⟩
@@ -71,21 +77,16 @@ def Contractive (B : Codec V A M → Codec V A M) : Prop :=
 /-- **The recursive codec**: each input read at the stage its own depth names. The member is
     `⊤`, because the stages need not agree on one. The held set is the write domain, so the held
     set of a recursive term is its admission with no induction over the stages. -/
-def muCodec (B : Codec V A M → Codec V A M) : Codec V A M :=
-  Codec.ofEP (T := fun v => ((muStage B (dV v)).e v).isSome = true)
-    (μ := none)
-    (e := fun v => (muStage B (dV v)).e v)
-    (p := fun a => (muStage B (dA a)).p a)
+def muCodec (B : Codec V A M → Codec V A M) : Codec V A M where
+  T v := ((muStage B (dV v)).e v).isSome = true
+  μ := none
+  f o x := (muStage B (Side.elim dV dA o.c x)).f o x
 
 variable {dV dA}
 
-/-- The limit writes a value at the stage the value's depth names. -/
-theorem muCodec_e (B : Codec V A M → Codec V A M) (v : V) :
-    (muCodec dV dA B).e v = (muStage B (dV v)).e v := rfl
-
-/-- The limit reads an attribute at the stage the attribute's depth names. -/
-theorem muCodec_p (B : Codec V A M → Codec V A M) (a : A) :
-    (muCodec dV dA B).p a = (muStage B (dA a)).p a := rfl
+/-- The limit sends an input at the stage that the depth of the input names. -/
+theorem muCodec_f (B : Codec V A M → Codec V A M) (o : Orient) (x : Side V A o.c) :
+    (muCodec dV dA B).f o x = (muStage B (Side.elim dV dA o.c x)).f o x := rfl
 
 /-! ### The converse of the construct -/
 
@@ -100,34 +101,17 @@ theorem muStage_R {N' : Type} (B : Codec V A M → Codec V A M) (B' : Codec A V 
 theorem muCodec_R {N' : Type} (dV : V → Nat) (dA : A → Nat) (B : Codec V A M → Codec V A M)
     (B' : Codec A V N' → Codec A V N') (h : ∀ c' c, R c' c → R (B' c') (B c)) :
     R (muCodec dA dV B') (muCodec dV dA B) :=
-  ⟨funext fun a => by
-      simp only [muCodec, Codec.ofEP_e, Codec.ofEP_p]
-      rw [(muStage_R B B' h _).1],
-   funext fun v => by
-      simp only [muCodec, Codec.ofEP_e, Codec.ofEP_p]
-      rw [(muStage_R B B' h _).2]⟩
-
-/-- The converse body: unconvert, apply, convert. -/
-def convB (B : Codec V A M → Codec V A M) : Codec A V Unit → Codec A V Unit :=
-  fun c' => conv (B (unconv c'))
-
-/-- A contractive body reads only the graph of its argument. -/
-theorem contractive_graph {B : Codec V A M → Codec V A M} (hB : Contractive dV dA B)
-    {c d : Codec V A M} (he : c.e = d.e) (hp : c.p = d.p) : (B c).e = (B d).e ∧ (B c).p = (B d).p :=
-  have h : ∀ n, AgreeLe dV dA (n + 1) (B c) (B d) := fun n =>
-    hB n c d ⟨fun v _ => congrFun he v, fun a _ => congrFun hp a⟩
-  ⟨funext fun v => (h (dV v)).e v (by omega), funext fun a => (h (dA a)).p a (by omega)⟩
-
-/-- The converse body of a contractive body is contractive, with the two depths swapped. -/
-theorem contractive_conv {B : Codec V A M → Codec V A M} (hB : Contractive dV dA B) :
-    Contractive dA dV (convB B) :=
-  fun n c₁ c₂ h =>
-    let h' := hB n (unconv c₁) (unconv c₂) ⟨h.p, h.e⟩
-    ⟨h'.p, h'.e⟩
+  ⟨funext fun a => congrFun (muStage_R B B' h (dA a)).1 a,
+   funext fun v => congrFun (muStage_R B B' h (dV v)).2 v⟩
 
 section Stages
 variable (hV : ∀ v, 0 < dV v) (hA : ∀ a, 0 < dA a) {B : Codec V A M → Codec V A M}
 include hV hA
+
+/-- Every input has a positive depth, at each side. -/
+theorem depth_pos : ∀ (s : Bool) (x : Side V A s), 0 < Side.elim dV dA s x
+  | false, v => hV v
+  | true, a => hA a
 
 /-- Each stage agrees with the next one below its own index. -/
 theorem muStage_stable (hB : Contractive dV dA B) :
@@ -153,38 +137,27 @@ theorem muCodec_agree (hB : Contractive dV dA B) (n : Nat) :
   ⟨fun v hv => (muStage_agree_le hV hA hB hv).e v le_rfl,
    fun a ha => (muStage_agree_le hV hA hB ha).p a le_rfl⟩
 
-/-- **The fixed point, write side.** The limit writes what its body writes over the limit. -/
-theorem muCodec_e_fix (hB : Contractive dV dA B) (v : V) :
-    (muCodec dV dA B).e v = (B (muCodec dV dA B)).e v := by
-  obtain ⟨k, hk⟩ : ∃ k, dV v = k + 1 := ⟨dV v - 1, by have := hV v; omega⟩
-  rw [muCodec_e, hk]
-  exact (hB k _ _ (muCodec_agree hV hA hB k).symm).e v (by omega)
+/-- **The fixed point.** The limit sends what its body sends over the limit, at each
+    orientation. -/
+theorem muCodec_fix (hB : Contractive dV dA B) (o : Orient) (x : Side V A o.c) :
+    (muCodec dV dA B).f o x = (B (muCodec dV dA B)).f o x := by
+  obtain ⟨k, hk⟩ : ∃ k, Side.elim dV dA o.c x = k + 1 :=
+    ⟨Side.elim dV dA o.c x - 1, by have := depth_pos hV hA o.c x; omega⟩
+  rw [muCodec_f, hk]
+  exact (hB k _ _ (muCodec_agree hV hA hB k).symm).f o x (by omega)
 
-/-- **The fixed point, read side**: the write-side fixed point of the converse body. -/
-theorem muCodec_p_fix (hB : Contractive dV dA B) (a : A) :
-    (muCodec dV dA B).p a = (B (muCodec dV dA B)).p a := by
-  have hR : ∀ c' c, R c' c → R (convB B c') (B c) := fun c' c h =>
-    let g := contractive_graph hB (c := unconv c') (d := c) h.2 h.1
-    ⟨g.2, g.1⟩
-  have hm := muCodec_R dV dA B (convB B) hR
-  rw [← hm.1, muCodec_e_fix hA hV (contractive_conv hB) a]
-  exact congrFun (contractive_graph hB (c := (unconv (muCodec dA dV (convB B)) : Codec V A M))
-    (d := muCodec dV dA B) hm.2 hm.1).2 a
-
-/-- **Lawful stages give a lawful limit.** The write side reads at the depth of the value and
-    the read side at the depth of the attribute. Stability moves both answers to the stage
-    at the larger of the two depths, and that stage is lawful. -/
+/-- **Lawful stages give a lawful limit.** The input reads at its own depth, and the output at
+    its own depth. Stability moves both answers to the stage at the larger of the two depths,
+    and that stage is lawful. One proof serves each orientation. -/
 theorem lawful_muCodec (hB : Contractive dV dA B)
-    (hs : ∀ n, Lawful member (muStage B n)) : Lawful member (muCodec dV dA B) := by
-  refine .ofRC (fun {v a} he => ?_) (fun {a v} hp => ?_) (fun hμ => nomatch hμ)
-  · have hN := muStage_agree_le hV hA hB (Nat.le_max_left (dV v) (dA a))
-    rw [muCodec_e, hN.e v le_rfl] at he
-    rw [muCodec_p, (muStage_agree_le hV hA hB (Nat.le_max_right (dV v) (dA a))).p a le_rfl]
-    exact (hs _).retract he
-  · have hN := muStage_agree_le hV hA hB (Nat.le_max_left (dA a) (dV v))
-    rw [muCodec_p, hN.p a le_rfl] at hp
-    rw [muCodec_e, (muStage_agree_le hV hA hB (Nat.le_max_right (dA a) (dV v))).e v le_rfl]
-    exact (hs _).canon hp
+    (hs : ∀ n, Lawful member (muStage B n)) : Lawful member (muCodec dV dA B) where
+  inv {o x y} h := by
+    have hl := Nat.le_max_left (Side.elim dV dA o.c x) (Side.elim dV dA o.s y)
+    have hr := Nat.le_max_right (Side.elim dV dA o.c x) (Side.elim dV dA o.s y)
+    rw [muCodec_f, (muStage_agree_le hV hA hB hl).f o x le_rfl] at h
+    rw [muCodec_f, (muStage_agree_le hV hA hB hr).f o.op y le_rfl]
+    exact (hs _).inv h
+  writes hμ := nomatch hμ
 
 end Stages
 
@@ -225,12 +198,17 @@ theorem agreeLe_altCodec {d : Nat} {os₁ os₂ : List (Codec V A M)} (μ₁ μ�
   ⟨fun v hv => select_congr (h.imp fun _ _ hc => hc.e v hv),
    fun a ha => select_congr (h.imp fun _ _ hc => hc.p a ha)⟩
 
+/-- The two-sided restriction keeps agreement below a depth. -/
+theorem agreeLe_refine2 {d : Nat} {c₁ c₂ : Codec V A M} (h : AgreeLe dV dA d c₁ c₂)
+    (qV : V → Bool) (qA : A → Bool) :
+    AgreeLe dV dA d (refine2 c₁ qV qA) (refine2 c₂ qV qA) :=
+  ⟨fun v hv => by simp only [refine2_e_def, h.e v hv],
+    fun a ha => by simp only [refine2_p_def, h.p a ha]⟩
+
 /-- A restriction reads its codec at its own input, so it keeps the depth. -/
 theorem agreeLe_restrict {d : Nat} {c₁ c₂ : Codec V A M} (h : AgreeLe dV dA d c₁ c₂)
     (q : V → Bool) : AgreeLe dV dA d (c₁.restrict q) (c₂.restrict q) :=
-  ⟨fun v hv => congrArg (fun x => if q v = true then x else none) (h.e v hv),
-   fun a ha => congrArg (fun x => Option.bind x fun v => if q v = true then some v else none)
-     (h.p a ha)⟩
+  agreeLe_refine2 h q _
 
 /-- A row of codecs that agree below `d`, zipped with inputs no deeper than `d`, traverses to
     one answer. -/

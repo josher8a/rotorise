@@ -48,8 +48,7 @@ theorem optional_μ (t : Term) : (fieldSem α (.optional t)).codec.μ = (denote 
 /-! ## `union` is associative
 
 §6's row, stated outright. Both forms take the first admitter in the same order, so the
-write and read halves are equal (`altCodec_nest_e`, `altCodec_nest_p`), and the row carries
-no condition. -/
+two maps are equal at each orientation (`altCodec_nest`), and the row carries no condition. -/
 
 /-- The member index nests the same way it flattens. Both sides conclude the head member
     or `⊤`, so the content is entirely in whether the condition agrees. -/
@@ -88,11 +87,9 @@ theorem equiv_altCodec_assoc (o₁ o₂ o₃ : Codec) :
       (altCodec [o₁, o₂, o₃] (unanimous [o₁.μ, o₂.μ, o₃.μ])) := by
   refine ⟨altCodec_assoc_heldSet o₁ o₂ o₃ _ _, unanimous_pair_assoc _ _ _, ?_, ?_⟩
   · intro v a a' hn hf
-    rw [altCodec_nest_e (μf := unanimous [o₁.μ, o₂.μ, o₃.μ])] at hn
-    exact Option.some.inj (hn.symm.trans hf)
+    exact Option.some.inj ((hn.symm.trans (altCodec_nest o₁ o₂ o₃ _ _ _ (o := .host) v)).trans hf)
   · intro a v v' hn hf
-    rw [altCodec_nest_p (μf := unanimous [o₁.μ, o₂.μ, o₃.μ])] at hn
-    exact Option.some.inj (hn.symm.trans hf)
+    exact Option.some.inj ((hn.symm.trans (altCodec_nest o₁ o₂ o₃ _ _ _ (o := .dual) a)).trans hf)
 
 /-! ## §6's Hold rows, at term level
 
@@ -113,10 +110,11 @@ theorem equiv_denote_held_id (t P PA : Term) (kA : List (Alg.Syn.GenA dynSyn × 
   simp only [denote_rows]
   refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩
   · intro v a a' h h'
-    exact Option.some.inj ((through_e.mp (Alg.refine2_e.mp h).2.1).symm.trans (restrict_e.mp h').2)
+    exact Option.some.inj
+      ((through_e.mp (Alg.refine2_f.mp h).2.1).symm.trans (refine2_f.mp h').2.1)
   · intro a v v' h h'
-    obtain ⟨w, hw, rfl⟩ := through_p.mp (Alg.refine2_p.mp h).2.1
-    exact Option.some.inj (hw.symm.trans (restrict_p.mp h').1)
+    obtain ⟨w, hw, rfl⟩ := through_p.mp (Alg.refine2_f.mp h).2.1
+    exact Option.some.inj (hw.symm.trans (refine2_f.mp h').2.1)
 
 /-- §6: `held(held(c, P, PA, k), P′, PA′, k′) ≡ refine(held(c, P′, PA′, k ++ k′), P ∘ f′)`, where
     `f′` is the caller-side function of `k′`. The words concatenate, so the transforms compose,
@@ -132,13 +130,13 @@ theorem equiv_denote_held_comp (t P PA P' PA' : Term) (k k' : Word)
   refine ⟨fun _ => ⟨fun ⟨⟨h1, h2⟩, h3⟩ => ⟨⟨h1, h3⟩, h2⟩, fun ⟨⟨h1, h3⟩, h2⟩ => ⟨⟨h1, h2⟩, h3⟩⟩,
     rfl, ?_, ?_⟩
   · intro v a a' h h'
-    have hl := (Alg.refine2_e.mp (through_e.mp (Alg.refine2_e.mp h).2.1)).2.1
-    have hr := (Alg.refine2_e.mp (restrict_e.mp h').2).2.1
+    have hl := (Alg.refine2_f.mp (through_e.mp (Alg.refine2_f.mp h).2.1)).2.1
+    have hr := (Alg.refine2_f.mp (refine2_f.mp h').2.1).2.1
     exact Option.some.inj ((through_e.mp hl).symm.trans hr)
   · intro a v v' h h'
-    obtain ⟨w, hw, rfl⟩ := through_p.mp (Alg.refine2_p.mp h).2.1
-    obtain ⟨x, hx, rfl⟩ := through_p.mp (Alg.refine2_p.mp hw).2.1
-    obtain ⟨y, hy, rfl⟩ := through_p.mp (Alg.refine2_p.mp (restrict_p.mp h').1).2.1
+    obtain ⟨w, hw, rfl⟩ := through_p.mp (Alg.refine2_f.mp h).2.1
+    obtain ⟨x, hx, rfl⟩ := through_p.mp (Alg.refine2_f.mp hw).2.1
+    obtain ⟨y, hy, rfl⟩ := through_p.mp (Alg.refine2_f.mp (refine2_f.mp h').2.1).2.1
     rw [hx] at hy
     cases hy
     rfl

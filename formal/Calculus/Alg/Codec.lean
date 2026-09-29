@@ -51,6 +51,12 @@ abbrev Side (V A : Type) : Bool → Type
   | false => V
   | true => A
 
+/-- **A function at each absolute side**: `fV` at the values, and `fA` at the attributes. A
+    predicate of each side and a depth of each side are such functions. -/
+def Side.elim {V A X : Type} (fV : V → X) (fA : A → X) : (s : Bool) → Side V A s → X
+  | false => fV
+  | true => fA
+
 /-- §2: `c = (T, μ, f)`, over the carriers `V`, `A` and `M`. `f o` is the partial map from the
     caller side of `o` to the stored side of `o`. -/
 structure Codec (V A M : Type) where

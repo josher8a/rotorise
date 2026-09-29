@@ -27,14 +27,14 @@ abbrev LawfulCore := Alg.LawfulCore (V := Value) Attr.member
    caller reaches by field notation get an alias. Field notation reaches the others through the
    abbreviation. -/
 export Alg (Can IsoCancels ReadsCoherently Carrier SurvivesStore Ctor pointCodec partialId
-  through_e through_p restrict_e restrict_p
-  length_le_one_of_pairwise_false AdmitsAtMostOne select altCodec select_admits altCodec_e
-  altCodec_p carrier_pointCodec carrier_restrict
+  through_e through_p refine2_f
+  length_le_one_of_pairwise_false AdmitsAtMostOne select altCodec select_admits altCodec_f
+  carrier_pointCodec carrier_restrict
   carrier_altCodec lawful_pointCodec funImage funImage_some funImage_isSome funImage_isSome_iff
   funImage_eq Sub sub_restrict_self optBot selectF ConfluentAt
   Compat find?_attempt_V find?_attempt_A acts_of_find?_V acts_of_find?_A
   Canon lawful_altCodec compat_of_exclusive compat_of_common_bound'
-  equiv_restrict_meet equiv_restrict_full altCodec_nest_e altCodec_nest_p
+  equiv_restrict_meet equiv_restrict_full altCodec_nest
   altCodec_assoc_heldSet)
 
 namespace Codec

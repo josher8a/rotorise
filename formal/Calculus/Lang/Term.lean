@@ -1064,7 +1064,7 @@ theorem denote_refine_host (t : Term B) (p : B.P false) (ρ : List (Syn.C ⟨B, 
       (denote α β t ρ).restrict (Mean.eval false p) := by
   have h : Mean.eval (B := B) true (Mean.truth true) = fun _ => true := funext (Mean.eval_truth true)
   rw [denote]
-  exact (congrArg _ h).trans (refine2_host _ _)
+  exact congrArg _ h
 
 /-- **The host `held` is the caller-side adapter, restricted by the caller outer**, where the top
     reads every attribute. -/

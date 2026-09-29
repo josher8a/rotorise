@@ -391,10 +391,10 @@ family.
 **Stability needs the guard alone.** `Contractive` says that a body reads its argument only at
 inputs strictly shallower than its own input, on both sides. `contractive_body` derives it from the
 guard, through one congruence over the term family (`denote_agree`). From it the stages agree past
-the depth of the input (`muStage_agree`). The limit is a fixed point of its body (`muCodec_e_fix`,
-`muCodec_p_fix`), and lawful stages give a lawful limit (`lawful_muCodec`). The lawful limit reads
-both sides at the stage of the larger depth, so no lemma about depth preservation is owed. No
-option of a body has to be disjoint from another for any of these.
+the depth of the input (`muStage_agree`). The limit is a fixed point of its body at each
+orientation (`muCodec_fix`), and lawful stages give a lawful limit (`lawful_muCodec`). The lawful
+limit reads both sides at the stage of the larger depth, so no lemma about depth preservation is
+owed. No option of a body has to be disjoint from another for any of these.
 
 **Soundness runs over the environment.** `Obligations` takes the environment. A `mu` owes the
 premises of its body at each stage, given that the stage before is lawful. `soundnessIn` proves

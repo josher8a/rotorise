@@ -13,7 +13,7 @@ The budget is a structural recursion on the input, so a closed term still reduce
 The one premise is `Contractive`: the body reads its argument only at inputs strictly shallower
 than its own input. A container gives that, because an element is one layer below its container.
 From it alone the stages agree past the depth of the input (`muStage_agree`), the limit is a
-fixed point of the body (`muCodec_e_fix`, `muCodec_p_fix`), and lawful stages give a lawful limit
+fixed point of the body (`muCodec_fix`), and lawful stages give a lawful limit
 (`lawful_muCodec`). No option of the body has to be disjoint from another for these three.
 
 `opaque` is `muCodec opaqStep`, and `Term.mu` denotes `muCodec` of its body.
@@ -124,15 +124,11 @@ theorem muStage_agree {B : Codec → Codec} (hB : Contractive B) {d : Nat} :
     ∀ k, AgreeLe d (muStage B d) (muStage B (d + k)) :=
   Alg.muStage_agree Value.depth_pos Attr.depth_pos hB
 
-/-- **The fixed point, write side.** The limit writes what its body writes over the limit. -/
-theorem muCodec_e_fix {B : Codec → Codec} (hB : Contractive B) (v : Value) :
-    (muCodec B).e v = (B (muCodec B)).e v :=
-  Alg.muCodec_e_fix Value.depth_pos Attr.depth_pos hB v
-
-/-- **The fixed point, read side.** -/
-theorem muCodec_p_fix {B : Codec → Codec} (hB : Contractive B) (a : Attr) :
-    (muCodec B).p a = (B (muCodec B)).p a :=
-  Alg.muCodec_p_fix Value.depth_pos Attr.depth_pos hB a
+/-- **The fixed point.** The limit sends what its body sends over the limit, at each
+    orientation. -/
+theorem muCodec_fix {B : Codec → Codec} (hB : Contractive B) (o : Alg.Orient)
+    (x : Alg.Side Value Attr o.c) : (muCodec B).f o x = (B (muCodec B)).f o x :=
+  Alg.muCodec_fix Value.depth_pos Attr.depth_pos hB o x
 
 /-- **Lawful stages give a lawful limit.** -/
 theorem lawful_muCodec {B : Codec → Codec} (hB : Contractive B)

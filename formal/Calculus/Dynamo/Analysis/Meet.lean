@@ -945,7 +945,7 @@ theorem AdmA_opaq_num (x : WFNumeral) :
 theorem literal_p_base {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
     (h : (literalCodec k x).p a = some v) : (baseCodec k).p a = some v := by
   rw [literalCodec_p_restrict] at h
-  simp only [Alg.Codec.restrict, Alg.Codec.ofEP_p] at h
+  simp only [Alg.restrict_p_def] at h
   cases hb : (baseCodec k).p a with
   | none => rw [hb] at h; simp at h
   | some w => rw [hb] at h; simp only [Option.bind] at h; split at h <;> simp_all
@@ -974,7 +974,7 @@ theorem AdmA_literal_member (k : GroundKind) (x : k.Carrier) (a : Attr)
 theorem literal_inL {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
     (h : (literalCodec k x).p a = some v) : inL k x v = true := by
   rw [literalCodec_p_restrict] at h
-  simp only [Alg.Codec.restrict, Alg.Codec.ofEP_p] at h
+  simp only [Alg.restrict_p_def] at h
   cases hb : (baseCodec k).p a with
   | none => rw [hb] at h; simp at h
   | some w => rw [hb] at h; simp only [Option.bind] at h; split at h <;> simp_all
