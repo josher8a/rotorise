@@ -238,10 +238,10 @@ its own below. -/
     `E`/`D` are the payload pair. -/
 def carriedCodec {γ δ : Type} (pV : Ctor γ V) (pA : Ctor δ A) (μ₀ : M)
     (P : γ → Prop) (E : γ → Option δ) (D : δ → Option γ) : Codec V A M :=
-  { T := fun v => ∃ x, v = pV.into x ∧ P x
-    μ := some μ₀
-    e := fun v => ((pV.out v).bind E).map pA.into
-    p := fun a => ((pA.out a).bind D).map pV.into }
+  Codec.ofEP (T := fun v => ∃ x, v = pV.into x ∧ P x)
+    (μ := some μ₀)
+    (e := fun v => ((pV.out v).bind E).map pA.into)
+    (p := fun a => ((pA.out a).bind D).map pV.into)
 
 section Carried
 variable {γ δ : Type} {pV : Ctor γ V} {pA : Ctor δ A} {μ₀ : M}

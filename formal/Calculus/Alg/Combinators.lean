@@ -97,26 +97,26 @@ structure Ctor (α β : Type) where
     and `into_out` is canonizability **(C)** — which is why `lawful_pointCodec` needs no
     hypothesis about either side beyond the member it stamps. -/
 def pointCodec {α : Type} (pV : Ctor α V) (pA : Ctor α A) (μ₀ : M) : Codec V A M :=
-  { T := fun v => ∃ x, v = pV.into x
-    μ := some μ₀
-    e := fun v => (pV.out v).map pA.into
-    p := fun a => (pA.out a).map pV.into }
+  Codec.ofEP (T := fun v => ∃ x, v = pV.into x)
+    (μ := some μ₀)
+    (e := fun v => (pV.out v).map pA.into)
+    (p := fun a => (pA.out a).map pV.into)
 
 /-! ## Wrappers -/
 
 /-- `held`: an iso on the value side; the stored side is untouched. -/
 def Codec.through (c : Codec V A M) (f g : V → V) : Codec V A M :=
-  { T := fun v => c.T (f v)
-    μ := c.μ
-    e := fun v => c.e (f v)
-    p := fun a => (c.p a).map g }
+  Codec.ofEP (T := fun v => c.T (f v))
+    (μ := c.μ)
+    (e := fun v => c.e (f v))
+    (p := fun a => (c.p a).map g)
 
 /-- `refine`: the prism. -/
 def Codec.restrict (c : Codec V A M) (q : V → Bool) : Codec V A M :=
-  { T := fun v => c.T v ∧ q v
-    μ := c.μ
-    e := fun v => if q v then c.e v else none
-    p := fun a => (c.p a).bind fun v => if q v then some v else none }
+  Codec.ofEP (T := fun v => c.T v ∧ q v)
+    (μ := c.μ)
+    (e := fun v => if q v then c.e v else none)
+    (p := fun a => (c.p a).bind fun v => if q v then some v else none)
 
 /-- **The combinator `held` and `refine` both are.** A partial iso either side of the
     pair: `f` in front of the writing, `g` behind the reading, both allowed to refuse.
@@ -134,10 +134,10 @@ def Codec.restrict (c : Codec V A M) (q : V → Bool) : Codec V A M :=
     taking blind. The pair is what the claim is about, and the
     pair agrees on the nose. -/
 def Codec.adapt (c : Codec V A M) (f g : V → Option V) : Codec V A M :=
-  { T := fun v => ∃ w, f v = some w ∧ c.T w
-    μ := c.μ
-    e := fun v => (f v).bind c.e
-    p := fun a => (c.p a).bind g }
+  Codec.ofEP (T := fun v => ∃ w, f v = some w ∧ c.T w)
+    (μ := c.μ)
+    (e := fun v => (f v).bind c.e)
+    (p := fun a => (c.p a).bind g)
 
 /-- The partial identity on a predicate — `refine`'s adapter, on both halves. -/
 def partialId (q : V → Bool) : V → Option V := fun v => if q v then some v else none
@@ -149,13 +149,13 @@ theorem through_e_adapt {c : Codec V A M} (f g : V → V) :
 /-- …and reads as one. -/
 theorem through_p_adapt {c : Codec V A M} (f g : V → V) :
     (c.through f g).p = (c.adapt (some ∘ f) (some ∘ g)).p := by
-  funext a; simp only [Codec.through, Codec.adapt]; cases c.p a <;> rfl
+  funext a; simp only [Codec.through, Codec.adapt, Codec.ofEP_p]; cases c.p a <;> rfl
 
 /-- `refine` writes as `adapt` with a partial identity — the *same* combinator, weaker
     adapter. This is the sense in which it is sugar. -/
 theorem restrict_e_adapt {c : Codec V A M} (q : V → Bool) :
     (c.restrict q).e = (c.adapt (partialId q) (partialId q)).e := by
-  funext v; simp only [Codec.restrict, Codec.adapt, partialId]; cases q v <;> rfl
+  funext v; simp only [Codec.restrict, Codec.adapt, partialId, Codec.ofEP_e]; cases q v <;> rfl
 
 /-- …and reads as one. -/
 theorem restrict_p_adapt {c : Codec V A M} (q : V → Bool) :
@@ -170,7 +170,7 @@ Each read-side fact below is the write-side fact of the converse. -/
 /-- **The converse of a codec**: the read is the write, and the write is the read. The member
     names nothing on the stored side of the converse, so it is `Unit`. -/
 def conv (c : Codec V A M) : Codec A V Unit :=
-  { T := fun _ => True, μ := c.μ.map (fun _ => ()), e := c.p, p := c.e }
+  Codec.ofEP (T := fun _ => True) (μ := c.μ.map (fun _ => ())) (e := c.p) (p := c.e)
 
 /-- `c'` has the converse graph of `c`. -/
 def R {X Y N N' : Type} (c' : Codec Y X N') (c : Codec X Y N) : Prop := c'.e = c.p ∧ c'.p = c.e
@@ -184,39 +184,36 @@ theorem R_conv (c : Codec V A M) : R (conv c) c := ⟨rfl, rfl⟩
 
 /-- The converse of a codec on the dual carriers, back on the original carriers. -/
 def unconv (c : Codec A V Unit) : Codec V A M :=
-  { T := fun _ => True, μ := none, e := c.p, p := c.e }
+  Codec.ofEP (T := fun _ => True) (μ := none) (e := c.p) (p := c.e)
 
 /-- **The two-sided restriction** `[qA] ∘ c ∘ [qV]`: `qV` restricts the caller side, and `qA`
     restricts the stored side. -/
 def refine2 (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) : Codec V A M :=
-  { T := fun v => c.T v ∧ qV v
-    μ := c.μ
-    e := fun v => if qV v then (c.e v).bind (fun a => if qA a then some a else none) else none
-    p := fun a => if qA a then (c.p a).bind (fun v => if qV v then some v else none) else none }
+  Codec.ofEP (T := fun v => c.T v ∧ qV v)
+    (μ := c.μ)
+    (e := fun v => if qV v then (c.e v).bind (fun a => if qA a then some a else none) else none)
+    (p := fun a => if qA a then (c.p a).bind (fun v => if qV v then some v else none) else none)
 
 /-- **The converse of the two-sided restriction swaps the halves**, over any codec with the
     converse graph. -/
 theorem R.refine2 {N : Type} {c' : Codec A V N} {c : Codec V A M} (h : R c' c)
     (qV : V → Bool) (qA : A → Bool) : R (refine2 c' qA qV) (refine2 c qV qA) := by
-  obtain ⟨T, μ, e, p⟩ := c'
   obtain ⟨h1, h2⟩ := h
-  subst h1 h2
-  exact ⟨rfl, rfl⟩
+  exact ⟨by simp only [_root_.Calculus.Alg.refine2, Codec.ofEP_e, Codec.ofEP_p, h1],
+    by simp only [_root_.Calculus.Alg.refine2, Codec.ofEP_e, Codec.ofEP_p, h2]⟩
 
 /-- **The host `refine` is the one-sided restriction**: the stored predicate admits every
     attribute. -/
 theorem refine2_host (c : Codec V A M) (q : V → Bool) :
     refine2 c q (fun _ => true) = c.restrict q := by
-  obtain ⟨T, μ, e, p⟩ := c
-  simp only [refine2, Codec.restrict, Codec.mk.injEq, true_and]
-  refine ⟨funext fun v => ?_, funext fun a => ?_⟩
-  · cases e v <;> rfl
+  refine Codec.ext rfl rfl (funext fun v => ?_) (funext fun a => ?_)
+  · simp only [refine2, Codec.restrict, Codec.ofEP_e]; cases c.e v <;> rfl
   · rfl
 
 /-- The write of the two-sided restriction. -/
 theorem refine2_e {c : Codec V A M} {qV : V → Bool} {qA : A → Bool} {v : V} {a : A} :
     (refine2 c qV qA).e v = some a ↔ qV v = true ∧ c.e v = some a ∧ qA a = true := by
-  simp only [refine2]
+  simp only [refine2, Codec.ofEP_e]
   cases hq : qV v
   · simp
   · cases c.e v with
@@ -245,7 +242,7 @@ theorem gate_true {X Y N : Type} (c : Codec X Y N) (x : X) :
     stored predicate. -/
 theorem refine2_e_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (v : V) :
     ((refine2 c qV qA).e v).isSome = (qV v && gate c qA v) := by
-  simp only [refine2, gate]
+  simp only [refine2, gate, Codec.ofEP_e]
   cases qV v
   · rfl
   · cases c.e v with
@@ -267,10 +264,10 @@ theorem refine2_p_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (
 /-- `alternate reader`: extend the reading. With §3's coherence premise this presentation equals
     the order-free `p ∪ r`. -/
 def Codec.extendRead (c : Codec V A M) (r : A → Option V) : Codec V A M :=
-  { T := c.T
-    μ := c.μ
-    e := c.e
-    p := fun a => match c.p a with | some v => some v | none => r a }
+  Codec.ofEP (T := c.T)
+    (μ := c.μ)
+    (e := c.e)
+    (p := fun a => match c.p a with | some v => some v | none => r a)
 
 /-! ### What the wrappers write and read
 
@@ -297,7 +294,7 @@ theorem through_p {f g : V → V} {a v} :
 @[simp] theorem restrict_p_isSome {c : Codec V A M} {q : V → Bool} (a : A) :
     ((c.restrict q).p a).isSome = ((c.p a).elim false q) := by
   rw [← refine2_host, refine2_p_isSome, Bool.true_and]
-  simp only [gate, conv]; cases c.p a <;> rfl
+  simp only [gate, conv, Codec.ofEP_e]; cases c.p a <;> rfl
 
 /-- `refine` writes only what passes the prism… -/
 theorem restrict_e {q : V → Bool} {v a} :
@@ -368,10 +365,10 @@ def select {X Y : Type} (os : List (Codec V A M)) (run : Codec V A M → X → O
 /-- `union`: the sum, resolved by the first admitter. Over lawful, pairwise compatible options
     the order is unobservable (`altCodec_perm`). -/
 def altCodec (os : List (Codec V A M)) (μA : Option M) : Codec V A M :=
-  { T := fun v => ∃ o ∈ os, o.T v
-    μ := μA
-    e := select os (·.e)
-    p := select os (·.p) }
+  Codec.ofEP (T := fun v => ∃ o ∈ os, o.T v)
+    (μ := μA)
+    (e := select os (·.e))
+    (p := select os (·.p))
 
 /-! ### How a union resolves
 

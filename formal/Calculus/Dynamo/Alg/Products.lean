@@ -203,22 +203,22 @@ theorem decSet_mem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
     constructors are the three element types the reference names. What is left for the
     codec is the element map — and that is the whole of `(set)` now. -/
 noncomputable def setCodec (c : Codec) : Codec :=
-  { T := fun v => match v with
+  Alg.Codec.ofEP (T := fun v => match v with
       | .strSet S => ∀ s ∈ S.1, c.T (.str s)
       | .numSet S => ∀ d ∈ S.1, c.T (.num d)
       | .binSet S => ∀ b ∈ S.1, c.T (.bin b)
-      | _ => False
-    μ := c.μ.bind setMember
-    e := fun v => match v with
+      | _ => False)
+    (μ := c.μ.bind setMember)
+    (e := fun v => match v with
       | .strSet S => encSet c Value.str S
       | .numSet S => encSet c Value.num S
       | .binSet S => encSet c Value.bin S
-      | _ => none
-    p := fun a => match a with
+      | _ => none)
+    (p := fun a => match a with
       | .ss S => decSet c Attr.s S
       | .ns S => decSet c Attr.n S
       | .bs S => decSet c Attr.b S
-      | _ => none }
+      | _ => none)
 
 /-! ### A codec carried between two prisms
 
@@ -254,14 +254,14 @@ theorem setCodec_p_eq {c : Codec} {a : Attr} {v : Value} :
   cases a <;> simp [setCodec]
 
 def arrayCodec (c : Codec) : Codec :=
-  { T := fun v => match v with | .arr vs => ∀ x ∈ vs, c.T x | _ => False
-    μ := some .L
-    e := fun v => match v with
+  Alg.Codec.ofEP (T := fun v => match v with | .arr vs => ∀ x ∈ vs, c.T x | _ => False)
+    (μ := some .L)
+    (e := fun v => match v with
       | .arr vs => (traverse c.e vs).map Attr.l
-      | _ => none
-    p := fun a => match a with
+      | _ => none)
+    (p := fun a => match a with
       | .l as => (traverse c.p as).map Value.arr
-      | _ => none }
+      | _ => none)
 
 /-- `array` *is* the entrywise product at `arr`/`L`, on the nose. The definition above is
     left in its unfolded form because the `opaque` fixpoint reduces through it; this
@@ -288,14 +288,14 @@ nothing has to carry a name anywhere. Their five laws went with them — §2's f
 level down, were what `entrywise` asked and `carriedCodec` does not. -/
 
 noncomputable def recordCodec (c : Codec) : Codec :=
-  { T := fun v => match v with | .map _ f => ∀ k, c.T (f k) | _ => False
-    μ := some .M
-    e := fun v => match v with
+  Alg.Codec.ofEP (T := fun v => match v with | .map _ f => ∀ k, c.T (f k) | _ => False)
+    (μ := some .M)
+    (e := fun v => match v with
       | .map keys f => (funImage (fun k => c.e (f k))).map (Attr.m keys)
-      | _ => none
-    p := fun a => match a with
+      | _ => none)
+    (p := fun a => match a with
       | .m keys g => (funImage (fun k => c.p (g k))).map (Value.map keys)
-      | _ => none }
+      | _ => none)
 
 /-! `record` is no longer an `entrywise` product: `entrywise` traverses a *list* payload,
 and `M`'s payload is a name set with a function on it. What it still is, is `carriedCodec`
@@ -398,18 +398,18 @@ export Alg (align slots_all align_eq_some align_of_slots zip_canonS zip_domE zip
   alignL_spread mem_replicate_zip)
 
 def tupleCodec (cs : List Codec) (tail : Option Codec) : Codec :=
-  { T := fun v => match v with
+  Alg.Codec.ofEP (T := fun v => match v with
       | .arr vs => ∃ ps, align cs tail vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2
-      | _ => False
-    μ := some .L
-    e := fun v => match v with
+      | _ => False)
+    (μ := some .L)
+    (e := fun v => match v with
       | .arr vs => ((align cs tail vs).bind
           (traverse fun cv => cv.1.e cv.2)).map Attr.l
-      | _ => none
-    p := fun a => match a with
+      | _ => none)
+    (p := fun a => match a with
       | .l as => ((align cs tail as).bind
           (traverse fun ca => ca.1.p ca.2)).map Value.arr
-      | _ => none }
+      | _ => none)
 
 /-! #### `tuple` is `carriedCodec` at that pair -/
 
@@ -494,7 +494,7 @@ theorem tupleCodec_eq_listCodec (cs : List Codec) (tail : Option Codec) :
 theorem arrayCodec_e (c : Codec) (v : Value) :
     (arrayCodec c).e v = (listCodec [] (some c) []).e v := by
   cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA,
-      Option.bind_some]; try rfl)
+      Option.bind_some, Alg.Codec.ofEP_e]; try rfl)
   rw [alignL_spread]
   show _ = ((traverse (fun q : Codec × Value => q.1.e q.2) _).map Attr.l)
   rw [traverse_replicate_zip c (fun d x => d.e x)]
@@ -503,7 +503,7 @@ theorem arrayCodec_e (c : Codec) (v : Value) :
 theorem arrayCodec_p (c : Codec) (a : Attr) :
     (arrayCodec c).p a = (listCodec [] (some c) []).p a := by
   cases a <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA,
-      Option.bind_some]; try rfl)
+      Option.bind_some, Alg.Codec.ofEP_p]; try rfl)
   rw [alignL_spread]
   show _ = ((traverse (fun q : Codec × Attr => q.1.p q.2) _).map Value.arr)
   rw [traverse_replicate_zip c (fun d x => d.p x)]
@@ -513,7 +513,7 @@ theorem arrayCodec_T (c : Codec) (v : Value) :
     (arrayCodec c).T v ↔ (listCodec [] (some c) []).T v := by
   cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA,
       Value.arr.injEq, reduceCtorEq,
-    false_and, exists_false, exists_eq_left', iff_self]; try exact Iff.rfl)
+    false_and, exists_false, exists_eq_left', iff_self, Alg.Codec.ofEP_T]; try exact Iff.rfl)
   rw [alignL_spread]
   constructor
   · intro h

@@ -27,7 +27,7 @@ def ceBad : Value → Option Attr :=
 
 /-- …as a codec, and `Codec.empty` approximates it, so the growth is legitimate. -/
 def cBad : Codec :=
-  { T := fun v => (ceBad v).isSome, μ := none, e := ceBad, p := fun _ => none }
+  Alg.Codec.ofEP (T := fun v => (ceBad v).isSome) (μ := none) (e := ceBad) (p := fun _ => none)
 
 /-- …as an option. -/
 def optBad : Codec := cBad

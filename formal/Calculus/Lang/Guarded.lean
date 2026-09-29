@@ -126,9 +126,9 @@ theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ�
             (by rw [Nat.max_left_comm, Nat.max_comm (PA.use i)]; exact h i)
       refine AgreeLe.of_eq ?_ ?_
       · simp only [denote, held2, refine2, adapt2, half2_apply Codec.e, half2_apply Codec.p, ht.1,
-          hP.1, hP.2, hPA.1, hPA.2]
+          hP.1, hP.2, hPA.1, hPA.2, Codec.ofEP_e, Codec.ofEP_p]
       · simp only [denote, held2, refine2, adapt2, half2_apply Codec.e, half2_apply Codec.p, ht.2,
-          hP.1, hP.2, hPA.1, hPA.2]
+          hP.1, hP.2, hPA.1, hPA.2, Codec.ofEP_e, Codec.ofEP_p]
   | .list pre sp suf, hg, d, ρ₁, ρ₂, h => by
       simp only [Term.guarded, Bool.and_eq_true] at hg
       match d with

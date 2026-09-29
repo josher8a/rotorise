@@ -80,7 +80,7 @@ variable {S : Syn} [Sem S]
 
 /-- **The converse of a codec of a universe**, as a codec of the dual. The converse names no
     member, so one map serves every orientation. -/
-def convU (c : S.C) : S.op.C := { T := fun _ => True, μ := none, e := c.p, p := c.e }
+def convU (c : S.C) : S.op.C := Codec.ofEP (T := fun _ => True) (μ := none) (e := c.p) (p := c.e)
 
 /-- The converse has the converse graph. -/
 theorem R_convU (c : S.C) : R (convU c) c := ⟨rfl, rfl⟩

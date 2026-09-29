@@ -127,16 +127,16 @@ abbrev StoredNumeral := {s : Numeral // Numeral.Stored s = true}
     side has to check as well — an ill-formed numeral admitted by `p` would name a value
     `e` then refuses, and that is **(C)** failing. -/
 def decimalCodec : Codec :=
-  { T := fun v => ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true
-    μ := some .N
-    e := fun v => match v with
+  Alg.Codec.ofEP (T := fun v => ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true)
+    (μ := some .N)
+    (e := fun v => match v with
       -- the carrier already proves `WF`, so the write produces the attribute directly and
       -- `Numeral.stored_wf` is no longer needed to manufacture the proof
       | .num x => if Numeral.Stored x.1 then some (.n x) else none
-      | _ => none
-    p := fun a => match a with
+      | _ => none)
+    (p := fun a => match a with
       | .n x => if Numeral.Stored x.1 then some (.num x) else none
-      | _ => none }
+      | _ => none)
 
 /-- §1's `Stored`, which is NOT carried and remains a real test: what the store hands back is
     narrower than what it accepts. -/

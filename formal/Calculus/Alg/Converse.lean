@@ -55,10 +55,10 @@ theorem agreeS_conv {side : Bool} {c d : Codec V A M} (h : AgreeS (!side) c d) :
 /-- **The two-sided adapter.** The caller pair is `(fV, gV)`: `fV` on entry from `V`, `gV` on exit
     to `V`. The stored pair is `(hA, kA)`: `hA` on entry from `A`, `kA` on exit to `A`. -/
 def adapt2 (c : Codec V A M) (fV gV : V → V) (hA kA : A → A) : Codec V A M :=
-  { T := fun v => c.T (fV v)
-    μ := c.μ
-    e := fun v => (c.e (fV v)).map kA
-    p := fun a => (c.p (hA a)).map gV }
+  Codec.ofEP (T := fun v => c.T (fV v))
+    (μ := c.μ)
+    (e := fun v => (c.e (fV v)).map kA)
+    (p := fun a => (c.p (hA a)).map gV)
 
 /-- **The two-sided `held`**: the adapter, restricted on each side by an outer codec. The caller
     outer restricts by its write domain, and the stored outer by its read domain. -/
@@ -69,10 +69,9 @@ def held2 {M₁ M₂ : Type} (c : Codec V A M) (oV : Codec V A M₁) (oA : Codec
 /-- **The converse of the two-sided adapter swaps the halves**, with no dagger. -/
 theorem R.adapt2 {N : Type} {c' : Codec A V N} {c : Codec V A M} (h : R c' c)
     (fV gV : V → V) (hA kA : A → A) : R (adapt2 c' hA kA fV gV) (adapt2 c fV gV hA kA) := by
-  obtain ⟨T, μ, e, p⟩ := c'
   obtain ⟨h1, h2⟩ := h
-  subst h1 h2
-  exact ⟨rfl, rfl⟩
+  exact ⟨by simp only [Alg.adapt2, Codec.ofEP_e, Codec.ofEP_p, h1],
+    by simp only [Alg.adapt2, Codec.ofEP_e, Codec.ofEP_p, h2]⟩
 
 /-- **The converse of the two-sided `held` swaps the halves, the outers included.** The caller
     outer of the dual is the converse of the stored outer, and its stored outer the converse of
@@ -81,19 +80,17 @@ theorem R.held2 {N M₁ M₂ N₁ N₂ : Type} {c' : Codec A V N} {c : Codec V A
     {oV : Codec V A M₁} {oA : Codec V A M₂} {oV' : Codec A V N₁} {oA' : Codec A V N₂}
     (h : R c' c) (hV : R oV' oA) (hA : R oA' oV) (fV gV : V → V) (hA' kA : A → A) :
     R (held2 c' oV' oA' hA' kA fV gV) (held2 c oV oA fV gV hA' kA) := by
-  obtain ⟨_, _, e₁, p₁⟩ := oV'
-  obtain ⟨_, _, e₂, p₂⟩ := oA'
   obtain ⟨h1, -⟩ := hV
   obtain ⟨-, h2⟩ := hA
-  subst h1 h2
+  unfold Alg.held2
+  rw [h1, h2]
   exact R.refine2 (R.adapt2 h fV gV hA' kA) _ _
 
 /-- **The host adapter is `through`**: the stored pair is the identity. -/
 theorem adapt2_host (c : Codec V A M) (f g : V → V) : adapt2 c f g id id = c.through f g := by
-  obtain ⟨T, μ, e, p⟩ := c
-  simp only [adapt2, Codec.through, Codec.mk.injEq, true_and]
-  refine ⟨funext fun v => ?_, rfl⟩
-  cases e (f v) <;> rfl
+  refine Codec.ext rfl rfl (funext fun v => ?_) rfl
+  simp only [adapt2, Codec.through, Codec.ofEP_e]
+  cases c.e (f v) <;> rfl
 
 /-- **The host `held` is the one-sided `held`** when the stored outer reads every attribute and
     the stored pair is the identity. -/
@@ -138,7 +135,7 @@ theorem gate_isSome {X Y N : Type} {c : Codec X Y N} {q : Y → Bool} {x : X}
     exit functions. -/
 theorem adapt2_gate (c : Codec V A M) (fV gV : V → V) (hA kA : A → A) (q : A → Bool) (v : V) :
     gate (adapt2 c fV gV hA kA) q v = gate c (q ∘ kA) (fV v) := by
-  simp only [gate, adapt2]
+  simp only [gate, adapt2, Codec.ofEP_e]
   cases c.e (fV v) <;> rfl
 
 /-- The gate of the converse of the two-sided adapter, on the read side. -/
@@ -204,13 +201,13 @@ theorem Lawful.adapt2 {member : A → M} {c : Codec V A M} (hc : Lawful member c
   refine ⟨fun {v a'} he => ?_, fun {a' w} hp => ?_, fun {μ} hμ {v a'} he => ?_⟩
   · obtain ⟨a, ha, rfl⟩ := Option.map_eq_some_iff.mp he
     have hr := hc.retract ha
-    have hk : hA (kA a) = a := hA2 a (by simp only [Alg.conv, hr, Option.isSome_some])
-    simp only [Alg.adapt2, hk, hr, Option.map_some, hV1 v (by rw [ha]; rfl)]
+    have hk : hA (kA a) = a := hA2 a (by simp only [Alg.conv, Codec.ofEP_e, hr, Option.isSome_some])
+    simp only [Alg.adapt2, Codec.ofEP_p, hk, hr, Option.map_some, hV1 v (by rw [ha]; rfl)]
   · obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp hp
     have hcu := hc.canon hu
     have hfg : fV (gV u) = u := hV2 u (by rw [hcu]; rfl)
-    simp only [Alg.adapt2, hfg, hcu, Option.map_some,
-      hA1 a' (by simp only [Alg.conv, hu, Option.isSome_some])]
+    simp only [Alg.adapt2, Codec.ofEP_e, hfg, hcu, Option.map_some,
+      hA1 a' (by simp only [Alg.conv, Codec.ofEP_e, hu, Option.isSome_some])]
   · obtain ⟨a, ha, rfl⟩ := Option.map_eq_some_iff.mp he
     rw [hm (fV v) a ha]
     exact hc.writes hμ ha
@@ -242,7 +239,8 @@ theorem carrier_adapt2 {member : A → M} {c : Codec V A M} (hc : Carrier c)
 theorem agreeLe_refine2 {dV : V → Nat} {dA : A → Nat} {d : Nat} {c₁ c₂ : Codec V A M}
     (h : AgreeLe dV dA d c₁ c₂) (qV : V → Bool) (qA : A → Bool) :
     AgreeLe dV dA d (refine2 c₁ qV qA) (refine2 c₂ qV qA) :=
-  ⟨fun v hv => by simp only [refine2, h.e v hv], fun a ha => by simp only [refine2, h.p a ha]⟩
+  ⟨fun v hv => by simp only [refine2, Codec.ofEP_e, h.e v hv],
+    fun a ha => by simp only [refine2, Codec.ofEP_p, h.p a ha]⟩
 
 /-! ## The constructors that keep the converse
 
@@ -337,10 +335,10 @@ theorem objectCodec_R {N' : Type} (mV : Ctor (MapOf V) V) (mA : Ctor (MapOf A) A
   have hpres' : ∀ n, reqPresentB ⟨keys, s'⟩ n = valPresentB ⟨keys, s⟩ n := fun n =>
     decide_eq_decide.mpr (forall_congr' fun k => by rw [(hF k).valPresentAt n k.1])
   refine ⟨funext fun a => ?_, funext fun v => ?_⟩
-  · simp only [carriedCodec]
+  · simp only [carriedCodec, Codec.ofEP_e]
     congr 2; funext q
     exact (objRead_true _ _ _ _ (fun n => (hpres n).symm) (entry_R hF hr) q).symm
-  · simp only [carriedCodec]
+  · simp only [carriedCodec, Codec.ofEP_p]
     congr 2; funext q
     refine objRead_true _ _ _ _ hpres' (fun k => ?_) q
     have hk := entry_R hF hr k
@@ -427,11 +425,11 @@ theorem listCodec_R {N' : Type} (pV : Ctor (List V) V) (pA : Ctor (List A) A) (�
     · exact .none
     · exact rel_map (fun _ _ hr => List.rel_append hr hsuf) (slots_R hpre hsp (n - suf.length))
   refine ⟨funext fun a => ?_, funext fun v => ?_⟩
-  · simp only [listCodec, carriedCodec]
+  · simp only [listCodec, carriedCodec, Codec.ofEP_e]
     congr 2; funext as
     unfold alignL
     exact rowtrav_e (hrow as.length) as
-  · simp only [listCodec, carriedCodec]
+  · simp only [listCodec, carriedCodec, Codec.ofEP_p]
     congr 2; funext vs
     unfold alignL
     exact rowtrav_p (hrow vs.length) vs

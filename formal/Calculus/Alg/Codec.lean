@@ -5,24 +5,106 @@ The laws of a codec relate `e` and `p` to each other. No law reads the structure
 of an attribute. So the record and its laws take the carriers as parameters: `V` the caller's
 values, `A` the stored attributes, and `M` the members. The one fact that (W) needs from the
 store is the member of an attribute, and `Lawful` takes that function as a parameter.
+
+The record holds one partial map for each orientation, from the caller side to the stored side
+of the orientation. `e` is the map at the host, and `p` is the map at the dual.
 -/
 
 namespace Calculus.Alg
 
-/-- §2: `c = (T, μ, e, p)`, over the carriers `V`, `A` and `M`. -/
-@[ext]
+/-! ## The orientation -/
+
+/-- **An orientation**: the absolute side of the caller and the absolute side of the stored
+    carrier. The two sides differ, so an orientation is one of two values. -/
+abbrev Orient : Type := {p : Bool × Bool // p.1 ≠ p.2}
+
+/-- The dual orientation: the caller side and the stored side swap. -/
+abbrev Orient.op (o : Orient) : Orient := ⟨(o.1.2, o.1.1), fun h => o.2 h.symm⟩
+
+/-- The host orientation: the caller side is `false`, and the stored side is `true`. -/
+abbrev Orient.host : Orient := ⟨(false, true), Bool.false_ne_true⟩
+
+/-- The dual of the host. -/
+abbrev Orient.dual : Orient := Orient.host.op
+
+/-- **The dual of the dual is the orientation, on the nose.** -/
+theorem Orient.op_op (o : Orient) : o.op.op = o := rfl
+
+/-- The caller side of an orientation. -/
+abbrev Orient.c (o : Orient) : Bool := o.1.1
+
+/-- The stored side of an orientation. -/
+abbrev Orient.s (o : Orient) : Bool := o.1.2
+
+/-- The carrier at an absolute side: the values `V` at `false`, and the attributes `A` at
+    `true`. -/
+abbrev Side (V A : Type) : Bool → Type
+  | false => V
+  | true => A
+
+/-- §2: `c = (T, μ, f)`, over the carriers `V`, `A` and `M`. `f o` is the partial map from the
+    caller side of `o` to the stored side of `o`. -/
 structure Codec (V A M : Type) where
   T : V → Prop
   μ : Option M
-  e : V → Option A
-  p : A → Option V
+  f : (o : Orient) → Side V A o.c → Option (Side V A o.s)
 
 variable {V A M : Type}
+
+/-- The write: the map at the host. -/
+abbrev Codec.e (c : Codec V A M) : V → Option A := c.f Orient.host
+
+/-- The read: the map at the dual. -/
+abbrev Codec.p (c : Codec V A M) : A → Option V := c.f Orient.dual
+
+/-- The codec of a write and a read. -/
+def Codec.ofEP (T : V → Prop) (μ : Option M) (e : V → Option A) (p : A → Option V) :
+    Codec V A M where
+  T := T
+  μ := μ
+  f
+    | ⟨(false, true), _⟩ => e
+    | ⟨(true, false), _⟩ => p
+    | ⟨(false, false), h⟩ => absurd rfl h
+    | ⟨(true, true), h⟩ => absurd rfl h
+
+section OfEP
+variable (T : V → Prop) (μ : Option M) (e : V → Option A) (p : A → Option V)
+
+/-- The held set of `Codec.ofEP T μ e p` is `T`. -/
+@[simp] theorem Codec.ofEP_T : (Codec.ofEP T μ e p).T = T := rfl
+
+/-- The member of `Codec.ofEP T μ e p` is `μ`. -/
+@[simp] theorem Codec.ofEP_μ : (Codec.ofEP T μ e p).μ = μ := rfl
+
+/-- The write of `Codec.ofEP T μ e p` is `e`. `e` is no projection, so `simp only` needs this
+    lemma by name. -/
+@[simp] theorem Codec.ofEP_e : (Codec.ofEP T μ e p).e = e := rfl
+
+/-- The read of `Codec.ofEP T μ e p` is `p`. `p` is no projection, so `simp only` needs this
+    lemma by name. -/
+@[simp] theorem Codec.ofEP_p : (Codec.ofEP T μ e p).p = p := rfl
+
+end OfEP
+
+/-- Two codecs with the same held set, member, write and read are equal. -/
+@[ext]
+theorem Codec.ext {c d : Codec V A M} (hT : c.T = d.T) (hμ : c.μ = d.μ) (he : c.e = d.e)
+    (hp : c.p = d.p) : c = d := by
+  cases c
+  cases d
+  congr
+  funext o
+  match o with
+  | ⟨(false, true), _⟩ => exact he
+  | ⟨(true, false), _⟩ => exact hp
+  | ⟨(false, false), h⟩ => exact absurd rfl h
+  | ⟨(true, true), h⟩ => exact absurd rfl h
 
 /-- The degenerate codec: empty domains everywhere. Laws hold vacuously. It is the first stage of
     a recursive term, and a variable that no binder gives. -/
 def Codec.empty : Codec V A M :=
-  { T := fun _ => False, μ := none, e := fun _ => none, p := fun _ => none }
+  { T := fun _ => False, μ := none, f := fun _ _ => none }
 
 /-! ## §2's two derived sets -/
 
