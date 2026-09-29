@@ -62,7 +62,7 @@ instance, and JSON is a second instance.
 | `Alg/Combinators.lean`, `Alg/Relations.lean` | the combinators, the join by the first admitter, the order, the equivalence, `Compat`, `Canon` and `Sub` |
 | `Alg/Lists.lean`, `Alg/Positions.lean`, `Alg/Maps.lean` | the traversal and `entrywise`, the positional theory, the image of a function over a key set, and `MapOf`, which keeps the namespace `Calculus` |
 | `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
-| `Alg/Agree.lean` | the two halves of agreement `AgreeE` and `AgreeP`, one lemma per combinator, and `compat_iff_agree` |
+| `Alg/Agree.lean` | agreement `Agree` at an orientation, whose two halves are the host and the dual, one lemma per combinator, and `compat_iff_agree` |
 | `Lang/Term.lean`, `Lang/Typing.lean` | the term family over a signature, `denote`, the guard, `Typed` and `Obligations` |
 | `Lang/Guarded.lean`, `Lang/Sound.lean`, `Lang/HeldFree.lean` | `contractive_body`, `soundness`, and `compat_of_HF` |
 | `Lang/Disjoint.lean` | the class `Leaf`, and the structural disjointness test `Term.disjoint` over a signature |
@@ -330,8 +330,9 @@ only.
 | about what a codec does: its write half, its read half, an iso, a resolution | `Obligations`, as `PairwiseCompat` and `IsoCancels` are | `soundness`, and `extendRead_lawfulCore` through it |
 | a rule of one universe on a set element | the `elem` field of the universe's `SetF`, which `SetObl` puts in `Obligations` | no law: `soundness` takes it as a premise and does not read it |
 
-`Term` has no alternate reader. Therefore `soundness` proves `Lawful`, which is retract, canon and
-writes, for every typed term whose obligations hold. The induction proves `Lawful` alone.
+`Term` has no alternate reader. Therefore `soundness` proves `Lawful`, which is one inverse law over
+the orientation (retract at the host, canon at the dual) and writes, for every typed term whose
+obligations hold. The induction proves `Lawful` alone.
 `Lawful.core` gives `LawfulCore` from it. An alternate reader is `Codec.extendRead` at the codec layer.
 `ReadsCoherently` is its condition, and `extendRead_lawfulCore` proves `LawfulCore` for it over a
 typed term whose obligations hold.
@@ -578,10 +579,10 @@ option that writes and reads other slots is disjoint from the option.
 
 **The certificate is one row of the union's decision.** The union's one law is compatibility
 (Lawson: `s ∨ t` exists iff `s ∼ t`), and compatibility is two halves of agreement: two writers of
-one value write one attribute (`AgreeE`), and two readers of one attribute read one value
-(`AgreeP`). `Term.compat` decides each half per component: the two terms are disjoint there, or one
-codec bounds both there. The bottom agrees with every term. Two held-free terms are bounded by the
-top. With no binder unfolded, the oracle `dynOracle` asks the test of the two views of the half. A
+one value write one attribute (`Agree` at the host), and two readers of one attribute read one
+value (`Agree` at the dual). `Term.compat` decides each half per component: the two terms are
+disjoint there, or one codec bounds both there. The bottom agrees with every term. Two held-free
+terms are bounded by the top. With no binder unfolded, the oracle `dynOracle` asks the test of the two views of the half. A
 `held` whose half is disjoint from the partner agrees there. `compat_sound` proves each row, and
 `pairwiseCompat_of_compatPair` discharges the union's obligation of two lawful closed options.
 

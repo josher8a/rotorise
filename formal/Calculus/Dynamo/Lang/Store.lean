@@ -196,7 +196,7 @@ theorem decimalCodec_p_n (x : WFNumeral) :
     decimalCodec.p (.n x) = if Numeral.Stored x.1 then some (.num x) else none := rfl
 
 theorem lawful_decimalCodec : Lawful decimalCodec := by
-  refine ⟨?_, ?_, ?_⟩
+  refine .ofRC ?_ ?_ ?_
   · intro t a he
     cases t with
     | num x =>

@@ -365,7 +365,7 @@ theorem lawfulCore_recordCodec {c : Codec} (h : LawfulCore c) :
 
 /-- `record` is lawful, name by name. -/
 theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) := by
-  refine ⟨(lawfulCore_recordCodec h.core).retract, ?_, (lawfulCore_recordCodec h.core).writes⟩
+  refine .ofRC (lawfulCore_recordCodec h.core).retract ?_ (lawfulCore_recordCodec h.core).writes
   intro a t hp
   obtain ⟨keys, g, f, rfl, hf, rfl⟩ := recordCodec_p_eq.mp hp
   exact recordCodec_e_eq.mpr ⟨keys, f, g, rfl,

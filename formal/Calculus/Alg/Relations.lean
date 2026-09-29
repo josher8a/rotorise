@@ -16,13 +16,20 @@ variable {V A M : Type} {member : A → M}
 
 /-! ## The order -/
 
-/-- Graph inclusion of two codecs on both halves: a restriction of `d` to the domains of `c`. -/
+/-- Graph inclusion of two codecs at each orientation: a restriction of `d` to the domains of
+    `c`. -/
 def Sub (c d : Codec V A M) : Prop :=
-  (∀ v a, c.e v = some a → d.e v = some a) ∧ (∀ a v, c.p a = some v → d.p a = some v)
+  ∀ (o : Orient) (x : Side V A o.c) (y : Side V A o.s), c.f o x = some y → d.f o x = some y
+
+/-- Inclusion from its two orientations. A proof that reads the asymmetric write and read of a
+    combinator gives the two orientations apart. -/
+theorem Sub.ofEP {c d : Codec V A M} (he : ∀ v a, c.e v = some a → d.e v = some a)
+    (hp : ∀ a v, c.p a = some v → d.p a = some v) : Sub c d :=
+  Orient.both (P := fun o => ∀ x y, c.f o x = some y → d.f o x = some y) he hp
 
 /-- **A restriction is below the codec that it restricts.** -/
 theorem sub_restrict_self (c : Codec V A M) (q : V → Bool) : Sub (c.restrict q) c :=
-  ⟨fun _ _ h => (restrict_e.mp h).2, fun _ _ h => (restrict_p.mp h).1⟩
+  .ofEP (fun _ _ h => (restrict_e.mp h).2) (fun _ _ h => (restrict_p.mp h).1)
 
 /-- **Below one bound, the read domains decide the reads.** Three codecs below `u`, where the
     third reads exactly where both others read: there the three read the value of `u`. -/
@@ -31,9 +38,9 @@ theorem readAgree_of_sub {x y z u : Codec V A M} (hx : Sub x u) (hy : Sub y u) (
     (ha : (x.p a).isSome = true) (hb : (y.p a).isSome = true) :
     z.p a = x.p a ∧ z.p a = y.p a := by
   have hc : (z.p a).isSome = true := by rw [h1, ha, hb]; rfl
-  have ez := (Option.some_get hc).symm.trans (hz.2 _ _ (Option.some_get hc).symm).symm
-  exact ⟨ez.trans ((hx.2 _ _ (Option.some_get ha).symm).trans (Option.some_get ha)),
-    ez.trans ((hy.2 _ _ (Option.some_get hb).symm).trans (Option.some_get hb))⟩
+  have ez := (Option.some_get hc).symm.trans (hz .dual _ _ (Option.some_get hc).symm).symm
+  exact ⟨ez.trans ((hx .dual _ _ (Option.some_get ha).symm).trans (Option.some_get ha)),
+    ez.trans ((hy .dual _ _ (Option.some_get hb).symm).trans (Option.some_get hb))⟩
 
 /-! ### The information order
 
@@ -332,12 +339,13 @@ theorem lawful_altCodec {os : List (Codec V A M)} {μA : Option M}
     (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o')
     (hW : ∀ m, μA = some m → ∀ o ∈ os, ∀ t a, o.e t = some a → member a = m) :
     Lawful member (altCodec os μA) :=
-  { lawfulCore_altCodec (fun o ho => (h o ho).core) hC hW with
-    canon := by
+  .ofRC (lawfulCore_altCodec (fun o ho => (h o ho).core) hC hW).retract
+    (by
       intro a t hp
       obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
       have ho := List.mem_of_find?_eq_some hf
-      exact altCodec_e_of_mem h hC ho ((h o ho).canon hop) }
+      exact altCodec_e_of_mem h hC ho ((h o ho).canon hop))
+    (lawfulCore_altCodec (fun o ho => (h o ho).core) hC hW).writes
 
 /-- **Exclusive admission gives compatibility.** Where the option that admits an input is the
     only one, the other option never acts where the first reads. -/
@@ -387,17 +395,17 @@ theorem compat_of_common_bound {c d u : Codec V A M}
   have hup : u.p a = some t := hcp _ _ hp
   rcases hact with hq | he
   · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hq
-    have := hd.2 _ _ hw
+    have : u.p a = some w := hd .dual _ _ hw
     rw [hup] at this; cases this; exact hw
   · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp he
-    have := hd.1 _ _ hb
+    have : u.e t = some b := hd .host _ _ hb
     rw [hu a t hup] at this; cases this
     exact hdr hb
 
 /-- **`compat_of_common_bound` with `Sub` on both sides and a lawful `d`.** -/
 theorem compat_of_common_bound' {c d u : Codec V A M} (hc : Sub c u) (hd : Sub d u)
     (hu : Canon u) (hdl : Lawful member d) : Compat c d :=
-  compat_of_common_bound hc.2 hd hu hdl.retract
+  compat_of_common_bound (hc .dual) hd hu hdl.retract
 
 /-! ## §6's `≡` -/
 

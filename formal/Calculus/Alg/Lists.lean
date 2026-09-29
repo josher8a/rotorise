@@ -283,12 +283,12 @@ theorem lawful_carried (hμ : ∀ y, member (pA.into y) = μ₀)
     (hcan : ∀ y x, D y = some x → E x = some y) :
     Lawful member (carriedCodec pV pA μ₀ P E D) :=
   have hc := lawfulCore_carried (P := P) hμ hr (fun y x h => by rw [hcan y x h]; rfl)
-  { retract := hc.retract
-    writes := hc.writes
-    canon := by
+  .ofRC hc.retract
+    (by
       intro a t hp
       obtain ⟨y, x, ha, hy, rfl⟩ := carried_p.mp hp
-      exact carried_e.mpr ⟨x, y, pV.out_into x, hcan y x hy, pA.into_out ha⟩ }
+      exact carried_e.mpr ⟨x, y, pV.out_into x, hcan y x hy, pA.into_out ha⟩)
+    hc.writes
 
 /-- `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`: the held set's condition has to hold of whatever
     payload either half of the pair accepts. -/

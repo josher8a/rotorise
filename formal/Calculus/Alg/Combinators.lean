@@ -325,7 +325,7 @@ end WrapperInversion
     all over the development. -/
 theorem Lawful.congr {c d : Codec V A M} (he : c.e = d.e) (hp : c.p = d.p) (hμ : c.μ = d.μ)
     (h : Lawful member d) : Lawful member c := by
-  refine ⟨?_, ?_, ?_⟩
+  refine .ofRC ?_ ?_ ?_
   · intro t a hx; rw [he] at hx; rw [hp]; exact h.retract hx
   · intro a t hx; rw [hp] at hx; rw [he]; exact h.canon hx
   · intro μ hm t a hx; rw [hμ] at hm; rw [he] at hx; exact h.writes hm hx
@@ -495,7 +495,7 @@ theorem carrier_altCodec {os : List (Codec V A M)} {μA : Option M}
 theorem lawful_pointCodec {α : Type} {pV : Ctor α V} {pA : Ctor α A} {μ₀ : M}
     (hμ : ∀ x, member (pA.into x) = μ₀) :
     Lawful member (pointCodec pV pA μ₀) := by
-  refine ⟨?_, ?_, ?_⟩
+  refine .ofRC ?_ ?_ ?_
   · -- (R): match, rebuild, match again — `out_into` on each side.
     intro t a he
     obtain ⟨x, hx, rfl⟩ := Option.map_eq_some_iff.mp he
@@ -525,11 +525,12 @@ theorem LawfulCore.through {c : Codec V A M} (h : LawfulCore member c) {f g : V 
 theorem Lawful.through {c : Codec V A M} (h : Lawful member c) {f g : V → V}
     (hiso : IsoCancels c f g) :
     Lawful member (c.through f g) :=
-  { LawfulCore.through h.core hiso with
-    canon := by
+  .ofRC (LawfulCore.through h.core hiso).retract
+    (by
       intro a t hp
       obtain ⟨w, hw, rfl⟩ := through_p.mp hp
-      rw [through_e, hiso.2 w (h.defined hw)]; exact h.canon hw }
+      rw [through_e, hiso.2 w (h.defined hw)]; exact h.canon hw)
+    (LawfulCore.through h.core hiso).writes
 
 /-- `refine` preserves the laws: everything restricts. -/
 theorem LawfulCore.restrict {c : Codec V A M} (h : LawfulCore member c) (q : V → Bool) :
@@ -546,8 +547,9 @@ theorem LawfulCore.restrict {c : Codec V A M} (h : LawfulCore member c) (q : V �
 
 theorem Lawful.restrict {c : Codec V A M} (h : Lawful member c) (q : V → Bool) :
     Lawful member (c.restrict q) :=
-  { LawfulCore.restrict h.core q with
-    canon := fun hp => let ⟨hc, hq⟩ := restrict_p.mp hp; restrict_e.mpr ⟨hq, h.canon hc⟩ }
+  .ofRC (LawfulCore.restrict h.core q).retract
+    (fun hp => let ⟨hc, hq⟩ := restrict_p.mp hp; restrict_e.mpr ⟨hq, h.canon hc⟩)
+    (LawfulCore.restrict h.core q).writes
 
 theorem LawfulCore.extendRead {c : Codec V A M} (h : LawfulCore member c) {r : A → Option V}
     (hran : ∀ a v, r a = some v → (c.e v).isSome) :

@@ -87,7 +87,7 @@ theorem R_convU (c : S.C) : R (convU c) c := ⟨rfl, rfl⟩
 
 /-- **The converse keeps the law at every orientation**, with no case on the orientation. -/
 theorem Lawful.convU {c : S.C} (h : Lawful Syn.member c) : Lawful Syn.member (convU c) :=
-  ⟨h.canon, h.retract, fun hμ => nomatch hμ⟩
+  .ofRC h.canon h.retract fun hμ => nomatch hμ
 
 end ConvU
 

@@ -44,7 +44,7 @@ theorem lawful_nullCodec : Lawful nullCodec :=
     row. No shortest-text round trip is needed, because there is no host spelling to
     round-trip through. -/
 theorem lawful_numberCodec : Lawful numberCodec := by
-  refine ⟨?_, ?_, ?_⟩
+  refine .ofRC ?_ ?_ ?_
   · intro t a he
     cases t with
     | num x => cases he; rfl

@@ -23,19 +23,19 @@ variable {V A M : Type}
 
 /-- Inclusion of graphs is transitive. -/
 theorem sub_trans {c d u : Codec V A M} (h : Sub c d) (h' : Sub d u) : Sub c u :=
-  ⟨fun _ _ he => h'.1 _ _ (h.1 _ _ he), fun _ _ hp => h'.2 _ _ (h.2 _ _ hp)⟩
+  fun o x y hxy => h' o x y (h o x y hxy)
 
 /-- The empty codec is below every codec. -/
 theorem sub_empty {u : Codec V A M} : Sub Codec.empty u :=
-  ⟨fun _ _ h => (nomatch h), fun _ _ h => (nomatch h)⟩
+  fun _ _ _ h => nomatch h
 
 /-- A union of codecs below `u` is below `u`, because the selector returns the answer of one
     option. -/
 theorem sub_altCodec {os : List (Codec V A M)} {u : Codec V A M} (h : ∀ o ∈ os, Sub o u)
     (μ : Option M) : Sub (altCodec os μ) u := by
-  refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
-  · obtain ⟨o, ho, -, he⟩ := select_admits he; exact (h o ho).1 _ _ he
-  · obtain ⟨o, ho, -, hp⟩ := select_admits hp; exact (h o ho).2 _ _ hp
+  refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
+  · obtain ⟨o, ho, -, he⟩ := select_admits he; exact (h o ho) .host _ _ he
+  · obtain ⟨o, ho, -, hp⟩ := select_admits hp; exact (h o ho) .dual _ _ hp
 
 /-- A zipped traversal whose every row codec is below `u` is a traversal of `u`. -/
 theorem forall₂_zip_e {u : Codec V A M} : ∀ (ds : List (Codec V A M)) (vs : List V) (as : List A),
@@ -44,7 +44,7 @@ theorem forall₂_zip_e {u : Codec V A M} : ∀ (ds : List (Codec V A M)) (vs : 
     List.Forall₂ (fun v a => u.e v = some a) vs as
   | [], [], _, _, _, h => by cases h; exact .nil
   | d :: ds, v :: vs, a :: as, hl, hd, .cons h1 h2 =>
-      .cons ((hd d (by simp)).1 _ _ h1)
+      .cons ((hd d (by simp)) .host _ _ h1)
         (forall₂_zip_e ds vs as (by simpa using hl) (fun c hc => hd c (by simp [hc])) h2)
   | [], _ :: _, _, hl, _, _ => nomatch hl
   | _ :: _, [], _, hl, _, _ => nomatch hl
@@ -56,7 +56,7 @@ theorem forall₂_zip_p {u : Codec V A M} (ds : List (Codec V A M)) (as : List A
     (h : List.Forall₂ (fun (ca : Codec V A M × A) v => ca.1.p ca.2 = some v) (ds.zip as) vs) :
     List.Forall₂ (fun a v => u.p a = some v) as vs :=
   forall₂_zip_e (u := conv u) (ds.map conv) as vs (by simpa using hl)
-    (List.forall_mem_map.mpr fun c hc => ⟨(hd c hc).2, (hd c hc).1⟩)
+    (List.forall_mem_map.mpr fun c hc => .ofEP (hd c hc .dual) (hd c hc .host))
     (by rw [List.zip_map_left, List.forall₂_map_left_iff]; exact h)
 
 /-- A list whose every slot is below a top that acts as the list former is below the top. -/
@@ -71,7 +71,7 @@ theorem sub_listCodec {pV : Ctor (List V) V} {pA : Ctor (List A) A} {μL : M} {u
     · exact hpre c h1
     · exact hsp c h1
     · exact hsuf c h1
-  refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
+  refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
   · obtain ⟨vs, as, hv, hE, rfl⟩ := carried_e.mp he
     simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hE
     obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hE
@@ -106,14 +106,14 @@ theorem sub_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM : M
     {sems : MapOf (FieldSem V A M)} {rest : RestSem V A M} (hnd : rest ≠ .drop)
     (hf : ∀ k, Sub (sems.2 k).codec u) (hw : ∀ c ∈ rcOf rest, Sub c u) :
     Sub (objectCodec mV mA μM sems rest) u := by
-  refine ⟨fun v a he => ?_, fun a v hp => ?_⟩
+  refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
   · obtain ⟨x, y, hv, hE, rfl⟩ := carried_e.mp he
     obtain ⟨-, g, hg, rfl⟩ := objWrite_eq.mp hE
     rw [mV.into_out hv, hue, funImage_eq (f := g) (fun k => ?_)]
     · rfl
     have hk := funImage_some hg k
     obtain ⟨c, hc, hce⟩ := Option.bind_eq_some_iff.mp hk
-    exact (entryCodec_of (Q := fun c => Sub c u) hf hw hc).1 _ _ hce
+    exact (entryCodec_of (Q := fun c => Sub c u) hf hw hc) .host _ _ hce
   · obtain ⟨y, x, ha, hD, rfl⟩ := carried_p.mp hp
     obtain ⟨-, d, hd, rfl⟩ := objRead_eq.mp hD
     have hkeep : ∀ k, keepB rest sems k = true := by
@@ -132,7 +132,7 @@ theorem sub_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM : M
     have hk := funImage_some hd ⟨k, h'⟩
     rw [hk]
     obtain ⟨c, hc, hcp⟩ := Option.bind_eq_some_iff.mp hk
-    exact (entryCodec_of (Q := fun c => Sub c u) hf hw hc).2 _ _ hcp
+    exact (entryCodec_of (Q := fun c => Sub c u) hf hw hc) .dual _ _ hcp
 
 end Combinators
 
@@ -179,7 +179,7 @@ mutual
 theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Syn.top (S := S))) → Sub (denote α β t ρ) (Syn.top (S := S))
   | .prim g, _, _, _ => TopLaws.ground g
-  | .opaq, _, _, _ => ⟨fun _ _ h => h, fun _ _ h => h⟩
+  | .opaq, _, _, _ => fun _ _ _ h => h
   | .never, _, _, _ => sub_empty
   | .var i, _, _, henv => henv i
   | .set t, h, ρ, henv => by
@@ -197,7 +197,7 @@ theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
           exact sub_denoteIn b h (_ :: ρ) fun i => match i with
             | 0 => ih
             | i + 1 => henv i
-      exact ⟨fun v a he => (hs _).1 v a he, fun a v hp => (hs _).2 a v hp⟩
+      exact .ofEP (fun v a he => hs _ .host v a he) (fun a v hp => hs _ .dual a v hp)
   | .held _ _ _ _ _, h, _, _ => nomatch h
   | .refine t _ _, h, ρ, henv =>
       sub_trans (sub_refine2_self _ _ _) (sub_denoteIn t h ρ henv)

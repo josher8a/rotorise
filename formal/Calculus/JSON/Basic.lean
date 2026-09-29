@@ -70,12 +70,12 @@ def ground (m : JMember) : Alg.Codec Json Json JMember :=
     (p := gate m)
 
 /-- A ground codec is lawful: the gate is its own inverse, and the gate passes one kind. -/
-theorem lawful_ground (m : JMember) : Alg.Lawful Json.member (ground m) where
-  retract he := let ⟨hm, h⟩ := gate_eq_some.mp he; gate_eq_some.mpr ⟨h ▸ hm, h.symm⟩
-  canon hp := let ⟨hm, h⟩ := gate_eq_some.mp hp; gate_eq_some.mpr ⟨h ▸ hm, h.symm⟩
-  writes hμ _ _ he :=
-    let ⟨hm, h⟩ := gate_eq_some.mp he
-    (h ▸ hm).trans (Option.some.inj hμ)
+theorem lawful_ground (m : JMember) : Alg.Lawful Json.member (ground m) :=
+  .ofRC (fun he => let ⟨hm, h⟩ := gate_eq_some.mp he; gate_eq_some.mpr ⟨h ▸ hm, h.symm⟩)
+    (fun hp => let ⟨hm, h⟩ := gate_eq_some.mp hp; gate_eq_some.mpr ⟨h ▸ hm, h.symm⟩)
+    (fun hμ _ _ he =>
+      let ⟨hm, h⟩ := gate_eq_some.mp he
+      (h ▸ hm).trans (Option.some.inj hμ))
 
 /-- The string codec. -/
 def str : Alg.Codec Json Json JMember := ground .str
@@ -130,7 +130,7 @@ theorem canon_idCodec : Alg.Canon idCodec := fun _ _ h => (Option.some.inj h).sy
 
 /-- A ground codec is below the identity codec. -/
 theorem sub_ground_id (m : JMember) : Alg.Sub (ground m) idCodec :=
-  ⟨fun _ _ h => (gate_eq_some.mp h).2 ▸ rfl, fun _ _ h => (gate_eq_some.mp h).2 ▸ rfl⟩
+  .ofEP (fun _ _ h => (gate_eq_some.mp h).2 ▸ rfl) (fun _ _ h => (gate_eq_some.mp h).2 ▸ rfl)
 
 /-! ## The JSON signature
 
@@ -169,8 +169,8 @@ instance jsonSem : Alg.Mean jsonSig where
   set := none
   groundμ m := some m
   top := idCodec
-  lawful_top := ⟨fun he => (Option.some.inj he) ▸ rfl, fun hp => (Option.some.inj hp) ▸ rfl,
-    fun hμ => nomatch hμ⟩
+  lawful_top := .ofRC (fun he => (Option.some.inj he) ▸ rfl) (fun hp => (Option.some.inj hp) ▸ rfl)
+    (fun hμ => nomatch hμ)
   carrier_top := ⟨fun _ => trivial, fun _ => trivial⟩
   topHeld _ := True
   top_held _ _ := trivial

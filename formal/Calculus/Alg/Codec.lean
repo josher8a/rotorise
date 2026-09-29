@@ -30,6 +30,15 @@ abbrev Orient.dual : Orient := Orient.host.op
 /-- **The dual of the dual is the orientation, on the nose.** -/
 theorem Orient.op_op (o : Orient) : o.op.op = o := rfl
 
+/-- **A property of every orientation** from the property at the host and at the dual. The two
+    are the only orientations. -/
+theorem Orient.both {P : Orient → Prop} (host : P Orient.host) (dual : P Orient.dual) :
+    ∀ o, P o
+  | ⟨(false, true), _⟩ => host
+  | ⟨(true, false), _⟩ => dual
+  | ⟨(false, false), h⟩ => absurd rfl h
+  | ⟨(true, true), h⟩ => absurd rfl h
+
 /-- The caller side of an orientation. -/
 abbrev Orient.c (o : Orient) : Bool := o.1.1
 
@@ -95,11 +104,7 @@ theorem Codec.ext {c d : Codec V A M} (hT : c.T = d.T) (hμ : c.μ = d.μ) (he :
   cases d
   congr
   funext o
-  match o with
-  | ⟨(false, true), _⟩ => exact he
-  | ⟨(true, false), _⟩ => exact hp
-  | ⟨(false, false), h⟩ => exact absurd rfl h
-  | ⟨(true, true), h⟩ => exact absurd rfl h
+  exact Orient.both (P := fun o => _ = _) he hp o
 
 /-- The degenerate codec: empty domains everywhere. Laws hold vacuously. It is the first stage of
     a recursive term, and a variable that no binder gives. -/
@@ -133,14 +138,35 @@ theorem Codec.ker_equivalence (c : Codec V A M) : Equivalence c.Ker :=
     and merely partial on `A`; §6's `≈` rows are stated on it. -/
 def Can (c : Codec V A M) (a : A) : Prop := ∃ v, c.e v = some a
 
-/-- §2 Laws: the codec is a canonical partial bijection. `(R)` retraction, `(C)` in the canonical
-    form (a read at `a` of `t` writes `t` at `a`), and `(W)` member-naming, where `member` gives
-    the member of an attribute. The `alternate reader` exemption is handled at the theorem (§5),
-    not here: `Lawful` is the exemption-free bundle. -/
+/-- §2 Laws: the codec is a canonical partial bijection. `inv` is one law over the orientation:
+    the map at the dual inverts the map at each orientation. At the host `inv` is `(R)`
+    retraction, and at the dual `inv` is `(C)` in the canonical form (a read at `a` of `t`
+    writes `t` at `a`). `(W)` member-naming is one-sided, where `member` gives the member of an
+    attribute. The `alternate reader` exemption is handled at the theorem (§5), not here:
+    `Lawful` is the exemption-free bundle. -/
 structure Lawful (member : A → M) (c : Codec V A M) : Prop where
-  retract : ∀ {t a}, c.e t = some a → c.p a = some t
-  canon   : ∀ {a t}, c.p a = some t → c.e t = some a
+  inv : ∀ {o : Orient} {x : Side V A o.c} {y : Side V A o.s}, c.f o x = some y → c.f o.op y = some x
   writes  : ∀ {μ}, c.μ = some μ → ∀ {t a}, c.e t = some a → member a = μ
+
+variable {member : A → M}
+
+/-- `(R)`: the one law at the host. -/
+theorem Lawful.retract {c : Codec V A M} (h : Lawful member c) {t a} (he : c.e t = some a) :
+    c.p a = some t := h.inv he
+
+/-- `(C)`: the one law at the dual. -/
+theorem Lawful.canon {c : Codec V A M} (h : Lawful member c) {a t} (hp : c.p a = some t) :
+    c.e t = some a := h.inv hp
+
+/-- The law from its two orientations. A proof that reads the asymmetric write and read of a
+    combinator gives the two orientations apart. -/
+theorem Lawful.ofRC {c : Codec V A M} (retract : ∀ {t a}, c.e t = some a → c.p a = some t)
+    (canon : ∀ {a t}, c.p a = some t → c.e t = some a)
+    (writes : ∀ {μ}, c.μ = some μ → ∀ {t a}, c.e t = some a → member a = μ) :
+    Lawful member c where
+  inv {o} := Orient.both (P := fun o => ∀ {x : Side V A o.c} {y : Side V A o.s},
+    c.f o x = some y → c.f o.op y = some x) retract canon o
+  writes := writes
 
 /-- `(R)`, `(C)` as definedness, and `(W)` — what survives in a derivation containing
     `alternate reader` (§5 theorem, first residue). -/
@@ -148,8 +174,6 @@ structure LawfulCore (member : A → M) (c : Codec V A M) : Prop where
   retract : ∀ {t a}, c.e t = some a → c.p a = some t
   canon   : ∀ {a t}, c.p a = some t → (c.e t).isSome
   writes  : ∀ {μ}, c.μ = some μ → ∀ {t a}, c.e t = some a → member a = μ
-
-variable {member : A → M}
 
 /-- A read value is writable. -/
 theorem Lawful.defined {c : Codec V A M} (h : Lawful member c) {a t} (hp : c.p a = some t) :
@@ -199,8 +223,7 @@ theorem Lawful.e_injective {c : Codec V A M} (h : Lawful member c) {t t' a}
 
 /-- The empty codec is lawful, vacuously. -/
 theorem Lawful.empty : Lawful member (Codec.empty : Codec V A M) where
-  retract h := nomatch h
-  canon h := nomatch h
+  inv h := nomatch h
   writes _ _ _ h := nomatch h
 
 /-- **The ideal a codec is a deviation from**, stated so the deviation can be located.

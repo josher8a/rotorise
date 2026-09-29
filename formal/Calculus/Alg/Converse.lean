@@ -26,10 +26,8 @@ variable {V A M : Type}
 
 /-- The converse of a lawful codec is lawful, with the trivial member. -/
 theorem Lawful.conv {member : A → M} {c : Codec V A M} (h : Lawful member c) :
-    Lawful (fun _ : V => ()) (conv c) where
-  retract := h.canon
-  canon := h.retract
-  writes _ _ _ _ := rfl
+    Lawful (fun _ : V => ()) (conv c) :=
+  .ofRC h.canon h.retract fun _ _ _ _ => rfl
 
 /-- The converse holds every value, so it is on its carrier. -/
 theorem carrier_conv (c : Codec V A M) : Carrier (conv c) := ⟨fun _ => trivial, fun _ => trivial⟩
@@ -37,7 +35,7 @@ theorem carrier_conv (c : Codec V A M) : Carrier (conv c) := ⟨fun _ => trivial
 /-- The inverse converse of a lawful codec is lawful, and names no member. -/
 theorem Lawful.unconv {member : A → M} {c : Codec A V Unit} (h : Lawful (fun _ : V => ()) c) :
     Lawful member (unconv c : Codec V A M) :=
-  ⟨h.canon, h.retract, fun hμ => nomatch hμ⟩
+  .ofRC h.canon h.retract fun hμ => nomatch hμ
 
 /-- Agreement on one half of two codecs is agreement on the other half of their inverse
     converses. -/
@@ -102,19 +100,20 @@ theorem held2_host {M₁ M₂ : Type} (c : Codec V A M) (o : Codec V A M₁) (oA
 
 /-- The two-sided restriction keeps the laws, and owes nothing. -/
 theorem Lawful.refine2 {member : A → M} {c : Codec V A M} (hc : Lawful member c)
-    (qV : V → Bool) (qA : A → Bool) : Lawful member (refine2 c qV qA) where
-  retract he :=
-    let ⟨hq, he', hqa⟩ := refine2_e.mp he
-    refine2_p.mpr ⟨hqa, hc.retract he', hq⟩
-  canon hp :=
-    let ⟨hqa, hp', hq⟩ := refine2_p.mp hp
-    refine2_e.mpr ⟨hq, hc.canon hp', hqa⟩
-  writes hμ _ _ he := hc.writes hμ (refine2_e.mp he).2.1
+    (qV : V → Bool) (qA : A → Bool) : Lawful member (refine2 c qV qA) :=
+  .ofRC
+    (fun he =>
+      let ⟨hq, he', hqa⟩ := refine2_e.mp he
+      refine2_p.mpr ⟨hqa, hc.retract he', hq⟩)
+    (fun hp =>
+      let ⟨hqa, hp', hq⟩ := refine2_p.mp hp
+      refine2_e.mpr ⟨hq, hc.canon hp', hqa⟩)
+    (fun hμ _ _ he => hc.writes hμ (refine2_e.mp he).2.1)
 
 /-- **A two-sided restriction is below the codec that it restricts.** -/
 theorem sub_refine2_self (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) :
     Sub (refine2 c qV qA) c :=
-  ⟨fun _ _ h => (refine2_e.mp h).2.1, fun _ _ h => (refine2_p.mp h).2.1⟩
+  .ofEP (fun _ _ h => (refine2_e.mp h).2.1) (fun _ _ h => (refine2_p.mp h).2.1)
 
 /-- A gate whose predicate admits the write is the write domain. -/
 theorem gate_eq_isSome {X Y N : Type} {c : Codec X Y N} {q : Y → Bool} {x : X}
@@ -150,19 +149,19 @@ theorem agreeS_adapt2 {side : Bool} {c c' : Codec V A M} {fV gV : V → V} {hA k
   · intro a t w ht hw
     obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp ht
     obtain ⟨u', hu', rfl⟩ := Option.map_eq_some_iff.mp hw
-    rw [(h : AgreeP c c') (hA a) u u' hu hu']
+    rw [(h : Agree .dual c c') (hA a) u u' hu hu']
   · intro v a b ha hb
     obtain ⟨a', ha', rfl⟩ := Option.map_eq_some_iff.mp ha
     obtain ⟨b', hb', rfl⟩ := Option.map_eq_some_iff.mp hb
-    rw [(h : AgreeE c c') (fV v) a' b' ha' hb']
+    rw [(h : Agree .host c c') (fV v) a' b' ha' hb']
 
 /-- **One adapter over two agreeing inner codecs agrees**, whatever the outers of each side. -/
 theorem agreeS_held2 {side : Bool} {M₁ M₂ M₁' M₂' : Type} {c c' : Codec V A M}
     {oV : Codec V A M₁} {oA : Codec V A M₂} {oV' : Codec V A M₁'} {oA' : Codec V A M₂'}
     {fV gV : V → V} {hA kA : A → A} (h : AgreeS side c c') :
     AgreeS side (held2 c oV oA fV gV hA kA) (held2 c' oV' oA' fV gV hA kA) :=
-  agreeS_sub_left (sub_refine2_self _ _ _)
-    (agreeS_sub_right (sub_refine2_self _ _ _) (agreeS_adapt2 h))
+  agree_sub_left (sub_refine2_self _ _ _)
+    (agree_sub_right (sub_refine2_self _ _ _) (agreeS_adapt2 h))
 
 /-- A `held` writes only where its caller outer writes. -/
 theorem held2_e_dom {M₁ M₂ : Type} {c : Codec V A M} {oV : Codec V A M₁} {oA : Codec V A M₂}
@@ -198,7 +197,7 @@ theorem Lawful.adapt2 {member : A → M} {c : Codec V A M} (hc : Lawful member c
     {fV gV : V → V} {hA kA : A → A} (h : Obl2 member c fV gV hA kA) :
     Lawful member (adapt2 c fV gV hA kA) := by
   obtain ⟨⟨hV1, hV2⟩, ⟨hA1, hA2⟩, hm⟩ := h
-  refine ⟨fun {v a'} he => ?_, fun {a' w} hp => ?_, fun {μ} hμ {v a'} he => ?_⟩
+  refine .ofRC (fun {v a'} he => ?_) (fun {a' w} hp => ?_) (fun {μ} hμ {v a'} he => ?_)
   · obtain ⟨a, ha, rfl⟩ := Option.map_eq_some_iff.mp he
     have hr := hc.retract ha
     have hk : hA (kA a) = a := hA2 a (by simp only [Alg.conv, Codec.ofEP_e, hr, Option.isSome_some])
