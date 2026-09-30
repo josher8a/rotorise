@@ -58,7 +58,7 @@ theorem of_eq (he : c₁.e = c₂.e) (hp : c₁.p = c₂.p) : AgreeLe dV dA d c�
 /-- Agreement below a depth, at an orientation: the two maps at `o` agree at each input of
     depth at most `d`. -/
 theorem f (h : AgreeLe dV dA d c₁ c₂) :
-    ∀ (o : Orient) (x : Side V o.c), Side.elim dV dA o.c x ≤ d → c₁.f o x = c₂.f o x :=
+    ∀ (o : Orient) (x : V), Side.elim dV dA o.c x ≤ d → c₁.f o x = c₂.f o x :=
   Orient.both h.e h.p
 
 /-- …and agreement at every depth is one pair of halves, because every input has a depth. -/
@@ -85,7 +85,7 @@ def muCodec (B : Codec V M → Codec V M) : Codec V M where
 variable {dV dA}
 
 /-- The limit sends an input at the stage that the depth of the input names. -/
-theorem muCodec_f (B : Codec V M → Codec V M) (o : Orient) (x : Side V o.c) :
+theorem muCodec_f (B : Codec V M → Codec V M) (o : Orient) (x : V) :
     (muCodec dV dA B).f o x = (muStage B (Side.elim dV dA o.c x)).f o x := rfl
 
 /-! ### The converse of the construct -/
@@ -95,7 +95,7 @@ variable (hV : ∀ v, 0 < dV v) (hA : ∀ a, 0 < dA a) {B : Codec V M → Codec 
 include hV hA
 
 /-- Every input has a positive depth, at each side. -/
-theorem depth_pos : ∀ (s : Bool) (x : Side V s), 0 < Side.elim dV dA s x
+theorem depth_pos : ∀ (s : Bool) (x : V), 0 < Side.elim dV dA s x
   | false, v => hV v
   | true, a => hA a
 
@@ -125,7 +125,7 @@ theorem muCodec_agree (hB : Contractive dV dA B) (n : Nat) :
 
 /-- **The fixed point.** The limit sends what its body sends over the limit, at each
     orientation. -/
-theorem muCodec_fix (hB : Contractive dV dA B) (o : Orient) (x : Side V o.c) :
+theorem muCodec_fix (hB : Contractive dV dA B) (o : Orient) (x : V) :
     (muCodec dV dA B).f o x = (B (muCodec dV dA B)).f o x := by
   obtain ⟨k, hk⟩ : ∃ k, Side.elim dV dA o.c x = k + 1 :=
     ⟨Side.elim dV dA o.c x - 1, by have := depth_pos hV hA o.c x; omega⟩

@@ -18,7 +18,7 @@ variable {V M : Type} {member : V → M}
 /-- Graph inclusion of two codecs at each orientation: a restriction of `d` to the domains of
     `c`. -/
 def Sub (c d : Codec V M) : Prop :=
-  ∀ (o : Orient) (x : Side V o.c) (y : Side V o.s), c.f o x = some y → d.f o x = some y
+  ∀ (o : Orient) (x : V) (y : V), c.f o x = some y → d.f o x = some y
 
 /-- Inclusion from its two orientations. A proof that reads the asymmetric write and read of a
     combinator gives the two orientations apart. -/
@@ -276,7 +276,7 @@ theorem Compat.e_agree {c d : Codec V M} (h : Compat c d) (hc : LawfulCore membe
 theorem altCodec_of_mem {os : List (Codec V M)} {μA : Option M}
     (hl : ∀ o ∈ os, Lawful member o)
     (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o') {c : Codec V M} (hc : c ∈ os) :
-    ∀ (o : Orient) {x : Side V o.c} {y : Side V o.s},
+    ∀ (o : Orient) {x : V} {y : V},
       c.f o x = some y → (altCodec os μA).f o x = some y :=
   Orient.both
     (fun {v a} he => by
@@ -603,7 +603,7 @@ theorem select_cons {X Y : Type} (o : Codec V M) (os : List (Codec V M))
 
 /-- A nested union sends as the flat union, at each orientation. -/
 theorem altCodec_nest (o₁ o₂ o₃ : Codec V M) (μ μ' μf : Option M) {o : Orient}
-    (x : Side V o.c) :
+    (x : V) :
     (altCodec [o₁, (altCodec [o₂, o₃] μ')] μ).f o x = (altCodec [o₁, o₂, o₃] μf).f o x := by
   show select _ _ x = select _ _ x
   rw [select_cons, select_cons, select_cons, select_nil_eq]

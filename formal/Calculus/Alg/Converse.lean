@@ -20,58 +20,58 @@ variable {V M : Type}
 
 /-! ## The adapter and the one-sided `held` -/
 
-/-- **A pair at an absolute side**: the entry function and the exit function of the side. -/
-abbrev PairAt (V : Type) (s : Bool) : Type :=
-  (Side V s → Side V s) × (Side V s → Side V s)
+/-- **An adapter pair**: the entry function and the exit function. -/
+abbrev PairAt (V : Type) : Type :=
+  (V → V) × (V → V)
 
 /-- **The pairs of a one-sided adapter**: the pair `w` at the side `s`, and the identity at the
     other side. -/
-abbrev PairAt.one (s : Bool) (w : PairAt V s) : (t : Bool) → PairAt V t :=
-  Orient.place (X := PairAt V) (Orient.at s) w (id, id)
+abbrev PairAt.one (s : Bool) (w : PairAt V) : Bool → PairAt V :=
+  Orient.place (X := fun _ => PairAt V) (Orient.at s) w (id, id)
 
 /-- The pair of a one-sided adapter at the other side is the identity. -/
-theorem PairAt.one_ne (s : Bool) (w : PairAt V s) : ∀ t, t ≠ s → PairAt.one s w t = (id, id)
+theorem PairAt.one_ne (s : Bool) (w : PairAt V) : ∀ t, t ≠ s → PairAt.one s w t = (id, id)
   | false, h => by cases s; exact absurd rfl h; rfl
   | true, h => by cases s; rfl; exact absurd rfl h
 
 /-- **The adapter**, with a pair at each absolute side. One formula serves each orientation: the
     entry function of the caller side acts on the input, and the exit function of the stored side
     acts on the output. -/
-def adapt2 (c : Codec V M) (π : (s : Bool) → PairAt V s) : Codec V M where
+def adapt2 (c : Codec V M) (π : Bool → PairAt V) : Codec V M where
   T v := c.T ((π false).1 v)
   μ := c.μ
   f o x := (c.f o ((π o.c).1 x)).map (π o.s).2
 
 /-- The map of the adapter at an orientation, for a rewrite. -/
-theorem adapt2_f (c : Codec V M) (π : (s : Bool) → PairAt V s) (o : Orient)
-    (x : Side V o.c) : (adapt2 c π).f o x = (c.f o ((π o.c).1 x)).map (π o.s).2 := rfl
+theorem adapt2_f (c : Codec V M) (π : Bool → PairAt V) (o : Orient)
+    (x : V) : (adapt2 c π).f o x = (c.f o ((π o.c).1 x)).map (π o.s).2 := rfl
 
 /-- **The one-sided `held` at the side `s`**: the adapter with the pair `w` at `s` and the
     identity at the other side, restricted at `s` by the domain of the outer `P` at `s`. The other
     side has no restriction. -/
-def held1 {M₁ : Type} (s : Bool) (c : Codec V M) (P : Codec V M₁) (w : PairAt V s) :
+def held1 {M₁ : Type} (s : Bool) (c : Codec V M) (P : Codec V M₁) (w : PairAt V) :
     Codec V M :=
   refine2 (adapt2 c (PairAt.one s w)) (fun v => false != s || (P.e v).isSome)
     (fun a => true != s || (P.p a).isSome)
 
 /-- **The adapter at the side `false` is `through`**: the pair at the side `true` is the
     identity. -/
-theorem adapt2_host (c : Codec V M) (w : PairAt V false) :
+theorem adapt2_host (c : Codec V M) (w : PairAt V) :
     adapt2 c (PairAt.one false w) = c.through w.1 w.2 := by
   exact Codec.ext rfl rfl (funext fun v => congrFun Option.map_id (c.e (w.1 v))) rfl
 
 /-- **The one-sided `held` at the side `false` is the host `held`**: `through`, restricted by the
     write domain of the outer. -/
-theorem held1_host {M₁ : Type} (c : Codec V M) (P : Codec V M₁) (w : PairAt V false) :
+theorem held1_host {M₁ : Type} (c : Codec V M) (P : Codec V M₁) (w : PairAt V) :
     held1 false c P w = (c.through w.1 w.2).restrict fun v => (P.e v).isSome := by
   rw [held1, adapt2_host]; rfl
 
 /-- **A two-sided adapter is two nested one-sided ones**: the side `false` inside, and the side
     `true` outside. The pairs of the two sides and the two outers stay apart. -/
 theorem held1_nest {M₁ M₂ : Type} (c : Codec V M) (oV : Codec V M₁) (oA : Codec V M₂)
-    (wV : PairAt V false) (wA : PairAt V true) :
+    (wV : PairAt V) (wA : PairAt V) :
     held1 true (held1 false c oV wV) oA wA =
-      refine2 (adapt2 c (Orient.place (X := PairAt V) .host wV wA))
+      refine2 (adapt2 c (Orient.place (X := fun _ => PairAt V) .host wV wA))
         (fun v => (oV.e v).isSome) (fun a => (oA.p a).isSome) := by
   refine Codec.ext ?_ rfl ?_ ?_
   · funext v
@@ -116,8 +116,8 @@ theorem gate_isSome {X Y : Type} {m : X → Option Y} {q : Y → Bool} {x : X}
 
 /-- **The gate of the adapter at an orientation** is the gate of its inner codec, after the entry
     function of the caller side, and before the exit function of the stored side. -/
-theorem adapt2_gate (c : Codec V M) (π : (s : Bool) → PairAt V s) (o : Orient)
-    (q : Side V o.s → Bool) (x : Side V o.c) :
+theorem adapt2_gate (c : Codec V M) (π : Bool → PairAt V) (o : Orient)
+    (q : V → Bool) (x : V) :
     gate ((adapt2 c π).f o) q x = gate (c.f o) (q ∘ (π o.s).2) ((π o.c).1 x) := by
   simp only [gate, adapt2]
   cases c.f o ((π o.c).1 x) <;> rfl
@@ -126,12 +126,12 @@ theorem adapt2_gate (c : Codec V M) (π : (s : Bool) → PairAt V s) (o : Orient
     the side `s` is the caller side, and the inner codec sends the entry image to an output whose
     exit image the outer reads back where the side `s` is the stored side. -/
 theorem held1_f_isSome {M₁ : Type} (s : Bool) (c : Codec V M) (P : Codec V M₁)
-    (w : PairAt V s) : ∀ (o : Orient) (x : Side V o.c),
+    (w : PairAt V) : ∀ (o : Orient) (x : V),
     ((held1 s c P w).f o x).isSome =
       ((o.c != s || (P.f o x).isSome) &&
         gate (c.f o) (fun y => o.s != s || (P.f o.op ((PairAt.one s w o.s).2 y)).isSome)
           ((PairAt.one s w o.c).1 x)) :=
-  Orient.both (P := fun o => ∀ (x : Side V o.c),
+  Orient.both (P := fun o => ∀ (x : V),
     ((held1 s c P w).f o x).isSome =
       ((o.c != s || (P.f o x).isSome) &&
         gate (c.f o) (fun y => o.s != s || (P.f o.op ((PairAt.one s w o.s).2 y)).isSome)
@@ -140,7 +140,7 @@ theorem held1_f_isSome {M₁ : Type} (s : Bool) (c : Codec V M) (P : Codec V M�
     (fun a => by rw [held1, refine2_p_isSome, adapt2_gate]; rfl)
 
 /-- **One adapter over two agreeing inner codecs agrees.** -/
-theorem agreeS_adapt2 {side : Bool} {c c' : Codec V M} {π : (s : Bool) → PairAt V s}
+theorem agreeS_adapt2 {side : Bool} {c c' : Codec V M} {π : Bool → PairAt V}
     (h : AgreeS side c c') : AgreeS side (adapt2 c π) (adapt2 c' π) := by
   cases side
   · intro a t w ht hw
@@ -154,7 +154,7 @@ theorem agreeS_adapt2 {side : Bool} {c c' : Codec V M} {π : (s : Bool) → Pair
 
 /-- **One `held` over two agreeing inner codecs agrees**, whatever the outers. -/
 theorem agreeS_held1 {side s : Bool} {M₁ M₁' : Type} {c c' : Codec V M}
-    {P : Codec V M₁} {P' : Codec V M₁'} {w : PairAt V s} (h : AgreeS side c c') :
+    {P : Codec V M₁} {P' : Codec V M₁'} {w : PairAt V} (h : AgreeS side c c') :
     AgreeS side (held1 s c P w) (held1 s c' P' w) :=
   agree_sub_left (sub_refine2_self _ _ _)
     (agree_sub_right (sub_refine2_self _ _ _) (agreeS_adapt2 h))
@@ -166,7 +166,7 @@ def KeepsMember (member : V → M) (c : Codec V M) (k : V → V) : Prop :=
 /-- **The member fact of an exit function at an absolute side.** The attributes carry the
     members, so the fact binds at the side `true`, and the side `false` owes nothing. -/
 def KeepsMemberAt (member : V → M) (c : Codec V M) :
-    (s : Bool) → (Side V s → Side V s) → Prop
+    (s : Bool) → (V → V) → Prop
   | false, _ => True
   | true, k => KeepsMember member c k
 
@@ -175,13 +175,13 @@ def KeepsMemberAt (member : V → M) (c : Codec V M) :
     side of the attributes. A `held` owes one obligation for one half, because the caller code is
     opaque: the model cannot derive the obligation of one half from the obligation of the other.
     A two-sided adapter is two nested `held`s, so it owes one obligation for each half. -/
-def Obl1 (member : V → M) (c : Codec V M) (s : Bool) (w : PairAt V s) : Prop :=
+def Obl1 (member : V → M) (c : Codec V M) (s : Bool) (w : PairAt V) : Prop :=
   IsoCancelsAt (Orient.at s) c w.1 w.2 ∧ KeepsMemberAt member c s w.2
 
 /-- **The adapter keeps the laws**, from the cancellation of the pair at each side and the member
     fact of the exit function at the side `true`. -/
 theorem Lawful.adapt2 {member : V → M} {c : Codec V M} (hc : Lawful member c)
-    {π : (s : Bool) → PairAt V s} (h : ∀ s, IsoCancelsAt (Orient.at s) c (π s).1 (π s).2)
+    {π : Bool → PairAt V} (h : ∀ s, IsoCancelsAt (Orient.at s) c (π s).1 (π s).2)
     (hm : KeepsMember member c (π true).2) : Lawful member (adapt2 c π) := by
   obtain ⟨hV1, hV2⟩ := h false
   obtain ⟨hA1, hA2⟩ := h true
@@ -201,7 +201,7 @@ theorem Lawful.adapt2 {member : V → M} {c : Codec V M} (hc : Lawful member c)
 /-- **The one-sided `held` keeps the laws**, from its one obligation. The other side holds the
     identity, which cancels and keeps every member. -/
 theorem Lawful.held1 {member : V → M} {M₁ : Type} {c : Codec V M} (hc : Lawful member c)
-    {s : Bool} (P : Codec V M₁) {w : PairAt V s} (h : Obl1 member c s w) :
+    {s : Bool} (P : Codec V M₁) {w : PairAt V} (h : Obl1 member c s w) :
     Lawful member (held1 s c P w) :=
   (hc.adapt2 (fun t => by
       cases s <;> cases t
@@ -211,7 +211,7 @@ theorem Lawful.held1 {member : V → M} {M₁ : Type} {c : Codec V M} (hc : Lawf
 /-- The adapter is on its carrier when the inner codec is, and the pair of the side `false`
     cancels on the written values. -/
 theorem carrier_adapt2 {member : V → M} {c : Codec V M} (hc : Carrier c)
-    (hlaw : LawfulCore member c) (π : (s : Bool) → PairAt V s)
+    (hlaw : LawfulCore member c) (π : Bool → PairAt V)
     (hfg : ∀ v, (c.e v).isSome → (π false).1 ((π false).2 v) = v) : Carrier (adapt2 c π) where
   domE he := let ⟨_, ha, _⟩ := Option.map_eq_some_iff.mp he; hc.domE ha
   ranP hp := by
@@ -222,7 +222,7 @@ theorem carrier_adapt2 {member : V → M} {c : Codec V M} (hc : Carrier c)
 
 /-- **The one-sided `held` is on its carrier**, from its one obligation. -/
 theorem carrier_held1 {member : V → M} {M₁ : Type} {c : Codec V M} (hc : Carrier c)
-    (hlaw : LawfulCore member c) {s : Bool} (P : Codec V M₁) {w : PairAt V s}
+    (hlaw : LawfulCore member c) {s : Bool} (P : Codec V M₁) {w : PairAt V}
     (h : Obl1 member c s w) : Carrier (held1 s c P w) :=
   carrier_refine2 (carrier_adapt2 hc hlaw _ (by cases s; exacts [h.1.2, fun _ _ => rfl])) _ _
 
@@ -230,16 +230,16 @@ theorem carrier_held1 {member : V → M} {M₁ : Type} {c : Codec V M} (hc : Car
 
 /-- **The object codec at an orientation**: read the caller prism, pass the presence guard, run
     each entry at the orientation, and build with the stored prism. -/
-theorem objectCodec_f (m : (s : Bool) → Ctor (MapOf (Side V s)) (Side V s)) (μM : M)
+theorem objectCodec_f (m : (s : Bool) → Ctor (MapOf (V)) (V)) (μM : M)
     (sems : MapOf (FieldSem V M)) {rest : RestSem V M} :
-    ∀ (o : Orient) (x : Side V o.c), (objectCodec (m false) (m true) μM sems rest).f o x =
+    ∀ (o : Orient) (x : V), (objectCodec (m false) (m true) μM sems rest).f o x =
       (((m o.c).out x).bind fun q => if valPresentB sems q.1 = true then
         (funImage fun k => (entryCodec sems (rcOf rest) k.1).bind fun c => c.f o (q.2 k)).map
-          (fun g => (⟨q.1, g⟩ : MapOf (Side V o.s))) else none).map (m o.s).into :=
+          (fun g => (⟨q.1, g⟩ : MapOf (V))) else none).map (m o.s).into :=
   Orient.both (P := fun o => ∀ x, (objectCodec (m false) (m true) μM sems rest).f o x =
       (((m o.c).out x).bind fun q => if valPresentB sems q.1 = true then
         (funImage fun k => (entryCodec sems (rcOf rest) k.1).bind fun c => c.f o (q.2 k)).map
-          (fun g => (⟨q.1, g⟩ : MapOf (Side V o.s))) else none).map (m o.s).into)
+          (fun g => (⟨q.1, g⟩ : MapOf (V))) else none).map (m o.s).into)
     (fun _ => rfl)
     (fun _ => rfl)
 

@@ -143,14 +143,14 @@ class Mean (B : Sig) where
   ground : B.Ground → Codec V Mem
   lawful_ground : ∀ g, Lawful mem (ground g)
   carrier_ground : ∀ g, Carrier (ground g)
-  eval : (s : Bool) → B.P s → Side V s → Bool
+  eval : (s : Bool) → B.P s → V → Bool
   /-- The predicate at each side that admits every element. -/
   truth : (s : Bool) → B.P s
   eval_truth : ∀ s x, eval s (truth s) x = true
-  d : (s : Bool) → Side V s → Nat
+  d : (s : Bool) → V → Nat
   d_pos : ∀ s x, 0 < d s x
-  list : Option (ListA (Side V) Mem mem d)
-  map : Option (MapA (Side V) Mem mem d)
+  list : Option (ListA (fun _ => V) Mem mem d)
+  map : Option (MapA (fun _ => V) Mem mem d)
   set : Option (SetF V Mem mem (d false) (d true))
   /-- The member that the judgement gives a primitive. -/
   groundμ : B.Ground → Option Mem
@@ -161,11 +161,7 @@ class Mean (B : Sig) where
   topHeld : V → Prop
   top_held : ∀ v, top.T v → topHeld v
 
-/-- The carrier of the side `true`: the one carrier of the meaning. -/
-abbrev Mean.A {B : Sig} [Mean B] : Type := Mean.V (B := B)
 
-/-- The carrier of a meaning at each absolute side: the one carrier of the meaning. -/
-abbrev Mean.Car {B : Sig} [Mean B] : Bool → Type := Side (Mean.V (B := B))
 
 /-- The codecs of a meaning: partial bijections of its carrier, with the member of the meaning. -/
 abbrev Mean.C (B : Sig) [Mean B] : Type :=
@@ -209,11 +205,8 @@ namespace Syn
 section
 variable (S : Syn) [Sem S]
 
-/-- The carrier of the caller side of a universe: the one carrier of its meaning. -/
-abbrev V : Type := Mean.Car (B := S.sig) S.o.c
-
-/-- The carrier of the stored side of a universe: the one carrier of its meaning. -/
-abbrev A : Type := Mean.Car (B := S.sig) S.o.s
+/-- The carrier of a universe: the one carrier of its meaning. -/
+abbrev V : Type := Mean.V (B := S.sig)
 
 /-- The member of a universe: the member of its meaning. -/
 abbrev M : Type := Mean.Mem (B := S.sig)
@@ -231,7 +224,7 @@ abbrev ground (g : S.Ground) : S.C := Mean.ground g
 abbrev eval : S.Pred → S.V → Bool := Mean.eval S.o.c
 
 /-- The meaning of a stored-side predicate. -/
-abbrev evalA : S.PredA → S.A → Bool := Mean.eval S.o.s
+abbrev evalA : S.PredA → S.V → Bool := Mean.eval S.o.s
 
 /-- The caller-side predicate that admits every value. -/
 abbrev truth : S.Pred := Mean.truth S.o.c
@@ -243,13 +236,13 @@ theorem eval_truth (v : S.V) : Syn.eval Syn.truth v = true := Mean.eval_truth S.
 abbrev truthA : S.PredA := Mean.truth S.o.s
 
 /-- The stored-side truth admits every attribute. -/
-theorem evalA_truthA (a : S.A) : Syn.evalA Syn.truthA a = true := Mean.eval_truth S.o.s a
+theorem evalA_truthA (a : S.V) : Syn.evalA Syn.truthA a = true := Mean.eval_truth S.o.s a
 
 /-- The depth of a caller value. -/
 abbrev dV : S.V → Nat := Mean.d S.o.c
 
 /-- The depth of a stored attribute. -/
-abbrev dA : S.A → Nat := Mean.d S.o.s
+abbrev dA : S.V → Nat := Mean.d S.o.s
 
 /-- A caller value has a positive depth. -/
 theorem dV_pos (v : S.V) : 0 < Syn.dV v := Mean.d_pos S.o.c v
@@ -275,7 +268,7 @@ denotes each term by the same codec. -/
 /-- **A table of adapters at an absolute side**: the entry function and the exit function of each
     generator of the side. -/
 abbrev TableAt (B : Sig) [Mean B] (s : Bool) : Type :=
-  B.G s → (Mean.Car (B := B) s → Mean.Car (B := B) s) × (Mean.Car (B := B) s → Mean.Car (B := B) s)
+  B.G s → (Mean.V (B := B) → Mean.V (B := B)) × (Mean.V (B := B) → Mean.V (B := B))
 
 /-- **A table of adapters of a universe**: the table at its caller side. The table of the dual
     universe is the table at the stored side. `denote` reads a table as it reads the environment
@@ -287,13 +280,13 @@ variable {B : Sig} [Mean B] {s : Bool}
 
 /-- The pair of one signed generator: the converse swaps the two functions. -/
 def TableAt.letter (α : TableAt B s) (x : B.G s × Bool) :
-    (Mean.Car (B := B) s → Mean.Car (B := B) s) × (Mean.Car (B := B) s → Mean.Car (B := B) s) :=
+    (Mean.V (B := B) → Mean.V (B := B)) × (Mean.V (B := B) → Mean.V (B := B)) :=
   if x.2 then ((α x.1).2, (α x.1).1) else α x.1
 
 /-- **The pair of a word**: the empty word is the identity, and a word composes its letters,
     the first letter outermost on the caller side. -/
 def TableAt.word (α : TableAt B s) : List (B.G s × Bool) →
-    (Mean.Car (B := B) s → Mean.Car (B := B) s) × (Mean.Car (B := B) s → Mean.Car (B := B) s)
+    (Mean.V (B := B) → Mean.V (B := B)) × (Mean.V (B := B) → Mean.V (B := B))
   | [] => (id, id)
   | x :: k => ((α.letter x).1 ∘ (α.word k).1, (α.word k).2 ∘ (α.letter x).2)
 

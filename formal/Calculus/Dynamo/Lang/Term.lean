@@ -220,12 +220,12 @@ theorem opaq_TSubω (v : Value) :
     ((muStage_induct Carrier.empty (fun _ => carrier_opaqStep) (Value.depth v)).domE ha)
 
 /-- The depth of an element of each carrier. -/
-abbrev dynDepth : (s : Bool) → Alg.Side Value s → Nat
+abbrev dynDepth : (s : Bool) → Value → Nat
   | false => Value.depth
   | true => Attr.depth
 
 /-- The list former: the `arr` and `L` prisms. -/
-abbrev dList : Alg.ListA (Alg.Side Value) Member Attr.member dynDepth where
+abbrev dList : Alg.ListA (fun _ => Value) Member Attr.member dynDepth where
   p
     | false => arrV
     | true => lA
@@ -236,7 +236,7 @@ abbrev dList : Alg.ListA (Alg.Side Value) Member Attr.member dynDepth where
     | true, _, _, hx => Nat.succ_le_succ (Attr.depth_le_depthL hx)
 
 /-- The map former: the `map` and `M` prisms. -/
-abbrev dMap : Alg.MapA (Alg.Side Value) Member Attr.member dynDepth where
+abbrev dMap : Alg.MapA (fun _ => Value) Member Attr.member dynDepth where
   m
     | false => mapV
     | true => mA
