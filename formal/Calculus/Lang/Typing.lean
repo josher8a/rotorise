@@ -75,9 +75,8 @@ variable (α β) in
 mutual
 
 inductive Typed : Term S → (Mean.V (B := S.sig) → Prop) → Option (Syn.M S) → Prop where
-  /-- §3's ground rules, as one rule: the held set is the primitive codec's, and the member is the
-      one the universe names. -/
-  | prim (g : S.Ground) : Typed (.prim g) (Syn.ground g).T (Syn.groundμ g)
+  /-- §3's ground rules, as one rule: the held set and the member are the primitive codec's. -/
+  | prim (g : S.Ground) : Typed (.prim g) (Syn.ground g).T (Syn.ground g).μ
   /-- §3 `(set)`: the element's judgement, lifted by the set former of the universe. -/
   | set {L t T μ} (hL : Mean.set (B := S.sig) = some L) (h : Typed t T μ) :
       Typed (.set t) (L.held T) (μ.bind L.member)
@@ -99,7 +98,7 @@ inductive Typed : Term S → (Mean.V (B := S.sig) → Prop) → Option (Syn.M S)
         (false != s || ((denote α β P).e v).isSome)) μ
   | refine {t T μ p pA} (h : Typed t T μ) :
       Typed (.refine t p pA) (fun v => T v ∧ Mean.eval false p v) μ
-  | opaq : Typed .opaq Syn.topHeld none
+  | opaq : Typed .opaq Syn.topHeld (Syn.top (S := S)).μ
   /-- §5's bottom. It writes no value, so it stores no member, and its held set is `False`. -/
   | never : Typed .never HNever none
   /-- §4 `(object)`. The field table is a key set with a function on it, so the judgement is
@@ -225,7 +224,7 @@ mutual
 
 /-- The member a term stores, syntactically: the `⇝` index computed from the term. -/
 def μSyn : Term S → Option (Syn.M S)
-  | .prim g => Syn.groundμ g
+  | .prim g => (Syn.ground g).μ
   | .set t =>
       match Mean.set (B := S.sig) with
       | some L => (μSyn t).bind L.member
@@ -233,13 +232,47 @@ def μSyn : Term S → Option (Syn.M S)
   | .list _ _ _ => (Mean.list (B := S.sig)).map (·.μ)
   | .held _ t _ _ _ => μSyn t
   | .refine t _ _ => μSyn t
-  | .opaq | .var _ | .mu _ | .never => none
+  | .opaq => (Syn.top (S := S)).μ
+  | .var _ | .mu _ | .never => none
   | .object _ => (Mean.map (B := S.sig)).map (·.μ)
   | .union opts => unanimous (μSynList opts)
 
 def μSynList : List (Term S) → List (Option (Syn.M S))
   | [] => []
   | t :: ts => μSyn t :: μSynList ts
+
+end
+
+mutual
+
+/-- **The judgement's member is the denotation's**, at every universe. Each former stamps the
+    member that the syntax computes: a primitive its codec's, a set its lift's (`SetF.lift_μ`), a
+    list and an object their former's, a union the unanimous member of its options. A recursive
+    term and a free variable stamp none. -/
+theorem denote_μ : ∀ t : Term S, (denote α β t).μ = μSyn t
+  | .prim _ => rfl
+  | .set t => by
+      simp only [denote, denoteAbs, μSyn]
+      cases Mean.set (B := S.sig) with
+      | none => rfl
+      | some L => rw [L.lift_μ]; exact congrArg (·.bind L.member) (denote_μ t)
+  | .list _ _ _ => by
+      simp only [denote, denoteAbs, μSyn]
+      cases Mean.list (B := S.sig) <;> rfl
+  | .held _ t _ _ _ => denote_μ t
+  | .refine t _ _ => denote_μ t
+  | .opaq | .never | .var _ | .mu _ => rfl
+  | .object (.mk _ _ _) => by
+      simp only [denote, denoteAbs, bodySemAbs, μSyn]
+      cases Mean.map (B := S.sig) <;> rfl
+  | .union opts => congrArg unanimous (denoteμs_μSyn opts)
+
+/-- …and the options' members, per option. -/
+theorem denoteμs_μSyn : ∀ opts : List (Term S), denoteμsAbs (tables S.o α β) opts [] = μSynList opts
+  | [] => rfl
+  | t :: ts => by
+      simp only [denoteμsAbs, μSynList]
+      rw [show (denoteAbs (tables S.o α β) t []).μ = μSyn t from denote_μ t, denoteμs_μSyn ts]
 
 end
 

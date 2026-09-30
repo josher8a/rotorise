@@ -108,7 +108,7 @@ caller side, because no law reads a difference between the two sides.
 | the generators of the adapters | `Sig.G`, `Sig.decG`, at each absolute side | `DynGen` | `Empty` |
 | the depth | `Mean.d`, one function of the carrier | `Attr.depth` | a constant |
 | the list and map formers | `Mean.list` as a `ListA`, `Mean.map` as a `MapA`: one prism of the carrier | `dList`, `dMap` | none |
-| the set former | `Mean.set` as a `SetF` over the carriers of the meaning: a lift and its laws | `dSet`, over `setCodec` | none |
+| the set former | `Mean.set` as a `SetF` over the carrier of the meaning: a lift, its laws, and the member of a set from the member of its element (`SetF.member`, with `SetF.lift_μ`) | `dSet`, over `setCodec` | none |
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
 | the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | `dynOracle`, over the two views | `jsonOracle`, which certifies nothing |
 | the top | `Mean.top`, `Mean.lawful_top`, `Mean.topHeld` | `Ω`, `HOpaque` | `idCodec` |
@@ -118,6 +118,11 @@ caller side, because no law reads a difference between the two sides.
 | the laws of the leaves | `LeafAdm`, `LeafAdmA`, `LeafMeet` | `dynLeafAdm`, `dynLeafAdmA`, `dynLeafMeet` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafMeet` |
 | the set laws that the test reads | `FormerAdm`, `FormerAdmA` | `dynFormerAdm`, `dynFormerAdmA` | `jsonFormerAdm`, `jsonFormerAdmA` |
 | the former class of each value and attribute, and where each former lands | `Shapes` | `dynShapes`: the root constructor | `jsonShapes`: every value is a primitive |
+
+**The judgement's member is the denotation's member, at every universe (`denote_μ`).** The
+judgement reads a primitive's member and the top's member off their codecs, and a set's member
+through `SetF.member`. `SetF.lift_μ` requires the lift to stamp that same member. Without the
+law, the `⇝` index of the judgement states nothing about the codec.
 
 A former is an `Option`. A universe without a former denotes the term of that former as the
 bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only

@@ -133,8 +133,8 @@ namespace TypedWild export Alg.TypedWild (none some) end TypedWild
 
 /-- §3's ground rules: the held set is the base codec's. At `number` that set is `D`, §1's
     numeral domain, and at `null` it is the point `{null}`. -/
-theorem Typed.base (k : GroundKind) : Typed α (.base k) (baseCodec k).T (some k.member) :=
-  Alg.Typed.prim (S := dynSyn) (Ground.base k)
+theorem Typed.base (k : GroundKind) : Typed α (.base k) (baseCodec k).T (some k.member) := by
+  cases k <;> exact Alg.Typed.prim (S := dynSyn) (Ground.base _)
 
 /-- **§3 `(literal)`, with no premise line left.**
 
@@ -154,8 +154,8 @@ theorem Typed.base (k : GroundKind) : Typed α (.base k) (baseCodec k).T (some k
     **One value.** Several alternatives are a certified `union` of singletons, and
     `Calculus/Dynamo/Witness/LiteralArity1.lean` derives that rule from this one and `Typed.union`. -/
 theorem Typed.literal (k : GroundKind) (x : k.Carrier) :
-    Typed α (.literal k x) (HLit k x) (some k.member) :=
-  Alg.Typed.prim (S := dynSyn) (Ground.literal k x)
+    Typed α (.literal k x) (HLit k x) (some k.member) := by
+  cases k <;> exact Alg.Typed.prim (S := dynSyn) (Ground.literal _ x)
 
 /-- §3 `(set)`: the element's judgement, lifted. The held set is `℘⁺fin` of the element's,
     and the member is `setMember` of the element's.
@@ -241,8 +241,8 @@ theorem Typed.casesD {motive : ∀ t T μ, Typed α t T μ → Prop}
   cases h with
   | prim g =>
     cases g with
-    | base k => exact base k
-    | literal k x => exact literal k x
+    | base k => cases k <;> exact base _
+    | literal k x => cases k <;> exact literal _ x
   | set hL h => cases hL; exact set h
   | list hL hp hs hf => cases hL; exact list hp hs hf
   | @held s _ _ _ _ k₀ _ h =>
