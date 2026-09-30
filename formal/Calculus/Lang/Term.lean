@@ -89,15 +89,15 @@ def Word.dagger {S : Syn} (k : Word S) : Word S := k.reverse.map fun x => (x.1, 
 
 /-! ## The formers
 
-A former of the meaning holds one prism per absolute side and the member at the side `true`. The
-set former is a codec transformer over the carriers of the meaning. -/
+A former of the meaning holds one prism of the carrier, its member, and its depth law. The set
+former is a codec transformer over the carrier of the meaning. -/
 
 /-- The set former of a universe: the lift, its law, its agreement one layer down, and each half
     of agreement. -/
-structure SetF (V M : Type) (member : V → M) (dV : V → Nat) (dA : V → Nat) where
+structure SetF (V M : Type) (member : V → M) (depth : V → Nat) where
   lift : Codec V M → Codec V M
   lawful : ∀ {c}, Lawful member c → Lawful member (lift c)
-  agree : ∀ {d c₁ c₂}, AgreeLe dV dA d c₁ c₂ → AgreeLe dV dA (d + 1) (lift c₁) (lift c₂)
+  agree : ∀ {d c₁ c₂}, AgreeLe depth d c₁ c₂ → AgreeLe depth (d + 1) (lift c₁) (lift c₂)
   /-- The lift keeps each half of agreement: two sets whose element codecs agree on a half agree
       on that half. -/
   agreeS : ∀ {side : Bool} {c d : Codec V M}, AgreeS side c d → AgreeS side (lift c) (lift d)
@@ -112,22 +112,19 @@ structure SetF (V M : Type) (member : V → M) (dV : V → Nat) (dA : V → Nat)
   /-- The lift's held set is inside `held` of any bound on the element's held set. -/
   held_of : ∀ {c : Codec V M} {T : V → Prop}, (∀ v, c.T v → T v) → ∀ v, (lift c).T v → held T v
 
-/-- **The list former of a meaning**: one prism per absolute side, the member at the side `true`,
-    and one depth law for both sides. -/
-structure ListA (Car : Bool → Type) (Mem : Type) (mem : Car true → Mem)
-    (d : (s : Bool) → Car s → Nat) where
-  p : (s : Bool) → Ctor (List (Car s)) (Car s)
+/-- **The list former of a meaning**: one prism of the carrier, its member, and its depth law. -/
+structure ListA (V Mem : Type) (mem : V → Mem) (d : V → Nat) where
+  p : Ctor (List V) V
   μ : Mem
-  hμ : ∀ y, mem ((p true).into y) = μ
-  d_lt : ∀ s xs, ∀ x ∈ xs, d s x + 1 ≤ d s ((p s).into xs)
+  hμ : ∀ y, mem (p.into y) = μ
+  d_lt : ∀ xs, ∀ x ∈ xs, d x + 1 ≤ d (p.into xs)
 
 /-- **The keyed-map former of a meaning**: the same four facts onto `MapOf`. -/
-structure MapA (Car : Bool → Type) (Mem : Type) (mem : Car true → Mem)
-    (d : (s : Bool) → Car s → Nat) where
-  m : (s : Bool) → Ctor (MapOf (Car s)) (Car s)
+structure MapA (V Mem : Type) (mem : V → Mem) (d : V → Nat) where
+  m : Ctor (MapOf V) V
   μ : Mem
-  hμ : ∀ y, mem ((m true).into y) = μ
-  d_lt : ∀ s (x : MapOf (Car s)) k, d s (x.get k) + 1 ≤ d s ((m s).into x)
+  hμ : ∀ y, mem (m.into y) = μ
+  d_lt : ∀ (x : MapOf V) k, d (x.get k) + 1 ≤ d (m.into x)
 
 /-! ## The meaning -/
 
@@ -147,11 +144,12 @@ class Mean (B : Sig) where
   /-- The predicate at each side that admits every element. -/
   truth : (s : Bool) → B.P s
   eval_truth : ∀ s x, eval s (truth s) x = true
-  d : (s : Bool) → V → Nat
-  d_pos : ∀ s x, 0 < d s x
-  list : Option (ListA (fun _ => V) Mem mem d)
-  map : Option (MapA (fun _ => V) Mem mem d)
-  set : Option (SetF V Mem mem (d false) (d true))
+  /-- The depth of a datum, which bounds the stage of a recursive codec. -/
+  d : V → Nat
+  d_pos : ∀ x, 0 < d x
+  list : Option (ListA V Mem mem d)
+  map : Option (MapA V Mem mem d)
+  set : Option (SetF V Mem mem d)
   /-- The member that the judgement gives a primitive. -/
   groundμ : B.Ground → Option Mem
   top : Codec V Mem
@@ -175,11 +173,6 @@ theorem Mean.eval_half {B : Sig} [Mean B] (p : B.P false) (pA : B.P true) :
   | false => rfl
   | true => rfl
 
-/-- The depth of each absolute side is the depth at that side. -/
-theorem Mean.d_elim {B : Sig} [Mean B] :
-    ∀ s, Side.elim (Mean.d (B := B) false) (Mean.d true) s = Mean.d s
-  | false => rfl
-  | true => rfl
 
 /-- **The meaning of a universe**: the meaning of its signature. One instance serves every
     orientation, so the dual universe finds the meaning of the universe, and a lemma finds its
@@ -238,14 +231,11 @@ abbrev truthA : S.PredA := Mean.truth S.o.s
 /-- The stored-side truth admits every attribute. -/
 theorem evalA_truthA (a : S.V) : Syn.evalA Syn.truthA a = true := Mean.eval_truth S.o.s a
 
-/-- The depth of a caller value. -/
-abbrev dV : S.V → Nat := Mean.d S.o.c
+/-- The depth of a datum. -/
+abbrev d : S.V → Nat := Mean.d
 
-/-- The depth of a stored attribute. -/
-abbrev dA : S.V → Nat := Mean.d S.o.s
-
-/-- A caller value has a positive depth. -/
-theorem dV_pos (v : S.V) : 0 < Syn.dV v := Mean.d_pos S.o.c v
+/-- A datum has a positive depth. -/
+theorem d_pos (v : S.V) : 0 < Syn.d v := Mean.d_pos v
 
 /-- The member that the judgement gives a primitive. -/
 abbrev groundμ (g : S.Ground) : Option S.M := Mean.groundμ g
@@ -619,7 +609,7 @@ recurse on the term instead — and `sizeOf` cannot serve, because `Term.object`
 *function* and `sizeOf` is blind to functions (`sizeOf f = 0`).
 
 This is the measure that sees through it, and it is not a new idea: it is exactly the shape
-`Value.depth` in `Recursion.lean` uses — `attach.sup` over the key set where a list would
+`Attr.depth` in `Recursion.lean` uses — `attach.sup` over the key set where a list would
 fold. What matters is that it is **derived from the term** rather than supplied by a caller, so it
 appears in no statement, no `Obligations`, and no rule. That is the whole difference between this
 and the `fuel` parameter it replaces. -/
@@ -748,8 +738,8 @@ variable {B : Sig} [Mean B] (τ : (s : Bool) → TableAt B s)
 mutual
 
 /-- **Each term, at its certified combinator**, over the tables of each absolute side. The
-    denotation reads no orientation: each former reads its prism at each absolute side, and a
-    two-sided row stores each half at its absolute side. -/
+    denotation reads no orientation: each former reads its one prism, and a two-sided row stores
+    each half at its absolute side. -/
 noncomputable def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C B
   | .prim g, _ => Mean.ground g
   | .set t, ρ =>
@@ -758,7 +748,7 @@ noncomputable def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C
       | none => .empty
   | .list pre spread suf, ρ =>
       match Mean.list (B := B) with
-      | some L => listCodec (L.p false) (L.p true) L.μ (denoteListAbs pre ρ) (denoteOptAbs spread ρ)
+      | some L => listCodec L.p L.p L.μ (denoteListAbs pre ρ) (denoteOptAbs spread ρ)
           (denoteListAbs suf ρ)
       | none => .empty
   -- the side `s` reads its outer, and its word from its own table
@@ -772,7 +762,7 @@ noncomputable def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C
   | .never, _ => .empty
   | .var i, ρ => envAt ρ i
   -- each input reads the stage of the body that its own depth names
-  | .mu b, ρ => muCodec (Mean.d false) (Mean.d true) fun c => denoteAbs b (c :: ρ)
+  | .mu b, ρ => muCodec Mean.d fun c => denoteAbs b (c :: ρ)
 
 /-- The payload's semantics: the slot table and the open block, each through its own
     companion. -/
@@ -780,7 +770,7 @@ noncomputable def bodySemAbs : Body B → (ρ : List (Mean.C B) := []) → Mean.
   | .mk fields f wild, ρ =>
       match Mean.map (B := B) with
       | some F =>
-          objectCodec (F.m false) (F.m true) F.μ ⟨fields, fun k => fieldSemAbs (f k) ρ⟩
+          objectCodec F.m F.m F.μ ⟨fields, fun k => fieldSemAbs (f k) ρ⟩
             (wildSemAbs wild ρ)
       | none => .empty
 

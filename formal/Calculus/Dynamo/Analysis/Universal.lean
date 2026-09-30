@@ -163,16 +163,16 @@ theorem opaq_total : ∀ v : Value, Adm α .opaq v = true
   | .arr vs => by
       rw [Adm_opaq_arr]
       exact decide_eq_true (fun x hx =>
-        have : Value.depth x < Value.depth (.arr vs) := by
-          have := Value.depth_le_depthL hx; simp only [Value.depth]; omega
+        have : Attr.depth x < Attr.depth (.l vs) := by
+          have := Attr.depth_le_depthL hx; simp only [Attr.depth]; omega
         opaq_total x)
   | .map keys g => by
       rw [Adm_opaq_map]
       exact decide_eq_true (fun k =>
-        have : Value.depth (g k) < Value.depth (.map keys g) := by
-          have := Value.depth_map_entry (f := g) k; omega
+        have : Attr.depth (g k) < Attr.depth (.m keys g) := by
+          have := Attr.depth_map_entry (f := g) k; omega
         opaq_total (g k))
-termination_by v => Value.depth v
+termination_by v => Attr.depth v
 
 /-- **`opaque` is total, read side.** `opaque` reads every attribute. -/
 theorem opaqA_total : ∀ a : Attr, AdmA α .opaq a = true

@@ -105,7 +105,7 @@ recover the fuel-free reading. None of that was forced by the term language:
   argument disappears.
 
 The `Finset`-plus-function field table is *not* an obstruction — structural recursion goes
-straight through `f k`, as `Value.depth` in `Recursion.lean` does. `sizeOf` cannot see
+straight through `f k`, as `Attr.depth` in `Recursion.lean` does. `sizeOf` cannot see
 into a function, but `sizeOf` is only the measure once something forces well-founded recursion,
 and nothing here does.
 

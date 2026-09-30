@@ -84,7 +84,7 @@ inductive Typed : Term S → (Mean.V (B := S.sig) → Prop) → Option (Syn.M S)
   /-- `(list)`: one rule for the one positional container. -/
   | list {L pre Tpre sp Tsp suf Tsuf} (hL : Mean.list (B := S.sig) = some L)
       (hp : TypedList pre Tpre) (hs : TypedOpt sp Tsp) (hf : TypedList suf Tsuf) :
-      Typed (.list pre sp suf) (HList (L.p false) Tpre Tsp Tsuf) (some L.μ)
+      Typed (.list pre sp suf) (HList L.p Tpre Tsp Tsuf) (some L.μ)
   /-- `(held)`: the held set **is** the premise's, pulled back along the entry function of the
       side `false`, and cut by the write domain of `P` where `s` is the side `false`; the
       cancellation laws are `Obligations`'.
@@ -109,7 +109,7 @@ inductive Typed : Term S → (Mean.V (B := S.sig) → Prop) → Option (Syn.M S)
       (hF : Mean.map (B := S.sig) = some F)
       (hf : ∀ k, TypedField (body.at k) (bind k).2 (bind k).1 (μs k))
       (hr : TypedWild body.wild R) :
-      Typed (.object body) (HObject (F.m false) body.fields bind R) (some F.μ)
+      Typed (.object body) (HObject F.m body.fields bind R) (some F.μ)
   /-- `(union)`: the option judgements. -/
   | union {opts Ts μs} (h : TypedListμ opts Ts μs) :
       Typed (.union opts) (HUnion Ts) (unanimous μs)

@@ -37,10 +37,10 @@ noncomputable section
 
 /-- The elements of a value, where the list former reads one. -/
 def listOut (v : S.V) : Option (List S.V) :=
-  (Mean.list (B := S.sig)).bind fun L => (L.p S.o.c).out v
+  (Mean.list (B := S.sig)).bind fun L => L.p.out v
 
 /-- The entries of a value, where the map former reads one. -/
-def mapOut (v : S.V) : Option (MapOf S.V) := (Mean.map (B := S.sig)).bind fun F => (F.m S.o.c).out v
+def mapOut (v : S.V) : Option (MapOf S.V) := (Mean.map (B := S.sig)).bind fun F => F.m.out v
 
 /-- A `list` admits a value that the list former reads by the row of its positions. -/
 theorem Adm_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.V}
@@ -169,17 +169,15 @@ omit [PrimAdm S] in
     names. -/
 theorem denote_mu_f (b : Term S) (ρ : List S.C) (v : S.V) :
     (denote α β (.mu b) ρ).f S.o v =
-      (muStage (fun c => denote α β b (c :: ρ)) (Syn.dV v)).f S.o v :=
-  congrArg (fun n => (muStage (fun c => denote α β b (c :: ρ)) n).f S.o v)
-    (congrFun (Mean.d_elim S.o.c) v)
+      (muStage (fun c => denote α β b (c :: ρ)) (Syn.d v)).f S.o v := rfl
 
 /-- **A recursive term admits what its body admits over the stage below the value's depth.** The
     limit reads a value at the stage that the value's depth names, and that stage is the body over
     the stage below. So the unfolding needs no guard. -/
 theorem Adm_mu_unfold (b : Term S) (ρ : List S.C) (v : S.V) :
-    Adm α β (.mu b) ρ v = Adm α β b (muStage (fun c => denote α β b (c :: ρ)) (Syn.dV v - 1) :: ρ) v := by
+    Adm α β (.mu b) ρ v = Adm α β b (muStage (fun c => denote α β b (c :: ρ)) (Syn.d v - 1) :: ρ) v := by
   rw [Adm_eq_isSome (.mu b), denote_mu_f, Adm_eq_isSome b]
-  obtain ⟨n, hn⟩ : ∃ n, Syn.dV v = n + 1 := ⟨Syn.dV v - 1, by have := Syn.dV_pos v; omega⟩
+  obtain ⟨n, hn⟩ : ∃ n, Syn.d v = n + 1 := ⟨Syn.d v - 1, by have := Syn.d_pos v; omega⟩
   rw [hn, Nat.add_sub_cancel]
   rfl
 
@@ -704,7 +702,7 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S
               ((denote α β b' (c' :: ρ')).f S.o u).isSome) = false := fun c c' hc u => by
           have := disjoint_sound (pairMu p) b b' h (c :: ρ) (c' :: ρ') (hp.mu hc) u
           rwa [Adm_eq_isSome, Adm_eq_isSome] at this
-        have := stage_apart hB (Syn.dV v) v
+        have := stage_apart hB (Syn.d v) v
         rw [Adm_eq_isSome, Adm_eq_isSome, denote_mu_f, denote_mu_f]
         exact this
       | _ =>

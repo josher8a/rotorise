@@ -217,34 +217,21 @@ theorem opaq_TSubω (v : Value) :
   intro h
   obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
   exact opaq_TSub _ v
-    ((muStage_induct Carrier.empty (fun _ => carrier_opaqStep) (Value.depth v)).domE ha)
+    ((muStage_induct Carrier.empty (fun _ => carrier_opaqStep) (Attr.depth v)).domE ha)
 
-/-- The depth of an element of each carrier. -/
-abbrev dynDepth : (s : Bool) → Value → Nat
-  | false => Value.depth
-  | true => Attr.depth
-
-/-- The list former: the `arr` and `L` prisms. -/
-abbrev dList : Alg.ListA (fun _ => Value) Member Attr.member dynDepth where
-  p
-    | false => arrV
-    | true => lA
+/-- The list former: the `L` prism. -/
+abbrev dList : Alg.ListA Value Member Attr.member Attr.depth where
+  p := lA
   μ := .L
   hμ _ := rfl
-  d_lt
-    | false, _, _, hx => Nat.succ_le_succ (Value.depth_le_depthL hx)
-    | true, _, _, hx => Nat.succ_le_succ (Attr.depth_le_depthL hx)
+  d_lt _ _ hx := Nat.succ_le_succ (Attr.depth_le_depthL hx)
 
-/-- The map former: the `map` and `M` prisms. -/
-abbrev dMap : Alg.MapA (fun _ => Value) Member Attr.member dynDepth where
-  m
-    | false => mapV
-    | true => mA
+/-- The map former: the `M` prism. -/
+abbrev dMap : Alg.MapA Value Member Attr.member Attr.depth where
+  m := mA
   μ := .M
   hμ _ := rfl
-  d_lt
-    | false, m, k => Value.depth_map_entry (f := m.2) k
-    | true, m, k => Attr.depth_map_entry (f := m.2) k
+  d_lt m k := Attr.depth_map_entry (f := m.2) k
 
 /-- **Two element codecs that agree on the read half read a wire set to one value set.** -/
 theorem decSet_agree {α : Type} {c d : Codec} {inj : α → Attr} {S : NEFinset α} {t w : Value}
@@ -263,7 +250,7 @@ theorem encSet_agree {α : Type} {c d : Codec} {inj : α → Value} {S : NEFinse
     rw [hu, hu', h _ _ _ hu hu'])).trans hb
 
 /-- The set former: the lift, with the store's set rule as the element's obligation. -/
-noncomputable abbrev dSet : Alg.SetF Value Member Attr.member Value.depth Attr.depth where
+noncomputable abbrev dSet : Alg.SetF Value Member Attr.member Attr.depth where
   lift := setCodec
   lawful h := lawful_setCodec h
   agree h := agreeLe_setCodec h
@@ -337,10 +324,8 @@ abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
   eval_truth
     | false, _ => rfl
     | true, _ => rfl
-  d := dynDepth
-  d_pos
-    | false => Value.depth_pos
-    | true => Attr.depth_pos
+  d := Attr.depth
+  d_pos := Attr.depth_pos
   list := some dList
   map := some dMap
   set := some dSet

@@ -106,8 +106,8 @@ caller side, because no law reads a difference between the two sides.
 | the primitives and their codecs | `Sig.Ground`, `Mean.ground`, `Mean.lawful_ground` | `Ground`, `groundCodec` | `JMember`, `ground` |
 | the predicates | `Sig.P`, `Mean.eval`, at each absolute side | `Pred`, `Pred.eval` | a function on `Json` |
 | the generators of the adapters | `Sig.G`, `Sig.decG`, at each absolute side | `DynGen` | `Empty` |
-| the depths | `Mean.d`, at each absolute side | `Value.depth`, `Attr.depth` | a constant |
-| the list and map formers | `Mean.list` as a `ListA`, `Mean.map` as a `MapA`: a prism at each absolute side | `dList`, `dMap` | none |
+| the depth | `Mean.d`, one function of the carrier | `Attr.depth` | a constant |
+| the list and map formers | `Mean.list` as a `ListA`, `Mean.map` as a `MapA`: one prism of the carrier | `dList`, `dMap` | none |
 | the set former | `Mean.set` as a `SetF` over the carriers of the meaning: a lift and its laws | `dSet`, over `setCodec` | none |
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
 | the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | `dynOracle`, over the two views | `jsonOracle`, which certifies nothing |
@@ -362,8 +362,8 @@ What matters is that the measure is **derived from the term**, so it appears in 
 it, and an inequality the block does not offer goes beside `Term.depth` rather than inline.
 
 A recursive term recurses on its input, not on the term. `muCodec` reads each input at the stage
-that the input's own depth names, by the depths of the universe: `Syn.dV` on the write side and
-`Syn.dA` on the read side, which are `Value.depth` and `Attr.depth` at DynamoDB.
+that the input's own depth names, by the depth of the universe: `Syn.d`, which is `Attr.depth`
+at DynamoDB. The depth reads no orientation, so a stage is one stage at both orientations.
 That budget is a structural recursion on the input, so a closed recursive term still reduces by
 `rfl`, and the bridge states its vectors. A well-founded budget evaluates and does not reduce in
 the kernel.

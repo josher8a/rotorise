@@ -87,20 +87,20 @@ theorem agree_alt_right {o : Orient} {os : List (Codec V M)} {μ : Option M} {c 
 
 /-- **Two recursive codecs agree where their stages agree**: each input reads the stage of its
     own depth, at each orientation. -/
-theorem agree_mu {o : Orient} {dV : V → Nat} {dA : V → Nat} {B B' : Codec V M → Codec V M}
+theorem agree_mu {o : Orient} {depth : V → Nat} {B B' : Codec V M → Codec V M}
     (h : ∀ n, Agree o (muStage B n) (muStage B' n)) :
-    Agree o (muCodec dV dA B) (muCodec dV dA B') :=
-  fun x => h (Side.elim dV dA o.c x) x
+    Agree o (muCodec depth B) (muCodec depth B') :=
+  fun x => h (depth x) x
 
 /-- …and a recursive codec agrees with a partner that every stage agrees with. -/
-theorem agree_mu_left {o : Orient} {dV : V → Nat} {dA : V → Nat} {B : Codec V M → Codec V M}
-    {d : Codec V M} (h : ∀ n, Agree o (muStage B n) d) : Agree o (muCodec dV dA B) d :=
-  fun x => h (Side.elim dV dA o.c x) x
+theorem agree_mu_left {o : Orient} {depth : V → Nat} {B : Codec V M → Codec V M}
+    {d : Codec V M} (h : ∀ n, Agree o (muStage B n) d) : Agree o (muCodec depth B) d :=
+  fun x => h (depth x) x
 
 /-- …on the right. -/
-theorem agree_mu_right {o : Orient} {dV : V → Nat} {dA : V → Nat} {B : Codec V M → Codec V M}
-    {c : Codec V M} (h : ∀ n, Agree o c (muStage B n)) : Agree o c (muCodec dV dA B) :=
-  fun x => h (Side.elim dV dA o.c x) x
+theorem agree_mu_right {o : Orient} {depth : V → Nat} {B : Codec V M → Codec V M}
+    {c : Codec V M} (h : ∀ n, Agree o c (muStage B n)) : Agree o c (muCodec depth B) :=
+  fun x => h (depth x) x
 
 /-- Two carried codecs over one prism pair agree where their payload pairs agree. -/
 theorem agreeE_carried {γ δ : Type} {pV : Ctor γ V} {pA : Ctor δ V} {μ₀ : M}
