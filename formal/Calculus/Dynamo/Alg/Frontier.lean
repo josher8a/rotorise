@@ -38,29 +38,29 @@ theorem member_of_bC {a : Attr} (h : (bC.out a).isSome = true) : a.member = .B :
 
 export Alg (setImage_read)
 
-/-- `decSet` lands on the string branch when the reads produce strings. -/
-theorem decSet_strBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
-    {U : NEFinset String}
-    (h1 : neSetImage (fun y => (c.p (inj y)).bind sC.out) S = some U) :
-    decSet c inj S = some (.strSet U) := by
-  unfold decSet; rw [h1]
+/-- `setAt` moves a string set when the element images are strings. -/
+theorem setAt_ssBranch {α : Type} {o : Alg.Orient} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {T : NEFinset String}
+    (h1 : neSetImage (fun x => (c.f o (inj x)).bind sC.out) S = some T) :
+    setAt o c inj S = some (.ss T) := by
+  unfold setAt; rw [h1]
 
-/-- …the numeric branch when they produce numbers, the string branch having failed. -/
-theorem decSet_numBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
-    {U : NEFinset WFNumeral}
-    (h0 : neSetImage (fun y => (c.p (inj y)).bind sC.out) S = none)
-    (h1 : neSetImage (fun y => (c.p (inj y)).bind nC.out) S = some U) :
-    decSet c inj S = some (.numSet U) := by
-  unfold decSet; rw [h0, h1]
+/-- …a number set when they are numbers, the string branch having failed. -/
+theorem setAt_nsBranch {α : Type} {o : Alg.Orient} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {T : NEFinset WFNumeral}
+    (h0 : neSetImage (fun x => (c.f o (inj x)).bind sC.out) S = none)
+    (h1 : neSetImage (fun x => (c.f o (inj x)).bind nC.out) S = some T) :
+    setAt o c inj S = some (.ns T) := by
+  unfold setAt; rw [h0, h1]
 
-/-- …and the binary branch when both earlier ones have. -/
-theorem decSet_binBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
-    {U : NEFinset Bytes}
-    (h0 : neSetImage (fun y => (c.p (inj y)).bind sC.out) S = none)
-    (h0' : neSetImage (fun y => (c.p (inj y)).bind nC.out) S = none)
-    (h1 : neSetImage (fun y => (c.p (inj y)).bind bC.out) S = some U) :
-    decSet c inj S = some (.binSet U) := by
-  unfold decSet; rw [h0, h0', h1]; rfl
+/-- …and a binary set when both earlier ones have. -/
+theorem setAt_bsBranch {α : Type} {o : Alg.Orient} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {T : NEFinset Bytes}
+    (h0 : neSetImage (fun x => (c.f o (inj x)).bind sC.out) S = none)
+    (h0' : neSetImage (fun x => (c.f o (inj x)).bind nC.out) S = none)
+    (h1 : neSetImage (fun x => (c.f o (inj x)).bind bC.out) S = some T) :
+    setAt o c inj S = some (.bs T) := by
+  unfold setAt; rw [h0, h0', h1]; rfl
 
 /-- **(R) for `set`.** The wire image inverts by `setImage_inv`, and the read side lands on
     the branch the element codec's own reads determine — the *value* kind fixes it, whichever
@@ -91,18 +91,18 @@ theorem set_retract {c : Codec} (h : LawfulCore c) :
     obtain ⟨x, -, hpx⟩ := setImage_read h hA (neSetImage_eq_setImage.mp hI) y hy
     exact neSetImage_none (setImage_none_of hy (by rw [hpx]; simpa using hV x))
   intro t a he
-  rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
-    (unfold encSet at hE
+  rcases setCodec_f_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
+    (unfold setAt at hE
      split at hE
      · next T hT =>
        injection hE with hE; subst hE
        first
-       | exact decSet_strBranch
+       | exact setAt_ssBranch
            (key (vinj := Value.str) (vout := sC.out) sC_out_inj (fun _ => rfl) hT)
-       | exact decSet_numBranch
+       | exact setAt_nsBranch
            (miss (vinj := Value.num) (vout := sC.out) sC_out_inj (fun _ => rfl) hT)
            (key (vinj := Value.num) (vout := nC.out) sC_out_inj (fun _ => rfl) hT)
-       | exact decSet_binBranch
+       | exact setAt_bsBranch
            (miss (vinj := Value.bin) (vout := sC.out) sC_out_inj (fun _ => rfl) hT)
            (miss (vinj := Value.bin) (vout := nC.out) sC_out_inj (fun _ => rfl) hT)
            (key (vinj := Value.bin) (vout := bC.out) sC_out_inj (fun _ => rfl) hT)
@@ -110,12 +110,12 @@ theorem set_retract {c : Codec} (h : LawfulCore c) :
        · next T hT =>
          injection hE with hE; subst hE
          first
-         | exact decSet_strBranch
+         | exact setAt_ssBranch
              (key (vinj := Value.str) (vout := sC.out) nC_out_inj (fun _ => rfl) hT)
-         | exact decSet_numBranch
+         | exact setAt_nsBranch
              (miss (vinj := Value.num) (vout := sC.out) nC_out_inj (fun _ => rfl) hT)
              (key (vinj := Value.num) (vout := nC.out) nC_out_inj (fun _ => rfl) hT)
-         | exact decSet_binBranch
+         | exact setAt_bsBranch
              (miss (vinj := Value.bin) (vout := sC.out) nC_out_inj (fun _ => rfl) hT)
              (miss (vinj := Value.bin) (vout := nC.out) nC_out_inj (fun _ => rfl) hT)
              (key (vinj := Value.bin) (vout := bC.out) nC_out_inj (fun _ => rfl) hT)
@@ -123,18 +123,18 @@ theorem set_retract {c : Codec} (h : LawfulCore c) :
          obtain ⟨T, hT, hA⟩ := Option.map_eq_some_iff.mp hE
          subst hA
          first
-         | exact decSet_strBranch
+         | exact setAt_ssBranch
              (key (vinj := Value.str) (vout := sC.out) bC_out_inj (fun _ => rfl) hT)
-         | exact decSet_numBranch
+         | exact setAt_nsBranch
              (miss (vinj := Value.num) (vout := sC.out) bC_out_inj (fun _ => rfl) hT)
              (key (vinj := Value.num) (vout := nC.out) bC_out_inj (fun _ => rfl) hT)
-         | exact decSet_binBranch
+         | exact setAt_bsBranch
              (miss (vinj := Value.bin) (vout := sC.out) bC_out_inj (fun _ => rfl) hT)
              (miss (vinj := Value.bin) (vout := nC.out) bC_out_inj (fun _ => rfl) hT)
              (key (vinj := Value.bin) (vout := bC.out) bC_out_inj (fun _ => rfl) hT))
 
 /-- **(W) for `set`.** The wire member is `setMember` of the element's, and which branch
-    `encSet` took is fixed by the element codec's own member. -/
+    `setAt` took is fixed by the element codec's own member. -/
 theorem set_writes {c : Codec} (h : LawfulCore c) :
     ∀ {μ}, (setCodec c).μ = some μ → ∀ {t a}, (setCodec c).e t = some a →
       a.member = μ := by
@@ -145,11 +145,11 @@ theorem set_writes {c : Codec} (h : LawfulCore c) :
   | some μ₀ =>
     rw [hc] at hμ
     replace hμ : setMember μ₀ = some μ := hμ
-    rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
+    rcases setCodec_f_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
       · obtain ⟨x₀, hx₀⟩ := S.2
-        obtain ⟨a₀, ha₀⟩ := Option.isSome_iff_exists.mp (encSet_elem hE x₀ hx₀)
+        obtain ⟨a₀, ha₀⟩ := Option.isSome_iff_exists.mp (setAt_elem hE x₀ hx₀)
         have hm₀ : a₀.member = μ₀ := h.writes hc ha₀
-        unfold encSet at hE
+        unfold setAt at hE
         split at hE
         · next T hT =>
           injection hE with hE; subst hE
@@ -173,16 +173,16 @@ theorem set_writes {c : Codec} (h : LawfulCore c) :
             simpa [Attr.member] using Option.some.inj hμ
 
 /-- Writing a set succeeds when its elements do and the element member is ground: the
-    member fixes which branch `encSet` takes, and (R) supplies the injectivity. -/
-theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
+    member fixes which branch `setAt` takes, and (R) supplies the injectivity. -/
+theorem setAt_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
     {μ₀ μS : Member} (hsm : setMember μ₀ = some μS)
     {vinj : α → Value} (hvi : ∀ x y, vinj x = vinj y → x = y)
     {S : NEFinset α}
     (hall : ∀ x ∈ S.1, (c.e (vinj x)).isSome = true)
     (hmem : ∀ x ∈ S.1, ∀ a', c.e (vinj x) = some a' → a'.member = μ₀) :
-    (encSet c vinj S).isSome = true := by
+    (setAt .host c vinj S).isSome = true := by
   obtain ⟨x₀, hx₀⟩ := S.2
-  unfold encSet
+  unfold setAt
   -- the element member decides the branch
   cases μ₀
   case S =>
@@ -265,30 +265,6 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
   all_goals exact nomatch hsm
 
 
-/-- `encSet` writes a string set when the element writes produce strings. -/
-theorem encSet_ssBranch {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset α}
-    {T : NEFinset String}
-    (h1 : neSetImage (fun x => (c.e (inj x)).bind sC.out) S = some T) :
-    encSet c inj S = some (.ss T) := by
-  unfold encSet; rw [h1]
-
-/-- …a number set when they produce numbers, the string branch having failed. -/
-theorem encSet_nsBranch {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset α}
-    {T : NEFinset WFNumeral}
-    (h0 : neSetImage (fun x => (c.e (inj x)).bind sC.out) S = none)
-    (h1 : neSetImage (fun x => (c.e (inj x)).bind nC.out) S = some T) :
-    encSet c inj S = some (.ns T) := by
-  unfold encSet; rw [h0, h1]
-
-/-- …and a binary set when both earlier ones have. -/
-theorem encSet_bsBranch {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset α}
-    {T : NEFinset Bytes}
-    (h0 : neSetImage (fun x => (c.e (inj x)).bind sC.out) S = none)
-    (h0' : neSetImage (fun x => (c.e (inj x)).bind nC.out) S = none)
-    (h1 : neSetImage (fun x => (c.e (inj x)).bind bC.out) S = some T) :
-    encSet c inj S = some (.bs T) := by
-  unfold encSet; rw [h0, h0', h1]; rfl
-
 /-- **Canonical reads for `set`.** The mirror of `set_retract`: the read image inverts by
     `setImage_inv`, and the write lands on the wire member of the attribute that was read. -/
 theorem set_canon {c : Codec} (h : Lawful c) :
@@ -320,36 +296,36 @@ theorem set_canon {c : Codec} (h : Lawful c) :
   have hn : ∀ o x, o.bind nC.out = some x → o = some (Value.num x) := fun _ _ => bind_nC
   have hb : ∀ o x, o.bind bC.out = some x → o = some (Value.bin x) := fun _ _ => bind_bC
   intro a t hp
-  rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
-    (unfold decSet at hD
+  rcases setCodec_f_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
+    (unfold setAt at hD
      split at hD
      · next U hU =>
        injection hD with hD; subst hD
        first
-       | exact encSet_ssBranch (key (aout := sC.out) (fun _ => rfl) hs hU)
-       | exact encSet_nsBranch (miss (aout := sC.out) (fun _ => rfl) hs hU)
+       | exact setAt_ssBranch (key (aout := sC.out) (fun _ => rfl) hs hU)
+       | exact setAt_nsBranch (miss (aout := sC.out) (fun _ => rfl) hs hU)
            (key (aout := nC.out) (fun _ => rfl) hs hU)
-       | exact encSet_bsBranch (miss (aout := sC.out) (fun _ => rfl) hs hU)
+       | exact setAt_bsBranch (miss (aout := sC.out) (fun _ => rfl) hs hU)
            (miss (aout := nC.out) (fun _ => rfl) hs hU)
            (key (aout := bC.out) (fun _ => rfl) hs hU)
      · split at hD
        · next U hU =>
          injection hD with hD; subst hD
          first
-         | exact encSet_ssBranch (key (aout := sC.out) (fun _ => rfl) hn hU)
-         | exact encSet_nsBranch (miss (aout := sC.out) (fun _ => rfl) hn hU)
+         | exact setAt_ssBranch (key (aout := sC.out) (fun _ => rfl) hn hU)
+         | exact setAt_nsBranch (miss (aout := sC.out) (fun _ => rfl) hn hU)
              (key (aout := nC.out) (fun _ => rfl) hn hU)
-         | exact encSet_bsBranch (miss (aout := sC.out) (fun _ => rfl) hn hU)
+         | exact setAt_bsBranch (miss (aout := sC.out) (fun _ => rfl) hn hU)
              (miss (aout := nC.out) (fun _ => rfl) hn hU)
              (key (aout := bC.out) (fun _ => rfl) hn hU)
        · next =>
          obtain ⟨U, hU, hA⟩ := Option.map_eq_some_iff.mp hD
          subst hA
          first
-         | exact encSet_ssBranch (key (aout := sC.out) (fun _ => rfl) hb hU)
-         | exact encSet_nsBranch (miss (aout := sC.out) (fun _ => rfl) hb hU)
+         | exact setAt_ssBranch (key (aout := sC.out) (fun _ => rfl) hb hU)
+         | exact setAt_nsBranch (miss (aout := sC.out) (fun _ => rfl) hb hU)
              (key (aout := nC.out) (fun _ => rfl) hb hU)
-         | exact encSet_bsBranch (miss (aout := sC.out) (fun _ => rfl) hb hU)
+         | exact setAt_bsBranch (miss (aout := sC.out) (fun _ => rfl) hb hU)
              (miss (aout := nC.out) (fun _ => rfl) hb hU)
              (key (aout := bC.out) (fun _ => rfl) hb hU))
 
@@ -415,7 +391,7 @@ theorem onKind_number : Codec.OnKind (numberCodec) .number := by
     not a special construction. -/
 theorem onKind_set (c : Codec) : Codec.OnKind ((setCodec c)) .set := by
   constructor <;> intro x hx <;> cases x <;>
-    simp_all [setCodec, Value.kind, Attr.kind]
+    simp_all [setCodec, Alg.Codec.e, Alg.Codec.p, Value.kind, Attr.kind]
 
 theorem onKind_array (c : Codec) :
     Codec.OnKind ((arrayCodec c)) .array := by

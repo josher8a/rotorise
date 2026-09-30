@@ -55,21 +55,21 @@ theorem opaqStep_e_strSet (c : Codec) (S : NEFinset String) :
     (opaqStep c).e (.strSet S)
       = (setCodec c).e (.strSet S) := by
   cases he : (setCodec c).e (.strSet S) <;>
-    simp [-setCodec, he]
+    simp [-setCodec, he, Alg.Codec.e, Alg.Codec.p]
 
 /-- §3 `(opaque)`, write side at kind `set`, number elements. -/
 theorem opaqStep_e_numSet (c : Codec) (S : NEFinset WFNumeral) :
     (opaqStep c).e (.numSet S)
       = (setCodec c).e (.numSet S) := by
   cases he : (setCodec c).e (.numSet S) <;>
-    simp [-setCodec, he]
+    simp [-setCodec, he, Alg.Codec.e, Alg.Codec.p]
 
 /-- §3 `(opaque)`, write side at kind `set`, byte-string elements. -/
 theorem opaqStep_e_binSet (c : Codec) (S : NEFinset Bytes) :
     (opaqStep c).e (.binSet S)
       = (setCodec c).e (.binSet S) := by
   cases he : (setCodec c).e (.binSet S) <;>
-    simp [-setCodec, he]
+    simp [-setCodec, he, Alg.Codec.e, Alg.Codec.p]
 
 /-- §3 `(opaque)`, write side at kind `array`: the `L` option, recursing through `c`. -/
 theorem opaqStep_e_arr (c : Codec) (vs : List Value) :
@@ -102,19 +102,19 @@ attribute [local simp] opaqStep opaqOptions Alg.altCodec_f_def select stringCode
 theorem opaqStep_p_ss (c : Codec) (vs : NEFinset String) :
     (opaqStep c).p (.ss vs) = (setCodec c).p (.ss vs) := by
   cases hp : (setCodec c).p (.ss vs) <;>
-    simp [-setCodec, hp]
+    simp [-setCodec, hp, Alg.Codec.e, Alg.Codec.p]
 
 /-- §3 `(opaque)`, read side at member `NS`. -/
 theorem opaqStep_p_ns (c : Codec) (vs : NEFinset WFNumeral) :
     (opaqStep c).p (.ns vs) = (setCodec c).p (.ns vs) := by
   cases hp : (setCodec c).p (.ns vs) <;>
-    simp [-setCodec, hp]
+    simp [-setCodec, hp, Alg.Codec.e, Alg.Codec.p]
 
 /-- §3 `(opaque)`, read side at member `BS`. -/
 theorem opaqStep_p_bs (c : Codec) (vs : NEFinset Bytes) :
     (opaqStep c).p (.bs vs) = (setCodec c).p (.bs vs) := by
   cases hp : (setCodec c).p (.bs vs) <;>
-    simp [-setCodec, hp]
+    simp [-setCodec, hp, Alg.Codec.e, Alg.Codec.p]
 
 /-- §3 `(opaque)`, read side at member `L`. -/
 theorem opaqStep_p_l (c : Codec) (as : List Attr) :
@@ -177,23 +177,23 @@ theorem Ωp_m (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
     Ω.p (.m keys g) = (funImage fun k => Ω.p (g k)).map (Value.map keys) := by
   rw [Ωp_fix, opaqStep_p_m]; rfl
 
-/-- `Ω` writes a string set through `encSet` over `Ω` itself. -/
-theorem Ωe_strSet (S : NEFinset String) : Ω.e (.strSet S) = encSet Ω Value.str S := by
+/-- `Ω` writes a string set through `setAt` at the host over `Ω` itself. -/
+theorem Ωe_strSet (S : NEFinset String) : Ω.e (.strSet S) = setAt .host Ω Value.str S := by
   rw [Ωe_fix, opaqStep_e_strSet]; rfl
-/-- `Ω` writes a number set through `encSet` over `Ω` itself. -/
-theorem Ωe_numSet (S : NEFinset WFNumeral) : Ω.e (.numSet S) = encSet Ω Value.num S := by
+/-- `Ω` writes a number set through `setAt` at the host over `Ω` itself. -/
+theorem Ωe_numSet (S : NEFinset WFNumeral) : Ω.e (.numSet S) = setAt .host Ω Value.num S := by
   rw [Ωe_fix, opaqStep_e_numSet]; rfl
-/-- `Ω` writes a binary set through `encSet` over `Ω` itself. -/
-theorem Ωe_binSet (S : NEFinset Bytes) : Ω.e (.binSet S) = encSet Ω Value.bin S := by
+/-- `Ω` writes a binary set through `setAt` at the host over `Ω` itself. -/
+theorem Ωe_binSet (S : NEFinset Bytes) : Ω.e (.binSet S) = setAt .host Ω Value.bin S := by
   rw [Ωe_fix, opaqStep_e_binSet]; rfl
-/-- `Ω` reads `SS` through `decSet` over `Ω` itself. -/
-theorem Ωp_ss (S : NEFinset String) : Ω.p (.ss S) = decSet Ω Attr.s S := by
+/-- `Ω` reads `SS` through `setAt` at the dual over `Ω` itself. -/
+theorem Ωp_ss (S : NEFinset String) : Ω.p (.ss S) = setAt .dual Ω Attr.s S := by
   rw [Ωp_fix, opaqStep_p_ss]; rfl
-/-- `Ω` reads `NS` through `decSet` over `Ω` itself. -/
-theorem Ωp_ns (S : NEFinset WFNumeral) : Ω.p (.ns S) = decSet Ω Attr.n S := by
+/-- `Ω` reads `NS` through `setAt` at the dual over `Ω` itself. -/
+theorem Ωp_ns (S : NEFinset WFNumeral) : Ω.p (.ns S) = setAt .dual Ω Attr.n S := by
   rw [Ωp_fix, opaqStep_p_ns]; rfl
-/-- `Ω` reads `BS` through `decSet` over `Ω` itself. -/
-theorem Ωp_bs (S : NEFinset Bytes) : Ω.p (.bs S) = decSet Ω Attr.b S := by
+/-- `Ω` reads `BS` through `setAt` at the dual over `Ω` itself. -/
+theorem Ωp_bs (S : NEFinset Bytes) : Ω.p (.bs S) = setAt .dual Ω Attr.b S := by
   rw [Ωp_fix, opaqStep_p_bs]; rfl
 
 end Calculus

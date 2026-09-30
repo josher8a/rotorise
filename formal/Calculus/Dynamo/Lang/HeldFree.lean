@@ -14,8 +14,8 @@ graph and the read graph of a held-free term lie inside the graphs of `opaque`.
 option, for every universe. The instance `Ω_topLaws` gives the laws of `Ω` that the induction
 reads.
 
-`Sub c d` is the inclusion of graphs on both halves. The set cases go through `encSet_congr` and
-`decSet_congr`.
+`Sub c d` is the inclusion of graphs on both halves. The set cases go through `setAt_congr` and
+`setAt_congr`.
 
 The file sits below the meet because the meet's `set` row reads it: over a held-free element, a
 set writes and reads exactly where each element does. `Confluence.lean` holds the payoffs.
@@ -80,33 +80,25 @@ theorem sub_literal (k : GroundKind) (x : k.Carrier) : Sub (literalCodec k x) Ω
   have h := sub_restrict (sub_baseCodec k) (inL k x)
   .ofEP (h .host) (h .dual)
 
-/-- `encSet` keeps an inclusion of graphs. -/
-theorem encSet_sub {α : Type} {c d : Codec} (h : Sub c d) {inj : α → Value} {S : NEFinset α}
-    {a : Attr} (he : encSet c inj S = some a) : encSet d inj S = some a := by
-  rw [← encSet_congr (c := c) (fun x hx => by
-    obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (encSet_elem he x hx)
-    rw [hy, show d.e _ = _ from h .host _ _ hy])]
+/-- `setAt` keeps an inclusion of graphs. -/
+theorem setAt_sub {α : Type} {o : Alg.Orient} {c d : Codec} (h : Sub c d) {inj : α → Attr}
+    {S : NEFinset α} {a : Attr} (he : setAt o c inj S = some a) : setAt o d inj S = some a := by
+  rw [← setAt_congr (c := c) (fun x hx => by
+    obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (setAt_elem he x hx)
+    rw [hy, h o _ _ hy])]
   exact he
-
-/-- `decSet` keeps an inclusion of graphs. -/
-theorem decSet_sub {α : Type} {c d : Codec} (h : Sub c d) {inj : α → Attr} {S : NEFinset α}
-    {v : Value} (hp : decSet c inj S = some v) : decSet d inj S = some v := by
-  rw [← decSet_congr (c := c) (fun x hx => by
-    obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (decSet_elem hp x hx)
-    rw [hy, show d.p _ = _ from h .dual _ _ hy])]
-  exact hp
 
 /-- A set over a restriction of `Ω` is a restriction of `Ω`. -/
 theorem sub_setCodec {c : Codec} (h : Sub c Ω) : Sub (setCodec c) Ω := by
   refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
-  · rcases setCodec_e_eq.mp he with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩
-    · rw [Ωe_strSet]; exact encSet_sub h hS
-    · rw [Ωe_numSet]; exact encSet_sub h hS
-    · rw [Ωe_binSet]; exact encSet_sub h hS
-  · rcases setCodec_p_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩
-    · rw [Ωp_ss]; exact decSet_sub h hS
-    · rw [Ωp_ns]; exact decSet_sub h hS
-    · rw [Ωp_bs]; exact decSet_sub h hS
+  · rcases setCodec_f_eq.mp he with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩
+    · rw [Ωe_strSet]; exact setAt_sub h hS
+    · rw [Ωe_numSet]; exact setAt_sub h hS
+    · rw [Ωe_binSet]; exact setAt_sub h hS
+  · rcases setCodec_f_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩
+    · rw [Ωp_ss]; exact setAt_sub h hS
+    · rw [Ωp_ns]; exact setAt_sub h hS
+    · rw [Ωp_bs]; exact setAt_sub h hS
 
 /-- The selector returns the answer of one option, and nothing else. -/
 theorem select_some {A B : Type} {os : List Codec} {run : Codec → A → Option B} {x : A} {y : B}
@@ -186,16 +178,16 @@ theorem setCodec_e_isSome_of_sub {c : Codec} (h : Sub c Ω) (v : Value) :
   cases v
   case ss S =>
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
-    · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact encSet_elem ha s hs
+    · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact setAt_elem ha s hs
     · have hc : neSetImage (fun x => (c.e (Value.str x)).bind sC.out) S =
           neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp (hall x hx)
         rw [ha, sub_e_str h ha]; rfl
-      show (encSet c Value.str S).isSome = true
-      unfold encSet; rw [hc, neSetImage_id]; rfl
+      show (setAt .host c Value.str S).isSome = true
+      unfold setAt; rw [hc, neSetImage_id]; rfl
   case ns S =>
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
-    · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact encSet_elem ha s hs
+    · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact setAt_elem ha s hs
     · obtain ⟨x₀, hx₀⟩ := S.2
       have hS : neSetImage (fun x => (c.e (Value.num x)).bind sC.out) S = none :=
         neSetImage_none (setImage_none_of hx₀ (by
@@ -205,11 +197,11 @@ theorem setCodec_e_isSome_of_sub {c : Codec} (h : Sub c Ω) (v : Value) :
           neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp (hall x hx)
         rw [ha, sub_e_num h ha]; rfl
-      show (encSet c Value.num S).isSome = true
-      unfold encSet; rw [hS, hN, neSetImage_id]; rfl
+      show (setAt .host c Value.num S).isSome = true
+      unfold setAt; rw [hS, hN, neSetImage_id]; rfl
   case bs S =>
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
-    · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact encSet_elem ha s hs
+    · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact setAt_elem ha s hs
     · obtain ⟨x₀, hx₀⟩ := S.2
       have hS : neSetImage (fun x => (c.e (Value.bin x)).bind sC.out) S = none :=
         neSetImage_none (setImage_none_of hx₀ (by
@@ -223,8 +215,8 @@ theorem setCodec_e_isSome_of_sub {c : Codec} (h : Sub c Ω) (v : Value) :
           neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp (hall x hx)
         rw [ha, sub_e_bin h ha]; rfl
-      show (encSet c Value.bin S).isSome = true
-      unfold encSet; rw [hS, hN, hB, neSetImage_id]; rfl
+      show (setAt .host c Value.bin S).isSome = true
+      unfold setAt; rw [hS, hN, hB, neSetImage_id]; rfl
   all_goals exact ⟨(fun h => nomatch h), (fun h => h.elim)⟩
 
 /-- A restriction of `Ω` reads `S` as a string. -/
@@ -253,16 +245,16 @@ theorem setCodec_p_isSome_of_sub {c : Codec} (h : Sub c Ω) (a : Attr) :
   cases a
   case ss S =>
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
-    · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp he; exact decSet_elem hw s hs
+    · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp he; exact setAt_elem hw s hs
     · have hc : neSetImage (fun x => (c.p (Attr.s x)).bind sC.out) S =
           neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
         obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp (hall x hx)
         rw [hw, sub_p_s h hw]; rfl
-      show (decSet c Attr.s S).isSome = true
-      unfold decSet; rw [hc, neSetImage_id]; rfl
+      show (setAt .dual c Attr.s S).isSome = true
+      unfold setAt; rw [hc, neSetImage_id]; rfl
   case ns S =>
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
-    · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp he; exact decSet_elem hw s hs
+    · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp he; exact setAt_elem hw s hs
     · obtain ⟨x₀, hx₀⟩ := S.2
       have hS : neSetImage (fun x => (c.p (Attr.n x)).bind sC.out) S = none :=
         neSetImage_none (setImage_none_of hx₀ (by
@@ -272,11 +264,11 @@ theorem setCodec_p_isSome_of_sub {c : Codec} (h : Sub c Ω) (a : Attr) :
           neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
         obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp (hall x hx)
         rw [hw, sub_p_n h hw]; rfl
-      show (decSet c Attr.n S).isSome = true
-      unfold decSet; rw [hS, hN, neSetImage_id]; rfl
+      show (setAt .dual c Attr.n S).isSome = true
+      unfold setAt; rw [hS, hN, neSetImage_id]; rfl
   case bs S =>
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
-    · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp he; exact decSet_elem hw s hs
+    · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp he; exact setAt_elem hw s hs
     · obtain ⟨x₀, hx₀⟩ := S.2
       have hS : neSetImage (fun x => (c.p (Attr.b x)).bind sC.out) S = none :=
         neSetImage_none (setImage_none_of hx₀ (by
@@ -290,8 +282,8 @@ theorem setCodec_p_isSome_of_sub {c : Codec} (h : Sub c Ω) (a : Attr) :
           neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
         obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp (hall x hx)
         rw [hw, sub_p_b h hw]; rfl
-      show (decSet c Attr.b S).isSome = true
-      unfold decSet; rw [hS, hN, hB, neSetImage_id]; rfl
+      show (setAt .dual c Attr.b S).isSome = true
+      unfold setAt; rw [hS, hN, hB, neSetImage_id]; rfl
   all_goals exact ⟨(fun h => nomatch h), (fun h => h.elim)⟩
 
 end Calculus
