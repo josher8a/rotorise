@@ -543,9 +543,8 @@ union of lawful options meets its obligation.
 **The direction has a standard name.** It is the abstract interpretation of Cousot and Cousot,
 1977: a coarse test that over-approximates a precise one transfers disjointness downward, and a
 tighter test does not. The principle is why a certificate may be proved over an approximation at
-all. This development spends it once. `writeView`
-and `readView` admit each value and each attribute that the term admits (`writeLe_of`,
-`readLe_of`), so two views that are disjoint separate the terms.
+all. This development spends it once. The view at an orientation admits each value that the
+term admits at that orientation (`viewLe_of`), so two views that are disjoint separate the terms.
 
 **The outer carrier has a separate read-side fact.** An alternate reader can read an attribute
 outside the current term's member. `extendRead_reads_n` records a string core that reads a numeric
@@ -562,8 +561,8 @@ is the discharger stated on what `select` actually decides by.
 The union obligation is compatibility, and the certificate is sufficient for it. `certPair`
 certifies a pair where the two terms are orthogonal (`viewsDisjoint`).
 
-**The certificate is orthogonality.** A term denotes a partial isomorphism. `writeView`
-states its domain and `readView` states its range. In an inverse semigroup, two elements are
+**The certificate is orthogonality.** A term denotes a partial isomorphism. The caller view,
+`view` at the host, states its domain. The stored view, `view` at the dual, states its range. In an inverse semigroup, two elements are
 orthogonal where the product of their domain idempotents is zero and the product of their range
 idempotents is zero (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). `certPair` asks
 `Term.disjoint` of the two caller views and of the two stored views. `Term.disjoint` reads a raw
