@@ -125,19 +125,19 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA α opaqUnfold a = AdmA α .opaq a := b
   | n x => rw [AdmA_opaq_num]; rfl
   | ss S =>
       rw [AdmA_opaq_eq, Ωp_ss]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBaseA, Term.array, Term.record, setCodec, Alg.Codec.p]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, Alg.Codec.p]
       rfl
   | bs S =>
       rw [AdmA_opaq_eq, Ωp_bs]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBaseA, Term.array, Term.record, setCodec, Alg.Codec.p]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, Alg.Codec.p]
       rfl
   | ns S =>
       rw [AdmA_opaq_eq, Ωp_ns]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBaseA, Term.array, Term.record, setCodec, Alg.Codec.p]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, Alg.Codec.p]
       rfl
   | l as =>
       rw [AdmA_opaq_l]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBaseA, Term.array,
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array,
         Term.record, alignPL_spread, setCodec, Alg.Codec.p]
       exact decide_eq_decide.mpr Iff.rfl
   | m keys g =>
@@ -145,7 +145,7 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA α opaqUnfold a = AdmA α .opaq a := b
       have hp : valPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [AdmA_opaq_m]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBaseA, Term.array,
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array,
         Term.record, objAdmV, entryP, MapOf.at, setCodec, Alg.Codec.p]
       exact fun _ => hp
 
@@ -184,15 +184,15 @@ theorem opaqA_total : ∀ a : Attr, AdmA α .opaq a = true
   -- `opaque` is a restriction of itself, so a wire set reads where each payload does
   | .ss S => by
       rw [AdmA_opaq_eq, Ωp_ss]
-      exact (setCodec_p_isSome_of_sub (c := Ω) (fun _ _ _ h => h) (.ss S)).mpr
+      exact (setCodec_isSome_of_sub (c := Ω) (fun _ _ _ h => h) .dual (.ss S)).mpr
         fun _ _ => rfl
   | .ns S => by
       rw [AdmA_opaq_eq, Ωp_ns]
-      exact (setCodec_p_isSome_of_sub (c := Ω) (fun _ _ _ h => h) (.ns S)).mpr
+      exact (setCodec_isSome_of_sub (c := Ω) (fun _ _ _ h => h) .dual (.ns S)).mpr
         fun _ _ => rfl
   | .bs S => by
       rw [AdmA_opaq_eq, Ωp_bs]
-      exact (setCodec_p_isSome_of_sub (c := Ω) (fun _ _ _ h => h) (.bs S)).mpr
+      exact (setCodec_isSome_of_sub (c := Ω) (fun _ _ _ h => h) .dual (.bs S)).mpr
         fun _ _ => rfl
   | .l as => by
       rw [AdmA_opaq_l]
