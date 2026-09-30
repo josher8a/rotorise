@@ -8,8 +8,7 @@ import Calculus.Alg.Combinators
 The traversal of a list, its laws, and the `filter` facts that the sum proofs consume. None of
 them reads a codec. The codec carried between two prisms, `carriedCodec`, and its instance at a
 traversal, `entrywise`, read only the prism laws, the payload pair and the member. So each one
-takes the carriers as parameters: `V` the caller's values, `A` the stored attributes, and `M`
-the members.
+takes the carrier `V` and the members `M` as parameters.
 
 The bar for adding a list fact here is that mathlib lacks the fact, or states it in a shape the
 use sites cannot consume.
@@ -216,7 +215,7 @@ theorem forall_mem_map_option {α β : Type} {x? : Option α} {g : α → β} {P
   cases x? <;> simp_all
 
 
-variable {V A M : Type} {member : A → M}
+variable {V M : Type} {member : V → M}
 
 /-! ### A codec carried between two prisms
 
@@ -236,15 +235,15 @@ its own below. -/
 
 /-- **A codec between two prisms.** `P` is the held set's condition on the payload;
     `E`/`D` are the payload pair. -/
-def carriedCodec {γ δ : Type} (pV : Ctor γ V) (pA : Ctor δ A) (μ₀ : M)
-    (P : γ → Prop) (E : γ → Option δ) (D : δ → Option γ) : Codec V A M :=
+def carriedCodec {γ δ : Type} (pV : Ctor γ V) (pA : Ctor δ V) (μ₀ : M)
+    (P : γ → Prop) (E : γ → Option δ) (D : δ → Option γ) : Codec V M :=
   Codec.ofEP (T := fun v => ∃ x, v = pV.into x ∧ P x)
     (μ := some μ₀)
     (e := fun v => ((pV.out v).bind E).map pA.into)
     (p := fun a => ((pA.out a).bind D).map pV.into)
 
 section Carried
-variable {γ δ : Type} {pV : Ctor γ V} {pA : Ctor δ A} {μ₀ : M}
+variable {γ δ : Type} {pV : Ctor γ V} {pA : Ctor δ V} {μ₀ : M}
   {P : γ → Prop} {E : γ → Option δ} {D : δ → Option γ}
 
 /-- What it writes: only a value the prism matches, and only what `E` accepts. -/
@@ -312,12 +311,12 @@ traversed: a value constructor holding a list of entries, an attribute construct
 holding a list of wire entries. Named once, §2's laws are discharged once. -/
 
 /-- **The entrywise product**: `carriedCodec` at a traversal. -/
-def entrywise {α β : Type} (pV : Ctor (List α) V) (pA : Ctor (List β) A)
-    (μ₀ : M) (P : List α → Prop) (f : α → Option β) (g : β → Option α) : Codec V A M :=
+def entrywise {α β : Type} (pV : Ctor (List α) V) (pA : Ctor (List β) V)
+    (μ₀ : M) (P : List α → Prop) (f : α → Option β) (g : β → Option α) : Codec V M :=
   carriedCodec pV pA μ₀ P (traverse f) (traverse g)
 
 section Entrywise
-variable {α β : Type} {pV : Ctor (List α) V} {pA : Ctor (List β) A}
+variable {α β : Type} {pV : Ctor (List α) V} {pA : Ctor (List β) V}
   {μ₀ : M} {P : List α → Prop} {f : α → Option β} {g : β → Option α}
 
 /-- Canonical reads, entry by entry. -/

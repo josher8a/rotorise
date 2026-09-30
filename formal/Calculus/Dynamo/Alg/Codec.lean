@@ -14,7 +14,7 @@ parameters too, and the aliases below give them their names in this namespace.
 namespace Calculus
 
 /-- §2: `c = (T, μ, f)`, at the DynamoDB carriers. -/
-abbrev Codec := Alg.Codec Value Attr Member
+abbrev Codec := Alg.Codec Value Member
 
 /-- §2 Laws at the DynamoDB carriers: (W) reads the member of an attribute. -/
 abbrev Lawful := Alg.Lawful (V := Value) Attr.member

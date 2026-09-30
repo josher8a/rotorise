@@ -58,7 +58,7 @@ instance, and JSON is a second instance.
 
 | module | states, for every universe |
 | --- | --- |
-| `Alg/Codec.lean` | the record `Codec` and its laws `Lawful` and `LawfulCore`, over the carriers `V`, `A` and `M` |
+| `Alg/Codec.lean` | the record `Codec` and its laws `Lawful` and `LawfulCore`, over the carrier `V` and the members `M` |
 | `Alg/Combinators.lean`, `Alg/Relations.lean` | the combinators, the join by the first admitter, the order, the equivalence, `Compat`, `Canon` and `Sub` |
 | `Alg/Lists.lean`, `Alg/Positions.lean`, `Alg/Maps.lean` | the traversal and `entrywise`, the positional theory, the image of a function over a key set, and `MapOf`, which keeps the namespace `Calculus` |
 | `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
@@ -82,8 +82,8 @@ reads `Sig` alone, and names no orientation. The class `Mean` over a `Sig` holds
 meaning: the carrier of each side, the member of the stored side, the codec of each primitive, the
 evaluation of a predicate at each side, the depths, the formers and the top. A universe `Syn` is a
 signature and an orientation `Orient`, a pair of two different sides. The readings in the namespace
-`Syn` read the carriers, the predicates and the depths at the orientation: the caller carrier is the
-carrier of the caller side. The codecs and the member are the meaning itself at every orientation,
+`Syn` read the predicates and the depths at the orientation. A meaning has one carrier at both
+sides: a codec is a partial bijection of that carrier, and the dual orientation is its inverse. The codecs and the member are the meaning itself at every orientation,
 and an analysis reads a codec at its orientation. The dual universe `Syn.op` keeps the signature and
 swaps the orientation, so the dual term type is the term type, and the converse of a term is the
 term. `denote` reads the table of each absolute side, so the dual, with the two tables swapped,

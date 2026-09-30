@@ -19,25 +19,25 @@ namespace Calculus.Alg
 /-! ## Inclusion lemmas, one per combinator -/
 
 section Combinators
-variable {V A M : Type}
+variable {V M : Type}
 
 /-- Inclusion of graphs is transitive. -/
-theorem sub_trans {c d u : Codec V A M} (h : Sub c d) (h' : Sub d u) : Sub c u :=
+theorem sub_trans {c d u : Codec V M} (h : Sub c d) (h' : Sub d u) : Sub c u :=
   fun o x y hxy => h' o x y (h o x y hxy)
 
 /-- A union of codecs below `u` is below `u`, because the selector returns the answer of one
     option. -/
-theorem sub_altCodec {os : List (Codec V A M)} {u : Codec V A M} (h : ∀ o ∈ os, Sub o u)
+theorem sub_altCodec {os : List (Codec V M)} {u : Codec V M} (h : ∀ o ∈ os, Sub o u)
     (μ : Option M) : Sub (altCodec os μ) u := fun o x y hxy =>
   let ⟨c, hc, _, hcy⟩ := altCodec_admits hxy
   h c hc o x y hcy
 
 /-- A zipped traversal at the orientation `o` whose every row codec is below `u` is a traversal
     of `u` at `o`. -/
-theorem forall₂_zip (o : Orient) {u : Codec V A M} :
-    ∀ (ds : List (Codec V A M)) (xs : List (Side V A o.c)) (ys : List (Side V A o.s)),
+theorem forall₂_zip (o : Orient) {u : Codec V M} :
+    ∀ (ds : List (Codec V M)) (xs : List (Side V o.c)) (ys : List (Side V o.s)),
     ds.length = xs.length → (∀ c ∈ ds, Sub c u) →
-    List.Forall₂ (fun (cx : Codec V A M × Side V A o.c) y => cx.1.f o cx.2 = some y) (ds.zip xs) ys →
+    List.Forall₂ (fun (cx : Codec V M × Side V o.c) y => cx.1.f o cx.2 = some y) (ds.zip xs) ys →
     List.Forall₂ (fun x y => u.f o x = some y) xs ys
   | [], [], _, _, _, h => by cases h; exact .nil
   | d :: ds, x :: xs, y :: ys, hl, hd, .cons h1 h2 =>
@@ -48,10 +48,10 @@ theorem forall₂_zip (o : Orient) {u : Codec V A M} :
   | _ :: _, _ :: _, [], _, _, h => nomatch h
 
 /-- A list whose every slot is below a top that acts as the list former is below the top. -/
-theorem sub_listCodec {pV : Ctor (List V) V} {pA : Ctor (List A) A} {μL : M} {u : Codec V A M}
+theorem sub_listCodec {pV : Ctor (List V) V} {pA : Ctor (List V) V} {μL : M} {u : Codec V M}
     (hue : ∀ vs, u.e (pV.into vs) = (traverse u.e vs).map pA.into)
     (hup : ∀ as, u.p (pA.into as) = (traverse u.p as).map pV.into)
-    {pre suf : List (Codec V A M)} {sp : Option (Codec V A M)}
+    {pre suf : List (Codec V M)} {sp : Option (Codec V M)}
     (hpre : ∀ c ∈ pre, Sub c u) (hsp : ∀ c ∈ sp, Sub c u) (hsuf : ∀ c ∈ suf, Sub c u) :
     Sub (listCodec pV pA μL pre sp suf) u := by
   have hrow : ∀ n ds, slotsL pre sp suf n = some ds → ∀ c ∈ ds, Sub c u := fun n ds h c hc => by
@@ -75,13 +75,13 @@ theorem sub_listCodec {pV : Ctor (List V) V} {pA : Ctor (List A) A} {μL : M} {u
 
 /-- An object whose every entry codec is below a top that acts as the map former is below the
     top. -/
-theorem sub_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf A) A} {μM : M}
-    {u : Codec V A M}
+theorem sub_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf V) V} {μM : M}
+    {u : Codec V M}
     (hue : ∀ m : MapOf V, u.e (mV.into m) =
       (funImage fun k => u.e (m.get k)).map fun g => mA.into ⟨m.keys, g⟩)
-    (hup : ∀ m : MapOf A, u.p (mA.into m) =
+    (hup : ∀ m : MapOf V, u.p (mA.into m) =
       (funImage fun k => u.p (m.get k)).map fun g => mV.into ⟨m.keys, g⟩)
-    {sems : MapOf (FieldSem V A M)} {rest : RestSem V A M}
+    {sems : MapOf (FieldSem V M)} {rest : RestSem V M}
     (hf : ∀ k, Sub (sems.2 k).codec u) (hw : ∀ c ∈ rcOf rest, Sub c u) :
     Sub (objectCodec mV mA μM sems rest) u := by
   refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)

@@ -322,7 +322,7 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed α β t T μ → ∀ v, (den
           rw [dif_pos hk]
           simp only [objEntryT,
             MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem α β (ff k)⟩ :
-              MapOf (FieldSem (Mean.V (B := S.sig)) (Mean.A (B := S.sig)) S.M))) ⟨k.1, hk⟩] at hentry
+              MapOf (FieldSem (Mean.V (B := S.sig)) S.M))) ⟨k.1, hk⟩] at hentry
           obtain ⟨t', hty', hshape⟩ := TypedField.term (α := α) (β := β) (hfields ⟨k.1, hk⟩)
           rcases hshape with heq | heq
           · rw [heq] at hentry; exact typed_TSub hty' _ hentry

@@ -4,7 +4,7 @@ import Calculus.Lang.Term
 # The denotation of the dual
 
 The dual universe `S.op` keeps the signature and flips the orientation. So the dual reads the
-stored carrier as its caller carrier, the stored half of each two-sided row as its caller half,
+stored half of each two-sided row as its caller half,
 and the stored table as its caller table. The denotation reads the tables at the absolute sides,
 and the dual gives the same table at each absolute side. So the dual denotes each term by the
 same codec, and an analysis at the dual reads that codec at the dual orientation.

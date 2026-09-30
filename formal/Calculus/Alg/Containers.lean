@@ -12,24 +12,24 @@ and a universe supplies only its prisms and the member that its stored prism sta
 
 namespace Calculus.Alg
 
-variable {V A M : Type} {member : A → M}
+variable {V M : Type} {member : V → M}
 
 /-! ## `list` (§3): one prefix, at most one spread, one suffix -/
 
 section List
-variable (pV : Ctor (List V) V) (pA : Ctor (List A) A) (μL : M)
+variable (pV : Ctor (List V) V) (pA : Ctor (List V) V) (μL : M)
 
 /-- §3 `(list)`: the positional product over a prefix, a spread and a suffix, between two list
     prisms. -/
-abbrev listCodec (pre : List (Codec V A M)) (spread : Option (Codec V A M))
-    (suf : List (Codec V A M)) : Codec V A M :=
+abbrev listCodec (pre : List (Codec V M)) (spread : Option (Codec V M))
+    (suf : List (Codec V M)) : Codec V M :=
   carriedCodec pV pA μL
     (fun vs => ∃ ps, alignL pre spread suf vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2)
     (fun vs => (alignL pre spread suf vs).bind (traverse fun cv => cv.1.e cv.2))
     (fun as => (alignL pre spread suf as).bind (traverse fun ca => ca.1.p ca.2))
 
-variable {pV pA μL} {pre : List (Codec V A M)} {sp : Option (Codec V A M)}
-  {suf : List (Codec V A M)}
+variable {pV pA μL} {pre : List (Codec V M)} {sp : Option (Codec V M)}
+  {suf : List (Codec V M)}
 
 /-- A list is lawful: the alignment puts each position on its own codec. -/
 theorem lawful_listCodec (hμ : ∀ y, member (pA.into y) = μL)
@@ -74,12 +74,12 @@ and the coming back. `objectCodecCore` is `carriedCodec` between the two keyed-m
 section Object
 
 /-- Every `req` name present on the value side. One `decide` over the key set. -/
-def valPresentB (sems : MapOf (FieldSem V A M)) (names : Finset String) : Bool :=
+def valPresentB (sems : MapOf (FieldSem V M)) (names : Finset String) : Bool :=
   decide (∀ k : {k // k ∈ sems.1}, valPresentAt names k.1 (sems.2 k) = true)
 
 /-- The per-name half of §4's held set: a declared name holds its field's set, an
     undeclared one falls to the open part `R(ρ)`. -/
-def objEntryT (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) :
+def objEntryT (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) :
     String × V → Prop := fun kv =>
   match sems.at kv.1 with
   | some fs => fs.codec.T kv.2
@@ -87,17 +87,17 @@ def objEntryT (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) :
 
 /-- The codec one entry goes through: the field its name declares, or else the rest
     policy's. `none` is an undeclared name under `refuse`. -/
-def entryCodec (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) (k : String) :
-    Option (Codec V A M) :=
+def entryCodec (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) (k : String) :
+    Option (Codec V M) :=
   match sems.at k with
   | some fs => some fs.codec
   | none => rc?
 
-variable {sems : MapOf (FieldSem V A M)} {rc? : Option (Codec V A M)} {kn : String → Bool}
+variable {sems : MapOf (FieldSem V M)} {rc? : Option (Codec V M)} {kn : String → Bool}
 
 /-- A property of every field and of the rest codec is a property of every entry's
     codec — which is how the object's per-entry laws are discharged, once each. -/
-theorem entryCodec_of {Q : Codec V A M → Prop} (hf : ∀ k, Q (sems.2 k).codec)
+theorem entryCodec_of {Q : Codec V M → Prop} (hf : ∀ k, Q (sems.2 k).codec)
     (hrc : ∀ c ∈ rc?, Q c) {k c} (h : entryCodec sems rc? k = some c) : Q c := by
   simp only [entryCodec] at h
   cases hsp : sems.at k with
@@ -112,23 +112,23 @@ theorem objEntryT_eq {kv} :
 
 /-- **The object's payload pair at an orientation**: the presence guard, then each entry at the
     orientation. The write is the pair at the host, and the read is the pair at the dual. -/
-noncomputable def objAt (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) (o : Orient) :
-    MapOf (Side V A o.c) → Option (MapOf (Side V A o.s)) := fun p =>
+noncomputable def objAt (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) (o : Orient) :
+    MapOf (Side V o.c) → Option (MapOf (Side V o.s)) := fun p =>
   if valPresentB sems p.1 = true then
     (funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.f o (p.2 k)))).map
       (fun g => ⟨p.1, g⟩)
   else none
 
 /-- The payload pair, going out. -/
-noncomputable abbrev objWrite (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) :
-    MapOf V → Option (MapOf A) := objAt sems rc? Orient.host
+noncomputable abbrev objWrite (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) :
+    MapOf V → Option (MapOf V) := objAt sems rc? Orient.host
 
 /-- …and coming back. -/
-noncomputable abbrev objRead (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) :
-    MapOf A → Option (MapOf V) := objAt sems rc? Orient.dual
+noncomputable abbrev objRead (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) :
+    MapOf V → Option (MapOf V) := objAt sems rc? Orient.dual
 
 /-- What the payload pair sends at an orientation: the guard held, and the entrywise image. -/
-theorem objAt_eq {o : Orient} {p : MapOf (Side V A o.c)} {q : MapOf (Side V A o.s)} :
+theorem objAt_eq {o : Orient} {p : MapOf (Side V o.c)} {q : MapOf (Side V o.s)} :
     objAt sems rc? o p = some q ↔
       valPresentB sems p.1 = true ∧ ∃ g,
         funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.f o (p.2 k))) = some g ∧
@@ -138,18 +138,18 @@ theorem objAt_eq {o : Orient} {p : MapOf (Side V A o.c)} {q : MapOf (Side V A o.
   · next hg => simp [hg, Option.map_eq_some_iff, eq_comm (a := q)]
   · next hg => simp [hg]
 
-variable (mV : Ctor (MapOf V) V) (mA : Ctor (MapOf A) A) (μM : M)
+variable (mV : Ctor (MapOf V) V) (mA : Ctor (MapOf V) V) (μM : M)
 
 /-- The object is `carriedCodec` between the two keyed-map prisms. -/
-noncomputable abbrev objectCodecCore (sems : MapOf (FieldSem V A M)) (rc? : Option (Codec V A M)) :
-    Codec V A M :=
+noncomputable abbrev objectCodecCore (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) :
+    Codec V M :=
   carriedCodec mV mA μM
     (fun p => valPresentB sems p.1 = true ∧ ∀ k, objEntryT sems rc? (k.1, p.2 k))
     (objWrite sems rc?) (objRead sems rc?)
 
 /-- §4's `object`: the core at the rest policy's codec. -/
-noncomputable abbrev objectCodec (sems : MapOf (FieldSem V A M)) (rest : RestSem V A M) :
-    Codec V A M :=
+noncomputable abbrev objectCodec (sems : MapOf (FieldSem V M)) (rest : RestSem V M) :
+    Codec V M :=
   objectCodecCore mV mA μM sems (rcOf rest)
 
 variable {mV mA μM}
@@ -197,7 +197,7 @@ theorem valPresentB_of_req {names : Finset String}
 
 /-- The held set of an entry follows from the carrier of its codec, on the write step. -/
 theorem entry_domE' (hs : ∀ k, Carrier (sems.2 k).codec) (hrc : ∀ c ∈ rc?, Carrier c)
-    {k : String} {v : V} {a : A}
+    {k : String} {v : V} {a : V}
     (h : (entryCodec sems rc? k).bind (fun c => c.e v) = some a) :
     objEntryT sems rc? (k, v) := by
   cases hc : entryCodec sems rc? k with
@@ -208,7 +208,7 @@ theorem entry_domE' (hs : ∀ k, Carrier (sems.2 k).codec) (hrc : ∀ c ∈ rc?,
 
 /-- …and on the read step. -/
 theorem entry_ranP' (hs : ∀ k, Carrier (sems.2 k).codec) (hrc : ∀ c ∈ rc?, Carrier c)
-    {k : String} {a : A} {v : V}
+    {k : String} {a : V} {v : V}
     (h : (entryCodec sems rc? k).bind (fun c => c.p a) = some v) :
     objEntryT sems rc? (k, v) := by
   cases hc : entryCodec sems rc? k with
@@ -219,7 +219,7 @@ theorem entry_ranP' (hs : ∀ k, Carrier (sems.2 k).codec) (hrc : ∀ c ∈ rc?,
 
 /-- §4's held set follows from the entry carriers. The current-schema reader returns only stored
     entries, so the object row needs no extra reader premise. -/
-theorem carrier_objectCodec {rest : RestSem V A M}
+theorem carrier_objectCodec {rest : RestSem V M}
     (hsems : ∀ k, Carrier (sems.2 k).codec)
     (hrc : ∀ rc, rcOf rest = some rc → Carrier rc) :
     Carrier (objectCodec mV mA μM sems rest) := by
@@ -241,7 +241,7 @@ theorem carrier_objectCodec {rest : RestSem V A M}
 
 /-- **The inverse law of the payload pair**, at every orientation. The guard reads one key set
     on both sides, and each entry inverts its own map. -/
-theorem object_inv {rest : RestSem V A M} (hf : ∀ k, Lawful member (sems.2 k).codec)
+theorem object_inv {rest : RestSem V M} (hf : ∀ k, Lawful member (sems.2 k).codec)
     (hrc : ∀ c ∈ rcOf rest, Lawful member c) (o : Orient) :
     ∀ p q, objAt sems (rcOf rest) o p = some q → objAt sems (rcOf rest) o.op q = some p := by
   rintro p q h
@@ -255,7 +255,7 @@ theorem object_inv {rest : RestSem V A M} (hf : ∀ k, Lawful member (sems.2 k).
     exact (entryCodec_of hf hrc hc).inv hw
 
 /-- The keyed product: the doc's current-schema `object`. -/
-theorem lawful_objectCodec (hμ : ∀ y, member (mA.into y) = μM) {rest : RestSem V A M}
+theorem lawful_objectCodec (hμ : ∀ y, member (mA.into y) = μM) {rest : RestSem V M}
     (hf : ∀ k, Lawful member (sems.2 k).codec)
     (hrest : ∀ c, rest = .codec c → Lawful member c) :
     Lawful member (objectCodec mV mA μM sems rest) := by

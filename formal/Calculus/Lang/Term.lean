@@ -94,23 +94,23 @@ set former is a codec transformer over the carriers of the meaning. -/
 
 /-- The set former of a universe: the lift, its law, its agreement one layer down, and each half
     of agreement. -/
-structure SetF (V A M : Type) (member : A → M) (dV : V → Nat) (dA : A → Nat) where
-  lift : Codec V A M → Codec V A M
+structure SetF (V M : Type) (member : V → M) (dV : V → Nat) (dA : V → Nat) where
+  lift : Codec V M → Codec V M
   lawful : ∀ {c}, Lawful member c → Lawful member (lift c)
   agree : ∀ {d c₁ c₂}, AgreeLe dV dA d c₁ c₂ → AgreeLe dV dA (d + 1) (lift c₁) (lift c₂)
   /-- The lift keeps each half of agreement: two sets whose element codecs agree on a half agree
       on that half. -/
-  agreeS : ∀ {side : Bool} {c d : Codec V A M}, AgreeS side c d → AgreeS side (lift c) (lift d)
+  agreeS : ∀ {side : Bool} {c d : Codec V M}, AgreeS side c d → AgreeS side (lift c) (lift d)
   /-- The universe's own obligation on an element. Soundness does not read this field. -/
-  elem : Codec V A M → Prop
+  elem : Codec V M → Prop
   /-- The held set of a set, from the held set of its element. -/
   held : (V → Prop) → V → Prop
   /-- The member of a set, from the member of its element. -/
   member : M → Option M
   /-- The lift of a codec on its carrier is on its carrier. -/
-  carrier : ∀ {c : Codec V A M}, Carrier c → Carrier (lift c)
+  carrier : ∀ {c : Codec V M}, Carrier c → Carrier (lift c)
   /-- The lift's held set is inside `held` of any bound on the element's held set. -/
-  held_of : ∀ {c : Codec V A M} {T : V → Prop}, (∀ v, c.T v → T v) → ∀ v, (lift c).T v → held T v
+  held_of : ∀ {c : Codec V M} {T : V → Prop}, (∀ v, c.T v → T v) → ∀ v, (lift c).T v → held T v
 
 /-- **The list former of a meaning**: one prism per absolute side, the member at the side `true`,
     and one depth law for both sides. -/
@@ -131,47 +131,45 @@ structure MapA (Car : Bool → Type) (Mem : Type) (mem : Car true → Mem)
 
 /-! ## The meaning -/
 
-/-- **The meaning of a signature**: a carrier at each absolute side, the member of the side
-    `true`, and the codec of each part of the signature from the side `false` to the side
-    `true`. A class over the signature, so the dual universe finds the meaning of the universe,
+/-- **The meaning of a signature**: one carrier, the member of the side `true`, and the codec of
+    each part of the signature from the side `false` to the side `true`. A class over the signature, so the dual universe finds the meaning of the universe,
     and a term family carries no meaning. -/
 class Mean (B : Sig) where
-  /-- The caller carrier: the carrier of the side `false`. -/
+  /-- The carrier of both sides. -/
   V : Type
-  /-- The stored carrier: the carrier of the side `true`. -/
-  A : Type
   Mem : Type
-  mem : A → Mem
+  mem : V → Mem
   decM : DecidableEq Mem
-  ground : B.Ground → Codec V A Mem
+  ground : B.Ground → Codec V Mem
   lawful_ground : ∀ g, Lawful mem (ground g)
   carrier_ground : ∀ g, Carrier (ground g)
-  eval : (s : Bool) → B.P s → Side V A s → Bool
+  eval : (s : Bool) → B.P s → Side V s → Bool
   /-- The predicate at each side that admits every element. -/
   truth : (s : Bool) → B.P s
   eval_truth : ∀ s x, eval s (truth s) x = true
-  d : (s : Bool) → Side V A s → Nat
+  d : (s : Bool) → Side V s → Nat
   d_pos : ∀ s x, 0 < d s x
-  list : Option (ListA (Side V A) Mem mem d)
-  map : Option (MapA (Side V A) Mem mem d)
-  set : Option (SetF V A Mem mem (d false) (d true))
+  list : Option (ListA (Side V) Mem mem d)
+  map : Option (MapA (Side V) Mem mem d)
+  set : Option (SetF V Mem mem (d false) (d true))
   /-- The member that the judgement gives a primitive. -/
   groundμ : B.Ground → Option Mem
-  top : Codec V A Mem
+  top : Codec V Mem
   lawful_top : Lawful mem top
   carrier_top : Carrier top
   /-- The held set that the judgement gives the top, and the top's held set lies inside it. -/
   topHeld : V → Prop
   top_held : ∀ v, top.T v → topHeld v
 
-/-- The carrier of a meaning at each absolute side: the caller carrier at `false`, and the stored
-    carrier at `true`. -/
-abbrev Mean.Car {B : Sig} [Mean B] : Bool → Type := Side (Mean.V (B := B)) (Mean.A (B := B))
+/-- The carrier of the side `true`: the one carrier of the meaning. -/
+abbrev Mean.A {B : Sig} [Mean B] : Type := Mean.V (B := B)
 
-/-- The codecs of a meaning: from the caller carrier to the stored carrier, with the member of the
-    meaning. -/
+/-- The carrier of a meaning at each absolute side: the one carrier of the meaning. -/
+abbrev Mean.Car {B : Sig} [Mean B] : Bool → Type := Side (Mean.V (B := B))
+
+/-- The codecs of a meaning: partial bijections of its carrier, with the member of the meaning. -/
 abbrev Mean.C (B : Sig) [Mean B] : Type :=
-  Codec (Mean.V (B := B)) (Mean.A (B := B)) (Mean.Mem (B := B))
+  Codec (Mean.V (B := B)) (Mean.Mem (B := B))
 
 instance Mean.instDecM {B : Sig} [Mean B] : DecidableEq (Mean.Mem (B := B)) := Mean.decM
 
@@ -202,19 +200,19 @@ instance (priority := low) Sem.toMean (S : Syn) [h : Sem S] : Mean S.sig := h.me
 /-! ## The meaning read at a universe
 
 The codecs, the top and the member are the meaning itself, at every orientation, and a universe
-reads its formers from the meaning (`Mean.list`, `Mean.map`, `Mean.set`). The caller carrier, the
-stored carrier, the predicates and the depths are read at the orientation of the universe: the
-analyses read a codec at its caller side. -/
+reads its formers from the meaning (`Mean.list`, `Mean.map`, `Mean.set`). The predicates and the
+depths are read at the orientation of the universe: the analyses read a codec at its caller
+side. -/
 
 namespace Syn
 
 section
 variable (S : Syn) [Sem S]
 
-/-- The caller carrier of a universe. -/
+/-- The carrier of the caller side of a universe: the one carrier of its meaning. -/
 abbrev V : Type := Mean.Car (B := S.sig) S.o.c
 
-/-- The stored carrier of a universe. -/
+/-- The carrier of the stored side of a universe: the one carrier of its meaning. -/
 abbrev A : Type := Mean.Car (B := S.sig) S.o.s
 
 /-- The member of a universe: the member of its meaning. -/
@@ -749,7 +747,7 @@ def unanimous {M : Type} [DecidableEq M] : List (Option M) → Option M
   | μ :: μs => if μs.all (· == μ) then μ else none
 
 /-- The codec an environment gives the variable `i`: the bottom where no binder is. -/
-def envAt {V A M : Type} (ρ : List (Codec V A M)) (i : Nat) : Codec V A M := ρ.getD i .empty
+def envAt {V M : Type} (ρ : List (Codec V M)) (i : Nat) : Codec V M := ρ.getD i .empty
 
 section DenoteAbs
 variable {B : Sig} [Mean B] (τ : (s : Bool) → TableAt B s)
@@ -796,13 +794,13 @@ noncomputable def bodySemAbs : Body B → (ρ : List (Mean.C B) := []) → Mean.
 /-- A field's semantics. A companion of `denoteAbs` rather than a function of one, which is what
     removed the fuel. -/
 noncomputable def fieldSemAbs : ObjectSlot B → (ρ : List (Mean.C B) := []) →
-    FieldSem (Mean.V (B := B)) (Mean.A (B := B)) (Mean.Mem (B := B))
+    FieldSem (Mean.V (B := B)) (Mean.Mem (B := B))
   | .req t, ρ => .req (denoteAbs t ρ)
   | .optional t, ρ => .opt (denoteAbs t ρ)
 
 /-- The open block's semantics. **A body with no open block refuses.** -/
 noncomputable def wildSemAbs : Option (Term B) → (ρ : List (Mean.C B) := []) →
-    RestSem (Mean.V (B := B)) (Mean.A (B := B)) (Mean.Mem (B := B))
+    RestSem (Mean.V (B := B)) (Mean.Mem (B := B))
   | none, _ => .refuse
   | some t, ρ => .codec (denoteAbs t ρ)
 
@@ -931,12 +929,12 @@ noncomputable abbrev bodySem (b : Body S) (ρ : List S.C := []) : S.C :=
 
 /-- A field's semantics. -/
 noncomputable abbrev fieldSem (s : ObjectSlot S) (ρ : List S.C := []) :
-    FieldSem (Mean.V (B := S.sig)) (Mean.A (B := S.sig)) S.M :=
+    FieldSem (Mean.V (B := S.sig)) S.M :=
   fieldSemAbs (tables S.o α β) s ρ
 
 /-- The open block's semantics. -/
 noncomputable abbrev wildSem (w : Option (Term S)) (ρ : List S.C := []) :
-    RestSem (Mean.V (B := S.sig)) (Mean.A (B := S.sig)) S.M :=
+    RestSem (Mean.V (B := S.sig)) S.M :=
   wildSemAbs (tables S.o α β) w ρ
 
 /-- The options' codecs, in order. -/

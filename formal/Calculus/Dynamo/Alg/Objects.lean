@@ -13,10 +13,10 @@ noncomputable section
 /-! ## Objects (§4) -/
 
 /-- A field, denoted, at the DynamoDB carriers. -/
-abbrev FieldSem := Alg.FieldSem Value Attr Member
+abbrev FieldSem := Alg.FieldSem Value Member
 
 /-- A rest policy, denoted, at the DynamoDB carriers. -/
-abbrev RestSem := Alg.RestSem Value Attr Member
+abbrev RestSem := Alg.RestSem Value Member
 
 /- The fields, the guards and the rest codec take the carriers as parameters. The aliases give
    them their names in this namespace. `FieldSem.codec` has no alias, because an alias captures

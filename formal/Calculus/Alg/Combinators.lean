@@ -6,14 +6,14 @@ import Calculus.Alg.Codec
 
 The side conditions of §3, the wrappers `held`, `refine` and `alternate reader`, the point codec
 of a pair of prisms, and the union by the first admitter. Each one reads only the pair and the
-member, so each one takes the carriers as parameters: `V` the caller's values, `A` the stored
-attributes, and `M` the members. The laws of each combinator follow from the laws of its
-arguments, and `member : A → M` is the one fact of the store that (W) reads.
+member, so each one takes the carrier `V` and the members `M` as parameters. The laws of each
+combinator follow from the laws of its arguments, and `member : V → M` is the one fact of the
+store that (W) reads.
 -/
 
 namespace Calculus.Alg
 
-variable {V A M : Type}
+variable {V M : Type}
 
 /-! ## §3's side conditions, named
 
@@ -25,16 +25,16 @@ condition it is consuming. -/
 /-- §3 `(held)`: the iso cancels **on the carriers** — `T ≃ I`, in the domain-restricted
     form the laws actually need. `g ∘ f = id` where `f` lands writable, `f ∘ g = id` on
     the writable values themselves. -/
-def IsoCancelsAt (o : Orient) (c : Codec V A M) (f g : Side V A o.c → Side V A o.c) : Prop :=
+def IsoCancelsAt (o : Orient) (c : Codec V M) (f g : Side V o.c → Side V o.c) : Prop :=
   (∀ x, (c.f o (f x)).isSome → g (f x) = x) ∧
   (∀ x, (c.f o x).isSome → f (g x) = x)
 
 /-- The obligation at the host: the caller pair cancels on the values that the codec writes. -/
-abbrev IsoCancels (c : Codec V A M) (f g : V → V) : Prop := IsoCancelsAt Orient.host c f g
+abbrev IsoCancels (c : Codec V M) (f g : V → V) : Prop := IsoCancelsAt Orient.host c f g
 
 /-- §3 `(alternate reader)`: `ran(r) ⊆ dom(e)` — a migration lands on writable values — and
     coherence, the legacy reading agreeing with the current one on their overlap. -/
-def ReadsCoherently (c : Codec V A M) (r : A → Option V) : Prop :=
+def ReadsCoherently (c : Codec V M) (r : V → Option V) : Prop :=
   (∀ a v, r a = some v → (c.e v).isSome) ∧
   (∀ a v, r a = some v → ∀ v', c.p a = some v' → v = v')
 
@@ -42,19 +42,19 @@ def ReadsCoherently (c : Codec V A M) (r : A → Option V) : Prop :=
     mentions `T`, because retract, canon and writes relate `e` and `p` to each other and not to
     the index. So this is the separate claim that the index is honest, and it is what makes `T` a
     checked part of the judgement rather than a decoration. -/
-structure Carrier (c : Codec V A M) : Prop where
+structure Carrier (c : Codec V M) : Prop where
   /-- `e : T ⇀ 𝔸` — nothing outside the held set is written. -/
   domE : ∀ {v a}, c.e v = some a → c.T v
   /-- `p : 𝔸 ⇀ T` — nothing outside the held set is read. -/
   ranP : ∀ {a v}, c.p a = some v → c.T v
 
 /-- The empty codec is on its (empty) carrier, vacuously. -/
-theorem Carrier.empty : Carrier (Codec.empty : Codec V A M) := by
+theorem Carrier.empty : Carrier (Codec.empty : Codec V M) := by
   refine ⟨?_, ?_⟩ <;> intro _ _ h <;> exact nomatch h
 
 /-- `Can(c)` is §2's `e[T]` — and it takes `Carrier` to say so: without `domE` a codec could
     write from a value it does not hold, making `Can` larger than the image. -/
-theorem can_iff_image {c : Codec V A M} (h : Carrier c) {a : A} :
+theorem can_iff_image {c : Codec V M} (h : Carrier c) {a : V} :
     Can c a ↔ ∃ v, c.T v ∧ c.e v = some a := by
   constructor
   · rintro ⟨v, hv⟩; exact ⟨v, h.domE hv, hv⟩
@@ -67,15 +67,15 @@ identity on attributes. This is the premise itself, for every store. -/
 
 /-- **`η ⊆ ker p`** — §1's concession, as a proposition. Quantified over `Can(c)` because
     `η` only ever sees what `e` wrote. Buys `retract_through_store`: (R) through the store. -/
-def SurvivesStore (c : Codec V A M) (η : A → A) : Prop :=
+def SurvivesStore (c : Codec V M) (η : V → V) : Prop :=
   ∀ a, Can c a → c.Ker (η a) a
 
-variable {member : A → M}
+variable {member : V → M}
 
 /-- **(R), through the store.** `η ⊆ ker p` is exactly what makes a codec survive a round
     trip that passes through the store rather than through `Option` — and it is all it takes,
     which is why §1 could answer the whole problem by narrowing one held set. -/
-theorem Lawful.retract_through_store {c : Codec V A M} (h : Lawful member c) {η : A → A}
+theorem Lawful.retract_through_store {c : Codec V M} (h : Lawful member c) {η : V → V}
     (hη : SurvivesStore c η) {t a} (he : c.e t = some a) : c.p (η a) = some t := by
   have hk : c.p (η a) = c.p a := hη a ⟨t, he⟩
   rw [hk, h.retract he]
@@ -94,7 +94,7 @@ structure Ctor (α β : Type) where
   into_out : ∀ {b x}, out b = some x → b = into x
 
 /-- **A prism at each absolute side**: `pV` into the values, and `pA` into the attributes. -/
-def Ctor.side {α : Type} (pV : Ctor α V) (pA : Ctor α A) : (s : Bool) → Ctor α (Side V A s)
+def Ctor.side {α : Type} (pV : Ctor α V) (pA : Ctor α V) : (s : Bool) → Ctor α (Side V s)
   | false => pV
   | true => pA
 
@@ -106,7 +106,7 @@ def Ctor.side {α : Type} (pV : Ctor α V) (pA : Ctor α A) : (s : Bool) → Cto
     hypothesis about either side beyond the member it stamps. One formula serves each
     orientation: match with the prism of the caller side, and build with the prism of the stored
     side. -/
-def pointCodec {α : Type} (pV : Ctor α V) (pA : Ctor α A) (μ₀ : M) : Codec V A M where
+def pointCodec {α : Type} (pV : Ctor α V) (pA : Ctor α V) (μ₀ : M) : Codec V M where
   T v := ∃ x, v = pV.into x
   μ := some μ₀
   f o x := ((Ctor.side pV pA o.c).out x).map (Ctor.side pV pA o.s).into
@@ -116,7 +116,7 @@ def pointCodec {α : Type} (pV : Ctor α V) (pA : Ctor α A) (μ₀ : M) : Codec
 /-- `held`: an iso on the value side; the stored side is untouched. The iso acts at the values
     only, so the write and the read are two formulas. One formula over the orientation would
     only hide that case split. -/
-def Codec.through (c : Codec V A M) (f g : V → V) : Codec V A M :=
+def Codec.through (c : Codec V M) (f g : V → V) : Codec V M :=
   Codec.ofEP (T := fun v => c.T (f v))
     (μ := c.μ)
     (e := fun v => c.e (f v))
@@ -126,7 +126,7 @@ def Codec.through (c : Codec V A M) (f g : V → V) : Codec V A M :=
     restricts the attributes. One formula serves each orientation: the predicate at the caller
     side of the orientation gates the input, and the predicate at the stored side gates the
     output. -/
-def refine2 (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) : Codec V A M where
+def refine2 (c : Codec V M) (qV : V → Bool) (qA : V → Bool) : Codec V M where
   T v := c.T v ∧ qV v
   μ := c.μ
   f o x := if Side.elim qV qA o.c x then
@@ -135,13 +135,13 @@ def refine2 (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) : Codec V A M 
 
 /-- `refine`: the prism. It is the two-sided restriction whose stored predicate admits every
     attribute. -/
-def Codec.restrict (c : Codec V A M) (q : V → Bool) : Codec V A M :=
+def Codec.restrict (c : Codec V M) (q : V → Bool) : Codec V M :=
   refine2 c q fun _ => true
 
 /-- What the two-sided restriction sends: the input passes the predicate of the caller side,
     the base sends the input, and the output passes the predicate of the stored side. -/
-theorem refine2_f {c : Codec V A M} {qV : V → Bool} {qA : A → Bool} {o : Orient}
-    {x : Side V A o.c} {y : Side V A o.s} :
+theorem refine2_f {c : Codec V M} {qV : V → Bool} {qA : V → Bool} {o : Orient}
+    {x : Side V o.c} {y : Side V o.s} :
     (refine2 c qV qA).f o x = some y ↔
       Side.elim qV qA o.c x = true ∧ c.f o x = some y ∧ Side.elim qV qA o.s y = true := by
   simp only [refine2]
@@ -154,8 +154,8 @@ theorem refine2_f {c : Codec V A M} {qV : V → Bool} {qA : A → Bool} {o : Ori
 
 /-- **The rectangle**: a pair that the two-sided restriction sends satisfies the predicate at
     each absolute side. -/
-theorem refine2_rect {c : Codec V A M} {qV : V → Bool} {qA : A → Bool} {o : Orient}
-    {x : Side V A o.c} {y : Side V A o.s} (h : (refine2 c qV qA).f o x = some y) (s : Bool) :
+theorem refine2_rect {c : Codec V M} {qV : V → Bool} {qA : V → Bool} {o : Orient}
+    {x : Side V o.c} {y : Side V o.s} (h : (refine2 c qV qA).f o x = some y) (s : Bool) :
     Side.elim qV qA s (Orient.place o x y s) = true := by
   obtain ⟨hx, -, hy⟩ := refine2_f.mp h
   rcases Orient.side_of o s with rfl | rfl
@@ -163,22 +163,22 @@ theorem refine2_rect {c : Codec V A M} {qV : V → Bool} {qA : A → Bool} {o : 
   · rw [Orient.place_s]; exact hy
 
 /-- The write of the two-sided restriction, for a rewrite. -/
-theorem refine2_e_def (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) :
+theorem refine2_e_def (c : Codec V M) (qV : V → Bool) (qA : V → Bool) :
     (refine2 c qV qA).e =
       fun v => if qV v then (c.e v).bind (fun a => if qA a then some a else none) else none := rfl
 
 /-- The read of the two-sided restriction, for a rewrite. -/
-theorem refine2_p_def (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) :
+theorem refine2_p_def (c : Codec V M) (qV : V → Bool) (qA : V → Bool) :
     (refine2 c qV qA).p =
       fun a => if qA a then (c.p a).bind (fun v => if qV v then some v else none) else none := rfl
 
 /-- The write of a restriction: the predicate guards the write of the base. -/
-theorem restrict_e_def (c : Codec V A M) (q : V → Bool) :
+theorem restrict_e_def (c : Codec V M) (q : V → Bool) :
     (c.restrict q).e = fun v => if q v then c.e v else none := by
   simp only [Codec.restrict, refine2_e_def, if_true, Option.bind_fun_some]
 
 /-- The read of a restriction: the predicate guards the value that the base reads. -/
-theorem restrict_p_def (c : Codec V A M) (q : V → Bool) :
+theorem restrict_p_def (c : Codec V M) (q : V → Bool) :
     (c.restrict q).p = fun a => (c.p a).bind fun v => if q v then some v else none := rfl
 
 /-- **The combinator `held` and `refine` both are.** A partial iso either side of the
@@ -199,7 +199,7 @@ theorem restrict_p_def (c : Codec V A M) (q : V → Bool) :
 
     The adapter acts at the values only, so the write and the read are two formulas. One
     formula over the orientation would only hide that case split. -/
-def Codec.adapt (c : Codec V A M) (f g : V → Option V) : Codec V A M :=
+def Codec.adapt (c : Codec V M) (f g : V → Option V) : Codec V M :=
   Codec.ofEP (T := fun v => ∃ w, f v = some w ∧ c.T w)
     (μ := c.μ)
     (e := fun v => (f v).bind c.e)
@@ -209,24 +209,24 @@ def Codec.adapt (c : Codec V A M) (f g : V → Option V) : Codec V A M :=
 def partialId (q : V → Bool) : V → Option V := fun v => if q v then some v else none
 
 /-- `held` writes as `adapt` with a total adapter. -/
-theorem through_e_adapt {c : Codec V A M} (f g : V → V) :
+theorem through_e_adapt {c : Codec V M} (f g : V → V) :
     (c.through f g).e = (c.adapt (some ∘ f) (some ∘ g)).e := rfl
 
 /-- …and reads as one. -/
-theorem through_p_adapt {c : Codec V A M} (f g : V → V) :
+theorem through_p_adapt {c : Codec V M} (f g : V → V) :
     (c.through f g).p = (c.adapt (some ∘ f) (some ∘ g)).p := by
   funext a; simp only [Codec.through, Codec.adapt, Codec.ofEP_p]; cases c.p a <;> rfl
 
 /-- `refine` writes as `adapt` with a partial identity — the *same* combinator, weaker
     adapter. This is the sense in which it is sugar. -/
-theorem restrict_e_adapt {c : Codec V A M} (q : V → Bool) :
+theorem restrict_e_adapt {c : Codec V M} (q : V → Bool) :
     (c.restrict q).e = (c.adapt (partialId q) (partialId q)).e := by
   funext v
   simp only [restrict_e_def, Codec.adapt, Codec.ofEP_e, partialId]
   cases q v <;> rfl
 
 /-- …and reads as one. -/
-theorem restrict_p_adapt {c : Codec V A M} (q : V → Bool) :
+theorem restrict_p_adapt {c : Codec V M} (q : V → Bool) :
     (c.restrict q).p = (c.adapt (partialId q) (partialId q)).p := rfl
 
 /-! ### The stored-side gate -/
@@ -246,8 +246,8 @@ theorem gate_true {X Y : Type} (m : X → Option Y) (x : X) :
 
 /-- **The domain of the two-sided restriction at an orientation**: the predicate of the caller
     side, and the gate of the predicate of the stored side. -/
-theorem refine2_f_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (o : Orient)
-    (x : Side V A o.c) :
+theorem refine2_f_isSome (c : Codec V M) (qV : V → Bool) (qA : V → Bool) (o : Orient)
+    (x : Side V o.c) :
     ((refine2 c qV qA).f o x).isSome =
       (Side.elim qV qA o.c x && gate (c.f o) (Side.elim qV qA o.s) x) := by
   simp only [refine2, gate]
@@ -258,25 +258,25 @@ theorem refine2_f_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (
     | some y => cases h : Side.elim qV qA o.s y <;> simp [h]
 
 /-- The write domain of the two-sided restriction: the domain at the host. -/
-theorem refine2_e_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (v : V) :
+theorem refine2_e_isSome (c : Codec V M) (qV : V → Bool) (qA : V → Bool) (v : V) :
     ((refine2 c qV qA).e v).isSome = (qV v && gate c.e qA v) :=
   refine2_f_isSome c qV qA .host v
 
 /-- The read domain of the two-sided restriction: the domain at the dual. -/
-theorem refine2_p_isSome (c : Codec V A M) (qV : V → Bool) (qA : A → Bool) (a : A) :
+theorem refine2_p_isSome (c : Codec V M) (qV : V → Bool) (qA : V → Bool) (a : V) :
     ((refine2 c qV qA).p a).isSome = (qA a && gate c.p qV a) :=
   refine2_f_isSome c qV qA .dual a
 
 /-- A refinement writes where the gate passes and the base writes, so a row can read off a
     refinement without unfolding it. -/
-@[simp] theorem restrict_e_isSome {c : Codec V A M} {q : V → Bool} (v : V) :
+@[simp] theorem restrict_e_isSome {c : Codec V M} {q : V → Bool} (v : V) :
     ((c.restrict q).e v).isSome = (q v && (c.e v).isSome) := by
   rw [Codec.restrict, refine2_e_isSome, gate_true]
 
 /-- `alternate reader`: extend the reading. With §3's coherence premise this presentation equals
     the order-free `p ∪ r`. The migration extends the read only, so the write and the read are
     two formulas. -/
-def Codec.extendRead (c : Codec V A M) (r : A → Option V) : Codec V A M :=
+def Codec.extendRead (c : Codec V M) (r : V → Option V) : Codec V M :=
   Codec.ofEP (T := c.T)
     (μ := c.μ)
     (e := c.e)
@@ -290,7 +290,7 @@ the definitions again. `held` and `alternate reader` are transparent on the side
 touch, which is why two of the eight are `Iff.rfl`. -/
 
 section WrapperInversion
-variable {c : Codec V A M}
+variable {c : Codec V M}
 
 /-- `held` writes what its base writes, at the transported value. -/
 theorem through_e {f g : V → V} {v a} :
@@ -304,18 +304,18 @@ theorem through_p {f g : V → V} {a v} :
 /-- The read side of `restrict_e_isSome`, and its absence is why every literal row unfolded
     `Codec.restrict` by hand. §4c asks for one codec stated once for both sides; the write half
     was `@[simp]` and the read half was not there. -/
-@[simp] theorem restrict_p_isSome {c : Codec V A M} {q : V → Bool} (a : A) :
+@[simp] theorem restrict_p_isSome {c : Codec V M} {q : V → Bool} (a : V) :
     ((c.restrict q).p a).isSome = ((c.p a).elim false q) := by
   rw [Codec.restrict, refine2_p_isSome, Bool.true_and]
   simp only [gate]; cases c.p a <;> rfl
 
 /-- `alternate reader` does not touch the writing at all — §5's whole point. -/
-theorem extendRead_e {r : A → Option V} {v a} :
+theorem extendRead_e {r : V → Option V} {v a} :
     (c.extendRead r).e v = some a ↔ c.e v = some a := Iff.rfl
 
 /-- It reads through the base where the base reads, and through the migration exactly
     where the base does not. That "exactly" is where canonical reads go. -/
-theorem extendRead_p {r : A → Option V} {a v} :
+theorem extendRead_p {r : V → Option V} {a v} :
     (c.extendRead r).p a = some v ↔ c.p a = some v ∨ (c.p a = none ∧ r a = some v) := by
   show (match c.p a with | some w => some w | none => r a) = some v ↔ _
   cases hp : c.p a <;> simp
@@ -326,7 +326,7 @@ end WrapperInversion
     those three. This is how a ground codec inherits from the wrapper it turns out to be,
     without disturbing its definition — which matters, since the definitions are unfolded
     all over the development. -/
-theorem Lawful.congr {c d : Codec V A M} (he : c.e = d.e) (hp : c.p = d.p) (hμ : c.μ = d.μ)
+theorem Lawful.congr {c d : Codec V M} (he : c.e = d.e) (hp : c.p = d.p) (hμ : c.μ = d.μ)
     (h : Lawful member d) : Lawful member c where
   inv {o _ _} hx := by
     have hf := Orient.both (P := fun o => c.f o = d.f o) he hp
@@ -334,7 +334,7 @@ theorem Lawful.congr {c d : Codec V A M} (he : c.e = d.e) (hp : c.p = d.p) (hμ 
   writes hm _ _ hx := by rw [hμ] at hm; rw [he] at hx; exact h.writes hm hx
 
 /-- The carrier transfers too, given the held set is no smaller. -/
-theorem Carrier.congr {c d : Codec V A M} (he : c.e = d.e) (hp : c.p = d.p)
+theorem Carrier.congr {c d : Codec V M} (he : c.e = d.e) (hp : c.p = d.p)
     (hT : ∀ v, d.T v → c.T v) (h : Carrier d) : Carrier c := by
   refine ⟨?_, ?_⟩
   · intro v a hx; rw [he] at hx; exact hT v (h.domE hx)
@@ -354,19 +354,19 @@ theorem length_le_one_of_pairwise_false {α : Type} {l : List α}
 
 /-- **No value and no attribute is admitted by two options.** The certificate implies it
     (`admitsAtMostOne_of_separated`). -/
-def AdmitsAtMostOne (os : List (Codec V A M)) : Prop :=
+def AdmitsAtMostOne (os : List (Codec V M)) : Prop :=
   (∀ t, (os.filter (fun c => (c.e t).isSome)).length ≤ 1) ∧
   (∀ a, (os.filter (fun c => (c.p a).isSome)).length ≤ 1)
 
 /-- **The first option that acts.** A sum at each orientation is this: act through the first
     option that admits by the admission of that orientation. -/
-def select {X Y : Type} (os : List (Codec V A M)) (run : Codec V A M → X → Option Y) (x : X) :
+def select {X Y : Type} (os : List (Codec V M)) (run : Codec V M → X → Option Y) (x : X) :
     Option Y :=
   (os.find? (fun c => (run c x).isSome)).bind (run · x)
 
 /-- `union`: the sum, resolved by the first admitter. Over lawful, pairwise compatible options
     the order is unobservable (`altCodec_perm`). -/
-def altCodec (os : List (Codec V A M)) (μA : Option M) : Codec V A M where
+def altCodec (os : List (Codec V M)) (μA : Option M) : Codec V M where
   T v := ∃ o ∈ os, o.T v
   μ := μA
   f o := select os (·.f o)
@@ -376,7 +376,7 @@ def altCodec (os : List (Codec V A M)) (μA : Option M) : Codec V A M where
 At each orientation, the first option that acts answers. -/
 
 /-- **What a selection produces**: the first option that acts answered. -/
-theorem select_eq_some {X Y : Type} {os : List (Codec V A M)} {run : Codec V A M → X → Option Y}
+theorem select_eq_some {X Y : Type} {os : List (Codec V M)} {run : Codec V M → X → Option Y}
     {x : X} {y : Y} :
     select os run x = some y ↔
       ∃ o, os.find? (fun c => (run c x).isSome) = some o ∧ run o x = some y := by
@@ -384,33 +384,33 @@ theorem select_eq_some {X Y : Type} {os : List (Codec V A M)} {run : Codec V A M
   cases os.find? (fun c => (run c x).isSome) <;> simp
 
 /-- …and it routes through an option that acts. -/
-theorem select_admits {X Y : Type} {os : List (Codec V A M)} {run : Codec V A M → X → Option Y}
+theorem select_admits {X Y : Type} {os : List (Codec V M)} {run : Codec V M → X → Option Y}
     {x : X} {y : Y} (h : select os run x = some y) :
     ∃ o ∈ os, (run o x).isSome = true ∧ run o x = some y := by
   obtain ⟨o, hf, hr⟩ := select_eq_some.mp h
   exact ⟨o, List.mem_of_find?_eq_some hf, List.find?_some (p := fun c => (run c x).isSome) hf, hr⟩
 
 /-- **What a union sends**: the first option that acts at the input sent the input. -/
-theorem altCodec_f {os : List (Codec V A M)} {μA : Option M} {o : Orient} {x : Side V A o.c}
-    {y : Side V A o.s} :
+theorem altCodec_f {os : List (Codec V M)} {μA : Option M} {o : Orient} {x : Side V o.c}
+    {y : Side V o.s} :
     (altCodec os μA).f o x = some y ↔
       ∃ c, os.find? (fun c => (c.f o x).isSome) = some c ∧ c.f o x = some y := select_eq_some
 
 /-- The map of a union at an orientation, for a rewrite. The lemma rewrites the write and the
     read, because `e` and `p` reduce to `f`. -/
-theorem altCodec_f_def (os : List (Codec V A M)) (μA : Option M) (o : Orient) :
+theorem altCodec_f_def (os : List (Codec V M)) (μA : Option M) (o : Orient) :
     (altCodec os μA).f o = select os (·.f o) := rfl
 
 /-- A sum routes through an option that acts, at each orientation. -/
-theorem altCodec_admits {os : List (Codec V A M)} {μA : Option M} {o : Orient}
-    {x : Side V A o.c} {y : Side V A o.s} (h : (altCodec os μA).f o x = some y) :
+theorem altCodec_admits {os : List (Codec V M)} {μA : Option M} {o : Orient}
+    {x : Side V o.c} {y : Side V o.s} (h : (altCodec os μA).f o x = some y) :
     ∃ c ∈ os, (c.f o x).isSome = true ∧ c.f o x = some y := select_admits h
 
 /-! ## Carriers — the pair is on `T` -/
 
 /-- The carrier, likewise: `e` only writes what `pV` matched, `p` only reads what `pV`
     built. -/
-theorem carrier_pointCodec {α : Type} {pV : Ctor α V} {pA : Ctor α A} {μ₀ : M} :
+theorem carrier_pointCodec {α : Type} {pV : Ctor α V} {pA : Ctor α V} {μ₀ : M} :
     Carrier (pointCodec pV pA μ₀) := by
   refine ⟨?_, ?_⟩
   · intro v a h
@@ -420,7 +420,7 @@ theorem carrier_pointCodec {α : Type} {pV : Ctor α V} {pA : Ctor α A} {μ₀ 
     obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp h
     exact ⟨x, rfl⟩
 
-theorem carrier_through {c : Codec V A M} {f g : V → V} (hc : Carrier c)
+theorem carrier_through {c : Codec V M} {f g : V → V} (hc : Carrier c)
     (hlaw : LawfulCore member c) (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
     Carrier (c.through f g) where
   domE he := hc.domE (through_e.mp he)
@@ -431,19 +431,19 @@ theorem carrier_through {c : Codec V A M} {f g : V → V} (hc : Carrier c)
     exact hc.ranP hw
 
 /-- The two-sided restriction is on its carrier when the inner codec is. -/
-theorem carrier_refine2 {c : Codec V A M} (h : Carrier c) (qV : V → Bool) (qA : A → Bool) :
+theorem carrier_refine2 {c : Codec V M} (h : Carrier c) (qV : V → Bool) (qA : V → Bool) :
     Carrier (refine2 c qV qA) where
   domE he := let ⟨hq, he', _⟩ := refine2_f.mp he; ⟨h.domE he', hq⟩
   ranP hp := let ⟨_, hp', hq⟩ := refine2_f.mp hp; ⟨h.ranP hp', hq⟩
 
-theorem carrier_restrict {c : Codec V A M} (hc : Carrier c) (q : V → Bool) :
+theorem carrier_restrict {c : Codec V M} (hc : Carrier c) (q : V → Bool) :
     Carrier (c.restrict q) :=
   carrier_refine2 hc q _
 
 /-- `alternate reader`: the migration lands in `T` because §3's `ran(r) ⊆ dom(e)` puts it in
     `dom(e)`, and `e`'s domain is `T`. The doc writes `r : 𝔸 ⇀ T` directly; this is the
     same premise arrived at through the one the proof already needs. -/
-theorem carrier_extendRead {c : Codec V A M} {r : A → Option V} (hc : Carrier c)
+theorem carrier_extendRead {c : Codec V M} {r : V → Option V} (hc : Carrier c)
     (hran : ∀ a v, r a = some v → (c.e v).isSome) :
     Carrier (c.extendRead r) where
   domE he := hc.domE (extendRead_e.mp he)
@@ -453,7 +453,7 @@ theorem carrier_extendRead {c : Codec V A M} {r : A → Option V} (hc : Carrier 
     · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hran _ _ hrv)
       exact hc.domE ha'
 
-theorem carrier_altCodec {os : List (Codec V A M)} {μA : Option M}
+theorem carrier_altCodec {os : List (Codec V M)} {μA : Option M}
     (h : ∀ o ∈ os, Carrier o) : Carrier (altCodec os μA) := by
   refine ⟨?_, ?_⟩
   · intro v a he
@@ -467,7 +467,7 @@ theorem carrier_altCodec {os : List (Codec V A M)} {μA : Option M}
 
 /-- §2's laws for any pair of prisms. The one premise a prism pair does not already supply is
     which member the attribute side stamps. Everything else is `out_into` and `into_out`. -/
-theorem lawful_pointCodec {α : Type} {pV : Ctor α V} {pA : Ctor α A} {μ₀ : M}
+theorem lawful_pointCodec {α : Type} {pV : Ctor α V} {pA : Ctor α V} {μ₀ : M}
     (hμ : ∀ x, member (pA.into x) = μ₀) :
     Lawful member (pointCodec pV pA μ₀) where
   -- match, rebuild, match again: `out_into` at the stored side, `into_out` at the caller side
@@ -481,7 +481,7 @@ theorem lawful_pointCodec {α : Type} {pV : Ctor α V} {pA : Ctor α A} {μ₀ :
     obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp he
     cases hm; exact hμ x
 
-theorem LawfulCore.through {c : Codec V A M} (h : LawfulCore member c) {f g : V → V}
+theorem LawfulCore.through {c : Codec V M} (h : LawfulCore member c) {f g : V → V}
     (hiso : IsoCancels c f g) :
     LawfulCore member (c.through f g) where
   retract he := through_p.mpr ⟨_, h.retract (through_e.mp he),
@@ -494,7 +494,7 @@ theorem LawfulCore.through {c : Codec V A M} (h : LawfulCore member c) {f g : V 
   writes := by intro μ hμ t a he; exact h.writes hμ (through_e.mp he)
 
 /-- `held` preserves the laws: the core lemma, plus canonical reads through the iso. -/
-theorem Lawful.through {c : Codec V A M} (h : Lawful member c) {f g : V → V}
+theorem Lawful.through {c : Codec V M} (h : Lawful member c) {f g : V → V}
     (hiso : IsoCancels c f g) :
     Lawful member (c.through f g) :=
   .ofRC (LawfulCore.through h.core hiso).retract
@@ -506,16 +506,16 @@ theorem Lawful.through {c : Codec V A M} (h : Lawful member c) {f g : V → V}
 
 /-- The two-sided restriction keeps the laws, and owes nothing. One proof serves each
     orientation. -/
-theorem Lawful.refine2 {c : Codec V A M} (hc : Lawful member c) (qV : V → Bool)
-    (qA : A → Bool) : Lawful member (refine2 c qV qA) where
+theorem Lawful.refine2 {c : Codec V M} (hc : Lawful member c) (qV : V → Bool)
+    (qA : V → Bool) : Lawful member (refine2 c qV qA) where
   inv h := let ⟨hq, h', hq'⟩ := refine2_f.mp h; refine2_f.mpr ⟨hq', hc.inv h', hq⟩
   writes hμ _ _ he := hc.writes hμ (refine2_f.mp he).2.1
 
-theorem Lawful.restrict {c : Codec V A M} (h : Lawful member c) (q : V → Bool) :
+theorem Lawful.restrict {c : Codec V M} (h : Lawful member c) (q : V → Bool) :
     Lawful member (c.restrict q) :=
   h.refine2 q _
 
-theorem LawfulCore.extendRead {c : Codec V A M} (h : LawfulCore member c) {r : A → Option V}
+theorem LawfulCore.extendRead {c : Codec V M} (h : LawfulCore member c) {r : V → Option V}
     (hran : ∀ a v, r a = some v → (c.e v).isSome) :
     LawfulCore member (c.extendRead r) where
   retract he := extendRead_p.mpr (.inl (h.retract (extendRead_e.mp he)))

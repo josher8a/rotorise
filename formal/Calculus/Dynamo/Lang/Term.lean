@@ -220,12 +220,12 @@ theorem opaq_TSubω (v : Value) :
     ((muStage_induct Carrier.empty (fun _ => carrier_opaqStep) (Value.depth v)).domE ha)
 
 /-- The depth of an element of each carrier. -/
-abbrev dynDepth : (s : Bool) → Alg.Side Value Attr s → Nat
+abbrev dynDepth : (s : Bool) → Alg.Side Value s → Nat
   | false => Value.depth
   | true => Attr.depth
 
 /-- The list former: the `arr` and `L` prisms. -/
-abbrev dList : Alg.ListA (Alg.Side Value Attr) Member Attr.member dynDepth where
+abbrev dList : Alg.ListA (Alg.Side Value) Member Attr.member dynDepth where
   p
     | false => arrV
     | true => lA
@@ -236,7 +236,7 @@ abbrev dList : Alg.ListA (Alg.Side Value Attr) Member Attr.member dynDepth where
     | true, _, _, hx => Nat.succ_le_succ (Attr.depth_le_depthL hx)
 
 /-- The map former: the `map` and `M` prisms. -/
-abbrev dMap : Alg.MapA (Alg.Side Value Attr) Member Attr.member dynDepth where
+abbrev dMap : Alg.MapA (Alg.Side Value) Member Attr.member dynDepth where
   m
     | false => mapV
     | true => mA
@@ -263,7 +263,7 @@ theorem encSet_agree {α : Type} {c d : Codec} {inj : α → Value} {S : NEFinse
     rw [hu, hu', h _ _ _ hu hu'])).trans hb
 
 /-- The set former: the lift, with the store's set rule as the element's obligation. -/
-noncomputable abbrev dSet : Alg.SetF Value Attr Member Attr.member Value.depth Attr.depth where
+noncomputable abbrev dSet : Alg.SetF Value Member Attr.member Value.depth Attr.depth where
   lift := setCodec
   lawful h := lawful_setCodec h
   agree h := agreeLe_setCodec h
@@ -320,7 +320,6 @@ abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
 /-- **The DynamoDB meaning** of that signature. -/
 @[reducible] noncomputable instance dynSem : Alg.Mean dynSig where
   V := Value
-  A := Attr
   Mem := Member
   mem := Attr.member
   decM := inferInstance
