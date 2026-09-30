@@ -33,33 +33,7 @@ written out once per constructor before it was named:
 Naming the shape once is what lets retract, canon and writes be discharged once for each family
 rather than once per constructor. -/
 
-/-! ### The prisms, value side and attribute side -/
-
-/-- `str` values. -/ def strV : Ctor String Value where
-  into := Value.str
-  out := fun v => match v with | .str s => some s | _ => none
-  out_into _ := rfl
-  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
-
-/-- `bool` values. -/ def boolV : Ctor Bool Value where
-  into := Value.bool
-  out := fun v => match v with | .bool b => some b | _ => none
-  out_into _ := rfl
-  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
-
-/-- `bin` values. -/ def binV : Ctor Bytes Value where
-  into := Value.bin
-  out := fun v => match v with | .bin b => some b | _ => none
-  out_into _ := rfl
-  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
-
-/-- The `null` *point*: a prism with a trivial payload, which is what makes `null` an
-    instance of the same shape as the three that carry data. -/
-def nullV : Ctor Unit Value where
-  into := fun _ => .null
-  out := fun v => match v with | .null => some () | _ => none
-  out_into _ := rfl
-  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+/-! ### The prisms of the carrier -/
 
 /-- `S`'s payload. -/ def sC : Ctor String Attr where
   into := Attr.s
@@ -85,7 +59,8 @@ def nullV : Ctor Unit Value where
   out_into _ := rfl
   into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
 
-/-- `NULL`'s point. -/ def nullA : Ctor Unit Attr where
+/-- `NULL`'s point: a prism with a trivial payload, which is what makes `null` an instance of
+    the same shape as the three that carry data. -/ def nullA : Ctor Unit Attr where
   into := fun _ => .null
   out := fun a => match a with | .null => some () | _ => none
   out_into _ := rfl
@@ -94,21 +69,8 @@ def nullV : Ctor Unit Value where
 /-! ### The container prisms
 
 The same shape one level up: a constructor whose payload is a *list* of entries. `L` and
-`M` are the two §1 provides on the attribute side, `arr` and `map` the two §3 writes into
-them. Naming them is what lets `array` and `record` be one construction (`entrywise`,
-under Products) rather than two. -/
-
-/-- `arr` values. -/ def arrV : Ctor (List Value) Value where
-  into := Value.arr
-  out := fun v => match v with | .arr xs => some xs | _ => none
-  out_into _ := rfl
-  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
-
-/-- `map` values. -/ def mapV : Ctor (MapOf Value) Value where
-  into := fun p => Value.map p.1 p.2
-  out := fun v => match v with | .map keys f => some ⟨keys, f⟩ | _ => none
-  out_into _ := rfl
-  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+`M` are the two §1 provides. Naming them is what lets `array` and `record` be one construction
+(`entrywise`, under Products) rather than two. -/
 
 /-- `L`'s payload. -/ def lA : Ctor (List Attr) Attr where
   into := Attr.l

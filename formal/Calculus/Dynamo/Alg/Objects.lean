@@ -43,18 +43,17 @@ export Alg (valPresentB objEntryT entryCodec objAt objWrite objRead objAt_eq)
 section Object
 variable {sems : MapOf FieldSem} {rc? : Option Codec}
 
-/-- The object is `carriedCodec` between `map` and `M`, at that pair: the generic object at the
-    `map` and `M` prisms. -/
+/-- The object is `carriedCodec` at the `M` prism: the generic object at that prism. -/
 noncomputable abbrev objectCodecCore (sems : MapOf FieldSem) (rc? : Option Codec) : Codec :=
-  Alg.objectCodecCore mapV mA .M sems rc?
+  Alg.objectCodecCore mA mA .M sems rc?
 
-/-- §4's `object`, at the `map` and `M` prisms. -/
+/-- §4's `object`, at the `M` prism. -/
 noncomputable abbrev objectCodec (sems : MapOf FieldSem) (rest : RestSem) : Codec :=
-  Alg.objectCodec mapV mA .M sems rest
+  Alg.objectCodec mA mA .M sems rest
 
 theorem objectCodecCore_eq :
     objectCodecCore sems rc? =
-      carriedCodec mapV mA .M
+      carriedCodec mA mA .M
         (fun p => valPresentB sems p.1 = true ∧ ∀ k, objEntryT sems rc? (k.1, p.2 k))
         (objWrite sems rc?) (objRead sems rc?) := rfl
 
@@ -74,7 +73,7 @@ theorem objectCodec_empty_codec (c : Codec) :
   · funext v
     cases v <;>
       simp [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, recordCodec,
-            objEntryT, rcOf, MapOf.at, mapV]
+            objEntryT, rcOf, MapOf.at, mA]
     constructor
     · rintro ⟨x, ⟨rfl, hf⟩, h⟩
       cases eq_of_heq hf
@@ -87,7 +86,7 @@ theorem objectCodec_empty_codec (c : Codec) :
     rename_i keys f
     simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, recordCodec,
         Option.bind,
-          objWrite, objAt, rcOf, entryCodec, MapOf.at, mapV, mA, Alg.Codec.ofEP_e]
+          objWrite, objAt, rcOf, entryCodec, MapOf.at, mA, mA, Alg.Codec.ofEP_e]
     rw [if_pos (hval keys), Option.map_map]
     refine congrArg (fun F => Option.map F _) (funext fun _ => rfl) |>.trans ?_
     exact congrArg (Option.map _) (congrArg funImage
@@ -95,7 +94,7 @@ theorem objectCodec_empty_codec (c : Codec) :
   · funext a
     cases a <;> try rfl
     rename_i keys f
-    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, mapV, mA,
+    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, mA, mA,
         Option.bind,
                objRead, objAt, rcOf, entryCodec, MapOf.at, recordCodec, Alg.Codec.ofEP_p]
     -- simp over a vacuous `Finset ∅` goal reaches `Classical.choice` through three filter

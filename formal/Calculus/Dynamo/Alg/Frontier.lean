@@ -41,24 +41,24 @@ export Alg (setImage_read)
 /-- `decSet` lands on the string branch when the reads produce strings. -/
 theorem decSet_strBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
     {U : NEFinset String}
-    (h1 : neSetImage (fun y => (c.p (inj y)).bind vStr) S = some U) :
+    (h1 : neSetImage (fun y => (c.p (inj y)).bind sC.out) S = some U) :
     decSet c inj S = some (.strSet U) := by
   unfold decSet; rw [h1]
 
 /-- …the numeric branch when they produce numbers, the string branch having failed. -/
 theorem decSet_numBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
     {U : NEFinset WFNumeral}
-    (h0 : neSetImage (fun y => (c.p (inj y)).bind vStr) S = none)
-    (h1 : neSetImage (fun y => (c.p (inj y)).bind vNum) S = some U) :
+    (h0 : neSetImage (fun y => (c.p (inj y)).bind sC.out) S = none)
+    (h1 : neSetImage (fun y => (c.p (inj y)).bind nC.out) S = some U) :
     decSet c inj S = some (.numSet U) := by
   unfold decSet; rw [h0, h1]
 
 /-- …and the binary branch when both earlier ones have. -/
 theorem decSet_binBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
     {U : NEFinset Bytes}
-    (h0 : neSetImage (fun y => (c.p (inj y)).bind vStr) S = none)
-    (h0' : neSetImage (fun y => (c.p (inj y)).bind vNum) S = none)
-    (h1 : neSetImage (fun y => (c.p (inj y)).bind vBin) S = some U) :
+    (h0 : neSetImage (fun y => (c.p (inj y)).bind sC.out) S = none)
+    (h0' : neSetImage (fun y => (c.p (inj y)).bind nC.out) S = none)
+    (h1 : neSetImage (fun y => (c.p (inj y)).bind bC.out) S = some U) :
     decSet c inj S = some (.binSet U) := by
   unfold decSet; rw [h0, h0', h1]; rfl
 
@@ -98,40 +98,40 @@ theorem set_retract {c : Codec} (h : LawfulCore c) :
        injection hE with hE; subst hE
        first
        | exact decSet_strBranch
-           (key (vinj := Value.str) (vout := vStr) sC_out_inj (fun _ => rfl) hT)
+           (key (vinj := Value.str) (vout := sC.out) sC_out_inj (fun _ => rfl) hT)
        | exact decSet_numBranch
-           (miss (vinj := Value.num) (vout := vStr) sC_out_inj (fun _ => rfl) hT)
-           (key (vinj := Value.num) (vout := vNum) sC_out_inj (fun _ => rfl) hT)
+           (miss (vinj := Value.num) (vout := sC.out) sC_out_inj (fun _ => rfl) hT)
+           (key (vinj := Value.num) (vout := nC.out) sC_out_inj (fun _ => rfl) hT)
        | exact decSet_binBranch
-           (miss (vinj := Value.bin) (vout := vStr) sC_out_inj (fun _ => rfl) hT)
-           (miss (vinj := Value.bin) (vout := vNum) sC_out_inj (fun _ => rfl) hT)
-           (key (vinj := Value.bin) (vout := vBin) sC_out_inj (fun _ => rfl) hT)
+           (miss (vinj := Value.bin) (vout := sC.out) sC_out_inj (fun _ => rfl) hT)
+           (miss (vinj := Value.bin) (vout := nC.out) sC_out_inj (fun _ => rfl) hT)
+           (key (vinj := Value.bin) (vout := bC.out) sC_out_inj (fun _ => rfl) hT)
      · split at hE
        · next T hT =>
          injection hE with hE; subst hE
          first
          | exact decSet_strBranch
-             (key (vinj := Value.str) (vout := vStr) nC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.str) (vout := sC.out) nC_out_inj (fun _ => rfl) hT)
          | exact decSet_numBranch
-             (miss (vinj := Value.num) (vout := vStr) nC_out_inj (fun _ => rfl) hT)
-             (key (vinj := Value.num) (vout := vNum) nC_out_inj (fun _ => rfl) hT)
+             (miss (vinj := Value.num) (vout := sC.out) nC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.num) (vout := nC.out) nC_out_inj (fun _ => rfl) hT)
          | exact decSet_binBranch
-             (miss (vinj := Value.bin) (vout := vStr) nC_out_inj (fun _ => rfl) hT)
-             (miss (vinj := Value.bin) (vout := vNum) nC_out_inj (fun _ => rfl) hT)
-             (key (vinj := Value.bin) (vout := vBin) nC_out_inj (fun _ => rfl) hT)
+             (miss (vinj := Value.bin) (vout := sC.out) nC_out_inj (fun _ => rfl) hT)
+             (miss (vinj := Value.bin) (vout := nC.out) nC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.bin) (vout := bC.out) nC_out_inj (fun _ => rfl) hT)
        · next =>
          obtain ⟨T, hT, hA⟩ := Option.map_eq_some_iff.mp hE
          subst hA
          first
          | exact decSet_strBranch
-             (key (vinj := Value.str) (vout := vStr) bC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.str) (vout := sC.out) bC_out_inj (fun _ => rfl) hT)
          | exact decSet_numBranch
-             (miss (vinj := Value.num) (vout := vStr) bC_out_inj (fun _ => rfl) hT)
-             (key (vinj := Value.num) (vout := vNum) bC_out_inj (fun _ => rfl) hT)
+             (miss (vinj := Value.num) (vout := sC.out) bC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.num) (vout := nC.out) bC_out_inj (fun _ => rfl) hT)
          | exact decSet_binBranch
-             (miss (vinj := Value.bin) (vout := vStr) bC_out_inj (fun _ => rfl) hT)
-             (miss (vinj := Value.bin) (vout := vNum) bC_out_inj (fun _ => rfl) hT)
-             (key (vinj := Value.bin) (vout := vBin) bC_out_inj (fun _ => rfl) hT))
+             (miss (vinj := Value.bin) (vout := sC.out) bC_out_inj (fun _ => rfl) hT)
+             (miss (vinj := Value.bin) (vout := nC.out) bC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.bin) (vout := bC.out) bC_out_inj (fun _ => rfl) hT))
 
 /-- **(W) for `set`.** The wire member is `setMember` of the element's, and which branch
     `encSet` took is fixed by the element codec's own member. -/
@@ -316,9 +316,9 @@ theorem set_canon {c : Codec} (h : Lawful c) :
     obtain ⟨x, hx⟩ := U.2
     obtain ⟨y, -, hy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hI) x).mp hx
     exact neSetImage_none (setImage_none_of hx (by rw [h.canon (hV _ x hy)]; exact hA y))
-  have hs : ∀ o x, o.bind vStr = some x → o = some (Value.str x) := fun _ _ => bind_vStr
-  have hn : ∀ o x, o.bind vNum = some x → o = some (Value.num x) := fun _ _ => bind_vNum
-  have hb : ∀ o x, o.bind vBin = some x → o = some (Value.bin x) := fun _ _ => bind_vBin
+  have hs : ∀ o x, o.bind sC.out = some x → o = some (Value.str x) := fun _ _ => bind_sC
+  have hn : ∀ o x, o.bind nC.out = some x → o = some (Value.num x) := fun _ _ => bind_nC
+  have hb : ∀ o x, o.bind bC.out = some x → o = some (Value.bin x) := fun _ _ => bind_bC
   intro a t hp
   rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
     (unfold decSet at hD
@@ -363,7 +363,7 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) :=
 
 The guards, the entry steps, the rest policy and the two clauses of §2 read no carrier
 constructor, so they are the generic layer's. The aliases give them their names here, and the
-two laws below are the generic ones at the `map` and `M` prisms. -/
+two laws below are the generic ones at the `M` prism. -/
 
 export Alg (valPresentB_of)
 

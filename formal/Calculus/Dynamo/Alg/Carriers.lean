@@ -21,22 +21,22 @@ noncomputable section
     made them lawful: `e` only writes what the value prism matched, and `p` only reads what
     it built. See `carrier_pointCodec`. -/
 theorem carrier_stringCodec : Carrier stringCodec :=
-  Carrier.congr (d := pointCodec strV sC .S)
+  Carrier.congr (d := pointCodec sC sC .S)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
     (fun _ h => h) carrier_pointCodec
 
 theorem carrier_booleanCodec : Carrier booleanCodec :=
-  Carrier.congr (d := pointCodec boolV boolA .BOOL)
+  Carrier.congr (d := pointCodec boolA boolA .BOOL)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
     (fun _ h => h) carrier_pointCodec
 
 theorem carrier_binaryCodec : Carrier binaryCodec :=
-  Carrier.congr (d := pointCodec binV bC .B)
+  Carrier.congr (d := pointCodec bC bC .B)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
     (fun _ h => h) carrier_pointCodec
 
 theorem carrier_nullCodec : Carrier nullCodec :=
-  Carrier.congr (d := pointCodec nullV nullA .NULL)
+  Carrier.congr (d := pointCodec nullA nullA .NULL)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
     (fun _ h => h.elim fun _ hh => hh) carrier_pointCodec
 

@@ -66,29 +66,24 @@ theorem neSetImage_congr {α β : Type} [DecidableEq β] {f g : α → Option β
     rw [(neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hs S.2⟩)).mpr hs,
       (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hs S.2⟩)).mpr hT]
 
-/-- Reading a value's scalar payload, the mirror of `sC`/`nC`/`bC` on the value side. -/
-def vStr : Value → Option String := fun v => match v with | .str s => some s | _ => none
-def vNum : Value → Option WFNumeral := fun v => match v with | .num d => some d | _ => none
-def vBin : Value → Option Bytes  := fun v => match v with | .bin b => some b | _ => none
-
-/-- A `bind` through a value projection pins the value. -/
-theorem bind_vStr {o : Option Value} {y : String} (h : o.bind vStr = some y) :
+/-- A `bind` through a prism pins the datum. -/
+theorem bind_sC {o : Option Value} {y : String} (h : o.bind sC.out = some y) :
     o = some (.str y) := by
   cases o with
   | none => exact nomatch h
-  | some w => cases w <;> simp_all [vStr]
+  | some w => cases w <;> simp_all [sC]
 
-theorem bind_vNum {o : Option Value} {y : WFNumeral} (h : o.bind vNum = some y) :
+theorem bind_nC {o : Option Value} {y : WFNumeral} (h : o.bind nC.out = some y) :
     o = some (.num y) := by
   cases o with
   | none => exact nomatch h
-  | some w => cases w <;> simp_all [vNum]
+  | some w => cases w <;> simp_all [nC]
 
-theorem bind_vBin {o : Option Value} {y : Bytes} (h : o.bind vBin = some y) :
+theorem bind_bC {o : Option Value} {y : Bytes} (h : o.bind bC.out = some y) :
     o = some (.bin y) := by
   cases o with
   | none => exact nomatch h
-  | some w => cases w <;> simp_all [vBin]
+  | some w => cases w <;> simp_all [bC]
 
 /-- The member a set stores, computed from its element's (§3 `(set)`). -/
 def setMember : Member → Option Member
@@ -109,11 +104,11 @@ noncomputable def encSet {α : Type} (c : Codec) (inj : α → Value) (S : NEFin
 /-- …and back: decode a wire set's payloads into the value set their kind selects. -/
 noncomputable def decSet {α : Type} (c : Codec) (inj : α → Attr) (S : NEFinset α) :
     Option Value :=
-  match neSetImage (fun x => (c.p (inj x)).bind vStr) S with
+  match neSetImage (fun x => (c.p (inj x)).bind sC.out) S with
   | some T => some (.strSet T)
-  | none => match neSetImage (fun x => (c.p (inj x)).bind vNum) S with
+  | none => match neSetImage (fun x => (c.p (inj x)).bind nC.out) S with
     | some T => some (.numSet T)
-    | none => (neSetImage (fun x => (c.p (inj x)).bind vBin) S).map Value.binSet
+    | none => (neSetImage (fun x => (c.p (inj x)).bind bC.out) S).map Value.binSet
 
 /-! No emptiness guard here: §1 types the wire sets as `℘⁺fin`, which is a type, so there is
 no empty set for a codec to refuse. -/
@@ -161,11 +156,11 @@ theorem encSet_congr {α : Type} {c d : Codec} {inj : α → Value} {S : NEFinse
 theorem decSet_congr {α : Type} {c d : Codec} {inj : α → Attr} {S : NEFinset α}
     (h : ∀ x ∈ S.1, c.p (inj x) = d.p (inj x)) : decSet c inj S = decSet d inj S := by
   unfold decSet
-  rw [neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind vStr)
+  rw [neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind sC.out)
       (fun x hx => by rw [h x hx]),
-    neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind vNum)
+    neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind nC.out)
       (fun x hx => by rw [h x hx]),
-    neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind vBin)
+    neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind bC.out)
       (fun x hx => by rw [h x hx])]
 
 /-- What a read produces: one of the three value sets, each element read from an element
@@ -184,18 +179,18 @@ theorem decSet_mem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
     injection h with h
     refine Or.inl ⟨T, h.symm, fun y hy => ?_⟩
     obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
-    exact ⟨x, hx, bind_vStr hxy⟩
+    exact ⟨x, hx, bind_sC hxy⟩
   · split at h
     · next T hT =>
       injection h with h
       refine Or.inr (Or.inl ⟨T, h.symm, fun y hy => ?_⟩)
       obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
-      exact ⟨x, hx, bind_vNum hxy⟩
+      exact ⟨x, hx, bind_nC hxy⟩
     · next =>
       obtain ⟨T, hT, hv⟩ := Option.map_eq_some_iff.mp h
       refine Or.inr (Or.inr ⟨T, hv.symm, fun y hy => ?_⟩)
       obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
-      exact ⟨x, hx, bind_vBin hxy⟩
+      exact ⟨x, hx, bind_bC hxy⟩
 
 /-- §3 `(set)`. Non-emptiness, uniqueness and homogeneity are all carried by the **types**:
     a `Finset` has no repeats and no order, `℘⁺fin` has no empty inhabitant, and the three
@@ -227,7 +222,7 @@ in this namespace. -/
 export Alg (carriedCodec carried_e lawful_carried carrier_carried entrywise lawful_entrywise
   carrier_entrywise)
 
-/-! ### `array` (§3) — entrywise between `arr` and `L` -/
+/-! ### `array` (§3) — entrywise at `L` -/
 
 /-! ### What `set` writes and reads
 
@@ -262,12 +257,12 @@ def arrayCodec (c : Codec) : Codec :=
       | .l as => (traverse c.p as).map Value.arr
       | _ => none)
 
-/-- `array` *is* the entrywise product at `arr`/`L`, on the nose. The definition above is
+/-- `array` *is* the entrywise product at `L`, on the nose. The definition above is
     left in its unfolded form because the `opaque` fixpoint reduces through it; this
     equation is what carries the three lemmas across. -/
 theorem arrayCodec_eq {c : Codec} :
-    arrayCodec c = entrywise arrV lA .L (fun vs => ∀ x ∈ vs, c.T x) c.e c.p := by
-  ext v <;> cases v <;> simp_all [arrayCodec, entrywise, carriedCodec, arrV, lA]
+    arrayCodec c = entrywise lA lA .L (fun vs => ∀ x ∈ vs, c.T x) c.e c.p := by
+  ext v <;> cases v <;> simp_all [arrayCodec, entrywise, carriedCodec, lA, lA]
 
 /-- `array` is lawful, entry by entry. -/
 theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) :=
@@ -278,7 +273,7 @@ theorem carrier_arrayCodec {c : Codec} (hc : Carrier c) : Carrier (arrayCodec c)
     (fun h => traverse_mem_input (fun _ _ => hc.domE) h)
     (fun h => traverse_mem (fun _ _ => hc.ranP) h)
 
-/-! ### `record` (§3) — `carriedCodec` between `map` and `M`
+/-! ### `record` (§3) — `carriedCodec` at `M`
 
 The keyed entry steps ~~encPair~~/~~decPair~~ are gone with the traversal. They existed to
 carry a name past a codec inside `traverse`, and `M`'s payload no longer has a list for
@@ -416,12 +411,12 @@ section Tuple
 variable {cs : List Codec} {tail : Option Codec}
 
 theorem tupleCodec_eq :
-    tupleCodec cs tail = carriedCodec arrV lA .L
+    tupleCodec cs tail = carriedCodec lA lA .L
       (fun vs => ∃ ps, align cs tail vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2)
       (fun vs => (align cs tail vs).bind (traverse fun cv => cv.1.e cv.2))
       (fun as => (align cs tail as).bind (traverse fun ca => ca.1.p ca.2)) := by
   refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
-    simp [tupleCodec, carriedCodec, arrV, lA]
+    simp [tupleCodec, carriedCodec, lA, lA]
 
 /-- A tuple is lawful: the alignment puts each position on its own codec. -/
 theorem lawful_tupleCodec (hcs : ∀ c ∈ cs, Lawful c) (htl : ∀ c ∈ tail, Lawful c) :
@@ -467,16 +462,16 @@ are proved equal to a `list` below rather than restated, so the positional theor
 proved one time. -/
 
 /-- §3 `(list)`: the positional product over a prefix, a spread and a suffix. The generic
-    `list` at the `arr` and `L` prisms. -/
+    `list` at the `L` prism. -/
 abbrev listCodec (pre : List Codec) (spread : Option Codec) (suf : List Codec) : Codec :=
-  Alg.listCodec arrV lA .L pre spread suf
+  Alg.listCodec lA lA .L pre spread suf
 
 section ListShape
 variable {pre : List Codec} {sp : Option Codec} {suf : List Codec}
 
 /-- `list` is `carriedCodec` between the same two prisms as `tuple` and `array`. -/
 theorem listCodec_eq :
-    listCodec pre sp suf = carriedCodec arrV lA .L
+    listCodec pre sp suf = carriedCodec lA lA .L
       (fun vs => ∃ ps, alignL pre sp suf vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2)
       (fun vs => (alignL pre sp suf vs).bind (traverse fun cv => cv.1.e cv.2))
       (fun as => (alignL pre sp suf as).bind (traverse fun ca => ca.1.p ca.2)) := rfl
@@ -487,12 +482,12 @@ end ListShape
 theorem tupleCodec_eq_listCodec (cs : List Codec) (tail : Option Codec) :
     tupleCodec cs tail = listCodec cs tail [] := by
   refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
-    simp [tupleCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA, alignL_nil_suf]
+    simp [tupleCodec, listCodec, Alg.listCodec, carriedCodec, lA, lA, alignL_nil_suf]
 
 /-- `array` writes what the `list` with one spread writes. -/
 theorem arrayCodec_e (c : Codec) (v : Value) :
     (arrayCodec c).e v = (listCodec [] (some c) []).e v := by
-  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA,
+  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, lA,
       Option.bind_some, Alg.Codec.ofEP_e]; try rfl)
   rw [alignL_spread]
   show _ = ((traverse (fun q : Codec × Value => q.1.e q.2) _).map Attr.l)
@@ -501,7 +496,7 @@ theorem arrayCodec_e (c : Codec) (v : Value) :
 /-- …and reads what it reads. -/
 theorem arrayCodec_p (c : Codec) (a : Attr) :
     (arrayCodec c).p a = (listCodec [] (some c) []).p a := by
-  cases a <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA,
+  cases a <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, lA,
       Option.bind_some, Alg.Codec.ofEP_p]; try rfl)
   rw [alignL_spread]
   show _ = ((traverse (fun q : Codec × Attr => q.1.p q.2) _).map Value.arr)
@@ -510,7 +505,7 @@ theorem arrayCodec_p (c : Codec) (a : Attr) :
 /-- …and carries what it carries. -/
 theorem arrayCodec_T (c : Codec) (v : Value) :
     (arrayCodec c).T v ↔ (listCodec [] (some c) []).T v := by
-  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA,
+  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, lA,
       Attr.l.injEq, reduceCtorEq,
     false_and, exists_false, exists_eq_left', iff_self, Alg.Codec.ofEP_T]; try exact Iff.rfl)
   rw [alignL_spread]

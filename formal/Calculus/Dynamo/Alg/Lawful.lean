@@ -20,22 +20,22 @@ equality by `Lawful.congr`, which is what lets the definitions stay in the unfol
 the rest of the development `simp`s with. -/
 
 theorem lawful_stringCodec : Lawful stringCodec :=
-  Lawful.congr (d := pointCodec strV sC .S)
+  Lawful.congr (d := pointCodec sC sC .S)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
     (lawful_pointCodec (fun _ => rfl))
 
 theorem lawful_booleanCodec : Lawful booleanCodec :=
-  Lawful.congr (d := pointCodec boolV boolA .BOOL)
+  Lawful.congr (d := pointCodec boolA boolA .BOOL)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
     (lawful_pointCodec (fun _ => rfl))
 
 theorem lawful_binaryCodec : Lawful binaryCodec :=
-  Lawful.congr (d := pointCodec binV bC .B)
+  Lawful.congr (d := pointCodec bC bC .B)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
     (lawful_pointCodec (fun _ => rfl))
 
 theorem lawful_nullCodec : Lawful nullCodec :=
-  Lawful.congr (d := pointCodec nullV nullA .NULL)
+  Lawful.congr (d := pointCodec nullA nullA .NULL)
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
     (lawful_pointCodec (fun _ => rfl))
 

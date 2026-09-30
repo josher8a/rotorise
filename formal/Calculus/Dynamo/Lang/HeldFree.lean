@@ -254,7 +254,7 @@ theorem setCodec_p_isSome_of_sub {c : Codec} (h : Sub c Ω) (a : Attr) :
   case ss S =>
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
     · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp he; exact decSet_elem hw s hs
-    · have hc : neSetImage (fun x => (c.p (Attr.s x)).bind vStr) S =
+    · have hc : neSetImage (fun x => (c.p (Attr.s x)).bind sC.out) S =
           neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
         obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp (hall x hx)
         rw [hw, sub_p_s h hw]; rfl
@@ -264,11 +264,11 @@ theorem setCodec_p_isSome_of_sub {c : Codec} (h : Sub c Ω) (a : Attr) :
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
     · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp he; exact decSet_elem hw s hs
     · obtain ⟨x₀, hx₀⟩ := S.2
-      have hS : neSetImage (fun x => (c.p (Attr.n x)).bind vStr) S = none :=
+      have hS : neSetImage (fun x => (c.p (Attr.n x)).bind sC.out) S = none :=
         neSetImage_none (setImage_none_of hx₀ (by
           obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
           rw [hw, sub_p_n h hw]; rfl))
-      have hN : neSetImage (fun x => (c.p (Attr.n x)).bind vNum) S =
+      have hN : neSetImage (fun x => (c.p (Attr.n x)).bind nC.out) S =
           neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
         obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp (hall x hx)
         rw [hw, sub_p_n h hw]; rfl
@@ -278,15 +278,15 @@ theorem setCodec_p_isSome_of_sub {c : Codec} (h : Sub c Ω) (a : Attr) :
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
     · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp he; exact decSet_elem hw s hs
     · obtain ⟨x₀, hx₀⟩ := S.2
-      have hS : neSetImage (fun x => (c.p (Attr.b x)).bind vStr) S = none :=
+      have hS : neSetImage (fun x => (c.p (Attr.b x)).bind sC.out) S = none :=
         neSetImage_none (setImage_none_of hx₀ (by
           obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
           rw [hw, sub_p_b h hw]; rfl))
-      have hN : neSetImage (fun x => (c.p (Attr.b x)).bind vNum) S = none :=
+      have hN : neSetImage (fun x => (c.p (Attr.b x)).bind nC.out) S = none :=
         neSetImage_none (setImage_none_of hx₀ (by
           obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
           rw [hw, sub_p_b h hw]; rfl))
-      have hB : neSetImage (fun x => (c.p (Attr.b x)).bind vBin) S =
+      have hB : neSetImage (fun x => (c.p (Attr.b x)).bind bC.out) S =
           neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
         obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp (hall x hx)
         rw [hw, sub_p_b h hw]; rfl
