@@ -112,12 +112,12 @@ theorem alignP_short : ∀ (pre : List (α → Bool)) (sp : Option (α → Bool)
 
 /-- The spread row, split at the suffix. Stated over an explicit split so no rewrite has to
     reach inside a length. -/
-theorem zipP_row_split (pre suf : List (α → Bool)) (c : α → Bool) (A B : List α)
-    (hB : B.length = suf.length) (hA : pre.length ≤ A.length) :
-    (zipP (pre ++ List.replicate (A.length - pre.length) c) A && zipP suf B)
-      = zipP (pre ++ List.replicate ((A ++ B).length - pre.length - suf.length) c ++ suf)
-          (A ++ B) := by
-  have hcount : (A ++ B).length - pre.length - suf.length = A.length - pre.length := by
+theorem zipP_row_split (pre suf : List (α → Bool)) (c : α → Bool) (V B : List α)
+    (hB : B.length = suf.length) (hA : pre.length ≤ V.length) :
+    (zipP (pre ++ List.replicate (V.length - pre.length) c) V && zipP suf B)
+      = zipP (pre ++ List.replicate ((V ++ B).length - pre.length - suf.length) c ++ suf)
+          (V ++ B) := by
+  have hcount : (V ++ B).length - pre.length - suf.length = V.length - pre.length := by
     simp only [List.length_append, hB]; omega
   rw [hcount, zipP_append _ _ _ _
       (by simp only [List.length_append, List.length_replicate]; omega)]

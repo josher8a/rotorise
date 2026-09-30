@@ -154,7 +154,7 @@ def compatPair [Leaf S] (o : CompatOracle S) (x y : Term S) : Bool :=
 
 /-- **Agreement on one half of a universe**: the write half (`side = true`) is agreement at the
     orientation of the universe, and the read half is agreement at the dual orientation. -/
-abbrev AgreeHalf (S : Syn) {V A M : Type} (side : Bool) (c d : Codec V A M) : Prop :=
+abbrev AgreeHalf (S : Syn) {V M : Type} (side : Bool) (c d : Codec V M) : Prop :=
   Agree (bif side then S.o else S.o.op) c d
 
 section Sound

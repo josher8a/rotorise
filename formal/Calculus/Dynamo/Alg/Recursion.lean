@@ -127,7 +127,7 @@ theorem muStage_agree {B : Codec → Codec} (hB : Contractive B) {d : Nat} :
 /-- **The fixed point.** The limit sends what its body sends over the limit, at each
     orientation. -/
 theorem muCodec_fix {B : Codec → Codec} (hB : Contractive B) (o : Alg.Orient)
-    (x : Alg.Side Value Attr o.c) : (muCodec B).f o x = (B (muCodec B)).f o x :=
+    (x : Alg.Side Value o.c) : (muCodec B).f o x = (B (muCodec B)).f o x :=
   Alg.muCodec_fix Value.depth_pos Attr.depth_pos hB o x
 
 /-- **Lawful stages give a lawful limit.** -/

@@ -4,20 +4,18 @@ import Calculus.Lang.ExactA
 /-!
 # A second universe: JSON
 
-The codec algebra takes its carriers as parameters. This module instantiates the algebra at a
+The codec algebra takes its carrier as a parameter. This module instantiates the algebra at a
 JSON carrier, and imports no DynamoDB carrier. So the laws, the combinators and the join
 are facts of the algebra, and not facts of one store.
 
-The caller holds JSON values, and the store holds JSON values. So the caller carrier and the
-stored carrier are both `Json`, and the member of a value is its JSON kind. A number is an
+The carrier is `Json`, and the member of a value is its JSON kind. A number is an
 `Int`, so that no numeral parser enters the module.
 
 The module instantiates these parts of the generic layer: the record `Alg.Codec`, the laws
 `Alg.Lawful`, the refinement by `Alg.Lawful.restrict`, the adapter by `Alg.Lawful.through`, the
 array by `Alg.lawful_entrywise`, and the term language with its soundness at the signature
 `jsonSyn`. A union term is lawful by `Alg.soundness`, and its options are compatible by
-`Alg.compat_of_HF`: the identity codec bounds each ground codec, because the two carriers are one
-type.
+`Alg.compat_of_HF`: the identity codec bounds each ground codec.
 
 The module writes only four things itself: the carrier, the ground codecs with their laws, the
 prism of an array, and the signature. Each of the four reads the carrier.
@@ -63,7 +61,7 @@ theorem gate_eq_some {m : JMember} {v a : Json} :
   · next hm => exact ⟨(fun h => nomatch h), (fun ⟨h, _⟩ => absurd h hm)⟩
 
 /-- The ground codec of one kind: the caller value is the stored value. -/
-def ground (m : JMember) : Alg.Codec Json Json JMember :=
+def ground (m : JMember) : Alg.Codec Json JMember :=
   Alg.Codec.ofEP (T := fun v => v.member = m)
     (μ := some m)
     (e := gate m)
@@ -78,13 +76,13 @@ theorem lawful_ground (m : JMember) : Alg.Lawful Json.member (ground m) :=
       (h ▸ hm).trans (Option.some.inj hμ))
 
 /-- The string codec. -/
-def str : Alg.Codec Json Json JMember := ground .str
+def str : Alg.Codec Json JMember := ground .str
 /-- The number codec. -/
-def num : Alg.Codec Json Json JMember := ground .num
+def num : Alg.Codec Json JMember := ground .num
 /-- The boolean codec. -/
-def bool : Alg.Codec Json Json JMember := ground .bool
+def bool : Alg.Codec Json JMember := ground .bool
 /-- The null codec. -/
-def null : Alg.Codec Json Json JMember := ground .null
+def null : Alg.Codec Json JMember := ground .null
 
 /-- The string codec is lawful. -/
 theorem lawful_str : Alg.Lawful Json.member str := lawful_ground .str
@@ -98,7 +96,7 @@ theorem lawful_null : Alg.Lawful Json.member null := lawful_ground .null
 /-! ## Derived codecs, lawful by the generic laws alone -/
 
 /-- The non-negative numbers: a refinement of `num`. -/
-def natNum : Alg.Codec Json Json JMember :=
+def natNum : Alg.Codec Json JMember :=
   num.restrict fun v => match v with | .num n => decide (0 ≤ n) | _ => false
 
 /-- A refinement of a lawful codec is lawful. -/
@@ -114,15 +112,14 @@ theorem negate_negate (v : Json) : negate (negate v) = v := by
   cases v <;> simp only [negate, Int.neg_neg]
 
 /-- The negated numbers: the caller holds `n`, and the store holds `-n`. -/
-def negNum : Alg.Codec Json Json JMember := num.through negate negate
+def negNum : Alg.Codec Json JMember := num.through negate negate
 
 /-- An involution cancels on each side, so the adapter keeps the laws. -/
 theorem lawful_negNum : Alg.Lawful Json.member negNum :=
   lawful_num.through ⟨fun v _ => negate_negate v, fun v _ => negate_negate v⟩
 
-/-- The identity codec. Each ground codec is below the identity codec, because the caller
-    carrier is the stored carrier. -/
-def idCodec : Alg.Codec Json Json JMember :=
+/-- The identity codec. Each ground codec is below the identity codec. -/
+def idCodec : Alg.Codec Json JMember :=
   Alg.Codec.ofEP (T := fun _ => True) (μ := none) (e := some) (p := some)
 
 /-- The identity codec reads canonically. -/
@@ -152,7 +149,6 @@ abbrev jsonSyn : Alg.Syn := ⟨jsonSig, .host⟩
     meaning. -/
 instance jsonSem : Alg.Mean jsonSig where
   V := Json
-  A := Json
   Mem := JMember
   mem := Json.member
   decM := inferInstance
@@ -201,7 +197,7 @@ instance id_topLaws : Alg.TopLaws jsonSyn where
 def strOrNumTerm : Alg.Term jsonSyn := .union [.prim .str, .prim .num]
 
 /-- A string or a number. -/
-noncomputable def strOrNum : Alg.Codec Json Json JMember := Alg.denote jsonTable jsonTableA strOrNumTerm
+noncomputable def strOrNum : Alg.Codec Json JMember := Alg.denote jsonTable jsonTableA strOrNumTerm
 
 /-- **The union of the string codec and the number codec is lawful**, by the generic soundness:
     the two options are held-free, so the identity codec bounds both, and they are compatible. -/
@@ -261,16 +257,16 @@ def arrP : Alg.Ctor (List Json) Json where
   into_out {v _} h := by cases v <;> first | cases h; rfl | exact nomatch h
 
 /-- The array codec over an element codec: each entry through the element codec. -/
-def arr (c : Alg.Codec Json Json JMember) : Alg.Codec Json Json JMember :=
+def arr (c : Alg.Codec Json JMember) : Alg.Codec Json JMember :=
   Alg.entrywise arrP arrP .arr (fun xs => ∀ x ∈ xs, c.T x) c.e c.p
 
 /-- An array of a lawful element codec is lawful, entry by entry. -/
-theorem lawful_arr {c : Alg.Codec Json Json JMember} (h : Alg.Lawful Json.member c) :
+theorem lawful_arr {c : Alg.Codec Json JMember} (h : Alg.Lawful Json.member c) :
     Alg.Lawful Json.member (arr c) :=
   Alg.lawful_entrywise (fun _ => rfl) (fun _ _ => h.retract) (fun _ _ => h.canon)
 
 /-- An array of strings. -/
-def strArr : Alg.Codec Json Json JMember := arr str
+def strArr : Alg.Codec Json JMember := arr str
 
 /-- An array of strings is lawful. -/
 theorem lawful_strArr : Alg.Lawful Json.member strArr := lawful_arr lawful_str

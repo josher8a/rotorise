@@ -13,7 +13,7 @@ type, so the statement reads no fact of a store.
 
 A set codec moves the elements of a set. `setImage` is that move: the image is defined when
 every element is defined and no two elements collide. Its two laws read the pair of the element
-codec, so they take the carriers as parameters.
+codec, so they take the carrier as a parameter.
 -/
 
 namespace Calculus.Alg
@@ -60,7 +60,7 @@ theorem funImage_eq {κ β : Type} {keys : Finset κ} {g : {k // k ∈ keys} →
 /-! ## The image of a set -/
 
 section SetImage
-variable {V A M : Type} {member : A → M}
+variable {V M : Type} {member : V → M}
 
 /-- **The set image.** Map a finite set through a partial function, refusing if an element
     fails *or if two elements collide*.
@@ -179,8 +179,8 @@ theorem setImage_inv {α β : Type} [DecidableEq α] [DecidableEq β]
 
 /-- The round trip a set needs, assembled from the element codec's. -/
 theorem setImage_roundTrip {α β : Type} [DecidableEq α] [DecidableEq β]
-    {c : Codec V A M} (h : LawfulCore member c) {vinj : α → V} {aout : A → Option β}
-    {ainj : β → A} {vout : V → Option α}
+    {c : Codec V M} (h : LawfulCore member c) {vinj : α → V} {aout : V → Option β}
+    {ainj : β → V} {vout : V → Option α}
     (hA : ∀ a b, aout a = some b → a = ainj b)
     (hV : ∀ x, vout (vinj x) = some x)
     {S : Finset α} {T : Finset β}
@@ -241,8 +241,8 @@ theorem setImage_congr {α β : Type} [DecidableEq β] {f g : α → Option β} 
     rw [dif_neg (fun hg => hf (hiff.mpr hg))]
 
 /-- What each wire element reads back to: the value it came from. -/
-theorem setImage_read {α β : Type} [DecidableEq β] {c : Codec V A M} (h : LawfulCore member c)
-    {vinj : α → V} {aout : A → Option β} {ainj : β → A}
+theorem setImage_read {α β : Type} [DecidableEq β] {c : Codec V M} (h : LawfulCore member c)
+    {vinj : α → V} {aout : V → Option β} {ainj : β → V}
     (hA : ∀ a b, aout a = some b → a = ainj b)
     {S : Finset α} {T : Finset β}
     (hI : setImage (fun x => (c.e (vinj x)).bind aout) S = some T) :
@@ -259,74 +259,74 @@ end SetImage
 /-! ## The fields of an object
 
 A field and a rest policy each carry a codec. The presence guards and the rest codec read the
-shape of a field and never its codec, so each one takes the carriers as parameters, and the
+shape of a field and never its codec, so each one takes the carrier as a parameter, and the
 key type too. -/
 
 /-- A field, denoted: presence marker plus the attribute pair. -/
-inductive FieldSem (V A M : Type) where
-  | req (c : Codec V A M)
-  | opt (c : Codec V A M)
+inductive FieldSem (V M : Type) where
+  | req (c : Codec V M)
+  | opt (c : Codec V M)
 
 /-- A rest policy, denoted. -/
-inductive RestSem (V A M : Type) where
+inductive RestSem (V M : Type) where
   | refuse
-  | codec (c : Codec V A M)
+  | codec (c : Codec V M)
 
 section Fields
-variable {V A M : Type}
+variable {V M : Type}
 
 /-- The codec of a field. -/
-def FieldSem.codec : FieldSem V A M → Codec V A M
+def FieldSem.codec : FieldSem V M → Codec V M
   | .req c => c
   | .opt c => c
 
 /-- What each guard asks of one binding, named so the guards themselves are a single
     quantifier over the key set rather than a `List.all` over a row. The write side and the
     read side ask the same: a `req` name is present. -/
-def valPresentAt {κ : Type} [DecidableEq κ] (names : Finset κ) : κ → FieldSem V A M → Bool
+def valPresentAt {κ : Type} [DecidableEq κ] (names : Finset κ) : κ → FieldSem V M → Bool
   | _, .opt _ => true
   | k, _ => decide (k ∈ names)
 
 /-- The rest policy's codec, where it has one. -/
-def rcOf : RestSem V A M → Option (Codec V A M)
+def rcOf : RestSem V M → Option (Codec V M)
   | .codec c => some c
   | _ => none
 
 /-- Two fields of one shape whose codecs stand in `R`. -/
-def FieldSem.Rel (R : Codec V A M → Codec V A M → Prop) : FieldSem V A M → FieldSem V A M → Prop
+def FieldSem.Rel (R : Codec V M → Codec V M → Prop) : FieldSem V M → FieldSem V M → Prop
   | .req c₁, .req c₂ => R c₁ c₂
   | .opt c₁, .opt c₂ => R c₁ c₂
   | _, _ => False
 
 /-- Two rest policies of one shape whose codecs stand in `R`. -/
-def RestSem.Rel (R : Codec V A M → Codec V A M → Prop) : RestSem V A M → RestSem V A M → Prop
+def RestSem.Rel (R : Codec V M → Codec V M → Prop) : RestSem V M → RestSem V M → Prop
   | .refuse, .refuse => True
   | .codec c₁, .codec c₂ => R c₁ c₂
   | _, _ => False
 
-variable {R : Codec V A M → Codec V A M → Prop}
+variable {R : Codec V M → Codec V M → Prop}
 
 /-- Related fields have related codecs. -/
-theorem FieldSem.Rel.codec : ∀ {f₁ f₂ : FieldSem V A M}, FieldSem.Rel R f₁ f₂ →
+theorem FieldSem.Rel.codec : ∀ {f₁ f₂ : FieldSem V M}, FieldSem.Rel R f₁ f₂ →
     R f₁.codec f₂.codec
   | .req _, .req _, h => h
   | .opt _, .opt _, h => h
 
 /-- The presence guard reads the shape of a field, never its codec. -/
 theorem FieldSem.Rel.valPresentAt {κ : Type} [DecidableEq κ] (names : Finset κ) (k : κ) :
-    ∀ {f₁ f₂ : FieldSem V A M}, FieldSem.Rel R f₁ f₂ →
+    ∀ {f₁ f₂ : FieldSem V M}, FieldSem.Rel R f₁ f₂ →
       Alg.valPresentAt names k f₁ = Alg.valPresentAt names k f₂
   | .req _, .req _, _ => rfl
   | .opt _, .opt _, _ => rfl
 
 /-- Related rest policies give related rest codecs. -/
-theorem RestSem.Rel.rcOf : ∀ {r₁ r₂ : RestSem V A M}, RestSem.Rel R r₁ r₂ →
+theorem RestSem.Rel.rcOf : ∀ {r₁ r₂ : RestSem V M}, RestSem.Rel R r₁ r₂ →
     Option.Rel R (Alg.rcOf r₁) (Alg.rcOf r₂)
   | .refuse, .refuse, _ => .none
   | .codec _, .codec _, h => .some h
 
 /-- A property of the rest policy's codec, from one per `rest = .codec c`. -/
-theorem rcOf_forall {P : Codec V A M → Prop} {rest : RestSem V A M}
+theorem rcOf_forall {P : Codec V M → Prop} {rest : RestSem V M}
     (h : ∀ c, rest = .codec c → P c) : ∀ c ∈ rcOf rest, P c := by
   intro c hc
   cases rest with

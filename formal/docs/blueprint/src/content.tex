@@ -79,8 +79,8 @@ the two carry a number the same way: an \texttt{N} carries a \texttt{WFNumeral},
 \emph{not determined by the term}, not as \emph{anything}. Which terms may leave it
 undetermined is settled in §3.
 
-The record and its laws take the carriers as parameters: the values, the attributes, and the
-members. No law reads the structure of a value or of an attribute, and \rulelink{cond:W}{\textbf{(W)}} reads only the
+The record and its laws take the carrier and the members as parameters. The two sides of a
+codec hold one carrier. No law reads the structure of a value or of an attribute, and \rulelink{cond:W}{\textbf{(W)}} reads only the
 member of an attribute. This document states the calculus at the DynamoDB carriers: \texttt{Value},
 §1's \texttt{𝔸} and \texttt{Member}. The development states the same laws, the term language and
 soundness at a JSON carrier too (\texttt{Calculus.JSON}).
