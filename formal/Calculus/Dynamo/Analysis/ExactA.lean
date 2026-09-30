@@ -58,102 +58,29 @@ codec of the open block. The attribute row is the value row of the dual. -/
 /-- An attribute-side row, once the subterms' rows are known. -/
 abbrev AP := Attr → Bool
 
-/-- What the literal codec **reads**, exactly.
-
-    Each row is membership. `N` is carried exactly, so the `number` row compares the payload
-    with the literal, as the `string` row does. -/
-noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
-  | .string,  y, .s s    => decide (s = y)
-  | .boolean, y, .bool b => decide (b = y)
-  | .binary,  y, .b b    => decide (b = y)
-  | .null,    _, .null   => true
-  -- `N` is carried exactly on both sides, so the attribute payload IS the alternative and
-  -- this row reads like `string`'s beside it.
-  | .number,  y, .n x    => decide (x = y)
-  | _, _, _ => false
-
-/-- Whether an attribute is of one ground base's member. -/
-def inBaseA : GroundKind → Attr → Bool
-  | .string, .s _ | .number, .n _ | .boolean, .bool _ | .binary, .b _ | .null, .null => true
-  | _, _ => false
-
-/-! The four bases whose stored attribute *is* the value, stated as standalone lemmas with
-their carriers written out.
-
-`GroundKind.Carrier` is reducible, so `k.Carrier` at a *constructor* `k` is the same type as
-`Bytes` — but it is not the same *expression*, and `simp` inside the goal
-re-derives that on every rewrite. At `binary` (`List UInt8`) and `null` (`Unit`) that was
-enough to exhaust the heartbeat budget. Taking the carrier as a plain type in the statement
-does the reduction once, at elaboration.
-
-`string` and `boolean` are here for the same reason and not because they failed: inline in
-the literal row they were re-derived inside a twenty-case fan, and the row each one needs is a
-statement about *one* base. The literal row of `dynPrimAdmA` cites all four and unfolds none. -/
-
-theorem AdmALit_binary_exact (y : Bytes) (a : Attr) :
-    AdmALit .binary y a = true ↔ ((denote α (Term.literal .binary y)).p a).isSome = true := by
-  cases a <;>
-    simp [AdmALit, denote_rows, literalCodec, baseCodec,
-          binaryCodec]
-
-theorem AdmALit_null_exact (y : Unit) (a : Attr) :
-    AdmALit .null y a = true ↔ ((denote α (Term.literal .null y)).p a).isSome = true := by
-  cases a <;>
-    simp [AdmALit, denote_rows, literalCodec, baseCodec,
-          nullCodec]
-
-/-- `(literal)` at `string`, read side. `String` and not `k.Carrier`: the carrier reduces once
-    here instead of on every rewrite. -/
-theorem AdmALit_string_exact (y : String) (a : Attr) :
-    AdmALit .string y a = true ↔ ((denote α (Term.literal .string y)).p a).isSome = true := by
-  cases a <;>
-    simp [AdmALit, denote_rows, literalCodec, baseCodec,
-          stringCodec]
-
-/-- `(literal)` at `boolean`, read side. Same shape as `AdmALit_string_exact`, and the two
-    cannot share a `simp` set — one of them would have to name the other's codec. -/
-theorem AdmALit_boolean_exact (y : Bool) (a : Attr) :
-    AdmALit .boolean y a = true ↔ ((denote α (Term.literal .boolean y)).p a).isSome = true := by
-  cases a <;>
-    simp [AdmALit, denote_rows, literalCodec, baseCodec,
-          booleanCodec]
-
 /-! ## DynamoDB is an instance
 
 The structure of `AdmA` and its exactness are the term language's (`Alg.AdmA`,
-`Alg.AdmA_exact`). DynamoDB supplies the primitive rows, `inBaseA` and `AdmALit`, and their
-exactness. -/
+`Alg.AdmA_exact`). With one carrier, each DynamoDB primitive is one map at both orientations
+(`ground_selfdual`). So the read-side rows of the primitives are the write-side rows, `inBase`
+and `AdmLit`, and their exactness is the write-side exactness. -/
 
-/-- The DynamoDB primitive rows on the read side: `inBaseA` at a base and `AdmALit` at a
-    literal. -/
+/-- **Each DynamoDB primitive is one map at both orientations.** A primitive accepts a datum and
+    changes nothing, so its read is its write. -/
+theorem ground_selfdual : ∀ g, (groundCodec g).e = (groundCodec g).p := by
+  intro g
+  funext v
+  cases g with
+  | base k => cases k <;> cases v <;> rfl
+  | literal k x => cases k <;> cases v <;> rfl
+
+/-- The DynamoDB primitive rows on the read side: the write-side rows, because each primitive is
+    self-dual. -/
 noncomputable instance dynPrimAdmA : Alg.PrimAdmA dynSyn where
-  admV
-    | .base k => inBaseA k
-    | .literal k x => AdmALit k x
-  admV_exact
-    | .base k, a => by
-        show inBaseA k a = true ↔ ((denote (fun _ => (id, id)) (.base k)).p a).isSome = true
-        cases k <;> cases a <;> simp [inBaseA, denote_rows, stringCodec, numberCodec,
-          booleanCodec, binaryCodec, nullCodec]
-    | .literal k ls, a => by
-        show AdmALit k ls a = true ↔ ((denote (fun _ => (id, id)) (.literal k ls)).p a).isSome = true
-        cases k
-        case number =>
-          cases a
-          case n x =>
-            -- `numberCodec.p` is a constructor wrapper, so the row is the payload comparison
-            -- on both sides
-            rw [show (denote (fun _ => (id, id)) (Term.literal .number ls)).p (.n x)
-                   = (literalCodec .number ls).p (.n x) from rfl,
-               literalNCodec_p_n, numberCodec_p_n]
-            simp [AdmALit, inL]
-          -- for every other attribute the base's own read is `none` by a match
-          all_goals (simp only [AdmALit]; rfl)
-        -- the four bases whose stored attribute *is* the value, one tight simp set each
-        case string => exact AdmALit_string_exact ls a
-        case boolean => exact AdmALit_boolean_exact ls a
-        case binary => exact AdmALit_binary_exact ls a
-        case null => exact AdmALit_null_exact ls a
+  admV := dynPrimAdm.admV
+  admV_exact g a := (dynPrimAdm.admV_exact g a).trans (by
+    show ((groundCodec g).e a).isSome = true ↔ ((groundCodec g).p a).isSome = true
+    rw [ground_selfdual])
 
 variable (α) in
 /-- **The joint admission predicate, attribute side**: the generic row at DynamoDB. The mirror
@@ -190,7 +117,7 @@ in place of the formers' prisms, and the primitive row in place of `PrimAdm.admV
 section Rows
 variable (t : Term) (ts : List Term)
 
-@[AdmA_rows] theorem AdmA_base (k : GroundKind) : AdmA α (.base k) = inBaseA k := rfl
+@[AdmA_rows] theorem AdmA_base (k : GroundKind) : AdmA α (.base k) = inBase k := rfl
 /-- The bottom reads no attribute back, and the row is that sentence. -/
 @[AdmA_rows] theorem AdmA_never (a : Attr) : AdmA α .never a = false := rfl
 /-- The read side of the caller-side restriction: decode, transform, then ask `P`'s row. -/
@@ -263,7 +190,7 @@ noncomputable def AdmAAny (ts : List Term) (a : Attr) : Bool := anyP (AdmAList �
 
 /-- `AdmA`'s literal row, named — for the reason `Adm_literal` gives. -/
 @[simp, AdmA_rows] theorem AdmA_literal (k : GroundKind) (x : k.Carrier) (a : Attr) :
-    AdmA α (.literal k x) a = AdmALit k x a := rfl
+    AdmA α (.literal k x) a = AdmLit k x a := rfl
 
 variable (α) in
 /-- The converse direction on the attribute side: the row is `dom(p)`, not a bound on it. -/

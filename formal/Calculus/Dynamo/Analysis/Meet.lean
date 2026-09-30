@@ -961,9 +961,9 @@ theorem literal_inL {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
   | none => rw [hb] at h; simp at h
   | some w => rw [hb] at h; simp only [Option.bind] at h; split at h <;> simp_all
 
-/-- **Two literals at one base and two values read nothing together.** Simp on `AdmALit` and
+/-- **Two literals at one base and two values read nothing together.** Simp on `AdmLit` and
     `inL` does not reach the `number` row; exactness does. -/
-theorem AdmALit_never_of_ne {k : GroundKind} {x y : k.Carrier} (hne : ¬ (x = y)) (a : Attr) :
+theorem AdmA_literal_never_of_ne {k : GroundKind} {x y : k.Carrier} (hne : ¬ (x = y)) (a : Attr) :
     AdmA α (.never : Term) a = (AdmA α (Term.literal k x) a && AdmA α (Term.literal k y) a) := by
   cases hx : AdmA α (Term.literal k x) a with
   | false => simp [AdmA_rows]
@@ -1040,7 +1040,7 @@ theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
           | (simp only [reduceCtorEq] at hp; done)
           | exact AdmA_and_false (by decide) (AdmA_literal_member _ _)
               (AdmA_literal_member _ _) a
-          | (rename_i hne; rw [← AdmALit_never_of_ne hne a]; rfl)
+          | (rename_i hne; rw [← AdmA_literal_never_of_ne hne a]; rfl)
 
 /-- The set former of DynamoDB, on the read side. -/
 instance dynFormerAdmA : Alg.FormerAdmA dynSyn where
@@ -1109,22 +1109,13 @@ theorem anyP_mono {α : Type} : ∀ {Ps Qs : List (α → Bool)}, List.Forall₂
 
 /-- **A set over a restriction of `Ω` acts, at the orientation, where a set over a narrower
     element acts.** -/
-theorem setCodec_mono : ∀ (o : Orient) {c d : Codec}, Sub d Ω →
-    (∀ w, (c.f o w).isSome = true → (d.f o w).isSome = true) →
-    ∀ x, ((setCodec c).f o x).isSome = true → ((setCodec d).f o x).isSome = true :=
-  Alg.Orient.both (P := fun o => ∀ {c d : Codec}, Sub d Ω →
-      (∀ w, (c.f o w).isSome = true → (d.f o w).isSome = true) →
-      ∀ x, ((setCodec c).f o x).isSome = true → ((setCodec d).f o x).isSome = true)
-    (fun hd h v hv => by
-      obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
-      refine (setCodec_e_isSome_of_sub hd v).mpr ?_
-      rcases setCodec_f_eq.mp ha with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
-        exact fun x hx => h _ (setAt_elem hS x hx))
-    (fun hd h a ha => by
-      obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp ha
-      refine (setCodec_p_isSome_of_sub hd a).mpr ?_
-      rcases setCodec_f_eq.mp hv with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
-        exact fun x hx => h _ (setAt_elem hS x hx))
+theorem setCodec_mono (o : Orient) {c d : Codec} (hd : Sub d Ω)
+    (h : ∀ w, (c.f o w).isSome = true → (d.f o w).isSome = true) (x : Attr)
+    (hx : ((setCodec c).f o x).isSome = true) : ((setCodec d).f o x).isSome = true := by
+  obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hx
+  refine (setCodec_isSome_of_sub hd o x).mpr ?_
+  rcases setCodec_f_eq.mp ha with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
+    exact fun y hy => h _ (setAt_elem hS y hy)
 
 /-- The second environment acts, at each index and at the orientation, where the first acts. -/
 def EnvLe (o : Orient) (ρ ρ' : List Codec) : Prop :=
