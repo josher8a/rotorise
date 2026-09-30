@@ -93,7 +93,7 @@ structure Ctor (α β : Type) where
   /-- Anything that matches was built. -/
   into_out : ∀ {b x}, out b = some x → b = into x
 
-/-- **A prism at each absolute side**: `pV` into the values, and `pA` into the attributes. -/
+/-- **A prism at each absolute side**: `pV` at the side `false`, and `pA` at the side `true`. -/
 def Ctor.side {α : Type} (pV : Ctor α V) (pA : Ctor α V) : (s : Bool) → Ctor α (V)
   | false => pV
   | true => pA

@@ -82,7 +82,7 @@ theorem Orient.side_of : ∀ (o : Orient) (s : Bool), s = o.c ∨ s = o.s :=
     (fun s => by cases s <;> simp) (fun s => by cases s <;> simp)
 
 /-- **A function at each absolute side**: `fV` at the side `false`, and `fA` at the side `true`.
-    A predicate of each side and a depth of each side are such functions. -/
+    A predicate of each side is such a function. -/
 def Side.elim {V X : Type} (fV : V → X) (fA : V → X) : (s : Bool) → V → X
   | false => fV
   | true => fA

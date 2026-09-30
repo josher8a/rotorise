@@ -127,13 +127,13 @@ variable [Sem S] {α : Table S}
 class TopLaws (S : Syn) [Sem S] : Prop where
   ground : ∀ g, Sub (Syn.ground g) (Syn.top (S := S))
   list : ∀ L ∈ Mean.list (B := S.sig),
-    (∀ vs, (Syn.top (S := S)).e ((L.p false).into vs) = (traverse (Syn.top (S := S)).e vs).map (L.p true).into) ∧
-    (∀ as, (Syn.top (S := S)).p ((L.p true).into as) = (traverse (Syn.top (S := S)).p as).map (L.p false).into)
+    (∀ vs, (Syn.top (S := S)).e (L.p.into vs) = (traverse (Syn.top (S := S)).e vs).map L.p.into) ∧
+    (∀ as, (Syn.top (S := S)).p (L.p.into as) = (traverse (Syn.top (S := S)).p as).map L.p.into)
   map : ∀ F ∈ Mean.map (B := S.sig),
-    (∀ m : MapOf (Mean.V (B := S.sig)), (Syn.top (S := S)).e ((F.m false).into m) =
-      (funImage fun k => (Syn.top (S := S)).e (m.get k)).map fun g => (F.m true).into ⟨m.keys, g⟩) ∧
-    (∀ m : MapOf (Mean.V (B := S.sig)), (Syn.top (S := S)).p ((F.m true).into m) =
-      (funImage fun k => (Syn.top (S := S)).p (m.get k)).map fun g => (F.m false).into ⟨m.keys, g⟩)
+    (∀ m : MapOf (Mean.V (B := S.sig)), (Syn.top (S := S)).e (F.m.into m) =
+      (funImage fun k => (Syn.top (S := S)).e (m.get k)).map fun g => F.m.into ⟨m.keys, g⟩) ∧
+    (∀ m : MapOf (Mean.V (B := S.sig)), (Syn.top (S := S)).p (F.m.into m) =
+      (funImage fun k => (Syn.top (S := S)).p (m.get k)).map fun g => F.m.into ⟨m.keys, g⟩)
   set : ∀ L ∈ Mean.set (B := S.sig), ∀ c : S.C, Sub c (Syn.top (S := S)) →
     Sub (L.lift c) (Syn.top (S := S))
 

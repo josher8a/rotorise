@@ -79,7 +79,7 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
     -- each stage is lawful by the body's soundness at the stage before, and the guard carries
     -- the laws to the limit
     | @mu b T' μ' hg h' =>
-      refine lawful_muCodec (Mean.d_pos false) (Mean.d_pos true) (contractive_body hg ρ) fun n => ?_
+      refine lawful_muCodec Mean.d_pos (contractive_body hg ρ) fun n => ?_
       induction n with
       | zero => exact Lawful.empty
       | succ n ih =>

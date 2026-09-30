@@ -38,13 +38,13 @@ class Shapes (S : Syn) [Sem S] where
   setA : ∀ L, Mean.set (B := S.sig) = some L → ∀ c a, ((L.lift c).f S.o.op a).isSome = true →
     formerA a = .set
   /-- The list prism builds list values. -/
-  list : ∀ L, Mean.list (B := S.sig) = some L → ∀ vs, former ((L.p S.o.c).into vs) = .list
+  list : ∀ L, Mean.list (B := S.sig) = some L → ∀ vs, former (L.p.into vs) = .list
   /-- The list prism builds list attributes. -/
-  listA : ∀ L, Mean.list (B := S.sig) = some L → ∀ as, formerA ((L.p S.o.s).into as) = .list
+  listA : ∀ L, Mean.list (B := S.sig) = some L → ∀ as, formerA (L.p.into as) = .list
   /-- The map prism builds object values. -/
-  map : ∀ F, Mean.map (B := S.sig) = some F → ∀ m, former ((F.m S.o.c).into m) = .object
+  map : ∀ F, Mean.map (B := S.sig) = some F → ∀ m, former (F.m.into m) = .object
   /-- The map prism builds object attributes. -/
-  mapA : ∀ F, Mean.map (B := S.sig) = some F → ∀ m, formerA ((F.m S.o.s).into m) = .object
+  mapA : ∀ F, Mean.map (B := S.sig) = some F → ∀ m, formerA (F.m.into m) = .object
 
 namespace Shapes
 
@@ -84,7 +84,7 @@ theorem adm_list (pre : List (Term S)) sp suf (v : S.V) (h : Adm α β (.list pr
   split at h
   · next L hL =>
       split at h
-      · next vs hv => rw [(L.p S.o.c).into_out hv]; exact Shapes.list L hL vs
+      · next vs hv => rw [L.p.into_out hv]; exact Shapes.list L hL vs
       · exact nomatch h
   · exact nomatch h
 
@@ -96,7 +96,7 @@ theorem adm_object (b : Body S) (v : S.V) (h : Adm α β (.object b) ρ v = true
   split at h
   · next F hF =>
       split at h
-      · next m hm => rw [(F.m S.o.c).into_out hm]; exact Shapes.map F hF m
+      · next m hm => rw [F.m.into_out hm]; exact Shapes.map F hF m
       · exact nomatch h
   · exact nomatch h
 

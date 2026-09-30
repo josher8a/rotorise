@@ -163,8 +163,8 @@ instance jsonSem : Alg.Mean jsonSig where
   eval_truth
     | false, _ => rfl
     | true, _ => rfl
-  d _ _ := 1
-  d_pos _ _ := Nat.one_pos
+  d _ := 1
+  d_pos _ := Nat.one_pos
   list := none
   map := none
   set := none

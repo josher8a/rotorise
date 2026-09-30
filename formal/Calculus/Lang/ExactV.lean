@@ -69,16 +69,16 @@ theorem select_isSome_attempt {V M X Y : Type} (os : List (Codec V M))
       (List.find?_isSome.mpr ⟨o, ho, he⟩ : (os.find? fun c => (run c x).isSome).isSome = true)
     unfold select; rw [hf]; exact List.find?_some (p := fun c => (run c x).isSome) hf
 
-/-- **The list codec at an orientation**: read the caller prism, align, run each position at the
-    orientation, and build with the stored prism. -/
-theorem listCodec_f {V M : Type} (p : (s : Bool) → Ctor (List (V)) (V))
+/-- **The list codec at an orientation**: read the prism, align, run each position at the
+    orientation, and build with the prism. -/
+theorem listCodec_f {V M : Type} (p : Ctor (List V) V)
     (μL : M) (pre : List (Codec V M)) (sp : Option (Codec V M)) (suf : List (Codec V M)) :
-    ∀ (o : Orient) (x : V), (listCodec (p false) (p true) μL pre sp suf).f o x =
-      (((p o.c).out x).bind fun xs =>
-        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map (p o.s).into :=
-  Orient.both (P := fun o => ∀ x, (listCodec (p false) (p true) μL pre sp suf).f o x =
-      (((p o.c).out x).bind fun xs =>
-        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map (p o.s).into)
+    ∀ (o : Orient) (x : V), (listCodec p p μL pre sp suf).f o x =
+      ((p.out x).bind fun xs =>
+        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map p.into :=
+  Orient.both (P := fun o => ∀ x, (listCodec p p μL pre sp suf).f o x =
+      ((p.out x).bind fun xs =>
+        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map p.into)
     (fun _ => rfl) (fun _ => rfl)
 
 variable [Sem S] [PrimAdm S] {α : Table S} {β : Table S.op}
@@ -110,7 +110,7 @@ def Adm : Term S → List S.C → S.V → Bool
   | .list pre sp suf, ρ => fun v =>
       match Mean.list (B := S.sig) with
       | some L =>
-          match (L.p S.o.c).out v with
+          match L.p.out v with
           | some vs => alignPL (AdmList pre ρ) (AdmOptT sp ρ) (AdmList suf ρ) vs
           | none => false
       | none => false
@@ -125,7 +125,7 @@ def AdmBody : Body S → List S.C → S.V → Bool
   | .mk fields fld wild, ρ => fun v =>
       match Mean.map (B := S.sig) with
       | some F =>
-          match (F.m S.o.c).out v with
+          match F.m.out v with
           | some m =>
               valPresentT fields fld m.keys &&
               objAdmV ⟨fields, fun k => AdmField (fld k) ρ⟩ (AdmWild wild ρ) m.keys m.get
@@ -265,7 +265,7 @@ theorem ExactV_list {pre : List (Term S)} {sp : Option (Term S)} {suf : List (Te
   | none => simp [Codec.empty]
   | some L =>
     rw [listCodec_f]
-    rcases hv : (L.p S.o.c).out v with _ | vs
+    rcases hv : L.p.out v with _ | vs
     · simp [hv]
     · simp only [hv, Option.bind_some, Option.isSome_map]
       exact alignPL_iff pre sp suf hpre hsp hsuf vs
@@ -315,7 +315,7 @@ theorem ExactV_object {fields : Finset String} {fld : {k // k ∈ fields} → Ob
   | none => simp [Codec.empty]
   | some F =>
     rw [objectCodec_f]
-    rcases hv : (F.m S.o.c).out v with _ | m
+    rcases hv : F.m.out v with _ | m
     · simp [hv]
     · simp only [hv, Option.bind_some, Option.isSome_map]
       rw [valPresentT_eq (α := α) (β := β) (ρ := ρ)]
