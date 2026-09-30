@@ -297,7 +297,7 @@ types it at the member `none` (`setMember` of the union's `none`). The DynamoDB 
     member. -/
 theorem setElem_union_refused : ¬ SetElem (denote α (.union [.string, .boolean])) := by
   intro h
-  rw [SetElem, denote_μ] at h
+  rw [SetElem, Alg.denote_μ] at h
   exact absurd h (by decide)
 
 /-- The union on its own is typed, and so is the `set` above it: the store refuses the set. -/

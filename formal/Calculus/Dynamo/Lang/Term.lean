@@ -256,6 +256,7 @@ noncomputable abbrev dSet : Alg.SetF Value Member Attr.member Attr.depth where
   elem := SetElem
   held := HSet
   member := setMember
+  lift_μ _ := rfl
   carrier h := carrier_setCodec h
   held_of {c T} ih v hv := by
     cases v <;> first
@@ -322,8 +323,6 @@ abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
   list := some dList
   map := some dMap
   set := some dSet
-  groundμ
-    | .base k | .literal k _ => some k.member
   top := Ω
   lawful_top := lawful_opaq
   carrier_top := carrier_opaq

@@ -16,7 +16,7 @@ binder first, and a closed term is denoted at `ρ = []`, which the default suppl
 `muCodec` budgets each input by its own depth, which is a recursion on the input and not on the
 term. `opaque` is `muCodec opaqStep`, the same construct at a fixed body.
 
-`μ := μSyn t` is a *function of the term* (`denote_μ`), so the `⇝` column stays truthful.
+`μ := μSyn t` is a *function of the term* (`Alg.denote_μ`, proved at every universe), so the `⇝` column stays truthful.
 Laws are in Soundness.lean.
 -/
 
@@ -67,8 +67,9 @@ abbrev μSynList (ts : List Term) : List (Option Member) := Alg.μSynList ts
 section Rows
 variable (k : GroundKind) (t : Term) (ts : List Term)
 
-@[μSyn_rows] theorem μSyn_base : μSyn (.base k) = some k.member := rfl
-@[μSyn_rows] theorem μSyn_literal (x : k.Carrier) : μSyn (.literal k x) = some k.member := rfl
+@[μSyn_rows] theorem μSyn_base : μSyn (.base k) = some k.member := by cases k <;> rfl
+@[μSyn_rows] theorem μSyn_literal (x : k.Carrier) : μSyn (.literal k x) = some k.member :=
+  literalCodec_μ k x
 /-- The member is `setMember` of the element's: `none` where the element names no member of
     `S`, `N` or `B`, which is the case the DynamoDB obligation `SetElem` refuses. -/
 @[μSyn_rows] theorem μSyn_set : μSyn (.set t) = (μSyn t).bind setMember := rfl
@@ -205,43 +206,6 @@ variable (t : Term) (ts : List Term) (ρ : List Codec)
   rfl
 
 end Rows
-
-/-! ## The member index
-
-Was "fuel-free" as a *claim about a fueled denotation*; now it is a fact about a structural one,
-and the proof is a plain induction on the term. `termination_by fuel _ => (fuel, 0)` and its
-companion's `(fuel, opts.length + 1)` are gone with the parameter. -/
-
-/-- Whatever the payload, an object writes a map. The companion `denote_μ`'s `.object` row
-    needs: with the payload inlined the row was `rfl`, and with a `Body` variable in hand there
-    is nothing to reduce until the payload is matched — so the match happens once, here. -/
-theorem bodySem_μ : ∀ b : Body, (bodySem α b).μ = some .M
-  | .mk _ _ _ => rfl
-
-mutual
-
-theorem denote_μ : ∀ t : Term, (denote α t).μ = μSyn t
-  | .literal k ls => literalCodec_μ k ls
-  | .base k => by cases k <;> rfl
-  | .set t => by show (denote α t).μ.bind setMember = _; rw [denote_μ t]; rfl
-  | .list _ _ _ => rfl
-  | .held _ t' _ _ _ => denote_μ t'
-  | .refine t' _ _ => denote_μ t'
-  | .opaq | .never | .var _ | .mu _ => rfl
-  | .object b => bodySem_μ b
-  | .union opts => by
-      show unanimous (denoteμs α opts) = unanimous (μSynList opts)
-      rw [denoteμs_eq opts]
-
-/-- The union options' members, per option. ~~μSynList_eq~~ under its old name was the same fact
-    with a fuel index and a `termination_by`; both are gone. -/
-theorem denoteμs_eq : ∀ opts : List Term, denoteμs α opts = μSynList opts
-  | [] => rfl
-  | t :: ts => by
-      simp only [denote_rows, μSyn_rows]
-      rw [denote_μ t, denoteμs_eq ts]
-
-end
 
 /-! ### §6 at term level — the translation table, written down
 

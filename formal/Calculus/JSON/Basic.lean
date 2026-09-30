@@ -168,7 +168,6 @@ instance jsonSem : Alg.Mean jsonSig where
   list := none
   map := none
   set := none
-  groundμ m := some m
   top := idCodec
   lawful_top := .ofRC (fun he => (Option.some.inj he) ▸ rfl) (fun hp => (Option.some.inj hp) ▸ rfl)
     (fun hμ => nomatch hμ)

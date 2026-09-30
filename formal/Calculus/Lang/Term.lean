@@ -107,6 +107,10 @@ structure SetF (V M : Type) (member : V → M) (depth : V → Nat) where
   held : (V → Prop) → V → Prop
   /-- The member of a set, from the member of its element. -/
   member : M → Option M
+  /-- **The lift stamps that member.** The judgement computes a set's member from its element's
+      member, so the lift must stamp the same member, or the `⇝` index of the judgement says
+      nothing about the codec. -/
+  lift_μ : ∀ c, (lift c).μ = c.μ.bind member
   /-- The lift of a codec on its carrier is on its carrier. -/
   carrier : ∀ {c : Codec V M}, Carrier c → Carrier (lift c)
   /-- The lift's held set is inside `held` of any bound on the element's held set. -/
@@ -150,8 +154,6 @@ class Mean (B : Sig) where
   list : Option (ListA V Mem mem d)
   map : Option (MapA V Mem mem d)
   set : Option (SetF V Mem mem d)
-  /-- The member that the judgement gives a primitive. -/
-  groundμ : B.Ground → Option Mem
   top : Codec V Mem
   lawful_top : Lawful mem top
   carrier_top : Carrier top
@@ -236,9 +238,6 @@ abbrev d : S.V → Nat := Mean.d
 
 /-- A datum has a positive depth. -/
 theorem d_pos (v : S.V) : 0 < Syn.d v := Mean.d_pos v
-
-/-- The member that the judgement gives a primitive. -/
-abbrev groundμ (g : S.Ground) : Option S.M := Mean.groundμ g
 
 /-- The canonical top of a universe. -/
 abbrev top : S.C := Mean.top (B := S.sig)
