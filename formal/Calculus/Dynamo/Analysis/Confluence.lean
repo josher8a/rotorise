@@ -68,19 +68,19 @@ theorem Ω_e_valueOfAttr : ∀ a : Attr, Ω.e (valueOfAttr a) = some a
   | .null => rfl
   | .ss S => by
       show Ω.e (.strSet S) = _
-      rw [Ωe_strSet]; unfold encSet
+      rw [Ωe_strSet]; unfold setAt
       rw [show (fun x : String => (Ω.e (Value.str x)).bind sC.out) = fun x => some x from rfl,
         neSetImage_id]
   | .ns S => by
       show Ω.e (.numSet S) = _
-      rw [Ωe_numSet]; unfold encSet
+      rw [Ωe_numSet]; unfold setAt
       rw [neSetImage_none_all (f := fun x : WFNumeral => (Ω.e (Value.num x)).bind sC.out) S
           (fun _ => rfl),
         show (fun x : WFNumeral => (Ω.e (Value.num x)).bind nC.out) = fun x => some x from rfl,
         neSetImage_id]
   | .bs S => by
       show Ω.e (.binSet S) = _
-      rw [Ωe_binSet]; unfold encSet
+      rw [Ωe_binSet]; unfold setAt
       rw [neSetImage_none_all (f := fun x : Bytes => (Ω.e (Value.bin x)).bind sC.out) S
           (fun _ => rfl),
         neSetImage_none_all (f := fun x : Bytes => (Ω.e (Value.bin x)).bind nC.out) S

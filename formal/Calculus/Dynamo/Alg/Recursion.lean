@@ -145,14 +145,14 @@ theorem agreeLe_setCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂)
     AgreeLe (d + 1) (setCodec c₁) (setCodec c₂) := by
   refine ⟨fun v hv => ?_, fun a ha => ?_⟩
   · cases v with
-    | ss S => exact encSet_congr fun x _ => h.e _ (by simp only [Attr.depth] at hv ⊢; omega)
-    | ns S => exact encSet_congr fun x _ => h.e _ (by simp only [Attr.depth] at hv ⊢; omega)
-    | bs S => exact encSet_congr fun x _ => h.e _ (by simp only [Attr.depth] at hv ⊢; omega)
+    | ss S => exact setAt_congr fun x _ => h.e _ (by simp only [Attr.depth] at hv ⊢; omega)
+    | ns S => exact setAt_congr fun x _ => h.e _ (by simp only [Attr.depth] at hv ⊢; omega)
+    | bs S => exact setAt_congr fun x _ => h.e _ (by simp only [Attr.depth] at hv ⊢; omega)
     | _ => rfl
   · cases a with
-    | ss S => exact decSet_congr fun x _ => h.p _ (by simp only [Attr.depth] at ha ⊢; omega)
-    | ns S => exact decSet_congr fun x _ => h.p _ (by simp only [Attr.depth] at ha ⊢; omega)
-    | bs S => exact decSet_congr fun x _ => h.p _ (by simp only [Attr.depth] at ha ⊢; omega)
+    | ss S => exact setAt_congr fun x _ => h.p _ (by simp only [Attr.depth] at ha ⊢; omega)
+    | ns S => exact setAt_congr fun x _ => h.p _ (by simp only [Attr.depth] at ha ⊢; omega)
+    | bs S => exact setAt_congr fun x _ => h.p _ (by simp only [Attr.depth] at ha ⊢; omega)
     | _ => rfl
 
 /-! ### Objects

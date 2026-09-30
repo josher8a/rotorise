@@ -92,31 +92,24 @@ def setMember : Member → Option Member
   | .B => some .BS
   | _ => none
 
-/-- Encode a value-set's payloads into the wire set their member selects. -/
-noncomputable def encSet {α : Type} (c : Codec) (inj : α → Value) (S : NEFinset α) :
+/-- **A set's payloads at an orientation**: image each element through the codec at `o`, into the
+    wire set that the image selects. The write is the map at the host, and the read is the map at
+    the dual. -/
+noncomputable def setAt {α : Type} (o : Alg.Orient) (c : Codec) (inj : α → Attr) (S : NEFinset α) :
     Option Attr :=
-  match neSetImage (fun x => (c.e (inj x)).bind sC.out) S with
+  match neSetImage (fun x => (c.f o (inj x)).bind sC.out) S with
   | some T => some (.ss T)
-  | none => match neSetImage (fun x => (c.e (inj x)).bind nC.out) S with
+  | none => match neSetImage (fun x => (c.f o (inj x)).bind nC.out) S with
     | some T => some (.ns T)
-    | none => (neSetImage (fun x => (c.e (inj x)).bind bC.out) S).map Attr.bs
-
-/-- …and back: decode a wire set's payloads into the value set their kind selects. -/
-noncomputable def decSet {α : Type} (c : Codec) (inj : α → Attr) (S : NEFinset α) :
-    Option Value :=
-  match neSetImage (fun x => (c.p (inj x)).bind sC.out) S with
-  | some T => some (.strSet T)
-  | none => match neSetImage (fun x => (c.p (inj x)).bind nC.out) S with
-    | some T => some (.numSet T)
-    | none => (neSetImage (fun x => (c.p (inj x)).bind bC.out) S).map Value.binSet
+    | none => (neSetImage (fun x => (c.f o (inj x)).bind bC.out) S).map Attr.bs
 
 /-! No emptiness guard here: §1 types the wire sets as `℘⁺fin`, which is a type, so there is
 no empty set for a codec to refuse. -/
 
-/-- Writing a set needs every element to write. -/
-theorem encSet_elem {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset α} {a : Attr}
-    (h : encSet c inj S = some a) : ∀ x ∈ S.1, (c.e (inj x)).isSome = true := by
-  unfold encSet at h
+/-- Moving a set needs every element to move. -/
+theorem setAt_elem {α : Type} {o : Alg.Orient} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {a : Attr} (h : setAt o c inj S = some a) : ∀ x ∈ S.1, (c.f o (inj x)).isSome = true := by
+  unfold setAt at h
   split at h
   · next T hT =>
       exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
@@ -127,53 +120,28 @@ theorem encSet_elem {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset �
       obtain ⟨T, hT, -⟩ := Option.map_eq_some_iff.mp h
       exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
 
-/-- …and reading one needs every element to read. -/
-theorem decSet_elem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α} {v : Value}
-    (h : decSet c inj S = some v) : ∀ x ∈ S.1, (c.p (inj x)).isSome = true := by
-  unfold decSet at h
-  split at h
-  · next T hT =>
-      exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
-  · split at h
-    · next T hT =>
-        exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
-    · next =>
-      obtain ⟨T, hT, -⟩ := Option.map_eq_some_iff.mp h
-      exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
-
-/-- Two codecs that agree on the write of each element write one set. -/
-theorem encSet_congr {α : Type} {c d : Codec} {inj : α → Value} {S : NEFinset α}
-    (h : ∀ x ∈ S.1, c.e (inj x) = d.e (inj x)) : encSet c inj S = encSet d inj S := by
-  unfold encSet
-  rw [neSetImage_congr (S := S) (g := fun x => (d.e (inj x)).bind sC.out)
+/-- Two codecs that agree at the orientation on each element move one set. -/
+theorem setAt_congr {α : Type} {o : Alg.Orient} {c d : Codec} {inj : α → Attr} {S : NEFinset α}
+    (h : ∀ x ∈ S.1, c.f o (inj x) = d.f o (inj x)) : setAt o c inj S = setAt o d inj S := by
+  unfold setAt
+  rw [neSetImage_congr (S := S) (g := fun x => (d.f o (inj x)).bind sC.out)
       (fun x hx => by rw [h x hx]),
-    neSetImage_congr (S := S) (g := fun x => (d.e (inj x)).bind nC.out)
+    neSetImage_congr (S := S) (g := fun x => (d.f o (inj x)).bind nC.out)
       (fun x hx => by rw [h x hx]),
-    neSetImage_congr (S := S) (g := fun x => (d.e (inj x)).bind bC.out)
+    neSetImage_congr (S := S) (g := fun x => (d.f o (inj x)).bind bC.out)
       (fun x hx => by rw [h x hx])]
 
-/-- …and two codecs that agree on the read of each element read one set. -/
-theorem decSet_congr {α : Type} {c d : Codec} {inj : α → Attr} {S : NEFinset α}
-    (h : ∀ x ∈ S.1, c.p (inj x) = d.p (inj x)) : decSet c inj S = decSet d inj S := by
-  unfold decSet
-  rw [neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind sC.out)
-      (fun x hx => by rw [h x hx]),
-    neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind nC.out)
-      (fun x hx => by rw [h x hx]),
-    neSetImage_congr (S := S) (g := fun x => (d.p (inj x)).bind bC.out)
-      (fun x hx => by rw [h x hx])]
-
-/-- What a read produces: one of the three value sets, each element read from an element
-    of the wire set. -/
-theorem decSet_mem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α} {v : Value}
-    (h : decSet c inj S = some v) :
-    (∃ T : NEFinset String, v = .strSet T ∧
-        ∀ y ∈ T.1, ∃ x ∈ S.1, c.p (inj x) = some (.str y))
-  ∨ (∃ T : NEFinset WFNumeral, v = .numSet T ∧
-        ∀ y ∈ T.1, ∃ x ∈ S.1, c.p (inj x) = some (.num y))
-  ∨ (∃ T : NEFinset Bytes, v = .binSet T ∧
-        ∀ y ∈ T.1, ∃ x ∈ S.1, c.p (inj x) = some (.bin y)) := by
-  unfold decSet at h
+/-- What a move produces: one of the three wire sets, each element the image of an element of
+    the set. -/
+theorem setAt_mem {α : Type} {o : Alg.Orient} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {v : Attr} (h : setAt o c inj S = some v) :
+    (∃ T : NEFinset String, v = .ss T ∧
+        ∀ y ∈ T.1, ∃ x ∈ S.1, c.f o (inj x) = some (.s y))
+  ∨ (∃ T : NEFinset WFNumeral, v = .ns T ∧
+        ∀ y ∈ T.1, ∃ x ∈ S.1, c.f o (inj x) = some (.n y))
+  ∨ (∃ T : NEFinset Bytes, v = .bs T ∧
+        ∀ y ∈ T.1, ∃ x ∈ S.1, c.f o (inj x) = some (.b y)) := by
+  unfold setAt at h
   split at h
   · next T hT =>
     injection h with h
@@ -196,23 +164,18 @@ theorem decSet_mem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
     a `Finset` has no repeats and no order, `℘⁺fin` has no empty inhabitant, and the three
     constructors are the three element types the reference names. What is left for the
     codec is the element map — and that is the whole of `(set)` now. -/
-noncomputable def setCodec (c : Codec) : Codec :=
-  Alg.Codec.ofEP (T := fun v => match v with
-      | .strSet S => ∀ s ∈ S.1, c.T (.str s)
-      | .numSet S => ∀ d ∈ S.1, c.T (.num d)
-      | .binSet S => ∀ b ∈ S.1, c.T (.bin b)
-      | _ => False)
-    (μ := c.μ.bind setMember)
-    (e := fun v => match v with
-      | .strSet S => encSet c Value.str S
-      | .numSet S => encSet c Value.num S
-      | .binSet S => encSet c Value.bin S
-      | _ => none)
-    (p := fun a => match a with
-      | .ss S => decSet c Attr.s S
-      | .ns S => decSet c Attr.n S
-      | .bs S => decSet c Attr.b S
-      | _ => none)
+noncomputable def setCodec (c : Codec) : Codec where
+  T v := match v with
+    | .ss S => ∀ s ∈ S.1, c.T (.s s)
+    | .ns S => ∀ d ∈ S.1, c.T (.n d)
+    | .bs S => ∀ b ∈ S.1, c.T (.b b)
+    | _ => False
+  μ := c.μ.bind setMember
+  f o x := match x with
+    | .ss S => setAt o c Attr.s S
+    | .ns S => setAt o c Attr.n S
+    | .bs S => setAt o c Attr.b S
+    | _ => none
 
 /-! ### A codec carried between two prisms
 
@@ -224,28 +187,19 @@ export Alg (carriedCodec carried_e lawful_carried carrier_carried entrywise lawf
 
 /-! ### `array` (§3) — entrywise at `L` -/
 
-/-! ### What `set` writes and reads
+/-! ### What `set` moves
 
-    The attribute side of `set` is a choice among three wire constructors rather than
-    one prism, which is why it is not an `entrywise` product and why its read-side
-    inversion names all three families. -/
+    A set is a choice among three wire constructors rather than one prism, which is why it is
+    not an `entrywise` product and why its inversion names all three families. -/
 
-/-- What `set` writes: one of the three value-set constructors, its payloads imaged
-    through the element codec. -/
-theorem setCodec_e_eq {c : Codec} {v : Value} {a : Attr} :
-    (setCodec c).e v = some a ↔
-      (∃ S : NEFinset String, v = .strSet S ∧ encSet c Value.str S = some a)
-      ∨ (∃ S : NEFinset WFNumeral, v = .numSet S ∧ encSet c Value.num S = some a)
-      ∨ (∃ S : NEFinset Bytes, v = .binSet S ∧ encSet c Value.bin S = some a) := by
-  cases v <;> simp [setCodec]
-
-/-- …and what it reads: one of the three wire sets, imaged back. -/
-theorem setCodec_p_eq {c : Codec} {a : Attr} {v : Value} :
-    (setCodec c).p a = some v ↔
-      (∃ S : NEFinset String, a = .ss S ∧ decSet c Attr.s S = some v)
-      ∨ (∃ S : NEFinset WFNumeral, a = .ns S ∧ decSet c Attr.n S = some v)
-      ∨ (∃ S : NEFinset Bytes, a = .bs S ∧ decSet c Attr.b S = some v) := by
-  cases a <;> simp [setCodec]
+/-- What `set` moves at an orientation: one of the three wire sets, its payloads imaged through
+    the element codec. -/
+theorem setCodec_f_eq {c : Codec} {o : Alg.Orient} {x y : Attr} :
+    (setCodec c).f o x = some y ↔
+      (∃ S : NEFinset String, x = .ss S ∧ setAt o c Attr.s S = some y)
+      ∨ (∃ S : NEFinset WFNumeral, x = .ns S ∧ setAt o c Attr.n S = some y)
+      ∨ (∃ S : NEFinset Bytes, x = .bs S ∧ setAt o c Attr.b S = some y) := by
+  cases x <;> simp [setCodec]
 
 def arrayCodec (c : Codec) : Codec :=
   Alg.Codec.ofEP (T := fun v => match v with | .arr vs => ∀ x ∈ vs, c.T x | _ => False)

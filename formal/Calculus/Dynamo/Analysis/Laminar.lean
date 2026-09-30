@@ -150,33 +150,33 @@ theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed α t T μ) (hob : Oblig
   have hin : ∀ w, T w ↔ ((denote α t).e w).isSome = true := fun w => (ih w).trans (Adm_exact t w)
   cases v with
   | ss S =>
-    show HSet T (.strSet S) ↔ (encSet (denote α t) Value.str S).isSome = true
+    show HSet T (.strSet S) ↔ (setAt .host (denote α t) Value.str S).isSome = true
     simp only [HSet, Attr.ss.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
       or_false]
-    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Attr.s.inj h)
+    exact ⟨fun hall => setAt_isSome_of hl hsm (fun _ _ h => Attr.s.inj h)
         (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
       fun he x hx => by
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
-        exact (hin _).mpr (encSet_elem ha x hx)⟩
+        exact (hin _).mpr (setAt_elem ha x hx)⟩
   | ns S =>
-    show HSet T (.numSet S) ↔ (encSet (denote α t) Value.num S).isSome = true
+    show HSet T (.numSet S) ↔ (setAt .host (denote α t) Value.num S).isSome = true
     simp only [HSet, Attr.ns.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
       false_or, or_false]
-    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Attr.n.inj h)
+    exact ⟨fun hall => setAt_isSome_of hl hsm (fun _ _ h => Attr.n.inj h)
         (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
       fun he x hx => by
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
-        exact (hin _).mpr (encSet_elem ha x hx)⟩
+        exact (hin _).mpr (setAt_elem ha x hx)⟩
   | bs S =>
-    show HSet T (.binSet S) ↔ (encSet (denote α t) Value.bin S).isSome = true
+    show HSet T (.binSet S) ↔ (setAt .host (denote α t) Value.bin S).isSome = true
     simp only [HSet, Attr.bs.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
       false_or]
-    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Attr.b.inj h)
+    exact ⟨fun hall => setAt_isSome_of hl hsm (fun _ _ h => Attr.b.inj h)
         (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
       fun he x hx => by
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
-        exact (hin _).mpr (encSet_elem ha x hx)⟩
-  | _ => simp [HSet, Adm_rows, setCodec]
+        exact (hin _).mpr (setAt_elem ha x hx)⟩
+  | _ => simp [HSet, Adm_rows, setCodec, Alg.Codec.e]
 
 /-- `HOpaque` is `opaque`'s admission: `opaque`'s held set is its write domain, and
     `opaq_T_identity` names that set. -/

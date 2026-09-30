@@ -793,11 +793,11 @@ theorem Adm_set_and_false {a y : Term} (h : ∀ u, (Adm α a u && Adm α y u) = 
       have := h w
       rw [(Adm_exact a w).mpr h1, (Adm_exact y w).mpr h2] at this
       exact Bool.noConfusion this
-  rcases setCodec_e_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
+  rcases setCodec_f_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
     obtain ⟨x, hx⟩ := S.2
-  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote α y) (inj := Value.str) hq x hx)
-  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote α y) (inj := Value.num) hq x hx)
-  · exact hne _ (encSet_elem hS x hx) (encSet_elem (c := denote α y) (inj := Value.bin) hq x hx)
+  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Value.str) hq x hx)
+  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Value.num) hq x hx)
+  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Value.bin) hq x hx)
 
 /-- **Two primitives met at the bottom share no value.** -/
 theorem Adm_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
@@ -857,11 +857,11 @@ noncomputable instance dynShapes : Alg.Shapes dynSyn where
   set L hL c v h := by
     cases hL
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
-    rcases setCodec_e_eq.mp ha with ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ <;> rfl
+    rcases setCodec_f_eq.mp ha with ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ <;> rfl
   setA L hL c a h := by
     cases hL
     obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
-    rcases setCodec_p_eq.mp hw with ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ <;> rfl
+    rcases setCodec_f_eq.mp hw with ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ <;> rfl
   list L hL _ := by cases hL; rfl
   listA L hL _ := by cases hL; rfl
   map F hF _ := by cases hF; rfl
@@ -999,11 +999,11 @@ theorem AdmA_set_and_false {a y : Term} (h : ∀ u, (AdmA α a u && AdmA α y u)
       have := h w
       rw [(AdmA_exact a w).mpr h1, (AdmA_exact y w).mpr h2] at this
       exact Bool.noConfusion this
-  rcases setCodec_p_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
+  rcases setCodec_f_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
     obtain ⟨x, hx⟩ := S.2
-  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote α y) (inj := Attr.s) hq x hx)
-  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote α y) (inj := Attr.n) hq x hx)
-  · exact hne _ (decSet_elem hS x hx) (decSet_elem (c := denote α y) (inj := Attr.b) hq x hx)
+  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Attr.s) hq x hx)
+  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Attr.n) hq x hx)
+  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Attr.b) hq x hx)
 
 /-- **Two primitives met at the bottom read nothing together.** -/
 theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
@@ -1118,13 +1118,13 @@ theorem setCodec_mono : ∀ (o : Orient) {c d : Codec}, Sub d Ω →
     (fun hd h v hv => by
       obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
       refine (setCodec_e_isSome_of_sub hd v).mpr ?_
-      rcases setCodec_e_eq.mp ha with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
-        exact fun x hx => h _ (encSet_elem hS x hx))
+      rcases setCodec_f_eq.mp ha with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
+        exact fun x hx => h _ (setAt_elem hS x hx))
     (fun hd h a ha => by
       obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp ha
       refine (setCodec_p_isSome_of_sub hd a).mpr ?_
-      rcases setCodec_p_eq.mp hv with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
-        exact fun x hx => h _ (decSet_elem hS x hx))
+      rcases setCodec_f_eq.mp hv with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
+        exact fun x hx => h _ (setAt_elem hS x hx))
 
 /-- The second environment acts, at each index and at the orientation, where the first acts. -/
 def EnvLe (o : Orient) (ρ ρ' : List Codec) : Prop :=

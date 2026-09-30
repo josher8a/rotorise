@@ -18,7 +18,7 @@ noncomputable section
 `array` is the degenerate `tuple`: an empty fixed part and a uniform spread. Both builders write
 the same `list`, so `array c` and `tuple [] (some c)` are **one term**, and `arrayRow` is `rfl`.
 `set` is the opposite case: a narrower *constructor* buys *exactness*. `set b` cannot be spelled
-as a `refine` of anything, and indexing by the base is what makes `encSet`'s collision guard
+as a `refine` of anything, and indexing by the base is what makes `setAt`'s collision guard
 provably dead.
 
 `record` is the degenerate `object`: a builder over the body whose only block is the open one.
@@ -310,26 +310,26 @@ theorem sepJV_set_literals :
   case ss S =>
     obtain ⟨x, hx⟩ := S.2
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
-    have hA := hlit "A" _ (encSet_elem (c := denote α (.literal .string "A")) ha x hx)
+    have hA := hlit "A" _ (setAt_elem (c := denote α (.literal .string "A")) ha x hx)
     cases hb : Adm α (.set (.literal .string "B")) (.strSet S) with
     | false => rfl
     | true =>
       obtain ⟨b, hb'⟩ := Option.isSome_iff_exists.mp hb
-      have hB := hlit "B" _ (encSet_elem (c := denote α (.literal .string "B")) hb' x hx)
+      have hB := hlit "B" _ (setAt_elem (c := denote α (.literal .string "B")) hb' x hx)
       exact absurd (hA.symm.trans hB) (by simp)
   -- the other two wire families are refused element by element, and `℘⁺fin` supplies the
   -- element
   case ns S =>
     obtain ⟨x, hx⟩ := S.2
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
-    exact absurd (hlit "A" _ (encSet_elem (c := denote α (.literal .string "A")) ha x hx))
+    exact absurd (hlit "A" _ (setAt_elem (c := denote α (.literal .string "A")) ha x hx))
       (by simp)
   case bs S =>
     obtain ⟨x, hx⟩ := S.2
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
-    exact absurd (hlit "A" _ (encSet_elem (c := denote α (.literal .string "A")) ha x hx))
+    exact absurd (hlit "A" _ (setAt_elem (c := denote α (.literal .string "A")) ha x hx))
       (by simp)
-  all_goals simp [Adm_rows, setCodec] at hv
+  all_goals simp [Adm_rows, setCodec, Alg.Codec.e] at hv
 
 /-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
     separate, because both options admit `[]`. This is §5's empty-container argument in its

@@ -27,7 +27,7 @@ written out once per constructor before it was named:
   `null` are a payload carried between a value constructor and an attribute constructor,
   differing in nothing but which pair;
 * the **scalar payload prisms** (`sC`/`nC`/`bC`) — the attribute half of three of those
-  pairs, factored out because `encSet` needs the same three prisms to decide which wire set
+  pairs, factored out because `setAt` needs the same three prisms to decide which wire set
   a homogeneous element set writes to.
 
 Naming the shape once is what lets retract, canon and writes be discharged once for each family
