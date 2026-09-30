@@ -237,7 +237,7 @@ theorem disjoint_domE [PrimAdm S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S
 
 /-- …and apart read domains. -/
 theorem disjoint_domP [PrimAdmA S] [Leaf S] [LeafMeet S] [LeafAdmA S] [FormerAdmA S] [Shapes S]
-    [TopLaws S] {x y : Term S} (h : Term.disjoint pair0 x y = true) (ρ ρ' : List S.C) (a : Syn.A S) :
+    [TopLaws S] {x y : Term S} (h : Term.disjoint pair0 x y = true) (ρ ρ' : List S.C) (a : S.V) :
     (((denote α β x ρ).f S.o.op a).isSome && ((denote α β y ρ').f S.o.op a).isSome) = false := by
   have := disjoint_soundA (α := α) (β := β) pair0 x y h ρ ρ' (fun _ _ _ hp => nomatch hp) a
   rwa [AdmA_eq_isSome, AdmA_eq_isSome] at this
@@ -255,7 +255,7 @@ theorem apart_of_imp' {x y y' : Bool} (h : y = true → y' = true) (h' : (x && y
 /-- **A `held` acts at an orientation only where its outer acts**, where its side is the caller
     side of the orientation, and only where its inner term acts otherwise. -/
 theorem held_dom {sd : Bool} {i P : Term S} {k₀ : S.sig.G sd × Bool} {k : List (S.sig.G sd × Bool)}
-    {ρ : List S.C} (o : Orient) (x : Mean.Car (B := S.sig) o.c)
+    {ρ : List S.C} (o : Orient) (x : Mean.V (B := S.sig))
     (h : ((denote α β (.held sd i P k₀ k) ρ).f o x).isSome = true) :
     ((denote α β (if o.c == sd then P else i) ρ).f o x).isSome = true := by
   have h' : ((held1 sd (denote α β i ρ) (denote α β P ρ)

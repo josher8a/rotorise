@@ -81,12 +81,9 @@ theorem Orient.side_of : ∀ (o : Orient) (s : Bool), s = o.c ∨ s = o.s :=
   Orient.both (P := fun o => ∀ s, s = o.c ∨ s = o.s)
     (fun s => by cases s <;> simp) (fun s => by cases s <;> simp)
 
-/-- The carrier at an absolute side: the one carrier `V` at each side. -/
-abbrev Side (V : Type) (_ : Bool) : Type := V
-
 /-- **A function at each absolute side**: `fV` at the side `false`, and `fA` at the side `true`.
     A predicate of each side and a depth of each side are such functions. -/
-def Side.elim {V X : Type} (fV : V → X) (fA : V → X) : (s : Bool) → Side V s → X
+def Side.elim {V X : Type} (fV : V → X) (fA : V → X) : (s : Bool) → V → X
   | false => fV
   | true => fA
 
@@ -95,7 +92,7 @@ def Side.elim {V X : Type} (fV : V → X) (fA : V → X) : (s : Bool) → Side V
 structure Codec (V M : Type) where
   T : V → Prop
   μ : Option M
-  f : (o : Orient) → Side V o.c → Option (Side V o.s)
+  f : (o : Orient) → V → Option (V)
 
 variable {V M : Type}
 
@@ -184,7 +181,7 @@ def Can (c : Codec V M) (a : V) : Prop := ∃ v, c.e v = some a
     attribute. The `alternate reader` exemption is handled at the theorem (§5), not here:
     `Lawful` is the exemption-free bundle. -/
 structure Lawful (member : V → M) (c : Codec V M) : Prop where
-  inv : ∀ {o : Orient} {x : Side V o.c} {y : Side V o.s}, c.f o x = some y → c.f o.op y = some x
+  inv : ∀ {o : Orient} {x : V} {y : V}, c.f o x = some y → c.f o.op y = some x
   writes  : ∀ {μ}, c.μ = some μ → ∀ {t a}, c.e t = some a → member a = μ
 
 variable {member : V → M}
@@ -203,7 +200,7 @@ theorem Lawful.ofRC {c : Codec V M} (retract : ∀ {t a}, c.e t = some a → c.p
     (canon : ∀ {a t}, c.p a = some t → c.e t = some a)
     (writes : ∀ {μ}, c.μ = some μ → ∀ {t a}, c.e t = some a → member a = μ) :
     Lawful member c where
-  inv {o} := Orient.both (P := fun o => ∀ {x : Side V o.c} {y : Side V o.s},
+  inv {o} := Orient.both (P := fun o => ∀ {x : V} {y : V},
     c.f o x = some y → c.f o.op y = some x) retract canon o
   writes := writes
 

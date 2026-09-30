@@ -31,7 +31,7 @@ noncomputable section
 
 /-- **A recursive term reads where its body reads over the stage below the attribute's depth**:
     the write-side unfolding of the dual. -/
-theorem AdmA_mu_unfold (b : Term S) (ρ : List S.C) (a : Syn.A S) :
+theorem AdmA_mu_unfold (b : Term S) (ρ : List S.C) (a : S.V) :
     AdmA α β (.mu b) ρ a
       = AdmA α β b (muStage (fun c => denote α β b (c :: ρ)) (Syn.dA a - 1) :: ρ) a := by
   have hB : (fun c => denote (S := S.op) β α b (c :: ρ)) = fun c => denote α β b (c :: ρ) :=

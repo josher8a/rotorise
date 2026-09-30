@@ -24,7 +24,7 @@ variable {V M : Type}
     At the host, two writers of one value write one attribute. At the dual, two readers of one
     attribute read one value. -/
 def Agree (o : Orient) (c d : Codec V M) : Prop :=
-  ∀ (x : Side V o.c) (y z : Side V o.s), c.f o x = some y → d.f o x = some z → y = z
+  ∀ (x : V) (y z : V), c.f o x = some y → d.f o x = some z → y = z
 
 /-- One half, by the side flag: `true` is the write half, at the host. -/
 abbrev AgreeS (side : Bool) : Codec V M → Codec V M → Prop :=

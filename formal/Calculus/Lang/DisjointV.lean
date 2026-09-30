@@ -353,7 +353,7 @@ end
     that it sends is the pair of the top, and each predicate reads that pair at the side `s`. -/
 theorem predApart_sound [Leaf S] [LeafMeet S] [TopBound S] (s : Bool) {q : S.sig.P s}
     {ρ' : List S.C} : ∀ (y : Term S), predApart s q y = true → ∀ v a,
-      (Syn.top (S := S)).f S.o v = some a → Mean.eval s q (Orient.place S.o v a s) = true →
+      (Syn.top (S := S)).f S.o v = some a → Mean.eval s q (Orient.place (X := fun _ => S.V) S.o v a s) = true →
       Adm α β y ρ' v = false
   | .refine y q₁ q₂, h, v, a, htop, hq => by
       simp only [predApart, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
@@ -371,7 +371,7 @@ theorem predApart_sound [Leaf S] [LeafMeet S] [TopBound S] (s : Bool) {q : S.sig
           rw [htop] at htop'; cases htop'
           have hr := refine2_rect (c := denote α β y ρ') ha' s
           rw [Mean.eval_half] at hr
-          have := LeafMeet.pmeet_none s q _ hn (Orient.place S.o v a s)
+          have := LeafMeet.pmeet_none s q _ hn (Orient.place (X := fun _ => S.V) S.o v a s)
           rw [hq, hr] at this; exact nomatch this
       · rw [Adm_refine_eq, predApart_sound s y h v a htop hq, Bool.false_and]
   | .prim _, h, _, _, _, _ | .never, h, _, _, _, _ | .set _, h, _, _, _, _

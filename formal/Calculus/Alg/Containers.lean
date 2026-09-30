@@ -113,7 +113,7 @@ theorem objEntryT_eq {kv} :
 /-- **The object's payload pair at an orientation**: the presence guard, then each entry at the
     orientation. The write is the pair at the host, and the read is the pair at the dual. -/
 noncomputable def objAt (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) (o : Orient) :
-    MapOf (Side V o.c) → Option (MapOf (Side V o.s)) := fun p =>
+    MapOf (V) → Option (MapOf (V)) := fun p =>
   if valPresentB sems p.1 = true then
     (funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.f o (p.2 k)))).map
       (fun g => ⟨p.1, g⟩)
@@ -128,7 +128,7 @@ noncomputable abbrev objRead (sems : MapOf (FieldSem V M)) (rc? : Option (Codec 
     MapOf V → Option (MapOf V) := objAt sems rc? Orient.dual
 
 /-- What the payload pair sends at an orientation: the guard held, and the entrywise image. -/
-theorem objAt_eq {o : Orient} {p : MapOf (Side V o.c)} {q : MapOf (Side V o.s)} :
+theorem objAt_eq {o : Orient} {p : MapOf (V)} {q : MapOf (V)} :
     objAt sems rc? o p = some q ↔
       valPresentB sems p.1 = true ∧ ∃ g,
         funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.f o (p.2 k))) = some g ∧

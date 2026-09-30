@@ -101,7 +101,7 @@ caller side, because no law reads a difference between the two sides.
 
 | the fact | the field | at DynamoDB | at JSON |
 | --- | --- | --- | --- |
-| the carriers | `Mean.Car`, `Mean.Mem`, read as `Syn.V`, `Syn.A`, `Syn.M` | `Value`, `Attr`, `Member` | `Json`, `Json`, `JMember` |
+| the carrier and the members | `Mean.V`, `Mean.Mem`, read as `Syn.V`, `Syn.M` | `Attr` (`Value` names it at the caller side), `Member` | `Json`, `JMember` |
 | the member of an attribute | `Mean.mem` | `Attr.member` | `Json.member` |
 | the primitives and their codecs | `Sig.Ground`, `Mean.ground`, `Mean.lawful_ground` | `Ground`, `groundCodec` | `JMember`, `ground` |
 | the predicates | `Sig.P`, `Mean.eval`, at each absolute side | `Pred`, `Pred.eval` | a function on `Json` |

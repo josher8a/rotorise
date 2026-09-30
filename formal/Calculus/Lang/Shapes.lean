@@ -26,7 +26,7 @@ class Shapes (S : Syn) [Sem S] where
   /-- The former class of a value. -/
   former : S.V → Former
   /-- The former class of an attribute. -/
-  formerA : Syn.A S → Former
+  formerA : S.V → Former
   /-- A primitive writes only primitive values. -/
   prim : ∀ g v, ((Syn.ground g).f S.o v).isSome = true → former v = .prim
   /-- A primitive reads only primitive attributes. -/

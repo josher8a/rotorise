@@ -21,12 +21,12 @@ variable {S : Syn} [Sem S] {α : Table S} {β : Table S.op}
 
 variable (α β) in
 /-- **`refine`'s read-side gate**: decode with the base, then apply `q` to what comes out. -/
-noncomputable def refineReads (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a : Syn.A S) :
+noncomputable def refineReads (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a : S.V) :
     Bool :=
   gate ((denote α β t ρ).f S.o.op) q a
 
 /-- `refineReads` is the gate of the term at the dual orientation. -/
-theorem refineReads_eq_gate (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a : Syn.A S) :
+theorem refineReads_eq_gate (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a : S.V) :
     gate ((denote (S := S.op) β α t ρ).f S.o.op) q a = refineReads α β t ρ q a := by
   rw [denote_op]; rfl
 
@@ -37,30 +37,30 @@ noncomputable section
 variable (α β) in
 /-- **The joint admission predicate, attribute side**, under an environment `ρ`: the value row
     of the term in the dual universe, under the same environment. -/
-def AdmA (t : Term S) (ρ : List S.C) : Syn.A S → Bool := Adm (S := S.op) β α t ρ
+def AdmA (t : Term S) (ρ : List S.C) : S.V → Bool := Adm (S := S.op) β α t ρ
 
 variable (α β) in
 /-- The read side's payload row; `AdmBody`'s mirror. -/
-def AdmABody (b : Body S) (ρ : List S.C) : Syn.A S → Bool := AdmBody (S := S.op) β α b ρ
+def AdmABody (b : Body S) (ρ : List S.C) : S.V → Bool := AdmBody (S := S.op) β α b ρ
 
 variable (α β) in
 /-- A slot's read row is its term's. -/
-def AdmAField (s : ObjectSlot S) (ρ : List S.C) : Syn.A S → Bool :=
+def AdmAField (s : ObjectSlot S) (ρ : List S.C) : S.V → Bool :=
   AdmField (S := S.op) β α s ρ
 
 variable (α β) in
 /-- The open block's read row, where the body has one. -/
-def AdmAWild (w : Option (Term S)) (ρ : List S.C) : Option (Syn.A S → Bool) :=
+def AdmAWild (w : Option (Term S)) (ρ : List S.C) : Option (S.V → Bool) :=
   AdmWild (S := S.op) β α w ρ
 
 variable (α β) in
 /-- The options' read rows, in order. -/
-def AdmAList (ts : List (Term S)) (ρ : List S.C) : List (Syn.A S → Bool) :=
+def AdmAList (ts : List (Term S)) (ρ : List S.C) : List (S.V → Bool) :=
   AdmList (S := S.op) β α ts ρ
 
 variable (α β) in
 /-- The spread's read row, where there is one. -/
-def AdmAOptT (o : Option (Term S)) (ρ : List S.C) : Option (Syn.A S → Bool) :=
+def AdmAOptT (o : Option (Term S)) (ρ : List S.C) : Option (S.V → Bool) :=
   AdmOptT (S := S.op) β α o ρ
 
 @[simp] theorem AdmAList_eq (ρ : List S.C) :
@@ -71,7 +71,7 @@ def AdmAOptT (o : Option (Term S)) (ρ : List S.C) : Option (Syn.A S → Bool) :
 /-- A refinement reads what its inner term reads, its stored predicate holds on, and its
     predicate holds on the read. -/
 theorem AdmA_refine_eq (t : Term S) (p : S.sig.P false) (pA : S.sig.P true) (ρ : List S.C)
-    (a : Syn.A S) :
+    (a : S.V) :
     AdmA α β (.refine t p pA) ρ a =
       (AdmA α β t ρ a && (Syn.evalA (half S.o.s p pA) a &&
         refineReads α β t ρ (Syn.eval (half S.o.c p pA)) a)) := by
@@ -82,7 +82,7 @@ theorem AdmA_refine_eq (t : Term S) (p : S.sig.P false) (pA : S.sig.P true) (ρ 
     term reads the entry image, and where the outer admits the exit image of the read where its
     side is the caller side. -/
 theorem AdmA_held_eq [PrimAdm S] (s : Bool) (t P : Term S) (k₀ : S.sig.G s × Bool)
-    (k : List (S.sig.G s × Bool)) (ρ : List S.C) (a : Syn.A S) :
+    (k : List (S.sig.G s × Bool)) (ρ : List S.C) (a : S.V) :
     AdmA α β (.held s t P k₀ k) ρ a =
       ((S.o.s != s || AdmA α β P ρ a) &&
         AdmA α β t ρ ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.s).1 a) &&
@@ -112,7 +112,7 @@ theorem AdmA_exact (t : Term S) (ρ : List S.C) : ExactA α β t ρ := fun a =>
   (Adm_exact (S := S.op) (α := β) (β := α) t ρ a).trans (by rw [denote_op])
 
 /-- The row, read as a Boolean: the read domain of the denotation. -/
-theorem AdmA_eq_isSome (t : Term S) (ρ : List S.C) (a : Syn.A S) :
+theorem AdmA_eq_isSome (t : Term S) (ρ : List S.C) (a : S.V) :
     AdmA α β t ρ a = ((denote α β t ρ).f S.o.op a).isSome :=
   Bool.eq_iff_iff.mpr (AdmA_exact t ρ a)
 

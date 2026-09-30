@@ -71,9 +71,9 @@ theorem select_isSome_attempt {V M X Y : Type} (os : List (Codec V M))
 
 /-- **The list codec at an orientation**: read the caller prism, align, run each position at the
     orientation, and build with the stored prism. -/
-theorem listCodec_f {V M : Type} (p : (s : Bool) → Ctor (List (Side V s)) (Side V s))
+theorem listCodec_f {V M : Type} (p : (s : Bool) → Ctor (List (V)) (V))
     (μL : M) (pre : List (Codec V M)) (sp : Option (Codec V M)) (suf : List (Codec V M)) :
-    ∀ (o : Orient) (x : Side V o.c), (listCodec (p false) (p true) μL pre sp suf).f o x =
+    ∀ (o : Orient) (x : V), (listCodec (p false) (p true) μL pre sp suf).f o x =
       (((p o.c).out x).bind fun xs =>
         (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map (p o.s).into :=
   Orient.both (P := fun o => ∀ x, (listCodec (p false) (p true) μL pre sp suf).f o x =

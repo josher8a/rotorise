@@ -25,7 +25,7 @@ condition it is consuming. -/
 /-- §3 `(held)`: the iso cancels **on the carriers** — `T ≃ I`, in the domain-restricted
     form the laws actually need. `g ∘ f = id` where `f` lands writable, `f ∘ g = id` on
     the writable values themselves. -/
-def IsoCancelsAt (o : Orient) (c : Codec V M) (f g : Side V o.c → Side V o.c) : Prop :=
+def IsoCancelsAt (o : Orient) (c : Codec V M) (f g : V → V) : Prop :=
   (∀ x, (c.f o (f x)).isSome → g (f x) = x) ∧
   (∀ x, (c.f o x).isSome → f (g x) = x)
 
@@ -94,7 +94,7 @@ structure Ctor (α β : Type) where
   into_out : ∀ {b x}, out b = some x → b = into x
 
 /-- **A prism at each absolute side**: `pV` into the values, and `pA` into the attributes. -/
-def Ctor.side {α : Type} (pV : Ctor α V) (pA : Ctor α V) : (s : Bool) → Ctor α (Side V s)
+def Ctor.side {α : Type} (pV : Ctor α V) (pA : Ctor α V) : (s : Bool) → Ctor α (V)
   | false => pV
   | true => pA
 
@@ -141,7 +141,7 @@ def Codec.restrict (c : Codec V M) (q : V → Bool) : Codec V M :=
 /-- What the two-sided restriction sends: the input passes the predicate of the caller side,
     the base sends the input, and the output passes the predicate of the stored side. -/
 theorem refine2_f {c : Codec V M} {qV : V → Bool} {qA : V → Bool} {o : Orient}
-    {x : Side V o.c} {y : Side V o.s} :
+    {x : V} {y : V} :
     (refine2 c qV qA).f o x = some y ↔
       Side.elim qV qA o.c x = true ∧ c.f o x = some y ∧ Side.elim qV qA o.s y = true := by
   simp only [refine2]
@@ -155,8 +155,8 @@ theorem refine2_f {c : Codec V M} {qV : V → Bool} {qA : V → Bool} {o : Orien
 /-- **The rectangle**: a pair that the two-sided restriction sends satisfies the predicate at
     each absolute side. -/
 theorem refine2_rect {c : Codec V M} {qV : V → Bool} {qA : V → Bool} {o : Orient}
-    {x : Side V o.c} {y : Side V o.s} (h : (refine2 c qV qA).f o x = some y) (s : Bool) :
-    Side.elim qV qA s (Orient.place o x y s) = true := by
+    {x : V} {y : V} (h : (refine2 c qV qA).f o x = some y) (s : Bool) :
+    Side.elim qV qA s (Orient.place (X := fun _ => V) o x y s) = true := by
   obtain ⟨hx, -, hy⟩ := refine2_f.mp h
   rcases Orient.side_of o s with rfl | rfl
   · rw [Orient.place_c]; exact hx
@@ -247,7 +247,7 @@ theorem gate_true {X Y : Type} (m : X → Option Y) (x : X) :
 /-- **The domain of the two-sided restriction at an orientation**: the predicate of the caller
     side, and the gate of the predicate of the stored side. -/
 theorem refine2_f_isSome (c : Codec V M) (qV : V → Bool) (qA : V → Bool) (o : Orient)
-    (x : Side V o.c) :
+    (x : V) :
     ((refine2 c qV qA).f o x).isSome =
       (Side.elim qV qA o.c x && gate (c.f o) (Side.elim qV qA o.s) x) := by
   simp only [refine2, gate]
@@ -391,8 +391,8 @@ theorem select_admits {X Y : Type} {os : List (Codec V M)} {run : Codec V M → 
   exact ⟨o, List.mem_of_find?_eq_some hf, List.find?_some (p := fun c => (run c x).isSome) hf, hr⟩
 
 /-- **What a union sends**: the first option that acts at the input sent the input. -/
-theorem altCodec_f {os : List (Codec V M)} {μA : Option M} {o : Orient} {x : Side V o.c}
-    {y : Side V o.s} :
+theorem altCodec_f {os : List (Codec V M)} {μA : Option M} {o : Orient} {x : V}
+    {y : V} :
     (altCodec os μA).f o x = some y ↔
       ∃ c, os.find? (fun c => (c.f o x).isSome) = some c ∧ c.f o x = some y := select_eq_some
 
@@ -403,7 +403,7 @@ theorem altCodec_f_def (os : List (Codec V M)) (μA : Option M) (o : Orient) :
 
 /-- A sum routes through an option that acts, at each orientation. -/
 theorem altCodec_admits {os : List (Codec V M)} {μA : Option M} {o : Orient}
-    {x : Side V o.c} {y : Side V o.s} (h : (altCodec os μA).f o x = some y) :
+    {x : V} {y : V} (h : (altCodec os μA).f o x = some y) :
     ∃ c ∈ os, (c.f o x).isSome = true ∧ c.f o x = some y := select_admits h
 
 /-! ## Carriers — the pair is on `T` -/

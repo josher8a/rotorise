@@ -35,9 +35,9 @@ theorem sub_altCodec {os : List (Codec V M)} {u : Codec V M} (h : ∀ o ∈ os, 
 /-- A zipped traversal at the orientation `o` whose every row codec is below `u` is a traversal
     of `u` at `o`. -/
 theorem forall₂_zip (o : Orient) {u : Codec V M} :
-    ∀ (ds : List (Codec V M)) (xs : List (Side V o.c)) (ys : List (Side V o.s)),
+    ∀ (ds : List (Codec V M)) (xs : List (V)) (ys : List (V)),
     ds.length = xs.length → (∀ c ∈ ds, Sub c u) →
-    List.Forall₂ (fun (cx : Codec V M × Side V o.c) y => cx.1.f o cx.2 = some y) (ds.zip xs) ys →
+    List.Forall₂ (fun (cx : Codec V M × V) y => cx.1.f o cx.2 = some y) (ds.zip xs) ys →
     List.Forall₂ (fun x y => u.f o x = some y) xs ys
   | [], [], _, _, _, h => by cases h; exact .nil
   | d :: ds, x :: xs, y :: ys, hl, hd, .cons h1 h2 =>
@@ -132,7 +132,7 @@ class TopLaws (S : Syn) [Sem S] : Prop where
   map : ∀ F ∈ Mean.map (B := S.sig),
     (∀ m : MapOf (Mean.V (B := S.sig)), (Syn.top (S := S)).e ((F.m false).into m) =
       (funImage fun k => (Syn.top (S := S)).e (m.get k)).map fun g => (F.m true).into ⟨m.keys, g⟩) ∧
-    (∀ m : MapOf (Mean.A (B := S.sig)), (Syn.top (S := S)).p ((F.m true).into m) =
+    (∀ m : MapOf (Mean.V (B := S.sig)), (Syn.top (S := S)).p ((F.m true).into m) =
       (funImage fun k => (Syn.top (S := S)).p (m.get k)).map fun g => (F.m false).into ⟨m.keys, g⟩)
   set : ∀ L ∈ Mean.set (B := S.sig), ∀ c : S.C, Sub c (Syn.top (S := S)) →
     Sub (L.lift c) (Syn.top (S := S))
