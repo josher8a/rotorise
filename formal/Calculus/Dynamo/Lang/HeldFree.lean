@@ -122,8 +122,9 @@ theorem select_some {A B : Type} {os : List Codec} {run : Codec → A → Option
 export Alg (HF HFS HFL HFO)
 
 /-- The laws of `Ω` that the held-free theory reads: each primitive is below `Ω`, `Ω` acts as the
-    `arr` and `map` formers, and a set over a restriction of `Ω` is a restriction of `Ω`. -/
-instance Ω_topLaws : Alg.TopLaws dynSyn where
+    `arr` and `map` formers, and a set over a restriction of `Ω` is a restriction of `Ω`. The
+    laws read no orientation, so one instance serves both. -/
+instance Ω_topLaws (o : Alg.Orient) : Alg.TopLaws ⟨dynSig, o⟩ where
   ground
     | .base k => sub_baseCodec k
     | .literal k x => sub_literal k x
