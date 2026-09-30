@@ -113,7 +113,7 @@ theorem agreeLe_listCodec {d : Nat} {pre₁ pre₂ suf₁ suf₂ : List Codec}
     {sp₁ sp₂ : Option Codec} (hpre : List.Forall₂ (AgreeLe d) pre₁ pre₂)
     (hsp : Option.Rel (AgreeLe d) sp₁ sp₂) (hsuf : List.Forall₂ (AgreeLe d) suf₁ suf₂) :
     AgreeLe (d + 1) (listCodec pre₁ sp₁ suf₁) (listCodec pre₂ sp₂ suf₂) :=
-  Alg.agreeLe_listCodec (pV := arrV) (pA := lA) (μL := .L)
+  Alg.agreeLe_listCodec (pV := lA) (pA := lA) (μL := .L)
     (fun _ _ hx => Nat.succ_le_succ (Attr.depth_le_depthL hx))
     (fun _ _ hx => Nat.succ_le_succ (Attr.depth_le_depthL hx)) hpre hsp hsuf
 

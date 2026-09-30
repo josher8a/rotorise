@@ -212,13 +212,13 @@ theorem decides_object :
   · simp +contextual [denote_rows,
           objectCodec, stringCodec,
           valPresentB, valPresentAt, rcOf, Alg.FieldSem.codec, carriedCodec,
-          mapV, mA, objWrite, entryCodec, MapOf.at, funImage,
+          mA, mA, objWrite, entryCodec, MapOf.at, funImage,
           Subtype.forall]
     rfl
   · simp [denote_rows,
           objectCodec, Alg.objectCodec, Alg.objectCodecCore, stringCodec,
           valPresentB, valPresentAt, rcOf, carriedCodec,
-          mapV, mA, objWrite, objAt, Subtype.forall]
+          mA, mA, objWrite, objAt, Subtype.forall]
 
 
 /-! ### …and the two errors are the same combinator

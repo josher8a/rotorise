@@ -100,12 +100,12 @@ def noEntries {α : Type} : MapOf α := ⟨∅, fun k => (Finset.notMem_empty _ 
 def dropAll : Codec :=
   Alg.Codec.ofEP (T := fun _ => True) (μ := none) (e := fun _ => none)
     (p := fun a => match a with
-      | .m _ _ => some (mapV.into noEntries)
+      | .m _ _ => some (mA.into noEntries)
       | _ => none)
 
 /-- **Every `M` attribute reads to the empty map.** This one equation is the fibre. -/
 theorem dropAll_p (keys : Finset Name) (f : {k // k ∈ keys} → Attr) :
-    dropAll.p (.m keys f) = some (mapV.into noEntries) := rfl
+    dropAll.p (.m keys f) = some (mA.into noEntries) := rfl
 
 /-- **A reader that drops names is not lawful**: two maps read to the empty map, and the empty
     map writes one of them. -/
