@@ -46,7 +46,7 @@ theorem carrier_numberCodec : Carrier numberCodec := by
   refine ⟨?_, ?_⟩
   · intro v a h
     cases v with
-    | num x => exact ⟨x, rfl⟩
+    | n x => exact ⟨x, rfl⟩
     | _ => exact nomatch h
   · intro a v h
     cases a with

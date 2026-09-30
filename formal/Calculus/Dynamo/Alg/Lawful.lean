@@ -47,7 +47,7 @@ theorem lawful_numberCodec : Lawful numberCodec := by
   refine .ofRC ?_ ?_ ?_
   · intro t a he
     cases t with
-    | num x => cases he; rfl
+    | n x => cases he; rfl
     | _ => exact nomatch he
   · intro a t hp
     cases a with
@@ -55,7 +55,7 @@ theorem lawful_numberCodec : Lawful numberCodec := by
     | _ => exact nomatch hp
   · intro μ hμ t a he
     cases t with
-    | num x => cases he; cases hμ; rfl
+    | n x => cases he; cases hμ; rfl
     | _ => exact nomatch he
 
 /-- …and every base is lawful. -/

@@ -95,7 +95,7 @@ theorem cW_notW : ¬ (∀ {μ}, cW.μ = some μ → ∀ {t a}, cW.e t = some a �
 theorem cW_R : ∀ {t a}, cW.e t = some a → cW.p a = some t := by
   intro t a h
   cases t <;> simp only [cW, Alg.Codec.ofEP_e] at h
-  case str s =>
+  case s s =>
     split at h
     · next hz => subst hz; cases h; rfl
     · next hz => cases h; simp only [cW, Alg.Codec.ofEP_p]; rw [if_neg hz]

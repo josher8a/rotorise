@@ -184,7 +184,7 @@ theorem setCodec_e_isSome_of_sub {c : Codec} (h : Sub c Ω) (v : Value) :
         | .binSet S => ∀ b ∈ S.1, (c.e (.bin b)).isSome = true
         | _ => False) := by
   cases v
-  case strSet S =>
+  case ss S =>
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
     · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact encSet_elem ha s hs
     · have hc : neSetImage (fun x => (c.e (Value.str x)).bind sC.out) S =
@@ -193,7 +193,7 @@ theorem setCodec_e_isSome_of_sub {c : Codec} (h : Sub c Ω) (v : Value) :
         rw [ha, sub_e_str h ha]; rfl
       show (encSet c Value.str S).isSome = true
       unfold encSet; rw [hc, neSetImage_id]; rfl
-  case numSet S =>
+  case ns S =>
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
     · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact encSet_elem ha s hs
     · obtain ⟨x₀, hx₀⟩ := S.2
@@ -207,7 +207,7 @@ theorem setCodec_e_isSome_of_sub {c : Codec} (h : Sub c Ω) (v : Value) :
         rw [ha, sub_e_num h ha]; rfl
       show (encSet c Value.num S).isSome = true
       unfold encSet; rw [hS, hN, neSetImage_id]; rfl
-  case binSet S =>
+  case bs S =>
     refine ⟨fun he s hs => ?_, fun hall => ?_⟩
     · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact encSet_elem ha s hs
     · obtain ⟨x₀, hx₀⟩ := S.2

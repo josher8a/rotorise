@@ -103,7 +103,7 @@ theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectS
     HObject fields bind R v ↔ AdmBody α (.mk fields ff wild) v = true := by
   have hF := fun k => typedField_adm (hfields k) (ihr k) (iho k)
   cases v with
-  | map keys f =>
+  | m keys f =>
     simp only [Adm_rows, Bool.and_eq_true, valPresentT_req, objAdmV, decide_eq_true_eq]
     have hpres : (∀ k : {k // k ∈ fields}, (bind k).1 = true → k.1 ∈ keys) ↔
         (∀ k : {k // k ∈ fields}, ObjectSlot.isReq (ff k) = true → k.1 ∈ keys) :=
@@ -149,29 +149,29 @@ theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed α t T μ) (hob : Oblig
   have hw : ∀ x a, (denote α t).e x = some a → a.member = μ₀ := fun _ _ h => hl.writes hμ h
   have hin : ∀ w, T w ↔ ((denote α t).e w).isSome = true := fun w => (ih w).trans (Adm_exact t w)
   cases v with
-  | strSet S =>
+  | ss S =>
     show HSet T (.strSet S) ↔ (encSet (denote α t) Value.str S).isSome = true
-    simp only [HSet, Value.strSet.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
+    simp only [HSet, Attr.ss.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
       or_false]
-    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Value.str.inj h)
+    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Attr.s.inj h)
         (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
       fun he x hx => by
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
         exact (hin _).mpr (encSet_elem ha x hx)⟩
-  | numSet S =>
+  | ns S =>
     show HSet T (.numSet S) ↔ (encSet (denote α t) Value.num S).isSome = true
-    simp only [HSet, Value.numSet.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
+    simp only [HSet, Attr.ns.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
       false_or, or_false]
-    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Value.num.inj h)
+    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Attr.n.inj h)
         (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
       fun he x hx => by
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
         exact (hin _).mpr (encSet_elem ha x hx)⟩
-  | binSet S =>
+  | bs S =>
     show HSet T (.binSet S) ↔ (encSet (denote α t) Value.bin S).isSome = true
-    simp only [HSet, Value.binSet.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
+    simp only [HSet, Attr.bs.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
       false_or]
-    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Value.bin.inj h)
+    exact ⟨fun hall => encSet_isSome_of hl hsm (fun _ _ h => Attr.b.inj h)
         (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
       fun he x hx => by
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
@@ -215,8 +215,8 @@ theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t →
     | @set t' T' μ' h' => exact hset_iff h' hob (typed_T_adm h' hob.1) v
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       cases v with
-      | arr vs =>
-        simp only [HList, Adm_rows, Value.arr.injEq, exists_eq_left']
+      | l vs =>
+        simp only [HList, Adm_rows, Attr.l.injEq, exists_eq_left']
         exact htupleL_iff hp hs hf
           (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).1 t' ht') w)
           (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.1 t' ht') w)

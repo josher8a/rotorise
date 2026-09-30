@@ -62,29 +62,29 @@ theorem Adm_opaqUnfold (v : Value) : Adm α opaqUnfold v = Adm α .opaq v := by
     rfl
   rw [hu]
   cases v with
-  | str s => rw [Adm_opaq_str]; rfl
+  | s s => rw [Adm_opaq_str]; rfl
   | bool b => rw [Adm_opaq_bool]; rfl
-  | bin b => rw [Adm_opaq_bin]; rfl
+  | b b => rw [Adm_opaq_bin]; rfl
   | null => rw [Adm_opaq_null]; rfl
-  | num d => rw [Adm_opaq_num]; rfl
+  | n d => rw [Adm_opaq_num]; rfl
   -- `set opaque` is `opaque`'s own set option, so the two rows are one expression
-  | strSet S =>
+  | ss S =>
       rw [Adm_opaq_eq, Ωe_strSet]
       simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec]
       rfl
-  | numSet S =>
+  | ns S =>
       rw [Adm_opaq_eq, Ωe_numSet]
       simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec]
       rfl
-  | binSet S =>
+  | bs S =>
       rw [Adm_opaq_eq, Ωe_binSet]
       simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec]
       rfl
-  | arr vs =>
+  | l vs =>
       rw [Adm_opaq_arr]
       simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, alignPL_spread, setCodec]
       exact decide_eq_decide.mpr Iff.rfl
-  | map keys g =>
+  | m keys g =>
       -- the record's guard is vacuous over `∅`; a `simp` that unfolds the guard reaches
       -- `Finset.instIsEmpty`, so the guard stays folded and the fact is handed in
       have hp : valPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=

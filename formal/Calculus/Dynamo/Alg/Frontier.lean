@@ -426,7 +426,7 @@ theorem onKind_record (c : Codec) :
     Codec.OnKind ((recordCodec c)) .map := by
   refine ⟨fun v hv => ?_, fun a ha => ?_⟩
   · cases v
-    case map keys f => rfl
+    case m keys f => rfl
     all_goals
       (simp only [recordCodec] at hv; exact absurd hv (by simp))
   · cases a

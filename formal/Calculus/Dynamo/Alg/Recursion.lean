@@ -162,9 +162,9 @@ theorem agreeLe_recordCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c�
     AgreeLe (d + 1) (recordCodec c₁) (recordCodec c₂) := by
   refine ⟨fun v hv => ?_, fun a ha => ?_⟩
   · cases v with
-    | map keys f =>
+    | m keys f =>
       have hk : ∀ k, c₁.e (f k) = c₂.e (f k) := fun k =>
-        h.e _ (by have := Value.depth_map_entry (f := f) k; omega)
+        h.e _ (by have := Value.depth_map_entry (f := f) k; simp only [Value.map] at this; omega)
       simp only [recordCodec, hk, Alg.Codec.ofEP_e]
     | _ => rfl
   · cases a with
@@ -179,9 +179,9 @@ theorem agreeLe_setCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂)
     AgreeLe (d + 1) (setCodec c₁) (setCodec c₂) := by
   refine ⟨fun v hv => ?_, fun a ha => ?_⟩
   · cases v with
-    | strSet S => exact encSet_congr fun x _ => h.e _ (by simp only [Value.depth] at hv ⊢; omega)
-    | numSet S => exact encSet_congr fun x _ => h.e _ (by simp only [Value.depth] at hv ⊢; omega)
-    | binSet S => exact encSet_congr fun x _ => h.e _ (by simp only [Value.depth] at hv ⊢; omega)
+    | ss S => exact encSet_congr fun x _ => h.e _ (by simp only [Value.depth] at hv ⊢; omega)
+    | ns S => exact encSet_congr fun x _ => h.e _ (by simp only [Value.depth] at hv ⊢; omega)
+    | bs S => exact encSet_congr fun x _ => h.e _ (by simp only [Value.depth] at hv ⊢; omega)
     | _ => rfl
   · cases a with
     | ss S => exact decSet_congr fun x _ => h.p _ (by simp only [Attr.depth] at ha ⊢; omega)

@@ -313,31 +313,26 @@ end
     and `ran(e) ⊆ 𝔸` is only the guarantee it reads as when the two agree. -/
 def Attr.Storable (bound : Nat) (a : Attr) : Prop := Attr.nesting a ≤ bound
 
-/-- The value language, partitioned exactly as §5's `Kind`. `decimal` holds numerals as
-    `str` values — one string kind, as in the doc's κ table. -/
-inductive Value where
-  | str  (v : String)
-  /-- §1's `N`, carried EXACTLY and as the attribute side already carries it. A host's numeric
-      type is an approximation of this and the wire's string is a spelling of it.
-      Neither is the datatype, so neither is the carrier: an adapter reaches them. -/
-  | num  (v : WFNumeral)
-  | bool (v : Bool)
-  | bin  (v : Bytes)
-  | null
-  /-- The reference: "The set types are string set, number set, and binary set." Three
-      concrete element types, so each is a genuine `Finset`.
+/-- **The caller carrier is the stored carrier.** DynamoDB has one datum shape, `Attr`, and
+    `Value` names that shape at the caller side. No law reads a difference between the two
+    sides, so the two sides hold one type, and a codec is a partial map of `Attr` to itself.
+    Each caller-side constructor is a `match_pattern` alias of its stored-side constructor.
 
-      **These three constructors are DynamoDB facts in the carrier, not rules of the set
-      algebra.** The three element types and `℘⁺fin` (no empty set) are the store universe's.
-      The algebra is the finite-powerset lift of a lawful element codec (`lawful_setCodec`),
-      and the term `set` takes any element term. The one set rule the carrier cannot carry, that
-      the element writes one member of `S`, `N` or `B`, is an obligation (`SetElem`). -/
-  | strSet (v : NEFinset String)
-  | numSet (v : NEFinset WFNumeral)
-  | binSet (v : NEFinset Bytes)
-  | arr  (v : List Value)
-  /-- …and the value side of the same, for the same reason. -/
-  | map  (keys : Finset Name) (f : {k // k ∈ keys} → Value)
+    The value language is partitioned exactly as §5's `Kind`. `decimal` holds numerals as `str`
+    values: one string kind, as in the κ table of the specification. The three set constructors
+    and `℘⁺fin` are DynamoDB facts in the carrier, not rules of the set algebra (`SetElem`). -/
+abbrev Value := Attr
+
+@[match_pattern] abbrev Value.str (v : String) : Value := Attr.s v
+@[match_pattern] abbrev Value.num (v : WFNumeral) : Value := Attr.n v
+@[match_pattern] abbrev Value.bool (v : Bool) : Value := Attr.bool v
+@[match_pattern] abbrev Value.bin (v : Bytes) : Value := Attr.b v
+@[match_pattern] abbrev Value.null : Value := Attr.null
+@[match_pattern] abbrev Value.strSet (v : NEFinset String) : Value := Attr.ss v
+@[match_pattern] abbrev Value.numSet (v : NEFinset WFNumeral) : Value := Attr.ns v
+@[match_pattern] abbrev Value.binSet (v : NEFinset Bytes) : Value := Attr.bs v
+@[match_pattern] abbrev Value.arr (v : List Value) : Value := Attr.l v
+@[match_pattern] abbrev Value.map (keys : Finset Name) (f : {k // k ∈ keys} → Value) : Value := Attr.m keys f
 
 /-- The kind a value is of — §5's `κ` reads this. -/
 def Value.kind : Value → Kind

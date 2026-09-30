@@ -308,7 +308,7 @@ theorem recordCodec_e_eq {c : Codec} {v : Value} {a : Attr} :
       ∃ keys f g, v = .map keys f ∧ funImage (fun k => c.e (f k)) = some g ∧
         a = .m keys g := by
   cases v
-  case map keys f =>
+  case m keys f =>
     constructor
     · intro h
       obtain ⟨g, hg, rfl⟩ := Option.map_eq_some_iff.mp h
@@ -511,7 +511,7 @@ theorem arrayCodec_p (c : Codec) (a : Attr) :
 theorem arrayCodec_T (c : Codec) (v : Value) :
     (arrayCodec c).T v ↔ (listCodec [] (some c) []).T v := by
   cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, arrV, lA,
-      Value.arr.injEq, reduceCtorEq,
+      Attr.l.injEq, reduceCtorEq,
     false_and, exists_false, exists_eq_left', iff_self, Alg.Codec.ofEP_T]; try exact Iff.rfl)
   rw [alignL_spread]
   constructor
