@@ -146,7 +146,7 @@ def isStored : Value → Bool :=
 @[simp] theorem decimalCodec_e_isSome (v : Value) :
     (decimalCodec.e v).isSome = isStored v := by
   cases v <;> try rfl
-  case num x =>
+  case n x =>
     show (if Numeral.Stored x.1 then some (Attr.n x) else none).isSome = isStored (Value.num x)
     cases h : Numeral.Stored x.1 <;> simp [isStored, h]
 
@@ -155,7 +155,7 @@ def isStored : Value → Bool :=
     `Stored → WF` is what makes the composite equal `decimal`. -/
 theorem decimalCodec_e_restrict : decimalCodec.e = (numberCodec.restrict isStored).e := by
   funext v; cases v with
-  | num x =>
+  | n x =>
     cases hs : Numeral.Stored x.1 <;>
       simp [decimalCodec, numberCodec, Alg.restrict_e_def, isStored, hs]
   | _ => rfl
@@ -172,7 +172,7 @@ theorem carrier_decimalCodec : Carrier decimalCodec := by
   refine ⟨?_, ?_⟩
   · intro v a h
     cases v with
-    | num x =>
+    | n x =>
       replace h : (if Numeral.Stored x.1 = true then some (Attr.n x) else none) = some a := h
       cases hw : Numeral.Stored x.1
       · rw [hw, if_neg (by simp)] at h; exact nomatch h
@@ -199,7 +199,7 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
   refine .ofRC ?_ ?_ ?_
   · intro t a he
     cases t with
-    | num x =>
+    | n x =>
       rw [decimalCodec_e_num] at he
       by_cases hw : Numeral.Stored x.1 = true
       · rw [if_pos hw] at he; cases he; rw [decimalCodec_p_n, if_pos hw]
@@ -215,7 +215,7 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
     | _ => exact nomatch hp
   · intro μ hμ t a he
     cases t with
-    | num x =>
+    | n x =>
       rw [decimalCodec_e_num] at he
       by_cases hw : Numeral.Stored x.1 = true
       · rw [if_pos hw] at he; cases he; cases hμ; rfl
@@ -246,7 +246,7 @@ theorem ker_decimalCodec {x y : WFNumeral} (h : decimalCodec.Ker (.n x) (.n y))
   rw [decimalCodec_p_n, decimalCodec_p_n, if_pos hx] at h'
   by_cases hy : Numeral.Stored y.1 = true
   · rw [if_pos hy] at h'
-    exact congrArg Subtype.val (Value.num.inj (Option.some.inj h'))
+    exact congrArg Subtype.val (Attr.n.inj (Option.some.inj h'))
   · rw [if_neg hy] at h'; exact nomatch h'
 
 /-- §1: `Can(decimal)` is the normal forms and a normalisation fixes its own, so `Stored`
@@ -256,7 +256,7 @@ theorem survivesStore_decimalCodec {η : Attr → Attr}
     SurvivesStore decimalCodec η := by
   rintro a ⟨v, hv⟩
   cases v with
-  | num x =>
+  | n x =>
     rw [decimalCodec_e_num] at hv
     by_cases hs : Numeral.Stored x.1 = true
     · rw [if_pos hs] at hv
@@ -290,7 +290,7 @@ theorem decimal_writes_stored {v : Value} {a : Attr}
     (he : decimalCodec.e v = some a) :
     ∃ x : WFNumeral, a = .n x ∧ Numeral.Stored x.1 = true := by
   cases v with
-  | num x =>
+  | n x =>
     rw [decimalCodec_e_num] at he
     by_cases hw : Numeral.Stored x.1 = true
     · rw [if_pos hw] at he; cases he; exact ⟨_, rfl, hw⟩
@@ -387,7 +387,7 @@ theorem not_survivesStore_numberCodec {η : Attr → Attr}
   have hk : numberCodec.p (η (.n (.of "1.500"))) = numberCodec.p (.n (.of "1.500")) :=
     h _ can_numberCodec_denormal
   rw [hη, numberCodec_p_n', numberCodec_p_n'] at hk
-  exact absurd (congrArg Subtype.val (Value.num.inj (Option.some.inj hk))) (by decide)
+  exact absurd (congrArg Subtype.val (Attr.n.inj (Option.some.inj hk))) (by decide)
 
 /-- And (R) through the store fails outright: the value is written, the store rewrites the
     attribute, and the codec reads back something else — the shape of the shipped defect. -/
@@ -398,7 +398,7 @@ theorem not_retract_through_store_numberCodec {η : Attr → Attr}
   refine ⟨by rw [numberCodec_e_num'], ?_⟩
   rw [hη, numberCodec_p_n']
   intro hk
-  exact absurd (congrArg Subtype.val (Value.num.inj (Option.some.inj hk))) (by decide)
+  exact absurd (congrArg Subtype.val (Attr.n.inj (Option.some.inj hk))) (by decide)
 
 /-! ## The adapters this library ships, named so a vector can cite them
 

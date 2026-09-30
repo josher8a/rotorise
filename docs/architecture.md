@@ -94,9 +94,8 @@ The split keeps a term as data that code can compute with.
 
 **Each stored-side law of the generic layer is the caller-side law at the dual universe.** `AdmA`
 is `Adm` at `S.op`, and so is each stored-side law that the generic layer states. At DynamoDB the
-two carriers differ, `Value` on the caller side and `Attr` on the stored side, because the wire
-format fixes `Attr`. There the lemmas of each side are content, not repetition, and each side keeps
-its own.
+two sides hold one carrier. The wire format fixes `Attr`, and `Value` names the same type at the
+caller side, because no law reads a difference between the two sides.
 
 **A universe owns these facts, and the generic layer owns none of them.**
 

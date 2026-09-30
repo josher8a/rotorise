@@ -70,15 +70,15 @@ theorem hopaque_e {v : Value} (h : HOpaque v) : (Ω.e v).isSome = true := by
   | num d => rfl
   | strSet S _ _ =>
     rw [Ωe_strSet, encSet_congr (c := Ω) (d := stringCodec) (fun x _ => rfl)]
-    exact encSet_isSome_of lawful_stringCodec.core (μ₀ := .S) rfl (fun _ _ h => Value.str.inj h)
+    exact encSet_isSome_of lawful_stringCodec.core (μ₀ := .S) rfl (fun _ _ h => Attr.s.inj h)
       (fun _ _ => rfl) (fun _ _ _ ha => lawful_stringCodec.writes rfl ha)
   | numSet S _ _ =>
     rw [Ωe_numSet, encSet_congr (c := Ω) (d := numberCodec) (fun x _ => rfl)]
-    exact encSet_isSome_of lawful_numberCodec.core (μ₀ := .N) rfl (fun _ _ h => Value.num.inj h)
+    exact encSet_isSome_of lawful_numberCodec.core (μ₀ := .N) rfl (fun _ _ h => Attr.n.inj h)
       (fun _ _ => rfl) (fun _ _ _ ha => lawful_numberCodec.writes rfl ha)
   | binSet S _ _ =>
     rw [Ωe_binSet, encSet_congr (c := Ω) (d := binaryCodec) (fun x _ => rfl)]
-    exact encSet_isSome_of lawful_binaryCodec.core (μ₀ := .B) rfl (fun _ _ h => Value.bin.inj h)
+    exact encSet_isSome_of lawful_binaryCodec.core (μ₀ := .B) rfl (fun _ _ h => Attr.b.inj h)
       (fun _ _ => rfl) (fun _ _ _ ha => lawful_binaryCodec.writes rfl ha)
   | arr vs _ ih =>
     rw [Ωe_arr, Option.isSome_map]

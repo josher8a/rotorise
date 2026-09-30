@@ -307,7 +307,7 @@ theorem sepJV_set_literals :
     cases w <;> simp_all [Adm_rows, AdmLit, inL]
   intro v hv
   cases v
-  case strSet S =>
+  case ss S =>
     obtain ⟨x, hx⟩ := S.2
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
     have hA := hlit "A" _ (encSet_elem (c := denote α (.literal .string "A")) ha x hx)
@@ -319,12 +319,12 @@ theorem sepJV_set_literals :
       exact absurd (hA.symm.trans hB) (by simp)
   -- the other two wire families are refused element by element, and `℘⁺fin` supplies the
   -- element
-  case numSet S =>
+  case ns S =>
     obtain ⟨x, hx⟩ := S.2
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
     exact absurd (hlit "A" _ (encSet_elem (c := denote α (.literal .string "A")) ha x hx))
       (by simp)
-  case binSet S =>
+  case bs S =>
     obtain ⟨x, hx⟩ := S.2
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
     exact absurd (hlit "A" _ (encSet_elem (c := denote α (.literal .string "A")) ha x hx))

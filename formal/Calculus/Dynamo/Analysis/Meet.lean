@@ -434,7 +434,7 @@ theorem Adm_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → Obje
     Adm α (.object (.mk D f none)) = Adm α (.object (.mk D f (some .never))) := by
   funext v
   cases v with
-  | map keys g =>
+  | m keys g =>
       show (valPresentT D f keys && objAdmV _ none keys g) =
         (valPresentT D f keys && objAdmV _ (some (fun _ => false)) keys g)
       rw [objAdmV_none_never]

@@ -74,7 +74,7 @@ def swX : Value → Value := fun v =>
 /-- **`swX` is an involution.** -/
 theorem swX_invol (v : Value) : swX (swX v) = v := by
   cases v with
-  | str s =>
+  | s s =>
       simp only [swX]
       split_ifs <;> simp_all
   | _ => rfl
@@ -109,7 +109,7 @@ theorem lawful_shout : Lawful (denote swTable shout) := by
 /-- **The shout pair is not `Compat`**: the two options read `"X"` to two values. -/
 theorem not_compat_shout : ¬ Compat (denote swTable shout) (denote swTable litX) := by
   intro h
-  have := Value.str.inj (h.p_agree shout_p litX_p)
+  have := Attr.s.inj (h.p_agree shout_p litX_p)
   exact absurd this (by decide)
 
 /-! ## An incompatible pair: `boolean | flipBool` -/
@@ -140,7 +140,7 @@ theorem not_compat_flip : ¬ Compat (denote flipTable .boolean) (denote flipTabl
   intro h
   have hb : (denote flipTable .boolean).p (.bool true) = some (.bool true) := rfl
   have hf : (denote flipTable flipBool).p (.bool true) = some (.bool false) := rfl
-  exact absurd (Value.bool.inj (h.p_agree hb hf)) (by decide)
+  exact absurd (Attr.bool.inj (h.p_agree hb hf)) (by decide)
 
 /-- **Without `Compat`, the order of the options is observable**: the union writes `true`
     through the first option that writes it. -/
