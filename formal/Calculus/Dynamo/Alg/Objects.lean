@@ -57,50 +57,59 @@ theorem objectCodecCore_eq :
         (fun p => valPresentB sems p.1 = true ∧ ∀ k, objEntryT sems rc? (k.1, p.2 k))
         (objWrite sems rc?) (objRead sems rc?) := rfl
 
-/-- **The empty body with an open block is the record.** `record` is not a term of its own: it
-    is the object that declares no name and takes every key at one codec, and this is the
-    equation that says so. -/
-theorem objectCodec_empty_codec (c : Codec) :
-    objectCodec ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ (.codec c) = recordCodec c := by
-  -- A quantifier over the empty key set is vacuous, and simp discharges one through an
-  -- emptiness instance that reaches `Classical.choice`. `hval` is the same fact as a direct
-  -- term, so the guard rewrites without the instance and the route stays closed.
-  have hval : ∀ keys : Finset Name,
-      valPresentB (⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ : MapOf FieldSem) keys
-        = true :=
-    fun _ => decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
-  apply Codec.ext
-  · funext v
-    cases v <;>
-      simp [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, recordCodec, objEntryT, rcOf, MapOf.at, mA]
-    constructor
-    · rintro ⟨x, ⟨rfl, hf⟩, h⟩
-      cases eq_of_heq hf
-      exact h.2
-    · rename_i keys f
-      exact fun h => ⟨⟨keys, f⟩, ⟨rfl, HEq.rfl⟩, hval keys, h⟩
-  · rfl
-  · funext v
-    cases v <;> try rfl
-    rename_i keys f
-    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, recordCodec, Option.bind, objWrite, objAt, rcOf, entryCodec, MapOf.at, mA, Alg.Codec.ofEP_e]
-    rw [if_pos (hval keys), Option.map_map]
+/-- **§3 `record`: the object that declares no name and takes every key at one codec.** It is
+    not a construct of its own: `Term.record` is the empty body with an open block, and its
+    codec is the object codec of that body. -/
+noncomputable abbrev recordCodec (c : Codec) : Codec :=
+  objectCodec ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ (.codec c)
+
+/-- The empty body requires no name. A direct term: `simp` over a vacuous `Finset ∅` reaches
+    `Classical.choice` through filter lemmas that this development does not advertise. -/
+theorem valPresentB_empty (keys : Finset Name) :
+    valPresentB (⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ : MapOf FieldSem) keys =
+      true :=
+  decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
+
+/-- **A record moves entry by entry**, at each orientation: the same name set, every entry
+    through `c`. -/
+theorem recordCodec_f (o : Alg.Orient) (c : Codec) (keys : Finset Name)
+    (g : {k // k ∈ keys} → Attr) :
+    (recordCodec c).f o (.m keys g) = (funImage fun k => c.f o (g k)).map (Attr.m keys) := by
+  revert o g
+  refine Alg.Orient.both (P := fun o => ∀ g : {k // k ∈ keys} → Attr,
+    (recordCodec c).f o (.m keys g) = (funImage fun k => c.f o (g k)).map (Attr.m keys)) ?_ ?_ <;>
+  · intro g
+    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, Option.bind,
+      objWrite, objRead, objAt, rcOf, entryCodec, MapOf.at, mA, Alg.Codec.ofEP]
+    rw [if_pos (valPresentB_empty keys), Option.map_map]
     refine congrArg (fun F => Option.map F _) (funext fun _ => rfl) |>.trans ?_
     exact congrArg (Option.map _) (congrArg funImage
       (funext fun k => by rw [dif_neg (Finset.notMem_empty k.1)]))
-  · funext a
-    cases a <;> try rfl
-    rename_i keys f
-    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, mA, Option.bind, objRead, objAt, rcOf, entryCodec, MapOf.at, recordCodec, Alg.Codec.ofEP_p]
-    -- simp over a vacuous `Finset ∅` goal reaches `Classical.choice` through three filter
-    -- lemmas this development does not advertise. Each fact below is the direct term instead.
-    rw [if_pos (show valPresentB (⟨(∅ : Finset Name),
-        fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ : MapOf FieldSem) keys = true from
-      decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1)))]
-    rw [Option.map_map]
-    refine congrArg (fun F => Option.map F _) (funext fun _ => rfl) |>.trans ?_
-    exact congrArg (Option.map _) (congrArg funImage
-      (funext fun k => by rw [dif_neg (Finset.notMem_empty k.1)]))
+
+/-- **A record holds a map whose every entry the codec holds.** -/
+theorem recordCodec_T (c : Codec) (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
+    (recordCodec c).T (.m keys g) ↔ ∀ k, c.T (g k) := by
+  constructor
+  · rintro ⟨x, hx, -, h⟩ k
+    simp only [mA] at hx; cases hx
+    have := h k
+    simp only [objEntryT, rcOf, MapOf.at, dif_neg (Finset.notMem_empty k.1)] at this
+    obtain ⟨_, ⟨⟩, h⟩ := this
+    exact h
+  · intro h
+    refine ⟨⟨keys, g⟩, rfl, valPresentB_empty keys, fun k => ?_⟩
+    simp only [objEntryT, rcOf, MapOf.at, dif_neg (Finset.notMem_empty k.1)]
+    exact ⟨c, rfl, h k⟩
+
+/-- A record is lawful where its codec is. -/
+theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) :=
+  Alg.lawful_objectCodec (fun _ => rfl) (fun k => absurd k.2 (Finset.notMem_empty k.1))
+    (fun _ hc => by cases hc; exact h)
+
+/-- A record is on its carrier where its codec is. -/
+theorem carrier_recordCodec {c : Codec} (hc : Carrier c) : Carrier (recordCodec c) :=
+  Alg.carrier_objectCodec (fun k => absurd k.2 (Finset.notMem_empty k.1))
+    (fun _ h => by cases h; exact hc)
 
 end Object
 

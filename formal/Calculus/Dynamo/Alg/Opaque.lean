@@ -49,7 +49,7 @@ definitions, so those are a local `simp` set for the section. -/
 section Unfoldings
 attribute [local simp] opaqStep opaqOptions Alg.altCodec_f_def select baseCodec pointCodec
   Calculus.Alg.Ctor.side GroundKind.prism sC nC bC boolA nullA setCodec arrayCodec recordCodec
-  Alg.listCodec carriedCodec lA
+  Alg.listCodec carriedCodec lA objectCodec Alg.objectCodec Alg.objectCodecCore mA
 
 /-- §3 `(opaque)`, write side at kind `set`: the wire member is computed from the elements (`setCodec`), which is why one option covers `SS`, `NS` and `BS`. -/
 theorem opaqStep_e_strSet (c : Codec) (S : NEFinset String) :
@@ -76,16 +76,22 @@ theorem opaqStep_e_binSet (c : Codec) (S : NEFinset Bytes) :
 theorem opaqStep_e_arr (c : Codec) (vs : List Value) :
     (opaqStep c).e (.arr vs)
       = (arrayCodec c).e (.arr vs) := by
-  cases he : (arrayCodec c).e (.arr vs) <;>
-    simp [-arrayCodec, -Alg.listCodec, -carriedCodec, -lA, he]
+  show select ([baseCodec .string, baseCodec .boolean, baseCodec .binary, baseCodec .null, baseCodec .number, setCodec c] ++ arrayCodec c :: [recordCodec c]) (·.f _) _ = _
+  exact Alg.select_split _ _ _ _ _ (fun d hd => by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hd
+    rcases hd with rfl | rfl | rfl | rfl | rfl | rfl <;> rfl) (fun d hd => by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hd
+    rcases hd with rfl; rfl)
 
 /-- §3 `(opaque)`, write side at kind `map`: the `M` option, recursing through `c`. -/
 theorem opaqStep_e_map (c : Codec) (keys : Finset Name)
     (f : {k // k ∈ keys} → Value) :
     (opaqStep c).e (.map keys f)
       = (recordCodec c).e (.map keys f) := by
-  cases he : (recordCodec c).e (.map keys f) <;>
-    simp [-recordCodec, he]
+  show select ([baseCodec .string, baseCodec .boolean, baseCodec .binary, baseCodec .null, baseCodec .number, setCodec c, arrayCodec c] ++ recordCodec c :: []) (·.f _) _ = _
+  exact Alg.select_split _ _ _ _ _ (fun d hd => by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hd
+    rcases hd with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> rfl) (fun _ hd => nomatch hd)
 
 end Unfoldings
 
@@ -98,7 +104,7 @@ of the eight. -/
 section UnfoldingsA
 attribute [local simp] opaqStep opaqOptions Alg.altCodec_f_def select baseCodec pointCodec
   Calculus.Alg.Ctor.side GroundKind.prism sC nC bC boolA nullA setCodec arrayCodec recordCodec
-  Alg.listCodec carriedCodec lA
+  Alg.listCodec carriedCodec lA objectCodec Alg.objectCodec Alg.objectCodecCore mA
 
 /-- §3 `(opaque)`, read side at member `SS` — one of the three members routing to the single `set` option. -/
 theorem opaqStep_p_ss (c : Codec) (vs : NEFinset String) :
@@ -121,16 +127,22 @@ theorem opaqStep_p_bs (c : Codec) (vs : NEFinset Bytes) :
 /-- §3 `(opaque)`, read side at member `L`. -/
 theorem opaqStep_p_l (c : Codec) (as : List Attr) :
     (opaqStep c).p (.l as) = (arrayCodec c).p (.l as) := by
-  cases hp : (arrayCodec c).p (.l as) <;>
-    simp [-arrayCodec, -Alg.listCodec, -carriedCodec, -lA, hp]
+  show select ([baseCodec .string, baseCodec .boolean, baseCodec .binary, baseCodec .null, baseCodec .number, setCodec c] ++ arrayCodec c :: [recordCodec c]) (·.f _) _ = _
+  exact Alg.select_split _ _ _ _ _ (fun d hd => by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hd
+    rcases hd with rfl | rfl | rfl | rfl | rfl | rfl <;> rfl) (fun d hd => by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hd
+    rcases hd with rfl; rfl)
 
 /-- §3 `(opaque)`, read side at member `M`. -/
 theorem opaqStep_p_m (c : Codec) (keys : Finset Name)
     (g : {k // k ∈ keys} → Attr) :
     (opaqStep c).p (.m keys g)
       = (recordCodec c).p (.m keys g) := by
-  cases hp : (recordCodec c).p (.m keys g) <;>
-    simp [-recordCodec, hp]
+  show select ([baseCodec .string, baseCodec .boolean, baseCodec .binary, baseCodec .null, baseCodec .number, setCodec c, arrayCodec c] ++ recordCodec c :: []) (·.f _) _ = _
+  exact Alg.select_split _ _ _ _ _ (fun d hd => by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hd
+    rcases hd with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> rfl) (fun _ hd => nomatch hd)
 
 end UnfoldingsA
 
@@ -172,12 +184,12 @@ theorem Ωp_l (as : List Attr) : Ω.p (.l as) = (traverse Ω.p as).map Value.arr
 /-- `Ω` writes a map entry by entry, through `Ω` itself. -/
 theorem Ωe_map (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
     Ω.e (.map keys g) = (funImage fun k => Ω.e (g k)).map (Attr.m keys) := by
-  rw [Ωe_fix, opaqStep_e_map]; rfl
+  rw [Ωe_fix, opaqStep_e_map]; exact recordCodec_f _ Ω keys g
 
 /-- `Ω` reads a map entry by entry, through `Ω` itself. -/
 theorem Ωp_m (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
     Ω.p (.m keys g) = (funImage fun k => Ω.p (g k)).map (Value.map keys) := by
-  rw [Ωp_fix, opaqStep_p_m]; rfl
+  rw [Ωp_fix, opaqStep_p_m]; exact recordCodec_f _ Ω keys g
 
 /-- `Ω` writes a string set through `setAt` at the host over `Ω` itself. -/
 theorem Ωe_strSet (S : NEFinset String) : Ω.e (.strSet S) = setAt .host Ω Value.str S := by

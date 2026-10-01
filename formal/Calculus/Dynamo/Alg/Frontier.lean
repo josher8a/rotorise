@@ -387,12 +387,10 @@ theorem onKind_record (c : Codec) :
   refine ⟨fun v hv => ?_, fun a ha => ?_⟩
   · cases v
     case m keys f => rfl
-    all_goals
-      (simp only [recordCodec] at hv; exact absurd hv (by simp))
+    all_goals exact nomatch hv
   · cases a
     case m keys g => rfl
-    all_goals
-      (simp only [recordCodec] at ha; exact absurd ha (by simp))
+    all_goals exact nomatch ha
 
 /-- The kinds `opaque`'s options are pinned to, in the order they are offered. -/
 def opaqKinds : List Kind :=
