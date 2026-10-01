@@ -120,9 +120,8 @@ theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ�
       have hP := AgreeLe.eq_of_forall fun d' =>
         denote_agree P hg.2 d' ρ₁ ρ₂ fun i =>
           UseAgree.of_held (v := t.use i) (by rw [Nat.max_comm]; exact h i)
-      refine AgreeLe.of_eq ?_ ?_
-      · simp only [denote, denoteAbs, held1, refine2_e_def, adapt2_f, ht.1, hP.1, hP.2]
-      · simp only [denote, denoteAbs, held1, refine2_p_def, adapt2_f, ht.2, hP.1, hP.2]
+      refine AgreeLe.of_eq ?_
+      simp only [denote, denoteAbs, held1, refine2, adapt2, Codec.e, Codec.p, ht, hP]
   | .list pre sp suf, hg, d, ρ₁, ρ₂, h => by
       simp only [Term.guarded, Bool.and_eq_true] at hg
       match d with
