@@ -122,105 +122,26 @@ end Numeral
     two: what the store hands back, against what it accepts. -/
 abbrev StoredNumeral := {s : Numeral // Numeral.Stored s = true}
 
-/-- §3 `(decimal)`. The held set is §1's `Numerals`, not every string: the grammar, the
-    38 significant digits and the magnitude range are checked on both halves. The read
-    side has to check as well — an ill-formed numeral admitted by `p` would name a value
-    `e` then refuses, and that is **(C)** failing. -/
-def decimalCodec : Codec :=
-  Alg.Codec.ofEP (T := fun v => ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true)
-    (μ := some .N)
-    (e := fun v => match v with
-      -- the carrier already proves `WF`, so the write produces the attribute directly and
-      -- `Numeral.stored_wf` is no longer needed to manufacture the proof
-      | .num x => if Numeral.Stored x.1 then some (.n x) else none
-      | _ => none)
-    (p := fun a => match a with
-      | .n x => if Numeral.Stored x.1 then some (.num x) else none
-      | _ => none)
-
-/-- §1's `Stored`, which is NOT carried and remains a real test: what the store hands back is
-    narrower than what it accepts. -/
+/-- The numerals in the form the store hands back. -/
 def isStored : Value → Bool :=
   fun v => match v with | .num x => Numeral.Stored x.1 | _ => false
 
-@[simp] theorem decimalCodec_e_isSome (v : Value) :
-    (decimalCodec.e v).isSome = isStored v := by
-  cases v <;> try rfl
-  case n x =>
-    show (if Numeral.Stored x.1 then some (Attr.n x) else none).isSome = isStored (Value.num x)
-    cases h : Numeral.Stored x.1 <;> simp [isStored, h]
+/-- §3 `(decimal)`: the number base restricted to the stored numerals. The restriction checks
+    both halves: an ill-formed numeral admitted by `p` would name a value that `e` then refuses,
+    and that is **(C)** failing. -/
+def decimalCodec : Codec := (baseCodec .number).restrict isStored
 
-/-- **§3's `(decimal)` gate is `refine`** at `Stored` over §1's `Numerals`, on the writing
-    half… The base is `baseCodec .number`, which is §1's own set rather than an ungated one, and
-    `Stored → WF` is what makes the composite equal `decimal`. -/
-theorem decimalCodec_e_restrict : decimalCodec.e = ((baseCodec .number).restrict isStored).e := by
-  funext v; cases v with
-  | n x =>
-    cases hs : Numeral.Stored x.1 <;>
-      simp [decimalCodec, baseCodec, Alg.restrict_e_def, isStored, hs, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, nC, Alg.Codec.e]
-  | _ => rfl
+theorem carrier_decimalCodec : Carrier decimalCodec :=
+  Alg.carrier_restrict (carrier_baseCodec .number) isStored
 
-/-- …and on the reading half. -/
-theorem decimalCodec_p_restrict : decimalCodec.p = ((baseCodec .number).restrict isStored).p := by
-  funext a; cases a with
-  | n x =>
-    cases hs : Numeral.Stored x.1 <;>
-      simp [decimalCodec, baseCodec, Alg.restrict_p_def, isStored, hs, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, nC, Alg.Codec.p]
-  | _ => rfl
-
-theorem carrier_decimalCodec : Carrier decimalCodec := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v with
-    | n x =>
-      replace h : (if Numeral.Stored x.1 = true then some (Attr.n x) else none) = some a := h
-      cases hw : Numeral.Stored x.1
-      · rw [hw, if_neg (by simp)] at h; exact nomatch h
-      · exact ⟨x, rfl, hw⟩
-    | _ => exact nomatch h
-  · intro a v h
-    cases a with
-    | n x =>
-      replace h : (if Numeral.Stored x.1 = true then some (Value.num x) else none) = some v := h
-      cases hw : Numeral.Stored x.1
-      · rw [hw, if_neg (by simp)] at h; exact nomatch h
-      · rw [hw, if_pos (by simp)] at h; cases h; exact ⟨x, rfl, hw⟩
-    | _ => exact nomatch h
-
-/-- `e` and `p` gate on the *same* predicate applied to the *same* text, so each law
-    reduces to that one decision. -/
 theorem decimalCodec_e_num (x : WFNumeral) :
     decimalCodec.e (.num x) = if Numeral.Stored x.1 then some (.n x) else none := rfl
 
 theorem decimalCodec_p_n (x : WFNumeral) :
     decimalCodec.p (.n x) = if Numeral.Stored x.1 then some (.num x) else none := rfl
 
-theorem lawful_decimalCodec : Lawful decimalCodec := by
-  refine .ofRC ?_ ?_ ?_
-  · intro t a he
-    cases t with
-    | n x =>
-      rw [decimalCodec_e_num] at he
-      by_cases hw : Numeral.Stored x.1 = true
-      · rw [if_pos hw] at he; cases he; rw [decimalCodec_p_n, if_pos hw]
-      · rw [if_neg hw] at he; exact nomatch he
-    | _ => exact nomatch he
-  · intro a t hp
-    cases a with
-    | n x =>
-      rw [decimalCodec_p_n] at hp
-      by_cases hw : Numeral.Stored x.1 = true
-      · rw [if_pos hw] at hp; cases hp; rw [decimalCodec_e_num, if_pos hw]
-      · rw [if_neg hw] at hp; exact nomatch hp
-    | _ => exact nomatch hp
-  · intro μ hμ t a he
-    cases t with
-    | n x =>
-      rw [decimalCodec_e_num] at he
-      by_cases hw : Numeral.Stored x.1 = true
-      · rw [if_pos hw] at he; cases he; cases hμ; rfl
-      · rw [if_neg hw] at he; exact nomatch he
-    | _ => exact nomatch he
+theorem lawful_decimalCodec : Lawful decimalCodec :=
+  (lawful_baseCodec .number).restrict isStored
 
 /-! ### `number` against the store (§1)
 
@@ -282,7 +203,10 @@ partiality is a fact about the port's types, not the model's. -/
 
 /-- `decimal`'s held set is exactly §1's `Numerals`. -/
 theorem decimal_T (v : Value) :
-    decimalCodec.T v ↔ ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true := Iff.rfl
+    decimalCodec.T v ↔ ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true := by
+  constructor
+  · rintro ⟨⟨x, rfl⟩, h⟩; exact ⟨x, rfl, h⟩
+  · rintro ⟨x, rfl, h⟩; exact ⟨⟨x, rfl⟩, h⟩
 
 /-- **The report.** `decimalCodec` writes only well-formed numerals — the tightened
     `: T` index, cashed on the attribute side. -/

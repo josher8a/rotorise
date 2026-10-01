@@ -167,7 +167,7 @@ def HLit (k : GroundKind) (x : k.Carrier) : Value → Prop :=
 
     So the gates are not bespoke: each of the two codecs is `refine` over a base. The
     `decimal` gate is a fact of the store, so the DynamoDB port states it on the pair
-    (`decimalCodec_e_restrict`, `Dynamo/Lang/Store.lean`). The bases used to be *ungated*, every
+    (`decimalCodec` is that restriction, `Dynamo/Lang/Store.lean`). The bases used to be *ungated*, every
     numeral and every string, and cannot be, now that both sides carry §1's `Numerals`. There is one base at `N`
     instead of the two a host carrier forced, and it is §1's own set: `baseCodec .number`. The ungated
     bases were standing in for sets the carrier should have been. -/

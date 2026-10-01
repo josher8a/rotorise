@@ -824,13 +824,6 @@ theorem Adm_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
         (try (simp only [reduceCtorEq] at hp)) <;>
         (cases v <;> simp_all [Adm_rows, AdmLit, inL])
 
-/-- The former class of a value: its root constructor. -/
-def Value.former : Value → Alg.Former
-  | .str _ | .num _ | .bool _ | .bin _ | .null => .prim
-  | .strSet _ | .numSet _ | .binSet _ => .set
-  | .arr _ => .list
-  | .map _ _ => .object
-
 /-- The former class of an attribute: its root constructor. -/
 def Attr.former : Attr → Alg.Former
   | .s _ | .n _ | .b _ | .bool _ | .null => .prim
@@ -841,7 +834,7 @@ def Attr.former : Attr → Alg.Former
 /-- **The shape classes of DynamoDB.** A base or a literal writes and reads a scalar, `setCodec`
     writes and reads one of the three sets, and the prisms build `arr`, `l`, `map` and `m`. -/
 noncomputable instance dynShapes : Alg.Shapes dynSyn where
-  former := Value.former
+  former := Attr.former
   formerA := Attr.former
   prim g v h := by
     have h' := (Alg.PrimAdm.admV_exact (S := dynSyn) g v).mpr h
