@@ -93,6 +93,12 @@ structure Ctor (α β : Type) where
   /-- Anything that matches was built. -/
   into_out : ∀ {b x}, out b = some x → b = into x
 
+/-- A `bind` through a prism pins the datum. -/
+theorem Ctor.bind_out {α β : Type} (p : Ctor α β) {o : Option β} {y : α}
+    (h : o.bind p.out = some y) : o = some (p.into y) := by
+  obtain ⟨b, hb, hy⟩ := Option.bind_eq_some_iff.mp h
+  rw [hb, p.into_out hy]
+
 /-- **The point ground codecs of §3**, as one construction: the partial identity on the image of
     a prism `p`, which stamps one member.
 
