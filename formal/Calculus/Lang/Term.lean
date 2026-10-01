@@ -77,9 +77,6 @@ abbrev Syn.PredA (S : Syn) : Type := S.sig.P S.o.s
 /-- The caller-side generators of the adapters. -/
 abbrev Syn.Gen (S : Syn) : Type := S.sig.G S.o.c
 
-/-- The stored-side generators of the adapters. -/
-abbrev Syn.GenA (S : Syn) : Type := S.sig.G S.o.s
-
 /-- **An adapter word**: a word over the signed generators. The sign `true` names the converse
     of the generator, the pair with its two functions swapped. -/
 abbrev Word (S : Syn) : Type := List (S.Gen × Bool)

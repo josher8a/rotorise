@@ -129,8 +129,4 @@ both are named here. -/
 theorem altCodec_T (os : List Codec) (μA : Option Member) (v : Value) :
     (altCodec os μA).T v ↔ ∃ o ∈ os, o.T v := Iff.rfl
 
-/-- **(B), named.** The held set is exactly what the pair can write — `T = dom(e)`.
-    `Carrier.domE` gives `dom(e) ⊆ T` for every derivable term; this is the converse. -/
-def TIsDomE (c : Codec) : Prop := ∀ v, c.T v ↔ (c.e v).isSome
-
 end Calculus

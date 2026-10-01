@@ -419,36 +419,6 @@ instance dynLeaf : Alg.Leaf dynSig where
   pmeet s := Alg.half (X := fun s => dynP s → dynP s → Option (Option (dynP s))) s Pred.meetM
     fun _ _ => none
 
-/-- A closed traversal and a traversal through a block that admits nothing agree. -/
-theorem objAdmV_none_never {α : Type} (fs : MapOf (α → Bool)) (keys : Finset Name)
-    (g : {k // k ∈ keys} → α) :
-    objAdmV fs none keys g = objAdmV fs (some (fun _ => false)) keys g := by
-  unfold objAdmV
-  exact decide_eq_decide.mpr (forall_congr' fun k => by unfold entryP; cases fs.at k.1 <;> exact Iff.rfl)
-
-
-/-- **The closed body is the open body whose block is `never`**, on the write side. -/
-theorem Adm_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → ObjectSlot) :
-    Adm α (.object (.mk D f none)) = Adm α (.object (.mk D f (some .never))) := by
-  funext v
-  cases v with
-  | m keys g =>
-      show (valPresentT D f keys && objAdmV _ none keys g) =
-        (valPresentT D f keys && objAdmV _ (some (fun _ => false)) keys g)
-      rw [objAdmV_none_never]
-  | _ => rfl
-
-/-- …and on the read side. -/
-theorem AdmA_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → ObjectSlot) :
-    AdmA α (.object (.mk D f none)) = AdmA α (.object (.mk D f (some .never))) := by
-  funext a
-  cases a with
-  | m keys g =>
-      change (valPresentT D _ keys && objAdmV _ none keys g) =
-        (valPresentT D _ keys && objAdmV _ (some (fun _ => false)) keys g)
-      rw [objAdmV_none_never]
-  | _ => rfl
-
 /-! ## The union certificate
 
 The certificate is defined here, after the leaves, because the test of the views reads them. -/
