@@ -161,11 +161,6 @@ instance jsonSem : Alg.Mean jsonSig where
   list := none
   map := none
   set := none
-  top := Alg.idCodec
-  lawful_top := Alg.lawful_idCodec
-  carrier_top := Alg.carrier_idCodec
-  topHeld _ := True
-  top_held _ _ := trivial
 
 /-- **The one table of JSON**: the universe names no generator, so it has no `held`. -/
 def jsonTable : Alg.Table jsonSyn := fun g => nomatch g
@@ -180,8 +175,6 @@ variable {β : Alg.Table jsonSyn.op}
 /-- The laws of the identity codec that the held-free theory reads: each kind is below it. -/
 instance id_topLaws : Alg.TopLaws jsonSyn where
   ground := sub_ground_id
-  list _ h := nomatch h
-  map _ h := nomatch h
   set _ h := nomatch h
 
 /-- A string or a number, as a term. -/
@@ -210,7 +203,7 @@ theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum := by
     · rcases List.mem_cons.mp hx with rfl | hx
       · trivial
       · exact nomatch hx
-  exact Alg.compat_of_HF (S := jsonSyn) Alg.canon_idCodec (hf s hs) (hf t ht) (hl t ht)
+  exact Alg.compat_of_HF (S := jsonSyn) (hf s hs) (hf t ht) (hl t ht)
 
 /-! ## Exactness
 

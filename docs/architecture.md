@@ -97,7 +97,9 @@ is `Adm` at `S.op`, and so is each stored-side law that the generic layer states
 two sides hold one carrier. The wire format fixes `Attr`, and `Value` names the same type at the
 caller side, because no law reads a difference between the two sides.
 
-**A universe owns these facts, and the generic layer owns none of them.**
+**A universe owns these facts, and the generic layer owns none of them.** The top is not among
+them: `Syn.top` is the identity codec `idCodec` of the carrier at every universe, because the
+top reads every datum and sends each datum to itself.
 
 | the fact | the field | at DynamoDB | at JSON |
 | --- | --- | --- | --- |
@@ -111,8 +113,7 @@ caller side, because no law reads a difference between the two sides.
 | the set former | `Mean.set` as a `SetF` over the carrier of the meaning: a lift, its laws, and the member of a set from the member of its element (`SetF.member`, with `SetF.lift_μ`) | `dSet`, over `setCodec` | none |
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
 | the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | `dynOracle`, over the two views | `jsonOracle`, which certifies nothing |
-| the top | `Mean.top`, `Mean.lawful_top`, `Mean.topHeld` | `Ω`, the identity codec `Alg.idCodec` | `Alg.idCodec` |
-| the top laws | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
+| the top laws: each primitive, and the set lift, below the top | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
 | the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `AdmLit`, at both orientations, because each primitive is self-dual (`ground_selfdual`) | the kind test |
 | the leaves: two primitives, two predicates | `Leaf` | `dynLeaf`: `Ground.meet`, `Pred.isData`, `Pred.meetM` | `jsonLeaf`: one kind |
 | the laws of the leaves | `LeafAdm`, `LeafAdmA`, `LeafMeet` | `dynLeafAdm`, `dynLeafAdmA`, `dynLeafMeet` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafMeet` |
@@ -180,9 +181,9 @@ DynamoDB the lift is `setCodec`, over the three wire-set constructors of `Value`
 
 **The theorems of the algebra hold at every signature.** `Alg.soundness` proves `Lawful` for each
 closed typed term whose obligations hold, in any universe. The universe supplies the laws of its
-primitives, of its formers and of its top, and the generic combinators supply the rest.
-`Alg.compat_of_HF` proves two held-free terms compatible from `TopLaws` and a canonical top,
-when the second term is lawful.
+primitives and of its formers, and the generic combinators supply the rest.
+`Alg.compat_of_HF` proves two held-free terms compatible from `TopLaws`, when the second term is
+lawful: the top is the identity, which is canonical.
 
 **The instance names the generic declarations.** At DynamoDB, `Codec` and `Lawful` are
 abbreviations at the DynamoDB carriers, and `Term`, `Typed` and `Obligations` are abbreviations

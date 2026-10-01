@@ -11,19 +11,19 @@ normalisation `η` inside `ker p` fixes every attribute the codec writes
 (`Lawful.survivesStore_fix`).
 
 A held-free term has an injective read with no premise on its laws: `confluence_R` puts the read
-of the term inside the read of `opaque`, and `Ω_canon` makes the read of `opaque` injective
+of the term inside the read of `opaque`, and the read of `opaque` is the identity, which is injective
 (`ker_eq_of_HF`).
 -/
 
 namespace Calculus
 
 /-- **`ker p` is equality at a held-free term.** Two attributes that the term reads to one
-    value are equal, by `confluence_R` and `Ω_canon`. -/
+    value are equal, by `confluence_R` and the identity read of `opaque`. -/
 theorem ker_eq_of_HF {t : Term} (h : HF t) {a a' : Attr} {v : Value}
     (hp : (denote α t).p a = some v) (hk : (denote α t).Ker a' a) : a' = a := by
   have hp' : (denote α t).p a' = some v := Eq.trans hk hp
-  have h1 := Ω_canon (confluence_R h hp)
-  have h2 := Ω_canon (confluence_R h hp')
+  have h1 := Alg.canon_idCodec _ _ (confluence_R h hp)
+  have h2 := Alg.canon_idCodec _ _ (confluence_R h hp')
   exact Option.some.inj (h2.symm.trans h1)
 
 /-- **`ker p` is equality at a lawful codec.** Both attributes are the write of the value. -/

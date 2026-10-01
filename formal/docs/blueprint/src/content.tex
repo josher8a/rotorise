@@ -243,7 +243,7 @@ once.
 read to one value. \textbf{Every lawful codec collapses it.} By \rulelink{cond:C}{\textbf{(C)}} an attribute that reads to
 \texttt{t} is \texttt{e(t)}, so two attributes that read to one value are one attribute. So every term
 whose obligations hold collapses it. A held-free term collapses it with no law as a premise: \texttt{confluence\_R} puts its
-reading inside \texttt{opaque}'s, and \texttt{Ω\_canon} makes \texttt{opaque}'s reading injective. Outside the
+reading inside \texttt{opaque}'s, and \texttt{opaque}'s reading is the identity, which is injective. Outside the
 term algebra, \texttt{extendRead} keeps a quotient, and \texttt{e\_comp\_p\_ne\_id} is its witness.
 
 \begin{theorem}[a lawful codec has \texttt{ker\ p} equality]
@@ -280,7 +280,7 @@ one \texttt{𝔸}. What removes it is one schema per store, which is a different
 better encoding.
 
 \textbf{They collapse together at \texttt{opaque} alone.} \texttt{opaque} reads every attribute of \texttt{𝔸}
-(\texttt{opaqA\_total}). Its pair is a bijection between \texttt{Value} and \texttt{𝔸} (\texttt{Ω\_onto}, \texttt{Ω\_canon}), so its
+(\texttt{opaqA\_total}). Its pair is the identity of the one carrier (\texttt{canon\_idCodec}), so its
 \texttt{ker\ p} is equality. Its held set is every \texttt{Value}, so one \texttt{T} lives in \texttt{𝔸}, which is the
 condition the paragraph above names. \texttt{opaque} pays with \texttt{μ\ =\ ⊤}. Every term with a schema keeps one deviation at least:
 every term whose obligations hold kills the quotient and keeps partiality, and §1 is why.
