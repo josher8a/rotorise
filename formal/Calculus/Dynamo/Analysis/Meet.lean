@@ -824,12 +824,15 @@ theorem Adm_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
         (try (simp only [reduceCtorEq] at hp)) <;>
         (cases v <;> simp_all [Adm_rows, AdmLit, inL])
 
-/-- The former class of an attribute: its root constructor. -/
-def Attr.former : Attr → Alg.Former
-  | .s _ | .n _ | .b _ | .bool _ | .null => .prim
-  | .ss _ | .ns _ | .bs _ => .set
-  | .l _ => .list
-  | .m _ _ => .object
+/-- The former class of a kind: the five scalar kinds are one class. -/
+def Kind.former : Kind → Alg.Former
+  | .string | .number | .boolean | .binary | .null => .prim
+  | .set => .set
+  | .array => .list
+  | .map => .object
+
+/-- The former class of an attribute: the class of its kind. -/
+abbrev Attr.former (a : Attr) : Alg.Former := a.kind.former
 
 /-- **The shape classes of DynamoDB.** A base or a literal writes and reads a scalar, `setCodec`
     writes and reads one of the three sets, and the prisms build `arr`, `l`, `map` and `m`. -/
