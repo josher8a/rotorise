@@ -257,16 +257,16 @@ def Attr.member : Attr → Member
   | .l _    => .L
   | .m _ _  => .M
 
-/-- The kind an attribute is of: its member, with `SS`/`NS`/`BS` identified. -/
-def Attr.kind : Attr → Kind
-  | .s _    => .string
-  | .n _    => .number
-  | .b _    => .binary
-  | .bool _ => .boolean
-  | .null   => .null
-  | .ss _ | .ns _ | .bs _ => .set
-  | .l _    => .array
-  | .m _ _  => .map
+/-- **§5's `κ`.** The kind of a member: the three wire sets are one kind, and each other member
+    is its own kind. -/
+def Member.kind : Member → Kind
+  | .S => .string | .N => .number | .B => .binary | .BOOL => .boolean | .NULL => .null
+  | .SS | .NS | .BS => .set
+  | .L => .array
+  | .M => .map
+
+/-- The kind an attribute is of: the kind of its member. -/
+abbrev Attr.kind (a : Attr) : Kind := a.member.kind
 
 /-! ## §1's nesting bound — the one constraint on `𝔸` the carrier cannot carry
 
@@ -394,13 +394,8 @@ deriving DecidableEq, Repr
   | .binary  => .B
   | .null    => .NULL
 
-/-- §5's `κ` on a literal: the base's kind. -/
-@[simp] def GroundKind.kind : GroundKind → Kind
-  | .string  => .string
-  | .number  => .number
-  | .boolean => .boolean
-  | .binary  => .binary
-  | .null    => .null
+/-- §5's `κ` on a literal: the kind of the base's member. -/
+abbrev GroundKind.kind (k : GroundKind) : Kind := k.member.kind
 
 /-! ## What a `union` option's admission reads
 
