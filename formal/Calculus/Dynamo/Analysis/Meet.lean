@@ -749,27 +749,27 @@ theorem Adm_ofOptions (ts : List Term) (v : Value) :
   | [t] => simp only [Term.ofOptions, AdmAny_cons, AdmAny_nil, Bool.or_false]
   | _ :: _ :: _ => rfl
 
-/-- **Two sets whose elements share no value share no set**, because no set is empty. -/
-theorem Adm_set_and_false {a y : Term} (h : ∀ u, (Adm α a u && Adm α y u) = false) (v : Value) :
-    (Adm α (.set a) v && Adm α (.set y) v) = false := by
-  cases hA : Adm α (.set a) v with
-  | false => rfl
-  | true =>
-  cases hY : Adm α (.set y) v with
-  | false => rfl
-  | true =>
-  exfalso
-  obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp hA
-  obtain ⟨q, hq⟩ := Option.isSome_iff_exists.mp hY
-  have hne : ∀ w, ((denote α a).e w).isSome = true → ((denote α y).e w).isSome = true → False :=
-    fun w h1 h2 => by
-      have := h w
-      rw [(Adm_exact a w).mpr h1, (Adm_exact y w).mpr h2] at this
-      exact Bool.noConfusion this
+/-- **Two sets whose element codecs move no common datum move no common set**, at an orientation,
+    because no set is empty. -/
+theorem setCodec_apart {o : Orient} {c d : Codec}
+    (h : ∀ w, (c.f o w).isSome = true → (d.f o w).isSome = true → False) (x : Attr)
+    (hc : ((setCodec c).f o x).isSome = true) (hd : ((setCodec d).f o x).isSome = true) : False := by
+  obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp hc
+  obtain ⟨q, hq⟩ := Option.isSome_iff_exists.mp hd
   obtain ⟨k, S, rfl, hS⟩ := setCodec_f_eq.mp hp
-  obtain ⟨x, hx⟩ := S.2
-  exact hne _ (setAt_elem hS x hx)
-    (setAt_elem ((setCodec_wire_f (c := denote α y) (o := .host)).symm.trans hq) x hx)
+  obtain ⟨y, hy⟩ := S.2
+  exact h _ (setAt_elem hS y hy) (setAt_elem (setCodec_wire_f.symm.trans hq) y hy)
+
+/-- **Two sets whose elements share no value share no set.** -/
+theorem Adm_set_and_false {a y : Term} (h : ∀ u, (Adm α a u && Adm α y u) = false) (v : Value) :
+    (Adm α (.set a) v && Adm α (.set y) v) = false :=
+  Bool.eq_false_iff.mpr fun hv => by
+    rw [Bool.and_eq_true] at hv
+    refine setCodec_apart (o := .host) (fun w h1 h2 => ?_) v
+      ((Adm_exact (.set a) v).mp hv.1) ((Adm_exact (.set y) v).mp hv.2)
+    have := h w
+    rw [(Adm_exact a w).mpr h1, (Adm_exact y w).mpr h2] at this
+    exact Bool.noConfusion this
 
 /-- **Two primitives met at the bottom share no value.** -/
 theorem Adm_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
@@ -852,138 +852,25 @@ instance dynLeafMeet : Alg.LeafMeet dynSig where
 /-! ## DynamoDB is an instance of the laws, on the read side
 
 `Alg.disjoint_soundA` proves the read side once, over any signature. DynamoDB supplies the read
-law of its set former (`dynFormerAdmA`) and of its primitives (`dynLeafAdmA`). A literal reads
-through its base's codec restricted, so two different literals at one base read nothing
-together. -/
+law of its set former (`dynFormerAdmA`) and of its primitives (`dynLeafAdmA`). Each primitive is
+self-dual, so the read law of the primitives is their write law. -/
 
-/-- Two terms that read only two different members share no attribute, so their conjunction is
-    the bottom. This closes every row that answers `never` because the two read different `Attr`
-    constructors. -/
-theorem AdmA_and_false {x y : Term} {m m' : Member} (hne : m ≠ m')
-    (hx : ∀ a, AdmA α x a = true → a.member = m) (hy : ∀ a, AdmA α y a = true → a.member = m')
-    (a : Attr) : (AdmA α x a && AdmA α y a) = false := by
-  refine Bool.eq_false_iff.mpr fun h => hne ?_
-  rw [Bool.and_eq_true] at h
-  exact (hx a h.1).symm.trans (hy a h.2)
-
-/-- Where a literal reads, its base reads the same value: `literalCodec` is `baseCodec`
-    restricted, and `Codec.restrict`'s `p` returns the base's own value where the guard passes. -/
-theorem literal_p_base {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
-    (h : (literalCodec k x).p a = some v) : (baseCodec k).p a = some v := by
-  rw [literalCodec_p_restrict] at h
-  simp only [Alg.restrict_p_def] at h
-  cases hb : (baseCodec k).p a with
-  | none => rw [hb] at h; simp at h
-  | some w => rw [hb] at h; simp only [Option.bind] at h; split at h <;> simp_all
-
-/-- Where a literal reads, its base reads: the literal's codec is the base's restricted. -/
-theorem AdmA_base_of_literal {k : GroundKind} {x : k.Carrier} {bt : Term} {a : Attr}
-    (hb : denote α bt = baseCodec k) (h : AdmA α (Term.literal k x) a = true) :
-    AdmA α bt a = true := by
-  refine (AdmA_exact bt a).mpr ?_
-  rw [hb]
-  obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ a).mp h)
-  rw [literal_p_base (show (literalCodec k x).p a = some w from hw)]
-  rfl
-
-/-- **A base reads only its own member.** -/
-theorem AdmA_base_member (k : GroundKind) (a : Attr) (h : AdmA α (.base k) a = true) :
-    a.member = k.member := by
-  cases k <;> cases a <;> first | rfl | exact nomatch h
-
-/-- **A literal reads only the member of its base**, because its base reads where it reads. -/
-theorem AdmA_literal_member (k : GroundKind) (x : k.Carrier) (a : Attr)
-    (h : AdmA α (.literal k x) a = true) : a.member = k.member :=
-  AdmA_base_member k a (AdmA_base_of_literal rfl h)
-
-/-- A literal's guard, read off a successful read: mirror of `literal_p_base`. -/
-theorem literal_inL {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
-    (h : (literalCodec k x).p a = some v) : inL k x v = true := by
-  rw [literalCodec_p_restrict] at h
-  simp only [Alg.restrict_p_def] at h
-  cases hb : (baseCodec k).p a with
-  | none => rw [hb] at h; simp at h
-  | some w => rw [hb] at h; simp only [Option.bind] at h; split at h <;> simp_all
-
-/-- **Two literals at one base and two values read nothing together.** Simp on `AdmLit` and
-    `inL` does not reach the `number` row; exactness does. -/
-theorem AdmA_literal_never_of_ne {k : GroundKind} {x y : k.Carrier} (hne : ¬ (x = y)) (a : Attr) :
-    AdmA α (.never : Term) a = (AdmA α (Term.literal k x) a && AdmA α (Term.literal k y) a) := by
-  cases hx : AdmA α (Term.literal k x) a with
-  | false => simp [AdmA_rows]
-  | true =>
-      cases hy : AdmA α (Term.literal k y) a with
-      | false => simp [AdmA_rows]
-      | true =>
-          exfalso
-          obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ a).mp hx)
-          obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ a).mp hy)
-          have hbx := literal_p_base (show (literalCodec k x).p a = some v from hv)
-          have hby := literal_p_base (show (literalCodec k y).p a = some w from hw)
-          have hvw : v = w := Option.some.inj (hbx.symm.trans hby)
-          subst hvw
-          exact hne (inL_inj (literal_inL (show (literalCodec k x).p a = some v from hv))
-            (literal_inL (show (literalCodec k y).p a = some v from hw)))
-
-/-- **Two sets whose elements read no common attribute read no common set**, because no set is
-    empty. -/
+/-- **Two sets whose elements read no common attribute read no common set.** -/
 theorem AdmA_set_and_false {a y : Term} (h : ∀ u, (AdmA α a u && AdmA α y u) = false) (att : Attr) :
-    (AdmA α (.set a) att && AdmA α (.set y) att) = false := by
-  cases hA : AdmA α (.set a) att with
-  | false => rfl
-  | true =>
-  cases hY : AdmA α (.set y) att with
-  | false => rfl
-  | true =>
-  exfalso
-  obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ att).mp hA)
-  obtain ⟨q, hq⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ att).mp hY)
-  have hne : ∀ w, ((denote α a).p w).isSome = true → ((denote α y).p w).isSome = true → False :=
-    fun w h1 h2 => by
-      have := h w
-      rw [(AdmA_exact a w).mpr h1, (AdmA_exact y w).mpr h2] at this
-      exact Bool.noConfusion this
-  obtain ⟨k, S, rfl, hS⟩ := setCodec_f_eq.mp hp
-  obtain ⟨x, hx⟩ := S.2
-  exact hne _ (setAt_elem hS x hx)
-    (setAt_elem ((setCodec_wire_f (c := denote α y) (o := .dual)).symm.trans hq) x hx)
+    (AdmA α (.set a) att && AdmA α (.set y) att) = false :=
+  Bool.eq_false_iff.mpr fun hv => by
+    rw [Bool.and_eq_true] at hv
+    refine setCodec_apart (o := .dual) (fun w h1 h2 => ?_) att
+      ((AdmA_exact (.set a) att).mp hv.1) ((AdmA_exact (.set y) att).mp hv.2)
+    have := h w
+    rw [(AdmA_exact a w).mpr h1, (AdmA_exact y w).mpr h2] at this
+    exact Bool.noConfusion this
 
-/-- **Two primitives met at the bottom read nothing together.** -/
+/-- **Two primitives met at the bottom read nothing together.** Each primitive is self-dual, so
+    its read-side row is its write-side row (`PrimAdm.dual`). -/
 theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
-    ∀ a, (AdmA α (.prim g) a && AdmA α (.prim g') a) = false
-  | .base k, .base k', hp, a => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · exact nomatch hp
-      · next hk =>
-          exact AdmA_and_false
-            (by cases k <;> cases k' <;> first | exact absurd rfl hk | decide)
-            (AdmA_base_member k) (AdmA_base_member k') a
-  | .base k, .literal k' x, hp, a => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · exact nomatch hp
-      · next hk =>
-          exact AdmA_and_false
-            (by cases k <;> cases k' <;> first | exact absurd rfl hk | decide)
-            (AdmA_base_member k) (AdmA_literal_member k' _) a
-  | .literal k x, .base k', hp, a => by
-      simp only [Ground.meet] at hp
-      split at hp
-      · exact nomatch hp
-      · next hk =>
-          exact AdmA_and_false
-            (by cases k <;> cases k' <;> first | exact absurd rfl hk | decide)
-            (AdmA_literal_member k _) (AdmA_base_member k') a
-  | .literal k x, .literal k' x', hp, a => by
-      simp only [Ground.meet] at hp
-      cases k <;> cases k' <;> simp only [Ground.meetLit, reduceCtorEq] at hp <;>
-        (try split at hp) <;>
-        first
-          | (simp only [reduceCtorEq] at hp; done)
-          | exact AdmA_and_false (by decide) (AdmA_literal_member _ _)
-              (AdmA_literal_member _ _) a
-          | (rename_i hne; rw [← AdmA_literal_never_of_ne hne a]; rfl)
+    ∀ a, (AdmA α (.prim g) a && AdmA α (.prim g') a) = false :=
+  Adm_prim_none (α := α)
 
 /-- The set former of DynamoDB, on the read side. -/
 instance dynFormerAdmA : Alg.FormerAdmA dynSyn where
