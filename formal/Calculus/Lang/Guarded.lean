@@ -132,7 +132,7 @@ theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ�
         cases Mean.list (B := S.sig) with
         | none => exact AgreeLe.refl _ _
         | some L =>
-          exact agreeLe_listCodec L.d_lt L.d_lt
+          exact agreeLe_listCodec L.d_lt
             (denoteList_agree pre hg.1.1 d ρ₁ ρ₂ fun i => UseAgree.of_under (h i) (by omega))
             (denoteOpt_agree sp hg.1.2 d ρ₁ ρ₂ fun i => UseAgree.of_under (h i) (by omega))
             (denoteList_agree suf hg.2 d ρ₁ ρ₂ fun i => UseAgree.of_under (h i) (by omega))
@@ -162,7 +162,7 @@ theorem bodySem_agree : ∀ (b : Body S), b.guarded = true → ∀ (d : Nat) (ρ
       cases Mean.map (B := S.sig) with
       | none => exact AgreeLe.refl _ _
       | some F =>
-        exact agreeLe_objectCodec F.d_lt F.d_lt
+        exact agreeLe_objectCodec F.d_lt
           (fun k => fieldSem_agree (f k) (hg.1 k) d ρ₁ ρ₂ fun i => UseAgree.of_under (h i)
             (le_max_of_le_left (Finset.le_sup (f := fun k => ObjectSlot.use i (f k))
               (Finset.mem_attach _ k))))

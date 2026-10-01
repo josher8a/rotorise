@@ -93,27 +93,17 @@ structure Ctor (α β : Type) where
   /-- Anything that matches was built. -/
   into_out : ∀ {b x}, out b = some x → b = into x
 
-/-- **A prism at each absolute side**: `pV` at the side `false`, and `pA` at the side `true`. -/
-def Ctor.side {α : Type} (pV : Ctor α V) (pA : Ctor α V) : (s : Bool) → Ctor α (V)
-  | false => pV
-  | true => pA
-
-/-- One prism at both sides is that prism at each side. -/
-theorem Ctor.side_self {α : Type} (p : Ctor α V) (s : Bool) : Ctor.side p p s = p := by
-  cases s <;> rfl
-
-/-- **The point ground codecs of §3**, as one construction: a payload carried between a
-    value constructor `pV` and an attribute constructor `pA`, both prisms.
+/-- **The point ground codecs of §3**, as one construction: the partial identity on the image of
+    a prism `p`, which stamps one member.
 
     The prism laws are exactly §2's laws in disguise — `out_into` is the round trip **(R)**
     and `into_out` is canonizability **(C)** — which is why `lawful_pointCodec` needs no
-    hypothesis about either side beyond the member it stamps. One formula serves each
-    orientation: match with the prism of the caller side, and build with the prism of the stored
-    side. -/
-def pointCodec {α : Type} (pV : Ctor α V) (pA : Ctor α V) (μ₀ : M) : Codec V M where
-  T v := ∃ x, v = pV.into x
+    hypothesis beyond the member it stamps. The map reads no orientation: match with the prism,
+    and build with it again. -/
+def pointCodec {α : Type} (p : Ctor α V) (μ₀ : M) : Codec V M where
+  T v := ∃ x, v = p.into x
   μ := some μ₀
-  f o x := ((Ctor.side pV pA o.c).out x).map (Ctor.side pV pA o.s).into
+  f _ x := (p.out x).map p.into
 
 /-- **The identity codec**: it holds every datum, names no member, and sends each datum to itself
     at each orientation. It is the unit of the inverse monoid of the carrier, and the top of a
@@ -433,14 +423,14 @@ theorem altCodec_admits {os : List (Codec V M)} {μA : Option M} {o : Orient}
 /-- The identity codec holds every datum. -/
 theorem carrier_idCodec : Carrier (idCodec : Codec V M) := ⟨fun _ => trivial, fun _ => trivial⟩
 
-/-- The carrier, likewise: `e` only writes what `pV` matched, `p` only reads what `pV`
+/-- The carrier, likewise: `e` only writes what `p` matched, and `p` only reads what `p`
     built. -/
-theorem carrier_pointCodec {α : Type} {pV : Ctor α V} {pA : Ctor α V} {μ₀ : M} :
-    Carrier (pointCodec pV pA μ₀) := by
+theorem carrier_pointCodec {α : Type} {p : Ctor α V} {μ₀ : M} :
+    Carrier (pointCodec p μ₀) := by
   refine ⟨?_, ?_⟩
   · intro v a h
     obtain ⟨x, hx, _⟩ := Option.map_eq_some_iff.mp h
-    exact ⟨x, pV.into_out hx⟩
+    exact ⟨x, p.into_out hx⟩
   · intro a v h
     obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp h
     exact ⟨x, rfl⟩
@@ -495,18 +485,17 @@ theorem lawful_idCodec : Lawful member (idCodec : Codec V M) where
   inv h := by cases h; rfl
   writes hμ := nomatch hμ
 
-/-- §2's laws for any pair of prisms. The one premise a prism pair does not already supply is
-    which member the attribute side stamps. Everything else is `out_into` and `into_out`. -/
-theorem lawful_pointCodec {α : Type} {pV : Ctor α V} {pA : Ctor α V} {μ₀ : M}
-    (hμ : ∀ x, member (pA.into x) = μ₀) :
-    Lawful member (pointCodec pV pA μ₀) where
-  -- match, rebuild, match again: `out_into` at the stored side, `into_out` at the caller side
+/-- §2's laws for any prism. The one premise a prism does not already supply is which member
+    it stamps. Everything else is `out_into` and `into_out`. -/
+theorem lawful_pointCodec {α : Type} {p : Ctor α V} {μ₀ : M}
+    (hμ : ∀ x, member (p.into x) = μ₀) :
+    Lawful member (pointCodec p μ₀) where
+  -- match, rebuild, match again: `out_into`, then `into_out`
   inv {o x y} h := by
     obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-    exact (congrArg (Option.map (Ctor.side pV pA o.c).into)
-      ((Ctor.side pV pA o.s).out_into z)).trans
-      (congrArg some ((Ctor.side pV pA o.c).into_out hz).symm)
-  -- everything written is `pA.into` of something
+    exact (congrArg (Option.map p.into) (p.out_into z)).trans
+      (congrArg some (p.into_out hz).symm)
+  -- everything written is `p.into` of something
   writes hm _ _ he := by
     obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp he
     cases hm; exact hμ x

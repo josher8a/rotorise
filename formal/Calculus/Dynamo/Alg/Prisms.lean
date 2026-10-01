@@ -101,7 +101,7 @@ def GroundKind.prism : (k : GroundKind) → Ctor k.Carrier Attr
     three times over, which is why `literal-S` and `literal-N` were two rules and `boolean`,
     `binary` and `null` were none. A base is one point codec at the prism of its kind: it
     accepts a datum of the kind, changes nothing, and stamps the member of the kind. -/
-@[simp] def baseCodec (k : GroundKind) : Codec := pointCodec k.prism k.prism k.member
+@[simp] def baseCodec (k : GroundKind) : Codec := pointCodec k.prism k.member
 
 /-- `number` writes a numeral as `N`. -/
 theorem baseCodec_e_num (x : WFNumeral) : (baseCodec .number).e (.num x) = some (.n x) := rfl

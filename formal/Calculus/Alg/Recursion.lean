@@ -30,6 +30,10 @@ namespace AgreeLe
 
 variable {depth} {d : Nat} {c₁ c₂ c₃ : Codec V M}
 
+/-- Agreement from agreement at each orientation. -/
+theorem ofF (h : ∀ o x, depth x ≤ d → c₁.f o x = c₂.f o x) : AgreeLe depth d c₁ c₂ :=
+  ⟨h .host, h .dual⟩
+
 /-- A codec agrees with itself at every depth. -/
 theorem refl (d : Nat) (c : Codec V M) : AgreeLe depth d c c :=
   ⟨fun _ _ => rfl, fun _ _ => rfl⟩
@@ -222,34 +226,24 @@ theorem traverse_row_congr {α β : Type} {d : Nat} {run : Codec V M → α → 
   | _, _, .some h => traverse_zip_congr hrun xs h hx
 
 /-- A `list` reads each element one layer down, so it turns agreement below `d` into agreement
-    below `d + 1`. The universe supplies the depth of its two list prisms. -/
-theorem agreeLe_listCodec {pV : Ctor (List V) V} {pA : Ctor (List V) V} {μL : M}
-    (hdV : ∀ vs, ∀ x ∈ vs, depth x + 1 ≤ depth (pV.into vs))
-    (hdA : ∀ as, ∀ x ∈ as, depth x + 1 ≤ depth (pA.into as)) {d : Nat}
+    below `d + 1`. The universe supplies the depth of its list prism. -/
+theorem agreeLe_listCodec {pL : Ctor (List V) V} {μL : M}
+    (hd : ∀ vs, ∀ x ∈ vs, depth x + 1 ≤ depth (pL.into vs)) {d : Nat}
     {pre₁ pre₂ suf₁ suf₂ : List (Codec V M)} {sp₁ sp₂ : Option (Codec V M)}
     (hpre : List.Forall₂ (AgreeLe depth d) pre₁ pre₂) (hsp : Option.Rel (AgreeLe depth d) sp₁ sp₂)
     (hsuf : List.Forall₂ (AgreeLe depth d) suf₁ suf₂) :
-    AgreeLe depth (d + 1) (listCodec pV pA μL pre₁ sp₁ suf₁)
-      (listCodec pV pA μL pre₂ sp₂ suf₂) := by
-  refine ⟨fun v hv => ?_, fun a ha => ?_⟩
-  · show ((pV.out v).bind _).map pA.into = ((pV.out v).bind _).map pA.into
-    cases h : pV.out v with
-    | none => rfl
-    | some vs =>
-      have hvv := pV.into_out h
-      simp only [Option.bind_some, alignL]
-      exact congrArg (Option.map pA.into) (traverse_row_congr (fun _ _ x hc hx => hc.e x hx) vs
-        (fun x hx => by have := hdV vs x hx; rw [← hvv] at this; omega)
-        (slotsL_rel hpre hsp hsuf vs.length))
-  · show ((pA.out a).bind _).map pV.into = ((pA.out a).bind _).map pV.into
-    cases h : pA.out a with
-    | none => rfl
-    | some as =>
-      have haa := pA.into_out h
-      simp only [Option.bind_some, alignL]
-      exact congrArg (Option.map pV.into) (traverse_row_congr (fun _ _ x hc hx => hc.p x hx) as
-        (fun x hx => by have := hdA as x hx; rw [← haa] at this; omega)
-        (slotsL_rel hpre hsp hsuf as.length))
+    AgreeLe depth (d + 1) (listCodec pL μL pre₁ sp₁ suf₁)
+      (listCodec pL μL pre₂ sp₂ suf₂) := by
+  refine .ofF fun o v hv => ?_
+  show ((pL.out v).bind _).map pL.into = ((pL.out v).bind _).map pL.into
+  cases h : pL.out v with
+  | none => rfl
+  | some vs =>
+    have hvv := pL.into_out h
+    simp only [Option.bind_some, alignL]
+    exact congrArg (Option.map pL.into) (traverse_row_congr (fun _ _ x hc hx => hc.f o x hx) vs
+      (fun x hx => by have := hd vs x hx; rw [← hvv] at this; omega)
+      (slotsL_rel hpre hsp hsuf vs.length))
 
 /-! ### Objects
 
@@ -286,15 +280,14 @@ theorem valPresentB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) (names : 
 end ObjectAgree
 
 /-- An object reads each entry one layer below the map, so it turns agreement below `d` into
-    agreement below `d + 1`. The universe supplies the depth of its two keyed-map prisms. -/
-theorem agreeLe_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf V) V} {μM : M}
-    (hdV : ∀ (m : MapOf V) k, depth (m.get k) + 1 ≤ depth (mV.into m))
-    (hdA : ∀ (m : MapOf V) k, depth (m.get k) + 1 ≤ depth (mA.into m)) {d : Nat}
+    agreement below `d + 1`. The universe supplies the depth of its keyed-map prism. -/
+theorem agreeLe_objectCodec {pM : Ctor (MapOf V) V} {μM : M}
+    (hd : ∀ (m : MapOf V) k, depth (m.get k) + 1 ≤ depth (pM.into m)) {d : Nat}
     {keys : Finset String} {F₁ F₂ : {k // k ∈ keys} → FieldSem V M}
     {r₁ r₂ : RestSem V M} (hF : ∀ k, FieldSem.Rel (AgreeLe depth d) (F₁ k) (F₂ k))
     (hr : RestSem.Rel (AgreeLe depth d) r₁ r₂) :
-    AgreeLe depth (d + 1) (objectCodec mV mA μM ⟨keys, F₁⟩ r₁)
-      (objectCodec mV mA μM ⟨keys, F₂⟩ r₂) := by
+    AgreeLe depth (d + 1) (objectCodec pM μM ⟨keys, F₁⟩ r₁)
+      (objectCodec pM μM ⟨keys, F₂⟩ r₂) := by
   have hent : ∀ k, Option.Rel (AgreeLe depth d) (entryCodec ⟨keys, F₁⟩ (rcOf r₁) k)
       (entryCodec ⟨keys, F₂⟩ (rcOf r₂) k) := fun k => entryCodec_rel hr.rcOf (mapOf_at_rel hF k)
   have hbind : ∀ {α β : Type} (run : Codec V M → α → Option β) (x : α),
@@ -303,32 +296,19 @@ theorem agreeLe_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf V) V} {μM
         = (entryCodec ⟨keys, F₂⟩ (rcOf r₂) k).bind (run · x) := fun run x hrun k =>
     optionRel_bind (fun _ _ h => hrun _ _ h) (hent k)
   unfold objectCodec
-  refine ⟨fun v hv => ?_, fun a ha => ?_⟩
-  · show ((mV.out v).bind _).map mA.into = ((mV.out v).bind _).map mA.into
-    cases h : mV.out v with
-    | none => rfl
-    | some m =>
-      have hvv := mV.into_out h
-      refine congrArg (Option.map mA.into) ?_
-      simp only [Option.bind_some, objWrite, objAt, valPresentB_rel hF]
-      split
-      · congr 2
-        funext k
-        exact hbind (·.e ·) (m.get k) (fun _ _ h => h.e _ (by
-          have := hdV m k; rw [← hvv] at this; omega)) k.1
-      · rfl
-  · show ((mA.out a).bind _).map mV.into = ((mA.out a).bind _).map mV.into
-    cases h : mA.out a with
-    | none => rfl
-    | some m =>
-      have haa := mA.into_out h
-      refine congrArg (Option.map mV.into) ?_
-      simp only [Option.bind_some, objRead, objAt, valPresentB_rel hF]
-      split
-      · congr 2
-        funext k
-        exact hbind (·.p ·) (m.get k) (fun _ _ h => h.p _ (by
-          have := hdA m k; rw [← haa] at this; omega)) k.1
-      · rfl
+  refine .ofF fun o v hv => ?_
+  show ((pM.out v).bind _).map pM.into = ((pM.out v).bind _).map pM.into
+  cases h : pM.out v with
+  | none => rfl
+  | some m =>
+    have hvv := pM.into_out h
+    refine congrArg (Option.map pM.into) ?_
+    simp only [Option.bind_some, objAt, valPresentB_rel hF]
+    split
+    · congr 2
+      funext k
+      exact hbind (·.f o ·) (m.get k) (fun _ _ h => h.f o _ (by
+        have := hd m k; rw [← hvv] at this; omega)) k.1
+    · rfl
 
 end Calculus.Alg

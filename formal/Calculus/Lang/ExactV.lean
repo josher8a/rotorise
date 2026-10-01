@@ -22,7 +22,7 @@ def entryP {α : Type} (fs : MapOf (α → Bool)) (rp : Option (α → Bool)) (k
     Option (α → Bool) :=
   match fs.at k with | some P => some P | none => rp
 
-/-- `objWrite`'s traversal and `objRead`'s traversal, as a row: every entry goes through the
+/-- `objAt`'s traversal, as a row: every entry goes through the
     codec its name names. -/
 def objAdmV {α : Type} (fs : MapOf (α → Bool)) (rp : Option (α → Bool)) (keys : Finset String)
     (g : {k // k ∈ keys} → α) : Bool :=
@@ -73,10 +73,10 @@ theorem select_isSome_attempt {V M X Y : Type} (os : List (Codec V M))
     orientation, and build with the prism. -/
 theorem listCodec_f {V M : Type} (p : Ctor (List V) V)
     (μL : M) (pre : List (Codec V M)) (sp : Option (Codec V M)) (suf : List (Codec V M)) :
-    ∀ (o : Orient) (x : V), (listCodec p p μL pre sp suf).f o x =
+    ∀ (o : Orient) (x : V), (listCodec p μL pre sp suf).f o x =
       ((p.out x).bind fun xs =>
         (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map p.into :=
-  Orient.both (P := fun o => ∀ x, (listCodec p p μL pre sp suf).f o x =
+  Orient.both (P := fun o => ∀ x, (listCodec p μL pre sp suf).f o x =
       ((p.out x).bind fun xs =>
         (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map p.into)
     (fun _ => rfl) (fun _ => rfl)

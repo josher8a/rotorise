@@ -183,22 +183,22 @@ def Decides (t : Term) : Prop :=
 /-- A string `literal` decides, as §5 says. -/
 theorem decides_literalS : Decides α (.literal .string "A") :=
   ⟨.str "A", .str "B",
-   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p],
+   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p],
    rfl,
-   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p]⟩
+   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p]⟩
 
 /-- `string` does not, as §5 also says. -/
 theorem not_decides_string : ¬ Decides α .string := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
-  cases v <;> cases w <;> simp_all [baseCodec, Attr.kind, Attr.member, Member.kind, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e]
+  cases v <;> cases w <;> simp_all [baseCodec, Attr.kind, Attr.member, Member.kind, pointCodec, GroundKind.prism, sC, Alg.Codec.e]
 
 
 theorem not_decides_refine_top : ¬ Decides α (.refine .string (.closure qTop) ()) := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
   cases v <;> cases w <;>
-    simp_all [Alg.restrict_e_def, Pred.eval, baseCodec, qTop, Attr.kind, Attr.member, Member.kind, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e]
+    simp_all [Alg.restrict_e_def, Pred.eval, baseCodec, qTop, Attr.kind, Attr.member, Member.kind, pointCodec, GroundKind.prism, sC, Alg.Codec.e]
 
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one: two `map`s differing in admission, so a row that answers `false` at every
@@ -207,9 +207,9 @@ theorem decides_object :
     Decides α (.object (.mk {"k"} (fun _ => .req .string) none)) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)), ?_, rfl, ?_⟩
-  · simp +contextual [denote_rows, objectCodec, baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e, valPresentB, valPresentAt, rcOf, Alg.FieldSem.codec, carriedCodec, mA, objWrite, entryCodec, MapOf.at, funImage, Subtype.forall]
+  · simp +contextual [denote_rows, objectCodec, baseCodec, pointCodec, GroundKind.prism, sC, Alg.Codec.e, valPresentB, valPresentAt, rcOf, Alg.FieldSem.codec, carriedCodec, mA, entryCodec, MapOf.at, funImage, Subtype.forall]
     rfl
-  · simp [denote_rows, objectCodec, Alg.objectCodec, Alg.objectCodecCore, baseCodec, valPresentB, valPresentAt, rcOf, carriedCodec, mA, objWrite, objAt, Subtype.forall, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e]
+  · simp [denote_rows, objectCodec, Alg.objectCodec, Alg.objectCodecCore, baseCodec, valPresentB, valPresentAt, rcOf, carriedCodec, mA, objAt, Subtype.forall, pointCodec, GroundKind.prism, sC, Alg.Codec.e]
 
 
 /-! ### …and the two errors are the same combinator
@@ -243,8 +243,8 @@ def splitTable : Table := fun _ => (fSplit, id)
 theorem decides_held :
     Decides splitTable (.held false .string .string (.caller 0, false) []) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
-  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through, baseCodec, fSplit, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p]
-  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through, baseCodec, fSplit, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p]
+  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through, baseCodec, fSplit, pointCodec, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p]
+  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through, baseCodec, fSplit, pointCodec, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p]
 
 
 /-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/

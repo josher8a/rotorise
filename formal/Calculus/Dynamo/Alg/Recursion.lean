@@ -113,8 +113,7 @@ theorem agreeLe_listCodec {d : Nat} {pre₁ pre₂ suf₁ suf₂ : List Codec}
     {sp₁ sp₂ : Option Codec} (hpre : List.Forall₂ (AgreeLe d) pre₁ pre₂)
     (hsp : Option.Rel (AgreeLe d) sp₁ sp₂) (hsuf : List.Forall₂ (AgreeLe d) suf₁ suf₂) :
     AgreeLe (d + 1) (listCodec pre₁ sp₁ suf₁) (listCodec pre₂ sp₂ suf₂) :=
-  Alg.agreeLe_listCodec (pV := lA) (pA := lA) (μL := .L)
-    (fun _ _ hx => Nat.succ_le_succ (Attr.depth_le_depthL hx))
+  Alg.agreeLe_listCodec (pL := lA) (μL := .L)
     (fun _ _ hx => Nat.succ_le_succ (Attr.depth_le_depthL hx)) hpre hsp hsuf
 
 /-- An array is the spread-only `list`, and so reads its elements one layer down. -/
@@ -125,8 +124,7 @@ theorem agreeLe_arrayCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c�
 /-- A record reads each entry one layer below the map. -/
 theorem agreeLe_recordCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂) :
     AgreeLe (d + 1) (recordCodec c₁) (recordCodec c₂) :=
-  Alg.agreeLe_objectCodec (fun m k => Attr.depth_map_entry (f := m.2) k)
-    (fun m k => Attr.depth_map_entry (f := m.2) k)
+  Alg.agreeLe_objectCodec (pM := mA) (μM := Member.M) (fun m k => Attr.depth_map_entry (f := m.2) k)
     (fun k => absurd k.2 (Finset.notMem_empty k.1)) h
 
 /-- A set reads its element codec at scalars, which are one layer below the set. -/
