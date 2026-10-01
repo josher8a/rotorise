@@ -54,13 +54,16 @@ theorem Adm_opaqUnfold (v : Value) : Adm α opaqUnfold v = Adm α .opaq v := by
   | s _ | bool _ | b _ | null | n _ => rfl
   | ss S =>
       simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec, Alg.Codec.e,
-        denote_opaq, setAt_Ω_s]
+        denote_opaq]
+      exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .host .string S⟩
   | ns S =>
       simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec, Alg.Codec.e,
-        denote_opaq, setAt_Ω_n]
+        denote_opaq]
+      exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .host .number S⟩
   | bs S =>
       simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec, Alg.Codec.e,
-        denote_opaq, setAt_Ω_b]
+        denote_opaq]
+      exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .host .binary S⟩
   | l vs =>
       simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, alignPL_spread, setCodec, Alg.Codec.e]
   | m keys g =>
@@ -82,13 +85,16 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA α opaqUnfold a = AdmA α .opaq a := b
   | s _ | bool _ | b _ | null | n _ => rfl
   | ss S =>
       simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, Alg.Codec.p,
-        denote_opaq, setAt_Ω_s]
+        denote_opaq]
+      exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .dual .string S⟩
   | bs S =>
       simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, Alg.Codec.p,
-        denote_opaq, setAt_Ω_b]
+        denote_opaq]
+      exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .dual .binary S⟩
   | ns S =>
       simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, Alg.Codec.p,
-        denote_opaq, setAt_Ω_n]
+        denote_opaq]
+      exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .dual .number S⟩
   | l as =>
       simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, alignPL_spread, setCodec, Alg.Codec.p]
   | m keys g =>

@@ -766,11 +766,10 @@ theorem Adm_set_and_false {a y : Term} (h : ∀ u, (Adm α a u && Adm α y u) = 
       have := h w
       rw [(Adm_exact a w).mpr h1, (Adm_exact y w).mpr h2] at this
       exact Bool.noConfusion this
-  rcases setCodec_f_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
-    obtain ⟨x, hx⟩ := S.2
-  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Value.str) hq x hx)
-  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Value.num) hq x hx)
-  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Value.bin) hq x hx)
+  obtain ⟨k, S, rfl, hS⟩ := setCodec_f_eq.mp hp
+  obtain ⟨x, hx⟩ := S.2
+  exact hne _ (setAt_elem hS x hx)
+    (setAt_elem ((setCodec_wire_f (c := denote α y) (o := .host)).symm.trans hq) x hx)
 
 /-- **Two primitives met at the bottom share no value.** -/
 theorem Adm_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
@@ -826,7 +825,8 @@ noncomputable instance dynShapes : Alg.Shapes dynSyn where
   set L hL c o v h := by
     cases hL
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
-    rcases setCodec_f_eq.mp ha with ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ <;> rfl
+    obtain ⟨k, S, rfl, -⟩ := setCodec_f_eq.mp ha
+    cases k <;> rfl
   list L hL _ := by cases hL; rfl
   map F hF _ := by cases hF; rfl
 
@@ -943,11 +943,10 @@ theorem AdmA_set_and_false {a y : Term} (h : ∀ u, (AdmA α a u && AdmA α y u)
       have := h w
       rw [(AdmA_exact a w).mpr h1, (AdmA_exact y w).mpr h2] at this
       exact Bool.noConfusion this
-  rcases setCodec_f_eq.mp hp with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
-    obtain ⟨x, hx⟩ := S.2
-  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Attr.s) hq x hx)
-  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Attr.n) hq x hx)
-  · exact hne _ (setAt_elem hS x hx) (setAt_elem (c := denote α y) (inj := Attr.b) hq x hx)
+  obtain ⟨k, S, rfl, hS⟩ := setCodec_f_eq.mp hp
+  obtain ⟨x, hx⟩ := S.2
+  exact hne _ (setAt_elem hS x hx)
+    (setAt_elem ((setCodec_wire_f (c := denote α y) (o := .dual)).symm.trans hq) x hx)
 
 /-- **Two primitives met at the bottom read nothing together.** -/
 theorem admA_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
@@ -1056,9 +1055,8 @@ theorem setCodec_mono (o : Orient) {c d : Codec} (hd : Sub d Ω)
     (h : ∀ w, (c.f o w).isSome = true → (d.f o w).isSome = true) (x : Attr)
     (hx : ((setCodec c).f o x).isSome = true) : ((setCodec d).f o x).isSome = true := by
   obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hx
-  refine (setCodec_isSome_of_sub hd o x).mpr ?_
-  rcases setCodec_f_eq.mp ha with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ <;>
-    exact fun y hy => h _ (setAt_elem hS y hy)
+  obtain ⟨k, S, rfl, hS⟩ := setCodec_f_eq.mp ha
+  exact (setCodec_isSome_of_sub hd o S).mpr fun y hy => h _ (setAt_elem hS y hy)
 
 /-- The second environment acts, at each index and at the orientation, where the first acts. -/
 def EnvLe (o : Orient) (ρ ρ' : List Codec) : Prop :=

@@ -94,6 +94,41 @@ def GroundKind.prism : (k : GroundKind) → Ctor k.Carrier Attr
   | .binary  => bC
   | .null    => nullA
 
+/-! ### The element kinds of a wire set -/
+
+/-- The three element kinds of §1's wire sets: the ground kinds that a set holds. -/
+inductive SetKind where
+  | string | number | binary
+deriving DecidableEq
+
+/-- The ground kind of a set's elements. -/
+@[reducible] def SetKind.ground : SetKind → GroundKind
+  | .string => .string
+  | .number => .number
+  | .binary => .binary
+
+/-- What a set of each kind holds: the carrier of its ground kind. -/
+abbrev SetKind.Carrier (k : SetKind) : Type := k.ground.Carrier
+
+instance SetKind.decEqCarrier : (k : SetKind) → DecidableEq k.Carrier
+  | .string => inferInstanceAs (DecidableEq String)
+  | .number => inferInstanceAs (DecidableEq WFNumeral)
+  | .binary => inferInstanceAs (DecidableEq Bytes)
+
+/-- The element prism of a kind: the prism of its ground kind. -/
+abbrev SetKind.elem (k : SetKind) : Ctor k.Carrier Attr := k.ground.prism
+
+/-- The wire set of a kind. -/
+def SetKind.wire : (k : SetKind) → NEFinset k.Carrier → Attr
+  | .string => Attr.ss
+  | .number => Attr.ns
+  | .binary => Attr.bs
+
+/-- Two element prisms of different kinds share no datum. -/
+theorem SetKind.elem_out_ne {k k' : SetKind} (h : k ≠ k') (x : k.Carrier) :
+    k'.elem.out (k.elem.into x) = none := by
+  cases k <;> cases k' <;> first | exact absurd rfl h | rfl
+
 /-- The pair a literal refines: its base's, chosen by the index.
 
     §3's `(literal)` premise is `⊢ g : T ⇝ μ, g ground`, and this is `g`. It exists because
