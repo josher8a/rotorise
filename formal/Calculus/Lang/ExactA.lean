@@ -19,6 +19,14 @@ abbrev PrimAdmA (S : Syn) [Sem S] := PrimAdm S.op
 
 variable {S : Syn} [Sem S] {α : Table S} {β : Table S.op}
 
+/-- **A self-dual primitive reads where it writes**: where each primitive's map at the dual is its
+    map at the universe's orientation, the value-side rows are the attribute-side rows. -/
+def PrimAdm.dual [h : PrimAdm S] (hd : ∀ g, (Syn.ground (S := S) g).f S.o.op = (Syn.ground g).f S.o) :
+    PrimAdmA S where
+  admV := h.admV
+  admV_exact g a := (h.admV_exact g a).trans
+    (Iff.of_eq (congrArg (fun f => (f a).isSome = true) (hd g)).symm)
+
 variable (α β) in
 /-- **`refine`'s read-side gate**: decode with the base, then apply `q` to what comes out. -/
 noncomputable def refineReads (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a : S.V) :

@@ -76,11 +76,8 @@ theorem ground_selfdual : ∀ g, (groundCodec g).e = (groundCodec g).p := by
 
 /-- The DynamoDB primitive rows on the read side: the write-side rows, because each primitive is
     self-dual. -/
-noncomputable instance dynPrimAdmA : Alg.PrimAdmA dynSyn where
-  admV := dynPrimAdm.admV
-  admV_exact g a := (dynPrimAdm.admV_exact g a).trans (by
-    show ((groundCodec g).e a).isSome = true ↔ ((groundCodec g).p a).isSome = true
-    rw [ground_selfdual])
+noncomputable instance dynPrimAdmA : Alg.PrimAdmA dynSyn :=
+  Alg.PrimAdm.dual fun g => (ground_selfdual g).symm
 
 variable (α) in
 /-- **The joint admission predicate, attribute side**: the generic row at DynamoDB. The mirror
