@@ -201,31 +201,46 @@ theorem setCodec_f_eq {c : Codec} {o : Alg.Orient} {x y : Attr} :
       ∨ (∃ S : NEFinset Bytes, x = .bs S ∧ setAt o c Attr.b S = some y) := by
   cases x <;> simp [setCodec]
 
-def arrayCodec (c : Codec) : Codec :=
-  Alg.Codec.ofEP (T := fun v => match v with | .arr vs => ∀ x ∈ vs, c.T x | _ => False)
-    (μ := some .L)
-    (e := fun v => match v with
-      | .arr vs => (traverse c.e vs).map Attr.l
-      | _ => none)
-    (p := fun a => match a with
-      | .l as => (traverse c.p as).map Value.arr
-      | _ => none)
+/-- §3 `array`: the list former with a spread and no fixed positions. -/
+abbrev arrayCodec (c : Codec) : Codec := Alg.listCodec lA lA .L [] (some c) []
 
-/-- `array` *is* the entrywise product at `L`, on the nose. The definition above is
-    left in its unfolded form because the `opaque` fixpoint reduces through it; this
-    equation is what carries the three lemmas across. -/
-theorem arrayCodec_eq {c : Codec} :
-    arrayCodec c = entrywise lA lA .L (fun vs => ∀ x ∈ vs, c.T x) c.e c.p := by
-  ext v <;> cases v <;> simp_all [arrayCodec, entrywise, carriedCodec, lA]
+/-- **An array moves entry by entry**, at each orientation. -/
+theorem arrayCodec_f (o : Alg.Orient) (c : Codec) (xs : List Attr) :
+    (arrayCodec c).f o (.l xs) = (traverse (c.f o) xs).map Attr.l := by
+  rcases o with ⟨⟨_ | _, _ | _⟩, ho⟩
+  · exact absurd rfl ho
+  · show (((lA.out (.l xs)).bind fun ys => (Alg.alignL [] (some c) [] ys).bind
+        (traverse fun cv => cv.1.f _ cv.2)).map lA.into) = _
+    simp only [lA, Option.bind_some]
+    rw [Alg.alignL_spread]; simp only [Option.bind_some]
+    rw [Alg.traverse_replicate_zip c (fun d x => d.f _ x)]
+  · show (((lA.out (.l xs)).bind fun ys => (Alg.alignL [] (some c) [] ys).bind
+        (traverse fun cv => cv.1.f _ cv.2)).map lA.into) = _
+    simp only [lA, Option.bind_some]
+    rw [Alg.alignL_spread]; simp only [Option.bind_some]
+    rw [Alg.traverse_replicate_zip c (fun d x => d.f _ x)]
+  · exact absurd rfl ho
 
-/-- `array` is lawful, entry by entry. -/
+/-- **An array holds a list whose every entry the element holds.** -/
+theorem arrayCodec_T (c : Codec) (xs : List Attr) :
+    (arrayCodec c).T (.l xs) ↔ ∀ x ∈ xs, c.T x := by
+  constructor
+  · rintro ⟨ys, hys, ps, hal, hps⟩ x hx
+    simp only [lA] at hys; cases hys
+    rw [Alg.alignL_spread] at hal; cases hal
+    exact hps (c, x) ((Alg.mem_replicate_zip _ _ _ x).mpr ⟨rfl, hx⟩)
+  · intro h
+    refine ⟨xs, rfl, _, Alg.alignL_spread c xs, fun p hp => ?_⟩
+    obtain ⟨d, x⟩ := p
+    obtain ⟨rfl, hx⟩ := (Alg.mem_replicate_zip c xs d x).mp hp
+    exact h x hx
+
 theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) :=
-  arrayCodec_eq ▸ lawful_entrywise (fun _ => rfl) (fun _ _ => h.retract) (fun _ _ => h.canon)
+  Alg.lawful_listCodec (fun _ => rfl) (fun _ h => nomatch h) (fun _ hc => by cases hc; exact h)
+    (fun _ h => nomatch h)
 
 theorem carrier_arrayCodec {c : Codec} (hc : Carrier c) : Carrier (arrayCodec c) :=
-  arrayCodec_eq ▸ carrier_entrywise
-    (fun h => traverse_mem_input (fun _ _ => hc.domE) h)
-    (fun h => traverse_mem (fun _ _ => hc.ranP) h)
+  Alg.carrier_listCodec (fun _ h => nomatch h) (fun _ h => by cases h; exact hc) (fun _ h => nomatch h)
 
 /-! ### `record` (§3) — `carriedCodec` at `M`
 
@@ -327,79 +342,12 @@ theorem carrier_recordCodec {c : Codec} (hc : Carrier c) : Carrier (recordCodec 
     obtain ⟨keys, g, f, rfl, hf, rfl⟩ := recordCodec_p_eq.mp hp
     exact fun k => hc.ranP (funImage_some hf k)
 
-/-! ### `tuple` (§3) — the positional product
-
-`tuple` is `carriedCodec` between the same two prisms as `array`, with a payload pair
-that pairs each position with its own codec before traversing. Everything specific to it
-is therefore a fact about that pairing, and there is only one worth stating: **which
-codec a position gets depends on the position alone, never on what stands there.** Name
-the codec row a shape assigns to a row of `n` positions (`slots`) and the pairing is a
-`zip` with it (`align_eq_some`) — after which a row and its image under the pair, having
-the same length, provably align against the *same* codecs. That is the whole of the
-tuple's asymmetry between reading and writing, and the four clauses of §2 then run
-position by position over the codec row, exactly as they do for `array`. -/
-
 /- The positional theory takes the carriers as parameters. The aliases give it its names in this
    namespace. -/
 export Alg (align slots_all align_eq_some align_of_slots zip_canonS zip_domE zip_ranP
   tuple_retract alignL alignL_nil_suf alignL_of_split traverse_replicate_zip
   alignL_spread mem_replicate_zip)
 
-def tupleCodec (cs : List Codec) (tail : Option Codec) : Codec :=
-  Alg.Codec.ofEP (T := fun v => match v with
-      | .arr vs => ∃ ps, align cs tail vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2
-      | _ => False)
-    (μ := some .L)
-    (e := fun v => match v with
-      | .arr vs => ((align cs tail vs).bind
-          (traverse fun cv => cv.1.e cv.2)).map Attr.l
-      | _ => none)
-    (p := fun a => match a with
-      | .l as => ((align cs tail as).bind
-          (traverse fun ca => ca.1.p ca.2)).map Value.arr
-      | _ => none)
-
-/-! #### `tuple` is `carriedCodec` at that pair -/
-
-section Tuple
-variable {cs : List Codec} {tail : Option Codec}
-
-theorem tupleCodec_eq :
-    tupleCodec cs tail = carriedCodec lA lA .L
-      (fun vs => ∃ ps, align cs tail vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2)
-      (fun vs => (align cs tail vs).bind (traverse fun cv => cv.1.e cv.2))
-      (fun as => (align cs tail as).bind (traverse fun ca => ca.1.p ca.2)) := by
-  refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
-    simp [tupleCodec, carriedCodec, lA]
-
-/-- A tuple is lawful: the alignment puts each position on its own codec. -/
-theorem lawful_tupleCodec (hcs : ∀ c ∈ cs, Lawful c) (htl : ∀ c ∈ tail, Lawful c) :
-    Lawful (tupleCodec cs tail) := by
-  refine tupleCodec_eq ▸ lawful_carried (fun _ => rfl)
-    (tuple_retract (fun c h => (hcs c h).core) (fun c h => (htl c h).core)) ?_
-  intro as vs hD
-  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
-  obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
-  have hn : vs.length = as.length := by
-    rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
-  rw [align_of_slots hs hn]
-  exact zip_canonS ds as vs (slots_all hcs htl hs) hlen htr
-
-theorem carrier_tupleCodec (hcs : ∀ c ∈ cs, Carrier c) (htl : ∀ c ∈ tail, Carrier c) :
-    Carrier (tupleCodec cs tail) := by
-  refine tupleCodec_eq ▸ carrier_carried ?_ ?_
-  · intro vs as hE
-    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hE
-    obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
-    exact ⟨_, hal, zip_domE ds vs as (slots_all hcs htl hs) htr⟩
-  · intro as vs hD
-    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
-    obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
-    have hn : vs.length = as.length := by
-      rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
-    exact ⟨_, align_of_slots hs hn, zip_ranP ds as vs (slots_all hcs htl hs) htr⟩
-
-end Tuple
 
 /-! #### `list` (§3) — one prefix, at most one spread, one suffix
 
@@ -412,8 +360,7 @@ one append. The four clauses of §2 then run position by position over the row, 
 for `tuple` and for `array`.
 
 `tuple` is the case with no suffix and `array` the case with no prefix and no suffix. Both
-are proved equal to a `list` below rather than restated, so the positional theory is
-proved one time. -/
+are defined as a `list`, so the positional theory is proved one time. -/
 
 /-- §3 `(list)`: the positional product over a prefix, a spread and a suffix. The generic
     `list` at the `L` prism. -/
@@ -432,49 +379,8 @@ theorem listCodec_eq :
 
 end ListShape
 
-/-- **`tuple` is the `list` with no suffix.** -/
-theorem tupleCodec_eq_listCodec (cs : List Codec) (tail : Option Codec) :
-    tupleCodec cs tail = listCodec cs tail [] := by
-  refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
-    simp [tupleCodec, listCodec, Alg.listCodec, carriedCodec, lA, alignL_nil_suf]
-
-/-- `array` writes what the `list` with one spread writes. -/
-theorem arrayCodec_e (c : Codec) (v : Value) :
-    (arrayCodec c).e v = (listCodec [] (some c) []).e v := by
-  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, Option.bind_some, Alg.Codec.ofEP_e]; try rfl)
-  rw [alignL_spread]
-  show _ = ((traverse (fun q : Codec × Value => q.1.e q.2) _).map Attr.l)
-  rw [traverse_replicate_zip c (fun d x => d.e x)]
-
-/-- …and reads what it reads. -/
-theorem arrayCodec_p (c : Codec) (a : Attr) :
-    (arrayCodec c).p a = (listCodec [] (some c) []).p a := by
-  cases a <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, Option.bind_some, Alg.Codec.ofEP_p]; try rfl)
-  rw [alignL_spread]
-  show _ = ((traverse (fun q : Codec × Attr => q.1.p q.2) _).map Value.arr)
-  rw [traverse_replicate_zip c (fun d x => d.p x)]
-
-/-- …and carries what it carries. -/
-theorem arrayCodec_T (c : Codec) (v : Value) :
-    (arrayCodec c).T v ↔ (listCodec [] (some c) []).T v := by
-  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, Attr.l.injEq, reduceCtorEq, false_and, exists_false, exists_eq_left', iff_self, Alg.Codec.ofEP_T]; try exact Iff.rfl)
-  rw [alignL_spread]
-  constructor
-  · intro h
-    refine ⟨_, rfl, fun p hp => ?_⟩
-    obtain ⟨d, x⟩ := p
-    obtain ⟨rfl, h2⟩ := (mem_replicate_zip c _ d x).mp hp
-    exact h _ h2
-  · rintro ⟨ps, hps, hall⟩
-    cases hps
-    intro x hx
-    exact hall (c, x) ((mem_replicate_zip c _ c x).mpr ⟨rfl, hx⟩)
-
-/-- **`array` is the `list` with one spread and nothing else.** `arrayCodec` keeps its own
-    unfolded definition, because the `opaque` fixpoint reduces through it. -/
-theorem arrayCodec_eq_listCodec (c : Codec) : arrayCodec c = listCodec [] (some c) [] :=
-  Codec.ext (funext fun v => propext (arrayCodec_T c v)) rfl
-    (funext (arrayCodec_e c)) (funext (arrayCodec_p c))
+/-- **§3 `tuple` is the `list` with no suffix.** -/
+abbrev tupleCodec (cs : List Codec) (tail : Option Codec) : Codec := listCodec cs tail []
 
 end
 

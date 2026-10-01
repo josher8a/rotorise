@@ -38,15 +38,15 @@ theorem selectF_not_monotone :
     selectF [optBot, optLit] (.str "A") = some (.s "A")
     ∧ selectF [optBad, optLit] (.str "A") = some (.s "B") := by
   constructor <;>
-    simp [selectF, select, optBot, optBad, optLit, cBad, ceBad, Codec.empty, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
+    simp [selectF, select, optBot, optBad, optLit, cBad, ceBad, Codec.empty, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p]
 
 /-- …and the obligation is exactly what that violates. -/
 theorem optBad_not_confluent : ¬ ConfluentAt [optBad, optLit] (.str "A") := by
   intro h
   have := h optBad (by simp) optLit (by simp)
     (by simp [optBad, cBad, ceBad])
-    (by simp [optLit, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p])
-  simp [optBad, optLit, cBad, ceBad, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p] at this
+    (by simp [optLit, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p])
+  simp [optBad, optLit, cBad, ceBad, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p] at this
 
 /-! **The ground-term witness is gone, and it was the decimal conflation.** ~~string_decimal_not_confluent~~
 took `string` and a decimal base both writing `.str "1.5"` and storing it differently. The model

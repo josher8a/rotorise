@@ -380,7 +380,7 @@ theorem onKind_set (c : Codec) : Codec.OnKind ((setCodec c)) .set := by
 theorem onKind_array (c : Codec) :
     Codec.OnKind ((arrayCodec c)) .array := by
   constructor <;> intro x hx <;> cases x <;>
-    simp_all [arrayCodec, Value.kind, Attr.kind]
+    simp_all [arrayCodec, Alg.listCodec, carriedCodec, lA, Alg.Codec.e, Alg.Codec.p, Value.kind, Attr.kind]
 
 theorem onKind_record (c : Codec) :
     Codec.OnKind ((recordCodec c)) .map := by

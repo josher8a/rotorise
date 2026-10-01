@@ -49,6 +49,7 @@ definitions, so those are a local `simp` set for the section. -/
 section Unfoldings
 attribute [local simp] opaqStep opaqOptions Alg.altCodec_f_def select baseCodec pointCodec
   Calculus.Alg.Ctor.side GroundKind.prism sC nC bC boolA nullA setCodec arrayCodec recordCodec
+  Alg.listCodec carriedCodec lA
 
 /-- §3 `(opaque)`, write side at kind `set`: the wire member is computed from the elements (`setCodec`), which is why one option covers `SS`, `NS` and `BS`. -/
 theorem opaqStep_e_strSet (c : Codec) (S : NEFinset String) :
@@ -76,7 +77,7 @@ theorem opaqStep_e_arr (c : Codec) (vs : List Value) :
     (opaqStep c).e (.arr vs)
       = (arrayCodec c).e (.arr vs) := by
   cases he : (arrayCodec c).e (.arr vs) <;>
-    simp [-arrayCodec, he]
+    simp [-arrayCodec, -Alg.listCodec, -carriedCodec, -lA, he]
 
 /-- §3 `(opaque)`, write side at kind `map`: the `M` option, recursing through `c`. -/
 theorem opaqStep_e_map (c : Codec) (keys : Finset Name)
@@ -97,6 +98,7 @@ of the eight. -/
 section UnfoldingsA
 attribute [local simp] opaqStep opaqOptions Alg.altCodec_f_def select baseCodec pointCodec
   Calculus.Alg.Ctor.side GroundKind.prism sC nC bC boolA nullA setCodec arrayCodec recordCodec
+  Alg.listCodec carriedCodec lA
 
 /-- §3 `(opaque)`, read side at member `SS` — one of the three members routing to the single `set` option. -/
 theorem opaqStep_p_ss (c : Codec) (vs : NEFinset String) :
@@ -120,7 +122,7 @@ theorem opaqStep_p_bs (c : Codec) (vs : NEFinset Bytes) :
 theorem opaqStep_p_l (c : Codec) (as : List Attr) :
     (opaqStep c).p (.l as) = (arrayCodec c).p (.l as) := by
   cases hp : (arrayCodec c).p (.l as) <;>
-    simp [-arrayCodec, hp]
+    simp [-arrayCodec, -Alg.listCodec, -carriedCodec, -lA, hp]
 
 /-- §3 `(opaque)`, read side at member `M`. -/
 theorem opaqStep_p_m (c : Codec) (keys : Finset Name)
@@ -161,11 +163,11 @@ theorem Ωp_fix (a : Attr) : Ω.p a = (opaqStep Ω).p a := muCodec_fix contracti
 
 /-- `Ω` writes an array element by element, through `Ω` itself. -/
 theorem Ωe_arr (vs : List Value) : Ω.e (.arr vs) = (traverse Ω.e vs).map Attr.l := by
-  rw [Ωe_fix, opaqStep_e_arr]; rfl
+  rw [Ωe_fix, opaqStep_e_arr]; exact arrayCodec_f _ Ω vs
 
 /-- `Ω` reads a list element by element, through `Ω` itself. -/
 theorem Ωp_l (as : List Attr) : Ω.p (.l as) = (traverse Ω.p as).map Value.arr := by
-  rw [Ωp_fix, opaqStep_p_l]; rfl
+  rw [Ωp_fix, opaqStep_p_l]; exact arrayCodec_f _ Ω as
 
 /-- `Ω` writes a map entry by entry, through `Ω` itself. -/
 theorem Ωe_map (keys : Finset Name) (g : {k // k ∈ keys} → Value) :

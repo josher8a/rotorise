@@ -112,7 +112,7 @@ noncomputable instance dynPrimAdm : Alg.PrimAdm dynSyn where
   admV_exact
     | .base k, v => by
         show inBase k v = true ↔ ((denote (fun _ => (id, id)) (.base k)).e v).isSome = true
-        cases k <;> cases v <;> simp [inBase, denote_rows, baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
+        cases k <;> cases v <;> simp [inBase, denote_rows, baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e]
     | .literal k x, v => by
         show AdmLit k x v = true ↔ ((denote (fun _ => (id, id)) (.literal k x)).e v).isSome = true
         cases k <;> cases v <;>

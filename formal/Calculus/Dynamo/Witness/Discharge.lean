@@ -49,7 +49,7 @@ theorem typed_json : Typed α jsonTerm (fun v => (denote α jsonTerm).T v) none 
 /-- `jsonTerm`'s options are compatible at every lawful stage: they are pinned to two kinds. -/
 theorem pairwiseCompat_json (c : Codec) (hc : Lawful c) :
     PairwiseCompat α [.string, .array (.var 0)] [c] := by
-  have hA : denote α (.array (.var 0)) [c] = arrayCodec c := (arrayCodec_eq_listCodec c).symm
+  have hA : denote α (.array (.var 0)) [c] = arrayCodec c := rfl
   have h := compat_of_onKinds (os := [(baseCodec .string), arrayCodec c]) (ks := [.string, .array])
     (forall_mem_pair (lawful_baseCodec .string).core (lawful_arrayCodec hc).core)
     (.cons (onKind_base .string) (.cons (onKind_array c) .nil)) (by decide)

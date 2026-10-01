@@ -204,7 +204,7 @@ theorem opaq_TSub : ∀ (fuel : Nat) (v : Value),
         | exact .binSet _ fun b hb => ih (Value.bin b) (hT b hb)
         | exact nomatch hT
     · cases v <;> first
-        | exact .arr _ fun x hx => ih x (hT x hx)
+        | exact .arr _ fun x hx => ih x ((arrayCodec_T _ _).mp hT x hx)
         | exact nomatch hT
     · cases v <;> first
         | exact .map _ _ fun k => ih _ (hT k)

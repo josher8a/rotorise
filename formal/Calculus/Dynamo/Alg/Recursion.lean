@@ -120,7 +120,6 @@ theorem agreeLe_listCodec {d : Nat} {pre₁ pre₂ suf₁ suf₂ : List Codec}
 /-- An array is the spread-only `list`, and so reads its elements one layer down. -/
 theorem agreeLe_arrayCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂) :
     AgreeLe (d + 1) (arrayCodec c₁) (arrayCodec c₂) := by
-  rw [arrayCodec_eq_listCodec, arrayCodec_eq_listCodec]
   exact agreeLe_listCodec .nil (.some h) .nil
 
 /-- A record reads each entry one layer below the map. -/

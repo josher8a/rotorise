@@ -229,7 +229,7 @@ section Bridge
 
 /-- `array` denotes the spread-only `list`, which is what `arrayCodec` is. -/
 theorem denote_array (t : Term) : denote α (.array t) = arrayCodec (denote α t) :=
-  (arrayCodec_eq_listCodec (denote α t)).symm
+  rfl
 
 /-- `record` denotes `recordCodec`: the empty body with an open block, which is what
     `objectCodec_empty_codec` proves the record codec to be. -/
@@ -239,7 +239,7 @@ theorem denote_record (t : Term) : denote α (.record t) = recordCodec (denote �
 /-- `tuple` denotes the suffix-free `list`, which is what `tupleCodec` is. -/
 theorem denote_tuple (ts : List Term) (tail : Option Term) :
     denote α (.tuple ts tail) = tupleCodec (denoteList α ts) (denoteOpt α tail) :=
-  (tupleCodec_eq_listCodec (denoteList α ts) (denoteOpt α tail)).symm
+  rfl
 
 /-- `object` denotes `objectCodec`. -/
 theorem denote_object_table (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)

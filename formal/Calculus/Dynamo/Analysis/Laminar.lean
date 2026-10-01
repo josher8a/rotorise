@@ -201,7 +201,7 @@ theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t →
     ∀ v, T v ↔ Adm α t v = true
   | t, T, μ, h, hob, v => by
     cases h with
-    | base k => cases k <;> cases v <;> simp [Adm_rows, inBase, baseCodec, -Subtype.exists, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
+    | base k => cases k <;> cases v <;> simp [Adm_rows, inBase, baseCodec, -Subtype.exists, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA]
     | literal k x => cases k <;> cases v <;> simp [HLit, Adm_rows, AdmLit, inL, GroundKind.toValue]
     | never => simp [HNever, Adm_rows]
     | opaq => exact hopaque_adm v
