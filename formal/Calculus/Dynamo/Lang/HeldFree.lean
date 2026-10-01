@@ -53,34 +53,32 @@ theorem neSetImage_id {α : Type} [DecidableEq α] (S : NEFinset α) :
     (fun _ _ _ _ _ h1 h2 => Option.some.inj (h1.trans h2.symm)) (fun y => ?_))
   simp
 
-/-- `Ω` moves a string set to itself, at each orientation. -/
-theorem setAt_Ω_s (o : Alg.Orient) (S : NEFinset String) : setAt o Ω Attr.s S = some (.ss S) := by
-  unfold setAt
-  rw [show (fun x => (Ω.f o (Attr.s x)).bind sC.out) = fun x => some x from funext fun x => rfl,
-    neSetImage_id]
-
-/-- …a number set. -/
-theorem setAt_Ω_n (o : Alg.Orient) (S : NEFinset WFNumeral) : setAt o Ω Attr.n S = some (.ns S) := by
+/-- **A codec that sends each element of a set to itself moves the set to itself**, at the
+    set's own kind: every other kind misses. -/
+theorem setAt_ident {o : Alg.Orient} {c : Codec} {k : SetKind} {S : NEFinset k.Carrier}
+    (h : ∀ x ∈ S.1, c.f o (k.elem.into x) = some (k.elem.into x)) :
+    setAt o c k.elem.into S = some (k.wire S) := by
+  have hk : neSetImage (fun x => (c.f o (k.elem.into x)).bind k.elem.out) S = some S := by
+    rw [neSetImage_congr (g := fun x => some x) fun x hx => by
+      rw [h x hx]; exact k.elem.out_into x]
+    exact neSetImage_id S
   obtain ⟨x₀, hx₀⟩ := S.2
-  unfold setAt
-  rw [neSetImage_none (setImage_none_of hx₀ rfl),
-    show (fun x => (Ω.f o (Attr.n x)).bind nC.out) = fun x => some x from funext fun x => rfl,
-    neSetImage_id]
+  refine setAt_of (setAtK_eq.mpr ⟨S, hk, rfl⟩) fun k' hk' => ?_
+  have hmiss : (c.f o (k.elem.into x₀)).bind k'.elem.out = none := by
+    rw [h x₀ hx₀]; exact SetKind.elem_out_ne (Ne.symm hk') x₀
+  unfold setAtK
+  rw [neSetImage_none (setImage_none_of hx₀ hmiss)]
+  rfl
 
-/-- …and a binary set. -/
-theorem setAt_Ω_b (o : Alg.Orient) (S : NEFinset Bytes) : setAt o Ω Attr.b S = some (.bs S) := by
-  obtain ⟨x₀, hx₀⟩ := S.2
-  unfold setAt
-  rw [neSetImage_none (setImage_none_of hx₀ rfl), neSetImage_none (setImage_none_of hx₀ rfl),
-    show (fun x => (Ω.f o (Attr.b x)).bind bC.out) = fun x => some x from funext fun x => rfl,
-    neSetImage_id]; rfl
+/-- `Ω` moves a set to itself, at each orientation. -/
+theorem setAt_Ω (o : Alg.Orient) (k : SetKind) (S : NEFinset k.Carrier) :
+    setAt o Ω k.elem.into S = some (k.wire S) :=
+  setAt_ident fun _ _ => rfl
 
 /-- A set over a restriction of `Ω` is a restriction of `Ω`. -/
 theorem sub_setCodec {c : Codec} (h : Sub c Ω) : Sub (setCodec c) Ω := fun o x y hc => by
-  rcases setCodec_f_eq.mp hc with ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩ | ⟨S, rfl, hS⟩
-  · exact (setAt_Ω_s o S).symm.trans (setAt_sub h hS)
-  · exact (setAt_Ω_n o S).symm.trans (setAt_sub h hS)
-  · exact (setAt_Ω_b o S).symm.trans (setAt_sub h hS)
+  obtain ⟨k, S, rfl, hS⟩ := setCodec_f_eq.mp hc
+  exact (setAt_Ω o k S).symm.trans (setAt_sub h hS)
 
 /-- The selector returns the answer of one option, and nothing else. -/
 theorem select_some {A B : Type} {os : List Codec} {run : Codec → A → Option B} {x : A} {y : B}
@@ -143,57 +141,17 @@ these. -/
 
 /-- **Over a restriction of `Ω`, a set moves exactly where every element does**, at each
     orientation. -/
-theorem setCodec_isSome_of_sub {c : Codec} (h : Sub c Ω) (o : Alg.Orient) (x : Attr) :
-    ((setCodec c).f o x).isSome = true ↔
-      (match x with
-        | .ss S => ∀ s ∈ S.1, (c.f o (.s s)).isSome = true
-        | .ns S => ∀ n ∈ S.1, (c.f o (.n n)).isSome = true
-        | .bs S => ∀ b ∈ S.1, (c.f o (.b b)).isSome = true
-        | _ => False) := by
-  cases x
-  case ss S =>
-    refine ⟨fun he s hs => ?_, fun hall => ?_⟩
-    · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact setAt_elem ha s hs
-    · have hc : neSetImage (fun x => (c.f o (Attr.s x)).bind sC.out) S =
-          neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
-        obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp (hall x hx)
-        rw [ha, sub_fix h ha]; rfl
-      show (setAt o c Attr.s S).isSome = true
-      unfold setAt; rw [hc, neSetImage_id]; rfl
-  case ns S =>
-    refine ⟨fun he s hs => ?_, fun hall => ?_⟩
-    · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact setAt_elem ha s hs
-    · obtain ⟨x₀, hx₀⟩ := S.2
-      have hS : neSetImage (fun x => (c.f o (Attr.n x)).bind sC.out) S = none :=
-        neSetImage_none (setImage_none_of hx₀ (by
-          obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
-          rw [ha, sub_fix h ha]; rfl))
-      have hN : neSetImage (fun x => (c.f o (Attr.n x)).bind nC.out) S =
-          neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
-        obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp (hall x hx)
-        rw [ha, sub_fix h ha]; rfl
-      show (setAt o c Attr.n S).isSome = true
-      unfold setAt; rw [hS, hN, neSetImage_id]; rfl
-  case bs S =>
-    refine ⟨fun he s hs => ?_, fun hall => ?_⟩
-    · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he; exact setAt_elem ha s hs
-    · obtain ⟨x₀, hx₀⟩ := S.2
-      have hS : neSetImage (fun x => (c.f o (Attr.b x)).bind sC.out) S = none :=
-        neSetImage_none (setImage_none_of hx₀ (by
-          obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
-          rw [ha, sub_fix h ha]; rfl))
-      have hN : neSetImage (fun x => (c.f o (Attr.b x)).bind nC.out) S = none :=
-        neSetImage_none (setImage_none_of hx₀ (by
-          obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
-          rw [ha, sub_fix h ha]; rfl))
-      have hB : neSetImage (fun x => (c.f o (Attr.b x)).bind bC.out) S =
-          neSetImage (fun x => some x) S := neSetImage_congr fun x hx => by
-        obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp (hall x hx)
-        rw [ha, sub_fix h ha]; rfl
-      show (setAt o c Attr.b S).isSome = true
-      unfold setAt; rw [hS, hN, hB, neSetImage_id]; rfl
-  all_goals exact ⟨(fun h => nomatch h), (fun h => h.elim)⟩
-
-
+theorem setCodec_isSome_of_sub {c : Codec} (h : Sub c Ω) (o : Alg.Orient) {k : SetKind}
+    (S : NEFinset k.Carrier) :
+    ((setCodec c).f o (k.wire S)).isSome = true ↔
+      ∀ x ∈ S.1, (c.f o (k.elem.into x)).isSome = true := by
+  refine ⟨fun he x hx => ?_, fun hall => ?_⟩
+  · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
+    obtain ⟨k', S', hk, hS⟩ := setCodec_f_eq.mp ha
+    cases k <;> cases k' <;> cases hk <;> exact setAt_elem hS x hx
+  · have hid : ∀ x ∈ S.1, c.f o (k.elem.into x) = some (k.elem.into x) := fun x hx => by
+      obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp (hall x hx)
+      rw [ha, sub_fix h ha]
+    exact Option.isSome_iff_exists.mpr ⟨_, setCodec_f_eq.mpr ⟨k, S, rfl, setAt_ident hid⟩⟩
 
 end Calculus

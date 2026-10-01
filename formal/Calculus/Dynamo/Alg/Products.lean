@@ -73,73 +73,109 @@ def setMember : Member → Option Member
   | .B => some .BS
   | _ => none
 
-/-- **A set's payloads at an orientation**: image each element through the codec at `o`, into the
-    wire set that the image selects. The write is the map at the host, and the read is the map at
-    the dual. -/
+/-- The member that each kind's element stamps: the member of its ground kind. -/
+abbrev SetKind.member (k : SetKind) : Member := k.ground.member
+
+/-- An element of a kind stamps the kind's member. -/
+theorem SetKind.member_into (k : SetKind) (x : k.Carrier) : (k.elem.into x).member = k.member := by
+  cases k <;> rfl
+
+/-- A datum that a kind's element prism matches has the kind's member. -/
+theorem SetKind.member_of_out {k : SetKind} {a : Attr} (h : (k.elem.out a).isSome = true) :
+    a.member = k.member := by
+  obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp h
+  rw [k.elem.into_out hy, k.member_into]
+
+/-- …and a datum with the kind's member is one that the element prism matches. -/
+theorem SetKind.out_of_member {k : SetKind} {a : Attr} (h : a.member = k.member) :
+    ∃ y, k.elem.out a = some y := by
+  cases k <;> cases a <;> first | exact ⟨_, rfl⟩ | exact nomatch h
+
+/-- The wire set of a kind stamps the set member of the kind's member. -/
+theorem SetKind.wire_member (k : SetKind) (T : NEFinset k.Carrier) :
+    setMember k.member = some (k.wire T).member := by
+  cases k <;> rfl
+
+/-- A member with a set member is the member of a kind. -/
+theorem SetKind.of_setMember {μ₀ μS : Member} (h : setMember μ₀ = some μS) :
+    ∃ k : SetKind, μ₀ = k.member := by
+  cases μ₀
+  case S => exact ⟨.string, rfl⟩
+  case N => exact ⟨.number, rfl⟩
+  case B => exact ⟨.binary, rfl⟩
+  all_goals exact nomatch h
+
+/-- **A set's payloads at an orientation, into one kind**: image each element through the codec
+    at `o`, into the wire set of the kind `k`. -/
+noncomputable def setAtK {α : Type} (o : Alg.Orient) (c : Codec) (inj : α → Attr)
+    (S : NEFinset α) (k : SetKind) : Option Attr :=
+  (neSetImage (fun x => (c.f o (inj x)).bind k.elem.out) S).map k.wire
+
+/-- **A set's payloads at an orientation**: the wire set of the kind that the image selects. The
+    write is the map at the host, and the read is the map at the dual. -/
 noncomputable def setAt {α : Type} (o : Alg.Orient) (c : Codec) (inj : α → Attr) (S : NEFinset α) :
     Option Attr :=
-  match neSetImage (fun x => (c.f o (inj x)).bind sC.out) S with
-  | some T => some (.ss T)
-  | none => match neSetImage (fun x => (c.f o (inj x)).bind nC.out) S with
-    | some T => some (.ns T)
-    | none => (neSetImage (fun x => (c.f o (inj x)).bind bC.out) S).map Attr.bs
+  match setAtK o c inj S .string with
+  | some a => some a
+  | none => match setAtK o c inj S .number with
+    | some a => some a
+    | none => setAtK o c inj S .binary
 
 /-! No emptiness guard here: §1 types the wire sets as `℘⁺fin`, which is a type, so there is
 no empty set for a codec to refuse. -/
 
-/-- Moving a set needs every element to move. -/
-theorem setAt_elem {α : Type} {o : Alg.Orient} {c : Codec} {inj : α → Attr} {S : NEFinset α}
-    {a : Attr} (h : setAt o c inj S = some a) : ∀ x ∈ S.1, (c.f o (inj x)).isSome = true := by
+section SetAt
+variable {α : Type} {o : Alg.Orient} {c : Codec} {inj : α → Attr} {S : NEFinset α} {a : Attr}
+
+/-- What one kind produces: the wire set of the image. -/
+theorem setAtK_eq {k : SetKind} : setAtK o c inj S k = some a ↔
+    ∃ T, neSetImage (fun x => (c.f o (inj x)).bind k.elem.out) S = some T ∧ a = k.wire T := by
+  simp [setAtK, Option.map_eq_some_iff, eq_comm]
+
+/-- A move is the move of one kind. -/
+theorem setAt_some (h : setAt o c inj S = some a) : ∃ k, setAtK o c inj S k = some a := by
   unfold setAt at h
   split at h
-  · next T hT =>
-      exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+  · next a' ha => cases h; exact ⟨.string, ha⟩
   · split at h
-    · next T hT =>
-        exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
-    · next =>
-      obtain ⟨T, hT, -⟩ := Option.map_eq_some_iff.mp h
-      exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+    · next a' ha => cases h; exact ⟨.number, ha⟩
+    · exact ⟨.binary, h⟩
+
+/-- **A kind that moves the set, where every other kind misses, decides the move.** -/
+theorem setAt_of {k : SetKind} (h : setAtK o c inj S k = some a)
+    (hm : ∀ k', k' ≠ k → setAtK o c inj S k' = none) : setAt o c inj S = some a := by
+  cases k
+  · simp only [setAt, h]
+  · simp only [setAt, h, hm .string (by decide)]
+  · simp only [setAt, h, hm .string (by decide), hm .number (by decide)]
+
+/-- Moving a set needs every element to move. -/
+theorem setAt_elem (h : setAt o c inj S = some a) : ∀ x ∈ S.1, (c.f o (inj x)).isSome = true := by
+  obtain ⟨k, hk⟩ := setAt_some h
+  obtain ⟨T, hT, -⟩ := setAtK_eq.mp hk
+  exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
 
 /-- Two codecs that agree at the orientation on each element move one set. -/
-theorem setAt_congr {α : Type} {o : Alg.Orient} {c d : Codec} {inj : α → Attr} {S : NEFinset α}
-    (h : ∀ x ∈ S.1, c.f o (inj x) = d.f o (inj x)) : setAt o c inj S = setAt o d inj S := by
-  unfold setAt
-  rw [neSetImage_congr (S := S) (g := fun x => (d.f o (inj x)).bind sC.out)
-      (fun x hx => by rw [h x hx]),
-    neSetImage_congr (S := S) (g := fun x => (d.f o (inj x)).bind nC.out)
-      (fun x hx => by rw [h x hx]),
-    neSetImage_congr (S := S) (g := fun x => (d.f o (inj x)).bind bC.out)
+theorem setAt_congr {d : Codec} (h : ∀ x ∈ S.1, c.f o (inj x) = d.f o (inj x)) :
+    setAt o c inj S = setAt o d inj S := by
+  have hk : ∀ k, setAtK o c inj S k = setAtK o d inj S k := fun k => by
+    unfold setAtK
+    rw [neSetImage_congr (S := S) (g := fun x => (d.f o (inj x)).bind k.elem.out)
       (fun x hx => by rw [h x hx])]
+  simp only [setAt, hk]
 
-/-- What a move produces: one of the three wire sets, each element the image of an element of
-    the set. -/
-theorem setAt_mem {α : Type} {o : Alg.Orient} {c : Codec} {inj : α → Attr} {S : NEFinset α}
-    {v : Attr} (h : setAt o c inj S = some v) :
-    (∃ T : NEFinset String, v = .ss T ∧
-        ∀ y ∈ T.1, ∃ x ∈ S.1, c.f o (inj x) = some (.s y))
-  ∨ (∃ T : NEFinset WFNumeral, v = .ns T ∧
-        ∀ y ∈ T.1, ∃ x ∈ S.1, c.f o (inj x) = some (.n y))
-  ∨ (∃ T : NEFinset Bytes, v = .bs T ∧
-        ∀ y ∈ T.1, ∃ x ∈ S.1, c.f o (inj x) = some (.b y)) := by
-  unfold setAt at h
-  split at h
-  · next T hT =>
-    injection h with h
-    refine Or.inl ⟨T, h.symm, fun y hy => ?_⟩
-    obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
-    exact ⟨x, hx, sC.bind_out hxy⟩
-  · split at h
-    · next T hT =>
-      injection h with h
-      refine Or.inr (Or.inl ⟨T, h.symm, fun y hy => ?_⟩)
-      obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
-      exact ⟨x, hx, nC.bind_out hxy⟩
-    · next =>
-      obtain ⟨T, hT, hv⟩ := Option.map_eq_some_iff.mp h
-      refine Or.inr (Or.inr ⟨T, hv.symm, fun y hy => ?_⟩)
-      obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
-      exact ⟨x, hx, bC.bind_out hxy⟩
+/-- What a move produces: the wire set of one kind, each element the image of an element of the
+    set. -/
+theorem setAt_mem {v : Attr} (h : setAt o c inj S = some v) :
+    ∃ (k : SetKind) (T : NEFinset k.Carrier), v = k.wire T ∧
+      ∀ y ∈ T.1, ∃ x ∈ S.1, c.f o (inj x) = some (k.elem.into y) := by
+  obtain ⟨k, hk⟩ := setAt_some h
+  obtain ⟨T, hT, rfl⟩ := setAtK_eq.mp hk
+  refine ⟨k, T, rfl, fun y hy => ?_⟩
+  obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
+  exact ⟨x, hx, k.elem.bind_out hxy⟩
+
+end SetAt
 
 /-- §3 `(set)`. Non-emptiness, uniqueness and homogeneity are all carried by the **types**:
     a `Finset` has no repeats and no order, `℘⁺fin` has no empty inhabitant, and the three
@@ -173,14 +209,30 @@ export Alg (carriedCodec carried_e lawful_carried carrier_carried entrywise lawf
     A set is a choice among three wire constructors rather than one prism, which is why it is
     not an `entrywise` product and why its inversion names all three families. -/
 
-/-- What `set` moves at an orientation: one of the three wire sets, its payloads imaged through
+/-- What `set` moves at an orientation: the wire set of one kind, its payloads imaged through
     the element codec. -/
 theorem setCodec_f_eq {c : Codec} {o : Alg.Orient} {x y : Attr} :
     (setCodec c).f o x = some y ↔
-      (∃ S : NEFinset String, x = .ss S ∧ setAt o c Attr.s S = some y)
-      ∨ (∃ S : NEFinset WFNumeral, x = .ns S ∧ setAt o c Attr.n S = some y)
-      ∨ (∃ S : NEFinset Bytes, x = .bs S ∧ setAt o c Attr.b S = some y) := by
-  cases x <;> simp [setCodec]
+      ∃ (k : SetKind) (S : NEFinset k.Carrier), x = k.wire S ∧ setAt o c k.elem.into S = some y := by
+  constructor
+  · intro h
+    cases x
+    case ss S => exact ⟨.string, S, rfl, h⟩
+    case ns S => exact ⟨.number, S, rfl, h⟩
+    case bs S => exact ⟨.binary, S, rfl, h⟩
+    all_goals exact nomatch h
+  · rintro ⟨k, S, rfl, h⟩
+    cases k <;> exact h
+
+/-- What `set` moves at the wire set of a kind: the set through the kind's element prism. -/
+theorem setCodec_wire_f {c : Codec} {o : Alg.Orient} {k : SetKind} {S : NEFinset k.Carrier} :
+    (setCodec c).f o (k.wire S) = setAt o c k.elem.into S := by
+  cases k <;> rfl
+
+/-- What `set` holds at the wire set of a kind: every element is held. -/
+theorem setCodec_T_wire {c : Codec} {k : SetKind} {S : NEFinset k.Carrier} :
+    (setCodec c).T (k.wire S) ↔ ∀ x ∈ S.1, c.T (k.elem.into x) := by
+  cases k <;> exact Iff.rfl
 
 /-- §3 `array`: the list former with a spread and no fixed positions. -/
 abbrev arrayCodec (c : Codec) : Codec := Alg.listCodec lA .L [] (some c) []

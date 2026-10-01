@@ -41,16 +41,16 @@ theorem carrier_literalCodec (k : GroundKind) (x : k.Carrier) :
     are no longer conditions at all — the `Finset` carries them. -/
 theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) where
   domE he := by
-    rcases setCodec_f_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
-      refine fun x hx => ?_ <;>
-      · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (setAt_elem hE x hx)
-        exact hc.domE hb
+    obtain ⟨k, S, rfl, hE⟩ := setCodec_f_eq.mp he
+    refine setCodec_T_wire.mpr fun x hx => ?_
+    obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (setAt_elem hE x hx)
+    exact hc.domE hb
   ranP hp := by
-    rcases setCodec_f_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
-      · rcases setAt_mem hD with ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ <;>
-        · refine fun y hy => ?_
-          obtain ⟨x, -, hx⟩ := hm y hy
-          exact hc.ranP hx
+    obtain ⟨k, S, rfl, hD⟩ := setCodec_f_eq.mp hp
+    obtain ⟨k', T, rfl, hm⟩ := setAt_mem hD
+    refine setCodec_T_wire.mpr fun y hy => ?_
+    obtain ⟨x, -, hx⟩ := hm y hy
+    exact hc.ranP hx
 
 end
 
