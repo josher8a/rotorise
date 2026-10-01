@@ -66,25 +66,6 @@ theorem neSetImage_congr {α β : Type} [DecidableEq β] {f g : α → Option β
     rw [(neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hs S.2⟩)).mpr hs,
       (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hs S.2⟩)).mpr hT]
 
-/-- A `bind` through a prism pins the datum. -/
-theorem bind_sC {o : Option Value} {y : String} (h : o.bind sC.out = some y) :
-    o = some (.str y) := by
-  cases o with
-  | none => exact nomatch h
-  | some w => cases w <;> simp_all [sC]
-
-theorem bind_nC {o : Option Value} {y : WFNumeral} (h : o.bind nC.out = some y) :
-    o = some (.num y) := by
-  cases o with
-  | none => exact nomatch h
-  | some w => cases w <;> simp_all [nC]
-
-theorem bind_bC {o : Option Value} {y : Bytes} (h : o.bind bC.out = some y) :
-    o = some (.bin y) := by
-  cases o with
-  | none => exact nomatch h
-  | some w => cases w <;> simp_all [bC]
-
 /-- The member a set stores, computed from its element's (§3 `(set)`). -/
 def setMember : Member → Option Member
   | .S => some .SS
@@ -147,18 +128,18 @@ theorem setAt_mem {α : Type} {o : Alg.Orient} {c : Codec} {inj : α → Attr} {
     injection h with h
     refine Or.inl ⟨T, h.symm, fun y hy => ?_⟩
     obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
-    exact ⟨x, hx, bind_sC hxy⟩
+    exact ⟨x, hx, sC.bind_out hxy⟩
   · split at h
     · next T hT =>
       injection h with h
       refine Or.inr (Or.inl ⟨T, h.symm, fun y hy => ?_⟩)
       obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
-      exact ⟨x, hx, bind_nC hxy⟩
+      exact ⟨x, hx, nC.bind_out hxy⟩
     · next =>
       obtain ⟨T, hT, hv⟩ := Option.map_eq_some_iff.mp h
       refine Or.inr (Or.inr ⟨T, hv.symm, fun y hy => ?_⟩)
       obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
-      exact ⟨x, hx, bind_bC hxy⟩
+      exact ⟨x, hx, bC.bind_out hxy⟩
 
 /-- §3 `(set)`. Non-emptiness, uniqueness and homogeneity are all carried by the **types**:
     a `Finset` has no repeats and no order, `℘⁺fin` has no empty inhabitant, and the three
