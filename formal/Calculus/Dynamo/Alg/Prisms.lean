@@ -86,62 +86,28 @@ The same shape one level up: a constructor whose payload is a *list* of entries.
 
 /-! ## Ground codecs (§3) -/
 
-def stringCodec : Codec :=
-  Alg.Codec.ofEP (T := fun v => ∃ s, v = .str s)
-    (μ := some .S)
-    (e := fun v => match v with | .str s => some (.s s) | _ => none)
-    (p := fun a => match a with | .s s => some (.str s) | _ => none)
-
-/-- §3 `(number)`. The held set is `D`, §1's numeral domain, and the carrier is `WFNumeral`,
-    so `e` and `p` are constructor wrappers with no gate. -/
-def numberCodec : Codec :=
-  Alg.Codec.ofEP (T := fun v => ∃ x : WFNumeral, v = .num x)
-    (μ := some .N)
-    -- **No gate on either half.** The carrier is `WFNumeral`, so the proof `Attr.n` demands
-    -- arrives with the value and the read hands the same subtype straight back. The `dite`
-    -- that used to make the check and throw it away has nothing left to check.
-    (e := fun v => match v with
-      | .num x => some (.n x)
-      | _ => none)
-    (p := fun a => match a with
-      | .n x => some (.num x)
-      | _ => none)
-
-theorem numberCodec_e_num (x : WFNumeral) : numberCodec.e (.num x) = some (.n x) := rfl
-
-theorem numberCodec_p_n (x : WFNumeral) : numberCodec.p (.n x) = some (.num x) := rfl
-
-def booleanCodec : Codec :=
-  Alg.Codec.ofEP (T := fun v => ∃ b, v = .bool b)
-    (μ := some .BOOL)
-    (e := fun v => match v with | .bool b => some (.bool b) | _ => none)
-    (p := fun a => match a with | .bool b => some (.bool b) | _ => none)
-
-def binaryCodec : Codec :=
-  Alg.Codec.ofEP (T := fun v => ∃ b, v = .bin b)
-    (μ := some .B)
-    (e := fun v => match v with | .bin b => some (.b b) | _ => none)
-    (p := fun a => match a with | .b b => some (.bin b) | _ => none)
-
-/-- The `NULL` point: one value, one attribute. A building block of `opaqStep`. -/
-def nullCodec : Codec :=
-  Alg.Codec.ofEP (T := fun v => v = .null)
-    (μ := some .NULL)
-    (e := fun v => match v with | .null => some .null | _ => none)
-    (p := fun a => match a with | .null => some .null | _ => none)
+/-- **The prism of a ground kind**: the stored constructor of the kind. -/
+def GroundKind.prism : (k : GroundKind) → Ctor k.Carrier Attr
+  | .string  => sC
+  | .number  => nC
+  | .boolean => boolA
+  | .binary  => bC
+  | .null    => nullA
 
 /-- The pair a literal refines: its base's, chosen by the index.
 
     §3's `(literal)` premise is `⊢ g : T ⇝ μ, g ground`, and this is `g`. It exists because
     the rule quantifies over the base — the three constructors this replaces had it hard-coded
     three times over, which is why `literal-S` and `literal-N` were two rules and `boolean`,
-    `binary` and `null` were none. -/
-@[simp] noncomputable def baseCodec : GroundKind → Codec
-  | .string  => stringCodec
-  | .number  => numberCodec
-  | .boolean => booleanCodec
-  | .binary  => binaryCodec
-  | .null    => nullCodec
+    `binary` and `null` were none. A base is one point codec at the prism of its kind: it
+    accepts a datum of the kind, changes nothing, and stamps the member of the kind. -/
+@[simp] def baseCodec (k : GroundKind) : Codec := pointCodec k.prism k.prism k.member
+
+/-- `number` writes a numeral as `N`. -/
+theorem baseCodec_e_num (x : WFNumeral) : (baseCodec .number).e (.num x) = some (.n x) := rfl
+
+/-- …and reads `N` back as the numeral. -/
+theorem baseCodec_p_n (x : WFNumeral) : (baseCodec .number).p (.n x) = some (.num x) := rfl
 
 /-- `literal(ℓ)`'s predicate: the value is the alternative.
 
@@ -203,7 +169,7 @@ def HLit (k : GroundKind) (x : k.Carrier) : Value → Prop :=
     `decimal` gate is a fact of the store, so the DynamoDB port states it on the pair
     (`decimalCodec_e_restrict`, `Dynamo/Lang/Store.lean`). The bases used to be *ungated*, every
     numeral and every string, and cannot be, now that both sides carry §1's `Numerals`. There is one base at `N`
-    instead of the two a host carrier forced, and it is §1's own set: `numberCodec`. The ungated
+    instead of the two a host carrier forced, and it is §1's own set: `baseCodec .number`. The ungated
     bases were standing in for sets the carrier should have been. -/
 
 /-- §1's `D`, as a predicate on values. **It asks only that the value is an `N`**: `D` is the
@@ -212,21 +178,12 @@ def HLit (k : GroundKind) (x : k.Carrier) : Value → Prop :=
 def inD : Value → Bool :=
   fun v => match v with | .num _ => true | _ => false
 
-/-- **`number` writes exactly on §1's `D`** — stated as the `isSome` of the write, without
-    the `dite`.
-
-    Worth having as lemmas rather than leaving to `simp`: the decision inside those `dite`s
-    is `Numeral.WF`, whose body is a string parser (`Domain.lean`), so any `simp` that
-    unfolds the codec will chase the parser and run out of heartbeats. These state the only
-    consequence the analysis rows need. -/
-@[simp] theorem numberCodec_e_isSome (v : Value) : (numberCodec.e v).isSome = inD v := by
-  cases v <;> rfl
 
 /-! ### The base at `N` is §1's own set, and there is exactly ONE of them
 
-**`numberCodec` IS the base at `N`.** `Attr.n` carries `Numeral.WF` and so does the value
+**`baseCodec .number` IS the base at `N`.** `Attr.n` carries `Numeral.WF` and so does the value
 side now, so `Carries(N)` is §1's `Numerals` on both halves and no wider codec exists to
-refine. ~~wfDecimalCodec~~ was the text-side base beside it, gated at `WF` where `numberCodec`
+refine. ~~wfDecimalCodec~~ was the text-side base beside it, gated at `WF` where `baseCodec .number`
 went through a host spelling; the two are one definition now and the second is deleted. The
 DynamoDB port refines it at `Stored` (`Dynamo/Lang/Store.lean`), and `Stored` is a real gate rather
 than a carried one. -/
@@ -238,7 +195,7 @@ than a carried one. -/
     **`T` is deliberately *not* the refinement's**: it stays §3's `ℓ`. That used to mean a
     numeric literal outside `D` was *held* and unwritable, which is (B) failing, and it no
     longer can be: `GroundKind.number`'s carrier is the well-formed numerals, so `HLit` holds
-    only values `numberCodec` writes. The transcription that used to exhibit (B) failing here
+    only values `baseCodec .number` writes. The transcription that used to exhibit (B) failing here
     is retired, because the value carrier is `D` and there is no outside to point at. -/
 noncomputable def literalCodec (k : GroundKind) (x : k.Carrier) : Codec :=
   Alg.Codec.ofEP (T := HLit k x) (μ := ((baseCodec k).restrict (inL k x)).μ)
@@ -246,7 +203,7 @@ noncomputable def literalCodec (k : GroundKind) (x : k.Carrier) : Codec :=
 
 theorem literalNCodec_p_n (y : WFNumeral) (x : WFNumeral) :
     (literalCodec .number y).p (.n x) =
-      (numberCodec.p (.n x)).bind (fun v => if inL .number y v then some v else none) := rfl
+      ((baseCodec .number).p (.n x)).bind (fun v => if inL .number y v then some v else none) := rfl
 
 /-! ### The gated ground codecs are refinements
 
@@ -278,10 +235,6 @@ theorem inL_of_literalCodec_e {k : GroundKind} {x : k.Carrier} {v a}
     (he : (literalCodec k x).e v = some a) : inL k x v = true := by
   rw [literalCodec_e_restrict] at he
   exact (Alg.refine2_f.mp he).1
-
-/-- The member is the base's, and the base's is the index's. -/
-theorem literalCodec_μ (k : GroundKind) (x : k.Carrier) :
-    (literalCodec k x).μ = some k.member := by cases k <;> rfl
 
 /-- The value `ℓ` names places the value in the held set — the direction `Carrier` needs.
 

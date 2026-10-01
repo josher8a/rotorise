@@ -140,8 +140,7 @@ theorem MapOf.restrict_disjUnion_left {α : Type} (a b : MapOf α)
     (hb : ∀ k ∈ b.keys, k ∉ s) : (a.disjUnion b h).restrict s = a := by
   refine MapOf.ext ?_ ?_
   · ext k
-    simp only [MapOf.restrict_keys, MapOf.disjUnion, Finset.mem_filter,
-      Finset.mem_disjUnion]
+    simp only [MapOf.restrict_keys, MapOf.disjUnion, Finset.mem_filter, Finset.mem_disjUnion]
     constructor
     · rintro ⟨hk | hk, hks⟩
       · exact hk
@@ -155,8 +154,7 @@ theorem MapOf.restrict_disjUnion_right {α : Type} (a b : MapOf α)
     (ha : ∀ k ∈ a.keys, k ∉ s) : (a.disjUnion b h).restrict s = b := by
   refine MapOf.ext ?_ ?_
   · ext k
-    simp only [MapOf.restrict_keys, MapOf.disjUnion, Finset.mem_filter,
-      Finset.mem_disjUnion]
+    simp only [MapOf.restrict_keys, MapOf.disjUnion, Finset.mem_filter, Finset.mem_disjUnion]
     constructor
     · rintro ⟨hk | hk, hks⟩
       · exact absurd hks (ha k hk)

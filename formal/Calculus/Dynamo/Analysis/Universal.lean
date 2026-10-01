@@ -137,16 +137,14 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA α opaqUnfold a = AdmA α .opaq a := b
       rfl
   | l as =>
       rw [AdmA_opaq_l]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array,
-        Term.record, alignPL_spread, setCodec, Alg.Codec.p]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, alignPL_spread, setCodec, Alg.Codec.p]
       exact decide_eq_decide.mpr Iff.rfl
   | m keys g =>
       -- the record's guard stays folded, for the reason `Adm_opaqUnfold` gives
       have hp : valPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
       rw [AdmA_opaq_m]
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array,
-        Term.record, objAdmV, entryP, MapOf.at, setCodec, Alg.Codec.p]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, objAdmV, entryP, MapOf.at, setCodec, Alg.Codec.p]
       exact fun _ => hp
 
 /-- **`opaque` is total, write side.** `opaque` writes every value. -/

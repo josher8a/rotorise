@@ -216,7 +216,7 @@ def arrayCodec (c : Codec) : Codec :=
     equation is what carries the three lemmas across. -/
 theorem arrayCodec_eq {c : Codec} :
     arrayCodec c = entrywise lA lA .L (fun vs => ∀ x ∈ vs, c.T x) c.e c.p := by
-  ext v <;> cases v <;> simp_all [arrayCodec, entrywise, carriedCodec, lA, lA]
+  ext v <;> cases v <;> simp_all [arrayCodec, entrywise, carriedCodec, lA]
 
 /-- `array` is lawful, entry by entry. -/
 theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) :=
@@ -370,7 +370,7 @@ theorem tupleCodec_eq :
       (fun vs => (align cs tail vs).bind (traverse fun cv => cv.1.e cv.2))
       (fun as => (align cs tail as).bind (traverse fun ca => ca.1.p ca.2)) := by
   refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
-    simp [tupleCodec, carriedCodec, lA, lA]
+    simp [tupleCodec, carriedCodec, lA]
 
 /-- A tuple is lawful: the alignment puts each position on its own codec. -/
 theorem lawful_tupleCodec (hcs : ∀ c ∈ cs, Lawful c) (htl : ∀ c ∈ tail, Lawful c) :
@@ -436,13 +436,12 @@ end ListShape
 theorem tupleCodec_eq_listCodec (cs : List Codec) (tail : Option Codec) :
     tupleCodec cs tail = listCodec cs tail [] := by
   refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
-    simp [tupleCodec, listCodec, Alg.listCodec, carriedCodec, lA, lA, alignL_nil_suf]
+    simp [tupleCodec, listCodec, Alg.listCodec, carriedCodec, lA, alignL_nil_suf]
 
 /-- `array` writes what the `list` with one spread writes. -/
 theorem arrayCodec_e (c : Codec) (v : Value) :
     (arrayCodec c).e v = (listCodec [] (some c) []).e v := by
-  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, lA,
-      Option.bind_some, Alg.Codec.ofEP_e]; try rfl)
+  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, Option.bind_some, Alg.Codec.ofEP_e]; try rfl)
   rw [alignL_spread]
   show _ = ((traverse (fun q : Codec × Value => q.1.e q.2) _).map Attr.l)
   rw [traverse_replicate_zip c (fun d x => d.e x)]
@@ -450,8 +449,7 @@ theorem arrayCodec_e (c : Codec) (v : Value) :
 /-- …and reads what it reads. -/
 theorem arrayCodec_p (c : Codec) (a : Attr) :
     (arrayCodec c).p a = (listCodec [] (some c) []).p a := by
-  cases a <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, lA,
-      Option.bind_some, Alg.Codec.ofEP_p]; try rfl)
+  cases a <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, Option.bind_some, Alg.Codec.ofEP_p]; try rfl)
   rw [alignL_spread]
   show _ = ((traverse (fun q : Codec × Attr => q.1.p q.2) _).map Value.arr)
   rw [traverse_replicate_zip c (fun d x => d.p x)]
@@ -459,9 +457,7 @@ theorem arrayCodec_p (c : Codec) (a : Attr) :
 /-- …and carries what it carries. -/
 theorem arrayCodec_T (c : Codec) (v : Value) :
     (arrayCodec c).T v ↔ (listCodec [] (some c) []).T v := by
-  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, lA,
-      Attr.l.injEq, reduceCtorEq,
-    false_and, exists_false, exists_eq_left', iff_self, Alg.Codec.ofEP_T]; try exact Iff.rfl)
+  cases v <;> (simp only [arrayCodec, listCodec, Alg.listCodec, carriedCodec, lA, Attr.l.injEq, reduceCtorEq, false_and, exists_false, exists_eq_left', iff_self, Alg.Codec.ofEP_T]; try exact Iff.rfl)
   rw [alignL_spread]
   constructor
   · intro h

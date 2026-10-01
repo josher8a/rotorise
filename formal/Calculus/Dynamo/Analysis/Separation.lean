@@ -183,24 +183,22 @@ def Decides (t : Term) : Prop :=
 /-- A string `literal` decides, as §5 says. -/
 theorem decides_literalS : Decides α (.literal .string "A") :=
   ⟨.str "A", .str "B",
-   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL,
-     stringCodec],
+   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p],
    rfl,
-   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL,
-     stringCodec]⟩
+   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]⟩
 
 /-- `string` does not, as §5 also says. -/
 theorem not_decides_string : ¬ Decides α .string := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
-  cases v <;> cases w <;> simp_all [stringCodec, Value.kind]
+  cases v <;> cases w <;> simp_all [baseCodec, Value.kind, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
 
 
 theorem not_decides_refine_top : ¬ Decides α (.refine .string (.closure qTop) ()) := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
   cases v <;> cases w <;>
-    simp_all [Alg.restrict_e_def, Pred.eval, stringCodec, qTop, Value.kind]
+    simp_all [Alg.restrict_e_def, Pred.eval, baseCodec, qTop, Value.kind, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
 
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one: two `map`s differing in admission, so a row that answers `false` at every
@@ -209,16 +207,9 @@ theorem decides_object :
     Decides α (.object (.mk {"k"} (fun _ => .req .string) none)) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)), ?_, rfl, ?_⟩
-  · simp +contextual [denote_rows,
-          objectCodec, stringCodec,
-          valPresentB, valPresentAt, rcOf, Alg.FieldSem.codec, carriedCodec,
-          mA, mA, objWrite, entryCodec, MapOf.at, funImage,
-          Subtype.forall]
+  · simp +contextual [denote_rows, objectCodec, baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p, valPresentB, valPresentAt, rcOf, Alg.FieldSem.codec, carriedCodec, mA, objWrite, entryCodec, MapOf.at, funImage, Subtype.forall]
     rfl
-  · simp [denote_rows,
-          objectCodec, Alg.objectCodec, Alg.objectCodecCore, stringCodec,
-          valPresentB, valPresentAt, rcOf, carriedCodec,
-          mA, mA, objWrite, objAt, Subtype.forall]
+  · simp [denote_rows, objectCodec, Alg.objectCodec, Alg.objectCodecCore, baseCodec, valPresentB, valPresentAt, rcOf, carriedCodec, mA, objWrite, objAt, Subtype.forall, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
 
 
 /-! ### …and the two errors are the same combinator
@@ -252,10 +243,8 @@ def splitTable : Table := fun _ => (fSplit, id)
 theorem decides_held :
     Decides splitTable (.held false .string .string (.caller 0, false) []) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
-  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through,
-      stringCodec, fSplit]
-  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through,
-      stringCodec, fSplit]
+  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through, baseCodec, fSplit, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
+  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through, baseCodec, fSplit, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
 
 
 /-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/
@@ -377,8 +366,7 @@ theorem wireSet_order_irrelevant :
 theorem set_no_duplicates :
     (Value.strSet (.of "a" {"a"})) = (Value.strSet (.of "a" ∅)) :=
   congrArg Value.strSet (Subtype.ext (Finset.ext fun x => by
-    simp only [NEFinset.of, Finset.mem_insert, Finset.mem_singleton,
-      Finset.notMem_empty, or_false]
+    simp only [NEFinset.of, Finset.mem_insert, Finset.mem_singleton, Finset.notMem_empty, or_false]
     exact ⟨fun h => h.elim id id, fun h => Or.inl h⟩))
 
 /-! ### What (R) forces on a list carrier for a set
@@ -439,9 +427,9 @@ theorem record_p_order_irrelevant
     (g' : {k // k ∈ ({"b", "a"} : Finset Name)} → Attr)
     (h : ∀ k (h₁ : k ∈ ({"a", "b"} : Finset Name)) (h₂ : k ∈ ({"b", "a"} : Finset Name)),
       g ⟨k, h₁⟩ = g' ⟨k, h₂⟩) :
-    (recordCodec stringCodec).p (.m {"a", "b"} g)
-      = (recordCodec stringCodec).p (.m {"b", "a"} g') :=
-  congrArg (fun p : MapOf Attr => (recordCodec stringCodec).p (.m p.1 p.2))
+    (recordCodec (baseCodec .string)).p (.m {"a", "b"} g)
+      = (recordCodec (baseCodec .string)).p (.m {"b", "a"} g') :=
+  congrArg (fun p : MapOf Attr => (recordCodec (baseCodec .string)).p (.m p.1 p.2))
     (MapOf.ext (p := ⟨{"a", "b"}, g⟩) (q := ⟨{"b", "a"}, g'⟩) mapKeys_order_irrelevant h)
 
 /-- A repeated key is not an inhabitant: the map that was supposed to carry `"a"` twice is

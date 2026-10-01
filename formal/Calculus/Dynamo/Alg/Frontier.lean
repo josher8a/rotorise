@@ -365,26 +365,10 @@ def Codec.OnKind (o : Codec) (k : Kind) : Prop :=
 
 /-! ### `opaque`'s options, each pinned to its kind -/
 
-theorem onKind_string : Codec.OnKind (stringCodec) .string := by
-  constructor <;> intro x hx <;> cases x <;>
-    simp_all [stringCodec, Value.kind, Attr.kind]
-
-theorem onKind_boolean : Codec.OnKind (booleanCodec) .boolean := by
-  constructor <;> intro x hx <;> cases x <;>
-    simp_all [booleanCodec, Value.kind, Attr.kind]
-
-theorem onKind_binary : Codec.OnKind (binaryCodec) .binary := by
-  constructor <;> intro x hx <;> cases x <;>
-    simp_all [binaryCodec, Value.kind, Attr.kind]
-
-theorem onKind_null : Codec.OnKind (nullCodec) .null := by
-  constructor <;> intro x hx <;> cases x <;>
-    simp_all [nullCodec, Value.kind, Attr.kind]
-
-/-- The number option is pinned to `number`. -/
-theorem onKind_number : Codec.OnKind (numberCodec) .number := by
-  constructor <;> intro x hx <;> cases x <;>
-    simp_all [numberCodec, Value.kind, Attr.kind]
+/-- **A base is pinned to its kind.** -/
+theorem onKind_base (k : GroundKind) : Codec.OnKind (baseCodec k) k.kind := by
+  cases k <;> constructor <;> intro x hx <;> cases x <;>
+    simp_all [pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Value.kind, Attr.kind, Alg.Codec.e, Alg.Codec.p]
 
 /-- A container option is pinned by its own constructor, whatever it contains. This is
     why the fixpoint's compatibility needs nothing from the recursive call — and why `opaque` is
@@ -418,8 +402,8 @@ def opaqKinds : List Kind :=
     options and the eight kinds that identify them. -/
 theorem opaq_onKinds (c : Codec) :
     List.Forall₂ Codec.OnKind (opaqOptions c) opaqKinds :=
-  .cons onKind_string (.cons onKind_boolean (.cons onKind_binary (.cons onKind_null
-    (.cons onKind_number (.cons (onKind_set _) (.cons (onKind_array _)
+  .cons (onKind_base .string) (.cons (onKind_base .boolean) (.cons (onKind_base .binary) (.cons (onKind_base .null)
+    (.cons (onKind_base .number) (.cons (onKind_set _) (.cons (onKind_array _)
       (.cons (onKind_record _) .nil)))))))
 
 /-- Every option of `opaque` is lawful, given the recursive one is. -/
@@ -428,8 +412,8 @@ theorem lawful_opaqOptions {c : Codec} (hop : Lawful c) :
   intro o ho
   simp only [opaqOptions, List.mem_cons] at ho
   rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | h
-  exacts [lawful_stringCodec, lawful_booleanCodec, lawful_binaryCodec,
-    lawful_nullCodec, lawful_numberCodec, lawful_setCodec hop, lawful_arrayCodec hop,
+  exacts [(lawful_baseCodec .string), (lawful_baseCodec .boolean), (lawful_baseCodec .binary),
+    (lawful_baseCodec .null), (lawful_baseCodec .number), lawful_setCodec hop, lawful_arrayCodec hop,
     lawful_recordCodec hop, absurd h (by simp)]
 
 /-- **Options pinned to distinct kinds are pairwise compatible**: each input has one kind, and

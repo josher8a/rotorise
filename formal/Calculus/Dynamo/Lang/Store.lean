@@ -10,7 +10,7 @@ normalisation `η`. This module holds the instances at DynamoDB:
 * the nesting bound, which the core takes as a parameter of `Attr.Storable`;
 * `Numeral.Normal` and `Numeral.Stored`, the numerals the store hands back unchanged;
 * `decimalCodec`, the codec gated at `Stored`, with its laws and its `SurvivesStore`
-  instance, and the refutation that the ungated `numberCodec` does not survive the store;
+  instance, and the refutation that the ungated `baseCodec .number` does not survive the store;
 * `numeralOfStoredText` and `textOfNumeral`, the text adapter the host ships as `decimal`.
 
 The ideal algebra has no depth limit. DynamoDB has one, and this module instantiates the
@@ -151,21 +151,21 @@ def isStored : Value → Bool :=
     cases h : Numeral.Stored x.1 <;> simp [isStored, h]
 
 /-- **§3's `(decimal)` gate is `refine`** at `Stored` over §1's `Numerals`, on the writing
-    half… The base is `numberCodec`, which is §1's own set rather than an ungated one, and
+    half… The base is `baseCodec .number`, which is §1's own set rather than an ungated one, and
     `Stored → WF` is what makes the composite equal `decimal`. -/
-theorem decimalCodec_e_restrict : decimalCodec.e = (numberCodec.restrict isStored).e := by
+theorem decimalCodec_e_restrict : decimalCodec.e = ((baseCodec .number).restrict isStored).e := by
   funext v; cases v with
   | n x =>
     cases hs : Numeral.Stored x.1 <;>
-      simp [decimalCodec, numberCodec, Alg.restrict_e_def, isStored, hs]
+      simp [decimalCodec, baseCodec, Alg.restrict_e_def, isStored, hs, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
   | _ => rfl
 
 /-- …and on the reading half. -/
-theorem decimalCodec_p_restrict : decimalCodec.p = (numberCodec.restrict isStored).p := by
+theorem decimalCodec_p_restrict : decimalCodec.p = ((baseCodec .number).restrict isStored).p := by
   funext a; cases a with
   | n x =>
     cases hs : Numeral.Stored x.1 <;>
-      simp [decimalCodec, numberCodec, Alg.restrict_p_def, isStored, hs]
+      simp [decimalCodec, baseCodec, Alg.restrict_p_def, isStored, hs, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
   | _ => rfl
 
 theorem carrier_decimalCodec : Carrier decimalCodec := by
@@ -230,7 +230,7 @@ rather than as an equality. -/
 /-! **~~survivesStore_numberCodec~~ is retired, and what killed it is worth stating.** It said
 `number` survives a normalising store for free, because its `p` factored through the host's
 decimal reader: the store could rewrite the digits and the double read back the same. That was a
-property of the DOUBLE CARRIER, not of `number`. Carrying `N` exactly makes `numberCodec.p` a
+property of the DOUBLE CARRIER, not of `number`. Carrying `N` exactly makes `(baseCodec .number).p` a
 constructor wrapper, so its kernel is equality and a store that rewrites `"1.500"` to `"1.5"`
 moves the value.
 
@@ -362,41 +362,38 @@ Without this the narrowing reads as a precaution. With it, it is the only option
 `"1.500"`, the store returns `"1.5"`, `decimal`'s `ker p` is equality (`ker_decimalCodec`),
 and (R) through the store fails on a value the codec claimed to hold. -/
 
-/-- `decimal`, gated on §1's grammar rather than on what the store hands back — which is
-    now **`numberCodec`, the base `decimal` actually refines**. Since `Attr.n` carries
+/-! `decimal`, gated on §1's grammar rather than on what the store hands back — which is
+    now **`baseCodec .number`, the base `decimal` actually refines**. Since `Attr.n` carries
     `WF`, there is no wider text-side numeric codec to invent, so this refutation says
     something about the base itself rather than about a codec built for the purpose.
 
     Note its read is *total*: `WF` is the carrier now, so the gate that used to sit on `p`
     has nothing left to reject. That is the whole asymmetry `decimal` adds — `Stored` is a
     strictly smaller set than `WF`, and only the smaller one survives the store. -/
-theorem numberCodec_e_num' (x : WFNumeral) : numberCodec.e (.num x) = some (.n x) := rfl
-
-theorem numberCodec_p_n' (x : WFNumeral) : numberCodec.p (.n x) = some (.num x) := rfl
 
 /-- `"1.500"` is one of the forms `stored_rejects_denormal` records the store rewriting, and
     the un-narrowed codec claims to hold it. -/
-theorem can_numberCodec_denormal : Can numberCodec (.n (.of "1.500")) :=
-  ⟨.num (.of "1.500"), by rw [numberCodec_e_num']⟩
+theorem can_numberCodec_denormal : Can (baseCodec .number) (.n (.of "1.500")) :=
+  ⟨.num (.of "1.500"), by rw [baseCodec_e_num]⟩
 
 /-- **The un-narrowed `decimal` does not survive the store.** Any `η` that normalises
     `"1.500"` — which is what DynamoDB was measured to do — falls outside its `ker p`. -/
 theorem not_survivesStore_numberCodec {η : Attr → Attr}
-    (hη : η (.n (.of "1.500")) = .n (.of "1.5")) : ¬ SurvivesStore numberCodec η := by
+    (hη : η (.n (.of "1.500")) = .n (.of "1.5")) : ¬ SurvivesStore (baseCodec .number) η := by
   intro h
-  have hk : numberCodec.p (η (.n (.of "1.500"))) = numberCodec.p (.n (.of "1.500")) :=
+  have hk : (baseCodec .number).p (η (.n (.of "1.500"))) = (baseCodec .number).p (.n (.of "1.500")) :=
     h _ can_numberCodec_denormal
-  rw [hη, numberCodec_p_n', numberCodec_p_n'] at hk
+  rw [hη, baseCodec_p_n, baseCodec_p_n] at hk
   exact absurd (congrArg Subtype.val (Attr.n.inj (Option.some.inj hk))) (by decide)
 
 /-- And (R) through the store fails outright: the value is written, the store rewrites the
     attribute, and the codec reads back something else — the shape of the shipped defect. -/
 theorem not_retract_through_store_numberCodec {η : Attr → Attr}
     (hη : η (.n (.of "1.500")) = .n (.of "1.5")) :
-    numberCodec.e (.num (.of "1.500")) = some (.n (.of "1.500")) ∧
-      numberCodec.p (η (.n (.of "1.500"))) ≠ some (.num (.of "1.500")) := by
-  refine ⟨by rw [numberCodec_e_num'], ?_⟩
-  rw [hη, numberCodec_p_n']
+    (baseCodec .number).e (.num (.of "1.500")) = some (.n (.of "1.500")) ∧
+      (baseCodec .number).p (η (.n (.of "1.500"))) ≠ some (.num (.of "1.500")) := by
+  refine ⟨by rw [baseCodec_e_num], ?_⟩
+  rw [hη, baseCodec_p_n]
   intro hk
   exact absurd (congrArg Subtype.val (Attr.n.inj (Option.some.inj hk))) (by decide)
 

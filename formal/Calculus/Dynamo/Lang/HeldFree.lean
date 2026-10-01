@@ -45,35 +45,20 @@ theorem Ωp_null : Ω.p .null = some .null := rfl
 
 /-! ## Inclusion lemmas, one per combinator -/
 
-/-- `string` is a restriction of `Ω`. -/
-theorem sub_string : Sub stringCodec Ω :=
-  .ofEP (fun v a h => (by cases v <;> simp [stringCodec] at h; subst h; rfl))
-    (fun a v h => (by cases a <;> simp [stringCodec] at h; subst h; rfl))
-/-- `number` is a restriction of `Ω`. -/
-theorem sub_number : Sub numberCodec Ω :=
-  .ofEP (fun v a h => (by cases v <;> simp [numberCodec] at h; subst h; rfl))
-    (fun a v h => (by cases a <;> simp [numberCodec] at h; subst h; rfl))
-/-- `boolean` is a restriction of `Ω`. -/
-theorem sub_boolean : Sub booleanCodec Ω :=
-  .ofEP (fun v a h => (by cases v <;> simp [booleanCodec] at h; subst h; rfl))
-    (fun a v h => (by cases a <;> simp [booleanCodec] at h; subst h; rfl))
-/-- `binary` is a restriction of `Ω`. -/
-theorem sub_binary : Sub binaryCodec Ω :=
-  .ofEP (fun v a h => (by cases v <;> simp [binaryCodec] at h; subst h; rfl))
-    (fun a v h => (by cases a <;> simp [binaryCodec] at h; subst h; rfl))
-/-- `null` is a restriction of `Ω`. -/
-theorem sub_null : Sub nullCodec Ω :=
-  .ofEP (fun v a h => (by cases v <;> simp [nullCodec] at h; subst h; rfl))
-    (fun a v h => (by cases a <;> simp [nullCodec] at h; subst h; rfl))
-
 /-- A restriction of a restriction of `Ω` is a restriction of `Ω`. -/
 theorem sub_restrict {c : Codec} (h : Sub c Ω) (q : Value → Bool) : Sub (c.restrict q) Ω :=
   Alg.sub_trans (sub_restrict_self c q) h
 
-/-- Each ground base is a restriction of `Ω`. -/
-theorem sub_baseCodec : ∀ k, Sub (baseCodec k) Ω
-  | .string => sub_string | .number => sub_number | .boolean => sub_boolean
-  | .binary => sub_binary | .null => sub_null
+/-- **Each ground base is a restriction of `Ω`**: a point codec sends a datum only to itself. -/
+theorem sub_baseCodec (k : GroundKind) : Sub (baseCodec k) Ω := fun o x y h => by
+  obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.mp h
+  have hx : x = (Calculus.Alg.Ctor.side k.prism k.prism o.c).into z := (Calculus.Alg.Ctor.side k.prism k.prism o.c).into_out hz
+  rcases o with ⟨⟨_ | _, _ | _⟩, ho⟩
+  · exact absurd rfl ho
+  · simp only [Calculus.Alg.Ctor.side] at hx ⊢; subst hx; cases k <;> rfl
+  · simp only [Calculus.Alg.Ctor.side] at hx ⊢; subst hx
+    exact lawful_opaq.retract (by cases k <;> rfl)
+  · exact absurd rfl ho
 
 /-- A literal is a restriction of `Ω`, because a literal restricts its base. -/
 theorem sub_literal (k : GroundKind) (x : k.Carrier) : Sub (literalCodec k x) Ω :=

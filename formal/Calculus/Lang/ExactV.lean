@@ -182,8 +182,7 @@ theorem alignP_iff (tail : Option (Term S)) (htl : ∀ t ∈ tail, ExactV α β 
         have ih := alignP_iff tail htl [] vs (by simp)
         rw [htail] at ih
         simp only [AdmList, AdmOptT, denoteList_nil, denoteOpt_some] at ih
-        simp only [alignP, AdmList, AdmOptT, align, denoteList_nil, denoteOpt_some,
-          Bool.and_eq_true]
+        simp only [alignP, AdmList, AdmOptT, align, denoteList_nil, denoteOpt_some, Bool.and_eq_true]
         cases hal : align [] (some (denote α β t ρ)) vs with
         | none =>
           rw [hal] at ih
@@ -222,8 +221,7 @@ theorem zipP_iff : ∀ (suf : List (Term S)), (∀ t ∈ suf, ExactV α β t ρ)
   | _ :: _, _, [], h => by
       exact absurd h (by simp only [List.length_cons, List.length_nil]; omega)
   | t :: ts, h, v :: vs, hlen => by
-      simp only [AdmList, denoteList_cons, zipP, List.zip_cons_cons, Bool.and_eq_true,
-        traverse_cons_isSome]
+      simp only [AdmList, denoteList_cons, zipP, List.zip_cons_cons, Bool.and_eq_true, traverse_cons_isSome]
       rw [zipP_iff ts (fun t' ht' => h t' (List.mem_cons_of_mem _ ht')) vs
           (by simp only [List.length_cons] at hlen; omega),
         h t List.mem_cons_self v]

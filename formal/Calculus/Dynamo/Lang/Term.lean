@@ -196,7 +196,7 @@ theorem opaq_TSub : ∀ (fuel : Nat) (v : Value),
     · obtain ⟨s, rfl⟩ := hT; exact .str s
     · obtain ⟨b, rfl⟩ := hT; exact .bool b
     · obtain ⟨b, rfl⟩ := hT; exact .bin b
-    · cases hT; exact .null
+    · obtain ⟨_, rfl⟩ := hT; exact .null
     · obtain ⟨d, rfl⟩ := hT; exact .num d
     · cases v <;> first
         | exact .strSet _ fun s hs => ih (Value.str s) (hT s hs)

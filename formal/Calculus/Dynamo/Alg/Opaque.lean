@@ -43,12 +43,12 @@ option's. This is kind-disjointness cashed — the property `union` in general d
 (`onKind_*` is what `opaque` has and `union` does not).
 
 Stated against the option's own codec rather than its literal encoding, so they stay
-true if a primitive's shape changes. Every one of them computes through the same ten
+true if a primitive's shape changes. Every one of them computes through the same
 definitions, so those are a local `simp` set for the section. -/
 
 section Unfoldings
-attribute [local simp] opaqStep opaqOptions Alg.altCodec_f_def select stringCodec booleanCodec
-  binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec
+attribute [local simp] opaqStep opaqOptions Alg.altCodec_f_def select baseCodec pointCodec
+  Calculus.Alg.Ctor.side GroundKind.prism sC nC bC boolA nullA setCodec arrayCodec recordCodec
 
 /-- §3 `(opaque)`, write side at kind `set`: the wire member is computed from the elements (`setCodec`), which is why one option covers `SS`, `NS` and `BS`. -/
 theorem opaqStep_e_strSet (c : Codec) (S : NEFinset String) :
@@ -95,8 +95,8 @@ Kind-disjointness is the same argument — each attribute constructor is accepte
 of the eight. -/
 
 section UnfoldingsA
-attribute [local simp] opaqStep opaqOptions Alg.altCodec_f_def select stringCodec booleanCodec
-  binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec
+attribute [local simp] opaqStep opaqOptions Alg.altCodec_f_def select baseCodec pointCodec
+  Calculus.Alg.Ctor.side GroundKind.prism sC nC bC boolA nullA setCodec arrayCodec recordCodec
 
 /-- §3 `(opaque)`, read side at member `SS` — one of the three members routing to the single `set` option. -/
 theorem opaqStep_p_ss (c : Codec) (vs : NEFinset String) :

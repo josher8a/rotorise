@@ -657,7 +657,7 @@ self-identifying, closed under the containers}, a fixpoint of shape
 members are pairwise disjoint (\texttt{compat\_opaque}). That makes each layer lawful, and the limit is lawful by the
 general theorem (\texttt{lawful\_opaq}). The held set is \emph{defined}
 as the values whose member is recoverable from the value alone, so \rulelink{cond:R}{\textbf{(R)}} holds by construction.
-A numeral is such a value: the \texttt{number} option is \texttt{numberCodec}, which holds the numeral exactly, as its digits, and
+A numeral is such a value: the \texttt{number} option is \texttt{baseCodec .number}, which holds the numeral exactly, as its digits, and
 \texttt{number\ ⇄\ N} keeps the member and the digits on both halves. So the held set is every
 \texttt{Value} (\texttt{opaq\_total}).
 

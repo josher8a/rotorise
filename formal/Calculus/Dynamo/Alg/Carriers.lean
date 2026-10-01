@@ -17,49 +17,9 @@ noncomputable section
     checked claim: what a derivable term writes and reads lies in the `T` it names. -/
 
 
-/-- The four point ground codecs are on their carriers for one reason, the same one that
-    made them lawful: `e` only writes what the value prism matched, and `p` only reads what
-    it built. See `carrier_pointCodec`. -/
-theorem carrier_stringCodec : Carrier stringCodec :=
-  Carrier.congr (d := pointCodec sC sC .S)
-    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
-    (fun _ h => h) carrier_pointCodec
-
-theorem carrier_booleanCodec : Carrier booleanCodec :=
-  Carrier.congr (d := pointCodec boolA boolA .BOOL)
-    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
-    (fun _ h => h) carrier_pointCodec
-
-theorem carrier_binaryCodec : Carrier binaryCodec :=
-  Carrier.congr (d := pointCodec bC bC .B)
-    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
-    (fun _ h => h) carrier_pointCodec
-
-theorem carrier_nullCodec : Carrier nullCodec :=
-  Carrier.congr (d := pointCodec nullA nullA .NULL)
-    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
-    (fun _ h => h.elim fun _ hh => hh) carrier_pointCodec
-
-/-- **Both halves are total at `N` now**, so neither direction has a gate to split on: the
-    carrier is the held set. -/
-theorem carrier_numberCodec : Carrier numberCodec := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v with
-    | n x => exact ⟨x, rfl⟩
-    | _ => exact nomatch h
-  · intro a v h
-    cases a with
-    | n x => rw [numberCodec_p_n] at h; cases h; exact ⟨x, rfl⟩
-    | _ => exact nomatch h
-
-/-- Every base is on its carrier — the six lemmas above, indexed. -/
-theorem carrier_baseCodec : ∀ k : GroundKind, Carrier (baseCodec k)
-  | .string  => carrier_stringCodec
-  | .number  => carrier_numberCodec
-  | .boolean => carrier_booleanCodec
-  | .binary  => carrier_binaryCodec
-  | .null    => carrier_nullCodec
+/-- **Every base is on its carrier**: `e` only writes what the prism matched, and `p` only
+    reads what it built (`carrier_pointCodec`). -/
+theorem carrier_baseCodec (k : GroundKind) : Carrier (baseCodec k) := carrier_pointCodec
 
 /-! ### The refinement ground codecs, on their carriers -/
 
@@ -101,11 +61,11 @@ theorem carrier_opaqStep {c : Codec} (ih : Carrier c) : Carrier (opaqStep c) := 
   intro o ho
   simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
   rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-  · exact carrier_stringCodec
-  · exact carrier_booleanCodec
-  · exact carrier_binaryCodec
-  · exact carrier_nullCodec
-  · exact carrier_numberCodec
+  · exact (carrier_baseCodec .string)
+  · exact (carrier_baseCodec .boolean)
+  · exact (carrier_baseCodec .binary)
+  · exact (carrier_baseCodec .null)
+  · exact (carrier_baseCodec .number)
   · exact carrier_setCodec ih
   · exact carrier_arrayCodec ih
   · exact carrier_recordCodec ih

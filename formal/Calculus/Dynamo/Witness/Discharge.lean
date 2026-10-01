@@ -50,11 +50,11 @@ theorem typed_json : Typed α jsonTerm (fun v => (denote α jsonTerm).T v) none 
 theorem pairwiseCompat_json (c : Codec) (hc : Lawful c) :
     PairwiseCompat α [.string, .array (.var 0)] [c] := by
   have hA : denote α (.array (.var 0)) [c] = arrayCodec c := (arrayCodec_eq_listCodec c).symm
-  have h := compat_of_onKinds (os := [stringCodec, arrayCodec c]) (ks := [.string, .array])
-    (forall_mem_pair lawful_stringCodec.core (lawful_arrayCodec hc).core)
-    (.cons onKind_string (.cons (onKind_array c) .nil)) (by decide)
-  have hs : denote α .string [c] ∈ [stringCodec, arrayCodec c] := List.mem_cons_self
-  have ha : denote α (.array (.var 0)) [c] ∈ [stringCodec, arrayCodec c] := by
+  have h := compat_of_onKinds (os := [(baseCodec .string), arrayCodec c]) (ks := [.string, .array])
+    (forall_mem_pair (lawful_baseCodec .string).core (lawful_arrayCodec hc).core)
+    (.cons (onKind_base .string) (.cons (onKind_array c) .nil)) (by decide)
+  have hs : denote α .string [c] ∈ [(baseCodec .string), arrayCodec c] := List.mem_cons_self
+  have ha : denote α (.array (.var 0)) [c] ∈ [(baseCodec .string), arrayCodec c] := by
     rw [hA]; exact List.mem_cons_of_mem _ List.mem_cons_self
   exact forall_mem_pair (forall_mem_pair (h _ hs _ hs) (h _ hs _ ha))
     (forall_mem_pair (h _ ha _ hs) (h _ ha _ ha))

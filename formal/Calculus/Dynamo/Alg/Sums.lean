@@ -5,7 +5,7 @@ import Calculus.Lang.Term
 # Sums (§5), and unknown values
 
 `altCodec` over the options' codecs: the first option that acts answers. `opaqStep` is one layer of
-`opaque`: `altCodec` over everything self-identifying, and its number option is `numberCodec`,
+`opaque`: `altCodec` over everything self-identifying, and its number option is `baseCodec .number`,
 which holds a numeral exactly.
 -/
 
@@ -20,9 +20,9 @@ export Alg (unanimous)
 
     Named because three statements cite it — `opaqStep`, `opaq_onKinds`,
     `compat_opaque` — and a list spelled three times can drift twice. The number
-    option is `numberCodec`, which holds a numeral exactly. -/
+    option is `baseCodec .number`, which holds a numeral exactly. -/
 def opaqOptions (rec : Codec) : List Codec :=
-  [stringCodec, booleanCodec, binaryCodec, nullCodec, numberCodec,
+  [(baseCodec .string), (baseCodec .boolean), (baseCodec .binary), (baseCodec .null), (baseCodec .number),
    setCodec rec, arrayCodec rec, recordCodec rec]
 
 /-- `opaque`'s body: one layer of everything self-identifying, with `c` for the layer below.

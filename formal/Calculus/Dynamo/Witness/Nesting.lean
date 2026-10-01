@@ -46,8 +46,7 @@ theorem nesting_zero_of_ground (k : GroundKind) (v : Value) (a : Attr)
   -- every branch writes a *named* constructor, so the work is substituting the equation the
   -- codec's `e` leaves behind and reading `nesting` off it
   cases k <;> cases v <;>
-    simp_all [baseCodec, stringCodec, numberCodec, booleanCodec, binaryCodec,
-              nullCodec] <;>
+    simp_all [baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p] <;>
     first
       | rfl
       | (subst_vars; rfl)
