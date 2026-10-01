@@ -53,7 +53,7 @@ theorem neSetImage_none {α β : Type} [DecidableEq β] {f : α → Option β} {
   · next T' hT' => rw [h] at hT'; exact nomatch hT'
   · rfl
 
-export Alg (setImage_eq setImage_inv setImage_roundTrip setImage_none_of setImage_isSome_of
+export Alg (setImage_eq setImage_inv setImage_none_of setImage_isSome_of
   setImage_congr)
 
 /-- …and the same at `℘⁺fin`. -/

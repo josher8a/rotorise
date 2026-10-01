@@ -177,22 +177,6 @@ theorem setImage_inv {α β : Type} [DecidableEq α] [DecidableEq β]
       cases Option.some.inj hgy
       exact hx'
 
-/-- The round trip a set needs, assembled from the element codec's. -/
-theorem setImage_roundTrip {α β : Type} [DecidableEq α] [DecidableEq β]
-    {c : Codec V M} (h : LawfulCore member c) {vinj : α → V} {aout : V → Option β}
-    {ainj : β → V} {vout : V → Option α}
-    (hA : ∀ a b, aout a = some b → a = ainj b)
-    (hV : ∀ x, vout (vinj x) = some x)
-    {S : Finset α} {T : Finset β}
-    (hI : setImage (fun x => (c.e (vinj x)).bind aout) S = some T) :
-    setImage (fun y => (c.p (ainj y)).bind vout) T = some S := by
-  refine setImage_inv (fun x y hxy => ?_) hI
-  simp only [Option.bind_eq_some_iff] at hxy
-  obtain ⟨a, hea, hoa⟩ := hxy
-  rw [hA a y hoa] at hea
-  rw [h.retract hea]
-  simpa using hV x
-
 /-- One failing element sinks the image. -/
 theorem setImage_none_of {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
     {x : α} (hx : x ∈ S) (hf : f x = none) : setImage f S = none := by
@@ -239,20 +223,6 @@ theorem setImage_congr {α β : Type} [DecidableEq β] {f g : α → Option β} 
     simp only [hmap]
   · next hf =>
     rw [dif_neg (fun hg => hf (hiff.mpr hg))]
-
-/-- What each wire element reads back to: the value it came from. -/
-theorem setImage_read {α β : Type} [DecidableEq β] {c : Codec V M} (h : LawfulCore member c)
-    {vinj : α → V} {aout : V → Option β} {ainj : β → V}
-    (hA : ∀ a b, aout a = some b → a = ainj b)
-    {S : Finset α} {T : Finset β}
-    (hI : setImage (fun x => (c.e (vinj x)).bind aout) S = some T) :
-    ∀ y ∈ T, ∃ x ∈ S, c.p (ainj y) = some (vinj x) := by
-  intro y hy
-  obtain ⟨x, hx, hxy⟩ := (mem_setImage hI y).mp hy
-  simp only [Option.bind_eq_some_iff] at hxy
-  obtain ⟨a, hea, hoa⟩ := hxy
-  rw [hA a y hoa] at hea
-  exact ⟨x, hx, h.retract hea⟩
 
 end SetImage
 
