@@ -350,8 +350,7 @@ inductive Term (S : Sig) where
       (k : List (S.G s × Bool))
   /-- §3 `(refine)`: the restriction of each side by a predicate of that side. -/
   | refine   (inner : Term S) (p : S.P false) (pA : S.P true)
-  /-- §3 `(opaque)`: the universal sum. The number option is `baseCodec .number`, so `opaque`
-      writes every `Value` (`opaq_total`). -/
+  /-- §3 `(opaque)`: the universal sum, which each universe denotes by its top. -/
   | opaq
   /-- §4's field table is a *set* of names each declaring one field, so that is what the
       term carries. A `List (Name × ObjectSlot)` admitted two orderings of one object and a
@@ -370,7 +369,7 @@ inductive Term (S : Sig) where
       term reads a variable that no `mu` binds as the bottom. -/
   | var (i : Nat)
   /-- A guarded recursive term: `mu b` is the fixed point of `b`, where `var 0` in `b` stands for
-      `mu b` itself. The name is not `rec`, which the recursor holds. `denote` reads each input at
+      `mu b` itself. The name is not rec, which the recursor holds. `denote` reads each input at
       the stage of `b` that the input's own depth names (`muCodec`).
 
       **The guard is a checked condition, and not a type.** `Term.guarded` refuses a variable that
@@ -611,7 +610,7 @@ This is the measure that sees through it, and it is not a new idea: it is exactl
 `Attr.depth` in `Recursion.lean` uses — `attach.sup` over the key set where a list would
 fold. What matters is that it is **derived from the term** rather than supplied by a caller, so it
 appears in no statement, no `Obligations`, and no rule. That is the whole difference between this
-and the `fuel` parameter it replaces. -/
+and the fuel parameter it replaces. -/
 
 mutual
 

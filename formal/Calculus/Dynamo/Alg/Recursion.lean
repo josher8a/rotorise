@@ -16,7 +16,7 @@ From it alone the stages agree past the depth of the input (`muStage_agree`), th
 fixed point of the body (`muCodec_fix`), and lawful stages give a lawful limit
 (`lawful_muCodec`). No option of the body has to be disjoint from another for these three.
 
-`opaque` is `muCodec opaqStep`, and `Term.mu` denotes `muCodec` of its body.
+`Term.mu` denotes `muCodec` of its body.
 -/
 
 namespace Calculus

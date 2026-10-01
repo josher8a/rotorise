@@ -111,7 +111,7 @@ caller side, because no law reads a difference between the two sides.
 | the set former | `Mean.set` as a `SetF` over the carrier of the meaning: a lift, its laws, and the member of a set from the member of its element (`SetF.member`, with `SetF.lift_μ`) | `dSet`, over `setCodec` | none |
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
 | the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | `dynOracle`, over the two views | `jsonOracle`, which certifies nothing |
-| the top | `Mean.top`, `Mean.lawful_top`, `Mean.topHeld` | `Ω`, `HOpaque` | `idCodec` |
+| the top | `Mean.top`, `Mean.lawful_top`, `Mean.topHeld` | `Ω`, the identity codec `Alg.idCodec` | `Alg.idCodec` |
 | the top laws | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
 | the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `AdmLit`, at both orientations, because each primitive is self-dual (`ground_selfdual`) | the kind test |
 | the leaves: two primitives, two predicates | `Leaf` | `dynLeaf`: `Ground.meet`, `Pred.isData`, `Pred.meetM` | `jsonLeaf`: one kind |
@@ -413,11 +413,10 @@ premises of its body at each stage, given that the stage before is lawful. `soun
 the closed case. A recursive codec's held set is its write domain, so the held-set theorems stay
 closed: at `mu` they are definitional.
 
-**`opaque` is the construct at a fixed body.** `opaque` denotes `muCodec opaqStep`, where `opaqStep
-c` is one layer of everything self-identifying over `c`. `contractive_opaqStep` is the contraction
-at that body. Kind-disjointness gives the compatibility of its options (`compat_of_onKinds`, with
-`compat_opaque` as the instance). That makes each layer lawful (`lawful_opaqStep`), and
-`lawful_opaq` is the general limit theorem at that body.
+**`opaque` is the identity.** With one carrier, each datum identifies itself, so §3's union of
+everything self-identifying sends each datum to itself. `opaque` denotes the identity codec
+`Alg.idCodec`, and it owes no compatibility and no contraction. The §3 union is a theorem:
+`Adm_opaqUnfold` and `AdmA_opaqUnfold` state that the union term admits what `opaque` admits.
 
 **The analyses read a recursive term through its body.** `Adm` and `AdmA` take the environment
 that `denote` takes. A variable asks the codec that the environment gives the variable, and a

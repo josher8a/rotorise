@@ -98,6 +98,10 @@ def Ctor.side {α : Type} (pV : Ctor α V) (pA : Ctor α V) : (s : Bool) → Cto
   | false => pV
   | true => pA
 
+/-- One prism at both sides is that prism at each side. -/
+theorem Ctor.side_self {α : Type} (p : Ctor α V) (s : Bool) : Ctor.side p p s = p := by
+  cases s <;> rfl
+
 /-- **The point ground codecs of §3**, as one construction: a payload carried between a
     value constructor `pV` and an attribute constructor `pA`, both prisms.
 
@@ -110,6 +114,14 @@ def pointCodec {α : Type} (pV : Ctor α V) (pA : Ctor α V) (μ₀ : M) : Codec
   T v := ∃ x, v = pV.into x
   μ := some μ₀
   f o x := ((Ctor.side pV pA o.c).out x).map (Ctor.side pV pA o.s).into
+
+/-- **The identity codec**: it holds every datum, names no member, and sends each datum to itself
+    at each orientation. It is the unit of the inverse monoid of the carrier, and the top of a
+    universe: a codec below it is a partial identity. -/
+def idCodec : Codec V M where
+  T _ := True
+  μ := none
+  f _ x := some x
 
 /-! ## Wrappers -/
 
@@ -428,6 +440,9 @@ theorem altCodec_admits {os : List (Codec V M)} {μA : Option M} {o : Orient}
 
 /-! ## Carriers — the pair is on `T` -/
 
+/-- The identity codec holds every datum. -/
+theorem carrier_idCodec : Carrier (idCodec : Codec V M) := ⟨fun _ => trivial, fun _ => trivial⟩
+
 /-- The carrier, likewise: `e` only writes what `pV` matched, `p` only reads what `pV`
     built. -/
 theorem carrier_pointCodec {α : Type} {pV : Ctor α V} {pA : Ctor α V} {μ₀ : M} :
@@ -484,6 +499,11 @@ theorem carrier_altCodec {os : List (Codec V M)} {μA : Option M}
     exact ⟨o, ho, (h o ho).ranP hop⟩
 
 /-! ## Lawfulness — proved -/
+
+/-- The identity codec is lawful: each orientation is the identity, and it names no member. -/
+theorem lawful_idCodec : Lawful member (idCodec : Codec V M) where
+  inv h := by cases h; rfl
+  writes hμ := nomatch hμ
 
 /-- §2's laws for any pair of prisms. The one premise a prism pair does not already supply is
     which member the attribute side stamps. Everything else is `out_into` and `into_out`. -/

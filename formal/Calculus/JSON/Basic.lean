@@ -118,15 +118,8 @@ def negNum : Alg.Codec Json JMember := num.through negate negate
 theorem lawful_negNum : Alg.Lawful Json.member negNum :=
   lawful_num.through ⟨fun v _ => negate_negate v, fun v _ => negate_negate v⟩
 
-/-- The identity codec. Each ground codec is below the identity codec. -/
-def idCodec : Alg.Codec Json JMember :=
-  Alg.Codec.ofEP (T := fun _ => True) (μ := none) (e := some) (p := some)
-
-/-- The identity codec reads canonically. -/
-theorem canon_idCodec : Alg.Canon idCodec := fun _ _ h => (Option.some.inj h).symm ▸ rfl
-
 /-- A ground codec is below the identity codec. -/
-theorem sub_ground_id (m : JMember) : Alg.Sub (ground m) idCodec :=
+theorem sub_ground_id (m : JMember) : Alg.Sub (ground m) Alg.idCodec :=
   .ofEP (fun _ _ h => (gate_eq_some.mp h).2 ▸ rfl) (fun _ _ h => (gate_eq_some.mp h).2 ▸ rfl)
 
 /-! ## The JSON signature
@@ -168,10 +161,9 @@ instance jsonSem : Alg.Mean jsonSig where
   list := none
   map := none
   set := none
-  top := idCodec
-  lawful_top := .ofRC (fun he => (Option.some.inj he) ▸ rfl) (fun hp => (Option.some.inj hp) ▸ rfl)
-    (fun hμ => nomatch hμ)
-  carrier_top := ⟨fun _ => trivial, fun _ => trivial⟩
+  top := Alg.idCodec
+  lawful_top := Alg.lawful_idCodec
+  carrier_top := Alg.carrier_idCodec
   topHeld _ := True
   top_held _ _ := trivial
 
@@ -218,7 +210,7 @@ theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum := by
     · rcases List.mem_cons.mp hx with rfl | hx
       · trivial
       · exact nomatch hx
-  exact Alg.compat_of_HF (S := jsonSyn) canon_idCodec (hf s hs) (hf t ht) (hl t ht)
+  exact Alg.compat_of_HF (S := jsonSyn) Alg.canon_idCodec (hf s hs) (hf t ht) (hl t ht)
 
 /-! ## Exactness
 

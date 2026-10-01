@@ -157,68 +157,6 @@ def HSet (T : Value → Prop) : Value → Prop := fun v =>
   (∃ S : NEFinset WFNumeral, v = .numSet S ∧ ∀ d ∈ S.1, T (.num d)) ∨
   (∃ S : NEFinset Bytes,  v = .binSet S ∧ ∀ b ∈ S.1, T (.bin b))
 
-/-- `HOpaque` (§3 `(opaque)`): `opaque`'s held set, the values whose member is recoverable
-    from the value alone, as the doc's fixpoint — everything self-identifying, closed under the
-    containers. Every `Value` is in `HOpaque`: the number option holds a numeral exactly. -/
-inductive HOpaque : Value → Prop where
-  | str  (s)  : HOpaque (.str s)
-  | bool (b)  : HOpaque (.bool b)
-  | bin  (b)  : HOpaque (.bin b)
-  | null      : HOpaque .null
-  /-- No premise: the carrier is the well-formed numerals, so there is no numeral
-      `opaque` cannot write and nothing for a premise to exclude. -/
-  | num  (d)  : HOpaque (.num d)
-  /-- Non-emptiness carried no premise here any more, because `℘⁺fin` is the type. The
-      argument for it stands and is worth keeping: an empty wire set is not writable, and
-      its member would not be recoverable from the value anyway — you cannot tell `SS`
-      from `NS` at `∅`. Both readings §3 gives of `opaque`'s held set exclude it. What
-      changed is where the exclusion lives: `HeldSet.lean` used to exhibit `opaque` refusing
-      `strSet ∅`, and that witness is now unstatable. -/
-  | strSet (S : NEFinset String)
-      (h : ∀ s ∈ S.1, HOpaque (.str s)) : HOpaque (.strSet S)
-  | numSet (S : NEFinset WFNumeral)
-      (h : ∀ d ∈ S.1, HOpaque (.num d)) : HOpaque (.numSet S)
-  | binSet (S : NEFinset Bytes)
-      (h : ∀ b ∈ S.1, HOpaque (.bin b)) : HOpaque (.binSet S)
-  | arr  (vs) (h : ∀ x ∈ vs, HOpaque x) : HOpaque (.arr vs)
-  | map  (keys) (f) (h : ∀ k, HOpaque (f k)) : HOpaque (.map keys f)
-
-/-- Every stage of `opaque` carries `HOpaque`. The stage is the budget on the *input's* depth, not
-    a budget on the term. -/
-theorem opaq_TSub : ∀ (fuel : Nat) (v : Value),
-    (muStage opaqStep fuel).T v → HOpaque v
-  | 0, _, h => nomatch h
-  | fuel+1, v, h => by
-    obtain ⟨o, ho, hT⟩ := h
-    have ih := opaq_TSub fuel
-    simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
-    rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-    · obtain ⟨s, rfl⟩ := hT; exact .str s
-    · obtain ⟨b, rfl⟩ := hT; exact .bool b
-    · obtain ⟨b, rfl⟩ := hT; exact .bin b
-    · obtain ⟨_, rfl⟩ := hT; exact .null
-    · obtain ⟨d, rfl⟩ := hT; exact .num d
-    · cases v <;> first
-        | exact .strSet _ fun s hs => ih (Value.str s) (hT s hs)
-        | exact .numSet _ fun d hd => ih (Value.num d) (hT d hd)
-        | exact .binSet _ fun b hb => ih (Value.bin b) (hT b hb)
-        | exact nomatch hT
-    · cases v <;> first
-        | exact .arr _ fun x hx => ih x ((arrayCodec_T _ _).mp hT x hx)
-        | exact nomatch hT
-    · cases v <;> first
-        | exact .map _ _ fun k => ih _ ((recordCodec_T _ _ _).mp hT k)
-        | (obtain ⟨_, hx, -⟩ := hT; exact nomatch hx)
-
-/-- `opaque`'s held set — its write domain — lands in `HOpaque`: the stage that writes a value is
-    on its carrier. -/
-theorem opaq_TSubω (v : Value) :
-    Ω.T v → HOpaque v := by
-  intro h
-  obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
-  exact opaq_TSub _ v
-    ((muStage_induct Carrier.empty (fun _ => carrier_opaqStep) (Attr.depth v)).domE ha)
-
 /-- The list former: the `L` prism. -/
 abbrev dList : Alg.ListA Value Member Attr.member Attr.depth where
   p := lA
@@ -326,8 +264,8 @@ abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
   top := Ω
   lawful_top := lawful_opaq
   carrier_top := carrier_opaq
-  topHeld := HOpaque
-  top_held := opaq_TSubω
+  topHeld _ := True
+  top_held _ _ := trivial
 
 /-- **The one stored table of DynamoDB**: the store names no generator. -/
 def dynTableA : Alg.Table dynSyn.op := fun g => nomatch g

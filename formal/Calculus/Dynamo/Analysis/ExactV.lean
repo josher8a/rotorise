@@ -53,10 +53,10 @@ noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
 
 /-! ## The rows that ask their own codec
 
-    `opaque` and `mu` are the two recursive terms, and their rows below **do not describe a
-    set at all**. Each asks the codec it denotes:
+    `mu` is the recursive term, and its row below **does not describe a set at all**. The row
+    asks the codec that `mu` denotes, and `opaque`'s row asks the identity:
 
-        Adm  .opaq    v = ((muCodec opaqStep).e v).isSome
+        Adm  .opaq    v = (Ω.e v).isSome
         Adm  (.mu b)  v = ((denote (.mu b)).e v).isSome
 
     and the read rows do the same with `p`. Three things follow.
@@ -70,9 +70,9 @@ noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
     and a row over the term cannot see past the top constructor. Deferring sees all of it,
     because it does not look. `opaque`'s domain is every value (`opaq_total`).
 
-    *Nothing here knows anything about the implementation.* Swap the body of `opaque` — a
-    different numeric policy, a different set of options — and every theorem downstream is
-    still true and still proved, because none of them mentions what the codec answers.
+    *Nothing here knows anything about the implementation.* Swap the body of a `mu` and every
+    theorem downstream is still true and still proved, because none of them mentions what the
+    codec answers.
 
     A variable is read closed, as the bottom, so its row is `false`. A variable reads its
     binder's stage only inside `muCodec`, and no row reaches inside it.
@@ -196,9 +196,9 @@ variable (t : Term) (ts : List Term)
       | _ => false := by
   funext v; cases v <;> rfl
 @[Adm_rows] theorem Adm_object (b : Body) : Adm α (.object b) = AdmBody α b := rfl
-/-- **The second row that asks its own codec**: `denote .opaq` *is* `muCodec opaqStep`, so this
-    is `dom(e)` rather than a description of it, and the row's exactness is `Iff.rfl`. -/
-@[Adm_rows] theorem Adm_opaq : Adm α .opaq = fun v => ((muCodec opaqStep).e v).isSome := rfl
+/-- **The second row that asks its own codec**: `denote .opaq` is the identity, so `opaque`
+    admits every value. -/
+@[Adm_rows] theorem Adm_opaq : Adm α .opaq = fun _ => true := rfl
 /-- A closed variable is the bottom. -/
 @[Adm_rows] theorem Adm_var (i : Nat) : Adm α (.var i) = fun _ => false := rfl
 /-- The second recursive term asks its own codec, for the reason `opaq` does. -/

@@ -149,8 +149,8 @@ variable (t : Term) (ts : List Term)
       | _ => false := by
   funext a; cases a <;> rfl
 @[AdmA_rows] theorem AdmA_object (b : Body) : AdmA α (.object b) = AdmABody α b := rfl
-/-- The read side of the same deferral; see the `Adm` row. -/
-@[AdmA_rows] theorem AdmA_opaq : AdmA α .opaq = fun a => ((muCodec opaqStep).p a).isSome := rfl
+/-- The read side: `opaque` reads every attribute. -/
+@[AdmA_rows] theorem AdmA_opaq : AdmA α .opaq = fun _ => true := rfl
 /-- A closed variable is the bottom, and `mu` asks its own codec, as `opaq` does. -/
 @[AdmA_rows] theorem AdmA_var (i : Nat) : AdmA α (.var i) = fun _ => false := rfl
 @[AdmA_rows] theorem AdmA_mu : AdmA α (.mu t) = fun a => ((denote α (.mu t)).p a).isSome :=

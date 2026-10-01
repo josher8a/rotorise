@@ -734,39 +734,12 @@ example : Alg.Term.disjoint pair0 (Term.held false .string .opaq (.caller 0, fal
 
 /-! ## The levers -/
 
-/-! ## What `opaque` admits
-
-`Adm .opaq v` is `dom(e)` of `Ω`, and a scalar's budget is one layer, so each row below
-reduces by `rfl`. -/
-
-/-- `opaque` writes every string, so `string` is the finer term. -/
-theorem Adm_opaq_str (s : String) : Adm α .opaq (.str s) = true := rfl
-
-/-- …every boolean. -/
-theorem Adm_opaq_bool (b : Bool) : Adm α .opaq (.bool b) = true := rfl
-
-/-- …every byte string. -/
-theorem Adm_opaq_bin (b : Bytes) : Adm α .opaq (.bin b) = true := rfl
-
-/-- …and the null point. -/
-theorem Adm_opaq_null : Adm α .opaq .null = true := rfl
-
-/-- …and every numeral, exactly on `D`. -/
-theorem Adm_opaq_num (d : WFNumeral) :
-    Adm α .opaq (.num d) = inD (.num d) := by
-  rw [show Adm α .opaq (.num d) = true from rfl]
-  simp [inD]
-
-
 /-! ## DynamoDB is an instance of the laws, on the write side
 
 `Alg.disjoint_sound` proves the write side once, over any signature. DynamoDB supplies the law of
 its set former (`dynFormerAdm`) and the laws of its leaves (`dynLeafAdm`). A primitive law is a
 fact about `inBase` and `inL`, and the set law is a fact about `setCodec`. The disjointness of
 two formers is a theorem of the shape classes (`dynShapes`). -/
-
-/-- `opaque`'s row is `dom(e)` of its codec. -/
-theorem Adm_opaq_eq (v : Value) : Adm α .opaq v = (Ω.e v).isSome := rfl
 
 /-- **`ofOptions` admits what its options admit**, and no certificate is spent. -/
 theorem Adm_ofOptions (ts : List Term) (v : Value) :
@@ -898,25 +871,6 @@ theorem AdmA_and_false {x y : Term} {m m' : Member} (hne : m ≠ m')
   refine Bool.eq_false_iff.mpr fun h => hne ?_
   rw [Bool.and_eq_true] at h
   exact (hx a h.1).symm.trans (hy a h.2)
-
-/-- `opaque` reads an attribute exactly where its codec answers. -/
-theorem AdmA_opaq_eq (a : Attr) : AdmA α .opaq a = (Ω.p a).isSome := rfl
-
-/-- It reads every stored string, -/
-theorem AdmA_opaq_str (s : String) : AdmA α .opaq (.s s) = true := rfl
-
-/-- …every stored boolean, -/
-theorem AdmA_opaq_bool (b : Bool) : AdmA α .opaq (.bool b) = true := rfl
-
-/-- …every stored byte string, -/
-theorem AdmA_opaq_bin (b : Bytes) : AdmA α .opaq (.b b) = true := rfl
-
-/-- …the stored null, -/
-theorem AdmA_opaq_null : AdmA α .opaq .null = true := rfl
-
-/-- …and every stored numeral, as `number` reads it. -/
-theorem AdmA_opaq_num (x : WFNumeral) :
-    AdmA α .opaq (.n x) = ((baseCodec .number).p (.n x)).isSome := rfl
 
 /-- Where a literal reads, its base reads the same value: `literalCodec` is `baseCodec`
     restricted, and `Codec.restrict`'s `p` returns the base's own value where the guard passes. -/

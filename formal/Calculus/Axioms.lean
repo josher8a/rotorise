@@ -164,15 +164,10 @@ part of what the soundness statements rest on. -/
 shared transport constant — ~~denote_eq~~ was the ω-layer's and went with the layer
 (`Denote.lean`) — so each is guarded on its own footing. -/
 
-/-! `HOpaque` for `opaque`, and §1's numeral domain. `opaq_T_identity` is the row
-closed for `opaque`; its proof sits behind seven
-`omega` calls in `HeldSet.lean`, and `omega` is a known `Classical.choice` route — which
-makes it the single constant in this file with the most to lose from going unguarded. -/
+/-! §1's numeral domain. -/
 
-/-! §3's `(number)` gate and the two places the bound is forced outward. `opaq_T_identity`
-above is the half that reaches the depth machinery. The `(literal-N)` rows are the half that
-does not:
-they are `(literal-N)`'s `ℓ ⊆ D`, added to §3 once the shipped `literal(NaN)` settled the
+/-! §3's `(number)` gate and the two places the bound is forced outward. The `(literal-N)`
+rows are `(literal-N)`'s `ℓ ⊆ D`, added to §3 once the shipped `literal(NaN)` settled the
 question the conditional refutations leave open. -/
 
 /-! §2's kernel and §1's store. `retract_through_store` is **(R)** with DynamoDB in the
