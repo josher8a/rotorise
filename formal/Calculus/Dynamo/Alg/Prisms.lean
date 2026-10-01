@@ -192,14 +192,10 @@ than a carried one. -/
     §7 calls "an iso and a prism", with the prism named by `ℓ` and the iso supplied by the
     index.
 
-    **`T` is deliberately *not* the refinement's**: it stays §3's `ℓ`. That used to mean a
-    numeric literal outside `D` was *held* and unwritable, which is (B) failing, and it no
-    longer can be: `GroundKind.number`'s carrier is the well-formed numerals, so `HLit` holds
-    only values `baseCodec .number` writes. The transcription that used to exhibit (B) failing here
-    is retired, because the value carrier is `D` and there is no outside to point at. -/
+    `T` is spelled as §3's `ℓ` (`HLit`), so the judgement reads against §3. The set is the
+    refinement's held set (`HLit_iff_restrict`); only the spelling differs. -/
 noncomputable def literalCodec (k : GroundKind) (x : k.Carrier) : Codec :=
-  Alg.Codec.ofEP (T := HLit k x) (μ := ((baseCodec k).restrict (inL k x)).μ)
-    (e := ((baseCodec k).restrict (inL k x)).e) (p := ((baseCodec k).restrict (inL k x)).p)
+  { (baseCodec k).restrict (inL k x) with T := HLit k x }
 
 theorem literalNCodec_p_n (y : WFNumeral) (x : WFNumeral) :
     (literalCodec .number y).p (.n x) =
@@ -236,34 +232,12 @@ theorem inL_of_literalCodec_e {k : GroundKind} {x : k.Carrier} {v a}
   rw [literalCodec_e_restrict] at he
   exact (Alg.refine2_f.mp he).1
 
-/-- The value `ℓ` names places the value in the held set — the direction `Carrier` needs.
-
-    The four ungated bases are the payload equality outright. `number` and `decimal` reach here
-    with a `dite` on their gate, so the branch splits on the gate and names the alternative as a
-    subtype, and `toValue` projects it straight back. `cases hs :` rather than `by_cases`, which
-    is classical. `.null` is `rfl`: it used to need the alternative set's nonemptiness proof, and
-    a carrier with one inhabitant needs nothing. -/
-theorem hLit_of_inL (k : GroundKind) (x : k.Carrier) (v : Value) :
-    inL k x v = true → HLit k x v := by
-  cases k <;> cases v <;> intro h <;>
-    first
-      | exact Bool.noConfusion h
-      | rfl
-      | (simp only [inL, decide_eq_true_eq] at h
-         subst h
-         rfl)
-      | (simp only [inL] at h
-         split at h
-         · simp only [decide_eq_true_eq] at h
-           subst h
-           rfl
-         · exact Bool.noConfusion h)
-      | (rename_i d
-         cases hs : Numeral.WF d.toDec with
-         | true =>
-           simp only [inL, hs, dif_pos, decide_eq_true_eq] at h
-           exact congrArg Value.num (congrArg Subtype.val h)
-         | false => simp [inL, hs] at h)
+/-- **A literal's held set is the refinement's held set**: §3's `ℓ` is the base's carrier
+    restricted to the alternative. -/
+theorem HLit_iff_restrict (k : GroundKind) (x : k.Carrier) (v : Value) :
+    HLit k x v ↔ ((baseCodec k).restrict (inL k x)).T v := by
+  show v = k.toValue x ↔ (∃ z, v = k.prism.into z) ∧ inL k x v = true
+  cases k <;> cases v <;> simp [GroundKind.toValue, GroundKind.prism, sC, nC, bC, boolA, nullA, inL]
 
 end
 

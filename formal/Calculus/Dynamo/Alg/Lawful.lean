@@ -12,12 +12,10 @@ namespace Calculus
 noncomputable section
 /-! ## Lawfulness — proved -/
 
-/-! ### The point ground codecs, argued once
+/-! ### The ground codecs, argued once
 
-`string`, `boolean`, `binary` and `null` are `pointCodec` at four different pairs of
-prisms. Below, each of the four is that one lemma transported across the definitional
-equality by `Lawful.congr`, which is what lets the definitions stay in the unfolded form
-the rest of the development `simp`s with. -/
+Each base is one point codec at the prism of its kind, so `lawful_pointCodec` proves every
+base. A literal is its base restricted, so `Lawful.restrict` proves every literal. -/
 
 /-- **Every base is lawful**: a point codec whose prism stamps the member of its kind. -/
 theorem lawful_baseCodec (k : GroundKind) : Lawful (baseCodec k) :=
@@ -36,8 +34,8 @@ theorem lawful_baseCodec (k : GroundKind) : Lawful (baseCodec k) :=
     here. -/
 theorem lawful_literalCodec (k : GroundKind) (x : k.Carrier) :
     Lawful (literalCodec k x) :=
-  Lawful.congr (d := (baseCodec k).restrict (inL k x)) rfl rfl rfl
-    (Alg.Lawful.restrict (lawful_baseCodec k) (inL k x))
+  have h := Alg.Lawful.restrict (lawful_baseCodec k) (inL k x)
+  ⟨h.inv, h.writes⟩
 
 end
 

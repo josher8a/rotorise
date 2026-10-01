@@ -334,18 +334,8 @@ theorem extendRead_p {r : V → Option V} {a v} :
 
 end WrapperInversion
 
-/-- Lawfulness sees only the pair and the member, so it transfers to any codec agreeing on
-    those three. This is how a ground codec inherits from the wrapper it turns out to be,
-    without disturbing its definition — which matters, since the definitions are unfolded
-    all over the development. -/
-theorem Lawful.congr {c d : Codec V M} (he : c.e = d.e) (hp : c.p = d.p) (hμ : c.μ = d.μ)
-    (h : Lawful member d) : Lawful member c where
-  inv {o _ _} hx := by
-    have hf := Orient.both (P := fun o => c.f o = d.f o) he hp
-    rw [hf o] at hx; rw [hf o.op]; exact h.inv hx
-  writes hm _ _ hx := by rw [hμ] at hm; rw [he] at hx; exact h.writes hm hx
-
-/-- The carrier transfers too, given the held set is no smaller. -/
+/-- The carrier transfers to any codec that agrees on the pair, given the held set is no
+    smaller. -/
 theorem Carrier.congr {c d : Codec V M} (he : c.e = d.e) (hp : c.p = d.p)
     (hT : ∀ v, d.T v → c.T v) (h : Carrier d) : Carrier c := by
   refine ⟨?_, ?_⟩

@@ -42,7 +42,7 @@ export Alg.Codec (ext empty Equiv)
 end Codec
 
 namespace Lawful
-export Alg.Lawful (empty congr)
+export Alg.Lawful (empty)
 end Lawful
 
 namespace Carrier
