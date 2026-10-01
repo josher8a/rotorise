@@ -124,20 +124,10 @@ theorem agreeLe_arrayCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c�
 
 /-- A record reads each entry one layer below the map. -/
 theorem agreeLe_recordCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂) :
-    AgreeLe (d + 1) (recordCodec c₁) (recordCodec c₂) := by
-  refine ⟨fun v hv => ?_, fun a ha => ?_⟩
-  · cases v with
-    | m keys f =>
-      have hk : ∀ k, c₁.e (f k) = c₂.e (f k) := fun k =>
-        h.e _ (by have := Attr.depth_map_entry (f := f) k; omega)
-      simp only [recordCodec, hk, Alg.Codec.ofEP_e]
-    | _ => rfl
-  · cases a with
-    | m keys g =>
-      have hk : ∀ k, c₁.p (g k) = c₂.p (g k) := fun k =>
-        h.p _ (by have := Attr.depth_map_entry (f := g) k; omega)
-      simp only [recordCodec, hk, Alg.Codec.ofEP_p]
-    | _ => rfl
+    AgreeLe (d + 1) (recordCodec c₁) (recordCodec c₂) :=
+  Alg.agreeLe_objectCodec (fun m k => Attr.depth_map_entry (f := m.2) k)
+    (fun m k => Attr.depth_map_entry (f := m.2) k)
+    (fun k => absurd k.2 (Finset.notMem_empty k.1)) h
 
 /-- A set reads its element codec at scalars, which are one layer below the set. -/
 theorem agreeLe_setCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂) :

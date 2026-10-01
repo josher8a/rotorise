@@ -364,6 +364,26 @@ def select {X Y : Type} (os : List (Codec V M)) (run : Codec V M → X → Optio
     Option Y :=
   (os.find? (fun c => (run c x).isSome)).bind (run · x)
 
+/-- **A sum answers what its one acting option answers**: where every other option refuses the
+    input, the first admitter is that option, or nothing acts. -/
+theorem select_split {X Y : Type} (pre suf : List (Codec V M)) (c : Codec V M)
+    (run : Codec V M → X → Option Y) (x : X) (hpre : ∀ d ∈ pre, run d x = none)
+    (hsuf : ∀ d ∈ suf, run d x = none) : select (pre ++ c :: suf) run x = run c x := by
+  induction pre with
+  | nil =>
+    unfold select
+    simp only [List.nil_append, List.find?_cons]
+    cases h : run c x with
+    | some y => simp only [Option.isSome_some, Option.bind_some, h]
+    | none =>
+      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
+      rw [List.find?_eq_none.mpr (fun d hd => by simp [hsuf d hd])]; rfl
+  | cons d ds ih =>
+    unfold select at ih ⊢
+    simp only [List.cons_append, List.find?_cons, hpre d (List.mem_cons_self ..),
+      Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
+    exact ih (fun d' hd' => hpre d' (List.mem_cons_of_mem _ hd'))
+
 /-- `union`: the sum, resolved by the first admitter. Over lawful, pairwise compatible options
     the order is unobservable (`altCodec_perm`). -/
 def altCodec (os : List (Codec V M)) (μA : Option M) : Codec V M where

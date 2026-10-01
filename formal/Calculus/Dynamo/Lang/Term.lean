@@ -207,8 +207,8 @@ theorem opaq_TSub : ∀ (fuel : Nat) (v : Value),
         | exact .arr _ fun x hx => ih x ((arrayCodec_T _ _).mp hT x hx)
         | exact nomatch hT
     · cases v <;> first
-        | exact .map _ _ fun k => ih _ (hT k)
-        | exact nomatch hT
+        | exact .map _ _ fun k => ih _ ((recordCodec_T _ _ _).mp hT k)
+        | (obtain ⟨_, hx, -⟩ := hT; exact nomatch hx)
 
 /-- `opaque`'s held set — its write domain — lands in `HOpaque`: the stage that writes a value is
     on its carrier. -/
@@ -442,8 +442,8 @@ def Term.array (elem : Term) : Term := .list [] (some elem) []
 def Term.tuple (elems : List Term) (tail : Option Term) : Term := .list elems tail []
 
 /-- §4 `(record)`: the object that declares no name and takes every key at one codec. It stopped
-    being a constructor when the open block became a block like any other, and
-    `objectCodec_empty_codec` is the equation that keeps the two readings one. -/
+    being a constructor when the open block became a block like any other, and its codec
+    `recordCodec` is the object codec of this body by definition. -/
 def Term.record (val : Term) : Term :=
   .object (.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some val))
 

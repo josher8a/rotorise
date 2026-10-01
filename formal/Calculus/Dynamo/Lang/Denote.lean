@@ -231,10 +231,10 @@ section Bridge
 theorem denote_array (t : Term) : denote α (.array t) = arrayCodec (denote α t) :=
   rfl
 
-/-- `record` denotes `recordCodec`: the empty body with an open block, which is what
-    `objectCodec_empty_codec` proves the record codec to be. -/
+/-- `record` denotes `recordCodec`, which is the object codec of the empty body with an open
+    block by definition. -/
 theorem denote_record (t : Term) : denote α (.record t) = recordCodec (denote α t) :=
-  objectCodec_empty_codec (denote α t)
+  rfl
 
 /-- `tuple` denotes the suffix-free `list`, which is what `tupleCodec` is. -/
 theorem denote_tuple (ts : List Term) (tail : Option Term) :
