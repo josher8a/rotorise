@@ -129,6 +129,8 @@ theorem SetKind.elem_out_ne {k k' : SetKind} (h : k ≠ k') (x : k.Carrier) :
     k'.elem.out (k.elem.into x) = none := by
   cases k <;> cases k' <;> first | exact absurd rfl h | rfl
 
+attribute [prism_rows] Alg.pointCodec GroundKind.prism sC nC bC boolA nullA
+
 /-- The pair a literal refines: its base's, chosen by the index.
 
     §3's `(literal)` premise is `⊢ g : T ⇝ μ, g ground`, and this is `g`. It exists because
@@ -272,7 +274,7 @@ theorem inL_of_literalCodec_e {k : GroundKind} {x : k.Carrier} {v a}
 theorem HLit_iff_restrict (k : GroundKind) (x : k.Carrier) (v : Value) :
     HLit k x v ↔ ((baseCodec k).restrict (inL k x)).T v := by
   show v = k.toValue x ↔ (∃ z, v = k.prism.into z) ∧ inL k x v = true
-  cases k <;> cases v <;> simp [GroundKind.toValue, GroundKind.prism, sC, nC, bC, boolA, nullA, inL]
+  cases k <;> cases v <;> simp [GroundKind.toValue, prism_rows, inL]
 
 end
 

@@ -149,7 +149,7 @@ def Codec.OnKind (o : Codec) (k : Kind) : Prop :=
 /-- **A base is pinned to its kind.** -/
 theorem onKind_base (k : GroundKind) : Codec.OnKind (baseCodec k) k.kind := by
   cases k <;> constructor <;> intro x hx <;> cases x <;>
-    simp_all [pointCodec, GroundKind.prism, sC, nC, bC, boolA, nullA, Attr.kind, Attr.member, Member.kind, GroundKind.kind, Alg.Codec.e, Alg.Codec.p]
+    simp_all [prism_rows, Attr.kind, Attr.member, Member.kind, GroundKind.kind, Alg.Codec.e, Alg.Codec.p]
 
 /-- A container option is pinned by its own constructor, whatever it contains. This is
     why the fixpoint's compatibility needs nothing from the recursive call — and why `opaque` is
