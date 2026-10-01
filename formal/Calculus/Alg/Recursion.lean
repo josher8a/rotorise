@@ -20,55 +20,46 @@ variable {V M : Type} {member : V → M} (depth : V → Nat)
 
 /-! ## Agreement below a depth -/
 
-/-- Two codecs agree on every input of depth at most `d`, on both sides. `Lawful` relates the
-    two sides, so a statement about one side alone cannot carry the laws to a limit. -/
+/-- Two codecs agree on every input of depth at most `d`, at each orientation. `Lawful` relates
+    the two orientations, so a statement about one orientation alone cannot carry the laws to a
+    limit. -/
 structure AgreeLe (d : Nat) (c₁ c₂ : Codec V M) : Prop where
-  e : ∀ v, depth v ≤ d → c₁.e v = c₂.e v
-  p : ∀ a, depth a ≤ d → c₁.p a = c₂.p a
+  f : ∀ (o : Orient) (x : V), depth x ≤ d → c₁.f o x = c₂.f o x
 
 namespace AgreeLe
 
 variable {depth} {d : Nat} {c₁ c₂ c₃ : Codec V M}
 
 /-- Agreement from agreement at each orientation. -/
-theorem ofF (h : ∀ o x, depth x ≤ d → c₁.f o x = c₂.f o x) : AgreeLe depth d c₁ c₂ :=
-  ⟨h .host, h .dual⟩
+theorem ofF (h : ∀ o x, depth x ≤ d → c₁.f o x = c₂.f o x) : AgreeLe depth d c₁ c₂ := ⟨h⟩
 
 /-- A codec agrees with itself at every depth. -/
-theorem refl (d : Nat) (c : Codec V M) : AgreeLe depth d c c :=
-  ⟨fun _ _ => rfl, fun _ _ => rfl⟩
+theorem refl (d : Nat) (c : Codec V M) : AgreeLe depth d c c := ⟨fun _ _ _ => rfl⟩
 
 /-- Agreement below a depth is symmetric. -/
 theorem symm (h : AgreeLe depth d c₁ c₂) : AgreeLe depth d c₂ c₁ :=
-  ⟨fun v hv => (h.e v hv).symm, fun a ha => (h.p a ha).symm⟩
+  ⟨fun o x hx => (h.f o x hx).symm⟩
 
 /-- Agreement below a depth is transitive. -/
 theorem trans (h : AgreeLe depth d c₁ c₂) (h' : AgreeLe depth d c₂ c₃) : AgreeLe depth d c₁ c₃ :=
-  ⟨fun v hv => (h.e v hv).trans (h'.e v hv), fun a ha => (h.p a ha).trans (h'.p a ha)⟩
+  ⟨fun o x hx => (h.f o x hx).trans (h'.f o x hx)⟩
 
 /-- Agreement below a depth holds below every smaller depth. -/
 theorem mono {d' : Nat} (h : AgreeLe depth d c₁ c₂) (hd : d' ≤ d) : AgreeLe depth d' c₁ c₂ :=
-  ⟨fun v hv => h.e v (le_trans hv hd), fun a ha => h.p a (le_trans ha hd)⟩
+  ⟨fun o x hx => h.f o x (le_trans hx hd)⟩
 
 /-- Where every input has depth at least one, any two codecs agree below depth zero. -/
 theorem zero (hd : ∀ v, 0 < depth v) (c₁ c₂ : Codec V M) :
     AgreeLe depth 0 c₁ c₂ :=
-  ⟨fun v hv => absurd hv (Nat.not_le.mpr (hd v)),
-   fun a ha => absurd ha (Nat.not_le.mpr (hd a))⟩
+  ⟨fun _ x hx => absurd hx (Nat.not_le.mpr (hd x))⟩
 
-/-- Two codecs with one pair of halves agree at every depth. -/
-theorem of_eq (he : c₁.e = c₂.e) (hp : c₁.p = c₂.p) : AgreeLe depth d c₁ c₂ :=
-  ⟨fun v _ => congrFun he v, fun a _ => congrFun hp a⟩
+/-- Two codecs with one map agree at every depth. -/
+theorem of_eq (h : c₁.f = c₂.f) : AgreeLe depth d c₁ c₂ :=
+  ⟨fun o x _ => congrFun (congrFun h o) x⟩
 
-/-- Agreement below a depth, at an orientation: the two maps at `o` agree at each input of
-    depth at most `d`. -/
-theorem f (h : AgreeLe depth d c₁ c₂) :
-    ∀ (o : Orient) (x : V), depth x ≤ d → c₁.f o x = c₂.f o x :=
-  Orient.both h.e h.p
-
-/-- …and agreement at every depth is one pair of halves, because every input has a depth. -/
-theorem eq_of_forall (h : ∀ d, AgreeLe depth d c₁ c₂) : c₁.e = c₂.e ∧ c₁.p = c₂.p :=
-  ⟨funext fun v => (h _).e v le_rfl, funext fun a => (h _).p a le_rfl⟩
+/-- …and agreement at every depth is one map, because every input has a depth. -/
+theorem eq_of_forall (h : ∀ d, AgreeLe depth d c₁ c₂) : c₁.f = c₂.f :=
+  funext fun o => funext fun x => (h _).f o x le_rfl
 
 end AgreeLe
 
@@ -121,8 +112,7 @@ theorem muStage_agree_le (hB : Contractive depth B) {d n : Nat} (h : d ≤ n) :
 /-- The limit agrees with the stage `n` below `n`. -/
 theorem muCodec_agree (hB : Contractive depth B) (n : Nat) :
     AgreeLe depth n (muCodec depth B) (muStage B n) :=
-  ⟨fun v hv => (muStage_agree_le hd hB hv).e v le_rfl,
-   fun a ha => (muStage_agree_le hd hB ha).p a le_rfl⟩
+  ⟨fun o x hx => (muStage_agree_le hd hB hx).f o x le_rfl⟩
 
 /-- **The fixed point.** The limit sends what its body sends over the limit, at each
     orientation. -/
@@ -163,7 +153,7 @@ theorem agreeLe_muCodec {d : Nat} {B₁ B₂ : Codec V M → Codec V M}
     induction n with
     | zero => exact AgreeLe.refl _ _
     | succ n ih => exact h _ _ ih
-  exact ⟨fun v hv => (hs _).e v hv, fun a ha => (hs _).p a ha⟩
+  exact ⟨fun o x hx => (hs _).f o x hx⟩
 
 /-! ## The combinators keep agreement -/
 
@@ -182,15 +172,13 @@ theorem select_congr {X R : Type} {run : Codec V M → X → Option R} {x : X} :
 theorem agreeLe_altCodec {d : Nat} {os₁ os₂ : List (Codec V M)} (μ₁ μ₂ : Option M)
     (h : List.Forall₂ (AgreeLe depth d) os₁ os₂) :
     AgreeLe depth d (altCodec os₁ μ₁) (altCodec os₂ μ₂) :=
-  ⟨fun v hv => select_congr (h.imp fun _ _ hc => hc.e v hv),
-   fun a ha => select_congr (h.imp fun _ _ hc => hc.p a ha)⟩
+  ⟨fun o x hx => select_congr (h.imp fun _ _ hc => hc.f o x hx)⟩
 
 /-- The two-sided restriction keeps agreement below a depth. -/
 theorem agreeLe_refine2 {d : Nat} {c₁ c₂ : Codec V M} (h : AgreeLe depth d c₁ c₂)
     (qV : V → Bool) (qA : V → Bool) :
     AgreeLe depth d (refine2 c₁ qV qA) (refine2 c₂ qV qA) :=
-  ⟨fun v hv => by simp only [refine2_e_def, h.e v hv],
-    fun a ha => by simp only [refine2_p_def, h.p a ha]⟩
+  ⟨fun o x hx => by simp only [refine2, h.f o x hx]⟩
 
 /-- A restriction reads its codec at its own input, so it keeps the depth. -/
 theorem agreeLe_restrict {d : Nat} {c₁ c₂ : Codec V M} (h : AgreeLe depth d c₁ c₂)

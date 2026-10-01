@@ -130,17 +130,12 @@ theorem agreeLe_recordCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c�
 /-- A set reads its element codec at scalars, which are one layer below the set. -/
 theorem agreeLe_setCodec {d : Nat} {c₁ c₂ : Codec} (h : AgreeLe d c₁ c₂) :
     AgreeLe (d + 1) (setCodec c₁) (setCodec c₂) := by
-  refine ⟨fun v hv => ?_, fun a ha => ?_⟩
-  · cases v with
-    | ss S => exact setAt_congr fun x _ => h.e _ (by simp only [Attr.depth] at hv ⊢; omega)
-    | ns S => exact setAt_congr fun x _ => h.e _ (by simp only [Attr.depth] at hv ⊢; omega)
-    | bs S => exact setAt_congr fun x _ => h.e _ (by simp only [Attr.depth] at hv ⊢; omega)
-    | _ => rfl
-  · cases a with
-    | ss S => exact setAt_congr fun x _ => h.p _ (by simp only [Attr.depth] at ha ⊢; omega)
-    | ns S => exact setAt_congr fun x _ => h.p _ (by simp only [Attr.depth] at ha ⊢; omega)
-    | bs S => exact setAt_congr fun x _ => h.p _ (by simp only [Attr.depth] at ha ⊢; omega)
-    | _ => rfl
+  refine ⟨fun o v hv => ?_⟩
+  cases v with
+  | ss S => exact setAt_congr fun x _ => h.f o _ (by simp only [Attr.depth] at hv ⊢; omega)
+  | ns S => exact setAt_congr fun x _ => h.f o _ (by simp only [Attr.depth] at hv ⊢; omega)
+  | bs S => exact setAt_congr fun x _ => h.f o _ (by simp only [Attr.depth] at hv ⊢; omega)
+  | _ => rfl
 
 /-! ### Objects
 
