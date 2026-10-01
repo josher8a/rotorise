@@ -191,14 +191,14 @@ theorem decides_literalS : Decides α (.literal .string "A") :=
 theorem not_decides_string : ¬ Decides α .string := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
-  cases v <;> cases w <;> simp_all [baseCodec, Value.kind, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e]
+  cases v <;> cases w <;> simp_all [baseCodec, Attr.kind, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e]
 
 
 theorem not_decides_refine_top : ¬ Decides α (.refine .string (.closure qTop) ()) := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
   cases v <;> cases w <;>
-    simp_all [Alg.restrict_e_def, Pred.eval, baseCodec, qTop, Value.kind, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e]
+    simp_all [Alg.restrict_e_def, Pred.eval, baseCodec, qTop, Attr.kind, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e]
 
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one: two `map`s differing in admission, so a row that answers `false` at every

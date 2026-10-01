@@ -266,11 +266,6 @@ theorem denoteOpt_eq {ρ : List Codec} :
   | none => rfl
   | some _ => rfl
 
-theorem denoteμs_eq_map {ρ : List Codec} : ∀ opts : List Term,
-    denoteμs α opts ρ = opts.map fun t => (denote α t ρ).μ
-  | [] => rfl
-  | t :: ts => by simp only [denote_rows, List.map]; rw [denoteμs_eq_map ts]
-
 end
 
 end Calculus

@@ -110,15 +110,6 @@ theorem lawful_literal (k : GroundKind) (x : k.Carrier) :
 
 /-! ## Inversion and dispatch helpers -/
 
-theorem TypedListM.forall : ∀ {ts Ts}, TypedListM α ts Ts →
-    ∀ t ∈ ts, ∃ T, Typed α t T (some .M)
-  | _, _, .nil, t, ht => absurd ht (by simp)
-  | _, _, .cons h hs, t, ht => by
-      rcases List.mem_cons.mp ht with rfl | ht'
-      · exact ⟨_, h⟩
-      · exact TypedListM.forall hs t ht'
-
-
 /-! ## The theorem
 
 `Alg.soundnessIn` at the DynamoDB signature. -/
@@ -241,15 +232,6 @@ theorem alignL_T_of_HTupleL {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tp
   rcases List.mem_append.mp hp with hp' | hp'
   · exact hpsF p hp'
   · exact hzip p hp'
-
-theorem TypedListM.mem : ∀ {ts Ts}, TypedListM α ts Ts →
-    ∀ t ∈ ts, ∃ T ∈ Ts, Typed α t T (some .M)
-  | _, _, .nil, t, ht => absurd ht (by simp)
-  | _, _, .cons h hs, t, ht => by
-      rcases List.mem_cons.mp ht with rfl | ht'
-      · exact ⟨_, List.mem_cons_self, h⟩
-      · obtain ⟨T', hT', hty⟩ := TypedListM.mem hs t ht'
-        exact ⟨T', List.mem_cons_of_mem _ hT', hty⟩
 
 /-- …and the option that answers for a held set, which is the lookup in the other direction.
 

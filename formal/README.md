@@ -28,7 +28,7 @@ definition it touches.
 | `Calculus/Lang/DisjointV.lean` | §5         | `disjoint_sound` at every signature: two terms the test keeps apart share no value, from the write-side laws `FormerAdm`, `LeafAdm` and `LeafMeet`, the shape classes and the top bound `TopBound` |
 | `Calculus/Lang/DisjointA.lean` | §5         | `disjoint_soundA` at every signature, as `disjoint_sound` at the dual: two terms the test keeps apart read no attribute in common, from `FormerAdmA`, `LeafAdmA` and `TopLaws`, and `disjoint_orthogonal`, which joins the two sides |
 | `Calculus/Dynamo/Alg/Lists.lean`       | —           | The list plumbing at the DynamoDB carriers: the aliases of the generic traversal and `filter` facts, and the keyed clause `traverse_fst`, which reads `Name` |
-| `Calculus/Dynamo/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Value.kind`/`Attr.kind` (the ten members collapsing onto eight), and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
+| `Calculus/Dynamo/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Attr.kind` (the ten members collapsing onto eight), and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
 | `Calculus/Dynamo/Alg/Codec.lean`       | §2, §5      | `Codec`, `Lawful` (a canonical partial bijection) and `LawfulCore` as abbreviations of the generic record and laws at `Value`, `Attr` and `Member`, and the aliases of the generic combinators |
 | `Calculus/Dynamo/Alg/Prisms.lean`      | §3          | The entry point of the certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism) and `extendRead` (alternate reading). `Ctor`, `pointCodec` and the three wrappers are stated generically in `Alg/Combinators.lean`; this file instantiates them at the DynamoDB carriers |
 | `Calculus/Dynamo/Alg/Products.lean`    | §3          | `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`), `tupleCodec` it at `align` + a traversal over `slots`, the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone. `setCodec` is argued on its own. `carriedCodec` and `entrywise` are stated generically in `Alg/Lists.lean`, and `align` and `slots` in `Alg/Positions.lean`; this file instantiates them at the DynamoDB carriers |
@@ -124,8 +124,8 @@ and the judgement to it).
   `set` is the one product that is not, and the reason is stated where it is argued:
   its attribute side is a choice among three wire sets, not one constructor.
 - **`opaque`'s compatibility is computed from kinds, not argued per option.** `Kind` is §1
-  vocabulary now (`Domain.lean`), on both sides of the pair — `Value.kind` and
-  `Attr.kind`, the ten members collapsing onto eight. An option is *pinned to a kind*
+  vocabulary now (`Domain.lean`): `Attr.kind`, one function on the one carrier, the ten members
+  collapsing onto eight. An option is *pinned to a kind*
   when it admits only values and attributes of that kind (`Codec.OnKind`), and
   `compat_opaque` turns pinned options with distinct kinds into compatibility. Each of
   `opaque`'s eight is pinned in one line, and `onKind_set`/`onKind_array`/`onKind_record`

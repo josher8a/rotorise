@@ -334,19 +334,6 @@ abbrev Value := Attr
 @[match_pattern] abbrev Value.arr (v : List Value) : Value := Attr.l v
 @[match_pattern] abbrev Value.map (keys : Finset Name) (f : {k // k ∈ keys} → Value) : Value := Attr.m keys f
 
-/-- The kind a value is of — §5's `κ` reads this. -/
-def Value.kind : Value → Kind
-  | .str _  => .string
-  | .num _  => .number
-  | .bool _ => .boolean
-  | .bin _  => .binary
-  | .null   => .null
-  | .strSet _ => .set
-  | .numSet _ => .set
-  | .binSet _ => .set
-  | .arr _  => .array
-  | .map _ _ => .map
-
 /-! ## The ground bases, and what each one carries (§3 `(literal)`'s payload)
 
 §3 has **one** `(literal)` rule:
