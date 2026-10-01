@@ -118,7 +118,7 @@ and the judgement to it).
   definition, its two inversion lemmas, its carrier and its lawfulness sit together.
   Soundness needs only `Lawful`, so a core lemma exists only where a `Lawful` lemma or
   the alternate reader cites it, and the two share their clauses (`tuple_retract`,
-  `set_retract`/`set_writes`). The shape underneath is `carriedCodec`, a payload map carried by one
+  `set_writes`). The shape underneath is `carriedCodec`, a payload map carried by one
   prism; `pointCodec`, `entrywise` (hence `array`, `record`), `tuple` and
   `object` are all instances, so §2's prism halves are discharged once for all of them.
   `set` is the one product that is not, and the reason is stated where it is argued:
