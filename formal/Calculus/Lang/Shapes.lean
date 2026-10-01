@@ -20,31 +20,21 @@ inductive Former where
   | prim | set | list | object
 deriving DecidableEq
 
-/-- **The shape classes of a universe**: the former class of each value and of each attribute,
-    and the landing fact of each former of the signature on each side. -/
+/-- **The shape classes of a universe**: the former class of each datum, and the landing fact of
+    each former of the signature. The carrier is one, so one class serves values and attributes,
+    and each landing fact holds at each orientation. -/
 class Shapes (S : Syn) [Sem S] where
-  /-- The former class of a value. -/
+  /-- The former class of a datum. -/
   former : S.V → Former
-  /-- The former class of an attribute. -/
-  formerA : S.V → Former
-  /-- A primitive writes only primitive values. -/
-  prim : ∀ g v, ((Syn.ground g).f S.o v).isSome = true → former v = .prim
-  /-- A primitive reads only primitive attributes. -/
-  primA : ∀ g a, ((Syn.ground g).f S.o.op a).isSome = true → formerA a = .prim
-  /-- A set lift writes only set values. -/
-  set : ∀ L, Mean.set (B := S.sig) = some L → ∀ c v, ((L.lift c).f S.o v).isSome = true →
+  /-- A primitive moves only primitive data. -/
+  prim : ∀ o g v, ((Syn.ground g).f o v).isSome = true → former v = .prim
+  /-- A set lift moves only set data. -/
+  set : ∀ L, Mean.set (B := S.sig) = some L → ∀ c o v, ((L.lift c).f o v).isSome = true →
     former v = .set
-  /-- A set lift reads only set attributes. -/
-  setA : ∀ L, Mean.set (B := S.sig) = some L → ∀ c a, ((L.lift c).f S.o.op a).isSome = true →
-    formerA a = .set
-  /-- The list prism builds list values. -/
+  /-- The list prism builds list data. -/
   list : ∀ L, Mean.list (B := S.sig) = some L → ∀ vs, former (L.p.into vs) = .list
-  /-- The list prism builds list attributes. -/
-  listA : ∀ L, Mean.list (B := S.sig) = some L → ∀ as, formerA (L.p.into as) = .list
-  /-- The map prism builds object values. -/
+  /-- The map prism builds object data. -/
   map : ∀ F, Mean.map (B := S.sig) = some F → ∀ m, former (F.m.into m) = .object
-  /-- The map prism builds object attributes. -/
-  mapA : ∀ F, Mean.map (B := S.sig) = some F → ∀ m, formerA (F.m.into m) = .object
 
 namespace Shapes
 
@@ -68,13 +58,13 @@ variable [PrimAdm S] {ρ ρ' : List S.C}
 /-- A primitive admits only primitive values. -/
 theorem adm_prim (g : S.Ground) (v : S.V) (h : Adm α β (.prim g) ρ v = true) :
     former v = .prim :=
-  Shapes.prim g v ((PrimAdm.admV_exact g v).mp h)
+  Shapes.prim S.o g v ((PrimAdm.admV_exact g v).mp h)
 
 /-- A set admits only set values. -/
 theorem adm_set (t : Term S) (v : S.V) (h : Adm α β (.set t) ρ v = true) : former v = .set := by
   simp only [Adm, denote, denoteAbs] at h
   split at h
-  · next L hL => exact Shapes.set L hL _ v h
+  · next L hL => exact Shapes.set L hL _ S.o v h
   · exact nomatch h
 
 /-- A list admits only list values. -/
@@ -134,19 +124,14 @@ end Value
 section Attr
 variable [PrimAdmA S] {ρ ρ' : List S.C}
 
-/-- **The shape classes of the dual**: the attribute classes are the value classes, and each
-    landing fact of the stored side is a landing fact of the caller side, on the same codecs. -/
+/-- **The shape classes of the dual are the shape classes**: the carrier and the codecs are the
+    same, and each landing fact holds at each orientation. -/
 instance op : Shapes S.op where
-  former := formerA (S := S)
-  formerA := former (S := S)
-  prim := primA (S := S)
-  primA := prim (S := S)
-  set := setA (S := S)
-  setA := set (S := S)
-  list := listA (S := S)
-  listA := list (S := S)
-  map := mapA (S := S)
-  mapA := map (S := S)
+  former := former (S := S)
+  prim := prim (S := S)
+  set := set (S := S)
+  list := list (S := S)
+  map := map (S := S)
 
 /-! ## The six disjointness laws, on the read side: the laws of the dual -/
 

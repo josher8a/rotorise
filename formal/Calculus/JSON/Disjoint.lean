@@ -49,15 +49,10 @@ theorem admA_former_empty (a : Json) :
     no set, list or map former to land elsewhere. -/
 instance jsonShapes : Alg.Shapes jsonSyn where
   former _ := .prim
-  formerA _ := .prim
-  prim _ _ _ := rfl
-  primA _ _ _ := rfl
+  prim _ _ _ _ := rfl
   set _ h := nomatch h
-  setA _ h := nomatch h
   list _ h := nomatch h
-  listA _ h := nomatch h
   map _ h := nomatch h
-  mapA _ h := nomatch h
 
 /-- The formers of JSON, on the write side: every former term admits nothing. -/
 instance jsonFormerAdm : Alg.FormerAdm jsonSyn where
