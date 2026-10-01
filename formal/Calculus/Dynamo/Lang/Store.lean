@@ -157,7 +157,7 @@ theorem decimalCodec_e_restrict : decimalCodec.e = ((baseCodec .number).restrict
   funext v; cases v with
   | n x =>
     cases hs : Numeral.Stored x.1 <;>
-      simp [decimalCodec, baseCodec, Alg.restrict_e_def, isStored, hs, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
+      simp [decimalCodec, baseCodec, Alg.restrict_e_def, isStored, hs, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, nC, Alg.Codec.e]
   | _ => rfl
 
 /-- …and on the reading half. -/
@@ -165,7 +165,7 @@ theorem decimalCodec_p_restrict : decimalCodec.p = ((baseCodec .number).restrict
   funext a; cases a with
   | n x =>
     cases hs : Numeral.Stored x.1 <;>
-      simp [decimalCodec, baseCodec, Alg.restrict_p_def, isStored, hs, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
+      simp [decimalCodec, baseCodec, Alg.restrict_p_def, isStored, hs, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, nC, Alg.Codec.p]
   | _ => rfl
 
 theorem carrier_decimalCodec : Carrier decimalCodec := by

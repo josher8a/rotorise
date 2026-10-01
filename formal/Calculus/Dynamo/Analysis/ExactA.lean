@@ -253,7 +253,7 @@ theorem AdmA_sound (t : Term) {a v} (hp : (denote α t).p a = some v) : AdmA α 
     ~~not_ExactA_refine~~, stated as "`AdmA` cannot see it". -/
 theorem AdmA_refine_bot (a : Attr) : AdmA α (.refine .string (.closure (fun _ => false)) ()) a = false := by
   simp [AdmA_rows, Pred.eval]
-  cases a <;> simp [denote_rows, baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
+  cases a <;> simp [denote_rows, baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.p]
 
 end
 

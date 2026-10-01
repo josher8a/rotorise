@@ -46,7 +46,7 @@ theorem nesting_zero_of_ground (k : GroundKind) (v : Value) (a : Attr)
   -- every branch writes a *named* constructor, so the work is substituting the equation the
   -- codec's `e` leaves behind and reading `nesting` off it
   cases k <;> cases v <;>
-    simp_all [baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p] <;>
+    simp_all [baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e] <;>
     first
       | rfl
       | (subst_vars; rfl)
@@ -112,8 +112,9 @@ theorem deepT_e : ∀ n, (denote α (deepT n)).e (deepV n) = some (deepA n)
   | 0 => rfl
   | n + 1 => by
     show (arrayCodec (denote α (deepT n))).e (.arr [deepV n]) = some (.l [deepA n])
-    simp only [arrayCodec, traverse, deepT_e n, Alg.Codec.ofEP_e]
-    rfl
+    refine (arrayCodec_f _ _ [deepV n]).trans ?_
+    have h := deepT_e n
+    simp only [traverse, Alg.Codec.e] at h ⊢; rw [h]; rfl
 
 /-- **The claim the calculus cannot make.** At every bound, a derivable term, a value it
     writes, and an attribute the store refuses — so `ran(e) ⊆ 𝔸` is exact against the model's
