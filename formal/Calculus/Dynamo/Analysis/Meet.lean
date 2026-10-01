@@ -81,36 +81,28 @@ def Pred.excBoth (k : GroundKind) [DecidableEq k.Carrier]
   some (some (.except k ⟨A.1 ∪ B.1,
     match A.2 with | ⟨x, hx⟩ => ⟨x, Finset.mem_union.mpr (Or.inl hx)⟩⟩))
 
-/-- **Two `members` predicates, met at any two bases.** `inL` at a base holds only a value of
-    that base, so two different bases share no value. -/
-def Pred.meetMem : (k : GroundKind) → NEFinset k.Carrier →
-    (k' : GroundKind) → NEFinset k'.Carrier → Option (Option Pred)
-  | .string,  A, .string,  B => Pred.meetAlt .string A B
-  | .number,  A, .number,  B => Pred.meetAlt .number A B
-  | .boolean, A, .boolean, B => Pred.meetAlt .boolean A B
-  | .binary,  A, .binary,  B => Pred.meetAlt .binary A B
-  | .null,    A, .null,    B => Pred.meetAlt .null A B
+/-- **A meet at two bases**: `op` where the two bases agree, and no value where they differ. Two
+    different bases share no value, because `inL` and `inBase` at a base hold only values of that
+    base. -/
+def Pred.atBase (op : (k : GroundKind) → [DecidableEq k.Carrier] → NEFinset k.Carrier →
+    NEFinset k.Carrier → Option (Option Pred)) :
+    (k : GroundKind) → NEFinset k.Carrier → (k' : GroundKind) → NEFinset k'.Carrier →
+      Option (Option Pred)
+  | .string,  A, .string,  B => op .string A B
+  | .number,  A, .number,  B => op .number A B
+  | .boolean, A, .boolean, B => op .boolean A B
+  | .binary,  A, .binary,  B => op .binary A B
+  | .null,    A, .null,    B => op .null A B
   | _, _, _, _ => some none
+
+/-- Two `members` predicates, met at any two bases. -/
+abbrev Pred.meetMem := Pred.atBase Pred.meetAlt
 
 /-- A `members` predicate met with an `except` predicate, at any two bases. -/
-def Pred.meetMemExc : (k : GroundKind) → NEFinset k.Carrier →
-    (k' : GroundKind) → NEFinset k'.Carrier → Option (Option Pred)
-  | .string,  A, .string,  B => Pred.minus .string A B
-  | .number,  A, .number,  B => Pred.minus .number A B
-  | .boolean, A, .boolean, B => Pred.minus .boolean A B
-  | .binary,  A, .binary,  B => Pred.minus .binary A B
-  | .null,    A, .null,    B => Pred.minus .null A B
-  | _, _, _, _ => some none
+abbrev Pred.meetMemExc := Pred.atBase Pred.minus
 
 /-- Two `except` predicates, met at any two bases. -/
-def Pred.meetExc : (k : GroundKind) → NEFinset k.Carrier →
-    (k' : GroundKind) → NEFinset k'.Carrier → Option (Option Pred)
-  | .string,  A, .string,  B => Pred.excBoth .string A B
-  | .number,  A, .number,  B => Pred.excBoth .number A B
-  | .boolean, A, .boolean, B => Pred.excBoth .boolean A B
-  | .binary,  A, .binary,  B => Pred.excBoth .binary A B
-  | .null,    A, .null,    B => Pred.excBoth .null A B
-  | _, _, _, _ => some none
+abbrev Pred.meetExc := Pred.atBase Pred.excBoth
 
 /-- **Two predicates, met.** `none` is a refusal to combine, `some none` says that no value
     satisfies both, and `some (some r)` is the combined predicate. Every data case meets every
@@ -346,31 +338,37 @@ theorem excBoth_ok (k : GroundKind) [DecidableEq k.Carrier] (A B : NEFinset k.Ca
   rw [inLs_union]
   cases inBase k v <;> cases inLs k A v <;> cases inLs k B v <;> rfl
 
-/-- `members` meets `members` at any two bases. -/
-theorem meetMem_ok (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind)
-    (B : NEFinset k'.Carrier) : MeetOk (.members k A) (.members k' B) (Pred.meetMem k A k' B) := by
+/-- **A meet at two bases is sound** where `op` is sound at one base, and where two different
+    bases share no value. -/
+theorem atBase_ok {P Q : (k : GroundKind) → NEFinset k.Carrier → Pred}
+    {op : (k : GroundKind) → [DecidableEq k.Carrier] → NEFinset k.Carrier →
+      NEFinset k.Carrier → Option (Option Pred)}
+    (hop : ∀ (k : GroundKind) [DecidableEq k.Carrier] (A B : NEFinset k.Carrier),
+      MeetOk (P k A) (Q k B) (op k A B))
+    (hne : ∀ {k k' : GroundKind}, k ≠ k' → ∀ (A : NEFinset k.Carrier) (B : NEFinset k'.Carrier),
+      MeetOk (P k A) (Q k' B) (some none)) :
+    ∀ (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind) (B : NEFinset k'.Carrier),
+      MeetOk (P k A) (Q k' B) (Pred.atBase op k A k' B) := by
+  intro k A k' B
   cases k <;> cases k' <;>
     first
-      | exact meetAlt_ok _ A B
-      | exact memMem_none (by decide) A B
+      | exact hop _ A B
+      | exact hne (by decide) A B
+
+/-- `members` meets `members` at any two bases. -/
+theorem meetMem_ok : ∀ (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind)
+    (B : NEFinset k'.Carrier), MeetOk (.members k A) (.members k' B) (Pred.meetMem k A k' B) :=
+  atBase_ok (P := .members) (Q := .members) meetAlt_ok memMem_none
 
 /-- `members` meets `except` at any two bases. -/
-theorem meetMemExc_ok (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind)
-    (B : NEFinset k'.Carrier) :
-    MeetOk (.members k A) (.except k' B) (Pred.meetMemExc k A k' B) := by
-  cases k <;> cases k' <;>
-    first
-      | exact minus_ok _ A B
-      | exact memExc_none (by decide) A B
+theorem meetMemExc_ok : ∀ (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind)
+    (B : NEFinset k'.Carrier), MeetOk (.members k A) (.except k' B) (Pred.meetMemExc k A k' B) :=
+  atBase_ok (P := .members) (Q := .except) minus_ok memExc_none
 
 /-- `except` meets `except` at any two bases. -/
-theorem meetExc_ok (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind)
-    (B : NEFinset k'.Carrier) :
-    MeetOk (.except k A) (.except k' B) (Pred.meetExc k A k' B) := by
-  cases k <;> cases k' <;>
-    first
-      | exact excBoth_ok _ A B
-      | exact excExc_none (by decide) A B
+theorem meetExc_ok : ∀ (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind)
+    (B : NEFinset k'.Carrier), MeetOk (.except k A) (.except k' B) (Pred.meetExc k A k' B) :=
+  atBase_ok (P := .except) (Q := .except) excBoth_ok excExc_none
 
 /-- **The predicate meet is sound at every row.** -/
 theorem meetM_ok : ∀ q p : Pred, MeetOk q p (Pred.meetM q p)
