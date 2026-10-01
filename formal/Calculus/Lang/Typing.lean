@@ -98,7 +98,7 @@ inductive Typed : Term S → (Mean.V (B := S.sig) → Prop) → Option (Syn.M S)
         (false != s || ((denote α β P).e v).isSome)) μ
   | refine {t T μ p pA} (h : Typed t T μ) :
       Typed (.refine t p pA) (fun v => T v ∧ Mean.eval false p v) μ
-  | opaq : Typed .opaq Syn.topHeld (Syn.top (S := S)).μ
+  | opaq : Typed .opaq (fun _ => True) none
   /-- §5's bottom. It writes no value, so it stores no member, and its held set is `False`. -/
   | never : Typed .never HNever none
   /-- §4 `(object)`. The field table is a key set with a function on it, so the judgement is
@@ -232,7 +232,7 @@ def μSyn : Term S → Option (Syn.M S)
   | .list _ _ _ => (Mean.list (B := S.sig)).map (·.μ)
   | .held _ t _ _ _ => μSyn t
   | .refine t _ _ => μSyn t
-  | .opaq => (Syn.top (S := S)).μ
+  | .opaq => none
   | .var _ | .mu _ | .never => none
   | .object _ => (Mean.map (B := S.sig)).map (·.μ)
   | .union opts => unanimous (μSynList opts)

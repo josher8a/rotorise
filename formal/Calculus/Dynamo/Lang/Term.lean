@@ -261,11 +261,6 @@ abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
   list := some dList
   map := some dMap
   set := some dSet
-  top := Ω
-  lawful_top := lawful_opaq
-  carrier_top := carrier_opaq
-  topHeld _ := True
-  top_held _ _ := trivial
 
 /-- **The one stored table of DynamoDB**: the store names no generator. -/
 def dynTableA : Alg.Table dynSyn.op := fun g => nomatch g

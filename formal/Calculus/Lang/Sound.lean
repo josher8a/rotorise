@@ -74,7 +74,7 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
     | prim g => exact Mean.lawful_ground g
     -- the bottom's domains are empty, so every law holds vacuously
     | never => exact Lawful.empty
-    | opaq => exact Mean.lawful_top
+    | opaq => exact lawful_idCodec
     | var i => exact henv i
     -- each stage is lawful by the body's soundness at the stage before, and the guard carries
     -- the laws to the limit
@@ -279,7 +279,7 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed α β t T μ → ∀ v, (den
     cases h with
     | prim _ => exact hv
     | never => exact hv
-    | opaq => exact Mean.top_held v hv
+    | opaq => trivial
     -- a closed variable is the bottom, and a `mu`'s index is its codec's held set
     | var _ => exact False.elim hv
     | mu _ _ => exact hv
@@ -357,7 +357,7 @@ theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed α β t T μ → Obligat
     cases h with
     | prim g => exact Mean.carrier_ground g
     | never => exact Carrier.empty
-    | opaq => exact Mean.carrier_top
+    | opaq => exact carrier_idCodec
     -- a closed variable is the bottom, and a lawful `mu` is on its held set, its write domain
     | var _ => exact Carrier.empty
     | @mu b T' μ' hg h' => exact carrier_muCodec (soundness (.mu hg h') hob)

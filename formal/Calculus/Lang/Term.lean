@@ -154,12 +154,6 @@ class Mean (B : Sig) where
   list : Option (ListA V Mem mem d)
   map : Option (MapA V Mem mem d)
   set : Option (SetF V Mem mem d)
-  top : Codec V Mem
-  lawful_top : Lawful mem top
-  carrier_top : Carrier top
-  /-- The held set that the judgement gives the top, and the top's held set lies inside it. -/
-  topHeld : V → Prop
-  top_held : ∀ v, top.T v → topHeld v
 
 
 
@@ -239,11 +233,9 @@ abbrev d : S.V → Nat := Mean.d
 /-- A datum has a positive depth. -/
 theorem d_pos (v : S.V) : 0 < Syn.d v := Mean.d_pos v
 
-/-- The canonical top of a universe. -/
-abbrev top : S.C := Mean.top (B := S.sig)
-
-/-- The held set that the judgement gives the top. -/
-abbrev topHeld : Mean.V (B := S.sig) → Prop := Mean.topHeld (B := S.sig)
+/-- **The top of a universe is the identity codec of its carrier**: it holds every datum and
+    sends each datum to itself, so a codec below it is a partial identity. -/
+abbrev top : S.C := idCodec
 
 end Syn
 
@@ -753,7 +745,7 @@ noncomputable def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C
   | .held s inner outer k₀ k, ρ =>
       held1 s (denoteAbs inner ρ) (denoteAbs outer ρ) ((τ s).word (k₀ :: k))
   | .refine inner p pA, ρ => refine2 (denoteAbs inner ρ) (Mean.eval false p) (Mean.eval true pA)
-  | .opaq, _ => Mean.top
+  | .opaq, _ => idCodec
   | .object b, ρ => bodySemAbs b ρ
   | .union opts, ρ => altCodec (denoteListAbs opts ρ) (unanimous (denoteμsAbs opts ρ))
   -- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously

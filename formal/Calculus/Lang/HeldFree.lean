@@ -8,10 +8,10 @@ or composes subterms through the structure that the top itself uses, so the writ
 read graph of a held-free term lie inside the graphs of the top. `sub_denote` proves the two
 inclusions by one mutual induction over `Term`, `Body`, `ObjectSlot`, the list and the option.
 
-`TopLaws` states what the induction reads of the top, former by former. A universe supplies the
-laws as an instance. Neither soundness nor the judgement reads these laws, so they sit outside
-`Sem`. `compat_of_HF` adds that the top is canonical: two held-free terms below one canonical
-codec are compatible.
+`TopLaws` states what the induction reads of the universe: each primitive is below the top, and
+the set lift keeps a codec below the top. A universe supplies the laws as an instance. Neither
+soundness nor the judgement reads these laws, so they sit outside `Sem`. The top is the identity,
+which is canonical, so two held-free terms are compatible (`compat_of_HF`).
 -/
 
 namespace Calculus.Alg
@@ -122,22 +122,27 @@ abbrev HFO (o : Option (Term S)) : Prop := hasHeldO o = false
 
 variable [Sem S] {α : Table S}
 
-/-- The laws of the top that the held-free theory reads: each primitive is below the top, the
-    top acts as the list and map formers, and the set lift keeps a codec below the top. -/
+/-- The laws of the top that the held-free theory reads: each primitive is below the top, and
+    the set lift keeps a codec below the top. The top is the identity, so it acts as the list
+    and map formers with no law of the universe (`top_list`, `top_map`). -/
 class TopLaws (S : Syn) [Sem S] : Prop where
   ground : ∀ g, Sub (Syn.ground g) (Syn.top (S := S))
-  list : ∀ L ∈ Mean.list (B := S.sig),
-    (∀ vs, (Syn.top (S := S)).e (L.p.into vs) = (traverse (Syn.top (S := S)).e vs).map L.p.into) ∧
-    (∀ as, (Syn.top (S := S)).p (L.p.into as) = (traverse (Syn.top (S := S)).p as).map L.p.into)
-  map : ∀ F ∈ Mean.map (B := S.sig),
-    (∀ m : MapOf (Mean.V (B := S.sig)), (Syn.top (S := S)).e (F.m.into m) =
-      (funImage fun k => (Syn.top (S := S)).e (m.get k)).map fun g => F.m.into ⟨m.keys, g⟩) ∧
-    (∀ m : MapOf (Mean.V (B := S.sig)), (Syn.top (S := S)).p (F.m.into m) =
-      (funImage fun k => (Syn.top (S := S)).p (m.get k)).map fun g => F.m.into ⟨m.keys, g⟩)
   set : ∀ L ∈ Mean.set (B := S.sig), ∀ c : S.C, Sub c (Syn.top (S := S)) →
     Sub (L.lift c) (Syn.top (S := S))
 
 variable {β : Table S.op}
+
+/-- The top acts as a list former: element by element. -/
+theorem top_list {o : Orient} (into : List S.V → S.V) (vs : List S.V) :
+    (Syn.top (S := S)).f o (into vs) = (traverse ((Syn.top (S := S)).f o) vs).map into :=
+  (congrArg (Option.map into) (traverse_some vs)).symm
+
+/-- The top acts as a map former: entry by entry. -/
+theorem top_map {o : Orient} (into : MapOf S.V → S.V) (m : MapOf S.V) :
+    (Syn.top (S := S)).f o (into m) =
+      (funImage fun k => (Syn.top (S := S)).f o (m.get k)).map fun g => into ⟨m.keys, g⟩ :=
+  (congrArg (Option.map fun g => into ⟨m.keys, g⟩) (funImage_eq (g := fun k => (Syn.top (S := S)).f o (m.get k))
+    (fun _ => rfl))).symm
 
 mutual
 /-- **Confluence.** The denotation of a held-free term is a restriction of the top, on both
@@ -173,7 +178,7 @@ theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
       cases hL : Mean.list (B := S.sig) with
       | none => exact sub_empty
       | some L =>
-        exact sub_listCodec (TopLaws.list L hL).1 (TopLaws.list L hL).2
+        exact sub_listCodec (top_list (o := .host) L.p.into) (top_list (o := .dual) L.p.into)
           (sub_denoteList pre h.1.1 ρ henv) (sub_denoteOpt sp h.1.2 ρ henv)
           (sub_denoteList suf h.2 ρ henv)
   | .object b, h, ρ, henv => sub_body b h ρ henv
@@ -187,7 +192,7 @@ theorem sub_body [TopLaws S] : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
       cases hF : Mean.map (B := S.sig) with
       | none => exact sub_empty
       | some F =>
-        exact sub_objectCodec (TopLaws.map F hF).1 (TopLaws.map F hF).2
+        exact sub_objectCodec (top_map (o := .host) F.m.into) (top_map (o := .dual) F.m.into)
           (fun k => sub_slot (f k) (Bool.eq_false_iff.mpr (h.1 k)) ρ henv)
           (sub_wild w h.2 ρ henv)
 /-- …at a slot. -/
@@ -221,10 +226,10 @@ theorem sub_denote [TopLaws S] (t : Term S) (h : HF t) : Sub (denote α β t) (S
   sub_denoteIn t h [] fun _ => sub_empty
 
 /-- **Held-free lawful terms are pairwise compatible**: the common bound is the top, and the top
-    is canonical. -/
-theorem compat_of_HF [TopLaws S] (hcan : Canon (Syn.top (S := S))) {s t : Term S} (hs : HF s) (ht : HF t)
+    is the identity, which is canonical. -/
+theorem compat_of_HF [TopLaws S] {s t : Term S} (hs : HF s) (ht : HF t)
     (hlt : Lawful Mean.mem (denote α β t)) : Compat (denote α β s) (denote α β t) :=
-  compat_of_common_bound' (sub_denote s hs) (sub_denote t ht) hcan hlt
+  compat_of_common_bound' (sub_denote s hs) (sub_denote t ht) canon_idCodec hlt
 
 end HeldFree
 

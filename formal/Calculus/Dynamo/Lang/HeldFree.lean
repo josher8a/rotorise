@@ -104,16 +104,6 @@ instance Ω_topLaws (o : Alg.Orient) : Alg.TopLaws ⟨dynSig, o⟩ where
   ground
     | .base k => sub_baseCodec k
     | .literal k x => sub_literal k x
-  list L hL := by
-    cases hL
-    exact ⟨fun vs => (congrArg (Option.map _) (Alg.traverse_some vs)).symm,
-      fun as => (congrArg (Option.map _) (Alg.traverse_some as)).symm⟩
-  map F hF := by
-    cases hF
-    exact ⟨fun m => (congrArg (Option.map _) (Alg.funImage_eq (g := fun k => Ω.e (m.get k))
-        (fun _ => rfl))).symm,
-      fun m => (congrArg (Option.map _) (Alg.funImage_eq (g := fun k => Ω.p (m.get k))
-        (fun _ => rfl))).symm⟩
   set L hL c hc := by cases hL; exact sub_setCodec hc
 
 /-- **Confluence**, closed: the denotation of a held-free term is a restriction of `Ω`. -/

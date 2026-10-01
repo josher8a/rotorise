@@ -8,8 +8,8 @@ variable {α : Calculus.Table}
 `HeldFree.lean` proves that a held-free term is a restriction of `opaque` on both halves
 (`sub_denote`, `confluence_W`, `confluence_R`). This file holds what follows from it.
 
-The payoffs follow from one fact: `opaque`'s pair is a bijection between `Value` and `Attr`.
-`Ω_onto` and `Ω_canon` prove the bijection. So two held-free terms that both write a value
+The payoffs follow from one fact: `opaque` is the identity. So two held-free terms that both
+write a value
 write one attribute (`write_agree`), and two that both read an attribute read one value
 (`read_agree`).
 
@@ -31,13 +31,6 @@ theorem write_agree {s t : Term} (hs : HF s) (ht : HF t) {v a b}
 theorem read_agree {s t : Term} (hs : HF s) (ht : HF t) {a v w}
     (hv : (denote α s).p a = some v) (hw : (denote α t).p a = some w) : v = w :=
   Option.some.inj ((confluence_R hs hv).symm.trans (confluence_R ht hw))
-
-/-- `Ω` writes every attribute: its write side is onto. -/
-theorem Ω_onto (a : Attr) : ∃ v, Ω.e v = some a := ⟨a, rfl⟩
-
-/-- `Ω` reads only canonical attributes: `e ∘ p = id` on `dom(p)`. -/
-theorem Ω_canon {a : Attr} {t : Value} (h : Ω.p a = some t) : Ω.e t = some a := by
-  cases h; rfl
 
 /-- Each member of a held-free list is held-free. -/
 theorem HFL_mem : ∀ {ts : List Term}, HFL ts → ∀ t ∈ ts, HF t
