@@ -52,24 +52,6 @@ theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) whe
           obtain ⟨x, -, hx⟩ := hm y hy
           exact hc.ranP hx
 
-/-! ### Sums -/
-
-/-- One layer of `opaque` is on its carrier when the layer below is — `HOpaque`, one option per
-    kind. -/
-theorem carrier_opaqStep {c : Codec} (ih : Carrier c) : Carrier (opaqStep c) := by
-  refine carrier_altCodec ?_
-  intro o ho
-  simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
-  rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-  · exact (carrier_baseCodec .string)
-  · exact (carrier_baseCodec .boolean)
-  · exact (carrier_baseCodec .binary)
-  · exact (carrier_baseCodec .null)
-  · exact (carrier_baseCodec .number)
-  · exact carrier_setCodec ih
-  · exact carrier_arrayCodec ih
-  · exact carrier_recordCodec ih
-
 end
 
 end Calculus

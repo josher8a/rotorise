@@ -32,79 +32,12 @@ theorem read_agree {s t : Term} (hs : HF s) (ht : HF t) {a v w}
     (hv : (denote α s).p a = some v) (hw : (denote α t).p a = some w) : v = w :=
   Option.some.inj ((confluence_R hs hv).symm.trans (confluence_R ht hw))
 
-/-- The image of a nonempty set under a function that answers `none` everywhere is `none`. -/
-theorem neSetImage_none_all {α β : Type} [DecidableEq β] {f : α → Option β} (S : NEFinset α)
-    (h : ∀ x, f x = none) : neSetImage f S = none := by
-  obtain ⟨x, hx⟩ := S.2
-  exact neSetImage_none (setImage_none_of hx (h x))
-
-mutual
-/-- The value that `Ω` writes to an attribute, by structure. The witness of `Ω_onto` is this
-    function and not a choice, so the map case names its preimage without `Classical.choose`. -/
-def valueOfAttr : Attr → Value
-  | .s x => .str x
-  | .n x => .num x
-  | .b x => .bin x
-  | .bool x => .bool x
-  | .null => .null
-  | .ss S => .strSet S
-  | .ns S => .numSet S
-  | .bs S => .binSet S
-  | .l as => .arr (valueOfAttrL as)
-  | .m keys g => .map keys (fun k => valueOfAttr (g k))
-/-- …and on a list of attributes. -/
-def valueOfAttrL : List Attr → List Value
-  | [] => []
-  | a :: as => valueOfAttr a :: valueOfAttrL as
-end
-
-mutual
-/-- `Ω` writes each attribute from `valueOfAttr`. -/
-theorem Ω_e_valueOfAttr : ∀ a : Attr, Ω.e (valueOfAttr a) = some a
-  | .s _ => rfl
-  | .n _ => rfl
-  | .b _ => rfl
-  | .bool _ => rfl
-  | .null => rfl
-  | .ss S => by
-      show Ω.e (.strSet S) = _
-      rw [Ωe_strSet]; unfold setAt
-      rw [show (fun x : String => (Ω.e (Value.str x)).bind sC.out) = fun x => some x from rfl,
-        neSetImage_id]
-  | .ns S => by
-      show Ω.e (.numSet S) = _
-      rw [Ωe_numSet]; unfold setAt
-      rw [neSetImage_none_all (f := fun x : WFNumeral => (Ω.e (Value.num x)).bind sC.out) S
-          (fun _ => rfl),
-        show (fun x : WFNumeral => (Ω.e (Value.num x)).bind nC.out) = fun x => some x from rfl,
-        neSetImage_id]
-  | .bs S => by
-      show Ω.e (.binSet S) = _
-      rw [Ωe_binSet]; unfold setAt
-      rw [neSetImage_none_all (f := fun x : Bytes => (Ω.e (Value.bin x)).bind sC.out) S
-          (fun _ => rfl),
-        neSetImage_none_all (f := fun x : Bytes => (Ω.e (Value.bin x)).bind nC.out) S
-          (fun _ => rfl),
-        show (fun x : Bytes => (Ω.e (Value.bin x)).bind bC.out) = fun x => some x from rfl,
-        neSetImage_id]; rfl
-  | .l as => by
-      show Ω.e (.arr (valueOfAttrL as)) = _
-      rw [Ωe_arr, Ω_e_valueOfAttrL as]; rfl
-  | .m keys g => by
-      show Ω.e (.map keys (fun k => valueOfAttr (g k))) = _
-      rw [Ωe_map, funImage_eq (f := g) (fun k => Ω_e_valueOfAttr (g k))]; rfl
-/-- …and each list of attributes from `valueOfAttrL`. -/
-theorem Ω_e_valueOfAttrL : ∀ as : List Attr, traverse Ω.e (valueOfAttrL as) = some as
-  | [] => rfl
-  | a :: as => by simp only [valueOfAttrL, traverse, Ω_e_valueOfAttr a, Ω_e_valueOfAttrL as]
-end
-
 /-- `Ω` writes every attribute: its write side is onto. -/
-theorem Ω_onto (a : Attr) : ∃ v, Ω.e v = some a := ⟨_, Ω_e_valueOfAttr a⟩
+theorem Ω_onto (a : Attr) : ∃ v, Ω.e v = some a := ⟨a, rfl⟩
 
 /-- `Ω` reads only canonical attributes: `e ∘ p = id` on `dom(p)`. -/
-theorem Ω_canon {a : Attr} {t : Value} (h : Ω.p a = some t) : Ω.e t = some a :=
-  lawful_opaq.can_roundTrip (Ω_onto a) h
+theorem Ω_canon {a : Attr} {t : Value} (h : Ω.p a = some t) : Ω.e t = some a := by
+  cases h; rfl
 
 /-- Each member of a held-free list is held-free. -/
 theorem HFL_mem : ∀ {ts : List Term}, HFL ts → ∀ t ∈ ts, HF t
@@ -134,9 +67,7 @@ theorem oneHeld_writes : (denote oneTable oneHeld).e (.str "1") = some (.n (WFNu
 theorem held_violates_W :
     ¬ ∀ v a, (denote oneTable oneHeld).e v = some a → (denote oneTable .opaq).e v = some a := by
   intro h
-  have := h _ _ oneHeld_writes
-  rw [denote_opaq, show (muCodec opaqStep).e (.str "1") = some (.s "1") from rfl] at this
-  exact nomatch this
+  exact absurd (Option.some.inj (h _ _ oneHeld_writes)) (fun h => nomatch h)
 
 /-- `oneHeld` reads the number `1` as the string `"1"`. -/
 theorem oneHeld_reads : (denote oneTable oneHeld).p (.n (WFNumeral.of "1")) = some (.str "1") := by
@@ -147,10 +78,7 @@ theorem oneHeld_reads : (denote oneTable oneHeld).p (.n (WFNumeral.of "1")) = so
 theorem held_violates_R :
     ¬ ∀ a v, (denote oneTable oneHeld).p a = some v → (denote oneTable .opaq).p a = some v := by
   intro h
-  have := h _ _ oneHeld_reads
-  rw [denote_opaq, show (muCodec opaqStep).p (.n (WFNumeral.of "1"))
-    = some (.num (WFNumeral.of "1")) from rfl] at this
-  exact nomatch this
+  exact absurd (Option.some.inj (h _ _ oneHeld_reads)) (fun h => nomatch h)
 
 
 /-- The control of the control: `oneHeld` is not held-free, so `confluence_W` does not

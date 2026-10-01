@@ -14,7 +14,7 @@ binder first, and a closed term is denoted at `ρ = []`, which the default suppl
 
 `mu b` is the one row that stages: it is `muCodec` of the body `fun c => denote b (c :: ρ)`, and
 `muCodec` budgets each input by its own depth, which is a recursion on the input and not on the
-term. `opaque` is `muCodec opaqStep`, the same construct at a fixed body.
+term. `opaque` is the identity codec, and stages nothing.
 
 `μ := μSyn t` is a *function of the term* (`Alg.denote_μ`, proved at every universe), so the `⇝` column stays truthful.
 Laws are in Soundness.lean.
@@ -175,8 +175,8 @@ variable (t : Term) (ts : List Term) (ρ : List Codec)
 @[denote_rows] theorem denote_refine (p : Pred) (pA : Alg.Syn.PredA dynSyn) :
     denote α (.refine t p pA) ρ = (denote α t ρ).restrict p.eval :=
   rfl
-/-- `opaque` denotes the recursive codec of its body `opaqStep` (`Opaque.lean`). -/
-@[denote_rows] theorem denote_opaq : denote α .opaq ρ = muCodec opaqStep := rfl
+/-- `opaque` denotes the identity codec (`Opaque.lean`). -/
+@[denote_rows] theorem denote_opaq : denote α .opaq ρ = Ω := rfl
 /-- `object` denotes its payload's semantics. -/
 @[denote_rows] theorem denote_object (b : Body) : denote α (.object b) ρ = bodySem α b ρ := rfl
 /-- `union` denotes `altCodec`, over the options' semantics and their unanimous member. -/

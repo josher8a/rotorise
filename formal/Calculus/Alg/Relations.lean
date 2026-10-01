@@ -262,6 +262,9 @@ theorem acts_of_find? (o : Orient) {os : List (Codec V M)} {c : Codec V M} {x}
     the codec read. -/
 def Canon (u : Codec V M) : Prop := ∀ a t, u.p a = some t → u.e t = some a
 
+/-- The identity codec reads canonically. -/
+theorem canon_idCodec : Canon (idCodec : Codec V M) := fun _ _ h => by cases h; rfl
+
 /-- **Write agreement**: two compatible options that both write `v` write one attribute. -/
 theorem Compat.e_agree {c d : Codec V M} (h : Compat c d) (hc : LawfulCore member c)
     (hd : Canon d) {v a b}

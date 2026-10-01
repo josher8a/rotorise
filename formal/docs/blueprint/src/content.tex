@@ -649,17 +649,14 @@ Demanding \rulelink{cond:R}{\textbf{(R)}} alone would under-demand, deriving a \
 exact term §2's argument for \texttt{opaque} says cannot exist. (\rulelink{cond:W}{\textbf{(W)}} is vacuous at \texttt{⊤}, so the three
 named are the whole obligation.)
 
-\texttt{opaque} is the calculus's universal sum, and it is primitive only in presentation: it
-is \rulelink{thm:guarded-recursion}{guarded recursion} at one fixed body. The body is the \textbf{union of everything
-self-identifying, closed under the containers}, a fixpoint of shape
-\texttt{union(string,\ boolean,\ binary,\ ⟨NULL⟩,\ number,\ set(opaque),\ array(opaque),\ record(opaque))}
-(\texttt{opaqStep}, \texttt{contractive\_opaqStep}). Its options are \rulelink{cond:compat}{\textbf{(Compat)}}, because their kinds and
-members are pairwise disjoint (\texttt{compat\_opaque}). That makes each layer lawful, and the limit is lawful by the
-general theorem (\texttt{lawful\_opaq}). The held set is \emph{defined}
-as the values whose member is recoverable from the value alone, so \rulelink{cond:R}{\textbf{(R)}} holds by construction.
-A numeral is such a value: the \texttt{number} option is \texttt{baseCodec .number}, which holds the numeral exactly, as its digits, and
-\texttt{number\ ⇄\ N} keeps the member and the digits on both halves. So the held set is every
-\texttt{Value} (\texttt{opaq\_total}).
+\texttt{opaque} is the calculus's universal sum: the \textbf{union of everything self-identifying,
+closed under the containers}, of shape
+\texttt{union(string,\ boolean,\ binary,\ ⟨NULL⟩,\ number,\ set(opaque),\ array(opaque),\ record(opaque))}.
+With one carrier, each datum identifies itself, so that union sends each datum to itself at each
+orientation. The model denotes \texttt{opaque} by the identity codec (\texttt{lawful\_opaq}), and the
+union is a theorem (\texttt{Adm\_opaqUnfold}, \texttt{AdmA\_opaqUnfold}). The held set is every
+\texttt{Value} (\texttt{opaq\_total}): a numeral is such a value, and \texttt{number\ ⇄\ N} keeps the member
+and the digits on both halves.
 
 \textbf{\texttt{opaque} has no numeric policy.} A host whose numeric type is not exact, a binary64 float for
 example, adapts that type outside the core. A policy that refuses a host number, or one that rounds it,
@@ -953,7 +950,7 @@ held-free options & every pair of terms with no \texttt{held} & both sit below \
 a common canonical bound & two restrictions of one adapter & \texttt{compat\_of\_common\_bound} \\
 separation & two options that no input reaches both of & the certificate below (\texttt{pairwiseCompat\_of\_separated}) \\
 an empty option & a pair with \texttt{never} on a side & \texttt{pairwiseCompat\_never\_left}, \texttt{pairwiseCompat\_never\_right} \\
-kind exclusivity & \texttt{opaque}'s fixpoint (§3) & \texttt{compat\_opaque} \\
+kind exclusivity & a recursive union whose options are pinned to distinct kinds, as \texttt{jsonTerm} & \texttt{compat\_of\_onKinds} \\
 tag disjointness & \rulelink{rule:dunion}{\texttt{(dunion)}}, outright & the discriminator literals \\
 a slice & a sublist of a compatible union & \texttt{pairwiseCompat\_sublist}, \texttt{pairwiseCompat\_extract}, \texttt{pairwiseCompat\_exclude} \\
 \bottomrule
@@ -1042,9 +1039,7 @@ escapes it by putting the growing option first, which makes it automatically the
 
 These are the obligations of a least-fixpoint construction, and the model's recursion does not need
 them. \rulelink{thm:guarded-recursion}{Guarded recursion} reads each input at the stage its own depth names, so it builds
-no chain. The guard alone makes the stages agree past the depth of the input. \texttt{opaque} is that
-construction at one body, and its options are kind-exclusive at every stage (\texttt{compat\_opaque}), so
-\texttt{lawful\_opaq} proves its fixed point lawful.
+no chain. The guard alone makes the stages agree past the depth of the input.
 
 \subsection{The machinery of admission}\label{the-machinery-of-admission}
 
@@ -1399,9 +1394,8 @@ The dischargers close the obligation where they apply:
 \texttt{Lᵢ}. So no input reaches two options, the options are separated, and the sum case closes. The one
 union that is separated by construction, which is what the term is \emph{for}.
 
-\emph{opaque.} The fixpoint of §3: one option per kind, each self-identifying by construction — kinds
-partition the values and members partition the attributes. So its options are compatible at
-every depth of the fixpoint (\texttt{compat\_opaque}), and the sum case closes here too.
+\emph{opaque.} The model denotes \texttt{opaque} by the identity codec, which is lawful
+(\texttt{lawful\_opaq}). It is no sum in the model, so no sum case arises.
 \end{proof}
 
 What remains outside the theorem is what §3 already names: each \rulelink{rule:union}{\texttt{(union)}}'s \rulelink{cond:compat}{\textbf{(Compat)}} where no discharger decides it. The numeral bound is not among

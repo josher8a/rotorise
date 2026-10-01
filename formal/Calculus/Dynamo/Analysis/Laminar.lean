@@ -175,11 +175,6 @@ theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed α t T μ) (hob : Oblig
         exact (hin _).mpr (setAt_elem ha x hx)⟩
   | _ => simp [HSet, Adm_rows, setCodec, Alg.Codec.e]
 
-/-- `HOpaque` is `opaque`'s admission: `opaque`'s held set is its write domain, and
-    `opaq_T_identity` names that set. -/
-theorem hopaque_adm (v : Value) : HOpaque v ↔ Adm α .opaq v = true :=
-  (opaq_T_identity v).symm
-
 /-- A union's held set is the disjunction row of `Adm`. -/
 theorem hunion_iff : ∀ {opts Ts μs}, TypedListμ α opts Ts μs → (∀ t ∈ opts, AdmIff α t) →
     ∀ v, HUnion Ts v ↔ AdmAny α opts v = true
@@ -204,7 +199,7 @@ theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t →
     | base k => cases k <;> cases v <;> simp [Adm_rows, inBase, baseCodec, -Subtype.exists, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA]
     | literal k x => cases k <;> cases v <;> simp [HLit, Adm_rows, AdmLit, inL, GroundKind.toValue]
     | never => simp [HNever, Adm_rows]
-    | opaq => exact hopaque_adm v
+    | opaq => exact ⟨fun _ => rfl, fun _ => trivial⟩
     | var _ => simp [HNever, Adm_rows]
     -- a `mu`'s held set is its write domain, which is its row
     | mu _ _ => exact Iff.rfl

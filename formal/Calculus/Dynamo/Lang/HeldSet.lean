@@ -3,102 +3,19 @@ import Calculus.Dynamo.Lang.Soundness
 variable {α : Calculus.Table}
 
 /-!
-# `HOpaque` and the empty set — a mechanization bug, closed by the type
+# The judgement's held set is the denotation's
 
-"`T` as an identity" was long unproved, and it bites hardest at `opaque`, where
-`HOpaque` *is* the held set. Attempting it turned up
-a defect — and, unlike §4's three, this one was in the **model**, not the specification.
-
-`HOpaque`'s `set` clause was transcribed as
-
-```
-| set (vs) (h : ∀ x ∈ vs, HOpaque lossy x) : HOpaque lossy (.set vs)
-```
-
-with no constraint on `vs`, so `HOpaque lossy (set [])` held vacuously. Nothing in the
-calculus agreed:
-
-* §1's `SS`/`NS`/`BS` are `℘⁺fin` — explicitly non-empty. There is no empty wire set to
-  write.
-* `(set)`'s own held set `HSet` excluded it. §3 exhibits `opaque` as the fixpoint
-  `union(…, set(opaque), …)`, whose `set` option is that rule — so the fixpoint reading
-  excludes `set []` too.
-* §3's prose reading — "the values whose member is recoverable from the value alone" —
-  excludes it as well, and for the sharpest reason: an empty set has no payloads, so
-  `SS`, `NS` and `BS` are indistinguishable. Its member is precisely what cannot be
-  recovered.
-
-**The repair went through three stages, and the last one is why this section is now
-prose.** First the inductive gained `hne : vs ≠ []`, and three theorems here exhibited the
-gap: ~~not_hopaque_set_nil~~, ~~opaqCodec_T_set_nil~~ and ~~opaqCodecω_e_set_nil~~ — the empty
-set is held by no fuel, written by none, and refused by the corrected `HOpaque`. Then the sets
-became `Finset`, and `vs ≠ []` became `S.Nonempty`. Now `Value.strSet` takes a
-`NEFinset String`, and **the three theorems cannot be stated**: `Value.strSet ∅` does not
-typecheck, because `∅` carries no non-emptiness proof and `℘⁺fin` has no other inhabitant
-to offer.
-
-That is the closure, and it is the same shape as the map defect's
-(~~record_e_keeps_duplicate_keys~~ became unstatable when `M`'s keys became a `Finset`). A
-witness that a value is excluded is worth having exactly while the value is expressible.
-When the type stops admitting it, the witness stops being a theorem and becomes a
-typechecking error at the point where anyone would try to write it down — which is
-earlier, and cheaper to act on.
-
-The direction matters: `typed_TSub` (denotation ⊆ judgement) holds either way, so no law
-depends on this. What a surplus on the judgement's side costs is the advertised precision of
-the `: T` index, and nothing else.
+`typed_TSub` puts the denotation's held set inside the judgement's. `typed_T_eq` is the other
+direction, so the two are one set (`typed_T_identity`). `opaque` holds every value, at both.
 -/
 
 namespace Calculus
 
 open Alg (Body.fields_mk Body.wild_mk Body.at_mk Term.depth)
 
-/-! ## `T` as an identity, for `opaque`
+/-! ## At every rule
 
-With `HOpaque` corrected, the converse of `opaq_TSub` goes through: everything `HOpaque` admits,
-`opaque` writes. `opaque`'s held set is its write domain (`muCodec`), so the identity is one
-induction over `HOpaque`, and each container case reads `opaque` through itself at the fixed
-point (`Ωe_arr`, `Ωe_map`, `Ωe_strSet` and the other two sets). -/
-
-/-- Everything `HOpaque` holds, `opaque` writes. -/
-theorem hopaque_e {v : Value} (h : HOpaque v) : (Ω.e v).isSome = true := by
-  induction h with
-  | str s => rfl
-  | bool b => rfl
-  | bin b => rfl
-  | null => rfl
-  | num d => rfl
-  | strSet S _ _ =>
-    rw [Ωe_strSet, setAt_congr (c := Ω) (d := (baseCodec .string)) (fun x _ => rfl)]
-    exact setAt_isSome_of (lawful_baseCodec .string).core (μ₀ := .S) rfl (fun _ _ h => Attr.s.inj h)
-      (fun _ _ => rfl) (fun _ _ _ ha => (lawful_baseCodec .string).writes rfl ha)
-  | numSet S _ _ =>
-    rw [Ωe_numSet, setAt_congr (c := Ω) (d := (baseCodec .number)) (fun x _ => rfl)]
-    exact setAt_isSome_of (lawful_baseCodec .number).core (μ₀ := .N) rfl (fun _ _ h => Attr.n.inj h)
-      (fun _ _ => rfl) (fun _ _ _ ha => (lawful_baseCodec .number).writes rfl ha)
-  | binSet S _ _ =>
-    rw [Ωe_binSet, setAt_congr (c := Ω) (d := (baseCodec .binary)) (fun x _ => rfl)]
-    exact setAt_isSome_of (lawful_baseCodec .binary).core (μ₀ := .B) rfl (fun _ _ h => Attr.b.inj h)
-      (fun _ _ => rfl) (fun _ _ _ ha => (lawful_baseCodec .binary).writes rfl ha)
-  | arr vs _ ih =>
-    rw [Ωe_arr, Option.isSome_map]
-    exact traverse_isSome_of_all ih
-  | map keys f _ ih =>
-    rw [Ωe_map, Option.isSome_map]
-    exact funImage_isSome_iff.mpr ih
-
-/-- **`HOpaque` *is* `opaque`'s held set.** The row §6 called unproved, and unprovable in
-    the fuel encoding, closed for the case it said bites hardest. -/
-theorem opaq_T_identity (v : Value) : Ω.T v ↔ HOpaque v :=
-  ⟨opaq_TSubω v, hopaque_e⟩
-
-/-! ## …and in general, at every rule
-
-`opaq_T_identity` closes (A) at the constructor §3 says it bites hardest at. The general
-statement lives **here rather than beside `typed_TSub`**, which is where its mirror is and
-where it belongs by shape: its `opaque` case is `opaq_T_identity`, and the two theorems that
-reach `opaque` stay together. The four list and table helpers the other rules need stay beside
-their converses in `Soundness.lean`.
+The four list and table helpers the rules need stay beside their converses in `Soundness.lean`.
 
 So `term_depth_wf`'s users are **no longer all in one module**. The reason they are not is
 written above, and no document carries a count of them.
@@ -109,11 +26,11 @@ set_option linter.unreachableTactic false in
 /-- **The judgement's held set is inside the denotation's** — `typed_TSub` the other way, and
     the direction that was open.
 
-    `HeldSet.lean` names this claim (A) and had it only at `opaque` (`opaq_T_identity`); the
-    general statement is here because it is `typed_TSub`'s mirror and recurses the same way.
+    This file names this claim (A). The statement is `typed_TSub`'s mirror and recurses the
+    same way.
     Every rule closes: the ground rules and `literal` are `exact hv`, the two
-    containers and the four wrappers reduce past their constructor, `opaque` is the existing
-    iff, and `set` recurses into its element. Only four rules need anything new, and each needs the
+    containers and the four wrappers reduce past their constructor, `opaque` holds every
+    value, and `set` recurses into its element. Only four rules need anything new, and each needs the
     converse of a helper that was already here for the other direction.
 
     **What this does *not* say is `T = dom(e)`**, which is a different claim, proved by
@@ -126,7 +43,7 @@ theorem typed_T_eq : ∀ {t T μ}, Typed α t T μ → ∀ v, T v → (denote α
     -- expression — the same fact that removed `typed_TSub`'s five-way split here
     | literal _ _ => exact hv
     | never => exact hv
-    | opaq => exact (opaq_T_identity v).mpr hv
+    | opaq => trivial
     -- a closed variable holds nothing, and a `mu`'s index is its codec's held set
     | var _ => exact False.elim hv
     | mu _ _ => exact hv
@@ -195,9 +112,8 @@ theorem typed_T_identity {t T μ} (h : Typed α t T μ) (v : Value) : (denote α
 
 /-! ## Which identity? §6's row is two of them
 
-* **(A)** `(denote t).T = T` for a derivable `⊢ t : T ⇝ μ` — `HOpaque` *is* `opaque`'s held
-  set, which `opaq_T_identity` proves at `opaque` and `typed_T_identity` now proves at every
-  rule. **Closed**, and it was the half `typed_TSub` left.
+* **(A)** `(denote t).T = T` for a derivable `⊢ t : T ⇝ μ`, which `typed_T_identity` proves
+  at every rule. **Closed**, and it was the half `typed_TSub` left.
 * **(B)** `T = dom(e)` — what makes `: T` an honest index rather than an upper bound.
   `Carrier.domE` is its other half.
 

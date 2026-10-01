@@ -183,8 +183,8 @@ theorem Typed.refine {t T μ p pA} (h : Typed α t T μ) :
     Typed α (.refine t p pA) (fun v => T v ∧ p.eval v) μ :=
   Alg.Typed.refine h
 
-/-- §3 `(opaque)`: the held set is `HOpaque`. -/
-theorem Typed.opaq : Typed α .opaq HOpaque none := Alg.Typed.opaq
+/-- §3 `(opaque)`: the held set is every value. -/
+theorem Typed.opaq : Typed α .opaq (fun _ => True) none := Alg.Typed.opaq
 
 /-- §5's bottom: it holds nothing and stores no member. -/
 theorem Typed.never : Typed α .never HNever none := Alg.Typed.never
@@ -225,7 +225,7 @@ theorem Typed.casesD {motive : ∀ t T μ, Typed α t T μ → Prop}
         (fun v => I ((α.word (k₀ :: k)).1 v) ∧ ((denote α P).e v).isSome) μ (.held h))
     (refine : ∀ {t T μ p pA} (h : Typed α t T μ),
       motive (.refine t p pA) (fun v => T v ∧ p.eval v) μ (.refine h))
-    (opaq : motive .opaq HOpaque none .opaq)
+    (opaq : motive .opaq (fun _ => True) none .opaq)
     (never : motive .never HNever none .never)
     (object : ∀ {body : Body} {bind R} {μs : {k // k ∈ body.fields} → Option Member}
       (hf : ∀ k, TypedField α (body.at k) (bind k).2 (bind k).1 (μs k))

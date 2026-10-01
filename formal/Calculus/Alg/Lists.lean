@@ -68,6 +68,11 @@ variable {α β γ : Type} {f : α → Option β} {g : β → Option α}
 
 @[simp] theorem traverse_nil : traverse f [] = some [] := rfl
 
+/-- `traverse` of `some` is `some`: the identity, element by element. -/
+theorem traverse_some : ∀ xs : List α, traverse some xs = some xs
+  | [] => rfl
+  | x :: xs => by simp only [traverse, traverse_some xs]
+
 /-- The `cons` step in `Option`'s monad, which is the form `simp` can reason with. -/
 theorem traverse_cons {x : α} {xs : List α} :
     traverse f (x :: xs) = (f x).bind fun y => (traverse f xs).map (y :: ·) := by

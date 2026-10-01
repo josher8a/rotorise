@@ -33,18 +33,18 @@ definition it touches.
 | `Calculus/Dynamo/Alg/Prisms.lean`      | §3          | The entry point of the certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism) and `extendRead` (alternate reading). `Ctor`, `pointCodec` and the three wrappers are stated generically in `Alg/Combinators.lean`; this file instantiates them at the DynamoDB carriers |
 | `Calculus/Dynamo/Alg/Products.lean`    | §3          | `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`), `tupleCodec` it at `align` + a traversal over `slots`, the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone. `setCodec` is argued on its own. `carriedCodec` and `entrywise` are stated generically in `Alg/Lists.lean`, and `align` and `slots` in `Alg/Positions.lean`; this file instantiates them at the DynamoDB carriers |
 | `Calculus/Dynamo/Alg/Objects.lean`     | §4          | The field table as a map rather than a row, and the object taken apart through it. `objectCodec` is cashed as an equation by `objectCodecCore_eq` rather than argued on its own |
-| `Calculus/Dynamo/Alg/Sums.lean`        | §5, §3      | `altCodec` (the sum, resolved by the first admitter), and `opaqStep`, one layer of everything self-identifying |
+| `Calculus/Dynamo/Alg/Sums.lean`        | §5, §3      | `altCodec` (the sum, resolved by the first admitter) |
 | `Calculus/Dynamo/Alg/Carriers.lean`    | §3          | One `Carrier` lemma per combinator, so the judgement's held-set index is the domain of the pair |
 | `Calculus/Dynamo/Alg/Lawful.lean`      | §3–§5       | The lawfulness lemmas this development discharges, one per construction |
 | `Calculus/Dynamo/Alg/Frontier.lean`    | §3–§5       | The lawfulness lemmas that are stated and not yet discharged, and the ones whose discharge is partial |
 | `Calculus/Dynamo/Lang/Term.lean`        | §3–§4       | The DynamoDB signature: `Pred`, `SetElem`, the primitives `Ground` with `groundCodec`, the formers `dList`, `dMap` and `dSet`, `dynSyn` and `dynSem`. `Term`, `Body` and `ObjectSlot` are abbreviations at `dynSyn`, with one `match_pattern` abbreviation per constructor spelling and the eliminator `Term.casesD`. The registrations of the simp sets `denote_rows`, `μSyn_rows`, `Adm_rows` and `AdmA_rows` |
 | `Calculus/Dynamo/Alg/Recursion.lean`   | §3          | Guarded recursion: `muCodec` budgets each input by its own depth (`Value.depth`/`Attr.depth`); from `Contractive` alone the stages agree past the depth (`muStage_agree`), the limit is a fixed point (`muCodec_fix`), and lawful stages give a lawful limit (`lawful_muCodec`); each container keeps agreement one layer down |
 | `Calculus/Dynamo/Lang/Denote.lean`      | —           | `denote` at DynamoDB, structural, pure dispatch into the combinators, over an environment for the bound variables; `mu` is `muCodec` of its body. `denote` is the generic `Alg.denote`, and the simp set `denote_rows` holds its rows at the DynamoDB constructors |
-| `Calculus/Dynamo/Lang/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
+| `Calculus/Dynamo/Lang/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HObject`, `HUnion`); `opaque` holds every value; syntactic premises only                                                                                             |
 | `Calculus/Dynamo/Lang/Soundness.lean`   | §5          | `Obligations` and `PairwiseCompat` at `dynSyn`, the theorem statements, and the held-set bridge `typed_e_mem`/`typed_p_mem`, from `Alg.carrier_denote` and `Alg.typed_TSub` |
 | `Calculus/Dynamo/Lang/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `Can`, and all ten of §6's "Hold" nodes this development still states — `held`'s composition (its identity is `equiv_through_id` at the codecs, because a `held` of the empty word has no term), `refine`'s meet and full case, `Codec.extendRead` with its own reader as the alternate reader and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of §6's stated conditions), wrapper member preservation. §6's null-point node went with the wrapper: the point is a union option, so idempotence is the union's |
-| `Calculus/Dynamo/Alg/Opaque.lean`      | §3, §7      | `opaque` as `muCodec opaqStep`: the kind-disjoint unfoldings — one per constructor each side, counted in that file's own header — `contractive_opaqStep`, `lawful_opaq`/`carrier_opaq` from the general theorems, and the fixed point at each container (`Ωe_fix`, `Ωe_arr` and the rest) |
-| `Calculus/Dynamo/Lang/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`HOpaque` *is* `opaque`'s held set) and `typed_T_identity` ((A) at every rule); `typed_T_adm` in `Laminar.lean` proves (B) at every derivable term whose obligations hold |
+| `Calculus/Dynamo/Alg/Opaque.lean`      | §3, §7      | `opaque` as the identity codec `Alg.idCodec`, with `lawful_opaq` and `carrier_opaq`; the §3 union is a theorem in `Universal.lean` |
+| `Calculus/Dynamo/Lang/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `typed_T_identity` ((A) at every rule); `typed_T_adm` in `Laminar.lean` proves (B) at every derivable term whose obligations hold |
 | `Calculus/Dynamo/Alg/Continuity.lean`  | §5, §7      | `Sub` as the information order that any ccpo must extend, and first-match resolution monotone (`selectF_mono_list`) and continuous (`selectF_continuous_list`) under the obligation that every admitter agrees |
 | `Calculus/Dynamo/Witness/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's nesting bound, a parameter, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
 | `Calculus/Dynamo/Lang/Store.lean`    | §1          | The DynamoDB port: `DynamoDB.maxNesting` instantiates the nesting bound at the store's 32 levels; `Numeral.Normal`/`Numeral.Stored`, `decimalCodec` and its `SurvivesStore` instance, `not_survivesStore_numberCodec`, the numeral-domain report (`decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases), and the text adapter `numeralOfStoredText`/`textOfNumeral` |
@@ -63,8 +63,8 @@ Read those.
 
 **The mechanization is complete: the project builds with zero `sorry`.** §5's
 soundness theorem is machine-checked — `soundness` (retract, canon and writes) — by induction on the judgement, dispatching
-each case to its certified combinator lemma, with `opaque`'s compatibility discharged by
-`compat_opaque`.
+each case to its certified combinator lemma. `opaque` is the identity codec, so it owes no
+compatibility.
 The judgement carries both of §3's indices, and both are checked against the
 denotation. `typed_e_mem` and `typed_p_mem` are §3's `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T` at the
 judgement's own index — a derivable term writes and reads only values of the held set it
@@ -123,14 +123,13 @@ and the judgement to it).
   `object` are all instances, so §2's prism halves are discharged once for all of them.
   `set` is the one product that is not, and the reason is stated where it is argued:
   its attribute side is a choice among three wire sets, not one constructor.
-- **`opaque`'s compatibility is computed from kinds, not argued per option.** `Kind` is §1
-  vocabulary now (`Domain.lean`): `Attr.kind`, one function on the one carrier, the ten members
-  collapsing onto eight. An option is *pinned to a kind*
-  when it admits only values and attributes of that kind (`Codec.OnKind`), and
-  `compat_opaque` turns pinned options with distinct kinds into compatibility. Each of
-  `opaque`'s eight is pinned in one line, and `onKind_set`/`onKind_array`/`onKind_record`
-  hold for *any* element codec — which is why the fixpoint's compatibility needs
-  nothing from the recursive call, and why `opaque` is not a special construction.
+- **A recursive union's compatibility is computed from kinds, not argued per option.** `Kind`
+  is §1 vocabulary (`Domain.lean`): `Member.kind`, the ten members collapsing onto eight. An
+  option is *pinned to a kind* when it admits only values and attributes of that kind
+  (`Codec.OnKind`), and `compat_of_onKinds` turns pinned options with distinct kinds into
+  compatibility. `onKind_set`/`onKind_array`/`onKind_record` hold for *any* element codec, so
+  the compatibility of a recursive union such as `jsonTerm` needs nothing from the recursive
+  call.
 - **`N` is carried exactly, and no numeric type is axiomatized.** A target language that hands
   its own numeric type to a caller adapts that type to `WFNumeral` in the port. IEEE-754 facts
   are not this calculus's theorems, and nothing here assumes them.

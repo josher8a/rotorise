@@ -350,14 +350,13 @@ theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     Lawful (objectCodec sems rest) :=
   Alg.lawful_objectCodec (fun _ => rfl) hf hrest
 
-/-! ### Kind separation, and `opaque`'s fixpoint
+/-! ### Kind separation
 
-    The discharger `(opaque)` needs. An option is
-    *pinned to a kind* when it admits only values and attributes of that kind — which is
-    precisely what §3 means by calling `opaque`'s options "self-identifying". Pin each
-    option and keep the kinds distinct, and compatibility follows with nothing said
-    about what the options contain: `onKind_set` and its two neighbours hold for *any*
-    element codec, which is why the fixpoint needs nothing from the recursive call. -/
+    The discharger of a recursive union. An option is *pinned to a kind* when it admits only
+    values and attributes of that kind, which is what §3 means by "self-identifying". Pin each
+    option and keep the kinds distinct, and compatibility follows with nothing said about what
+    the options contain: `onKind_set` and its two neighbours hold for *any* element codec, so
+    the fixpoint needs nothing from the recursive call. -/
 
 /-- An option pinned to a kind: it admits only values and attributes of that kind. -/
 def Codec.OnKind (o : Codec) (k : Kind) : Prop :=
@@ -392,28 +391,6 @@ theorem onKind_record (c : Codec) :
     case m keys g => rfl
     all_goals exact nomatch ha
 
-/-- The kinds `opaque`'s options are pinned to, in the order they are offered. -/
-def opaqKinds : List Kind :=
-  [.string, .boolean, .binary, .null, .number, .set, .array, .map]
-
-/-- "The recursive union of everything self-identifying" (§3), spelled out: the eight
-    options and the eight kinds that identify them. -/
-theorem opaq_onKinds (c : Codec) :
-    List.Forall₂ Codec.OnKind (opaqOptions c) opaqKinds :=
-  .cons (onKind_base .string) (.cons (onKind_base .boolean) (.cons (onKind_base .binary) (.cons (onKind_base .null)
-    (.cons (onKind_base .number) (.cons (onKind_set _) (.cons (onKind_array _)
-      (.cons (onKind_record _) .nil)))))))
-
-/-- Every option of `opaque` is lawful, given the recursive one is. -/
-theorem lawful_opaqOptions {c : Codec} (hop : Lawful c) :
-    ∀ o ∈ opaqOptions c, Lawful o := by
-  intro o ho
-  simp only [opaqOptions, List.mem_cons] at ho
-  rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | h
-  exacts [(lawful_baseCodec .string), (lawful_baseCodec .boolean), (lawful_baseCodec .binary),
-    (lawful_baseCodec .null), (lawful_baseCodec .number), lawful_setCodec hop, lawful_arrayCodec hop,
-    lawful_recordCodec hop, absurd h (by simp)]
-
 /-- **Options pinned to distinct kinds are pairwise compatible**: each input has one kind, and
     one option answers to each kind. This is the compatibility of `opaque`'s options, and of the
     options of any recursive union whose options are kind-disjoint. -/
@@ -434,18 +411,6 @@ theorem compat_of_onKinds {os : List Codec} {ks : List Kind} (hl : ∀ o ∈ os,
       (key := fun a => some a.kind) ?_ hp o ho ha
     rw [List.forall₂_map_right_iff]
     exact hz.imp fun _ _ h a ha => ⟨_, rfl, h.2 a ha⟩
-
-/-- `opaque`'s options are pairwise compatible: they are pinned to its eight kinds. -/
-theorem compat_opaque (c : Codec) (hop : Lawful c) :
-    ∀ o ∈ opaqOptions c, ∀ o' ∈ opaqOptions c, Compat o o' :=
-  compat_of_onKinds (fun o ho => (lawful_opaqOptions hop o ho).core) (opaq_onKinds c) (by decide)
-
-/-- One layer of `opaque` is lawful when the layer below is, with no bespoke induction: the sum
-    lemma, its options' lemmas, and compatibility computed from the shapes — kinds partition the
-    values, and the same kinds partition the attributes. -/
-theorem lawful_opaqStep {c : Codec} (hop : Lawful c) : Lawful (opaqStep c) :=
-  -- `μ` is `⊤`: the options name eight different members, so `unanimous` is `none`
-  lawful_altCodec (lawful_opaqOptions hop) (compat_opaque c hop) (fun _ hm => nomatch hm)
 
 end
 
