@@ -807,34 +807,28 @@ def Kind.former : Kind → Alg.Former
 /-- The former class of an attribute: the class of its kind. -/
 abbrev Attr.former (a : Attr) : Alg.Former := a.kind.former
 
+/-- A primitive writes only scalar data. -/
+theorem ground_former (g : Ground) (v : Value) (h : ((groundCodec g).e v).isSome = true) :
+    Attr.former v = .prim := by
+  have h' := (Alg.PrimAdm.admV_exact (S := dynSyn) g v).mpr h
+  cases g with
+  | base k => cases k <;> cases v <;> first | rfl | exact nomatch h'
+  | literal k x =>
+      cases k <;> cases v <;> first | rfl | simp [Alg.PrimAdm.admV, AdmLit, inL] at h'
+
 /-- **The shape classes of DynamoDB.** A base or a literal writes and reads a scalar, `setCodec`
     writes and reads one of the three sets, and the prisms build `arr`, `l`, `map` and `m`. -/
 noncomputable instance dynShapes : Alg.Shapes dynSyn where
   former := Attr.former
-  formerA := Attr.former
-  prim g v h := by
-    have h' := (Alg.PrimAdm.admV_exact (S := dynSyn) g v).mpr h
-    cases g with
-    | base k => cases k <;> cases v <;> first | rfl | exact nomatch h'
-    | literal k x =>
-        cases k <;> cases v <;> first | rfl | simp [Alg.PrimAdm.admV, AdmLit, inL] at h'
-  primA g a h := by
-    have h' := (Alg.PrimAdm.admV_exact (S := dynSyn.op) g a).mpr h
-    cases g with
-    | base k => cases k <;> cases a <;> first | rfl | exact nomatch h'
-    | literal k x => cases k <;> cases a <;> first | rfl | exact nomatch h'
-  set L hL c v h := by
+  prim := Alg.Orient.both
+    (P := fun o => ∀ g v, ((Alg.Syn.ground (S := dynSyn) g).f o v).isSome = true → Attr.former v = .prim)
+    ground_former fun g a h => ground_former g a (by rw [ground_selfdual]; exact h)
+  set L hL c o v h := by
     cases hL
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
     rcases setCodec_f_eq.mp ha with ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ <;> rfl
-  setA L hL c a h := by
-    cases hL
-    obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
-    rcases setCodec_f_eq.mp hw with ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ | ⟨S, rfl, -⟩ <;> rfl
   list L hL _ := by cases hL; rfl
-  listA L hL _ := by cases hL; rfl
   map F hF _ := by cases hF; rfl
-  mapA F hF _ := by cases hF; rfl
 
 /-- The set former of DynamoDB: the set law of `setCodec`. -/
 instance dynFormerAdm : Alg.FormerAdm dynSyn where
