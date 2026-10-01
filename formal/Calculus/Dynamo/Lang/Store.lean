@@ -114,14 +114,6 @@ theorem stored_lt_wf : ∃ s, WF s = true ∧ Stored s = false := ⟨"1.500", by
 
 end Numeral
 
-/-- A numeral in the form the store hands back — §1's `Stored`, carried rather than gated.
-
-    This is `decimal`'s literal carrier, and the reason `decimal` is worth a ground base of its
-    own. Both this and `WFNumeral` are gates carried as subtypes, so `inL` is the whole of
-    admission at either and the row is exact by construction. `Stored` is the narrower of the
-    two: what the store hands back, against what it accepts. -/
-abbrev StoredNumeral := {s : Numeral // Numeral.Stored s = true}
-
 /-- The numerals in the form the store hands back. -/
 def isStored : Value → Bool :=
   fun v => match v with | .num x => Numeral.Stored x.1 | _ => false
