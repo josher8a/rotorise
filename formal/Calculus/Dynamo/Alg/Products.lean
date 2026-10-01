@@ -4,8 +4,8 @@ import Calculus.Alg.Containers
 /-!
 # Products
 
-The traversal toolkit and the products built on it. `carriedCodec`, a payload pair carried
-between two prisms, is the shape underneath all of them: `entrywise` is it at a traversal,
+The traversal toolkit and the products built on it. `carriedCodec`, a payload map carried by
+a prism, is the shape underneath all of them: `entrywise` is it at a traversal,
 hence `arrayCodec` and `recordCodec`, and `tupleCodec` is it at `align` plus a traversal,
 where the one fact worth proving is that alignment depends on a row's *length* alone.
 `setCodec` is argued on its own.
@@ -177,7 +177,7 @@ noncomputable def setCodec (c : Codec) : Codec where
     | .bs S => setAt o c Attr.b S
     | _ => none
 
-/-! ### A codec carried between two prisms
+/-! ### A codec carried by a prism
 
 `carriedCodec` and `entrywise` take the carriers as parameters. The aliases give them their names
 in this namespace. -/
@@ -202,7 +202,7 @@ theorem setCodec_f_eq {c : Codec} {o : Alg.Orient} {x y : Attr} :
   cases x <;> simp [setCodec]
 
 /-- §3 `array`: the list former with a spread and no fixed positions. -/
-abbrev arrayCodec (c : Codec) : Codec := Alg.listCodec lA lA .L [] (some c) []
+abbrev arrayCodec (c : Codec) : Codec := Alg.listCodec lA .L [] (some c) []
 
 /-- **An array moves entry by entry**, at each orientation. -/
 theorem arrayCodec_f (o : Alg.Orient) (c : Codec) (xs : List Attr) :
@@ -265,17 +265,16 @@ are defined as a `list`, so the positional theory is proved one time. -/
 /-- §3 `(list)`: the positional product over a prefix, a spread and a suffix. The generic
     `list` at the `L` prism. -/
 abbrev listCodec (pre : List Codec) (spread : Option Codec) (suf : List Codec) : Codec :=
-  Alg.listCodec lA lA .L pre spread suf
+  Alg.listCodec lA .L pre spread suf
 
 section ListShape
 variable {pre : List Codec} {sp : Option Codec} {suf : List Codec}
 
-/-- `list` is `carriedCodec` between the same two prisms as `tuple` and `array`. -/
+/-- `list` is `carriedCodec` at the same prism as `tuple` and `array`. -/
 theorem listCodec_eq :
-    listCodec pre sp suf = carriedCodec lA lA .L
+    listCodec pre sp suf = carriedCodec lA .L
       (fun vs => ∃ ps, alignL pre sp suf vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2)
-      (fun vs => (alignL pre sp suf vs).bind (traverse fun cv => cv.1.e cv.2))
-      (fun as => (alignL pre sp suf as).bind (traverse fun ca => ca.1.p ca.2)) := rfl
+      (fun o vs => (alignL pre sp suf vs).bind (traverse fun cv => cv.1.f o cv.2)) := rfl
 
 end ListShape
 

@@ -31,7 +31,7 @@ definition it touches.
 | `Calculus/Dynamo/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Attr.kind` (the ten members collapsing onto eight), and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
 | `Calculus/Dynamo/Alg/Codec.lean`       | §2, §5      | `Codec`, `Lawful` (a canonical partial bijection) and `LawfulCore` as abbreviations of the generic record and laws at `Value`, `Attr` and `Member`, and the aliases of the generic combinators |
 | `Calculus/Dynamo/Alg/Prisms.lean`      | §3          | The entry point of the certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism) and `extendRead` (alternate reading). `Ctor`, `pointCodec` and the three wrappers are stated generically in `Alg/Combinators.lean`; this file instantiates them at the DynamoDB carriers |
-| `Calculus/Dynamo/Alg/Products.lean`    | §3          | `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`), `tupleCodec` it at `align` + a traversal over `slots`, the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone. `setCodec` is argued on its own. `carriedCodec` and `entrywise` are stated generically in `Alg/Lists.lean`, and `align` and `slots` in `Alg/Positions.lean`; this file instantiates them at the DynamoDB carriers |
+| `Calculus/Dynamo/Alg/Products.lean`    | §3          | `carriedCodec` — a payload map carried by one prism, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`), `tupleCodec` it at `align` + a traversal over `slots`, the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone. `setCodec` is argued on its own. `carriedCodec` and `entrywise` are stated generically in `Alg/Lists.lean`, and `align` and `slots` in `Alg/Positions.lean`; this file instantiates them at the DynamoDB carriers |
 | `Calculus/Dynamo/Alg/Objects.lean`     | §4          | The field table as a map rather than a row, and the object taken apart through it. `objectCodec` is cashed as an equation by `objectCodecCore_eq` rather than argued on its own |
 | `Calculus/Dynamo/Alg/Sums.lean`        | §5, §3      | `altCodec` (the sum, resolved by the first admitter) |
 | `Calculus/Dynamo/Alg/Carriers.lean`    | §3          | One `Carrier` lemma per combinator, so the judgement's held-set index is the domain of the pair |
@@ -118,8 +118,8 @@ and the judgement to it).
   definition, its two inversion lemmas, its carrier and its lawfulness sit together.
   Soundness needs only `Lawful`, so a core lemma exists only where a `Lawful` lemma or
   the alternate reader cites it, and the two share their clauses (`tuple_retract`,
-  `set_retract`/`set_writes`). The shape underneath is `carriedCodec`, a payload pair between two
-  prisms; `pointCodec`, `entrywise` (hence `array`, `record`), `tuple` and
+  `set_retract`/`set_writes`). The shape underneath is `carriedCodec`, a payload map carried by one
+  prism; `pointCodec`, `entrywise` (hence `array`, `record`), `tuple` and
   `object` are all instances, so §2's prism halves are discharged once for all of them.
   `set` is the one product that is not, and the reason is stated where it is argued:
   its attribute side is a choice among three wire sets, not one constructor.

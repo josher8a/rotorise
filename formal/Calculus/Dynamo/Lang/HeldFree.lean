@@ -32,7 +32,6 @@ theorem sub_restrict {c : Codec} (h : Sub c Ω) (q : Value → Bool) : Sub (c.re
     to itself. -/
 theorem sub_baseCodec (k : GroundKind) : Sub (baseCodec k) Ω := fun o x y h => by
   obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-  simp only [Calculus.Alg.Ctor.side_self] at hz ⊢
   exact congrArg some (k.prism.into_out hz)
 
 /-- A literal is a restriction of `Ω`, because a literal restricts its base. -/

@@ -48,57 +48,40 @@ theorem forall₂_zip (o : Orient) {u : Codec V M} :
   | _ :: _, _ :: _, [], _, _, h => nomatch h
 
 /-- A list whose every slot is below a top that acts as the list former is below the top. -/
-theorem sub_listCodec {pV : Ctor (List V) V} {pA : Ctor (List V) V} {μL : M} {u : Codec V M}
-    (hue : ∀ vs, u.e (pV.into vs) = (traverse u.e vs).map pA.into)
-    (hup : ∀ as, u.p (pA.into as) = (traverse u.p as).map pV.into)
+theorem sub_listCodec {pL : Ctor (List V) V} {μL : M} {u : Codec V M}
+    (hu : ∀ o vs, u.f o (pL.into vs) = (traverse (u.f o) vs).map pL.into)
     {pre suf : List (Codec V M)} {sp : Option (Codec V M)}
     (hpre : ∀ c ∈ pre, Sub c u) (hsp : ∀ c ∈ sp, Sub c u) (hsuf : ∀ c ∈ suf, Sub c u) :
-    Sub (listCodec pV pA μL pre sp suf) u := by
+    Sub (listCodec pL μL pre sp suf) u := by
   have hrow : ∀ n ds, slotsL pre sp suf n = some ds → ∀ c ∈ ds, Sub c u := fun n ds h c hc => by
     rcases slotsL_mem pre sp suf n ds h c hc with h1 | h1 | h1
     · exact hpre c h1
     · exact hsp c h1
     · exact hsuf c h1
-  refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
-  · obtain ⟨vs, as, hv, hE, rfl⟩ := carried_e.mp he
-    simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hE
-    obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hE
-    rw [pV.into_out hv, hue, traverse_eq_some.mpr (forall₂_zip .host ds vs as
-      (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
-    rfl
-  · obtain ⟨as, vs, ha, hD, rfl⟩ := carried_p.mp hp
-    simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hD
-    obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hD
-    rw [pA.into_out ha, hup, traverse_eq_some.mpr (forall₂_zip .dual ds as vs
-      (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
-    rfl
+  intro o v a he
+  obtain ⟨vs, as, hv, hE, rfl⟩ := carried_f.mp he
+  simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hE
+  obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hE
+  rw [pL.into_out hv, hu, traverse_eq_some.mpr (forall₂_zip o ds vs as
+    (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
+  rfl
 
 /-- An object whose every entry codec is below a top that acts as the map former is below the
     top. -/
-theorem sub_objectCodec {mV : Ctor (MapOf V) V} {mA : Ctor (MapOf V) V} {μM : M}
-    {u : Codec V M}
-    (hue : ∀ m : MapOf V, u.e (mV.into m) =
-      (funImage fun k => u.e (m.get k)).map fun g => mA.into ⟨m.keys, g⟩)
-    (hup : ∀ m : MapOf V, u.p (mA.into m) =
-      (funImage fun k => u.p (m.get k)).map fun g => mV.into ⟨m.keys, g⟩)
+theorem sub_objectCodec {pM : Ctor (MapOf V) V} {μM : M} {u : Codec V M}
+    (hu : ∀ o (m : MapOf V), u.f o (pM.into m) =
+      (funImage fun k => u.f o (m.get k)).map fun g => pM.into ⟨m.keys, g⟩)
     {sems : MapOf (FieldSem V M)} {rest : RestSem V M}
     (hf : ∀ k, Sub (sems.2 k).codec u) (hw : ∀ c ∈ rcOf rest, Sub c u) :
-    Sub (objectCodec mV mA μM sems rest) u := by
-  refine .ofEP (fun v a he => ?_) (fun a v hp => ?_)
-  · obtain ⟨x, y, hv, hE, rfl⟩ := carried_e.mp he
-    obtain ⟨-, g, hg, rfl⟩ := objAt_eq.mp hE
-    rw [mV.into_out hv, hue, funImage_eq (f := g) (fun k => ?_)]
-    · rfl
-    have hk := funImage_some hg k
-    obtain ⟨c, hc, hce⟩ := Option.bind_eq_some_iff.mp hk
-    exact (entryCodec_of (Q := fun c => Sub c u) hf hw hc) .host _ _ hce
-  · obtain ⟨y, x, ha, hD, rfl⟩ := carried_p.mp hp
-    obtain ⟨-, d, hd, rfl⟩ := objAt_eq.mp hD
-    rw [mA.into_out ha, hup, funImage_eq (f := d) (fun k => ?_)]
-    · rfl
-    have hk := funImage_some hd k
-    obtain ⟨c, hc, hcp⟩ := Option.bind_eq_some_iff.mp hk
-    exact (entryCodec_of (Q := fun c => Sub c u) hf hw hc) .dual _ _ hcp
+    Sub (objectCodec pM μM sems rest) u := by
+  intro o v a he
+  obtain ⟨x, y, hv, hE, rfl⟩ := carried_f.mp he
+  obtain ⟨-, g, hg, rfl⟩ := objAt_eq.mp hE
+  rw [pM.into_out hv, hu, funImage_eq (f := g) (fun k => ?_)]
+  · rfl
+  have hk := funImage_some hg k
+  obtain ⟨c, hc, hce⟩ := Option.bind_eq_some_iff.mp hk
+  exact (entryCodec_of (Q := fun c => Sub c u) hf hw hc) o _ _ hce
 
 end Combinators
 
@@ -178,7 +161,7 @@ theorem sub_denoteIn [TopLaws S] : ∀ t : Term S, HF t → ∀ ρ : List S.C,
       cases hL : Mean.list (B := S.sig) with
       | none => exact sub_empty
       | some L =>
-        exact sub_listCodec (top_list (o := .host) L.p.into) (top_list (o := .dual) L.p.into)
+        exact sub_listCodec (fun _ => top_list L.p.into)
           (sub_denoteList pre h.1.1 ρ henv) (sub_denoteOpt sp h.1.2 ρ henv)
           (sub_denoteList suf h.2 ρ henv)
   | .object b, h, ρ, henv => sub_body b h ρ henv
@@ -192,7 +175,7 @@ theorem sub_body [TopLaws S] : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
       cases hF : Mean.map (B := S.sig) with
       | none => exact sub_empty
       | some F =>
-        exact sub_objectCodec (top_map (o := .host) F.m.into) (top_map (o := .dual) F.m.into)
+        exact sub_objectCodec (fun _ => top_map F.m.into)
           (fun k => sub_slot (f k) (Bool.eq_false_iff.mpr (h.1 k)) ρ henv)
           (sub_wild w h.2 ρ henv)
 /-- …at a slot. -/

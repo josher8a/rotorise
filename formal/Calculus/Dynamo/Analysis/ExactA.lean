@@ -51,8 +51,8 @@ then applies `q`. Each is a row here rather than a remark. -/
 
 /-! ### The attribute side's rows, and the three that are not the value side's
 
-The attribute side reads the combinators of the value side at the carrier `Attr`. `objRead`
-reads every stored name, because a rest policy refuses an undeclared name or reads it with the
+The attribute side reads the combinators of the value side at the carrier `Attr`. `objAt` at the
+dual reads every stored name, because a rest policy refuses an undeclared name or reads it with the
 codec of the open block. The attribute row is the value row of the dual. -/
 
 /-- An attribute-side row, once the subterms' rows are known. -/
@@ -250,7 +250,7 @@ theorem AdmA_sound (t : Term) {a v} (hp : (denote α t).p a = some v) : AdmA α 
     ~~not_ExactA_refine~~, stated as "`AdmA` cannot see it". -/
 theorem AdmA_refine_bot (a : Attr) : AdmA α (.refine .string (.closure (fun _ => false)) ()) a = false := by
   simp [AdmA_rows, Pred.eval]
-  cases a <;> simp [denote_rows, baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.p]
+  cases a <;> simp [denote_rows, baseCodec, pointCodec, GroundKind.prism, sC, Alg.Codec.p]
 
 end
 

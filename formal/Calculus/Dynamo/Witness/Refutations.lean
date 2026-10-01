@@ -155,7 +155,7 @@ theorem not_equiv_union_extend :
     ¬ Codec.Equiv (denote α (.union [.string])) (denote α (.union [.string, .boolean])) := by
   intro h
   have hb := (h.heldSet (.bool true)).mpr
-  simp [denote_rows, altCodec, baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, boolA] at hb
+  simp [denote_rows, altCodec, baseCodec, pointCodec, GroundKind.prism, sC, boolA] at hb
 
 /-! ## `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`
 
@@ -169,7 +169,7 @@ theorem not_equiv_union_array :
         (denote α (.array (.union [.literal .string "A", .literal .string "B"]))) := by
   intro h
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
-  simp [Term.array, denote_rows, altCodec, arrayCodec_T, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, HLit, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p] at hv
+  simp [Term.array, denote_rows, altCodec, arrayCodec_T, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, HLit, pointCodec, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p] at hv
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
 
@@ -228,7 +228,7 @@ theorem not_equiv_refine_held :
         (denote isoTable (.held false (.refine .string (.closure predA) ()) .string (.caller 0, false) [])) := by
   intro h
   have hv := (h.heldSet (.str "B")).mpr
-  simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, isoTable, Alg.Codec.through, Alg.Codec.restrict, Alg.refine2, Pred.eval, baseCodec, isoF, predA, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p] at hv
+  simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, isoTable, Alg.Codec.through, Alg.Codec.restrict, Alg.refine2, Pred.eval, baseCodec, isoF, predA, pointCodec, GroundKind.prism, sC, Alg.Codec.e, Alg.Codec.p] at hv
 
 /-! ## `legacy(c, r)` breaks canonical reads, and `e ∘ p ≢ id`
 

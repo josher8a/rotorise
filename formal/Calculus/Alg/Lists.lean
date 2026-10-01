@@ -6,8 +6,8 @@ import Calculus.Alg.Combinators
 # The list plumbing and the carried products, over any carriers
 
 The traversal of a list, its laws, and the `filter` facts that the sum proofs consume. None of
-them reads a codec. The codec carried between two prisms, `carriedCodec`, and its instance at a
-traversal, `entrywise`, read only the prism laws, the payload pair and the member. So each one
+them reads a codec. The codec carried by a prism, `carriedCodec`, and its instance at a
+traversal, `entrywise`, read only the prism laws, the payload map and the member. So each one
 takes the carrier `V` and the members `M` as parameters.
 
 The bar for adding a list fact here is that mathlib lacks the fact, or states it in a shape the
@@ -222,13 +222,12 @@ theorem forall_mem_map_option {α β : Type} {x? : Option α} {g : α → β} {P
 
 variable {V M : Type} {member : V → M}
 
-/-! ### A codec carried between two prisms
+/-! ### A codec carried by a prism
 
-The shape underneath every product in §3–§4. A pair works on *payloads* — lists of
-entries, mostly — and two prisms say which value and which attribute constructor hold
-them. Retract, canon and writes split cleanly along that seam: the prism halves are discharged once,
-here, and each construction is left with only its payload pair's own round trip,
-definedness and agreement.
+The shape underneath every product in §3–§4. A payload map works on *payloads* — lists of
+entries, mostly — at each orientation, and one prism says which constructor holds them. §2's
+laws split cleanly along that seam: the prism is discharged once, here, and each construction
+is left with only its payload map's own inverse law and agreement.
 
 `pointCodec` above is the degenerate case, where the payload passes through untouched.
 The three below are the products: `entrywise` (a traversal, hence `array` and `record`),
@@ -238,71 +237,56 @@ The three below are the products: `entrywise` (a traversal, hence `array` and `r
 attribute side is a choice among three wire sets, not one constructor. It is argued on
 its own below. -/
 
-/-- **A codec between two prisms.** `P` is the held set's condition on the payload;
-    `E`/`D` are the payload pair. -/
-def carriedCodec {γ δ : Type} (pV : Ctor γ V) (pA : Ctor δ V) (μ₀ : M)
-    (P : γ → Prop) (E : γ → Option δ) (D : δ → Option γ) : Codec V M :=
-  Codec.ofEP (T := fun v => ∃ x, v = pV.into x ∧ P x)
-    (μ := some μ₀)
-    (e := fun v => ((pV.out v).bind E).map pA.into)
-    (p := fun a => ((pA.out a).bind D).map pV.into)
+/-- **A codec carried by a prism.** `P` is the held set's condition on the payload, and `F o`
+    is the payload map at the orientation `o`. -/
+def carriedCodec {γ : Type} (p : Ctor γ V) (μ₀ : M) (P : γ → Prop)
+    (F : Orient → γ → Option γ) : Codec V M where
+  T v := ∃ x, v = p.into x ∧ P x
+  μ := some μ₀
+  f o v := ((p.out v).bind (F o)).map p.into
 
 section Carried
-variable {γ δ : Type} {pV : Ctor γ V} {pA : Ctor δ V} {μ₀ : M}
-  {P : γ → Prop} {E : γ → Option δ} {D : δ → Option γ}
+variable {γ : Type} {p : Ctor γ V} {μ₀ : M} {P : γ → Prop} {F : Orient → γ → Option γ}
 
-/-- What it writes: only a value the prism matches, and only what `E` accepts. -/
-theorem carried_e {v a} :
-    (carriedCodec pV pA μ₀ P E D).e v = some a ↔
-      ∃ x y, pV.out v = some x ∧ E x = some y ∧ a = pA.into y := by
+/-- What it sends at an orientation: only a datum the prism matches, and only what `F o`
+    accepts. -/
+theorem carried_f {o : Orient} {v a} :
+    (carriedCodec p μ₀ P F).f o v = some a ↔
+      ∃ x y, p.out v = some x ∧ F o x = some y ∧ a = p.into y := by
   simp [carriedCodec, Option.bind_eq_some_iff, Option.map_eq_some_iff, eq_comm (a := a)]
 
-/-- What it reads: the mirror. -/
-theorem carried_p {a v} :
-    (carriedCodec pV pA μ₀ P E D).p a = some v ↔
-      ∃ y x, pA.out a = some y ∧ D y = some x ∧ v = pV.into x :=
-  carried_e (pV := pA) (pA := pV) (μ₀ := ()) (P := fun _ => True) (E := D) (D := E)
+/-- What it writes. -/
+theorem carried_e {v a} :
+    (carriedCodec p μ₀ P F).e v = some a ↔
+      ∃ x y, p.out v = some x ∧ F .host x = some y ∧ a = p.into y := carried_f
 
-/-- (R), (C) and (W) are the payload pair's own, plus the member the attribute
-    constructor stamps. The prisms contribute nothing but their two laws. -/
-theorem lawfulCore_carried (hμ : ∀ y, member (pA.into y) = μ₀)
-    (hr : ∀ x y, E x = some y → D y = some x)
-    (hc : ∀ y x, D y = some x → (E x).isSome) :
-    LawfulCore member (carriedCodec pV pA μ₀ P E D) where
-  retract he := by
-    obtain ⟨x, y, hv, hx, rfl⟩ := carried_e.mp he
-    exact carried_p.mpr ⟨y, x, pA.out_into y, hr x y hx, pV.into_out hv⟩
-  canon hp := by
-    obtain ⟨y, x, _, hy, rfl⟩ := carried_p.mp hp
-    obtain ⟨y', h'⟩ := Option.isSome_iff_exists.mp (hc y x hy)
-    exact Option.isSome_iff_exists.mpr ⟨_, carried_e.mpr ⟨x, y', pV.out_into x, h', rfl⟩⟩
+/-- What it reads. -/
+theorem carried_p {a v} :
+    (carriedCodec p μ₀ P F).p a = some v ↔
+      ∃ y x, p.out a = some y ∧ F .dual y = some x ∧ v = p.into x := carried_f
+
+/-- **§2's laws are the payload map's own**: `F o` inverted by `F o.op`, plus the member the
+    prism stamps. The prism contributes nothing but its two laws. -/
+theorem lawful_carried (hμ : ∀ y, member (p.into y) = μ₀)
+    (hinv : ∀ o x y, F o x = some y → F o.op y = some x) :
+    Lawful member (carriedCodec p μ₀ P F) where
+  inv {o _ _} h := by
+    obtain ⟨x, y, hv, hx, rfl⟩ := carried_f.mp h
+    exact carried_f.mpr ⟨y, x, p.out_into y, hinv o x y hx, p.into_out hv⟩
   writes := by
     intro μ hμ' t a he
     obtain ⟨_, y, _, _, rfl⟩ := carried_e.mp he
     exact (hμ y).trans (Option.some.inj hμ')
 
-/-- Canonical reads are the payload pair's own too. -/
-theorem lawful_carried (hμ : ∀ y, member (pA.into y) = μ₀)
-    (hr : ∀ x y, E x = some y → D y = some x)
-    (hcan : ∀ y x, D y = some x → E x = some y) :
-    Lawful member (carriedCodec pV pA μ₀ P E D) :=
-  have hc := lawfulCore_carried (P := P) hμ hr (fun y x h => by rw [hcan y x h]; rfl)
-  .ofRC hc.retract
-    (by
-      intro a t hp
-      obtain ⟨y, x, ha, hy, rfl⟩ := carried_p.mp hp
-      exact carried_e.mpr ⟨x, y, pV.out_into x, hcan y x hy, pA.into_out ha⟩)
-    hc.writes
-
 /-- `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`: the held set's condition has to hold of whatever
     payload either half of the pair accepts. -/
 theorem carrier_carried
-    (hdom : ∀ {x y}, E x = some y → P x)
-    (hran : ∀ {y x}, D y = some x → P x) :
-    Carrier (carriedCodec pV pA μ₀ P E D) where
+    (hdom : ∀ {x y}, F .host x = some y → P x)
+    (hran : ∀ {y x}, F .dual y = some x → P x) :
+    Carrier (carriedCodec p μ₀ P F) where
   domE he := by
     obtain ⟨x, y, hv, hx, _⟩ := carried_e.mp he
-    exact ⟨x, pV.into_out hv, hdom hx⟩
+    exact ⟨x, p.into_out hv, hdom hx⟩
   ranP hp := by
     obtain ⟨y, x, _, hy, rfl⟩ := carried_p.mp hp
     exact ⟨x, rfl, hran hy⟩
@@ -311,30 +295,28 @@ end Carried
 
 /-! ### The entrywise product, named once
 
-`array` and `record` are `carriedCodec` where the payload pair is one entry function
-traversed: a value constructor holding a list of entries, an attribute constructor
-holding a list of wire entries. Named once, §2's laws are discharged once. -/
+`array` and `record` are `carriedCodec` where the payload map is one entry map traversed: a
+prism holding a list of entries. Named once, §2's laws are discharged once. -/
 
-/-- **The entrywise product**: `carriedCodec` at a traversal. -/
-def entrywise {α β : Type} (pV : Ctor (List α) V) (pA : Ctor (List β) V)
-    (μ₀ : M) (P : List α → Prop) (f : α → Option β) (g : β → Option α) : Codec V M :=
-  carriedCodec pV pA μ₀ P (traverse f) (traverse g)
+/-- **The entrywise product**: `carriedCodec` at a traversal of the entry map `h o`. -/
+def entrywise {α : Type} (p : Ctor (List α) V) (μ₀ : M) (P : List α → Prop)
+    (h : Orient → α → Option α) : Codec V M :=
+  carriedCodec p μ₀ P fun o => traverse (h o)
 
 section Entrywise
-variable {α β : Type} {pV : Ctor (List α) V} {pA : Ctor (List β) V}
-  {μ₀ : M} {P : List α → Prop} {f : α → Option β} {g : β → Option α}
+variable {α : Type} {p : Ctor (List α) V} {μ₀ : M} {P : List α → Prop}
+  {h : Orient → α → Option α}
 
-/-- Canonical reads, entry by entry. -/
-theorem lawful_entrywise (hμ : ∀ ys, member (pA.into ys) = μ₀)
-    (hr : ∀ x y, f x = some y → g y = some x)
-    (hcan : ∀ y x, g y = some x → f x = some y) :
-    Lawful member (entrywise pV pA μ₀ P f g) :=
-  lawful_carried hμ (traverse_roundTrip hr) (traverse_roundTrip hcan)
+/-- The laws, entry by entry. -/
+theorem lawful_entrywise (hμ : ∀ ys, member (p.into ys) = μ₀)
+    (hinv : ∀ o x y, h o x = some y → h o.op y = some x) :
+    Lawful member (entrywise p μ₀ P h) :=
+  lawful_carried hμ fun o => traverse_roundTrip (hinv o)
 
 theorem carrier_entrywise
-    (hdom : ∀ {xs ys}, traverse f xs = some ys → P xs)
-    (hran : ∀ {ys xs}, traverse g ys = some xs → P xs) :
-    Carrier (entrywise pV pA μ₀ P f g) :=
+    (hdom : ∀ {xs ys}, traverse (h .host) xs = some ys → P xs)
+    (hran : ∀ {ys xs}, traverse (h .dual) ys = some xs → P xs) :
+    Carrier (entrywise p μ₀ P h) :=
   carrier_carried hdom hran
 
 end Entrywise

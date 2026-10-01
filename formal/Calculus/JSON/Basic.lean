@@ -239,12 +239,12 @@ def arrP : Alg.Ctor (List Json) Json where
 
 /-- The array codec over an element codec: each entry through the element codec. -/
 def arr (c : Alg.Codec Json JMember) : Alg.Codec Json JMember :=
-  Alg.entrywise arrP arrP .arr (fun xs => ∀ x ∈ xs, c.T x) c.e c.p
+  Alg.entrywise arrP .arr (fun xs => ∀ x ∈ xs, c.T x) c.f
 
 /-- An array of a lawful element codec is lawful, entry by entry. -/
 theorem lawful_arr {c : Alg.Codec Json JMember} (h : Alg.Lawful Json.member c) :
     Alg.Lawful Json.member (arr c) :=
-  Alg.lawful_entrywise (fun _ => rfl) (fun _ _ => h.retract) (fun _ _ => h.canon)
+  Alg.lawful_entrywise (fun _ => rfl) fun _ _ _ => h.inv
 
 /-- An array of strings. -/
 def strArr : Alg.Codec Json JMember := arr str

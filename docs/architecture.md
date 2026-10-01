@@ -498,12 +498,12 @@ A constructor is a prism — `Ctor`, with the laws `out_into` and `into_out` —
 round-trip and completeness clauses at a constructor, so the prism half of every lawfulness proof
 is discharged once.
 
-Two shapes sit over the prisms. `pointCodec` is the degenerate case, one payload type on both
-sides, and the point codecs share one lawfulness proof through it. `carriedCodec` is the
-load-bearing one: a payload pair between two prisms, the shape underneath every product. **The
-model states a codec once for both sides**, so the doubling in this development is in the analyses
-rather than in the algebra. Its two inversions `carried_e` and `carried_p` are what every
-product's proof goes through.
+Two shapes sit over the prisms. `pointCodec` is the degenerate case, the partial identity on the
+image of one prism, and the point codecs share one lawfulness proof through it. `carriedCodec` is
+the load-bearing one: a payload map at each orientation, carried by one prism, the shape underneath
+every product. **The model states a codec once for both sides**: one inverse law of the payload
+map, `F o` inverted by `F o.op`, is the lawfulness of every product, and `carried_f` is the
+inversion that every product's proof goes through.
 
 The prism inventory is partial on both sides on purpose. The gaps are the constructions that are
 not one payload between one pair: the numeric constructor, where the numeral gate stops the

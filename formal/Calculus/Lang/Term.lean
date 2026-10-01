@@ -738,7 +738,7 @@ noncomputable def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C
       | none => .empty
   | .list pre spread suf, ρ =>
       match Mean.list (B := B) with
-      | some L => listCodec L.p L.p L.μ (denoteListAbs pre ρ) (denoteOptAbs spread ρ)
+      | some L => listCodec L.p L.μ (denoteListAbs pre ρ) (denoteOptAbs spread ρ)
           (denoteListAbs suf ρ)
       | none => .empty
   -- the side `s` reads its outer, and its word from its own table
@@ -760,7 +760,7 @@ noncomputable def bodySemAbs : Body B → (ρ : List (Mean.C B) := []) → Mean.
   | .mk fields f wild, ρ =>
       match Mean.map (B := B) with
       | some F =>
-          objectCodec F.m F.m F.μ ⟨fields, fun k => fieldSemAbs (f k) ρ⟩
+          objectCodec F.m F.μ ⟨fields, fun k => fieldSemAbs (f k) ρ⟩
             (wildSemAbs wild ρ)
       | none => .empty
 
