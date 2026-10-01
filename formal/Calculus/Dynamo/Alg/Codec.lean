@@ -11,6 +11,10 @@ them at `Value`, `Attr` and `Member`. The side conditions and the combinators ta
 parameters too, and the aliases below give them their names in this namespace.
 -/
 
+/-- The unfolds of a ground base: the point codec, the prism of each kind, and the five prisms.
+    A proof that computes a base or a literal at a concrete datum reads this set. -/
+register_simp_attr prism_rows
+
 namespace Calculus
 
 /-- §2: `c = (T, μ, f)`, at the DynamoDB carriers. -/
