@@ -151,8 +151,7 @@ theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed α t T μ) (hob : Oblig
   cases v with
   | ss S =>
     show HSet T (.strSet S) ↔ (setAt .host (denote α t) Value.str S).isSome = true
-    simp only [HSet, Attr.ss.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
-      or_false]
+    simp only [HSet, Attr.ss.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false, or_false]
     exact ⟨fun hall => setAt_isSome_of hl hsm (fun _ _ h => Attr.s.inj h)
         (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
       fun he x hx => by
@@ -160,8 +159,7 @@ theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed α t T μ) (hob : Oblig
         exact (hin _).mpr (setAt_elem ha x hx)⟩
   | ns S =>
     show HSet T (.numSet S) ↔ (setAt .host (denote α t) Value.num S).isSome = true
-    simp only [HSet, Attr.ns.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
-      false_or, or_false]
+    simp only [HSet, Attr.ns.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false, false_or, or_false]
     exact ⟨fun hall => setAt_isSome_of hl hsm (fun _ _ h => Attr.n.inj h)
         (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
       fun he x hx => by
@@ -169,8 +167,7 @@ theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed α t T μ) (hob : Oblig
         exact (hin _).mpr (setAt_elem ha x hx)⟩
   | bs S =>
     show HSet T (.binSet S) ↔ (setAt .host (denote α t) Value.bin S).isSome = true
-    simp only [HSet, Attr.bs.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false,
-      false_or]
+    simp only [HSet, Attr.bs.injEq, exists_eq_left', reduceCtorEq, false_and, exists_false, false_or]
     exact ⟨fun hall => setAt_isSome_of hl hsm (fun _ _ h => Attr.b.inj h)
         (fun x hx => (hin _).mp (hall x hx)) (fun _ _ a h => hw _ a h),
       fun he x hx => by
@@ -204,8 +201,7 @@ theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t →
     ∀ v, T v ↔ Adm α t v = true
   | t, T, μ, h, hob, v => by
     cases h with
-    | base k => cases k <;> cases v <;> simp [Adm_rows, inBase, stringCodec, numberCodec,
-        booleanCodec, binaryCodec, nullCodec, -Subtype.exists]
+    | base k => cases k <;> cases v <;> simp [Adm_rows, inBase, baseCodec, -Subtype.exists, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
     | literal k x => cases k <;> cases v <;> simp [HLit, Adm_rows, AdmLit, inL, GroundKind.toValue]
     | never => simp [HNever, Adm_rows]
     | opaq => exact hopaque_adm v
@@ -223,8 +219,7 @@ theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t →
           (fun t' ht' _ _ hty w => typed_T_adm hty ((Obligations.list hob).2.2 t' ht') w) vs
       | _ => simp [HList, Adm_rows]
     | @held t' I' μ' P k₀ k h' =>
-      simp only [Adm_held, Bool.and_eq_true, typed_T_adm h' hob.1 ((α.word (k₀ :: k)).1 v),
-        Adm_exact P v]
+      simp only [Adm_held, Bool.and_eq_true, typed_T_adm h' hob.1 ((α.word (k₀ :: k)).1 v), Adm_exact P v]
     | @refine t' T' μ' q qA h' =>
       simp only [Adm_refine, Bool.and_eq_true, typed_T_adm h' hob v]
     | @object body bind R μs hfields hrest =>

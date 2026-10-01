@@ -112,15 +112,11 @@ noncomputable instance dynPrimAdm : Alg.PrimAdm dynSyn where
   admV_exact
     | .base k, v => by
         show inBase k v = true ↔ ((denote (fun _ => (id, id)) (.base k)).e v).isSome = true
-        cases k <;> cases v <;> simp [inBase, denote_rows, stringCodec, numberCodec,
-          booleanCodec, binaryCodec, nullCodec]
-    -- `numberCodec` is read through `numberCodec_e_isSome` rather than unfolded: its `dite` is a
-    -- string parser, and `simp` inside it runs out of heartbeats.
+        cases k <;> cases v <;> simp [inBase, denote_rows, baseCodec, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
     | .literal k x, v => by
         show AdmLit k x v = true ↔ ((denote (fun _ => (id, id)) (.literal k x)).e v).isSome = true
         cases k <;> cases v <;>
-          simp [AdmLit, denote_rows, literalCodec, baseCodec, inL,
-                stringCodec, booleanCodec, binaryCodec, nullCodec, inD]
+          simp [AdmLit, denote_rows, literalCodec, baseCodec, inL, inD, pointCodec, Calculus.Alg.Ctor.side, GroundKind.prism, sC, nC, bC, boolA, nullA, Alg.Codec.e, Alg.Codec.p]
 
 variable (α) in
 /-- **The joint admission predicate**: the generic row at DynamoDB, at the closed environment.

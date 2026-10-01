@@ -350,7 +350,7 @@ inductive Term (S : Sig) where
       (k : List (S.G s × Bool))
   /-- §3 `(refine)`: the restriction of each side by a predicate of that side. -/
   | refine   (inner : Term S) (p : S.P false) (pA : S.P true)
-  /-- §3 `(opaque)`: the universal sum. The number option is `numberCodec`, so `opaque`
+  /-- §3 `(opaque)`: the universal sum. The number option is `baseCodec .number`, so `opaque`
       writes every `Value` (`opaq_total`). -/
   | opaq
   /-- §4's field table is a *set* of names each declaring one field, so that is what the
@@ -845,8 +845,7 @@ theorem denoteAbs_closed : ∀ (t : Term B), t.hasVar = false → ∀ ρ ρ' : L
 theorem bodySemAbs_closed : ∀ (b : Body B), b.hasVar = false → ∀ ρ ρ' : List (Mean.C B),
     bodySemAbs τ b ρ = bodySemAbs τ b ρ'
   | .mk fields f wild, h, ρ, ρ' => by
-      simp only [Body.hasVar, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists,
-        Bool.not_eq_true] at h
+      simp only [Body.hasVar, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists, Bool.not_eq_true] at h
       have hf : (fun k => fieldSemAbs τ (f k) ρ) = (fun k => fieldSemAbs τ (f k) ρ') :=
         funext fun k => fieldSemAbs_closed (f k) (h.1 k) ρ ρ'
       simp only [bodySemAbs]

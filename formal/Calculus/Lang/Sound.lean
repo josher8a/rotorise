@@ -320,8 +320,7 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed α β t T μ → ∀ v, (den
         by_cases hk : k.1 ∈ fields
         · -- declared: the entry holds its field's set, and the binding is at the same key
           rw [dif_pos hk]
-          simp only [objEntryT,
-            MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem α β (ff k)⟩ :
+          simp only [objEntryT, MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem α β (ff k)⟩ :
               MapOf (FieldSem (Mean.V (B := S.sig)) S.M))) ⟨k.1, hk⟩] at hentry
           obtain ⟨t', hty', hshape⟩ := TypedField.term (α := α) (β := β) (hfields ⟨k.1, hk⟩)
           rcases hshape with heq | heq

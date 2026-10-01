@@ -69,17 +69,17 @@ theorem hopaque_e {v : Value} (h : HOpaque v) : (Ω.e v).isSome = true := by
   | null => rfl
   | num d => rfl
   | strSet S _ _ =>
-    rw [Ωe_strSet, setAt_congr (c := Ω) (d := stringCodec) (fun x _ => rfl)]
-    exact setAt_isSome_of lawful_stringCodec.core (μ₀ := .S) rfl (fun _ _ h => Attr.s.inj h)
-      (fun _ _ => rfl) (fun _ _ _ ha => lawful_stringCodec.writes rfl ha)
+    rw [Ωe_strSet, setAt_congr (c := Ω) (d := (baseCodec .string)) (fun x _ => rfl)]
+    exact setAt_isSome_of (lawful_baseCodec .string).core (μ₀ := .S) rfl (fun _ _ h => Attr.s.inj h)
+      (fun _ _ => rfl) (fun _ _ _ ha => (lawful_baseCodec .string).writes rfl ha)
   | numSet S _ _ =>
-    rw [Ωe_numSet, setAt_congr (c := Ω) (d := numberCodec) (fun x _ => rfl)]
-    exact setAt_isSome_of lawful_numberCodec.core (μ₀ := .N) rfl (fun _ _ h => Attr.n.inj h)
-      (fun _ _ => rfl) (fun _ _ _ ha => lawful_numberCodec.writes rfl ha)
+    rw [Ωe_numSet, setAt_congr (c := Ω) (d := (baseCodec .number)) (fun x _ => rfl)]
+    exact setAt_isSome_of (lawful_baseCodec .number).core (μ₀ := .N) rfl (fun _ _ h => Attr.n.inj h)
+      (fun _ _ => rfl) (fun _ _ _ ha => (lawful_baseCodec .number).writes rfl ha)
   | binSet S _ _ =>
-    rw [Ωe_binSet, setAt_congr (c := Ω) (d := binaryCodec) (fun x _ => rfl)]
-    exact setAt_isSome_of lawful_binaryCodec.core (μ₀ := .B) rfl (fun _ _ h => Attr.b.inj h)
-      (fun _ _ => rfl) (fun _ _ _ ha => lawful_binaryCodec.writes rfl ha)
+    rw [Ωe_binSet, setAt_congr (c := Ω) (d := (baseCodec .binary)) (fun x _ => rfl)]
+    exact setAt_isSome_of (lawful_baseCodec .binary).core (μ₀ := .B) rfl (fun _ _ h => Attr.b.inj h)
+      (fun _ _ => rfl) (fun _ _ _ ha => (lawful_baseCodec .binary).writes rfl ha)
   | arr vs _ ih =>
     rw [Ωe_arr, Option.isSome_map]
     exact traverse_isSome_of_all ih
@@ -156,8 +156,7 @@ theorem typed_T_eq : ∀ {t T μ}, Typed α t T μ → ∀ v, T v → (denote α
         have hentry := hall k
         by_cases hk : k.1 ∈ fields
         · rw [dif_pos hk] at hentry
-          simp only [objEntryT,
-            MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem α (ff k)⟩ :
+          simp only [objEntryT, MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem α (ff k)⟩ :
               MapOf FieldSem)) ⟨k.1, hk⟩]
           obtain ⟨t', hty', hshape⟩ := TypedField.term (α := α) (hfields ⟨k.1, hk⟩)
           rcases hshape with heq | heq

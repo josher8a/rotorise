@@ -52,8 +52,8 @@ def specOf : Term → Option (MapOf NameSpec)
 
 /-! ### Where ~~literalMember~~ went
 
-`(literal)`'s member is its base's — `literalCodec` and `GroundKind.member` agree case for case,
-which is `Prisms.literalCodec_μ`, stated where the codec is.
+`(literal)`'s member is its base's: `baseCodec k` stamps `k.member` by definition, and a literal
+restricts its base, so `μSyn_literal` holds by `rfl`.
 
 The `Option` in `Codec.μ` is `Codec.μ`'s own — a codec that writes no attribute — and never
 "this payload had no base", the member being a function of the index. -/
@@ -67,9 +67,8 @@ abbrev μSynList (ts : List Term) : List (Option Member) := Alg.μSynList ts
 section Rows
 variable (k : GroundKind) (t : Term) (ts : List Term)
 
-@[μSyn_rows] theorem μSyn_base : μSyn (.base k) = some k.member := by cases k <;> rfl
-@[μSyn_rows] theorem μSyn_literal (x : k.Carrier) : μSyn (.literal k x) = some k.member :=
-  literalCodec_μ k x
+@[μSyn_rows] theorem μSyn_base : μSyn (.base k) = some k.member := rfl
+@[μSyn_rows] theorem μSyn_literal (x : k.Carrier) : μSyn (.literal k x) = some k.member := rfl
 /-- The member is `setMember` of the element's: `none` where the element names no member of
     `S`, `N` or `B`, which is the case the DynamoDB obligation `SetElem` refuses. -/
 @[μSyn_rows] theorem μSyn_set : μSyn (.set t) = (μSyn t).bind setMember := rfl

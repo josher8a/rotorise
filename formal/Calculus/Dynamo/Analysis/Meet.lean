@@ -920,7 +920,7 @@ theorem AdmA_opaq_null : AdmA α .opaq .null = true := rfl
 
 /-- …and every stored numeral, as `number` reads it. -/
 theorem AdmA_opaq_num (x : WFNumeral) :
-    AdmA α .opaq (.n x) = (numberCodec.p (.n x)).isSome := rfl
+    AdmA α .opaq (.n x) = ((baseCodec .number).p (.n x)).isSome := rfl
 
 /-- Where a literal reads, its base reads the same value: `literalCodec` is `baseCodec`
     restricted, and `Codec.restrict`'s `p` returns the base's own value where the guard passes. -/
@@ -1077,8 +1077,7 @@ theorem HF_view (o : Orient) : ∀ t : Term, HF (view o t)
       simp only [view, HF, hasHeld, Bool.or_eq_false_iff]
       exact ⟨⟨HF_viewL o pre, HF_viewO o sp⟩, HF_viewL o suf⟩
   | .object (.mk fs f w) => by
-      simp only [view, viewB, HF, hasHeld, Alg.hasHeldB, Bool.or_eq_false_iff,
-        decide_eq_false_iff_not, not_exists]
+      simp only [view, viewB, HF, hasHeld, Alg.hasHeldB, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists]
       exact ⟨fun k => Bool.eq_false_iff.mp (HF_viewS o (f k)), HF_viewO o w⟩
   | .union os => by simp only [view]; exact HF_viewL o os
   | .set t => by simp only [view]; exact HF_view o t
@@ -1292,8 +1291,7 @@ theorem viewsDisjoint_adm {x y : Term} (h : viewsDisjoint x y = true) (v : Value
     (Adm α x v && Adm α y v) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
   have hw := Alg.disjoint_sound (α := α) (β := dynTableA) pair0 _ _ h.1 [] [] (fun _ _ _ hp => nomatch hp) v
-  cases hx : Adm α x v <;> cases hy : Adm α y v <;> simp only [Bool.and_false, Bool.false_and,
-    Bool.and_self]
+  cases hx : Adm α x v <;> cases hy : Adm α y v <;> simp only [Bool.and_false, Bool.false_and, Bool.and_self]
   have e1 : Alg.Adm α dynTableA (view .host x) [] v = true := viewLe_of .host α dynTableA x v hx
   have e2 : Alg.Adm α dynTableA (view .host y) [] v = true := viewLe_of .host α dynTableA y v hy
   rw [e1, e2] at hw; exact nomatch hw
@@ -1304,8 +1302,7 @@ theorem viewsDisjoint_admA {x y : Term} (h : viewsDisjoint x y = true) (a : Attr
     (AdmA α x a && AdmA α y a) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
   have hr := Alg.disjoint_soundA (α := α) (β := dynTableA) pair0 _ _ h.2 [] [] (fun _ _ _ hp => nomatch hp) a
-  cases hx : AdmA α x a <;> cases hy : AdmA α y a <;> simp only [Bool.and_false, Bool.false_and,
-    Bool.and_self]
+  cases hx : AdmA α x a <;> cases hy : AdmA α y a <;> simp only [Bool.and_false, Bool.false_and, Bool.and_self]
   have e1 : Alg.AdmA α dynTableA (view .dual x) [] a = true := viewLe_of .dual dynTableA α x a hx
   have e2 : Alg.AdmA α dynTableA (view .dual y) [] a = true := viewLe_of .dual dynTableA α y a hy
   rw [e1, e2] at hr; exact nomatch hr

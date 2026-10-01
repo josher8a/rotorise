@@ -133,8 +133,7 @@ theorem zip_agree {X Y : Type} (run : Codec V M → X → Option Y) (R : Codec V
   | [], [], [], ys₁, ys₂, _, _, _, h1, h2 => by
       simp only [List.zip_nil_right, traverse_nil, Option.some.injEq] at h1 h2; rw [← h1, ← h2]
   | x :: xs, c :: cs, d :: ds, ys₁, ys₂, hl1, hl2, hall, h1, h2 => by
-      simp only [List.zip_cons_cons, traverse_cons, Option.bind_eq_some_iff,
-        Option.map_eq_some_iff] at h1 h2
+      simp only [List.zip_cons_cons, traverse_cons, Option.bind_eq_some_iff, Option.map_eq_some_iff] at h1 h2
       obtain ⟨y1, hy1, t1, ht1, rfl⟩ := h1
       obtain ⟨y2, hy2, t2, ht2, rfl⟩ := h2
       rw [hR c d (hall c (by simp) d (by simp)) x y1 y2 hy1 hy2,

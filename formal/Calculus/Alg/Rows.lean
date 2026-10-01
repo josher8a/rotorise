@@ -99,8 +99,7 @@ theorem alignP_some_eq_zipP : ∀ (pre : List (α → Bool)) (c : α → Bool) (
   | _ :: _, _, [], h => by simp at h
   | _ :: Ps, c, _ :: vs, h => by
       have ih := alignP_some_eq_zipP Ps c vs (by simpa using h)
-      simp only [alignP, List.cons_append, zipP, List.length_cons,
-        Nat.succ_sub_succ_eq_sub, ih]
+      simp only [alignP, List.cons_append, zipP, List.length_cons, Nat.succ_sub_succ_eq_sub, ih]
 
 /-- …and refuses a row shorter than its declared positions. -/
 theorem alignP_short : ∀ (pre : List (α → Bool)) (sp : Option (α → Bool)) (ws : List α),
@@ -171,8 +170,7 @@ theorem alignPL_mono {Ps Qs Ss Ts : List (α → Bool)} {sp sq : Option (α → 
 /-- A list with no prefix and no suffix admits a value when the spread admits each element. -/
 theorem alignPL_spread (P : α → Bool) (vs : List α) :
     alignPL [] (some P) [] vs = decide (∀ x ∈ vs, P x = true) := by
-  simp only [alignPL, List.length_nil, Nat.sub_zero, List.take_length, List.drop_length, zipP,
-    Bool.and_true]
+  simp only [alignPL, List.length_nil, Nat.sub_zero, List.take_length, List.drop_length, zipP, Bool.and_true]
   induction vs with
   | nil => rfl
   | cons x xs ih => simp [alignP, ih]
@@ -388,15 +386,13 @@ theorem rowOfG_respread {α : Type} {pre suf : List α} {c : α} {P S n : Nat}
   subst hN; subst hm
   have h1 : ((pre ++ List.replicate (P + S - pre.length - suf.length) c) ++ suf).take P
       = pre ++ List.replicate (P - pre.length) c := by
-    simp only [List.take_append, List.length_append, List.length_replicate,
-      List.take_replicate, List.take_of_length_le hP]
+    simp only [List.take_append, List.length_append, List.length_replicate, List.take_replicate, List.take_of_length_le hP]
     rw [show min (P - pre.length) (P + S - pre.length - suf.length) = P - pre.length by omega,
       show P - (pre.length + (P + S - pre.length - suf.length)) = 0 by omega]
     simp
   have h2 : ((pre ++ List.replicate (P + S - pre.length - suf.length) c) ++ suf).drop P
       = List.replicate (S - suf.length) c ++ suf := by
-    simp only [List.drop_append, List.length_append, List.length_replicate,
-      List.drop_replicate, List.drop_eq_nil_of_le hP]
+    simp only [List.drop_append, List.length_append, List.length_replicate, List.drop_replicate, List.drop_eq_nil_of_le hP]
     rw [show P - (pre.length + (P + S - pre.length - suf.length)) = 0 by omega,
       show P + S - pre.length - suf.length - (P - pre.length) = S - suf.length by omega]
     simp

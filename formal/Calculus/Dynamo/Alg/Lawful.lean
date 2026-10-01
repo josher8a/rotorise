@@ -19,52 +19,9 @@ prisms. Below, each of the four is that one lemma transported across the definit
 equality by `Lawful.congr`, which is what lets the definitions stay in the unfolded form
 the rest of the development `simp`s with. -/
 
-theorem lawful_stringCodec : Lawful stringCodec :=
-  Lawful.congr (d := pointCodec sC sC .S)
-    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
-    (lawful_pointCodec (fun _ => rfl))
-
-theorem lawful_booleanCodec : Lawful booleanCodec :=
-  Lawful.congr (d := pointCodec boolA boolA .BOOL)
-    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
-    (lawful_pointCodec (fun _ => rfl))
-
-theorem lawful_binaryCodec : Lawful binaryCodec :=
-  Lawful.congr (d := pointCodec bC bC .B)
-    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
-    (lawful_pointCodec (fun _ => rfl))
-
-theorem lawful_nullCodec : Lawful nullCodec :=
-  Lawful.congr (d := pointCodec nullA nullA .NULL)
-    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
-    (lawful_pointCodec (fun _ => rfl))
-
-/-- **The `(number)` case, with no axiom.** `e` and `p` are mutually inverse constructor
-    wrappers over one carrier, so retract, canon and writes are `rfl` at the only inhabited
-    row. No shortest-text round trip is needed, because there is no host spelling to
-    round-trip through. -/
-theorem lawful_numberCodec : Lawful numberCodec := by
-  refine .ofRC ?_ ?_ ?_
-  · intro t a he
-    cases t with
-    | n x => cases he; rfl
-    | _ => exact nomatch he
-  · intro a t hp
-    cases a with
-    | n x => cases hp; rfl
-    | _ => exact nomatch hp
-  · intro μ hμ t a he
-    cases t with
-    | n x => cases he; cases hμ; rfl
-    | _ => exact nomatch he
-
-/-- …and every base is lawful. -/
-theorem lawful_baseCodec : ∀ k : GroundKind, Lawful (baseCodec k)
-  | .string  => lawful_stringCodec
-  | .number  => lawful_numberCodec
-  | .boolean => lawful_booleanCodec
-  | .binary  => lawful_binaryCodec
-  | .null    => lawful_nullCodec
+/-- **Every base is lawful**: a point codec whose prism stamps the member of its kind. -/
+theorem lawful_baseCodec (k : GroundKind) : Lawful (baseCodec k) :=
+  lawful_pointCodec (by cases k <;> exact fun _ => rfl)
 
 /-! ### The literal codec is lawful because its base is
 

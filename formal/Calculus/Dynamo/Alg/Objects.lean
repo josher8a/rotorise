@@ -72,8 +72,7 @@ theorem objectCodec_empty_codec (c : Codec) :
   apply Codec.ext
   · funext v
     cases v <;>
-      simp [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, recordCodec,
-            objEntryT, rcOf, MapOf.at, mA]
+      simp [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, recordCodec, objEntryT, rcOf, MapOf.at, mA]
     constructor
     · rintro ⟨x, ⟨rfl, hf⟩, h⟩
       cases eq_of_heq hf
@@ -84,9 +83,7 @@ theorem objectCodec_empty_codec (c : Codec) :
   · funext v
     cases v <;> try rfl
     rename_i keys f
-    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, recordCodec,
-        Option.bind,
-          objWrite, objAt, rcOf, entryCodec, MapOf.at, mA, mA, Alg.Codec.ofEP_e]
+    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, recordCodec, Option.bind, objWrite, objAt, rcOf, entryCodec, MapOf.at, mA, Alg.Codec.ofEP_e]
     rw [if_pos (hval keys), Option.map_map]
     refine congrArg (fun F => Option.map F _) (funext fun _ => rfl) |>.trans ?_
     exact congrArg (Option.map _) (congrArg funImage
@@ -94,9 +91,7 @@ theorem objectCodec_empty_codec (c : Codec) :
   · funext a
     cases a <;> try rfl
     rename_i keys f
-    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, mA, mA,
-        Option.bind,
-               objRead, objAt, rcOf, entryCodec, MapOf.at, recordCodec, Alg.Codec.ofEP_p]
+    simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, mA, Option.bind, objRead, objAt, rcOf, entryCodec, MapOf.at, recordCodec, Alg.Codec.ofEP_p]
     -- simp over a vacuous `Finset ∅` goal reaches `Classical.choice` through three filter
     -- lemmas this development does not advertise. Each fact below is the direct term instead.
     rw [if_pos (show valPresentB (⟨(∅ : Finset Name),
