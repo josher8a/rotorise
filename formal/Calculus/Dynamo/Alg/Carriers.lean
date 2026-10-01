@@ -28,12 +28,12 @@ theorem carrier_baseCodec (k : GroundKind) : Carrier (baseCodec k) := carrier_po
     ~~literalNCodec~~'s carrier used to be proved by hand — unfolding the host's decimal reader, splitting on
     `Numeral.WF`, then on membership — because the codec was a hand-written pair that only
     *agreed* with a restriction. It now **is** the restriction, so `carrier_restrict` supplies
-    everything and all that remains is the held set being no smaller than the restriction's,
-    which is `hLit_of_inL`. -/
+    everything and all that remains is the held set being the restriction's, which is
+    `HLit_iff_restrict`. -/
 theorem carrier_literalCodec (k : GroundKind) (x : k.Carrier) :
     Carrier (literalCodec k x) :=
   Carrier.congr (d := (baseCodec k).restrict (inL k x)) rfl rfl
-    (fun _ hv => hLit_of_inL k x _ hv.2)
+    (fun v hv => (HLit_iff_restrict k x v).mpr hv)
     (carrier_restrict (carrier_baseCodec k) (inL k x))
 
 /-- `set`: non-emptiness comes from the codec refusing an empty set on both sides, and

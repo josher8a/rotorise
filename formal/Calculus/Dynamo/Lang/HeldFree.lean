@@ -37,8 +37,7 @@ theorem sub_baseCodec (k : GroundKind) : Sub (baseCodec k) Ω := fun o x y h => 
 
 /-- A literal is a restriction of `Ω`, because a literal restricts its base. -/
 theorem sub_literal (k : GroundKind) (x : k.Carrier) : Sub (literalCodec k x) Ω :=
-  have h := sub_restrict (sub_baseCodec k) (inL k x)
-  .ofEP (h .host) (h .dual)
+  sub_restrict (sub_baseCodec k) (inL k x)
 
 /-- `setAt` keeps an inclusion of graphs. -/
 theorem setAt_sub {α : Type} {o : Alg.Orient} {c d : Codec} (h : Sub c d) {inj : α → Attr}
