@@ -369,8 +369,9 @@ read the ladder.
 
 `opaque` is the top: the universal sum, total on the values (`opaq_total`) and on the attributes
 (`opaqA_total`). `opaque` denotes a codec the calculus warrants, and not a codec a caller
-supplies. `opaqStep` is one layer of everything self-identifying, and `opaque` is its limit
-(`muCodec opaqStep`).
+supplies. With one carrier, each datum identifies itself, so the union of everything
+self-identifying is the identity: `opaque` denotes the identity codec of the carrier, the top of
+every universe. The union is a theorem (`Adm_opaqUnfold`, `AdmA_opaqUnfold`).
 Each term with no `held` is a restriction of `opaque` on both halves (`confluence_W`,
 `confluence_R`). A `held` term changes the carrier, so that inclusion does not reach it. `opaque`
 carries no flag, because it holds a number exactly and so loses nothing.
