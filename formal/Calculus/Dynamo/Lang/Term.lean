@@ -83,13 +83,7 @@ noncomputable def inLs (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : 
   decide (∃ x ∈ ls.1, inL k x v = true)
 
 /-- Whether a value is of one ground base. -/
-def inBase : GroundKind → Value → Bool
-  | .string,  .str _  => true
-  | .number,  .num _  => true
-  | .boolean, .bool _ => true
-  | .binary,  .bin _  => true
-  | .null,    .null   => true
-  | _, _ => false
+def inBase (k : GroundKind) (v : Value) : Bool := decide (v.member = k.member)
 
 /-- **What a `Pred` means.** The universe's `Alg.Syn.eval`, beside the type.
 

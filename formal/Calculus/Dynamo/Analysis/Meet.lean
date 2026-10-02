@@ -192,7 +192,7 @@ theorem meetAlt_ok (k : GroundKind) [DecidableEq k.Carrier] (A B : NEFinset k.Ca
 /-- An alternative that `inL` holds at a value names the value's base. -/
 theorem inBase_of_inL {k : GroundKind} {x : k.Carrier} {v : Value} (h : inL k x v = true) :
     inBase k v = true := by
-  cases k <;> cases v <;> simp_all [inL, inBase]
+  cases k <;> cases v <;> simp_all [inL, inBase, Attr.member]
 
 /-- A value outside a base satisfies no alternative at that base. -/
 theorem inLs_false_of_base {k : GroundKind} {A : NEFinset k.Carrier} {v : Value}
@@ -551,7 +551,7 @@ example : Alg.Term.disjoint pair0
 /-- The left body admits `{x := "1"}` through its declared slot… -/
 example : Adm α (.object (.mk {"x"} (fun _ => .req .string) (some .string)))
     (.map {"x"} (fun _ => .str "1")) = true := by
-  simp [Adm_rows, valPresentT, objAdmV, entryP, MapOf.at, inBase]
+  simp [Adm_rows, valPresentT, objAdmV, entryP, MapOf.at, inBase, Attr.member]
 
 /-- …and the right body admits it through its open block, at a name it does not declare. -/
 example : Adm α (.object (.mk {"y"} (fun _ => .optional .string) (some .string)))

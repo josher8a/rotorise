@@ -111,8 +111,9 @@ noncomputable instance dynPrimAdm : Alg.PrimAdm dynSyn where
     | .literal k x => AdmLit k x
   admV_exact
     | .base k, v => by
-        show inBase k v = true ↔ ((denote (fun _ => (id, id)) (.base k)).e v).isSome = true
-        cases k <;> cases v <;> simp [inBase, denote_rows, prism_rows, orient_rows]
+        show decide (v.member = k.member) = true ↔
+          ((Alg.fiberCodec Attr.member k.member).f .host v).isSome = true
+        rw [Alg.fiberCodec_isSome]
     | .literal k x, v => by
         show AdmLit k x v = true ↔ ((denote (fun _ => (id, id)) (.literal k x)).e v).isSome = true
         cases k <;> cases v <;>
