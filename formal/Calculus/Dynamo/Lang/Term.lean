@@ -284,6 +284,8 @@ abbrev ObjectSlot := Alg.ObjectSlot dynSyn
   Alg.Term.held s inner outer k₀ k
 @[match_pattern] abbrev Term.refine (inner : Term) (p : Pred) (pA : dynSyn.PredA) :
     Term := Alg.Term.refine inner p pA
+@[match_pattern] abbrev Term.legacy (inner : Term) (r : Attr → Option Value) : Term :=
+  Alg.Term.legacy inner r
 @[match_pattern] abbrev Term.opaq : Term := Alg.Term.opaq
 @[match_pattern] abbrev Term.object (b : Body) : Term := Alg.Term.object b
 @[match_pattern] abbrev Term.union (options : List Term) : Term := Alg.Term.union options
