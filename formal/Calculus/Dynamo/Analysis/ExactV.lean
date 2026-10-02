@@ -239,26 +239,6 @@ theorem valPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → Ob
     | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
 
 
-/-- A present name that the body declares goes through that name's field. -/
-theorem objAdmV_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Value}
-    (hB : objAdmV ⟨c.fields, fun k => AdmField α (c.at k)⟩ (AdmWild α c.wild) keys g = true)
-    {k : Name} (hk : k ∈ keys) (hc : k ∈ c.fields) :
-    AdmField α (c.at ⟨k, hc⟩) (g ⟨k, hk⟩) = true := by
-  unfold objAdmV at hB
-  have hh := of_decide_eq_true hB ⟨k, hk⟩
-  rwa [entryP, MapOf.at, dif_pos hc] at hh
-
-/-- A present name the body does not declare goes through the open block: an open body claims
-    the name, and the block's row admits the name's value. -/
-theorem objAdmV_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Value}
-    (hB : objAdmV ⟨c.fields, fun k => AdmField α (c.at k)⟩ (AdmWild α c.wild) keys g = true)
-    {k : Name} (hk : k ∈ keys) (hnc : k ∉ c.fields) {w : Term}
-    (hw : c.wild = some w) : Adm α w (g ⟨k, hk⟩) = true := by
-  unfold objAdmV at hB
-  have hh := of_decide_eq_true hB ⟨k, hk⟩
-  rwa [entryP, MapOf.at, dif_neg hnc, hw, AdmWild_some] at hh
-
-
 variable (α) in
 /-- `⋁` of `Adm` over a union's options, named — sound, and *not* exact. -/
 noncomputable def AdmAny (ts : List Term) (v : Value) : Bool := anyP (AdmList α ts) v
@@ -294,31 +274,6 @@ theorem AdmAny_iff : ∀ {os : List Term} {v : Value},
 variable (α) in
 /-- §5's converse direction: the row is `dom(e)`, not merely a bound on it. -/
 def ExactV (t : Term) : Prop := ∀ v, Adm α t v = true ↔ ((denote α t).e v).isSome
-
-/-- A traversal succeeds exactly when every entry does. -/
-theorem traverse_isSome_iff {α β : Type} (f : α → Option β) : ∀ xs : List α,
-    (traverse f xs).isSome = true ↔ ∀ x ∈ xs, (f x).isSome = true := by
-  intro xs
-  induction xs with
-  | nil => simp [traverse]
-  | cons x xs ih =>
-    simp only [traverse, List.mem_cons]
-    cases hx : f x with
-    | none => simp [hx]
-    | some y =>
-      cases htr : traverse f xs with
-      | none =>
-        have hno : ¬ (∀ z ∈ xs, (f z).isSome = true) := by
-          intro hall; have := ih.mpr hall; rw [htr] at this; simp at this
-        constructor
-        · intro hc; simp at hc
-        · intro hall; exact absurd (fun z hz => hall z (Or.inr hz)) hno
-      | some ys =>
-        have hall : ∀ z ∈ xs, (f z).isSome = true := ih.mp (by rw [htr]; rfl)
-        simp only [Option.isSome_some, true_iff]
-        rintro z (rfl | hz)
-        · rw [hx]; rfl
-        · exact hall z hz
 
 /-- Each option's row *is* its attempt — given that option's exactness, which is where the
     exactness hypothesis is spent. -/

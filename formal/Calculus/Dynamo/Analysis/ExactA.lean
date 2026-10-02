@@ -193,11 +193,6 @@ variable (α) in
 /-- The converse direction on the attribute side: the row is `dom(p)`, not a bound on it. -/
 def ExactA (t : Term) : Prop := ∀ a, AdmA α t a = true ↔ ((denote α t).p a).isSome
 
-/-- The read-side agreement, option by option — `isSome_e_eq_Adm`'s twin. -/
-theorem isSome_p_eq_AdmA {t : Term} (h : ExactA α t) (a : Attr) :
-    ((denote α t).p a).isSome = AdmA α t a := by
-  exact Bool.coe_iff_coe.mp (by simpa using (h a).symm)
-
 /-- `select`'s filter is the term list's, mapped — `filter_AdmList`'s twin. Every row is exact,
     so the filter moves through the map with no hypothesis. -/
 theorem filter_AdmAList (opts : List Term) (a : Attr) :
@@ -219,25 +214,6 @@ theorem AdmA_exact (t : Term) : ExactA α t := Alg.AdmA_exact t []
 The value side needs only `AdmWild`, which is `none` exactly where the body declares no open
 block. The read side reads the block the same way: an undeclared name under a closed body is
 refused, and each name's own presence pair handles a declared absent name. -/
-
-/-- One entry of the read-side object row — `objAdmV_row`'s twin. -/
-theorem objAdmA_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (hB : objAdmV ⟨c.fields, fun k => AdmAField α (c.at k)⟩ (AdmAWild α c.wild) keys g = true)
-    {k : Name} (hk : k ∈ keys) (hc : k ∈ c.fields) :
-    AdmAField α (c.at ⟨k, hc⟩) (g ⟨k, hk⟩) = true := by
-  unfold objAdmV at hB
-  have hh := of_decide_eq_true hB ⟨k, hk⟩
-  rwa [entryP, MapOf.at, dif_pos hc] at hh
-
-/-- A present name the body does not declare goes through the open block, on the read side.
-    `objAdmV_wild`'s twin. -/
-theorem objAdmA_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (hB : objAdmV ⟨c.fields, fun k => AdmAField α (c.at k)⟩ (AdmAWild α c.wild) keys g = true)
-    {k : Name} (hk : k ∈ keys) (hnc : k ∉ c.fields) {w : Term}
-    (hw : c.wild = some w) : AdmA α w (g ⟨k, hk⟩) = true := by
-  unfold objAdmV at hB
-  have hh := of_decide_eq_true hB ⟨k, hk⟩
-  rwa [entryP, MapOf.at, dif_neg hnc, hw, AdmAWild_some] at hh
 
 /-- Soundness of every attribute row — a corollary, as on the value side. The
     hundred-and-thirty-line depth recursion this was, and the ~~SoundA~~ scaffolding it needed,

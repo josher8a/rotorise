@@ -179,15 +179,6 @@ theorem valPresentB_spec_req {names : Finset String}
   rw [hs] at hb
   exact of_decide_eq_true hb
 
-/-- The presence guard passes where every `req` name is present. -/
-theorem valPresentB_of_req {names : Finset String}
-    (h : ∀ k c, sems.at k = some (.req c) → k ∈ names) :
-    valPresentB sems names = true := by
-  refine decide_eq_true fun k => ?_
-  cases hs : sems.2 k with
-  | req c => simpa [valPresentAt, hs] using h k.1 c (by rw [MapOf.at_of_mem k, hs])
-  | opt c => simp [valPresentAt]
-
 /-- The held set of an entry follows from the carrier of its codec, on the write step. -/
 theorem entry_domE' (hs : ∀ k, Carrier (sems.2 k).codec) (hrc : ∀ c ∈ rc?, Carrier c)
     {k : String} {v : V} {a : V}

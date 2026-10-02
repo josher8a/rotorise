@@ -180,11 +180,6 @@ theorem agreeLe_refine2 {d : Nat} {c₁ c₂ : Codec V M} (h : AgreeLe depth d c
     AgreeLe depth d (refine2 c₁ qV qA) (refine2 c₂ qV qA) :=
   ⟨fun o x hx => by simp only [refine2, h.f o x hx]⟩
 
-/-- A restriction reads its codec at its own input, so it keeps the depth. -/
-theorem agreeLe_restrict {d : Nat} {c₁ c₂ : Codec V M} (h : AgreeLe depth d c₁ c₂)
-    (q : V → Bool) : AgreeLe depth d (c₁.restrict q) (c₂.restrict q) :=
-  agreeLe_refine2 h q _
-
 /-- A row of codecs that agree below `d`, zipped with inputs no deeper than `d`, traverses to
     one answer. -/
 theorem traverse_zip_congr {α β : Type} {d : Nat} {run : Codec V M → α → Option β}
