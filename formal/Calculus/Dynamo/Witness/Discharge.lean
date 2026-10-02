@@ -1,4 +1,4 @@
-import Calculus.Dynamo.Lang.Soundness
+import Calculus.Dynamo.Analysis.Meet
 
 variable {α : Calculus.Table}
 
@@ -46,18 +46,26 @@ theorem guard_accepts_container_path :
 theorem typed_json : Typed α jsonTerm (fun v => (denote α jsonTerm).T v) none :=
   .mu rfl (.union (.cons (Typed.base _) (.cons (Typed.array (.var 0)) .nil)))
 
-/-- `jsonTerm`'s options are compatible at every lawful stage: they are pinned to two kinds. -/
+/-- `jsonTerm`'s options are compatible at every lawful stage: `Term.disjoint` keeps them apart
+    whatever the variable denotes, and orthogonal lawful codecs are compatible. -/
 theorem pairwiseCompat_json (c : Codec) (hc : Lawful c) :
     PairwiseCompat α [.string, .array (.var 0)] [c] := by
-  have hA : denote α (.array (.var 0)) [c] = arrayCodec c := rfl
-  have h := compat_of_onKinds (os := [(baseCodec .string), arrayCodec c]) (ks := [.string, .array])
-    (forall_mem_pair (lawful_baseCodec .string).core (lawful_arrayCodec hc).core)
-    (.cons (onKind_base .string) (.cons (onKind_array c) .nil)) (by decide)
-  have hs : denote α .string [c] ∈ [(baseCodec .string), arrayCodec c] := List.mem_cons_self
-  have ha : denote α (.array (.var 0)) [c] ∈ [(baseCodec .string), arrayCodec c] := by
-    rw [hA]; exact List.mem_cons_of_mem _ List.mem_cons_self
-  exact forall_mem_pair (forall_mem_pair (h _ hs _ hs) (h _ hs _ ha))
-    (forall_mem_pair (h _ ha _ hs) (h _ ha _ ha))
+  have hd : Alg.Term.disjoint (S := dynSyn) Alg.pair0 Term.string (Term.array (.var 0)) = true := by rfl
+  obtain ⟨hV, hA⟩ := Alg.disjoint_orthogonal (α := α) (β := dynTableA) hd
+  have hx : Lawful (denote α .string [c]) := lawful_baseCodec .string
+  have hy : Lawful (denote α (.array (.var 0)) [c]) := lawful_arrayCodec hc
+  have hxy : Compat (denote α .string [c]) (denote α (.array (.var 0)) [c]) :=
+    (Alg.compat_iff_agree hx hy).mpr
+      ⟨Alg.agree_apart fun v => by
+          have := hV [c] [c] (fun _ _ _ hp => nomatch hp) v
+          rwa [Bool.eq_iff_iff.mpr (Alg.Adm_exact Term.string [c] v),
+            Bool.eq_iff_iff.mpr (Alg.Adm_exact (Term.array (.var 0)) [c] v)] at this,
+       Alg.agree_apart fun a => by
+          have := hA [c] [c] (fun _ _ _ hp => nomatch hp) a
+          rwa [Bool.eq_iff_iff.mpr (Alg.AdmA_exact Term.string [c] a),
+            Bool.eq_iff_iff.mpr (Alg.AdmA_exact (Term.array (.var 0)) [c] a)] at this⟩
+  exact forall_mem_pair (forall_mem_pair (compat_self _) hxy)
+    (forall_mem_pair (Alg.compat_symm hx hy hxy) (compat_self _))
 
 /-- `jsonTerm`'s obligations hold: the body owes compatibility at each stage, given that the
     stage before is lawful. -/

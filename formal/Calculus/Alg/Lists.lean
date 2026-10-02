@@ -148,73 +148,8 @@ theorem traverse_mem_input {P : α → Prop} (hP : ∀ x y, f x = some y → P x
 
 end Traverse
 
-/-- Constructive on purpose: mathlib's `filter_eq_nil_iff` routes through
-    `Classical.choice`, and this module keeps choice out even though the advertised base
-    admits it through `Finset`. -/
-theorem filter_nil_of {α : Type _} {p : α → Bool} :
-    ∀ {l : List α}, (∀ y ∈ l, p y = false) → l.filter p = []
-  | [], _ => rfl
-  | a :: l, h => by
-      have ha := h a (List.mem_cons_self)
-      simp only [List.filter, ha]
-      exact filter_nil_of fun y hy => h y (List.mem_cons_of_mem a hy)
-
-
-
-
-
-/-- **Separation.** Suppose a predicate family `adm` pins each list entry to a key: an
-    entry admits `x` only when `key x` is that entry's key. If the keys are pairwise
-    distinct, then whatever one entry admits, no other does — so filtering by admission
-    leaves exactly that entry. This is the shape every disjointness discharger has. -/
-theorem filter_eq_singleton_of_disjoint {β α : Type} {adm : β → α → Bool} {x : α} :
-    ∀ {os : List β} {Ss : List (α → Prop)},
-      List.Forall₂ (fun o S => ∀ y, adm o y = true → S y) os Ss →
-      List.Pairwise (fun S T => ∀ y, S y → ¬ T y) Ss →
-      ∀ o ∈ os, adm o x = true → os.filter (adm · x) = [o]
-  | [], _, .nil, _, _, ho, _ => nomatch ho
-  | o₀ :: os', S₀ :: Ss', .cons h₀ hz, hp, o, ho, hx => by
-    obtain ⟨hhead, htail⟩ := List.pairwise_cons.mp hp
-    by_cases h0 : adm o₀ x = true
-    · have hnone : ∀ o' ∈ os', adm o' x = false := by
-        intro o' ho'
-        cases hq : adm o' x with
-        | false => rfl
-        | true =>
-          obtain ⟨S', hS'mem, hrel⟩ := hz.mem_left ho'
-          exact absurd (hrel x hq) (hhead S' hS'mem x (h₀ x h0))
-      obtain rfl : o = o₀ := by
-        rcases List.mem_cons.mp ho with rfl | ho'
-        · rfl
-        · exact absurd hx (by rw [hnone o ho']; exact Bool.noConfusion)
-      rw [List.filter_cons_of_pos (p := (adm · x)) h0, filter_nil_of hnone]
-    · have ho' : o ∈ os' := by
-        rcases List.mem_cons.mp ho with rfl | h
-        · exact absurd hx (by simp_all)
-        · exact h
-      rw [List.filter_cons_of_neg (p := (adm · x)) (by simpa using h0)]
-      exact filter_eq_singleton_of_disjoint hz htail o ho' hx
-
-/-- A projection is not a different condition — it is a way of *building* the sets. Pull
-    each option's label set back along the projection and the sets are disjoint again,
-    because an input has at most one label. -/
-theorem filter_eq_singleton_of_labels {β α ι : Type}
-    {adm : β → α → Bool} {key : α → Option ι} {x : α} {os : List β} {Ss : List (ι → Prop)}
-    (hz : List.Forall₂ (fun o S => ∀ y, adm o y = true → ∃ l, key y = some l ∧ S l) os Ss)
-    (hp : List.Pairwise (fun S T => ∀ l, S l → ¬ T l) Ss)
-    (o : β) (ho : o ∈ os) (hx : adm o x = true) : os.filter (adm · x) = [o] := by
-  refine filter_eq_singleton_of_disjoint
-    (Ss := Ss.map (fun S y => ∃ l, key y = some l ∧ S l)) ?_ ?_ o ho hx
-  · rw [List.forall₂_map_right_iff]; exact hz
-  · rw [List.pairwise_map]
-    refine hp.imp fun h y hy hy' => ?_
-    obtain ⟨l, hk, hS⟩ := hy
-    obtain ⟨l', hk', hS'⟩ := hy'
-    rw [hk] at hk'; cases hk'
-    exact h l hS hS'
-
-
-/-- …and the same for `Option.map`, which is how a uniform tail is carried. -/
+/-- A property of each image under `g` holds at each element of `x?.map g`. A uniform tail is
+    carried by `Option.map`. -/
 theorem forall_mem_map_option {α β : Type} {x? : Option α} {g : α → β} {P : β → Prop}
     (h : ∀ x ∈ x?, P (g x)) : ∀ y ∈ x?.map g, P y := by
   cases x? <;> simp_all

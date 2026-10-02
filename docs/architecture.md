@@ -931,7 +931,6 @@ what it reads.
 | `f_sound` | a syntactic function agrees with the denotation |
 | `equiv_X` | a rewriting row |
 | `not_X` | a refutation, or a repaired discharger |
-| `onKind_X` | `X` is pinned to a kind |
 
 **What a docstring is for.** The source explains the code; the history is in `git log`. Keep the
 rule or clause tag, so a reviewer can check a theorem in isolation. Keep the forced choice: why

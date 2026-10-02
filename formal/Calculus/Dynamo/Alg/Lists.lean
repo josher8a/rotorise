@@ -17,7 +17,7 @@ there is no first occurrence to prefer. `traverse_fst` survives because `L` real
 namespace Calculus
 
 export Alg (traverse traverse_cons traverse_eq_some traverse_length traverse_isSome_of_all
-  traverse_mem traverse_mem_input filter_eq_singleton_of_labels)
+  traverse_mem traverse_mem_input)
 
 section Traverse
 variable {α β : Type}
