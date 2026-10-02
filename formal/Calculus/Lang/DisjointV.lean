@@ -301,6 +301,7 @@ theorem disjSRight_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S 
   | .set t, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .list a b c, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .held _ _ _ _ _, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
+  | .legacy _ _, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .opaq, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .object b, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
   | .var j, p, ρ', hp, h, v => hf p ρ' hp _ (by simpa only [disjSRight] using h) v
@@ -332,6 +333,7 @@ theorem splitR_sound {ρ ρ' : List S.C} {x : Term S} {fam : Pairing → Term S 
   | .set t, h, v => hf _ (by simpa only [splitR] using h) v
   | .list a b c, h, v => hf _ (by simpa only [splitR] using h) v
   | .held _ _ _ _ _, h, v => hf _ (by simpa only [splitR] using h) v
+  | .legacy _ _, h, v => hf _ (by simpa only [splitR] using h) v
   | .opaq, h, v => hf _ (by simpa only [splitR] using h) v
   | .object b, h, v => hf _ (by simpa only [splitR] using h) v
   | .var j, h, v => hf _ (by simpa only [splitR] using h) v
@@ -373,7 +375,7 @@ theorem predApart_sound [Leaf S] [LeafMeet S] [TopBound S] (s : Bool) {q : S.sig
           rw [hq, hr] at this; exact nomatch this
       · rw [Adm_refine_eq, predApart_sound s y h v a htop hq, Bool.false_and]
   | .prim _, h, _, _, _, _ | .never, h, _, _, _, _ | .set _, h, _, _, _, _
-  | .list _ _ _, h, _, _, _, _ | .held _ _ _ _ _, h, _, _, _, _
+  | .list _ _ _, h, _, _, _, _ | .held _ _ _ _ _, h, _, _, _, _ | .legacy _ _, h, _, _, _, _
   | .opaq, h, _, _, _, _ | .object _, h, _, _, _, _ | .union _, h, _, _, _, _
   | .var _, h, _, _, _, _ | .mu _, h, _, _, _, _ => by
       simp [predApart] at h
@@ -689,6 +691,9 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S
       ∀ (ρ ρ' : List S.C), ApartV p ρ ρ' → ∀ v, (Adm α β x ρ v && Adm α β y ρ' v) = false
   | _, .never, _, _, _, _, _, _ => by simp
   | p, .held _ _ _ _ _, y, h, ρ, ρ', hp, v =>
+      disjSRight_sound (ρ := ρ) (fam := fun _ _ => false)
+        (fun _ _ _ _ hh => nomatch hh) y p ρ' hp h v
+  | p, .legacy _ _, y, h, ρ, ρ', hp, v =>
       disjSRight_sound (ρ := ρ) (fam := fun _ _ => false)
         (fun _ _ _ _ hh => nomatch hh) y p ρ' hp h v
   | p, .var i, y, h, ρ, ρ', hp, v =>

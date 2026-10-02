@@ -342,7 +342,8 @@ only.
 | about what a codec does: its write half, its read half, an iso, a resolution | `Obligations`, as `PairwiseCompat` and `IsoCancels` are | `soundness`, and `extendRead_lawfulCore` through it |
 | a rule of one universe on a set element | the `elem` field of the universe's `SetF`, which `SetObl` puts in `Obligations` | no law: `soundness` takes it as a premise and does not read it |
 
-`Term` has no alternate reader. Therefore `soundness` proves `Lawful`, which is one inverse law over
+`Typed` has no rule for the alternate reader (`Term.legacy`), so a typed term holds none. Therefore
+`soundness` proves `Lawful`, which is one inverse law over
 the orientation (retract at the host, canon at the dual) and writes, for every typed term whose
 obligations hold. The induction proves `Lawful` alone.
 `Lawful.core` gives `LawfulCore` from it. An alternate reader is `Codec.extendRead` at the codec layer. Its read passes only what the current
@@ -490,8 +491,10 @@ that asks is the domain of the read half exactly.
 The price is that a row becomes `noncomputable` when its codec is. That costs nothing here,
 because `denote` is `noncomputable` already: `inL` is, and `denote` reads it.
 
-An alternate reader is deliberately outside the term rows. `Codec.extendRead` tries the current
-reader first and then the alternate reader. No structural analysis reads the alternate reader.
+An alternate reader is `Term.legacy`, and its codec is `Codec.extendRead`. `Codec.extendRead` tries
+the current reader first and then the alternate reader, and it passes only what the current codec
+writes. No structural analysis reads the alternate reader: each row reads `legacy` from its own
+codec, as it reads an opaque leaf.
 
 ### One codec, stated once for both sides of the pair
 
@@ -535,8 +538,8 @@ and admissible sets are ways of building those families rather than four separat
 `ExactV.lean` holds `Adm` and `ExactA.lean` holds `AdmA`, exact at every constructor, with no
 hypothesis and no escape hatch. Its value-side separation predicate is one clause, because the
 joint predicate absorbs what a kind table used to carry. The attribute-side predicate is also one
-clause. An alternate reader cannot add a structural exception because `Codec.extendRead` is
-outside `Term`.
+clause. An alternate reader cannot add a structural exception, because each row reads `Term.legacy`
+from its own codec.
 
 **One test decides both.** `select` attempts every option, so option admission *is* the row at
 every constructor: `admitV_le_Adm` and `admitA_le_AdmA` hold from exactness alone, with no premise

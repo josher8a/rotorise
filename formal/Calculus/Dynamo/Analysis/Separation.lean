@@ -75,7 +75,7 @@ theorem refine_top_row (t : Term) : Adm α (.refine t (.closure qTop) ()) = Adm 
 
 `SepJV` and `SepJA` state separation on the rows this file proves exact. Each side is one
 clause. `Adm` and `AdmA` fold the kind or member gate into their rows. An alternate reader
-(`Codec.extendRead`) is outside `Term`, so an alternate reader cannot add a second structural clause.
+(`Term.legacy`) asks its own codec in each row, so it cannot add a second structural clause.
 
 A discharger consumes disjointness of the options `select` builds, and every option, `object`
 included, is admitted by attempt, which is `Adm`/`AdmA` exactly. `admitV_le_Adm` and
@@ -268,10 +268,10 @@ channel falling back to `r`'s, which is a **choice**, not a composition. That is
 `union` belongs to as well (`altCodec`, n-ary, both sides). `alternate reader` is the one-sided
 member: it reads on two channels and writes on one.
 
-The read domain of `extendRead c r` is `dom(p) ∪ dom(r)`. A passthrough that bounds it by the
-subterm's read domain is unsound, not coarse: `extendRead (literal "A") r`, with `r` reading
-`⟨N, "1"⟩` to `"A"`, reads an attribute that the literal refuses. `extendRead` is outside
-`Term`, so `AdmA` has no alternate-reader row. -/
+The read domain of `extendRead c r` is `dom(p)` and the part of `dom(r)` whose answer `c`
+writes. A passthrough that bounds it by the subterm's read domain is unsound, not coarse:
+`extendRead (literal "A") r`, with `r` reading `⟨N, "1"⟩` to `"A"`, reads an attribute that the
+literal refuses. So the `legacy` row of `AdmA` asks its own codec. -/
 
 /-- An adapter never widens the read domain. -/
 theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
