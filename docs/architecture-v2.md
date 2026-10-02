@@ -123,8 +123,10 @@ test decides that the product of two idempotents is zero.
 
 A test that cannot tell is a decline, not a refutation.
 
-> ASPIRATION: no declaration decides compatibility structurally. Two adapters are compatible
-> where their functions agree on the overlap, and a function has no decidable equality.
+> ASPIRATION: `Term.compat` decides compatibility structurally, and `compat_sound` proves it sound.
+> Two adapters agree there only where they carry one word, or where a half of one is disjoint
+> from the other. Two adapters of different words whose functions agree on the overlap are
+> refused, because a function has no decidable equality.
 
 The certificate is orthogonality. Two terms are orthogonal where the product of their domain
 idempotents is zero and the product of their range idempotents is zero (Lawson, *Primer on
@@ -159,12 +161,10 @@ each half of agreement at each component: one canonical codec bounds both terms 
 terms are disjoint there. The decision refuses an adapter beside a term where a component shares an
 input on one half and no bound covers the component.
 
-> ASPIRATION: the library tests a bound only where the bound is `opaque`, or where its rule
-> `below(x, y)` shows one option below the other. The rule has five rows: a literal below its base
-> and below itself, a union whose options are each below, a term below a held-free union where the
-> term is below one option, the same adapter over sides that are each below, and a term with no
-> payload below itself. So it refuses `decimal('1')` beside `union([decimal('1', '2.5'),
-> string('A')])`, and two restrictions of one adapter that overlap where neither is below the other.
+> ASPIRATION: the decision knows two bounds: the top, which bounds two held-free terms, and one
+> adapter word, which bounds two adapters of one side. A canonical codec below the top that bounds
+> an adapter and a term is not one of them, so the decision refuses such a pair wherever a
+> component shares an input on one half.
 
 **A union is the join of its options.** The first option that admits a value writes the value,
 and over lawful, pairwise compatible options the order of the options is unobservable. So a value
