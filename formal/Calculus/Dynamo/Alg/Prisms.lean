@@ -23,9 +23,8 @@ is the prism §7 of the specification already names when it calls `held` and `re
 same shape at different strengths". Two families turn out to be instances, and each was
 written out once per constructor before it was named:
 
-* the **point ground codecs** (`pointCodec`) — `string`, `boolean`, `binary` and
-  `null` are a payload carried between a value constructor and an attribute constructor,
-  differing in nothing but which pair;
+* the **ground summands** (`GroundKind.summand`) — the prism of each base with the member it
+  stamps, which gives a set element its member law;
 * the **scalar payload prisms** (`sC`/`nC`/`bC`) — the attribute half of three of those
   pairs, factored out because `setAt` needs the same three prisms to decide which wire set
   a homogeneous element set writes to.
@@ -138,7 +137,7 @@ theorem SetKind.elem_out_ne {k k' : SetKind} (h : k ≠ k') (x : k.Carrier) :
   cases k <;> cases k' <;> first | exact absurd rfl h | rfl
 
 attribute [orient_rows] Alg.Codec.e Alg.Codec.p
-attribute [prism_rows] Alg.pointCodec GroundKind.prism sC nC bC boolA nullA
+attribute [prism_rows] GroundKind.prism sC nC bC boolA nullA
 
 /-- The summand of a ground kind: the prism of the kind, which stamps the member of the kind. -/
 def GroundKind.summand (k : GroundKind) : Alg.Summand k.Carrier Attr Member Attr.member :=
@@ -149,11 +148,11 @@ def GroundKind.summand (k : GroundKind) : Alg.Summand k.Carrier Attr Member Attr
     §3's `(literal)` premise is `⊢ g : T ⇝ μ, g ground`, and this is `g`. It exists because
     the rule quantifies over the base — the three constructors this replaces had it hard-coded
     three times over, which is why `literal-S` and `literal-N` were two rules and `boolean`,
-    `binary` and `null` were none. A base is one point codec at the prism of its kind: it
+    `binary` and `null` were none. A base is the identity on the fiber of its kind: it
     accepts a datum of the kind, changes nothing, and stamps the member of the kind. -/
-@[simp] def baseCodec (k : GroundKind) : Codec := pointCodec k.summand
+@[simp] def baseCodec (k : GroundKind) : Codec := Alg.fiberCodec Attr.member k.member
 
-attribute [prism_rows] baseCodec GroundKind.summand
+attribute [prism_rows] baseCodec GroundKind.summand Alg.fiberCodec Attr.member
 
 /-- `number` writes a numeral as `N`. -/
 theorem baseCodec_e_num (x : WFNumeral) : (baseCodec .number).e (.num x) = some (.n x) := rfl
@@ -260,7 +259,7 @@ and its held set is the restriction's (`HLit_iff_restrict`). `decimal` is the sa
     restricted to the alternative. -/
 theorem HLit_iff_restrict (k : GroundKind) (x : k.Carrier) (v : Value) :
     HLit k x v ↔ ((baseCodec k).restrict (inL k x)).T v := by
-  show v = k.toValue x ↔ (∃ z, v = k.summand.p.into z) ∧ inL k x v = true
+  show v = k.toValue x ↔ Attr.member v = k.member ∧ inL k x v = true
   cases k <;> cases v <;> simp [GroundKind.toValue, prism_rows, inL]
 
 end

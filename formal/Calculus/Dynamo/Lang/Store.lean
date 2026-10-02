@@ -197,8 +197,8 @@ partiality is a fact about the port's types, not the model's. -/
 theorem decimal_T (v : Value) :
     decimalCodec.T v ↔ ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true := by
   constructor
-  · rintro ⟨⟨x, rfl⟩, h⟩; exact ⟨x, rfl, h⟩
-  · rintro ⟨x, rfl, h⟩; exact ⟨⟨x, rfl⟩, h⟩
+  · rintro ⟨hm, h⟩; cases v <;> first | exact ⟨_, rfl, h⟩ | exact nomatch hm
+  · rintro ⟨x, rfl, h⟩; exact ⟨rfl, h⟩
 
 /-- **The report.** `decimalCodec` writes only well-formed numerals — the tightened
     `: T` index, cashed on the attribute side. -/

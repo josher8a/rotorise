@@ -9,7 +9,7 @@ definition it touches.
 | Module                      | Doc section | Content                                                                                                                                                                                                                                                               |
 | --------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Calculus/Alg/Codec.lean`         | §2          | The generic layer starts here, in the namespace `Calculus.Alg`. The record `Codec` and its laws `Lawful`/`LawfulCore` over carriers `V`, `A` and `M`, with the member of an attribute as a parameter of `Lawful`. The module imports nothing |
-| `Calculus/Alg/Combinators.lean` | §3, §5      | `restrict`, `through`, `extendRead`, `pointCodec`, the union by the first admitter (`select`, `altCodec`), the side conditions (`Carrier`, `IsoCancels`, `ReadsCoherently`), and the law of each, over any carriers |
+| `Calculus/Alg/Combinators.lean` | §3, §5      | `restrict`, `through`, `extendRead`, `fiberCodec`, the union by the first admitter (`select`, `altCodec`), the side conditions (`Carrier`, `IsoCancels`, `ReadsCoherently`), and the law of each, over any carriers |
 | `Calculus/Alg/Relations.lean` | §5, §6      | `Sub` (graph inclusion and the information order), `Codec.Equiv`, `Canon`, `Compat`, the reads below one bound (`readAgree_of_sub`), the laws of the join (`lawful_altCodec`) and the common bound (`compat_of_common_bound`), over any carriers |
 | `Calculus/Alg/Lists.lean`    | —, §3       | `traverse` and its laws off the pivot `traverse_eq_some`, the `filter` facts, and `carriedCodec` with its instance at a traversal, `entrywise` (`lawful_entrywise`), over any carriers |
 | `Calculus/Alg/Positions.lean` | §3          | The positional theory: `align`, `slots`, `alignL`, `slotsL`, the zip laws, `tuple_retract` and `list_retract`, over any carriers |
@@ -30,7 +30,7 @@ definition it touches.
 | `Calculus/Dynamo/Alg/Lists.lean`       | —           | The list plumbing at the DynamoDB carriers: the aliases of the generic traversal and `filter` facts, and the keyed clause `traverse_fst`, which reads `Name` |
 | `Calculus/Dynamo/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Attr.kind` (the ten members collapsing onto eight), and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
 | `Calculus/Dynamo/Alg/Codec.lean`       | §2, §5      | `Codec`, `Lawful` (a canonical partial bijection) and `LawfulCore` as abbreviations of the generic record and laws at `Value`, `Attr` and `Member`, and the aliases of the generic combinators |
-| `Calculus/Dynamo/Alg/Prisms.lean`      | §3          | The entry point of the certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism) and `extendRead` (alternate reading). `Ctor`, `pointCodec` and the three wrappers are stated generically in `Alg/Combinators.lean`; this file instantiates them at the DynamoDB carriers |
+| `Calculus/Dynamo/Alg/Prisms.lean`      | §3          | The entry point of the certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. Each ground codec is `fiberCodec`, the identity on the fiber of its member, and the bases share its one lawfulness proof. Then `through`/`restrict` (iso/prism) and `extendRead` (alternate reading). `Ctor`, `fiberCodec` and the three wrappers are stated generically in `Alg/Combinators.lean`; this file instantiates them at the DynamoDB carriers |
 | `Calculus/Dynamo/Alg/Products.lean`    | §3          | `carriedCodec` — a payload map carried by one prism, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`), `tupleCodec` it at `align` + a traversal over `slots`, the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone. `setCodec` is argued on its own. `carriedCodec` and `entrywise` are stated generically in `Alg/Lists.lean`, and `align` and `slots` in `Alg/Positions.lean`; this file instantiates them at the DynamoDB carriers |
 | `Calculus/Dynamo/Alg/Objects.lean`     | §4          | The field table as a map rather than a row, and the object taken apart through it. `objectCodec` is cashed as an equation by `objectCodecCore_eq` rather than argued on its own |
 | `Calculus/Dynamo/Alg/Sums.lean`        | §5, §3      | `altCodec` (the sum, resolved by the first admitter) |
@@ -119,7 +119,7 @@ and the judgement to it).
   Soundness needs only `Lawful`, so a core lemma exists only where a `Lawful` lemma or
   the alternate reader cites it, and the two share their clauses (`tuple_retract`,
   `set_writes`). The shape underneath is `carriedCodec`, a payload map carried by one
-  prism; `pointCodec`, `entrywise` (hence `array`, `record`), `tuple` and
+  summand; `entrywise` (hence `array`, `record`), `tuple` and
   `object` are all instances, so §2's prism halves are discharged once for all of them.
   `set` is the one product that is not, and the reason is stated where it is argued:
   its attribute side is a choice among three wire sets, not one constructor.
@@ -181,7 +181,7 @@ The short version: the *obligation* half of the vocabulary is done (20/22 carrie
 writes and reads — is 28 of 44. Seven of every ten remaining hand-unfoldings are `Option`
 algebra rather than anything about codecs. Across blocks the spread is narrower than a first
 reading of the table suggests, and `ground` sits mid-table with no inversion at all — because
-`pointCodec` gives four of the ground codecs one shared proof, which argues *for* the
+`fiberCodec` gives the ground codecs one shared proof, which argues *for* the
 convention rather than against it: shared construction, fewer sites.
 
 ## What remains (sharpenings, not gaps)

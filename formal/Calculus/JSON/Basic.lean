@@ -48,32 +48,11 @@ def Json.member : Json → JMember
 
 /-! ## Ground codecs -/
 
-/-- The partial identity on the values of one kind. -/
-def gate (m : JMember) (v : Json) : Option Json :=
-  if v.member = m then some v else none
+/-- The ground codec of one kind: the identity on the values of the kind. -/
+def ground (m : JMember) : Alg.Codec Json JMember := Alg.fiberCodec Json.member m
 
-/-- The gate passes a value of its kind unchanged, and refuses every other value. -/
-theorem gate_eq_some {m : JMember} {v a : Json} :
-    gate m v = some a ↔ v.member = m ∧ a = v := by
-  unfold gate
-  split
-  · next hm => exact ⟨(fun h => ⟨hm, (Option.some.inj h).symm⟩), (fun ⟨_, h⟩ => h ▸ rfl)⟩
-  · next hm => exact ⟨(fun h => nomatch h), (fun ⟨h, _⟩ => absurd h hm)⟩
-
-/-- The ground codec of one kind: the caller value is the stored value. -/
-def ground (m : JMember) : Alg.Codec Json JMember :=
-  Alg.Codec.ofEP (T := fun v => v.member = m)
-    (μ := some m)
-    (e := gate m)
-    (p := gate m)
-
-/-- A ground codec is lawful: the gate is its own inverse, and the gate passes one kind. -/
-theorem lawful_ground (m : JMember) : Alg.Lawful Json.member (ground m) :=
-  .ofRC (fun he => let ⟨hm, h⟩ := gate_eq_some.mp he; gate_eq_some.mpr ⟨h ▸ hm, h.symm⟩)
-    (fun hp => let ⟨hm, h⟩ := gate_eq_some.mp hp; gate_eq_some.mpr ⟨h ▸ hm, h.symm⟩)
-    (fun hμ _ _ he =>
-      let ⟨hm, h⟩ := gate_eq_some.mp he
-      (h ▸ hm).trans (Option.some.inj hμ))
+/-- A ground codec is lawful: the identity on a fiber inverts itself and writes one kind. -/
+theorem lawful_ground (m : JMember) : Alg.Lawful Json.member (ground m) := Alg.lawful_fiberCodec
 
 /-- The string codec. -/
 def str : Alg.Codec Json JMember := ground .str
@@ -118,9 +97,6 @@ def negNum : Alg.Codec Json JMember := num.through negate negate
 theorem lawful_negNum : Alg.Lawful Json.member negNum :=
   lawful_num.through ⟨fun v _ => negate_negate v, fun v _ => negate_negate v⟩
 
-/-- A ground codec is below the identity codec. -/
-theorem sub_ground_id (m : JMember) : Alg.Sub (ground m) Alg.idCodec :=
-  .ofEP (fun _ _ h => (gate_eq_some.mp h).2 ▸ rfl) (fun _ _ h => (gate_eq_some.mp h).2 ▸ rfl)
 
 /-! ## The JSON signature
 
@@ -147,8 +123,7 @@ instance jsonSem : Alg.Mean jsonSig where
   decM := inferInstance
   ground := ground
   lawful_ground := lawful_ground
-  carrier_ground _ := ⟨fun he => (gate_eq_some.mp he).1, fun hp => (gate_eq_some.mp hp).2 ▸
-    (gate_eq_some.mp hp).1⟩
+  carrier_ground _ := Alg.carrier_fiberCodec
   eval
     | false, q => q
     | true, q => q
@@ -174,7 +149,7 @@ variable {β : Alg.Table jsonSyn.op}
 
 /-- The laws of the identity codec that the held-free theory reads: each kind is below it. -/
 instance id_topLaws : Alg.TopLaws jsonSyn where
-  ground := sub_ground_id
+  ground m := Alg.sub_fiberCodec Json.member m
   set _ h := nomatch h
 
 /-- A string or a number, as a term. -/
@@ -210,15 +185,10 @@ theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum := by
 The row of a kind is the kind test. So the exactness of every admission row of the term language
 holds at `jsonSyn`, by `Alg.Adm_exact` and `Alg.AdmA_exact`. -/
 
-/-- The gate admits exactly the values of its kind. -/
-theorem gate_isSome (m : JMember) (v : Json) : (gate m v).isSome = decide (v.member = m) := by
-  unfold gate
-  split <;> simp_all
-
 /-- The value-side row of a kind. -/
 instance jsonPrimAdm : Alg.PrimAdm jsonSyn where
   admV m v := decide (v.member = m)
-  admV_exact m v := by rw [show (Alg.Syn.ground m).f jsonSyn.o v = gate m v from rfl, gate_isSome]
+  admV_exact m v := by rw [← Alg.fiberCodec_isSome Json.member m .host v]; rfl
 
 /-- The attribute-side row of a kind: each kind's gate is self-dual. -/
 instance jsonPrimAdmA : Alg.PrimAdmA jsonSyn := Alg.PrimAdm.dual fun _ => rfl

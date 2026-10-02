@@ -17,9 +17,8 @@ noncomputable section
     checked claim: what a derivable term writes and reads lies in the `T` it names. -/
 
 
-/-- **Every base is on its carrier**: `e` only writes what the prism matched, and `p` only
-    reads what it built (`carrier_pointCodec`). -/
-theorem carrier_baseCodec (k : GroundKind) : Carrier (baseCodec k) := carrier_pointCodec
+/-- **Every base is on its carrier**: the identity on a fiber holds exactly its fiber. -/
+theorem carrier_baseCodec (k : GroundKind) : Carrier (baseCodec k) := Alg.carrier_fiberCodec
 
 /-! ### The refinement ground codecs, on their carriers -/
 

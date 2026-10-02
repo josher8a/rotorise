@@ -116,16 +116,19 @@ theorem Summand.member_of_out {α : Type} {s : Summand α V M member} {a : V}
   obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp h
   rw [s.p.into_out hy]; exact s.hμ y
 
-/-- **The point ground codecs of §3**, as one construction: the partial identity on the image of
-    a summand, which stamps the summand's member.
+/-- **The identity on one fiber**: every datum that carries the member `m`, sent to itself at each
+    orientation. A ground codec of a universe is this codec: it changes nothing and accepts one
+    member, so write and read are one map. -/
+def fiberCodec [DecidableEq M] (member : V → M) (m : M) : Codec V M where
+  T v := member v = m
+  μ := some m
+  f _ v := if member v = m then some v else none
 
-    The prism laws are exactly §2's laws in disguise — `out_into` is the round trip **(R)**
-    and `into_out` is canonizability **(C)** — which is why `lawful_pointCodec` needs no
-    hypothesis. The map reads no orientation: match with the prism, and build with it again. -/
-def pointCodec {α : Type} {member : V → M} (s : Summand α V M member) : Codec V M where
-  T v := ∃ x, v = s.p.into x
-  μ := some s.μ
-  f _ x := (s.p.out x).map s.p.into
+/-- A fiber codec acts exactly at the data of its member, at each orientation. -/
+theorem fiberCodec_isSome [DecidableEq M] (member : V → M) (m : M) (o : Orient) (v : V) :
+    ((fiberCodec member m).f o v).isSome = decide (member v = m) := by
+  simp only [fiberCodec]
+  split <;> simp_all
 
 /-- **The identity codec**: it holds every datum, names no member, and sends each datum to itself
     at each orientation. It is the unit of the inverse monoid of the carrier, and the top of a
@@ -406,17 +409,19 @@ theorem altCodec_admits {os : List (Codec V M)} {μA : Option M} {o : Orient}
 /-- The identity codec holds every datum. -/
 theorem carrier_idCodec : Carrier (idCodec : Codec V M) := ⟨fun _ => trivial, fun _ => trivial⟩
 
-/-- The carrier, likewise: `e` only writes what `p` matched, and `p` only reads what `p`
-    built. -/
-theorem carrier_pointCodec {α : Type} {member : V → M} {s : Summand α V M member} :
-    Carrier (pointCodec s) := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    obtain ⟨x, hx, _⟩ := Option.map_eq_some_iff.mp h
-    exact ⟨x, s.p.into_out hx⟩
-  · intro a v h
-    obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp h
-    exact ⟨x, rfl⟩
+/-- A fiber codec holds exactly its fiber. -/
+theorem carrier_fiberCodec [DecidableEq M] {member : V → M} {m : M} :
+    Carrier (fiberCodec member m) where
+  domE {v _} h := by
+    simp only [Codec.e, fiberCodec] at h ⊢
+    split at h
+    · next hv => exact hv
+    · exact nomatch h
+  ranP {a _} h := by
+    simp only [Codec.p, fiberCodec] at h ⊢
+    split at h
+    · next ha => cases h; exact ha
+    · exact nomatch h
 
 /-- The two-sided restriction is on its carrier when the inner codec is. -/
 theorem carrier_refine2 {c : Codec V M} (h : Carrier c) (qV : V → Bool) (qA : V → Bool) :
@@ -458,18 +463,18 @@ theorem lawful_idCodec : Lawful member (idCodec : Codec V M) where
   inv h := by cases h; rfl
   writes hμ := nomatch hμ
 
-/-- §2's laws for any summand: `out_into`, `into_out`, and the member that the summand stamps. -/
-theorem lawful_pointCodec {α : Type} {s : Summand α V M member} :
-    Lawful member (pointCodec s) where
-  -- match, rebuild, match again: `out_into`, then `into_out`
+/-- §2's laws for a fiber codec: the identity inverts itself, and it writes only its member. -/
+theorem lawful_fiberCodec [DecidableEq M] {m : M} : Lawful member (fiberCodec member m) where
   inv {o x y} h := by
-    obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-    exact (congrArg (Option.map s.p.into) (s.p.out_into z)).trans
-      (congrArg some (s.p.into_out hz).symm)
-  -- everything written is `s.p.into` of something
-  writes hm _ _ he := by
-    obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp he
-    cases hm; exact s.hμ x
+    simp only [fiberCodec] at h ⊢
+    split at h
+    · next hx => cases h; rw [if_pos hx]
+    · exact nomatch h
+  writes hm t a he := by
+    simp only [Codec.e, fiberCodec] at he
+    split at he
+    · next ht => cases he; cases hm; exact ht
+    · exact nomatch he
 
 theorem LawfulCore.through {c : Codec V M} (h : LawfulCore member c) {f g : V → V}
     (hiso : IsoCancels c f g) :
