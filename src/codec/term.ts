@@ -1203,6 +1203,9 @@ const callerView = throughThunks((t, view) => {
             return view(t.outer)
         case 'refine':
             return { kind: 'refine', inner: view(t.inner), q: t.q }
+        // a `withLegacyRead` writes what its inner term writes, and the older reader only reads
+        case 'legacy':
+            return view(t.inner)
         default:
             return mapChildren(t, view)
     }
