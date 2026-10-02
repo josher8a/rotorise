@@ -183,22 +183,22 @@ def Decides (t : Term) : Prop :=
 /-- A string `literal` decides, as §5 says. -/
 theorem decides_literalS : Decides α (.literal .string "A") :=
   ⟨.str "A", .str "B",
-   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, prism_rows, Alg.Codec.e, Alg.Codec.p],
+   by simp [denote_rows, literalCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, prism_rows, orient_rows],
    rfl,
-   by simp [denote_rows, literalCodec, baseCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, prism_rows, Alg.Codec.e, Alg.Codec.p]⟩
+   by simp [denote_rows, literalCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, prism_rows, orient_rows]⟩
 
 /-- `string` does not, as §5 also says. -/
 theorem not_decides_string : ¬ Decides α .string := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
-  cases v <;> cases w <;> simp_all [baseCodec, Attr.kind, Attr.member, Member.kind, prism_rows, Alg.Codec.e]
+  cases v <;> cases w <;> simp_all [Attr.kind, Attr.member, Member.kind, prism_rows, orient_rows]
 
 
 theorem not_decides_refine_top : ¬ Decides α (.refine .string (.closure qTop) ()) := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
   cases v <;> cases w <;>
-    simp_all [Alg.restrict_e_def, Pred.eval, baseCodec, qTop, Attr.kind, Attr.member, Member.kind, prism_rows, Alg.Codec.e]
+    simp_all [Alg.restrict_e_def, Pred.eval, qTop, Attr.kind, Attr.member, Member.kind, prism_rows, orient_rows]
 
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one: two `map`s differing in admission, so a row that answers `false` at every
@@ -207,9 +207,9 @@ theorem decides_object :
     Decides α (.object (.mk {"k"} (fun _ => .req .string) none)) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)), ?_, rfl, ?_⟩
-  · simp +contextual [denote_rows, objectCodec, baseCodec, prism_rows, Alg.Codec.e, valPresentB, valPresentAt, rcOf, Alg.FieldSem.codec, carriedCodec, mA, entryCodec, MapOf.at, funImage, Subtype.forall]
+  · simp +contextual [denote_rows, objectCodec, prism_rows, orient_rows, valPresentB, valPresentAt, rcOf, Alg.FieldSem.codec, carriedCodec, mA, entryCodec, MapOf.at, funImage, Subtype.forall]
     rfl
-  · simp [denote_rows, objectCodec, Alg.objectCodec, Alg.objectCodecCore, baseCodec, valPresentB, valPresentAt, rcOf, carriedCodec, mA, objAt, Subtype.forall, prism_rows, Alg.Codec.e]
+  · simp [denote_rows, objectCodec, Alg.objectCodec, Alg.objectCodecCore, valPresentB, valPresentAt, rcOf, carriedCodec, mA, objAt, Subtype.forall, prism_rows, orient_rows]
 
 
 /-! ### …and the two errors are the same combinator
@@ -243,8 +243,8 @@ def splitTable : Table := fun _ => (fSplit, id)
 theorem decides_held :
     Decides splitTable (.held false .string .string (.caller 0, false) []) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
-  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through, baseCodec, fSplit, prism_rows, Alg.Codec.e, Alg.Codec.p]
-  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through, baseCodec, fSplit, prism_rows, Alg.Codec.e, Alg.Codec.p]
+  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through, fSplit, prism_rows, orient_rows]
+  · simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, splitTable, Alg.Codec.through, fSplit, prism_rows, orient_rows]
 
 
 /-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/
@@ -318,7 +318,7 @@ theorem sepJV_set_literals :
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
     exact absurd (hlit "A" _ (setAt_elem (c := denote α (.literal .string "A")) ha x hx))
       (by simp)
-  all_goals simp [Adm_rows, setCodec, Alg.Codec.e] at hv
+  all_goals simp [Adm_rows, setCodec, orient_rows] at hv
 
 /-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
     separate, because both options admit `[]`. This is §5's empty-container argument in its

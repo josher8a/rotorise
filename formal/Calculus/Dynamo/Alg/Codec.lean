@@ -15,6 +15,10 @@ parameters too, and the aliases below give them their names in this namespace.
     A proof that computes a base or a literal at a concrete datum reads this set. -/
 register_simp_attr prism_rows
 
+/-- The two readings of a codec: the write `e` is the map at the host, and the read `p` is the map
+    at the dual. A proof that unfolds a reading to its map reads this set. -/
+register_simp_attr orient_rows
+
 namespace Calculus
 
 /-- §2: `c = (T, μ, f)`, at the DynamoDB carriers. -/

@@ -15,7 +15,7 @@ definition it touches.
 | `Calculus/Alg/Positions.lean` | §3          | The positional theory: `align`, `slots`, `alignL`, `slotsL`, the zip laws, `tuple_retract` and `list_retract`, over any carriers |
 | `Calculus/Alg/Maps.lean`     | §3–§4       | `funImage` and `setImage` over any key type, `FieldSem` and `RestSem`, and the keyed map `MapOf`, which keeps the namespace `Calculus` so that field notation reaches its extensions |
 | `Calculus/Alg/Containers.lean` | §3–§4       | `listCodec` and `objectCodec` over the list and keyed-map prisms of a universe, with their laws and carriers |
-| `Calculus/Alg/Recursion.lean` | §3          | `AgreeLe`, `Contractive`, `muCodec` and `lawful_muCodec` over two depth functions, and the agreement lemmas of the combinators |
+| `Calculus/Alg/Recursion.lean` | §3          | `AgreeLe`, `Contractive`, `muCodec` and `lawful_muCodec` over one depth function of the carrier, and the agreement lemmas of the combinators |
 | `Calculus/Lang/Term.lean`     | §3–§4       | The universe signature: `Syn` (the syntax) and the class `Sem` (the meaning), with the formers `ListA`, `MapA` and `SetF`. The term family `Term S`/`Body S`/`ObjectSlot S`, the guard `Term.guarded`, `Term.depth`, `denote`, and the tactic `term_depth_wf` |
 | `Calculus/Lang/Typing.lean`   | §3–§5       | The held sets, the judgement `Typed` over a signature, `μSyn` with `typed_μSyn`, and `Obligations` with `PairwiseCompat` and the set obligation `SetObl` |
 | `Calculus/Lang/Guarded.lean`  | §3          | `denote_agree` and `contractive_body`: the guard of a binder makes its body contractive, at every signature |
