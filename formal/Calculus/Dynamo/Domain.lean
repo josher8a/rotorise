@@ -245,7 +245,7 @@ inductive Attr where
   | m    (keys : Finset Name) (f : {k // k ∈ keys} → Attr)
 
 /-- The member an attribute carries. -/
-def Attr.member : Attr → Member
+@[simp] def Attr.member : Attr → Member
   | .s _    => .S
   | .n _    => .N
   | .b _    => .B

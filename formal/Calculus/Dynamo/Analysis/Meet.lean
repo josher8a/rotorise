@@ -542,7 +542,7 @@ example : Alg.Term.disjoint pair0
 /-- The left body admits `{x := "1"}` through its declared slot… -/
 example : Adm α (.object (.mk {"x"} (fun _ => .req .string) (some .string)))
     (.map {"x"} (fun _ => .str "1")) = true := by
-  simp [Adm_rows, valPresentT, objAdmV, entryP, MapOf.at, inBase, Attr.member]
+  simp [Adm_rows, valPresentT, objAdmV, entryP, MapOf.at, inBase]
 
 /-- …and the right body admits it through its open block, at a name it does not declare. -/
 example : Adm α (.object (.mk {"y"} (fun _ => .optional .string) (some .string)))

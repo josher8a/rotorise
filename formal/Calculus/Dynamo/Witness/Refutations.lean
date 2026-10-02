@@ -90,7 +90,7 @@ def cW : Codec :=
 
 /-- `cW` writes `⟨BOOL, true⟩` while naming `S`. -/
 theorem cW_notW : ¬ (∀ {μ}, cW.μ = some μ → ∀ {t a}, cW.e t = some a → a.member = μ) := by
-  intro h; have := @h .S rfl (.str "z") (.bool true) (by simp [cW]); simp [Attr.member] at this
+  intro h; have := @h .S rfl (.str "z") (.bool true) (by simp [cW]); simp at this
 /-- …and is a retraction all the same: the two branches are disjoint by construction. -/
 theorem cW_R : ∀ {t a}, cW.e t = some a → cW.p a = some t := by
   intro t a h
