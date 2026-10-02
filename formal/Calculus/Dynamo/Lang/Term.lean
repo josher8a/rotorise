@@ -222,6 +222,7 @@ abbrev dynSig : Alg.Sig where
   decG
     | false => inferInstanceAs (DecidableEq DynGen)
     | true => inferInstanceAs (DecidableEq Empty)
+  R := Attr → Option Value
 
 /-- **The DynamoDB syntax**: the signature at the host orientation. -/
 abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
@@ -251,6 +252,7 @@ abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
   list := some dList
   map := some dMap
   set := some dSet
+  read := id
 
 /-- **The one stored table of DynamoDB**: the store names no generator. -/
 def dynTableA : Alg.Table dynSyn.op := fun g => nomatch g
@@ -302,7 +304,8 @@ def Term.casesD {motive : Term → Sort _} (base : ∀ k, motive (.base k))
     (literal : ∀ k v, motive (.literal k v)) (set : ∀ elem, motive (.set elem))
     (list : ∀ pre spread suf, motive (.list pre spread suf))
     (held : ∀ inner outer k₀ k, motive (.held false inner outer k₀ k))
-    (refine : ∀ inner p pA, motive (.refine inner p pA)) (opaq : motive .opaq)
+    (refine : ∀ inner p pA, motive (.refine inner p pA))
+    (legacy : ∀ inner r, motive (.legacy inner r)) (opaq : motive .opaq)
     (object : ∀ b, motive (.object b)) (union : ∀ options, motive (.union options))
     (never : motive .never) (var : ∀ i, motive (.var i)) (mu : ∀ body, motive (.mu body)) :
     (t : Term) → motive t
@@ -313,6 +316,7 @@ def Term.casesD {motive : Term → Sort _} (base : ∀ k, motive (.base k))
   | .held false i o k₀ k => held i o k₀ k
   | .held true _ _ k₀ _ => nomatch k₀.1
   | .refine i p pA => refine i p pA
+  | .legacy i r => legacy i r
   | .opaq => opaq
   | .object b => object b
   | .union os => union os

@@ -107,6 +107,7 @@ def Adm : Term S → List S.C → S.V → Bool
           ((PairAt.one s ((tables S.o α β s).word (k₀ :: k)) S.o.c).1 v)
   | .union opts, ρ => fun v => anyP (AdmList opts ρ) v
   | .set t, ρ => fun v => ((denote α β (.set t) ρ).f S.o v).isSome
+  | .legacy t r, ρ => fun v => ((denote α β (.legacy t r) ρ).f S.o v).isSome
   | .list pre sp suf, ρ => fun v =>
       match Mean.list (B := S.sig) with
       | some L =>
@@ -373,8 +374,8 @@ theorem Adm_exact : ∀ (t : Term S) (ρ : List S.C), ExactV α β t ρ
         (exactVL_mem suf (Adm_exactL suf ρ))
   | .object b, ρ => Adm_exactB b ρ
   | .union opts, ρ => ExactV_union (exactVL_mem opts (Adm_exactL opts ρ))
-  -- `set`, `opaq`, `mu` and a variable ask their own codec, and the bottom is empty
-  | .set _, _ | .opaq, _ | .mu _, _ | .never, _ | .var _, _ => fun _ => Iff.rfl
+  -- `set`, `legacy`, `opaq`, `mu` and a variable ask their own codec, and the bottom is empty
+  | .set _, _ | .legacy _ _, _ | .opaq, _ | .mu _, _ | .never, _ | .var _, _ => fun _ => Iff.rfl
   | .refine c p pA, ρ => by
       have hc v : Adm α β c ρ v = ((denote α β c ρ).f S.o v).isSome :=
         Bool.eq_iff_iff.mpr (Adm_exact c ρ v)

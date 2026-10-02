@@ -249,6 +249,7 @@ mutual
 def Term.disjoint [Leaf S] (p : Pairing) : Term S → Term S → Bool
   | .never, _ => true
   | .held _ _ _ _ _, y => disjSRight (fun _ _ => false) p y
+  | .legacy _ _, y => disjSRight (fun _ _ => false) p y
   | .var i, y => disjSRight (famVarD i) p y
   | .mu b, .mu b' => Term.disjoint (pairMu p) b b'
   | .mu b, y => Term.disjoint (shiftL p) b y

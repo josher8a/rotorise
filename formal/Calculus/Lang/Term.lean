@@ -40,14 +40,17 @@ def half {X : Bool → Type} : (s : Bool) → X false → X true → X s
 
 /-! ## The signature and the universe -/
 
-/-- **The signature of a universe**: the primitives, and the predicates and the adapter
-    generators at each absolute side. The term language reads this and nothing else, so a term
-    is data that code can compute with. The signature names no orientation. -/
+/-- **The signature of a universe**: the primitives, the predicates and the adapter generators at
+    each absolute side, and the older readers. The term language reads this and nothing else, so a
+    term is data that code can compute with. The signature names no orientation. -/
 structure Sig where
   Ground : Type
   P : Bool → Type
   G : Bool → Type
   decG : (s : Bool) → DecidableEq (G s)
+  /-- The older readers of `legacy`. A reader is caller code, so the term carries it as data and
+      the meaning reads it; no analysis looks inside it. -/
+  R : Type
 
 instance (B : Sig) (s : Bool) : DecidableEq (B.G s) := B.decG s
 
@@ -145,6 +148,8 @@ class Mean (B : Sig) where
   list : Option (ListA V Mem mem d)
   map : Option (MapA V Mem mem d)
   set : Option (SetF V Mem mem d)
+  /-- The meaning of an older reader: an attribute to the value it reads, where it reads one. -/
+  read : B.R → V → Option V
 
 
 
@@ -333,6 +338,10 @@ inductive Term (S : Sig) where
       (k : List (S.G s × Bool))
   /-- §3 `(refine)`: the restriction of each side by a predicate of that side. -/
   | refine   (inner : Term S) (p : S.P false) (pA : S.P true)
+  /-- §3 `(alternate reader)`: the inner term, and an older reader where the inner term reads
+      nothing. The read passes only what the inner term writes. The pair is not a partial
+      bijection (`legacy_breaks_MP`), so the judgement has no rule for it. -/
+  | legacy   (inner : Term S) (r : S.R)
   /-- §3 `(opaque)`: the universal sum, which each universe denotes by its top. -/
   | opaq
   /-- §4's field table is a *set* of names each declaring one field, so that is what the
@@ -471,6 +480,8 @@ def Term.use (i : Nat) : Term S → Nat
   | .set t => useUnder (Term.use i t)
   | .mu t => Term.use (i + 1) t
   | .refine t _ _ => Term.use i t
+  -- the read passes the inner term's write at the older reader's answer, of any depth
+  | .legacy t _ => useHeld (Term.use i t)
   | .held _ t P _ _ => useHeld (max (Term.use i t) (Term.use i P))
   | .list pre sp suf =>
       useUnder (max (Term.useL i pre) (max (Term.useO i sp) (Term.useL i suf)))
@@ -502,6 +513,7 @@ def Term.guarded : Term S → Bool
   | .mu t => decide (Term.use 0 t ≤ 1) && Term.guarded t
   | .set t => Term.guarded t
   | .refine t _ _ => Term.guarded t
+  | .legacy t _ => Term.guarded t
   | .held _ t P _ _ => Term.guarded t && Term.guarded P
   | .list pre sp suf => Term.guardedL pre && Term.guardedO sp && Term.guardedL suf
   | .union opts => Term.guardedL opts
@@ -531,7 +543,7 @@ mutual
     environment (`denote_closed`). -/
 def Term.hasVar : Term S → Bool
   | .var _ => true
-  | .refine t _ _ | .mu t | .set t => Term.hasVar t
+  | .refine t _ _ | .legacy t _ | .mu t | .set t => Term.hasVar t
   | .held _ t P _ _ => Term.hasVar t || Term.hasVar P
   | .list pre sp suf => Term.hasVarL pre || Term.hasVarO sp || Term.hasVarL suf
   | .object b => Body.hasVar b
@@ -559,6 +571,8 @@ mutual
 def hasHeld : Term S → Bool
   | .held _ _ _ _ _ => true
   | .refine t _ _ => hasHeld t
+  -- an older read can land on a value other than the attribute, so the term is not below `opaque`
+  | .legacy _ _ => true
   | .mu b => hasHeld b
   | .list pre sp suf => hasHeldL pre || hasHeldO sp || hasHeldL suf
   | .object b => hasHeldB b
@@ -603,6 +617,7 @@ def Term.depth : Term S → Nat
   | .set t => Term.depth t + 1
   | .held _ t P _ _ => max (Term.depth t) (Term.depth P) + 1
   | .refine t _ _ => Term.depth t + 1
+  | .legacy t _ => Term.depth t + 1
   | .list pre sp suf =>
       max (Term.depthL pre) (max (Term.depthO sp) (Term.depthL suf)) + 1
   -- one companion, like every other non-leaf row
@@ -736,6 +751,7 @@ noncomputable def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C
   | .held s inner outer k₀ k, ρ =>
       held1 s (denoteAbs inner ρ) (denoteAbs outer ρ) ((τ s).word (k₀ :: k))
   | .refine inner p pA, ρ => refine2 (denoteAbs inner ρ) (Mean.eval false p) (Mean.eval true pA)
+  | .legacy inner r, ρ => (denoteAbs inner ρ).extendRead (Mean.read r)
   | .opaq, _ => idCodec
   | .object b, ρ => bodySemAbs b ρ
   | .union opts, ρ => altCodec (denoteListAbs opts ρ) (unanimous (denoteμsAbs opts ρ))
@@ -804,6 +820,7 @@ theorem denoteAbs_closed : ∀ (t : Term B), t.hasVar = false → ∀ ρ ρ' : L
   | .var _, h, _, _ => nomatch h
   | .set t, h, ρ, ρ' => by simp only [denoteAbs]; rw [denoteAbs_closed t h ρ ρ']
   | .refine t _ _, h, ρ, ρ' => by simp only [denoteAbs]; rw [denoteAbs_closed t h ρ ρ']
+  | .legacy t _, h, ρ, ρ' => by simp only [denoteAbs]; rw [denoteAbs_closed t h ρ ρ']
   | .mu b, h, ρ, ρ' => by
       simp only [denoteAbs]
       congr 1

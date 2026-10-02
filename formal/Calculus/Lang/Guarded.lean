@@ -113,6 +113,13 @@ theorem denote_agree : ∀ (t : Term S), t.guarded = true → ∀ (d : Nat) (ρ�
       | i + 1 => exact h i
   | .refine t p pA, hg, d, ρ₁, ρ₂, h =>
       agreeLe_refine2 (denote_agree t hg d ρ₁ ρ₂ h) (Mean.eval false p) (Mean.eval true pA)
+  | .legacy t _, hg, _, ρ₁, ρ₂, h => by
+      simp only [Term.guarded] at hg
+      have ht := AgreeLe.eq_of_forall fun d' =>
+        denote_agree t hg d' ρ₁ ρ₂ fun i => UseAgree.of_held (v := 0) (by rw [Nat.max_zero]; exact h i)
+      refine AgreeLe.of_eq ?_
+      show ((denote α β t ρ₁).extendRead _).f = ((denote α β t ρ₂).extendRead _).f
+      simp only [Codec.extendRead, Codec.ofEP, Codec.e, Codec.p, ht]
   | .held s t P k₀ k, hg, _, ρ₁, ρ₂, h => by
       simp only [Term.guarded, Bool.and_eq_true] at hg
       have ht := AgreeLe.eq_of_forall fun d' =>

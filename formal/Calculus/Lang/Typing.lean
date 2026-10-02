@@ -232,6 +232,7 @@ def μSyn : Term S → Option (Syn.M S)
   | .list _ _ _ => (Mean.list (B := S.sig)).map (·.μ)
   | .held _ t _ _ _ => μSyn t
   | .refine t _ _ => μSyn t
+  | .legacy t _ => μSyn t
   | .opaq => none
   | .var _ | .mu _ | .never => none
   | .object _ => (Mean.map (B := S.sig)).map (·.μ)
@@ -261,6 +262,7 @@ theorem denote_μ : ∀ t : Term S, (denote α β t).μ = μSyn t
       cases Mean.list (B := S.sig) <;> rfl
   | .held _ t _ _ _ => denote_μ t
   | .refine t _ _ => denote_μ t
+  | .legacy t _ => denote_μ t
   | .opaq | .never | .var _ | .mu _ => rfl
   | .object (.mk _ _ _) => by
       simp only [denote, denoteAbs, bodySemAbs, μSyn]
@@ -322,6 +324,7 @@ def Obligations : Term S → (ρ : List S.C := []) → Prop
   -- the element's premises, and the universe's set obligation
   | .set t', ρ => Obligations t' ρ ∧ SetObl (denote α β t' ρ)
   | .refine t' _ _, ρ => Obligations t' ρ
+  | .legacy t' _, ρ => Obligations t' ρ
   | .list pre sp suf, ρ => ObligationsList pre ρ ∧ ObligationsOpt sp ρ ∧ ObligationsList suf ρ
   -- the outer owes nothing: a restriction keeps the laws of any lawful codec
   | .held s t' _ k₀ k, ρ => Obligations t' ρ ∧

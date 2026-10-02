@@ -98,6 +98,8 @@ def Term.compat [Leaf S] (o : CompatOracle S) (side : Bool) (p : Pairing) (top s
         | _ => false)) p top s y
   | .prim g, y => cmpR (fun _ t' s' y' => cbase o side t' s' (.prim g) y') p top s y
   | .opaq, y => cmpR (fun _ t' s' y' => cbase o side t' s' .opaq y') p top s y
+  -- the older reader is opaque, so a legacy term is decided by the base test alone
+  | .legacy x r, y => cmpR (fun _ t' s' y' => cbase o side t' s' (.legacy x r) y') p top s y
   | .set a, y => cmpR (fun p' t' s' y' => cbase o side t' s' (.set a) y' ||
       (match y' with | .set a' => Term.compat o side p' t' s' a a' | _ => false)) p top s y
   | .list pre sp suf, y => cmpR (fun p' t' s' y' => cbase o side t' s' (.list pre sp suf) y' ||
@@ -344,6 +346,7 @@ theorem cmpR_sound [TopLaws S] {side : Bool} {X : S.C} {ρ : List S.C}
   | .list _ _ _, _, _, _, _, h, he => hfam _ _ _ _ _ h he
   | .held _ _ _ _ _, _, _, _, _, h, he => hfam _ _ _ _ _ h he
   | .opaq, _, _, _, _, h, he => hfam _ _ _ _ _ h he
+  | .legacy _ _, _, _, _, _, h, he => hfam _ _ _ _ _ h he
   | .object _, _, _, _, _, h, he => hfam _ _ _ _ _ h he
   | .var _, _, _, _, _, h, he => hfam _ _ _ _ _ h he
 /-- …and option by option. -/
@@ -473,6 +476,9 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
       simp only [Term.compat] at h
       exact cmpR_sound (fun p' t' s' y' ρ'' hf he' => cbase_sound ho hf he') y p top s ρ' h he
   | .opaq, side, p, top, s, y, ρ, ρ', h, he => by
+      simp only [Term.compat] at h
+      exact cmpR_sound (fun p' t' s' y' ρ'' hf he' => cbase_sound ho hf he') y p top s ρ' h he
+  | .legacy x r, side, p, top, s, y, ρ, ρ', h, he => by
       simp only [Term.compat] at h
       exact cmpR_sound (fun p' t' s' y' ρ'' hf he' => cbase_sound ho hf he') y p top s ρ' h he
   | .set a, side, p, top, s, y, ρ, ρ', h, he => by

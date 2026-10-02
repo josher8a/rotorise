@@ -460,6 +460,8 @@ def view (o : Orient) : Term → Term
   | .union os => .union (viewL o os)
   | .set t => .set (view o t)
   | .mu b => .mu (view o b)
+  -- the write is the inner term's; the older reader is opaque, so the read is bounded by `opaque`
+  | .legacy t _ => bif o.c then .opaq else view o t
   | t => t
 def viewL (o : Orient) : List Term → List Term
   | [] => []
@@ -862,6 +864,9 @@ theorem HF_view (o : Orient) : ∀ t : Term, HF (view o t)
   | .held s t P _ _ => by
       simp only [view]; cases s == o.c
       exacts [HF_view o t, HF_view o P]
+  | .legacy t _ => by
+      simp only [view]; cases o.c
+      exacts [HF_view o t, rfl]
   | .refine t _ _ => by
       simp only [view]
       split
@@ -998,6 +1003,17 @@ theorem viewLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLe o ρ ρ' → EnvSu
           have := viewLeE b _ _ he' hs' w (by rw [Alg.Adm_eq_isSome]; exact hw)
           rwa [Alg.Adm_eq_isSome] at this
       exact viewLeE b _ _ (EnvLe.cons (hst _).1 he) (EnvSub.cons (hst _).2 hs) v h
+  | .legacy t r, ρ, ρ', he, hs => by
+      simp only [view]
+      have iht := viewLeE t ρ ρ' he hs
+      revert iht
+      rcases o with ⟨⟨_ | _, _ | _⟩, ho⟩
+      · exact absurd rfl ho
+      · refine fun iht v h => iht v ?_
+        rw [Alg.Adm_eq_isSome]
+        exact h
+      · exact fun _ _ _ => rfl
+      · exact absurd rfl ho
   | .refine t p pA, ρ, ρ', he, hs => by
       simp only [view]
       split
