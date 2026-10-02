@@ -465,6 +465,8 @@ const topScope = (t: Term): Scope => ({
 type Bound = {
     readonly closures: Map<unknown, string>
     readonly adapters: Map<unknown, string>
+    /** The older reader of each `legacy`, a variable of the theorem, keyed by the function. */
+    readonly readers: Map<unknown, string>
 }
 
 /** A scope, and the functions that the theorem binds where the vector is quantified. */
@@ -500,7 +502,10 @@ const callerOf = (generators: Map<unknown, string>, fn: unknown): string => {
 const leanBinders = (bound: Bound): string => {
     const group = (names: Map<unknown, string>, type: string): string[] =>
         names.size === 0 ? [] : [`(${[...names.values()].join(' ')} : ${type})`]
-    return [...group(bound.closures, 'Value → Bool')].join(' ')
+    return [
+        ...group(bound.closures, 'Value → Bool'),
+        ...group(bound.readers, 'Attr → Option Value'),
+    ].join(' ')
 }
 
 /**
@@ -825,11 +830,15 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
                       at,
                       "`Term.held` carries a word of adapter generators, and a table gives each generator two `Value → Value` functions. The library ships one generator the model names, `decimalText`, whose pair is `numeralOfStoredText`/`textOfNumeral`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted",
                   )
+        // the older reader is caller code: a quantified verdict binds it as a variable, and an
+        // evaluation vector would have to run it
         case 'legacy':
-            return refuse(
-                at,
-                '`Term.legacy` carries `r : Attr → Option Value`; the definition carries the older reading now, and it is a JS closure, which no `Term` prints',
-            )
+            return scope.bound
+                ? `(Term.legacy (${leanTermOfTerm(t.inner, at, scope)}) ${boundName(scope.bound.readers, t.r, 'r')})`
+                : refuse(
+                      at,
+                      '`Term.legacy` carries `r : Attr → Option Value`, a JS closure: a quantified verdict binds it as a variable, and no evaluation vector prints one',
+                  )
     }
 }
 
@@ -845,17 +854,16 @@ const leanSlotOf = (field: TermField, at: string, scope: At): string => {
         case 'optional':
             return `ObjectSlot.optional (${leanTermOfTerm(field.t, at, scope)})`
         /**
-         * **A field's alternate reader has no slot, and that is deliberate in the model.**
+         * **A field's alternate reader has no slot in the model yet.**
          *
-         * The model states an older reader as `Codec.extendRead`, a codec over the current term's
-         * codec and outside `Term`, so a `Body` has no alternate-reader row to put this in —
-         * `ExactA.lean` states exactly that. A field-level fallback is not a slot the model declined to add; it
-         * is a stratum the model put somewhere else, and nothing here can name it.
+         * The model states an older reader at a term, `Term.legacy`, whose codec is
+         * `Codec.extendRead`. An `ObjectSlot` has no older reader, so a `Body` has no alternate-reader
+         * row to put this in, and nothing here can name it.
          */
         case 'fallback':
             return refuse(
                 at,
-                '`withLegacyRead` on a field has no `ObjectSlot`: the model carries an older reader as `Codec.extendRead`, which is a codec outside `Term`, so a body has no alternate-reader slot to print',
+                '`withLegacyRead` on a field has no `ObjectSlot`: the model carries an older reader at a term (`Term.legacy`) and at no slot, so a body has no alternate-reader slot to print',
             )
         case 'req':
             return `ObjectSlot.req (${leanTermOfTerm(field.t, at, scope)})`
@@ -1053,7 +1061,11 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     }
     // a caller's function is a variable of the theorem, and the kernel's `decide` refuses a goal
     // with a free variable, so a quantified verdict reduces by `rfl`
-    const bound: Bound = { closures: new Map(), adapters: new Map() }
+    const bound: Bound = {
+        closures: new Map(),
+        adapters: new Map(),
+        readers: new Map(),
+    }
     const l = leanTermOf(left, name, bound)
     const r = leanTermOf(right, name, bound)
     const binders = leanBinders(bound)
@@ -1202,7 +1214,11 @@ export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
     }
     // a caller's function is a variable of the theorem, and the kernel's `decide` refuses a goal
     // with a free variable, so a quantified pair reduces by `rfl`
-    const bound: Bound = { closures: new Map(), adapters: new Map() }
+    const bound: Bound = {
+        closures: new Map(),
+        adapters: new Map(),
+        readers: new Map(),
+    }
     const l = leanTermOf(left, name, bound)
     const r = leanTermOf(right, name, bound)
     const binders = leanBinders(bound)

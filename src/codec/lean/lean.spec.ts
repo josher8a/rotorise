@@ -323,9 +323,8 @@ describe('terms', () => {
      * **A field's stand-in value has no slot, and the model put that stratum elsewhere.**
      *
      * This emitted `Field.fallback (t) (v)` against a `Field` with three constructors. An
-     * `ObjectSlot` has two, and the older reader lives in `Codec.extendRead` — a codec *outside*
-     * `Term`, over the current term's codec. `ExactA.lean` says so in as many words: its table has
-     * no alternate-reader row because an alternate reader is outside `Term`.
+     * `ObjectSlot` has two, and the model states an older reader at a term (`Term.legacy`) and at
+     * no slot.
      *
      * So this is not a slot the model declined to add. It is a stratum the model moved, and a
      * `Body` has nowhere to print it. The refusal is the honest answer until the emitter states a
@@ -344,7 +343,7 @@ describe('terms', () => {
                 ),
             ),
         ).reason
-        expect(why).toContain('Codec.extendRead')
+        expect(why).toContain('Term.legacy')
         expect(why).toContain('no alternate-reader slot')
     })
 
@@ -448,6 +447,28 @@ describe('terms', () => {
         expect(verdict.endsWith('= false := rfl')).toBe(true)
         expect(refusal(() => leanTermOf(textFlags)).reason).toContain(
             'Value → Bool',
+        )
+    })
+
+    /**
+     * **An older reader is a variable of a quantified verdict**, as a caller's function is. The
+     * decision reads a `legacy` term as an opaque leaf, so the verdict holds at every reader.
+     * Outside a verdict the emitter refuses the reader, because no vector can run it.
+     */
+    it('binds the older reader of a legacy term in a verdict, and refuses it elsewhere', () => {
+        const migrated = withLegacyRead({
+            current: string,
+            older: { decode: () => 'older' as string },
+        })
+        const verdict = leanSeparation({
+            name: 'migrated',
+            left: migrated,
+            right: number,
+        })
+        expect(verdict).toContain('(r0 : Attr → Option Value)')
+        expect(verdict).toContain('(Term.legacy (Term.string) r0)')
+        expect(refusal(() => leanTermOf(migrated)).reason).toContain(
+            'no evaluation vector',
         )
     })
 
@@ -1130,8 +1151,8 @@ export const allRefusals = (): readonly Refusal[] => {
 }
 
 /** Whether the emitter can state this codec's term at all, which is a different axis from its
- * value. `object_fallback_present` is the one corpus entry that fails it: a field's older reader
- * lives in `Codec.extendRead`, outside `Term`, so a `Body` has no slot to print it. */
+ * value. `object_fallback_present` is the one corpus entry that fails it: the model states an older
+ * reader at a term and at no slot, so a `Body` has no slot to print a field's. */
 const emittable = (one: Vector): boolean => statesTerm(one.codec, one.name)
 
 /**
@@ -1209,6 +1230,30 @@ describe('the `check` protocol', () => {
         expect(module).not.toContain('macro "vector"')
     })
 })
+
+/**
+ * A string that an older encoding also read. The older reader is caller code, so a verdict binds it
+ * as a variable; the corpus pairs it with the bottom, a disjoint scalar, its own scalar and itself.
+ */
+const migratedString = erase(
+    withLegacyRead({
+        current: string,
+        older: { decode: () => 'older' as string },
+    }),
+)
+const legacyPairs = <P>(
+    sep: string,
+    make: (name: string, left: AnyCodec, right: AnyCodec) => P,
+): P[] => [
+    make(`migrated_string${sep}never`, migratedString, erase(never)),
+    make(`migrated_string${sep}scalar_number`, migratedString, erase(number)),
+    make(`migrated_string${sep}scalar_string`, migratedString, erase(string)),
+    make(
+        `migrated_string${sep}migrated_string`,
+        migratedString,
+        migratedString,
+    ),
+]
 
 /**
  * Every option pair the corpus offers. `leanTermOf` is what bounds it: a pair either side of which
@@ -1323,6 +1368,13 @@ const separationPairs = (): readonly Separation[] => {
             right: never,
         },
     )
+    out.push(
+        ...legacyPairs('__vs__', (name, left, right) => ({
+            name,
+            left,
+            right,
+        })),
+    )
     return out
 }
 
@@ -1391,6 +1443,13 @@ const disjointPairs = (): readonly DisjointPair[] => {
             left: union([string, array(undeclared)]),
             right: string,
         },
+    )
+    out.push(
+        ...legacyPairs('__disjoint__', (name, left, right) => ({
+            name,
+            left,
+            right,
+        })),
     )
     return out
 }
@@ -1628,8 +1687,8 @@ describe("the read side, against the model's read row", () => {
      */
     it('offers 1927 pairs, and asserts every one', () => {
         const verdicts = readVerdicts()
-        // 1634 until `object_fallback_present` left the emittable corpus: a field's older
-        // reader lives in `Codec.extendRead`, outside `Term`, so a `Body` has no slot to print it
+        // 1634 until `object_fallback_present` left the emittable corpus: the model states an older
+        // reader at a term and at no slot, so a `Body` has no slot to print a field's
         expect(verdicts.length).toBe(1927)
         const module = leanReadModule(verdicts)
         for (const name of [
@@ -1673,7 +1732,7 @@ describe("the declaration guard, against the model's classifier", () => {
             /= false := (by decide|rfl)$/.test(one),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([849, 26])
+        expect([accepted.length, refused.length]).toEqual([850, 29])
     })
 
     /**
@@ -1738,7 +1797,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it("puts every corpus pair to the model's disjointness test", () => {
         const pairs = disjointPairs()
-        expect(pairs.length).toBe(866)
+        expect(pairs.length).toBe(870)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.disjoints.lean'),
@@ -1834,9 +1893,8 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
      * terms; it carries a `WFNumeral` now, so a numeral is a closed term and a numeric value on
      * the read side states like any other.
      *
-     * What is skipped is `object_fallback_present`, whose **term** the emitter refuses: a field's
-     * older reader lives in `Codec.extendRead`, a codec outside `Term`, so a `Body` has no slot to
-     * print it. It is named here rather than filtered in silence, because a second exclusion
+     * What is skipped is `object_fallback_present`, whose **term** the emitter refuses: the model
+     * states an older reader at a term and at no slot, so a `Body` has no slot to print a field's. It is named here rather than filtered in silence, because a second exclusion
      * arriving is the thing worth failing on.
      */
     it('states a read vector for every codec whose term the model can spell', () => {

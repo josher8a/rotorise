@@ -178,15 +178,16 @@ describe('what is still refused', () => {
      * recorded only `current` and dropped the older readers at construction, so there was no `r`
      * in this library to recognise even if the model named one. The definition carries the reader
      * now, so that half is gone and the assertion moved to the half that remains — `r` is a JS
-     * closure, and no `Term` prints one. The rule is unchanged: the emitter refuses a `withLegacyRead`.
+     * closure. A quantified verdict binds it as a variable, and an evaluation vector cannot run it,
+     * so the emitter refuses a `withLegacyRead` outside a verdict.
      */
-    it('refuses `withLegacyRead`, whose reader is a closure', () => {
+    it('refuses `withLegacyRead` outside a verdict, whose reader is a closure', () => {
         const older = withLegacyRead({
             current: string,
             older: { decode: () => 'older' as string },
         })
         expect(refusal(() => leanTermOf(erase(older))).reason).toContain(
-            'no `Term` prints',
+            'no evaluation vector prints one',
         )
     })
 })
