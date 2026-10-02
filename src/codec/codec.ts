@@ -1908,8 +1908,8 @@ export type Reader<T> = {
  * failure, here and in the model (`Codec.extendRead`), so on `dom(p_current)` the older reader is
  * never consulted and a disagreement has no observable consequence at all. What the premise buys
  * is that the *ordering does not matter*: with it, this presentation equals the order-free
- * `p ∪ r`. Without it the reading depends on declaration order, which is the one thing §5 says
- * resolution never does. So it is a written obligation, and the thing to check is that two
+ * union of `p` and the checked older reading. Without it the reading depends on declaration
+ * order, which is the one thing §5 says resolution never does. So it is a written obligation, and the thing to check is that two
  * readers of one attribute agree — nothing in this library will tell you they do not.
  */
 export type WithLegacyReadOptions<C extends AnyCodec> = {

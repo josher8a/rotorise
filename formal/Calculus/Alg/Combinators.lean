@@ -295,8 +295,8 @@ theorem refine2_p_isSome (c : Codec V M) (qV : V → Bool) (qA : V → Bool) (a 
     nothing, and its answer passes the restriction of `c`'s write: a value that `c` cannot write
     is not read. That is the host's check after the older reader answers, so `ran ⊆ dom(e)` is the
     construction and not a premise. With §3's coherence premise this presentation equals the
-    order-free `p ∪ r`. The migration extends the read only, so the write and the read are two
-    formulas. -/
+    order-free union of `p` and the gated `r` (`extendRead_p_union`). The migration extends
+    the read only, so the write and the read are two formulas. -/
 def Codec.extendRead (c : Codec V M) (r : V → Option V) : Codec V M :=
   Codec.ofEP (T := c.T)
     (μ := c.μ)
@@ -345,6 +345,18 @@ theorem extendRead_p {r : V → Option V} {a v} :
     | some w => some w
     | none => (r a).filter fun v => (c.e v).isSome) = some v ↔ _
   cases hp : c.p a <;> simp
+
+/-- **Under coherence the read is the order-free union** of the base read and the gated older
+    read: the base's precedence is unobservable. Without the gate the union is wider, because
+    the older reader can answer a value that `c` cannot write. -/
+theorem extendRead_p_union {r : V → Option V} (h : ReadsCoherently c r) {a v} :
+    (c.extendRead r).p a = some v ↔ c.p a = some v ∨ (r a = some v ∧ (c.e v).isSome) := by
+  rw [extendRead_p]
+  refine ⟨fun h' => h'.imp_right fun ⟨_, hr, he⟩ => ⟨hr, he⟩, fun h' => h'.elim .inl ?_⟩
+  rintro ⟨hr, he⟩
+  rcases (c.p a).eq_none_or_eq_some with hp | ⟨v', hp⟩
+  · exact .inr ⟨hp, hr, he⟩
+  · exact .inl (hp.trans (congrArg some (h a v hr v' hp).symm))
 
 end WrapperInversion
 
