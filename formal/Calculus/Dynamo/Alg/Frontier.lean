@@ -39,7 +39,7 @@ theorem set_writes {c : Codec} (h : LawfulCore c) :
     obtain ⟨T, hT, rfl⟩ := setAtK_eq.mp hk'
     have hs := setImage_some (neSetImage_eq_setImage.mp hT) x₀ hx₀
     rw [ha₀] at hs
-    rw [← hm₀, SetKind.member_of_out hs] at hμ
+    rw [← hm₀, Alg.Summand.member_of_out (s := k'.ground.summand) hs] at hμ
     exact Option.some.inj ((k'.wire_member T).symm.trans hμ)
 
 /-- Writing a set succeeds when its elements do and the element member is ground: the member
@@ -130,7 +130,7 @@ theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hf : ∀ k, Lawful (sems.2 k).codec)
     (hrest : ∀ c, rest = .codec c → Lawful c) :
     Lawful (objectCodec sems rest) :=
-  Alg.lawful_objectCodec (fun _ => rfl) hf hrest
+  Alg.lawful_objectCodec hf hrest
 
 end
 

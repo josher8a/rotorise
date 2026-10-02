@@ -76,17 +76,7 @@ def setMember : Member → Option Member
 /-- The member that each kind's element stamps: the member of its ground kind. -/
 abbrev SetKind.member (k : SetKind) : Member := k.ground.member
 
-/-- An element of a kind stamps the kind's member. -/
-theorem SetKind.member_into (k : SetKind) (x : k.Carrier) : (k.elem.into x).member = k.member := by
-  cases k <;> rfl
-
-/-- A datum that a kind's element prism matches has the kind's member. -/
-theorem SetKind.member_of_out {k : SetKind} {a : Attr} (h : (k.elem.out a).isSome = true) :
-    a.member = k.member := by
-  obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp h
-  rw [k.elem.into_out hy, k.member_into]
-
-/-- …and a datum with the kind's member is one that the element prism matches. -/
+/-- A datum with the kind's member is one that the element prism matches. -/
 theorem SetKind.out_of_member {k : SetKind} {a : Attr} (h : a.member = k.member) :
     ∃ y, k.elem.out a = some y := by
   cases k <;> cases a <;> first | exact ⟨_, rfl⟩ | exact nomatch h
@@ -235,7 +225,7 @@ theorem setCodec_T_wire {c : Codec} {k : SetKind} {S : NEFinset k.Carrier} :
   cases k <;> exact Iff.rfl
 
 /-- §3 `array`: the list former with a spread and no fixed positions. -/
-abbrev arrayCodec (c : Codec) : Codec := Alg.listCodec lA .L [] (some c) []
+abbrev arrayCodec (c : Codec) : Codec := Alg.listCodec lS [] (some c) []
 
 /-- **An array moves entry by entry**, at each orientation. -/
 theorem arrayCodec_f (o : Alg.Orient) (c : Codec) (xs : List Attr) :
@@ -259,7 +249,7 @@ theorem arrayCodec_T (c : Codec) (xs : List Attr) :
     (arrayCodec c).T (.l xs) ↔ ∀ x ∈ xs, c.T x := by
   constructor
   · rintro ⟨ys, hys, ps, hal, hps⟩ x hx
-    simp only [lA] at hys; cases hys
+    simp only [lS, lA] at hys; cases hys
     rw [Alg.alignL_spread] at hal; cases hal
     exact hps (c, x) ((Alg.mem_replicate_zip _ _ _ x).mpr ⟨rfl, hx⟩)
   · intro h
@@ -269,7 +259,7 @@ theorem arrayCodec_T (c : Codec) (xs : List Attr) :
     exact h x hx
 
 theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) :=
-  Alg.lawful_listCodec (fun _ => rfl) (fun _ h => nomatch h) (fun _ hc => by cases hc; exact h)
+  Alg.lawful_listCodec (fun _ h => nomatch h) (fun _ hc => by cases hc; exact h)
     (fun _ h => nomatch h)
 
 export Alg (align slots_all align_eq_some align_of_slots zip_canonS zip_domE zip_ranP
@@ -293,7 +283,7 @@ are defined as a `list`, so the positional theory is proved one time. -/
 /-- §3 `(list)`: the positional product over a prefix, a spread and a suffix. The generic
     `list` at the `L` prism. -/
 abbrev listCodec (pre : List Codec) (spread : Option Codec) (suf : List Codec) : Codec :=
-  Alg.listCodec lA .L pre spread suf
+  Alg.listCodec lS pre spread suf
 
 section ListShape
 variable {pre : List Codec} {sp : Option Codec} {suf : List Codec}

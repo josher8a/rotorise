@@ -40,7 +40,7 @@ def listOut (v : S.V) : Option (List S.V) :=
   (Mean.list (B := S.sig)).bind fun L => L.p.out v
 
 /-- The entries of a value, where the map former reads one. -/
-def mapOut (v : S.V) : Option (MapOf S.V) := (Mean.map (B := S.sig)).bind fun F => F.m.out v
+def mapOut (v : S.V) : Option (MapOf S.V) := (Mean.map (B := S.sig)).bind fun F => F.p.out v
 
 /-- A `list` admits a value that the list former reads by the row of its positions. -/
 theorem Adm_list_of_out {pre suf : List (Term S)} {sp : Option (Term S)} {v : S.V}

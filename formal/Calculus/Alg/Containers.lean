@@ -4,10 +4,9 @@ import Calculus.Alg.Maps
 /-!
 # The list and the object, over any carriers
 
-A container reads a universe through one prism onto a canonical carrier and one member: a list
-prism onto `List`, and a keyed-map prism onto `MapOf`. Each container is `carriedCodec` at its
-prism. So the laws of the payload map are proved one time here, and a universe supplies only its
-prisms and the member that each prism stamps.
+A container reads a universe through one summand onto a canonical carrier: a list summand onto
+`List`, and a keyed-map summand onto `MapOf`. Each container is `carriedCodec` at its summand. So
+the laws of the payload map are proved one time here, and a universe supplies only its summands.
 -/
 
 namespace Calculus.Alg
@@ -17,24 +16,24 @@ variable {V M : Type} {member : V → M}
 /-! ## `list` (§3): one prefix, at most one spread, one suffix -/
 
 section List
-variable (pL : Ctor (List V) V) (μL : M)
+variable (sL : Summand (List V) V M member)
 
 /-- §3 `(list)`: the positional product over a prefix, a spread and a suffix, carried by the
     list prism. Each position goes through its own codec at the orientation. -/
 abbrev listCodec (pre : List (Codec V M)) (spread : Option (Codec V M))
     (suf : List (Codec V M)) : Codec V M :=
-  carriedCodec pL μL
+  carriedCodec sL
     (fun vs => ∃ ps, alignL pre spread suf vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2)
     (fun o vs => (alignL pre spread suf vs).bind (traverse fun cv => cv.1.f o cv.2))
 
-variable {pL μL} {pre : List (Codec V M)} {sp : Option (Codec V M)}
+variable {sL} {pre : List (Codec V M)} {sp : Option (Codec V M)}
   {suf : List (Codec V M)}
 
 /-- A list is lawful: the alignment puts each position on its own codec. -/
-theorem lawful_listCodec (hμ : ∀ y, member (pL.into y) = μL)
+theorem lawful_listCodec
     (hpre : ∀ c ∈ pre, Lawful member c) (hsp : ∀ c ∈ sp, Lawful member c)
-    (hsuf : ∀ c ∈ suf, Lawful member c) : Lawful member (listCodec pL μL pre sp suf) := by
-  refine lawful_carried hμ (Orient.both
+    (hsuf : ∀ c ∈ suf, Lawful member c) : Lawful member (listCodec sL pre sp suf) := by
+  refine lawful_carried (Orient.both
     (P := fun o => ∀ x y, (alignL pre sp suf x).bind (traverse fun cv => cv.1.f o cv.2) = some y →
       (alignL pre sp suf y).bind (traverse fun cv => cv.1.f o.op cv.2) = some x)
     (list_retract (fun c h => (hpre c h).core) (fun c h => (hsp c h).core)
@@ -49,7 +48,7 @@ theorem lawful_listCodec (hμ : ∀ y, member (pL.into y) = μL)
 
 /-- Writing and reading a `list` puts every position on its own carrier. -/
 theorem carrier_listCodec (hpre : ∀ c ∈ pre, Carrier c) (hsp : ∀ c ∈ sp, Carrier c)
-    (hsuf : ∀ c ∈ suf, Carrier c) : Carrier (listCodec pL μL pre sp suf) := by
+    (hsuf : ∀ c ∈ suf, Carrier c) : Carrier (listCodec sL pre sp suf) := by
   refine carrier_carried ?_ ?_
   · intro vs as hE
     obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hE
@@ -131,21 +130,21 @@ theorem objAt_eq {o : Orient} {p : MapOf (V)} {q : MapOf (V)} :
   · next hg => simp [hg, Option.map_eq_some_iff, eq_comm (a := q)]
   · next hg => simp [hg]
 
-variable (pM : Ctor (MapOf V) V) (μM : M)
+variable (sM : Summand (MapOf V) V M member)
 
 /-- The object is `carriedCodec` at the keyed-map prism, with the payload map `objAt`. -/
 noncomputable abbrev objectCodecCore (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) :
     Codec V M :=
-  carriedCodec pM μM
+  carriedCodec sM
     (fun p => valPresentB sems p.1 = true ∧ ∀ k, objEntryT sems rc? (k.1, p.2 k))
     (objAt sems rc?)
 
 /-- §4's `object`: the core at the rest policy's codec. -/
 noncomputable abbrev objectCodec (sems : MapOf (FieldSem V M)) (rest : RestSem V M) :
     Codec V M :=
-  objectCodecCore pM μM sems (rcOf rest)
+  objectCodecCore sM sems (rcOf rest)
 
-variable {pM μM}
+variable {sM}
 
 /-! ### The guards and the filter -/
 
@@ -206,7 +205,7 @@ theorem entry_ranP' (hs : ∀ k, Carrier (sems.2 k).codec) (hrc : ∀ c ∈ rc?,
 theorem carrier_objectCodec {rest : RestSem V M}
     (hsems : ∀ k, Carrier (sems.2 k).codec)
     (hrc : ∀ rc, rcOf rest = some rc → Carrier rc) :
-    Carrier (objectCodec pM μM sems rest) := by
+    Carrier (objectCodec sM sems rest) := by
   refine carrier_carried ?_ ?_
   · rintro p q h
     obtain ⟨hval, g, hg, rfl⟩ := objAt_eq.mp h
@@ -239,11 +238,11 @@ theorem object_inv {rest : RestSem V M} (hf : ∀ k, Lawful member (sems.2 k).co
     exact (entryCodec_of hf hrc hc).inv hw
 
 /-- The keyed product: the doc's current-schema `object`. -/
-theorem lawful_objectCodec (hμ : ∀ y, member (pM.into y) = μM) {rest : RestSem V M}
+theorem lawful_objectCodec {rest : RestSem V M}
     (hf : ∀ k, Lawful member (sems.2 k).codec)
     (hrest : ∀ c, rest = .codec c → Lawful member c) :
-    Lawful member (objectCodec pM μM sems rest) :=
-  lawful_carried hμ (object_inv hf (rcOf_forall hrest))
+    Lawful member (objectCodec sM sems rest) :=
+  lawful_carried (object_inv hf (rcOf_forall hrest))
 
 end Object
 

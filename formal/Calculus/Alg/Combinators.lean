@@ -99,17 +99,33 @@ theorem Ctor.bind_out {α β : Type} (p : Ctor α β) {o : Option β} {y : α}
   obtain ⟨b, hb, hy⟩ := Option.bind_eq_some_iff.mp h
   rw [hb, p.into_out hy]
 
+/-- **A summand of the carrier**: the prism of one member. Every datum that the prism builds
+    carries the member, so a codec built on a summand cannot promise a member that its prism
+    does not stamp. The member is the index of the summand in the universe's tagging grammar. -/
+structure Summand (α V M : Type) (member : V → M) where
+  /-- The injection of the summand. -/
+  p : Ctor α V
+  /-- The member of the summand. -/
+  μ : M
+  /-- Each datum that the injection builds carries the member. -/
+  hμ : ∀ x, member (p.into x) = μ
+
+/-- A datum that a summand matches carries the summand's member. -/
+theorem Summand.member_of_out {α : Type} {s : Summand α V M member} {a : V}
+    (h : (s.p.out a).isSome = true) : member a = s.μ := by
+  obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp h
+  rw [s.p.into_out hy]; exact s.hμ y
+
 /-- **The point ground codecs of §3**, as one construction: the partial identity on the image of
-    a prism `p`, which stamps one member.
+    a summand, which stamps the summand's member.
 
     The prism laws are exactly §2's laws in disguise — `out_into` is the round trip **(R)**
     and `into_out` is canonizability **(C)** — which is why `lawful_pointCodec` needs no
-    hypothesis beyond the member it stamps. The map reads no orientation: match with the prism,
-    and build with it again. -/
-def pointCodec {α : Type} (p : Ctor α V) (μ₀ : M) : Codec V M where
-  T v := ∃ x, v = p.into x
-  μ := some μ₀
-  f _ x := (p.out x).map p.into
+    hypothesis. The map reads no orientation: match with the prism, and build with it again. -/
+def pointCodec {α : Type} {member : V → M} (s : Summand α V M member) : Codec V M where
+  T v := ∃ x, v = s.p.into x
+  μ := some s.μ
+  f _ x := (s.p.out x).map s.p.into
 
 /-- **The identity codec**: it holds every datum, names no member, and sends each datum to itself
     at each orientation. It is the unit of the inverse monoid of the carrier, and the top of a
@@ -392,12 +408,12 @@ theorem carrier_idCodec : Carrier (idCodec : Codec V M) := ⟨fun _ => trivial, 
 
 /-- The carrier, likewise: `e` only writes what `p` matched, and `p` only reads what `p`
     built. -/
-theorem carrier_pointCodec {α : Type} {p : Ctor α V} {μ₀ : M} :
-    Carrier (pointCodec p μ₀) := by
+theorem carrier_pointCodec {α : Type} {member : V → M} {s : Summand α V M member} :
+    Carrier (pointCodec s) := by
   refine ⟨?_, ?_⟩
   · intro v a h
     obtain ⟨x, hx, _⟩ := Option.map_eq_some_iff.mp h
-    exact ⟨x, p.into_out hx⟩
+    exact ⟨x, s.p.into_out hx⟩
   · intro a v h
     obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp h
     exact ⟨x, rfl⟩
@@ -442,20 +458,18 @@ theorem lawful_idCodec : Lawful member (idCodec : Codec V M) where
   inv h := by cases h; rfl
   writes hμ := nomatch hμ
 
-/-- §2's laws for any prism. The one premise a prism does not already supply is which member
-    it stamps. Everything else is `out_into` and `into_out`. -/
-theorem lawful_pointCodec {α : Type} {p : Ctor α V} {μ₀ : M}
-    (hμ : ∀ x, member (p.into x) = μ₀) :
-    Lawful member (pointCodec p μ₀) where
+/-- §2's laws for any summand: `out_into`, `into_out`, and the member that the summand stamps. -/
+theorem lawful_pointCodec {α : Type} {s : Summand α V M member} :
+    Lawful member (pointCodec s) where
   -- match, rebuild, match again: `out_into`, then `into_out`
   inv {o x y} h := by
     obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-    exact (congrArg (Option.map p.into) (p.out_into z)).trans
-      (congrArg some (p.into_out hz).symm)
-  -- everything written is `p.into` of something
+    exact (congrArg (Option.map s.p.into) (s.p.out_into z)).trans
+      (congrArg some (s.p.into_out hz).symm)
+  -- everything written is `s.p.into` of something
   writes hm _ _ he := by
     obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp he
-    cases hm; exact hμ x
+    cases hm; exact s.hμ x
 
 theorem LawfulCore.through {c : Codec V M} (h : LawfulCore member c) {f g : V → V}
     (hiso : IsoCancels c f g) :

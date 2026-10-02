@@ -210,21 +210,21 @@ theorem traverse_row_congr {α β : Type} {d : Nat} {run : Codec V M → α → 
 
 /-- A `list` reads each element one layer down, so it turns agreement below `d` into agreement
     below `d + 1`. The universe supplies the depth of its list prism. -/
-theorem agreeLe_listCodec {pL : Ctor (List V) V} {μL : M}
-    (hd : ∀ vs, ∀ x ∈ vs, depth x + 1 ≤ depth (pL.into vs)) {d : Nat}
+theorem agreeLe_listCodec {sL : Summand (List V) V M member}
+    (hd : ∀ vs, ∀ x ∈ vs, depth x + 1 ≤ depth (sL.p.into vs)) {d : Nat}
     {pre₁ pre₂ suf₁ suf₂ : List (Codec V M)} {sp₁ sp₂ : Option (Codec V M)}
     (hpre : List.Forall₂ (AgreeLe depth d) pre₁ pre₂) (hsp : Option.Rel (AgreeLe depth d) sp₁ sp₂)
     (hsuf : List.Forall₂ (AgreeLe depth d) suf₁ suf₂) :
-    AgreeLe depth (d + 1) (listCodec pL μL pre₁ sp₁ suf₁)
-      (listCodec pL μL pre₂ sp₂ suf₂) := by
+    AgreeLe depth (d + 1) (listCodec sL pre₁ sp₁ suf₁)
+      (listCodec sL pre₂ sp₂ suf₂) := by
   refine .ofF fun o v hv => ?_
-  show ((pL.out v).bind _).map pL.into = ((pL.out v).bind _).map pL.into
-  cases h : pL.out v with
+  show ((sL.p.out v).bind _).map sL.p.into = ((sL.p.out v).bind _).map sL.p.into
+  cases h : sL.p.out v with
   | none => rfl
   | some vs =>
-    have hvv := pL.into_out h
+    have hvv := sL.p.into_out h
     simp only [Option.bind_some, alignL]
-    exact congrArg (Option.map pL.into) (traverse_row_congr (fun _ _ x hc hx => hc.f o x hx) vs
+    exact congrArg (Option.map sL.p.into) (traverse_row_congr (fun _ _ x hc hx => hc.f o x hx) vs
       (fun x hx => by have := hd vs x hx; rw [← hvv] at this; omega)
       (slotsL_rel hpre hsp hsuf vs.length))
 
@@ -264,13 +264,13 @@ end ObjectAgree
 
 /-- An object reads each entry one layer below the map, so it turns agreement below `d` into
     agreement below `d + 1`. The universe supplies the depth of its keyed-map prism. -/
-theorem agreeLe_objectCodec {pM : Ctor (MapOf V) V} {μM : M}
-    (hd : ∀ (m : MapOf V) k, depth (m.get k) + 1 ≤ depth (pM.into m)) {d : Nat}
+theorem agreeLe_objectCodec {sM : Summand (MapOf V) V M member}
+    (hd : ∀ (m : MapOf V) k, depth (m.get k) + 1 ≤ depth (sM.p.into m)) {d : Nat}
     {keys : Finset String} {F₁ F₂ : {k // k ∈ keys} → FieldSem V M}
     {r₁ r₂ : RestSem V M} (hF : ∀ k, FieldSem.Rel (AgreeLe depth d) (F₁ k) (F₂ k))
     (hr : RestSem.Rel (AgreeLe depth d) r₁ r₂) :
-    AgreeLe depth (d + 1) (objectCodec pM μM ⟨keys, F₁⟩ r₁)
-      (objectCodec pM μM ⟨keys, F₂⟩ r₂) := by
+    AgreeLe depth (d + 1) (objectCodec sM ⟨keys, F₁⟩ r₁)
+      (objectCodec sM ⟨keys, F₂⟩ r₂) := by
   have hent : ∀ k, Option.Rel (AgreeLe depth d) (entryCodec ⟨keys, F₁⟩ (rcOf r₁) k)
       (entryCodec ⟨keys, F₂⟩ (rcOf r₂) k) := fun k => entryCodec_rel hr.rcOf (mapOf_at_rel hF k)
   have hbind : ∀ {α β : Type} (run : Codec V M → α → Option β) (x : α),
@@ -280,12 +280,12 @@ theorem agreeLe_objectCodec {pM : Ctor (MapOf V) V} {μM : M}
     optionRel_bind (fun _ _ h => hrun _ _ h) (hent k)
   unfold objectCodec
   refine .ofF fun o v hv => ?_
-  show ((pM.out v).bind _).map pM.into = ((pM.out v).bind _).map pM.into
-  cases h : pM.out v with
+  show ((sM.p.out v).bind _).map sM.p.into = ((sM.p.out v).bind _).map sM.p.into
+  cases h : sM.p.out v with
   | none => rfl
   | some m =>
-    have hvv := pM.into_out h
-    refine congrArg (Option.map pM.into) ?_
+    have hvv := sM.p.into_out h
+    refine congrArg (Option.map sM.p.into) ?_
     simp only [Option.bind_some, objAt, valPresentB_rel hF]
     split
     · congr 2

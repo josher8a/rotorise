@@ -222,16 +222,16 @@ theorem carrier_held1 {member : V → M} {M₁ : Type} {c : Codec V M} (hc : Car
 
 /-- **The object codec at an orientation**: read the prism, pass the presence guard, run each
     entry at the orientation, and build with the prism. -/
-theorem objectCodec_f (m : Ctor (MapOf V) V) (μM : M)
+theorem objectCodec_f {member : V → M} (sM : Summand (MapOf V) V M member)
     (sems : MapOf (FieldSem V M)) {rest : RestSem V M} :
-    ∀ (o : Orient) (x : V), (objectCodec m μM sems rest).f o x =
-      ((m.out x).bind fun q => if valPresentB sems q.1 = true then
+    ∀ (o : Orient) (x : V), (objectCodec sM sems rest).f o x =
+      ((sM.p.out x).bind fun q => if valPresentB sems q.1 = true then
         (funImage fun k => (entryCodec sems (rcOf rest) k.1).bind fun c => c.f o (q.2 k)).map
-          (fun g => (⟨q.1, g⟩ : MapOf V)) else none).map m.into :=
-  Orient.both (P := fun o => ∀ x, (objectCodec m μM sems rest).f o x =
-      ((m.out x).bind fun q => if valPresentB sems q.1 = true then
+          (fun g => (⟨q.1, g⟩ : MapOf V)) else none).map sM.p.into :=
+  Orient.both (P := fun o => ∀ x, (objectCodec sM sems rest).f o x =
+      ((sM.p.out x).bind fun q => if valPresentB sems q.1 = true then
         (funImage fun k => (entryCodec sems (rcOf rest) k.1).bind fun c => c.f o (q.2 k)).map
-          (fun g => (⟨q.1, g⟩ : MapOf V)) else none).map m.into)
+          (fun g => (⟨q.1, g⟩ : MapOf V)) else none).map sM.p.into)
     (fun _ => rfl)
     (fun _ => rfl)
 

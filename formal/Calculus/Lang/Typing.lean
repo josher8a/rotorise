@@ -108,7 +108,7 @@ inductive Typed : Term S → (Mean.V (B := S.sig) → Prop) → Option (Syn.M S)
       (hF : Mean.map (B := S.sig) = some F)
       (hf : ∀ k, TypedField (body.at k) (bind k).2 (bind k).1 (μs k))
       (hr : TypedWild body.wild R) :
-      Typed (.object body) (HObject F.m body.fields bind R) (some F.μ)
+      Typed (.object body) (HObject F.p body.fields bind R) (some F.μ)
   /-- `(union)`: the option judgements. -/
   | union {opts Ts μs} (h : TypedListμ opts Ts μs) :
       Typed (.union opts) (HUnion Ts) (unanimous μs)

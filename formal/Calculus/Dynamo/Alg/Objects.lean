@@ -45,15 +45,15 @@ variable {sems : MapOf FieldSem} {rc? : Option Codec}
 
 /-- The object is `carriedCodec` at the `M` prism: the generic object at that prism. -/
 noncomputable abbrev objectCodecCore (sems : MapOf FieldSem) (rc? : Option Codec) : Codec :=
-  Alg.objectCodecCore mA .M sems rc?
+  Alg.objectCodecCore mS sems rc?
 
 /-- §4's `object`, at the `M` prism. -/
 noncomputable abbrev objectCodec (sems : MapOf FieldSem) (rest : RestSem) : Codec :=
-  Alg.objectCodec mA .M sems rest
+  Alg.objectCodec mS sems rest
 
 theorem objectCodecCore_eq :
     objectCodecCore sems rc? =
-      carriedCodec mA .M
+      carriedCodec mS
         (fun p => valPresentB sems p.1 = true ∧ ∀ k, objEntryT sems rc? (k.1, p.2 k))
         (objAt sems rc?) := rfl
 
@@ -75,7 +75,7 @@ theorem valPresentB_empty (keys : Finset Name) :
 theorem recordCodec_f (o : Alg.Orient) (c : Codec) (keys : Finset Name)
     (g : {k // k ∈ keys} → Attr) :
     (recordCodec c).f o (.m keys g) = (funImage fun k => c.f o (g k)).map (Attr.m keys) := by
-  simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, Option.bind, objAt, rcOf, entryCodec, MapOf.at, mA]
+  simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, Option.bind, objAt, rcOf, entryCodec, MapOf.at, mS, mA]
   rw [if_pos (valPresentB_empty keys), Option.map_map]
   refine congrArg (fun F => Option.map F _) (funext fun _ => rfl) |>.trans ?_
   exact congrArg (Option.map _) (congrArg funImage
@@ -86,7 +86,7 @@ theorem recordCodec_T (c : Codec) (keys : Finset Name) (g : {k // k ∈ keys} �
     (recordCodec c).T (.m keys g) ↔ ∀ k, c.T (g k) := by
   constructor
   · rintro ⟨x, hx, -, h⟩ k
-    simp only [mA] at hx; cases hx
+    simp only [mS, mA] at hx; cases hx
     have := h k
     simp only [objEntryT, rcOf, MapOf.at, dif_neg (Finset.notMem_empty k.1)] at this
     obtain ⟨_, ⟨⟩, h⟩ := this

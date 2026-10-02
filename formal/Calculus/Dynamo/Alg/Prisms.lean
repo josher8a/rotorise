@@ -84,6 +84,14 @@ The same shape one level up: a constructor whose payload is a *list* of entries.
   out_into _ := rfl
   into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
 
+/-- The summand of `L`. -/
+def lS : Alg.Summand (List Attr) Attr Member Attr.member := ⟨lA, .L, fun _ => rfl⟩
+
+/-- The summand of `M`. -/
+def mS : Alg.Summand (MapOf Attr) Attr Member Attr.member := ⟨mA, .M, fun _ => rfl⟩
+
+attribute [prism_rows] lS mS
+
 /-! ## Ground codecs (§3) -/
 
 /-- **The prism of a ground kind**: the stored constructor of the kind. -/
@@ -132,6 +140,10 @@ theorem SetKind.elem_out_ne {k k' : SetKind} (h : k ≠ k') (x : k.Carrier) :
 attribute [orient_rows] Alg.Codec.e Alg.Codec.p
 attribute [prism_rows] Alg.pointCodec GroundKind.prism sC nC bC boolA nullA
 
+/-- The summand of a ground kind: the prism of the kind, which stamps the member of the kind. -/
+def GroundKind.summand (k : GroundKind) : Alg.Summand k.Carrier Attr Member Attr.member :=
+  ⟨k.prism, k.member, by cases k <;> exact fun _ => rfl⟩
+
 /-- The pair a literal refines: its base's, chosen by the index.
 
     §3's `(literal)` premise is `⊢ g : T ⇝ μ, g ground`, and this is `g`. It exists because
@@ -139,9 +151,9 @@ attribute [prism_rows] Alg.pointCodec GroundKind.prism sC nC bC boolA nullA
     three times over, which is why `literal-S` and `literal-N` were two rules and `boolean`,
     `binary` and `null` were none. A base is one point codec at the prism of its kind: it
     accepts a datum of the kind, changes nothing, and stamps the member of the kind. -/
-@[simp] def baseCodec (k : GroundKind) : Codec := pointCodec k.prism k.member
+@[simp] def baseCodec (k : GroundKind) : Codec := pointCodec k.summand
 
-attribute [prism_rows] baseCodec
+attribute [prism_rows] baseCodec GroundKind.summand
 
 /-- `number` writes a numeral as `N`. -/
 theorem baseCodec_e_num (x : WFNumeral) : (baseCodec .number).e (.num x) = some (.n x) := rfl
@@ -248,7 +260,7 @@ and its held set is the restriction's (`HLit_iff_restrict`). `decimal` is the sa
     restricted to the alternative. -/
 theorem HLit_iff_restrict (k : GroundKind) (x : k.Carrier) (v : Value) :
     HLit k x v ↔ ((baseCodec k).restrict (inL k x)).T v := by
-  show v = k.toValue x ↔ (∃ z, v = k.prism.into z) ∧ inL k x v = true
+  show v = k.toValue x ↔ (∃ z, v = k.summand.p.into z) ∧ inL k x v = true
   cases k <;> cases v <;> simp [GroundKind.toValue, prism_rows, inL]
 
 end

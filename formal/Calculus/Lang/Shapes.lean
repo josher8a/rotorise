@@ -34,7 +34,7 @@ class Shapes (S : Syn) [Sem S] where
   /-- The list prism builds list data. -/
   list : ∀ L, Mean.list (B := S.sig) = some L → ∀ vs, former (L.p.into vs) = .list
   /-- The map prism builds object data. -/
-  map : ∀ F, Mean.map (B := S.sig) = some F → ∀ m, former (F.m.into m) = .object
+  map : ∀ F, Mean.map (B := S.sig) = some F → ∀ m, former (F.p.into m) = .object
 
 namespace Shapes
 
@@ -86,7 +86,7 @@ theorem adm_object (b : Body S) (v : S.V) (h : Adm α β (.object b) ρ v = true
   split at h
   · next F hF =>
       split at h
-      · next m hm => rw [F.m.into_out hm]; exact Shapes.map F hF m
+      · next m hm => rw [F.p.into_out hm]; exact Shapes.map F hF m
       · exact nomatch h
   · exact nomatch h
 
