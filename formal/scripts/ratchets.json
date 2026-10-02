@@ -3,7 +3,7 @@
   "branches": {
     "Calculus/Alg/Agree.lean": 26,
     "Calculus/Alg/Codec.lean": 27,
-    "Calculus/Alg/Combinators.lean": 80,
+    "Calculus/Alg/Combinators.lean": 82,
     "Calculus/Alg/Containers.lean": 42,
     "Calculus/Alg/Converse.lean": 49,
     "Calculus/Alg/Lists.lean": 40,
