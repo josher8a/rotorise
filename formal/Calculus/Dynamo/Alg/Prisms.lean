@@ -129,6 +129,7 @@ theorem SetKind.elem_out_ne {k k' : SetKind} (h : k ≠ k') (x : k.Carrier) :
     k'.elem.out (k.elem.into x) = none := by
   cases k <;> cases k' <;> first | exact absurd rfl h | rfl
 
+attribute [orient_rows] Alg.Codec.e Alg.Codec.p
 attribute [prism_rows] Alg.pointCodec GroundKind.prism sC nC bC boolA nullA
 
 /-- The pair a literal refines: its base's, chosen by the index.
@@ -139,6 +140,8 @@ attribute [prism_rows] Alg.pointCodec GroundKind.prism sC nC bC boolA nullA
     `binary` and `null` were none. A base is one point codec at the prism of its kind: it
     accepts a datum of the kind, changes nothing, and stamps the member of the kind. -/
 @[simp] def baseCodec (k : GroundKind) : Codec := pointCodec k.prism k.member
+
+attribute [prism_rows] baseCodec
 
 /-- `number` writes a numeral as `N`. -/
 theorem baseCodec_e_num (x : WFNumeral) : (baseCodec .number).e (.num x) = some (.n x) := rfl

@@ -75,8 +75,7 @@ theorem valPresentB_empty (keys : Finset Name) :
 theorem recordCodec_f (o : Alg.Orient) (c : Codec) (keys : Finset Name)
     (g : {k // k ∈ keys} → Attr) :
     (recordCodec c).f o (.m keys g) = (funImage fun k => c.f o (g k)).map (Attr.m keys) := by
-  simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, Option.bind,
-    objAt, rcOf, entryCodec, MapOf.at, mA]
+  simp only [objectCodec, Alg.objectCodec, Alg.objectCodecCore, carriedCodec, Option.bind, objAt, rcOf, entryCodec, MapOf.at, mA]
   rw [if_pos (valPresentB_empty keys), Option.map_map]
   refine congrArg (fun F => Option.map F _) (funext fun _ => rfl) |>.trans ?_
   exact congrArg (Option.map _) (congrArg funImage

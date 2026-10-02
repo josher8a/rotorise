@@ -173,7 +173,7 @@ theorem hset_iff {t : Term} {T : Held} {μ} (hty : Typed α t T μ) (hob : Oblig
       fun he x hx => by
         obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp he
         exact (hin _).mpr (setAt_elem ha x hx)⟩
-  | _ => simp [HSet, Adm_rows, setCodec, Alg.Codec.e]
+  | _ => simp [HSet, Adm_rows, setCodec, orient_rows]
 
 /-- A union's held set is the disjunction row of `Adm`. -/
 theorem hunion_iff : ∀ {opts Ts μs}, TypedListμ α opts Ts μs → (∀ t ∈ opts, AdmIff α t) →
@@ -196,7 +196,7 @@ theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t →
     ∀ v, T v ↔ Adm α t v = true
   | t, T, μ, h, hob, v => by
     cases h with
-    | base k => cases k <;> cases v <;> simp [Adm_rows, inBase, baseCodec, -Subtype.exists, prism_rows]
+    | base k => cases k <;> cases v <;> simp [Adm_rows, inBase, -Subtype.exists, prism_rows]
     | literal k x => cases k <;> cases v <;> simp [HLit, Adm_rows, AdmLit, inL, GroundKind.toValue]
     | never => simp [HNever, Adm_rows]
     | opaq => exact ⟨fun _ => rfl, fun _ => trivial⟩

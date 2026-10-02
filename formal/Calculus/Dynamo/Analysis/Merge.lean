@@ -214,8 +214,7 @@ theorem hobject_merge {a b : Body} (h : Disjoint a.fields b.fields)
       have hx := hheld ⟨k.1, (Finset.mem_filter.mp k.2).1⟩
       rw [dif_pos (Finset.mem_disjUnion.mpr (Or.inr hkb))] at hx
       rw [dif_pos hkb]
-      simpa only [MapOf.restrict, MapOf.toValue, bindMerge,
-        dif_neg (hnb ⟨k.1, hkb⟩)] using hx
+      simpa only [MapOf.restrict, MapOf.toValue, bindMerge, dif_neg (hnb ⟨k.1, hkb⟩)] using hx
   · rintro ⟨hcov, ⟨_, _, heqa, hreqa, hhelda⟩, ⟨_, _, heqb, hreqb, hheldb⟩⟩
     cases heqa; cases heqb
     refine ⟨keys, f, rfl, ?_, ?_⟩
@@ -234,8 +233,7 @@ theorem hobject_merge {a b : Body} (h : Disjoint a.fields b.fields)
         simpa only [bindMerge, dif_pos hka, MapOf.restrict, MapOf.toValue] using this
       · have := hheldb ⟨k.1, Finset.mem_filter.mpr ⟨k.2, hkb⟩⟩
         rw [dif_pos hkb] at this
-        simpa only [bindMerge, dif_neg (hnb ⟨k.1, hkb⟩), MapOf.restrict,
-          MapOf.toValue] using this
+        simpa only [bindMerge, dif_neg (hnb ⟨k.1, hkb⟩), MapOf.restrict, MapOf.toValue] using this
 
 /-! ## Distribution
 

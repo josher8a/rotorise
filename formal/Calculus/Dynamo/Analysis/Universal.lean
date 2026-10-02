@@ -53,25 +53,22 @@ theorem Adm_opaqUnfold (v : Value) : Adm α opaqUnfold v = Adm α .opaq v := by
   cases v with
   | s _ | bool _ | b _ | null | n _ => rfl
   | ss S =>
-      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec, Alg.Codec.e,
-        denote_opaq]
+      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec, orient_rows, denote_opaq]
       exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .host .string S⟩
   | ns S =>
-      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec, Alg.Codec.e,
-        denote_opaq]
+      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec, orient_rows, denote_opaq]
       exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .host .number S⟩
   | bs S =>
-      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec, Alg.Codec.e,
-        denote_opaq]
+      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, setCodec, orient_rows, denote_opaq]
       exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .host .binary S⟩
   | l vs =>
-      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, alignPL_spread, setCodec, Alg.Codec.e]
+      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, alignPL_spread, setCodec, orient_rows]
   | m keys g =>
       -- the record's guard is vacuous over `∅`; a `simp` that unfolds the guard reaches
       -- `Finset.instIsEmpty`, so the guard stays folded and the fact is handed in
       have hp : valPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
-      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, objAdmV, entryP, MapOf.at, setCodec, Alg.Codec.e]
+      simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, objAdmV, entryP, MapOf.at, setCodec, orient_rows]
       exact hp
 
 /-- **The unfolding lemma, read side.** `opaque` reads exactly the attributes that its
@@ -84,24 +81,21 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA α opaqUnfold a = AdmA α .opaq a := b
   cases a with
   | s _ | bool _ | b _ | null | n _ => rfl
   | ss S =>
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, Alg.Codec.p,
-        denote_opaq]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, orient_rows, denote_opaq]
       exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .dual .string S⟩
   | bs S =>
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, Alg.Codec.p,
-        denote_opaq]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, orient_rows, denote_opaq]
       exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .dual .binary S⟩
   | ns S =>
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, Alg.Codec.p,
-        denote_opaq]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, setCodec, orient_rows, denote_opaq]
       exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω .dual .number S⟩
   | l as =>
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, alignPL_spread, setCodec, Alg.Codec.p]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, alignPL_spread, setCodec, orient_rows]
   | m keys g =>
       -- the record's guard stays folded, for the reason `Adm_opaqUnfold` gives
       have hp : valPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
         decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
-      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, objAdmV, entryP, MapOf.at, setCodec, Alg.Codec.p]
+      simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, objAdmV, entryP, MapOf.at, setCodec, orient_rows]
       exact hp
 
 end Calculus
