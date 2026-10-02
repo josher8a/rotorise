@@ -364,8 +364,8 @@ deriving DecidableEq, Repr
     has one inhabitant, so `literal .null` says "exactly null" and cannot say anything else.
 
     **Reducible**, and that is load-bearing: it lets `Carrier .string` elaborate as `String`, so
-    equality at `ℓ` resolves through `String.decEq` and the ordinary instances. An indexed
-    `DecidableEq k.Carrier` instance would work too. -/
+    equality at `ℓ` resolves through `String.decEq` and the ordinary instances. Where the base
+    is a variable, the indexed instance `GroundKind.decEqCarrier` decides the equality. -/
 @[reducible] def GroundKind.Carrier : GroundKind → Type
   | .string  => String
   -- §3's `ℓ ⊆ D` is this base's carrier and not a premise beside it. ~~LiteralD~~ was that
@@ -374,15 +374,6 @@ deriving DecidableEq, Repr
   | .boolean => Bool
   | .binary  => Bytes
   | .null    => Unit
-
-/-- An alternative, as the value it is. Injective at every base. -/
-@[simp] def GroundKind.toValue : (k : GroundKind) → k.Carrier → Value
-  | .string,  s => .str s
-  -- `number` is now the IDENTITY at its carrier: the alternative is already an `N`
-  | .number,  x => .num x
-  | .boolean, b => .bool b
-  | .binary,  b => .bin b
-  | .null,    _ => .null
 
 /-- §3 `(literal)`'s member: the one the base stores as. **Total**, and a function of the index
     rather than an index with a premise pinning it — which is the `hμ` the three constructors
@@ -393,6 +384,10 @@ deriving DecidableEq, Repr
   | .boolean => .BOOL
   | .binary  => .B
   | .null    => .NULL
+
+/-- Two bases that store as one member are one base. -/
+theorem GroundKind.member_inj {k k' : GroundKind} (h : k.member = k'.member) : k = k' := by
+  cases k <;> cases k' <;> first | rfl | exact nomatch h
 
 /-! ## What a `union` option's admission reads
 

@@ -292,8 +292,7 @@ theorem sepJV_set_literals :
   -- a string literal writes one string and no other value
   have hlit : ∀ (c : String) (w : Value), ((denote α (.literal .string c)).e w).isSome = true →
       w = .str c := fun c w h => by
-    have := (Adm_exact (α := α) (.literal .string c) w).mpr h
-    cases w <;> simp_all [Adm_rows, AdmLit, inL]
+    exact inL_iff.mp ((Adm_exact (α := α) (.literal .string c) w).mpr h)
   intro v hv
   cases v
   case ss S =>

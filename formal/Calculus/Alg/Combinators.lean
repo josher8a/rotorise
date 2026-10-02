@@ -93,6 +93,11 @@ structure Ctor (α β : Type) where
   /-- Anything that matches was built. -/
   into_out : ∀ {b x}, out b = some x → b = into x
 
+/-- A prism matches exactly what it built. -/
+theorem Ctor.out_eq_some {α β : Type} (p : Ctor α β) {b : β} {x : α} :
+    p.out b = some x ↔ b = p.into x :=
+  ⟨p.into_out, fun h => h ▸ p.out_into x⟩
+
 /-- A `bind` through a prism pins the datum. -/
 theorem Ctor.bind_out {α β : Type} (p : Ctor α β) {o : Option β} {y : α}
     (h : o.bind p.out = some y) : o = some (p.into y) := by
