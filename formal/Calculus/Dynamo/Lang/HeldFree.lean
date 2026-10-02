@@ -28,11 +28,10 @@ namespace Calculus
 theorem sub_restrict {c : Codec} (h : Sub c Ω) (q : Value → Bool) : Sub (c.restrict q) Ω :=
   Alg.sub_trans (sub_restrict_self c q) h
 
-/-- **Each ground base is a restriction of `Ω`**: a point codec at one prism sends a datum only
+/-- **Each ground base is a restriction of `Ω`**: the identity on one fiber sends a datum only
     to itself. -/
-theorem sub_baseCodec (k : GroundKind) : Sub (baseCodec k) Ω := fun o x y h => by
-  obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-  exact congrArg some (k.prism.into_out hz)
+theorem sub_baseCodec (k : GroundKind) : Sub (baseCodec k) Ω :=
+  Alg.sub_fiberCodec Attr.member k.member
 
 /-- A literal is a restriction of `Ω`, because a literal restricts its base. -/
 theorem sub_literal (k : GroundKind) (x : k.Carrier) : Sub (literalCodec k x) Ω :=

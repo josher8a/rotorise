@@ -498,10 +498,10 @@ A constructor is a prism — `Ctor`, with the laws `out_into` and `into_out` —
 round-trip and completeness clauses at a constructor, so the prism half of every lawfulness proof
 is discharged once.
 
-Two shapes sit over the prisms. `pointCodec` is the degenerate case, the partial identity on the
-image of one prism, and the point codecs share one lawfulness proof through it. `carriedCodec` is
-the load-bearing one: a payload map at each orientation, carried by one prism, the shape underneath
-every product. **The model states a codec once for both sides**: one inverse law of the payload
+A ground codec needs no prism: `fiberCodec` is the identity on the data of one member, and every
+universe's ground codecs share its one lawfulness proof. `carriedCodec` sits over the prisms: a
+payload map at each orientation, carried by one summand (a prism with the member that it stamps),
+the shape underneath every product. **The model states a codec once for both sides**: one inverse law of the payload
 map, `F o` inverted by `F o.op`, is the lawfulness of every product, and `carried_f` is the
 inversion that every product's proof goes through.
 

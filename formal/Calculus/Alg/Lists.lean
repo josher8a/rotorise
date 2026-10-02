@@ -164,7 +164,7 @@ entries, mostly — at each orientation, and one prism says which constructor ho
 laws split cleanly along that seam: the prism is discharged once, here, and each construction
 is left with only its payload map's own inverse law and agreement.
 
-`pointCodec` above is the degenerate case, where the payload passes through untouched.
+A ground codec is not carried: it is the identity on one fiber (`fiberCodec`).
 The three below are the products: `entrywise` (a traversal, hence `array` and `record`),
 `tuple` (`align`, then a traversal) and `object` (a guard, a filter, then a traversal).
 

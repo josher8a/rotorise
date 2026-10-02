@@ -34,11 +34,11 @@ abbrev LawfulCore := Alg.LawfulCore (V := Value) Attr.member
    notation, and Lean then refuses the argument of the abbreviation. So only the names that no
    caller reaches by field notation get an alias. Field notation reaches the others through the
    abbreviation. -/
-export Alg (Can IsoCancels ReadsCoherently Carrier SurvivesStore Ctor pointCodec partialId
+export Alg (Can IsoCancels ReadsCoherently Carrier SurvivesStore Ctor partialId
   through_e through_p refine2_f
   length_le_one_of_pairwise_false AdmitsAtMostOne select altCodec select_admits altCodec_f
-  carrier_pointCodec carrier_restrict
-  carrier_altCodec lawful_pointCodec funImage funImage_some funImage_isSome funImage_isSome_iff
+  carrier_restrict
+  carrier_altCodec funImage funImage_some funImage_isSome funImage_isSome_iff
   funImage_eq Sub sub_restrict_self optBot selectF ConfluentAt
   Compat
   Canon lawful_altCodec compat_of_exclusive compat_of_common_bound'

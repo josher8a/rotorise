@@ -321,15 +321,12 @@ export type Pair = {
 }
 
 /**
- * §3's ground terms, as one construction — the model's `pointCodec` under this library's word.
+ * §3's ground terms, as one construction: the model's `fiberCodec` under this library's word.
+ * §3 calls what it builds a *ground term*, so that is the word here.
  *
- * A prism pair, which `src/` has no name of its own for; §3 calls what it builds a *ground term*,
- * so that is the word here.
- *
- * A payload carried between a value constructor and an attribute constructor, both prisms. The
- * prism laws are §2's laws in disguise, which is why `lawful_pointCodec` needs no hypothesis about
- * either side beyond the member it stamps: `out_into` is the round trip **(R)** and `into_out` is
- * canonizability **(C)**.
+ * A shape test, then the member stamped. In the model's one carrier this is the identity on the
+ * data of one member, and `lawful_fiberCodec` is its one lawfulness proof: the identity inverts
+ * itself, and it writes only its member.
  *
  * The shape test is `accepts`', not a second one: `shapeOf` is the function that row calls, so
  * the two cannot drift into disagreeing about what a string is.
@@ -1312,10 +1309,8 @@ export const denote = (def: Term): Pair => {
             }
         /**
          * **The `NULL` point, and it is not a {@link groundCodec} here.** The reason is this
-         * library's and not the model's: `lawful_nullCodec` *is* `lawful_pointCodec`, at the
-         * prisms `nullV` and `nullA`, whose payload is `Unit` — "a prism with a trivial payload,
-         * which is what makes `null` an instance of the same shape as the three that carry data".
-         * So the model has one construction for all four.
+         * library's and not the model's: the model has one construction for all five bases,
+         * `fiberCodec`, the identity on the data of one member.
          *
          * `groundCodec` is not that construction. It is a shape test and a `carrying`, which
          * carries the *value* into the member — and `NULL`'s payload is the constant `true`, which

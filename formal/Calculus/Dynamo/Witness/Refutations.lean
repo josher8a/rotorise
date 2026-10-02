@@ -188,7 +188,7 @@ theorem not_equiv_tupleTail_tuple :
   -- `Classical.choice` in with it; the implication is the constructive shape.
   obtain ⟨_, hxs, ps, hps, -⟩ := hv ⟨_, rfl, _, rfl, fun p hp => by
     simp [Alg.denoteListAbs] at hp
-    rcases hp with rfl | rfl <;> exact ⟨_, rfl⟩⟩
+    rcases hp with rfl | rfl <;> rfl⟩
   simp only [lA] at hxs; cases hxs
   exact nomatch hps
 
@@ -297,7 +297,7 @@ theorem setElem_union_refused : ¬ SetElem (denote α (.union [.string, .boolean
 /-- The union on its own is typed, and so is the `set` above it: the store refuses the set. -/
 theorem typed_union_string_boolean :
     Typed α (.union [.string, .boolean])
-      (HUnion [fun v => ∃ s, v = .str s, fun v => ∃ b, v = .bool b]) none :=
+      (HUnion [fun v => v.member = .S, fun v => v.member = .BOOL]) none :=
   .union (.cons (Typed.base _) (.cons (Typed.base _) .nil))
 
 /-- **An empty option is the unit of the sum.** The bottom holds nothing, so it changes no
@@ -433,7 +433,7 @@ which is what settled the question the conditional leaves open. -/
 theorem literalN_sub_number (y : WFNumeral) :
     ∀ v, (literalCodec .number y).T v → (baseCodec .number).T v := by
   rintro v rfl
-  exact ⟨y, rfl⟩
+  rfl
 
 /-! ### §3's `(literal)` at `number`, and why the witnesses are all gone now
 

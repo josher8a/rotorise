@@ -26,6 +26,14 @@ theorem Sub.ofEP {c d : Codec V M} (he : ∀ v a, c.e v = some a → d.e v = som
     (hp : ∀ a v, c.p a = some v → d.p a = some v) : Sub c d :=
   Orient.both (P := fun o => ∀ x y, c.f o x = some y → d.f o x = some y) he hp
 
+/-- **A fiber codec is below the identity**: it sends a datum only to itself. -/
+theorem sub_fiberCodec [DecidableEq M] (member : V → M) (m : M) :
+    Sub (fiberCodec member m) idCodec := fun o x y h => by
+  simp only [fiberCodec] at h
+  split at h
+  · exact h
+  · exact nomatch h
+
 /-- **A two-sided restriction is below the codec that it restricts.** -/
 theorem sub_refine2_self (c : Codec V M) (qV : V → Bool) (qA : V → Bool) :
     Sub (refine2 c qV qA) c :=

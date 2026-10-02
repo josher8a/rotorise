@@ -43,14 +43,11 @@ namespace Calculus
 /-- Every ground codec writes a scalar or a wire set, and neither is a document type. -/
 theorem nesting_zero_of_ground (k : GroundKind) (v : Value) (a : Attr)
     (h : (baseCodec k).e v = some a) : Attr.nesting a = 0 := by
-  -- every branch writes a *named* constructor, so the work is substituting the equation the
-  -- codec's `e` leaves behind and reading `nesting` off it
-  cases k <;> cases v <;>
-    simp_all [prism_rows, orient_rows] <;>
-    first
-      | rfl
-      | (subst_vars; rfl)
-      | (obtain ⟨-, rfl⟩ := h; rfl)
+  -- the base writes the datum it was given, and the datum carries a scalar member
+  simp only [baseCodec, Alg.fiberCodec, Alg.Codec.e] at h
+  split at h
+  · next hm => cases h; cases k <;> cases v <;> simp_all [Attr.member, Attr.nesting]
+  · exact nomatch h
 
 /-! ## The containers add exactly one
 
