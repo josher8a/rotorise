@@ -1895,16 +1895,16 @@ export type Reader<T> = {
  * rate: withLegacyRead({ current: decimal, older: string })
  * ```
  *
- * **Two things §3 asks of the older reader** (`ReadsCoherently`), and only one of them is
- * checkable.
+ * **Two things §3 asks of the older reader**, and only one of them is checkable.
  *
  * `ran(r) ⊆ dom(e)` — a migration lands on values the current encoding can *write*. This is
  * checked, per read, as soon as the older reader has answered, because that is the earliest
- * anything can know what it returns. Unchecked it read a row and refused on the way out, which is
- * **(C)** broken at the migrated row and reported at some later write.
+ * anything can know what it returns. The model reads the same way (`Codec.extendRead`), so there
+ * the containment is the construction and not a premise. Unchecked it read a row and refused on
+ * the way out, which is **(C)** broken at the migrated row and reported at some later write.
  *
- * Coherence — where both readers read an attribute, they agree — is **not** checkable, and the
- * reason is sharper than that. The current encoding is tried first and the older one only on its
+ * Coherence (`ReadsCoherently`) — where both readers read an attribute, they agree — is **not**
+ * checkable, and the reason is sharper than that. The current encoding is tried first and the older one only on its
  * failure, here and in the model (`Codec.extendRead`), so on `dom(p_current)` the older reader is
  * never consulted and a disagreement has no observable consequence at all. What the premise buys
  * is that the *ordering does not matter*: with it, this presentation equals the order-free

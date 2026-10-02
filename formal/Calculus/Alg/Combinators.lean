@@ -32,11 +32,11 @@ def IsoCancelsAt (o : Orient) (c : Codec V M) (f g : V → V) : Prop :=
 /-- The obligation at the host: the caller pair cancels on the values that the codec writes. -/
 abbrev IsoCancels (c : Codec V M) (f g : V → V) : Prop := IsoCancelsAt Orient.host c f g
 
-/-- §3 `(alternate reader)`: `ran(r) ⊆ dom(e)` — a migration lands on writable values — and
-    coherence, the legacy reading agreeing with the current one on their overlap. -/
+/-- §3 `(alternate reader)`'s coherence: the legacy reading agrees with the current one on their
+    overlap. `ran(r) ⊆ dom(e)` is not part of it, because `Codec.extendRead` reads only what the
+    current codec writes. -/
 def ReadsCoherently (c : Codec V M) (r : V → Option V) : Prop :=
-  (∀ a v, r a = some v → (c.e v).isSome) ∧
-  (∀ a v, r a = some v → ∀ v', c.p a = some v' → v = v')
+  ∀ a v, r a = some v → ∀ v', c.p a = some v' → v = v'
 
 /-- §3 types the pair *on the held set*: `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`. `Lawful` never
     mentions `T`, because retract, canon and writes relate `e` and `p` to each other and not to
@@ -286,14 +286,19 @@ theorem refine2_p_isSome (c : Codec V M) (qV : V → Bool) (qA : V → Bool) (a 
     ((c.restrict q).e v).isSome = (q v && (c.e v).isSome) := by
   rw [Codec.restrict, refine2_e_isSome, gate_true]
 
-/-- `alternate reader`: extend the reading. With §3's coherence premise this presentation equals
-    the order-free `p ∪ r`. The migration extends the read only, so the write and the read are
-    two formulas. -/
+/-- `alternate reader`: extend the reading. The older reader `r` answers only where `c` reads
+    nothing, and its answer passes the restriction of `c`'s write: a value that `c` cannot write
+    is not read. That is the host's check after the older reader answers, so `ran ⊆ dom(e)` is the
+    construction and not a premise. With §3's coherence premise this presentation equals the
+    order-free `p ∪ r`. The migration extends the read only, so the write and the read are two
+    formulas. -/
 def Codec.extendRead (c : Codec V M) (r : V → Option V) : Codec V M :=
   Codec.ofEP (T := c.T)
     (μ := c.μ)
     (e := c.e)
-    (p := fun a => match c.p a with | some v => some v | none => r a)
+    (p := fun a => match c.p a with
+      | some v => some v
+      | none => (r a).filter fun v => (c.e v).isSome)
 
 /-! ### What the wrappers write and read
 
@@ -329,8 +334,11 @@ theorem extendRead_e {r : V → Option V} {v a} :
 /-- It reads through the base where the base reads, and through the migration exactly
     where the base does not. That "exactly" is where canonical reads go. -/
 theorem extendRead_p {r : V → Option V} {a v} :
-    (c.extendRead r).p a = some v ↔ c.p a = some v ∨ (c.p a = none ∧ r a = some v) := by
-  show (match c.p a with | some w => some w | none => r a) = some v ↔ _
+    (c.extendRead r).p a = some v ↔
+      c.p a = some v ∨ (c.p a = none ∧ r a = some v ∧ (c.e v).isSome) := by
+  show (match c.p a with
+    | some w => some w
+    | none => (r a).filter fun v => (c.e v).isSome) = some v ↔ _
   cases hp : c.p a <;> simp
 
 end WrapperInversion
@@ -433,17 +441,15 @@ theorem carrier_restrict {c : Codec V M} (hc : Carrier c) (q : V → Bool) :
     Carrier (c.restrict q) :=
   carrier_refine2 hc q _
 
-/-- `alternate reader`: the migration lands in `T` because §3's `ran(r) ⊆ dom(e)` puts it in
-    `dom(e)`, and `e`'s domain is `T`. The doc writes `r : 𝔸 ⇀ T` directly; this is the
-    same premise arrived at through the one the proof already needs. -/
-theorem carrier_extendRead {c : Codec V M} {r : V → Option V} (hc : Carrier c)
-    (hran : ∀ a v, r a = some v → (c.e v).isSome) :
+/-- `alternate reader`: the migration lands in `T`, because the read passes only what `c`
+    writes, and `e`'s domain is `T`. -/
+theorem carrier_extendRead {c : Codec V M} {r : V → Option V} (hc : Carrier c) :
     Carrier (c.extendRead r) where
   domE he := hc.domE (extendRead_e.mp he)
   ranP hp := by
-    rcases extendRead_p.mp hp with hcv | ⟨-, hrv⟩
+    rcases extendRead_p.mp hp with hcv | ⟨-, -, hw⟩
     · exact hc.ranP hcv
-    · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hran _ _ hrv)
+    · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp hw
       exact hc.domE ha'
 
 theorem carrier_altCodec {os : List (Codec V M)} {μA : Option M}
@@ -510,11 +516,10 @@ theorem Lawful.restrict {c : Codec V M} (h : Lawful member c) (q : V → Bool) :
     Lawful member (c.restrict q) :=
   h.refine2 q _
 
-theorem LawfulCore.extendRead {c : Codec V M} (h : LawfulCore member c) {r : V → Option V}
-    (hran : ∀ a v, r a = some v → (c.e v).isSome) :
+theorem LawfulCore.extendRead {c : Codec V M} (h : LawfulCore member c) {r : V → Option V} :
     LawfulCore member (c.extendRead r) where
   retract he := extendRead_p.mpr (.inl (h.retract (extendRead_e.mp he)))
-  canon hp := (extendRead_p.mp hp).elim h.canon fun ⟨_, hr⟩ => hran _ _ hr
+  canon hp := (extendRead_p.mp hp).elim h.canon fun ⟨_, _, hw⟩ => hw
   writes := by intro μ hμ t a he; exact h.writes hμ (extendRead_e.mp he)
 
 end Calculus.Alg

@@ -345,9 +345,10 @@ only.
 `Term` has no alternate reader. Therefore `soundness` proves `Lawful`, which is one inverse law over
 the orientation (retract at the host, canon at the dual) and writes, for every typed term whose
 obligations hold. The induction proves `Lawful` alone.
-`Lawful.core` gives `LawfulCore` from it. An alternate reader is `Codec.extendRead` at the codec layer.
-`ReadsCoherently` is its condition, and `extendRead_lawfulCore` proves `LawfulCore` for it over a
-typed term whose obligations hold.
+`Lawful.core` gives `LawfulCore` from it. An alternate reader is `Codec.extendRead` at the codec layer. Its read passes only what the current
+codec writes, so `extendRead_lawfulCore` proves `LawfulCore` for it over a typed term whose
+obligations hold, with no premise. `ReadsCoherently` is §3's coherence, which makes the first-match
+presentation equal the order-free `p ∪ r`.
 
 Choosing wrong is not a build error. A semantic premise in `Typed` makes the judgement
 undecidable; a syntactic premise in `Obligations` becomes a burden every caller carries.
