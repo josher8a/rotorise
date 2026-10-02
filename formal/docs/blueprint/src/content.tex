@@ -950,7 +950,7 @@ held-free options & every pair of terms with no \texttt{held} & both sit below \
 a common canonical bound & two restrictions of one adapter & \texttt{compat\_of\_common\_bound} \\
 separation & two options that no input reaches both of & the certificate below (\texttt{pairwiseCompat\_of\_separated}) \\
 an empty option & a pair with \texttt{never} on a side & \texttt{pairwiseCompat\_never\_left}, \texttt{pairwiseCompat\_never\_right} \\
-kind exclusivity & a recursive union whose options are pinned to distinct kinds, as \texttt{jsonTerm} & \texttt{compat\_of\_onKinds} \\
+orthogonality & a recursive union whose options the disjoint test keeps apart whatever the variable denotes, as \texttt{jsonTerm} & \texttt{disjoint\_orthogonal}, in \texttt{pairwiseCompat\_json} \\
 tag disjointness & \rulelink{rule:dunion}{\texttt{(dunion)}}, outright & the discriminator literals \\
 a slice & a sublist of a compatible union & \texttt{pairwiseCompat\_sublist}, \texttt{pairwiseCompat\_extract}, \texttt{pairwiseCompat\_exclude} \\
 \bottomrule

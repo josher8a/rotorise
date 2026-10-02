@@ -128,13 +128,13 @@ build stops here rather than in a reader's `#print axioms`. -/
 /-! The refutations that repaired the specification (§4) — a counterexample proved classically would still be a counterexample, but these are
 constructive and the guard records that. -/
 
-/-! §5's `adm` cannot pass through `alternate reader` on the read side — the specification defect
-that had no witness until it had this one. -/
+/-! §5's admission `Adm` cannot pass through `alternate reader` on the read side — the
+specification defect that had no witness until it had this one. -/
 
 /-! §6's `≡` is not transitive — the one refutation that is about the equational theory
 rather than about a row of it. -/
 
-/-! `ident` has no denotational content to pin — what it has is its relation to `adm`,
+/-! `ident` has no denotational content to pin — what it has is its relation to `Adm`,
 which is what §5 uses it for, and ~~SepV~~'s right to drop §5's two `ident` conjuncts
 rests on it. -/
 

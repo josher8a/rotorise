@@ -123,13 +123,10 @@ and the judgement to it).
   `object` are all instances, so §2's prism halves are discharged once for all of them.
   `set` is the one product that is not, and the reason is stated where it is argued:
   its attribute side is a choice among three wire sets, not one constructor.
-- **A recursive union's compatibility is computed from kinds, not argued per option.** `Kind`
-  is §1 vocabulary (`Domain.lean`): `Member.kind`, the ten members collapsing onto eight. An
-  option is *pinned to a kind* when it admits only values and attributes of that kind
-  (`Codec.OnKind`), and `compat_of_onKinds` turns pinned options with distinct kinds into
-  compatibility. `onKind_set`/`onKind_array`/`onKind_record` hold for *any* element codec, so
-  the compatibility of a recursive union such as `jsonTerm` needs nothing from the recursive
-  call.
+- **A recursive union's compatibility is decided by orthogonality, not argued per option.**
+  `Term.disjoint` keeps `jsonTerm`'s options apart whatever the variable denotes, and orthogonal
+  lawful codecs are compatible (`pairwiseCompat_json`). So the compatibility needs nothing from
+  the recursive call.
 - **`N` is carried exactly, and no numeric type is axiomatized.** A target language that hands
   its own numeric type to a caller adapts that type to `WFNumeral` in the port. IEEE-754 facts
   are not this calculus's theorems, and nothing here assumes them.

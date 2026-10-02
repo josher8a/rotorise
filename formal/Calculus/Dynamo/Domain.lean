@@ -394,9 +394,6 @@ deriving DecidableEq, Repr
   | .binary  => .B
   | .null    => .NULL
 
-/-- §5's `κ` on a literal: the kind of the base's member. -/
-abbrev GroundKind.kind (k : GroundKind) : Kind := k.member.kind
-
 /-! ## What a `union` option's admission reads
 
 `Sums.lean` states a union option's admission and cannot see `ObjectSlot`: `Term.lean` is on no

@@ -132,68 +132,6 @@ theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     Lawful (objectCodec sems rest) :=
   Alg.lawful_objectCodec (fun _ => rfl) hf hrest
 
-/-! ### Kind separation
-
-    The discharger of a recursive union. An option is *pinned to a kind* when it admits only
-    values and attributes of that kind, which is what §3 means by "self-identifying". Pin each
-    option and keep the kinds distinct, and compatibility follows with nothing said about what
-    the options contain: `onKind_set` and its two neighbours hold for *any* element codec, so
-    the fixpoint needs nothing from the recursive call. -/
-
-/-- An option pinned to a kind: it admits only values and attributes of that kind. -/
-def Codec.OnKind (o : Codec) (k : Kind) : Prop :=
-  (∀ v, (o.e v).isSome = true → v.kind = k) ∧ (∀ a, (o.p a).isSome = true → a.kind = k)
-
-/-! ### `opaque`'s options, each pinned to its kind -/
-
-/-- **A base is pinned to its kind.** -/
-theorem onKind_base (k : GroundKind) : Codec.OnKind (baseCodec k) k.kind := by
-  cases k <;> constructor <;> intro x hx <;> cases x <;>
-    simp_all [prism_rows, Attr.kind, Attr.member, Member.kind, GroundKind.kind, orient_rows]
-
-/-- A container option is pinned by its own constructor, whatever it contains. This is
-    why the fixpoint's compatibility needs nothing from the recursive call — and why `opaque` is
-    not a special construction. -/
-theorem onKind_set (c : Codec) : Codec.OnKind ((setCodec c)) .set := by
-  constructor <;> intro x hx <;> cases x <;>
-    simp_all [setCodec, orient_rows, Attr.kind, Attr.member, Member.kind]
-
-theorem onKind_array (c : Codec) :
-    Codec.OnKind ((arrayCodec c)) .array := by
-  constructor <;> intro x hx <;> cases x <;>
-    simp_all [arrayCodec, Alg.listCodec, carriedCodec, lA, orient_rows, Attr.kind, Attr.member, Member.kind]
-
-theorem onKind_record (c : Codec) :
-    Codec.OnKind ((recordCodec c)) .map := by
-  refine ⟨fun v hv => ?_, fun a ha => ?_⟩
-  · cases v
-    case m keys f => rfl
-    all_goals exact nomatch hv
-  · cases a
-    case m keys g => rfl
-    all_goals exact nomatch ha
-
-/-- **Options pinned to distinct kinds are pairwise compatible**: each input has one kind, and
-    one option answers to each kind. This is the compatibility of `opaque`'s options, and of the
-    options of any recursive union whose options are kind-disjoint. -/
-theorem compat_of_onKinds {os : List Codec} {ks : List Kind} (hl : ∀ o ∈ os, LawfulCore o)
-    (hz : List.Forall₂ Codec.OnKind os ks) (hnd : ks.Nodup) :
-    ∀ o ∈ os, ∀ o' ∈ os, Compat o o' := by
-  have hp : List.Pairwise (fun S T => ∀ l, S l → ¬ T l) (ks.map (fun k l => l = k)) := by
-    rw [List.pairwise_map]
-    exact hnd.imp fun hne l hl hl' => hne (hl.symm.trans hl')
-  refine compat_of_exclusive hl ?_ ?_
-  · intro o ho v hv
-    refine filter_eq_singleton_of_labels (adm := fun c v => (c.e v).isSome)
-      (key := fun v => some v.kind) ?_ hp o ho hv
-    rw [List.forall₂_map_right_iff]
-    exact hz.imp fun _ _ h v hv => ⟨_, rfl, h.1 v hv⟩
-  · intro o ho a ha
-    refine filter_eq_singleton_of_labels (adm := fun c a => (c.p a).isSome)
-      (key := fun a => some a.kind) ?_ hp o ho ha
-    rw [List.forall₂_map_right_iff]
-    exact hz.imp fun _ _ h a ha => ⟨_, rfl, h.2 a ha⟩
-
 end
 
 end Calculus
