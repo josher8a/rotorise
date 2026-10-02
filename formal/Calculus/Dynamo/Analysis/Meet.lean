@@ -45,11 +45,9 @@ def Pred.isData : Pred → Bool
 
 /-- One base's guard names one inhabitant. -/
 theorem inL_inj {k : GroundKind} {x y : k.Carrier} {v : Value}
-    (hx : inL k x v = true) (hy : inL k y v = true) : x = y := by
-  cases k <;> cases v <;> simp_all [inL] <;>
-    first
-      | rfl
-      | (obtain ⟨_, rfl⟩ := hx; obtain ⟨_, rfl⟩ := hy; rfl)
+    (hx : inL k x v = true) (hy : inL k y v = true) : x = y :=
+  Option.some_injective _ <| (k.prism.out_eq_some.mpr (inL_iff.mp hx)).symm.trans
+    (k.prism.out_eq_some.mpr (inL_iff.mp hy))
 
 /-- A finite set with a positive count holds an element. `Finset.card_pos` states the same fact
     through a route to `Classical.choice` that the gateway baseline does not list. This case
@@ -85,15 +83,10 @@ def Pred.excBoth (k : GroundKind) [DecidableEq k.Carrier]
     different bases share no value, because `inL` and `inBase` at a base hold only values of that
     base. -/
 def Pred.atBase (op : (k : GroundKind) → [DecidableEq k.Carrier] → NEFinset k.Carrier →
-    NEFinset k.Carrier → Option (Option Pred)) :
-    (k : GroundKind) → NEFinset k.Carrier → (k' : GroundKind) → NEFinset k'.Carrier →
-      Option (Option Pred)
-  | .string,  A, .string,  B => op .string A B
-  | .number,  A, .number,  B => op .number A B
-  | .boolean, A, .boolean, B => op .boolean A B
-  | .binary,  A, .binary,  B => op .binary A B
-  | .null,    A, .null,    B => op .null A B
-  | _, _, _, _ => some none
+    NEFinset k.Carrier → Option (Option Pred))
+    (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind) (B : NEFinset k'.Carrier) :
+    Option (Option Pred) :=
+  if h : k' = k then op k A (h ▸ B) else some none
 
 /-- Two `members` predicates, met at any two bases. -/
 abbrev Pred.meetMem := Pred.atBase Pred.meetAlt
@@ -192,7 +185,7 @@ theorem meetAlt_ok (k : GroundKind) [DecidableEq k.Carrier] (A B : NEFinset k.Ca
 /-- An alternative that `inL` holds at a value names the value's base. -/
 theorem inBase_of_inL {k : GroundKind} {x : k.Carrier} {v : Value} (h : inL k x v = true) :
     inBase k v = true := by
-  cases k <;> cases v <;> simp_all [inL, inBase, Attr.member]
+  rw [inL_iff.mp h]; exact decide_eq_true (k.summand.hμ x)
 
 /-- A value outside a base satisfies no alternative at that base. -/
 theorem inLs_false_of_base {k : GroundKind} {A : NEFinset k.Carrier} {v : Value}
@@ -207,8 +200,10 @@ theorem inLs_false_of_base {k : GroundKind} {A : NEFinset k.Carrier} {v : Value}
 
 /-- Two different bases hold no common value. -/
 theorem inBase_disj {k k' : GroundKind} (h : k ≠ k') (v : Value) :
-    (inBase k v && inBase k' v) = false := by
-  cases k <;> cases k' <;> cases v <;> first | rfl | exact absurd rfl h
+    (inBase k v && inBase k' v) = false :=
+  Bool.eq_false_iff.mpr fun hv => h <| GroundKind.member_inj <|
+    (of_decide_eq_true (Bool.and_eq_true _ _ ▸ hv).1).symm.trans
+      (of_decide_eq_true (Bool.and_eq_true _ _ ▸ hv).2)
 
 /-- A literal and a base share the literal's values where the two bases agree, and no value
     elsewhere. -/
@@ -350,10 +345,10 @@ theorem atBase_ok {P Q : (k : GroundKind) → NEFinset k.Carrier → Pred}
     ∀ (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind) (B : NEFinset k'.Carrier),
       MeetOk (P k A) (Q k' B) (Pred.atBase op k A k' B) := by
   intro k A k' B
-  cases k <;> cases k' <;>
-    first
-      | exact hop _ A B
-      | exact hne (by decide) A B
+  unfold Pred.atBase
+  split
+  · next h => subst h; exact hop _ A B
+  · next h => exact hne (Ne.symm h) A B
 
 /-- `members` meets `members` at any two bases. -/
 theorem meetMem_ok : ∀ (k : GroundKind) (A : NEFinset k.Carrier) (k' : GroundKind)
@@ -394,15 +389,9 @@ The test is `Alg.Term.disjoint`, the structural test over a universe signature. 
 the leaves `dynLeaf`: two primitives, and two predicates. -/
 
 /-- Two literals: the same value at the same base, or `none` for the bottom. -/
-def Ground.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.Carrier →
-    Option Ground
-  | .string, v, .string, v' => if v = v' then some (.literal .string v) else none
-  | .boolean, v, .boolean, v' => if v = v' then some (.literal .boolean v) else none
-  | .binary, v, .binary, v' => if v = v' then some (.literal .binary v) else none
-  -- `Unit` has one inhabitant, so two null literals name the same value
-  | .null, v, .null, _ => some (.literal .null v)
-  | .number, v, .number, v' => if v = v' then some (.literal .number v) else none
-  | _, _, _, _ => none
+def Ground.meetLit (k : GroundKind) (v : k.Carrier) (k' : GroundKind) (v' : k'.Carrier) :
+    Option Ground :=
+  if h : k' = k then if v = h ▸ v' then some (.literal k v) else none else none
 
 /-- **Two primitives met.** A base meets its own base and its own literals, and two literals meet
     at one value. Every other pair is the bottom. -/
@@ -761,10 +750,14 @@ theorem Adm_prim_none : ∀ g g' : Ground, Ground.meet g g' = none →
       · next hk => exact (inL_and_inBase x v).trans (if_neg (Ne.symm hk))
   | .literal k x, .literal k' x', hp, v => by
       simp only [Ground.meet] at hp
-      cases k <;> cases k' <;> simp only [Ground.meetLit, reduceCtorEq] at hp <;>
-        (try split at hp) <;>
-        (try (simp only [reduceCtorEq] at hp)) <;>
-        (cases v <;> simp_all [Adm_rows, AdmLit, inL])
+      refine Bool.eq_false_iff.mpr fun hv => ?_
+      rw [Bool.and_eq_true] at hv
+      have e := (inL_iff.mp (hv.1 : inL k x v = true)).symm.trans
+        (inL_iff.mp (hv.2 : inL k' x' v = true))
+      obtain rfl := GroundKind.member_inj ((k.summand.hμ x).symm.trans (e ▸ k'.summand.hμ x'))
+      obtain rfl := Option.some_injective _
+        ((k.prism.out_into x).symm.trans (e ▸ k.prism.out_into x'))
+      simp [Ground.meetLit] at hp
 
 /-- The former class of a kind: the five scalar kinds are one class. -/
 def Kind.former : Kind → Alg.Former
@@ -780,10 +773,11 @@ abbrev Attr.former (a : Attr) : Alg.Former := a.kind.former
 theorem ground_former (g : Ground) (v : Value) (h : ((groundCodec g).e v).isSome = true) :
     Attr.former v = .prim := by
   have h' := (Alg.PrimAdm.admV_exact (S := dynSyn) g v).mpr h
-  cases g with
-  | base k => cases k <;> cases v <;> first | rfl | exact nomatch h'
-  | literal k x =>
-      cases k <;> cases v <;> first | rfl | simp [Alg.PrimAdm.admV, AdmLit, inL] at h'
+  obtain ⟨k, hk⟩ : ∃ k : GroundKind, v.member = k.member := by
+    cases g with
+    | base k => exact ⟨k, of_decide_eq_true (h' : inBase k v = true)⟩
+    | literal k x => exact ⟨k, inL_iff.mp (h' : inL k x v = true) ▸ k.summand.hμ x⟩
+  exact (congrArg (fun m : Member => m.kind.former) hk).trans (by cases k <;> rfl)
 
 /-- **The shape classes of DynamoDB.** A base or a literal writes and reads a scalar, `setCodec`
     writes and reads one of the three sets, and the prisms build `arr`, `l`, `map` and `m`. -/

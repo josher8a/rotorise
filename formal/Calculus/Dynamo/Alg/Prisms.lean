@@ -101,6 +101,14 @@ def GroundKind.prism : (k : GroundKind) → Ctor k.Carrier Attr
   | .binary  => bC
   | .null    => nullA
 
+/-- Equality at each base's carrier is decidable. -/
+instance GroundKind.decEqCarrier : (k : GroundKind) → DecidableEq k.Carrier
+  | .string  => inferInstanceAs (DecidableEq String)
+  | .number  => inferInstanceAs (DecidableEq WFNumeral)
+  | .boolean => inferInstanceAs (DecidableEq Bool)
+  | .binary  => inferInstanceAs (DecidableEq Bytes)
+  | .null    => inferInstanceAs (DecidableEq Unit)
+
 /-! ### The element kinds of a wire set -/
 
 /-- The three element kinds of §1's wire sets: the ground kinds that a set holds. -/
@@ -116,11 +124,6 @@ deriving DecidableEq
 
 /-- What a set of each kind holds: the carrier of its ground kind. -/
 abbrev SetKind.Carrier (k : SetKind) : Type := k.ground.Carrier
-
-instance SetKind.decEqCarrier : (k : SetKind) → DecidableEq k.Carrier
-  | .string => inferInstanceAs (DecidableEq String)
-  | .number => inferInstanceAs (DecidableEq WFNumeral)
-  | .binary => inferInstanceAs (DecidableEq Bytes)
 
 /-- The element prism of a kind: the prism of its ground kind. -/
 abbrev SetKind.elem (k : SetKind) : Ctor k.Carrier Attr := k.ground.prism
@@ -160,25 +163,21 @@ theorem baseCodec_e_num (x : WFNumeral) : (baseCodec .number).e (.num x) = some 
 /-- …and reads `N` back as the numeral. -/
 theorem baseCodec_p_n (x : WFNumeral) : (baseCodec .number).p (.n x) = some (.num x) := rfl
 
-/-- `literal(ℓ)`'s predicate: the value is the alternative.
+/-- `literal(ℓ)`'s predicate: the base's prism matches the value, and the match is the
+    alternative.
 
-    One definition where there were two (~~inLS~~, ~~inLN~~) and three bases with none. Dispatching
-    on the index first is what makes the carrier concrete, and so the equality decidable. -/
-noncomputable def inL : (k : GroundKind) → k.Carrier → Value → Bool
-  | .string,  x, .str s  => decide (s = x)
-  -- `number`'s carrier IS the value's, so this row joins the ungated four: the payload is
-  -- the alternative and there is no gate left to go through.
-  | .number,  x, .num d  => decide (d = x)
-  | .boolean, x, .bool b => decide (b = x)
-  | .binary,  x, .bin b  => decide (b = x)
-  | .null,    _, .null   => true
-  | _, _, _ => false
+    One definition where there were two (~~inLS~~, ~~inLN~~) and three bases with none. The
+    prism of the index makes the carrier concrete, and so the equality decidable. -/
+noncomputable def inL (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
+  match k.prism.out v with
+  | some y => decide (y = x)
+  | none   => false
 
 /-! `inL`'s rows at the five bases, as `@[simp]` equations.
 
-Without these a `simp` that needs `inL` at one base unfolds `inL.match_1` — the matcher Lean
-derives for the whole ten-row table — and pays for all ten rows at every rewrite. That is what
-~~fanOf~~ found behind `AdmA_exact`'s duplication. Each of the five bases gets an equation. -/
+Without these a `simp` that needs `inL` at one base unfolds the prism's matcher at every
+rewrite. That is what ~~fanOf~~ found behind `AdmA_exact`'s duplication. Each of the five bases
+gets an equation. -/
 
 /-- `.str` at `string`: the payload *is* the carrier, so this is `rfl`. -/
 @[simp] theorem inL_str (x s : String) :
@@ -201,10 +200,17 @@ derives for the whole ten-row table — and pays for all ten rows at every rewri
 @[simp] theorem inL_null (x : Unit) :
     inL .null x .null = true := rfl
 
-/-- §3's `{ℓ}` — the held set, uniform in the base because `toValue` is. Spelled
-    `Value → Prop` rather than `Held`, which is `Typing`'s abbreviation and one module down. -/
+/-- **`inL` holds exactly at the alternative's datum**, at every base. -/
+theorem inL_iff {k : GroundKind} {x : k.Carrier} {v : Value} :
+    inL k x v = true ↔ v = k.prism.into x := by
+  rw [← Alg.Ctor.out_eq_some, inL]
+  split <;> simp_all
+
+/-- §3's `{ℓ}` — the held set: the datum that the base's prism builds from the alternative.
+    Spelled `Value → Prop` rather than `Held`, which is `Typing`'s abbreviation and one module
+    down. -/
 def HLit (k : GroundKind) (x : k.Carrier) : Value → Prop :=
-  fun v => v = k.toValue x
+  fun v => v = k.prism.into x
 
 
 /-! ## Wrappers -/
@@ -259,8 +265,9 @@ and its held set is the restriction's (`HLit_iff_restrict`). `decimal` is the sa
     restricted to the alternative. -/
 theorem HLit_iff_restrict (k : GroundKind) (x : k.Carrier) (v : Value) :
     HLit k x v ↔ ((baseCodec k).restrict (inL k x)).T v := by
-  show v = k.toValue x ↔ Attr.member v = k.member ∧ inL k x v = true
-  cases k <;> cases v <;> simp [GroundKind.toValue, prism_rows, inL]
+  show v = k.prism.into x ↔ Attr.member v = k.member ∧ inL k x v = true
+  rw [inL_iff]
+  exact ⟨fun h => ⟨h ▸ k.summand.hμ x, h⟩, And.right⟩
 
 end
 

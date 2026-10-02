@@ -307,12 +307,12 @@ theorem Adm_array_nil (c : Term) : Adm α (.array c) (.arr []) = true := by
 
 /-- …and it is strictly sharper than the `⊤` that was standing in for it. -/
 theorem Adm_array_sharp : Adm α (.array (.literal .string "A")) (.arr [.str "B"]) = false := by
-  simp [Term.array, Adm_rows, alignPL, alignP, zipP, AdmLit, inL]
+  simp [Term.array, Adm_rows, alignPL, alignP, zipP, AdmLit]
 
 /-- Nested, which the old row could not see at any depth. -/
 theorem Adm_array_nested :
     Adm α (.array (.array (.literal .string "A"))) (.arr [.arr [.str "B"]]) = false := by
-  simp [Term.array, Adm_rows, alignPL, alignP, zipP, AdmLit, inL]
+  simp [Term.array, Adm_rows, alignPL, alignP, zipP, AdmLit]
 
 
 /-- Soundness of every row — **now a corollary.**
