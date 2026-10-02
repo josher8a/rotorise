@@ -166,11 +166,11 @@ set law holds because the signature has no former and both sides admit nothing.
 **A universe is a container, and the disjointness of two formers is a theorem.** The carrier of a
 universe is the W-type of a container, and the member of a value is its root shape. Each former
 lands in one class of root shapes: a primitive, a set, a list or an object. The classes of distinct
-formers are disjoint, because the carrier is a coproduct. `Shapes` gives the class of each value
-and of each attribute, and the landing fact of each former: a primitive codec, the set lift, the
-list prism and the map prism. So two formers in different classes share no value and no attribute
-(`Shapes.prim_set`, `Shapes.prim_setA` and their companions), and the catch-all rows of the test
-read those theorems. A set and a keyed map are quotient containers, so the set laws stay a class
+formers are disjoint, because the carrier is a coproduct. `Shapes` gives the class of each datum,
+and the landing fact of each former at each orientation: a primitive codec, the set lift, the list
+prism and the map prism. So two formers in different classes share no value (`Shapes.prim_set`
+and its companions), and no attribute, because the same laws hold at the dual (`Shapes.op`). The
+catch-all rows of the test read those theorems. A set and a keyed map are quotient containers, so the set laws stay a class
 of each universe. At DynamoDB, the class of a value or an attribute is its root constructor.
 
 **The set former is a lift, and not a prism.** The list and map formers are prisms from `List`

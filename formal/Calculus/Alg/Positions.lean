@@ -435,12 +435,6 @@ theorem optionRel_bind {α β γ : Type} {R : α → β → Prop} {f : α → Op
   | _, _, .none => rfl
   | _, _, .some h => hfg _ _ h
 
-/-- Related options are defined together. -/
-theorem optionRel_isSome {α β : Type} {R : α → β → Prop} :
-    ∀ {a : Option α} {b : Option β}, Option.Rel R a b → a.isSome = b.isSome
-  | _, _, .none => rfl
-  | _, _, .some _ => rfl
-
 /-- A slot row of one shape pairs related codecs position by position. -/
 theorem slots_rel {R : Codec V M → Codec V M → Prop} :
     ∀ (n : Nat) {cs₁ cs₂ : List (Codec V M)} {t₁ t₂ : Option (Codec V M)},

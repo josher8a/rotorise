@@ -97,16 +97,6 @@ theorem recordCodec_T (c : Codec) (keys : Finset Name) (g : {k // k ∈ keys} �
     simp only [objEntryT, rcOf, MapOf.at, dif_neg (Finset.notMem_empty k.1)]
     exact ⟨c, rfl, h k⟩
 
-/-- A record is lawful where its codec is. -/
-theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) :=
-  Alg.lawful_objectCodec (fun _ => rfl) (fun k => absurd k.2 (Finset.notMem_empty k.1))
-    (fun _ hc => by cases hc; exact h)
-
-/-- A record is on its carrier where its codec is. -/
-theorem carrier_recordCodec {c : Codec} (hc : Carrier c) : Carrier (recordCodec c) :=
-  Alg.carrier_objectCodec (fun k => absurd k.2 (Finset.notMem_empty k.1))
-    (fun _ h => by cases h; exact hc)
-
 end Object
 
 end

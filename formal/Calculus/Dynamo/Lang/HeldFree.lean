@@ -80,13 +80,6 @@ theorem sub_setCodec {c : Codec} (h : Sub c Ω) : Sub (setCodec c) Ω := fun o x
   obtain ⟨k, S, rfl, hS⟩ := setCodec_f_eq.mp hc
   exact (setAt_Ω o k S).symm.trans (setAt_sub h hS)
 
-/-- The selector returns the answer of one option, and nothing else. -/
-theorem select_some {A B : Type} {os : List Codec} {run : Codec → A → Option B} {x : A} {y : B}
-    (h : select os run x = some y) :
-    ∃ o ∈ os, run o x = some y := by
-  obtain ⟨o, ho, -, hr⟩ := select_admits h
-  exact ⟨o, ho, hr⟩
-
 /-! ## Held-free terms -/
 
 -- A term is **held-free** when no `held` occurs in the term: `Alg.HF`, the test `hasHeld` at

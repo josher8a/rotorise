@@ -234,40 +234,12 @@ than a carried one. -/
 noncomputable def literalCodec (k : GroundKind) (x : k.Carrier) : Codec :=
   { (baseCodec k).restrict (inL k x) with T := HLit k x }
 
-theorem literalNCodec_p_n (y : WFNumeral) (x : WFNumeral) :
-    (literalCodec .number y).p (.n x) =
-      ((baseCodec .number).p (.n x)).bind (fun v => if inL .number y v then some v else none) := rfl
-
 /-! ### The gated ground codecs are refinements
 
-`literal` is not a new construction: it is `string` and `number` with a prism laid over
-them, which is exactly what §7 means by "an iso and a prism". Naming the predicates makes
-that visible, and lets all four of its laws come from `Lawful.restrict` and
-`carrier_restrict` instead of four bespoke inductions.
-
-`decimal` is deliberately *not* here. It moves the member (`str` values to an `N`
-attribute), so it is not a refinement of `string` and keeps its own proofs. -/
-
-/-- **§3's gate is `refine` over the base, at every base** — and the numeric one is `number`
-    itself rather than a separate ungated numeric term, because §1's `Numerals` is the whole of
-    `Carries(N)` and there is no wider numeric pair. That is what makes numeric literals
-    separable.
-
-    Both halves are `rfl` now, where the string pair needed a `funext` and a case split: the
-    codec *is* the restriction, rather than a hand-written pair that agreed with one. -/
-theorem literalCodec_e_restrict (k : GroundKind) (x : k.Carrier) :
-    (literalCodec k x).e = ((baseCodec k).restrict (inL k x)).e := rfl
-
-theorem literalCodec_p_restrict (k : GroundKind) (x : k.Carrier) :
-    (literalCodec k x).p = ((baseCodec k).restrict (inL k x)).p := rfl
-
-/-- **A literal codec writes only its own alternative.** `restrict`'s `e` is a guard in front
-    of the base's, so a defined write is the value `ℓ` names — which is what an object option's
-    content admission reads off a field whose term is a literal. -/
-theorem inL_of_literalCodec_e {k : GroundKind} {x : k.Carrier} {v a}
-    (he : (literalCodec k x).e v = some a) : inL k x v = true := by
-  rw [literalCodec_e_restrict] at he
-  exact (Alg.refine2_f.mp he).1
+`literal` is not a new construction: it is its base with a prism laid over it, which is what
+§7 means by "an iso and a prism". So its laws come from `Lawful.restrict` and `carrier_restrict`,
+and its held set is the restriction's (`HLit_iff_restrict`). `decimal` is the same shape at the
+`number` base, restricted to the stored numerals (`Store.lean`). -/
 
 /-- **A literal's held set is the refinement's held set**: §3's `ℓ` is the base's carrier
     restricted to the alternative. -/

@@ -272,11 +272,6 @@ theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) :=
   Alg.lawful_listCodec (fun _ => rfl) (fun _ h => nomatch h) (fun _ hc => by cases hc; exact h)
     (fun _ h => nomatch h)
 
-theorem carrier_arrayCodec {c : Codec} (hc : Carrier c) : Carrier (arrayCodec c) :=
-  Alg.carrier_listCodec (fun _ h => nomatch h) (fun _ h => by cases h; exact hc) (fun _ h => nomatch h)
-
-/- The positional theory takes the carriers as parameters. The aliases give it its names in this
-   namespace. -/
 export Alg (align slots_all align_eq_some align_of_slots zip_canonS zip_domE zip_ranP
   tuple_retract alignL alignL_nil_suf alignL_of_split traverse_replicate_zip
   alignL_spread mem_replicate_zip)
@@ -302,12 +297,6 @@ abbrev listCodec (pre : List Codec) (spread : Option Codec) (suf : List Codec) :
 
 section ListShape
 variable {pre : List Codec} {sp : Option Codec} {suf : List Codec}
-
-/-- `list` is `carriedCodec` at the same prism as `tuple` and `array`. -/
-theorem listCodec_eq :
-    listCodec pre sp suf = carriedCodec lA .L
-      (fun vs => ∃ ps, alignL pre sp suf vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2)
-      (fun o vs => (alignL pre sp suf vs).bind (traverse fun cv => cv.1.f o cv.2)) := rfl
 
 end ListShape
 

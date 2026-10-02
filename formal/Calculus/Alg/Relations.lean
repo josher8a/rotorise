@@ -51,9 +51,6 @@ theorem readAgree_of_sub {x y z u : Codec V M} (hx : Sub x u) (hy : Sub y u) (hz
 `Sub` is the information order: the minimal requirement that any ccpo on codecs meets. The map
 at each orientation grows from undefined, with `Codec.empty` at the bottom. -/
 
-/-- A codec is below itself. -/
-theorem sub_refl (c : Codec V M) : Sub c c := fun _ _ _ h => h
-
 /-- The empty codec is below every codec: the bottom of the order, and what a staged definition
     starts from. -/
 theorem sub_empty {u : Codec V M} : Sub Codec.empty u :=
@@ -74,13 +71,6 @@ theorem muStage_induct {B : Codec V M → Codec V M} {P : Codec V M → Prop} (h
     (hs : ∀ c, P c → P (B c)) : ∀ n, P (muStage B n)
   | 0 => h0
   | n + 1 => hs _ (muStage_induct h0 hs n)
-
-/-- **`alternate reader` is a step up.** `extendRead` only ever adds readings — everything `c`
-    decodes, the migration decodes the same way, and the writing half is untouched. §3's
-    `(alternate reader)` coherence premise is what makes this an *extension* rather than a
-    replacement, and this is that fact in the information order. -/
-theorem sub_extendRead (c : Codec V M) (r : V → Option V) : Sub c (c.extendRead r) :=
-  .ofEP (fun _ _ h => h) (fun _ _ h => by simp only [Codec.extendRead, Codec.ofEP_p, h])
 
 /-! ### First-match resolution under the obligation
 
@@ -293,30 +283,6 @@ theorem altCodec_of_mem {os : List (Codec V M)} {μA : Option M}
       obtain ⟨o', hf⟩ := find?_attempt .dual hc hp
       have ho' := List.mem_of_find?_eq_some hf
       exact altCodec_f.mpr ⟨o', hf, hC c hc o' ho' _ _ hp (Or.inl (acts_of_find? .dual hf))⟩)
-
-/-- The sum's core laws. Compatibility is what makes them hold: the option that reads the
-    attribute of a write reads the value back, whichever option wrote. -/
-theorem lawfulCore_altCodec {os : List (Codec V M)} {μA : Option M}
-    (h : ∀ o ∈ os, LawfulCore member o)
-    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o')
-    (hW : ∀ m, μA = some m → ∀ o ∈ os, ∀ t a, o.e t = some a → member a = m) :
-    LawfulCore member (altCodec os μA) where
-  retract he := by
-    obtain ⟨o, ho, -, hoe⟩ := altCodec_admits he
-    have hop := (h o ho).retract hoe
-    obtain ⟨o', hf'⟩ := find?_attempt .dual ho hop
-    have ho' := List.mem_of_find?_eq_some hf'
-    exact altCodec_f.mpr ⟨o', hf', hC o ho o' ho' _ _ hop (Or.inl (acts_of_find? .dual hf'))⟩
-  canon hp := by
-    obtain ⟨o, ho, -, hop⟩ := altCodec_admits hp
-    obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((h o ho).canon hop)
-    obtain ⟨o', hf'⟩ := find?_attempt .host ho ha'
-    obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (acts_of_find? .host hf')
-    exact Option.isSome_iff_exists.mpr ⟨b, altCodec_f.mpr ⟨o', hf', hb⟩⟩
-  writes := by
-    intro μ hμ t a he
-    obtain ⟨o, ho, -, hoe⟩ := altCodec_admits he
-    exact hW μ hμ o ho t a hoe
 
 /-- …and the laws: the option that sends the input inverts the output, and the union sends
     what any option sends. One proof serves each orientation. -/

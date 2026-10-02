@@ -175,11 +175,6 @@ theorem refine2_e_def (c : Codec V M) (qV : V → Bool) (qA : V → Bool) :
     (refine2 c qV qA).e =
       fun v => if qV v then (c.e v).bind (fun a => if qA a then some a else none) else none := rfl
 
-/-- The read of the two-sided restriction, for a rewrite. -/
-theorem refine2_p_def (c : Codec V M) (qV : V → Bool) (qA : V → Bool) :
-    (refine2 c qV qA).p =
-      fun a => if qA a then (c.p a).bind (fun v => if qV v then some v else none) else none := rfl
-
 /-- The write of a restriction: the predicate guards the write of the base. -/
 theorem restrict_e_def (c : Codec V M) (q : V → Bool) :
     (c.restrict q).e = fun v => if q v then c.e v else none := by
@@ -220,11 +215,6 @@ def partialId (q : V → Bool) : V → Option V := fun v => if q v then some v e
 theorem through_e_adapt {c : Codec V M} (f g : V → V) :
     (c.through f g).e = (c.adapt (some ∘ f) (some ∘ g)).e := rfl
 
-/-- …and reads as one. -/
-theorem through_p_adapt {c : Codec V M} (f g : V → V) :
-    (c.through f g).p = (c.adapt (some ∘ f) (some ∘ g)).p := by
-  funext a; simp only [Codec.through, Codec.adapt, Codec.ofEP_p]; cases c.p a <;> rfl
-
 /-- `refine` writes as `adapt` with a partial identity — the *same* combinator, weaker
     adapter. This is the sense in which it is sugar. -/
 theorem restrict_e_adapt {c : Codec V M} (q : V → Bool) :
@@ -232,10 +222,6 @@ theorem restrict_e_adapt {c : Codec V M} (q : V → Bool) :
   funext v
   simp only [restrict_e_def, Codec.adapt, Codec.ofEP_e, partialId]
   cases q v <;> rfl
-
-/-- …and reads as one. -/
-theorem restrict_p_adapt {c : Codec V M} (q : V → Bool) :
-    (c.restrict q).p = (c.adapt (partialId q) (partialId q)).p := rfl
 
 /-! ### The stored-side gate -/
 
@@ -362,26 +348,6 @@ def select {X Y : Type} (os : List (Codec V M)) (run : Codec V M → X → Optio
     Option Y :=
   (os.find? (fun c => (run c x).isSome)).bind (run · x)
 
-/-- **A sum answers what its one acting option answers**: where every other option refuses the
-    input, the first admitter is that option, or nothing acts. -/
-theorem select_split {X Y : Type} (pre suf : List (Codec V M)) (c : Codec V M)
-    (run : Codec V M → X → Option Y) (x : X) (hpre : ∀ d ∈ pre, run d x = none)
-    (hsuf : ∀ d ∈ suf, run d x = none) : select (pre ++ c :: suf) run x = run c x := by
-  induction pre with
-  | nil =>
-    unfold select
-    simp only [List.nil_append, List.find?_cons]
-    cases h : run c x with
-    | some y => simp only [Option.isSome_some, Option.bind_some, h]
-    | none =>
-      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
-      rw [List.find?_eq_none.mpr (fun d hd => by simp [hsuf d hd])]; rfl
-  | cons d ds ih =>
-    unfold select at ih ⊢
-    simp only [List.cons_append, List.find?_cons, hpre d (List.mem_cons_self ..),
-      Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
-    exact ih (fun d' hd' => hpre d' (List.mem_cons_of_mem _ hd'))
-
 /-- `union`: the sum, resolved by the first admitter. Over lawful, pairwise compatible options
     the order is unobservable (`altCodec_perm`). -/
 def altCodec (os : List (Codec V M)) (μA : Option M) : Codec V M where
@@ -414,11 +380,6 @@ theorem altCodec_f {os : List (Codec V M)} {μA : Option M} {o : Orient} {x : V}
     (altCodec os μA).f o x = some y ↔
       ∃ c, os.find? (fun c => (c.f o x).isSome) = some c ∧ c.f o x = some y := select_eq_some
 
-/-- The map of a union at an orientation, for a rewrite. The lemma rewrites the write and the
-    read, because `e` and `p` reduce to `f`. -/
-theorem altCodec_f_def (os : List (Codec V M)) (μA : Option M) (o : Orient) :
-    (altCodec os μA).f o = select os (·.f o) := rfl
-
 /-- A sum routes through an option that acts, at each orientation. -/
 theorem altCodec_admits {os : List (Codec V M)} {μA : Option M} {o : Orient}
     {x : V} {y : V} (h : (altCodec os μA).f o x = some y) :
@@ -440,16 +401,6 @@ theorem carrier_pointCodec {α : Type} {p : Ctor α V} {μ₀ : M} :
   · intro a v h
     obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp h
     exact ⟨x, rfl⟩
-
-theorem carrier_through {c : Codec V M} {f g : V → V} (hc : Carrier c)
-    (hlaw : LawfulCore member c) (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
-    Carrier (c.through f g) where
-  domE he := hc.domE (through_e.mp he)
-  ranP hp := by
-    obtain ⟨w, hw, rfl⟩ := through_p.mp hp
-    show c.T (f (g w))
-    rw [hfg w (hlaw.canon hw)]
-    exact hc.ranP hw
 
 /-- The two-sided restriction is on its carrier when the inner codec is. -/
 theorem carrier_refine2 {c : Codec V M} (h : Carrier c) (qV : V → Bool) (qA : V → Bool) :

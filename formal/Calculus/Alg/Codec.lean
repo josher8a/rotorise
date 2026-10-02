@@ -262,22 +262,4 @@ theorem Lawful.empty : Lawful member (Codec.empty : Codec V M) where
   inv h := nomatch h
   writes _ _ _ h := nomatch h
 
-/-- **The ideal a codec is a deviation from**, stated so the deviation can be located.
-    `(R)` gives `p ∘ e = id` on `dom(e)`; this gives `e ∘ p = id` on `Can(c)`. Together
-    with `e_injective` they say that between the values a codec writes and the attributes
-    it does write, `e` and `p` are **mutually inverse** — a bijection, on the nose, with
-    no quotient and no partiality anywhere in sight.
-
-    A lawful codec has no canonizer. `canon` sends every read attribute to itself, so
-    `dom(p) ⊆ Can(c)` and `Ker` is trivial on `dom(p)`. The quotient half, where `e ∘ p` is
-    a canonizer and the equivalence is `Ker`, belongs to `LawfulCore`, whose `canon` asks only
-    that a read value be writable: that is an alternate reader. Off `dom(e)` inside `T`, there
-    is nothing to write: that is the partial half. -/
-theorem Lawful.can_roundTrip {c : Codec V M} (h : Lawful member c) {a : V} {t : V}
-    (ha : Can c a) (hp : c.p a = some t) : c.e t = some a := by
-  obtain ⟨t', ht'⟩ := ha
-  rw [h.retract ht'] at hp
-  cases hp
-  exact ht'
-
 end Calculus.Alg

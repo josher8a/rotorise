@@ -99,14 +99,6 @@ theorem held1_nest {M₁ M₂ : Type} (c : Codec V M) (oV : Codec V M₁) (oA : 
       else none
     cases (oA.p a).isSome <;> cases c.p (wA.1 a) <;> simp
 
-/-- A gate whose predicate admits every output is the domain of the map. -/
-theorem gate_eq_isSome {X Y : Type} {m : X → Option Y} {q : Y → Bool} {x : X}
-    (h : ∀ y, m x = some y → q y = true) : gate m q x = (m x).isSome := by
-  unfold gate
-  cases hx : m x with
-  | none => rfl
-  | some y => exact h y hx
-
 /-- A gate that passes sees an output. -/
 theorem gate_isSome {X Y : Type} {m : X → Option Y} {q : Y → Bool} {x : X}
     (h : gate m q x = true) : (m x).isSome = true := by
