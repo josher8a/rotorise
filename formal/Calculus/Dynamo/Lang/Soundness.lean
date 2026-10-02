@@ -267,10 +267,9 @@ theorem typed_p_mem {t T μ} (h : Typed α t T μ) (hob : Obligations α t)
   Alg.typed_TSub h v ((Alg.carrier_denote h hob).ranP hp)
 
 /-- §3 `(alternate reader)`: an alternate reader over a derivable term preserves the three
-    core laws under its coherence condition. -/
+    core laws, because the read passes only what the term writes. -/
 theorem extendRead_lawfulCore {t T μ} (ht : Typed α t T μ) (hob : Obligations α t)
-    {r : Attr → Option Value} (hr : ReadsCoherently (denote α t) r) :
-    LawfulCore ((denote α t).extendRead r) :=
-  Alg.LawfulCore.extendRead (soundness ht hob).core hr.1
+    (r : Attr → Option Value) : LawfulCore ((denote α t).extendRead r) :=
+  Alg.LawfulCore.extendRead (soundness ht hob).core
 
 end Calculus
