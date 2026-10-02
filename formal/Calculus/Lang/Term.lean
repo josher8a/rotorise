@@ -113,19 +113,13 @@ structure SetF (V M : Type) (member : V → M) (depth : V → Nat) where
   /-- The lift's held set is inside `held` of any bound on the element's held set. -/
   held_of : ∀ {c : Codec V M} {T : V → Prop}, (∀ v, c.T v → T v) → ∀ v, (lift c).T v → held T v
 
-/-- **The list former of a meaning**: one prism of the carrier, its member, and its depth law. -/
-structure ListA (V Mem : Type) (mem : V → Mem) (d : V → Nat) where
-  p : Ctor (List V) V
-  μ : Mem
-  hμ : ∀ y, mem (p.into y) = μ
+/-- **The list former of a meaning**: one summand of the carrier, and its depth law. -/
+structure ListA (V Mem : Type) (mem : V → Mem) (d : V → Nat) extends Summand (List V) V Mem mem where
   d_lt : ∀ xs, ∀ x ∈ xs, d x + 1 ≤ d (p.into xs)
 
-/-- **The keyed-map former of a meaning**: the same four facts onto `MapOf`. -/
-structure MapA (V Mem : Type) (mem : V → Mem) (d : V → Nat) where
-  m : Ctor (MapOf V) V
-  μ : Mem
-  hμ : ∀ y, mem (m.into y) = μ
-  d_lt : ∀ (x : MapOf V) k, d (x.get k) + 1 ≤ d (m.into x)
+/-- **The keyed-map former of a meaning**: one summand onto `MapOf`, and its depth law. -/
+structure MapA (V Mem : Type) (mem : V → Mem) (d : V → Nat) extends Summand (MapOf V) V Mem mem where
+  d_lt : ∀ (x : MapOf V) k, d (x.get k) + 1 ≤ d (p.into x)
 
 /-! ## The meaning -/
 
@@ -735,7 +729,7 @@ noncomputable def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C
       | none => .empty
   | .list pre spread suf, ρ =>
       match Mean.list (B := B) with
-      | some L => listCodec L.p L.μ (denoteListAbs pre ρ) (denoteOptAbs spread ρ)
+      | some L => listCodec L.toSummand (denoteListAbs pre ρ) (denoteOptAbs spread ρ)
           (denoteListAbs suf ρ)
       | none => .empty
   -- the side `s` reads its outer, and its word from its own table
@@ -757,7 +751,7 @@ noncomputable def bodySemAbs : Body B → (ρ : List (Mean.C B) := []) → Mean.
   | .mk fields f wild, ρ =>
       match Mean.map (B := B) with
       | some F =>
-          objectCodec F.m F.μ ⟨fields, fun k => fieldSemAbs (f k) ρ⟩
+          objectCodec F.toSummand ⟨fields, fun k => fieldSemAbs (f k) ρ⟩
             (wildSemAbs wild ρ)
       | none => .empty
 

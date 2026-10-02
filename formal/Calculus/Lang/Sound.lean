@@ -110,7 +110,7 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
         obtain ⟨T', μ', hμ'⟩ := TypedList.forall (α := α) (β := β) hf t' ht'
         exact soundnessIn ρ hμ' (obligationsList_iff.mp hob.2.2 t' ht') henv
       simp only [denote, denoteAbs, hL, denoteList_eq, denoteOpt_eq]
-      exact lawful_listCodec L.hμ
+      exact lawful_listCodec
           (List.forall_mem_map.mpr fun t' ht' => ihp t' ht')
           (forall_mem_map_option fun t' ht' => ihsp t' ht')
           (List.forall_mem_map.mpr fun t' ht' => ihf t' ht')
@@ -137,7 +137,7 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
           cases hcr
           exact soundnessIn ρ hty hob.2 henv
       simp only [denote, denoteAbs, bodySemAbs, hF]
-      exact lawful_objectCodec F.hμ ihf ihr
+      exact lawful_objectCodec ihf ihr
     | @union opts Ts μs hlist =>
       have ihs : ∀ t' ∈ opts, Lawful Mean.mem (denote α β t' ρ) := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall (α := α) (β := β) hlist t' ht'

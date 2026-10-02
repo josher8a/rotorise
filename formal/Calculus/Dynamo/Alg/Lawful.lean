@@ -17,9 +17,8 @@ noncomputable section
 Each base is one point codec at the prism of its kind, so `lawful_pointCodec` proves every
 base. A literal is its base restricted, so `Lawful.restrict` proves every literal. -/
 
-/-- **Every base is lawful**: a point codec whose prism stamps the member of its kind. -/
-theorem lawful_baseCodec (k : GroundKind) : Lawful (baseCodec k) :=
-  lawful_pointCodec (by cases k <;> exact fun _ => rfl)
+/-- **Every base is lawful**: a point codec at the summand of its kind. -/
+theorem lawful_baseCodec (k : GroundKind) : Lawful (baseCodec k) := lawful_pointCodec
 
 /-! ### The literal codec is lawful because its base is
 

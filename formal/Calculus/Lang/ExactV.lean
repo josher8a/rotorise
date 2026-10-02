@@ -71,14 +71,14 @@ theorem select_isSome_attempt {V M X Y : Type} (os : List (Codec V M))
 
 /-- **The list codec at an orientation**: read the prism, align, run each position at the
     orientation, and build with the prism. -/
-theorem listCodec_f {V M : Type} (p : Ctor (List V) V)
-    (μL : M) (pre : List (Codec V M)) (sp : Option (Codec V M)) (suf : List (Codec V M)) :
-    ∀ (o : Orient) (x : V), (listCodec p μL pre sp suf).f o x =
-      ((p.out x).bind fun xs =>
-        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map p.into :=
-  Orient.both (P := fun o => ∀ x, (listCodec p μL pre sp suf).f o x =
-      ((p.out x).bind fun xs =>
-        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map p.into)
+theorem listCodec_f {V M : Type} {member : V → M} (sL : Summand (List V) V M member)
+    (pre : List (Codec V M)) (sp : Option (Codec V M)) (suf : List (Codec V M)) :
+    ∀ (o : Orient) (x : V), (listCodec sL pre sp suf).f o x =
+      ((sL.p.out x).bind fun xs =>
+        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map sL.p.into :=
+  Orient.both (P := fun o => ∀ x, (listCodec sL pre sp suf).f o x =
+      ((sL.p.out x).bind fun xs =>
+        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map sL.p.into)
     (fun _ => rfl) (fun _ => rfl)
 
 variable [Sem S] [PrimAdm S] {α : Table S} {β : Table S.op}
@@ -125,7 +125,7 @@ def AdmBody : Body S → List S.C → S.V → Bool
   | .mk fields fld wild, ρ => fun v =>
       match Mean.map (B := S.sig) with
       | some F =>
-          match F.m.out v with
+          match F.p.out v with
           | some m =>
               valPresentT fields fld m.keys &&
               objAdmV ⟨fields, fun k => AdmField (fld k) ρ⟩ (AdmWild wild ρ) m.keys m.get
@@ -313,7 +313,7 @@ theorem ExactV_object {fields : Finset String} {fld : {k // k ∈ fields} → Ob
   | none => simp [Codec.empty]
   | some F =>
     rw [objectCodec_f]
-    rcases hv : F.m.out v with _ | m
+    rcases hv : F.p.out v with _ | m
     · simp [hv]
     · simp only [hv, Option.bind_some, Option.isSome_map]
       rw [valPresentT_eq (α := α) (β := β) (ρ := ρ)]

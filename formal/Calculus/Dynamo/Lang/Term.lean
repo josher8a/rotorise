@@ -157,18 +157,14 @@ def HSet (T : Value → Prop) : Value → Prop := fun v =>
   (∃ S : NEFinset WFNumeral, v = .numSet S ∧ ∀ d ∈ S.1, T (.num d)) ∨
   (∃ S : NEFinset Bytes,  v = .binSet S ∧ ∀ b ∈ S.1, T (.bin b))
 
-/-- The list former: the `L` prism. -/
+/-- The list former: the `L` summand. -/
 abbrev dList : Alg.ListA Value Member Attr.member Attr.depth where
-  p := lA
-  μ := .L
-  hμ _ := rfl
+  toSummand := lS
   d_lt _ _ hx := Nat.succ_le_succ (Attr.depth_le_depthL hx)
 
-/-- The map former: the `M` prism. -/
+/-- The map former: the `M` summand. -/
 abbrev dMap : Alg.MapA Value Member Attr.member Attr.depth where
-  m := mA
-  μ := .M
-  hμ _ := rfl
+  toSummand := mS
   d_lt m k := Attr.depth_map_entry (f := m.2) k
 
 /-- **Two element codecs that agree at an orientation move a set to one image.** -/

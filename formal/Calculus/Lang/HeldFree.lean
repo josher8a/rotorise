@@ -48,11 +48,11 @@ theorem forall₂_zip (o : Orient) {u : Codec V M} :
   | _ :: _, _ :: _, [], _, _, h => nomatch h
 
 /-- A list whose every slot is below a top that acts as the list former is below the top. -/
-theorem sub_listCodec {pL : Ctor (List V) V} {μL : M} {u : Codec V M}
-    (hu : ∀ o vs, u.f o (pL.into vs) = (traverse (u.f o) vs).map pL.into)
+theorem sub_listCodec {member : V → M} {sL : Summand (List V) V M member} {u : Codec V M}
+    (hu : ∀ o vs, u.f o (sL.p.into vs) = (traverse (u.f o) vs).map sL.p.into)
     {pre suf : List (Codec V M)} {sp : Option (Codec V M)}
     (hpre : ∀ c ∈ pre, Sub c u) (hsp : ∀ c ∈ sp, Sub c u) (hsuf : ∀ c ∈ suf, Sub c u) :
-    Sub (listCodec pL μL pre sp suf) u := by
+    Sub (listCodec sL pre sp suf) u := by
   have hrow : ∀ n ds, slotsL pre sp suf n = some ds → ∀ c ∈ ds, Sub c u := fun n ds h c hc => by
     rcases slotsL_mem pre sp suf n ds h c hc with h1 | h1 | h1
     · exact hpre c h1
@@ -62,22 +62,22 @@ theorem sub_listCodec {pL : Ctor (List V) V} {μL : M} {u : Codec V M}
   obtain ⟨vs, as, hv, hE, rfl⟩ := carried_f.mp he
   simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hE
   obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hE
-  rw [pL.into_out hv, hu, traverse_eq_some.mpr (forall₂_zip o ds vs as
+  rw [sL.p.into_out hv, hu, traverse_eq_some.mpr (forall₂_zip o ds vs as
     (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
   rfl
 
 /-- An object whose every entry codec is below a top that acts as the map former is below the
     top. -/
-theorem sub_objectCodec {pM : Ctor (MapOf V) V} {μM : M} {u : Codec V M}
-    (hu : ∀ o (m : MapOf V), u.f o (pM.into m) =
-      (funImage fun k => u.f o (m.get k)).map fun g => pM.into ⟨m.keys, g⟩)
+theorem sub_objectCodec {member : V → M} {sM : Summand (MapOf V) V M member} {u : Codec V M}
+    (hu : ∀ o (m : MapOf V), u.f o (sM.p.into m) =
+      (funImage fun k => u.f o (m.get k)).map fun g => sM.p.into ⟨m.keys, g⟩)
     {sems : MapOf (FieldSem V M)} {rest : RestSem V M}
     (hf : ∀ k, Sub (sems.2 k).codec u) (hw : ∀ c ∈ rcOf rest, Sub c u) :
-    Sub (objectCodec pM μM sems rest) u := by
+    Sub (objectCodec sM sems rest) u := by
   intro o v a he
   obtain ⟨x, y, hv, hE, rfl⟩ := carried_f.mp he
   obtain ⟨-, g, hg, rfl⟩ := objAt_eq.mp hE
-  rw [pM.into_out hv, hu, funImage_eq (f := g) (fun k => ?_)]
+  rw [sM.p.into_out hv, hu, funImage_eq (f := g) (fun k => ?_)]
   · rfl
   have hk := funImage_some hg k
   obtain ⟨c, hc, hce⟩ := Option.bind_eq_some_iff.mp hk
@@ -175,7 +175,7 @@ theorem sub_body [TopLaws S] : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
       cases hF : Mean.map (B := S.sig) with
       | none => exact sub_empty
       | some F =>
-        exact sub_objectCodec (fun _ => top_map F.m.into)
+        exact sub_objectCodec (fun _ => top_map F.p.into)
           (fun k => sub_slot (f k) (Bool.eq_false_iff.mpr (h.1 k)) ρ henv)
           (sub_wild w h.2 ρ henv)
 /-- …at a slot. -/

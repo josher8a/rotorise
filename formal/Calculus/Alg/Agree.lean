@@ -104,10 +104,10 @@ theorem agree_mu_right {o : Orient} {depth : V → Nat} {B : Codec V M → Codec
 
 /-- Two carried codecs over one prism agree at an orientation where their payload maps agree
     there. -/
-theorem agree_carried {o : Orient} {γ : Type} {p : Ctor γ V} {μ₀ : M}
+theorem agree_carried {o : Orient} {γ : Type} {member : V → M} {s : Summand γ V M member}
     {P₁ P₂ : γ → Prop} {F₁ F₂ : Orient → γ → Option γ}
     (h : ∀ x d₁ d₂, F₁ o x = some d₁ → F₂ o x = some d₂ → d₁ = d₂) :
-    Agree o (carriedCodec p μ₀ P₁ F₁) (carriedCodec p μ₀ P₂ F₂) := by
+    Agree o (carriedCodec s P₁ F₁) (carriedCodec s P₂ F₂) := by
   intro v a b ha hb
   obtain ⟨x, d₁, hx, h1, rfl⟩ := carried_f.mp ha
   obtain ⟨x', d₂, hx', h2, rfl⟩ := carried_f.mp hb
@@ -138,11 +138,11 @@ theorem zip_agree {X Y : Type} (run : Codec V M → X → Option Y) (R : Codec V
 
 /-- **Two lists agree where every codec of one row agrees with every codec of the other**, at
     each orientation. -/
-theorem agree_list {o : Orient} {pL : Ctor (List V) V} {μL : M}
+theorem agree_list {o : Orient} {member : V → M} {sL : Summand (List V) V M member}
     {pre suf pre' suf' : List (Codec V M)} {sp sp' : Option (Codec V M)}
     (h : ∀ c, (c ∈ pre ∨ sp = some c ∨ c ∈ suf) → ∀ d, (d ∈ pre' ∨ sp' = some d ∨ d ∈ suf') →
       Agree o c d) :
-    Agree o (listCodec pL μL pre sp suf) (listCodec pL μL pre' sp' suf') := by
+    Agree o (listCodec sL pre sp suf) (listCodec sL pre' sp' suf') := by
   refine agree_carried fun vs d₁ d₂ h1 h2 => ?_
   obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp h1
   obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
@@ -154,11 +154,11 @@ theorem agree_list {o : Orient} {pL : Ctor (List V) V} {μL : M}
     htr htr'
 
 /-- **Two objects agree where the two codecs of each name agree**, at each orientation. -/
-theorem agree_object {o : Orient} {pM : Ctor (MapOf V) V} {μM : M}
+theorem agree_object {o : Orient} {member : V → M} {sM : Summand (MapOf V) V M member}
     {sems₁ sems₂ : MapOf (FieldSem V M)} {rest₁ rest₂ : RestSem V M}
     (h : ∀ k c₁ c₂, entryCodec sems₁ (rcOf rest₁) k = some c₁ →
       entryCodec sems₂ (rcOf rest₂) k = some c₂ → Agree o c₁ c₂) :
-    Agree o (objectCodec pM μM sems₁ rest₁) (objectCodec pM μM sems₂ rest₂) := by
+    Agree o (objectCodec sM sems₁ rest₁) (objectCodec sM sems₂ rest₂) := by
   refine agree_carried fun m d₁ d₂ h1 h2 => ?_
   unfold objAt at h1 h2
   split at h1 <;> [skip; exact nomatch h1]
