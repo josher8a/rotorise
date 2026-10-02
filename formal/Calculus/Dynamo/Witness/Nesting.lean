@@ -46,7 +46,7 @@ theorem nesting_zero_of_ground (k : GroundKind) (v : Value) (a : Attr)
   -- the base writes the datum it was given, and the datum carries a scalar member
   simp only [baseCodec, Alg.fiberCodec, Alg.Codec.e] at h
   split at h
-  · next hm => cases h; cases k <;> cases v <;> simp_all [Attr.member, Attr.nesting]
+  · next hm => cases h; cases k <;> cases v <;> simp_all [Attr.nesting]
   · exact nomatch h
 
 /-! ## The containers add exactly one
