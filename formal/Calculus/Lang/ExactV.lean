@@ -136,6 +136,7 @@ def AdmBody : Body S → List S.C → S.V → Bool
 def AdmField : ObjectSlot S → List S.C → S.V → Bool
   | .req t, ρ => Adm t ρ
   | .optional t, ρ => Adm t ρ
+  | .fill t _, ρ => Adm t ρ
 
 /-- The open block's row, where the body has one. -/
 def AdmWild : Option (Term S) → List S.C → Option (S.V → Bool)
@@ -279,7 +280,7 @@ omit [PrimAdm S] in
 theorem valPresentT_iff (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
     (keys : Finset String) :
     valPresentT S.o fields fld keys = true ↔ ∀ k ∈ fields, k ∉ keys →
-      (absentOf ((⟨fields, fun k => fieldSem α β (fld k) ρ⟩ : MapOf _).at k)).isSome := by
+      (absentOf S.o ((⟨fields, fun k => fieldSem α β (fld k) ρ⟩ : MapOf _).at k)).isSome := by
   simp only [valPresentT, decide_eq_true_eq]
   constructor
   · intro h k hk hkk
@@ -287,6 +288,12 @@ theorem valPresentT_iff (fields : Finset String) (fld : {k // k ∈ fields} → 
     match hfd : fld ⟨k, hk⟩ with
     | .req t => exact absurd (h ⟨k, hk⟩ (by rw [hfd]; rfl)) hkk
     | .optional t => simp only [hfd, fieldSem, fieldSemAbs, absentOf, Option.isSome_some]
+    | .fill t v =>
+      have hr := h ⟨k, hk⟩
+      simp only [hfd, ObjectSlot.isReqAt] at hr
+      rcases Bool.eq_false_or_eq_true S.o.c with hc | hc
+      · simp only [hfd, fieldSem, fieldSemAbs, absentOf, hc, cond_true, Option.isSome_some]
+      · exact absurd (hr (by simp [hc])) hkk
   · intro h k hr
     refine Decidable.byContradiction fun hn => ?_
     have := h k.1 k.2 hn
@@ -295,6 +302,10 @@ theorem valPresentT_iff (fields : Finset String) (fld : {k // k ∈ fields} → 
     | .optional t => rw [hfd] at hr; exact nomatch hr
     | .req t =>
       simp only [hfd, fieldSem, fieldSemAbs, absentOf, Option.isSome_none,
+        Bool.false_eq_true] at this
+    | .fill t v =>
+      simp only [hfd, ObjectSlot.isReqAt, Bool.not_eq_true'] at hr
+      simp only [hfd, fieldSem, fieldSemAbs, absentOf, hr, cond_false, Option.isSome_none,
         Bool.false_eq_true] at this
 
 theorem entry_iff {fields : Finset String} {fld : {k // k ∈ fields} → ObjectSlot S}
@@ -428,6 +439,7 @@ theorem Adm_exactO : ∀ (tail : Option (Term S)) (ρ : List S.C), ExactVO α β
 theorem Adm_exactF : ∀ (fd : ObjectSlot S) (ρ : List S.C), ExactField α β fd ρ
   | .req t0, ρ => fun v => Adm_exact t0 ρ v
   | .optional t0, ρ => fun v => Adm_exact t0 ρ v
+  | .fill t0 _, ρ => fun v => Adm_exact t0 ρ v
 end
 
 /-- The row, read as a Boolean: the write domain of the denotation. -/

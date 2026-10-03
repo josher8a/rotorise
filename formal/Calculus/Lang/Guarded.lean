@@ -182,6 +182,7 @@ theorem fieldSem_agree : ∀ (s : ObjectSlot S), s.guarded = true →
       (fieldSem α β s ρ₂)
   | .req t, hg, d, ρ₁, ρ₂, h => denote_agree t hg d ρ₁ ρ₂ h
   | .optional t, hg, d, ρ₁, ρ₂, h => denote_agree t hg d ρ₁ ρ₂ h
+  | .fill t _, hg, d, ρ₁, ρ₂, h => ⟨denote_agree t hg d ρ₁ ρ₂ h, rfl⟩
 
 /-- The open block's congruence is its term's. -/
 theorem wildSem_agree : ∀ (w : Option (Term S)), Term.guardedO w = true →

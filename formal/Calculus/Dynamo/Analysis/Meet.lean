@@ -463,6 +463,8 @@ def viewB (o : Orient) : Body → Body
 def viewS (o : Orient) : ObjectSlot → ObjectSlot
   | .req t => .req (view o t)
   | .optional t => .optional (view o t)
+  -- the caller side always holds the name; the stored side may lack it
+  | .fill t _ => bif o.c then .optional (view o t) else .req (view o t)
 end
 
 /-- **Whether the two pairs of views are disjoint.** A term denotes a partial isomorphism.
@@ -893,6 +895,9 @@ theorem HF_viewO (o : Orient) : ∀ x : Option Term, HFO (viewO o x)
 theorem HF_viewS (o : Orient) : ∀ s : ObjectSlot, HFS (viewS o s)
   | .req t => HF_view o t
   | .optional t => HF_view o t
+  | .fill t _ => by
+      rcases Bool.eq_false_or_eq_true o.c with hc | hc <;>
+        simp only [viewS, hc, cond_true, cond_false] <;> exact HF_view o t
 end
 
 /-- A union of rows over wider rows admits where the narrower union admits. -/
@@ -1049,7 +1054,8 @@ theorem viewLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLe o ρ ρ' → EnvSu
         · refine decide_eq_true fun k hr => of_decide_eq_true h.1 k ?_
           beta_reduce at hr
           generalize f k = s at hr
-          cases s <;> simp_all [viewS, Alg.ObjectSlot.isReqAt]
+          rcases Bool.eq_false_or_eq_true o.c with hc | hc <;>
+            cases s <;> simp_all [viewS, Alg.ObjectSlot.isReqAt]
         · cases w with
           | none => exact .none
           | some t => exact .some (viewLeE t ρ ρ' he hs)
@@ -1080,6 +1086,9 @@ theorem viewLeES : ∀ (s : ObjectSlot) (ρ ρ' : List Codec), EnvLe o ρ ρ' �
     RowLe (Alg.AdmField α β s ρ) (Alg.AdmField α β (viewS o s) ρ')
   | .req t, ρ, ρ', he, hs => viewLeE t ρ ρ' he hs
   | .optional t, ρ, ρ', he, hs => viewLeE t ρ ρ' he hs
+  | .fill t _, ρ, ρ', he, hs => by
+      rcases Bool.eq_false_or_eq_true o.c with hc | hc <;>
+        simp only [viewS, hc, cond_true, cond_false] <;> exact viewLeE t ρ ρ' he hs
 end
 
 /-- **The view admits at the orientation each value that the term admits.** -/

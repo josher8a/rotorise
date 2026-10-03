@@ -288,6 +288,6 @@ theorem agreeLe_objectCodec {sM : Summand (MapOf V) V M member}
       exact congrArg (Option.map some) (hbind (·.f o ·) (m.get ⟨k, hk⟩) (fun _ _ h => h.f o _ (by
         have := hd m ⟨k, hk⟩; rw [← hvv] at this; omega)) k)
     · rw [MapOf.at_none hk]
-      exact absentOf_rel (mapOf_at_rel hF k)
+      exact absentOf_rel o (mapOf_at_rel hF k)
 
 end Calculus.Alg

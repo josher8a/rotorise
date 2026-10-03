@@ -70,11 +70,20 @@ end
 
 /-- The term of a slot, whatever its presence. -/
 def ObjectSlot.term : ObjectSlot S → Term S
-  | .req t | .optional t => t
+  | .req t | .optional t | .fill t _ => t
 
 /-- Every test of the left row against every term of the right row. -/
 def allPairs (fs : List (Term S → Bool)) (ys : List (Term S)) : Bool :=
   fs.all fun f => ys.all f
+
+/-- **Two slots answer alike at absence** on a half, the host's stand-in test: on the read, a
+    fill agrees with a `req` slot, which reads no map without the name, and with no other slot.
+    Two fills are refused: the constants have no decidable equality. -/
+def ObjectSlot.absentAgree (o : Orient) (a b : ObjectSlot S) : Bool :=
+  !o.c || match a, b with
+    | .fill _ _, .req _ | .req _, .fill _ _ => true
+    | .fill _ _, _ | _, .fill _ _ => false
+    | _, _ => true
 
 mutual
 /-- **The compatibility decision, one half.** Structural on the left operand. -/
@@ -114,6 +123,8 @@ def Term.compat [Leaf S] (o : CompatOracle S) (side : Bool) (p : Pairing) (top s
             decide (∀ k : {k // k ∈ fs ∪ b'.fields},
               (if h : k.1 ∈ fs then ObjectSlot.compat o side p' t' s' (f ⟨k.1, h⟩) (b'.slotAt k.1)
                else Term.compatW o side p' t' s' w (b'.slotAt k.1).term) = true) &&
+            decide (∀ k : {k // k ∈ fs ∪ b'.fields}, ObjectSlot.absentAgree
+              (bif side then S.o else S.o.op) ((Body.mk fs f w).slotAt k.1) (b'.slotAt k.1) = true) &&
             Term.compatW o side p' t' s' w b'.block
         | _ => false)) p top s y
 termination_by structural x _ => x
@@ -141,11 +152,10 @@ def Term.compatW [Leaf S] (o : CompatOracle S) (side : Bool) (p : Pairing) (top 
   | none, _ => true
   | some t, y => Term.compat o side p top s t y
 termination_by structural t => t
-/-- Two slots at one name: the terms, whatever the presence. -/
+/-- Two slots at one name: the terms, whatever the presence. A fill also needs `absentAgree`. -/
 def ObjectSlot.compat [Leaf S] (o : CompatOracle S) (side : Bool) (p : Pairing) (top s : Bool) :
     ObjectSlot S → ObjectSlot S → Bool
-  | .req x, y => Term.compat o side p top s x y.term
-  | .optional x, y => Term.compat o side p top s x y.term
+  | .req x, y | .optional x, y | .fill x _, y => Term.compat o side p top s x y.term
 termination_by structural f _ => f
 end
 
@@ -390,6 +400,23 @@ theorem rcOf_wild {w : Option (Term S)} {ρ : List S.C} {c : S.C}
   | none => exact nomatch h
   | some t => exact ⟨t, rfl, (Option.some.inj h).symm⟩
 
+/-- An undeclared name acts at absence as the open block's `optional` slot. -/
+theorem absentOf_slotAt (fs : Finset String) (f : {k // k ∈ fs} → ObjectSlot S)
+    (w : Option (Term S)) (o : Orient) (ρ : List S.C) (k : String) :
+    absentOf o ((⟨fs, fun k => fieldSem α β (f k) ρ⟩ : MapOf _).at k) =
+      absentOf o (some (fieldSem α β ((Body.mk fs f w).slotAt k) ρ)) := by
+  rcases Decidable.em (k ∈ fs) with hk | hk
+  · rw [MapOf.at_of_mem (m := ⟨fs, _⟩) ⟨k, hk⟩, Body.slotAt_pos (b := .mk fs f w) hk]; rfl
+  · rw [MapOf.at_none (m := ⟨fs, _⟩) hk, Body.slotAt_neg (b := .mk fs f w) hk]; rfl
+
+/-- Two slots that `absentAgree` answer alike at absence. -/
+theorem absentAgree_sound {o : Orient} {a b : ObjectSlot S} {ρ ρ' : List S.C} {y₁ y₂ : Option S.V}
+    (h : ObjectSlot.absentAgree o a b = true)
+    (e1 : absentOf o (some (fieldSem α β a ρ)) = some y₁)
+    (e2 : absentOf o (some (fieldSem α β b ρ')) = some y₂) : y₁ = y₂ := by
+  rcases Bool.eq_false_or_eq_true o.c with hc | hc <;> cases a <;> cases b <;>
+    simp_all [ObjectSlot.absentAgree, absentOf, fieldSem, fieldSemAbs]
+
 mutual
 /-- **Soundness of the compatibility decision.** Where the decision answers `true` for one half,
     the two denotations agree on that half, over every two environments that the pairing and
@@ -548,12 +575,22 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
         cases b' with
         | mk fs' f' w' =>
         simp only [Bool.and_eq_true, decide_eq_true_eq] at hf
-        obtain ⟨hall, hw⟩ := hf
+        obtain ⟨⟨hall, hfa⟩, hw⟩ := hf
         simp only [denote, denoteAbs, bodySemAbs]
         cases Mean.map (B := S.sig) with
         | none => exact agree_empty_left _ _
         | some F =>
-          refine agree_object fun k c₁ c₂ h1 h2 => ?_
+          refine agree_object (fun k c₁ c₂ h1 h2 => ?_) (fun k y₁ y₂ e1 e2 => ?_)
+          rotate_left
+          · rw [absentOf_slotAt fs f w] at e1
+            rw [absentOf_slotAt fs' f' w'] at e2
+            rcases Decidable.em (k ∈ fs ∪ fs') with hk | hk
+            · exact absentAgree_sound (hfa ⟨k, hk⟩) e1 e2
+            · have h1 : k ∉ fs := fun h' => hk (Finset.mem_union.mpr (Or.inl h'))
+              have h2 : k ∉ fs' := fun h' => hk (Finset.mem_union.mpr (Or.inr h'))
+              rw [Body.slotAt_neg h1] at e1
+              rw [Body.slotAt_neg h2] at e2
+              cases e1; cases e2; rfl
           rcases entry_cases h1 with ⟨hk, rfl⟩ | ⟨hk, hc₁⟩ <;>
             rcases entry_cases h2 with ⟨hk', rfl⟩ | ⟨hk', hc₂⟩
           · have := hall ⟨k, Finset.mem_union.mpr (Or.inl hk)⟩
@@ -640,6 +677,8 @@ theorem cslot_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [
         AgreeHalf S side (fieldSem α β f ρ).codec (denote α β y.term ρ')
   | .req x, side, p, top, s, y, ρ, ρ', h, he => compat_sound ho x side p top s y.term ρ ρ' h he
   | .optional x, side, p, top, s, y, ρ, ρ', h, he =>
+      compat_sound ho x side p top s y.term ρ ρ' h he
+  | .fill x _, side, p, top, s, y, ρ, ρ', h, he =>
       compat_sound ho x side p top s y.term ρ ρ' h he
 termination_by structural f => f
 end

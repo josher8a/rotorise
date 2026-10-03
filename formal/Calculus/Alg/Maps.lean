@@ -232,10 +232,12 @@ A field and a rest policy each carry a codec. The presence guards and the rest c
 shape of a field and never its codec, so each one takes the carrier as a parameter, and the
 key type too. -/
 
-/-- A field, denoted: presence marker plus the attribute pair. -/
+/-- A field, denoted: presence marker plus the attribute pair. A `fill` reads an absent name as
+    the value `v`, and its write requires the name. -/
 inductive FieldSem (V M : Type) where
   | req (c : Codec V M)
   | opt (c : Codec V M)
+  | fill (c : Codec V M) (v : V)
 
 /-- A rest policy, denoted. -/
 inductive RestSem (V M : Type) where
@@ -249,11 +251,18 @@ variable {V M : Type}
 def FieldSem.codec : FieldSem V M → Codec V M
   | .req c => c
   | .opt c => c
+  | .fill c _ => c
 
-/-- **A slot at absence**: a `req` slot refuses, and every other slot, an undeclared name
-    included, stays absent. Both orientations ask the same. -/
-def absentOf : Option (FieldSem V M) → Option (Option V)
+/-- Whether a field fills an absent name on the read. -/
+def FieldSem.isFill : FieldSem V M → Bool
+  | .fill _ _ => true
+  | _ => false
+
+/-- **A slot at absence, at an orientation**: a `req` slot refuses; a `fill` refuses on the
+    write and reads `v`; every other slot, an undeclared name included, stays absent. -/
+def absentOf (o : Orient) : Option (FieldSem V M) → Option (Option V)
   | some (.req _) => none
+  | some (.fill _ v) => bif o.c then some (some v) else none
   | _ => some none
 
 /-- The rest policy's codec, where it has one. -/
@@ -265,6 +274,7 @@ def rcOf : RestSem V M → Option (Codec V M)
 def FieldSem.Rel (R : Codec V M → Codec V M → Prop) : FieldSem V M → FieldSem V M → Prop
   | .req c₁, .req c₂ => R c₁ c₂
   | .opt c₁, .opt c₂ => R c₁ c₂
+  | .fill c₁ v₁, .fill c₂ v₂ => R c₁ c₂ ∧ v₁ = v₂
   | _, _ => False
 
 /-- Two rest policies of one shape whose codecs stand in `R`. -/
@@ -280,13 +290,15 @@ theorem FieldSem.Rel.codec : ∀ {f₁ f₂ : FieldSem V M}, FieldSem.Rel R f₁
     R f₁.codec f₂.codec
   | .req _, .req _, h => h
   | .opt _, .opt _, h => h
+  | .fill _ _, .fill _ _, h => h.1
 
-/-- A slot's behavior at absence reads the shape of a field, never its codec. -/
-theorem absentOf_rel : ∀ {o₁ o₂ : Option (FieldSem V M)}, Option.Rel (FieldSem.Rel R) o₁ o₂ →
-    absentOf o₁ = absentOf o₂
+/-- Related slots act alike at absence. -/
+theorem absentOf_rel (o : Orient) : ∀ {o₁ o₂ : Option (FieldSem V M)},
+    Option.Rel (FieldSem.Rel R) o₁ o₂ → absentOf o o₁ = absentOf o o₂
   | _, _, .none => rfl
   | .some (.req _), .some (.req _), .some _ => rfl
   | .some (.opt _), .some (.opt _), .some _ => rfl
+  | .some (.fill _ _), .some (.fill _ _), .some ⟨_, hv⟩ => by simp only [absentOf, hv]
 
 /-- Related rest policies give related rest codecs. -/
 theorem RestSem.Rel.rcOf : ∀ {r₁ r₂ : RestSem V M}, RestSem.Rel R r₁ r₂ →

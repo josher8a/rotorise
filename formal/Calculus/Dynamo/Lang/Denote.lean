@@ -36,6 +36,7 @@ def Body.map (b : Body) : MapOf ObjectSlot := ⟨b.fields, b.at⟩
 def altsOfField : ObjectSlot → Option Alts
   | .req (.literal k x) => some ⟨k, x⟩
   | .optional (.literal k x) => some ⟨k, x⟩
+  | .fill (.literal k x) _ => some ⟨k, x⟩
   | _ => none
 
 /-- A body's spec: the presence and the pinned literal of each declared name, which a slice

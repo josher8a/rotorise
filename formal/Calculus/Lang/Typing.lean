@@ -343,6 +343,7 @@ def ObligationsBody : Body S → (ρ : List S.C := []) → Prop
 def ObligationsField : ObjectSlot S → (ρ : List S.C := []) → Prop
   | .req t', ρ => Obligations t' ρ
   | .optional t', ρ => Obligations t' ρ
+  | .fill t' _, ρ => Obligations t' ρ
 
 def ObligationsWild : Option (Term S) → (ρ : List S.C := []) → Prop
   | some t', ρ => Obligations t' ρ

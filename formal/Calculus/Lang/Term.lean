@@ -51,6 +51,8 @@ structure Sig where
   /-- The older readers of `legacy`. A reader is caller code, so the term carries it as data and
       the meaning reads it; no analysis looks inside it. -/
   R : Type
+  /-- The constants a `fill` reads at an absent name. -/
+  K : Type
 
 instance (B : Sig) (s : Bool) : DecidableEq (B.G s) := B.decG s
 
@@ -150,6 +152,8 @@ class Mean (B : Sig) where
   set : Option (SetF V Mem mem d)
   /-- The meaning of an older reader: an attribute to the value it reads, where it reads one. -/
   read : B.R → V → Option V
+  /-- The value of a constant. -/
+  const : B.K → V
 
 
 
@@ -397,6 +401,9 @@ inductive Body (S : Sig) where
 inductive ObjectSlot (S : Sig) where
   | req      (t : Term S)
   | optional (t : Term S)
+  /-- Required on the write; on the read, an absent name reads as the constant. Not a partial
+      bijection, so the judgement has no rule for it. -/
+  | fill     (t : Term S) (v : S.K)
 
 end
 
@@ -410,12 +417,13 @@ def Term.isNever : Term S → Bool
 /-- Whether a slot's name must be present in the input of the orientation. -/
 def ObjectSlot.isReqAt : Orient → ObjectSlot S → Bool
   | _, .optional _ => false
+  | o, .fill _ _ => !o.c
   | _, _ => true
 
 /-- A slot's presence lattice element. The bits admit presence and absence, respectively. -/
 def ObjectSlot.presence : ObjectSlot S → Bool × Bool
   | .req t => if t.isNever then (false, false) else (true, false)
-  | .optional t => if t.isNever then (false, true) else (true, true)
+  | .optional t | .fill t _ => if t.isNever then (false, true) else (true, true)
 
 
 /-! ## `Body`'s projections
@@ -492,7 +500,7 @@ def Body.use (i : Nat) : Body S → Nat
       max (fields.attach.sup fun k => ObjectSlot.use i (f k)) (Term.useO i wild)
 
 def ObjectSlot.use (i : Nat) : ObjectSlot S → Nat
-  | .req t | .optional t => Term.use i t
+  | .req t | .optional t | .fill t _ => Term.use i t
 
 def Term.useL (i : Nat) : List (Term S) → Nat
   | [] => 0
@@ -523,7 +531,7 @@ def Body.guarded : Body S → Bool
       decide (∀ k : {k // k ∈ fields}, ObjectSlot.guarded (f k) = true) && Term.guardedO wild
 
 def ObjectSlot.guarded : ObjectSlot S → Bool
-  | .req t | .optional t => Term.guarded t
+  | .req t | .optional t | .fill t _ => Term.guarded t
 
 def Term.guardedL : List (Term S) → Bool
   | [] => true
@@ -553,7 +561,7 @@ def Body.hasVar : Body S → Bool
   | .mk fs f w => decide (∃ k : {k // k ∈ fs}, ObjectSlot.hasVar (f k) = true) || Term.hasVarO w
 /-- …in a slot's term. -/
 def ObjectSlot.hasVar : ObjectSlot S → Bool
-  | .req t | .optional t => Term.hasVar t
+  | .req t | .optional t | .fill t _ => Term.hasVar t
 /-- …in a list of terms. -/
 def Term.hasVarL : List (Term S) → Bool
   | [] => false
@@ -593,6 +601,7 @@ def hasHeldB : Body S → Bool
 def hasHeldS : ObjectSlot S → Bool
   | .req t => hasHeld t
   | .optional t => hasHeld t
+  | .fill _ _ => true
 end
 
 /-! ## A structural measure on terms
@@ -632,7 +641,7 @@ def Body.depth : Body S → Nat
       max (fields.attach.sup fun k => ObjectSlot.depth (f k)) (Body.wildDepth wild) + 1
 
 def ObjectSlot.depth : ObjectSlot S → Nat
-  | .req t | .optional t => Term.depth t + 1
+  | .req t | .optional t | .fill t _ => Term.depth t + 1
 
 def Body.wildDepth : Option (Term S) → Nat
   | none => 1
@@ -776,6 +785,7 @@ noncomputable def fieldSemAbs : ObjectSlot B → (ρ : List (Mean.C B) := []) �
     FieldSem (Mean.V (B := B)) (Mean.Mem (B := B))
   | .req t, ρ => .req (denoteAbs t ρ)
   | .optional t, ρ => .opt (denoteAbs t ρ)
+  | .fill t v, ρ => .fill (denoteAbs t ρ) (Mean.const v)
 
 /-- The open block's semantics. **A body with no open block refuses.** -/
 noncomputable def wildSemAbs : Option (Term B) → (ρ : List (Mean.C B) := []) →
@@ -854,6 +864,7 @@ theorem fieldSemAbs_closed : ∀ (s : ObjectSlot B), s.hasVar = false →
     ∀ ρ ρ' : List (Mean.C B), fieldSemAbs τ s ρ = fieldSemAbs τ s ρ'
   | .req t, h, ρ, ρ' => by simp only [fieldSemAbs]; rw [denoteAbs_closed t h ρ ρ']
   | .optional t, h, ρ, ρ' => by simp only [fieldSemAbs]; rw [denoteAbs_closed t h ρ ρ']
+  | .fill t _, h, ρ, ρ' => by simp only [fieldSemAbs]; rw [denoteAbs_closed t h ρ ρ']
 
 /-- …at an open block. -/
 theorem wildSemAbs_closed : ∀ (w : Option (Term B)), Term.hasVarO w = false →

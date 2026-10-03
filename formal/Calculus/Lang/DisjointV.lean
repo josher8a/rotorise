@@ -662,7 +662,7 @@ theorem famObjD_sound [Shapes S] {ρ ρ' : List S.C} {a : Body S}
         refine AdmBody_apart_at (k := k) (by rw [hbs]; simp [ObjectSlot.isReqAt]) (fun w => ?_) v
         rw [hbs, Body.slotAt_neg ha]
         exact hmw y hd w
-      · exact nomatch hd
+      all_goals exact nomatch hd
   | _ => simp [famObjD] at h
 
 mutual
@@ -774,7 +774,13 @@ theorem slot_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S] [T
       ⟨rfl, fun w => disjoint_sound p x y h ρ ρ' hp w⟩
   | p, .optional x, .req y, h, ρ, ρ', hp =>
       ⟨by simp [ObjectSlot.isReqAt], fun w => disjoint_sound p x y h ρ ρ' hp w⟩
-  | _, .optional _, .optional _, h, _, _, _ => by simp [ObjectSlot.disjoint] at h
+  | p, .req x, .fill y _, h, ρ, ρ', hp =>
+      ⟨rfl, fun w => disjoint_sound p x y h ρ ρ' hp w⟩
+  | p, .fill x _, .req y, h, ρ, ρ', hp =>
+      ⟨by simp [ObjectSlot.isReqAt], fun w => disjoint_sound p x y h ρ ρ' hp w⟩
+  | _, .optional _, .optional _, h, _, _, _ | _, .optional _, .fill _ _, h, _, _, _
+  | _, .fill _ _, .optional _, h, _, _, _ | _, .fill _ _, .fill _ _, h, _, _, _ => by
+      simp [ObjectSlot.disjoint] at h
 termination_by structural _ s => s
 end
 

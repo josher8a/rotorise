@@ -223,7 +223,7 @@ def slotD (a b : Body S) (g : {k // k ∈ a.fields} → ObjectSlot S → Bool)
   else
     match b.at ⟨k.1, (Finset.mem_union.mp k.2).resolve_left h⟩ with
     | .req y => mw y
-    | .optional _ => false
+    | .optional _ | .fill _ _ => false
 
 /-- **Two objects are disjoint at one name.** A body is a total function from the key space to a
     slot, so two bodies share no map where one name of either body holds two disjoint slots.
@@ -277,12 +277,14 @@ termination_by structural xs _ => xs
 def Term.disjointTs [Leaf S] (p : Pairing) : List (Term S) → List (Term S → Bool)
   | [] => [] | t :: ts => Term.disjoint p t :: Term.disjointTs p ts
 termination_by structural ts => ts
-/-- Two slots are disjoint where one requires the name and the terms are disjoint. -/
+/-- Two slots are disjoint where one requires the name and the terms are disjoint. A fill
+    requires the name on the write only, so it is read as `optional`; the side views state it
+    exactly. -/
 def ObjectSlot.disjoint [Leaf S] (p : Pairing) : ObjectSlot S → ObjectSlot S → Bool
   | .req x, .req y => Term.disjoint p x y
-  | .req x, .optional y => Term.disjoint p x y
-  | .optional x, .req y => Term.disjoint p x y
-  | .optional _, .optional _ => false
+  | .req x, .optional y | .req x, .fill y _ => Term.disjoint p x y
+  | .optional x, .req y | .fill x _, .req y => Term.disjoint p x y
+  | _, _ => false
 termination_by structural f _ => f
 end
 
