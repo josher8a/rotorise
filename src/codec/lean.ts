@@ -845,26 +845,19 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
 /**
  * An `ObjectSlot` — §4's stratum, which is a *position* in a map and not a codec.
  *
- * **`Field` is gone and the slot has two constructors.** A name is required or it is optional, and
- * the presence lattice reads the rest. This emitted `Field.req` and `Field.optional` against a
- * model that stopped having them.
+ * **The slot has three constructors.** A name is required, optional, or filled: a fill is required
+ * on the write and reads an absent name as its stand-in. The presence lattice reads the rest.
  */
 const leanSlotOf = (field: TermField, at: string, scope: At): string => {
     switch (field.mark) {
         case 'optional':
             return `ObjectSlot.optional (${leanTermOfTerm(field.t, at, scope)})`
         /**
-         * **A field's alternate reader has no slot in the model yet.**
-         *
-         * The model states an older reader at a term, `Term.legacy`, whose codec is
-         * `Codec.extendRead`. An `ObjectSlot` has no older reader, so a `Body` has no alternate-reader
-         * row to put this in, and nothing here can name it.
+         * `ObjectSlot.fill`: the stand-in is data, so it prints as a `Value`. An older reader of a
+         * present value stays in the term, as `Term.legacy`.
          */
         case 'fallback':
-            return refuse(
-                at,
-                '`withLegacyRead` on a field has no `ObjectSlot`: the model carries an older reader at a term (`Term.legacy`) and at no slot, so a body has no alternate-reader slot to print',
-            )
+            return `ObjectSlot.fill (${leanTermOfTerm(field.t, at, scope)}) (${leanValueOf(field.v, at)})`
         case 'req':
             return `ObjectSlot.req (${leanTermOfTerm(field.t, at, scope)})`
         /**

@@ -320,18 +320,11 @@ describe('terms', () => {
     })
 
     /**
-     * **A field's stand-in value has no slot, and the model put that stratum elsewhere.**
-     *
-     * This emitted `Field.fallback (t) (v)` against a `Field` with three constructors. An
-     * `ObjectSlot` has two, and the model states an older reader at a term (`Term.legacy`) and at
-     * no slot.
-     *
-     * So this is not a slot the model declined to add. It is a stratum the model moved, and a
-     * `Body` has nowhere to print it. The refusal is the honest answer until the emitter states a
-     * `Codec.extendRead` rather than a `Term` for such a codec.
+     * **A field's stand-in is a fill slot.** The stand-in is data, so it prints as a `Value`, and an
+     * older reader of a present value stays in the term.
      */
-    it('refuses a missing-value field, which is a stratum outside the term', () => {
-        const why = refusal(() =>
+    it('emits a missing-value field as a fill slot that carries its stand-in', () => {
+        expect(
             leanTermOf(
                 erase(
                     object({
@@ -342,9 +335,7 @@ describe('terms', () => {
                     }),
                 ),
             ),
-        ).reason
-        expect(why).toContain('Term.legacy')
-        expect(why).toContain('no alternate-reader slot')
+        ).toContain('ObjectSlot.fill (Term.string) (Value.str "d")')
     })
 
     it('emits an open object as the one open block', () => {
@@ -1131,8 +1122,7 @@ const refusalCodecs: readonly (readonly [string, AnyCodec])[] = [
     ['scalar_number', erase(dynamoNumber)] as const,
     ['never', erase(never)] as const,
     // a refusal vector states the term and no value, so a codec whose *term* the model cannot
-    // spell states nothing here either. `object_fallback_present` is the one, and it is named by
-    // the read-side test rather than dropped in silence
+    // spell states nothing here either. The read-side test pins that the corpus holds none
 ].filter(([cn, codec]) => statesTerm(codec, cn))
 
 export const allRefusals = (): readonly Refusal[] => {
@@ -1151,8 +1141,7 @@ export const allRefusals = (): readonly Refusal[] => {
 }
 
 /** Whether the emitter can state this codec's term at all, which is a different axis from its
- * value. `object_fallback_present` is the one corpus entry that fails it: the model states an older
- * reader at a term and at no slot, so a `Body` has no slot to print a field's. */
+ * value. The read-side test pins that every corpus entry passes it. */
 const emittable = (one: Vector): boolean => statesTerm(one.codec, one.name)
 
 /**
@@ -1253,6 +1242,30 @@ const numberOverNever = erase(
         decode: () => new CodecError('nothing is stored'),
     }),
 )
+/**
+ * A field that reads an absent name as a stand-in. The corpus pairs it with the two verdicts the
+ * host pins (a closed object that requires another name; an `optional` and a `req` field at the
+ * same name) and with each row of the stand-in test: beside `req`, beside `optional`, and beside a
+ * closed body.
+ */
+const standIn = erase(
+    object({ a: withLegacyRead({ current: string, whenMissing: 'stand-in' }) }),
+)
+const fallbackPairs = <P>(
+    sep: string,
+    make: (name: string, left: AnyCodec, right: AnyCodec) => P,
+): P[] => [
+    make(`stand_in${sep}priced`, standIn, erase(object({ b: decimal }))),
+    make(
+        `stand_in${sep}optional_boolean`,
+        standIn,
+        erase(object({ a: optional(boolean) })),
+    ),
+    make(`stand_in${sep}req_boolean`, standIn, erase(object({ a: boolean }))),
+    make(`stand_in${sep}req_string`, standIn, erase(object({ a: string }))),
+    make(`stand_in${sep}empty_object`, standIn, erase(object({}))),
+]
+
 const legacyPairs = <P>(
     sep: string,
     make: (name: string, left: AnyCodec, right: AnyCodec) => P,
@@ -1396,6 +1409,11 @@ const separationPairs = (): readonly Separation[] => {
             left,
             right,
         })),
+        ...fallbackPairs('__vs__', (name, left, right) => ({
+            name,
+            left,
+            right,
+        })),
     )
     return out
 }
@@ -1472,6 +1490,18 @@ const disjointPairs = (): readonly DisjointPair[] => {
             left,
             right,
         })),
+        ...fallbackPairs('__disjoint__', (name, left, right) => ({
+            name,
+            left,
+            right,
+        })),
+        // two stand-ins at one name: compatibility refuses the pair, because the model has no
+        // equality of constants, so the pair is put to disjointness only
+        {
+            name: 'stand_in__disjoint__stand_in',
+            left: standIn,
+            right: standIn,
+        },
     )
     return out
 }
@@ -1707,11 +1737,9 @@ describe("the read side, against the model's read row", () => {
      * a concrete numeral by `rfl`, so the filter excluded pairs the row answers. The filter is
      * deleted, and the three are theorems in `.readverdicts.lean` like every other pair.
      */
-    it('offers 1927 pairs, and asserts every one', () => {
+    it('offers 1974 pairs, and asserts every one', () => {
         const verdicts = readVerdicts()
-        // 1634 until `object_fallback_present` left the emittable corpus: the model states an older
-        // reader at a term and at no slot, so a `Body` has no slot to print a field's
-        expect(verdicts.length).toBe(1927)
+        expect(verdicts.length).toBe(1974)
         const module = leanReadModule(verdicts)
         for (const name of [
             'scalar_number__reads__scalar_decimal',
@@ -1731,7 +1759,7 @@ describe("the read side, against the model's read row", () => {
         }
         const module = leanReadModule(readVerdicts())
         expect(module).toContain('import Calculus.Dynamo.Lang.Store')
-        expect(module).toContain('All 1927 pairs are asserted here.')
+        expect(module).toContain('All 1974 pairs are asserted here.')
     })
 })
 
@@ -1754,7 +1782,7 @@ describe("the declaration guard, against the model's classifier", () => {
             /= false := (by decide|rfl)$/.test(one),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([852, 29])
+        expect([accepted.length, refused.length]).toEqual([893, 35])
     })
 
     /**
@@ -1775,7 +1803,7 @@ describe("the declaration guard, against the model's classifier", () => {
         const refused = emitted.filter((one) =>
             one.endsWith('= false := by decide'),
         )
-        expect([byDecision.length, refused.length]).toEqual([158, 3])
+        expect([byDecision.length, refused.length]).toEqual([162, 3])
         expect(byDecision.length + refused.length).toBe(recursive.length)
         const verdict = (left: AnyCodec, right: AnyCodec) =>
             leanSeparation({ name: 'probe', left, right })
@@ -1819,7 +1847,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it("puts every corpus pair to the model's disjointness test", () => {
         const pairs = disjointPairs()
-        expect(pairs.length).toBe(872)
+        expect(pairs.length).toBe(920)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.disjoints.lean'),
@@ -1909,26 +1937,23 @@ describe('the full refusal set, for the gate', () => {
  */
 describe("the read side of every corpus codec, against the model's `p`", () => {
     /**
-     * **One is skipped, and it is the term rather than the value.**
+     * **None is skipped.**
      *
-     * No *value* is unspellable any more. `Value.num` carried a `Double`, an axiom with no closed
-     * terms; it carries a `WFNumeral` now, so a numeral is a closed term and a numeric value on
-     * the read side states like any other.
-     *
-     * What is skipped is `object_fallback_present`, whose **term** the emitter refuses: the model
-     * states an older reader at a term and at no slot, so a `Body` has no slot to print a field's. It is named here rather than filtered in silence, because a second exclusion
+     * No *value* is unspellable. `Value.num` carries a `WFNumeral`, so a numeral is a closed term
+     * and a numeric value on the read side states like any other. No *term* is unspellable either:
+     * a field's stand-in prints as a fill slot. The empty list is pinned, because a first exclusion
      * arriving is the thing worth failing on.
      */
     it('states a read vector for every codec whose term the model can spell', () => {
         expect(
             sampleVectors.filter((one) => !emittable(one)).map((o) => o.name),
-        ).toEqual(['object_fallback_present'])
+        ).toEqual([])
         const statable = sampleVectors.filter(
             (one) =>
                 readVectorIsUnstatable(one) === undefined && emittable(one),
         )
-        expect(statable.length).toBe(sampleVectors.length - 1)
-        expect(statable.length).toBe(40)
+        expect(statable.length).toBe(sampleVectors.length)
+        expect(statable.length).toBe(41)
         // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
         for (const one of statable) {
             const vector = leanReadVector(one)
@@ -1990,8 +2015,7 @@ describe('the committed sample', () => {
         ] as const) {
             const at = join(process.cwd(), 'formal', file)
             const emitted = leanVectorModule(
-                // `object_fallback_present` is excluded and named by the test above: its term has
-                // no `ObjectSlot`, so the sample states the codecs the model can spell
+                // the test above pins that every codec here is emittable
                 sampleVectors.filter(
                     (one) =>
                         emittable(one) &&

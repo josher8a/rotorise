@@ -198,6 +198,13 @@ theorem object_optional_absent :
     = some (Attr.m {"a"} (fun k => Attr.s "x")) := by
   vector
 
+/-- `object_fallback_present` -/
+theorem object_fallback_present :
+    (denote (libTable noCallers) (Term.object (Body.mk {"a"} (fun k => ObjectSlot.fill (Term.string) (Value.str "stand-in")) none))).e
+      (Value.map {"a"} (fun k => Value.str "x"))
+    = some (Attr.m {"a"} (fun k => Attr.s "x")) := by
+  vector
+
 /-- `object_open` -/
 theorem object_open :
     (denote (libTable noCallers) (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) (some (Term.boolean))))).e
@@ -327,8 +334,8 @@ theorem recursive_tree_optional__guarded :
 
 /-! ## Refusals — neither side writes anything for these
 
-41 of 1564 shown; `scripts/gate.sh` elaborates all
-1564. One `rfl` each, no comparator and no fuel: the answer is `none`,
+42 of 1602 shown; `scripts/gate.sh` elaborates all
+1602. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -435,6 +442,11 @@ theorem object_two_fields__refuses__scalar_string :
 /-- `object_optional_absent__refuses__scalar_string` — refused on both sides -/
 theorem object_optional_absent__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.boolean)) none))).e
+      (Value.str "hello") = none := rfl
+
+/-- `object_fallback_present__refuses__scalar_string` — refused on both sides -/
+theorem object_fallback_present__refuses__scalar_string :
+    (denote (libTable noCallers) (Term.object (Body.mk {"a"} (fun k => ObjectSlot.fill (Term.string) (Value.str "stand-in")) none))).e
       (Value.str "hello") = none := rfl
 
 /-- `object_open__refuses__scalar_string` — refused on both sides -/
