@@ -207,9 +207,14 @@ theorem decides_object :
     Decides α (.object (.mk {"k"} (fun _ => .req .string) none)) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)), ?_, rfl, ?_⟩
-  · simp +contextual [denote_rows, objectCodec, prism_rows, orient_rows, valPresentB, valPresentAt, rcOf, Alg.FieldSem.codec, carriedCodec, mA, entryCodec, MapOf.at, funImage, Subtype.forall]
-    rfl
-  · simp [denote_rows, objectCodec, Alg.objectCodec, Alg.objectCodecCore, valPresentB, valPresentAt, rcOf, carriedCodec, mA, objAt, Subtype.forall, prism_rows, orient_rows]
+  · simp +contextual [denote_rows, objectCodec, prism_rows, orient_rows, Alg.objAt_isSome, absentOf, rcOf, Alg.FieldSem.codec, carriedCodec, mA, entryCodec, MapOf.at]
+  · -- the required name is absent: its slot refuses
+    rw [Bool.eq_false_iff]
+    intro h
+    simp only [denote_rows, objectCodec, prism_rows, orient_rows, carriedCodec, mA,
+      Option.isSome_map, Option.bind_some, Alg.objAt_isSome] at h
+    have := h.1 "k" (by decide) (Finset.notMem_empty _)
+    simp [absentOf, MapOf.at] at this
 
 
 /-! ### …and the two errors are the same combinator

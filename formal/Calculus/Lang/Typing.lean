@@ -180,8 +180,8 @@ theorem TypedField.not_optional {fd : ObjectSlot S} {T π μ} (h : TypedField α
     `not_optional` is what a *consumer* of the judgement wants — it has `π = true` and needs
     the shape. Producing `π = true` from the shape is the converse, and `typed_T_eq`'s
     `object` case is where it is needed: there the map's key set is known to contain every
-    required name and the guard `valPresentB` is stated by shape, so the two have to be
-    exchanged in this direction. Both rows are `rfl`. -/
+    required name and a slot's behavior at absence (`absentOf`) is stated by shape, so the two
+    have to be exchanged in this direction. Both rows are `rfl`. -/
 theorem TypedField.true_of_not_optional {fd : ObjectSlot S} {T π μ} (h : TypedField α β fd T π μ)
     (hno : ∀ t', fd ≠ .optional t') : π = true := by
   cases h with

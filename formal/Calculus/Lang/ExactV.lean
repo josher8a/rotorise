@@ -42,8 +42,7 @@ class PrimAdm (S : Syn) [Sem S] where
 
 variable {S : Syn}
 
-/-- The guard of `valPresentB` and of `valPresentB`, read off the *term*'s field table: only
-    `optional` may be absent. -/
+/-- The presence row, read off the *term*'s field table: only `optional` may be absent. -/
 def valPresentT {S : Sig} (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
     (keys : Finset String) : Bool :=
   decide (∀ k : {k // k ∈ fields},
@@ -275,16 +274,29 @@ def ExactField (fd : ObjectSlot S) (ρ : List S.C) : Prop :=
   ∀ v, AdmField α β fd ρ v = true ↔ (((fieldSem α β fd ρ).codec).f S.o v).isSome
 
 omit [PrimAdm S] in
-theorem valPresentT_eq (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
+/-- The term's presence row says what the slots say at absence: an absent declared name is
+    one whose slot lets absence be. -/
+theorem valPresentT_iff (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
     (keys : Finset String) :
-    valPresentT fields fld keys = valPresentB ⟨fields, fun k => fieldSem α β (fld k) ρ⟩ keys := by
-  simp only [valPresentT, valPresentB]
-  congr 1
-  apply propext
-  constructor <;> intro h k <;> have := h k <;>
-    (cases hfd : fld k with
-      | req t => simp_all [valPresentAt, fieldSem, fieldSemAbs]
-      | optional t => simp_all [valPresentAt, fieldSem, fieldSemAbs])
+    valPresentT fields fld keys = true ↔ ∀ k ∈ fields, k ∉ keys →
+      (absentOf ((⟨fields, fun k => fieldSem α β (fld k) ρ⟩ : MapOf _).at k)).isSome := by
+  simp only [valPresentT, decide_eq_true_eq]
+  constructor
+  · intro h k hk hkk
+    have := h ⟨k, hk⟩
+    rw [MapOf.at_of_mem (m := ⟨fields, _⟩) ⟨k, hk⟩]
+    match hfd : fld ⟨k, hk⟩ with
+    | .req t => rw [hfd] at this; exact absurd (of_decide_eq_true this) hkk
+    | .optional t => simp only [hfd, fieldSem, fieldSemAbs, absentOf, Option.isSome_some]
+  · intro h k
+    match hfd : fld k with
+    | .optional t => rfl
+    | .req t =>
+      refine decide_eq_true (Decidable.byContradiction fun hn => ?_)
+      have := h k.1 k.2 hn
+      rw [MapOf.at_of_mem (m := ⟨fields, _⟩) k] at this
+      simp only [hfd, fieldSem, fieldSemAbs, absentOf, Option.isSome_none,
+        Bool.false_eq_true] at this
 
 theorem entry_iff {fields : Finset String} {fld : {k // k ∈ fields} → ObjectSlot S}
     {wild : Option (Term S)}
@@ -316,15 +328,10 @@ theorem ExactV_object {fields : Finset String} {fld : {k // k ∈ fields} → Ob
     rw [objectCodec_f]
     rcases hv : F.p.out v with _ | m
     · simp [hv]
-    · simp only [hv, Option.bind_some, Option.isSome_map]
-      rw [valPresentT_eq (α := α) (β := β) (ρ := ρ)]
+    · simp only [hv, Option.bind_some, Option.isSome_map, objAt_isSome]
       simp only [objAdmV, Bool.and_eq_true, decide_eq_true_eq]
-      by_cases hv : valPresentB ⟨fields, fun k => fieldSem α β (fld k) ρ⟩ m.keys = true
-      · rw [if_pos hv]
-        simp only [hv, true_and, Option.isSome_map, funImage_isSome_iff]
-        exact forall_congr' fun k => entry_iff hf hr k.1 (m.get k)
-      · rw [if_neg hv]
-        simp [hv]
+      exact and_congr (valPresentT_iff (α := α) (β := β) (ρ := ρ) fields fld m.keys)
+        (forall_congr' fun k => entry_iff hf hr k.1 (m.get k))
 
 /-- **`union` writes exactly what its row says**: the options are exact, and a union writes
     where one of them writes. -/

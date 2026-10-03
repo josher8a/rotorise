@@ -302,21 +302,23 @@ theorem typed_TSub : ∀ {t : Term S} {T μ}, Typed α β t T μ → ∀ v, (den
       simp only [denote, denoteAbs, bodySemAbs, hF] at hv
       -- No case split on `v`: the object's `T` is `carriedCodec`'s, so it *hands over*
       -- the payload, a key set and a function on it, which is exactly `HObject`'s witness.
-      obtain ⟨⟨keys, kvs⟩, hvp, hval, hall⟩ := hv
+      obtain ⟨⟨keys, kvs⟩, hvp, hslot⟩ := hv
       refine ⟨keys, kvs, hvp, ?_, ?_⟩
-      · -- every required binding's name is present, because its field is not `opt`
+      · -- every required binding's name is present: its slot refuses absence
         intro k hreq
+        refine Decidable.byContradiction fun hk => ?_
         have hty := hfields k
-        have hno : ∀ c, fieldSem α β (ff k) ≠ FieldSem.opt c := by
-          intro c hc
-          obtain ⟨t', -, hshape⟩ := TypedField.term (α := α) (β := β) hty
-          rcases hshape with heq | heq
-          · rw [heq] at hc; exact nomatch hc
-          · exact TypedField.not_optional hty hreq t' heq
-        exact valPresentB_spec hval (MapOf.at_of_mem (m := ⟨fields, _⟩) k) hno
+        have hs := hslot k.1
+        simp only [MapOf.at_none (m := ⟨keys, kvs⟩) hk, slotT,
+          MapOf.at_of_mem (m := ⟨fields, fun k => fieldSem α β (ff k)⟩) k] at hs
+        obtain ⟨t', -, hshape⟩ := TypedField.term (α := α) (β := β) hty
+        rcases hshape with heq | heq
+        · rw [heq] at hs; exact nomatch hs
+        · exact TypedField.not_optional hty hreq t' heq
       · -- and every present name holds what its binding, or the open part, says
         intro k
-        have hentry := hall k
+        have hentry := hslot k.1
+        simp only [slotT, MapOf.at_of_mem (m := ⟨keys, kvs⟩) k] at hentry
         by_cases hk : k.1 ∈ fields
         · -- declared: the entry holds its field's set, and the binding is at the same key
           rw [dif_pos hk]
