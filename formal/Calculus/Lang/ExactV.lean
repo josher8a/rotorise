@@ -42,11 +42,11 @@ class PrimAdm (S : Syn) [Sem S] where
 
 variable {S : Syn}
 
-/-- The presence row, read off the *term*'s field table: only `optional` may be absent. -/
-def valPresentT {S : Sig} (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
-    (keys : Finset String) : Bool :=
-  decide (∀ k : {k // k ∈ fields},
-    (match fld k with | .optional _ => true | _ => decide (k.1 ∈ keys)) = true)
+/-- The presence row at an orientation, read off the *term*'s field table: a declared name that
+    must be present in the input is. -/
+def valPresentT {S : Sig} (o : Orient) (fields : Finset String)
+    (fld : {k // k ∈ fields} → ObjectSlot S) (keys : Finset String) : Bool :=
+  decide (∀ k : {k // k ∈ fields}, (fld k).isReqAt o = true → k.1 ∈ keys)
 
 /-- A traversal succeeds at a cons exactly when the head and the tail do. -/
 theorem traverse_cons_isSome {α β : Type} (f : α → Option β) (x : α) (xs : List α) :
@@ -127,7 +127,7 @@ def AdmBody : Body S → List S.C → S.V → Bool
       | some F =>
           match F.p.out v with
           | some m =>
-              valPresentT fields fld m.keys &&
+              valPresentT S.o fields fld m.keys &&
               objAdmV ⟨fields, fun k => AdmField (fld k) ρ⟩ (AdmWild wild ρ) m.keys m.get
           | none => false
       | none => false
@@ -278,23 +278,22 @@ omit [PrimAdm S] in
     one whose slot lets absence be. -/
 theorem valPresentT_iff (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
     (keys : Finset String) :
-    valPresentT fields fld keys = true ↔ ∀ k ∈ fields, k ∉ keys →
+    valPresentT S.o fields fld keys = true ↔ ∀ k ∈ fields, k ∉ keys →
       (absentOf ((⟨fields, fun k => fieldSem α β (fld k) ρ⟩ : MapOf _).at k)).isSome := by
   simp only [valPresentT, decide_eq_true_eq]
   constructor
   · intro h k hk hkk
-    have := h ⟨k, hk⟩
     rw [MapOf.at_of_mem (m := ⟨fields, _⟩) ⟨k, hk⟩]
     match hfd : fld ⟨k, hk⟩ with
-    | .req t => rw [hfd] at this; exact absurd (of_decide_eq_true this) hkk
+    | .req t => exact absurd (h ⟨k, hk⟩ (by rw [hfd]; rfl)) hkk
     | .optional t => simp only [hfd, fieldSem, fieldSemAbs, absentOf, Option.isSome_some]
-  · intro h k
+  · intro h k hr
+    refine Decidable.byContradiction fun hn => ?_
+    have := h k.1 k.2 hn
+    rw [MapOf.at_of_mem (m := ⟨fields, _⟩) k] at this
     match hfd : fld k with
-    | .optional t => rfl
+    | .optional t => rw [hfd] at hr; exact nomatch hr
     | .req t =>
-      refine decide_eq_true (Decidable.byContradiction fun hn => ?_)
-      have := h k.1 k.2 hn
-      rw [MapOf.at_of_mem (m := ⟨fields, _⟩) k] at this
       simp only [hfd, fieldSem, fieldSemAbs, absentOf, Option.isSome_none,
         Bool.false_eq_true] at this
 

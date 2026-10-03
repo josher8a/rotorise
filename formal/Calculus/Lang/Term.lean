@@ -407,15 +407,14 @@ def Term.isNever : Term S → Bool
   | .never => true
   | _ => false
 
-/-- Whether a slot's name must be present on the write side. -/
-def ObjectSlot.isReq : ObjectSlot S → Bool
-  | .optional _ => false
-  | _ => true
+/-- Whether a slot's name must be present in the input of the orientation. -/
+def ObjectSlot.isReqAt : Orient → ObjectSlot S → Bool
+  | _, .optional _ => false
+  | _, _ => true
 
 /-- A slot's presence lattice element. The bits admit presence and absence, respectively. -/
-def ObjectSlot.presence (f : ObjectSlot S) : Bool × Bool :=
-  match f with
-  | .req t => if t.isNever then (false, false) else (f.isReq, !f.isReq)
+def ObjectSlot.presence : ObjectSlot S → Bool × Bool
+  | .req t => if t.isNever then (false, false) else (true, false)
   | .optional t => if t.isNever then (false, true) else (true, true)
 
 

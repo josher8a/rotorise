@@ -66,8 +66,8 @@ theorem Adm_opaqUnfold (v : Value) : Adm α opaqUnfold v = Adm α .opaq v := by
   | m keys g =>
       -- the record's guard is vacuous over `∅`; a `simp` that unfolds the guard reaches
       -- `Finset.instIsEmpty`, so the guard stays folded and the fact is handed in
-      have hp : valPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
-        decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
+      have hp : valPresentT (S := dynSyn) .host ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
+        decide_eq_true (fun k _ => absurd k.2 (Finset.notMem_empty k.1))
       simp [opaqUnfold, AdmAny_cons, Adm_rows, Term.array, Term.record, inBase, objAdmV, entryP, MapOf.at, setCodec, orient_rows]
       exact hp
 
@@ -93,8 +93,8 @@ theorem AdmA_opaqUnfold (a : Attr) : AdmA α opaqUnfold a = AdmA α .opaq a := b
       simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, alignPL_spread, setCodec, orient_rows]
   | m keys g =>
       -- the record's guard stays folded, for the reason `Adm_opaqUnfold` gives
-      have hp : valPresentT (S := dynSyn) ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
-        decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
+      have hp : valPresentT (S := dynSyn) .dual ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) keys = true :=
+        decide_eq_true (fun k _ => absurd k.2 (Finset.notMem_empty k.1))
       simp [opaqUnfold, AdmAAny, anyP, AdmA_rows, inBase, Term.array, Term.record, objAdmV, entryP, MapOf.at, setCodec, orient_rows]
       exact hp
 

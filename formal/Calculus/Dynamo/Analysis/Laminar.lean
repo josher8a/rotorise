@@ -13,7 +13,7 @@ the union row needs no side condition.
 
 namespace Calculus
 
-open Alg (ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Term.depth)
+open Alg (ObjectSlot.isReqAt Body.fields_mk Body.wild_mk Body.at_mk Term.depth)
 
 /-! ## The held set is the admission -/
 
@@ -88,7 +88,7 @@ theorem htupleL_iff {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre)
 /-- A typed slot's mark is the slot's, and its held set is its admission. -/
 theorem typedField_adm {s : ObjectSlot} {T b μ} (h : TypedField α s T b μ)
     (ihr : ∀ t', s = .req t' → AdmIff α t') (iho : ∀ t', s = .optional t' → AdmIff α t') :
-    b = s.isReq ∧ ∀ v, T v ↔ AdmField α s v = true := by
+    b = s.isReqAt .host ∧ ∀ v, T v ↔ AdmField α s v = true := by
   cases h with
   | req hty => exact ⟨rfl, fun v => ihr _ rfl _ _ hty v⟩
   | optional hty => exact ⟨rfl, fun v => iho _ rfl _ _ hty v⟩
@@ -104,9 +104,9 @@ theorem hobject_iff {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectS
   have hF := fun k => typedField_adm (hfields k) (ihr k) (iho k)
   cases v with
   | m keys f =>
-    simp only [Adm_rows, Bool.and_eq_true, valPresentT_req, objAdmV, decide_eq_true_eq]
+    simp only [Adm_rows, Bool.and_eq_true, valPresentT, objAdmV, decide_eq_true_eq]
     have hpres : (∀ k : {k // k ∈ fields}, (bind k).1 = true → k.1 ∈ keys) ↔
-        (∀ k : {k // k ∈ fields}, ObjectSlot.isReq (ff k) = true → k.1 ∈ keys) :=
+        (∀ k : {k // k ∈ fields}, ObjectSlot.isReqAt .host (ff k) = true → k.1 ∈ keys) :=
       forall_congr' fun k => by rw [(hF k).1]
     have hent : ∀ k : {k // k ∈ keys},
         (if h : k.1 ∈ fields then (bind ⟨k.1, h⟩).2 (f k) else ∃ T, R = some T ∧ T (f k)) ↔
