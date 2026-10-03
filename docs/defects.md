@@ -111,6 +111,26 @@ The scalar half has no pin, and closing it means putting a scalar `dynamoNumber`
 
 ---
 
+## Known: the model refuses two stand-ins at one name where the host accepts two equal ones
+
+**Observation.** The host's stand-in test accepts two fields that read a map without the name to
+values that `Object.is` equates. The model decides the same test with `ObjectSlot.absentAgree`, and
+the constants of a fill (`Sig.K`) have no decidable equality, because neither `Value` nor `Json`
+derives one. So the model refuses two fills at one name whatever their constants.
+
+**Effect.** A union of two objects that declare one stand-in at the same name is accepted by the
+host and refused by `compatPair`. The model is coarser, so no verdict that the model gives is
+wrong; the bridge cannot check the host's acceptance of such a union.
+
+**Pin.** The corpus in `src/codec/lean/lean.spec.ts` puts the pair to disjointness only. To
+reproduce, add the pair of two stand-in objects to fallbackPairs(), emit with
+`EMIT_LEAN_REFUSALS=1`, and elaborate `formal/.separations.lean`: `decide` proves the
+`compatPair` of the pair `false`.
+
+**Open.** A decidable equality on the constants, or a constant syntax that has one, closes it.
+
+---
+
 ## Known: the iso premise of the wrapper rule is stronger than the proof consumes
 
 **Observation.** The specification's wrapper rule demands total cancellation on the two carriers:
