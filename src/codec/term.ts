@@ -994,89 +994,77 @@ export const force = (
 }
 
 /**
- * **Whether a thunk on the spine of a term is recursive, or throws when forced.** The spine is
- * what {@link occV} and {@link occA} force: a thunk, the options of a union, both sides of a
- * `held`, and the inner term of a `refine` or a `legacy`. A union asks this of each option before
- * any occupancy runs, so a recursive spine is refused and does not loop.
- */
-export const unreadableSpine = (
-    t: Term,
-    seen: Set<Term> = new Set(),
-): boolean => {
-    const on = (one: Term) => unreadableSpine(one, seen)
-    switch (t.kind) {
-        case 'lazy': {
-            if (seen.has(t)) return true
-            seen.add(t)
-            const forced = force(t)
-            return forced === undefined || on(forced)
-        }
-        case 'held':
-            return on(t.inner) || on(t.outer)
-        case 'legacy':
-        case 'refine':
-            return on(t.inner)
-        case 'union':
-            return t.options.some(on)
-        default:
-            return false
-    }
-}
-
-/**
- * **Whether a `held` sits between a recursive thunk and the term the thunk returns**, which is the
- * model's `Term.guarded` refusing a variable at level 3. The walk forces each thunk and keeps the
- * term objects it is inside. A thunk that returns an object on that stack closes a cycle, and the
- * objects between the two are the path of the recursion. A `held` on that path refuses: its
- * conversion can make the input deeper, so no container on the path bounds the depth of a stage.
+ * **How a recursion in the term reads its own input**, the model's `Term.use` at the variable of
+ * each binder, joined over the binders. The walk forces each thunk and keeps the terms it is
+ * inside. A thunk that returns a term on that stack closes a cycle, and the terms between the two
+ * are the path of the recursion. The level of a path is the model's:
  *
- * **A thunk that throws under a `held` refuses too.** At the declaration of a recursive schema the
- * thunk names the constant being declared, so it throws, and the walk cannot see the cycle. The
- * spine reads such a thunk as recursive ({@link unreadableSpine}), and a `held` path reads it the
- * same way. The walk ends at each cycle, because a thunk memoizes its codec and every other edge of
- * a term is built before the term.
+ * - `0`: the term has no recursion;
+ * - `1`: each path has a container and no adapter, so each stage reads a shallower input;
+ * - `2`: a path has no container, so the recursion reads the input of its own binder;
+ * - `3`: a path has an adapter. Caller code makes the input of the inner term, at any depth. A
+ *   `held` converts the value, and a `withLegacyRead` writes the older reader's answer.
+ *
+ * The model's guard refuses `2` and `3`. **A thunk that throws closes a path to the root**: at the
+ * declaration of a recursive schema the thunk names the constant being declared, so the walk
+ * cannot see the cycle. The walk ends at each cycle, because a thunk memoizes its codec and every
+ * other edge of a term is built before the term.
  */
-export const heldOnRecursivePath = (root: Term): boolean => {
-    const walk = (t: Term, stack: readonly Term[]): boolean => {
+export const recursionUse = (root: Term): number => {
+    const walk = (t: Term, stack: readonly Term[]): number => {
         const on = [...stack, t]
         const next = (one: Term) => walk(one, on)
+        const most = (ones: readonly Term[]) => Math.max(0, ...ones.map(next))
         switch (t.kind) {
             case 'lazy': {
                 const target = force(t)
-                if (target === undefined)
-                    return on.some((one) => one.kind === 'held')
+                if (target === undefined) return pathUse(on)
                 const at = on.indexOf(target)
-                return at === -1
-                    ? next(target)
-                    : on.slice(at).some((one) => one.kind === 'held')
+                return at === -1 ? next(target) : pathUse(on.slice(at))
             }
             case 'list':
-                return (
-                    [...t.pre, ...t.suf].some(next) ||
-                    (t.spread !== undefined && next(t.spread))
-                )
+                return most([
+                    ...t.pre,
+                    ...t.suf,
+                    ...(t.spread === undefined ? [] : [t.spread]),
+                ])
             case 'object':
-                return (
-                    Object.values(t.body.fields).some((field) =>
-                        next(field.t),
-                    ) ||
-                    (t.body.rest !== undefined && next(t.body.rest))
-                )
+                return most([
+                    ...Object.values(t.body.fields).map((field) => field.t),
+                    ...(t.body.rest === undefined ? [] : [t.body.rest]),
+                ])
             case 'union':
-                return t.options.some(next)
+                return most(t.options)
             case 'set':
                 return next(t.elem)
             case 'held':
-                return next(t.inner) || next(t.outer)
+                return most([t.inner, t.outer])
             case 'refine':
             case 'legacy':
                 return next(t.inner)
             default:
-                return false
+                return 0
         }
     }
     return walk(root, [])
 }
+
+/** The level of one path, folded from the occurrence outward: the model's `useUnder` at a
+ * container, `useHeld` at an adapter, and the same level elsewhere. */
+const pathUse = (path: readonly Term[]): number =>
+    path.reduceRight((use, one) => {
+        switch (one.kind) {
+            case 'list':
+            case 'object':
+            case 'set':
+                return use === 2 ? 1 : use
+            case 'held':
+            case 'legacy':
+                return use === 0 ? 0 : 3
+            default:
+                return use
+        }
+    }, 2)
 
 /**
  * **Whether {@link callerView} and {@link storedView} are sound on a term.**
