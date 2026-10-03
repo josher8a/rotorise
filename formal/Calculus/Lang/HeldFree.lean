@@ -66,12 +66,12 @@ theorem sub_listCodec {member : V → M} {sL : Summand (List V) V M member} {u :
     (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
   rfl
 
-/-- An object whose every entry codec is below a top that acts as the map former is below the
-    top. -/
+/-- An object with no fill whose every entry codec is below a top that acts as the map former
+    is below the top. -/
 theorem sub_objectCodec {member : V → M} {sM : Summand (MapOf V) V M member} {u : Codec V M}
     (hu : ∀ o (m : MapOf V), u.f o (sM.p.into m) =
       (funImage fun k => u.f o (m.get k)).map fun g => sM.p.into ⟨m.keys, g⟩)
-    {sems : MapOf (FieldSem V M)} {rest : RestSem V M}
+    {sems : MapOf (FieldSem V M)} {rest : RestSem V M} (hnf : noFill sems = true)
     (hf : ∀ k, Sub (sems.2 k).codec u) (hw : ∀ c ∈ rcOf rest, Sub c u) :
     Sub (objectCodec sM sems rest) u := by
   intro o v a he
@@ -97,7 +97,7 @@ theorem sub_objectCodec {member : V → M} {sM : Summand (MapOf V) V M member} {
     simp only [MapOf.at, dif_pos hkx, hw', Option.get_some]
   · have h := objAt_at hE k
     rw [MapOf.at_none hkx] at h
-    rw [liftTable_none h]
+    rw [liftTable_none (noFill_at hnf k) h]
     simp only [MapOf.at, dif_neg hkx]
 
 end Combinators
@@ -192,7 +192,14 @@ theorem sub_body [TopLaws S] : ∀ b : Body S, HFB b → ∀ ρ : List S.C,
       cases hF : Mean.map (B := S.sig) with
       | none => exact sub_empty
       | some F =>
-        exact sub_objectCodec (fun _ => top_map F.p.into)
+        -- a fill is held, so a held-free body holds none
+        have hnf : noFill (⟨fields, fun k => fieldSem α β (f k) ρ⟩ : MapOf _) = true :=
+          decide_eq_true fun k => by
+            have := h.1 k
+            match hk : f k with
+            | .req _ | .optional _ | .fill _ _ =>
+              simp_all [hasHeldS, fieldSem, fieldSemAbs, FieldSem.isFill]
+        exact sub_objectCodec (fun _ => top_map F.p.into) hnf
           (fun k => sub_slot (f k) (Bool.eq_false_iff.mpr (h.1 k)) ρ henv)
           (sub_wild w h.2 ρ henv)
 /-- …at a slot. -/
@@ -200,6 +207,7 @@ theorem sub_slot [TopLaws S] : ∀ s : ObjectSlot S, HFS s → ∀ ρ : List S.C
     (∀ i, Sub (envAt ρ i) (Syn.top (S := S))) → Sub (fieldSem α β s ρ).codec (Syn.top (S := S))
   | .req t, h, ρ, henv => sub_denoteIn t h ρ henv
   | .optional t, h, ρ, henv => sub_denoteIn t h ρ henv
+  | .fill _ _, h, _, _ => nomatch h
 /-- …at an open block. -/
 theorem sub_wild [TopLaws S] : ∀ w : Option (Term S), HFO w → ∀ ρ : List S.C,
     (∀ i, Sub (envAt ρ i) (Syn.top (S := S))) → ∀ c ∈ rcOf (wildSem α β w ρ), Sub c (Syn.top (S := S))

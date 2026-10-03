@@ -73,6 +73,11 @@ theorem typed_T_eq : ∀ {t T μ}, Typed α t T μ → ∀ v, T v → (denote α
           intro t'' hc'
           rw [hc] at hc'
           exact nomatch hc'
+        | .fill t' v' =>
+          -- the judgement has no rule for a fill
+          have hty := hfields ⟨k, hk⟩
+          rw [hc] at hty
+          cases hty
       · intro k
         have hentry := hall k
         by_cases hk : k.1 ∈ fields

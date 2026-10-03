@@ -111,6 +111,7 @@ abbrev jsonSig : Alg.Sig where
   G _ := Empty
   decG _ := inferInstance
   R := Json → Option Json
+  K := Json
 
 /-- **The JSON syntax**: the signature at the host orientation. -/
 abbrev jsonSyn : Alg.Syn := ⟨jsonSig, .host⟩
@@ -138,6 +139,7 @@ instance jsonSem : Alg.Mean jsonSig where
   map := none
   set := none
   read := id
+  const := id
 
 /-- **The one table of JSON**: the universe names no generator, so it has no `held`. -/
 def jsonTable : Alg.Table jsonSyn := fun g => nomatch g

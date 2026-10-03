@@ -136,8 +136,13 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
           replace hcr : RestSem.codec (denote α β t' ρ) = RestSem.codec c := hcr
           cases hcr
           exact soundnessIn ρ hty hob.2 henv
+      -- a typed slot is `req` or `optional`: the judgement has no rule for a fill
+      have hnf : noFill (⟨fields, fun k => fieldSem α β (ff k) ρ⟩ : MapOf _) = true :=
+        decide_eq_true fun k => by
+          obtain ⟨t', -, hshape⟩ := TypedField.term (α := α) (β := β) (hfields k)
+          rcases hshape with heq | heq <;> simp only [heq, fieldSem, fieldSemAbs, FieldSem.isFill]
       simp only [denote, denoteAbs, bodySemAbs, hF]
-      exact lawful_objectCodec ihf ihr
+      exact lawful_objectCodec hnf ihf ihr
     | @union opts Ts μs hlist =>
       have ihs : ∀ t' ∈ opts, Lawful Mean.mem (denote α β t' ρ) := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall (α := α) (β := β) hlist t' ht'
@@ -407,8 +412,12 @@ theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed α β t T μ → Obligat
           replace hcr : some (denote α β t') = some rc := hcr
           cases hcr
           exact carrier_denote hty hob.2
+      -- a typed slot is no fill, so no constant is owed
+      have hfill : ∀ k c v, fieldSem α β (ff k) = FieldSem.fill c v → c.T v := fun k c v hc => by
+        obtain ⟨t', -, hshape⟩ := TypedField.term (α := α) (β := β) (hfields k)
+        rcases hshape with heq | heq <;> rw [heq] at hc <;> exact nomatch hc
       simp only [denote, denoteAbs, bodySemAbs, hF]
-      exact carrier_objectCodec hsems hrc
+      exact carrier_objectCodec hsems hrc hfill
     | @union opts Ts μs hlist =>
       simp only [denote, denoteAbs, denoteList_eq]
       refine carrier_altCodec (List.forall_mem_map.mpr fun t' ht' => ?_)

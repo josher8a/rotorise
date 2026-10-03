@@ -153,18 +153,21 @@ theorem agree_list {o : Orient} {member : V → M} {sL : Summand (List V) V M me
     (fun c hc d hd => h c (slotsL_mem _ _ _ _ _ hs c hc) d (slotsL_mem _ _ _ _ _ hs' d hd))
     htr htr'
 
-/-- **Two objects agree where the two codecs of each name agree**, at each orientation. -/
+/-- **Two objects agree where the two codecs of each name agree**, and where the two slots of each
+    name answer alike at absence, at each orientation. -/
 theorem agree_object {o : Orient} {member : V → M} {sM : Summand (MapOf V) V M member}
     {sems₁ sems₂ : MapOf (FieldSem V M)} {rest₁ rest₂ : RestSem V M}
     (h : ∀ k c₁ c₂, entryCodec sems₁ (rcOf rest₁) k = some c₁ →
-      entryCodec sems₂ (rcOf rest₂) k = some c₂ → Agree o c₁ c₂) :
+      entryCodec sems₂ (rcOf rest₂) k = some c₂ → Agree o c₁ c₂)
+    (hA : ∀ k y₁ y₂, absentOf o (sems₁.at k) = some y₁ → absentOf o (sems₂.at k) = some y₂ →
+      y₁ = y₂) :
     Agree o (objectCodec sM sems₁ rest₁) (objectCodec sM sems₂ rest₂) := by
   refine agree_carried fun m d₁ d₂ h1 h2 => MapOf.ext_at fun k => ?_
   have e1 := objAt_at h1 k
   have e2 := objAt_at h2 k
   rcases (m.at k).eq_none_or_eq_some with hm | ⟨v, hm⟩
   · rw [hm] at e1 e2
-    rw [liftTable_none e1, liftTable_none e2]
+    exact hA k _ _ e1 e2
   · rw [hm] at e1 e2
     simp only [liftTable, Option.map_eq_some_iff] at e1 e2
     obtain ⟨a₁, ha₁, he₁⟩ := e1

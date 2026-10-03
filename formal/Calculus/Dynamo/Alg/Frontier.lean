@@ -124,11 +124,11 @@ constructor, so they are the generic layer's. The two laws below are the generic
 prism. -/
 
 /-- The keyed product — the doc's current-schema `object`. -/
-theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
+theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem} (hnf : Alg.noFill sems = true)
     (hf : ∀ k, Lawful (sems.2 k).codec)
     (hrest : ∀ c, rest = .codec c → Lawful c) :
     Lawful (objectCodec sems rest) :=
-  Alg.lawful_objectCodec hf hrest
+  Alg.lawful_objectCodec hnf hf hrest
 
 end
 

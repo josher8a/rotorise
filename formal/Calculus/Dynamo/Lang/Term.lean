@@ -223,6 +223,7 @@ abbrev dynSig : Alg.Sig where
     | false => inferInstanceAs (DecidableEq DynGen)
     | true => inferInstanceAs (DecidableEq Empty)
   R := Attr → Option Value
+  K := Value
 
 /-- **The DynamoDB syntax**: the signature at the host orientation. -/
 abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
@@ -253,6 +254,7 @@ abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
   map := some dMap
   set := some dSet
   read := id
+  const := id
 
 /-- **The one stored table of DynamoDB**: the store names no generator. -/
 def dynTableA : Alg.Table dynSyn.op := fun g => nomatch g
@@ -296,6 +298,7 @@ abbrev ObjectSlot := Alg.ObjectSlot dynSyn
     (wild : Option Term) : Body := Alg.Body.mk fields f wild
 @[match_pattern] abbrev ObjectSlot.req (t : Term) : ObjectSlot := Alg.ObjectSlot.req t
 @[match_pattern] abbrev ObjectSlot.optional (t : Term) : ObjectSlot := Alg.ObjectSlot.optional t
+@[match_pattern] abbrev ObjectSlot.fill (t : Term) (v : Value) : ObjectSlot := Alg.ObjectSlot.fill t v
 
 /-- **Case analysis on a DynamoDB term**, with the primitive split into its two rows, and each
     field at its DynamoDB type. `cases` uses this eliminator for every `Term`, so a case reads
@@ -336,9 +339,11 @@ def Body.casesD {motive : Body → Sort _}
 /-- Case analysis on a DynamoDB slot, at the DynamoDB types. -/
 @[elab_as_elim, cases_eliminator]
 def ObjectSlot.casesD {motive : ObjectSlot → Sort _} (req : ∀ t, motive (ObjectSlot.req t))
-    (optional : ∀ t, motive (ObjectSlot.optional t)) : (s : ObjectSlot) → motive s
+    (optional : ∀ t, motive (ObjectSlot.optional t))
+    (fill : ∀ t v, motive (ObjectSlot.fill t v)) : (s : ObjectSlot) → motive s
   | .req t => req t
   | .optional t => optional t
+  | .fill t v => fill t v
 
 /-- The five bases by name. A pattern `.string` still matches, as `.base .string`. -/
 @[match_pattern] abbrev Term.string : Term := .base .string

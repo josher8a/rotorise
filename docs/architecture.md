@@ -287,11 +287,14 @@ A primitive is one constructor, `prim`, over the primitives of the universe. At 
 primitives are `Ground`, with the constructors `base` over a `GroundKind` and `literal`, so a
 table over terms states every ground base in one row. `opaq` denotes the top of the universe.
 
-`ObjectSlot` carries the current-schema rule only. A required slot remains required on both
-current-schema sides. An alternate reader is `Codec.extendRead`, over the codec of one current
-`Term`.
-Structural operations, including disjointness and union certification, operate on `Term`. The operations
-cannot observe or propagate an alternate reader.
+`ObjectSlot` carries the current-schema rule and one older reading. A required slot remains
+required on both current-schema sides. A `fill` slot is required on the write, and its read gives
+an absent name the slot's constant. `req` and `optional` are self-dual and the fill is not, so a
+slot states its requirement at an orientation (`ObjectSlot.isReqAt`). An alternate reader of a
+present value is `Codec.extendRead`, over the codec of one current `Term`.
+Structural operations, including disjointness and union certification, operate on `Term`. They
+cannot observe an alternate reader. They read a fill through its presence only: on the read, union
+certification accepts a fill beside a `req` slot and beside no other slot.
 
 `Body`'s projections `Body.fields`, `Body.at` and `Body.wild` are written by hand, because `Body`
 is an `inductive` with one constructor. The `mutual` block of `Term`, `Body` and `ObjectSlot` also

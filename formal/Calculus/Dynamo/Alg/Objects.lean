@@ -68,13 +68,18 @@ theorem emptyBody_at (k : Name) :
     (⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ : MapOf FieldSem).at k = none :=
   MapOf.at_none (Finset.notMem_empty k)
 
+/-- The empty body holds no fill. -/
+theorem emptyBody_noFill :
+    Alg.noFill (⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ : MapOf FieldSem) = true :=
+  decide_eq_true fun k => absurd k.2 (Finset.notMem_empty k.1)
+
 /-- **A record moves entry by entry**, at each orientation: the same name set, every entry
     through `c`. -/
 theorem recordCodec_f (o : Alg.Orient) (c : Codec) (keys : Finset Name)
     (g : {k // k ∈ keys} → Attr) :
     (recordCodec c).f o (.m keys g) = (funImage fun k => c.f o (g k)).map (Attr.m keys) := by
   simp only [carriedCodec, Option.bind, objAt, rcOf, entryCodec, mS, mA]
-  rw [if_pos (fun k hk => absurd hk (Finset.notMem_empty k)), Option.map_map]
+  rw [if_pos emptyBody_noFill, if_pos (fun k hk => absurd hk (Finset.notMem_empty k)), Option.map_map]
   refine congrArg (fun F => Option.map F _) (funext fun _ => rfl) |>.trans ?_
   exact congrArg (Option.map _) (congrArg funImage
     (funext fun k => by rw [emptyBody_at]))
