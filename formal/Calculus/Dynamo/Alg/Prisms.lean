@@ -168,7 +168,7 @@ theorem baseCodec_p_n (x : WFNumeral) : (baseCodec .number).p (.n x) = some (.nu
 
     One definition where there were two (~~inLS~~, ~~inLN~~) and three bases with none. The
     prism of the index makes the carrier concrete, and so the equality decidable. -/
-noncomputable def inL (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
+def inL (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
   match k.prism.out v with
   | some y => decide (y = x)
   | none   => false
