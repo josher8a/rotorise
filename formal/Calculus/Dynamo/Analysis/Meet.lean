@@ -30,7 +30,7 @@ on the write half and not on the read half. The certificate asks both halves.
 
 namespace Calculus
 
-open Alg (Orient Term.isNever ObjectSlot.isReq Body.fields_mk Body.wild_mk Body.at_mk Body.block)
+open Alg (Orient Term.isNever ObjectSlot.isReqAt Body.fields_mk Body.wild_mk Body.at_mk Body.block)
 
 export Alg (Term.ofOptions hasHeld pair0)
 
@@ -547,7 +547,7 @@ example : Adm α (.object (.mk {"x"} (fun _ => .req .string) (some .string)))
 /-- …and the right body admits it through its open block, at a name it does not declare. -/
 example : Adm α (.object (.mk {"y"} (fun _ => .optional .string) (some .string)))
     (.map {"x"} (fun _ => .str "1")) = true := by
-  simp [Adm_rows, valPresentT, objAdmV, entryP, MapOf.at]
+  simp [Adm_rows, valPresentT, ObjectSlot.isReqAt, objAdmV, entryP, MapOf.at]
   apply decide_eq_true
   intro k
   rw [if_neg (by have hk := k.2; simp only [Finset.mem_singleton] at hk; simp [hk])]
@@ -1046,11 +1046,10 @@ theorem viewLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLe o ρ ρ' → EnvSu
         simp only [Alg.Body.fields_mk, Alg.Body.at_mk, Alg.Body.wild_mk] at h ⊢
         rw [Bool.and_eq_true] at h ⊢
         refine ⟨?_, objAdmV_mono (fun k => viewLeES (f k) ρ ρ' he hs) ?_ h.2⟩
-        · refine decide_eq_true fun k => ?_
-          have := of_decide_eq_true h.1 k
-          beta_reduce
-          generalize f k = s at this ⊢
-          cases s <;> simp_all [viewS]
+        · refine decide_eq_true fun k hr => of_decide_eq_true h.1 k ?_
+          beta_reduce at hr
+          generalize f k = s at hr
+          cases s <;> simp_all [viewS, Alg.ObjectSlot.isReqAt]
         · cases w with
           | none => exact .none
           | some t => exact .some (viewLeE t ρ ρ' he hs)

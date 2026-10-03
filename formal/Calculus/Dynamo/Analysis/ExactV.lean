@@ -14,7 +14,7 @@ unsoundness. `Adm` is admission as a *domain* instead: exact at every constructo
 
 namespace Calculus
 
-open Alg (ObjectSlot.isReq Term.depth)
+open Alg (ObjectSlot.isReqAt Term.depth)
 
 noncomputable section
 
@@ -208,7 +208,7 @@ variable (t : Term) (ts : List Term)
     (wild : Option Term) : AdmBody α (.mk fields fld wild) = fun v =>
       match v with
       | .map keys g =>
-          valPresentT fields fld keys &&
+          valPresentT .host fields fld keys &&
           objAdmV ⟨fields, fun k => AdmField α (fld k)⟩ (AdmWild α wild) keys g
       | _ => false := by
   funext v; cases v <;> rfl
@@ -222,23 +222,6 @@ variable (t : Term) (ts : List Term)
 @[Adm_rows] theorem AdmOptT_some : AdmOptT α (some t) = some (Adm α t) := rfl
 
 end Rows
-
-/-- `valPresentT` in the form the object row uses: a declared name that must be present is
-    present. -/
-theorem valPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
-    (keys : Finset Name) :
-    valPresentT fields fld keys
-      = decide (∀ k : {k // k ∈ fields}, ObjectSlot.isReq (fld k) = true → k.1 ∈ keys) := by
-  unfold valPresentT
-  refine decide_eq_decide.mpr ⟨fun hh k hreq => ?_, fun hh k => ?_⟩
-  · have hk := hh k
-    cases hf : fld k with
-    | req t => rw [hf] at hk; exact of_decide_eq_true hk
-    | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReq])
-  · cases hf : fld k with
-    | optional t => rfl
-    | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
-
 
 variable (α) in
 /-- `⋁` of `Adm` over a union's options, named — sound, and *not* exact. -/

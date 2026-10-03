@@ -157,7 +157,7 @@ variable (t : Term) (ts : List Term)
     (wild : Option Term) : AdmABody α (.mk fields fld wild) = fun a =>
       match a with
       | .m keys g =>
-          valPresentT fields fld keys &&
+          valPresentT .dual fields fld keys &&
           objAdmV ⟨fields, fun k => AdmAField α (fld k)⟩ (AdmAWild α wild) keys g
       | _ => false := by
   funext a

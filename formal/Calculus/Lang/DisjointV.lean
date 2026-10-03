@@ -66,7 +66,7 @@ theorem Adm_list_of_none {pre suf : List (Term S)} {sp : Option (Term S)} {v : S
 /-- A body admits a value that the map former reads by two tests: the required names are
     present, and each present name passes its row. -/
 theorem AdmBody_of_out {b : Body S} {v : S.V} {m : MapOf S.V} (h : mapOut v = some m) :
-    AdmBody α β b ρ v = (valPresentT b.fields b.at m.keys &&
+    AdmBody α β b ρ v = (valPresentT S.o b.fields b.at m.keys &&
       objAdmV ⟨b.fields, fun k => AdmField α β (b.at k) ρ⟩ (AdmWild α β b.wild ρ) m.keys m.get) := by
   unfold mapOut at h
   cases b with
@@ -88,23 +88,6 @@ theorem AdmBody_of_none {b : Body S} {v : S.V} (h : mapOut v = none) :
   · rw [hL] at h
     simp only [Option.bind_some] at h
     simp only [AdmBody, hL, h]
-
-omit [Sem S] [PrimAdm S] in
-/-- `valPresentT` in the form the object row uses: a declared name that must be present is
-    present. -/
-theorem valPresentT_req (fields : Finset String) (fld : {k // k ∈ fields} → ObjectSlot S)
-    (keys : Finset String) :
-    valPresentT fields fld keys
-      = decide (∀ k : {k // k ∈ fields}, ObjectSlot.isReq (fld k) = true → k.1 ∈ keys) := by
-  unfold valPresentT
-  refine decide_eq_decide.mpr ⟨fun hh k hreq => ?_, fun hh k => ?_⟩
-  · have hk := hh k
-    cases hf : fld k with
-    | req t => rw [hf] at hk; exact of_decide_eq_true hk
-    | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReq])
-  · cases hf : fld k with
-    | optional t => rfl
-    | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
 
 /-- The bottom admits nothing. -/
 @[simp] theorem Adm_never (v : S.V) : Adm α β (.never : Term S) ρ v = false := by simp [Adm]
@@ -136,23 +119,23 @@ theorem AdmOptT_eq_map (sp : Option (Term S)) : AdmOptT α β sp ρ = sp.map (Ad
 omit [Sem S] [PrimAdm S] in
 /-- The required names, read over the whole key space: an undeclared name is `optional`. -/
 theorem reqs_slotAt (c : Body S) (keys : Finset String) :
-    decide (∀ k : {k // k ∈ c.fields}, ObjectSlot.isReq (c.at k) = true → k.1 ∈ keys) = true ↔
-    ∀ k, ObjectSlot.isReq (c.slotAt k) = true → k ∈ keys := by
+    decide (∀ k : {k // k ∈ c.fields}, ObjectSlot.isReqAt S.o (c.at k) = true → k.1 ∈ keys) = true ↔
+    ∀ k, ObjectSlot.isReqAt S.o (c.slotAt k) = true → k ∈ keys := by
   rw [decide_eq_true_iff]
   constructor
   · intro h k hr
     rcases Decidable.em (k ∈ c.fields) with hk | hk
     · rw [Body.slotAt_pos hk] at hr; exact h ⟨k, hk⟩ hr
-    · rw [Body.slotAt_neg hk] at hr; exact absurd hr (by simp [ObjectSlot.isReq])
+    · rw [Body.slotAt_neg hk] at hr; exact absurd hr (by simp [ObjectSlot.isReqAt])
   · intro h k hr; exact h k.1 (by rw [Body.slotAt_pos k.2]; exact hr)
 
 /-- **A body admits a map by its slots**: every name whose slot is required is present, and
     every present name passes its slot. -/
 theorem AdmBody_map_slots (c : Body S) {v : S.V} {m : MapOf S.V} (hm : mapOut v = some m) :
     AdmBody α β c ρ v = true ↔
-      (∀ k, ObjectSlot.isReq (c.slotAt k) = true → k ∈ m.keys) ∧
+      (∀ k, ObjectSlot.isReqAt S.o (c.slotAt k) = true → k ∈ m.keys) ∧
       ∀ k : {k // k ∈ m.keys}, AdmField α β (c.slotAt k.1) ρ (m.get k) = true := by
-  rw [AdmBody_of_out hm, valPresentT_req, Bool.and_eq_true, reqs_slotAt]
+  rw [AdmBody_of_out hm, valPresentT, Bool.and_eq_true, reqs_slotAt]
   apply and_congr Iff.rfl
   unfold objAdmV; rw [decide_eq_true_iff]
   refine forall_congr' fun k => ?_
@@ -630,7 +613,7 @@ theorem famListD_sound [Shapes S] {ρ ρ' : List S.C} {pre suf : List (Term S)}
 /-- **Two bodies apart at one name** share no map: the name is required on one side, so a
     common map holds the name, and the two slots share no value there. -/
 theorem AdmBody_apart_at {ρ ρ' : List S.C} {a b : Body S} {k : String}
-    (hr : (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)) = true)
+    (hr : (ObjectSlot.isReqAt S.o (a.slotAt k) || ObjectSlot.isReqAt S.o (b.slotAt k)) = true)
     (hs : ∀ w, (AdmField α β (a.slotAt k) ρ w && AdmField α β (b.slotAt k) ρ' w) = false) (v : S.V) :
     (AdmBody α β a ρ v && AdmBody α β b ρ' v) = false := by
   refine Bool.eq_false_iff.mpr (fun hab => ?_)
@@ -650,7 +633,7 @@ theorem AdmBody_apart_at {ρ ρ' : List S.C} {a b : Body S} {k : String}
     slots, one of them required. -/
 theorem famObjD_sound [Shapes S] {ρ ρ' : List S.C} {a : Body S}
     {g : {k // k ∈ a.fields} → ObjectSlot S → Bool} {mw : Term S → Bool}
-    (hg : ∀ k s, g k s = true → (ObjectSlot.isReq (a.at k) || ObjectSlot.isReq s) = true ∧
+    (hg : ∀ k s, g k s = true → (ObjectSlot.isReqAt S.o (a.at k) || ObjectSlot.isReqAt S.o s) = true ∧
       ∀ w, (AdmField α β (a.at k) ρ w && AdmField α β s ρ' w) = false)
     (hmw : DisjSound α β ρ ρ' a.block mw) :
     DisjSound α β ρ ρ' (.object a) (famObjD a g mw) := by
@@ -676,7 +659,7 @@ theorem famObjD_sound [Shapes S] {ρ ρ' : List S.C} {a : Body S}
       split at hd
       · next y hy =>
         have hbs : b.slotAt k = .req y := by rw [Body.slotAt_pos hkb]; exact hy
-        refine AdmBody_apart_at (k := k) (by rw [hbs]; simp [ObjectSlot.isReq]) (fun w => ?_) v
+        refine AdmBody_apart_at (k := k) (by rw [hbs]; simp [ObjectSlot.isReqAt]) (fun w => ?_) v
         rw [hbs, Body.slotAt_neg ha]
         exact hmw y hd w
       · exact nomatch hd
@@ -783,14 +766,14 @@ termination_by structural _ ts => ts
 theorem slot_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S] [TopBound S] :
     ∀ (p : Pairing) (s s' : ObjectSlot S), ObjectSlot.disjoint p s s' = true →
       ∀ (ρ ρ' : List S.C), ApartV p ρ ρ' →
-        (ObjectSlot.isReq s || ObjectSlot.isReq s') = true ∧
+        (ObjectSlot.isReqAt S.o s || ObjectSlot.isReqAt S.o s') = true ∧
           ∀ w, (AdmField α β s ρ w && AdmField α β s' ρ' w) = false
   | p, .req x, .req y, h, ρ, ρ', hp =>
       ⟨rfl, fun w => disjoint_sound p x y h ρ ρ' hp w⟩
   | p, .req x, .optional y, h, ρ, ρ', hp =>
       ⟨rfl, fun w => disjoint_sound p x y h ρ ρ' hp w⟩
   | p, .optional x, .req y, h, ρ, ρ', hp =>
-      ⟨by simp [ObjectSlot.isReq], fun w => disjoint_sound p x y h ρ ρ' hp w⟩
+      ⟨by simp [ObjectSlot.isReqAt], fun w => disjoint_sound p x y h ρ ρ' hp w⟩
   | _, .optional _, .optional _, h, _, _, _ => by simp [ObjectSlot.disjoint] at h
 termination_by structural _ s => s
 end
