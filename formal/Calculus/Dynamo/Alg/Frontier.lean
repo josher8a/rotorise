@@ -119,11 +119,9 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) where
 
 /-! ### The keyed product
 
-The guards, the entry steps, the rest policy and the two clauses of §2 read no carrier
-constructor, so they are the generic layer's. The aliases give them their names here, and the
-two laws below are the generic ones at the `M` prism. -/
-
-export Alg (valPresentB_of)
+The slots, the entry steps, the rest policy and the two clauses of §2 read no carrier
+constructor, so they are the generic layer's. The two laws below are the generic ones at the `M`
+prism. -/
 
 /-- The keyed product — the doc's current-schema `object`. -/
 theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}

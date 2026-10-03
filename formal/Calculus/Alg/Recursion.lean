@@ -230,9 +230,9 @@ theorem agreeLe_listCodec {sL : Summand (List V) V M member}
 
 /-! ### Objects
 
-An object reads its entry codecs at the entries of a map, one layer below the map. The presence
-guards and the name filter read the shape of each field and never its codec, so two tables of one
-shape guard and filter alike. -/
+An object reads its entry codecs at the entries of a map, one layer below the map. A slot's
+behavior at absence reads the shape of its field and never its codec, so two tables of one shape
+act alike at absence. -/
 
 section ObjectAgree
 variable {R : Codec V M → Codec V M → Prop} {keys : Finset String}
@@ -254,11 +254,6 @@ theorem entryCodec_rel {rc₁ rc₂ : Option (Codec V M)} (hr : Option.Rel R rc�
         (match o₂ with | some fs => some fs.codec | none => rc₂)
   | _, _, .none => hr
   | _, _, .some h => .some h.codec
-
-/-- Two tables of one shape guard the write side alike. -/
-theorem valPresentB_rel (hF : ∀ k, FieldSem.Rel R (F₁ k) (F₂ k)) (names : Finset String) :
-    valPresentB ⟨keys, F₁⟩ names = valPresentB ⟨keys, F₂⟩ names :=
-  decide_eq_decide.mpr (forall_congr' fun k => by rw [(hF k).valPresentAt names k.1])
 
 end ObjectAgree
 
@@ -286,12 +281,13 @@ theorem agreeLe_objectCodec {sM : Summand (MapOf V) V M member}
   | some m =>
     have hvv := sM.p.into_out h
     refine congrArg (Option.map sM.p.into) ?_
-    simp only [Option.bind_some, objAt, valPresentB_rel hF]
-    split
-    · congr 2
-      funext k
-      exact hbind (·.f o ·) (m.get k) (fun _ _ h => h.f o _ (by
-        have := hd m k; rw [← hvv] at this; omega)) k.1
-    · rfl
+    simp only [Option.bind_some, objAt_eq_objP]
+    refine objP_congr fun k _ => ?_
+    rcases Decidable.em (k ∈ m.keys) with hk | hk
+    · rw [MapOf.at_of_mem ⟨k, hk⟩]
+      exact congrArg (Option.map some) (hbind (·.f o ·) (m.get ⟨k, hk⟩) (fun _ _ h => h.f o _ (by
+        have := hd m ⟨k, hk⟩; rw [← hvv] at this; omega)) k)
+    · rw [MapOf.at_none hk]
+      exact absentOf_rel (mapOf_at_rel hF k)
 
 end Calculus.Alg

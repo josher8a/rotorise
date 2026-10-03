@@ -63,12 +63,16 @@ theorem typed_T_eq : ∀ {t T μ}, Typed α t T μ → ∀ v, T v → (denote α
       cases body with | mk fields ff wild =>
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest hv ⊢
       obtain ⟨keys, f, rfl, hreq, hall⟩ := hv
-      refine ⟨⟨keys, f⟩, rfl, ?_, ?_⟩
-      · refine valPresentB_of fun k fs hm hno => ?_
-        obtain ⟨hk, rfl⟩ := MapOf.at_eq_some.mp hm
-        refine hreq ⟨k, hk⟩ (TypedField.true_of_not_optional (hfields ⟨k, hk⟩) ?_)
-        intro t' hc
-        exact hno (denote α t') (congrArg (fieldSem α) hc)
+      refine ⟨⟨keys, f⟩, rfl, Alg.slotT_all_iff.mpr ⟨fun k hk hkk => ?_, ?_⟩⟩
+      · -- an absent declared name is `optional`: a required one is present
+        rw [MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem α (ff k)⟩ : MapOf FieldSem)) ⟨k, hk⟩]
+        match hc : ff ⟨k, hk⟩ with
+        | .optional t' => simp only [hc]; rfl
+        | .req t' =>
+          refine absurd (hreq ⟨k, hk⟩ (TypedField.true_of_not_optional (hfields ⟨k, hk⟩) ?_)) hkk
+          intro t'' hc'
+          rw [hc] at hc'
+          exact nomatch hc'
       · intro k
         have hentry := hall k
         by_cases hk : k.1 ∈ fields

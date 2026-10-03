@@ -76,12 +76,29 @@ theorem sub_objectCodec {member : V → M} {sM : Summand (MapOf V) V M member} {
     Sub (objectCodec sM sems rest) u := by
   intro o v a he
   obtain ⟨x, y, hv, hE, rfl⟩ := carried_f.mp he
-  obtain ⟨-, g, hg, rfl⟩ := objAt_eq.mp hE
-  rw [sM.p.into_out hv, hu, funImage_eq (f := g) (fun k => ?_)]
-  · rfl
-  have hk := funImage_some hg k
-  obtain ⟨c, hc, hce⟩ := Option.bind_eq_some_iff.mp hk
-  exact (entryCodec_of (Q := fun c => Sub c u) hf hw hc) o _ _ hce
+  -- a present name: its entry goes through the top
+  have hk : ∀ k : {k // k ∈ x.keys}, ∃ w, u.f o (x.get k) = some w ∧ y.at k.1 = some w := by
+    intro k
+    have h := objAt_at hE k.1
+    rw [MapOf.at_of_mem k] at h
+    simp only [liftTable, Option.map_eq_some_iff] at h
+    obtain ⟨w, hcw, hyw⟩ := h
+    obtain ⟨c, hc, hce⟩ := Option.bind_eq_some_iff.mp hcw
+    exact ⟨w, (entryCodec_of (Q := fun c => Sub c u) hf hw hc) o _ _ hce, hyw.symm⟩
+  have hs : ∀ k : {k // k ∈ x.keys}, (u.f o (x.get k)).isSome := fun k => by
+    obtain ⟨w, hw', -⟩ := hk k; rw [hw']; rfl
+  rw [sM.p.into_out hv, hu, funImage_eq (f := fun k => (u.f o (x.get k)).get (hs k))
+    (fun k => (Option.some_get _).symm)]
+  -- every other name is absent on both sides
+  refine congrArg (fun m => some (sM.p.into m)) (MapOf.ext_at fun k => ?_)
+  rcases Decidable.em (k ∈ x.keys) with hkx | hkx
+  · obtain ⟨w, hw', hyw⟩ := hk ⟨k, hkx⟩
+    rw [hyw]
+    simp only [MapOf.at, dif_pos hkx, hw', Option.get_some]
+  · have h := objAt_at hE k
+    rw [MapOf.at_none hkx] at h
+    rw [liftTable_none h]
+    simp only [MapOf.at, dif_neg hkx]
 
 end Combinators
 

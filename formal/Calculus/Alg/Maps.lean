@@ -250,12 +250,11 @@ def FieldSem.codec : FieldSem V M → Codec V M
   | .req c => c
   | .opt c => c
 
-/-- What each guard asks of one binding, named so the guards themselves are a single
-    quantifier over the key set rather than a `List.all` over a row. The write side and the
-    read side ask the same: a `req` name is present. -/
-def valPresentAt {κ : Type} [DecidableEq κ] (names : Finset κ) : κ → FieldSem V M → Bool
-  | _, .opt _ => true
-  | k, _ => decide (k ∈ names)
+/-- **A slot at absence**: a `req` slot refuses, and every other slot, an undeclared name
+    included, stays absent. Both orientations ask the same. -/
+def absentOf : Option (FieldSem V M) → Option (Option V)
+  | some (.req _) => none
+  | _ => some none
 
 /-- The rest policy's codec, where it has one. -/
 def rcOf : RestSem V M → Option (Codec V M)
@@ -282,12 +281,12 @@ theorem FieldSem.Rel.codec : ∀ {f₁ f₂ : FieldSem V M}, FieldSem.Rel R f₁
   | .req _, .req _, h => h
   | .opt _, .opt _, h => h
 
-/-- The presence guard reads the shape of a field, never its codec. -/
-theorem FieldSem.Rel.valPresentAt {κ : Type} [DecidableEq κ] (names : Finset κ) (k : κ) :
-    ∀ {f₁ f₂ : FieldSem V M}, FieldSem.Rel R f₁ f₂ →
-      Alg.valPresentAt names k f₁ = Alg.valPresentAt names k f₂
-  | .req _, .req _, _ => rfl
-  | .opt _, .opt _, _ => rfl
+/-- A slot's behavior at absence reads the shape of a field, never its codec. -/
+theorem absentOf_rel : ∀ {o₁ o₂ : Option (FieldSem V M)}, Option.Rel (FieldSem.Rel R) o₁ o₂ →
+    absentOf o₁ = absentOf o₂
+  | _, _, .none => rfl
+  | .some (.req _), .some (.req _), .some _ => rfl
+  | .some (.opt _), .some (.opt _), .some _ => rfl
 
 /-- Related rest policies give related rest codecs. -/
 theorem RestSem.Rel.rcOf : ∀ {r₁ r₂ : RestSem V M}, RestSem.Rel R r₁ r₂ →
@@ -367,5 +366,39 @@ theorem MapOf.at_forall {α : Type} {m : MapOf α} {Q : α → Prop}
     (h : ∀ k, Q (m.2 k)) {k x} (hm : m.at k = some x) : Q x := by
   obtain ⟨hk, rfl⟩ := MapOf.at_eq_some.mp hm
   exact h ⟨k, hk⟩
+
+/-- An undeclared name has no value. -/
+theorem MapOf.at_none {α : Type} {m : MapOf α} {k : String} (h : k ∉ m.keys) : m.at k = none := by
+  simp only [MapOf.at, dif_neg h]
+
+/-- **A map is its lookup**: two maps with one lookup are one map. -/
+theorem MapOf.ext_at {α : Type} {p q : MapOf α} (h : ∀ k, p.at k = q.at k) : p = q := by
+  refine MapOf.ext (Finset.ext fun k => ?_) fun k h₁ h₂ => ?_
+  · have := h k
+    simp only [MapOf.at] at this
+    constructor
+    · intro hk; exact Decidable.byContradiction fun hn => by simp [hk, hn] at this
+    · intro hk; exact Decidable.byContradiction fun hn => by simp [hk, hn] at this
+  · have := h k; simp only [MapOf.at, dif_pos h₁, dif_pos h₂] at this; exact Option.some.inj this
+
+/-- The map of a partial function on names, inside a finite bound: the names where the
+    function answers, each at its answer. -/
+def MapOf.ofFun {α : Type} (ks : Finset String) (g : String → Option α) : MapOf α :=
+  ⟨ks.filter fun k => (g k).isSome, fun k => (g k.1).get (Finset.mem_filter.mp k.2).2⟩
+
+/-- The lookup of `MapOf.ofFun` is the function, when the function answers nothing outside
+    the bound. -/
+theorem MapOf.at_ofFun {α : Type} {ks : Finset String} {g : String → Option α}
+    (hg : ∀ k, k ∉ ks → g k = none) (k : String) : (MapOf.ofFun ks g).at k = g k := by
+  unfold MapOf.ofFun MapOf.at
+  split
+  · next h => simp
+  · next h =>
+    simp only [Finset.mem_filter, not_and] at h
+    rcases Decidable.em (k ∈ ks) with hk | hk
+    · cases hgk : g k with
+      | none => rfl
+      | some x => rw [hgk] at h; exact absurd rfl (h hk)
+    · exact (hg k hk).symm
 
 end Calculus

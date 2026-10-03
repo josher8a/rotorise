@@ -159,19 +159,19 @@ theorem agree_object {o : Orient} {member : V → M} {sM : Summand (MapOf V) V M
     (h : ∀ k c₁ c₂, entryCodec sems₁ (rcOf rest₁) k = some c₁ →
       entryCodec sems₂ (rcOf rest₂) k = some c₂ → Agree o c₁ c₂) :
     Agree o (objectCodec sM sems₁ rest₁) (objectCodec sM sems₂ rest₂) := by
-  refine agree_carried fun m d₁ d₂ h1 h2 => ?_
-  unfold objAt at h1 h2
-  split at h1 <;> [skip; exact nomatch h1]
-  split at h2 <;> [skip; exact nomatch h2]
-  obtain ⟨G1, hG1, rfl⟩ := Option.map_eq_some_iff.mp h1
-  obtain ⟨G2, hG2, rfl⟩ := Option.map_eq_some_iff.mp h2
-  have : G1 = G2 := funext fun k => by
-    have e1 := funImage_some hG1 k
-    have e2 := funImage_some hG2 k
-    obtain ⟨c₁, hc₁, hr₁⟩ := Option.bind_eq_some_iff.mp e1
-    obtain ⟨c₂, hc₂, hr₂⟩ := Option.bind_eq_some_iff.mp e2
-    exact (h k.1 c₁ c₂ hc₁ hc₂ : Agree o c₁ c₂) _ _ _ hr₁ hr₂
-  rw [this]
+  refine agree_carried fun m d₁ d₂ h1 h2 => MapOf.ext_at fun k => ?_
+  have e1 := objAt_at h1 k
+  have e2 := objAt_at h2 k
+  rcases (m.at k).eq_none_or_eq_some with hm | ⟨v, hm⟩
+  · rw [hm] at e1 e2
+    rw [liftTable_none e1, liftTable_none e2]
+  · rw [hm] at e1 e2
+    simp only [liftTable, Option.map_eq_some_iff] at e1 e2
+    obtain ⟨a₁, ha₁, he₁⟩ := e1
+    obtain ⟨a₂, ha₂, he₂⟩ := e2
+    obtain ⟨c₁, hc₁, hr₁⟩ := Option.bind_eq_some_iff.mp ha₁
+    obtain ⟨c₂, hc₂, hr₂⟩ := Option.bind_eq_some_iff.mp ha₂
+    rw [← he₁, ← he₂, (h k c₁ c₂ hc₁ hc₂ : Agree o c₁ c₂) _ _ _ hr₁ hr₂]
 
 /-- **The codec lemma.** Over two lawful codecs, the tree's `Compat` is exactly agreement on
     both halves. So `Compat` is symmetric there, and it is Lawson's compatibility of two partial
