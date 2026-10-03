@@ -1229,8 +1229,10 @@ const heldFree = (t: Term): boolean =>
     !holdsAdapter(t, { binds: bindersOf(t), inside: [] })
 
 /**
- * **Whether a `withLegacyRead` occurs in the term.** The model has no read widening in `Term`, so a
- * construction that the model states only over `Term`, as `set` is, refuses one.
+ * **Whether a `withLegacyRead` occurs in the term.** The model states the read widening as
+ * `Term.legacy`, and the judgement `Typed` has no rule for it, because the pair is not a partial
+ * bijection. The law of `set`, `lawful_setCodec`, needs a lawful element, so no law covers a set
+ * of a widened element, and `set` refuses one.
  */
 export const widensRead = (t: Term): boolean => reaches(t, ['legacy'])
 
