@@ -89,7 +89,8 @@ swaps the orientation, so the dual term type is the term type, and the converse 
 term. `denote` reads the table of each absolute side, so the dual, with the two tables swapped,
 denotes each term by the same codec (`denote_op`). The compiled code of a function over `Term S`
 takes `S` as a real argument, because `casesOn` takes the parameter of the family as a real
-argument. The meaning is `noncomputable` at DynamoDB: `inL`, `setCodec`, `Ω` and `Pred.eval` are.
+argument. The meaning is `noncomputable`: `denoteAbs` reads `objAt`, which reads `funImage`, and at
+DynamoDB `setCodec` reads `setAt`.
 The split keeps a term as data that code can compute with.
 
 **Each stored-side law of the generic layer is the caller-side law at the dual universe.** `AdmA`
@@ -494,7 +495,7 @@ give up. The denotation of a numeric literal **is** the literal codec by reducti
 that asks is the domain of the read half exactly.
 
 The price is that a row becomes `noncomputable` when its codec is. That costs nothing here,
-because `denote` is `noncomputable` already: `inL` is, and `denote` reads it.
+because `denote` is `noncomputable` already: `objAt` is, and `denote` reads it.
 
 An alternate reader is `Term.legacy`, and its codec is `Codec.extendRead`. `Codec.extendRead` tries
 the current reader first and then the alternate reader, and it passes only what the current codec

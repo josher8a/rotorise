@@ -79,7 +79,7 @@ inductive Pred where
     This is what `inL` was before a literal carried one value. It survives because a refinement
     predicate is data over a `Finset` and a literal is not: `Pred.members` is the only remaining
     set of alternatives in the language. -/
-noncomputable def inLs (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
+def inLs (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
   decide (∃ x ∈ ls.1, inL k x v = true)
 
 /-- Whether a value is of one ground base. -/
@@ -87,13 +87,12 @@ def inBase (k : GroundKind) (v : Value) : Bool := decide (v.member = k.member)
 
 /-- **What a `Pred` means.** The universe's `Alg.Syn.eval`, beside the type.
 
-    `noncomputable`, because `inL` is. `denote` is noncomputable for the same reason, and
-    the meet never calls this: the meet reads a `Pred`'s constructors, which are data.
+    The meet never calls this: the meet reads a `Pred`'s constructors, which are data.
 
     **`members` keeps its `Finset`, and a literal no longer has one.** A refinement predicate is
     data over a set of alternatives; a literal is one value. `inLs` is the set form, built from
     `inL` at each alternative rather than as a membership row of its own. -/
-noncomputable def Pred.eval : Pred → Value → Bool
+def Pred.eval : Pred → Value → Bool
   | .members k ls => inLs k ls
   | .closure q    => q
   | .except k ls  => fun v => inBase k v && !inLs k ls v
