@@ -1647,16 +1647,25 @@ const readResolutions = (): readonly ReadResolution[] => {
     attributes.push(['raw_S', { S: 'x' } as AttributeValue])
     attributes.push(['raw_BOOL', { BOOL: true } as AttributeValue])
     attributes.push(['raw_NULL', { NULL: true } as AttributeValue])
-    return resolutionUnions().flatMap(([un, u]) =>
-        attributes.flatMap(([an, attribute]) => {
-            try {
-                leanAttrOf(attribute, an)
-            } catch {
-                return []
-            }
-            return [{ name: `rr_${un}__${an}`, union: u, attribute }]
-        }),
-    )
+    return [
+        ...resolutionUnions().flatMap(([un, u]) =>
+            attributes.flatMap(([an, attribute]) => {
+                try {
+                    leanAttrOf(attribute, an)
+                } catch {
+                    return []
+                }
+                return [{ name: `rr_${un}__${an}`, union: u, attribute }]
+            }),
+        ),
+        // the read value at an absent fill name: the stand-in, which a read vector cannot reach,
+        // because the codec's own encode always writes the name
+        {
+            name: 'rr_stand_in__open_empty',
+            union: standIn,
+            attribute: { M: {} },
+        },
+    ]
 }
 
 describe('union resolution, model against library', () => {
@@ -1668,10 +1677,10 @@ describe('union resolution, model against library', () => {
      * `set_of_literal`, and 248 by `literal_non_ascii` and the three products: each new entry
      * adds the resolutions of the unions it takes part in.
      */
-    it('offers 410 write pairs and every one of 440 read pairs', () => {
+    it('offers 410 write pairs and every one of 441 read pairs', () => {
         expect(writeResolutions().length).toBe(410)
         const reads = readResolutions()
-        expect(reads.length).toBe(440)
+        expect(reads.length).toBe(441)
         /**
          * **Every pair is stated, and no filter decides otherwise.** A read value with no Lean
          * form makes `leanValueOf` throw, so a pair becoming unstatable fails the emission rather
@@ -1704,6 +1713,15 @@ describe('union resolution, model against library', () => {
         }
     })
 
+    it('reads an absent fill name as the stand-in, not as a refusal', () => {
+        const one = readResolutions().find(
+            (r) => r.name === 'rr_stand_in__open_empty',
+        )
+        expect(one && leanReadResolution(one)).toContain(
+            '(some (Value.map {"a"} (fun k => Value.str "stand-in")))',
+        )
+    })
+
     it('emits them for the gate to elaborate', () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
@@ -1716,7 +1734,7 @@ describe('union resolution, model against library', () => {
             readResolutions(),
         )
         expect(module).toContain('import Calculus.Bridge.Vectors')
-        expect(module).toContain('440 on the read side')
+        expect(module).toContain('441 on the read side')
         expect(module).toContain('vcheck')
     })
 })
