@@ -448,7 +448,7 @@ describe('a union refuses a thunk it must read at its own input, because the mod
             ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
             return self
         }
-        expect(declare).toThrow(/option 2 of this union holds a `held`/)
+        expect(declare).toThrow(/option 2 of this union holds an adapter/)
         // declared outside a union, the cycle is complete when a union reads it
         const kids: AnyCodec = object({
             kids: array(
@@ -461,7 +461,26 @@ describe('a union refuses a thunk it must read at its own input, because the mod
         }) as unknown as AnyCodec
         expect(() =>
             union([number, kids] as unknown as readonly AnyCodec[]),
-        ).toThrow(/option 2 of this union holds a `held`/)
+        ).toThrow(/option 2 of this union holds an adapter/)
+    })
+
+    /**
+     * **An older reader on the path of a recursion is refused as an adapter is.** The read writes the
+     * older reader's answer through the inner term, and the answer has any depth, so a container on
+     * the path bounds nothing.
+     */
+    it('refuses a withLegacyRead between a recursive thunk and the codec it returns', () => {
+        const kids: AnyCodec = object({
+            kids: array(
+                withLegacyRead({
+                    current: lazy(() => kids as never),
+                    older: { decode: () => ({ kids: [] }) as never },
+                }),
+            ),
+        }) as unknown as AnyCodec
+        expect(() =>
+            union([number, kids] as unknown as readonly AnyCodec[]),
+        ).toThrow(/option 2 of this union holds an adapter/)
     })
 
     it('accepts a recursion below a list or an object with no adapter on its path', () => {
