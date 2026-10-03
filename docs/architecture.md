@@ -108,6 +108,8 @@ top reads every datum and sends each datum to itself.
 | the primitives and their codecs | `Sig.Ground`, `Mean.ground`, `Mean.lawful_ground` | `Ground`, `groundCodec` | `JMember`, `ground` |
 | the predicates | `Sig.P`, `Mean.eval`, at each absolute side | `Pred`, `Pred.eval` | a function on `Json` |
 | the generators of the adapters | `Sig.G`, `Sig.decG`, at each absolute side | `DynGen` | `Empty` |
+| the older readers | `Sig.R`, `Mean.read` | `Attr → Option Value`, read as itself | `Json → Option Json`, read as itself |
+| the constants of a fill slot | `Sig.K`, `Mean.const` | `Value`, read as itself | `Json`, read as itself |
 | the depth | `Mean.d`, one function of the carrier | `Attr.depth` | a constant |
 | the list and map formers | `Mean.list` as a `ListA`, `Mean.map` as a `MapA`: one prism of the carrier | `dList`, `dMap` | none |
 | the set former | `Mean.set` as a `SetF` over the carrier of the meaning: a lift, its laws, and the member of a set from the member of its element (`SetF.member`, with `SetF.lift_μ`) | `dSet`, over `setCodec` | none |
@@ -511,6 +513,16 @@ payload map at each orientation, carried by one summand (a prism with the member
 the shape underneath every product. **The model states a codec once for both sides**: one inverse law of the payload
 map, `F o` inverted by `F o.op`, is the lawfulness of every product, and `carried_f` is the
 inversion that every product's proof goes through.
+
+**An object is the product of its slots.** A slot reads the lookup of one name, so a slot is a
+codec on the presence lift `Option V`: a present value goes through the slot's codec, and absence
+takes the slot's behavior at the orientation (`absentOf`). The product runs over the declared names
+and the present names (`objP`), and its inverse law is the inverse law of each slot (`objP_inv`).
+The payload map `objAt` is that product (`objAt_eq_objP`). A table with no fill takes a form that
+walks the present keys and looks no name up, because the vectors reduce the payload map by `rfl`
+under a bound key, where a lookup does not reduce. A fill reads an absent name as its constant and
+the write sends the constant to a present name, so a fill is not an inverse: the inverse law holds
+for a table with no fill (`noFill`).
 
 The prism inventory is partial on both sides on purpose. The gaps are the constructions that are
 not one payload between one pair: the numeric constructor, where the numeral gate stops the
