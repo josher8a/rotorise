@@ -63,14 +63,7 @@ import {
 } from '../lean'
 import { orThrow } from '../result'
 import type { Term } from '../term'
-import {
-    agrees,
-    disjoint,
-    force,
-    readsFreeVariable,
-    recursionUse,
-    viewsDisjoint,
-} from '../term'
+import { agrees, disjoint, force, recursionUse, viewsDisjoint } from '../term'
 import { arbitraryOf, rngFrom } from '../testing'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
@@ -492,8 +485,6 @@ type PoolPair = {
     readonly host: string
     /** A fill at one field name on each side: the pair goes to disjointness only. */
     readonly fills: boolean
-    /** A thunk that throws on a side: the compatibility test reads the open term in both halves. */
-    readonly open: boolean
     readonly l: string
     readonly r: string
     /** The two terms that the guard reads. */
@@ -564,7 +555,6 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
             right: b.codec,
             host,
             fills: fillsMeet(x, y),
-            open: readsFreeVariable(x) || readsFreeVariable(y),
             l,
             r,
             gl: leanRooted(l, a.codec),
@@ -592,9 +582,7 @@ const evalRows = (p: PoolPair): string[] => {
     // the compatibility columns of a pair with a fill on each side are the known narrowing
     const expected = p.fills ? `${p.host.slice(0, 2)}-${p.host[3]}-` : p.host
     const label = leanString(`${p.name} ${p.label}`)
-    const call = p.open
-        ? `poolCheckOpen ${label} "${expected}" (${p.l}) (${p.r}) (${p.gl}) (${p.gr})`
-        : `poolCheck ${label} "${expected}" (${p.l}) (${p.r})`
+    const call = `poolCheck ${label} "${expected}" (${p.l}) (${p.r}) (${p.gl}) (${p.gr})`
     if (p.closures.length + p.readers.length === 0) return [`#eval ${call}`]
     return stands.map((stand) => {
         const lets = [
@@ -629,17 +617,15 @@ namespace Calculus
 
 /-- Print the pair when a column that the host states differs from the model's. The host columns
 are disjoint, views, compatible, guarded, and the union decision. The guard reads \`gl\` and \`gr\`,
-and the other tests read \`l\` and \`r\`. A refusal of an open pair is the refusal of either half,
-as the separation vector states it. The compatibility column counts only where the guard accepts,
+and the other tests read \`l\` and \`r\`. The decision holds at every environment, so an open pair
+reads it as a closed pair does. The compatibility column counts only where the guard accepts,
 because the host reads no compatibility after a guard refusal. -/
-def poolCheckOpen (name host : String) (l r gl gr : Term) (isOpen : Bool := true) : IO Unit := do
+def poolCheck (name host : String) (l r gl gr : Term) : IO Unit := do
   let bit (b : Bool) : String := if b then "1" else "0"
   let d := Alg.Term.disjoint pair0 l r
   let v := viewsDisjoint l r
   let c := Alg.compatPair dynOracle l r
-  let halves := Alg.Term.compat dynOracle true pair0 false false l r &&
-    Alg.Term.compat dynOracle false pair0 false false l r
-  let refuses := if isOpen then !halves else !c
+  let refuses := !c
   let g := Alg.Term.guarded gl && Alg.Term.guarded gr
   let hostAt (i : Nat) : Char := host.toList.getD i '-'
   let col (i : Nat) (yes no : Bool) : Bool :=
@@ -647,11 +633,7 @@ def poolCheckOpen (name host : String) (l r gl gr : Term) (isOpen : Bool := true
   let ok := col 0 d (!d) && col 1 v (!v) && (hostAt 3 == '0' || col 2 c refuses) &&
     col 3 g (!g) && col 4 (g && c) (!g || refuses)
   unless ok do
-    IO.println s!"mismatch {name}: host {host} model {bit d}{bit v}{bit c}{bit halves}{bit g}"
-
-/-- A closed pair: one reading. -/
-def poolCheck (name host : String) (l r : Term) : IO Unit :=
-  poolCheckOpen name host l r l r false
+    IO.println s!"mismatch {name}: host {host} model {bit d}{bit v}{bit c}{bit g}"
 
 ${pairs.flatMap(evalRows).join('\n')}
 

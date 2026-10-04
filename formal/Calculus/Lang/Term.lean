@@ -604,6 +604,154 @@ def hasHeldS : ObjectSlot S → Bool
   | .fill _ _ => true
 end
 
+mutual
+/-- **Whether the term reads a variable free at depth `k`**: a variable whose index is `k` or above,
+    where each binder on the way adds one to `k`. A term that reads none at depth `0` is closed, and
+    denotes one codec under every environment (`denote_of_closed`). -/
+def Term.readsFree (k : Nat) : Term S → Bool
+  | .var j => decide (k ≤ j)
+  | .refine t _ _ | .legacy t _ | .set t => Term.readsFree k t
+  | .mu t => Term.readsFree (k + 1) t
+  | .held _ t P _ _ => Term.readsFree k t || Term.readsFree k P
+  | .list pre sp suf => Term.readsFreeL k pre || Term.readsFreeO k sp || Term.readsFreeL k suf
+  | .object b => Body.readsFree k b
+  | .union os => Term.readsFreeL k os
+  | .prim _ | .opaq | .never => false
+/-- …in a body: in a declared slot or in the open block. -/
+def Body.readsFree (k : Nat) : Body S → Bool
+  | .mk fs f w => decide (∃ i : {i // i ∈ fs}, ObjectSlot.readsFree k (f i) = true) || Term.readsFreeO k w
+/-- …in a slot's term. -/
+def ObjectSlot.readsFree (k : Nat) : ObjectSlot S → Bool
+  | .req t | .optional t | .fill t _ => Term.readsFree k t
+/-- …in a list of terms. -/
+def Term.readsFreeL (k : Nat) : List (Term S) → Bool
+  | [] => false
+  | t :: ts => Term.readsFree k t || Term.readsFreeL k ts
+/-- …in an optional term. -/
+def Term.readsFreeO (k : Nat) : Option (Term S) → Bool
+  | none => false
+  | some t => Term.readsFree k t
+end
+
+/-- **A closed term** reads no free variable. -/
+def Term.closed (t : Term S) : Bool := !t.readsFree 0
+
+/-- **A context with one entry pushed**: the entry of the binder at index `0`, and the context
+    shifted by one beyond it. A context is a function and not a list, because a list cannot mark
+    every variable safe, which the confluence of a held-free term needs (`sub_denoteIn`). -/
+def ctxPush (b : Bool) (ctx : Nat → Bool) : Nat → Bool
+  | 0 => b
+  | i + 1 => ctx i
+
+mutual
+/-- **Whether each free variable that the term reads is safe in the context.** The context says
+    for each variable whether it is below the top. A binder of the term itself pushes a safe entry:
+    where the term is held-free, each stage of the binder is below the top (`sub_denoteSafe`). -/
+def Term.safe (ctx : Nat → Bool) : Term S → Bool
+  | .var j => ctx j
+  | .refine t _ _ | .legacy t _ | .set t => Term.safe ctx t
+  | .mu t => Term.safe (ctxPush true ctx) t
+  | .held _ t P _ _ => Term.safe ctx t && Term.safe ctx P
+  | .list pre sp suf => Term.safeL ctx pre && Term.safeO ctx sp && Term.safeL ctx suf
+  | .object b => Body.safe ctx b
+  | .union os => Term.safeL ctx os
+  | .prim _ | .opaq | .never => true
+/-- …in a body: in each declared slot and in the open block. -/
+def Body.safe (ctx : Nat → Bool) : Body S → Bool
+  | .mk fs f w => decide (∀ i : {i // i ∈ fs}, ObjectSlot.safe ctx (f i) = true) && Term.safeO ctx w
+/-- …in a slot's term. -/
+def ObjectSlot.safe (ctx : Nat → Bool) : ObjectSlot S → Bool
+  | .req t | .optional t | .fill t _ => Term.safe ctx t
+/-- …in a list of terms. -/
+def Term.safeL (ctx : Nat → Bool) : List (Term S) → Bool
+  | [] => true
+  | t :: ts => Term.safe ctx t && Term.safeL ctx ts
+/-- …in an optional term. -/
+def Term.safeO (ctx : Nat → Bool) : Option (Term S) → Bool
+  | none => true
+  | some t => Term.safe ctx t
+end
+
+mutual
+/-- **Every term is safe in a context where every variable is safe.** -/
+theorem safe_of_all : ∀ (t : Term S) (ctx : Nat → Bool), (∀ i, ctx i = true) → t.safe ctx = true
+  | .prim _, _, _ | .opaq, _, _ | .never, _, _ => rfl
+  | .var j, _, h => h j
+  | .set t, ctx, h | .refine t _ _, ctx, h | .legacy t _, ctx, h => safe_of_all t ctx h
+  | .mu t, ctx, h => safe_of_all t (ctxPush true ctx) fun i => match i with
+      | 0 => rfl
+      | i + 1 => h i
+  | .held _ t P _ _, ctx, h => by
+      simp only [Term.safe, safe_of_all t ctx h, safe_of_all P ctx h, Bool.and_self]
+  | .list pre sp suf, ctx, h => by
+      simp only [Term.safe, safeL_of_all pre ctx h, safeO_of_all sp ctx h, safeL_of_all suf ctx h,
+        Bool.and_self]
+  | .object b, ctx, h => safeB_of_all b ctx h
+  | .union os, ctx, h => safeL_of_all os ctx h
+/-- …in a body. -/
+theorem safeB_of_all : ∀ (b : Body S) (ctx : Nat → Bool), (∀ i, ctx i = true) → b.safe ctx = true
+  | .mk fs f w, ctx, h => by
+      simp only [Body.safe, Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨fun i => safeS_of_all (f i) ctx h, safeO_of_all w ctx h⟩
+/-- …in a slot. -/
+theorem safeS_of_all : ∀ (s : ObjectSlot S) (ctx : Nat → Bool), (∀ i, ctx i = true) →
+    s.safe ctx = true
+  | .req t, ctx, h | .optional t, ctx, h | .fill t _, ctx, h => safe_of_all t ctx h
+/-- …in a list of terms. -/
+theorem safeL_of_all : ∀ (ts : List (Term S)) (ctx : Nat → Bool), (∀ i, ctx i = true) →
+    Term.safeL ctx ts = true
+  | [], _, _ => rfl
+  | t :: ts, ctx, h => by simp only [Term.safeL, safe_of_all t ctx h, safeL_of_all ts ctx h, Bool.and_self]
+/-- …in an optional term. -/
+theorem safeO_of_all : ∀ (o : Option (Term S)) (ctx : Nat → Bool), (∀ i, ctx i = true) →
+    Term.safeO ctx o = true
+  | none, _, _ => rfl
+  | some t, ctx, h => safe_of_all t ctx h
+end
+
+mutual
+/-- **A term with no variable reads no free variable**, at every depth. -/
+theorem readsFree_of_hasVar : ∀ (t : Term S) (k : Nat), t.hasVar = false → t.readsFree k = false
+  | .prim _, _, _ | .opaq, _, _ | .never, _, _ => rfl
+  | .var _, _, h => nomatch h
+  | .set t, k, h | .refine t _ _, k, h | .legacy t _, k, h => readsFree_of_hasVar t k h
+  | .mu t, k, h => readsFree_of_hasVar t (k + 1) h
+  | .held _ t P _ _, k, h => by
+      simp only [Term.hasVar, Bool.or_eq_false_iff] at h
+      simp only [Term.readsFree, readsFree_of_hasVar t k h.1, readsFree_of_hasVar P k h.2, Bool.or_self]
+  | .list pre sp suf, k, h => by
+      simp only [Term.hasVar, Bool.or_eq_false_iff] at h
+      simp only [Term.readsFree, readsFreeL_of_hasVar pre k h.1.1, readsFreeO_of_hasVar sp k h.1.2,
+        readsFreeL_of_hasVar suf k h.2, Bool.or_self]
+  | .object b, k, h => readsFreeB_of_hasVar b k h
+  | .union os, k, h => readsFreeL_of_hasVar os k h
+/-- …in a body. -/
+theorem readsFreeB_of_hasVar : ∀ (b : Body S) (k : Nat), b.hasVar = false → b.readsFree k = false
+  | .mk fs f w, k, h => by
+      simp only [Body.hasVar, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists,
+        Bool.not_eq_true] at h
+      simp only [Body.readsFree, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists,
+        Bool.not_eq_true]
+      exact ⟨fun i => readsFreeS_of_hasVar (f i) k (h.1 i), readsFreeO_of_hasVar w k h.2⟩
+/-- …in a slot. -/
+theorem readsFreeS_of_hasVar : ∀ (s : ObjectSlot S) (k : Nat), s.hasVar = false →
+    s.readsFree k = false
+  | .req t, k, h | .optional t, k, h | .fill t _, k, h => readsFree_of_hasVar t k h
+/-- …in a list of terms. -/
+theorem readsFreeL_of_hasVar : ∀ (ts : List (Term S)) (k : Nat), Term.hasVarL ts = false →
+    Term.readsFreeL k ts = false
+  | [], _, _ => rfl
+  | t :: ts, k, h => by
+      simp only [Term.hasVarL, Bool.or_eq_false_iff] at h
+      simp only [Term.readsFreeL, readsFree_of_hasVar t k h.1, readsFreeL_of_hasVar ts k h.2,
+        Bool.or_self]
+/-- …in an optional term. -/
+theorem readsFreeO_of_hasVar : ∀ (o : Option (Term S)) (k : Nat), Term.hasVarO o = false →
+    Term.readsFreeO k o = false
+  | none, _, _ => rfl
+  | some t, k, h => readsFree_of_hasVar t k h
+end
+
 /-! ## A structural measure on terms
 
 `denote` recurses structurally and needs no measure. The **proofs** do: `soundness` recurses
@@ -812,89 +960,111 @@ def denoteμsAbs : List (Term B) → (ρ : List (Mean.C B) := []) →
 
 end
 
-/-! ## A term with no variable
+/-! ## A term with no free variable
 
-A term with no variable reads no binder, so the environment does not change the denotation. -/
+A term that reads no variable free at depth `k` reads only the first `k` entries of its environment,
+so two environments that agree there give one codec. At `k = 0` the term is closed. -/
 
 variable {τ}
 
 mutual
 
-/-- **A term with no variable is closed**: two environments give one codec. -/
-theorem denoteAbs_closed : ∀ (t : Term B), t.hasVar = false → ∀ ρ ρ' : List (Mean.C B),
-    denoteAbs τ t ρ = denoteAbs τ t ρ'
-  | .prim _, _, _, _ => rfl
-  | .opaq, _, _, _ => rfl
-  | .never, _, _, _ => rfl
-  | .var _, h, _, _ => nomatch h
-  | .set t, h, ρ, ρ' => by simp only [denoteAbs]; rw [denoteAbs_closed t h ρ ρ']
-  | .refine t _ _, h, ρ, ρ' => by simp only [denoteAbs]; rw [denoteAbs_closed t h ρ ρ']
-  | .legacy t _, h, ρ, ρ' => by simp only [denoteAbs]; rw [denoteAbs_closed t h ρ ρ']
-  | .mu b, h, ρ, ρ' => by
+/-- **A term reads only the entries below its free depth.** -/
+theorem denoteAbs_readsFree : ∀ (t : Term B) (k : Nat), t.readsFree k = false →
+    ∀ ρ ρ' : List (Mean.C B), (∀ i, i < k → envAt ρ i = envAt ρ' i) →
+      denoteAbs τ t ρ = denoteAbs τ t ρ'
+  | .prim _, _, _, _, _, _ => rfl
+  | .opaq, _, _, _, _, _ => rfl
+  | .never, _, _, _, _, _ => rfl
+  | .var j, k, h, ρ, ρ', hρ => by
+      simp only [Term.readsFree, decide_eq_false_iff_not, Nat.not_le] at h
+      exact hρ j h
+  | .set t, k, h, ρ, ρ', hρ => by
+      simp only [denoteAbs]; rw [denoteAbs_readsFree t k h ρ ρ' hρ]
+  | .refine t _ _, k, h, ρ, ρ', hρ => by
+      simp only [denoteAbs]; rw [denoteAbs_readsFree t k h ρ ρ' hρ]
+  | .legacy t _, k, h, ρ, ρ', hρ => by
+      simp only [denoteAbs]; rw [denoteAbs_readsFree t k h ρ ρ' hρ]
+  | .mu b, k, h, ρ, ρ', hρ => by
       simp only [denoteAbs]
       congr 1
       funext c
-      exact denoteAbs_closed b h (c :: ρ) (c :: ρ')
-  | .held _ t P _ _, h, ρ, ρ' => by
-      simp only [Term.hasVar, Bool.or_eq_false_iff] at h
+      exact denoteAbs_readsFree b (k + 1) h (c :: ρ) (c :: ρ') fun i hi => match i, hi with
+        | 0, _ => rfl
+        | i + 1, hi => hρ i (Nat.lt_of_succ_lt_succ hi)
+  | .held _ t P _ _, k, h, ρ, ρ', hρ => by
+      simp only [Term.readsFree, Bool.or_eq_false_iff] at h
       simp only [denoteAbs]
-      rw [denoteAbs_closed t h.1 ρ ρ', denoteAbs_closed P h.2 ρ ρ']
-  | .list pre sp suf, h, ρ, ρ' => by
-      simp only [Term.hasVar, Bool.or_eq_false_iff] at h
+      rw [denoteAbs_readsFree t k h.1 ρ ρ' hρ, denoteAbs_readsFree P k h.2 ρ ρ' hρ]
+  | .list pre sp suf, k, h, ρ, ρ', hρ => by
+      simp only [Term.readsFree, Bool.or_eq_false_iff] at h
       simp only [denoteAbs]
-      rw [denoteListAbs_closed pre h.1.1 ρ ρ', denoteOptAbs_closed sp h.1.2 ρ ρ',
-        denoteListAbs_closed suf h.2 ρ ρ']
-  | .object b, h, ρ, ρ' => bodySemAbs_closed b h ρ ρ'
-  | .union os, h, ρ, ρ' => by
+      rw [denoteListAbs_readsFree pre k h.1.1 ρ ρ' hρ, denoteOptAbs_readsFree sp k h.1.2 ρ ρ' hρ,
+        denoteListAbs_readsFree suf k h.2 ρ ρ' hρ]
+  | .object b, k, h, ρ, ρ', hρ => bodySemAbs_readsFree b k h ρ ρ' hρ
+  | .union os, k, h, ρ, ρ', hρ => by
+      simp only [Term.readsFree] at h
       simp only [denoteAbs]
-      rw [denoteListAbs_closed os h ρ ρ', denoteμsAbs_closed os h ρ ρ']
+      rw [denoteListAbs_readsFree os k h ρ ρ' hρ, denoteμsAbs_readsFree os k h ρ ρ' hρ]
 
 /-- …at a body. -/
-theorem bodySemAbs_closed : ∀ (b : Body B), b.hasVar = false → ∀ ρ ρ' : List (Mean.C B),
-    bodySemAbs τ b ρ = bodySemAbs τ b ρ'
-  | .mk fields f wild, h, ρ, ρ' => by
-      simp only [Body.hasVar, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists, Bool.not_eq_true] at h
-      have hf : (fun k => fieldSemAbs τ (f k) ρ) = (fun k => fieldSemAbs τ (f k) ρ') :=
-        funext fun k => fieldSemAbs_closed (f k) (h.1 k) ρ ρ'
+theorem bodySemAbs_readsFree : ∀ (b : Body B) (k : Nat), b.readsFree k = false →
+    ∀ ρ ρ' : List (Mean.C B), (∀ i, i < k → envAt ρ i = envAt ρ' i) →
+      bodySemAbs τ b ρ = bodySemAbs τ b ρ'
+  | .mk fields f wild, k, h, ρ, ρ', hρ => by
+      simp only [Body.readsFree, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists,
+        Bool.not_eq_true] at h
+      have hf : (fun i => fieldSemAbs τ (f i) ρ) = (fun i => fieldSemAbs τ (f i) ρ') :=
+        funext fun i => fieldSemAbs_readsFree (f i) k (h.1 i) ρ ρ' hρ
       simp only [bodySemAbs]
-      rw [hf, wildSemAbs_closed wild h.2 ρ ρ']
+      rw [hf, wildSemAbs_readsFree wild k h.2 ρ ρ' hρ]
 
 /-- …at a slot. -/
-theorem fieldSemAbs_closed : ∀ (s : ObjectSlot B), s.hasVar = false →
-    ∀ ρ ρ' : List (Mean.C B), fieldSemAbs τ s ρ = fieldSemAbs τ s ρ'
-  | .req t, h, ρ, ρ' => by simp only [fieldSemAbs]; rw [denoteAbs_closed t h ρ ρ']
-  | .optional t, h, ρ, ρ' => by simp only [fieldSemAbs]; rw [denoteAbs_closed t h ρ ρ']
-  | .fill t _, h, ρ, ρ' => by simp only [fieldSemAbs]; rw [denoteAbs_closed t h ρ ρ']
+theorem fieldSemAbs_readsFree : ∀ (s : ObjectSlot B) (k : Nat), s.readsFree k = false →
+    ∀ ρ ρ' : List (Mean.C B), (∀ i, i < k → envAt ρ i = envAt ρ' i) →
+      fieldSemAbs τ s ρ = fieldSemAbs τ s ρ'
+  | .req t, k, h, ρ, ρ', hρ => by
+      simp only [fieldSemAbs]; rw [denoteAbs_readsFree t k h ρ ρ' hρ]
+  | .optional t, k, h, ρ, ρ', hρ => by
+      simp only [fieldSemAbs]; rw [denoteAbs_readsFree t k h ρ ρ' hρ]
+  | .fill t _, k, h, ρ, ρ', hρ => by
+      simp only [fieldSemAbs]; rw [denoteAbs_readsFree t k h ρ ρ' hρ]
 
 /-- …at an open block. -/
-theorem wildSemAbs_closed : ∀ (w : Option (Term B)), Term.hasVarO w = false →
-    ∀ ρ ρ' : List (Mean.C B), wildSemAbs τ w ρ = wildSemAbs τ w ρ'
-  | none, _, _, _ => rfl
-  | some t, h, ρ, ρ' => by simp only [wildSemAbs]; rw [denoteAbs_closed t h ρ ρ']
+theorem wildSemAbs_readsFree : ∀ (w : Option (Term B)) (k : Nat), Term.readsFreeO k w = false →
+    ∀ ρ ρ' : List (Mean.C B), (∀ i, i < k → envAt ρ i = envAt ρ' i) →
+      wildSemAbs τ w ρ = wildSemAbs τ w ρ'
+  | none, _, _, _, _, _ => rfl
+  | some t, k, h, ρ, ρ', hρ => by
+      simp only [wildSemAbs]; rw [denoteAbs_readsFree t k h ρ ρ' hρ]
 
 /-- …at a list of terms. -/
-theorem denoteListAbs_closed : ∀ (ts : List (Term B)), Term.hasVarL ts = false →
-    ∀ ρ ρ' : List (Mean.C B), denoteListAbs τ ts ρ = denoteListAbs τ ts ρ'
-  | [], _, _, _ => rfl
-  | t :: ts, h, ρ, ρ' => by
-      simp only [Term.hasVarL, Bool.or_eq_false_iff] at h
+theorem denoteListAbs_readsFree : ∀ (ts : List (Term B)) (k : Nat), Term.readsFreeL k ts = false →
+    ∀ ρ ρ' : List (Mean.C B), (∀ i, i < k → envAt ρ i = envAt ρ' i) →
+      denoteListAbs τ ts ρ = denoteListAbs τ ts ρ'
+  | [], _, _, _, _, _ => rfl
+  | t :: ts, k, h, ρ, ρ', hρ => by
+      simp only [Term.readsFreeL, Bool.or_eq_false_iff] at h
       simp only [denoteListAbs]
-      rw [denoteAbs_closed t h.1 ρ ρ', denoteListAbs_closed ts h.2 ρ ρ']
+      rw [denoteAbs_readsFree t k h.1 ρ ρ' hρ, denoteListAbs_readsFree ts k h.2 ρ ρ' hρ]
 
 /-- …at an optional term. -/
-theorem denoteOptAbs_closed : ∀ (sp : Option (Term B)), Term.hasVarO sp = false →
-    ∀ ρ ρ' : List (Mean.C B), denoteOptAbs τ sp ρ = denoteOptAbs τ sp ρ'
-  | none, _, _, _ => rfl
-  | some t, h, ρ, ρ' => by simp only [denoteOptAbs]; rw [denoteAbs_closed t h ρ ρ']
+theorem denoteOptAbs_readsFree : ∀ (sp : Option (Term B)) (k : Nat), Term.readsFreeO k sp = false →
+    ∀ ρ ρ' : List (Mean.C B), (∀ i, i < k → envAt ρ i = envAt ρ' i) →
+      denoteOptAbs τ sp ρ = denoteOptAbs τ sp ρ'
+  | none, _, _, _, _, _ => rfl
+  | some t, k, h, ρ, ρ', hρ => by
+      simp only [denoteOptAbs]; rw [denoteAbs_readsFree t k h ρ ρ' hρ]
 
 /-- …at the members of a list of terms. -/
-theorem denoteμsAbs_closed : ∀ (ts : List (Term B)), Term.hasVarL ts = false →
-    ∀ ρ ρ' : List (Mean.C B), denoteμsAbs τ ts ρ = denoteμsAbs τ ts ρ'
-  | [], _, _, _ => rfl
-  | t :: ts, h, ρ, ρ' => by
-      simp only [Term.hasVarL, Bool.or_eq_false_iff] at h
+theorem denoteμsAbs_readsFree : ∀ (ts : List (Term B)) (k : Nat), Term.readsFreeL k ts = false →
+    ∀ ρ ρ' : List (Mean.C B), (∀ i, i < k → envAt ρ i = envAt ρ' i) →
+      denoteμsAbs τ ts ρ = denoteμsAbs τ ts ρ'
+  | [], _, _, _, _, _ => rfl
+  | t :: ts, k, h, ρ, ρ', hρ => by
+      simp only [Term.readsFreeL, Bool.or_eq_false_iff] at h
       simp only [denoteμsAbs]
-      rw [denoteAbs_closed t h.1 ρ ρ', denoteμsAbs_closed ts h.2 ρ ρ']
+      rw [denoteAbs_readsFree t k h.1 ρ ρ' hρ, denoteμsAbs_readsFree ts k h.2 ρ ρ' hρ]
 
 end
 
@@ -955,10 +1125,16 @@ abbrev denoteμs (ts : List (Term S)) (ρ : List S.C := []) : List (Option S.M) 
 
 variable {α β}
 
+/-- **A closed term denotes one codec under every environment**: it reads no free variable, which
+    is weaker than reading no variable, because a term may read the variable of its own binder. -/
+theorem denote_of_closed (t : Term S) (h : t.closed = true) (ρ ρ' : List S.C) :
+    denote α β t ρ = denote α β t ρ' :=
+  denoteAbs_readsFree t 0 (by simpa [Term.closed] using h) ρ ρ' fun _ hi => absurd hi (Nat.not_lt_zero _)
+
 /-- **A term with no variable is closed**: two environments give one codec. -/
 theorem denote_closed (t : Term S) (h : t.hasVar = false) (ρ ρ' : List S.C) :
     denote α β t ρ = denote α β t ρ' :=
-  denoteAbs_closed t h ρ ρ'
+  denote_of_closed t (by simp only [Term.closed, readsFree_of_hasVar t 0 h, Bool.not_false]) ρ ρ'
 
 /-! ## The host rows
 
