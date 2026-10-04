@@ -18,6 +18,7 @@ import {
     failed,
     held,
     list,
+    never,
     number,
     object,
     optional,
@@ -603,6 +604,24 @@ describe('the held side is the write occupancy of a union option', () => {
         expect(() => declare([legacy, object({ a: string })])).toThrow(
             CodecError,
         )
+    })
+
+    /**
+     * **A legacy read is decided by the base test alone**, because its older reader is caller code
+     * and the model reads that reader as opaque. On the write half the two legacy reads hold one
+     * text, and no base row separates them, so the union is refused even when both options are
+     * one codec. The `held` over the bottom stores nothing, so only the write half refuses.
+     */
+    it('refuses a codec with a legacy read beside itself, because the older reader is opaque', () => {
+        const flag = held(never, boolean, {
+            encode: () => new CodecError('nothing is stored'),
+            decode: () => new CodecError('nothing is stored'),
+        })
+        const pair = list(
+            withLegacyRead({ current: string, older: string }),
+            flag,
+        )
+        expect(() => declare([pair, pair])).toThrow(CodecError)
     })
 
     it('refuses a foreign held side beside a codec, because the top meets every kind', () => {
