@@ -1681,7 +1681,9 @@ const bodiesAgree = (half: Half, a: Body, b: Body, at: Agreement): boolean => {
  * returns to, and a variable at the thunk that closes the cycle ({@link Scope}). Two variables are
  * disjoint where the two binders were unfolded together, because the model's environments keep
  * each such pair apart. Two recursive terms are disjoint where their bodies are, with the two
- * binders paired. A recursive term beside another term unfolds, and its binder pairs with nothing.
+ * binders paired. A recursive term also unfolds, and its binder pairs with nothing. The rows of a
+ * left recursive term and a left refinement split the right operand at every depth, so a right
+ * refinement or a right recursive term hides no option from the left row.
  *
  * **A thunk that throws is a free variable that pairs with nothing.** The thunk names a codec that
  * is not yet declared, so the host cannot read the term that the thunk returns. The soundness of
@@ -1804,8 +1806,10 @@ type Walk = {
  *
  * **The walk ends.** The spelling of each operand is a finite term, because {@link bindersOf}
  * binds the target of every thunk that closes a cycle, and the spelling stops at each variable.
- * Each call reads a strict subterm of one spelling, or of both, with the other spelling
- * unchanged, so the sum of the two sizes falls at each call.
+ * Each call reads a strict subterm of one spelling, or of both, with the other spelling no
+ * larger. The split of the right operand hands a left row an option under the refinements that
+ * the split keeps, which is no larger than the right spelling, and the left row then reads a
+ * strict subterm of the left spelling. So the sum of the two sizes falls at each call.
  */
 const disjointWalk = (x: Term, y: Term, w: Walk): boolean => {
     const one = see(x, w.left)
@@ -1827,18 +1831,28 @@ const disjointWalk = (x: Term, y: Term, w: Walk): boolean => {
                 y,
                 w,
             )
-        case 'mu': {
-            const other = see(y, w.right)
-            // two recursive terms: the bodies, with the two binders paired
-            if (other.kind === 'mu')
-                return disjointWalk(one.body, other.body, {
-                    left: one.scope,
-                    right: other.scope,
-                    pairs: [...w.pairs, { left: one.body, right: other.body }],
-                })
-            // a recursive term beside another term unfolds, and its binder pairs with nothing
-            return disjointWalk(one.body, y, { ...w, left: one.scope })
-        }
+        // the right operand splits at every depth. Two recursive terms: the bodies, with the two
+        // binders paired. A recursive term also unfolds, and its binder pairs with nothing
+        case 'mu':
+            return splitRight(
+                (y1, v) => {
+                    const other = see(y1, v.right)
+                    return (
+                        (other.kind === 'mu' &&
+                            disjointWalk(one.body, other.body, {
+                                left: one.scope,
+                                right: other.scope,
+                                pairs: [
+                                    ...v.pairs,
+                                    { left: one.body, right: other.body },
+                                ],
+                            })) ||
+                        disjointWalk(one.body, y1, { ...v, left: one.scope })
+                    )
+                },
+                y,
+                w,
+            )
         case 'term':
             return termRow(one.t, y, w)
     }
@@ -1944,19 +1958,44 @@ const rightRows = (
 }
 
 /**
- * **The bottom and a union of the right operand, and nothing else**, the model's `splitR`. The
- * refinement row hands each option whole to `fam`.
+ * **The right operand, split at every depth**, the model's `splitR`. The rows of a left
+ * refinement and a left recursive term read the right operand through this split. A union splits
+ * into its options. A refinement keeps its predicate on each option below it, through the wrapper
+ * `wrap`, unless its inner term holds an adapter or a variable: there the split drops the
+ * predicate, and the inner term bounds the refinement. A recursive term is handed whole to `fam`,
+ * and is also unfolded with its binder paired with nothing. So a right refinement or a right
+ * recursive term hides no option from the left row.
  */
 const splitRight = (
     fam: (other: Term, w: Walk) => boolean,
     y: Term,
     w: Walk,
+    wrap: (t: Term) => Term = (t) => t,
 ): boolean => {
     const other = see(y, w.right)
-    if (other.kind === 'term' && other.t.kind === 'never') return true
-    if (other.kind === 'term' && other.t.kind === 'union')
-        return other.t.options.every((option) => splitRight(fam, option, w))
-    return fam(y, w)
+    if (other.kind === 'mu')
+        return (
+            fam(wrap(y), w) ||
+            splitRight(fam, other.body, { ...w, right: other.scope }, wrap)
+        )
+    if (other.kind === 'term')
+        switch (other.t.kind) {
+            case 'never':
+                return true
+            case 'union':
+                return other.t.options.every((option) =>
+                    splitRight(fam, option, w, wrap),
+                )
+            case 'refine': {
+                const { inner, q } = other.t
+                return spells(inner, w.right.inside, ['held', 'legacy'])
+                    ? splitRight(fam, inner, w, wrap)
+                    : splitRight(fam, inner, w, (t) =>
+                          wrap({ kind: 'refine', inner: t, q }),
+                      )
+            }
+        }
+    return fam(wrap(y), w)
 }
 
 /**
