@@ -1370,8 +1370,8 @@ const baseRows = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
 /**
  * **The rows of the right operand**, the model's `cmpR`. The bottom agrees with every term. A
  * union agrees where each option does. A refinement is below its inner term. A recursive term
- * unfolds, and its binder pairs with nothing. On the write half, a `withLegacyRead` writes what
- * its inner term writes. `fam` answers every other spelling, and each spelling that it declines.
+ * unfolds, and its binder pairs with nothing. `fam` answers every other spelling, and each
+ * spelling that it declines.
  */
 const agreeRight = (
     half: Half,
@@ -1398,8 +1398,6 @@ const agreeRight = (
             )
         case 'refine':
             return agreeRight(half, fam, other.t.inner, at)
-        case 'legacy':
-            return half === 'write' && agreeRight(half, fam, other.t.inner, at)
         default:
             return false
     }
@@ -1487,9 +1485,7 @@ const agreeWalk = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
                 t.options.every((option) => agreeWalk(half, option, y, at))
             )
         case 'legacy':
-            return half === 'write'
-                ? base(y, at) || agreeWalk(half, t.inner, y, at)
-                : agreeRight(half, base, y, at)
+            return agreeRight(half, base, y, at)
         case 'set':
             return agreeRight(
                 half,
