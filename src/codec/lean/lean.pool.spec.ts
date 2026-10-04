@@ -11,16 +11,14 @@
  * alone, so a change of the pool counts below is a change of the generator, of the constructors, or
  * of the emitter.
  *
- * Two routes narrow the pool, and each has a reason:
+ * A thunk that throws is an unknown term, and each host check takes its worst case, so a pair has
+ * two readings: the guard reads the thunk as the root of its option, and the other tests read the
+ * open term.
  *
- * - **No thunk that throws.** The emitter spells a thunk that throws as a variable that no binder
- *   binds. The model reads that variable as guarded, and the host's guard refuses the thunk, so the
- *   two disagree on a term that the host never meant. The generator draws no such thunk until the
- *   emitter spells the thunk as the variable of a root `Term.mu`.
- * - **No separation vector for a fill on each side.** The model refuses two fills at one name
- *   whatever their constants, because the constants of a fill have no decidable equality. The host
- *   accepts two fills with equal constants. Such a pair goes to disjointness only, and the
- *   pre-check reads no compatibility column for the pair.
+ * One route narrows the pool. **No separation vector for a fill on each side.** The model refuses
+ * two fills at one name whatever their constants, because the constants of a fill have no decidable
+ * equality. The host accepts two fills with equal constants. Such a pair goes to disjointness only,
+ * and the pre-check reads no compatibility column for the pair.
  */
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -56,6 +54,7 @@ import {
     LeanUnemittable,
     leanDisjoint,
     leanDisjointModule,
+    leanRooted,
     leanSeparation,
     leanSeparationModule,
     leanString,
@@ -115,6 +114,7 @@ const leaves: readonly (readonly [string, () => AnyCodec])[] = [
     ['opaque', () => erase(opaque)],
     ['opaque.lossy', () => erase(opaque('lossy'))],
     ['never', () => erase(never)],
+    ['undeclared', () => erase(undeclared)],
 ]
 const setable: readonly (readonly [string, () => AnyCodec])[] = [
     ['string.set', () => erase(string.set())],
@@ -123,6 +123,10 @@ const setable: readonly (readonly [string, () => AnyCodec])[] = [
     ['decimal.set', () => erase(decimal.set())],
     ['binary.set', () => erase(binary.set())],
 ]
+/** A thunk that names a codec not yet declared: forced, it throws. */
+const undeclared = lazy((): never => {
+    throw new ReferenceError('the constant under declaration')
+})
 /** A caller's predicate: the theorem binds the predicate as a variable. */
 const callerPredicate = (v: unknown): v is unknown => v !== 'zz'
 const names = ['a', 'b', 'c']
@@ -363,8 +367,13 @@ type PoolPair = {
     readonly host: string
     /** A fill on each side: the pair goes to disjointness only. */
     readonly fills: boolean
+    /** A thunk that throws on a side: the compatibility test reads the open term in both halves. */
+    readonly open: boolean
     readonly l: string
     readonly r: string
+    /** The two terms that the guard reads. */
+    readonly gl: string
+    readonly gr: string
     readonly closures: readonly string[]
     readonly readers: readonly string[]
 }
@@ -404,11 +413,6 @@ const pool = (): readonly PoolPair[] => {
         }
         const x = a.codec.def
         const y = b.codec.def
-        // no draw holds a thunk that throws, so a free variable is a broken invariant
-        if (readsFreeVariable(x) || readsFreeVariable(y))
-            throw new Error(
-                `${name} reads a free variable: ${a.name} | ${b.name}`,
-            )
         let declared = true
         try {
             union([a.codec, b.codec] as never)
@@ -432,8 +436,11 @@ const pool = (): readonly PoolPair[] => {
             right: b.codec,
             host,
             fills: holdsFill(x) && holdsFill(y),
+            open: readsFreeVariable(x) || readsFreeVariable(y),
             l,
             r,
+            gl: leanRooted(l, a.codec),
+            gr: leanRooted(r, b.codec),
             closures: [...bound.closures.values()],
             readers: [...bound.readers.values()],
         })
@@ -455,7 +462,10 @@ const stands = [
 const evalRows = (p: PoolPair): string[] => {
     // the compatibility columns of a pair with a fill on each side are the known narrowing
     const expected = p.fills ? `${p.host.slice(0, 2)}-${p.host[3]}-` : p.host
-    const call = `poolCheck ${leanString(`${p.name} ${p.label}`)} "${expected}" (${p.l}) (${p.r})`
+    const label = leanString(`${p.name} ${p.label}`)
+    const call = p.open
+        ? `poolCheckOpen ${label} "${expected}" (${p.l}) (${p.r}) (${p.gl}) (${p.gr})`
+        : `poolCheck ${label} "${expected}" (${p.l}) (${p.r})`
     if (p.closures.length + p.readers.length === 0) return [`#eval ${call}`]
     return stands.map((stand) => {
         const lets = [
@@ -488,18 +498,31 @@ set_option linter.unusedVariables false
 
 namespace Calculus
 
-/-- The model's verdicts on a pair: disjoint, views, compatible, guarded, and the union decision. -/
-def poolRow (l r : Term) : String :=
+/-- Print the pair when a column that the host states differs from the model's. The host columns
+are disjoint, views, compatible, guarded, and the union decision. The guard reads \`gl\` and \`gr\`,
+and the other tests read \`l\` and \`r\`. A refusal of an open pair is the refusal of either half,
+as the separation vector states it. The compatibility column counts only where the guard accepts,
+because the host reads no compatibility after a guard refusal. -/
+def poolCheckOpen (name host : String) (l r gl gr : Term) (isOpen : Bool := true) : IO Unit := do
   let bit (b : Bool) : String := if b then "1" else "0"
+  let d := Alg.Term.disjoint pair0 l r
+  let v := viewsDisjoint l r
   let c := Alg.compatPair dynOracle l r
-  let g := Alg.Term.guarded l && Alg.Term.guarded r
-  bit (Alg.Term.disjoint pair0 l r) ++ bit (viewsDisjoint l r) ++ bit c ++ bit g ++ bit (g && c)
+  let halves := Alg.Term.compat dynOracle true pair0 false false l r &&
+    Alg.Term.compat dynOracle false pair0 false false l r
+  let refuses := if isOpen then !halves else !c
+  let g := Alg.Term.guarded gl && Alg.Term.guarded gr
+  let hostAt (i : Nat) : Char := host.toList.getD i '-'
+  let col (i : Nat) (yes no : Bool) : Bool :=
+    hostAt i == '-' || (hostAt i == '1' && yes) || (hostAt i == '0' && no)
+  let ok := col 0 d (!d) && col 1 v (!v) && (hostAt 3 == '0' || col 2 c refuses) &&
+    col 3 g (!g) && col 4 (g && c) (!g || refuses)
+  unless ok do
+    IO.println s!"mismatch {name}: host {host} model {bit d}{bit v}{bit c}{bit halves}{bit g}"
 
-/-- Print the pair when a column that the host states differs from the model's. -/
-def poolCheck (name host : String) (l r : Term) : IO Unit := do
-  let model := poolRow l r
-  unless (host.toList.zip model.toList).all (fun (h, m) => h == '-' || h == m) do
-    IO.println s!"mismatch {name}: host {host} model {model}"
+/-- A closed pair: one reading. -/
+def poolCheck (name host : String) (l r : Term) : IO Unit :=
+  poolCheckOpen name host l r l r false
 
 ${pairs.flatMap(evalRows).join('\n')}
 
@@ -550,14 +573,14 @@ describe('the generated pool, against the model', () => {
             dropped: Object.fromEntries([...dropped].sort()),
         }).toMatchInlineSnapshot(`
           {
-            "disjoints": 1060,
+            "disjoints": 978,
             "dropped": {
-              "a constructor refused the draw": 23,
-              "term: \`Term.held\` carries a word of adapter generators, and a table gives each generator two \`Value → Value\` functions. The library ships one generator the model names, \`decimalText\`, whose pair is \`numeralOfStoredText\`/\`textOfNumeral\`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted": 83,
+              "a constructor refused the draw": 30,
+              "term: \`Term.held\` carries a word of adapter generators, and a table gives each generator two \`Value → Value\` functions. The library ships one generator the model names, \`decimalText\`, whose pair is \`numeralOfStoredText\`/\`textOfNumeral\`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted": 102,
             },
-            "fills": 10,
-            "pairs": 1060,
-            "separations": 1050,
+            "fills": 8,
+            "pairs": 978,
+            "separations": 970,
           }
         `)
     })

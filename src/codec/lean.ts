@@ -72,6 +72,7 @@ import {
     disjoint,
     force,
     readsFreeVariable,
+    recursionUse,
     type Scope,
     viewsDisjoint,
 } from './term'
@@ -541,7 +542,9 @@ const leanBinders = (bound: Bound): string => {
  *   prints as a variable that the theorem binds, and a caller's adapter prints as a generator
  *   `caller n` whose pair the theorem quantifies through the caller table.
  * - **A thunk that throws is not here.** It names a codec not yet declared, and it prints as a
- *   variable that no binder of the term binds, as the host's disjointness test reads it.
+ *   variable that no binder of the term binds, as the host's disjointness test reads it. The
+ *   host's guard reads the same thunk as the root of the term, and {@link leanRooted} spells that
+ *   second reading.
  *
  * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
  * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
@@ -682,6 +685,19 @@ const leanBodyOf = (body: Body, at: string, scope: At): string => {
             : `(some (${leanTermOfTerm(rest, `${at}.rest`, scope)}))`
     return `(Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
 }
+
+/**
+ * **The guard's reading of a term**: a thunk that throws is the variable of a root `Term.mu`.
+ *
+ * A thunk that throws is an unknown term, and each host check takes its worst case. The
+ * disjointness and compatibility tests read the open term, where the thunk is a variable that no
+ * binder binds. The guard reads the thunk as a path to the root of the option, because at a
+ * declaration such a thunk throws as a thunk that names the codec under declaration does.
+ * {@link leanTermOf} prints that variable one binder beyond each enclosing binder, so one `Term.mu`
+ * around the whole term binds it to the root. A term with no such thunk has no root binder.
+ */
+export const leanRooted = (printed: string, declared: AnyCodec): string =>
+    readsFreeVariable(declared.def) ? `Term.mu (${printed})` : printed
 
 const leanTermOfTerm = (t: Term, at: string, scope: At): string =>
     scope.binds.has(t) && !scope.inside.includes(t)
@@ -1034,6 +1050,9 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  *   prove stops the file.
  * - `src/` **refuses** the pair: the model's decision must refuse it too, `compatPair dynOracle x
  *   y = false`. A decision that starts to accept a pair `src/` turns down stops the file.
+ * - `src/` **refuses** the pair **at the guard**: an option reads the input of its own binder, or
+ *   holds an adapter on a recursive path. The model's guard must refuse an option too, on the
+ *   terms that {@link leanRooted} spells.
  *
  * Compatibility is not decidable, so a refused pair carries no theorem that it is incompatible:
  * `not_compat_flip` and `not_compat_shout` are the model's witnesses of that class.
@@ -1072,6 +1091,18 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
             ? (half: boolean) =>
                   `Alg.Term.compat dynOracle ${half} pair0 false false (${l})\n        (${r})`
             : undefined
+    // the host's guard runs before its compatibility test, and reads each option on its own
+    const guardRefuses = [left, right].some(
+        (option) => recursionUse(option.def) >= 2,
+    )
+    if (refused && guardRefuses) {
+        return [
+            `/-- \`${name}\` — \`src/\` refuses this pair at the guard; the model's guard refuses it too -/`,
+            head,
+            `    (Alg.Term.guarded (${leanRooted(l, left)}) &&`,
+            `      Alg.Term.guarded (${leanRooted(r, right)})) = false := ${reduce}`,
+        ].join('\n')
+    }
     if (refused) {
         return [
             `/-- \`${name}\` — \`src/\` refuses this pair; the model's decision refuses it too -/`,

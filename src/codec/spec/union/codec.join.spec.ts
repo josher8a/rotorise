@@ -412,7 +412,8 @@ describe('a union refuses a thunk it must read at its own input, because the mod
      * **A thunk that names a codec not yet declared is read as the union itself.** The thunk
      * throws in the same way for the union and for a later constant, so the declaration cannot
      * tell the two apart. The model reads an unbound variable as guarded, and the host refuses
-     * here on purpose: read as the union, the option recurses at its own input.
+     * here on purpose: read as the union, the option recurses at its own input. The emitter states
+     * this reading as a guard vector, on the term with the thunk as the variable of a root `Term.mu`.
      */
     it('refuses a thunk that names a later codec, because it throws as a thunk that names the union does', () => {
         const declare = () => {
