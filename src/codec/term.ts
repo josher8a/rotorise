@@ -1877,7 +1877,7 @@ const termRow = (x: Term, y: Term, w: Walk): boolean => {
                 (other, v) =>
                     disjointWalk(x.inner, other, v) ||
                     (x.q.kind === 'members' &&
-                        !spells(x.inner, v.left.inside, ['held', 'legacy']) &&
+                        !heldOrVariable(x.inner, v.left) &&
                         predicateApart(x.q, other, v)),
                 y,
                 w,
@@ -1889,8 +1889,8 @@ const termRow = (x: Term, y: Term, w: Walk): boolean => {
                 (other, v) =>
                     other.kind === 'term' &&
                     (other.t.kind === 'set'
-                        ? !spells(x.elem, v.left.inside, []) &&
-                          !spells(other.t.elem, v.right.inside, []) &&
+                        ? !readsVariable(x.elem, v.left.inside) &&
+                          !readsVariable(other.t.elem, v.right.inside) &&
                           disjointWalk(x.elem, other.t.elem, v)
                         : otherShape(other.t, ['prim', 'list', 'object'])),
                 y,
@@ -1988,7 +1988,7 @@ const splitRight = (
                 )
             case 'refine': {
                 const { inner, q } = other.t
-                return spells(inner, w.right.inside, ['held', 'legacy'])
+                return heldOrVariable(inner, w.right)
                     ? splitRight(fam, inner, w, wrap)
                     : splitRight(fam, inner, w, (t) =>
                           wrap({ kind: 'refine', inner: t, q }),
@@ -2006,7 +2006,7 @@ const predicateApart = (q: Predicate, y: Term, w: Walk): boolean => {
     const other = see(y, w.right)
     if (other.kind !== 'term' || other.t.kind !== 'refine') return false
     return (
-        (!spells(other.t.inner, w.right.inside, ['held', 'legacy']) &&
+        (!heldOrVariable(other.t.inner, w.right) &&
             predicatesApart(q, other.t.q)) ||
         predicateApart(q, other.t.inner, w)
     )
@@ -2159,18 +2159,12 @@ const bodiesApart = (a: Body, b: Body, w: Walk): boolean =>
     )
 
 /**
- * **Whether the spelling of a term at a scope reads a variable, or holds a subterm of one of these
- * kinds**, the model's `hasVar` and `hasHeld`. A thunk that returns a term the walk is inside is a
- * variable, and a thunk that throws is a free variable. The walk stops at each, so it ends where
- * the spelling ends.
+ * **Whether the spelling of a term at a scope reads a variable**, the model's `hasVar`. A thunk
+ * that returns a term the walk is inside is a variable, and a thunk that throws is a free
+ * variable. The walk stops at each, so it ends where the spelling ends.
  */
-const spells = (
-    t: Term,
-    inside: readonly Term[],
-    kinds: readonly Term['kind'][],
-): boolean => {
-    if (kinds.includes(t.kind)) return true
-    const on = (one: Term) => spells(one, [...inside, t], kinds)
+const readsVariable = (t: Term, inside: readonly Term[]): boolean => {
+    const on = (one: Term) => readsVariable(one, [...inside, t])
     switch (t.kind) {
         // a thunk that throws is a free variable
         case 'lazy': {
@@ -2201,5 +2195,13 @@ const spells = (
             return false
     }
 }
+
+/**
+ * **Whether the inner term of a refinement bounds the refinement**, the model's
+ * `hasHeld y || y.hasVar`. Such a refinement reads no data predicate. The split, the left row
+ * and the right chain each read this one test.
+ */
+const heldOrVariable = (t: Term, scope: Scope): boolean =>
+    holdsAdapter(t, scope) || readsVariable(t, scope.inside)
 
 const never: Term = { kind: 'never' }
