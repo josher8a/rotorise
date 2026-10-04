@@ -829,8 +829,12 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
          *
          * Every other adapter, a caller's pair or a float adapter of this library, prints a
          * generator `caller n` of a quantified vector: the analysis reads an adapter by its sides
-         * and its identity, and the theorem holds at every pair. Elsewhere it is refused: a float
-         * adapter's content is binary64 rounding, the host axiom this development deleted.
+         * and its identity, and the theorem holds at every pair of the caller table. The table is
+         * total and a real adapter refuses some values, so a real adapter is `Sub` of a pair of
+         * the table. Agreement is antitone in `Sub` (`agree_sub_left`, `agree_sub_right`), and
+         * the zero test separates a `held` from the bottom alone, so the verdict holds at the real
+         * adapter. Elsewhere the adapter is refused: a float adapter's content is binary64
+         * rounding, the host axiom this development deleted.
          *
          * A `held` is an adapter at one absolute side. The store names no generator, so each
          * `held` is at the caller side `false`, with a non-empty word. The stored side has no
