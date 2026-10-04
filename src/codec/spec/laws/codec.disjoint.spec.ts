@@ -22,6 +22,7 @@ import {
     optional,
     refine,
     string,
+    undefinable,
     union,
     withLegacyRead,
 } from '../../codec'
@@ -259,6 +260,21 @@ describe('two objects are disjoint where one name holds two fields apart', () =>
             true,
         )
         expect(apart(termOf(object({ a: string })), termOf(standIn))).toBe(
+            false,
+        )
+    })
+
+    /**
+     * **An `undefinable` field is an `optional` field.** The row stores `undefined` as an absent
+     * name, so the field admits a map without the name, and a required name is apart from the
+     * field where the two terms are disjoint.
+     */
+    it('keeps a required field apart from an undefinable field whose terms are disjoint', () => {
+        const maybe = termOf(object({ a: undefinable(boolean) }))
+        expect(apart(maybe, termOf(object({ a: string })))).toBe(true)
+        expect(viewsDisjoint(maybe, termOf(object({ a: string })))).toBe(true)
+        expect(apart(maybe, termOf(object({ a: boolean })))).toBe(false)
+        expect(apart(maybe, termOf(object({ a: optional(string) })))).toBe(
             false,
         )
     })

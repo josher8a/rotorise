@@ -2129,13 +2129,10 @@ const listsApart = (
  * **Two fields at one name apart**, the model's `ObjectSlot.disjoint`: one field requires the
  * name, and the terms are disjoint. Two fields that both admit a map without the name share it.
  * A `withLegacyRead` field reads a map without the name, so only `req` requires the name.
- * `undefinable` has no model mark, and the host keeps no row for it.
+ * An `undefinable` field is the model's `optional`: the row stores `undefined` as an absent name.
  */
 const fieldsApart = (a: Field, b: Field, w: Walk): boolean =>
-    a.mark !== 'undefinable' &&
-    b.mark !== 'undefinable' &&
-    (a.mark === 'req' || b.mark === 'req') &&
-    disjointWalk(a.t, b.t, w)
+    (a.mark === 'req' || b.mark === 'req') && disjointWalk(a.t, b.t, w)
 
 /**
  * **Two bodies apart at one name**, the model's `famObjD`. A body is a total function from the
