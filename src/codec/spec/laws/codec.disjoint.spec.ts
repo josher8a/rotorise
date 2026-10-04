@@ -12,6 +12,7 @@ import {
     array,
     boolean,
     decimal,
+    held,
     lazy,
     never,
     nullValue,
@@ -331,5 +332,93 @@ describe('two recursive terms are disjoint where their bodies are', () => {
 
     it('keeps a recursive term apart from a partner that no stage shares', () => {
         expect(apart(json.def as Term, termOf(nullValue))).toBe(true)
+    })
+})
+
+/**
+ * The test splits the right operand at every depth, as it reads the left operand. A right
+ * refinement keeps its predicate on each option below it, and a right recursive term is read
+ * whole and unfolded. So no right `refine` and no right recursive term hides an option, and the
+ * verdict does not read the order of the operands.
+ */
+describe('the verdict does not read the order of the operands', () => {
+    const among = (inner: Term, member: string): Term => ({
+        kind: 'refine',
+        inner,
+        q: {
+            kind: 'members',
+            literal: { kind: 'alternatives', base: 'string', ls: [member] },
+        },
+    })
+    const listOf = (head: AnyCodec): AnyCodec => {
+        const self: AnyCodec = union([
+            head,
+            object({ k: lazy(() => self as never) }),
+        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+        return self
+    }
+    const booleans = listOf(boolean)
+    const strings = refine(
+        listOf(string) as never,
+        (_v: unknown): _v is unknown => true,
+    ) as unknown as AnyCodec
+
+    it('keeps a refinement apart from a right union that a refinement restricts to another member', () => {
+        const xb = among(termOf(string), 'b')
+        const yb: Term = {
+            kind: 'union',
+            options: [
+                among(
+                    {
+                        kind: 'union',
+                        options: [
+                            among(termOf(string), 'a'),
+                            { kind: 'number' },
+                        ],
+                    },
+                    'b',
+                ),
+                { kind: 'number' },
+            ],
+        }
+        expect(apart(xb, yb)).toBe(true)
+    })
+
+    it('keeps a refinement apart from a right recursive term whose stages it shares no member with', () => {
+        const stages: Term = {
+            kind: 'union',
+            options: [
+                among(termOf(string), 'a'),
+                {
+                    kind: 'object',
+                    body: {
+                        fields: {
+                            k: {
+                                mark: 'req',
+                                t: { kind: 'lazy', get: () => stages },
+                            },
+                        },
+                    },
+                },
+            ],
+        }
+        expect(apart(among(termOf(string), 'b'), stages)).toBe(true)
+    })
+
+    it('keeps two recursive terms apart where a refinement covers the right one', () => {
+        expect(apart(termOf(booleans), termOf(strings))).toBe(true)
+    })
+
+    it('certifies a recursive term beside an adapter over a refined recursive term in both orders', () => {
+        const adapted = held(
+            string as never,
+            strings as never,
+            {
+                encode: (v: never) => v,
+                decode: (v: never) => v,
+            } as never,
+        ) as unknown as AnyCodec
+        expect(() => union([booleans, adapted] as never)).not.toThrow()
+        expect(() => union([adapted, booleans] as never)).not.toThrow()
     })
 })
