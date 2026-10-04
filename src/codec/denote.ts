@@ -316,7 +316,12 @@ export const sameAssignment = (
  * puts the type back on, once, where the constructor knows it.
  */
 export type Pair = {
-    readonly encode: (value: never) => Result<AttributeValue>
+    /**
+     * `enclosing` is the number of `L` and `M` that the written attribute sits inside. A container
+     * passes its own level plus one to each child, so {@link tooDeeplyNested} holds the bound at
+     * every position. A public `encode` starts the count at `0`.
+     */
+    readonly encode: (value: never, enclosing: number) => Result<AttributeValue>
     readonly decode: (attribute: AttributeValue) => Result<unknown>
 }
 
@@ -362,19 +367,26 @@ export const carriedCodec = <Payload, Written, Read>(
     holds: (value: unknown) => value is Payload,
     member: AttributeName,
     refuse: (value: unknown) => CodecError,
-    into: (payload: Payload) => Result<Written>,
+    into: (payload: Payload, enclosing: number) => Result<Written>,
     outOf: (carried: Read) => Result<unknown>,
 ): Pair => ({
     // two casts, one reason: `member` is a *value* here, so the type checker cannot tie it to the
     // payload types either side of it. The model takes the two prisms as arguments and gets that
     // tie for free; this takes a member and a pair of transforms, and the row is what says they
-    // agree — `'L'` with a list, `'M'` with a map
-    encode: (value: unknown) =>
-        holds(value)
-            ? andThen(into(value), (written) =>
+    // agree — `'L'` with a list, `'M'` with a map.
+    //
+    // The nesting bound is asked here, once for every typed container: `L` and `M` are the two
+    // document types, and both reach the wire through this function. The bound is asked before
+    // `into` runs, so a recursive value deeper than the call stack is a refusal and not a crash
+    encode: (value: unknown, enclosing: number) => {
+        if (!holds(value)) return refuse(value)
+        const deep = tooDeeplyNested(enclosing)
+        return deep
+            ? new CodecError(deep)
+            : andThen(into(value, enclosing + 1), (written) =>
                   carrying(member, written as never),
               )
-            : refuse(value),
+    },
     decode: (attribute) =>
         andThen(expect(member, attribute), (carried) => outOf(carried as Read)),
 })
@@ -403,7 +415,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
         if (field === undefined) continue
         declared.push({
             name,
-            codec: codecOfTerm(field.t),
+            pair: pairOf(field.t),
             optional: !alwaysWritten(field),
             keyed: field.mark === 'undefinable',
             absent:
@@ -412,11 +424,11 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                     : undefined,
         })
     }
-    const restCodec = rest && codecOfTerm(rest)
+    const restPair = rest && pairOf(rest)
     return {
-        encode: (held) => {
+        encode: (held, enclosing = 0) => {
             const out: Record<string, AttributeValue> = {}
-            for (const { name, codec: attribute, optional } of declared) {
+            for (const { name, pair: attribute, optional } of declared) {
                 const value = held[name]
                 if (value === undefined) {
                     if (optional) continue
@@ -424,7 +436,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                         `'${name}' is required and was not given`,
                     )
                 }
-                const written = attribute.encode(value as never)
+                const written = attribute.encode(value as never, enclosing)
                 if (failed(written)) return written.under(name)
                 out[name] = written
             }
@@ -434,12 +446,12 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                 // a closed body refuses an undeclared name on both sides, as the model's body does.
                 // A write that dropped the name read back a different value, and a union that
                 // admits by attempt reads this refusal to tell two closed options apart
-                if (!restCodec) {
+                if (!restPair) {
                     return new CodecError(
                         `'${name}' is not an attribute this codec declares`,
                     )
                 }
-                const written = restCodec.encode(value as never)
+                const written = restPair.encode(value as never, enclosing)
                 if (failed(written)) return written.under(name)
                 out[name] = written
             }
@@ -453,7 +465,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
             const out: Record<string, unknown> = {}
             for (const {
                 name,
-                codec: attributeCodec,
+                pair: attributeCodec,
                 optional,
                 keyed,
                 absent,
@@ -482,12 +494,12 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
             }
             for (const name in item) {
                 if (name in of) continue
-                if (!restCodec) {
+                if (!restPair) {
                     return new CodecError(
                         `'${name}' is not an attribute this codec declares; the schema and the data have drifted apart`,
                     )
                 }
-                const read = restCodec.decode(item[name] as AttributeValue)
+                const read = restPair.decode(item[name] as AttributeValue)
                 if (failed(read)) return read.under(name)
                 out[name] = read
             }
@@ -509,7 +521,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
  * rather than an exception escaping a codec.
  */
 export const heldThrough = (
-    inner: AnyCodec,
+    inner: Pair,
     adapt: {
         readonly encode: (value: never) => unknown
         readonly decode: (held: never) => unknown
@@ -533,8 +545,10 @@ export const heldThrough = (
     const into = guarded(adapt.encode, 'writing')
     const outOf = guarded(adapt.decode, 'reading')
     return {
-        encode: (value) =>
-            andThen(into(value), (held) => inner.encode(held as never)),
+        encode: (value, enclosing) =>
+            andThen(into(value), (held) =>
+                inner.encode(held as never, enclosing),
+            ),
         decode: (attribute) => {
             // `failed` rather than `andThen`, because a {@link Pair}'s read answers `unknown` and
             // `Result<unknown>` *is* `unknown` — the failure channel is not visible in that type,
@@ -561,15 +575,15 @@ export const heldThrough = (
  * predicate itself all along.
  */
 export const restrict = (
-    base: AnyCodec,
+    base: Pair,
     holds: (value: never) => boolean,
     refuse: (value: unknown) => CodecError,
 ): Pair => ({
     // the base writes first, so the predicate sees only a value of the base's type, and a value the
     // base refuses is refused by the refinement. The model's `restrict` asks `q` first, and the
     // two orders agree because the model's `q` is total
-    encode: (value) => {
-        const written = base.encode(value)
+    encode: (value, enclosing) => {
+        const written = base.encode(value, enclosing)
         return !failed(written) && holds(value) ? written : refuse(value)
     },
     decode: (attribute) => {
@@ -726,13 +740,17 @@ export const altSem = (
             (option) => option.codec.decode(attribute) as Result<T>,
         )
     }
-    const write = (value: unknown): Result<AttributeValue> => {
+    const write = (
+        value: unknown,
+        enclosing: number,
+    ): Result<AttributeValue> => {
         const held = asRecord(value)
         return onlyAdmitting(
             forValue(shapeOf(value)),
             naming('this value', held ? namesOf(held) : undefined),
             value,
-            (option) => option.codec.encode(value as never),
+            (option) =>
+                pairOf(option.codec.def).encode(value as never, enclosing),
         ) as Result<AttributeValue>
     }
 
@@ -851,8 +869,10 @@ export const membersOf = <V>(
  * half carried into an `'M'`.
  */
 export type ItemPair = {
+    /** `enclosing` is the level of each attribute in the map: `0` for an item, as {@link Pair} counts. */
     readonly encode: (
         held: Record<string, unknown>,
+        enclosing?: number,
     ) => Result<Record<string, AttributeValue>>
     readonly decode: (
         item: Readonly<Record<string, AttributeValue>>,
@@ -901,8 +921,9 @@ export const itemSem = (def: ItemTerm): ItemPair => {
  * `denote` is this function and the rows below answer to its combinators one for one.
  *
  * **A definition's children are terms, and no row here reaches into a child codec's pair.** Where a
- * row needs one it calls `codecOfTerm`, which memoises on the frozen term and answers the codec
- * that was already built, so recovering a child costs a lookup rather than a construction. The
+ * row needs one it calls `pairOf` or `codecOfTerm`, which memoise on the frozen term and answer
+ * what was already built, so recovering a child costs a lookup rather than a construction. A
+ * container writes a child through `pairOf`, because the pair takes the level of the child. The
  * checker holds this rather than a reader: every child position of a `Term` is a `Term`, so
  * `def.elem.encode` is a type error and not a habit to avoid.
  *
@@ -945,9 +966,9 @@ export const denote = (def: Term): Pair => {
          * `tuple` builds, and everything else only `list` can spell.
          */
         case 'list': {
-            const pre = def.pre.map((element) => codecOfTerm(element))
-            const suf = def.suf.map((element) => codecOfTerm(element))
-            const spread = def.spread ? codecOfTerm(def.spread) : undefined
+            const pre = def.pre.map((element) => pairOf(element))
+            const suf = def.suf.map((element) => pairOf(element))
+            const spread = def.spread ? pairOf(def.spread) : undefined
             const declared = pre.length + suf.length
             const shape =
                 declared === 0 && spread
@@ -970,12 +991,12 @@ export const denote = (def: Term): Pair => {
              * value is. The prefix and the suffix cannot overlap here, because `aligned` has
              * already turned down every length below `declared`.
              */
-            const at = (index: number, length: number): AnyCodec =>
+            const at = (index: number, length: number): Pair =>
                 index < pre.length
-                    ? (pre[index] as AnyCodec)
+                    ? (pre[index] as Pair)
                     : index >= length - suf.length
-                      ? (suf[index - (length - suf.length)] as AnyCodec)
-                      : (spread as AnyCodec)
+                      ? (suf[index - (length - suf.length)] as Pair)
+                      : (spread as Pair)
             return carriedCodec(
                 (value): value is readonly never[] => Array.isArray(value),
                 'L',
@@ -983,13 +1004,13 @@ export const denote = (def: Term): Pair => {
                     new CodecError(
                         `${describeShape(value)} is not an array, and \`${shape}\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
                     ),
-                (held) =>
+                (held, enclosing) =>
                     aligned(
                         held.length,
                         (arity) => `expected ${atLeast}${arity} elements`,
                     ) ??
                     every(held, (one, index) =>
-                        at(index, held.length).encode(one),
+                        at(index, held.length).encode(one, enclosing),
                     ),
                 (carried: readonly AttributeValue[]) =>
                     aligned(
@@ -1095,13 +1116,13 @@ export const denote = (def: Term): Pair => {
         }
         /** §3 `(held)`. `lawful_through` is the lemma; the adapter is data the term carries. */
         case 'held':
-            return heldThrough(codecOfTerm(def.inner), {
+            return heldThrough(pairOf(def.inner), {
                 encode: def.f,
                 decode: def.g,
             })
         /** §3 `(refine)`. `lawful_restrict` is the lemma; `q` is data the term carries. */
         case 'refine':
-            return restrict(codecOfTerm(def.inner), holds(def.q), (value) =>
+            return restrict(pairOf(def.inner), holds(def.q), (value) =>
                 refusedBy(def.q, value),
             )
         /**
@@ -1121,9 +1142,10 @@ export const denote = (def: Term): Pair => {
          */
         case 'legacy': {
             const current = codecOfTerm(def.inner)
+            const written = pairOf(def.inner)
             const older = def.r
             return {
-                encode: (value) => current.encode(value),
+                encode: written.encode,
                 decode: (attribute) => {
                     const read = current.decode(attribute)
                     if (!failed(read)) return read
@@ -1164,11 +1186,11 @@ export const denote = (def: Term): Pair => {
                 }
             }
             return {
-                encode: (value) => {
+                encode: (value, enclosing) => {
                     const t = resolved()
                     return t instanceof CodecError
                         ? t
-                        : codecOfTerm(t).encode(value)
+                        : pairOf(t).encode(value, enclosing)
                 },
                 decode: (attribute) => {
                     const t = resolved()
@@ -1222,7 +1244,8 @@ export const denote = (def: Term): Pair => {
          */
         case 'opaq':
             return {
-                encode: (value: unknown) => encodeUnknown(value),
+                encode: (value: unknown, enclosing) =>
+                    encodeUnknown(value, enclosing),
                 decode: (attribute) => decodeUnknown(attribute),
             }
         /**
@@ -1264,10 +1287,10 @@ export const denote = (def: Term): Pair => {
                 )
             const base = denote({ kind: def.base })
             return {
-                encode: (value: unknown) =>
+                encode: (value: unknown, enclosing) =>
                     member(value) === undefined
                         ? refuse(value)
-                        : base.encode(value as never),
+                        : base.encode(value as never, enclosing),
                 decode: (attribute) =>
                     andThen(base.decode(attribute), (read) => {
                         const found = member(read)
@@ -1387,17 +1410,40 @@ export const codecOfTerm = <T, A extends AttributeValue>(
     return made
 }
 
+/**
+ * **One pair per term**, which a container reads to pass its level to a child. A public `encode`
+ * starts the count again at `0`, so a container writes a child through this and not through
+ * {@link codecOfTerm}.
+ */
+const pairs = new WeakMap<Term, Pair>()
+
+const pairOf = (def: Term): Pair => {
+    const built = pairs.get(def)
+    if (built) return built
+    const made = denote(Object.freeze(def))
+    pairs.set(def, made)
+    return made
+}
+
 const buildCodec = <T, A extends AttributeValue>(
     def: Term,
-): AttributeCodec<T, A> =>
+): AttributeCodec<T, A> => {
     // **A codec is its pair and its term, and nothing else.** `arbitrary` and `shrink` were copied
     // onto the object here for `custom`, which made one fact reachable two ways; they are on the
     // term, `arbitraryOf` and `shrinkOf` read them there, and a caller that wants to share a
     // generator names it rather than reading it back off a pair.
-    codec<T, A>({
+    const pair = pairOf(def)
+    const atTop: Pick<Pair, 'decode'> & {
+        readonly encode: (value: never) => Result<AttributeValue>
+    } = {
+        encode: (value) => pair.encode(value, 0),
+        decode: pair.decode,
+    }
+    return codec<T, A>({
         def,
-        ...(denote(def) as Pick<Codec<T, A>, 'encode' | 'decode'>),
+        ...(atTop as Pick<Codec<T, A>, 'encode' | 'decode'>),
     })
+}
 
 /** Only plain objects round-trip; anything with a prototype loses it. */
 const isPlainObject = (value: object) => {

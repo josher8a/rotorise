@@ -361,23 +361,20 @@ export const MAX_DOCUMENT_NESTING = 32
  *
  * The reason and not the error, because {@link CodecError} lives in `./result`, which already
  * imports this file — and because the bound and its wording belong wherever the carrier is
- * described, the way `isNumeral` does. Two walkers ask it and there is one of it.
+ * described, the way `isNumeral` does. Four walkers ask it and there is one of it.
  *
  * Asked on the way *in*, before recursing, which is what makes a pathological input a refusal
  * rather than a crash: a 20 000-deep array exhausted the call stack before anything looked at it,
  * and a `RangeError` is not what callers of this library handle.
  *
- * **Where it is asked, and the one place it is not.** `opaque` and `native` ask it, because they
- * are the two that walk data nobody declared. A typed codec does not, because its depth is fixed
- * by its spec and checking it per value would be a walk with a known answer — *except* under
- * `lazy`, where a recursive entity's depth comes from the data: a self-nesting `object` holding an
- * `array` of itself costs two levels a turn and passes 32 at the sixteenth. That case is a real
- * gap and is queued rather than fixed here, because closing it means threading a level through
- * every container codec, which is a different change from guarding the two escape hatches. It is
- * measured: a self-nesting entity reaches `depth 82` at forty levels. The repair that would be
- * compositional is stated in `formal/Calculus/Dynamo/Witness/Nesting.lean`, which also says why it cannot cover
- * the whole language — `opaque` and `lazy` take their depth from the value, so no syntactic bound
- * exists for them and the theorem there is about the fragment that excludes them.
+ * **Where it is asked.** Every codec that writes an `L` or an `M` asks it with the level it writes
+ * at. A typed container gets the level from its parent, adds one, and hands the sum to each child,
+ * so the count is compositional: no codec walks a finished attribute. `opaque` and `native` ask it
+ * per level of the data they walk, because nobody declared that data. A recursive entity takes its
+ * depth from the value, and the container that would write the 33rd level refuses, with its path.
+ *
+ * **Where it is not.** A public `encode` starts the count at `0`, so a value written at a nested
+ * path through `at` counts from that path and not from the root of the item.
  */
 export const tooDeeplyNested = (enclosing: number): string | undefined =>
     enclosing >= MAX_DOCUMENT_NESTING
