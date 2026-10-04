@@ -1337,12 +1337,14 @@ const isNeverAt = (t: Term, scope: Scope): boolean => {
 
 /**
  * **The term inside which a `held` acts on one half**, the model's `heldSide`: a `held` writes
- * inside its held side and reads inside its stored side.
+ * inside its held side and reads inside its stored side. Where that side is a `held` too, the
+ * half acts inside its side in turn, and a binder or a variable stops the walk.
  */
 const heldSide = (half: Half, t: Term, scope: Scope): Term | undefined => {
     const one = see(t, scope)
     if (one.kind !== 'term' || one.t.kind !== 'held') return undefined
-    return half === 'write' ? one.t.outer : one.t.inner
+    const side = half === 'write' ? one.t.outer : one.t.inner
+    return heldSide(half, side, scope) ?? side
 }
 
 /**

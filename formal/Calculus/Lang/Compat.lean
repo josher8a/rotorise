@@ -35,12 +35,21 @@ structure CompatOracle (S : Syn) where
   orthE : Term S → Term S → Bool
   orthP : Term S → Term S → Bool
 
-/-- The row a `held` gives one half. A half reads the caller side of its orientation: the write
+/-- **Where one half of a term acts.** A half reads the caller side of its orientation: the write
     half reads the caller side of the universe, and the read half reads the stored side. The half
-    at the side of the `held` sits inside its outer, and the other half sits inside its inner
-    term, because the other side has no adapter. -/
+    at the side of a `held` sits inside its outer, and the other half sits inside its inner term,
+    because the other side has no adapter. Where that term is a `held` too, the half sits inside
+    its side in turn. Any other term is its own side. -/
+def heldSideIn (side : Bool) : Term S → Term S
+  | .held sd i P _ _ =>
+      match (bif side then S.o else S.o.op).c == sd with
+      | true => heldSideIn side P
+      | false => heldSideIn side i
+  | t => t
+
+/-- The row a `held` gives one half: the term inside which the half acts. -/
 def heldSide (side : Bool) : Term S → Option (Term S)
-  | .held sd i P _ _ => some (if (bif side then S.o else S.o.op).c == sd then P else i)
+  | .held sd i P k₀ k => some (heldSideIn side (.held sd i P k₀ k))
   | _ => none
 
 /-- **The rows that read no structure**: the bottom, two held-free terms below the top, two
@@ -288,6 +297,24 @@ theorem held_dom {sd : Bool} {i P : Term S} {k₀ : S.sig.G sd × Bool} {k : Lis
     rw [bne, hs, Bool.not_true, Bool.false_or] at h'
     exact h'.1
 
+/-- **A half acts only inside the term where it sits**: the domain of a term at the orientation of
+    a half lies inside the domain of `heldSideIn`, by `held_dom` at each `held` on the way. -/
+theorem heldSideIn_dom (side : Bool) {ρ : List S.C} :
+    ∀ (t : Term S) (x : Mean.V (B := S.sig)),
+      ((denote α β t ρ).f (bif side then S.o else S.o.op) x).isSome = true →
+        ((denote α β (heldSideIn side t) ρ).f (bif side then S.o else S.o.op) x).isSome = true
+  | .held sd i P k₀ k, x, h => by
+      have h' := held_dom (k₀ := k₀) (k := k) (bif side then S.o else S.o.op) x h
+      simp only [heldSideIn]
+      cases hc : ((bif side then S.o else S.o.op).c == sd)
+      · rw [hc] at h'
+        exact heldSideIn_dom side i x h'
+      · rw [hc] at h'
+        exact heldSideIn_dom side P x h'
+  | .prim _, _, h | .opaq, _, h | .never, _, h | .var _, _, h | .mu _, _, h | .set _, _, h
+  | .refine _ _ _, _, h | .legacy _ _, _, h | .list _ _ _, _, h | .union _, _, h | .object _, _, h => by
+      simpa only [heldSideIn] using h
+
 /-- **The rows that read no structure are sound.** -/
 theorem cbase_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) {side top s : Bool}
@@ -309,12 +336,16 @@ theorem cbase_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [
     · exact agree_apart (ho.e x y ho')
   · cases x <;> simp only [heldSide, reduceCtorEq] at hl
     cases side
-    · exact agree_apart fun a => apart_of_imp (held_dom S.o.op a) (disjoint_domP hl ρ ρ' a)
-    · exact agree_apart fun v => apart_of_imp (held_dom S.o v) (disjoint_domE hl ρ ρ' v)
+    · exact agree_apart fun a =>
+        apart_of_imp (heldSideIn_dom false _ a) (disjoint_domP hl ρ ρ' a)
+    · exact agree_apart fun v =>
+        apart_of_imp (heldSideIn_dom true _ v) (disjoint_domE hl ρ ρ' v)
   · cases y <;> simp only [heldSide, reduceCtorEq] at hr
     cases side
-    · exact agree_apart fun a => apart_of_imp' (held_dom S.o.op a) (disjoint_domP hr ρ ρ' a)
-    · exact agree_apart fun v => apart_of_imp' (held_dom S.o v) (disjoint_domE hr ρ ρ' v)
+    · exact agree_apart fun a =>
+        apart_of_imp' (heldSideIn_dom false _ a) (disjoint_domP hr ρ ρ' a)
+    · exact agree_apart fun v =>
+        apart_of_imp' (heldSideIn_dom true _ v) (disjoint_domE hr ρ ρ' v)
 
 mutual
 /-- **The rows of the right operand are sound**, for a left codec that the family is sound for. -/
