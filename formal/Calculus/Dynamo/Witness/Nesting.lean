@@ -30,8 +30,9 @@ Three things are proved:
   against the model's `𝔸` and fails against the store's, and there is a witness rather than a
   remark.
 
-The third is why `src/` gates on depth at `opaque` and `native`, and why a recursive typed
-codec is a live gap. It is also why the honest repair is
+The third is why `src/` gates on depth at every codec that writes a list or a map: each
+container passes its level to its children, and the write past the bound is refused. It is also
+why the honest repair is
 *not* a carrier refinement: the witness is well-typed, so no premise of the typing rules is
 being violated — the rules simply do not mention depth.
 -/

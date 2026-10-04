@@ -17,6 +17,7 @@ import type {
 } from './attribute'
 import { DynamoNumber, isStoredNumeral } from './attribute'
 import { codec } from './build'
+import type { Pair } from './denote'
 import {
     accepts,
     altSem,
@@ -2847,7 +2848,7 @@ export type LocatedCodec<T> = AttributeCodec<T> & {
  */
 export type Declared = {
     readonly name: string
-    readonly codec: AnyCodec
+    readonly pair: Pair
     /** The attribute may be omitted — true for both `optional` and `undefinable`. */
     readonly optional: boolean
     /** On decode, an omitted attribute still gets its key, holding `undefined`. */
@@ -4900,7 +4901,9 @@ export const union = <const Options extends readonly AnyCodec[]>(
     // call can be narrowed to from inside
     // the resolution is erased — a sum's rule is about options, not about the type they carry —
     // so the two halves get their types back here, once, the way `codecOfTerm` does for a term
-    const encode = write as (value: T) => Result<WrittenBy<Options>>
+    const encode = ((value: T) => write(value as never, 0)) as (
+        value: T,
+    ) => Result<WrittenBy<Options>>
     const decode = read as (attribute: AttributeValue) => Result<T>
     return {
         encode,
