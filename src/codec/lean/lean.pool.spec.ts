@@ -15,7 +15,7 @@
  * two readings: the guard reads the thunk as the root of its option, and the other tests read the
  * open term.
  *
- * One route narrows the pool. **No separation vector for a fill on each side.** The model refuses
+ * One route narrows the pool. **No separation vector for two fills at one name.** The model refuses
  * two fills at one name whatever their constants, because the constants of a fill have no decidable
  * equality. The host accepts two fills with equal constants. Such a pair goes to disjointness only,
  * and the pre-check reads no compatibility column for the pair.
@@ -75,8 +75,11 @@ import { arbitraryOf, rngFrom } from '../testing'
 /** The emitter takes the erased codec; the constructors return precise ones. */
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
 
-/** The seed of the pool. A new seed is a new pool, and the pinned counts move with it. */
-const SEED = 20261004
+/**
+ * The seeds of the pool. A new seed is a new pool, and the pinned counts move with it. Seed 4 holds
+ * one codec with a legacy read beside itself, which the host accepted and the model refuses.
+ */
+const SEEDS = [20261004, 1, 4] as const
 /** The number of codecs that the generator draws. */
 const DRAWS = 150
 /** The depth of each drawn codec. */
@@ -86,7 +89,8 @@ const PARTNERS = 8
 
 type Entry = { readonly name: string; readonly codec: AnyCodec }
 
-const rng = rngFrom(SEED)
+/** The stream of the seed that {@link pool} draws from. */
+let rng = rngFrom(SEEDS[0])
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rng() * xs.length)] as T
 
 const leaves: readonly (readonly [string, () => AnyCodec])[] = [
@@ -320,41 +324,53 @@ const draw = (depth: number): Entry => {
     }
 }
 
-/** Whether a term holds a fill, at any depth. */
-const holdsFill = (t: Term, seen: Set<Term> = new Set()): boolean => {
-    if (seen.has(t)) return false
-    seen.add(t)
-    const on = (u: Term) => holdsFill(u, seen)
-    switch (t.kind) {
-        case 'set':
-            return on(t.elem)
-        case 'list':
-            return [
-                ...t.pre,
-                ...t.suf,
-                ...(t.spread === undefined ? [] : [t.spread]),
-            ].some(on)
-        case 'held':
-            return on(t.inner) || on(t.outer)
-        case 'refine':
-        case 'legacy':
-            return on(t.inner)
-        case 'lazy': {
-            const target = force(t)
-            return target !== undefined && on(target)
+/** The field names at which a term holds a fill, at any depth. */
+const fillNames = (root: Term): Set<string> => {
+    const names = new Set<string>()
+    const seen = new Set<Term>()
+    const walk = (t: Term): void => {
+        if (seen.has(t)) return
+        seen.add(t)
+        switch (t.kind) {
+            case 'set':
+                return walk(t.elem)
+            case 'list':
+                t.pre.forEach(walk)
+                t.suf.forEach(walk)
+                if (t.spread !== undefined) walk(t.spread)
+                return
+            case 'held':
+                walk(t.inner)
+                return walk(t.outer)
+            case 'refine':
+            case 'legacy':
+                return walk(t.inner)
+            case 'lazy': {
+                const target = force(t)
+                if (target !== undefined) walk(target)
+                return
+            }
+            case 'object':
+                for (const [name, field] of Object.entries(t.body.fields)) {
+                    if (field.mark === 'fallback') names.add(name)
+                    walk(field.t)
+                }
+                if (t.body.rest !== undefined) walk(t.body.rest)
+                return
+            case 'union':
+                return t.options.forEach(walk)
+            default:
+                return
         }
-        case 'object':
-            return (
-                Object.values(t.body.fields).some(
-                    (field) => field.mark === 'fallback' || on(field.t),
-                ) ||
-                (t.body.rest !== undefined && on(t.body.rest))
-            )
-        case 'union':
-            return t.options.some(on)
-        default:
-            return false
     }
+    walk(root)
+    return names
+}
+
+/** Whether the two terms hold a fill at one field name: the narrowing of the model. */
+const fillsMeet = (x: Term, y: Term): boolean => {
+    const there = fillNames(y)
+    return [...fillNames(x)].some((name) => there.has(name))
 }
 
 /** One pair of the pool, with the host verdicts and the two terms that the model reads. */
@@ -365,7 +381,7 @@ type PoolPair = {
     readonly right: AnyCodec
     /** The host verdicts, in the column order of `poolRow`: disjoint, views, agrees, guard, union. */
     readonly host: string
-    /** A fill on each side: the pair goes to disjointness only. */
+    /** A fill at one field name on each side: the pair goes to disjointness only. */
     readonly fills: boolean
     /** A thunk that throws on a side: the compatibility test reads the open term in both halves. */
     readonly open: boolean
@@ -384,7 +400,9 @@ const bit = (b: boolean): string => (b ? '1' : '0')
 const dropped = new Map<string, number>()
 const drop = (why: string) => dropped.set(why, (dropped.get(why) ?? 0) + 1)
 
-const pool = (): readonly PoolPair[] => {
+/** The pairs of one seed. The names continue after `first`, so the seeds share one name space. */
+const pool = (seed: number, first: number): readonly PoolPair[] => {
+    rng = rngFrom(seed)
     const built: Entry[] = []
     for (let i = 0; i < DRAWS; i++) {
         try {
@@ -395,7 +413,7 @@ const pool = (): readonly PoolPair[] => {
     }
     const pairs: PoolPair[] = []
     const add = (a: Entry, b: Entry) => {
-        const name = `pool_${pairs.length}`
+        const name = `pool_${first + pairs.length}`
         const bound = {
             closures: new Map<unknown, string>(),
             adapters: new Map<unknown, string>(),
@@ -435,7 +453,7 @@ const pool = (): readonly PoolPair[] => {
             left: a.codec,
             right: b.codec,
             host,
-            fills: holdsFill(x) && holdsFill(y),
+            fills: fillsMeet(x, y),
             open: readsFreeVariable(x) || readsFreeVariable(y),
             l,
             r,
@@ -557,8 +575,19 @@ const kernelPairs = (pairs: readonly PoolPair[]) => {
 }
 
 describe('the generated pool, against the model', () => {
-    const pairs = pool()
-    const { disjoints, separations } = kernelPairs(pairs)
+    const seeds: { seed: number; pairs: readonly PoolPair[] }[] = []
+    for (const seed of SEEDS) {
+        const first = seeds.reduce((n, one) => n + one.pairs.length, 0)
+        seeds.push({ seed, pairs: pool(seed, first) })
+    }
+    const perSeed = seeds.map(({ seed, pairs }) => ({
+        seed,
+        pairs,
+        ...kernelPairs(pairs),
+    }))
+    const pairs = perSeed.flatMap((one) => one.pairs)
+    const disjoints = perSeed.flatMap((one) => one.disjoints)
+    const separations = perSeed.flatMap((one) => one.separations)
 
     /**
      * **The counts pin the pool, deliberately.** The pool depends on the seed alone, so a count
@@ -566,21 +595,43 @@ describe('the generated pool, against the model', () => {
      */
     it('draws a pool that depends on the seed alone', () => {
         expect({
-            pairs: pairs.length,
-            fills: pairs.filter((p) => p.fills).length,
-            disjoints: disjoints.length,
-            separations: separations.length,
+            seeds: perSeed.map((one) => ({
+                seed: one.seed,
+                pairs: one.pairs.length,
+                fills: one.pairs.filter((p) => p.fills).length,
+                disjoints: one.disjoints.length,
+                separations: one.separations.length,
+            })),
             dropped: Object.fromEntries([...dropped].sort()),
         }).toMatchInlineSnapshot(`
           {
-            "disjoints": 978,
             "dropped": {
-              "a constructor refused the draw": 30,
-              "term: \`Term.held\` carries a word of adapter generators, and a table gives each generator two \`Value → Value\` functions. The library ships one generator the model names, \`decimalText\`, whose pair is \`numeralOfStoredText\`/\`textOfNumeral\`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted": 102,
+              "a constructor refused the draw": 82,
+              "term: \`Term.held\` carries a word of adapter generators, and a table gives each generator two \`Value → Value\` functions. The library ships one generator the model names, \`decimalText\`, whose pair is \`numeralOfStoredText\`/\`textOfNumeral\`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted": 446,
             },
-            "fills": 8,
-            "pairs": 978,
-            "separations": 970,
+            "seeds": [
+              {
+                "disjoints": 978,
+                "fills": 6,
+                "pairs": 978,
+                "seed": 20261004,
+                "separations": 972,
+              },
+              {
+                "disjoints": 974,
+                "fills": 9,
+                "pairs": 974,
+                "seed": 1,
+                "separations": 965,
+              },
+              {
+                "disjoints": 914,
+                "fills": 9,
+                "pairs": 914,
+                "seed": 4,
+                "separations": 905,
+              },
+            ],
           }
         `)
     })

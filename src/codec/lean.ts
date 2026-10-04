@@ -1083,7 +1083,9 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     const r = leanTermOf(right, name, bound)
     const binders = leanBinders(bound)
     const head = `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`
-    const reduce = binders === '' ? 'by decide' : 'rfl'
+    // the term \`rfl\` exhausts the default heartbeats on a refusal of two terms of about 600
+    // characters, where the tactic \`rfl\` closes the goal
+    const reduce = binders === '' ? 'by decide' : 'by rfl'
     // a free variable names a codec not yet declared, which the host reads as unknown and a closed
     // denotation reads as the bottom, so the verdict states the decision at an unknown environment
     const decision =
