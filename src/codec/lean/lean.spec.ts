@@ -804,8 +804,9 @@ const selfThunk: AnyCodec = erase(
 
 /**
  * **A thunk that names the constant under declaration**, as a recursive schema's thunk does
- * before the constant is assigned. The thunk throws when forced, so the host reads it as a free
- * variable, and the emitter prints a variable that no binder of the term binds.
+ * before the constant is assigned. The thunk throws when forced, so the host's tests read it as a
+ * free variable, and the emitter prints a variable that no binder of the term binds. The host's
+ * guard reads it as the root of the option, and the emitter states that reading for the guard.
  */
 const undeclared = lazy((): AttributeCodec<string> => {
     throw new ReferenceError('the constant under declaration')
@@ -1394,7 +1395,8 @@ const separationPairs = (): readonly Separation[] => {
         left: refine(string, nonEmpty),
         right: decimal,
     })
-    // a thunk that throws beside three partners: a free variable pairs with no binder
+    // a thunk that throws beside three partners: a free variable pairs with no binder. The bare
+    // thunk is the root of its option, so the guard refuses it, and the vector states the guard
     out.push(
         {
             name: 'free_array__vs__scalar_decimal',
