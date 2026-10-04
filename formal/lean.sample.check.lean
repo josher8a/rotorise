@@ -214,6 +214,20 @@ theorem map_inside_a_list :
         (Value.arr [Value.map {"a"} (fun k => Value.str "x")]))
       (some (Attr.l [Attr.m {"a"} (fun k => Attr.s "x")])) = .same := rfl
 
+/-- `object_with_a_name_inside_a_list` -/
+theorem object_with_a_name_inside_a_list :
+    check 3
+      ((denote (libTable noCallers) (Term.array (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) none)))).e
+        (Value.arr [Value.map {"a"} (fun k => Value.str "x")]))
+      (some (Attr.l [Attr.m {"a"} (fun k => Attr.s "x")])) = .same := rfl
+
+/-- `open_object_absent_name_inside_a_list` -/
+theorem open_object_absent_name_inside_a_list :
+    check 3
+      ((denote (libTable noCallers) (Term.array (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.boolean)) (some (Term.boolean)))))).e
+        (Value.arr [Value.map {"a", "z"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true)]))
+      (some (Attr.l [Attr.m {"a", "z"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true)])) = .same := rfl
+
 /-- `union_of_two` -/
 theorem union_of_two :
     check 1
@@ -378,8 +392,8 @@ theorem union_of_two__reads :
 
 /-! ## Refusals — neither side writes anything for these
 
-42 of 1602 shown; `scripts/gate.sh` elaborates all
-1602. One `rfl` each, no comparator and no fuel: the answer is `none`,
+44 of 1764 shown; `scripts/gate.sh` elaborates all
+1764. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -516,6 +530,16 @@ theorem object_restricted_rest__refuses__scalar_string :
 /-- `map_inside_a_list__refuses__scalar_string` — refused on both sides -/
 theorem map_inside_a_list__refuses__scalar_string :
     (denote (libTable noCallers) (Term.array (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.string)))))).e
+      (Value.str "hello") = none := rfl
+
+/-- `object_with_a_name_inside_a_list__refuses__scalar_string` — refused on both sides -/
+theorem object_with_a_name_inside_a_list__refuses__scalar_string :
+    (denote (libTable noCallers) (Term.array (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) none)))).e
+      (Value.str "hello") = none := rfl
+
+/-- `open_object_absent_name_inside_a_list__refuses__scalar_string` — refused on both sides -/
+theorem open_object_absent_name_inside_a_list__refuses__scalar_string :
+    (denote (libTable noCallers) (Term.array (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.boolean)) (some (Term.boolean)))))).e
       (Value.str "hello") = none := rfl
 
 /-- `union_of_two__refuses__scalar_binary` — refused on both sides -/

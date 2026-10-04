@@ -36,9 +36,14 @@ namespace Calculus
     order it was given, so `rfl` diverges on every set whose two sides disagree about order.
     `decide` settles it, because `Finset` equality at a concrete element type is decidable.
 
-    The alternatives are ordered as they are because `rfl` first sends both the top-level goal and
-    a mis-ordered set into an `isDefEq` loop that exhausts the heartbeat budget rather than
-    failing. -/
+    The two list alternatives split a list into its elements before `rfl` runs. `rfl` on a whole
+    list asks the kernel for each element at once, and an object inside the list answers with a
+    lookup at a bound key, which `rfl` cannot reduce. After the split, each element is a goal of
+    its own, and the map alternative reaches the object.
+
+    The alternatives are ordered as they are because `rfl` first sends the top-level goal, a
+    mis-ordered set, and a list that holds an object into an `isDefEq` loop. The loop exhausts the
+    heartbeat budget rather than failing. -/
 macro "vector" : tactic => `(tactic|
   (refine congrArg some ?_
    repeat' first
@@ -48,6 +53,8 @@ macro "vector" : tactic => `(tactic|
      | (refine congrArg Attr.ss (Subtype.ext ?_); decide)
      | (refine congrArg Attr.ns (Subtype.ext ?_); decide)
      | (refine congrArg Attr.bs (Subtype.ext ?_); decide)
+     | (refine congrArg Attr.l ?_)
+     | (refine congrArg₂ List.cons ?_ ?_)
      | rfl
      | congr 1))
 
@@ -240,6 +247,20 @@ theorem map_inside_a_list :
     = some (Attr.l [Attr.m {"a"} (fun k => Attr.s "x")]) := by
   vector
 
+/-- `object_with_a_name_inside_a_list` -/
+theorem object_with_a_name_inside_a_list :
+    (denote (libTable noCallers) (Term.array (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) none)))).e
+      (Value.arr [Value.map {"a"} (fun k => Value.str "x")])
+    = some (Attr.l [Attr.m {"a"} (fun k => Attr.s "x")]) := by
+  vector
+
+/-- `open_object_absent_name_inside_a_list` -/
+theorem open_object_absent_name_inside_a_list :
+    (denote (libTable noCallers) (Term.array (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.boolean)) (some (Term.boolean)))))).e
+      (Value.arr [Value.map {"a", "z"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true)])
+    = some (Attr.l [Attr.m {"a", "z"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true)]) := by
+  vector
+
 /-- `union_of_two` -/
 theorem union_of_two :
     (denote (libTable noCallers) (Term.union [Term.string, Term.boolean])).e
@@ -334,8 +355,8 @@ theorem recursive_tree_optional__guarded :
 
 /-! ## Refusals — neither side writes anything for these
 
-42 of 1602 shown; `scripts/gate.sh` elaborates all
-1602. One `rfl` each, no comparator and no fuel: the answer is `none`,
+44 of 1764 shown; `scripts/gate.sh` elaborates all
+1764. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -472,6 +493,16 @@ theorem object_restricted_rest__refuses__scalar_string :
 /-- `map_inside_a_list__refuses__scalar_string` — refused on both sides -/
 theorem map_inside_a_list__refuses__scalar_string :
     (denote (libTable noCallers) (Term.array (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.string)))))).e
+      (Value.str "hello") = none := rfl
+
+/-- `object_with_a_name_inside_a_list__refuses__scalar_string` — refused on both sides -/
+theorem object_with_a_name_inside_a_list__refuses__scalar_string :
+    (denote (libTable noCallers) (Term.array (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) none)))).e
+      (Value.str "hello") = none := rfl
+
+/-- `open_object_absent_name_inside_a_list__refuses__scalar_string` — refused on both sides -/
+theorem open_object_absent_name_inside_a_list__refuses__scalar_string :
+    (denote (libTable noCallers) (Term.array (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.boolean)) (some (Term.boolean)))))).e
       (Value.str "hello") = none := rfl
 
 /-- `union_of_two__refuses__scalar_binary` — refused on both sides -/
