@@ -1200,12 +1200,6 @@ export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
         )
     }
     const views = viewsDisjoint(one, other)
-    if (views === undefined) {
-        throw new LeanUnemittable(
-            name,
-            'a term with no views: a `withLegacyRead` with a `held` below it',
-        )
-    }
     // a caller's function is a variable of the theorem, and the kernel's `decide` refuses a goal
     // with a free variable, so a quantified pair reduces by `rfl`
     const bound: Bound = {

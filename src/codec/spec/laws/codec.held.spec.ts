@@ -29,6 +29,7 @@ import {
     withLegacyRead,
 } from '../../codec'
 import type { StandardSchemaV1 } from '../../standard'
+import { viewsDisjoint } from '../../term'
 import { checkEncodePaths, checkRoundTrip } from '../../testing'
 
 /** A Standard Schema v1 written by hand: a foreign held side that admits a `Date`. */
@@ -553,10 +554,8 @@ describe('the held side is the write occupancy of a union option', () => {
     })
 
     /**
-     * A legacy read over `decimal` has no views: the legacy read reads an attribute to a held
-     * value. The meet still answers the bottom, because the tags `'x'` and `'y'` meet at the
-     * bottom, and a slot at the bottom decides before a slot that refuses. The decision keeps the
-     * row of the raw terms, `disjoint`, for this pair.
+     * The tags `'x'` and `'y'` are disjoint, so the raw terms are disjoint at `k`. The decision
+     * accepts the pair by the row of the raw terms, `disjoint`, before it reads a view.
      */
     it('accepts two objects whose tags differ, where one object reads a legacy form of decimal', () => {
         const tagged = union([
@@ -572,6 +571,38 @@ describe('the held side is the write occupancy of a union option', () => {
         expect(tagged.unsafeEncode({ a: '1.5', k: 'y' })).toEqual({
             M: { a: { S: '1.5' }, k: { S: 'y' } },
         })
+    })
+
+    /**
+     * **A legacy read writes what its inner term writes**, so its caller view is the caller view
+     * of `decimal`, and its stored view is `opaque`, because the older reader reads every
+     * attribute. The required name `n` keeps both pairs of views apart: the open block holds
+     * `number` at `n`, and the other object requires a boolean there.
+     */
+    it('accepts a legacy read of decimal beside an object whose required name keeps the views apart', () => {
+        const legacy = object(
+            { a: withLegacyRead({ current: decimal, older: string }) },
+            [string, optional(number)],
+        )
+        const flagged = object({ a: string, n: boolean })
+        expect(viewsDisjoint(legacy.def, flagged.def)).toBe(true)
+        const either = union([flagged, legacy] as readonly AnyCodec[])
+        expect(either.unsafeEncode({ a: '1.5' } as never)).toEqual({
+            M: { a: { N: '1.5' } },
+        })
+        expect(either.unsafeEncode({ a: 'x', n: true } as never)).toEqual({
+            M: { a: { S: 'x' }, n: { BOOL: true } },
+        })
+    })
+
+    it('refuses a legacy read of decimal beside an object that holds the same text at the name', () => {
+        const legacy = object({
+            a: withLegacyRead({ current: decimal, older: string }),
+        })
+        expect(viewsDisjoint(legacy.def, object({ a: string }).def)).toBe(false)
+        expect(() => declare([legacy, object({ a: string })])).toThrow(
+            CodecError,
+        )
     })
 
     it('refuses a foreign held side beside a codec, because the top meets every kind', () => {
