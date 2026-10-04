@@ -319,7 +319,8 @@ export type Pair = {
     /**
      * `enclosing` is the number of `L` and `M` that the written attribute sits inside. A container
      * passes its own level plus one to each child, so {@link tooDeeplyNested} holds the bound at
-     * every position. A public `encode` starts the count at `0`.
+     * every position. A public `encode` starts the count at `0`, and `at` starts the count at the
+     * level of its path.
      */
     readonly encode: (value: never, enclosing: number) => Result<AttributeValue>
     readonly decode: (attribute: AttributeValue) => Result<unknown>
@@ -1405,7 +1406,7 @@ export const codecOfTerm = <T, A extends AttributeValue>(
 ): AttributeCodec<T, A> => {
     const built = codecs.get(def)
     if (built) return built as unknown as AttributeCodec<T, A>
-    const made = buildCodec<T, A>(Object.freeze(def))
+    const made = codecAtLevel<T, A>(Object.freeze(def), 0)
     codecs.set(def, made as unknown as AttributeCodec<never, AttributeValue>)
     return made
 }
@@ -1425,8 +1426,14 @@ const pairOf = (def: Term): Pair => {
     return made
 }
 
-const buildCodec = <T, A extends AttributeValue>(
+/**
+ * The codec of a term whose attribute sits inside `enclosing` levels of `L` and `M`. A public
+ * codec starts at `0`. `at` starts at the level of its path: each segment past the first crosses one
+ * list or map.
+ */
+export const codecAtLevel = <T, A extends AttributeValue>(
     def: Term,
+    enclosing: number,
 ): AttributeCodec<T, A> => {
     // **A codec is its pair and its term, and nothing else.** `arbitrary` and `shrink` were copied
     // onto the object here for `custom`, which made one fact reachable two ways; they are on the
@@ -1436,7 +1443,7 @@ const buildCodec = <T, A extends AttributeValue>(
     const atTop: Pick<Pair, 'decode'> & {
         readonly encode: (value: never) => Result<AttributeValue>
     } = {
-        encode: (value) => pair.encode(value, 0),
+        encode: (value) => pair.encode(value, enclosing),
         decode: pair.decode,
     }
     return codec<T, A>({

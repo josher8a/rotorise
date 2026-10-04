@@ -373,8 +373,9 @@ export const MAX_DOCUMENT_NESTING = 32
  * per level of the data they walk, because nobody declared that data. A recursive entity takes its
  * depth from the value, and the container that would write the 33rd level refuses, with its path.
  *
- * **Where it is not.** A public `encode` starts the count at `0`, so a value written at a nested
- * path through `at` counts from that path and not from the root of the item.
+ * **Where the count starts.** A public `encode` starts the count at `0`, the level of an item
+ * attribute. `at` starts the count at the level of its path. The item root is no level, and each
+ * segment past the first crosses one `L` or `M`.
  */
 export const tooDeeplyNested = (enclosing: number): string | undefined =>
     enclosing >= MAX_DOCUMENT_NESTING
