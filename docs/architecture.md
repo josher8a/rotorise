@@ -519,11 +519,9 @@ inversion that every product's proof goes through.
 codec on the presence lift `Option V`: a present value goes through the slot's codec, and absence
 takes the slot's behavior at the orientation (`absentOf`). The product runs over the declared names
 and the present names (`objP`), and its inverse law is the inverse law of each slot (`objP_inv`).
-The payload map `objAt` is that product (`objAt_eq_objP`). A table with no fill takes a form that
-walks the present keys and looks no name up, because the vectors reduce the payload map by `rfl`
-under a bound key, where a lookup does not reduce. A fill reads an absent name as its constant and
-the write sends the constant to a present name, so a fill is not an inverse: the inverse law holds
-for a table with no fill (`noFill`).
+The payload map `objAt` is that product, for every table. A fill reads an absent name as its
+constant and the write sends the constant to a present name, so a fill is not an inverse: the
+inverse law holds for a table with no fill (`noFill`).
 
 The prism inventory is partial on both sides on purpose. The gaps are the constructions that are
 not one payload between one pair: the numeric constructor, where the numeral gate stops the

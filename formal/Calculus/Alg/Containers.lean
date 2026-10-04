@@ -226,92 +226,19 @@ theorem absentOf_of_notFill {o o' : Orient} {x : Option (FieldSem V M)}
   | some (.opt _), _ => rfl
   | some (.fill _ _), hx => exact absurd (hx _ rfl) (by simp [FieldSem.isFill])
 
-/-- At absence a slot that is not a fill and answers answers absence. -/
-theorem absentOf_isSome {o : Orient} {x : Option (FieldSem V M)}
-    (hx : ∀ fs, x = some fs → fs.isFill = false) (h : (absentOf o x).isSome) :
-    absentOf o x = some none := by
-  match x, hx, h with
-  | none, _, _ => rfl
-  | some (.opt _), _, _ => rfl
-  | some (.fill _ _), hx, _ => exact absurd (hx _ rfl) (by simp [FieldSem.isFill])
-
-/-- **The object's payload map at an orientation**: the product of the slots (`objAt_eq_objP`).
-    A table with no fill takes the form that walks the present keys and looks no name up, because
-    the vectors reduce it by `rfl` under a bound key, where a lookup does not reduce. A fill adds
-    the names it reads, so its table takes the product itself. -/
+/-- **The object's payload map at an orientation**: the product of the slots over the declared
+    names and the present names. -/
 def objAt (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) (o : Orient) :
-    MapOf V → Option (MapOf V) := fun p =>
-  if noFill sems then
-    if ∀ k ∈ sems.keys, k ∉ p.keys → (absentOf o (sems.at k)).isSome then
-      (funImage fun k => (entryCodec sems rc? k.1).bind fun c => c.f o (p.2 k)).map
-        fun g => ⟨p.1, g⟩
-    else none
-  else objP (liftTable sems rc?) sems.keys o p
-
-/-- **The payload map is the product of the slots** over the declared names and the present names. -/
-theorem objAt_eq_objP (o : Orient) (p : MapOf V) :
-    objAt sems rc? o p = objP (liftTable sems rc?) sems.keys o p := by
-  unfold objAt
-  split
-  · next hnf =>
-    have hnf := noFill_at hnf
-    refine Option.ext fun q => ?_
-    rw [objP_eq]
-    refine Iff.symm ?_
-    split
-    · next hg =>
-      constructor
-      · rintro ⟨hq, hsub⟩
-        -- a present name: the entry sends the value to `q`'s
-        have hpres : ∀ k : {k // k ∈ p.keys}, ∃ w, (entryCodec sems rc? k.1).bind
-            (fun c => c.f o (p.2 k)) = some w ∧ q.at k.1 = some w := by
-          intro k
-          have := hq k.1 (Finset.mem_union.mpr (Or.inr k.2))
-          rw [MapOf.at_of_mem k] at this
-          simp only [liftTable, Option.map_eq_some_iff] at this
-          obtain ⟨w, hw, he⟩ := this
-          exact ⟨w, hw, he.symm⟩
-        have hsome : ∀ k : {k // k ∈ p.keys},
-            ((entryCodec sems rc? k.1).bind fun c => c.f o (p.2 k)).isSome := fun k => by
-          obtain ⟨w, hw, _⟩ := hpres k; rw [hw]; rfl
-        rw [funImage_eq (f := fun k => (_ : Option V).get (hsome k)) fun k => (Option.some_get _).symm]
-        refine congrArg some (MapOf.ext_at fun k => ?_)
-        rcases Decidable.em (k ∈ p.keys) with hkp | hkp
-        · obtain ⟨w, hw, hqk⟩ := hpres ⟨k, hkp⟩
-          rw [hqk]
-          simp only [MapOf.at, dif_pos hkp, hw, Option.get_some]
-        · refine (MapOf.at_none (m := ⟨p.keys, fun k =>
-            ((entryCodec sems rc? k.1).bind fun c => c.f o (p.get k)).get (hsome k)⟩) hkp).trans ?_
-          rcases Decidable.em (k ∈ sems.keys) with hkF | hkF
-          · have := hq k (Finset.mem_union.mpr (Or.inl hkF))
-            rw [MapOf.at_none hkp] at this
-            exact (liftTable_none (hnf k) this).symm
-          · exact (MapOf.at_none fun h' => (Finset.mem_union.mp (hsub h')).elim hkF hkp).symm
-      · intro h
-        obtain ⟨g, hg', rfl⟩ := Option.map_eq_some_iff.mp h
-        have hent := funImage_some hg'
-        refine ⟨fun k hk => ?_, fun k hk => Finset.mem_union.mpr (Or.inr hk)⟩
-        rcases Decidable.em (k ∈ p.keys) with hkp | hkp
-        · rw [MapOf.at_of_mem ⟨k, hkp⟩, MapOf.at_of_mem (m := (⟨p.1, g⟩ : MapOf V)) ⟨k, hkp⟩]
-          simp only [liftTable, hent ⟨k, hkp⟩, Option.map_some]
-        · rw [MapOf.at_none hkp, MapOf.at_none (m := (⟨p.1, g⟩ : MapOf V)) hkp]
-          exact absentOf_isSome (hnf k) (hg k ((Finset.mem_union.mp hk).resolve_right hkp) hkp)
-    · next hg =>
-      refine ⟨fun ⟨hq, _⟩ => absurd (fun k hkF hkp => ?_) hg, fun h => (nomatch h)⟩
-      have := hq k (Finset.mem_union.mpr (Or.inl hkF))
-      rw [MapOf.at_none hkp] at this
-      simp only [liftTable] at this
-      rw [this]; rfl
-
-  · rfl
+    MapOf V → Option (MapOf V) :=
+  objP (liftTable sems rc?) sems.keys o
 
 /-- What the payload map sends at an orientation: each slot sends its lookup, and nothing
     outside the names. -/
 theorem objAt_eq {o : Orient} {p q : MapOf V} :
     objAt sems rc? o p = some q ↔
       (∀ k ∈ sems.keys ∪ p.keys, liftTable sems rc? k o (p.at k) = some (q.at k)) ∧
-        q.keys ⊆ sems.keys ∪ p.keys := by
-  rw [objAt_eq_objP]; exact objP_eq
+        q.keys ⊆ sems.keys ∪ p.keys :=
+  objP_eq
 
 /-- **The domain of the payload map**: every absent declared name answers at absence, and every
     present entry goes through its codec. -/
@@ -319,8 +246,7 @@ theorem objAt_isSome {o : Orient} {p : MapOf V} :
     (objAt sems rc? o p).isSome ↔
       (∀ k ∈ sems.keys, k ∉ p.keys → (absentOf o (sems.at k)).isSome) ∧
         ∀ k : {k // k ∈ p.keys}, ((entryCodec sems rc? k.1).bind fun c => c.f o (p.get k)).isSome := by
-  rw [objAt_eq_objP]
-  unfold objP
+  unfold objAt objP
   split
   · next hall =>
     simp only [Option.isSome_some, true_iff]
@@ -436,7 +362,6 @@ theorem object_inv {rest : RestSem V M} (hnf : noFill sems = true)
     (hrc : ∀ c ∈ rcOf rest, Lawful member c) (o : Orient) :
     ∀ p q, objAt sems (rcOf rest) o p = some q → objAt sems (rcOf rest) o.op q = some p := by
   intro p q h
-  rw [objAt_eq_objP] at h ⊢
   refine objP_inv (L := liftTable sems (rcOf rest)) (fun k o x y h => ?_)
     (fun k o hk => liftTable_absent hk o) o p q h
   cases x with

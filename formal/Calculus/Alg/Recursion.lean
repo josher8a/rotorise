@@ -281,7 +281,7 @@ theorem agreeLe_objectCodec {sM : Summand (MapOf V) V M member}
   | some m =>
     have hvv := sM.p.into_out h
     refine congrArg (Option.map sM.p.into) ?_
-    simp only [Option.bind_some, objAt_eq_objP]
+    simp only [Option.bind_some, objAt]
     refine objP_congr fun k _ => ?_
     rcases Decidable.em (k ∈ m.keys) with hk | hk
     · rw [MapOf.at_of_mem ⟨k, hk⟩]
