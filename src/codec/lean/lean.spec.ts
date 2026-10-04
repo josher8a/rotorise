@@ -478,6 +478,27 @@ describe('terms', () => {
             ).toContain('Value → Value')
         }
     })
+
+    /**
+     * **In a declaration verdict a numeric policy is a generator**, as a caller's adapter is: the
+     * analysis reads an adapter by its sides and its identity, and the verdict holds at every pair.
+     * The host reads two `opaque('lossy')` as one adapter, so the two print one generator.
+     */
+    it('emits each numeric policy of a declaration verdict as a generator, one for each adapter', () => {
+        const verdict = leanSeparation({
+            name: 'policies',
+            left: erase(opaque('lossy')),
+            right: erase(object({ a: opaque('lossy') })),
+        })
+        expect(verdict).toContain('(.caller 0, false)')
+        expect(verdict).not.toContain('(.caller 1, false)')
+        const both = leanSeparation({
+            name: 'two_policies',
+            left: erase(opaque('lossy')),
+            right: erase(opaque('refuse')),
+        })
+        expect(both).toContain('(.caller 1, false)')
+    })
 })
 
 describe('what cannot be emitted', () => {
