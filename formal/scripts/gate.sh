@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # The commit gate: every check, in order, gated on exit codes.
 #
-#   scripts/gate.sh              all nine checks
+#   scripts/gate.sh              all ten checks
 #   scripts/gate.sh --no-build   the five Python guards only
 #
-# `--no-build` skips the build, the gateway check, the emit and the bridge, and is honest only
-# when no `.lean` file changed.
+# `--no-build` skips the build, the gateway check, the emit, the pool pre-check and the bridge,
+# and is honest only when no `.lean` file changed.
 #
 # Run the gate inside the devcontainer or on CI. Only one `lake build` may run at a time
 # across the sessions sharing this tree, and a build from `docs/` is one of them: `calculus`
@@ -71,11 +71,18 @@ if [ "$RUN_BUILD" -eq 1 ]; then
                     <(grep -v "^#" scripts/classical_gateways.txt | sort))
      [ -z "$new" ] || { echo "new classical route(s):"; echo "$new"; exit 1; }'
   run 'vector emit' bash -c \
-    "cd \"$REPO_DIR\" && EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/codec/lean/lean.spec.ts --reporter=dot"
+    "cd \"$REPO_DIR\" && EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/codec/lean/lean.spec.ts src/codec/lean/lean.pool.spec.ts --reporter=dot"
+  # The generated pool, put to the model by `#eval`. A row prints only on a mismatch, and Lean
+  # exits 0 after a print, so the check reads the output: the sentinel line must be all of it.
+  run 'pool pre-check' bash -c \
+    'out=$(lake env lean .pool.eval.lean 2>&1) || { echo "$out"; exit 1; }
+     printf "%s\n" "$out" | grep -qxE "pool: [0-9]+ pairs checked" || { echo "$out"; exit 1; }
+     [ "$(printf "%s\n" "$out" | wc -l)" -eq 1 ] || { echo "$out"; exit 1; }'
   run 'vector bridge' bash -c \
     'for f in lean.sample.check.lean lean.sample.lean .vectors.full.lean \
               .separations.lean .readverdicts.lean .resolutions.lean \
-              .readvectors.lean .disjoints.lean; do
+              .readvectors.lean .disjoints.lean \
+              .pool.disjoints.lean .pool.separations.lean; do
        [ -f "$f" ] || { echo "missing $f"; exit 1; }
        out=$(lake env lean "$f" 2>&1) || { echo "$out"; exit 1; }
        # warnings are failures here: the generated files are machine-written, so a warning is
@@ -86,6 +93,7 @@ else
   printf 'SKIP  %-28s (--no-build)\n' 'lake build'
   printf 'SKIP  %-28s (--no-build)\n' 'classical gateways'
   printf 'SKIP  %-28s (--no-build)\n' 'vector emit'
+  printf 'SKIP  %-28s (--no-build)\n' 'pool pre-check'
   printf 'SKIP  %-28s (--no-build)\n' 'vector bridge'
 fi
 
