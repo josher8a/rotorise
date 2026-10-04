@@ -22,7 +22,7 @@ def entryP {α : Type} (fs : MapOf (α → Bool)) (rp : Option (α → Bool)) (k
     Option (α → Bool) :=
   match fs.at k with | some P => some P | none => rp
 
-/-- `objAt`'s traversal, as a row: every entry goes through the
+/-- The present entries of the product `objAt`, as a row: every entry goes through the
     codec its name names. -/
 def objAdmV {α : Type} (fs : MapOf (α → Bool)) (rp : Option (α → Bool)) (keys : Finset String)
     (g : {k // k ∈ keys} → α) : Bool :=

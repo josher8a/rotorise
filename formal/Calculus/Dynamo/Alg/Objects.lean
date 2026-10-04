@@ -68,21 +68,40 @@ theorem emptyBody_at (k : Name) :
     (⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ : MapOf FieldSem).at k = none :=
   MapOf.at_none (Finset.notMem_empty k)
 
-/-- The empty body holds no fill. -/
-theorem emptyBody_noFill :
-    Alg.noFill (⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ : MapOf FieldSem) = true :=
-  decide_eq_true fun k => absurd k.2 (Finset.notMem_empty k.1)
-
 /-- **A record moves entry by entry**, at each orientation: the same name set, every entry
     through `c`. -/
 theorem recordCodec_f (o : Alg.Orient) (c : Codec) (keys : Finset Name)
     (g : {k // k ∈ keys} → Attr) :
     (recordCodec c).f o (.m keys g) = (funImage fun k => c.f o (g k)).map (Attr.m keys) := by
-  simp only [carriedCodec, Option.bind, objAt, rcOf, entryCodec, mS, mA]
-  rw [if_pos emptyBody_noFill, if_pos (fun k hk => absurd hk (Finset.notMem_empty k)), Option.map_map]
-  refine congrArg (fun F => Option.map F _) (funext fun _ => rfl) |>.trans ?_
-  exact congrArg (Option.map _) (congrArg funImage
-    (funext fun k => by rw [emptyBody_at]))
+  have hent : ∀ k, entryCodec (⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ :
+      MapOf FieldSem) (some c) k = some c := fun k => by simp only [entryCodec, emptyBody_at]
+  have hlift : ∀ k (hk : k ∈ keys), liftTable ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩
+      (some c) k o ((⟨keys, g⟩ : MapOf Attr).at k) = (c.f o (g ⟨k, hk⟩)).map some := fun k hk => by
+    rw [MapOf.at_of_mem (m := ⟨keys, g⟩) ⟨k, hk⟩]
+    simp only [liftTable, hent, Option.bind_some]
+  have hmem : ∀ k, k ∈ (∅ : Finset Name) ∪ keys ↔ k ∈ keys := fun k =>
+    ⟨fun h => (Finset.mem_union.mp h).resolve_left (Finset.notMem_empty k),
+      fun h => Finset.mem_union.mpr (Or.inr h)⟩
+  simp only [carriedCodec, Option.bind, rcOf, mS, mA]
+  rcases hf : funImage (fun k => c.f o (g k)) with _ | h
+  · refine Option.map_eq_none_iff.mpr (Option.not_isSome_iff_eq_none.mp fun hs => ?_)
+    have hall : ∀ k : {k // k ∈ keys}, (c.f o (g k)).isSome = true := fun k => by
+      have h1 := (Alg.objP_eq (q := (objAt _ (some c) o ⟨keys, g⟩).get hs)).mp
+        (Option.some_get hs).symm |>.1 k.1 ((hmem k.1).mpr k.2)
+      rw [hlift k.1 k.2] at h1
+      rw [← Option.isSome_map (f := some), h1]; rfl
+    have := funImage_isSome hall
+    rw [hf] at this
+    exact nomatch this
+  · have hg := funImage_some hf
+    have hq : objAt (⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ : MapOf FieldSem)
+        (some c) o ⟨keys, g⟩ = some ⟨keys, h⟩ := by
+      refine Alg.objP_eq.mpr ⟨fun k hk => ?_, fun k hk => (hmem k).mpr hk⟩
+      have hk := (hmem k).mp hk
+      rw [hlift k hk, hg ⟨k, hk⟩, MapOf.at_of_mem (m := ⟨keys, h⟩) ⟨k, hk⟩]
+      rfl
+    rw [hq]
+    rfl
 
 /-- **A record holds a map whose every entry the codec holds.** -/
 theorem recordCodec_T (c : Codec) (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
