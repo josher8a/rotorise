@@ -436,7 +436,7 @@ describe('terms', () => {
             right: numberFlags,
         })
         expect(verdict).toContain('theorem flags (q0 : Value → Bool) :')
-        expect(verdict.endsWith('= false := rfl')).toBe(true)
+        expect(verdict.endsWith('= false := by rfl')).toBe(true)
         expect(refusal(() => leanTermOf(textFlags)).reason).toContain(
             'Value → Bool',
         )
@@ -1860,7 +1860,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.includes('PairwiseCompat (libTable κ) ['),
         )
         const refused = emitted.filter((one) =>
-            /= false := (by decide|rfl)$/.test(one),
+            /= false := by (decide|rfl)$/.test(one),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
         expect([accepted.length, refused.length]).toEqual([981, 35])
