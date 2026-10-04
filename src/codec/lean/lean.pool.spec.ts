@@ -636,6 +636,17 @@ describe('the generated pool, against the model', () => {
         `)
     })
 
+    /**
+     * **A union that the host accepts has a warrant that the model proves.** A pair reaches the
+     * separation emitter only after its terms print, so the emitter refuses a pair for one reason:
+     * the host accepted it where the model's decision refuses it.
+     */
+    it('accepts no pair on a warrant that the model does not prove', () => {
+        expect(
+            [...dropped.keys()].filter((why) => why.startsWith('separation: ')),
+        ).toEqual([])
+    })
+
     it('emits the pre-check and the kernel vectors for the gate', () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             const formal = join(process.cwd(), 'formal')

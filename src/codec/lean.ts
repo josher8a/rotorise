@@ -1044,9 +1044,10 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  * **The bridge runs both ways, because the two host defects of the certificate lived in the
  * direction that the one-way bridge did not check.**
  *
- * - `src/` **accepts** the pair: the model proves `PairwiseCompat` for it, given lawful options.
- *   Where {@link agrees} holds, the host decided the model's `compatPair`, and the proof is
- *   `pairwiseCompat_of_compatPair` over that decision. A host warrant that the model does not
+ * - `src/` **accepts** the pair: the model's guard accepts both options, on the terms that
+ *   {@link leanRooted} spells, and the model proves `PairwiseCompat` for the pair, given lawful
+ *   options. Where {@link agrees} holds, the host decided the model's `compatPair`, and the proof
+ *   is `pairwiseCompat_of_compatPair` over that decision. A host warrant that the model does not
  *   prove stops the file.
  * - `src/` **refuses** the pair: the model's decision must refuse it too, `compatPair dynOracle x
  *   y = false`. A decision that starts to accept a pair `src/` turns down stops the file.
@@ -1126,12 +1127,15 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
               name,
               '`src/` accepts this pair on no warrant that the model proves: the decision refuses it',
           )
+    // the host's union verdict is the guard and the compatibility test, so the vector states both
     return [
-        `/-- \`${name}\` — \`src/\` accepts this pair; the model proves it compatible -/`,
+        `/-- \`${name}\` — \`src/\` accepts this pair; the model's guard accepts it, and the model proves it compatible -/`,
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} (κ : Callers) :`,
-        `    (∀ t ∈ [${l}, ${r}], Lawful (denote (libTable κ) t)) →`,
-        `      PairwiseCompat (libTable κ) [${l}, ${r}] :=`,
-        `  ${warrant}`,
+        `    (Alg.Term.guarded (${leanRooted(l, left)}) &&`,
+        `      Alg.Term.guarded (${leanRooted(r, right)})) = true ∧`,
+        `    ((∀ t ∈ [${l}, ${r}], Lawful (denote (libTable κ) t)) →`,
+        `      PairwiseCompat (libTable κ) [${l}, ${r}]) :=`,
+        `  ⟨${reduce}, ${warrant}⟩`,
     ].join('\n')
 }
 
@@ -1169,6 +1173,10 @@ See \`src/codec/lean.ts\`'s \`Separation\`.
 set_option linter.unusedVariables false
 /-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
 set_option linter.style.nameCheck false
+/-! A quantified verdict binds a caller's function, so \`decide\` refuses it and the elaborator
+reduces \`Term.guarded\` by \`whnf\`. On a term with a binder and an object, that reduction needs
+more than the default 200000 heartbeats. -/
+set_option maxHeartbeats 1000000
 
 namespace Calculus
 
