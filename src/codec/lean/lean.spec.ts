@@ -1307,6 +1307,19 @@ const standIn = erase(
  * the view of `decimal`, so a required boolean keeps the two views apart.
  */
 const undefinableBoolean = erase(object({ a: undefinable(boolean) }))
+/**
+ * One codec with a legacy read beside itself, which the pool found: the model reads a legacy read
+ * by the base test alone, so the union is refused even when both options are one codec (bbe84d6).
+ */
+const sharedLegacy = erase(
+    list(
+        withLegacyRead({ current: string, older: string }),
+        held(never, boolean, {
+            encode: () => new CodecError('nothing is stored'),
+            decode: () => new CodecError('nothing is stored'),
+        }),
+    ),
+)
 const twoFields = erase(object({ a: string, n: boolean }))
 const legacyDecimalRestNumber = erase(
     object(
@@ -1487,6 +1500,11 @@ const separationPairs = (): readonly Separation[] => {
             name: 'two_fields__vs__legacy_decimal_rest_number',
             left: twoFields,
             right: legacyDecimalRestNumber,
+        },
+        {
+            name: 'shared_legacy__vs__shared_legacy',
+            left: sharedLegacy,
+            right: sharedLegacy,
         },
     )
     return out
@@ -1886,7 +1904,7 @@ describe("the declaration guard, against the model's classifier", () => {
             ),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([981, 35])
+        expect([accepted.length, refused.length]).toEqual([981, 36])
     })
 
     /**

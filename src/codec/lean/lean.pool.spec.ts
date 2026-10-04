@@ -23,7 +23,7 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DynamoNumber, isNumeral } from '../attribute'
+import { DynamoNumber, isNumeral, isStoredNumeral } from '../attribute'
 import type { AnyCodec } from '../codec'
 import {
     array,
@@ -35,12 +35,14 @@ import {
     held,
     lazy,
     list,
+    mdunion,
     never,
     nullable,
     nullValue,
     object,
     opaque,
     optional,
+    product,
     refine,
     spread,
     string,
@@ -74,10 +76,7 @@ import { arbitraryOf, rngFrom } from '../testing'
 /** The emitter takes the erased codec; the constructors return precise ones. */
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
 
-/**
- * The seeds of the pool. A new seed is a new pool, and the pinned counts move with it. Seed 4 holds
- * one codec with a legacy read beside itself, which the host accepted and the model refuses.
- */
+/** The seeds of the pool. A new seed is a new pool, and the pinned counts move with it. */
 const SEEDS = [20261004, 1, 4] as const
 /** The number of codecs that the generator draws. */
 const DRAWS = 150
@@ -153,13 +152,19 @@ const declare = (a: Entry, b: Entry, make: () => unknown): AnyCodec => {
     return erase(make())
 }
 
+/** The two slices of a dissection, which `mdunion` returns. */
+type Slices = {
+    readonly extract: (clause: Readonly<Record<string, unknown>>) => unknown
+    readonly exclude: (clause: Readonly<Record<string, unknown>>) => unknown
+}
+
 /** One codec, drawn through the public constructors. A constructor can refuse the draw. */
 const draw = (depth: number): Entry => {
     if (depth === 0 || rng() < 0.25) {
         const [name, make] = pick(rng() < 0.8 ? leaves : setable)
         return { name, codec: make() }
     }
-    switch (Math.floor(rng() * 17)) {
+    switch (Math.floor(rng() * 19)) {
         case 0: {
             const c = draw(depth - 1)
             return { name: `array(${c.name})`, codec: erase(array(c.codec)) }
@@ -246,10 +251,16 @@ const draw = (depth: number): Entry => {
             return { name, codec: make() }
         }
         case 8: {
-            if (rng() < 0.33)
+            const shipped = rng()
+            if (shipped < 0.17)
                 return {
                     name: 'refine(string,isNumeral)',
                     codec: erase(refine(string, isNumeral as never)),
+                }
+            if (shipped < 0.33)
+                return {
+                    name: 'refine(decimal,isStoredNumeral)',
+                    codec: erase(refine(decimal, isStoredNumeral as never)),
                 }
             const c = draw(depth - 1)
             return {
@@ -286,9 +297,12 @@ const draw = (depth: number): Entry => {
         }
         case 11: {
             const c = draw(depth - 1)
-            const self: AnyCodec = erase(
-                lazy(() => object({ v: c.codec, kids: array(self) }) as never),
+            const tree = lazy(
+                () => object({ v: c.codec, kids: array(self) }) as never,
             )
+            const self: AnyCodec = erase(tree)
+            // the thunk runs the constructor, so a refusal of the body is a refusal of the draw
+            if (tree.def.kind === 'lazy') tree.def.get()
             return { name: `mu.tree(${c.name})`, codec: self }
         }
         case 12: {
@@ -347,6 +361,67 @@ const draw = (depth: number): Entry => {
                 union([c.codec, node.codec] as never),
             )
             return { name: `mu.opt(${c.name})`, codec: self }
+        }
+        case 17: {
+            const a = draw(depth - 1)
+            const b = draw(depth - 1)
+            const merge = product as (...factors: unknown[]) => unknown
+            const right = erase(object({ b: b.codec }))
+            if (rng() < 0.5)
+                return {
+                    name: `product({a:${a.name}},{b:${b.name}})`,
+                    codec: erase(merge(object({ a: a.codec }), right)),
+                }
+            const left = {
+                name: `{a:${a.name}}`,
+                codec: erase(object({ a: a.codec })),
+            }
+            const other = {
+                name: '{c:string}',
+                codec: erase(object({ c: string })),
+            }
+            const factor = declare(left, other, () =>
+                union([left.codec, other.codec] as never),
+            )
+            return {
+                name: `product(union({a:${a.name}}|{c:string}),{b:${b.name}})`,
+                codec: erase(merge(factor, right)),
+            }
+        }
+        case 18: {
+            const a = draw(depth - 1)
+            const b = draw(depth - 1)
+            const small = {
+                name: `{k:p,s:x,x:${a.name}}`,
+                codec: erase(
+                    object({ k: string('p'), s: string('x'), x: a.codec }),
+                ),
+            }
+            const large = {
+                name: `{k:p,s:y,y:${b.name}}`,
+                codec: erase(
+                    object({ k: string('p'), s: string('y'), y: b.codec }),
+                ),
+            }
+            const name = `mdunion(k,s:${small.name}|${large.name})`
+            const whole = declare(small, large, () =>
+                (mdunion as (...x: unknown[]) => unknown)(
+                    ['k', 's'],
+                    [small.codec, large.codec],
+                ),
+            ) as AnyCodec & Slices
+            const slice = rng()
+            if (slice < 0.33)
+                return {
+                    name: `extract(s=x,${name})`,
+                    codec: erase(whole.extract({ s: string('x') })),
+                }
+            if (slice < 0.67)
+                return {
+                    name: `exclude(s=x,${name})`,
+                    codec: erase(whole.exclude({ s: string('x') })),
+                }
+            return { name, codec: whole }
         }
         default: {
             const c = draw(depth - 1)
@@ -642,29 +717,29 @@ describe('the generated pool, against the model', () => {
         }).toMatchInlineSnapshot(`
           {
             "dropped": {
-              "a constructor refused the draw": 69,
+              "a constructor refused the draw": 71,
             },
             "seeds": [
               {
-                "disjoints": 1262,
-                "fills": 8,
-                "pairs": 1262,
-                "seed": 20261004,
-                "separations": 1254,
-              },
-              {
-                "disjoints": 1267,
+                "disjoints": 1285,
                 "fills": 7,
-                "pairs": 1267,
-                "seed": 1,
-                "separations": 1260,
+                "pairs": 1285,
+                "seed": 20261004,
+                "separations": 1278,
               },
               {
-                "disjoints": 1182,
-                "fills": 9,
-                "pairs": 1182,
+                "disjoints": 1272,
+                "fills": 7,
+                "pairs": 1272,
+                "seed": 1,
+                "separations": 1265,
+              },
+              {
+                "disjoints": 1198,
+                "fills": 14,
+                "pairs": 1198,
                 "seed": 4,
-                "separations": 1173,
+                "separations": 1184,
               },
             ],
           }
