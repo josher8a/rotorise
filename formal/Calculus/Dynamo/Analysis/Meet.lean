@@ -596,6 +596,46 @@ example : Alg.Term.disjoint pair0
     (Term.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩) ()) Term.null
       = true := by rfl
 
+/-- **A refinement is apart from a refined union in both orders.** The right union refines
+    `literal "a" ∪ number` to `literal "b"`, and the test reads the predicate of the right
+    refinement on each option below it. -/
+theorem disjoint_refinedUnion_bothOrders :
+    Alg.Term.disjoint pair0 (.refine Term.string (.members .string (NEFinset.of "b" ∅)) () : Term)
+        (.union [.refine (.union [.refine Term.string (.members .string (NEFinset.of "a" ∅)) (),
+          Term.number]) (.members .string (NEFinset.of "b" ∅)) (), Term.number]) = true ∧
+      Alg.Term.disjoint pair0
+        (.union [.refine (.union [.refine Term.string (.members .string (NEFinset.of "a" ∅)) (),
+          Term.number]) (.members .string (NEFinset.of "b" ∅)) (), Term.number] : Term)
+        (.refine Term.string (.members .string (NEFinset.of "b" ∅)) ()) = true := by
+  decide
+
+/-- **Two recursive terms are apart in both orders where a refinement covers one.** A list of
+    booleans and a refined list of strings share no value, and the test reads the recursive
+    term below the refinement on the right as it reads the term on the left. -/
+theorem disjoint_refinedRecursion_bothOrders :
+    Alg.Term.disjoint pair0
+        (.mu (.union [Term.boolean, .object (.mk {"k"} (fun _ => .req (.var 0)) none)]) : Term)
+        (.refine (.mu (.union [Term.string, .object (.mk {"k"} (fun _ => .req (.var 0)) none)]))
+          (.closure fun _ => true) ()) = true ∧
+      Alg.Term.disjoint pair0
+        (.refine (.mu (.union [Term.string, .object (.mk {"k"} (fun _ => .req (.var 0)) none)]))
+          (.closure fun _ => true) () : Term)
+        (.mu (.union [Term.boolean, .object (.mk {"k"} (fun _ => .req (.var 0)) none)])) = true := by
+  decide
+
+/-- **The certificate of a union does not read the order of the options.** A recursive term
+    beside a `held` over a refined recursive term is certified in both orders. -/
+theorem certPair_heldRecursion_bothOrders :
+    certPair (.mu (.union [Term.boolean, .object (.mk {"k"} (fun _ => .req (.var 0)) none)]))
+        (.held false Term.string (.refine (.mu (.union [Term.string,
+          .object (.mk {"k"} (fun _ => .req (.var 0)) none)])) (.closure fun _ => true) ())
+          (.caller 0, false) []) = true ∧
+      certPair (.held false Term.string (.refine (.mu (.union [Term.string,
+          .object (.mk {"k"} (fun _ => .req (.var 0)) none)])) (.closure fun _ => true) ())
+          (.caller 0, false) [])
+        (.mu (.union [Term.boolean, .object (.mk {"k"} (fun _ => .req (.var 0)) none)])) = true := by
+  decide
+
 example : unionOk [.object (.mk {"x"} (fun _ => .optional .string) none)] = true := by
   simp [unionOk, certAll]
 

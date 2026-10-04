@@ -145,7 +145,10 @@ and the kernel evaluates a closed pair.
 left variable `i` and the right variable `j` are one pair of binders. Two variables are disjoint
 where the pairing names them one pair, because the environments keep each pair apart. Two
 recursive terms are disjoint where their bodies are disjoint with the two new binders paired. A
-recursive term beside another constructor unfolds, and its binder pairs with nothing. The set row
+recursive term also unfolds, and its binder pairs with nothing. The rows of a left recursive term
+and a left refinement split the right operand at every depth: a union into its options, a
+refinement with its predicate kept on each option below it, and a recursive term both whole and
+unfolded. So a right refinement or a right recursive term hides no option from the left row. The set row
 asks closed elements, because the set laws are stated over closed terms. A `held` and the top are
 disjoint only from the bottom, because their admission is a function that the test does not read.
 
@@ -434,8 +437,8 @@ that `denote` takes. A variable asks the codec that the environment gives the va
 **The test reads a recursive term stage by stage.** Two recursive terms are disjoint where their
 bodies are disjoint under every two stages that are disjoint, because each stage is the body over
 the stage below (`stage_apart`). A recursive term beside another constructor reads
-the stage below the depth of the input (`Adm_mu_unfold`, `AdmA_mu_unfold`). Neither row needs the
-guard.
+the stage below the depth of the input (`Adm_mu_unfold`, `AdmA_mu_unfold`). A refinement above a
+right recursive term reads the same stage (`denote_mu_unfold`). No row needs the guard.
 
 **The host spells recursion as a thunk, and the bridge prints the binder.** The emitter marks each
 term object that a thunk returns during the printing of that object. It prints `Term.mu` at the
