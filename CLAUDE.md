@@ -234,9 +234,10 @@ Hold the position while you have evidence. Give the evidence.
 If the user overrules you and the user is right, adopt the decision, and continue the work.
 
 ### Rule 29: Ask the owner for a normative decision
-A change to a normative document, to the advertised axiom base, or to the public API is a decision of the owner.
+A change to a normative document or to the advertised axiom base is a decision of the owner.
 Deliver the measurement, state the trade, and stop.
 Do not move a finding from an audit into a normative document. The owner triages each finding first.
+Decide a change to the public API on the design, and report the change. Migration cost is not an argument.
 
 ### Rule 30: Read the memory index before you plan
 `memory/` holds the record of past arcs, where the directory exists. Read `memory/MEMORY.md` first.
@@ -328,6 +329,9 @@ These are the rulings of the owner, in the terms of this repository.
   future**: one entry per future state, with what decides it. `docs/defects.md` holds the
   **known issues, the suspected ones, and the partially mitigated ones**, and each entry
   opens with one of those three words.
+- `docs/architecture-v2.md` is the target of the architecture. It replaces `docs/architecture.md`
+  when its structure exists, and it goes only when that file absorbs it. No guard reads it: run the
+  `name_drift.py` scan over it before a commit that touches the term language.
 - The architecture holds no count and no measurement, and cites no section number. A count is
   short lived: it belongs in the commit that measured it, in `docs/defects.md` where it pins
   an issue, or in the output of a guard. A figure appears in the roadmap only where the figure
