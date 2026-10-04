@@ -17,6 +17,7 @@ import {
     decimal,
     failed,
     held,
+    lazy,
     list,
     never,
     number,
@@ -622,6 +623,28 @@ describe('the held side is the write occupancy of a union option', () => {
             flag,
         )
         expect(() => declare([pair, pair])).toThrow(CodecError)
+    })
+
+    /**
+     * **A half acts inside the side of a held, and inside the side of that side.** The text held
+     * over `decimal` reads inside `decimal`, which is a held too, so its read half sits inside the
+     * stored number. Under a binder the decision reads no closed-context oracle, so the structural
+     * row alone must see that a number is apart from a boolean and a map.
+     */
+    it('accepts a recursive held option whose inner held stores apart from the partner', () => {
+        const text = held(decimal, string, {
+            encode: (value: string) => value,
+            decode: (value: string) => value,
+        })
+        const texts: AnyCodec = union([
+            text,
+            object({ m: optional(lazy(() => texts as never)) }),
+        ] as readonly AnyCodec[])
+        const flags: AnyCodec = union([
+            boolean,
+            object({ m: optional(lazy(() => flags as never)) }),
+        ] as readonly AnyCodec[])
+        expect(() => declare([texts, flags])).not.toThrow()
     })
 
     it('refuses a foreign held side beside a codec, because the top meets every kind', () => {
