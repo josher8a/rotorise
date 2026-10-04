@@ -34,12 +34,16 @@
  * refine congrArg some ?_
  * repeat' first
  *   | (refine congrArg (Attr.m _) (funext fun k => ?_); obtain ⟨_, hk⟩ := k; fin_cases hk)
+ *   | (refine congrArg Attr.l ?_)
+ *   | (refine congrArg₂ List.cons ?_ ?_)
  *   | rfl
  *   | congr 1
  * ```
  *
  * The order matters and cost a probe to find: `rfl` first sends the top-level goal into an
- * `isDefEq` loop that exhausts the heartbeat budget rather than failing.
+ * `isDefEq` loop that exhausts the heartbeat budget rather than failing. A list that holds an
+ * object does the same, because the object answers with a lookup at a bound key. So the tactic
+ * splits a list into its elements before `rfl` runs.
  *
  * ── what cannot be emitted ─────────────────────────────────────────────────────────────────────
  *
@@ -1651,9 +1655,14 @@ namespace Calculus
     order it was given, so \`rfl\` diverges on every set whose two sides disagree about order.
     \`decide\` settles it, because \`Finset\` equality at a concrete element type is decidable.
 
-    The alternatives are ordered as they are because \`rfl\` first sends both the top-level goal and
-    a mis-ordered set into an \`isDefEq\` loop that exhausts the heartbeat budget rather than
-    failing. -/
+    The two list alternatives split a list into its elements before \`rfl\` runs. \`rfl\` on a whole
+    list asks the kernel for each element at once, and an object inside the list answers with a
+    lookup at a bound key, which \`rfl\` cannot reduce. After the split, each element is a goal of
+    its own, and the map alternative reaches the object.
+
+    The alternatives are ordered as they are because \`rfl\` first sends the top-level goal, a
+    mis-ordered set, and a list that holds an object into an \`isDefEq\` loop. The loop exhausts the
+    heartbeat budget rather than failing. -/
 macro "vector" : tactic => \`(tactic|
   (refine congrArg some ?_
    repeat' first
@@ -1663,6 +1672,8 @@ macro "vector" : tactic => \`(tactic|
      | (refine congrArg Attr.ss (Subtype.ext ?_); decide)
      | (refine congrArg Attr.ns (Subtype.ext ?_); decide)
      | (refine congrArg Attr.bs (Subtype.ext ?_); decide)
+     | (refine congrArg Attr.l ?_)
+     | (refine congrArg₂ List.cons ?_ ?_)
      | rfl
      | congr 1))
 `
