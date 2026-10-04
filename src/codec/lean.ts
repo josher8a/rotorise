@@ -459,10 +459,9 @@ const topScope = (t: Term): Scope => ({
 /**
  * **The caller's functions that a quantified vector binds.** A caller closure has no expression in
  * the model, so the theorem binds one variable for each, and the claim holds at every function.
- * A caller adapter is a generator `caller n`, and the theorem quantifies its pair through the
- * caller table. Keyed by the function, so one function is one variable or one generator wherever
- * the pair uses it. `Value` holds each value that a caller function receives, except a JS float,
- * so an adapter this library ships over a float is still refused.
+ * An adapter that the model does not name is a generator `caller n`, and the theorem quantifies
+ * its pair through the caller table. Keyed by the identity that the host reads, the adapter's
+ * library name or else its function, so one adapter is one generator wherever the pair uses it.
  */
 type Bound = {
     readonly closures: Map<unknown, string>
@@ -828,19 +827,18 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
          * is. `decimal` is `number` under the text adapter now, so refusing every `held` would
          * take every decimal vector with it.
          *
-         * A caller's pair prints a generator `caller n` of a quantified vector, and is refused
-         * elsewhere.
-         * The float adapter is refused everywhere, for a reason that is not about closures:
-         * `Value` carries no float, so the conversion would be numeral to numeral and its content
-         * is binary64 rounding. That is the host axiom this development deleted.
+         * Every other adapter, a caller's pair or a float adapter of this library, prints a
+         * generator `caller n` of a quantified vector: the analysis reads an adapter by its sides
+         * and its identity, and the theorem holds at every pair. Elsewhere it is refused: a float
+         * adapter's content is binary64 rounding, the host axiom this development deleted.
          *
          * A `held` is an adapter at one absolute side. The store names no generator, so each
          * `held` is at the caller side `false`, with a non-empty word. The stored side has no
          * `held`, so the term prints no stored outer and no stored word.
          */
         case 'held':
-            if (t.via === undefined && scope.bound)
-                return `(Term.held false (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) (.caller ${callerOf(scope.bound.adapters, t.f)}, false) [])`
+            if (t.via !== 'decimalText' && scope.bound)
+                return `(Term.held false (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) (.caller ${callerOf(scope.bound.adapters, t.via ?? t.f)}, false) [])`
             return t.via === 'decimalText'
                 ? `(Term.held false (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) (.decimalText, false) [])`
                 : refuse(

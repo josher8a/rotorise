@@ -93,11 +93,12 @@ let rng = rngFrom(SEEDS[0])
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rng() * xs.length)] as T
 
 /**
- * **No adapter of the library is a leaf.** `number` and `opaque('lossy')` are each a `held` with a
- * float adapter, and the model names no float adapter, so a codec that held one would leave the
- * pool. The analysis reads a `held` by its two sides and the identity of its adapter, and the
- * model's verdicts quantify the adapter, so the `held` former with a caller's adapter stands for
- * every adapter. The specs of each adapter check what the adapter computes.
+ * **No adapter of the library is a leaf.** `number` and `opaque('lossy')` are each a `held`
+ * whose adapter converts a JS float. The analysis reads a `held` by its two sides and the identity
+ * of its adapter, and a declaration verdict quantifies the adapter, so the `held` former with a
+ * caller's adapter stands for every adapter. The former draws its outer side from the leaves, so
+ * `held(dynamoNumber, number)` is one of its shapes. The specs of each adapter check what the
+ * adapter computes.
  */
 const leaves: readonly (readonly [string, () => AnyCodec])[] = [
     ['string', () => erase(string)],
@@ -260,9 +261,10 @@ const draw = (depth: number): Entry => {
         }
         case 9: {
             const c = draw(depth - 1)
-            const outer = rng() < 0.5 ? erase(boolean) : erase(string)
+            const [side, make] = pick(leaves)
+            const outer = make()
             return {
-                name: `held(${c.name},caller)`,
+                name: `held(${c.name},${side},caller)`,
                 codec: erase(
                     held(
                         c.codec as never,
@@ -651,11 +653,11 @@ describe('the generated pool, against the model', () => {
                 "separations": 1254,
               },
               {
-                "disjoints": 1268,
-                "fills": 9,
-                "pairs": 1268,
+                "disjoints": 1267,
+                "fills": 7,
+                "pairs": 1267,
                 "seed": 1,
-                "separations": 1259,
+                "separations": 1260,
               },
               {
                 "disjoints": 1182,
