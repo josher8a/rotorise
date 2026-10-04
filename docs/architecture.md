@@ -610,10 +610,13 @@ option that writes and reads other slots is disjoint from the option.
 one value write one attribute (`Agree` at the host), and two readers of one attribute read one
 value (`Agree` at the dual). `Term.compat` decides each half per component: the two terms are
 disjoint there, or one codec bounds both there. The bottom agrees with every term. Two held-free
-terms are bounded by the top. With no binder unfolded, the oracle `dynOracle` asks the test of the
-two views of the half. A `held` whose half is disjoint from the partner agrees there.
-`compat_sound` proves each row, and `pairwiseCompat_of_compatPair` discharges the union's
-obligation of two lawful closed options.
+terms whose variables are below the top are bounded by the top: a context gives each variable that
+fact, a binder of a held-free body pushes it, and a free variable does not have it. Two closed
+terms take the oracle `dynOracle`, which asks the test of the two views of the half. A `held` whose
+half, or the half of the `held` inside it, is disjoint from the partner agrees there.
+`compat_sound` proves each row, `compatPair_sound` holds at every environment of the free
+variables, and `pairwiseCompat_of_compatPair` discharges the union's obligation of two lawful
+options.
 
 **The decision is the specification of the library's declaration-time guard, and a checked one.**
 The `union` combinator in `src/` accepts a pair where `agrees(x, y)` holds, which is the model's
@@ -650,9 +653,10 @@ string literal it does not write. A caller-built `held` keeps the held side that
 theorem per emittable pair of the sample codecs, generated and elaborated by `formal/scripts/gate.sh`. For a
 pair the library accepts, the theorem states that the two terms meet `PairwiseCompat` where both
 denote lawful codecs, proved by the warrant the library used. For a pair the library refuses, the
-theorem states that `compatPair dynOracle` refuses it. Where a term reads a thunk that throws, a
-closed denotation reads the variable as the bottom, so the theorem states the decision with both
-flags off, at an unknown environment of the variable.
+theorem states that `compatPair dynOracle` refuses it. A pair that reads a thunk that throws takes
+the same forms, because the decision holds whatever codec the thunk names. Each theorem also states
+the guard, `Term.guarded`, and the guard reads a thunk that throws as the variable of a binder at
+the root of its option.
 
 **`certPair` is sufficient and not necessary.** A decline by `certPair` is not a refutation of
 compatibility. Two restrictions of one adapter are compatible in the model

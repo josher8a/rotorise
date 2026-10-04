@@ -1217,20 +1217,79 @@ type Half = 'write' | 'read'
 
 /**
  * **Where the decision is in the two operands**: the scope of each operand, the binders unfolded
- * together, and the two flags of the model. `top` says that no binder is unfolded, so the views
- * apply. `bounded` says that the body of every binder unfolded so far holds no adapter, so each
- * variable is below `opaque`.
+ * together, and the context of each operand, the model's. A context holds the binders whose
+ * variable is below `opaque`, and a free variable is in none.
  */
 type Agreement = {
     readonly left: Scope
     readonly right: Scope
     readonly pairs: Walk['pairs']
-    readonly top: boolean
-    readonly bounded: boolean
+    readonly safeL: ReadonlySet<Term>
+    readonly safeR: ReadonlySet<Term>
 }
 
 /**
- * **Whether two closed options agree on both halves**, the model's `compatPair` at `dynOracle`.
+ * **Whether each variable that the spelling reads is safe in the context**, the model's
+ * `Term.safe`: its binder is in the context, or is a binder of the term itself. A free variable is
+ * not safe. With no binder in the context, the term is closed, the model's `Term.closed`.
+ */
+const safeAt = (t: Term, scope: Scope, safe: ReadonlySet<Term>): boolean => {
+    const one = see(t, scope)
+    switch (one.kind) {
+        case 'mu':
+            return safeAt(one.body, one.scope, new Set([...safe, one.body]))
+        case 'var':
+            return safe.has(one.binder)
+        case 'free':
+            return false
+        case 'term':
+            break
+    }
+    const on = (inner: Term) => safeAt(inner, scope, safe)
+    const u = one.t
+    switch (u.kind) {
+        case 'held':
+            return on(u.inner) && on(u.outer)
+        case 'legacy':
+        case 'refine':
+            return on(u.inner)
+        case 'set':
+            return on(u.elem)
+        case 'list':
+            return (
+                u.pre.every(on) &&
+                (u.spread === undefined || on(u.spread)) &&
+                u.suf.every(on)
+            )
+        case 'object':
+            return (
+                Object.values(u.body.fields).every((field) => on(field.t)) &&
+                (u.body.rest === undefined || on(u.body.rest))
+            )
+        case 'union':
+            return u.options.every(on)
+        default:
+            return true
+    }
+}
+
+/**
+ * **The context with the binder of `y` pushed**, the model's `pushMu`: the binder is below `opaque`
+ * where its body holds no adapter and each variable of the recursive term is safe.
+ */
+const pushBinder = (
+    safe: ReadonlySet<Term>,
+    binder: Term,
+    y: Term,
+    scope: Scope,
+): ReadonlySet<Term> =>
+    !holdsAdapter(y, scope) && safeAt(y, scope, safe)
+        ? new Set([...safe, binder])
+        : safe
+
+/**
+ * **Whether two options agree on both halves**, the model's `compatPair` at `dynOracle`, which
+ * holds at every codec that a thunk that throws later names.
  * The decision reads each operand as the model spells it, as {@link disjoint} does.
  */
 export const agrees = (x: Term, y: Term): boolean => {
@@ -1238,8 +1297,8 @@ export const agrees = (x: Term, y: Term): boolean => {
         left: { binds: bindersOf(x), inside: [] },
         right: { binds: bindersOf(y), inside: [] },
         pairs: [],
-        top: true,
-        bounded: true,
+        safeL: new Set(),
+        safeR: new Set(),
     }
     return agreeWalk('write', x, y, at) && agreeWalk('read', x, y, at)
 }
@@ -1349,20 +1408,31 @@ const heldSide = (half: Half, t: Term, scope: Scope): Term | undefined => {
 
 /**
  * **The rows that read no structure**, the model's `cbase`. The bottom agrees with every term.
- * Two terms with no adapter below the top are bounded by the top. Two disjoint terms share
- * nothing. With no binder unfolded, two disjoint views share nothing on their half. A `held`
+ * Two terms with no adapter whose variables are safe are bounded by the top. Two disjoint terms
+ * share nothing. Two closed terms with disjoint views share nothing on their half. A `held`
  * whose half is disjoint from the partner shares nothing there.
  */
 const baseRows = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
     if (isNeverAt(x, at.left) || isNeverAt(y, at.right)) return true
-    if (at.bounded && !holdsAdapter(x, at.left) && !holdsAdapter(y, at.right))
+    if (
+        !holdsAdapter(x, at.left) &&
+        !holdsAdapter(y, at.right) &&
+        safeAt(x, at.left, at.safeL) &&
+        safeAt(y, at.right, at.safeR)
+    )
         return true
     const apart = (a: Term, b: Term) =>
         disjointWalk(a, b, { left: at.left, right: at.right, pairs: [] })
     if (apart(x, y)) return true
     // the caller view states the domain, and the stored view states the range
     const view = half === 'write' ? callerView : storedView
-    if (at.top && disjoint(view(x), view(y))) return true
+    // two closed terms denote alike at every binder, so their views speak for them
+    if (
+        safeAt(x, at.left, new Set()) &&
+        safeAt(y, at.right, new Set()) &&
+        disjoint(view(x), view(y))
+    )
+        return true
     const hx = heldSide(half, x, at.left)
     if (hx !== undefined && apart(hx, y)) return true
     const hy = heldSide(half, y, at.right)
@@ -1387,8 +1457,7 @@ const agreeRight = (
         return agreeRight(half, fam, other.body, {
             ...at,
             right: other.scope,
-            top: false,
-            bounded: at.bounded && !holdsAdapter(y, at.right),
+            safeR: pushBinder(at.safeR, other.body, y, at.right),
         })
     if (other.kind !== 'term') return false
     switch (other.t.kind) {
@@ -1428,15 +1497,15 @@ const agreeWalk = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
         case 'mu': {
             if (baseRows(half, x, y, at)) return true
             const other = see(y, at.right)
-            const bounded = at.bounded && !holdsAdapter(x, at.left)
+            const safeL = pushBinder(at.safeL, one.body, x, at.left)
             // two recursive terms: the bodies agree on both halves, with the two binders paired
             if (other.kind === 'mu') {
                 const inner: Agreement = {
                     left: one.scope,
                     right: other.scope,
                     pairs: [...at.pairs, { left: one.body, right: other.body }],
-                    top: false,
-                    bounded: bounded && !holdsAdapter(y, at.right),
+                    safeL,
+                    safeR: pushBinder(at.safeR, other.body, y, at.right),
                 }
                 return (
                     agreeWalk('write', one.body, other.body, inner) &&
@@ -1447,8 +1516,7 @@ const agreeWalk = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
             return agreeWalk(half, one.body, y, {
                 ...at,
                 left: one.scope,
-                top: false,
-                bounded,
+                safeL,
             })
         }
         // a variable agrees with the variable of the binder that its own binder was unfolded with

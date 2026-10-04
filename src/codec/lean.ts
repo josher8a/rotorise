@@ -1058,6 +1058,9 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  *   holds an adapter on a recursive path. The model's guard must refuse an option too, on the
  *   terms that {@link leanRooted} spells.
  *
+ * A pair that reads a thunk that throws takes the same forms: the model's decision gives agreement
+ * at every environment (`compatPair_sound`), so its warrant holds whatever codec the thunk names.
+ *
  * Compatibility is not decidable, so a refused pair carries no theorem that it is incompatible:
  * `not_compat_flip` and `not_compat_shout` are the model's witnesses of that class.
  */
@@ -1090,13 +1093,6 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     // the term \`rfl\` exhausts the default heartbeats on a refusal of two terms of about 600
     // characters, where the tactic \`rfl\` closes the goal
     const reduce = binders === '' ? 'by decide' : 'by rfl'
-    // a free variable names a codec not yet declared, which the host reads as unknown and a closed
-    // denotation reads as the bottom, so the verdict states the decision at an unknown environment
-    const decision =
-        readsFreeVariable(left.def) || readsFreeVariable(right.def)
-            ? (half: boolean) =>
-                  `Alg.Term.compat dynOracle ${half} pair0 false false (${l})\n        (${r})`
-            : undefined
     // the host's guard runs before its compatibility test, and reads each option on its own
     const guardRefuses = [left, right].some(
         (option) => recursionUse(option.def) >= 2,
@@ -1116,15 +1112,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
             head,
             `    (Alg.Term.guarded (${leanRooted(l, left)}) &&`,
             `      Alg.Term.guarded (${leanRooted(r, right)})) = true ∧`,
-            ...(decision === undefined
-                ? [
-                      `    Alg.compatPair dynOracle (${l})`,
-                      `      (${r}) = false := ⟨${reduce}, ${reduce}⟩`,
-                  ]
-                : [
-                      `    (${decision(true)} &&`,
-                      `      ${decision(false)}) = false := ⟨${reduce}, ${reduce}⟩`,
-                  ]),
+            `    Alg.compatPair dynOracle (${l})`,
+            `      (${r}) = false := ⟨${reduce}, ${reduce}⟩`,
         ].join('\n')
     }
     const warrant = agrees(left.def, right.def)

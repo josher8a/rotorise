@@ -21,6 +21,7 @@ import {
     lazy,
     number,
     object,
+    optional,
     refine,
     string,
     union,
@@ -425,6 +426,23 @@ describe('a union refuses a thunk it must read at its own input, because the mod
             return [early, later]
         }
         expect(declare).toThrow(CodecError)
+    })
+
+    /**
+     * **A part that reads no variable is decided as a closed term, under a binder too.** The
+     * recursive option holds two literals of `decimal` beside an object that recurses, and its
+     * binder holds an adapter. The literals read no variable, so the test of the views applies to
+     * them as it does at the top, and the union with `decimal` is accepted.
+     */
+    it('accepts a recursive option beside decimal, where the part that reads no variable is closed', () => {
+        const declare = () => {
+            const self: AnyCodec = union([
+                decimal('1', '2.5'),
+                object({ m: optional(lazy(() => self as never)) }),
+            ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+            return union([self, decimal] as unknown as readonly AnyCodec[])
+        }
+        expect(declare).not.toThrow()
     })
 
     // a thunk below a list names the union being declared, so the walk meets the thunk again. Two
