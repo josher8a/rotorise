@@ -154,15 +154,22 @@ theorem denote_mu_f (b : Term S) (ρ : List S.C) (v : S.V) :
     (denote α β (.mu b) ρ).f S.o v =
       (muStage (fun c => denote α β b (c :: ρ)) (Syn.d v)).f S.o v := rfl
 
+omit [PrimAdm S] in
+/-- **A recursive term sends what its body sends over the stage below the value's depth.** -/
+theorem denote_mu_unfold (b : Term S) (ρ : List S.C) (v : S.V) :
+    (denote α β (.mu b) ρ).f S.o v =
+      (denote α β b (muStage (fun c => denote α β b (c :: ρ)) (Syn.d v - 1) :: ρ)).f S.o v := by
+  rw [denote_mu_f]
+  obtain ⟨n, hn⟩ : ∃ n, Syn.d v = n + 1 := ⟨Syn.d v - 1, by have := Syn.d_pos v; omega⟩
+  rw [hn, Nat.add_sub_cancel]
+  rfl
+
 /-- **A recursive term admits what its body admits over the stage below the value's depth.** The
     limit reads a value at the stage that the value's depth names, and that stage is the body over
     the stage below. So the unfolding needs no guard. -/
 theorem Adm_mu_unfold (b : Term S) (ρ : List S.C) (v : S.V) :
     Adm α β (.mu b) ρ v = Adm α β b (muStage (fun c => denote α β b (c :: ρ)) (Syn.d v - 1) :: ρ) v := by
-  rw [Adm_eq_isSome (.mu b), denote_mu_f, Adm_eq_isSome b]
-  obtain ⟨n, hn⟩ : ∃ n, Syn.d v = n + 1 := ⟨Syn.d v - 1, by have := Syn.d_pos v; omega⟩
-  rw [hn, Nat.add_sub_cancel]
-  rfl
+  rw [Adm_eq_isSome (.mu b), denote_mu_unfold, Adm_eq_isSome b]
 
 end
 
@@ -300,35 +307,114 @@ theorem disjSRightL_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S
         disjSRightL_sound hf ys p ρ' hp h.2 v, Bool.false_or]
 end
 
+variable (α β) in
+/-- **A wrapper reads a term only through the value that the term sends.** Where the wrapped
+    term sends a value, the term sends some value, and every term that sends that value sends
+    the same value once wrapped. A chain of refinements is a wrapper. -/
+def Wraps (w : Term S → Term S) : Prop :=
+  ∀ t ρ v a, (denote α β (w t) ρ).f S.o v = some a → ∃ b, (denote α β t ρ).f S.o v = some b ∧
+    ∀ t' ρ', (denote α β t' ρ').f S.o v = some b → (denote α β (w t') ρ').f S.o v = some a
+
+omit [PrimAdm S] in
+/-- The identity is a wrapper. -/
+theorem Wraps.id : Wraps α β id := fun _ _ _ a h => ⟨a, h, fun _ _ h' => h'⟩
+
+omit [PrimAdm S] in
+/-- **A refinement under a wrapper is a wrapper**, because the refinement reads only the value
+    that its inner term sends. -/
+theorem Wraps.refine {w : Term S → Term S} (hw : Wraps α β w) (q : S.sig.P false)
+    (qA : S.sig.P true) : Wraps α β (fun t => w (.refine t q qA)) := by
+  intro t ρ v a h
+  obtain ⟨b, hb, ht⟩ := hw _ ρ v a h
+  obtain ⟨hc, hf, hs⟩ := refine2_f.mp hb
+  exact ⟨b, hf, fun t' ρ' h' => ht _ ρ' (refine2_f.mpr ⟨hc, h', hs⟩)⟩
+
+/-- A wrapped term admits a value only where the term sends a value, and every term that sends
+    that value admits the value once wrapped. -/
+theorem Wraps.adm {w : Term S → Term S} (hw : Wraps α β w) {t : Term S} {ρ : List S.C}
+    {v : S.V} (h : Adm α β (w t) ρ v = true) : ∃ b, (denote α β t ρ).f S.o v = some b ∧
+      ∀ t' ρ', (denote α β t' ρ').f S.o v = some b → Adm α β (w t') ρ' v = true := by
+  rw [Adm_eq_isSome] at h
+  obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
+  obtain ⟨b, hb, ht⟩ := hw _ ρ v a ha
+  exact ⟨b, hb, fun t' ρ' h' => by rw [Adm_eq_isSome, ht t' ρ' h']; rfl⟩
+
+/-- **A wrapper distributes over a union.** A union sends what its first acting option sends, so
+    a wrapped union admits a value only where one wrapped option admits the value. -/
+theorem Wraps.union {w : Term S → Term S} (hw : Wraps α β w) {os : List (Term S)}
+    {ρ : List S.C} {v : S.V} (h : Adm α β (w (.union os)) ρ v = true) :
+    ∃ y ∈ os, Adm α β (w y) ρ v = true := by
+  obtain ⟨b, hb, ht⟩ := hw.adm h
+  obtain ⟨c, hc, -, hcb⟩ := altCodec_admits hb
+  rw [← denoteList, denoteList_eq] at hc
+  obtain ⟨y, hy, rfl⟩ := List.mem_map.mp hc
+  exact ⟨y, hy, ht y ρ hcb⟩
+
+/-- **A wrapped term is bounded by any term that sends what it sends.** Where every value that
+    `t` sends at `v` is sent by `t'`, a left operand apart from the wrapped `t'` at `v` is apart
+    from the wrapped `t`. -/
+theorem Wraps.below {w : Term S → Term S} (hw : Wraps α β w) {x t t' : Term S}
+    {ρ ρ' ρ'' : List S.C} {v : S.V}
+    (ht : ∀ b, (denote α β t ρ').f S.o v = some b → (denote α β t' ρ'').f S.o v = some b)
+    (h : (Adm α β x ρ v && Adm α β (w t') ρ'' v) = false) :
+    (Adm α β x ρ v && Adm α β (w t) ρ' v) = false := by
+  refine Bool.eq_false_iff.mpr fun hA => ?_
+  rw [Bool.and_eq_true] at hA
+  obtain ⟨b, hb, hT⟩ := hw.adm hA.2
+  rw [hA.1, hT t' ρ'' (ht b hb)] at h
+  exact nomatch h
+
 mutual
-/-- **The split of the right operand is sound**, given a sound family at the pairing. -/
-theorem splitR_sound {ρ ρ' : List S.C} {x : Term S} {fam : Pairing → Term S → Bool} {p : Pairing}
-    (hf : DisjSound α β ρ ρ' x (fam p)) :
-    ∀ (y : Term S), splitR fam p y = true → ∀ v, (Adm α β x ρ v && Adm α β y ρ' v) = false
-  | .never, _, v => by simp
-  | .union os, h, v => by
+/-- **The split of the right operand is sound**, given a sound family at every pairing that
+    keeps the environments apart, and a wrapper that holds the refinements above the split. -/
+theorem splitR_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
+    (hf : ∀ q ρ', ApartV q ρ ρ' → DisjSound α β ρ ρ' x (fam q)) :
+    ∀ (y : Term S) (p : Pairing) (ρ' : List S.C) (w : Term S → Term S), Wraps α β w →
+      ApartV p ρ ρ' → splitR fam p w y = true →
+        ∀ v, (Adm α β x ρ v && Adm α β (w y) ρ' v) = false
+  | .never, _, _, _, hw, _, _, _ => by
+      refine Bool.eq_false_iff.mpr fun hA => ?_
+      obtain ⟨_, hb, -⟩ := hw.adm (Bool.and_eq_true _ _ ▸ hA).2
+      exact nomatch hb
+  | .union os, p, ρ', w, hw, hp, h, v => by
       simp only [splitR] at h
-      rw [Adm_union]
-      exact splitRL_sound hf os h v
-  | .mu b, h, v => hf _ (by simpa only [splitR] using h) v
-  | .refine y q _, h, v => hf _ (by simpa only [splitR] using h) v
-  | .prim g, h, v => hf _ (by simpa only [splitR] using h) v
-  | .set t, h, v => hf _ (by simpa only [splitR] using h) v
-  | .list a b c, h, v => hf _ (by simpa only [splitR] using h) v
-  | .held _ _ _ _ _, h, v => hf _ (by simpa only [splitR] using h) v
-  | .legacy _ _, h, v => hf _ (by simpa only [splitR] using h) v
-  | .opaq, h, v => hf _ (by simpa only [splitR] using h) v
-  | .object b, h, v => hf _ (by simpa only [splitR] using h) v
-  | .var j, h, v => hf _ (by simpa only [splitR] using h) v
-/-- …and over the options of a union. -/
-theorem splitRL_sound {ρ ρ' : List S.C} {x : Term S} {fam : Pairing → Term S → Bool} {p : Pairing}
-    (hf : DisjSound α β ρ ρ' x (fam p)) :
-    ∀ (ys : List (Term S)), splitRL fam p ys = true → ∀ v, (Adm α β x ρ v && AdmAny α β ys ρ' v) = false
-  | [], _, v => by simp
-  | y :: ys, h, v => by
+      refine Bool.eq_false_iff.mpr fun hA => ?_
+      rw [Bool.and_eq_true] at hA
+      obtain ⟨y, hy, ha⟩ := hw.union hA.2
+      have := splitRL_sound hf os p ρ' w hw hp h y hy v
+      rw [hA.1, ha] at this
+      exact nomatch this
+  | .refine y q qA, p, ρ', w, hw, hp, h, v => by
+      simp only [splitR] at h
+      split at h
+      · exact hw.below (fun _ hb => (refine2_f.mp hb).2.1) (splitR_sound hf y p ρ' w hw hp h v)
+      · exact splitR_sound hf y p ρ' _ (hw.refine q qA) hp h v
+  | .mu b, p, ρ', w, hw, hp, h, v => by
+      simp only [splitR, Bool.or_eq_true] at h
+      rcases h with h | h
+      · exact hf p ρ' hp _ h v
+      · exact hw.below (fun _ hb => by rwa [denote_mu_unfold] at hb)
+          (splitR_sound hf b (shiftR p) _ w hw (hp.right _) h v)
+  | .prim g, p, ρ', _, _, hp, h, v => hf p ρ' hp _ (by simpa only [splitR] using h) v
+  | .set t, p, ρ', _, _, hp, h, v => hf p ρ' hp _ (by simpa only [splitR] using h) v
+  | .list a b c, p, ρ', _, _, hp, h, v => hf p ρ' hp _ (by simpa only [splitR] using h) v
+  | .held _ _ _ _ _, p, ρ', _, _, hp, h, v => hf p ρ' hp _ (by simpa only [splitR] using h) v
+  | .legacy _ _, p, ρ', _, _, hp, h, v => hf p ρ' hp _ (by simpa only [splitR] using h) v
+  | .opaq, p, ρ', _, _, hp, h, v => hf p ρ' hp _ (by simpa only [splitR] using h) v
+  | .object b, p, ρ', _, _, hp, h, v => hf p ρ' hp _ (by simpa only [splitR] using h) v
+  | .var j, p, ρ', _, _, hp, h, v => hf p ρ' hp _ (by simpa only [splitR] using h) v
+/-- …and over each option of a union. -/
+theorem splitRL_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
+    (hf : ∀ q ρ', ApartV q ρ ρ' → DisjSound α β ρ ρ' x (fam q)) :
+    ∀ (ys : List (Term S)) (p : Pairing) (ρ' : List S.C) (w : Term S → Term S), Wraps α β w →
+      ApartV p ρ ρ' → splitRL fam p w ys = true →
+        ∀ y ∈ ys, ∀ v, (Adm α β x ρ v && Adm α β (w y) ρ' v) = false
+  | [], _, _, _, _, _, _, _, hy, _ => nomatch hy
+  | y :: ys, p, ρ', w, hw, hp, h, z, hz, v => by
       simp only [splitRL, Bool.and_eq_true] at h
-      rw [AdmAny_cons, Bool.and_or_distrib_left, splitR_sound hf y h.1 v,
-        splitRL_sound hf ys h.2 v, Bool.false_or]
+      cases hz with
+      | head => exact splitR_sound hf y p ρ' w hw hp h.1 v
+      | tail _ hz => exact splitRL_sound hf ys p ρ' w hw hp h.2 z hz v
 end
 
 /-- **Two data predicates at one absolute side that meet at the empty predicate keep a refinement
@@ -682,30 +768,33 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S
   | p, .var i, y, h, ρ, ρ', hp, v =>
       disjSRight_sound (ρ := ρ) (fun _ _ hq => famVarD_sound hq) y p ρ' hp h v
   | p, .mu b, y, h, ρ, ρ', hp, v => by
-      cases y with
-      | mu b' =>
-        simp only [Term.disjoint] at h
-        have hB : ∀ c c', (∀ u, ((c.f S.o u).isSome && (c'.f S.o u).isSome) = false) →
-            ∀ u, (((denote α β b (c :: ρ)).f S.o u).isSome &&
-              ((denote α β b' (c' :: ρ')).f S.o u).isSome) = false := fun c c' hc u => by
-          have := disjoint_sound (pairMu p) b b' h (c :: ρ) (c' :: ρ') (hp.mu hc) u
-          rwa [Adm_eq_isSome, Adm_eq_isSome] at this
-        have := stage_apart hB (Syn.d v) v
-        rw [Adm_eq_isSome, Adm_eq_isSome, denote_mu_f, denote_mu_f]
-        exact this
-      | _ =>
-        simp only [Term.disjoint] at h
-        rw [Adm_mu_unfold b ρ v]
-        exact disjoint_sound (shiftL p) b _ h _ ρ' (hp.left _) v
+      simp only [Term.disjoint] at h
+      refine splitR_sound (ρ := ρ) (x := .mu b) ?_ y p ρ' id Wraps.id hp h v
+      intro q ρ₁ hq y' hy w
+      simp only [Bool.or_eq_true] at hy
+      rcases hy with hy | hy
+      · cases y' with
+        | mu b' =>
+          have hB : ∀ c c', (∀ u, ((c.f S.o u).isSome && (c'.f S.o u).isSome) = false) →
+              ∀ u, (((denote α β b (c :: ρ)).f S.o u).isSome &&
+                ((denote α β b' (c' :: ρ₁)).f S.o u).isSome) = false := fun c c' hc u => by
+            have := disjoint_sound (pairMu q) b b' hy (c :: ρ) (c' :: ρ₁) (hq.mu hc) u
+            rwa [Adm_eq_isSome, Adm_eq_isSome] at this
+          have := stage_apart hB (Syn.d w) w
+          rw [Adm_eq_isSome, Adm_eq_isSome, denote_mu_f, denote_mu_f]
+          exact this
+        | _ => exact nomatch hy
+      · rw [Adm_mu_unfold b ρ w]
+        exact disjoint_sound (shiftL q) b _ hy _ ρ₁ (hq.left _) w
   | p, .refine x q qA, y, h, ρ, ρ', hp, v => by
       simp only [Term.disjoint] at h
-      refine splitR_sound (ρ := ρ) (ρ' := ρ') (x := .refine x q qA) (p := p) ?_ y h v
-      intro y' hy w
+      refine splitR_sound (ρ := ρ) (x := .refine x q qA) ?_ y p ρ' id Wraps.id hp h v
+      intro p' ρ₁ hp' y' hy w
       simp only [Bool.or_eq_true] at hy
       rcases hy with (hy | hy) | hy
       · rw [Adm_refine_eq]
-        have := disjoint_sound p x y' hy ρ ρ' hp w
-        cases h1 : Adm α β x ρ w <;> cases h2 : Adm α β y' ρ' w <;> simp_all
+        have := disjoint_sound p' x y' hy ρ ρ₁ hp' w
+        cases h1 : Adm α β x ρ w <;> cases h2 : Adm α β y' ρ₁ w <;> simp_all
       · exact dataApart_sound false hy w
       · exact dataApart_sound true hy w
   | p, .union os, y, h, ρ, ρ', hp, v => by

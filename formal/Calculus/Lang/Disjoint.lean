@@ -122,18 +122,26 @@ def disjSRightL (fam : Pairing → Term S → Bool) (p : Pairing) : List (Term S
 end
 
 mutual
-/-- **The bottom and a union of the right operand, and nothing else.** The refinement row of the
-    left operand splits the right operand into its options, and hands each option whole to the
-    family. The family tests the inner term of the refinement against the option, and the
-    recursion on the inner term then reads a right `mu` or a right `refine`. -/
-def splitR (fam : Pairing → Term S → Bool) (p : Pairing) : Term S → Bool
+/-- **The right operand, split at every depth.** The rows of a left `refine` and a left `mu`
+    read the right operand through this split. A union splits into its options. A refinement
+    keeps its predicate on each option below it, through the wrapper `w`, unless its inner term
+    holds a `held` or a variable: there the split drops the predicate, and the inner term bounds
+    the refinement. A recursive term is handed whole to the family, and is also unfolded with
+    its binder paired with nothing. So a right `refine` or a right `mu` hides no option from
+    the left row. -/
+def splitR (fam : Pairing → Term S → Bool) (p : Pairing) (w : Term S → Term S) : Term S → Bool
   | .never => true
-  | .union os => splitRL fam p os
-  | y => fam p y
+  | .union os => splitRL fam p w os
+  | .refine y q qA =>
+      if hasHeld y || y.hasVar then splitR fam p w y
+      else splitR fam p (fun t => w (.refine t q qA)) y
+  | .mu b => fam p (w (.mu b)) || splitR fam (shiftR p) w b
+  | y => fam p (w y)
 /-- The list companion of `splitR`. -/
-def splitRL (fam : Pairing → Term S → Bool) (p : Pairing) : List (Term S) → Bool
+def splitRL (fam : Pairing → Term S → Bool) (p : Pairing) (w : Term S → Term S) :
+    List (Term S) → Bool
   | [] => true
-  | y :: ys => splitR fam p y && splitRL fam p ys
+  | y :: ys => splitR fam p w y && splitRL fam p w ys
 end
 
 /-! ## The families: one per left constructor, flat and non-recursive -/
@@ -241,21 +249,24 @@ mutual
     keeps the left operand on the left.
 
     A `held` and the top are disjoint only from the bottom, because their admission is a
-    function that the test does not read. Two recursive terms are disjoint where their bodies
-    are disjoint with the two binders paired, because then each two stages are disjoint. A
-    recursive term beside another constructor unfolds, and its binder pairs with nothing. A
-    refinement is disjoint where its inner term is, or where its data predicate at one absolute
-    side and a data predicate of the partner at that side hold together nowhere. -/
+    function that the test does not read. A recursive term and a refinement read the right
+    operand through `splitR`. Two recursive terms are disjoint where their bodies are disjoint
+    with the two binders paired, because then each two stages are disjoint. A recursive term
+    also unfolds, and its binder pairs with nothing. A refinement is disjoint where its inner
+    term is, or where its data predicate at one absolute side and a data predicate of the
+    partner at that side hold together nowhere. -/
 def Term.disjoint [Leaf S] (p : Pairing) : Term S → Term S → Bool
   | .never, _ => true
   | .held _ _ _ _ _, y => disjSRight (fun _ _ => false) p y
   | .legacy _ _, y => disjSRight (fun _ _ => false) p y
   | .var i, y => disjSRight (famVarD i) p y
-  | .mu b, .mu b' => Term.disjoint (pairMu p) b b'
-  | .mu b, y => Term.disjoint (shiftL p) b y
+  | .mu b, y =>
+      splitR (fun p' y' => (match y' with
+        | .mu b' => Term.disjoint (pairMu p') b b'
+        | _ => false) || Term.disjoint (shiftL p') b y') p id y
   | .refine x q qA, y =>
       splitR (fun p' y' => Term.disjoint p' x y' || dataApart x false q y' ||
-        dataApart x true qA y') p y
+        dataApart x true qA y') p id y
   | .union os, y => Term.disjointL p os y
   | .prim g, y => disjSRight (fun _ => famPrimD g) p y
   | .set a, y => disjSRight (fun q => famSetD a (Term.disjoint q a)) p y
