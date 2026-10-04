@@ -135,6 +135,19 @@ const undeclared = lazy((): never => {
 const callerPredicate = (v: unknown): v is unknown => v !== 'zz'
 const names = ['a', 'b', 'c']
 
+/**
+ * **The unions that the generator declares inside a draw.** Each declaration is a host verdict, and
+ * a refused declaration refuses the whole draw, so the pool puts each declared pair to the model as
+ * well. A recursive option names the union under declaration: where the host refuses, the thunk
+ * still throws, and the pair is the declaration itself; where the host accepts, the thunk returns
+ * the union, and the pair is the same two options declared later.
+ */
+let declared: [Entry, Entry][] = []
+const declare = (a: Entry, b: Entry, make: () => unknown): AnyCodec => {
+    declared.push([a, b])
+    return erase(make())
+}
+
 /** One codec, drawn through the public constructors. A constructor can refuse the draw. */
 const draw = (depth: number): Entry => {
     if (depth === 0 || rng() < 0.25) {
@@ -220,7 +233,7 @@ const draw = (depth: number): Entry => {
             const b = draw(depth - 1)
             return {
                 name: `union(${a.name}|${b.name})`,
-                codec: erase(union([a.codec, b.codec] as never)),
+                codec: declare(a, b, () => union([a.codec, b.codec] as never)),
             }
         }
         case 7: {
@@ -274,20 +287,32 @@ const draw = (depth: number): Entry => {
         }
         case 12: {
             const c = draw(depth - 1)
-            const self: AnyCodec = erase(
-                union([c.codec, array(lazy(() => self as never))] as never),
+            const kids = {
+                name: 'array(self)',
+                codec: erase(array(lazy(() => self as never))),
+            }
+            const self: AnyCodec = declare(c, kids, () =>
+                union([c.codec, kids.codec] as never),
             )
             return { name: `mu.json(${c.name})`, codec: self }
         }
         case 13: {
             const a = draw(depth - 1)
             const b = draw(depth - 1)
+            const left = {
+                name: `{k:a,x:${a.name}}`,
+                codec: erase(object({ k: string('a'), x: a.codec })),
+            }
+            const right = {
+                name: `{k:b,y:${b.name}}`,
+                codec: erase(object({ k: string('b'), y: b.codec })),
+            }
             return {
                 name: `dunion(k:a{x:${a.name}}|b{y:${b.name}})`,
-                codec: erase(
+                codec: declare(left, right, () =>
                     (discriminatedUnion as (...x: unknown[]) => unknown)('k', [
-                        object({ k: string('a'), x: a.codec }),
-                        object({ k: string('b'), y: b.codec }),
+                        left.codec,
+                        right.codec,
                     ]),
                 ),
             }
@@ -306,11 +331,14 @@ const draw = (depth: number): Entry => {
         }
         case 15: {
             const c = draw(depth - 1)
-            const self: AnyCodec = erase(
-                union([
-                    c.codec,
+            const node = {
+                name: '{m?:self}',
+                codec: erase(
                     object({ m: optional(lazy(() => self as never)) }),
-                ] as never),
+                ),
+            }
+            const self: AnyCodec = declare(c, node, () =>
+                union([c.codec, node.codec] as never),
             )
             return { name: `mu.opt(${c.name})`, codec: self }
         }
@@ -403,6 +431,7 @@ const drop = (why: string) => dropped.set(why, (dropped.get(why) ?? 0) + 1)
 /** The pairs of one seed. The names continue after `first`, so the seeds share one name space. */
 const pool = (seed: number, first: number): readonly PoolPair[] => {
     rng = rngFrom(seed)
+    declared = []
     const built: Entry[] = []
     for (let i = 0; i < DRAWS; i++) {
         try {
@@ -467,6 +496,7 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
         add(e, e)
         for (let j = 0; j < PARTNERS; j++) add(e, pick(built))
     }
+    for (const [a, b] of declared) add(a, b)
     return pairs
 }
 
@@ -607,29 +637,29 @@ describe('the generated pool, against the model', () => {
           {
             "dropped": {
               "a constructor refused the draw": 82,
-              "term: \`Term.held\` carries a word of adapter generators, and a table gives each generator two \`Value → Value\` functions. The library ships one generator the model names, \`decimalText\`, whose pair is \`numeralOfStoredText\`/\`textOfNumeral\`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted": 446,
+              "term: \`Term.held\` carries a word of adapter generators, and a table gives each generator two \`Value → Value\` functions. The library ships one generator the model names, \`decimalText\`, whose pair is \`numeralOfStoredText\`/\`textOfNumeral\`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted": 471,
             },
             "seeds": [
               {
-                "disjoints": 978,
-                "fills": 6,
-                "pairs": 978,
+                "disjoints": 1061,
+                "fills": 7,
+                "pairs": 1061,
                 "seed": 20261004,
-                "separations": 972,
+                "separations": 1054,
               },
               {
-                "disjoints": 974,
+                "disjoints": 1069,
                 "fills": 9,
-                "pairs": 974,
+                "pairs": 1069,
                 "seed": 1,
-                "separations": 965,
+                "separations": 1060,
               },
               {
-                "disjoints": 914,
-                "fills": 9,
-                "pairs": 914,
+                "disjoints": 996,
+                "fills": 11,
+                "pairs": 996,
                 "seed": 4,
-                "separations": 905,
+                "separations": 985,
               },
             ],
           }
