@@ -280,7 +280,7 @@ regression that your pass caused.
 `biome --write` reformats a file that you did not edit. Name the files that you changed
 when you format.
 
-`gate.sh --no-build` runs the four Python guards, and takes about one second.
+`gate.sh --no-build` runs the five Python guards, and takes about one second.
 `--no-build` is honest only when nothing that you touched reaches the elaborator. Run the
 full gate when you edit any `.lean` file, a docstring included.
 
@@ -344,7 +344,7 @@ These are the rulings of the owner, in the terms of this repository.
 
 - `lake env lean` reads the existing olean of a dependency. Edit `Domain.lean`, check
   `Prisms.lean`, and the new constructor reports as an unknown identifier until
-  `lake build Calculus.Domain` runs.
+  `lake build Calculus.Dynamo.Domain` runs.
 - Run one `lake build` at a time across the sessions that share this tree. Your build
   rewrites the oleans under the `lake env lean` of the other session. A parallel agent may
   run `lake env lean`, which writes nothing.
