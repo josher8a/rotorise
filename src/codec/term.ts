@@ -894,19 +894,16 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
 /* ── the declaration guard ────────────────────────────────────────────────────────────── */
 
 /**
- * **Whether the two pairs of views are disjoint**, the model's `viewsDisjoint`, or `undefined`
- * where one term has no views ({@link viewable}).
+ * **Whether the two pairs of views are disjoint**, the model's `viewsDisjoint`.
  *
  * A term denotes a partial isomorphism, the caller view states its domain, and the stored view
  * states its range. Two options whose domains are disjoint and whose ranges are disjoint are
  * orthogonal: no value has two writers, and no attribute has two readers. {@link agrees} asks each
  * half of it apart, where no binder is unfolded, as the model's oracle `dynOracle` does.
  */
-export const viewsDisjoint = (x: Term, y: Term): boolean | undefined =>
-    viewable(x) && viewable(y)
-        ? disjoint(callerView(x), callerView(y)) &&
-          disjoint(storedView(x), storedView(y))
-        : undefined
+export const viewsDisjoint = (x: Term, y: Term): boolean =>
+    disjoint(callerView(x), callerView(y)) &&
+    disjoint(storedView(x), storedView(y))
 
 /**
  * **Whether a term reaches a subterm of one of these kinds**, at any depth, or reaches a thunk
@@ -1066,54 +1063,6 @@ const pathUse = (path: readonly Term[]): number =>
         }
     }, 2)
 
-/**
- * **Whether {@link callerView} and {@link storedView} are sound on a term.**
- *
- * The view of a `union` is the union of the views of its options, because a union admits where
- * one of its options admits. A `legacy` with a `held` below it has no view: its `r` reads an
- * attribute to a held value, so the read widens on both sides. A thunk has the view of the term
- * it returns. A thunk that throws is a free variable, and the view of a variable is the variable:
- * {@link disjoint} reads the view of the thunk as a free variable too.
- *
- * The walk forces each thunk once, so it ends: a thunk memoizes its codec, and every other edge
- * of a term is built before the term.
- */
-const viewable = (t: Term, seen: Set<Term> = new Set()): boolean => {
-    const on = (one: Term) => viewable(one, seen)
-    switch (t.kind) {
-        case 'lazy': {
-            if (seen.has(t)) return true
-            seen.add(t)
-            const forced = force(t)
-            return forced === undefined || on(forced)
-        }
-        case 'held':
-            return on(t.inner) && on(t.outer)
-        case 'refine':
-            return on(t.inner)
-        case 'set':
-            return on(t.elem)
-        case 'union':
-            return t.options.every(on)
-        // `reaches` counts a thunk it cannot read as a `held`, so such a thunk below refuses here too
-        case 'legacy':
-            return !reaches(t, ['held'])
-        case 'list':
-            return (
-                t.pre.every(on) &&
-                (t.spread === undefined || on(t.spread)) &&
-                t.suf.every(on)
-            )
-        case 'object':
-            return (
-                Object.values(t.body.fields).every((f) => on(f.t)) &&
-                (t.body.rest === undefined || on(t.body.rest))
-            )
-        default:
-            return true
-    }
-}
-
 /** A list, an object or a union with each position, field and option replaced by its view. */
 const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
     switch (t.kind) {
@@ -1158,10 +1107,10 @@ const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
  *
  * The build forces no thunk, so it ends: it recurses only through the edges that are not a
  * thunk, and every such edge of a term is built before the term. A thunk of the view forces its
- * thunk when {@link disjoint} reads it, and {@link viewable} forced each such thunk already. A
- * thunk that throws throws again there, and {@link disjoint} reads it as a free variable. So the
- * thunk of the view forces its thunk directly and not through {@link force}: the throw must reach
- * the {@link force} of {@link disjoint} at the thunk of the view.
+ * thunk when {@link disjoint} reads it. A thunk that throws throws there, and {@link disjoint}
+ * reads it as a free variable. So the thunk of the view forces its thunk directly and not through
+ * {@link force}: the throw must reach the {@link force} of {@link disjoint} at the thunk of the
+ * view.
  */
 const throughThunks =
     (row: (t: Term, view: (t: Term) => Term) => Term) =>
@@ -1182,8 +1131,8 @@ const throughThunks =
 
 /**
  * **The caller view**: each `held` becomes its held side. The view admits each value that the
- * term admits, where {@link viewable} holds. A `refine` above a `held` keeps its predicate,
- * because the caller states the predicate on the held value.
+ * term admits. A `refine` above a `held` keeps its predicate, because the caller states the
+ * predicate on the held value.
  */
 const callerView = throughThunks((t, view) => {
     switch (t.kind) {
@@ -1201,7 +1150,8 @@ const callerView = throughThunks((t, view) => {
 
 /**
  * **The stored view**: each `held` becomes its inner term. The view reads each attribute that
- * the term reads, where {@link viewable} holds.
+ * the term reads. A `withLegacyRead` stays as it is, and {@link disjoint} reads it as `opaque`,
+ * which is the model's stored view of it: the older reader reads every attribute.
  *
  * **The view keeps a predicate only where the inner term decodes the same in the view as in the
  * term**: where the inner term reaches no `held` and closes no cycle. A thunk that closes a cycle
@@ -1396,13 +1346,6 @@ const heldSide = (half: Half, t: Term, scope: Scope): Term | undefined => {
 }
 
 /**
- * **The view of a term on one half**, or nothing where the term has no views ({@link viewable}).
- * The caller view states the domain, and the stored view states the range.
- */
-const viewOn = (half: Half, t: Term): Term | undefined =>
-    viewable(t) ? (half === 'write' ? callerView(t) : storedView(t)) : undefined
-
-/**
  * **The rows that read no structure**, the model's `cbase`. The bottom agrees with every term.
  * Two terms with no adapter below the top are bounded by the top. Two disjoint terms share
  * nothing. With no binder unfolded, two disjoint views share nothing on their half. A `held`
@@ -1415,12 +1358,9 @@ const baseRows = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
     const apart = (a: Term, b: Term) =>
         disjointWalk(a, b, { left: at.left, right: at.right, pairs: [] })
     if (apart(x, y)) return true
-    if (at.top) {
-        const vx = viewOn(half, x)
-        const vy = viewOn(half, y)
-        if (vx !== undefined && vy !== undefined && disjoint(vx, vy))
-            return true
-    }
+    // the caller view states the domain, and the stored view states the range
+    const view = half === 'write' ? callerView : storedView
+    if (at.top && disjoint(view(x), view(y))) return true
     const hx = heldSide(half, x, at.left)
     if (hx !== undefined && apart(hx, y)) return true
     const hy = heldSide(half, y, at.right)
