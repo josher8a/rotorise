@@ -436,7 +436,7 @@ describe('terms', () => {
             right: numberFlags,
         })
         expect(verdict).toContain('theorem flags (q0 : Value → Bool) :')
-        expect(verdict.endsWith('= false := by rfl')).toBe(true)
+        expect(verdict.endsWith('= false := ⟨by rfl, by rfl⟩')).toBe(true)
         expect(refusal(() => leanTermOf(textFlags)).reason).toContain(
             'Value → Bool',
         )
@@ -1881,7 +1881,9 @@ describe("the declaration guard, against the model's classifier", () => {
             one.includes('PairwiseCompat (libTable κ) ['),
         )
         const refused = emitted.filter((one) =>
-            /= false := by (decide|rfl)$/.test(one),
+            /= false := (⟨by (decide|rfl), by (decide|rfl)⟩|by (decide|rfl))$/.test(
+                one,
+            ),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
         expect([accepted.length, refused.length]).toEqual([981, 35])
@@ -1903,7 +1905,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.includes('pairwiseCompat_of_compatPair'),
         )
         const refused = emitted.filter((one) =>
-            one.endsWith('= false := by decide'),
+            one.endsWith('= false := ⟨by decide, by decide⟩'),
         )
         expect([byDecision.length, refused.length]).toEqual([170, 3])
         expect(byDecision.length + refused.length).toBe(recursive.length)
@@ -1915,7 +1917,9 @@ describe("the declaration guard, against the model's classifier", () => {
         expect(verdict(erase(array(string)), json)).toContain(
             'pairwiseCompat_of_compatPair',
         )
-        expect(verdict(erase(decimal), json)).toContain('= false := by decide')
+        expect(verdict(erase(decimal), json)).toContain(
+            '= false := ⟨by decide, by decide⟩',
+        )
         expect(verdict(erase(string), tree)).toContain(
             'pairwiseCompat_of_compatPair',
         )
@@ -1980,7 +1984,7 @@ describe("the declaration guard, against the model's classifier", () => {
         expect(refused).toMatch(
             /^ {4}Alg\.compatPair dynOracle \(Term\.string\)$/m,
         )
-        expect(refused.endsWith('= false := by decide')).toBe(true)
+        expect(refused.endsWith('= false := ⟨by decide, by decide⟩')).toBe(true)
     })
 })
 

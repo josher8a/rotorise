@@ -1047,8 +1047,9 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  *   options. Where {@link agrees} holds, the host decided the model's `compatPair`, and the proof
  *   is `pairwiseCompat_of_compatPair` over that decision. A host warrant that the model does not
  *   prove stops the file.
- * - `src/` **refuses** the pair: the model's decision must refuse it too, `compatPair dynOracle x
- *   y = false`. A decision that starts to accept a pair `src/` turns down stops the file.
+ * - `src/` **refuses** the pair at its compatibility test: the model's guard accepts both options,
+ *   and the model's decision refuses the pair, `compatPair dynOracle x y = false`. A decision that
+ *   starts to accept a pair `src/` turns down stops the file.
  * - `src/` **refuses** the pair **at the guard**: an option reads the input of its own binder, or
  *   holds an adapter on a recursive path. The model's guard must refuse an option too, on the
  *   terms that {@link leanRooted} spells.
@@ -1104,18 +1105,21 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
             `      Alg.Term.guarded (${leanRooted(r, right)})) = false := ${reduce}`,
         ].join('\n')
     }
+    // the host's guard accepted before its compatibility test refused, so the vector states both
     if (refused) {
         return [
-            `/-- \`${name}\` — \`src/\` refuses this pair; the model's decision refuses it too -/`,
+            `/-- \`${name}\` — \`src/\` refuses this pair; the model's guard accepts it, and the model's decision refuses it -/`,
             head,
+            `    (Alg.Term.guarded (${leanRooted(l, left)}) &&`,
+            `      Alg.Term.guarded (${leanRooted(r, right)})) = true ∧`,
             ...(decision === undefined
                 ? [
                       `    Alg.compatPair dynOracle (${l})`,
-                      `      (${r}) = false := ${reduce}`,
+                      `      (${r}) = false := ⟨${reduce}, ${reduce}⟩`,
                   ]
                 : [
                       `    (${decision(true)} &&`,
-                      `      ${decision(false)}) = false := ${reduce}`,
+                      `      ${decision(false)}) = false := ⟨${reduce}, ${reduce}⟩`,
                   ]),
         ].join('\n')
     }
