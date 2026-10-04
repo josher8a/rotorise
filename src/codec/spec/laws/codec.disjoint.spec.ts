@@ -152,6 +152,53 @@ describe('a refinement by a closure is disjoint where its inner term is', () => 
     })
 })
 
+/**
+ * A field with a fallback reads a map without the name to a value with the name, so the model
+ * counts the field as held. A refinement over a term that holds such a field reads no data
+ * predicate, on either side, and its inner term bounds it. No public constructor builds a
+ * `members` refinement, so each test builds the raw term.
+ */
+describe('a refinement over a term that holds a fallback field reads no predicate below it, as the model does', () => {
+    const among = (inner: Term, member: string): Term => ({
+        kind: 'refine',
+        inner,
+        q: {
+            kind: 'members',
+            literal: { kind: 'alternatives', base: 'string', ls: [member] },
+        },
+    })
+    const withFallback: Term = {
+        kind: 'object',
+        body: {
+            fields: { a: { mark: 'fallback', t: termOf(string), v: 'd' } },
+        },
+    }
+    const required: Term = {
+        kind: 'object',
+        body: { fields: { a: { mark: 'req', t: termOf(string) } } },
+    }
+
+    it('reads no predicate of a left refinement over a fallback field', () => {
+        expect(disjoint(among(withFallback, 'a'), among(required, 'b'))).toBe(
+            false,
+        )
+    })
+
+    it('drops the predicate of a right refinement over a fallback field at the split', () => {
+        const right = among(
+            { kind: 'union', options: [withFallback, termOf(string)] },
+            'b',
+        )
+        expect(disjoint(among(termOf(string), 'a'), right)).toBe(false)
+    })
+
+    it('reads no predicate of a right refinement chain over a fallback field', () => {
+        expect(disjoint(among(required, 'b'), among(withFallback, 'a'))).toBe(
+            false,
+        )
+    })
+})
+
 describe('two objects are disjoint where one name holds two fields apart', () => {
     const body = (fields: Record<string, Field>): Term => ({
         kind: 'object',
