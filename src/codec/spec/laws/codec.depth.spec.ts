@@ -21,6 +21,7 @@ import {
     type AttributeCodec,
     array,
     CodecError,
+    discriminatedUnion,
     held,
     lazy,
     list,
@@ -272,6 +273,155 @@ describe('the nesting bound in a recursive entity', () => {
 
     it('refuses a pathological recursive depth instead of exhausting the stack', () => {
         expect(Tree.encode(nestTree(20_000) as never)).toBeInstanceOf(
+            CodecError,
+        )
+    })
+})
+
+/**
+ * **A write at a path counts the levels the path crosses.** `at` encodes below the item root, so
+ * the value it writes sits inside the maps and lists of the path. The item root is no level, and
+ * each segment past the first crosses one `M` or `L`. Each row names the levels its path crosses.
+ */
+describe('the nesting bound at a path', () => {
+    type Node = { next?: Node }
+    const Node: AttributeCodec<Node, Attribute<'M'>> = lazy(() =>
+        object({ next: optional(Node) }),
+    )
+
+    const anObject = object({ a: object({ b: opaque }) }).item
+    const aList = object({ xs: array(array(opaque)) }).item
+    const aRecursive = object({ root: Node }).item
+    const aUnion = object({
+        u: union([object({ x: opaque }), object({ w: string })]),
+    }).item
+    const aDiscriminated = object({
+        d: discriminatedUnion('t', [
+            object({ t: string('A'), x: opaque }),
+            object({ t: string('B'), x: opaque }),
+        ]),
+    }).item
+    const anOpenRest = object([string, optional(object({ y: opaque }))]).item
+    const aTuple = object({
+        tup: list(object({ w: string }), object({ z: opaque })),
+    }).item
+
+    /** `n` levels of map, the innermost one empty. */
+    const nestNode = (n: number): Node => {
+        let v: Node = {}
+        for (let i = 1; i < n; i++) v = { next: v }
+        return v
+    }
+
+    const paths: readonly (readonly [
+        string,
+        { readonly encode: (value: never) => unknown },
+        { readonly encode: (item: never) => unknown },
+        number,
+        (levels: number) => unknown,
+        (value: unknown) => unknown,
+    ])[] = [
+        [
+            'an object path',
+            anObject.at((p) => p.a.b),
+            anObject,
+            1,
+            nestL,
+            (v) => ({ a: { b: v } }),
+        ],
+        [
+            'a list path',
+            aList.at((p) => p.xs.at(0).at(0)),
+            aList,
+            2,
+            nestL,
+            (v) => ({ xs: [[v]] }),
+        ],
+        [
+            'a recursive lazy path',
+            aRecursive.at((p) => p.root.next.next.next),
+            aRecursive,
+            3,
+            nestNode,
+            (v) => ({ root: { next: { next: { next: v } } } }),
+        ],
+        [
+            'a union path',
+            aUnion.at((p) => p.u.x),
+            aUnion,
+            1,
+            nestL,
+            (v) => ({ u: { x: v } }),
+        ],
+        [
+            'a discriminated union path',
+            aDiscriminated.at((p) => p.d.x),
+            aDiscriminated,
+            1,
+            nestL,
+            (v) => ({ d: { t: 'A', x: v } }),
+        ],
+        [
+            'an open rest path',
+            anOpenRest.at((p) => p.at('k').y),
+            anOpenRest,
+            1,
+            nestL,
+            (v) => ({ k: { y: v } }),
+        ],
+        [
+            'a tuple path',
+            aTuple.at((p) => p.tup.at(1).z),
+            aTuple,
+            2,
+            nestL,
+            (v) => ({ tup: [{ w: 's' }, { z: v }] }),
+        ],
+    ]
+
+    it.each(paths)(
+        'writes at %s the value that fills the last level',
+        (_, at, __, crossed, nest) => {
+            const value = nest(MAX_DOCUMENT_NESTING - crossed)
+            expect(at.encode(value as never)).not.toBeInstanceOf(CodecError)
+        },
+    )
+
+    it.each(paths)(
+        'refuses at %s the value that reaches the 33rd level, and names the reason',
+        (_, at, __, crossed, nest) => {
+            const result = at.encode(
+                nest(MAX_DOCUMENT_NESTING + 1 - crossed) as never,
+            )
+            expect(result).toBeInstanceOf(CodecError)
+            expect((result as CodecError).reason).toMatch(
+                /nesting reaches 33 levels of list and map, and DynamoDB stores at most 32/,
+            )
+        },
+    )
+
+    it.each(paths)(
+        'a write at %s agrees with the write of the whole item',
+        (_, at, item, crossed, nest, wrap) => {
+            for (const levels of [
+                MAX_DOCUMENT_NESTING - crossed,
+                MAX_DOCUMENT_NESTING + 1 - crossed,
+            ]) {
+                const value = nest(levels)
+                expect(at.encode(value as never) instanceof CodecError).toBe(
+                    item.encode(wrap(value) as never) instanceof CodecError,
+                )
+            }
+        },
+    )
+
+    /** A path of one segment names an item attribute, which sits inside no list and no map. */
+    it('counts a path of one segment from zero, as the item does', () => {
+        const at = object({ a: opaque }).item.at((p) => p.a)
+        expect(at.encode(nestL(MAX_DOCUMENT_NESTING))).not.toBeInstanceOf(
+            CodecError,
+        )
+        expect(at.encode(nestL(MAX_DOCUMENT_NESTING + 1))).toBeInstanceOf(
             CodecError,
         )
     })

@@ -22,6 +22,7 @@ import {
     accepts,
     altSem,
     byTagSem,
+    codecAtLevel,
     codecOfTerm,
     itemSem,
     literalCodec,
@@ -3020,8 +3021,11 @@ const objectFromMap = <
                     AnyCodec,
                     ...AnyCodec[],
                 ]
+                // the item root is no level, and each segment past the first crosses one L or M
                 return ambiguous.length === 0
-                    ? first
+                    ? segments.length <= 1
+                        ? first
+                        : codecAtLevel(first.def, segments.length - 1)
                     : unresolvedAt(String(path))
             }
             const here = walk()
