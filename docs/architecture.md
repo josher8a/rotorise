@@ -89,8 +89,8 @@ swaps the orientation, so the dual term type is the term type, and the converse 
 term. `denote` reads the table of each absolute side, so the dual, with the two tables swapped,
 denotes each term by the same codec (`denote_op`). The compiled code of a function over `Term S`
 takes `S` as a real argument, because `casesOn` takes the parameter of the family as a real
-argument. The meaning is `noncomputable`: `denoteAbs` reads `objAt`, which reads `funImage`, and at
-DynamoDB `setCodec` reads `setAt`.
+argument. The meaning is computable: no definition carries `noncomputable`, and `#eval` runs
+`denote` and `AdmA` at DynamoDB.
 The split keeps a term as data that code can compute with.
 
 **Each stored-side law of the generic layer is the caller-side law at the dual universe.** `AdmA`
@@ -494,9 +494,6 @@ shape recurs: *no syntactic set names this* is a reason to stop being syntactic,
 give up. The denotation of a numeric literal **is** the literal codec by reduction, so the row
 that asks is the domain of the read half exactly.
 
-The price is that a row becomes `noncomputable` when its codec is. That costs nothing here,
-because `denote` is `noncomputable` already: `objAt` is, and `denote` reads it.
-
 An alternate reader is `Term.legacy`, and its codec is `Codec.extendRead`. `Codec.extendRead` tries
 the current reader first and then the alternate reader, and it passes only what the current codec
 writes. No structural analysis reads the alternate reader: each row reads `legacy` from its own
@@ -755,9 +752,9 @@ terms the guarantee is a written premise on both sides.
 and a racing run fails at once over an unchanged tree. Judge that check by its duration before
 judging it by its exit code.
 
-The bridge checks generated lines by kernel typechecking rather than by evaluation, because the
-denotation is `noncomputable`. Evaluation and decision by compilation are both unavailable, and
-that is not a toolchain gap to route around.
+The bridge checks generated lines by kernel typechecking rather than by evaluation. `#eval` runs
+the denotation, but a printed value proves nothing, and `native_decide` rests on `Lean.ofReduceBool`,
+which is outside the advertised axiom base. A checked line is a theorem.
 
 ### The host's instruments
 

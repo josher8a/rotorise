@@ -9,7 +9,7 @@ rather than once per term.
 
 namespace Calculus
 
-noncomputable section
+section
 /-! ## Lawfulness — proved -/
 
 /-! ### The ground codecs, argued once

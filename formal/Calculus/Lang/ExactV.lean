@@ -82,7 +82,7 @@ theorem listCodec_f {V M : Type} {member : V → M} (sL : Summand (List V) V M m
 
 variable [Sem S] [PrimAdm S] {α : Table S} {β : Table S.op}
 
-noncomputable section
+section
 
 variable (α β) in
 mutual

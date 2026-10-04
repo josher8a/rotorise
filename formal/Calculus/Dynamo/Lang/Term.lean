@@ -133,7 +133,7 @@ inductive Ground where
   | literal (k : GroundKind) (v : k.Carrier)
 
 /-- The codec of each primitive. -/
-@[simp] noncomputable def groundCodec : Ground → Codec
+@[simp] def groundCodec : Ground → Codec
   | .base k => baseCodec k
   | .literal k v => literalCodec k v
 
@@ -170,7 +170,7 @@ theorem setAt_agree {α : Type} {o : Alg.Orient} {c d : Codec} {inj : α → Att
     rw [hu, hu', h _ _ _ hu hu'])).trans hb
 
 /-- The set former: the lift, with the store's set rule as the element's obligation. -/
-noncomputable abbrev dSet : Alg.SetF Value Member Attr.member Attr.depth where
+abbrev dSet : Alg.SetF Value Member Attr.member Attr.depth where
   lift := setCodec
   lawful h := lawful_setCodec h
   agree h := agreeLe_setCodec h
@@ -228,7 +228,7 @@ abbrev dynSig : Alg.Sig where
 abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩
 
 /-- **The DynamoDB meaning** of that signature. -/
-@[reducible] noncomputable instance dynSem : Alg.Mean dynSig where
+@[reducible] instance dynSem : Alg.Mean dynSig where
   V := Value
   Mem := Member
   mem := Attr.member

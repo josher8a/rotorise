@@ -160,7 +160,7 @@ instance id_topLaws : Alg.TopLaws jsonSyn where
 def strOrNumTerm : Alg.Term jsonSyn := .union [.prim .str, .prim .num]
 
 /-- A string or a number. -/
-noncomputable def strOrNum : Alg.Codec Json JMember := Alg.denote jsonTable jsonTableA strOrNumTerm
+def strOrNum : Alg.Codec Json JMember := Alg.denote jsonTable jsonTableA strOrNumTerm
 
 /-- **The union of the string codec and the number codec is lawful**, by the generic soundness:
     the two options are held-free, so the identity codec bounds both, and they are compatible. -/

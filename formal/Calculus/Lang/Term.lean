@@ -744,7 +744,7 @@ mutual
 /-- **Each term, at its certified combinator**, over the tables of each absolute side. The
     denotation reads no orientation: each former reads its one prism, and a two-sided row stores
     each half at its absolute side. -/
-noncomputable def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C B
+def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C B
   | .prim g, _ => Mean.ground g
   | .set t, ρ =>
       match Mean.set (B := B) with
@@ -771,7 +771,7 @@ noncomputable def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C
 
 /-- The payload's semantics: the slot table and the open block, each through its own
     companion. -/
-noncomputable def bodySemAbs : Body B → (ρ : List (Mean.C B) := []) → Mean.C B
+def bodySemAbs : Body B → (ρ : List (Mean.C B) := []) → Mean.C B
   | .mk fields f wild, ρ =>
       match Mean.map (B := B) with
       | some F =>
@@ -781,31 +781,31 @@ noncomputable def bodySemAbs : Body B → (ρ : List (Mean.C B) := []) → Mean.
 
 /-- A field's semantics. A companion of `denoteAbs` rather than a function of one, which is what
     removed the fuel. -/
-noncomputable def fieldSemAbs : ObjectSlot B → (ρ : List (Mean.C B) := []) →
+def fieldSemAbs : ObjectSlot B → (ρ : List (Mean.C B) := []) →
     FieldSem (Mean.V (B := B)) (Mean.Mem (B := B))
   | .req t, ρ => .req (denoteAbs t ρ)
   | .optional t, ρ => .opt (denoteAbs t ρ)
   | .fill t v, ρ => .fill (denoteAbs t ρ) (Mean.const v)
 
 /-- The open block's semantics. **A body with no open block refuses.** -/
-noncomputable def wildSemAbs : Option (Term B) → (ρ : List (Mean.C B) := []) →
+def wildSemAbs : Option (Term B) → (ρ : List (Mean.C B) := []) →
     RestSem (Mean.V (B := B)) (Mean.Mem (B := B))
   | none, _ => .refuse
   | some t, ρ => .codec (denoteAbs t ρ)
 
 /-- The options' codecs, in order. -/
-noncomputable def denoteListAbs : List (Term B) → (ρ : List (Mean.C B) := []) → List (Mean.C B)
+def denoteListAbs : List (Term B) → (ρ : List (Mean.C B) := []) → List (Mean.C B)
   | [], _ => []
   | t :: ts, ρ => denoteAbs t ρ :: denoteListAbs ts ρ
 
 /-- The spread's codec, where there is one. -/
-noncomputable def denoteOptAbs : Option (Term B) → (ρ : List (Mean.C B) := []) →
+def denoteOptAbs : Option (Term B) → (ρ : List (Mean.C B) := []) →
     Option (Mean.C B)
   | none, _ => none
   | some t, ρ => some (denoteAbs t ρ)
 
 /-- The options' members, in order. -/
-noncomputable def denoteμsAbs : List (Term B) → (ρ : List (Mean.C B) := []) →
+def denoteμsAbs : List (Term B) → (ρ : List (Mean.C B) := []) →
     List (Option (Mean.Mem (B := B)))
   | [], _ => []
   | t :: ts, ρ => (denoteAbs t ρ).μ :: denoteμsAbs ts ρ
@@ -910,33 +910,33 @@ section Denote
 variable {S : Syn} [Sem S] (α : Table S) (β : Table S.op)
 
 /-- Each term, at its certified combinator. -/
-noncomputable abbrev denote (t : Term S) (ρ : List S.C := []) : S.C :=
+abbrev denote (t : Term S) (ρ : List S.C := []) : S.C :=
   denoteAbs (tables S.o α β) t ρ
 
 /-- The payload's semantics. -/
-noncomputable abbrev bodySem (b : Body S) (ρ : List S.C := []) : S.C :=
+abbrev bodySem (b : Body S) (ρ : List S.C := []) : S.C :=
   bodySemAbs (tables S.o α β) b ρ
 
 /-- A field's semantics. -/
-noncomputable abbrev fieldSem (s : ObjectSlot S) (ρ : List S.C := []) :
+abbrev fieldSem (s : ObjectSlot S) (ρ : List S.C := []) :
     FieldSem (Mean.V (B := S.sig)) S.M :=
   fieldSemAbs (tables S.o α β) s ρ
 
 /-- The open block's semantics. -/
-noncomputable abbrev wildSem (w : Option (Term S)) (ρ : List S.C := []) :
+abbrev wildSem (w : Option (Term S)) (ρ : List S.C := []) :
     RestSem (Mean.V (B := S.sig)) S.M :=
   wildSemAbs (tables S.o α β) w ρ
 
 /-- The options' codecs, in order. -/
-noncomputable abbrev denoteList (ts : List (Term S)) (ρ : List S.C := []) : List S.C :=
+abbrev denoteList (ts : List (Term S)) (ρ : List S.C := []) : List S.C :=
   denoteListAbs (tables S.o α β) ts ρ
 
 /-- The spread's codec, where there is one. -/
-noncomputable abbrev denoteOpt (sp : Option (Term S)) (ρ : List S.C := []) : Option S.C :=
+abbrev denoteOpt (sp : Option (Term S)) (ρ : List S.C := []) : Option S.C :=
   denoteOptAbs (tables S.o α β) sp ρ
 
 /-- The options' members, in order. -/
-noncomputable abbrev denoteμs (ts : List (Term S)) (ρ : List S.C := []) : List (Option S.M) :=
+abbrev denoteμs (ts : List (Term S)) (ρ : List S.C := []) : List (Option S.M) :=
   denoteμsAbs (tables S.o α β) ts ρ
 
 /-- The options of no term are no codecs. -/

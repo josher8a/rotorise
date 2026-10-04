@@ -22,7 +22,7 @@ Laws are in Soundness.lean.
 
 namespace Calculus
 
-noncomputable section
+section
 
 /-- The payload's field table as a `MapOf`, the shape `MapOf.at` reads. `Body.mk` takes the key
     set and the slot function as two arguments, so this is the coercion. -/
