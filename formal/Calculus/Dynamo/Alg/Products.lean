@@ -17,7 +17,7 @@ DynamoDB carriers.
 
 namespace Calculus
 
-noncomputable section
+section
 /-! ## Filter facts (the sum proofs consume these) -/
 
 
@@ -28,7 +28,7 @@ export Alg (setImage setImage_some mem_setImage setImage_nonempty)
 /-- **The set image at `℘⁺fin`.** The same map, with non-emptiness carried rather than
     re-derived: `setImage_nonempty` is spent once, here, instead of at every call site.
     Everything else known about `setImage` transports through `neSetImage_eq_setImage`. -/
-noncomputable def neSetImage {α β : Type} [DecidableEq β]
+def neSetImage {α β : Type} [DecidableEq β]
     (f : α → Option β) (S : NEFinset α) : Option (NEFinset β) :=
   match h : setImage f S.1 with
   | some T => some ⟨T, setImage_nonempty h S.2⟩
@@ -97,13 +97,13 @@ theorem SetKind.of_setMember {μ₀ μS : Member} (h : setMember μ₀ = some μ
 
 /-- **A set's payloads at an orientation, into one kind**: image each element through the codec
     at `o`, into the wire set of the kind `k`. -/
-noncomputable def setAtK {α : Type} (o : Alg.Orient) (c : Codec) (inj : α → Attr)
+def setAtK {α : Type} (o : Alg.Orient) (c : Codec) (inj : α → Attr)
     (S : NEFinset α) (k : SetKind) : Option Attr :=
   (neSetImage (fun x => (c.f o (inj x)).bind k.elem.out) S).map k.wire
 
 /-- **A set's payloads at an orientation**: the wire set of the kind that the image selects. The
     write is the map at the host, and the read is the map at the dual. -/
-noncomputable def setAt {α : Type} (o : Alg.Orient) (c : Codec) (inj : α → Attr) (S : NEFinset α) :
+def setAt {α : Type} (o : Alg.Orient) (c : Codec) (inj : α → Attr) (S : NEFinset α) :
     Option Attr :=
   match setAtK o c inj S .string with
   | some a => some a
@@ -171,7 +171,7 @@ end SetAt
     a `Finset` has no repeats and no order, `℘⁺fin` has no empty inhabitant, and the three
     constructors are the three element types the reference names. What is left for the
     codec is the element map — and that is the whole of `(set)` now. -/
-noncomputable def setCodec (c : Codec) : Codec where
+def setCodec (c : Codec) : Codec where
   T v := match v with
     | .ss S => ∀ s ∈ S.1, c.T (.s s)
     | .ns S => ∀ d ∈ S.1, c.T (.n d)

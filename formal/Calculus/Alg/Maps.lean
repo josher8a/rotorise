@@ -21,7 +21,7 @@ namespace Calculus.Alg
 /-- **The map analogue of `setImage`, and much simpler.** A set codec can collide two
     elements onto one; a map cannot, because the names are fixed and the codec only moves
     the values. So all this has to do is demand that every value succeeds. -/
-noncomputable def funImage {κ β : Type} {keys : Finset κ}
+def funImage {κ β : Type} {keys : Finset κ}
     (g : {k // k ∈ keys} → Option β) : Option ({k // k ∈ keys} → β) :=
   if h : ∀ k, (g k).isSome = true then some (fun k => (g k).get (h k)) else none
 
@@ -70,7 +70,7 @@ variable {V M : Type} {member : V → M}
     unsatisfiable — so a collision must be refused, not absorbed. And its API is classical:
     `Finset.mem_image` and `Multiset.mem_dedup` depend on `Classical.choice`, which §3's
     axiom base does not admit. A `Nodup`-guarded `Multiset.map` needs neither. -/
-noncomputable def setImage {α β : Type} [DecidableEq β]
+def setImage {α β : Type} [DecidableEq β]
     (f : α → Option β) (S : Finset α) : Option (Finset β) :=
   if h : ∀ x ∈ S, (f x).isSome then
     if hn : (S.attach.val.map (fun x => (f x.1).get (h x.1 x.2))).Nodup then

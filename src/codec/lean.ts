@@ -10,11 +10,9 @@
  * ── why the traffic goes this way ───────────────────────────────────────────────────────────────
  *
  * The obvious design is the other one: let Lean produce the expected attribute and compare it here.
- * That is not available, and the reason is structural rather than a missing feature.
- *
- * `denote` is `noncomputable` — `funImage` is a `dite` on a `Decidable` instance the kernel does
- * not evaluate for free. So `#eval` fails on every denoted codec, and Lean can generate nothing.
- * The model declares no axiom: `N` is carried exactly, as `WFNumeral`.
+ * `#eval` runs `denote`, so Lean can produce it, but a printed value certifies nothing, and
+ * `native_decide` rests on `Lean.ofReduceBool`, outside the model's axiom base. The model declares no
+ * axiom: `N` is carried exactly, as `WFNumeral`.
  *
  * What Lean *can* do is check. `(denote t).e v = some a` is a closed proposition, and for every
  * term form this library can express it is provable by kernel reduction — see the `vector` tactic
@@ -376,9 +374,8 @@ export const leanAttrOf = (
  * model spells only at the `.num` carrier (`inD`) and so is written out here. Both were checked
  * against the kernel rather than read across: a corpus of numeral spellings was run through the
  * TypeScript predicates, the verdicts emitted as `Numeral.WF s = b` / `Numeral.Stored s = b` rows,
- * and all of them closed by `rfl`. `inD` is deliberately *not* used for `isNumeral`: it decides
- * `Numeral.WF d.toDec` for a **double**, which is a different predicate on a different carrier, and
- * it is `noncomputable`, so a vector mentioning it would not reduce.
+ * and all of them closed by `rfl`. `inD` is deliberately *not* used for `isNumeral`: it asks only
+ * whether a value is an `N`, which is a different predicate on a different carrier.
  *
  * ── the side condition, which is not decoration ────────────────────────────────────────────────
  *
@@ -1157,8 +1154,8 @@ end Calculus
  * def-reading port would be a second description of what `decode` already computes exactly, and
  * two descriptions of one thing need a guard between them. **The guard is what landed.**
  *
- * `AdmA` is `noncomputable`, so this cannot be `#eval`. The kernel unfolds it anyway, which is
- * the same fact `Vectors.lean` opens with, so the verdict is asserted and elaboration is the test.
+ * `#eval` runs `AdmA`, but a printed verdict proves nothing. The kernel unfolds it, which is the
+ * fact `Vectors.lean` opens with, so the verdict is asserted and elaboration is the test.
  */
 export type ReadVerdict = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */

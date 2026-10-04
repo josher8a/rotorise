@@ -24,7 +24,7 @@ variable (α) in
 
     `AdmA`'s `refine` row is this function, which is why the row survived the retirement of
     the per-aspect tables it was first written for. -/
-noncomputable abbrev refineReads (t : Term) (q : Value → Bool) : Attr → Bool :=
+abbrev refineReads (t : Term) (q : Value → Bool) : Attr → Bool :=
   Alg.refineReads α dynTableA t [] q
 
 @[AdmA_rows] theorem refineReads_eq (t : Term) (q : Value → Bool) (a : Attr) :
@@ -37,7 +37,7 @@ noncomputable abbrev refineReads (t : Term) (q : Value → Bool) : Attr → Bool
   unfold Alg.gate
   cases (Alg.denote α dynTableA t).p a <;> rfl
 
-noncomputable section
+section
 /-! ## The attribute side
 
 `Adm` is the value half. `AdmA` is the attribute half, and it has no
@@ -76,7 +76,7 @@ theorem ground_selfdual : ∀ g, (groundCodec g).e = (groundCodec g).p := by
 
 /-- The DynamoDB primitive rows on the read side: the write-side rows, because each primitive is
     self-dual. -/
-noncomputable instance dynPrimAdmA : Alg.PrimAdmA dynSyn :=
+instance dynPrimAdmA : Alg.PrimAdmA dynSyn :=
   Alg.PrimAdm.dual fun g => (ground_selfdual g).symm
 
 variable (α) in
@@ -178,7 +178,7 @@ end Rows
 variable (α) in
 /-- `⋁` of `AdmA` over a union's options; sound, and inexact for the reason the value side
     gives. -/
-noncomputable def AdmAAny (ts : List Term) (a : Attr) : Bool := anyP (AdmAList α ts) a
+def AdmAAny (ts : List Term) (a : Attr) : Bool := anyP (AdmAList α ts) a
 
 @[simp] theorem AdmAAny_nil (a : Attr) : AdmAAny α [] a = false := rfl
 

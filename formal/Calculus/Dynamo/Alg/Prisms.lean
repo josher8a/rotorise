@@ -14,7 +14,7 @@ the instances that read the constructors of `Value` and `Attr`:
 
 namespace Calculus
 
-noncomputable section
+section
 
 /-! ## Constructors as prisms
 
@@ -251,7 +251,7 @@ than a carried one. -/
 
     `T` is spelled as §3's `ℓ` (`HLit`), so the judgement reads against §3. The set is the
     refinement's held set (`HLit_iff_restrict`); only the spelling differs. -/
-noncomputable def literalCodec (k : GroundKind) (x : k.Carrier) : Codec :=
+def literalCodec (k : GroundKind) (x : k.Carrier) : Codec :=
   { (baseCodec k).restrict (inL k x) with T := HLit k x }
 
 /-! ### The gated ground codecs are refinements

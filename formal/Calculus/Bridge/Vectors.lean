@@ -11,10 +11,9 @@ and the *kernel* — not a tactic, not `#eval` — decides whether the model agr
 Three facts about this development force the shape of what follows, and each of them killed
 an easier design first.
 
-**`denote` is `noncomputable`, but the kernel still evaluates it.** The map attribute carries
-a function on its key set, so no compiler can run `denote`; `#eval` and
-`native_decide` are both unavailable, and that is not a toolchain gap to be worked around.
-What *is* available is definitional unfolding: `(denote t).e v = some a` is `rfl` for every
+**The kernel evaluates `denote`, and the kernel is the check.** `#eval` runs `denote` too, but a
+printed value proves nothing, and `native_decide` rests on `Lean.ofReduceBool`, which is outside the
+advertised axiom base. Definitional unfolding is the check: `(denote t).e v = some a` is `rfl` for every
 term form, including deeply nested ones, in well under a second. So a vector is checked by
 being *typechecked*, and the certificate is a theorem rather than a program's output.
 

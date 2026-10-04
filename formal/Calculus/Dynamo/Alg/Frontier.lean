@@ -9,7 +9,7 @@ The laws that are stated and not yet discharged, and the ones whose discharge is
 
 namespace Calculus
 
-noncomputable section
+section
 /-! ## Lawfulness — the open frontier (README roadmap) -/
 
 /-! ### `setCodec`'s laws

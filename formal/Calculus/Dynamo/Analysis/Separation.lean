@@ -12,7 +12,7 @@ does not record, with what to use instead.
 
 namespace Calculus
 
-noncomputable section
+section
 /-! ## `array` and `record` are builders
 
 `array` is the degenerate `tuple`: an empty fixed part and a uniform spread. Both builders write

@@ -9,7 +9,7 @@ lawfulness lemmas, so the judgement's held-set index is the domain of the pair.
 
 namespace Calculus
 
-noncomputable section
+section
 /-! ## Carriers — the pair is on `T` (§3 `e : T ⇀ 𝔸`, `p : 𝔸 ⇀ T`)
 
     One `Carrier` lemma per combinator, mirroring the lawfulness lemmas below. Together

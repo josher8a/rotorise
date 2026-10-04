@@ -9,7 +9,7 @@ The field table is a map rather than a row, and the object is taken apart throug
 
 namespace Calculus
 
-noncomputable section
+section
 /-! ## Objects (§4) -/
 
 /-- A field, denoted, at the DynamoDB carriers. -/
@@ -45,11 +45,11 @@ section Object
 variable {sems : MapOf FieldSem} {rc? : Option Codec}
 
 /-- The object is `carriedCodec` at the `M` prism: the generic object at that prism. -/
-noncomputable abbrev objectCodecCore (sems : MapOf FieldSem) (rc? : Option Codec) : Codec :=
+abbrev objectCodecCore (sems : MapOf FieldSem) (rc? : Option Codec) : Codec :=
   Alg.objectCodecCore mS sems rc?
 
 /-- §4's `object`, at the `M` prism. -/
-noncomputable abbrev objectCodec (sems : MapOf FieldSem) (rest : RestSem) : Codec :=
+abbrev objectCodec (sems : MapOf FieldSem) (rest : RestSem) : Codec :=
   Alg.objectCodec mS sems rest
 
 theorem objectCodecCore_eq :
@@ -60,7 +60,7 @@ theorem objectCodecCore_eq :
 /-- **§3 `record`: the object that declares no name and takes every key at one codec.** It is
     not a construct of its own: `Term.record` is the empty body with an open block, and its
     codec is the object codec of that body. -/
-noncomputable abbrev recordCodec (c : Codec) : Codec :=
+abbrev recordCodec (c : Codec) : Codec :=
   objectCodec ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ (.codec c)
 
 /-- The empty body declares no name. -/

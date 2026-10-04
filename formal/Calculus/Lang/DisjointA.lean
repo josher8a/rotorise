@@ -25,7 +25,7 @@ open Calculus (alignPL alignP zipP anyP objAdmV entryP)
 variable {S : Syn} [Sem S] [PrimAdmA S] {ρ ρ' ρ'' : List S.C}
   {α : Table S} {β : Table S.op}
 
-noncomputable section
+section
 
 /-! ## The rows of the read side -/
 

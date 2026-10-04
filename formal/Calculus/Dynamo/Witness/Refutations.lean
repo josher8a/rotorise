@@ -242,7 +242,7 @@ def migrateNtoS : Attr → Option Value
   | _ => none
 
 /-- `string` with `migrateNtoS` as its alternate reader. -/
-noncomputable def migration : Codec := (baseCodec .string).extendRead migrateNtoS
+def migration : Codec := (baseCodec .string).extendRead migrateNtoS
 
 theorem legacy_p_n : migration.p (.n (.of "1")) = some (.str "x") := rfl
 

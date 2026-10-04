@@ -16,7 +16,7 @@ namespace Calculus
 
 open Alg (ObjectSlot.isReqAt Term.depth)
 
-noncomputable section
+section
 
 /-! ## The rows a term's subterms hand up
 
@@ -48,7 +48,7 @@ export Alg (valPresentT)
     and was therefore inexact at `number` by exactly this conjunct, while the joint row carried
     it and so `Adm_exact` covered the literal. The defect is closed rather than patched:
     nothing was added to make the two agree. -/
-noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
+def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
   inL k x v
 
 /-! ## The rows that ask their own codec
@@ -95,9 +95,8 @@ noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
 
     Three senses had been running together: (i) the term does not carry the information —
     true of nothing here; (ii) the domain cannot be computed without running the codec — true
-    of `opaq`, and the reason the row *does* run it, at the price of being
-    `noncomputable`; (iii) a reader cannot see through it — true of `held` and
-    `opaq`, and not a property of the calculus. -/
+    of `opaq`, and the reason the row *does* run it; (iii) a reader cannot see through it — true
+    of `held` and `opaq`, and not a property of the calculus. -/
 
 /-! ## DynamoDB is an instance
 
@@ -105,7 +104,7 @@ The structure of `Adm` and its exactness are the term language's (`Alg.Adm`, `Al
 DynamoDB supplies the primitive rows, `inBase` and `AdmLit`, and their exactness. -/
 
 /-- The DynamoDB primitive rows: `inBase` at a base and `AdmLit` at a literal. -/
-noncomputable instance dynPrimAdm : Alg.PrimAdm dynSyn where
+instance dynPrimAdm : Alg.PrimAdm dynSyn where
   admV
     | .base k => inBase k
     | .literal k x => AdmLit k x
@@ -225,7 +224,7 @@ end Rows
 
 variable (α) in
 /-- `⋁` of `Adm` over a union's options, named — sound, and *not* exact. -/
-noncomputable def AdmAny (ts : List Term) (v : Value) : Bool := anyP (AdmList α ts) v
+def AdmAny (ts : List Term) (v : Value) : Bool := anyP (AdmList α ts) v
 
 @[simp] theorem AdmAny_nil (v : Value) : AdmAny α [] v = false := rfl
 

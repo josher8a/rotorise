@@ -239,7 +239,7 @@ theorem absentOf_isSome {o : Orient} {x : Option (FieldSem V M)}
     A table with no fill takes the form that walks the present keys and looks no name up, because
     the vectors reduce it by `rfl` under a bound key, where a lookup does not reduce. A fill adds
     the names it reads, so its table takes the product itself. -/
-noncomputable def objAt (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) (o : Orient) :
+def objAt (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) (o : Orient) :
     MapOf V → Option (MapOf V) := fun p =>
   if noFill sems then
     if ∀ k ∈ sems.keys, k ∉ p.keys → (absentOf o (sems.at k)).isSome then
@@ -370,12 +370,12 @@ theorem objAt_at {o : Orient} {p q : MapOf V} (h : objAt sems rc? o p = some q) 
 variable (sM : Summand (MapOf V) V M member)
 
 /-- The object is `carriedCodec` at the keyed-map prism, with the payload map `objAt`. -/
-noncomputable abbrev objectCodecCore (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) :
+abbrev objectCodecCore (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) :
     Codec V M :=
   carriedCodec sM (fun p => ∀ k, slotT sems rc? k (p.at k)) (objAt sems rc?)
 
 /-- §4's `object`: the core at the rest policy's codec. -/
-noncomputable abbrev objectCodec (sems : MapOf (FieldSem V M)) (rest : RestSem V M) :
+abbrev objectCodec (sems : MapOf (FieldSem V M)) (rest : RestSem V M) :
     Codec V M :=
   objectCodecCore sM sems (rcOf rest)
 

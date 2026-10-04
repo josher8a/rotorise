@@ -783,7 +783,7 @@ theorem ground_former (g : Ground) (v : Value) (h : ((groundCodec g).e v).isSome
 
 /-- **The shape classes of DynamoDB.** A base or a literal writes and reads a scalar, `setCodec`
     writes and reads one of the three sets, and the prisms build `arr`, `l`, `map` and `m`. -/
-noncomputable instance dynShapes : Alg.Shapes dynSyn where
+instance dynShapes : Alg.Shapes dynSyn where
   former := Attr.former
   prim := Alg.Orient.both
     (P := fun o => ∀ g v, ((Alg.Syn.ground (S := dynSyn) g).f o v).isSome = true → Attr.former v = .prim)

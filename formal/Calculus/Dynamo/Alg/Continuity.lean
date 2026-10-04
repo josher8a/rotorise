@@ -17,7 +17,7 @@ namespace Calculus
 /-! ## The witnesses -/
 
 /-- The stable option: `literal("A")`, which admits `"A"` at every stage. -/
-noncomputable def optLit : Codec := (literalCodec .string "A")
+def optLit : Codec := (literalCodec .string "A")
 
 /-! ### The obligation is not free, and a new witness is needed -/
 

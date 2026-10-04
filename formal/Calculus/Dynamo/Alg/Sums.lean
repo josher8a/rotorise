@@ -9,7 +9,7 @@ import Calculus.Lang.Term
 
 namespace Calculus
 
-noncomputable section
+section
 export Alg (unanimous)
 
 end

@@ -29,7 +29,7 @@ def PrimAdm.dual [h : PrimAdm S] (hd : ∀ g, (Syn.ground (S := S) g).f S.o.op =
 
 variable (α β) in
 /-- **`refine`'s read-side gate**: decode with the base, then apply `q` to what comes out. -/
-noncomputable def refineReads (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a : S.V) :
+def refineReads (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a : S.V) :
     Bool :=
   gate ((denote α β t ρ).f S.o.op) q a
 
@@ -40,7 +40,7 @@ theorem refineReads_eq_gate (t : Term S) (ρ : List S.C) (q : S.V → Bool) (a :
 
 variable [PrimAdmA S]
 
-noncomputable section
+section
 
 variable (α β) in
 /-- **The joint admission predicate, attribute side**, under an environment `ρ`: the value row
