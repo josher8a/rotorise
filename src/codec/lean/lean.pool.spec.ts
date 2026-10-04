@@ -38,7 +38,6 @@ import {
     never,
     nullable,
     nullValue,
-    number,
     object,
     opaque,
     optional,
@@ -93,6 +92,13 @@ type Entry = { readonly name: string; readonly codec: AnyCodec }
 let rng = rngFrom(SEEDS[0])
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rng() * xs.length)] as T
 
+/**
+ * **No adapter of the library is a leaf.** `number` and `opaque('lossy')` are each a `held` with a
+ * float adapter, and the model names no float adapter, so a codec that held one would leave the
+ * pool. The analysis reads a `held` by its two sides and the identity of its adapter, and the
+ * model's verdicts quantify the adapter, so the `held` former with a caller's adapter stands for
+ * every adapter. The specs of each adapter check what the adapter computes.
+ */
 const leaves: readonly (readonly [string, () => AnyCodec])[] = [
     ['string', () => erase(string)],
     ['boolean', () => erase(boolean)],
@@ -100,7 +106,6 @@ const leaves: readonly (readonly [string, () => AnyCodec])[] = [
     ['null', () => erase(nullValue)],
     ['decimal', () => erase(decimal)],
     ['dynamoNumber', () => erase(dynamoNumber)],
-    ['number', () => erase(number)],
     ['lit_s', () => erase(string('a', 'b'))],
     ['lit_s1', () => erase(string('a'))],
     ['lit_d', () => erase(decimal('1', '2.5'))],
@@ -116,7 +121,6 @@ const leaves: readonly (readonly [string, () => AnyCodec])[] = [
     ],
     ['lit_b', () => erase(binary(new Uint8Array([1, 2])))],
     ['opaque', () => erase(opaque)],
-    ['opaque.lossy', () => erase(opaque('lossy'))],
     ['never', () => erase(never)],
     ['undeclared', () => erase(undeclared)],
 ]
@@ -636,30 +640,29 @@ describe('the generated pool, against the model', () => {
         }).toMatchInlineSnapshot(`
           {
             "dropped": {
-              "a constructor refused the draw": 82,
-              "term: \`Term.held\` carries a word of adapter generators, and a table gives each generator two \`Value → Value\` functions. The library ships one generator the model names, \`decimalText\`, whose pair is \`numeralOfStoredText\`/\`textOfNumeral\`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted": 471,
+              "a constructor refused the draw": 69,
             },
             "seeds": [
               {
-                "disjoints": 1061,
-                "fills": 7,
-                "pairs": 1061,
+                "disjoints": 1262,
+                "fills": 8,
+                "pairs": 1262,
                 "seed": 20261004,
-                "separations": 1054,
+                "separations": 1254,
               },
               {
-                "disjoints": 1069,
+                "disjoints": 1268,
                 "fills": 9,
-                "pairs": 1069,
+                "pairs": 1268,
                 "seed": 1,
-                "separations": 1060,
+                "separations": 1259,
               },
               {
-                "disjoints": 996,
-                "fills": 11,
-                "pairs": 996,
+                "disjoints": 1182,
+                "fills": 9,
+                "pairs": 1182,
                 "seed": 4,
-                "separations": 985,
+                "separations": 1173,
               },
             ],
           }
