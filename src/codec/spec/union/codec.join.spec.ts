@@ -408,6 +408,24 @@ describe('a union refuses a thunk it must read at its own input, because the mod
         expect(declare).toThrow(CodecError)
     })
 
+    /**
+     * **A thunk that names a codec not yet declared is read as the union itself.** The thunk
+     * throws in the same way for the union and for a later constant, so the declaration cannot
+     * tell the two apart. The model reads an unbound variable as guarded, and the host refuses
+     * here on purpose: read as the union, the option recurses at its own input.
+     */
+    it('refuses a thunk that names a later codec, because it throws as a thunk that names the union does', () => {
+        const declare = () => {
+            const early = union([
+                string,
+                lazy(() => later as never),
+            ] as unknown as readonly AnyCodec[])
+            const later = array(boolean)
+            return [early, later]
+        }
+        expect(declare).toThrow(CodecError)
+    })
+
     // a thunk below a list names the union being declared, so the walk meets the thunk again. Two
     // held-free options sit below `opaque` wherever they overlap, and an adapter that writes a text
     // to another attribute does not
