@@ -250,7 +250,7 @@ describe('branding survives, and it survives through the capability', () => {
  * A stored set holds elements of one member of `S`, `N` or `B`. That is the store universe's rule,
  * the model's `SetElem` obligation, and it is the whole of the element check: the lift of a lawful
  * element is lawful whatever the element is. The host adds one refusal, a `withLegacyRead`
- * element, because the model states no set of an older reader.
+ * element, because a read widening is not a lawful element, so no law covers the set of it.
  */
 describe('what a set cannot be built from', () => {
     it('still refuses an element that writes no single member', () => {
@@ -314,7 +314,7 @@ describe('what a set cannot be built from', () => {
         expect(words.unsafeDecode(words.unsafeEncode(value))).toEqual(value)
     })
 
-    it('refuses a read widening, because the model states no set of an older reader', () => {
+    it('refuses a read widening, because no law covers the set of an element that is not lawful', () => {
         const widened = withLegacyRead({ current: string, older: decimal })
         expect(() => refine(widened, isText).set()).toThrow(CodecError)
     })

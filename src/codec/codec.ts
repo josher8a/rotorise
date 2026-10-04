@@ -1057,12 +1057,13 @@ const set = <const C extends AnyCodec>(
             `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
         )
     }
-    // **A read widening has no set of it in the model.** `withLegacyRead` is `Codec.extendRead`,
-    // which is outside the model's `Term`, so no law covers a set of it, and the host refuses one
-    // rather than ship a pair nothing proves
+    // **No law covers a set of a read widening.** `withLegacyRead` is the model's `Term.legacy`,
+    // and `Typed` has no rule for it, because the pair is not a partial bijection. The set law
+    // `lawful_setCodec` needs a lawful element, so the host refuses the set rather than ship a
+    // pair that no law covers
     if (widensRead(inner.def)) {
         throw new CodecError(
-            `a set's element cannot carry \`withLegacyRead\`: the model states no set of an older reader, so no law covers the pair; declare the set of the current codec, and read the older form with \`withLegacyRead\` around the whole set`,
+            `a set's element cannot carry \`withLegacyRead\`: a read widening is not a lawful element, so no law covers the set of it; declare the set of the current codec, and read the older form with \`withLegacyRead\` around the whole set`,
         )
     }
     // the element is the element's own term, so a restriction, a literal and an adapter each ride
