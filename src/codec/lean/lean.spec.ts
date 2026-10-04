@@ -54,6 +54,7 @@ import {
     refine,
     spread,
     string,
+    undefinable,
     union,
     withLegacyRead,
 } from '../codec'
@@ -1277,6 +1278,25 @@ const numberOverNever = erase(
 const standIn = erase(
     object({ a: withLegacyRead({ current: string, whenMissing: 'stand-in' }) }),
 )
+/**
+ * Two pairs that the generated pool found, each where the host and the model disagreed before a
+ * fix. An `undefinable` field is the model's `optional`, so the field is apart from a required
+ * field whose term is disjoint. A legacy read of `decimal` holds a `held`, and its caller view is
+ * the view of `decimal`, so a required boolean keeps the two views apart.
+ */
+const undefinableBoolean = erase(object({ a: undefinable(boolean) }))
+const twoFields = erase(object({ a: string, n: boolean }))
+const legacyDecimalRestNumber = erase(
+    object(
+        {
+            a: withLegacyRead({
+                current: decimal,
+                older: { decode: () => '1' as string },
+            }),
+        },
+        [string, optional(number)],
+    ),
+)
 const fallbackPairs = <P>(
     sep: string,
     make: (name: string, left: AnyCodec, right: AnyCodec) => P,
@@ -1440,6 +1460,11 @@ const separationPairs = (): readonly Separation[] => {
             left,
             right,
         })),
+        {
+            name: 'two_fields__vs__legacy_decimal_rest_number',
+            left: twoFields,
+            right: legacyDecimalRestNumber,
+        },
     )
     return out
 }
@@ -1527,6 +1552,16 @@ const disjointPairs = (): readonly DisjointPair[] => {
             name: 'stand_in__disjoint__stand_in',
             left: standIn,
             right: standIn,
+        },
+        {
+            name: 'undefinable_boolean__disjoint__req_string',
+            left: undefinableBoolean,
+            right: erase(object({ a: string })),
+        },
+        {
+            name: 'two_fields__disjoint__legacy_decimal_rest_number',
+            left: twoFields,
+            right: legacyDecimalRestNumber,
         },
     )
     return out
@@ -1826,7 +1861,7 @@ describe("the declaration guard, against the model's classifier", () => {
             /= false := (by decide|rfl)$/.test(one),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([980, 35])
+        expect([accepted.length, refused.length]).toEqual([981, 35])
     })
 
     /**
@@ -1891,7 +1926,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it("puts every corpus pair to the model's disjointness test", () => {
         const pairs = disjointPairs()
-        expect(pairs.length).toBe(1007)
+        expect(pairs.length).toBe(1009)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.disjoints.lean'),
