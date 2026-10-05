@@ -24,6 +24,7 @@ import type {
     Rng,
     SetSlot,
 } from './codec'
+import { CodecError } from './result'
 import { sameLiteral } from './value'
 
 /* ── the term ─────────────────────────────────────────────────────────────────────────── */
@@ -1013,7 +1014,7 @@ export const recursionUse = (root: Term): number => {
         const most = (ones: readonly Term[]) => Math.max(0, ...ones.map(next))
         switch (t.kind) {
             case 'lazy': {
-                const target = force(t)
+                const target = forceDeclared(t)
                 if (target === undefined) return pathUse(on)
                 const at = on.indexOf(target)
                 return at === -1 ? next(target) : pathUse(on.slice(at))
@@ -1043,6 +1044,24 @@ export const recursionUse = (root: Term): number => {
         }
     }
     return walk(root, [])
+}
+
+/**
+ * The term of a thunk that the walk of {@link recursionUse} forces, or nothing where {@link force}
+ * answers nothing or the thunk throws a {@link CodecError}. **A former refuses inside a thunk where
+ * the name it reads is in progress**: `lazy(() => nullable(Self))` refuses while `Self` resolves,
+ * and resolves once `Self` is declared. The throw leaves no mark, so a later force retries. So the
+ * walk reads the refusal as the free variable that a thunk in the temporal dead zone is.
+ */
+const forceDeclared = (
+    t: Term & { readonly kind: 'lazy' },
+): Term | undefined => {
+    try {
+        return force(t)
+    } catch (thrown) {
+        if (thrown instanceof CodecError) return undefined
+        throw thrown
+    }
 }
 
 /** The level of one path, folded from the occurrence outward: the model's `useUnder` at a
