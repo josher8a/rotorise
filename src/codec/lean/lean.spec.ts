@@ -1957,7 +1957,11 @@ describe("the declaration guard, against the model's classifier", () => {
                 leanSeparationModule(separationPairs()),
             )
         }
+        // `Compat` reaches `Meet`, so the module imports `Compat` alone
         expect(leanSeparationModule([])).toContain(
+            'import Calculus.Dynamo.Analysis.Compat',
+        )
+        expect(leanSeparationModule([])).not.toContain(
             'import Calculus.Dynamo.Analysis.Meet',
         )
         // a verdict spells `libTable`, which only `Store` declares, and without the import
