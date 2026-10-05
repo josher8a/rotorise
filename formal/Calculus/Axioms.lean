@@ -61,14 +61,13 @@ namespace Calculus
 
 open Alg (Term.depthL)
 
-/-- **The sanctioned base is Lean's own, and nothing else.** There is no numeric host axiom
-    here any more, because there is no host in the calculus: `N` is carried exactly, as
-    `WFNumeral`, so nothing is assumed about binary64 or about any other numeric type.
+/-- **The sanctioned base is Lean's own, and nothing else.** The calculus has no numeric host
+    axiom, because it has no host: `N` is carried exactly, as `WFNumeral`, so nothing is assumed
+    about binary64 or about any other numeric type.
 
-    ~~Calculus.Double~~ and ~~Calculus.numericHost~~ were the last two entries and both are
-    gone with the carrier they served. A target language that hands its own numeric type to a
-    caller adapts that type to `WFNumeral` in the port, and the adaptation is the implementor's
-    tradeoff rather than the calculus's.
+    A target language that hands its own numeric type to a caller adapts that type to
+    `WFNumeral` in the port, and the adaptation is the implementor's tradeoff rather than the
+    calculus's.
 
     `Classical.choice` is here by more than one route. Mathlib resolves `k ∈ (s : Finset α)`
     through `Finset.instSetLike`, whose injectivity field is proved classically, and core
@@ -134,9 +133,8 @@ specification defect that had no witness until it had this one. -/
 /-! §6's `≡` is not transitive — the one refutation that is about the equational theory
 rather than about a row of it. -/
 
-/-! `ident` has no denotational content to pin — what it has is its relation to `Adm`,
-which is what §5 uses it for, and ~~SepV~~'s right to drop §5's two `ident` conjuncts
-rests on it. -/
+/-! `ident` has no denotational content to pin. What it has is its relation to `Adm`, which is
+what §5 uses it for. -/
 
 /-! §2's ideal: `e` and `p` are mutually inverse between `dom(e)` and `Can(c)`. `retract`
 is one half and this is the other, so the bijection is a theorem rather than a reading. -/
@@ -160,9 +158,8 @@ gives where the side is the caller side (`AdmA_held_eq`). -/
 is a transcription of a table rather than a claim about the model, so their axiom base is
 part of what the soundness statements rest on. -/
 
-/-! The fuel-free twins. They meet §6's table through `Codec.Equiv` rather than through a
-shared transport constant — ~~denote_eq~~ was the ω-layer's and went with the layer
-(`Denote.lean`) — so each is guarded on its own footing. -/
+/-! The term-level twins of §6's rows. They meet §6's table through `Codec.Equiv`, with no shared
+transport constant, so each is guarded on its own footing. -/
 
 /-! §1's numeral domain. -/
 

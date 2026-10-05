@@ -86,10 +86,9 @@ included, is admitted by attempt, which is `Adm`/`AdmA` exactly. `admitV_le_Adm`
 when one of its options does. -/
 
 variable (α) in
-/-- **Separation on the joint predicate, value side — one clause.** §5's ~~SepV~~ offers a
-    choice between disjoint kinds and disjoint admissible sets; `Adm` carries the kind gate
-    in its own rows, so the first disjunct is subsumed (~~Adm_kind~~) and the definition
-    collapses. -/
+/-- **Separation on the joint predicate, value side, in one clause.** §5 offers a choice between
+    disjoint kinds and disjoint admissible sets. `Adm` carries the kind gate in its own rows,
+    so disjoint kinds give disjoint admissible sets, and one clause states both. -/
 def SepJV (x y : Term) : Prop := ∀ v, Adm α x v = true → Adm α y v = false
 
 variable (α) in
@@ -413,8 +412,8 @@ attributes go in a function's codomain, a strictly positive position that the ke
 
     | m (keys : Finset Name) (f : {k // k ∈ keys} → Attr)
 
-Unordered, unique-keyed and total-on-its-keys are facts about the type. No canonical order,
-no ~~Wire.canon~~, and nothing for `e` to choose between. -/
+Unordered, unique-keyed and total-on-its-keys are facts about the type. No canonical order
+exists, and `e` has nothing to choose between. -/
 
 /-- Two "orderings" of one map's names are one name set — there is nothing to quotient. -/
 theorem mapKeys_order_irrelevant : ({"a", "b"} : Finset Name) = {"b", "a"} :=

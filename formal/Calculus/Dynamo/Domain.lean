@@ -344,13 +344,8 @@ abbrev Value := Attr
 ⊢ literal(ℓ₁ … ℓₙ) : {ℓ₁ … ℓₙ} ⇝ μ
 ```
 
-The model had three constructors for it — arity-one over a `Value`, and two n-ary ones at the
-two commonest bases — and every part of that premise line was a gate. `g ground` was carried
-three times over (~~literalOK~~'s `| _ => false`, ~~literalMember~~'s `none`, `literalCodec`'s
-`Codec.empty`); `n ≥ 1` and pairwise distinctness were `hne`/`hnd` until `℘⁺fin` typed them;
-`ℓᵢ ∈ T` at a base the other constructors could not name was why there were two of them.
-
-`GroundKind` is the premise line as a type. The base is an index, so `member` is a function of
+Every part of that premise line is a fact of the type, not a gate. `GroundKind` is the premise
+line as a type. The base is an index, so `member` is a function of
 it and `g ground` is unsayable-otherwise; the alternative is one inhabitant of *that base's*
 carrier, so `ℓ ⊆ T` is the type. A literal carries one value; several values are a certified
 `union` of singletons, and `Calculus/Dynamo/Witness/LiteralArity1.lean` derives that rule. -/
@@ -368,8 +363,8 @@ deriving DecidableEq, Repr
     is a variable, the indexed instance `GroundKind.decEqCarrier` decides the equality. -/
 @[reducible] def GroundKind.Carrier : GroundKind → Type
   | .string  => String
-  -- §3's `ℓ ⊆ D` is this base's carrier and not a premise beside it. ~~LiteralD~~ was that
-  -- premise and is deleted. `D` IS the well-formed numerals now, so the carrier says so.
+  -- §3's `ℓ ⊆ D` is this base's carrier and not a premise beside it: `D` is the well-formed
+  -- numerals, and so is the carrier.
   | .number  => WFNumeral
   | .boolean => Bool
   | .binary  => Bytes
