@@ -17,21 +17,20 @@ open Alg (Body.fields_mk Body.wild_mk Body.at_mk Term.depth)
 
 The four list and table helpers the rules need stay beside their converses in `Soundness.lean`.
 
-So `term_depth_wf`'s users are **no longer all in one module**. The reason they are not is
-written above, and no document carries a count of them.
+So `term_depth_wf` has users in more than one module, for the reason above. No document carries
+a count of them.
 -/
 
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
-/-- **The judgement's held set is inside the denotation's** — `typed_TSub` the other way, and
-    the direction that was open.
+/-- **The judgement's held set is inside the denotation's** — `typed_TSub` the other way.
 
     This file names this claim (A). The statement is `typed_TSub`'s mirror and recurses the
     same way.
     Every rule closes: the ground rules and `literal` are `exact hv`, the two
     containers and the four wrappers reduce past their constructor, `opaque` holds every
     value, and `set` recurses into its element. Only four rules need anything new, and each needs the
-    converse of a helper that was already here for the other direction.
+    converse of a helper of the other direction.
 
     **What this does *not* say is `T = dom(e)`**, which is a different claim, proved by
     `typed_T_adm` (`Laminar.lean`). Reading (A) as (B) is the mistake §6's row made. -/
@@ -39,8 +38,8 @@ theorem typed_T_eq : ∀ {t T μ}, Typed α t T μ → ∀ v, T v → (denote α
   | t, T, μ, h, v, hv => by
     cases h with
     | base _ => exact hv
-    -- the carrier is gated, so the rule's `HLit k ls` and the denotation's are one
-    -- expression — the same fact that removed `typed_TSub`'s five-way split here
+    -- the carrier is gated, so the rule's `HLit k x` and the denotation's are one
+    -- expression
     | literal _ _ => exact hv
     | never => exact hv
     | opaq => trivial
@@ -115,19 +114,19 @@ decreasing_by term_depth_wf
     So the index is a description and carries nothing the pair does not. It stays anyway:
     the rules are the model's transcription of §3, and a judgement whose held set is spelled
     `(denote t).T` cannot be read against the document it transcribes. What the identity buys
-    is that the reading is now checked rather than advertised. -/
+    is that the reading is checked rather than advertised. -/
 theorem typed_T_identity {t T μ} (h : Typed α t T μ) (v : Value) : (denote α t).T v ↔ T v :=
   ⟨Alg.typed_TSub h v, typed_T_eq h v⟩
 
 /-! ## Which identity? §6's row is two of them
 
 * **(A)** `(denote t).T = T` for a derivable `⊢ t : T ⇝ μ`, which `typed_T_identity` proves
-  at every rule. **Closed**, and it was the half `typed_TSub` left.
+  at every rule. It is the half `typed_TSub` leaves.
 * **(B)** `T = dom(e)` — what makes `: T` an honest index rather than an upper bound.
   `Carrier.domE` is its other half.
 
 §6's row asserted (A) and then justified it with a sentence about (B). (A) is not false at
-`union`; it is definitional — and it is now proved everywhere else too. **(B) holds at every
+`union`; it is definitional — and it is proved everywhere else too. **(B) holds at every
 derivable term whose obligations hold** by `typed_T_adm` (`Laminar.lean`): a union writes wherever
 one of its options writes, and a set reads its obligations. Reading a proof of (A) as a claim about (B) is the mistake the row made, and the reason
 both are named here. -/

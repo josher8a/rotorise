@@ -9,9 +9,9 @@ give them their names in this namespace. The keyed clause of the traversal reads
 stays here.
 
 §5's keyed refinement, *"entries are dispatched and compared by name, first occurrence
-first"*, is gone. It was a statement about `M` as a `List (Name × Attr)`: a clause needed because
-a keyed list has an order and can repeat a key. `M` is now a name set with a function on it, so
-there is no first occurrence to prefer. `traverse_fst` survives because `L` really is a list.
+first"*, has no statement here. The clause is about a keyed list, which has an order and can
+repeat a key. `M` is a name set with a function on it, so there is no first occurrence to
+prefer. `traverse_fst` stays because `L` really is a list.
 -/
 
 namespace Calculus

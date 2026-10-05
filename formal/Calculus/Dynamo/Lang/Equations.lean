@@ -35,10 +35,9 @@ namespace Calculus
 
 §6's last "Hold" row, `μ(w(c)) = μ(c)` for `w ∈ {held, refine, legacy, optional,
 
-Three of the five are codec wrappers. The other two are **fields**, and this file used to
-say their half of the row was "the stratification of §4 and not a statement about
-`Codec.μ` at all". That was an evasion: §4 says in as many words that *a field carries a
-member like anything else*, and `FieldSem.codec` is where the model puts it. Stated
+Three of the five are codec wrappers. The other two are **fields**. §4 says in as many words
+that *a field carries a member like anything else*, and `FieldSem.codec` is where the model
+puts it. Stated
 through that accessor the two rows are `rfl` — which is the honest form of the claim
 rather than a reason to skip it, and it is what makes the row five of five. -/
 
@@ -128,7 +127,7 @@ theorem equiv_denote_held_comp (t P P' : Term) (k₀ k₀' : DynGen × Bool) (k 
 /-- §6: `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`.
 
     **The meet is a `closure`, and that is what `Pred` costs.** The equation is about codecs
-    and it holds: `equiv_restrict_meet` is unchanged, because `restrict` still takes a
+    and it holds: `equiv_restrict_meet` applies, because `restrict` takes a
     `Value → Bool` and `denote` hands it `p.eval`. What the reified predicate cannot do is
     keep the *shape*.
 

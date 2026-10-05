@@ -344,8 +344,7 @@ structure MapOf (α : Type) where
   get  : {k // k ∈ keys} → α
 
 /-- Two map payloads are equal when their name sets are and their values agree on them.
-    The dependent pair needs this said once; the list representation got it from
-    `List.ext`. -/
+    The dependent pair needs this said once, where a list gets it from `List.ext`. -/
 theorem MapOf.ext {α : Type} {p q : MapOf α} (hk : p.1 = q.1)
     (hf : ∀ k (h₁ : k ∈ p.1) (h₂ : k ∈ q.1), p.2 ⟨k, h₁⟩ = q.2 ⟨k, h₂⟩) : p = q := by
   obtain ⟨kp, fp⟩ := p

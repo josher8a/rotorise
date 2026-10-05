@@ -170,7 +170,7 @@ end SetAt
 /-- §3 `(set)`. Non-emptiness, uniqueness and homogeneity are all carried by the **types**:
     a `Finset` has no repeats and no order, `℘⁺fin` has no empty inhabitant, and the three
     constructors are the three element types the reference names. What is left for the
-    codec is the element map — and that is the whole of `(set)` now. -/
+    codec is the element map — and that is the whole of `(set)`. -/
 def setCodec (c : Codec) : Codec where
   T v := match v with
     | .ss S => ∀ s ∈ S.1, c.T (.s s)

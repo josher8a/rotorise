@@ -43,16 +43,15 @@ import Lean
 # The axiom base, as a checked claim
 
 **The whole development stands on `propext`, `Classical.choice` and `Quot.sound` — no
-`sorryAx`.** `sanctionedAxioms` below is that claim, and this file turns
-it from a sentence a reader had to verify by hand with `#print axioms` into a build error.
+`sorryAx`.** `sanctionedAxioms` below is that claim, and this file makes
+it a build error rather than a sentence a reader verifies by hand with `#print axioms`.
 
-Here it is a build error instead. `#assert_axioms` collects the axioms a constant actually
+`#assert_axioms` collects the axioms a constant actually
 depends on and fails if any of them is outside the sanctioned base below.
 
 This is not decoration. `Classical.choice` is easy to acquire by accident: mathlib proves a
 great many list facts classically, and a single `by_contra` or an appeal to (say)
-`List.filter_eq_nil_iff` silently widens the base of every theorem downstream. Both of those
-happened while this module was being written, which is why it exists.
+`List.filter_eq_nil_iff` silently widens the base of every theorem downstream.
 -/
 
 open Lean Elab Command
@@ -94,12 +93,9 @@ def elabAssertAxioms : CommandElab := fun stx => do
 /-- `#assert_axioms_all` is `#assert_axioms` over the whole `Calculus` namespace, found by
     walking the environment instead of by naming constants one at a time.
 
-    The enumerated form this replaces was opt-in, and opt-in is the wrong default for a
-    guard: it holds only for the theorems someone remembered to list, and says nothing
-    about the ones they did not. 125 lines named 125 theorems; the namespace has 1199, and
-    one of the 1074 unnamed (`not_equiv_tupleTail_tuple`) had already acquired
-    `Classical.choice` from a `simp`, exactly as the note above predicts. A theorem is now
-    guarded by existing. -/
+    An enumerated form is opt-in, and opt-in is the wrong default for a guard: it holds only
+    for the theorems someone remembered to list, and says nothing about the ones they did
+    not. A theorem is guarded by existing. -/
 syntax (name := assertAxiomsAll) "#assert_axioms_all" : command
 
 /-- Elaborator for `#assert_axioms_all`: every theorem in the namespace, found by walking
@@ -124,11 +120,11 @@ build stops here rather than in a reader's `#print axioms`. -/
 
 /-! Both indices of the judgement are claims about the denotation (§3). -/
 
-/-! The refutations that repaired the specification (§4) — a counterexample proved classically would still be a counterexample, but these are
+/-! The refutations of the specification (§4) — a counterexample proved classically would still be a counterexample, but these are
 constructive and the guard records that. -/
 
 /-! §5's admission `Adm` cannot pass through `alternate reader` on the read side — the
-specification defect that had no witness until it had this one. -/
+specification defect, and this is its witness. -/
 
 /-! §6's `≡` is not transitive — the one refutation that is about the equational theory
 rather than about a row of it. -/
@@ -146,7 +142,7 @@ combinator, and the pair agrees on the nose. -/
 halves by construction, which is what §3 argues an ad-hoc gate forgets. -/
 
 /-! `through_p` is the fact the `held` row rests on — `g` post-processes a read and is
-total, so `dom(p)` is the subterm's exactly. It is cited as a result now, so it is guarded
+total, so `dom(p)` is the subterm's exactly. It is cited as a result, so it is guarded
 like one. -/
 
 /-! `AdmA`'s `held` row, both directions. §5 gave `held` one `⊤` row on both sides. A `held`
@@ -164,8 +160,7 @@ transport constant, so each is guarded on its own footing. -/
 /-! §1's numeral domain. -/
 
 /-! §3's `(number)` gate and the two places the bound is forced outward. The `(literal-N)`
-rows are `(literal-N)`'s `ℓ ⊆ D`, added to §3 once the shipped `literal(NaN)` settled the
-question the conditional refutations leave open. -/
+rows are `(literal-N)`'s `ℓ ⊆ D`. -/
 
 /-! §2's kernel and §1's store. `retract_through_store` is **(R)** with DynamoDB in the
 middle — the law production actually runs — and the two `decimalCodec` rows are what makes
@@ -183,27 +178,24 @@ what a reviewer checks §6's table against. -/
 /-! §7's continuity results — why fuel is not removable by a fixpoint. -/
 
 /-! The vector checker. `aeq`'s two soundness halves are what a generated vector line is
-cashed against, so they carry the whole differential-testing bridge — and the comparator
-reached this guard already carrying `Classical.choice`, from mathlib's `DecidableEq (Finset α)`
-of all places. `fsetEq` is the repair. This import is the reason the guard saw it: it walks
-the environment, and a module it does not import is not in the environment. -/
+cashed against, so they carry the whole differential-testing bridge. A comparator built on
+mathlib's `DecidableEq (Finset α)` carries `Classical.choice`, and `fsetEq` is the choice-free
+comparison. This import is what lets the guard see the comparator: it walks the environment,
+and a module it does not import is not in the environment. -/
 
 #assert_axioms_all
 
 /-! ## …and the environment linters, for the same reason
 
 `#assert_axioms_all` guards one property of the environment. Batteries ships more —
-`simpNF`, `unusedArguments`, `synTaut`, `dupNamespace`, `checkType` and the rest — and this
-development had **never run them**, because `Batteries.Tactic.Lint` is not imported by
-anything `Calculus` needed and so was never built.
+`simpNF`, `unusedArguments`, `synTaut`, `dupNamespace`, `checkType` and the rest — and nothing
+else `Calculus` needs imports `Batteries.Tactic.Lint`, so this module imports it to run them.
 
-The first run over 1674 declarations found one substantive defect and it was invisible by
-reading: a lemma on the member of a set's element was `@[simp]` with a left-hand side that
-cannot occur in simp-normal form, because the function it named is `@[simp]` too and unfolds
-first. An
-attribute asserting something about behaviour that had quietly stopped being true — the same
-failure class as a description drifting from what it describes, and the reason this guard is
-here rather than a note saying someone should lint occasionally.
+A linter finds a defect that reading does not: a `@[simp]` lemma whose left-hand side cannot
+occur in simp-normal form, because the function it names is `@[simp]` too and unfolds first.
+Such an attribute asserts something about behaviour that is not true — the same failure class
+as a description drifting from what it describes, and the reason this guard is here rather than
+a note saying someone should lint occasionally.
 
 `docBlame` is **excluded**, not sanctioned: its hits are helper definitions (`Term.depthL`,
 `Codec.e`), and whether this development's docstring convention reaches them is

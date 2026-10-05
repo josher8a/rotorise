@@ -7,13 +7,11 @@ variable {α : Calculus.Table}
 /-!
 # §6's "Do not hold" table, refuted
 
-Nine rows of §6 assert that a rewrite *fails*, and none was machine-checked — the most
-suspicious remaining surface, given that mechanizing §5's *positive* discharger claims
-refuted three of them.
+Nine rows of §6 assert that a rewrite *fails*.
 
 They are stated here against `denote`, which is what makes them readable: a claim about
-`≡` is a claim about `T`, `μ`, `e` and `p` together, and until the denotation lost its
-fuel every such statement carried a budget that had nothing to do with the equation.
+`≡` is a claim about `T`, `μ`, `e` and `p` together. `denote` takes no fuel, so no such
+statement carries a budget that has nothing to do with the equation.
 
 A note on what refuting one of these means. `Codec.Equiv` is §6's `≡` — same held set,
 same member, `e` and `p` agreeing *where both are defined*. So the cheapest honest
@@ -408,28 +406,16 @@ theorem not_equiv_trans :
 
 /-! ## `(literal-N)`'s `ℓ ⊆ D`, and what it refuses
 
-`(number)` gates on §1's numeral domain, which is what the rule always claimed. `(literal-N)`
-now carries the same bound as a premise — the second and last of the two places the bound was
-forced outward, and the one that needed the specification amended rather than the model
-corrected.
+`(number)` gates on §1's numeral domain. `(literal-N)` carries the same bound, and the bound is
+the value carrier: `Value.num` carries a `WFNumeral`.
 
 It is the same set on both rules: **what DynamoDB accepts**, `Numeral.WF` of the text the
 value is written as. `literal` writes its values' own digits, so a double outside that domain
 would be written to an attribute `𝔸` has no point for, which is the one thing a term may
-never do. The premise sits beside `hne` and `hnd` because it is the same kind of fact: data
-the term owns, decidable at the declaration.
+never do. IEEE-754 has such doubles: NaN and 1e400 have no numeral that DynamoDB stores. -/
 
-What follows is what it buys and what it refuses. The refutations were conditional on a host
-number outside `D` existing, while the numeric host was axiomatized with the shortest-text round
-trip and nothing else: whether IEEE-754 has a value DynamoDB will not store is a fact about IEEE
-that the model deliberately does not assert. It was not a hypothetical — the shipped `literal(NaN)`
-wrote `⟨N, "NaN"⟩` and `literal(1e400)` wrote `⟨N, "Infinity"⟩`, both reachable with no cast,
-which is what settled the question the conditional leaves open. -/
-
-/-- **`literal-N` is a refinement of `number`, with nothing asked for.** This took
-    `hD : ∀ d ∈ ls.1, Numeral.WF d.toDec = true` and its docstring said the premise "is the
-    whole of what the prism needed". It still is; it is the VALUE carrier's now, so the
-    containment holds of every literal there is and of every value there is. -/
+/-- **`literal-N` is a refinement of `number`, with nothing asked for.** The bound `ℓ ⊆ D` is
+    the value carrier's, so the containment holds of every literal and of every value. -/
 theorem literalN_sub_number (y : WFNumeral) :
     ∀ v, (literalCodec .number y).T v → (baseCodec .number).T v := by
   rintro v rfl
@@ -444,18 +430,6 @@ A refutation that the premise is load-bearing needs a value outside `D` to point
 `Value.num` carries `WFNumeral`, so no such value exists: the gate is the value's carrier, and
 `ℓ ⊆ D` is true of everything that can be written down. "This cannot be derived" and "this
 cannot be written" are one claim, and a refutation needs a representable counterexample. -/
-
-/-! Two theorems here quantified over a derivation only to read `hD` back off it. With the gate
-in the carrier the derivation argument is unused, `#lint_calculus` reported it, and the honest
-response to that report is deletion rather than a sanction entry: one became `fun d _ => d.2`
-and the other became `literalN_sub_number` above, which needs no premise. A theorem whose
-hypothesis has become decoration is a description that has stopped describing.
-
-A third said no numeric literal outside `D` is derivable. It quantified over a carrier that had
-no closed term, because the carrier was a host axiom, so there was nothing to quantify over:
-"this cannot be derived" and "this cannot be written" were one claim, and only the theorem could
-go stale. `N` is carried exactly now and closed numeric literals exist, so the premise that made
-the two claims one is gone with the axiom. -/
 
 /-! ## `union(opaque, c)` is never separable
 

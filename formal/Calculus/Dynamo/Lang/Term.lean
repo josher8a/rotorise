@@ -16,9 +16,8 @@ Deep embedding. Notes:
 * An object's **payload** (§4) is a separate inductive for the same reason, one level up.
   `Body` is the key set, the slot function on it, and the open block, as one thing — so
   every table over terms has a *one-argument* `.object` row that delegates to a `Body`
-  companion, the way `denote`'s row delegates to `fieldSem` and `wildSem`. Threading three
-  arguments by hand through twenty tables was the only reason those three had to agree by
-  convention rather than by type.
+  companion, the way `denote`'s row delegates to `fieldSem` and `wildSem`. Three arguments
+  threaded by hand through each table would agree by convention rather than by type.
 -/
 
 /-! ## The DynamoDB rows of the generic functions
@@ -51,7 +50,7 @@ open Alg (Term.depth Body.depth Term.depthO Term.depth_le_depthL Term.depthO_le
     A bare `Value → Bool` decides nothing a table can see, and two things wanted to see it.
     A certificate cannot compare `set(literal k ls)` with another one while the predicate is a
     function, because the disjointness test reads a predicate only as data. And
-    `src/codec/term.ts` had already made the same move for the same reason: its predicate type is
+    `src/codec/term.ts` makes the same move for the same reason: its predicate type is
     `members | closure`, and its docstring says the declaration guard has to read the
     predicate as data. The model has `members` and `closure` and one more, `except`, which the
     host does not spell yet.
@@ -76,9 +75,7 @@ inductive Pred where
 /-- **A set of alternatives, as the predicate `Pred.members` carries.** Some alternative is the
     value, which is `inL` at each.
 
-    This is what `inL` was before a literal carried one value. It survives because a refinement
-    predicate is data over a `Finset` and a literal is not: `Pred.members` is the only remaining
-    set of alternatives in the language. -/
+    It exists because a refinement predicate is data over a `Finset` and a literal is not. -/
 def inLs (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
   decide (∃ x ∈ ls.1, inL k x v = true)
 
@@ -94,7 +91,7 @@ def inBase (k : GroundKind) (v : Value) : Bool := decide (v.member = k.member)
 
     The apart test never calls this: `Pred.apart` reads a `Pred`'s constructors, which are data.
 
-    **`members` keeps its `Finset`, and a literal no longer has one.** A refinement predicate is
+    **`members` carries a `Finset`, and a literal does not.** A refinement predicate is
     data over a set of alternatives; a literal is one value. `inLs` is the set form, built from
     `inL` at each alternative rather than as a membership row of its own. -/
 def Pred.eval : Pred → Value → Bool
@@ -273,7 +270,7 @@ def dynTableA : Alg.Table dynSyn.op := fun g => nomatch g
 /-! ## The term language at DynamoDB
 
 Each constructor keeps its spelling, as a `match_pattern` abbreviation: a pattern `.list pre sp
-suf` or `.string` matches as it did. -/
+suf` or `.string` matches with that spelling. -/
 
 /-- The term language of DynamoDB. -/
 abbrev Term := Alg.Term dynSyn
@@ -374,9 +371,9 @@ theorem req_never_presence :
 
 /-! ## `array` and `tuple`, as builders over `list`
 
-`Term.list` replaced three constructors, and these two keep the words that name the shapes
-a caller writes. They are definitions, so a *statement* about `.array c` reads as it always
-did, while a *match* goes through `.list`. -/
+`Term.list` is one constructor for three shapes, and these two keep the words that name the
+shapes a caller writes. They are definitions, so a *statement* about `.array c` reads as §3
+writes it, while a *match* goes through `.list`. -/
 
 /-- §3 `(array)`: every position under one codec, and no fixed position. -/
 def Term.array (elem : Term) : Term := .list [] (some elem) []
@@ -386,8 +383,8 @@ def Term.array (elem : Term) : Term := .list [] (some elem) []
     number of declared positions. -/
 def Term.tuple (elems : List Term) (tail : Option Term) : Term := .list elems tail []
 
-/-- §4 `(record)`: the object that declares no name and takes every key at one codec. It stopped
-    being a constructor when the open block became a block like any other, and its codec
+/-- §4 `(record)`: the object that declares no name and takes every key at one codec. It is not
+    a constructor, because the open block is a block like any other, and its codec
     `recordCodec` is the object codec of this body by definition. -/
 def Term.record (val : Term) : Term :=
   .object (.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some val))
@@ -395,15 +392,14 @@ def Term.record (val : Term) : Term :=
 /-- An **open object**: one that carries the open block, so a name it does not declare is held
     rather than refused.
 
-    §5's closed-option dischargers exclude exactly these, and they used to say so with three
-    quantifiers and a disequality — `∀ fields ff tr, t ≠ .object fields ff (.codec tr)` — at
-    seven statements. The payload is one thing now, so the exclusion is one decidable
-    question about it. `isOpenObject_eq_false` below is the form the disequality had. -/
+    §5's closed-option dischargers exclude exactly these. The payload is one thing, so the
+    exclusion is one decidable question about it. `isOpenObject_eq_false` below states the
+    exclusion as a quantified disequality. -/
 def Term.isOpenObject : Term → Bool
   | .object b => b.wild.isSome
   | _ => false
 
-/-- The old spelling of the premise, so a reader can see the two say the same thing. -/
+/-- The premise as a quantified disequality, so a reader can see the two say the same thing. -/
 theorem Term.isOpenObject_eq_false {t : Term} :
     t.isOpenObject = false ↔ ∀ b, t = .object b → b.wild = none := by
   constructor

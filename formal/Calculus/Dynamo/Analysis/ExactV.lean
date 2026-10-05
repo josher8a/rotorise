@@ -6,10 +6,10 @@ variable {α : Calculus.Table}
 /-!
 # §5 — exactness on the value side
 
-§5 used to state admission as a family of per-aspect tables, and every one of them was an
-**over**-approximation. `⊤` is sound for every term, so a row that claims nothing can never
-fail, and every defect caught in those tables was an imprecision rather than an
-unsoundness. `Adm` is admission as a *domain* instead: exact at every constructor.
+A per-aspect table of admission is an **over**-approximation. `⊤` is sound for every term, so
+a row that claims nothing can never fail, and every defect such a table catches is an
+imprecision rather than an unsoundness. `Adm` is admission as a *domain* instead: exact at
+every constructor.
 -/
 
 namespace Calculus
@@ -68,16 +68,16 @@ export Alg (valPresentT)
     guard of its body. A `mu` owes the premises of its body at each stage, and `soundnessIn`
     turns them into the laws of the limit. The row asks a codec **the calculus warrants**.
 
-    ### What "unanalysable" turned out to mean
+    ### What "unanalysable" means
 
-    `held` was on the unanalysable list because its adapter is a pair of Lean functions, and
+    `held` looks unanalysable because its adapter is a pair of Lean functions, and
     a function is not something a reader can look inside. But a row is not a reader: it is a
     function with the term and the table in hand, and the table gives the word of the term its
     pair `f` and `g` as data. It can apply them. `(c.through f g).e v = c.e (f v)` holds by
     `Iff.rfl`, so `held`'s writable set is the subterm's pulled back along `f` and cut by the caller-side term's row, with no
     appeal to `held`'s iso obligation.
 
-    Three senses had been running together: (i) the term does not carry the information —
+    The word has three senses: (i) the term does not carry the information —
     true of nothing here; (ii) the domain cannot be computed without running the codec — true
     of `opaq`, and the reason the row *does* run it; (iii) a reader cannot see through it — true
     of `held` and `opaq`, and not a property of the calculus. -/
@@ -109,8 +109,8 @@ instance dynPrimAdm : Alg.PrimAdm dynSyn where
 variable (α) in
 /-- **The joint admission predicate**: the generic row at DynamoDB, at the closed environment.
     A corpus term is closed, so its variables are bound inside it. One structural recursion
-    over the term, with the containers recursing through *this*, which is exactly what the
-    retired per-aspect rows failed to do. **Every row is exact** (`Adm_exact`). -/
+    over the term, with the containers recursing through *this*. **Every row is exact**
+    (`Adm_exact`). -/
 abbrev Adm (t : Term) : VP := Alg.Adm α dynTableA t []
 
 variable (α) in
@@ -269,15 +269,15 @@ theorem filter_AdmList (opts : List Term) (v : Value) :
     `(Adm_exact t v).mpr`. -/
 theorem Adm_exact (t : Term) : ExactV α t := Alg.Adm_exact t []
 
-/-- §5's empty-container argument, **derived**: the exact row still admits `[]`. -/
+/-- §5's empty-container argument, **derived**: the exact row admits `[]`. -/
 theorem Adm_array_nil (c : Term) : Adm α (.array c) (.arr []) = true := by
   simp [Term.array, Adm_rows, alignPL, alignP, zipP]
 
-/-- …and it is strictly sharper than the `⊤` that was standing in for it. -/
+/-- …and it is strictly sharper than `⊤`. -/
 theorem Adm_array_sharp : Adm α (.array (.literal .string "A")) (.arr [.str "B"]) = false := by
   simp [Term.array, Adm_rows, alignPL, alignP, zipP]
 
-/-- Nested, which the old row could not see at any depth. -/
+/-- Nested: the row sees the element at every depth. -/
 theorem Adm_array_nested :
     Adm α (.array (.array (.literal .string "A"))) (.arr [.arr [.str "B"]]) = false := by
   simp [Term.array, Adm_rows, alignPL, alignP, zipP]

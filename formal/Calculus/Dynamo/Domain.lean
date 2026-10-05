@@ -20,7 +20,7 @@ Mechanization of the specification, `docs/blueprint/src/content.tex`. Modelling 
   (`M`) are a `Finset Name` with a function on it. Unordered, unique and non-empty are
   properties of the type, so set-ness lives in the carrier and not in §2's `ker p`. The
   kernel's restriction is narrower than it looks: it rejects a `Finset` whose element type
-  is the datatype being declared, which is why `union`'s payload is still a list (see
+  is the datatype being declared, which is why `union`'s payload is a list (see
   `Calculus/Dynamo/Witness/LiteralArity1.lean`), and accepts one over a concrete type in the same constructor.
 * **`N` is carried exactly and this calculus assumes nothing about any numeric type.** The
   value side of `N` is `WFNumeral`, the subtype `Numeral.WF` cuts out, so there is no host
@@ -175,8 +175,8 @@ deriving DecidableEq, Repr
 /-- §1's `℘⁺fin(α)` — the **nonempty** finite subsets. The reference: *"DynamoDB does not
     support empty sets"*, and §1 types all three wire sets as `℘⁺fin`. Carried by the type
     rather than gated by a codec, for the same reason unorderedness and uniqueness are:
-    `{S : Finset α // S.Nonempty}` is admissible in a constructor, so the claim that only
-    a gate could enforce this was a claim worth testing. -/
+    `{S : Finset α // S.Nonempty}` is admissible in a constructor, so no gate needs to
+    enforce this. -/
 abbrev NEFinset (α : Type) := {S : Finset α // S.Nonempty}
 
 /-! **No order is on the set path, and none is needed.** Both sides of every wire set are a
@@ -194,14 +194,12 @@ concrete ones. -/
 /-- §1's `Numerals` — the strings DynamoDB accepts in an `N`, carried by the type. So
     `Carries(N)` is exact and `⟨N, "abc"⟩` is not an attribute at all.
 
-    The case for leaving the carrier unrefined was that a port should see the embedding `⌈·⌉`
-    is partial. That partiality is a fact about the **port's** attribute type, not the
-    model's. -/
+    A port sees the embedding `⌈·⌉` as partial. That partiality is a fact about the
+    **port's** attribute type, not the model's. -/
 abbrev WFNumeral := {x : Numeral // Numeral.WF x = true}
 
 /-- A literal numeral, with §1's check discharged where it is written. `WF` is decidable
-    by construction, so a concrete numeral carries its own proof and no witness in this
-    development had to change shape. -/
+    by construction, so a concrete numeral carries its own proof. -/
 def WFNumeral.of (x : Numeral) (h : Numeral.WF x = true := by decide) : WFNumeral := ⟨x, h⟩
 
 @[simp] theorem WFNumeral.of_val (x : Numeral) (h : Numeral.WF x = true) :
@@ -275,10 +273,8 @@ the bound is a parameter here, and a port instantiates it: `DynamoDB.maxNesting`
 
 A subtype `{as : List Attr // Attr.nestingL as ≤ 31}` puts `Attr` under its own declaration
 and the kernel refuses it, exactly as it refuses `Finset Attr`. So `Attr` above is the
-*unbounded* closure and the bound is stated about it rather than inside it. It was once
-recorded as "not typeable" and filed as disposed of on that answer alone; being un-typeable
-never made it un-checkable, and `src/` had to gate on it in the end. That failure mode is a
-checklist item in `docs/architecture.md`.
+*unbounded* closure and the bound is stated about it rather than inside it. Being
+un-typeable does not make the bound un-checkable, and `src/` gates on it.
 
 **It counts `L` and `M` and nothing else.** A scalar is not a document type. Neither is a
 wire set: `SS`/`NS`/`BS` carry payloads rather than attributes, so a set can neither nest

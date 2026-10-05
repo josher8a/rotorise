@@ -52,7 +52,7 @@ variable (α) in
     cannot take it: `Separates` is stated on `Adm`, in `ExactV.lean`, and
     the import chain is `Typing` then `Soundness` then `ExactV` then `ExactA` then this
     file. A premise here is four modules above the judgement it would constrain. So an undischarged
-    union stays *underivable* through `Obligations`, which is where it was, rather than becoming
+    union stays *underivable* through `Obligations`, which is where it is, rather than becoming
     unrepresentable.
 
     **And unrepresentable is not available anyway.** A `Term.union` carrying its own witness needs
