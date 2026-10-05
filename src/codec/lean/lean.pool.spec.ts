@@ -599,8 +599,7 @@ const evalRows = (p: PoolPair): string[] => {
 const sentinel = (count: number) => `pool: ${count} pairs checked`
 
 const evalModule = (pairs: readonly PoolPair[]): string =>
-    `import Calculus.Dynamo.Analysis.Meet
-import Calculus.Dynamo.Analysis.Compat
+    `import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Lang.Store
 
 /-!

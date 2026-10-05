@@ -478,7 +478,12 @@ type Bound = {
 /** A scope, and the functions that the theorem binds where the vector is quantified. */
 type At = Scope & { readonly bound?: Bound }
 
-/** The variable of one caller function, made on the first use. */
+/**
+ * **The name of one caller function, made on the first use.** A prefix names a variable of the
+ * theorem (`q0`, `r0`); the empty prefix names the index of an adapter's generator (`caller 0`).
+ * The key is the identity that the host reads, so one function is one name wherever the pair uses
+ * it.
+ */
 const boundName = (
     names: Map<unknown, string>,
     fn: unknown,
@@ -492,17 +497,13 @@ const boundName = (
 }
 
 /**
- * **The generator of one caller adapter**, made on the first use. The key is the term's caller-side
- * function, which `held` builds once for each adapter, so one adapter is one generator wherever the
- * pair uses it. The theorem quantifies the pair of each generator through the caller table.
+ * **How a vector closes a goal.** A closed goal closes by `decide`, which the kernel evaluates. A
+ * quantified goal binds a caller's function, and `decide` refuses a goal with a free variable, so
+ * the goal closes by the tactic `rfl`. The term `rfl` exhausts the default heartbeats on a refusal
+ * of two terms of about 600 characters, where the tactic closes the goal.
  */
-const callerOf = (generators: Map<unknown, string>, fn: unknown): string => {
-    const known = generators.get(fn)
-    if (known !== undefined) return known
-    const made = `${generators.size}`
-    generators.set(fn, made)
-    return made
-}
+const closing = (binders: string): string =>
+    binders === '' ? 'by decide' : 'by rfl'
 
 /** The binders of a quantified theorem, or nothing where the vector binds no function. */
 const leanBinders = (bound: Bound): string => {
@@ -651,7 +652,7 @@ const leanPredicate = (q: Predicate, at: string, bound?: Bound): string => {
             if (!known) {
                 return refuse(
                     at,
-                    `\`Pred.closure\` carries \`q : Value → Bool\`, and this predicate is not one this library ships — it is the caller's closure for ${JSON.stringify(q.q.what)}. The recognised ones are \`isNumeral\` and \`isStoredNumeral\` from \`src/codec/attribute.ts\`, passed by reference`,
+                    `\`Pred.closure\` carries \`q : Value → Bool\`, and this predicate is not one this library ships: it is the caller's closure for ${JSON.stringify(q.q.what)}, a JS closure. A quantified verdict binds it as a variable, and no evaluation vector prints one. The model names two predicates that this library ships, \`isNumeral\` and \`isStoredNumeral\` from \`src/codec/attribute.ts\`, passed by reference`,
                 )
             }
             return `(Pred.closure ${known.lean})`
@@ -849,12 +850,12 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
          */
         case 'held':
             if (t.via !== 'decimalText' && scope.bound)
-                return `(Term.held false (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) (.caller ${callerOf(scope.bound.adapters, t.via ?? t.f)}, false) [])`
+                return `(Term.held false (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) (.caller ${boundName(scope.bound.adapters, t.via ?? t.f, '')}, false) [])`
             return t.via === 'decimalText'
                 ? `(Term.held false (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) (.decimalText, false) [])`
                 : refuse(
                       at,
-                      "`Term.held` carries a word of adapter generators, and a table gives each generator two `Value → Value` functions. The library ships one generator the model names, `decimalText`, whose pair is `numeralOfStoredText`/`textOfNumeral`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted",
+                      "`Term.held` carries a word of adapter generators, and a table gives each generator two `Value → Value` functions: a quantified verdict binds an adapter that the model does not name as a generator `caller n`, and no evaluation vector prints one. An evaluation vector would have to run the adapter: a caller's closure has no name in the model, and a float adapter's content is binary64 rounding, the host axiom this development deleted. The model names one generator that this library ships, `decimalText`, whose pair is `numeralOfStoredText`/`textOfNumeral`",
                   )
         // the older reader is caller code: a quantified verdict binds it as a variable, and an
         // evaluation vector would have to run it
@@ -1086,8 +1087,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     } catch {
         refused = true
     }
-    // a caller's function is a variable of the theorem, and the kernel's `decide` refuses a goal
-    // with a free variable, so a quantified verdict reduces by `rfl`
+    // a caller's function is a variable of the theorem, and the goal closes as {@link closing} says
     const bound: Bound = {
         closures: new Map(),
         adapters: new Map(),
@@ -1097,9 +1097,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     const r = leanTermOf(right, name, bound)
     const binders = leanBinders(bound)
     const head = `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`
-    // the term \`rfl\` exhausts the default heartbeats on a refusal of two terms of about 600
-    // characters, where the tactic \`rfl\` closes the goal
-    const reduce = binders === '' ? 'by decide' : 'by rfl'
+    const reduce = closing(binders)
     // the guard reads the shape alone, so a quantified verdict closes the guard on a twin of one
     // shape that holds no free function, where \`decide\` runs on a closed goal
     const standIn: Bound = {
@@ -1164,9 +1162,9 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
  * The declaration verdicts as a module of their own, because they need the decision `compatPair`
  * and the dischargers of `PairwiseCompat`.
  *
- * The header imports `Calculus.Dynamo.Lang.Store` as well, because a verdict spells
- * `libTable` and `Callers`, which the DynamoDB port defines, and
- * `Meet` does not reach them. Lean
+ * The header imports `Calculus.Dynamo.Analysis.Compat`, which reaches `Meet`, and
+ * `Calculus.Dynamo.Lang.Store`, because a verdict spells `libTable` and `Callers`, which the
+ * DynamoDB port defines, and `Compat` does not reach them. Lean
  * auto-binds an unknown lower-case name, so the missing import reports a free variable in the
  * expected type of every verdict rather than an unknown identifier.
  *
@@ -1175,8 +1173,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
 export const leanSeparationModule = (
     separations: readonly Separation[],
 ): string =>
-    `import Calculus.Dynamo.Analysis.Meet
-import Calculus.Dynamo.Analysis.Compat
+    `import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Lang.Store
 
 /-!
@@ -1258,8 +1255,8 @@ export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
         )
     }
     const views = viewsDisjoint(one, other)
-    // a caller's function is a variable of the theorem, and the kernel's `decide` refuses a goal
-    // with a free variable, so a quantified pair reduces by `rfl`
+    // a caller's function is a variable of the theorem, and each conjunct closes as
+    // {@link closing} says
     const bound: Bound = {
         closures: new Map(),
         adapters: new Map(),
@@ -1274,7 +1271,7 @@ export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
         `    Alg.Term.disjoint pair0 (${l})`,
         `        (${r}) = ${disjoint(one, other)} ∧`,
         `      viewsDisjoint (${l})`,
-        `        (${r}) = ${views} := ${binders === '' ? 'by decide' : '⟨rfl, rfl⟩'}`,
+        `        (${r}) = ${views} := ⟨${closing(binders)}, ${closing(binders)}⟩`,
     ].join('\n')
 }
 
