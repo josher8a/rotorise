@@ -38,15 +38,15 @@ theorem selectF_not_monotone :
     selectF [optBot, optLit] (.str "A") = some (.s "A")
     ∧ selectF [optBad, optLit] (.str "A") = some (.s "B") := by
   constructor <;>
-    simp [selectF, select, optBot, optBad, optLit, cBad, ceBad, Codec.empty, literalCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, prism_rows, orient_rows]
+    simp [selectF, select, optBot, optBad, optLit, cBad, ceBad, Codec.empty, literalCodec, Alg.restrict_e_def, inL, prism_rows, orient_rows]
 
 /-- …and the obligation is exactly what that violates. -/
 theorem optBad_not_confluent : ¬ ConfluentAt [optBad, optLit] (.str "A") := by
   intro h
   have := h optBad (by simp) optLit (by simp)
     (by simp [optBad, cBad, ceBad])
-    (by simp [optLit, literalCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, prism_rows, orient_rows])
-  simp [optBad, optLit, cBad, ceBad, literalCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, prism_rows, orient_rows] at this
+    (by simp [optLit, literalCodec, Alg.restrict_e_def, inL, prism_rows, orient_rows])
+  simp [optBad, optLit, cBad, ceBad, literalCodec, Alg.restrict_e_def, inL, prism_rows, orient_rows] at this
 
 /-! **`string` beside the host's decimal is no witness.** The model has no decimal base, and no
 ground term writes text and stores `N`: the host's decimal is `held` over `number`, and `held` is

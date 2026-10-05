@@ -109,7 +109,7 @@ instance dynPrimAdm : Alg.PrimAdm dynSyn where
     | .literal k x, v => by
         show AdmLit k x v = true ↔ ((denote (fun _ => (id, id)) (.literal k x)).e v).isSome = true
         cases k <;> cases v <;>
-          simp [AdmLit, denote_rows, literalCodec, inL, inD, prism_rows, orient_rows]
+          simp [AdmLit, denote_rows, literalCodec, inL, prism_rows, orient_rows]
 
 variable (α) in
 /-- **The joint admission predicate**: the generic row at DynamoDB, at the closed environment.

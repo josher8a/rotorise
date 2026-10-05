@@ -46,7 +46,7 @@ theorem htuple_iff {tail : Option Term} {Tt} (hopt : TypedOpt α tail Tt)
       cases hopt with
       | none => rw [AdmOptT_none]; cases vs <;> simp [HTuple, alignP]
       | some hty => exact htuple_nil_some_iff hty (iht _ rfl) vs
-  | _, _, .cons _ _, _, [] => by rw [AdmList_cons]; simp [HTuple, alignP]
+  | _, _, .cons _ _, _, [] => by simp [HTuple, alignP]
   | _, _, .cons hty hs, ih, v :: vs => by
       rw [AdmList_cons]
       simp only [HTuple, alignP, Bool.and_eq_true]

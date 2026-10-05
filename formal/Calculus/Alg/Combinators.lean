@@ -204,10 +204,6 @@ theorem restrict_e_def (c : Codec V M) (q : V → Bool) :
     (c.restrict q).e = fun v => if q v then c.e v else none := by
   simp only [Codec.restrict, refine2_e_def, if_true, Option.bind_fun_some]
 
-/-- The read of a restriction: the predicate guards the value that the base reads. -/
-theorem restrict_p_def (c : Codec V M) (q : V → Bool) :
-    (c.restrict q).p = fun a => (c.p a).bind fun v => if q v then some v else none := rfl
-
 /-- **The combinator `held` and `refine` both are.** A partial iso either side of the
     pair: `f` in front of the writing, `g` behind the reading, both allowed to refuse.
 
