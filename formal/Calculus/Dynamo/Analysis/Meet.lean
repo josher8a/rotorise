@@ -20,7 +20,7 @@ predicate. DynamoDB supplies the laws of the leaves and of the set former (`dynL
 The caller view states its domain, and the stored view states its range. A `held` carries an adapter word,
 and the test reads no table, so the test reads a raw `held` as disjoint from the bottom alone. The views replace each `held`
 by a term that bounds its domain or its range, so the certificate asks the test of the two pairs
-of views (`certPair`). Two terms whose domains are disjoint and whose ranges are disjoint are
+of views (`viewsDisjoint`). Two terms whose domains are disjoint and whose ranges are disjoint are
 orthogonal: no value has two writers, and no attribute has two readers.
 
 **The two halves part at a `held`.** A `held` writes where its caller-side term writes and reads
@@ -438,7 +438,7 @@ mutual
     difference.** A variable holds a `held` only where its binder's body holds one, so a finer
     view keeps more predicates over a variable. `Term.disjoint` compares a data predicate only
     over a closed held-free inner term, so a predicate over a variable changes no verdict. An
-    example after `separates_of_certPair` pins the narrowing. -/
+    example after `separates_of_viewsDisjoint` pins the narrowing. -/
 def view (o : Orient) : Term → Term
   | .held s t P _ _ => bif s == o.c then view o P else view o t
   | .refine t p pA =>
@@ -467,18 +467,13 @@ def viewS (o : Orient) : ObjectSlot → ObjectSlot
   | .fill t _ => bif o.c then .optional (view o t) else .req (view o t)
 end
 
-/-- **Whether the two pairs of views are disjoint.** A term denotes a partial isomorphism.
-    The caller view states its domain and the stored view states its range. Two terms
-    whose domains are disjoint and whose ranges are disjoint are orthogonal. -/
-def viewsDisjoint (x y : Term) : Bool :=
-  Alg.Term.disjoint pair0 (view .host x) (view .host y) &&
-    Alg.Term.disjoint pair0 (view .dual x) (view .dual y)
-
-/-- **The certificate for one pair of options**: orthogonality. The domains are disjoint and the
-    ranges are disjoint, so the product of the two domain idempotents is zero and the product of
-    the two range idempotents is zero: the two options are orthogonal elements of an inverse
-    semigroup (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). So no value has two writers
-    and no attribute has two readers (`viewsDisjoint_adm`, `viewsDisjoint_admA`).
+/-- **Whether the two pairs of views are disjoint**: the certificate for one pair of options. A
+    term denotes a partial isomorphism. The caller view states its domain and the stored view
+    states its range. Where the domains are disjoint and the ranges are disjoint, the product of
+    the two domain idempotents is zero and the product of the two range idempotents is zero: the
+    two options are orthogonal elements of an inverse semigroup (Lawson, *Primer on inverse
+    semigroups I*, Lemma 2.16). So no value has two writers and no attribute has two readers
+    (`viewsDisjoint_adm`, `viewsDisjoint_admA`).
 
     **The views state the domain and the range of a `held`**, which the test does not read on a
     raw term. On a term with no `held`, the caller view is the term, and the stored view keeps
@@ -487,12 +482,14 @@ def viewsDisjoint (x y : Term) : Bool :=
     **A `refine` at a `closure` has an admission that is a function.** The test reads it through
     its inner term. So `refine string (closure q)` beside `list [] (some number) []` is
     certified, because `string` beside the list is disjoint. -/
-def certPair (x y : Term) : Bool := viewsDisjoint x y
+def viewsDisjoint (x y : Term) : Bool :=
+  Alg.Term.disjoint pair0 (view .host x) (view .host y) &&
+    Alg.Term.disjoint pair0 (view .dual x) (view .dual y)
 
 /-- The certificate over a list of options, pair by pair. -/
 def certAll : List Term → Bool
   | [] => true
-  | t :: ts => ts.all (fun u => certPair t u) && certAll ts
+  | t :: ts => ts.all (fun u => viewsDisjoint t u) && certAll ts
 
 /-- **The certificate a union must carry for its admission to be the join of its options'.**
     One condition. Each pair of options is certified, so no value and no attribute has two
@@ -505,7 +502,7 @@ def unionOk (os : List Term) : Bool :=
 
 /-- The certificate, in the pairwise form. -/
 theorem pairwise_of_certAll : ∀ {ts : List Term}, certAll ts = true →
-    List.Pairwise (fun x y => certPair x y = true) ts
+    List.Pairwise (fun x y => viewsDisjoint x y = true) ts
   | [], _ => .nil
   | _ :: _, h => by
       simp only [certAll, Bool.and_eq_true, List.all_eq_true] at h
@@ -625,12 +622,12 @@ theorem disjoint_refinedRecursion_bothOrders :
 
 /-- **The certificate of a union does not read the order of the options.** A recursive term
     beside a `held` over a refined recursive term is certified in both orders. -/
-theorem certPair_heldRecursion_bothOrders :
-    certPair (.mu (.union [Term.boolean, .object (.mk {"k"} (fun _ => .req (.var 0)) none)]))
+theorem viewsDisjoint_heldRecursion_bothOrders :
+    viewsDisjoint (.mu (.union [Term.boolean, .object (.mk {"k"} (fun _ => .req (.var 0)) none)]))
         (.held false Term.string (.refine (.mu (.union [Term.string,
           .object (.mk {"k"} (fun _ => .req (.var 0)) none)])) (.closure fun _ => true) ())
           (.caller 0, false) []) = true ∧
-      certPair (.held false Term.string (.refine (.mu (.union [Term.string,
+      viewsDisjoint (.held false Term.string (.refine (.mu (.union [Term.string,
           .object (.mk {"k"} (fun _ => .req (.var 0)) none)])) (.closure fun _ => true) ())
           (.caller 0, false) [])
         (.mu (.union [Term.boolean, .object (.mk {"k"} (fun _ => .req (.var 0)) none)])) = true := by
@@ -699,15 +696,15 @@ theorem disjoint_heldNE_base :
   decide
 
 /-- **A caller side that requires one element or more is certified** beside a list of numbers. -/
-theorem certPair_heldNE :
-    certPair (.held false (.set .string) (.list [.string] (some .string) []) (.caller 0, false) [])
+theorem viewsDisjoint_heldNE :
+    viewsDisjoint (.held false (.set .string) (.list [.string] (some .string) []) (.caller 0, false) [])
       (.list [] (some .number) []) = true := by
   decide
 
 /-- **A caller side that admits the empty list is refused**, because the list of numbers admits
     the empty list too. -/
-theorem certPair_heldAny :
-    certPair (.held false (.set .string) (.list [] (some .string) []) (.caller 0, false) [])
+theorem viewsDisjoint_heldAny :
+    viewsDisjoint (.held false (.set .string) (.list [] (some .string) []) (.caller 0, false) [])
       (.list [] (some .number) []) = false := by
   decide
 
@@ -715,15 +712,15 @@ theorem certPair_heldAny :
     recursive term is `mu (union [literal "1", list [] (some (var 0)) []])`, and the stored view
     is `mu (union [number, list [] (some (var 0)) []])`. Each is disjoint from
     `literal "A" ∪ literal "B"`. -/
-theorem certPair_heldBelowMu :
-    certPair (.union [.literal .string "A", .literal .string "B"])
+theorem viewsDisjoint_heldBelowMu :
+    viewsDisjoint (.union [.literal .string "A", .literal .string "B"])
       (.mu (.union [.held false .number (.literal .string "1") (.caller 0, false) [], .list [] (some (.var 0)) []]))
       = true := by
   decide
 
 /-- …and the pair is refused where the caller views share a value: the text `"1"`. -/
-theorem certPair_heldBelowMu_meets :
-    certPair (.literal .string "1")
+theorem viewsDisjoint_heldBelowMu_meets :
+    viewsDisjoint (.literal .string "1")
       (.mu (.union [.held false .number (.literal .string "1") (.caller 0, false) [], .list [] (some (.var 0)) []]))
       = false := by
   decide
@@ -1163,7 +1160,7 @@ theorem viewsDisjoint_admA {x y : Term} (h : viewsDisjoint x y = true) (a : Attr
   rw [e1, e2] at hr; exact nomatch hr
 
 /-- **The pair certificate is sound**: orthogonality separates the pair. -/
-theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates α x y := by
+theorem separates_of_viewsDisjoint {x y : Term} (h : viewsDisjoint x y = true) : Separates α x y := by
   refine ⟨fun v hx hy => ?_, fun a hx hy => ?_⟩
   · have := viewsDisjoint_adm (α := α) h v
     rw [hx, hy] at this; exact nomatch this
@@ -1177,7 +1174,7 @@ theorem separates_of_certPair {x y : Term} (h : certPair x y = true) : Separates
     two options write disjoint slots. The caller sides share `boolean`, so the caller views are
     not disjoint, and the certificate agrees with the host. -/
 example :
-    certPair (.set (.refine (.held false .string (.union [.string, .boolean]) (.caller 0, false) [])
+    viewsDisjoint (.set (.refine (.held false .string (.union [.string, .boolean]) (.caller 0, false) [])
         (.closure fun _ => true) ()))
       (.set (.held false .number (.union [.number, .boolean]) (.caller 1, false) [])) = false := by
   decide
@@ -1186,18 +1183,18 @@ example :
     separated: `mu (refine (union [string, array (var 0)]) {a})` admits the string `"a"` and no
     other string, and `refine string {b}` admits the string `"b"` alone. The test compares two
     data predicates only over closed held-free inner terms, and this inner term holds a variable.
-    So `certPair` answers `false`. The host builds no data predicate over a variable, so no
+    So `viewsDisjoint` answers `false`. The host builds no data predicate over a variable, so no
     observable distinguishes this test from a finer test. A finer test becomes necessary only
     when the host builds such a term. -/
 example :
-    certPair (.mu (.refine (.union [.string, .array (.var 0)]) (.members .string (NEFinset.of "a" ∅)) ()))
+    viewsDisjoint (.mu (.refine (.union [.string, .array (.var 0)]) (.members .string (NEFinset.of "a" ∅)) ()))
         (.refine .string (.members .string (NEFinset.of "b" ∅)) ()) = false := by
   decide
 
 /-- **A certified union is separated**, which is the premise of `pairwiseCompat_of_separated`
     and of `admitsAtMostOne_of_separated`. -/
 theorem separated_of_unionOk {os : List Term} (h : unionOk os = true) : Separated α os :=
-  (pairwise_of_certAll h).imp separates_of_certPair
+  (pairwise_of_certAll h).imp separates_of_viewsDisjoint
 
 
 end Calculus

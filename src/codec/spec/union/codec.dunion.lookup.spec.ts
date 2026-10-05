@@ -9,7 +9,7 @@
  * round-trip test: each option round-trips perfectly on its own.
  *
  * The model states neither defect, and it no longer keys anything by a tag: there is one sum. Two
- * options answering to one tag are not separated, so `Calculus.certPair` certifies nothing about them
+ * options answering to one tag are not separated, so `Calculus.viewsDisjoint` certifies nothing about them
  * and the union gets no certificate — `Calculus.admitsAtMostOne_of_separated` is what the
  * lookup would need and is exactly what such a pair withholds. The library built it anyway and let
  * the earlier option be overwritten. The refusal below is where the host states what the

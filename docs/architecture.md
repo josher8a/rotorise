@@ -580,13 +580,13 @@ is the discharger stated on what `select` actually decides by.
 
 ### The classifier, and what it is the specification of
 
-The union obligation is compatibility, and the certificate is sufficient for it. `certPair`
-certifies a pair where the two terms are orthogonal (`viewsDisjoint`).
+The union obligation is compatibility, and the certificate is sufficient for it. `viewsDisjoint`
+certifies a pair where the two terms are orthogonal.
 
 **The certificate is orthogonality.** A term denotes a partial isomorphism. The caller view,
 `view` at the host, states its domain. The stored view, `view` at the dual, states its range. In an inverse semigroup, two elements are
 orthogonal where the product of their domain idempotents is zero and the product of their range
-idempotents is zero (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). `certPair` asks
+idempotents is zero (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). `viewsDisjoint` asks
 `Term.disjoint` of the two caller views and of the two stored views. `Term.disjoint` reads a raw
 `held` as disjoint from the bottom alone, and a view holds no `held`, so a `held` reaches the
 certificate through its views. On a term with no `held`, the caller view is the term itself. The
@@ -658,7 +658,7 @@ the same forms, because the decision holds whatever codec the thunk names. Each 
 the guard, `Term.guarded`, and the guard reads a thunk that throws as the variable of a binder at
 the root of its option.
 
-**`certPair` is sufficient and not necessary.** A decline by `certPair` is not a refutation of
+**`viewsDisjoint` is sufficient and not necessary.** A decline by `viewsDisjoint` is not a refutation of
 compatibility. Two restrictions of one adapter are compatible in the model
 (`compat_of_common_bound`), and no certificate reaches such a pair where the two overlap. The
 decision reaches such a pair through the held row: `decimal('1', '2.5')` beside

@@ -993,7 +993,7 @@ shown compatible.
 \begin{definition}[the certificate]
 \label{def:certificate}
 \uses{cond:compat,def:family}
-\lean{Calculus.certPair, Calculus.viewsDisjoint, Calculus.Alg.Term.disjoint, Calculus.view, Calculus.Alg.hasHeld}
+\lean{Calculus.viewsDisjoint, Calculus.Alg.Term.disjoint, Calculus.view, Calculus.Alg.hasHeld}
 \leanok
 Two options are certified where they are orthogonal. A term denotes a partial isomorphism, and its caller view and its stored
 view are its domain and its range. Two terms are orthogonal where the product of their domain
@@ -1007,7 +1007,7 @@ reaches the certificate too. The stored view keeps a predicate only where the in
 \texttt{held}. The test compares two data predicates only over closed held-free inner terms, so the
 two views give one verdict. The
 test reads a closure through its inner term. A certified pair is separated
-(\texttt{separates\_of\_certPair}), so it is compatible. The certificate is sufficient and not
+(\texttt{separates\_of\_viewsDisjoint}), so it is compatible. The certificate is sufficient and not
 necessary: two restrictions of one adapter that overlap are compatible, and no certificate reaches
 them.
 \end{definition}

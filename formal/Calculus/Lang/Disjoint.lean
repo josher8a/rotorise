@@ -11,7 +11,7 @@ nothing: the test is sound, not complete.
 
 A term denotes a partial isomorphism, and its admission is the domain idempotent. Two terms are
 disjoint where the product of the two idempotents is zero, which is orthogonality in an inverse
-semigroup. The union certificate asks the test of the two pairs of views (`Calculus.certPair`).
+semigroup. The union certificate asks the test of the two pairs of views (`Calculus.viewsDisjoint`).
 Orthogonality is self-dual, so the test reads no orientation: each two-sided row reads both
 absolute sides, and the test at the dual universe is the test.
 

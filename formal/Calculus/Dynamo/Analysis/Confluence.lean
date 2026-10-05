@@ -80,7 +80,7 @@ theorem not_HF_oneHeld : ¬ HF oneHeld := nofun
 
 /-- **The views do not certify the constant adapter beside `string`.** Its caller side is
     `string`, so the caller-side views overlap. -/
-theorem certPair_oneHeld_string : certPair oneHeld .string = false := by
+theorem viewsDisjoint_oneHeld_string : viewsDisjoint oneHeld .string = false := by
   decide
 
 end Calculus
