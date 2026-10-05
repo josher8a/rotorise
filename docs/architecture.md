@@ -666,7 +666,7 @@ decision reaches such a pair through the held row: `decimal('1', '2.5')` beside
 terms agree.
 
 `Separated` is what names the separation guarantee over the option list, with
-`separated_of_unionOk` as the certificate's bridge into it.
+`separated_of_certAll` as the certificate's bridge into it.
 
 ---
 

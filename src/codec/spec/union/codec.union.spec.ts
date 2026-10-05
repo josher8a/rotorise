@@ -627,7 +627,8 @@ describe('an object option is admitted by attempt', () => {
      * **A union reads an object option as closed, and the option's term is what has to say so.**
      *
      * An undeclared name fails the `decode` of each closed option.
-     * `Calculus.unionOk` asks every object option for a closed body, which has no open block.
+     * The certificate `Calculus.certAll` asks no option for a closed body, so the term states the
+     * closure that the union reads.
      */
     it('states the closure a union reads its object options with', () => {
         const codec = union([object({ a: string }), object({ b: number })])
