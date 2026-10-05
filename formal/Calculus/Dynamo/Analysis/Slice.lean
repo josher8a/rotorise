@@ -12,9 +12,10 @@ clause describes; the exclusion keeps the options it rejects. Both give a union 
 options in the same order, and fewer of them.
 
 **The clause carries an `Alts` at each name it speaks about, and not a set of text.** A union
-option is told apart by the meet, which separates two objects at a `boolean` or a `binary`
-literal as well as at a `string` one, so a clause over text could not slice a union that the
-certificate certifies. Non-emptiness is `Alts`'s own, so the record below declares no such field.
+option is told apart by the disjointness test, which separates two objects at a `boolean` or a
+`binary` literal as well as at a `string` one, so a clause over text could not slice a union that
+the certificate certifies. Non-emptiness is `Alts`'s own, so the record below declares no such
+field.
 
 **The union's obligation survives a slice on its own.** Pairwise compatibility is a property of
 each pair of options, so any sub-selection keeps it, and the slice needs no certificate.

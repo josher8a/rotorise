@@ -50,7 +50,7 @@ open Alg (Term.depth Body.depth Term.depthO Term.depth_le_depthL Term.depthO_le
 
     A bare `Value → Bool` decides nothing a table can see, and two things wanted to see it.
     A certificate cannot compare `set(literal k ls)` with another one while the predicate is a
-    function, because the meet reads a predicate only as data. And
+    function, because the disjointness test reads a predicate only as data. And
     `src/codec/term.ts` had already made the same move for the same reason: its predicate type is
     `members | closure`, and its docstring says the declaration guard has to read the
     predicate as data. The model has `members` and `closure` and one more, `except`, which the
@@ -87,7 +87,7 @@ def inBase (k : GroundKind) (v : Value) : Bool := decide (v.member = k.member)
 
 /-- **What a `Pred` means.** The universe's `Alg.Syn.eval`, beside the type.
 
-    The meet never calls this: the meet reads a `Pred`'s constructors, which are data.
+    The apart test never calls this: `Pred.apart` reads a `Pred`'s constructors, which are data.
 
     **`members` keeps its `Finset`, and a literal no longer has one.** A refinement predicate is
     data over a set of alternatives; a literal is one value. `inLs` is the set form, built from

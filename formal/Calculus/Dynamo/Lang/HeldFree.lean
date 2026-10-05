@@ -17,8 +17,8 @@ reads.
 `Sub c d` is the inclusion of graphs on both halves. The set cases go through `setAt_congr` and
 `setAt_congr`.
 
-The file sits below the meet because the meet's `set` row reads it: over a held-free element, a
-set writes and reads exactly where each element does. `Confluence.lean` holds the payoffs.
+The file sits below the views because `setCodec_mono` reads it: over a held-free element, a set
+writes and reads exactly where each element does. `Confluence.lean` holds the payoffs.
 -/
 
 namespace Calculus

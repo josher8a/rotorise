@@ -12,9 +12,10 @@ variable {α : Calculus.Table}
 
 `Alg.Term.disjoint` decides that two terms share no value, and `Alg.disjoint_orthogonal` proves
 the decision sound over any signature. DynamoDB supplies the leaves (`dynLeaf`): two primitives
-meet at a primitive or at the bottom, and two data predicates meet at a predicate or at the empty
-predicate. DynamoDB supplies the laws of the leaves and of the set former (`dynLeafAdm`,
-`dynFormerAdm` and their read-side twins), and the shape classes (`dynShapes`).
+are apart where no value is both (`Ground.apart`), and two data predicates are apart where no
+value satisfies both (`Pred.apart`). DynamoDB supplies the laws of the leaves and of the set
+former (`dynLeafAdm`, `dynFormerAdm` and their read-side twins), and the shape classes
+(`dynShapes`).
 
 **The certificate reads the views, not the terms.** A term denotes a partial isomorphism.
 The caller view states its domain, and the stored view states its range. A `held` carries an adapter word,
