@@ -9,7 +9,7 @@ import Calculus.Alg.Maps
 /-!
 # The attribute domain
 
-Modelling choices, each recorded where it bites:
+Mechanization of the specification, `docs/blueprint/src/content.tex`. Modelling choices, each recorded where it bites:
 
 * `Numeral` is `String` — the *raw text a parser sees*. The carrier is not: `Attr.n`
   carries `WFNumeral`, the subtype `Numeral.WF` picks out, so `⟨N, "abc"⟩` is
