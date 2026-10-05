@@ -30,8 +30,6 @@ Finset.decidableMem
 Finset.disjUnion
 Finset.disjoint_left
 Finset.ext
-Finset.filter_eq_self
-Finset.filter_false_of_mem
 Finset.insert_nonempty
 Finset.instOrderBot
 Finset.instPartialOrder
@@ -49,7 +47,6 @@ Finset.mem_singleton._simp_1
 Finset.mem_union
 Finset.notMem_empty
 Finset.notMem_empty._simp_1
-Finset.sup_le
 Fintype.decidableExistsFintype
 Fintype.decidableForallFintype
 Lean.Core.CoreM
