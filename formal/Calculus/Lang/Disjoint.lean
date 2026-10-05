@@ -30,12 +30,13 @@ namespace Calculus.Alg
     of a term that the test cannot read structurally. The leaves are facts of the signature at
     each absolute side, so the dual universe has the leaves of the universe. -/
 class Leaf (B : Sig) where
-  /-- Two primitives met: a primitive, or `none` for two primitives that share no value. -/
-  prim : B.Ground → B.Ground → Option B.Ground
+  /-- Whether two primitives share no value. -/
+  primsApart : B.Ground → B.Ground → Bool
   /-- Whether a predicate is data that the test can compare with another. -/
   isData : (s : Bool) → B.P s → Bool
-  /-- Two predicates met: `none` refuses, `some none` is empty, `some (some r)` is `r`. -/
-  pmeet : (s : Bool) → B.P s → B.P s → Option (Option (B.P s))
+  /-- Whether two predicates hold together nowhere. `false` says nothing: the test reads no more
+      of a predicate than this answer. -/
+  predicatesApart : (s : Bool) → B.P s → B.P s → Bool
 
 variable {S : Sig}
 
@@ -150,7 +151,7 @@ end
     so two such refinements send one value and one attribute to each other. -/
 def predApart [Leaf S] (s : Bool) (q : S.P s) : Term S → Bool
   | .refine y q' qA' => (Leaf.isData s (half s q' qA') && !hasHeld y && !y.hasVar &&
-      (match Leaf.pmeet s q (half s q' qA') with | some none => true | _ => false)) ||
+      Leaf.predicatesApart s q (half s q' qA')) ||
         predApart s q y
   | _ => false
 
@@ -163,7 +164,7 @@ def dataApart [Leaf S] (x : Term S) (s : Bool) (q : S.P s) (y : Term S) : Bool :
     and from every former, because two formers of different shape classes share no value. The
     top and a function-valued admission are disjoint from nothing. -/
 def famPrimD [Leaf S] (g : S.Ground) : Term S → Bool
-  | .prim g' => (Leaf.prim g g').isNone
+  | .prim g' => Leaf.primsApart g g'
   | .set _ | .list _ _ _ | .object _ => true
   | _ => false
 

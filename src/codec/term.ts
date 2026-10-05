@@ -2019,7 +2019,7 @@ const predicateApart = (q: Predicate, y: Term, w: Walk): boolean => {
 }
 
 /**
- * **Two predicates that hold together nowhere**: the model's `Pred.meetM` at the empty predicate.
+ * **Two predicates that hold together nowhere**, the model's `Pred.apart`.
  * Two `members` sets at two bases share no value, and at one base they share a value where they
  * share an alternative. A `closure` is not data.
  */
@@ -2053,7 +2053,7 @@ const otherShape = (
         classes.includes(t.kind))
 
 /**
- * **Two primitives apart**, the model's `Ground.meet` at `none`: two bases of different kinds,
+ * **Two primitives apart**, the model's `Ground.apart`: two bases of different kinds,
  * a literal beside another base, and two literals of different values.
  */
 const primsApart = (x: Term, y: Term): boolean => {
