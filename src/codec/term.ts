@@ -911,8 +911,7 @@ export const viewsDisjoint = (x: Term, y: Term): boolean =>
  *
  * The walk forces each thunk once and reads through it. A thunk that the walk meets again is
  * recursive, and a thunk that throws names a codec that is not yet declared. Each answers
- * "reaches". {@link heldFree} asks for no adapter, because the model's confluence holds only
- * there.
+ * "reaches".
  */
 const reaches = (
     t: Term,
@@ -1174,13 +1173,6 @@ const storedView = throughThunks((t, view) => {
 })
 
 /**
- * **Whether the walk shows a term held-free**, the model's `HF`: the term as the model spells it
- * holds no adapter ({@link holdsAdapter}).
- */
-const heldFree = (t: Term): boolean =>
-    !holdsAdapter(t, { binds: bindersOf(t), inside: [] })
-
-/**
  * **Whether a `withLegacyRead` occurs in the term.** The model states the read widening as
  * `Term.legacy`, and the judgement `Typed` has no rule for it, because the pair is not a partial
  * bijection. The law of `set`, `lawful_setCodec`, needs a lawful element, so no law covers a set
@@ -1199,17 +1191,6 @@ const sameAdapter = (
     y: Extract<Term, { kind: 'held' }>,
 ): boolean =>
     (x.via !== undefined && x.via === y.via) || (x.f === y.f && x.g === y.g)
-
-/**
- * **Whether the declaration shows two options compatible**, which is what `union` asks of a pair.
- *
- * A union is the join of its options, and the join of two lawful options exists exactly when the
- * two are compatible (Lawson: `s ∨ t` exists iff `s ∼ t`). Compatibility of two partial
- * bijections is two halves of agreement: two writers of one value write one attribute, and two
- * readers of one attribute read one value. {@link agrees} is the model's `compatPair`, which
- * decides each half per component (`pairwiseCompat_of_compatPair`).
- */
-export const compatible = (x: Term, y: Term): boolean => agrees(x, y)
 
 /* ── the compatibility decision ───────────────────────────────────────────────────────── */
 
@@ -1305,7 +1286,10 @@ const pushBinder = (
 
 /**
  * **Whether two options agree on both halves**, the model's `compatPair` at `dynOracle`, which
- * holds at every codec that a thunk that throws later names.
+ * holds at every codec that a thunk that throws later names. A union is the join of its options,
+ * and the join of two lawful options exists exactly when the two are compatible (Lawson: `s ∨ t`
+ * exists iff `s ∼ t`). Compatibility of two partial bijections is two halves of agreement: two
+ * writers of one value write one attribute, and two readers of one attribute read one value.
  * The decision reads each operand as the model spells it, as {@link disjoint} does.
  */
 export const agrees = (x: Term, y: Term): boolean => {
@@ -1370,39 +1354,11 @@ const holdsAdapter = (t: Term, scope: Scope): boolean => {
 
 /**
  * **Whether the spelling of a term reads a free variable**: a thunk that names a codec not yet
- * declared. The model spells such a thunk as a variable that no binder binds, and a closed
- * denotation reads it as the bottom, where the host reads it as an unknown codec.
+ * declared. The model spells such a thunk as a variable that no binder binds, so the term is not
+ * closed at its root ({@link closedAt}).
  */
-export const readsFreeVariable = (t: Term): boolean => {
-    const walk = (u: Term, scope: Scope): boolean => {
-        const one = see(u, scope)
-        if (one.kind === 'mu') return walk(one.body, one.scope)
-        if (one.kind !== 'term') return one.kind === 'free'
-        const on = (inner: Term) => walk(inner, scope)
-        const v = one.t
-        switch (v.kind) {
-            case 'held':
-                return on(v.inner) || on(v.outer)
-            case 'refine':
-            case 'legacy':
-                return on(v.inner)
-            case 'set':
-                return on(v.elem)
-            case 'list':
-                return positionsOf(v).some(on)
-            case 'object':
-                return (
-                    Object.values(v.body.fields).some((field) => on(field.t)) ||
-                    (v.body.rest !== undefined && on(v.body.rest))
-                )
-            case 'union':
-                return v.options.some(on)
-            default:
-                return false
-        }
-    }
-    return walk(t, { binds: bindersOf(t), inside: [] })
-}
+export const readsFreeVariable = (t: Term): boolean =>
+    !closedAt(t, { binds: bindersOf(t), inside: [] })
 
 /** The bottom, as the model spells it at the scope. */
 const isNeverAt = (t: Term, scope: Scope): boolean => {
