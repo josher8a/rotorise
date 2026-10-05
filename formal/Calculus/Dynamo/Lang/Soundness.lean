@@ -28,9 +28,10 @@ open Alg (Body.fields_mk Body.wild_mk Body.at_mk Term.depth)
 
 
 variable (α) in
-/-- **The union's obligation**: its options are pairwise compatible. -/
-def PairwiseCompat (opts : List Term) (ρ : List Codec := []) : Prop :=
-  ∀ s ∈ opts, ∀ t ∈ opts, Compat (denote α s ρ) (denote α t ρ)
+/-- **The union's obligation**: its options are pairwise compatible. It is the generic
+    `Alg.PairwiseCompat` at the DynamoDB signature, as `denote` is. -/
+abbrev PairwiseCompat (opts : List Term) (ρ : List Codec := []) : Prop :=
+  Alg.PairwiseCompat α dynTableA opts ρ
 
 /-- A premise of the form `∀ t ∈ [x, y], P t`, checked at the two options. -/
 theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy : P y) :
