@@ -35,15 +35,6 @@ abbrev VP := Value → Bool
    generic guard, and no caller reaches it by field notation. -/
 export Alg (valPresentT)
 
-/-- What the literal codec **writes**, exactly.
-
-    The row is `inL`, with no `Numeral.WF` conjunct. `GroundKind.number.Carrier` is
-    `WFNumeral`, so an alternative outside §1's `D` has no representation, and `inL`'s own row
-    splits on the gate. So membership is exact at every base, and `Adm_exact` covers the literal
-    with nothing added to make the row and the codec agree. -/
-def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
-  inL k x v
-
 /-! ## The rows that ask their own codec
 
     `mu` is the recursive term, and its row below **does not describe a set at all**. The row
@@ -94,22 +85,26 @@ def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
 /-! ## DynamoDB is an instance
 
 The structure of `Adm` and its exactness are the term language's (`Alg.Adm`, `Alg.Adm_exact`).
-DynamoDB supplies the primitive rows, `inBase` and `AdmLit`, and their exactness. -/
+DynamoDB supplies the primitive rows, `inBase` and `inL`, and their exactness. -/
 
-/-- The DynamoDB primitive rows: `inBase` at a base and `AdmLit` at a literal. -/
+/-- The DynamoDB primitive rows: `inBase` at a base and `inL` at a literal.
+
+    The literal row is `inL`, with no `Numeral.WF` conjunct. `GroundKind.number.Carrier` is
+    `WFNumeral`, so an alternative outside §1's `D` has no representation. So membership is exact
+    at every base, and `Adm_exact` covers the literal with nothing added. -/
 instance dynPrimAdm : Alg.PrimAdm dynSyn where
   admV
     | .base k => inBase k
-    | .literal k x => AdmLit k x
+    | .literal k x => inL k x
   admV_exact
     | .base k, v => by
         show decide (v.member = k.member) = true ↔
           ((Alg.fiberCodec Attr.member k.member).f .host v).isSome = true
         rw [Alg.fiberCodec_isSome]
     | .literal k x, v => by
-        show AdmLit k x v = true ↔ ((denote (fun _ => (id, id)) (.literal k x)).e v).isSome = true
+        show inL k x v = true ↔ ((denote (fun _ => (id, id)) (.literal k x)).e v).isSome = true
         cases k <;> cases v <;>
-          simp [AdmLit, denote_rows, literalCodec, inL, prism_rows, orient_rows]
+          simp [denote_rows, literalCodec, inL, prism_rows, orient_rows]
 
 variable (α) in
 /-- **The joint admission predicate**: the generic row at DynamoDB, at the closed environment.
@@ -246,7 +241,7 @@ theorem AdmAny_iff : ∀ {os : List Term} {v : Value},
 /-- `Adm`'s literal row. The row's pattern is *dependent*, since `ls`'s type mentions `k`, so
     the row is stated once here, at an applied value. -/
 @[simp, Adm_rows] theorem Adm_literal (k : GroundKind) (x : k.Carrier) (v : Value) :
-    Adm α (.literal k x) v = AdmLit k x v := rfl
+    Adm α (.literal k x) v = inL k x v := rfl
 
 variable (α) in
 /-- §5's converse direction: the row is `dom(e)`, not merely a bound on it. -/
@@ -280,12 +275,12 @@ theorem Adm_array_nil (c : Term) : Adm α (.array c) (.arr []) = true := by
 
 /-- …and it is strictly sharper than the `⊤` that was standing in for it. -/
 theorem Adm_array_sharp : Adm α (.array (.literal .string "A")) (.arr [.str "B"]) = false := by
-  simp [Term.array, Adm_rows, alignPL, alignP, zipP, AdmLit]
+  simp [Term.array, Adm_rows, alignPL, alignP, zipP]
 
 /-- Nested, which the old row could not see at any depth. -/
 theorem Adm_array_nested :
     Adm α (.array (.array (.literal .string "A"))) (.arr [.arr [.str "B"]]) = false := by
-  simp [Term.array, Adm_rows, alignPL, alignP, zipP, AdmLit]
+  simp [Term.array, Adm_rows, alignPL, alignP, zipP]
 
 
 /-- Soundness of every row, **a corollary.** The rows of `set` and `union` are exact, so

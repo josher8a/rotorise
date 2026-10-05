@@ -197,7 +197,7 @@ theorem typed_T_adm : ∀ {t T μ}, Typed α t T μ → Obligations α t →
   | t, T, μ, h, hob, v => by
     cases h with
     | base k => cases k <;> cases v <;> simp [Adm_rows, inBase, -Subtype.exists, prism_rows]
-    | literal k x => simp [HLit, Adm_rows, AdmLit, inL_iff]
+    | literal k x => simp [HLit, Adm_rows, inL_iff]
     | never => simp [HNever, Adm_rows]
     | opaq => exact ⟨fun _ => rfl, fun _ => trivial⟩
     | var _ => simp [HNever, Adm_rows]

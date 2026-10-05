@@ -63,7 +63,7 @@ abbrev AP := Attr → Bool
 The structure of `AdmA` and its exactness are the term language's (`Alg.AdmA`,
 `Alg.AdmA_exact`). With one carrier, each DynamoDB primitive is one map at both orientations
 (`ground_selfdual`). So the read-side rows of the primitives are the write-side rows, `inBase`
-and `AdmLit`, and their exactness is the write-side exactness. -/
+and `inL`, and their exactness is the write-side exactness. -/
 
 /-- **Each DynamoDB primitive is one map at both orientations.** A primitive accepts a datum and
     changes nothing, so its read is its write. -/
@@ -187,7 +187,7 @@ def AdmAAny (ts : List Term) (a : Attr) : Bool := anyP (AdmAList α ts) a
 
 /-- `AdmA`'s literal row, named — for the reason `Adm_literal` gives. -/
 @[simp, AdmA_rows] theorem AdmA_literal (k : GroundKind) (x : k.Carrier) (a : Attr) :
-    AdmA α (.literal k x) a = AdmLit k x a := rfl
+    AdmA α (.literal k x) a = inL k x a := rfl
 
 variable (α) in
 /-- The converse direction on the attribute side: the row is `dom(p)`, not a bound on it. -/
