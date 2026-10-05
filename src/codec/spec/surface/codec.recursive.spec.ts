@@ -280,3 +280,45 @@ describe('a union that names itself', () => {
         ).toBeInstanceOf(CodecError)
     })
 })
+
+/**
+ * **The model's guard refuses a recursion that reads the input of its own binder.** With no list or
+ * object on the path, each stage reads the same input, and encode overflows the stack. Each former
+ * refuses such a term at its declaration, as `union` refuses such an option.
+ */
+describe('a recursion is refused or accepted where it is declared, as the model guards each binder', () => {
+    it('a recursion that reads its own input with no list or object between is refused where it is declared', () => {
+        const X: AnyCodec = lazy(() => X as never) as never
+        const P: AnyCodec = lazy(() => Q as never) as never
+        const Q: AnyCodec = lazy(() => P as never) as never
+        const between = /with no list or object between/
+        expect(() => object({ a: X as never })).toThrow(between)
+        expect(() => array(X as never)).toThrow(between)
+        expect(() => object({ a: P as never })).toThrow(between)
+    })
+
+    it('a union accepts a guarded recursion that it reaches through options and thunks with no container', () => {
+        const Tree: AnyCodec = lazy(() =>
+            object({ kids: array(Tree as never) }),
+        ) as never
+        const Twice = lazy(() => lazy(() => Tree as never))
+        const Self: AttributeCodec<Tree> = lazy(() =>
+            union([string, array(Self)]),
+        )
+        const options = union([string, Tree as never])
+        expect(options.unsafeEncode({ kids: [{ kids: [] }] } as never)).toEqual(
+            { M: { kids: { L: [{ M: { kids: { L: [] } } }] } } },
+        )
+        expect(() => union([string, Twice as never])).not.toThrow()
+        expect(Self.unsafeEncode(['x'])).toEqual({ L: [{ S: 'x' }] })
+    })
+
+    it('a thunk that two positions share without a cycle is no recursion', () => {
+        const shared = lazy(() => string)
+        const Pair = object({ a: shared, b: optional(shared) })
+        expect(Pair.unsafeEncode({ a: 'x', b: 'y' })).toEqual({
+            M: { a: { S: 'x' }, b: { S: 'y' } },
+        })
+        expect(() => array(object({ a: shared, b: shared }))).not.toThrow()
+    })
+})

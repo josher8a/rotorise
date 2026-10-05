@@ -1050,9 +1050,9 @@ const set = <const C extends AnyCodec>(
     // **The DynamoDB set obligation, and nothing of the algebra.** A stored set, `SS`, `NS` or `BS`,
     // holds elements of one scalar member, which is the model's `SetElem`; the lift of any lawful
     // element is lawful (`lawful_setCodec`), so this refusal belongs to the store universe. A thunk
-    // element answers no member here, because the host cannot force a thunk safely at declaration:
-    // forcing a recursive thunk can loop, which is a limit of the host's carrier. So a set of a
-    // thunk is refused
+    // element answers no member here, because `memberOf` does not read through a thunk. So a set
+    // of a thunk is refused. A stored set holds strings, numbers or binary, and none of those
+    // recurse, so the refusal loses no set
     const member = memberOf(inner.def)
     if (member !== 'S' && member !== 'N' && member !== 'B') {
         throw new CodecError(
@@ -1975,12 +1975,18 @@ export function withLegacyRead<const C extends AnyCodec>(
  * A codec resolved on first use, so an entity can contain itself.
  *
  * `item()` evaluates its spec eagerly, so a category whose children are categories cannot name
- * itself — the constant is not initialised yet. A thunk defers that to the first encode, decode or
- * path walk, by which time it is.
+ * itself — the constant is not initialised yet. A thunk defers the read of the name while the name
+ * is in progress, and no longer.
  *
- * Resolved once and kept. Declares no {@link AttributeCodec.member}: reading one would force
- * resolution at construction, which is the cycle this exists to break, so a lazy codec cannot be a
- * set's element — no loss, since a set holds strings, numbers or binary and none of those recurse.
+ * **A former above the thunk runs the thunk at the declaration of that former**, because each
+ * former refuses a recursion that the model's guard refuses, and the guard reads the codec that the
+ * thunk returns. The call of `lazy` runs nothing. A thunk that names a constant not yet declared,
+ * or the thunk under resolution, or a thunk whose former refuses while that name is in progress,
+ * leaves no mark. That thunk runs again at the next former, encode, decode or path walk.
+ *
+ * Resolved once and kept. Declares no {@link AttributeCodec.member}: the call of `lazy` runs
+ * nothing, so a lazy codec cannot be a set's element — no loss, since a set holds strings, numbers
+ * or binary and none of those recurse.
  *
  * @example
  * ```ts

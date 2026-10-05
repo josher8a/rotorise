@@ -465,14 +465,15 @@ describe('a union refuses a thunk it must read at its own input, because the mod
     })
 
     /**
-     * **An adapter on the path of a recursion is refused, and the refusal names the option.** The
+     * **An adapter on the path of a recursion is refused where the adapter is declared.** The
      * model's guard refuses a `held` between a binder and its variable, because the conversion can
      * make the input deeper, so the stages need not agree. A list on the path bounds nothing then.
+     * At the declaration of the `held`, the thunk below the `held` names a constant not yet
+     * declared, so the `held` refuses before any union or object above it reads it.
      */
-    it('refuses a held between a recursive thunk and the codec it returns, and names the option', () => {
+    it('refuses a held between a recursive thunk and the codec it returns where the held is declared, before a union reads it', () => {
         const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
-        // at its own declaration the thunk throws, because the constant is not yet declared
-        const declare = () => {
+        const inUnion = () => {
             const self: AnyCodec = union([
                 string,
                 array(
@@ -485,39 +486,40 @@ describe('a union refuses a thunk it must read at its own input, because the mod
             ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
             return self
         }
-        expect(declare).toThrow(/option 2 of this union holds an adapter/)
-        // declared outside a union, the cycle is complete when a union reads it
-        const kids: AnyCodec = object({
-            kids: array(
-                held(
-                    lazy(() => kids as never),
-                    lazy(() => kids as never),
-                    same,
+        expect(inUnion).toThrow(/this `held` term holds an adapter/)
+        const inObject = () => {
+            const kids: AnyCodec = object({
+                kids: array(
+                    held(
+                        lazy(() => kids as never),
+                        lazy(() => kids as never),
+                        same,
+                    ),
                 ),
-            ),
-        }) as unknown as AnyCodec
-        expect(() =>
-            union([number, kids] as unknown as readonly AnyCodec[]),
-        ).toThrow(/option 2 of this union holds an adapter/)
+            }) as unknown as AnyCodec
+            return kids
+        }
+        expect(inObject).toThrow(/this `held` term holds an adapter/)
     })
 
     /**
-     * **An older reader on the path of a recursion is refused as an adapter is.** The read writes the
-     * older reader's answer through the inner term, and the answer has any depth, so a container on
-     * the path bounds nothing.
+     * **An older reader on the path of a recursion is refused as an adapter is, where the reader is
+     * declared.** The read writes the older reader's answer through the inner term, and the answer
+     * has any depth, so a container on the path bounds nothing.
      */
-    it('refuses a withLegacyRead between a recursive thunk and the codec it returns', () => {
-        const kids: AnyCodec = object({
-            kids: array(
-                withLegacyRead({
-                    current: lazy(() => kids as never),
-                    older: { decode: () => ({ kids: [] }) as never },
-                }),
-            ),
-        }) as unknown as AnyCodec
-        expect(() =>
-            union([number, kids] as unknown as readonly AnyCodec[]),
-        ).toThrow(/option 2 of this union holds an adapter/)
+    it('refuses a withLegacyRead between a recursive thunk and the codec it returns where the withLegacyRead is declared', () => {
+        const declare = () => {
+            const kids: AnyCodec = object({
+                kids: array(
+                    withLegacyRead({
+                        current: lazy(() => kids as never),
+                        older: { decode: () => ({ kids: [] }) as never },
+                    }),
+                ),
+            }) as unknown as AnyCodec
+            return kids
+        }
+        expect(declare).toThrow(/this `legacy` term holds an adapter/)
     })
 
     it('accepts a recursion below a list or an object with no adapter on its path', () => {
