@@ -59,7 +59,7 @@ omit [PrimAdmA S] in
 /-- **A held-free closed term lies below the top**, from the laws of the top. -/
 instance TopBound.ofLaws [TopLaws S] : TopBound S where
   sub_top t hh hv ρ := by
-    rw [denote_closed t hv ρ []]
+    rw [denote_of_closed t hv ρ []]
     exact sub_denoteIn (S := S) t hh [] fun i => by
       simp only [envAt, List.getD_nil]; exact sub_empty
 

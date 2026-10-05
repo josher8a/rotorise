@@ -124,12 +124,6 @@ theorem AdmA_eq_isSome (t : Term S) (ρ : List S.C) (a : S.V) :
     AdmA α β t ρ a = ((denote α β t ρ).f S.o.op a).isSome :=
   Bool.eq_iff_iff.mpr (AdmA_exact t ρ a)
 
-/-- **A term with no variable reads one set of attributes under every environment.** -/
-theorem AdmA_closed (t : Term S) (h : t.hasVar = false) (ρ ρ' : List S.C) :
-    AdmA α β t ρ = AdmA α β t ρ' := by
-  funext a
-  rw [AdmA_eq_isSome, AdmA_eq_isSome, denote_closed t h ρ ρ']
-
 end
 
 end Calculus.Alg

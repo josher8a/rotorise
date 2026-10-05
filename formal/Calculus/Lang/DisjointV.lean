@@ -201,7 +201,7 @@ class LeafMeet (B : Sig) [Mean B] [Leaf B] : Prop where
     value, and a predicate at either side reads that one element. -/
 class TopBound (S : Syn) [Sem S] : Prop where
   sub_top : ∀ {α : Table S} {β : Table S.op} (t : Term S), hasHeld t = false →
-    t.hasVar = false → ∀ ρ : List S.C, Sub (denote α β t ρ) (Syn.top (S := S))
+    t.closed = true → ∀ ρ : List S.C, Sub (denote α β t ρ) (Syn.top (S := S))
 
 
 /-! ## Soundness, on the write side -/
@@ -364,7 +364,7 @@ theorem Wraps.below {w : Term S → Term S} (hw : Wraps α β w) {x t t' : Term 
 mutual
 /-- **The split of the right operand is sound**, given a sound family at every pairing that
     keeps the environments apart, and a wrapper that holds the refinements above the split. -/
-theorem splitR_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
+theorem splitR_sound [Leaf S] {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
     (hf : ∀ q ρ', ApartV q ρ ρ' → DisjSound α β ρ ρ' x (fam q)) :
     ∀ (y : Term S) (p : Pairing) (ρ' : List S.C) (w : Term S → Term S), Wraps α β w →
       ApartV p ρ ρ' → splitR fam p w y = true →
@@ -384,8 +384,8 @@ theorem splitR_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → 
   | .refine y q qA, p, ρ', w, hw, hp, h, v => by
       simp only [splitR] at h
       split at h
-      · exact hw.below (fun _ hb => (refine2_f.mp hb).2.1) (splitR_sound hf y p ρ' w hw hp h v)
       · exact splitR_sound hf y p ρ' _ (hw.refine q qA) hp h v
+      · exact hw.below (fun _ hb => (refine2_f.mp hb).2.1) (splitR_sound hf y p ρ' w hw hp h v)
   | .mu b, p, ρ', w, hw, hp, h, v => by
       simp only [splitR, Bool.or_eq_true] at h
       rcases h with h | h
@@ -401,7 +401,7 @@ theorem splitR_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → 
   | .object b, p, ρ', _, _, hp, h, v => hf p ρ' hp _ (by simpa only [splitR] using h) v
   | .var j, p, ρ', _, _, hp, h, v => hf p ρ' hp _ (by simpa only [splitR] using h) v
 /-- …and over each option of a union. -/
-theorem splitRL_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
+theorem splitRL_sound [Leaf S] {ρ : List S.C} {x : Term S} {fam : Pairing → Term S → Bool}
     (hf : ∀ q ρ', ApartV q ρ ρ' → DisjSound α β ρ ρ' x (fam q)) :
     ∀ (ys : List (Term S)) (p : Pairing) (ρ' : List S.C) (w : Term S → Term S), Wraps α β w →
       ApartV p ρ ρ' → splitRL fam p w ys = true →

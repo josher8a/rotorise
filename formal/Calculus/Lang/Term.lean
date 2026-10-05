@@ -733,33 +733,6 @@ end
 
 
 mutual
-/-- Whether a variable occurs in the term. A term with no variable denotes one codec under every
-    environment (`denote_closed`). -/
-def Term.hasVar : Term S → Bool
-  | .var _ => true
-  | .refine t _ _ | .legacy t _ | .mu t | .set t => Term.hasVar t
-  | .held _ t P _ _ => Term.hasVar t || Term.hasVar P
-  | .list pre sp suf => Term.hasVarL pre || Term.hasVarO sp || Term.hasVarL suf
-  | .object b => Body.hasVar b
-  | .union os => Term.hasVarL os
-  | .prim _ | .opaq | .never => false
-/-- …in a body: in a declared slot or in the open block. -/
-def Body.hasVar : Body S → Bool
-  | .mk fs f w => decide (∃ k : {k // k ∈ fs}, ObjectSlot.hasVar (f k) = true) || Term.hasVarO w
-/-- …in a slot's term. -/
-def ObjectSlot.hasVar : ObjectSlot S → Bool
-  | .req t | .optional t | .fill t _ => Term.hasVar t
-/-- …in a list of terms. -/
-def Term.hasVarL : List (Term S) → Bool
-  | [] => false
-  | t :: ts => Term.hasVar t || Term.hasVarL ts
-/-- …in an optional term. -/
-def Term.hasVarO : Option (Term S) → Bool
-  | none => false
-  | some t => Term.hasVar t
-end
-
-mutual
 /-- **Whether a `held` occurs in the term.** A variable is not a `held`. A term is held-free
     (`HF`) where this test answers `false`. -/
 def hasHeld : Term S → Bool
@@ -894,49 +867,6 @@ theorem safeO_of_all : ∀ (o : Option (Term S)) (ctx : Nat → Bool), (∀ i, c
     Term.safeO ctx o = true
   | none, _, _ => rfl
   | some t, ctx, h => safe_of_all t ctx h
-end
-
-mutual
-/-- **A term with no variable reads no free variable**, at every depth. -/
-theorem readsFree_of_hasVar : ∀ (t : Term S) (k : Nat), t.hasVar = false → t.readsFree k = false
-  | .prim _, _, _ | .opaq, _, _ | .never, _, _ => rfl
-  | .var _, _, h => nomatch h
-  | .set t, k, h | .refine t _ _, k, h | .legacy t _, k, h => readsFree_of_hasVar t k h
-  | .mu t, k, h => readsFree_of_hasVar t (k + 1) h
-  | .held _ t P _ _, k, h => by
-      simp only [Term.hasVar, Bool.or_eq_false_iff] at h
-      simp only [Term.readsFree, readsFree_of_hasVar t k h.1, readsFree_of_hasVar P k h.2, Bool.or_self]
-  | .list pre sp suf, k, h => by
-      simp only [Term.hasVar, Bool.or_eq_false_iff] at h
-      simp only [Term.readsFree, readsFreeL_of_hasVar pre k h.1.1, readsFreeO_of_hasVar sp k h.1.2,
-        readsFreeL_of_hasVar suf k h.2, Bool.or_self]
-  | .object b, k, h => readsFreeB_of_hasVar b k h
-  | .union os, k, h => readsFreeL_of_hasVar os k h
-/-- …in a body. -/
-theorem readsFreeB_of_hasVar : ∀ (b : Body S) (k : Nat), b.hasVar = false → b.readsFree k = false
-  | .mk fs f w, k, h => by
-      simp only [Body.hasVar, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists,
-        Bool.not_eq_true] at h
-      simp only [Body.readsFree, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists,
-        Bool.not_eq_true]
-      exact ⟨fun i => readsFreeS_of_hasVar (f i) k (h.1 i), readsFreeO_of_hasVar w k h.2⟩
-/-- …in a slot. -/
-theorem readsFreeS_of_hasVar : ∀ (s : ObjectSlot S) (k : Nat), s.hasVar = false →
-    s.readsFree k = false
-  | .req t, k, h | .optional t, k, h | .fill t _, k, h => readsFree_of_hasVar t k h
-/-- …in a list of terms. -/
-theorem readsFreeL_of_hasVar : ∀ (ts : List (Term S)) (k : Nat), Term.hasVarL ts = false →
-    Term.readsFreeL k ts = false
-  | [], _, _ => rfl
-  | t :: ts, k, h => by
-      simp only [Term.hasVarL, Bool.or_eq_false_iff] at h
-      simp only [Term.readsFreeL, readsFree_of_hasVar t k h.1, readsFreeL_of_hasVar ts k h.2,
-        Bool.or_self]
-/-- …in an optional term. -/
-theorem readsFreeO_of_hasVar : ∀ (o : Option (Term S)) (k : Nat), Term.hasVarO o = false →
-    Term.readsFreeO k o = false
-  | none, _, _ => rfl
-  | some t, k, h => readsFree_of_hasVar t k h
 end
 
 /-! ## A structural measure on terms
@@ -1312,16 +1242,11 @@ abbrev denoteμs (ts : List (Term S)) (ρ : List S.C := []) : List (Option S.M) 
 
 variable {α β}
 
-/-- **A closed term denotes one codec under every environment**: it reads no free variable, which
-    is weaker than reading no variable, because a term may read the variable of its own binder. -/
+/-- **A closed term denotes one codec under every environment**: it reads no free variable. A
+    closed term may read the variable of its own binder. -/
 theorem denote_of_closed (t : Term S) (h : t.closed = true) (ρ ρ' : List S.C) :
     denote α β t ρ = denote α β t ρ' :=
   denoteAbs_readsFree t 0 (by simpa [Term.closed] using h) ρ ρ' fun _ hi => absurd hi (Nat.not_lt_zero _)
-
-/-- **A term with no variable is closed**: two environments give one codec. -/
-theorem denote_closed (t : Term S) (h : t.hasVar = false) (ρ ρ' : List S.C) :
-    denote α β t ρ = denote α β t ρ' :=
-  denote_of_closed t (by simp only [Term.closed, readsFree_of_hasVar t 0 h, Bool.not_false]) ρ ρ'
 
 /-! ## The host rows
 

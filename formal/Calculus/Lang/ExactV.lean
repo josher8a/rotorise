@@ -447,11 +447,11 @@ theorem Adm_eq_isSome (t : Term S) (ρ : List S.C) (v : S.V) :
     Adm α β t ρ v = ((denote α β t ρ).f S.o v).isSome :=
   Bool.eq_iff_iff.mpr (Adm_exact t ρ v)
 
-/-- **A term with no variable admits one set of values under every environment.** -/
-theorem Adm_closed (t : Term S) (h : t.hasVar = false) (ρ ρ' : List S.C) :
+/-- **A closed term admits one set of values under every environment.** -/
+theorem Adm_closed (t : Term S) (h : t.closed = true) (ρ ρ' : List S.C) :
     Adm α β t ρ = Adm α β t ρ' := by
   funext v
-  rw [Adm_eq_isSome, Adm_eq_isSome, denote_closed t h ρ ρ']
+  rw [Adm_eq_isSome, Adm_eq_isSome, denote_of_closed t h ρ ρ']
 
 end
 

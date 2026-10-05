@@ -262,8 +262,9 @@ mutual
     element by element.
 
     **Over a held-free closed inner term, the view keeps a refinement as it is.** Elsewhere the
-    inner term can hold a `held`: a variable denotes a stage of its binder, and the stage can hold
-    a `held`, so a variable counts as a possible `held`. The orientation tests the predicate of
+    inner term can hold a `held`: a free variable can name a codec that holds one, so a free
+    variable counts as a possible `held`. A bound variable denotes a stage of a binder inside the
+    term, and `hasHeld` reads the binder's body, so a bound variable holds no `held` there. The orientation tests the predicate of
     its caller side directly, and tests the predicate of its stored side through the map of the
     inner term, which runs the adapter. The view keeps no adapter, so the view keeps the first
     predicate and drops the second. DynamoDB states no stored predicate (`()` is the truth). So
@@ -272,14 +273,15 @@ mutual
     is the view of the inner term.
 
     **The stored view is narrower than it can be, and no certificate observes the
-    difference.** A variable holds a `held` only where its binder's body holds one, so a finer
-    view keeps more predicates over a variable. `Term.disjoint` compares a data predicate only
-    over a closed held-free inner term, so a predicate over a variable changes no verdict. An
+    difference.** A free variable holds a `held` only where the codec that it names holds one, so
+    a finer view keeps more predicates over a free variable. `Term.disjoint` compares a data
+    predicate only over a closed held-free inner term, so a predicate over a free variable changes
+    no verdict. An
     example after `separates_of_viewsDisjoint` pins the narrowing. -/
 def view (o : Orient) : Term → Term
   | .held s t P _ _ => bif s == o.c then view o P else view o t
   | .refine t p pA =>
-      if hasHeld t || t.hasVar then bif o.c then view o t else .refine (view o t) p pA
+      if hasHeld t || !t.closed then bif o.c then view o t else .refine (view o t) p pA
       else .refine t p pA
   | .list pre sp suf => .list (viewL o pre) (viewO o sp) (viewL o suf)
   | .object b => .object (viewB o b)
@@ -834,8 +836,8 @@ mutual
     `set` row reads a restriction of `Ω` element by element.
 
     A `held` and a refinement over a possible `held` are the two rows that read the orientation.
-    A refinement that the view keeps as it is has an inner term with no variable, so the
-    environment does not change its map (`denote_closed`). -/
+    A refinement that the view keeps as it is has a closed inner term, so the environment does
+    not change its map (`denote_of_closed`). -/
 theorem viewLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLe o ρ ρ' → EnvSub ρ' →
     RowLe (Alg.Adm α β t ρ) (Alg.Adm α β (view o t) ρ')
   | .held true _ _ k₀ _, _, _, _, _ => nomatch k₀.1
@@ -897,7 +899,8 @@ theorem viewLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLe o ρ ρ' → EnvSu
         simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hv
         intro v h
         rw [Alg.Adm_eq_isSome] at h ⊢
-        rwa [Alg.denote_closed (α := α) (β := β) (.refine t p pA) hv.2 ρ' ρ]
+        rwa [Alg.denote_of_closed (α := α) (β := β) (.refine t p pA)
+          (by simpa [Alg.Term.closed, Alg.Term.readsFree] using hv.2) ρ' ρ]
   | .list pre sp suf, ρ, ρ', he, hs => fun v h => by
       cases hl : Alg.listOut (S := ⟨dynSig, o⟩) v with
       | none => rw [Alg.Adm_list_of_none hl] at h; exact absurd h Bool.false_ne_true
