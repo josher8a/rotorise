@@ -960,6 +960,20 @@ end
 theorem viewLe_of (t : Term) : RowLe (Alg.Adm α β t []) (Alg.Adm α β (view o t) []) :=
   viewLeE o α β t [] [] (fun _ _ h => h) EnvSub.nil
 
+/-- **Two terms whose views at the orientation are disjoint admit no common value there.** A value
+    that both terms admit is admitted by both views (`viewLe_of`), and the views share no value
+    (`Alg.disjoint_sound`). One proof serves both halves of the certificate: the value side at the
+    host, and the attribute side at the dual. -/
+theorem views_apart [Alg.LeafAdm ⟨dynSig, o⟩] [Alg.FormerAdm ⟨dynSig, o⟩] [Alg.Shapes ⟨dynSig, o⟩]
+    [Alg.TopBound ⟨dynSig, o⟩] {x y : Term}
+    (h : Alg.Term.disjoint pair0 (view o x) (view o y) = true) (v : Value) :
+    (Alg.Adm α β x [] v && Alg.Adm α β y [] v) = false := by
+  have hw := Alg.disjoint_sound (α := α) (β := β) pair0 _ _ h [] [] (fun _ _ hp => nomatch hp) v
+  cases hx : Alg.Adm α β x [] v <;> cases hy : Alg.Adm α β y [] v <;>
+    simp only [Bool.and_false, Bool.false_and, Bool.and_self]
+  rw [viewLe_of o α β x v hx, viewLe_of o α β y v hy] at hw
+  exact nomatch hw
+
 end
 
 
@@ -970,22 +984,15 @@ end
 theorem viewsDisjoint_adm {x y : Term} (h : viewsDisjoint x y = true) (v : Value) :
     (Adm α x v && Adm α y v) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
-  have hw := Alg.disjoint_sound (α := α) (β := dynTableA) pair0 _ _ h.1 [] [] (fun _ _ hp => nomatch hp) v
-  cases hx : Adm α x v <;> cases hy : Adm α y v <;> simp only [Bool.and_false, Bool.false_and, Bool.and_self]
-  have e1 : Alg.Adm α dynTableA (view .host x) [] v = true := viewLe_of .host α dynTableA x v hx
-  have e2 : Alg.Adm α dynTableA (view .host y) [] v = true := viewLe_of .host α dynTableA y v hy
-  rw [e1, e2] at hw; exact nomatch hw
+  exact views_apart .host α dynTableA h.1 v
 
 /-- **Orthogonal terms read no common attribute.** An attribute that both terms read is read
     by both stored views, and the views are disjoint. -/
 theorem viewsDisjoint_admA {x y : Term} (h : viewsDisjoint x y = true) (a : Attr) :
     (AdmA α x a && AdmA α y a) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
-  have hr := Alg.disjoint_soundA (α := α) (β := dynTableA) pair0 _ _ h.2 [] [] (fun _ _ hp => nomatch hp) a
-  cases hx : AdmA α x a <;> cases hy : AdmA α y a <;> simp only [Bool.and_false, Bool.false_and, Bool.and_self]
-  have e1 : Alg.AdmA α dynTableA (view .dual x) [] a = true := viewLe_of .dual dynTableA α x a hx
-  have e2 : Alg.AdmA α dynTableA (view .dual y) [] a = true := viewLe_of .dual dynTableA α y a hy
-  rw [e1, e2] at hr; exact nomatch hr
+  have : Alg.Shapes ⟨dynSig, Orient.dual⟩ := Alg.Shapes.op (S := dynSyn)
+  exact views_apart .dual dynTableA α h.2 a
 
 /-- **The pair certificate is sound**: orthogonality separates the pair. -/
 theorem separates_of_viewsDisjoint {x y : Term} (h : viewsDisjoint x y = true) : Separates α x y := by
