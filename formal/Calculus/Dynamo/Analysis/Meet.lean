@@ -94,8 +94,7 @@ theorem memMem_empty {k : GroundKind} [DecidableEq k.Carrier] {A B : NEFinset k.
       cases hB : inLs k B v with
       | false => simp
       | true =>
-          simp only [inLs, decide_eq_true_eq] at hA hB
-          exact absurd hB (hiff hA)
+          exact absurd (inLs_eq_true.mp hB) (hiff (inLs_eq_true.mp hA))
 
 /-- An alternative that `inL` holds at a value names the value's base. -/
 theorem inBase_of_inL {k : GroundKind} {x : k.Carrier} {v : Value} (h : inL k x v = true) :
@@ -108,8 +107,7 @@ theorem inLs_false_of_base {k : GroundKind} {A : NEFinset k.Carrier} {v : Value}
   cases hA : inLs k A v with
   | false => rfl
   | true =>
-    simp only [inLs, decide_eq_true_eq] at hA
-    obtain ⟨x, _, hx⟩ := hA
+    obtain ⟨x, _, hx⟩ := inLs_eq_true.mp hA
     rw [inBase_of_inL hx] at h
     exact nomatch h
 
@@ -134,7 +132,7 @@ theorem inL_and_inBase {k k' : GroundKind} (x : k.Carrier) (v : Value) :
 theorem memMem_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
     (B : NEFinset k'.Carrier) (v : Value) :
     (Pred.eval (.members k A) v && Pred.eval (.members k' B) v) = false := by
-  show (inLs k A v && inLs k' B v) = false
+  rw [Pred.eval_members, Pred.eval_members]
   have hd := inBase_disj h v
   cases hk : inBase k v with
   | false => rw [inLs_false_of_base hk]; rfl
@@ -146,7 +144,7 @@ theorem memMem_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
 theorem memExc_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
     (B : NEFinset k'.Carrier) (v : Value) :
     (Pred.eval (.members k A) v && Pred.eval (.except k' B) v) = false := by
-  show (inLs k A v && (inBase k' v && !inLs k' B v)) = false
+  rw [Pred.eval_members, Pred.eval_except]
   have hd := inBase_disj h v
   cases hk : inBase k v with
   | false => rw [inLs_false_of_base hk]; rfl
@@ -158,7 +156,7 @@ theorem memExc_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
 theorem excExc_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
     (B : NEFinset k'.Carrier) (v : Value) :
     (Pred.eval (.except k A) v && Pred.eval (.except k' B) v) = false := by
-  show ((inBase k v && !inLs k A v) && (inBase k' v && !inLs k' B v)) = false
+  rw [Pred.eval_except, Pred.eval_except]
   have hd := inBase_disj h v
   cases hk : inBase k v with
   | false => rfl
@@ -195,8 +193,8 @@ theorem memExc_empty {k : GroundKind} [DecidableEq k.Carrier] {A B : NEFinset k.
     cases hB : inLs k B v with
     | true => simp
     | false =>
-      simp only [inLs, decide_eq_true_eq, decide_eq_false_iff_not] at hA hB
-      obtain ⟨x, hx, _⟩ := hiff.mpr ⟨hA, hB⟩
+      obtain ⟨x, hx, _⟩ :=
+        hiff.mpr ⟨inLs_eq_true.mp hA, fun h => nomatch hB.symm.trans (inLs_eq_true.mpr h)⟩
       rw [hne] at hx
       exact absurd hx (Finset.notMem_empty x)
 
@@ -911,7 +909,7 @@ theorem viewLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLe o ρ ρ' → EnvSu
         exact alignPL_mono (viewLeEL pre ρ ρ' he hs) (viewLeEO sp ρ ρ' he hs)
           (viewLeEL suf ρ ρ' he hs) vs h
   | .object (.mk fs f w), ρ, ρ', he, hs => fun v h => by
-      change Alg.AdmBody α β (.mk fs f w) ρ v = true at h
+      rw [Alg.Adm_object] at h
       change Alg.AdmBody α β (.mk fs (fun k => viewS o (f k)) (viewO o w)) ρ' v = true
       cases hm : Alg.mapOut (S := ⟨dynSig, o⟩) v with
       | none => rw [Alg.AdmBody_of_none hm] at h; exact absurd h Bool.false_ne_true
@@ -972,11 +970,8 @@ theorem views_apart [Alg.LeafAdm ⟨dynSig, o⟩] [Alg.FormerAdm ⟨dynSig, o⟩
     [Alg.TopBound ⟨dynSig, o⟩] {x y : Term}
     (h : Alg.Term.disjoint pair0 (view o x) (view o y) = true) (v : Value) :
     (Alg.Adm α β x [] v && Alg.Adm α β y [] v) = false := by
-  have hw := Alg.disjoint_sound (α := α) (β := β) pair0 _ _ h [] [] (fun _ _ hp => nomatch hp) v
-  cases hx : Alg.Adm α β x [] v <;> cases hy : Alg.Adm α β y [] v <;>
-    simp only [Bool.and_false, Bool.false_and, Bool.and_self]
-  rw [viewLe_of o α β x v hx, viewLe_of o α β y v hy] at hw
-  exact nomatch hw
+  exact Alg.apart_of_imp (viewLe_of o α β x v) (Alg.apart_of_imp' (viewLe_of o α β y v)
+    (Alg.disjoint_sound (α := α) (β := β) pair0 _ _ h [] [] (fun _ _ hp => nomatch hp) v))
 
 end
 

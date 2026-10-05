@@ -195,7 +195,8 @@ variable (t : Term) (ts : List Term) (ρ : List Codec)
 @[denote_rows] theorem fieldSem_req : fieldSem α (.req t) ρ = .req (denote α t ρ) := rfl
 @[denote_rows] theorem fieldSem_optional : fieldSem α (.optional t) ρ = .opt (denote α t ρ) := rfl
 @[denote_rows] theorem wildSem_none : wildSem α none ρ = .refuse := rfl
-@[denote_rows] theorem wildSem_some : wildSem α (some t) ρ = .codec (denote α t ρ) := rfl
+@[denote_rows] theorem wildSem_some : wildSem α (some t) ρ = .codec (denote α t ρ) :=
+  Alg.wildSem_some _ _ t ρ
 @[denote_rows] theorem denoteList_nil : denoteList α [] ρ = [] := rfl
 @[denote_rows] theorem denoteList_cons : denoteList α (t :: ts) ρ = denote α t ρ :: denoteList α ts ρ :=
   rfl

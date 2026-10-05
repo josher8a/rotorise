@@ -522,11 +522,8 @@ theorem rowsApart_of_anyZip {ρ ρ' : List S.C} :
           simp only [anyZip, Bool.or_eq_true] at h
           simp only [AdmList, zipP]
           rcases h with h | h
-          · have := ht u h w
-            cases h1 : Adm α β t ρ w <;> cases h2 : Adm α β u ρ' w <;> simp_all
-          · have := rowsApart_of_anyZip hr h ws
-            cases h1 : zipP (AdmList α β r₁ ρ) ws <;> cases h2 : zipP (AdmList α β r₂ ρ') ws <;>
-              simp_all
+          · exact apart_and_left (ht u h w)
+          · exact apart_and_right (rowsApart_of_anyZip hr h ws)
 
 /-- Two rows stay apart when a common prefix of equal length goes in front. -/
 theorem RowsApart.append_left {ρ ρ' : List S.C} {A₁ A₂ X₁ X₂ : List (Term S)}
@@ -540,8 +537,7 @@ theorem RowsApart.append_left {ρ ρ' : List S.C} {A₁ A₂ X₁ X₂ : List (T
       zipP_append _ _ _ _ (by simp; omega)]
     have := h (ws.take A₁.length)
     rw [AdmList_eq, AdmList_eq] at this
-    cases h1 : zipP (A₁.map (Adm α β · ρ)) (ws.take A₁.length) <;>
-      cases h2 : zipP (A₂.map (Adm α β · ρ')) (ws.take A₁.length) <;> simp_all
+    exact apart_and_left this
 
 /-- …and when a common suffix of equal length goes behind. -/
 theorem RowsApart.append_right {ρ ρ' : List S.C} {B₁ B₂ X₁ X₂ : List (Term S)}
@@ -555,8 +551,7 @@ theorem RowsApart.append_right {ρ ρ' : List S.C} {B₁ B₂ X₁ X₂ : List (
       zipP_append _ _ _ _ (by simp; omega)]
     have := h (ws.drop X₁.length)
     rw [AdmList_eq, AdmList_eq] at this
-    cases h1 : zipP (B₁.map (Adm α β · ρ)) (ws.drop X₁.length) <;>
-      cases h2 : zipP (B₂.map (Adm α β · ρ')) (ws.drop X₁.length) <;> simp_all
+    exact apart_and_right this
 
 /-- Two `list` shapes whose rows are apart at every common length share no value. -/
 theorem Adm_list_apart {ρ ρ' : List S.C} {p₁ s₁ p₂ s₂ : List (Term S)} {q₁ q₂ : Option (Term S)}
@@ -720,7 +715,7 @@ theorem famObjD_sound [Shapes S] {ρ ρ' : List S.C} {a : Body S}
   | object b =>
     simp only [famObjD, decide_eq_true_eq] at h
     obtain ⟨⟨k, hk⟩, hd⟩ := h
-    show (AdmBody α β a ρ v && AdmBody α β b ρ' v) = false
+    rw [Adm_object, Adm_object]
     unfold slotD at hd
     split at hd
     · next ha =>
@@ -782,8 +777,8 @@ theorem disjoint_sound [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S
       simp only [Bool.or_eq_true] at hy
       rcases hy with (hy | hy) | hy
       · rw [Adm_refine_eq]
-        have := disjoint_sound p' x y' hy ρ ρ₁ hp' w
-        cases h1 : Adm α β x ρ w <;> cases h2 : Adm α β y' ρ₁ w <;> simp_all
+        exact apart_of_imp (fun hx => (Bool.and_eq_true_iff.mp hx).1)
+          (disjoint_sound p' x y' hy ρ ρ₁ hp' w)
       · exact dataApart_sound false hy w
       · exact dataApart_sound true hy w
   | p, .union os, y, h, ρ, ρ', hp, v => by

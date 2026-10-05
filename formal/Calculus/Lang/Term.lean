@@ -1214,6 +1214,10 @@ abbrev wildSem (w : Option (Term S)) (ρ : List S.C := []) :
     RestSem (Mean.V (B := S.sig)) S.M :=
   wildSemAbs (tables S.o α β) w ρ
 
+/-- An open block reads its term's codec. -/
+theorem wildSem_some (t : Term S) (ρ : List S.C) :
+    wildSem α β (some t) ρ = .codec (denote α β t ρ) := rfl
+
 /-- The options' codecs, in order. -/
 abbrev denoteList (ts : List (Term S)) (ρ : List S.C := []) : List S.C :=
   denoteListAbs (tables S.o α β) ts ρ

@@ -98,6 +98,20 @@ theorem align_eq_some {α : Type} {cs : List (Codec V M)} {tail : Option (Codec 
   · rintro ⟨ds, h', _, rfl⟩
     rw [h']; rfl
 
+/-- **A position past the declared ones reads the tail.** The row is the tail's codec at the
+    first value, in front of the row of the rest. -/
+theorem align_nil_some_cons {α : Type} {c : Codec V M} {x : α} {xs : List α} {ps} :
+    align [] (some c) (x :: xs) = some ps ↔
+      ∃ ps', align [] (some c) xs = some ps' ∧ ps = (c, x) :: ps' := by
+  exact Option.map_eq_some_iff.trans (exists_congr fun _ => and_congr_right fun _ => eq_comm)
+
+/-- **A declared position reads its own codec**, in front of the row of the rest. -/
+theorem align_cons_cons {α : Type} {c : Codec V M} {cs : List (Codec V M)}
+    {tail : Option (Codec V M)} {x : α} {xs : List α} {ps} :
+    align (c :: cs) tail (x :: xs) = some ps ↔
+      ∃ ps', align cs tail xs = some ps' ∧ ps = (c, x) :: ps' := by
+  exact Option.map_eq_some_iff.trans (exists_congr fun _ => and_congr_right fun _ => eq_comm)
+
 /-- …so any row of the same length aligns against the same codecs. -/
 theorem align_of_slots {α : Type} {cs : List (Codec V M)} {tail : Option (Codec V M)} {n ds}
     (h : slots cs tail n = some ds) {xs : List α} (hn : xs.length = n) :

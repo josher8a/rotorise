@@ -82,6 +82,11 @@ inductive Pred where
 def inLs (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
   decide (∃ x ∈ ls.1, inL k x v = true)
 
+/-- A value is in a set of alternatives exactly where one alternative holds at it. -/
+theorem inLs_eq_true {k : GroundKind} {ls : NEFinset k.Carrier} {v : Value} :
+    inLs k ls v = true ↔ ∃ x ∈ ls.1, inL k x v = true := by
+  simp only [inLs, decide_eq_true_eq]
+
 /-- Whether a value is of one ground base. -/
 def inBase (k : GroundKind) (v : Value) : Bool := decide (v.member = k.member)
 
@@ -96,6 +101,14 @@ def Pred.eval : Pred → Value → Bool
   | .members k ls => inLs k ls
   | .closure q    => q
   | .except k ls  => fun v => inBase k v && !inLs k ls v
+
+/-- `members` holds where one of its alternatives does. -/
+theorem Pred.eval_members (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
+    Pred.eval (.members k ls) v = inLs k ls v := rfl
+
+/-- `except` holds at a value of its base that none of its alternatives names. -/
+theorem Pred.eval_except (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
+    Pred.eval (.except k ls) v = (inBase k v && !inLs k ls v) := rfl
 
 /-- **The DynamoDB set obligation**: the element writes one member of `S`, `N` or `B`.
 

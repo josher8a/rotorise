@@ -16,6 +16,32 @@ disjointness test reads it, and the compatibility decision reads it through that
 
 namespace Calculus.Alg
 
+/-! ## Apartness is antitone
+
+Two domains are apart where no datum lies in both. A domain inside an apart domain is apart too,
+so each soundness proof reads this fact where it would otherwise split the Booleans. -/
+
+/-- **Apartness moves to a domain that lies inside.** -/
+theorem apart_of_imp {x x' y : Bool} (h : x = true → x' = true) (h' : (x' && y) = false) :
+    (x && y) = false := by
+  cases x <;> cases y <;> simp_all
+
+/-- …on the right. -/
+theorem apart_of_imp' {x y y' : Bool} (h : y = true → y' = true) (h' : (x && y') = false) :
+    (x && y) = false := by
+  cases x <;> cases y <;> simp_all
+
+/-- Two conjunctions are apart where their left conjuncts are, because each conjunction lies inside
+    its conjunct. -/
+theorem apart_and_left {a b c d : Bool} (h : (a && b) = false) : ((a && c) && (b && d)) = false :=
+  apart_of_imp (fun hx => (Bool.and_eq_true_iff.mp hx).1)
+    (apart_of_imp' (fun hy => (Bool.and_eq_true_iff.mp hy).1) h)
+
+/-- …and where their right conjuncts are. -/
+theorem apart_and_right {a b c d : Bool} (h : (c && d) = false) : ((a && c) && (b && d)) = false :=
+  apart_of_imp (fun hx => (Bool.and_eq_true_iff.mp hx).2)
+    (apart_of_imp' (fun hy => (Bool.and_eq_true_iff.mp hy).2) h)
+
 /-- The four formers of the term language, as classes of root shapes. -/
 inductive Former where
   | prim | set | list | object
