@@ -468,6 +468,11 @@ type Bound = {
     readonly adapters: Map<unknown, string>
     /** The older reader of each `legacy`, a variable of the theorem, keyed by the function. */
     readonly readers: Map<unknown, string>
+    /**
+     * Print a fixed function in place of each caller's closure and older reader: the twin of one
+     * shape that holds no free function, which the guard reads as it reads the term.
+     */
+    readonly standIn?: boolean
 }
 
 /** A scope, and the functions that the theorem binds where the vector is quantified. */
@@ -640,7 +645,9 @@ const leanPredicate = (q: Predicate, at: string, bound?: Bound): string => {
             const known = shippedPredicates.get(q.q.is)
             // a caller's closure in a quantified vector is a variable of the theorem
             if (!known && bound)
-                return `(Pred.closure ${boundName(bound.closures, q.q.is, 'q')})`
+                return bound.standIn
+                    ? '(Pred.closure (fun _ => true))'
+                    : `(Pred.closure ${boundName(bound.closures, q.q.is, 'q')})`
             if (!known) {
                 return refuse(
                     at,
@@ -853,7 +860,7 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
         // evaluation vector would have to run it
         case 'legacy':
             return scope.bound
-                ? `(Term.legacy (${leanTermOfTerm(t.inner, at, scope)}) ${boundName(scope.bound.readers, t.r, 'r')})`
+                ? `(Term.legacy (${leanTermOfTerm(t.inner, at, scope)}) ${scope.bound.standIn ? '(fun _ => none)' : boundName(scope.bound.readers, t.r, 'r')})`
                 : refuse(
                       at,
                       '`Term.legacy` carries `r : Attr → Option Value`, a JS closure: a quantified verdict binds it as a variable, and no evaluation vector prints one',
@@ -1093,6 +1100,23 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     // the term \`rfl\` exhausts the default heartbeats on a refusal of two terms of about 600
     // characters, where the tactic \`rfl\` closes the goal
     const reduce = binders === '' ? 'by decide' : 'by rfl'
+    // the guard reads the shape alone, so a quantified verdict closes the guard on a twin of one
+    // shape that holds no free function, where \`decide\` runs on a closed goal
+    const standIn: Bound = {
+        closures: new Map(),
+        adapters: new Map(),
+        readers: new Map(),
+        standIn: true,
+    }
+    const guard =
+        binders === ''
+            ? 'by decide'
+            : [
+                  `(congrArg₂ (· && ·)`,
+                  `      (Alg.guarded_of_sameShape _ (${leanRooted(leanTermOf(left, name, standIn), left)}) (by rfl))`,
+                  `      (Alg.guarded_of_sameShape _ (${leanRooted(leanTermOf(right, name, standIn), right)}) (by rfl))).trans`,
+                  `    (by decide)`,
+              ].join('\n')
     // the host's guard runs before its compatibility test, and reads each option on its own
     const guardRefuses = [left, right].some(
         (option) => recursionUse(option.def) >= 2,
@@ -1102,7 +1126,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
             `/-- \`${name}\` — \`src/\` refuses this pair at the guard; the model's guard refuses it too -/`,
             head,
             `    (Alg.Term.guarded (${leanRooted(l, left)}) &&`,
-            `      Alg.Term.guarded (${leanRooted(r, right)})) = false := ${reduce}`,
+            `      Alg.Term.guarded (${leanRooted(r, right)})) = false :=`,
+            `  ${guard}`,
         ].join('\n')
     }
     // the host's guard accepted before its compatibility test refused, so the vector states both
@@ -1113,7 +1138,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
             `    (Alg.Term.guarded (${leanRooted(l, left)}) &&`,
             `      Alg.Term.guarded (${leanRooted(r, right)})) = true ∧`,
             `    Alg.compatPair dynOracle (${l})`,
-            `      (${r}) = false := ⟨${reduce}, ${reduce}⟩`,
+            `      (${r}) = false :=`,
+            `  ⟨${guard}, ${reduce}⟩`,
         ].join('\n')
     }
     const warrant = agrees(left.def, right.def)
@@ -1130,7 +1156,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
         `      Alg.Term.guarded (${leanRooted(r, right)})) = true ∧`,
         `    ((∀ t ∈ [${l}, ${r}], Lawful (denote (libTable κ) t)) →`,
         `      PairwiseCompat (libTable κ) [${l}, ${r}]) :=`,
-        `  ⟨${reduce}, ${warrant}⟩`,
+        `  ⟨${guard}, ${warrant}⟩`,
     ].join('\n')
 }
 
@@ -1168,10 +1194,6 @@ See \`src/codec/lean.ts\`'s \`Separation\`.
 set_option linter.unusedVariables false
 /-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
 set_option linter.style.nameCheck false
-/-! A quantified verdict binds a caller's function, so \`decide\` refuses it and the elaborator
-reduces \`Term.guarded\` by \`whnf\`. On a term with a binder and an object, that reduction needs
-more than the default 200000 heartbeats. -/
-set_option maxHeartbeats 1000000
 
 namespace Calculus
 

@@ -543,6 +543,193 @@ def Term.guardedO : Option (Term S) → Bool
 
 end
 
+/-! ## The shape of a term
+
+The guard reads the constructors, the variables and the field names of a term, and no function
+data: no predicate, no older reader, no adapter word and no primitive. That is the shape of the
+term, the term with its data forgotten. Two terms of one shape have one guard. A vector that binds a
+caller's function states the guard of the term, and closes it on a twin of one shape that holds no
+free function: `decide` runs on a closed goal, where a free function in the goal makes each
+reduction of `Term.use` start again. -/
+
+mutual
+/-- **Two terms of one shape**: the same constructors, the same variables and the same field
+    names. Predicates, older readers, adapter words and primitives are not read. -/
+def Term.sameShape : Term S → Term S → Bool
+  | .prim _, .prim _ | .opaq, .opaq | .never, .never => true
+  | .var i, .var j => i == j
+  | .mu t, .mu t' | .set t, .set t' | .refine t _ _, .refine t' _ _ | .legacy t _, .legacy t' _ =>
+      Term.sameShape t t'
+  | .held _ t P _ _, .held _ t' P' _ _ => Term.sameShape t t' && Term.sameShape P P'
+  | .list pre sp suf, .list pre' sp' suf' =>
+      Term.sameShapeL pre pre' && Term.sameShapeO sp sp' && Term.sameShapeL suf suf'
+  | .union os, .union os' => Term.sameShapeL os os'
+  | .object b, .object b' => Body.sameShape b b'
+  | _, _ => false
+termination_by structural t => t
+/-- …of two bodies: each name of one is a name of the other, with slots of one shape. -/
+def Body.sameShape : Body S → Body S → Bool
+  | .mk fs f w, .mk fs' f' w' =>
+      decide (∀ k : {k // k ∈ fs}, ∃ h : k.1 ∈ fs', ObjectSlot.sameShape (f k) (f' ⟨k.1, h⟩) = true) &&
+        decide (∀ k : {k // k ∈ fs'}, k.1 ∈ fs) && Term.sameShapeO w w'
+termination_by structural b => b
+/-- …of two slots: one presence, and terms of one shape. -/
+def ObjectSlot.sameShape : ObjectSlot S → ObjectSlot S → Bool
+  | .req t, .req t' | .optional t, .optional t' | .fill t _, .fill t' _ => Term.sameShape t t'
+  | _, _ => false
+termination_by structural s => s
+/-- …of two lists, position by position. -/
+def Term.sameShapeL : List (Term S) → List (Term S) → Bool
+  | [], [] => true
+  | t :: ts, t' :: ts' => Term.sameShape t t' && Term.sameShapeL ts ts'
+  | _, _ => false
+termination_by structural ts => ts
+/-- …of two optional terms. -/
+def Term.sameShapeO : Option (Term S) → Option (Term S) → Bool
+  | none, none => true
+  | some t, some t' => Term.sameShape t t'
+  | _, _ => false
+termination_by structural o => o
+end
+
+mutual
+/-- **The use of a variable reads the shape alone.** -/
+theorem use_of_sameShape : ∀ (t t' : Term S), t.sameShape t' = true → ∀ i, t.use i = t'.use i
+  | .prim _, t', h, _ | .opaq, t', h, _ | .never, t', h, _ => by
+      cases t' <;> simp_all [Term.sameShape, Term.use]
+  | .var j, t', h, i => by
+      cases t' <;> simp_all [Term.sameShape, Term.use]
+  | .mu t, t', h, i => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.use, use_of_sameShape t _ h (i + 1)]
+  | .set t, t', h, i => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.use, use_of_sameShape t _ h i]
+  | .refine t _ _, t', h, i => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.use, use_of_sameShape t _ h i]
+  | .legacy t _, t', h, i => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.use, use_of_sameShape t _ h i]
+  | .held _ t P _ _, t', h, i => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq, Bool.and_eq_true] at h
+      simp only [Term.use, use_of_sameShape t _ h.1 i, use_of_sameShape P _ h.2 i]
+  | .list pre sp suf, t', h, i => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq, Bool.and_eq_true] at h
+      simp only [Term.use, useL_of_sameShape pre _ h.1.1 i, useO_of_sameShape sp _ h.1.2 i,
+        useL_of_sameShape suf _ h.2 i]
+  | .union os, t', h, i => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.use, useL_of_sameShape os _ h i]
+  | .object b, t', h, i => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.use, useB_of_sameShape b _ h i]
+termination_by structural t => t
+/-- …in a body. -/
+theorem useB_of_sameShape : ∀ (b b' : Body S), b.sameShape b' = true → ∀ i, b.use i = b'.use i
+  | .mk fs f w, .mk fs' f' w', h, i => by
+      simp only [Body.sameShape, Bool.and_eq_true, decide_eq_true_eq] at h
+      obtain ⟨⟨h1, h2⟩, hw⟩ := h
+      have he : fs = fs' := Finset.ext fun x => ⟨fun hx => (h1 ⟨x, hx⟩).1, fun hx => h2 ⟨x, hx⟩⟩
+      subst he
+      have hf : (fun k => ObjectSlot.use i (f k)) = (fun k => ObjectSlot.use i (f' k)) :=
+        funext fun k => by
+          obtain ⟨hk, hs⟩ := h1 k
+          exact useS_of_sameShape (f k) (f' k) hs i
+      simp only [Body.use, hf, useO_of_sameShape w w' hw i]
+termination_by structural b => b
+/-- …in a slot. -/
+theorem useS_of_sameShape : ∀ (s s' : ObjectSlot S), s.sameShape s' = true → ∀ i, s.use i = s'.use i
+  | .req t, s', h, i | .optional t, s', h, i | .fill t _, s', h, i => by
+      cases s' <;> simp only [ObjectSlot.sameShape, reduceCtorEq] at h
+      all_goals simp only [ObjectSlot.use, use_of_sameShape t _ h i]
+termination_by structural s => s
+/-- …in a list of terms. -/
+theorem useL_of_sameShape : ∀ (ts ts' : List (Term S)), Term.sameShapeL ts ts' = true →
+    ∀ i, Term.useL i ts = Term.useL i ts'
+  | [], ts', h, _ => by cases ts' <;> simp_all [Term.sameShapeL]
+  | t :: ts, ts', h, i => by
+      cases ts' <;> simp only [Term.sameShapeL, reduceCtorEq, Bool.and_eq_true] at h
+      simp only [Term.useL, use_of_sameShape t _ h.1 i, useL_of_sameShape ts _ h.2 i]
+termination_by structural ts => ts
+/-- …in an optional term. -/
+theorem useO_of_sameShape : ∀ (o o' : Option (Term S)), Term.sameShapeO o o' = true →
+    ∀ i, Term.useO i o = Term.useO i o'
+  | none, o', h, _ => by cases o' <;> simp_all [Term.sameShapeO]
+  | some t, o', h, i => by
+      cases o' <;> simp only [Term.sameShapeO, reduceCtorEq] at h
+      exact use_of_sameShape t _ h i
+termination_by structural o => o
+end
+
+mutual
+/-- **The guard reads the shape alone.** -/
+theorem guarded_of_sameShape : ∀ (t t' : Term S), t.sameShape t' = true → t.guarded = t'.guarded
+  | .prim _, t', h | .opaq, t', h | .never, t', h | .var _, t', h => by
+      cases t' <;> simp_all [Term.sameShape, Term.guarded]
+  | .mu t, t', h => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.guarded, use_of_sameShape t _ h 0, guarded_of_sameShape t _ h]
+  | .set t, t', h => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.guarded, guarded_of_sameShape t _ h]
+  | .refine t _ _, t', h => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.guarded, guarded_of_sameShape t _ h]
+  | .legacy t _, t', h => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.guarded, guarded_of_sameShape t _ h]
+  | .held _ t P _ _, t', h => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq, Bool.and_eq_true] at h
+      simp only [Term.guarded, guarded_of_sameShape t _ h.1, guarded_of_sameShape P _ h.2]
+  | .list pre sp suf, t', h => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq, Bool.and_eq_true] at h
+      simp only [Term.guarded, guardedL_of_sameShape pre _ h.1.1, guardedO_of_sameShape sp _ h.1.2,
+        guardedL_of_sameShape suf _ h.2]
+  | .union os, t', h => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.guarded, guardedL_of_sameShape os _ h]
+  | .object b, t', h => by
+      cases t' <;> simp only [Term.sameShape, reduceCtorEq] at h
+      simp only [Term.guarded, guardedB_of_sameShape b _ h]
+termination_by structural t => t
+/-- …in a body. -/
+theorem guardedB_of_sameShape : ∀ (b b' : Body S), b.sameShape b' = true → b.guarded = b'.guarded
+  | .mk fs f w, .mk fs' f' w', h => by
+      simp only [Body.sameShape, Bool.and_eq_true, decide_eq_true_eq] at h
+      obtain ⟨⟨h1, h2⟩, hw⟩ := h
+      have he : fs = fs' := Finset.ext fun x => ⟨fun hx => (h1 ⟨x, hx⟩).1, fun hx => h2 ⟨x, hx⟩⟩
+      subst he
+      have hf : ∀ k, ObjectSlot.guarded (f k) = ObjectSlot.guarded (f' k) := fun k => by
+        obtain ⟨hk, hs⟩ := h1 k
+        exact guardedS_of_sameShape (f k) (f' k) hs
+      simp only [Body.guarded, hf, guardedO_of_sameShape w w' hw]
+termination_by structural b => b
+/-- …in a slot. -/
+theorem guardedS_of_sameShape : ∀ (s s' : ObjectSlot S), s.sameShape s' = true →
+    s.guarded = s'.guarded
+  | .req t, s', h | .optional t, s', h | .fill t _, s', h => by
+      cases s' <;> simp only [ObjectSlot.sameShape, reduceCtorEq] at h
+      all_goals simp only [ObjectSlot.guarded, guarded_of_sameShape t _ h]
+termination_by structural s => s
+/-- …in a list of terms. -/
+theorem guardedL_of_sameShape : ∀ (ts ts' : List (Term S)), Term.sameShapeL ts ts' = true →
+    Term.guardedL ts = Term.guardedL ts'
+  | [], ts', h => by cases ts' <;> simp_all [Term.sameShapeL]
+  | t :: ts, ts', h => by
+      cases ts' <;> simp only [Term.sameShapeL, reduceCtorEq, Bool.and_eq_true] at h
+      simp only [Term.guardedL, guarded_of_sameShape t _ h.1, guardedL_of_sameShape ts _ h.2]
+termination_by structural ts => ts
+/-- …in an optional term. -/
+theorem guardedO_of_sameShape : ∀ (o o' : Option (Term S)), Term.sameShapeO o o' = true →
+    Term.guardedO o = Term.guardedO o'
+  | none, o', h => by cases o' <;> simp_all [Term.sameShapeO]
+  | some t, o', h => by
+      cases o' <;> simp only [Term.sameShapeO, reduceCtorEq] at h
+      exact guarded_of_sameShape t _ h
+termination_by structural o => o
+end
+
 
 
 mutual
