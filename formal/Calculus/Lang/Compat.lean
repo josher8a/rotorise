@@ -272,16 +272,6 @@ theorem disjoint_domP [PrimAdmA S] [Leaf S] [LeafMeet S] [LeafAdmA S] [FormerAdm
   have := disjoint_soundA (α := α) (β := β) pair0 x y h ρ ρ' (fun _ _ hp => nomatch hp) a
   rwa [AdmA_eq_isSome, AdmA_eq_isSome] at this
 
-/-- Apartness moves to a codec whose domain lies inside. -/
-theorem apart_of_imp {x x' y : Bool} (h : x = true → x' = true) (h' : (x' && y) = false) :
-    (x && y) = false := by
-  cases x <;> cases y <;> simp_all
-
-/-- …on the right. -/
-theorem apart_of_imp' {x y y' : Bool} (h : y = true → y' = true) (h' : (x && y') = false) :
-    (x && y) = false := by
-  cases x <;> cases y <;> simp_all
-
 /-- **A `held` acts at an orientation only where its outer acts**, where its side is the caller
     side of the orientation, and only where its inner term acts otherwise. -/
 theorem held_dom {sd : Bool} {i P : Term S} {k₀ : S.sig.G sd × Bool} {k : List (S.sig.G sd × Bool)}

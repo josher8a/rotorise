@@ -133,7 +133,7 @@ theorem soundnessIn : ∀ {t : Term S} {T μ} (ρ : List S.C), Typed α β t T �
         cases hrest with
         | none => exact nomatch hcr
         | @some t' T' μ' hty =>
-          replace hcr : RestSem.codec (denote α β t' ρ) = RestSem.codec c := hcr
+          rw [wildSem_some] at hcr
           cases hcr
           exact soundnessIn ρ hty hob.2 henv
       -- a typed slot is `req` or `optional`: the judgement has no rule for a fill
@@ -183,17 +183,11 @@ theorem alignTail_TSub {c : S.C} {T' : Mean.V (B := S.sig) → Prop} (ih : ∀ v
       ∀ x ∈ vs, T' x
   | [], _, _, _, x, hx => absurd hx (by simp)
   | v :: vs, ps, hal, hall, x, hx => by
-      replace hal : ((align [] (some c) vs).map ((c, v) :: ·)) = some ps := hal
-      cases hal' : align ([] : List S.C) (some c) vs with
-      | none => rw [hal'] at hal; exact nomatch hal
-      | some ps' =>
-        rw [hal'] at hal
-        replace hal : some ((c, v) :: ps') = some ps := hal
-        cases hal
-        rcases List.mem_cons.mp hx with rfl | hx'
-        · exact ih x (hall (c, x) (List.mem_cons_self))
-        · exact alignTail_TSub ih hal'
-            (fun p hp => hall p (List.mem_cons_of_mem _ hp)) x hx'
+      obtain ⟨ps', hal', rfl⟩ := align_nil_some_cons.mp hal
+      rcases List.mem_cons.mp hx with rfl | hx'
+      · exact ih x (hall (c, x) (List.mem_cons_self))
+      · exact alignTail_TSub ih hal'
+          (fun p hp => hall p (List.mem_cons_of_mem _ hp)) x hx'
 
 /-- `align`'s positional pairing is §3's `T₁ × … × Tₙ`, one position at a time. -/
 theorem align_TSub {tail : Option (Term S)} {Tt} (hopt : TypedOpt α β tail Tt)
@@ -218,18 +212,11 @@ theorem align_TSub {tail : Option (Term S)} {Tt} (hopt : TypedOpt α β tail Tt)
       cases vs with
       | nil => exact nomatch hal
       | cons v vs' =>
-        replace hal : (((align _ (tail.map (denote α β)) vs')).map
-          ((denote α β _, v) :: ·)) = some ps := hal
-        cases hal' : align _ (tail.map (denote α β)) vs' with
-        | none => rw [hal'] at hal; exact nomatch hal
-        | some ps' =>
-          rw [hal'] at hal
-          replace hal : some ((denote α β _, v) :: ps') = some ps := hal
-          cases hal
-          refine ⟨ih _ (List.mem_cons_self) _ _ hty v (hall _ (List.mem_cons_self)), ?_⟩
-          exact align_TSub hopt ihTail hs
-            (fun t' ht' => ih t' (List.mem_cons_of_mem _ ht')) hal'
-            (fun p hp => hall p (List.mem_cons_of_mem _ hp))
+        obtain ⟨ps', hal', rfl⟩ := align_cons_cons.mp hal
+        refine ⟨ih _ (List.mem_cons_self) _ _ hty v (hall _ (List.mem_cons_self)), ?_⟩
+        exact align_TSub hopt ihTail hs
+          (fun t' ht' => ih t' (List.mem_cons_of_mem _ ht')) hal'
+          (fun p hp => hall p (List.mem_cons_of_mem _ hp))
 
 /-- The suffix's positions, read off the zipped row. -/
 theorem zipSuf_TSub :
@@ -409,7 +396,7 @@ theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed α β t T μ → Obligat
         cases hrest with
         | none => exact nomatch hcr
         | @some t' T' μ' hty =>
-          replace hcr : some (denote α β t') = some rc := hcr
+          rw [wildSem_some] at hcr
           cases hcr
           exact carrier_denote hty hob.2
       -- a typed slot is no fill, so no constant is owed

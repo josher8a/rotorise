@@ -195,7 +195,8 @@ variable (t : Term) (ts : List Term)
       | .arr vs => alignPL (AdmList α pre) (AdmOptT α sp) (AdmList α suf) vs
       | _ => false := by
   funext v; cases v <;> rfl
-@[Adm_rows] theorem Adm_object (b : Body) : Adm α (.object b) = AdmBody α b := rfl
+@[Adm_rows] theorem Adm_object (b : Body) : Adm α (.object b) = AdmBody α b :=
+  Alg.Adm_object b []
 /-- **The second row that asks its own codec**: `denote .opaq` is the identity, so `opaque`
     admits every value. -/
 @[Adm_rows] theorem Adm_opaq : Adm α .opaq = fun _ => true := rfl

@@ -155,6 +155,9 @@ def AdmOptT : Option (Term S) → List S.C → Option (S.V → Bool)
 
 end
 
+/-- An object's row is its body's. -/
+theorem Adm_object (b : Body S) (ρ : List S.C) : Adm α β (.object b) ρ = AdmBody α β b ρ := rfl
+
 @[simp] theorem AdmList_eq (ρ : List S.C) : ∀ ts : List (Term S), AdmList α β ts ρ = ts.map (Adm α β · ρ)
   | [] => rfl
   | t :: ts => by simp only [AdmList, List.map]; rw [AdmList_eq ρ ts]
