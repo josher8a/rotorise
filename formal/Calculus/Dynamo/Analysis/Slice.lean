@@ -32,12 +32,13 @@ namespace Calculus
     **A clause pins one value per name, because a literal carries one.** Selecting several
     alternatives is selecting with one clause per alternative, which `mem_extract_or` below states.
 
-    Three rows. `number` has no row, so a clause at `number` keeps no option. `null` has no row
-    because its carrier has one inhabitant, so a clause there would keep every member rather than
-    select among them. A name
+    Four rows, one per base whose carrier has more than one value. `null` has no row because its
+    carrier has one inhabitant, so a clause there would keep every member rather than select
+    among them. A name
     pinned at one base against a clause at another is no match, which is the `_` row. -/
 def altsSub : Option Alts → Alts → Bool
   | some ⟨.string, x⟩,  ⟨.string, c⟩  => decide (x = c)
+  | some ⟨.number, x⟩,  ⟨.number, c⟩  => decide (x = c)
   | some ⟨.boolean, x⟩, ⟨.boolean, c⟩ => decide (x = c)
   | some ⟨.binary, x⟩,  ⟨.binary, c⟩  => decide (x = c)
   | _, _ => false
@@ -67,6 +68,16 @@ def AltClause.admits (c : AltClause) (t : Term) : Bool :=
   match specOf t with
   | some s => decide (∀ k : {k // k ∈ c.keys}, litSubAt s c k = true)
   | none => false
+
+/-- **A clause at a numeral keeps the option that pins that numeral**, and not an option that pins
+    another one. -/
+example : (AltClause.mk {"k"} fun _ => ⟨.number, WFNumeral.of "1"⟩).admits
+    (.object (.mk {"k"} (fun _ => .req (.literal .number (WFNumeral.of "1"))) none)) = true := by
+  decide
+
+example : (AltClause.mk {"k"} fun _ => ⟨.number, WFNumeral.of "1"⟩).admits
+    (.object (.mk {"k"} (fun _ => .req (.literal .number (WFNumeral.of "2"))) none)) = false := by
+  decide
 
 /-- **The extraction**: the options the clause describes, in their original order. -/
 def AltClause.extract (c : AltClause) (opts : List Term) : List Term :=
