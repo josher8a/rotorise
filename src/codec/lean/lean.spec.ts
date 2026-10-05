@@ -1398,8 +1398,8 @@ const separationPairs = (): readonly Separation[] => {
             out.push({ name: `${an}__vs__${bn}`, left, right })
         }
     }
-    // two numeric literal sets, one under the `decimal` adapter, which the meet of two numbers
-    // separates. No sample pairs a numeric literal with a literal decimal
+    // two numeric literal sets, one under the `decimal` adapter, which the disjointness test of
+    // two numbers separates. No sample pairs a numeric literal with a literal decimal
     const numeral = (text: string) => orThrow(DynamoNumber.from(text))
     out.push({
         name: 'pinned_numerals__vs__literal_decimal_23',

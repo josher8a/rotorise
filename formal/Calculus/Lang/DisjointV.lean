@@ -13,7 +13,7 @@ does, and every row is structure except the leaves.
 A universe supplies the laws in three classes. `FormerAdm` holds the set law: two sets whose
 elements share no value share no set. `LeafAdm` holds the primitive law: two primitives that the
 leaf keeps apart share no value. `LeafMeet` holds the predicate law at each absolute side: two
-predicates that meet at the empty predicate hold together nowhere. The classes are outside `Sem`
+predicates that the leaf keeps apart hold together nowhere. The classes are outside `Sem`
 and outside `Leaf`, because only the soundness theorems read the laws. Two formers in different
 classes share no value, and that fact is a theorem of the shape classes (`Shapes`).
 

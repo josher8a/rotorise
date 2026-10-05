@@ -136,7 +136,8 @@ the held-free theory and the soundness of the disjointness test read them. `Prim
 **The disjointness test is structural, and a universe supplies its leaves.** `Alg.Term.disjoint`
 has one row per constructor of the left operand, and decides that two terms share no value. Only
 two rows read a fact of a universe: a primitive beside a primitive, and a predicate beside a
-predicate. `Leaf` holds the two leaf meets and the test for a predicate that the test can compare.
+predicate. `Leaf` holds the two apart tests of the leaves and the test for a predicate that the
+test can compare.
 `Leaf` is a fact of the signature at each absolute side, so the dual universe has the leaves of the
 universe. `Leaf` is outside `Sem` and holds computable fields only, so the test stays computable,
 and the kernel evaluates a closed pair.

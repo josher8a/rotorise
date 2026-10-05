@@ -10,7 +10,8 @@ coproduct. So two formers in different classes share no value and no attribute, 
 disjointness laws on each side are theorems of the classes.
 
 A universe supplies the class of each value and of each attribute, and the class where each of
-its formers lands. The class is outside `Sem`, as `PrimAdm` is, because only the meet reads it.
+its formers lands. The class is outside `Sem`, as `PrimAdm` is, because only the soundness of the
+disjointness test reads it, and the compatibility decision reads it through that test.
 -/
 
 namespace Calculus.Alg

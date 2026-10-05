@@ -380,7 +380,7 @@ describe('the term `.set()` writes', () => {
 
     /**
      * …and a set over a *literal* element carries the alternatives as data at the element, which
-     * is what makes the meet able to read them.
+     * is what makes the disjointness test able to read them.
      */
     it('a set over a literal carries the alternatives, so the declaration can read them', () => {
         const term = erase(string.set('a', 'b')).def

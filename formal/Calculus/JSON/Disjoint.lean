@@ -5,8 +5,8 @@ import Calculus.Lang.DisjointA
 # Disjointness at JSON
 
 The structural test `Alg.Term.disjoint` and its soundness hold at every signature, and JSON
-supplies only its leaves and the laws of the leaves and of the formers. Two kinds meet at the
-kind where they are one kind, and at the bottom elsewhere. A JSON predicate is a function, so the
+supplies only its leaves and the laws of the leaves and of the formers. Two kinds are apart where
+they are two kinds. A JSON predicate is a function, so the
 test compares no predicate. JSON has no set former, no list former and no map former in its
 signature, so a term of those formers admits nothing, and each former law holds because both
 sides are empty.
