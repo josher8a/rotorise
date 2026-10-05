@@ -150,7 +150,7 @@ describe('the product distributes over a union', () => {
     /**
      * **The distribution law.** A product over a union of objects is the union of the merges,
      * and nothing is nested: the result is one flat `union`, built through `union` itself so
-     * `compatible` runs over the products rather than over the factors.
+     * `agrees` runs over the products rather than over the factors.
      */
     it('is the union of the merges, flat', () => {
         expect(product(Kind, Tail).def).toEqual(

@@ -43,10 +43,10 @@ import {
 } from './result'
 import type { Body, Field, LiteralForm, NameForm, Term } from './term'
 import {
+    agrees,
     alwaysWritten,
     clauseForm,
     clauseLiteralsOf,
-    compatible,
     force,
     literalAlternatives,
     member as memberOf,
@@ -283,7 +283,7 @@ export type Decoded<C> = C extends {
 /*
  * A reader here answers from the **term** and nothing else, which is what makes the term determine
  * the codec rather than describe it. `constantOf` is the one left in this file; `member`, `occV`,
- * `occA`, `specOf`, `tagsOf` and `compatible` are `term.ts`'s, and
+ * `occA`, `specOf`, `tagsOf` and `agrees` are `term.ts`'s, and
  * `carries`, `accepts` and `readsBack` ask the pair in `denote.ts`.
  *
  * They take a *codec* and read its term rather than taking the term, and that is the decision
@@ -3416,7 +3416,7 @@ const productOfTwo = (first: unknown, second: unknown): unknown => {
         }),
     )
     // one merge is an object and needs no union around it; several are one flat union, built
-    // through `union` itself so `compatible` runs over the products
+    // through `union` itself so `agrees` runs over the products
     return merges.length === 1
         ? merges[0]
         : union(merges as unknown as readonly AnyCodec[])
@@ -3431,7 +3431,7 @@ const productOfTwo = (first: unknown, second: unknown): unknown => {
  *
  * **A union factor distributes.** The result is one flat `union` of the `n·m` merges, outer over
  * the first factor's options and inner over the second — the `flatMap` order the model's
- * distribution law states. It is built through {@link union}, so `compatible` runs
+ * distribution law states. It is built through {@link union}, so `agrees` runs
  * over the products and a pair of merges it cannot show compatible is refused there rather than here.
  *
  * **More than two factors fold left.** `product(a, b, c)` is `product(product(a, b), c)`, and the
@@ -4828,7 +4828,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
 
     for (const [at, { option: first, term: x }] of pairs.entries()) {
         for (const { option: second, term: y } of pairs.slice(at + 1)) {
-            if (compatible(x, y)) continue
+            if (agrees(x, y)) continue
             throw new CodecError(
                 `${first.describe} and ${second.describe} are not shown compatible: an adapter or a thunk is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
             )
