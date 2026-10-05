@@ -486,19 +486,16 @@ def viewsDisjoint (x y : Term) : Bool :=
   Alg.Term.disjoint pair0 (view .host x) (view .host y) &&
     Alg.Term.disjoint pair0 (view .dual x) (view .dual y)
 
-/-- The certificate over a list of options, pair by pair. -/
-def certAll : List Term → Bool
-  | [] => true
-  | t :: ts => ts.all (fun u => viewsDisjoint t u) && certAll ts
-
-/-- **The certificate a union must carry for its admission to be the join of its options'.**
-    One condition. Each pair of options is certified, so no value and no attribute has two
-    admitters, and nothing is refused for being admitted twice.
+/-- **The certificate a union must carry for its admission to be the join of its options'**: the
+    certificate over a list of options, pair by pair. One condition. Each pair of options is
+    certified, so no value and no attribute has two admitters, and nothing is refused for being
+    admitted twice.
 
     An open object needs no second condition. The structural lemmas carry the open block
     themselves, so a union holding an open block certifies on separation alone. -/
-def unionOk (os : List Term) : Bool :=
-  certAll os
+def certAll : List Term → Bool
+  | [] => true
+  | t :: ts => ts.all (fun u => viewsDisjoint t u) && certAll ts
 
 /-- The certificate, in the pairwise form. -/
 theorem pairwise_of_certAll : ∀ {ts : List Term}, certAll ts = true →
@@ -573,7 +570,7 @@ example : Alg.Term.disjoint pair0
 
 /-- **Two objects that declare one name with one mark and no literal are certified**: the
     required slots hold `string` and `boolean`, which are disjoint. -/
-example : unionOk [.object (.mk {"a"} (fun _ => .req .string) none),
+example : certAll [.object (.mk {"a"} (fun _ => .req .string) none),
     .object (.mk {"a"} (fun _ => .req .boolean) none)] = true := by decide
 
 /-! ### A required position and an element
@@ -633,18 +630,18 @@ theorem viewsDisjoint_heldRecursion_bothOrders :
         (.mu (.union [Term.boolean, .object (.mk {"k"} (fun _ => .req (.var 0)) none)])) = true := by
   decide
 
-example : unionOk [.object (.mk {"x"} (fun _ => .optional .string) none)] = true := by
-  simp [unionOk, certAll]
+example : certAll [.object (.mk {"x"} (fun _ => .optional .string) none)] = true := by
+  simp [certAll]
 
-example : unionOk [.object (.mk {"x"} (fun _ => .req .string) none)]
+example : certAll [.object (.mk {"x"} (fun _ => .req .string) none)]
     = true := by
-  simp [unionOk, certAll]
+  simp [certAll]
 
 /-- …and a singleton union of an **open** object is certified: a union of one option has no
     pair to certify. -/
-example : unionOk [.object (.mk {"a"} (fun _ => .req .string) (some .string))]
+example : certAll [.object (.mk {"a"} (fun _ => .req .string) (some .string))]
     = true := by
-  simp [unionOk, certAll]
+  simp [certAll]
 
 /-! ### Arrays told apart by a literal position
 
@@ -658,12 +655,12 @@ def literalListOptions : List Term :=
    .list [] none []]
 
 /-- **The test certifies the union**: each pair is disjoint. -/
-theorem unionOk_literalListOptions : unionOk literalListOptions = true := by decide
+theorem certAll_literalListOptions : certAll literalListOptions = true := by decide
 
 /-- **The crossing control is not certified.** `array (literal "A")` and `array (literal "B")`
     both hold `[]`. -/
-theorem not_unionOk_literalArrays :
-    unionOk [.array (.literal .string "A"), .array (.literal .string "B")] = false := by decide
+theorem not_certAll_literalArrays :
+    certAll [.array (.literal .string "A"), .array (.literal .string "B")] = false := by decide
 
 /-! ### Two restricted sets, apart at their elements
 
@@ -1193,7 +1190,7 @@ example :
 
 /-- **A certified union is separated**, which is the premise of `pairwiseCompat_of_separated`
     and of `admitsAtMostOne_of_separated`. -/
-theorem separated_of_unionOk {os : List Term} (h : unionOk os = true) : Separated α os :=
+theorem separated_of_certAll {os : List Term} (h : certAll os = true) : Separated α os :=
   (pairwise_of_certAll h).imp separates_of_viewsDisjoint
 
 

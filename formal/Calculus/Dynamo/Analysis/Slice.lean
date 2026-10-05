@@ -191,7 +191,7 @@ theorem AdmAny_extract_or_exclude (c : AltClause) (opts : List Term) (v : Value)
 /-- …and the two halves of a slice share no value, because the certificate bounds the options
     that admit one at a single option and the clause keeps them apart. -/
 theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
-    (hok : unionOk opts = true) (v : Value) :
+    (hok : certAll opts = true) (v : Value) :
     (AdmAny α (c.extract opts) v && AdmAny α (c.exclude opts) v) = false := by
   rcases hb : AdmAny α (c.extract opts) v with _ | _
   · simp
@@ -207,7 +207,7 @@ theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
     have := (List.mem_filter.mp ht2).2; simpa using this
   have hne : t1 ≠ t2 := fun hh => by rw [hh, hc2] at hc1; exact Bool.noConfusion hc1
   have hlen : (opts.filter (fun t => Adm α t v)).length ≤ 1 := by
-    have hone := (admitsAtMostOne_of_separated (α := α) (separated_of_unionOk hok)).1 v
+    have hone := (admitsAtMostOne_of_separated (α := α) (separated_of_certAll hok)).1 v
     rwa [filter_AdmList (fun t _ => Adm_exact t) v,
       List.length_map] at hone
   have hf1 : t1 ∈ opts.filter (fun t => Adm α t v) :=
@@ -231,7 +231,7 @@ theorem Adm_extract_or_exclude (c : AltClause) (opts : List Term) (v : Value) :
 
 /-- …and no value falls in both slices of a certified union, so a certified union is the sum of
     any slice and its complement. -/
-theorem Adm_extract_and_exclude {c : AltClause} {opts : List Term} (hok : unionOk opts = true)
+theorem Adm_extract_and_exclude {c : AltClause} {opts : List Term} (hok : certAll opts = true)
     (v : Value) :
     (Adm α (Term.ofOptions (c.extract opts)) v && Adm α (Term.ofOptions (c.exclude opts)) v)
       = false := by

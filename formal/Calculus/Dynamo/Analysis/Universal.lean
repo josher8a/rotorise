@@ -35,7 +35,7 @@ def opaqUnfold : Term :=
     Term.array .opaq, Term.record .opaq, .set .opaq]
 
 /-- The options of the unfolding are pairwise orthogonal. -/
-theorem opaqUnfold_ok : unionOk (match opaqUnfold with | .union os => os | _ => []) = true := by
+theorem opaqUnfold_ok : certAll (match opaqUnfold with | .union os => os | _ => []) = true := by
   decide
 
 /-- **`opaque` is total, write side.** `opaque` writes every value. -/

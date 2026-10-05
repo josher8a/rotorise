@@ -49,7 +49,7 @@ already give.
 
 **What names the guarantee instead today.** `PairwiseCompat`, one `Prop` over the option list.
 `pairwiseCompat_of_compatPair` discharges it through the decision, and `pairwiseCompat_of_separated`
-with `separated_of_unionOk` through the certificate.
+with `separated_of_certAll` through the certificate.
 
 ---
 
