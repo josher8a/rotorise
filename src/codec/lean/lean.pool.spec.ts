@@ -571,28 +571,26 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
     return pairs
 }
 
-/** The two instances of each caller function that the `#eval` rows run, where the kernel binds them. */
-const stands = [
-    { q: 'fun _ => true', r: 'fun _ => none' },
-    { q: 'fun _ => false', r: 'fun _ => some Value.null' },
-] as const
+/**
+ * **One instance of each caller function, for the `#eval` row.** The kernel vector of a quantified
+ * pair binds each caller function and states the decision at every function, so a second instance
+ * checks nothing that the kernel does not. The row runs one instance for its diagnosis.
+ */
+const stand = { q: 'fun _ => true', r: 'fun _ => none' } as const
 
-/** One `#eval` row per instance: the row prints only on a mismatch. */
-const evalRows = (p: PoolPair): string[] => {
+/** One `#eval` row per pair: the row prints only on a mismatch. */
+const evalRow = (p: PoolPair): string => {
     // the compatibility columns of a pair with a fill on each side are the known narrowing
     const expected = p.fills ? `${p.host.slice(0, 2)}-${p.host[3]}-` : p.host
     const label = leanString(`${p.name} ${p.label}`)
     const call = `poolCheck ${label} "${expected}" (${p.l}) (${p.r}) (${p.gl}) (${p.gr})`
-    if (p.closures.length + p.readers.length === 0) return [`#eval ${call}`]
-    return stands.map((stand) => {
-        const lets = [
-            ...p.closures.map((q) => `let ${q} : Value → Bool := ${stand.q}; `),
-            ...p.readers.map(
-                (r) => `let ${r} : Attr → Option Value := ${stand.r}; `,
-            ),
-        ].join('')
-        return `#eval ${lets}${call}`
-    })
+    const lets = [
+        ...p.closures.map((q) => `let ${q} : Value → Bool := ${stand.q}; `),
+        ...p.readers.map(
+            (r) => `let ${r} : Attr → Option Value := ${stand.r}; `,
+        ),
+    ].join('')
+    return `#eval ${lets}${call}`
 }
 
 /** The sentinel that the gate reads: the only line of a clean run. */
@@ -605,7 +603,7 @@ import Calculus.Dynamo.Lang.Store
 /-!
 # The pre-check of the generated pool
 
-**Generated — do not edit.** One row per pair and instance of the caller functions. A row compares
+**Generated — do not edit.** One row per pair, at one instance of the caller functions. A row compares
 the host verdicts with the model's decisions, and prints only a mismatch. A \`-\` reads no column.
 -/
 
@@ -634,7 +632,7 @@ def poolCheck (name host : String) (l r gl gr : Term) : IO Unit := do
   unless ok do
     IO.println s!"mismatch {name}: host {host} model {bit d}{bit v}{bit c}{bit g}"
 
-${pairs.flatMap(evalRows).join('\n')}
+${pairs.map(evalRow).join('\n')}
 
 #eval IO.println ${leanString(sentinel(pairs.length))}
 
