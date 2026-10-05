@@ -39,6 +39,7 @@ import {
     never,
     nullable,
     nullValue,
+    number,
     object,
     opaque,
     optional,
@@ -50,7 +51,7 @@ import {
     union,
     withLegacyRead,
 } from '../codec'
-import type { DisjointPair, Separation } from '../lean'
+import type { DisjointPair, Separation, Slice, Sliceable } from '../lean'
 import {
     LeanUnemittable,
     leanDisjoint,
@@ -58,6 +59,8 @@ import {
     leanRooted,
     leanSeparation,
     leanSeparationModule,
+    leanSlice,
+    leanSliceModule,
     leanString,
     leanTermOf,
 } from '../lean'
@@ -132,6 +135,11 @@ const undeclared = lazy((): never => {
 const callerPredicate = (v: unknown): v is unknown => v !== 'zz'
 const names = ['a', 'b', 'c']
 
+/** A union that a constructor accepted, and the discriminators where the union is a dissection. */
+type Declared = { readonly codec: AnyCodec; readonly keys: readonly string[] }
+/** The unions of the seed under draw: each declared union, then each union of a pair. */
+let unions: Declared[] = []
+
 /**
  * **The unions that the generator declares inside a draw.** Each declaration is a host verdict, and
  * a refused declaration refuses the whole draw, so the pool puts each declared pair to the model as
@@ -140,9 +148,16 @@ const names = ['a', 'b', 'c']
  * the union, and the pair is the same two options declared later.
  */
 let declared: [Entry, Entry][] = []
-const declare = (a: Entry, b: Entry, make: () => unknown): AnyCodec => {
+const declare = (
+    a: Entry,
+    b: Entry,
+    make: () => unknown,
+    keys: readonly string[] = [],
+): AnyCodec => {
     declared.push([a, b])
-    return erase(make())
+    const made = erase(make())
+    unions.push({ codec: made, keys })
+    return made
 }
 
 /** The two slices of a dissection, which `mdunion` returns. */
@@ -322,11 +337,15 @@ const draw = (depth: number): Entry => {
             }
             return {
                 name: `dunion(k:a{x:${a.name}}|b{y:${b.name}})`,
-                codec: declare(left, right, () =>
-                    (discriminatedUnion as (...x: unknown[]) => unknown)('k', [
-                        left.codec,
-                        right.codec,
-                    ]),
+                codec: declare(
+                    left,
+                    right,
+                    () =>
+                        (discriminatedUnion as (...x: unknown[]) => unknown)(
+                            'k',
+                            [left.codec, right.codec],
+                        ),
+                    ['k'],
                 ),
             }
         }
@@ -397,11 +416,15 @@ const draw = (depth: number): Entry => {
                 ),
             }
             const name = `mdunion(k,s:${small.name}|${large.name})`
-            const whole = declare(small, large, () =>
-                (mdunion as (...x: unknown[]) => unknown)(
-                    ['k', 's'],
-                    [small.codec, large.codec],
-                ),
+            const whole = declare(
+                small,
+                large,
+                () =>
+                    (mdunion as (...x: unknown[]) => unknown)(
+                        ['k', 's'],
+                        [small.codec, large.codec],
+                    ),
+                ['k', 's'],
             ) as AnyCodec & Slices
             const slice = rng()
             if (slice < 0.33)
@@ -504,6 +527,7 @@ const drop = (why: string) => dropped.set(why, (dropped.get(why) ?? 0) + 1)
 const pool = (seed: number, first: number): readonly PoolPair[] => {
     rng = rngFrom(seed)
     declared = []
+    unions = []
     const built: Entry[] = []
     for (let i = 0; i < DRAWS; i++) {
         try {
@@ -534,7 +558,10 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
         const y = b.codec.def
         let declared = true
         try {
-            union([a.codec, b.codec] as never)
+            unions.push({
+                codec: erase(union([a.codec, b.codec] as never)),
+                keys: [],
+            })
         } catch {
             declared = false
         }
@@ -664,20 +691,103 @@ const kernelPairs = (pairs: readonly PoolPair[]) => {
     return { disjoints, separations }
 }
 
+/**
+ * **The clauses that the pool puts to each name of a union.** The values that the generator pins,
+ * two values that the generator never pins, and one literal at each base and form.
+ */
+const clauseVocabulary: readonly (() => AnyCodec)[] = [
+    ...['a', 'b', 'p', 'x', 'y', 'A', 'q'].map((s) => () => erase(string(s))),
+    ...['1', '2.5'].map((s) => () => erase(decimal(s))),
+    ...['1', '2.5'].map(
+        (s) => () => erase(dynamoNumber(orThrow(DynamoNumber.from(s)))),
+    ),
+    ...[1, 2.5].map((n) => () => erase(number(n))),
+    ...[true, false].map((b) => () => erase(boolean(b))),
+    () => erase(binary(new Uint8Array([1, 2]))),
+]
+
+/**
+ * The slices of one seed: each union of object options, once, with each clause that the emitter
+ * states. The names continue after `first`, so the seeds share one name space.
+ */
+const slicesOf = (declared: readonly Declared[], first: number): Slice[] => {
+    const seen = new Set<string>()
+    const slices: Slice[] = []
+    for (const { codec, keys } of declared) {
+        const def = codec.def
+        if ('mark' in def || def.kind !== 'union') continue
+        const fields = def.options.flatMap((t) =>
+            t.kind === 'object' ? [Object.keys(t.body.fields)] : [],
+        )
+        // the class that the pool measured: a union whose options are all objects
+        if (fields.length !== def.options.length) continue
+        let printed: string
+        try {
+            printed = leanTermOf(codec, 'slice', {
+                closures: new Map(),
+                adapters: new Map(),
+                readers: new Map(),
+            })
+        } catch (error) {
+            if (!(error instanceof LeanUnemittable)) throw error
+            drop(`slice term: ${error.reason}`)
+            continue
+        }
+        const id = `${keys.join(',')}|${printed}`
+        if (seen.has(id)) continue
+        seen.add(id)
+        // a union and a dissection each carry `extract`, which the erased codec does not show
+        const sliceable = codec as Sliceable
+        const name = `slice_${first + slices.length}`
+        const clauses: Readonly<Record<string, AnyCodec>>[] = []
+        for (const key of new Set(fields.flat())) {
+            for (const make of clauseVocabulary) {
+                const clause = { [key]: make() }
+                try {
+                    leanSlice({ name, codec: sliceable, clauses: [clause] })
+                    clauses.push(clause)
+                } catch (error) {
+                    if (!(error instanceof LeanUnemittable)) throw error
+                    drop(`slice: ${error.reason}`)
+                }
+            }
+        }
+        let assigned = keys
+        try {
+            leanSlice({ name, codec: sliceable, clauses: [], keys })
+        } catch (error) {
+            if (!(error instanceof LeanUnemittable)) throw error
+            drop(`assignment: ${error.reason}`)
+            assigned = []
+        }
+        if (clauses.length === 0 && assigned.length === 0) continue
+        slices.push({ name, codec: sliceable, clauses, keys: assigned })
+    }
+    return slices
+}
+
 describe('the generated pool, against the model', () => {
-    const seeds: { seed: number; pairs: readonly PoolPair[] }[] = []
+    const seeds: {
+        seed: number
+        pairs: readonly PoolPair[]
+        slices: readonly Slice[]
+    }[] = []
     for (const seed of SEEDS) {
         const first = seeds.reduce((n, one) => n + one.pairs.length, 0)
-        seeds.push({ seed, pairs: pool(seed, first) })
+        const pairs = pool(seed, first)
+        const sliced = seeds.reduce((n, one) => n + one.slices.length, 0)
+        seeds.push({ seed, pairs, slices: slicesOf(unions, sliced) })
     }
-    const perSeed = seeds.map(({ seed, pairs }) => ({
+    const perSeed = seeds.map(({ seed, pairs, slices }) => ({
         seed,
         pairs,
+        slices,
         ...kernelPairs(pairs),
     }))
     const pairs = perSeed.flatMap((one) => one.pairs)
     const disjoints = perSeed.flatMap((one) => one.disjoints)
     const separations = perSeed.flatMap((one) => one.separations)
+    const slices = perSeed.flatMap((one) => one.slices)
 
     /**
      * **The counts pin the pool, deliberately.** The pool depends on the seed alone, so a count
@@ -691,34 +801,50 @@ describe('the generated pool, against the model', () => {
                 fills: one.pairs.filter((p) => p.fills).length,
                 disjoints: one.disjoints.length,
                 separations: one.separations.length,
+                slices: one.slices.length,
+                clauses: one.slices.reduce((n, s) => n + s.clauses.length, 0),
+                assignments: one.slices.filter((s) => s.keys?.length).length,
             })),
             dropped: Object.fromEntries([...dropped].sort()),
         }).toMatchInlineSnapshot(`
           {
             "dropped": {
               "a constructor refused the draw": 71,
+              "slice: a member pins the key through a \`held\` adapter: the host reads the literal under the adapter, and \`altsOfField\` reads a literal slot alone": 192,
+              "slice: a member pins the key with a fill: the host counts a fill as required, and \`ObjectSlot.presence\` gives a fill the presence of an optional name": 24,
+              "slice: the clause is a \`decimal\` or a \`number\` literal: the host compares the form of the literal, and \`Alts\` carries the base alone": 3428,
+              "slice: the key carries a union of literals: the host compares two sets of alternatives, and \`altsSub\` compares one literal with one value": 252,
             },
             "seeds": [
               {
+                "assignments": 32,
+                "clauses": 2940,
                 "disjoints": 1285,
                 "fills": 7,
                 "pairs": 1285,
                 "seed": 20261004,
                 "separations": 1278,
+                "slices": 77,
               },
               {
+                "assignments": 37,
+                "clauses": 3240,
                 "disjoints": 1272,
                 "fills": 7,
                 "pairs": 1272,
                 "seed": 1,
                 "separations": 1265,
+                "slices": 80,
               },
               {
+                "assignments": 38,
+                "clauses": 3636,
                 "disjoints": 1198,
                 "fills": 14,
                 "pairs": 1198,
                 "seed": 4,
                 "separations": 1184,
+                "slices": 98,
               },
             ],
           }
@@ -747,6 +873,10 @@ describe('the generated pool, against the model', () => {
             writeFileSync(
                 join(formal, '.pool.separations.lean'),
                 leanSeparationModule(separations),
+            )
+            writeFileSync(
+                join(formal, '.pool.slices.lean'),
+                leanSliceModule(slices),
             )
         }
         expect(evalModule([])).toContain(sentinel(0))

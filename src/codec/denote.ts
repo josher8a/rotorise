@@ -240,10 +240,10 @@ const setWire = { S: 'SS', N: 'NS', B: 'BS' } as const
 /**
  * **A member's assignment: one tag per key, read off the member's own body.**
  *
- * The model states no rule here: the tag table is a host index over a `Term.union`, and no term
- * carries it. What the model does carry is the member's own body, as `Calculus.Body.spec`, and
- * this reads the same field data one question further — the field is `req`, its term is a
- * `literal`, and it pins exactly one alternative.
+ * The tag table is a host index over a `Term.union`, and no term carries it. The model carries the
+ * member's own body, as `Calculus.Body.spec`, and this reads the same field data one question
+ * further — the field is `req`, its term is a `literal`, and it pins exactly one alternative. The
+ * slice vectors check each tag: the one-key clause of a tag must admit its own member.
  *
  * **`req` only.** A discriminator that fills an absent tag with a default would key a member on a
  * value no item carries. `Calculus.Body.spec` gives a field with a stand-in the presence of an

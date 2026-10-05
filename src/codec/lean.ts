@@ -56,8 +56,8 @@ import type { AttributeValue } from './attribute'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, LiteralValue, ObjectSlot } from './codec'
 import { union } from './codec'
-import { accepts, readsBack } from './denote'
-import { failed } from './result'
+import { accepts, assignmentOf, readsBack } from './denote'
+import { CodecError, failed } from './result'
 import type {
     Alternatives,
     Body,
@@ -69,8 +69,10 @@ import type {
 import {
     agrees,
     bindersOf,
+    clauseForm,
     disjoint,
     force,
+    pinnedForm,
     readsFreeVariable,
     recursionUse,
     type Scope,
@@ -1302,6 +1304,258 @@ set_option linter.style.nameCheck false
 namespace Calculus
 
 ${pairs.map(leanDisjoint).join('\n\n')}
+
+end Calculus
+`
+
+/* ── the slice ───────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A union or a dissection, with the slice that `src/` runs on it.
+ *
+ * The public `extract` is generic over the clauses that the options admit. This is the erased
+ * form, as {@link AnyCodec} is the erased form of a codec.
+ */
+export type Sliceable = AnyCodec & {
+    readonly extract: (clause: Readonly<Record<string, AnyCodec>>) => AnyCodec
+}
+
+/**
+ * A union and the clauses put to it: `src/`'s `extract`, against the model's `AltClause.admits`.
+ *
+ * `keys` names the discriminators of a dissection. Each option then adds one row per key: the
+ * one-key clause at the tag that `assignmentOf` reads off the option. The row keeps each option
+ * that the host assigns the same tag at that key, the option itself included.
+ */
+export type Slice = {
+    /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
+    readonly name: string
+    readonly codec: Sliceable
+    readonly clauses: readonly Readonly<Record<string, AnyCodec>>[]
+    readonly keys?: readonly string[]
+}
+
+/**
+ * **The five readings of the host that the model's slice does not make.**
+ *
+ * At a row with one of these, the two sides answer two different questions, so the emitter refuses
+ * the row. The pool measured the agreement at every other row. A probe of one reading gives the
+ * model the reading, or shows that the host is wrong, and then deletes the refusal.
+ */
+const sliceReadings = {
+    held: 'a member pins the key through a `held` adapter: the host reads the literal under the adapter, and `altsOfField` reads a literal slot alone',
+    refine: 'a member pins the key through a `refine`: the host reads the literal under the refinement, and `altsOfField` reads a literal slot alone',
+    fill: 'a member pins the key with a fill: the host counts a fill as required, and `ObjectSlot.presence` gives a fill the presence of an optional name',
+    alternatives:
+        'the key carries a union of literals: the host compares two sets of alternatives, and `altsSub` compares one literal with one value',
+    form: 'the clause is a `decimal` or a `number` literal: the host compares the form of the literal, and `Alts` carries the base alone',
+} as const
+
+/** One clause, and the options that `src/` keeps under the clause, in the order of the union. */
+type SliceRow = { readonly clause: string; readonly keeps: readonly boolean[] }
+
+/** A clause, as an `AltClause` over the names, the base, and the one value at each name. */
+const leanClause = (
+    entries: readonly (readonly [string, Literal['base'], unknown])[],
+): string =>
+    `(AltClause.mk ${leanFinset(entries.map(([name]) => name))} (${leanKeyFunction(
+        entries.map(([name, base, one]) => [
+            leanString(name),
+            `(⟨.${base}, ${leanAlternative(base, one)}⟩ : Alts)`,
+        ]),
+    )}))`
+
+/** Refuse a key where a member pins the key by a reading that the model does not make. */
+const memberReadings = (
+    options: readonly Term[],
+    key: string,
+    at: string,
+): void => {
+    for (const t of options) {
+        if (t.kind !== 'object') continue
+        const field = t.body.fields[key]
+        if (field === undefined || pinnedForm(field.t) === undefined) continue
+        if (field.t.kind === 'held') refuse(at, sliceReadings.held)
+        if (field.t.kind === 'refine') refuse(at, sliceReadings.refine)
+        if (field.t.kind === 'union') refuse(at, sliceReadings.alternatives)
+        if (field.mark === 'fallback') refuse(at, sliceReadings.fill)
+    }
+}
+
+/** The options that `src/`'s `extract` keeps under one clause. */
+const keptBy = (
+    codec: Sliceable,
+    options: readonly Term[],
+    clause: Readonly<Record<string, AnyCodec>>,
+    at: string,
+): readonly boolean[] => {
+    let result: AnyCodec
+    try {
+        result = codec.extract(clause)
+    } catch (error) {
+        // the host refuses a clause key that no member pins, and a clause at a base that no
+        // member carries: each keeps nothing whatever the values, and so does the model
+        if (error instanceof CodecError) return options.map(() => false)
+        throw error
+    }
+    const def = result.def
+    if ('mark' in def) throw new Error(`${at}: a slice returned a field`)
+    const kept =
+        def.kind === 'never' ? [] : def.kind === 'union' ? def.options : [def]
+    if (kept.some((t) => !options.includes(t))) {
+        throw new Error(`${at}: a slice returned an option the union lacks`)
+    }
+    return options.map((t) => kept.includes(t))
+}
+
+/** One clause of the caller, with the host's verdict, or a refusal that names the reading. */
+const sliceRow = (
+    codec: Sliceable,
+    options: readonly Term[],
+    clause: Readonly<Record<string, AnyCodec>>,
+    at: string,
+): SliceRow => {
+    const entries = Object.entries(clause).map(([key, value]) => {
+        const def = value.def
+        const form = 'mark' in def ? undefined : clauseForm(def)
+        if (form === undefined) {
+            return refuse(
+                at,
+                `the clause at '${key}' is no literal codec: \`src/\` refuses the clause, and \`AltClause\` has no clause to state`,
+            )
+        }
+        const ls: readonly LiteralValue[] = form.alts.ls
+        if (ls.length !== 1) refuse(at, sliceReadings.alternatives)
+        if (form.alts.base === 'number' && form.form !== 'dynamoNumber') {
+            refuse(at, sliceReadings.form)
+        }
+        memberReadings(options, key, at)
+        return [key, form.alts.base, ls[0]] as const
+    })
+    return {
+        clause: leanClause(entries),
+        keeps: keptBy(codec, options, clause, at),
+    }
+}
+
+/**
+ * The rows of the discriminator assignment: one per option and key.
+ *
+ * The verdict comes from `assignmentOf` alone, and not from `extract`. A wrong tag then states a
+ * clause that the option fails, and the kernel refuses the row.
+ */
+const assignmentRows = (
+    options: readonly Term[],
+    keys: readonly string[],
+    at: string,
+): readonly SliceRow[] => {
+    for (const key of keys) memberReadings(options, key, `${at}.${key}`)
+    const assigned = options.map((t, i) => {
+        if (t.kind !== 'object') {
+            return refuse(
+                `${at}.option${i}`,
+                'no object: `assignmentOf` reads a tag off an object body',
+            )
+        }
+        const tags = assignmentOf(keys, t.body)
+        if (failed(tags)) {
+            return refuse(
+                `${at}.option${i}`,
+                `\`src/\` assigns no tag: ${tags.message}`,
+            )
+        }
+        // past the refusals above, a tag is a literal slot, so the base is the literal's
+        const baseAt = (key: string): Literal['base'] => {
+            const field = t.body.fields[key]
+            if (field?.t.kind !== 'literal') {
+                throw new Error(
+                    `${at}.option${i}: the tag at '${key}' is no literal`,
+                )
+            }
+            return field.t.base
+        }
+        return keys.map((key) => [key, baseAt(key), tags[key]] as const)
+    })
+    return assigned.flatMap((mine) =>
+        mine.map(([key, base, tag], k) => ({
+            clause: leanClause([[key, base, tag]]),
+            keeps: assigned.map((other) => {
+                const [, b, t] = other[k] as (typeof other)[number]
+                return b === base && t === tag
+            }),
+        })),
+    )
+}
+
+/**
+ * One union, as a Lean `theorem`: the verdict of each clause at each option, as `src/` gives it.
+ *
+ * One theorem per union and not per row, so the file prints each option one time. A caller's
+ * function is a variable of the theorem, and the goal closes as {@link closing} says.
+ */
+export const leanSlice = ({
+    name,
+    codec,
+    clauses,
+    keys = [],
+}: Slice): string => {
+    const def = codec.def
+    if ('mark' in def || def.kind !== 'union') {
+        return refuse(
+            name,
+            'no union: a slice selects among the options of a union',
+        )
+    }
+    const options = def.options
+    const rows = [
+        ...clauses.map((clause, i) =>
+            sliceRow(codec, options, clause, `${name}.clause${i}`),
+        ),
+        ...assignmentRows(options, keys, name),
+    ]
+    const bound: Bound = {
+        closures: new Map(),
+        adapters: new Map(),
+        readers: new Map(),
+    }
+    const printed = options.map((t, i) =>
+        leanTermOfTerm(t, `${name}.option${i}`, { ...topScope(t), bound }),
+    )
+    const binders = leanBinders(bound)
+    return [
+        `/-- \`${name}\` — the options \`src/\` keeps under each clause -/`,
+        `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
+        `    [${rows.map((row) => row.clause).join(',\n      ')}].map`,
+        `      (fun c => [${printed.map((t) => `(${t})`).join(',\n        ')}].map c.admits) =`,
+        `    [${rows.map((row) => `[${row.keeps.join(', ')}]`).join(',\n      ')}] := ${closing(binders)}`,
+    ].join('\n')
+}
+
+/**
+ * The slices as a module of their own.
+ *
+ * Generated at gate time and elaborated, never committed.
+ */
+export const leanSliceModule = (slices: readonly Slice[]): string =>
+    `import Calculus.Dynamo.Analysis.Slice
+import Calculus.Dynamo.Lang.Store
+
+/-!
+# Slices, proposed to the model
+
+**Generated — do not edit.** One theorem per union. Each row is a clause, and the row lists the
+options that \`src/\` keeps under the clause: \`extract\` gives the verdict of a clause of the caller,
+and \`assignmentOf\` gives the verdict of a clause at the tag of a dissection's option. The theorem
+states that \`Calculus.AltClause.admits\` gives the same verdict at each option.
+-/
+
+/-! The emitted key function is total on a membership subtype, so a one-name clause binds a \`k\`
+it never reads; the binder cannot be \`_\` because a clause of several names reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${slices.map(leanSlice).join('\n\n')}
 
 end Calculus
 `
