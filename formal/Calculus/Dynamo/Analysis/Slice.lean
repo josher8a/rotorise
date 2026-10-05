@@ -1,4 +1,4 @@
-import Calculus.Dynamo.Analysis.Meet
+import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Analysis.Orthogonality
 
 variable {α : Calculus.Table}

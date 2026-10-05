@@ -513,7 +513,7 @@ export const occV = (t: Term): readonly SetSlot[] => {
         // the held side restricts every value `f` receives, as `occV (held t P k) = occV P`
         case 'held':
             return occV(t.outer)
-        // a thunk carries a term, so it answers what that term answers. `Meet.lean` heads the
+        // a thunk carries a term, so it answers what that term answers. `Dynamo/Analysis/Disjoint.lean` heads the
         // section `lazy` is transparent, and it constrains nothing: the model reads through on
         // both projections and only the member is lost
         case 'lazy': {
