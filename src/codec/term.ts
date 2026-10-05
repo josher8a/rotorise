@@ -1154,18 +1154,20 @@ const callerView = throughThunks((t, view) => {
  * which is the model's stored view of it: the older reader reads every attribute.
  *
  * **The view keeps a predicate only where the inner term decodes the same in the view as in the
- * term**: where the inner term reaches no `held` and closes no cycle. A thunk that closes a cycle
- * is a variable of the model, and the variable denotes a stage of its binder, which can hold a
- * `held`. {@link reaches} counts such a thunk as a `held`. Elsewhere the view drops the
- * predicate, because data exists only on the side where it was stated: the stored side reads the
- * predicate only through `g`, and the view keeps no closure.
+ * term**: where the inner term lies below the top ({@link belowTop}), read at its own scope. An
+ * adapter (`held`, `withLegacyRead`, a field with a stand-in) or a free variable can run caller
+ * code there. Elsewhere the view drops the predicate, because data exists only on the side where
+ * it was stated: the stored side reads the predicate only through `g`, and the view keeps no
+ * closure.
  */
 const storedView = throughThunks((t, view) => {
     switch (t.kind) {
         case 'held':
             return view(t.inner)
         case 'refine':
-            return reaches(t.inner, ['held']) ? view(t.inner) : t
+            return belowTop(t.inner, { binds: bindersOf(t.inner), inside: [] })
+                ? t
+                : view(t.inner)
         default:
             return mapChildren(t, view)
     }
@@ -1272,6 +1274,20 @@ const safeAt = (t: Term, scope: Scope, safe: ReadonlySet<Term>): boolean => {
             return true
     }
 }
+
+/**
+ * **Whether a term is closed at the scope**, the model's `Term.closed`: it reads no variable of a
+ * binder outside it. A binder of the term itself is inside it.
+ */
+const closedAt = (t: Term, scope: Scope): boolean => safeAt(t, scope, new Set())
+
+/**
+ * **Whether a term lies below the top at the scope**, the model's `!hasHeld t && t.closed`: it
+ * holds no adapter and it is closed. Such a term writes one value to one attribute and reads one
+ * attribute to one value, as the top does, so a predicate over it reads the value itself.
+ */
+const belowTop = (t: Term, scope: Scope): boolean =>
+    !holdsAdapter(t, scope) && closedAt(t, scope)
 
 /**
  * **The context with the binder of `y` pushed**, the model's `pushMu`: the binder is below `opaque`
@@ -1428,8 +1444,8 @@ const baseRows = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
     const view = half === 'write' ? callerView : storedView
     // two closed terms denote alike at every binder, so their views speak for them
     if (
-        safeAt(x, at.left, new Set()) &&
-        safeAt(y, at.right, new Set()) &&
+        closedAt(x, at.left) &&
+        closedAt(y, at.right) &&
         disjoint(view(x), view(y))
     )
         return true
@@ -1883,7 +1899,7 @@ const termRow = (x: Term, y: Term, w: Walk): boolean => {
                 (other, v) =>
                     disjointWalk(x.inner, other, v) ||
                     (x.q.kind === 'members' &&
-                        !heldOrVariable(x.inner, v.left) &&
+                        belowTop(x.inner, v.left) &&
                         predicateApart(x.q, other, v)),
                 y,
                 w,
@@ -1895,8 +1911,8 @@ const termRow = (x: Term, y: Term, w: Walk): boolean => {
                 (other, v) =>
                     other.kind === 'term' &&
                     (other.t.kind === 'set'
-                        ? !readsVariable(x.elem, v.left.inside) &&
-                          !readsVariable(other.t.elem, v.right.inside) &&
+                        ? closedAt(x.elem, v.left) &&
+                          closedAt(other.t.elem, v.right) &&
                           disjointWalk(x.elem, other.t.elem, v)
                         : otherShape(other.t, ['prim', 'list', 'object'])),
                 y,
@@ -1967,8 +1983,9 @@ const rightRows = (
  * **The right operand, split at every depth**, the model's `splitR`. The rows of a left
  * refinement and a left recursive term read the right operand through this split. A union splits
  * into its options. A refinement keeps its predicate on each option below it, through the wrapper
- * `wrap`, unless its inner term holds an adapter or a variable: there the split drops the
- * predicate, and the inner term bounds the refinement. A recursive term is handed whole to `fam`,
+ * `wrap`, where the predicate is data and the inner term lies below the top ({@link belowTop}).
+ * Elsewhere the split drops the predicate, and the inner term bounds the refinement: a refined
+ * term admits less than its inner term, and a predicate that is not data is read by no row. A recursive term is handed whole to `fam`,
  * and is also unfolded with its binder paired with nothing. So a right refinement or a right
  * recursive term hides no option from the left row.
  */
@@ -1994,11 +2011,11 @@ const splitRight = (
                 )
             case 'refine': {
                 const { inner, q } = other.t
-                return heldOrVariable(inner, w.right)
-                    ? splitRight(fam, inner, w, wrap)
-                    : splitRight(fam, inner, w, (t) =>
+                return q.kind === 'members' && belowTop(inner, w.right)
+                    ? splitRight(fam, inner, w, (t) =>
                           wrap({ kind: 'refine', inner: t, q }),
                       )
+                    : splitRight(fam, inner, w, wrap)
             }
         }
     return fam(wrap(y), w)
@@ -2012,8 +2029,7 @@ const predicateApart = (q: Predicate, y: Term, w: Walk): boolean => {
     const other = see(y, w.right)
     if (other.kind !== 'term' || other.t.kind !== 'refine') return false
     return (
-        (!heldOrVariable(other.t.inner, w.right) &&
-            predicatesApart(q, other.t.q)) ||
+        (belowTop(other.t.inner, w.right) && predicatesApart(q, other.t.q)) ||
         predicateApart(q, other.t.inner, w)
     )
 }
@@ -2160,51 +2176,5 @@ const bodiesApart = (a: Body, b: Body, w: Walk): boolean =>
             field.mark === 'req' &&
             (a.rest === undefined || disjointWalk(a.rest, field.t, w)),
     )
-
-/**
- * **Whether the spelling of a term at a scope reads a variable**, the model's `hasVar`. A thunk
- * that returns a term the walk is inside is a variable, and a thunk that throws is a free
- * variable. The walk stops at each, so it ends where the spelling ends.
- */
-const readsVariable = (t: Term, inside: readonly Term[]): boolean => {
-    const on = (one: Term) => readsVariable(one, [...inside, t])
-    switch (t.kind) {
-        // a thunk that throws is a free variable
-        case 'lazy': {
-            const target = force(t)
-            return target === undefined || inside.includes(target) || on(target)
-        }
-        case 'set':
-            return on(t.elem)
-        case 'list':
-            return (
-                t.pre.some(on) ||
-                (t.spread !== undefined && on(t.spread)) ||
-                t.suf.some(on)
-            )
-        case 'object':
-            return (
-                Object.values(t.body.fields).some((field) => on(field.t)) ||
-                (t.body.rest !== undefined && on(t.body.rest))
-            )
-        case 'union':
-            return t.options.some(on)
-        case 'held':
-            return on(t.inner) || on(t.outer)
-        case 'refine':
-        case 'legacy':
-            return on(t.inner)
-        default:
-            return false
-    }
-}
-
-/**
- * **Whether the inner term of a refinement bounds the refinement**, the model's
- * `hasHeld y || y.hasVar`. Such a refinement reads no data predicate. The split, the left row
- * and the right chain each read this one test.
- */
-const heldOrVariable = (t: Term, scope: Scope): boolean =>
-    holdsAdapter(t, scope) || readsVariable(t, scope.inside)
 
 const never: Term = { kind: 'never' }

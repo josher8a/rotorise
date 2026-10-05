@@ -124,21 +124,24 @@ end
 mutual
 /-- **The right operand, split at every depth.** The rows of a left `refine` and a left `mu`
     read the right operand through this split. A union splits into its options. A refinement
-    keeps its predicate on each option below it, through the wrapper `w`, unless its inner term
-    holds a `held` or a variable: there the split drops the predicate, and the inner term bounds
-    the refinement. A recursive term is handed whole to the family, and is also unfolded with
+    keeps its predicate on each option below it, through the wrapper `w`, where the predicate is
+    data at a side and the inner term lies below the top (held-free and closed). Elsewhere the
+    split drops the predicate, and the inner term bounds the refinement: a refined term admits
+    less than its inner term, and a predicate that is data at no side is read by no family. A recursive term is handed whole to the family, and is also unfolded with
     its binder paired with nothing. So a right `refine` or a right `mu` hides no option from
     the left row. -/
-def splitR (fam : Pairing → Term S → Bool) (p : Pairing) (w : Term S → Term S) : Term S → Bool
+def splitR [Leaf S] (fam : Pairing → Term S → Bool) (p : Pairing) (w : Term S → Term S) :
+    Term S → Bool
   | .never => true
   | .union os => splitRL fam p w os
   | .refine y q qA =>
-      if hasHeld y || y.hasVar then splitR fam p w y
-      else splitR fam p (fun t => w (.refine t q qA)) y
+      if (Leaf.isData false q || Leaf.isData true qA) && !hasHeld y && y.closed then
+        splitR fam p (fun t => w (.refine t q qA)) y
+      else splitR fam p w y
   | .mu b => fam p (w (.mu b)) || splitR fam (shiftR p) w b
   | y => fam p (w y)
 /-- The list companion of `splitR`. -/
-def splitRL (fam : Pairing → Term S → Bool) (p : Pairing) (w : Term S → Term S) :
+def splitRL [Leaf S] (fam : Pairing → Term S → Bool) (p : Pairing) (w : Term S → Term S) :
     List (Term S) → Bool
   | [] => true
   | y :: ys => splitR fam p w y && splitRL fam p w ys
@@ -150,7 +153,7 @@ end
     with `q`.** A refinement counts only over a held-free closed term, which lies below the top,
     so two such refinements send one value and one attribute to each other. -/
 def predApart [Leaf S] (s : Bool) (q : S.P s) : Term S → Bool
-  | .refine y q' qA' => (Leaf.isData s (half s q' qA') && !hasHeld y && !y.hasVar &&
+  | .refine y q' qA' => (Leaf.isData s (half s q' qA') && !hasHeld y && y.closed &&
       Leaf.predicatesApart s q (half s q' qA')) ||
         predApart s q y
   | _ => false
@@ -158,7 +161,7 @@ def predApart [Leaf S] (s : Bool) (q : S.P s) : Term S → Bool
 /-- **A refinement is apart from the right operand at the side `s`**: the refinement's data
     predicate at `s` holds with no predicate of the right chain, over a held-free closed term. -/
 def dataApart [Leaf S] (x : Term S) (s : Bool) (q : S.P s) (y : Term S) : Bool :=
-  Leaf.isData s q && !hasHeld x && !x.hasVar && predApart s q y
+  Leaf.isData s q && !hasHeld x && x.closed && predApart s q y
 
 /-- **The one leaf family**: a primitive is disjoint from a primitive where the leaf says so,
     and from every former, because two formers of different shape classes share no value. The
@@ -172,7 +175,7 @@ def famPrimD [Leaf S] (g : S.Ground) : Term S → Bool
     two element terms that share no value give two set terms that share no set. The row asks
     closed elements, because the set laws of a universe are stated over closed elements. -/
 def famSetD (a : Term S) (mt : Term S → Bool) : Term S → Bool
-  | .set y => !a.hasVar && !y.hasVar && mt y
+  | .set y => a.closed && y.closed && mt y
   | .prim _ | .list _ _ _ | .object _ => true
   | _ => false
 
