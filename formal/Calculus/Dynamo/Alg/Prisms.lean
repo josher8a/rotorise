@@ -226,12 +226,6 @@ def HLit (k : GroundKind) (x : k.Carrier) : Value → Prop :=
     *ungated*, because both sides carry §1's `Numerals`. There is one base at `N`, and it is
     §1's own set: `baseCodec .number`. -/
 
-/-- §1's `D`, as a predicate on values. **It asks only that the value is an `N`**: `D` is the
-    well-formed numerals and the carrier is exactly those, so the grammar check is carried
-    rather than tested. -/
-def inD : Value → Bool :=
-  fun v => match v with | .num _ => true | _ => false
-
 
 /-! ### The base at `N` is §1's own set, and there is exactly ONE of them
 
