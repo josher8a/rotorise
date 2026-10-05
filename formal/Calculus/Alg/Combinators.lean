@@ -31,11 +31,12 @@ def IsoCancelsAt (o : Orient) (c : Codec V M) (f g : V → V) : Prop :=
 /-- The obligation at the host: the caller pair cancels on the values that the codec writes. -/
 abbrev IsoCancels (c : Codec V M) (f g : V → V) : Prop := IsoCancelsAt Orient.host c f g
 
-/-- The coherence of the rule `(alternate reader)`: the legacy reading agrees with the current one on their
-    overlap. `ran(r) ⊆ dom(e)` is not part of it, because `Codec.extendRead` reads only what the
-    current codec writes. -/
+/-- The coherence of the rule `(alternate reader)`: where both readers read an attribute, and the
+    current codec can write the legacy answer, the two answers agree. A legacy answer that the
+    current codec cannot write is never read, so the premise asks nothing of it. This is the exact
+    premise of order-freedom (`extendRead_p_union`). -/
 def ReadsCoherently (c : Codec V M) (r : V → Option V) : Prop :=
-  ∀ a v, r a = some v → ∀ v', c.p a = some v' → v = v'
+  ∀ a v, r a = some v → (c.e v).isSome → ∀ v', c.p a = some v' → v = v'
 
 /-- The judgement types the pair *on the held set*: `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`. `Lawful` never
     mentions `T`, because retract, canon and writes relate `e` and `p` to each other and not to
@@ -340,17 +341,20 @@ theorem extendRead_p {r : V → Option V} {a v} :
     | none => (r a).filter fun v => (c.e v).isSome) = some v ↔ _
   cases hp : c.p a <;> simp
 
-/-- **Under coherence the read is the order-free union** of the base read and the gated older
-    read: the base's precedence is unobservable. Without the gate the union is wider, because
-    the older reader can answer a value that `c` cannot write. -/
-theorem extendRead_p_union {r : V → Option V} (h : ReadsCoherently c r) {a v} :
-    (c.extendRead r).p a = some v ↔ c.p a = some v ∨ (r a = some v ∧ (c.e v).isSome) := by
-  rw [extendRead_p]
-  refine ⟨fun h' => h'.imp_right fun ⟨_, hr, he⟩ => ⟨hr, he⟩, fun h' => h'.elim .inl ?_⟩
-  rintro ⟨hr, he⟩
-  rcases (c.p a).eq_none_or_eq_some with hp | ⟨v', hp⟩
-  · exact .inr ⟨hp, hr, he⟩
-  · exact .inl (hp.trans (congrArg some (h a v hr v' hp).symm))
+/-- **Coherence is exactly the condition under which the read is the order-free union** of the
+    base read and the gated older read: the base's precedence is unobservable. Without the gate
+    the union is wider, because the older reader can answer a value that `c` cannot write. -/
+theorem extendRead_p_union {r : V → Option V} :
+    ReadsCoherently c r ↔ ∀ a v,
+      ((c.extendRead r).p a = some v ↔ c.p a = some v ∨ (r a = some v ∧ (c.e v).isSome)) := by
+  refine ⟨fun h a v => ?_, fun h a v hr he v' hp => ?_⟩
+  · rw [extendRead_p]
+    refine ⟨fun h' => h'.imp_right fun ⟨_, hr, he⟩ => ⟨hr, he⟩, fun h' => h'.elim .inl ?_⟩
+    rintro ⟨hr, he⟩
+    rcases (c.p a).eq_none_or_eq_some with hp | ⟨v', hp⟩
+    · exact .inr ⟨hp, hr, he⟩
+    · exact .inl (hp.trans (congrArg some (h a v hr he v' hp).symm))
+  · exact Option.some.inj (((h a v).mpr (.inr ⟨hr, he⟩)).symm.trans ((h a v').mpr (.inl hp)))
 
 end WrapperInversion
 

@@ -1905,11 +1905,12 @@ export type Reader<T> = {
  * the containment is the construction and not a premise. Unchecked it read a row and refused on
  * the way out, which is **(C)** broken at the migrated row and reported at some later write.
  *
- * Coherence (`ReadsCoherently`) — where both readers read an attribute, they agree — is **not**
+ * Coherence (`ReadsCoherently`) — where both readers read an attribute, and the current encoding
+ * can write the older answer, they agree — is **not**
  * checkable, and the reason is sharper than that. The current encoding is tried first and the older one only on its
  * failure, here and in the model (`Codec.extendRead`), so on `dom(p_current)` the older reader is
  * never consulted and a disagreement has no observable consequence at all. What the premise buys
- * is that the *ordering does not matter*: with it, this presentation equals the order-free
+ * is that the *ordering does not matter*: with it, and only with it, this presentation equals the order-free
  * union of `p` and the checked older reading. Without it the reading depends on declaration
  * order, which is the one thing §5 says resolution never does. So it is a written obligation, and the thing to check is that two
  * readers of one attribute agree — nothing in this library will tell you they do not.

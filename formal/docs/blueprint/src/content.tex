@@ -584,8 +584,8 @@ then \texttt{IsoCancels} on the pair of the caller word. In the rest of this doc
 \lean{Calculus.Alg.Codec.extendRead, Calculus.Alg.ReadsCoherently}
 \leanok
 \begin{verbatim}
-⊢ c : T ⇝ μ    r : 𝔸 ⇀ T    ran(r) ⊆ dom(e)    a ∈ dom(r) ∩ dom(p) ⟹ r(a) = p(a)
-──────────────────────────────────────────────────────────────────────────────────── (alternate reader)
+⊢ c : T ⇝ μ    r : 𝔸 ⇀ T    ran(r) ⊆ dom(e)    a ∈ dom(r) ∩ dom(p) ∧ r(a) ∈ dom(e) ⟹ r(a) = p(a)
+─────────────────────────────────────────────────────────────────────────────────────────────── (alternate reader)
 extendRead(c, r) : adapted(T, μ)
 \end{verbatim}
 \end{definition}
@@ -690,7 +690,7 @@ rule writes through \texttt{c} whatever it read through. Asking for a codec woul
 be called, and would \emph{force} one wherever the older encoding's held set differs. The two side
 premises are the soundness proof's levies (§5). \texttt{ran(r)\ ⊆\ dom(e)} is \rulelink{cond:C}{\textbf{(C)}}'s: a migration must
 land on values the current encoding can write, or the read succeeds and the write-back is the
-failure. The \textbf{coherence} premise — \texttt{r} agrees with \texttt{p} wherever both are defined — is what makes
+failure. The \textbf{coherence} premise — \texttt{r} agrees with \texttt{p} wherever both are defined and \texttt{e} accepts the answer of \texttt{r} — is what makes
 \texttt{extendRead} a migration and not a disguise. Without it the adapter gives two conflicting
 answers to one attribute. With it, \texttt{p\ ∪\ r} is a left-biased union of compatible partial maps,
 and a migrated row behaves \emph{by law} like a current one at the surface. How the migration achieves
