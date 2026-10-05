@@ -8,12 +8,14 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AttributeMap, AttributeValue } from '../../attribute'
+import { DynamoNumber } from '../../attribute'
 import {
     andThen,
     array,
     binary,
     CodecError,
     decimal,
+    dynamoNumber,
     held,
     object,
     optional,
@@ -21,6 +23,7 @@ import {
     union,
     withLegacyRead,
 } from '../../codec'
+import { orThrow } from '../../result'
 import type { StandardSchemaV1 } from '../../standard'
 import { checkMembersStable, checkRoundTrip } from '../../testing'
 
@@ -216,6 +219,30 @@ describe('an attribute the row does not have', () => {
             tier: withLegacyRead({ current: string, whenMissing: 'FREE' }),
         }).item
         expect(C.unsafeDecode({ id: { S: 'a' } }).tier).toBe('FREE')
+    })
+
+    /**
+     * **A decode is writable, so the copy keeps the class of each value in the stand-in.**
+     *
+     * `structuredClone` turns an instance of a class the platform does not know into a plain
+     * object. A `DynamoNumber` stand-in then decoded to `{ digits: '1' }`, and the encode of that
+     * decode refused it as not a `DynamoNumber`. The element of an array failed the same way.
+     */
+    it('decodes a stand-in that holds a DynamoNumber to a value that encodes back', () => {
+        const one = orThrow(DynamoNumber.from('1'))
+        const C = object({
+            b: withLegacyRead({ current: dynamoNumber, whenMissing: one }),
+            bs: withLegacyRead({
+                current: array(dynamoNumber),
+                whenMissing: [one],
+            }),
+        })
+        const read = C.unsafeDecode({ M: {} })
+        expect(read.b).toBeInstanceOf(DynamoNumber)
+        expect(read.bs[0]).toBeInstanceOf(DynamoNumber)
+        expect(C.unsafeEncode(read)).toEqual({
+            M: { b: { N: '1' }, bs: { L: [{ N: '1' }] } },
+        })
     })
 
     /**

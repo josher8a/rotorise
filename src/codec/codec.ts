@@ -1580,8 +1580,9 @@ type MissingCodec<
  *
  * The stand-in is a **value and not a thunk**, which is what makes the check possible here rather
  * than on whichever read happens to need it first. It does not become shared state for that: the
- * declaration holds one value and each read that needs one gets a `structuredClone` of it, so a
- * mutable stand-in still cannot leak between entities. Primitives are handed over as they are,
+ * declaration holds one value and each read that needs one gets a copy of it, so a mutable stand-in
+ * still cannot leak between entities. The copy keeps the class of each value, because a decode must
+ * be writable: a `DynamoNumber` is shared, being immutable. Primitives are handed over as they are,
  * being unable to leak anything.
  */
 const withMissing = <const C extends AnyCodec>(

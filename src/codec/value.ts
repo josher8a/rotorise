@@ -170,12 +170,46 @@ export const namedLiteral = (one: unknown): string =>
             : rendered(one)
 
 /**
+ * A copy of a stand-in for one read, **that keeps the class of each value in the stand-in**.
+ *
+ * A decode must be writable, and a copy that changes a class breaks that. `structuredClone` keeps
+ * the class of a platform type and turns an instance of any other class into a plain object: a
+ * `DynamoNumber` stand-in read back as `{ digits }`, and `dynamoNumber` refused to encode it.
+ *
+ * So this rebuilds the containers that `structuredClone` recurses into, and gives each other object
+ * to `structuredClone`. Where the clone keeps the class, the clone is the copy. Where the clone
+ * loses the class, no copy keeps it, and the value is shared. `DynamoNumber` is the library's one
+ * such class, and it is immutable. A class of the caller that `held` admits is shared the same way.
+ *
+ * Total on any value {@link copiedPerRead} approves: each object this clones is a part of a value
+ * that `structuredClone` accepted.
+ */
+export const copied = (value: unknown): unknown => {
+    if (typeof value !== 'object' || value === null) return value
+    if (Array.isArray(value)) return value.map(copied)
+    if (value instanceof Set) return new Set([...value].map(copied))
+    if (value instanceof Map) {
+        return new Map([...value].map(([k, v]) => [copied(k), copied(v)]))
+    }
+    const record = asRecord(value)
+    if (record) {
+        return Object.fromEntries(
+            Object.entries(record).map(([k, v]) => [k, copied(v)]),
+        )
+    }
+    const clone: unknown = structuredClone(value)
+    return Object.getPrototypeOf(clone) === Object.getPrototypeOf(value)
+        ? clone
+        : value
+}
+
+/**
  * Whether this stand-in has to be *copied* on each read that uses it, decided once.
  *
  * The declaration holds **one** value — that is what makes §3 `(withLegacyRead)`'s premise checkable
  * where the declaration is — so handing that object out is handing every row the same object, and
- * one caller's `.push` becomes every other caller's default. `structuredClone` is the platform's,
- * so a copy costs no dependency.
+ * one caller's `.push` becomes every other caller's default. {@link copied} makes the copy, from
+ * `structuredClone`, which is the platform's, so a copy costs no dependency.
  *
  * Two reasons not to copy, and both are settled here rather than per read.
  *
