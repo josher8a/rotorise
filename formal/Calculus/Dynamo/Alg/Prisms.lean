@@ -9,7 +9,7 @@ The DynamoDB instances of the certified combinator algebra. `Ctor`, the wrappers
 the instances that read the constructors of `Value` and `Attr`:
 
 * the prisms, one per constructor, on the value side and the attribute side;
-* ground codecs, one per §3 ground term.
+* ground codecs, one per ground term.
 -/
 
 namespace Calculus
@@ -19,7 +19,7 @@ section
 /-! ## Constructors as prisms
 
 The shape this file is built out of. A constructor viewed as a partial iso onto its image
-is the prism §7 of the specification already names when it calls `held` and `refine` "the
+is a prism, and `held` and `refine` are "the
 same shape at different strengths". Two families are instances, and naming each writes it
 once rather than once per constructor:
 
@@ -68,7 +68,7 @@ rather than once per constructor. -/
 /-! ### The container prisms
 
 The same shape one level up: a constructor whose payload is a *list* of entries. `L` and
-`M` are the two §1 provides. Naming them is what lets `array` and `record` be one construction
+`M` are the two the attribute domain provides. Naming them is what lets `array` and `record` be one construction
 (`entrywise`, under Products) rather than two. -/
 
 /-- `L`'s payload. -/ def lA : Ctor (List Attr) Attr where
@@ -91,7 +91,7 @@ def mS : Alg.Summand (MapOf Attr) Attr Member Attr.member := ⟨mA, .M, fun _ =>
 
 attribute [prism_rows] lS mS
 
-/-! ## Ground codecs (§3) -/
+/-! ## Ground codecs -/
 
 /-- **The prism of a ground kind**: the stored constructor of the kind. -/
 def GroundKind.prism : (k : GroundKind) → Ctor k.Carrier Attr
@@ -111,7 +111,7 @@ instance GroundKind.decEqCarrier : (k : GroundKind) → DecidableEq k.Carrier
 
 /-! ### The element kinds of a wire set -/
 
-/-- The three element kinds of §1's wire sets: the ground kinds that a set holds. -/
+/-- The three element kinds of the wire sets: the ground kinds that a set holds. -/
 inductive SetKind where
   | string | number | binary
 deriving DecidableEq
@@ -148,7 +148,7 @@ def GroundKind.summand (k : GroundKind) : Alg.Summand k.Carrier Attr Member Attr
 
 /-- The pair a literal refines: its base's, chosen by the index.
 
-    §3's `(literal)` premise is `⊢ g : T ⇝ μ, g ground`, and this is `g`. It exists because
+    The premise of the rule `(literal)` is `⊢ g : T ⇝ μ, g ground`, and this is `g`. It exists because
     the rule quantifies over the base — with the base hard-coded, `literal-S` and `literal-N`
     are two rules and `boolean`, `binary` and `null` are none. A base is the identity on the fiber of its kind: it
     accepts a datum of the kind, changes nothing, and stamps the member of the kind. -/
@@ -204,7 +204,7 @@ theorem inL_iff {k : GroundKind} {x : k.Carrier} {v : Value} :
   rw [← Alg.Ctor.out_eq_some, inL]
   split <;> simp_all
 
-/-- §3's `{ℓ}` — the held set: the datum that the base's prism builds from the alternative.
+/-- The held set `{ℓ}`: the datum that the base's prism builds from the alternative.
     Spelled `Value → Prop` rather than `Held`, which is `Typing`'s abbreviation and one module
     down. -/
 def HLit (k : GroundKind) (x : k.Carrier) : Value → Prop :=
@@ -213,32 +213,32 @@ def HLit (k : GroundKind) (x : k.Carrier) : Value → Prop :=
 
 /-! ## Wrappers -/
 
-/-! ### §1's number gates are that combinator too
+/-! ### The number gates are that combinator too
 
     `(number)` and `(decimal)` each carry a predicate checked on **both** halves —
     `Numeral.WF` on the double a text reads back to, `Numeral.Stored` on the numeral a
-    string is written as. §3 argues at length that gating only the write breaks (C), which
-    is exactly the shape `restrict` has and an ad-hoc `if` does not.
+    string is written as. A gate on the write alone breaks (C), so each gate checks both halves,
+    which is exactly the shape `restrict` has and an ad-hoc `if` does not.
 
     So the gates are not bespoke: each of the two codecs is `refine` over a base. The
     `decimal` gate is a fact of the store, so the DynamoDB port states it on the pair
     (`decimalCodec` is that restriction, `Dynamo/Lang/Store.lean`). The base at `N` is not
-    *ungated*, because both sides carry §1's `Numerals`. There is one base at `N`, and it is
-    §1's own set: `baseCodec .number`. -/
+    *ungated*, because both sides carry `Numerals`. There is one base at `N`, and it is
+    the numeral domain itself: `baseCodec .number`. -/
 
 
-/-! ### The base at `N` is §1's own set, and there is exactly ONE of them
+/-! ### The base at `N` is the numeral domain, and there is exactly ONE of them
 
 **`baseCodec .number` IS the base at `N`.** `Attr.n` carries `Numeral.WF` and so does the value
-side, so `Carries(N)` is §1's `Numerals` on both halves and no wider codec exists to refine. No
+side, so `Carries(N)` is `Numerals` on both halves and no wider codec exists to refine. No
 second base at `N` exists beside it. The DynamoDB port refines it at `Stored`
 (`Dynamo/Lang/Store.lean`), and `Stored` is a real gate rather than a carried one. -/
 
-/-- §3 `(literal)`. **The pair is a refinement of its base by construction** — the `refine`
-    §7 calls "an iso and a prism", with the prism named by `ℓ` and the iso supplied by the
+/-- The rule `(literal)`. **The pair is a refinement of its base by construction** — the `refine`
+    that is "an iso and a prism", with the prism named by `ℓ` and the iso supplied by the
     index.
 
-    `T` is spelled as §3's `ℓ` (`HLit`), so the judgement reads against §3. The set is the
+    `T` is spelled as `ℓ` (`HLit`), so the judgement reads as the rule `(literal)`. The set is the
     refinement's held set (`HLit_iff_restrict`); only the spelling differs. -/
 def literalCodec (k : GroundKind) (x : k.Carrier) : Codec :=
   { (baseCodec k).restrict (inL k x) with T := HLit k x }
@@ -246,11 +246,11 @@ def literalCodec (k : GroundKind) (x : k.Carrier) : Codec :=
 /-! ### The gated ground codecs are refinements
 
 `literal` is not a new construction: it is its base with a prism laid over it, which is what
-§7 means by "an iso and a prism". So its laws come from `Lawful.restrict` and `carrier_restrict`,
+"an iso and a prism" means. So its laws come from `Lawful.restrict` and `carrier_restrict`,
 and its held set is the restriction's (`HLit_iff_restrict`). `decimal` is the same shape at the
 `number` base, restricted to the stored numerals (`Store.lean`). -/
 
-/-- **A literal's held set is the refinement's held set**: §3's `ℓ` is the base's carrier
+/-- **A literal's held set is the refinement's held set**: `ℓ` is the base's carrier
     restricted to the alternative. -/
 theorem HLit_iff_restrict (k : GroundKind) (x : k.Carrier) (v : Value) :
     HLit k x v ↔ ((baseCodec k).restrict (inL k x)).T v := by

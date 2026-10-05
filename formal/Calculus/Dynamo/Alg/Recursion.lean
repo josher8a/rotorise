@@ -27,7 +27,7 @@ mutual
 
 /-- The stage a recursive codec needs to see all of a datum: leaves need `1`, and each
     container layer needs one more. A set holds scalars, so it is one layer deep whatever its
-    size. §1's `M` is a key set with a function on it, so a map's layer is the largest entry
+    size. `M` is a key set with a function on it, so a map's layer is the largest entry
     budget over the key set. -/
 def Attr.depth : Attr → Nat
   | .s _ | .n _ | .b _ | .bool _ | .null => 1

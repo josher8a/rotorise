@@ -6,7 +6,7 @@ import Calculus.Alg.Lists
 `tuple` and `list` pair each position of a row with its own codec before the traversal. The
 codec row that a shape assigns to a row of `n` positions (`slots`, `slotsL`) depends on the
 position alone, never on what stands there. The pairing (`align`, `alignL`) is then a `zip` with
-that row, and §2's clauses run position by position over it. Each fact reads only the pair, so
+that row, and the clauses of the codec laws run position by position over it. Each fact reads only the pair, so
 each one takes the carrier `V` and the members `M` as parameters.
 -/
 
@@ -118,7 +118,7 @@ theorem align_of_slots {α : Type} {cs : List (Codec V M)} {tail : Option (Codec
     align cs tail xs = some (ds.zip xs) := by
   rw [align_eq_zip, hn, h]; rfl
 
-/-! #### §2's clauses, position by position over the codec row -/
+/-! #### The clauses of the codec laws, position by position over the codec row -/
 
 theorem zip_roundTrip : ∀ (ds : List (Codec V M)) (vs : List V) (as : List V),
     (∀ c ∈ ds, LawfulCore member c) → ds.length = vs.length →

@@ -4,7 +4,7 @@ import Calculus.Alg.Codec
 /-!
 # The combinators and the join, over any carriers
 
-The side conditions of §3, the wrappers `held`, `refine` and `alternate reader`, the point codec
+The side conditions of the typing rules, the wrappers `held`, `refine` and `alternate reader`, the point codec
 of a pair of prisms, and the union by the first admitter. Each one reads only the pair and the
 member, so each one takes the carrier `V` and the members `M` as parameters. The laws of each
 combinator follow from the laws of its arguments, and `member : V → M` is the one fact of the
@@ -15,14 +15,13 @@ namespace Calculus.Alg
 
 variable {V M : Type}
 
-/-! ## §3's side conditions, named
+/-! ## The side conditions of the typing rules, named
 
-Three rules carry premises about the pair rather than about the index, and §3 names each
-of them in prose. Naming them here too is what keeps `Obligations` readable and stops
-every use site restating the proposition: a case that consumes one of these says which
-condition it is consuming. -/
+Three rules carry premises about the pair rather than about the index. Naming them here is
+what keeps `Obligations` readable and stops every use site restating the proposition: a
+case that consumes one of these says which condition it is consuming. -/
 
-/-- §3 `(held)`: the iso cancels **on the carriers** — `T ≃ I`, in the domain-restricted
+/-- The rule `(held)`: the iso cancels **on the carriers** — `T ≃ I`, in the domain-restricted
     form the laws actually need. `g ∘ f = id` where `f` lands writable, `f ∘ g = id` on
     the writable values themselves. -/
 def IsoCancelsAt (o : Orient) (c : Codec V M) (f g : V → V) : Prop :=
@@ -32,13 +31,13 @@ def IsoCancelsAt (o : Orient) (c : Codec V M) (f g : V → V) : Prop :=
 /-- The obligation at the host: the caller pair cancels on the values that the codec writes. -/
 abbrev IsoCancels (c : Codec V M) (f g : V → V) : Prop := IsoCancelsAt Orient.host c f g
 
-/-- §3 `(alternate reader)`'s coherence: the legacy reading agrees with the current one on their
+/-- The coherence of the rule `(alternate reader)`: the legacy reading agrees with the current one on their
     overlap. `ran(r) ⊆ dom(e)` is not part of it, because `Codec.extendRead` reads only what the
     current codec writes. -/
 def ReadsCoherently (c : Codec V M) (r : V → Option V) : Prop :=
   ∀ a v, r a = some v → ∀ v', c.p a = some v' → v = v'
 
-/-- §3 types the pair *on the held set*: `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`. `Lawful` never
+/-- The judgement types the pair *on the held set*: `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`. `Lawful` never
     mentions `T`, because retract, canon and writes relate `e` and `p` to each other and not to
     the index. So this is the separate claim that the index is honest, and it is what makes `T` a
     checked part of the judgement rather than a decoration. -/
@@ -52,7 +51,7 @@ structure Carrier (c : Codec V M) : Prop where
 theorem Carrier.empty : Carrier (Codec.empty : Codec V M) := by
   refine ⟨?_, ?_⟩ <;> intro _ _ h <;> exact nomatch h
 
-/-- `Can(c)` is §2's `e[T]` — and it takes `Carrier` to say so: without `domE` a codec could
+/-- `Can(c)` is the image `e[T]` — and it takes `Carrier` to say so: without `domE` a codec could
     write from a value it does not hold, making `Can` larger than the image. -/
 theorem can_iff_image {c : Codec V M} (h : Carrier c) {a : V} :
     Can c a ↔ ∃ v, c.T v ∧ c.e v = some a := by
@@ -60,12 +59,12 @@ theorem can_iff_image {c : Codec V M} (h : Carrier c) {a : V} :
   · rintro ⟨v, hv⟩; exact ⟨v, h.domE hv, hv⟩
   · rintro ⟨v, -, hv⟩; exact ⟨v, hv⟩
 
-/-! ## §1's store, as a premise
+/-! ## The store, as a premise
 
-§2 composes `e` and `p` directly. In use there is a store between them and it is not the
+The codec laws compose `e` and `p` directly. In use there is a store between them and it is not the
 identity on attributes. This is the premise itself, for every store. -/
 
-/-- **`η ⊆ ker p`** — §1's concession, as a proposition. Quantified over `Can(c)` because
+/-- **`η ⊆ ker p`** — the concession to the store, as a proposition. Quantified over `Can(c)` because
     `η` only ever sees what `e` wrote. Buys `retract_through_store`: (R) through the store. -/
 def SurvivesStore (c : Codec V M) (η : V → V) : Prop :=
   ∀ a, Can c a → c.Ker (η a) a
@@ -74,7 +73,7 @@ variable {member : V → M}
 
 /-- **(R), through the store.** `η ⊆ ker p` is exactly what makes a codec survive a round
     trip that passes through the store rather than through `Option` — and it is all it takes,
-    which is why §1 could answer the whole problem by narrowing one held set. -/
+    so a narrowing of one held set answers the whole problem. -/
 theorem Lawful.retract_through_store {c : Codec V M} (h : Lawful member c) {η : V → V}
     (hη : SurvivesStore c η) {t a} (he : c.e t = some a) : c.p (η a) = some t := by
   have hk : c.p (η a) = c.p a := hη a ⟨t, he⟩
@@ -207,7 +206,7 @@ theorem restrict_e_def (c : Codec V M) (q : V → Bool) :
 /-- **The combinator `held` and `refine` both are.** A partial iso either side of the
     pair: `f` in front of the writing, `g` behind the reading, both allowed to refuse.
 
-    §3 keeps the two apart and says why — "the literature collapses them … which is
+    The specification keeps the two apart and says why — "the literature collapses them … which is
     exactly the merged combinator", separated for a reason *outside* the calculus, since a
     total `g` lets a generator for `I` be pushed forward while a partial one leaves only
     rejection sampling. This is that merged combinator, so the claim is checked rather
@@ -290,7 +289,7 @@ theorem refine2_p_isSome (c : Codec V M) (qV : V → Bool) (qA : V → Bool) (a 
 /-- `alternate reader`: extend the reading. The older reader `r` answers only where `c` reads
     nothing, and its answer passes the restriction of `c`'s write: a value that `c` cannot write
     is not read. That is the host's check after the older reader answers, so `ran ⊆ dom(e)` is the
-    construction and not a premise. With §3's coherence premise this presentation equals the
+    construction and not a premise. With the coherence premise of `(alternate reader)` this presentation equals the
     order-free union of `p` and the gated `r` (`extendRead_p_union`). The migration extends
     the read only, so the write and the read are two formulas. -/
 def Codec.extendRead (c : Codec V M) (r : V → Option V) : Codec V M :=
@@ -304,7 +303,7 @@ def Codec.extendRead (c : Codec V M) (r : V → Option V) : Codec V M :=
 /-! ### What the wrappers write and read
 
 Each wrapper is one line of definition and touches exactly one half of the pair; stating
-that as an `iff` is what keeps the proofs below — and §6's wrapper rows — from unfolding
+that as an `iff` is what keeps the proofs below — and the wrapper rows of `≡` — from unfolding
 the definitions again. `held` and `alternate reader` are transparent on the side they do not
 touch, which is why two of the eight are `Iff.rfl`. -/
 
@@ -321,13 +320,13 @@ theorem through_p {f g : V → V} {a v} :
   simp [Codec.through, Option.map_eq_some_iff, eq_comm (a := v)]
 
 /-- The read side of `restrict_e_isSome`. Without it, every literal row unfolds `Codec.restrict`
-    by hand. §4c asks for one codec stated once for both sides, so both halves are `@[simp]`. -/
+    by hand. One codec is stated once for both sides, so both halves are `@[simp]`. -/
 @[simp] theorem restrict_p_isSome {c : Codec V M} {q : V → Bool} (a : V) :
     ((c.restrict q).p a).isSome = ((c.p a).elim false q) := by
   rw [Codec.restrict, refine2_p_isSome, Bool.true_and]
   simp only [gate]; cases c.p a <;> rfl
 
-/-- `alternate reader` does not touch the writing at all — §5's whole point. -/
+/-- `alternate reader` does not touch the writing at all — that is its whole point. -/
 theorem extendRead_e {r : V → Option V} {v a} :
     (c.extendRead r).e v = some a ↔ c.e v = some a := Iff.rfl
 
@@ -363,7 +362,7 @@ theorem Carrier.congr {c d : Codec V M} (he : c.e = d.e) (hp : c.p = d.p)
   · intro v a hx; rw [he] at hx; exact hT v (h.domE hx)
   · intro a v hx; rw [hp] at hx; exact hT v (h.ranP hx)
 
-/-! ## Sums (§5) -/
+/-! ## Sums -/
 
 /-- A list no two of whose entries stand in any relation holds at most one entry. -/
 theorem length_le_one_of_pairwise_false {α : Type} {l : List α}
@@ -481,7 +480,7 @@ theorem lawful_idCodec : Lawful member (idCodec : Codec V M) where
   inv h := by cases h; rfl
   writes hμ := nomatch hμ
 
-/-- §2's laws for a fiber codec: the identity inverts itself, and it writes only its member. -/
+/-- The codec laws for a fiber codec: the identity inverts itself, and it writes only its member. -/
 theorem lawful_fiberCodec [DecidableEq M] {m : M} : Lawful member (fiberCodec member m) where
   inv {o x y} h := by
     simp only [fiberCodec] at h ⊢

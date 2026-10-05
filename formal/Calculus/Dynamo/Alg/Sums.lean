@@ -2,7 +2,7 @@ import Calculus.Dynamo.Alg.Objects
 import Calculus.Lang.Term
 
 /-!
-# Sums (§5)
+# Sums
 
 `altCodec` over the options' codecs: the first option that acts answers.
 -/

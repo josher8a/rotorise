@@ -5,29 +5,29 @@ import Calculus.Dynamo.Witness.Discharge
 variable {α : Calculus.Table}
 
 /-!
-# §6's "Do not hold" table, refuted
+# The "Do not hold" table of `≡`, refuted
 
-Nine rows of §6 assert that a rewrite *fails*.
+Nine rows of the equations assert that a rewrite *fails*.
 
 They are stated here against `denote`, which is what makes them readable: a claim about
 `≡` is a claim about `T`, `μ`, `e` and `p` together. `denote` takes no fuel, so no such
 statement carries a budget that has nothing to do with the equation.
 
-A note on what refuting one of these means. `Codec.Equiv` is §6's `≡` — same held set,
+A note on what refuting one of these means. `Codec.Equiv` is `≡` — same held set,
 same member, `e` and `p` agreeing *where both are defined*. So the cheapest honest
 refutation is usually a held-set separation: one side holds a value the other does not.
 That is stronger than an `e`/`p` disagreement would be, because `≡` deliberately tolerates
 a shrinking domain but never a differing `T`.
 
-§2's independence claim is here too, and for the same reason: it is a claim that something
+The independence of the codec laws is here too, and for the same reason: it is a claim that something
 *fails*, so its evidence is a counter-model and not a proof.
 -/
 
 namespace Calculus
 
-/-! ## §2's three laws are independent
+/-! ## The three codec laws are independent
 
-§2's laws are (R), canonical reads, and (W). Independence *is* a family of counter-models: for
+The codec laws are (R), canonical reads, and (W). Independence *is* a family of counter-models: for
 each law, a codec satisfying the other two and failing that one.
 
 They are stated at `Codec`, not at `Term`, which is what makes this independence rather than
@@ -36,7 +36,7 @@ law the definition does not imply. Each is as small as `𝔸` allows — a pair 
 functions on strings, `T` everything, and a member named only where the law needs one.
 
 `cM` is the codec between `LawfulCore` and `Lawful`: every read value is writable, and the
-write lands on another attribute. That is the same residue `alternate reader` leaves (§5). -/
+write lands on another attribute. That is the same residue `alternate reader` leaves. -/
 
 /-- **(R) fails alone.** Every string is written to one attribute, so the write forgets which
     string it was; nothing else notices. -/
@@ -146,8 +146,7 @@ theorem cM_notCanon : ¬ (∀ {a t}, cM.p a = some t → cM.e t = some a) := by
 
 /-! ## `union(c₁ … cₙ) ≢ union(c₁ … cₙ, c)`
 
-Not closed under extension. The held set grows, so `≡` fails before any obligation is consulted.
-§6 justifies the row by well-formedness, and the model shows it fails for a more basic reason. -/
+Not closed under extension. The held set grows, so `≡` fails before any obligation is consulted. -/
 
 theorem not_equiv_union_extend :
     ¬ Codec.Equiv (denote α (.union [.string])) (denote α (.union [.string, .boolean])) := by
@@ -157,7 +156,7 @@ theorem not_equiv_union_extend :
 
 /-! ## `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`
 
-§6: "Left: a sequence homogeneous in one option. Right: a sequence of either,
+The specification states: "Left: a sequence homogeneous in one option. Right: a sequence of either,
 elementwise." The witness is the shortest heterogeneous sequence. -/
 
 /-- `["A", "B"]` is an array of either literal, but homogeneous in neither. -/
@@ -171,7 +170,7 @@ theorem not_equiv_union_array :
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
 
-§6: "a fixed head with a repeating tail is neither: a tuple has no tail and an array has
+The specification states: "a fixed head with a repeating tail is neither: a tuple has no tail and an array has
 no head." Both halves separate on held sets, and each witness is the shortest one that
 isolates the missing feature. -/
 
@@ -202,7 +201,7 @@ theorem not_equiv_tupleTail_array :
 
 /-! ## `refine(held(c, P, k), q) ≢ held(refine(c, q), P, k)`
 
-§6: "the refinement applies on opposite sides of the iso, so `q` is a subset of different
+The specification states: "the refinement applies on opposite sides of the iso, so `q` is a subset of different
 sets." The model makes that literal — one held set says `q v`, the other says `q (f v)`, where
 `f` is the caller-side function that the table gives the word `k`. -/
 
@@ -231,7 +230,7 @@ theorem not_equiv_refine_held :
 /-! ## `legacy(c, r)` breaks canonical reads, and `e ∘ p ≢ id`
 
 Two rows, one witness. A migration reads an attribute that the codec does not write, so the
-value it reads writes another attribute. That is why §6 says an `alternate reader` attribute
+value it reads writes another attribute. So an `alternate reader` attribute
 cannot be an index key. -/
 
 /-- Reads an `N` into a string value — so the re-encoding lands on `S`. -/
@@ -246,14 +245,14 @@ theorem legacy_p_n : migration.p (.n (.of "1")) = some (.str "x") := rfl
 
 theorem legacy_e_x : migration.e (.str "x") = some (.s "x") := rfl
 
-/-- §6: an alternate reader breaks canonical reads. The migration reads `N` and writes `S`. -/
+/-- An alternate reader breaks canonical reads. The migration reads `N` and writes `S`. -/
 theorem legacy_breaks_MP : ¬ Lawful migration := by
   intro h
   have hc := h.canon legacy_p_n
   rw [legacy_e_x] at hc
   cases hc
 
-/-- §6: `e ∘ p ≢ id` — equality holds only on `Can(c)`, and this attribute is off it. -/
+/-- `e ∘ p ≢ id` — equality holds only on `Can(c)`, and this attribute is off it. -/
 theorem e_comp_p_ne_id :
     ∃ (c : Codec) (a : Attr) (v : Value), c.p a = some v ∧ c.e v ≠ some a :=
   ⟨migration, .n (.of "1"), .str "x", legacy_p_n, by
@@ -267,16 +266,16 @@ This row needs no theorem, and could not have one: it is enforced by the syntax.
 An alternate reader (`Codec.extendRead`) is outside a slot. An `ObjectSlot` always carries a
 current `Term`.
 
-That is the stratification §4 of the specification asks for, and the model gets it from
+That is the stratification the specification asks for, and the model gets it from
 the type rather than from a side condition — which is the stronger place to get it. It is
-also `C3`'s sharpest test for a port (§5): a library that lets `optional(c)` appear where a
+also `C3`'s sharpest test for a port: a library that lets `optional(c)` appear where a
 codec is expected has no corresponding `Term`, and the mapping fails there rather than
 quietly succeeding.
 -/
 
 /-! ## `set(union(c₁, c₂))`: derivable, and refused by the store
 
-§6: "the premise on `set` demands a member, and a union of options writing different
+The specification states: "the premise on `set` demands a member, and a union of options writing different
 members has none." `μSyn` of a heterogeneous union is `none`, and the judgement types the
 union at the same `none` (`typed_union_string_boolean`).
 
@@ -306,8 +305,8 @@ example : ∃ T μ, Typed α (.union [.string, .never]) T μ :=
 
 /-! ## `≡` is not transitive
 
-Not a row of §6 — a property of §6 itself. `Codec.Equiv.refl` and `Codec.Equiv.symm` are
-proved over any carriers; `trans` is absent, and this is why. §6 is presented as an
+Not a row of the table of `≡` — a property of `≡` itself. `Codec.Equiv.refl` and `Codec.Equiv.symm` are
+proved over any carriers; `trans` is absent, and this is why. `≡` is presented as an
 equational theory and the conformance standard asks a port to exhibit `Codec.Equiv`, so a
 reader is entitled to assume the relation chains. It does not,
 and nothing said so.
@@ -316,11 +315,11 @@ The mechanism is the tolerance the header above describes: `≡` compares `e` an
 *where both are defined*, so a codec whose `e` is nowhere defined agrees with everything.
 Put one in the middle and it relates two codecs that disagree outright.
 
-The witness is at `Codec` level, which is the level §6's relation lives at: the rows of §6 are
+The witness is at `Codec` level, which is the level the relation `≡` lives at: the rows of `≡` are
 stated over any carriers, about combinators and not about `denote`. What keeps it
 from being a degenerate artifact is that **all three codecs are `Lawful` and on their
-`Carrier`**, and the held set is not empty: the failure survives every hypothesis §2
-imposes on a pair. It uses only the licence §2 grants explicitly — a term's `e` does
+`Carrier`**, and the held set is not empty: the failure survives every hypothesis the codec laws
+impose on a pair. It uses only the licence the codec laws grant explicitly — a term's `e` does
 whatever it likes off `T` — and the fact that `Carrier` bounds `dom(e)` by `T` without
 requiring the converse.
 
@@ -340,7 +339,7 @@ def cB : Codec :=
     (e := fun v => match v with | .null => some (.s "B") | _ => none)
     (p := fun a => match a with | .s x => if x = "B" then some .null else none | _ => none)
 
-/-- The middle: the same held set, and no `e` or `p` anywhere. Every law of §2 is vacuous
+/-- The middle: the same held set, and no `e` or `p` anywhere. Every codec law is vacuous
     on it, which is exactly what makes it `≡` to both of the others. -/
 def cMid : Codec :=
   Alg.Codec.ofEP (T := fun v => v = .null) (μ := none) (e := fun _ => none) (p := fun _ => none)
@@ -399,14 +398,14 @@ theorem not_equiv_cA_cB : ¬ Codec.Equiv cA cB := by
   have hab : (Attr.s "A") = Attr.s "B" := h.writes (v := .null) rfl rfl
   simp at hab
 
-/-- **§6's `≡` is not transitive**, and the counterexample is lawful throughout. -/
+/-- **`≡` is not transitive**, and the counterexample is lawful throughout. -/
 theorem not_equiv_trans :
     ¬ ∀ c d e : Codec, Codec.Equiv c d → Codec.Equiv d e → Codec.Equiv c e :=
   fun h => not_equiv_cA_cB (h _ _ _ equiv_cA_cMid equiv_cMid_cB)
 
 /-! ## `(literal-N)`'s `ℓ ⊆ D`, and what it refuses
 
-`(number)` gates on §1's numeral domain. `(literal-N)` carries the same bound, and the bound is
+`(number)` gates on the numeral domain `Numerals`. `(literal-N)` carries the same bound, and the bound is
 the value carrier: `Value.num` carries a `WFNumeral`.
 
 It is the same set on both rules: **what DynamoDB accepts**, `Numeral.WF` of the text the
@@ -421,10 +420,10 @@ theorem literalN_sub_number (y : WFNumeral) :
   rintro v rfl
   rfl
 
-/-! ### §3's `(literal)` at `number`: no refutation is statable
+/-! ### The rule `(literal)` at `number`: no refutation is statable
 
-§3's premise line is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T`, and at `g = number` the base's held
-set *is* §1's `D`, so the rule already requires `ℓ ⊆ D`.
+The premise line of `(literal)` is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T`, and at `g = number` the base's held
+set *is* `D`, so the rule already requires `ℓ ⊆ D`.
 
 A refutation that the premise is load-bearing needs a value outside `D` to point at.
 `Value.num` carries `WFNumeral`, so no such value exists: the gate is the value's carrier, and
@@ -433,9 +432,8 @@ cannot be written" are one claim, and a refutation needs a representable counter
 
 /-! ## `union(opaque, c)` is never separable
 
-Not one of §6's nine rows — a row §5 never wrote, and the reason it did not is that
-`opaque` looked like a term with nothing to say. `κ .opaq` is `⊤`, and `Adm .opaq` and
-`admA .opaq` ask `opaque`'s codec, which admits everything. §5's separation offers two routes
+Not one of the nine rows of `≡`, and not a row of the admission. `κ .opaq` is `⊤`, and `Adm .opaq` and
+`admA .opaq` ask `opaque`'s codec, which admits everything. The separation of `(union)` offers two routes
 on the value side, a disjoint kind or a disjoint admissible set, and two on the attribute side,
 a distinct named member or a disjoint admissible set. A `⊤` on every one of the four is not a
 weak option; it is an **absorbing** one, in the sense `unknown | T` is

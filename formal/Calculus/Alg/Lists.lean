@@ -38,16 +38,16 @@ end List
 
 namespace Calculus.Alg
 
-/-! ## Traversal — §5's Lemma, clause by clause
+/-! ## Traversal — the Lemma, clause by clause
 
-This section **is** §5's Lemma (traversal), which five rules — `array`, `tuple`, `record`,
+This section **is** the Lemma (traversal), which five rules — `array`, `tuple`, `record`,
 `object`, `set` — are instantiations of.
 
 > *Let a step be an entrywise pair between the entries of two lists, and lift it entrywise —
 > defined where every entry is, positions preserved. If the step satisfies a law pointwise,
 > the lift satisfies it listwise.*
 
-| §5's clause | here | how |
+| clause | here | how |
 | --- | --- | --- |
 | the lift itself, positions preserved | `traverse_eq_some` | the pivot: a successful traversal **is** `Forall₂ (f · = some ·)`, which is positional by construction |
 | defined where every entry is | `traverse_isSome_of_all` | no partner list — only that every entry is writable |
@@ -78,7 +78,7 @@ theorem traverse_cons {x : α} {xs : List α} :
     traverse f (x :: xs) = (f x).bind fun y => (traverse f xs).map (y :: ·) := by
   simp only [traverse]; cases f x <;> cases traverse f xs <;> rfl
 
-/-- **The pivot** (§5, Lemma (traversal): the lift, positions preserved). A traversal
+/-- **The pivot** (Lemma (traversal): the lift, positions preserved). A traversal
     succeeds exactly when the entrywise function relates the two lists position by position.
     Everything below is a corollary of this and mathlib's `Forall₂` API. -/
 theorem traverse_eq_some {xs : List α} {ys : List β} :
@@ -89,7 +89,7 @@ theorem traverse_eq_some {xs : List α} {ys : List β} :
     | nil => simp [traverse_cons, Option.bind_eq_some_iff, ih]
     | cons y ys => simp [traverse_cons, Option.bind_eq_some_iff, ih, List.forall₂_cons]
 
-/-- §5, Lemma (traversal): "lengths survive both directions". This is one of them; the
+/-- Lemma (traversal): "lengths survive both directions". This is one of them; the
     other is this applied to `traverse_roundTrip`'s conclusion. -/
 theorem traverse_length :
     ∀ (xs : List α) (ys : List β), traverse f xs = some ys → xs.length = ys.length :=
@@ -106,13 +106,13 @@ theorem traverse_append_isSome :
       rw [show (traverse f (xs ++ ys)) = (traverse f (xs ++ ys)) from rfl]
       cases hx : f x <;> simp [traverse_append_isSome xs ys]
 
-/-- §5, Lemma (traversal), **(R)** — "positions re-read in place". Pointwise (R) lifts to
+/-- Lemma (traversal), **(R)** — "positions re-read in place". Pointwise (R) lifts to
     the traversal: reverse the relation. -/
 theorem traverse_roundTrip (h : ∀ x y, f x = some y → g y = some x) :
     ∀ (xs : List α) (ys : List β), traverse f xs = some ys → traverse g ys = some xs :=
   fun _ _ ht => traverse_eq_some.mpr ((traverse_eq_some.mp ht).imp h).flip
 
-/-- §5, Lemma (traversal): "defined where every entry is". Definedness needs no partner
+/-- Lemma (traversal): "defined where every entry is". Definedness needs no partner
     list — only that every entry is writable. -/
 theorem traverse_isSome_of_all {xs : List α} (h : ∀ x ∈ xs, (f x).isSome) :
     (traverse f xs).isSome := by
@@ -123,7 +123,7 @@ theorem traverse_isSome_of_all {xs : List α} (h : ∀ x ∈ xs, (f x).isSome) :
       obtain ⟨ys, hys⟩ := Option.isSome_iff_exists.mp (ih fun z hz => h z (by simp [hz]))
       simp [traverse_cons, hy, hys]
 
-/-- §5, Lemma (traversal), **(C)** — "each entry re-encodes". Pointwise (C) lifts to the
+/-- Lemma (traversal), **(C)** — "each entry re-encodes". Pointwise (C) lifts to the
     traversal: forget the partner, keep definedness. -/
 theorem traverse_isSome {f : α → Option γ} (h : ∀ y x, g y = some x → (f x).isSome) :
     ∀ (ys : List β) (xs : List α), traverse g ys = some xs → (traverse f xs).isSome :=
@@ -159,8 +159,8 @@ variable {V M : Type} {member : V → M}
 
 /-! ### A codec carried by a prism
 
-The shape underneath every product in §3–§4. A payload map works on *payloads* — lists of
-entries, mostly — at each orientation, and one prism says which constructor holds them. §2's
+The shape underneath every product of the term language. A payload map works on *payloads* — lists of
+entries, mostly — at each orientation, and one prism says which constructor holds them. The codec
 laws split cleanly along that seam: the prism is discharged once, here, and each construction
 is left with only its payload map's own inverse law and agreement.
 
@@ -200,7 +200,7 @@ theorem carried_p {a v} :
     (carriedCodec s P F).p a = some v ↔
       ∃ y x, s.p.out a = some y ∧ F .dual y = some x ∧ v = s.p.into x := carried_f
 
-/-- **§2's laws are the payload map's own**: `F o` inverted by `F o.op`. The summand contributes
+/-- **The codec laws are the payload map's own**: `F o` inverted by `F o.op`. The summand contributes
     its two prism laws and the member that it stamps. -/
 theorem lawful_carried
     (hinv : ∀ o x y, F o x = some y → F o.op y = some x) :
@@ -231,7 +231,7 @@ end Carried
 /-! ### The entrywise product, named once
 
 `array` and `record` are `carriedCodec` where the payload map is one entry map traversed: a
-prism holding a list of entries. Named once, §2's laws are discharged once. -/
+prism holding a list of entries. Named once, the codec laws are discharged once. -/
 
 /-- **The entrywise product**: `carriedCodec` at a traversal of the entry map `h o`. -/
 def entrywise {α : Type} (s : Summand (List α) V M member) (P : List α → Prop)

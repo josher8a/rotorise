@@ -9,7 +9,7 @@ non-malleability in its equality form, the form the verified-formats community s
 
 * **`Fmt` is derived, not assumed.** It is the fibre of `p`, so it is `Codec.Ker` seen from the
   other side, and `fmt_forced` shows that the two relational decode directions pin it.
-* **`η` is stated against fibres.** `survivesStore_iff` is §1's `η ⊆ ker p` against fibres. Under
+* **`η` is stated against fibres.** `survivesStore_iff` is `η ⊆ ker p` against fibres. Under
   a canonical codec a fibre is one attribute, so the store must fix each attribute the codec
   writes. That is why `decimal`'s held set is the numerals the store returns unchanged.
 * **A reader that drops names is not lawful** (`not_lawful_dropAll`). A reader that discards
@@ -56,7 +56,7 @@ theorem fmt_forced {c : Codec} {fmt : Value → Set Attr}
 
 /-! ## The store premise, restated against fibres
 
-`SurvivesStore` is §1's concession: the store is not the identity
+`SurvivesStore` concedes that the store is not the identity
 on attributes, and all a codec needs is that it moves within a fibre. Under a relational
 format that sentence is unchanged — which is the point. -/
 

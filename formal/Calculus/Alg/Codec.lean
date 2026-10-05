@@ -1,5 +1,5 @@
 /-!
-# §2 — The codec record and its laws, over any carrier
+# The codec record and its laws, over any carrier
 
 The laws of a codec relate `e` and `p` to each other. No law reads the structure of a datum.
 So the record and its laws take the carrier `V` and the members `M` as parameters. The two
@@ -87,7 +87,7 @@ def Side.elim {V X : Type} (fV : V → X) (fA : V → X) : (s : Bool) → V → 
   | false => fV
   | true => fA
 
-/-- §2: `c = (T, μ, f)`, over the carrier `V` and the members `M`. `f o` is the partial map from the
+/-- The codec record `c = (T, μ, f)`, over the carrier `V` and the members `M`. `f o` is the partial map from the
     caller side of `o` to the stored side of `o`. -/
 structure Codec (V M : Type) where
   T : V → Prop
@@ -147,9 +147,9 @@ theorem Codec.ext {c d : Codec V M} (hT : c.T = d.T) (hμ : c.μ = d.μ) (he : c
 def Codec.empty : Codec V M :=
   { T := fun _ => False, μ := none, f := fun _ _ => none }
 
-/-! ## §2's two derived sets -/
+/-! ## The two derived sets of a codec -/
 
-/-- §2's `≈c`: the kernel of the reading, `a ≈c a′ ⟺ p(a) = p(a′)`. The equivalence `e ∘ p`
+/-- The codec equivalence `≈c`: the kernel of the reading, `a ≈c a′ ⟺ p(a) = p(a′)`. The equivalence `e ∘ p`
     canonizes modulo — forced by `p`, not chosen.
 
     Not `Codec.Equiv`, which relates two *codecs* and is not transitive (`not_equiv_trans`).
@@ -170,15 +170,15 @@ theorem Codec.Ker.trans {c : Codec V M} {a a' a'' : V}
 theorem Codec.ker_equivalence (c : Codec V M) : Equivalence c.Ker :=
   ⟨Codec.Ker.refl c, Codec.Ker.symm, Codec.Ker.trans⟩
 
-/-- §2's `Can(c) = e[T]`: the attributes some value actually writes. `e ∘ p` is total here
-    and merely partial on `A`; §6's `≈` rows are stated on it. -/
+/-- The canonical set `Can(c) = e[T]`: the attributes some value actually writes. `e ∘ p` is total here
+    and merely partial on `A`; the `≈` rows of the equations are stated on it. -/
 def Can (c : Codec V M) (a : V) : Prop := ∃ v, c.e v = some a
 
-/-- §2 Laws: the codec is a canonical partial bijection. `inv` is one law over the orientation:
+/-- The codec laws: the codec is a canonical partial bijection. `inv` is one law over the orientation:
     the map at the dual inverts the map at each orientation. At the host `inv` is `(R)`
     retraction, and at the dual `inv` is `(C)` in the canonical form (a read at `a` of `t`
     writes `t` at `a`). `(W)` member-naming is one-sided, where `member` gives the member of an
-    attribute. The `alternate reader` exemption is handled at the theorem (§5), not here:
+    attribute. The `alternate reader` exemption is handled at the soundness theorem, not here:
     `Lawful` is the exemption-free bundle. -/
 structure Lawful (member : V → M) (c : Codec V M) : Prop where
   inv : ∀ {o : Orient} {x : V} {y : V}, c.f o x = some y → c.f o.op y = some x
@@ -205,7 +205,7 @@ theorem Lawful.ofRC {c : Codec V M} (retract : ∀ {t a}, c.e t = some a → c.p
   writes := writes
 
 /-- `(R)`, `(C)` as definedness, and `(W)` — what survives in a derivation containing
-    `alternate reader` (§5 theorem, first residue). -/
+    `alternate reader` (the soundness theorem, first residue). -/
 structure LawfulCore (member : V → M) (c : Codec V M) : Prop where
   retract : ∀ {t a}, c.e t = some a → c.p a = some t
   canon   : ∀ {a t}, c.p a = some t → (c.e t).isSome
@@ -219,19 +219,19 @@ theorem Lawful.defined {c : Codec V M} (h : Lawful member c) {a t} (hp : c.p a =
 theorem Lawful.core {c : Codec V M} (h : Lawful member c) : LawfulCore member c :=
   ⟨h.retract, h.defined, h.writes⟩
 
-/-- §2 Corollary (Q — stability): `∀ a ∈ dom(p). e(p(a)) ≈c a`. Retraction asked at values a
+/-- Corollary of the codec laws (Q — stability): `∀ a ∈ dom(p). e(p(a)) ≈c a`. Retraction asked at values a
     *table* returned rather than a generator produced; what it adds to (R) is (C). -/
 theorem Lawful.stable {c : Codec V M} (h : Lawful member c) {a t a'}
     (hp : c.p a = some t) (he : c.e t = some a') : c.Ker a' a := by
   show c.p a' = c.p a
   rw [h.retract he, hp]
 
-/-- §2 Corollary (read-side W): a member-naming codec accepts only its member. -/
+/-- Corollary of the codec laws (read-side W): a member-naming codec accepts only its member. -/
 theorem Lawful.reads {c : Codec V M} (h : Lawful member c) {μ a t}
     (hμ : c.μ = some μ) (hp : c.p a = some t) : member a = μ :=
   h.writes hμ (h.canon hp)
 
-/-- §2 Corollary: **a member a codec cannot write is one it cannot read.** Canonical reads hold
+/-- Corollary of the codec laws: **a member a codec cannot write is one it cannot read.** Canonical reads hold
     the pair's halves together, so a member absent from `ran(e)` is absent from `dom(p)`.
 
     Definedness alone does not see this: in the failing case `e (p a)` is defined and the value
@@ -249,7 +249,7 @@ theorem Lawful.write_of_read {c : Codec V M} (h : Lawful member c) {a v}
     (hp : c.p a = some v) : ∃ a', c.e v = some a' ∧ member a' = member a :=
   ⟨a, h.canon hp, rfl⟩
 
-/-- `(R)` makes `e` injective on its domain — the Lemma of §5's proof, consumed by the
+/-- `(R)` makes `e` injective on its domain — the Lemma of the soundness proof, consumed by the
     `set` case. -/
 theorem Lawful.e_injective {c : Codec V M} (h : Lawful member c) {t t' a}
     (he : c.e t = some a) (he' : c.e t' = some a) : t = t' := by

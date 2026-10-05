@@ -301,10 +301,10 @@ theorem Table.word_dagger {S : Syn} [Sem S] (α : Table S) (k : Word S) :
 mutual
 
 inductive Term (S : Sig) where
-  /-- §3's ground rules, as one row: a primitive of the universe. A universe names its primitives
+  /-- The ground rules, as one row: a primitive of the universe. A universe names its primitives
       (`Syn.Ground`) and the codec of each (`Mean.ground`). -/
   | prim (g : S.Ground)
-  /-- §3 `(set)`: the finite-powerset lift of an element term. A lawful element gives a lawful
+  /-- The rule `(set)`: the finite-powerset lift of an element term. A lawful element gives a lawful
       set (`lawful_setCodec`), and that law reads nothing about the element's base.
 
       **The DynamoDB set rules are not structure here.** That a stored set holds elements of one
@@ -314,7 +314,7 @@ inductive Term (S : Sig) where
       element, a literal element and an adapter element are each spelled at the element:
       `set(refine(string, q))`, `set(literal k v)` and `set(held number string k)`. -/
   | set      (elem : Term S)
-  /-- §3 `(list)`: the one positional container, as a prefix, at most one spread, and a
+  /-- The rule `(list)`: the one positional container, as a prefix, at most one spread, and a
       suffix. `array`, `(tuple)` and `(tuple-tail)` are three shapes of one thing, and
       none of the three can say `[A, B, ...C[], D]` — a fixed position AFTER a spread.
 
@@ -329,7 +329,7 @@ inductive Term (S : Sig) where
       Measured, not read. `array` and `tuple` are *builders* below, so a statement that
       spells either keeps its spelling. -/
   | list     (pre : List (Term S)) (spread : Option (Term S)) (suf : List (Term S))
-  /-- §3 `(held)`: an adapter at one absolute side `s`, and a restriction of that side. `outer`
+  /-- The rule `(held)`: an adapter at one absolute side `s`, and a restriction of that side. `outer`
       restricts the side `s` by its domain at `s`, and the word `k₀ :: k` only transforms. A table
       gives each word its two functions, so two `held`s of one word carry one pair. The other side
       has no adapter and no restriction.
@@ -339,15 +339,15 @@ inductive Term (S : Sig) where
       that side. A two-sided adapter is two nested `held`s (`held1_nest`). -/
   | held     (s : Bool) (inner : Term S) (outer : Term S) (k₀ : S.G s × Bool)
       (k : List (S.G s × Bool))
-  /-- §3 `(refine)`: the restriction of each side by a predicate of that side. -/
+  /-- The rule `(refine)`: the restriction of each side by a predicate of that side. -/
   | refine   (inner : Term S) (p : S.P false) (pA : S.P true)
-  /-- §3 `(alternate reader)`: the inner term, and an older reader where the inner term reads
+  /-- The rule `(alternate reader)`: the inner term, and an older reader where the inner term reads
       nothing. The read passes only what the inner term writes. The pair is not a partial
       bijection (`legacy_breaks_MP`), so the judgement has no rule for it. -/
   | legacy   (inner : Term S) (r : S.R)
-  /-- §3 `(opaque)`: the universal sum, which each universe denotes by its top. -/
+  /-- The rule `(opaque)`: the universal sum, which each universe denotes by its top. -/
   | opaq
-  /-- §4's field table is a *set* of names each declaring one field, so that is what the
+  /-- The field table is a *set* of names each declaring one field, so that is what the
       term carries. A `List (Name × ObjectSlot)` admits two orderings of one object and a
       repeated name, and a typing rule over it needs a `Nodup` premise to make the first
       harmless and rule out the second; over a set, both are properties of the type. `ObjectSlot`
@@ -355,7 +355,7 @@ inductive Term (S : Sig) where
       `Attr.m` and `Value.map` use one level down. -/
   | object   (b : Body S)
   | union    (options : List (Term S))
-  /-- §5's bottom: the term that admits no value. Its held set is `False`, which is a subset of
+  /-- The bottom: the term that admits no value. Its held set is `False`, which is a subset of
       every held set. A constructor and not an empty `union`: the empty option list is a term a
       caller can build by accident, and a rule that reads it as the bottom reads that accident as
       intent. -/
@@ -374,7 +374,7 @@ inductive Term (S : Sig) where
       body of a binder, and every table over terms would then have one more family. -/
   | mu (body : Term S)
 
-/-- §4's object payload: the declared names, the slot at each, and the one open block.
+/-- The object payload: the declared names, the slot at each, and the one open block.
     The type is `inductive … | mk`, so the projections below are written by hand: three lines,
     against a `Body`-shaped row in every table over terms.
 
@@ -396,7 +396,7 @@ inductive Term (S : Sig) where
 inductive Body (S : Sig) where
   | mk (fields : Finset String) (f : {k // k ∈ fields} → ObjectSlot S) (wild : Option (Term S))
 
-/-- §4's current-schema slot. A required name is required on both current-schema sides. -/
+/-- The current-schema slot. A required name is required on both current-schema sides. -/
 inductive ObjectSlot (S : Sig) where
   | req      (t : Term S)
   | optional (t : Term S)
@@ -991,7 +991,7 @@ theorem Term.depth_lt_object_rest {b : Body S} {t : Term S} (h : b.wild = some t
 field table passes the recursion applied, through `fieldSem`, so no higher-order argument is left.
 The environment `ρ` holds the codec of each bound variable, nearest binder first. -/
 
-/-- A union's member: `μ` when unanimous, else `⊤` (§5 `(union)`). -/
+/-- A union's member: `μ` when unanimous, else `⊤` (the rule `(union)`). -/
 def unanimous {M : Type} [DecidableEq M] : List (Option M) → Option M
   | [] => none
   | μ :: μs => if μs.all (· == μ) then μ else none
@@ -1026,7 +1026,7 @@ def denoteAbs : Term B → (ρ : List (Mean.C B) := []) → Mean.C B
   | .opaq, _ => idCodec
   | .object b, ρ => bodySemAbs b ρ
   | .union opts, ρ => altCodec (denoteListAbs opts ρ) (unanimous (denoteμsAbs opts ρ))
-  -- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously
+  -- The degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously
   | .never, _ => .empty
   | .var i, ρ => envAt ρ i
   -- each input reads the stage of the body that its own depth names

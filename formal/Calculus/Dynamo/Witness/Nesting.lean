@@ -5,7 +5,7 @@ import Calculus.Dynamo.Analysis.ExactV
 variable {α : Calculus.Table}
 
 /-!
-# §1's nesting bound, and the claim the calculus cannot make
+# The nesting bound, and the claim the calculus cannot make
 
 `Domain.lean` states the bound: `Attr.Storable n a` is `Attr.nesting a ≤ n`, counting `L` and
 `M` and nothing else. The bound `n` is a parameter, because the ideal algebra has no depth
@@ -13,7 +13,7 @@ limit. A port instantiates it (`Dynamo/Lang/Store.lean`). This file says what th
 and the answer is worth stating precisely because **it is the one place `𝔸` is larger in the
 model than in the store**.
 
-Everywhere else §1 is exact, and (W) plus `Carrier` give `ran(e) ⊆ 𝔸` outright. Here they do
+Everywhere else the attribute domain is exact, and (W) plus `Carrier` give `ran(e) ⊆ 𝔸` outright. Here they do
 not: `Attr.l` and `Attr.m` nest without limit by construction, so a derivable term can write
 an attribute the store refuses. That is not a defect the model *has* — it is a defect the
 model must be able to **state**, because a target certified against a spec that cannot say
@@ -118,8 +118,8 @@ theorem deepT_e : ∀ n, (denote α (deepT n)).e (deepV n) = some (deepA n)
     writes, and an attribute the store refuses — so `ran(e) ⊆ 𝔸` is exact against the model's
     `𝔸` and false against a bounded store's.
 
-    The term is `array^(bound+1)(string)`, which carries no premise about depth because §3
-    states none. That is the finding: the bound is not a side condition anyone forgot to
+    The term is `array^(bound+1)(string)`, which carries no premise about depth because no typing rule
+    states one. That is the finding: the bound is not a side condition anyone forgot to
     discharge, it is absent from the rules, and no derivation can be blamed. -/
 theorem not_storable_of_typed (bound : Nat) :
     ∃ (t : Term) (T : Held) (μ : Option Member) (v : Value) (a : Attr),

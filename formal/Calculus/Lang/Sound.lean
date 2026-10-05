@@ -2,7 +2,7 @@ import Calculus.Lang.Typing
 import Calculus.Lang.Guarded
 
 /-!
-# §5 — Soundness, for every universe
+# Soundness, for every universe
 
 The theorem. `Obligations t` collects the semantic rule premises: `(held)` cancellation laws,
 `(union)` pairwise compatibility, the universe's set obligation, and the body's premises at every
@@ -172,7 +172,7 @@ theorem soundness {t : Term S} {T μ} (h : Typed α β t T μ) (hob : Obligation
 /-! ## The denotation's held set is the judgement's
 
 `Carrier` bounds `e` and `p` by the *codec's* `T`. `typed_TSub` bounds the codec's `T` by the
-*judgement's*, which is what makes §3's `⊢ c : T ⇝ μ` a claim about the denotation rather than a
+*judgement's*, which is what makes the judgement `⊢ c : T ⇝ μ` a claim about the denotation rather than a
 decoration. Each rule's held set is built by the same former the combinator's `T` field uses, so
 most cases are pointwise. Three are not: `list` (positional through `align`), `object`
 (name-dispatched) and the top, which is the universe's law. -/
@@ -189,7 +189,7 @@ theorem alignTail_TSub {c : S.C} {T' : Mean.V (B := S.sig) → Prop} (ih : ∀ v
       · exact alignTail_TSub ih hal'
           (fun p hp => hall p (List.mem_cons_of_mem _ hp)) x hx'
 
-/-- `align`'s positional pairing is §3's `T₁ × … × Tₙ`, one position at a time. -/
+/-- `align`'s positional pairing is the held set `T₁ × … × Tₙ`, one position at a time. -/
 theorem align_TSub {tail : Option (Term S)} {Tt} (hopt : TypedOpt α β tail Tt)
     (ihTail : ∀ t' ∈ tail, ∀ (T' : Mean.V (B := S.sig) → Prop) (μ' : Option (Syn.M S)),
       Typed α β t' T' μ' → ∀ v, (denote α β t').T v → T' v) :
@@ -244,7 +244,7 @@ theorem zipSuf_TSub :
               simp only [List.map_cons, List.zip_cons_cons]
               exact List.mem_cons_of_mem _ hp))
 
-/-- `alignL`'s pairing is §3's `(list)` held set, read off the alignment. -/
+/-- `alignL`'s pairing is the held set of the rule `(list)`, read off the alignment. -/
 theorem alignL_TSub {pre : List (Term S)} {Tpre sp Tsp suf Tsuf} (hp : TypedList α β pre Tpre)
     (hs : TypedOpt α β sp Tsp) (hf : TypedList α β suf Tsuf)
     (ihp : ∀ t' ∈ pre, ∀ (T' : Mean.V (B := S.sig) → Prop) (μ' : Option (Syn.M S)),
@@ -343,7 +343,7 @@ decreasing_by term_depth_wf
 
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
-/-- Every derivable term denotes a pair **on its carrier**: §3's `e : T ⇀ 𝔸`, `p : 𝔸 ⇀ T`. One
+/-- Every derivable term denotes a pair **on its carrier**: `e : T ⇀ 𝔸`, `p : 𝔸 ⇀ T`. One
     walk of the derivation, dispatching to the `Carrier` lemmas, with `soundness` supplying the
     lawfulness that the `held` and `mu` cases need. -/
 theorem carrier_denote : ∀ {t : Term S} {T μ}, Typed α β t T μ → Obligations α β t → Carrier (denote α β t)

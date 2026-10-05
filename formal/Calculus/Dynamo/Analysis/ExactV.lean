@@ -4,7 +4,7 @@ import Calculus.Dynamo.Lang.Soundness
 variable {α : Calculus.Table}
 
 /-!
-# §5 — exactness on the value side
+# Exactness on the value side
 
 A per-aspect table of admission is an **over**-approximation. `⊤` is sound for every term, so
 a row that claims nothing can never fail, and every defect such a table catches is an
@@ -90,7 +90,7 @@ DynamoDB supplies the primitive rows, `inBase` and `inL`, and their exactness. -
 /-- The DynamoDB primitive rows: `inBase` at a base and `inL` at a literal.
 
     The literal row is `inL`, with no `Numeral.WF` conjunct. `GroundKind.number.Carrier` is
-    `WFNumeral`, so an alternative outside §1's `D` has no representation. So membership is exact
+    `WFNumeral`, so an alternative outside `D` has no representation. So membership is exact
     at every base, and `Adm_exact` covers the literal with nothing added. -/
 instance dynPrimAdm : Alg.PrimAdm dynSyn where
   admV
@@ -244,7 +244,7 @@ theorem AdmAny_iff : ∀ {os : List Term} {v : Value},
     Adm α (.literal k x) v = inL k x v := rfl
 
 variable (α) in
-/-- §5's converse direction: the row is `dom(e)`, not merely a bound on it. -/
+/-- The converse direction: the row is `dom(e)`, not merely a bound on it. -/
 def ExactV (t : Term) : Prop := ∀ v, Adm α t v = true ↔ ((denote α t).e v).isSome
 
 /-- Each option's row *is* its attempt. Every row is exact (`Alg.Adm_eq_isSome`), so the
@@ -269,7 +269,7 @@ theorem filter_AdmList (opts : List Term) (v : Value) :
     `(Adm_exact t v).mpr`. -/
 theorem Adm_exact (t : Term) : ExactV α t := Alg.Adm_exact t []
 
-/-- §5's empty-container argument, **derived**: the exact row admits `[]`. -/
+/-- The empty-container argument, **derived**: the exact row admits `[]`. -/
 theorem Adm_array_nil (c : Term) : Adm α (.array c) (.arr []) = true := by
   simp [Term.array, Adm_rows, alignPL, alignP, zipP]
 

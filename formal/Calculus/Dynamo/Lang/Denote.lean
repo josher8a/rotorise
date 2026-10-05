@@ -142,7 +142,7 @@ abbrev denoteμs (ts : List Term) (ρ : List Codec := []) : List (Option Member)
 
 /-! ### The rows at the DynamoDB constructors
 
-Each row is `rfl`: the generic row at `dynSem` is the DynamoDB combinator. `§6`'s **Hold** rows
+Each row is `rfl`: the generic row at `dynSem` is the DynamoDB combinator. The **Hold** rows of `≡`
 are stated about combinators and its **Do not hold** rows (`Refutations.lean`) about terms, and
 these rows are the translation between the two. -/
 
@@ -176,7 +176,7 @@ variable (t : Term) (ts : List Term) (ρ : List Codec)
 /-- `union` denotes `altCodec`, over the options' semantics and their unanimous member. -/
 @[denote_rows] theorem denote_union_sems :
     denote α (.union ts) ρ = altCodec (denoteList α ts ρ) (unanimous (denoteμs α ts ρ)) := rfl
-/-- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously. -/
+/-- The degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously. -/
 @[denote_rows] theorem denote_never : denote α .never ρ = Codec.empty := rfl
 @[denote_rows] theorem denote_var (i : Nat) : denote α (.var i) ρ = envAt ρ i := rfl
 /-- `mu` denotes the recursive codec of its body: each input reads the stage of the body that
@@ -201,11 +201,11 @@ variable (t : Term) (ts : List Term) (ρ : List Codec)
 
 end Rows
 
-/-! ### §6 at term level — the translation table, written down
+/-! ### `≡` at term level — the translation table, written down
 
 These are equations about `denote`, so they sit beside it.
 
-§6's **Hold** rows are stated about *combinators*; its **Do not hold** rows
+The **Hold** rows of `≡` are stated about *combinators*; its **Do not hold** rows
 (`Refutations.lean`) are stated about *terms*. Reading a Hold row against the specification
 needed an eight-entry translation, five entries of which share no substring with the term
 they translate, written down nowhere.

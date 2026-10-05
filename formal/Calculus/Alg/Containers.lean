@@ -13,12 +13,12 @@ namespace Calculus.Alg
 
 variable {V M : Type} {member : V → M}
 
-/-! ## `list` (§3): one prefix, at most one spread, one suffix -/
+/-! ## `list`: one prefix, at most one spread, one suffix -/
 
 section List
 variable (sL : Summand (List V) V M member)
 
-/-- §3 `(list)`: the positional product over a prefix, a spread and a suffix, carried by the
+/-- The rule `(list)`: the positional product over a prefix, a spread and a suffix, carried by the
     list prism. Each position goes through its own codec at the orientation. -/
 abbrev listCodec (pre : List (Codec V M)) (spread : Option (Codec V M))
     (suf : List (Codec V M)) : Codec V M :=
@@ -63,13 +63,13 @@ theorem carrier_listCodec (hpre : ∀ c ∈ pre, Carrier c) (hsp : ∀ c ∈ sp,
 
 end List
 
-/-! ## Objects (§4)
+/-! ## Objects
 
 An object is the product of its slots over the names. A slot reads the lookup `p.at k`, so a
 slot is a codec on the presence lift `Option V`: a present value goes through the entry's codec,
 and absence takes the slot's behavior (`absentOf`). The product runs over the declared names and
 the present names; every other name is absent and stays absent. `objectCodecCore` is
-`carriedCodec` at the keyed-map prism, so §2's prism halves are the ones already discharged. -/
+`carriedCodec` at the keyed-map prism, so the prism halves of the codec laws are the ones already discharged. -/
 
 section Product
 variable {L : String → Orient → Option V → Option (Option V)} {F : Finset String}
@@ -145,7 +145,7 @@ end Product
 
 section Object
 
-/-- The per-name half of §4's held set: a declared name holds its field's set, an
+/-- The per-name half of the object's held set: a declared name holds its field's set, an
     undeclared one falls to the open part `R(ρ)`. -/
 def objEntryT (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) :
     String × V → Prop := fun kv =>
@@ -190,7 +190,7 @@ theorem entryCodec_of {Q : Codec V M → Prop} (hf : ∀ k, Q (sems.2 k).codec)
   | some fs => rw [hsp] at h; cases h; exact MapOf.at_forall (Q := fun fs => Q fs.codec) hf hsp
   | none => rw [hsp] at h; exact hrc c h
 
-/-- §4's held set, per entry, in the same vocabulary. -/
+/-- The object's held set, per entry, in the same vocabulary. -/
 theorem objEntryT_eq {kv} :
     objEntryT sems rc? kv ↔ ∃ c, entryCodec sems rc? kv.1 = some c ∧ c.T kv.2 := by
   simp only [objEntryT, entryCodec]
@@ -300,16 +300,16 @@ abbrev objectCodecCore (sems : MapOf (FieldSem V M)) (rc? : Option (Codec V M)) 
     Codec V M :=
   carriedCodec sM (fun p => ∀ k, slotT sems rc? k (p.at k)) (objAt sems rc?)
 
-/-- §4's `object`: the core at the rest policy's codec. -/
+/-- The `object`: the core at the rest policy's codec. -/
 abbrev objectCodec (sems : MapOf (FieldSem V M)) (rest : RestSem V M) :
     Codec V M :=
   objectCodecCore sM sems (rcOf rest)
 
 variable {sM}
 
-/-! ### §2's clauses for the object's payload map -/
+/-! ### The clauses of the codec laws for the object's payload map -/
 
-/-- §4's held set follows from the entry carriers, slot by slot, where every fill's constant is
+/-- The object's held set follows from the entry carriers, slot by slot, where every fill's constant is
     in its codec's held set. The host refuses at construction a constant that its codec cannot
     write. -/
 theorem carrier_objectCodec {rest : RestSem V M}

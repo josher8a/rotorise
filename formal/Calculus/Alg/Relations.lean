@@ -4,7 +4,7 @@ import Calculus.Alg.Combinators
 # The order, the equivalence and compatibility, over any carriers
 
 Three relations between two codecs: graph inclusion `Sub`, which is also the information order,
-§6's `Codec.Equiv`, and the compatibility `Compat` that makes a union of lawful options lawful.
+the equivalence `Codec.Equiv`, and the compatibility `Compat` that makes a union of lawful options lawful.
 Each relation reads only the pair, the held set and the member, so each one takes the carrier `V`
 and the members `M` as parameters.
 -/
@@ -358,9 +358,9 @@ theorem compat_of_common_bound' {c d u : Codec V M} (hc : Sub c u) (hd : Sub d u
     (hu : Canon u) (hdl : Lawful member d) : Compat c d :=
   compat_of_common_bound (hc .dual) hd hu hdl.retract
 
-/-! ## §6's `≡` -/
+/-! ## `≡` -/
 
-/-- §6's `≡`. Note it is *not* equality of the pair: `e` and `p` need only agree where
+/-- `≡`. Note it is *not* equality of the pair: `e` and `p` need only agree where
     both are defined, which is what lets a rewrite shrink a domain. -/
 structure Codec.Equiv (c d : Codec V M) : Prop where
   /-- The same held set. -/
@@ -380,7 +380,7 @@ theorem Codec.Equiv.refl (c : Codec V M) : Codec.Equiv c c :=
     `e` and `p` only *where both are defined*, so a codec that writes and reads nowhere is
     `≡` to everything and chains two codecs that disagree outright. Refuted as
     `Refutations.not_equiv_trans`, with all three codecs `Lawful` and on their `Carrier`.
-    §6 is a table of rewrites, each proved on its own; it is not a congruence to reason
+    `≡` is a table of rewrites, each proved on its own; it is not a congruence to reason
     in transitively. -/
 theorem Codec.Equiv.symm {c d : Codec V M} (h : Codec.Equiv c d) : Codec.Equiv d c :=
   ⟨fun v => (h.heldSet v).symm, h.member.symm,
@@ -404,7 +404,7 @@ theorem option_eq_of_some_iff {β : Type} {x y : Option β} (h : ∀ b, x = some
     | some b => rw [hx] at h; exact nomatch (h b).mpr hy
   | some b => exact ((h b).mp hx).symm
 
-/-- §6: `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))`, **on the nose**, over options that are
+/-- `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))`, **on the nose**, over options that are
     lawful and pairwise compatible. -/
 theorem altCodec_perm {os os' : List (Codec V M)} (h : os.Perm os') (μA : Option M)
     (hl : ∀ o ∈ os, Lawful member o)
@@ -425,14 +425,14 @@ theorem altCodec_perm {os os' : List (Codec V M)} (h : os.Perm os') (μA : Optio
   · obtain ⟨c, hc, -, hcb⟩ := altCodec_admits h
     exact altCodec_of_mem hl hC ((m c).mpr hc) o hcb
 
-/-- The row as §6 states it, in `≡`: `Codec.Equiv.refl` transported along the equality. -/
+/-- The row as the table states it, in `≡`: `Codec.Equiv.refl` transported along the equality. -/
 theorem equiv_altCodec_perm {os os' : List (Codec V M)} (h : os.Perm os') (μA : Option M)
     (hl : ∀ o ∈ os, Lawful member o)
     (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o') :
     Codec.Equiv (altCodec os μA) (altCodec os' μA) :=
   altCodec_perm h μA hl hC ▸ Codec.Equiv.refl _
 
-/-- §6: `union(c₁, c₂, …) ≡ union(c₂, c₁, …)`, the general theorem at `List.Perm.swap`. -/
+/-- `union(c₁, c₂, …) ≡ union(c₂, c₁, …)`, the general theorem at `List.Perm.swap`. -/
 theorem equiv_altCodec_swap (o₁ o₂ : Codec V M) (os : List (Codec V M)) (μA : Option M)
     (hl : ∀ o ∈ o₁ :: o₂ :: os, Lawful member o)
     (hC : ∀ o ∈ o₁ :: o₂ :: os, ∀ o' ∈ o₁ :: o₂ :: os, Compat o o') :
@@ -441,11 +441,11 @@ theorem equiv_altCodec_swap (o₁ o₂ : Codec V M) (os : List (Codec V M)) (μA
 
 /-! ### `held` is an identity, and composes
 
-§6's first two rows. The second is the one worth stating carefully: the writing halves
+The first two rows of `≡`. The second is the one worth stating carefully: the writing halves
 compose in the order written and the reading halves compose *reversed*, which is what
 "note the reversal on the reading half" means and what the model makes literal. -/
 
-/-- §6: `held(c, id, id) ≡ c`. -/
+/-- `held(c, id, id) ≡ c`. -/
 theorem equiv_through_id (c : Codec V M) : Codec.Equiv (c.through id id) c := by
   refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩
   · exact fun h h' => Option.some.inj ((through_e.mp h).symm.trans h')
@@ -453,7 +453,7 @@ theorem equiv_through_id (c : Codec V M) : Codec.Equiv (c.through id id) c := by
     obtain ⟨w, hw, rfl⟩ := through_p.mp h
     exact Option.some.inj (hw.symm.trans h')
 
-/-- §6: `held(held(c, f, g), f′, g′) ≡ held(c, f ∘ f′, g′ ∘ g)`. -/
+/-- `held(held(c, f, g), f′, g′) ≡ held(c, f ∘ f′, g′ ∘ g)`. -/
 theorem equiv_through_comp (c : Codec V M) (f g f' g' : V → V) :
     Codec.Equiv ((c.through f g).through f' g') (c.through (f ∘ f') (g' ∘ g)) := by
   refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩
@@ -468,7 +468,7 @@ theorem equiv_through_comp (c : Codec V M) (f g f' g' : V → V) :
 
 /-! ### `refine` — prisms meet, and a full one is no refinement -/
 
-/-- §6: `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`. -/
+/-- `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`. -/
 theorem equiv_restrict_meet (c : Codec V M) (q q' : V → Bool) :
     Codec.Equiv ((c.restrict q).restrict q') (c.restrict (fun v => q v && q' v)) := by
   refine ⟨?_, rfl, ?_, ?_⟩
@@ -486,7 +486,7 @@ theorem equiv_restrict_meet (c : Codec V M) (q q' : V → Bool) :
     obtain ⟨-, hin, -⟩ := refine2_f.mp h
     exact Option.some.inj ((refine2_f.mp hin).2.1.symm.trans (refine2_f.mp h').2.1)
 
-/-- §6: `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. A refinement admitting everything the codec
+/-- `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. A refinement admitting everything the codec
     holds is no refinement — and note the premise needed is only that `q` agrees with `T`,
     not that the pair is on its carrier: `≡` compares `e` and `p` where *both* are defined,
     so a `q` that rejects something outside `T` costs nothing. -/
@@ -505,7 +505,7 @@ theorem extendRead_self_p (c : Codec V M) : (c.extendRead c.p).p = c.p := by
   simp only [Codec.extendRead, Codec.ofEP_p]
   cases c.p a <;> rfl
 
-/-- §6: `legacy(c, p_c) ≡ c`. -/
+/-- `legacy(c, p_c) ≡ c`. -/
 theorem equiv_extendRead_self (c : Codec V M) : Codec.Equiv (c.extendRead c.p) c := by
   refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩
   · intro v a a' h h'
@@ -514,7 +514,7 @@ theorem equiv_extendRead_self (c : Codec V M) : Codec.Equiv (c.extendRead c.p) c
     rw [extendRead_self_p] at h
     exact Option.some.inj (h.symm.trans h')
 
-/-- §6: `legacy(c, r) ≈ c` on `Can(c)`. A migration differs from the current encoding only
+/-- `legacy(c, r) ≈ c` on `Can(c)`. A migration differs from the current encoding only
     *off* the canonical set — on it, `(R)` has already made `c.p` succeed, so `r` is never
     consulted. The premise is exactly `(R)`, which is why this row is about lawful codecs
     and not about `extendRead` in general. -/
@@ -526,7 +526,7 @@ theorem extendRead_eq_on_can (c : Codec V M) (r : V → Option V) (hc : Lawful m
 
 /-! ### `union` of one -/
 
-/-- §6: `union(c) ≡ c`. Choice of one: `o` is the first option that acts exactly when `o`
+/-- `union(c) ≡ c`. Choice of one: `o` is the first option that acts exactly when `o`
     acts, and `altCodec` then reads `o`'s own pair. -/
 theorem equiv_altCodec_single (o : Codec V M) :
     Codec.Equiv (altCodec [o] o.μ) o := by

@@ -4,16 +4,16 @@ import Calculus.Dynamo.Alg.Opaque
 variable {α : Calculus.Table}
 
 /-!
-# §6 — Equations
+# Equations
 
-Which rewrites preserve the pair. `≡` is §6's own reading: the same held set, the same
+Which rewrites preserve the pair. `≡` reads as: the same held set, the same
 member, and `e` and `p` agreeing everywhere both are defined.
 
-The rows of §6 that read only the combinators take the carriers as parameters, as `Codec.Equiv`
+The rows of `≡` that read only the combinators take the carriers as parameters, as `Codec.Equiv`
 does. This file states the rows that read a term, a field, or the member of a union. Two of the
 rows are cited elsewhere as load-bearing and came first:
 
-* `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))` — §5 leans on this for "declaration order is
+* `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))` — the admission leans on this for "declaration order is
   never consulted". Proved at *every* permutation and as an **equality** of the pair
   (`altCodec_perm`), not merely `≡`, over pairwise compatible, lawful options. Deriving the general case from the adjacent one would
   need `≡` to compose, and `Refutations.not_equiv_trans` says it does not.
@@ -26,28 +26,25 @@ preservation of the three codec wrappers. `held`'s identity is a row of the code
 The last row, `union` associativity, needs no condition: a nested union and its flattening
 consult the same options in the same order, so the two are equal on both halves.
 
-The "Do not hold" table is settled in `Refutations.lean`. §6 is complete.
+The "Do not hold" table is settled in `Refutations.lean`. Every row of `≡` is stated.
 -/
 
 namespace Calculus
 
 /-! ## Wrappers preserve the member
 
-§6's last "Hold" row, `μ(w(c)) = μ(c)` for `w ∈ {held, refine, legacy, optional,
+The last "Hold" row of `≡` is `μ(w(c)) = μ(c)` for a wrapper `w`. A field carries a member like
+anything else, and `FieldSem.codec` is where the model puts it, so the row at `optional` is
+`rfl` through that accessor (`optional_μ`). The codec wrappers `held` and `refine` keep the
+member by `rfl` as well (`denote_held_μ`, `denote_refine_μ`). -/
 
-Three of the five are codec wrappers. The other two are **fields**. §4 says in as many words
-that *a field carries a member like anything else*, and `FieldSem.codec` is where the model
-puts it. Stated
-through that accessor the two rows are `rfl` — which is the honest form of the claim
-rather than a reason to skip it, and it is what makes the row five of five. -/
-
-/-- §4 `(opt)`: an optional attribute is still stored somewhere, and where is the
+/-- The rule `(opt)`: an optional attribute is still stored somewhere, and where is the
     subterm's member. -/
 theorem optional_μ (t : Term) : (fieldSem α (.optional t)).codec.μ = (denote α t).μ := rfl
 
 /-! ## `union` is associative
 
-§6's row, stated outright. Both forms take the first admitter in the same order, so the
+The row of `≡`, stated outright. Both forms take the first admitter in the same order, so the
 two maps are equal at each orientation (`altCodec_nest`), and the row carries no condition. -/
 
 /-- The member index nests the same way it flattens. Both sides conclude the head member
@@ -79,7 +76,7 @@ theorem unanimous_pair_assoc (a b c : Option Member) :
             exact absurd (by rw [eq_of_beq hbx, eq_of_beq hcx]; simp) hcb
       simp [hne]
 
-/-- §6: `union(c₁, union(c₂, c₃)) ≡ union(c₁, c₂, c₃)` — with no side condition. -/
+/-- `union(c₁, union(c₂, c₃)) ≡ union(c₁, c₂, c₃)` — with no side condition. -/
 theorem equiv_altCodec_assoc (o₁ o₂ o₃ : Codec) :
     Codec.Equiv
       (altCodec [o₁, (altCodec [o₂, o₃] (unanimous [o₂.μ, o₃.μ]))]
@@ -91,16 +88,16 @@ theorem equiv_altCodec_assoc (o₁ o₂ o₃ : Codec) :
   · intro a v v' hn hf
     exact Option.some.inj ((hn.symm.trans (altCodec_nest o₁ o₂ o₃ _ _ _ (o := .dual) a)).trans hf)
 
-/-! ## §6's Hold rows, at term level
+/-! ## The Hold rows of `≡`, at term level
 
-Each row's twin, stated where a reader of the specification's §6 would look for it: about a
+Each row's twin, stated about a
 `Term`, the way `Refutations.lean`'s "Do not hold" rows already are. Every one is its
 combinator row through the bridge above, so they cost a line each and buy the property
-the representation audit asked for — both halves of §6 in one language. -/
+the representation audit asked for — both halves of `≡` in one language. -/
 
 section Terms
 
-/-- §6: `held(held(c, P, k), P′, k′) ≡ refine(held(c, P′, k ++ k′), P ∘ f′)`, where `f′` is
+/-- `held(held(c, P, k), P′, k′) ≡ refine(held(c, P′, k ++ k′), P ∘ f′)`, where `f′` is
     the caller-side function of `k′`. The words concatenate, so the transforms compose, and the
     inner restriction pulls back along `f′`. The pullback is a predicate and no term, so the right
     side carries it as a `refine`. -/
@@ -124,7 +121,7 @@ theorem equiv_denote_held_comp (t P P' : Term) (k₀ k₀' : DynGen × Bool) (k 
     cases hy
     rfl
 
-/-- §6: `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`.
+/-- `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`.
 
     **The meet is a `closure`, and that is what `Pred` costs.** The equation is about codecs
     and it holds: `equiv_restrict_meet` applies, because `restrict` takes a
@@ -141,7 +138,7 @@ theorem equiv_denote_refine_meet (t : Term) (p p' : Pred) :
   simp only [denote_rows]
   exact equiv_restrict_meet _ _ _
 
-/-- §6: `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. The premise is the row's, read off the
+/-- `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. The premise is the row's, read off the
     denotation rather than the judgement — `typed_TSub` is what connects the two. -/
 theorem equiv_denote_refine_full (t : Term) (p : Pred)
     (hq : ∀ v, (denote α t).T v ↔ p.eval v = true) :
@@ -149,8 +146,8 @@ theorem equiv_denote_refine_full (t : Term) (p : Pred)
   simp only [denote_rows]
   exact equiv_restrict_full _ _ hq
 
-/-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
-    `optional_μ` and `optional_μ`, which are already stated over a denotation. -/
+/-- `μ(w(c)) = μ(c)` for the codec wrappers `held` and `refine`. The field wrapper is
+    `optional_μ`, which is stated over a denotation. -/
 theorem denote_held_μ (t P : Term) (k₀ : DynGen × Bool) (k : Word) :
     (denote α (.held false t P k₀ k)).μ = (denote α t).μ := rfl
 

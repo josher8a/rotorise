@@ -9,7 +9,7 @@ variable {α : Calculus.Table}
 a set of alternatives is a `Term.union` of singletons. **This file is what that union concludes**,
 so the n-ary rule the specification writes is derived rather than assumed:
 
-* `typed_literalsS` / `typed_literalsN` derive §3's n-ary rule at `S` and at `N`
+* `typed_literalsS` / `typed_literalsN` derive the n-ary `(literal)` rule at `S` and at `N`
   (`(literal-S)`, `(literal-N)`), from `Typed.literal` at a singleton and `Typed.union`.
 
 **Why the statements take a bare `List` and not a `Finset`.** `Term.union` takes a `List Term`,
@@ -102,7 +102,7 @@ theorem typed_literalsS {l : List String} (hne : l ≠ []) :
   rw [hunion_map_literal_str, unanimous_map_const _ hne] at h
   exact h
 
-/-- **`(literal-N)` is derivable**, and §3's `ℓ ⊆ D` is the list's element type. -/
+/-- **`(literal-N)` is derivable**, and the premise `ℓ ⊆ D` is the list's element type. -/
 theorem typed_literalsN {l : List WFNumeral} (hne : l ≠ []) :
     Typed α (.union (l.map fun d => .literal .number d))
       (fun v => ∃ d, d ∈ l ∧ v = .num d) (some .N) := by

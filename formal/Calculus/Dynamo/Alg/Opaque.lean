@@ -4,10 +4,10 @@ import Calculus.Dynamo.Alg.Recursion
 /-!
 # `opaque` is the identity
 
-§3 states `(opaque)` as the recursive union of everything self-identifying: the five bases, and
+The rule `(opaque)` states the recursive union of everything self-identifying: the five bases, and
 `set`, `array` and `record` over `opaque`. With one carrier, each datum identifies itself, so that
 union sends each datum to itself at each orientation. `opaque` is therefore the identity codec of
-the carrier, by definition. The §3 union is a theorem about the term `union [...]`
+the carrier, by definition. That union is a theorem about the term `union [...]`
 (`Adm_opaqUnfold`, `AdmA_opaqUnfold`), not the definition of `opaque`.
 -/
 

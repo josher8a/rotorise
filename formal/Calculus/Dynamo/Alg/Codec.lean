@@ -3,7 +3,7 @@ import Calculus.Alg.Relations
 import Calculus.Alg.Maps
 
 /-!
-# §2 — What a codec is, and its laws
+# What a codec is, and its laws
 
 The pair is data; the laws are a `Prop`-valued structure over it: a lawful codec is a canonical
 partial bijection. The record and its laws take the carriers as parameters. This file instantiates
@@ -21,13 +21,13 @@ register_simp_attr orient_rows
 
 namespace Calculus
 
-/-- §2: `c = (T, μ, f)`, at the DynamoDB carriers. -/
+/-- The codec record `c = (T, μ, f)`, at the DynamoDB carriers. -/
 abbrev Codec := Alg.Codec Value Member
 
-/-- §2 Laws at the DynamoDB carriers: (W) reads the member of an attribute. -/
+/-- The codec laws at the DynamoDB carriers: (W) reads the member of an attribute. -/
 abbrev Lawful := Alg.Lawful (V := Value) Attr.member
 
-/-- §2 core laws at the DynamoDB carriers. -/
+/-- The core codec laws at the DynamoDB carriers. -/
 abbrev LawfulCore := Alg.LawfulCore (V := Value) Attr.member
 
 /- An `export` alias whose first explicit parameter is the generic record captures field

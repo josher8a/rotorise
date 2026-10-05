@@ -66,7 +66,7 @@ theorem neSetImage_congr {α β : Type} [DecidableEq β] {f g : α → Option β
     rw [(neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hs S.2⟩)).mpr hs,
       (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hs S.2⟩)).mpr hT]
 
-/-- The member a set stores, computed from its element's (§3 `(set)`). -/
+/-- The member a set stores, computed from its element's (the rule `(set)`). -/
 def setMember : Member → Option Member
   | .S => some .SS
   | .N => some .NS
@@ -111,7 +111,7 @@ def setAt {α : Type} (o : Alg.Orient) (c : Codec) (inj : α → Attr) (S : NEFi
     | some a => some a
     | none => setAtK o c inj S .binary
 
-/-! No emptiness guard here: §1 types the wire sets as `℘⁺fin`, which is a type, so there is
+/-! No emptiness guard here: the wire sets have the type `℘⁺fin`, so there is
 no empty set for a codec to refuse. -/
 
 section SetAt
@@ -167,7 +167,7 @@ theorem setAt_mem {v : Attr} (h : setAt o c inj S = some v) :
 
 end SetAt
 
-/-- §3 `(set)`. Non-emptiness, uniqueness and homogeneity are all carried by the **types**:
+/-- The rule `(set)`. Non-emptiness, uniqueness and homogeneity are all carried by the **types**:
     a `Finset` has no repeats and no order, `℘⁺fin` has no empty inhabitant, and the three
     constructors are the three element types the reference names. What is left for the
     codec is the element map — and that is the whole of `(set)`. -/
@@ -192,7 +192,7 @@ in this namespace. -/
 export Alg (carriedCodec carried_e lawful_carried carrier_carried entrywise lawful_entrywise
   carrier_entrywise)
 
-/-! ### `array` (§3) — entrywise at `L` -/
+/-! ### `array` — entrywise at `L` -/
 
 /-! ### What `set` moves
 
@@ -224,7 +224,7 @@ theorem setCodec_T_wire {c : Codec} {k : SetKind} {S : NEFinset k.Carrier} :
     (setCodec c).T (k.wire S) ↔ ∀ x ∈ S.1, c.T (k.elem.into x) := by
   cases k <;> exact Iff.rfl
 
-/-- §3 `array`: the list former with a spread and no fixed positions. -/
+/-- The rule `(array)`: the list former with a spread and no fixed positions. -/
 abbrev arrayCodec (c : Codec) : Codec := Alg.listCodec lS [] (some c) []
 
 /-- **An array moves entry by entry**, at each orientation. -/
@@ -267,20 +267,20 @@ export Alg (align slots_all align_eq_some align_of_slots zip_canonS zip_domE zip
   alignL_spread mem_replicate_zip)
 
 
-/-! #### `list` (§3) — one prefix, at most one spread, one suffix
+/-! #### `list` — one prefix, at most one spread, one suffix
 
 `list` is the positional product that `tuple` cannot state: a fixed **suffix** after a
 spread, so `[A, B, ...C[], D]` has a term. The shape assigns a row of `n` codecs the same
 way `tuple` does, and the extra content is one sentence: the last `|suf|` positions are
 the suffix, and the first `n - |suf|` are exactly `tuple`'s row. So `slotsL` is `slots`
 with the suffix appended, and every fact proved about `slots` carries over through that
-one append. The four clauses of §2 then run position by position over the row, as they do
+one append. The four clauses of the codec laws then run position by position over the row, as they do
 for `tuple` and for `array`.
 
 `tuple` is the case with no suffix and `array` the case with no prefix and no suffix. Both
 are defined as a `list`, so the positional theory is proved one time. -/
 
-/-- §3 `(list)`: the positional product over a prefix, a spread and a suffix. The generic
+/-- The rule `(list)`: the positional product over a prefix, a spread and a suffix. The generic
     `list` at the `L` prism. -/
 abbrev listCodec (pre : List Codec) (spread : Option Codec) (suf : List Codec) : Codec :=
   Alg.listCodec lS pre spread suf
@@ -290,7 +290,7 @@ variable {pre : List Codec} {sp : Option Codec} {suf : List Codec}
 
 end ListShape
 
-/-- **§3 `tuple` is the `list` with no suffix.** -/
+/-- **The rule `(tuple)` is the `list` with no suffix.** -/
 abbrev tupleCodec (cs : List Codec) (tail : Option Codec) : Codec := listCodec cs tail []
 
 end
