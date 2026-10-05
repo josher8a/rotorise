@@ -119,7 +119,7 @@ abbrev bodySem (b : Body) (ρ : List Codec := []) : Codec := Alg.bodySem α dynT
 
 variable (α) in
 /-- A field's semantics. A companion of `denote` rather than a function of one, which is what
-    removed the fuel. -/
+    lets `denote` take no fuel. -/
 abbrev fieldSem (s : ObjectSlot) (ρ : List Codec := []) : FieldSem := Alg.fieldSem α dynTableA s ρ
 
 variable (α) in
@@ -244,10 +244,10 @@ theorem denote_object_table (fields : Finset Name) (f : {k // k ∈ fields} → 
 
 end Bridge
 
-/-! ### The companions are the old mapped forms
+/-! ### The companions are the mapped forms
 
-`denote` had to name its list companions to become structural, and every proof downstream was
-written against `opts.map (denote fuel)`. These four are that bridge. The generic `@[simp]`
+`denote` names its list companions to be structural, and a proof downstream reads the mapped
+form `opts.map (denote α · ρ)`. These four are that bridge. The generic `@[simp]`
 forms in `Alg` fire at DynamoDB, so nothing else has to know the companions exist. -/
 
 theorem denoteList_eq {ρ : List Codec} :

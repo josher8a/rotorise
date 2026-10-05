@@ -3,13 +3,12 @@ import Calculus.Dynamo.Lang.Denote
 /-!
 # The vector checker — how a generated test vector becomes a kernel-checked theorem
 
-The correspondence between this model and `src/` was stated as prose: the TypeScript codec is
-claimed to compute what `denote` denotes. Nothing checked it.
-This file is the Lean half of the bridge that does: a generator emits one line per vector,
+The TypeScript codec is claimed to compute what `denote` denotes.
+This file is the Lean half of the bridge that checks the claim: a generator emits one line per vector,
 and the *kernel* — not a tactic, not `#eval` — decides whether the model agrees.
 
-Three facts about this development force the shape of what follows, and each of them killed
-an easier design first.
+Three facts about this development force the shape of what follows, and each of them rules
+out an easier design.
 
 **The kernel evaluates `denote`, and the kernel is the check.** `#eval` runs `denote` too, but a
 printed value proves nothing, and `native_decide` rests on `Lean.ofReduceBool`, which is outside the
@@ -26,8 +25,7 @@ not. That single fact is why this file exists: `aeq` never compares two function
 compares them **at every key of a key set that it has already checked is the same set**, and
 that is a decidable proposition the kernel is happy to settle.
 
-**No `DecidableEq Attr`, and none is coming.** the host's decidable equality is an axiom (so it does not
-reduce) and `.m`'s function field is not comparable anyway. `aeq` is therefore not a
+**No `DecidableEq Attr`.** `.m`'s function field is not comparable. `aeq` is therefore not a
 decision procedure that was derived and then used; it is written by hand, and its agreement
 with equality is *proved* (`aeq_same`, `aeq_differ`) rather than assumed. Those two theorems
 are what a vector line is worth: without them `check … = .same` says only that a function
@@ -41,7 +39,7 @@ finite and a structural comparator would terminate — it is what makes the func
 reduces in the kernel. A well-founded definition elaborates to `WellFounded.fix`, which does
 not unfold by `rfl`; this was measured, not assumed, and it is also why the list case is a
 separate first-order helper (`zipAll`) taking the comparator as a parameter rather than a
-`mutual` block: `mutual` fell back to well-founded recursion and every `rfl` below stopped
+`mutual` block: `mutual` falls back to well-founded recursion and every `rfl` below stops
 working.
 
 Fuel that runs out is then the obvious hole. A `Bool` comparator has nowhere to put
@@ -339,9 +337,8 @@ theorem check_differ {n : Nat} {x y : Option Attr} (h : check n x y = .differ) :
 /-! ## The `Value` twin, for the read side
 
 `aeq` compares `Attr`. A read-side vector's answer is a `Value`, and `Value.map` carries a
-function exactly as `Attr.m` does — so a read resolution landing on a map met the same funext
-gap `aeq` was built to cross, with nothing to cross it. Five of the union bridge's read pairs
-were recorded as unstatable for want of this.
+function exactly as `Attr.m` does — so a read resolution landing on a map meets the same funext
+gap `aeq` crosses, and `veq` crosses it on the value side.
 
 **The construction transfers unchanged**, which is the result rather than the code: the same
 fuel, the same `Verdict`, the same two-quantifier `map` case, the same `mapAt` trick of comparing
@@ -349,12 +346,9 @@ two closures only at names. Both rules `aeq`'s docstring records carry over and 
 re-derived here — ask the `∀` before the `∃`, and **quantify over the expected side's key set,
 not the codec's**, which is the 10× nobody can see in the statement.
 
-**No row differs now, and that is the change.** `veq` answered `.exhausted` at `.num` and
-`.numSet` while the numeric carrier was a host type whose equality was an axiom. `N` is carried
-exactly, so both rows compare the numeral text and decide, as every other leaf row does.
-`Verdict.exhausted` keeps its meaning, "carries no information", and the fuel row is what answers
-it. The read pairs this file once recorded as unstatable for want of a numeric comparison are not
-re-measured here. -/
+**No row differs.** `N` is carried exactly, so the `.num` and `.numSet` rows compare the numeral
+text and decide, as every other leaf row does. `Verdict.exhausted` keeps its meaning, "carries no
+information", and the fuel row is what answers it. -/
 
 def zipAllV (r : Value → Value → Verdict) : List Value → List Value → Verdict
   | [], [] => .same
@@ -373,15 +367,14 @@ def mapRowV (r : Value → Value → Verdict)
   | _, _ => .differ
 
 /-- `aeq`'s construction over `Value`. Every leaf row decides. The two numeric rows compare the
-    numeral text, where they answered `.exhausted` through a host's axiomatised equality. -/
+    numeral text. -/
 def veq : Nat → Value → Value → Verdict
   | 0, _, _ => .exhausted
   | _ + 1, .str a,  .str b  => if a = b then .same else .differ
   | _ + 1, .bool a, .bool b => if a = b then .same else .differ
   | _ + 1, .bin a,  .bin b  => if a = b then .same else .differ
   | _ + 1, .null,   .null   => .same
-  -- **`N` DECIDES now.** Its equality is the numeral text's, so these two rows stopped being
-  -- `.exhausted` when the carrier stopped being a host type.
+  -- **`N` DECIDES.** Its equality is the numeral text's, so these two rows decide.
   | _ + 1, .num a,  .num b  => if a.1 = b.1 then .same else .differ
   | _ + 1, .numSet a, .numSet b => if fsetEq a.1 b.1 then .same else .differ
   | _ + 1, .strSet a, .strSet b => if fsetEq a.1 b.1 then .same else .differ
@@ -560,25 +553,16 @@ Linear in the number of vectors — 100 two-field object vectors cost the same p
 where the same 200 written out as separate lines compile in 19 s. Each `rfl` gets its own
 heartbeat budget, and distinct vectors share no structure for a batch to exploit.
 
-`number` can carry **positive** vectors now. `Value.num` carries a `WFNumeral`, which is a
+`number` can carry **positive** vectors. `Value.num` carries a `WFNumeral`, which is a
 `String` subtype carrying its own well-formedness proof, so a closed numeric value is one literal
-and reduces like text. This paragraph recorded the opposite while the carrier was an axiom with no
-closed terms, and `decimal` was named the numeric escape hatch for that reason. Whether the corpus
-holds such a vector is a separate question, and this paragraph does not answer it. `Attr.n`'s row
+and reduces like text. Whether the corpus holds such a vector is a separate question, and this
+paragraph does not answer it. `Attr.n`'s row
 compares the underlying text, which is the carrier's own equality.
 
-**It has refusal vectors, and that took the impossibility being put in the right place.** A
-refusal names the term and a value the term *rejects*, so it needs no inhabitant of the codec's
-own carrier: `(denote Term.number).e (Value.str "x") = none` is `rfl`. `Term.number` is a closed
-term and always was; the generator refused to emit it, on the ground that no value could be named
-at it — true of an agreement, false of a refusal, and stated as a fact about the syntax. The
-generator's own value emitter already reported the real impossibility, at `Value.num`, so moving
-nothing and *deleting* the term-level refusal was the whole fix.
-
-A numeric `literal` is the case that does not follow, and the contrast is the useful part:
-`Term.literal GroundKind.number ls` needs `ls : NEFinset WFNumeral`, so **the term itself** has no
-closed expression and no vector of either kind reaches it. Term-inexpressible and
-value-inexpressible are two boundaries, and this file's old sentence had them as one.
+**It has refusal vectors.** A refusal names the term and a value the term *rejects*, so it needs
+no inhabitant of the codec's own carrier: `(denote Term.number).e (Value.str "x") = none` is
+`rfl`. `Term.number` is a closed term, so the generator needs no term-level refusal at it.
+Term-inexpressible and value-inexpressible are two boundaries.
 -/
 
 end Calculus

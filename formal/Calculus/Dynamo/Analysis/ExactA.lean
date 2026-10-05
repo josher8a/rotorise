@@ -7,7 +7,7 @@ variable {α : Calculus.Table}
 # §5 — exactness on the attribute side
 
 `Adm` is the value half. `AdmA` is the attribute half, and it has no `Adm`-shaped
-counterpart, which is the first reason the analysis tables could not simply be tightened.
+counterpart.
 -/
 
 namespace Calculus
@@ -15,15 +15,12 @@ namespace Calculus
 variable (α) in
 /-- **`refine`'s read-side gate**: decode with the base, then apply `q` to what comes out.
 
-    The row this replaces was `admA (.refine t q) = admA t` — the predicate dropped — and
-    the reason on record was that `q` tests the value a read *produces*, so no *syntactic*
-    set of attributes bounds it. The premise is true and the conclusion does not follow, in
-    exactly the way `number`'s and `opaq`'s `⊤`s did not follow: a row is not confined to
-    syntax. It may call the denotation, and the denotation is what produces the value `q`
-    tests. `(denote t).p a` is that value, or `none`; the gate is `q` of it.
+    `q` tests the value a read *produces*, so no *syntactic* set of attributes bounds it. A
+    row is not confined to syntax: it may call the denotation, and the denotation is what
+    produces the value `q` tests. `(denote t).p a` is that value, or `none`; the gate is `q`
+    of it.
 
-    `AdmA`'s `refine` row is this function, which is why the row survived the retirement of
-    the per-aspect tables it was first written for. -/
+    `AdmA`'s `refine` row is this function. -/
 abbrev refineReads (t : Term) (q : Value → Bool) : Attr → Bool :=
   Alg.refineReads α dynTableA t [] q
 
@@ -41,15 +38,12 @@ section
 /-! ## The attribute side
 
 `Adm` is the value half. `AdmA` is the attribute half, and it has no
-`Adm`-shaped counterpart — which is the first reason the analysis tables cannot simply be
-renamed onto `Adm`. `AdmA` below is that counterpart's definition and its soundness proof.
+`Adm`-shaped counterpart. `AdmA` below is that counterpart's definition and its soundness proof.
 
-The mirror is not symmetric, and the asymmetry that remains is §1's rather than this
-file's: the numeric rows went through the host's decimal reader, and `refine` narrows a read.
-was listed here as a third — "cannot narrow a read" — and is not one: the row decodes and
-then applies `q`. Each is a row here rather than a remark. -/
+The numeric rows read the attribute payload directly, and the `refine` row decodes and then
+applies `q` (`refineReads`). Each is a row here rather than a remark. -/
 
-/-! ### The attribute side's rows, and the three that are not the value side's
+/-! ### The attribute side's rows
 
 The attribute side reads the combinators of the value side at the carrier `Attr`. `objAt` at the
 dual reads every stored name, because a rest policy refuses an undeclared name or reads it with the
@@ -205,8 +199,8 @@ theorem filter_AdmAList (opts : List Term) (a : Attr) :
 
 /-- **Every attribute row is exact**, as on the value side. The term language proves it once
     for every universe (`Alg.AdmA_exact`), and this is that theorem at DynamoDB. The numeric
-    rows read the attribute payload directly, so a row reaches `dom(p)` with no appeal to the
-    host's decimal reader. -/
+    rows read the attribute payload directly, so a row reaches `dom(p)` with no reader
+    between. -/
 theorem AdmA_exact (t : Term) : ExactA α t := Alg.AdmA_exact t []
 
 /-! ### The same equation on the read side

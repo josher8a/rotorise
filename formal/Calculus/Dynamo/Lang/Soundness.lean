@@ -51,8 +51,9 @@ abbrev Obligations : Term → optParam (List Codec) [] → Prop := @Alg.Obligati
 
 /-! ### The companions, as the quantifiers the rest of the file speaks in
 
-`ObligationsList` is what made the recursion structural; `∀ t ∈ ts, Obligations t` is what every
-proof below wants. These are that bridge, and they are the entire cost of losing the fuel. -/
+`ObligationsList` is what makes the recursion structural; `∀ t ∈ ts, Obligations t` is what every
+proof below wants. These are that bridge, and they are the entire cost of a recursion with no
+fuel. -/
 
 export Alg (obligationsList_iff obligationsOpt_iff)
 
@@ -60,7 +61,7 @@ export Alg (obligationsList_iff obligationsOpt_iff)
 
 `Obligations` is a recursion over the term, so at each rule it *is* the proposition that
 rule's premises make — but only up to unfolding, and every case of the two inductions
-below was re-stating that proposition to name it. These are that unfolding, once per
+below would re-state that proposition to name it. These are that unfolding, once per
 rule, and they read as the rule they belong to. Each is `:= h`. -/
 
 namespace Obligations
@@ -104,7 +105,7 @@ end Obligations
 /-- Each ground base is lawful: the term denotes the base codec. -/
 theorem lawful_base (k : GroundKind) : Lawful (denote α (.base k)) := lawful_baseCodec k
 
-/-- One where there were two, at every base rather than the two commonest. -/
+/-- Each literal is lawful, at every base. -/
 theorem lawful_literal (k : GroundKind) (x : k.Carrier) :
     Lawful (denote α (.literal k x)) := by
   simp only [denote_rows]; exact lawful_literalCodec k x

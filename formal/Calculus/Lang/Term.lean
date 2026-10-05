@@ -315,8 +315,8 @@ inductive Term (S : Sig) where
       `set(refine(string, q))`, `set(literal k v)` and `set(held number string k)`. -/
   | set      (elem : Term S)
   /-- §3 `(list)`: the one positional container, as a prefix, at most one spread, and a
-      suffix. `array`, `(tuple)` and `(tuple-tail)` were three shapes of one thing, and
-      none of the three could say `[A, B, ...C[], D]` — a fixed position AFTER a spread.
+      suffix. `array`, `(tuple)` and `(tuple-tail)` are three shapes of one thing, and
+      none of the three can say `[A, B, ...C[], D]` — a fixed position AFTER a spread.
 
       A value of length `n` is admitted when `n ≥ pre.length + suf.length`: `pre` aligns
       from the left, `suf` from the right, and every position between them goes through
@@ -325,10 +325,9 @@ inductive Term (S : Sig) where
       **Two spreads have no term**, because the spread is an `Option` and not a `List`.
       The host's list constructor takes the spread as one parameter and inherits that,
       while its tuple takes a tail as a marker inside a variadic parameter list. So the
-      host's type-level refusal for a misplaced tail still has a job, on the tuple alone:
-      the refusal is narrower than it was and it is not gone. Measured, not read.
-      `array` and `tuple` survive below as *builders*, so a statement that spells either
-      keeps its spelling. -/
+      host's type-level refusal for a misplaced tail still has a job, on the tuple alone.
+      Measured, not read. `array` and `tuple` are *builders* below, so a statement that
+      spells either keeps its spelling. -/
   | list     (pre : List (Term S)) (spread : Option (Term S)) (suf : List (Term S))
   /-- §3 `(held)`: an adapter at one absolute side `s`, and a restriction of that side. `outer`
       restricts the side `s` by its domain at `s`, and the word `k₀ :: k` only transforms. A table
@@ -349,9 +348,9 @@ inductive Term (S : Sig) where
   /-- §3 `(opaque)`: the universal sum, which each universe denotes by its top. -/
   | opaq
   /-- §4's field table is a *set* of names each declaring one field, so that is what the
-      term carries. A `List (Name × ObjectSlot)` admitted two orderings of one object and a
-      repeated name, and the typing rule carried a `Nodup` premise to make the first
-      harmless and rule out the second; both are now properties of the type. `ObjectSlot`
+      term carries. A `List (Name × ObjectSlot)` admits two orderings of one object and a
+      repeated name, and a typing rule over it needs a `Nodup` premise to make the first
+      harmless and rule out the second; over a set, both are properties of the type. `ObjectSlot`
       sits in the function's codomain, which is strictly positive — the same factoring
       `Attr.m` and `Value.map` use one level down. -/
   | object   (b : Body S)
@@ -880,7 +879,7 @@ This is the measure that sees through it, and it is not a new idea: it is exactl
 `Attr.depth` in `Recursion.lean` uses — `attach.sup` over the key set where a list would
 fold. What matters is that it is **derived from the term** rather than supplied by a caller, so it
 appears in no statement, no `Obligations`, and no rule. That is the whole difference between this
-and the fuel parameter it replaces. -/
+and a fuel parameter. -/
 
 mutual
 
@@ -898,9 +897,9 @@ def Term.depth : Term S → Nat
   | .union opts => Term.depthL opts + 1
 /-- The payload's own budget: the slot table is a key *set* with a function on it, so its
     layer is the largest slot budget over the key set — a `Finset.sup`, where a list would be
-    a fold — against the open block's. This is the companion `ObjectSlot.depth` and
-    `Body.wildDepth` were always missing: the object row used to inline it, which is why the
-    three inequality lemmas below had to quantify over three components. -/
+    a fold — against the open block's. This is the companion of `ObjectSlot.depth` and
+    `Body.wildDepth`: the object row delegates to it, so the inequality lemmas below quantify
+    over one `Body` rather than over three components. -/
 def Body.depth : Body S → Nat
   | .mk fields f wild =>
       max (fields.attach.sup fun k => ObjectSlot.depth (f k)) (Body.wildDepth wild) + 1
@@ -961,17 +960,16 @@ theorem Body.depth_lt_rest : ∀ (b : Body S) {t : Term S}, b.wild = some t →
 theorem Term.depth_lt_object_body (b : Body S) : Body.depth b < Term.depth (.object b) := by
   simp only [Term.depth]; omega
 
-/-- A declared field's *layer* against the object's, kept under its old name: every downstream
-    citation is of this, and the payload's own version is `Body.depth_lt_field`. -/
+/-- A declared field's *layer* against the object's. Every downstream citation is of this, and
+    the payload's own version is `Body.depth_lt_field`. -/
 theorem Term.depth_lt_object (b : Body S) (k : {k // k ∈ b.fields}) :
     ObjectSlot.depth (b.at k) < Term.depth (.object b) :=
   lt_trans (Body.depth_lt_field b k) (Term.depth_lt_object_body b)
 
-/-- …and the two slot shapes, which is what a proof recursing into a declared slot needs.
-    A row that matched `.object (.mk fields f wild)` discharges these with `f k = .req t m` in
-    hand: `(Body.mk fields f wild).at k` is `f k` by `rfl`, so `assumption` closes it.
-
-    so the `req` lemma covers both and the third one is gone rather than renamed. -/
+/-- …and at a `req` slot: the subterm of a required slot is strictly shallower than the object,
+    which is what a proof recursing into a declared slot needs. A row that matched
+    `.object (.mk fields f wild)` discharges the premise with `f k = .req t` in hand:
+    `(Body.mk fields f wild).at k` is `f k` by `rfl`, so `assumption` closes it. -/
 theorem Term.depth_lt_object_req {b : Body S} (k : {k // k ∈ b.fields}) {t : Term S}
     (h : b.at k = .req t) : Term.depth t < Term.depth (.object b) := by
   have h1 := Term.depth_lt_object b k
@@ -1045,7 +1043,7 @@ def bodySemAbs : Body B → (ρ : List (Mean.C B) := []) → Mean.C B
       | none => .empty
 
 /-- A field's semantics. A companion of `denoteAbs` rather than a function of one, which is what
-    removed the fuel. -/
+    lets `denoteAbs` take no fuel. -/
 def fieldSemAbs : ObjectSlot B → (ρ : List (Mean.C B) := []) →
     FieldSem (Mean.V (B := B)) (Mean.Mem (B := B))
   | .req t, ρ => .req (denoteAbs t ρ)

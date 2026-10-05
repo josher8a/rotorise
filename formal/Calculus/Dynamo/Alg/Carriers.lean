@@ -33,7 +33,7 @@ theorem carrier_literalCodec (k : GroundKind) (x : k.Carrier) :
 
 /-- `set`: non-emptiness comes from the codec refusing an empty set on both sides, and
     membership in the held set from the element codec's own carrier. Uniqueness and order
-    are no longer conditions at all — the `Finset` carries them. -/
+    are not conditions at all — the `Finset` carries them. -/
 theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) where
   domE he := by
     obtain ⟨k, S, rfl, hE⟩ := setCodec_f_eq.mp he

@@ -20,8 +20,8 @@ section
 
 The shape this file is built out of. A constructor viewed as a partial iso onto its image
 is the prism §7 of the specification already names when it calls `held` and `refine` "the
-same shape at different strengths". Two families turn out to be instances, and each was
-written out once per constructor before it was named:
+same shape at different strengths". Two families are instances, and naming each writes it
+once rather than once per constructor:
 
 * the **ground summands** (`GroundKind.summand`) — the prism of each base with the member it
   stamps, which gives a set element its member law;
@@ -149,9 +149,8 @@ def GroundKind.summand (k : GroundKind) : Alg.Summand k.Carrier Attr Member Attr
 /-- The pair a literal refines: its base's, chosen by the index.
 
     §3's `(literal)` premise is `⊢ g : T ⇝ μ, g ground`, and this is `g`. It exists because
-    the rule quantifies over the base — the three constructors this replaces had it hard-coded
-    three times over, which is why `literal-S` and `literal-N` were two rules and `boolean`,
-    `binary` and `null` were none. A base is the identity on the fiber of its kind: it
+    the rule quantifies over the base — with the base hard-coded, `literal-S` and `literal-N`
+    are two rules and `boolean`, `binary` and `null` are none. A base is the identity on the fiber of its kind: it
     accepts a datum of the kind, changes nothing, and stamps the member of the kind. -/
 @[simp] def baseCodec (k : GroundKind) : Codec := Alg.fiberCodec Attr.member k.member
 
@@ -182,8 +181,8 @@ rewrite. Each of the five bases gets an equation. -/
 @[simp] theorem inL_str (x s : String) :
     inL .string x (.str s) = decide (s = x) := rfl
 
-/-- `.num` at `number`: the carrier is the payload now, so this is `rfl` like the three
-    ungated bases beside it. It used to need a `dite` on the host's spelling. -/
+/-- `.num` at `number`: the carrier is the payload, so this is `rfl`, like the three
+    ungated bases beside it. -/
 @[simp] theorem inL_num (x d : WFNumeral) :
     inL .number x (.num d) = decide (d = x) := rfl
 
@@ -223,14 +222,13 @@ def HLit (k : GroundKind) (x : k.Carrier) : Value → Prop :=
 
     So the gates are not bespoke: each of the two codecs is `refine` over a base. The
     `decimal` gate is a fact of the store, so the DynamoDB port states it on the pair
-    (`decimalCodec` is that restriction, `Dynamo/Lang/Store.lean`). The bases used to be *ungated*, every
-    numeral and every string, and cannot be, now that both sides carry §1's `Numerals`. There is one base at `N`
-    instead of the two a host carrier forced, and it is §1's own set: `baseCodec .number`. The ungated
-    bases were standing in for sets the carrier should have been. -/
+    (`decimalCodec` is that restriction, `Dynamo/Lang/Store.lean`). The base at `N` is not
+    *ungated*, because both sides carry §1's `Numerals`. There is one base at `N`, and it is
+    §1's own set: `baseCodec .number`. -/
 
 /-- §1's `D`, as a predicate on values. **It asks only that the value is an `N`**: `D` is the
-    well-formed numerals and the carrier is exactly those, so the grammar check that used to
-    sit here is carried rather than tested. -/
+    well-formed numerals and the carrier is exactly those, so the grammar check is carried
+    rather than tested. -/
 def inD : Value → Bool :=
   fun v => match v with | .num _ => true | _ => false
 

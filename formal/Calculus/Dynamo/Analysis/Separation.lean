@@ -120,8 +120,8 @@ theorem Adm_string_eq_refine : Adm α .string = Adm α (.refine .string (.closur
 
 
 
-/-- **`SepJV` suffices for the codec-level discharge.** The joint predicate is tighter than
-    the rows it replaces, so `SepJV` is a *weaker* statement — but `Adm_sound` connects it
+/-- **`SepJV` suffices for the codec-level discharge.** The joint predicate is exact, so
+    `SepJV` is weaker than a separation by an over-approximating row — but `Adm_sound` connects it
     straight to the denotation: where `x` writes, `y` refuses. What a discharger consumes is
     disjointness of the *options* `select` builds, and every option, `object` included, is
     admitted by attempting its codec, so this is the same fact the discharger needs. -/
@@ -404,7 +404,7 @@ a set is not preserved."* The section above states it.
 **`M`**: *"A map type attribute can store an **unordered** collection of name-value
 pairs."* The three theorems below state it.
 
-**A map is repaired by typing.** `Finset (Name × Attr)` is rejected by the kernel, exactly as
+**A map is typed, not gated.** `Finset (Name × Attr)` is rejected by the kernel, exactly as
 `Finset Value` is, because the element type is the one under declaration. That does not send
 `M` to a well-formedness premise. The pair need not be the element: §1's `M` is a finite
 *partial function*, so the names go in a `Finset` over the concrete type `Name` and the

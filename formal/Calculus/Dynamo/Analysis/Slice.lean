@@ -29,13 +29,12 @@ namespace Calculus
 
 /-- A declared name's literal is the clause's value, at the same base.
 
-    **A clause pins one value per name, because a literal carries one.** The subset test this
-    replaces existed only while a literal held a set. Selecting several alternatives is
-    selecting with one clause per alternative, which `mem_extract_or` below states.
+    **A clause pins one value per name, because a literal carries one.** Selecting several
+    alternatives is selecting with one clause per alternative, which `mem_extract_or` below states.
 
-    Three rows: `number` declines because
-    the numeric carrier's equality came from an axiomatised host, and `null` because its carrier has one
-    inhabitant, so a clause there would keep every member rather than select among them. A name
+    Three rows. `number` has no row, so a clause at `number` keeps no option. `null` has no row
+    because its carrier has one inhabitant, so a clause there would keep every member rather than
+    select among them. A name
     pinned at one base against a clause at another is no match, which is the `_` row. -/
 def altsSub : Option Alts → Alts → Bool
   | some ⟨.string, x⟩,  ⟨.string, c⟩  => decide (x = c)
@@ -128,8 +127,8 @@ theorem TypedListμ.sublist {opts' opts : List Term} {Ts μs} (hsub : opts'.Subl
 
 /-- **The extraction of a derivable union is derivable.**
 
-    Nothing is proved about an option that was not proved before: each kept option carries the
-    judgement it already had. The one lemma this needs is `TypedListμ.sublist` above. -/
+    Nothing new is proved about an option: each kept option carries the judgement it already
+    has. The one lemma this needs is `TypedListμ.sublist` above. -/
 theorem typed_union_extract {opts : List Term} {Ts μs} (c : AltClause)
     (h : TypedListμ α opts Ts μs) :
     ∃ Ts' μs', Ts'.Sublist Ts ∧ μs'.Sublist μs ∧

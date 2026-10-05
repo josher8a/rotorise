@@ -48,12 +48,12 @@ identity on the digits, so `ker p` is equality and `η` would have to be too.
 So `decimal`'s held set is not `Numerals`. It is the numerals the store returns unchanged,
 and that is what this predicate is.
 
-`η ⊆ ker p` is no longer only prose. `Codec.Ker` names §2's `≈c` and `SurvivesStore` names
+`η ⊆ ker p` is not only prose. `Codec.Ker` names §2's `≈c` and `SurvivesStore` names
 the inclusion, both in `Codec.lean`; `Lawful.retract_through_store` is what they buy, which
 is **(R)** with the store in the middle. The two halves for `decimal` are
 `survivesStore_decimalCodec` — the narrowing discharges the premise, because a normalisation
 fixes its own normal forms — and `not_survivesStore_numberCodec` below, which
-is the codec that gated on `WF` instead, failing on `"1.500"`. `ker_decimalCodec` is the fact
+is the codec that gates on `WF` instead, failing on `"1.500"`. `ker_decimalCodec` is the fact
 both turn on: `decimal`'s kernel is equality, so nothing weaker than "η fixes it" would
 serve. -/
 
@@ -91,7 +91,7 @@ def Normal (s : Numeral) : Bool :=
 def Stored (s : Numeral) : Bool := WF s && Normal s
 
 /-- What the store hands back, it also accepts — so a `Stored` numeral is a `WFNumeral`
-    without further checking. `decimal` needs this now that `Attr.n` carries the proof. -/
+    without further checking. `decimal` needs this because `Attr.n` carries the proof. -/
 theorem stored_wf {s : Numeral} (h : Stored s = true) : WF s = true := by
   simp only [Stored, Bool.and_eq_true] at h; exact h.1
 
@@ -177,17 +177,13 @@ theorem survivesStore_decimalCodec {η : Attr → Attr}
 
 /-! ## §1's numeral domain, checked
 
-`Numeral := String` was a standing gap: the grammar, the 38
-significant digits and the magnitude range were unmodelled, so `decimalCodec` held
-every string", with the note that once the predicate is tightened `typed_e_mem` reports
-whether the codec respects it. `Domain.lean` now carries §1's predicate and
-`decimalCodec` gates on it, so here is that report.
+`Domain.lean` carries §1's predicate, with the grammar, the 38 significant digits and the
+magnitude range, and `decimalCodec` gates on it. `typed_e_mem` reports whether the codec
+respects the predicate, so here is that report.
 
-The carrier is no longer unrestricted either: `Attr.n` carries `WFNumeral`, so `⟨N, "abc"⟩`
-is not an attribute and `decimal`'s report below is about a codec whose target is exactly
-§1's. That was the last of §5's four refined members to be typed, and the argument for
-leaving it alone — that a port should see the embedding is partial — did not survive: the
-partiality is a fact about the port's types, not the model's. -/
+The carrier is not unrestricted either: `Attr.n` carries `WFNumeral`, so `⟨N, "abc"⟩` is not
+an attribute and `decimal`'s report below is about a codec whose target is exactly §1's. That
+a port sees the embedding as partial is a fact about the port's types, not the model's. -/
 
 /-- `decimal`'s held set is exactly §1's `Numerals`. -/
 theorem decimal_T (v : Value) :
@@ -196,7 +192,7 @@ theorem decimal_T (v : Value) :
   · rintro ⟨hm, h⟩; cases v <;> first | exact ⟨_, rfl, h⟩ | exact nomatch hm
   · rintro ⟨x, rfl, h⟩; exact ⟨rfl, h⟩
 
-/-- **The report.** `decimalCodec` writes only well-formed numerals — the tightened
+/-- **The report.** `decimalCodec` writes only well-formed numerals — the
     `: T` index, cashed on the attribute side. -/
 theorem decimal_writes_stored {v : Value} {a : Attr}
     (he : decimalCodec.e v = some a) :
@@ -226,15 +222,15 @@ theorem decimal_reads_stored {a : Attr} {v : Value}
     replace hp : (none : Option Value) = some v := hp
     exact nomatch hp
 
-/-! ### The gap that closed, and the one behind it
+/-! ### The gate at the store
 
-Before the tightening, `decimal` wrote an `N` for every string. It no longer does — and the
-second tightening is the one no reading of the specification could have produced, because
-it is a fact about the **store** rather than about the calculus.
+`decimal` writes an `N` only for a numeral the store hands back unchanged. No reading of the
+specification produces that gate, because it is a fact about the **store** rather than about
+the calculus.
 
 §1's worked example says `"1e+21"` is well formed and that treating it as out of range
 would be a defect, "the bound that bites being magnitude rather than notation". That is
-still true of `Numeral.WF`, which is what DynamoDB *accepts*. It is not true of `decimal`,
+true of `Numeral.WF`, which is what DynamoDB *accepts*. It is not true of `decimal`,
 because DynamoDB hands `1e+21` back as `1000000000000000000000`, and `decimal`'s `p` is the
 identity on the digits — so the round trip fails at the one point §2 cannot see, between
 `e` and `p`. `Numeral.Stored` is that set, and the measurements it is read off are in
@@ -263,11 +259,11 @@ theorem decimal_accepts_expanded :
     decimalCodec.e (.num (.of "1000000000000000000000"))
       = some (.n (.of "1000000000000000000000")) := rfl
 
-/-! ## `decimalCodec` before its held set was narrowed
+/-! ## `decimalCodec` without its narrowed held set
 
 `survivesStore_decimalCodec` shows that gating on `Numeral.Stored` discharges `η ⊆ ker p`.
-This is the other half: the codec that gated on `Numeral.WF` instead — §1's *whole* numeral
-grammar, which is what the implementation shipped — does not, and the witness is a form
+This is the other half: the codec that gates on `Numeral.WF` instead — §1's *whole* numeral
+grammar — does not, and the witness is a form
 DynamoDB was measured to normalise.
 
 Without this the narrowing reads as a precaution. With it, it is the only option: `WF` admits
@@ -275,12 +271,11 @@ Without this the narrowing reads as a precaution. With it, it is the only option
 and (R) through the store fails on a value the codec claimed to hold. -/
 
 /-! `decimal`, gated on §1's grammar rather than on what the store hands back — which is
-    now **`baseCodec .number`, the base `decimal` actually refines**. Since `Attr.n` carries
+    **`baseCodec .number`, the base `decimal` actually refines**. Since `Attr.n` carries
     `WF`, there is no wider text-side numeric codec to invent, so this refutation says
     something about the base itself rather than about a codec built for the purpose.
 
-    Note its read is *total*: `WF` is the carrier now, so the gate that used to sit on `p`
-    has nothing left to reject. That is the whole asymmetry `decimal` adds — `Stored` is a
+    Note its read is *total*: `WF` is the carrier, so a gate on `p` has nothing to reject. That is the whole asymmetry `decimal` adds — `Stored` is a
     strictly smaller set than `WF`, and only the smaller one survives the store. -/
 
 /-- `"1.500"` is one of the forms `stored_rejects_denormal` records the store rewriting, and
@@ -319,8 +314,8 @@ generator.
 
 **The text adapter only.** A caller holding a JS float has no adapter here and cannot have one:
 `Value` carries no float, so the conversion would be numeral to numeral and its content is
-binary64 rounding. Writing that down is the host axiom this development deleted, so the emitter
-refuses a float-carrying codec by name instead.
+binary64 rounding. Writing that down needs a host axiom that this development does not assert, so
+the emitter refuses a float-carrying codec by name instead.
 -/
 
 /-- **Text in, numeral out**, gated where `decimal` gates: the spelling the store returns.

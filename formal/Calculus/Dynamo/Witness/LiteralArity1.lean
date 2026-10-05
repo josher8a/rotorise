@@ -14,17 +14,14 @@ so the n-ary rule the specification writes is derived rather than assumed:
 
 **Why the statements take a bare `List` and not a `Finset`.** `Term.union` takes a `List Term`,
 and bridging from a `NEFinset` is `Finset.toList`, which is `Multiset.toList`, which is
-`Quotient.out` — `Classical.choice`. The first draft of this file was stated over `NEFinset` and
-`#assert_axioms_all` rejected five theorems for exactly that. Stated over `(l : List α)` with
-`l.Nodup` and `l ≠ []`, as it is here, it is choice-free, and those two premises are precisely the
-gates the `℘⁺fin` repair had deleted. `Term` cannot have `DecidableEq` either (`Pred.closure`
-carries a function on `Value`), so `union` could not take a `NEFinset Term` and close the gap
-that way.
+`Quotient.out` — `Classical.choice`, which `#assert_axioms_all` rejects. Stated over
+`(l : List α)` with `l ≠ []`, as it is here, it is choice-free. `Term` cannot have `DecidableEq`
+either (`Pred.closure` carries a function on `Value`), so `union` cannot take a `NEFinset Term`
+and close the gap that way.
 
-**That obstruction is why the literal held a set for as long as it did, and it is why the set
-could go.** The bridge is needed only to prove an n-ary *constructor* equal to the union. With one
-value there is no `Finset` of alternatives anywhere, so nothing reaches `Finset.toList` and the
-route is free.
+**That obstruction is why the literal carries one value.** The bridge is needed only to prove an
+n-ary *constructor* equal to the union. With one value there is no `Finset` of alternatives
+anywhere, so nothing reaches `Finset.toList` and the route is free.
 -/
 namespace Calculus
 
@@ -32,8 +29,7 @@ namespace Calculus
 
 Stated over a bare `List`, by recursion on it, rather than over a `Finset` of alternatives: the
 literal carries one value and the union carries a list, so there is no set to walk and nothing to
-bridge. The two held sets below are `HLit` at one value and so are `rfl`, where a set of
-alternatives needed a lemma to collapse the existential. -/
+bridge. The two held sets below are `HLit` at one value and so are `rfl`. -/
 
 /-- Every option of a string literal set is derivable, at `S`, with no premise. -/
 theorem typedListμ_map_literal_str : ∀ (l : List String),
@@ -90,12 +86,11 @@ theorem hunion_map_literal_num (l : List WFNumeral) :
 
 The specification writes `(literal-S)`'s payload as a set; `Term.union`'s is a `List Term`. Going
 from one to the other is `Finset.toList`, which is `Multiset.toList`, which is `Quotient.out` —
-and every theorem stated through it picks up `Classical.choice`. The axiom scan says so: the first
-draft of this file stated the two rules over `NEFinset` and five theorems came back unsanctioned.
+and every theorem stated through it picks up `Classical.choice`.
 
 So they are stated over a list with the premise spelled out, which is choice-free and is the
-honest shape of the claim. `hne` is what the set was carrying for the member, and writing it out
-is what lets the term language carry no set at all. -/
+honest shape of the claim. `hne` is the nonemptiness the member needs, and writing it out is
+what lets the term language carry no set at all. -/
 
 /-- **`(literal-S)` is derivable.** Its conclusion, the held set and the member, comes from
     `Typed.literal` and `Typed.union`. The one premise is `hne`, which the member needs
@@ -117,20 +112,12 @@ theorem typed_literalsN {l : List WFNumeral} (hne : l ≠ []) :
 
 /-! ## The other route not taken: `literal` as a refinement
 
-`refine(base, · ∈ ℓ)` is the second derivation of `literal`, and until now it cost precision:
-`admA (.refine t q)` dropped `q`, so the refinement form was **blind on the read side** where
-the read-side literal row was not. That was the argument against a literal API in which every primitive codec
-accepts its own alternatives — `string('A')`, `number(1)`, `decimal('1')` — since the natural
-encoding of that API is a refinement.
-
-The argument is gone with the row. `AdmA` at a `refine` decodes with the base and applies `q`,
-and `literalCodec k ls` **is** `(baseCodec k).restrict (inL k ls)`, so the two terms denote the
-same read and the two rows now compute the same answer, at every base including `number`.
-
-On the write side the refinement is not merely equal but **strictly sharper at `number`**:
-`adm (.literal k ls)` is `inL k ls` alone, which over-approximates there (`dom(e)` is `inL`
-*and* `WF d.toDec` — the fourth row `b52910d` left standing), while the refinement conjoins the
-base's own `inD`. -/
+`refine(base, · ∈ ℓ)` is the second derivation of `literal`, and it costs no precision.
+`AdmA` at a `refine` decodes with the base and applies `q`, and `literalCodec k x` **is**
+`(baseCodec k).restrict (inL k x)`, so the two terms denote the same read and the two rows
+compute the same answer, at every base including `number`. So a literal API in which every
+primitive codec accepts its own alternatives — `string('A')`, `number(1)`, `decimal('1')` —
+loses nothing on the read side, although the natural encoding of that API is a refinement. -/
 
 /-- **`refine(base k, ∈ ℓ)` reads exactly the base restricted to `ℓ`**, up to the held set a
     literal carries — which `restrict` cannot know and `T` is not consulted by either row.

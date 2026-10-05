@@ -15,7 +15,7 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   set formers below. The index is determined by the term in every rule, exactly as a
   syntax-directed judgement should be; it is an index rather than a function so the rules
   read as §3 writes them.
-* `Typed` keeps no *syntactic* premise. Every side condition became a type — see each
+* `Typed` keeps no *syntactic* premise. Every side condition is a type — see each
   rule's own docstring.
   The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
   `ran(r) ⊆ dom(e)` and coherence, and `(union)`'s pairwise compatibility — live in
@@ -36,7 +36,7 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   judgements (`TypedListμ` keeps their members alongside their held sets).
 * `held`'s iso premises are carrier-restricted (`T ≃ I`, not `Value ≃ Value`) and so mention
   `e`, which is why they sit in `Obligations` with the other semantic premises.
-  The *rule* carries none of them, and no longer carries the held set's half of the iso
+  The *rule* carries none of them, and does not carry the held set's half of the iso
   either: that half is not a premise but the conclusion's index, `fun v => I (f v)` cut by
   the admission of the caller-side term, which is what `through` and `restrict` build.
 * `(refine)` concludes `T v ∧ q v` where the doc concludes `q` under the premise
@@ -85,7 +85,7 @@ theorem HProd_eq_HList (Ts : List Held) (tail : Option Held) :
 theorem HStar_eq_HList (T : Held) : HStar T = HList [] (some T) [] := by
   rw [show HStar T = HProd [] (some T) from rfl, HProd_eq_HList]
 
-/-- `Name ⇀fin T` (§3 `(record)`). The finite partial map is now literally that: a name
+/-- `Name ⇀fin T` (§3 `(record)`). The finite partial map is literally that: a name
     set and a function on it, so "every value holds `T`" is a statement about the
     function's codomain and needs no membership hypothesis. -/
 def HMap (T : Held) : Held :=
@@ -139,17 +139,12 @@ theorem Typed.base (k : GroundKind) : Typed α (.base k) (baseCodec k).T (some k
 /-- **§3 `(literal)`, with no premise line left.**
 
     §3 writes it `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T; n ≥ 1; pairwise distinct`. Every clause
-    is a type here: `g ground` is the index `k`; `n ≥ 1` and distinctness are `NEFinset`'s;
-    `ℓᵢ ∈ T` is `NEFinset k.Carrier`, which at `number` means the well-formed numerals and
-    so carries §1's `ℓ ⊆ D` in the element. The member is `k.member`, a function of the index.
+    is a type here: `g ground` is the index `k`; `ℓᵢ ∈ T` is `x : k.Carrier`, which at `number`
+    means the well-formed numerals and so carries §1's `ℓ ⊆ D` in the element; `n ≥ 1` and
+    distinctness hold of one value. The member is `k.member`, a function of the index.
 
-    **The one thing typing the carrier would have cost, and did not.** A transcription in
-    `Refutations.lean` used to exhibit a literal that is *held* and unwritable, which is (B)
-    failing, and the case against gating the carrier was that gating it deletes the witness.
-    It did not, at the time: the witness was about §3's rule, which
-    admits an ungated `ℓ` only if you drop `ℓᵢ ∈ T`, so it is stated on an ungated prism that
-    is deliberately not a `Term`. What the gate does buy is that `inL` is the whole of
-    admission, which makes `adm (.literal .number x)` exact.
+    **The gated carrier makes admission exact.** `inL` is the whole of admission, which makes
+    `Adm (.literal .number x)` exact.
 
     **One value.** Several alternatives are a certified `union` of singletons, and
     `Calculus/Dynamo/Witness/LiteralArity1.lean` derives that rule from this one and `Typed.union`. -/
@@ -166,7 +161,7 @@ theorem Typed.literal (k : GroundKind) (x : k.Carrier) :
 theorem Typed.set {t T μ} (h : Typed α t T μ) : Typed α (.set t) (HSet T) (μ.bind setMember) :=
   Alg.Typed.set rfl h
 
-/-- `(list)`: `(array)`, `(tuple)` and `(tuple-tail)` were three rules of this one, and the
+/-- `(list)`: `(array)`, `(tuple)` and `(tuple-tail)` are three spellings of this rule, and the
     theorems below recover each spelling. -/
 theorem Typed.list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList α pre Tpre) (hs : TypedOpt α sp Tsp)
     (hf : TypedList α suf Tsuf) : Typed α (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L) :=
@@ -264,9 +259,9 @@ inductive TypedListM : List Term → List Held → Prop where
       TypedListM (t :: ts) (T :: Ts)
 
 /-- **§3 `(record)`, derived.** `record` is the object that declares no name and takes every
-    key at one codec, so its rule is `object`'s at the empty key set. It was a constructor,
-    and a constructor would now conclude about a term `object` already concludes about: one
-    term with two derivations, and two held sets where `typed_T_eq` needs one. -/
+    key at one codec, so its rule is `object`'s at the empty key set. A constructor would
+    conclude about a term `object` already concludes about: one term with two derivations,
+    and two held sets where `typed_T_eq` needs one. -/
 theorem HObject_empty (b : {k // k ∈ (∅ : Finset Name)} → Bool × Held) (T : Held) :
     HObject ∅ b (some T) = HMap T := by
   funext v

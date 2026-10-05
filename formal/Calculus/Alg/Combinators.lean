@@ -320,9 +320,8 @@ theorem through_p {f g : V → V} {a v} :
     (c.through f g).p a = some v ↔ ∃ w, c.p a = some w ∧ v = g w := by
   simp [Codec.through, Option.map_eq_some_iff, eq_comm (a := v)]
 
-/-- The read side of `restrict_e_isSome`, and its absence is why every literal row unfolded
-    `Codec.restrict` by hand. §4c asks for one codec stated once for both sides; the write half
-    was `@[simp]` and the read half was not there. -/
+/-- The read side of `restrict_e_isSome`. Without it, every literal row unfolds `Codec.restrict`
+    by hand. §4c asks for one codec stated once for both sides, so both halves are `@[simp]`. -/
 @[simp] theorem restrict_p_isSome {c : Codec V M} {q : V → Bool} (a : V) :
     ((c.restrict q).p a).isSome = ((c.p a).elim false q) := by
   rw [Codec.restrict, refine2_p_isSome, Bool.true_and]
