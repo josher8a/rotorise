@@ -57,11 +57,11 @@ theorem pairwiseCompat_json (c : Codec) (hc : Lawful c) :
   have hxy : Compat (denote α .string [c]) (denote α (.array (.var 0)) [c]) :=
     (Alg.compat_iff_agree hx hy).mpr
       ⟨Alg.agree_apart fun v => by
-          have := hV [c] [c] (fun _ _ _ hp => nomatch hp) v
+          have := hV [c] [c] (fun _ _ hp => nomatch hp) v
           rwa [Bool.eq_iff_iff.mpr (Alg.Adm_exact Term.string [c] v),
             Bool.eq_iff_iff.mpr (Alg.Adm_exact (Term.array (.var 0)) [c] v)] at this,
        Alg.agree_apart fun a => by
-          have := hA [c] [c] (fun _ _ _ hp => nomatch hp) a
+          have := hA [c] [c] (fun _ _ hp => nomatch hp) a
           rwa [Bool.eq_iff_iff.mpr (Alg.AdmA_exact Term.string [c] a),
             Bool.eq_iff_iff.mpr (Alg.AdmA_exact (Term.array (.var 0)) [c] a)] at this⟩
   exact forall_mem_pair (forall_mem_pair (compat_self _) hxy)

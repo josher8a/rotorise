@@ -208,39 +208,36 @@ class TopBound (S : Syn) [Sem S] : Prop where
 
 /-- The environments keep each paired binder pair apart: no value written by both. -/
 def ApartV (p : Pairing) (ρ ρ' : List S.C) : Prop :=
-  ∀ i j k, p i j = some k → ∀ v, (((envAt ρ i).f S.o v).isSome && ((envAt ρ' j).f S.o v).isSome) = false
+  ∀ i j, p i j = true → ∀ v, (((envAt ρ i).f S.o v).isSome && ((envAt ρ' j).f S.o v).isSome) = false
 
 omit [PrimAdm S] in
 /-- Apart environments stay apart when the left operand unfolds: its new binder pairs with
     nothing. -/
 theorem ApartV.left {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') (c : S.C) :
     ApartV (shiftL p) (c :: ρ) ρ' := by
-  intro i j k hp v
+  intro i j hp v
   match i, hp with
   | 0, hp => exact nomatch hp
-  | i + 1, hp => exact h i j k hp v
+  | i + 1, hp => exact h i j hp v
 
 omit [PrimAdm S] in
 /-- …and when the right operand unfolds. -/
 theorem ApartV.right {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') (c : S.C) :
     ApartV (shiftR p) ρ (c :: ρ') := by
-  intro i j k hp v
+  intro i j hp v
   match i, j, hp with
   | _, 0, hp => exact nomatch hp
-  | i, j + 1, hp => exact h i j k hp v
+  | i, j + 1, hp => exact h i j hp v
 
 omit [PrimAdm S] in
 /-- Two new binders that share no value extend two apart environments at a paired binder. -/
 theorem ApartV.mu {p : Pairing} {ρ ρ' : List S.C} (h : ApartV p ρ ρ') {c c' : S.C}
     (hc : ∀ v, ((c.f S.o v).isSome && (c'.f S.o v).isSome) = false) :
     ApartV (pairMu p) (c :: ρ) (c' :: ρ') := by
-  intro i j k hp v
+  intro i j hp v
   match i, j, hp with
   | 0, 0, _ => exact hc v
-  | i + 1, j + 1, hp =>
-    simp only [pairMu, Option.map_eq_some_iff] at hp
-    obtain ⟨k', hk, rfl⟩ := hp
-    exact h i j k' hk v
+  | i + 1, j + 1, hp => exact h i j hp v
   | 0, _ + 1, hp => exact nomatch hp
   | _ + 1, 0, hp => exact nomatch hp
 
@@ -486,9 +483,7 @@ theorem famVarD_sound {ρ ρ' : List S.C} {i : Nat} {q : Pairing} (hq : ApartV q
   intro y h v
   cases y with
   | var j =>
-      simp only [famVarD, Option.isSome_iff_exists] at h
-      obtain ⟨k, hk⟩ := h
-      exact hq i j k hk v
+      exact hq i j h v
   | _ => simp [famVarD] at h
 
 /-- **The set family is sound**: the set law over closed elements, and the shape classes at

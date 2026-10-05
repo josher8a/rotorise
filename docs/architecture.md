@@ -141,7 +141,7 @@ predicate. `Leaf` holds the two leaf meets and the test for a predicate that the
 universe. `Leaf` is outside `Sem` and holds computable fields only, so the test stays computable,
 and the kernel evaluates a closed pair.
 
-**The test reads two open terms at a pairing of their binders.** `p i j = some k` says that the
+**The test reads two open terms at a pairing of their binders.** `p i j = true` says that the
 left variable `i` and the right variable `j` are one pair of binders. Two variables are disjoint
 where the pairing names them one pair, because the environments keep each pair apart. Two
 recursive terms are disjoint where their bodies are disjoint with the two new binders paired. A
