@@ -52,11 +52,11 @@ definition it touches.
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
 | `Calculus/Dynamo/Witness/Discharge.lean`   | §5          | The host's recursive schema for JSON (`jsonTerm`) carried through `soundness`, with the refusals of the guard pinned |
 | `Calculus/JSON/Basic.lean`        | —           | A second universe on the generic layer, with no DynamoDB import: the carrier `Json`, the ground codecs, the array prism, the signature `jsonSyn`/`jsonSem` with `id_topLaws`, a union lawful by `Alg.soundness` and `Alg.compat_of_HF` (`lawful_strOrNum`), and the kind test as the primitive admission rows, exact by `Alg.Adm_exact` and `Alg.AdmA_exact` (`exact_strOrNum`) |
-| `Calculus/JSON/Disjoint.lean`     | —           | Disjointness at JSON: the leaves `jsonLeaf` (two kinds meet where they are one kind), the laws of the leaves and of the formers as instances, and `Alg.disjoint_orthogonal` at `jsonSyn` (`orthogonal`) |
+| `Calculus/JSON/Disjoint.lean`     | —           | Disjointness at JSON: the leaves `jsonLeaf` (two kinds are apart where they are two kinds), the laws of the leaves and of the formers as instances, and `Alg.disjoint_orthogonal` at `jsonSyn` (`orthogonal`) |
 
 This table has a row of its own for forty-five of the sixty-two modules under `Calculus/`.
 `Compat.lean`, `Confluence.lean`, `ExactA.lean`, `ExactV.lean`, `HeldFree.lean`, `Kernel.lean`,
-`Laminar.lean`, `LiteralArity1.lean`, `Malleability.lean`, `Meet.lean`, `Merge.lean`,
+`Laminar.lean`, `LiteralArity1.lean`, `Malleability.lean`, `Dynamo/Analysis/Disjoint.lean`, `Merge.lean`,
 `Orthogonality.lean`, `Rows.lean`, `Separation.lean`, `Slice.lean`, `Universal.lean` and
 `Vectors.lean` have none, and each opens with a module docstring that says what it is for.
 Read those.

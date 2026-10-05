@@ -1957,12 +1957,12 @@ describe("the declaration guard, against the model's classifier", () => {
                 leanSeparationModule(separationPairs()),
             )
         }
-        // `Compat` reaches `Meet`, so the module imports `Compat` alone
+        // `Compat` reaches `Dynamo.Analysis.Disjoint`, so the module imports `Compat` alone
         expect(leanSeparationModule([])).toContain(
             'import Calculus.Dynamo.Analysis.Compat',
         )
         expect(leanSeparationModule([])).not.toContain(
-            'import Calculus.Dynamo.Analysis.Meet',
+            'import Calculus.Dynamo.Analysis.Disjoint',
         )
         // a verdict spells `libTable`, which only `Store` declares, and without the import
         // Lean auto-binds the name and every verdict fails to elaborate
@@ -1986,7 +1986,7 @@ describe("the declaration guard, against the model's classifier", () => {
             )
         }
         expect(leanDisjointModule([])).toContain(
-            'import Calculus.Dynamo.Analysis.Meet',
+            'import Calculus.Dynamo.Analysis.Disjoint',
         )
     })
 

@@ -54,7 +54,7 @@ import Calculus.Dynamo.Analysis.ExactV
 import Calculus.Dynamo.Analysis.ExactA
 import Calculus.Dynamo.Analysis.Separation
 import Calculus.Dynamo.Analysis.Laminar
-import Calculus.Dynamo.Analysis.Meet
+import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Witness.LiteralArity1
 import Calculus.Dynamo.Analysis.Orthogonality
 import Calculus.Bridge.Vectors

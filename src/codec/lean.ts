@@ -1162,7 +1162,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
  * The declaration verdicts as a module of their own, because they need the decision `compatPair`
  * and the dischargers of `PairwiseCompat`.
  *
- * The header imports `Calculus.Dynamo.Analysis.Compat`, which reaches `Meet`, and
+ * The header imports `Calculus.Dynamo.Analysis.Compat`, which reaches `Dynamo.Analysis.Disjoint`, and
  * `Calculus.Dynamo.Lang.Store`, because a verdict spells `libTable` and `Callers`, which the
  * DynamoDB port defines, and `Compat` does not reach them. Lean
  * auto-binds an unknown lower-case name, so the missing import reports a free variable in the
@@ -1281,7 +1281,7 @@ export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
  * Generated at gate time and elaborated, never committed.
  */
 export const leanDisjointModule = (pairs: readonly DisjointPair[]): string =>
-    `import Calculus.Dynamo.Analysis.Meet
+    `import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Lang.Store
 
 /-!

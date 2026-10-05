@@ -6,7 +6,7 @@ variable {α : Calculus.Table}
 # Orthogonality: separation
 
 `Obligations (.union opts)` carries pairwise compatibility. Two separated options are compatible
-(`pairwiseCompat_of_separated`). The decidable certificate is `viewsDisjoint` (`Meet.lean`): two
+(`pairwiseCompat_of_separated`). The decidable certificate is `viewsDisjoint` (`Dynamo/Analysis/Disjoint.lean`): two
 options are orthogonal when the domains and the ranges of the two terms meet at the bottom. The
 meet refuses a closure beside a partner that its inner term does not meet at the bottom.
 

@@ -1,4 +1,4 @@
-import Calculus.Dynamo.Analysis.Meet
+import Calculus.Dynamo.Analysis.Disjoint
 
 variable {α : Calculus.Table}
 
