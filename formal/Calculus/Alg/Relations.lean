@@ -20,12 +20,6 @@ variable {V M : Type} {member : V → M}
 def Sub (c d : Codec V M) : Prop :=
   ∀ (o : Orient) (x : V) (y : V), c.f o x = some y → d.f o x = some y
 
-/-- Inclusion from its two orientations. A proof that reads the asymmetric write and read of a
-    combinator gives the two orientations apart. -/
-theorem Sub.ofEP {c d : Codec V M} (he : ∀ v a, c.e v = some a → d.e v = some a)
-    (hp : ∀ a v, c.p a = some v → d.p a = some v) : Sub c d :=
-  Orient.both (P := fun o => ∀ x y, c.f o x = some y → d.f o x = some y) he hp
-
 /-- **A fiber codec is below the identity**: it sends a datum only to itself. -/
 theorem sub_fiberCodec [DecidableEq M] (member : V → M) (m : M) :
     Sub (fiberCodec member m) idCodec := fun o x y h => by
