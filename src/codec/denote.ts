@@ -61,8 +61,8 @@ import {
 } from './term'
 import {
     asRecord,
-    copiedPerRead,
     copied,
+    copiedPerRead,
     describeShape,
     expect,
     namedLiteral,
@@ -481,9 +481,9 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                     }
                     if (optional) continue
                     if (absent) {
-                        out[name] = absent.copy
                         // `copied` and not `structuredClone`: a decode must be writable, so
                         // the copy keeps the class of each value, a `DynamoNumber` included
+                        out[name] = absent.copy
                             ? copied(absent.value)
                             : absent.value
                         continue
