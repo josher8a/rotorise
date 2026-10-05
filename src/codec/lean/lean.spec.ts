@@ -66,6 +66,7 @@ import type {
     Refusal,
     Resolution,
     Separation,
+    Sliceable,
     Vector,
 } from '../lean'
 import {
@@ -81,6 +82,8 @@ import {
     leanResolutionModule,
     leanSeparation,
     leanSeparationModule,
+    leanSlice,
+    leanSliceModule,
     leanTermOf,
     leanValueOf,
     leanVector,
@@ -2166,5 +2169,158 @@ describe('the committed sample', () => {
             if (process.env.UPDATE_LEAN_SAMPLE) writeFileSync(at, emitted)
             expect(emitted).toBe(readFileSync(at, 'utf8'))
         }
+    })
+})
+
+describe("the slice, against the model's `AltClause.admits`", () => {
+    /** A union of objects carries `extract`, which the erased codec does not show. */
+    const sliceable = (options: readonly unknown[]): Sliceable =>
+        union(options as never) as unknown as Sliceable
+    const one = (t: unknown, clause: Readonly<Record<string, unknown>>) =>
+        refusal(() =>
+            leanSlice({
+                name: 'one',
+                codec: sliceable([
+                    object({ t } as never),
+                    object({ t: string('z') }),
+                ]),
+                clauses: [clause as Readonly<Record<string, AnyCodec>>],
+            }),
+        ).reason
+
+    it('states the options that the host keeps under each clause', () => {
+        const codec = sliceable([
+            object({ kind: string('a'), x: string }),
+            object({ kind: string('b'), x: boolean }),
+        ])
+        const text = leanSlice({
+            name: 'kinds',
+            codec,
+            clauses: [
+                { kind: erase(string('a')) },
+                { kind: erase(string('c')) },
+            ],
+        })
+        expect(text).toContain(
+            '(AltClause.mk {"kind"} (fun k => (⟨.string, "a"⟩ : Alts)))',
+        )
+        expect(text).toContain(
+            '[[true, false],\n      [false, false]] := by decide',
+        )
+    })
+
+    /**
+     * **A host refusal keeps nothing.** The host refuses a clause key that no member pins, because
+     * the clause keeps no member whatever the values. The model has no refusal, and its extraction
+     * at the same clause is empty, so the row states no option.
+     */
+    it('states a clause that the host refuses as a clause that keeps no option', () => {
+        const text = leanSlice({
+            name: 'refused',
+            codec: sliceable([
+                object({ t: string('a') }),
+                object({ t: string('b') }),
+            ]),
+            clauses: [{ u: erase(string('a')) }],
+        })
+        expect(text).toContain('[[false, false]] := by decide')
+    })
+
+    /**
+     * **The verdict is the host's, so a wrong host verdict writes a false theorem.** A codec whose
+     * `extract` keeps every option states `true` where the clause describes no option, and the
+     * kernel refuses the theorem in the gate.
+     */
+    it('states a mutant host verdict, which the kernel then refuses', () => {
+        const codec = sliceable([
+            object({ t: string('a') }),
+            object({ t: string('b') }),
+        ])
+        const mutant: Sliceable = { ...codec, extract: () => codec }
+        expect(
+            leanSlice({
+                name: 'mutant',
+                codec: mutant,
+                clauses: [{ t: erase(string('a')) }],
+            }),
+        ).toContain('[[true, true]] := by decide')
+    })
+
+    /**
+     * **A dissection states its assignment.** Each option adds the one-key clause at the tag that
+     * the host assigns, and the row keeps the options with that tag: the option itself included.
+     */
+    it('states that each option of a dissection answers to the tag the host assigns', () => {
+        const codec = discriminatedUnion('kind', [
+            object({ kind: string('a'), x: string }),
+            object({ kind: string('b'), y: string }),
+        ] as never) as unknown as Sliceable
+        const text = leanSlice({
+            name: 'tags',
+            codec,
+            clauses: [],
+            keys: ['kind'],
+        })
+        expect(text).toContain(
+            '(AltClause.mk {"kind"} (fun k => (⟨.string, "b"⟩ : Alts)))',
+        )
+        expect(text).toContain(
+            '[[true, false],\n      [false, true]] := by decide',
+        )
+    })
+
+    // **The five readings that the model's slice does not make.** Each refusal keeps the row out
+    // of the vectors, and a probe of the reading deletes the refusal.
+    it('refuses a member that pins the key through a `held` adapter', () => {
+        expect(
+            one(decimal('1'), {
+                t: dynamoNumber(orThrow(DynamoNumber.from('1'))),
+            }),
+        ).toContain('through a `held` adapter')
+    })
+
+    it('refuses a member that pins the key through a `refine`', () => {
+        expect(
+            one(refine(string('1'), isNumeral as never), { t: string('1') }),
+        ).toContain('through a `refine`')
+    })
+
+    it('refuses a member that pins the key with a fill', () => {
+        expect(
+            one(
+                withLegacyRead({
+                    current: string('a'),
+                    whenMissing: 'a',
+                } as never),
+                {
+                    t: string('a'),
+                },
+            ),
+        ).toContain('with a fill')
+    })
+
+    it('refuses a union of literals, at the clause and at the member', () => {
+        expect(one(string('a'), { t: string('a', 'z') })).toContain(
+            'a union of literals',
+        )
+        expect(one(string('a', 'b'), { t: string('z') })).toContain(
+            'a union of literals',
+        )
+    })
+
+    it('refuses a clause at the `decimal` form and at the `number` form', () => {
+        const at = dynamoNumber(orThrow(DynamoNumber.from('1')))
+        expect(one(at, { t: decimal('1') })).toContain(
+            '`decimal` or a `number` literal',
+        )
+        expect(one(at, { t: number(1) })).toContain(
+            '`decimal` or a `number` literal',
+        )
+    })
+
+    it('emits a module that imports the slice', () => {
+        expect(leanSliceModule([])).toContain(
+            'import Calculus.Dynamo.Analysis.Slice',
+        )
     })
 })
