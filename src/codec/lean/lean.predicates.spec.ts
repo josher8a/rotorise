@@ -9,7 +9,7 @@
  * this library did not build" rather than "refinements".
  *
  * The defect this guards is the one the emitter exists to prevent, and it is a *silent* one: an
- * approximation — `fun _ => true` for a predicate, or a near-miss like `inD` for `isNumeral` —
+ * approximation — `fun _ => true` for a predicate, or a near-miss like a test for an `N` for `isNumeral` —
  * yields a Lean file that compiles and proves a theorem about a codec nobody shipped. So the
  * negative direction is tested at least as hard as the positive: a caller's own predicate must
  * still throw, and it must throw *naming itself*, so the boundary is legible from the error.
@@ -69,11 +69,10 @@ describe('the predicates this library ships', () => {
     })
 
     /**
-     * `isNumeral` is §1's `Numeral.WF`. The model names it only at the *double* carrier — `inD` is
-     * `fun v => match v with | .num d => Numeral.WF d.toDec` — which is a different predicate on a
-     * different carrier and is `noncomputable` besides, so a vector mentioning it would not reduce
-     * in the kernel. Written out at the text carrier instead, which is a closed expression in the
-     * model's own vocabulary and needs nothing added to `formal/`.
+     * `isNumeral` is §1's `Numeral.WF`. The model carries it in the type of `.num`, as a
+     * `WFNumeral`, and names no predicate on values for it. So the emitter writes it out at the
+     * text carrier, which is a closed expression in the model's own vocabulary and needs nothing
+     * added to `formal/`.
      */
     it('emits `Numeral.WF` at the text carrier for `isNumeral`', () => {
         const wf = refine(string, narrowing(isNumeral))

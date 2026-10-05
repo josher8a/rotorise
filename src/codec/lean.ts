@@ -376,11 +376,11 @@ export const leanAttrOf = (
  * ── the correspondence, and what checked it ────────────────────────────────────────────────────
  *
  * `isStoredNumeral` ↦ `isStored` and `isNumeral` ↦ the same shape over `Numeral.WF`, which the
- * model spells only at the `.num` carrier (`inD`) and so is written out here. Both were checked
+ * model carries in the type of `.num` and so is written out here. Both were checked
  * against the kernel rather than read across: a corpus of numeral spellings was run through the
  * TypeScript predicates, the verdicts emitted as `Numeral.WF s = b` / `Numeral.Stored s = b` rows,
- * and all of them closed by `rfl`. `inD` is deliberately *not* used for `isNumeral`: it asks only
- * whether a value is an `N`, which is a different predicate on a different carrier.
+ * and all of them closed by `rfl`. A test of whether a value is an `N` is not `isNumeral`: it is a
+ * different predicate on a different carrier.
  *
  * ── the side condition, which is not decoration ────────────────────────────────────────────────
  *
