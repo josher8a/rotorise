@@ -185,15 +185,15 @@ class FormerAdm (S : Syn) [Sem S] [PrimAdm S] : Prop where
 /-- **The write-side law of the primitive leaves.** A primitive reads no variable, so the law is
     stated at the closed environment. -/
 class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] : Prop where
-  /-- Two primitives met at the bottom share no value. -/
-  prim_none : ∀ {α : Table S} {β : Table S.op} (g g' : S.Ground), Leaf.prim g g' = none →
+  /-- Two primitives apart share no value. -/
+  prims_apart : ∀ {α : Table S} {β : Table S.op} (g g' : S.Ground), Leaf.primsApart g g' = true →
     ∀ v, (Adm α β (.prim g : Term S) [] v && Adm α β (.prim g') [] v) = false
 
-/-- **The law of the predicate leaves**, at each absolute side: two predicates met at the empty
-    predicate hold together nowhere. The law is a fact of the signature and its meaning, so the
-    dual universe has the law of the universe. -/
+/-- **The law of the predicate leaves**, at each absolute side: two predicates apart hold
+    together nowhere. The law is a fact of the signature and its meaning, so the dual universe has
+    the law of the universe. -/
 class LeafMeet (B : Sig) [Mean B] [Leaf B] : Prop where
-  pmeet_none : ∀ (s : Bool) (q p : B.P s), Leaf.pmeet s q p = some none →
+  predicates_apart : ∀ (s : Bool) (q p : B.P s), Leaf.predicatesApart s q p = true →
     ∀ x, (Mean.eval s q x && Mean.eval s p x) = false
 
 /-- **A held-free closed term lies below the top**: its graph is inside the graph of the top.
@@ -414,8 +414,7 @@ theorem splitRL_sound {ρ : List S.C} {x : Term S} {fam : Pairing → Term S →
       | tail _ hz => exact splitRL_sound hf ys p ρ' w hw hp h.2 z hz v
 end
 
-/-- **Two data predicates at one absolute side that meet at the empty predicate keep a refinement
-    chain apart**, over held-free closed inner terms. Such a term lies below the top, so the pair
+/-- **Two data predicates at one absolute side that are apart keep a refinement chain apart**, over held-free closed inner terms. Such a term lies below the top, so the pair
     that it sends is the pair of the top, and each predicate reads that pair at the side `s`. -/
 theorem predApart_sound [Leaf S] [LeafMeet S] [TopBound S] (s : Bool) {q : S.sig.P s}
     {ρ' : List S.C} : ∀ (y : Term S), predApart s q y = true → ∀ v a,
@@ -423,12 +422,8 @@ theorem predApart_sound [Leaf S] [LeafMeet S] [TopBound S] (s : Bool) {q : S.sig
       Adm α β y ρ' v = false
   | .refine y q₁ q₂, h, v, a, htop, hq => by
       simp only [predApart, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
-      rcases h with ⟨⟨⟨-, hh⟩, hv⟩, hm⟩ | h
-      · have hn : Leaf.pmeet s q (half s q₁ q₂) = some none := by
-          revert hm; cases Leaf.pmeet s q (half s q₁ q₂) with
-          | none => simp
-          | some o => cases o <;> simp
-        cases hA : Adm α β (.refine y q₁ q₂) ρ' v with
+      rcases h with ⟨⟨⟨-, hh⟩, hv⟩, hn⟩ | h
+      · cases hA : Adm α β (.refine y q₁ q₂) ρ' v with
         | false => rfl
         | true =>
           rw [Adm_eq_isSome] at hA
@@ -437,7 +432,7 @@ theorem predApart_sound [Leaf S] [LeafMeet S] [TopBound S] (s : Bool) {q : S.sig
           rw [htop] at htop'; cases htop'
           have hr := refine2_rect (c := denote α β y ρ') ha' s
           rw [Mean.eval_half] at hr
-          have := LeafMeet.pmeet_none s q _ hn (Orient.place (X := fun _ => S.V) S.o v a s)
+          have := LeafMeet.predicates_apart s q _ hn (Orient.place (X := fun _ => S.V) S.o v a s)
           rw [hq, hr] at this; exact nomatch this
       · rw [Adm_refine_eq, predApart_sound s y h v a htop hq, Bool.false_and]
   | .prim _, h, _, _, _, _ | .never, h, _, _, _, _ | .set _, h, _, _, _, _
@@ -470,8 +465,7 @@ theorem famPrimD_sound [Leaf S] [LeafAdm S] [Shapes S] {ρ ρ' : List S.C} (g : 
   intro y h v
   cases y with
   | prim g' =>
-      simp only [famPrimD, Option.isNone_iff_eq_none] at h
-      exact LeafAdm.prim_none (α := α) (β := β) g g' h v
+      exact LeafAdm.prims_apart (α := α) (β := β) g g' h v
   | set t => exact Shapes.prim_set g t v
   | list a b c => exact Shapes.prim_list g a b c v
   | object b => exact Shapes.prim_obj g b v

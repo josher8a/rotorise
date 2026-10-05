@@ -16,11 +16,12 @@ namespace Calculus.JSON
 
 variable {α : Alg.Table jsonSyn} {β : Alg.Table jsonSyn.op}
 
-/-- **The leaves of JSON.** Two kinds meet where they are one kind. -/
+/-- **The leaves of JSON.** Two kinds are apart where they are two kinds. A JSON predicate is a
+    function, so no two predicates are apart. -/
 instance jsonLeaf : Alg.Leaf jsonSig where
-  prim m m' := if m = m' then some m else none
+  primsApart m m' := !decide (m = m')
   isData _ _ := false
-  pmeet _ _ _ := none
+  predicatesApart _ _ _ := false
 
 /-- A kind admits a value of that kind, on the write side. -/
 theorem adm_prim (m : JMember) (v : Json) :
@@ -60,19 +61,17 @@ instance jsonFormerAdm : Alg.FormerAdm jsonSyn where
 
 /-- Two kinds that the leaf keeps apart share no value. -/
 instance jsonLeafAdm : Alg.LeafAdm jsonSyn where
-  prim_none m m' hp v := by
-    simp only [Alg.Leaf.prim] at hp
-    split at hp
-    · exact nomatch hp
-    · next hne =>
-        rw [adm_prim, adm_prim]
-        cases hv : decide (v.member = m) with
-        | false => rfl
-        | true =>
-            have h1 : v.member = m := of_decide_eq_true hv
-            exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
+  prims_apart m m' hp v := by
+    simp only [Alg.Leaf.primsApart, Bool.not_eq_true', decide_eq_false_iff_not] at hp
+    have hne := hp
+    rw [adm_prim, adm_prim]
+    cases hv : decide (v.member = m) with
+    | false => rfl
+    | true =>
+        have h1 : v.member = m := of_decide_eq_true hv
+        exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
 
-/-- A JSON predicate is a function, so the leaves meet no predicate. -/
+/-- A JSON predicate is a function, so the leaves keep no two predicates apart. -/
 instance jsonLeafMeet : Alg.LeafMeet jsonSig := ⟨fun _ _ _ h => nomatch h⟩
 
 /-- The formers of JSON, on the read side: every former term reads nothing. -/
@@ -81,18 +80,16 @@ instance jsonFormerAdmA : Alg.FormerAdmA jsonSyn where
 
 /-- …and read no attribute in common. -/
 instance jsonLeafAdmA : Alg.LeafAdmA jsonSyn where
-  prim_none {β α} m m' hp a := by
+  prims_apart {β α} m m' hp a := by
     change (Alg.AdmA α β (.prim m : Alg.Term jsonSyn) [] a && Alg.AdmA α β (.prim m') [] a) = false
-    simp only [Alg.Leaf.prim] at hp
-    split at hp
-    · exact nomatch hp
-    · next hne =>
-        rw [admA_prim, admA_prim]
-        cases ha : decide (a.member = m) with
-        | false => rfl
-        | true =>
-            have h1 : a.member = m := of_decide_eq_true ha
-            exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
+    simp only [Alg.Leaf.primsApart, Bool.not_eq_true', decide_eq_false_iff_not] at hp
+    have hne := hp
+    rw [admA_prim, admA_prim]
+    cases ha : decide (a.member = m) with
+    | false => rfl
+    | true =>
+        have h1 : a.member = m := of_decide_eq_true ha
+        exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
 
 /-- The test computes at JSON: two kinds are disjoint. -/
 example : Alg.Term.disjoint (S := jsonSyn) Alg.pair0 (.prim .str) (.prim .num) = true := by rfl
