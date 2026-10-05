@@ -358,8 +358,10 @@ the orientation (retract at the host, canon at the dual) and writes, for every t
 obligations hold. The induction proves `Lawful` alone.
 `Lawful.core` gives `LawfulCore` from it. An alternate reader is `Codec.extendRead` at the codec layer. Its read passes only what the current
 codec writes, so `extendRead_lawfulCore` proves `LawfulCore` for it over a typed term whose
-obligations hold, with no premise. `ReadsCoherently` is §3's coherence, which makes the first-match
-presentation equal the order-free union of `p` and the gated `r` (`extendRead_p_union`).
+obligations hold, with no premise. `ReadsCoherently` is the coherence of the alternate reader:
+where both readers read an attribute, and the current codec can write the older answer, the two
+answers agree. `extendRead_p_union` proves the premise equivalent to order-freedom: the first-match
+presentation equals the order-free union of `p` and the gated `r`.
 
 Choosing wrong is not a build error. A semantic premise in `Typed` makes the judgement
 undecidable; a syntactic premise in `Obligations` becomes a burden every caller carries.

@@ -132,7 +132,7 @@ and the judgement to it).
   are not this calculus's theorems, and nothing here assumes them.
 - **Semantic rule premises live beside the carrier**, not in `Typed`: the doc's
   `(held)` side condition lives in `Obligations`. The alternate-reader
-  condition is `ReadsCoherently`, which `extendRead_lawfulCore` consumes. Each definition has
+  condition is `ReadsCoherently`, which `extendRead_p_union` proves equivalent to order-freedom. Each definition has
   its denotation in scope.
   `Obligations` is **structural, not fuel-indexed** —
   this bullet said `Obligations fuel t` and "same premises, fueled form" long after `denote`
