@@ -1139,7 +1139,7 @@ end
 theorem viewsDisjoint_adm {x y : Term} (h : viewsDisjoint x y = true) (v : Value) :
     (Adm α x v && Adm α y v) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
-  have hw := Alg.disjoint_sound (α := α) (β := dynTableA) pair0 _ _ h.1 [] [] (fun _ _ _ hp => nomatch hp) v
+  have hw := Alg.disjoint_sound (α := α) (β := dynTableA) pair0 _ _ h.1 [] [] (fun _ _ hp => nomatch hp) v
   cases hx : Adm α x v <;> cases hy : Adm α y v <;> simp only [Bool.and_false, Bool.false_and, Bool.and_self]
   have e1 : Alg.Adm α dynTableA (view .host x) [] v = true := viewLe_of .host α dynTableA x v hx
   have e2 : Alg.Adm α dynTableA (view .host y) [] v = true := viewLe_of .host α dynTableA y v hy
@@ -1150,7 +1150,7 @@ theorem viewsDisjoint_adm {x y : Term} (h : viewsDisjoint x y = true) (v : Value
 theorem viewsDisjoint_admA {x y : Term} (h : viewsDisjoint x y = true) (a : Attr) :
     (AdmA α x a && AdmA α y a) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
-  have hr := Alg.disjoint_soundA (α := α) (β := dynTableA) pair0 _ _ h.2 [] [] (fun _ _ _ hp => nomatch hp) a
+  have hr := Alg.disjoint_soundA (α := α) (β := dynTableA) pair0 _ _ h.2 [] [] (fun _ _ hp => nomatch hp) a
   cases hx : AdmA α x a <;> cases hy : AdmA α y a <;> simp only [Bool.and_false, Bool.false_and, Bool.and_self]
   have e1 : Alg.AdmA α dynTableA (view .dual x) [] a = true := viewLe_of .dual dynTableA α x a hx
   have e2 : Alg.AdmA α dynTableA (view .dual y) [] a = true := viewLe_of .dual dynTableA α y a hy

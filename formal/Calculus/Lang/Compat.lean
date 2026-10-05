@@ -117,7 +117,7 @@ def Term.compat [Leaf S] (o : CompatOracle S) (side : Bool) (p : Pairing) (cl cr
   | .mu b, y => cbase o side cl cr (.mu b) y ||
       Term.compat o side (shiftL p) (pushMu cl b) cr b y
   | .var i, y => cmpR (fun p' cl' cr' y' => cbase o side cl' cr' (.var i) y' ||
-      (match y' with | .var j => (p' i j).isSome | _ => false)) p cl cr y
+      (match y' with | .var j => p' i j | _ => false)) p cl cr y
   | .held sd i P k₀ k, y => cmpR (fun p' cl' cr' y' => cbase o side cl' cr' (.held sd i P k₀ k) y' ||
       (match y' with
         | .held sd' i' _ k₀' k' =>
@@ -195,7 +195,7 @@ variable [Sem S] {α : Table S} {β : Table S.op}
 /-- **What the contexts and the pairing promise of the two environments.** A paired binder pair
     agrees on both halves. Each entry that a context marks safe is below the top. -/
 structure CEnv (p : Pairing) (cl cr : Nat → Bool) (ρ ρ' : List S.C) : Prop where
-  pair : ∀ i j k, p i j = some k → ∀ o, Agree o (envAt ρ i) (envAt ρ' j)
+  pair : ∀ i j, p i j = true → ∀ o, Agree o (envAt ρ i) (envAt ρ' j)
   safeL : ∀ i, cl i = true → Sub (envAt ρ i) (Syn.top (S := S))
   safeR : ∀ i, cr i = true → Sub (envAt ρ' i) (Syn.top (S := S))
 
@@ -208,7 +208,7 @@ structure OracleSound (o : CompatOracle S) : Prop where
 
 /-- **The empty contexts promise nothing of the environments**, so they admit every two. -/
 theorem CEnv.empty (ρ ρ' : List S.C) : CEnv pair0 noSafe noSafe ρ ρ' where
-  pair _ _ _ h := nomatch h
+  pair _ _ h := nomatch h
   safeL _ h := nomatch h
   safeR _ h := nomatch h
 
@@ -224,8 +224,8 @@ theorem stage_subMu [TopLaws S] {b : Term S} {ctx : Nat → Bool} {ρ : List S.C
 theorem CEnv.left {p : Pairing} {cl cr : Nat → Bool} {ρ ρ' : List S.C} (he : CEnv p cl cr ρ ρ')
     (b : Term S) (c : S.C) (hc : (!hasHeld b && (Term.mu b).safe cl) = true → Sub c (Syn.top (S := S))) :
     CEnv (shiftL p) (pushMu cl b) cr (c :: ρ) ρ' where
-  pair i j k h o := match i, h with
-    | i + 1, h => he.pair i j k h o
+  pair i j h o := match i, h with
+    | i + 1, h => he.pair i j h o
   safeL i h := match i with
     | 0 => hc h
     | i + 1 => he.safeL i h
@@ -235,8 +235,8 @@ theorem CEnv.left {p : Pairing} {cl cr : Nat → Bool} {ρ ρ' : List S.C} (he :
 theorem CEnv.right {p : Pairing} {cl cr : Nat → Bool} {ρ ρ' : List S.C} (he : CEnv p cl cr ρ ρ')
     (b : Term S) (c : S.C) (hc : (!hasHeld b && (Term.mu b).safe cr) = true → Sub c (Syn.top (S := S))) :
     CEnv (shiftR p) cl (pushMu cr b) ρ (c :: ρ') where
-  pair i j k h o := match j, h with
-    | j + 1, h => he.pair i j k h o
+  pair i j h o := match j, h with
+    | j + 1, h => he.pair i j h o
   safeL := he.safeL
   safeR i h := match i with
     | 0 => hc h
@@ -248,12 +248,9 @@ theorem CEnv.mu {p : Pairing} {cl cr : Nat → Bool} {ρ ρ' : List S.C} (he : C
     (hc : (!hasHeld b && (Term.mu b).safe cl) = true → Sub c (Syn.top (S := S)))
     (hc' : (!hasHeld b' && (Term.mu b').safe cr) = true → Sub c' (Syn.top (S := S))) :
     CEnv (pairMu p) (pushMu cl b) (pushMu cr b') (c :: ρ) (c' :: ρ') where
-  pair i j k h o := match i, j, h with
+  pair i j h o := match i, j, h with
     | 0, 0, _ => hcc o
-    | i + 1, j + 1, h => by
-        simp only [pairMu, Option.map_eq_some_iff] at h
-        obtain ⟨k', hk', -⟩ := h
-        exact he.pair i j k' hk' o
+    | i + 1, j + 1, h => he.pair i j h o
   safeL i h := match i with
     | 0 => hc h
     | i + 1 => he.safeL i h
@@ -265,14 +262,14 @@ theorem CEnv.mu {p : Pairing} {cl cr : Nat → Bool} {ρ ρ' : List S.C} (he : C
 theorem disjoint_domE [PrimAdm S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S] [Shapes S]
     [TopLaws S] {x y : Term S} (h : Term.disjoint pair0 x y = true) (ρ ρ' : List S.C) (v : S.V) :
     (((denote α β x ρ).f S.o v).isSome && ((denote α β y ρ').f S.o v).isSome) = false := by
-  have := disjoint_sound (α := α) (β := β) pair0 x y h ρ ρ' (fun _ _ _ hp => nomatch hp) v
+  have := disjoint_sound (α := α) (β := β) pair0 x y h ρ ρ' (fun _ _ hp => nomatch hp) v
   rwa [Adm_eq_isSome, Adm_eq_isSome] at this
 
 /-- …and apart read domains. -/
 theorem disjoint_domP [PrimAdmA S] [Leaf S] [LeafMeet S] [LeafAdmA S] [FormerAdmA S] [Shapes S]
     [TopLaws S] {x y : Term S} (h : Term.disjoint pair0 x y = true) (ρ ρ' : List S.C) (a : S.V) :
     (((denote α β x ρ).f S.o.op a).isSome && ((denote α β y ρ').f S.o.op a).isSome) = false := by
-  have := disjoint_soundA (α := α) (β := β) pair0 x y h ρ ρ' (fun _ _ _ hp => nomatch hp) a
+  have := disjoint_soundA (α := α) (β := β) pair0 x y h ρ ρ' (fun _ _ hp => nomatch hp) a
   rwa [AdmA_eq_isSome, AdmA_eq_isSome] at this
 
 /-- Apartness moves to a codec whose domain lies inside. -/
@@ -517,8 +514,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
       · exact cbase_sound ho hf he'
       · cases y' <;> simp only [reduceCtorEq] at hf
         rename_i j
-        obtain ⟨k, hk⟩ := Option.isSome_iff_exists.mp hf
-        exact he'.pair i j k hk _
+        exact he'.pair i j hf _
   | .held sd i P k₀ k, side, p, cl, cr, y, ρ, ρ', h, he => by
       simp only [Term.compat] at h
       refine cmpR_sound (fun p' cl' cr' y' ρ'' hf he' => ?_) y p cl cr ρ' h he

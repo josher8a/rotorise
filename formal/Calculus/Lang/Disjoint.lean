@@ -50,32 +50,31 @@ def Term.ofOptions : List (Term S) → Term S
 
 The test reads two open terms. A variable of the left operand and a variable of the right operand
 are one pair where the two binders were unfolded together. A `Pairing` states that fact:
-`p i j = some k` says that the left variable `i` and the right variable `j` are one pair. A
+`p i j = true` says that the left variable `i` and the right variable `j` are one pair. A
 variable that no pairing names is apart from nothing. -/
 
-/-- `p i j = some k`: the left variable `i` and the right variable `j` are one pair of binders,
-    the pair `k` counted from the innermost. -/
-abbrev Pairing := Nat → Nat → Option Nat
+/-- `p i j = true`: the left variable `i` and the right variable `j` are one pair of binders. -/
+abbrev Pairing := Nat → Nat → Bool
 
 /-- Under a `mu` beside a `mu`: the two new binders pair at `0`, and the pairs outside move up
     one. -/
 def pairMu (p : Pairing) : Pairing
-  | 0, 0 => some 0
-  | i + 1, j + 1 => (p i j).map (· + 1)
-  | _, _ => none
+  | 0, 0 => true
+  | i + 1, j + 1 => p i j
+  | _, _ => false
 
 /-- Under an unfolding of the left operand: the left binder `0` pairs with nothing. -/
 def shiftL (p : Pairing) : Pairing
-  | 0, _ => none
+  | 0, _ => false
   | i + 1, j => p i j
 
 /-- Under an unfolding of the right operand: the right binder `0` pairs with nothing. -/
 def shiftR (p : Pairing) : Pairing
-  | _, 0 => none
+  | _, 0 => false
   | i, j + 1 => p i j
 
 /-- The pairing of two closed terms: no binder. -/
-def pair0 : Pairing := fun _ _ => none
+def pair0 : Pairing := fun _ _ => false
 
 /-! ## Reading a body name by name -/
 
@@ -179,7 +178,7 @@ def famSetD (a : Term S) (mt : Term S → Bool) : Term S → Bool
 /-- **Two variables are disjoint where the pairing names them one pair**, because the
     environments keep each paired binder pair apart. -/
 def famVarD (i : Nat) (p : Pairing) : Term S → Bool
-  | .var j => (p i j).isSome
+  | .var j => p i j
   | _ => false
 
 /-- Some position of two aligned rows is disjoint. -/
