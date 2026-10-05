@@ -166,8 +166,8 @@ theorem baseCodec_p_n (x : WFNumeral) : (baseCodec .number).p (.n x) = some (.nu
 /-- `literal(ℓ)`'s predicate: the base's prism matches the value, and the match is the
     alternative.
 
-    One definition where there were two (~~inLS~~, ~~inLN~~) and three bases with none. The
-    prism of the index makes the carrier concrete, and so the equality decidable. -/
+    One definition serves the five bases. The prism of the index makes the carrier concrete,
+    and so the equality decidable. -/
 def inL (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
   match k.prism.out v with
   | some y => decide (y = x)
@@ -176,8 +176,7 @@ def inL (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
 /-! `inL`'s rows at the five bases, as `@[simp]` equations.
 
 Without these a `simp` that needs `inL` at one base unfolds the prism's matcher at every
-rewrite. That is what ~~fanOf~~ found behind `AdmA_exact`'s duplication. Each of the five bases
-gets an equation. -/
+rewrite. Each of the five bases gets an equation. -/
 
 /-- `.str` at `string`: the payload *is* the carrier, so this is `rfl`. -/
 @[simp] theorem inL_str (x s : String) :
@@ -239,11 +238,9 @@ def inD : Value → Bool :=
 /-! ### The base at `N` is §1's own set, and there is exactly ONE of them
 
 **`baseCodec .number` IS the base at `N`.** `Attr.n` carries `Numeral.WF` and so does the value
-side now, so `Carries(N)` is §1's `Numerals` on both halves and no wider codec exists to
-refine. ~~wfDecimalCodec~~ was the text-side base beside it, gated at `WF` where `baseCodec .number`
-went through a host spelling; the two are one definition now and the second is deleted. The
-DynamoDB port refines it at `Stored` (`Dynamo/Lang/Store.lean`), and `Stored` is a real gate rather
-than a carried one. -/
+side, so `Carries(N)` is §1's `Numerals` on both halves and no wider codec exists to refine. No
+second base at `N` exists beside it. The DynamoDB port refines it at `Stored`
+(`Dynamo/Lang/Store.lean`), and `Stored` is a real gate rather than a carried one. -/
 
 /-- §3 `(literal)`. **The pair is a refinement of its base by construction** — the `refine`
     §7 calls "an iso and a prism", with the prism named by `ℓ` and the iso supplied by the

@@ -9,9 +9,8 @@ variable {α : Calculus.Table}
 a set of alternatives is a `Term.union` of singletons. **This file is what that union concludes**,
 so the n-ary rule the specification writes is derived rather than assumed:
 
-* `typed_literalsS` / `typed_literalsN` derive exactly what the old ~~Typed.literalS~~ and
-  ~~Typed.literalN~~ concluded, from `Typed.literal` at a singleton and `Typed.union`. Same held
-  set, same member.
+* `typed_literalsS` / `typed_literalsN` derive §3's n-ary rule at `S` and at `N`
+  (`(literal-S)`, `(literal-N)`), from `Typed.literal` at a singleton and `Typed.union`.
 
 **Why the statements take a bare `List` and not a `Finset`.** `Term.union` takes a `List Term`,
 and bridging from a `NEFinset` is `Finset.toList`, which is `Multiset.toList`, which is
@@ -36,8 +35,7 @@ literal carries one value and the union carries a list, so there is no set to wa
 bridge. The two held sets below are `HLit` at one value and so are `rfl`, where a set of
 alternatives needed a lemma to collapse the existential. -/
 
-/-- Every option of a string literal set is derivable, at `S`. No premise: ~~LiteralD~~, the
-    gate this used to carry beside the rule, was `true` at every base but `number`. -/
+/-- Every option of a string literal set is derivable, at `S`, with no premise. -/
 theorem typedListμ_map_literal_str : ∀ (l : List String),
     TypedListμ α (l.map fun s => .literal .string s)
       (l.map fun s => fun v => v = Value.str s)
@@ -99,9 +97,9 @@ So they are stated over a list with the premise spelled out, which is choice-fre
 honest shape of the claim. `hne` is what the set was carrying for the member, and writing it out
 is what lets the term language carry no set at all. -/
 
-/-- **`(literal-S)` is derivable.** Every part of ~~Typed.literalS~~'s conclusion — the held set and
-    the member — comes from `Typed.literal` and `Typed.union`, with no premise ~~literalS~~ does not
-    already have: `hne` is what `NEFinset` was carrying for the member. -/
+/-- **`(literal-S)` is derivable.** Its conclusion, the held set and the member, comes from
+    `Typed.literal` and `Typed.union`. The one premise is `hne`, which the member needs
+    (`unanimous_map_const`). -/
 theorem typed_literalsS {l : List String} (hne : l ≠ []) :
     Typed α (.union (l.map fun s => .literal .string s))
       (fun v => ∃ s, s ∈ l ∧ v = .str s) (some .S) := by

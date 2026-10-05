@@ -140,17 +140,13 @@ theorem lawful_decimalCodec : Lawful decimalCodec :=
 The other side of `decimalCodec`'s answer, and the reason §1 states the condition as an inclusion
 rather than as an equality. -/
 
-/-! **~~survivesStore_numberCodec~~ is retired, and what killed it is worth stating.** It said
-`number` survives a normalising store for free, because its `p` factored through the host's
-decimal reader: the store could rewrite the digits and the double read back the same. That was a
-property of the DOUBLE CARRIER, not of `number`. Carrying `N` exactly makes `(baseCodec .number).p` a
-constructor wrapper, so its kernel is equality and a store that rewrites `"1.500"` to `"1.5"`
-moves the value.
+/-! **`number` makes no promise about what a normalising store gives back.** `N` is carried
+exactly, so `(baseCodec .number).p` is a constructor wrapper. Its kernel is equality, and a store
+that rewrites `"1.500"` to `"1.5"` moves the value.
 
-So the two numeric terms no longer differ in how they meet the store. They differ in one thing,
-which is the thing they were always for: `decimal` gates at `Stored`, the store's own fixpoint,
-and `survivesStore_decimalCodec` below is that. `number` accepts everything §1 accepts and makes
-no promise about what comes back. -/
+The two numeric terms differ in one thing: `decimal` gates at `Stored`, the store's own
+fixpoint, and `survivesStore_decimalCodec` below states that. `number` accepts everything §1
+accepts. -/
 
 /-- §1: `decimal`'s `ker p` is equality — its `p` is the identity on the digits. -/
 theorem ker_decimalCodec {x y : WFNumeral} (h : decimalCodec.Ker (.n x) (.n y))

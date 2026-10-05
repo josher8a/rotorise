@@ -22,13 +22,9 @@ theorem carrier_baseCodec (k : GroundKind) : Carrier (baseCodec k) := Alg.carrie
 
 /-! ### The refinement ground codecs, on their carriers -/
 
-/-- **One theorem where there were two, and the numeric one was twenty-six lines.**
-
-    ~~literalNCodec~~'s carrier used to be proved by hand — unfolding the host's decimal reader, splitting on
-    `Numeral.WF`, then on membership — because the codec was a hand-written pair that only
-    *agreed* with a restriction. It now **is** the restriction, so `carrier_restrict` supplies
-    everything and all that remains is the held set being the restriction's, which is
-    `HLit_iff_restrict`. -/
+/-- **A literal is on its carrier, at every base.** The literal codec is the restriction of its
+    base, so `carrier_restrict` supplies the carrier, and the held set is the restriction's,
+    which is `HLit_iff_restrict`. -/
 theorem carrier_literalCodec (k : GroundKind) (x : k.Carrier) :
     Carrier (literalCodec k x) :=
   Carrier.congr (d := (baseCodec k).restrict (inL k x)) rfl rfl

@@ -133,9 +133,8 @@ inductive Ground where
   | base (k : GroundKind)
   /-- §3 `(literal)`: a ground **base**, and one inhabitant of that base's carrier.
 
-      This was three constructors — arity-one over a value, and ~~literalS~~/~~literalN~~ at the
-      two commonest bases — because no single payload type could say "this alternative, at this
-      base". `(k : GroundKind)` with `v : k.Carrier` says it: the base is an index, so
+      `(k : GroundKind)` with `v : k.Carrier` says "this alternative, at this base": the base is
+      an index, so
       `g ground` is unsayable-otherwise and the member is a function rather than an index with a
       premise, and `ℓ ⊆ T` is the carrier. `.null`'s carrier is `Unit`, so `literal .null` can
       say nothing but what it means.

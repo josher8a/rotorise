@@ -51,7 +51,7 @@ def specOf : Term → Option (MapOf NameSpec)
   | .object b => some b.spec
   | _ => none
 
-/-! ### Where ~~literalMember~~ went
+/-! ### The member of a literal
 
 `(literal)`'s member is its base's: `baseCodec k` stamps `k.member` by definition, and a literal
 restricts its base, so `μSyn_literal` holds by `rfl`.
@@ -94,23 +94,16 @@ end Rows
 
 /-! ## The denotation
 
-**Structural, and there is no fuel.** `denote` used to take a `Nat` budget, with a dead
-`fuel = 0` codec at the bottom and a whole ω-layer (~~Denoteω~~, ~~Soundnessω~~, `Continuity`) to
-recover the fuel-free reading. None of that was forced by the term language:
+**Structural, and with no fuel.** `denote` recurses on the term itself:
 
-* the recursion under `List.map` — `elems.map (denote fuel)` — needs a **list companion**, which
-  is exactly what `μSyn`/`μSynList` above already do;
-* `fieldSemOf (denote fuel) (f k)` passed the recursion **unapplied**, as a function value, which
-  structural recursion cannot do. But ~~fieldSemOf~~ applied its argument to *precisely the
-  subterm* in every row, so it inverts: it becomes a mutual companion and the higher-order
-  argument disappears.
+* the recursion under a list goes through a **list companion**, as `μSyn`/`μSynList` above do;
+* a field's semantics applies the recursion to *precisely the subterm* in every row, so it is a
+  mutual companion, and no argument is higher-order.
 
 The `Finset`-plus-function field table is *not* an obstruction — structural recursion goes
 straight through `f k`, as `Attr.depth` in `Recursion.lean` does. `sizeOf` cannot see
 into a function, but `sizeOf` is only the measure once something forces well-founded recursion,
-and nothing here does.
-
-Fuel was a termination device and never a cost measure; it is not even that any more. -/
+and nothing here does. -/
 
 export Alg (envAt)
 
@@ -210,8 +203,7 @@ end Rows
 
 /-! ### §6 at term level — the translation table, written down
 
-Moved here from `Equations.lean` when ~~Denoteω~~ was deleted. It lived downstream because
-~~denoteω~~ did; these are equations about `denote` and belong beside it.
+These are equations about `denote`, so they sit beside it.
 
 §6's **Hold** rows are stated about *combinators*; its **Do not hold** rows
 (`Refutations.lean`) are stated about *terms*. Reading a Hold row against the specification
@@ -222,7 +214,7 @@ Here it is, as `rfl` theorems — `denote` dispatches straight onto the combinat
 prove nothing but the correspondence. Term-level twins of each row follow at the end. -/
 
 variable (α) in
-/-- The object field table, denoted. Was ~~denoteωF~~. -/
+/-- The object field table, denoted. -/
 def fieldTable (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
     (ρ : List Codec := []) : MapOf FieldSem :=
   ⟨fields, fun k => fieldSem α (f k) ρ⟩

@@ -48,17 +48,13 @@ theorem optBad_not_confluent : ¬ ConfluentAt [optBad, optLit] (.str "A") := by
     (by simp [optLit, literalCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, prism_rows, orient_rows])
   simp [optBad, optLit, cBad, ceBad, literalCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, prism_rows, orient_rows] at this
 
-/-! **The ground-term witness is gone, and it was the decimal conflation.** ~~string_decimal_not_confluent~~
-took `string` and a decimal base both writing `.str "1.5"` and storing it differently. The model
-has no decimal base now, and no ground term writes text and stores `N`. The host's decimal is
-`held` over `number`, and `held` is not a ground term. So no ground pair is a witness, and
-the theorem is false rather than unproved.
+/-! **`string` beside the host's decimal is no witness.** The model has no decimal base, and no
+ground term writes text and stores `N`: the host's decimal is `held` over `number`, and `held` is
+not a ground term.
 
-What the section still records is `optBad_not_confluent` above, which uses a codec built to break
-the obligation. So confluence is still not automatic, and is still an invariant the unrolling must
-carry. What is no longer true is that a pair of ORDINARY GROUND TERMS witnesses the failure. That
-is a consequence of separating the carrier from the wire, not an argument that no ground witness
-remains; none is claimed here. -/
+`optBad_not_confluent` above uses a codec built to break the obligation, so confluence is not
+automatic, and the unrolling must carry it as an invariant. The section claims no proof that no
+pair of ground terms is a witness. -/
 
 /-! ### What this does and does not establish
 

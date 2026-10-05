@@ -215,15 +215,13 @@ The value side needs only `AdmWild`, which is `none` exactly where the body decl
 block. The read side reads the block the same way: an undeclared name under a closed body is
 refused, and each name's own presence pair handles a declared absent name. -/
 
-/-- Soundness of every attribute row — a corollary, as on the value side. The
-    hundred-and-thirty-line depth recursion this was, and the ~~SoundA~~ scaffolding it needed,
-    are deleted: `AdmA_exact` carries no hypothesis, so the weaker half comes free. -/
+/-- Soundness of every attribute row, a corollary, as on the value side: `AdmA_exact` carries no
+    hypothesis, so the weaker half comes free. -/
 theorem AdmA_sound (t : Term) {a v} (hp : (denote α t).p a = some v) : AdmA α t a = true :=
   (AdmA_exact t a).mpr (by rw [hp]; rfl)
 
-/-- **The witness that is now a theorem the other way.** `refine(string, ⊥)` reads nothing,
-    and `AdmA` says so: the row decodes with `baseCodec .string` and applies `⊥`. This used to be
-    ~~not_ExactA_refine~~, stated as "`AdmA` cannot see it". -/
+/-- **`AdmA` sees a refinement that reads nothing.** `refine(string, ⊥)` reads nothing, and
+    `AdmA` says so: the row decodes with `baseCodec .string` and applies `⊥`. -/
 theorem AdmA_refine_bot (a : Attr) : AdmA α (.refine .string (.closure (fun _ => false)) ()) a = false := by
   simp [AdmA_rows, Pred.eval]
   cases a <;> simp [denote_rows, prism_rows, orient_rows]

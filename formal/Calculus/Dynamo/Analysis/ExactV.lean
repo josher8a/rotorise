@@ -37,17 +37,10 @@ export Alg (valPresentT)
 
 /-- What the literal codec **writes**, exactly.
 
-    **This was `inL` conjoined with `Numeral.WF`, and the conjunct is now the carrier's.**
-    The second conjunct existed because at `number` an alternative outside §1's `D` was *held*
-    and not *written*, so membership alone over-claimed — the same (B) failure ~~LiteralD~~
-    forbade in a derivable term, stated here as a fact about the codec, which had no premise to
-    lean on. `GroundKind.number.Carrier` is `WFNumeral`, so `inL`'s own row splits on the gate
-    and there is no alternative left for the conjunct to catch.
-
-    The retired per-aspect row was always `inL`
-    and was therefore inexact at `number` by exactly this conjunct, while the joint row carried
-    it and so `Adm_exact` covered the literal. The defect is closed rather than patched:
-    nothing was added to make the two agree. -/
+    The row is `inL`, with no `Numeral.WF` conjunct. `GroundKind.number.Carrier` is
+    `WFNumeral`, so an alternative outside §1's `D` has no representation, and `inL`'s own row
+    splits on the gate. So membership is exact at every base, and `Adm_exact` covers the literal
+    with nothing added to make the row and the codec agree. -/
 def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
   inL k x v
 
@@ -295,26 +288,16 @@ theorem Adm_array_nested :
   simp [Term.array, Adm_rows, alignPL, alignP, zipP, AdmLit]
 
 
-/-- Soundness of every row — **now a corollary.**
-
-    This was a hundred-and-twenty-line recursion on `Term.depth`, separate from `Adm_exact`
-    because exactness was proved *given* the subterms' exactness and soundness could assume no
-    such thing: `set` and `union` were loose, so a row over them had to be argued monotone
-    instead. Both rows are exact now, `Adm_exact` carries no hypothesis, and the
-    separate proof was proving the weaker half of something already available.
-
-    The scaffolding it needed — ~~SoundV~~, ~~alignP_sound~~ and the per-constructor soundness
-    lemmas — goes with it. -/
+/-- Soundness of every row, **a corollary.** The rows of `set` and `union` are exact, so
+    `Adm_exact` carries no hypothesis, and soundness is its weaker half. -/
 theorem Adm_sound (t : Term) {v a} (he : (denote α t).e v = some a) : Adm α t v = true :=
   (Adm_exact t v).mpr (by rw [he]; rfl)
 
 /-! ### No escape hatch
 
-**No row may be `false`, and there is nowhere to put an excuse.** An earlier apparatus —
-~~Analysable~~, ~~Excuse~~ and their twins — forced a row per constructor and made adding a `false`
-row cost a counterexample. `Alg.Adm_exact : ∀ t, ExactV t`, exhaustive over `Term` with no
-hypothesis, forces a *proof* per constructor instead, which is the stronger form of the same
-discipline: a new constructor cannot be added without one. -/
+**No row may be `false`, and there is nowhere to put an excuse.** `Alg.Adm_exact : ∀ t, ExactV t`
+is exhaustive over `Term` with no hypothesis, so it forces a *proof* per constructor: a new
+constructor cannot be added without one. -/
 
 end
 

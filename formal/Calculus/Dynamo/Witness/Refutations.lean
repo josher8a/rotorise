@@ -435,23 +435,15 @@ theorem literalN_sub_number (y : WFNumeral) :
   rintro v rfl
   rfl
 
-/-! ### §3's `(literal)` at `number`, and why the witnesses are all gone now
+/-! ### §3's `(literal)` at `number`: no refutation is statable
 
 §3's premise line is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T`, and at `g = number` the base's held
-set *is* §1's `D`, so the rule already requires `ℓ ⊆ D`. Two witnesses here used to show that
-premise load-bearing, stated about ~~literalNRule~~, an ungated prism that was deliberately not
-a `Term` and existed only to carry them.
+set *is* §1's `D`, so the rule already requires `ℓ ⊆ D`.
 
-**They are unstatable now, and by the argument the section below already made about a third.**
-Both needed a value outside `D` to point at: `{d : Double} (hw : Numeral.WF d.toDec = false)`.
-`Value.num` carries `WFNumeral`, so there is no such value to quantify over. The gate did not
-weaken; it moved one level further out, from the alternative's carrier to the VALUE's, and
-`ℓ ⊆ D` is now true of everything that can be written down.
-
-~~inLNRule~~, ~~literalNRule~~, ~~not_literalNRule_sub_number~~ and
-~~literalNRule_holds_what_it_cannot_write~~ go together. What the section keeps is the reason:
-"this cannot be derived" and "this cannot be written" became one claim, and a refutation needs
-a representable counterexample. -/
+A refutation that the premise is load-bearing needs a value outside `D` to point at.
+`Value.num` carries `WFNumeral`, so no such value exists: the gate is the value's carrier, and
+`ℓ ⊆ D` is true of everything that can be written down. "This cannot be derived" and "this
+cannot be written" are one claim, and a refutation needs a representable counterexample. -/
 
 /-! Two theorems here quantified over a derivation only to read `hD` back off it. With the gate
 in the carrier the derivation argument is unused, `#lint_calculus` reported it, and the honest
@@ -468,11 +460,11 @@ the two claims one is gone with the axiom. -/
 /-! ## `union(opaque, c)` is never separable
 
 Not one of §6's nine rows — a row §5 never wrote, and the reason it did not is that
-`opaque` looked like a term with nothing to say. `κ .opaq` is `⊤` and, before `Adm`
-was made to ask `opaque`'s codec, so were `Adm .opaq` and `admA .opaq`. ~~SepV~~
-offers exactly two routes — a disjoint kind or a disjoint admissible set — and ~~SepA~~
-two more — a distinct named member or a disjoint admissible set. A `⊤` on every one of
-the four is not a weak option; it is an **absorbing** one, in the sense `unknown | T` is
+`opaque` looked like a term with nothing to say. `κ .opaq` is `⊤`, and `Adm .opaq` and
+`admA .opaq` ask `opaque`'s codec, which admits everything. §5's separation offers two routes
+on the value side, a disjoint kind or a disjoint admissible set, and two on the attribute side,
+a distinct named member or a disjoint admissible set. A `⊤` on every one of the four is not a
+weak option; it is an **absorbing** one, in the sense `unknown | T` is
 absorbing in TypeScript.
 
 The absorption survives the semantic row. `opaque` writes every value (`opaq_total`), so

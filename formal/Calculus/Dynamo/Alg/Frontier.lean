@@ -14,10 +14,9 @@ section
 
 /-! ### `setCodec`'s laws
 
-Every one of these was a traversal argument over a list; on `Finset` they are the element
-codec's own laws lifted by `setImage_inv`. What used to need ~~asWireSet~~'s three-way
-payload split and a non-emptiness side condition needs neither: the split is the three
-constructors, and non-emptiness is `Finset.Nonempty`. -/
+On `Finset` these are the element codec's own laws, lifted by `setImage_inv`. The three set
+payloads are three constructors, and non-emptiness is `Finset.Nonempty`, so no proof splits a
+payload or carries a side condition. -/
 
 /-- **(W) for `set`.** The wire member is `setMember` of the element's, and the kind that
     `setAt` takes is fixed by the element codec's own member. -/
