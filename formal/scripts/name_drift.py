@@ -96,8 +96,8 @@ own prose is prose.
 Usage:  python3 scripts/name_drift.py            (run from formal/)
         python3 scripts/name_drift.py --all      (include the change log)
 Exit code 1 if any current-state document has a hit, a stale `EXPECTED` entry, a `~~name~~` whose
-name is still in the sources, a `§N` the specification does not have, or a file path nothing
-holds.
+name is still in the sources, a `§N` the specification does not have, a file path nothing
+holds, or a `Calculus.<name>` in `src/` that names no module file and no name the code holds.
 """
 import re, sys, os, glob, fnmatch
 
@@ -447,6 +447,30 @@ def dangling_paths(paths, full, base):
     return out
 
 
+# A model name that `src/` cites. The host spells the full name, so the `Calculus.` prefix marks the
+# citation without backticks, in a comment and in an emitted string alike. A TypeScript `'` closes a
+# string, so the tokenizer here is narrower than `IDENT`.
+MODEL_CITATION = re.compile(r"\bCalculus(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
+
+
+def dead_model_citations(paths, present):
+    """Every `Calculus.<name>` in `src/` that names no module file and no name the code holds.
+
+    The resolution is `scan()`'s: the whole name occurs, or each component occurs. A module path
+    resolves when its file exists, because an `import` line names a file and not a declaration.
+    """
+    out = {}
+    for path in paths:
+        for lineno, line in enumerate(open(path).read().split("\n"), 1):
+            for t in MODEL_CITATION.findall(line):
+                if os.path.exists(t.replace(".", "/") + ".lean"):
+                    continue
+                if t in present or all(part in present for part in t.split(".")):
+                    continue
+                out.setdefault(path, []).append((lineno, t))
+    return out
+
+
 def spec_sections():
     """The section numbers the specification declares, read from its own headings."""
     return {int(n) for n in SECTION_HEADING.findall(open(SPEC_DOC).read())}
@@ -577,6 +601,15 @@ def main():
               f"than to a declaration name")
         for path in sorted(anchored):
             for lineno, tok in anchored[path]:
+                print(f"      {os.path.normpath(path)}:{lineno}  {tok}")
+    dead = dead_model_citations(sorted(glob.glob("../src/**/*.ts", recursive=True)), present)
+    if dead:
+        failed = True
+        total = sum(len(v) for v in dead.values())
+        print(f"\n  {total} model citation{'' if total == 1 else 's'} in src/ naming nothing "
+              f"`Calculus/` holds")
+        for path in sorted(dead):
+            for lineno, tok in dead[path]:
                 print(f"      {os.path.normpath(path)}:{lineno}  {tok}")
     known = spec_sections()
     dangling = dangling_sections(CURRENT + sorted(glob.glob("scripts/*.py")), known)

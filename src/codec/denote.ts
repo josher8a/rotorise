@@ -244,16 +244,16 @@ const setWire = { S: 'SS', N: 'NS', B: 'BS' } as const
  * this reads the same field data one question further — the field is `req`, its term is a
  * `literal`, and it pins exactly one alternative.
  *
- * **`req` only.** A `withLegacyRead` discriminator would fill an absent tag with a default, and the
- * index would then key a member on a value no item carries. `Calculus.Body.spec` marks a
- * `withLegacyRead` field required, so the model's own clause keeps one where this refuses it: the two
- * rules differ because this one writes a tag and the model's writes none.
+ * **`req` only.** A discriminator that fills an absent tag with a default would key a member on a
+ * value no item carries. `Calculus.Body.spec` gives a field with a stand-in the presence of an
+ * optional name, so the model's clause keeps no such member either.
  *
- * One divergence, and it is the one the model writes down rather than fixes: the model reads a
- * `number` literal's tag set as empty, because `Calculus.Double` is an axiom with no closed terms.
- * The host builds a numeric tag and reads it back as its text, and `src/codec/lean.ts` refuses to
- * emit one and says why. Narrowing this to the model's two bases would take a tag the published
- * surface admits today.
+ * One divergence: a tag behind an adapter. The model reads a tag through `Calculus.altsOfField`,
+ * which answers only where the field's term is a literal. `decimal('1')` and `number(1)` are each a
+ * `held` over a literal, so the model reads no tag there; the pair of `number` is binary64
+ * rounding, and the model names no such pair. The host builds a numeric tag and reads it back as
+ * its text, and `src/codec/lean.ts` refuses to emit one and says why. Narrowing this to the model's
+ * literal fields would take a tag the published surface admits today.
  */
 export const assignmentOf = (
     ks: readonly string[],
