@@ -70,7 +70,7 @@ theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated α opts) 
     AdmitsAtMostOne (denoteList α opts) := by
   constructor
   · intro v
-    rw [filter_AdmList (fun t _ => Adm_exact t) v, List.length_map]
+    rw [filter_AdmList _ v, List.length_map]
     refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
       (List.Pairwise.filter _ (h.imp fun hs => hs.1 v)))
     intro x y hx hy hxy

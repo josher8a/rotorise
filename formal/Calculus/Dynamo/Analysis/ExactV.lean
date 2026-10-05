@@ -258,24 +258,21 @@ variable (α) in
 /-- §5's converse direction: the row is `dom(e)`, not merely a bound on it. -/
 def ExactV (t : Term) : Prop := ∀ v, Adm α t v = true ↔ ((denote α t).e v).isSome
 
-/-- Each option's row *is* its attempt — given that option's exactness, which is where the
-    exactness hypothesis is spent. -/
-theorem isSome_e_eq_Adm {t : Term} (h : ExactV α t) (v : Value) :
-    ((denote α t).e v).isSome = Adm α t v := by
-  exact Bool.coe_iff_coe.mp (by simpa using (h v).symm)
+/-- Each option's row *is* its attempt. Every row is exact (`Alg.Adm_eq_isSome`), so the
+    agreement needs no hypothesis. -/
+theorem isSome_e_eq_Adm (t : Term) (v : Value) :
+    ((denote α t).e v).isSome = Adm α t v :=
+  (Alg.Adm_eq_isSome t [] v).symm
 
-/-- **The option list's filter is the term list's, mapped.** It is an induction rather than a
-    rewrite because the agreement above is per-option and hypothesis-bearing. -/
-theorem filter_AdmList {opts : List Term} (h : ∀ t ∈ opts, ExactV α t) (v : Value) :
+/-- **The option list's filter is the term list's, mapped**, as `filter_AdmAList` is on the
+    attribute side. Every row is exact, so the filter moves through the map with no hypothesis. -/
+theorem filter_AdmList (opts : List Term) (v : Value) :
     (denoteList α opts).filter (fun c => (c.e v).isSome)
       = (opts.filter (fun t => Adm α t v)).map (denote α) := by
-  induction opts with
-  | nil => rfl
-  | cons t ts ih =>
-    have ht : ExactV α t := h t (by simp)
-    have hts : ∀ t' ∈ ts, ExactV α t' := fun t' h' => h t' (by simp [h'])
-    simp only [denote_rows, List.filter_cons, isSome_e_eq_Adm ht, ih hts]
-    cases hb : Adm α t v <;> simp []
+  rw [denoteList_eq, List.filter_map]
+  congr 2
+  funext t
+  exact isSome_e_eq_Adm t v
 
 /-- **Every row is exact.** Not a bound on `dom(e)`: `dom(e)`, at every constructor and with no
     hypothesis. The term language proves it once for every universe (`Alg.Adm_exact`), from the
