@@ -189,8 +189,8 @@ convention rather than against it: shared construction, fewer sites.
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
 soundness. `union`'s commutativity is proved for the adjacent transposition, which
 generates every permutation, and lifting it to `List.Perm` is the obvious next step.
-A numeric literal's read side names its set: `N` is carried exactly, so `AdmLit`'s `.number`
-row reads by equality, as the `.string` row does. Each primitive is self-dual, so `AdmLit` is
+A numeric literal's read side names its set: `N` is carried exactly, so the `.number` row of `inL`
+reads by equality, as the `.string` row does. Each primitive is self-dual, so `inL` is
 the row at both orientations, and it is `dom(p)` exactly, which is what separates two disjoint
 numeric literals from each other.
 The store observation lives in the DynamoDB port. `10²¹` is written `1e+21` and handed back

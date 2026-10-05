@@ -117,7 +117,7 @@ top reads every datum and sends each datum to itself.
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
 | the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | `dynOracle`, over the two views | `jsonOracle`, which certifies nothing |
 | the top laws: each primitive, and the set lift, below the top | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
-| the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `AdmLit`, at both orientations, because each primitive is self-dual (`ground_selfdual`) | the kind test |
+| the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `inL`, at both orientations, because each primitive is self-dual (`ground_selfdual`) | the kind test |
 | the leaves: two primitives apart, two predicates apart | `Leaf` | `dynLeaf`: `Ground.apart`, `Pred.isData`, `Pred.apart` | `jsonLeaf`: one kind |
 | the laws of the leaves | `LeafAdm`, `LeafAdmA`, `LeafMeet` | `dynLeafAdm`, `dynLeafAdmA`, `dynLeafMeet` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafMeet` |
 | the set laws that the test reads | `FormerAdm`, `FormerAdmA` | `dynFormerAdm`, `dynFormerAdmA` | `jsonFormerAdm`, `jsonFormerAdmA` |
