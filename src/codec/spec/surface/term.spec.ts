@@ -98,10 +98,9 @@ describe('the member a term stores', () => {
 
 describe('the occupancies of a term', () => {
     /**
-     * **A thunk carries a term, so both projections read through it.** `Dynamo/Analysis/Disjoint.lean` heads the
-     * section "`lazy` is transparent, and it constrains nothing", and the model reads through on
-     * both: `occV (.lazy t) = occV t` and `occA (.lazy t) = occA t`. Only the member is lost,
-     * because `μSyn (.lazy t)` is `none`.
+     * **A thunk carries a term, so both projections read through it.** The model has no thunk: the
+     * emitter prints the term that a thunk returns, so the model reads that term on both
+     * projections. Only the member is lost.
      *
      * **This answered `⊤` on both sides until it was measured, and `⊤` was the unsound
      * direction rather than the safe one.** The claim was that an over-approximation costs a

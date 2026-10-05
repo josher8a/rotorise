@@ -158,7 +158,7 @@ describe('a union of compatible options gives one answer whatever the option ord
         })
     })
 
-    // `lazy` is transparent: a thunk of a held-free term is held-free, as the model's `HF` reads
+    // a thunk of a held-free term is held-free: the model reads the term that the thunk returns
     it('writes and reads a held-free option beside a thunk of a held-free option the same way in each order', () => {
         const values = ['A', 'B']
         const attributes: AttributeValue[] = [
