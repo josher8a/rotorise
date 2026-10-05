@@ -115,67 +115,67 @@ def elabAssertAxiomsAll : CommandElab := fun _ => do
 
 /-! ## The theorems the documentation makes claims about
 
-§5's soundness, both halves, fueled and fuel-free. If any of these acquires an axiom, the
+The soundness of the admission, both halves, fueled and fuel-free. If any of these acquires an axiom, the
 build stops here rather than in a reader's `#print axioms`. -/
 
-/-! Both indices of the judgement are claims about the denotation (§3). -/
+/-! Both indices of the judgement are claims about the denotation. -/
 
-/-! The refutations of the specification (§4) — a counterexample proved classically would still be a counterexample, but these are
+/-! The refutations of the specification — a counterexample proved classically would still be a counterexample, but these are
 constructive and the guard records that. -/
 
-/-! §5's admission `Adm` cannot pass through `alternate reader` on the read side — the
+/-! The admission `Adm` cannot pass through `alternate reader` on the read side — the
 specification defect, and this is its witness. -/
 
-/-! §6's `≡` is not transitive — the one refutation that is about the equational theory
+/-! `≡` is not transitive — the one refutation that is about the equational theory
 rather than about a row of it. -/
 
 /-! `ident` has no denotational content to pin. What it has is its relation to `Adm`, which is
-what §5 uses it for. -/
+what the admission uses it for. -/
 
-/-! §2's ideal: `e` and `p` are mutually inverse between `dom(e)` and `Can(c)`. `retract`
+/-! The ideal codec: `e` and `p` are mutually inverse between `dom(e)` and `Can(c)`. `retract`
 is one half and this is the other, so the bijection is a theorem rather than a reading. -/
 
-/-! §3's `held`/`refine` split, checked rather than asserted: both are one partial-iso
+/-! The `held`/`refine` split, checked rather than asserted: both are one partial-iso
 combinator, and the pair agrees on the nose. -/
 
-/-! §1's two number gates, as instances of the same combinator. `restrict` gates both
-halves by construction, which is what §3 argues an ad-hoc gate forgets. -/
+/-! The two number gates, as instances of the same combinator. `restrict` gates both
+halves by construction, and an ad-hoc gate can forget one half. -/
 
 /-! `through_p` is the fact the `held` row rests on — `g` post-processes a read and is
 total, so `dom(p)` is the subterm's exactly. It is cited as a result, so it is guarded
 like one. -/
 
-/-! `AdmA`'s `held` row, both directions. §5 gave `held` one `⊤` row on both sides. A `held`
+/-! `AdmA`'s `held` row, both directions. A `held`
 restricts its side. The read row asks the outer of the attribute where the side of the `held` is
 the stored side, the inner term of the entry image, and the outer of the value that the read
 gives where the side is the caller side (`AdmA_held_eq`). -/
 
-/-! The lemmas that pin §5's declaration-time devices to the denotation. Without them a row
+/-! The lemmas that pin the declaration-time devices of the admission to the denotation. Without them a row
 is a transcription of a table rather than a claim about the model, so their axiom base is
 part of what the soundness statements rest on. -/
 
-/-! The term-level twins of §6's rows. They meet §6's table through `Codec.Equiv`, with no shared
+/-! The term-level twins of the rows of `≡`. They meet the table of `≡` through `Codec.Equiv`, with no shared
 transport constant, so each is guarded on its own footing. -/
 
-/-! §1's numeral domain. -/
+/-! The numeral domain `Numerals`. -/
 
-/-! §3's `(number)` gate and the two places the bound is forced outward. The `(literal-N)`
+/-! The `(number)` gate and the two places the bound is forced outward. The `(literal-N)`
 rows are `(literal-N)`'s `ℓ ⊆ D`. -/
 
-/-! §2's kernel and §1's store. `retract_through_store` is **(R)** with DynamoDB in the
+/-! The kernel `ker p` and the store. `retract_through_store` is **(R)** with DynamoDB in the
 middle — the law production actually runs — and the two `decimalCodec` rows are what makes
 `Numeral.Stored` the right held set rather than a cautious one: `η ⊆ ker p` holds after the
 narrowing and fails before it. -/
 
-/-! §2's corollary that a pair has two halves: a member a codec cannot write is one it
+/-! The corollary of the codec laws that a pair has two halves: a member a codec cannot write is one it
 cannot read. The `opaque`/`NS` defect is its counterexample, and canonical reads are the only
 law that sees it — which is why it needs stating rather than following from the rest. -/
 
-/-! §6's Hold rows at term level. The ten `denote_*` bridges are `rfl` and carry no axiom
+/-! The Hold rows of `≡` at term level. The ten `denote_*` bridges are `rfl` and carry no axiom
 risk worth a line each; what is guarded is the twins, which go through `Codec.Equiv` and are
-what a reviewer checks §6's table against. -/
+what a reviewer checks the table of `≡` against. -/
 
-/-! §7's continuity results — why fuel is not removable by a fixpoint. -/
+/-! The continuity results — why fuel is not removable by a fixpoint. -/
 
 /-! The vector checker. `aeq`'s two soundness halves are what a generated vector line is
 cashed against, so they carry the whole differential-testing bridge. A comparator built on

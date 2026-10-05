@@ -68,7 +68,7 @@ variable {V M : Type} {member : V → M}
     Not `Finset.image`, for two reasons. It dedups, which is the wrong answer here — (R)
     needs the element map injective, and collapsing two elements makes `p (e v) = v`
     unsatisfiable — so a collision must be refused, not absorbed. And its API is classical:
-    `Finset.mem_image` and `Multiset.mem_dedup` depend on `Classical.choice`, which §3's
+    `Finset.mem_image` and `Multiset.mem_dedup` depend on `Classical.choice`, which the
     axiom base does not admit. A `Nodup`-guarded `Multiset.map` needs neither. -/
 def setImage {α β : Type} [DecidableEq β]
     (f : α → Option β) (S : Finset α) : Option (Finset β) :=
@@ -325,11 +325,11 @@ namespace Calculus
 
 /-! ## The keyed map
 
-A key *set* with a function on it, which is what a stored map is, and what §4's field table is
+A key *set* with a function on it, which is what a stored map is, and what the field table is
 one stratum up. A `List (String × α)` admits two orderings of one payload and a repeated key;
 both are properties of this type instead.
 
-The keys are strings. The store reads a name as a string, and so does the term language: §4's
+The keys are strings. The store reads a name as a string, and so does the term language: the
 field table is a `MapOf` of slots. Nothing about it is codec-shaped: a `Finset`, a function, and
 a lookup.
 

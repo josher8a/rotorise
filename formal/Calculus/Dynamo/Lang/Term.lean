@@ -3,7 +3,7 @@ import Calculus.Dynamo.Alg.Opaque
 import Mathlib.Data.Finset.Lattice.Fold
 
 /-!
-# §3–§4 — The term language
+# The term language
 
 Deep embedding. Notes:
 
@@ -11,9 +11,9 @@ Deep embedding. Notes:
   needs no classical choice; the doc's subsets are their coercions. `Pred` below is that
   predicate **as data** where the data exists, and a function only where it does not.
 * `opaque` is a Lean keyword, hence `opaq`.
-* Slots (§4) are a separate inductive — the stratification is the point: no `Term`
+* Slots are a separate inductive — the stratification is the point: no `Term`
   position accepts an `ObjectSlot`.
-* An object's **payload** (§4) is a separate inductive for the same reason, one level up.
+* An object's **payload** is a separate inductive for the same reason, one level up.
   `Body` is the key set, the slot function on it, and the open block, as one thing — so
   every table over terms has a *one-argument* `.object` row that delegates to a `Body`
   companion, the way `denote`'s row delegates to `fieldSem` and `wildSem`. Three arguments
@@ -45,7 +45,7 @@ open Alg (Term.depth Body.depth Term.depthO Term.depth_le_depthL Term.depthO_le
   Term.depth_lt_object_req Term.depth_lt_object_opt Term.depth_lt_object_rest)
 
 
-/-- §3 `(refine)`'s predicate, as far as it can be read.
+/-- The predicate of the rule `(refine)`, as far as it can be read.
 
     A bare `Value → Bool` decides nothing a table can see, and two things wanted to see it.
     A certificate cannot compare `set(literal k ls)` with another one while the predicate is a
@@ -126,9 +126,9 @@ this development already proves: the ground codecs, the list and map prisms, the
 
 /-- The primitives of DynamoDB: a ground base, or one alternative at a base. -/
 inductive Ground where
-  /-- §3's ground bases: the base is an index, as `literal`'s is. -/
+  /-- The ground bases: the base is an index, as `literal`'s is. -/
   | base (k : GroundKind)
-  /-- §3 `(literal)`: a ground **base**, and one inhabitant of that base's carrier.
+  /-- The rule `(literal)`: a ground **base**, and one inhabitant of that base's carrier.
 
       `(k : GroundKind)` with `v : k.Carrier` says "this alternative, at this base": the base is
       an index, so
@@ -153,7 +153,7 @@ theorem lawful_groundCodec : ∀ g, Lawful (groundCodec g)
 
 /-! ### The held sets that the signature names -/
 
-/-- `℘⁺fin(T)` — the nonempty finite subsets of `T` (§3 `(set)`). -/
+/-- `℘⁺fin(T)` — the nonempty finite subsets of `T` (the rule `(set)`). -/
 def HSet (T : Value → Prop) : Value → Prop := fun v =>
   (∃ S : NEFinset String, v = .strSet S ∧ ∀ s ∈ S.1, T (.str s)) ∨
   (∃ S : NEFinset WFNumeral, v = .numSet S ∧ ∀ d ∈ S.1, T (.num d)) ∨
@@ -358,7 +358,7 @@ def ObjectSlot.casesD {motive : ObjectSlot → Sort _} (req : ∀ t, motive (Obj
 @[match_pattern] abbrev Term.number : Term := .base .number
 @[match_pattern] abbrev Term.boolean : Term := .base .boolean
 @[match_pattern] abbrev Term.binary : Term := .base .binary
-/-- §3 `(null)`: the `NULL` point, so a schema can say "this attribute is exactly NULL". -/
+/-- The rule `(null)`: the `NULL` point, so a schema can say "this attribute is exactly NULL". -/
 @[match_pattern] abbrev Term.null : Term := .base .null
 
 /-- A required slot is required on both sides of the current schema. -/
@@ -372,18 +372,18 @@ theorem req_never_presence :
 /-! ## `array` and `tuple`, as builders over `list`
 
 `Term.list` is one constructor for three shapes, and these two keep the words that name the
-shapes a caller writes. They are definitions, so a *statement* about `.array c` reads as §3
+shapes a caller writes. They are definitions, so a *statement* about `.array c` reads as the typing rule
 writes it, while a *match* goes through `.list`. -/
 
-/-- §3 `(array)`: every position under one codec, and no fixed position. -/
+/-- The rule `(array)`: every position under one codec, and no fixed position. -/
 def Term.array (elem : Term) : Term := .list [] (some elem) []
 
-/-- §3 `(tuple)` and `(tuple-tail)` in one builder: the declared positions, then the tail
+/-- The rules `(tuple)` and `(tuple-tail)` in one builder: the declared positions, then the tail
     codec where there is one. `tail = none` is the plain tuple, whose arity is exactly the
     number of declared positions. -/
 def Term.tuple (elems : List Term) (tail : Option Term) : Term := .list elems tail []
 
-/-- §4 `(record)`: the object that declares no name and takes every key at one codec. It is not
+/-- The rule `(record)`: the object that declares no name and takes every key at one codec. It is not
     a constructor, because the open block is a block like any other, and its codec
     `recordCodec` is the object codec of this body by definition. -/
 def Term.record (val : Term) : Term :=
@@ -392,7 +392,7 @@ def Term.record (val : Term) : Term :=
 /-- An **open object**: one that carries the open block, so a name it does not declare is held
     rather than refused.
 
-    §5's closed-option dischargers exclude exactly these. The payload is one thing, so the
+    The closed-option dischargers of `(union)` exclude exactly these. The payload is one thing, so the
     exclusion is one decidable question about it. `isOpenObject_eq_false` below states the
     exclusion as a quantified disequality. -/
 def Term.isOpenObject : Term → Bool

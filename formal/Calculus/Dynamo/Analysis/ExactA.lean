@@ -4,7 +4,7 @@ import Calculus.Dynamo.Analysis.ExactV
 variable {α : Calculus.Table}
 
 /-!
-# §5 — exactness on the attribute side
+# Exactness on the attribute side
 
 `Adm` is the value half. `AdmA` is the attribute half, and it has no `Adm`-shaped
 counterpart.
@@ -75,7 +75,7 @@ instance dynPrimAdmA : Alg.PrimAdmA dynSyn :=
 
 variable (α) in
 /-- **The joint admission predicate, attribute side**: the generic row at DynamoDB. The mirror
-    of `Adm` across §1's asymmetry, and it is not a symmetric mirror: `refine` **does** narrow
+    of `Adm` across the asymmetry of value and attribute, and it is not a symmetric mirror: `refine` **does** narrow
     here, because a row may decode and then ask `q` (`refineReads`). An alternate reader
     (`Term.legacy`) asks its own codec, so this table has no structural alternate-reader row. -/
 abbrev AdmA (t : Term) : AP := Alg.AdmA α dynTableA t []

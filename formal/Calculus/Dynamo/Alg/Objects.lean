@@ -1,7 +1,7 @@
 import Calculus.Dynamo.Alg.Products
 
 /-!
-# Objects (§4)
+# Objects
 
 The field table is a map rather than a row, and the object is taken apart through it.
 `objectCodec` is not argued on its own: `objectCodecCore_eq` cashes it as an equation.
@@ -10,7 +10,7 @@ The field table is a map rather than a row, and the object is taken apart throug
 namespace Calculus
 
 section
-/-! ## Objects (§4) -/
+/-! ## Objects -/
 
 /-- A field, denoted, at the DynamoDB carriers. -/
 abbrev FieldSem := Alg.FieldSem Value Member
@@ -34,7 +34,7 @@ end RestSem
 
 /-! ### The field table is a map, not a row
 
-§4 declares a *set* of field names, each with one field, so the table is a `MapOf`, exactly as
+An object declares a *set* of field names, each with one field, so the table is a `MapOf`, exactly as
 `M`'s payload is, and for the same reason. The slots, the entry codec and the payload map read no
 carrier constructor, so they are the generic layer's (`Alg.objAt` and its neighbours), and the
 aliases below give them their names in this namespace. -/
@@ -48,7 +48,7 @@ variable {sems : MapOf FieldSem} {rc? : Option Codec}
 abbrev objectCodecCore (sems : MapOf FieldSem) (rc? : Option Codec) : Codec :=
   Alg.objectCodecCore mS sems rc?
 
-/-- §4's `object`, at the `M` prism. -/
+/-- The `object`, at the `M` prism. -/
 abbrev objectCodec (sems : MapOf FieldSem) (rest : RestSem) : Codec :=
   Alg.objectCodec mS sems rest
 
@@ -57,7 +57,7 @@ theorem objectCodecCore_eq :
       carriedCodec mS
         (fun p => ∀ k, slotT sems rc? k (p.at k)) (objAt sems rc?) := rfl
 
-/-- **§3 `record`: the object that declares no name and takes every key at one codec.** It is
+/-- **The rule `(record)`: the object that declares no name and takes every key at one codec.** It is
     not a construct of its own: `Term.record` is the empty body with an open block, and its
     codec is the object codec of that body. -/
 abbrev recordCodec (c : Codec) : Codec :=

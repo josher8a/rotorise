@@ -4,7 +4,7 @@ import Calculus.Lang.Sound
 variable {α : Calculus.Table}
 
 /-!
-# §5 — Soundness
+# Soundness
 
 The theorem. `Obligations t` collects the semantic rule premises: `(held)` cancellation laws,
 `(union)` pairwise compatibility, and the set obligation `SetElem`, at every stage of each
@@ -70,7 +70,7 @@ theorem array {t} (h : Obligations α (.array t)) : Obligations α t := h.2.1
 theorem record {t} (h : Obligations α (.record t)) : Obligations α t := h.2
 theorem refine {t q qA ρ} (h : Obligations α (.refine t q qA) ρ) : Obligations α t ρ := h
 
-/-- §3 `(set)`: the element's premises, and the DynamoDB set rule. -/
+/-- The rule `(set)`: the element's premises, and the DynamoDB set rule. -/
 theorem set {t ρ} (h : Obligations α (.set t) ρ) : Obligations α t ρ ∧ SetElem (denote α t ρ) :=
   ⟨h.1, h.2⟩
 
@@ -78,18 +78,18 @@ theorem tuple {ts tail} (h : Obligations α (.tuple ts tail)) :
     (∀ t ∈ ts, Obligations α t) ∧ (∀ t ∈ tail, Obligations α t) :=
   ⟨obligationsList_iff.mp h.1, obligationsOpt_iff.mp h.2.1⟩
 
-/-- §3 `(list)`: one premise per declared position, the spread's, and the suffix's. -/
+/-- The rule `(list)`: one premise per declared position, the spread's, and the suffix's. -/
 theorem list {pre sp suf ρ} (h : Obligations α (.list pre sp suf) ρ) :
     (∀ t ∈ pre, Obligations α t ρ) ∧ (∀ t ∈ sp, Obligations α t ρ) ∧ (∀ t ∈ suf, Obligations α t ρ) :=
   ⟨obligationsList_iff.mp h.1, obligationsOpt_iff.mp h.2.1, obligationsList_iff.mp h.2.2⟩
 
-/-- §3 `(held)`: the subterm's premises, and the iso of the whole word cancelling on the
+/-- The rule `(held)`: the subterm's premises, and the iso of the whole word cancelling on the
     carriers. -/
 theorem held {t P k₀ k ρ} (h : Obligations α (.held false t P k₀ k) ρ) :
     Obligations α t ρ ∧ IsoCancels (denote α t ρ) (α.word (k₀ :: k)).1 (α.word (k₀ :: k)).2 :=
   ⟨h.1, h.2.1⟩
 
-/-- §5 `(union)`: one premise per option, and pairwise compatibility. -/
+/-- The rule `(union)`: one premise per option, and pairwise compatibility. -/
 theorem union {opts ρ} (h : Obligations α (.union opts) ρ) :
     (∀ t ∈ opts, Obligations α t ρ) ∧ PairwiseCompat α opts ρ :=
   ⟨obligationsList_iff.mp h.1, h.2⟩
@@ -124,7 +124,7 @@ theorem soundness {t T μ} (h : Typed α t T μ) (hob : Obligations α t) : Lawf
 /-! ## The denotation's held set is the judgement's
 
     `Carrier` bounds `e` and `p` by the *codec's* `T`. `typed_TSub` bounds the codec's
-    `T` by the *judgement's*, which is what makes §3's `⊢ c : T ⇝ μ` a claim about the
+    `T` by the *judgement's*, which is what makes the judgement `⊢ c : T ⇝ μ` a claim about the
     denotation rather than a decoration. The two compose into `typed_e_mem` and
     `typed_p_mem` below. `Alg.typed_TSub` is the proof. The converse helpers below serve `typed_T_eq`. -/
 
@@ -256,19 +256,19 @@ theorem unionT_of_mem : ∀ {opts : List Term} {Ts μs}, TypedListμ α opts Ts 
 
 
 
-/-- §3's `e : T ⇀ 𝔸`, at the judgement's own index: a derivable term writes only
+/-- The write `e : T ⇀ 𝔸`, at the judgement's own index: a derivable term writes only
     values of the held set it names. -/
 theorem typed_e_mem {t T μ} (h : Typed α t T μ) (hob : Obligations α t)
     {v a} (he : (denote α t).e v = some a) : T v :=
   Alg.typed_TSub h v ((Alg.carrier_denote h hob).domE he)
 
-/-- §3's `p : 𝔸 ⇀ T`, at the judgement's own index: a derivable term reads only into
+/-- The read `p : 𝔸 ⇀ T`, at the judgement's own index: a derivable term reads only into
     the held set it names. -/
 theorem typed_p_mem {t T μ} (h : Typed α t T μ) (hob : Obligations α t)
     {a v} (hp : (denote α t).p a = some v) : T v :=
   Alg.typed_TSub h v ((Alg.carrier_denote h hob).ranP hp)
 
-/-- §3 `(alternate reader)`: an alternate reader over a derivable term preserves the three
+/-- The rule `(alternate reader)`: an alternate reader over a derivable term preserves the three
     core laws, because the read passes only what the term writes. -/
 theorem extendRead_lawfulCore {t T μ} (ht : Typed α t T μ) (hob : Obligations α t)
     (r : Attr → Option Value) : LawfulCore ((denote α t).extendRead r) :=

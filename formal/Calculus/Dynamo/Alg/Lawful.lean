@@ -25,11 +25,11 @@ theorem lawful_baseCodec (k : GroundKind) : Lawful (baseCodec k) := Alg.lawful_f
 `literal` adds a prism and nothing else, so retract, canon and writes come from
 `Lawful.restrict`. That is one statement, because there is one codec. -/
 
-/-- §3 `(literal)` is lawful, full stop.
+/-- The rule `(literal)` is lawful, full stop.
 
     **No `ℓ ⊆ D` hypothesis, and the proof never needed one.** `Lawful` relates `e` and `p` to
     each other and never mentions `T`, so a restriction of a lawful pair is lawful whether or
-    not the restriction is inhabited. That is why §3's `ℓ ⊆ D` belongs to the carrier and not
+    not the restriction is inhabited. That is why the premise `ℓ ⊆ D` belongs to the carrier and not
     here. -/
 theorem lawful_literalCodec (k : GroundKind) (x : k.Carrier) :
     Lawful (literalCodec k x) :=

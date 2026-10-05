@@ -33,7 +33,7 @@ set_option linter.unreachableTactic false in
     converse of a helper of the other direction.
 
     **What this does *not* say is `T = dom(e)`**, which is a different claim, proved by
-    `typed_T_adm` (`Laminar.lean`). Reading (A) as (B) is the mistake §6's row made. -/
+    `typed_T_adm` (`Laminar.lean`). Reading (A) as (B) is the mistake the specification's row made. -/
 theorem typed_T_eq : ∀ {t T μ}, Typed α t T μ → ∀ v, T v → (denote α t).T v
   | t, T, μ, h, v, hv => by
     cases h with
@@ -109,23 +109,23 @@ theorem typed_T_eq : ∀ {t T μ}, Typed α t T μ → ∀ v, T v → (denote α
 termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
 
-/-- **§3's `⊢ c : T ⇝ μ` names the denotation's held set exactly**, at every rule.
+/-- **The judgement `⊢ c : T ⇝ μ` names the denotation's held set exactly**, at every rule.
 
     So the index is a description and carries nothing the pair does not. It stays anyway:
-    the rules are the model's transcription of §3, and a judgement whose held set is spelled
+    the rules are the model's transcription of the typing rules, and a judgement whose held set is spelled
     `(denote t).T` cannot be read against the document it transcribes. What the identity buys
     is that the reading is checked rather than advertised. -/
 theorem typed_T_identity {t T μ} (h : Typed α t T μ) (v : Value) : (denote α t).T v ↔ T v :=
   ⟨Alg.typed_TSub h v, typed_T_eq h v⟩
 
-/-! ## Which identity? §6's row is two of them
+/-! ## Which identity? The specification's row is two of them
 
 * **(A)** `(denote t).T = T` for a derivable `⊢ t : T ⇝ μ`, which `typed_T_identity` proves
   at every rule. It is the half `typed_TSub` leaves.
 * **(B)** `T = dom(e)` — what makes `: T` an honest index rather than an upper bound.
   `Carrier.domE` is its other half.
 
-§6's row asserted (A) and then justified it with a sentence about (B). (A) is not false at
+The specification's row asserts (A) and then justifies it with a sentence about (B). (A) is not false at
 `union`; it is definitional — and it is proved everywhere else too. **(B) holds at every
 derivable term whose obligations hold** by `typed_T_adm` (`Laminar.lean`): a union writes wherever
 one of its options writes, and a set reads its obligations. Reading a proof of (A) as a claim about (B) is the mistake the row made, and the reason
@@ -133,7 +133,7 @@ both are named here. -/
 
 /-- **(A) at a union is definitional.** `altCodec`'s held set *is* the union of its options'
     — no premise, nothing to prove. So the union case of (A) is exactly the options'
-    (A), and §6's "false for `union`" cannot be about this claim. -/
+    (A), and the specification's "false for `union`" cannot be about this claim. -/
 theorem altCodec_T (os : List Codec) (μA : Option Member) (v : Value) :
     (altCodec os μA).T v ↔ ∃ o ∈ os, o.T v := Iff.rfl
 

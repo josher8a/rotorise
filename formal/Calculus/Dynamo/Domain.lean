@@ -7,9 +7,9 @@ import Mathlib.Data.Fintype.Basic
 import Mathlib.Data.Finset.Lattice.Fold
 import Calculus.Alg.Maps
 /-!
-# §1 — The attribute domain
+# The attribute domain
 
-Mechanization of the specification, `docs/blueprint/src/content.tex`. Modelling choices, each recorded where it bites:
+Modelling choices, each recorded where it bites:
 
 * `Numeral` is `String` — the *raw text a parser sees*. The carrier is not: `Attr.n`
   carries `WFNumeral`, the subtype `Numeral.WF` picks out, so `⟨N, "abc"⟩` is
@@ -18,7 +18,7 @@ Mechanization of the specification, `docs/blueprint/src/content.tex`. Modelling 
 * Wire sets (`SS`/`NS`/`BS`) are `NEFinset` of a *concrete element type* — `NEFinset
   String`, `NEFinset WFNumeral`, `NEFinset Bytes`, and the same three on `Value`. Maps
   (`M`) are a `Finset Name` with a function on it. Unordered, unique and non-empty are
-  properties of the type, so set-ness lives in the carrier and not in §2's `ker p`. The
+  properties of the type, so set-ness lives in the carrier and not in the kernel `ker p`. The
   kernel's restriction is narrower than it looks: it rejects a `Finset` whose element type
   is the datatype being declared, which is why `union`'s payload is a list (see
   `Calculus/Dynamo/Witness/LiteralArity1.lean`), and accepts one over a concrete type in the same constructor.
@@ -33,9 +33,9 @@ namespace Calculus
 /-- Attribute names. -/
 abbrev Name := String
 
-/-- Numeral *text*. Every string is one; §1's `Numerals` is the subset `Numeral.WF` picks
+/-- Numeral *text*. Every string is one; the numeral domain `Numerals` is the subset `Numeral.WF` picks
     out, and `WFNumeral` below is that subset as a type. `Attr.n` carries the subtype, so
-    the attribute domain is exactly §1's — this abbreviation is the raw text a parser sees,
+    the attribute domain is exact — this abbreviation is the raw text a parser sees,
     not the carrier of an `N`. -/
 abbrev Numeral := String
 
@@ -47,24 +47,23 @@ abbrev Bytes := List UInt8
 `MapOf`, the key set with a function on it, is in `Alg/Maps.lean`: the generic layer's containers
 read it, and it reads no carrier of this file. -/
 
-/-! ## §1's `Numerals`
+/-! ## The numeral domain `Numerals`
 
-The table in §1 states three clauses: "optional sign, digits, optional point, optional
+The numeral domain has three clauses: "optional sign, digits, optional point, optional
 exponent; ≤ 38 significant digits; magnitude 0 or `1e-130 … 9.9…e125`". All three are
 modelled here, as a decidable predicate on the carrier.
 
 `Numeral` stays `String` as the *text* type, and `WFNumeral` — the subtype `WF` cuts out —
 is what `Attr.n` carries. So `⟨N, "abc"⟩` is not an attribute at all, and `Carries(N)` in
-§1's coproduct is exact rather than approximated. This document argued for a while that the
-carrier should stay unrestricted so that a port would see the embedding `⌈·⌉` is partial;
+the coproduct is exact rather than approximated. A port sees the embedding `⌈·⌉` as partial;
 that partiality is a fact about the **port's** types, not the model's, and nothing in the
-development ever used an ill-formed `N`.
+development uses an ill-formed `N`.
 
 Note the read side has to check too, not merely the write side. If `p` accepted an
 ill-formed numeral it would return a value `e` then refuses, breaking **(C)** — so the
 grammar is forced onto both halves by the laws, not by taste.
 
-One narrowing, and it is a narrowing of §1 rather than a transcription of it: a bare integer
+One narrowing of `Numerals`: a bare integer
 part is required, so `".5"` and `"1."` are rejected where DynamoDB *accepts* both and
 normalises them (`src/codec/spec/surface/codec.dynamodb.spec.ts`). It stands because `Stored` (`Dynamo/Lang/Store.lean`) rejects them
 anyway. Significance is counted between the first and last
@@ -140,14 +139,14 @@ def significand (p : Parsed) : List Char :=
 
 def isZero (p : Parsed) : Bool := (significand p).isEmpty
 
-/-- The power of ten of the leading significant digit — the quantity §1's magnitude
+/-- The power of ten of the leading significant digit — the quantity the magnitude
     bound is stated on. -/
 def decExp (p : Parsed) : Int :=
   let m := mantissa p
   let leading := m.length - (dropLeadingZeros m).length
   (p.intDigits.length : Int) - 1 - (leading : Int) + p.exp
 
-/-- §1's `Numerals`: the grammar, 38 significant digits, and DynamoDB's magnitude range —
+/-- The numeral domain `Numerals`: the grammar, 38 significant digits, and DynamoDB's magnitude range —
     what the service **accepts** in an `N`. -/
 def WF (s : Numeral) : Bool :=
   match parse s with
@@ -161,19 +160,19 @@ end Numeral
 /-- **Kinds.** The eight shapes the value language is partitioned into — and the eight
     the attribute domain collapses onto, since the three wire sets are one kind and the
     ten members are eight. A value and the attribute it is written to have the same
-    kind: that is what "self-identifying" means in §3's `(opaque)`, and it is the
-    disjointness §5's `κ` table is stated in. -/
+    kind: that is what "self-identifying" means in the rule `(opaque)`, and it is the
+    disjointness the `κ` table is stated in. -/
 inductive Kind where
   | string | number | boolean | binary | set | array | map | null
 deriving DecidableEq, Repr
 
-/-- The ten members of the coproduct (§1). -/
+/-- The ten members of the coproduct. -/
 inductive Member where
   | S | N | B | BOOL | NULL | SS | NS | BS | L | M
 deriving DecidableEq, Repr
 
-/-- §1's `℘⁺fin(α)` — the **nonempty** finite subsets. The reference: *"DynamoDB does not
-    support empty sets"*, and §1 types all three wire sets as `℘⁺fin`. Carried by the type
+/-- `℘⁺fin(α)` — the **nonempty** finite subsets. The reference: *"DynamoDB does not
+    support empty sets"*, and all three wire sets have the type `℘⁺fin`. Carried by the type
     rather than gated by a codec, for the same reason unorderedness and uniqueness are:
     `{S : Finset α // S.Nonempty}` is admissible in a constructor, so no gate needs to
     enforce this. -/
@@ -191,14 +190,14 @@ not need the order (a nested `Finset`, `Multiset` or `Quot` of the datatype), an
 needs a canonical spelling that each set codec enforces by refusal, so the carriers are the three
 concrete ones. -/
 
-/-- §1's `Numerals` — the strings DynamoDB accepts in an `N`, carried by the type. So
+/-- The numeral domain `Numerals` — the strings DynamoDB accepts in an `N`, carried by the type. So
     `Carries(N)` is exact and `⟨N, "abc"⟩` is not an attribute at all.
 
     A port sees the embedding `⌈·⌉` as partial. That partiality is a fact about the
     **port's** attribute type, not the model's. -/
 abbrev WFNumeral := {x : Numeral // Numeral.WF x = true}
 
-/-- A literal numeral, with §1's check discharged where it is written. `WF` is decidable
+/-- A literal numeral, with the check `Numeral.WF` discharged where it is written. `WF` is decidable
     by construction, so a concrete numeral carries its own proof. -/
 def WFNumeral.of (x : Numeral) (h : Numeral.WF x = true := by decide) : WFNumeral := ⟨x, h⟩
 
@@ -218,21 +217,21 @@ theorem NEFinset.mem_of {α : Type} [DecidableEq α] (x : α) (S : Finset α) :
 @[simp] theorem NEFinset.of_val {α : Type} [DecidableEq α] (x : α) (S : Finset α) :
     (NEFinset.of x S).1 = insert x S := rfl
 
-/-- The attribute domain `𝔸` (§1). The coproduct is exact: one member per attribute. -/
+/-- The attribute domain `𝔸`. The coproduct is exact: one member per attribute. -/
 inductive Attr where
   | s    (v : String)
   | n    (v : WFNumeral)
   | b    (v : Bytes)
   | bool (v : Bool)
   | null
-  /-- §1's `℘⁺fin(String)`. A `Finset` and not a list: the reference says the order of a
+  /-- `℘⁺fin(String)`. A `Finset` and not a list: the reference says the order of a
       set's values is not preserved and each value is unique, and the store dedups on
       insert. Both facts are properties of the *type*, not obligations on a codec. -/
   | ss   (v : NEFinset String)
   | ns   (v : NEFinset WFNumeral)
   | bs   (v : NEFinset Bytes)
   | l    (v : List Attr)
-  /-- §1's `M`. The reference calls it an *unordered* collection of name-value pairs, and
+  /-- The map member `M`. The reference calls it an *unordered* collection of name-value pairs, and
       an update at an existing name replaces it — so the names form a **set** and the
       values are a function on it. A list would admit two orderings of one map and a
       repeated name, neither of which `M` has.
@@ -255,7 +254,7 @@ inductive Attr where
   | .l _    => .L
   | .m _ _  => .M
 
-/-- **§5's `κ`.** The kind of a member: the three wire sets are one kind, and each other member
+/-- **The kind function `κ`.** The kind of a member: the three wire sets are one kind, and each other member
     is its own kind. -/
 def Member.kind : Member → Kind
   | .S => .string | .N => .number | .B => .binary | .BOOL => .boolean | .NULL => .null
@@ -266,7 +265,7 @@ def Member.kind : Member → Kind
 /-- The kind an attribute is of: the kind of its member. -/
 abbrev Attr.kind (a : Attr) : Kind := a.member.kind
 
-/-! ## §1's nesting bound — the one constraint on `𝔸` the carrier cannot carry
+/-! ## The nesting bound — the one constraint on `𝔸` the carrier cannot carry
 
 A store can bound how deep the document types nest. The ideal algebra has no such bound, so
 the bound is a parameter here, and a port instantiates it: `DynamoDB.maxNesting` is 32.
@@ -303,9 +302,9 @@ def Attr.nestingL : List Attr → Nat
 
 end
 
-/-- **§1's `𝔸` as a store with a nesting bound has it.** The `Attr` above is what the calculus
+/-- **`𝔸` as a store with a nesting bound has it.** The `Attr` above is what the calculus
     writes into; this is the subset a store accepts when it nests at most `bound` document
-    types. Everything else in §1 is exact, so this predicate is the whole of the difference —
+    types. Everything else in `𝔸` is exact, so this predicate is the whole of the difference —
     and `ran(e) ⊆ 𝔸` is only the guarantee it reads as when the two agree. -/
 def Attr.Storable (bound : Nat) (a : Attr) : Prop := Attr.nesting a ≤ bound
 
@@ -314,7 +313,7 @@ def Attr.Storable (bound : Nat) (a : Attr) : Prop := Attr.nesting a ≤ bound
     sides, so the two sides hold one type, and a codec is a partial map of `Attr` to itself.
     Each caller-side constructor is a `match_pattern` alias of its stored-side constructor.
 
-    The value language is partitioned exactly as §5's `Kind`. `decimal` holds numerals as `str`
+    The value language is partitioned exactly as `Kind`. `decimal` holds numerals as `str`
     values: one string kind, as in the κ table of the specification. The three set constructors
     and `℘⁺fin` are DynamoDB facts in the carrier, not rules of the set algebra (`SetElem`). -/
 abbrev Value := Attr
@@ -330,9 +329,9 @@ abbrev Value := Attr
 @[match_pattern] abbrev Value.arr (v : List Value) : Value := Attr.l v
 @[match_pattern] abbrev Value.map (keys : Finset Name) (f : {k // k ∈ keys} → Value) : Value := Attr.m keys f
 
-/-! ## The ground bases, and what each one carries (§3 `(literal)`'s payload)
+/-! ## The ground bases, and what each one carries (the payload of the rule `(literal)`)
 
-§3 has **one** `(literal)` rule:
+The calculus has **one** `(literal)` rule:
 
 ```
 ⊢ g : T ⇝ μ,  g ground    ℓ₁ … ℓₙ ∈ T,  n ≥ 1,  pairwise distinct
@@ -359,14 +358,14 @@ deriving DecidableEq, Repr
     is a variable, the indexed instance `GroundKind.decEqCarrier` decides the equality. -/
 @[reducible] def GroundKind.Carrier : GroundKind → Type
   | .string  => String
-  -- §3's `ℓ ⊆ D` is this base's carrier and not a premise beside it: `D` is the well-formed
+  -- The premise `ℓ ⊆ D` is this base's carrier and not a premise beside it: `D` is the well-formed
   -- numerals, and so is the carrier.
   | .number  => WFNumeral
   | .boolean => Bool
   | .binary  => Bytes
   | .null    => Unit
 
-/-- §3 `(literal)`'s member: the one the base stores as. **Total**, and a function of the index
+/-- The member of the rule `(literal)`: the one the base stores as. **Total**, and a function of the index
     rather than an index with a premise pinning it — which is the `hμ` the three constructors
     between them carried. -/
 @[simp] def GroundKind.member : GroundKind → Member

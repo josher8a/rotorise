@@ -118,7 +118,7 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) where
 
 /-! ### The keyed product
 
-The slots, the entry steps, the rest policy and the two clauses of §2 read no carrier
+The slots, the entry steps, the rest policy and the two clauses of the codec record read no carrier
 constructor, so they are the generic layer's. The two laws below are the generic ones at the `M`
 prism. -/
 

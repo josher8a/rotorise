@@ -86,7 +86,7 @@ included, is admitted by attempt, which is `Adm`/`AdmA` exactly. `admitV_le_Adm`
 when one of its options does. -/
 
 variable (α) in
-/-- **Separation on the joint predicate, value side, in one clause.** §5 offers a choice between
+/-- **Separation on the joint predicate, value side, in one clause.** The separation offers a choice between
     disjoint kinds and disjoint admissible sets. `Adm` carries the kind gate in its own rows,
     so disjoint kinds give disjoint admissible sets, and one clause states both. -/
 def SepJV (x y : Term) : Prop := ∀ v, Adm α x v = true → Adm α y v = false
@@ -107,7 +107,7 @@ theorem extendRead_reads_n :
 
 A predicate on values does not say how a term is *written*. `string` and `refine(string, ⊤)`
 denote the same pair and have the same `Adm`, so nothing defined on the pair tells them
-apart. `Decides` below is the semantic notion §5's prose describes, pinned from the pair
+apart. `Decides` below is a semantic notion, pinned from the pair
 rather than read off the syntax. The theorem immediately below is the witness that the two
 questions are different. -/
 
@@ -157,7 +157,7 @@ theorem admitA_le_AdmA (t : Term) {a : Attr}
 
 /-! ### `Decides`, and why no table over the syntax decides it
 
-`Decides` below is the semantic notion §5's prose describes: two values of the same kind,
+`Decides` below is a semantic notion: two values of the same kind,
 one written and one refused, so that the kind does not settle admission and an admission is
 therefore evidence.
 
@@ -174,19 +174,19 @@ notion is stated on the denotation. -/
 variable (α) in
 /-- **What "decides its own membership" actually says.** Two values of the *same kind*, one
     written and one refused: the kind does not settle admission, so an admission is
-    evidence. This is the content §5 gestures at when it says a term decides its own
+    evidence. This is what it means that a term decides its own
     membership, stated on the denotation. -/
 def Decides (t : Term) : Prop :=
   ∃ v w, ((denote α t).e v).isSome = true ∧ v.kind = w.kind ∧ ((denote α t).e w).isSome = false
 
-/-- A string `literal` decides, as §5 says. -/
+/-- A string `literal` decides. -/
 theorem decides_literalS : Decides α (.literal .string "A") :=
   ⟨.str "A", .str "B",
    by simp [denote_rows, literalCodec, Alg.restrict_e_def, inL, prism_rows, orient_rows],
    rfl,
    by simp [denote_rows, literalCodec, Alg.restrict_e_def, inL, prism_rows, orient_rows]⟩
 
-/-- `string` does not, as §5 also says. -/
+/-- `string` does not. -/
 theorem not_decides_string : ¬ Decides α .string := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote_rows] at hv hw
@@ -286,7 +286,7 @@ theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
   | none => rw [hc] at h; simp at h
   | some _ => rfl
 
-/-- **A discharge §5 could not state.** Two sets over disjoint literals separate, because
+/-- **A discharge the specification cannot state.** Two sets over disjoint literals separate, because
     `℘⁺fin` has no empty inhabitant and so the two options share none. The non-emptiness
     is the *type's*, which is why every branch here starts at `S.2`.
 
@@ -324,7 +324,7 @@ theorem sepJV_set_literals :
   all_goals simp [Adm_rows, setCodec, orient_rows] at hv
 
 /-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
-    separate, because both options admit `[]`. This is §5's empty-container argument in its
+    separate, because both options admit `[]`. This is the empty-container argument in its
     correct scope — it is a fact about `array`, `record` and `object`, not about `set`. -/
 theorem not_sepJV_array_literals :
     ¬ SepJV α (.array (.literal .string "A")) (.array (.literal .string "B")) := by
@@ -343,7 +343,7 @@ why `set` needs no compatibility premise and `union` does.
 **Not `array` with a wrapper.** `array` traverses a `List Value`, and `set` images a
 `Finset`. The two share the *element* codec and nothing else.
 
-**"Order does not matter" is true of the model.** §1 types `SS` as `℘⁺fin(String)`, and the
+**"Order does not matter" is true of the model.** `SS` has the type `℘⁺fin(String)`, and the
 reference says the order of a set's values is not preserved and each value is unique. The
 three theorems below state it: an ordering is not a distinction a `Finset` can make, and a
 repeat is not an inhabitant it can hold. -/
@@ -391,7 +391,7 @@ refuses is `Finset (Name × Attr)`, and `M` does not need it, as the next sectio
 
 /-! ### The reference, checked against the model
 
-`docs/dynamo-datatypes.md` is the official datatype reference. Most of §1 survives it
+`docs/dynamo-datatypes.md` is the official datatype reference. Most of the attribute domain survives it
 exactly — `Numeral.WF`'s 38 digits and `-130 … 125` exponent range are the documented
 bounds; binary compares unsigned; empty strings and empty binary are permitted, empty lists
 and maps are permitted, empty sets are not, and the model already refuses the last.
@@ -406,7 +406,7 @@ pairs."* The three theorems below state it.
 
 **A map is typed, not gated.** `Finset (Name × Attr)` is rejected by the kernel, exactly as
 `Finset Value` is, because the element type is the one under declaration. That does not send
-`M` to a well-formedness premise. The pair need not be the element: §1's `M` is a finite
+`M` to a well-formedness premise. The pair need not be the element: `M` is a finite
 *partial function*, so the names go in a `Finset` over the concrete type `Name` and the
 attributes go in a function's codomain, a strictly positive position that the kernel accepts:
 

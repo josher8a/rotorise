@@ -33,14 +33,14 @@ namespace Numeral
 
 /-! ### What the store hands back
 
-§2 composes a codec's `e` and `p` directly. In use there is a **store** between them, and
+The codec laws compose a codec's `e` and `p` directly. In use there is a **store** between them, and
 it is not the identity on attributes: DynamoDB normalises every `N` it accepts — trimming
 leading and trailing zeros, dropping `+`, expanding exponents, and keeping one spelling of
 zero. Measured rather than assumed: `src/codec/spec/surface/codec.dynamodb.spec.ts` puts each of these forms into a
 real table and reads it back, and the two theorems below are that measurement.
 
 Write `η` for the store's normalisation. A codec survives the round trip through the store
-exactly when **`η` lies inside `ker p`** — §2's `≈c`, the relation that already exists for
+exactly when **`η` lies inside `ker p`** — the codec equivalence `≈c`, the relation that already exists for
 "a different attribute that reads to the same value". `number` satisfies it for free:
 `p "1.500"` and `p "1.5"` are the same double. `decimal` cannot, because its `p` is the
 identity on the digits, so `ker p` is equality and `η` would have to be too.
@@ -48,7 +48,7 @@ identity on the digits, so `ker p` is equality and `η` would have to be too.
 So `decimal`'s held set is not `Numerals`. It is the numerals the store returns unchanged,
 and that is what this predicate is.
 
-`η ⊆ ker p` is not only prose. `Codec.Ker` names §2's `≈c` and `SurvivesStore` names
+`η ⊆ ker p` is not only prose. `Codec.Ker` names the codec equivalence `≈c` and `SurvivesStore` names
 the inclusion, both in `Codec.lean`; `Lawful.retract_through_store` is what they buy, which
 is **(R)** with the store in the middle. The two halves for `decimal` are
 `survivesStore_decimalCodec` — the narrowing discharges the premise, because a normalisation
@@ -118,7 +118,7 @@ end Numeral
 def isStored : Value → Bool :=
   fun v => match v with | .num x => Numeral.Stored x.1 | _ => false
 
-/-- §3 `(decimal)`: the number base restricted to the stored numerals. The restriction checks
+/-- The rule `(decimal)`: the number base restricted to the stored numerals. The restriction checks
     both halves: an ill-formed numeral admitted by `p` would name a value that `e` then refuses,
     and that is **(C)** failing. -/
 def decimalCodec : Codec := (baseCodec .number).restrict isStored
@@ -135,20 +135,20 @@ theorem decimalCodec_p_n (x : WFNumeral) :
 theorem lawful_decimalCodec : Lawful decimalCodec :=
   (lawful_baseCodec .number).restrict isStored
 
-/-! ### `number` against the store (§1)
+/-! ### `number` against the store
 
-The other side of `decimalCodec`'s answer, and the reason §1 states the condition as an inclusion
-rather than as an equality. -/
+The other side of `decimalCodec`'s answer, and the reason the condition is an inclusion
+rather than an equality. -/
 
 /-! **`number` makes no promise about what a normalising store gives back.** `N` is carried
 exactly, so `(baseCodec .number).p` is a constructor wrapper. Its kernel is equality, and a store
 that rewrites `"1.500"` to `"1.5"` moves the value.
 
 The two numeric terms differ in one thing: `decimal` gates at `Stored`, the store's own
-fixpoint, and `survivesStore_decimalCodec` below states that. `number` accepts everything §1
+fixpoint, and `survivesStore_decimalCodec` below states that. `number` accepts everything `Numeral.WF`
 accepts. -/
 
-/-- §1: `decimal`'s `ker p` is equality — its `p` is the identity on the digits. -/
+/-- `decimal`'s `ker p` is equality — its `p` is the identity on the digits. -/
 theorem ker_decimalCodec {x y : WFNumeral} (h : decimalCodec.Ker (.n x) (.n y))
     (hx : Numeral.Stored x.1 = true) : x.1 = y.1 := by
   have h' : decimalCodec.p (.n x) = decimalCodec.p (.n y) := h
@@ -158,7 +158,7 @@ theorem ker_decimalCodec {x y : WFNumeral} (h : decimalCodec.Ker (.n x) (.n y))
     exact congrArg Subtype.val (Attr.n.inj (Option.some.inj h'))
   · rw [if_neg hy] at h'; exact nomatch h'
 
-/-- §1: `Can(decimal)` is the normal forms and a normalisation fixes its own, so `Stored`
+/-- `Can(decimal)` is the normal forms and a normalisation fixes its own, so `Stored`
     discharges `η ⊆ ker p`. Necessity is `not_survivesStore_numberCodec`. -/
 theorem survivesStore_decimalCodec {η : Attr → Attr}
     (hη : ∀ s : WFNumeral, Numeral.Stored s.1 = true → η (.n s) = .n s) :
@@ -175,17 +175,17 @@ theorem survivesStore_decimalCodec {η : Attr → Attr}
     · rw [if_neg hs] at hv; exact nomatch hv
   | _ => exact nomatch hv
 
-/-! ## §1's numeral domain, checked
+/-! ## The numeral domain `Numerals`, checked
 
-`Domain.lean` carries §1's predicate, with the grammar, the 38 significant digits and the
+`Domain.lean` carries the predicate `Numeral.WF`, with the grammar, the 38 significant digits and the
 magnitude range, and `decimalCodec` gates on it. `typed_e_mem` reports whether the codec
 respects the predicate, so here is that report.
 
 The carrier is not unrestricted either: `Attr.n` carries `WFNumeral`, so `⟨N, "abc"⟩` is not
-an attribute and `decimal`'s report below is about a codec whose target is exactly §1's. That
+an attribute and `decimal`'s report below is about a codec whose target is exactly the numeral domain. That
 a port sees the embedding as partial is a fact about the port's types, not the model's. -/
 
-/-- `decimal`'s held set is exactly §1's `Numerals`. -/
+/-- `decimal`'s held set is exactly `Numerals`. -/
 theorem decimal_T (v : Value) :
     decimalCodec.T v ↔ ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true := by
   constructor
@@ -228,11 +228,11 @@ theorem decimal_reads_stored {a : Attr} {v : Value}
 specification produces that gate, because it is a fact about the **store** rather than about
 the calculus.
 
-§1's worked example says `"1e+21"` is well formed and that treating it as out of range
-would be a defect, "the bound that bites being magnitude rather than notation". That is
+`"1e+21"` is well formed, and a check that puts it out of range
+is a defect: the bound that bites is magnitude rather than notation. That is
 true of `Numeral.WF`, which is what DynamoDB *accepts*. It is not true of `decimal`,
 because DynamoDB hands `1e+21` back as `1000000000000000000000`, and `decimal`'s `p` is the
-identity on the digits — so the round trip fails at the one point §2 cannot see, between
+identity on the digits — so the round trip fails at the one point the codec laws cannot see, between
 `e` and `p`. `Numeral.Stored` is that set, and the measurements it is read off are in
 `src/codec/spec/surface/codec.dynamodb.spec.ts`. -/
 
@@ -247,7 +247,7 @@ theorem wf_refuses_39_digits :
 theorem decimal_refuses_39_digits :
     decimalCodec.e (.str "123456789012345678901234567890123456789") = none := rfl
 
-/-- §1's own example, at the level it was written about: the service accepts an exponent. -/
+/-- The service accepts an exponent: `"1e+21"` is well formed. -/
 theorem wf_accepts_exponent : Numeral.WF "1e+21" = true := by decide
 
 /-- `decimal` does not, and the reason is the store rather than the grammar. -/
@@ -262,7 +262,7 @@ theorem decimal_accepts_expanded :
 /-! ## `decimalCodec` without its narrowed held set
 
 `survivesStore_decimalCodec` shows that gating on `Numeral.Stored` discharges `η ⊆ ker p`.
-This is the other half: the codec that gates on `Numeral.WF` instead — §1's *whole* numeral
+This is the other half: the codec that gates on `Numeral.WF` instead — the *whole* numeral
 grammar — does not, and the witness is a form
 DynamoDB was measured to normalise.
 
@@ -270,7 +270,7 @@ Without this the narrowing reads as a precaution. With it, it is the only option
 `"1.500"`, the store returns `"1.5"`, `decimal`'s `ker p` is equality (`ker_decimalCodec`),
 and (R) through the store fails on a value the codec claimed to hold. -/
 
-/-! `decimal`, gated on §1's grammar rather than on what the store hands back — which is
+/-! `decimal`, gated on the numeral grammar rather than on what the store hands back — which is
     **`baseCodec .number`, the base `decimal` actually refines**. Since `Attr.n` carries
     `WF`, there is no wider text-side numeric codec to invent, so this refutation says
     something about the base itself rather than about a codec built for the purpose.

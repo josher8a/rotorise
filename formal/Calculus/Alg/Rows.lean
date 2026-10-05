@@ -30,8 +30,7 @@ def anyP : List (α → Bool) → α → Bool
   | P :: Ps, v => P v || anyP Ps v
 
 /-- `align`'s row: the same length discipline — fixed head positionally, tail uniformly, a
-    mismatch refused — asked of the rows rather than of the codecs. §5's `⊤` on any `.arr`
-    ignored all three of those things. -/
+    mismatch refused — asked of the rows rather than of the codecs. -/
 def alignP : List (α → Bool) → Option (α → Bool) → List α → Bool
   | [], none, [] => true
   | [], none, _ :: _ => false

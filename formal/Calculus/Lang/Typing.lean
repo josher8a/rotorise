@@ -40,13 +40,13 @@ def HTupleL (pre : List (V → Prop)) (sp : Option (V → Prop)) (suf : List (V 
   ∃ front back : List V,
     vs = front ++ back ∧ List.Forall₂ (fun T v => T v) suf back ∧ HTuple pre sp front
 
-/-- `T₁ × … × Tₚ × T* × U₁ × … × U_s` (§3 `(list)`): the one positional held set, through the
+/-- `T₁ × … × Tₚ × T* × U₁ × … × U_s` (the rule `(list)`): the one positional held set, through the
     list prism of the universe. -/
 def HList (pV : Ctor (List V) V) (pre : List (V → Prop)) (sp : Option (V → Prop))
     (suf : List (V → Prop)) : V → Prop :=
   fun v => ∃ vs, v = pV.into vs ∧ HTupleL pre sp suf vs
 
-/-- `⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ)` (§4 `(object)`), through the map prism of the universe. A
+/-- `⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ)` (the rule `(object)`), through the map prism of the universe. A
     binding is `(required?, held set)`, and `R` is the held set of the open block. Every `req` name
     is present, and every present name is either declared, and holds its own set, or falls to the
     open block. -/
@@ -58,7 +58,7 @@ def HObject (mV : Ctor (MapOf V) V) (names : Finset String)
       if h : k.1 ∈ names then (b ⟨k.1, h⟩).2 (f k)
       else ∃ T, R = some T ∧ T (f k))
 
-/-- `⋃ Tᵢ` (§5 `(union)`). -/
+/-- `⋃ Tᵢ` (the rule `(union)`). -/
 def HUnion (Ts : List (V → Prop)) : V → Prop :=
   fun v => ∃ T ∈ Ts, T v
 
@@ -75,9 +75,9 @@ variable (α β) in
 mutual
 
 inductive Typed : Term S → (Mean.V (B := S.sig) → Prop) → Option (Syn.M S) → Prop where
-  /-- §3's ground rules, as one rule: the held set and the member are the primitive codec's. -/
+  /-- The ground rules, as one rule: the held set and the member are the primitive codec's. -/
   | prim (g : S.Ground) : Typed (.prim g) (Syn.ground g).T (Syn.ground g).μ
-  /-- §3 `(set)`: the element's judgement, lifted by the set former of the universe. -/
+  /-- The rule `(set)`: the element's judgement, lifted by the set former of the universe. -/
   | set {L t T μ} (hL : Mean.set (B := S.sig) = some L) (h : Typed t T μ) :
       Typed (.set t) (L.held T) (μ.bind L.member)
   /-- `(list)`: one rule for the one positional container. -/
@@ -99,9 +99,9 @@ inductive Typed : Term S → (Mean.V (B := S.sig) → Prop) → Option (Syn.M S)
   | refine {t T μ p pA} (h : Typed t T μ) :
       Typed (.refine t p pA) (fun v => T v ∧ Mean.eval false p v) μ
   | opaq : Typed .opaq (fun _ => True) none
-  /-- §5's bottom. It writes no value, so it stores no member, and its held set is `False`. -/
+  /-- The bottom codec. It writes no value, so it stores no member, and its held set is `False`. -/
   | never : Typed .never HNever none
-  /-- §4 `(object)`. The field table is a key set with a function on it, so the judgement is
+  /-- The rule `(object)`. The field table is a key set with a function on it, so the judgement is
       **pointwise**: every declared name's field is typed at its binding, and the bindings are
       indexed by the same set. -/
   | object {F} {body : Body S} {bind R} {μs : {k // k ∈ body.fields} → Option (Syn.M S)}
@@ -140,13 +140,13 @@ inductive TypedOpt : Option (Term S) → Option (Mean.V (B := S.sig) → Prop) �
   | none : TypedOpt none none
   | some {t T μ} (h : Typed t T μ) : TypedOpt (some t) (some T)
 
-/-- §4's `⊢ f : T ⊗ π ⇝ μ`; the `Bool` is `π`, `true` for `req`. -/
+/-- The field judgement `⊢ f : T ⊗ π ⇝ μ`; the `Bool` is `π`, `true` for `req`. -/
 inductive TypedField : ObjectSlot S → (Mean.V (B := S.sig) → Prop) → Bool → Option (Syn.M S) →
     Prop where
   | req {t T μ} (h : Typed t T μ) : TypedField (.req t) T true μ
   | optional {t T μ} (h : Typed t T μ) : TypedField (.optional t) T false μ
 
-/-- §4's `⊢ ρ : wild`, carrying `R(ρ)`: `none` where the body carries no open block, the open
+/-- The open-block judgement `⊢ ρ : wild`, carrying `R(ρ)`: `none` where the body carries no open block, the open
     block's held set otherwise. -/
 inductive TypedWild : Option (Term S) → Option (Mean.V (B := S.sig) → Prop) → Prop where
   | none : TypedWild none none
