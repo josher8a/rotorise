@@ -639,10 +639,9 @@ describe('what cannot be emitted', () => {
      * `decimal` alike — a decimal literal holds its numeral as text — so a decimal discriminator
      * emits on both halves.
      *
-     * **`number` stays refused and the reason changed twice.** It was a disagreement between two
-     * rules; then it was `Calculus.Double`, an axiom with no closed terms. That axiom is deleted
-     * and the refusal is now the adapter's: a `number` tag is a literal at the native base under a
-     * pair whose content is binary64 rounding, and the model names no such pair.
+     * **`number` stays refused, and the refusal is the adapter's**: a `number` tag is a literal at
+     * the native base under a pair whose content is binary64 rounding, and the model names no such
+     * pair.
      */
     it('refuses a tag at the numeric adapter, whose pair has no name', () => {
         const numeric = erase(

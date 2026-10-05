@@ -4276,7 +4276,7 @@ type MultiTagged<
  * The assignment a variant's spec names: its tag at each key.
  *
  * An **object type**, so the type level carries what the term carries and no more. An object type
- * has no order on its keys, which is the property `Calculus.Assignment` has by being a function on
+ * has no order on its keys, which is the property `Calculus.AltClause` has by being a function on
  * a `Finset`; a tuple would put the order back and make two types for one dissection.
  */
 export type AssignmentOf<Spec, Ks extends readonly PropertyKey[]> = {
