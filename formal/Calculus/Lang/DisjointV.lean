@@ -488,7 +488,7 @@ theorem famSetD_sound [FormerAdm S] [Shapes S] {ρ ρ' : List S.C} (a : Term S)
   intro y h v
   cases y with
   | set y' =>
-      simp only [famSetD, Bool.and_eq_true, Bool.not_eq_true'] at h
+      simp only [famSetD, Bool.and_eq_true] at h
       obtain ⟨⟨ha, hy⟩, hm⟩ := h
       have hc := FormerAdm.set_never a y' (fun u => by
         rw [← Adm_closed a ha ρ [], ← Adm_closed y' hy ρ' []]; exact hmt y' hm u) v

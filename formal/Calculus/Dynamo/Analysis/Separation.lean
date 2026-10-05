@@ -182,9 +182,9 @@ def Decides (t : Term) : Prop :=
 /-- A string `literal` decides, as §5 says. -/
 theorem decides_literalS : Decides α (.literal .string "A") :=
   ⟨.str "A", .str "B",
-   by simp [denote_rows, literalCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, prism_rows, orient_rows],
+   by simp [denote_rows, literalCodec, Alg.restrict_e_def, inL, prism_rows, orient_rows],
    rfl,
-   by simp [denote_rows, literalCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, prism_rows, orient_rows]⟩
+   by simp [denote_rows, literalCodec, Alg.restrict_e_def, inL, prism_rows, orient_rows]⟩
 
 /-- `string` does not, as §5 also says. -/
 theorem not_decides_string : ¬ Decides α .string := by

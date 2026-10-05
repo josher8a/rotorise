@@ -169,7 +169,7 @@ theorem not_equiv_union_array :
         (denote α (.array (.union [.literal .string "A", .literal .string "B"]))) := by
   intro h
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
-  simp [Term.array, denote_rows, altCodec, arrayCodec_T, literalCodec, Alg.restrict_e_def, Alg.restrict_p_def, inL, HLit, prism_rows, orient_rows] at hv
+  simp [Term.array, denote_rows, altCodec, arrayCodec_T, literalCodec, HLit, prism_rows, orient_rows] at hv
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
 
@@ -189,7 +189,7 @@ theorem not_equiv_tupleTail_tuple :
   obtain ⟨_, hxs, ps, hps, -⟩ := hv ⟨_, rfl, _, rfl, fun p hp => by
     simp [Alg.denoteListAbs] at hp
     rcases hp with rfl | rfl <;> rfl⟩
-  simp only [lA] at hxs; cases hxs
+  simp only at hxs; cases hxs
   exact nomatch hps
 
 /-- Against the array: the empty sequence, which an array holds and a fixed head cannot. -/
@@ -199,7 +199,7 @@ theorem not_equiv_tupleTail_array :
   intro h
   have hv := (h.heldSet (.arr [])).mpr
   obtain ⟨_, hxs, ps, hps, -⟩ := hv ((arrayCodec_T _ []).mpr fun _ h => nomatch h)
-  simp only [lA] at hxs; cases hxs
+  simp only at hxs; cases hxs
   exact nomatch hps
 
 /-! ## `refine(held(c, P, k), q) ≢ held(refine(c, q), P, k)`

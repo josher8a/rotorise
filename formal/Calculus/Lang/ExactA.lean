@@ -21,7 +21,7 @@ variable {S : Syn} [Sem S] {α : Table S} {β : Table S.op}
 
 /-- **A self-dual primitive reads where it writes**: where each primitive's map at the dual is its
     map at the universe's orientation, the value-side rows are the attribute-side rows. -/
-def PrimAdm.dual [h : PrimAdm S] (hd : ∀ g, (Syn.ground (S := S) g).f S.o.op = (Syn.ground g).f S.o) :
+@[instance_reducible] def PrimAdm.dual [h : PrimAdm S] (hd : ∀ g, (Syn.ground (S := S) g).f S.o.op = (Syn.ground g).f S.o) :
     PrimAdmA S where
   admV := h.admV
   admV_exact g a := (h.admV_exact g a).trans

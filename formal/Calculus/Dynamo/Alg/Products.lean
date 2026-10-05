@@ -120,7 +120,7 @@ variable {α : Type} {o : Alg.Orient} {c : Codec} {inj : α → Attr} {S : NEFin
 /-- What one kind produces: the wire set of the image. -/
 theorem setAtK_eq {k : SetKind} : setAtK o c inj S k = some a ↔
     ∃ T, neSetImage (fun x => (c.f o (inj x)).bind k.elem.out) S = some T ∧ a = k.wire T := by
-  simp [setAtK, Option.map_eq_some_iff, eq_comm]
+  simp [setAtK, eq_comm]
 
 /-- A move is the move of one kind. -/
 theorem setAt_some (h : setAt o c inj S = some a) : ∃ k, setAtK o c inj S k = some a := by
