@@ -766,7 +766,7 @@ export const altSem = (
  * The assignment chooses the member, and the choice is a **lookup** rather than an attempt.
  *
  * **The index is the host's, and the model has no such term.** A dissection is a `Term.union` of
- * members whose structures are disjoint, certified by `Calculus.certPair`; this table is an index
+ * members whose structures are disjoint, certified by `Calculus.viewsDisjoint`; this table is an index
  * built over that union, so nothing in the model states it and nothing in the model needs it. What
  * makes the lookup answer the same question the union answers is the refusal at construction: two
  * members carrying one assignment are refused, so at most one member is reached either way.

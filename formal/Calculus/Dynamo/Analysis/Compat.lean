@@ -149,7 +149,7 @@ theorem flip_order_observable :
       ≠ (altCodec [denote flipTable flipBool, denote flipTable .boolean] none).e (.bool true) := by
   show some (Attr.bool true) ≠ some (Attr.bool false); simp
 
-/-! ## Compatible, and refused by `certPair`
+/-! ## Compatible, and refused by `viewsDisjoint`
 
 Two overlapping `refine`s of one `held` swap sit below one canonical bound. -/
 
@@ -197,11 +197,11 @@ theorem pairwiseCompat_sw : PairwiseCompat swTable [sw1, sw2] := by
   exact fun s hs t ht => compat_sw s t (hm s hs) (hm t ht)
 
 /-- **The certificate refuses the pair.** -/
-theorem certPair_sw : certPair sw1 sw2 = false := by decide
+theorem viewsDisjoint_sw : viewsDisjoint sw1 sw2 = false := by decide
 
 /-! ## The decision at the witnesses
 
-`compatPair` certifies each pair below, and `certPair` certifies none of them. Each pair holds a
+`compatPair` certifies each pair below, and `viewsDisjoint` certifies none of them. Each pair holds a
 `held`, so no held-free bound covers it: the decision agrees per half and per component. -/
 
 /-- `{a?: swap}` and `{a?: binary}`: the two slots agree, because the two terms are disjoint. -/
@@ -216,11 +216,11 @@ example : Alg.compatPair dynOracle (Term.array swap) (Term.array Term.boolean) =
 example : Alg.compatPair dynOracle (Term.mu (.union [swap, .array (.var 0)]))
     (Term.array .never) = true := by decide
 /-- …and the zero test certifies none of the four. -/
-example : certPair (Term.object (Body.mk {"a"} (fun _ => .optional swap) none))
+example : viewsDisjoint (Term.object (Body.mk {"a"} (fun _ => .optional swap) none))
       (Term.object (Body.mk {"a"} (fun _ => .optional Term.binary) none)) = false ∧
-    certPair Term.binary (Term.union [swap, Term.binary]) = false ∧
-    certPair (Term.array swap) (Term.array Term.boolean) = false ∧
-    certPair (Term.mu (.union [swap, .array (.var 0)])) (Term.array .never) = false := by decide
+    viewsDisjoint Term.binary (Term.union [swap, Term.binary]) = false ∧
+    viewsDisjoint (Term.array swap) (Term.array Term.boolean) = false ∧
+    viewsDisjoint (Term.mu (.union [swap, .array (.var 0)])) (Term.array .never) = false := by decide
 
 /-- **The decision refuses the two incompatible witnesses.** -/
 example : Alg.compatPair dynOracle shout litX = false ∧
