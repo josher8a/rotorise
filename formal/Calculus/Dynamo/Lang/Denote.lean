@@ -28,23 +28,59 @@ section
     set and the slot function as two arguments, so this is the coercion. -/
 def Body.map (b : Body) : MapOf ObjectSlot := ⟨b.fields, b.at⟩
 
-/-- The alternatives a field pins its name to, where the field's term is a literal.
+/-- **The adapter word a pin goes through**, the generators of a `held` in order. The empty word
+    is the native form, so `decimal` pins under `[(.decimalText, false)]` and a literal under `[]`. -/
+abbrev AdapterWord := List (DynGen × Bool)
 
-    Every field form and not `req` only. The slice reads the presence beside the alternatives
-    (`litSubAt`), so an `optional` literal is told apart by its presence and not by its
-    alternatives. -/
-def altsOfField : ObjectSlot → Option Alts
-  | .req (.literal k x) => some ⟨k, x⟩
-  | .optional (.literal k x) => some ⟨k, x⟩
-  | .fill (.literal k x) _ => some ⟨k, x⟩
+/-- **What a name is pinned to**: the adapter word, and the alternatives under the word. The word is
+    part of the pin because a `held` admits the caller's value and not the literal beneath it: a
+    clause at the same literal under another word describes other values. -/
+abbrev Pin := AdapterWord × Alts
+
+/-- The literals of a list of options, where each option is a literal at base `k`. -/
+def litsAt (k : GroundKind) : List Term → Option (Finset k.Carrier)
+  | [] => some ∅
+  | .literal k' x :: ts => if h : k' = k then (litsAt k ts).map (insert (h ▸ x)) else none
+  | _ :: _ => none
+
+/-- The alternatives a term pins without an adapter: a literal pins itself, and a union of
+    literals at one base pins its options. A union whose options are not all literals at one base
+    pins nothing, because no one base describes it. -/
+def altsOf : Term → Option Alts
+  | .literal k x => some ⟨k, NEFinset.of x ∅⟩
+  | .union (.literal k x :: ts) => (litsAt k ts).map fun s => ⟨k, NEFinset.of x s⟩
   | _ => none
 
-/-- A body's spec: the presence and the pinned literal of each declared name, which a slice
+/-- **The pin of a term**, read through a refinement and through one adapter.
+
+    A refinement of a literal admits a subset of the literal's alternatives, so the alternatives
+    are an upper bound on the field. A `held` pins the alternatives of its stored side under its
+    word. Each `held` sits at the caller side `false`, so the side `true` pins nothing. -/
+def pinOf : Term → Option Pin
+  | .refine t _ _ => pinOf t
+  | .held false t _ k₀ ks => (altsOf t).map ((k₀ :: ks), ·)
+  | t => (altsOf t).map ([], ·)
+
+/-- The pin of a field, whatever its presence. The slice reads the presence beside the pin
+    (`litSubAt`), so an `optional` literal is told apart by its presence and not by its pin. -/
+def altsOfField : ObjectSlot → Option Pin
+  | .req t | .optional t | .fill t _ => pinOf t
+
+/-- One declared name, as a slice reads it: whether the caller must write the name, and the pin
+    of its field.
+
+    `required` is the presence at the caller side, `isReqAt .host`. A fill is required there,
+    because a fill is optional on the read alone. -/
+structure NameSpec where
+  required : Bool
+  pin : Option Pin
+
+/-- A body's spec: the caller-side presence and the pin of each declared name, which a slice
     reads. A slice asks each name that a clause names, so an undeclared name and the open block
     answer nothing here. The payload's own function, so `specOf` is a dispatch and nothing
     more. Admission reads no spec: every option admits by attempt, which runs `Adm`. -/
 def Body.spec : Body → MapOf NameSpec
-  | .mk fields f _ => ⟨fields, fun k => ⟨(f k).presence, altsOfField (f k)⟩⟩
+  | .mk fields f _ => ⟨fields, fun k => ⟨(f k).isReqAt .host, altsOfField (f k)⟩⟩
 
 /-- The spec of an object option — `none` for non-objects. -/
 def specOf : Term → Option (MapOf NameSpec)

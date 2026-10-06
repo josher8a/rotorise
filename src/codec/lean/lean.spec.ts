@@ -2202,7 +2202,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             ],
         })
         expect(text).toContain(
-            '(AltClause.mk {"kind"} (fun k => (⟨.string, "a"⟩ : Alts)))',
+            '(AltClause.mk {"kind"} (fun k => (([], ⟨.string, NEFinset.of "a" ∅⟩) : Pin)))',
         )
         expect(text).toContain(
             '[[true, false],\n      [false, false]] := by decide',
@@ -2262,59 +2262,106 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             keys: ['kind'],
         })
         expect(text).toContain(
-            '(AltClause.mk {"kind"} (fun k => (⟨.string, "b"⟩ : Alts)))',
+            '(AltClause.mk {"kind"} (fun k => (([], ⟨.string, NEFinset.of "b" ∅⟩) : Pin)))',
         )
         expect(text).toContain(
             '[[true, false],\n      [false, true]] := by decide',
         )
     })
 
-    // **The five readings that the model's slice does not make.** Each refusal keeps the row out
-    // of the vectors, and a probe of the reading deletes the refusal.
-    it('refuses a member that pins the key through a `held` adapter', () => {
-        expect(
-            one(decimal('1'), {
-                t: dynamoNumber(orThrow(DynamoNumber.from('1'))),
-            }),
-        ).toContain('through a `held` adapter')
-    })
+    /** The verdict rows of a slice over the member `t` and a member at `z`, one row per clause. */
+    const rows = (t: unknown, clauses: readonly unknown[]): string =>
+        leanSlice({
+            name: 'rows',
+            codec: sliceable([
+                object({ t, k: string('h') } as never),
+                object({ t: string('z'), k: string('p') }),
+            ]),
+            clauses: clauses.map((clause) => ({ t: erase(clause) })),
+        })
 
-    it('refuses a member that pins the key through a `refine`', () => {
-        expect(
-            one(refine(string('1'), isNumeral as never), { t: string('1') }),
-        ).toContain('through a `refine`')
-    })
-
-    it('refuses a member that pins the key with a fill', () => {
-        expect(
-            one(
-                withLegacyRead({
-                    current: string('a'),
-                    whenMissing: 'a',
-                } as never),
-                {
-                    t: string('a'),
-                },
-            ),
-        ).toContain('with a fill')
-    })
-
-    it('refuses a union of literals, at the clause and at the member', () => {
-        expect(one(string('a'), { t: string('a', 'z') })).toContain(
-            'a union of literals',
-        )
-        expect(one(string('a', 'b'), { t: string('z') })).toContain(
-            'a union of literals',
-        )
-    })
-
-    it('refuses a clause at the `decimal` form and at the `number` form', () => {
+    /**
+     * **The adapter word is part of the pin.** `decimal('1')` admits the text `'1'`, and
+     * `dynamoNumber(1)` admits the numeral, so each clause keeps only the member at its own form.
+     */
+    it('keeps a member pinned through `decimal` under a `decimal` clause alone', () => {
         const at = dynamoNumber(orThrow(DynamoNumber.from('1')))
-        expect(one(at, { t: decimal('1') })).toContain(
-            '`decimal` or a `number` literal',
+        const text = rows(decimal('1'), [decimal('1'), at])
+        expect(text).toContain(
+            '(([(.decimalText, false)], ⟨.number, NEFinset.of (WFNumeral.of "1") ∅⟩) : Pin)',
         )
+        expect(text).toContain('[[true, false],\n      [false, false]] := by')
+    })
+
+    /** **A caller adapter matches only itself**, so a plain clause at the stored literal keeps nothing. */
+    it('keeps a member pinned through a caller adapter under the same adapter alone', () => {
+        const adapter = held(string('a'), string, {
+            encode: (v: string) => (v === 'x' ? 'a' : new CodecError('no')),
+            decode: () => 'x',
+        })
+        const text = rows(adapter, [string('a'), adapter])
+        expect(text).toContain(
+            '(([(.caller 0, false)], ⟨.string, NEFinset.of "a" ∅⟩) : Pin)',
+        )
+        expect(text).toContain('[[false, false],\n      [true, false]] := by')
+    })
+
+    /** **A refinement of a literal admits a subset of the literal**, so the literal bounds the member. */
+    it('keeps a member pinned through a `refine` under the literal it refines', () => {
+        const text = rows(refine(string('1'), isNumeral as never), [
+            string('1'),
+            string('z'),
+        ])
+        expect(text).toContain('[[true, false],\n      [false, true]] := by')
+    })
+
+    /** **The caller must write a fill**, so a fill is required where the clause reads presence. */
+    it('keeps a member pinned with a fill, because the caller must write the name', () => {
+        const fill = withLegacyRead({
+            current: string('a'),
+            whenMissing: 'a',
+        } as never)
+        expect(rows(fill, [string('a')])).toContain('[[true, false]] := by')
+    })
+
+    /** **A clause keeps a member whose alternatives lie inside the clause's**, and not one that overlaps. */
+    it('keeps a member pinned to a union of literals under a clause that contains the union', () => {
+        const text = rows(string('a', 'b'), [
+            string('a'),
+            string('a', 'b', 'c'),
+            string('b', 'z'),
+        ])
+        expect(text).toContain(
+            '(([], ⟨.string, NEFinset.of "a" {"b", "c"}⟩) : Pin)',
+        )
+        expect(text).toContain(
+            '[[false, false],\n      [true, false],\n      [false, true]] := by',
+        )
+    })
+
+    /** **A dissection tag behind `decimal` keys its member under the word of `decimal`.** */
+    it('states the tag of a dissection behind `decimal` under the word of `decimal`', () => {
+        const codec = discriminatedUnion('kind', [
+            object({ kind: decimal('1'), x: string }),
+            object({ kind: decimal('2'), y: string }),
+        ] as never) as unknown as Sliceable
+        const text = leanSlice({
+            name: 'tags',
+            codec,
+            clauses: [],
+            keys: ['kind'],
+        })
+        expect(text).toContain(
+            '(([(.decimalText, false)], ⟨.number, NEFinset.of (WFNumeral.of "2") ∅⟩) : Pin)',
+        )
+        expect(text).toContain('[[true, false],\n      [false, true]] := by')
+    })
+
+    /** **The model names no float adapter**, so a clause at the `number` form has no pin to state. */
+    it('refuses a clause at the `number` form', () => {
+        const at = dynamoNumber(orThrow(DynamoNumber.from('1')))
         expect(one(at, { t: number(1) })).toContain(
-            '`decimal` or a `number` literal',
+            'the model names no float adapter',
         )
     })
 

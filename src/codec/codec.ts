@@ -4609,7 +4609,7 @@ const clauseLiteral = (name: string, value: unknown): NameForm => {
  *
  * The base is compared before the alternatives, and a mismatch keeps the member out. That is
  * `Calculus.altsSub`, whose four rows are four bases and whose fall-through row is every pair that
- * does not share one.
+ * does not share one. Each row compares the adapter word, and then the two sets of alternatives.
  *
  * **The adapter is compared with the base.** The form names the kind of the held side and not the
  * conversion, so a caller's adapter that decodes `'a'` to `'x'` has the form of `string('a')`. Kept

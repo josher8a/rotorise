@@ -693,10 +693,12 @@ const kernelPairs = (pairs: readonly PoolPair[]) => {
 
 /**
  * **The clauses that the pool puts to each name of a union.** The values that the generator pins,
- * two values that the generator never pins, and one literal at each base and form.
+ * two values that the generator never pins, one literal at each base and form, and one union of
+ * two literals.
  */
 const clauseVocabulary: readonly (() => AnyCodec)[] = [
     ...['a', 'b', 'p', 'x', 'y', 'A', 'q'].map((s) => () => erase(string(s))),
+    () => erase(string('a', 'b')),
     ...['1', '2.5'].map((s) => () => erase(decimal(s))),
     ...['1', '2.5'].map(
         (s) => () => erase(dynamoNumber(orThrow(DynamoNumber.from(s)))),
@@ -810,25 +812,22 @@ describe('the generated pool, against the model', () => {
           {
             "dropped": {
               "a constructor refused the draw": 87,
-              "slice: a member pins the key through a \`held\` adapter: the host reads the literal under the adapter, and \`altsOfField\` reads a literal slot alone": 156,
-              "slice: a member pins the key with a fill: the host counts a fill as required, and \`ObjectSlot.presence\` gives a fill the presence of an optional name": 12,
-              "slice: the clause is a \`decimal\` or a \`number\` literal: the host compares the form of the literal, and \`Alts\` carries the base alone": 3120,
-              "slice: the key carries a union of literals: the host compares two sets of alternatives, and \`altsSub\` compares one literal with one value": 240,
+              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1560,
             },
             "seeds": [
               {
                 "assignments": 29,
-                "clauses": 2724,
+                "clauses": 3615,
                 "disjoints": 1210,
                 "fills": 3,
                 "pairs": 1210,
                 "seed": 20261004,
                 "separations": 1207,
-                "slices": 72,
+                "slices": 73,
               },
               {
                 "assignments": 29,
-                "clauses": 2568,
+                "clauses": 3360,
                 "disjoints": 1214,
                 "fills": 8,
                 "pairs": 1214,
@@ -838,7 +837,7 @@ describe('the generated pool, against the model', () => {
               },
               {
                 "assignments": 38,
-                "clauses": 3660,
+                "clauses": 4725,
                 "disjoints": 1162,
                 "fills": 12,
                 "pairs": 1162,

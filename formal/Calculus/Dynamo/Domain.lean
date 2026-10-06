@@ -379,24 +379,12 @@ deriving DecidableEq, Repr
 theorem GroundKind.member_inj {k k' : GroundKind} (h : k.member = k'.member) : k = k' := by
   cases k <;> cases k' <;> first | rfl | exact nomatch h
 
-/-! ## What a `union` option's admission reads
+/-! ## What a slice compares -/
 
-`Sums.lean` states a union option's admission and cannot see `ObjectSlot`: `Term.lean` is on no
-import path below `Calculus.Dynamo.Alg.Objects`. So an object option's slot table crosses to `Sums` as
-the two things admission reads off each declared name, built in `Denote.lean` where `ObjectSlot` is
-in scope. -/
-
-/-- A literal's payload with its base packed in. The value's type depends on the base, so one
-    literal as data is this pair and not two fields. -/
-abbrev Alts := (k : GroundKind) × k.Carrier
-
-/-- One declared name, as a slice reads it: one presence lattice element, and the value the
-    name is pinned to where its field is a literal.
-
-    Each presence pair admits presence and absence, respectively. `alts` is what a clause
-    compares against. -/
-structure NameSpec where
-  presence : Bool × Bool
-  alts : Option Alts
+/-- **The alternatives a name is pinned to**, with their base packed in: a non-empty set of
+    literals at one base. The set's type depends on the base, so the alternatives as data are this
+    pair and not two fields. One literal pins a set of one, and a union of literals at one base
+    pins the set of its options. -/
+abbrev Alts := (k : GroundKind) × NEFinset k.Carrier
 
 end Calculus

@@ -27,39 +27,41 @@ they sit here by the same rule.
 
 namespace Calculus
 
-/-- A declared name's literal is the clause's value, at the same base.
+/-- A declared name's pin lies inside the clause's: the same adapter word, the same base, and
+    alternatives that are a subset of the clause's.
 
-    **A clause pins one value per name, because a literal carries one.** Selecting several
-    alternatives is selecting with one clause per alternative, which `mem_extract_or` below states.
+    **Containment, not membership.** A name pinned to `a | b` admits values at both, so a clause
+    at `a` alone does not describe it.
 
     Four rows, one per base whose carrier has more than one value. `null` has no row because its
     carrier has one inhabitant, so a clause there would keep every member rather than select
-    among them. A name
-    pinned at one base against a clause at another is no match, which is the `_` row. -/
-def altsSub : Option Alts → Alts → Bool
-  | some ⟨.string, x⟩,  ⟨.string, c⟩  => decide (x = c)
-  | some ⟨.number, x⟩,  ⟨.number, c⟩  => decide (x = c)
-  | some ⟨.boolean, x⟩, ⟨.boolean, c⟩ => decide (x = c)
-  | some ⟨.binary, x⟩,  ⟨.binary, c⟩  => decide (x = c)
+    among them. A name pinned at one base against a clause at another is no match, which is the
+    `_` row. -/
+def altsSub : Option Pin → Pin → Bool
+  | some (w, ⟨.string, x⟩),  (w', ⟨.string, c⟩)  => decide (w = w') && decide (∀ a ∈ x.1.val, a ∈ c.1.val)
+  | some (w, ⟨.number, x⟩),  (w', ⟨.number, c⟩)  => decide (w = w') && decide (∀ a ∈ x.1.val, a ∈ c.1.val)
+  | some (w, ⟨.boolean, x⟩), (w', ⟨.boolean, c⟩) => decide (w = w') && decide (∀ a ∈ x.1.val, a ∈ c.1.val)
+  | some (w, ⟨.binary, x⟩),  (w', ⟨.binary, c⟩)  => decide (w = w') && decide (∀ a ∈ x.1.val, a ∈ c.1.val)
   | _, _ => false
 
-/-- **A clause at union level**: the names it speaks about, and the alternatives it admits at each.
+/-- **A clause at union level**: the names it speaks about, and the pin it admits at each.
 
     No index: a union declares no key set, so a name the clause asks for that no option declares
     is a clause that keeps nothing, which is `never` said in a place that can say it. -/
 structure AltClause where
   keys : Finset Name
-  alts : {k // k ∈ keys} → Alts
+  pin : {k // k ∈ keys} → Pin
 
-/-- One clause key, answered against one option's spec: the name is declared, it is required,
-    and its alternatives lie inside the clause's.
+/-- One clause key, answered against one option's spec: the name is declared, the caller must
+    write it, and its pin lies inside the clause's.
 
     Required presence is read because an optional literal name admits the map that omits the
     name, so the option holds values outside every fibre the clause describes, and
-    the clause does not describe the option. -/
+    the clause does not describe the option. A fill is required at the caller side, so a fill is
+    kept. -/
 def litSubAt (s : MapOf NameSpec) (c : AltClause) (k : {k // k ∈ c.keys}) : Bool :=
   match s.at k.1 with
-  | some ns => decide (ns.presence = (true, false)) && altsSub ns.alts (c.alts k)
+  | some ns => ns.required && altsSub ns.pin (c.pin k)
   | none => false
 
 /-- **Whether a clause describes an option**: the option is an object, and it answers at every key
@@ -71,11 +73,11 @@ def AltClause.admits (c : AltClause) (t : Term) : Bool :=
 
 /-- **A clause at a numeral keeps the option that pins that numeral**, and not an option that pins
     another one. -/
-example : (AltClause.mk {"k"} fun _ => ⟨.number, WFNumeral.of "1"⟩).admits
+example : (AltClause.mk {"k"} fun _ => ([], ⟨.number, NEFinset.of (WFNumeral.of "1") ∅⟩)).admits
     (.object (.mk {"k"} (fun _ => .req (.literal .number (WFNumeral.of "1"))) none)) = true := by
   decide
 
-example : (AltClause.mk {"k"} fun _ => ⟨.number, WFNumeral.of "1"⟩).admits
+example : (AltClause.mk {"k"} fun _ => ([], ⟨.number, NEFinset.of (WFNumeral.of "1") ∅⟩)).admits
     (.object (.mk {"k"} (fun _ => .req (.literal .number (WFNumeral.of "2"))) none)) = false := by
   decide
 
@@ -88,10 +90,10 @@ def AltClause.extract (c : AltClause) (opts : List Term) : List Term :=
 def AltClause.exclude (c : AltClause) (opts : List Term) : List Term :=
   opts.filter (fun t => ! c.admits t)
 
-/-- **Several alternatives are several clauses, and the extracts join.**
+/-- **Two clauses select the join of their extracts.**
 
-    A clause pins one value per name, so selecting a set of alternatives is selecting with each
-    clause in turn. Stated on membership and not as an append: `List.filter` fixes an order, and
+    A clause pins one word per name, so selecting under two words is selecting with each clause
+    in turn. Stated on membership and not as an append: `List.filter` fixes an order, and
     an append would carry an option both clauses admit twice. -/
 theorem mem_extract_or (c c' : AltClause) (opts : List Term) (t : Term) :
     t ∈ opts.filter (fun u => c.admits u || c'.admits u) ↔
