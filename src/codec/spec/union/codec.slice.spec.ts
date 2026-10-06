@@ -9,11 +9,14 @@
  * field whatever the key set says.
  */
 import { describe, expect, it } from 'vitest'
+import { DynamoNumber } from '../../attribute'
 import {
     boolean,
     CodecError,
     decimal,
     discriminatedUnion,
+    dynamoNumber,
+    held,
     mdunion,
     number,
     object,
@@ -21,7 +24,7 @@ import {
     string,
     union,
 } from '../../codec'
-import { failed } from '../../result'
+import { failed, orThrow } from '../../result'
 
 const pet = object({ kind: string('pet'), size: string('small'), toy: string })
 const dog = object({ kind: string('pet'), size: string('large'), pen: string })
@@ -228,6 +231,89 @@ describe('a clause is a literal at a base', () => {
             // @ts-expect-error the plain base admits more than a literal does
             byBase.extract({ k: string }),
         ).toThrow(/is not a literal codec/)
+    })
+
+    /**
+     * **An adapter is part of what a clause names.** The form reads the kind of the held side, and
+     * a caller's adapter over `string('a')` has the form of `string('a')` while the member decodes
+     * `'x'`. Kept on the form, the extraction decodes a value outside the clause. So a clause keeps
+     * a member pinned through an adapter only where the clause sits under the same adapter.
+     */
+    it('a slice keeps a member pinned through an adapter only against a clause with the same adapter', () => {
+        const toX = held(string('a'), string, {
+            encode: (v: string) =>
+                v === 'x' ? 'a' : new CodecError(`'${v}' is not 'x'`),
+            decode: () => 'x',
+        })
+        const viaX = union([
+            object({ t: toX, k: string('h') }),
+            object({ t: string('z'), k: string('p') }),
+        ])
+        // the type refuses both clauses, because the adapter's member decodes no literal at `t`. The
+        // runtime answers for a caller who reaches past the type
+        const plain = viaX.extract(
+            // @ts-expect-error the member under the adapter decodes `string`, not `'a'`
+            { t: string('a') },
+        )
+        expect(plain.def).toEqual({ kind: 'never' })
+        const same = viaX.extract(
+            // @ts-expect-error a clause pins a literal at the type, and `toX` decodes `string`
+            { t: toX },
+        )
+        expect(
+            same.unsafeDecode({ M: { t: { S: 'a' }, k: { S: 'h' } } }),
+        ).toEqual({ t: 'x', k: 'h' })
+
+        const one = orThrow(DynamoNumber.from('1'))
+        const toText = held(dynamoNumber(one), string, {
+            encode: (v: string) =>
+                v === 'one' ? one : new CodecError(`'${v}' is not 'one'`),
+            decode: () => 'one',
+        })
+        const viaText = union([
+            object({ t: toText, k: string('h') }),
+            object({ t: decimal('2'), k: string('p') }),
+        ])
+        const text = viaText.extract(
+            // @ts-expect-error the member under the adapter decodes `string`, not `'1'`
+            { t: decimal('1') },
+        )
+        expect(text.def).toEqual({ kind: 'never' })
+
+        const toTwo = held(dynamoNumber(one), number, {
+            encode: (v: number) =>
+                v === 2 ? one : new CodecError(`${v} is not 2`),
+            decode: () => 2,
+        })
+        const viaTwo = union([
+            object({ t: toTwo, k: string('h') }),
+            object({ t: number(3), k: string('p') }),
+        ])
+        const two = viaTwo.extract(
+            // @ts-expect-error the member under the adapter decodes `number`, not `1`
+            { t: number(1) },
+        )
+        expect(two.def).toEqual({ kind: 'never' })
+
+        // a library adapter carries one identity for each name, so its members stay kept
+        const byDecimal = union([
+            object({ t: decimal('1'), k: string('a') }),
+            object({ t: decimal('2'), k: string('b') }),
+        ])
+        expect(
+            byDecimal
+                .extract({ t: decimal('1') })
+                .unsafeDecode({ M: { t: { N: '1' }, k: { S: 'a' } } }),
+        ).toEqual({ t: '1', k: 'a' })
+        const byNumber = union([
+            object({ t: number(1), k: string('a') }),
+            object({ t: number(2), k: string('b') }),
+        ])
+        expect(
+            byNumber
+                .extract({ t: number(1) })
+                .unsafeDecode({ M: { t: { N: '1' }, k: { S: 'a' } } }),
+        ).toEqual({ t: 1, k: 'a' })
     })
 })
 

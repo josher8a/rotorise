@@ -744,6 +744,11 @@ export type NameForm = {
     readonly required: boolean
     readonly alts: Alternatives
     readonly form: LiteralForm
+    /**
+     * The outermost adapter that the literal sits under, where one does. The form names the kind of
+     * the held side and not the conversion, so a clause compares the adapter as well.
+     */
+    readonly adapter?: Extract<Term, { kind: 'held' }>
 }
 
 /**
@@ -783,20 +788,19 @@ export const clauseLiteralsOf = (
 export const clauseForm = (
     t: Term,
     outer?: Term,
-): { readonly alts: Alternatives; readonly form: LiteralForm } | undefined => {
-    // an `opaque` held side admits every kind, so it names no form
-    if (t.kind === 'held')
-        return t.outer.kind === 'opaq'
-            ? undefined
-            : clauseForm(t.inner, t.outer)
+): Omit<NameForm, 'required'> | undefined => {
+    if (t.kind === 'held') {
+        // an `opaque` held side admits every kind, so it names no form
+        if (t.outer.kind === 'opaq') return undefined
+        const pinned = clauseForm(t.inner, t.outer)
+        return pinned && { ...pinned, adapter: t }
+    }
     const alts = literalAlternatives(t)
     return alts && { alts, form: literalForm(alts.base, outer) }
 }
 
 /** …and the member's side, which reads through a refinement too. @see {@link clauseForm} */
-export const pinnedForm = (
-    t: Term,
-): { readonly alts: Alternatives; readonly form: LiteralForm } | undefined =>
+export const pinnedForm = (t: Term): Omit<NameForm, 'required'> | undefined =>
     t.kind === 'refine' ? pinnedForm(t.inner) : clauseForm(t)
 
 /**
@@ -1205,7 +1209,7 @@ export const widensRead = (t: Term): boolean => reaches(t, ['legacy'])
  * one generator for each name. The tag of a caller's adapter is the pair of functions that
  * `held` builds once for each call, so two terms of one call are one adapter.
  */
-const sameAdapter = (
+export const sameAdapter = (
     x: Extract<Term, { kind: 'held' }>,
     y: Extract<Term, { kind: 'held' }>,
 ): boolean =>

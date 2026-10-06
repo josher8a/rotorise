@@ -52,6 +52,7 @@ import {
     member as memberOf,
     ownsNullOf,
     recursionUse,
+    sameAdapter,
     ThunkReentered,
     widensRead,
 } from './term'
@@ -4609,6 +4610,12 @@ const clauseLiteral = (name: string, value: unknown): NameForm => {
  * The base is compared before the alternatives, and a mismatch keeps the member out. That is
  * `Calculus.altsSub`, whose four rows are four bases and whose fall-through row is every pair that
  * does not share one.
+ *
+ * **The adapter is compared with the base.** The form names the kind of the held side and not the
+ * conversion, so a caller's adapter that decodes `'a'` to `'x'` has the form of `string('a')`. Kept
+ * on the form alone, the member decodes a value outside the clause. A library adapter carries one
+ * identity for each name, so `decimal` against `decimal` keeps the member, and a caller's adapter
+ * matches only itself. A plain literal and a literal under an adapter never match.
  */
 const clauseKeeps = (
     clause: ReadonlyMap<string, NameForm>,
@@ -4619,6 +4626,9 @@ const clauseKeeps = (
     for (const [name, pinned] of clause) {
         const mine = literals[name]
         if (!mine?.required || mine.form !== pinned.form) return false
+        const [a, b] = [mine.adapter, pinned.adapter]
+        if (a === undefined || b === undefined ? a !== b : !sameAdapter(a, b))
+            return false
         const inside = (mine.alts.ls as readonly LiteralValue[]).every((one) =>
             (pinned.alts.ls as readonly LiteralValue[]).some((tag) =>
                 sameLiteral(one, tag),
