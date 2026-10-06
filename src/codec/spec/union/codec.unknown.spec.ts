@@ -216,13 +216,13 @@ describe('what it refuses, and what it tells you instead', () => {
 describe('reading an N somebody else wrote', () => {
     /** The canonical codec reads the exact number, so it chooses no reading. */
     it('reads the exact DynamoNumber, which writes back as N', () => {
-        const read = opaque.unsafeDecode({ N: '1.50' })
+        const read = opaque.unsafeDecode({ N: '1.5' })
         expect(read).toEqual(orThrow(DynamoNumber.from('1.5')))
         expect(opaque.unsafeEncode(read)).toEqual({ N: '1.5' })
     })
 
     it('reads an NS as a set of DynamoNumbers, which writes back as NS', () => {
-        const read = opaque.unsafeDecode({ NS: ['2', '1.50'] })
+        const read = opaque.unsafeDecode({ NS: ['2', '1.5'] })
         expect(opaque.unsafeEncode(read)).toEqual({ NS: ['1.5', '2'] })
     })
 
@@ -231,7 +231,7 @@ describe('reading an N somebody else wrote', () => {
      * policy sees the `DynamoNumber` that the canonical codec read, and not the stored text.
      */
     it('refuses under refuse rather than choose a reading nobody asked for', () => {
-        expect(() => opaque('refuse').unsafeDecode({ N: '1.50' })).toThrow(
+        expect(() => opaque('refuse').unsafeDecode({ N: '1.5' })).toThrow(
             /the stored number '1\.5' cannot be stored/,
         )
     })
@@ -277,7 +277,7 @@ describe('with numbers held exactly', () => {
     it('keeps N and NS on a read-modify-write', () => {
         expect(() =>
             checkMembersStable(holderFor(opaque), [
-                { v: { N: '1.50' } },
+                { v: { N: '1.5' } },
                 { v: { N: '12345678901234567890123456789012345678' } },
                 { v: { NS: ['1', '2'] } },
             ]),
@@ -312,7 +312,7 @@ describe('with numbers opted into as lossy', () => {
     it('keeps N as N on a read-modify-write, which is the point', () => {
         expect(() =>
             checkMembersStable(holderFor(lossy), [
-                { v: { N: '1.50' } },
+                { v: { N: '1.5' } },
                 { v: { N: '12345678901234567890' } },
                 { v: { N: '0' } },
             ]),
@@ -337,7 +337,7 @@ describe('with numbers opted into as lossy', () => {
     })
 
     it('loses digits a float cannot hold — which is what lossy means', () => {
-        expect(lossy.unsafeDecode({ N: '1.50' })).toBe(1.5)
+        expect(lossy.unsafeDecode({ N: '1.5' })).toBe(1.5)
         expect(lossy.unsafeDecode({ N: '12345678901234567890' })).toBe(
             12345678901234567890,
         )

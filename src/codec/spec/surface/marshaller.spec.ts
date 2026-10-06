@@ -57,14 +57,19 @@ describe('the two marshallers write the same bytes', () => {
 })
 
 describe('and read them differently, which is the whole point', () => {
-    const row = { M: { price: { N: '1.50' }, id: { S: 'o1' } } } as never
+    const row = {
+        M: { price: { N: '1.5000000000000000001' }, id: { S: 'o1' } },
+    } as never
 
     it('the SDK rounds the digits into a number', () => {
         expect(native.decode(row)).toEqual({ price: 1.5, id: 'o1' })
     })
 
     it('the exact marshaller keeps them', () => {
-        expect(exact.decode(row)).toEqual({ price: '1.50', id: 'o1' })
+        expect(exact.decode(row)).toEqual({
+            price: '1.5000000000000000001',
+            id: 'o1',
+        })
     })
 
     /** The reason: past the safe range a number is no longer the price that was stored. */

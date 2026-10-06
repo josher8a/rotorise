@@ -23,6 +23,7 @@ import {
     carrying,
     DynamoNumber,
     isNumeral,
+    isStoredNumeral,
     MAX_DOCUMENT_NESTING,
     memberOf,
     tooDeeplyNested,
@@ -1348,13 +1349,7 @@ export const denote = (def: Term): Pair => {
                               `${rendered(value)} is not a DynamoNumber; build one with DynamoNumber.from or DynamoNumber.fromNumber`,
                           ),
                 decode: (attribute) =>
-                    andThen(expect('N', attribute), (carried) =>
-                        isNumeral(carried)
-                            ? DynamoNumber.from(carried)
-                            : new CodecError(
-                                  `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
-                              ),
-                    ),
+                    andThen(expect('N', attribute), storedNumber),
             }
         /**
          * **The `NULL` point, and it is not a {@link groundCodec} here.** The reason is this
@@ -1654,10 +1649,24 @@ export const encodeUnknown = (
     return unrecoverable(`a ${typeof value}`, 'No DynamoDB member carries it.')
 }
 
-/** The stored digits as a `DynamoNumber`, behind the numeral gate that `number` reads through. */
-const storedNumber = (carried: string): Result<DynamoNumber> =>
+/**
+ * The stored digits as a `DynamoNumber`. Every numeric read parses an `N` here: `number`, its
+ * literals, its sets, the adapters over it, and `opaque`.
+ *
+ * **The read admits the stored form only**, which is `Numeral.Stored` and not `Numeral.WF`. The
+ * carrier normalises, so a read of `'1.0'` holds `1` and writes `'1'`: the value read does not
+ * write back to the attribute read, which is **(C)** failing. The store returns no such numeral,
+ * so the read refuses the numeral rather than re-spell the numeral.
+ */
+export const storedNumber = (carried: string): Result<DynamoNumber> =>
     isNumeral(carried)
-        ? DynamoNumber.from(carried)
+        ? andThen(DynamoNumber.from(carried), (read) =>
+              isStoredNumeral(carried)
+                  ? read
+                  : new CodecError(
+                        `'${carried}' is not in the form the store returns: the store returns '${read.digits}' for this numeral, so the value read would not write back`,
+                    ),
+          )
         : new CodecError(
               `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
           )
