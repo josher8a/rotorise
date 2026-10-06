@@ -1575,11 +1575,27 @@ type MissingCodec<
 }
 
 /**
- * The checks that wait on each thunk under resolution, the innermost thunk last. A check made while
- * a thunk resolves cannot decide yet, so the check waits on the innermost thunk, and is discarded
- * with the declaration that made it if that thunk's resolution throws.
+ * Each thunk under resolution, the innermost thunk last. `owed` holds the checks that wait on the
+ * thunk. A check made while a thunk resolves cannot decide yet, so the check waits on the innermost
+ * thunk, the thunk of the declaration that made the check. So a declaration that throws discards
+ * its own checks and no others. A thunk that resolves under another thunk passes its checks on.
+ *
+ * `held` drops the mark of each thunk that resolved under the thunk. A thunk resolved under another
+ * keeps its result only when the outermost resolution completes with every check passing, the
+ * thunks that its checks resolve included. So a refusal leaves no mark under the outermost thunk,
+ * in any order of first use.
  */
-const underResolution: (() => void)[][] = []
+type Resolution = {
+    readonly owed: (() => void)[]
+    readonly held: (() => void)[]
+}
+const underResolution: Resolution[] = []
+
+/**
+ * The marks that each outermost thunk holds while the thunk runs its checks, the innermost last.
+ * A check forces a thunk that reads the codecs under decision, so the decision holds that mark too.
+ */
+const underDecision: (() => void)[][] = []
 
 /**
  * Reads a missing attribute as a value, and writes the attribute always.
@@ -1596,7 +1612,7 @@ const underResolution: (() => void)[][] = []
  *
  * The stand-in is a **value and not a thunk**, which is what makes the check possible here rather
  * than on whichever read happens to need it first. While a thunk resolves, the codec of the
- * stand-in may have no term yet, so that check runs when the thunk resolves. It does not become shared state for that: the
+ * stand-in may have no term yet, so that check runs when the outermost thunk resolves. It does not become shared state for that: the
  * declaration holds one value and each read that needs one gets a copy of it, so a mutable stand-in
  * still cannot leak between entities. The copy keeps the class of each value, because a decode must
  * be writable: a `DynamoNumber` is shared, being immutable. Primitives are handed over as they are,
@@ -1616,15 +1632,15 @@ const withMissing = <const C extends AnyCodec>(
     // value the item cannot be written back as — (C) broken at the read, with the refusal arriving
     // on the next write instead of at the declaration that caused it. Decidable from the
     // declaration alone, which is why the stand-in is a value and not a thunk. One case waits: a
-    // check made while a thunk resolves runs when that thunk resolves, and an unwritable stand-in
-    // refuses the resolution
+    // check made while a thunk resolves runs when the outermost thunk resolves, and an unwritable
+    // stand-in refuses that resolution
     const standsFor = inner as unknown as AnyCodec
     const check = (): void => {
         // a check forces no thunk while a thunk resolves: a union declared under that force reads
         // the thunk under resolution as a free variable at its root, and refuses a guarded term
         const waiting = underResolution.at(-1)
         if (waiting !== undefined) {
-            waiting.push(check)
+            waiting.owed.push(check)
             return
         }
         let refusal: CodecError | undefined
@@ -2051,25 +2067,43 @@ export const lazy = <T, A extends AttributeValue = AttributeValue>(
         if (resolved !== undefined) return resolved
         if (resolving) throw new ThunkReentered()
         resolving = true
-        const owed: (() => void)[] = []
-        underResolution.push(owed)
+        const frame: Resolution = { owed: [], held: [] }
+        underResolution.push(frame)
         let got: AttributeCodec<T>
         try {
             got = get()
+        } catch (thrown) {
+            for (const drop of frame.held) drop()
+            throw thrown
         } finally {
             underResolution.pop()
             resolving = false
         }
-        // each check that waited on this thunk reads the resolved codec. A check that refuses
-        // leaves no mark, as a former that refuses inside the thunk leaves none
         resolved = got
-        try {
-            for (const check of owed) check()
-        } catch (thrown) {
+        const drop = (): void => {
             resolved = undefined
-            throw thrown
         }
-        return resolved
+        // an outer thunk under resolution takes the checks and the marks: the outermost thunk decides
+        const outer = underResolution.at(-1)
+        if (outer !== undefined) {
+            outer.owed.push(...frame.owed)
+            outer.held.push(...frame.held, drop)
+            return got
+        }
+        // each check reads the resolved codecs. A check that refuses leaves no mark under this thunk,
+        // as a former that refuses inside the thunk leaves none
+        underDecision.push(frame.held)
+        try {
+            for (const check of frame.owed) check()
+        } catch (thrown) {
+            for (const under of frame.held) under()
+            drop()
+            throw thrown
+        } finally {
+            underDecision.pop()
+        }
+        underDecision.at(-1)?.push(...frame.held, drop)
+        return got
     }
     return codecOfTerm<T, A>({
         kind: 'lazy',
