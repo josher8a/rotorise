@@ -707,11 +707,19 @@ export const altSem = (
         value: unknown,
         through: (option: Option) => Result<A>,
     ): Result<A> => {
-        const candidates = all.filter(
-            (option) => survives(option) && admitOption(option, value),
-        )
-        const first = candidates[0]
-        return first === undefined ? unmatched(named) : through(first)
+        const fits = all.filter(survives)
+        const first = fits.find((option) => admitOption(option, value))
+        if (first !== undefined) return through(first)
+        // where the kind leaves one option, the cause is that option's: its own write says why,
+        // and the union's message carries the reason rather than only the list of options
+        const sole = fits.length === 1 ? fits[0] : undefined
+        if (sole === undefined) return unmatched(named)
+        const refused = through(sole)
+        return failed(refused)
+            ? new CodecError(
+                  `${unmatched(named).reason}; ${sole.describe} refuses: ${refused.message}`,
+              )
+            : unmatched(named)
     }
 
     /**

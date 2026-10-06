@@ -2,9 +2,9 @@
  * Untagged unions: the shape `tagged` cannot express, because it has nothing to switch on.
  */
 import { describe, expect, it } from 'vitest'
-import type { AttributeMap } from '../../attribute'
-import { DynamoNumber } from '../../attribute'
-import type { AnyCodec, UnionCodec } from '../../codec'
+import type { Attribute, AttributeMap } from '../../attribute'
+import { DynamoNumber, MAX_DOCUMENT_NESTING } from '../../attribute'
+import type { AnyCodec, AttributeCodec, UnionCodec } from '../../codec'
 import {
     array,
     boolean,
@@ -13,6 +13,7 @@ import {
     discriminatedUnion,
     dynamoNumber,
     held,
+    lazy,
     never,
     nullValue,
     number,
@@ -699,5 +700,31 @@ describe('never', () => {
             // @ts-expect-error the empty option list is refused by the type as well
             discriminatedUnion('kind', []),
         ).toThrow(CodecError)
+    })
+})
+
+describe('the refusal of a union', () => {
+    type Tree = readonly Tree[]
+    const Tree: AttributeCodec<Tree, Attribute<'L'>> = lazy(() => array(Tree))
+
+    /** `n` levels of list, the innermost one empty. */
+    const nestTree = (n: number): Tree => {
+        let v: Tree = []
+        for (let i = 1; i < n; i++) v = [v]
+        return v
+    }
+
+    /**
+     * The kind of the value leaves one option, so the cause of the refusal is that option's. The
+     * union keeps its own message and adds the reason, because "no option admits" alone hides the
+     * bound that the write broke.
+     */
+    it('a union that refuses a value names the reason of the one option whose shape fits', () => {
+        const Node = union([object({ a: optional(Tree) }), nullValue])
+        const result = Node.encode({ a: nestTree(MAX_DOCUMENT_NESTING) })
+        expect(result).toBeInstanceOf(CodecError)
+        expect((result as CodecError).reason).toMatch(
+            /^no option admits this value with attributes 'a'; options are .*nesting reaches 33 levels of list and map, and DynamoDB stores at most 32/,
+        )
     })
 })
