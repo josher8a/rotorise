@@ -19,7 +19,6 @@ import { DynamoNumber, isStoredNumeral } from './attribute'
 import { codec } from './build'
 import type { Pair } from './denote'
 import {
-    accepts,
     altSem,
     byTagSem,
     codecAtLevel,
@@ -1568,6 +1567,12 @@ type MissingCodec<
 }
 
 /**
+ * The checks that wait on each thunk under resolution, the innermost thunk last. A check that
+ * forces a thunk under resolution cannot decide yet, so the check waits on the innermost thunk.
+ */
+const underResolution: (() => void)[][] = []
+
+/**
  * Reads a missing attribute as a value, and writes the attribute always.
  *
  * Not {@link optional}: the entity always has it, the *data* may not — a row written before the
@@ -1581,7 +1586,8 @@ type MissingCodec<
  * declaration responsible for it. `withLegacyRead({ current: string('A'), whenMissing: 'B' })` is the whole of it.
  *
  * The stand-in is a **value and not a thunk**, which is what makes the check possible here rather
- * than on whichever read happens to need it first. It does not become shared state for that: the
+ * than on whichever read happens to need it first. A codec that forces a thunk under resolution
+ * has no term yet, so that check runs when the thunk resolves. It does not become shared state for that: the
  * declaration holds one value and each read that needs one gets a copy of it, so a mutable stand-in
  * still cannot leak between entities. The copy keeps the class of each value, because a decode must
  * be writable: a `DynamoNumber` is shared, being immutable. Primitives are handed over as they are,
@@ -1599,13 +1605,34 @@ const withMissing = <const C extends AnyCodec>(
 ): MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> => {
     // §3 `(withLegacyRead)`: the stand-in must be *writable*, or a row missing the name decodes to a
     // value the item cannot be written back as — (C) broken at the read, with the refusal arriving
-    // on the next write instead of at the declaration that caused it. Decidable here, from the
-    // declaration alone, which is why the stand-in is a value and not a thunk.
-    if (!accepts(inner as unknown as AnyCodec, value)) {
-        throw new CodecError(
-            `\`withLegacyRead\`'s stand-in must be a value the codec it stands in for can write, and ${describeShape(value)} is not one this \`${(inner as unknown as AnyCodec).def?.kind ?? 'codec'}\` writes. A row missing the attribute would read back as it and then refuse on the way out`,
-        )
+    // on the next write instead of at the declaration that caused it. Decidable from the
+    // declaration alone, which is why the stand-in is a value and not a thunk. One case waits: a
+    // codec that forces a thunk under resolution has no term yet, so the check runs when that
+    // thunk resolves, and an unwritable stand-in refuses the resolution
+    const standsFor = inner as unknown as AnyCodec
+    const check = (): void => {
+        let refusal: CodecError | undefined
+        try {
+            const written = standsFor.encode(value as never)
+            refusal = failed(written) ? written : undefined
+        } catch (thrown) {
+            const waiting = underResolution.at(-1)
+            if (thrown instanceof ThunkReentered && waiting !== undefined) {
+                waiting.push(check)
+                return
+            }
+            // a value outside the codec's type, which the codec reached past that type: as `accepts` reads it
+            refusal = new CodecError(
+                thrown instanceof Error ? thrown.message : String(thrown),
+            )
+        }
+        if (refusal) {
+            throw new CodecError(
+                `\`withLegacyRead\`'s stand-in must be a value the codec it stands in for can write, and this \`${standsFor.def.kind}\` refuses the stand-in: ${refusal.message}. A row missing the attribute would read back as it and then refuse on the way out`,
+            )
+        }
     }
+    check()
     const attribute = inner as unknown as AttributeCodec<Decoded<C>>
     return {
         codec: attribute,
@@ -2013,10 +2040,23 @@ export const lazy = <T, A extends AttributeValue = AttributeValue>(
         if (resolved !== undefined) return resolved
         if (resolving) throw new ThunkReentered()
         resolving = true
+        const owed: (() => void)[] = []
+        underResolution.push(owed)
+        let got: AttributeCodec<T>
         try {
-            resolved = get()
+            got = get()
         } finally {
+            underResolution.pop()
             resolving = false
+        }
+        // each check that waited on this thunk reads the resolved codec. A check that refuses
+        // leaves no mark, as a former that refuses inside the thunk leaves none
+        resolved = got
+        try {
+            for (const check of owed) check()
+        } catch (thrown) {
+            resolved = undefined
+            throw thrown
         }
         return resolved
     }

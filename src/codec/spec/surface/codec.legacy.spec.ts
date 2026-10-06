@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import type { AttributeMap, AttributeValue } from '../../attribute'
 import { DynamoNumber } from '../../attribute'
 import {
+    type AttributeCodec,
     andThen,
     array,
     binary,
@@ -17,8 +18,10 @@ import {
     decimal,
     dynamoNumber,
     held,
+    lazy,
     object,
     optional,
+    refine,
     string,
     union,
     withLegacyRead,
@@ -270,6 +273,63 @@ describe('an attribute the row does not have', () => {
         const a = C.unsafeDecode({ id: { S: 'a' } })
         const b = C.unsafeDecode({ id: { S: 'b' } })
         expect(a.h).toBe(b.h)
+    })
+})
+
+/**
+ * **A stand-in over the codec under declaration.** The check of the stand-in forces the thunk that
+ * is still resolving, so the check waits until the thunk resolves. The check still runs, so an
+ * unwritable stand-in still refuses.
+ */
+describe('a stand-in for a recursive codec', () => {
+    type Leaf = { end: string } | { name: string; next: Leaf }
+
+    it('a recursion with a stand-in encodes and decodes, and a read that lacks the attribute fills it', () => {
+        const Leaf: AttributeCodec<Leaf> = lazy(() =>
+            union([
+                object({ end: string }),
+                object({
+                    name: string,
+                    next: withLegacyRead({
+                        current: Leaf,
+                        whenMissing: { end: 'x' },
+                    }),
+                }),
+            ]),
+        )
+        const value: Leaf = { name: 'a', next: { end: 'b' } }
+        const written = Leaf.encode(value)
+        expect(written).not.toBeInstanceOf(CodecError)
+        expect(Leaf.decode(written as AttributeValue)).toEqual(value)
+        expect(Leaf.decode({ M: { name: { S: 'a' } } })).toEqual({
+            name: 'a',
+            next: { end: 'x' },
+        })
+    })
+
+    it('an unwritable stand-in for a recursive codec still refuses, and names the reason', () => {
+        const Ended: AttributeCodec<Leaf> = lazy(() =>
+            refine(
+                union([
+                    object({ end: string }),
+                    object({
+                        name: string,
+                        next: withLegacyRead({
+                            current: Ended,
+                            whenMissing: { end: '' },
+                        }),
+                    }),
+                ]),
+                (leaf): leaf is Leaf => !('end' in leaf) || leaf.end !== '',
+                { describe: 'an end that is not empty' },
+            ),
+        )
+        const read = Ended.decode({ M: { end: { S: 'b' } } })
+        expect(read).toBeInstanceOf(CodecError)
+        expect((read as CodecError).reason).toMatch(
+            /stand-in must be a value the codec it stands in for can write, and this `lazy` refuses the stand-in: .*an end that is not empty/,
+        )
+        expect((read as CodecError).reason).not.toMatch(/\[object Object\]/)
     })
 })
 
