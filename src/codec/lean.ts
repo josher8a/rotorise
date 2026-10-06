@@ -478,6 +478,11 @@ type Bound = {
     /** The older reader of each `legacy`, a variable of the theorem, keyed by the function. */
     readonly readers: Map<unknown, string>
     /**
+     * The answers of each older reader that the host asked, as a Lean test on the attribute and
+     * the printed answer. The term prints the reader as the variable with these answers pinned.
+     */
+    readonly pins?: ReadonlyMap<unknown, readonly (readonly [string, string])[]>
+    /**
      * Print a fixed function in place of each caller's closure and older reader: the twin of one
      * shape that holds no free function, which the guard reads as it reads the term.
      */
@@ -870,7 +875,7 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
         // evaluation vector would have to run it
         case 'legacy':
             return scope.bound
-                ? `(Term.legacy (${leanTermOfTerm(t.inner, at, scope)}) ${scope.bound.standIn ? '(fun _ => none)' : boundName(scope.bound.readers, t.r, 'r')})`
+                ? `(Term.legacy (${leanTermOfTerm(t.inner, at, scope)}) ${scope.bound.standIn ? '(fun _ => none)' : pinned(scope.bound, t.r)})`
                 : refuse(
                       at,
                       '`Term.legacy` carries `r : Attr → Option Value`, a JS closure: a quantified verdict binds it as a variable, and no evaluation vector prints one',
@@ -1386,6 +1391,209 @@ set_option linter.style.nameCheck false
 namespace Calculus
 
 ${pairs.map(leanDisjoint).join('\n\n')}
+
+end Calculus
+`
+
+/* ── the legacy read gate ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * **An older reader, as the variable of the theorem with the answers of the host pinned.** `Attr`
+ * has no decidable equality, so each pin tests `aeq` at the attribute that the host asked. Any
+ * other attribute goes to the variable, so the claim holds at every reader that gives these answers.
+ */
+const pinned = (bound: Bound, r: unknown): string => {
+    const name = boundName(bound.readers, r, 'r')
+    const pins = bound.pins?.get(r) ?? []
+    return pins.length === 0
+        ? name
+        : `(fun b => ${pins.map(([test, answer]) => `if ${test} then ${answer} else `).join('')}${name} b)`
+}
+
+/**
+ * **A copy of the term whose older readers record each answer.** The copy denotes what the term
+ * denotes: each reader answers as before. A thunk copies to one thunk, so a cycle stays a cycle.
+ */
+const recording = (
+    t: Term,
+    log: Map<unknown, [AttributeValue, unknown][]>,
+    copies: Map<Term, Term> = new Map(),
+): Term => {
+    const known = copies.get(t)
+    if (known !== undefined) return known
+    const copy = (u: Term): Term => recording(u, log, copies)
+    const made = ((): Term => {
+        switch (t.kind) {
+            case 'set':
+                return { ...t, elem: copy(t.elem) }
+            case 'list':
+                return {
+                    ...t,
+                    pre: t.pre.map(copy),
+                    ...(t.spread === undefined
+                        ? {}
+                        : { spread: copy(t.spread) }),
+                    suf: t.suf.map(copy),
+                }
+            case 'held':
+                return { ...t, inner: copy(t.inner), outer: copy(t.outer) }
+            case 'refine':
+                return { ...t, inner: copy(t.inner) }
+            case 'legacy': {
+                const answers = log.get(t.r) ?? []
+                log.set(t.r, answers)
+                const r = t.r
+                return {
+                    ...t,
+                    inner: copy(t.inner),
+                    r: (attribute) => {
+                        try {
+                            const out = r(attribute)
+                            answers.push([attribute, out])
+                            return out
+                        } catch (thrown) {
+                            answers.push([attribute, undefined])
+                            throw thrown
+                        }
+                    },
+                }
+            }
+            case 'lazy': {
+                const get = t.get
+                let forced: Term | undefined
+                return {
+                    ...t,
+                    get: () => {
+                        forced ??= copy(get())
+                        return forced
+                    },
+                }
+            }
+            case 'object':
+                return {
+                    ...t,
+                    body: {
+                        fields: Object.fromEntries(
+                            Object.entries(t.body.fields).map(
+                                ([name, field]) => [
+                                    name,
+                                    { ...field, t: copy(field.t) },
+                                ],
+                            ),
+                        ),
+                        ...(t.body.rest === undefined
+                            ? {}
+                            : { rest: copy(t.body.rest) }),
+                    },
+                }
+            case 'union':
+                return { ...t, options: t.options.map(copy) }
+            default:
+                return t
+        }
+    })()
+    copies.set(t, made)
+    return made
+}
+
+/** One read of a codec with an older reader, addressed by the attribute. */
+export type LegacyRead = {
+    readonly name: string
+    readonly codec: AnyCodec
+    readonly attribute: AttributeValue
+}
+
+/**
+ * **The legacy read gate, as one read.** The host decodes through a copy of the term whose older
+ * readers record each answer. The theorem binds each reader as a variable, and pins the variable
+ * at each attribute that the host asked. A reader that threw, failed, or answered `undefined`
+ * pins to `none`. The model reads the older answer only where the current term writes the answer.
+ */
+export const leanLegacyRead = (one: LegacyRead): string => {
+    const { name, codec, attribute } = one
+    const def = codec.def
+    if ('mark' in def) {
+        return refuse(
+            name,
+            'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
+        )
+    }
+    const log = new Map<unknown, [AttributeValue, unknown][]>()
+    let read: unknown
+    try {
+        read = codecOfTerm(recording(def, log)).decode(attribute as never)
+    } catch (thrown) {
+        read = new CodecError(String(thrown))
+    }
+    const pins = new Map(
+        [...log].map(([r, answers]) => [
+            r,
+            answers.map(
+                ([asked, answer]) =>
+                    [
+                        `aeq ${fuelFor(asked)} b (${leanAttrOf(asked, name)}) = .same`,
+                        failed(answer) || answer === undefined
+                            ? 'none'
+                            : `some (${leanValueOf(answer, name)})`,
+                    ] as const,
+            ),
+        ]),
+    )
+    const bound: Bound = {
+        closures: new Map(),
+        adapters: new Map(),
+        readers: new Map(),
+        pins,
+    }
+    const term = leanTermOf(codec, name, bound)
+    if (bound.closures.size > 0 || bound.adapters.size > 0) {
+        return refuse(
+            name,
+            "a caller's predicate or adapter: the read binds the older readers alone, under `libTable noCallers`",
+        )
+    }
+    const head = [
+        `/-- \`${name}\` — the older reader pinned where \`src/\` asked it -/`,
+        `theorem ${leanIdent(name)} ${leanBinders(bound)} :`,
+    ]
+    return failed(read)
+        ? [
+              ...head,
+              `    (denote (libTable noCallers) (${term})).p`,
+              `      (${leanAttrOf(attribute, name)}) = none := by rfl`,
+          ].join('\n')
+        : [
+              ...head,
+              `    vcheck ${fuelForValue(read)}`,
+              `      ((denote (libTable noCallers) (${term})).p`,
+              `        (${leanAttrOf(attribute, name)}))`,
+              `      (some (${leanValueOf(read, name)})) = .same := by rfl`,
+          ].join('\n')
+}
+
+/** The legacy reads as a module of their own. Generated at gate time and elaborated, never committed. */
+export const leanLegacyReadModule = (reads: readonly LegacyRead[]): string =>
+    `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Lang.Store
+
+/-!
+# The legacy read gate, model against library
+
+**Generated — do not edit.** One theorem per (codec, attribute) pair, ${reads.length} in all. Each
+older reader is a variable of the theorem, pinned at each attribute that \`src/\` asked it. The
+model reads the older answer only where the current term writes the answer, and \`src/\` checks
+the same.
+-/
+
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
+set_option linter.style.nameCheck false
+
+namespace Calculus
+
+${reads.map(leanLegacyRead).join('\n\n')}
 
 end Calculus
 `

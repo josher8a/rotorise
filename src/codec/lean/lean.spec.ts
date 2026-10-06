@@ -63,6 +63,7 @@ import type {
     DisjointPair,
     Dissection,
     ItemRead,
+    LegacyRead,
     ReadResolution,
     ReadVerdict,
     Refusal,
@@ -79,6 +80,8 @@ import {
     leanFormerGuard,
     leanGuard,
     leanItemReadResolution,
+    leanLegacyRead,
+    leanLegacyReadModule,
     leanReadModule,
     leanReadResolution,
     leanReadVector,
@@ -2033,6 +2036,159 @@ describe('union resolution, model against library', () => {
         expect(module).toContain('import Calculus.Bridge.Vectors')
         expect(module).toContain('461 on the read side')
         expect(module).toContain('vcheck')
+    })
+})
+
+/**
+ * The codecs whose older reader the legacy read gate reaches.
+ *
+ * `literal_A` reads `A` at `N 1` and `B` at `N 2` from its older reader, and the current literal
+ * writes `A` alone: the gate reads the first answer and refuses the second. `nested_A` puts the
+ * gate under an object. `throws` and `undefined_reader` give no answer. The corpus adds its three
+ * codecs with an older reader. `older_o` is the generated pool's older reader, which answers `'o'`
+ * at every attribute, put over each codec of the corpus.
+ */
+const legacyCodecs = (): readonly (readonly [string, AnyCodec])[] => {
+    const literalA = erase(
+        withLegacyRead({
+            current: string('A'),
+            older: {
+                decode: ((attribute: AttributeValue) =>
+                    'N' in attribute && attribute.N === '1'
+                        ? 'A'
+                        : 'N' in attribute && attribute.N === '2'
+                          ? 'B'
+                          : new CodecError('no older encoding')) as never,
+            },
+        }),
+    )
+    return [
+        ['literal_A', literalA],
+        ['nested_A', erase(object({ f: literalA, g: string }))],
+        [
+            'throws',
+            erase(
+                withLegacyRead({
+                    current: string,
+                    older: {
+                        decode: (() => {
+                            throw new Error('older')
+                        }) as never,
+                    },
+                }),
+            ),
+        ],
+        [
+            'undefined_reader',
+            erase(
+                withLegacyRead({
+                    current: string,
+                    older: { decode: (() => undefined) as never },
+                }),
+            ),
+        ],
+        ['migrated_string', migratedString],
+        ['shared_legacy', sharedLegacy],
+        ['legacy_decimal_rest_number', legacyDecimalRestNumber],
+        ...sampleVectors.map(
+            (v) =>
+                [
+                    `older_o_${v.name}`,
+                    erase(
+                        withLegacyRead({
+                            current: v.codec as never,
+                            older: { decode: () => 'o' as never },
+                        }),
+                    ),
+                ] as const,
+        ),
+    ]
+}
+
+/**
+ * Every (legacy codec, attribute) pair: the attributes that the corpus writes, and raw shapes at
+ * which the probed older readers answer. Bounded by the emitter, as the read verdicts are.
+ */
+const legacyReads = (): readonly LegacyRead[] => {
+    const attributes: [string, AttributeValue][] = []
+    for (const v of sampleVectors) {
+        try {
+            attributes.push([
+                v.name,
+                v.codec.unsafeEncode(v.value as never) as AttributeValue,
+            ])
+        } catch {
+            // a value its own codec refuses writes no attribute to read back
+        }
+    }
+    attributes.push(['raw_S_A', { S: 'A' } as AttributeValue])
+    attributes.push(['raw_S_B', { S: 'B' } as AttributeValue])
+    attributes.push(['raw_N_1', { N: '1' } as AttributeValue])
+    attributes.push(['raw_N_2', { N: '2' } as AttributeValue])
+    attributes.push(['raw_BOOL', { BOOL: true } as AttributeValue])
+    attributes.push([
+        'raw_M_f1',
+        { M: { f: { N: '1' }, g: { S: 'q' } } } as AttributeValue,
+    ])
+    attributes.push([
+        'raw_M_f2',
+        { M: { f: { N: '2' }, g: { S: 'q' } } } as AttributeValue,
+    ])
+    const out: LegacyRead[] = []
+    for (const [cn, codec] of legacyCodecs()) {
+        for (const [an, attribute] of attributes) {
+            const one = { name: `lr_${cn}__${an}`, codec, attribute }
+            try {
+                leanLegacyRead(one)
+            } catch (error) {
+                if (error instanceof LeanUnemittable) continue
+                throw error
+            }
+            out.push(one)
+        }
+    }
+    return out
+}
+
+describe('the legacy read gate, against the model', () => {
+    /**
+     * **An older answer is read only where the current codec writes the answer.** The host checks
+     * the answer of the older reader against the current codec, and the model's `extendRead` reads
+     * the answer only where the current term writes the answer. Each row pins the reader at the
+     * attributes that the host asked, and leaves every other attribute to the variable.
+     */
+    it('reads an older answer only where the current codec writes it', () => {
+        const byName = new Map(
+            legacyReads().map((one) => [one.name, one] as const),
+        )
+        const stated = (name: string) =>
+            leanLegacyRead(byName.get(name) as LegacyRead)
+        // the older reader answers `A`, which the current literal writes
+        expect(stated('lr_literal_A__raw_N_1')).toContain('vcheck')
+        expect(stated('lr_nested_A__raw_M_f1')).toContain('vcheck')
+        // the older reader answers `B`, which the current literal cannot write
+        expect(stated('lr_literal_A__raw_N_2')).toContain(') = none := by rfl')
+        expect(stated('lr_nested_A__raw_M_f2')).toContain(') = none := by rfl')
+        // a reader that throws or answers nothing pins to `none`
+        expect(stated('lr_throws__raw_N_1')).toContain('then none else r0 b')
+        expect(stated('lr_undefined_reader__raw_N_1')).toContain(
+            'then none else r0 b',
+        )
+        // the current read answers first, and the host asks the older reader nothing
+        expect(stated('lr_literal_A__raw_S_A')).toContain(
+            '(Term.legacy (Term.literal GroundKind.string "A") r0)',
+        )
+    })
+
+    it('emits them for the gate to elaborate', () => {
+        const reads = legacyReads()
+        expect(reads.length).toBe(2400)
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.legacyreads.lean'),
+                leanLegacyReadModule(reads),
+            )
+        }
     })
 })
 

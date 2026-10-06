@@ -13,6 +13,7 @@ tsconfig.tsbuildinfo
 /formal/.resolutions.lean
 /formal/.readvectors.lean
 /formal/.disjoints.lean
+/formal/.legacyreads.lean
 # the generated pool: the pre-check and the kernel vectors
 /formal/.pool.eval.lean
 /formal/.pool.disjoints.lean
