@@ -483,8 +483,8 @@ const refusedAt = (refusal: CodecError): AnyCodec => {
  * does not require knowing what writes it, and that is what `at` is most often for. Only the codec
  * half is missing, so only the codec half fails.
  *
- * It says **`never`**, the term that admits no value, and that is what this is: both halves throw,
- * so no value is written and no attribute is read. It used to be a `Def` kind of its own called
+ * It says **`never`**, the term that admits no value, and that is what this is: both halves return
+ * the refusal, so no value is written and no attribute is read. It used to be a `Def` kind of its own called
  * `branch`, so a definition language for codecs contained an entry that was not a codec and every
  * reader had to know about it; and it used to carry no definition at all, which stopped being
  * available when `def` became required. It then said `custom`, a pair of functions with no
@@ -494,18 +494,12 @@ const refusedAt = (refusal: CodecError): AnyCodec => {
  * they said nothing at a missing definition, and `accepts` declines to claim instead of reaching
  * the same `false` by catching.
  */
-const unresolvedAt = (path: string): AnyCodec => {
-    const unresolved = () => {
-        throw new CodecError(
+const unresolvedAt = (path: string): AnyCodec =>
+    refusedAt(
+        new CodecError(
             `'${path}' is declared differently in different variants, so this path cannot say which codec to encode with. Reach for the variant you mean — \`variant(...)\` is an item codec with its own \`at\` — or narrow the entity so only one variant declares it.`,
-        )
-    }
-    return codec<never, AttributeValue>({
-        def: { kind: 'never' },
-        encode: unresolved,
-        decode: unresolved,
-    })
-}
+        ),
+    )
 
 /** A map of attribute name to codec — what `item`, `map` and each `tagged` variant hold. */
 export type Attributes = Readonly<Record<string, AnyCodec>>

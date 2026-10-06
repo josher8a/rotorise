@@ -33,6 +33,20 @@ describe('where the variants disagree', () => {
         expect(() => ambiguous.unsafeEncode('1.5')).toThrow(CodecError)
     })
 
+    it('is a refusal that the safe halves return, not a throw', () => {
+        const ambiguous = Entity.at((p) => p.op.amount)
+        const written = ambiguous.encode('1.5')
+        const read = ambiguous.decode({ S: '1.5' })
+        expect(written).toBeInstanceOf(CodecError)
+        expect(read).toBeInstanceOf(CodecError)
+        expect(String(written)).toMatch(
+            /declared differently in different variants/,
+        )
+        expect(String(read)).toMatch(
+            /declared differently in different variants/,
+        )
+    })
+
     it('says where to go instead', () => {
         expect(() => Entity.at((p) => p.op.amount).unsafeEncode('1.5')).toThrow(
             /Reach for the variant you mean — `variant\(\.\.\.\)` is an item codec with its own `at`/,
