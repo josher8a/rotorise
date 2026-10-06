@@ -9,12 +9,17 @@
 import { describe, expect, it } from 'vitest'
 import {
     array,
+    CodecError,
+    decimal,
     discriminatedUnion,
+    dynamoNumber,
     list,
     number,
     object,
     optional,
+    refine,
     string,
+    withLegacyRead,
 } from '../../codec'
 
 const Delivery = object({
@@ -154,5 +159,40 @@ describe('a codec at a path', () => {
         const _wrongScalar = () => index.unsafeEncode('1')
 
         expect(located.path()).toBe('fulfilment.legs[1].deliveredAt')
+    })
+})
+
+/**
+ * **A path stops at a refinement and at an older reading.** A predicate reads the whole value, and
+ * a write at a path writes one part of the value, so the write cannot keep the predicate. An older
+ * encoding has another shape, which a path inside the attribute does not address.
+ */
+describe('a path that crosses a whole-value adapter', () => {
+    it('a path that crosses a refinement is refused, because a path write cannot keep the predicate', () => {
+        const Account = object({
+            a: refine(
+                object({ x: dynamoNumber }),
+                (v): v is { x: typeof v.x } => !v.x.digits.startsWith('-'),
+                { describe: 'a balance that is not negative' },
+            ),
+        }).item
+        expect(() => Account.at((p) => p.a.x)).toThrow(CodecError)
+        expect(() => Account.at((p) => p.a.x)).toThrow(
+            /a path cannot go into `refine` at 'x'/,
+        )
+        // the refined attribute itself is a path, and its codec keeps the predicate
+        expect(Account.at((p) => p.a).path()).toBe('a')
+    })
+
+    it('a path that crosses an older reading is refused, because a path addresses the current shape only', () => {
+        const Migrated = object({
+            a: withLegacyRead({
+                current: object({ x: decimal }),
+                older: { decode: () => ({ x: '0' }) },
+            }),
+        }).item
+        expect(() => Migrated.at((p) => p.a.x)).toThrow(
+            /a path cannot go into `withLegacyRead` at 'x'/,
+        )
     })
 })

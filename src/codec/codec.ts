@@ -418,9 +418,16 @@ const childrenOf = (
                 def.options.map((option) => codecOfTerm(option)),
                 segment,
             )
+        // **A path stops at an adapter that reads the whole value.** A write at a path writes one
+        // part of the attribute, and the attribute is checked as a whole nowhere on that write
         case 'refine':
+            throw new CodecError(
+                `a path cannot go into \`refine\` at '${segment}': the predicate reads the whole value, and a write at the path writes one part of the value without the predicate. Address the refined attribute itself`,
+            )
         case 'legacy':
-            return childrenOf(codecOfTerm(def.inner), segment)
+            throw new CodecError(
+                `a path cannot go into \`withLegacyRead\` at '${segment}': an older encoding of the attribute has another shape, and a path addresses the current shape only. Address the attribute itself`,
+            )
         case 'lazy': {
             let resolved: Term
             try {
@@ -1116,8 +1123,8 @@ type IsNeverSlot<D> = [D] extends [{ readonly [optionalMarker]: true }]
  *
  * The spread is not asked, because the spread is not a slot: a value of exactly the declared
  * length omits every spread position, so a spread at the bottom is the list of its declared
- * positions and that is a value. `Term.listOf` normalises the declared positions for the same
- * reason and leaves the spread alone.
+ * positions and that is a value. The model's `Term.list` admits a value of exactly the declared
+ * length for the same reason, so a spread at `never` leaves its held set non-empty.
  */
 type ListNeverSlot<Cs extends readonly unknown[]> = Cs extends readonly [
     infer H,
@@ -1205,7 +1212,8 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
      *
      * The **spread** is not asked, and that is the rule rather than an omission: a value of
      * exactly the declared length omits every spread position, so `list(spread(never))` is the
-     * empty list and the empty list is a value. `Term.listOf` draws the same line.
+     * empty list and the empty list is a value. The model's `Term.list` draws the same line: a
+     * spread position exists only past the declared length.
      */
     const deadAt = declared.findIndex((item) => termOf(item).kind === 'never')
     if (deadAt !== -1) {
