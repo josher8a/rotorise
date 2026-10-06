@@ -99,6 +99,12 @@ theorem nesting_deepA : ∀ n, Attr.nesting (deepA n) = n
     show max (Attr.nesting (deepA n)) 0 + 1 = n + 1
     rw [nesting_deepA n]; simp
 
+/-- The witness holds no numeral, so the numeral half of the store gate admits it at every
+    index. -/
+theorem numeralsStored_deepA : ∀ n, Attr.numeralsStored (deepA n) = true
+  | 0 => rfl
+  | n + 1 => (Bool.and_true _).trans (numeralsStored_deepA n)
+
 /-- Every one of them is derivable. -/
 theorem typed_deepT : ∀ n, ∃ T μ, Typed α (deepT n) T μ
   | 0 => ⟨_, _, Typed.base .string⟩
@@ -170,7 +176,7 @@ theorem storeCodec_writes_deep :
   rw [storeCodec, Alg.refine2_e_def]
   simp only [if_true]
   rw [deepT_e]
-  simp [isStorable, nesting_deepA]
+  simp [isStorable, nesting_deepA, numeralsStored_deepA]
 
 end Calculus.DynamoDB
 
