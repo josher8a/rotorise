@@ -145,6 +145,35 @@ describe('an open object entry', () => {
             current: 'v1',
         })
     })
+
+    // The type admits each declaration below, so the refusal at construction is the only gate. An
+    // object holds one codec per name and one open block: a second declaration would replace the
+    // first one, and the item would read and write with a codec that the caller did not see last
+    it('refuses a name declared twice, because the later declaration would replace the earlier one', () => {
+        expect(() => object({ a: string }, [string('a'), scalar])).toThrow(
+            /'a' is declared more than once/,
+        )
+        expect(() =>
+            object([string('a'), string], [string('a'), optional(string)]),
+        ).toThrow(/'a' is declared more than once/)
+    })
+
+    it('refuses a second open entry, because the second wildcard would replace the first', () => {
+        expect(() =>
+            object([string, optional(string)], [string, optional(scalar)]),
+        ).toThrow(/an object has at most one open key entry/)
+    })
+
+    it('refuses a refined entry key, because an object block is keyed by all strings or by named keys', () => {
+        expect(() =>
+            object([
+                refine(string, (key: string): key is string => key !== ''),
+                optional(string),
+            ]),
+        ).toThrow(
+            /an object entry key must be `string` or a string literal key set/,
+        )
+    })
 })
 
 describe('a strict object', () => {
