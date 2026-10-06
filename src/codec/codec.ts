@@ -1604,9 +1604,9 @@ const underDecision: (() => void)[][] = []
  * attribute existed. Replaces `item.channel ?? 'IN_STORE'` at every read site.
  *
  * **The stand-in must be writable by the codec it stands in for**, and that is checked here, at the
- * declaration. §3 `(withLegacyRead)` carries it as a premise, `ObligationsField`'s `.req` row, and it
- * exists because the proof failed without it: a row missing the attribute reads back as the
- * stand-in, and if the inner codec cannot write that value the item cannot be written back —
+ * declaration. The model carries it as the premise `hfill` of `carrier_objectCodec`: the stand-in of a
+ * `.fill` slot is in the write domain of its codec. The premise exists because the proof failed
+ * without it: a row missing the attribute reads back as the stand-in, and if the inner codec cannot write that value the item cannot be written back —
  * **(C)** broken at the read, with the refusal surfacing on some later write rather than at the
  * declaration responsible for it. `withLegacyRead({ current: string('A'), whenMissing: 'B' })` is the whole of it.
  *
