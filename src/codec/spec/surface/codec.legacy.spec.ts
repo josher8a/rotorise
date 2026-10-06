@@ -333,6 +333,63 @@ describe('a stand-in for a recursive codec', () => {
     })
 })
 
+/**
+ * **Two thunks under resolution.** The first use forces `Tree`, and `Tree`'s union forces `Branch`.
+ * The stand-in check forces `Tree`, so the check waits on `Branch`. When `Branch` resolves, `Tree`
+ * still resolves, so the check waits again on `Tree`.
+ */
+describe('a stand-in check waits for every thunk under resolution, the outer ones too', () => {
+    type Tree = { end: string } | Branch
+    type Branch = { name: string; next: Tree }
+
+    it('a writable stand-in encodes, decodes, and fills a missing attribute', () => {
+        const Tree: AttributeCodec<Tree> = lazy(() =>
+            union([object({ end: string }), Branch]),
+        )
+        const Branch: AttributeCodec<Branch> = lazy(() =>
+            object({
+                name: string,
+                next: withLegacyRead({
+                    current: Tree,
+                    whenMissing: { end: 'x' },
+                }),
+            }),
+        )
+        const value: Tree = { name: 'a', next: { end: 'b' } }
+        const written = Tree.encode(value)
+        expect(written).not.toBeInstanceOf(CodecError)
+        expect(Tree.decode(written as AttributeValue)).toEqual(value)
+        expect(Tree.decode({ M: { name: { S: 'a' } } })).toEqual({
+            name: 'a',
+            next: { end: 'x' },
+        })
+    })
+
+    it('an unwritable stand-in refuses at first use, and names the reason', () => {
+        const Tree: AttributeCodec<Tree> = lazy(() =>
+            refine(
+                union([object({ end: string }), Branch]),
+                (tree): tree is Tree => !('end' in tree) || tree.end !== '',
+                { describe: 'an end that is not empty' },
+            ),
+        )
+        const Branch: AttributeCodec<Branch> = lazy(() =>
+            object({
+                name: string,
+                next: withLegacyRead({
+                    current: Tree,
+                    whenMissing: { end: '' },
+                }),
+            }),
+        )
+        const written = Tree.encode({ end: 'b' })
+        expect(written).toBeInstanceOf(CodecError)
+        expect((written as CodecError).reason).toMatch(
+            /stand-in must be a value the codec it stands in for can write, and this `lazy` refuses the stand-in: .*an end that is not empty/,
+        )
+    })
+})
+
 describe('an attribute written in an older encoding', () => {
     it('reads the current one', () => {
         expect(
