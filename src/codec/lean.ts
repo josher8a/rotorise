@@ -56,7 +56,7 @@ import type { AttributeValue } from './attribute'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, LiteralValue, ObjectSlot } from './codec'
 import { union } from './codec'
-import { accepts, assignmentOf, readsBack } from './denote'
+import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
 import { CodecError, failed } from './result'
 import type {
     Alternatives,
@@ -1631,15 +1631,84 @@ ${slices.map(leanSlice).join('\n\n')}
 end Calculus
 `
 
-/** One read verdict, as a Lean `theorem`; `src/`'s answer is taken by running `decode`. */
+/**
+ * One read verdict, as a Lean `theorem`; `src/`'s answer is taken by running `decode`.
+ *
+ * **A caller's predicate at the top is a variable `q0` of the theorem.** The model's `refine` row
+ * reads the attribute with the inner term, then applies `q0` to the value read. Where the inner
+ * term refuses, the verdict is `false` at every `q0`. Where the inner term reads `v`, the theorem
+ * assumes `q0 v` equals the answer of the caller's closure at the value that the host read. The
+ * kernel then checks that the model applies `q0` at that value, and that `decode` answers the same.
+ * A caller's predicate below the top is refused, because the emitter computes the value that the
+ * predicate reads at the top only. A caller's adapter and an older reader are refused, because the
+ * row reads under `libTable noCallers`.
+ */
 export const leanReadVerdict = (one: ReadVerdict): string => {
     const { name, codec, attribute } = one
     const decodes = readsBack(codec, attribute)
-    return [
+    const bound: Bound = {
+        closures: new Map(),
+        adapters: new Map(),
+        readers: new Map(),
+    }
+    const head = [
         `/-- \`${name}\` — \`src/\` ${decodes ? 'decodes' : 'refuses'} this attribute -/`,
-        `theorem ${leanIdent(name)} :`,
-        `    AdmA (libTable noCallers) (${leanTermOf(codec, name)})`,
-        `      (${leanAttrOf(attribute, name)}) = ${decodes} := rfl`,
+        `    AdmA (libTable noCallers) (${leanTermOf(codec, name, bound)})`,
+        `      (${leanAttrOf(attribute, name)}) = ${decodes}`,
+    ] as const
+    if (bound.adapters.size > 0 || bound.readers.size > 0) {
+        return refuse(
+            name,
+            "a caller's adapter or older reader: the read row reads under `libTable noCallers`, which names no caller",
+        )
+    }
+    if (bound.closures.size === 0) {
+        return [
+            head[0],
+            `theorem ${leanIdent(name)} :`,
+            head[1],
+            `${head[2]} := rfl`,
+        ].join('\n')
+    }
+    const def = codec.def
+    const inner =
+        !('mark' in def) && def.kind === 'refine' && def.q.kind === 'closure'
+            ? { term: def.inner, holds: def.q.q.is }
+            : undefined
+    // the inner term must print no closure, so the theorem binds the top predicate alone
+    const below: Bound = {
+        closures: new Map(),
+        adapters: new Map(),
+        readers: new Map(),
+    }
+    if (inner !== undefined) {
+        leanTermOfTerm(inner.term, name, {
+            ...topScope(inner.term),
+            bound: below,
+        })
+    }
+    if (inner === undefined || below.closures.size > 0) {
+        return refuse(
+            name,
+            "a caller's predicate below the top: the emitter computes the value that the predicate reads at the top only",
+        )
+    }
+    const read: unknown = codecOfTerm(inner.term).decode(attribute as never)
+    if (failed(read)) {
+        return [
+            head[0],
+            `theorem ${leanIdent(name)} (q0 : Value → Bool) :`,
+            head[1],
+            `${head[2]} := by rfl`,
+        ].join('\n')
+    }
+    const v = leanValueOf(read, name)
+    const answer = inner.holds(read as never)
+    return [
+        head[0],
+        `theorem ${leanIdent(name)} (q0 : Value → Bool) (h0 : q0 (${v}) = ${answer}) :`,
+        head[1],
+        `${head[2]} := show q0 (${v}) = ${answer} from h0`,
     ].join('\n')
 }
 

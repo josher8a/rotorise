@@ -80,6 +80,7 @@ import {
     leanReadResolution,
     leanReadVector,
     leanReadVectorModule,
+    leanReadVerdict,
     leanResolutionModule,
     leanSeparation,
     leanSeparationModule,
@@ -1617,6 +1618,25 @@ const disjointPairs = (): readonly DisjointPair[] => {
 }
 
 /**
+ * **The two read decisions that no other row reaches**: a refinement and the bottom.
+ *
+ * A refinement reads with the inner codec, then asks the predicate. The rows carry the shipped
+ * `isNumeral`, and a caller's predicate, which the theorem binds as a variable. The bottom reads
+ * nothing, so each row puts `never` at a position that a read reaches.
+ *
+ * The shipped `isStoredNumeral` has no row. The emitter prints `isStoredNumeral` as the model's
+ * `isStored`, which decides a `.num`. The inner term reads a `.str`, so the model refuses each
+ * stored numeral that `decode` reads.
+ */
+const readDecisions: readonly (readonly [string, AnyCodec])[] = [
+    ['refine_string_isNumeral', erase(refine(string, isNumeral as never))],
+    ['refine_string_caller', erase(refine(string, nonEmpty))],
+    ['never', erase(never)],
+    ['array_never', erase(array(never))],
+    ['object_optional_never', erase(object({ a: optional(never) }))],
+]
+
+/**
  * Every (codec, attribute) pair the corpus offers, for the read-side differential.
  *
  * The attributes are what the corpus actually *writes*, plus six raw shapes for the members no
@@ -1627,6 +1647,7 @@ const readVerdicts = (): readonly ReadVerdict[] => {
     const codecs: readonly (readonly [string, AnyCodec])[] = [
         ...sampleVectors.map((v) => [v.name, v.codec] as const),
         ['scalar_number', erase(dynamoNumber)] as const,
+        ...readDecisions,
     ]
     const attributes: [string, AttributeValue][] = []
     for (const v of sampleVectors) {
@@ -1645,21 +1666,23 @@ const readVerdicts = (): readonly ReadVerdict[] => {
     attributes.push(['raw_NULL', { NULL: true } as AttributeValue])
     attributes.push(['raw_L_empty', { L: [] } as AttributeValue])
     attributes.push(['raw_M_empty', { M: {} } as AttributeValue])
+    // an attribute that each predicate of `readDecisions` admits, and one that each refuses
+    attributes.push(['raw_S_numeral', { S: '12' } as AttributeValue])
+    attributes.push(['raw_S_empty', { S: '' } as AttributeValue])
+    attributes.push(['raw_L_string', { L: [{ S: 'x' }] } as AttributeValue])
+    attributes.push(['raw_M_a', { M: { a: { S: 'x' } } } as AttributeValue])
 
     const out: ReadVerdict[] = []
     for (const [cn, codec] of codecs) {
-        try {
-            leanTermOf(codec, cn)
-        } catch {
-            continue
-        }
         for (const [an, attribute] of attributes) {
+            const one = { name: `${cn}__reads__${an}`, codec, attribute }
             try {
-                leanAttrOf(attribute, an)
-            } catch {
-                continue
+                leanReadVerdict(one)
+            } catch (error) {
+                if (error instanceof LeanUnemittable) continue
+                throw error
             }
-            out.push({ name: `${cn}__reads__${an}`, codec, attribute })
+            out.push(one)
         }
     }
     return out
@@ -1865,9 +1888,9 @@ describe("the read side, against the model's read row", () => {
      * a concrete numeral by `rfl`, so the filter excluded pairs the row answers. The filter is
      * deleted, and the three are theorems in `.readverdicts.lean` like every other pair.
      */
-    it('offers 2156 pairs, and asserts every one', () => {
+    it('offers 2597 pairs, and asserts every one', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(2156)
+        expect(verdicts.length).toBe(2597)
         const module = leanReadModule(verdicts)
         for (const name of [
             'scalar_number__reads__scalar_decimal',
@@ -1876,6 +1899,33 @@ describe("the read side, against the model's read row", () => {
         ]) {
             expect(module).toContain(`theorem ${name} :`)
         }
+    })
+
+    /**
+     * **A refinement and the bottom each reach the kernel on the read side.** A refinement reads
+     * only where its predicate admits the value read, and `never` reads no attribute. Each row
+     * below holds an attribute that the host reads or one that the host refuses. A caller's
+     * predicate is a variable, and the theorem assumes the answer of the closure at the value read.
+     */
+    it('states the read of a refinement and of the bottom, both ways', () => {
+        const module = leanReadModule(readVerdicts())
+        for (const name of [
+            'refine_string_isNumeral__reads__raw_S_numeral',
+            'refine_string_isNumeral__reads__raw_S',
+            'refine_string_caller__reads__raw_S',
+            'refine_string_caller__reads__raw_S_empty',
+            'refine_string_caller__reads__raw_N',
+            'never__reads__raw_S',
+            'array_never__reads__raw_L_empty',
+            'array_never__reads__raw_L_string',
+            'object_optional_never__reads__raw_M_empty',
+            'object_optional_never__reads__raw_M_a',
+        ]) {
+            expect(module).toContain(`theorem ${name} `)
+        }
+        expect(module).toContain(
+            'theorem refine_string_caller__reads__raw_S_empty (q0 : Value → Bool) (h0 : q0 (Value.str "") = false) :',
+        )
     })
 
     it('emits them for the gate to elaborate', () => {
@@ -1887,7 +1937,7 @@ describe("the read side, against the model's read row", () => {
         }
         const module = leanReadModule(readVerdicts())
         expect(module).toContain('import Calculus.Dynamo.Lang.Store')
-        expect(module).toContain('All 2156 pairs are asserted here.')
+        expect(module).toContain('All 2597 pairs are asserted here.')
     })
 })
 
