@@ -227,7 +227,10 @@ describe('the product distributes over a union', () => {
 })
 
 describe('the variadic product', () => {
-    /** The fold is left, and `merge_assoc` on `fields` and `rest` is why the other nesting agrees. */
+    /**
+     * The fold is left. The model proves the name set associative (`Body.merge_fields_assoc`) and
+     * the rest empty (`Body.merge_wild`). No declaration proves the term of the other nesting equal.
+     */
     it('folds left, and both nestings give the same term', () => {
         const a = object({ a: string })
         const b = object({ b: boolean })
