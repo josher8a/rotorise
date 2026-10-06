@@ -84,6 +84,28 @@ describe('an open type', () => {
         ).not.toThrow()
     })
 
+    it('a patch writes a name that the open entry admits', () => {
+        const patch = Meta.encodePartial({ holdId: 'lock-2', expiresIn: 60 })
+        expect(patch).toEqual({
+            holdId: { S: 'lock-2' },
+            expiresIn: { N: '60' },
+        })
+        // the patch writes each name as the whole item writes it
+        const whole = Meta.unsafeEncode({
+            ...meta,
+            holdId: 'lock-2',
+            expiresIn: 60,
+        })
+        expect(patch).toEqual({
+            holdId: whole.holdId,
+            expiresIn: whole.expiresIn,
+        })
+        // and through the open entry's codec, which refuses what that codec refuses
+        expect(Meta.encodePartial({ holdId: [] as never })).toBeInstanceOf(
+            CodecError,
+        )
+    })
+
     it('decodes an attribute no version of the code has ever seen', () => {
         const fromTheFuture = {
             ...Meta.unsafeEncode(meta),

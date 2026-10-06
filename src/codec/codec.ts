@@ -3019,11 +3019,13 @@ const objectFromMap = <
             for (const name in held) {
                 const value = held[name]
                 if (value === undefined) continue
-                const field = fields[name]
-                if (!field) {
+                // a name the spec does not declare is written through the open entry, as `encode`
+                // writes it
+                const term = fields[name]?.t ?? declaredBody.rest
+                if (!term) {
                     return new CodecError(`'${name}' is not an attribute`)
                 }
-                const written = codecOfTerm(field.t).encode(value as never)
+                const written = codecOfTerm(term).encode(value as never)
                 if (failed(written)) return written.under(name)
                 out[name] = written
             }
