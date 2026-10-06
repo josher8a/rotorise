@@ -74,6 +74,7 @@ import {
     leanAttrOf,
     leanDisjoint,
     leanDisjointModule,
+    leanFormerGuard,
     leanGuard,
     leanReadModule,
     leanReadResolution,
@@ -91,6 +92,8 @@ import {
     readVectorIsUnstatable,
 } from '../lean'
 import { CodecError, orThrow } from '../result'
+import type { Term } from '../term'
+import { RecursionRefused } from '../term'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
@@ -1971,6 +1974,60 @@ describe("the declaration guard, against the model's classifier", () => {
         expect(leanSeparationModule([])).toContain(
             'import Calculus.Dynamo.Lang.Store',
         )
+    })
+
+    /**
+     * **A term that a former refuses reaches no union, so its guard verdict is a vector alone.** The
+     * refusal carries the term, and the vector states that the model's guard refuses the term too.
+     * A term that the host's guard accepts gets no vector, because the vector would state a refusal
+     * that the host does not make.
+     */
+    it('the guard that a former refuses with is stated in the kernel', () => {
+        const refusedTerm = (make: () => unknown): Term => {
+            try {
+                make()
+            } catch (thrown) {
+                if (thrown instanceof RecursionRefused) return thrown.term
+                throw thrown
+            }
+            throw new Error('expected the former to refuse, and it did not')
+        }
+        const undeclared = lazy((): never => {
+            throw new ReferenceError('a codec not yet declared')
+        })
+        const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
+        const closed = leanFormerGuard({
+            name: 'closed',
+            term: refusedTerm(() =>
+                held(undeclared as never, string as never, same as never),
+            ),
+        })
+        expect(closed).toContain(
+            'Alg.Term.guarded (Term.mu ((Term.held false (Term.var 0) (Term.string) (.caller 0, false) []))) = false :=\n  by decide',
+        )
+        const quantified = leanFormerGuard({
+            name: 'quantified',
+            term: refusedTerm(() =>
+                withLegacyRead({
+                    current: undeclared as never,
+                    older: { decode: () => 'o' as never },
+                }),
+            ),
+        })
+        expect(quantified).toContain(
+            [
+                'theorem quantified (r0 : Attr → Option Value) :',
+                '    Alg.Term.guarded (Term.mu ((Term.legacy (Term.var 0) r0))) = false :=',
+                '  (Alg.guarded_of_sameShape _ (Term.mu ((Term.legacy (Term.var 0) (fun _ => none)))) (by rfl)).trans (by decide)',
+            ].join('\n'),
+        )
+        const tree: AnyCodec = erase(
+            object({ v: string, kids: array(lazy(() => tree as never)) }),
+        )
+        expect(
+            refusal(() => leanFormerGuard({ name: 'accepted', term: tree.def }))
+                .at,
+        ).toBe('accepted')
     })
 
     /**

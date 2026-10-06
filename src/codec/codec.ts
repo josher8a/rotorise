@@ -4818,17 +4818,14 @@ export const union = <const Options extends readonly AnyCodec[]>(
     // being declared
     for (const [at, declared] of (options as readonly AnyCodec[]).entries()) {
         const use = recursionUse(termOf(declared))
-        if (use === 2) {
+        // each former refuses an adapter on a recursive path where the adapter is declared, so an
+        // adapter reaches the union only as the refusal of a thunk that the union forces, and the
+        // level `3` names that cause
+        if (use >= 2) {
             throw new CodecError(
-                `option ${at + 1} of this union reaches a thunk that is recursive, or that names a codec not yet declared, where the union must read it. The model's guard refuses a recursion that reads the input of its own binder, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
-            )
-        }
-        // **An adapter on a recursive path is refused as well.** The model's guard refuses a
-        // `held` or a `withLegacyRead` between a binder and its variable, because caller code
-        // makes the input of the inner term, and a container on the path then bounds nothing
-        if (use === 3) {
-            throw new CodecError(
-                `option ${at + 1} of this union holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive thunk and the codec that the thunk returns, or above a thunk that names a codec not yet declared. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion, and this option is not shown compatible with the others. Put no adapter on the path of a recursion`,
+                use === 3
+                    ? `option ${at + 1} of this union reaches a thunk whose codec holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive thunk and the codec that the thunk returns, or above a thunk that names a codec not yet declared, and the declaration of that codec refused. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion, and this option is not shown compatible with the others. Put no adapter on the path of a recursion`
+                    : `option ${at + 1} of this union reaches a thunk that is recursive, or that names a codec not yet declared, where the union must read it. The model's guard refuses a recursion that reads the input of its own binder, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
             )
         }
     }

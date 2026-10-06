@@ -18,6 +18,7 @@ tsconfig.tsbuildinfo
 /formal/.pool.disjoints.lean
 /formal/.pool.separations.lean
 /formal/.pool.slices.lean
+/formal/.pool.guards.lean
 
 # local tarballs for installing into consuming repos before a release
 .pack/

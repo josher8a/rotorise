@@ -1020,6 +1020,13 @@ export const recursionUse = (root: Term): number => {
             case 'lazy': {
                 const target = forceDeclared(t)
                 if (target === undefined) return pathUse(on)
+                // the free variable refuses at `2` or above, and an adapter in the term of the
+                // thunk is the cause of the refusal, which the level `3` names. The level changes
+                // no verdict: a free variable that reads `1` keeps `1`
+                if (target instanceof RecursionRefused) {
+                    const use = pathUse(on)
+                    return use < 2 ? use : Math.max(use, target.use)
+                }
                 const at = on.indexOf(target)
                 return at === -1 ? next(target) : pathUse(on.slice(at))
             }
@@ -1051,18 +1058,36 @@ export const recursionUse = (root: Term): number => {
 }
 
 /**
+ * **The refusal of a former whose term the model's guard refuses.** The refusal carries the term,
+ * so a checker states the model's guard on the term that the host refused. The refusal carries the
+ * level of {@link recursionUse}, so a walk that forces the thunk reads the cause.
+ */
+export class RecursionRefused extends CodecError {
+    readonly term: Term
+    readonly use: 2 | 3
+
+    constructor(term: Term, use: 2 | 3, reason: string) {
+        super(reason)
+        this.term = term
+        this.use = use
+    }
+}
+
+/**
  * The term of a thunk that the walk of {@link recursionUse} forces, or nothing where {@link force}
  * answers nothing or the thunk throws a {@link CodecError}. **A former refuses inside a thunk where
  * the name it reads is in progress**: `lazy(() => nullable(Self))` refuses while `Self` resolves,
  * and resolves once `Self` is declared. The throw leaves no mark, so a later force retries. So the
- * walk reads the refusal as the free variable that a thunk in the temporal dead zone is.
+ * walk reads the refusal as the free variable that a thunk in the temporal dead zone is. A
+ * {@link RecursionRefused} returns itself, so the walk reads its level.
  */
 const forceDeclared = (
     t: Term & { readonly kind: 'lazy' },
-): Term | undefined => {
+): Term | RecursionRefused | undefined => {
     try {
         return force(t)
     } catch (thrown) {
+        if (thrown instanceof RecursionRefused) return thrown
         if (thrown instanceof CodecError) return undefined
         throw thrown
     }
