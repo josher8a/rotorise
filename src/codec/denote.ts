@@ -56,6 +56,7 @@ import {
     literalAlternatives,
     literalForm,
     occV,
+    RecursionRefused,
     recursionUse,
     storedAlternatives,
     member as termMember,
@@ -1413,16 +1414,21 @@ export const codecOfTerm = <T, A extends AttributeValue>(
     // with no container reads the input of its own binder, and encode then overflows the stack. A
     // path with an adapter lets caller code make the input at any depth. A `lazy` term is not
     // walked, because the walk forces the thunk, and a thunk runs at the first former above it. A
-    // `union` refuses each option with a message that names the option
+    // `union` refuses each option with a message that names the option. The refusal carries the
+    // term, so a checker states the model's guard on the term
     if (def.kind !== 'lazy' && def.kind !== 'union') {
         const use = recursionUse(def)
         if (use === 2) {
-            throw new CodecError(
+            throw new RecursionRefused(
+                def,
+                use,
                 `this \`${def.kind}\` term reaches a thunk that is recursive, or that names a codec not yet declared, with no list or object between. A recursion there reads its own input and does not end. The model's guard refuses a recursion that reads the input of its own binder. Put the recursion below a list or an object`,
             )
         }
         if (use === 3) {
-            throw new CodecError(
+            throw new RecursionRefused(
+                def,
+                use,
                 `this \`${def.kind}\` term holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive thunk and the codec that the thunk returns, or above a thunk that names a codec not yet declared. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion. Put no adapter on the path of a recursion`,
             )
         }

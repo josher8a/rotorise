@@ -1202,6 +1202,81 @@ end Calculus
 `
 
 /**
+ * **A guard verdict on a term that a former refused.** Each former refuses a term where the host's
+ * guard reads a recursion at its own input or an adapter on a recursive path, and the refusal
+ * carries the term. No union reads such a term, so no {@link Separation} states the model's guard
+ * on the term. This vector states the guard half of a separation on the term alone: the model's
+ * guard refuses the term too, on the term that {@link leanRooted} spells.
+ */
+export type FormerGuard = {
+    /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
+    readonly name: string
+    readonly term: Term
+}
+
+/** One guard verdict on a refused term, as a Lean `theorem`, with the `src/` side decided here. */
+export const leanFormerGuard = ({ name, term }: FormerGuard): string => {
+    // a thunk in the term can name a codec that is declared now, and the host's guard then reads
+    // the term again with another answer. A vector about a term that the host accepts asserts a
+    // refusal that the host does not make
+    if (recursionUse(term) < 2) {
+        return refuse(
+            name,
+            "the host's guard accepts this term now, so a vector that the model's guard refuses it states no host refusal",
+        )
+    }
+    const rooted = (bound: Bound): string => {
+        const printed = leanTermOfTerm(term, name, { ...topScope(term), bound })
+        return readsFreeVariable(term) ? `Term.mu (${printed})` : printed
+    }
+    // a caller's function is a variable of the theorem, and the guard reads the shape alone, so a
+    // quantified verdict closes the guard on a twin of one shape that holds no free function
+    const bound: Bound = {
+        closures: new Map(),
+        adapters: new Map(),
+        readers: new Map(),
+    }
+    const printed = rooted(bound)
+    const binders = leanBinders(bound)
+    const guard =
+        binders === ''
+            ? 'by decide'
+            : `(Alg.guarded_of_sameShape _ (${rooted({ closures: new Map(), adapters: new Map(), readers: new Map(), standIn: true })}) (by rfl)).trans (by decide)`
+    return [
+        `/-- \`${name}\` — a former refuses this term; the model's guard refuses it too -/`,
+        `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
+        `    Alg.Term.guarded (${printed}) = false :=`,
+        `  ${guard}`,
+    ].join('\n')
+}
+
+/**
+ * The guard verdicts on refused terms as a module of their own. The header imports what
+ * {@link leanSeparationModule} imports, because a verdict spells the same terms and the same lemma.
+ *
+ * Generated at gate time and elaborated, never committed.
+ */
+export const leanFormerGuardModule = (guards: readonly FormerGuard[]): string =>
+    `import Calculus.Dynamo.Analysis.Compat
+import Calculus.Dynamo.Lang.Store
+
+/-!
+# Guard verdicts on refused terms
+
+**Generated — do not edit.** One theorem per term that a former of \`src/\` refused at its guard.
+The model's guard refuses the term too. See \`src/codec/lean.ts\`'s \`FormerGuard\`.
+-/
+
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${guards.map(leanFormerGuard).join('\n\n')}
+
+end Calculus
+`
+
+/**
  * One proposed **read verdict**: this codec, given this attribute, decodes exactly when the
  * model's read row admits it.
  *

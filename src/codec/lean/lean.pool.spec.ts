@@ -51,11 +51,19 @@ import {
     union,
     withLegacyRead,
 } from '../codec'
-import type { DisjointPair, Separation, Slice, Sliceable } from '../lean'
+import type {
+    DisjointPair,
+    FormerGuard,
+    Separation,
+    Slice,
+    Sliceable,
+} from '../lean'
 import {
     LeanUnemittable,
     leanDisjoint,
     leanDisjointModule,
+    leanFormerGuard,
+    leanFormerGuardModule,
     leanRooted,
     leanSeparation,
     leanSeparationModule,
@@ -66,7 +74,14 @@ import {
 } from '../lean'
 import { orThrow } from '../result'
 import type { Term } from '../term'
-import { agrees, disjoint, force, recursionUse, viewsDisjoint } from '../term'
+import {
+    agrees,
+    disjoint,
+    force,
+    RecursionRefused,
+    recursionUse,
+    viewsDisjoint,
+} from '../term'
 import { arbitraryOf, rngFrom } from '../testing'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
@@ -148,6 +163,12 @@ let unions: Declared[] = []
  * the union, and the pair is the same two options declared later.
  */
 let declared: [Entry, Entry][] = []
+
+/**
+ * **The terms that a former of the seed under draw refused at its guard.** No union reads such a
+ * term, so the pool puts each term to the model's guard alone.
+ */
+let refused: Term[] = []
 const declare = (
     a: Entry,
     b: Entry,
@@ -528,12 +549,14 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
     rng = rngFrom(seed)
     declared = []
     unions = []
+    refused = []
     const built: Entry[] = []
     for (let i = 0; i < DRAWS; i++) {
         try {
             built.push(draw(DEPTH))
-        } catch {
+        } catch (error) {
             drop('a constructor refused the draw')
+            if (error instanceof RecursionRefused) refused.push(error.term)
         }
     }
     const pairs: PoolPair[] = []
@@ -691,6 +714,22 @@ const kernelPairs = (pairs: readonly PoolPair[]) => {
     return { disjoints, separations }
 }
 
+/** The guard verdicts of one seed. The names continue after `first`, so the seeds share one name space. */
+const formerGuards = (terms: readonly Term[], first: number): FormerGuard[] => {
+    const guards: FormerGuard[] = []
+    for (const term of terms) {
+        const one = { name: `former_${first + guards.length}`, term }
+        try {
+            leanFormerGuard(one)
+            guards.push(one)
+        } catch (error) {
+            if (!(error instanceof LeanUnemittable)) throw error
+            drop(`guard: ${error.reason}`)
+        }
+    }
+    return guards
+}
+
 /**
  * **The clauses that the pool puts to each name of a union.** The values that the generator pins,
  * two values that the generator never pins, one literal at each base and form, and one union of
@@ -773,23 +812,32 @@ describe('the generated pool, against the model', () => {
         seed: number
         pairs: readonly PoolPair[]
         slices: readonly Slice[]
+        guards: readonly FormerGuard[]
     }[] = []
     for (const seed of SEEDS) {
         const first = seeds.reduce((n, one) => n + one.pairs.length, 0)
         const pairs = pool(seed, first)
         const sliced = seeds.reduce((n, one) => n + one.slices.length, 0)
-        seeds.push({ seed, pairs, slices: slicesOf(unions, sliced) })
+        const guarded = seeds.reduce((n, one) => n + one.guards.length, 0)
+        seeds.push({
+            seed,
+            pairs,
+            slices: slicesOf(unions, sliced),
+            guards: formerGuards(refused, guarded),
+        })
     }
-    const perSeed = seeds.map(({ seed, pairs, slices }) => ({
+    const perSeed = seeds.map(({ seed, pairs, slices, guards }) => ({
         seed,
         pairs,
         slices,
+        guards,
         ...kernelPairs(pairs),
     }))
     const pairs = perSeed.flatMap((one) => one.pairs)
     const disjoints = perSeed.flatMap((one) => one.disjoints)
     const separations = perSeed.flatMap((one) => one.separations)
     const slices = perSeed.flatMap((one) => one.slices)
+    const guards = perSeed.flatMap((one) => one.guards)
 
     /**
      * **The counts pin the pool, deliberately.** The pool depends on the seed alone, so a count
@@ -806,6 +854,7 @@ describe('the generated pool, against the model', () => {
                 slices: one.slices.length,
                 clauses: one.slices.reduce((n, s) => n + s.clauses.length, 0),
                 assignments: one.slices.filter((s) => s.keys?.length).length,
+                guards: one.guards.length,
             })),
             dropped: Object.fromEntries([...dropped].sort()),
         }).toMatchInlineSnapshot(`
@@ -820,6 +869,7 @@ describe('the generated pool, against the model', () => {
                 "clauses": 3615,
                 "disjoints": 1210,
                 "fills": 3,
+                "guards": 8,
                 "pairs": 1210,
                 "seed": 20261004,
                 "separations": 1207,
@@ -830,6 +880,7 @@ describe('the generated pool, against the model', () => {
                 "clauses": 3360,
                 "disjoints": 1214,
                 "fills": 8,
+                "guards": 6,
                 "pairs": 1214,
                 "seed": 1,
                 "separations": 1206,
@@ -840,6 +891,7 @@ describe('the generated pool, against the model', () => {
                 "clauses": 4725,
                 "disjoints": 1162,
                 "fills": 12,
+                "guards": 4,
                 "pairs": 1162,
                 "seed": 4,
                 "separations": 1150,
@@ -876,6 +928,10 @@ describe('the generated pool, against the model', () => {
             writeFileSync(
                 join(formal, '.pool.slices.lean'),
                 leanSliceModule(slices),
+            )
+            writeFileSync(
+                join(formal, '.pool.guards.lean'),
+                leanFormerGuardModule(guards),
             )
         }
         expect(evalModule([])).toContain(sentinel(0))
