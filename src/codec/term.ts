@@ -1111,7 +1111,7 @@ const pathUse = (path: readonly Term[]): number =>
     }, 2)
 
 /** A list, an object or a union with each position, field and option replaced by its view. */
-const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
+export const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
     switch (t.kind) {
         case 'list':
             return {
@@ -1159,7 +1159,7 @@ const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
  * {@link force}: the throw must reach the {@link force} of {@link disjoint} at the thunk of the
  * view.
  */
-const throughThunks =
+export const throughThunks =
     (row: (t: Term, view: (t: Term) => Term) => Term) =>
     (root: Term): Term => {
         const views = new Map<Term, Term>()
