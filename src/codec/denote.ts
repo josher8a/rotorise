@@ -23,6 +23,7 @@ import {
     carrying,
     DynamoNumber,
     isNumeral,
+    MAX_DOCUMENT_NESTING,
     memberOf,
     tooDeeplyNested,
 } from './attribute'
@@ -1462,6 +1463,49 @@ const pairOf = (def: Term): Pair => {
 }
 
 /**
+ * Nothing, or the refusal of an attribute that nests past what DynamoDB stores.
+ *
+ * The read side of {@link tooDeeplyNested}. A decode returns a value that the encode writes back,
+ * and the encode refuses past the bound, so the decode refuses at the same bound. `enclosing`
+ * counts as {@link Pair} counts it. The walk stops at the bound, so a deep attribute is a refusal
+ * and not an overflow of the call stack.
+ */
+export const storedTooDeeply = (
+    attribute: AttributeValue,
+    enclosing: number,
+): CodecError | undefined => {
+    const list = attribute.L
+    const map = attribute.M
+    if (list === undefined && map === undefined) return undefined
+    if (enclosing >= MAX_DOCUMENT_NESTING) {
+        return new CodecError(
+            `nesting reaches ${enclosing + 1} levels of list and map, and DynamoDB stores at most ${MAX_DOCUMENT_NESTING} — the store cannot hold this attribute, so the value read would not write back`,
+        )
+    }
+    if (list !== undefined) {
+        for (const [index, one] of list.entries()) {
+            const deep = storedTooDeeply(one, enclosing + 1)
+            if (deep) return deep.under(index)
+        }
+    }
+    return map === undefined ? undefined : membersTooDeeply(map, enclosing + 1)
+}
+
+/** {@link storedTooDeeply} over each member of a map, or of an item, which sit at `enclosing`. */
+export const membersTooDeeply = (
+    map: Readonly<Record<string, AttributeValue | undefined>>,
+    enclosing: number,
+): CodecError | undefined => {
+    for (const name in map) {
+        const one = map[name]
+        const deep =
+            one === undefined ? undefined : storedTooDeeply(one, enclosing)
+        if (deep) return deep.under(name)
+    }
+    return undefined
+}
+
+/**
  * The codec of a term whose attribute sits inside `enclosing` levels of `L` and `M`. A public
  * codec starts at `0`. `at` starts at the level of its path: each segment past the first crosses one
  * list or map.
@@ -1479,7 +1523,8 @@ export const codecAtLevel = <T, A extends AttributeValue>(
         readonly encode: (value: never) => Result<AttributeValue>
     } = {
         encode: (value) => pair.encode(value, enclosing),
-        decode: pair.decode,
+        decode: (attribute) =>
+            storedTooDeeply(attribute, enclosing) ?? pair.decode(attribute),
     }
     return codec<T, A>({
         def,

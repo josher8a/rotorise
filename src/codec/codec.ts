@@ -28,6 +28,7 @@ import {
     literalCodec,
     literalShape,
     membersOf,
+    membersTooDeeply,
     opaqueTerms,
     optionOfTerm,
     sameAssignment,
@@ -2990,9 +2991,10 @@ const objectFromMap = <
         },
 
         decode: (item) =>
-            body.decode(
+            membersTooDeeply(item, 0) ??
+            (body.decode(
                 item as Readonly<Record<string, AttributeValue>>,
-            ) as Result<T>,
+            ) as Result<T>),
 
         unsafeEncode: (item) => orThrow(self.encode(item)),
         unsafeDecode: (item) => orThrow(self.decode(item)),
@@ -4867,6 +4869,8 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * `AdmA` reads no name.
      */
     const readItem = (item: StoredItem): Result<T> => {
+        const deep = membersTooDeeply(item, 0)
+        if (deep) return deep
         const names = namesOf(item)
         return only(
             () => true,
