@@ -52,8 +52,14 @@
  * `Value.num` carries a `WFNumeral`, which is exact, so writing one down is a rounding the model
  * does not state. A `DynamoNumber` is a numeral, and it emits as `Value.num`.
  */
-import type { AttributeValue } from './attribute'
-import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
+import type { AttributeValue, StoredItem } from './attribute'
+import {
+    carrying,
+    DynamoNumber,
+    isNumeral,
+    isStoredNumeral,
+    memberOf,
+} from './attribute'
 import type { AnyCodec, LiteralValue, ObjectSlot } from './codec'
 import { union } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
@@ -1920,12 +1926,47 @@ export type ReadResolution = {
 }
 
 /** One read-side resolution: what the union read, or that it read nothing. */
-export const leanReadResolution = (one: ReadResolution): string => {
-    const { name, union: u, attribute } = one
+export const leanReadResolution = (one: ReadResolution): string =>
+    statedRead(one.name, one.union, one.attribute, () =>
+        one.union.decode(one.attribute as never),
+    )
+
+/**
+ * A dissection, with the read of a whole item that `src/` runs through the index of its tags.
+ *
+ * The index is the host's, and no term carries it. The model's `Term.union` of the members reads
+ * `Attr.m` of the item, so the statement is the read resolution of that union.
+ */
+export type Dissection = AnyCodec & {
+    readonly item: {
+        readonly decode: (item: StoredItem) => ReturnType<AnyCodec['decode']>
+    }
+}
+
+/** One read through the index of a dissection, addressed by the item. */
+export type ItemRead = {
+    readonly name: string
+    readonly dissection: Dissection
+    readonly item: Readonly<Record<string, AttributeValue>>
+}
+
+/** One read through the index: what the index read from the item, or that it read nothing. */
+export const leanItemReadResolution = (one: ItemRead): string =>
+    statedRead(one.name, one.dissection, carrying('M', one.item), () =>
+        one.dissection.item.decode(one.item),
+    )
+
+/** The theorem that the model's union reads `attribute` as the host read it, or reads nothing. */
+const statedRead = (
+    name: string,
+    u: AnyCodec,
+    attribute: AttributeValue,
+    decode: () => unknown,
+): string => {
     let read: unknown
     let did = true
     try {
-        const out = u.decode(attribute as never)
+        const out = decode()
         did = !failed(out)
         read = out
     } catch {
@@ -1962,6 +2003,7 @@ export const leanReadResolution = (one: ReadResolution): string => {
 export const leanResolutionModule = (
     writes: readonly Resolution[],
     reads: readonly ReadResolution[],
+    items: readonly ItemRead[],
 ): string =>
     `import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Lang.Store
@@ -1971,7 +2013,8 @@ import Calculus.Dynamo.Lang.Store
 
 **Generated — do not edit.** One theorem per (union, value) and (union, attribute) pair: the
 option the model's \`select\` resolves to, against the one this library's resolver picked.
-${writes.length} on the write side, ${reads.length} on the read side.
+${writes.length} on the write side, ${reads.length} on the read side, and ${items.length} read through the
+index of a dissection's tags.
 
 A map-valued read is stated like the others: it goes through \`vcheck\`, the \`Value\` twin of
 \`check\`, because \`Value.map\` carries a function and \`rfl\` on the assembled closure does not
@@ -1989,6 +2032,8 @@ namespace Calculus
 ${writes.map(leanResolution).join('\n\n')}
 
 ${reads.map(leanReadResolution).join('\n\n')}
+
+${items.map(leanItemReadResolution).join('\n\n')}
 
 end Calculus
 `

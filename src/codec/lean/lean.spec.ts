@@ -61,6 +61,8 @@ import {
 import { accepts } from '../denote'
 import type {
     DisjointPair,
+    Dissection,
+    ItemRead,
     ReadResolution,
     ReadVerdict,
     Refusal,
@@ -76,6 +78,7 @@ import {
     leanDisjointModule,
     leanFormerGuard,
     leanGuard,
+    leanItemReadResolution,
     leanReadModule,
     leanReadResolution,
     leanReadVector,
@@ -1802,6 +1805,125 @@ const readResolutions = (): readonly ReadResolution[] => {
     ]
 }
 
+/**
+ * The dissections whose index the read through an item reaches, and the items put to each.
+ *
+ * Three dissections carry the probed rows: a tag at `string`, a tag at `decimal`, and two keys.
+ * Each row holds an item that a member reads, or an item that the index refuses: a tag that names
+ * no member, an absent tag, a tag in the wrong attribute member, a combination of tags that no
+ * member carries, and an item that the chosen member refuses. Each numeral is a stored numeral,
+ * because the host refuses any other.
+ */
+const dissections = (): readonly (readonly [
+    string,
+    Dissection,
+    readonly (readonly [string, Readonly<Record<string, AttributeValue>>])[],
+])[] => {
+    const s = (value: string) => ({ S: value }) as AttributeValue
+    const n = (value: string) => ({ N: value }) as AttributeValue
+    return [
+        [
+            'tag_string',
+            dissection(
+                discriminatedUnion('k', [
+                    object({ k: string('A'), x: string }),
+                    object({ k: string('B'), y: string }),
+                ]),
+            ),
+            [
+                ['found_A', { k: s('A'), x: s('p') }],
+                ['found_B', { k: s('B'), y: s('p') }],
+                ['not_variant', { k: s('C'), x: s('p') }],
+                ['tag_absent', { x: s('p') }],
+                [
+                    'tag_bool',
+                    { k: { BOOL: true } as AttributeValue, x: s('p') },
+                ],
+                ['tag_as_n', { k: n('5'), x: s('p') }],
+                ['member_refuses', { k: s('A'), y: s('p') }],
+            ],
+        ],
+        [
+            'tag_decimal',
+            dissection(
+                discriminatedUnion('k', [
+                    object({ k: decimal('1'), x: string }),
+                    object({ k: decimal('2'), y: string }),
+                ]),
+            ),
+            [
+                ['found_1', { k: n('1'), x: s('p') }],
+                ['found_2', { k: n('2'), y: s('p') }],
+                ['tag_as_s', { k: s('1'), x: s('p') }],
+            ],
+        ],
+        [
+            'two_keys',
+            dissection(
+                mdunion(
+                    ['k', 'j'],
+                    [
+                        object({ k: string('A'), j: string('X'), x: string }),
+                        object({ k: string('B'), j: string('X'), y: string }),
+                        object({ k: string('A'), j: string('Y'), z: string }),
+                    ],
+                ),
+            ),
+            [
+                ['found_AX', { k: s('A'), j: s('X'), x: s('p') }],
+                ['found_BX', { k: s('B'), j: s('X'), y: s('p') }],
+                ['found_AY', { k: s('A'), j: s('Y'), z: s('p') }],
+                ['no_combination', { k: s('B'), j: s('Y'), y: s('p') }],
+            ],
+        ],
+    ]
+}
+
+/** The public dissection, erased to the reading that the emitter takes. */
+const dissection = (codec: unknown): Dissection => codec as Dissection
+
+/**
+ * Every read through the index of a dissection: the probed rows, and each other dissection of the
+ * corpus at each item that the corpus writes.
+ */
+const itemReads = (): readonly ItemRead[] => {
+    const items: [string, Readonly<Record<string, AttributeValue>>][] = []
+    for (const v of sampleVectors) {
+        try {
+            const written = v.codec.unsafeEncode(v.value as never)
+            if (written.M !== undefined) items.push([v.name, written.M])
+        } catch {
+            // a value its own codec refuses writes no item to read back
+        }
+    }
+    const corpus: (readonly [string, Dissection])[] = [
+        ...sampleVectors
+            .filter((v) =>
+                ['discriminated_union', 'dunion_two_keys'].includes(v.name),
+            )
+            .map((v) => [v.name, dissection(v.codec)] as const),
+        ...resolutionUnions()
+            .filter(([un]) => un.startsWith('d_'))
+            .map(([un, u]) => [un, dissection(u)] as const),
+    ]
+    return [
+        ...dissections().flatMap(([dn, d, rows]) =>
+            rows.map(([an, item]) => ({
+                name: `ir_${dn}__${an}`,
+                dissection: d,
+                item,
+            })),
+        ),
+        ...corpus.flatMap(([dn, d]) =>
+            items.map(([an, item]) => ({
+                name: `ir_${dn}__${an}`,
+                dissection: d,
+                item,
+            })),
+        ),
+    ]
+}
+
 describe('union resolution, model against library', () => {
     /**
      * **Coverage, and it is worth being exact about that.** Two resolutions were pinned before —
@@ -1856,16 +1978,57 @@ describe('union resolution, model against library', () => {
         )
     })
 
+    /**
+     * **The index of a dissection reads an item as the union of its members reads the item.** The
+     * host reads the tags and looks the member up. The model has no index: its union reads
+     * `Attr.m` of the item. Each row states the read of the index as the read of the union, both
+     * where a member reads the item and where the index refuses the item.
+     */
+    it('reads an item through the index of its tags as the union of its members reads it', () => {
+        const reads = itemReads()
+        expect(reads.length).toBe(90)
+        const byName = new Map(reads.map((one) => [one.name, one] as const))
+        const stated = (name: string) =>
+            leanItemReadResolution(byName.get(name) as ItemRead)
+        for (const name of [
+            'ir_tag_string__found_A',
+            'ir_tag_string__found_B',
+            'ir_tag_decimal__found_1',
+            'ir_tag_decimal__found_2',
+            'ir_two_keys__found_AX',
+            'ir_two_keys__found_BX',
+            'ir_two_keys__found_AY',
+        ]) {
+            expect(stated(name)).toContain('vcheck')
+        }
+        for (const name of [
+            'ir_tag_string__not_variant',
+            'ir_tag_string__tag_absent',
+            'ir_tag_string__tag_bool',
+            'ir_tag_string__tag_as_n',
+            'ir_tag_string__member_refuses',
+            'ir_tag_decimal__tag_as_s',
+            'ir_two_keys__no_combination',
+        ]) {
+            expect(stated(name)).toContain(') = none := rfl')
+        }
+    })
+
     it('emits them for the gate to elaborate', () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.resolutions.lean'),
-                leanResolutionModule(writeResolutions(), readResolutions()),
+                leanResolutionModule(
+                    writeResolutions(),
+                    readResolutions(),
+                    itemReads(),
+                ),
             )
         }
         const module = leanResolutionModule(
             writeResolutions(),
             readResolutions(),
+            itemReads(),
         )
         expect(module).toContain('import Calculus.Bridge.Vectors')
         expect(module).toContain('461 on the read side')
