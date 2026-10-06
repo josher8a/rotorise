@@ -1162,7 +1162,20 @@ export const denote = (def: Term): Pair => {
                 decode: (attribute) => {
                     const read = current.decode(attribute)
                     if (!failed(read)) return read
-                    const older_ = older(attribute)
+                    // the older reader is the caller's, so it may throw rather than return, and
+                    // the throw is a refusal of this read, as `held` reads a throw of the caller
+                    let older_: unknown
+                    try {
+                        older_ = older(attribute)
+                    } catch (thrown) {
+                        older_ = new CodecError(
+                            `the older reader threw: ${
+                                thrown instanceof Error
+                                    ? thrown.message
+                                    : String(thrown)
+                            }`,
+                        )
+                    }
                     if (!failed(older_)) {
                         if (!accepts(current, older_)) {
                             return new CodecError(
