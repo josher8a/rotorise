@@ -78,10 +78,12 @@ import {
     clauseForm,
     disjoint,
     force,
+    mapChildren,
     readsFreeVariable,
     recursionUse,
     type Scope,
     storedAlternatives,
+    throughThunks,
     viewsDisjoint,
 } from './term'
 import { shapeOf } from './value'
@@ -1417,24 +1419,9 @@ const pinned = (bound: Bound, r: unknown): string => {
 const recording = (
     t: Term,
     log: Map<unknown, [AttributeValue, unknown][]>,
-    copies: Map<Term, Term> = new Map(),
-): Term => {
-    const known = copies.get(t)
-    if (known !== undefined) return known
-    const copy = (u: Term): Term => recording(u, log, copies)
-    const made = ((): Term => {
+): Term =>
+    throughThunks((t, copy) => {
         switch (t.kind) {
-            case 'set':
-                return { ...t, elem: copy(t.elem) }
-            case 'list':
-                return {
-                    ...t,
-                    pre: t.pre.map(copy),
-                    ...(t.spread === undefined
-                        ? {}
-                        : { spread: copy(t.spread) }),
-                    suf: t.suf.map(copy),
-                }
             case 'held':
                 return { ...t, inner: copy(t.inner), outer: copy(t.outer) }
             case 'refine':
@@ -1458,43 +1445,10 @@ const recording = (
                     },
                 }
             }
-            case 'lazy': {
-                const get = t.get
-                let forced: Term | undefined
-                return {
-                    ...t,
-                    get: () => {
-                        forced ??= copy(get())
-                        return forced
-                    },
-                }
-            }
-            case 'object':
-                return {
-                    ...t,
-                    body: {
-                        fields: Object.fromEntries(
-                            Object.entries(t.body.fields).map(
-                                ([name, field]) => [
-                                    name,
-                                    { ...field, t: copy(field.t) },
-                                ],
-                            ),
-                        ),
-                        ...(t.body.rest === undefined
-                            ? {}
-                            : { rest: copy(t.body.rest) }),
-                    },
-                }
-            case 'union':
-                return { ...t, options: t.options.map(copy) }
             default:
-                return t
+                return mapChildren(t, copy)
         }
-    })()
-    copies.set(t, made)
-    return made
-}
+    })(t)
 
 /** One read of a codec with an older reader, addressed by the attribute. */
 export type LegacyRead = {
