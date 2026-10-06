@@ -310,6 +310,23 @@ describe('an attribute written in an older encoding', () => {
         )
     })
 
+    it('a withLegacyRead whose older reader throws refuses the read as a value', () => {
+        const Rate = withLegacyRead({
+            current: decimal,
+            older: {
+                decode: () => {
+                    throw new Error('the old format is gone')
+                },
+            },
+        })
+        const read = Rate.decode({ BOOL: true })
+        expect(read).toBeInstanceOf(CodecError)
+        expect((read as CodecError).reason).toMatch(
+            /no encoding could read this attribute; tried the current one and one older: .*the older reader threw: the old format is gone/,
+        )
+        expect(Rate.decode({ N: '1.5' })).toBe('1.5')
+    })
+
     it('keeps the round-trip law, because it only ever writes one shape', () => {
         checkRoundTrip(Listing, { count: 200, seed: 20260826 })
     })
