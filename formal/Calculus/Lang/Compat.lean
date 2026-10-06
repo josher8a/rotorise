@@ -192,10 +192,10 @@ abbrev AgreeHalf (S : Syn) {V M : Type} (side : Bool) (c d : Codec V M) : Prop :
 section Sound
 variable [Sem S] {α : Table S} {β : Table S.op}
 
-/-- **What the contexts and the pairing promise of the two environments.** A paired binder pair
-    agrees on both halves. Each entry that a context marks safe is below the top. -/
-structure CEnv (p : Pairing) (cl cr : Nat → Bool) (ρ ρ' : List S.C) : Prop where
-  pair : ∀ i j, p i j = true → ∀ o, Agree o (envAt ρ i) (envAt ρ' j)
+/-- **What the contexts and the pairing promise of the two environments** at the half `side`. A
+    paired binder pair agrees on that half. Each entry that a context marks safe is below the top. -/
+structure CEnv (side : Bool) (p : Pairing) (cl cr : Nat → Bool) (ρ ρ' : List S.C) : Prop where
+  pair : ∀ i j, p i j = true → AgreeHalf S side (envAt ρ i) (envAt ρ' j)
   safeL : ∀ i, cl i = true → Sub (envAt ρ i) (Syn.top (S := S))
   safeR : ∀ i, cr i = true → Sub (envAt ρ' i) (Syn.top (S := S))
 
@@ -207,7 +207,7 @@ structure OracleSound (o : CompatOracle S) : Prop where
     (((denote α β x []).f S.o.op a).isSome && ((denote α β y []).f S.o.op a).isSome) = false
 
 /-- **The empty contexts promise nothing of the environments**, so they admit every two. -/
-theorem CEnv.empty (ρ ρ' : List S.C) : CEnv pair0 noSafe noSafe ρ ρ' where
+theorem CEnv.empty {side : Bool} (ρ ρ' : List S.C) : CEnv side pair0 noSafe noSafe ρ ρ' where
   pair _ _ h := nomatch h
   safeL _ h := nomatch h
   safeR _ h := nomatch h
@@ -221,36 +221,39 @@ theorem stage_subMu [TopLaws S] {b : Term S} {ctx : Nat → Bool} {ρ : List S.C
   exact stage_subSafe h.1 h.2 henv n
 
 /-- An unfolding of the left operand keeps the promise: the new left binder pairs with nothing. -/
-theorem CEnv.left {p : Pairing} {cl cr : Nat → Bool} {ρ ρ' : List S.C} (he : CEnv p cl cr ρ ρ')
+theorem CEnv.left {side : Bool} {p : Pairing} {cl cr : Nat → Bool} {ρ ρ' : List S.C}
+    (he : CEnv side p cl cr ρ ρ')
     (b : Term S) (c : S.C) (hc : (!hasHeld b && (Term.mu b).safe cl) = true → Sub c (Syn.top (S := S))) :
-    CEnv (shiftL p) (pushMu cl b) cr (c :: ρ) ρ' where
-  pair i j h o := match i, h with
-    | i + 1, h => he.pair i j h o
+    CEnv side (shiftL p) (pushMu cl b) cr (c :: ρ) ρ' where
+  pair i j h := match i, h with
+    | i + 1, h => he.pair i j h
   safeL i h := match i with
     | 0 => hc h
     | i + 1 => he.safeL i h
   safeR := he.safeR
 
 /-- …and an unfolding of the right operand. -/
-theorem CEnv.right {p : Pairing} {cl cr : Nat → Bool} {ρ ρ' : List S.C} (he : CEnv p cl cr ρ ρ')
+theorem CEnv.right {side : Bool} {p : Pairing} {cl cr : Nat → Bool} {ρ ρ' : List S.C}
+    (he : CEnv side p cl cr ρ ρ')
     (b : Term S) (c : S.C) (hc : (!hasHeld b && (Term.mu b).safe cr) = true → Sub c (Syn.top (S := S))) :
-    CEnv (shiftR p) cl (pushMu cr b) ρ (c :: ρ') where
-  pair i j h o := match j, h with
-    | j + 1, h => he.pair i j h o
+    CEnv side (shiftR p) cl (pushMu cr b) ρ (c :: ρ') where
+  pair i j h := match j, h with
+    | j + 1, h => he.pair i j h
   safeL := he.safeL
   safeR i h := match i with
     | 0 => hc h
     | i + 1 => he.safeR i h
 
-/-- Two binders unfolded together keep the promise where their stages agree on both halves. -/
-theorem CEnv.mu {p : Pairing} {cl cr : Nat → Bool} {ρ ρ' : List S.C} (he : CEnv p cl cr ρ ρ')
-    (b b' : Term S) (c c' : S.C) (hcc : ∀ o, Agree o c c')
+/-- Two binders unfolded together keep the promise where their stages agree on the half. -/
+theorem CEnv.mu {side : Bool} {p : Pairing} {cl cr : Nat → Bool} {ρ ρ' : List S.C}
+    (he : CEnv side p cl cr ρ ρ')
+    (b b' : Term S) (c c' : S.C) (hcc : AgreeHalf S side c c')
     (hc : (!hasHeld b && (Term.mu b).safe cl) = true → Sub c (Syn.top (S := S)))
     (hc' : (!hasHeld b' && (Term.mu b').safe cr) = true → Sub c' (Syn.top (S := S))) :
-    CEnv (pairMu p) (pushMu cl b) (pushMu cr b') (c :: ρ) (c' :: ρ') where
-  pair i j h o := match i, j, h with
-    | 0, 0, _ => hcc o
-    | i + 1, j + 1, h => he.pair i j h o
+    CEnv side (pairMu p) (pushMu cl b) (pushMu cr b') (c :: ρ) (c' :: ρ') where
+  pair i j h := match i, j, h with
+    | 0, 0, _ => hcc
+    | i + 1, j + 1, h => he.pair i j h
   safeL i h := match i with
     | 0 => hc h
     | i + 1 => he.safeL i h
@@ -318,7 +321,7 @@ theorem heldSideIn_dom (side : Bool) {ρ : List S.C} :
 theorem cbase_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) {side : Bool}
     {cl cr : Nat → Bool} {x y : Term S} (h : cbase o side cl cr x y = true) {p : Pairing}
-    {ρ ρ' : List S.C} (he : CEnv p cl cr ρ ρ') : AgreeHalf S side (denote α β x ρ) (denote α β y ρ') := by
+    {ρ ρ' : List S.C} (he : CEnv side p cl cr ρ ρ') : AgreeHalf S side (denote α β x ρ) (denote α β y ρ') := by
   simp only [cbase, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
   rcases h with ((((((hx | hy) | ⟨⟨⟨hx, hy⟩, hsx⟩, hsy⟩) | hd) | ⟨⟨hcx, hcy⟩, ho'⟩) | hl) | hr)
   · cases x <;> simp only [Term.isNever, reduceCtorEq] at hx
@@ -351,10 +354,10 @@ mutual
 /-- **The rows of the right operand are sound**, for a left codec that the family is sound for. -/
 theorem cmpR_sound [TopLaws S] {side : Bool} {X : S.C} {ρ : List S.C}
     {fam : Pairing → (Nat → Bool) → (Nat → Bool) → Term S → Bool}
-    (hfam : ∀ p' cl' cr' y' ρ', fam p' cl' cr' y' = true → CEnv p' cl' cr' ρ ρ' →
+    (hfam : ∀ p' cl' cr' y' ρ', fam p' cl' cr' y' = true → CEnv side p' cl' cr' ρ ρ' →
       AgreeHalf S side X (denote α β y' ρ')) :
     ∀ (y : Term S) (p : Pairing) (cl cr : Nat → Bool) (ρ' : List S.C), cmpR fam p cl cr y = true →
-      CEnv p cl cr ρ ρ' → AgreeHalf S side X (denote α β y ρ')
+      CEnv side p cl cr ρ ρ' → AgreeHalf S side X (denote α β y ρ')
   | .never, _, _, _, _, _, _ => agree_empty_right _ X
   | .union os, p, cl, cr, ρ', h, he => by
       simp only [cmpR, Bool.or_eq_true] at h
@@ -390,10 +393,10 @@ theorem cmpR_sound [TopLaws S] {side : Bool} {X : S.C} {ρ : List S.C}
 /-- …and option by option. -/
 theorem cmpRL_sound [TopLaws S] {side : Bool} {X : S.C} {ρ : List S.C}
     {fam : Pairing → (Nat → Bool) → (Nat → Bool) → Term S → Bool}
-    (hfam : ∀ p' cl' cr' y' ρ', fam p' cl' cr' y' = true → CEnv p' cl' cr' ρ ρ' →
+    (hfam : ∀ p' cl' cr' y' ρ', fam p' cl' cr' y' = true → CEnv side p' cl' cr' ρ ρ' →
       AgreeHalf S side X (denote α β y' ρ')) :
     ∀ (ys : List (Term S)) (p : Pairing) (cl cr : Nat → Bool) (ρ' : List S.C),
-      cmpRL fam p cl cr ys = true → CEnv p cl cr ρ ρ' → ∀ o ∈ denoteList α β ys ρ', AgreeHalf S side X o
+      cmpRL fam p cl cr ys = true → CEnv side p cl cr ρ ρ' → ∀ o ∈ denoteList α β ys ρ', AgreeHalf S side X o
   | [], _, _, _, _, _, _ => fun _ h => nomatch h
   | y :: ys, p, cl, cr, ρ', h, he => by
       simp only [cmpRL, Bool.and_eq_true] at h
@@ -452,7 +455,7 @@ mutual
 theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (x : Term S) (side : Bool) (p : Pairing) (cl cr : Nat → Bool) (y : Term S) (ρ ρ' : List S.C),
-      Term.compat o side p cl cr x y = true → CEnv p cl cr ρ ρ' →
+      Term.compat o side p cl cr x y = true → CEnv side p cl cr ρ ρ' →
         AgreeHalf S side (denote α β x ρ) (denote α β y ρ')
   | .never, side, _, _, _, _, _, _, _, _ => agree_empty_left _ _
   | .refine x q _, side, p, cl, cr, y, ρ, ρ', h, he => by
@@ -473,18 +476,19 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
         simp only [Term.compat, Bool.or_eq_true, Bool.and_eq_true] at h
         rcases h with h | ⟨hE, hP⟩
         · exact cbase_sound ho h he
-        · have hs : ∀ n, (∀ o, Agree o (muStage (fun c => denote α β b (c :: ρ)) n)
-              (muStage (fun c => denote α β b' (c :: ρ')) n)) := by
+        · have hs : ∀ n, AgreeHalf S side (muStage (fun c => denote α β b (c :: ρ)) n)
+              (muStage (fun c => denote α β b' (c :: ρ')) n) := by
             intro n
             induction n with
-            | zero => exact fun o => agree_empty_left _ _
+            | zero => exact agree_empty_left _ _
             | succ n ih =>
               have he' := he.mu b b' _ _ ih (fun hs => stage_subMu hs he.safeL n)
                 (fun hs => stage_subMu hs he.safeR n)
-              exact agree_all (compat_sound ho b true _ _ _ b' _ _ hE he')
-                (compat_sound ho b false _ _ _ b' _ _ hP he')
+              have hside : Term.compat o side (pairMu p) (pushMu cl b) (pushMu cr b') b b' = true := by
+                cases side <;> assumption
+              exact compat_sound ho b side _ _ _ b' _ _ hside he'
           simp only [denote, denoteAbs]
-          exact agree_mu fun n => hs n _
+          exact agree_mu fun n => hs n
       | _ =>
         simp only [Term.compat, Bool.or_eq_true] at h
         rcases h with h | h
@@ -504,7 +508,7 @@ theorem compat_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] 
       · exact cbase_sound ho hf he'
       · cases y' <;> simp only [reduceCtorEq] at hf
         rename_i j
-        exact he'.pair i j hf _
+        exact he'.pair i j hf
   | .held sd i P k₀ k, side, p, cl, cr, y, ρ, ρ', h, he => by
       simp only [Term.compat] at h
       refine cmpR_sound (fun p' cl' cr' y' ρ'' hf he' => ?_) y p cl cr ρ' h he
@@ -634,7 +638,7 @@ termination_by structural x => x
 theorem compatL_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (xs : List (Term S)) (side : Bool) (p : Pairing) (cl cr : Nat → Bool) (y : Term S)
-      (ρ ρ' : List S.C), Term.compatL o side p cl cr xs y = true → CEnv p cl cr ρ ρ' →
+      (ρ ρ' : List S.C), Term.compatL o side p cl cr xs y = true → CEnv side p cl cr ρ ρ' →
         ∀ c ∈ denoteList α β xs ρ, AgreeHalf S side c (denote α β y ρ')
   | [], _, _, _, _, _, _, _, _, _ => fun _ h => nomatch h
   | x :: xs, side, p, cl, cr, y, ρ, ρ', h, he => by
@@ -650,7 +654,7 @@ theorem compatTs_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (ts : List (Term S)) (side : Bool) (p : Pairing) (cl cr : Nat → Bool) (ρ ρ' : List S.C)
       (ys : List (Term S)), (∀ f ∈ Term.compatTs o side p cl cr ts, ∀ y ∈ ys, f y = true) →
-        CEnv p cl cr ρ ρ' → ∀ c ∈ denoteList α β ts ρ, ∀ y ∈ ys, AgreeHalf S side c (denote α β y ρ')
+        CEnv side p cl cr ρ ρ' → ∀ c ∈ denoteList α β ts ρ, ∀ y ∈ ys, AgreeHalf S side c (denote α β y ρ')
   | [], _, _, _, _, _, _, _, _, _ => fun _ h => nomatch h
   | t :: ts, side, p, cl, cr, ρ, ρ', ys, h, he => by
       intro c hc y hy
@@ -666,7 +670,7 @@ theorem compatO_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (t? : Option (Term S)) (side : Bool) (p : Pairing) (cl cr : Nat → Bool) (ρ ρ' : List S.C)
       (ys : List (Term S)), (∀ f ∈ Term.compatO o side p cl cr t?, ∀ y ∈ ys, f y = true) →
-        CEnv p cl cr ρ ρ' → ∀ c, denoteOpt α β t? ρ = some c → ∀ y ∈ ys, AgreeHalf S side c (denote α β y ρ')
+        CEnv side p cl cr ρ ρ' → ∀ c, denoteOpt α β t? ρ = some c → ∀ y ∈ ys, AgreeHalf S side c (denote α β y ρ')
   | none, _, _, _, _, _, _, _, _, _ => fun _ h => nomatch h
   | some t, side, p, cl, cr, ρ, ρ', ys, h, he => by
       intro c hc y hy
@@ -678,7 +682,7 @@ termination_by structural t? => t?
 theorem compatW_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (w : Option (Term S)) (side : Bool) (p : Pairing) (cl cr : Nat → Bool) (y : Term S)
-      (ρ ρ' : List S.C), Term.compatW o side p cl cr w y = true → CEnv p cl cr ρ ρ' →
+      (ρ ρ' : List S.C), Term.compatW o side p cl cr w y = true → CEnv side p cl cr ρ ρ' →
         ∀ c, rcOf (wildSem α β w ρ) = some c → AgreeHalf S side c (denote α β y ρ')
   | none, _, _, _, _, _, _, _, _, _ => fun _ h => nomatch h
   | some t, side, p, cl, cr, y, ρ, ρ', h, he => by
@@ -691,7 +695,7 @@ termination_by structural w => w
 theorem cslot_sound [PrimAdm S] [PrimAdmA S] [Leaf S] [LeafAdm S] [LeafMeet S] [FormerAdm S]
     [LeafAdmA S] [FormerAdmA S] [Shapes S] [TopLaws S] {o : CompatOracle S} (ho : OracleSound o) :
     ∀ (f : ObjectSlot S) (side : Bool) (p : Pairing) (cl cr : Nat → Bool) (y : ObjectSlot S)
-      (ρ ρ' : List S.C), ObjectSlot.compat o side p cl cr f y = true → CEnv p cl cr ρ ρ' →
+      (ρ ρ' : List S.C), ObjectSlot.compat o side p cl cr f y = true → CEnv side p cl cr ρ ρ' →
         AgreeHalf S side (fieldSem α β f ρ).codec (denote α β y.term ρ')
   | .req x, side, p, cl, cr, y, ρ, ρ', h, he => compat_sound ho x side p cl cr y.term ρ ρ' h he
   | .optional x, side, p, cl, cr, y, ρ, ρ', h, he =>

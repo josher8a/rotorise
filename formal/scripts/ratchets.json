@@ -55,7 +55,7 @@
     "Calculus/JSON/Basic.lean": 23,
     "Calculus/JSON/Compat.lean": 1,
     "Calculus/JSON/Disjoint.lean": 8,
-    "Calculus/Lang/Compat.lean": 219,
+    "Calculus/Lang/Compat.lean": 221,
     "Calculus/Lang/Converse.lean": 0,
     "Calculus/Lang/Disjoint.lean": 89,
     "Calculus/Lang/DisjointA.lean": 0,
