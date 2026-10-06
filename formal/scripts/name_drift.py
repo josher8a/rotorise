@@ -451,18 +451,38 @@ def dangling_paths(paths, full, base):
 # citation without backticks, in a comment and in an emitted string alike. A TypeScript `'` closes a
 # string, so the tokenizer here is narrower than `IDENT`.
 MODEL_CITATION = re.compile(r"\bCalculus(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
+# `src/` also cites a model name without the prefix, in backticks: `Term.list`, `Body.spec`. A
+# backticked dotted name is a model citation when its head is a namespace that the code uses, as
+# `Term` is in `Term.list`. The head set comes from the code, so a new namespace needs no entry.
+# The rule reads only a dotted name: a single word such as `encode` names a host function as often
+# as a model one. JavaScript's `JSON` shares the head of the model's `JSON` namespace.
+JS_NAMES = {"JSON.stringify"}
+
+
+def model_heads(present):
+    """The namespaces that the code uses: the capitalized head of each dotted name that occurs."""
+    return {t.split(".")[0] for t in present if "." in t and t[:1].isupper()} - {"Calculus"}
+
+
+def unprefixed_citations(line, heads):
+    """The backticked dotted names on one line whose head is a model namespace."""
+    return [t for t in BACKTICKED.findall(line)
+            if LEANISH.match(t) and "." in t and not PATHISH.search(t)
+            and t.split(".")[0] in heads and not language(t) and t not in JS_NAMES]
 
 
 def dead_model_citations(paths, present):
-    """Every `Calculus.<name>` in `src/` that names no module file and no name the code holds.
+    """Every model name in `src/` that names no module file and no name the code holds.
 
+    A model name is a `Calculus.<name>`, or a backticked dotted name under a model namespace.
     The resolution is `scan()`'s: the whole name occurs, or each component occurs. A module path
     resolves when its file exists, because an `import` line names a file and not a declaration.
     """
+    heads = model_heads(present)
     out = {}
     for path in paths:
         for lineno, line in enumerate(open(path).read().split("\n"), 1):
-            for t in MODEL_CITATION.findall(line):
+            for t in MODEL_CITATION.findall(line) + unprefixed_citations(line, heads):
                 if os.path.exists(t.replace(".", "/") + ".lean"):
                     continue
                 if t in present or all(part in present for part in t.split(".")):
