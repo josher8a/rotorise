@@ -1205,6 +1205,27 @@ export const allRefusals = (): readonly Refusal[] => {
     return out
 }
 
+/**
+ * The other half of the cross product: every pair that the codec admits, off the diagonal, as a
+ * positive vector. A refusal list alone checks one direction: a refusal that turns into an admission
+ * leaves the list and fails nothing. With both lists, each cross pair carries the host verdict, and
+ * a flip either way stops the gate's file elaborating. The diagonal is the committed sample already.
+ */
+export const allAdmissions = (): readonly Vector[] => {
+    const out: Vector[] = []
+    for (const [cn, codec] of refusalCodecs) {
+        for (const vector of sampleVectors) {
+            if (cn === vector.name || !accepts(codec, vector.value)) continue
+            out.push({
+                name: `${cn}__admits__${vector.name}`,
+                codec,
+                value: vector.value,
+            })
+        }
+    }
+    return out
+}
+
 /** Whether the emitter can state this codec's term at all, which is a different axis from its
  * value. The read-side test pins that every corpus entry passes it. */
 const emittable = (one: Vector): boolean => statesTerm(one.codec, one.name)
@@ -2446,7 +2467,7 @@ describe("the declaration guard, against the model's classifier", () => {
     })
 })
 
-describe('the full refusal set, for the gate', () => {
+describe('the full cross product, for the gate', () => {
     /**
      * **The subset is committed for reading; this is what gets verified.**
      *
@@ -2455,14 +2476,22 @@ describe('the full refusal set, for the gate', () => {
      * on every gate run has nothing to gain from being in the tree, and a diff nobody reads is a
      * diff nobody checks. The committed sample is the readable half and says so in its header.
      */
-    it('emits every refusal the corpus produces', () => {
+    it('emits the host verdict of every cross pair, a refusal or an admission', () => {
         const refusals = allRefusals()
+        const admissions = allAdmissions()
         expect(refusals.length).toBeGreaterThan(sampleRefusals.length)
+        // each pair off the diagonal lands in one list, so no verdict leaves the file in silence
+        const diagonal = refusalCodecs.filter(([cn]) =>
+            sampleVectors.some((v) => v.name === cn),
+        ).length
+        expect(refusals.length + admissions.length).toBe(
+            refusalCodecs.length * sampleVectors.length - diagonal,
+        )
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.vectors.full.lean'),
                 leanVectorModule(
-                    [],
+                    admissions,
                     'check',
                     refusals,
                     refusals.length,
