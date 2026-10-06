@@ -30,7 +30,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../attribute'
-import { DynamoNumber, isNumeral } from '../attribute'
+import { DynamoNumber, isNumeral, isStoredNumeral } from '../attribute'
 import type { AnyCodec, AttributeCodec } from '../codec'
 import {
     array,
@@ -1623,14 +1623,14 @@ const disjointPairs = (): readonly DisjointPair[] => {
  * A refinement reads with the inner codec, then asks the predicate. The rows carry the shipped
  * `isNumeral`, and a caller's predicate, which the theorem binds as a variable. The bottom reads
  * nothing, so each row puts `never` at a position that a read reaches.
- *
- * The shipped `isStoredNumeral` has no row. The emitter prints `isStoredNumeral` as the model's
- * `isStored`, which decides a `.num`. The inner term reads a `.str`, so the model refuses each
- * stored numeral that `decode` reads.
  */
 const readDecisions: readonly (readonly [string, AnyCodec])[] = [
     ['refine_string_isNumeral', erase(refine(string, isNumeral as never))],
     ['refine_string_caller', erase(refine(string, nonEmpty))],
+    [
+        'refine_decimal_isStoredNumeral',
+        erase(refine(decimal, isStoredNumeral as never)),
+    ],
     ['never', erase(never)],
     ['array_never', erase(array(never))],
     ['object_optional_never', erase(object({ a: optional(never) }))],
@@ -1669,6 +1669,7 @@ const readVerdicts = (): readonly ReadVerdict[] => {
     // an attribute that each predicate of `readDecisions` admits, and one that each refuses
     attributes.push(['raw_S_numeral', { S: '12' } as AttributeValue])
     attributes.push(['raw_S_empty', { S: '' } as AttributeValue])
+    // no non-stored numeral: a term reads each well-formed numeral, `storeCodec` states the stored form, and the host refuses at its read
     attributes.push(['raw_L_string', { L: [{ S: 'x' }] } as AttributeValue])
     attributes.push(['raw_M_a', { M: { a: { S: 'x' } } } as AttributeValue])
 
@@ -1888,9 +1889,9 @@ describe("the read side, against the model's read row", () => {
      * a concrete numeral by `rfl`, so the filter excluded pairs the row answers. The filter is
      * deleted, and the three are theorems in `.readverdicts.lean` like every other pair.
      */
-    it('offers 2597 pairs, and asserts every one', () => {
+    it('offers 2650 pairs, and asserts every one', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(2597)
+        expect(verdicts.length).toBe(2650)
         const module = leanReadModule(verdicts)
         for (const name of [
             'scalar_number__reads__scalar_decimal',
@@ -1915,6 +1916,7 @@ describe("the read side, against the model's read row", () => {
             'refine_string_caller__reads__raw_S',
             'refine_string_caller__reads__raw_S_empty',
             'refine_string_caller__reads__raw_N',
+            'refine_decimal_isStoredNumeral__reads__raw_N',
             'never__reads__raw_S',
             'array_never__reads__raw_L_empty',
             'array_never__reads__raw_L_string',
@@ -1937,7 +1939,7 @@ describe("the read side, against the model's read row", () => {
         }
         const module = leanReadModule(readVerdicts())
         expect(module).toContain('import Calculus.Dynamo.Lang.Store')
-        expect(module).toContain('All 2597 pairs are asserted here.')
+        expect(module).toContain('All 2650 pairs are asserted here.')
     })
 })
 
