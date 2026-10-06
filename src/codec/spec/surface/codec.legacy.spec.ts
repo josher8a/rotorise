@@ -434,6 +434,57 @@ describe('a stand-in verdict does not depend on which recursive thunk is used fi
     }
 })
 
+/**
+ * **A declaration that fails, and is retried.** `Branch`'s declaration makes a stand-in check, then
+ * throws on `Later`, which is still in its temporal dead zone. The check waits on `Branch`, the
+ * innermost thunk, and goes with the failed declaration. A check that waited on `Tree` instead would
+ * run when `Tree` resolves, force `Branch` again, and refuse `Tree` for a declaration that no longer
+ * exists.
+ */
+describe('a stand-in check is discarded with the declaration that made it, so a declaration that fails and is retried is not refused by a stale check', () => {
+    type Tree = { end?: string; kids?: readonly Branch[] }
+    type Branch = { name: string; next: Tree; tag: string }
+
+    it('the first use accepts, and the retried declaration reads and fills a missing attribute', () => {
+        const Tree: AttributeCodec<Tree> = lazy(() =>
+            object({ end: optional(string), kids: optional(array(Branch)) }),
+        )
+        const Branch: AttributeCodec<Branch> = lazy(() =>
+            object({
+                name: string,
+                next: withLegacyRead({
+                    current: Tree,
+                    whenMissing: { kids: [{ name: 'z', next: {}, tag: 'q' }] },
+                }),
+                tag: Later,
+            }),
+        )
+        expect(Tree.encode({ end: 'b' })).toEqual({ M: { end: { S: 'b' } } })
+        const Later = string
+        const value: Tree = {
+            kids: [{ name: 'a', next: { end: 'b' }, tag: 't' }],
+        }
+        const written = Tree.encode(value)
+        expect(written).not.toBeInstanceOf(CodecError)
+        expect(Tree.decode(written as AttributeValue)).toEqual(value)
+        expect(
+            Tree.decode({
+                M: {
+                    kids: { L: [{ M: { name: { S: 'a' }, tag: { S: 't' } } }] },
+                },
+            }),
+        ).toEqual({
+            kids: [
+                {
+                    name: 'a',
+                    next: { kids: [{ name: 'z', next: {}, tag: 'q' }] },
+                    tag: 't',
+                },
+            ],
+        })
+    })
+})
+
 describe('an attribute written in an older encoding', () => {
     it('reads the current one', () => {
         expect(
