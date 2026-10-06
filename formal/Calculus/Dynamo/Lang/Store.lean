@@ -7,7 +7,8 @@ The facts of the store, which the core algebra does not state. The core keeps th
 law: `SurvivesStore c η`, `Codec.Ker` and `Lawful.retract_through_store` hold for every store
 normalisation `η`. This module holds the instances at DynamoDB:
 
-* the nesting bound, which the core takes as a parameter of `Attr.Storable`;
+* the nesting bound, which the core takes as a parameter of `Attr.Storable`, and `storeCodec`,
+  the write gated at the bound;
 * `Numeral.Normal` and `Numeral.Stored`, the numerals the store hands back unchanged;
 * `decimalCodec`, the codec gated at `Stored`, with its laws and its `SurvivesStore`
   instance, and the refutation that the ungated `baseCodec .number` does not survive the store;
@@ -303,6 +304,35 @@ theorem not_retract_through_store_numberCodec {η : Attr → Attr}
   rw [hη, baseCodec_p_n]
   intro hk
   exact absurd (congrArg Subtype.val (Attr.n.inj (Option.some.inj hk))) (by decide)
+
+/-! ## The write the store holds
+
+`Attr.l` and `Attr.m` nest without limit, so a lawful codec can write an attribute past
+`maxNesting`. `storeCodec` gates the stored side at the bound. The gate reads the written
+attribute, not the value: a set write has nesting one less than the value it writes. A gate on
+the write alone breaks **(C)**, because a read past the bound then names a value that the write
+refuses. `refine2` gates both halves, so the laws hold over the gate with no premise.
+-/
+
+/-- The attributes that the store holds: nesting at most `DynamoDB.maxNesting`. -/
+def isStorable (a : Attr) : Bool := decide (Attr.nesting a ≤ DynamoDB.maxNesting)
+
+/-- **The DynamoDB write**: `c` with its stored side gated at the nesting bound. -/
+def storeCodec (c : Codec) : Codec := Alg.refine2 c (fun _ => true) isStorable
+
+/-- The gate keeps the laws, and owes no premise. -/
+theorem lawful_storeCodec {c : Codec} (h : Lawful c) : Lawful (storeCodec c) :=
+  h.refine2 _ _
+
+/-- The gate keeps the carrier. -/
+theorem carrier_storeCodec {c : Codec} (h : Carrier c) : Carrier (storeCodec c) :=
+  Alg.carrier_refine2 h _ _
+
+/-- **The store codec writes only what the store holds.** -/
+theorem storeCodec_storable (c : Codec) {v a} (he : (storeCodec c).e v = some a) :
+    Attr.Storable DynamoDB.maxNesting a :=
+  (of_decide_eq_true ((Alg.refine2_f.mp he).2.2 : isStorable a = true) :
+    Attr.nesting a ≤ DynamoDB.maxNesting)
 
 /-! ## The adapters this library ships, named so a vector can cite them
 

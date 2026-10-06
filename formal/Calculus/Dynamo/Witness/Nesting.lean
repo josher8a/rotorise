@@ -31,8 +31,9 @@ Three things are proved:
   remark.
 
 The third is why `src/` gates on depth at every codec that writes a list or a map: each
-container passes its level to its children, and the write past the bound is refused. It is also
-why the honest repair is
+container passes its level to its children, and the write past the bound is refused. The port
+states that gate as `storeCodec` (`Dynamo/Lang/Store.lean`), and `storeCodec_refuses_deep` refuses
+the witness. The third is also why the honest repair is
 *not* a carrier refinement: the witness is well-typed, so no premise of the typing rules is
 being violated — the rules simply do not mention depth.
 -/
@@ -144,6 +145,32 @@ theorem not_storable_of_typed :
     ∃ (t : Term) (T : Held) (μ : Option Member) (v : Value) (a : Attr),
       Typed α t T μ ∧ (denote α t).e v = some a ∧ ¬ Attr.Storable maxNesting a :=
   Calculus.not_storable_of_typed maxNesting
+
+/-- The port gates every derivable term: `storeCodec` keeps the laws of `soundness`. -/
+theorem lawful_storeCodec_denote {t T μ} (h : Typed α t T μ) (hob : Obligations α t) :
+    Lawful (storeCodec (denote α t)) :=
+  Calculus.lawful_storeCodec (soundness h hob)
+
+/-- …and keeps the carrier of every derivable term. -/
+theorem carrier_storeCodec_denote {t T μ} (h : Typed α t T μ) (hob : Obligations α t) :
+    Carrier (storeCodec (denote α t)) :=
+  Calculus.carrier_storeCodec (Alg.carrier_denote h hob)
+
+/-- **The port refuses the witness**: the write at `maxNesting + 1` levels is refused. -/
+theorem storeCodec_refuses_deep :
+    (storeCodec (denote α (deepT (maxNesting + 1)))).e (deepV (maxNesting + 1)) = none := by
+  rw [storeCodec, Alg.refine2_e_def]
+  simp only [if_true]
+  rw [deepT_e]
+  simp [isStorable, nesting_deepA]
+
+/-- …and writes the witness at `maxNesting` levels unchanged. -/
+theorem storeCodec_writes_deep :
+    (storeCodec (denote α (deepT maxNesting))).e (deepV maxNesting) = some (deepA maxNesting) := by
+  rw [storeCodec, Alg.refine2_e_def]
+  simp only [if_true]
+  rw [deepT_e]
+  simp [isStorable, nesting_deepA]
 
 end Calculus.DynamoDB
 
