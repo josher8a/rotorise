@@ -6,7 +6,7 @@
  * things are going on there and they are worth keeping apart: an attribute that is *absent*, and
  * an attribute written in an encoding that is no longer the current one.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AttributeMap, AttributeValue } from '../../attribute'
 import { DynamoNumber } from '../../attribute'
 import {
@@ -277,8 +277,8 @@ describe('an attribute the row does not have', () => {
 })
 
 /**
- * **A stand-in over the codec under declaration.** The check of the stand-in forces the thunk that
- * is still resolving, so the check waits until the thunk resolves. The check still runs, so an
+ * **A stand-in over the codec under declaration.** The check of the stand-in runs while the thunk
+ * still resolves, so the check waits until the thunk resolves. The check still runs, so an
  * unwritable stand-in still refuses.
  */
 describe('a stand-in for a recursive codec', () => {
@@ -335,8 +335,8 @@ describe('a stand-in for a recursive codec', () => {
 
 /**
  * **Two thunks under resolution.** The first use forces `Tree`, and `Tree`'s union forces `Branch`.
- * The stand-in check forces `Tree`, so the check waits on `Branch`. When `Branch` resolves, `Tree`
- * still resolves, so the check waits again on `Tree`.
+ * The stand-in check runs while `Branch` resolves, so the check waits on `Branch`. When `Branch`
+ * resolves, `Tree` still resolves, so the check waits again on `Tree`.
  */
 describe('a stand-in check waits for every thunk under resolution, the outer ones too', () => {
     type Tree = { end: string } | Branch
@@ -388,6 +388,50 @@ describe('a stand-in check waits for every thunk under resolution, the outer one
             /stand-in must be a value the codec it stands in for can write, and this `lazy` refuses the stand-in: .*an end that is not empty/,
         )
     })
+})
+
+/**
+ * **The first use through either thunk.** A first use through `Branch` resolves `Branch` first. A
+ * check that forced `Tree` then would declare `Tree`'s union over `Branch` under resolution, which
+ * reads `Branch` as a free variable at the root and refuses a guarded term. Each order runs in a
+ * fresh module instance, so no state that an earlier use left in the module decides the verdict.
+ */
+describe('a stand-in verdict does not depend on which recursive thunk is used first', () => {
+    type Tree = { end: string } | Branch
+    type Branch = { name: string; next: Tree }
+
+    const declare = async () => {
+        vi.resetModules()
+        const { CodecError, lazy, object, string, union, withLegacyRead } =
+            await import('../../codec')
+        const Tree: AttributeCodec<Tree> = lazy(() =>
+            union([object({ end: string }), Branch]),
+        )
+        const Branch: AttributeCodec<Branch> = lazy(() =>
+            object({
+                name: string,
+                next: withLegacyRead({
+                    current: Tree,
+                    whenMissing: { end: 'x' },
+                }),
+            }),
+        )
+        return { CodecError, Tree, Branch }
+    }
+    const value: Branch = { name: 'a', next: { end: 'b' } }
+
+    for (const first of ['Tree', 'Branch'] as const) {
+        it(`a writable stand-in encodes, decodes, and fills a missing attribute when ${first} is used first`, async () => {
+            const codecs = await declare()
+            const written = codecs[first].encode(value)
+            expect(written).not.toBeInstanceOf(codecs.CodecError)
+            expect(codecs.Tree.decode(written as AttributeValue)).toEqual(value)
+            expect(codecs.Branch.decode({ M: { name: { S: 'a' } } })).toEqual({
+                name: 'a',
+                next: { end: 'x' },
+            })
+        })
+    }
 })
 
 describe('an attribute written in an older encoding', () => {
