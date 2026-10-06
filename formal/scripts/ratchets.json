@@ -39,7 +39,7 @@
     "Calculus/Dynamo/Analysis/Slice.lean": 41,
     "Calculus/Dynamo/Analysis/Universal.lean": 17,
     "Calculus/Dynamo/Domain.lean": 72,
-    "Calculus/Dynamo/Lang/Denote.lean": 11,
+    "Calculus/Dynamo/Lang/Denote.lean": 18,
     "Calculus/Dynamo/Lang/Equations.lean": 18,
     "Calculus/Dynamo/Lang/HeldFree.lean": 15,
     "Calculus/Dynamo/Lang/HeldSet.lean": 35,

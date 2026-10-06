@@ -247,15 +247,13 @@ const setWire = { S: 'SS', N: 'NS', B: 'BS' } as const
  * slice vectors check each tag: the one-key clause of a tag must admit its own member.
  *
  * **`req` only.** A discriminator that fills an absent tag with a default would key a member on a
- * value no item carries. `Calculus.Body.spec` gives a field with a stand-in the presence of an
- * optional name, so the model's clause keeps no such member either.
+ * value no item carries, so the index refuses it. The model's slice is wider here: `Calculus.Body.spec`
+ * reads a field with a stand-in as required at the caller side.
  *
- * One divergence: a tag behind an adapter. The model reads a tag through `Calculus.altsOfField`,
- * which answers only where the field's term is a literal. `decimal('1')` and `number(1)` are each a
- * `held` over a literal, so the model reads no tag there; the pair of `number` is binary64
- * rounding, and the model names no such pair. The host builds a numeric tag and reads it back as
- * its text, and `src/codec/lean.ts` refuses to emit one and says why. Narrowing this to the model's
- * literal fields would take a tag the published surface admits today.
+ * The model reads a tag through `Calculus.altsOfField`, through a `refine` and through a `held` under
+ * its adapter word, so a `decimal` tag is a model tag. A `number` tag is a literal at the native base
+ * under a pair whose content is binary64 rounding, and the model names no such pair, so
+ * `src/codec/lean.ts` refuses to emit one and says why.
  */
 export const assignmentOf = (
     ks: readonly string[],

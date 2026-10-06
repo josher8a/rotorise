@@ -72,10 +72,10 @@ import {
     clauseForm,
     disjoint,
     force,
-    pinnedForm,
     readsFreeVariable,
     recursionUse,
     type Scope,
+    storedAlternatives,
     viewsDisjoint,
 } from './term'
 import { shapeOf } from './value'
@@ -1336,51 +1336,46 @@ export type Slice = {
 }
 
 /**
- * **The five readings of the host that the model's slice does not make.**
+ * **The reading of the host that the model's slice does not make.**
  *
- * At a row with one of these, the two sides answer two different questions, so the emitter refuses
- * the row. The pool measured the agreement at every other row. A probe of one reading gives the
- * model the reading, or shows that the host is wrong, and then deletes the refusal.
+ * At a row with this reading, the two sides answer two different questions, so the emitter refuses
+ * the row. The pool measured the agreement at every other row.
  */
-const sliceReadings = {
-    held: 'a member pins the key through a `held` adapter: the host reads the literal under the adapter, and `altsOfField` reads a literal slot alone',
-    refine: 'a member pins the key through a `refine`: the host reads the literal under the refinement, and `altsOfField` reads a literal slot alone',
-    fill: 'a member pins the key with a fill: the host counts a fill as required, and `ObjectSlot.presence` gives a fill the presence of an optional name',
-    alternatives:
-        'the key carries a union of literals: the host compares two sets of alternatives, and `altsSub` compares one literal with one value',
-    form: 'the clause is a `decimal` or a `number` literal: the host compares the form of the literal, and `Alts` carries the base alone',
-} as const
+const numberForm =
+    'the clause is a `number` literal: the host reads the literal under the float adapter of `number`, and the model names no float adapter'
 
 /** One clause, and the options that `src/` keeps under the clause, in the order of the union. */
 type SliceRow = { readonly clause: string; readonly keeps: readonly boolean[] }
 
-/** A clause, as an `AltClause` over the names, the base, and the one value at each name. */
-const leanClause = (
-    entries: readonly (readonly [string, Literal['base'], unknown])[],
-): string =>
+/** One clause key: the name, the adapter word, and the alternatives under the word. */
+type ClauseEntry = readonly [string, string, Alternatives]
+
+/**
+ * **The adapter word a pin goes through**, as `Calculus.pinOf` reads it: `[]` for a literal, and the
+ * generator of the `held` that `leanTermOfTerm` prints, under the same bound, for an adapter.
+ */
+const leanWord = (t: Term, bound: Bound): string =>
+    t.kind === 'refine'
+        ? leanWord(t.inner, bound)
+        : t.kind !== 'held'
+          ? '[]'
+          : t.via === 'decimalText'
+            ? '[(.decimalText, false)]'
+            : `[(.caller ${boundName(bound.adapters, t.via ?? t.f, '')}, false)]`
+
+/** A clause, as an `AltClause` over the names, and the word and the alternatives at each name. */
+const leanClause = (entries: readonly ClauseEntry[], at: string): string =>
     `(AltClause.mk ${leanFinset(entries.map(([name]) => name))} (${leanKeyFunction(
-        entries.map(([name, base, one]) => [
+        entries.map(([name, word, alts]) => [
             leanString(name),
-            `(⟨.${base}, ${leanAlternative(base, one)}⟩ : Alts)`,
+            `((${word}, ⟨.${alts.base}, ${leanNonEmptySet(
+                (alts.ls as readonly LiteralValue[]).map((one) =>
+                    leanAlternative(alts.base, one),
+                ),
+                at,
+            )}⟩) : Pin)`,
         ]),
     )}))`
-
-/** Refuse a key where a member pins the key by a reading that the model does not make. */
-const memberReadings = (
-    options: readonly Term[],
-    key: string,
-    at: string,
-): void => {
-    for (const t of options) {
-        if (t.kind !== 'object') continue
-        const field = t.body.fields[key]
-        if (field === undefined || pinnedForm(field.t) === undefined) continue
-        if (field.t.kind === 'held') refuse(at, sliceReadings.held)
-        if (field.t.kind === 'refine') refuse(at, sliceReadings.refine)
-        if (field.t.kind === 'union') refuse(at, sliceReadings.alternatives)
-        if (field.mark === 'fallback') refuse(at, sliceReadings.fill)
-    }
-}
 
 /** The options that `src/`'s `extract` keeps under one clause. */
 const keptBy = (
@@ -1413,27 +1408,23 @@ const sliceRow = (
     codec: Sliceable,
     options: readonly Term[],
     clause: Readonly<Record<string, AnyCodec>>,
+    bound: Bound,
     at: string,
 ): SliceRow => {
-    const entries = Object.entries(clause).map(([key, value]) => {
+    const entries = Object.entries(clause).map(([key, value]): ClauseEntry => {
         const def = value.def
         const form = 'mark' in def ? undefined : clauseForm(def)
-        if (form === undefined) {
+        if ('mark' in def || form === undefined) {
             return refuse(
                 at,
                 `the clause at '${key}' is no literal codec: \`src/\` refuses the clause, and \`AltClause\` has no clause to state`,
             )
         }
-        const ls: readonly LiteralValue[] = form.alts.ls
-        if (ls.length !== 1) refuse(at, sliceReadings.alternatives)
-        if (form.alts.base === 'number' && form.form !== 'dynamoNumber') {
-            refuse(at, sliceReadings.form)
-        }
-        memberReadings(options, key, at)
-        return [key, form.alts.base, ls[0]] as const
+        if (form.form === 'number') refuse(at, numberForm)
+        return [key, leanWord(def, bound), form.alts]
     })
     return {
-        clause: leanClause(entries),
+        clause: leanClause(entries, at),
         keeps: keptBy(codec, options, clause, at),
     }
 }
@@ -1447,9 +1438,9 @@ const sliceRow = (
 const assignmentRows = (
     options: readonly Term[],
     keys: readonly string[],
+    bound: Bound,
     at: string,
 ): readonly SliceRow[] => {
-    for (const key of keys) memberReadings(options, key, `${at}.${key}`)
     const assigned = options.map((t, i) => {
         if (t.kind !== 'object') {
             return refuse(
@@ -1464,24 +1455,28 @@ const assignmentRows = (
                 `\`src/\` assigns no tag: ${tags.message}`,
             )
         }
-        // past the refusals above, a tag is a literal slot, so the base is the literal's
-        const baseAt = (key: string): Literal['base'] => {
+        // past `assignmentOf`, a tag is a `req` field that stores one alternative
+        const entryAt = (key: string): ClauseEntry => {
             const field = t.body.fields[key]
-            if (field?.t.kind !== 'literal') {
+            const alts = field && storedAlternatives(field.t)
+            if (field === undefined || alts === undefined) {
                 throw new Error(
-                    `${at}.option${i}: the tag at '${key}' is no literal`,
+                    `${at}.option${i}: the tag at '${key}' stores no literal`,
                 )
             }
-            return field.t.base
+            if (clauseForm(field.t)?.form === 'number') {
+                refuse(`${at}.option${i}`, numberForm)
+            }
+            return [key, leanWord(field.t, bound), alts]
         }
-        return keys.map((key) => [key, baseAt(key), tags[key]] as const)
+        return keys.map((key) => [entryAt(key), tags[key]] as const)
     })
-    return assigned.flatMap((mine) =>
-        mine.map(([key, base, tag], k) => ({
-            clause: leanClause([[key, base, tag]]),
+    return assigned.flatMap((mine, i) =>
+        mine.map(([entry, tag], k) => ({
+            clause: leanClause([entry], `${at}.option${i}`),
             keeps: assigned.map((other) => {
-                const [, b, t] = other[k] as (typeof other)[number]
-                return b === base && t === tag
+                const [[, , alts], t] = other[k] as (typeof other)[number]
+                return alts.base === entry[2].base && t === tag
             }),
         })),
     )
@@ -1507,17 +1502,18 @@ export const leanSlice = ({
         )
     }
     const options = def.options
-    const rows = [
-        ...clauses.map((clause, i) =>
-            sliceRow(codec, options, clause, `${name}.clause${i}`),
-        ),
-        ...assignmentRows(options, keys, name),
-    ]
+    // one bound for the clauses and the options, so one adapter is one generator in both
     const bound: Bound = {
         closures: new Map(),
         adapters: new Map(),
         readers: new Map(),
     }
+    const rows = [
+        ...clauses.map((clause, i) =>
+            sliceRow(codec, options, clause, bound, `${name}.clause${i}`),
+        ),
+        ...assignmentRows(options, keys, bound, name),
+    ]
     const printed = options.map((t, i) =>
         leanTermOfTerm(t, `${name}.option${i}`, { ...topScope(t), bound }),
     )

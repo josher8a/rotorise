@@ -332,8 +332,8 @@ Every other row is owed unconditionally.
 The spec projection separates a name's presence from what the name holds. The split is
 Rémy's, from the 1989 record and variant extension of ML. A field type carries presence
 beside the value type, so an analysis keeps exact negative information about a name.
-`litSubAt` reads both: the one current-schema presence fact, and the literal a name is pinned
-to. No reader reads a codec.
+`litSubAt` reads both: the one current-schema presence fact, and the pin of a name: its
+adapter word and its set of alternatives. No reader reads a codec.
 
 The emitter clause is owed for the same reason as the rest: the bridge is part of the
 correspondence, and a stratum whose shape the emitter cannot spell produces committed vector
