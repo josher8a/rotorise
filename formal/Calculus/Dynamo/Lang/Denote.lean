@@ -28,14 +28,12 @@ section
     set and the slot function as two arguments, so this is the coercion. -/
 def Body.map (b : Body) : MapOf ObjectSlot := ⟨b.fields, b.at⟩
 
-/-- **The adapter word a pin goes through**, the generators of a `held` in order. The empty word
-    is the native form, so `decimal` pins under `[(.decimalText, false)]` and a literal under `[]`. -/
-abbrev AdapterWord := List (DynGen × Bool)
-
-/-- **What a name is pinned to**: the adapter word, and the alternatives under the word. The word is
-    part of the pin because a `held` admits the caller's value and not the literal beneath it: a
-    clause at the same literal under another word describes other values. -/
-abbrev Pin := AdapterWord × Alts
+/-- **What a name is pinned to**: the adapter word, and the alternatives under the word. The word
+    is the generators of a `held` in order. The empty word is the native form, so `decimal` pins
+    under `[(.decimalText, false)]` and a literal under `[]`. The word is part of the pin because a
+    `held` admits the caller's value and not the literal beneath it: a clause at the same literal
+    under another word describes other values. -/
+abbrev Pin := Word × Alts
 
 /-- The literals of a list of options, where each option is a literal at base `k`. -/
 def litsAt (k : GroundKind) : List Term → Option (Finset k.Carrier)
