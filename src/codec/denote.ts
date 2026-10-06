@@ -959,9 +959,10 @@ export const denote = (def: Term): Pair => {
         /**
          * §3 `(list)`: the one positional container, with the arity test before any position.
          *
-         * `arrayCodec_eq` and `tupleCodec_eq` are the lemmas for the two builder shapes, and
-         * `align_eq_some` is what settles the spread: the arity test comes **before** the
-         * positions, because a list of the wrong length has no entrywise reading at all. `align`
+         * The model's two builder shapes, `arrayCodec` and `tupleCodec`, are abbreviations of
+         * `listCodec`. The row is `denote_list`, and `Alg.lawful_listCodec` is the lemma.
+         * `Alg.alignL_eq_some` settles the spread: the arity test comes **before** the
+         * positions, because a list of the wrong length has no entrywise reading at all. `alignL`
          * is the model's name for that step; here it is the two length tests, and they are the
          * same fact — a list with a spread aligns at *at least* its declared positions, one
          * without at exactly them.
@@ -1128,20 +1129,21 @@ export const denote = (def: Term): Pair => {
                     body.decode(carried),
             )
         }
-        /** §3 `(held)`. `lawful_through` is the lemma; the adapter is data the term carries. */
+        /** §3 `(held)`. `Lawful.held1` is the lemma; the adapter is data the term carries. */
         case 'held':
             return heldThrough(pairOf(def.inner), {
                 encode: def.f,
                 decode: def.g,
             })
-        /** §3 `(refine)`. `lawful_restrict` is the lemma; `q` is data the term carries. */
+        /** §3 `(refine)`. `Lawful.restrict` is the lemma; `q` is data the term carries. */
         case 'refine':
             return restrict(pairOf(def.inner), holds(def.q), (value) =>
                 refusedBy(def.q, value),
             )
         /**
          * §3 `(withLegacyRead)`: the current reading, extended by an older one — the model's
-         * `Codec.extendRead`, and `lawful_extendRead` is the lemma. The write side is untouched,
+         * `Codec.extendRead`. The model proves the core laws only (`LawfulCore.extendRead`): a
+         * canonical read fails, and `legacy_breaks_MP` is the refutation. The write side is untouched,
          * which is the whole of what makes it a migration rather than a union: `withLegacyRead` adds no
          * way to *write*, only a second way to read.
          *
@@ -1259,15 +1261,15 @@ export const denote = (def: Term): Pair => {
             }
         /**
          * §3 `(opaque)`: the recursive union of everything self-identifying, and total: a number
-         * is a `DynamoNumber`. The two numeric policies are `held` over this row. `lawful_opaqCodecω` is the lemma, and it is a *theorem* rather
-         * than an obligation — the model's `Obligations (.opaq _)` is `True`, which is what makes
+         * is a `DynamoNumber`. The two numeric policies are `held` over this row. `lawful_opaq` is the lemma, and it is a *theorem* rather
+         * than an obligation — the model's `Obligations .opaq` is `True`, which is what makes
          * `opaque` a well-behaved `custom`: the same analysis with the opposite warranty. A
          * `custom` carries a premise its author owes; this carries none, because the calculus
          * proves the laws for it.
          *
-         * The pair is this library's own recursion rather than a fixpoint built here, and the row
-         * asks it. §5's rows do the same for the same reason: no syntactic set names
-         * `opaqCodecω`'s domain, because it recurses on the *input's own depth*.
+         * The model's codec is `Ω`, which is `Alg.idCodec`: with one carrier, each datum identifies
+         * itself. The host has two carriers, so the pair is this library's own recursion over the
+         * input, and the row asks it.
          */
         case 'opaq':
             return {
@@ -1326,15 +1328,10 @@ export const denote = (def: Term): Pair => {
             }
         }
         /**
-         * §3 `(number)`. The held set is `D` — §1's numeral domain — and not every double, so
-         * both halves gate. `lawful_numberCodec` is its own lemma rather than the ground one's,
-         * and the model's row is written out for the same reason this one is.
-         *
-         * **The second gate is not redundant**, and the model records the same fact from the same
-         * direction: `p` gates on the **round-tripped** value rather than on the stored digits,
-         * because `ofDec` rounds and a numeral at the top of the range can round *up* past it.
-         * Gating on the digits would admit a value `e` then refuses, which is **(C)** failing.
-         * `Number('9.9999999999999999999999999999999999999E+125')` is that numeral here.
+         * §3 `(number)`. The model's row is the ground base at `N`, and `lawful_baseCodec .number`
+         * is the lemma. The write asks the kind. The read gates the stored form through
+         * {@link storedNumber}. The model states the stored form at the port (`storeCodec`), not
+         * in this row.
          */
         case 'number':
             return {

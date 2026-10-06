@@ -3327,7 +3327,10 @@ type ProductOfTwo<X, Y> = Distribute<
         : UnionCodec<DerivedUnion<Ms>, Ms>
     : never
 
-/** More than two factors fold left, which `merge_assoc` is why the other nesting agrees. */
+/**
+ * More than two factors fold left. The model proves the name set of a merge associative
+ * (`Body.merge_fields_assoc`) and the rest of a merge empty (`Body.merge_wild`).
+ */
 type FoldProduct<Fs extends readonly unknown[]> = Fs extends readonly [
     infer A,
     infer B,
@@ -3495,8 +3498,9 @@ const productOfTwo = (first: unknown, second: unknown): unknown => {
  * distribution law states. It is built through {@link union}, so `agrees` runs
  * over the products and a pair of merges it cannot show compatible is refused there rather than here.
  *
- * **More than two factors fold left.** `product(a, b, c)` is `product(product(a, b), c)`, and the
- * model's `merge_assoc` on `fields` and `rest` is why the other nesting gives the same term.
+ * **More than two factors fold left.** `product(a, b, c)` is `product(product(a, b), c)`. The
+ * model proves the name set of a merge associative (`Body.merge_fields_assoc`) and the rest of a
+ * merge empty (`Body.merge_wild`). No declaration proves that the other nesting gives the same term.
  *
  * @example
  * ```ts

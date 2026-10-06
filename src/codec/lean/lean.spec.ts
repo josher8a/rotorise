@@ -1108,7 +1108,8 @@ export const sampleVectors: readonly Vector[] = [
         ),
         value: { a: 'x', n: '1' },
     },
-    // and the fold, which `merge_assoc` on `fields` and `rest` is why either nesting gives
+    // and the fold: the model proves the name set associative (`Body.merge_fields_assoc`)
+    // and the rest empty (`Body.merge_wild`)
     {
         name: 'product_three',
         codec: erase(
