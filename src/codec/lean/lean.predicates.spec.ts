@@ -16,9 +16,9 @@
  *
  * Two facts found while wiring this up, both recorded here because each one is a trap:
  *
- * 1. **The correspondence is only over strings.** `isStoredNumeral` takes a `string`; `isStored`
- *    takes a `Value`. `RegExp.test` stringifies, so `isStoredNumeral(['1'])` is `true` where
- *    `isStored (Value.arr …)` is `false`. The emitter confines itself to inner terms that write
+ * 1. **The correspondence is only over strings.** `isStoredNumeral` takes a `string`; the printed
+ *    predicate takes a `Value`. `RegExp.test` stringifies, so `isStoredNumeral(['1'])` is `true` where
+ *    the printed predicate at `Value.arr …` is `false`. The emitter confines itself to inner terms that write
  *    nothing but `Value.str`, where the gap is unobservable, and refuses otherwise.
  * 2. **`refine`'s two halves are not symmetric here, and are in the model.** This library's
  *    `refine` does *not* run `is` on encode (`src/codec/codec.ts:1466` says why: the argument is already
@@ -58,13 +58,14 @@ describe('the predicates this library ships', () => {
     /**
      * `isStoredNumeral` is what DynamoDB hands back, and `Numeral.Stored` is the same set —
      * `src/codec/attribute.ts:138` claims it and the two were checked against each other in the kernel
-     * over a corpus of numeral spellings before this emission was allowed. `isStored` is that
-     * predicate lifted to a `Value`.
+     * over a corpus of numeral spellings before this emission was allowed. The emitter writes
+     * `Numeral.Stored` at the text carrier, because a refinement over `decimal` tests the caller's
+     * text. The model's `isStored` decides a `.num`, and is false at every text.
      */
-    it('emits `isStored` for `isStoredNumeral`', () => {
+    it('emits `Numeral.Stored` at the text carrier for `isStoredNumeral`', () => {
         const stored = refine(decimal, narrowing(isStoredNumeral))
         expect(leanTermOf(erase(stored))).toBe(
-            'Term.refine ((Term.held false (Term.number) (Term.string) (.decimalText, false) [])) (Pred.closure isStored) ()',
+            'Term.refine ((Term.held false (Term.number) (Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) ()',
         )
     })
 
@@ -96,7 +97,7 @@ describe('the predicates this library ships', () => {
             string('1', '2') as AttributeCodec<string>,
             narrowing(isStoredNumeral),
         )
-        expect(leanTermOf(erase(one))).toContain('isStored')
+        expect(leanTermOf(erase(one))).toContain('Numeral.Stored s')
     })
 
     /** The whole point: it has to survive the vector writer, not just the term writer. */
@@ -107,7 +108,7 @@ describe('the predicates this library ships', () => {
             value: '1.5',
         })
         expect(emitted).toContain(
-            'Term.refine ((Term.held false (Term.number) (Term.string) (.decimalText, false) [])) (Pred.closure isStored) ()',
+            'Term.refine ((Term.held false (Term.number) (Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) ()',
         )
         expect(emitted).toContain('Attr.n (WFNumeral.of "1.5")')
     })

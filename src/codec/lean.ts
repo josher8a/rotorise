@@ -377,8 +377,9 @@ export const leanAttrOf = (
  *
  * ── the correspondence, and what checked it ────────────────────────────────────────────────────
  *
- * `isStoredNumeral` ↦ `isStored` and `isNumeral` ↦ the same shape over `Numeral.WF`, which the
- * model carries in the type of `.num` and so is written out here. Both were checked
+ * `isStoredNumeral` ↦ `Numeral.Stored` and `isNumeral` ↦ `Numeral.WF`, each written out at the text
+ * carrier `.str`. The model's `isStored` decides a `.num`, and a refinement over `decimal` tests the
+ * caller's text, so `isStored` is not the image of `isStoredNumeral`. Both were checked
  * against the kernel rather than read across: a corpus of numeral spellings was run through the
  * TypeScript predicates, the verdicts emitted as `Numeral.WF s = b` / `Numeral.Stored s = b` rows,
  * and all of them closed by `rfl`. A test of whether a value is an `N` is not `isNumeral`: it is a
@@ -388,7 +389,7 @@ export const leanAttrOf = (
  *
  * The two TypeScript predicates take a `string`; a `Value → Bool` takes anything. They disagree
  * where JavaScript coerces: `isStoredNumeral(['1'])` is `true`, because `RegExp.test` stringifies
- * its argument and `String(['1'])` is `'1'`, while `isStored (Value.arr …)` is `false`. So the
+ * its argument and `String(['1'])` is `'1'`, while the printed predicate at `Value.arr …` is `false`. So the
  * correspondence holds *on string values only*, and {@link writesOnlyStrings} confines the emission
  * to inner terms that write nowhere else — where `Codec.restrict`'s `e` is `if q v then c.e v else
  * none` and `c.e v` is already `none` off the strings, so `q`'s verdict there cannot be observed.
@@ -407,8 +408,8 @@ const shippedPredicates: ReadonlyMap<unknown, ShippedPredicate> = new Map<
     [
         isStoredNumeral,
         {
-            lean: 'isStored',
-            what: '`isStoredNumeral`, which is `Numeral.Stored`',
+            lean: '(fun v => match v with | .str s => Numeral.Stored s | _ => false)',
+            what: '`isStoredNumeral`, which is `Numeral.Stored` at the text carrier',
         },
     ],
     [
