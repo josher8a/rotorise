@@ -219,9 +219,10 @@ export class DynamoNumber {
      * comparison and round trip downstream would have to know that. This is the one place that
      * can know it.
      *
-     * A codec that must refuse a denormal spelling rather than re-spell it — {@link decimal} does,
-     * because it hands the caller back text — checks {@link isStoredNumeral} on the text before
-     * building one of these.
+     * A spelling that must be refused rather than re-spelled is checked with {@link isStoredNumeral}
+     * before one of these is built. Two places refuse. The `encode` of {@link decimal} refuses,
+     * because `decimal` hands the caller back text. Every numeric read refuses, because the store
+     * returns the stored form only, and a read that re-spelled the numeral would not write back.
      */
     static from(digits: string): Result<DynamoNumber> {
         return isNumeral(digits)

@@ -376,11 +376,21 @@ describe('the read side reads through the same gate as number', () => {
         }
     })
 
-    /** The forms DynamoDB does accept still read, which is what keeps the store round trip. */
-    it('still reads the denormalised forms the service normalises', () => {
+    /**
+     * DynamoDB accepts `'1.0'`, `'01'`, `'+1'` and `'1e0'`, and returns `'1'` for each. A read of
+     * such a numeral holds `1` and writes `'1'`, so the value read would not write back to the
+     * attribute read. The store returns the stored form only, so the read refuses the other forms.
+     */
+    it('a numeric read refuses a numeral that the store would not return, so every read writes back', () => {
         const status = number(0, 1, 2)
-        for (const text of ['1', '1.0', '01', '+1', '1e0']) {
-            expect(status.unsafeDecode({ N: text })).toBe(1)
+        expect(status.unsafeDecode({ N: '1' })).toBe(1)
+        expect(status.unsafeEncode(1)).toEqual({ N: '1' })
+        for (const text of ['1.0', '01', '+1', '1e0']) {
+            expect(readsBack(status, { N: text })).toBe(false)
+            // one alternative carries the reason; more than one report that no option admits it
+            expect(() => number(1).unsafeDecode({ N: text })).toThrow(
+                "the store returns '1' for this numeral, so the value read would not write back",
+            )
         }
     })
 
@@ -392,11 +402,14 @@ describe('the read side reads through the same gate as number', () => {
      * attribute — and it is pinned here rather than believed.
      */
     it('needs no second gate, because the rounded value cannot be in the set', () => {
-        const past = '9.9999999999999999999999999999999999999E+125'
+        // `9.9999999999999999999999999999999999999E+125`, in the form the store returns
+        const past = `${'9'.repeat(38)}${'0'.repeat(88)}`
         expect(Number(past)).toBe(1e126)
         // refused by `ℓ` and not by a second gate: the rounded value is outside a set fixed at
         // construction, so membership is what declines it
-        expect(readsBack(number(1e125), { N: '1e125' })).toBe(true)
+        expect(readsBack(number(1e125), { N: `1${'0'.repeat(125)}` })).toBe(
+            true,
+        )
         expect(readsBack(number(1e125), { N: past })).toBe(false)
         expect(() => number(1e125).unsafeDecode({ N: past })).toThrow(
             CodecError,

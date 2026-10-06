@@ -44,7 +44,7 @@ import { carrying, isNumeral, memberOf, tooDeeplyNested } from './attribute'
 import { codec } from './build'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every, everyEntry } from './codec'
-import { opaqueTerms, storedTooDeeply } from './denote'
+import { opaqueTerms, storedNumber, storedTooDeeply } from './denote'
 
 /**
  * The options `@aws-sdk/util-dynamodb` takes, as far as this reproduces them.
@@ -266,36 +266,34 @@ const toNative = (
 }
 
 /** A stored number, as `convertToNative` reads it — a `bigint` outside the safe range. */
-const fromNativeNumber = (digits: string): Result<unknown> => {
+const fromNativeNumber = (digits: string): Result<unknown> =>
     /**
      * **`Number` reads far more than an `N` carries**, and the SDK hands it the digits unchecked:
      * `''` and whitespace are `0`, `'0x10'` is `16`, `'abc'` is `NaN`. Each is a value this codec's
      * own `encode` now refuses, which is **(C)** failing — the pair's two halves disagreeing about
-     * what an `N` holds. `number` and `opaque` have read through this gate since the numeral domain
-     * was tightened; this is the third reader of an `N`, one file over.
+     * what an `N` holds. `number` and `opaque` read through the same gate, and this is the third
+     * reader of an `N`. The gate admits the stored form only, so `'1.0'` is refused: the value read
+     * would write `'1'`, and the store returns no `'1.0'`.
      *
      * One gate is enough here, where `number` needs two. `number`'s second gate catches a numeral
      * that rounds *out* of range on the way into a double; this reader hands a wide value back as a
      * `bigint` of the very digits stored, and a narrow one is inside the safe range, so nothing it
      * returns can fail to be writable again.
      */
-    if (!isNumeral(digits)) {
-        return new CodecError(
-            `'${digits}' is not a numeral, so this attribute was not written by DynamoDB`,
-        )
-    }
-    const asNumber = Number(digits)
-    const wide =
-        asNumber > Number.MAX_SAFE_INTEGER || asNumber < Number.MIN_SAFE_INTEGER
-    if (!wide || !Number.isFinite(asNumber)) return asNumber
-    try {
-        return BigInt(digits)
-    } catch {
-        return new CodecError(
-            `${digits} can't be converted to BigInt. Set options.wrapNumbers to get string value.`,
-        )
-    }
-}
+    andThen(storedNumber(digits), () => {
+        const asNumber = Number(digits)
+        const wide =
+            asNumber > Number.MAX_SAFE_INTEGER ||
+            asNumber < Number.MIN_SAFE_INTEGER
+        if (!wide || !Number.isFinite(asNumber)) return asNumber
+        try {
+            return BigInt(digits)
+        } catch {
+            return new CodecError(
+                `${digits} can't be converted to BigInt. Set options.wrapNumbers to get string value.`,
+            )
+        }
+    })
 
 /**
  * A stored set, refused when empty.

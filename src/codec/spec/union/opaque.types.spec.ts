@@ -188,7 +188,7 @@ describe('opaque is one codec and one optional policy', () => {
 
     it('and calling it with no argument means the same thing', () => {
         expect(failed(opaque().encode(1))).toBe(true)
-        expect(opaque().decode({ N: '1.50' })).toEqual(
+        expect(opaque().decode({ N: '1.5' })).toEqual(
             orThrow(DynamoNumber.from('1.5')),
         )
     })
@@ -378,7 +378,7 @@ describe('every N it writes is a numeral', () => {
                 /is not a numeral/,
             )
         }
-        expect(lossy.unsafeDecode({ N: '1.50' })).toBe(1.5)
+        expect(lossy.unsafeDecode({ N: '1.5' })).toBe(1.5)
         expect(lossy.unsafeDecode({ N: '0' })).toBe(0)
     })
 
