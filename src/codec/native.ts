@@ -44,7 +44,7 @@ import { carrying, isNumeral, memberOf, tooDeeplyNested } from './attribute'
 import { codec } from './build'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every, everyEntry } from './codec'
-import { opaqueTerms } from './denote'
+import { opaqueTerms, storedTooDeeply } from './denote'
 
 /**
  * The options `@aws-sdk/util-dynamodb` takes, as far as this reproduces them.
@@ -387,7 +387,8 @@ const configured = (
     return codec<unknown, AttributeValue>({
         def: opaqueTerms.lossy,
         encode: (value) => toNative(value, options, write),
-        decode: (attribute) => fromNative(attribute, read),
+        decode: (attribute) =>
+            storedTooDeeply(attribute, 0) ?? fromNative(attribute, read),
     })
 }
 

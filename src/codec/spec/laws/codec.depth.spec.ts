@@ -14,7 +14,7 @@
  * item is assembled and nowhere inside one attribute's codec.
  */
 import { describe, expect, it } from 'vitest'
-import type { Attribute } from '../../attribute'
+import type { Attribute, AttributeValue } from '../../attribute'
 import { MAX_DOCUMENT_NESTING } from '../../attribute'
 import {
     type AnyCodec,
@@ -424,5 +424,89 @@ describe('the nesting bound at a path', () => {
         expect(at.encode(nestL(MAX_DOCUMENT_NESTING + 1))).toBeInstanceOf(
             CodecError,
         )
+    })
+})
+
+/**
+ * **The read side of the bound.** A decode returns a value that the encode writes back, and the
+ * encode refuses past the bound. So a stored attribute past the bound is refused on the read, at
+ * the same level, and not read into a value that no write accepts.
+ */
+describe('the nesting bound on a read', () => {
+    /** The stored form of `n` nested lists around a string. */
+    const storedL = (n: number): AttributeValue => {
+        let v: AttributeValue = { S: 'leaf' }
+        for (let i = 0; i < n; i++) v = { L: [v] }
+        return v
+    }
+
+    /** The same in maps. */
+    const storedM = (n: number): AttributeValue => {
+        let v: AttributeValue = { S: 'leaf' }
+        for (let i = 0; i < n; i++) v = { M: { k: v } }
+        return v
+    }
+
+    /** `n` levels of stored list, the innermost one empty. */
+    const storedTree = (n: number): AttributeValue => {
+        let v: AttributeValue = { L: [] }
+        for (let i = 1; i < n; i++) v = { L: [v] }
+        return v
+    }
+
+    const refusesPastTheStore = (result: unknown) => {
+        expect(result).toBeInstanceOf(CodecError)
+        expect((result as CodecError).reason).toMatch(
+            /nesting reaches 33 levels of list and map, and DynamoDB stores at most 32/,
+        )
+    }
+
+    it('a decode refuses an attribute that the store could not hold, so every decode encodes back', () => {
+        refusesPastTheStore(opaque.decode(storedL(MAX_DOCUMENT_NESTING + 1)))
+        refusesPastTheStore(opaque.decode(storedM(MAX_DOCUMENT_NESTING + 1)))
+        refusesPastTheStore(native.decode(storedL(MAX_DOCUMENT_NESTING + 1)))
+
+        type Tree = readonly Tree[]
+        const Tree: AttributeCodec<Tree, Attribute<'L'>> = lazy(() =>
+            array(Tree),
+        )
+        refusesPastTheStore(Tree.decode(storedTree(MAX_DOCUMENT_NESTING + 1)))
+
+        const item = object({ a: opaque }).item
+        const tooDeep = item.decode({ a: storedL(MAX_DOCUMENT_NESTING + 1) })
+        refusesPastTheStore(tooDeep)
+        expect((tooDeep as CodecError).path).toEqual([
+            'a',
+            ...Array.from({ length: MAX_DOCUMENT_NESTING }, () => 0),
+        ])
+
+        const either = union([object({ a: opaque }), object({ b: string })])
+        refusesPastTheStore(
+            either.item.decode({ a: storedL(MAX_DOCUMENT_NESTING + 1) }),
+        )
+
+        // at the bound, each read encodes back
+        const read = opaque.decode(storedL(MAX_DOCUMENT_NESTING))
+        expect(read).not.toBeInstanceOf(CodecError)
+        expect(opaque.encode(read)).toEqual(storedL(MAX_DOCUMENT_NESTING))
+        const readTree = Tree.decode(storedTree(MAX_DOCUMENT_NESTING))
+        expect(readTree).not.toBeInstanceOf(CodecError)
+        expect(Tree.encode(readTree as Tree)).toEqual(
+            storedTree(MAX_DOCUMENT_NESTING),
+        )
+    })
+
+    /** A path of two segments reads an attribute that sits inside one map. */
+    it('counts the level of a path on a read, as on a write', () => {
+        const at = object({ a: object({ b: opaque }) }).item.at((p) => p.a.b)
+        expect(at.decode(storedL(MAX_DOCUMENT_NESTING - 1))).not.toBeInstanceOf(
+            CodecError,
+        )
+        refusesPastTheStore(at.decode(storedL(MAX_DOCUMENT_NESTING)))
+    })
+
+    /** The walk stops at the bound, so a pathological attribute is a refusal and not a crash. */
+    it('refuses a read far past the bound without exhausting the call stack', () => {
+        refusesPastTheStore(opaque.decode(storedL(100_000)))
     })
 })
