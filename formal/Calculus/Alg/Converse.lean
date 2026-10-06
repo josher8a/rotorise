@@ -151,9 +151,10 @@ theorem agreeS_held1 {side s : Bool} {M₁ M₁' : Type} {c c' : Codec V M}
   agree_sub_left (sub_refine2_self _ _ _)
     (agree_sub_right (sub_refine2_self _ _ _) (agreeS_adapt2 h))
 
-/-- The stored exit function keeps the member of every written attribute. -/
+/-- The stored exit function keeps the member of every written attribute, where the base names a
+    member. A base that names no member owes no member fact, so the premise binds only there. -/
 def KeepsMember (member : V → M) (c : Codec V M) (k : V → V) : Prop :=
-  ∀ v a, c.e v = some a → member (k a) = member a
+  ∀ μ, c.μ = some μ → ∀ v a, c.e v = some a → member (k a) = member a
 
 /-- **The member fact of an exit function at an absolute side.** The attributes carry the
     members, so the fact binds at the side `true`, and the side `false` owes nothing. -/
@@ -164,8 +165,9 @@ def KeepsMemberAt (member : V → M) (c : Codec V M) :
 
 /-- **The obligation of the one-sided adapter at the side `s`**: the pair cancels at the
     orientation whose caller side is `s`, and the exit function keeps the member where `s` is the
-    side of the attributes. A `held` owes one obligation for one half, because the caller code is
-    opaque: the model cannot derive the obligation of one half from the obligation of the other.
+    side of the attributes and the base names a member. A `held` owes one obligation for one half,
+    because the caller code is opaque: the model cannot derive the obligation of one half from the
+    obligation of the other.
     A two-sided adapter is two nested `held`s, so it owes one obligation for each half. -/
 def Obl1 (member : V → M) (c : Codec V M) (s : Bool) (w : PairAt V) : Prop :=
   IsoCancelsAt (Orient.at s) c w.1 w.2 ∧ KeepsMemberAt member c s w.2
@@ -187,7 +189,7 @@ theorem Lawful.adapt2 {member : V → M} {c : Codec V M} (hc : Lawful member c)
     have hfg : (π false).1 ((π false).2 u) = u := hV2 u (Option.isSome_iff_exists.mpr ⟨_, hcu⟩)
     simp only [adapt2_f, hfg, hcu, Option.map_some, hA1 a' (Option.isSome_iff_exists.mpr ⟨_, hu⟩)]
   · obtain ⟨a, ha, rfl⟩ := Option.map_eq_some_iff.mp he
-    rw [hm ((π false).1 v) a ha]
+    rw [hm μ hμ ((π false).1 v) a ha]
     exact hc.writes hμ ha
 
 /-- **The one-sided `held` keeps the laws**, from its one obligation. The other side holds the
@@ -198,7 +200,7 @@ theorem Lawful.held1 {member : V → M} {M₁ : Type} {c : Codec V M} (hc : Lawf
   (hc.adapt2 (fun t => by
       cases s <;> cases t
       all_goals first | exact h.1 | exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩)
-    (by cases s; exacts [fun _ _ _ => rfl, h.2])).refine2 _ _
+    (by cases s; exacts [fun _ _ _ _ _ => rfl, h.2])).refine2 _ _
 
 /-- The adapter is on its carrier when the inner codec is, and the pair of the side `false`
     cancels on the written values. -/
