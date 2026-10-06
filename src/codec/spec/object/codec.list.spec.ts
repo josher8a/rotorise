@@ -129,8 +129,8 @@ describe('what a list refuses at the declaration', () => {
      *
      * A value of exactly the declared length omits every spread position, so a list whose spread
      * holds nothing is the list of its declared positions, and that is a value. The declared
-     * positions are slots and refuse `never`; the spread is not a slot and does not. `Term.listOf`
-     * draws the same line, and `array(never)` is the same fact under the one-word name.
+     * positions are slots and refuse `never`; the spread is not a slot and does not. The model's
+     * `Term.list` draws the same line, and `array(never)` is the same fact under the one-word name.
      */
     it('admits a spread at never, which holds the declared positions alone', () => {
         const bare = list(string, spread(nothing))
