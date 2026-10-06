@@ -8,7 +8,7 @@ law: `SurvivesStore c η`, `Codec.Ker` and `Lawful.retract_through_store` hold f
 normalisation `η`. This module holds the instances at DynamoDB:
 
 * the nesting bound, which the core takes as a parameter of `Attr.Storable`, and `storeCodec`,
-  the write gated at the bound;
+  the write gated at the bound and at the stored numerals;
 * `Numeral.Normal` and `Numeral.Stored`, the numerals the store hands back unchanged;
 * `decimalCodec`, the codec gated at `Stored`, with its laws and its `SurvivesStore`
   instance, and the refutation that the ungated `baseCodec .number` does not survive the store;
@@ -308,16 +308,38 @@ theorem not_retract_through_store_numberCodec {η : Attr → Attr}
 /-! ## The write the store holds
 
 `Attr.l` and `Attr.m` nest without limit, so a lawful codec can write an attribute past
-`maxNesting`. `storeCodec` gates the stored side at the bound. The gate reads the written
-attribute, not the value: a set write has nesting one less than the value it writes. A gate on
-the write alone breaks **(C)**, because a read past the bound then names a value that the write
-refuses. `refine2` gates both halves, so the laws hold over the gate with no premise.
+`maxNesting`. The store also returns each numeral in its stored form, at every depth: an `N`, each
+element of an `NS`, and each numeral inside an `L` or an `M`. `storeCodec` gates the stored side
+at the bound and at the stored numerals. The gate reads the written attribute, not the value: a
+set write has nesting one less than the value it writes. A gate on the write alone breaks **(C)**,
+because a read outside the gate then names a value that the write refuses. `refine2` gates both
+halves, so the laws hold over the gate with no premise.
 -/
 
-/-- The attributes that the store holds: nesting at most `DynamoDB.maxNesting`. -/
-def isStorable (a : Attr) : Bool := decide (Attr.nesting a ≤ DynamoDB.maxNesting)
+mutual
 
-/-- **The DynamoDB write**: `c` with its stored side gated at the nesting bound. -/
+/-- Each numeral in the attribute is `Numeral.Stored`: an `N`, each element of an `NS`, and each
+    numeral inside an `L` or an `M`. -/
+def Attr.numeralsStored : Attr → Bool
+  | .n x => Numeral.Stored x.1
+  | .ns xs => decide (∀ x ∈ xs.1, Numeral.Stored x.1 = true)
+  | .s _ | .b _ | .bool _ | .null | .ss _ | .bs _ => true
+  | .l as => Attr.numeralsStoredL as
+  | .m keys f => decide (∀ k ∈ keys.attach, Attr.numeralsStored (f k) = true)
+
+/-- The list mirror that `Attr.numeralsStored` needs at `L`. -/
+def Attr.numeralsStoredL : List Attr → Bool
+  | [] => true
+  | a :: as => Attr.numeralsStored a && Attr.numeralsStoredL as
+
+end
+
+/-- The attributes that the store holds: nesting at most `DynamoDB.maxNesting`, and each numeral
+    in the stored form. -/
+def isStorable (a : Attr) : Bool :=
+  decide (Attr.nesting a ≤ DynamoDB.maxNesting) && Attr.numeralsStored a
+
+/-- **The DynamoDB write**: `c` with its stored side gated at `isStorable`. -/
 def storeCodec (c : Codec) : Codec := Alg.refine2 c (fun _ => true) isStorable
 
 /-- The gate keeps the laws, and owes no premise. -/
@@ -328,11 +350,21 @@ theorem lawful_storeCodec {c : Codec} (h : Lawful c) : Lawful (storeCodec c) :=
 theorem carrier_storeCodec {c : Codec} (h : Carrier c) : Carrier (storeCodec c) :=
   Alg.carrier_refine2 h _ _
 
-/-- **The store codec writes only what the store holds.** -/
+/-- **The store codec writes only what the store holds**: the nesting is within the bound, and
+    each numeral is in the stored form. -/
 theorem storeCodec_storable (c : Codec) {v a} (he : (storeCodec c).e v = some a) :
-    Attr.Storable DynamoDB.maxNesting a :=
-  (of_decide_eq_true ((Alg.refine2_f.mp he).2.2 : isStorable a = true) :
-    Attr.nesting a ≤ DynamoDB.maxNesting)
+    Attr.Storable DynamoDB.maxNesting a ∧ Attr.numeralsStored a = true :=
+  have h := (Bool.and_eq_true _ _).mp ((Alg.refine2_f.mp he).2.2 : isStorable a = true)
+  ⟨(of_decide_eq_true h.1 : Attr.nesting a ≤ DynamoDB.maxNesting), h.2⟩
+
+/-- **The port refuses a numeral that the store rewrites**: the store returns `"1.500"` as
+    `"1.5"`. -/
+theorem storeCodec_refuses_denormal :
+    (storeCodec (baseCodec .number)).e (.num (.of "1.500")) = none := rfl
+
+/-- …and writes the stored form unchanged. -/
+theorem storeCodec_writes_stored :
+    (storeCodec (baseCodec .number)).e (.num (.of "1.5")) = some (.n (.of "1.5")) := rfl
 
 /-! ## The adapters this library ships, named so a vector can cite them
 
