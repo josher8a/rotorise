@@ -17,8 +17,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import { CodecError } from '../../../Rotorise'
+import type { Attribute } from '../../attribute'
 import type { AnyObjectCodec } from '../../codec'
-import { discriminatedUnion, object, string } from '../../codec'
+import { discriminatedUnion, lazy, mdunion, object, string } from '../../codec'
 
 /** The constructor with its declaration-time constraint forgotten, so the runtime can be asked. */
 const declare = discriminatedUnion as unknown as (
@@ -152,5 +153,46 @@ describe('a stored tag that names a member of Object.prototype', () => {
             type: 'CHECKUP',
             petId: 'p',
         })
+    })
+})
+
+describe('a tag declared through a thunk', () => {
+    // a thunk that resolves denotes its term, so the tag behind it is the tag: the model reads the
+    // printed body, and the table reads the same literal
+    const checkup = string('CHECKUP')
+    const viaThunk = discriminatedUnion('type', [
+        object({
+            type: lazy<'CHECKUP', Attribute<'S'>>(() => checkup),
+            petId: string,
+        }),
+        object({ type: string('SHOT'), vaccine: string }),
+    ])
+
+    it('keys the variant by the literal that the thunk resolves to', () => {
+        expect(
+            viaThunk.decode({
+                M: { type: { S: 'CHECKUP' }, petId: { S: 'p' } },
+            }),
+        ).toEqual({ type: 'CHECKUP', petId: 'p' })
+        expect(viaThunk.encode({ type: 'CHECKUP', petId: 'p' })).toEqual({
+            M: { type: { S: 'CHECKUP' }, petId: { S: 'p' } },
+        })
+    })
+
+    it('keys a dissection the same way', () => {
+        const pet = string('pet')
+        const byKind = mdunion(
+            ['kind'],
+            [
+                object({
+                    kind: lazy<'pet', Attribute<'S'>>(() => pet),
+                    toy: string,
+                }),
+                object({ kind: string('food'), gram: string }),
+            ],
+        )
+        expect(
+            byKind.decode({ M: { kind: { S: 'pet' }, toy: { S: 't' } } }),
+        ).toEqual({ kind: 'pet', toy: 't' })
     })
 })
