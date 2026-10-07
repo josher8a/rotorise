@@ -68,6 +68,7 @@ instance, and JSON is a second instance.
 | `Lang/Disjoint.lean` | the class `Leaf`, and the structural disjointness test `Term.disjoint` over a signature |
 | `Lang/DisjointV.lean`, `Lang/DisjointA.lean` | the soundness of the test: `disjoint_sound`, `disjoint_soundA`, and `disjoint_orthogonal` |
 | `Lang/Compat.lean` | the compatibility decision `Term.compat` over a signature, `compat_sound`, and `pairwiseCompat_of_compatPair` |
+| `Lang/Path.lean` | the path into a term `Term.at`, the write of the store at a path `putPath`, the strong law `strong_law`, and narrowing `narrow` with `narrow_law` |
 
 `Rows.lean` is generic too, in the namespace `Calculus`. It states the row combinators of the
 analyses over one carrier type, and each side of the pair instantiates it. It states the row
@@ -452,6 +453,61 @@ option whose spine reaches a recursive thunk. The other is an option where a `he
 term that a recursive thunk returns and the thunk. The host's `union` also refuses a thunk that
 throws. Recursion below a list or an object stays declared, and the decision decides it. The
 host's `heldFree(t)` reads through a recursive thunk, as the model's `HF` reads through a binder.
+
+---
+
+## A path into a term, and the strong law
+
+**A path is a list of segments.** A segment (`Seg`) is a name into a map, or a position into a
+list. `Term.at` gives the frontier of a term at a path: each term that can stand at the path, or a
+refusal. An entry of a frontier is a `Frame`: a term and its binder stack. Entry `j` of the stack is
+the binder that the variable `j` names. One segment reads the slot of a name (`Body.slotAt`), the
+term of a position (`listChild`), the options of a union, and the body of a binder. A variable
+resolves to its binder, one level up. The resolutions have a bound, so an unguarded binder gives a
+refusal and not a loop.
+
+**The store refuses a segment apart from the term.** A term that stores one member (`μSyn`) apart
+from the member of the container of the segment gives no frame (`apartAt`). So a name on a list,
+a position on a map, and a primitive of another member give no frame. An option of a union that reads maps and
+declares no name gives `never`. A `refine`, a `held` and an alternate reader give a refusal where
+they are not apart, because a frontier cannot carry a restriction. A position past the prefix of a
+list shape with a suffix is a refusal, because the term of the position depends on the length.
+
+**The write of the store at a path is `putPath`.** A name of a map takes the value (`MapOf.put`). A
+position inside a list takes the value, and a position past the end appends the value. Each
+segment before the last must hold an entry. The store refuses every other attribute.
+
+**The strong law: an attribute that a term reads stays readable after a write at a path.**
+`strong_law` takes a typed and guarded term whose obligations hold, and a writer that agrees with
+each frame of the frontier: each frame reads what the writer writes. An attribute that the term
+reads stays readable after the store puts, at the path, what the writer wrote. `path_law` composes
+the law from one law per segment, `StepLaw`. Where a frame reads an attribute, the store refuses
+the segment there, or one child reads the entry and keeps the attribute readable under a write of
+a value that the child reads. Each row of the term language proves its law one time: the object at
+a name, the list at a position, the union through its options, the binder through its fixed point
+(`muCodec_fix`), the variable one resolution down, the bottom, the top, and each term that is
+apart from the segment.
+
+**The law reads lawful frames, and a typed term gives them.** A primitive, a set, a `held`, a
+`refine` and an alternate reader that are apart from the segment read no attribute that the store
+accepts there, where the codec is lawful. So the step laws read `LawfulReach`: each frame that the
+path reaches holds a lawful codec and a guarded term. A frame under a binder reads the limit of
+the binder, and `Obligations` holds the premises of the body at the stages. `lawfulReach_of_typed`
+closes that gap: lawful approximants, with each binder at one stage, agree with the frame at every
+depth (`lawful_of_approx`).
+
+**Narrowing is the restriction by a range idempotent, and `Term.disjoint` decides it.** A clause
+(`clauseTerm`) is an object term: each named key is required at a term, and every other name is
+open. `narrow` keeps each option of a union that `Term.disjoint` does not separate from the clause.
+On an attribute that the stored admission of the clause admits, the narrowed union reads what the
+union reads (`narrow_reads`), and a dropped option reads nothing (`narrow_drops`). The slice of a
+certified union (`AltClause.extract`) keeps fewer options: the options that the clause describes.
+On a union whose options pin one tag each, the two agree.
+
+**The strong law after narrowing needs a condition on the update.** `narrow_law` holds for an item
+that the stored admission of the clause admits, and a write to another item can reach a dropped
+option. `narrow_law` states the condition as a premise, and the DynamoDB port owes the condition
+on the update.
 
 ---
 
