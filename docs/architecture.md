@@ -503,16 +503,24 @@ open. `narrow` keeps each option of a union whose stored view `Term.disjoint` do
 from the stored view of the clause. The guard of a read is the stored admission, and the stored
 view admits each attribute that its term admits (`views_apart` at the dual). `Term.disjoint` reads
 a raw `held` as disjoint from the bottom alone, so a tag behind an adapter separates only under the
-stored view. On an attribute that the stored admission of the clause admits, the narrowed union
-reads what the union reads (`narrow_reads`), and a dropped option reads nothing under every
-environment (`narrow_drops`). The slice of a
+stored view. On an attribute that the stored view of the clause admits, the narrowed union reads
+what the union reads (`narrow_reads`), and a dropped option reads nothing under every environment
+(`narrow_drops`). The slice of a
 certified union (`AltClause.extract`) keeps fewer options: the options that the clause describes.
 On a union whose options pin one tag each, the two agree.
 
-**The strong law after narrowing needs a condition on the update.** `narrow_law` holds for an item
-that the stored admission of the clause admits, and a write to another item can reach a dropped
-option. `narrow_law` states the condition as a premise, and the DynamoDB port owes the condition
-on the update.
+**The strong law after narrowing needs a condition on the update, and the port states the
+condition as data.** `narrow_law` holds for an item that the stored view of the clause admits, and
+a write to another item can reach a dropped option. The DynamoDB port states the condition as a
+guard (`guardOf`): a conjunction of conditions, each a path into the item and one test that the
+store evaluates, `in`, `type` or `exists`. The guard reads the stored view of the clause, so a tag
+behind an adapter gives the test of its stored literal. The port states the guard exactly or
+refuses: on an item, the guard holds exactly where the stored view of the clause admits the
+attribute at the path of the union (`guardOf_exact`). A literal, a union of literals at one base, a
+base, `opaque` and an open object whose slots are each required give a guard. Every other stored
+view refuses, and so does a clause with no key below the root. `narrow_law_guard` is the narrowing
+law with the guard in place of the admission. Rotorise hands the guard to the caller as data, and
+Brushless renders the condition expression.
 
 ---
 

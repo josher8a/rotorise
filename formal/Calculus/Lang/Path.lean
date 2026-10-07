@@ -20,7 +20,7 @@ stages. So the law reads the frames through `LawfulReach`, and `lawfulReach_of_t
 a typed term: lawful approximants agree with each frame at every depth.
 
 `narrow` restricts a union to the options whose stored view `Term.disjoint` does not separate from
-the stored view of a clause. On an attribute that the stored admission of the clause admits, the
+the stored view of a clause. On an attribute that the stored view of the clause admits, the
 narrowed union reads what the union reads, and no dropped option reads the attribute
 (`narrow_law`).
 -/
@@ -1417,20 +1417,25 @@ variable [PrimAdmA S] [Leaf S.sig] [LeafAdmA S] [LeafMeet S.sig] [FormerAdmA S] 
   [TopLaws S]
 
 /-- **Narrowing drops only what the clause excludes**: an option that narrowing drops reads no
-    attribute that the stored admission of the clause admits, under every environment. Each
-    stored view reads what its term reads (`views_apart` at the dual). -/
+    attribute that the stored view of the clause admits, under every environment. The stored view
+    of the option reads what the option reads (`viewLe_of` at the dual), and the two stored views
+    share no attribute (`disjoint_sound` at the dual). The stored view of the clause admits each
+    attribute that the clause admits, so the premise is the weaker one. -/
 theorem narrow_drops {φ o : Term S.sig} {os : List (Term S.sig)} (ho : o ∈ os)
-    (hd : o ∉ narrow S.o.op φ os) (ρ : List S.C) {a : S.V} (hφ : AdmA α β φ [] a = true) :
+    (hd : o ∉ narrow S.o.op φ os) (ρ : List S.C) {a : S.V}
+    (hφ : AdmA α β (view S.o.op φ) [] a = true) :
     AdmA α β o ρ a = false := by
-  have h : (AdmA α β φ [] a && AdmA α β o ρ a) = false :=
-    views_apart (S := S.op) β α (disjoint_of_dropped ho hd) [] ρ a
+  have h : (AdmA α β (view S.o.op φ) [] a && AdmA α β o ρ a) = false :=
+    apart_of_imp' (viewLe_of (S := S.op) β α o ρ a)
+      (disjoint_sound (S := S.op) (α := β) (β := α) pair0 _ _ (disjoint_of_dropped ho hd) [] _
+        (fun _ _ hp => nomatch hp) a)
   rw [hφ, Bool.true_and] at h
   exact h
 
-/-- **Narrowing is the restriction to the clause**: on an attribute that the stored admission of
-    the clause admits, the narrowed union reads what the union reads. -/
+/-- **Narrowing is the restriction to the clause**: on an attribute that the stored view of the
+    clause admits, the narrowed union reads what the union reads. -/
 theorem narrow_reads (φ : Term S.sig) (os : List (Term S.sig)) (ρ : List S.C) {a : S.V}
-    (hφ : AdmA α β φ [] a = true) :
+    (hφ : AdmA α β (view S.o.op φ) [] a = true) :
     (denote α β (.union (narrow S.o.op φ os)) ρ).f S.o.op a =
       (denote α β (.union os) ρ).f S.o.op a := by
   show select (denoteList α β (narrow S.o.op φ os) ρ) (·.f S.o.op) a =
@@ -1443,7 +1448,7 @@ theorem narrow_reads (φ : Term S.sig) (os : List (Term S.sig)) (ρ : List S.C) 
   rw [AdmA_eq_isSome] at h
   exact Option.not_isSome_iff_eq_none.mp (by rw [h]; exact Bool.false_ne_true)
 
-/-- **The narrowing law.** Take an item that the stored admission of the clause admits. No option
+/-- **The narrowing law.** Take an item that the stored view of the clause admits. No option
     that narrowing drops reads the item. Where the narrowed union is typed and guarded and its
     obligations hold, a write at a path whose frontier the narrowed union gives keeps the item
     readable by the union. -/
@@ -1453,7 +1458,8 @@ theorem narrow_law (hS : S.o.op = Orient.dual) {φ : Term S.sig} {os : List (Ter
     (hg : (Term.union (narrow S.o.op φ os)).guarded = true)
     (π : List Seg) (res : List (Frame S)) (hat : (Term.union (narrow S.o.op φ os)).at π = some res)
     (w : S.C) (hw : ∀ g ∈ res, ∀ x a, w.e x = some a → ((Frame.sem α β g).p a).isSome)
-    {A A' x a : S.V} (hφ : AdmA α β φ [] A = true) (hA : ((denote α β (.union os)).p A).isSome)
+    {A A' x a : S.V} (hφ : AdmA α β (view S.o.op φ) [] A = true)
+    (hA : ((denote α β (.union os)).p A).isSome)
     (hx : w.e x = some a) (hput : putPath π a A = some A') :
     (∀ o ∈ os, o ∉ narrow S.o.op φ os → (denote α β o).p A = none) ∧
       ((denote α β (.union os)).p A').isSome := by

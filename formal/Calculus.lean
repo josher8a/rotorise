@@ -65,4 +65,5 @@ import Calculus.Dynamo.Analysis.Confluence
 import Calculus.Dynamo.Analysis.Kernel
 import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Analysis.Path
+import Calculus.Dynamo.Analysis.Guard
 import Calculus.Axioms
