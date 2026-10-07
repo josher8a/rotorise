@@ -1032,26 +1032,6 @@ end Main
 
 /-! ## The frames of a typed term -/
 
-section Approx
-variable {V M : Type} {member : V → M} {depth : V → Nat}
-
-/-- **A codec that lawful codecs approximate at every depth is lawful**, where each approximant
-    keeps the member of the codec. -/
-theorem lawful_of_approx {c : Codec V M}
-    (h : ∀ d, ∃ c', Lawful member c' ∧ AgreeLe depth d c c' ∧ ∀ m, c.μ = some m → c'.μ = some m) :
-    Lawful member c where
-  inv {o x y} hxy := by
-    obtain ⟨c', hl, ha, -⟩ := h (max (depth x) (depth y))
-    rw [ha.f o x (Nat.le_max_left _ _)] at hxy
-    rw [ha.f o.op y (Nat.le_max_right _ _)]
-    exact hl.inv hxy
-  writes {m} hm {t a} he := by
-    obtain ⟨c', hl, ha, hμ⟩ := h (depth t)
-    have he' : c'.e t = some a := (ha.f Orient.host t le_rfl).symm.trans he
-    exact hl.writes (hμ m hm) he'
-
-end Approx
-
 section Discharge
 variable {α : Table S} {β : Table S.op}
 
