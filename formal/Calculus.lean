@@ -23,6 +23,7 @@ import Calculus.Lang.Disjoint
 import Calculus.Lang.DisjointV
 import Calculus.Lang.DisjointA
 import Calculus.Lang.Compat
+import Calculus.Lang.Path
 import Calculus.JSON.Basic
 import Calculus.JSON.Disjoint
 import Calculus.JSON.Compat
@@ -62,4 +63,5 @@ import Calculus.Dynamo.Analysis.Universal
 import Calculus.Dynamo.Analysis.Confluence
 import Calculus.Dynamo.Analysis.Kernel
 import Calculus.Dynamo.Analysis.Compat
+import Calculus.Dynamo.Analysis.Path
 import Calculus.Axioms
