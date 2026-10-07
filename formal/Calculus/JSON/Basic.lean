@@ -155,6 +155,7 @@ variable {β : Alg.Table jsonSyn.op}
 instance id_topLaws : Alg.TopLaws jsonSyn where
   ground m := Alg.sub_fiberCodec Json.member m
   set _ h := nomatch h
+  set_mono _ h := nomatch h
 
 /-- A string or a number, as a term. -/
 def strOrNumTerm : Alg.Term jsonSyn := .union [.prim .str, .prim .num]

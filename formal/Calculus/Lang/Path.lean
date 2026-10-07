@@ -1,4 +1,5 @@
 import Calculus.Lang.Compat
+import Calculus.Lang.View
 
 /-!
 # A path into a term, and the strong law of a write at the path
@@ -18,9 +19,10 @@ A frame under a binder reads the limit of the binder, and the obligations of the
 stages. So the law reads the frames through `LawfulReach`, and `lawfulReach_of_typed` gives it from
 a typed term: lawful approximants agree with each frame at every depth.
 
-`narrow` restricts a union to the options that `Term.disjoint` does not separate from a clause. On
-an attribute that the stored admission of the clause admits, the narrowed union reads what the
-union reads, and no dropped option reads the attribute (`narrow_law`).
+`narrow` restricts a union to the options whose stored view `Term.disjoint` does not separate from
+the stored view of a clause. On an attribute that the stored admission of the clause admits, the
+narrowed union reads what the union reads, and no dropped option reads the attribute
+(`narrow_law`).
 -/
 
 namespace Calculus.Alg
@@ -1365,21 +1367,28 @@ end Discharge
 abbrev clauseTerm {B : Sig} (keys : Finset String) (T : {k // k ∈ keys} → Term B) : Term B :=
   .object (.mk keys (fun k => .req (T k)) (some .opaq))
 
-/-- **Narrowing by a clause**: the options that the disjointness decision does not separate from
-    the clause. -/
-def narrow {B : Sig} [Leaf B] (φ : Term B) (os : List (Term B)) : List (Term B) :=
-  os.filter fun o => !Term.disjoint pair0 φ o
+/-- **Narrowing by a clause**: the options whose view at the orientation `o` the disjointness
+    decision does not separate from the view of the clause. The read of a universe is at the dual
+    of its orientation, so a universe narrows by its stored views.
+
+    **The stored view decides, and not the raw term.** A `held` admits an attribute where its
+    stored side admits the attribute, so the guard of the read is the stored admission. The test
+    reads a raw `held` as disjoint from the bottom alone, and the stored view replaces the `held`
+    by its stored side. So a tag behind an adapter separates under the stored view. -/
+def narrow {B : Sig} [Mean B] [Leaf B] (o : Orient) (φ : Term B) (os : List (Term B)) :
+    List (Term B) :=
+  os.filter fun x => !Term.disjoint pair0 (view o φ) (view o x)
 
 section Narrow
 variable {α : Table S} {β : Table S.op}
 
-omit [Sem S] in
-/-- An option that narrowing drops is one that the decision separates from the clause. -/
-theorem disjoint_of_dropped [Leaf S.sig] {φ o : Term S.sig} {os : List (Term S.sig)} (ho : o ∈ os)
-    (hd : o ∉ narrow φ os) : Term.disjoint pair0 φ o = true := by
+/-- An option that narrowing drops is one whose view the decision separates from the view of the
+    clause. -/
+theorem disjoint_of_dropped [Leaf S.sig] {u : Orient} {φ o : Term S.sig} {os : List (Term S.sig)}
+    (ho : o ∈ os) (hd : o ∉ narrow u φ os) : Term.disjoint pair0 (view u φ) (view u o) = true := by
   unfold narrow at hd
   rw [List.mem_filter] at hd
-  cases h : Term.disjoint pair0 φ o
+  cases h : Term.disjoint pair0 (view u φ) (view u o)
   · exact absurd ⟨ho, by rw [h]; rfl⟩ hd
   · rfl
 
@@ -1408,12 +1417,13 @@ variable [PrimAdmA S] [Leaf S.sig] [LeafAdmA S] [LeafMeet S.sig] [FormerAdmA S] 
   [TopLaws S]
 
 /-- **Narrowing drops only what the clause excludes**: an option that narrowing drops reads no
-    attribute that the stored admission of the clause admits. -/
+    attribute that the stored admission of the clause admits, under every environment. Each
+    stored view reads what its term reads (`views_apart` at the dual). -/
 theorem narrow_drops {φ o : Term S.sig} {os : List (Term S.sig)} (ho : o ∈ os)
-    (hd : o ∉ narrow φ os) (ρ : List S.C) {a : S.V} (hφ : AdmA α β φ [] a = true) :
+    (hd : o ∉ narrow S.o.op φ os) (ρ : List S.C) {a : S.V} (hφ : AdmA α β φ [] a = true) :
     AdmA α β o ρ a = false := by
-  have h := disjoint_soundA (α := α) (β := β) pair0 φ o (disjoint_of_dropped ho hd) [] ρ
-    (fun _ _ hp => nomatch hp) a
+  have h : (AdmA α β φ [] a && AdmA α β o ρ a) = false :=
+    views_apart (S := S.op) β α (disjoint_of_dropped ho hd) [] ρ a
   rw [hφ, Bool.true_and] at h
   exact h
 
@@ -1421,12 +1431,13 @@ theorem narrow_drops {φ o : Term S.sig} {os : List (Term S.sig)} (ho : o ∈ os
     the clause admits, the narrowed union reads what the union reads. -/
 theorem narrow_reads (φ : Term S.sig) (os : List (Term S.sig)) (ρ : List S.C) {a : S.V}
     (hφ : AdmA α β φ [] a = true) :
-    (denote α β (.union (narrow φ os)) ρ).f S.o.op a = (denote α β (.union os) ρ).f S.o.op a := by
-  show select (denoteList α β (narrow φ os) ρ) (·.f S.o.op) a =
+    (denote α β (.union (narrow S.o.op φ os)) ρ).f S.o.op a =
+      (denote α β (.union os) ρ).f S.o.op a := by
+  show select (denoteList α β (narrow S.o.op φ os) ρ) (·.f S.o.op) a =
     select (denoteList α β os ρ) (·.f S.o.op) a
   rw [denoteList_eq, denoteList_eq]
   refine select_filter os fun o ho hk => ?_
-  have hd : o ∉ narrow φ os := fun h => by
+  have hd : o ∉ narrow S.o.op φ os := fun h => by
     unfold narrow at h; rw [List.mem_filter] at h; rw [h.2] at hk; exact nomatch hk
   have h := narrow_drops (α := α) (β := β) ho hd ρ hφ
   rw [AdmA_eq_isSome] at h
@@ -1437,23 +1448,24 @@ theorem narrow_reads (φ : Term S.sig) (os : List (Term S.sig)) (ρ : List S.C) 
     obligations hold, a write at a path whose frontier the narrowed union gives keeps the item
     readable by the union. -/
 theorem narrow_law (hS : S.o.op = Orient.dual) {φ : Term S.sig} {os : List (Term S.sig)}
-    {T : S.V → Prop} {μ : Option S.M} (hty : Typed α β (.union (narrow φ os)) T μ)
-    (hob : Obligations α β (.union (narrow φ os))) (hg : (Term.union (narrow φ os)).guarded = true)
-    (π : List Seg) (res : List (Frame S)) (hat : (Term.union (narrow φ os)).at π = some res)
+    {T : S.V → Prop} {μ : Option S.M} (hty : Typed α β (.union (narrow S.o.op φ os)) T μ)
+    (hob : Obligations α β (.union (narrow S.o.op φ os)))
+    (hg : (Term.union (narrow S.o.op φ os)).guarded = true)
+    (π : List Seg) (res : List (Frame S)) (hat : (Term.union (narrow S.o.op φ os)).at π = some res)
     (w : S.C) (hw : ∀ g ∈ res, ∀ x a, w.e x = some a → ((Frame.sem α β g).p a).isSome)
     {A A' x a : S.V} (hφ : AdmA α β φ [] A = true) (hA : ((denote α β (.union os)).p A).isSome)
     (hx : w.e x = some a) (hput : putPath π a A = some A') :
-    (∀ o ∈ os, o ∉ narrow φ os → (denote α β o).p A = none) ∧
+    (∀ o ∈ os, o ∉ narrow S.o.op φ os → (denote α β o).p A = none) ∧
       ((denote α β (.union os)).p A').isSome := by
   have hp : ∀ (c : S.C) (v : S.V), c.f S.o.op v = c.p v := fun c v => by rw [hS]
   refine ⟨fun o ho hd => ?_, ?_⟩
   · have h := narrow_drops (α := α) (β := β) ho hd [] hφ
     rw [AdmA_eq_isSome, hp] at h
     exact Option.not_isSome_iff_eq_none.mp (by rw [h]; exact Bool.false_ne_true)
-  · have hA' : ((denote α β (.union (narrow φ os))).p A).isSome := by
+  · have hA' : ((denote α β (.union (narrow S.o.op φ os))).p A).isSome := by
       rw [← hp, narrow_reads φ os [] hφ, hp]; exact hA
     have h := strong_law hty hob hg π res hat w hw hA' hx hput
-    replace h : (select (denoteList α β (narrow φ os) []) (·.p) A').isSome = true := h
+    replace h : (select (denoteList α β (narrow S.o.op φ os) []) (·.p) A').isSome = true := h
     show (select (denoteList α β os []) (·.p) A').isSome = true
     rw [denoteList_eq] at h ⊢
     obtain ⟨c, hc, hcA⟩ := (select_isSome_attempt _ _ _).mp h

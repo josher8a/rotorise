@@ -24,8 +24,8 @@ namespace Calculus
 /-- **The DynamoDB oracles**: the caller-side views decide write orthogonality, and the
     stored-side views decide read orthogonality. -/
 def dynOracle : Alg.CompatOracle dynSyn :=
-  ⟨fun x y => Alg.Term.disjoint pair0 (view .host x) (view .host y),
-   fun x y => Alg.Term.disjoint pair0 (view .dual x) (view .dual y)⟩
+  ⟨fun x y => Alg.Term.disjoint pair0 (Alg.view .host x) (Alg.view .host y),
+   fun x y => Alg.Term.disjoint pair0 (Alg.view .dual x) (Alg.view .dual y)⟩
 
 /-- **The DynamoDB oracles are sound**: each view admits what its term admits, so disjoint views
     give apart domains. -/
@@ -33,13 +33,12 @@ theorem dynOracle_sound : Alg.OracleSound dynOracle where
   e {_ β} x y h v := by
     obtain rfl : β = dynTableA := funext fun g => nomatch g
     rw [← Alg.Adm_eq_isSome, ← Alg.Adm_eq_isSome]
-    exact Alg.apart_of_imp (viewLe_of .host _ _ x v) (Alg.apart_of_imp' (viewLe_of .host _ _ y v)
-      (Alg.disjoint_sound (S := dynSyn) pair0 _ _ h [] [] (fun _ _ hp => nomatch hp) v))
+    exact Alg.views_apart (S := dynSyn) _ _ h [] [] v
   p {_ β} x y h a := by
     obtain rfl : β = dynTableA := funext fun g => nomatch g
     rw [← Alg.AdmA_eq_isSome (S := dynSyn), ← Alg.AdmA_eq_isSome (S := dynSyn)]
-    exact Alg.apart_of_imp (viewLe_of .dual _ _ x a) (Alg.apart_of_imp' (viewLe_of .dual _ _ y a)
-      (Alg.disjoint_soundA (S := dynSyn) pair0 _ _ h [] [] (fun _ _ hp => nomatch hp) a))
+    have : Alg.Shapes ⟨dynSig, Alg.Orient.dual⟩ := Alg.Shapes.op (S := dynSyn)
+    exact Alg.views_apart (S := dynSyn.op) _ _ h [] [] a
 
 /-- **The decision discharges the union's obligation** of two lawful closed options. -/
 theorem pairwiseCompat_of_compatPair {x y : Term} (h : Alg.compatPair dynOracle x y = true)

@@ -166,6 +166,14 @@ theorem alignPL_mono {Ps Qs Ss Ts : List (α → Bool)} {sp sq : Option (α → 
   simp only [Bool.and_eq_true] at h ⊢
   exact ⟨alignP_mono hPQ hs _ h.1, zipP_mono hST _ h.2⟩
 
+/-- A union of rows over wider rows admits where the narrower union admits. -/
+theorem anyP_mono : ∀ {Ps Qs : List (α → Bool)}, List.Forall₂ RowLe Ps Qs →
+    ∀ x, anyP Ps x = true → anyP Qs x = true
+  | [], [], .nil, _, h => h
+  | _ :: _, _ :: _, .cons hPQ hr, x, h => by
+      simp only [anyP, Bool.or_eq_true] at h ⊢
+      exact h.imp (hPQ x) (anyP_mono hr x)
+
 /-- A list with no prefix and no suffix admits a value when the spread admits each element. -/
 theorem alignPL_spread (P : α → Bool) (vs : List α) :
     alignPL [] (some P) [] vs = decide (∀ x ∈ vs, P x = true) := by

@@ -9,8 +9,9 @@ The store refuses a name on a list and a position on a map. A refinement refuses
 the frontier cannot carry its predicate. A position past the prefix of a list shape with a suffix
 is a refusal, because the codec of the position depends on the length.
 
-Narrowing keeps each option that the clause meets, and the slice keeps each option that the clause
-describes. On a union whose options pin one tag each, the two agree.
+Narrowing keeps each option whose stored view meets the stored view of the clause, and the slice
+keeps each option that the clause describes. On a union whose options pin one tag each, the two
+agree. A tag behind an adapter separates under the stored view, and not under the raw terms.
 -/
 
 namespace Calculus
@@ -108,11 +109,66 @@ private abbrev oS : Term := .object (.mk {"tag", "z"}
   (fun k => if k.1 = "tag" then .req .string else .req .number) none)
 
 -- narrowing keeps every option that the clause meets; the slice keeps the option it describes
-example : (Alg.narrow φA [oA, oAB, oB, oS]).length = 3 := by decide
+example : (Alg.narrow .dual φA [oA, oAB, oB, oS]).length = 3 := by decide
 example : (clA.extract [oA, oAB, oB, oS]).length = 1 := by decide
 -- on a union whose options pin one tag each, narrowing is the slice
-example : (Alg.narrow φA [oA, oB]).length = 1 ∧ (clA.extract [oA, oB]).length = 1 := by decide
+example : (Alg.narrow .dual φA [oA, oB]).length = 1 ∧ (clA.extract [oA, oB]).length = 1 := by decide
 -- `string('A','B')` keeps the options that can hold `A` or `B`
-example : (Alg.narrow φAB [oA, oAB, oB, oS]).length = 4 := by decide
+example : (Alg.narrow .dual φAB [oA, oAB, oB, oS]).length = 4 := by decide
+
+/-! Narrowing by the stored views, against the test of the raw terms
+
+The test reads a raw `held` as disjoint from the bottom alone, so the raw clause separates no
+option at a tag behind an adapter. The stored view replaces each `held` by its stored side, and
+the stored sides separate. -/
+
+/-- The options that the test of the raw terms does not separate from the clause. -/
+private def rawNarrow (φ : Term) (os : List Term) : List Term :=
+  os.filter fun o => !Alg.Term.disjoint pair0 φ o
+
+private abbrev decH : Term := Term.held false Term.number Term.string (.decimalText, false) []
+private abbrev n1 : Term := .literal .number (WFNumeral.of "1")
+private abbrev n2 : Term := .literal .number (WFNumeral.of "2")
+-- `number(1)`: a caller adapter over the literal `N 1`
+private abbrev num (l : Term) : Term := Term.held false l Term.number (.caller 0, false) []
+-- `decimal('1')`: the library text adapter over the literal `N 1`
+private abbrev dec (l : Term) (s : String) : Term :=
+  Term.held false l (Term.literal .string s) (.decimalText, false) []
+private abbrev two (k v : String) (tk tv : Term) : Term :=
+  .object (.mk {k, v} (fun x => if x.1 = k then .req tk else .req tv) none)
+
+-- numeric tags behind a caller adapter
+private abbrev oN1 : Term := two "k" "a" (num n1) Term.string
+private abbrev oN2 : Term := two "k" "a" (num n2) Term.number
+private abbrev φN1 : Term := Alg.clauseTerm {"k"} fun _ => num n1
+example : (rawNarrow φN1 [oN1, oN2]).length = 2 ∧ (Alg.narrow .dual φN1 [oN1, oN2]).length = 1 := by
+  decide
+-- decimal tags behind the library text adapter
+private abbrev oD1 : Term := two "k" "a" (dec n1 "1") Term.string
+private abbrev oD2 : Term := two "k" "a" (dec n2 "2") Term.number
+private abbrev φD1 : Term := Alg.clauseTerm {"k"} fun _ => dec n1 "1"
+example : (rawNarrow φD1 [oD1, oD2]).length = 2 ∧ (Alg.narrow .dual φD1 [oD1, oD2]).length = 1 := by
+  decide
+-- `number(1)` against decimal tags: the two adapters store one literal, so the option stays
+example : (Alg.narrow .dual φN1 [oD1, oD2]).length = 1 := by decide
+-- an object clause against a `decimal` member, which stores a number
+private abbrev objZ : Term := .object (.mk {"z"} (fun _ => .req Term.string) none)
+private abbrev oVd : Term := two "tag" "v" (litS "A") decH
+private abbrev oVo : Term := two "tag" "v" (litS "B") objZ
+private abbrev φVo : Term := Alg.clauseTerm {"v"} fun _ => objZ
+example : (rawNarrow φVo [oVd, oVo]).length = 2 ∧ (Alg.narrow .dual φVo [oVd, oVo]).length = 1 := by
+  decide
+-- an adapter clause against a primitive member
+private abbrev oPn : Term := two "tag" "v" (litS "A") Term.number
+private abbrev oPs : Term := two "tag" "v" (litS "B") Term.string
+private abbrev φPd : Term := Alg.clauseTerm {"v"} fun _ => decH
+example : (rawNarrow φPd [oPn, oPs]).length = 2 ∧ (Alg.narrow .dual φPd [oPn, oPs]).length = 1 := by
+  decide
+-- string tags hold no adapter, so the two tests agree
+private abbrev oSA : Term := two "k" "a" (litS "A") Term.string
+private abbrev oSB : Term := two "k" "a" (litS "B") Term.number
+private abbrev φSA : Term := Alg.clauseTerm {"k"} fun _ => litS "A"
+example : (rawNarrow φSA [oSA, oSB]).length = 1 ∧ (Alg.narrow .dual φSA [oSA, oSB]).length = 1 := by
+  decide
 
 end Calculus

@@ -1,4 +1,5 @@
 import Calculus.Lang.DisjointA
+import Calculus.Lang.View
 import Calculus.Dynamo.Lang.HeldSet
 import Calculus.Dynamo.Lang.HeldFree
 import Calculus.Dynamo.Analysis.Merge
@@ -31,7 +32,7 @@ on the write half and not on the read half. The certificate asks both halves.
 
 namespace Calculus
 
-open Alg (Orient Term.isNever ObjectSlot.isReqAt Body.fields_mk Body.wild_mk Body.at_mk Body.block)
+open Alg (Orient Term.isNever ObjectSlot.isReqAt Body.fields_mk Body.wild_mk Body.at_mk Body.block view)
 
 export Alg (Term.ofOptions hasHeld pair0)
 
@@ -247,63 +248,6 @@ instance dynLeaf : Alg.Leaf dynSig where
 /-! ## The union certificate
 
 The certificate is defined here, after the leaves, because the test of the views reads them. -/
-
-mutual
-/-- **The view at an orientation**: each `held` becomes its term at the caller side of the
-    orientation: its outer where its side is that caller side, and its inner term otherwise. The
-    view admits at the orientation each value that the term admits (`viewLe_of`). The view of a
-    `union` is the union of the views, because a union admits where one of its options admits.
-    The view at the host is the caller view, and the view at the dual is the stored view.
-
-    The view of `mu b` is `mu` of the view of `b`, and a variable stays a variable. Each stage of
-    the view admits what the same stage of the term admits, so the view of a recursive term
-    admits what the term admits. The view holds no `held` (`HF_view`), so a set of the view acts
-    element by element.
-
-    **Over a held-free closed inner term, the view keeps a refinement as it is.** Elsewhere the
-    inner term can hold a `held`: a free variable can name a codec that holds one, so a free
-    variable counts as a possible `held`. A bound variable denotes a stage of a binder inside the
-    term, and `hasHeld` reads the binder's body, so a bound variable holds no `held` there. The orientation tests the predicate of
-    its caller side directly, and tests the predicate of its stored side through the map of the
-    inner term, which runs the adapter. The view keeps no adapter, so the view keeps the first
-    predicate and drops the second. DynamoDB states no stored predicate (`()` is the truth). So
-    at the host the second predicate is the truth, and the view keeps the refinement over the
-    view of the inner term. At the dual the second predicate is the data predicate, and the view
-    is the view of the inner term.
-
-    **The stored view is narrower than it can be, and no certificate observes the
-    difference.** A free variable holds a `held` only where the codec that it names holds one, so
-    a finer view keeps more predicates over a free variable. `Term.disjoint` compares a data
-    predicate only over a closed held-free inner term, so a predicate over a free variable changes
-    no verdict. An
-    example after `separates_of_viewsDisjoint` pins the narrowing. -/
-def view (o : Orient) : Term → Term
-  | .held s t P _ _ => bif s == o.c then view o P else view o t
-  | .refine t p pA =>
-      if hasHeld t || !t.closed then bif o.c then view o t else .refine (view o t) p pA
-      else .refine t p pA
-  | .list pre sp suf => .list (viewL o pre) (viewO o sp) (viewL o suf)
-  | .object b => .object (viewB o b)
-  | .union os => .union (viewL o os)
-  | .set t => .set (view o t)
-  | .mu b => .mu (view o b)
-  -- the write is the inner term's; the older reader is opaque, so the read is bounded by `opaque`
-  | .legacy t _ => bif o.c then .opaq else view o t
-  | t => t
-def viewL (o : Orient) : List Term → List Term
-  | [] => []
-  | t :: ts => view o t :: viewL o ts
-def viewO (o : Orient) : Option Term → Option Term
-  | none => none
-  | some t => some (view o t)
-def viewB (o : Orient) : Body → Body
-  | .mk fs f w => .mk fs (fun k => viewS o (f k)) (viewO o w)
-def viewS (o : Orient) : ObjectSlot → ObjectSlot
-  | .req t => .req (view o t)
-  | .optional t => .optional (view o t)
-  -- the caller side always holds the name; the stored side may lack it
-  | .fill t _ => bif o.c then .optional (view o t) else .req (view o t)
-end
 
 /-- **Whether the two pairs of views are disjoint**: the certificate for one pair of options. A
     term denotes a partial isomorphism. The caller view states its domain and the stored view
@@ -717,265 +661,6 @@ instance dynLeafAdmA : Alg.LeafAdmA dynSyn where
     exact admA_prim_apart g g' hp c
 
 
-/-! ## The views admit what the term admits -/
-
-mutual
-/-- **The view holds no `held`.** Each `held` becomes its view, and a refinement that the view
-    keeps as it is has an inner term with no `held`. -/
-theorem HF_view (o : Orient) : ∀ t : Term, HF (view o t)
-  | .held s t P _ _ => by
-      simp only [view]; cases s == o.c
-      exacts [HF_view o t, HF_view o P]
-  | .legacy t _ => by
-      simp only [view]; cases o.c
-      exacts [HF_view o t, rfl]
-  | .refine t _ _ => by
-      simp only [view]
-      split
-      · cases o.c
-        · exact HF_view o t
-        · exact HF_view o t
-      · next h =>
-        simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at h
-        exact h.1
-  | .list pre sp suf => by
-      simp only [view, HF, hasHeld, Bool.or_eq_false_iff]
-      exact ⟨⟨HF_viewL o pre, HF_viewO o sp⟩, HF_viewL o suf⟩
-  | .object (.mk fs f w) => by
-      simp only [view, viewB, HF, hasHeld, Alg.hasHeldB, Bool.or_eq_false_iff, decide_eq_false_iff_not, not_exists]
-      exact ⟨fun k => Bool.eq_false_iff.mp (HF_viewS o (f k)), HF_viewO o w⟩
-  | .union os => by simp only [view]; exact HF_viewL o os
-  | .set t => by simp only [view]; exact HF_view o t
-  | .mu b => by simp only [view]; exact HF_view o b
-  | .prim _ => rfl | .opaq => rfl | .never => rfl | .var _ => rfl
-/-- `HF_view` over a list. -/
-theorem HF_viewL (o : Orient) : ∀ ts : List Term, HFL (viewL o ts)
-  | [] => rfl
-  | t :: ts => by
-      simp only [viewL, HFL, Alg.hasHeldL, Bool.or_eq_false_iff]; exact ⟨HF_view o t, HF_viewL o ts⟩
-/-- `HF_view` at an optional term. -/
-theorem HF_viewO (o : Orient) : ∀ x : Option Term, HFO (viewO o x)
-  | none => rfl
-  | some t => HF_view o t
-/-- `HF_view` at a slot. -/
-theorem HF_viewS (o : Orient) : ∀ s : ObjectSlot, HFS (viewS o s)
-  | .req t => HF_view o t
-  | .optional t => HF_view o t
-  | .fill t _ => by
-      rcases Bool.eq_false_or_eq_true o.c with hc | hc <;>
-        simp only [viewS, hc, cond_true, cond_false] <;> exact HF_view o t
-end
-
-/-- A union of rows over wider rows admits where the narrower union admits. -/
-theorem anyP_mono {α : Type} : ∀ {Ps Qs : List (α → Bool)}, List.Forall₂ RowLe Ps Qs →
-    ∀ x, anyP Ps x = true → anyP Qs x = true
-  | [], [], .nil, _, h => h
-  | _ :: _, _ :: _, .cons hPQ hr, x, h => by
-      simp only [anyP, Bool.or_eq_true] at h ⊢
-      exact h.imp (hPQ x) (anyP_mono hr x)
-
-/-- **A set over a restriction of `Ω` acts, at the orientation, where a set over a narrower
-    element acts.** -/
-theorem setCodec_mono (o : Orient) {c d : Codec} (hd : Sub d Ω)
-    (h : ∀ w, (c.f o w).isSome = true → (d.f o w).isSome = true) (x : Attr)
-    (hx : ((setCodec c).f o x).isSome = true) : ((setCodec d).f o x).isSome = true := by
-  obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hx
-  obtain ⟨k, S, rfl, hS⟩ := setCodec_f_eq.mp ha
-  exact (setCodec_isSome_of_sub hd o S).mpr fun y hy => h _ (setAt_elem hS y hy)
-
-/-- The second environment acts, at each index and at the orientation, where the first acts. -/
-def EnvLe (o : Orient) (ρ ρ' : List Codec) : Prop :=
-  ∀ i x, ((Alg.envAt ρ i).f o x).isSome = true → ((Alg.envAt ρ' i).f o x).isSome = true
-/-- Each codec of the environment is a restriction of `Ω`. -/
-def EnvSub (ρ : List Codec) : Prop := ∀ i, Sub (Alg.envAt ρ i) Ω
-
-/-- A codec that acts more, on top of an environment that acts more. -/
-theorem EnvLe.cons {o : Orient} {c c' : Codec} {ρ ρ' : List Codec}
-    (hc : ∀ x, (c.f o x).isSome = true → (c'.f o x).isSome = true) (h : EnvLe o ρ ρ') :
-    EnvLe o (c :: ρ) (c' :: ρ')
-  | 0 => hc
-  | i + 1 => h i
-/-- A restriction of `Ω`, on top of an environment of restrictions of `Ω`. -/
-theorem EnvSub.cons {c : Codec} {ρ : List Codec} (hc : Sub c Ω) (h : EnvSub ρ) : EnvSub (c :: ρ)
-  | 0 => hc
-  | i + 1 => h i
-/-- The empty environment gives the bottom at each index. -/
-theorem EnvSub.nil : EnvSub [] := fun _ => Alg.sub_empty
-
-/-- The entry test of an object over wider slot rows and a wider open block admits where the
-    narrower test admits. -/
-theorem objAdmV_mono {α : Type} {fs : Finset Name} {P Q : {k // k ∈ fs} → α → Bool}
-    {wP wQ : Option (α → Bool)} (hf : ∀ k, RowLe (P k) (Q k)) (hw : Option.Rel RowLe wP wQ)
-    {keys : Finset Name} {g : {k // k ∈ keys} → α}
-    (h : objAdmV ⟨fs, P⟩ wP keys g = true) : objAdmV ⟨fs, Q⟩ wQ keys g = true := by
-  unfold objAdmV at h ⊢
-  refine decide_eq_true fun k => ?_
-  have := of_decide_eq_true h k
-  rcases Decidable.em (k.1 ∈ fs) with hm | hm
-  · simp only [entryP, MapOf.at, dif_pos hm] at this ⊢
-    exact hf ⟨k.1, hm⟩ _ this
-  · simp only [entryP, MapOf.at, dif_neg hm] at this ⊢
-    cases hw with
-    | none => exact this
-    | some hr => exact hr _ this
-
-section
-variable (o : Orient) [Alg.PrimAdm ⟨dynSig, o⟩] (α : Alg.Table ⟨dynSig, o⟩)
-  (β : Alg.Table (Alg.Syn.op ⟨dynSig, o⟩))
-
-mutual
-/-- **The view admits at the orientation each value that the term admits**, under an
-    environment that acts at each index where the first environment acts. One proof serves both
-    orientations: the value side at the host, and the attribute side at the dual.
-
-    The environment is what the `mu` row needs. A recursive term admits what its body admits over
-    the stage below the depth of the value (`Adm_mu_unfold`), and the view does the same over the
-    stage of the view. An induction over the stages carries the inclusion to each stage. The
-    environment of the view is a restriction of `Ω`, because the view holds no `held`, and the
-    `set` row reads a restriction of `Ω` element by element.
-
-    A `held` and a refinement over a possible `held` are the two rows that read the orientation.
-    A refinement that the view keeps as it is has a closed inner term, so the environment does
-    not change its map (`denote_of_closed`). -/
-theorem viewLeE : ∀ (t : Term) (ρ ρ' : List Codec), EnvLe o ρ ρ' → EnvSub ρ' →
-    RowLe (Alg.Adm α β t ρ) (Alg.Adm α β (view o t) ρ')
-  | .held true _ _ k₀ _, _, _, _, _ => nomatch k₀.1
-  | .held false t P _ _, ρ, ρ', he, hs => by
-      have ihP := viewLeE P ρ ρ' he hs
-      have iht := viewLeE t ρ ρ' he hs
-      revert ihP iht
-      rcases o with ⟨⟨_ | _, _ | _⟩, ho⟩
-      · exact absurd rfl ho
-      · exact fun ihP _ v h => ihP v (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).2
-      · exact fun _ iht v h => iht v (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).1
-      · exact absurd rfl ho
-  | .var i, _, _, he, _ => fun v h => by
-      rw [Alg.Adm_eq_isSome] at h ⊢
-      exact he i v h
-  | .mu b, ρ, ρ', he, hs => fun v h => by
-      simp only [view]
-      rw [Alg.Adm_mu_unfold] at h ⊢
-      have hst : ∀ n, (∀ w, ((Alg.muStage (fun c => Alg.denote α β b (c :: ρ)) n).f o w).isSome = true →
-          ((Alg.muStage (fun c => Alg.denote α β (view o b) (c :: ρ')) n).f o w).isSome = true) ∧
-          Sub (Alg.muStage (fun c => Alg.denote α β (view o b) (c :: ρ')) n) Ω := by
-        intro n
-        induction n with
-        | zero => exact ⟨(fun _ hw => nomatch hw), Alg.sub_empty⟩
-        | succ n ih =>
-          have he' := EnvLe.cons ih.1 he
-          have hs' := EnvSub.cons ih.2 hs
-          refine ⟨fun w hw => ?_, Alg.sub_denoteIn (α := α) (β := β) (view o b) (HF_view o b) _ hs'⟩
-          have := viewLeE b _ _ he' hs' w (by rw [Alg.Adm_eq_isSome]; exact hw)
-          rwa [Alg.Adm_eq_isSome] at this
-      exact viewLeE b _ _ (EnvLe.cons (hst _).1 he) (EnvSub.cons (hst _).2 hs) v h
-  | .legacy t r, ρ, ρ', he, hs => by
-      simp only [view]
-      have iht := viewLeE t ρ ρ' he hs
-      revert iht
-      rcases o with ⟨⟨_ | _, _ | _⟩, ho⟩
-      · exact absurd rfl ho
-      · refine fun iht v h => iht v ?_
-        rw [Alg.Adm_eq_isSome]
-        exact h
-      · exact fun _ _ _ => rfl
-      · exact absurd rfl ho
-  | .refine t p pA, ρ, ρ', he, hs => by
-      simp only [view]
-      split
-      · have iht := viewLeE t ρ ρ' he hs
-        revert iht
-        rcases o with ⟨⟨_ | _, _ | _⟩, ho⟩
-        · exact absurd rfl ho
-        · refine fun iht v h => ?_
-          have h' := Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1
-          have hw := iht v h'.1
-          refine Bool.and_eq_true_iff.mpr ⟨Bool.and_eq_true_iff.mpr ⟨hw, h'.2⟩, ?_⟩
-          rw [Alg.Adm_eq_isSome] at hw
-          exact (Alg.gate_true _ _).trans hw
-        · exact fun iht v h => iht v (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).1).1
-        · exact absurd rfl ho
-      · next hv =>
-        simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hv
-        intro v h
-        rw [Alg.Adm_eq_isSome] at h ⊢
-        rwa [Alg.denote_of_closed (α := α) (β := β) (.refine t p pA)
-          (by simpa [Alg.Term.closed, Alg.Term.readsFree] using hv.2) ρ' ρ]
-  | .list pre sp suf, ρ, ρ', he, hs => fun v h => by
-      cases hl : Alg.listOut (S := ⟨dynSig, o⟩) v with
-      | none => rw [Alg.Adm_list_of_none hl] at h; exact absurd h Bool.false_ne_true
-      | some vs =>
-        rw [Alg.Adm_list_of_out hl] at h
-        simp only [view]; rw [Alg.Adm_list_of_out hl]
-        exact alignPL_mono (viewLeEL pre ρ ρ' he hs) (viewLeEO sp ρ ρ' he hs)
-          (viewLeEL suf ρ ρ' he hs) vs h
-  | .object (.mk fs f w), ρ, ρ', he, hs => fun v h => by
-      rw [Alg.Adm_object] at h
-      change Alg.AdmBody α β (.mk fs (fun k => viewS o (f k)) (viewO o w)) ρ' v = true
-      cases hm : Alg.mapOut (S := ⟨dynSig, o⟩) v with
-      | none => rw [Alg.AdmBody_of_none hm] at h; exact absurd h Bool.false_ne_true
-      | some m =>
-        rw [Alg.AdmBody_of_out hm] at h; rw [Alg.AdmBody_of_out hm]
-        simp only [Alg.Body.fields_mk, Alg.Body.at_mk, Alg.Body.wild_mk] at h ⊢
-        rw [Bool.and_eq_true] at h ⊢
-        refine ⟨?_, objAdmV_mono (fun k => viewLeES (f k) ρ ρ' he hs) ?_ h.2⟩
-        · refine decide_eq_true fun k hr => of_decide_eq_true h.1 k ?_
-          beta_reduce at hr
-          generalize f k = s at hr
-          rcases Bool.eq_false_or_eq_true o.c with hc | hc <;>
-            cases s <;> simp_all [viewS, Alg.ObjectSlot.isReqAt]
-        · cases w with
-          | none => exact .none
-          | some t => exact .some (viewLeE t ρ ρ' he hs)
-  | .union os, ρ, ρ', he, hs => fun v h => anyP_mono (viewLeEL os ρ ρ' he hs) v h
-  | .set t, ρ, ρ', he, hs => fun v h => by
-      simp only [view]
-      rw [Alg.Adm_eq_isSome] at h ⊢
-      exact setCodec_mono o (c := Alg.denote α β t ρ)
-        (Alg.sub_denoteIn (α := α) (β := β) _ (HF_view o t) ρ' hs)
-        (fun w hw => by
-          have := viewLeE t ρ ρ' he hs w (by rw [Alg.Adm_eq_isSome]; exact hw)
-          rwa [Alg.Adm_eq_isSome] at this) v h
-  | .prim _, _, _, _, _ => fun _ h => h
-  | .opaq, _, _, _, _ => fun _ h => h
-  | .never, _, _, _, _ => fun _ h => h
-/-- `viewLeE` over a list. -/
-theorem viewLeEL : ∀ (ts : List Term) (ρ ρ' : List Codec), EnvLe o ρ ρ' → EnvSub ρ' →
-    List.Forall₂ RowLe (Alg.AdmList α β ts ρ) (Alg.AdmList α β (viewL o ts) ρ')
-  | [], _, _, _, _ => .nil
-  | t :: ts, ρ, ρ', he, hs => .cons (viewLeE t ρ ρ' he hs) (viewLeEL ts ρ ρ' he hs)
-/-- `viewLeE` at an optional term. -/
-theorem viewLeEO : ∀ (x : Option Term) (ρ ρ' : List Codec), EnvLe o ρ ρ' → EnvSub ρ' →
-    Option.Rel RowLe (Alg.AdmOptT α β x ρ) (Alg.AdmOptT α β (viewO o x) ρ')
-  | none, _, _, _, _ => .none
-  | some t, ρ, ρ', he, hs => .some (viewLeE t ρ ρ' he hs)
-/-- `viewLeE` at a slot. -/
-theorem viewLeES : ∀ (s : ObjectSlot) (ρ ρ' : List Codec), EnvLe o ρ ρ' → EnvSub ρ' →
-    RowLe (Alg.AdmField α β s ρ) (Alg.AdmField α β (viewS o s) ρ')
-  | .req t, ρ, ρ', he, hs => viewLeE t ρ ρ' he hs
-  | .optional t, ρ, ρ', he, hs => viewLeE t ρ ρ' he hs
-  | .fill t _, ρ, ρ', he, hs => by
-      rcases Bool.eq_false_or_eq_true o.c with hc | hc <;>
-        simp only [viewS, hc, cond_true, cond_false] <;> exact viewLeE t ρ ρ' he hs
-end
-
-/-- **The view admits at the orientation each value that the term admits.** -/
-theorem viewLe_of (t : Term) : RowLe (Alg.Adm α β t []) (Alg.Adm α β (view o t) []) :=
-  viewLeE o α β t [] [] (fun _ _ h => h) EnvSub.nil
-
-/-- **Two terms whose views at the orientation are disjoint admit no common value there.** A value
-    that both terms admit is admitted by both views (`viewLe_of`), and the views share no value
-    (`Alg.disjoint_sound`). One proof serves both halves of the certificate: the value side at the
-    host, and the attribute side at the dual. -/
-theorem views_apart [Alg.LeafAdm ⟨dynSig, o⟩] [Alg.FormerAdm ⟨dynSig, o⟩] [Alg.Shapes ⟨dynSig, o⟩]
-    [Alg.TopBound ⟨dynSig, o⟩] {x y : Term}
-    (h : Alg.Term.disjoint pair0 (view o x) (view o y) = true) (v : Value) :
-    (Alg.Adm α β x [] v && Alg.Adm α β y [] v) = false := by
-  exact Alg.apart_of_imp (viewLe_of o α β x v) (Alg.apart_of_imp' (viewLe_of o α β y v)
-    (Alg.disjoint_sound (α := α) (β := β) pair0 _ _ h [] [] (fun _ _ hp => nomatch hp) v))
-
-end
-
-
 /-! ## The orthogonal row -/
 
 /-- **Orthogonal terms admit no common value.** A value that both terms admit is admitted by
@@ -983,7 +668,7 @@ end
 theorem viewsDisjoint_adm {x y : Term} (h : viewsDisjoint x y = true) (v : Value) :
     (Adm α x v && Adm α y v) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
-  exact views_apart .host α dynTableA h.1 v
+  exact Alg.views_apart (S := dynSyn) α dynTableA h.1 [] [] v
 
 /-- **Orthogonal terms read no common attribute.** An attribute that both terms read is read
     by both stored views, and the views are disjoint. -/
@@ -991,7 +676,7 @@ theorem viewsDisjoint_admA {x y : Term} (h : viewsDisjoint x y = true) (a : Attr
     (AdmA α x a && AdmA α y a) = false := by
   simp only [viewsDisjoint, Bool.and_eq_true] at h
   have : Alg.Shapes ⟨dynSig, Orient.dual⟩ := Alg.Shapes.op (S := dynSyn)
-  exact views_apart .dual dynTableA α h.2 a
+  exact Alg.views_apart (S := dynSyn.op) dynTableA α h.2 [] [] a
 
 /-- **The pair certificate is sound**: orthogonality separates the pair. -/
 theorem separates_of_viewsDisjoint {x y : Term} (h : viewsDisjoint x y = true) : Separates α x y := by

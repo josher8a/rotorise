@@ -129,6 +129,15 @@ class TopLaws (S : Syn) [Sem S] : Prop where
   ground : ∀ g, Sub (Syn.ground g) (Syn.top (S := S))
   set : ∀ L ∈ Mean.set (B := S.sig), ∀ c : S.C, Sub c (Syn.top (S := S)) →
     Sub (L.lift c) (Syn.top (S := S))
+  /-- A set over a restriction of the top acts, at each orientation, where a set over an element
+      that acts less acts. The view of a set reads this law. -/
+  set_mono : ∀ L ∈ Mean.set (B := S.sig), ∀ (o : Orient) (c d : S.C), Sub d (Syn.top (S := S)) →
+    (∀ w, (c.f o w).isSome = true → (d.f o w).isSome = true) →
+    ∀ x, ((L.lift c).f o x).isSome = true → ((L.lift d).f o x).isSome = true
+
+/-- **The laws of the top read no orientation**, so the dual universe has the laws of the
+    universe. -/
+instance TopLaws.op [h : TopLaws S] : TopLaws S.op := ⟨h.ground, h.set, h.set_mono⟩
 
 variable {β : Table S.op}
 

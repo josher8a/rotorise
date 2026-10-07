@@ -17,8 +17,8 @@ reads.
 `Sub c d` is the inclusion of graphs on both halves. The set cases go through `setAt_congr` and
 `setAt_congr`.
 
-The file sits below the views because `setCodec_mono` reads it: over a held-free element, a set
-writes and reads exactly where each element does. `Confluence.lean` holds the payoffs.
+The set law of `Ω_topLaws` is `setCodec_mono`: over a held-free element, a set writes and reads
+exactly where each element does. `Confluence.lean` holds the payoffs.
 -/
 
 namespace Calculus
@@ -79,35 +79,6 @@ theorem sub_setCodec {c : Codec} (h : Sub c Ω) : Sub (setCodec c) Ω := fun o x
   obtain ⟨k, S, rfl, hS⟩ := setCodec_f_eq.mp hc
   exact (setAt_Ω o k S).symm.trans (setAt_sub h hS)
 
-/-! ## Held-free terms -/
-
--- A term is **held-free** when no `held` occurs in the term: `Alg.HF`, the test `hasHeld` at
--- `false`. The names are aliases, so a closed term is shown held-free by `rfl`.
-export Alg (HF HFS HFL HFO)
-
-/-- The laws of `Ω` that the held-free theory reads: each primitive is below `Ω`, `Ω` acts as the
-    `arr` and `map` formers, and a set over a restriction of `Ω` is a restriction of `Ω`. The
-    laws read no orientation, so one instance serves both. -/
-instance Ω_topLaws (o : Alg.Orient) : Alg.TopLaws ⟨dynSig, o⟩ where
-  ground
-    | .base k => sub_baseCodec k
-    | .literal k x => sub_literal k x
-  set L hL c hc := by cases hL; exact sub_setCodec hc
-
-/-- **Confluence**, closed: the denotation of a held-free term is a restriction of `Ω`. -/
-theorem sub_denote (t : Term) (h : HF t) : Sub (denote α t) Ω :=
-  Alg.sub_denote t h
-
-/-- **(W)**: a held-free term writes only what `opaque` writes. -/
-theorem confluence_W {t : Term} (h : HF t) {v a} (he : (denote α t).e v = some a) :
-    (denote α .opaq).e v = some a := sub_denote t h .host _ _ he
-
-/-- **(R)**: a held-free term reads only what `opaque` reads. -/
-theorem confluence_R {t : Term} (h : HF t) {a v} (hp : (denote α t).p a = some v) :
-    (denote α .opaq).p a = some v := sub_denote t h .dual _ _ hp
-
-
-
 /-! ## `opaque` is the identity, and the held-free fragment is self-dual
 
 With one carrier, `Ω` sends each datum to itself, at both orientations. A lawful codec below `Ω`
@@ -145,5 +116,43 @@ theorem setCodec_isSome_of_sub {c : Codec} (h : Sub c Ω) (o : Alg.Orient) {k : 
       obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp (hall x hx)
       rw [ha, sub_fix h ha]
     exact Option.isSome_iff_exists.mpr ⟨_, setCodec_f_eq.mpr ⟨k, S, rfl, setAt_ident hid⟩⟩
+
+/-- **A set over a restriction of `Ω` acts, at the orientation, where a set over a narrower
+    element acts.** -/
+theorem setCodec_mono (o : Alg.Orient) {c d : Codec} (hd : Sub d Ω)
+    (h : ∀ w, (c.f o w).isSome = true → (d.f o w).isSome = true) (x : Attr)
+    (hx : ((setCodec c).f o x).isSome = true) : ((setCodec d).f o x).isSome = true := by
+  obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hx
+  obtain ⟨k, S, rfl, hS⟩ := setCodec_f_eq.mp ha
+  exact (setCodec_isSome_of_sub hd o S).mpr fun y hy => h _ (setAt_elem hS y hy)
+
+/-! ## Held-free terms -/
+
+-- A term is **held-free** when no `held` occurs in the term: `Alg.HF`, the test `hasHeld` at
+-- `false`. The names are aliases, so a closed term is shown held-free by `rfl`.
+export Alg (HF HFS HFL HFO)
+
+/-- The laws of `Ω` that the held-free theory reads: each primitive is below `Ω`, `Ω` acts as the
+    `arr` and `map` formers, and a set over a restriction of `Ω` is a restriction of `Ω` that acts
+    where its element acts. The
+    laws read no orientation, so one instance serves both. -/
+instance Ω_topLaws (o : Alg.Orient) : Alg.TopLaws ⟨dynSig, o⟩ where
+  ground
+    | .base k => sub_baseCodec k
+    | .literal k x => sub_literal k x
+  set L hL c hc := by cases hL; exact sub_setCodec hc
+  set_mono L hL o _ _ hd h := by cases hL; exact setCodec_mono o hd h
+
+/-- **Confluence**, closed: the denotation of a held-free term is a restriction of `Ω`. -/
+theorem sub_denote (t : Term) (h : HF t) : Sub (denote α t) Ω :=
+  Alg.sub_denote t h
+
+/-- **(W)**: a held-free term writes only what `opaque` writes. -/
+theorem confluence_W {t : Term} (h : HF t) {v a} (he : (denote α t).e v = some a) :
+    (denote α .opaq).e v = some a := sub_denote t h .host _ _ he
+
+/-- **(R)**: a held-free term reads only what `opaque` reads. -/
+theorem confluence_R {t : Term} (h : HF t) {a v} (hp : (denote α t).p a = some v) :
+    (denote α .opaq).p a = some v := sub_denote t h .dual _ _ hp
 
 end Calculus
