@@ -61,7 +61,7 @@ import {
     memberOf,
 } from './attribute'
 import type { AnyCodec, LiteralValue, ObjectSlot } from './codec'
-import { union } from './codec'
+import { object, optional, union } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
 import { CodecError, failed } from './result'
 import type {
@@ -1771,14 +1771,445 @@ export const leanSlice = ({
     ].join('\n')
 }
 
+/* ── the path ──────────────────────────────────────────────────────────────────────────────── */
+
+/** One step of a path: a name, a position, or the clause of a `when`. */
+export type PathStep =
+    | string
+    | number
+    | { readonly when: Readonly<Record<string, AnyCodec>> }
+
 /**
- * The slices as a module of their own.
+ * **What `at` decides at one path**, read from outside the host.
+ *
+ * The walk refuses (`refused`), or no codec stands at the path (`vacant`), or some options admit
+ * no value at the path (`someVariants`), or the options declare the path differently
+ * (`ambiguous`), or one codec stands at the path (`resolved`). The first and the second each
+ * happen at the call or on use. The model's frontier carries no such moment, so the vector reads
+ * neither moment.
+ */
+export type HostAt =
+    | { readonly kind: 'refused' | 'vacant' | 'someVariants' | 'ambiguous' }
+    | { readonly kind: 'resolved'; readonly codec: AnyCodec }
+
+/**
+ * The recorder that `at` hands its selector, as a loop drives it. The path type names the steps
+ * that a selector literal writes, and a loop computes its steps, so the one cast is at
+ * {@link wrapperOf}.
+ */
+type Recorder = { readonly [name: string]: Recorder } & {
+    readonly at: (index: number) => Recorder
+    readonly when: (clause: Readonly<Record<string, AnyCodec>>) => Recorder
+}
+
+/** The item codec that holds a codec at {@link wrapped}, with `at` over a loop's steps. */
+type Wrapper = AnyCodec & {
+    readonly at: (select: (path: Recorder) => Recorder) => AnyCodec
+}
+
+/** The name at which the wrapper holds the codec under test. */
+const wrapped = 'r'
+
+/**
+ * **A path enters a codec through an item.** `at` belongs to the item of an object, so the codec
+ * sits at an optional name, which takes every codec and `never` too. The type of `at` follows the
+ * spec, and the spec here is a variable, so the item is cast one time to the erased signature.
+ */
+const wrapperOf = (codec: AnyCodec): Wrapper =>
+    object({ [wrapped]: optional(codec) }).item as unknown as Wrapper
+
+/** Every term that the walk can reach from a root, through each thunk that resolves. */
+export const reachable = (root: Term): ReadonlySet<Term> => {
+    const seen = new Set<Term>()
+    const walk = (t: Term): void => {
+        if (seen.has(t)) return
+        seen.add(t)
+        switch (t.kind) {
+            case 'lazy': {
+                const target = force(t)
+                if (target !== undefined) walk(target)
+                return
+            }
+            case 'list':
+                for (const one of [...t.pre, ...t.suf]) walk(one)
+                if (t.spread !== undefined) walk(t.spread)
+                return
+            case 'object':
+                for (const field of Object.values(t.body.fields)) walk(field.t)
+                if (t.body.rest !== undefined) walk(t.body.rest)
+                return
+            case 'union':
+                return t.options.forEach(walk)
+            case 'set':
+                return walk(t.elem)
+            case 'held':
+                walk(t.inner)
+                return walk(t.outer)
+            case 'refine':
+            case 'legacy':
+                return walk(t.inner)
+            default:
+                return
+        }
+    }
+    walk(root)
+    return seen
+}
+
+/** One step of the recorder. */
+const stepOf = (path: Recorder, step: PathStep): Recorder =>
+    typeof step === 'number'
+        ? path.at(step)
+        : typeof step === 'string'
+          ? (path[step] as Recorder)
+          : path.when(step.when)
+
+/**
+ * **The decision of `at` at a path under {@link wrapped}.** A throw of the call is a refusal at the
+ * call. A codec whose term the root does not reach is a refusal on use, and its message names the
+ * reading. Any other codec is the resolved codec. A throw that is no `CodecError` propagates.
+ */
+export const hostAt = (codec: AnyCodec, steps: readonly PathStep[]): HostAt => {
+    const item = wrapperOf(codec)
+    let reached: AnyCodec
+    try {
+        reached = item.at((path) =>
+            steps.reduce(stepOf, path[wrapped] as Recorder),
+        )
+    } catch (error) {
+        if (!(error instanceof CodecError)) throw error
+        return {
+            kind: error.message.startsWith('no attribute is declared')
+                ? 'vacant'
+                : 'refused',
+        }
+    }
+    if (reachable(item.def as Term).has(reached.def as Term))
+        return { kind: 'resolved', codec: reached }
+    const refusal = reached.decode({ NULL: true })
+    const message = refusal instanceof CodecError ? refusal.message : ''
+    if (message.includes('is declared by some variants only'))
+        return { kind: 'someVariants' }
+    if (message.includes('is declared differently in different variants'))
+        return { kind: 'ambiguous' }
+    // a clause that separates every option leaves no codec at the path
+    if (message.startsWith('the clause on')) return { kind: 'vacant' }
+    return { kind: 'refused' }
+}
+
+/** The paths of one codec, each as its steps under {@link wrapped}. */
+export type PathVectors = {
+    /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
+    readonly name: string
+    readonly codec: AnyCodec
+    readonly paths: readonly (readonly PathStep[])[]
+}
+
+/** A segment of the model's path. */
+const leanSeg = (step: string | number): string =>
+    typeof step === 'number' ? `.pos ${step}` : `.name ${leanString(step)}`
+
+/**
+ * **The depth of a term as it prints**: a thunk that closes a cycle prints a variable, and any
+ * other thunk prints its target. A frame agrees with a resolved term to the depth of the term and
+ * two more steps, which reads the whole print of the term and one step past each leaf. A deeper
+ * step reads one more unfolding of a binder that the print already holds. A bound of the
+ * constructor count reads a recursive term with two recursive children to an exponential size.
+ */
+const depthOf = (root: Term): number => {
+    const walk = (t: Term, stack: readonly Term[]): number => {
+        const on = [...stack, t]
+        const max = (ts: readonly Term[]) =>
+            1 + Math.max(0, ...ts.map((one) => walk(one, on)))
+        switch (t.kind) {
+            case 'lazy': {
+                const target = force(t)
+                return target === undefined || on.includes(target)
+                    ? 1
+                    : walk(target, on)
+            }
+            case 'list':
+                return max([
+                    ...t.pre,
+                    ...t.suf,
+                    ...(t.spread ? [t.spread] : []),
+                ])
+            case 'object':
+                return max([
+                    ...Object.values(t.body.fields).map((field) => field.t),
+                    ...(t.body.rest ? [t.body.rest] : []),
+                ])
+            case 'union':
+                return max(t.options)
+            case 'set':
+                return max([t.elem])
+            case 'held':
+                return max([t.inner, t.outer])
+            case 'refine':
+            case 'legacy':
+                return max([t.inner])
+            default:
+                return 1
+        }
+    }
+    return walk(root, [])
+}
+
+/** The term of a codec with each thunk resolved, as the walk of `when` reads it. */
+const resolved = (t: Term): Term | undefined =>
+    t.kind === 'lazy'
+        ? ((u) => (u === undefined ? undefined : resolved(u)))(force(t))
+        : t
+
+/**
+ * **A decision where a row can narrow**: one codec, and a union under its thunks that is no
+ * binder. The walk of `when` narrows the options of such a union, and a row states that narrowing.
+ *
+ * A recursive union has no row. Its options read the union through a variable, and `narrow` reads
+ * the variable open, where the host reads the thunk closed. The model has no substitution that
+ * closes the options, so no row states the narrowing that the host does.
+ */
+export const unionAt = (host: HostAt): boolean => {
+    if (host.kind !== 'resolved' || 'mark' in host.codec.def) return false
+    const u = resolved(host.codec.def)
+    return u?.kind === 'union' && !bindersOf(host.codec.def).has(u)
+}
+
+/**
+ * **The paths of one codec, as one Lean `theorem`.** Each path without a clause is a row of
+ * `pathRows`: the model's `Term.at` at the path, read against the decision of the host. A path
+ * with a clause is a row of `whenRows` at the union that the host resolves before the clause: the
+ * model's `narrow` over the options of the union, then the frontier of the rest of the path.
+ *
+ * One bound for every term of the theorem, so one adapter is one generator in each.
+ *
+ * **A caller's function prints as its stand-in**, and the theorem is closed. `Term.at` and `μSyn`
+ * read the constructors of a term and no function. `narrow` reads a predicate through
+ * `Pred.isData`, which is `false` at every closure, and reads no older reader. So the twin of one
+ * shape has the decisions of the term, and the goal is closed. A quantified goal closes by `rfl`,
+ * which runs out of heartbeats on a theorem of this size.
+ *
+ * **The kernel decides the goal**, by `decide +kernel`. The elaborator's `decide` evaluates the
+ * goal before the kernel does, and runs out of heartbeats. The kernel check adds no axiom.
+ */
+export const leanPath = ({ name, codec, paths }: PathVectors): string => {
+    const bound: Bound = {
+        closures: new Map(),
+        adapters: new Map(),
+        readers: new Map(),
+        standIn: true,
+    }
+    const item = wrapperOf(codec)
+    const root = leanTermOf(item, `${name}.root`, bound)
+    let fuel = 1
+    // a long term prints one time per theorem, as an abbreviation that the rows name
+    const terms = new Map<string, string>()
+    const named = (printed: string): string => {
+        if (printed.length <= 80) return `(${printed})`
+        const known = terms.get(printed)
+        if (known !== undefined) return known
+        const made = `${leanIdent(name)}_t${terms.size}`
+        terms.set(printed, made)
+        return made
+    }
+    const host = (steps: readonly PathStep[], at: string): string => {
+        const decided = hostAt(codec, steps)
+        if (decided.kind !== 'resolved') return `.${decided.kind}`
+        const printed = leanTermOf(decided.codec, at, bound)
+        fuel = Math.max(fuel, depthOf(decided.codec.def as Term))
+        return `.resolved ${named(printed)}`
+    }
+    const plain: string[] = []
+    const unions = new Map<string, Map<string, string[]>>()
+    paths.forEach((steps, i) => {
+        const at = `${name}.path${i}`
+        const clauses = steps.flatMap((step, k) =>
+            typeof step === 'object' ? [k] : [],
+        )
+        if (clauses.length === 0) {
+            const segs = [wrapped, ...(steps as readonly (string | number)[])]
+            plain.push(
+                `([${segs.map(leanSeg).join(', ')}], ${host(steps, at)})`,
+            )
+            return
+        }
+        const [k] = clauses
+        if (clauses.length > 1 || k === undefined) {
+            return refuse(at, 'a path of two clauses: a row narrows once')
+        }
+        const before = hostAt(codec, steps.slice(0, k))
+        if (before.kind !== 'resolved' || !unionAt(before)) {
+            return refuse(
+                at,
+                'no union stands before the clause: a row narrows the options of one union',
+            )
+        }
+        const u = leanTermOf(before.codec, `${at}.union`, bound)
+        const clause = (steps[k] as Exclude<PathStep, string | number>).when
+        const entries = Object.entries(clause).map(
+            ([key, one]) =>
+                [
+                    leanString(key),
+                    `(${leanTermOf(one, `${at}.when.${key}`, bound)})`,
+                ] as const,
+        )
+        const phi = `(Alg.clauseTerm ${leanFinset(Object.keys(clause))} (${leanKeyFunction(entries)}))`
+        const rest = steps.slice(k + 1) as readonly (string | number)[]
+        const byClause = unions.get(u) ?? new Map<string, string[]>()
+        const rows = byClause.get(phi) ?? []
+        rows.push(`([${rest.map(leanSeg).join(', ')}], ${host(steps, at)})`)
+        byClause.set(phi, rows)
+        unions.set(u, byClause)
+    })
+    const conjuncts = [
+        `pathRows ${fuel + 2} (${root})\n      [${plain.join(',\n       ')}]`,
+        ...[...unions].map(
+            ([u, byClause]) =>
+                `whenRows ${fuel + 2} (${u})\n      [${[...byClause]
+                    .map(
+                        ([phi, rows]) =>
+                            `(${phi},\n        [${rows.join(',\n         ')}])`,
+                    )
+                    .join(',\n       ')}]`,
+        ),
+    ]
+    // one theorem per codec: the cost of a declaration outweighs the parallel check of small ones
+    return [
+        ...[...terms].map(
+            ([printed, ident]) =>
+                `private abbrev ${ident} : Term := ${printed}`,
+        ),
+        `/-- \`${name}\` — the decision of \`at\` at each path, and under each \`when\` -/`,
+        `theorem ${leanIdent(name)} :`,
+        `    (${conjuncts.join(' &&\n    ')}) = true := by decide +kernel`,
+    ].join('\n')
+}
+
+/**
+ * The readings of the path rows, in the module that states them.
+ *
+ * **The frontier is read as a set of frames, each binder read through.** A frame holds a variable
+ * over its binder stack where the host holds a thunk, and the host keeps one copy of each codec
+ * where the model keeps one frame per option. So two frames agree where they have one shape to
+ * the depth that the theorem names, each binder entered and each variable read through its
+ * binder. A primitive and an adapter word are compared. A predicate and an older reader are not
+ * read, as `Term.sameShape` reads none.
+ */
+const pathReadings = `/-! ## The readings of a path
+
+A row states the decision of \`at\` on the host, and the frontier of the model at the path. -/
+
+set_option maxRecDepth 8192
+
+/-- Two primitives are one primitive. -/
+def groundEq : Ground → Ground → Bool
+  | .base k, .base k' => decide (k = k')
+  | .literal k v, .literal k' v' => if h : k = k' then decide (h ▸ v = v') else false
+  | _, _ => false
+
+/-- The head of a frame: a binder enters its body, and a variable reads the binder that it names. -/
+def pathHead : Nat → Alg.Frame dynSyn → Alg.Frame dynSyn
+  | 0, f => f
+  | n + 1, (.mu b, env) => pathHead n (b, .mu b :: env)
+  | n + 1, (.var i, env) =>
+      match env[i]? with
+      | some m => pathHead n (m, env.drop (i + 1))
+      | none => (.var i, env)
+  | _ + 1, f => f
+
+/-- **Two frames of one shape to depth \`n\`**, each binder entered and each variable read through
+    its binder. A variable that no binder binds is compared past the stack. -/
+def frameSim (n : Nat) (f g : Alg.Frame dynSyn) : Bool :=
+  match n with
+  | 0 => true
+  | n + 1 =>
+    let x := pathHead (f.2.length + 2) f
+    let y := pathHead (g.2.length + 2) g
+    let sim := fun (s t : Term) => frameSim n (s, x.2) (t, y.2)
+    let simL := fun (ss ts : List Term) =>
+      ss.length == ts.length && (ss.zip ts).all fun p => sim p.1 p.2
+    let simO := fun (s t : Option Term) => match s, t with
+      | none, none => true
+      | some s, some t => sim s t
+      | _, _ => false
+    let simS := fun (s t : ObjectSlot) => match s, t with
+      | .req s, .req t | .optional s, .optional t | .fill s _, .fill t _ => sim s t
+      | _, _ => false
+    match x.1, y.1 with
+    | .prim a, .prim b => groundEq a b
+    | .opaq, .opaq | .never, .never => true
+    | .var i, .var j => i - x.2.length == j - y.2.length
+    | .set s, .set t => sim s t
+    | .refine s _ _, .refine t _ _ | .legacy s _, .legacy t _ => sim s t
+    | .held false s P k ks, .held false t Q l ls => sim s t && sim P Q && decide (k :: ks = l :: ls)
+    | .list p sp sf, .list q tp tf => simL p q && simO sp tp && simL sf tf
+    | .union os, .union ps => simL os ps
+    | .object (.mk fs f w), .object (.mk gs g v) =>
+        decide (∀ k : {k // k ∈ fs}, ∃ h : k.1 ∈ gs, simS (f k) (g ⟨k.1, h⟩) = true) &&
+          fs.card == gs.card && simO w v
+    | _, _ => false
+termination_by structural n
+
+/-- A frame whose head is \`never\`: an option that admits no value at the path. -/
+def frameNever (f : Alg.Frame dynSyn) : Bool :=
+  match (pathHead (f.2.length + 2) f).1 with
+  | .never => true
+  | _ => false
+
+/-- **The decision of \`at\` at a path**, as the host states it. -/
+inductive HostAt where
+  /-- The walk refuses the path. -/
+  | refused
+  /-- No codec stands at the path. -/
+  | vacant
+  /-- Some options admit no value at the path, and some do. -/
+  | someVariants
+  /-- The options declare the path differently. -/
+  | ambiguous
+  /-- One codec stands at the path. -/
+  | resolved (t : Term)
+
+/-- **The frontier that a decision names.** A refusal is \`none\`. No codec is a frontier of \`never\`
+    alone, the empty frontier included. Some options is a frontier with \`never\` and with another
+    frame. Two declarations are a frontier with no \`never\` and two frames of two shapes. One codec
+    is a frontier of frames of the shape of the codec. -/
+def pathReads (n : Nat) : Option (List (Alg.Frame dynSyn)) → HostAt → Bool
+  | none, .refused => true
+  | some fs, .vacant => fs.all frameNever
+  | some fs, .someVariants => fs.any frameNever && fs.any (!frameNever ·)
+  | some (f :: fs), .ambiguous => !(f :: fs).any frameNever && fs.any (!frameSim n f ·)
+  | some fs, .resolved t => !fs.isEmpty && fs.all (frameSim n · (t, []))
+  | _, _ => false
+
+/-- The rows of the paths into a root: \`Term.at\` at each path, read against the host. -/
+def pathRows (n : Nat) (root : Term) (rows : List (List Alg.Seg × HostAt)) : Bool :=
+  rows.all fun r => pathReads n (Alg.Term.at root r.1) r.2
+
+/-- **The frames after a clause**: the options of the union that \`narrow\` keeps, each under the
+    binder of a recursive union. -/
+def narrowFrames (φ : Term) : Term → List (Alg.Frame dynSyn)
+  | .union os => (Alg.narrow .dual φ os).map ((·, []))
+  | .mu (.union os) => (Alg.narrow .dual φ os).map ((·, [.mu (.union os)]))
+  | t => [(t, [])]
+
+/-- The rows of the clauses at a union: for each clause, \`narrow\`, then the frontier of the rest
+    of each path. -/
+def whenRows (n : Nat) (u : Term) (rows : List (Term × List (List Alg.Seg × HostAt))) : Bool :=
+  rows.all fun c => let fs := narrowFrames c.1 u
+    c.2.all fun r => pathReads n (Alg.atG Alg.Frame.child r.1 fs) r.2`
+
+/**
+ * The slices as a module of their own, with the paths of the pool.
  *
  * Generated at gate time and elaborated, never committed.
  */
-export const leanSliceModule = (slices: readonly Slice[]): string =>
+export const leanSliceModule = (
+    slices: readonly Slice[],
+    paths: readonly PathVectors[] = [],
+): string =>
     `import Calculus.Dynamo.Analysis.Slice
 import Calculus.Dynamo.Lang.Store
+import Calculus.Lang.Path
 
 /-!
 # Slices, proposed to the model
@@ -1787,6 +2218,10 @@ import Calculus.Dynamo.Lang.Store
 options that \`src/\` keeps under the clause: \`extract\` gives the verdict of a clause of the caller,
 and \`assignmentOf\` gives the verdict of a clause at the tag of a dissection's option. The theorem
 states that \`Calculus.AltClause.admits\` gives the same verdict at each option.
+
+A path theorem states the decision of \`at\` at each path into one codec, and under each \`when\`
+at a union on the path. The model gives the frontier by \`Alg.Term.at\`, and after a clause by
+\`Alg.narrow\` and the frontier of the rest of the path.
 -/
 
 /-! The emitted key function is total on a membership subtype, so a one-name clause binds a \`k\`
@@ -1796,7 +2231,7 @@ set_option linter.unusedVariables false
 namespace Calculus
 
 ${slices.map(leanSlice).join('\n\n')}
-
+${paths.length === 0 ? '' : `\n${pathReadings}\n\n${paths.map(leanPath).join('\n\n')}\n`}
 end Calculus
 `
 

@@ -52,19 +52,25 @@ import {
     union,
     withLegacyRead,
 } from '../codec'
+import { codecOfTerm } from '../denote'
 import type {
     DisjointPair,
     FormerGuard,
+    HostAt,
+    PathStep,
+    PathVectors,
     Separation,
     Slice,
     Sliceable,
 } from '../lean'
 import {
+    hostAt,
     LeanUnemittable,
     leanDisjoint,
     leanDisjointModule,
     leanFormerGuard,
     leanFormerGuardModule,
+    leanPath,
     leanRooted,
     leanSeparation,
     leanSeparationModule,
@@ -72,6 +78,8 @@ import {
     leanSliceModule,
     leanString,
     leanTermOf,
+    reachable,
+    unionAt,
 } from '../lean'
 import { orThrow } from '../result'
 import type { Term } from '../term'
@@ -79,6 +87,7 @@ import {
     agrees,
     disjoint,
     force,
+    member,
     RecursionRefused,
     recursionUse,
     viewsDisjoint,
@@ -860,6 +869,246 @@ const slicesOf = (declared: readonly Declared[], first: number): Slice[] => {
     return slices
 }
 
+/** A path with no clause. */
+const plainPath = (path: readonly PathStep[]): boolean =>
+    path.every((step) => typeof step !== 'object')
+
+/** The segments of a path below the codec, at most. */
+const PATH_DEPTH = 3
+
+/**
+ * The segments of a path below a clause, at most. The clause decides the frontier at the union,
+ * and one segment reads the narrowed frontier. A deeper segment walks what a path without the
+ * clause walks, and the bridge pays for each row in time.
+ */
+const WHEN_DEPTH = 1
+
+/**
+ * **The paths into one codec.** A step is each name that a reachable object declares, and each
+ * position of a reachable prefix with the first position past the prefix. A path grows only where
+ * the host lets a codec stand, to {@link PATH_DEPTH} segments. Past a resolved codec, a path tries
+ * the steps that the codec declares at its top, one name and one position. A path under a `when` starts at each
+ * path where the host resolves a union, with each clause of {@link clauseVocabulary} at each name
+ * of an option, and grows under the clause to {@link WHEN_DEPTH} segments.
+ */
+const pathsOf = (codec: AnyCodec): (readonly PathStep[])[] => {
+    const names = new Set<string>()
+    let positions = 0
+    for (const t of reachable(codec.def)) {
+        if (t.kind === 'object')
+            for (const name of Object.keys(t.body.fields)) names.add(name)
+        if (t.kind === 'list') positions = Math.max(positions, t.pre.length + 1)
+    }
+    const steps = [...names, ...Array.from({ length: positions }, (_, i) => i)]
+    const paths: (readonly PathStep[])[] = []
+    // **A thunk that names a codec not yet declared ends the path.** The walk forces the thunk,
+    // and the throw of the caller propagates: the host reads no refusal there. The model reads the
+    // variable that no binder binds as an empty frontier, so the two state no common decision
+    const decide = (path: readonly PathStep[]) => {
+        try {
+            return hostAt(codec, path)
+        } catch (error) {
+            if (!(error instanceof ReferenceError)) throw error
+            drop('path: a thunk names a codec not yet declared')
+            return undefined
+        }
+    }
+    // one name and one position of the codec stand for each step that the codec at a prefix
+    // does not declare: each such step is the same refusal of the store
+    const probes = [...[...names].slice(0, 1), 0]
+    const next = (decided: HostAt): readonly (string | number)[] => {
+        if (decided.kind !== 'resolved') return steps
+        const declared = new Set<string | number>(probes)
+        for (const t of topTerms(decided.codec.def)) {
+            if (t.kind === 'object')
+                for (const name of Object.keys(t.body.fields))
+                    declared.add(name)
+            if (t.kind === 'list')
+                for (let i = 0; i <= t.pre.length; i++) declared.add(i)
+        }
+        return steps.filter((step) => declared.has(step))
+    }
+    const grow = (path: readonly PathStep[], left: number) => {
+        const decided = decide(path)
+        if (decided === undefined) return
+        paths.push(path)
+        if (decided.kind === 'refused' || decided.kind === 'vacant') return
+        if (left > 0)
+            for (const step of next(decided)) grow([...path, step], left - 1)
+    }
+    const narrowing = (path: readonly PathStep[], left: number) => {
+        const decided = decide(path)
+        if (decided === undefined) return
+        if (decided.kind === 'resolved' && unionAt(decided)) {
+            const keys = new Set(
+                [...reachable(decided.codec.def)].flatMap((t) =>
+                    t.kind === 'object' ? Object.keys(t.body.fields) : [],
+                ),
+            )
+            for (const key of keys)
+                for (const make of clauseVocabulary)
+                    grow(
+                        [...path, { when: { [key]: make() } }],
+                        Math.min(left, WHEN_DEPTH),
+                    )
+        }
+        if (decided.kind === 'refused' || decided.kind === 'vacant') return
+        if (left > 0)
+            for (const step of next(decided))
+                narrowing([...path, step], left - 1)
+    }
+    grow([], PATH_DEPTH)
+    narrowing([], PATH_DEPTH)
+    // the wrapper holds the codec at its name, so the path of no step under the name states the
+    // codec against itself
+    return paths.filter((path) => path.length > 0)
+}
+
+/** The term under a chain of thunks, or nothing where a thunk throws. */
+const throughLazy = (t: Term): Term | undefined => {
+    if (t.kind !== 'lazy') return t
+    const target = force(t)
+    return target === undefined ? undefined : throughLazy(target)
+}
+
+/** The terms at the top of a term, under thunks and unions. */
+const topTerms = (t: Term): Term[] => {
+    const u = throughLazy(t)
+    if (u === undefined) return []
+    return u.kind === 'union' ? u.options.flatMap(topTerms) : [u]
+}
+
+/** The object options of a union, under thunks and nested unions. */
+const objectOptions = (t: Term): Term[] => {
+    const u = throughLazy(t)
+    if (u === undefined) return []
+    if (u.kind === 'object') return [u]
+    return u.kind === 'union' ? u.options.flatMap(objectOptions) : []
+}
+
+/**
+ * **The codecs where the host and the model disagree on a path**, by cause. Each cause is a
+ * finding: no vector states a disagreement, so a codec that can reach a cause goes, by the reason.
+ * The test is wider than the cause, so a codec goes where a path can disagree.
+ */
+const disagreementOf = (codec: AnyCodec): string | undefined => {
+    const terms = [...reachable(codec.def)]
+    if (terms.some((t) => t.kind === 'opaq'))
+        return 'path: under `opaque` the host stands no codec, and the model stands `opaq` at every segment'
+    if (
+        terms.some(
+            (t) =>
+                (t.kind === 'held' ||
+                    t.kind === 'refine' ||
+                    t.kind === 'legacy') &&
+                member(t.inner) === undefined,
+        )
+    )
+        return 'path: `member` stops at a thunk, so the host refuses a wrapper that the model drops as apart'
+    for (const u of terms) {
+        if (u.kind !== 'union') continue
+        const at = new Map<string, Term[]>()
+        for (const o of objectOptions(u))
+            if (o.kind === 'object')
+                for (const [name, field] of Object.entries(o.body.fields))
+                    at.set(name, [...(at.get(name) ?? []), field.t])
+        for (const ts of at.values()) {
+            const printed = ts.map((t) => printedAlone(codecOfTerm(t)))
+            const twice = ts.some((t, i) =>
+                ts.some(
+                    (x, j) =>
+                        j > i &&
+                        x !== t &&
+                        printed[i] !== undefined &&
+                        printed[i] === printed[j],
+                ),
+            )
+            if (twice)
+                return 'path: two options declare one name at two codecs of one term, and the host reads two codecs where the model reads one shape'
+        }
+    }
+    return undefined
+}
+
+/**
+ * The path vectors of one seed: each codec of the pairs, once, with the paths into it. The names
+ * continue after `first`, so the seeds share one name space. A codec whose theorem prints as the
+ * theorem of a codec before it adds nothing, and goes.
+ */
+const pathVectorsOf = (
+    pairs: readonly PoolPair[],
+    first: number,
+    seen: Set<string>,
+): PathVectors[] => {
+    const vectors: PathVectors[] = []
+    for (const codec of new Set(pairs.flatMap((p) => [p.left, p.right]))) {
+        const cause = disagreementOf(codec)
+        if (cause !== undefined) {
+            drop(cause)
+            continue
+        }
+        const one = { name: 'path', codec, paths: pathsOf(codec) }
+        let printed: string
+        try {
+            printed = leanPath(one)
+        } catch (error) {
+            if (!(error instanceof LeanUnemittable)) throw error
+            drop(`path: ${error.reason}`)
+            continue
+        }
+        if (seen.has(printed)) continue
+        seen.add(printed)
+        vectors.push({ ...one, name: `path_${first + vectors.length}` })
+    }
+    return vectors
+}
+
+/**
+ * The decision of `at` at each path into each codec of the pairs, keyed by the term of the codec
+ * and the path. Two spellings that print one term key one decision.
+ */
+const decisionsOf = (
+    seeds: ReturnType<typeof buildPool>,
+): ReadonlyMap<string, string> => {
+    const bound = () => ({
+        closures: new Map(),
+        adapters: new Map(),
+        readers: new Map(),
+        standIn: true,
+    })
+    const print = (codec: AnyCodec): string =>
+        leanTermOf(codec, 'decision', bound())
+    const stepKey = (step: PathStep): string =>
+        typeof step === 'object'
+            ? `when{${Object.entries(step.when)
+                  .map(([key, c]) => `${key}:${print(c)}`)
+                  .join(',')}}`
+            : String(step)
+    const decided = new Map<string, string>()
+    for (const codec of new Set(
+        seeds.flatMap((one) => one.pairs.flatMap((p) => [p.left, p.right])),
+    )) {
+        let root: string
+        try {
+            root = print(codec)
+        } catch (error) {
+            if (!(error instanceof LeanUnemittable)) throw error
+            continue
+        }
+        for (const path of pathsOf(codec)) {
+            let clause: string
+            try {
+                clause = path.map(stepKey).join('.')
+            } catch (error) {
+                if (!(error instanceof LeanUnemittable)) throw error
+                continue
+            }
+            decided.set(`${root}\u0000${clause}`, hostAt(codec, path).kind)
+        }
+    }
+    return decided
+}
+
 /**
  * The term a codec prints alone, or nothing where the print binds a caller's function: a bound name
  * is numbered afresh in each print, so two different functions print one name.
@@ -969,24 +1218,29 @@ const buildPool = () => {
         pairs: readonly PoolPair[]
         slices: readonly Slice[]
         guards: readonly FormerGuard[]
+        paths: readonly PathVectors[]
     }[] = []
+    const printedPaths = new Set<string>()
     for (const seed of SEEDS) {
         const first = seeds.reduce((n, one) => n + one.pairs.length, 0)
         const pairs = pool(seed, first)
         const sliced = seeds.reduce((n, one) => n + one.slices.length, 0)
         const guarded = seeds.reduce((n, one) => n + one.guards.length, 0)
+        const pathed = seeds.reduce((n, one) => n + one.paths.length, 0)
         seeds.push({
             seed,
             pairs,
             slices: slicesOf(unions, sliced),
             guards: formerGuards(refused, guarded),
+            paths: pathVectorsOf(pairs, pathed, printedPaths),
         })
     }
-    return seeds.map(({ seed, pairs, slices, guards }) => ({
+    return seeds.map(({ seed, pairs, slices, guards, paths }) => ({
         seed,
         pairs,
         slices,
         guards,
+        paths,
         ...kernelPairs(pairs),
     }))
 }
@@ -1006,7 +1260,10 @@ const poolModules = (
     ],
     [
         '.pool.slices.lean',
-        leanSliceModule(perSeed.flatMap((one) => one.slices)),
+        leanSliceModule(
+            perSeed.flatMap((one) => one.slices),
+            perSeed.flatMap((one) => one.paths),
+        ),
     ],
     [
         '.pool.guards.lean',
@@ -1034,47 +1291,69 @@ describe('the generated pool, against the model', () => {
                 clauses: one.slices.reduce((n, s) => n + s.clauses.length, 0),
                 assignments: one.slices.filter((s) => s.keys?.length).length,
                 guards: one.guards.length,
+                codecsPathed: one.paths.length,
+                paths: one.paths.reduce(
+                    (n, v) => n + v.paths.filter(plainPath).length,
+                    0,
+                ),
+                whenPaths: one.paths.reduce(
+                    (n, v) => n + v.paths.filter((p) => !plainPath(p)).length,
+                    0,
+                ),
             })),
             dropped: Object.fromEntries([...dropped].sort()),
         }).toMatchInlineSnapshot(`
           {
             "dropped": {
               "a constructor refused the draw": 76,
+              "path: \`member\` stops at a thunk, so the host refuses a wrapper that the model drops as apart": 32,
+              "path: a thunk names a codec not yet declared": 158,
+              "path: two options declare one name at two codecs of one term, and the host reads two codecs where the model reads one shape": 24,
+              "path: under \`opaque\` the host stands no codec, and the model stands \`opaq\` at every segment": 58,
               "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1622,
             },
             "seeds": [
               {
                 "assignments": 32,
                 "clauses": 4470,
+                "codecsPathed": 203,
                 "disjoints": 1310,
                 "fills": 6,
                 "guards": 1,
                 "pairs": 1310,
+                "paths": 1606,
                 "seed": 20261004,
                 "separations": 1304,
                 "slices": 93,
+                "whenPaths": 3501,
               },
               {
                 "assignments": 32,
                 "clauses": 4170,
+                "codecsPathed": 162,
                 "disjoints": 1189,
                 "fills": 7,
                 "guards": 4,
                 "pairs": 1189,
+                "paths": 1388,
                 "seed": 1,
                 "separations": 1182,
                 "slices": 88,
+                "whenPaths": 2892,
               },
               {
                 "assignments": 32,
                 "clauses": 3525,
+                "codecsPathed": 120,
                 "disjoints": 1199,
                 "fills": 11,
                 "guards": 6,
                 "pairs": 1199,
+                "paths": 1230,
                 "seed": 4,
                 "separations": 1188,
                 "slices": 70,
+                "whenPaths": 2675,
               },
             ],
           }
@@ -1111,17 +1390,29 @@ describe('the generated pool, against the model', () => {
      * again with each leaf and each tag literal behind a thunk that closes no cycle. Each term prints
      * the same, so each emitted file and each drop must be the same: a difference is a host reader
      * that stops at a thunk where the model reads the term.
+     *
+     * **The decision of `at` is the one exception, and the snapshot pins it.** The path rows of the
+     * two spellings are compared by decision, and each difference is counted by its two decisions.
+     * `member` stops at a thunk, so `at` refuses a wrapper over a thunk where the plain spelling
+     * stands no codec. The model reads one term in both spellings, so each difference is that
+     * host reader, and the snapshot empties when `at` reads through the thunk.
      */
     it('builds the same pool when each leaf and tag sits behind a thunk', () => {
         const plain = [...dropped]
-        const before = poolModules(perSeed)
+        const withoutPaths = (seeds: ReturnType<typeof buildPool>) =>
+            poolModules(seeds.map((one) => ({ ...one, paths: [] })))
+        const before = withoutPaths(perSeed)
+        const decidedBefore = decisionsOf(perSeed)
         dropped.clear()
         thunked = true
         let wrapped: readonly (readonly [string, string])[]
         let wrappedDrops: [string, number][]
+        let decidedWrapped: ReadonlyMap<string, string>
         try {
-            wrapped = poolModules(buildPool())
+            const seeds = buildPool()
             wrappedDrops = [...dropped]
+            wrapped = withoutPaths(seeds)
+            decidedWrapped = decisionsOf(seeds)
         } finally {
             thunked = false
             dropped.clear()
@@ -1140,7 +1431,25 @@ describe('the generated pool, against the model', () => {
                 firstDifference(before[i]?.[1] ?? '', text),
             ]),
         ).toEqual(before.map(([file]) => [file, 'same']))
-        expect(wrappedDrops.sort()).toEqual(plain.sort())
+        const notPath = ([why]: [string, number]) => !why.startsWith('path: ')
+        expect(wrappedDrops.filter(notPath).sort()).toEqual(
+            plain.filter(notPath).sort(),
+        )
+        const changed = new Map<string, number>()
+        for (const [key, kind] of decidedBefore) {
+            const other = decidedWrapped.get(key)
+            if (other === undefined || other === kind) continue
+            const move = `${kind} -> ${other}`
+            changed.set(move, (changed.get(move) ?? 0) + 1)
+        }
+        expect(Object.fromEntries([...changed].sort())).toMatchInlineSnapshot(`
+          {
+            "ambiguous -> refused": 1,
+            "resolved -> refused": 1,
+            "someVariants -> refused": 2,
+            "vacant -> refused": 93,
+          }
+        `)
     })
 
     it('emits the pre-check and the kernel vectors for the gate', () => {
