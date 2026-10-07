@@ -213,7 +213,7 @@ describe('untagged', () => {
         const Holder = object({ leg: LegCodec }).item
         expect(
             Holder.at(
-                (p) => p.leg.when({ petIds: array(string) }).petIds,
+                (p) => p.leg.narrow({ petIds: array(string) }).petIds,
             ).unsafeEncode(['x']),
         ).toEqual({
             L: [{ S: 'x' }],

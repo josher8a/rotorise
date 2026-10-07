@@ -110,7 +110,7 @@ describe('a numeric tag', () => {
         const Holder = object({ row: Rows }).item
         expect(
             Holder.at(
-                (p) => p.row.when({ kind: number(0) }).draftedAt,
+                (p) => p.row.narrow({ kind: number(0) }).draftedAt,
             ).unsafeEncode('t'),
         ).toEqual({ S: 't' })
     })

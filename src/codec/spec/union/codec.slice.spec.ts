@@ -379,12 +379,12 @@ describe('the clause carries no order', () => {
         expect(
             Holder.at(
                 (p) =>
-                    p.x.when({ kind: string('pet'), size: string('large') })
+                    p.x.narrow({ kind: string('pet'), size: string('large') })
                         .pen,
             ).unsafeEncode('p1'),
         ).toEqual({ S: 'p1' })
         // @ts-expect-error `food` is not a member of the extraction
-        Holder.at((p) => p.x.when({ kind: string('food') }))
+        Holder.at((p) => p.x.narrow({ kind: string('food') }))
     })
 
     it('gives the same members whichever order they were declared in', () => {

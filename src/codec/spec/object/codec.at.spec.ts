@@ -252,7 +252,7 @@ describe('a path under opaque', () => {
         expect(deep.unsafeEncode({ k: 'v' })).toEqual({
             M: { k: { S: 'v' } },
         })
-        // no `when` narrows the path, so a write needs no guard
-        expect(deep.guards).toEqual([])
+        // no `narrow` narrows the path, so a write needs no precondition
+        expect(deep.preconditions).toEqual([])
     })
 })

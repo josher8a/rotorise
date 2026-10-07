@@ -879,15 +879,15 @@ const PATH_DEPTH = 3
  * and one segment reads the narrowed frontier. A deeper segment walks what a path without the
  * clause walks, and the bridge pays for each row in time.
  */
-const WHEN_DEPTH = 1
+const NARROW_DEPTH = 1
 
 /**
  * **The paths into one codec.** A step is each name that a reachable object declares, and each
  * position of a reachable prefix with the first position past the prefix. A path grows only where
  * the host lets a codec stand, to {@link PATH_DEPTH} segments. Past a resolved codec, a path tries
- * the steps that the codec declares at its top, one name and one position. A path under a `when` starts at each
+ * the steps that the codec declares at its top, one name and one position. A path under a `narrow` starts at each
  * path where the host resolves a union, with each clause of {@link clauseVocabulary} at each name
- * of an option, and grows under the clause to {@link WHEN_DEPTH} segments.
+ * of an option, and grows under the clause to {@link NARROW_DEPTH} segments.
  */
 const pathsOf = (codec: AnyCodec): (readonly PathStep[])[] => {
     const names = new Set<string>()
@@ -946,8 +946,8 @@ const pathsOf = (codec: AnyCodec): (readonly PathStep[])[] => {
             for (const key of keys)
                 for (const make of clauseVocabulary)
                     grow(
-                        [...path, { when: { [key]: make() } }],
-                        Math.min(left, WHEN_DEPTH),
+                        [...path, { narrow: { [key]: make() } }],
+                        Math.min(left, NARROW_DEPTH),
                     )
         }
         if (decided.kind === 'refused' || decided.kind === 'vacant') return
@@ -1021,7 +1021,7 @@ const decisionsOf = (
         leanTermOf(codec, 'decision', bound())
     const stepKey = (step: PathStep): string =>
         typeof step === 'object'
-            ? `when{${Object.entries(step.when)
+            ? `narrow{${Object.entries(step.narrow)
                   .map(([key, c]) => `${key}:${print(c)}`)
                   .join(',')}}`
             : String(step)

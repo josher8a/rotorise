@@ -1773,11 +1773,11 @@ export const leanSlice = ({
 
 /* ── the path ──────────────────────────────────────────────────────────────────────────────── */
 
-/** One step of a path: a name, a position, or the clause of a `when`. */
+/** One step of a path: a name, a position, or the clause of a `narrow`. */
 export type PathStep =
     | string
     | number
-    | { readonly when: Readonly<Record<string, AnyCodec>> }
+    | { readonly narrow: Readonly<Record<string, AnyCodec>> }
 
 /**
  * **What `at` decides at one path**, read from outside the host.
@@ -1799,7 +1799,7 @@ export type HostAt =
  */
 type Recorder = { readonly [name: string]: Recorder } & {
     readonly at: (index: number) => Recorder
-    readonly when: (clause: Readonly<Record<string, AnyCodec>>) => Recorder
+    readonly narrow: (clause: Readonly<Record<string, AnyCodec>>) => Recorder
 }
 
 /** The item codec that holds a codec at {@link wrapped}, with `at` over a loop's steps. */
@@ -1862,7 +1862,7 @@ const stepOf = (path: Recorder, step: PathStep): Recorder =>
         ? path.at(step)
         : typeof step === 'string'
           ? (path[step] as Recorder)
-          : path.when(step.when)
+          : path.narrow(step.narrow)
 
 /**
  * **The decision of `at` at a path under {@link wrapped}.** A throw of the call is a refusal at the
@@ -1955,7 +1955,7 @@ const depthOf = (root: Term): number => {
     return walk(root, [])
 }
 
-/** The term of a codec with each thunk resolved, as the walk of `when` reads it. */
+/** The term of a codec with each thunk resolved, as the walk of `narrow` reads it. */
 const resolved = (t: Term): Term | undefined =>
     t.kind === 'lazy'
         ? ((u) => (u === undefined ? undefined : resolved(u)))(force(t))
@@ -1963,7 +1963,7 @@ const resolved = (t: Term): Term | undefined =>
 
 /**
  * **A decision where a row can narrow**: one codec, and a union under its thunks that is no
- * binder. The walk of `when` narrows the options of such a union, and a row states that narrowing.
+ * binder. The walk of `narrow` narrows the options of such a union, and a row states that narrowing.
  *
  * A recursive union has no row. Its options read the union through a variable, and `narrow` reads
  * the variable open, where the host reads the thunk closed. The model has no substitution that
@@ -1978,7 +1978,7 @@ export const unionAt = (host: HostAt): boolean => {
 /**
  * **The paths of one codec, as one Lean `theorem`.** Each path without a clause is a row of
  * `pathRows`: the model's `Term.at` at the path, read against the decision of the host. A path
- * with a clause is a row of `whenRows` at the union that the host resolves before the clause: the
+ * with a clause is a row of `narrowRows` at the union that the host resolves before the clause: the
  * model's `narrow` over the options of the union, then the frontier of the rest of the path.
  *
  * One bound for every term of the theorem, so one adapter is one generator in each.
@@ -2045,12 +2045,12 @@ export const leanPath = ({ name, codec, paths }: PathVectors): string => {
             )
         }
         const u = leanTermOf(before.codec, `${at}.union`, bound)
-        const clause = (steps[k] as Exclude<PathStep, string | number>).when
+        const clause = (steps[k] as Exclude<PathStep, string | number>).narrow
         const entries = Object.entries(clause).map(
             ([key, one]) =>
                 [
                     leanString(key),
-                    `(${leanTermOf(one, `${at}.when.${key}`, bound)})`,
+                    `(${leanTermOf(one, `${at}.narrow.${key}`, bound)})`,
                 ] as const,
         )
         const phi = `(Alg.clauseTerm ${leanFinset(Object.keys(clause))} (${leanKeyFunction(entries)}))`
@@ -2065,7 +2065,7 @@ export const leanPath = ({ name, codec, paths }: PathVectors): string => {
         `pathRows ${fuel + 2} (${root})\n      [${plain.join(',\n       ')}]`,
         ...[...unions].map(
             ([u, byClause]) =>
-                `whenRows ${fuel + 2} (${u})\n      [${[...byClause]
+                `narrowRows ${fuel + 2} (${u})\n      [${[...byClause]
                     .map(
                         ([phi, rows]) =>
                             `(${phi},\n        [${rows.join(',\n         ')}])`,
@@ -2079,7 +2079,7 @@ export const leanPath = ({ name, codec, paths }: PathVectors): string => {
             ([printed, ident]) =>
                 `private abbrev ${ident} : Term := ${printed}`,
         ),
-        `/-- \`${name}\` — the decision of \`at\` at each path, and under each \`when\` -/`,
+        `/-- \`${name}\` — the decision of \`at\` at each path, and under each \`narrow\` -/`,
         `theorem ${leanIdent(name)} :`,
         `    (${conjuncts.join(' &&\n    ')}) = true := by decide +kernel`,
     ].join('\n')
@@ -2194,7 +2194,7 @@ def narrowFrames (φ : Term) : Term → List (Alg.Frame dynSyn)
 
 /-- The rows of the clauses at a union: for each clause, \`narrow\`, then the frontier of the rest
     of each path. -/
-def whenRows (n : Nat) (u : Term) (rows : List (Term × List (List Alg.Seg × HostAt))) : Bool :=
+def narrowRows (n : Nat) (u : Term) (rows : List (Term × List (List Alg.Seg × HostAt))) : Bool :=
   rows.all fun c => let fs := narrowFrames c.1 u
     c.2.all fun r => pathReads n (Alg.atG Alg.Frame.child r.1 fs) r.2`
 
@@ -2219,7 +2219,7 @@ options that \`src/\` keeps under the clause: \`extract\` gives the verdict of a
 and \`assignmentOf\` gives the verdict of a clause at the tag of a dissection's option. The theorem
 states that \`Calculus.AltClause.admits\` gives the same verdict at each option.
 
-A path theorem states the decision of \`at\` at each path into one codec, and under each \`when\`
+A path theorem states the decision of \`at\` at each path into one codec, and under each \`narrow\`
 at a union on the path. The model gives the frontier by \`Alg.Term.at\`, and after a clause by
 \`Alg.narrow\` and the frontier of the rest of the path.
 -/
