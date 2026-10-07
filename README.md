@@ -171,11 +171,15 @@ Set a discriminated spec value to `null` to produce `undefined` (useful for GSIs
 
 ### Preconditions of a Narrowed Path
 
-`narrow` narrows a path through a union to the options that the clause does not separate. The narrowing acts at run time and in the type. The table can still hold an item of a dropped option. A write at the narrowed path is safe only under the preconditions of the path: put the preconditions in the `ConditionExpression` of the write.
+`at` on an item codec gives the codec at a path, together with the path. A path through a union resolves where each option that the path reaches stores one codec there. A name that only some options declare, or that options declare with different codecs, gives a codec that returns a `CodecError` on use.
 
-`at(...).preconditions` states the preconditions as data, a conjunction of `in`, `type` and `exists` facts at a path. A path with no `narrow` has no precondition. A clause that no exact condition states gives a `CodecError` that names the key.
+`narrow(spec)` narrows a path through a union to the options that the clause does not separate. The clause is an object of codecs, and each key of the clause is required at its codec. The narrowing acts at run time and in the type, and adds no segment to the path. The table can still hold an item of a dropped option. A write at the narrowed path is safe only under the preconditions of the path: put the preconditions in the `ConditionExpression` of the write.
+
+`at(...).preconditions` states the preconditions as data, a conjunction of `in`, `type` and `exists` facts at a path. A path with no `narrow` has no precondition. Where a clause key stores a term that no exact condition states, such as a list, `preconditions` is a `CodecError` that names the path. Test the result with `failed`.
 
 ```ts
+import { discriminatedUnion, failed, number, object, string } from 'rotorise'
+
 const Order = object({
   pay: discriminatedUnion('tender', [
     object({ tender: string('CARD'), cardId: string }),
@@ -184,14 +188,19 @@ const Order = object({
 }).item
 
 const cardId = Order.at((p) => p.pay.narrow({ tender: string('CARD') }).cardId)
-cardId.path()   // 'pay.cardId'
+cardId.path()          // 'pay.cardId'
 cardId.preconditions   // [{ segments: ['pay', 'tender'], in: [{ S: 'CARD' }] }]
+cardId.encode('c-1')   // { S: 'c-1' }
+
+// only the CARD option declares `cardId`
+Order.at((p) => p.pay.cardId).encode('c-1')   // a CodecError that names `narrow`
 ```
 
-Rotorise builds no expression string. An adapter to [Brushless](https://github.com/josher8a/Brushless) is a few lines. The caller supplies the aliases:
+Rotorise builds no expression string. An adapter to [Brushless](https://github.com/josher8a/Brushless) is a few lines. The caller supplies the alias of each value, with no leading `:`, because Brushless adds the `:`.
 
 ```ts
-import { Condition as C, AttributePath, AttributeValue } from 'brushless'
+import { Condition as C, AttributePath, AttributeValue, Register } from 'brushless'
+import type { Precondition } from 'rotorise'
 
 const pathOf = (segments: readonly (string | number)[]) =>
   AttributePath.fromString(
@@ -202,12 +211,22 @@ const conditionOf = (preconditions: readonly Precondition[], alias: () => string
   preconditions
     .map((g) =>
       'in' in g
-        ? C.inList(pathOf(g.segments), g.in.map((value) => AttributeValue.make({ value, alias: alias() })))
+        ? C.inList(
+            pathOf(g.segments),
+            g.in.map((value) => AttributeValue.make({ value, alias: alias() })),
+          )
         : 'type' in g
           ? C.attributeType(pathOf(g.segments), AttributeValue.make({ value: { S: g.type }, alias: alias() }))
           : C.attributeExists(pathOf(g.segments)),
     )
     .reduce((all, one) => C.and(all, one))
+
+const preconditions = cardId.preconditions
+if (failed(preconditions)) throw preconditions
+let n = 0
+const register = Register.make()
+C.build(conditionOf(preconditions, () => `v${n++}`), register)
+// => '#pay.#tender IN (:v0)', and `register` holds the names and the value
 ```
 
 A write with an empty precondition list needs no condition. Check the list before the fold.
