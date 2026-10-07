@@ -47,12 +47,14 @@ import {
     alwaysWritten,
     clauseForm,
     clauseLiteralsOf,
+    disjoint,
     force,
     literalAlternatives,
     member as memberOf,
     ownsNullOf,
     recursionUse,
     sameAdapter,
+    storedView,
     ThunkReentered,
     widensRead,
 } from './term'
@@ -459,6 +461,50 @@ const acrossVariants = (
         for (const child of children) reached.add(child)
     }
     return [...reached]
+}
+
+/**
+ * **The frontier after a clause**, the model's `narrow`. A union gives each option whose stored
+ * view {@link disjoint} does not separate from the stored view of the clause. Any other member
+ * stays where the clause does not separate the member. A clause that separates every member is a
+ * refusal that names the keys of the clause. A thunk resolves as {@link childrenOf} resolves it.
+ *
+ * **The test reads the stored views**, because a path addresses a stored attribute. An adapter is
+ * apart only from the bottom, so a test on the terms separates nothing at a `number` tag. The
+ * stored view of an adapter is its inner term, which the test reads.
+ */
+const narrowAcross = (
+    frontier: readonly AnyCodec[],
+    clause: Clause,
+): readonly AnyCodec[] | CodecError => {
+    const stored = storedView(clause)
+    const apart = (t: Term) => disjoint(stored, storedView(t))
+    const kept = new Set<AnyCodec>()
+    for (const one of frontier) {
+        let t = one.def
+        while (t.kind === 'lazy') {
+            try {
+                t = t.get()
+            } catch (thrown) {
+                if (thrown instanceof CodecError) return thrown
+                throw thrown
+            }
+        }
+        if (t.kind !== 'union') {
+            if (!apart(t)) kept.add(one)
+            continue
+        }
+        for (const option of t.options) {
+            if (!apart(option)) kept.add(codecOfTerm(option))
+        }
+    }
+    if (kept.size > 0) return [...kept]
+    const keys = Object.keys(clause.body.fields)
+        .map((key) => `'${key}'`)
+        .join(', ')
+    return new CodecError(
+        `the clause on ${keys} separates every option that the path reaches, so no codec stands at the path`,
+    )
 }
 
 /**
@@ -2511,16 +2557,78 @@ export namespace opaque {
  * index yields `| undefined` — again about a value, not a path — so `at` is the form that stays
  * clean. An entity with its own attribute named `at` should use brackets for that one hop.
  */
-export type PathOf<T> = PathTerminal<T> & PathBody<NonNullable<T>>
+export type PathOf<T, F = unknown> = PathTerminal<T> &
+    PathBody<NonNullable<T>, F>
 
-type PathBody<T> = [T] extends [readonly unknown[]]
+type PathBody<T, F> = [T] extends [readonly unknown[]]
     ? PathList<T[number]>
     : [T] extends [object]
       ? {
-            readonly [K in UnionKeys<T>]: PathOf<ValueAt<T, K>>
+            readonly [K in UnionKeys<T>]: PathOf<ValueAt<T, K>, ChildAt<F, K>>
         } & PathRecord<T> &
-            PathNarrowing<T>
+            PathNarrowing<T, F>
       : Record<never, never>
+
+/**
+ * **The frontier of a path, where the path type knows the codecs**: one record per member, with
+ * the spec of the member, its open entry, and its decoded type. `unknown` is a frontier that the
+ * type does not know, and `unknown` absorbs every union, so one unknown member makes the frontier
+ * unknown. A list, an adapter and a thunk carry no codec of a child in their types, so the
+ * frontier below one is unknown.
+ */
+type Member = {
+    readonly spec: unknown
+    readonly rest: unknown
+    readonly t: unknown
+}
+
+/** The members of a codec: each option of a union, each variant of a tagged union, or the object. */
+type MembersOf<C> = C extends UnionCodec<infer _T, infer Options>
+    ? MembersOf<Options[number]>
+    : C extends DiscriminatedCodec<infer T, infer D, infer Table>
+      ? {
+            [V in keyof Table]: {
+                readonly spec: Table[V]
+                readonly rest: undefined
+                readonly t: VariantOf<T, D & keyof T, V>
+            }
+        }[keyof Table]
+      : C extends {
+              readonly item: {
+                  readonly spec: infer Spec
+                  readonly rest: infer Rest
+              }
+          }
+        ? { readonly spec: Spec; readonly rest: Rest; readonly t: Decoded<C> }
+        : unknown
+
+/** The frontier at the root of an item: the one member that its spec declares. */
+type ItemFrontier<T, Spec, Rest> = {
+    readonly spec: Spec
+    readonly rest: Rest
+    readonly t: T
+}
+
+/** The codec that a field of a spec marks, or the codec itself. */
+type MarkedCodec<C> = C extends { readonly codec: infer Marked } ? Marked : C
+
+/** The codec that a member holds at a key: the declared field, then the open entry. */
+type CodecAt<M, K> = M extends Member
+    ? K extends keyof M['spec']
+        ? MarkedCodec<M['spec'][K]>
+        : M['rest'] extends AnyCodec
+          ? M['rest']
+          : never
+    : unknown
+
+/** The frontier one key down. A key that no known member holds gives an unknown frontier. */
+type ChildAt<F, K> = unknown extends F
+    ? unknown
+    : MembersOf<CodecAt<F, K>> extends infer Next
+      ? [Next] extends [never]
+          ? unknown
+          : Next
+      : unknown
 
 /**
  * Every key any member of a union states, not only the shared ones.
@@ -2539,38 +2647,128 @@ type ValueAt<T, K extends PropertyKey> = T extends unknown
     : never
 
 /**
- * Picking one member of a union before walking further.
+ * Picking the members of a union that a clause does not separate, before walking further.
  *
  * Merging every member's keys works while the members are objects, and stops working where they
  * disagree about *kind* — a key holding an object in one and a string in another merges to neither.
  *
- * `when` adds nothing to the path: narrowing is a statement about the type. Only present on a union.
+ * `when` adds no segment to the path. The walk of {@link ItemCodec.at} narrows its frontier by the
+ * clause. Only present on a union.
  *
  * @example
  * ```ts
- * p.priceIn.when<Tender<'CASH'>>().cardId   // → 'priceIn.cardId'
+ * p.priceIn.when({ tenderType: string('CASH') }).cardId   // → 'priceIn.cardId'
  * ```
  */
-type PathNarrowing<T> = IsUnion<T> extends true
+type PathNarrowing<T, F> = IsUnion<T> extends true
     ? {
           /**
-           * Narrows to the members matching `Filter`.
+           * **Narrows to the members that the clause does not separate.** The clause is an object
+           * of codecs: each key is required at the term of its codec, and every other name is open.
            *
-           * A type rather than a discriminant and a value, because not every union has one. The
-           * checked form of the cast otherwise written here: `when<Pet<'DOG'>>()` must match a
-           * member or it does not compile.
-           *
-           * Narrows the *type* only. Where two members put different codecs at one attribute,
-           * {@link ItemCodec.at} still cannot choose — types are gone by the time anything runs.
-           * Reach for `tagged.variant(name)`, which is an item codec with its own `at`.
+           * A member stays where the clause cannot tell it apart. A pin `'A' | 'B'` stays under the
+           * clause `'A'`, and a member with no pin at the key stays too. The walk of `at` separates
+           * on the stored views, so `number(1)` and `decimal('1')` meet, and `decimal` and
+           * `string` are apart. Where the path knows the codecs, this type separates on the stored
+           * attributes too ({@link Kept}). Below a list, an adapter or a thunk, and in the path of a
+           * `tableEntry`, the type knows only the decoded types and is coarser ({@link Narrowed}).
            */
-          when<Filter extends Partial<T>>(): [Extract<T, Filter>] extends [
-              never,
-          ]
-              ? ErrorMessage<'[when] no member of this union matches that filter'>
-              : PathOf<Extract<T, Filter>>
+          when<const C extends Readonly<Record<string, AnyCodec>>>(
+              clause: C & ClauseOn<T, F, C>,
+          ): unknown extends F
+              ? PathOf<Narrowed<T, C>>
+              : PathOf<Kept<F, C>['t'], Kept<F, C>>
       }
     : unknown
+
+/**
+ * **The members of a known frontier that a clause does not separate**, as the walk of `at` decides
+ * it: on the stored side. A member goes where, at one key of the clause, the member holds no codec,
+ * or the codec of the member and the codec of the clause are apart ({@link StoredApart}).
+ */
+type Kept<F, C> = F extends Member
+    ? true extends {
+          [K in keyof C]: [CodecAt<F, K>] extends [never]
+              ? true
+              : StoredApart<CodecAt<F, K>, C[K]>
+      }[keyof C]
+        ? never
+        : F
+    : never
+
+/**
+ * **Two codecs whose stored attributes cannot meet**: the members of DynamoDB that the two write
+ * share none, or each pins literals and the two pins share no stored value. The stored attribute
+ * of an adapter is the attribute of its inner codec, so `number` and `decimal` each write `N`, and
+ * `number(1)` and `decimal('1')` each store the text `1`.
+ *
+ * Coarser than the walk of `at` in two places: two maps or two lists are never apart here, and a
+ * caller's adapter whose decoded literal is not its stored literal pins the decoded one.
+ */
+type StoredApart<X, Y> = [
+    WrittenMembers<AttributeOf<X>> & WrittenMembers<AttributeOf<Y>>,
+] extends [never]
+    ? true
+    : [StoredPin<Decoded<X>>] extends [never]
+      ? false
+      : [StoredPin<Decoded<Y>>] extends [never]
+        ? false
+        : [StoredPin<Decoded<X>> & StoredPin<Decoded<Y>>] extends [never]
+          ? true
+          : false
+
+/** The members of DynamoDB that an attribute type writes: the keys that it requires. */
+type WrittenMembers<A> = A extends unknown
+    ? {
+          [K in keyof A]-?: undefined extends A[K] ? never : K
+      }[keyof A]
+    : never
+
+/** The stored text of a literal, or `never` where the decoded type is not a literal. */
+type StoredPin<D> = D extends string | number | boolean
+    ? string extends D
+        ? never
+        : number extends D
+          ? never
+          : boolean extends D
+            ? never
+            : `${D}`
+    : never
+
+/**
+ * **The members that a clause does not separate, on the decoded types**: the filter where the path
+ * type knows no codec, as in the path of a `tableEntry`. A member goes where, at one key of the
+ * clause, the member declares no such key and holds no index signature, or the value at the key
+ * shares no value with what the clause's codec decodes.
+ */
+type Narrowed<T, C> = T extends unknown
+    ? true extends SeparatedAt<T, C>[keyof C]
+        ? never
+        : T
+    : never
+
+/** Whether the clause separates the member at each key of the clause. */
+type SeparatedAt<T, C> = {
+    [K in keyof C]: K extends keyof T
+        ? [T[K] & Decoded<C[K]>] extends [never]
+            ? true
+            : false
+        : true
+}
+
+/**
+ * Nothing, or why a clause names nothing: a key that no member declares, or a clause that separates
+ * every member.
+ */
+type ClauseOn<T, F, C> = [Exclude<keyof C, UnionKeys<T>>] extends [never]
+    ? [unknown extends F ? Narrowed<T, C> : Kept<F, C>] extends [never]
+        ? ErrorMessage<'[when] the clause separates every member of this union'>
+        : unknown
+    : ErrorMessage<`[when] no member of this union declares '${Exclude<
+          keyof C,
+          UnionKeys<T>
+      > &
+          string}'`>
 
 /**
  * A map whose keys are not known ahead of time, indexed by `at`.
@@ -2905,7 +3103,9 @@ export type ItemCodec<T, Spec = unknown, Rest = undefined> = {
      * ```
      */
     readonly at: <X>(
-        select: (path: PathOf<T>) => PathTerminal<X>,
+        select: (
+            path: PathOf<T, ItemFrontier<T, Spec, Rest>>,
+        ) => PathTerminal<X>,
     ) => LocatedCodec<X>
     /**
      * A builder for document paths into this item.
@@ -2913,7 +3113,7 @@ export type ItemCodec<T, Spec = unknown, Rest = undefined> = {
      * One instance builds any number of independent paths: every hop returns a new builder carrying
      * its own segments, so nothing accumulates and nothing is consumed. Hoist it.
      */
-    readonly path: () => PathOf<T>
+    readonly path: () => PathOf<T, ItemFrontier<T, Spec, Rest>>
     readonly spec: Spec
     /** The codec of an attribute the spec does not declare, or `undefined` for a closed object. */
     readonly rest: Rest
@@ -3081,9 +3281,16 @@ const objectFromMap = <
         unsafeDecode: (item) => orThrow(self.decode(item)),
         unsafeEncodePartial: (patch) => orThrow(self.encodePartial(patch)),
 
-        path: () => pathBuilder<T>(),
-        at: <X>(select: (path: PathOf<T>) => PathTerminal<X>) => {
-            const segments = segmentsOf(select(pathBuilder<T>()))
+        path: () => pathBuilder<T, ItemFrontier<T, Spec, Rest>>(),
+        at: <X>(
+            select: (
+                path: PathOf<T, ItemFrontier<T, Spec, Rest>>,
+            ) => PathTerminal<X>,
+        ) => {
+            const steps = stepsOf(
+                select(pathBuilder<T, ItemFrontier<T, Spec, Rest>>()),
+            )
+            const segments = segmentsIn(steps)
             const path = asPath(segments)
 
             /**
@@ -3099,8 +3306,11 @@ const objectFromMap = <
                 let frontier: readonly AnyCodec[] = [
                     self as unknown as AnyCodec,
                 ]
-                for (const segment of segments) {
-                    const next = acrossVariants(frontier, segment)
+                for (const step of steps) {
+                    const next =
+                        typeof step === 'object'
+                            ? narrowAcross(frontier, step)
+                            : acrossVariants(frontier, step)
                     if (next instanceof CodecError) return refusedAt(next)
                     if (next.length === 0) {
                         throw new CodecError(
@@ -3109,6 +3319,9 @@ const objectFromMap = <
                     }
                     frontier = next
                 }
+                // a clause at the root narrows the values, and the item codec writes each value
+                // of a kept option as that option writes it
+                if (segments.length === 0) return self as unknown as AnyCodec
                 const [first, ...ambiguous] = frontier as [
                     AnyCodec,
                     ...AnyCodec[],
@@ -3561,13 +3774,40 @@ export const product = <const Fs extends readonly unknown[]>(
  * agree about what a path means — `at` resolves a codec by walking the same segments this records —
  * and the surest way for two implementations to agree is for there to be one.
  */
-export const pathBuilder = <T>(): PathOf<T> => recordPath([]) as PathOf<T>
+export const pathBuilder = <T, F = unknown>(): PathOf<T, F> =>
+    recordPath([]) as PathOf<T, F>
 
 /** A segment addressing a list position, as opposed to an attribute named in digits. */
 const asIndex = /^\d+$/
 
-/** What each recorder recorded — read back by {@link segmentsOf}. */
-const recorded = new WeakMap<object, readonly (string | number)[]>()
+/**
+ * **A step of a path**: a segment, or a clause. A clause adds no segment, and narrows the frontier
+ * that the walk of `at` carries.
+ */
+type Step = string | number | Clause
+
+/**
+ * **The clause of `when`**, the model's `clauseTerm`: an object term whose keys are each required
+ * at the term of a codec, and whose open block is `opaque`.
+ */
+type Clause = Extract<Term, { readonly kind: 'object' }>
+
+/** The term of a clause, built one time when the path records the clause. */
+const clauseTerm = (spec: Readonly<Record<string, AnyCodec>>): Clause => {
+    const fields: Record<string, Field> = {}
+    for (const name in spec) {
+        const one = spec[name]
+        if (one) fields[name] = { mark: 'req', t: one.def }
+    }
+    return { kind: 'object', body: { fields, rest: { kind: 'opaq' } } }
+}
+
+/** The segments of a path, without its clauses. */
+const segmentsIn = (steps: readonly Step[]): readonly (string | number)[] =>
+    steps.flatMap((step) => (typeof step === 'object' ? [] : [step]))
+
+/** What each recorder recorded — read back by {@link stepsOf}. */
+const recorded = new WeakMap<object, readonly Step[]>()
 
 /** Nothing, shared: every `get` is trapped, so the target is only an identity to hang one on. */
 const nothing = {}
@@ -3581,25 +3821,28 @@ const nothing = {}
  * step.status` — would record both reads as one path. It also makes a recorder reusable, which is
  * what `path()` has always been.
  */
-const recordPath = (segments: readonly (string | number)[]): unknown => {
+const recordPath = (steps: readonly Step[]): unknown => {
     const recorder = new Proxy(nothing, {
         get: (_target, prop) => {
             if (typeof prop !== 'string') return undefined
-            if (prop === 'toString') return () => asPath(segments)
+            if (prop === 'toString') return () => asPath(segmentsIn(steps))
             if (prop === 'at') {
-                return (index: number) => recordPath([...segments, index])
+                return (index: number) => recordPath([...steps, index])
             }
-            // narrowing is a statement about the type; the document path is unchanged
-            if (prop === 'when') return () => recordPath(segments)
+            // a clause narrows the frontier of `at`; the document path is unchanged
+            if (prop === 'when') {
+                return (spec: Readonly<Record<string, AnyCodec>>) =>
+                    recordPath([...steps, clauseTerm(spec)])
+            }
             // digits all the way through, or it is an attribute name: `parseInt` accepted a
             // leading number and dropped the rest, so `'1abc'` recorded `[NaN]`
             return recordPath([
-                ...segments,
+                ...steps,
                 asIndex.test(prop) ? Number(prop) : prop,
             ])
         },
     })
-    recorded.set(recorder, segments)
+    recorded.set(recorder, steps)
     return recorder
 }
 
@@ -3614,16 +3857,16 @@ const recordPath = (segments: readonly (string | number)[]): unknown => {
  * `Promise.resolve(path)` hang forever, silently. The target stays inert and the segments live
  * beside it.
  */
-const segmentsOf = (path: unknown): readonly (string | number)[] => {
+const stepsOf = (path: unknown): readonly Step[] => {
     // no `typeof` guard: `WeakMap.prototype.get` answers `undefined` for a key that cannot be held
     // weakly, so a selector that returned a string or a number falls into the same branch
-    const segments = recorded.get(path as object)
-    if (!segments) {
+    const steps = recorded.get(path as object)
+    if (!steps) {
         throw new CodecError(
-            'a path selector must return a path — an attribute, `at(...)` or `when()`',
+            'a path selector must return a path — an attribute, `at(...)` or `when(...)`',
         )
     }
-    return segments
+    return steps
 }
 
 /**

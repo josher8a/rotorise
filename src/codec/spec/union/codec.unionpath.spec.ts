@@ -8,7 +8,14 @@
  * member-specific attribute is the whole reason to write the path.
  */
 import { describe, expect, it } from 'vitest'
-import { discriminatedUnion, object, pathBuilder, string } from '../../codec'
+import {
+    array,
+    discriminatedUnion,
+    number,
+    object,
+    pathBuilder,
+    string,
+} from '../../codec'
 
 type Tender =
     | { tenderType: 'STORE_CREDIT'; tender: string }
@@ -106,59 +113,65 @@ describe('members that disagree about kind', () => {
     })
 
     it('reaches it once a member is picked', () => {
-        expect(p.mixed.when<{ tag: 'DEEP' }>().data.nested.toString()).toBe(
-            'mixed.data.nested',
-        )
+        expect(
+            p.mixed.when({ tag: string('DEEP') }).data.nested.toString(),
+        ).toBe('mixed.data.nested')
     })
 
     it('picks between a list and an object under one key', () => {
-        expect(p.mixed.when<{ tag: 'FLAT' }>().both.at(0).toString()).toBe(
-            'mixed.both[0]',
-        )
-        expect(p.mixed.when<{ tag: 'DEEP' }>().both.k.toString()).toBe(
+        expect(
+            p.mixed
+                .when({ tag: string('FLAT') })
+                .both.at(0)
+                .toString(),
+        ).toBe('mixed.both[0]')
+        expect(p.mixed.when({ tag: string('DEEP') }).both.k.toString()).toBe(
             'mixed.both.k',
         )
     })
 
-    it('takes the member type itself, not only a filter', () => {
+    it('takes a clause on more than one key', () => {
         expect(
             p.mixed
-                .when<Extract<Mixed, { tag: 'DEEP' }>>()
+                .when({ tag: string('DEEP'), data: object({ nested: number }) })
                 .data.nested.toString(),
         ).toBe('mixed.data.nested')
     })
 
-    it('adds nothing to the path — narrowing is about the type', () => {
-        expect(p.mixed.when<{ tag: 'FLAT' }>().data.toString()).toBe(
+    it('adds nothing to the path', () => {
+        expect(p.mixed.when({ tag: string('FLAT') }).data.toString()).toBe(
             'mixed.data',
         )
         expect(p.mixed.data.toString()).toBe('mixed.data')
     })
 
-    it('refuses a filter no member matches', () => {
+    it('refuses a clause that separates every member', () => {
         // @ts-expect-error there is no such variant
-        const _noSuchTag = () => p.mixed.when<{ tag: 'MIDDLE' }>()
+        const _noSuchTag = () => p.mixed.when({ tag: string('MIDDLE') })
         expect(typeof _noSuchTag).toBe('function')
     })
 
     it('holds the narrowing while walking further', () => {
-        // @ts-expect-error FLAT's `data` is a string
-        const _stillFlat = () => p.mixed.when<{ tag: 'FLAT' }>().data.nested
+        const _stillFlat = () =>
+            // @ts-expect-error FLAT's `data` is a string
+            p.mixed.when({ tag: string('FLAT') }).data.nested
         expect(typeof _stillFlat).toBe('function')
     })
 
     it('is absent where there is nothing to pick', () => {
+        const flat = { tag: string('FLAT') }
         // @ts-expect-error a single-member attribute has no `when`
-        const _notAUnion = () => p.mixed.when<{ tag: 'FLAT' }>().data.when<0>()
+        const _notAUnion = () => p.mixed.when(flat).data.when(flat)
         expect(typeof _notAUnion).toBe('function')
     })
 })
 
 /**
- * A union with no discriminant, which is why `when` takes a type rather than a tag and a value.
+ * A union with no discriminant, which is why `when` takes a clause on any key rather than a tag.
  *
  * A `LineItem` of `{ gift?, petId, sellerId, price } | { petIds }` — a single pet or a bundle —
- * has nothing to switch on. Narrowing by discriminant cannot reach it; narrowing by shape can.
+ * has nothing to switch on. Narrowing by discriminant cannot reach it; a clause on a key that one
+ * member declares and the other does not can.
  */
 describe('a union with nothing to switch on', () => {
     type LineItem =
@@ -179,21 +192,22 @@ describe('a union with nothing to switch on', () => {
 
     it('narrows by shape to reach a list member', () => {
         expect(
-            p.leg.when<{ petIds: readonly string[] }>().petIds.at(1).toString(),
+            p.leg
+                .when({ petIds: array(string) })
+                .petIds.at(1)
+                .toString(),
         ).toBe('leg.petIds[1]')
     })
 
     it('narrows by shape to the other member', () => {
-        expect(p.leg.when<{ petId: string }>().sellerId.toString()).toBe(
+        expect(p.leg.when({ petId: string }).sellerId.toString()).toBe(
             'leg.sellerId',
         )
     })
 
-    it('refuses a shape neither member has, at the first use of the result', () => {
-        // a filter of all-optional properties admits an extra key, so this cannot be caught at the
-        // call — it resolves to `never` and the failure lands here instead
+    it('refuses a key neither member declares, at the call', () => {
         // @ts-expect-error neither member carries this
-        const _neither = () => p.leg.when<{ notAnAttribute: string }>().petId
+        const _neither = () => p.leg.when({ notAnAttribute: string })
         expect(typeof _neither).toBe('function')
     })
 })

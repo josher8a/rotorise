@@ -1238,7 +1238,7 @@ const callerView = throughThunks((t, view) => {
  * it was stated: the stored side reads the predicate only through `g`, and the view keeps no
  * closure.
  */
-const storedView = throughThunks((t, view) => {
+export const storedView = throughThunks((t, view) => {
     switch (t.kind) {
         case 'held':
             return view(t.inner)
