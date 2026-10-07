@@ -347,7 +347,7 @@ describe('the nesting bound at a path', () => {
         ],
         [
             'a union path',
-            aUnion.at((p) => p.u.x),
+            aUnion.at((p) => p.u.when({ x: opaque }).x),
             aUnion,
             1,
             nestL,

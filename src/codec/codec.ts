@@ -388,32 +388,53 @@ export const constantOf = (declared: ObjectSlot): unknown => {
  * **A refusal inside a thunk is a value.** The thunk is caller code, and a builder in the thunk
  * refuses with a `CodecError` when the walk forces the thunk. The walk returns that refusal. Every
  * other throw propagates, because an overflow or a defect of the caller is not a refusal.
+ *
+ * **A segment has three answers**, as the model's `childD` has. The codecs at the segment. No
+ * codec, where the term stores a member that is not the container of the segment: the store
+ * refuses the segment on every attribute of the term, so the term leaves the frontier. And
+ * {@link absent}, where the container admits no value at the segment: a closed object that lacks
+ * the name, or a list with no spread past its prefix. A write there leaves an item that the codec
+ * does not read, so `absent` stays on the frontier and the frontier refuses on use.
  */
 const childrenOf = (
     codec: AnyCodec,
     segment: string | number,
 ): readonly AnyCodec[] | CodecError => {
     const def = codec.def
-    const one = (child: AnyCodec | undefined) => (child ? [child] : [])
+    // a position enters a list, and a name enters a map
+    const container = typeof segment === 'number' ? 'L' : 'M'
+    const stored = memberOf(def)
+    const apart = stored !== undefined && stored !== container
     switch (def.kind) {
         // a name the body does not declare falls in the open block, where there is one
         case 'object': {
+            if (apart) return []
             const { fields, rest } = def.body
-            const field = fields[String(segment)]
-            return one(field ? codecOfTerm(field.t) : rest && codecOfTerm(rest))
+            const field = fields[segment]
+            return [
+                field
+                    ? codecOfTerm(field.t)
+                    : rest
+                      ? codecOfTerm(rest)
+                      : absent,
+            ]
         }
         // a set is unordered, so no document path addresses a member of one — `set` never offered
         // a child either, and refusing here is what keeps a meaningless path from compiling
         case 'list': {
+            if (apart || typeof segment !== 'number') return []
             // **A suffix refuses every position past the prefix.** Which codec holds position `n`
             // depends on how long the value is, because the suffix aligns from the right, and a
             // path is written without a length. The prefix is the part a path can address whatever
             // the value, so that is the part addressed here
-            const index = Number(segment)
-            const at =
-                def.pre[index] ??
-                (def.suf.length === 0 ? def.spread : undefined)
-            return one(at ? codecOfTerm(at) : undefined)
+            const at = def.pre[segment]
+            if (at) return [codecOfTerm(at)]
+            if (def.suf.length > 0) {
+                return new CodecError(
+                    `a path cannot go to position ${segment} of a list with a suffix: the codec at a position past the prefix depends on the length of the value, and a path carries no length. Address a position in the prefix, or the list itself`,
+                )
+            }
+            return [def.spread ? codecOfTerm(def.spread) : absent]
         }
         case 'union':
             return acrossVariants(
@@ -423,12 +444,19 @@ const childrenOf = (
         // **A path stops at an adapter that reads the whole value.** A write at a path writes one
         // part of the attribute, and the attribute is checked as a whole nowhere on that write
         case 'refine':
+            if (apart) return []
             throw new CodecError(
                 `a path cannot go into \`refine\` at '${segment}': the predicate reads the whole value, and a write at the path writes one part of the value without the predicate. Address the refined attribute itself`,
             )
         case 'legacy':
+            if (apart) return []
             throw new CodecError(
                 `a path cannot go into \`withLegacyRead\` at '${segment}': an older encoding of the attribute has another shape, and a path addresses the current shape only. Address the attribute itself`,
+            )
+        case 'held':
+            if (apart) return []
+            return new CodecError(
+                `a path cannot go into an adapter at '${segment}': the adapter converts the whole value, and a write at the path writes one part of the stored value without the conversion. Address the attribute itself`,
             )
         case 'lazy': {
             let resolved: Term
@@ -440,10 +468,18 @@ const childrenOf = (
             }
             return childrenOf(codecOfTerm(resolved), segment)
         }
+        // a primitive, a literal and a set each store a member that no segment enters
         default:
             return []
     }
 }
+
+/**
+ * **The codec where a container admits no value at a segment**: one `never`, so a frontier that
+ * holds it agrees with no writer, and the walk refuses on use. One term, so the frontier keeps one
+ * copy.
+ */
+const absent: AnyCodec = codecOfTerm({ kind: 'never' })
 
 /**
  * What the variants reach, deduplicated — `Set` keeps insertion order, so the first declared wins.
@@ -539,11 +575,17 @@ const refusedAt = (refusal: CodecError): AnyCodec => {
  * fact rather than hiding it behind a throw — `member` and `carries` say nothing here, exactly as
  * they said nothing at a missing definition, and `accepts` declines to claim instead of reaching
  * the same `false` by catching.
+ *
+ * **`partial` is a frontier that holds {@link absent}**: some option admits no value at the path,
+ * so a write there leaves an item of that option unreadable. A clause that drops the option settles
+ * the path, so the refusal names `when`.
  */
-const unresolvedAt = (path: string): AnyCodec =>
+const unresolvedAt = (path: string, partial: boolean): AnyCodec =>
     refusedAt(
         new CodecError(
-            `'${path}' is declared differently in different variants, so this path cannot say which codec to encode with. Reach for the variant you mean — \`variant(...)\` is an item codec with its own \`at\` — or narrow the entity so only one variant declares it.`,
+            partial
+                ? `'${path}' is declared by some variants only, so a write at this path would leave an item of another variant that no variant reads. Narrow the union with \`when({...})\` to the variants that declare it.`
+                : `'${path}' is declared differently in different variants, so this path cannot say which codec to encode with. Reach for the variant you mean — \`variant(...)\` is an item codec with its own \`at\` — or narrow the entity so only one variant declares it.`,
         ),
     )
 
@@ -3312,7 +3354,8 @@ const objectFromMap = <
                             ? narrowAcross(frontier, step)
                             : acrossVariants(frontier, step)
                     if (next instanceof CodecError) return refusedAt(next)
-                    if (next.length === 0) {
+                    // a frontier of `absent` alone is a name that no codec declares
+                    if (next.every((one) => one === absent)) {
                         throw new CodecError(
                             `no attribute is declared at '${path}'`,
                         )
@@ -3331,7 +3374,7 @@ const objectFromMap = <
                     ? segments.length <= 1
                         ? first
                         : codecAtLevel(first.def, segments.length - 1)
-                    : unresolvedAt(String(path))
+                    : unresolvedAt(String(path), frontier.includes(absent))
             }
             const here = walk()
 
