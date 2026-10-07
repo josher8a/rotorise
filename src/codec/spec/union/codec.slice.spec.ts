@@ -441,6 +441,34 @@ describe('a clause key no member pins is refused', () => {
             },
         })
     })
+
+    it('reads a key whose union option is a thunk, because the union then pins its literals', () => {
+        const red = string('red')
+        const viaOption = mdunion(
+            ['kind', 'size'],
+            [
+                pet,
+                object({
+                    kind: string('pet'),
+                    size: string('large'),
+                    colour: union([
+                        lazy<'red', Attribute<'S'>>(() => red),
+                        string('blue'),
+                    ]),
+                }),
+            ],
+        )
+        const kept = viaOption.extract({ colour: string('red', 'blue') })
+        expect(
+            kept.encode({ kind: 'pet', size: 'large', colour: 'blue' }),
+        ).toEqual({
+            M: {
+                kind: { S: 'pet' },
+                size: { S: 'large' },
+                colour: { S: 'blue' },
+            },
+        })
+    })
 })
 
 describe('a union of objects has the same slice', () => {

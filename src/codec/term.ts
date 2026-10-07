@@ -789,30 +789,21 @@ export const clauseForm = (
     t: Term,
     outer?: Term,
 ): Omit<NameForm, 'required'> | undefined => {
-    if (t.kind === 'held') {
+    const at = resolvedTerm(t)
+    if (at?.kind === 'held') {
         // an `opaque` held side admits every kind, so it names no form
-        if (t.outer.kind === 'opaq') return undefined
-        const pinned = clauseForm(t.inner, t.outer)
-        return pinned && { ...pinned, adapter: t }
+        if (at.outer.kind === 'opaq') return undefined
+        const pinned = clauseForm(at.inner, at.outer)
+        return pinned && { ...pinned, adapter: at }
     }
-    const alts = literalAlternatives(t)
+    const alts = at && literalAlternatives(at)
     return alts && { alts, form: literalForm(alts.base, outer) }
 }
 
-/**
- * …and the member's side, which reads through a refinement too. @see {@link clauseForm}
- *
- * The member's side reads through a thunk as well. A thunk that resolves denotes its term, and the
- * model reads that term, so a literal declared through `lazy` pins its key. A thunk that does not
- * resolve pins nothing.
- */
+/** …and the member's side, which reads through a refinement too. @see {@link clauseForm} */
 export const pinnedForm = (t: Term): Omit<NameForm, 'required'> | undefined => {
-    if (t.kind === 'refine') return pinnedForm(t.inner)
-    if (t.kind === 'lazy') {
-        const target = force(t)
-        return target && pinnedForm(target)
-    }
-    return clauseForm(t)
+    const at = resolvedTerm(t)
+    return at?.kind === 'refine' ? pinnedForm(at.inner) : at && clauseForm(at)
 }
 
 /**
@@ -822,8 +813,12 @@ export const pinnedForm = (t: Term): Omit<NameForm, 'required'> | undefined => {
  * sound upper bound on what the field can carry: a value outside it is outside the field, and a
  * value inside it that the refinement rejects is the option's own error to report.
  */
-const pinnedLiteral = (t: Term): Alternatives | undefined =>
-    t.kind === 'refine' ? pinnedLiteral(t.inner) : literalAlternatives(t)
+const pinnedLiteral = (t: Term): Alternatives | undefined => {
+    const at = resolvedTerm(t)
+    return at?.kind === 'refine'
+        ? pinnedLiteral(at.inner)
+        : at && literalAlternatives(at)
+}
 
 /**
  * **The alternatives a term pins, without reading through a refinement.**
@@ -834,12 +829,32 @@ const pinnedLiteral = (t: Term): Alternatives | undefined =>
  * Separate from {@link pinnedLiteral} because a tag is written and a refinement is not: a reader
  * that must produce the value the codec writes cannot look through a predicate that narrows it.
  */
-export const literalAlternatives = (t: Term): Alternatives | undefined =>
-    t.kind === 'literal'
-        ? oneAlternative(t)
-        : t.kind === 'union'
-          ? unionAlternatives(t.options)
+export const literalAlternatives = (t: Term): Alternatives | undefined => {
+    const at = resolvedTerm(t)
+    return at?.kind === 'literal'
+        ? oneAlternative(at)
+        : at?.kind === 'union'
+          ? unionAlternatives(at.options)
           : undefined
+}
+
+/**
+ * **The term that a chain of thunks resolves to**, or nothing where a thunk does not resolve.
+ *
+ * The emitter prints a thunk that closes no cycle as its body, so the model reads a literal behind a
+ * thunk as the literal. Each reader of a literal or a tag reads through the chain here, and a chain
+ * that returns to a thunk it already passed resolves to nothing.
+ */
+const resolvedTerm = (t: Term): Term | undefined => {
+    const passed = new Set<Term>()
+    let at: Term | undefined = t
+    while (at?.kind === 'lazy') {
+        if (passed.has(at)) return undefined
+        passed.add(at)
+        at = force(at)
+    }
+    return at
+}
 
 /**
  * **The alternatives an adapter stores**, which is not what it pins.
@@ -853,8 +868,12 @@ export const literalAlternatives = (t: Term): Alternatives | undefined =>
  * matched against, so it wants the alternative under the adapter, and this is that reader. The two
  * are different questions and the split is why they are two functions.
  */
-export const storedAlternatives = (t: Term): Alternatives | undefined =>
-    t.kind === 'held' ? storedAlternatives(t.inner) : literalAlternatives(t)
+export const storedAlternatives = (t: Term): Alternatives | undefined => {
+    const at = resolvedTerm(t)
+    return at?.kind === 'held'
+        ? storedAlternatives(at.inner)
+        : at && literalAlternatives(at)
+}
 
 /** One literal, as the one-alternative set it pins. */
 const oneAlternative = (t: Literal): Alternatives =>
@@ -875,11 +894,11 @@ const oneAlternative = (t: Literal): Alternatives =>
 const unionAlternatives = (
     options: readonly Term[],
 ): Alternatives | undefined => {
-    const first = options[0]
-    if (first === undefined || first.kind !== 'literal') return undefined
+    const [first, ...rest] = options.map(resolvedTerm)
+    if (first?.kind !== 'literal') return undefined
     const ls: LiteralValue[] = [first.v]
-    for (const option of options.slice(1)) {
-        if (option.kind !== 'literal' || option.base !== first.base)
+    for (const option of rest) {
+        if (option?.kind !== 'literal' || option.base !== first.base)
             return undefined
         ls.push(option.v)
     }
