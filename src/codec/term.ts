@@ -799,9 +799,21 @@ export const clauseForm = (
     return alts && { alts, form: literalForm(alts.base, outer) }
 }
 
-/** …and the member's side, which reads through a refinement too. @see {@link clauseForm} */
-export const pinnedForm = (t: Term): Omit<NameForm, 'required'> | undefined =>
-    t.kind === 'refine' ? pinnedForm(t.inner) : clauseForm(t)
+/**
+ * …and the member's side, which reads through a refinement too. @see {@link clauseForm}
+ *
+ * The member's side reads through a thunk as well. A thunk that resolves denotes its term, and the
+ * model reads that term, so a literal declared through `lazy` pins its key. A thunk that does not
+ * resolve pins nothing.
+ */
+export const pinnedForm = (t: Term): Omit<NameForm, 'required'> | undefined => {
+    if (t.kind === 'refine') return pinnedForm(t.inner)
+    if (t.kind === 'lazy') {
+        const target = force(t)
+        return target && pinnedForm(target)
+    }
+    return clauseForm(t)
+}
 
 /**
  * The literal a term is pinned to, reading through a refinement.
