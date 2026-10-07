@@ -11,7 +11,7 @@
     "Calculus/Alg/Positions.lean": 109,
     "Calculus/Alg/Recursion.lean": 32,
     "Calculus/Alg/Relations.lean": 86,
-    "Calculus/Alg/Rows.lean": 89,
+    "Calculus/Alg/Rows.lean": 91,
     "Calculus/Axioms.lean": 1,
     "Calculus/Bridge/Vectors.lean": 205,
     "Calculus/Dynamo/Alg/Carriers.lean": 5,
@@ -28,21 +28,21 @@
     "Calculus/Dynamo/Alg/Sums.lean": 0,
     "Calculus/Dynamo/Analysis/Compat.lean": 20,
     "Calculus/Dynamo/Analysis/Confluence.lean": 3,
-    "Calculus/Dynamo/Analysis/Disjoint.lean": 188,
+    "Calculus/Dynamo/Analysis/Disjoint.lean": 94,
     "Calculus/Dynamo/Analysis/ExactA.lean": 28,
     "Calculus/Dynamo/Analysis/ExactV.lean": 23,
     "Calculus/Dynamo/Analysis/Kernel.lean": 1,
     "Calculus/Dynamo/Analysis/Laminar.lean": 68,
     "Calculus/Dynamo/Analysis/Merge.lean": 14,
     "Calculus/Dynamo/Analysis/Orthogonality.lean": 18,
-    "Calculus/Dynamo/Analysis/Path.lean": 8,
+    "Calculus/Dynamo/Analysis/Path.lean": 9,
     "Calculus/Dynamo/Analysis/Separation.lean": 40,
     "Calculus/Dynamo/Analysis/Slice.lean": 94,
     "Calculus/Dynamo/Analysis/Universal.lean": 17,
     "Calculus/Dynamo/Domain.lean": 72,
     "Calculus/Dynamo/Lang/Denote.lean": 18,
     "Calculus/Dynamo/Lang/Equations.lean": 18,
-    "Calculus/Dynamo/Lang/HeldFree.lean": 15,
+    "Calculus/Dynamo/Lang/HeldFree.lean": 18,
     "Calculus/Dynamo/Lang/HeldSet.lean": 35,
     "Calculus/Dynamo/Lang/Soundness.lean": 34,
     "Calculus/Dynamo/Lang/Store.lean": 52,
@@ -69,7 +69,8 @@
     "Calculus/Lang/Shapes.lean": 13,
     "Calculus/Lang/Sound.lean": 139,
     "Calculus/Lang/Term.lean": 359,
-    "Calculus/Lang/Typing.lean": 114
+    "Calculus/Lang/Typing.lean": 114,
+    "Calculus/Lang/View.lean": 107
   },
   "retirement_marks": {
     "../docs/architecture.md": 0,
@@ -144,6 +145,7 @@
     "Calculus/Lang/Sound.lean": 0,
     "Calculus/Lang/Term.lean": 0,
     "Calculus/Lang/Typing.lean": 0,
+    "Calculus/Lang/View.lean": 0,
     "README.md": 0,
     "docs/blueprint/src/abstract.tex": 0,
     "docs/blueprint/src/content.tex": 0,
@@ -218,7 +220,8 @@
     "Calculus/Lang/Shapes.lean": 0,
     "Calculus/Lang/Sound.lean": 0,
     "Calculus/Lang/Term.lean": 6,
-    "Calculus/Lang/Typing.lean": 0
+    "Calculus/Lang/Typing.lean": 0,
+    "Calculus/Lang/View.lean": 0
   },
   "unfolding_sites": {
     "Calculus/Alg/Agree.lean": 0,
@@ -248,7 +251,7 @@
     "Calculus/Dynamo/Alg/Sums.lean": 0,
     "Calculus/Dynamo/Analysis/Compat.lean": 1,
     "Calculus/Dynamo/Analysis/Confluence.lean": 0,
-    "Calculus/Dynamo/Analysis/Disjoint.lean": 11,
+    "Calculus/Dynamo/Analysis/Disjoint.lean": 9,
     "Calculus/Dynamo/Analysis/ExactA.lean": 1,
     "Calculus/Dynamo/Analysis/ExactV.lean": 3,
     "Calculus/Dynamo/Analysis/Kernel.lean": 0,
@@ -289,6 +292,7 @@
     "Calculus/Lang/Shapes.lean": 1,
     "Calculus/Lang/Sound.lean": 6,
     "Calculus/Lang/Term.lean": 0,
-    "Calculus/Lang/Typing.lean": 0
+    "Calculus/Lang/Typing.lean": 0,
+    "Calculus/Lang/View.lean": 5
   }
 }

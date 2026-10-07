@@ -23,6 +23,7 @@ import Calculus.Lang.Disjoint
 import Calculus.Lang.DisjointV
 import Calculus.Lang.DisjointA
 import Calculus.Lang.Compat
+import Calculus.Lang.View
 import Calculus.Lang.Path
 import Calculus.JSON.Basic
 import Calculus.JSON.Disjoint

@@ -68,6 +68,7 @@ instance, and JSON is a second instance.
 | `Lang/Disjoint.lean` | the class `Leaf`, and the structural disjointness test `Term.disjoint` over a signature |
 | `Lang/DisjointV.lean`, `Lang/DisjointA.lean` | the soundness of the test: `disjoint_sound`, `disjoint_soundA`, and `disjoint_orthogonal` |
 | `Lang/Compat.lean` | the compatibility decision `Term.compat` over a signature, `compat_sound`, and `pairwiseCompat_of_compatPair` |
+| `Lang/View.lean` | the view `view` at an orientation, `viewLe_of`, and `views_apart` |
 | `Lang/Path.lean` | the path into a term `Term.at`, the write of the store at a path `putPath`, the strong law `strong_law`, and narrowing `narrow` with `narrow_law` |
 
 `Rows.lean` is generic too, in the namespace `Calculus`. It states the row combinators of the
@@ -108,7 +109,7 @@ top reads every datum and sends each datum to itself.
 | the carrier and the members | `Mean.V`, `Mean.Mem`, read as `Syn.V`, `Syn.M` | `Attr` (`Value` names it at the caller side), `Member` | `Json`, `JMember` |
 | the member of an attribute | `Mean.mem` | `Attr.member` | `Json.member` |
 | the primitives and their codecs | `Sig.Ground`, `Mean.ground`, `Mean.lawful_ground` | `Ground`, `groundCodec` | `JMember`, `ground` |
-| the predicates | `Sig.P`, `Mean.eval`, at each absolute side | `Pred`, `Pred.eval` | a function on `Json` |
+| the predicates | `Sig.P`, `Mean.eval`, and the truth `Mean.truth`, at each absolute side | `Pred`, `Pred.eval`; the stored side names the truth `()` alone | a function on `Json` |
 | the generators of the adapters | `Sig.G`, `Sig.decG`, at each absolute side | `DynGen` | `Empty` |
 | the older readers | `Sig.R`, `Mean.read` | `Attr → Option Value`, read as itself | `Json → Option Json`, read as itself |
 | the constants of a fill slot | `Sig.K`, `Mean.const` | `Value`, read as itself | `Json`, read as itself |
@@ -117,7 +118,7 @@ top reads every datum and sends each datum to itself.
 | the set former | `Mean.set` as a `SetF` over the carrier of the meaning: a lift, its laws, and the member of a set from the member of its element (`SetF.member`, with `SetF.lift_μ`) | `dSet`, over `setCodec` | none |
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
 | the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | `dynOracle`, over the two views | `jsonOracle`, which certifies nothing |
-| the top laws: each primitive, and the set lift, below the top | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
+| the top laws: each primitive, and the set lift, below the top, and the set lift over a restriction of the top acts where its element acts | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
 | the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `inL`, at both orientations, because each primitive is self-dual (`ground_selfdual`) | the kind test |
 | the leaves: two primitives apart, two predicates apart | `Leaf` | `dynLeaf`: `Ground.apart`, `Pred.isData`, `Pred.apart` | `jsonLeaf`: one kind |
 | the laws of the leaves | `LeafAdm`, `LeafAdmA`, `LeafMeet` | `dynLeafAdm`, `dynLeafAdmA`, `dynLeafMeet` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafMeet` |
@@ -131,7 +132,7 @@ law, the `⇝` index of the judgement states nothing about the codec.
 
 A former is an `Option`. A universe without a former denotes the term of that former as the
 bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only
-the held-free theory and the soundness of the disjointness test read them. `PrimAdm` and
+the held-free theory, the views, and the soundness of the disjointness test read them. `PrimAdm` and
 `PrimAdmA` are outside `Sem` for the same reason: only exactness reads them.
 
 **The disjointness test is structural, and a universe supplies its leaves.** `Alg.Term.disjoint`
@@ -496,11 +497,15 @@ the binder, and `Obligations` holds the premises of the body at the stages. `law
 closes that gap: lawful approximants, with each binder at one stage, agree with the frame at every
 depth (`lawful_of_approx`).
 
-**Narrowing is the restriction by a range idempotent, and `Term.disjoint` decides it.** A clause
+**Narrowing is the restriction by a range idempotent, and the stored views decide it.** A clause
 (`clauseTerm`) is an object term: each named key is required at a term, and every other name is
-open. `narrow` keeps each option of a union that `Term.disjoint` does not separate from the clause.
-On an attribute that the stored admission of the clause admits, the narrowed union reads what the
-union reads (`narrow_reads`), and a dropped option reads nothing (`narrow_drops`). The slice of a
+open. `narrow` keeps each option of a union whose stored view `Term.disjoint` does not separate
+from the stored view of the clause. The guard of a read is the stored admission, and the stored
+view admits each attribute that its term admits (`views_apart` at the dual). `Term.disjoint` reads
+a raw `held` as disjoint from the bottom alone, so a tag behind an adapter separates only under the
+stored view. On an attribute that the stored admission of the clause admits, the narrowed union
+reads what the union reads (`narrow_reads`), and a dropped option reads nothing under every
+environment (`narrow_drops`). The slice of a
 certified union (`AltClause.extract`) keeps fewer options: the options that the clause describes.
 On a union whose options pin one tag each, the two agree.
 
@@ -652,8 +657,12 @@ certificate through its views. On a term with no `held`, the caller view is the 
 view of a `union` is the union of the views of its options. The view of `mu b` is `mu` of the view
 of `b`, and a variable stays a variable, so a `held` below a recursion reaches the certificate too.
 
-**The stored view drops a predicate over a variable.** The stored view keeps a predicate only
-where the inner term holds no `held` and no variable. A variable denotes a stage of its binder,
+**The stored view drops a predicate over a variable.** A view keeps a refinement as it is only
+where the inner term holds no `held` and no variable. Elsewhere the view keeps the predicate of its
+caller side and puts the truth of the meaning, `Mean.truth`, at its stored side, because the
+stored side tests its predicate through the adapter that the view drops. DynamoDB names the truth
+alone at the stored side, so the caller view keeps the refinement, and the stored view keeps no
+data predicate there. A variable denotes a stage of its binder,
 and the view reads each variable as a possible `held`. A finer view reads a variable as a `held`
 only where the binder's body holds one. `Term.disjoint` compares two data predicates only over
 closed held-free inner terms, so the two views give one verdict. A Lean example pins the separated
