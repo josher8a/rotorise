@@ -40,7 +40,15 @@ import {
     orThrow,
     type Result,
 } from './result'
-import type { Body, Field, LiteralForm, NameForm, Term } from './term'
+import type {
+    Alternatives,
+    Body,
+    Field,
+    LiteralForm,
+    NameForm,
+    NonEmpty,
+    Term,
+} from './term'
 import {
     agrees,
     alwaysWritten,
@@ -540,6 +548,165 @@ const narrowAcross = (
     return new CodecError(
         `the clause on ${keys} separates every option that the path reaches, so no codec stands at the path`,
     )
+}
+
+/**
+ * **A stored fact at a path that a condition expression tests**: the stored attribute at
+ * `segments` holds one of the values in `in`, holds the member `type`, or exists. The three forms
+ * are DynamoDB's `IN`, `attribute_type` and `attribute_exists`. Rotorise states the fact, and the
+ * caller's expression library renders the fact.
+ */
+export type Guard =
+    | {
+          readonly segments: readonly (string | number)[]
+          readonly in: NonEmpty<AttributeValue>
+      }
+    | {
+          readonly segments: readonly (string | number)[]
+          readonly type: AttributeName
+      }
+    | { readonly segments: readonly (string | number)[]; readonly exists: true }
+
+/**
+ * **The guards of the clauses on a path**, a conjunction. The guards of a clause are the stored
+ * admission of the clause term at the position of the narrowed union. The narrowing drops each
+ * option that the stored view of the clause separates. So an item that satisfies the guards is no
+ * item of a dropped option, and a write at the path is safe under the guards.
+ *
+ * A guard is exact or absent. A condition weaker than the admission admits an item of a dropped
+ * option, so a clause key with no exact guard is a refusal that names the key.
+ *
+ * **An empty clause below the root is a refusal.** The clause term is then an open object with no
+ * key: the narrowing drops each option that stores no `M`, and no key carries the guard of that
+ * member.
+ */
+const guardsOf = (steps: readonly Step[]): Result<readonly Guard[]> => {
+    const guards: Guard[] = []
+    const prefix: (string | number)[] = []
+    for (const step of steps) {
+        if (typeof step !== 'object') {
+            prefix.push(step)
+            continue
+        }
+        const fields = Object.entries(step.body.fields)
+        if (fields.length === 0 && prefix.length > 0) {
+            return new CodecError(
+                `the clause at '${asPath(prefix)}' names no key, so no guard states that the attribute is a map`,
+            )
+        }
+        for (const [key, field] of fields) {
+            const at = guardsAt(storedView(field.t), [...prefix, key], [])
+            if (failed(at)) return at
+            guards.push(...at)
+        }
+    }
+    return guards
+}
+
+/** The member of each ground base, which a `type` guard tests. */
+const groundMember = {
+    string: 'S',
+    number: 'N',
+    boolean: 'BOOL',
+    binary: 'B',
+    null: 'NULL',
+} as const satisfies Readonly<Record<string, AttributeName>>
+
+/**
+ * **The guards of a stored view at a path**: `in` for a literal or a union of literals at one
+ * base, `type` for a ground base, `exists` for `opaque`, and `type M` with the guards of each key
+ * for an object whose keys are each required and whose open block is `opaque`. Any other term
+ * admits less than any conjunction of these forms states, so the term is a refusal.
+ *
+ * `inside` holds the thunks that the walk passed on the way down. A thunk met again is a
+ * recursion, which no finite conjunction states.
+ */
+const guardsAt = (
+    t: Term,
+    segments: readonly (string | number)[],
+    inside: readonly Term[],
+): Result<readonly Guard[]> => {
+    const refuse = (what: string) =>
+        new CodecError(
+            `'${asPath(segments)}' gives no exact guard: the clause stores ${what} there, and a condition on the path would admit more than the clause`,
+        )
+    switch (t.kind) {
+        case 'lazy': {
+            if (inside.includes(t)) return refuse('a recursion')
+            let forced: Term
+            try {
+                forced = t.get()
+            } catch (thrown) {
+                if (thrown instanceof CodecError) return thrown
+                throw thrown
+            }
+            return guardsAt(forced, segments, [...inside, t])
+        }
+        case 'literal':
+        case 'union': {
+            const alts = literalAlternatives(t)
+            return alts
+                ? [{ segments, in: storedLiterals(alts) }]
+                : refuse('a union of terms that are not literals at one base')
+        }
+        case 'string':
+        case 'number':
+        case 'boolean':
+        case 'binary':
+        case 'null':
+            return [{ segments, type: groundMember[t.kind] }]
+        case 'opaq':
+            return [{ segments, exists: true }]
+        case 'object': {
+            if (t.body.rest?.kind !== 'opaq') return refuse('a closed object')
+            const guards: Guard[] = [{ segments, type: 'M' }]
+            for (const [key, field] of Object.entries(t.body.fields)) {
+                if (field.mark !== 'req') {
+                    return refuse(
+                        `an object whose key '${key}' is not required`,
+                    )
+                }
+                const at = guardsAt(field.t, [...segments, key], inside)
+                if (failed(at)) return at
+                guards.push(...at)
+            }
+            return guards
+        }
+        case 'list':
+            return refuse('a list')
+        case 'set':
+            return refuse('a set')
+        case 'refine':
+            return refuse('a refinement')
+        case 'legacy':
+            return refuse('a `withLegacyRead`')
+        case 'held':
+            return refuse('an adapter')
+        case 'never':
+            return refuse('`never`')
+    }
+}
+
+/** The stored attribute of each alternative, as the base writes it. */
+const storedLiterals = (alts: Alternatives): NonEmpty<AttributeValue> => {
+    switch (alts.base) {
+        case 'string':
+            return eachOf(alts.ls, (v) => ({ S: v }))
+        case 'number':
+            return eachOf(alts.ls, (v) => ({ N: v.digits }))
+        case 'boolean':
+            return eachOf(alts.ls, (v) => ({ BOOL: v }))
+        case 'binary':
+            return eachOf(alts.ls, (v) => ({ B: v }))
+    }
+}
+
+const eachOf = <V>(
+    ls: NonEmpty<V>,
+    stored: (v: V) => AttributeValue,
+): NonEmpty<AttributeValue> => {
+    const [one, ...more] = ls
+    return [stored(one), ...more.map(stored)]
 }
 
 /**
@@ -3162,6 +3329,15 @@ export type LocatedCodec<T> = AttributeCodec<T> & {
     /** The document path, as DynamoDB expression syntax. */
     readonly path: () => string
     readonly segments: readonly (string | number)[]
+    /**
+     * **The condition under which a write at this path is safe**, as a conjunction of
+     * {@link Guard}s: one group for each `when` on the path, empty where the path has no `when`.
+     * The narrowing drops options, and an item of a dropped option may still be stored. Put the
+     * guards in the `ConditionExpression` of the write, so the write refuses such an item.
+     *
+     * A refusal where a clause key stores a term that no exact guard states.
+     */
+    readonly guards: Result<readonly Guard[]>
 }
 
 /**
@@ -3374,6 +3550,7 @@ const objectFromMap = <
                 ...(here as AttributeCodec<X>),
                 path: () => path,
                 segments,
+                guards: guardsOf(steps),
             }
         },
         // the codec the member declares, never the field that marks it: a field has no pair, and a

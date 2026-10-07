@@ -35,6 +35,7 @@ EncodedPatch
 EncodedVariants
 ExactlyOne
 Field
+Guard
 IsUnion
 ItemCodec
 ItemSpec
