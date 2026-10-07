@@ -69,9 +69,11 @@ describe('a path into a union', () => {
 })
 
 describe('a codec at a path into a union', () => {
-    it('resolves the variant that has the attribute', () => {
-        // only CASH declares cardId, so there is exactly one candidate
-        const cardId = Adoption.at((q) => q.priceIn.cardId)
+    it('resolves the variant that has the attribute, under the clause that keeps that variant', () => {
+        // only CASH declares cardId, so the clause keeps one candidate
+        const cardId = Adoption.at(
+            (q) => q.priceIn.when({ tenderType: string('CASH') }).cardId,
+        )
         expect(cardId.path()).toBe('priceIn.cardId')
         expect(cardId.unsafeEncode('CASH')).toEqual({
             S: 'CASH',

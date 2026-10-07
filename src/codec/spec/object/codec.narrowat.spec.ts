@@ -107,14 +107,16 @@ describe('where they agree, or only one declares it', () => {
         })
     })
 
-    it('resolves an attribute only one variant has', () => {
+    it('resolves an attribute only one variant has, under the clause that keeps that variant', () => {
         const M = object({
             m: discriminatedUnion('tag', [
                 object({ tag: string('A'), only: number }),
                 object({ tag: string('B'), shared: string }),
             ]),
         }).item
-        expect(M.at((p) => p.m.only).unsafeEncode(7)).toEqual({ N: '7' })
+        expect(
+            M.at((p) => p.m.when({ tag: string('A') }).only).unsafeEncode(7),
+        ).toEqual({ N: '7' })
     })
 })
 
@@ -135,8 +137,10 @@ describe('a clause narrows the frontier of `at`', () => {
     const isA = { tag: string('A') }
 
     it('keeps an option whose pin the clause does not separate', () => {
-        const ab = Pinned.at((p) => p.u.when(isA).ab)
-        const free = Pinned.at((p) => p.u.when(isA).free)
+        // the second clause keeps the one option that declares the name, so the path resolves only
+        // where the first clause kept that option
+        const ab = Pinned.at((p) => p.u.when(isA).when({ ab: number }).ab)
+        const free = Pinned.at((p) => p.u.when(isA).when({ free: number }).free)
         expect(ab.unsafeEncode(1)).toEqual({ N: '1' })
         expect(free.unsafeEncode(2)).toEqual({ N: '2' })
     })
@@ -318,5 +322,72 @@ describe('the type and the walk of `at` agree on the stored side', () => {
         expect(tag.unsafeEncode('A')).toEqual({ S: 'A' })
         // @ts-expect-error the clause separates the member that stores `M`
         expect(tag.encode('B')).toBeInstanceOf(CodecError)
+    })
+})
+
+/**
+ * **A path carries the strong law**: an item that the codec reads stays readable after a write at
+ * the path. A closed option that lacks the name admits no value there, so a write at the name
+ * leaves an item of that option that no option reads. An option whose stored member the segment
+ * cannot enter is no such risk: the store refuses the write on that item, so the option leaves the
+ * frontier.
+ */
+describe('a path keeps every item that the codec reads readable', () => {
+    const M = object({
+        m: discriminatedUnion('tag', [
+            object({ tag: string('A'), only: number }),
+            object({ tag: string('B'), shared: string }),
+        ]),
+    }).item
+    const isA = { tag: string('A') }
+
+    it('refuses on use a name that a closed option lacks, and names `when`', () => {
+        const only = M.at((p) => p.m.only)
+        expect(only.path()).toBe('m.only')
+        const written = only.encode(7)
+        expect(written).toBeInstanceOf(CodecError)
+        expect(String(written)).toMatch(
+            /'m\.only' is declared by some variants only.*narrow the union with `when\(\{\.\.\.\}\)`/i,
+        )
+    })
+
+    it('writes no attribute that leaves an item of a kept option unreadable', () => {
+        const itemA = M.unsafeEncode({ m: { tag: 'A', only: 1 } })
+        const itemB = M.unsafeEncode({ m: { tag: 'B', shared: 's' } })
+        const cases = [
+            [M.at((p) => p.m.only), [itemA, itemB]],
+            [M.at((p) => p.m.when(isA).only), [itemA]],
+        ] as const
+        let writes = 0
+        for (const [at, kept] of cases) {
+            const wrote = at.encode(7)
+            if (wrote instanceof CodecError) continue
+            writes++
+            for (const item of kept) {
+                const stored = item.m as { M: Record<string, unknown> }
+                // the write at the path, as `UpdateItem` sets `m.only`
+                const after = {
+                    ...item,
+                    m: { M: { ...stored.M, only: wrote } },
+                }
+                expect(M.decode(after as never)).not.toBeInstanceOf(CodecError)
+            }
+        }
+        expect(writes).toBe(1)
+    })
+
+    it('drops an option whose stored member the segment cannot enter', () => {
+        const U = object({ u: union([string, object({ x: number })]) }).item
+        // @ts-expect-error the path type offers no key on a union with a primitive member
+        const x = U.at((p) => p.u.x)
+        expect(x.unsafeEncode(7)).toEqual({ N: '7' })
+    })
+
+    it('refuses at the call a name on a list, because the store refuses the name on a list', () => {
+        const L = object({ xs: array(string) }).item
+        // @ts-expect-error a list has positions, not names
+        expect(() => L.at((p) => p.xs.foo)).toThrow(
+            /no attribute is declared at 'xs\.foo'/,
+        )
     })
 })
