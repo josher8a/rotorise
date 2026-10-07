@@ -84,6 +84,21 @@ variable {depth}
 theorem muCodec_f (B : Codec V M → Codec V M) (o : Orient) (x : V) :
     (muCodec depth B).f o x = (muStage B (depth x)).f o x := rfl
 
+/-- **A codec that lawful codecs approximate at every depth is lawful**, where each approximant
+    keeps the member of the codec. -/
+theorem lawful_of_approx {c : Codec V M}
+    (h : ∀ d, ∃ c', Lawful member c' ∧ AgreeLe depth d c c' ∧ ∀ m, c.μ = some m → c'.μ = some m) :
+    Lawful member c where
+  inv {o x y} hxy := by
+    obtain ⟨c', hl, ha, -⟩ := h (max (depth x) (depth y))
+    rw [ha.f o x (Nat.le_max_left _ _)] at hxy
+    rw [ha.f o.op y (Nat.le_max_right _ _)]
+    exact hl.inv hxy
+  writes {m} hm {t a} he := by
+    obtain ⟨c', hl, ha, hμ⟩ := h (depth t)
+    have he' : c'.e t = some a := (ha.f Orient.host t le_rfl).symm.trans he
+    exact hl.writes (hμ m hm) he'
+
 /-! ### The converse of the construct -/
 
 section Stages
@@ -123,18 +138,11 @@ theorem muCodec_fix (hB : Contractive depth B) (o : Orient) (x : V) :
   rw [muCodec_f, hk]
   exact (hB k _ _ (muCodec_agree hd hB k).symm).f o x (by omega)
 
-/-- **Lawful stages give a lawful limit.** The input reads at its own depth, and the output at
-    its own depth. Stability moves both answers to the stage at the larger of the two depths,
-    and that stage is lawful. One proof serves each orientation. -/
+/-- **Lawful stages give a lawful limit.** The stage `d` approximates the limit below `d`, and
+    the limit has no member to keep. -/
 theorem lawful_muCodec (hB : Contractive depth B)
-    (hs : ∀ n, Lawful member (muStage B n)) : Lawful member (muCodec depth B) where
-  inv {o x y} h := by
-    have hl := Nat.le_max_left (depth x) (depth y)
-    have hr := Nat.le_max_right (depth x) (depth y)
-    rw [muCodec_f, (muStage_agree_le hd hB hl).f o x le_rfl] at h
-    rw [muCodec_f, (muStage_agree_le hd hB hr).f o.op y le_rfl]
-    exact (hs _).inv h
-  writes hμ := nomatch hμ
+    (hs : ∀ n, Lawful member (muStage B n)) : Lawful member (muCodec depth B) :=
+  lawful_of_approx fun d => ⟨_, hs d, muCodec_agree hd hB d, fun _ h => nomatch h⟩
 
 end Stages
 
