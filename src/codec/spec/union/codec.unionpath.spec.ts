@@ -14,6 +14,7 @@ import {
     number,
     object,
     pathBuilder,
+    refine,
     string,
 } from '../../codec'
 
@@ -83,6 +84,36 @@ describe('a codec at a path into a union', () => {
     it('resolves a shared attribute the variants agree on', () => {
         const tender = Adoption.at((q) => q.priceIn.tender)
         expect(tender.unsafeEncode('AKC')).toEqual({ S: 'AKC' })
+    })
+
+    it('resolves an attribute that each variant declares with its own call of one constructor, because the two declarations are one codec', () => {
+        const Shipment = discriminatedUnion('kind', [
+            object({ kind: string('PARCEL'), region: string('EU', 'US') }),
+            object({ kind: string('PALLET'), region: string('EU', 'US') }),
+        ])
+        const Order = object({ shipment: Shipment }).item
+        const region = Order.at((q) => q.shipment.region)
+        expect(region.unsafeEncode('EU')).toEqual({ S: 'EU' })
+    })
+
+    it('refuses an attribute that the variants refine with two different predicates, because two predicates are two codecs', () => {
+        const short = (v: string): v is string => v.length < 8
+        const upper = (v: string): v is string => v === v.toUpperCase()
+        const Shipment = discriminatedUnion('kind', [
+            object({
+                kind: string('PARCEL'),
+                label: refine(string, short, { describe: 'a label' }),
+            }),
+            object({
+                kind: string('PALLET'),
+                label: refine(string, upper, { describe: 'a label' }),
+            }),
+        ])
+        const Order = object({ shipment: Shipment }).item
+        const label = Order.at((q) => q.shipment.label)
+        expect(() => label.unsafeEncode('AB')).toThrow(
+            /declared differently in different variants/,
+        )
     })
 
     it('types it by what lives there', () => {

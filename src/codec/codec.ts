@@ -52,6 +52,7 @@ import type {
 import {
     agrees,
     alwaysWritten,
+    bindersOf,
     clauseForm,
     clauseLiteralsOf,
     disjoint,
@@ -61,8 +62,10 @@ import {
     ownsNullOf,
     recursionUse,
     sameAdapter,
+    sameTerm,
     storedView,
     ThunkReentered,
+    unanimous,
     widensRead,
 } from './term'
 
@@ -402,15 +405,23 @@ export const constantOf = (declared: ObjectSlot): unknown => {
  * {@link absent}, where the container admits no value at the segment: a closed object that lacks
  * the name, or a list with no spread past its prefix. A write there leaves an item that the codec
  * does not read, so `absent` stays on the frontier and the frontier refuses on use.
+ *
+ * `binds` gives the binders of the root of the walk, which {@link printedMember} reads.
  */
 const childrenOf = (
     codec: AnyCodec,
     segment: string | number,
+    binds: Binders,
 ): readonly AnyCodec[] | CodecError => {
     const def = codec.def
     // a position enters a list, and a name enters a map
     const container = typeof segment === 'number' ? 'L' : 'M'
-    const stored = memberOf(def)
+    let stored = memberOf(def)
+    if (def.kind === 'held' || def.kind === 'refine' || def.kind === 'legacy') {
+        const binders = binds()
+        if (binders instanceof CodecError) return binders
+        stored = printedMember(def.inner, binders)
+    }
     const apart = stored !== undefined && stored !== container
     switch (def.kind) {
         // a name the body does not declare falls in the open block, where there is one
@@ -447,6 +458,7 @@ const childrenOf = (
             return acrossVariants(
                 def.options.map((option) => codecOfTerm(option)),
                 segment,
+                binds,
             )
         // **A path stops at an adapter that reads the whole value.** A write at a path writes one
         // part of the attribute, and the attribute is checked as a whole nowhere on that write
@@ -473,13 +485,80 @@ const childrenOf = (
                 if (thrown instanceof CodecError) return thrown
                 throw thrown
             }
-            return childrenOf(codecOfTerm(resolved), segment)
+            return childrenOf(codecOfTerm(resolved), segment, binds)
         }
+        // `opaque` admits every value, so the codec at each segment is `opaque` again
+        case 'opaq':
+            return [codec]
         // a primitive, a literal and a set each store a member that no segment enters
         default:
             return []
     }
 }
+
+/**
+ * **The binders of the root of a walk**, forced at the first wrapper that the walk meets. A thunk
+ * whose builder refuses makes the answer that refusal, because the binders are then unknown.
+ */
+type Binders = () => ReadonlySet<Term> | CodecError
+
+/** The {@link Binders} of a root, which force the thunks of the root once. */
+const bindersAt = (root: Term): Binders => {
+    let known: ReadonlySet<Term> | CodecError | undefined
+    return () => {
+        if (known === undefined) {
+            try {
+                known = bindersOf(root)
+            } catch (thrown) {
+                if (!(thrown instanceof CodecError)) throw thrown
+                known = thrown
+            }
+        }
+        return known
+    }
+}
+
+/**
+ * **The member that a wrapper's inner term stores, as the model reads the printed term.** The
+ * emitter prints a thunk that closes no cycle as its target, so the walk reads the target. The
+ * emitter prints a binder of the root as `mu`, and a thunk that throws as a free variable. The
+ * model's `μSyn` answers no member at either, so this answers `undefined` there.
+ *
+ * {@link memberOf} answers `undefined` at every thunk, and the set constructor relies on that
+ * answer. A set holds no thunk on the path that `member` reads, so the last row reads a set
+ * exactly.
+ */
+const printedMember = (
+    t: Term,
+    binds: ReadonlySet<Term>,
+): AttributeName | undefined => {
+    if (binds.has(t)) return undefined
+    switch (t.kind) {
+        case 'lazy': {
+            const target = force(t)
+            return target === undefined
+                ? undefined
+                : printedMember(target, binds)
+        }
+        case 'held':
+        case 'refine':
+        case 'legacy':
+            return printedMember(t.inner, binds)
+        case 'union':
+            return unanimous(t.options.map((one) => printedMember(one, binds)))
+        default:
+            return memberOf(t)
+    }
+}
+
+/** A frontier with one codec added, where no codec of the frontier has an equal term. */
+const including = (
+    frontier: readonly AnyCodec[],
+    codec: AnyCodec,
+): readonly AnyCodec[] =>
+    frontier.some((one) => sameTerm(one.def, codec.def))
+        ? frontier
+        : [...frontier, codec]
 
 /**
  * **The codec where a container admits no value at a segment**: one `never`, so a frontier that
@@ -489,21 +568,23 @@ const childrenOf = (
 const absent: AnyCodec = codecOfTerm({ kind: 'never' })
 
 /**
- * What the variants reach, deduplicated — `Set` keeps insertion order, so the first declared wins.
- * A variant that refuses makes the whole answer a refusal, because the reach of that variant is
+ * What the variants reach, one codec for each term ({@link sameTerm}), so the first declared wins.
+ * Two calls of one constructor build two codecs of one term, and the model reads one term. A
+ * variant that refuses makes the whole answer a refusal, because the reach of that variant is
  * unknown.
  */
 const acrossVariants = (
     variants: readonly AnyCodec[],
     segment: string | number,
+    binds: Binders,
 ): readonly AnyCodec[] | CodecError => {
-    const reached = new Set<AnyCodec>()
+    let reached: readonly AnyCodec[] = []
     for (const variant of variants) {
-        const children = childrenOf(variant, segment)
+        const children = childrenOf(variant, segment, binds)
         if (children instanceof CodecError) return children
-        for (const child of children) reached.add(child)
+        for (const child of children) reached = including(reached, child)
     }
-    return [...reached]
+    return reached
 }
 
 /**
@@ -522,7 +603,7 @@ const narrowAcross = (
 ): readonly AnyCodec[] | CodecError => {
     const stored = storedView(clause)
     const apart = (t: Term) => disjoint(stored, storedView(t))
-    const kept = new Set<AnyCodec>()
+    let kept: readonly AnyCodec[] = []
     for (const one of frontier) {
         let t = one.def
         while (t.kind === 'lazy') {
@@ -534,14 +615,14 @@ const narrowAcross = (
             }
         }
         if (t.kind !== 'union') {
-            if (!apart(t)) kept.add(one)
+            if (!apart(t)) kept = including(kept, one)
             continue
         }
         for (const option of t.options) {
-            if (!apart(option)) kept.add(codecOfTerm(option))
+            if (!apart(option)) kept = including(kept, codecOfTerm(option))
         }
     }
-    if (kept.size > 0) return [...kept]
+    if (kept.length > 0) return kept
     const keys = Object.keys(clause.body.fields)
         .map((key) => `'${key}'`)
         .join(', ')
@@ -3516,11 +3597,12 @@ const objectFromMap = <
                 let frontier: readonly AnyCodec[] = [
                     self as unknown as AnyCodec,
                 ]
+                const binds = bindersAt(itemDef)
                 for (const step of steps) {
                     const next =
                         typeof step === 'object'
                             ? narrowAcross(frontier, step)
-                            : acrossVariants(frontier, step)
+                            : acrossVariants(frontier, step, binds)
                     if (next instanceof CodecError) return refusedAt(next)
                     // a frontier of `absent` alone is a name that no codec declares
                     if (next.every((one) => one === absent)) {

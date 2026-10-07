@@ -52,7 +52,6 @@ import {
     union,
     withLegacyRead,
 } from '../codec'
-import { codecOfTerm } from '../denote'
 import type {
     DisjointPair,
     FormerGuard,
@@ -87,7 +86,6 @@ import {
     agrees,
     disjoint,
     force,
-    member,
     RecursionRefused,
     recursionUse,
     viewsDisjoint,
@@ -978,58 +976,6 @@ const topTerms = (t: Term): Term[] => {
     return u.kind === 'union' ? u.options.flatMap(topTerms) : [u]
 }
 
-/** The object options of a union, under thunks and nested unions. */
-const objectOptions = (t: Term): Term[] => {
-    const u = throughLazy(t)
-    if (u === undefined) return []
-    if (u.kind === 'object') return [u]
-    return u.kind === 'union' ? u.options.flatMap(objectOptions) : []
-}
-
-/**
- * **The codecs where the host and the model disagree on a path**, by cause. Each cause is a
- * finding: no vector states a disagreement, so a codec that can reach a cause goes, by the reason.
- * The test is wider than the cause, so a codec goes where a path can disagree.
- */
-const disagreementOf = (codec: AnyCodec): string | undefined => {
-    const terms = [...reachable(codec.def)]
-    if (terms.some((t) => t.kind === 'opaq'))
-        return 'path: under `opaque` the host stands no codec, and the model stands `opaq` at every segment'
-    if (
-        terms.some(
-            (t) =>
-                (t.kind === 'held' ||
-                    t.kind === 'refine' ||
-                    t.kind === 'legacy') &&
-                member(t.inner) === undefined,
-        )
-    )
-        return 'path: `member` stops at a thunk, so the host refuses a wrapper that the model drops as apart'
-    for (const u of terms) {
-        if (u.kind !== 'union') continue
-        const at = new Map<string, Term[]>()
-        for (const o of objectOptions(u))
-            if (o.kind === 'object')
-                for (const [name, field] of Object.entries(o.body.fields))
-                    at.set(name, [...(at.get(name) ?? []), field.t])
-        for (const ts of at.values()) {
-            const printed = ts.map((t) => printedAlone(codecOfTerm(t)))
-            const twice = ts.some((t, i) =>
-                ts.some(
-                    (x, j) =>
-                        j > i &&
-                        x !== t &&
-                        printed[i] !== undefined &&
-                        printed[i] === printed[j],
-                ),
-            )
-            if (twice)
-                return 'path: two options declare one name at two codecs of one term, and the host reads two codecs where the model reads one shape'
-        }
-    }
-    return undefined
-}
-
 /**
  * The path vectors of one seed: each codec of the pairs, once, with the paths into it. The names
  * continue after `first`, so the seeds share one name space. A codec whose theorem prints as the
@@ -1042,11 +988,6 @@ const pathVectorsOf = (
 ): PathVectors[] => {
     const vectors: PathVectors[] = []
     for (const codec of new Set(pairs.flatMap((p) => [p.left, p.right]))) {
-        const cause = disagreementOf(codec)
-        if (cause !== undefined) {
-            drop(cause)
-            continue
-        }
         const one = { name: 'path', codec, paths: pathsOf(codec) }
         let printed: string
         try {
@@ -1306,54 +1247,51 @@ describe('the generated pool, against the model', () => {
           {
             "dropped": {
               "a constructor refused the draw": 76,
-              "path: \`member\` stops at a thunk, so the host refuses a wrapper that the model drops as apart": 32,
-              "path: a thunk names a codec not yet declared": 158,
-              "path: two options declare one name at two codecs of one term, and the host reads two codecs where the model reads one shape": 24,
-              "path: under \`opaque\` the host stands no codec, and the model stands \`opaq\` at every segment": 58,
+              "path: a thunk names a codec not yet declared": 194,
               "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1622,
             },
             "seeds": [
               {
                 "assignments": 32,
                 "clauses": 4470,
-                "codecsPathed": 203,
+                "codecsPathed": 238,
                 "disjoints": 1310,
                 "fills": 6,
                 "guards": 1,
                 "pairs": 1310,
-                "paths": 1606,
+                "paths": 2109,
                 "seed": 20261004,
                 "separations": 1304,
                 "slices": 93,
-                "whenPaths": 3501,
+                "whenPaths": 5339,
               },
               {
                 "assignments": 32,
                 "clauses": 4170,
-                "codecsPathed": 162,
+                "codecsPathed": 198,
                 "disjoints": 1189,
                 "fills": 7,
                 "guards": 4,
                 "pairs": 1189,
-                "paths": 1388,
+                "paths": 1942,
                 "seed": 1,
                 "separations": 1182,
                 "slices": 88,
-                "whenPaths": 2892,
+                "whenPaths": 3957,
               },
               {
                 "assignments": 32,
                 "clauses": 3525,
-                "codecsPathed": 120,
+                "codecsPathed": 158,
                 "disjoints": 1199,
                 "fills": 11,
                 "guards": 6,
                 "pairs": 1199,
-                "paths": 1230,
+                "paths": 1823,
                 "seed": 4,
                 "separations": 1188,
                 "slices": 70,
-                "whenPaths": 2675,
+                "whenPaths": 4429,
               },
             ],
           }
@@ -1391,11 +1329,9 @@ describe('the generated pool, against the model', () => {
      * the same, so each emitted file and each drop must be the same: a difference is a host reader
      * that stops at a thunk where the model reads the term.
      *
-     * **The decision of `at` is the one exception, and the snapshot pins it.** The path rows of the
-     * two spellings are compared by decision, and each difference is counted by its two decisions.
-     * `member` stops at a thunk, so `at` refuses a wrapper over a thunk where the plain spelling
-     * stands no codec. The model reads one term in both spellings, so each difference is that
-     * host reader, and the snapshot empties when `at` reads through the thunk.
+     * **The decision of `at` is the same too.** The path rows of the two spellings are compared by
+     * decision, and each difference is counted by its two decisions. The model reads one term in
+     * both spellings, so a difference is a reader of `at` that stops at a thunk.
      */
     it('builds the same pool when each leaf and tag sits behind a thunk', () => {
         const plain = [...dropped]
@@ -1442,14 +1378,7 @@ describe('the generated pool, against the model', () => {
             const move = `${kind} -> ${other}`
             changed.set(move, (changed.get(move) ?? 0) + 1)
         }
-        expect(Object.fromEntries([...changed].sort())).toMatchInlineSnapshot(`
-          {
-            "ambiguous -> refused": 1,
-            "resolved -> refused": 1,
-            "someVariants -> refused": 2,
-            "vacant -> refused": 93,
-          }
-        `)
+        expect(Object.fromEntries([...changed].sort())).toEqual({})
     })
 
     it('emits the pre-check and the kernel vectors for the gate', () => {

@@ -1271,6 +1271,125 @@ export const sameAdapter = (
 ): boolean =>
     (x.via !== undefined && x.via === y.via) || (x.f === y.f && x.g === y.g)
 
+/**
+ * **Whether two terms are one term**: one structure, with each thunk read as its target, and each
+ * function that a term holds the same function object. A literal compares by its base, and a
+ * stand-in by `Object.is`.
+ *
+ * Two codecs built by two calls of one constructor are two objects and one term, and the model
+ * reads only the term. A thunk that closes a cycle makes the walk meet a pair again, and the walk
+ * assumes that pair equal: each test is a conjunction, so a pair that differs makes the answer
+ * `false` wherever the walk meets it. A thunk that throws is equal to itself only.
+ */
+export const sameTerm = (x: Term, y: Term): boolean => {
+    const assumed: [Term, Term][] = []
+    const same = (a: Term, b: Term): boolean => {
+        const l = resolvedTerm(a) ?? a
+        const r = resolvedTerm(b) ?? b
+        if (l === r) return true
+        if (assumed.some(([one, other]) => one === l && other === r))
+            return true
+        assumed.push([l, r])
+        const all = (ls: readonly Term[], rs: readonly Term[]) =>
+            ls.length === rs.length &&
+            ls.every((one, i) => {
+                const other = rs[i]
+                return other !== undefined && same(one, other)
+            })
+        const maybe = (one: Term | undefined, other: Term | undefined) =>
+            one === undefined || other === undefined
+                ? one === other
+                : same(one, other)
+        switch (l.kind) {
+            case 'literal':
+                return (
+                    r.kind === 'literal' &&
+                    l.base === r.base &&
+                    sameLiteral(l.v, r.v)
+                )
+            case 'set':
+                return r.kind === 'set' && same(l.elem, r.elem)
+            case 'list':
+                return (
+                    r.kind === 'list' &&
+                    all(l.pre, r.pre) &&
+                    maybe(l.spread, r.spread) &&
+                    all(l.suf, r.suf)
+                )
+            case 'held':
+                return (
+                    r.kind === 'held' &&
+                    l.via === r.via &&
+                    l.f === r.f &&
+                    l.g === r.g &&
+                    l.arbitrary === r.arbitrary &&
+                    l.shrink === r.shrink &&
+                    same(l.inner, r.inner) &&
+                    same(l.outer, r.outer)
+                )
+            case 'refine':
+                return (
+                    r.kind === 'refine' &&
+                    samePredicate(l.q, r.q) &&
+                    same(l.inner, r.inner)
+                )
+            case 'legacy':
+                return (
+                    r.kind === 'legacy' && l.r === r.r && same(l.inner, r.inner)
+                )
+            case 'object': {
+                if (r.kind !== 'object') return false
+                const names = Object.keys(l.body.fields)
+                return (
+                    names.length === Object.keys(r.body.fields).length &&
+                    names.every((name) => {
+                        const one = l.body.fields[name]
+                        const other = r.body.fields[name]
+                        return (
+                            one !== undefined &&
+                            other !== undefined &&
+                            one.mark === other.mark &&
+                            (one.mark !== 'fallback' ||
+                                (other.mark === 'fallback' &&
+                                    Object.is(one.v, other.v))) &&
+                            same(one.t, other.t)
+                        )
+                    }) &&
+                    maybe(l.body.rest, r.body.rest)
+                )
+            }
+            case 'union':
+                return r.kind === 'union' && all(l.options, r.options)
+            // a thunk that throws is equal to itself only, which the identity test above answers
+            case 'lazy':
+                return false
+            default:
+                return l.kind === r.kind
+        }
+    }
+    return same(x, y)
+}
+
+/** Two predicates: the same alternatives, or the same closure, field by field. */
+const samePredicate = (p: Predicate, q: Predicate): boolean => {
+    if (p.kind === 'members')
+        return (
+            q.kind === 'members' &&
+            p.literal.base === q.literal.base &&
+            p.literal.ls.length === q.literal.ls.length &&
+            p.literal.ls.every((one) =>
+                q.literal.ls.some((other) => sameLiteral(one, other)),
+            )
+        )
+    return (
+        q.kind === 'closure' &&
+        p.q.is === q.q.is &&
+        p.q.what === q.q.what &&
+        p.q.arbitrary === q.q.arbitrary &&
+        p.q.onThinSearch === q.q.onThinSearch
+    )
+}
+
 /* ── the compatibility decision ───────────────────────────────────────────────────────── */
 
 /** One half of agreement. `write`: two writers of one value write one attribute. `read`: two
