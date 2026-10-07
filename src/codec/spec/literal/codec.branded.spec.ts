@@ -112,22 +112,26 @@ const balance = {
     updatedAt: string,
 }
 
+const OwnerAccount = object({
+    type: string('OWNER'),
+    userId,
+    profileId,
+    speciesId,
+    ...balance,
+})
+
+const StaffAccount = object({
+    type: string('STAFF'),
+    userId,
+    profileId,
+    speciesId,
+    branchId: string,
+    ...balance,
+})
+
 const AccountCodec = discriminatedUnion('type', [
-    object({
-        type: string('OWNER'),
-        userId,
-        profileId,
-        speciesId,
-        ...balance,
-    }),
-    object({
-        type: string('STAFF'),
-        userId,
-        profileId,
-        speciesId,
-        branchId: string,
-        ...balance,
-    }),
+    OwnerAccount,
+    StaffAccount,
 ]).item
 
 const HolderCodec = discriminatedUnion('type', [
@@ -211,8 +215,8 @@ describe('the laws, over branded entities', () => {
     })
 
     it('the encode paths agree, per variant', () => {
-        checkEncodePaths(AccountCodec.variant('OWNER'), { seed: 1 })
-        checkEncodePaths(AccountCodec.variant('STAFF'), { seed: 2 })
+        checkEncodePaths(OwnerAccount.item, { seed: 1 })
+        checkEncodePaths(StaffAccount.item, { seed: 2 })
     })
 
     it('a read-modify-write leaves the amounts as N', () => {

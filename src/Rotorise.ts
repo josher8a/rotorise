@@ -1190,10 +1190,9 @@ const isTableKey = (spec: unknown): spec is TableKeySpec<unknown> =>
  *
  * One object check instead of three, but the point is the `keys` parameter: it is
  * `(keyof T & string)[]`, so the names a probe looks for are checked against the type that declares
- * them. These predicates decide which branch a codec argument takes, and they used to look for
- * `'field'` and `'variant'` as bare strings — renaming either on {@link ItemCodec} or
- * {@link TaggedCodec} would have left the probe compiling and quietly matching nothing, sending
- * every codec down the "this is a spec" branch.
+ * them. These predicates decide which branch a codec argument takes. A probe that looks for
+ * `'field'` as a bare string keeps compiling after a rename of `field` on {@link ItemCodec}, and
+ * then matches nothing, which sends every codec down the "this is a spec" branch.
  */
 const callable = <T>(
     value: unknown,
@@ -1225,23 +1224,15 @@ const isItemCodec = (value: unknown): value is ItemCodecRuntime =>
 const isCodecLike = (value: unknown): value is AnyCodec =>
     callable<AnyCodec>(value, ['unsafeEncode', 'unsafeDecode'])
 
-/**
- * An erased tagged codec.
- *
- * `variant` is replaced rather than intersected: an intersection of two function types is an
- * overload set, and the first signature wins, so `& { variant }` would have kept the `unknown`
- * return {@link TaggedCodec} declares and hidden the item codec underneath it.
- */
-type TaggedRuntime = Omit<
-    TaggedCodec<Record<string, unknown>, Record<string, unknown>>,
-    'variant'
-> & {
-    readonly variant: (name: string) => ItemCodecRuntime | undefined
-}
+/** An erased tagged codec: the spec of each variant, keyed by the tag of the variant. */
+type TaggedRuntime = TaggedCodec<
+    Record<string, unknown>,
+    Record<string, Record<string, ObjectSlot>>
+>
 
 /** A codec that decides its variant from the item, rather than having one set of attributes. */
 const isTagged = (value: unknown): value is TaggedRuntime =>
-    callable<TaggedRuntime>(value, ['variant']) &&
+    callable<TaggedRuntime>(value, ['unsafeEncode', 'unsafeDecode']) &&
     typeof (value as TaggedRuntime).discriminator === 'string'
 
 /**
@@ -1254,7 +1245,7 @@ const isTagged = (value: unknown): value is TaggedRuntime =>
 const agreedConstant = (codec: TaggedRuntime, component: string): unknown => {
     let agreed: unknown
     for (const name of Object.keys(codec.spec)) {
-        const found = codec.variant(name)?.spec[component]
+        const found = codec.spec[name]?.[component]
         const value = found && constantOf(found)
         if (value === undefined) return undefined
         if (agreed === undefined) agreed = value

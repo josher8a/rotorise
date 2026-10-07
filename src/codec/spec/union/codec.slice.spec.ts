@@ -368,15 +368,23 @@ describe('the clause carries no order', () => {
     })
 
     /**
-     * **The spec table shrinks with the entity type**, which is what makes a dissected codec
-     * deterministic at both levels: asking for a member the clause dropped is a type error, where a
-     * table that kept every key would answer with a codec over `never`.
+     * **The members shrink with the entity type**, which is what makes a dissected codec
+     * deterministic at both levels: a clause that keeps only a member the slice dropped is a type
+     * error, where a slice that kept every member would answer with a path over `never`.
      */
-    it('drops the member from the table, so asking for it is a type error', () => {
-        const pets = twoKey.extract({ kind: string('pet') })
-        expect(pets.item.variant({ kind: 'pet', size: 'large' })).toBeDefined()
+    it('drops the member from the slice, so a clause that keeps only that member is a type error', () => {
+        const Holder = object({
+            x: twoKey.extract({ kind: string('pet') }),
+        }).item
+        expect(
+            Holder.at(
+                (p) =>
+                    p.x.when({ kind: string('pet'), size: string('large') })
+                        .pen,
+            ).unsafeEncode('p1'),
+        ).toEqual({ S: 'p1' })
         // @ts-expect-error `food` is not a member of the extraction
-        pets.item.variant({ kind: 'food', size: 'small' })
+        Holder.at((p) => p.x.when({ kind: string('food') }))
     })
 
     it('gives the same members whichever order they were declared in', () => {
