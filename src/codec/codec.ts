@@ -631,6 +631,13 @@ const narrowAcross = (
     )
 }
 
+/** The stored value of a literal: the members a literal stores, and no set, list or map. */
+type StoredLiteral =
+    | Attribute<'S'>
+    | Attribute<'N'>
+    | Attribute<'BOOL'>
+    | Attribute<'B'>
+
 /**
  * **A stored fact at a path that a condition expression tests**: the stored attribute at
  * `segments` holds one of the values in `in`, holds the member `type`, or exists. The three forms
@@ -640,7 +647,7 @@ const narrowAcross = (
 export type Precondition =
     | {
           readonly segments: readonly (string | number)[]
-          readonly in: NonEmpty<AttributeValue>
+          readonly in: NonEmpty<StoredLiteral>
       }
     | {
           readonly segments: readonly (string | number)[]
@@ -776,7 +783,7 @@ const preconditionsAt = (
 }
 
 /** The stored attribute of each alternative, as the base writes it. */
-const storedLiterals = (alts: Alternatives): NonEmpty<AttributeValue> => {
+const storedLiterals = (alts: Alternatives): NonEmpty<StoredLiteral> => {
     switch (alts.base) {
         case 'string':
             return eachOf(alts.ls, (v) => ({ S: v }))
@@ -791,8 +798,8 @@ const storedLiterals = (alts: Alternatives): NonEmpty<AttributeValue> => {
 
 const eachOf = <V>(
     ls: NonEmpty<V>,
-    stored: (v: V) => AttributeValue,
-): NonEmpty<AttributeValue> => {
+    stored: (v: V) => StoredLiteral,
+): NonEmpty<StoredLiteral> => {
     const [one, ...more] = ls
     return [stored(one), ...more.map(stored)]
 }
