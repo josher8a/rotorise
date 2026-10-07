@@ -1371,10 +1371,10 @@ abbrev clauseTerm {B : Sig} (keys : Finset String) (T : {k // k ∈ keys} → Te
     decision does not separate from the view of the clause. The read of a universe is at the dual
     of its orientation, so a universe narrows by its stored views.
 
-    **The stored view decides, and not the raw term.** A `held` admits an attribute where its
-    stored side admits the attribute, so the guard of the read is the stored admission. The test
-    reads a raw `held` as disjoint from the bottom alone, and the stored view replaces the `held`
-    by its stored side. So a tag behind an adapter separates under the stored view. -/
+    **The stored view decides, and not the raw term.** A `held` admits an attribute where its stored
+    side admits the attribute, so the precondition of the read is the stored admission. The test
+    reads a raw `held` as disjoint from the bottom alone, and the stored view replaces the `held` by
+    its stored side. So a tag behind an adapter separates under the stored view. -/
 def narrow {B : Sig} [Mean B] [Leaf B] (o : Orient) (φ : Term B) (os : List (Term B)) :
     List (Term B) :=
   os.filter fun x => !Term.disjoint pair0 (view o φ) (view o x)
