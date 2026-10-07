@@ -9,7 +9,7 @@
  * field whatever the key set says.
  */
 import { describe, expect, it } from 'vitest'
-import { DynamoNumber } from '../../attribute'
+import { type Attribute, DynamoNumber } from '../../attribute'
 import {
     boolean,
     CodecError,
@@ -17,6 +17,7 @@ import {
     discriminatedUnion,
     dynamoNumber,
     held,
+    lazy,
     mdunion,
     number,
     object,
@@ -414,6 +415,31 @@ describe('a clause key no member pins is refused', () => {
         expect(() => twoKey.extract({ toy: string('t') } as never)).toThrow(
             CodecError,
         )
+    })
+
+    it('reads a key pinned through a thunk, because the thunk resolves to the literal', () => {
+        const colour = string('red', 'blue')
+        const viaThunk = mdunion(
+            ['kind', 'size'],
+            [
+                pet,
+                object({
+                    kind: string('pet'),
+                    size: string('large'),
+                    colour: lazy<'red' | 'blue', Attribute<'S'>>(() => colour),
+                }),
+            ],
+        )
+        const kept = viaThunk.extract({ colour: string('red', 'blue') })
+        expect(
+            kept.encode({ kind: 'pet', size: 'large', colour: 'red' }),
+        ).toEqual({
+            M: {
+                kind: { S: 'pet' },
+                size: { S: 'large' },
+                colour: { S: 'red' },
+            },
+        })
     })
 })
 
