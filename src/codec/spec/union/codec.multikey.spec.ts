@@ -195,16 +195,17 @@ describe('neither the keys nor the members carry an order', () => {
 })
 
 describe('a member is selected by its assignment', () => {
-    /** An object literal, matched key by key: the selector is as unordered as the term's key. */
+    /** An object literal, matched key by key: the clause is as unordered as the term's key. */
     it('reaches a member by the assignment it carries', () => {
-        const chosen = twoKey.item.variant({ kind: 'pet', size: 'large' })
-        expect(
-            chosen.encode({ kind: 'pet', size: 'large', pen: 'p1' }),
-        ).toEqual({
-            kind: { S: 'pet' },
-            size: { S: 'large' },
-            pen: { S: 'p1' },
-        })
+        const Holder = object({ x: twoKey }).item
+        const chosen = Holder.at(
+            (p) => p.x.when({ kind: string('pet'), size: string('large') }).pen,
+        )
+        const reordered = Holder.at(
+            (p) => p.x.when({ size: string('large'), kind: string('pet') }).pen,
+        )
+        expect(chosen.unsafeEncode('p1')).toEqual({ S: 'p1' })
+        expect(reordered.unsafeEncode('p1')).toEqual({ S: 'p1' })
     })
 
     /** The key set, and no `discriminator`: at several keys there is no single name to give. */

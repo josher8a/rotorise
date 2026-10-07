@@ -31,22 +31,24 @@ type Account =
           note?: string
       }
 
-const Account = discriminatedUnion('type', [
-    object({
-        type: string('OWNER'),
-        userId: string,
-        profileId: string,
-        balance: decimal,
-    }),
-    object({
-        type: string('STAFF'),
-        userId: string,
-        profileId: string,
-        branchId: string,
-        weight: number,
-        note: optional(string),
-    }),
-]).item
+const Owner = object({
+    type: string('OWNER'),
+    userId: string,
+    profileId: string,
+    balance: decimal,
+})
+
+const Staff = object({
+    type: string('STAFF'),
+    userId: string,
+    profileId: string,
+    branchId: string,
+    weight: number,
+    note: optional(string),
+})
+
+const AccountCodec = discriminatedUnion('type', [Owner, Staff])
+const Account = AccountCodec.item
 
 const plain: Account = {
     type: 'OWNER',
@@ -95,14 +97,19 @@ describe('tagged', () => {
         }
     })
 
-    it('exposes one variant as a plain item codec', () => {
+    it('writes an attribute with the codec of the variant that the clause keeps', () => {
+        const Holder = object({ account: AccountCodec }).item
         expect(
-            Account.variant('STAFF').field('weight').unsafeEncode(7),
+            Holder.at(
+                (p) => p.account.when({ type: string('STAFF') }).weight,
+            ).unsafeEncode(7),
         ).toEqual({
             N: '7',
         })
         expect(
-            Account.variant('OWNER').field('balance').unsafeEncode('1.5'),
+            Holder.at(
+                (p) => p.account.when({ type: string('OWNER') }).balance,
+            ).unsafeEncode('1.5'),
         ).toEqual({
             N: '1.5',
         })
@@ -209,9 +216,10 @@ describe('the law, over generated values', () => {
     })
 
     it('and the encode paths agree, per variant', () => {
-        // a variant codec has no `field`, so each variant is checked as the item codec it is
-        checkEncodePaths(Account.variant('OWNER'), { seed: 20260826 })
-        checkEncodePaths(Account.variant('STAFF'), {
+        // a tagged codec has no `field`, so each variant is checked through the object codec
+        // that declares the variant
+        checkEncodePaths(Owner.item, { seed: 20260826 })
+        checkEncodePaths(Staff.item, {
             seed: 20260826,
         })
     })

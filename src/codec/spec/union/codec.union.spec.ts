@@ -38,7 +38,7 @@ type LineItem =
       }
     | { readonly petIds: readonly string[] }
 
-const Leg = union([
+const LegCodec = union([
     object({
         gift: optional(boolean),
         petId: string,
@@ -46,7 +46,8 @@ const Leg = union([
         price: decimal,
     }),
     object({ petIds: array(string) }),
-]).item
+])
+const Leg = LegCodec.item
 
 const single: LineItem = {
     petId: 'o1',
@@ -208,8 +209,13 @@ describe('untagged', () => {
         })
     })
 
-    it('exposes a chosen variant as a plain item codec', () => {
-        expect(Leg.variant(1).field('petIds').unsafeEncode(['x'])).toEqual({
+    it('writes an attribute with the codec of the variant that the clause keeps', () => {
+        const Holder = object({ leg: LegCodec }).item
+        expect(
+            Holder.at(
+                (p) => p.leg.when({ petIds: array(string) }).petIds,
+            ).unsafeEncode(['x']),
+        ).toEqual({
             L: [{ S: 'x' }],
         })
     })

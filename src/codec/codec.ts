@@ -30,7 +30,6 @@ import {
     membersTooDeeply,
     opaqueTerms,
     optionOfTerm,
-    sameAssignment,
     termOf,
 } from './denote'
 import {
@@ -585,7 +584,7 @@ const unresolvedAt = (path: string, partial: boolean): AnyCodec =>
         new CodecError(
             partial
                 ? `'${path}' is declared by some variants only, so a write at this path would leave an item of another variant that no variant reads. Narrow the union with \`when({...})\` to the variants that declare it.`
-                : `'${path}' is declared differently in different variants, so this path cannot say which codec to encode with. Reach for the variant you mean — \`variant(...)\` is an item codec with its own \`at\` — or narrow the entity so only one variant declares it.`,
+                : `'${path}' is declared differently in different variants, so this path cannot say which codec to encode with. Narrow the union with \`when({...})\` to the variants that agree, for example \`when({ type: string('A') })\` where \`type\` is the discriminator.`,
         ),
     )
 
@@ -2978,11 +2977,8 @@ export type DiscriminatedCodec<T, D extends string, Spec> = {
 /**
  * A dissection read as a whole item: the members, chosen by an assignment.
  *
- * {@link Tagged} at several discriminators. Two fields move, and both because there is no single
- * discriminator to name: `keys` holds the key set where `discriminator` held the one name, and
- * `variant` takes the assignment as an **object literal** rather than a bare tag. An object type is
- * unordered, so the selector carries no order and no rendered key — which is the whole of what the
- * multi-key term buys, said at the type level.
+ * {@link Tagged} at several discriminators. One field moves, because there is no single
+ * discriminator to name: `keys` holds the key set where `discriminator` held the one name.
  *
  * `spec` is the members' specs as the caller declared them. There is no string to key them by: a
  * key would be a rendering of an assignment, and a rendering is an order.
@@ -3005,10 +3001,6 @@ export type Dissected<
     /** The entity, or why the item could not be read. */
     readonly decode: (item: StoredItem) => Result<T>
     readonly unsafeDecode: (item: StoredItem) => T
-    /** One member, by the assignment it carries. */
-    readonly variant: <A extends AssignmentOf<Specs[number], Ks>>(
-        assignment: A,
-    ) => ItemCodec<Extract<T, A>, unknown>
     readonly keys: Ks
     readonly spec: Specs
     /** What this codec is — see {@link Term}. */
@@ -3050,7 +3042,7 @@ export type DissectedCodec<
  *
  * **At one key it is today's type, exactly.** `discriminatedUnion` is `mdunion` at one
  * discriminator, so the two have to be the same type and not merely compatible ones — a caller
- * who swaps the call changes no annotation, and `variant`, `discriminator`, `spec` and the
+ * who swaps the call changes no annotation, and `discriminator`, `spec` and the
  * `Writes` pin all read as they did.
  */
 export type Dissection<
@@ -3682,6 +3674,13 @@ type Factor = {
 }
 
 /**
+ * **The whole-item readings of a union's options, in declared order**: what a product distributes
+ * over. The module does not export the symbol, so no caller reaches one option of a union through
+ * this member.
+ */
+const optionItems = Symbol('optionItems')
+
+/**
  * The options a factor offers: a union's, or the factor itself.
  *
  * **A tagged builder is a union here, and that is why it is no longer refused.** It used to be a
@@ -3697,7 +3696,7 @@ const optionsOfFactor = (factor: unknown): readonly Factor[] => {
               readonly item?: {
                   readonly spec?: Record<string, ObjectSlot>
                   readonly rest?: AnyCodec
-                  readonly variant?: (index: number) => Factor
+                  readonly [optionItems]?: readonly Factor[]
               }
           }
         | undefined
@@ -3712,23 +3711,23 @@ const optionsOfFactor = (factor: unknown): readonly Factor[] => {
         )
     }
     if (def?.kind === 'union') {
-        const variant = codec?.item?.variant
-        if (!variant) {
-            throw new CodecError(
-                'a union factor must read as a whole item, and this one cannot — every option of it has to be an object for the product to merge names',
-            )
-        }
         // **A dissection is a union now and its members are not reached positionally.** Its
-        // `variant` is keyed by the assignment its members carry, where a plain union's is keyed by
-        // position, so the loop below would ask for member `0` and be handed nothing. The term-level
-        // refusal this replaces named a ruling the owner had not made; that ruling has been made
-        // and what is left is the wiring, which is its own pass.
+        // members are keyed by the assignment they carry, where a plain union's are keyed by
+        // position, and a dissection keeps no list of option items. The term-level refusal this
+        // replaces named a ruling the owner had not made; that ruling has been made and what is
+        // left is the wiring, which is its own pass.
         if ((codec?.item as { readonly keys?: unknown })?.keys !== undefined) {
             throw new CodecError(
                 'a `discriminatedUnion` is a union of objects and a product distributes over it, but its members are reached by the assignment they carry rather than by position, and this loop reads a union positionally — take the product inside each member, or use an untagged `union` of objects',
             )
         }
-        return def.options.map((_, index) => variant(index))
+        const items = codec?.item?.[optionItems]
+        if (!items) {
+            throw new CodecError(
+                'a union factor must read as a whole item, and this one cannot — every option of it has to be an object for the product to merge names',
+            )
+        }
+        return items
     }
     if (def?.kind === 'object' && codec?.item?.spec) {
         return [codec.item as Factor]
@@ -4157,7 +4156,6 @@ export type TaggedCodec<T, Spec = unknown> = {
     readonly unsafeDecode: (item: StoredItem) => T
     readonly discriminator: keyof T & string
     readonly spec: Spec
-    readonly variant: (name: keyof Spec) => unknown
 }
 
 /**
@@ -4189,10 +4187,6 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
     /** The entity, or why the item could not be read. */
     readonly decode: (item: StoredItem) => Result<T>
     readonly unsafeDecode: (item: StoredItem) => T
-    /** One variant's codec, with everything {@link item} gives. */
-    readonly variant: <V extends keyof Spec>(
-        name: V,
-    ) => ItemCodec<VariantOf<T, D & keyof T, V>, Spec[V]>
     readonly discriminator: D
     readonly spec: Spec
     /** What this codec is — see {@link Term}. */
@@ -4254,7 +4248,7 @@ const dissect = <T extends Record<string, unknown>>(
      * A dissection is a certified union: its members are objects that differ at a required literal
      * key with disjoint alternatives, which is exactly what structural admission resolves and what
      * `Calculus.viewsDisjoint` certifies. So there is one sum in the term language, and the key set below
-     * is a lookup this builder keeps for `variant`, `encodePartial` and the item path — a host
+     * is a lookup this builder keeps for `encodePartial` and the item path — a host
      * index, carried by no term.
      */
     const memberTerms = options.map((option) =>
@@ -4314,30 +4308,6 @@ const dissect = <T extends Record<string, unknown>>(
         unsafeEncodePartial: (patch: Partial<T>) =>
             orThrow(self.encodePartial(patch)),
         unsafeDecode: (item: StoredItem) => orThrow(self.decode(item)),
-        /**
-         * One variant, selected by its assignment.
-         *
-         * An **object literal**, matched key by key with {@link sameAssignment}, so the selector is
-         * the same unordered thing the term's key is. A bare tag is the one-key spelling and means
-         * that tag at the one key there is; at several keys it names no member, which is what a
-         * caller who wrote one meant to be told.
-         */
-        variant: (selector: unknown) => {
-            const assignment =
-                typeof selector === 'object' && selector !== null
-                    ? Object.fromEntries(
-                          Object.entries(selector).map(([name, tag]) => [
-                              name,
-                              String(tag),
-                          ]),
-                      )
-                    : Object.fromEntries(
-                          ks.map((name) => [name, String(selector)]),
-                      )
-            return members.find(([one]) =>
-                sameAssignment(ks, one, assignment),
-            )?.[1] as never
-        },
         keys: ks,
         ...(oneKey === undefined ? {} : { discriminator: oneKey }),
         // at one key the spec is keyed by the tag, which is what a caller walking the variants
@@ -4516,17 +4486,6 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
     /** The entity, or why the item could not be read. */
     readonly decode: (item: StoredItem) => Result<T>
     readonly unsafeDecode: (item: StoredItem) => T
-    /**
-     * One variant by position.
-     *
-     * Indexing a list with a `number` yields `| undefined` under `noUncheckedIndexedAccess`, which is
-     * a statement about a position that may not exist — and it landed on the *codec*, so reaching a
-     * variant written as a literal one line below its declaration needed a `!`. Getting the index
-     * right is the caller's job, as with any list; what comes back is a codec.
-     */
-    readonly variant: <I extends number>(
-        index: I,
-    ) => ItemCodec<show<ObjectOf<NonNullable<Specs[I]>>>, NonNullable<Specs[I]>>
     readonly spec: Specs
     /** What this codec is — see {@link Term}. */
     readonly def: Term
@@ -4653,17 +4612,6 @@ type MultiTagged<
                 : `option ${Cursor['length']}`)
           | MultiTagged<Rest, D, [...Cursor, unknown]>
     : never
-
-/**
- * The assignment a variant's spec names: its tag at each key.
- *
- * An **object type**, so the type level carries what the term carries and no more. An object type
- * has no order on its keys, which is the property `Calculus.AltClause` has by being a function on
- * a `Finset`; a tuple would put the order back and make two types for one dissection.
- */
-export type AssignmentOf<Spec, Ks extends readonly PropertyKey[]> = {
-    readonly [K in Ks[number]]: TagsOf<Spec, K>
-}
 
 /**
  * A key that **some** option names with no tag: that option cannot be found at it.
@@ -5275,12 +5223,14 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * not be reached here also cannot be selected here: `declares` is what selects, and only an
      * object option has it.
      */
-    const self: Untagged<T, SpecsOf<Options>> = {
+    const self: Untagged<T, SpecsOf<Options>> & {
+        readonly [optionItems]: readonly Option['item'][]
+    } = {
         encode: writeItem,
         decode: readItem,
         unsafeEncode: (item) => orThrow(self.encode(item)),
         unsafeDecode: (item) => orThrow(self.decode(item)),
-        variant: (index) => (all[index] as Option).item as never,
+        [optionItems]: all.map((option) => option.item),
         spec: (options as readonly AnyCodec[]).map(
             (option) =>
                 (option as unknown as Partial<AnyObjectCodec>).item?.spec,

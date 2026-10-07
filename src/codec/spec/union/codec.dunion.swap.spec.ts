@@ -8,7 +8,7 @@
  *
  * What that leaves is the caller's own half — that writing the other spelling changes nothing a
  * caller can observe. That is what this file pins: the same term, the same reading on both halves,
- * the same `variant`, `spec`, `discriminator` and patch, and the same *type* in both directions.
+ * the same `spec`, `discriminator` and patch, and the same *type* in both directions.
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -90,7 +90,6 @@ type Swappable = {
         readonly encodePartial: (patch: never) => unknown
         readonly discriminator: string
         readonly spec: Record<string, unknown>
-        readonly variant: (name: never) => { readonly def: Term }
     }
 }
 
@@ -126,14 +125,10 @@ describe.each(cases)('$name', ({ d, options, values }) => {
         )
     })
 
-    it('carries the same discriminator, spec and variants', () => {
+    it('carries the same discriminator, and the same spec of each variant at each tag', () => {
         expect(many.item.discriminator).toBe(one.item.discriminator)
         expect(Object.keys(many.item.spec)).toEqual(Object.keys(one.item.spec))
-        for (const tag of Object.keys(one.item.spec)) {
-            expect(many.item.variant(tag as never).def).toEqual(
-                one.item.variant(tag as never).def,
-            )
-        }
+        expect(many.item.spec).toEqual(one.item.spec)
     })
 
     it('encodes a patch the same way', () => {

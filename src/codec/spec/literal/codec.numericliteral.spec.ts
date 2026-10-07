@@ -107,8 +107,11 @@ describe('a numeric tag', () => {
     })
 
     it('reaches a variant by its numeric tag', () => {
+        const Holder = object({ row: Rows }).item
         expect(
-            Rows.item.variant(0).field('draftedAt').unsafeEncode('t'),
+            Holder.at(
+                (p) => p.row.when({ kind: number(0) }).draftedAt,
+            ).unsafeEncode('t'),
         ).toEqual({ S: 't' })
     })
 

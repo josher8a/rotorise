@@ -6,8 +6,7 @@
  * alone does not say which codec to encode with, and `at` reports that rather than guessing.
  *
  * `when` settles it where the clause narrows the frontier to options that agree: the walk of `at`
- * keeps each option that the clause does not separate. The variant's own codec settles it too, at
- * the cost of a path relative to that variant.
+ * keeps each option that the clause does not separate.
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -52,18 +51,8 @@ describe('where the variants disagree', () => {
 
     it('says where to go instead', () => {
         expect(() => Entity.at((p) => p.op.amount).unsafeEncode('1.5')).toThrow(
-            /Reach for the variant you mean — `variant\(\.\.\.\)` is an item codec with its own `at`/,
+            /Narrow the union with `when\(\{\.\.\.\}\)` to the variants that agree, for example `when\(\{ type: string\('A'\) \}\)`/,
         )
-    })
-
-    it('is settled by the variant codec, with a path relative to it', () => {
-        const asNumber = OpCodec.item.variant('SHIPMENT').at((p) => p.amount)
-        const asString = OpCodec.item.variant('COUNTER').at((p) => p.amount)
-
-        expect(asNumber.unsafeEncode('1.5')).toEqual({ N: '1.5' })
-        expect(asString.unsafeEncode('1.5')).toEqual({ S: '1.5' })
-        // relative, because the variant codec does not know where it was reached from
-        expect(asNumber.path()).toBe('amount')
     })
 
     /**
