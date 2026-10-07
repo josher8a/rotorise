@@ -1,11 +1,11 @@
 /**
- * **A write at a narrowed path is safe only under the guards of the path.**
+ * **A write at a narrowed path is safe only under the preconditions of the path.**
  *
- * `when` drops each option that the stored view of the clause separates, and the store can still
- * hold an item of a dropped option. The guards state the stored admission of each clause as data:
- * `in`, `type` and `exists` at a path. A condition expression built from the guards refuses the
- * write on an item of a dropped option. A clause key that no exact guard states is a refusal,
- * because a weaker condition admits such an item.
+ * `narrow` drops each option that the stored view of the clause separates, and the store can
+ * still hold an item of a dropped option. The preconditions state the stored admission of each
+ * clause as data: `in`, `type` and `exists` at a path. A condition expression built from the
+ * preconditions refuses the write on an item of a dropped option. A clause key that no exact
+ * precondition states is a refusal, because a weaker condition admits such an item.
  */
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
@@ -13,18 +13,18 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    type Guard,
     number,
     object,
     opaque,
+    type Precondition,
     string,
     union,
 } from '../../codec'
 
-describe('the guards of a path are the stored admission of each clause', () => {
-    it('a path with no clause has no guard', () => {
+describe('the preconditions of a path are the stored admission of each clause', () => {
+    it('a path with no clause has no precondition', () => {
         const Plain = object({ a: object({ b: string }) }).item
-        expect(Plain.at((p) => p.a.b).guards).toEqual([])
+        expect(Plain.at((p) => p.a.b).preconditions).toEqual([])
     })
 
     it('a string tag pins the stored text', () => {
@@ -34,9 +34,9 @@ describe('the guards of a path are the stored admission of each clause', () => {
                 object({ tag: string('B'), shared: string }),
             ]),
         }).item
-        expect(M.at((p) => p.m.when({ tag: string('A') }).only).guards).toEqual(
-            [{ segments: ['m', 'tag'], in: [{ S: 'A' }] }],
-        )
+        expect(
+            M.at((p) => p.m.narrow({ tag: string('A') }).only).preconditions,
+        ).toEqual([{ segments: ['m', 'tag'], in: [{ S: 'A' }] }])
     })
 
     const Numeric = object({
@@ -47,14 +47,14 @@ describe('the guards of a path are the stored admission of each clause', () => {
     }).item
 
     it('a numeric tag pins the stored numeral, not the number', () => {
-        expect(Numeric.at((p) => p.u.when({ k: number(1) }).a).guards).toEqual([
-            { segments: ['u', 'k'], in: [{ N: '1' }] },
-        ])
+        expect(
+            Numeric.at((p) => p.u.narrow({ k: number(1) }).a).preconditions,
+        ).toEqual([{ segments: ['u', 'k'], in: [{ N: '1' }] }])
     })
 
     it('a decimal tag pins the stored numeral, which a number tag stores too', () => {
         expect(
-            Numeric.at((p) => p.u.when({ k: decimal('1') }).a).guards,
+            Numeric.at((p) => p.u.narrow({ k: decimal('1') }).a).preconditions,
         ).toEqual([{ segments: ['u', 'k'], in: [{ N: '1' }] }])
     })
 
@@ -62,9 +62,9 @@ describe('the guards of a path are the stored admission of each clause', () => {
         const Untagged = object({
             u: union([object({ a: string }), object({ b: number })]),
         }).item
-        expect(Untagged.at((p) => p.u.when({ a: opaque }).a).guards).toEqual([
-            { segments: ['u', 'a'], exists: true },
-        ])
+        expect(
+            Untagged.at((p) => p.u.narrow({ a: opaque }).a).preconditions,
+        ).toEqual([{ segments: ['u', 'a'], exists: true }])
     })
 
     it('a base clause states the stored member', () => {
@@ -74,12 +74,12 @@ describe('the guards of a path are the stored admission of each clause', () => {
                 object({ tag: string('B'), v: string }),
             ]),
         }).item
-        expect(ByMember.at((p) => p.u.when({ v: number }).tag).guards).toEqual([
-            { segments: ['u', 'v'], type: 'N' },
-        ])
+        expect(
+            ByMember.at((p) => p.u.narrow({ v: number }).tag).preconditions,
+        ).toEqual([{ segments: ['u', 'v'], type: 'N' }])
     })
 
-    it('a clause on a nested union guards at the path of that union', () => {
+    it('a clause on a nested union states its precondition at the path of that union', () => {
         const Nested = object({
             u: discriminatedUnion('tag', [
                 object({
@@ -96,16 +96,16 @@ describe('the guards of a path are the stored admission of each clause', () => {
             Nested.at(
                 (p) =>
                     p.u
-                        .when({ tag: string('OUTER') })
-                        .inner.when({ kind: string('x') }).x,
-            ).guards,
+                        .narrow({ tag: string('OUTER') })
+                        .inner.narrow({ kind: string('x') }).x,
+            ).preconditions,
         ).toEqual([
             { segments: ['u', 'tag'], in: [{ S: 'OUTER' }] },
             { segments: ['u', 'inner', 'kind'], in: [{ S: 'x' }] },
         ])
     })
 
-    it('two clauses on one path are a conjunction of their guards', () => {
+    it('two clauses on one path are a conjunction of their preconditions', () => {
         const Two = object({
             u: union([
                 object({
@@ -128,10 +128,10 @@ describe('the guards of a path are the stored admission of each clause', () => {
         expect(
             Two.at(
                 (p) =>
-                    p.u.when({ kind: string('pet') }).when({
+                    p.u.narrow({ kind: string('pet') }).narrow({
                         size: string('large'),
                     }).pen,
-            ).guards,
+            ).preconditions,
         ).toEqual([
             { segments: ['u', 'kind'], in: [{ S: 'pet' }] },
             { segments: ['u', 'size'], in: [{ S: 'large' }] },
@@ -145,27 +145,27 @@ describe('the guards of a path are the stored admission of each clause', () => {
                 object({ data: string, tag: string }),
             ]),
         }).item
-        const guards = Closed.at(
-            (p) => p.u.when({ data: object({ n: number }) }).tag,
-        ).guards
-        expect(guards).toBeInstanceOf(CodecError)
-        expect(String(guards)).toMatch(
-            /'u\.data' gives no exact guard: the clause stores a closed object/,
+        const preconditions = Closed.at(
+            (p) => p.u.narrow({ data: object({ n: number }) }).tag,
+        ).preconditions
+        expect(preconditions).toBeInstanceOf(CodecError)
+        expect(String(preconditions)).toMatch(
+            /'u\.data' gives no exact precondition: the clause stores a closed object/,
         )
     })
 })
 
 /**
- * **What a condition expression answers on a stored item**: each guard holds at its path. The
+ * **What a condition expression answers on a stored item**: each precondition holds at its path. The
  * store compares an `N` as a number, and each `N` in these items is already normal.
  */
 const holds = (
     item: Readonly<Record<string, AttributeValue>>,
-    guards: readonly Guard[],
+    preconditions: readonly Precondition[],
 ): boolean =>
-    guards.every((guard) => {
+    preconditions.every((precondition) => {
         let at: AttributeValue | undefined
-        for (const segment of guard.segments) {
+        for (const segment of precondition.segments) {
             at =
                 at === undefined
                     ? item[segment]
@@ -178,16 +178,17 @@ const holds = (
                         : undefined
             if (at === undefined) return false
         }
-        if ('in' in guard) {
-            return guard.in.some(
+        if ('in' in precondition) {
+            return precondition.in.some(
                 (one) => JSON.stringify(one) === JSON.stringify(at),
             )
         }
-        if ('type' in guard) return at !== undefined && guard.type in at
+        if ('type' in precondition)
+            return at !== undefined && precondition.type in at
         return at !== undefined
     })
 
-describe('a write at a narrowed path is safe only under its guards', () => {
+describe('a write at a narrowed path is safe only under its preconditions', () => {
     const M = object({
         m: discriminatedUnion('tag', [
             object({ tag: string('A'), only: number }),
@@ -198,20 +199,20 @@ describe('a write at a narrowed path is safe only under its guards', () => {
     const itemB = M.unsafeEncode({ m: { tag: 'B', shared: 's' } })
 
     it('refuses the write on an item of the dropped option, which the write would leave unreadable', () => {
-        const only = M.at((p) => p.m.when({ tag: string('A') }).only)
-        const guards = only.guards
-        if (guards instanceof CodecError) throw guards
+        const only = M.at((p) => p.m.narrow({ tag: string('A') }).only)
+        const preconditions = only.preconditions
+        if (preconditions instanceof CodecError) throw preconditions
         const wrote = only.unsafeEncode(7)
         // the write at the path, as `UpdateItem` sets `m.only`
         const written = (item: typeof itemA) => ({
             ...item,
             m: { M: { ...(item.m as { M: object }).M, only: wrote } },
         })
-        // without the guards, the write leaves the item of `B` unreadable
+        // without the preconditions, the write leaves the item of `B` unreadable
         expect(M.decode(written(itemB) as never)).toBeInstanceOf(CodecError)
-        // under the guards, the store refuses that write and accepts the write on `A`
-        expect(holds(itemB, guards)).toBe(false)
-        expect(holds(itemA, guards)).toBe(true)
+        // under the preconditions, the store refuses that write and accepts the write on `A`
+        expect(holds(itemB, preconditions)).toBe(false)
+        expect(holds(itemA, preconditions)).toBe(true)
         expect(M.decode(written(itemA) as never)).not.toBeInstanceOf(CodecError)
     })
 })

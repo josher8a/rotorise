@@ -637,7 +637,7 @@ const narrowAcross = (
  * are DynamoDB's `IN`, `attribute_type` and `attribute_exists`. Rotorise states the fact, and the
  * caller's expression library renders the fact.
  */
-export type Guard =
+export type Precondition =
     | {
           readonly segments: readonly (string | number)[]
           readonly in: NonEmpty<AttributeValue>
@@ -649,20 +649,23 @@ export type Guard =
     | { readonly segments: readonly (string | number)[]; readonly exists: true }
 
 /**
- * **The guards of the clauses on a path**, a conjunction. The guards of a clause are the stored
- * admission of the clause term at the position of the narrowed union. The narrowing drops each
- * option that the stored view of the clause separates. So an item that satisfies the guards is no
- * item of a dropped option, and a write at the path is safe under the guards.
+ * **The preconditions of the clauses on a path**, a conjunction. The preconditions of a clause are
+ * the stored admission of the clause term at the position of the narrowed union. The narrowing
+ * drops each option that the stored view of the clause separates. So an item that satisfies the
+ * preconditions is no item of a dropped option, and a write at the path is safe under the
+ * preconditions.
  *
- * A guard is exact or absent. A condition weaker than the admission admits an item of a dropped
- * option, so a clause key with no exact guard is a refusal that names the key.
+ * A precondition is exact or absent. A condition weaker than the admission admits an item of a
+ * dropped option, so a clause key with no exact precondition is a refusal that names the key.
  *
  * **An empty clause below the root is a refusal.** The clause term is then an open object with no
- * key: the narrowing drops each option that stores no `M`, and no key carries the guard of that
- * member.
+ * key: the narrowing drops each option that stores no `M`, and no key carries the precondition of
+ * that member.
  */
-const guardsOf = (steps: readonly Step[]): Result<readonly Guard[]> => {
-    const guards: Guard[] = []
+const preconditionsOf = (
+    steps: readonly Step[],
+): Result<readonly Precondition[]> => {
+    const preconditions: Precondition[] = []
     const prefix: (string | number)[] = []
     for (const step of steps) {
         if (typeof step !== 'object') {
@@ -672,19 +675,23 @@ const guardsOf = (steps: readonly Step[]): Result<readonly Guard[]> => {
         const fields = Object.entries(step.body.fields)
         if (fields.length === 0 && prefix.length > 0) {
             return new CodecError(
-                `the clause at '${asPath(prefix)}' names no key, so no guard states that the attribute is a map`,
+                `the clause at '${asPath(prefix)}' names no key, so no precondition states that the attribute is a map`,
             )
         }
         for (const [key, field] of fields) {
-            const at = guardsAt(storedView(field.t), [...prefix, key], [])
+            const at = preconditionsAt(
+                storedView(field.t),
+                [...prefix, key],
+                [],
+            )
             if (failed(at)) return at
-            guards.push(...at)
+            preconditions.push(...at)
         }
     }
-    return guards
+    return preconditions
 }
 
-/** The member of each ground base, which a `type` guard tests. */
+/** The member of each ground base, which a `type` precondition tests. */
 const groundMember = {
     string: 'S',
     number: 'N',
@@ -694,22 +701,22 @@ const groundMember = {
 } as const satisfies Readonly<Record<string, AttributeName>>
 
 /**
- * **The guards of a stored view at a path**: `in` for a literal or a union of literals at one
- * base, `type` for a ground base, `exists` for `opaque`, and `type M` with the guards of each key
- * for an object whose keys are each required and whose open block is `opaque`. Any other term
- * admits less than any conjunction of these forms states, so the term is a refusal.
+ * **The preconditions of a stored view at a path**: `in` for a literal or a union of literals at
+ * one base, `type` for a ground base, `exists` for `opaque`, and `type M` with the preconditions
+ * of each key for an object whose keys are each required and whose open block is `opaque`. Any
+ * other term admits less than any conjunction of these forms states, so the term is a refusal.
  *
  * `inside` holds the thunks that the walk passed on the way down. A thunk met again is a
  * recursion, which no finite conjunction states.
  */
-const guardsAt = (
+const preconditionsAt = (
     t: Term,
     segments: readonly (string | number)[],
     inside: readonly Term[],
-): Result<readonly Guard[]> => {
+): Result<readonly Precondition[]> => {
     const refuse = (what: string) =>
         new CodecError(
-            `'${asPath(segments)}' gives no exact guard: the clause stores ${what} there, and a condition on the path would admit more than the clause`,
+            `'${asPath(segments)}' gives no exact precondition: the clause stores ${what} there, and a condition on the path would admit more than the clause`,
         )
     switch (t.kind) {
         case 'lazy': {
@@ -721,7 +728,7 @@ const guardsAt = (
                 if (thrown instanceof CodecError) return thrown
                 throw thrown
             }
-            return guardsAt(forced, segments, [...inside, t])
+            return preconditionsAt(forced, segments, [...inside, t])
         }
         case 'literal':
         case 'union': {
@@ -740,18 +747,18 @@ const guardsAt = (
             return [{ segments, exists: true }]
         case 'object': {
             if (t.body.rest?.kind !== 'opaq') return refuse('a closed object')
-            const guards: Guard[] = [{ segments, type: 'M' }]
+            const preconditions: Precondition[] = [{ segments, type: 'M' }]
             for (const [key, field] of Object.entries(t.body.fields)) {
                 if (field.mark !== 'req') {
                     return refuse(
                         `an object whose key '${key}' is not required`,
                     )
                 }
-                const at = guardsAt(field.t, [...segments, key], inside)
+                const at = preconditionsAt(field.t, [...segments, key], inside)
                 if (failed(at)) return at
-                guards.push(...at)
+                preconditions.push(...at)
             }
-            return guards
+            return preconditions
         }
         case 'list':
             return refuse('a list')
@@ -825,14 +832,14 @@ const refusedAt = (refusal: CodecError): AnyCodec => {
  *
  * **`partial` is a frontier that holds {@link absent}**: some option admits no value at the path,
  * so a write there leaves an item of that option unreadable. A clause that drops the option settles
- * the path, so the refusal names `when`.
+ * the path, so the refusal names `narrow`.
  */
 const unresolvedAt = (path: string, partial: boolean): AnyCodec =>
     refusedAt(
         new CodecError(
             partial
-                ? `'${path}' is declared by some variants only, so a write at this path would leave an item of another variant that no variant reads. Narrow the union with \`when({...})\` to the variants that declare it.`
-                : `'${path}' is declared differently in different variants, so this path cannot say which codec to encode with. Narrow the union with \`when({...})\` to the variants that agree, for example \`when({ type: string('A') })\` where \`type\` is the discriminator.`,
+                ? `'${path}' is declared by some variants only, so a write at this path would leave an item of another variant that no variant reads. Call \`narrow({...})\` to keep the variants that declare it.`
+                : `'${path}' is declared differently in different variants, so this path cannot say which codec to encode with. Call \`narrow({...})\` to keep the variants that agree, for example \`narrow({ type: string('A') })\` where \`type\` is the discriminator.`,
         ),
     )
 
@@ -2941,18 +2948,19 @@ type ValueAt<T, K extends PropertyKey> = T extends unknown
  * Merging every member's keys works while the members are objects, and stops working where they
  * disagree about *kind* — a key holding an object in one and a string in another merges to neither.
  *
- * `when` adds no segment to the path. The walk of {@link ItemCodec.at} narrows its frontier by the
+ * `narrow` adds no segment to the path. The walk of {@link ItemCodec.at} narrows its frontier by the
  * clause. Only present on a union.
  *
  * @example
  * ```ts
- * p.priceIn.when({ tenderType: string('CASH') }).cardId   // → 'priceIn.cardId'
+ * p.priceIn.narrow({ tenderType: string('CASH') }).cardId   // → 'priceIn.cardId'
  * ```
  */
 type PathNarrowing<T, F> = IsUnion<T> extends true
     ? {
           /**
-           * **Narrows to the members that the clause does not separate.** The clause is an object
+           * **Narrows the path at run time and in the type, to the members that the clause does not
+           * separate.** The clause is an object
            * of codecs: each key is required at the term of its codec, and every other name is open.
            *
            * A member stays where the clause cannot tell it apart. A pin `'A' | 'B'` stays under the
@@ -2962,7 +2970,7 @@ type PathNarrowing<T, F> = IsUnion<T> extends true
            * attributes too ({@link Kept}). Below a list, an adapter or a thunk, and in the path of a
            * `tableEntry`, the type knows only the decoded types and is coarser ({@link Narrowed}).
            */
-          when<const C extends Readonly<Record<string, AnyCodec>>>(
+          narrow<const C extends Readonly<Record<string, AnyCodec>>>(
               clause: C & ClauseOn<T, F, C>,
           ): unknown extends F
               ? PathOf<Narrowed<T, C>>
@@ -3051,9 +3059,9 @@ type SeparatedAt<T, C> = {
  */
 type ClauseOn<T, F, C> = [Exclude<keyof C, UnionKeys<T>>] extends [never]
     ? [unknown extends F ? Narrowed<T, C> : Kept<F, C>] extends [never]
-        ? ErrorMessage<'[when] the clause separates every member of this union'>
+        ? ErrorMessage<'[narrow] the clause separates every member of this union'>
         : unknown
-    : ErrorMessage<`[when] no member of this union declares '${Exclude<
+    : ErrorMessage<`[narrow] no member of this union declares '${Exclude<
           keyof C,
           UnionKeys<T>
       > &
@@ -3412,13 +3420,14 @@ export type LocatedCodec<T> = AttributeCodec<T> & {
     readonly segments: readonly (string | number)[]
     /**
      * **The condition under which a write at this path is safe**, as a conjunction of
-     * {@link Guard}s: one group for each `when` on the path, empty where the path has no `when`.
-     * The narrowing drops options, and an item of a dropped option may still be stored. Put the
-     * guards in the `ConditionExpression` of the write, so the write refuses such an item.
+     * {@link Precondition}s: one group for each `narrow` on the path, empty where the path has no
+     * `narrow`. The narrowing drops options, and an item of a dropped option may still be stored.
+     * Put the preconditions in the `ConditionExpression` of the write, so the write refuses such
+     * an item.
      *
-     * A refusal where a clause key stores a term that no exact guard states.
+     * A refusal where a clause key stores a term that no exact precondition states.
      */
-    readonly guards: Result<readonly Guard[]>
+    readonly preconditions: Result<readonly Precondition[]>
 }
 
 /**
@@ -3632,7 +3641,7 @@ const objectFromMap = <
                 ...(here as AttributeCodec<X>),
                 path: () => path,
                 segments,
-                guards: guardsOf(steps),
+                preconditions: preconditionsOf(steps),
             }
         },
         // the codec the member declares, never the field that marks it: a field has no pair, and a
@@ -4088,7 +4097,7 @@ const asIndex = /^\d+$/
 type Step = string | number | Clause
 
 /**
- * **The clause of `when`**, the model's `clauseTerm`: an object term whose keys are each required
+ * **The clause of `narrow`**, the model's `clauseTerm`: an object term whose keys are each required
  * at the term of a codec, and whose open block is `opaque`.
  */
 type Clause = Extract<Term, { readonly kind: 'object' }>
@@ -4131,7 +4140,7 @@ const recordPath = (steps: readonly Step[]): unknown => {
                 return (index: number) => recordPath([...steps, index])
             }
             // a clause narrows the frontier of `at`; the document path is unchanged
-            if (prop === 'when') {
+            if (prop === 'narrow') {
                 return (spec: Readonly<Record<string, AnyCodec>>) =>
                     recordPath([...steps, clauseTerm(spec)])
             }
@@ -4164,7 +4173,7 @@ const stepsOf = (path: unknown): readonly Step[] => {
     const steps = recorded.get(path as object)
     if (!steps) {
         throw new CodecError(
-            'a path selector must return a path — an attribute, `at(...)` or `when(...)`',
+            'a path selector must return a path — an attribute, `at(...)` or `narrow(...)`',
         )
     }
     return steps

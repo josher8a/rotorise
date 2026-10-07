@@ -5,7 +5,7 @@
  * codecs at one attribute name. Where variants disagree about how an attribute is stored, the name
  * alone does not say which codec to encode with, and `at` reports that rather than guessing.
  *
- * `when` settles it where the clause narrows the frontier to options that agree: the walk of `at`
+ * `narrow` settles it where the clause narrows the frontier to options that agree: the walk of `at`
  * keeps each option that the clause does not separate.
  */
 import { describe, expect, it } from 'vitest'
@@ -51,7 +51,7 @@ describe('where the variants disagree', () => {
 
     it('says where to go instead', () => {
         expect(() => Entity.at((p) => p.op.amount).unsafeEncode('1.5')).toThrow(
-            /Narrow the union with `when\(\{\.\.\.\}\)` to the variants that agree, for example `when\(\{ type: string\('A'\) \}\)`/,
+            /Call `narrow\(\{\.\.\.\}\)` to keep the variants that agree, for example `narrow\(\{ type: string\('A'\) \}\)`/,
         )
     })
 
@@ -78,10 +78,10 @@ describe('where the variants disagree', () => {
 
     it('is settled by a clause that keeps the options that agree, with the path unchanged', () => {
         const asString = Entity.at(
-            (p) => p.op.when({ type: string('COUNTER') }).amount,
+            (p) => p.op.narrow({ type: string('COUNTER') }).amount,
         )
         const asNumber = Entity.at(
-            (p) => p.op.when({ type: string('SHIPMENT') }).amount,
+            (p) => p.op.narrow({ type: string('SHIPMENT') }).amount,
         )
         expect(asString.path()).toBe('op.amount')
         expect(asString.unsafeEncode('1.5')).toEqual({ S: '1.5' })
@@ -104,7 +104,7 @@ describe('where they agree, or only one declares it', () => {
             ]),
         }).item
         expect(
-            M.at((p) => p.m.when({ tag: string('A') }).only).unsafeEncode(7),
+            M.at((p) => p.m.narrow({ tag: string('A') }).only).unsafeEncode(7),
         ).toEqual({ N: '7' })
     })
 })
@@ -128,15 +128,17 @@ describe('a clause narrows the frontier of `at`', () => {
     it('keeps an option whose pin the clause does not separate', () => {
         // the second clause keeps the one option that declares the name, so the path resolves only
         // where the first clause kept that option
-        const ab = Pinned.at((p) => p.u.when(isA).when({ ab: number }).ab)
-        const free = Pinned.at((p) => p.u.when(isA).when({ free: number }).free)
+        const ab = Pinned.at((p) => p.u.narrow(isA).narrow({ ab: number }).ab)
+        const free = Pinned.at(
+            (p) => p.u.narrow(isA).narrow({ free: number }).free,
+        )
         expect(ab.unsafeEncode(1)).toEqual({ N: '1' })
         expect(free.unsafeEncode(2)).toEqual({ N: '2' })
     })
 
     it('drops an option whose pin the clause separates', () => {
         // @ts-expect-error the clause separates the option that declares `b`
-        const dropped = () => Pinned.at((p) => p.u.when(isA).b)
+        const dropped = () => Pinned.at((p) => p.u.narrow(isA).b)
         expect(dropped).toThrow(/no attribute is declared at 'u\.b'/)
     })
 
@@ -148,9 +150,9 @@ describe('a clause narrows the frontier of `at`', () => {
             ]),
         }).item
         const bundle = Line.at(
-            (p) => p.leg.when({ petIds: array(string) }).price,
+            (p) => p.leg.narrow({ petIds: array(string) }).price,
         )
-        const single = Line.at((p) => p.leg.when({ petId: string }).price)
+        const single = Line.at((p) => p.leg.narrow({ petId: string }).price)
         expect(bundle.path()).toBe('leg.price')
         expect(bundle.unsafeEncode(3)).toEqual({ N: '3' })
         expect(single.unsafeEncode('3')).toEqual({ S: '3' })
@@ -159,7 +161,7 @@ describe('a clause narrows the frontier of `at`', () => {
     it('refuses on use where the clause separates every option, and names the keys', () => {
         const none = Entity.at(
             // @ts-expect-error the clause separates every member
-            (p) => p.op.when({ type: string('REFUND') }).note,
+            (p) => p.op.narrow({ type: string('REFUND') }).note,
         )
         expect(none.path()).toBe('op.note')
         const written = none.encode('x')
@@ -230,84 +232,84 @@ describe('the type and the walk of `at` agree on the stored side', () => {
     }).item
 
     it('an adapter clause keeps the member that stores its attribute', () => {
-        const k = NumberOrString.at((p) => p.u.when({ n: number }).k)
+        const k = NumberOrString.at((p) => p.u.narrow({ n: number }).k)
         expect(k.unsafeEncode('y')).toEqual({ S: 'y' })
         // @ts-expect-error the clause separates the member that stores `S`
         expect(k.encode('x')).toBeInstanceOf(CodecError)
     })
 
     it('a map clause drops the member that stores a string', () => {
-        const tag = MapOrString.at((p) => p.u.when({ data: nested }).tag)
+        const tag = MapOrString.at((p) => p.u.narrow({ data: nested }).tag)
         expect(tag.unsafeEncode('D')).toEqual({ S: 'D' })
         // @ts-expect-error the clause separates the member that stores `S`
         expect(tag.encode('F')).toBeInstanceOf(CodecError)
     })
 
     it('a map clause drops the member that stores a decimal', () => {
-        const tag = MapOrDecimal.at((p) => p.u.when({ data: nested }).tag)
+        const tag = MapOrDecimal.at((p) => p.u.narrow({ data: nested }).tag)
         expect(tag.unsafeEncode('D')).toEqual({ S: 'D' })
         // @ts-expect-error the clause separates the member that stores `N`
         expect(tag.encode('F')).toBeInstanceOf(CodecError)
     })
 
     it('a numeric tag keeps the option with its pin', () => {
-        const a = NumberTags.at((p) => p.u.when({ k: number(1) }).a)
+        const a = NumberTags.at((p) => p.u.narrow({ k: number(1) }).a)
         expect(a.unsafeEncode('x')).toEqual({ S: 'x' })
         // @ts-expect-error the clause separates the option pinned at 2
         expect(a.encode(3)).toBeInstanceOf(CodecError)
     })
 
     it('a decimal tag keeps the option with its pin', () => {
-        const a = DecimalTags.at((p) => p.u.when({ k: decimal('1') }).a)
+        const a = DecimalTags.at((p) => p.u.narrow({ k: decimal('1') }).a)
         expect(a.unsafeEncode('x')).toEqual({ S: 'x' })
         // @ts-expect-error the clause separates the option pinned at 2
         expect(a.encode(3)).toBeInstanceOf(CodecError)
     })
 
     it('a numeric pin meets the decimal pin that stores the same text', () => {
-        const a = DecimalTags.at((p) => p.u.when({ k: number(1) }).a)
+        const a = DecimalTags.at((p) => p.u.narrow({ k: number(1) }).a)
         expect(a.unsafeEncode('x')).toEqual({ S: 'x' })
         // @ts-expect-error the clause separates the option pinned at 2
         expect(a.encode(3)).toBeInstanceOf(CodecError)
     })
 
     it('a `number` clause keeps a native number and drops a string', () => {
-        const tag = NativeOrString.at((p) => p.u.when({ v: number }).tag)
+        const tag = NativeOrString.at((p) => p.u.narrow({ v: number }).tag)
         expect(tag.unsafeEncode('A')).toEqual({ S: 'A' })
         // @ts-expect-error the clause separates the member that stores `S`
         expect(tag.encode('B')).toBeInstanceOf(CodecError)
     })
 
     it('a `decimal` clause keeps a native number and drops a string', () => {
-        const tag = NativeOrString.at((p) => p.u.when({ v: decimal }).tag)
+        const tag = NativeOrString.at((p) => p.u.narrow({ v: decimal }).tag)
         expect(tag.unsafeEncode('A')).toEqual({ S: 'A' })
         // @ts-expect-error the clause separates the member that stores `S`
         expect(tag.encode('B')).toBeInstanceOf(CodecError)
     })
 
     it('a map clause drops a decimal and keeps the map', () => {
-        const tag = DecimalOrMap.at((p) => p.u.when({ v: z }).tag)
+        const tag = DecimalOrMap.at((p) => p.u.narrow({ v: z }).tag)
         expect(tag.unsafeEncode('B')).toEqual({ S: 'B' })
         // @ts-expect-error the clause separates the member that stores `N`
         expect(tag.encode('A')).toBeInstanceOf(CodecError)
     })
 
     it('a `decimal` clause drops a string, although both decode to a string', () => {
-        const tag = DecimalOrString.at((p) => p.u.when({ v: decimal }).tag)
+        const tag = DecimalOrString.at((p) => p.u.narrow({ v: decimal }).tag)
         expect(tag.unsafeEncode('A')).toEqual({ S: 'A' })
         // @ts-expect-error the clause separates the member that stores `S`
         expect(tag.encode('B')).toBeInstanceOf(CodecError)
     })
 
     it('a `string` clause drops a decimal, although both decode to a string', () => {
-        const tag = DecimalOrString.at((p) => p.u.when({ v: string }).tag)
+        const tag = DecimalOrString.at((p) => p.u.narrow({ v: string }).tag)
         expect(tag.unsafeEncode('B')).toEqual({ S: 'B' })
         // @ts-expect-error the clause separates the member that stores `N`
         expect(tag.encode('A')).toBeInstanceOf(CodecError)
     })
 
     it('a `number` clause keeps a decimal and drops a map', () => {
-        const tag = DecimalOrMap.at((p) => p.u.when({ v: number }).tag)
+        const tag = DecimalOrMap.at((p) => p.u.narrow({ v: number }).tag)
         expect(tag.unsafeEncode('A')).toEqual({ S: 'A' })
         // @ts-expect-error the clause separates the member that stores `M`
         expect(tag.encode('B')).toBeInstanceOf(CodecError)
@@ -330,13 +332,13 @@ describe('a path keeps every item that the codec reads readable', () => {
     }).item
     const isA = { tag: string('A') }
 
-    it('refuses on use a name that a closed option lacks, and names `when`', () => {
+    it('refuses on use a name that a closed option lacks, and names `narrow`', () => {
         const only = M.at((p) => p.m.only)
         expect(only.path()).toBe('m.only')
         const written = only.encode(7)
         expect(written).toBeInstanceOf(CodecError)
         expect(String(written)).toMatch(
-            /'m\.only' is declared by some variants only.*narrow the union with `when\(\{\.\.\.\}\)`/i,
+            /'m\.only' is declared by some variants only.*call `narrow\(\{\.\.\.\}\)` to keep the variants that declare it/i,
         )
     })
 
@@ -345,7 +347,7 @@ describe('a path keeps every item that the codec reads readable', () => {
         const itemB = M.unsafeEncode({ m: { tag: 'B', shared: 's' } })
         const cases = [
             [M.at((p) => p.m.only), [itemA, itemB]],
-            [M.at((p) => p.m.when(isA).only), [itemA]],
+            [M.at((p) => p.m.narrow(isA).only), [itemA]],
         ] as const
         let writes = 0
         for (const [at, kept] of cases) {

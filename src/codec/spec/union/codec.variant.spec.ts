@@ -101,14 +101,14 @@ describe('tagged', () => {
         const Holder = object({ account: AccountCodec }).item
         expect(
             Holder.at(
-                (p) => p.account.when({ type: string('STAFF') }).weight,
+                (p) => p.account.narrow({ type: string('STAFF') }).weight,
             ).unsafeEncode(7),
         ).toEqual({
             N: '7',
         })
         expect(
             Holder.at(
-                (p) => p.account.when({ type: string('OWNER') }).balance,
+                (p) => p.account.narrow({ type: string('OWNER') }).balance,
             ).unsafeEncode('1.5'),
         ).toEqual({
             N: '1.5',

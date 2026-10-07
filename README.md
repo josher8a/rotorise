@@ -169,11 +169,11 @@ ItemTable.key('PK', { kind: 'refund', orderId: 'o1', refundId: 'r1' })
 
 Set a discriminated spec value to `null` to produce `undefined` (useful for GSIs that don't apply to all variants).
 
-### Guards of a Narrowed Path
+### Preconditions of a Narrowed Path
 
-`when` narrows a path through a union to the options that the clause does not separate. The table can still hold an item of a dropped option. A write at the narrowed path is safe only under the guards of the path: put the guards in the `ConditionExpression` of the write.
+`narrow` narrows a path through a union to the options that the clause does not separate. The narrowing acts at run time and in the type. The table can still hold an item of a dropped option. A write at the narrowed path is safe only under the preconditions of the path: put the preconditions in the `ConditionExpression` of the write.
 
-`at(...).guards` states the guards as data, a conjunction of `in`, `type` and `exists` facts at a path. A path with no `when` has no guard. A clause that no exact condition states gives a `CodecError` that names the key.
+`at(...).preconditions` states the preconditions as data, a conjunction of `in`, `type` and `exists` facts at a path. A path with no `narrow` has no precondition. A clause that no exact condition states gives a `CodecError` that names the key.
 
 ```ts
 const Order = object({
@@ -183,9 +183,9 @@ const Order = object({
   ]),
 }).item
 
-const cardId = Order.at((p) => p.pay.when({ tender: string('CARD') }).cardId)
+const cardId = Order.at((p) => p.pay.narrow({ tender: string('CARD') }).cardId)
 cardId.path()   // 'pay.cardId'
-cardId.guards   // [{ segments: ['pay', 'tender'], in: [{ S: 'CARD' }] }]
+cardId.preconditions   // [{ segments: ['pay', 'tender'], in: [{ S: 'CARD' }] }]
 ```
 
 Rotorise builds no expression string. An adapter to [Brushless](https://github.com/josher8a/Brushless) is a few lines. The caller supplies the aliases:
@@ -198,8 +198,8 @@ const pathOf = (segments: readonly (string | number)[]) =>
     segments.map((s, i) => (typeof s === 'number' ? `[${s}]` : i ? `.${s}` : s)).join(''),
   )
 
-const conditionOf = (guards: readonly Guard[], alias: () => string) =>
-  guards
+const conditionOf = (preconditions: readonly Precondition[], alias: () => string) =>
+  preconditions
     .map((g) =>
       'in' in g
         ? C.inList(pathOf(g.segments), g.in.map((value) => AttributeValue.make({ value, alias: alias() })))
@@ -210,7 +210,7 @@ const conditionOf = (guards: readonly Guard[], alias: () => string) =>
     .reduce((all, one) => C.and(all, one))
 ```
 
-A write with an empty guard list needs no condition. Check the list before the fold.
+A write with an empty precondition list needs no condition. Check the list before the fold.
 
 ### Custom Separator
 
