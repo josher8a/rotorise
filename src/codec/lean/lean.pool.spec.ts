@@ -193,7 +193,7 @@ const draw = (depth: number): Entry => {
         const [name, make] = pick(rng() < 0.8 ? leaves : setable)
         return { name, codec: make() }
     }
-    switch (Math.floor(rng() * 19)) {
+    switch (Math.floor(rng() * 20)) {
         case 0: {
             const c = draw(depth - 1)
             return { name: `array(${c.name})`, codec: erase(array(c.codec)) }
@@ -459,6 +459,35 @@ const draw = (depth: number): Entry => {
                     codec: erase(whole.exclude({ s: string('x') })),
                 }
             return { name, codec: whole }
+        }
+        // **A mutual recursion entered at two members.** Each member is a binder, and inside one
+        // member the other prints as a binder whose body reads only the outer variable: the
+        // emitter's one route to a vacuous `Term.mu`. A recursion entered at one member, or a self
+        // recursion, never prints one
+        case 19: {
+            const c = draw(depth - 1)
+            const ma: AnyCodec = erase(
+                lazy(() => object({ v: c.codec, b: optional(mb) }) as never),
+            )
+            const mb: AnyCodec = erase(
+                lazy(() => object({ a: optional(ma) }) as never),
+            )
+            const left = { name: `mu.a(${c.name})`, codec: ma }
+            const right = { name: 'mu.b', codec: mb }
+            // each thunk runs its constructor, so a refusal of a body is a refusal of the draw
+            if (ma.def.kind === 'lazy') ma.def.get()
+            if (mb.def.kind === 'lazy') mb.def.get()
+            if (rng() < 0.5)
+                return {
+                    name: `{x:${left.name},y:${right.name}}`,
+                    codec: erase(object({ x: left.codec, y: right.codec })),
+                }
+            return {
+                name: `union(${left.name}|${right.name})`,
+                codec: declare(left, right, () =>
+                    union([left.codec, right.codec] as never),
+                ),
+            }
         }
         default: {
             const c = draw(depth - 1)
@@ -860,42 +889,42 @@ describe('the generated pool, against the model', () => {
         }).toMatchInlineSnapshot(`
           {
             "dropped": {
-              "a constructor refused the draw": 87,
-              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1560,
+              "a constructor refused the draw": 76,
+              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1622,
             },
             "seeds": [
               {
-                "assignments": 29,
-                "clauses": 3615,
-                "disjoints": 1210,
-                "fills": 3,
-                "guards": 8,
-                "pairs": 1210,
+                "assignments": 32,
+                "clauses": 4470,
+                "disjoints": 1310,
+                "fills": 6,
+                "guards": 1,
+                "pairs": 1310,
                 "seed": 20261004,
-                "separations": 1207,
-                "slices": 73,
+                "separations": 1304,
+                "slices": 93,
               },
               {
-                "assignments": 29,
-                "clauses": 3360,
-                "disjoints": 1214,
-                "fills": 8,
-                "guards": 6,
-                "pairs": 1214,
-                "seed": 1,
-                "separations": 1206,
-                "slices": 63,
-              },
-              {
-                "assignments": 38,
-                "clauses": 4725,
-                "disjoints": 1162,
-                "fills": 12,
+                "assignments": 32,
+                "clauses": 4170,
+                "disjoints": 1189,
+                "fills": 7,
                 "guards": 4,
-                "pairs": 1162,
+                "pairs": 1189,
+                "seed": 1,
+                "separations": 1182,
+                "slices": 88,
+              },
+              {
+                "assignments": 32,
+                "clauses": 3525,
+                "disjoints": 1199,
+                "fills": 11,
+                "guards": 6,
+                "pairs": 1199,
                 "seed": 4,
-                "separations": 1150,
-                "slices": 99,
+                "separations": 1188,
+                "slices": 70,
               },
             ],
           }
