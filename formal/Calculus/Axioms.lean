@@ -39,6 +39,7 @@ import Calculus.Lang.DisjointV
 import Calculus.Lang.DisjointA
 import Calculus.Lang.Path
 import Calculus.Dynamo.Analysis.Path
+import Calculus.Dynamo.Analysis.Guard
 import Lean
 
 /-!
