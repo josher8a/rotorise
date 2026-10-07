@@ -1725,6 +1725,7 @@ export type {
     Encoded,
     EncodedPatch,
     EncodedVariants,
+    Guard,
     IsUnion,
     ItemCodec,
     ItemSpec,
