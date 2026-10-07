@@ -29,6 +29,7 @@ import {
     array,
     binary,
     boolean,
+    CodecError,
     decimal,
     discriminatedUnion,
     dynamoNumber,
@@ -82,7 +83,7 @@ import {
     recursionUse,
     viewsDisjoint,
 } from '../term'
-import { arbitraryOf, rngFrom } from '../testing'
+import { arbitraryOf, rngFrom, structuralEquals } from '../testing'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
@@ -187,11 +188,26 @@ type Slices = {
     readonly exclude: (clause: Readonly<Record<string, unknown>>) => unknown
 }
 
+/**
+ * **The spelling of a leaf and of a tag.** With `thunked`, each one sits behind a thunk that closes no
+ * cycle. The emitter prints such a thunk as its body and the wrap draws no number, so a seed builds
+ * the same pool in both spellings, and every emitted file must come out the same.
+ *
+ * `never` keeps its plain spelling. The host refuses a `never` that a row always writes, at a list
+ * position, as a product factor, and under `nullable`, by the declared term. Those refusals are the
+ * host's own rules, and the model types each such term. Reading through a thunk there forces the
+ * thunk at the declaration, and a forced recursive thunk changes the order of resolution, which the
+ * stand-in tests pin.
+ */
+let thunked = false
+const spelled = (codec: unknown): AnyCodec =>
+    thunked ? erase(lazy(() => codec as never)) : erase(codec)
+
 /** One codec, drawn through the public constructors. A constructor can refuse the draw. */
 const draw = (depth: number): Entry => {
     if (depth === 0 || rng() < 0.25) {
         const [name, make] = pick(rng() < 0.8 ? leaves : setable)
-        return { name, codec: make() }
+        return { name, codec: name === 'never' ? make() : spelled(make()) }
     }
     switch (Math.floor(rng() * 20)) {
         case 0: {
@@ -350,11 +366,11 @@ const draw = (depth: number): Entry => {
             const b = draw(depth - 1)
             const left = {
                 name: `{k:a,x:${a.name}}`,
-                codec: erase(object({ k: string('a'), x: a.codec })),
+                codec: erase(object({ k: spelled(string('a')), x: a.codec })),
             }
             const right = {
                 name: `{k:b,y:${b.name}}`,
-                codec: erase(object({ k: string('b'), y: b.codec })),
+                codec: erase(object({ k: spelled(string('b')), y: b.codec })),
             }
             return {
                 name: `dunion(k:a{x:${a.name}}|b{y:${b.name}})`,
@@ -427,13 +443,21 @@ const draw = (depth: number): Entry => {
             const small = {
                 name: `{k:p,s:x,x:${a.name}}`,
                 codec: erase(
-                    object({ k: string('p'), s: string('x'), x: a.codec }),
+                    object({
+                        k: spelled(string('p')),
+                        s: spelled(string('x')),
+                        x: a.codec,
+                    }),
                 ),
             }
             const large = {
                 name: `{k:p,s:y,y:${b.name}}`,
                 codec: erase(
-                    object({ k: string('p'), s: string('y'), y: b.codec }),
+                    object({
+                        k: spelled(string('p')),
+                        s: spelled(string('y')),
+                        y: b.codec,
+                    }),
                 ),
             }
             const name = `mdunion(k,s:${small.name}|${large.name})`
@@ -836,7 +860,110 @@ const slicesOf = (declared: readonly Declared[], first: number): Slice[] => {
     return slices
 }
 
-describe('the generated pool, against the model', () => {
+/**
+ * The term a codec prints alone, or nothing where the print binds a caller's function: a bound name
+ * is numbered afresh in each print, so two different functions print one name.
+ */
+const printedAlone = (codec: AnyCodec): string | undefined => {
+    const bound = {
+        closures: new Map<unknown, string>(),
+        adapters: new Map<unknown, string>(),
+        readers: new Map<unknown, string>(),
+    }
+    let printed: string
+    try {
+        printed = leanTermOf(codec, 'alone', bound)
+    } catch (error) {
+        if (!(error instanceof LeanUnemittable)) throw error
+        return undefined
+    }
+    const binds =
+        bound.closures.size + bound.adapters.size + bound.readers.size > 0
+    return binds ? undefined : printed
+}
+
+/** What one half answered: a refusal, or the result. A refusal's wording is not compared. */
+const answer = (run: () => unknown): { readonly result?: unknown } => {
+    try {
+        const result = run()
+        return result instanceof CodecError ? {} : { result }
+    } catch (error) {
+        if (error instanceof CodecError) return {}
+        throw error
+    }
+}
+
+const sameAnswer = (
+    a: { readonly result?: unknown },
+    b: { readonly result?: unknown },
+): boolean =>
+    'result' in a === 'result' in b && structuralEquals(a.result, b.result)
+
+/**
+ * Each place where two codecs that print one term get two host verdicts: a pair verdict, an encode
+ * of a value that one of them generates, or a decode of an attribute that one of them writes. The
+ * counts say how much was compared, so a pool that offers no group reads as no check.
+ */
+const samePrintDisagreements = (
+    pairs: readonly PoolPair[],
+): {
+    readonly disagreements: readonly string[]
+    readonly pairGroups: number
+    readonly termGroups: number
+} => {
+    const out: string[] = []
+    let pairGroups = 0
+    let termGroups = 0
+    const byPair = new Map<string, PoolPair>()
+    for (const p of pairs) {
+        const binds = p.closures.length + p.readers.length > 0
+        if (binds || `${p.l}${p.r}`.includes('.caller')) continue
+        const key = `${p.l}\u0000${p.r}`
+        const seen = byPair.get(key)
+        if (seen === undefined) byPair.set(key, p)
+        else if (seen.label !== p.label) pairGroups++
+        if (seen !== undefined && seen.host !== p.host)
+            out.push(
+                `pair ${seen.label} (${seen.host}) / ${p.label} (${p.host})`,
+            )
+    }
+    const byTerm = new Map<string, AnyCodec[]>()
+    for (const codec of new Set(pairs.flatMap((p) => [p.left, p.right]))) {
+        const printed = printedAlone(codec)
+        if (printed === undefined) continue
+        byTerm.set(printed, [...(byTerm.get(printed) ?? []), codec])
+    }
+    for (const [printed, codecs] of byTerm) {
+        if (codecs.length < 2) continue
+        termGroups++
+        for (const from of codecs) {
+            for (let k = 1; k <= 6; k++) {
+                let value: unknown
+                try {
+                    value = arbitraryOf(from, rngFrom(k), 3)
+                } catch {
+                    continue
+                }
+                const written = codecs.map((c) =>
+                    answer(() => c.encode(value as never)),
+                )
+                if (written.some((w) => !sameAnswer(w, written[0] ?? {})))
+                    out.push(`encode under ${printed}`)
+                const attribute = written[codecs.indexOf(from)]?.result
+                if (attribute === undefined) continue
+                const read = codecs.map((c) =>
+                    answer(() => c.decode(attribute as never)),
+                )
+                if (read.some((r) => !sameAnswer(r, read[0] ?? {})))
+                    out.push(`decode under ${printed}`)
+            }
+        }
+    }
+    return { disagreements: [...new Set(out)], pairGroups, termGroups }
+}
+
+/** The pool of every seed, with the kernel vectors of each pair. */
+const buildPool = () => {
     const seeds: {
         seed: number
         pairs: readonly PoolPair[]
@@ -855,18 +982,41 @@ describe('the generated pool, against the model', () => {
             guards: formerGuards(refused, guarded),
         })
     }
-    const perSeed = seeds.map(({ seed, pairs, slices, guards }) => ({
+    return seeds.map(({ seed, pairs, slices, guards }) => ({
         seed,
         pairs,
         slices,
         guards,
         ...kernelPairs(pairs),
     }))
+}
+
+/** The files that the gate elaborates, by name, from one build of the pool. */
+const poolModules = (
+    perSeed: ReturnType<typeof buildPool>,
+): readonly (readonly [string, string])[] => [
+    ['.pool.eval.lean', evalModule(perSeed.flatMap((one) => one.pairs))],
+    [
+        '.pool.disjoints.lean',
+        leanDisjointModule(perSeed.flatMap((one) => one.disjoints)),
+    ],
+    [
+        '.pool.separations.lean',
+        leanSeparationModule(perSeed.flatMap((one) => one.separations)),
+    ],
+    [
+        '.pool.slices.lean',
+        leanSliceModule(perSeed.flatMap((one) => one.slices)),
+    ],
+    [
+        '.pool.guards.lean',
+        leanFormerGuardModule(perSeed.flatMap((one) => one.guards)),
+    ],
+]
+
+describe('the generated pool, against the model', () => {
+    const perSeed = buildPool()
     const pairs = perSeed.flatMap((one) => one.pairs)
-    const disjoints = perSeed.flatMap((one) => one.disjoints)
-    const separations = perSeed.flatMap((one) => one.separations)
-    const slices = perSeed.flatMap((one) => one.slices)
-    const guards = perSeed.flatMap((one) => one.guards)
 
     /**
      * **The counts pin the pool, deliberately.** The pool depends on the seed alone, so a count
@@ -942,26 +1092,62 @@ describe('the generated pool, against the model', () => {
         ).toEqual([])
     })
 
+    /**
+     * **Codecs that print one term get one host verdict.** The emitter prints a thunk that closes no
+     * cycle as its body, and the model reads only the printed term, so it gives both codecs one
+     * verdict. Each check above compares one codec with the model; this compares two codecs with
+     * each other, and needs no kernel.
+     */
+    it('gives one host verdict to the codecs that print one term', () => {
+        const { disagreements, pairGroups, termGroups } =
+            samePrintDisagreements(pairs)
+        expect(disagreements).toEqual([])
+        expect(pairGroups).toBeGreaterThan(0)
+        expect(termGroups).toBeGreaterThan(0)
+    })
+
+    /**
+     * **A leaf or a tag behind a thunk changes no host verdict.** The same seeds build the pool
+     * again with each leaf and each tag literal behind a thunk that closes no cycle. Each term prints
+     * the same, so each emitted file and each drop must be the same: a difference is a host reader
+     * that stops at a thunk where the model reads the term.
+     */
+    it('builds the same pool when each leaf and tag sits behind a thunk', () => {
+        const plain = [...dropped]
+        const before = poolModules(perSeed)
+        dropped.clear()
+        thunked = true
+        let wrapped: readonly (readonly [string, string])[]
+        let wrappedDrops: [string, number][]
+        try {
+            wrapped = poolModules(buildPool())
+            wrappedDrops = [...dropped]
+        } finally {
+            thunked = false
+            dropped.clear()
+            for (const [why, n] of plain) dropped.set(why, n)
+        }
+        const firstDifference = (a: string, b: string) => {
+            const [x, y] = [a.split('\n'), b.split('\n')]
+            const at = x.findIndex((line, i) => line !== y[i])
+            return at === -1 && x.length === y.length
+                ? 'same'
+                : `line ${at + 1}: ${x[at]?.slice(0, 160)} / ${y[at]?.slice(0, 160)}`
+        }
+        expect(
+            wrapped.map(([file, text], i) => [
+                file,
+                firstDifference(before[i]?.[1] ?? '', text),
+            ]),
+        ).toEqual(before.map(([file]) => [file, 'same']))
+        expect(wrappedDrops.sort()).toEqual(plain.sort())
+    })
+
     it('emits the pre-check and the kernel vectors for the gate', () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             const formal = join(process.cwd(), 'formal')
-            writeFileSync(join(formal, '.pool.eval.lean'), evalModule(pairs))
-            writeFileSync(
-                join(formal, '.pool.disjoints.lean'),
-                leanDisjointModule(disjoints),
-            )
-            writeFileSync(
-                join(formal, '.pool.separations.lean'),
-                leanSeparationModule(separations),
-            )
-            writeFileSync(
-                join(formal, '.pool.slices.lean'),
-                leanSliceModule(slices),
-            )
-            writeFileSync(
-                join(formal, '.pool.guards.lean'),
-                leanFormerGuardModule(guards),
-            )
+            for (const [file, text] of poolModules(perSeed))
+                writeFileSync(join(formal, file), text)
         }
         expect(evalModule([])).toContain(sentinel(0))
     })
