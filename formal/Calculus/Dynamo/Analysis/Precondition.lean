@@ -2,7 +2,7 @@ import Calculus.Dynamo.Analysis.Slice
 import Calculus.Lang.Path
 
 /-!
-# The guard of a clause, as data for the store
+# The precondition of a clause, as data for the store
 
 A clause narrows a union (`Alg.narrow`), and the narrowing law holds for an item whose attribute at
 the union the stored view of the clause admits (`Alg.narrow_law`). The store tests a condition on
@@ -11,28 +11,29 @@ a path into the item. Each test is one that DynamoDB evaluates: `in` (the attrib
 finite list of literals at one base), `type` (the attribute has one member), and `exists` (the
 attribute exists).
 
-`guardOf` states the guard of a clause exactly, or refuses. The guard reads the stored view of the
-clause (`Alg.view .dual`), as `Alg.narrow` does. A stored view gives an exact guard where it is a
-literal, a union of literals at one base, a base, `opaque`, or an open object whose slots are each
-required at a stored view that gives an exact guard. Every other stored view refuses, so the port
-states no guard that `guardOf_exact` does not cover. A clause with no key refuses below the root, because the
-empty conjunction admits an attribute that is no map. `guardOf_exact` states that the guard holds
-on an item exactly where the stored view of the clause admits the attribute at the path.
-`narrow_law_guard` is the narrowing law with the guard in place of the admission.
+`preconditionOf` states the precondition of a clause exactly, or refuses. The precondition reads the
+stored view of the clause (`Alg.view .dual`), as `Alg.narrow` does. A stored view gives an exact
+precondition where it is a literal, a union of literals at one base, a base, `opaque`, or an open
+object whose slots are each required at a stored view that gives an exact precondition. Every other
+stored view refuses, so the port states no precondition that `preconditionOf_exact` does not cover.
+A clause with no key refuses below the root, because the empty conjunction admits an attribute that
+is no map. `preconditionOf_exact` states that the precondition holds on an item exactly where the
+stored view of the clause admits the attribute at the path. `narrow_law_precondition` is the
+narrowing law with the precondition in place of the admission.
 
-**The guard is exact for the stored view, and not for the raw clause.** A `held` admits where its
-stored side admits and where the read of the adapter satisfies the outer term. The store tests the
-stored side alone, so the guard of `number(1)` is `in [N 1]`, which is the admission of the stored
-view. A refinement over an adapter has the truth as its stored predicate, so its guard is the guard
-of its inner term. The narrowing law reads the stored view of the clause, so the guard discharges
-the law.
+**The precondition is exact for the stored view, and not for the raw clause.** A `held` admits where
+its stored side admits and where the read of the adapter satisfies the outer term. The store tests
+the stored side alone, so the precondition of `number(1)` is `in [N 1]`, which is the admission of
+the stored view. A refinement over an adapter has the truth as its stored predicate, so its
+precondition is the precondition of its inner term. The narrowing law reads the stored view of the
+clause, so the precondition discharges the law.
 -/
 
 namespace Calculus
 
 open Alg (Seg)
 
-/-! ## The guard as data -/
+/-! ## The precondition as data -/
 
 /-- A test that the store evaluates on one stored attribute. -/
 inductive Test where
@@ -43,8 +44,8 @@ inductive Test where
   /-- The attribute exists. -/
   | «exists»
 
-/-- A condition: a test at a path into the item. A guard is a list of conditions, and the guard
-    holds where each condition holds. -/
+/-- A condition: a test at a path into the item. A precondition is a list of conditions, and the
+    precondition holds where each condition holds. -/
 structure Cond where
   path : List Seg
   test : Test
@@ -70,9 +71,9 @@ def Cond.eval (c : Cond) (R : Attr) : Bool :=
 
 /-! ## The order of the names
 
-A guard lists the condition of each name of an object, so the names of a `Finset` need one list.
-A `Finset` holds its names up to a permutation, and a sort by `compare` gives one list for each
-permutation. The sort is an insertion sort, with its laws proved here: the sort laws of the
+A precondition lists the condition of each name of an object, so the names of a `Finset` need one
+list. A `Finset` holds its names up to a permutation, and a sort by `compare` gives one list for
+each permutation. The sort is an insertion sort, with its laws proved here: the sort laws of the
 library reach `Classical.choice` through constants that the gateway baseline does not list. -/
 
 /-- The insertion of a name into a sorted list. -/
@@ -145,12 +146,13 @@ theorem mem_sortedKeys {s : Finset String} {k : String} : k ∈ sortedKeys s ↔
   obtain ⟨⟨l⟩, _⟩ := s
   exact (perm_sortNames l).mem_iff
 
-/-! ## The guard of a term
+/-! ## The precondition of a term
 
-The guard of a term is the guard of its stored view (`Alg.view .dual`). Each function below reads
-the raw term and takes the row that the stored view takes, so the stored view is never built: a
-`held` gives the guard of its stored side, an alternate reader gives the guard of `opaque`, and a
-refinement that the stored view keeps as the truth gives the guard of its inner term. -/
+The precondition of a term is the precondition of its stored view (`Alg.view .dual`). Each function
+below reads the raw term and takes the row that the stored view takes, so the stored view is never
+built: a `held` gives the precondition of its stored side, an alternate reader gives the
+precondition of `opaque`, and a refinement that the stored view keeps as the truth gives the
+precondition of its inner term. -/
 
 /-- The literal that the stored view of a term is, where it is one. -/
 def storedLit : Term → Option ((k : GroundKind) × k.Carrier)
@@ -174,11 +176,11 @@ def storedOpaq : Term → Bool
   | _ => false
 
 mutual
-/-- **The guard of a term at a path**, or a refusal (`none`). The stored view decides the row. A
-    literal and a union of literals at one base give `in`, a base gives `type`, `opaque` gives
-    `exists`, and an open object whose slots are each required gives `type M` and the guard of
-    each name. Every other stored view refuses. -/
-def termGuard : Term → List Seg → Option (List Cond)
+/-- **The precondition of a term at a path**, or a refusal (`none`). The stored view decides the
+    row. A literal and a union of literals at one base give `in`, a base gives `type`, `opaque`
+    gives `exists`, and an open object whose slots are each required gives `type M` and the
+    precondition of each name. Every other stored view refuses. -/
+def termPrecondition : Term → List Seg → Option (List Cond)
   | .base k, π => some [⟨π, .type k.member⟩]
   | .literal k x, π => some [⟨π, .in k x []⟩]
   | .union (t :: ts), π =>
@@ -187,34 +189,34 @@ def termGuard : Term → List Seg → Option (List Cond)
       | none => none
   | .opaq, π => some [⟨π, .exists⟩]
   | .legacy _ _, π => some [⟨π, .exists⟩]
-  | .held s t P _ _, π => bif s then termGuard P π else termGuard t π
-  | .refine t _ _, π => if Alg.hasHeld t || !t.closed then termGuard t π else none
-  | .object b, π => (keysGuard b π).map (⟨π, .type .M⟩ :: ·)
+  | .held s t P _ _, π => bif s then termPrecondition P π else termPrecondition t π
+  | .refine t _ _, π => if Alg.hasHeld t || !t.closed then termPrecondition t π else none
+  | .object b, π => (keysPrecondition b π).map (⟨π, .type .M⟩ :: ·)
   | _, _ => none
-/-- The guards of the names of an open body, each at the path of its name. -/
-def keysGuard : Body → List Seg → Option (List Cond)
+/-- The preconditions of the names of an open body, each at the path of its name. -/
+def keysPrecondition : Body → List Seg → Option (List Cond)
   | .mk fields fld (some w), π =>
       if storedOpaq w then
         ((sortedKeys fields).attach.mapM fun k =>
-          slotGuard (fld ⟨k.1, mem_sortedKeys.mp k.2⟩) (π ++ [.name k.1])).map List.flatten
+          slotPrecondition (fld ⟨k.1, mem_sortedKeys.mp k.2⟩) (π ++ [.name k.1])).map List.flatten
       else none
   | _, _ => none
-/-- The guard of a required slot. Any other slot refuses: the stored view of a filled slot is
+/-- The precondition of a required slot. Any other slot refuses: the stored view of a filled slot is
     optional. -/
-def slotGuard : ObjectSlot → List Seg → Option (List Cond)
-  | .req t, π => termGuard t π
+def slotPrecondition : ObjectSlot → List Seg → Option (List Cond)
+  | .req t, π => termPrecondition t π
   | _, _ => none
 end
 
-/-- **The guard of a clause at the path of the union.** A clause is an open object, and its guard
-    is the guard of each name. A clause with no name refuses below the root: the clause admits
-    each map there, and the empty conjunction admits each attribute. At the root the item is a
-    map, so the empty conjunction is the guard. -/
-def guardOf : Term → List Seg → Option (List Cond)
+/-- **The precondition of a clause at the path of the union.** A clause is an open object, and its
+    precondition is the precondition of each name. A clause with no name refuses below the root: the
+    clause admits each map there, and the empty conjunction admits each attribute. At the root the
+    item is a map, so the empty conjunction is the precondition. -/
+def preconditionOf : Term → List Seg → Option (List Cond)
   | .object (.mk fields fld w), π =>
       match sortedKeys fields, π with
       | [], _ :: _ => none
-      | _, _ => keysGuard (.mk fields fld w) π
+      | _, _ => keysPrecondition (.mk fields fld w) π
   | _, _ => none
 
 /-- The segment read of a name at DynamoDB: the entry of a map, and nothing on any other attribute. -/
@@ -407,21 +409,22 @@ theorem anyP_lits (k : GroundKind) (a : Attr) : ∀ xs : List k.Carrier,
       rw [anyP_lits k a xs, AdmA_literal]; rfl
 
 mutual
-/-- **The guard of a term is exact**: on each item, the guard holds where the stored view of the
-    term admits the attribute at the path. -/
-theorem termGuard_exact : ∀ (t : Term) (π : List Seg) (gs : List Cond), termGuard t π = some gs →
+/-- **The precondition of a term is exact**: on each item, the precondition holds where the stored
+    view of the term admits the attribute at the path. -/
+theorem termPrecondition_exact : ∀ (t : Term) (π : List Seg) (gs : List Cond),
+    termPrecondition t π = some gs →
     ∀ R, gs.all (·.eval R) = admAt α t π R
   | .base k, π, gs, h, R => by
-      simp only [termGuard, Option.some.injEq] at h; subst h
+      simp only [termPrecondition, Option.some.injEq] at h; subst h
       unfold admAt Cond.eval
       cases hR : readPath π R <;> simp [hR, Test.eval, AdmA_base, inBase, Alg.view]
       rfl
   | .literal k x, π, gs, h, R => by
-      simp only [termGuard, Option.some.injEq] at h; subst h
+      simp only [termPrecondition, Option.some.injEq] at h; subst h
       unfold admAt Cond.eval
       cases hR : readPath π R <;> simp [hR, Test.eval, Alg.view]
   | .union (t :: ts), π, gs, h, R => by
-      unfold termGuard at h
+      unfold termPrecondition at h
       split at h
       · next k x hl =>
         simp only [Option.map_eq_some_iff] at h
@@ -438,25 +441,25 @@ theorem termGuard_exact : ∀ (t : Term) (π : List Seg) (gs : List Cond), termG
             rw [anyP_lits]; rfl
       · exact nomatch h
   | .opaq, π, gs, h, R => by
-      simp only [termGuard, Option.some.injEq] at h; subst h
+      simp only [termPrecondition, Option.some.injEq] at h; subst h
       unfold admAt Cond.eval
       cases hR : readPath π R <;> simp [hR, Test.eval, Alg.view]
       rfl
   | .legacy _ _, π, gs, h, R => by
-      simp only [termGuard, Option.some.injEq] at h; subst h
+      simp only [termPrecondition, Option.some.injEq] at h; subst h
       unfold admAt Cond.eval
       cases hR : readPath π R <;> simp [hR, Test.eval, Alg.view]
       rfl
   | .held s t P _ _, π, gs, h, R => by
       unfold admAt; rw [view_held]
       cases s
-      · rw [termGuard_exact t π gs h R]; rfl
-      · rw [termGuard_exact P π gs h R]; rfl
+      · rw [termPrecondition_exact t π gs h R]; rfl
+      · rw [termPrecondition_exact P π gs h R]; rfl
   | .refine t p pA, π, gs, h, R => by
-      simp only [termGuard] at h
+      simp only [termPrecondition] at h
       split at h
       · next hc =>
-        rw [termGuard_exact t π gs h R]
+        rw [termPrecondition_exact t π gs h R]
         unfold admAt
         have hv : Alg.view .dual (Term.refine t p pA) =
             Term.refine (Alg.view .dual t) (Alg.Mean.truth (B := dynSig) false) pA := by
@@ -466,10 +469,10 @@ theorem termGuard_exact : ∀ (t : Term) (π : List Seg) (gs : List Cond), termG
         | some A => show AdmA α _ A = AdmA α _ A; rw [hv, AdmA_refine_truth]
       · exact nomatch h
   | .object b, π, gs, h, R => by
-      simp only [termGuard, Option.map_eq_some_iff] at h
+      simp only [termPrecondition, Option.map_eq_some_iff] at h
       obtain ⟨gs', hb, rfl⟩ := h
       obtain ⟨fields, fld, w⟩ := b
-      obtain ⟨w', rfl, hw, hreq, hall⟩ := keysGuard_exact (.mk fields fld w) π gs' hb rfl
+      obtain ⟨w', rfl, hw, hreq, hall⟩ := keysPrecondition_exact (.mk fields fld w) π gs' hb rfl
       refine Bool.eq_iff_iff.mpr ?_
       rw [List.all_cons, Bool.and_eq_true, hall R]
       unfold admAt Cond.eval
@@ -491,25 +494,25 @@ theorem termGuard_exact : ∀ (t : Term) (π : List Seg) (gs : List Cond), termG
   | .never, _, _, h, _ | .var _, _, _, h, _ | .mu _, _, _, h, _ | .set _, _, _, h, _
   | .list _ _ _, _, _, h, _ | .union [], _, _, h, _ => nomatch h
 
-/-- The guards of the names of an open body hold where the stored view of each required slot admits
-    the entry at the name. -/
-theorem keysGuard_exact : ∀ (b : Body) (π : List Seg) (gs : List Cond),
-    keysGuard b π = some gs → ∀ {fields fld w}, b = .mk fields fld w →
+/-- The preconditions of the names of an open body hold where the stored view of each required slot
+    admits the entry at the name. -/
+theorem keysPrecondition_exact : ∀ (b : Body) (π : List Seg) (gs : List Cond),
+    keysPrecondition b π = some gs → ∀ {fields fld w}, b = .mk fields fld w →
       ∃ w', w = some w' ∧ storedOpaq w' = true ∧ (∀ k, ∃ t, fld k = .req t) ∧
         ∀ R, (gs.all (·.eval R) = true ↔
           ∀ k t, fld k = .req t → admAt α t (π ++ [.name k.1]) R = true)
   | .mk fields fld (some w), π, gs, h, _, _, _, hb => by
       cases hb
-      simp only [keysGuard] at h
+      simp only [keysPrecondition] at h
       split at h
       · next hw =>
         simp only [Option.map_eq_some_iff] at h
         obtain ⟨gss, hm, rfl⟩ := h
         have hslot : ∀ k : {k // k ∈ fields}, ∃ t ys, fld k = .req t ∧
-            slotGuard (fld k) (π ++ [.name k.1]) = some ys ∧
+            slotPrecondition (fld k) (π ++ [.name k.1]) = some ys ∧
             ∀ R, ys.all (·.eval R) = admAt α t (π ++ [.name k.1]) R := fun k => by
           obtain ⟨ys, hy⟩ := isSome_of_mapM hm ⟨k.1, mem_sortedKeys.mpr k.2⟩ (List.mem_attach _ _)
-          obtain ⟨t, ht, he⟩ := slotGuard_exact (fld k) _ ys hy
+          obtain ⟨t, ht, he⟩ := slotPrecondition_exact (fld k) _ ys hy
           exact ⟨t, ys, ht, hy, he⟩
         refine ⟨w, rfl, hw, fun k => ?_, fun R => ?_⟩
         · obtain ⟨t, _, ht, _⟩ := hslot k; exact ⟨t, ht⟩
@@ -528,31 +531,33 @@ theorem keysGuard_exact : ∀ (b : Body) (π : List Seg) (gs : List Cond),
       · exact nomatch h
   | .mk _ _ none, _, _, h, _, _, _, _ => nomatch h
 
-/-- The guard of a slot is the guard of the term of a required slot. -/
-theorem slotGuard_exact : ∀ (s : ObjectSlot) (π : List Seg) (gs : List Cond),
-    slotGuard s π = some gs → ∃ t, s = .req t ∧ ∀ R, gs.all (·.eval R) = admAt α t π R
-  | .req t, π, gs, h => ⟨t, rfl, termGuard_exact t π gs h⟩
+/-- The precondition of a slot is the precondition of the term of a required slot. -/
+theorem slotPrecondition_exact : ∀ (s : ObjectSlot) (π : List Seg) (gs : List Cond),
+    slotPrecondition s π = some gs → ∃ t, s = .req t ∧ ∀ R, gs.all (·.eval R) = admAt α t π R
+  | .req t, π, gs, h => ⟨t, rfl, termPrecondition_exact t π gs h⟩
   | .optional _, _, _, h | .fill _ _, _, _, h => nomatch h
 end
 
-/-- **The guard of a clause is exact on an item**: the guard holds where the stored view of the
-    clause admits the attribute at the path. An item is a map. -/
-theorem guardOf_exact {φ : Term} {π : List Seg} {gs : List Cond} (h : guardOf φ π = some gs)
+/-- **The precondition of a clause is exact on an item**: the precondition holds where the stored
+    view of the clause admits the attribute at the path. An item is a map. -/
+theorem preconditionOf_exact {φ : Term} {π : List Seg} {gs : List Cond}
+    (h : preconditionOf φ π = some gs)
     (R : Attr) (hitem : ∃ keys g, R = .m keys g) : gs.all (·.eval R) = admAt α φ π R := by
   cases φ
   case object b =>
     obtain ⟨fields, fld, w⟩ := b
-    have hroot : (π = [] ∨ ∃ k, k ∈ fields) ∧ keysGuard (.mk fields fld w) π = some gs := by
+    have hroot :
+        (π = [] ∨ ∃ k, k ∈ fields) ∧ keysPrecondition (.mk fields fld w) π = some gs := by
       cases hs : sortedKeys fields with
       | nil =>
           cases π with
-          | nil => exact ⟨.inl rfl, by simpa [guardOf, hs] using h⟩
-          | cons s π => simp [guardOf, hs] at h
+          | nil => exact ⟨.inl rfl, by simpa [preconditionOf, hs] using h⟩
+          | cons s π => simp [preconditionOf, hs] at h
       | cons k ks =>
           exact ⟨.inr ⟨k, mem_sortedKeys.mp (by rw [hs]; exact List.mem_cons_self)⟩,
-            by simpa [guardOf, hs] using h⟩
+            by simpa [preconditionOf, hs] using h⟩
     obtain ⟨hπ, hkg⟩ := hroot
-    obtain ⟨w', rfl, hw, hreq, hall⟩ := keysGuard_exact α _ π gs hkg rfl
+    obtain ⟨w', rfl, hw, hreq, hall⟩ := keysPrecondition_exact α _ π gs hkg rfl
     refine Bool.eq_iff_iff.mpr ?_
     rw [hall R]
     unfold admAt
@@ -577,29 +582,29 @@ theorem guardOf_exact {φ : Term} {π : List Seg} {gs : List Cond} (h : guardOf 
           rw [hR, objectAdm α hw hreq] at hA
           obtain ⟨keys, g, rfl, hk⟩ := hA
           exact fun k t ht => (admAt_name α t π k.1 R).mpr ⟨keys, g, hR, hk k t ht⟩
-  all_goals simp [guardOf] at h
+  all_goals simp [preconditionOf] at h
 
-/-! ## The narrowing law with the guard -/
+/-! ## The narrowing law with the precondition -/
 
-/-- **The narrowing law, with the guard in place of the admission.** Take an item whose attribute at
-    the path of the union is `A`, and on which the guard of the clause holds. No option that
-    narrowing drops reads `A`. A write at a path whose frontier the narrowed union gives keeps `A`
-    readable by the union. The store tests the guard on the update, and the guard is the
-    admission of the stored view of the clause (`guardOf_exact`). -/
-theorem narrow_law_guard {φ : Term} {os : List Term} {T : Attr → Prop} {μ : Option Member}
+/-- **The narrowing law, with the precondition in place of the admission.** Take an item whose
+    attribute at the path of the union is `A`, and on which the precondition of the clause holds. No
+    option that narrowing drops reads `A`. A write at a path whose frontier the narrowed union gives
+    keeps `A` readable by the union. The store tests the precondition on the update, and the
+    precondition is the admission of the stored view of the clause (`preconditionOf_exact`). -/
+theorem narrow_law_precondition {φ : Term} {os : List Term} {T : Attr → Prop} {μ : Option Member}
     (hty : Alg.Typed α dynTableA (.union (Alg.narrow .dual φ os)) T μ)
     (hob : Alg.Obligations α dynTableA (.union (Alg.narrow .dual φ os)))
     (hg : (Alg.Term.union (Alg.narrow .dual φ os)).guarded = true)
     (π : List Seg) (res : List (Alg.Frame dynSyn))
     (hat : (Alg.Term.union (Alg.narrow .dual φ os)).at π = some res)
     (w : Codec) (hw : ∀ g ∈ res, ∀ x a, w.e x = some a → ((Alg.Frame.sem α dynTableA g).p a).isSome)
-    {pre : List Seg} {gs : List Cond} (hgs : guardOf φ pre = some gs)
+    {pre : List Seg} {gs : List Cond} (hgs : preconditionOf φ pre = some gs)
     {R A A' x a : Attr} (hitem : ∃ keys g, R = .m keys g) (hR : readPath pre R = some A)
     (hG : gs.all (·.eval R) = true) (hA : ((denote α (.union os)).p A).isSome)
     (hx : w.e x = some a) (hput : Alg.putPath (S := dynSyn) π a A = some A') :
     (∀ o ∈ os, o ∉ Alg.narrow .dual φ os → (denote α o).p A = none) ∧
       ((denote α (.union os)).p A').isSome := by
-  have hφ : admAt α φ pre R = true := by rw [← guardOf_exact α hgs R hitem]; exact hG
+  have hφ : admAt α φ pre R = true := by rw [← preconditionOf_exact α hgs R hitem]; exact hG
   unfold admAt at hφ
   rw [hR] at hφ
   exact Alg.narrow_law rfl hty hob hg π res hat w hw hφ hA hx hput
@@ -607,8 +612,8 @@ theorem narrow_law_guard {φ : Term} {os : List Term} {T : Attr → Prop} {μ : 
 
 /-! ## Vectors
 
-Each vector reduces in the kernel. A guard is shown as its conditions, each a path of names and a
-test. A key of a clause reads at the path of the union and then the name. -/
+Each vector reduces in the kernel. A precondition is shown as its conditions, each a path of names
+and a test. A key of a clause reads at the path of the union and then the name. -/
 
 /-- The names of a path. A position shows as `#`. -/
 private def names (π : List Seg) : List String := π.map fun | .name k => k | .pos _ => "#"
@@ -637,7 +642,7 @@ private def existsAt (π : List String) (c : Cond) : Bool :=
     | .exists => true
     | _ => false
 
-/-- Each condition of a guard against one check each, in order. -/
+/-- Each condition of a precondition against one check each, in order. -/
 private def shows (r : Option (List Cond)) (cs : List (Cond → Bool)) : Bool :=
   match r with
   | some gs => gs.length == cs.length && (gs.zip cs).all fun p => p.2 p.1
@@ -656,47 +661,48 @@ private abbrev cl1 (t : Term) : Term := Alg.clauseTerm {"k"} fun _ => t
 private abbrev m : List Seg := [.name "m"]
 
 -- a string tag
-example : shows (guardOf (cl1 (litS "A")) m) [inS ["m", "k"] ["A"]] = true := by decide
+example : shows (preconditionOf (cl1 (litS "A")) m) [inS ["m", "k"] ["A"]] = true := by decide
 -- a string tag of two literals
-example : shows (guardOf (cl1 (.union [litS "A", litS "B"])) m) [inS ["m", "k"] ["A", "B"]] =
+example : shows (preconditionOf (cl1 (.union [litS "A", litS "B"])) m) [inS ["m", "k"] ["A", "B"]] =
     true := by decide
 -- a numeric tag: `number(1)` stores `N 1`
-example : shows (guardOf (cl1 (num n1)) m) [inN ["m", "k"] [WFNumeral.of "1"]] = true := by decide
+example : shows (preconditionOf (cl1 (num n1)) m) [inN ["m", "k"] [WFNumeral.of "1"]] = true := by
+  decide
 -- a decimal tag: `decimal('1')` stores `N 1`
-example : shows (guardOf (cl1 (dec n1 "1")) m) [inN ["m", "k"] [WFNumeral.of "1"]] = true := by
+example : shows (preconditionOf (cl1 (dec n1 "1")) m) [inN ["m", "k"] [WFNumeral.of "1"]] = true := by
   decide
 -- a union of numeric tags reads through each adapter to one base
-example : shows (guardOf (cl1 (.union [num n1, num n2])) m)
+example : shows (preconditionOf (cl1 (.union [num n1, num n2])) m)
     [inN ["m", "k"] [WFNumeral.of "1", WFNumeral.of "2"]] = true := by decide
 -- a presence clause: `opaque` gives `exists`
-example : shows (guardOf (cl1 .opaq) m) [existsAt ["m", "k"]] = true := by decide
+example : shows (preconditionOf (cl1 .opaq) m) [existsAt ["m", "k"]] = true := by decide
 -- a base clause: `number` gives `type N`
-example : shows (guardOf (cl1 .number) m) [typeAt ["m", "k"] .N] = true := by decide
+example : shows (preconditionOf (cl1 .number) m) [typeAt ["m", "k"] .N] = true := by decide
 -- two keys: a conjunction, in the order of the names
-example : shows (guardOf (Alg.clauseTerm {"t", "k"} fun x => if x.1 = "k" then litS "A" else
+example : shows (preconditionOf (Alg.clauseTerm {"t", "k"} fun x => if x.1 = "k" then litS "A" else
     Term.number) m) [inS ["m", "k"] ["A"], typeAt ["m", "t"] .N] = true := by decide
--- an open object under a key: `type M` and the guard of its name
-example : shows (guardOf (cl1 (Alg.clauseTerm {"z"} fun _ => litS "Z")) [])
+-- an open object under a key: `type M` and the precondition of its name
+example : shows (preconditionOf (cl1 (Alg.clauseTerm {"z"} fun _ => litS "Z")) [])
     [typeAt ["k"] .M, inS ["k", "z"] ["Z"]] = true := by decide
 -- a refinement over an adapter: the stored view keeps the truth, so the inner term decides
-example : shows (guardOf (cl1 (.refine (num n1) (.closure fun _ => true) ())) m)
+example : shows (preconditionOf (cl1 (.refine (num n1) (.closure fun _ => true) ())) m)
     [inN ["m", "k"] [WFNumeral.of "1"]] = true := by decide
 -- the empty clause: the empty conjunction at the root, and a refusal below the root
-example : shows (guardOf (Alg.clauseTerm ∅ fun k => nomatch k.2) []) [] = true := by decide
-example : (guardOf (Alg.clauseTerm ∅ fun k => nomatch k.2) m).isNone = true := by decide
+example : shows (preconditionOf (Alg.clauseTerm ∅ fun k => nomatch k.2) []) [] = true := by decide
+example : (preconditionOf (Alg.clauseTerm ∅ fun k => nomatch k.2) m).isNone = true := by decide
 
 -- a closed object refuses
-example : (guardOf (cl1 (.object (.mk {"z"} (fun _ => .req .string) none))) m).isNone = true := by
+example : (preconditionOf (cl1 (.object (.mk {"z"} (fun _ => .req .string) none))) m).isNone = true := by
   decide
 -- a list with a spread refuses
-example : (guardOf (cl1 (.list [] (some .string) [])) m).isNone = true := by decide
+example : (preconditionOf (cl1 (.list [] (some .string) [])) m).isNone = true := by decide
 -- a refinement that the stored view keeps refuses
-example : (guardOf (cl1 (.refine .string (.closure fun _ => true) ())) m).isNone = true := by
+example : (preconditionOf (cl1 (.refine .string (.closure fun _ => true) ())) m).isNone = true := by
   decide
 -- an optional slot under a key refuses
-example : (guardOf (cl1 (.object (.mk {"z"} (fun _ => .optional .string) (some .opaq))))
+example : (preconditionOf (cl1 (.object (.mk {"z"} (fun _ => .optional .string) (some .opaq))))
     m).isNone = true := by decide
 -- a union of two bases refuses
-example : (guardOf (cl1 (.union [litS "A", n1])) m).isNone = true := by decide
+example : (preconditionOf (cl1 (.union [litS "A", n1])) m).isNone = true := by decide
 
 end Calculus
