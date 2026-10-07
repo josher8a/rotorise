@@ -469,8 +469,10 @@ refusal and not a loop.
 
 **The store refuses a segment apart from the term.** A term that stores one member (`μSyn`) apart
 from the member of the container of the segment gives no frame (`apartAt`). So a name on a list,
-a position on a map, and a primitive of another member give no frame. An option of a union that reads maps and
-declares no name gives `never`. A `refine`, a `held` and an alternate reader give a refusal where
+a position on a map, and a primitive of another member give no frame. A closed object at a name
+that the object does not declare gives `never`, and so does a list shape with no spread at a
+position past its prefix: no readable value holds the segment. `opaque` gives `opaque` at every
+segment. A `refine`, a `held` and an alternate reader give a refusal where
 they are not apart, because a frontier cannot carry a restriction. A position past the prefix of a
 list shape with a suffix is a refusal, because the term of the position depends on the length.
 
@@ -520,8 +522,37 @@ admits the attribute at the path of the union (`preconditionOf_exact`). A litera
 literals at one base, a base, `opaque` and an open object whose slots are each required give a
 precondition. Every other stored view refuses, and so does a clause with no key below the root.
 `narrow_law_precondition` is the narrowing law with the precondition in place of the admission.
-Rotorise hands the precondition to the caller as data, and Brushless renders the condition
-expression.
+Rotorise states the precondition as data and builds no expression string. An expression library
+renders the condition expression.
+
+**The host's path API follows the model.** `at((p) => ...)` on an item codec gives the codec at a
+path, with the path as `path()` and as a list of segments. The walk of `at` gives the three answers of
+`Term.at` at each segment: the frames, no frame where the store refuses the segment, and `never`.
+The walk reads a thunk as the model reads a binder. The walk compares two terms by structure, so two
+declarations of one term are one frame. A path resolves where the frontier holds one term, so the
+codec at the path agrees with each frame, which is the premise of `strong_law`. A frontier of two
+terms, or of one term beside `never`, gives a codec that returns a refusal value on use, and the
+message names `narrow(...)`. A frontier of `never` alone throws at the call: no codec declares the path.
+
+`p.u.narrow(spec)` is `narrow`. The spec is the clause: an object of codecs, each key required at
+the term of its codec, every other name open. The host keeps each option whose stored view the
+host's disjointness test does not separate from the stored view of the clause. The call adds no
+segment to the path. The path type narrows too, and the path type is coarser where the path type
+knows only the decoded types. `at(...).preconditions` is the conjunction of the preconditions of
+each `narrow(...)` on the path, by the rules that `preconditionOf` states, or a refusal value that
+names the path where no exact precondition exists. A path with no `narrow(...)` has the empty
+conjunction. The caller puts the preconditions in the condition expression of the write.
+
+**Two checks put the host's path decisions to the model.** The path vectors walk the grounded pool:
+each pool codec under an object, each path of declared names and positions below the codec to a
+fixed depth, and each clause of the pool's vocabulary at each option name of a union. Each path
+records the decision of the host. One theorem per codec states that `Term.at`, after `narrow` for a
+clause, gives the frontier that each decision names, and the kernel decides the theorem. A recursive
+union has no clause row: `narrow` reads the options of the binder open, and the host reads the thunk
+closed. The two-spelling check builds the pool again with each leaf and each tag behind a thunk that
+closes no cycle. The model reads one term in both spellings, so each decision of `at` must be the
+same, and a difference is a host reader that stops at a thunk. No vector puts the host's
+preconditions to `preconditionOf`: the host's tests pin each precondition form and each refusal.
 
 ---
 
