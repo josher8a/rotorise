@@ -8,17 +8,21 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+    type AttributeCodec,
     array,
     CodecError,
     decimal,
     discriminatedUnion,
     dynamoNumber,
+    lazy,
     list,
     number,
     object,
+    opaque,
     optional,
     refine,
     string,
+    union,
     withLegacyRead,
 } from '../../codec'
 
@@ -194,5 +198,61 @@ describe('a path that crosses a whole-value adapter', () => {
         expect(() => Migrated.at((p) => p.a.x)).toThrow(
             /a path cannot go into `withLegacyRead` at 'x'/,
         )
+    })
+})
+
+/**
+ * **A path passes an option whose stored member is not the container of the segment.** The store
+ * refuses the segment on every attribute of that option, so the option has no codec at the path.
+ * A thunk that closes no cycle is the codec that the thunk returns, so a thunk changes nothing.
+ */
+describe('an option that the store keeps apart from the segment', () => {
+    it('a path passes a refined number behind a thunk, because the store holds no map at a number', () => {
+        const Reading = union([
+            object({ x: string }),
+            refine(
+                lazy(() => dynamoNumber),
+                (v): v is typeof v => !v.digits.startsWith('-'),
+                { describe: 'a reading that is not negative' },
+            ),
+        ])
+        const Meter = object({ reading: Reading }).item
+        const x = Meter.at((p) => p.reading.x)
+        expect(x.path()).toBe('reading.x')
+        expect(x.unsafeEncode('high')).toEqual({ S: 'high' })
+    })
+
+    it('a path does not pass a refinement of a recursive list, because the member of a recursion is not read off the term', () => {
+        type Nest = readonly Nest[]
+        const Nest: AttributeCodec<Nest> = array(lazy(() => Nest))
+        const Shape = union([
+            object({ x: string }),
+            refine(Nest, (v): v is Nest => v.length > 0, {
+                describe: 'a nest that is not empty',
+            }),
+        ])
+        const Drawing = object({ shape: Shape }).item
+        expect(() => Drawing.at((p) => p.shape.x)).toThrow(
+            /a path cannot go into `refine` at 'x'/,
+        )
+    })
+})
+
+/**
+ * **A path under `opaque` stands at `opaque`.** `opaque` admits every value, so the attribute at
+ * each segment below it admits every value too. The type of the path stops at `opaque`, and the
+ * runtime answers the path that the type refuses.
+ */
+describe('a path under opaque', () => {
+    it('a path under opaque writes any value, because opaque admits every value at every depth', () => {
+        const Envelope = object({ payload: opaque }).item
+        // @ts-expect-error the type of a path offers no segment below `opaque`
+        const deep = Envelope.at((p) => p.payload.a.b.at(2).c)
+        expect(deep.path()).toBe('payload.a.b[2].c')
+        expect(deep.unsafeEncode({ k: 'v' })).toEqual({
+            M: { k: { S: 'v' } },
+        })
+        // no `when` narrows the path, so a write needs no guard
+        expect(deep.guards).toEqual([])
     })
 })
