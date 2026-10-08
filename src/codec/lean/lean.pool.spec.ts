@@ -17,8 +17,8 @@
  *
  * One route narrows the pool. **No separation vector for two fills at one name.** The model refuses
  * two fills at one name whatever their constants, because the constants of a fill have no decidable
- * equality. The host accepts two fills with equal constants. Such a pair goes to disjointness only,
- * and the pre-check reads no compatibility column for the pair.
+ * equality. The host accepts two fills with equal constants. Such a pair goes to disjointness and
+ * to a kernel row of its guard column, and no check reads a compatibility column for the pair.
  */
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -767,10 +767,14 @@ end Calculus
 `)
 }
 
-/** The pairs that each kernel module states; a refusal of the emitter drops the pair by reason. */
+/**
+ * The pairs that each kernel module states; a refusal of the emitter drops the pair by reason. A
+ * pair with a fill on each side has no separation vector, so the kernel states its guard column alone.
+ */
 const kernelPairs = (pairs: readonly PoolPair[]) => {
     const disjoints: DisjointPair[] = []
     const separations: Separation[] = []
+    const fillGuards: Separation[] = []
     for (const p of pairs) {
         const one = { name: p.name, left: p.left, right: p.right }
         try {
@@ -780,7 +784,10 @@ const kernelPairs = (pairs: readonly PoolPair[]) => {
             if (!(error instanceof LeanUnemittable)) throw error
             drop(`disjoint: ${error.reason}`)
         }
-        if (p.fills) continue
+        if (p.fills) {
+            fillGuards.push(one)
+            continue
+        }
         try {
             leanSeparation(one)
             separations.push(one)
@@ -789,7 +796,7 @@ const kernelPairs = (pairs: readonly PoolPair[]) => {
             drop(`separation: ${error.reason}`)
         }
     }
-    return { disjoints, separations }
+    return { disjoints, separations, fillGuards }
 }
 
 /** The guard verdicts of one seed. The names continue after `first`, so the seeds share one name space. */
@@ -1215,7 +1222,11 @@ const poolModules = (
     ],
     [
         '.pool.separations.lean',
-        leanSeparationRowModule(perSeed.flatMap((one) => one.separations)),
+        leanSeparationRowModule(
+            perSeed.flatMap((one) => one.separations),
+            'pool',
+            perSeed.flatMap((one) => one.fillGuards),
+        ),
     ],
     [
         '.pool.slices.lean',
@@ -1398,6 +1409,24 @@ describe('the generated pool, against the model', () => {
             changed.set(move, (changed.get(move) ?? 0) + 1)
         }
         expect(Object.fromEntries([...changed].sort())).toEqual({})
+    })
+
+    /**
+     * **No column of a pair is checked by `#eval` alone.** A pair with a fill on each side has no
+     * separation vector, so the kernel states its guard column in a row of its own.
+     */
+    it('states the guard column of each pair of two fills in the kernel', () => {
+        const fills = pairs.filter((p) => p.fills).map((p) => p.name)
+        expect(fills).toHaveLength(24)
+        const module = new Map(poolModules(perSeed)).get(
+            '.pool.separations.lean',
+        )
+        for (const name of fills) {
+            expect(module).toMatch(
+                new RegExp(`\\("${name}", \\([^\\n]*, (true|false)\\)\\)`),
+            )
+        }
+        expect(module).toContain('failing pairGuardOk (pairGuards0 ρ π) = []')
     })
 
     it('emits the pre-check and the kernel vectors for the gate', () => {

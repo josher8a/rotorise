@@ -2093,7 +2093,7 @@ describe('union resolution, model against library', () => {
             readResolutions(),
             itemReads(),
         )
-        expect(module).toContain('import Calculus.Bridge.Vectors')
+        expect(module).toContain('import Calculus.Bridge.Rows')
         expect(module).toContain('461 on the read side')
         expect(module).toContain('vcheck')
     })
@@ -2333,7 +2333,7 @@ describe("the read side, against the model's read row", () => {
             )
         }
         const module = leanReadRowModule(readVerdicts())
-        expect(module).toContain('import Calculus.Dynamo.Lang.Store')
+        expect(module).toContain('import Calculus.Bridge.Rows')
         expect(module).toContain('All 2650 pairs are asserted here.')
     })
 })
@@ -2488,7 +2488,7 @@ describe("the declaration guard, against the model's classifier", () => {
             )
         }
         expect(leanDisjointRowModule([], 'corpus')).toContain(
-            'import Calculus.Dynamo.Analysis.Disjoint',
+            'import Calculus.Bridge.Rows',
         )
     })
 
@@ -2875,10 +2875,10 @@ describe("the slice, against the model's `AltClause.admits`", () => {
 
 describe('the corpus pre-check, for the gate', () => {
     /**
-     * **The pre-check names a failing vector, because a row carries no theorem name.** The kernel
-     * decides one list of rows at a time, so a kernel failure names the list alone. The pre-check
-     * reads the same rows of the six corpus files, each with the name of its former theorem, and
-     * prints the name where the check fails. Its sentinel counts every corpus vector.
+     * **The pre-check names a failing vector, as each kernel file now does.** The pre-check reads
+     * the same rows of the six corpus files, each with the name of its former theorem, and prints
+     * the name where the comparator of the row answers `false`. Its sentinel counts every corpus
+     * vector. The pre-check runs beside the diagnostic of each kernel file until the two compare.
      */
     it('reads every vector of the six corpus files, by name', () => {
         const files = [

@@ -1547,20 +1547,37 @@ const kernelShapes = () => {
     )
 }
 
-/** A list of rows of `type` as a `def` over the functions, and the kernel's check of the list. */
+/** A list of named rows of `type` as a `def` over the functions, and the kernel's check of the list. */
 const leanRowList = (
     name: string,
     type: string,
-    rows: readonly string[],
-    check: string,
+    rows: readonly Row<string>[],
+    ok: string,
 ): string =>
     [
-        `def ${name} ${rowBinders} : List ${type} := [`,
-        `  ${rows.join(',\n  ')}]`,
+        `def ${name} ${rowBinders} : List (String × ${type}) := [`,
+        `  ${rows.map((one) => `(${leanString(one.name)}, ${one.row})`).join(',\n  ')}]`,
         '',
         `theorem ${name}_check ${rowBinders} :`,
-        `    (${name} ρ π).all (fun p => ${check}) = true := kernel_rfl%`,
+        `    failing ${ok} (${name} ρ π) = [] := kernel_rfl%`,
     ].join('\n')
+
+/**
+ * **The diagnostic of a row module**: one `#eval` that prints the name of each row whose
+ * comparator answers `false`, at the instance of the caller functions that the pre-checks read.
+ * The kernel theorem of each list reads the same `failing` and the same comparator.
+ */
+const leanDiagnostic = (
+    lists: readonly { readonly name: string; readonly ok: string }[],
+): string =>
+    lists.length === 0
+        ? ''
+        : `#eval ([${lists
+              .map(
+                  ({ name, ok }) =>
+                      `failing ${ok} (${name} (fun _ _ => none) (fun _ _ => true))`,
+              )
+              .join(',\n  ')}].flatten).forM IO.println`
 
 /** What a row module states: the generated pool, or the corpus. */
 type Subject = 'pool' | 'corpus'
@@ -1571,16 +1588,18 @@ const unitOf = { pool: 'pair', corpus: 'vector' } as const satisfies Record<
     string
 >
 
-/** The header of a row module: the reason that a row carries no theorem name of its own. */
+/** The header of a row module: how a row names its vector, and how the file names a failure. */
 const rowForm = (
     subject: Subject,
 ) => `Each distinct term is one \`def\`, and a caller's function of the term is a parameter of the \`def\`.
 A row applies the \`def\` to \`ρ n\` or \`π n\`, and each function of each ${unitOf[subject]} has an index of its own.
-A list holds ${rowsPerList} rows, and the kernel decides one check per list by \`kernel_rfl%\`. A ${unitOf[subject]} carries no
-theorem name of its own: the ${subject} pre-check names a failing ${unitOf[subject]}.`
+A row is the name of its ${unitOf[subject]}, then the data. A list holds ${rowsPerList} rows, and the kernel decides
+\`failing ok rows = []\` for the comparator \`ok\` of each list by \`kernel_rfl%\`. The last \`#eval\` prints
+\`failing ok rows\` of each list at one instance of the caller functions, so the file names each failing
+${unitOf[subject]}, and prints nothing when each row passes.`
 
-/** A form of row list: the Lean type of a row, and the check of one row `p` as a `Bool`. */
-type RowForm = { readonly type: string; readonly check: string }
+/** A form of row list: the Lean type of a row, and the comparator of `Calculus.Bridge.Rows` that answers one row. */
+type RowForm = { readonly type: string; readonly ok: string }
 
 /** One vector as a row: the name of its former theorem, its form, and the row as Lean prints it. */
 type Row<F extends string> = {
@@ -1625,21 +1644,13 @@ const kernelLists = <F extends string>(
 ): readonly {
     readonly form: F
     readonly name: string
+    readonly ok: string
     readonly text: string
 }[] =>
     rowLists(file, shapes).map(({ form, index, rows }) => {
         const name = `${form}${index}`
-        const { type, check } = file.forms[form]
-        return {
-            form,
-            name,
-            text: leanRowList(
-                name,
-                type,
-                rows.map((one) => one.row),
-                check,
-            ),
-        }
+        const { type, ok } = file.forms[form]
+        return { form, name, ok, text: leanRowList(name, type, rows, ok) }
     })
 
 /** The disjointness pairs as rows: the two terms and the two answers of {@link leanDisjoint}. */
@@ -1649,7 +1660,7 @@ export const disjointRows = (
     forms: {
         rows: {
             type: '(Term × Term × Bool × Bool)',
-            check: '(Alg.Term.disjoint pair0 p.1 p.2.1 == p.2.2.1) &&\n      (viewsDisjoint p.1 p.2.1 == p.2.2.2)',
+            ok: 'disjointOk',
         },
     },
     rows: (shapes) =>
@@ -1675,12 +1686,8 @@ export const leanDisjointRowModule = (
     subject: Subject = 'pool',
 ): string => {
     const shapes = kernelShapes()
-    const lists = kernelLists(disjointRows(pairs), shapes).map(
-        (one) => one.text,
-    )
-    return leanNumeralsOnce(`import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Analysis.Disjoint
-import Calculus.Dynamo.Lang.Store
+    const lists = kernelLists(disjointRows(pairs), shapes)
+    return leanNumeralsOnce(`import Calculus.Bridge.Rows
 
 /-!
 # Disjointness of the ${subject}, proposed to the model
@@ -1688,7 +1695,8 @@ import Calculus.Dynamo.Lang.Store
 **Generated — do not edit.** One row per pair of ${subject} terms: the two terms, the answer of
 \`src/\`'s \`disjoint\` on the two terms, and the answer of \`src/\`'s \`viewsDisjoint\` on the two pairs
 of views. The checker of a list states that \`Calculus.Alg.Term.disjoint\` and
-\`Calculus.viewsDisjoint\` give the same answers at each row.
+\`Calculus.viewsDisjoint\` give the same answers at each row: \`disjointOk_iff\` makes \`disjointOk\`
+the two equations.
 
 ${rowForm(subject)}
 -/
@@ -1701,7 +1709,9 @@ namespace Calculus
 
 ${shapes.defs()}
 
-${lists.join('\n\n')}
+${lists.map((one) => one.text).join('\n\n')}
+
+${leanDiagnostic(lists)}
 
 end Calculus
 `)
@@ -1711,26 +1721,26 @@ end Calculus
 const separationLists = {
     accepted: {
         type: '(Term × Term × Term × Term)',
-        check: 'Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1 &&\n      Alg.compatPair dynOracle p.2.2.1 p.2.2.2',
+        ok: 'acceptedOk',
         caller: ' (κ : Callers)',
-        verdict: `(Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1) = true ∧
-    ((∀ t ∈ [p.2.2.1, p.2.2.2], Lawful (denote (libTable κ) t)) →
-      PairwiseCompat (libTable κ) [p.2.2.1, p.2.2.2])`,
+        verdict: `(Alg.Term.guarded p.2.1 && Alg.Term.guarded p.2.2.1) = true ∧
+    ((∀ t ∈ [p.2.2.2.1, p.2.2.2.2], Lawful (denote (libTable κ) t)) →
+      PairwiseCompat (libTable κ) [p.2.2.2.1, p.2.2.2.2])`,
         lift: (list: string) => `accepted_of_rows (${list}_check ρ π) κ`,
     },
     refused: {
         type: '(Term × Term × Term × Term)',
-        check: 'Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1 &&\n      !Alg.compatPair dynOracle p.2.2.1 p.2.2.2',
+        ok: 'refusedOk',
         caller: '',
-        verdict: `(Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1) = true ∧
-    Alg.compatPair dynOracle p.2.2.1 p.2.2.2 = false`,
+        verdict: `(Alg.Term.guarded p.2.1 && Alg.Term.guarded p.2.2.1) = true ∧
+    Alg.compatPair dynOracle p.2.2.2.1 p.2.2.2.2 = false`,
         lift: (list: string) => `refused_of_rows (${list}_check ρ π)`,
     },
     guardRefused: {
         type: '(Term × Term)',
-        check: '!(Alg.Term.guarded p.1 && Alg.Term.guarded p.2)',
+        ok: 'guardRefusedOk',
         caller: '',
-        verdict: '(Alg.Term.guarded p.1 && Alg.Term.guarded p.2) = false',
+        verdict: '(Alg.Term.guarded p.2.1 && Alg.Term.guarded p.2.2) = false',
         lift: (list: string) => `guardRefused_of_rows (${list}_check ρ π)`,
     },
 } as const satisfies Record<SeparationForm, unknown>
@@ -1760,6 +1770,29 @@ export const separationRows = (
 })
 
 /**
+ * **The guard column of a pair, alone**: the two rooted terms, and whether `src/`'s guard accepts
+ * both options. A pair with a fill on each side has no separation verdict, and this row states the
+ * column of the pair that the model decides.
+ */
+export const pairGuardRows = (
+    pairs: readonly Separation[],
+): RowFile<'pairGuards'> => ({
+    forms: { pairGuards: { type: '(Term × Term × Bool)', ok: 'pairGuardOk' } },
+    rows: (shapes) =>
+        pairs.map((one) => {
+            const { gl, gr } = shapes.pair(one.left, one.right, one.name)
+            const guarded = [one.left, one.right].every(
+                (option) => recursionUse(option.def) < 2,
+            )
+            return {
+                name: leanIdent(one.name),
+                form: 'pairGuards',
+                row: `(${gl}, ${gr}, ${guarded})`,
+            }
+        }),
+})
+
+/**
  * The declaration verdicts in the row form: one row list per {@link SeparationForm}. Each list
  * carries the checker, and the verdict of {@link leanSeparation} at each row, lifted from the
  * checker.
@@ -1769,10 +1802,13 @@ export const separationRows = (
 export const leanSeparationRowModule = (
     separations: readonly Separation[],
     subject: Subject = 'pool',
+    guardOnly: readonly Separation[] = [],
 ): string => {
     const shapes = kernelShapes()
-    const lists = kernelLists(separationRows(separations), shapes).map(
-        ({ form, name, text }) => {
+    const separated = kernelLists(separationRows(separations), shapes)
+    const guarded = kernelLists(pairGuardRows(guardOnly), shapes)
+    const lists = [
+        ...separated.map(({ form, name, text }) => {
             const { caller, verdict, lift } = separationLists[form]
             return [
                 text,
@@ -1782,10 +1818,16 @@ export const leanSeparationRowModule = (
                 `    ${verdict} :=`,
                 `  ${lift(name)}`,
             ].join('\n')
-        },
-    )
+        }),
+        ...guarded.map((one) => one.text),
+    ]
+    const guardText =
+        guardOnly.length === 0
+            ? ''
+            : ` A pair with a fill on each side carries the
+guard column alone, in the \`pairGuards\` lists: the model refuses two fills at one name whatever their
+constants, and \`src/\` accepts two fills with equal constants, so the pair has no separation verdict.`
     return leanNumeralsOnce(`import Calculus.Bridge.Rows
-import Calculus.Bridge.Vectors
 
 /-!
 # Declaration verdicts of the ${subject}, both ways
@@ -1795,7 +1837,7 @@ that \`src/\`'s \`union\` accepts carries the model's guard on both options and 
 that the pair is compatible. A pair that \`src/\` refuses at compatibility carries the model's
 guard and \`compatPair dynOracle x y = false\`. A pair that \`src/\` refuses at the guard carries
 the model's guard refusal. The lemmas of \`Calculus.Bridge.Rows\` lift each checker to the verdict
-of each row.
+of each row.${guardText}
 
 ${rowForm(subject)}
 -/
@@ -1809,6 +1851,8 @@ namespace Calculus
 ${shapes.defs()}
 
 ${lists.join('\n\n')}
+
+${leanDiagnostic([...separated, ...guarded])}
 
 end Calculus
 `)
@@ -3373,48 +3417,45 @@ export const leanVectorModule = (
 const evaluationForms = {
     writes: {
         type: '(Nat × Term × Value × Attr)',
-        check: 'check p.1 ((denote (libTable noCallers) p.2.1).e p.2.2.1) (some p.2.2.2) == Verdict.same',
+        ok: 'writesOk',
     },
     writesNothing: {
         type: '(Term × Value)',
-        check: '((denote (libTable noCallers) p.1).e p.2).isNone',
+        ok: 'writesNothingOk',
     },
     reads: {
         type: '(Nat × Term × Attr × Value)',
-        check: 'vcheck p.1 ((denote (libTable noCallers) p.2.1).p p.2.2.1) (some p.2.2.2) == Verdict.same',
+        ok: 'readsOk',
     },
     readsNothing: {
         type: '(Term × Attr)',
-        check: '((denote (libTable noCallers) p.1).p p.2).isNone',
+        ok: 'readsNothingOk',
     },
     guards: {
         type: '(Term × Bool)',
-        check: 'Alg.Term.guarded p.1 == p.2',
+        ok: 'guardsOk',
     },
     admits: {
         type: '(Term × Attr × Bool)',
-        check: 'AdmA (libTable noCallers) p.1 p.2.1 == p.2.2',
+        ok: 'admitsOk',
     },
 } as const satisfies Record<string, RowForm>
 
 /** The equivalence that turns the checker of a list into the former statement of each row. */
-const rowChecks = `The checker of a list states \`List.all … = true\`, which \`List.all_eq_true\` makes the check at
-each row. A check is a \`Bool\` whose truth is the former statement of the row: \`beq_iff_eq\` makes
-\`(v == Verdict.same) = true\` the equation \`v = .same\`, and \`(b == c) = true\` the equation \`b = c\`
-at \`Bool\`. \`Option.isNone_iff_eq_none\` makes \`x.isNone = true\` the equation \`x = none\`. \`Attr\` and
-\`Value\` have no decidable equality, because a map holds a function, so a \`some\` answer keeps \`check\` or
-\`vcheck\`.`
+const rowChecks = `The checker of a list states \`failing ok rows = []\`, which \`ok_of_failing\` makes the
+comparator at each row. The law of each comparator of \`Calculus.Bridge.Rows\` (\`writesOk_iff\` and the
+rest) makes the comparator the former statement of the row. \`Attr\` and \`Value\` have no decidable
+equality, because a map holds a function, so a \`some\` answer keeps \`check\` or \`vcheck\`.`
 
-/** A module of corpus rows: the imports, the title, the statement, and the rows. */
+/** A module of corpus rows: the title, the statement, and the rows. */
 const leanCorpusRowModule = <F extends string>(
-    imports: string,
     title: string,
     states: string,
     file: RowFile<F>,
 ): string => {
     const shapes = kernelShapes()
-    const lists = kernelLists(file, shapes).map((one) => one.text)
-    return leanNumeralsOnce(`${imports}
+    const lists = kernelLists(file, shapes)
+    return leanNumeralsOnce(`import Calculus.Bridge.Rows
 
 /-!
 # ${title}
@@ -3434,7 +3475,9 @@ namespace Calculus
 
 ${shapes.defs()}
 
-${lists.join('\n\n')}
+${lists.map((one) => one.text).join('\n\n')}
+
+${leanDiagnostic(lists)}
 
 end Calculus
 `)
@@ -3500,8 +3543,6 @@ export const leanVectorRowModule = (
     guards: readonly Guard[],
 ): string =>
     leanCorpusRowModule(
-        `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Lang.Store`,
         'Differential-testing vectors, the full cross product',
         `Emitted by \`src/codec/lean.ts\` from the shipped TypeScript codecs. A \`writes\`
 row is one \`encode\` that this library performed, \`check n ((denote t).e v) (some a) = .same\`. A
@@ -3586,8 +3627,6 @@ export const leanResolutionRowModule = (
     items: readonly ItemRead[],
 ): string =>
     leanCorpusRowModule(
-        `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Lang.Store`,
         'Union resolution, model against library',
         `One row per (union, value) and (union, attribute) pair: the option
 the model's \`select\` resolves to, against the one this library's resolver picked.
@@ -3625,9 +3664,6 @@ export const readVerdictRows = (
 /** The read verdicts in the row form. Generated at gate time, never committed. */
 export const leanReadRowModule = (verdicts: readonly ReadVerdict[]): string =>
     leanCorpusRowModule(
-        `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Analysis.ExactA
-import Calculus.Dynamo.Lang.Store`,
         "Read verdicts, proposed to the model's read row",
         `One row per (codec, attribute) pair: \`AdmA t a\` equals whether
 \`src/\`'s \`decode\` accepted it. All ${verdicts.length} pairs are asserted here. A caller's predicate is
@@ -3639,7 +3675,8 @@ import Calculus.Dynamo.Lang.Store`,
 
 /**
  * The legacy reads as rows. The older reader is `ρ k`, pinned at each attribute that `src/` asked
- * it, as {@link leanLegacyRead} pins the variable of the former theorem.
+ * it, as {@link leanLegacyRead} pins the variable of the former theorem. `aeq_pin` proves that a
+ * reader with the pinned answers equals its own pin.
  */
 export const legacyReadRows = (
     reads: readonly LegacyRead[],
@@ -3673,12 +3710,12 @@ export const legacyReadRows = (
 /** The legacy reads in the row form. Generated at gate time, never committed. */
 export const leanLegacyReadRowModule = (reads: readonly LegacyRead[]): string =>
     leanCorpusRowModule(
-        `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Lang.Store`,
         'The legacy read gate, model against library',
         `One row per (codec, attribute) pair, ${reads.length} in all. Each older
-reader is \`ρ k\`, pinned at each attribute that \`src/\` asked it. The model reads the older answer
-only where the current term writes the answer, and \`src/\` checks the same.`,
+reader is \`ρ k\`, pinned at each attribute that \`src/\` asked it. \`aeq_pin\` proves that a reader
+with those answers equals its own pin, so the row at \`ρ k := r\` states the read at each such \`r\`.
+The model reads the older answer only where the current term writes the answer, and \`src/\` checks
+the same.`,
         legacyReadRows(reads),
     )
 
@@ -3710,17 +3747,14 @@ export const leanCorpusEval = (files: readonly RowFile[]): string => {
         })
         .map(
             (
-                { type, check, rows },
+                { type, ok, rows },
                 i,
             ) => `def rows${i} : List (String × ${type}) := [
   ${rows.map((one) => `(${leanString(one.name)}, ${one.row})`).join(',\n  ')}]
 
-#eval rows${i}.forM fun (nm, p) => unless (${check}) do IO.println s!"mismatch {nm}"`,
+#eval rows${i}.forM fun (nm, p) => unless (${ok} p) do IO.println s!"mismatch {nm}"`,
         )
-    return leanNumeralsOnce(`import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Analysis.Compat
-import Calculus.Dynamo.Analysis.ExactA
-import Calculus.Dynamo.Lang.Store
+    return leanNumeralsOnce(`import Calculus.Bridge.Rows
 
 /-!
 # The pre-check of the corpus
