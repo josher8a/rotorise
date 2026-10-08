@@ -514,6 +514,15 @@ theorem veq_pin {n : Nat} {v : Value} {b : Bool} {q0 : Value → Bool} (h0 : q0 
     (fun x => if veq n x v = .same then b else q0 x) = q0 :=
   funext fun x => ite_eq_right_iff.mpr fun hx => ((veq_sound n x v).1 hx).symm ▸ h0.symm
 
+/-- **A reader with the pinned answer is its own pin.** A legacy read row quantifies the older
+    reader `ρ`, and states the term at the pin `fun b => if aeq n b a = .same then o else ρ b`.
+    Where `aeq` answers `.same`, `aeq_same` gives `b = a`, and `r a = o` gives the answer `o`.
+    So the row at `ρ := r` is the statement of the row at each `r` with `r a = o`. A pin of
+    several attributes nests one pin in another, and the lemma removes one pin at a time. -/
+theorem aeq_pin {n : Nat} {a : Attr} {o : Option Value} {r : Attr → Option Value}
+    (h0 : r a = o) : (fun b => if aeq n b a = .same then o else r b) = r :=
+  funext fun _ => ite_eq_right_iff.mpr fun hb => (aeq_same hb).symm ▸ h0.symm
+
 /-! ## The term that closes a vector -/
 
 open Lean Elab Term Meta in
