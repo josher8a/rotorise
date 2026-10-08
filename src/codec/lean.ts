@@ -3599,9 +3599,8 @@ index of a dissection's tags. A read row states \`vcheck\`, the \`Value\` twin o
 /**
  * The read verdicts as rows: the term, the attribute, and whether `src/` decodes it. A caller's
  * predicate at the top takes an index of `π`. Where the former theorem assumed `q0 v = b`, the row
- * pins the predicate: `fun x => if veq n x v = .same then b else π k x`. The pinned functions are
- * the predicates with `q0 v = b`: `veq_sound` gives `x = v` where `veq` answers `.same`, so a `q0`
- * with `q0 v = b` equals its own pin, and `veq n v v = .same` gives the pin the answer `b` at `v`.
+ * pins the predicate: `fun x => if veq n x v = .same then b else π k x`. `veq_pin` proves that a
+ * `q0` with `q0 v = b` equals its own pin, so the row at `π k := q0` is the former theorem at `q0`.
  */
 export const readVerdictRows = (
     verdicts: readonly ReadVerdict[],
@@ -3633,8 +3632,8 @@ import Calculus.Dynamo.Lang.Store`,
         `One row per (codec, attribute) pair: \`AdmA t a\` equals whether
 \`src/\`'s \`decode\` accepted it. All ${verdicts.length} pairs are asserted here. A caller's predicate is
 \`π k\`, pinned at the value that the inner term reads where the host answered the predicate there.
-The pinned functions are the predicates with that answer: \`veq_sound\` gives \`x = v\` where \`veq\`
-answers \`.same\`, so such a predicate equals its own pin.`,
+\`veq_pin\` proves that a predicate with that answer equals its own pin, so the row at
+\`π k := q0\` states the former theorem at each such \`q0\`.`,
         readVerdictRows(verdicts),
     )
 

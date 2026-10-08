@@ -506,6 +506,14 @@ theorem vcheck_same {n : Nat} {x y : Option Value} (h : vcheck n x y = .same) : 
   | some a, some b => exact congrArg some ((veq_sound n a b).1 h)
   | none, some _ | some _, none => simp [vcheck] at h
 
+/-- **A predicate with the pinned answer is its own pin.** A read row quantifies the caller's
+    predicate `π`, and states the term at the pin `fun x => if veq n x v = .same then b else π x`.
+    Where `veq` answers `.same`, `veq_sound` gives `x = v`, and `q0 v = b` gives the answer `b`.
+    So the row at `π := q0` is the statement of the row at each `q0` with `q0 v = b`. -/
+theorem veq_pin {n : Nat} {v : Value} {b : Bool} {q0 : Value → Bool} (h0 : q0 v = b) :
+    (fun x => if veq n x v = .same then b else q0 x) = q0 :=
+  funext fun x => ite_eq_right_iff.mpr fun hx => ((veq_sound n x v).1 hx).symm ▸ h0.symm
+
 /-! ## The term that closes a vector -/
 
 open Lean Elab Term Meta in

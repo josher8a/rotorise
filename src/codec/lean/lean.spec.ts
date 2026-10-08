@@ -2312,8 +2312,8 @@ describe("the read side, against the model's read row", () => {
         expect(module).toContain(
             'theorem refine_string_caller__reads__raw_S_empty (q0 : Value → Bool) (h0 : q0 (Value.str "") = false) :',
         )
-        // the row pins the predicate where the theorem assumed its answer: the pinned functions
-        // are the predicates with that answer, so the row quantifies as the theorem does
+        // the row pins the predicate where the theorem assumed its answer: `veq_pin` makes a
+        // predicate with that answer its own pin, so the row at that predicate is the theorem
         const row = readVerdictRows(
             readVerdicts().filter(
                 (one) =>
