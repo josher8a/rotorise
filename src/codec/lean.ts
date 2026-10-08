@@ -295,6 +295,43 @@ export const leanValueOf = (value: unknown, at = 'value'): string => {
 const leanNumeral = (numeral: string): string =>
     `WFNumeral.of ${leanString(numeral)}`
 
+/** The text of a numeral that {@link leanNumeral} or a numeric alternative writes. */
+const numeralText = /WFNumeral\.of "[^"\\]*"/g
+
+/**
+ * **A module decides each numeral once.** `WFNumeral.of` decides `Numeral.WF x = true` where the
+ * module writes the numeral, so a numeral at each occurrence is a decision at each occurrence. The
+ * module states each distinct numeral as one `def` after `namespace Calculus`, and writes the name
+ * of the `def` at each occurrence. Apply this once to a whole module: a `def` writes the numeral.
+ */
+export const leanNumeralsOnce = (module: string): string => {
+    const names = new Map<string, string>()
+    const named = module.replace(numeralText, (text) => {
+        const known = names.get(text)
+        if (known !== undefined) return known
+        const made = `numeral${names.size}`
+        names.set(text, made)
+        return made
+    })
+    if (names.size === 0) return module
+    const head = 'namespace Calculus\n'
+    const at = named.indexOf(head)
+    if (at < 0) {
+        return refuse(
+            'module',
+            'a module that writes a numeral opens `namespace Calculus`, where the numerals are stated',
+        )
+    }
+    const cut = at + head.length
+    const defs = [...names].map(
+        ([text, name]) => `def ${name} : WFNumeral := ${text}`,
+    )
+    return `${named.slice(0, cut)}
+/-! Each numeral of this module, decided once. -/
+${defs.join('\n')}
+${named.slice(cut)}`
+}
+
 /**
  * An `Attr` — §1's attribute domain, one member per attribute.
  *
@@ -1247,7 +1284,7 @@ export const leanFormerGuard = ({ name, term }: FormerGuard): string => {
  * Generated at gate time and elaborated, never committed.
  */
 export const leanFormerGuardModule = (guards: readonly FormerGuard[]): string =>
-    `import Calculus.Bridge.Vectors
+    leanNumeralsOnce(`import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Lang.Store
 
@@ -1265,7 +1302,7 @@ namespace Calculus
 ${guards.map(leanFormerGuard).join('\n\n')}
 
 end Calculus
-`
+`)
 
 /**
  * One proposed **read verdict**: this codec, given this attribute, decodes exactly when the
@@ -1601,7 +1638,7 @@ export const leanDisjointRowModule = (
     const lists = kernelLists(disjointRows(pairs), shapes).map(
         (one) => one.text,
     )
-    return `import Calculus.Bridge.Vectors
+    return leanNumeralsOnce(`import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Lang.Store
 
@@ -1627,7 +1664,7 @@ ${shapes.defs()}
 ${lists.join('\n\n')}
 
 end Calculus
-`
+`)
 }
 
 /** The kernel's check of a row list of each form, and the lemma of `Calculus.Bridge.Rows` that lifts it. */
@@ -1707,7 +1744,7 @@ export const leanSeparationRowModule = (
             ].join('\n')
         },
     )
-    return `import Calculus.Bridge.Rows
+    return leanNumeralsOnce(`import Calculus.Bridge.Rows
 import Calculus.Bridge.Vectors
 
 /-!
@@ -1734,7 +1771,7 @@ ${shapes.defs()}
 ${lists.join('\n\n')}
 
 end Calculus
-`
+`)
 }
 
 /* ── the legacy read gate ─────────────────────────────────────────────────────────────────── */
@@ -2559,7 +2596,7 @@ export const leanSliceModule = (slices: readonly Slice[]): string => {
     const defs = [...lists].map(
         ([list, name]) => `def ${name} : List AltClause := ${list}`,
     )
-    return `${sliceImports}
+    return leanNumeralsOnce(`${sliceImports}
 
 /-!
 # Slices, proposed to the model
@@ -2580,7 +2617,7 @@ namespace Calculus
 ${[...defs, ...theorems].join('\n\n')}
 
 end Calculus
-`
+`)
 }
 
 /**
@@ -2606,8 +2643,8 @@ export const leanPathModules = (
         owner.set(i, least)
         size[least] = (size[least] ?? 0) + length
     }
-    return size.map(
-        (_, file) => `${sliceImports}
+    return size.map((_, file) =>
+        leanNumeralsOnce(`${sliceImports}
 
 /-!
 # Paths, proposed to the model
@@ -2629,7 +2666,7 @@ ${pathReadings}
 ${printed.filter((_, i) => owner.get(i) === file).join('\n\n')}
 
 end Calculus
-`,
+`),
     )
 }
 
@@ -2827,7 +2864,7 @@ export const leanReadVectorModule = (vectors: readonly Vector[]): string => {
     const live = vectors.filter(
         (one) => readVectorIsUnstatable(one) === undefined,
     )
-    return `import Calculus.Bridge.Vectors
+    return leanNumeralsOnce(`import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Lang.Store
 
 /-!
@@ -2859,7 +2896,7 @@ namespace Calculus
 ${live.map(leanReadVector).join('\n\n')}
 
 end Calculus
-`
+`)
 }
 
 /**
@@ -3187,7 +3224,9 @@ export const leanVectorModule = (
             : `\n\n/-! ### The guard of a binder -/\n\n${guards.map(leanGuard).join('\n\n')}`
     const body = `${written}${readBack}${guarded}`
     if (refusals.length === 0) {
-        return `${protocol === 'equation' ? preamble : checkPreamble}\n${body}\n\nend Calculus\n`
+        return leanNumeralsOnce(
+            `${protocol === 'equation' ? preamble : checkPreamble}\n${body}\n\nend Calculus\n`,
+        )
     }
     const refused = refusals.map(leanRefusal).join('\n\n')
     const heading = [
@@ -3200,7 +3239,9 @@ export const leanVectorModule = (
         '-/',
         '',
     ].join('\n')
-    return `${protocol === 'equation' ? preamble : checkPreamble}\n${body}\n${heading}\n${refused}\n\nend Calculus\n`
+    return leanNumeralsOnce(
+        `${protocol === 'equation' ? preamble : checkPreamble}\n${body}\n${heading}\n${refused}\n\nend Calculus\n`,
+    )
 }
 
 /* ── the corpus in the row form ────────────────────────────────────────────────────────────── */
@@ -3255,7 +3296,7 @@ const leanCorpusRowModule = <F extends string>(
 ): string => {
     const shapes = kernelShapes()
     const lists = kernelLists(file, shapes).map((one) => one.text)
-    return `${imports}
+    return leanNumeralsOnce(`${imports}
 
 /-!
 # ${title}
@@ -3278,7 +3319,7 @@ ${shapes.defs()}
 ${lists.join('\n\n')}
 
 end Calculus
-`
+`)
 }
 
 /**
@@ -3559,7 +3600,7 @@ export const leanCorpusEval = (files: readonly RowFile[]): string => {
 
 #eval rows${i}.forM fun (nm, p) => unless (${check}) do IO.println s!"mismatch {nm}"`,
         )
-    return `import Calculus.Bridge.Vectors
+    return leanNumeralsOnce(`import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Analysis.ExactA
 import Calculus.Dynamo.Lang.Store
@@ -3584,5 +3625,5 @@ ${lists.join('\n\n')}
 #eval IO.println ${leanString(corpusSentinel(count))}
 
 end Calculus
-`
+`)
 }

@@ -69,6 +69,7 @@ import {
     leanDisjointRowModule,
     leanFormerGuard,
     leanFormerGuardModule,
+    leanNumeralsOnce,
     leanPath,
     leanPathModules,
     leanRooted,
@@ -719,7 +720,7 @@ const evalModule = (pairs: readonly PoolPair[]): string => {
 
 #eval rows${i}.forM fun (nm, h, l, r, gl, gr) => poolCheck nm h l r gl gr`,
     )
-    return `import Calculus.Dynamo.Analysis.Compat
+    return leanNumeralsOnce(`import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Lang.Store
 
 /-!
@@ -763,7 +764,7 @@ ${lists.join('\n\n')}
 #eval IO.println ${leanString(sentinel(pairs.length))}
 
 end Calculus
-`
+`)
 }
 
 /** The pairs that each kernel module states; a refusal of the emitter drops the pair by reason. */
