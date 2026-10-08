@@ -66,17 +66,19 @@ import {
     hostAt,
     LeanUnemittable,
     leanDisjoint,
-    leanDisjointModule,
+    leanDisjointRowModule,
     leanFormerGuard,
     leanFormerGuardModule,
     leanPath,
     leanRooted,
     leanSeparation,
-    leanSeparationModule,
+    leanSeparationRowModule,
+    leanShapes,
     leanSlice,
     leanSliceModule,
     leanString,
     leanTermOf,
+    listsOf,
     reachable,
     unionAt,
 } from '../lean'
@@ -688,33 +690,44 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
  */
 const stand = { q: 'fun _ => true', r: 'fun _ => none' } as const
 
-/** One `#eval` row per pair: the row prints only on a mismatch. */
-const evalRow = (p: PoolPair): string => {
+/** One row per pair, the name first: the row prints only on a mismatch. */
+const evalRow = (
+    p: PoolPair,
+    shapes: ReturnType<typeof leanShapes>,
+): string => {
     // the compatibility columns of a pair with a fill on each side are the known narrowing
     const expected = p.fills ? `${p.host.slice(0, 2)}-${p.host[3]}-` : p.host
     const label = leanString(`${p.name} ${p.label}`)
-    const call = `poolCheck ${label} "${expected}" (${p.l}) (${p.r}) (${p.gl}) (${p.gr})`
-    const lets = [
-        ...p.closures.map((q) => `let ${q} : Value → Bool := ${stand.q}; `),
-        ...p.readers.map(
-            (r) => `let ${r} : Attr → Option Value := ${stand.r}; `,
-        ),
-    ].join('')
-    return `#eval ${lets}${call}`
+    const { l, r, gl, gr } = shapes.pair(p.left, p.right, p.name)
+    return `(${label}, "${expected}", ${l}, ${r}, ${gl}, ${gr})`
 }
 
 /** The sentinel that the gate reads: the only line of a clean run. */
 const sentinel = (count: number) => `pool: ${count} pairs checked`
 
-const evalModule = (pairs: readonly PoolPair[]): string =>
-    `import Calculus.Dynamo.Analysis.Compat
+const evalModule = (pairs: readonly PoolPair[]): string => {
+    const shapes = leanShapes((kind) =>
+        kind === 'closure' ? `(${stand.q})` : `(${stand.r})`,
+    )
+    const lists = listsOf(pairs.map((p) => evalRow(p, shapes))).map(
+        (
+            rows,
+            i,
+        ) => `def rows${i} : List (String × String × Term × Term × Term × Term) := [
+  ${rows.join(',\n  ')}]
+
+#eval rows${i}.forM fun (nm, h, l, r, gl, gr) => poolCheck nm h l r gl gr`,
+    )
+    return `import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Lang.Store
 
 /-!
 # The pre-check of the generated pool
 
 **Generated — do not edit.** One row per pair, at one instance of the caller functions. A row compares
-the host verdicts with the model's decisions, and prints only a mismatch. A \`-\` reads no column.
+the host verdicts with the model's decisions, and prints only a mismatch, with the name of the pair.
+A \`-\` reads no column. Each distinct term is one \`def\`, and a caller's function of the term is a
+parameter of the \`def\`. One \`#eval\` runs each list of rows.
 -/
 
 set_option maxRecDepth 8192
@@ -742,12 +755,15 @@ def poolCheck (name host : String) (l r gl gr : Term) : IO Unit := do
   unless ok do
     IO.println s!"mismatch {name}: host {host} model {bit d}{bit v}{bit c}{bit g}"
 
-${pairs.map(evalRow).join('\n')}
+${shapes.defs()}
+
+${lists.join('\n\n')}
 
 #eval IO.println ${leanString(sentinel(pairs.length))}
 
 end Calculus
 `
+}
 
 /** The pairs that each kernel module states; a refusal of the emitter drops the pair by reason. */
 const kernelPairs = (pairs: readonly PoolPair[]) => {
@@ -1193,11 +1209,11 @@ const poolModules = (
     ['.pool.eval.lean', evalModule(perSeed.flatMap((one) => one.pairs))],
     [
         '.pool.disjoints.lean',
-        leanDisjointModule(perSeed.flatMap((one) => one.disjoints)),
+        leanDisjointRowModule(perSeed.flatMap((one) => one.disjoints)),
     ],
     [
         '.pool.separations.lean',
-        leanSeparationModule(perSeed.flatMap((one) => one.separations)),
+        leanSeparationRowModule(perSeed.flatMap((one) => one.separations)),
     ],
     [
         '.pool.slices.lean',

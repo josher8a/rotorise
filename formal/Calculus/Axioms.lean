@@ -14,6 +14,7 @@ import Calculus.Dynamo.Lang.Store
 import Calculus.Dynamo.Witness.Malleability
 import Calculus.Dynamo.Analysis.Orthogonality
 import Calculus.Bridge.Vectors
+import Calculus.Bridge.Rows
 import Calculus.Dynamo.Analysis.Universal
 import Calculus.Dynamo.Analysis.Confluence
 import Calculus.Dynamo.Analysis.Kernel

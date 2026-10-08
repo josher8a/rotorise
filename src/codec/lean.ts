@@ -1095,14 +1095,32 @@ export type Separation = {
     readonly right: AnyCodec
 }
 
-/** One declaration verdict, as a Lean `theorem`, with the `src/` side decided here. */
-export const leanSeparation = ({ name, left, right }: Separation): string => {
-    let refused = false
+/**
+ * **The form of a separation verdict**: accepted, refused at compatibility, or refused at the guard.
+ * The host's guard runs before its compatibility test, and reads each option on its own. The
+ * emitter refuses a pair that the host accepts on no warrant that the model proves.
+ */
+type SeparationForm = 'accepted' | 'refused' | 'guardRefused'
+
+/** The form of one separation verdict, with the `src/` side decided here. */
+const separationForm = ({ name, left, right }: Separation): SeparationForm => {
     try {
         union([left, right] as never)
     } catch {
-        refused = true
+        return [left, right].some((option) => recursionUse(option.def) >= 2)
+            ? 'guardRefused'
+            : 'refused'
     }
+    return agrees(left.def, right.def)
+        ? 'accepted'
+        : refuse(
+              name,
+              '`src/` accepts this pair on no warrant that the model proves: the decision refuses it',
+          )
+}
+
+/** One declaration verdict, as a Lean `theorem`, with the `src/` side decided here. */
+export const leanSeparation = ({ name, left, right }: Separation): string => {
     // a caller's function is a variable of the theorem, and the goal closes as {@link closing} says
     const bound: Bound = {
         closures: new Map(),
@@ -1131,11 +1149,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
                   `      (Alg.guarded_of_sameShape _ (${leanRooted(leanTermOf(right, name, standIn), right)}) kernel_rfl%)).trans`,
                   `    (of_decide_eq_true kernel_rfl%)`,
               ].join('\n')
-    // the host's guard runs before its compatibility test, and reads each option on its own
-    const guardRefuses = [left, right].some(
-        (option) => recursionUse(option.def) >= 2,
-    )
-    if (refused && guardRefuses) {
+    const form = separationForm({ name, left, right })
+    if (form === 'guardRefused') {
         return [
             `/-- \`${name}\` — \`src/\` refuses this pair at the guard; the model's guard refuses it too -/`,
             head,
@@ -1145,7 +1160,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
         ].join('\n')
     }
     // the host's guard accepted before its compatibility test refused, so the vector states both
-    if (refused) {
+    if (form === 'refused') {
         return [
             `/-- \`${name}\` — \`src/\` refuses this pair; the model's guard accepts it, and the model's decision refuses it -/`,
             head,
@@ -1156,12 +1171,6 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
             `  ⟨${guard}, ${reduce}⟩`,
         ].join('\n')
     }
-    const warrant = agrees(left.def, right.def)
-        ? `fun hl => pairwiseCompat_of_compatPair (${reduce}) hl`
-        : refuse(
-              name,
-              '`src/` accepts this pair on no warrant that the model proves: the decision refuses it',
-          )
     // the host's union verdict is the guard and the compatibility test, so the vector states both
     return [
         `/-- \`${name}\` — \`src/\` accepts this pair; the model's guard accepts it, and the model proves it compatible -/`,
@@ -1170,7 +1179,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
         `      Alg.Term.guarded (${leanRooted(r, right)})) = true ∧`,
         `    ((∀ t ∈ [${l}, ${r}], Lawful (denote (libTable κ) t)) →`,
         `      PairwiseCompat (libTable κ) [${l}, ${r}]) :=`,
-        `  ⟨${guard}, ${warrant}⟩`,
+        `  ⟨${guard}, fun hl => pairwiseCompat_of_compatPair (${reduce}) hl⟩`,
     ].join('\n')
 }
 
@@ -1332,13 +1341,12 @@ export type DisjointPair = {
     readonly right: AnyCodec
 }
 
-/**
- * One pair, as a Lean `theorem`: the two terms, and the two answers this library gives.
- *
- * `false` is asserted as much as `true` is. `false` states nothing about the pair, but a port
- * that certified a pair the model declines would fail here on that pair.
- */
-export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
+/** The two answers that `src/` computes on a pair: the raw terms, then the two pairs of views. */
+const disjointAnswers = ({
+    name,
+    left,
+    right,
+}: DisjointPair): readonly [boolean, boolean] => {
     const one = left.def
     const other = right.def
     if ('mark' in one || 'mark' in other) {
@@ -1347,7 +1355,17 @@ export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
             'a §4 *field*, not a term — no `Term` position accepts one, so the test has no pair to state',
         )
     }
-    const views = viewsDisjoint(one, other)
+    return [disjoint(one, other), viewsDisjoint(one, other)]
+}
+
+/**
+ * One pair, as a Lean `theorem`: the two terms, and the two answers this library gives.
+ *
+ * `false` is asserted as much as `true` is. `false` states nothing about the pair, but a port
+ * that certified a pair the model declines would fail here on that pair.
+ */
+export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
+    const [disjointly, views] = disjointAnswers({ name, left, right })
     // a caller's function is a variable of the theorem, and each conjunct closes as
     // {@link closing} says
     const bound: Bound = {
@@ -1362,7 +1380,7 @@ export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
         `/-- \`${name}\` — the answers \`src/\` computes, put to the model -/`,
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
         `    Alg.Term.disjoint pair0 (${l})`,
-        `        (${r}) = ${disjoint(one, other)} ∧`,
+        `        (${r}) = ${disjointly} ∧`,
         `      viewsDisjoint (${l})`,
         `        (${r}) = ${views} := ⟨${closing(binders)}, ${closing(binders)}⟩`,
     ].join('\n')
@@ -1399,6 +1417,276 @@ ${pairs.map(leanDisjoint).join('\n\n')}
 
 end Calculus
 `
+
+/* ── the row form ──────────────────────────────────────────────────────────────────────────── */
+
+/** The two terms that the tests read, and the two terms that the guard reads, as a row prints them. */
+export type RowTerms = {
+    readonly l: string
+    readonly r: string
+    readonly gl: string
+    readonly gr: string
+}
+
+/**
+ * **The distinct terms of a row module, one `def` each.** A caller's function of a term is a
+ * parameter of the term's `def`, so two pairs that print one shape share one `def`. The row applies
+ * the `def` to the argument that `argument` gives each function of the pair. One function is one
+ * argument in both terms of the pair, as one function was one binder of the former theorem.
+ * An adapter is one generator `caller n` in both terms of the pair, so the generator stays inside
+ * the shape.
+ */
+export const leanShapes = (
+    argument: (kind: 'closure' | 'reader') => string,
+): {
+    readonly pair: (left: AnyCodec, right: AnyCodec, at: string) => RowTerms
+    readonly defs: () => string
+} => {
+    const names = new Map<string, string>()
+    const defs: string[] = []
+    const pair = (left: AnyCodec, right: AnyCodec, at: string): RowTerms => {
+        const adapters = new Map<unknown, string>()
+        const given = new Map<unknown, string>()
+        const argumentOf = (fn: unknown, kind: 'closure' | 'reader') => {
+            const known = given.get(fn)
+            if (known !== undefined) return known
+            const made = argument(kind)
+            given.set(fn, made)
+            return made
+        }
+        const one = (codec: AnyCodec): string => {
+            const bound: Bound = {
+                closures: new Map(),
+                adapters,
+                readers: new Map(),
+            }
+            const printed = leanTermOf(codec, at, bound)
+            const binders = leanBinders(bound)
+            let name = names.get(printed)
+            if (name === undefined) {
+                name = `t${names.size}`
+                names.set(printed, name)
+                defs.push(
+                    `def ${name}${binders === '' ? '' : ` ${binders}`} : Term := ${printed}`,
+                )
+            }
+            // the order of `leanBinders`: the closures, then the readers
+            const applied = [
+                ...[...bound.closures.keys()].map((fn) =>
+                    argumentOf(fn, 'closure'),
+                ),
+                ...[...bound.readers.keys()].map((fn) =>
+                    argumentOf(fn, 'reader'),
+                ),
+            ]
+            return applied.length === 0
+                ? name
+                : `(${name} ${applied.join(' ')})`
+        }
+        const l = one(left)
+        const r = one(right)
+        return { l, r, gl: leanRooted(l, left), gr: leanRooted(r, right) }
+    }
+    return { pair, defs: () => defs.join('\n') }
+}
+
+/** The rows of one list. One list of a whole file exceeds `maxRecDepth`. */
+const rowsPerList = 100
+
+/** The rows in lists of {@link rowsPerList}. */
+export const listsOf = <T>(rows: readonly T[]): readonly (readonly T[])[] =>
+    Array.from({ length: Math.ceil(rows.length / rowsPerList) }, (_, i) =>
+        rows.slice(i * rowsPerList, (i + 1) * rowsPerList),
+    )
+
+/** The functions of a row theorem: one reader and one predicate per index. */
+const rowBinders = '(ρ : Nat → Attr → Option Value) (π : Nat → Value → Bool)'
+
+/**
+ * **A fresh index for each caller function of the file.** Two functions never share an index, so
+ * the row theorem quantifies each function as the former theorem bound each function.
+ */
+const kernelShapes = () => {
+    let readers = 0
+    let closures = 0
+    return leanShapes((kind) =>
+        kind === 'reader' ? `(ρ ${readers++})` : `(π ${closures++})`,
+    )
+}
+
+/** One list of rows as a `def` over the functions, and the kernel's check of the list. */
+const leanRowList = (
+    name: string,
+    type: string,
+    rows: readonly string[],
+    check: string,
+): string =>
+    [
+        `def ${name} ${rowBinders} : ${type} := [`,
+        `  ${rows.join(',\n  ')}]`,
+        '',
+        `theorem ${name}_check ${rowBinders} :`,
+        `    (${name} ρ π).all (fun p => ${check}) = true := kernel_rfl%`,
+    ].join('\n')
+
+/** The header of a row module: the reason that a pair carries no theorem name of its own. */
+const rowForm = `Each distinct term is one \`def\`, and a caller's function of the term is a parameter of the \`def\`.
+A row applies the \`def\` to \`ρ n\` or \`π n\`, and each function of each pair has an index of its own.
+A list holds ${rowsPerList} rows, and the kernel decides one check per list by \`kernel_rfl%\`. A pair carries no
+theorem name of its own: the pool pre-check names a failing pair.`
+
+/**
+ * The disjointness pairs in the row form: each row is the two terms and the two answers of
+ * {@link leanDisjoint}, and the checker of a list states both answers at each row.
+ *
+ * Generated at gate time and elaborated, never committed.
+ */
+export const leanDisjointRowModule = (
+    pairs: readonly DisjointPair[],
+): string => {
+    const shapes = kernelShapes()
+    const rows = pairs.map((pair) => {
+        const [disjointly, views] = disjointAnswers(pair)
+        const { l, r } = shapes.pair(pair.left, pair.right, pair.name)
+        return `(${l}, ${r}, ${disjointly}, ${views})`
+    })
+    const lists = listsOf(rows).map((list, i) =>
+        leanRowList(
+            `rows${i}`,
+            'List (Term × Term × Bool × Bool)',
+            list,
+            '(Alg.Term.disjoint pair0 p.1 p.2.1 == p.2.2.1) &&\n      (viewsDisjoint p.1 p.2.1 == p.2.2.2)',
+        ),
+    )
+    return `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Analysis.Disjoint
+import Calculus.Dynamo.Lang.Store
+
+/-!
+# Disjointness of the pool, proposed to the model
+
+**Generated — do not edit.** One row per pair of pool terms: the two terms, the answer of
+\`src/\`'s \`disjoint\` on the two terms, and the answer of \`src/\`'s \`viewsDisjoint\` on the two pairs
+of views. The checker of a list states that \`Calculus.Alg.Term.disjoint\` and
+\`Calculus.viewsDisjoint\` give the same answers at each row.
+
+${rowForm}
+-/
+
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${shapes.defs()}
+
+${lists.join('\n\n')}
+
+end Calculus
+`
+}
+
+/** The kernel's check of a row list of each form, and the lemma of `Calculus.Bridge.Rows` that lifts it. */
+const separationLists = {
+    accepted: {
+        type: 'List (Term × Term × Term × Term)',
+        check: 'Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1 &&\n      Alg.compatPair dynOracle p.2.2.1 p.2.2.2',
+        caller: ' (κ : Callers)',
+        verdict: `(Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1) = true ∧
+    ((∀ t ∈ [p.2.2.1, p.2.2.2], Lawful (denote (libTable κ) t)) →
+      PairwiseCompat (libTable κ) [p.2.2.1, p.2.2.2])`,
+        lift: (list: string) => `accepted_of_rows (${list}_check ρ π) κ`,
+    },
+    refused: {
+        type: 'List (Term × Term × Term × Term)',
+        check: 'Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1 &&\n      !Alg.compatPair dynOracle p.2.2.1 p.2.2.2',
+        caller: '',
+        verdict: `(Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1) = true ∧
+    Alg.compatPair dynOracle p.2.2.1 p.2.2.2 = false`,
+        lift: (list: string) => `refused_of_rows (${list}_check ρ π)`,
+    },
+    guardRefused: {
+        type: 'List (Term × Term)',
+        check: '!(Alg.Term.guarded p.1 && Alg.Term.guarded p.2)',
+        caller: '',
+        verdict: '(Alg.Term.guarded p.1 && Alg.Term.guarded p.2) = false',
+        lift: (list: string) => `guardRefused_of_rows (${list}_check ρ π)`,
+    },
+} as const satisfies Record<SeparationForm, unknown>
+
+/**
+ * The declaration verdicts in the row form: one row list per {@link SeparationForm}. A row of an
+ * accepted pair or of a pair refused at compatibility is the two rooted terms that the guard reads,
+ * then the two open terms that compatibility reads. A row of a pair refused at the guard is the two
+ * rooted terms. Each list carries the checker, and the verdict of {@link leanSeparation} at each row,
+ * lifted from the checker.
+ *
+ * Generated at gate time and elaborated, never committed.
+ */
+export const leanSeparationRowModule = (
+    separations: readonly Separation[],
+): string => {
+    const shapes = kernelShapes()
+    const rows: Record<SeparationForm, string[]> = {
+        accepted: [],
+        refused: [],
+        guardRefused: [],
+    }
+    for (const one of separations) {
+        const { l, r, gl, gr } = shapes.pair(one.left, one.right, one.name)
+        const form = separationForm(one)
+        rows[form].push(
+            form === 'guardRefused'
+                ? `(${gl}, ${gr})`
+                : `(${gl}, ${gr}, ${l}, ${r})`,
+        )
+    }
+    const lists = (['accepted', 'refused', 'guardRefused'] as const).flatMap(
+        (form) => {
+            const { type, check, caller, verdict, lift } = separationLists[form]
+            return listsOf(rows[form]).map((list, i) => {
+                const name = `${form}${i}`
+                return [
+                    leanRowList(name, type, list, check),
+                    '',
+                    `theorem ${name}_verdicts ${rowBinders}${caller} :`,
+                    `    ∀ p ∈ ${name} ρ π,`,
+                    `    ${verdict} :=`,
+                    `  ${lift(name)}`,
+                ].join('\n')
+            })
+        },
+    )
+    return `import Calculus.Bridge.Rows
+import Calculus.Bridge.Vectors
+
+/-!
+# Declaration verdicts of the pool, both ways
+
+**Generated — do not edit.** One row per option pair of the pool, in one list per form. A pair
+that \`src/\`'s \`union\` accepts carries the model's guard on both options and the model's proof
+that the pair is compatible. A pair that \`src/\` refuses at compatibility carries the model's
+guard and \`compatPair dynOracle x y = false\`. A pair that \`src/\` refuses at the guard carries
+the model's guard refusal. The lemmas of \`Calculus.Bridge.Rows\` lift each checker to the verdict
+of each row.
+
+${rowForm}
+-/
+
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${shapes.defs()}
+
+${lists.join('\n\n')}
+
+end Calculus
+`
+}
 
 /* ── the legacy read gate ─────────────────────────────────────────────────────────────────── */
 
@@ -1735,12 +2023,11 @@ const assignmentRows = (
  * One theorem per union and not per row, so the file prints each option one time. A caller's
  * function is a variable of the theorem, and the goal closes as {@link closing} says.
  */
-export const leanSlice = ({
-    name,
-    codec,
-    clauses,
-    keys = [],
-}: Slice): string => {
+export const leanSlice = (
+    { name, codec, clauses, keys = [] }: Slice,
+    /** The name of a `def` that holds the clause list, where the module shares the list. */
+    named?: (list: string) => string,
+): string => {
     const def = codec.def
     if ('mark' in def || def.kind !== 'union') {
         return refuse(
@@ -1765,10 +2052,11 @@ export const leanSlice = ({
         leanTermOfTerm(t, `${name}.option${i}`, { ...topScope(t), bound }),
     )
     const binders = leanBinders(bound)
+    const list = `[${rows.map((row) => row.clause).join(',\n      ')}]`
     return [
         `/-- \`${name}\` — the options \`src/\` keeps under each clause -/`,
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
-        `    [${rows.map((row) => row.clause).join(',\n      ')}].map`,
+        `    ${named === undefined ? list : named(list)}.map`,
         `      (fun c => [${printed.map((t) => `(${t})`).join(',\n        ')}].map c.admits) =`,
         `    [${rows.map((row) => `[${row.keeps.join(', ')}]`).join(',\n      ')}] := ${closing(binders)}`,
     ].join('\n')
@@ -2210,8 +2498,21 @@ def narrowRows (n : Nat) (u : Term) (rows : List (Term × List (List Alg.Seg × 
 export const leanSliceModule = (
     slices: readonly Slice[],
     paths: readonly PathVectors[] = [],
-): string =>
-    `import Calculus.Bridge.Vectors
+): string => {
+    // one clause list is one `def`, so the file prints each list one time
+    const lists = new Map<string, string>()
+    const named = (list: string): string => {
+        const known = lists.get(list)
+        if (known !== undefined) return known
+        const made = `clauses${lists.size}`
+        lists.set(list, made)
+        return made
+    }
+    const theorems = slices.map((slice) => leanSlice(slice, named))
+    const defs = [...lists].map(
+        ([list, name]) => `def ${name} : List AltClause := ${list}`,
+    )
+    return `import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Analysis.Slice
 import Calculus.Dynamo.Lang.Store
 import Calculus.Lang.Path
@@ -2222,7 +2523,8 @@ import Calculus.Lang.Path
 **Generated — do not edit.** One theorem per union. Each row is a clause, and the row lists the
 options that \`src/\` keeps under the clause: \`extract\` gives the verdict of a clause of the caller,
 and \`assignmentOf\` gives the verdict of a clause at the tag of a dissection's option. The theorem
-states that \`Calculus.AltClause.admits\` gives the same verdict at each option.
+states that \`Calculus.AltClause.admits\` gives the same verdict at each option. Each distinct
+clause list is one \`def\`, which each theorem with that list reads.
 
 A path theorem states the decision of \`at\` at each path into one codec, and under each \`narrow\`
 at a union on the path. The model gives the frontier by \`Alg.Term.at\`, and after a clause by
@@ -2235,10 +2537,11 @@ set_option linter.unusedVariables false
 
 namespace Calculus
 
-${slices.map(leanSlice).join('\n\n')}
+${[...defs, ...theorems].join('\n\n')}
 ${paths.length === 0 ? '' : `\n${pathReadings}\n\n${paths.map(leanPath).join('\n\n')}\n`}
 end Calculus
 `
+}
 
 /**
  * One read verdict, as a Lean `theorem`; `src/`'s answer is taken by running `decode`.
