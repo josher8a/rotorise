@@ -75,6 +75,7 @@ import type {
 import {
     corpusSentinel,
     disjointRows,
+    hostAt,
     LeanUnemittable,
     leanAttrOf,
     leanCorpusEval,
@@ -85,6 +86,7 @@ import {
     leanItemReadResolution,
     leanLegacyRead,
     leanLegacyReadRowModule,
+    leanPath,
     leanReadResolution,
     leanReadRowModule,
     leanReadVector,
@@ -705,6 +707,23 @@ describe('what cannot be emitted', () => {
                 ),
             ),
         ).toContain('Term.union')
+    })
+
+    /**
+     * **A path vector certifies the meaning of the host's decision.** The row states each frame of
+     * the model's frontier as a recorded frame of the node that the host resolves. A host that
+     * resolves `a` to the node of `b` holds a decision that the model does not reach, and the
+     * emitter refuses the path rather than print a row that states another meaning.
+     */
+    it('refuses a resolved path whose node holds no frame of the model frontier', () => {
+        const codec = erase(object({ a: string, b: boolean }))
+        const one = { name: 'p', codec, paths: [['a']] }
+        expect(leanPath(one)).toContain('.resolved')
+        const wrong: typeof hostAt = (c) => hostAt(c, ['b'])
+        expect(refusal(() => leanPath(one, wrong))).toEqual({
+            at: 'p.path0',
+            reason: 'the model reaches a frame that is no position of the resolved node',
+        })
     })
 })
 
