@@ -22,6 +22,12 @@ set_option linter.style.nameCheck false
 
 namespace Calculus
 
+/-! Each numeral of this module, decided once. -/
+def numeral0 : WFNumeral := WFNumeral.of "1.5"
+def numeral1 : WFNumeral := WFNumeral.of "1"
+def numeral2 : WFNumeral := WFNumeral.of "2.5"
+def numeral3 : WFNumeral := WFNumeral.of "2"
+
 /-- The one tactic every vector uses.
 
     `rfl` alone closes the scalar vectors and none of the map-shaped ones: `M`'s payload is a
@@ -70,7 +76,7 @@ theorem scalar_string :
 theorem scalar_decimal :
     (denote (libTable noCallers) ((Term.held false (Term.number) (Term.string) (.decimalText, false) []))).e
       (Value.str "1.5")
-    = some (Attr.n (WFNumeral.of "1.5")) := by
+    = some (Attr.n (numeral0)) := by
   vector
 
 /-- `scalar_boolean` -/
@@ -103,9 +109,9 @@ theorem literal_alternatives :
 
 /-- `literal_decimal` -/
 theorem literal_decimal :
-    (denote (libTable noCallers) ((Term.held false (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) (.decimalText, false) []))).e
+    (denote (libTable noCallers) ((Term.held false (Term.union [Term.literal GroundKind.number (numeral1), Term.literal GroundKind.number (numeral2)]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) (.decimalText, false) []))).e
       (Value.str "2.5")
-    = some (Attr.n (WFNumeral.of "2.5")) := by
+    = some (Attr.n (numeral2)) := by
   vector
 
 /-- `literal_non_ascii` -/
@@ -139,8 +145,8 @@ theorem set_of_literal :
 /-- `set_of_number` -/
 theorem set_of_number :
     (denote (libTable noCallers) (Term.set (Term.number))).e
-      (Value.numSet (NEFinset.of (WFNumeral.of "1.5") {(WFNumeral.of "2")}))
-    = some (Attr.ns (NEFinset.of (WFNumeral.of "1.5") {(WFNumeral.of "2")})) := by
+      (Value.numSet (NEFinset.of (numeral0) {(numeral3)}))
+    = some (Attr.ns (NEFinset.of (numeral0) {(numeral3)})) := by
   vector
 
 /-- `array_of_string` -/
@@ -301,14 +307,14 @@ theorem product_two_objects :
 theorem product_union_object :
     (denote (libTable noCallers) (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.req ((Term.held false (Term.number) (Term.string) (.decimalText, false) []))) none), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then ObjectSlot.req (Term.boolean) else ObjectSlot.req ((Term.held false (Term.number) (Term.string) (.decimalText, false) []))) none)])).e
       (Value.map {"a", "n"} (fun k => if k.1 = "a" then Value.str "x" else Value.str "1"))
-    = some (Attr.m {"a", "n"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.n (WFNumeral.of "1"))) := by
+    = some (Attr.m {"a", "n"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.n (numeral1))) := by
   vector
 
 /-- `product_three` -/
 theorem product_three :
     (denote (libTable noCallers) (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then ObjectSlot.req (Term.string) else if k.1 = "q" then ObjectSlot.req (Term.boolean) else ObjectSlot.req ((Term.held false (Term.number) (Term.string) (.decimalText, false) []))) none))).e
       (Value.map {"p", "q", "r"} (fun k => if k.1 = "p" then Value.str "x" else if k.1 = "q" then Value.bool true else Value.str "1"))
-    = some (Attr.m {"p", "q", "r"} (fun k => if k.1 = "p" then Attr.s "x" else if k.1 = "q" then Attr.bool true else Attr.n (WFNumeral.of "1"))) := by
+    = some (Attr.m {"p", "q", "r"} (fun k => if k.1 = "p" then Attr.s "x" else if k.1 = "q" then Attr.bool true else Attr.n (numeral1))) := by
   vector
 
 /-- `dunion_two_keys` -/
@@ -393,7 +399,7 @@ theorem literal_alternatives__refuses__scalar_string :
 
 /-- `literal_decimal__refuses__scalar_string` — refused on both sides -/
 theorem literal_decimal__refuses__scalar_string :
-    (denote (libTable noCallers) ((Term.held false (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) (.decimalText, false) []))).e
+    (denote (libTable noCallers) ((Term.held false (Term.union [Term.literal GroundKind.number (numeral1), Term.literal GroundKind.number (numeral2)]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) (.decimalText, false) []))).e
       (Value.str "hello") = none := kernel_rfl%
 
 /-- `literal_non_ascii__refuses__scalar_string` — refused on both sides -/
