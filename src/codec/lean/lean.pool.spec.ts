@@ -1,11 +1,10 @@
 /**
- * **The generated pool: one set of pairs, put to two checkers.**
+ * **The generated pool: one set of pairs, put to the kernel.**
  *
  * A seeded generator builds codecs through the public constructors, so the pool holds what the
- * library constructs and not what a reader imagined. Each pair of the pool goes to the model two
- * times. The first checker is an `#eval` file: each row compares the host verdicts with the
- * model's decisions, and prints only a mismatch. The second checker is the kernel: the disjointness
- * and separation vectors, through the same emitter that the hand corpus uses. The gate runs both.
+ * library constructs and not what a reader imagined. Each pair of the pool goes to the model as the
+ * disjointness and separation vectors, through the same emitter that the hand corpus uses. Each
+ * kernel file names its own failing rows.
  *
  * The hand corpus in `lean.spec.ts` stays as the hand-picked part. The pool depends on the seed
  * alone, so a change of the pool counts below is a change of the generator, of the constructors, or
@@ -69,18 +68,13 @@ import {
     leanDisjointRowModule,
     leanFormerGuard,
     leanFormerGuardModule,
-    leanNumeralsOnce,
     leanPath,
     leanPathModules,
-    leanRooted,
     leanSeparation,
     leanSeparationRowModule,
-    leanShapes,
     leanSlice,
     leanSliceModule,
-    leanString,
     leanTermOf,
-    listsOf,
     reachable,
     unionAt,
 } from '../lean'
@@ -591,13 +585,10 @@ type PoolPair = {
     readonly right: AnyCodec
     /** The host verdicts, in the column order of `poolRow`: disjoint, views, agrees, guard, union. */
     readonly host: string
-    /** A fill at one field name on each side: the pair goes to disjointness only. */
+    /** A fill at one field name on each side: the pair goes to disjointness and to a guard row. */
     readonly fills: boolean
     readonly l: string
     readonly r: string
-    /** The two terms that the guard reads. */
-    readonly gl: string
-    readonly gr: string
     readonly closures: readonly string[]
     readonly readers: readonly string[]
 }
@@ -671,8 +662,6 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
             fills: fillsMeet(x, y),
             l,
             r,
-            gl: leanRooted(l, a.codec),
-            gr: leanRooted(r, b.codec),
             closures: [...bound.closures.values()],
             readers: [...bound.readers.values()],
         })
@@ -683,88 +672,6 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
     }
     for (const [a, b] of declared) add(a, b)
     return pairs
-}
-
-/**
- * **One instance of each caller function, for the `#eval` row.** The kernel vector of a quantified
- * pair binds each caller function and states the decision at every function, so a second instance
- * checks nothing that the kernel does not. The row runs one instance for its diagnosis.
- */
-const stand = { q: 'fun _ => true', r: 'fun _ => none' } as const
-
-/** One row per pair, the name first: the row prints only on a mismatch. */
-const evalRow = (
-    p: PoolPair,
-    shapes: ReturnType<typeof leanShapes>,
-): string => {
-    // the compatibility columns of a pair with a fill on each side are the known narrowing
-    const expected = p.fills ? `${p.host.slice(0, 2)}-${p.host[3]}-` : p.host
-    const label = leanString(`${p.name} ${p.label}`)
-    const { l, r, gl, gr } = shapes.pair(p.left, p.right, p.name)
-    return `(${label}, "${expected}", ${l}, ${r}, ${gl}, ${gr})`
-}
-
-/** The sentinel that the gate reads: the only line of a clean run. */
-const sentinel = (count: number) => `pool: ${count} pairs checked`
-
-const evalModule = (pairs: readonly PoolPair[]): string => {
-    const shapes = leanShapes((kind) =>
-        kind === 'closure' ? `(${stand.q})` : `(${stand.r})`,
-    )
-    const lists = listsOf(pairs.map((p) => evalRow(p, shapes))).map(
-        (
-            rows,
-            i,
-        ) => `def rows${i} : List (String × String × Term × Term × Term × Term) := [
-  ${rows.join(',\n  ')}]
-
-#eval rows${i}.forM fun (nm, h, l, r, gl, gr) => poolCheck nm h l r gl gr`,
-    )
-    return leanNumeralsOnce(`import Calculus.Dynamo.Analysis.Compat
-import Calculus.Dynamo.Lang.Store
-
-/-!
-# The pre-check of the generated pool
-
-**Generated — do not edit.** One row per pair, at one instance of the caller functions. A row compares
-the host verdicts with the model's decisions, and prints only a mismatch, with the name of the pair.
-A \`-\` reads no column. Each distinct term is one \`def\`, and a caller's function of the term is a
-parameter of the \`def\`. One \`#eval\` runs each list of rows.
--/
-
-set_option maxRecDepth 8192
-set_option linter.unusedVariables false
-
-namespace Calculus
-
-/-- Print the pair when a column that the host states differs from the model's. The host columns
-are disjoint, views, compatible, guarded, and the union decision. The guard reads \`gl\` and \`gr\`,
-and the other tests read \`l\` and \`r\`. The decision holds at every environment, so an open pair
-reads it as a closed pair does. The compatibility column counts only where the guard accepts,
-because the host reads no compatibility after a guard refusal. -/
-def poolCheck (name host : String) (l r gl gr : Term) : IO Unit := do
-  let bit (b : Bool) : String := if b then "1" else "0"
-  let d := Alg.Term.disjoint pair0 l r
-  let v := viewsDisjoint l r
-  let c := Alg.compatPair dynOracle l r
-  let refuses := !c
-  let g := Alg.Term.guarded gl && Alg.Term.guarded gr
-  let hostAt (i : Nat) : Char := host.toList.getD i '-'
-  let col (i : Nat) (yes no : Bool) : Bool :=
-    hostAt i == '-' || (hostAt i == '1' && yes) || (hostAt i == '0' && no)
-  let ok := col 0 d (!d) && col 1 v (!v) && (hostAt 3 == '0' || col 2 c refuses) &&
-    col 3 g (!g) && col 4 (g && c) (!g || refuses)
-  unless ok do
-    IO.println s!"mismatch {name}: host {host} model {bit d}{bit v}{bit c}{bit g}"
-
-${shapes.defs()}
-
-${lists.join('\n\n')}
-
-#eval IO.println ${leanString(sentinel(pairs.length))}
-
-end Calculus
-`)
 }
 
 /**
@@ -1215,7 +1122,6 @@ const buildPool = () => {
 const poolModules = (
     perSeed: ReturnType<typeof buildPool>,
 ): readonly (readonly [string, string])[] => [
-    ['.pool.eval.lean', evalModule(perSeed.flatMap((one) => one.pairs))],
     [
         '.pool.disjoints.lean',
         leanDisjointRowModule(perSeed.flatMap((one) => one.disjoints)),
@@ -1429,12 +1335,22 @@ describe('the generated pool, against the model', () => {
         expect(module).toContain('failing pairGuardOk (pairGuards0 ρ π) = []')
     })
 
-    it('emits the pre-check and the kernel vectors for the gate', () => {
+    it('emits the kernel vectors for the gate', () => {
+        const modules = poolModules(perSeed)
         if (process.env.EMIT_LEAN_REFUSALS) {
             const formal = join(process.cwd(), 'formal')
-            for (const [file, text] of poolModules(perSeed))
+            for (const [file, text] of modules)
                 writeFileSync(join(formal, file), text)
         }
-        expect(evalModule([])).toContain(sentinel(0))
+        expect(modules.map(([file]) => file)).toEqual([
+            '.pool.disjoints.lean',
+            '.pool.separations.lean',
+            '.pool.slices.lean',
+            '.pool.paths0.lean',
+            '.pool.paths1.lean',
+            '.pool.paths2.lean',
+            '.pool.paths3.lean',
+            '.pool.guards.lean',
+        ])
     })
 })

@@ -14,10 +14,7 @@ tsconfig.tsbuildinfo
 /formal/.readvectors.lean
 /formal/.disjoints.lean
 /formal/.legacyreads.lean
-# the pre-check of the corpus
-/formal/.corpus.eval.lean
-# the generated pool: the pre-check and the kernel vectors
-/formal/.pool.eval.lean
+# the generated pool: the kernel vectors
 /formal/.pool.disjoints.lean
 /formal/.pool.separations.lean
 /formal/.pool.slices.lean

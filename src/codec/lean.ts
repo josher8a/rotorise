@@ -129,7 +129,7 @@ const refuse = (at: string, reason: string): never => {
  * already does with `∅` and `⟨⟩`. `\uHHHH` is kept for the control range and DEL, where a raw
  * character would be invisible in the generated file.
  */
-export const leanString = (value: string): string => {
+const leanString = (value: string): string => {
     let out = '"'
     for (const ch of value) {
         const code = ch.codePointAt(0) as number
@@ -305,7 +305,7 @@ const numeralText = /WFNumeral\.of "[^"\\]*"/g
  * module states each distinct numeral as one `def` after `namespace Calculus`, and writes the name
  * of the `def` at each occurrence. Apply this once to a whole module: a `def` writes the numeral.
  */
-export const leanNumeralsOnce = (module: string): string => {
+const leanNumeralsOnce = (module: string): string => {
     const names = new Map<string, string>()
     const named = module.replace(numeralText, (text) => {
         const known = names.get(text)
@@ -778,7 +778,7 @@ const leanBodyOf = (body: Body, at: string, scope: At): string => {
  * {@link leanTermOf} prints that variable one binder beyond each enclosing binder, so one `Term.mu`
  * around the whole term binds it to the root. A term with no such thunk has no root binder.
  */
-export const leanRooted = (printed: string, declared: AnyCodec): string =>
+const leanRooted = (printed: string, declared: AnyCodec): string =>
     readsFreeVariable(declared.def) ? `Term.mu (${printed})` : printed
 
 const leanTermOfTerm = (t: Term, at: string, scope: At): string => {
@@ -1183,17 +1183,36 @@ export type Separation = {
  * **The form of a separation verdict**: accepted, refused at compatibility, or refused at the guard.
  * The host's guard runs before its compatibility test, and reads each option on its own. The
  * emitter refuses a pair that the host accepts on no warrant that the model proves.
+ *
+ * **The form reads each host answer that a row states.** A row of a form states the guard and the
+ * compatibility of the pair, so the host's union decision, its guard (`recursionUse`) and its
+ * compatibility test (`agrees`) each decide the form. Where the union decision disagrees with the
+ * guard or with `agrees`, no form states the host, and the emitter refuses the pair. Otherwise a row
+ * checks the union decision alone, and a guard or `agrees` that drifts from the decision passes.
  */
 type SeparationForm = 'accepted' | 'refused' | 'guardRefused'
 
 /** The form of one separation verdict, with the `src/` side decided here. */
 const separationForm = ({ name, left, right }: Separation): SeparationForm => {
+    const guarded = [left, right].every(
+        (option) => recursionUse(option.def) < 2,
+    )
     try {
         union([left, right] as never)
     } catch {
-        return [left, right].some((option) => recursionUse(option.def) >= 2)
-            ? 'guardRefused'
+        if (!guarded) return 'guardRefused'
+        return agrees(left.def, right.def)
+            ? refuse(
+                  name,
+                  '`src/` refuses this pair at compatibility, and `agrees` accepts it: no form states the host',
+              )
             : 'refused'
+    }
+    if (!guarded) {
+        return refuse(
+            name,
+            '`src/` accepts this pair, and its guard refuses an option: no form states the host',
+        )
     }
     return agrees(left.def, right.def)
         ? 'accepted'
@@ -1527,7 +1546,7 @@ type Shapes = ReturnType<typeof leanShapes>
 const rowsPerList = 100
 
 /** The rows in lists of {@link rowsPerList}. */
-export const listsOf = <T>(rows: readonly T[]): readonly (readonly T[])[] =>
+const listsOf = <T>(rows: readonly T[]): readonly (readonly T[])[] =>
     Array.from({ length: Math.ceil(rows.length / rowsPerList) }, (_, i) =>
         rows.slice(i * rowsPerList, (i + 1) * rowsPerList),
     )
@@ -1564,7 +1583,8 @@ const leanRowList = (
 
 /**
  * **The diagnostic of a row module**: one `#eval` that prints the name of each row whose
- * comparator answers `false`, at the instance of the caller functions that the pre-checks read.
+ * comparator answers `false`, at one instance of the caller functions: each reader answers `none`,
+ * and each predicate answers `true`.
  * The kernel theorem of each list reads the same `failing` and the same comparator.
  */
 const leanDiagnostic = (
@@ -1610,8 +1630,7 @@ type Row<F extends string> = {
 
 /**
  * **The vectors of one file in the row form.** The rows print through the shapes that the reader
- * gives: the kernel module gives each caller function an index of `ρ` or `π`, and the pre-check
- * gives one instance of each function.
+ * gives: the kernel module gives each caller function an index of `ρ` or `π`.
  */
 export type RowFile<F extends string = string> = {
     readonly forms: Readonly<Record<F, RowForm>>
@@ -3718,63 +3737,3 @@ The model reads the older answer only where the current term writes the answer, 
 the same.`,
         legacyReadRows(reads),
     )
-
-/** The sentinel that the gate reads: the only line of a clean run of the corpus pre-check. */
-export const corpusSentinel = (count: number): string =>
-    `corpus: ${count} vectors checked`
-
-/**
- * **The pre-check of the corpus**: the rows of the six corpus files, at one instance of each caller
- * function, each row with the name of its former theorem. An `#eval` runs the check of each row,
- * and prints the name where the check fails. A printed line proves nothing: the kernel rows are the
- * check, and this file names the vector that a failing list holds.
- *
- * Generated at gate time and elaborated, never committed.
- */
-export const leanCorpusEval = (files: readonly RowFile[]): string => {
-    const shapes = leanShapes((kind) =>
-        kind === 'closure' ? '(fun _ => true)' : '(fun _ => none)',
-    )
-    let count = 0
-    const lists = files
-        .flatMap((file) => {
-            const lists = rowLists(file, shapes)
-            for (const { rows } of lists) count += rows.length
-            return lists.map(({ form, rows }) => ({
-                ...file.forms[form],
-                rows,
-            }))
-        })
-        .map(
-            (
-                { type, ok, rows },
-                i,
-            ) => `def rows${i} : List (String × ${type}) := [
-  ${rows.map((one) => `(${leanString(one.name)}, ${one.row})`).join(',\n  ')}]
-
-#eval rows${i}.forM fun (nm, p) => unless (${ok} p) do IO.println s!"mismatch {nm}"`,
-        )
-    return leanNumeralsOnce(`import Calculus.Bridge.Rows
-
-/-!
-# The pre-check of the corpus
-
-**Generated — do not edit.** The rows of the six corpus files, at one instance of each caller
-function, each with the name of its former theorem. A row prints only a mismatch, with the name. One
-\`#eval\` runs each list of rows, and the last line counts the rows.
--/
-
-set_option maxRecDepth 8192
-set_option linter.unusedVariables false
-
-namespace Calculus
-
-${shapes.defs()}
-
-${lists.join('\n\n')}
-
-#eval IO.println ${leanString(corpusSentinel(count))}
-
-end Calculus
-`)
-}
