@@ -225,23 +225,19 @@ def famListD (fpre : List (Term S → Bool)) (fsp : Option (Term S → Bool))
   | .prim _ | .set _ | .object _ => true
   | _ => false
 
-/-- **The slot pair at one name is disjoint**: some side requires the name, and the terms are
-    disjoint. `g` is the left slot's test against a right slot. `mw` is the left block's test. -/
-def slotD (a b : Body S) (g : {k // k ∈ a.fields} → ObjectSlot S → Bool)
-    (mw : Term S → Bool) (k : {k // k ∈ a.fields ∪ b.fields}) : Bool :=
-  if h : k.1 ∈ a.fields then
-    g ⟨k.1, h⟩ (if h' : k.1 ∈ b.fields then b.at ⟨k.1, h'⟩ else .optional b.block)
-  else
-    match b.at ⟨k.1, (Finset.mem_union.mp k.2).resolve_left h⟩ with
-    | .req y => mw y
-    | .optional _ | .fill _ _ => false
-
 /-- **Two objects are disjoint at one name.** A body is a total function from the key space to a
-    slot, so two bodies share no map where one name of either body holds two disjoint slots.
-    The object is disjoint from every former in another shape class. -/
+    slot (`Body.slotAt`), so two bodies share no map where one name holds two disjoint slots, one of
+    them required. A name outside both bodies holds two `optional` slots, which are never disjoint.
+    So the name is a key of the left body, where `g` tests the left slot against the right slot, or a
+    key of the right body outside the left one, where `mw`, the left block's test, meets a required
+    right slot. The object is disjoint from every former in another shape class. -/
 def famObjD (a : Body S) (g : {k // k ∈ a.fields} → ObjectSlot S → Bool)
     (mw : Term S → Bool) : Term S → Bool
-  | .object b => decide (∃ k : {k // k ∈ a.fields ∪ b.fields}, slotD a b g mw k = true)
+  | .object b => decide (∃ k : {k // k ∈ a.fields}, g k (b.slotAt k.1) = true) ||
+      decide (∃ k ∈ b.fields, k ∉ a.fields ∧
+        (match b.slotAt k with
+         | .req y => mw y
+         | .optional _ | .fill _ _ => false) = true)
   | .prim _ | .set _ | .list _ _ _ => true
   | _ => false
 

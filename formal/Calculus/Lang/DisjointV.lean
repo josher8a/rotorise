@@ -713,24 +713,16 @@ theorem famObjD_sound [Shapes S] {ρ ρ' : List S.C} {a : Body S}
   | set t => rw [Bool.and_comm]; exact Shapes.set_obj t a v
   | list p q s => rw [Bool.and_comm]; exact Shapes.list_obj p q s a v
   | object b =>
-    simp only [famObjD, decide_eq_true_eq] at h
-    obtain ⟨⟨k, hk⟩, hd⟩ := h
+    simp only [famObjD, Bool.or_eq_true, decide_eq_true_eq] at h
     rw [Adm_object, Adm_object]
-    unfold slotD at hd
-    split at hd
-    · next ha =>
-      have hb : (if h' : k ∈ b.fields then b.at ⟨k, h'⟩ else .optional b.block) = b.slotAt k := rfl
-      rw [hb] at hd
-      obtain ⟨hr, hs⟩ := hg _ _ hd
-      rw [← Body.slotAt_pos ha] at hr hs
+    rcases h with ⟨k, hd⟩ | ⟨k, _, ha, hd⟩
+    · obtain ⟨hr, hs⟩ := hg _ _ hd
+      rw [← Body.slotAt_pos k.2] at hr hs
       exact AdmBody_apart_at hr hs v
-    · next ha =>
-      have hkb : k ∈ b.fields := (Finset.mem_union.mp hk).resolve_left ha
-      split at hd
+    · split at hd
       · next y hy =>
-        have hbs : b.slotAt k = .req y := by rw [Body.slotAt_pos hkb]; exact hy
-        refine AdmBody_apart_at (k := k) (by rw [hbs]; simp [ObjectSlot.isReqAt]) (fun w => ?_) v
-        rw [hbs, Body.slotAt_neg ha]
+        refine AdmBody_apart_at (k := k) (by rw [hy]; simp [ObjectSlot.isReqAt]) (fun w => ?_) v
+        rw [hy, Body.slotAt_neg ha]
         exact hmw y hd w
       all_goals exact nomatch hd
   | _ => simp [famObjD] at h
