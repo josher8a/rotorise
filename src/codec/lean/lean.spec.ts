@@ -73,12 +73,10 @@ import type {
     Vector,
 } from '../lean'
 import {
-    corpusSentinel,
     disjointRows,
     hostAt,
     LeanUnemittable,
     leanAttrOf,
-    leanCorpusEval,
     leanDisjoint,
     leanDisjointRowModule,
     leanFormerGuard,
@@ -2873,14 +2871,13 @@ describe("the slice, against the model's `AltClause.admits`", () => {
     })
 })
 
-describe('the corpus pre-check, for the gate', () => {
+describe('the names of the corpus rows', () => {
     /**
-     * **The pre-check names a failing vector, as each kernel file now does.** The pre-check reads
-     * the same rows of the six corpus files, each with the name of its former theorem, and prints
-     * the name where the comparator of the row answers `false`. Its sentinel counts every corpus
-     * vector. The pre-check runs beside the diagnostic of each kernel file until the two compare.
+     * **A failing row is named by its vector.** The diagnostic of each kernel file prints the name
+     * of each row whose comparator answers `false`, so a name names one vector of the six corpus
+     * files.
      */
-    it('reads every vector of the six corpus files, by name', () => {
+    it('names each vector of the six corpus files once', () => {
         const files = [
             separationRows(separationPairs()),
             disjointRows(disjointPairs()),
@@ -2893,13 +2890,5 @@ describe('the corpus pre-check, for the gate', () => {
             file.rows(leanShapes(() => 'f')).map((one) => one.name),
         )
         expect(new Set(names).size).toBe(names.length)
-        const module = leanCorpusEval(files)
-        expect(module).toContain(corpusSentinel(names.length))
-        if (process.env.EMIT_LEAN_REFUSALS) {
-            writeFileSync(
-                join(process.cwd(), 'formal', '.corpus.eval.lean'),
-                module,
-            )
-        }
     })
 })
