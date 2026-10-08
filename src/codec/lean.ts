@@ -2490,15 +2490,18 @@ def narrowRows (n : Nat) (u : Term) (rows : List (Term × List (List Alg.Seg × 
   rows.all fun c => let fs := narrowFrames c.1 u
     c.2.all fun r => pathReads n (Alg.atG Alg.Frame.child r.1 fs) r.2`
 
+/** The imports of a slice module and of a path module. */
+const sliceImports = `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Analysis.Slice
+import Calculus.Dynamo.Lang.Store
+import Calculus.Lang.Path`
+
 /**
- * The slices as a module of their own, with the paths of the pool.
+ * The slices as a module of their own.
  *
  * Generated at gate time and elaborated, never committed.
  */
-export const leanSliceModule = (
-    slices: readonly Slice[],
-    paths: readonly PathVectors[] = [],
-): string => {
+export const leanSliceModule = (slices: readonly Slice[]): string => {
     // one clause list is one `def`, so the file prints each list one time
     const lists = new Map<string, string>()
     const named = (list: string): string => {
@@ -2512,10 +2515,7 @@ export const leanSliceModule = (
     const defs = [...lists].map(
         ([list, name]) => `def ${name} : List AltClause := ${list}`,
     )
-    return `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Analysis.Slice
-import Calculus.Dynamo.Lang.Store
-import Calculus.Lang.Path
+    return `${sliceImports}
 
 /-!
 # Slices, proposed to the model
@@ -2525,10 +2525,6 @@ options that \`src/\` keeps under the clause: \`extract\` gives the verdict of a
 and \`assignmentOf\` gives the verdict of a clause at the tag of a dissection's option. The theorem
 states that \`Calculus.AltClause.admits\` gives the same verdict at each option. Each distinct
 clause list is one \`def\`, which each theorem with that list reads.
-
-A path theorem states the decision of \`at\` at each path into one codec, and under each \`narrow\`
-at a union on the path. The model gives the frontier by \`Alg.Term.at\`, and after a clause by
-\`Alg.narrow\` and the frontier of the rest of the path.
 -/
 
 /-! The emitted key function is total on a membership subtype, so a one-name clause binds a \`k\`
@@ -2538,9 +2534,59 @@ set_option linter.unusedVariables false
 namespace Calculus
 
 ${[...defs, ...theorems].join('\n\n')}
-${paths.length === 0 ? '' : `\n${pathReadings}\n\n${paths.map(leanPath).join('\n\n')}\n`}
+
 end Calculus
 `
+}
+
+/**
+ * **The path theorems, in \`files\` modules of near one size.** The kernel checks the theorems of
+ * one file in sequence, so the gate checks the files in parallel. The emitter measures a theorem
+ * by its printed length, and gives each theorem, longest first, to the file with the least length.
+ * A file keeps the theorems in the order of the pool, and prints the readings that its rows read.
+ *
+ * Generated at gate time and elaborated, never committed.
+ */
+export const leanPathModules = (
+    paths: readonly PathVectors[],
+    files: number,
+): string[] => {
+    const printed = paths.map(leanPath)
+    const size = Array.from({ length: files }, () => 0)
+    const owner = new Map<number, number>()
+    const longestFirst = printed
+        .map((text, i) => [text.length, i] as const)
+        .sort(([a, i], [b, j]) => b - a || i - j)
+    for (const [length, i] of longestFirst) {
+        const least = size.indexOf(Math.min(...size))
+        owner.set(i, least)
+        size[least] = (size[least] ?? 0) + length
+    }
+    return size.map(
+        (_, file) => `${sliceImports}
+
+/-!
+# Paths, proposed to the model
+
+**Generated — do not edit.** File ${file} of ${files}. A path theorem states the decision of
+\`at\` at each path into one codec, and under each \`narrow\` at a union on the path. The model
+gives the frontier by \`Alg.Term.at\`, and after a clause by \`Alg.narrow\` and the frontier of
+the rest of the path.
+-/
+
+/-! The emitted key function is total on a membership subtype, so a one-name clause binds a \`k\`
+it never reads; the binder cannot be \`_\` because a clause of several names reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${pathReadings}
+
+${printed.filter((_, i) => owner.get(i) === file).join('\n\n')}
+
+end Calculus
+`,
+    )
 }
 
 /**

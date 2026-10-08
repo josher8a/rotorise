@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The commit gate: every check, in order, gated on exit codes.
 #
-#   scripts/gate.sh              all ten checks
+#   scripts/gate.sh              all nine checks
 #   scripts/gate.sh --no-build   the five Python guards only
 #
 # `--no-build` skips the build, the gateway check, the emit, the pool pre-check and the bridge,
@@ -74,28 +74,35 @@ if [ "$RUN_BUILD" -eq 1 ]; then
     "cd \"$REPO_DIR\" && EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/codec/lean/lean.spec.ts src/codec/lean/lean.pool.spec.ts --reporter=dot"
   # The generated pool, put to the model by `#eval`. A row prints only on a mismatch, and Lean
   # exits 0 after a print, so the check reads the output: the sentinel line must be all of it.
-  run 'pool pre-check' bash -c \
-    'out=$(lake env lean .pool.eval.lean 2>&1) || { echo "$out"; exit 1; }
-     printf "%s\n" "$out" | grep -qxE "pool: [0-9]+ pairs checked" || { echo "$out"; exit 1; }
-     [ "$(printf "%s\n" "$out" | wc -l)" -eq 1 ] || { echo "$out"; exit 1; }'
-  run 'vector bridge' bash -c \
-    'for f in lean.sample.check.lean lean.sample.lean .vectors.full.lean \
-              .separations.lean .readverdicts.lean .resolutions.lean \
-              .readvectors.lean .disjoints.lean .legacyreads.lean \
-              .pool.disjoints.lean .pool.separations.lean .pool.slices.lean \
-              .pool.guards.lean; do
-       [ -f "$f" ] || { echo "missing $f"; exit 1; }
-       out=$(lake env lean "$f" 2>&1) || { echo "$out"; exit 1; }
-       # warnings are failures here: the generated files are machine-written, so a warning is
-       # the emitter being sloppy rather than a human judgement call
-       [ -z "$out" ] || { echo "$f: $out"; exit 1; }
-     done'
+  # The pool pre-check and the vector bridge run as one set of parallel jobs, longest first: the
+  # kernel checks the theorems of one file in sequence, so the wall time of the set is the time of
+  # its longest file. A job writes its output to a file, and the step reads every file after the
+  # set ends, so one failure does not hide another. GATE_JOBS bounds the memory of the set.
+  run 'pool pre-check + bridge' bash -c '
+    jobs=${GATE_JOBS:-6}; out=$(mktemp -d); trap "rm -rf $out" EXIT
+    printf "%s\n" .pool.slices.lean .pool.paths0.lean .pool.paths1.lean .pool.paths2.lean \
+      .pool.paths3.lean .pool.eval.lean .pool.separations.lean .pool.disjoints.lean \
+      .legacyreads.lean .readverdicts.lean .vectors.full.lean .separations.lean .disjoints.lean \
+      .resolutions.lean lean.sample.check.lean lean.sample.lean .readvectors.lean .pool.guards.lean |
+    xargs -P "$jobs" -I{} sh -c "
+      [ -f {} ] || { echo missing > $out/x{}.rc; exit 0; }
+      lake env lean {} > $out/x{}.out 2>&1; echo \$? > $out/x{}.rc"
+    fail=0
+    for rc in "$out"/*.rc; do
+      f=$(basename "$rc" .rc); f=${f#x}; o=$(cat "$out/x$f.out" 2>/dev/null)
+      if [ "$(cat "$rc")" != 0 ]; then echo "$f: exit $(cat "$rc")"; echo "$o"; fail=1; continue; fi
+      if [ "$f" = .pool.eval.lean ]; then
+        printf "%s\n" "$o" | grep -qxE "pool: [0-9]+ pairs checked" && [ "$(printf "%s\n" "$o" | wc -l)" -eq 1 ] \
+          || { echo "$f: $o"; fail=1; }
+      elif [ -n "$o" ]; then echo "$f: $o"; fail=1; fi
+    done
+    [ "$(ls "$out"/*.rc | wc -l)" -eq 18 ] || { echo "a job did not report"; fail=1; }
+    exit $fail'
 else
   printf 'SKIP  %-28s (--no-build)\n' 'lake build'
   printf 'SKIP  %-28s (--no-build)\n' 'classical gateways'
   printf 'SKIP  %-28s (--no-build)\n' 'vector emit'
-  printf 'SKIP  %-28s (--no-build)\n' 'pool pre-check'
-  printf 'SKIP  %-28s (--no-build)\n' 'vector bridge'
+  printf 'SKIP  %-28s (--no-build)\n' 'pool pre-check + bridge'
 fi
 
 echo
