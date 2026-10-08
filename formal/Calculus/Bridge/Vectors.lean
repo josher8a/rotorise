@@ -517,11 +517,12 @@ open Lean Elab Term Meta in
     A closed decidable goal `p` is `of_decide_eq_true kernel_rfl%`. A goal with a free variable
     takes `kernel_rfl%` directly, because `decide` refuses the goal.
 
-    The goal must be an equation. A false equation is a kernel error, `application type mismatch`,
-    and not an elaborator error. The proof term is `Eq.refl`, so the term adds no axiom. -/
+    The goal must be an equation, or a reducible definition of one. A false equation is a kernel
+    error, `application type mismatch`, and not an elaborator error. The proof term is `Eq.refl`,
+    so the term adds no axiom. -/
 elab "kernel_rfl%" : term <= ty => do
   let ty ← instantiateMVars ty
-  let some (_, _, rhs) := ty.eq? | throwError "kernel_rfl%: the goal is not an equation"
+  let some (_, _, rhs) := (← whnfR ty).eq? | throwError "kernel_rfl%: the goal is not an equation"
   mkExpectedTypeHint (← mkEqRefl rhs) ty
 
 /-! A false equation fails in the kernel, and a goal that is not an equation fails in the

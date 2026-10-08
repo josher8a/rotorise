@@ -4,22 +4,30 @@ import Calculus.Dynamo.Analysis.Path
 # The readings of a path row
 
 A path row states the decision of `at` on the host, and the frontier of the model at the path.
-`pathReads` compares the two: the host gives a `HostAt`, and the model gives the frontier by
+`pathRead` compares the two: the host gives a `HostAt`, and the model gives the frontier by
 `Alg.Term.at`, or after a clause by `narrowFrames` and the frontier of the rest of the path. A
-generated path module states each row through `pathRows` and `narrowRows`, and the kernel decides
+generated path module states each row through `PathRows` and `NarrowRows`, and the kernel decides
 the rows.
 
 **What a row says.** Each `HostAt` form names a frontier, and the theorems below state the
-frontier that `pathReads` accepts for each form. A refusal is no frontier. No codec is a frontier
-whose frames each have the head `never`. Some options is a frontier with a `never` head and
-with another head. Two declarations is a frontier with no `never` head, whose first frame
-`frameSim` separates from another frame. One codec is a nonempty frontier whose frames each are
-similar to the codec.
+frontier that each form accepts. A refusal is no frontier. No codec is a frontier whose frames
+each have the head `never`. Some options is a frontier with a `never` head and with another head.
+Two declarations is a frontier with no `never` head, whose first frame `frameSim` separates from
+another frame. One codec is a frontier equal to the frames that the host names.
 
-**Why a row compares shapes.** A frame holds a variable over its binder stack where the host holds
-a thunk, and the host keeps one copy of each codec where the model keeps one frame per option. So
-a row compares the shape of each frame, each binder entered and each variable read through its
-binder.
+**Why one codec is an equation.** The host resolves a node of the term graph of the root, and the
+model's frames are subterms of the same printed root. The emitter records each position of each
+node in the print, with the binders above the position, and states each frame of the frontier as
+the recorded frame of the resolved node at that position. The kernel decides the equation by
+definitional equality. A caller's function is a variable of the theorem, so two frames are equal
+only where they hold one function. Equal frames have one meaning (`pathRead_resolved_sem`), so a
+resolved row certifies the meaning of the host's decision.
+
+**Why the frame and not its head.** A frame is the term at a position with its binder stack, as
+`Term.at` gives it: a variable that a step resolves enters its binder again, so a step past a
+cycle lands on a position of the print, with the stack of that position. So the frame itself is
+the recorded frame on every row, and the law is congruence. The head through `pathHead` would
+equate a variable with its binder, and its law would need the unfolding of a binder.
 
 **What similarity says.** `frameSim n f g` reads the heads of the two frames: `pathHead` enters
 each binder and reads each variable through its binder, at most the length of the stack and two
@@ -27,8 +35,8 @@ more steps. The heads have one constructor, two primitives are equal by `groundE
 past the stack name one outer binder, and the children are similar to one depth less. Similarity
 to depth `n` is the law that the definition gives, and it is no law of meaning: `frameSim` reads
 no predicate of a `refine` and no older reader of a `legacy`, so two frames similar at every
-depth can have two meanings (`frameSim_reads_no_predicate`). A generated row reads the depth of
-the resolved term and two more steps.
+depth can have two meanings (`frameSim_reads_no_predicate`). Only the comparator of two
+declarations reads similarity.
 -/
 
 namespace Calculus
@@ -100,24 +108,37 @@ inductive HostAt where
   | someVariants
   /-- The options declare the path differently. -/
   | ambiguous
-  /-- One codec stands at the path. -/
-  | resolved (t : Term)
+  /-- One codec stands at the path: the frontier, each frame at a position of the codec in the
+      printed root, with the binders above the position. -/
+  | resolved (f : Alg.Frame dynSyn) (fs : List (Alg.Frame dynSyn))
 
-/-- **The frontier that a decision names.** A refusal is `none`. No codec is a frontier of `never`
-    alone, the empty frontier included. Some options is a frontier with `never` and with another
-    frame. Two declarations are a frontier with no `never` and two frames of two shapes. One codec
-    is a frontier of frames of the shape of the codec. -/
+/-- **The frontier that a decision of no codec names.** A refusal is `none`. No codec is a frontier
+    of `never` alone, the empty frontier included. Some options is a frontier with `never` and with
+    another frame. Two declarations are a frontier with no `never` and two frames of two shapes.
+    One codec names its frontier, which `pathRead` compares. -/
 def pathReads (n : Nat) : Option (List (Alg.Frame dynSyn)) → HostAt → Bool
   | none, .refused => true
   | some fs, .vacant => fs.all frameNever
   | some fs, .someVariants => fs.any frameNever && fs.any (!frameNever ·)
   | some (f :: fs), .ambiguous => !(f :: fs).any frameNever && fs.any (!frameSim n f ·)
-  | some fs, .resolved t => !fs.isEmpty && fs.all (frameSim n · (t, []))
   | _, _ => false
 
-/-- **The rows of the paths into a root**: `Alg.Term.at` at each path, read against the host. -/
-def pathRows (n : Nat) (root : Term) (rows : List (List Alg.Seg × HostAt)) : Bool :=
-  rows.all fun r => pathReads n (Alg.Term.at root r.1) r.2
+/-- **What a row reads**: the frontier where one codec stands, and the decision of `pathReads`
+    elsewhere. -/
+def pathRead (n : Nat) (r : Option (List (Alg.Frame dynSyn))) :
+    HostAt → Bool × Option (List (Alg.Frame dynSyn))
+  | .resolved _ _ => (true, r)
+  | h => (pathReads n r h, none)
+
+/-- **What the host states that a row reads**: the frames of the codec where one codec stands,
+    and an accepting decision elsewhere. -/
+def HostAt.claim : HostAt → Bool × Option (List (Alg.Frame dynSyn))
+  | .resolved f fs => (true, some (f :: fs))
+  | _ => (true, none)
+
+/-- **The rows of the paths into a root**: `Alg.Term.at` at each path reads what the host states. -/
+abbrev PathRows (n : Nat) (root : Term) (rows : List (List Alg.Seg × HostAt)) : Prop :=
+  rows.map (fun r => pathRead n (Alg.Term.at root r.1) r.2) = rows.map (·.2.claim)
 
 /-- **The frames after a clause**: the options of the union that `narrow` keeps, each under the
     binder of a recursive union. -/
@@ -127,10 +148,12 @@ def narrowFrames (φ : Term) : Term → List (Alg.Frame dynSyn)
   | t => [(t, [])]
 
 /-- **The rows of the clauses at a union**: for each clause, `narrow`, then the frontier of the
-    rest of each path. -/
-def narrowRows (n : Nat) (u : Term) (rows : List (Term × List (List Alg.Seg × HostAt))) : Bool :=
-  rows.all fun c => let fs := narrowFrames c.1 u
-    c.2.all fun r => pathReads n (Alg.atG Alg.Frame.child r.1 fs) r.2
+    rest of each path reads what the host states. -/
+abbrev NarrowRows (n : Nat) (u : Term) (rows : List (Term × List (List Alg.Seg × HostAt))) :
+    Prop :=
+  rows.map (fun c => c.2.map fun r =>
+      pathRead n (Alg.atG Alg.Frame.child r.1 (narrowFrames c.1 u)) r.2) =
+    rows.map (·.2.map (·.2.claim))
 
 /-! ## The frontier that each decision names -/
 
@@ -163,11 +186,26 @@ theorem pathReads_ambiguous (n : Nat) (r : Option (List (Alg.Frame dynSyn))) :
       (∀ g ∈ f :: fs, frameNever g = false) ∧ ∃ g ∈ fs, frameSim n f g = false := by
   rcases r with _ | _ | ⟨f, fs⟩ <;> simp [pathReads]
 
-/-- **One codec is a nonempty frontier**, whose frames each are similar to the codec. -/
-theorem pathReads_resolved (n : Nat) (r : Option (List (Alg.Frame dynSyn))) (t : Term) :
-    pathReads n r (.resolved t) = true ↔ ∃ fs, r = some fs ∧ fs ≠ [] ∧
-      ∀ f ∈ fs, frameSim n f (t, []) = true := by
-  rcases r with _ | fs <;> simp [pathReads]
+/-- **A decision of no codec reads its comparator.** -/
+theorem pathRead_decided (n : Nat) (r : Option (List (Alg.Frame dynSyn))) (h : HostAt)
+    (hr : ∀ f fs, h ≠ .resolved f fs) : pathRead n r h = h.claim ↔ pathReads n r h = true := by
+  rcases h with _ | _ | _ | _ | ⟨f, fs⟩
+  all_goals first | exact absurd rfl (hr f fs) | simp [pathRead, HostAt.claim]
+
+/-- **One codec is its frontier**: the frames of the model are the recorded frames, one for one. -/
+theorem pathRead_resolved (n : Nat) (r : Option (List (Alg.Frame dynSyn))) (f : Alg.Frame dynSyn)
+    (fs : List (Alg.Frame dynSyn)) :
+    pathRead n r (.resolved f fs) = (HostAt.resolved f fs).claim ↔ r = some (f :: fs) := by
+  simp [pathRead, HostAt.claim]
+
+/-- **A resolved row certifies meaning**: each frame of the frontier denotes what the recorded
+    frame of the codec denotes, at every table. -/
+theorem pathRead_resolved_sem (n : Nat) {r : Option (List (Alg.Frame dynSyn))}
+    {f : Alg.Frame dynSyn} {fs : List (Alg.Frame dynSyn)}
+    (h : pathRead n r (.resolved f fs) = (HostAt.resolved f fs).claim) (α : Table)
+    (β : Alg.Table dynSyn.op) :
+    (r.getD []).map (Alg.Frame.sem α β) = (f :: fs).map (Alg.Frame.sem α β) := by
+  rw [(pathRead_resolved n r f fs).mp h]; rfl
 
 /-! ## Similarity is no law of meaning -/
 

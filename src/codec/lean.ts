@@ -83,6 +83,7 @@ import {
     recursionUse,
     type Scope,
     storedAlternatives,
+    storedView,
     throughThunks,
     viewsDisjoint,
 } from './term'
@@ -528,8 +529,24 @@ type Bound = {
     readonly standIn?: boolean
 }
 
+/**
+ * **The frames of a printed term.** Each term object that the printer prints, at each position, with
+ * the binders above the position, nearest first. A binder is a cell, and the printer writes the
+ * text of the cell when the print of the binder ends.
+ */
+type Frames = {
+    readonly at: Map<Term, Position[]>
+    readonly above: readonly { text: string }[]
+}
+
+/** One position of a printed term: the print, and the binders above it, nearest first. */
+type Position = {
+    readonly term: string
+    readonly above: readonly { text: string }[]
+}
+
 /** A scope, and the functions that the theorem binds where the vector is quantified. */
-type At = Scope & { readonly bound?: Bound }
+type At = Scope & { readonly bound?: Bound; readonly frames?: Frames }
 
 /**
  * **The name of one caller function, made on the first use.** A prefix names a variable of the
@@ -616,6 +633,7 @@ export const leanTermOf = (
     declared: ObjectSlot,
     at = 'codec',
     bound?: Bound,
+    frames?: Map<Term, Position[]>,
 ): string => {
     // the entry takes a declaration and the printer below takes a term, so the refusal has a place
     // to live and stays reachable. A codec's definition is a term in the type, and the caller this
@@ -627,7 +645,11 @@ export const leanTermOf = (
             'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
         )
     }
-    return leanTermOfTerm(def, at, { ...topScope(def), bound })
+    return leanTermOfTerm(def, at, {
+        ...topScope(def),
+        bound,
+        frames: frames && { at: frames, above: [] },
+    })
 }
 
 /**
@@ -759,10 +781,28 @@ const leanBodyOf = (body: Body, at: string, scope: At): string => {
 export const leanRooted = (printed: string, declared: AnyCodec): string =>
     readsFreeVariable(declared.def) ? `Term.mu (${printed})` : printed
 
-const leanTermOfTerm = (t: Term, at: string, scope: At): string =>
-    scope.binds.has(t) && !scope.inside.includes(t)
-        ? `Term.mu (${leanTermCore(t, at, { ...scope, inside: [...scope.inside, t] })})`
-        : leanTermCore(t, at, scope)
+const leanTermOfTerm = (t: Term, at: string, scope: At): string => {
+    const frames = scope.frames
+    const binder = { text: '' }
+    const printed =
+        scope.binds.has(t) && !scope.inside.includes(t)
+            ? `Term.mu (${leanTermCore(t, at, {
+                  ...scope,
+                  inside: [...scope.inside, t],
+                  frames: frames && {
+                      ...frames,
+                      above: [binder, ...frames.above],
+                  },
+              })})`
+            : leanTermCore(t, at, scope)
+    binder.text = printed
+    if (frames) {
+        const known = frames.at.get(t) ?? []
+        known.push({ term: printed, above: frames.above })
+        frames.at.set(t, known)
+    }
+    return printed
+}
 
 const leanTermCore = (t: Term, at: string, scope: At): string => {
     switch (t.kind) {
@@ -2283,9 +2323,9 @@ const leanSeg = (step: string | number): string =>
 
 /**
  * **The depth of a term as it prints**: a thunk that closes a cycle prints a variable, and any
- * other thunk prints its target. A row reads a frame as similar to a resolved term (`frameSim`) to
- * the depth of the term and two more steps, which reads the whole print of the term and one step
- * past each leaf. Similarity is one shape, not one meaning: `frameSim` reads no predicate. A deeper
+ * other thunk prints its target. The comparator of two declarations reads two frames as similar
+ * (`frameSim`) to the depth of the deepest term that the theorem resolves, and two more steps.
+ * Similarity is one shape, not one meaning: `frameSim` reads no predicate. A deeper
  * step reads one more unfolding of a binder that the print already holds. A bound of the
  * constructor count reads a recursive term with two recursive children to an exponential size.
  */
@@ -2348,50 +2388,209 @@ export const unionAt = (host: HostAt): boolean => {
     return u?.kind === 'union' && !bindersOf(host.codec.def).has(u)
 }
 
+/** A frame of the model's walk: a term object at one position, and the binders above it. */
+type Walked = {
+    readonly t: Term
+    readonly scope: At
+    readonly above: readonly string[]
+}
+
+/** The frame of a walk, as the model's `Frame` prints. */
+const leanFrame = (w: Walked, at: string): string =>
+    `(${leanTermOfTerm(w.t, at, w.scope)}, [${w.above.join(', ')}])`
+
+/** The term `never`, the frame of a name that an object neither declares nor leaves open. */
+const nothingAt: Term = { kind: 'never' }
+
+/**
+ * **The model's frontier at one segment, over the printed term**: `Alg.Frame.child`. A binder
+ * enters its body under its own print, a thunk that closes a cycle enters its binder again over the
+ * binders outside the binder, and any other thunk is its target. A union gives the children of each
+ * option. `undefined` is a refusal, and a segment that a term does not read gives no frame. The
+ * kernel checks each frame against `Term.at`, so a step that reads otherwise fails the row.
+ */
+const childOf = (
+    w: Walked,
+    s: string | number,
+    at: string,
+): Walked[] | undefined => {
+    const { t, scope, above } = w
+    if (scope.binds.has(t) && !scope.inside.includes(t)) {
+        const self = leanTermOfTerm(t, at, scope)
+        const inside = { ...scope, inside: [...scope.inside, t] }
+        return childIn({ t, scope: inside, above: [self, ...above] }, s, at)
+    }
+    return childIn(w, s, at)
+}
+
+/** {@link childOf} past the binder of the term. */
+const childIn = (
+    w: Walked,
+    s: string | number,
+    at: string,
+): Walked[] | undefined => {
+    const { t, scope, above } = w
+    const here = (u: Term): Walked[] => [{ t: u, scope, above }]
+    switch (t.kind) {
+        case 'never':
+            return []
+        case 'opaq':
+            return here(t)
+        case 'lazy': {
+            const target = force(t)
+            if (target === undefined) return []
+            const k = scope.inside.lastIndexOf(target)
+            if (k === -1) return childOf({ t: target, scope, above }, s, at)
+            const outer = { ...scope, inside: scope.inside.slice(0, k) }
+            const i = scope.inside.length - 1 - k
+            return childOf(
+                { t: target, scope: outer, above: above.slice(i + 1) },
+                s,
+                at,
+            )
+        }
+        case 'union': {
+            const all: Walked[] = []
+            for (const option of t.options) {
+                const some = childOf({ t: option, scope, above }, s, at)
+                if (some === undefined) return undefined
+                all.push(...some)
+            }
+            return all
+        }
+        case 'object': {
+            if (typeof s !== 'string') return []
+            const field = t.body.fields[s]
+            return here(field ? field.t : (t.body.rest ?? nothingAt))
+        }
+        case 'list': {
+            if (typeof s !== 'number') return []
+            const one = t.pre[s]
+            if (one !== undefined) return here(one)
+            if (t.suf.length > 0) return undefined
+            return here(t.spread ?? nothingAt)
+        }
+        default:
+            return []
+    }
+}
+
+/** The frontier of a walk at each segment of a path. */
+const walkOf = (
+    start: readonly Walked[],
+    segs: readonly (string | number)[],
+    at: string,
+): Walked[] | undefined => {
+    let ws: Walked[] = [...start]
+    for (const s of segs) {
+        const next: Walked[] = []
+        for (const w of ws) {
+            const some = childOf(w, s, at)
+            if (some === undefined) return undefined
+            next.push(...some)
+        }
+        ws = next
+    }
+    return ws
+}
+
+/** The options of a union that a clause keeps: the host's narrowing, on the stored views. */
+const narrowedBy = (
+    clause: Readonly<Record<string, AnyCodec>>,
+    options: readonly Term[],
+): Term[] => {
+    const fields: Record<string, TermField> = {}
+    for (const [key, one] of Object.entries(clause)) {
+        if ('mark' in one.def) continue
+        fields[key] = { mark: 'req', t: one.def }
+    }
+    const phi = storedView({
+        kind: 'object',
+        body: { fields, rest: { kind: 'opaq' } },
+    })
+    return options.filter((o) => !disjoint(phi, storedView(o)))
+}
+
 /**
  * **The paths of one codec, as one Lean `theorem`.** Each path without a clause is a row of
- * `pathRows`: the model's `Term.at` at the path, read against the decision of the host. A path
- * with a clause is a row of `narrowRows` at the union that the host resolves before the clause: the
- * model's `narrow` over the options of the union, then the frontier of the rest of the path.
+ * `PathRows`: the model's `Term.at` at the path, read against the decision of the host. A path
+ * with a clause is a row of `NarrowRows` at the union that the host resolves before the clause:
+ * the model's `narrow` over the options of the union, then the frontier of the rest of the path.
  *
  * One bound for every term of the theorem, so one adapter is one generator in each.
  *
- * **A caller's function prints as its stand-in**, and the theorem is closed. `Term.at` and `μSyn`
- * read the constructors of a term and no function. `narrow` reads a predicate through
- * `Pred.isData`, which is `false` at every closure, and reads no older reader. So the twin of one
- * shape has the decisions of the term, and the goal is closed. A quantified goal closes by `rfl`,
- * which runs out of heartbeats on a theorem of this size.
+ * **A resolved row states the frontier.** The host resolves a node of the term graph of the root.
+ * The printer records each position of each node, with the binders above the position. The walk
+ * of the model's frontier, over the same print, names the position of each frame, and the row
+ * states each frame as the recorded frame of the resolved node at that position. Equal frames have
+ * one meaning, so the row certifies the meaning of the host's decision. A frame at a position of
+ * another node, or at a position that the resolved node does not hold, refuses the path.
  *
- * **The kernel decides the goal**, by `of_decide_eq_true kernel_rfl%`. The elaborator's `decide`
- * evaluates the goal before the kernel does, and runs out of heartbeats. `kernel_rfl%` evaluates
- * nothing in the elaborator, and the kernel check adds no axiom.
+ * **A caller's function is a variable of the theorem**, so a frame equals the resolved frame only
+ * where the two hold the same function. The theorem binds each closure and each older reader.
+ *
+ * **The kernel decides the goal**, by `kernel_rfl%` on each conjunct. A frame holds a function, so
+ * the equation has no decision, and the kernel compares the two sides by definitional equality.
  */
 export const leanPath = ({ name, codec, paths }: PathVectors): string => {
     const bound: Bound = {
         closures: new Map(),
         adapters: new Map(),
         readers: new Map(),
-        standIn: true,
     }
     const item = wrapperOf(codec)
-    const root = leanTermOf(item, `${name}.root`, bound)
+    const rootFrames = new Map<Term, Position[]>()
+    const root = leanTermOf(item, `${name}.root`, bound, rootFrames)
+    const rootWalk: Walked = {
+        t: item.def as Term,
+        scope: { ...topScope(item.def as Term), bound },
+        above: [],
+    }
     let fuel = 1
-    // a long term prints one time per theorem, as an abbreviation that the rows name
+    // a long term of a frame prints one time per theorem, as a `let` that the rows name: the term
+    // can hold a variable of the theorem, so it is no declaration
     const terms = new Map<string, string>()
     const named = (printed: string): string => {
-        if (printed.length <= 80) return `(${printed})`
+        if (printed.length <= 80) return printed
         const known = terms.get(printed)
         if (known !== undefined) return known
-        const made = `${leanIdent(name)}_t${terms.size}`
+        const made = `t${terms.size}`
         terms.set(printed, made)
         return made
     }
-    const host = (steps: readonly PathStep[], at: string): string => {
+    /**
+     * The decision of the host at a path. A resolved row states the frontier of the walk, each
+     * frame at a recorded position of the resolved node.
+     */
+    const host = (
+        steps: readonly PathStep[],
+        at: string,
+        frontier: () => Walked[] | undefined,
+        recorded: Map<Term, Position[]>,
+    ): string => {
         const decided = hostAt(codec, steps)
         if (decided.kind !== 'resolved') return `.${decided.kind}`
-        const printed = leanTermOf(decided.codec, at, bound)
         fuel = Math.max(fuel, depthOf(decided.codec.def as Term))
-        return `.resolved ${named(printed)}`
+        const own = new Set(
+            (recorded.get(decided.codec.def as Term) ?? []).map(
+                (p) =>
+                    `(${p.term}, [${p.above.map((c) => c.text).join(', ')}])`,
+            ),
+        )
+        const walked = frontier() ?? []
+        if (
+            walked.length === 0 ||
+            walked.some((w) => !own.has(leanFrame(w, at)))
+        )
+            return refuse(
+                at,
+                'the model reaches a frame that is no position of the resolved node',
+            )
+        const [first, ...others] = walked.map(
+            (w) =>
+                `(${named(leanTermOfTerm(w.t, at, w.scope))}, [${w.above.map(named).join(', ')}])`,
+        )
+        return `.resolved ${first} [${others.join(', ')}]`
     }
     const plain: string[] = []
     const unions = new Map<string, Map<string, string[]>>()
@@ -2402,8 +2601,9 @@ export const leanPath = ({ name, codec, paths }: PathVectors): string => {
         )
         if (clauses.length === 0) {
             const segs = [wrapped, ...(steps as readonly (string | number)[])]
+            const frontier = () => walkOf([rootWalk], segs, at)
             plain.push(
-                `([${segs.map(leanSeg).join(', ')}], ${host(steps, at)})`,
+                `([${segs.map(leanSeg).join(', ')}], ${host(steps, at, frontier, rootFrames)})`,
             )
             return
         }
@@ -2418,7 +2618,8 @@ export const leanPath = ({ name, codec, paths }: PathVectors): string => {
                 'no union stands before the clause: a row narrows the options of one union',
             )
         }
-        const u = leanTermOf(before.codec, `${at}.union`, bound)
+        const uFrames = new Map<Term, Position[]>()
+        const u = leanTermOf(before.codec, `${at}.union`, bound, uFrames)
         const clause = (steps[k] as Exclude<PathStep, string | number>).narrow
         const entries = Object.entries(clause).map(
             ([key, one]) =>
@@ -2429,17 +2630,34 @@ export const leanPath = ({ name, codec, paths }: PathVectors): string => {
         )
         const phi = `(Alg.clauseTerm ${leanFinset(Object.keys(clause))} (${leanKeyFunction(entries)}))`
         const rest = steps.slice(k + 1) as readonly (string | number)[]
+        const uDef = before.codec.def as Term
+        const scope = { ...topScope(uDef), bound }
+        const options = resolved(uDef)
+        const frontier = () =>
+            options?.kind === 'union'
+                ? walkOf(
+                      narrowedBy(clause, options.options).map((t) => ({
+                          t,
+                          scope,
+                          above: [],
+                      })),
+                      rest,
+                      at,
+                  )
+                : undefined
         const byClause = unions.get(u) ?? new Map<string, string[]>()
         const rows = byClause.get(phi) ?? []
-        rows.push(`([${rest.map(leanSeg).join(', ')}], ${host(steps, at)})`)
+        rows.push(
+            `([${rest.map(leanSeg).join(', ')}], ${host(steps, at, frontier, uFrames)})`,
+        )
         byClause.set(phi, rows)
         unions.set(u, byClause)
     })
     const conjuncts = [
-        `pathRows ${fuel + 2} (${root})\n      [${plain.join(',\n       ')}]`,
+        `PathRows ${fuel + 2} (${root})\n      [${plain.join(',\n       ')}]`,
         ...[...unions].map(
             ([u, byClause]) =>
-                `narrowRows ${fuel + 2} (${u})\n      [${[...byClause]
+                `NarrowRows ${fuel + 2} (${u})\n      [${[...byClause]
                     .map(
                         ([phi, rows]) =>
                             `(${phi},\n        [${rows.join(',\n         ')}])`,
@@ -2447,15 +2665,19 @@ export const leanPath = ({ name, codec, paths }: PathVectors): string => {
                     .join(',\n       ')}]`,
         ),
     ]
+    const proof =
+        conjuncts.length === 1
+            ? 'kernel_rfl%'
+            : `⟨${conjuncts.map(() => 'kernel_rfl%').join(', ')}⟩`
+    const binders = leanBinders(bound)
     // one theorem per codec: the cost of a declaration outweighs the parallel check of small ones
     return [
-        ...[...terms].map(
-            ([printed, ident]) =>
-                `private abbrev ${ident} : Term := ${printed}`,
-        ),
         `/-- \`${name}\` — the decision of \`at\` at each path, and under each \`narrow\` -/`,
-        `theorem ${leanIdent(name)} :`,
-        `    (${conjuncts.join(' &&\n    ')}) = true := of_decide_eq_true kernel_rfl%`,
+        `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
+        ...[...terms].map(
+            ([printed, ident]) => `    let ${ident} : Term := ${printed}`,
+        ),
+        `    ${conjuncts.join(' ∧\n    ')} := ${proof}`,
     ].join('\n')
 }
 
