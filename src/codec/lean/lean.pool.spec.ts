@@ -70,6 +70,7 @@ import {
     leanFormerGuard,
     leanFormerGuardModule,
     leanPath,
+    leanPathModules,
     leanRooted,
     leanSeparation,
     leanSeparationRowModule,
@@ -1217,11 +1218,12 @@ const poolModules = (
     ],
     [
         '.pool.slices.lean',
-        leanSliceModule(
-            perSeed.flatMap((one) => one.slices),
-            perSeed.flatMap((one) => one.paths),
-        ),
+        leanSliceModule(perSeed.flatMap((one) => one.slices)),
     ],
+    ...leanPathModules(
+        perSeed.flatMap((one) => one.paths),
+        4,
+    ).map((text, i) => [`.pool.paths${i}.lean`, text] as const),
     [
         '.pool.guards.lean',
         leanFormerGuardModule(perSeed.flatMap((one) => one.guards)),
