@@ -2531,8 +2531,14 @@ const narrowedBy = (
  *
  * **The kernel decides the goal**, by `kernel_rfl%` on each conjunct. A frame holds a function, so
  * the equation has no decision, and the kernel compares the two sides by definitional equality.
+ *
+ * `decide` is the decision of the host. Every caller but one test reads {@link hostAt}. The test
+ * gives a wrong decision, so the refusal of a frame at no position of the resolved node fires.
  */
-export const leanPath = ({ name, codec, paths }: PathVectors): string => {
+export const leanPath = (
+    { name, codec, paths }: PathVectors,
+    decide: typeof hostAt = hostAt,
+): string => {
     const bound: Bound = {
         closures: new Map(),
         adapters: new Map(),
@@ -2568,7 +2574,7 @@ export const leanPath = ({ name, codec, paths }: PathVectors): string => {
         frontier: () => Walked[] | undefined,
         recorded: Map<Term, Position[]>,
     ): string => {
-        const decided = hostAt(codec, steps)
+        const decided = decide(codec, steps)
         if (decided.kind !== 'resolved') return `.${decided.kind}`
         fuel = Math.max(fuel, depthOf(decided.codec.def as Term))
         const own = new Set(
@@ -2611,7 +2617,7 @@ export const leanPath = ({ name, codec, paths }: PathVectors): string => {
         if (clauses.length > 1 || k === undefined) {
             return refuse(at, 'a path of two clauses: a row narrows once')
         }
-        const before = hostAt(codec, steps.slice(0, k))
+        const before = decide(codec, steps.slice(0, k))
         if (before.kind !== 'resolved' || !unionAt(before)) {
             return refuse(
                 at,
@@ -2743,7 +2749,7 @@ export const leanPathModules = (
     paths: readonly PathVectors[],
     files: number,
 ): string[] => {
-    const printed = paths.map(leanPath)
+    const printed = paths.map((one) => leanPath(one))
     const size = Array.from({ length: files }, () => 0)
     const owner = new Map<number, number>()
     const longestFirst = printed
