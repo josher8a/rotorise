@@ -971,8 +971,7 @@ export const leanVector = (
     const term = leanTermOf(codec, name)
     const attribute = codec.unsafeEncode(value as never)
     const head = [`/-- \`${name}\` -/`, `theorem ${leanIdent(name)} :`]
-    // a recursive term the library wrote through is a term the guard accepts
-    const guard = term.includes('Term.mu')
+    const guard = guardedToo(term)
         ? `\n\n${leanGuard({ name: `${name}__guarded`, codec, guarded: true })}`
         : ''
     const vector =
@@ -993,6 +992,9 @@ export const leanVector = (
               ].join('\n')
     return `${vector}${guard}`
 }
+
+/** A recursive term that the library wrote through is a term that the guard accepts. */
+const guardedToo = (term: string): boolean => term.includes('Term.mu')
 
 /**
  * **A guard verdict**: whether the model's `Alg.Term.guarded` accepts the term of a codec. A recursive
@@ -1050,18 +1052,23 @@ export type Refusal = {
  * disagreement — the worst possible artifact, a green check over a real divergence.
  */
 export const leanRefusal = ({ name, codec, value }: Refusal): string => {
-    if (accepts(codec, value)) {
-        throw new LeanUnemittable(
-            name,
-            'this codec admits this value, so a refusal vector about it would assert the model refuses what `src/` writes — pass it as a `Vector` instead',
-        )
-    }
+    refusedBoth(name, codec, value)
     return [
         `/-- \`${name}\` — refused on both sides -/`,
         `theorem ${leanIdent(name)} :`,
         `    (denote (libTable noCallers) (${leanTermOf(codec, name)})).e`,
         `      (${leanValueOf(value, name)}) = none := kernel_rfl%`,
     ].join('\n')
+}
+
+/** The `src/` half of a refusal vector, decided at emit time: this library refuses the value. */
+const refusedBoth = (name: string, codec: AnyCodec, value: unknown): void => {
+    if (accepts(codec, value)) {
+        throw new LeanUnemittable(
+            name,
+            'this codec admits this value, so a refusal vector about it would assert the model refuses what `src/` writes — pass it as a `Vector` instead',
+        )
+    }
 }
 
 /**
@@ -1184,48 +1191,6 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
 }
 
 /**
- * The declaration verdicts as a module of their own, because they need the decision `compatPair`
- * and the dischargers of `PairwiseCompat`.
- *
- * The header imports `Calculus.Dynamo.Analysis.Compat`, which reaches `Dynamo.Analysis.Disjoint`, and
- * `Calculus.Dynamo.Lang.Store`, because a verdict spells `libTable` and `Callers`, which the
- * DynamoDB port defines, and `Compat` does not reach them. Lean
- * auto-binds an unknown lower-case name, so the missing import reports a free variable in the
- * expected type of every verdict rather than an unknown identifier.
- *
- * Generated at gate time and elaborated, never committed.
- */
-export const leanSeparationModule = (
-    separations: readonly Separation[],
-): string =>
-    `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Analysis.Compat
-import Calculus.Dynamo.Lang.Store
-
-/-!
-# Declaration verdicts, both ways
-
-**Generated — do not edit.** One theorem per option pair of the corpus. A pair \`src/\`'s \`union\`
-accepts carries the model's proof that the pair is compatible, through the warrant the host used.
-A pair \`src/\` refuses carries \`compatPair dynOracle x y = false\`: the model's decision refuses
-it too.
-See \`src/codec/lean.ts\`'s \`Separation\`.
--/
-
-/-! The emitted key function is total on a membership subtype, so a single-name object binds a
-\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
-set_option linter.unusedVariables false
-/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
-set_option linter.style.nameCheck false
-
-namespace Calculus
-
-${separations.map(leanSeparation).join('\n\n')}
-
-end Calculus
-`
-
-/**
  * **A guard verdict on a term that a former refused.** Each former refuses a term where the host's
  * guard reads a recursion at its own input or an adapter on a recursive path, and the refusal
  * carries the term. No union reads such a term, so no {@link Separation} states the model's guard
@@ -1275,8 +1240,9 @@ export const leanFormerGuard = ({ name, term }: FormerGuard): string => {
 }
 
 /**
- * The guard verdicts on refused terms as a module of their own. The header imports what
- * {@link leanSeparationModule} imports, because a verdict spells the same terms and the same lemma.
+ * The guard verdicts on refused terms as a module of their own. A verdict spells the terms and the
+ * lemma of a separation verdict, so the header imports `Compat`, and `Store`, which declares
+ * `libTable` and which `Compat` does not reach.
  *
  * Generated at gate time and elaborated, never committed.
  */
@@ -1386,38 +1352,6 @@ export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
     ].join('\n')
 }
 
-/**
- * The disjointness pairs as a module of their own.
- *
- * Generated at gate time and elaborated, never committed.
- */
-export const leanDisjointModule = (pairs: readonly DisjointPair[]): string =>
-    `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Analysis.Disjoint
-import Calculus.Dynamo.Lang.Store
-
-/-!
-# Disjointness, proposed to the model
-
-**Generated — do not edit.** One theorem per pair of corpus terms, asserting that
-\`Calculus.Alg.Term.disjoint\` answers what \`src/\`'s \`disjoint\` answered on the two terms, and
-that \`Calculus.viewsDisjoint\` answers what \`src/\`'s \`viewsDisjoint\` answered on the two pairs of
-views. The two sides are one function written twice, so this runs in both directions.
--/
-
-/-! The emitted key function is total on a membership subtype, so a single-name object binds a
-\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
-set_option linter.unusedVariables false
-/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
-set_option linter.style.nameCheck false
-
-namespace Calculus
-
-${pairs.map(leanDisjoint).join('\n\n')}
-
-end Calculus
-`
-
 /* ── the row form ──────────────────────────────────────────────────────────────────────────── */
 
 /** The two terms that the tests read, and the two terms that the guard reads, as a row prints them. */
@@ -1440,36 +1374,40 @@ export const leanShapes = (
     argument: (kind: 'closure' | 'reader') => string,
 ): {
     readonly pair: (left: AnyCodec, right: AnyCodec, at: string) => RowTerms
+    readonly row: (pin?: Pin) => (codec: AnyCodec, at: string) => string
+    readonly closed: (printed: string) => string
     readonly defs: () => string
 } => {
     const names = new Map<string, string>()
     const defs: string[] = []
-    const pair = (left: AnyCodec, right: AnyCodec, at: string): RowTerms => {
+    const nameOf = (printed: string, binders: string): string => {
+        const known = names.get(printed)
+        if (known !== undefined) return known
+        const name = `t${names.size}`
+        names.set(printed, name)
+        defs.push(
+            `def ${name}${binders === '' ? '' : ` ${binders}`} : Term := ${printed}`,
+        )
+        return name
+    }
+    const row = (pin: Pin = (_, made) => made) => {
         const adapters = new Map<unknown, string>()
         const given = new Map<unknown, string>()
         const argumentOf = (fn: unknown, kind: 'closure' | 'reader') => {
             const known = given.get(fn)
             if (known !== undefined) return known
-            const made = argument(kind)
+            const made = pin(fn, argument(kind))
             given.set(fn, made)
             return made
         }
-        const one = (codec: AnyCodec): string => {
+        return (codec: AnyCodec, at: string): string => {
             const bound: Bound = {
                 closures: new Map(),
                 adapters,
                 readers: new Map(),
             }
             const printed = leanTermOf(codec, at, bound)
-            const binders = leanBinders(bound)
-            let name = names.get(printed)
-            if (name === undefined) {
-                name = `t${names.size}`
-                names.set(printed, name)
-                defs.push(
-                    `def ${name}${binders === '' ? '' : ` ${binders}`} : Term := ${printed}`,
-                )
-            }
+            const name = nameOf(printed, leanBinders(bound))
             // the order of `leanBinders`: the closures, then the readers
             const applied = [
                 ...[...bound.closures.keys()].map((fn) =>
@@ -1483,12 +1421,30 @@ export const leanShapes = (
                 ? name
                 : `(${name} ${applied.join(' ')})`
         }
-        const l = one(left)
-        const r = one(right)
+    }
+    const pair = (left: AnyCodec, right: AnyCodec, at: string): RowTerms => {
+        const one = row()
+        const l = one(left, at)
+        const r = one(right, at)
         return { l, r, gl: leanRooted(l, left), gr: leanRooted(r, right) }
     }
-    return { pair, defs: () => defs.join('\n') }
+    return {
+        pair,
+        row,
+        closed: (printed) => nameOf(printed, ''),
+        defs: () => defs.join('\n'),
+    }
 }
+
+/**
+ * **The argument of a row for one caller function, given the argument that the shapes made.** A
+ * former theorem that pinned the function at an input takes the pin around the argument, so the
+ * `def` of the term stays the shape, and the row carries the pin.
+ */
+type Pin = (fn: unknown, made: string) => string
+
+/** The shapes of one module. */
+type Shapes = ReturnType<typeof leanShapes>
 
 /** The rows of one list. One list of a whole file exceeds `maxRecDepth`. */
 const rowsPerList = 100
@@ -1514,7 +1470,7 @@ const kernelShapes = () => {
     )
 }
 
-/** One list of rows as a `def` over the functions, and the kernel's check of the list. */
+/** A list of rows of `type` as a `def` over the functions, and the kernel's check of the list. */
 const leanRowList = (
     name: string,
     type: string,
@@ -1522,18 +1478,114 @@ const leanRowList = (
     check: string,
 ): string =>
     [
-        `def ${name} ${rowBinders} : ${type} := [`,
+        `def ${name} ${rowBinders} : List ${type} := [`,
         `  ${rows.join(',\n  ')}]`,
         '',
         `theorem ${name}_check ${rowBinders} :`,
         `    (${name} ρ π).all (fun p => ${check}) = true := kernel_rfl%`,
     ].join('\n')
 
-/** The header of a row module: the reason that a pair carries no theorem name of its own. */
-const rowForm = `Each distinct term is one \`def\`, and a caller's function of the term is a parameter of the \`def\`.
-A row applies the \`def\` to \`ρ n\` or \`π n\`, and each function of each pair has an index of its own.
-A list holds ${rowsPerList} rows, and the kernel decides one check per list by \`kernel_rfl%\`. A pair carries no
-theorem name of its own: the pool pre-check names a failing pair.`
+/** What a row module states: the generated pool, or the corpus. */
+type Subject = 'pool' | 'corpus'
+
+/** The unit of a row of each subject, as the header names it. */
+const unitOf = { pool: 'pair', corpus: 'vector' } as const satisfies Record<
+    Subject,
+    string
+>
+
+/** The header of a row module: the reason that a row carries no theorem name of its own. */
+const rowForm = (
+    subject: Subject,
+) => `Each distinct term is one \`def\`, and a caller's function of the term is a parameter of the \`def\`.
+A row applies the \`def\` to \`ρ n\` or \`π n\`, and each function of each ${unitOf[subject]} has an index of its own.
+A list holds ${rowsPerList} rows, and the kernel decides one check per list by \`kernel_rfl%\`. A ${unitOf[subject]} carries no
+theorem name of its own: the ${subject} pre-check names a failing ${unitOf[subject]}.`
+
+/** A form of row list: the Lean type of a row, and the check of one row `p` as a `Bool`. */
+type RowForm = { readonly type: string; readonly check: string }
+
+/** One vector as a row: the name of its former theorem, its form, and the row as Lean prints it. */
+type Row<F extends string> = {
+    readonly name: string
+    readonly form: F
+    readonly row: string
+}
+
+/**
+ * **The vectors of one file in the row form.** The rows print through the shapes that the reader
+ * gives: the kernel module gives each caller function an index of `ρ` or `π`, and the pre-check
+ * gives one instance of each function.
+ */
+export type RowFile<F extends string = string> = {
+    readonly forms: Readonly<Record<F, RowForm>>
+    readonly rows: (shapes: Shapes) => readonly Row<F>[]
+}
+
+/** The rows of a file, by form in the order of the forms, in lists of {@link rowsPerList}. */
+const rowLists = <F extends string>(
+    file: RowFile<F>,
+    shapes: Shapes,
+): readonly {
+    readonly form: F
+    readonly index: number
+    readonly rows: readonly Row<F>[]
+}[] => {
+    const rows = file.rows(shapes)
+    return (Object.keys(file.forms) as F[]).flatMap((form) =>
+        listsOf(rows.filter((one) => one.form === form)).map((list, index) => ({
+            form,
+            index,
+            rows: list,
+        })),
+    )
+}
+
+/** The kernel's lists of a file, each with its checker, and the name of each list. */
+const kernelLists = <F extends string>(
+    file: RowFile<F>,
+    shapes: Shapes,
+): readonly {
+    readonly form: F
+    readonly name: string
+    readonly text: string
+}[] =>
+    rowLists(file, shapes).map(({ form, index, rows }) => {
+        const name = `${form}${index}`
+        const { type, check } = file.forms[form]
+        return {
+            form,
+            name,
+            text: leanRowList(
+                name,
+                type,
+                rows.map((one) => one.row),
+                check,
+            ),
+        }
+    })
+
+/** The disjointness pairs as rows: the two terms and the two answers of {@link leanDisjoint}. */
+export const disjointRows = (
+    pairs: readonly DisjointPair[],
+): RowFile<'rows'> => ({
+    forms: {
+        rows: {
+            type: '(Term × Term × Bool × Bool)',
+            check: '(Alg.Term.disjoint pair0 p.1 p.2.1 == p.2.2.1) &&\n      (viewsDisjoint p.1 p.2.1 == p.2.2.2)',
+        },
+    },
+    rows: (shapes) =>
+        pairs.map((pair) => {
+            const [disjointly, views] = disjointAnswers(pair)
+            const { l, r } = shapes.pair(pair.left, pair.right, pair.name)
+            return {
+                name: leanIdent(pair.name),
+                form: 'rows',
+                row: `(${l}, ${r}, ${disjointly}, ${views})`,
+            }
+        }),
+})
 
 /**
  * The disjointness pairs in the row form: each row is the two terms and the two answers of
@@ -1543,34 +1595,25 @@ theorem name of its own: the pool pre-check names a failing pair.`
  */
 export const leanDisjointRowModule = (
     pairs: readonly DisjointPair[],
+    subject: Subject = 'pool',
 ): string => {
     const shapes = kernelShapes()
-    const rows = pairs.map((pair) => {
-        const [disjointly, views] = disjointAnswers(pair)
-        const { l, r } = shapes.pair(pair.left, pair.right, pair.name)
-        return `(${l}, ${r}, ${disjointly}, ${views})`
-    })
-    const lists = listsOf(rows).map((list, i) =>
-        leanRowList(
-            `rows${i}`,
-            'List (Term × Term × Bool × Bool)',
-            list,
-            '(Alg.Term.disjoint pair0 p.1 p.2.1 == p.2.2.1) &&\n      (viewsDisjoint p.1 p.2.1 == p.2.2.2)',
-        ),
+    const lists = kernelLists(disjointRows(pairs), shapes).map(
+        (one) => one.text,
     )
     return `import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Lang.Store
 
 /-!
-# Disjointness of the pool, proposed to the model
+# Disjointness of the ${subject}, proposed to the model
 
-**Generated — do not edit.** One row per pair of pool terms: the two terms, the answer of
+**Generated — do not edit.** One row per pair of ${subject} terms: the two terms, the answer of
 \`src/\`'s \`disjoint\` on the two terms, and the answer of \`src/\`'s \`viewsDisjoint\` on the two pairs
 of views. The checker of a list states that \`Calculus.Alg.Term.disjoint\` and
 \`Calculus.viewsDisjoint\` give the same answers at each row.
 
-${rowForm}
+${rowForm(subject)}
 -/
 
 /-! The emitted key function is total on a membership subtype, so a single-name object binds a
@@ -1590,7 +1633,7 @@ end Calculus
 /** The kernel's check of a row list of each form, and the lemma of `Calculus.Bridge.Rows` that lifts it. */
 const separationLists = {
     accepted: {
-        type: 'List (Term × Term × Term × Term)',
+        type: '(Term × Term × Term × Term)',
         check: 'Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1 &&\n      Alg.compatPair dynOracle p.2.2.1 p.2.2.2',
         caller: ' (κ : Callers)',
         verdict: `(Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1) = true ∧
@@ -1599,7 +1642,7 @@ const separationLists = {
         lift: (list: string) => `accepted_of_rows (${list}_check ρ π) κ`,
     },
     refused: {
-        type: 'List (Term × Term × Term × Term)',
+        type: '(Term × Term × Term × Term)',
         check: 'Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1 &&\n      !Alg.compatPair dynOracle p.2.2.1 p.2.2.2',
         caller: '',
         verdict: `(Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1) = true ∧
@@ -1607,7 +1650,7 @@ const separationLists = {
         lift: (list: string) => `refused_of_rows (${list}_check ρ π)`,
     },
     guardRefused: {
-        type: 'List (Term × Term)',
+        type: '(Term × Term)',
         check: '!(Alg.Term.guarded p.1 && Alg.Term.guarded p.2)',
         caller: '',
         verdict: '(Alg.Term.guarded p.1 && Alg.Term.guarded p.2) = false',
@@ -1616,62 +1659,68 @@ const separationLists = {
 } as const satisfies Record<SeparationForm, unknown>
 
 /**
- * The declaration verdicts in the row form: one row list per {@link SeparationForm}. A row of an
- * accepted pair or of a pair refused at compatibility is the two rooted terms that the guard reads,
- * then the two open terms that compatibility reads. A row of a pair refused at the guard is the two
- * rooted terms. Each list carries the checker, and the verdict of {@link leanSeparation} at each row,
- * lifted from the checker.
+ * The declaration verdicts as rows, one form per {@link SeparationForm}. A row of an accepted pair
+ * or of a pair refused at compatibility is the two rooted terms that the guard reads, then the two
+ * open terms that compatibility reads. A row of a pair refused at the guard is the two rooted terms.
+ */
+export const separationRows = (
+    separations: readonly Separation[],
+): RowFile<SeparationForm> => ({
+    forms: separationLists,
+    rows: (shapes) =>
+        separations.map((one) => {
+            const { l, r, gl, gr } = shapes.pair(one.left, one.right, one.name)
+            const form = separationForm(one)
+            return {
+                name: leanIdent(one.name),
+                form,
+                row:
+                    form === 'guardRefused'
+                        ? `(${gl}, ${gr})`
+                        : `(${gl}, ${gr}, ${l}, ${r})`,
+            }
+        }),
+})
+
+/**
+ * The declaration verdicts in the row form: one row list per {@link SeparationForm}. Each list
+ * carries the checker, and the verdict of {@link leanSeparation} at each row, lifted from the
+ * checker.
  *
  * Generated at gate time and elaborated, never committed.
  */
 export const leanSeparationRowModule = (
     separations: readonly Separation[],
+    subject: Subject = 'pool',
 ): string => {
     const shapes = kernelShapes()
-    const rows: Record<SeparationForm, string[]> = {
-        accepted: [],
-        refused: [],
-        guardRefused: [],
-    }
-    for (const one of separations) {
-        const { l, r, gl, gr } = shapes.pair(one.left, one.right, one.name)
-        const form = separationForm(one)
-        rows[form].push(
-            form === 'guardRefused'
-                ? `(${gl}, ${gr})`
-                : `(${gl}, ${gr}, ${l}, ${r})`,
-        )
-    }
-    const lists = (['accepted', 'refused', 'guardRefused'] as const).flatMap(
-        (form) => {
-            const { type, check, caller, verdict, lift } = separationLists[form]
-            return listsOf(rows[form]).map((list, i) => {
-                const name = `${form}${i}`
-                return [
-                    leanRowList(name, type, list, check),
-                    '',
-                    `theorem ${name}_verdicts ${rowBinders}${caller} :`,
-                    `    ∀ p ∈ ${name} ρ π,`,
-                    `    ${verdict} :=`,
-                    `  ${lift(name)}`,
-                ].join('\n')
-            })
+    const lists = kernelLists(separationRows(separations), shapes).map(
+        ({ form, name, text }) => {
+            const { caller, verdict, lift } = separationLists[form]
+            return [
+                text,
+                '',
+                `theorem ${name}_verdicts ${rowBinders}${caller} :`,
+                `    ∀ p ∈ ${name} ρ π,`,
+                `    ${verdict} :=`,
+                `  ${lift(name)}`,
+            ].join('\n')
         },
     )
     return `import Calculus.Bridge.Rows
 import Calculus.Bridge.Vectors
 
 /-!
-# Declaration verdicts of the pool, both ways
+# Declaration verdicts of the ${subject}, both ways
 
-**Generated — do not edit.** One row per option pair of the pool, in one list per form. A pair
+**Generated — do not edit.** One row per option pair of the ${subject}, in one list per form. A pair
 that \`src/\`'s \`union\` accepts carries the model's guard on both options and the model's proof
 that the pair is compatible. A pair that \`src/\` refuses at compatibility carries the model's
 guard and \`compatPair dynOracle x y = false\`. A pair that \`src/\` refuses at the guard carries
 the model's guard refusal. The lemmas of \`Calculus.Bridge.Rows\` lift each checker to the verdict
 of each row.
 
-${rowForm}
+${rowForm(subject)}
 -/
 
 /-! The emitted key function is total on a membership subtype, so a single-name object binds a
@@ -1695,13 +1744,17 @@ end Calculus
  * has no decidable equality, so each pin tests `aeq` at the attribute that the host asked. Any
  * other attribute goes to the variable, so the claim holds at every reader that gives these answers.
  */
-const pinned = (bound: Bound, r: unknown): string => {
-    const name = boundName(bound.readers, r, 'r')
-    const pins = bound.pins?.get(r) ?? []
-    return pins.length === 0
+const pinned = (bound: Bound, r: unknown): string =>
+    pinText(bound.pins?.get(r), boundName(bound.readers, r, 'r'))
+
+/** A reader, given as `name`, with the answers of the host pinned. */
+const pinText = (
+    pins: readonly (readonly [string, string])[] | undefined,
+    name: string,
+): string =>
+    pins === undefined || pins.length === 0
         ? name
         : `(fun b => ${pins.map(([test, answer]) => `if ${test} then ${answer} else `).join('')}${name} b)`
-}
 
 /**
  * **A copy of the term whose older readers record each answer.** The copy denotes what the term
@@ -1755,6 +1808,40 @@ export type LegacyRead = {
  * pins to `none`. The model reads the older answer only where the current term writes the answer.
  */
 export const leanLegacyRead = (one: LegacyRead): string => {
+    const { name, attribute } = one
+    const { read, term, binders } = legacyReadOf(one)
+    const head = [
+        `/-- \`${name}\` — the older reader pinned where \`src/\` asked it -/`,
+        `theorem ${leanIdent(name)} ${binders} :`,
+    ]
+    return failed(read)
+        ? [
+              ...head,
+              `    (denote (libTable noCallers) (${term})).p`,
+              `      (${leanAttrOf(attribute, name)}) = none := kernel_rfl%`,
+          ].join('\n')
+        : [
+              ...head,
+              `    vcheck ${fuelForValue(read)}`,
+              `      ((denote (libTable noCallers) (${term})).p`,
+              `        (${leanAttrOf(attribute, name)}))`,
+              `      (some (${leanValueOf(read, name)})) = .same := kernel_rfl%`,
+          ].join('\n')
+}
+
+/**
+ * **One legacy read, decided here**: what the host read, the answers of each older reader that the
+ * host asked, and the term with each reader pinned. The refusals of {@link leanLegacyRead} are made
+ * here.
+ */
+const legacyReadOf = (
+    one: LegacyRead,
+): {
+    readonly read: unknown
+    readonly pins: ReadonlyMap<unknown, readonly (readonly [string, string])[]>
+    readonly term: string
+    readonly binders: string
+} => {
     const { name, codec, attribute } = one
     const def = codec.def
     if ('mark' in def) {
@@ -1797,51 +1884,8 @@ export const leanLegacyRead = (one: LegacyRead): string => {
             "a caller's predicate or adapter: the read binds the older readers alone, under `libTable noCallers`",
         )
     }
-    const head = [
-        `/-- \`${name}\` — the older reader pinned where \`src/\` asked it -/`,
-        `theorem ${leanIdent(name)} ${leanBinders(bound)} :`,
-    ]
-    return failed(read)
-        ? [
-              ...head,
-              `    (denote (libTable noCallers) (${term})).p`,
-              `      (${leanAttrOf(attribute, name)}) = none := kernel_rfl%`,
-          ].join('\n')
-        : [
-              ...head,
-              `    vcheck ${fuelForValue(read)}`,
-              `      ((denote (libTable noCallers) (${term})).p`,
-              `        (${leanAttrOf(attribute, name)}))`,
-              `      (some (${leanValueOf(read, name)})) = .same := kernel_rfl%`,
-          ].join('\n')
+    return { read, pins, term, binders: leanBinders(bound) }
 }
-
-/** The legacy reads as a module of their own. Generated at gate time and elaborated, never committed. */
-export const leanLegacyReadModule = (reads: readonly LegacyRead[]): string =>
-    `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Lang.Store
-
-/-!
-# The legacy read gate, model against library
-
-**Generated — do not edit.** One theorem per (codec, attribute) pair, ${reads.length} in all. Each
-older reader is a variable of the theorem, pinned at each attribute that \`src/\` asked it. The
-model reads the older answer only where the current term writes the answer, and \`src/\` checks
-the same.
--/
-
-/-! The emitted key function is total on a membership subtype, so a single-name object binds a
-\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
-set_option linter.unusedVariables false
-/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
-set_option linter.style.nameCheck false
-
-namespace Calculus
-
-${reads.map(leanLegacyRead).join('\n\n')}
-
-end Calculus
-`
 
 /* ── the slice ───────────────────────────────────────────────────────────────────────────── */
 
@@ -2602,25 +2646,14 @@ end Calculus
  * row reads under `libTable noCallers`.
  */
 export const leanReadVerdict = (one: ReadVerdict): string => {
-    const { name, codec, attribute } = one
-    const decodes = readsBack(codec, attribute)
-    const bound: Bound = {
-        closures: new Map(),
-        adapters: new Map(),
-        readers: new Map(),
-    }
+    const { name, attribute } = one
+    const { decodes, term, quantified, pin } = readVerdictOf(one)
     const head = [
         `/-- \`${name}\` — \`src/\` ${decodes ? 'decodes' : 'refuses'} this attribute -/`,
-        `    AdmA (libTable noCallers) (${leanTermOf(codec, name, bound)})`,
+        `    AdmA (libTable noCallers) (${term})`,
         `      (${leanAttrOf(attribute, name)}) = ${decodes}`,
     ] as const
-    if (bound.adapters.size > 0 || bound.readers.size > 0) {
-        return refuse(
-            name,
-            "a caller's adapter or older reader: the read row reads under `libTable noCallers`, which names no caller",
-        )
-    }
-    if (bound.closures.size === 0) {
+    if (!quantified) {
         return [
             head[0],
             `theorem ${leanIdent(name)} :`,
@@ -2628,6 +2661,56 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
             `${head[2]} := kernel_rfl%`,
         ].join('\n')
     }
+    if (pin === undefined) {
+        return [
+            head[0],
+            `theorem ${leanIdent(name)} (q0 : Value → Bool) :`,
+            head[1],
+            `${head[2]} := kernel_rfl%`,
+        ].join('\n')
+    }
+    const { v, answer } = pin
+    return [
+        head[0],
+        `theorem ${leanIdent(name)} (q0 : Value → Bool) (h0 : q0 (${v}) = ${answer}) :`,
+        head[1],
+        `${head[2]} := show q0 (${v}) = ${answer} from h0`,
+    ].join('\n')
+}
+
+/**
+ * **One read verdict, decided here**: `src/`'s answer, the term, whether a caller's predicate at the
+ * top is a variable, and the answer of that predicate at the value that the inner term reads, where
+ * the inner term reads one. The refusals of {@link leanReadVerdict} are made here.
+ */
+const readVerdictOf = (
+    one: ReadVerdict,
+): {
+    readonly decodes: boolean
+    readonly term: string
+    readonly quantified: boolean
+    readonly pin?: {
+        readonly is: unknown
+        readonly v: string
+        readonly answer: boolean
+        readonly fuel: number
+    }
+} => {
+    const { name, codec, attribute } = one
+    const decodes = readsBack(codec, attribute)
+    const bound: Bound = {
+        closures: new Map(),
+        adapters: new Map(),
+        readers: new Map(),
+    }
+    const term = leanTermOf(codec, name, bound)
+    if (bound.adapters.size > 0 || bound.readers.size > 0) {
+        return refuse(
+            name,
+            "a caller's adapter or older reader: the read row reads under `libTable noCallers`, which names no caller",
+        )
+    }
+    if (bound.closures.size === 0) return { decodes, term, quantified: false }
     const def = codec.def
     const inner =
         !('mark' in def) && def.kind === 'refine' && def.q.kind === 'closure'
@@ -2652,53 +2735,19 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
         )
     }
     const read: unknown = codecOfTerm(inner.term).decode(attribute as never)
-    if (failed(read)) {
-        return [
-            head[0],
-            `theorem ${leanIdent(name)} (q0 : Value → Bool) :`,
-            head[1],
-            `${head[2]} := kernel_rfl%`,
-        ].join('\n')
+    if (failed(read)) return { decodes, term, quantified: true }
+    return {
+        decodes,
+        term,
+        quantified: true,
+        pin: {
+            is: inner.holds,
+            v: leanValueOf(read, name),
+            answer: inner.holds(read as never),
+            fuel: fuelForValue(read),
+        },
     }
-    const v = leanValueOf(read, name)
-    const answer = inner.holds(read as never)
-    return [
-        head[0],
-        `theorem ${leanIdent(name)} (q0 : Value → Bool) (h0 : q0 (${v}) = ${answer}) :`,
-        head[1],
-        `${head[2]} := show q0 (${v}) = ${answer} from h0`,
-    ].join('\n')
 }
-
-/**
- * The read verdicts as a module of their own, because they need `AdmA`.
- *
- * Generated at gate time and elaborated, never committed.
- */
-export const leanReadModule = (verdicts: readonly ReadVerdict[]): string =>
-    `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Analysis.ExactA
-import Calculus.Dynamo.Lang.Store
-
-/-!
-# Read verdicts, proposed to the model's read row
-
-**Generated — do not edit.** One theorem per (codec, attribute) pair: \`AdmA t a\` equals whether
-\`src/\`'s \`decode\` accepted it. All ${verdicts.length} pairs are asserted here.
--/
-
-/-! The emitted key function is total on a membership subtype, so a single-name object binds a
-\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
-set_option linter.unusedVariables false
-/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
-set_option linter.style.nameCheck false
-
-namespace Calculus
-
-${verdicts.map(leanReadVerdict).join('\n\n')}
-
-end Calculus
-`
 
 /**
  * One **read vector**: this codec, given the attribute it wrote, reads that value back.
@@ -2835,39 +2884,21 @@ export type Resolution = {
     readonly value: unknown
 }
 
-/** One write-side resolution: what the union wrote, or that it wrote nothing. */
-export const leanResolution = ({
-    name,
-    union: u,
-    value,
-}: Resolution): string => {
-    const term = leanTermOf(u, name)
-    let written: unknown
-    let wrote = true
+/** What the union wrote for the value, or that it wrote nothing. */
+const writeOf = (
+    u: AnyCodec,
+    value: unknown,
+):
+    | { readonly wrote: true; readonly written: AttributeValue }
+    | { readonly wrote: false; readonly written?: undefined } => {
     try {
         const out = u.encode(value as never)
-        wrote = !failed(out)
-        written = out
+        return failed(out)
+            ? { wrote: false }
+            : { wrote: true, written: out as AttributeValue }
     } catch {
-        wrote = false
+        return { wrote: false }
     }
-    const head = [
-        `/-- \`${name}\` — the option the union picked -/`,
-        `theorem ${leanIdent(name)} :`,
-    ]
-    return wrote
-        ? [
-              ...head,
-              `    check ${fuelFor(written as AttributeValue)}`,
-              `      ((denote (libTable noCallers) (${term})).e`,
-              `        (${leanValueOf(value, name)}))`,
-              `      (some (${leanAttrOf(written as AttributeValue, name)})) = .same := kernel_rfl%`,
-          ].join('\n')
-        : [
-              ...head,
-              `    (denote (libTable noCallers) (${term})).e`,
-              `      (${leanValueOf(value, name)}) = none := kernel_rfl%`,
-          ].join('\n')
 }
 
 /** One read-side resolution, addressed by the attribute rather than the value. */
@@ -2908,6 +2939,18 @@ export const leanItemReadResolution = (one: ItemRead): string =>
         one.dissection.item.decode(one.item),
     )
 
+/** What the union read, or that it read nothing. */
+const readOf = (
+    decode: () => unknown,
+): { readonly did: boolean; readonly read: unknown } => {
+    try {
+        const out = decode()
+        return { did: !failed(out), read: out }
+    } catch {
+        return { did: false, read: undefined }
+    }
+}
+
 /** The theorem that the model's union reads `attribute` as the host read it, or reads nothing. */
 const statedRead = (
     name: string,
@@ -2915,15 +2958,7 @@ const statedRead = (
     attribute: AttributeValue,
     decode: () => unknown,
 ): string => {
-    let read: unknown
-    let did = true
-    try {
-        const out = decode()
-        did = !failed(out)
-        read = out
-    } catch {
-        did = false
-    }
+    const { did, read } = readOf(decode)
     const head = [
         `/-- \`${name}\` — the option the union read it back through -/`,
         `theorem ${leanIdent(name)} :`,
@@ -2945,50 +2980,6 @@ const statedRead = (
               `      (${leanAttrOf(attribute, name)}) = none := kernel_rfl%`,
           ].join('\n')
 }
-
-/**
- * The resolutions as a module of their own.
- *
- * Generated at gate time and elaborated, never committed — the counts are in
- * `docs/architecture.md`, beside the classifier this is the other half of.
- */
-export const leanResolutionModule = (
-    writes: readonly Resolution[],
-    reads: readonly ReadResolution[],
-    items: readonly ItemRead[],
-): string =>
-    `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Lang.Store
-
-/-!
-# Union resolution, model against library
-
-**Generated — do not edit.** One theorem per (union, value) and (union, attribute) pair: the
-option the model's \`select\` resolves to, against the one this library's resolver picked.
-${writes.length} on the write side, ${reads.length} on the read side, and ${items.length} read through the
-index of a dissection's tags.
-
-A map-valued read is stated like the others: it goes through \`vcheck\`, the \`Value\` twin of
-\`check\`, because \`Value.map\` carries a function and \`rfl\` on the assembled closure does not
-close. Five of these were recorded as unstatable until \`veq\` existed.
--/
-
-/-! The emitted key function is total on a membership subtype, so a single-name object binds a
-\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
-set_option linter.unusedVariables false
-/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
-set_option linter.style.nameCheck false
-
-namespace Calculus
-
-${writes.map(leanResolution).join('\n\n')}
-
-${reads.map(leanReadResolution).join('\n\n')}
-
-${items.map(leanItemReadResolution).join('\n\n')}
-
-end Calculus
-`
 
 /**
  * The same budget on the value side, for `veq`.
@@ -3210,4 +3201,388 @@ export const leanVectorModule = (
         '',
     ].join('\n')
     return `${protocol === 'equation' ? preamble : checkPreamble}\n${body}\n${heading}\n${refused}\n\nend Calculus\n`
+}
+
+/* ── the corpus in the row form ────────────────────────────────────────────────────────────── */
+
+/**
+ * The forms of the evaluation vectors. Each check is a `Bool` whose truth is the former statement:
+ * `beq_iff_eq` makes `(v == w) = true` the equation `v = w` at `Verdict` and at `Bool`, and
+ * `Option.isNone_iff_eq_none` makes `x.isNone = true` the equation `x = none`. `Attr` and `Value`
+ * hold a function, so neither has decidable equality, and a `some` answer keeps `check` or `vcheck`.
+ */
+const evaluationForms = {
+    writes: {
+        type: '(Nat × Term × Value × Attr)',
+        check: 'check p.1 ((denote (libTable noCallers) p.2.1).e p.2.2.1) (some p.2.2.2) == Verdict.same',
+    },
+    writesNothing: {
+        type: '(Term × Value)',
+        check: '((denote (libTable noCallers) p.1).e p.2).isNone',
+    },
+    reads: {
+        type: '(Nat × Term × Attr × Value)',
+        check: 'vcheck p.1 ((denote (libTable noCallers) p.2.1).p p.2.2.1) (some p.2.2.2) == Verdict.same',
+    },
+    readsNothing: {
+        type: '(Term × Attr)',
+        check: '((denote (libTable noCallers) p.1).p p.2).isNone',
+    },
+    guards: {
+        type: '(Term × Bool)',
+        check: 'Alg.Term.guarded p.1 == p.2',
+    },
+    admits: {
+        type: '(Term × Attr × Bool)',
+        check: 'AdmA (libTable noCallers) p.1 p.2.1 == p.2.2',
+    },
+} as const satisfies Record<string, RowForm>
+
+/** The equivalence that turns the checker of a list into the former statement of each row. */
+const rowChecks = `The checker of a list states \`List.all … = true\`, which \`List.all_eq_true\` makes the check at
+each row. A check is a \`Bool\` whose truth is the former statement of the row: \`beq_iff_eq\` makes
+\`(v == Verdict.same) = true\` the equation \`v = .same\`, and \`(b == c) = true\` the equation \`b = c\`
+at \`Bool\`. \`Option.isNone_iff_eq_none\` makes \`x.isNone = true\` the equation \`x = none\`. \`Attr\` and
+\`Value\` have no decidable equality, because a map holds a function, so a \`some\` answer keeps \`check\` or
+\`vcheck\`.`
+
+/** A module of corpus rows: the imports, the title, the statement, and the rows. */
+const leanCorpusRowModule = <F extends string>(
+    imports: string,
+    title: string,
+    states: string,
+    file: RowFile<F>,
+): string => {
+    const shapes = kernelShapes()
+    const lists = kernelLists(file, shapes).map((one) => one.text)
+    return `${imports}
+
+/-!
+# ${title}
+
+**Generated — do not edit.** ${states}
+
+${rowChecks}
+
+${rowForm('corpus')}
+-/
+
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${shapes.defs()}
+
+${lists.join('\n\n')}
+
+end Calculus
+`
+}
+
+/**
+ * **The cross product of the corpus as rows**: each admission of {@link leanVector} in the `check`
+ * protocol, with the guard of a recursive term, each guard verdict of {@link leanGuard}, and each
+ * refusal of {@link leanRefusal}. The term of each row is a closed term, as the former theorem
+ * printed it.
+ */
+export const vectorRows = (
+    admissions: readonly Vector[],
+    refusals: readonly Refusal[],
+    guards: readonly Guard[],
+): RowFile<'writes' | 'writesNothing' | 'guards'> => ({
+    forms: {
+        writes: evaluationForms.writes,
+        guards: evaluationForms.guards,
+        writesNothing: evaluationForms.writesNothing,
+    },
+    rows: (shapes) => [
+        ...admissions.flatMap(({ name, codec, value }) => {
+            const term = leanTermOf(codec, name)
+            const attribute = codec.unsafeEncode(value as never)
+            const t = shapes.closed(term)
+            const row = {
+                name: leanIdent(name),
+                form: 'writes' as const,
+                row: `(${fuelFor(attribute)}, ${t}, ${leanValueOf(value, name)}, ${leanAttrOf(attribute, name)})`,
+            }
+            return guardedToo(term)
+                ? [
+                      row,
+                      {
+                          name: leanIdent(`${name}__guarded`),
+                          form: 'guards' as const,
+                          row: `(${t}, true)`,
+                      },
+                  ]
+                : [row]
+        }),
+        ...guards.map(({ name, codec, guarded }) => ({
+            name: leanIdent(name),
+            form: 'guards' as const,
+            row: `(${shapes.closed(leanTermOf(codec, name))}, ${guarded})`,
+        })),
+        ...refusals.map(({ name, codec, value }) => {
+            refusedBoth(name, codec, value)
+            return {
+                name: leanIdent(name),
+                form: 'writesNothing' as const,
+                row: `(${shapes.closed(leanTermOf(codec, name))}, ${leanValueOf(value, name)})`,
+            }
+        }),
+    ],
+})
+
+/** The cross product of the corpus in the row form. Generated at gate time, never committed. */
+export const leanVectorRowModule = (
+    admissions: readonly Vector[],
+    refusals: readonly Refusal[],
+    guards: readonly Guard[],
+): string =>
+    leanCorpusRowModule(
+        `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Lang.Store`,
+        'Differential-testing vectors, the full cross product',
+        `Emitted by \`src/codec/lean.ts\` from the shipped TypeScript codecs. A \`writes\`
+row is one \`encode\` that this library performed, \`check n ((denote t).e v) (some a) = .same\`. A
+\`writesNothing\` row is a value that this library refuses, \`(denote t).e v = none\`. A \`guards\` row
+is the model's guard on a term, \`Alg.Term.guarded t = b\`. ${admissions.length} admissions,
+${refusals.length} refusals.`,
+        vectorRows(admissions, refusals, guards),
+    )
+
+/**
+ * The union resolutions as rows: each write that {@link writeOf} decides, then each read of
+ * {@link leanReadResolution}, then each read of {@link leanItemReadResolution}.
+ */
+export const resolutionRows = (
+    writes: readonly Resolution[],
+    reads: readonly ReadResolution[],
+    items: readonly ItemRead[],
+): RowFile<'writes' | 'writesNothing' | 'reads' | 'readsNothing'> => ({
+    forms: {
+        writes: evaluationForms.writes,
+        writesNothing: evaluationForms.writesNothing,
+        reads: evaluationForms.reads,
+        readsNothing: evaluationForms.readsNothing,
+    },
+    rows: (shapes) => {
+        const read = (
+            name: string,
+            u: AnyCodec,
+            attribute: AttributeValue,
+            decode: () => unknown,
+        ) => {
+            const t = shapes.closed(leanTermOf(u, name))
+            const a = leanAttrOf(attribute, name)
+            const { did, read } = readOf(decode)
+            return did
+                ? {
+                      name: leanIdent(name),
+                      form: 'reads' as const,
+                      row: `(${fuelForValue(read)}, ${t}, ${a}, ${leanValueOf(read, name)})`,
+                  }
+                : {
+                      name: leanIdent(name),
+                      form: 'readsNothing' as const,
+                      row: `(${t}, ${a})`,
+                  }
+        }
+        return [
+            ...writes.map(({ name, union: u, value }) => {
+                const t = shapes.closed(leanTermOf(u, name))
+                const v = leanValueOf(value, name)
+                const { wrote, written } = writeOf(u, value)
+                return wrote
+                    ? {
+                          name: leanIdent(name),
+                          form: 'writes' as const,
+                          row: `(${fuelFor(written)}, ${t}, ${v}, ${leanAttrOf(written, name)})`,
+                      }
+                    : {
+                          name: leanIdent(name),
+                          form: 'writesNothing' as const,
+                          row: `(${t}, ${v})`,
+                      }
+            }),
+            ...reads.map((one) =>
+                read(one.name, one.union, one.attribute, () =>
+                    one.union.decode(one.attribute as never),
+                ),
+            ),
+            ...items.map((one) =>
+                read(one.name, one.dissection, carrying('M', one.item), () =>
+                    one.dissection.item.decode(one.item),
+                ),
+            ),
+        ]
+    },
+})
+
+/** The union resolutions in the row form. Generated at gate time, never committed. */
+export const leanResolutionRowModule = (
+    writes: readonly Resolution[],
+    reads: readonly ReadResolution[],
+    items: readonly ItemRead[],
+): string =>
+    leanCorpusRowModule(
+        `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Lang.Store`,
+        'Union resolution, model against library',
+        `One row per (union, value) and (union, attribute) pair: the option
+the model's \`select\` resolves to, against the one this library's resolver picked.
+${writes.length} on the write side, ${reads.length} on the read side, and ${items.length} read through the
+index of a dissection's tags. A read row states \`vcheck\`, the \`Value\` twin of \`check\`.`,
+        resolutionRows(writes, reads, items),
+    )
+
+/**
+ * The read verdicts as rows: the term, the attribute, and whether `src/` decodes it. A caller's
+ * predicate at the top takes an index of `π`. Where the former theorem assumed `q0 v = b`, the row
+ * pins the predicate: `fun x => if veq n x v = .same then b else π k x`. The pinned functions are
+ * the predicates with `q0 v = b`: `veq_sound` gives `x = v` where `veq` answers `.same`, so a `q0`
+ * with `q0 v = b` equals its own pin, and `veq n v v = .same` gives the pin the answer `b` at `v`.
+ */
+export const readVerdictRows = (
+    verdicts: readonly ReadVerdict[],
+): RowFile<'admits'> => ({
+    forms: { admits: evaluationForms.admits },
+    rows: (shapes) =>
+        verdicts.map((one) => {
+            const { decodes, pin } = readVerdictOf(one)
+            const t = shapes.row((fn, made) =>
+                pin !== undefined && fn === pin.is
+                    ? `(fun x => if veq ${pin.fuel} x (${pin.v}) = .same then ${pin.answer} else ${made} x)`
+                    : made,
+            )(one.codec, one.name)
+            return {
+                name: leanIdent(one.name),
+                form: 'admits' as const,
+                row: `(${t}, ${leanAttrOf(one.attribute, one.name)}, ${decodes})`,
+            }
+        }),
+})
+
+/** The read verdicts in the row form. Generated at gate time, never committed. */
+export const leanReadRowModule = (verdicts: readonly ReadVerdict[]): string =>
+    leanCorpusRowModule(
+        `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Analysis.ExactA
+import Calculus.Dynamo.Lang.Store`,
+        "Read verdicts, proposed to the model's read row",
+        `One row per (codec, attribute) pair: \`AdmA t a\` equals whether
+\`src/\`'s \`decode\` accepted it. All ${verdicts.length} pairs are asserted here. A caller's predicate is
+\`π k\`, pinned at the value that the inner term reads where the host answered the predicate there.
+The pinned functions are the predicates with that answer: \`veq_sound\` gives \`x = v\` where \`veq\`
+answers \`.same\`, so such a predicate equals its own pin.`,
+        readVerdictRows(verdicts),
+    )
+
+/**
+ * The legacy reads as rows. The older reader is `ρ k`, pinned at each attribute that `src/` asked
+ * it, as {@link leanLegacyRead} pins the variable of the former theorem.
+ */
+export const legacyReadRows = (
+    reads: readonly LegacyRead[],
+): RowFile<'reads' | 'readsNothing'> => ({
+    forms: {
+        reads: evaluationForms.reads,
+        readsNothing: evaluationForms.readsNothing,
+    },
+    rows: (shapes) =>
+        reads.map((one) => {
+            const { read, pins } = legacyReadOf(one)
+            const t = shapes.row((fn, made) => pinText(pins.get(fn), made))(
+                one.codec,
+                one.name,
+            )
+            const a = leanAttrOf(one.attribute, one.name)
+            return failed(read)
+                ? {
+                      name: leanIdent(one.name),
+                      form: 'readsNothing' as const,
+                      row: `(${t}, ${a})`,
+                  }
+                : {
+                      name: leanIdent(one.name),
+                      form: 'reads' as const,
+                      row: `(${fuelForValue(read)}, ${t}, ${a}, ${leanValueOf(read, one.name)})`,
+                  }
+        }),
+})
+
+/** The legacy reads in the row form. Generated at gate time, never committed. */
+export const leanLegacyReadRowModule = (reads: readonly LegacyRead[]): string =>
+    leanCorpusRowModule(
+        `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Lang.Store`,
+        'The legacy read gate, model against library',
+        `One row per (codec, attribute) pair, ${reads.length} in all. Each older
+reader is \`ρ k\`, pinned at each attribute that \`src/\` asked it. The model reads the older answer
+only where the current term writes the answer, and \`src/\` checks the same.`,
+        legacyReadRows(reads),
+    )
+
+/** The sentinel that the gate reads: the only line of a clean run of the corpus pre-check. */
+export const corpusSentinel = (count: number): string =>
+    `corpus: ${count} vectors checked`
+
+/**
+ * **The pre-check of the corpus**: the rows of the six corpus files, at one instance of each caller
+ * function, each row with the name of its former theorem. An `#eval` runs the check of each row,
+ * and prints the name where the check fails. A printed line proves nothing: the kernel rows are the
+ * check, and this file names the vector that a failing list holds.
+ *
+ * Generated at gate time and elaborated, never committed.
+ */
+export const leanCorpusEval = (files: readonly RowFile[]): string => {
+    const shapes = leanShapes((kind) =>
+        kind === 'closure' ? '(fun _ => true)' : '(fun _ => none)',
+    )
+    let count = 0
+    const lists = files
+        .flatMap((file) => {
+            const lists = rowLists(file, shapes)
+            for (const { rows } of lists) count += rows.length
+            return lists.map(({ form, rows }) => ({
+                ...file.forms[form],
+                rows,
+            }))
+        })
+        .map(
+            (
+                { type, check, rows },
+                i,
+            ) => `def rows${i} : List (String × ${type}) := [
+  ${rows.map((one) => `(${leanString(one.name)}, ${one.row})`).join(',\n  ')}]
+
+#eval rows${i}.forM fun (nm, p) => unless (${check}) do IO.println s!"mismatch {nm}"`,
+        )
+    return `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Analysis.Compat
+import Calculus.Dynamo.Analysis.ExactA
+import Calculus.Dynamo.Lang.Store
+
+/-!
+# The pre-check of the corpus
+
+**Generated — do not edit.** The rows of the six corpus files, at one instance of each caller
+function, each with the name of its former theorem. A row prints only a mismatch, with the name. One
+\`#eval\` runs each list of rows, and the last line counts the rows.
+-/
+
+set_option maxRecDepth 8192
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${shapes.defs()}
+
+${lists.join('\n\n')}
+
+#eval IO.println ${leanString(corpusSentinel(count))}
+
+end Calculus
+`
 }

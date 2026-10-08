@@ -73,30 +73,40 @@ import type {
     Vector,
 } from '../lean'
 import {
+    corpusSentinel,
+    disjointRows,
     LeanUnemittable,
     leanAttrOf,
+    leanCorpusEval,
     leanDisjoint,
-    leanDisjointModule,
+    leanDisjointRowModule,
     leanFormerGuard,
     leanGuard,
     leanItemReadResolution,
     leanLegacyRead,
-    leanLegacyReadModule,
-    leanReadModule,
+    leanLegacyReadRowModule,
     leanReadResolution,
+    leanReadRowModule,
     leanReadVector,
     leanReadVectorModule,
     leanReadVerdict,
-    leanResolutionModule,
+    leanResolutionRowModule,
     leanSeparation,
-    leanSeparationModule,
+    leanSeparationRowModule,
+    leanShapes,
     leanSlice,
     leanSliceModule,
     leanTermOf,
     leanValueOf,
     leanVector,
     leanVectorModule,
+    leanVectorRowModule,
+    legacyReadRows,
     readVectorIsUnstatable,
+    readVerdictRows,
+    resolutionRows,
+    separationRows,
+    vectorRows,
 } from '../lean'
 import { CodecError, orThrow } from '../result'
 import type { Term } from '../term'
@@ -841,6 +851,11 @@ const underObject: AnyCodec = erase(
 const selfThunk: AnyCodec = erase(
     lazy(() => selfThunk as unknown as AttributeCodec<unknown>),
 )
+
+/** The guard verdicts of the full cross product, beside the guard of each recursive admission. */
+const fullGuards = [
+    { name: 'self_thunk__unguarded', codec: selfThunk, guarded: false },
+] as const
 
 /**
  * **A thunk that names the constant under declaration**, as a recursive schema's thunk does
@@ -2047,14 +2062,14 @@ describe('union resolution, model against library', () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.resolutions.lean'),
-                leanResolutionModule(
+                leanResolutionRowModule(
                     writeResolutions(),
                     readResolutions(),
                     itemReads(),
                 ),
             )
         }
-        const module = leanResolutionModule(
+        const module = leanResolutionRowModule(
             writeResolutions(),
             readResolutions(),
             itemReads(),
@@ -2216,7 +2231,7 @@ describe('the legacy read gate, against the model', () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.legacyreads.lean'),
-                leanLegacyReadModule(reads),
+                leanLegacyReadRowModule(reads),
             )
         }
     })
@@ -2241,13 +2256,14 @@ describe("the read side, against the model's read row", () => {
     it('offers 2650 pairs, and asserts every one', () => {
         const verdicts = readVerdicts()
         expect(verdicts.length).toBe(2650)
-        const module = leanReadModule(verdicts)
+        const rows = readVerdictRows(verdicts).rows(leanShapes(() => 'f'))
+        expect(rows.length).toBe(2650)
         for (const name of [
             'scalar_number__reads__scalar_decimal',
             'scalar_number__reads__literal_decimal',
             'scalar_number__reads__raw_N',
         ]) {
-            expect(module).toContain(`theorem ${name} :`)
+            expect(rows.map((one) => one.name)).toContain(name)
         }
     })
 
@@ -2258,7 +2274,7 @@ describe("the read side, against the model's read row", () => {
      * predicate is a variable, and the theorem assumes the answer of the closure at the value read.
      */
     it('states the read of a refinement and of the bottom, both ways', () => {
-        const module = leanReadModule(readVerdicts())
+        const module = readVerdicts().map(leanReadVerdict).join('\n\n')
         for (const name of [
             'refine_string_isNumeral__reads__raw_S_numeral',
             'refine_string_isNumeral__reads__raw_S',
@@ -2277,16 +2293,27 @@ describe("the read side, against the model's read row", () => {
         expect(module).toContain(
             'theorem refine_string_caller__reads__raw_S_empty (q0 : Value → Bool) (h0 : q0 (Value.str "") = false) :',
         )
+        // the row pins the predicate where the theorem assumed its answer: the pinned functions
+        // are the predicates with that answer, so the row quantifies as the theorem does
+        const row = readVerdictRows(
+            readVerdicts().filter(
+                (one) =>
+                    one.name === 'refine_string_caller__reads__raw_S_empty',
+            ),
+        ).rows(leanShapes(() => '(π 0)'))
+        expect(row.map((one) => one.row)).toEqual([
+            '((t0 (fun x => if veq 1 x (Value.str "") = .same then false else (π 0) x)), Attr.s "", false)',
+        ])
     })
 
     it('emits them for the gate to elaborate', () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.readverdicts.lean'),
-                leanReadModule(readVerdicts()),
+                leanReadRowModule(readVerdicts()),
             )
         }
-        const module = leanReadModule(readVerdicts())
+        const module = leanReadRowModule(readVerdicts())
         expect(module).toContain('import Calculus.Dynamo.Lang.Store')
         expect(module).toContain('All 2650 pairs are asserted here.')
     })
@@ -2362,20 +2389,14 @@ describe("the declaration guard, against the model's classifier", () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.separations.lean'),
-                leanSeparationModule(separationPairs()),
+                leanSeparationRowModule(separationPairs(), 'corpus'),
             )
         }
-        // `Compat` reaches `Dynamo.Analysis.Disjoint`, so the module imports `Compat` alone
-        expect(leanSeparationModule([])).toContain(
-            'import Calculus.Dynamo.Analysis.Compat',
-        )
-        expect(leanSeparationModule([])).not.toContain(
-            'import Calculus.Dynamo.Analysis.Disjoint',
-        )
-        // a verdict spells `libTable`, which only `Store` declares, and without the import
-        // Lean auto-binds the name and every verdict fails to elaborate
-        expect(leanSeparationModule([])).toContain(
-            'import Calculus.Dynamo.Lang.Store',
+        // `Bridge.Rows` reaches `Compat` and `Store`: a verdict spells `libTable`, which only
+        // `Store` declares, and without the import Lean auto-binds the name and every verdict
+        // fails to elaborate
+        expect(leanSeparationRowModule([], 'corpus')).toContain(
+            'import Calculus.Bridge.Rows',
         )
     })
 
@@ -2444,10 +2465,10 @@ describe("the declaration guard, against the model's classifier", () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.disjoints.lean'),
-                leanDisjointModule(pairs),
+                leanDisjointRowModule(pairs, 'corpus'),
             )
         }
-        expect(leanDisjointModule([])).toContain(
+        expect(leanDisjointRowModule([], 'corpus')).toContain(
             'import Calculus.Dynamo.Analysis.Disjoint',
         )
     })
@@ -2504,20 +2525,7 @@ describe('the full cross product, for the gate', () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.vectors.full.lean'),
-                leanVectorModule(
-                    admissions,
-                    'check',
-                    refusals,
-                    refusals.length,
-                    [],
-                    [
-                        {
-                            name: 'self_thunk__unguarded',
-                            codec: selfThunk,
-                            guarded: false,
-                        },
-                    ],
-                ),
+                leanVectorRowModule(admissions, refusals, fullGuards),
             )
         }
         // every corpus value is refused by some codec, which is what makes the cross product a
@@ -2843,5 +2851,36 @@ describe("the slice, against the model's `AltClause.admits`", () => {
         expect(leanSliceModule([])).toContain(
             'import Calculus.Dynamo.Analysis.Slice',
         )
+    })
+})
+
+describe('the corpus pre-check, for the gate', () => {
+    /**
+     * **The pre-check names a failing vector, because a row carries no theorem name.** The kernel
+     * decides one list of rows at a time, so a kernel failure names the list alone. The pre-check
+     * reads the same rows of the six corpus files, each with the name of its former theorem, and
+     * prints the name where the check fails. Its sentinel counts every corpus vector.
+     */
+    it('reads every vector of the six corpus files, by name', () => {
+        const files = [
+            separationRows(separationPairs()),
+            disjointRows(disjointPairs()),
+            vectorRows(allAdmissions(), allRefusals(), fullGuards),
+            resolutionRows(writeResolutions(), readResolutions(), itemReads()),
+            readVerdictRows(readVerdicts()),
+            legacyReadRows(legacyReads()),
+        ]
+        const names = files.flatMap((file) =>
+            file.rows(leanShapes(() => 'f')).map((one) => one.name),
+        )
+        expect(new Set(names).size).toBe(names.length)
+        const module = leanCorpusEval(files)
+        expect(module).toContain(corpusSentinel(names.length))
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.corpus.eval.lean'),
+                module,
+            )
+        }
     })
 })
