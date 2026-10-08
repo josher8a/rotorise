@@ -11,6 +11,11 @@ value cite directly, keeps the ones outside the namespace, and asks `collectAxio
 whether choice is in its base. The answer is a set of routes rather than a count: a count moves
 on almost any new proof, and a route is a name a reader can look up.
 
+The walk skips a declaration that the `term_elab` attribute registers. Such a declaration is an
+elaborator: it runs while a file elaborates, cites the elaborator's monads, and no theorem cites it.
+The proof term that an elaborator returns is checked where it lands: `#assert_axioms_all` checks the
+theorems of the development.
+
 `scripts/classical_gateways.txt` is the baseline and `gate.sh` diffs this output against it.
 -/
 
@@ -39,9 +44,11 @@ run_cmd do
   for i in [0:mods.size] do
     if (`Calculus).isPrefixOf mods[i]! then
       for n in data[i]!.constNames do ours := ours.insert n
+  let elabs := (Lean.Elab.Term.termElabAttribute.ext.getState env).declNames
   let mut gate : NameSet := {}
   let mut cache : Std.HashMap Name Bool := {}
   for n in ours.toList do
+    if elabs.contains n then continue
     if let some ci := env.find? n then
       for c in citedBy ci do
         unless ours.contains c || c == ``Classical.choice do

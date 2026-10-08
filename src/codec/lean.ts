@@ -513,13 +513,13 @@ const boundName = (
 }
 
 /**
- * **How a vector closes a goal.** A closed goal closes by `decide`, which the kernel evaluates. A
- * quantified goal binds a caller's function, and `decide` refuses a goal with a free variable, so
- * the goal closes by the tactic `rfl`. The term `rfl` exhausts the default heartbeats on a refusal
- * of two terms of about 600 characters, where the tactic closes the goal.
+ * **How a vector closes a goal.** The kernel decides the goal, through `kernel_rfl%` of
+ * `Calculus.Bridge.Vectors`, and the elaborator evaluates nothing. A closed goal closes by
+ * `of_decide_eq_true kernel_rfl%`. A quantified goal binds a caller's function, and `decide`
+ * refuses a goal with a free variable, so the goal closes by `kernel_rfl%` on the equation itself.
  */
 const closing = (binders: string): string =>
-    binders === '' ? 'by decide' : 'by rfl'
+    binders === '' ? 'of_decide_eq_true kernel_rfl%' : 'kernel_rfl%'
 
 /** The binders of a quantified theorem, or nothing where the vector binds no function. */
 const leanBinders = (bound: Bound): string => {
@@ -921,7 +921,7 @@ const leanSlotOf = (field: TermField, at: string, scope: At): string => {
 /**
  * How a vector states its claim to the kernel.
  *
- * `'check'` writes `check n ((denote t).e v) (some a) = .same := rfl` and is the default. It
+ * `'check'` writes `check n ((denote t).e v) (some a) = .same := kernel_rfl%` and is the default. It
  * depends on `Calculus/Bridge/Vectors.lean` — a fuelled three-valued comparator with `check_same` and
  * `check_differ` proved about it, so a passing line cashes to `(denote t).e v = some a` as a
  * theorem. No tactic, no `funext` gymnastics, an order of magnitude faster on maps, and it can
@@ -931,8 +931,8 @@ const leanSlotOf = (field: TermField, at: string, scope: At): string => {
  * build rather than passing quietly.
  *
  * `'equation'` writes `(denote t).e v = some a` and proves it with a tactic the generated file
- * carries. It depends on nothing beyond `denote`, which is worth keeping for a tree where
- * `Vectors.lean` is absent — but it cannot express a refusal, and on maps `rfl` does not merely
+ * carries. The proof reads no comparator, and the file imports `Vectors.lean` for `kernel_rfl%`
+ * alone. It cannot express a refusal, and on maps `rfl` does not merely
  * fail, it **diverges**: `Attr.m` holds a function, so the model's answer is stuck under a binder,
  * pointwise equal to the emitted lambda and not definitionally equal, and `isDefEq` runs to the
  * heartbeat limit.
@@ -989,7 +989,7 @@ export const leanVector = (
                   `    check ${fuelFor(attribute)}`,
                   `      ((denote (libTable noCallers) (${term})).e`,
                   `        (${leanValueOf(value, name)}))`,
-                  `      (some (${leanAttrOf(attribute, name)})) = .same := rfl`,
+                  `      (some (${leanAttrOf(attribute, name)})) = .same := kernel_rfl%`,
               ].join('\n')
     return `${vector}${guard}`
 }
@@ -1006,12 +1006,12 @@ export type Guard = {
     readonly guarded: boolean
 }
 
-/** One guard verdict, as a Lean `theorem` closed by `rfl`. */
+/** One guard verdict, as a Lean `theorem` closed by `kernel_rfl%`. */
 export const leanGuard = ({ name, codec, guarded }: Guard): string =>
     [
         `/-- \`${name}\` — the model's guard ${guarded ? 'accepts' : 'refuses'} this term -/`,
         `theorem ${leanIdent(name)} :`,
-        `    Alg.Term.guarded (${leanTermOf(codec, name)}) = ${guarded} := rfl`,
+        `    Alg.Term.guarded (${leanTermOf(codec, name)}) = ${guarded} := kernel_rfl%`,
     ].join('\n')
 
 /**
@@ -1027,8 +1027,8 @@ export const leanGuard = ({ name, codec, guarded }: Guard): string =>
  * **It needs neither the comparator nor fuel, and that is not an optimisation.** The gap positive
  * vectors fight is `Attr.m`'s payload — a function under a binder, pointwise equal to the emitted
  * lambda and not definitionally equal — so they need `check`, or `funext` and a case split. A
- * refusal's answer is `none`, which carries no payload, so `rfl` closes it outright at every
- * codec including the map-shaped ones.
+ * refusal's answer is `none`, which carries no payload, so the kernel closes it by reduction at
+ * every codec including the map-shaped ones.
  *
  * **And it reaches `number`**: `Term.number` is a closed term, so
  * `(denote Term.number).e (Value.str "x") = none` is `rfl`. A numeric `literal` is closed too, its
@@ -1060,7 +1060,7 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
         `/-- \`${name}\` — refused on both sides -/`,
         `theorem ${leanIdent(name)} :`,
         `    (denote (libTable noCallers) (${leanTermOf(codec, name)})).e`,
-        `      (${leanValueOf(value, name)}) = none := rfl`,
+        `      (${leanValueOf(value, name)}) = none := kernel_rfl%`,
     ].join('\n')
 }
 
@@ -1124,12 +1124,12 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     }
     const guard =
         binders === ''
-            ? 'by decide'
+            ? 'of_decide_eq_true kernel_rfl%'
             : [
                   `(congrArg₂ (· && ·)`,
-                  `      (Alg.guarded_of_sameShape _ (${leanRooted(leanTermOf(left, name, standIn), left)}) (by rfl))`,
-                  `      (Alg.guarded_of_sameShape _ (${leanRooted(leanTermOf(right, name, standIn), right)}) (by rfl))).trans`,
-                  `    (by decide)`,
+                  `      (Alg.guarded_of_sameShape _ (${leanRooted(leanTermOf(left, name, standIn), left)}) kernel_rfl%)`,
+                  `      (Alg.guarded_of_sameShape _ (${leanRooted(leanTermOf(right, name, standIn), right)}) kernel_rfl%)).trans`,
+                  `    (of_decide_eq_true kernel_rfl%)`,
               ].join('\n')
     // the host's guard runs before its compatibility test, and reads each option on its own
     const guardRefuses = [left, right].some(
@@ -1189,7 +1189,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
 export const leanSeparationModule = (
     separations: readonly Separation[],
 ): string =>
-    `import Calculus.Dynamo.Analysis.Compat
+    `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Lang.Store
 
 /-!
@@ -1254,8 +1255,8 @@ export const leanFormerGuard = ({ name, term }: FormerGuard): string => {
     const binders = leanBinders(bound)
     const guard =
         binders === ''
-            ? 'by decide'
-            : `(Alg.guarded_of_sameShape _ (${rooted({ closures: new Map(), adapters: new Map(), readers: new Map(), standIn: true })}) (by rfl)).trans (by decide)`
+            ? 'of_decide_eq_true kernel_rfl%'
+            : `(Alg.guarded_of_sameShape _ (${rooted({ closures: new Map(), adapters: new Map(), readers: new Map(), standIn: true })}) kernel_rfl%).trans (of_decide_eq_true kernel_rfl%)`
     return [
         `/-- \`${name}\` — a former refuses this term; the model's guard refuses it too -/`,
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
@@ -1271,7 +1272,8 @@ export const leanFormerGuard = ({ name, term }: FormerGuard): string => {
  * Generated at gate time and elaborated, never committed.
  */
 export const leanFormerGuardModule = (guards: readonly FormerGuard[]): string =>
-    `import Calculus.Dynamo.Analysis.Compat
+    `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Lang.Store
 
 /-!
@@ -1372,7 +1374,8 @@ export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
  * Generated at gate time and elaborated, never committed.
  */
 export const leanDisjointModule = (pairs: readonly DisjointPair[]): string =>
-    `import Calculus.Dynamo.Analysis.Disjoint
+    `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Lang.Store
 
 /-!
@@ -1514,14 +1517,14 @@ export const leanLegacyRead = (one: LegacyRead): string => {
         ? [
               ...head,
               `    (denote (libTable noCallers) (${term})).p`,
-              `      (${leanAttrOf(attribute, name)}) = none := by rfl`,
+              `      (${leanAttrOf(attribute, name)}) = none := kernel_rfl%`,
           ].join('\n')
         : [
               ...head,
               `    vcheck ${fuelForValue(read)}`,
               `      ((denote (libTable noCallers) (${term})).p`,
               `        (${leanAttrOf(attribute, name)}))`,
-              `      (some (${leanValueOf(read, name)})) = .same := by rfl`,
+              `      (some (${leanValueOf(read, name)})) = .same := kernel_rfl%`,
           ].join('\n')
 }
 
@@ -1989,8 +1992,9 @@ export const unionAt = (host: HostAt): boolean => {
  * shape has the decisions of the term, and the goal is closed. A quantified goal closes by `rfl`,
  * which runs out of heartbeats on a theorem of this size.
  *
- * **The kernel decides the goal**, by `decide +kernel`. The elaborator's `decide` evaluates the
- * goal before the kernel does, and runs out of heartbeats. The kernel check adds no axiom.
+ * **The kernel decides the goal**, by `of_decide_eq_true kernel_rfl%`. The elaborator's `decide`
+ * evaluates the goal before the kernel does, and runs out of heartbeats. `kernel_rfl%` evaluates
+ * nothing in the elaborator, and the kernel check adds no axiom.
  */
 export const leanPath = ({ name, codec, paths }: PathVectors): string => {
     const bound: Bound = {
@@ -2081,7 +2085,7 @@ export const leanPath = ({ name, codec, paths }: PathVectors): string => {
         ),
         `/-- \`${name}\` — the decision of \`at\` at each path, and under each \`narrow\` -/`,
         `theorem ${leanIdent(name)} :`,
-        `    (${conjuncts.join(' &&\n    ')}) = true := by decide +kernel`,
+        `    (${conjuncts.join(' &&\n    ')}) = true := of_decide_eq_true kernel_rfl%`,
     ].join('\n')
 }
 
@@ -2207,7 +2211,8 @@ export const leanSliceModule = (
     slices: readonly Slice[],
     paths: readonly PathVectors[] = [],
 ): string =>
-    `import Calculus.Dynamo.Analysis.Slice
+    `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Analysis.Slice
 import Calculus.Dynamo.Lang.Store
 import Calculus.Lang.Path
 
@@ -2271,7 +2276,7 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
             head[0],
             `theorem ${leanIdent(name)} :`,
             head[1],
-            `${head[2]} := rfl`,
+            `${head[2]} := kernel_rfl%`,
         ].join('\n')
     }
     const def = codec.def
@@ -2303,7 +2308,7 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
             head[0],
             `theorem ${leanIdent(name)} (q0 : Value → Bool) :`,
             head[1],
-            `${head[2]} := by rfl`,
+            `${head[2]} := kernel_rfl%`,
         ].join('\n')
     }
     const v = leanValueOf(read, name)
@@ -2322,7 +2327,8 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
  * Generated at gate time and elaborated, never committed.
  */
 export const leanReadModule = (verdicts: readonly ReadVerdict[]): string =>
-    `import Calculus.Dynamo.Analysis.ExactA
+    `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Analysis.ExactA
 import Calculus.Dynamo.Lang.Store
 
 /-!
@@ -2384,7 +2390,7 @@ export const leanReadVector = ({ name, codec, value }: Vector): string => {
         `    vcheck ${fuelForValue(read)}`,
         `      ((denote (libTable noCallers) (${leanTermOf(codec, name)})).p`,
         `        (${leanAttrOf(attribute, name)}))`,
-        `      (some (${leanValueOf(read, name)})) = .same := rfl`,
+        `      (some (${leanValueOf(read, name)})) = .same := kernel_rfl%`,
     ].join('\n')
 }
 
@@ -2506,12 +2512,12 @@ export const leanResolution = ({
               `    check ${fuelFor(written as AttributeValue)}`,
               `      ((denote (libTable noCallers) (${term})).e`,
               `        (${leanValueOf(value, name)}))`,
-              `      (some (${leanAttrOf(written as AttributeValue, name)})) = .same := rfl`,
+              `      (some (${leanAttrOf(written as AttributeValue, name)})) = .same := kernel_rfl%`,
           ].join('\n')
         : [
               ...head,
               `    (denote (libTable noCallers) (${term})).e`,
-              `      (${leanValueOf(value, name)}) = none := rfl`,
+              `      (${leanValueOf(value, name)}) = none := kernel_rfl%`,
           ].join('\n')
 }
 
@@ -2582,12 +2588,12 @@ const statedRead = (
               `    vcheck ${fuelForValue(read)}`,
               `      ((denote (libTable noCallers) (${leanTermOf(u, name)})).p`,
               `        (${leanAttrOf(attribute, name)}))`,
-              `      (some (${leanValueOf(read, name)})) = .same := rfl`,
+              `      (some (${leanValueOf(read, name)})) = .same := kernel_rfl%`,
           ].join('\n')
         : [
               ...head,
               `    (denote (libTable noCallers) (${leanTermOf(u, name)})).p`,
-              `      (${leanAttrOf(attribute, name)}) = none := rfl`,
+              `      (${leanAttrOf(attribute, name)}) = none := kernel_rfl%`,
           ].join('\n')
 }
 
@@ -2703,7 +2709,8 @@ const fuelFor = (attribute: AttributeValue): number => {
  * bridge would stop being one-directional. Everything the generated file needs is in the generated
  * file.
  */
-const preamble = `import Calculus.Dynamo.Lang.Denote
+const preamble = `import Calculus.Bridge.Vectors
+import Calculus.Dynamo.Lang.Denote
 import Calculus.Dynamo.Alg.Frontier
 import Calculus.Dynamo.Lang.Store
 import Mathlib.Tactic.FinCases
@@ -2813,8 +2820,8 @@ export const leanVectorModule = (
      *
      * A read vector has one form and it is `vcheck`: its answer is a `Value`, `Value.map` carries
      * a function, and `rfl` on the assembled closure diverges rather than failing. So it cannot be
-     * written in the `equation` protocol at all, and the `equation` sample's whole premise is
-     * depending on nothing beyond `denote` — putting a `vcheck` in it would cost that.
+     * written in the `equation` protocol at all, and the `equation` sample states each vector as an
+     * equation on `denote` — putting a `vcheck` in it would cost that.
      *
      * The two samples are otherwise the same vectors in two protocols, and this is the one place
      * they part. The gate elaborates all of `.readvectors.lean` either way; what the sample
@@ -2830,7 +2837,7 @@ export const leanVectorModule = (
     const readBack =
         reads.length === 0
             ? ''
-            : `\n\n/-! ### Read back, through the same term\n\nThe model's \`p\`, given the attribute the library wrote, against the value the library read. Only\nthe \`check\` sample carries these: a read vector's answer is a \`Value\`, so it needs \`vcheck\`, and\nthe \`equation\` sample depends on nothing beyond \`denote\` by design. -/\n\n${reads
+            : `\n\n/-! ### Read back, through the same term\n\nThe model's \`p\`, given the attribute the library wrote, against the value the library read. Only\nthe \`check\` sample carries these: a read vector's answer is a \`Value\`, so it needs \`vcheck\`, and\nthe \`equation\` sample states each vector as an equation on \`denote\` by design. -/\n\n${reads
                   .filter((one) => readVectorIsUnstatable(one) === undefined)
                   .map(leanReadVector)
                   .join('\n\n')}`
@@ -2848,7 +2855,7 @@ export const leanVectorModule = (
         '/-! ## Refusals — neither side writes anything for these',
         '',
         `${refusals.length} of ${refusalsChecked} shown; \`scripts/gate.sh\` elaborates all`,
-        `${refusalsChecked}. One \`rfl\` each, no comparator and no fuel: the answer is \`none\`,`,
+        `${refusalsChecked}. One \`kernel_rfl%\` each, no comparator and no fuel: the answer is \`none\`,`,
         'which carries no function for the funext gap to open under.',
         '-/',
         '',

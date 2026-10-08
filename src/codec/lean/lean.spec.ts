@@ -452,7 +452,9 @@ describe('terms', () => {
         // the guard closes on a twin of one shape that holds no free function
         expect(verdict).toContain('Alg.guarded_of_sameShape')
         expect(verdict).toContain('(Pred.closure (fun _ => true))')
-        expect(verdict.endsWith('(by decide), by rfl⟩')).toBe(true)
+        expect(
+            verdict.endsWith('(of_decide_eq_true kernel_rfl%), kernel_rfl%⟩'),
+        ).toBe(true)
         expect(refusal(() => leanTermOf(textFlags)).reason).toContain(
             'Value → Bool',
         )
@@ -640,7 +642,9 @@ describe('what cannot be emitted', () => {
         expect(leanTermOf(selfThunk)).toBe('Term.mu (Term.var 0)')
         expect(
             leanGuard({ name: 'self_thunk', codec: selfThunk, guarded: false }),
-        ).toContain('Term.guarded (Term.mu (Term.var 0)) = false := rfl')
+        ).toContain(
+            'Term.guarded (Term.mu (Term.var 0)) = false := kernel_rfl%',
+        )
     })
 
     /**
@@ -1296,7 +1300,7 @@ describe('the `check` protocol', () => {
                 { name: 'scalar', codec: erase(string), value: 'x' },
                 'check',
             ).trimEnd(),
-        ).toMatch(/= \.same := rfl$/)
+        ).toMatch(/= \.same := kernel_rfl%$/)
     })
 
     it('imports the comparator instead of carrying a tactic', () => {
@@ -2035,7 +2039,7 @@ describe('union resolution, model against library', () => {
             'ir_tag_decimal__tag_as_s',
             'ir_two_keys__no_combination',
         ]) {
-            expect(stated(name)).toContain(') = none := rfl')
+            expect(stated(name)).toContain(') = none := kernel_rfl%')
         }
     })
 
@@ -2189,8 +2193,12 @@ describe('the legacy read gate, against the model', () => {
         expect(stated('lr_literal_A__raw_N_1')).toContain('vcheck')
         expect(stated('lr_nested_A__raw_M_f1')).toContain('vcheck')
         // the older reader answers `B`, which the current literal cannot write
-        expect(stated('lr_literal_A__raw_N_2')).toContain(') = none := by rfl')
-        expect(stated('lr_nested_A__raw_M_f2')).toContain(') = none := by rfl')
+        expect(stated('lr_literal_A__raw_N_2')).toContain(
+            ') = none := kernel_rfl%',
+        )
+        expect(stated('lr_nested_A__raw_M_f2')).toContain(
+            ') = none := kernel_rfl%',
+        )
         // a reader that throws or answers nothing pins to `none`
         expect(stated('lr_throws__raw_N_1')).toContain('then none else r0 b')
         expect(stated('lr_undefined_reader__raw_N_1')).toContain(
@@ -2300,7 +2308,7 @@ describe("the declaration guard, against the model's classifier", () => {
             one.includes('PairwiseCompat (libTable κ) ['),
         )
         const refused = emitted.filter((one) =>
-            /= false :=\n {2}(⟨by decide, by decide⟩|by decide|⟨?\(congrArg₂[\s\S]*)$/.test(
+            /= false :=\n {2}(⟨of_decide_eq_true kernel_rfl%, of_decide_eq_true kernel_rfl%⟩|of_decide_eq_true kernel_rfl%|⟨?\(congrArg₂[\s\S]*)$/.test(
                 one,
             ),
         )
@@ -2324,7 +2332,9 @@ describe("the declaration guard, against the model's classifier", () => {
             one.includes('pairwiseCompat_of_compatPair'),
         )
         const refused = emitted.filter((one) =>
-            one.endsWith('= false :=\n  ⟨by decide, by decide⟩'),
+            one.endsWith(
+                '= false :=\n  ⟨of_decide_eq_true kernel_rfl%, of_decide_eq_true kernel_rfl%⟩',
+            ),
         )
         expect([byDecision.length, refused.length]).toEqual([170, 3])
         expect(byDecision.length + refused.length).toBe(recursive.length)
@@ -2337,7 +2347,7 @@ describe("the declaration guard, against the model's classifier", () => {
             'pairwiseCompat_of_compatPair',
         )
         expect(verdict(erase(decimal), json)).toContain(
-            '= false :=\n  ⟨by decide, by decide⟩',
+            '= false :=\n  ⟨of_decide_eq_true kernel_rfl%, of_decide_eq_true kernel_rfl%⟩',
         )
         expect(verdict(erase(string), tree)).toContain(
             'pairwiseCompat_of_compatPair',
@@ -2396,7 +2406,7 @@ describe("the declaration guard, against the model's classifier", () => {
             ),
         })
         expect(closed).toContain(
-            'Alg.Term.guarded (Term.mu ((Term.held false (Term.var 0) (Term.string) (.caller 0, false) []))) = false :=\n  by decide',
+            'Alg.Term.guarded (Term.mu ((Term.held false (Term.var 0) (Term.string) (.caller 0, false) []))) = false :=\n  of_decide_eq_true kernel_rfl%',
         )
         const quantified = leanFormerGuard({
             name: 'quantified',
@@ -2411,7 +2421,7 @@ describe("the declaration guard, against the model's classifier", () => {
             [
                 'theorem quantified (r0 : Attr → Option Value) :',
                 '    Alg.Term.guarded (Term.mu ((Term.legacy (Term.var 0) r0))) = false :=',
-                '  (Alg.guarded_of_sameShape _ (Term.mu ((Term.legacy (Term.var 0) (fun _ => none)))) (by rfl)).trans (by decide)',
+                '  (Alg.guarded_of_sameShape _ (Term.mu ((Term.legacy (Term.var 0) (fun _ => none)))) kernel_rfl%).trans (of_decide_eq_true kernel_rfl%)',
             ].join('\n'),
         )
         const tree: AnyCodec = erase(
@@ -2452,7 +2462,9 @@ describe("the declaration guard, against the model's classifier", () => {
         expect(accepted).toContain(
             'PairwiseCompat (libTable κ) [Term.string, Term.boolean]',
         )
-        expect(accepted).toContain('pairwiseCompat_of_compatPair (by decide)')
+        expect(accepted).toContain(
+            'pairwiseCompat_of_compatPair (of_decide_eq_true kernel_rfl%)',
+        )
         const refused = leanSeparation({
             name: 'refused',
             left: erase(string),
@@ -2461,9 +2473,11 @@ describe("the declaration guard, against the model's classifier", () => {
         expect(refused).toMatch(
             /^ {4}Alg\.compatPair dynOracle \(Term\.string\)$/m,
         )
-        expect(refused.endsWith('= false :=\n  ⟨by decide, by decide⟩')).toBe(
-            true,
-        )
+        expect(
+            refused.endsWith(
+                '= false :=\n  ⟨of_decide_eq_true kernel_rfl%, of_decide_eq_true kernel_rfl%⟩',
+            ),
+        ).toBe(true)
     })
 })
 
@@ -2552,7 +2566,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
             const vector = leanReadVector(one)
             expect(vector).toContain('vcheck')
             expect(vector).toContain('.p')
-            expect(vector).toContain('= .same := rfl')
+            expect(vector).toContain('= .same := kernel_rfl%')
         }
     })
 
@@ -2619,7 +2633,7 @@ describe('the committed sample', () => {
                 sampleRefusals,
                 allRefusals().length,
                 // the read subset is the `check` sample's alone: a read vector needs `vcheck`, and
-                // the `equation` sample depends on nothing beyond `denote` by design
+                // the `equation` sample states each vector as an equation on `denote` by design
                 protocol === 'check' ? readSample : [],
             )
             // `UPDATE_LEAN_SAMPLE=1 vitest run src/codec/lean/lean.spec.ts` rewrites them — and then they have
@@ -2663,7 +2677,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             '(AltClause.mk {"kind"} (fun k => (([], ⟨.string, NEFinset.of "a" ∅⟩) : Pin)))',
         )
         expect(text).toContain(
-            '[[true, false],\n      [false, false]] := by decide',
+            '[[true, false],\n      [false, false]] := of_decide_eq_true kernel_rfl%',
         )
     })
 
@@ -2681,7 +2695,9 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             ]),
             clauses: [{ u: erase(string('a')) }],
         })
-        expect(text).toContain('[[false, false]] := by decide')
+        expect(text).toContain(
+            '[[false, false]] := of_decide_eq_true kernel_rfl%',
+        )
     })
 
     /**
@@ -2701,7 +2717,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
                 codec: mutant,
                 clauses: [{ t: erase(string('a')) }],
             }),
-        ).toContain('[[true, true]] := by decide')
+        ).toContain('[[true, true]] := of_decide_eq_true kernel_rfl%')
     })
 
     /**
@@ -2723,7 +2739,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             '(AltClause.mk {"kind"} (fun k => (([], ⟨.string, NEFinset.of "b" ∅⟩) : Pin)))',
         )
         expect(text).toContain(
-            '[[true, false],\n      [false, true]] := by decide',
+            '[[true, false],\n      [false, true]] := of_decide_eq_true kernel_rfl%',
         )
     })
 
@@ -2748,7 +2764,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
         expect(text).toContain(
             '(([(.decimalText, false)], ⟨.number, NEFinset.of (WFNumeral.of "1") ∅⟩) : Pin)',
         )
-        expect(text).toContain('[[true, false],\n      [false, false]] := by')
+        expect(text).toContain('[[true, false],\n      [false, false]] := ')
     })
 
     /** **A caller adapter matches only itself**, so a plain clause at the stored literal keeps nothing. */
@@ -2761,7 +2777,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
         expect(text).toContain(
             '(([(.caller 0, false)], ⟨.string, NEFinset.of "a" ∅⟩) : Pin)',
         )
-        expect(text).toContain('[[false, false],\n      [true, false]] := by')
+        expect(text).toContain('[[false, false],\n      [true, false]] := ')
     })
 
     /** **A refinement of a literal admits a subset of the literal**, so the literal bounds the member. */
@@ -2770,7 +2786,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             string('1'),
             string('z'),
         ])
-        expect(text).toContain('[[true, false],\n      [false, true]] := by')
+        expect(text).toContain('[[true, false],\n      [false, true]] := ')
     })
 
     /** **The caller must write a fill**, so a fill is required where the clause reads presence. */
@@ -2779,7 +2795,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             current: string('a'),
             whenMissing: 'a',
         } as never)
-        expect(rows(fill, [string('a')])).toContain('[[true, false]] := by')
+        expect(rows(fill, [string('a')])).toContain('[[true, false]] := ')
     })
 
     /** **A clause keeps a member whose alternatives lie inside the clause's**, and not one that overlaps. */
@@ -2793,7 +2809,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             '(([], ⟨.string, NEFinset.of "a" {"b", "c"}⟩) : Pin)',
         )
         expect(text).toContain(
-            '[[false, false],\n      [true, false],\n      [false, true]] := by',
+            '[[false, false],\n      [true, false],\n      [false, true]] := ',
         )
     })
 
@@ -2812,7 +2828,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
         expect(text).toContain(
             '(([(.decimalText, false)], ⟨.number, NEFinset.of (WFNumeral.of "2") ∅⟩) : Pin)',
         )
-        expect(text).toContain('[[true, false],\n      [false, true]] := by')
+        expect(text).toContain('[[true, false],\n      [false, true]] := ')
     })
 
     /** **The model names no float adapter**, so a clause at the `number` form has no pin to state. */

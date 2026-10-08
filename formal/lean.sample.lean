@@ -1,3 +1,4 @@
+import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Lang.Denote
 import Calculus.Dynamo.Alg.Frontier
 import Calculus.Dynamo.Lang.Store
@@ -340,7 +341,7 @@ theorem recursive_json :
 
 /-- `recursive_json__guarded` — the model's guard accepts this term -/
 theorem recursive_json__guarded :
-    Alg.Term.guarded (Term.mu (Term.union [Term.string, Term.array (Term.var 0)])) = true := rfl
+    Alg.Term.guarded (Term.mu (Term.union [Term.string, Term.array (Term.var 0)])) = true := kernel_rfl%
 
 /-- `recursive_tree_optional` -/
 theorem recursive_tree_optional :
@@ -351,233 +352,233 @@ theorem recursive_tree_optional :
 
 /-- `recursive_tree_optional__guarded` — the model's guard accepts this term -/
 theorem recursive_tree_optional__guarded :
-    Alg.Term.guarded (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none))) = true := rfl
+    Alg.Term.guarded (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none))) = true := kernel_rfl%
 
 /-! ## Refusals — neither side writes anything for these
 
 44 of 1764 shown; `scripts/gate.sh` elaborates all
-1764. One `rfl` each, no comparator and no fuel: the answer is `none`,
+1764. One `kernel_rfl%` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
 /-- `scalar_string__refuses__scalar_boolean` — refused on both sides -/
 theorem scalar_string__refuses__scalar_boolean :
     (denote (libTable noCallers) (Term.string)).e
-      (Value.bool true) = none := rfl
+      (Value.bool true) = none := kernel_rfl%
 
 /-- `scalar_decimal__refuses__scalar_string` — refused on both sides -/
 theorem scalar_decimal__refuses__scalar_string :
     (denote (libTable noCallers) ((Term.held false (Term.number) (Term.string) (.decimalText, false) []))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `scalar_boolean__refuses__scalar_string` — refused on both sides -/
 theorem scalar_boolean__refuses__scalar_string :
     (denote (libTable noCallers) (Term.boolean)).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `scalar_binary__refuses__scalar_string` — refused on both sides -/
 theorem scalar_binary__refuses__scalar_string :
     (denote (libTable noCallers) (Term.binary)).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `scalar_null__refuses__scalar_string` — refused on both sides -/
 theorem scalar_null__refuses__scalar_string :
     (denote (libTable noCallers) (Term.null)).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `literal_alternatives__refuses__scalar_string` — refused on both sides -/
 theorem literal_alternatives__refuses__scalar_string :
     (denote (libTable noCallers) (Term.union [Term.literal GroundKind.string "A", Term.literal GroundKind.string "B"])).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `literal_decimal__refuses__scalar_string` — refused on both sides -/
 theorem literal_decimal__refuses__scalar_string :
     (denote (libTable noCallers) ((Term.held false (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) (.decimalText, false) []))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `literal_non_ascii__refuses__scalar_string` — refused on both sides -/
 theorem literal_non_ascii__refuses__scalar_string :
     (denote (libTable noCallers) (Term.union [Term.literal GroundKind.string "⊥", Term.literal GroundKind.string "𝔸"])).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `literal_binary__refuses__scalar_string` — refused on both sides -/
 theorem literal_binary__refuses__scalar_string :
     (denote (libTable noCallers) (Term.literal GroundKind.binary [0, 127, 255])).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `set_of_string__refuses__scalar_string` — refused on both sides -/
 theorem set_of_string__refuses__scalar_string :
     (denote (libTable noCallers) (Term.set (Term.string))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `set_of_literal__refuses__scalar_string` — refused on both sides -/
 theorem set_of_literal__refuses__scalar_string :
     (denote (libTable noCallers) (Term.set (Term.union [Term.literal GroundKind.string "a", Term.literal GroundKind.string "b"]))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `set_of_number__refuses__scalar_string` — refused on both sides -/
 theorem set_of_number__refuses__scalar_string :
     (denote (libTable noCallers) (Term.set (Term.number))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `array_of_string__refuses__scalar_string` — refused on both sides -/
 theorem array_of_string__refuses__scalar_string :
     (denote (libTable noCallers) (Term.array (Term.string))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `list_prefix_spread__refuses__scalar_string` — refused on both sides -/
 theorem list_prefix_spread__refuses__scalar_string :
     (denote (libTable noCallers) (Term.tuple [Term.string] (some (Term.string)))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `list_spread_suffix__refuses__scalar_string` — refused on both sides -/
 theorem list_spread_suffix__refuses__scalar_string :
     (denote (libTable noCallers) (Term.list [] (some (Term.string)) [Term.boolean])).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `array_empty__refuses__scalar_string` — refused on both sides -/
 theorem array_empty__refuses__scalar_string :
     (denote (libTable noCallers) (Term.array (Term.string))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `tuple_pair__refuses__scalar_string` — refused on both sides -/
 theorem tuple_pair__refuses__scalar_string :
     (denote (libTable noCallers) (Term.tuple [Term.string, Term.boolean] none)).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `open_of_string__refuses__scalar_string` — refused on both sides -/
 theorem open_of_string__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.string))))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `open_empty__refuses__scalar_string` — refused on both sides -/
 theorem open_empty__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.string))))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `object_two_fields__refuses__scalar_string` — refused on both sides -/
 theorem object_two_fields__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.req (Term.boolean)) none))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `object_optional_absent__refuses__scalar_string` — refused on both sides -/
 theorem object_optional_absent__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.boolean)) none))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `object_fallback_present__refuses__scalar_string` — refused on both sides -/
 theorem object_fallback_present__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk {"a"} (fun k => ObjectSlot.fill (Term.string) (Value.str "stand-in")) none))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `object_open__refuses__scalar_string` — refused on both sides -/
 theorem object_open__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) (some (Term.boolean))))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `object_nested__refuses__scalar_string` — refused on both sides -/
 theorem object_nested__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.object (Body.mk {"b"} (fun k => ObjectSlot.req (Term.string)) none))) none))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `open_of_restricted_set__refuses__scalar_string` — refused on both sides -/
 theorem open_of_restricted_set__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.set (Term.union [Term.literal GroundKind.string "a", Term.literal GroundKind.string "b"])))))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `object_restricted_rest__refuses__scalar_string` — refused on both sides -/
 theorem object_restricted_rest__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.set (Term.union [Term.literal GroundKind.string "b", Term.literal GroundKind.string "c"]))) (some (Term.set (Term.union [Term.literal GroundKind.string "b", Term.literal GroundKind.string "c"])))))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `map_inside_a_list__refuses__scalar_string` — refused on both sides -/
 theorem map_inside_a_list__refuses__scalar_string :
     (denote (libTable noCallers) (Term.array (Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.string)))))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `object_with_a_name_inside_a_list__refuses__scalar_string` — refused on both sides -/
 theorem object_with_a_name_inside_a_list__refuses__scalar_string :
     (denote (libTable noCallers) (Term.array (Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) none)))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `open_object_absent_name_inside_a_list__refuses__scalar_string` — refused on both sides -/
 theorem open_object_absent_name_inside_a_list__refuses__scalar_string :
     (denote (libTable noCallers) (Term.array (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.boolean)) (some (Term.boolean)))))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `union_of_two__refuses__scalar_binary` — refused on both sides -/
 theorem union_of_two__refuses__scalar_binary :
     (denote (libTable noCallers) (Term.union [Term.string, Term.boolean])).e
-      (Value.bin [0, 127, 255]) = none := rfl
+      (Value.bin [0, 127, 255]) = none := kernel_rfl%
 
 /-- `nullable_null__refuses__scalar_boolean` — refused on both sides -/
 theorem nullable_null__refuses__scalar_boolean :
     (denote (libTable noCallers) (Term.union [Term.string, Term.null])).e
-      (Value.bool true) = none := rfl
+      (Value.bool true) = none := kernel_rfl%
 
 /-- `union_by_literal__refuses__scalar_string` — refused on both sides -/
 theorem union_by_literal__refuses__scalar_string :
     (denote (libTable noCallers) (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then ObjectSlot.req (Term.literal GroundKind.string "a") else ObjectSlot.req (Term.string)) none), Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then ObjectSlot.req (Term.literal GroundKind.string "b") else ObjectSlot.req (Term.boolean)) none)])).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `discriminated_union__refuses__scalar_string` — refused on both sides -/
 theorem discriminated_union__refuses__scalar_string :
     (denote (libTable noCallers) (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then ObjectSlot.req (Term.literal GroundKind.string "a") else ObjectSlot.req (Term.string)) none), Term.object (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then ObjectSlot.req (Term.literal GroundKind.string "b") else ObjectSlot.req (Term.boolean)) none)])).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `product_two_objects__refuses__scalar_string` — refused on both sides -/
 theorem product_two_objects__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.req (Term.boolean)) none))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `product_union_object__refuses__scalar_string` — refused on both sides -/
 theorem product_union_object__refuses__scalar_string :
     (denote (libTable noCallers) (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.req ((Term.held false (Term.number) (Term.string) (.decimalText, false) []))) none), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then ObjectSlot.req (Term.boolean) else ObjectSlot.req ((Term.held false (Term.number) (Term.string) (.decimalText, false) []))) none)])).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `product_three__refuses__scalar_string` — refused on both sides -/
 theorem product_three__refuses__scalar_string :
     (denote (libTable noCallers) (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then ObjectSlot.req (Term.string) else if k.1 = "q" then ObjectSlot.req (Term.boolean) else ObjectSlot.req ((Term.held false (Term.number) (Term.string) (.decimalText, false) []))) none))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `dunion_two_keys__refuses__scalar_string` — refused on both sides -/
 theorem dunion_two_keys__refuses__scalar_string :
     (denote (libTable noCallers) (Term.union [Term.object (Body.mk {"kind", "size", "toy"} (fun k => if k.1 = "kind" then ObjectSlot.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then ObjectSlot.req (Term.literal GroundKind.string "small") else ObjectSlot.req (Term.string)) none), Term.object (Body.mk {"kind", "size", "pen"} (fun k => if k.1 = "kind" then ObjectSlot.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then ObjectSlot.req (Term.literal GroundKind.string "large") else ObjectSlot.req (Term.string)) none)])).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `lazy_string__refuses__scalar_boolean` — refused on both sides -/
 theorem lazy_string__refuses__scalar_boolean :
     (denote (libTable noCallers) (Term.string)).e
-      (Value.bool true) = none := rfl
+      (Value.bool true) = none := kernel_rfl%
 
 /-- `recursive_json__refuses__scalar_boolean` — refused on both sides -/
 theorem recursive_json__refuses__scalar_boolean :
     (denote (libTable noCallers) (Term.mu (Term.union [Term.string, Term.array (Term.var 0)]))).e
-      (Value.bool true) = none := rfl
+      (Value.bool true) = none := kernel_rfl%
 
 /-- `recursive_tree__refuses__scalar_string` — refused on both sides -/
 theorem recursive_tree__refuses__scalar_string :
     (denote (libTable noCallers) (Term.mu (Term.object (Body.mk {"v", "kids"} (fun k => if k.1 = "v" then ObjectSlot.req (Term.string) else ObjectSlot.req (Term.array (Term.var 0))) none)))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `recursive_category__refuses__scalar_string` — refused on both sides -/
 theorem recursive_category__refuses__scalar_string :
     (denote (libTable noCallers) (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none)))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `recursive_tree_optional__refuses__scalar_string` — refused on both sides -/
 theorem recursive_tree_optional__refuses__scalar_string :
     (denote (libTable noCallers) (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none)))).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `scalar_number__refuses__scalar_string` — refused on both sides -/
 theorem scalar_number__refuses__scalar_string :
     (denote (libTable noCallers) (Term.number)).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 /-- `never__refuses__scalar_string` — refused on both sides -/
 theorem never__refuses__scalar_string :
     (denote (libTable noCallers) (Term.never)).e
-      (Value.str "hello") = none := rfl
+      (Value.str "hello") = none := kernel_rfl%
 
 end Calculus

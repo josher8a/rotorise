@@ -506,15 +506,51 @@ theorem vcheck_same {n : Nat} {x y : Option Value} (h : vcheck n x y = .same) : 
   | some a, some b => exact congrArg some ((veq_sound n a b).1 h)
   | none, some _ | some _, none => simp [vcheck] at h
 
+/-! ## The term that closes a vector -/
+
+open Lean Elab Term Meta in
+/-- `kernel_rfl%` proves an equation `a = b` by `Eq.refl b`, and the kernel decides the goal.
+
+    The elaborator does not evaluate the goal. `rfl` evaluates the goal in `Meta` by unification,
+    and `decide` by `whnf` of the instance. The kernel then checks the term again. The `Meta`
+    pass costs more than the kernel check, and proves nothing that the kernel does not check.
+    A closed decidable goal `p` is `of_decide_eq_true kernel_rfl%`. A goal with a free variable
+    takes `kernel_rfl%` directly, because `decide` refuses the goal.
+
+    The goal must be an equation. A false equation is a kernel error, `application type mismatch`,
+    and not an elaborator error. The proof term is `Eq.refl`, so the term adds no axiom. -/
+elab "kernel_rfl%" : term <= ty => do
+  let ty ← instantiateMVars ty
+  let some (_, _, rhs) := ty.eq? | throwError "kernel_rfl%: the goal is not an equation"
+  mkExpectedTypeHint (← mkEqRefl rhs) ty
+
+/-! A false equation fails in the kernel, and a goal that is not an equation fails in the
+elaborator. -/
+
+/--
+error: (kernel) application type mismatch
+  id (Eq.refl 5)
+argument has type
+  5 = 5
+but function has type
+  2 + 2 = 5 → 2 + 2 = 5
+-/
+#guard_msgs in
+example : (2 : Nat) + 2 = 5 := kernel_rfl%
+
+/-- error: kernel_rfl%: the goal is not an equation -/
+#guard_msgs in
+example : (2 : Nat) ≤ 5 := kernel_rfl%
+
 /-! ## The shape of a generated vector
 
 A vector file emitted by the generator is one line per case, and reads:
 
 ```
-theorem v0 : check 8 ((denote t).e v) (some a) = .same := rfl
+theorem v0 : check 8 ((denote t).e v) (some a) = .same := kernel_rfl%
 ```
 
-`rfl` does the work: the kernel unfolds `denote`, runs the codec on the value, and settles
+The kernel does the work: the kernel unfolds `denote`, runs the codec on the value, and settles
 the comparison — no tactic, no `decide` on an undecidable equality, no compiled code. The
 line's content is then recovered with `check_same v0 : (denote t).e v = some a`.
 
