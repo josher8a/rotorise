@@ -80,10 +80,10 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # set ends, so one failure does not hide another. GATE_JOBS bounds the memory of the set.
   run 'pool pre-check + bridge' bash -c '
     jobs=${GATE_JOBS:-6}; out=$(mktemp -d); trap "rm -rf $out" EXIT
-    printf "%s\n" .pool.slices.lean .pool.paths0.lean .pool.paths1.lean .pool.paths2.lean \
-      .pool.paths3.lean .corpus.eval.lean .pool.eval.lean .pool.separations.lean .pool.disjoints.lean \
-      .legacyreads.lean .readverdicts.lean .vectors.full.lean .separations.lean .disjoints.lean \
-      .resolutions.lean lean.sample.check.lean lean.sample.lean .readvectors.lean .pool.guards.lean |
+    printf "%s\n" .pool.separations.lean .pool.slices.lean .pool.disjoints.lean .corpus.eval.lean \
+      .pool.paths0.lean .pool.paths1.lean .pool.paths3.lean .pool.paths2.lean .pool.eval.lean \
+      .legacyreads.lean .separations.lean .readverdicts.lean .disjoints.lean .vectors.full.lean \
+      .resolutions.lean lean.sample.lean lean.sample.check.lean .readvectors.lean .pool.guards.lean |
     xargs -P "$jobs" -I{} sh -c "
       [ -f {} ] || { echo missing > $out/x{}.rc; exit 0; }
       lake env lean {} > $out/x{}.out 2>&1; echo \$? > $out/x{}.rc"
