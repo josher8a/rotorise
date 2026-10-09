@@ -15,7 +15,7 @@
  * - `refine`, `held` and `withLegacyRead` carry *functions* in the model and *closures* here.
  *   There is no expression in Lean for a closure. A declaration verdict binds a caller's closure
  *   and a caller's adapter as variables of the theorem, and every other vector refuses them.
- * - `optional` and `withLegacyRead` are §4 `Field`s and `restOf` is a §4 `Rest`. Asking for a `Term` at
+ * - `optional` and `withLegacyRead` are `Field`s and `restOf` is a `Rest`. Asking for a `Term` at
  *   one of them is a stratification error, and the emitter reports it as one rather than flattening
  *   it — which is the same discipline `NotAboutAbsence` enforces in the types.
  *
@@ -154,7 +154,7 @@ describe('terms', () => {
 
     /**
      * `literal` is base-indexed in the model and value-indexed here, and the two agree only at the
-     * string base. `GroundKind` is the index and `k.Carrier` the value — so §3's premise line
+     * string base. `GroundKind` is the index and `k.Carrier` the value — so the premise line of the rule `(literal)`
      * (`g ground`, `ℓ ⊆ T`) is discharged by the type and the emitter writes one value.
      *
      * **Several alternatives are a union of singletons**, which is what the model says a set of
@@ -307,11 +307,11 @@ describe('terms', () => {
      * reads as dead. It is not: a brand is not a proof and a cast defeats a brand, which is why the
      * entry takes a declaration and refuses one, and why this is asserted through `erase` rather than
      * left to the type. `ObjectSlot.optional` is emitted where a field belongs — in an object's table —
-     * and the two spellings are what §4's strata mean.
+     * and the two spellings are what the field stratum means.
      */
     it('refuses a field where a term belongs, reached past a cast', () => {
         expect(() => leanTermOf(erase(optional(string)))).toThrow(
-            /a §4 \*field\*, not a term/,
+            /a \*field\*, not a term/,
         )
         expect(() =>
             leanTermOf(
@@ -324,7 +324,7 @@ describe('terms', () => {
     })
 
     /**
-     * §4's field table is a `Finset Name` with a function on it, not a list of pairs — so an object
+     * The field table is a `Finset Name` with a function on it, not a list of pairs — so an object
      * emits a key set and a chain of key tests, and the last field is the `else`. That is total
      * because the subtype's inhabitants are exactly the declared keys.
      */
@@ -567,7 +567,7 @@ describe('what cannot be emitted', () => {
     })
 
     /**
-     * Four of §3's constructors carry functions. The model's `refine` holds `q : Value → Bool`;
+     * Four constructors of the term language carry functions. The model's `refine` holds `q : Value → Bool`;
      * this library holds a JavaScript predicate. Nothing translates one into the other, and
      * emitting a *different* predicate — `fun _ => true`, say — would produce a file that compiles
      * and proves the wrong theorem, which is the failure mode this whole module exists to avoid.
@@ -598,7 +598,7 @@ describe('what cannot be emitted', () => {
     })
 
     /**
-     * §4's stratification, reported as itself. `optional(c)` denotes a `Field` and no `Term`
+     * The field stratum, reported as itself. `optional(c)` denotes a `Field` and no `Term`
      * position accepts one — the model makes that a fact about the types (`Field` is a separate
      * inductive), and this library makes it a fact about markers. Asking the emitter for a `Term`
      * at one is a category error, and it says so rather than unwrapping to the inner term, which
@@ -607,7 +607,7 @@ describe('what cannot be emitted', () => {
     it('refuses a field where a term is asked for', () => {
         expect(
             refusal(() => leanTermOf(erase(optional(string)))).reason,
-        ).toContain('§4 *field*')
+        ).toContain('a *field*, not a term')
         expect(
             refusal(() =>
                 leanTermOf(
@@ -616,11 +616,11 @@ describe('what cannot be emitted', () => {
                     ),
                 ),
             ).reason,
-        ).toContain('§4 *field*')
+        ).toContain('a *field*, not a term')
     })
 
     /**
-     * §1 types all three wire sets as `℘⁺fin`, so `NEFinset` has no empty inhabitant and an empty
+     * The attribute domain types all three wire sets as `℘⁺fin`, so `NEFinset` has no empty inhabitant and an empty
      * set has no expression at all. This library refuses an empty set too — but at encode time,
      * with a `CodecError`; here it is refused at emit time, with the model's reason.
      */
@@ -735,7 +735,7 @@ describe('values and attributes', () => {
     })
 
     /**
-     * `M` is a key set with a function on it on both sides of §1, so a map value and a map
+     * `M` is a key set with a function on it on both sides of the attribute domain, so a map value and a map
      * attribute emit the same shape. The empty one is the interesting case: there is no key to
      * test, so the function is `absurd` on the membership proof.
      */
@@ -749,7 +749,7 @@ describe('values and attributes', () => {
     })
 
     /**
-     * §4's `optional` is about *presence*, so an absent attribute is a name the key set does not
+     * The `optional` of a field is about *presence*, so an absent attribute is a name the key set does not
      * have. Emitting `Value.null` for it would be a different vector — one about `nullable` — and
      * would pass or fail for the wrong reason.
      */

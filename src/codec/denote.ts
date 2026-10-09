@@ -101,7 +101,7 @@ export const literalShape: { readonly [B in LiteralBase]: Shape } = {
 /**
  * A literal at a named base — the one builder every literal in this library goes through.
  *
- * The premises §3 states on `(literal)`, checked where the rule states them:
+ * The premises of the rule `(literal)`, checked where the rule states them:
  *
  * - **`ℓ` is non-empty.** Checked by each caller, because the message wants to name the
  *   constructor the caller actually wrote.
@@ -198,7 +198,7 @@ const satisfies = (q: Refinement, value: unknown): boolean =>
     q.is(value as never)
 
 /**
- * §3 `(refine)`'s `q`, run: whether a value satisfies a {@link Predicate}.
+ * The rule `(refine)`'s `q`, run: whether a value satisfies a {@link Predicate}.
  *
  * `members` is `inL`, compared the way the base compares. `closure` is the caller's function.
  */
@@ -330,8 +330,8 @@ export type Pair = {
 }
 
 /**
- * §3's ground terms, as one construction: the model's `fiberCodec` under this library's word.
- * §3 calls what it builds a *ground term*, so that is the word here.
+ * The ground terms of the judgement, as one construction: the model's `fiberCodec` under this library's word.
+ * The judgement calls what it builds a *ground term*, so that is the word here.
  *
  * A shape test, then the member stamped. In the model's one carrier this is the identity on the
  * data of one member, and `lawful_fiberCodec` is its one lawfulness proof: the identity inverts
@@ -396,11 +396,11 @@ export const carriedCodec = <Payload, Written, Read>(
 })
 
 /**
- * §4's body: the declared fields and the policy for everything else, as one pair over a bare item.
+ * The body of an object: the declared fields and the policy for everything else, as one pair over a bare item.
  *
  * The model's `objectCodecCore`, and `objectCodecCore_eq` is the lemma. It is *not* a
  * {@link carriedCodec} instance on its own — it writes a bare map rather than an `M` — which is
- * exactly the distinction `.item` exposes: §5 says a codec writes the attributes of that codec, and
+ * exactly the distinction `.item` exposes: a codec writes the attributes of that codec, and
  * `object` writes the members of `object` like any other, offering `.item` for the one place that
  * writes no map. So `denote`'s row wraps this in the member and `.item` takes it as it is.
  *
@@ -515,15 +515,15 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
 }
 
 /**
- * §3 `(held)`: a pair reached through an adapter — the model's `Codec.through`.
+ * The rule `(held)`: a pair reached through an adapter — the model's `Codec.through`.
  *
  * The word is `held`'s, because that is what this library calls the term. `f` sits in front of `e`
  * and `g` sits behind `p`, so the adapter changes what the value is *held* as and leaves what it is
- * *stored* as alone. §5 turns on the asymmetry: the readable side sees through it and the writable
+ * *stored* as alone. Separation turns on the asymmetry: the readable side sees through it and the writable
  * one cannot, which is the one row where the two sides of a term part in that direction.
  *
  * **A throw is a refusal like any other.** The two functions are the caller's, so either may throw
- * rather than return, and the guard is what makes that a value the way §2's error channel is one
+ * rather than return, and the guard is what makes that a value the way the error channel of a codec is one
  * rather than an exception escaping a codec.
  */
 export const heldThrough = (
@@ -566,11 +566,11 @@ export const heldThrough = (
 }
 
 /**
- * §3 `(refine)`: a pair narrowed by a predicate on **values** — the model's `Codec.restrict`.
+ * The rule `(refine)`: a pair narrowed by a predicate on **values** — the model's `Codec.restrict`.
  *
  * Both halves gate on the *same* predicate applied to the same value, which is what makes each law
- * restrict rather than need re-proving. The read side asks *after* the base has read, because §5
- * says `q` tests the value a read **produces**: no set of attributes bounds it, so the gate cannot
+ * restrict rather than need re-proving. The read side asks *after* the base has read, because
+ * `q` tests the value a read **produces**: no set of attributes bounds it, so the gate cannot
  * be moved in front of the base's own row.
  *
  * **The predicate runs on the way in too**, which is what closed the last row of
@@ -599,7 +599,7 @@ export const restrict = (
 })
 
 /**
- * §3 `(union)`'s resolution: which option an input is for, and the pair that follows.
+ * The rule `(union)`'s resolution: which option an input is for, and the pair that follows.
  *
  * The model's `altCodec` over `select`, and `lawful_altCodec` is the lemma. It takes the
  * options already read as {@link Option} records because two views need the same answer —
@@ -691,7 +691,7 @@ export const altSem = (
      * admits the value writes it, and compatibility makes every admitting option write it to one
      * attribute.
      *
-     * {@link accepts} is the decision for every option, and {@link admitOption} is that one row. §3's `Adm`,
+     * {@link accepts} is the decision for every option, and {@link admitOption} is that one row. The model's `Adm`,
      * proved exact at all 21 constructors, and `codec.laws.spec.ts` holds
      * `accepts(c, v) ⟺ !failed(c.encode(v))` over its whole table — so on the values in play this
      * selects the same option `only` would have found by attempting, and says *why* rather than
@@ -878,7 +878,7 @@ export const membersOf = <V>(
 /**
  * The two directions over a bare attribute map — a term's reading with the top-level `M` taken off.
  *
- * §5's split, as a type: a codec writes the attributes of that codec, and the top-level map belongs
+ * The split, as a type: a codec writes the attributes of that codec, and the top-level map belongs
  * to the *view* rather than to the codec. This is the view's half, and `denote`'s rows are that
  * half carried into an `'M'`.
  */
@@ -957,7 +957,7 @@ export const denote = (def: Term): Pair => {
         case 'binary':
             return groundCodec('binary', 'B', 'a `Uint8Array`', "a 'B'")
         /**
-         * §3 `(list)`: the one positional container, with the arity test before any position.
+         * The rule `(list)`: the one positional container, with the arity test before any position.
          *
          * The model's two builder shapes, `arrayCodec` and `tupleCodec`, are abbreviations of
          * `listCodec`. The row is `denote_list`, and `Alg.lawful_listCodec` is the lemma.
@@ -1038,7 +1038,7 @@ export const denote = (def: Term): Pair => {
             )
         }
         /**
-         * §3 `(set)`, and the one product that is **not** a {@link carriedCodec}. The model says
+         * The rule `(set)`, and the one product that is **not** a {@link carriedCodec}. The model says
          * why: its attribute side is a choice among three wire sets rather than one member, so
          * there is no single `A` prism to carry a payload into.
          *
@@ -1110,8 +1110,8 @@ export const denote = (def: Term): Pair => {
             }
         }
         /**
-         * §4's object: {@link bodySem} carried into an `M`. The row is the wrapper and the body is
-         * the content, which is the split §5 states — a codec writes the attributes of that codec,
+         * The object: {@link bodySem} carried into an `M`. The row is the wrapper and the body is
+         * the content, which is the split of the attributes — a codec writes the attributes of that codec,
          * and `.item` is the one place that writes no map.
          */
         case 'object': {
@@ -1129,19 +1129,19 @@ export const denote = (def: Term): Pair => {
                     body.decode(carried),
             )
         }
-        /** §3 `(held)`. `Lawful.held1` is the lemma; the adapter is data the term carries. */
+        /** The rule `(held)`. `Lawful.held1` is the lemma; the adapter is data the term carries. */
         case 'held':
             return heldThrough(pairOf(def.inner), {
                 encode: def.f,
                 decode: def.g,
             })
-        /** §3 `(refine)`. `Lawful.restrict` is the lemma; `q` is data the term carries. */
+        /** The rule `(refine)`. `Lawful.restrict` is the lemma; `q` is data the term carries. */
         case 'refine':
             return restrict(pairOf(def.inner), holds(def.q), (value) =>
                 refusedBy(def.q, value),
             )
         /**
-         * §3 `(withLegacyRead)`: the current reading, extended by an older one — the model's
+         * The rule `(withLegacyRead)`: the current reading, extended by an older one — the model's
          * `Codec.extendRead`. The model proves the core laws only (`LawfulCore.extendRead`): a
          * canonical read fails, and `legacy_breaks_MP` is the refutation. The write side is untouched,
          * which is the whole of what makes it a migration rather than a union: `withLegacyRead` adds no
@@ -1151,7 +1151,7 @@ export const denote = (def: Term): Pair => {
          * the migration takes allocates nothing — no `[current, ...older]` to walk and no list of
          * reasons collected for a failure that did not happen.
          *
-         * §3 `(withLegacyRead)`'s first premise, `ran(r) ⊆ dom(e)`, is checked here and nowhere earlier:
+         * The rule `(withLegacyRead)`'s first premise, `ran(r) ⊆ dom(e)`, is checked here and nowhere earlier:
          * `older` is a function, so what it returns is known only once it has answered. Without
          * the check the row decodes and the write-back refuses, which is **(C)** broken at the
          * migrated row and reported at the next write instead of at this read.
@@ -1230,20 +1230,20 @@ export const denote = (def: Term): Pair => {
             }
         }
         /**
-         * §3 `(union)`: the join, resolved by the first option that admits. `lawful_altCodec` is the lemma and
+         * The rule `(union)`: the join, resolved by the first option that admits. `lawful_altCodec` is the lemma and
          * `altSem` is the resolution — one rule, serving both the attribute pair here and the item
          * pair an all-object union also offers.
          *
          * **The write side decides and the read side attempts**, and that asymmetry is the model's.
          * Admission is `Adm`, proved exact at every constructor, so the writable side selects by
          * asking rather than by trying; the readable side has no `AdmA` in this library to ask, so
-         * it tries. §5 says the same thing from the other end — the two families are independent,
+         * it tries. The same holds from the other end: the two families are independent,
          * and a pair separated on one side only is not separated.
          */
         case 'union':
             return altSem(def.options.map(optionOfTerm)).pair
         /**
-         * §5's bottom: the codec that admits no value.
+         * The bottom: the codec that admits no value.
          *
          * `Codec.empty` on the model's side, whose laws hold vacuously because both domains are
          * empty. A refusal in both directions and a value rather than a throw, as every other row.
@@ -1260,7 +1260,7 @@ export const denote = (def: Term): Pair => {
                     ),
             }
         /**
-         * §3 `(opaque)`: the recursive union of everything self-identifying, and total: a number
+         * The rule `(opaque)`: the recursive union of everything self-identifying, and total: a number
          * is a `DynamoNumber`. The two numeric policies are `held` over this row. `lawful_opaq` is the lemma, and it is a *theorem* rather
          * than an obligation — the model's `Obligations .opaq` is `True`, which is what makes
          * `opaque` a well-behaved `custom`: the same analysis with the opposite warranty. A
@@ -1278,7 +1278,7 @@ export const denote = (def: Term): Pair => {
                 decode: (attribute) => decodeUnknown(attribute),
             }
         /**
-         * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
+         * The rule `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
          * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
          * are exactly five term kinds.
@@ -1291,7 +1291,7 @@ export const denote = (def: Term): Pair => {
          * longer restates it.
          *
          * **At `number` the predicate is on the read value and not on the stored text**, which is
-         * the model's `inL` at that base and the one place §5's two literal rules part: a string
+         * the model's `inL` at that base and the one place where the two literal rules part: a string
          * literal's stored text *is* its value, a numeric literal's is not.
          */
         case 'literal': {
@@ -1328,7 +1328,7 @@ export const denote = (def: Term): Pair => {
             }
         }
         /**
-         * §3 `(number)`. The model's row is the ground base at `N`, and `lawful_baseCodec .number`
+         * The rule `(number)`. The model's row is the ground base at `N`, and `lawful_baseCodec .number`
          * is the lemma. The write asks the kind. The read gates the stored form through
          * {@link storedNumber}. The model states the stored form at the port (`storeCodec`), not
          * in this row.
@@ -1399,7 +1399,7 @@ export const denote = (def: Term): Pair => {
 const codecs = new WeakMap<Term, AttributeCodec<never, AttributeValue>>()
 
 /**
- * A declaration's term, refusing a §4 field where a term is wanted.
+ * A declaration's term, refusing a field where a term is wanted.
  *
  * `optional(c)` and `withLegacyRead({ current: c, whenMissing: v })` denote a `Field`, and no `Term` position accepts one — which
  * the positional guards refuse in the *type* at every site that could go wrong. This is the runtime
@@ -1740,8 +1740,8 @@ const numberPolicy = (numbers: opaque.Numbers) => {
                 )
             }
             /**
-             * **Writing an `N` means writing a numeral.** `Number.isFinite` is not that test: §1's
-             * `Carries('N')` is `Numerals`, bounded by 38 significant digits and magnitude
+             * **Writing an `N` means writing a numeral.** `Number.isFinite` is not that test: the
+             * `Carries('N')` of the attribute domain is `Numerals`, bounded by 38 significant digits and magnitude
              * `1e-130 … 9.9…e125`, and `5e-324` is a finite double outside it. The digits that
              * reach the store are the normal form of `DynamoNumber`, which is the form the store
              * returns: `1e21` is stored `1000000000000000000000`.

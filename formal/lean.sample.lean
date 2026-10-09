@@ -36,7 +36,7 @@ def numeral3 : WFNumeral := WFNumeral.of "2"
     gap is closed by `funext` and a case split on the key set, applied to a fixpoint so that a map
     nested inside a map is reached too.
 
-    The three wire-set alternatives are the second surprise. §1 types `SS`/`NS`/`BS` as
+    The three wire-set alternatives are the second surprise. The attribute domain types `SS`/`NS`/`BS` as
     `Finset`s, so their *order* carries no information — but a `Finset` is a `Multiset` with a
     proof, a `Multiset` is a quotient of lists, and two `Quot.mk`s of differently-ordered lists
     are not definitionally equal. This library sorts a set on the way out and the model keeps the

@@ -310,7 +310,7 @@ describe('every N it writes is a numeral', () => {
     /**
      * `ran(e) ⊆ 𝔸`, the write half of C1's embedding obligation.
      *
-     * §1's `Carries('N')` is `Numerals` — 38 significant digits, magnitude `1e-130 … 9.9…e125` —
+     * The `Carries('N')` of the attribute domain is `Numerals` — 38 significant digits, magnitude `1e-130 … 9.9…e125` —
      * and `Number.isFinite`, which is what this checked, is not that test. `5e-324` is a finite
      * double outside the range and is the specification's own example of the bound going
      * unchecked; `opaque('lossy')` wrote it, along with `1e200` and `1e-200`.

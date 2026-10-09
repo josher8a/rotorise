@@ -1,5 +1,5 @@
 /**
- * §3's term language, and the five functions of a term that the model computes.
+ * The term language, and the five functions of a term that the model computes.
  *
  * Derived from `formal/Calculus/Dynamo/Lang/Term.lean`, with `member` from `Denote.lean`'s `μSyn`, `specOf`
  * from `Denote.lean`. {@link occV}, {@link occA} and {@link tagsOf} have no counterpart there: the
@@ -40,7 +40,7 @@ import { sameLiteral } from './value'
 export type NonEmpty<T> = readonly [T, ...T[]]
 
 /**
- * §3 `(literal)`: a ground base, and **one** inhabitant of that base's carrier.
+ * The rule `(literal)`: a ground base, and **one** inhabitant of that base's carrier.
  *
  * **Five variants rather than one with a `base` field**, and that is the whole content. One
  * variant with `base: LiteralBase` beside `v: LiteralValue` admits
@@ -108,7 +108,7 @@ export type Alternatives =
       }
 
 /**
- * §3 `(refine)`'s `q`, as the term carries it.
+ * The rule `(refine)`'s `q`, as the term carries it.
  *
  * The model's `q` is a bare `Value → Bool` and the host's used to be the caller's closure. Neither
  * is enough, because **the certificate has to read the predicate as data**: a closure decides nothing a
@@ -137,11 +137,11 @@ export type OpaqueSugar = 'opaqueLossy' | 'opaqueRefuse'
 export const isOpaqueSugar = (via: string | undefined): via is OpaqueSugar =>
     via === 'opaqueLossy' || via === 'opaqueRefuse'
 
-/** §3's terms. One variant per `Term.lean` constructor, under the model's names. */
+/** The terms. One variant per `Term.lean` constructor, under the model's names. */
 export type Term =
     | { readonly kind: 'string' }
     /**
-     * §3 `(number)`, and **the one native numeric term**. Its carrier is {@link DynamoNumber},
+     * The rule `(number)`, and **the one native numeric term**. Its carrier is {@link DynamoNumber},
      * which is DynamoDB's own `N`. `number` and `decimal` are adapters over it and are no longer
      * terms of their own: a JS float and a decimal string are two ways a caller may hold this,
      * not two things the service stores.
@@ -152,7 +152,7 @@ export type Term =
     | { readonly kind: 'null' }
     | Literal
     /**
-     * §3 `(set)`: the finite-powerset lift of an element term. A lawful element gives a lawful set
+     * The rule `(set)`: the finite-powerset lift of an element term. A lawful element gives a lawful set
      * (`lawful_setCodec`), and that law reads nothing about the element's base.
      *
      * That a stored set holds elements of one member of `S`, `N` or `B` is the DynamoDB universe's
@@ -162,7 +162,7 @@ export type Term =
      */
     | { readonly kind: 'set'; readonly elem: Term }
     /**
-     * §3 `(list)`: the one positional container, as a prefix, at most one spread, and a suffix.
+     * The rule `(list)`: the one positional container, as a prefix, at most one spread, and a suffix.
      *
      * A fixed arity, a homogeneous run, and the two together are shapes of one thing, and a fixed
      * position *after* a spread — `[A, B, ...C[], D]` — is one more. A value of length
@@ -181,7 +181,7 @@ export type Term =
           readonly suf: readonly Term[]
       }
     /**
-     * §3 `(held)`: a conversion between two restrictions. `inner` restricts the stored side, and
+     * The rule `(held)`: a conversion between two restrictions. `inner` restricts the stored side, and
      * `outer` restricts the held side, which is the model's second term.
      */
     | {
@@ -225,12 +225,12 @@ export type Term =
           readonly shrink?: (value: never) => readonly unknown[]
       }
     /**
-     * §3 `(refine)`. The model carries `q : Value → Bool`; this carries a {@link Predicate}, so a
+     * The rule `(refine)`. The model carries `q : Value → Bool`; this carries a {@link Predicate}, so a
      * declaration can read the ones that are data. The caller's closure rides in `closure`, with
      * `what` as the refusal text and `arbitrary` as what a generator derived from the term reads.
      */
     | { readonly kind: 'refine'; readonly inner: Term; readonly q: Predicate }
-    /** §3 `(withLegacyRead)`: `r : Attr ⇀ Value`, the older reading, which widens `p` and never `e`. */
+    /** The rule `(withLegacyRead)`: `r : Attr ⇀ Value`, the older reading, which widens `p` and never `e`. */
     | {
           readonly kind: 'legacy'
           readonly inner: Term
@@ -263,7 +263,7 @@ export type Term =
      */
     | { readonly kind: 'lazy'; readonly get: () => Term }
     /**
-     * §3 `(opaque)`: the universal sum, and **total**. It holds a number as {@link DynamoNumber},
+     * The rule `(opaque)`: the universal sum, and **total**. It holds a number as {@link DynamoNumber},
      * which is the model's `WFNumeral`, so it writes every wire value. The two numeric policies
      * `'refuse'` and `'lossy'` are not terms of their own: each is a `held` over this term.
      */
@@ -271,7 +271,7 @@ export type Term =
     | { readonly kind: 'object'; readonly body: Body }
     | { readonly kind: 'union'; readonly options: readonly Term[] }
     /**
-     * §5's bottom: the term that admits no value.
+     * The bottom: the term that admits no value.
      *
      * A constructor rather than a union over no options. The empty option list is a term a caller
      * can build by accident, and a rule that reads it as the bottom reads that accident as intent.
@@ -279,7 +279,7 @@ export type Term =
     | { readonly kind: 'never' }
 
 /**
- * §4's object payload: the declared names with the field at each, and the open block.
+ * The object payload: the declared names with the field at each, and the open block.
  *
  * A record from name to {@link Field} **is** the model's `Finset Name` paired with a function on
  * it: no repeats, no ordering for a statement to have to ignore. The model spends a paragraph
@@ -296,15 +296,15 @@ export type Body = {
 }
 
 /**
- * §4's field: a term with a presence mark, and **not a term**.
+ * A field: a term with a presence mark, and **not a term**.
  *
- * No member of {@link Term} holds one, which is §4's stratification as a type rather than a check.
+ * No member of {@link Term} holds one, which is the field stratum as a type rather than a check.
  * `array(optional(c))` is not a thing this type can express.
  */
 export type Field =
     | { readonly mark: 'req'; readonly t: Term }
     | { readonly mark: 'optional'; readonly t: Term }
-    /** `withLegacyRead` concludes `req` (§4): the absence is in the row, never in the value. */
+    /** `withLegacyRead` concludes `req`: the absence is in the row, never in the value. */
     | { readonly mark: 'fallback'; readonly t: Term; readonly v: unknown }
     /** The absence is in the row *and* in the value, and the key is still there. */
     | { readonly mark: 'undefinable'; readonly t: Term }
@@ -343,7 +343,7 @@ const setMemberOf = (
             : undefined
 
 /**
- * §5 `(union)`'s member: `μ` where every option agrees, and `⊤` otherwise.
+ * The rule `(union)`'s member: `μ` where every option agrees, and `⊤` otherwise.
  *
  * An empty list answers `⊤`, as the model's `unanimous` does. A list of `⊤`s answers `⊤` too, and
  * by agreement rather than by default — which is the same answer and not the same reason.
@@ -387,7 +387,7 @@ export const member = (t: Term): AttributeName | undefined => {
             return 'L'
         case 'object':
             return 'M'
-        // a wrapper preserves the member (§6), which is what keeps a key's attribute type stable
+        // a wrapper preserves the member, which is what keeps a key's attribute type stable
         case 'held':
         case 'refine':
         case 'legacy':
@@ -526,7 +526,7 @@ export const occV = (t: Term): readonly SetSlot[] => {
             return occV(t.inner)
         case 'union':
             return [...new Set(t.options.flatMap(occV))]
-        // **A closed form, not `⊤`.** §5 separates the two things a `⊤` covers: *unknown*, which is
+        // **A closed form, not `⊤`.** Separation tells apart the two things a `⊤` covers: *unknown*, which is
         // the read side of a `legacy`, and *everything*, which is `opaque` by design. The
         // model takes the second as data — `occV .opaq` is `occTop` — so answering
         // `undefined` here would say "cannot be read" about the one term whose occupancy is fully
@@ -663,7 +663,7 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
  * `undefined` for a non-object. The certificate reads these names and the literals an object
  * pins (the model reads them through the disjointness of two bodies). Selection itself is by attempt at every option, objects
  * included. An `optional` binding is declared and not required, and that is
- * the ambiguity §5 names in the same words: two objects declaring only optional names both admit
+ * the ambiguity of the union: two objects declaring only optional names both admit
  * the empty map, however disjoint their names.
  */
 export const specOf = (

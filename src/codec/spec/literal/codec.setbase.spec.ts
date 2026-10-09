@@ -62,7 +62,7 @@ describe('a set at each base', () => {
      * the same set compare equal and a schema pin stable.
      *
      * **Pins a fact no law has, deliberately.** Identity of the recorded element is not something
-     * §2 or §6 asks for — two codecs that behave alike satisfy every law here whether or not their
+     * the laws or the equations ask for — two codecs that behave alike satisfy every law here whether or not their
      * definitions are the same object. It is asserted because `toEqual` on `def` is what schema
      * comparison rests on, and a copy would pass every behavioural test and break that. It stays.
      *

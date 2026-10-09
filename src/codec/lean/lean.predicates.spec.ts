@@ -70,7 +70,7 @@ describe('the predicates this library ships', () => {
     })
 
     /**
-     * `isNumeral` is §1's `Numeral.WF`. The model carries it in the type of `.num`, as a
+     * `isNumeral` is the model's `Numeral.WF`. The model carries it in the type of `.num`, as a
      * `WFNumeral`, and names no predicate on values for it. So the emitter writes it out at the
      * text carrier, which is a closed expression in the model's own vocabulary and needs nothing
      * added to `formal/`.

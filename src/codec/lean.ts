@@ -164,7 +164,7 @@ const leanNonEmptySet = (elements: readonly string[], at: string): string => {
     if (first === undefined) {
         return refuse(
             at,
-            'an empty wire set — §1 types SS/NS/BS as ℘⁺fin, so `NEFinset` has no empty inhabitant',
+            'an empty wire set — the attribute domain types SS/NS/BS as ℘⁺fin, so `NEFinset` has no empty inhabitant',
         )
     }
     return `NEFinset.of ${first} ${rest.length === 0 ? '∅' : `{${rest.join(', ')}}`}`
@@ -195,7 +195,7 @@ const leanKeyFunction = (
     return `fun k => ${tests}${last[1]}`
 }
 
-/** A byte string, as the `List UInt8` §1 calls `Bytes`. */
+/** A byte string, as the `List UInt8` that the attribute domain calls `Bytes`. */
 const leanBytes = (bytes: Uint8Array): string =>
     `[${Array.from(bytes).join(', ')}]`
 
@@ -205,9 +205,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /**
- * A `Value` — §1's value language, as `denote`'s `e` consumes it.
+ * A `Value` — the value language, as `denote`'s `e` consumes it.
  *
- * Directed by the *value*, not by the codec, which is sound because §5's `κ` is: a value and the
+ * Directed by the *value*, not by the codec, which is sound because a value and the
  * attribute it writes have the same kind, and every codec in this library takes the kind its
  * grammar says it takes. The one place that would bite is `held`, whose whole job is to change the
  * kind held — and `held` is unemittable for a different reason anyway.
@@ -273,7 +273,7 @@ export const leanValueOf = (value: unknown, at = 'value'): string => {
     }
     if (isRecord(value)) {
         // an absent optional attribute is a name the map does not have, not a name holding null —
-        // §4's `optional` is about presence, and emitting `null` would test a different vector
+        // the `optional` of a field is about presence, and emitting `null` would test a different vector
         const names = Object.keys(value).filter(
             (name) => value[name] !== undefined,
         )
@@ -292,7 +292,7 @@ export const leanValueOf = (value: unknown, at = 'value'): string => {
 
 /* ── attributes ──────────────────────────────────────────────────────────────────────────── */
 
-/** A numeral, with §1's well-formedness discharged by `by decide` where it is written. */
+/** A numeral, with its well-formedness discharged by `by decide` where it is written. */
 const leanNumeral = (numeral: string): string =>
     `WFNumeral.of ${leanString(numeral)}`
 
@@ -334,10 +334,10 @@ ${named.slice(cut)}`
 }
 
 /**
- * An `Attr` — §1's attribute domain, one member per attribute.
+ * An `Attr` — the attribute domain, one member per attribute.
  *
- * `N` carries `WFNumeral`, a subtype, so `WFNumeral.of` runs §1's grammar at elaboration time with
- * its `by decide` default argument. A numeral this library will happily write but §1 refuses does
+ * `N` carries `WFNumeral`, a subtype, so `WFNumeral.of` runs the numeral grammar at elaboration time with
+ * its `by decide` default argument. A numeral this library will happily write but the grammar refuses does
  * not produce a false theorem: it produces a *file that will not elaborate*, naming the numeral.
  * That is the bridge working, and it is worth knowing that is what such a failure means.
  */
@@ -586,7 +586,7 @@ const leanBinders = (bound: Bound): string => {
 }
 
 /**
- * A `Term` — §3's syntax, from what the codec says it is.
+ * A `Term` — the term syntax, from what the codec says it is.
  *
  * Read off `codec.def`, which is this library's own abstract syntax and is documented as such. The
  * mapping is one-to-one where it exists at all; where it does not, this throws
@@ -642,7 +642,7 @@ export const leanTermOf = (
     if ('mark' in def) {
         return refuse(
             at,
-            'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
+            'a *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
         )
     }
     return leanTermOfTerm(def, at, {
@@ -696,7 +696,7 @@ const leanGround = (alts: Alternatives, at: string): string => {
 }
 
 /**
- * §3 `(refine)`'s predicate, as the model's `Pred`.
+ * The rule `(refine)`'s predicate, as the model's `Pred`.
  *
  * **The two sides are one shape now.** {@link Predicate} is `members | closure`, and
  * `Calculus.Pred` has those two constructors and `except`, which the host does not spell. So this
@@ -736,7 +736,7 @@ const leanPredicate = (q: Predicate, at: string, bound?: Bound): string => {
 }
 
 /**
- * §4's object payload, as the model's `Body.mk`.
+ * The object payload, as the model's `Body.mk`.
  *
  * One row prints it: an object's payload. It used to be two, the second being each variant of a
  * tagged union — and there is one sum now, so a member of a dissection is an `object` term like
@@ -897,7 +897,7 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
                 : `Term.var ${scope.inside.length - 1 - k}`
         }
         /**
-         * §3 `(refine)`. The predicate is printed by {@link leanPredicate}, and the side condition
+         * The rule `(refine)`. The predicate is printed by {@link leanPredicate}, and the side condition
          * below applies to a **shipped closure** only. A caller's closure in a quantified vector
          * is a variable, and the claim holds at every function, so no coercion can part the two.
          *
@@ -963,7 +963,7 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
 }
 
 /**
- * An `ObjectSlot` — §4's stratum, which is a *position* in a map and not a codec.
+ * An `ObjectSlot` — the field stratum, which is a *position* in a map and not a codec.
  *
  * **The slot has three constructors.** A name is required, optional, or filled: a fill is required
  * on the write and reads an absent name as its stand-in. The presence lattice reads the rest.
@@ -1414,7 +1414,7 @@ const disjointAnswers = ({
     if ('mark' in one || 'mark' in other) {
         throw new LeanUnemittable(
             name,
-            'a §4 *field*, not a term — no `Term` position accepts one, so the test has no pair to state',
+            'a *field*, not a term — no `Term` position accepts one, so the test has no pair to state',
         )
     }
     return [disjoint(one, other), viewsDisjoint(one, other)]
@@ -1987,7 +1987,7 @@ const legacyReadOf = (
     if ('mark' in def) {
         return refuse(
             name,
-            'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
+            'a *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
         )
     }
     const log = new Map<unknown, [AttributeValue, unknown][]>()
@@ -3299,7 +3299,7 @@ namespace Calculus
     gap is closed by \`funext\` and a case split on the key set, applied to a fixpoint so that a map
     nested inside a map is reached too.
 
-    The three wire-set alternatives are the second surprise. §1 types \`SS\`/\`NS\`/\`BS\` as
+    The three wire-set alternatives are the second surprise. The attribute domain types \`SS\`/\`NS\`/\`BS\` as
     \`Finset\`s, so their *order* carries no information — but a \`Finset\` is a \`Multiset\` with a
     proof, a \`Multiset\` is a quotient of lists, and two \`Quot.mk\`s of differently-ordered lists
     are not definitionally equal. This library sorts a set on the way out and the model keeps the

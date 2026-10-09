@@ -192,7 +192,7 @@ describe('an attribute the row does not have', () => {
     /**
      * **A copy per read, so a mutable stand-in cannot be shared between entities.**
      *
-     * The declaration holds one value — that is what makes §3 `(withLegacyRead)`'s premise checkable
+     * The declaration holds one value — that is what makes the rule `(withLegacyRead)`'s premise checkable
      * where the declaration is, rather than on whichever read reaches it first — and each read
      * that needs one gets a `structuredClone`. Both halves matter and this asserts both: the
      * value is right, and it is not the *same* value twice.

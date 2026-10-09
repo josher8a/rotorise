@@ -183,7 +183,7 @@ type CodecShape<In, Out, A extends AttributeValue> = {
     /**
      * What this codec is — see {@link Term}.
      *
-     * A term and not a declaration: the two field kinds denote a §4 field, a field is not a codec,
+     * A term and not a declaration: the two field kinds denote a field, a field is not a codec,
      * and so no codec's definition is one. It is what makes each reader total over the kinds it can
      * be handed rather than over the kinds that exist.
      */
@@ -207,7 +207,7 @@ export type Nestable<T> = AttributeCodec<T>
  *
  * **Not a codec, and it used to say it was.** This was `AttributeCodec<T, A>` intersected with the
  * marker, so it claimed a field has an `encode` and a `decode` — true only because {@link optional}
- * built its answer by spreading the codec it marks. §4 refuses it: a field is a statement about a
+ * built its answer by spreading the codec it marks. The field stratum refuses it: a field is a statement about a
  * *name*, the name belongs to the object, and the pair a member is read and written through is the
  * one the field marks. `rest` stopped making the same claim at `931c29c`.
  *
@@ -260,7 +260,7 @@ export type AnySpread = {
 }
 
 /**
- * Anything an object member can be declared as: a codec, or a §4 field that marks one.
+ * Anything an object member can be declared as: a codec, or a field that marks one.
  *
  * `optional` and `withLegacyRead` state that the attribute at a *name* may be absent, and the name belongs
  * to the object rather than to the thing declared at it. So a field is not a codec, and the pair a
@@ -339,8 +339,7 @@ export type Shape =
  * The model's `SetSlot`, and the split is the whole of its content: `Kind` collapses `strSet`, `numSet`
  * and `binSet` to one label, so `set(string)` and `set(number)` are indistinguishable to it, while
  * the ten constructors tell them apart. `union(set(string), set(number))` is certified by this and
- * was not by the coarser label — which is the correction §5 recorded when the kind tables went, and
- * this is that correction reaching `src/`.
+ * was not by the coarser label.
  *
  * **The codomain of `occV`, which reads a *term*.** The split is available here precisely because a
  * term carries its base. {@link Shape} is the value side's alphabet and stays coarse for the reason
@@ -351,7 +350,7 @@ export type SetSlot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
 /**
  * What one declared attribute decides, read where the field is held.
  *
- * §4's two marks answer differently and neither is the codec's answer. A name that may be absent
+ * The two presence marks answer differently and neither is the codec's answer. A name that may be absent
  * decides nothing about a key, because a key built from it would have no value to build from in the
  * rows that omit it. A stand-in is written always, so what it stands in for still decides.
  *
@@ -872,7 +871,7 @@ export type Refinement = {
  * removed, not merely deprecated: a literal is a capability of the primitive that names the base,
  * so `string('A')`, `number(1)` and `decimal('1')` each say which ground term they narrow.
  *
- * The list is §3's `GroundKind` **minus `null`**. It read "plus `decimal`" while `GroundKind` was
+ * The list is the model's `GroundKind` **minus `null`**. It read "plus `decimal`" while `GroundKind` was
  * `string | number | boolean | binary | null`; `decimal` is a ground base in the model now, so the
  * difference is the other way round and it is a stratification one — `nullValue` is a codec and
  * `nullValue()` is not a literal anyone can write, because the only nonempty subset of `Unit` is
@@ -893,7 +892,7 @@ export type LiteralValue = string | DynamoNumber | boolean | Uint8Array
 export type SetBase = Exclude<LiteralBase, 'boolean'>
 
 /**
- * §3 `(literal)`'s `ℓ`, checked: non-empty and pairwise distinct.
+ * The rule `(literal)`'s `ℓ`, checked: non-empty and pairwise distinct.
  *
  * **The model gets three guarantees from a type and the host's type gives two.** `ls` is a
  * `NEFinset k.Carrier`, so the base indexes the alternatives, `n ≥ 1` holds, and no two are equal —
@@ -1020,7 +1019,7 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> & {
     }
 }
 
-/* ── §3's terms, denoted ──────────────────────────────────────────────────────────────── */
+/* ── the terms, denoted ───────────────────────────────────────────────────────────────── */
 
 const stringCodec: AttributeCodec<string, Attribute<'S'>> = codecOfTerm({
     kind: 'string',
@@ -1382,7 +1381,7 @@ export const binary: BinaryCodec = Object.assign(
  * It was exported as `set(element)` and is not any more: the capability propagates, so a
  * free-standing form said nothing `.set()` cannot, and having two spellings of one combinator on
  * the surface meant two things to keep in step. It stays a function rather than being inlined
- * because it is where both halves of §3 `(set)`'s premise are checked, and they are checked once.
+ * because it is where both halves of the rule `(set)`'s premise are checked, and they are checked once.
  *
  * Which set follows from the element's member: `SS`, `NS` or `BS`. Taking a codec rather than being
  * fixed to strings is what makes `price.set()` decode back as prices.
@@ -1902,7 +1901,7 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
  *
  * Not a codec, for the reason {@link OptionalCodec} records. The stand-in is the marker's payload at
  * the type level and `def.value` at run time, and the run-time side is the one {@link withLegacyRead}
- * checks against §3 `(withLegacyRead)`.
+ * checks against the rule `(withLegacyRead)`.
  */
 type MissingCodec<
     T,
@@ -1971,7 +1970,7 @@ const withMissing = <const C extends AnyCodec>(
     // codec it stands in for — invisible while the entity was declared first and pinned it itself
     value: NoInfer<Decoded<C>>,
 ): MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> => {
-    // §3 `(withLegacyRead)`: the stand-in must be *writable*, or a row missing the name decodes to a
+    // The rule `(withLegacyRead)`: the stand-in must be *writable*, or a row missing the name decodes to a
     // value the item cannot be written back as — (C) broken at the read, with the refusal arriving
     // on the next write instead of at the declaration that caused it. Decidable from the
     // declaration alone, which is why the stand-in is a value and not a thunk. One case waits: a
@@ -2297,7 +2296,7 @@ export type Reader<T> = {
  * rate: withLegacyRead({ current: decimal, older: string })
  * ```
  *
- * **Two things §3 asks of the older reader**, and only one of them is checkable.
+ * **Two things the rule `(withLegacyRead)` asks of the older reader**, and only one of them is checkable.
  *
  * `ran(r) ⊆ dom(e)` — a migration lands on values the current encoding can *write*. This is
  * checked, per read, as soon as the older reader has answered, because that is the earliest
@@ -2312,7 +2311,7 @@ export type Reader<T> = {
  * never consulted and a disagreement has no observable consequence at all. What the premise buys
  * is that the *ordering does not matter*: with it, and only with it, this presentation equals the order-free
  * union of `p` and the checked older reading. Without it the reading depends on declaration
- * order, which is the one thing §5 says resolution never does. So it is a written obligation, and the thing to check is that two
+ * order, which is the one thing that resolution never does. So it is a written obligation, and the thing to check is that two
  * readers of one attribute agree — nothing in this library will tell you they do not.
  */
 export type WithLegacyReadOptions<C extends AnyCodec> = {
@@ -3921,7 +3920,7 @@ type HasNeverFactor<Fs extends readonly unknown[]> = Fs extends readonly [
  * Nothing, or why these factors have no product.
  *
  * **Three rules, in the order that gives the advice a caller can act on.** A `never` factor comes
- * first: §5's (D) fails at a product against a factor that holds nothing, because every merge
+ * first: a product against a factor that holds nothing passes no check, because every merge
  * holds nothing and two empty held sets are comparable in both directions. Without this clause the
  * open-factor one fired on it and told the caller to close a rest policy `never` does not have.
  *
@@ -3976,7 +3975,7 @@ const optionsOfFactor = (factor: unknown): readonly Factor[] => {
           }
         | undefined
     const def = codec?.def
-    // §5's (D) fails at a product against a factor that holds nothing: every merge would hold
+    // a product against a factor that holds nothing passes no check: every merge would hold
     // nothing too, and two empty held sets are comparable both ways, so no value tells the options
     // apart. `not_subset_prodOn` is the theorem, and this is the hypothesis it carries. `never` is
     // the only way in, because every other term that holds nothing is refused at its constructor

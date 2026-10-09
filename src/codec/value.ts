@@ -206,7 +206,7 @@ export const copied = (value: unknown): unknown => {
 /**
  * Whether this stand-in has to be *copied* on each read that uses it, decided once.
  *
- * The declaration holds **one** value — that is what makes §3 `(withLegacyRead)`'s premise checkable
+ * The declaration holds **one** value — that is what makes the rule `(withLegacyRead)`'s premise checkable
  * where the declaration is — so handing that object out is handing every row the same object, and
  * one caller's `.push` becomes every other caller's default. {@link copied} makes the copy, from
  * `structuredClone`, which is the platform's, so a copy costs no dependency.

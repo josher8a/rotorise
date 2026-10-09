@@ -430,9 +430,9 @@ premises of its body at each stage, given that the stage before is lawful. `soun
 the closed case. A recursive codec's held set is its write domain, so the held-set theorems stay
 closed: at `mu` they are definitional.
 
-**`opaque` is the identity.** With one carrier, each datum identifies itself, so §3's union of
-everything self-identifying sends each datum to itself. `opaque` denotes the identity codec
-`Alg.idCodec`, and it owes no compatibility and no contraction. The §3 union is a theorem:
+**`opaque` is the identity.** With one carrier, each datum identifies itself, so the union of
+everything self-identifying (`opaqUnfold`) sends each datum to itself. `opaque` denotes the identity
+codec `Alg.idCodec`, and it owes no compatibility and no contraction. The union is a theorem:
 `Adm_opaqUnfold` and `AdmA_opaqUnfold` state that the union term admits what `opaque` admits.
 
 **A held-free term is a restriction of `opaque`.** A held-free term (`HF`) holds no `held`, no

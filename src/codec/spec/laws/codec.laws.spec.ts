@@ -56,7 +56,7 @@ const seed = 20260828
  * declaration.
  *
  * `member` reads the term and reports what the term says it stores. That is the right answer for
- * the resolver, which has only a declaration to go on, and the wrong assertion for a law — §6's
+ * the resolver, which has only a declaration to go on, and the wrong assertion for a law — the
  * member-preservation row is a claim about `e`, so a test that asks `member` passes on a codec
  * whose term is right and whose `encode` is wrong, and fails a rewrite that keeps every behaviour
  * and reorganises the terms. Where the claim is the law, this is what to ask.
@@ -169,7 +169,7 @@ describe('held', () => {
 /**
  * **The five obligations the model carries as premises and this library does not type.**
  *
- * Each is a side condition §3 or §2 asks of a constructor that takes a caller's function or value.
+ * Each is a side condition that the judgement or the laws ask of a constructor that takes a caller's function or value.
  * Three are decidable from what the caller hands over and are now refused where the declaration is
  * — `withLegacyRead`'s stand-in, `withLegacyRead`'s `ran(r) ⊆ dom(e)`, and a `rest` out of position. Two are not
  * decidable at all, so what is pinned here is the failure mode, which is the only thing a test can
@@ -403,7 +403,7 @@ describe('optional', () => {
  */
 describe('nullable', () => {
     /**
-     * **§6's idempotence row.** `nullable(nullable(c)) ≡ nullable(c)`.
+     * **The idempotence row of the equations.** `nullable(nullable(c)) ≡ nullable(c)`.
      *
      * True by construction rather than as an equation the proof has to earn: the inner call builds
      * `union([c, null])`, which reaches the point, so the outer call returns it unchanged. The test
@@ -751,7 +751,7 @@ describe('(C): what a codec reads, it can write', () => {
     /**
      * **(Q), stability, over the same two entities.**
      *
-     * `decode ∘ encode ∘ decode = decode` — §2's corollary, and what **(R)** becomes when the values
+     * `decode ∘ encode ∘ decode = decode` — the corollary of the laws, and what **(R)** becomes when the values
      * come from a *table* rather than from a generator. The two differ exactly by **(C)**, which is
      * the containment most likely to be untrue, so asking (R) of generated values and never asking
      * (Q) of stored ones leaves the gap this file exists to close.
@@ -825,7 +825,7 @@ describe('(C): what a codec reads, it can write', () => {
 /**
  * **Admission against `encode`, in the one direction that is true.**
  *
- * `accepts` is §3's `Adm : Term → Value → Bool` asked of the pair, and the model proved `Adm` exact
+ * `accepts` is the model's `Adm : Term → Value → Bool` asked of the pair, and the model proved `Adm` exact
  * at all 21
  * constructors. The obvious law here is therefore `accepts(c, v) ⟺ !failed(c.encode(v))`, and half
  * of it used to be false — not because the port was wrong, but because **encoding did not

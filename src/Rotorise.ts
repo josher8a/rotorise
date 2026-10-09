@@ -1123,7 +1123,7 @@ type ConstantOrAny<C> = ConstantValue<C> extends infer V extends string
     : unknown
 
 /**
- * What one declared attribute decides, at the type level, with §4's two marks read.
+ * What one declared attribute decides, at the type level, with the two presence marks of a field read.
  *
  * The type half of {@link constantOf}, and it must give the same answer: a name that may be absent
  * decides nothing, a stand-in is written always so what it stands in for still decides, and the

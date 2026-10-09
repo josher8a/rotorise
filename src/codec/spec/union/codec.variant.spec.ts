@@ -168,7 +168,7 @@ describe('tagged', () => {
      * `taggedItemSem` reads each variant's term and takes its item pair, which exists only for an
      * `attributes` term. It is entitled to that because the declaration refuses anything else: an
      * option with no object `spec` has no attribute naming the discriminator, so there is no tag to
-     * select on. The refusal was in the code and in no test, which §8's case (c) is about — a gate
+     * select on. The refusal was in the code and in no test, and a gate
      * with no test beside it reads as a gate nobody migrated.
      *
      * Asserted at the *declaration* rather than at a read, which is the whole point: a union built
