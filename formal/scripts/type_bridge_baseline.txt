@@ -12,25 +12,6 @@
 #   exclude      time keeps the member (`accept`) or drops it (`refuse`).
 #   path         one path under `at`: `accept` where the run time resolves one codec.
 #   declaration  one constant of the generated codecs file: the run time built each one.
-declaration|accept|14240a1a3c|constant
-declaration|accept|21aaeed038|wrapper
-declaration|accept|2fde239397|constant
-declaration|accept|304e85ad24|constant
-declaration|accept|372bd33447|constant
-declaration|accept|3f3fe9e359|constant
-declaration|accept|5fdeb4da4f|wrapper
-declaration|accept|6a556b86f3|constant
-declaration|accept|8e59aebe8e|wrapper
-declaration|accept|98b0942311|wrapper
-declaration|accept|9d3ef7674b|wrapper
-declaration|accept|9d9720b20f|constant
-declaration|accept|a674bf469b|dissection k,s
-declaration|accept|a7f4437010|constant
-declaration|accept|a9b24735f8|constant
-declaration|accept|b94fbfc452|wrapper
-declaration|accept|cd5186102f|dissection k,s
-declaration|accept|df7ce37a15|constant
-declaration|accept|e563c80803|constant
 exclude|refuse|134680b461|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|1503a463bb|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|213752f822|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
@@ -40,17 +21,11 @@ exclude|refuse|364c824884|exclude({ y: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|5f73ac1837|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|656c632bae|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|6ebe823f83|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|7509ff3330|exclude({ k: string("p") }) member 0
-exclude|refuse|7509ff3330|exclude({ s: string("x") }) member 0
 exclude|refuse|8fb53ff91f|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|91add610f4|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|9b56b1cd60|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|a2b2fd940a|exclude({ k: string("p") }) member 0
-exclude|refuse|a2b2fd940a|exclude({ s: string("x") }) member 0
 exclude|refuse|a451fb1b6d|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|a839799bcc|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|a922d5b931|exclude({ k: string("p") }) member 0
-exclude|refuse|a922d5b931|exclude({ s: string("x") }) member 0
 exclude|refuse|b0734ea9d8|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|b32b9073d9|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|b32b915882|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
@@ -58,16 +33,6 @@ exclude|refuse|b93194fc99|exclude({ y: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|bdbcffe0fb|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|cc777de378|exclude({ a: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|d1c6d17caf|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|ff1df3b553|exclude({ k: string("p") }) member 0
-exclude|refuse|ff1df3b553|exclude({ s: string("x") }) member 0
-extract|accept|7509ff3330|extract({ k: string("p") }) member 0
-extract|accept|7509ff3330|extract({ s: string("x") }) member 0
-extract|accept|a2b2fd940a|extract({ k: string("p") }) member 0
-extract|accept|a2b2fd940a|extract({ s: string("x") }) member 0
-extract|accept|a922d5b931|extract({ k: string("p") }) member 0
-extract|accept|a922d5b931|extract({ s: string("x") }) member 0
-extract|accept|ff1df3b553|extract({ k: string("p") }) member 0
-extract|accept|ff1df3b553|extract({ s: string("x") }) member 0
 path|accept|01209c0435|r.at(0)
 path|accept|01209c0435|r.at(0).at(0)
 path|accept|01209c0435|r.at(0).at(0).at(0)
@@ -103,73 +68,48 @@ path|accept|0f1f8a09f8|r.v.v.v
 path|accept|0f82520aee|r.a
 path|accept|0f82520aee|r.a.at(0)
 path|accept|0f82520aee|r.a.at(0).at(0)
-path|accept|0faaec2ab7|r.narrow({ a: string("A") })
 path|accept|0faaec2ab7|r.narrow({ a: string("A") }).a
 path|accept|0faaec2ab7|r.narrow({ a: string("A") }).b
 path|accept|0faaec2ab7|r.narrow({ a: string("A") }).c
-path|accept|0faaec2ab7|r.narrow({ a: string("a") })
 path|accept|0faaec2ab7|r.narrow({ a: string("a") }).a
 path|accept|0faaec2ab7|r.narrow({ a: string("a") }).b
 path|accept|0faaec2ab7|r.narrow({ a: string("a") }).c
-path|accept|0faaec2ab7|r.narrow({ a: string("a", "b") })
 path|accept|0faaec2ab7|r.narrow({ a: string("a", "b") }).a
 path|accept|0faaec2ab7|r.narrow({ a: string("a", "b") }).b
 path|accept|0faaec2ab7|r.narrow({ a: string("a", "b") }).c
-path|accept|0faaec2ab7|r.narrow({ a: string("b") })
 path|accept|0faaec2ab7|r.narrow({ a: string("b") }).a
 path|accept|0faaec2ab7|r.narrow({ a: string("b") }).b
 path|accept|0faaec2ab7|r.narrow({ a: string("b") }).c
-path|accept|0faaec2ab7|r.narrow({ a: string("p") })
 path|accept|0faaec2ab7|r.narrow({ a: string("p") }).a
 path|accept|0faaec2ab7|r.narrow({ a: string("p") }).b
 path|accept|0faaec2ab7|r.narrow({ a: string("p") }).c
-path|accept|0faaec2ab7|r.narrow({ a: string("q") })
 path|accept|0faaec2ab7|r.narrow({ a: string("q") }).a
 path|accept|0faaec2ab7|r.narrow({ a: string("q") }).b
 path|accept|0faaec2ab7|r.narrow({ a: string("q") }).c
-path|accept|0faaec2ab7|r.narrow({ a: string("x") })
 path|accept|0faaec2ab7|r.narrow({ a: string("x") }).a
 path|accept|0faaec2ab7|r.narrow({ a: string("x") }).b
 path|accept|0faaec2ab7|r.narrow({ a: string("x") }).c
-path|accept|0faaec2ab7|r.narrow({ a: string("y") })
 path|accept|0faaec2ab7|r.narrow({ a: string("y") }).a
 path|accept|0faaec2ab7|r.narrow({ a: string("y") }).b
 path|accept|0faaec2ab7|r.narrow({ a: string("y") }).c
-path|accept|0faaec2ab7|r.narrow({ b: binary(new Uint8Array([1, 2])) })
 path|accept|0faaec2ab7|r.narrow({ b: binary(new Uint8Array([1, 2])) }).a
 path|accept|0faaec2ab7|r.narrow({ b: binary(new Uint8Array([1, 2])) }).b
 path|accept|0faaec2ab7|r.narrow({ b: binary(new Uint8Array([1, 2])) }).c
-path|accept|0faaec2ab7|r.narrow({ k: string("a") })
 path|accept|0faaec2ab7|r.narrow({ k: string("a") }).a
 path|accept|0faaec2ab7|r.narrow({ k: string("a") }).b
 path|accept|0faaec2ab7|r.narrow({ k: string("a") }).c
-path|accept|0faaec2ab7|r.narrow({ k: string("a", "b") })
 path|accept|0faaec2ab7|r.narrow({ k: string("a", "b") }).a
 path|accept|0faaec2ab7|r.narrow({ k: string("a", "b") }).b
 path|accept|0faaec2ab7|r.narrow({ k: string("a", "b") }).c
-path|accept|0faaec2ab7|r.narrow({ k: string("p") })
-path|accept|0faaec2ab7|r.narrow({ k: string("p") }).k
-path|accept|0faaec2ab7|r.narrow({ s: string("a") })
 path|accept|0faaec2ab7|r.narrow({ s: string("a") }).a
 path|accept|0faaec2ab7|r.narrow({ s: string("a") }).b
 path|accept|0faaec2ab7|r.narrow({ s: string("a") }).c
-path|accept|0faaec2ab7|r.narrow({ s: string("a", "b") })
 path|accept|0faaec2ab7|r.narrow({ s: string("a", "b") }).a
 path|accept|0faaec2ab7|r.narrow({ s: string("a", "b") }).b
 path|accept|0faaec2ab7|r.narrow({ s: string("a", "b") }).c
-path|accept|0faaec2ab7|r.narrow({ s: string("x") })
-path|accept|0faaec2ab7|r.narrow({ s: string("x") }).k
-path|accept|0faaec2ab7|r.narrow({ s: string("y") })
-path|accept|0faaec2ab7|r.narrow({ s: string("y") }).k
-path|accept|0faaec2ab7|r.narrow({ x: string("b") })
-path|accept|0faaec2ab7|r.narrow({ x: string("b") }).k
-path|accept|0faaec2ab7|r.narrow({ y: binary(new Uint8Array([1, 2])) })
-path|accept|0faaec2ab7|r.narrow({ y: binary(new Uint8Array([1, 2])) }).k
-path|accept|0faaec2ab7|r.narrow({ y: string("a") })
 path|accept|0faaec2ab7|r.narrow({ y: string("a") }).a
 path|accept|0faaec2ab7|r.narrow({ y: string("a") }).b
 path|accept|0faaec2ab7|r.narrow({ y: string("a") }).c
-path|accept|0faaec2ab7|r.narrow({ y: string("a", "b") })
 path|accept|0faaec2ab7|r.narrow({ y: string("a", "b") }).a
 path|accept|0faaec2ab7|r.narrow({ y: string("a", "b") }).b
 path|accept|0faaec2ab7|r.narrow({ y: string("a", "b") }).c
@@ -797,7 +737,6 @@ path|accept|48d717b1a8|r.narrow({ x: string("x") }).x
 path|accept|48d717b1a8|r.narrow({ x: string("y") })
 path|accept|48d717b1a8|r.narrow({ x: string("y") }).k
 path|accept|48d717b1a8|r.narrow({ x: string("y") }).x
-path|accept|48d717b1a8|r.y.at(0)
 path|accept|48d717b1a8|r.y.at(0).a
 path|accept|48d717b1a8|r.y.at(0).b
 path|accept|48d717b1a8|r.y.at(0).k
@@ -946,7 +885,6 @@ path|accept|53d9ab5880|r.narrow({ a: string("x") }).a
 path|accept|53d9ab5880|r.narrow({ a: string("y") }).a
 path|accept|558e87abbd|r.at(0).at(0)
 path|accept|558e87abbd|r.at(0).at(0).at(0)
-path|accept|565bd9cf8a|r.y.at(0)
 path|accept|565bd9cf8a|r.y.at(0).a
 path|accept|565bd9cf8a|r.y.at(0).b
 path|accept|565bd9cf8a|r.y.at(0).k
@@ -1339,9 +1277,6 @@ path|accept|90c4709888|r.at(0).at(0).at(0)
 path|accept|91bdb9b63e|r.x.at(0)
 path|accept|91bdb9b63e|r.x.at(0).at(0)
 path|accept|9414f5c00c|r.x.v.at(0)
-path|accept|9419babff7|r.k
-path|accept|9419babff7|r.narrow({ s: string("x") })
-path|accept|9419babff7|r.narrow({ s: string("x") }).k
 path|accept|9419babff7|r.x.a
 path|accept|9419babff7|r.x.k
 path|accept|9419babff7|r.x.s
@@ -1356,9 +1291,6 @@ path|accept|94784ca779|r.at(1).a.c
 path|accept|94784ca779|r.at(1).a.kids
 path|accept|94784ca779|r.at(1).a.v
 path|accept|962466d7e1|r.a
-path|accept|96b5a516e8|r.k
-path|accept|96b5a516e8|r.s
-path|accept|96b5a516e8|r.x
 path|accept|96b5a516e8|r.x.a
 path|accept|96b5a516e8|r.x.b
 path|accept|96b5a516e8|r.x.k
@@ -1762,19 +1694,14 @@ path|accept|db8cd84eca|r.y
 path|accept|db8cd84eca|r.y.a
 path|accept|db8cd84eca|r.y.a.b
 path|accept|db8cd84eca|r.y.a.v
-path|accept|e04f5b1035|r.narrow({ k: string("a") })
-path|accept|e04f5b1035|r.narrow({ k: string("a", "b") })
-path|accept|e04f5b1035|r.narrow({ k: string("p") })
-path|accept|e04f5b1035|r.narrow({ s: string("a") })
-path|accept|e04f5b1035|r.narrow({ s: string("a", "b") })
-path|accept|e04f5b1035|r.narrow({ s: string("x") })
-path|accept|e04f5b1035|r.narrow({ s: string("y") })
-path|accept|e04f5b1035|r.narrow({ x: string("a") })
-path|accept|e04f5b1035|r.narrow({ x: string("a", "b") })
-path|accept|e04f5b1035|r.narrow({ x: string("b") })
-path|accept|e04f5b1035|r.narrow({ y: binary(new Uint8Array([1, 2])) })
-path|accept|e04f5b1035|r.narrow({ y: string("a") })
-path|accept|e04f5b1035|r.narrow({ y: string("a", "b") })
+path|accept|e04f5b1035|r.a.b
+path|accept|e04f5b1035|r.a.b.a
+path|accept|e04f5b1035|r.a.v
+path|accept|e04f5b1035|r.a.v.a
+path|accept|e04f5b1035|r.b.a
+path|accept|e04f5b1035|r.b.a.b
+path|accept|e04f5b1035|r.b.a.v
+path|accept|e04f5b1035|r.v.a
 path|accept|e23efd3375|r.y.at(0)
 path|accept|e23efd3375|r.y.at(0).at(0)
 path|accept|e23efd3375|r.y.at(0).b
@@ -1785,39 +1712,22 @@ path|accept|e380bd5a51|r.m.m.m
 path|accept|e433f7b0ef|r.a
 path|accept|e433f7b0ef|r.at(0)
 path|accept|e433f7b0ef|r.at(1)
-path|accept|e433f7b0ef|r.narrow({ a: binary(new Uint8Array([1, 2])) })
 path|accept|e433f7b0ef|r.narrow({ a: binary(new Uint8Array([1, 2])) }).a
-path|accept|e433f7b0ef|r.narrow({ a: boolean(false) })
 path|accept|e433f7b0ef|r.narrow({ a: boolean(false) }).a
-path|accept|e433f7b0ef|r.narrow({ a: boolean(true) })
 path|accept|e433f7b0ef|r.narrow({ a: boolean(true) }).a
-path|accept|e433f7b0ef|r.narrow({ a: decimal("1") })
 path|accept|e433f7b0ef|r.narrow({ a: decimal("1") }).a
-path|accept|e433f7b0ef|r.narrow({ a: decimal("2.5") })
 path|accept|e433f7b0ef|r.narrow({ a: decimal("2.5") }).a
-path|accept|e433f7b0ef|r.narrow({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
 path|accept|e433f7b0ef|r.narrow({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) }).a
-path|accept|e433f7b0ef|r.narrow({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
 path|accept|e433f7b0ef|r.narrow({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }).a
-path|accept|e433f7b0ef|r.narrow({ a: number(1) })
 path|accept|e433f7b0ef|r.narrow({ a: number(1) }).a
-path|accept|e433f7b0ef|r.narrow({ a: number(2.5) })
 path|accept|e433f7b0ef|r.narrow({ a: number(2.5) }).a
-path|accept|e433f7b0ef|r.narrow({ a: string("A") })
 path|accept|e433f7b0ef|r.narrow({ a: string("A") }).a
-path|accept|e433f7b0ef|r.narrow({ a: string("a") })
 path|accept|e433f7b0ef|r.narrow({ a: string("a") }).a
-path|accept|e433f7b0ef|r.narrow({ a: string("a", "b") })
 path|accept|e433f7b0ef|r.narrow({ a: string("a", "b") }).a
-path|accept|e433f7b0ef|r.narrow({ a: string("b") })
 path|accept|e433f7b0ef|r.narrow({ a: string("b") }).a
-path|accept|e433f7b0ef|r.narrow({ a: string("p") })
 path|accept|e433f7b0ef|r.narrow({ a: string("p") }).a
-path|accept|e433f7b0ef|r.narrow({ a: string("q") })
 path|accept|e433f7b0ef|r.narrow({ a: string("q") }).a
-path|accept|e433f7b0ef|r.narrow({ a: string("x") })
 path|accept|e433f7b0ef|r.narrow({ a: string("x") }).a
-path|accept|e433f7b0ef|r.narrow({ a: string("y") })
 path|accept|e433f7b0ef|r.narrow({ a: string("y") }).a
 path|accept|e47e443053|r.v.at(0).at(0)
 path|accept|e48407f3a9|r.at(0).a
@@ -1854,9 +1764,6 @@ path|accept|e5c09f4803|r.narrow({ x: binary(new Uint8Array([1, 2])) })
 path|accept|e5c09f4803|r.narrow({ x: binary(new Uint8Array([1, 2])) }).k
 path|accept|e5c09f4803|r.narrow({ x: binary(new Uint8Array([1, 2])) }).s
 path|accept|e5c09f4803|r.narrow({ x: binary(new Uint8Array([1, 2])) }).x
-path|accept|e75e162957|r.k
-path|accept|e75e162957|r.s
-path|accept|e75e162957|r.x
 path|accept|e75e162957|r.x.a
 path|accept|e75e162957|r.x.k
 path|accept|e76b341717|r.at(0).at(0)
@@ -2461,6 +2368,19 @@ path|refuse|0eed14bbb1|r.narrow({ a: string("p") })
 path|refuse|0eed14bbb1|r.narrow({ a: string("q") })
 path|refuse|0eed14bbb1|r.narrow({ a: string("x") })
 path|refuse|0eed14bbb1|r.narrow({ a: string("y") })
+path|refuse|0faaec2ab7|r.narrow({ k: string("p") }).s
+path|refuse|0faaec2ab7|r.narrow({ k: string("p") }).x
+path|refuse|0faaec2ab7|r.narrow({ k: string("p") }).y
+path|refuse|0faaec2ab7|r.narrow({ s: string("x") }).s
+path|refuse|0faaec2ab7|r.narrow({ s: string("x") }).x
+path|refuse|0faaec2ab7|r.narrow({ s: string("y") }).s
+path|refuse|0faaec2ab7|r.narrow({ s: string("y") }).y
+path|refuse|0faaec2ab7|r.narrow({ x: string("a") })
+path|refuse|0faaec2ab7|r.narrow({ x: string("a", "b") })
+path|refuse|0faaec2ab7|r.narrow({ x: string("b") }).s
+path|refuse|0faaec2ab7|r.narrow({ x: string("b") }).x
+path|refuse|0faaec2ab7|r.narrow({ y: binary(new Uint8Array([1, 2])) }).s
+path|refuse|0faaec2ab7|r.narrow({ y: binary(new Uint8Array([1, 2])) }).y
 path|refuse|1031aa5749|r.a
 path|refuse|1031aa5749|r.c
 path|refuse|1031aa5749|r.narrow({ b: binary(new Uint8Array([1, 2])) })
@@ -3243,25 +3163,9 @@ path|refuse|48d717b1a8|r.narrow({ k: string("a", "b") }).x
 path|refuse|48d717b1a8|r.narrow({ k: string("a", "b") }).y
 path|refuse|48d717b1a8|r.x
 path|refuse|48d717b1a8|r.y
+path|refuse|48d717b1a8|r.y.at(1)
 path|refuse|48dee2fa7b|r.a
 path|refuse|48dee2fa7b|r.c
-path|refuse|48dee2fa7b|r.narrow({ a: binary(new Uint8Array([1, 2])) })
-path|refuse|48dee2fa7b|r.narrow({ a: boolean(false) })
-path|refuse|48dee2fa7b|r.narrow({ a: boolean(true) })
-path|refuse|48dee2fa7b|r.narrow({ a: decimal("1") })
-path|refuse|48dee2fa7b|r.narrow({ a: decimal("2.5") })
-path|refuse|48dee2fa7b|r.narrow({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-path|refuse|48dee2fa7b|r.narrow({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-path|refuse|48dee2fa7b|r.narrow({ a: number(1) })
-path|refuse|48dee2fa7b|r.narrow({ a: number(2.5) })
-path|refuse|48dee2fa7b|r.narrow({ a: string("A") })
-path|refuse|48dee2fa7b|r.narrow({ a: string("a") })
-path|refuse|48dee2fa7b|r.narrow({ a: string("a", "b") })
-path|refuse|48dee2fa7b|r.narrow({ a: string("b") })
-path|refuse|48dee2fa7b|r.narrow({ a: string("p") })
-path|refuse|48dee2fa7b|r.narrow({ a: string("q") })
-path|refuse|48dee2fa7b|r.narrow({ a: string("x") })
-path|refuse|48dee2fa7b|r.narrow({ a: string("y") })
 path|refuse|48dee2fa7b|r.narrow({ b: string("a") })
 path|refuse|48dee2fa7b|r.narrow({ b: string("a") }).a
 path|refuse|48dee2fa7b|r.narrow({ b: string("a") }).c
@@ -3301,6 +3205,7 @@ path|refuse|52a0e65764|r.at(0).narrow({ b: string("y") })
 path|refuse|52a0e65764|r.at(1).a
 path|refuse|52a0e65764|r.at(2)
 path|refuse|535b5a8cb3|r.at(1)
+path|refuse|565bd9cf8a|r.y.at(1)
 path|refuse|56841aad9e|r.at(2)
 path|refuse|56b2494d36|r.a
 path|refuse|56b2494d36|r.c
@@ -3972,12 +3877,32 @@ path|refuse|9419babff7|r.narrow({ k: binary(new Uint8Array([1, 2])) })
 path|refuse|9419babff7|r.narrow({ k: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
 path|refuse|9419babff7|r.narrow({ k: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
 path|refuse|9419babff7|r.narrow({ k: string("p") }).s
+path|refuse|9419babff7|r.narrow({ k: string("p") }).x
 path|refuse|9419babff7|r.narrow({ k: string("p") }).y
 path|refuse|9419babff7|r.narrow({ s: binary(new Uint8Array([1, 2])) })
 path|refuse|9419babff7|r.narrow({ s: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
 path|refuse|9419babff7|r.narrow({ s: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
+path|refuse|9419babff7|r.narrow({ s: string("x") }).s
+path|refuse|9419babff7|r.narrow({ s: string("x") }).x
 path|refuse|9419babff7|r.narrow({ s: string("y") }).s
 path|refuse|9419babff7|r.narrow({ s: string("y") }).y
+path|refuse|9419babff7|r.narrow({ x: binary(new Uint8Array([1, 2])) })
+path|refuse|9419babff7|r.narrow({ x: boolean(false) })
+path|refuse|9419babff7|r.narrow({ x: boolean(true) })
+path|refuse|9419babff7|r.narrow({ x: decimal("1") })
+path|refuse|9419babff7|r.narrow({ x: decimal("2.5") })
+path|refuse|9419babff7|r.narrow({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
+path|refuse|9419babff7|r.narrow({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
+path|refuse|9419babff7|r.narrow({ x: number(1) })
+path|refuse|9419babff7|r.narrow({ x: number(2.5) })
+path|refuse|9419babff7|r.narrow({ x: string("A") })
+path|refuse|9419babff7|r.narrow({ x: string("a") })
+path|refuse|9419babff7|r.narrow({ x: string("a", "b") })
+path|refuse|9419babff7|r.narrow({ x: string("b") })
+path|refuse|9419babff7|r.narrow({ x: string("p") })
+path|refuse|9419babff7|r.narrow({ x: string("q") })
+path|refuse|9419babff7|r.narrow({ x: string("x") })
+path|refuse|9419babff7|r.narrow({ x: string("y") })
 path|refuse|9419babff7|r.narrow({ y: binary(new Uint8Array([1, 2])) })
 path|refuse|9419babff7|r.narrow({ y: boolean(false) })
 path|refuse|9419babff7|r.narrow({ y: boolean(true) })
@@ -3995,6 +3920,9 @@ path|refuse|9419babff7|r.narrow({ y: string("p") })
 path|refuse|9419babff7|r.narrow({ y: string("q") })
 path|refuse|9419babff7|r.narrow({ y: string("x") })
 path|refuse|9419babff7|r.narrow({ y: string("y") })
+path|refuse|9419babff7|r.s
+path|refuse|9419babff7|r.x
+path|refuse|9419babff7|r.y
 path|refuse|94784ca779|r.at(0).a
 path|refuse|94784ca779|r.at(1).a
 path|refuse|94784ca779|r.at(1).c
@@ -4657,8 +4585,6 @@ path|refuse|dd6ead8980|r.narrow({ x: string("y") })
 path|refuse|dd6ead8980|r.s
 path|refuse|dd6ead8980|r.x
 path|refuse|dd6ead8980|r.y
-path|refuse|e04f5b1035|r.a
-path|refuse|e04f5b1035|r.b
 path|refuse|e04f5b1035|r.narrow({ a: binary(new Uint8Array([1, 2])) })
 path|refuse|e04f5b1035|r.narrow({ a: boolean(false) })
 path|refuse|e04f5b1035|r.narrow({ a: boolean(true) })
@@ -4668,16 +4594,6 @@ path|refuse|e04f5b1035|r.narrow({ a: dynamoNumber(orThrow(DynamoNumber.from("1")
 path|refuse|e04f5b1035|r.narrow({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
 path|refuse|e04f5b1035|r.narrow({ a: number(1) })
 path|refuse|e04f5b1035|r.narrow({ a: number(2.5) })
-path|refuse|e04f5b1035|r.narrow({ a: string("A") }).a
-path|refuse|e04f5b1035|r.narrow({ a: string("a") }).a
-path|refuse|e04f5b1035|r.narrow({ a: string("a", "b") }).a
-path|refuse|e04f5b1035|r.narrow({ a: string("b") }).a
-path|refuse|e04f5b1035|r.narrow({ a: string("p") }).a
-path|refuse|e04f5b1035|r.narrow({ a: string("q") }).a
-path|refuse|e04f5b1035|r.narrow({ a: string("x") }).a
-path|refuse|e04f5b1035|r.narrow({ a: string("y") }).a
-path|refuse|e04f5b1035|r.narrow({ b: binary(new Uint8Array([1, 2])) }).b
-path|refuse|e04f5b1035|r.narrow({ b: binary(new Uint8Array([1, 2])) }).v
 path|refuse|e04f5b1035|r.narrow({ b: boolean(false) })
 path|refuse|e04f5b1035|r.narrow({ b: boolean(true) })
 path|refuse|e04f5b1035|r.narrow({ b: decimal("1") })
@@ -4694,6 +4610,22 @@ path|refuse|e04f5b1035|r.narrow({ b: string("p") })
 path|refuse|e04f5b1035|r.narrow({ b: string("q") })
 path|refuse|e04f5b1035|r.narrow({ b: string("x") })
 path|refuse|e04f5b1035|r.narrow({ b: string("y") })
+path|refuse|e04f5b1035|r.narrow({ k: binary(new Uint8Array([1, 2])) })
+path|refuse|e04f5b1035|r.narrow({ k: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
+path|refuse|e04f5b1035|r.narrow({ k: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
+path|refuse|e04f5b1035|r.narrow({ k: string("p") }).k
+path|refuse|e04f5b1035|r.narrow({ k: string("p") }).s
+path|refuse|e04f5b1035|r.narrow({ k: string("p") }).x
+path|refuse|e04f5b1035|r.narrow({ k: string("p") }).y
+path|refuse|e04f5b1035|r.narrow({ s: binary(new Uint8Array([1, 2])) })
+path|refuse|e04f5b1035|r.narrow({ s: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
+path|refuse|e04f5b1035|r.narrow({ s: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
+path|refuse|e04f5b1035|r.narrow({ s: string("x") }).k
+path|refuse|e04f5b1035|r.narrow({ s: string("x") }).s
+path|refuse|e04f5b1035|r.narrow({ s: string("x") }).x
+path|refuse|e04f5b1035|r.narrow({ s: string("y") }).k
+path|refuse|e04f5b1035|r.narrow({ s: string("y") }).s
+path|refuse|e04f5b1035|r.narrow({ s: string("y") }).y
 path|refuse|e04f5b1035|r.narrow({ v: binary(new Uint8Array([1, 2])) })
 path|refuse|e04f5b1035|r.narrow({ v: boolean(false) })
 path|refuse|e04f5b1035|r.narrow({ v: boolean(true) })
@@ -4704,16 +4636,31 @@ path|refuse|e04f5b1035|r.narrow({ v: dynamoNumber(orThrow(DynamoNumber.from("2.5
 path|refuse|e04f5b1035|r.narrow({ v: number(1) })
 path|refuse|e04f5b1035|r.narrow({ v: number(2.5) })
 path|refuse|e04f5b1035|r.narrow({ v: string("A") })
-path|refuse|e04f5b1035|r.narrow({ v: string("a") }).b
-path|refuse|e04f5b1035|r.narrow({ v: string("a") }).v
-path|refuse|e04f5b1035|r.narrow({ v: string("a", "b") }).b
-path|refuse|e04f5b1035|r.narrow({ v: string("a", "b") }).v
 path|refuse|e04f5b1035|r.narrow({ v: string("b") })
 path|refuse|e04f5b1035|r.narrow({ v: string("p") })
 path|refuse|e04f5b1035|r.narrow({ v: string("q") })
 path|refuse|e04f5b1035|r.narrow({ v: string("x") })
 path|refuse|e04f5b1035|r.narrow({ v: string("y") })
-path|refuse|e04f5b1035|r.v
+path|refuse|e04f5b1035|r.narrow({ x: binary(new Uint8Array([1, 2])) })
+path|refuse|e04f5b1035|r.narrow({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
+path|refuse|e04f5b1035|r.narrow({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
+path|refuse|e04f5b1035|r.narrow({ x: string("b") }).k
+path|refuse|e04f5b1035|r.narrow({ x: string("b") }).s
+path|refuse|e04f5b1035|r.narrow({ x: string("b") }).x
+path|refuse|e04f5b1035|r.narrow({ y: boolean(false) })
+path|refuse|e04f5b1035|r.narrow({ y: boolean(true) })
+path|refuse|e04f5b1035|r.narrow({ y: decimal("1") })
+path|refuse|e04f5b1035|r.narrow({ y: decimal("2.5") })
+path|refuse|e04f5b1035|r.narrow({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
+path|refuse|e04f5b1035|r.narrow({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
+path|refuse|e04f5b1035|r.narrow({ y: number(1) })
+path|refuse|e04f5b1035|r.narrow({ y: number(2.5) })
+path|refuse|e04f5b1035|r.narrow({ y: string("A") })
+path|refuse|e04f5b1035|r.narrow({ y: string("b") })
+path|refuse|e04f5b1035|r.narrow({ y: string("p") })
+path|refuse|e04f5b1035|r.narrow({ y: string("q") })
+path|refuse|e04f5b1035|r.narrow({ y: string("x") })
+path|refuse|e04f5b1035|r.narrow({ y: string("y") })
 path|refuse|e23efd3375|r.y.a
 path|refuse|e23efd3375|r.y.c
 path|refuse|e47e443053|r.a

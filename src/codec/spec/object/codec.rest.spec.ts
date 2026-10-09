@@ -11,12 +11,17 @@ import type { AnyCodec } from '../../codec'
 import {
     CodecError,
     codecOfTerm,
+    lazy,
+    list,
+    number,
     object,
     opaque,
     optional,
     refine,
     string,
     termOf,
+    undefinable,
+    union,
     withLegacyRead,
 } from '../../codec'
 import { checkMembersStable, checkRoundTrip } from '../../testing'
@@ -173,6 +178,64 @@ describe('an open object entry', () => {
         ).toThrow(
             /an object entry key must be `string` or a string literal key set/,
         )
+    })
+})
+
+// An absent field writes no entry, so the map of an open object holds no `undefined` entry. The
+// encoded type states the same fact, and the object is an attribute that nests in each former
+describe('an open object with an absent field nests in another codec', () => {
+    const withOptional = object({ a: optional(number) }, [
+        string,
+        optional(opaque('lossy')),
+    ])
+    const withUndefinable = object({ a: undefinable(number) }, [
+        string,
+        optional(opaque('lossy')),
+    ])
+    const keep = <V>(value: V): value is V => value !== null
+
+    it('nests an optional field beside an open entry in each former, and writes no entry for the absent field', () => {
+        expect(object({ x: withOptional }).unsafeEncode({ x: {} })).toEqual({
+            M: { x: { M: {} } },
+        })
+        expect(union([withOptional, string]).unsafeEncode({})).toEqual({
+            M: {},
+        })
+        expect(list(withOptional).unsafeEncode([{}])).toEqual({
+            L: [{ M: {} }],
+        })
+        expect(refine(withOptional, keep).unsafeEncode({})).toEqual({ M: {} })
+        expect(lazy(() => withOptional).unsafeEncode({})).toEqual({ M: {} })
+    })
+
+    it('nests an undefinable field beside an open entry in each former, and writes no entry for the absent field', () => {
+        const absent = { a: undefined }
+        expect(
+            object({ x: withUndefinable }).unsafeEncode({ x: absent }),
+        ).toEqual({ M: { x: { M: {} } } })
+        expect(union([withUndefinable, string]).unsafeEncode(absent)).toEqual({
+            M: {},
+        })
+        expect(list(withUndefinable).unsafeEncode([absent])).toEqual({
+            L: [{ M: {} }],
+        })
+        expect(refine(withUndefinable, keep).unsafeEncode(absent)).toEqual({
+            M: {},
+        })
+        expect(lazy(() => withUndefinable).unsafeEncode(absent)).toEqual({
+            M: {},
+        })
+    })
+
+    it('refuses an undefined entry at the type, because the run time never writes one', () => {
+        type Written = ReturnType<typeof withOptional.unsafeEncode>
+        const written: Written = withOptional.unsafeEncode({ a: 1, z: true })
+        expect(written).toEqual({ M: { a: { N: '1' }, z: { BOOL: true } } })
+        // @ts-expect-error an undeclared name holds no `undefined` entry
+        const undeclared: Written = { M: { z: undefined } }
+        // @ts-expect-error an absent field writes no entry, so its name holds no `undefined` entry
+        const declared: Written = { M: { a: undefined } }
+        expect([undeclared, declared]).toHaveLength(2)
     })
 })
 

@@ -309,24 +309,3 @@ names the cause.
 adapter, which asserts the refusal of the walk, and the clause that drops a member pinned through a
 refinement of a literal. No test pins the path type of a key that some members declare, and no test
 narrows beside a key pinned through the explicit form of `lazy(...)`.
-
-
----
-
-## Known: the type refuses an object with an optional field and a rest entry inside another codec
-
-**Observation.** An object with an `optional` field and a rest entry is not a codec at the type
-level: its encoded map admits an undefined entry, so the object cannot stand inside `object(...)`, `union(...)`, `list(...)`,
-`refine(...)` or `lazy(...)`. The run time builds and encodes it. Measured 2026-10-09:
-
-    const inner = object({ a: optional(dynamoNumber) }, [string, optional(binary)])
-    const outer = object({ x: inner })
-      type checker: No overload matches this call
-      runtime:      outer.unsafeEncode({ x: {} }) gives {"M":{"x":{"M":{}}}}
-
-**Effect.** A caller cannot nest such an object, although the library builds it.
-
-**Pin.** None.
-
-**Fix direction.** The encoded type of an object reads the presence of each field, as the run time
-writes it: an absent optional field writes no entry, so the map holds no undefined entry.
