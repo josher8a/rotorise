@@ -310,3 +310,52 @@ adapter, which asserts the refusal of the walk, and the clause that drops a memb
 refinement of a literal. No test pins the path type of a key that some members declare, and no test
 narrows beside a key pinned through the explicit form of `lazy(...)`.
 
+
+---
+
+## Known: the type refuses a clause value that no member pins, and the run time answers it
+
+**Observation.** `extract` and `exclude` refuse at the type a clause whose value no member of the union
+pins, with "the clause at 'k' is not a literal the members pin that key". The run time answers the same
+call: `extract` keeps no member and `exclude` keeps every member. Measured 2026-10-09 with a throwaway
+program, checked by the TypeScript compiler and run by `vite-node`:
+
+    const u = union([object({ k: string('a'), a: string }), object({ k: string('b'), b: string })])
+    u.extract({ k: string('x') })
+      type checker: refused
+      runtime:      {"kind":"never"}
+    u.exclude({ k: string('x') })
+      type checker: refused
+      runtime:      the union of both members
+
+A slice of the grounded pool, printed as TypeScript and checked by the compiler, finds the same refusal at most
+of the clauses that the run time accepts.
+
+**Effect.** A caller cannot write a clause that selects nothing, although the run time states its result.
+The type and the run time disagree on which clauses exist.
+
+**Pin.** None.
+
+**Fix direction.** The type-level clause test accepts each value of the key's carrier, and computes the
+kept members as the run time does. The owner's direction for the static layer: each building block behaves
+the same at the type level and at run time, against the model.
+
+---
+
+## Known: the type refuses an object with an optional field and a rest entry inside another codec
+
+**Observation.** An object with an `optional` field and a rest entry is not a codec at the type
+level: its encoded map admits an undefined entry, so the object cannot stand inside `object(...)`, `union(...)`, `list(...)`,
+`refine(...)` or `lazy(...)`. The run time builds and encodes it. Measured 2026-10-09:
+
+    const inner = object({ a: optional(dynamoNumber) }, [string, optional(binary)])
+    const outer = object({ x: inner })
+      type checker: No overload matches this call
+      runtime:      outer.unsafeEncode({ x: {} }) gives {"M":{"x":{"M":{}}}}
+
+**Effect.** A caller cannot nest such an object, although the library builds it.
+
+**Pin.** None.
+
+**Fix direction.** The encoded type of an object reads the presence of each field, as the run time
+writes it: an absent optional field writes no entry, so the map holds no undefined entry.
