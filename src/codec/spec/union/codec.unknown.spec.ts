@@ -25,7 +25,7 @@ import {
  *
  * Not via `object({ v: ... })`: an `unknown` attribute has to be declared with `optional`, because
  * `undefined extends unknown` and nothing distinguishes a required `unknown` from an absent one — so
- * the codec really is optional, and the generator would leave the attribute out half the time.
+ * the codec really is optional, and the arbitrary would leave the attribute out half the time.
  */
 const holderFor = (attribute: AttributeCodec<unknown>): Checkable<unknown> => ({
     unsafeEncode: (value) => ({ v: attribute.unsafeEncode(value) }),

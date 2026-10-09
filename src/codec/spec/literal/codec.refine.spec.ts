@@ -67,7 +67,7 @@ describe('a predicate the inner codec rarely satisfies', () => {
         expect(thin).toEqual([])
     })
 
-    it('says nothing when a generator was given, because nothing is filtered', () => {
+    it('says nothing when an arbitrary was given, because nothing is filtered', () => {
         const thin: string[] = []
         const pick = (rng: () => number) =>
             (['0', '1', '42'] as SequenceValue[])[
@@ -97,7 +97,7 @@ describe('a predicate the inner codec never satisfies', () => {
     })
 })
 
-describe('the withLegacyRead is only reached from a generator', () => {
+describe('the withLegacyRead is only reached from an arbitrary', () => {
     it('never runs while encoding or decoding', () => {
         const thin: string[] = []
         const sequence = refine(decimal, isSequence, {

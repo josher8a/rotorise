@@ -752,12 +752,12 @@ describe('(C): what a codec reads, it can write', () => {
      * **(Q), stability, over the same two entities.**
      *
      * `decode ∘ encode ∘ decode = decode` — the corollary of the laws, and what **(R)** becomes when the values
-     * come from a *table* rather than from a generator. The two differ exactly by **(C)**, which is
+     * come from a *table* rather than from an arbitrary. The two differ exactly by **(C)**, which is
      * the containment most likely to be untrue, so asking (R) of generated values and never asking
      * (Q) of stored ones leaves the gap this file exists to close.
      *
      * It was exercised in two files, both of them about one entity apiece. Here it runs over the
-     * whole table the other laws use, and over stored forms a generator cannot produce: DynamoDB
+     * whole table the other laws use, and over stored forms an arbitrary cannot produce: DynamoDB
      * normalises `N`, so `'1.50'` comes back `'1.5'` and only a fixed point survives one pass.
      */
     const itemsOf = <T>(
@@ -913,10 +913,10 @@ describe('`accepts`, and the direction of the law that is true', () => {
     /**
      * Every codec's own generated values, crossed with every codec — which is the whole method.
      *
-     * A generator only ever produces values its own codec admits, so a pool drawn from one codec
+     * An arbitrary only ever produces values its own codec admits, so a pool drawn from one codec
      * exercises the implication and finds nothing. The looseness lives in the *cross* terms: a
      * `number` handed a `decimal`'s string, a `set` handed a `string`. The hand-written tail is for
-     * the kinds no generator in the table produces — a plain object whose names are right and whose
+     * the kinds no arbitrary in the table produces — a plain object whose names are right and whose
      * values are not, which is the only way to reach an object option's looseness.
      */
     const pool: unknown[] = []

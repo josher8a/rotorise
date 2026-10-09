@@ -18,10 +18,10 @@ import {
 import { checkRoundTrip } from '../../testing'
 
 /**
- * The generator and the shrinker, named once because three codecs here state the same two.
+ * The arbitrary and the shrinker, named once because three codecs here state the same two.
  *
  * They were read back off the first codec — `truncating.arbitrary` — until `arbitrary` and `shrink`
- * left the codec object. A caller states a generator, the term carries it, and nothing reads it
+ * left the codec object. A caller states an arbitrary, the term carries it, and nothing reads it
  * back off the pair, so the way to share one is to name it.
  */
 const someTruncatable = (rng: Rng) =>
@@ -40,7 +40,7 @@ const shrinkTruncatable = (value: string): readonly string[] =>
  * Round-trips only strings of three characters or fewer.
  *
  * An adapter over `string` whose read half truncates, so the pair is partial and the derived
- * generator would offer values it never makes. That is why both generators are stated here.
+ * arbitrary would offer values it never makes. That is why the arbitrary and the shrinker are stated here.
  */
 const truncating: AttributeCodec<string, Attribute<'S'>> = held(
     string,

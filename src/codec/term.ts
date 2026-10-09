@@ -129,7 +129,7 @@ export type Predicate =
  *
  * The term `opaq` is total and holds a number as a `DynamoNumber`. A policy converts a JS
  * number, or refuses one, over that term. The name lets a reader find the `opaq` under the
- * adapter: containment, the generator, and the union refusal at the type level each read it.
+ * adapter: containment, the arbitrary, and the union refusal at the type level each read it.
  */
 export type OpaqueSugar = 'opaqueLossy' | 'opaqueRefuse'
 
@@ -208,15 +208,15 @@ export type Term =
            */
           readonly via?: 'decimalText' | OpaqueSugar
           /**
-           * **The generators, where the caller supplies them rather than the inner codec.**
+           * **The arbitrary and the shrinker, where the caller supplies them rather than the inner codec.**
            *
            * An adapter derives both from the codec underneath: a value is generated for the inner
            * term and handed out through `g`, and a value is shrunk on the inner side and handed
            * back. That is right whenever the pair is total on the inner codec's values.
            *
            * It is wrong when the adapter is partial. A conversion that refuses some of what the
-           * inner codec generates makes the derived generator produce values the pair never
-           * makes, and the property then fails on the generator rather than on the codec. So the
+           * inner codec generates makes the derived arbitrary produce values the pair never
+           * makes, and the property then fails on the arbitrary rather than on the codec. So the
            * caller states them, and states them here because a definition carries everything the
            * caller said about a codec. Absent is the honest answer for an adapter nobody has
            * declared, and the derivation stands there.
@@ -227,7 +227,7 @@ export type Term =
     /**
      * The rule `(refine)`. The model carries `q : Value → Bool`; this carries a {@link Predicate}, so a
      * declaration can read the ones that are data. The caller's closure rides in `closure`, with
-     * `what` as the refusal text and `arbitrary` as what a generator derived from the term reads.
+     * `what` as the refusal text and `arbitrary` as what an arbitrary derived from the term reads.
      */
     | { readonly kind: 'refine'; readonly inner: Term; readonly q: Predicate }
     /** The rule `(withLegacyRead)`: `r : Attr ⇀ Value`, the older reading, which widens `p` and never `e`. */

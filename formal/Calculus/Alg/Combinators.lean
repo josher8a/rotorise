@@ -209,7 +209,7 @@ theorem restrict_e_def (c : Codec V M) (q : V → Bool) :
 
     The specification keeps the two apart and says why — "the literature collapses them … which is
     exactly the merged combinator", separated for a reason *outside* the calculus, since a
-    total `g` lets a generator for `I` be pushed forward while a partial one leaves only
+    total `g` lets an arbitrary for `I` be pushed forward while a partial one leaves only
     rejection sampling. This is that merged combinator, so the claim is checked rather
     than asserted: `through` is `adapt` with both halves total, `refine` is `adapt` with a
     partial identity on both halves, and the four theorems below are the whole of it.

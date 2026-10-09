@@ -3226,7 +3226,7 @@ const asRecordish = (value: unknown): Record<string, unknown> | undefined =>
  *
  * `aeq` recurses on a `Nat` rather than on the attribute, because only a *structurally* recursive
  * function reduces in the kernel — a well-founded one elaborates to `WellFounded.fix` and no `rfl`
- * would close a vector line. So the budget is the generator's job, and it is exactly the
+ * would close a vector line. So the budget is the emitter's job, and it is exactly the
  * attribute's document nesting: one layer per `L` or `M`, one for the scalar at the bottom.
  *
  * Computed rather than fixed at a generous constant. Under-fuelling does not produce a false
@@ -3343,7 +3343,7 @@ which vector.
 The verdict is \`Calculus.check\`'s, and \`check_same\` is what makes it worth having: \`.same\`
 *implies* the two attributes are equal, so a line that reduces to \`.same\` is a proof and not a
 comparator's opinion. The fuel on each line is the attribute's own nesting, computed by the
-generator — an under-fuelled line reduces to \`.exhausted\`, which matches neither \`.same\` nor
+emitter — an under-fuelled line reduces to \`.exhausted\`, which matches neither \`.same\` nor
 \`.differ\`, so it fails to compile rather than passing quietly.
 -/
 

@@ -85,7 +85,7 @@ const some =
 /**
  * Stored as `N`, read back as a branded string. Never a JS number, at any point.
  *
- * `decimal` generates negatives, which are not amounts, so the generator is supplied rather than
+ * `decimal` generates negatives, which are not amounts, so the arbitrary is supplied rather than
  * left to filter — a predicate that rejects half of what it sees wastes the search.
  */
 const amount = refine(decimal, isPrice, {

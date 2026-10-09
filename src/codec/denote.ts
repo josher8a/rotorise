@@ -1522,7 +1522,7 @@ export const codecAtLevel = <T, A extends AttributeValue>(
     // **A codec is its pair and its term, and nothing else.** `arbitrary` and `shrink` were copied
     // onto the object here for `custom`, which made one fact reachable two ways; they are on the
     // term, `arbitraryOf` and `shrinkOf` read them there, and a caller that wants to share a
-    // generator names it rather than reading it back off a pair.
+    // arbitrary names it rather than reading it back off a pair.
     const pair = pairOf(def)
     const atTop: Pick<Pair, 'decode'> & {
         readonly encode: (value: never) => Result<AttributeValue>
