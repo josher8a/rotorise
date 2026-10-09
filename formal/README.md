@@ -59,10 +59,12 @@ definition it touches.
 | `Calculus/JSON/Basic.lean`        | —           | A second universe on the generic layer, with no DynamoDB import: the carrier `Json`, the ground codecs, the array prism, the signature `jsonSyn`/`jsonSem` with `id_topLaws`, a union lawful by `Alg.soundness` and `Alg.compat_of_HF` (`lawful_strOrNum`), and the kind test as the primitive admission rows, exact by `Alg.Adm_exact` and `Alg.AdmA_exact` (`exact_strOrNum`) |
 | `Calculus/JSON/Disjoint.lean`     | —           | Disjointness at JSON: the leaves `jsonLeaf` (two kinds are apart where they are two kinds), the laws of the leaves and of the formers as instances, and `Alg.disjoint_orthogonal` at `jsonSyn` (`orthogonal`) |
 
+`Alg/Agree.lean`, `Alg/Converse.lean`, `Alg/Rows.lean`, `Lang/Converse.lean`, `JSON/Compat.lean`,
 `Dynamo/Analysis/Compat.lean`, `Confluence.lean`, `ExactA.lean`, `ExactV.lean`, `HeldFree.lean`, `Kernel.lean`,
 `Laminar.lean`, `LiteralArity1.lean`, `Malleability.lean`, `Dynamo/Analysis/Disjoint.lean`, `Merge.lean`,
-`Orthogonality.lean`, `Rows.lean`, `Separation.lean`, `Slice.lean`, `Universal.lean` and
-`Vectors.lean` have none, and each opens with a module docstring that says what it is for.
+`Orthogonality.lean`, `Separation.lean`, `Slice.lean`, `Universal.lean`, `Bridge/Vectors.lean`,
+`Bridge/Rows.lean` and `Bridge/Paths.lean` have none, and each opens with a module docstring that says
+what it is for.
 Read those.
 
 **The mechanization is complete: the project builds with zero `sorry`.** §5's

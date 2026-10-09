@@ -28,8 +28,9 @@ path, as a call, or in prose.
 This repository is two developments and one bridge between them.
 
 `src/` is a published TypeScript library. `Calculus/` is a Lean model of part of that library.
-The bridge is a generator in `src/codec/lean.ts` that emits Lean theorems from encodes the library
-actually performed, and the Lean kernel decides whether the model agrees.
+The bridge is the emitter in `src/codec/lean.ts`. The emitter states the decisions that the library
+made as Lean data: encodes, refusals, reads, verdicts, separations, disjointness, slices and paths.
+The Lean kernel decides whether the model makes each decision.
 
 The three carry different warranties, and keeping them apart is the whole discipline.
 
@@ -555,8 +556,21 @@ clause, gives the frontier that each decision names, and the kernel decides the 
 union has no clause row: `narrow` reads the options of the binder open, and the host reads the thunk
 closed. The two-spelling check builds the pool again with each leaf and each tag behind a thunk that
 closes no cycle. The model reads one term in both spellings, so each decision of `at` must be the
-same, and a difference is a host reader that stops at a thunk. No vector puts the host's
-preconditions to `preconditionOf`: the host's tests pin each precondition form and each refusal.
+same, and a difference is a host reader that stops at a thunk.
+
+**A path row certifies the meaning of a resolved decision.** The emitter records each position of
+each node in the print of the root, with the binders above the position. Where the host resolves
+one codec, the row states each frame of the frontier as the recorded frame of the resolved node, so
+the row is an equation per frame. A caller's function is a variable of the theorem, so two frames
+are equal only where the two hold one function, and equal frames have one meaning
+(`pathRead_resolved_sem`). `leanPath(...)` refuses a resolved row where the model reaches a frame
+at no position of the resolved node. Each other decision names a class of frontiers (`pathReads`).
+The decision of two declarations reads shape alone: `frameSim` reads no predicate of a `refine` and
+no older reader of a `legacy`, so two frames similar at every depth can have two meanings
+(`frameSim_reads_no_predicate`).
+
+No vector puts the host's preconditions to `preconditionOf`: the host's tests pin each
+precondition form and each refusal.
 
 ---
 
@@ -773,14 +787,22 @@ string is disjoint from it.
 string literals of its texts there, so its caller view is exact, and the views certify it beside a
 string literal it does not write. A caller-built `held` keeps the held side that the caller gave.
 
-**The bridge checks both directions.** The separation class in `src/codec/lean.ts` emits one
-theorem per emittable pair of the sample codecs, generated and elaborated by `formal/scripts/gate.sh`. For a
-pair the library accepts, the theorem states that the two terms meet `PairwiseCompat` where both
-denote lawful codecs, proved by the warrant the library used. For a pair the library refuses, the
-theorem states that `compatPair dynOracle` refuses it. A pair that reads a thunk that throws takes
-the same forms, because the decision holds whatever codec the thunk names. Each theorem also states
-the guard, `Term.guarded`, and the guard reads a thunk that throws as the variable of a binder at
-the root of its option.
+**The bridge checks both directions.** The emitter states each emittable option pair of the corpus
+and of the pool as a separation row, in one list per form, and `formal/scripts/gate.sh` elaborates
+the lists. For a pair the library accepts, the row states that `compatPair dynOracle` accepts the
+pair, and `accepted_of_rows` lifts the row to `PairwiseCompat` where both terms denote lawful
+codecs. For a pair the library refuses at compatibility, the row states that `compatPair dynOracle`
+refuses the pair (`refused_of_rows`). For a pair the library refuses at the guard, the row states
+that the guard refuses an option (`guardRefused_of_rows`). A pair that reads a thunk that throws
+takes the same forms, because the decision holds whatever codec the thunk names. Each row also
+states the guard, `Term.guarded`, and the guard reads a thunk that throws as the variable of a
+binder at the root of its option.
+
+**The emitter refuses a pair that no form states.** A form states the union decision of the host,
+its guard and its compatibility test together. Where the union decision disagrees with the guard or
+with the compatibility test, `separationForm(...)` refuses the pair. So a host guard or a host
+compatibility test that drifts from the union decision fails the suite that emits the rows, and
+passes no row.
 
 **`viewsDisjoint` is sufficient and not necessary.** A decline by `viewsDisjoint` is not a refutation of
 compatibility. Two restrictions of one adapter are compatible in the model
@@ -859,31 +881,59 @@ form too and expect the arity to be implicit.
 ### The bridge, and the claims that cannot reach the kernel
 
 **Regeneration is not verification.** What verifies the bridge is elaboration, which is why the
-gate runs the committed samples and every emittable pair of the sample codecs through Lean rather than
-trusting a byte comparison. **Refusal vectors are the other half of the same blind spot**: a
+gate emits the generated vector files again, and runs each vector file, the committed samples
+included, through Lean rather than trusting a byte comparison. **Refusal vectors are the other half of the same blind spot**: a
 positive vector is an agreement about what the library wrote, so a value the library refuses
 produces no vector at all — the half of the pair where the two sides could disagree unobserved.
 
-**No vector asserts a decoded value.** Every emitted theorem is about the write half or about a
-refusal, and the read-side differential compares a decision rather than the value that came back.
-So the kernel has never been shown that the read half returns a particular value, and the two laws
-most of this library's shipped defects lived in are the two the bridge cannot state. `veq`, sound
-by `veq_sound`, is what would make them statable.
+**A vector file holds data, and the kernel checks one list in one theorem.** The emitter prints
+each distinct term of a file as one `def`, and each numeral of the file one time. A caller's
+function of a term is a parameter of the `def`. A row is the name of its vector, then the data of
+the vector, and a list holds the rows of one form. The theorem of a list states
+`failing ok L = []` for the comparator `ok` of the form, and `kernel_rfl%` closes the theorem, so
+the kernel decides each row. `ok_of_failing` gives the comparator at each row of the list. The
+samples, the read vectors and the guards of the pool state one theorem per vector. The slices state
+one theorem per union, and the paths one theorem per codec.
 
-**The terms the emitter refuses are exactly the terms whose laws a caller owes.** The constructors
-carrying a caller's function, and a refinement holding a host predicate, are unemittable because
-nothing translates a closure into a Lean term, and emitting a different predicate would compile
-and prove the wrong theorem. That refusal is right. Its consequence is that the bridge is blind
-precisely where the model discharges an obligation the host cannot check either, so for those
-terms the guarantee is a written premise on both sides.
+**Each comparator has a law in `Calculus/Bridge`, and the law makes `true` the statement of the
+row.** `Vectors.lean` holds `check` and `vcheck`, which compare an attribute by `aeq` and a value
+by `veq` under fuel: `aeq_same` makes `.same` equality, and `aeq_differ` makes `.differ`
+disequality, with `veq_sound` as the twin at `Value`. `Rows.lean` holds `failing`, `ok_of_failing`, the comparator of
+each evaluation form with its law (`writesOk_iff` and the others), and the lifts of the separation
+forms. `Paths.lean` holds `pathReads` and `pathRead`, with `pathRead_resolved_sem`, and `frameSim`
+with its proved limit `frameSim_reads_no_predicate`. `frameSim` is the one comparator that
+certifies shape alone, and only the decision of two declarations reads `frameSim`.
+
+**A read row asserts a decoded value.** A read vector states that the model's `p`, at the
+attribute that the library wrote, gives the value that `decode(...)` read back, by `vcheck`. The
+read rows of the resolutions and of the legacy read gate state the same by `readsOk`. The read
+verdicts compare a decision: `AdmA` against whether `decode(...)` accepted the attribute. Each
+row states one value. A law over every value, such as the retract, is a theorem of the model, and
+no row states a law.
+
+**A caller's function is a variable of the theorem.** The emitter prints a caller's predicate and
+an older reader as variables, and a caller's adapter as a generator `caller n` of the caller table
+`κ`. The theorem quantifies each predicate and each reader, and a verdict that denotes a term
+quantifies `κ`. Where a row needs the answer of a caller's function, the emitter pins the function
+at the answers that the host recorded. `veq_pin` and `aeq_pin` prove that each function with those
+answers equals its own pin, so the row states the former theorem at each such function. An
+evaluation vector reads `libTable noCallers`, so the emitter refuses a caller's adapter there: the
+vector would have to run the adapter, and the model has no name for a caller's closure. A shipped
+predicate over an inner term that writes a value other than a string is refused too, because
+JavaScript coerces where the model does not, and the vector would prove the wrong theorem. So a row
+holds at every caller function, or at each function with the recorded answers. The laws that a
+caller owes stay a written premise on both sides.
 
 **A red bridge check that returns immediately has read nothing.** The bridge shares a build cache,
 and a racing run fails at once over an unchanged tree. Judge that check by its duration before
 judging it by its exit code.
 
-The bridge checks generated lines by kernel typechecking rather than by evaluation. `#eval` runs
-the denotation, but a printed value proves nothing, and `native_decide` rests on `Lean.ofReduceBool`,
-which is outside the advertised axiom base. A checked line is a theorem.
+**The kernel checks the bridge, and evaluation only names a failure.** The one `#eval` of a row
+file prints `failing ok L` of each list at one instance of the caller functions, so the file names
+each failing row. The gate passes a file that prints nothing. A printed value proves nothing, and
+`native_decide` rests on `Lean.ofReduceBool`, which is outside the advertised axiom base. A row
+that the kernel refuses only at other caller functions goes unnamed by the `#eval`, and the theorem
+of its list still fails. A checked row is a theorem.
 
 ### The host's instruments
 
@@ -1012,9 +1062,10 @@ host's `decimal` literal is that literal under the text adapter `numeralOfStored
 discriminator at either base emits.
 
 **What bounds the emitter is which terms have closed forms.** A caller's closure has none. The
-emitter refuses a term that holds one, rather than emitting a vector about a codec the model
-cannot express, and its message says so in the caller's vocabulary. That refusal is the record,
-and it is the shape every gap of this kind takes.
+emitter prints a caller's closure as a variable where the statement holds at every function. Where
+the statement must run the closure, the emitter refuses the term, rather than emitting a vector
+about a codec the model cannot express, and its message says so in the caller's vocabulary. That
+refusal is the record, and it is the shape every gap of this kind takes.
 
 **A core union requires its discriminator.** The model selects only an input that carries the
 required discriminator. A caller that accepts an old input extends the whole union's codec with
