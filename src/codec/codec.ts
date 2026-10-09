@@ -4420,14 +4420,16 @@ type Written<Full, K> = Exclude<Full[K & keyof Full], undefined>
  * invariant in its value, so `Rest extends AttributeCodec<unknown, infer A>` fails for every codec
  * of a narrower value and quietly takes the wrong branch. {@link AttributeOf} infers both
  * parameters, so the open block's attribute is exact. The index also admits each declared
- * attribute, because an index signature intersects with every declared key.
+ * attribute, because an index signature intersects with every declared key. The index takes no
+ * `undefined` from an optional key: an absent field writes no entry, so no entry holds `undefined`,
+ * and the map stays an attribute that nests in another codec.
  */
 type EncodedBy<Spec, Rest> = [Rest] extends [undefined]
     ? Encoded<Spec>
     : Encoded<Spec> & {
           readonly [name: string]:
               | AttributeOf<Rest>
-              | Encoded<Spec>[keyof Encoded<Spec>]
+              | Written<Encoded<Spec>, keyof Encoded<Spec>>
       }
 
 /**
