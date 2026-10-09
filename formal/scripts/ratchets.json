@@ -40,7 +40,7 @@
     "Calculus/Dynamo/Analysis/Path.lean": 9,
     "Calculus/Dynamo/Analysis/Precondition.lean": 215,
     "Calculus/Dynamo/Analysis/Separation.lean": 40,
-    "Calculus/Dynamo/Analysis/Slice.lean": 94,
+    "Calculus/Dynamo/Analysis/Slice.lean": 102,
     "Calculus/Dynamo/Analysis/Universal.lean": 17,
     "Calculus/Dynamo/Domain.lean": 72,
     "Calculus/Dynamo/Lang/Denote.lean": 18,

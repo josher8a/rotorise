@@ -198,7 +198,27 @@ describe('a clause is a literal at a base', () => {
             CodecError,
         )
         expect(() => byBase.extract({ k: number(1) } as never)).toThrow(
-            /`number` literal and no member pins 'k' at that base/,
+            /`number` literal under an adapter and no member pins 'k' at that base and adapter/,
+        )
+    })
+
+    /**
+     * The adapter is part of the form, as the base is: a plain literal and a literal under an
+     * adapter never match. So a key that the members pin under an adapter alone refuses a plain
+     * clause, as the model refuses a clause that is not keyed (`Calculus.AltClause.keyed`).
+     */
+    it('refuses a plain clause at a key that the members pin under an adapter alone', () => {
+        const toX = held(string('a'), string, {
+            encode: (v: string) =>
+                v === 'x' ? 'a' : new CodecError(`'${v}' is not 'x'`),
+            decode: () => 'x',
+        })
+        const viaX = union([
+            object({ t: toX, k: string('h') }),
+            object({ k: string('p') }),
+        ])
+        expect(() => viaX.extract({ t: string('a') } as never)).toThrow(
+            /`string` literal and no member pins 't' at that base and adapter/,
         )
     })
 

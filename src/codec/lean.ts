@@ -2073,8 +2073,15 @@ export type Slice = {
 const numberForm =
     'the clause is a `number` literal: the host reads the literal under the float adapter of `number`, and the model names no float adapter'
 
-/** One clause, and the options that `src/` keeps under the clause, in the order of the union. */
-type SliceRow = { readonly clause: string; readonly keeps: readonly boolean[] }
+/**
+ * One clause: whether `src/` answers the clause (`AltClause.keyed`), and the options that `src/`
+ * keeps under the clause, in the order of the union.
+ */
+type SliceRow = {
+    readonly clause: string
+    readonly keyed: boolean
+    readonly keeps: readonly boolean[]
+}
 
 /** One clause key: the name, the adapter word, and the alternatives under the word. */
 type ClauseEntry = readonly [string, string, Alternatives]
@@ -2106,20 +2113,22 @@ const leanClause = (entries: readonly ClauseEntry[], at: string): string =>
         ]),
     )}))`
 
-/** The options that `src/`'s `extract` keeps under one clause. */
+/** Whether `src/`'s `extract` answers one clause, and the options that it keeps. */
 const keptBy = (
     codec: Sliceable,
     options: readonly Term[],
     clause: Readonly<Record<string, AnyCodec>>,
     at: string,
-): readonly boolean[] => {
+): Omit<SliceRow, 'clause'> => {
     let result: AnyCodec
     try {
         result = codec.extract(clause)
     } catch (error) {
         // the host refuses a clause key that no member pins, and a clause at a base that no
-        // member carries: each keeps nothing whatever the values, and so does the model
-        if (error instanceof CodecError) return options.map(() => false)
+        // member carries, as the model refuses a clause that is not keyed. The refusal keeps
+        // nothing (`AltClause.extract_eq_nil_of_keyed_false`)
+        if (error instanceof CodecError)
+            return { keyed: false, keeps: options.map(() => false) }
         throw error
     }
     const def = result.def
@@ -2129,7 +2138,7 @@ const keptBy = (
     if (kept.some((t) => !options.includes(t))) {
         throw new Error(`${at}: a slice returned an option the union lacks`)
     }
-    return options.map((t) => kept.includes(t))
+    return { keyed: true, keeps: options.map((t) => kept.includes(t)) }
 }
 
 /** One clause of the caller, with the host's verdict, or a refusal that names the reading. */
@@ -2154,7 +2163,7 @@ const sliceRow = (
     })
     return {
         clause: leanClause(entries, at),
-        keeps: keptBy(codec, options, clause, at),
+        ...keptBy(codec, options, clause, at),
     }
 }
 
@@ -2203,6 +2212,8 @@ const assignmentRows = (
     return assigned.flatMap((mine, i) =>
         mine.map(([entry, tag], k) => ({
             clause: leanClause([entry], `${at}.option${i}`),
+            // the option itself pins the tag
+            keyed: true,
             keeps: assigned.map((other) => {
                 const [[, , alts], t] = other[k] as (typeof other)[number]
                 return alts.base === entry[2].base && t === tag
@@ -2251,8 +2262,9 @@ export const leanSlice = (
         `/-- \`${name}\` — the options \`src/\` keeps under each clause -/`,
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
         `    ${named === undefined ? list : named(list)}.map`,
-        `      (fun c => [${printed.map((t) => `(${t})`).join(',\n        ')}].map c.admits) =`,
-        `    [${rows.map((row) => `[${row.keeps.join(', ')}]`).join(',\n      ')}] := ${closing(binders)}`,
+        `      (fun c => let os := [${printed.map((t) => `(${t})`).join(',\n        ')}]`,
+        '        (c.keyed os, os.map c.admits)) =',
+        `    [${rows.map((row) => `(${row.keyed}, [${row.keeps.join(', ')}])`).join(',\n      ')}] := ${closing(binders)}`,
     ].join('\n')
 }
 
@@ -2790,10 +2802,11 @@ export const leanSliceModule = (slices: readonly Slice[]): string => {
 /-!
 # Slices, proposed to the model
 
-**Generated — do not edit.** One theorem per union. Each row is a clause, and the row lists the
-options that \`src/\` keeps under the clause: \`extract\` gives the verdict of a clause of the caller,
-and \`assignmentOf\` gives the verdict of a clause at the tag of a dissection's option. The theorem
-states that \`Calculus.AltClause.admits\` gives the same verdict at each option. Each distinct
+**Generated — do not edit.** One theorem per union. Each row is a clause: whether \`src/\` answers
+the clause, and the options that \`src/\` keeps under it. \`extract\` gives the verdict of a clause of
+the caller, and \`assignmentOf\` gives the verdict of a clause at the tag of a dissection's option.
+The theorem states that \`Calculus.AltClause.keyed\` refuses where \`src/\` refuses, and that
+\`Calculus.AltClause.admits\` gives the same verdict at each option. Each distinct
 clause list is one \`def\`, which each theorem with that list reads.
 -/
 
