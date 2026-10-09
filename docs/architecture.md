@@ -37,8 +37,8 @@ The three carry different warranties, and keeping them apart is the whole discip
 - **The model proves.** A theorem in `Calculus/` is checked by the kernel against an advertised
   axiom base.
 - **The bridge checks agreement.** A vector is a proposition about one operation the library ran.
-  Elaboration is what verifies it. Comparing the generator against output the generator produced
-  verifies nothing, because a stale generator agrees with its own stale output.
+  Elaboration is what verifies it. Comparing the emitter against output the emitter produced
+  verifies nothing, because a stale emitter agrees with its own stale output.
 - **A written premise is neither.** Where the model discharges an obligation the host cannot
   check, the guarantee is a sentence on both sides and no instrument is looking.
 
@@ -1088,14 +1088,14 @@ conversion at the construction site is a second conversion written in order to b
 says when it is finished is a table asserting the conversion is the identity, one row per
 constructor — which no checker can answer, and which asserts nothing once it is complete.
 
-**Test machinery drives the generators; it does not hold them.** An adapter states its own
-generator and shrinker where its pair is partial, because how a codec generates is a fact about
-that codec rather than about testing, and `held` takes the conversion and the two generators
-together as data — they go into the term, which is the codec's whole definition. What lives in the testing entry point is the
-machinery that *drives* them: the derivers that walk a term to build a generator, the shrinker, and
-the law checkers. **The term is the only source.** Where a generator was a projection of the term
+**Test machinery drives the arbitraries; it does not hold them.** An adapter states its own
+arbitrary and shrinker where its pair is partial, because how a codec generates is a fact about
+that codec rather than about testing, and `held` takes the conversion, the arbitrary and the
+shrinker together as data — they go into the term, which is the codec's whole definition. What lives in the testing entry point is the
+machinery that *drives* them: the derivers that walk a term to build an arbitrary, the shrinker, and
+the law checkers. **The term is the only source.** Where an arbitrary was a projection of the term
 that the derivers read before the term was consulted, one fact travelled two paths and could
-disagree with itself; now a caller that wants to share a generator names it rather than reading it
+disagree with itself; now a caller that wants to share an arbitrary names it rather than reading it
 back off a codec.
 
 **A value that the codec's own read produced is evidence.** A law checker that generates a value
