@@ -48,11 +48,11 @@ import Lean
 # The axiom base, as a checked claim
 
 **The whole development stands on `propext`, `Classical.choice` and `Quot.sound` — no
-`sorryAx`.** `sanctionedAxioms` below is that claim, and this file makes
+`sorryAx`.** `sanctionedAxioms` is that claim, and this file makes
 it a build error rather than a sentence a reader verifies by hand with `#print axioms`.
 
 `#assert_axioms` collects the axioms a constant actually
-depends on and fails if any of them is outside the sanctioned base below.
+depends on and fails if any of them is outside the sanctioned base.
 
 This is not decoration. `Classical.choice` is easy to acquire by accident: mathlib proves a
 great many list facts classically, and a single `by_contra` or an appeal to (say)
@@ -64,22 +64,6 @@ open Lean Elab Command
 namespace Calculus
 
 open Alg (Term.depthL)
-
-/-- **The sanctioned base is Lean's own, and nothing else.** The calculus has no numeric host
-    axiom, because it has no host: `N` is carried exactly, as `WFNumeral`, so nothing is assumed
-    about binary64 or about any other numeric type.
-
-    A target language that hands its own numeric type to a caller adapts that type to
-    `WFNumeral` in the port, and the adaptation is the implementor's tradeoff rather than the
-    calculus's.
-
-    `Classical.choice` is here by more than one route. Mathlib resolves `k ∈ (s : Finset α)`
-    through `Finset.instSetLike`, whose injectivity field is proved classically, and core
-    Lean's string and arithmetic lemmas reach `Classical.propDecidable` in their own proofs.
-    `scripts/classical_gateways.txt` is the set of routes and `gate.sh` holds it. The axiom is
-    computationally inert and the guard reads axioms transitively. -/
-def sanctionedAxioms : List Lean.Name :=
-  [``propext, ``Classical.choice, ``Quot.sound]
 
 /-- `#assert_axioms c` errors unless every axiom `c` depends on is in
     `Calculus.sanctionedAxioms`. -/

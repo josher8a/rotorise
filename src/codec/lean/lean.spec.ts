@@ -823,7 +823,9 @@ describe('a whole vector', () => {
         const module = leanVectorModule([])
         expect(module).toContain('import Calculus.Bridge.Vectors')
         expect(module).toContain('namespace Calculus')
-        expect(module.trimEnd().endsWith('end Calculus')).toBe(true)
+        expect(
+            module.trimEnd().endsWith('end Calculus\n\n#assert_axioms_module'),
+        ).toBe(true)
     })
 
     /** The equation protocol carries its own proof, so its preamble is the one with the tactic. */
@@ -832,7 +834,9 @@ describe('a whole vector', () => {
         expect(module).toContain('import Calculus.Dynamo.Lang.Denote')
         expect(module).toContain('import Mathlib.Tactic.FinCases')
         expect(module).toContain('macro "vector" : tactic')
-        expect(module.trimEnd().endsWith('end Calculus')).toBe(true)
+        expect(
+            module.trimEnd().endsWith('end Calculus\n\n#assert_axioms_module'),
+        ).toBe(true)
     })
 })
 

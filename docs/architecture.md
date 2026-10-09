@@ -931,9 +931,11 @@ judging it by its exit code.
 **The kernel checks the bridge, and evaluation only names a failure.** The one `#eval` of a row
 file prints `failing ok L` of each list at one instance of the caller functions, so the file names
 each failing row. The gate passes a file that prints nothing. A printed value proves nothing, and
-`native_decide` rests on `Lean.ofReduceBool`, which is outside the advertised axiom base. A row
-that the kernel refuses only at other caller functions goes unnamed by the `#eval`, and the theorem
-of its list still fails. A checked row is a theorem.
+`native_decide` adds an axiom of its own for each proof, which is outside the advertised axiom base.
+A row that the kernel refuses only at other caller functions goes unnamed by the `#eval`, and the
+theorem of its list still fails. A checked row is a theorem. Each generated file ends with
+`#assert_axioms_module`, which checks the axioms of the theorems that the file declares against
+`sanctionedAxioms`, and the gate fails a file whose last line is not that check.
 
 ### The host's instruments
 

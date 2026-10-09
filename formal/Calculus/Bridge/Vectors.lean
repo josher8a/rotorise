@@ -11,8 +11,8 @@ Three facts about this development force the shape of what follows, and each of 
 out an easier design.
 
 **The kernel evaluates `denote`, and the kernel is the check.** `#eval` runs `denote` too, but a
-printed value proves nothing, and `native_decide` rests on `Lean.ofReduceBool`, which is outside the
-advertised axiom base. Definitional unfolding is the check: `(denote t).e v = some a` is `rfl` for every
+printed value proves nothing, and `native_decide` adds an axiom of its own for each proof, which is
+outside the advertised axiom base. Definitional unfolding is the check: `(denote t).e v = some a` is `rfl` for every
 term form, including deeply nested ones. So a vector is checked by
 being *typechecked*, and the certificate is a theorem rather than a program's output.
 
@@ -559,6 +559,83 @@ example : (2 : Nat) + 2 = 5 := kernel_rfl%
 /-- error: kernel_rfl%: the goal is not an equation -/
 #guard_msgs in
 example : (2 : Nat) ≤ 5 := kernel_rfl%
+
+/-! ## The axioms of a generated file
+
+`#assert_axioms_all` reads the modules that `Axioms.lean` imports, and no module imports a
+generated file. A vector closed by `native_decide` rests on an axiom that the tactic adds, and a vector
+closed by `sorry` rests on `sorryAx`. So a generated file checks its own theorems: the emitter
+writes `#assert_axioms_module` as the last command of each file. The command reads the
+theorems that the file declares, and no imported theorem, so the development is not checked
+again in each file. -/
+
+/-- **The sanctioned base is Lean's own, and nothing else.** The calculus has no numeric host
+    axiom, because it has no host: `N` is carried exactly, as `WFNumeral`, so nothing is assumed
+    about binary64 or about any other numeric type.
+
+    A target language that hands its own numeric type to a caller adapts that type to
+    `WFNumeral` in the port, and the adaptation is the implementor's tradeoff rather than the
+    calculus's.
+
+    `Classical.choice` is here by more than one route. Mathlib resolves `k ∈ (s : Finset α)`
+    through `Finset.instSetLike`, whose injectivity field is proved classically, and core
+    Lean's string and arithmetic lemmas reach `Classical.propDecidable` in their own proofs.
+    `scripts/classical_gateways.txt` is the set of routes and `gate.sh` holds it. The axiom is
+    computationally inert and the guard reads axioms transitively.
+
+    The list is stated here, below `Axioms.lean`, because a generated file imports this module
+    and does not import `Axioms.lean`. -/
+def sanctionedAxioms : List Lean.Name :=
+  [``propext, ``Classical.choice, ``Quot.sound]
+
+/-- `#assert_axioms_module` errors unless each theorem that the current file declares depends
+    only on the axioms in `Calculus.sanctionedAxioms`. The error names each offender. A file that
+    passes prints nothing. -/
+syntax (name := assertAxiomsModule) "#assert_axioms_module" : command
+
+open Lean Elab Command in
+/-- Elaborator for `#assert_axioms_module`: each theorem of the current file, found by walking
+    the constants that the file adds. The walk waits for the kernel check of each theorem. -/
+@[command_elab assertAxiomsModule]
+def elabAssertAxiomsModule : CommandElab := fun _ => do
+  let env ← getEnv
+  let mut bad : Array (Lean.Name × List Lean.Name) := #[]
+  for (n, _) in env.constants.map₂.toList.filter (·.2.isTheorem) do
+    let stray := (← liftCoreM <| collectAxioms n).filter (· ∉ sanctionedAxioms)
+    unless stray.isEmpty do bad := bad.push (n, stray.toList)
+  unless bad.isEmpty do
+    throwError "unsanctioned axiom(s) outside {sanctionedAxioms}:\n\
+      {bad.toList.map (fun p => m!"  {p.1}: {p.2}")}"
+
+/-! A theorem outside the base fails the command. Each probe runs without a change to the
+environment, so the planted theorem does not stay in this module. -/
+
+/--
+error: unsanctioned axiom(s) outside [propext, Classical.choice, Quot.sound]:
+[  Calculus.plantedNative: [Calculus.plantedNative._native.native_decide.ax_1_1]]
+-/
+#guard_msgs in
+open Lean Elab Command in
+run_cmd withoutModifyingEnv do
+  elabCommand (← `(theorem $(mkIdent `plantedNative) : (2 : Nat) + 2 = 4 := by native_decide))
+  elabCommand (← `(#assert_axioms_module))
+
+/--
+error: unsanctioned axiom(s) outside [propext, Classical.choice, Quot.sound]:
+[  Calculus.plantedSorry: [sorryAx]]
+---
+warning: declaration uses `sorry`
+-/
+#guard_msgs in
+open Lean Elab Command in
+run_cmd withoutModifyingEnv do
+  elabCommand (← `(theorem $(mkIdent `plantedSorry) : (2 : Nat) + 2 = 4 := sorry))
+  elabCommand (← `(#assert_axioms_module))
+
+/-! A file whose theorems stay in the base passes, and prints nothing. -/
+
+#guard_msgs in
+#assert_axioms_module
 
 /-! ## The shape of a vector
 

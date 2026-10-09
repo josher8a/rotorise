@@ -624,3 +624,5 @@ theorem never__refuses__scalar_string :
       (Value.str "hello") = none := kernel_rfl%
 
 end Calculus
+
+#assert_axioms_module
