@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest'
 import { type Attribute, DynamoNumber } from '../../attribute'
 import {
+    binary,
     boolean,
     CodecError,
     decimal,
@@ -657,5 +658,48 @@ describe('discriminatedUnion slices like the dissection it is', () => {
         expect(rest.unsafeEncode({ type: 'SHOT', vaccine: 'v' })).toEqual({
             M: { type: { S: 'SHOT' }, vaccine: { S: 'v' } },
         })
+    })
+})
+
+/**
+ * **A literal whose carrier has no literal type is answered, and coarsely.** A `dynamoNumber`
+ * literal decodes a `DynamoNumber` and a `binary` literal a `Uint8Array`, so the type reads the form
+ * of the clause and not its alternatives. The model answers such a clause (`Calculus.AltClause.keyed`
+ * holds), so the type answers it too. Where only the alternatives decide a member, the extraction
+ * and the exclusion each keep the member: each result type admits every member that the run time
+ * keeps, and some that it drops. A literal type for the numeral is a later pass.
+ */
+describe('a clause at a literal whose carrier has no literal type', () => {
+    const one = orThrow(DynamoNumber.from('1'))
+    const two = orThrow(DynamoNumber.from('2'))
+
+    it('answers a clause at a `dynamoNumber` literal, and its type admits every member that the run time keeps', () => {
+        const byNumeral = union([
+            object({ k: string('a'), n: dynamoNumber(one) }),
+            object({ k: string('b'), n: dynamoNumber(two) }),
+        ])
+        const kept = byNumeral.extract({ n: dynamoNumber(one) })
+        expect(kept.unsafeEncode({ k: 'a', n: one })).toEqual({
+            M: { k: { S: 'a' }, n: { N: '1' } },
+        })
+        // the run time drops the member at `2`; the type cannot compare the numerals, so it admits it
+        const coarse: Parameters<typeof kept.encode>[0] = { k: 'b', n: two }
+        expect(failed(kept.encode(coarse))).toBe(true)
+    })
+
+    it('answers a clause at a `binary` literal, and its type admits every member that the run time keeps', () => {
+        const ab = new Uint8Array([1, 2])
+        const cd = new Uint8Array([3, 4])
+        const byBytes = union([
+            object({ k: string('a'), b: binary(ab) }),
+            object({ k: string('b'), b: binary(cd) }),
+        ])
+        const kept = byBytes.extract({ b: binary(ab) })
+        expect(kept.unsafeEncode({ k: 'a', b: ab })).toEqual({
+            M: { k: { S: 'a' }, b: { B: ab } },
+        })
+        // the run time drops the member at other bytes; the type admits it, as it cannot compare bytes
+        const coarse: Parameters<typeof kept.encode>[0] = { k: 'b', b: cd }
+        expect(failed(kept.encode(coarse))).toBe(true)
     })
 })
