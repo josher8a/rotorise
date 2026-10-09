@@ -12,152 +12,6 @@
 #   exclude      time keeps the member (`accept`) or drops it (`refuse`).
 #   path         one path under `at`: `accept` where the run time resolves one codec.
 #   declaration  one constant of the generated codecs file: the run time built each one.
-call|accept|134680b461|exclude({ y: binary(new Uint8Array([1, 2])) })
-call|accept|134680b461|extract({ y: binary(new Uint8Array([1, 2])) })
-call|accept|1503a463bb|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|1503a463bb|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|19fafa946d|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|19fafa946d|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|19fafa946d|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|19fafa946d|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|213752f822|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|213752f822|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|2a11564893|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|2a11564893|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|2a11564893|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|2a11564893|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|2e8ac2af5b|exclude({ y: binary(new Uint8Array([1, 2])) })
-call|accept|2e8ac2af5b|extract({ y: binary(new Uint8Array([1, 2])) })
-call|accept|2ff64383fb|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|2ff64383fb|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|364c824884|exclude({ y: binary(new Uint8Array([1, 2])) })
-call|accept|364c824884|extract({ y: binary(new Uint8Array([1, 2])) })
-call|accept|4231fc27ed|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|4231fc27ed|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|4231fc27ed|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|4231fc27ed|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|47384efa81|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|47384efa81|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|47384efa81|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|47384efa81|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|48952fa223|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|48952fa223|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|48952fa223|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|48952fa223|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|5101ce3622|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|5101ce3622|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|5101ce3622|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|5101ce3622|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|5347d2259c|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|5347d2259c|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|5347d2259c|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|5347d2259c|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|53b4072e97|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|53b4072e97|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|53b4072e97|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|53b4072e97|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|551fa3949a|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|551fa3949a|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|551fa3949a|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|551fa3949a|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|55667cffa1|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|55667cffa1|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|55667cffa1|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|55667cffa1|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|5f73ac1837|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|5f73ac1837|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|656c632bae|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|656c632bae|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|6936e6ab40|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|6936e6ab40|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|6936e6ab40|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|6936e6ab40|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|6b6622f635|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|6b6622f635|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|6b6622f635|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|6b6622f635|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|6ebe823f83|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|6ebe823f83|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|6ebe823f83|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|6ebe823f83|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|6ebe823f83|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|6ebe823f83|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|707436a0f7|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|707436a0f7|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|707436a0f7|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|707436a0f7|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|7c376a0cc0|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|7c376a0cc0|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|7c376a0cc0|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|7c376a0cc0|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|8fb53ff91f|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|8fb53ff91f|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|903453395c|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|903453395c|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|903453395c|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|903453395c|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|91add610f4|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|91add610f4|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|9b56b1cd60|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|9b56b1cd60|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|a03f0d4cd0|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|a03f0d4cd0|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|a03f0d4cd0|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|a03f0d4cd0|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|a451fb1b6d|exclude({ y: binary(new Uint8Array([1, 2])) })
-call|accept|a451fb1b6d|extract({ y: binary(new Uint8Array([1, 2])) })
-call|accept|a839799bcc|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|a839799bcc|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|a839799bcc|exclude({ y: binary(new Uint8Array([1, 2])) })
-call|accept|a839799bcc|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|a839799bcc|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|a839799bcc|extract({ y: binary(new Uint8Array([1, 2])) })
-call|accept|b0734ea9d8|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|b0734ea9d8|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|b32b9073d9|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|b32b9073d9|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|b32b915882|exclude({ x: binary(new Uint8Array([1, 2])) })
-call|accept|b32b915882|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|b32b915882|exclude({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|b32b915882|extract({ x: binary(new Uint8Array([1, 2])) })
-call|accept|b32b915882|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|b32b915882|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|b93194fc99|exclude({ y: binary(new Uint8Array([1, 2])) })
-call|accept|b93194fc99|extract({ y: binary(new Uint8Array([1, 2])) })
-call|accept|bdbcffe0fb|exclude({ y: binary(new Uint8Array([1, 2])) })
-call|accept|bdbcffe0fb|extract({ y: binary(new Uint8Array([1, 2])) })
-call|accept|c2fad6121b|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|c2fad6121b|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|c2fad6121b|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|c2fad6121b|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|ca9e033d48|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|ca9e033d48|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|ca9e033d48|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|ca9e033d48|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|cc777de378|exclude({ a: binary(new Uint8Array([1, 2])) })
-call|accept|cc777de378|extract({ a: binary(new Uint8Array([1, 2])) })
-call|accept|d1c6d17caf|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|d1c6d17caf|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|d1c6d17caf|exclude({ y: binary(new Uint8Array([1, 2])) })
-call|accept|d1c6d17caf|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|d1c6d17caf|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|d1c6d17caf|extract({ y: binary(new Uint8Array([1, 2])) })
-call|accept|d79a502a79|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|d79a502a79|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|d79a502a79|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|d79a502a79|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|e28a53281a|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|e28a53281a|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|e28a53281a|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|e28a53281a|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|f6e4cae3d0|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|f6e4cae3d0|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|f6e4cae3d0|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|f6e4cae3d0|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|f9b40d14b5|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|f9b40d14b5|exclude({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
-call|accept|f9b40d14b5|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
-call|accept|f9b40d14b5|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
 declaration|accept|14240a1a3c|constant
 declaration|accept|21aaeed038|wrapper
 declaration|accept|2fde239397|constant
@@ -177,12 +31,33 @@ declaration|accept|b94fbfc452|wrapper
 declaration|accept|cd5186102f|dissection k,s
 declaration|accept|df7ce37a15|constant
 declaration|accept|e563c80803|constant
+exclude|refuse|134680b461|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|1503a463bb|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|213752f822|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|2e8ac2af5b|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|2ff64383fb|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|364c824884|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|5f73ac1837|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|656c632bae|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|6ebe823f83|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|7509ff3330|exclude({ k: string("p") }) member 0
 exclude|refuse|7509ff3330|exclude({ s: string("x") }) member 0
+exclude|refuse|8fb53ff91f|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|91add610f4|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|9b56b1cd60|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|a2b2fd940a|exclude({ k: string("p") }) member 0
 exclude|refuse|a2b2fd940a|exclude({ s: string("x") }) member 0
+exclude|refuse|a451fb1b6d|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|a839799bcc|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|a922d5b931|exclude({ k: string("p") }) member 0
 exclude|refuse|a922d5b931|exclude({ s: string("x") }) member 0
+exclude|refuse|b0734ea9d8|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|b32b9073d9|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|b32b915882|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|b93194fc99|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|bdbcffe0fb|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|cc777de378|exclude({ a: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|d1c6d17caf|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|ff1df3b553|exclude({ k: string("p") }) member 0
 exclude|refuse|ff1df3b553|exclude({ s: string("x") }) member 0
 extract|accept|7509ff3330|extract({ k: string("p") }) member 0
@@ -193,6 +68,58 @@ extract|accept|a922d5b931|extract({ k: string("p") }) member 0
 extract|accept|a922d5b931|extract({ s: string("x") }) member 0
 extract|accept|ff1df3b553|extract({ k: string("p") }) member 0
 extract|accept|ff1df3b553|extract({ s: string("x") }) member 0
+extract|refuse|19fafa946d|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|19fafa946d|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|2a11564893|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|2a11564893|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|4231fc27ed|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|4231fc27ed|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|47384efa81|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|47384efa81|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|48952fa223|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|48952fa223|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|5101ce3622|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|5101ce3622|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|5347d2259c|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|5347d2259c|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|53b4072e97|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|53b4072e97|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|551fa3949a|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|551fa3949a|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|55667cffa1|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|55667cffa1|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|6936e6ab40|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|6936e6ab40|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|6b6622f635|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|6b6622f635|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|6ebe823f83|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|6ebe823f83|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|707436a0f7|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|707436a0f7|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|7c376a0cc0|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|7c376a0cc0|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|903453395c|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|903453395c|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|a03f0d4cd0|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|a03f0d4cd0|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|a839799bcc|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|a839799bcc|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|b32b915882|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|b32b915882|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|c2fad6121b|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|c2fad6121b|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|ca9e033d48|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|ca9e033d48|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|d1c6d17caf|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|d1c6d17caf|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|d79a502a79|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|d79a502a79|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|e28a53281a|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|e28a53281a|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|f6e4cae3d0|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|f6e4cae3d0|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|f9b40d14b5|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|f9b40d14b5|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
 path|accept|01209c0435|r.at(0)
 path|accept|01209c0435|r.at(0).at(0)
 path|accept|01209c0435|r.at(0).at(0).at(0)

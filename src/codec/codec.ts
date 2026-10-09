@@ -1385,10 +1385,10 @@ export const nullValue: AttributeCodec<null, Attribute<'NULL'>> = codecOfTerm({
  * as the array that was read off the wire.
  */
 export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> & {
-    (only: Uint8Array): ConstantCodec<Uint8Array, Attribute<'B'>>
+    (only: Uint8Array): ConstantCodec<Uint8Array, Attribute<'B'>> & LiteralMark
     (
         ...allowed: readonly Uint8Array[]
-    ): AttributeCodec<Uint8Array, Attribute<'B'>>
+    ): AttributeCodec<Uint8Array, Attribute<'B'>> & LiteralMark
     readonly set: {
         (): AttributeCodec<ReadonlySet<Uint8Array>, BS>
         (
@@ -4740,6 +4740,9 @@ type PinsALiteral<C> = C extends LiteralMark
  * Whether a decoded type is a literal type rather than a base. `'a'` and `'a' | 'b'` answer `true`;
  * `string`, `number` and `boolean` answer `false`, each excluded by its own row, because a base is
  * assignable *from* its literals and `extends` alone cannot tell the two apart.
+ *
+ * A {@link LiteralCarrier} answers `true`: the mark says that a literal constructor built the
+ * codec, and the carrier has no literal type that could say more.
  */
 type PinsALiteralValue<V> = [V] extends [never]
     ? false
@@ -4749,9 +4752,17 @@ type PinsALiteralValue<V> = [V] extends [never]
         ? false
         : boolean extends V
           ? false
-          : [V] extends [string | number | boolean]
+          : [V] extends [string | number | boolean | LiteralCarrier]
             ? true
             : false
+
+/**
+ * **The carriers of a literal with no literal type**: `dynamoNumber(n)` decodes a
+ * {@link DynamoNumber} and `binary(bytes)` a `Uint8Array`. The type reads the form of such a
+ * literal, and not its alternatives, so a clause at one keeps a member only on the values, which
+ * the type cannot decide.
+ */
+type LiteralCarrier = DynamoNumber | Uint8Array
 
 /**
  * An object codec with its spec forgotten — the constraint form, as {@link AnyCodec} is for codecs.
@@ -5144,20 +5155,34 @@ type FieldAt<Spec, K> = K extends keyof Spec ? Spec[K] : never
  * writes `S`, `decimal` and `number` write `N`, and those two are told apart by the values, `'1'`
  * against `1`. So the pair (attribute, values) is a base and its alternatives, and the two levels
  * cannot disagree about which member a clause keeps.
+ *
+ * `boolean` where the type cannot decide: a clause at a {@link LiteralCarrier} meets the member's
+ * form, and the alternatives have no literal type. The extraction and the exclusion each keep such
+ * a member, so each result type admits every member that the run time keeps.
  */
-type SpecKeeps<Spec, C> = {
+type SpecKeeps<Spec, C> = [SpecMisses<Spec, C>] extends [never]
+    ? true
+    : 'apart' extends SpecMisses<Spec, C>
+      ? false
+      : boolean
+
+/**
+ * At each clause key, why the member can miss the clause: `'apart'` where the declaration decides
+ * the miss, and `'values'` where only the alternatives of a {@link LiteralCarrier} decide it.
+ */
+type SpecMisses<Spec, C> = {
     [K in keyof C]-?: K extends RequiredKeysOf<Spec>
         ? PinsALiteral<MarkedCodec<FieldAt<Spec, K>>> extends true
             ? [AttributeOf<FieldAt<Spec, K>>] extends [AttributeOf<C[K]>]
                 ? [Decoded<FieldAt<Spec, K>>] extends [Decoded<C[K]>]
-                    ? never
-                    : K
-                : K
-            : K
-        : K
-}[keyof C] extends never
-    ? true
-    : false
+                    ? [Decoded<C[K]>] extends [LiteralCarrier]
+                        ? 'values'
+                        : never
+                    : 'apart'
+                : 'apart'
+            : 'apart'
+        : 'apart'
+}[keyof C]
 
 /**
  * **The member specs a clause keeps**, in the order they were declared.
@@ -5174,7 +5199,7 @@ export type Extracted<
     ...infer Tail extends readonly unknown[],
 ]
     ? [
-          ...(SpecKeeps<Head, C> extends Keep ? [Head] : []),
+          ...([Keep] extends [SpecKeeps<Head, C>] ? [Head] : []),
           ...Extracted<Tail, C, Keep>,
       ]
     : []
@@ -5196,7 +5221,7 @@ export type KeptOptions<
     ...infer Tail extends readonly unknown[],
 ]
     ? [
-          ...(SpecKeeps<SpecOf<Head>, C> extends Keep ? [Head] : []),
+          ...([Keep] extends [SpecKeeps<SpecOf<Head>, C>] ? [Head] : []),
           ...KeptOptions<Tail, C, Keep>,
       ]
     : []
@@ -5209,7 +5234,9 @@ type SpecOf<Option> = Option extends {
 
 /** The members of a tag table a clause keeps, keyed as they were. */
 export type KeptByTag<Spec, C, Keep extends boolean = true> = {
-    [K in keyof Spec as SpecKeeps<Spec[K], C> extends Keep ? K : never]: Spec[K]
+    [K in keyof Spec as [Keep] extends [SpecKeeps<Spec[K], C>]
+        ? K
+        : never]: Spec[K]
 }
 
 /** The entity a tag table describes, which is what its members describe. */
