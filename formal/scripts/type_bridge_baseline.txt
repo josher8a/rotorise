@@ -4822,6 +4822,7 @@ path|accept|48d717b1a8|r.narrow({ x: string("x") }).x
 path|accept|48d717b1a8|r.narrow({ x: string("y") })
 path|accept|48d717b1a8|r.narrow({ x: string("y") }).k
 path|accept|48d717b1a8|r.narrow({ x: string("y") }).x
+path|accept|48d717b1a8|r.y.at(0)
 path|accept|48d717b1a8|r.y.at(0).a
 path|accept|48d717b1a8|r.y.at(0).b
 path|accept|48d717b1a8|r.y.at(0).k
@@ -4970,6 +4971,7 @@ path|accept|53d9ab5880|r.narrow({ a: string("x") }).a
 path|accept|53d9ab5880|r.narrow({ a: string("y") }).a
 path|accept|558e87abbd|r.at(0).at(0)
 path|accept|558e87abbd|r.at(0).at(0).at(0)
+path|accept|565bd9cf8a|r.y.at(0)
 path|accept|565bd9cf8a|r.y.at(0).a
 path|accept|565bd9cf8a|r.y.at(0).b
 path|accept|565bd9cf8a|r.y.at(0).k
@@ -5388,7 +5390,6 @@ path|accept|96b5a516e8|r.x.k
 path|accept|981a87da6a|r.at(0).at(0)
 path|accept|981a87da6a|r.at(0).at(0).at(0)
 path|accept|9cf6a0fbdc|r.at(0).a
-path|accept|9cf6a0fbdc|r.at(0).b
 path|accept|9cf6a0fbdc|r.at(0).c
 path|accept|9efba4aac6|r.at(0).at(0)
 path|accept|9efba4aac6|r.at(0).at(0).at(0)
@@ -5807,6 +5808,8 @@ path|accept|e23efd3375|r.y.b.k
 path|accept|e380bd5a51|r.m.m
 path|accept|e380bd5a51|r.m.m.m
 path|accept|e433f7b0ef|r.a
+path|accept|e433f7b0ef|r.at(0)
+path|accept|e433f7b0ef|r.at(1)
 path|accept|e433f7b0ef|r.narrow({ a: binary(new Uint8Array([1, 2])) })
 path|accept|e433f7b0ef|r.narrow({ a: binary(new Uint8Array([1, 2])) }).a
 path|accept|e433f7b0ef|r.narrow({ a: boolean(false) })
@@ -5884,7 +5887,6 @@ path|accept|e75e162957|r.x.k
 path|accept|e76b341717|r.at(0).at(0)
 path|accept|e76b341717|r.at(0).at(0).at(0)
 path|accept|e76b341717|r.at(0).at(0).m
-path|accept|ea2821fcca|r.at(0).at(1).at(0)
 path|accept|ea7b823203|r.m.m
 path|accept|ea7b823203|r.m.m.m
 path|accept|eafe27dc7a|r.at(0).at(0)
@@ -6174,7 +6176,6 @@ path|refuse|01f5f4643b|r.narrow({ k: string("a", "b") }).x
 path|refuse|01f5f4643b|r.narrow({ k: string("a", "b") }).y
 path|refuse|01f5f4643b|r.x
 path|refuse|01f5f4643b|r.y
-path|refuse|0270036ed2|r.b.at(0).at(0)
 path|refuse|030e2f76b5|r.a
 path|refuse|030e2f76b5|r.b
 path|refuse|030e2f76b5|r.narrow({ a: binary(new Uint8Array([1, 2])) })
@@ -6485,7 +6486,6 @@ path|refuse|0eed14bbb1|r.narrow({ a: string("p") })
 path|refuse|0eed14bbb1|r.narrow({ a: string("q") })
 path|refuse|0eed14bbb1|r.narrow({ a: string("x") })
 path|refuse|0eed14bbb1|r.narrow({ a: string("y") })
-path|refuse|0f82520aee|r.at(0)
 path|refuse|1031aa5749|r.a
 path|refuse|1031aa5749|r.c
 path|refuse|1031aa5749|r.narrow({ b: binary(new Uint8Array([1, 2])) })
@@ -6597,7 +6597,6 @@ path|refuse|13be6ae1ac|r.a
 path|refuse|13be6ae1ac|r.a.k
 path|refuse|13be6ae1ac|r.a.x
 path|refuse|13be6ae1ac|r.a.y
-path|refuse|13be6ae1ac|r.b.at(0)
 path|refuse|13be6ae1ac|r.c
 path|refuse|13be6ae1ac|r.narrow({ a: binary(new Uint8Array([1, 2])) })
 path|refuse|13be6ae1ac|r.narrow({ a: boolean(false) })
@@ -6848,7 +6847,6 @@ path|refuse|272a547e53|r.m.s
 path|refuse|272a547e53|r.m.y
 path|refuse|272a547e53|r.s
 path|refuse|272a547e53|r.y
-path|refuse|277442aa4e|r.b.at(0)
 path|refuse|277442aa4e|r.c.at(2)
 path|refuse|27746d7246|r.at(1)
 path|refuse|2a6ed24db4|r.a.v.at(1)
@@ -7270,8 +7268,6 @@ path|refuse|48d717b1a8|r.narrow({ k: string("a", "b") }).x
 path|refuse|48d717b1a8|r.narrow({ k: string("a", "b") }).y
 path|refuse|48d717b1a8|r.x
 path|refuse|48d717b1a8|r.y
-path|refuse|48d717b1a8|r.y.at(0).at(0)
-path|refuse|48d717b1a8|r.y.at(1)
 path|refuse|48dee2fa7b|r.a
 path|refuse|48dee2fa7b|r.c
 path|refuse|48dee2fa7b|r.narrow({ a: binary(new Uint8Array([1, 2])) })
@@ -7330,8 +7326,6 @@ path|refuse|52a0e65764|r.at(0).narrow({ b: string("y") })
 path|refuse|52a0e65764|r.at(1).a
 path|refuse|52a0e65764|r.at(2)
 path|refuse|535b5a8cb3|r.at(1)
-path|refuse|565bd9cf8a|r.y.at(0).at(0)
-path|refuse|565bd9cf8a|r.y.at(1)
 path|refuse|56841aad9e|r.at(2)
 path|refuse|56b2494d36|r.a
 path|refuse|56b2494d36|r.c
@@ -7777,8 +7771,6 @@ path|refuse|74ca8faf77|r.narrow({ y: string("x") })
 path|refuse|74ca8faf77|r.narrow({ y: string("y") })
 path|refuse|74ca8faf77|r.s
 path|refuse|74ca8faf77|r.x
-path|refuse|74ca8faf77|r.x.at(0).at(0)
-path|refuse|74ca8faf77|r.x.at(1).at(0)
 path|refuse|74ca8faf77|r.y
 path|refuse|74ca8faf77|r.y.a
 path|refuse|74ca8faf77|r.y.b
@@ -7790,7 +7782,6 @@ path|refuse|778a02981d|r.a
 path|refuse|778a02981d|r.a.at(2)
 path|refuse|778a02981d|r.c
 path|refuse|7950b78ebc|r.at(2)
-path|refuse|7c8e0c9dba|r.b.at(0)
 path|refuse|7c8e0c9dba|r.c.at(2)
 path|refuse|7c8e0c9dba|r.narrow({ a: boolean(false) })
 path|refuse|7c8e0c9dba|r.narrow({ a: boolean(true) })
@@ -8055,7 +8046,6 @@ path|refuse|94784ca779|r.at(1).narrow({ c: decimal("2.5") })
 path|refuse|94784ca779|r.at(1).narrow({ c: dynamoNumber(orThrow(DynamoNumber.from("1"))) })
 path|refuse|94784ca779|r.at(1).narrow({ c: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })
 path|refuse|94784ca779|r.at(2)
-path|refuse|959db02cce|r.x.at(0).at(0)
 path|refuse|973d176bfc|r.at(0).at(1)
 path|refuse|981c19cf72|r.k
 path|refuse|981c19cf72|r.narrow({ k: string("a", "b") })
@@ -8583,7 +8573,6 @@ path|refuse|d18bc7abe8|r.narrow({ k: string("a", "b") }).x
 path|refuse|d18bc7abe8|r.narrow({ k: string("a", "b") }).y
 path|refuse|d18bc7abe8|r.x
 path|refuse|d18bc7abe8|r.y
-path|refuse|d374039d37|r.at(0)
 path|refuse|d51ed67780|r.k
 path|refuse|d51ed67780|r.narrow({ k: string("a", "b") })
 path|refuse|d51ed67780|r.narrow({ k: string("a", "b") }).k
@@ -8752,9 +8741,6 @@ path|refuse|e04f5b1035|r.narrow({ v: string("y") })
 path|refuse|e04f5b1035|r.v
 path|refuse|e23efd3375|r.y.a
 path|refuse|e23efd3375|r.y.c
-path|refuse|e433f7b0ef|r.at(0).at(0)
-path|refuse|e433f7b0ef|r.at(1).at(0)
-path|refuse|e433f7b0ef|r.at(2)
 path|refuse|e47e443053|r.a
 path|refuse|e47e443053|r.a.v.at(2)
 path|refuse|e47e443053|r.b
