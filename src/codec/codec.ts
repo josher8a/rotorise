@@ -1087,14 +1087,16 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> & {
     <const T extends DynamoNumber>(
         only: T,
     ): ConstantCodec<T, Attribute<'N'>> & LiteralMark
-    <const T extends DynamoNumber>(
-        ...allowed: readonly T[]
-    ): AttributeCodec<T, Attribute<'N'>> & LiteralMark
+    // a tuple, because inference unions no two object candidates: `readonly T[]` reads `T` off
+    // the first numeral, and refuses a second numeral with another text
+    <const T extends readonly DynamoNumber[]>(
+        ...allowed: T
+    ): AttributeCodec<T[number], Attribute<'N'>> & LiteralMark
     readonly set: {
         (): AttributeCodec<ReadonlySet<DynamoNumber>, NS>
-        <const T extends DynamoNumber>(
-            ...allowed: readonly T[]
-        ): AttributeCodec<ReadonlySet<T>, NS>
+        <const T extends readonly DynamoNumber[]>(
+            ...allowed: T
+        ): AttributeCodec<ReadonlySet<T[number]>, NS>
     }
 } = Object.assign(
     literalCapability('number'),
@@ -4742,7 +4744,7 @@ type PinsALiteral<C> = C extends LiteralMark
  * assignable *from* its literals and `extends` alone cannot tell the two apart.
  *
  * A {@link LiteralCarrier} answers `true`: the mark says that a literal constructor built the
- * codec, and the carrier has no literal type that could say more.
+ * codec, and the carrier can hold a value that no literal type names.
  */
 type PinsALiteralValue<V> = [V] extends [never]
     ? false
@@ -4757,12 +4759,24 @@ type PinsALiteralValue<V> = [V] extends [never]
             : false
 
 /**
- * **The carriers of a literal with no literal type**: `dynamoNumber(n)` decodes a
- * {@link DynamoNumber} and `binary(bytes)` a `Uint8Array`. The type reads the form of such a
- * literal, and not its alternatives, so a clause at one keeps a member only on the values, which
- * the type cannot decide.
+ * **The carriers of a literal that is no primitive**: `dynamoNumber(n)` decodes a
+ * {@link DynamoNumber} and `binary(bytes)` a `Uint8Array`.
  */
 type LiteralCarrier = DynamoNumber | Uint8Array
+
+/**
+ * **Whether the type cannot name the alternatives of a carrier**: `true` for a `Uint8Array`, which
+ * has no literal type, and for a {@link DynamoNumber} whose text is `string`. A clause at such a
+ * value keeps a member only on the values, which the type cannot decide. `boolean` for a union
+ * that holds both kinds of value.
+ */
+type UnnamedValues<V> = V extends Uint8Array
+    ? true
+    : V extends DynamoNumber
+      ? string extends V['digits']
+          ? true
+          : false
+      : false
 
 /**
  * An object codec with its spec forgotten — the constraint form, as {@link AnyCodec} is for codecs.
@@ -5156,9 +5170,9 @@ type FieldAt<Spec, K> = K extends keyof Spec ? Spec[K] : never
  * against `1`. So the pair (attribute, values) is a base and its alternatives, and the two levels
  * cannot disagree about which member a clause keeps.
  *
- * `boolean` where the type cannot decide: a clause at a {@link LiteralCarrier} meets the member's
- * form, and the alternatives have no literal type. The extraction and the exclusion each keep such
- * a member, so each result type admits every member that the run time keeps.
+ * `boolean` where the type cannot decide: a clause meets the member's form, and the type cannot
+ * name the alternatives of one side ({@link UnnamedValues}). The extraction and the exclusion each
+ * keep such a member, so each result type admits every member that the run time keeps.
  */
 type SpecKeeps<Spec, C> = [SpecMisses<Spec, C>] extends [never]
     ? true
@@ -5168,17 +5182,19 @@ type SpecKeeps<Spec, C> = [SpecMisses<Spec, C>] extends [never]
 
 /**
  * At each clause key, why the member can miss the clause: `'apart'` where the declaration decides
- * the miss, and `'values'` where only the alternatives of a {@link LiteralCarrier} decide it.
+ * the miss, and `'values'` where only alternatives that the type cannot name decide it.
  */
 type SpecMisses<Spec, C> = {
     [K in keyof C]-?: K extends RequiredKeysOf<Spec>
         ? PinsALiteral<MarkedCodec<FieldAt<Spec, K>>> extends true
             ? [AttributeOf<FieldAt<Spec, K>>] extends [AttributeOf<C[K]>]
                 ? [Decoded<FieldAt<Spec, K>>] extends [Decoded<C[K]>]
-                    ? [Decoded<C[K]>] extends [LiteralCarrier]
+                    ? true extends UnnamedValues<Decoded<C[K]>>
                         ? 'values'
                         : never
-                    : 'apart'
+                    : true extends UnnamedValues<Decoded<FieldAt<Spec, K>>>
+                      ? 'values'
+                      : 'apart'
                 : 'apart'
             : 'apart'
         : 'apart'
@@ -5289,7 +5305,9 @@ type CarrierOf<V> = V extends string
       ? number
       : V extends boolean
         ? boolean
-        : V
+        : V extends DynamoNumber
+          ? DynamoNumber
+          : V
 
 /**
  * Rejects a clause a member could never answer, at the call rather than on the result.

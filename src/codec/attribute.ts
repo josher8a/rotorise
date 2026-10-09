@@ -140,6 +140,59 @@ export const isNumeral = (s: string): boolean => {
 export const isStoredNumeral = (s: string): boolean =>
     s !== '-0' && /^-?(?:0|[1-9]\d*)(?:\.\d*[1-9])?$/.test(s) && isNumeral(s)
 
+/**
+ * **The stored text of a literal numeral**, computed at the type: the sign `+` drops, the leading
+ * zeros of the whole part and the trailing zeros of the fraction drop, and every zero is `'0'`.
+ *
+ * `string` where the type does not compute the text: an argument that is not a literal, and a
+ * spelling with an exponent, which the type does not shift. A literal for a spelling that
+ * {@link isNumeral} refuses holds no value, because {@link DynamoNumber.from} returns the error.
+ */
+type NormalNumeral<T extends string> = string extends T
+    ? string
+    : T extends `-${infer Magnitude}`
+      ? Signed<'-', NormalMagnitude<Magnitude>>
+      : T extends `+${infer Magnitude}`
+        ? Signed<'', NormalMagnitude<Magnitude>>
+        : Signed<'', NormalMagnitude<T>>
+
+type Signed<Sign extends string, M extends string> = string extends M
+    ? string
+    : M extends '0'
+      ? '0'
+      : `${Sign}${M}`
+
+type NormalMagnitude<T extends string> =
+    T extends `${infer Whole}.${infer Fraction}`
+        ? [AllDigits<Whole>, AllDigits<Fraction>] extends [true, true]
+            ? Joined<TrimLeadingZeros<Whole>, TrimTrailingZeros<Fraction>>
+            : string
+        : AllDigits<T> extends true
+          ? Joined<TrimLeadingZeros<T>, ''>
+          : string
+
+type Joined<
+    Whole extends string,
+    Fraction extends string,
+> = `${Whole extends '' ? '0' : Whole}${Fraction extends '' ? '' : `.${Fraction}`}`
+
+type Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
+
+/** `true` for one digit or more, and nothing else. */
+type AllDigits<T extends string> = T extends `${Digit}${infer Rest}`
+    ? Rest extends ''
+        ? true
+        : AllDigits<Rest>
+    : false
+
+type TrimLeadingZeros<T extends string> = T extends `0${infer Rest}`
+    ? TrimLeadingZeros<Rest>
+    : T
+
+type TrimTrailingZeros<T extends string> = T extends `${infer Rest}0`
+    ? TrimTrailingZeros<Rest>
+    : T
+
 // ── the carrier `N` actually has ─────────────────────────────────────
 //
 // The two predicates above are properties of the carrier rather than of any codec, and until now
@@ -160,16 +213,32 @@ export const isStoredNumeral = (s: string): boolean =>
  * and is exact. `number` holds a JS float and is lossy by construction. `decimal` holds a string
  * and is exact but compares as text. A caller picks the carrier and takes its cost, which is why
  * all three are on the surface rather than one being the others' spelling.
+ *
+ * `S` is the stored text as a literal type, where {@link DynamoNumber.from} can compute the text
+ * from a literal argument, and `string` elsewhere.
  */
-export class DynamoNumber {
+export class DynamoNumber<S extends string = string> {
     /**
      * The numeral text, in the form the store returns. Always {@link isStoredNumeral}, because
      * the constructor is the only way in and it normalises.
      */
-    readonly digits: string
+    readonly digits: S
 
-    private constructor(digits: string) {
+    private constructor(digits: S) {
         this.digits = digits
+    }
+
+    /**
+     * **`instanceof` narrows to a numeral of unknown text.** A generic class narrows `instanceof`
+     * to its `any` instantiation, which would pass an unknown value as any numeral, `'1'` among
+     * them. The predicate states the one thing the test proves: some numeral.
+     */
+    static [Symbol.hasInstance](value: unknown): value is DynamoNumber {
+        return (
+            typeof value === 'object' &&
+            value !== null &&
+            DynamoNumber.prototype.isPrototypeOf(value)
+        )
     }
 
     /**
@@ -223,7 +292,15 @@ export class DynamoNumber {
      * before one of these is built. Two places refuse. The `encode` of {@link decimal} refuses,
      * because `decimal` hands the caller back text. Every numeric read refuses, because the store
      * returns the stored form only, and a read that re-spelled the numeral would not write back.
+     *
+     * **The type computes the same text** from a literal argument: `from('1.50')` holds a
+     * `DynamoNumber<'1.5'>`. The overload states that fact, and the implementation cannot prove
+     * it, because `normalise` returns a `string`, so a test pins the two texts equal on each
+     * spelling. {@link NormalNumeral} names the spellings that fall back to `string`.
      */
+    static from<const T extends string>(
+        digits: T,
+    ): Result<DynamoNumber<NormalNumeral<T>>>
     static from(digits: string): Result<DynamoNumber> {
         return isNumeral(digits)
             ? new DynamoNumber(DynamoNumber.normalise(digits))
