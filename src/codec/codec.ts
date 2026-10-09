@@ -5234,24 +5234,42 @@ type TagsAtSpecs<S, K, A> = S extends unknown
         : never
     : never
 
-/** A clause key no member could ever answer, whatever the values turn out to be. */
+/**
+ * A clause key no member could ever answer, whatever the values turn out to be: the model's clause
+ * that is not keyed (`Calculus.AltClause.keyed`). A literal whose alternatives meet no member's is
+ * keyed, and keeps nothing: that is a fact about the values, and the run time answers it.
+ */
 type BadClauseKey<S, C> = {
     [K in keyof C]: PinsALiteral<C[K]> extends true
         ? [TagsAtSpecs<S, K, AttributeOf<C[K]>>] extends [never]
             ? K
-            : [Decoded<C[K]>] extends [TagsAtSpecs<S, K, AttributeOf<C[K]>>]
+            : [CarrierOf<Decoded<C[K]>>] extends [
+                    CarrierOf<TagsAtSpecs<S, K, AttributeOf<C[K]>>>,
+                ]
               ? never
               : K
         : K
 }[keyof C]
 
 /**
+ * **The carrier of a decoded literal**: the base type that the literal widens to. At one attribute
+ * the carrier names the adapter word of the model's form (`Calculus.pinForm`): `number`, `decimal`
+ * and `dynamoNumber` each write `N`, and decode a `number`, a `string` and a {@link DynamoNumber}.
+ */
+type CarrierOf<V> = V extends string
+    ? string
+    : V extends number
+      ? number
+      : V extends boolean
+        ? boolean
+        : V
+
+/**
  * Rejects a clause a member could never answer, at the call rather than on the result.
  *
- * Three failures with one message, because they are one mistake in three spellings: a value that is
- * no literal at all, a literal at a base no member pins that key at, and a literal whose
- * alternatives no member carries. Each is decidable from the declaration, which is the line the
- * runtime's refusals draw too.
+ * Two failures with one message, because they are one mistake in two spellings: a value that is no
+ * literal at all, and a literal at a base no member pins that key at. Each is decidable from the
+ * declaration, which is the line the runtime's refusals draw too.
  */
 export type ValidateClause<S, C> = [BadClauseKey<S, C>] extends [never]
     ? unknown

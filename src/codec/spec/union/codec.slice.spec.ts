@@ -270,12 +270,8 @@ describe('a clause is a literal at a base', () => {
             object({ t: toX, k: string('h') }),
             object({ t: string('z'), k: string('p') }),
         ])
-        // the type refuses both clauses, because the adapter's member decodes no literal at `t`. The
-        // runtime answers for a caller who reaches past the type
-        const plain = viaX.extract(
-            // @ts-expect-error the member under the adapter decodes `string`, not `'a'`
-            { t: string('a') },
-        )
+        // the other member pins `t` at a plain string, so the clause is answered, and it keeps nothing
+        const plain = viaX.extract({ t: string('a') })
         expect(plain.def).toEqual({ kind: 'never' })
         const same = viaX.extract(
             // @ts-expect-error a clause pins a literal at the type, and `toX` decodes `string`
@@ -295,10 +291,7 @@ describe('a clause is a literal at a base', () => {
             object({ t: toText, k: string('h') }),
             object({ t: decimal('2'), k: string('p') }),
         ])
-        const text = viaText.extract(
-            // @ts-expect-error the member under the adapter decodes `string`, not `'1'`
-            { t: decimal('1') },
-        )
+        const text = viaText.extract({ t: decimal('1') })
         expect(text.def).toEqual({ kind: 'never' })
 
         const toTwo = held(dynamoNumber(one), number, {
@@ -310,10 +303,7 @@ describe('a clause is a literal at a base', () => {
             object({ t: toTwo, k: string('h') }),
             object({ t: number(3), k: string('p') }),
         ])
-        const two = viaTwo.extract(
-            // @ts-expect-error the member under the adapter decodes `number`, not `1`
-            { t: number(1) },
-        )
+        const two = viaTwo.extract({ t: number(1) })
         expect(two.def).toEqual({ kind: 'never' })
 
         // a library adapter carries one identity for each name, so its members stay kept
@@ -557,11 +547,8 @@ describe('the type pins a key only where a literal constructor built the codec',
         object({ k: string('B'), b: string }),
     ])
 
-    it('refuses at the clause a literal that only an adapter decodes to', () => {
-        const kept = adapterOrB.extract(
-            // @ts-expect-error the adapter decodes 'A' over a term that pins nothing
-            { k: string('A') },
-        )
+    it('answers a literal that only an adapter decodes to with no member, because a plain clause never meets an adapter', () => {
+        const kept = adapterOrB.extract({ k: string('A') })
         expect(kept.def).toEqual({ kind: 'never' })
     })
 
@@ -620,16 +607,13 @@ describe('a union of objects has the same slice', () => {
     })
 
     /**
-     * **A tag no option carries is refused by the type and answered by the runtime**, and the two
-     * are not in disagreement. It is a typo, decidable from the declaration, so the type says so at
-     * the call. The runtime has nothing to add: the base matches and the alternatives simply do not
-     * meet, which is a fact about values, and the answer to that is the empty extraction.
+     * **A tag no option carries is answered at the type as at run time.** The base matches and the
+     * alternatives do not meet: that is a fact about the values, and its answer is the empty
+     * extraction (`Calculus.AltClause.extract`). The model refuses only a clause that it cannot
+     * answer (`Calculus.AltClause.keyed`).
      */
-    it('refuses a tag no option carries at the type, and answers never past it', () => {
-        const none = plain.extract(
-            // @ts-expect-error `z` is a tag no option carries
-            { kind: string('z') },
-        )
+    it('answers a tag no option carries with no member, at the type as at run time', () => {
+        const none = plain.extract({ kind: string('z') })
         expect(none.def).toEqual({ kind: 'never' })
     })
 
