@@ -219,3 +219,87 @@ has no type-level gate: `union` decides compatibility at run time only.
 which needs a codec's type to carry which constructor built it. It does not today. Widening the
 term reader instead would not close it: an adapter's decode is arbitrary code, and no term says
 what it returns.
+
+---
+
+## Known: no vector puts the preconditions of the host to `preconditionOf`
+
+**Observation.** The model states the precondition of a clause as data (`preconditionOf`), and
+`preconditionOf_exact` proves the precondition exact or refuses it. The host states the same
+data as `at(...).preconditions`, computed by `preconditionsOf(...)` in `src/codec/codec.ts`. The
+emitter has no form for a precondition. Measured 2026-10-09:
+
+    grep -c -i precondition src/codec/lean.ts
+    0
+
+The path vectors state the decision of `at` and of `narrow`, and no precondition.
+
+**Effect.** A host precondition that drifts from `preconditionOf` passes the gate. The tests of
+the host pin each precondition form and the refusal of a clause key with no exact precondition.
+The refusal of an empty clause below the root has no test. Measured 2026-10-09: a mutant of
+`preconditionsOf(...)` that never refuses an empty clause passes `npx vitest --run src`, with 62
+files and 1349 tests passed, 9 skipped. A throwaway script shows that the refusal fires at HEAD:
+
+    object({ u: union([object({ k: number(1), a: string }), object({ k: number(2), b: string })]) })
+      .item.at((p) => p.u.narrow({}).a).preconditions
+      CodecError: the clause at 'u' names no key, so no precondition states that the attribute is a map
+
+**Pin.** `src/codec/spec/union/codec.preconditions.spec.ts`, on the host side only. No vector, and
+no test of the refusal of an empty clause.
+
+---
+
+## Known: `narrow` at a recursive union has no row in the path vectors
+
+**Observation.** The pool states a clause path only where `unionAt(...)` in `src/codec/lean.ts`
+accepts the decision of the host. `unionAt(...)` refuses a union that is a binder: the options
+read the union through a variable, `narrow` reads the variable open, and the host reads the thunk
+closed. The host narrows at such a union. Measured 2026-10-09 with a throwaway script:
+
+    const Node = lazy(() => union([object({ k: string('leaf'), v: string }),
+                                   object({ k: string('node'), c: array(Node) })]))
+    object({ n: Node }).item.at((p) => p.n.narrow({ k: string('leaf') }).v)
+      runtime: path n.v, term {"kind":"string"}
+    unionAt(hostAt(object({ n: Node }), ['n']))
+      false
+
+Each `NarrowRows` of the generated path files narrows a `Term.union`, and none narrows a
+`Term.mu`. The model's `narrowFrames` has a case for a recursive union, and no row reads the case.
+
+**Effect.** The decision of the host at a clause on a recursive union reaches no kernel. A host
+walk that narrows such a union wrongly passes the gate.
+
+**Pin.** The docstring of `unionAt(...)` states the refusal. No test asserts that a recursive
+union has no clause row, and no test of the host narrows a recursive union.
+
+---
+
+## Known: the path type of `narrow` reads the decoded literal of a caller's adapter
+
+**Observation.** This is the defect of `extract` above, at `narrow`. The path type decides which
+members a clause keeps with the types Kept and StoredApart in `src/codec/codec.ts`. StoredApart
+pins a literal by the decoded type of a codec. At run time the walk of `at` narrows by the stored
+view of the term, and the stored view of an adapter is its inner term. So an adapter whose decode
+narrows to a literal type pins a literal in the type, and pins none in the walk. Measured
+2026-10-09 with a throwaway script and `npx tsc --noEmit`:
+
+    const tagA = held(string, string('A'), { encode: (v: 'A') => v, decode: ... })
+    const M = object({ u: union([object({ k: tagA, a: string }),
+                                 object({ k: string('B'), b: string })]) }).item
+    M.at((p) => p.u.narrow({ k: string('B') }).b)
+      type checker: accepted, a codec of string
+      runtime:      term {"kind":"never"}, and encode refuses:
+                    'u.b' is declared by some variants only ... Call `narrow({...})` ...
+    M.at((p) => p.u.narrow({ k: string('B') }).a)
+      type checker: refused
+
+The type drops the member that holds the adapter. The walk keeps the member, because the stored
+view `string` is not apart from the literal `B`.
+
+**Effect.** A caller gets a green typecheck and a path whose codec refuses every write. The
+refusal tells the caller to call `narrow`, which the caller already called.
+
+**Pin.** None. No test declares a clause beside an adapter that narrows to a literal type.
+
+**Fix direction.** The same as for `extract`: the type-level test has to read the constructor
+rather than the decoded type, and a codec's type does not carry the constructor today.
