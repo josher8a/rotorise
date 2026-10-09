@@ -9,9 +9,9 @@
  * refuses, that nothing rounds unless the caller asks for a JS number, and that the two equalities
  * are different questions with different answers.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { DynamoNumber, isStoredNumeral } from '../../attribute'
-import { CodecError, failed, orThrow } from '../../result'
+import { CodecError, failed, orThrow, type Result } from '../../result'
 
 /** The carrier, where the text is known good. */
 const num = (digits: string): DynamoNumber => orThrow(DynamoNumber.from(digits))
@@ -160,5 +160,82 @@ describe('there is one equality, because there is one spelling', () => {
     it('and different numbers are still different', () => {
         expect(num('1.5').equals(num('1.6'))).toBe(false)
         expect(num('1.5').equals(num('-1.5'))).toBe(false)
+    })
+})
+
+/**
+ * **The type holds the stored text of a literal numeral**, so a clause at a `dynamoNumber` literal
+ * compares the numerals at the type as the run time does. The type computes the text by its own
+ * rules, and no checker proves that the two computations agree. So each spelling below states the
+ * text once, and the type and the run time must each hold that text.
+ */
+describe('the type holds the text that the run time holds', () => {
+    it('narrows `instanceof` to a numeral of unknown text, because the test proves no text', () => {
+        const seen: unknown = orThrow(DynamoNumber.from('2'))
+        if (seen instanceof DynamoNumber) {
+            // @ts-expect-error a numeral of unknown text is not the numeral `1`
+            const one: DynamoNumber<'1'> = seen
+            expect(one.digits).toBe('2')
+        }
+    })
+
+    /** `text` must be the literal text of the type, and the text of the run time. */
+    const holds = <S extends string>(
+        held: Result<DynamoNumber<S>>,
+        text: string extends S ? never : NoInfer<S>,
+    ): void => {
+        expect(orThrow(held).digits).toBe(text)
+    }
+
+    it('drops the sign `+`, the leading zeros, and the trailing zeros, as the run time does', () => {
+        holds(DynamoNumber.from('1'), '1')
+        holds(DynamoNumber.from('+1'), '1')
+        holds(DynamoNumber.from('-1'), '-1')
+        holds(DynamoNumber.from('01'), '1')
+        holds(DynamoNumber.from('001'), '1')
+        holds(DynamoNumber.from('1.0'), '1')
+        holds(DynamoNumber.from('1.50'), '1.5')
+        holds(DynamoNumber.from('-1.50'), '-1.5')
+        holds(DynamoNumber.from('0.5'), '0.5')
+        holds(DynamoNumber.from('00.05'), '0.05')
+        holds(DynamoNumber.from('2.5'), '2.5')
+        holds(DynamoNumber.from('10'), '10')
+        holds(DynamoNumber.from('100'), '100')
+        holds(DynamoNumber.from('1000.000'), '1000')
+        holds(DynamoNumber.from('-007.700'), '-7.7')
+        holds(DynamoNumber.from('123.456'), '123.456')
+        holds(DynamoNumber.from('0.000001'), '0.000001')
+        holds(
+            DynamoNumber.from('12345678901234567890123456789012345678'),
+            '12345678901234567890123456789012345678',
+        )
+    })
+
+    it('holds one spelling of zero, as the run time does', () => {
+        holds(DynamoNumber.from('0'), '0')
+        holds(DynamoNumber.from('-0'), '0')
+        holds(DynamoNumber.from('+0'), '0')
+        holds(DynamoNumber.from('00'), '0')
+        holds(DynamoNumber.from('0.0'), '0')
+        holds(DynamoNumber.from('-0.0'), '0')
+        holds(DynamoNumber.from('000.000'), '0')
+    })
+
+    /**
+     * The type does not shift the point by an exponent, and reads no text that is no literal. There
+     * it holds `string`, so a clause at such a numeral keeps every member that the run time can keep.
+     */
+    it('holds `string` where the type does not compute the text', () => {
+        const spelled: string = '1.50'
+        expectTypeOf(num(spelled).digits).toEqualTypeOf<string>()
+        expectTypeOf(
+            orThrow(DynamoNumber.from('1e5')).digits,
+        ).toEqualTypeOf<string>()
+        expectTypeOf(
+            orThrow(DynamoNumber.from('-2.5e-3')).digits,
+        ).toEqualTypeOf<string>()
+        expectTypeOf(
+            orThrow(DynamoNumber.fromNumber(1.5)).digits,
+        ).toEqualTypeOf<string>()
     })
 })

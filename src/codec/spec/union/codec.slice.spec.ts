@@ -662,18 +662,19 @@ describe('discriminatedUnion slices like the dissection it is', () => {
 })
 
 /**
- * **A literal whose carrier has no literal type is answered, and coarsely.** A `dynamoNumber`
- * literal decodes a `DynamoNumber` and a `binary` literal a `Uint8Array`, so the type reads the form
- * of the clause and not its alternatives. The model answers such a clause (`Calculus.AltClause.keyed`
- * holds), so the type answers it too. Where only the alternatives decide a member, the extraction
- * and the exclusion each keep the member: each result type admits every member that the run time
- * keeps, and some that it drops. A literal type for the numeral is a later pass.
+ * **A clause at a carrier literal is answered.** The model answers such a clause
+ * (`Calculus.AltClause.keyed` holds), so the type answers it too. A `dynamoNumber` literal decodes
+ * a `DynamoNumber` whose type holds the stored text, so the type compares the numerals as the run
+ * time does. A `binary` literal decodes a `Uint8Array`, which has no literal type, and a numeral
+ * from text that is no literal holds `string`. Where only such values decide a member, the
+ * extraction and the exclusion each keep the member: each result type admits every member that the
+ * run time keeps, and some that it drops.
  */
-describe('a clause at a literal whose carrier has no literal type', () => {
+describe('a clause at a literal whose carrier is no primitive', () => {
     const one = orThrow(DynamoNumber.from('1'))
     const two = orThrow(DynamoNumber.from('2'))
 
-    it('answers a clause at a `dynamoNumber` literal, and its type admits every member that the run time keeps', () => {
+    it('keeps at a `dynamoNumber` literal exactly the members that the run time keeps', () => {
         const byNumeral = union([
             object({ k: string('a'), n: dynamoNumber(one) }),
             object({ k: string('b'), n: dynamoNumber(two) }),
@@ -682,7 +683,58 @@ describe('a clause at a literal whose carrier has no literal type', () => {
         expect(kept.unsafeEncode({ k: 'a', n: one })).toEqual({
             M: { k: { S: 'a' }, n: { N: '1' } },
         })
-        // the run time drops the member at `2`; the type cannot compare the numerals, so it admits it
+        // @ts-expect-error the run time drops the member at `2`, and the type compares the numerals
+        expect(failed(kept.encode({ k: 'b', n: two }))).toBe(true)
+
+        const rest = byNumeral.exclude({ n: dynamoNumber(one) })
+        expect(rest.unsafeEncode({ k: 'b', n: two })).toEqual({
+            M: { k: { S: 'b' }, n: { N: '2' } },
+        })
+        // @ts-expect-error the run time drops the member at `1`, and the type compares the numerals
+        expect(failed(rest.encode({ k: 'a', n: one }))).toBe(true)
+    })
+
+    it('compares two spellings of one number as one numeral, because the type holds the stored text', () => {
+        const byNumeral = union([
+            object({ k: string('a'), n: dynamoNumber(one) }),
+            object({ k: string('b'), n: dynamoNumber(two) }),
+        ])
+        const kept = byNumeral.extract({
+            n: dynamoNumber(orThrow(DynamoNumber.from('1.0'))),
+        })
+        expect(kept.unsafeEncode({ k: 'a', n: one })).toEqual({
+            M: { k: { S: 'a' }, n: { N: '1' } },
+        })
+        // @ts-expect-error the run time drops the member at `2`, and the type compares the numerals
+        expect(failed(kept.encode({ k: 'b', n: two }))).toBe(true)
+    })
+
+    it('answers a clause at a numeral that no member pins, and keeps no member, as the run time does', () => {
+        const byNumeral = union([
+            object({ k: string('a'), n: dynamoNumber(one) }),
+            object({ k: string('b'), n: dynamoNumber(two) }),
+        ])
+        const none = byNumeral.extract({
+            n: dynamoNumber(orThrow(DynamoNumber.from('3'))),
+        })
+        expect(none.def).toEqual({ kind: 'never' })
+        // @ts-expect-error the run time keeps no member, and the type compares the numerals
+        expect(failed(none.encode({ k: 'a', n: one }))).toBe(true)
+    })
+
+    it('admits every member that the run time keeps, where the type holds no text for the numeral', () => {
+        const spelled: string = '1'
+        const byNumeral = union([
+            object({ k: string('a'), n: dynamoNumber(one) }),
+            object({ k: string('b'), n: dynamoNumber(two) }),
+        ])
+        const kept = byNumeral.extract({
+            n: dynamoNumber(orThrow(DynamoNumber.from(spelled))),
+        })
+        expect(kept.unsafeEncode({ k: 'a', n: one })).toEqual({
+            M: { k: { S: 'a' }, n: { N: '1' } },
+        })
+        // the run time drops the member at `2`; the type holds no text for the clause, so it admits it
         const coarse: Parameters<typeof kept.encode>[0] = { k: 'b', n: two }
         expect(failed(kept.encode(coarse))).toBe(true)
     })
