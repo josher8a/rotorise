@@ -46,8 +46,9 @@ def altsSub : Option Pin → Pin → Bool
 
 /-- **A clause at union level**: the names it speaks about, and the pin it admits at each.
 
-    No index: a union declares no key set, so a name the clause asks for that no option declares
-    is a clause that keeps nothing, which is `never` said in a place that can say it. -/
+    No index: a union declares no key set, so the clause carries no proof that the options pin its
+    names. `AltClause.keyed` decides that against the options, and a clause that it refuses keeps
+    nothing (`AltClause.extract_eq_nil_of_keyed_false`). -/
 structure AltClause where
   keys : Finset Name
   pin : {k // k ∈ keys} → Pin
@@ -89,6 +90,26 @@ def AltClause.extract (c : AltClause) (opts : List Term) : List Term :=
     no option is both kept and dropped. -/
 def AltClause.exclude (c : AltClause) (opts : List Term) : List Term :=
   opts.filter (fun t => ! c.admits t)
+
+/-- **The form of a pin**: the adapter word and the base. A pin nests inside a pin of its own form
+    only (`altsSub_form`). -/
+def pinForm (p : Pin) : Word × GroundKind := (p.1, p.2.1)
+
+/-- The form that an option pins at a name: the option is an object, and the field at the name has
+    a pin. -/
+def formAt (t : Term) (k : Name) : Option (Word × GroundKind) :=
+  (((specOf t).bind (·.at k)).bind (·.pin)).map pinForm
+
+/-- **A clause that the options can answer**: some option pins each clause key, at the form of the
+    clause's pin.
+
+    A clause that fails this describes no option whatever its alternatives
+    (`AltClause.extract_eq_nil_of_keyed_false`), so the failure is a fact about the declaration, and
+    the slice refuses the clause as a mistake of the caller. A clause that passes can still keep
+    nothing, where the alternatives do not meet: that is a fact about the values. -/
+def AltClause.keyed (c : AltClause) (opts : List Term) : Bool :=
+  decide (∀ k : {k // k ∈ c.keys},
+    opts.any (fun t => decide (formAt t k.1 = some (pinForm (c.pin k)))) = true)
 
 /-- **Two clauses select the join of their extracts.**
 
@@ -366,6 +387,41 @@ theorem AltClause.admits_at {c : AltClause} {t : Term} (h : c.admits t = true)
       exact ⟨hf, hk⟩
     · cases hk
   | _ => cases h
+
+/-- A pin inside a clause's pin has the clause's form: `altsSub` compares the word and the base. -/
+theorem altsSub_form {p : Option Pin} {q : Pin} (h : altsSub p q = true) :
+    ∃ r, p = some r ∧ pinForm r = pinForm q := by
+  obtain _ | ⟨w, ⟨k, x⟩⟩ := p
+  · simp [altsSub] at h
+  obtain ⟨w', ⟨k', c⟩⟩ := q
+  refine ⟨(w, ⟨k, x⟩), rfl, ?_⟩
+  cases k <;> cases k' <;> simp_all [altsSub, pinForm]
+
+/-- **A clause that describes an option is a clause that the options can answer.** -/
+theorem AltClause.keyed_of_admits {c : AltClause} {opts : List Term} {t : Term} (ht : t ∈ opts)
+    (h : c.admits t = true) : c.keyed opts = true := by
+  refine decide_eq_true fun k => List.any_eq_true.mpr ⟨t, ht, decide_eq_true ?_⟩
+  obtain ⟨fields, f, wild, rfl, hf, _, hs⟩ := c.admits_at h k
+  obtain ⟨r, hr, hform⟩ := altsSub_form hs
+  simp only [formAt, specOf, Body.spec, MapOf.at, dif_pos hf, Option.bind_some, hr,
+    Option.map_some, hform]
+
+/-- **A clause that the options cannot answer describes no option.** -/
+theorem AltClause.admits_eq_false_of_keyed_false {c : AltClause} {opts : List Term}
+    (hk : c.keyed opts = false) {t : Term} (ht : t ∈ opts) : c.admits t = false :=
+  Bool.eq_false_iff.mpr fun h => Bool.false_ne_true (hk.symm.trans (c.keyed_of_admits ht h))
+
+/-- **The refusal of a clause hides no answer**: a clause that the options cannot answer extracts
+    nothing. -/
+theorem AltClause.extract_eq_nil_of_keyed_false {c : AltClause} {opts : List Term}
+    (hk : c.keyed opts = false) : c.extract opts = [] :=
+  (List.filter_congr fun _ ht => c.admits_eq_false_of_keyed_false hk ht).trans
+    (List.filter_false opts)
+
+/-- ...and excludes no option. -/
+theorem AltClause.exclude_eq_self_of_keyed_false {c : AltClause} {opts : List Term}
+    (hk : c.keyed opts = false) : c.exclude opts = opts :=
+  List.filter_eq_self.mpr fun _ ht => by rw [c.admits_eq_false_of_keyed_false hk ht]; rfl
 
 /-- **The stored side of the slice.** A kept option reads, at a clause key, only an attribute in
     the clause's alternatives.

@@ -2706,16 +2706,16 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             '(AltClause.mk {"kind"} (fun k => (([], ⟨.string, NEFinset.of "a" ∅⟩) : Pin)))',
         )
         expect(text).toContain(
-            '[[true, false],\n      [false, false]] := of_decide_eq_true kernel_rfl%',
+            '[(true, [true, false]),\n      (true, [false, false])] := of_decide_eq_true kernel_rfl%',
         )
     })
 
     /**
-     * **A host refusal keeps nothing.** The host refuses a clause key that no member pins, because
-     * the clause keeps no member whatever the values. The model has no refusal, and its extraction
-     * at the same clause is empty, so the row states no option.
+     * **A host refusal is the model's refusal.** The host refuses a clause key that no member pins,
+     * because the clause keeps no member whatever the values. The model refuses the same clause
+     * (`AltClause.keyed`), and the row states the refusal and an empty extraction.
      */
-    it('states a clause that the host refuses as a clause that keeps no option', () => {
+    it('states a clause that the host refuses as a clause that the model refuses', () => {
         const text = leanSlice({
             name: 'refused',
             codec: sliceable([
@@ -2725,7 +2725,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             clauses: [{ u: erase(string('a')) }],
         })
         expect(text).toContain(
-            '[[false, false]] := of_decide_eq_true kernel_rfl%',
+            '[(false, [false, false])] := of_decide_eq_true kernel_rfl%',
         )
     })
 
@@ -2746,7 +2746,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
                 codec: mutant,
                 clauses: [{ t: erase(string('a')) }],
             }),
-        ).toContain('[[true, true]] := of_decide_eq_true kernel_rfl%')
+        ).toContain('[(true, [true, true])] := of_decide_eq_true kernel_rfl%')
     })
 
     /**
@@ -2768,7 +2768,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             '(AltClause.mk {"kind"} (fun k => (([], ⟨.string, NEFinset.of "b" ∅⟩) : Pin)))',
         )
         expect(text).toContain(
-            '[[true, false],\n      [false, true]] := of_decide_eq_true kernel_rfl%',
+            '[(true, [true, false]),\n      (true, [false, true])] := of_decide_eq_true kernel_rfl%',
         )
     })
 
@@ -2793,7 +2793,10 @@ describe("the slice, against the model's `AltClause.admits`", () => {
         expect(text).toContain(
             '(([(.decimalText, false)], ⟨.number, NEFinset.of (WFNumeral.of "1") ∅⟩) : Pin)',
         )
-        expect(text).toContain('[[true, false],\n      [false, false]] := ')
+        // no member pins 't' at the form of `dynamoNumber`, so the host refuses that clause
+        expect(text).toContain(
+            '[(true, [true, false]),\n      (false, [false, false])] := ',
+        )
     })
 
     /** **A caller adapter matches only itself**, so a plain clause at the stored literal keeps nothing. */
@@ -2806,7 +2809,9 @@ describe("the slice, against the model's `AltClause.admits`", () => {
         expect(text).toContain(
             '(([(.caller 0, false)], ⟨.string, NEFinset.of "a" ∅⟩) : Pin)',
         )
-        expect(text).toContain('[[false, false],\n      [true, false]] := ')
+        expect(text).toContain(
+            '[(true, [false, false]),\n      (true, [true, false])] := ',
+        )
     })
 
     /** **A refinement of a literal admits a subset of the literal**, so the literal bounds the member. */
@@ -2815,7 +2820,9 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             string('1'),
             string('z'),
         ])
-        expect(text).toContain('[[true, false],\n      [false, true]] := ')
+        expect(text).toContain(
+            '[(true, [true, false]),\n      (true, [false, true])] := ',
+        )
     })
 
     /** **The caller must write a fill**, so a fill is required where the clause reads presence. */
@@ -2824,7 +2831,9 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             current: string('a'),
             whenMissing: 'a',
         } as never)
-        expect(rows(fill, [string('a')])).toContain('[[true, false]] := ')
+        expect(rows(fill, [string('a')])).toContain(
+            '[(true, [true, false])] := ',
+        )
     })
 
     /** **A clause keeps a member whose alternatives lie inside the clause's**, and not one that overlaps. */
@@ -2838,7 +2847,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
             '(([], ⟨.string, NEFinset.of "a" {"b", "c"}⟩) : Pin)',
         )
         expect(text).toContain(
-            '[[false, false],\n      [true, false],\n      [false, true]] := ',
+            '[(true, [false, false]),\n      (true, [true, false]),\n      (true, [false, true])] := ',
         )
     })
 
@@ -2857,7 +2866,9 @@ describe("the slice, against the model's `AltClause.admits`", () => {
         expect(text).toContain(
             '(([(.decimalText, false)], ⟨.number, NEFinset.of (WFNumeral.of "2") ∅⟩) : Pin)',
         )
-        expect(text).toContain('[[true, false],\n      [false, true]] := ')
+        expect(text).toContain(
+            '[(true, [true, false]),\n      (true, [false, true])] := ',
+        )
     })
 
     /** **The model names no float adapter**, so a clause at the `number` form has no pin to state. */

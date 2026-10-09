@@ -44,7 +44,6 @@ import type {
     Alternatives,
     Body,
     Field,
-    LiteralForm,
     NameForm,
     NonEmpty,
     Term,
@@ -5280,6 +5279,16 @@ const clauseLiteral = (name: string, value: unknown): NameForm => {
 }
 
 /**
+ * **Two literals of one form**: the same base, and the same adapter, or none on either. This is the
+ * form of the model's pin (`Calculus.pinForm`), the adapter word and the base.
+ */
+const sameForm = (a: NameForm, b: NameForm): boolean =>
+    a.form === b.form &&
+    (a.adapter === undefined || b.adapter === undefined
+        ? a.adapter === b.adapter
+        : sameAdapter(a.adapter, b.adapter))
+
+/**
  * **Whether a clause describes one member**: the member declares every clause key as a *required*
  * literal **at the clause's base**, and that literal's alternatives all lie inside the clause's.
  *
@@ -5305,9 +5314,7 @@ const clauseKeeps = (
     for (const [name, pinned] of clause) {
         const mine = literals[name]
         if (!mine?.required || mine.form !== pinned.form) return false
-        const [a, b] = [mine.adapter, pinned.adapter]
-        if (a === undefined || b === undefined ? a !== b : !sameAdapter(a, b))
-            return false
+        if (!sameForm(mine, pinned)) return false
         const inside = (mine.alts.ls as readonly LiteralValue[]).every((one) =>
             (pinned.alts.ls as readonly LiteralValue[]).some((tag) =>
                 sameLiteral(one, tag),
@@ -5328,8 +5335,8 @@ const clauseKeeps = (
  * the alternatives simply do not meet, because that is a fact about values. That line is where the
  * foreign-key refusal already sits, and the base refusal sits beside it for the same reason.
  *
- * The model cannot have either failure — its clause keys are a subset of the dissection's by the
- * type, and `Alts` carries the base at the key — so both refusals are the host's own.
+ * The model states the same refusal (`AltClause.keyed`): some option pins each clause key at the
+ * form of the clause, or the clause describes no option (`AltClause.extract_eq_nil_of_keyed_false`).
  */
 const sliced = <O>(
     options: readonly O[],
@@ -5337,28 +5344,26 @@ const sliced = <O>(
     keep: boolean,
 ): readonly O[] => {
     const terms = options.map((option) => termOf(option as unknown as AnyCodec))
-    const pinned = new Map<string, Set<LiteralForm>>()
+    const pinned = new Map<string, NameForm[]>()
     for (const term of terms) {
         for (const [name, one] of Object.entries(
             clauseLiteralsOf(term) ?? {},
         )) {
-            const bases = pinned.get(name) ?? new Set<LiteralForm>()
-            bases.add(one.form)
-            pinned.set(name, bases)
+            pinned.set(name, [...(pinned.get(name) ?? []), one])
         }
     }
     const read = new Map<string, NameForm>()
     for (const [name, value] of Object.entries(clause)) {
-        const bases = pinned.get(name)
-        if (!bases) {
+        const forms = pinned.get(name)
+        if (!forms) {
             throw new CodecError(
                 `'${name}' is not a key any member pins to a literal, so a clause naming it selects nothing; the keys available are ${[...pinned.keys()].map((one) => `'${one}'`).join(', ') || '(none)'}`,
             )
         }
         const literal = clauseLiteral(name, value)
-        if (!bases.has(literal.form)) {
+        if (!forms.some((one) => sameForm(one, literal))) {
             throw new CodecError(
-                `the clause at '${name}' is a \`${literal.form}\` literal and no member pins '${name}' at that base, so it describes no member whatever its alternatives; the bases declared at '${name}' are ${[...bases].map((one) => `\`${one}\``).join(', ')}`,
+                `the clause at '${name}' is a \`${literal.form}\` literal${literal.adapter ? ' under an adapter' : ''} and no member pins '${name}' at that base and adapter, so it describes no member whatever its alternatives; the bases declared at '${name}' are ${[...new Set(forms.map((one) => one.form))].map((one) => `\`${one}\``).join(', ')}`,
             )
         }
         read.set(name, literal)
