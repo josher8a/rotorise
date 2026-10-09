@@ -174,7 +174,7 @@ describe('the port agrees with the SDK it was ported from', () => {
  *
  * The comparison above walks the branches *I knew to test*, which is the weakness every hand-written
  * conformance list has: it agrees on exactly what its author thought of. This generates instead —
- * the same generator the property tests use, over the `opaque` definition, so nested lists of maps
+ * the same arbitrary the property tests use, over the `opaque` definition, so nested lists of maps
  * of sets turn up without anyone writing one down.
  *
  * Refusal is compared as carefully as success. A port that accepts what the SDK refuses writes rows
@@ -389,7 +389,7 @@ describe('the port agrees on values nobody picked', () => {
                 compared++
             }
 
-            // the sweep is worthless if the generator only ever produced things both refuse
+            // the sweep is worthless if the arbitrary only ever produced things both refuse
             expect(compared).toBeGreaterThan(100)
             expect(compared + refusedByBoth).toBe(200)
         },

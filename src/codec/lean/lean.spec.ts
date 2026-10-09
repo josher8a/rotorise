@@ -4,7 +4,7 @@
  * `src/codec/lean.ts` emits Lean source; only Lean can say whether that source is *true*. What this file
  * can say — and what nothing else says — is whether the emitter produces the text it thinks it
  * does, and, more importantly, whether it **refuses everything it cannot say**. A differential test
- * whose generator silently approximates is worse than no differential test: it produces a file that
+ * whose emitter silently approximates is worse than no differential test: it produces a file that
  * compiles and proves a theorem about a codec nobody shipped.
  *
  * So the refusals are tested as carefully as the emissions, and they are the reason this file is
@@ -1307,7 +1307,7 @@ describe('the `check` protocol', () => {
      * tactic, no `funext` gymnastics, and it can state a negative vector, which an equation cannot.
      *
      * The fuel is computed from the attribute rather than fixed generously, because `aeq` recurses
-     * on the budget — only structural recursion reduces in the kernel — so the generator owes it a
+     * on the budget — only structural recursion reduces in the kernel — so the emitter owes it a
      * number. One layer per `L` or `M`, one for the scalar at the bottom.
      */
     it('states the claim through `check`, with fuel for the attribute it wrote', () => {
@@ -2628,8 +2628,8 @@ describe('the committed sample', () => {
     /**
      * A sample that is not regenerated is a sample that lies — **and a regenerated one lies just
      * as well, because regeneration is not verification.** This compares the emitter's bytes
-     * against files the emitter produced, so a *stale generator agrees with its own stale
-     * output*: it cannot see the generator being wrong, and for a day it did not. `db444e3`
+     * against files the emitter produced, so a *stale emitter agrees with its own stale
+     * output*: it cannot see the emitter being wrong, and for a day it did not. `db444e3`
      * changed `Term.object` from three arguments to one, this test stayed green, and both sample
      * files typechecked against no `Calculus/` for ten commits (`e9f5b31`).
      *

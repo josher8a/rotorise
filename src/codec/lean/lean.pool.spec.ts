@@ -1,13 +1,13 @@
 /**
  * **The generated pool: one set of pairs, put to the kernel.**
  *
- * A seeded generator builds codecs through the public constructors, so the pool holds what the
+ * A seeded draw builds codecs through the public constructors, so the pool holds what the
  * library constructs and not what a reader imagined. Each pair of the pool goes to the model as the
  * disjointness and separation vectors, through the same emitter that the hand corpus uses. Each
  * kernel file names its own failing rows.
  *
  * The hand corpus in `lean.spec.ts` stays as the hand-picked part. The pool depends on the seed
- * alone, so a change of the pool counts below is a change of the generator, of the constructors, or
+ * alone, so a change of the pool counts below is a change of the draw, of the constructors, or
  * of the emitter.
  *
  * A thunk that throws is an unknown term, and each host check takes its worst case, so a pair has
@@ -95,7 +95,7 @@ const erase = (codec: unknown): AnyCodec => codec as AnyCodec
 
 /** The seeds of the pool. A new seed is a new pool, and the pinned counts move with it. */
 const SEEDS = [20261004, 1, 4] as const
-/** The number of codecs that the generator draws. */
+/** The number of codecs that the draw makes for each seed. */
 const DRAWS = 150
 /** The depth of each drawn codec. */
 const DEPTH = 3
@@ -162,7 +162,7 @@ type Declared = { readonly codec: AnyCodec; readonly keys: readonly string[] }
 let unions: Declared[] = []
 
 /**
- * **The unions that the generator declares inside a draw.** Each declaration is a host verdict, and
+ * **The unions that the draw declares inside one drawn codec.** Each declaration is a host verdict, and
  * a refused declaration refuses the whole draw, so the pool puts each declared pair to the model as
  * well. A recursive option names the union under declaration: where the host refuses, the thunk
  * still throws, and the pair is the declaration itself; where the host accepts, the thunk returns
@@ -723,8 +723,8 @@ const formerGuards = (terms: readonly Term[], first: number): FormerGuard[] => {
 }
 
 /**
- * **The clauses that the pool puts to each name of a union.** The values that the generator pins,
- * two values that the generator never pins, one literal at each base and form, and one union of
+ * **The clauses that the pool puts to each name of a union.** The values that the draw pins,
+ * two values that the draw never pins, one literal at each base and form, and one union of
  * two literals.
  */
 const clauseVocabulary: readonly (() => AnyCodec)[] = [
@@ -1154,7 +1154,7 @@ describe('the generated pool, against the model', () => {
 
     /**
      * **The counts pin the pool, deliberately.** The pool depends on the seed alone, so a count
-     * moves only when the generator, a constructor, or the emitter changes. Look at the move.
+     * moves only when the draw, a constructor, or the emitter changes. Look at the move.
      */
     it('draws a pool that depends on the seed alone', () => {
         expect({

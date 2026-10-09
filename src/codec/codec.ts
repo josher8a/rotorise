@@ -852,7 +852,7 @@ const unresolvedAt = (path: string, partial: boolean): AnyCodec =>
 /** A map of attribute name to codec — what `item`, `map` and each `tagged` variant hold. */
 export type Attributes = Readonly<Record<string, AnyCodec>>
 
-/** What {@link refine} narrowed with, for a generator that has to satisfy it. */
+/** What {@link refine} narrowed with, for an arbitrary that has to satisfy it. */
 export type Refinement = {
     readonly is: (value: never) => boolean
     readonly what: string
@@ -1851,7 +1851,7 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
         /**
          * Told when filtering keeps less than half of what it generates, instead of `console.warn`.
          *
-         * Only ever called from a generator, so only ever during a property run.
+         * Only ever called from an arbitrary, so only ever during a property run.
          */
         readonly onThinSearch?: (what: string, rate: number) => void
     } = {},
@@ -1866,7 +1866,7 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
      * so a run of a hundred cases can quietly be a run of forty. The declaration is not the place to
      * fix that: a predicate is what a brand *is*, and demanding an example of one beside it would
      * tax every codec for something only a property run cares about. But a run that has been halved
-     * without saying so is worth a word, and this can only be reached from a generator, so the word
+     * without saying so is worth a word, and this can only be reached from an arbitrary, so the word
      * only ever lands in a test.
      */
     // `member` reads through a refinement, which is what lets a set of a brand work; `constantOf`
@@ -2072,7 +2072,7 @@ const withMissing = <const C extends AnyCodec>(
  * **Nothing here checks it, and nothing here can.** The model carries it as `IsoCancels` — a
  * premise, in both directions: `g(f v) = v` wherever `f v` lands writable, and `f(g v) = v` on the
  * writable values themselves. It is a premise there for the same reason it is unchecked here. One
- * direction quantifies over the *held* type, which has no generator except `decode` itself, so
+ * direction quantifies over the *held* type, which has no arbitrary except `decode` itself, so
  * every value this library could make is already in the pair's image; and probing the other at
  * construction is worse than not probing it, because a legitimate adapter is an isomorphism on the
  * values its inner codec describes and *throws* off them.
@@ -2109,8 +2109,8 @@ export const held = <
          * That is right while the conversion accepts everything the inner codec produces.
          *
          * State them when it does not. A conversion that refuses part of the inner codec's range
-         * makes the derived generator offer values the pair never makes, so a property run fails
-         * on the generator instead of on the codec.
+         * makes the derived arbitrary offer values the pair never makes, so a property run fails
+         * on the arbitrary instead of on the codec.
          */
         readonly arbitrary?: (rng: Rng, size: number) => HeldOf<O>
         /** How to shrink one, where the pair is partial. Derived from the inner codec otherwise. */

@@ -12,7 +12,7 @@ which vector.
 The verdict is `Calculus.check`'s, and `check_same` is what makes it worth having: `.same`
 *implies* the two attributes are equal, so a line that reduces to `.same` is a proof and not a
 comparator's opinion. The fuel on each line is the attribute's own nesting, computed by the
-generator — an under-fuelled line reduces to `.exhausted`, which matches neither `.same` nor
+emitter — an under-fuelled line reduces to `.exhausted`, which matches neither `.same` nor
 `.differ`, so it fails to compile rather than passing quietly.
 -/
 

@@ -220,7 +220,7 @@ theorem Lawful.core {c : Codec V M} (h : Lawful member c) : LawfulCore member c 
   ⟨h.retract, h.defined, h.writes⟩
 
 /-- Corollary of the codec laws (Q — stability): `∀ a ∈ dom(p). e(p(a)) ≈c a`. Retraction asked at values a
-    *table* returned rather than a generator produced; what it adds to (R) is (C). -/
+    *table* returned rather than an arbitrary produced; what it adds to (R) is (C). -/
 theorem Lawful.stable {c : Codec V M} (h : Lawful member c) {a t a'}
     (hp : c.p a = some t) (he : c.e t = some a') : c.Ker a' a := by
   show c.p a' = c.p a

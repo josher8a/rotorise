@@ -143,7 +143,7 @@ lenses \cite{quotient-lenses} \texttt{e\ ∘\ p} is then a \textbf{canonizer}, t
 weaker form, and the equivalence it works modulo is not a parameter a programmer chooses: it is
 \texttt{ker\ p}, forced by the reading itself. Write \texttt{a\ ≈c\ a′\ ⟺\ p(a)\ =\ p(a′)}.
 
-\subsection{Stability under a generator}\label{corollary-q--stability}
+\subsection{Stability under an arbitrary}\label{corollary-q--stability}
 
 \begin{corollary}[Q — stability]
 \label{cor:Q}
@@ -159,7 +159,7 @@ By \rulelink{cond:C}{\textbf{(C)}}, \texttt{p(a)\ ∈\ dom(e)}. Put \texttt{t\ =
 \texttt{p(e(p(a)))\ =\ p(a)}, which is \texttt{e(p(a))\ ≈c\ a} by definition of \texttt{≈c}.
 \end{proof}
 
-So stability is retraction asked at a different \emph{source of values}: \rulelink{cond:R}{\textbf{(R)}} at values a generator
+So stability is retraction asked at a different \emph{source of values}: \rulelink{cond:R}{\textbf{(R)}} at values an arbitrary
 produced, \rulelink{cor:Q}{\textbf{(Q)}} at values a table returned. What \rulelink{cor:Q}{\textbf{(Q)}} adds to
 \rulelink{cond:R}{\textbf{(R)}} is exactly \rulelink{cond:C}{\textbf{(C)}}, and that containment is the thing most likely to be untrue.
 
@@ -679,8 +679,8 @@ to anything. So \texttt{refine} is not a second kind of adapter; it is the one a
 premise, and its whole content is that refusing \emph{is} available, because \texttt{e} and \texttt{p} are partial to
 begin with.
 
-They are kept apart for a reason outside the calculus, and only that one: a total \texttt{g} lets a
-generator for \texttt{I} be pushed forward to one for \texttt{T}, while a partial one leaves only rejection
+They are kept apart for a reason outside the calculus, and only that one: a total \texttt{g} lets an
+arbitrary for \texttt{I} be pushed forward to one for \texttt{T}, while a partial one leaves only rejection
 sampling. Same term, different search. The split is a note about testing, written into the syntax
 so it cannot be lost, which is the same bargain \texttt{nullable} strikes with \texttt{union(c,\ null)}, and
 should be read the same way.
