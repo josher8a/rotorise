@@ -329,9 +329,6 @@ These are the rulings of the owner, in the terms of this repository.
   future**: one entry per future state, with what decides it. `docs/defects.md` holds the
   **known issues, the suspected ones, and the partially mitigated ones**, and each entry
   opens with one of those three words.
-- `docs/architecture-v2.md` is the target of the architecture. It replaces `docs/architecture.md`
-  when its structure exists, and it goes only when that file absorbs it. No guard reads it: run the
-  `name_drift.py` scan over it before a commit that touches the term language.
 - The architecture holds no count and no measurement, and cites no section number. A count is
   short lived: it belongs in the commit that measured it, in `docs/defects.md` where it pins
   an issue, or in the output of a guard. A figure appears in the roadmap only where the figure

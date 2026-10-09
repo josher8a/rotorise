@@ -15,7 +15,6 @@ path, as a call, or in prose.
 
 | For | Read |
 | --- | --- |
-| The system this arc is building toward | `docs/architecture-v2.md`, which does NOT govern yet |
 | The rules, normatively | `formal/docs/blueprint/src/content.tex` |
 | Future states, and what decides each | `docs/roadmap.md` |
 | Known, suspected and partially mitigated issues | `docs/defects.md` |
@@ -435,6 +434,11 @@ everything self-identifying sends each datum to itself. `opaque` denotes the ide
 `Alg.idCodec`, and it owes no compatibility and no contraction. The §3 union is a theorem:
 `Adm_opaqUnfold` and `AdmA_opaqUnfold` state that the union term admits what `opaque` admits.
 
+**A held-free term is a restriction of `opaque`.** A held-free term (`HF`) holds no `held`, no
+older reader and no fill slot. Such a term writes only what `opaque` writes (`confluence_W`), and
+reads only what `opaque` reads (`confluence_R`). A `held` re-indexes the values of the caller, so
+the inclusion does not reach a `held`.
+
 **The analyses read a recursive term through its body.** `Adm` and `AdmA` take the environment
 that `denote` takes. A variable asks the codec that the environment gives the variable, and a
 `mu` asks its own codec, as the rows of `opaque` do.
@@ -708,6 +712,14 @@ only where the binder's body holds one. `Term.disjoint` compares two data predic
 closed held-free inner terms, so the two views give one verdict. A Lean example pins the separated
 pair that the certificate refuses at a data predicate over a variable.
 
+**The rows of the test are the laws of a product and a sum.** A product admits no value where
+one factor admits none. A sum admits no value only where each summand admits none. A required
+name and a fixed position are factors: two objects are disjoint at one name where one slot is
+required and the two terms are disjoint, and two lists with no spread are disjoint at one
+disjoint position. An optional name and a spread are summands, because the absent name and the
+empty list inhabit them. So two arrays over disjoint element terms are not disjoint. A union is
+disjoint from a partner where each option is.
+
 **The test reads a closure through its inner term.** The admission of a `refine` at a `closure`
 is a function. A refinement admits a part of what its inner term admits, so the refinement is
 disjoint from each partner that its inner term is disjoint from. A closure refinement beside an
@@ -725,6 +737,10 @@ half, or the half of the `held` inside it, is disjoint from the partner agrees t
 `compat_sound` proves each row, `compatPair_sound` holds at every environment of the free
 variables, and `pairwiseCompat_of_compatPair` discharges the union's obligation of two lawful
 options.
+
+**Over lawful, pairwise compatible options, the order of the options is unobservable.** A
+permutation of the options denotes the same codec (`altCodec_perm`), so a value that two options
+admit has no owner.
 
 **The decision is the specification of the library's declaration-time guard, and a checked one.**
 The `union` combinator in `src/` accepts a pair where `agrees(x, y)` holds, which is the model's

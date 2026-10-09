@@ -71,27 +71,173 @@ the gate's output, not this file's.
 
 ---
 
-## The term language separates a carrier from a restriction, and the certificate tests descriptions
+## A literal is a refinement at a singleton, and the test evaluates a data predicate at a literal
 
-**The future state.** `docs/architecture-v2.md` describes it in full and this entry does not
-repeat it. In one sentence: a literal is a refinement at a singleton, an adapter re-indexes
-rather than restricts, a name description is an admissible set rather than two coordinates, and
-the certificate tests descriptions for disjointness rather than terms.
+**The future state.** A set of admissible values is one concept. A literal is its singleton, and a
+bare carrier is the whole set. One relation over admissible sets decides a type and a
+discriminant at every depth. The test then keeps a literal apart from a refinement whose
+predicate refuses the literal.
 
-**Why it is a roadmap entry and not the architecture.** `architecture-v2.md` states the intent
-and does not govern. `architecture.md` governs. A reader who wants to know what the system is
-reads the second; a reader who wants to know where it is going reads the first. Neither repeats
-the other, and this entry is the only place that says how they relate.
+**What the tree carries today.** A literal is a primitive, `Term.literal`, and a refinement is a
+second constructor, `refine`. The predicate `members` already holds a finite set over the
+carrier of one ground kind. The test compares two data predicates through
+`Leaf.predicatesApart`, and evaluates no predicate at a literal. So `Term.disjoint` answers
+`false` for the string literal `"b"` beside a string refined to the members `{"a"}`.
 
-**The ruling today is not yet.** The generated artifacts are stated over the term language, and
-the gate elaborates each of them. So a change to the constructor set lands checked wherever the
-change reaches an artifact.
+**Why the state is wanted.** The merge of the two representations adds one element that neither
+side carries: the empty set, which is the bottom at a ground position. A set held in a
+description keeps the discipline of the kernel: quantify by membership, decide equality by mutual
+inclusion, and reach no classical instance.
 
-**What decides it.** Three things together, and none is a judgment call. The structure exists
-under `Calculus/`. `architecture-v2.md` replaces `architecture.md` under that name.
-`formal/scripts/name_drift.py` swaps the two in its `CURRENT` list, which is what makes the new
-document guarded and the old one gone. Until the third happens the new document cites names that
-do not exist and nothing reports it, which is stated at its head.
+**What a change costs.** The generated artifacts are stated over the term language, and the gate
+elaborates each artifact. So a change to the constructor set lands checked wherever the change
+reaches an artifact.
+
+**What decides it.** A pair that the library writes, which the test refuses only because a
+literal sits beside a refinement.
+
+---
+
+## The disjointness test answers at an adapter, at the top, and at a closure over a finite set
+
+**The future state.** A closure over an unbounded carrier is the one leaf that answers nothing.
+Every other position answers the test:
+
+- An adapter answers through its obligation. A theorem states when a `held` admits some value,
+  from its inner term and its outer, under `Obl1`. The theorem reads no property of the host
+  function beyond the obligation, so the set of the adapter stays unnamed.
+- `opaque` is total on both sides, so `opaque` is disjoint from a partner exactly where the
+  partner admits no value.
+- A closure beside a finite admissible set applies its function to each alternative of the set.
+  The answer is exact.
+
+**What the tree carries today.** `Term.disjoint` reads a raw `held`, a `legacy` and `opaq` as
+disjoint from the bottom alone. A `refine` whose predicate is no data, such as a `closure`, reads
+through its inner term. So a closure over `boolean` that refuses every value is not disjoint
+from the literal `false`. The certificate reaches a `held` through its views (`viewsDisjoint`),
+and not through the test. `opaq_total` and `opaqA_total` state that `opaque` admits every value
+and every attribute. No theorem states when a `held` admits some value.
+
+**What decides it.** A union that the library refuses where one option is a raw `held`, `opaque`,
+or a closure over a finite carrier, and where a caller needs the union.
+
+---
+
+## One decision of inhabitation settles both sides
+
+**The future state.** A declaration decides whether a term admits any value. A theorem derives
+the emptiness of the read side from the emptiness of the value side.
+
+**Why one decision suffices.** A term that admits a value writes an attribute, and the retraction
+law reads the attribute back. A term that accepts an attribute reads a value, and the definedness
+of reads writes the value. So the two projections of a term are inhabited together. Applied to the
+product of two domain idempotents, the value projections are disjoint exactly when the attribute
+projections are. The premises are the retraction and the definedness of reads, which are fields
+of `LawfulCore`, so a term with an alternate reader still meets them.
+
+**What the tree carries today.** `Adm` is a computable `Bool` at one value, exact at every
+constructor (`Adm_exact`), and `#eval` runs it at DynamoDB. No declaration decides whether a term
+admits any value. The tree tests each side with `Term.disjoint` on the view of that side, and
+`disjoint_sound` and `disjoint_soundA` prove the test sound on each side.
+
+**The exception is an adapter.** The certificate reads an adapter through its two views, and
+the future state keeps the views there.
+
+**What decides it.** A pass that needs the attribute side of a pair where the tree proves only
+the value side.
+
+---
+
+## A run of restrictions, and a run of adapters, has one normal form
+
+**The future state.** A function reduces a term to a carrier under an alternating word. A run of
+restrictions meets to one restriction, and a run of adapters composes to one adapter. A
+restriction and an adapter do not collapse, because no law relates them: a refinement outside an
+adapter tests the value of the caller, and the same refinement inside tests the carrier.
+
+**Why the state is wanted.** The restrictions around one carrier form a meet-semilattice, so a run
+of them has one normal form, and the order inside the run carries no information. The adapters
+form a monoid, so the order inside a run carries everything. A run carried as written costs the
+certificate. A string refined to the members `{"a"}`, then to the members `{"b"}`, admits no value,
+and `Term.disjoint` does not find the pair disjoint from a string.
+
+**What the tree carries today.** The equations of a run hold up to `Codec.Equiv`:
+`equiv_restrict_meet` meets two restrictions, `equiv_through_comp` composes two adapters, and
+`equiv_denote_held_comp` composes two nested `held`s under a closure restriction outside them. No
+function reduces a run. `not_equiv_trans` shows that `Codec.Equiv` does not chain, so the
+equations do not compose into a normal form one step at a time.
+
+**What decides it.** A pair that the test misses because a run is spelled as written, in a term
+that the library builds.
+
+---
+
+## A restriction outside an adapter meets into the held side
+
+**The future state.** Which values an adapter owns is a restriction on the values of the caller.
+A restriction written outside a `held` meets into the outer of the `held`, because both restrict
+the values of the caller. Then the caller view of the `held` names the values that the `held`
+owns.
+
+**What the tree carries today.** A `held` carries its held side as its outer, and the caller view
+of a `held` is its outer. The host's `decimal` over literals records the string literals of its
+texts there. A `refine` outside a `held` stays a separate layer, and no equation in the tree
+states the meet.
+
+**What decides it.** A union that the views refuse because a restriction sits outside a `held`
+rather than in its outer.
+
+---
+
+## Admission and the certificate are one relation
+
+**The future state.** One relation answers two questions: whether a value inhabits an option, and
+whether any value inhabits two options.
+
+**Why the state is wanted.** A certificate that separates what admission cannot tell apart is
+unsound: two incompatible options then admit one value, and the order of the options decides the
+attribute. A pair that admission tells apart and the certificate does not is waste, because the
+union is refused where the codec works. Two functions kept in agreement by hand drift, and
+nothing reports the drift.
+
+**What the tree carries today.** `Adm` and `AdmA` are exact at every constructor. The certificate
+is a separate function, `Term.disjoint`, sound for admission (`disjoint_sound`,
+`disjoint_soundA`) and not complete for admission.
+
+**What decides it.** A pass that adds a constructor, and so owes a row in both functions.
+
+---
+
+## The certificate is parametric in the universe
+
+**The future state.** The separation rows and the certificate take a universe signature as a
+parameter, as the disjointness test does. JSON then separates a union by the same certificate as
+DynamoDB.
+
+**What the tree carries today.** `Term.disjoint`, its soundness, and `Term.compat` are generic. A
+universe supplies its leaves, its shape classes and the laws of its leaves and formers, and JSON
+supplies each. `viewsDisjoint`, `certAll`, `Separates` and `pairwiseCompat_of_separated` read the
+constructors of the DynamoDB carriers, and JSON has none of them. The oracle of JSON,
+`jsonOracle`, certifies nothing.
+
+**What decides it.** A second universe that needs a union of separated options.
+
+---
+
+## The compatibility decision knows a canonical bound below the top
+
+**The future state.** The decision accepts an adapter beside a term where one canonical codec
+other than the top bounds both at a component that shares an input.
+
+**What the tree carries today.** `Term.compat` knows two bounds: the top, which bounds two
+held-free terms whose variables are below the top, and one adapter word, which bounds two `held`s
+of one side and one word. A canonical codec below the top that bounds an adapter and a term is
+neither bound. So the decision refuses such a pair at each component that shares an input on one
+half. `compat_of_common_bound` proves in the model that two restrictions of one canonical codec
+are compatible.
+
+**What decides it.** A union that a caller needs, of an adapter and a term below one canonical
+codec, which the library refuses today.
 
 ---
 
