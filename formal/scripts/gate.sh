@@ -77,6 +77,9 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # A file prints the name of each failing row and exits 0 after a print, so a job passes only
   # when the file prints nothing. A job writes its output to a file, and the step reads every file
   # after the set ends, so one failure does not hide another. GATE_JOBS bounds the memory of the set.
+  # No module imports a generated file, so `#assert_axioms_all` reads no vector: each file ends with
+  # `#assert_axioms_module`, which checks the axioms of the theorems of that file, and a job fails
+  # a file whose last line is not that command.
   run 'vector bridge' bash -c '
     jobs=${GATE_JOBS:-6}; out=$(mktemp -d); trap "rm -rf $out" EXIT
     printf "%s\n" .pool.separations.lean .pool.slices.lean .pool.disjoints.lean \
@@ -85,6 +88,8 @@ if [ "$RUN_BUILD" -eq 1 ]; then
       .resolutions.lean lean.sample.lean lean.sample.check.lean .readvectors.lean .pool.guards.lean |
     xargs -P "$jobs" -I{} sh -c "
       [ -f {} ] || { echo missing > $out/x{}.rc; exit 0; }
+      [ \"\$(tail -n 1 {})\" = \"#assert_axioms_module\" ] ||
+        { echo \"the last line is not #assert_axioms_module\" > $out/x{}.out; echo 1 > $out/x{}.rc; exit 0; }
       lake env lean {} > $out/x{}.out 2>&1; echo \$? > $out/x{}.rc"
     fail=0
     for rc in "$out"/*.rc; do

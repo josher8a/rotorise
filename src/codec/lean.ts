@@ -11,7 +11,7 @@
  *
  * The obvious design is the other one: let Lean produce the expected attribute and compare it here.
  * `#eval` runs `denote`, so Lean can produce it, but a printed value certifies nothing, and
- * `native_decide` rests on `Lean.ofReduceBool`, outside the model's axiom base. The model declares no
+ * `native_decide` adds an axiom of its own for each proof, outside the model's axiom base. The model declares no
  * axiom: `N` is carried exactly, as `WFNumeral`.
  *
  * What Lean *can* do is check. `(denote t).e v = some a` is a closed proposition, and for every
@@ -332,6 +332,15 @@ const leanNumeralsOnce = (module: string): string => {
 ${defs.join('\n')}
 ${named.slice(cut)}`
 }
+
+/**
+ * **A module checks the axioms of the theorems that the module declares.** No module imports a
+ * generated file, so `#assert_axioms_all` reads no vector. The last command of each module checks
+ * each theorem of the module against the sanctioned base, and prints nothing when each passes.
+ * Apply this once to a whole module, after {@link leanNumeralsOnce}.
+ */
+const leanModule = (module: string): string =>
+    `${leanNumeralsOnce(module)}\n#assert_axioms_module\n`
 
 /**
  * An `Attr` — the attribute domain, one member per attribute.
@@ -1343,7 +1352,7 @@ export const leanFormerGuard = ({ name, term }: FormerGuard): string => {
  * Generated at gate time and elaborated, never committed.
  */
 export const leanFormerGuardModule = (guards: readonly FormerGuard[]): string =>
-    leanNumeralsOnce(`import Calculus.Bridge.Vectors
+    leanModule(`import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Lang.Store
 
@@ -1706,7 +1715,7 @@ export const leanDisjointRowModule = (
 ): string => {
     const shapes = kernelShapes()
     const lists = kernelLists(disjointRows(pairs), shapes)
-    return leanNumeralsOnce(`import Calculus.Bridge.Rows
+    return leanModule(`import Calculus.Bridge.Rows
 
 /-!
 # Disjointness of the ${subject}, proposed to the model
@@ -1846,7 +1855,7 @@ export const leanSeparationRowModule = (
             : ` A pair with a fill on each side carries the
 guard column alone, in the \`pairGuards\` lists: the model refuses two fills at one name whatever their
 constants, and \`src/\` accepts two fills with equal constants, so the pair has no separation verdict.`
-    return leanNumeralsOnce(`import Calculus.Bridge.Rows
+    return leanModule(`import Calculus.Bridge.Rows
 
 /-!
 # Declaration verdicts of the ${subject}, both ways
@@ -2775,7 +2784,7 @@ export const leanSliceModule = (slices: readonly Slice[]): string => {
     const defs = [...lists].map(
         ([list, name]) => `def ${name} : List AltClause := ${list}`,
     )
-    return leanNumeralsOnce(`${sliceImports}
+    return leanModule(`${sliceImports}
 
 /-!
 # Slices, proposed to the model
@@ -2824,7 +2833,7 @@ export const leanPathModules = (
         size[least] = (size[least] ?? 0) + length
     }
     return size.map((_, file) =>
-        leanNumeralsOnce(`${sliceImports}
+        leanModule(`${sliceImports}
 import Calculus.Bridge.Paths
 
 /-!
@@ -3045,7 +3054,7 @@ export const leanReadVectorModule = (vectors: readonly Vector[]): string => {
     const live = vectors.filter(
         (one) => readVectorIsUnstatable(one) === undefined,
     )
-    return leanNumeralsOnce(`import Calculus.Bridge.Vectors
+    return leanModule(`import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Lang.Store
 
 /-!
@@ -3405,7 +3414,7 @@ export const leanVectorModule = (
             : `\n\n/-! ### The guard of a binder -/\n\n${guards.map(leanGuard).join('\n\n')}`
     const body = `${written}${readBack}${guarded}`
     if (refusals.length === 0) {
-        return leanNumeralsOnce(
+        return leanModule(
             `${protocol === 'equation' ? preamble : checkPreamble}\n${body}\n\nend Calculus\n`,
         )
     }
@@ -3420,7 +3429,7 @@ export const leanVectorModule = (
         '-/',
         '',
     ].join('\n')
-    return leanNumeralsOnce(
+    return leanModule(
         `${protocol === 'equation' ? preamble : checkPreamble}\n${body}\n${heading}\n${refused}\n\nend Calculus\n`,
     )
 }
@@ -3474,7 +3483,7 @@ const leanCorpusRowModule = <F extends string>(
 ): string => {
     const shapes = kernelShapes()
     const lists = kernelLists(file, shapes)
-    return leanNumeralsOnce(`import Calculus.Bridge.Rows
+    return leanModule(`import Calculus.Bridge.Rows
 
 /-!
 # ${title}
