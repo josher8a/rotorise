@@ -192,33 +192,37 @@ repair is to route the remaining site through the same seam, not to write a rend
 
 ---
 
-## Known: the type level reads a literal off a type, and the term is what the runtime reads
+## Partially mitigated: the type level reads a literal off a type, and the term is what the runtime reads
 
-**Observation.** `extract` and `exclude` check a clause at the type level with the type PinsALiteral in
-`src/codec/codec.ts`: a member pins a key when the type that the key's codec decodes to is a
-literal type. Nothing in a codec's type says which constructor built it, so no other question is
-available there. At run time the slice reads the term, and a term pins a literal only where a
-literal constructor built it. An adapter whose decode narrows to a literal type pins a literal at
-the type level and pins none at the term. Measured 2026-09-24 with a throwaway spec and
-`npx tsc --noEmit`:
+**Observation.** A clause pins a key at the term only where a literal constructor built the codec.
+The type reads that fact from the phantom mark literalMarker in `src/codec/codec.ts`: the literal
+overloads of `string`, `decimal`, `number` and `boolean` set the mark, `refine` over a marked codec
+keeps the mark, `union` sets the mark where each option carries the mark, and `lazy(...)` sets the mark in
+the form with no type arguments. A caller's adapter carries no mark. So `extract`, `exclude` and their
+result types read the same members as the runtime for a key pinned by a caller's adapter, and the
+result type of `exclude` no longer omits a member that the runtime keeps. Three cases remain, measured
+2026-10-09 with throwaway scripts, `npx tsc --noEmit` and `vite-node`:
 
-    const tagA = held(string, string('A'), { encode: (v: 'A') => v, decode: ... })
-    const u = union([object({ k: tagA, a: string }), object({ k: string('B'), b: string })])
-    u.extract({ k: string('A') })
+    a key pinned through `lazy<'red' | 'blue', Attribute<'S'>>(() => colour)`
+      type checker: the clause on that key is refused
+      runtime:      the key is pinned, and the member is kept
+    u.extract({ k: refine(string('A', 'C'), (v): v is 'A' => v === 'A') })
       type checker: accepted
-      runtime:      {"kind":"never"}
-    u.extract({ k: string('B') })
-      runtime:      the member with the literal
+      runtime:      CodecError: the clause at 'k' is not a literal codec
+    held(string('a'), string, ...) at a member key
+      type checker: no clause names the key
+      runtime:      the key is pinned under the adapter
 
-**Effect.** A caller gets a green typecheck and a slice that selects no member. The union itself
-has no type-level gate: `union` decides compatibility at run time only.
+**Effect.** A recursive declaration writes the type arguments of `lazy(...)`, and those state the decoded
+type alone, so a clause cannot name a key pinned through such a thunk. A refinement passes as a clause
+at the type, and the runtime refuses the clause at the call. A caller's adapter over a literal pins
+the literal at the runtime, and the type refuses the clause. Each case refuses: none gives a green
+typecheck and a wrong member set.
 
-**Pin.** None. No test declares a clause over an adapter that narrows to a literal type.
-
-**Fix direction.** The type-level test has to read the constructor rather than the decoded type,
-which needs a codec's type to carry which constructor built it. It does not today. Widening the
-term reader instead would not close it: an adapter's decode is arbitrary code, and no term says
-what it returns.
+**Pin.** `src/codec/spec/union/codec.slice.spec.ts`: the refusal of a key pinned through the explicit
+form of `lazy(...)`, the adapter clause refused at the type, the exclusion that keeps the adapter member,
+and the slice that keeps a member pinned through an adapter. No test declares a refinement as a
+clause.
 
 ---
 
@@ -274,32 +278,35 @@ union has no clause row, and no test of the host narrows a recursive union.
 
 ---
 
-## Known: the path type of `narrow` reads the decoded literal of a caller's adapter
+## Known: the path type admits a key that some members of the frontier declare
 
-**Observation.** This is the defect of `extract` above, at `narrow`. The path type decides which
-members a clause keeps with the types Kept and StoredApart in `src/codec/codec.ts`. StoredApart
-pins a literal by the decoded type of a codec. At run time the walk of `at` narrows by the stored
-view of the term, and the stored view of an adapter is its inner term. So an adapter whose decode
-narrows to a literal type pins a literal in the type, and pins none in the walk. Measured
-2026-10-09 with a throwaway script and `npx tsc --noEmit`:
+**Observation.** The path type of `at` admits a key that one member of a union declares, and the walk
+of `at` refuses the path on use. The type and the walk keep the same members after a clause, because
+the type StoredApart in `src/codec/codec.ts` pins a literal only where a literal constructor built the codec.
+The refusal of a key that some kept members lack is the walk's alone. Measured 2026-10-09 with a
+throwaway script and `npx tsc --noEmit`:
 
-    const tagA = held(string, string('A'), { encode: (v: 'A') => v, decode: ... })
-    const M = object({ u: union([object({ k: tagA, a: string }),
+    const L = object({ u: union([object({ k: string('A'), a: string }),
                                  object({ k: string('B'), b: string })]) }).item
-    M.at((p) => p.u.narrow({ k: string('B') }).b)
-      type checker: accepted, a codec of string
-      runtime:      term {"kind":"never"}, and encode refuses:
-                    'u.b' is declared by some variants only ... Call `narrow({...})` ...
-    M.at((p) => p.u.narrow({ k: string('B') }).a)
-      type checker: refused
+    L.at((p) => p.u.b)
+      type checker: accepted
+      runtime:      encode refuses: 'u.b' is declared by some variants only ... Call `narrow({...})` ...
 
-The type drops the member that holds the adapter. The walk keeps the member, because the stored
-view `string` is not apart from the literal `B`.
+A clause beside a member that a caller's adapter pins keeps that member in the type and in the walk,
+so `narrow({ k: string('B') }).a` reaches the same refusal. One case of the type keeps a member that
+the walk separates: a key pinned through `lazy(...)` with type arguments carries no mark.
 
-**Effect.** A caller gets a green typecheck and a path whose codec refuses every write. The
-refusal tells the caller to call `narrow`, which the caller already called.
+    object({ u: union([object({ k: lazy<'A', Attribute<'S'>>(() => string('A')), a: number }),
+                       object({ k: string('B'), a: string })]) }).item
+      .at((p) => p.u.narrow({ k: string('B') }).a).encode(3)
+      type checker: accepted
+      runtime:      refused, number `3` is not a string
 
-**Pin.** None. No test declares a clause beside an adapter that narrows to a literal type.
+**Effect.** A caller gets a green typecheck and a path whose codec refuses on use, with a refusal that
+names the cause.
 
-**Fix direction.** The same as for `extract`: the type-level test has to read the constructor
-rather than the decoded type, and a codec's type does not carry the constructor today.
+**Pin.** `src/codec/spec/object/codec.narrowat.spec.ts`: the clause that keeps a member pinned by an
+adapter, which asserts the refusal of the walk, and the clause that drops a member pinned through a
+refinement of a literal. No test pins the path type of a key that some members declare, and no test
+narrows beside a key pinned through the explicit form of `lazy(...)`.
+

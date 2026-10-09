@@ -15,8 +15,10 @@ import {
     decimal,
     discriminatedUnion,
     dynamoNumber,
+    held,
     number,
     object,
+    refine,
     string,
     union,
     valueKinds,
@@ -230,6 +232,57 @@ describe('the type and the walk of `at` agree on the stored side', () => {
             object({ tag: string('B'), v: string }),
         ]),
     }).item
+
+    /**
+     * The walk keeps both members, so `a` is declared by one kept member only, and the path refuses
+     * on use. The type cannot state that refusal: a path type admits a key that some members of the
+     * frontier declare. So this pins the frontier, not the refusal.
+     */
+    it('a clause keeps a member whose adapter decodes to a literal, as the walk keeps it', () => {
+        // the adapter decodes 'A' and stores any string, so the walk does not separate it from 'B'
+        const tagA = held(string, string('A'), {
+            encode: (v: 'A') => v,
+            decode: (v: string) =>
+                v === 'A'
+                    ? ('A' as const)
+                    : new CodecError(`'${v}' is not 'A'`),
+        })
+        const AdapterOrB = object({
+            u: union([
+                object({ k: tagA, a: string }),
+                object({ k: string('B'), b: string }),
+            ]),
+        }).item
+        const a = AdapterOrB.at((p) => p.u.narrow({ k: string('B') }).a)
+        expect(() => a.unsafeEncode('x')).toThrow(
+            /declared by some variants only/,
+        )
+        const LiteralOrB = object({
+            u: union([
+                object({ k: string('A'), a: string }),
+                object({ k: string('B'), b: string }),
+            ]),
+        }).item
+        expect(() =>
+            // @ts-expect-error the clause separates the member that pins 'A', and no kept member has `a`
+            LiteralOrB.at((p) => p.u.narrow({ k: string('B') }).a),
+        ).toThrow(/no attribute is declared at 'u.a'/)
+    })
+
+    it('a clause drops a member pinned through a refinement of a literal, as the walk drops it', () => {
+        // the stored view of a refinement is the literal under the predicate, so 'B' separates it
+        const onlyA = refine(string('A', 'C'), (v): v is 'A' => v === 'A')
+        const RefinedOrB = object({
+            u: union([
+                object({ k: onlyA, a: number }),
+                object({ k: string('B'), a: string }),
+            ]),
+        }).item
+        const a = RefinedOrB.at((p) => p.u.narrow({ k: string('B') }).a)
+        expect(a.unsafeEncode('x')).toEqual({ S: 'x' })
+        // @ts-expect-error the clause separates the member that stores a number at `a`
+        expect(a.encode(3)).toBeInstanceOf(CodecError)
+    })
 
     it('an adapter clause keeps the member that stores its attribute', () => {
         const k = NumberOrString.at((p) => p.u.narrow({ n: number }).k)

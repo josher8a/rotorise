@@ -434,7 +434,7 @@ describe('a clause key no member pins is refused', () => {
                 object({
                     kind: string('pet'),
                     size: string('large'),
-                    colour: lazy<'red' | 'blue', Attribute<'S'>>(() => colour),
+                    colour: lazy(() => colour),
                 }),
             ],
         )
@@ -459,10 +459,7 @@ describe('a clause key no member pins is refused', () => {
                 object({
                     kind: string('pet'),
                     size: string('large'),
-                    colour: union([
-                        lazy<'red', Attribute<'S'>>(() => red),
-                        string('blue'),
-                    ]),
+                    colour: union([lazy(() => red), string('blue')]),
                 }),
             ],
         )
@@ -476,6 +473,108 @@ describe('a clause key no member pins is refused', () => {
                 colour: { S: 'blue' },
             },
         })
+    })
+
+    /**
+     * **A thunk with explicit type arguments pins no key at the type.** A recursive declaration
+     * writes its type arguments, because the codec of the thunk is not declared yet. The arguments
+     * state the decoded type alone, and the decoded type cannot say whether a literal constructor
+     * built the codec: a caller's adapter decodes to a literal type over a term that pins nothing.
+     * So the type refuses the key, and the runtime, which resolves the thunk, still pins it.
+     */
+    it('refuses at the type a key pinned through a thunk with explicit type arguments', () => {
+        const colour = string('red', 'blue')
+        const explicit = mdunion(
+            ['kind', 'size'],
+            [
+                pet,
+                object({
+                    kind: string('pet'),
+                    size: string('large'),
+                    colour: lazy<'red' | 'blue', Attribute<'S'>>(() => colour),
+                }),
+            ],
+        )
+        const kept = explicit.extract(
+            // @ts-expect-error the type reads no literal constructor through the explicit form
+            { colour: string('red', 'blue') },
+        )
+        // the runtime answers for a caller who reaches past the type
+        expect(
+            kept.unsafeEncode({
+                kind: 'pet',
+                size: 'large',
+                colour: 'red',
+            } as never),
+        ).toEqual({
+            M: {
+                kind: { S: 'pet' },
+                size: { S: 'large' },
+                colour: { S: 'red' },
+            },
+        })
+    })
+})
+
+/**
+ * **A key is pinned where a literal constructor built its codec**, at the type as at the term. A
+ * caller's adapter can decode to a literal type over a term that pins nothing, and the runtime reads
+ * the term. So the type reads which constructor built the codec, and not the decoded type.
+ */
+describe('the type pins a key only where a literal constructor built the codec', () => {
+    const tagA = held(string, string('A'), {
+        encode: (v: 'A') => v,
+        decode: (v: string) =>
+            v === 'A' ? ('A' as const) : new CodecError(`'${v}' is not 'A'`),
+    })
+    const adapterOrB = union([
+        object({ k: tagA, a: string }),
+        object({ k: string('B'), b: string }),
+    ])
+    const threeWays = union([
+        object({ k: tagA, x: string }),
+        object({ k: string('A'), a: string }),
+        object({ k: string('B'), b: string }),
+    ])
+
+    it('refuses at the clause a literal that only an adapter decodes to', () => {
+        const kept = adapterOrB.extract(
+            // @ts-expect-error the adapter decodes 'A' over a term that pins nothing
+            { k: string('A') },
+        )
+        expect(kept.def).toEqual({ kind: 'never' })
+    })
+
+    it('accepts a literal that a literal constructor pins', () => {
+        const kept = adapterOrB.extract({ k: string('B') })
+        expect(
+            kept.unsafeDecode({ M: { k: { S: 'B' }, b: { S: 'y' } } }),
+        ).toEqual({ k: 'B', b: 'y' })
+    })
+
+    it('keeps the adapter member in the exclusion, as the runtime keeps it', () => {
+        const rest = threeWays.exclude({ k: string('A') })
+        // the type of the result admits the row of the adapter member, which the runtime decodes
+        const adapterRow: ReturnType<typeof rest.unsafeDecode> = {
+            k: 'A',
+            x: 'y',
+        }
+        expect(
+            rest.unsafeDecode({ M: { k: { S: 'A' }, x: { S: 'y' } } }),
+        ).toEqual(adapterRow)
+    })
+
+    it('drops the adapter member from the extraction, as the runtime drops it', () => {
+        const kept = threeWays.extract({ k: string('A') })
+        const adapterRow: ReturnType<typeof kept.unsafeDecode> = {
+            k: 'A',
+            // @ts-expect-error the extraction keeps the member with the literal only
+            x: 'y',
+        }
+        expect(
+            failed(kept.decode({ M: { k: { S: 'A' }, x: { S: 'y' } } })),
+        ).toBe(true)
+        expect(adapterRow).toEqual({ k: 'A', x: 'y' })
     })
 })
 
