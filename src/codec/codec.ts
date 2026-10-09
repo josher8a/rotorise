@@ -117,6 +117,23 @@ declare const fallbackMarker: unique symbol
 declare const undefinableMarker: unique symbol
 
 /**
+ * Marks a codec that a literal constructor built: `string('a')`, `number(1)`, `decimal('1')`,
+ * `boolean(true)`, and each form with more than one value.
+ *
+ * Type-level only. A clause pins a key only where the term pins a literal, and only a literal
+ * constructor builds such a term. The decoded type cannot say which constructor built a codec: a
+ * caller's adapter can decode to a literal type over a term that pins nothing. So the readers that
+ * ask whether a key is pinned read this mark, and no adapter sets the mark.
+ */
+declare const literalMarker: unique symbol
+
+/** The mark of {@link literalMarker}, on a codec that a literal constructor built. */
+type LiteralMark = { readonly [literalMarker]: true }
+
+/** The mark where each codec of `C` carries the mark, and nothing otherwise. */
+type LiteralMarkOf<C> = [C] extends [LiteralMark] ? LiteralMark : unknown
+
+/**
  * Marks the codec for a list's repeating positions.
  *
  * Type-level only, and read at runtime from the definition, for the same reason as
@@ -1007,10 +1024,12 @@ const literalCapability =
  * have to be kept in step.
  */
 export type StringCodec = AttributeCodec<string, Attribute<'S'>> & {
-    <const T extends string>(only: T): ConstantCodec<T, Attribute<'S'>>
+    <const T extends string>(
+        only: T,
+    ): ConstantCodec<T, Attribute<'S'>> & LiteralMark
     <const T extends string>(
         ...allowed: readonly T[]
-    ): AttributeCodec<T, Attribute<'S'>>
+    ): AttributeCodec<T, Attribute<'S'>> & LiteralMark
     readonly set: {
         (): AttributeCodec<ReadonlySet<string>, SS>
         <const T extends string>(
@@ -1054,10 +1073,12 @@ export const string: StringCodec = Object.assign(
  * | {@link number} | JS `number` | no, about 15 digits | rounding, by construction |
  */
 export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> & {
-    <const T extends DynamoNumber>(only: T): ConstantCodec<T, Attribute<'N'>>
+    <const T extends DynamoNumber>(
+        only: T,
+    ): ConstantCodec<T, Attribute<'N'>> & LiteralMark
     <const T extends DynamoNumber>(
         ...allowed: readonly T[]
-    ): AttributeCodec<T, Attribute<'N'>>
+    ): AttributeCodec<T, Attribute<'N'>> & LiteralMark
     readonly set: {
         (): AttributeCodec<ReadonlySet<DynamoNumber>, NS>
         <const T extends DynamoNumber>(
@@ -1150,10 +1171,12 @@ const storedOnly = (value: string): Result<DynamoNumber> =>
  * numeric ordering — trailing zeros that mean something — use {@link string}.
  */
 export const decimal: AttributeCodec<string, Attribute<'N'>> & {
-    <const T extends string>(only: T): ConstantCodec<T, Attribute<'N'>>
+    <const T extends string>(
+        only: T,
+    ): ConstantCodec<T, Attribute<'N'>> & LiteralMark
     <const T extends string>(
         ...allowed: readonly T[]
-    ): AttributeCodec<T, Attribute<'N'>>
+    ): AttributeCodec<T, Attribute<'N'>> & LiteralMark
     readonly set: {
         (): AttributeCodec<ReadonlySet<string>, NS>
         <const T extends string>(
@@ -1258,10 +1281,12 @@ const asJsNumber = (held: DynamoNumber): Result<number> => {
  * `decimal.set()` are two carriers over one wire set: each is the set of its adapter.
  */
 export const number: AttributeCodec<number, Attribute<'N'>> & {
-    <const T extends number>(only: T): ConstantCodec<T, Attribute<'N'>>
+    <const T extends number>(
+        only: T,
+    ): ConstantCodec<T, Attribute<'N'>> & LiteralMark
     <const T extends number>(
         ...allowed: readonly T[]
-    ): AttributeCodec<T, Attribute<'N'>>
+    ): AttributeCodec<T, Attribute<'N'>> & LiteralMark
     readonly set: {
         (): AttributeCodec<ReadonlySet<number>, NS>
         <const T extends number>(
@@ -1301,10 +1326,12 @@ export const number: AttributeCodec<number, Attribute<'N'>> & {
  * `boolean.set()`: DynamoDB has `SS`, `NS` and `BS`, and no set of booleans.
  */
 export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> & {
-    <const T extends boolean>(only: T): ConstantCodec<T, Attribute<'BOOL'>>
+    <const T extends boolean>(
+        only: T,
+    ): ConstantCodec<T, Attribute<'BOOL'>> & LiteralMark
     <const T extends boolean>(
         ...allowed: readonly T[]
-    ): AttributeCodec<T, Attribute<'BOOL'>>
+    ): AttributeCodec<T, Attribute<'BOOL'>> & LiteralMark
 }
 
 const booleanCodec: AttributeCodec<boolean, Attribute<'BOOL'>> = codecOfTerm({
@@ -1835,27 +1862,45 @@ const setCapable = <T, A extends AttributeValue>(
     return capable as unknown as Refined<T, A>
 }
 
-export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
+/** What {@link refine} takes beside the inner codec and the predicate. */
+type RefineOptions<Narrow> = {
+    /**
+     * Values satisfying `is`.
+     *
+     * Optional, but supply it when the inner codec's values rarely pass: generation falls back
+     * to filtering, and a predicate that rejects most of what it sees wastes the search.
+     */
+    readonly arbitrary?: (rng: Rng, size: number) => Narrow
+    /** Named in the error when a stored value fails the check. */
+    readonly describe?: string
+    /**
+     * Told when filtering keeps less than half of what it generates, instead of `console.warn`.
+     *
+     * Only ever called from an arbitrary, so only ever during a property run.
+     */
+    readonly onThinSearch?: (what: string, rate: number) => void
+}
+
+/**
+ * Two signatures, one codec. A refinement of a literal constructor keeps the mark of the literal
+ * ({@link literalMarker}), because the term under the predicate pins the literal: the members of a
+ * slice and the walk of `at` read through a refinement.
+ */
+export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
+    inner: AttributeCodec<Wide, A> & LiteralMark,
+    is: (value: Wide) => value is Narrow,
+    options?: RefineOptions<Narrow>,
+): Refined<Narrow, A> & LiteralMark
+export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
     inner: AttributeCodec<Wide, A>,
     is: (value: Wide) => value is Narrow,
-    options: {
-        /**
-         * Values satisfying `is`.
-         *
-         * Optional, but supply it when the inner codec's values rarely pass: generation falls back
-         * to filtering, and a predicate that rejects most of what it sees wastes the search.
-         */
-        readonly arbitrary?: (rng: Rng, size: number) => Narrow
-        /** Named in the error when a stored value fails the check. */
-        readonly describe?: string
-        /**
-         * Told when filtering keeps less than half of what it generates, instead of `console.warn`.
-         *
-         * Only ever called from an arbitrary, so only ever during a property run.
-         */
-        readonly onThinSearch?: (what: string, rate: number) => void
-    } = {},
-): Refined<Narrow, A> => {
+    options?: RefineOptions<Narrow>,
+): Refined<Narrow, A>
+export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
+    inner: AttributeCodec<Wide, A>,
+    is: (value: Wide) => value is Narrow,
+    options: RefineOptions<Narrow> = {},
+): Refined<Narrow, A> {
     const what = options.describe ?? 'the expected form'
 
     /**
@@ -2386,6 +2431,12 @@ export function withLegacyRead<const C extends AnyCodec>(
  * nothing, so a lazy codec cannot be a set's element — no loss, since a set holds strings, numbers
  * or binary and none of those recurse.
  *
+ * **Two forms.** A thunk with no type arguments takes its type from the codec that it returns, and
+ * keeps the mark of a literal constructor ({@link literalMarker}), so a key pinned through the thunk
+ * stays pinned at the type. A recursive declaration writes its type arguments, because its codec is
+ * not declared yet. The arguments state the decoded type alone, so that form carries no mark, and a
+ * clause cannot name a key pinned through it.
+ *
  * @example
  * ```ts
  * type Category = { name: string; children?: readonly Category[] }
@@ -2395,9 +2446,18 @@ export function withLegacyRead<const C extends AnyCodec>(
  * )
  * ```
  */
-export const lazy = <T, A extends AttributeValue = AttributeValue>(
+export function lazy<const C extends AnyCodec>(
+    get: () => C,
+    // a thunk that returns `never` takes the form below, which reads its type from the context
+    ...returnsNever: [C] extends [never] ? [never] : []
+): AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue> &
+    LiteralMarkOf<C>
+export function lazy<T, A extends AttributeValue = AttributeValue>(
     get: () => Nestable<T>,
-): AttributeCodec<T, A> => {
+): AttributeCodec<T, A>
+export function lazy<T, A extends AttributeValue = AttributeValue>(
+    get: () => Nestable<T>,
+): AttributeCodec<T, A> {
     // **A black hole.** The resolution of a recursive union forces the thunk again, because the
     // union checks its options. Without the mark, each force runs `get()` again, and the recursion
     // overflows the stack. The re-entrant force throws at once, and `force` reads the throw as the
@@ -3003,20 +3063,21 @@ type Kept<F, C> = F extends Member
  * **Two codecs whose stored attributes cannot meet**: the members of DynamoDB that the two write
  * share none, or each pins literals and the two pins share no stored value. The stored attribute
  * of an adapter is the attribute of its inner codec, so `number` and `decimal` each write `N`, and
- * `number(1)` and `decimal('1')` each store the text `1`.
+ * `number(1)` and `decimal('1')` each store the text `1`. A codec pins literals only where a literal
+ * constructor built it ({@link literalMarker}), so a caller's adapter pins nothing here.
  *
  * Coarser than the walk of `at` in two places: two maps or two lists are never apart here, and a
- * caller's adapter whose decoded literal is not its stored literal pins the decoded one.
+ * caller's adapter over a literal pins nothing here, where the walk reads the literal under it.
  */
 type StoredApart<X, Y> = [
     WrittenMembers<AttributeOf<X>> & WrittenMembers<AttributeOf<Y>>,
 ] extends [never]
     ? true
-    : [StoredPin<Decoded<X>>] extends [never]
+    : [StoredPin<X>] extends [never]
       ? false
-      : [StoredPin<Decoded<Y>>] extends [never]
+      : [StoredPin<Y>] extends [never]
         ? false
-        : [StoredPin<Decoded<X>> & StoredPin<Decoded<Y>>] extends [never]
+        : [StoredPin<X> & StoredPin<Y>] extends [never]
           ? true
           : false
 
@@ -3027,8 +3088,11 @@ type WrittenMembers<A> = A extends unknown
       }[keyof A]
     : never
 
+/** The stored text of a literal, or `never` where no literal constructor built the codec. */
+type StoredPin<C> = C extends LiteralMark ? StoredText<Decoded<C>> : never
+
 /** The stored text of a literal, or `never` where the decoded type is not a literal. */
-type StoredPin<D> = D extends string | number | boolean
+type StoredText<D> = D extends string | number | boolean
     ? string extends D
         ? never
         : number extends D
@@ -4646,21 +4710,24 @@ type RequiredKeysOf<Spec> = {
 }[keyof Spec]
 
 /**
- * **A type that is a literal rather than a base.**
+ * **A codec that pins a literal**: a literal constructor built it, and it decodes to a literal type
+ * rather than a base.
  *
- * The type level's reading of "this name is pinned to a literal", and it has to be a reading:
- * nothing in a codec's *type* says which constructor built it, so the question is put to the type
- * the codec decodes to. `'a'` and `'a' | 'b'` answer `true`; `string`, `number` and `boolean`
- * answer `false`, each excluded by its own row, because a base is assignable *from* its literals
- * and `extends` alone cannot tell the two apart.
- *
- * **Where this and the runtime disagree, and it is one case.** `literalsOf` reads the *term* and
- * accepts a `literal`, a `refine` over one included. A `held` or `custom` whose adapter happens to
- * decode to a literal type is read as pinned here and is not read as pinned there, so a clause on
- * such a name typechecks and the slice keeps no option: `extract` and `exclude` return `never`. An
- * adapter that narrows to a literal type is the only way to write it.
+ * The type level's reading of "this name is pinned to a literal". The runtime reads the term, and
+ * a term pins a literal only where a literal constructor built it, so this reads
+ * {@link literalMarker} first. A caller's adapter that decodes to a literal type carries no mark,
+ * and pins nothing here as it pins nothing at the term.
  */
-type PinsALiteral<V> = [V] extends [never]
+type PinsALiteral<C> = C extends LiteralMark
+    ? PinsALiteralValue<Decoded<C>>
+    : false
+
+/**
+ * Whether a decoded type is a literal type rather than a base. `'a'` and `'a' | 'b'` answer `true`;
+ * `string`, `number` and `boolean` answer `false`, each excluded by its own row, because a base is
+ * assignable *from* its literals and `extends` alone cannot tell the two apart.
+ */
+type PinsALiteralValue<V> = [V] extends [never]
     ? false
     : string extends V
       ? false
@@ -5066,9 +5133,11 @@ type FieldAt<Spec, K> = K extends keyof Spec ? Spec[K] : never
  */
 type SpecKeeps<Spec, C> = {
     [K in keyof C]-?: K extends RequiredKeysOf<Spec>
-        ? [AttributeOf<FieldAt<Spec, K>>] extends [AttributeOf<C[K]>]
-            ? [Decoded<FieldAt<Spec, K>>] extends [Decoded<C[K]>]
-                ? never
+        ? PinsALiteral<MarkedCodec<FieldAt<Spec, K>>> extends true
+            ? [AttributeOf<FieldAt<Spec, K>>] extends [AttributeOf<C[K]>]
+                ? [Decoded<FieldAt<Spec, K>>] extends [Decoded<C[K]>]
+                    ? never
+                    : K
                 : K
             : K
         : K
@@ -5144,7 +5213,7 @@ export type VariantsOf<Spec> = {
 type TagsAtSpecs<S, K, A> = S extends unknown
     ? K extends RequiredKeysOf<S>
         ? [AttributeOf<FieldAt<S, K>>] extends [A]
-            ? PinsALiteral<Decoded<FieldAt<S, K>>> extends true
+            ? PinsALiteral<MarkedCodec<FieldAt<S, K>>> extends true
                 ? Decoded<FieldAt<S, K>>
                 : never
             : never
@@ -5153,7 +5222,7 @@ type TagsAtSpecs<S, K, A> = S extends unknown
 
 /** A clause key no member could ever answer, whatever the values turn out to be. */
 type BadClauseKey<S, C> = {
-    [K in keyof C]: PinsALiteral<Decoded<C[K]>> extends true
+    [K in keyof C]: PinsALiteral<C[K]> extends true
         ? [TagsAtSpecs<S, K, AttributeOf<C[K]>>] extends [never]
             ? K
             : [Decoded<C[K]>] extends [TagsAtSpecs<S, K, AttributeOf<C[K]>>]
@@ -5407,7 +5476,8 @@ export const never: AttributeCodec<never, never> & {
  */
 export const union = <const Options extends readonly AnyCodec[]>(
     options: Options,
-): UnionCodec<DerivedUnion<Options>, Options> => {
+): UnionCodec<DerivedUnion<Options>, Options> &
+    LiteralMarkOf<Options[number]> => {
     // **A recursive spine is refused before any occupancy runs.** An option's occupancies force
     // each thunk on its spine, and a recursive one would not end, or would throw on the codec
     // being declared
@@ -5523,7 +5593,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         value: T,
     ) => Result<WrittenBy<Options>>
     const decode = read as (attribute: AttributeValue) => Result<T>
-    return {
+    const codec: UnionCodec<DerivedUnion<Options>, Options> = {
         encode,
         decode,
         unsafeEncode: (value) => orThrow(encode(value)),
@@ -5545,6 +5615,10 @@ export const union = <const Options extends readonly AnyCodec[]>(
                 false,
             )) as never,
     }
+    // the mark is phantom, so no value carries it and no check can produce it. A union of literal
+    // codecs pins their literals at run time (`literalAlternatives`), so the type states the mark
+    // where each option carries the mark
+    return codec as typeof codec & LiteralMarkOf<Options[number]>
 }
 
 /**
