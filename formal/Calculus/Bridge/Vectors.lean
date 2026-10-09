@@ -4,7 +4,7 @@ import Calculus.Dynamo.Lang.Denote
 # The vector checker — how a generated test vector becomes a kernel-checked theorem
 
 The TypeScript codec is claimed to compute what `denote` denotes.
-This file is the Lean half of the bridge that checks the claim: a generator emits one line per vector,
+This file is the Lean half of the bridge that checks the claim: the emitter states each vector,
 and the *kernel* — not a tactic, not `#eval` — decides whether the model agrees.
 
 Three facts about this development force the shape of what follows, and each of them rules
@@ -13,7 +13,7 @@ out an easier design.
 **The kernel evaluates `denote`, and the kernel is the check.** `#eval` runs `denote` too, but a
 printed value proves nothing, and `native_decide` rests on `Lean.ofReduceBool`, which is outside the
 advertised axiom base. Definitional unfolding is the check: `(denote t).e v = some a` is `rfl` for every
-term form, including deeply nested ones, in well under a second. So a vector is checked by
+term form, including deeply nested ones. So a vector is checked by
 being *typechecked*, and the certificate is a theorem rather than a program's output.
 
 **Except through `M`.** A *whole-structure* equation on a map result is not `rfl`, and
@@ -560,9 +560,9 @@ example : (2 : Nat) + 2 = 5 := kernel_rfl%
 #guard_msgs in
 example : (2 : Nat) ≤ 5 := kernel_rfl%
 
-/-! ## The shape of a generated vector
+/-! ## The shape of a vector
 
-A vector file emitted by the generator is one line per case, and reads:
+A committed sample states one theorem per vector, and reads:
 
 ```
 theorem v0 : check 8 ((denote t).e v) (some a) = .same := kernel_rfl%
@@ -575,37 +575,23 @@ line's content is then recovered with `check_same v0 : (denote t).e v = some a`.
 A rejection vector is the same line with `.differ`, and by `check_differ` it is a proof that
 the codec does *not* write that attribute. Under-fuelling either one produces `.exhausted`,
 which matches neither right-hand side and fails the build — the property that makes the
-generator's fuel argument something the kernel checks rather than something a reader trusts.
+emitter's fuel argument something the kernel checks rather than something a reader trusts.
 
-### Fuel, and what a vector line costs
+A generated vector file states the same comparison as a row of a list. The comparator of a row
+form (`Calculus.Bridge.Rows`) answers `check … == .same` or `vcheck … == .same`, and one theorem
+per list states `failing ok rows = []` by `kernel_rfl%`. The elaborator does not evaluate the
+goal, and the kernel checks each row of the list.
+
+### Fuel, and what a vector costs
 
 Fuel is a bound on *attribute* depth, not on the term's, and `check n` is exact once `n`
 exceeds the nesting of the written attribute — `Attr.nesting` in `Nesting.lean` counts the
-same layers. A generator should emit the depth it knows it built plus one; there is no reason
-to be generous, because **fuel is not a cost driver**. The comparator's work is bounded by
-the attribute, not by the budget: 50 two-field object vectors cost the same at `check 2` as
-at `check 8`, to within noise. Over-fuelling is free, and under-fuelling fails loudly, so a
-generator that cannot compute the depth should pass a constant.
+same layers. The emitter computes the fuel from the attribute: one layer per `L` or `M`, and one
+for the scalar at the bottom. **Fuel is not a cost driver**: the comparator's work is bounded by
+the attribute, not by the budget. Over-fuelling is free, and under-fuelling fails loudly.
 
 What a vector costs is what the *codec* costs, and that is a fact about `denote`, not about
-this file. Marginal cost per vector, over the ~0.8 s import baseline:
-
-| vector | ms |
-|---|---|
-| scalar (`string`) | ~5 |
-| two-element `array` | ~8 |
-| two-key `record` | ~19 |
-| one-field `object` | ~25 |
-| two-field `object` | ~64 |
-| `object` nested two deep | ~90 |
-
-Linear in the number of vectors — 100 two-field object vectors cost the same per vector as
-50 — so a file of a few hundred is seconds, not minutes, and the bridge is affordable in CI.
-
-**One line per vector, never a batch.** Folding 200 vectors into a single `List.all` and one
-`rfl` does not amortise anything and actively fails: it exceeds `maxHeartbeats` at 200000,
-where the same 200 written out as separate lines compile in 19 s. Each `rfl` gets its own
-heartbeat budget, and distinct vectors share no structure for a batch to exploit.
+this file.
 
 `number` can carry **positive** vectors. `Value.num` carries a `WFNumeral`, which is a
 `String` subtype carrying its own well-formedness proof, so a closed numeric value is one literal
@@ -615,7 +601,7 @@ compares the underlying text, which is the carrier's own equality.
 
 **It has refusal vectors.** A refusal names the term and a value the term *rejects*, so it needs
 no inhabitant of the codec's own carrier: `(denote Term.number).e (Value.str "x") = none` is
-`rfl`. `Term.number` is a closed term, so the generator needs no term-level refusal at it.
+`rfl`. `Term.number` is a closed term, so the emitter needs no term-level refusal at it.
 Term-inexpressible and value-inexpressible are two boundaries.
 -/
 

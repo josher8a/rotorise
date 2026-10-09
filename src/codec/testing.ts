@@ -12,7 +12,7 @@
  * import { checkRoundTrip, rngFrom } from 'rotorise/testing'
  * ```
  *
- * The generators themselves stay on the codecs — `arbitrary` and `shrink` are a codec describing
+ * The arbitraries themselves stay on the codecs — `arbitrary` and `shrink` are a codec describing
  * what it can carry, which is a fact about the codec and not about testing. What moved is the
  * machinery that *drives* them.
  *
@@ -93,7 +93,7 @@ export type Checkable<T> = {
      *
      * A {@link Term}: a checkable is generated for and round tripped, which is a codec's pair,
      * and a field has none — so handing one here is the defect the type refuses rather than a case
-     * the generator would have to answer.
+     * the arbitrary would have to answer.
      */
     def?: Term
 }
@@ -224,7 +224,7 @@ export type CheckOptions<T = unknown> = {
  *
  * Generation is driven by the codec rather than the TypeScript type — see
  * {@link AttributeCodec.arbitrary} — so `decimal` yields normalised decimals and `string.set()`
- * never yields the empty set. A structurally free generator would produce values DynamoDB itself
+ * never yields the empty set. A structurally free arbitrary would produce values DynamoDB itself
  * rejects and blame the codec.
  *
  * Deterministic: the same seed reproduces a counterexample from CI.
@@ -756,8 +756,8 @@ export const structuralEquals = (a: unknown, b: unknown): boolean => {
 
 // ── generating, by what a codec is ──────────────────────────────────
 //
-// The codecs carry a {@link Term} saying what they are; the generators live here and dispatch
-// on it. That is the whole reason for the def: a generator baked into every codec ships to
+// The codecs carry a {@link Term} saying what they are; the arbitraries live here and dispatch
+// on it. That is the whole reason for the def: an arbitrary baked into every codec ships to
 // production whether or not anything ever runs a property test, and no bundler can shake a closure
 // out of an object that is always constructed.
 
@@ -913,7 +913,7 @@ const THIN_SEARCH = 0.5
 /**
  * Draws from a wider codec until the predicate accepts.
  *
- * Runs only from a generator, so only during a property run. A predicate that rejects most draws
+ * Runs only from an arbitrary, so only during a property run. A predicate that rejects most draws
  * does not fail — it silently shrinks the search — so it says so once; `onThinSearch` routes that
  * somewhere other than the console.
  */
@@ -964,7 +964,7 @@ const bySampling = <Wide, Narrow extends Wide>(
 const samplers = new WeakMap<object, (rng: Rng, size: number) => unknown>()
 
 /**
- * How many values the generator has produced through a `held` read. A check reads it before and
+ * How many values the arbitrary has produced through a `held` read. A check reads it before and
  * after one generation: a value that came through a read is one the pair produced, so a codec
  * that then declines to write it fails (C) rather than declining a stranger.
  */
@@ -973,7 +973,7 @@ let readsGenerated = 0
 /**
  * A value the codec can carry.
  *
- * Dispatches on {@link Term}, so a codec kind that grows a generator grows it here rather than
+ * Dispatches on {@link Term}, so a codec kind that grows an arbitrary grows it here rather than
  * in the codec itself. `size` bounds recursion.
  */
 export const arbitraryOf = (
@@ -1008,8 +1008,8 @@ export const arbitraryOf = (
         case 'held':
             /**
              * Generated for the inner codec and handed out through `decode`, so what is generated is
-             * always something the pair produced — a generator for the *outer* type could invent a
-             * value `encode` never makes, and the round-trip would fail on the generator rather than
+             * always something the pair produced — an arbitrary for the *outer* type could invent a
+             * value `encode` never makes, and the round-trip would fail on the arbitrary rather than
              * on the codec.
              *
              * The conversion is called raw, where the codec guards it. Here the input is correct by
@@ -1018,7 +1018,7 @@ export const arbitraryOf = (
              */
             if (def.arbitrary) return def.arbitrary(rng, size)
             // a numeric policy of `opaque` generates the JS values it holds, as before it was a
-            // `held`. The derived generator would hand it an `NS` read, which the policy refuses
+            // `held`. The derived arbitrary would hand it an `NS` read, which the policy refuses
             if (def.via === 'opaqueLossy')
                 return someUnknown(rng, size, 'lossy')
             if (def.via === 'opaqueRefuse')
@@ -1030,7 +1030,7 @@ export const arbitraryOf = (
         case 'set': {
             /**
              * Deduplicated by what is *stored*, as the codec does — two values that write the same
-             * member are one member of the set, so a generator that did not deduplicate by the stored
+             * member are one member of the set, so an arbitrary that did not deduplicate by the stored
              * form would produce a set the codec cannot carry back unchanged.
              *
              * The stored form is computed once per value and kept as the map key. It is an
@@ -1134,7 +1134,7 @@ export const arbitraryOf = (
 
 /**
  * A set, deduplicated by what is *stored*, as the codec does — two values that write the same
- * member are one member of the set, so a generator that did not deduplicate by the stored form
+ * member are one member of the set, so an arbitrary that did not deduplicate by the stored form
  * would produce a set the codec cannot carry back unchanged.
  */
 const someSet = (
@@ -1623,7 +1623,7 @@ export const checkEquivalent = <T>(
  * way back in reads a row and writes back something else, which is data loss on a read-modify-write
  * and nothing else in the harness would catch it.
  *
- * The other direction, `decode(encode(t))` for every `t`, is not reachable: there is no generator for
+ * The other direction, `decode(encode(t))` for every `t`, is not reachable: there is no arbitrary for
  * the held type except `decode` itself, so every value the harness can make is already in its image.
  * `checkRoundTrip` over a spec holding the adapter covers what that leaves.
  *
