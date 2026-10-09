@@ -19,7 +19,7 @@
  * equality. The host accepts two fills with equal constants. Such a pair goes to disjointness and
  * to a kernel row of its guard column, and no check reads a compatibility column for the pair.
  */
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { DynamoNumber, isNumeral, isStoredNumeral } from '../attribute'
@@ -89,6 +89,7 @@ import {
     viewsDisjoint,
 } from '../term'
 import { arbitraryOf, rngFrom, structuralEquals } from '../testing'
+import { typeVectorFiles } from '../typeVectors'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
@@ -1351,6 +1352,43 @@ describe('the generated pool, against the model', () => {
             '.pool.paths2.lean',
             '.pool.paths3.lean',
             '.pool.guards.lean',
+        ])
+    })
+
+    /**
+     * **The type of a slice and of a path states the decision of the run time.** Each check is one
+     * decision of the run time, put to the type checker. The gate compiles the files and holds the
+     * set of disagreements to its list. The printer throws at a root that it cannot print, so no
+     * root leaves the check in silence.
+     */
+    it('emits the type vectors for the gate', () => {
+        const files = typeVectorFiles({
+            slices: perSeed.flatMap((one) => one.slices),
+            paths: perSeed.flatMap((one) => one.paths),
+            clauses: clauseVocabulary,
+        })
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            const types = join(process.cwd(), 'formal', '.pool.types')
+            mkdirSync(types, { recursive: true })
+            for (const [file, text] of files)
+                writeFileSync(join(types, file), text)
+        }
+        expect(files.map(([file]) => file)).toEqual([
+            'codecs.ts',
+            'slices0.ts',
+            'slices1.ts',
+            'slices2.ts',
+            'slices3.ts',
+            'slices4.ts',
+            'slices5.ts',
+            'slices6.ts',
+            'slices7.ts',
+            'slices8.ts',
+            'slices9.ts',
+            'paths.ts',
+            'rows.json',
+            'tsconfig.slices.json',
+            'tsconfig.paths.json',
         ])
     })
 })
