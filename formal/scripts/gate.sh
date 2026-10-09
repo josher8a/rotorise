@@ -80,8 +80,13 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # No module imports a generated file, so `#assert_axioms_all` reads no vector: each file ends with
   # `#assert_axioms_module`, which checks the axioms of the theorems of that file, and a job fails
   # a file whose last line is not that command.
+  # The type bridge runs beside the kernel jobs: two tsc programs, which put the run time to the
+  # type checker. The bridge prints a summary when it passes, so its job keeps the output of a
+  # failure only, and reports as one more job.
   run 'vector bridge' bash -c '
     jobs=${GATE_JOBS:-6}; out=$(mktemp -d); trap "rm -rf $out" EXIT
+    ( python3 scripts/type_bridge.py > $out/types.log 2>&1; rc=$?
+      [ $rc -eq 0 ] || cp $out/types.log $out/xtype_bridge.out; echo $rc > $out/xtype_bridge.rc ) &
     printf "%s\n" .pool.separations.lean .pool.slices.lean .pool.disjoints.lean \
       .pool.paths0.lean .pool.paths1.lean .pool.paths3.lean .pool.paths2.lean \
       .legacyreads.lean .separations.lean .readverdicts.lean .disjoints.lean .vectors.full.lean \
@@ -91,13 +96,14 @@ if [ "$RUN_BUILD" -eq 1 ]; then
       [ \"\$(tail -n 1 {})\" = \"#assert_axioms_module\" ] ||
         { echo \"the last line is not #assert_axioms_module\" > $out/x{}.out; echo 1 > $out/x{}.rc; exit 0; }
       lake env lean {} > $out/x{}.out 2>&1; echo \$? > $out/x{}.rc"
+    wait
     fail=0
     for rc in "$out"/*.rc; do
       f=$(basename "$rc" .rc); f=${f#x}; o=$(cat "$out/x$f.out" 2>/dev/null)
       if [ "$(cat "$rc")" != 0 ]; then echo "$f: exit $(cat "$rc")"; echo "$o"; fail=1; continue; fi
       [ -z "$o" ] || { echo "$f: $o"; fail=1; }
     done
-    [ "$(ls "$out"/*.rc | wc -l)" -eq 17 ] || { echo "a job did not report"; fail=1; }
+    [ "$(ls "$out"/*.rc | wc -l)" -eq 18 ] || { echo "a job did not report"; fail=1; }
     exit $fail'
 else
   printf 'SKIP  %-28s (--no-build)\n' 'lake build'
