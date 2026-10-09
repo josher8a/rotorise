@@ -584,6 +584,18 @@ const including = (
 const absent: AnyCodec = codecOfTerm({ kind: 'never' })
 
 /**
+ * **A codec that admits no value at a path**: its term is `never`, the model's frame whose head is
+ * `never` (`frameNever`). A declared `never` and {@link absent} are one term, so the test reads the
+ * term and not the identity of {@link absent}: the frontier keeps the first codec of a term, and an
+ * identity test made the verdict depend on the order of the options.
+ *
+ * **The test forces no thunk.** The walk forces a thunk only to step through it, and a thunk at the
+ * end of a path throws where the caller uses the codec. So a thunk whose target is `never` reads as
+ * a codec here, where the model, which prints the target, reads `never`.
+ */
+const admitsNothing = (codec: AnyCodec): boolean => codec.def.kind === 'never'
+
+/**
  * What the variants reach, one codec for each term ({@link sameTerm}), so the first declared wins.
  * Two calls of one constructor build two codecs of one term, and the model reads one term. A
  * variant that refuses makes the whole answer a refusal, because the reach of that variant is
@@ -853,7 +865,7 @@ const refusedAt = (refusal: CodecError): AnyCodec => {
  * they said nothing at a missing definition, and `accepts` declines to claim instead of reaching
  * the same `false` by catching.
  *
- * **`partial` is a frontier that holds {@link absent}**: some option admits no value at the path,
+ * **`partial` is a frontier that holds a codec that admits nothing** ({@link admitsNothing}): some option admits no value at the path,
  * so a write there leaves an item of that option unreadable. A clause that drops the option settles
  * the path, so the refusal names `narrow`.
  */
@@ -2923,7 +2935,10 @@ export type PathOf<T, F = unknown> = PathTerminal<T> &
     PathBody<NonNullable<T>, F>
 
 type PathBody<T, F> = [T] extends [readonly unknown[]]
-    ? PathList<T[number]>
+    ? // a list that holds no value offers no position, as the walk answers a position of it as vacant
+      [T[number]] extends [never]
+        ? Record<never, never>
+        : PathList<T[number]>
     : [T] extends [object]
       ? {
             readonly [K in UnionKeys<T>]: PathOf<ValueAt<T, K>, ChildAt<F, K>>
@@ -3683,8 +3698,8 @@ const objectFromMap = <
                             ? narrowAcross(frontier, step)
                             : acrossVariants(frontier, step, binds)
                     if (next instanceof CodecError) return refusedAt(next)
-                    // a frontier of `absent` alone is a name that no codec declares
-                    if (next.every((one) => one === absent)) {
+                    // a frontier where no codec admits a value is a name that no codec declares
+                    if (next.every(admitsNothing)) {
                         throw new CodecError(
                             `no attribute is declared at '${path}'`,
                         )
@@ -3703,7 +3718,7 @@ const objectFromMap = <
                     ? segments.length <= 1
                         ? first
                         : codecAtLevel(first.def, segments.length - 1)
-                    : unresolvedAt(String(path), frontier.includes(absent))
+                    : unresolvedAt(String(path), frontier.some(admitsNothing))
             }
             const here = walk()
 

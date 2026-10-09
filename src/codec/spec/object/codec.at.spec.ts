@@ -16,6 +16,7 @@ import {
     dynamoNumber,
     lazy,
     list,
+    never,
     number,
     object,
     opaque,
@@ -254,5 +255,43 @@ describe('a path under opaque', () => {
         })
         // no `narrow` narrows the path, so a write needs no precondition
         expect(deep.preconditions).toEqual([])
+    })
+})
+
+describe('a path to a codec that admits no value', () => {
+    const vacant = /no attribute is declared at /
+
+    it('a path to a declared `never` is vacant, because the model reads it as a frame of `never`', () => {
+        const item = object({ a: string, b: optional(never) }).item
+        expect(() => item.at((p) => p.b)).toThrow(vacant)
+    })
+
+    it('a path past a list of `never` is vacant in either option order, because the verdict reads the term and not the order', () => {
+        const declares = object({ k: string('a'), x: array(never) })
+        const lacks = object({ k: string('b') })
+        for (const options of [
+            [declares, lacks],
+            [lacks, declares],
+        ] as const) {
+            const item = object({ r: union(options) }).item
+            // @ts-expect-error a list that holds no value offers no position, at the type as at run time
+            expect(() => item.at((p) => p.r.x.at(0))).toThrow(vacant)
+        }
+    })
+
+    it('a `never` beside a codec is a path that some variants declare only, because a write there leaves the other variant unreadable', () => {
+        const empty = object({ k: string('a'), x: optional(never) })
+        const full = object({ k: string('b'), x: string })
+        for (const options of [
+            [empty, full],
+            [full, empty],
+        ] as const) {
+            const at = object({ r: union(options) }).item.at((p) => p.r.x)
+            expect(at.decode({ S: 'v' })).toMatchObject({
+                message: expect.stringMatching(
+                    /declared by some variants only/,
+                ),
+            })
+        }
     })
 })
