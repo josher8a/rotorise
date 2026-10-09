@@ -275,13 +275,13 @@ describe('a literal with no alternatives', () => {
 
 describe('the admissible set is what DynamoDB stores', () => {
     /**
-     * §3's `(literal-N)` premise `ℓ ⊆ D`, and the defect that made it more than bookkeeping.
+     * The premise of the rule `(literal-N)`, `ℓ ⊆ D`, and the defect that made it more than bookkeeping.
      *
      * `number` has refused `NaN`, `Infinity` and anything outside `D` on both halves since the
      * numeral domain was tightened. `literal` had not, and it is the other term that writes `N`:
      * `literal(NaN)` produced `{ N: 'NaN' }` and `literal(1e400)` produced `{ N: 'Infinity' }`,
      * both reachable with no cast, `tsc` clean, and both rejected by the service. An attribute
-     * outside §1's `Numerals` is the one thing a term may never write.
+     * outside the `Numerals` of the attribute domain is the one thing a term may never write.
      *
      * Refused at the declaration rather than per encode, because that is where the premise lives —
      * `ℓ` is data this library owns, so the check is decidable when the codec is built.
@@ -341,8 +341,8 @@ describe('the read side reads through the same gate as number', () => {
      * number(0, 16).decode({ N: '0x10' })    → 16
      * ```
      *
-     * No law in §2 catches it. (C) holds — `0` re-encodes fine — and so does (R). What it breaks
-     * is §1: `Carries('N')` is `Numerals`, and `''` is not one, so `p` was defined on something
+     * No law of a codec catches it. (C) holds — `0` re-encodes fine — and so does (R). What it breaks
+     * is the attribute domain: `Carries('N')` is `Numerals`, and `''` is not one, so `p` was defined on something
      * that is not an attribute. `decimal` and `number` both check this on the way in; `literal`
      * is the third term that writes an `N` and it did not.
      *
@@ -353,7 +353,7 @@ describe('the read side reads through the same gate as number', () => {
     it('refuses an N that is not a numeral, whatever Number would make of it', () => {
         const status = number(0, 1, 2)
         for (const text of ['', ' ', '\n', '0b11', '0o7', '1_0']) {
-            // not admitted at all, which is the §1 claim — `Number` would have made a value of
+            // not admitted at all, which is the claim of the attribute domain — `Number` would have made a value of
             // each of these and membership would then have let some through
             expect(readsBack(status, { N: text })).toBe(false)
             expect(() => status.unsafeDecode({ N: text })).toThrow(CodecError)

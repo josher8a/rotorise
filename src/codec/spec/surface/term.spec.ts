@@ -1,7 +1,7 @@
 /**
  * The five functions of a term, against the rules they are ported from.
  *
- * Each test names the rule of §3, §5 or §6 that the answer serves, not the answer. The terms are
+ * Each test names the rule of the judgement, of choice or of the equations that the answer serves, not the answer. The terms are
  * built as data rather than through the constructors on purpose: the point of `term.ts` is that the
  * model's language is expressible directly, so a test that could only reach a term through a codec
  * would be testing the conversion twice and the language never.
@@ -22,7 +22,7 @@ const bool: Term = { kind: 'boolean' }
 
 describe('the member a term stores', () => {
     /**
-     * §5 `(union)` concludes `μ` where every option agrees and `⊤` otherwise. `⊤` is the honest
+     * The rule `(union)` concludes `μ` where every option agrees and `⊤` otherwise. `⊤` is the honest
      * index for a term that writes two members, and it is what costs the union (W) and its
      * read-side corollary — so the difference between the two answers is a difference in which
      * laws pin the term, not a nicety.
@@ -45,7 +45,7 @@ describe('the member a term stores', () => {
     })
 
     /**
-     * §3 gives two terms a `⊤` index and gives each a different reason: `lazy` could be asked but
+     * The judgement gives two terms a `⊤` index and gives each a different reason: `lazy` could be asked but
      * answering forces the thunk, and `opaque` writes whatever the value turns out to be. A term
      * with no member is one only (MP) constrains. A union of several members answers nothing for a
      * third reason, which is `unanimous` and is asked in its own test.
@@ -56,7 +56,7 @@ describe('the member a term stores', () => {
     })
 
     /**
-     * §6's `μ(w(c)) = μ(c)` for the wrappers. This is what keeps a key's attribute type stable
+     * The equation `μ(w(c)) = μ(c)` for the wrappers. This is what keeps a key's attribute type stable
      * under a refactor: putting a `refine` or a `withLegacyRead` around a sort key must not change what the
      * index is built on.
      */
@@ -84,7 +84,7 @@ describe('the member a term stores', () => {
     })
 
     /**
-     * §3 `(set)`: a set's member is `setMember` of its element's member. An element of any other
+     * The rule `(set)`: a set's member is `setMember` of its element's member. An element of any other
      * member has no stored set, which is the DynamoDB set obligation, and the index says `⊤`.
      */
     it("a set stores the set member of its element's member, and nothing for any other member", () => {
@@ -123,7 +123,7 @@ describe('the occupancies of a term', () => {
     })
 
     /**
-     * §5: `held` and `withLegacyRead` swap sides, and the swap is the whole content of the two families
+     * `held` and `withLegacyRead` swap sides, and the swap is the whole content of the two families
      * being asked separately. `held` writes where its held side does, because the held side
      * restricts every value `f` receives, while its `g` only post-processes a read.
      * `withLegacyRead`'s `r` widens exactly the reading and adds no way to write.
@@ -155,10 +155,10 @@ describe('the occupancies of a term', () => {
     })
 
     /**
-     * §3 `(opaque)` is **total**: it holds a number as a `DynamoNumber`, so it writes every slot
+     * The rule `(opaque)` is **total**: it holds a number as a `DynamoNumber`, so it writes every slot
      * and reads every member. That is the model's `occTop` at the exact `opaq`.
      *
-     * **The closed form, and `undefined` would be the wrong answer.** §5 separates the two things
+     * **The closed form, and `undefined` would be the wrong answer.** Separation tells apart the two things
      * a `⊤` covers: *unknown*, which is `held`, `custom` and a host `lazy`, and *everything*,
      * which is what `opaque` is by design. An `opaque` answering `undefined` would claim its
      * occupancy cannot be read, about the one term whose occupancy is completely known, and the
@@ -192,7 +192,7 @@ describe('the occupancies of a term', () => {
     })
 
     /**
-     * §5 asks the two families separately and never reconciles them, and it needs a pair that
+     * Separation asks the two families separately and never reconciles them, and it needs a pair that
      * fails on one side only to be worth doing.
      *
      * **The set bases no longer provide one.** `set(string)` against `set(decimal)` wrote one
@@ -244,7 +244,7 @@ describe('the occupancies of a term', () => {
 
 describe("an object option's name spec", () => {
     /**
-     * §5: a union admits an object option when every present name is declared and every required
+     * A union admits an object option when every present name is declared and every required
      * name is present, so an `opt` binding **widens** admission. Two objects declaring only
      * optional names both admit the empty map however disjoint their names, which is the ambiguity
      * the name test cannot see — and it can only be stated because the spec records the two facts
@@ -261,7 +261,7 @@ describe("an object option's name spec", () => {
                 },
             },
         }
-        // `withLegacyRead` concludes `req` (§4): the absence is in the row, never in the value
+        // `withLegacyRead` concludes `req`: the absence is in the row, never in the value
         expect(specOf(body)).toEqual({ id: true, note: false, kind: true })
     })
 
@@ -276,7 +276,7 @@ describe('the tags a variant answers to', () => {
         field: Term extends never ? never : Parameters<typeof tagsOf>[1],
     ) => tagsOf('kind', field)
 
-    /** §5 `(dunion)`: the tag is read off the variant's own required string literal. */
+    /** The rule `(dunion)`: the tag is read off the variant's own required string literal. */
     it('a required string literal at the discriminator names the tags', () => {
         expect(
             variant({
@@ -361,7 +361,7 @@ describe('the tags a variant answers to', () => {
 
 describe('the term `.set()` writes', () => {
     /**
-     * §3 `(set)` is the finite-powerset lift of an element term, so a restriction rides at the
+     * The rule `(set)` is the finite-powerset lift of an element term, so a restriction rides at the
      * element: the set of `refine(decimal, q)` holds that refinement as its element, and the
      * predicate tests the text the caller holds.
      */

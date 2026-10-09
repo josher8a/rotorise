@@ -112,7 +112,7 @@ export const memberOf = (value: AttributeValue): AttributeName | undefined => {
 
 /**
  * What DynamoDB **accepts** in an `N`: optional sign, digits, optional point, optional exponent;
- * at most 38 significant digits; magnitude zero or `1e-130 … 9.9…e125`. §1's `Numerals`, and the
+ * at most 38 significant digits; magnitude zero or `1e-130 … 9.9…e125`. The `Numerals` of the attribute domain, and the
  * same predicate as `Numeral.WF` in `formal/Calculus/Dynamo/Domain.lean`.
  */
 const NUMERAL = /^[+-]?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/
