@@ -37,7 +37,7 @@ import type { AnyCodec } from './codec'
 import { number } from './codec'
 import { codecOfTerm } from './denote'
 import type { PathStep, PathVectors, Slice } from './lean'
-import { hostAt, leanPath, leanTermOf, reachable } from './lean'
+import { hostAt, leanTermOf, reachable } from './lean'
 import { CodecError } from './result'
 import type { Literal, Term } from './term'
 import { force, sameTerm } from './term'
@@ -914,7 +914,9 @@ export const typeVectorFiles = ({
     )
     const pathRoots = byHash(
         paths,
-        (v) => `path|${leanPath({ ...v, name: 'path' })}`,
+        // the term and not `leanPath`'s print, which holds the rows: a root keeps its id when the
+        // pool draws another set of paths at it
+        (v) => `path|${leanTermOf(v.codec, 'path', freshBound())}`,
     ).map(([root, v], i) =>
         pathRoot(v, printerOf(constants, `p${i}`, v.name), root),
     )
