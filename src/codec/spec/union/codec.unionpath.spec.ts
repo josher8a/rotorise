@@ -116,9 +116,9 @@ describe('a codec at a path into a union', () => {
         )
     })
 
-    it('types it by what lives there', () => {
+    it('refuses at the type a path that a variant does not declare, as the walk refuses on use', () => {
+        // @ts-expect-error a variant does not declare `cardId`, so the path refuses at the type as on use
         const cardId = Adoption.at((q) => q.priceIn.cardId)
-        // @ts-expect-error cardId is a string
         const _wrong = () => cardId.unsafeEncode(1)
         expect(typeof _wrong).toBe('function')
     })

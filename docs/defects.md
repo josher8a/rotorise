@@ -275,37 +275,3 @@ walk that narrows such a union wrongly passes the gate.
 
 **Pin.** The docstring of `unionAt(...)` states the refusal. No test asserts that a recursive
 union has no clause row, and no test of the host narrows a recursive union.
-
----
-
-## Known: the path type admits a key that some members of the frontier declare
-
-**Observation.** The path type of `at` admits a key that one member of a union declares, and the walk
-of `at` refuses the path on use. The type and the walk keep the same members after a clause, because
-the type StoredApart in `src/codec/codec.ts` pins a literal only where a literal constructor built the codec.
-The refusal of a key that some kept members lack is the walk's alone. Measured 2026-10-09 with a
-throwaway script and `npx tsc --noEmit`:
-
-    const L = object({ u: union([object({ k: string('A'), a: string }),
-                                 object({ k: string('B'), b: string })]) }).item
-    L.at((p) => p.u.b)
-      type checker: accepted
-      runtime:      encode refuses: 'u.b' is declared by some variants only ... Call `narrow({...})` ...
-
-A clause beside a member that a caller's adapter pins keeps that member in the type and in the walk,
-so `narrow({ k: string('B') }).a` reaches the same refusal. One case of the type keeps a member that
-the walk separates: a key pinned through `lazy(...)` with type arguments carries no mark.
-
-    object({ u: union([object({ k: lazy<'A', Attribute<'S'>>(() => string('A')), a: number }),
-                       object({ k: string('B'), a: string })]) }).item
-      .at((p) => p.u.narrow({ k: string('B') }).a).encode(3)
-      type checker: accepted
-      runtime:      refused, number `3` is not a string
-
-**Effect.** A caller gets a green typecheck and a path whose codec refuses on use, with a refusal that
-names the cause.
-
-**Pin.** `src/codec/spec/object/codec.narrowat.spec.ts`: the clause that keeps a member pinned by an
-adapter, which asserts the refusal of the walk, and the clause that drops a member pinned through a
-refinement of a literal. No test pins the path type of a key that some members declare, and no test
-narrows beside a key pinned through the explicit form of `lazy(...)`.
