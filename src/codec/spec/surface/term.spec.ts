@@ -106,7 +106,7 @@ describe('the occupancies of a term', () => {
      * direction rather than the safe one.** The claim was that an over-approximation costs a
      * certificate and never buys a wrong one. It was backwards here: the guard then refused a
      * union when two occupancies *met*, so an unknown occupancy made it decline to refuse.
-     * `union([lazy(string), string])` was accepted at the declaration, and a write
+     * A union of a thunk of `string` and `string` was accepted at the declaration, and a write
      * then reported two options admitting one value — the migration from declaration time to
      * write time that the calculus exists to stop. `lazy` was the only term answering unknown on
      * both projections, which is why it was the only hole.

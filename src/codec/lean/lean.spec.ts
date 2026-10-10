@@ -31,7 +31,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../attribute'
 import { DynamoNumber, isNumeral, isStoredNumeral } from '../attribute'
-import type { AnyCodec, AttributeCodec } from '../codec'
+import type { AnyCodec } from '../codec'
 import {
     array,
     binary,
@@ -40,7 +40,6 @@ import {
     discriminatedUnion,
     dynamoNumber,
     held,
-    lazy,
     list,
     mdunion,
     never,
@@ -51,14 +50,16 @@ import {
     opaque,
     optional,
     product,
+    ref,
     refine,
+    scope,
     spread,
     string,
     undefinable,
     union,
     withLegacyRead,
 } from '../codec'
-import { accepts } from '../denote'
+import { accepts, codecOfTerm } from '../denote'
 import type {
     DisjointPair,
     Dissection,
@@ -430,20 +431,19 @@ describe('terms', () => {
         expect(emitted.split('Body.mk')).toHaveLength(3)
     })
 
-    it('prints a thunk that closes no cycle as the term it returns', () => {
-        expect(leanTermOf(erase(lazy(() => string)))).toBe('Term.string')
+    it('prints a ref that closes no cycle as the term it names', () => {
+        expect(leanTermOf(erase(scope({ At: ref('S'), S: string }).At))).toBe(
+            'Term.string',
+        )
     })
 
     /**
-     * **A thunk that throws is a free variable, and the emitter returns a term for it.** The
-     * thunk names a codec not yet declared. The host reads the thunk as a variable that pairs with
-     * no binder, so the emitter prints the first index past the binders that enclose the thunk.
+     * **A `ref` that no scope binds is a free variable, and the emitter returns a term for it.**
+     * The host reads the `ref` as a variable that pairs with no binder, so the emitter prints the
+     * first index past the binders that enclose the `ref`.
      */
-    it('prints a thunk that names a codec under declaration as a variable that no binder binds', () => {
+    it('prints a ref that no scope binds as a variable that no binder binds', () => {
         expect(leanTermOf(array(undeclared))).toBe('Term.array (Term.var 0)')
-        expect(leanTermOf(underBinder)).toBe(
-            'Term.mu (Term.tuple [Term.var 1, Term.array (Term.var 0)] none)',
-        )
     })
 
     /**
@@ -844,34 +844,30 @@ describe('a whole vector', () => {
  * **The recursive schemas the host accepts**, each a cycle of term objects closed by a thunk below a
  * list or an object. The model states each as `Term.mu`, with `Term.var` at the thunk.
  */
-const json: AnyCodec = erase(
-    union([
-        string,
-        array(lazy(() => json as never)),
-    ] as unknown as readonly AnyCodec[]),
-)
-const tree: AnyCodec = erase(
-    object({ v: string, kids: array(lazy(() => tree as never)) }),
-)
-type Category = { name: string; children?: readonly Category[] }
-const Category: AttributeCodec<Category> = lazy(() =>
-    object({ name: string, children: optional(array(Category)) }),
-)
-type Tree = { name: string; children?: readonly Tree[] }
-const Tree: AttributeCodec<Tree> = lazy(() =>
-    object({ name: string, children: optional(array(Tree)) }),
-)
-/** A recursive union whose recursion sits under an optional field of an object. */
-const underObject: AnyCodec = erase(
-    union([
-        string,
-        object({ m: optional(lazy(() => underObject as never)) }),
-    ] as unknown as readonly AnyCodec[]),
-)
-/** A thunk that returns its own term: no container sits between the binder and its variable. */
-const selfThunk: AnyCodec = erase(
-    lazy(() => selfThunk as unknown as AttributeCodec<unknown>),
-)
+const recursive = scope({
+    json: union([string, array(ref('json'))]),
+    tree: object({ v: string, kids: array(ref('tree')) }),
+    Category: object({
+        name: string,
+        children: optional(array(ref('Category'))),
+    }),
+    Tree: object({ name: string, children: optional(array(ref('Tree'))) }),
+    /** A recursive union whose recursion sits under an optional field of an object. */
+    underObject: union([string, object({ m: optional(ref('underObject')) })]),
+    /** A recursive union of decimals: a library adapter below a binder. */
+    decimalJson: union([decimal, array(ref('decimalJson'))]),
+})
+const json: AnyCodec = erase(recursive.json)
+const tree: AnyCodec = erase(recursive.tree)
+const { Category, Tree, decimalJson } = recursive
+const underObject: AnyCodec = erase(recursive.underObject)
+/**
+ * **A thunk that returns its own term**: no container sits between the binder and its variable.
+ * The scope refuses the cycle at construction, so the term is built by hand, and the guard vector
+ * states that the model refuses it too.
+ */
+const selfTerm: Term = { kind: 'lazy', get: () => selfTerm }
+const selfThunk: AnyCodec = erase(codecOfTerm(selfTerm))
 
 /** The guard verdicts of the full cross product, beside the guard of each recursive admission. */
 const fullGuards = [
@@ -879,24 +875,11 @@ const fullGuards = [
 ] as const
 
 /**
- * **A thunk that names the constant under declaration**, as a recursive schema's thunk does
- * before the constant is assigned. The thunk throws when forced, so the host's tests read it as a
- * free variable, and the emitter prints a variable that no binder of the term binds. The host's
+ * **A `ref` that no scope binds**: a free variable. A force throws, so the host's tests read it as
+ * a free variable, and the emitter prints a variable that no binder of the term binds. The host's
  * guard reads it as the root of the option, and the emitter states that reading for the guard.
  */
-const undeclared = lazy((): AttributeCodec<string> => {
-    throw new ReferenceError('the constant under declaration')
-})
-/** A recursive union of decimals: a library adapter below a binder. */
-type DecimalJson = string | readonly DecimalJson[]
-const decimalJson: AttributeCodec<DecimalJson> = lazy(() =>
-    union([decimal, array(decimalJson)]),
-)
-/** A recursive pair with a thunk that throws below its binder. */
-type Chain = readonly [string, readonly Chain[]]
-const underBinder: AttributeCodec<Chain> = lazy(() =>
-    list(undeclared, array(underBinder)),
-)
+const undeclared = erase(ref('Undeclared'))
 /** A caller's type guard over every boolean, and two caller adapters to a boolean. */
 const anyBoolean = (value: boolean): value is boolean => value || !value
 const textFlag = held(string, boolean, {
@@ -1186,7 +1169,11 @@ export const sampleVectors: readonly Vector[] = [
         value: { kind: 'pet', size: 'small', toy: 'ball' },
     },
     { name: 'opaque_map', codec: erase(opaque), value: { a: 'x' } },
-    { name: 'lazy_string', codec: erase(lazy(() => string)), value: 'x' },
+    {
+        name: 'lazy_string',
+        codec: erase(scope({ At: ref('S'), S: string }).At),
+        value: 'x',
+    },
     { name: 'recursive_json', codec: json, value: ['a', ['b', []]] },
     {
         name: 'recursive_tree',
@@ -1506,25 +1493,6 @@ const separationPairs = (): readonly Separation[] => {
         left: refine(string, nonEmpty),
         right: decimal,
     })
-    // a thunk that throws beside three partners: a free variable pairs with no binder. The bare
-    // thunk is the root of its option, so the guard refuses it, and the vector states the guard
-    out.push(
-        {
-            name: 'free_array__vs__scalar_decimal',
-            left: array(undeclared),
-            right: decimal,
-        },
-        {
-            name: 'free_variable__vs__scalar_string',
-            left: undeclared,
-            right: string,
-        },
-        {
-            name: 'free_json__vs__scalar_string',
-            left: union([string, array(undeclared)]),
-            right: string,
-        },
-    )
     // a set of a caller's adapter beside three sets: the model's caller carrier has no set of
     // booleans, so the caller sides of two such sets meet at the booleans
     out.push(
@@ -2361,7 +2329,7 @@ describe("the declaration guard, against the model's classifier", () => {
             ),
         )
         expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([981, 36])
+        expect([accepted.length, refused.length]).toEqual([979, 35])
     })
 
     /**
@@ -2422,12 +2390,12 @@ describe("the declaration guard, against the model's classifier", () => {
     })
 
     /**
-     * **A term that a former refuses reaches no union, so its guard verdict is a vector alone.** The
-     * refusal carries the term, and the vector states that the model's guard refuses the term too.
-     * A term that the host's guard accepts gets no vector, because the vector would state a refusal
-     * that the host does not make.
+     * **A term that a scope refuses reaches no union, so its guard verdict is a vector alone.** The
+     * refusal carries the term of the entry, and the vector states that the model's guard refuses
+     * the term too. A term that the host's guard accepts gets no vector, because the vector would
+     * state a refusal that the host does not make.
      */
-    it('the guard that a former refuses with is stated in the kernel', () => {
+    it('the guard that a scope refuses with is stated in the kernel', () => {
         const refusedTerm = (make: () => unknown): Term => {
             try {
                 make()
@@ -2435,16 +2403,15 @@ describe("the declaration guard, against the model's classifier", () => {
                 if (thrown instanceof RecursionRefused) return thrown.term
                 throw thrown
             }
-            throw new Error('expected the former to refuse, and it did not')
+            throw new Error('expected the scope to refuse, and it did not')
         }
-        const undeclared = lazy((): never => {
-            throw new ReferenceError('a codec not yet declared')
-        })
         const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
         const closed = leanFormerGuard({
             name: 'closed',
             term: refusedTerm(() =>
-                held(undeclared as never, string as never, same as never),
+                scope({
+                    L: held(ref('L') as never, string as never, same as never),
+                }),
             ),
         })
         expect(closed).toContain(
@@ -2453,9 +2420,11 @@ describe("the declaration guard, against the model's classifier", () => {
         const quantified = leanFormerGuard({
             name: 'quantified',
             term: refusedTerm(() =>
-                withLegacyRead({
-                    current: undeclared as never,
-                    older: { decode: () => 'o' as never },
+                scope({
+                    L: withLegacyRead({
+                        current: ref('L') as never,
+                        older: { decode: () => 'o' as never },
+                    }),
                 }),
             ),
         })
@@ -2466,9 +2435,9 @@ describe("the declaration guard, against the model's classifier", () => {
                 '  (Alg.guarded_of_sameShape _ (Term.mu ((Term.legacy (Term.var 0) (fun _ => none)))) kernel_rfl%).trans (of_decide_eq_true kernel_rfl%)',
             ].join('\n'),
         )
-        const tree: AnyCodec = erase(
-            object({ v: string, kids: array(lazy(() => tree as never)) }),
-        )
+        const { tree } = scope({
+            tree: object({ v: string, kids: array(ref('tree')) }),
+        })
         expect(
             refusal(() => leanFormerGuard({ name: 'accepted', term: tree.def }))
                 .at,

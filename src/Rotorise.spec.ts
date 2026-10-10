@@ -1353,6 +1353,8 @@ describe('the published surface', () => {
         'drop',
         'RestPolicy',
         'RestDeclaration',
+        // a cycle is a `scope`, and the thunk under a `ref` is internal
+        'lazy',
         // the five functions of a term the model computes, which `writes` and `decides` became
         'member',
         'occV',
@@ -1405,7 +1407,6 @@ describe('the published surface', () => {
             'discriminatedUnion',
             'withLegacyRead',
             'held',
-            'lazy',
             'list',
             'nullValue',
             'nullable',

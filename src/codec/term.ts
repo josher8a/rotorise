@@ -18,6 +18,7 @@
 
 import type { AttributeName, AttributeValue, DynamoNumber } from './attribute'
 import type {
+    AnyCodec,
     LiteralBase,
     LiteralValue,
     Refinement,
@@ -257,8 +258,8 @@ export type Term =
      * Forcing does not throw: `object()` already forces at the declaration and the recursive
      * entity still round-trips. And `undefined` was the unsound direction rather than the safe
      * one, because the declaration guard then refused a union when two occupancies *met*, so an
-     * unknown occupancy made it decline to refuse. `union([lazy(string), string])` was accepted
-     * and a write then found two options admitting one value. `lazy` was the only
+     * unknown occupancy made it decline to refuse. A union of a thunk of `string` and `string` was
+     * accepted, and a write then found two options admitting one value. `lazy` was the only
      * term answering unknown on both projections, which is why it was the only hole.
      */
     | { readonly kind: 'lazy'; readonly get: () => Term }
@@ -989,9 +990,9 @@ const reaches = (
 
 /**
  * **The throw of a thunk that its own resolution forces again**, the black hole of a lazy runtime.
- * `lazy(() => union([string, array(self)]))` forces `self` while the union under declaration
- * checks its options. The thunk has no term yet, so the thunk names the codec being declared, as
- * a thunk in the temporal dead zone does.
+ * `scope({ Self: nullable(ref('Self')) })` forces the thunk of the `nullable` while the thunk
+ * resolves. The thunk has no term yet, so the thunk names the codec being declared, as a `ref` that
+ * no scope binds does.
  */
 export class ThunkReentered extends Error {
     constructor() {
@@ -1003,7 +1004,7 @@ export class ThunkReentered extends Error {
 /**
  * The term of a thunk, or nothing where the thunk names a codec not yet declared. A thunk is
  * caller code, so its throw crosses the boundary here. Two throws name such a codec: the
- * `ReferenceError` of a constant in the temporal dead zone, and {@link ThunkReentered}. The
+ * `ReferenceError` of a `ref` that no scope binds yet, and {@link ThunkReentered}. The
  * caller of this function refuses, declines, or reads the thunk as a free variable.
  *
  * **Every other throw propagates.** A `RangeError` is a stack that overflowed, which is a broken
@@ -1026,6 +1027,106 @@ export const force = (
 }
 
 /**
+ * The slot of a `ref`: the name, the definitions of the scope that binds the name, and waiting
+ * checks. A scope that refuses keeps its definitions in the slot, so a reader of the term sees the
+ * cycle that the scope refused, and marks the slot \`refused\`, so the name stays free.
+ */
+export type RefSlot = {
+    readonly name: string
+    bound?: Readonly<Record<string, AnyCodec>>
+    refused?: boolean
+    readonly waiting: (() => void)[]
+}
+
+/** The slot of each `ref`, by the term of the `ref`. `scope` fills the slot one time. */
+export const refSlots = new WeakMap<Term, RefSlot>()
+
+/**
+ * The slots of the `ref`s that the terms reach and that no scope binds yet. A bound `ref` belongs
+ * to the closed scope that bound it, so the walk stops there.
+ */
+export const unboundRefs = (roots: readonly Term[]): ReadonlySet<RefSlot> => {
+    const slots = new Set<RefSlot>()
+    const seen = new Set<Term>()
+    const walk = (t: Term): void => {
+        if (seen.has(t)) return
+        seen.add(t)
+        const slot = refSlots.get(t)
+        if (slot !== undefined) {
+            if (slot.bound === undefined || slot.refused === true)
+                slots.add(slot)
+            return
+        }
+        switch (t.kind) {
+            case 'lazy': {
+                const target = force(t)
+                if (target !== undefined) walk(target)
+                return
+            }
+            case 'list':
+                for (const one of [...t.pre, ...t.suf]) walk(one)
+                if (t.spread !== undefined) walk(t.spread)
+                return
+            case 'object':
+                for (const field of Object.values(t.body.fields)) walk(field.t)
+                if (t.body.rest !== undefined) walk(t.body.rest)
+                return
+            case 'union':
+                return t.options.forEach(walk)
+            case 'set':
+                return walk(t.elem)
+            case 'held':
+                walk(t.inner)
+                return walk(t.outer)
+            case 'refine':
+            case 'legacy':
+                return walk(t.inner)
+            default:
+                return
+        }
+    }
+    for (const root of roots) walk(root)
+    return slots
+}
+
+/**
+ * Each term that {@link freeNamesOf} found closed, with the count of refused scopes at that time.
+ * A scope that refuses frees each name that it bound, so the count makes each answer stale.
+ */
+const closedTerms = new WeakMap<Term, number>()
+let refusals = 0
+
+/** Marks the slots of a refused scope: each name stays free. */
+export const refuseSlots = (slots: Iterable<RefSlot>): void => {
+    for (const slot of slots) slot.refused = true
+    refusals += 1
+}
+
+/**
+ * **The free names of a term**: the names of the `ref`s that the term reaches and that no scope
+ * binds. The run-time side of the free names that the type of a codec carries.
+ */
+export const freeNamesOf = (t: Term): readonly string[] => {
+    if (closedTerms.get(t) === refusals) return []
+    const names = [...new Set([...unboundRefs([t])].map((slot) => slot.name))]
+    if (names.length === 0) closedTerms.set(t, refusals)
+    return names
+}
+
+/**
+ * **A use needs a closed codec.** Nothing, or the refusal of a term that reads a name through a
+ * \`ref\` that no scope binds: the codec of such a term has no meaning until a scope binds the name.
+ */
+export const openRefusal = (t: Term): CodecError | undefined => {
+    const names = freeNamesOf(t)
+    return names.length === 0
+        ? undefined
+        : new CodecError(
+              `this codec reads ${names.map((name) => `'${name}'`).join(', ')} through a \`ref\` that no scope binds. Place the codec in a \`scope\` that binds each name, and use the entry of that scope`,
+          )
+}
+
+/**
  * **How a recursion in the term reads its own input**, the model's `Term.use` at the variable of
  * each binder, joined over the binders. The walk forces each thunk and keeps the terms it is
  * inside. A thunk that returns a term on that stack closes a cycle, and the terms between the two
@@ -1037,10 +1138,10 @@ export const force = (
  * - `3`: a path has an adapter. Caller code makes the input of the inner term, at any depth. A
  *   `held` converts the value, and a `withLegacyRead` writes the older reader's answer.
  *
- * The model's guard refuses `2` and `3`. **A thunk that throws closes a path to the root**: at the
- * declaration of a recursive schema the thunk names the constant being declared, so the walk
- * cannot see the cycle. The walk ends at each cycle, because a thunk memoizes its codec and every
- * other edge of a term is built before the term.
+ * The model's guard refuses `2` and `3`. **A `ref` that no scope binds is a free variable**, and
+ * reads at `0`: an open fragment holds no recursion yet, and the {@link scope} that binds the name
+ * runs the walk with every name bound. The walk ends at each cycle, because every edge of a term
+ * other than a `ref` is built before the term.
  */
 export const recursionUse = (root: Term): number => {
     const walk = (t: Term, stack: readonly Term[]): number => {
@@ -1050,7 +1151,10 @@ export const recursionUse = (root: Term): number => {
         switch (t.kind) {
             case 'lazy': {
                 const target = forceDeclared(t)
-                if (target === undefined) return pathUse(on)
+                // a free variable: no binder of this term binds it, so it reads no input of this
+                // term, as the model's `Term.use` reads an unbound variable. The scope that binds
+                // the name runs the walk again with the name bound
+                if (target === undefined) return 0
                 // the free variable refuses at `2` or above, and an adapter in the term of the
                 // thunk is the cause of the refusal, which the level `3` names. The level changes
                 // no verdict: a free variable that reads `1` keeps `1`
@@ -1107,9 +1211,9 @@ export class RecursionRefused extends CodecError {
 /**
  * The term of a thunk that the walk of {@link recursionUse} forces, or nothing where {@link force}
  * answers nothing or the thunk throws a {@link CodecError}. **A former refuses inside a thunk where
- * the name it reads is in progress**: `lazy(() => nullable(Self))` refuses while `Self` resolves,
- * and resolves once `Self` is declared. The throw leaves no mark, so a later force retries. So the
- * walk reads the refusal as the free variable that a thunk in the temporal dead zone is. A
+ * the name it reads is in progress**: the thunk of a `nullable` over a `ref` to its own entry
+ * refuses while the entry resolves. The throw leaves no mark, so a later force retries. So the
+ * walk reads the refusal as the free variable that a `ref` that no scope binds is. A
  * {@link RecursionRefused} returns itself, so the walk reads its level.
  */
 const forceDeclared = (
@@ -1549,14 +1653,6 @@ const holdsAdapter = (t: Term, scope: Scope): boolean => {
             return false
     }
 }
-
-/**
- * **Whether the spelling of a term reads a free variable**: a thunk that names a codec not yet
- * declared. The model spells such a thunk as a variable that no binder binds, so the term is not
- * closed at its root ({@link closedAt}).
- */
-export const readsFreeVariable = (t: Term): boolean =>
-    !closedAt(t, { binds: bindersOf(t), inside: [] })
 
 /** The bottom, as the model spells it at the scope. */
 const isNeverAt = (t: Term, scope: Scope): boolean => {

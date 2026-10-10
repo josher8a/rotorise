@@ -10,9 +10,9 @@
  * alone, so a change of the pool counts below is a change of the draw, of the constructors, or
  * of the emitter.
  *
- * A thunk that throws is an unknown term, and each host check takes its worst case, so a pair has
- * two readings: the guard reads the thunk as the root of its option, and the other tests read the
- * open term.
+ * A `ref` that no scope binds is an unknown term, and each host check takes its worst case, so a
+ * pair has two readings: the guard reads the `ref` as the root of its option, and the other tests
+ * read the open term.
  *
  * One route narrows the pool. **No separation vector for two fills at one name.** The model refuses
  * two fills at one name whatever their constants, because the constants of a fill have no decidable
@@ -33,7 +33,6 @@ import {
     discriminatedUnion,
     dynamoNumber,
     held,
-    lazy,
     list,
     mdunion,
     never,
@@ -44,7 +43,9 @@ import {
     opaque,
     optional,
     product,
+    ref,
     refine,
+    scope,
     spread,
     string,
     undefinable,
@@ -84,6 +85,7 @@ import {
     agrees,
     disjoint,
     force,
+    openRefusal,
     RecursionRefused,
     recursionUse,
     viewsDisjoint,
@@ -149,10 +151,8 @@ const setable: readonly (readonly [string, () => AnyCodec])[] = [
     ['decimal.set', () => erase(decimal.set())],
     ['binary.set', () => erase(binary.set())],
 ]
-/** A thunk that names a codec not yet declared: forced, it throws. */
-const undeclared = lazy((): never => {
-    throw new ReferenceError('the constant under declaration')
-})
+/** A `ref` that no scope binds: a free variable, and each codec that reads it an open fragment. */
+const undeclared = ref('undeclared')
 /** A caller's predicate: the theorem binds the predicate as a variable. */
 const callerPredicate = (v: unknown): v is unknown => v !== 'zz'
 const names = ['a', 'b', 'c']
@@ -195,25 +195,33 @@ type Slices = {
 }
 
 /**
- * **The spelling of a leaf and of a tag.** With `thunked`, each one sits behind a thunk that closes no
- * cycle. The emitter prints such a thunk as its body and the wrap draws no number, so a seed builds
- * the same pool in both spellings, and every emitted file must come out the same.
+ * **The spelling of a leaf and of a tag.** With `thunked`, each one sits behind a `ref` to another
+ * entry of its scope, which closes no cycle, so a reader of the host passes a thunk to reach it. The
+ * emitter prints the entry as its body and the wrap draws no number, so a seed builds the same pool
+ * in both spellings, and every emitted file must come out the same.
  *
  * `never` keeps its plain spelling. The host refuses a `never` that a row always writes, at a list
  * position, as a product factor, and under `nullable`, by the declared term. Those refusals are the
- * host's own rules, and the model types each such term. Reading through a thunk there forces the
- * thunk at the declaration, and a forced recursive thunk changes the order of resolution, which the
- * stand-in tests pin.
+ * host's own rules, and the model types each such term. `undeclared` keeps its plain spelling,
+ * because a scope refuses a `ref` to a name that the scope does not declare.
  */
 let thunked = false
 const spelled = (codec: unknown): AnyCodec =>
-    thunked ? erase(lazy(() => codec as never)) : erase(codec)
+    thunked
+        ? erase(scope({ At: ref('It'), It: erase(codec) }).At)
+        : erase(codec)
 
 /** One codec, drawn through the public constructors. A constructor can refuse the draw. */
 const draw = (depth: number): Entry => {
     if (depth === 0 || rng() < 0.25) {
         const [name, make] = pick(rng() < 0.8 ? leaves : setable)
-        return { name, codec: name === 'never' ? make() : spelled(make()) }
+        return {
+            name,
+            codec:
+                name === 'never' || name === 'undeclared'
+                    ? make()
+                    : spelled(make()),
+        }
     }
     switch (Math.floor(rng() * 20)) {
         case 0: {
@@ -342,28 +350,30 @@ const draw = (depth: number): Entry => {
         case 10: {
             const c = draw(depth - 1)
             return {
-                name: `lazy(${c.name})`,
-                codec: erase(lazy(() => c.codec as never)),
+                name: `ref(${c.name})`,
+                codec: erase(scope({ At: ref('It'), It: c.codec }).At),
             }
         }
         case 11: {
             const c = draw(depth - 1)
-            const tree = lazy(
-                () => object({ v: c.codec, kids: array(self) }) as never,
-            )
-            const self: AnyCodec = erase(tree)
-            // the thunk runs the constructor, so a refusal of the body is a refusal of the draw
-            if (tree.def.kind === 'lazy') tree.def.get()
-            return { name: `mu.tree(${c.name})`, codec: self }
+            // the scope runs the guard, so a refusal of the body is a refusal of the draw. The
+            // draw is the thunk that closes the cycle, as an entry that is a `ref`
+            const { top } = scope({
+                top: ref('tree'),
+                tree: object({ v: c.codec, kids: array(ref('top')) }),
+            })
+            return { name: `mu.tree(${c.name})`, codec: erase(top) }
         }
         case 12: {
             const c = draw(depth - 1)
             const kids = {
                 name: 'array(self)',
-                codec: erase(array(lazy(() => self as never))),
+                codec: erase(array(ref('self'))),
             }
-            const self: AnyCodec = declare(c, kids, () =>
-                union([c.codec, kids.codec] as never),
+            const self: AnyCodec = declare(
+                c,
+                kids,
+                () => scope({ self: union([c.codec, kids.codec]) }).self,
             )
             return { name: `mu.json(${c.name})`, codec: self }
         }
@@ -408,12 +418,12 @@ const draw = (depth: number): Entry => {
             const c = draw(depth - 1)
             const node = {
                 name: '{m?:self}',
-                codec: erase(
-                    object({ m: optional(lazy(() => self as never)) }),
-                ),
+                codec: erase(object({ m: optional(ref('self')) })),
             }
-            const self: AnyCodec = declare(c, node, () =>
-                union([c.codec, node.codec] as never),
+            const self: AnyCodec = declare(
+                c,
+                node,
+                () => scope({ self: union([c.codec, node.codec]) }).self,
             )
             return { name: `mu.opt(${c.name})`, codec: self }
         }
@@ -496,17 +506,16 @@ const draw = (depth: number): Entry => {
         // recursion, never prints one
         case 19: {
             const c = draw(depth - 1)
-            const ma: AnyCodec = erase(
-                lazy(() => object({ v: c.codec, b: optional(mb) }) as never),
-            )
-            const mb: AnyCodec = erase(
-                lazy(() => object({ a: optional(ma) }) as never),
-            )
-            const left = { name: `mu.a(${c.name})`, codec: ma }
-            const right = { name: 'mu.b', codec: mb }
-            // each thunk runs its constructor, so a refusal of a body is a refusal of the draw
-            if (ma.def.kind === 'lazy') ma.def.get()
-            if (mb.def.kind === 'lazy') mb.def.get()
+            // the scope runs the guard, so a refusal of a body is a refusal of the draw. Each
+            // member is the thunk that closes the cycle, as an entry that is a `ref`
+            const mutual = scope({
+                A: ref('a'),
+                B: ref('b'),
+                a: object({ v: c.codec, b: optional(ref('B')) }),
+                b: object({ a: optional(ref('A')) }),
+            })
+            const left = { name: `mu.a(${c.name})`, codec: erase(mutual.A) }
+            const right = { name: 'mu.b', codec: erase(mutual.B) }
             if (rng() < 0.5)
                 return {
                     name: `{x:${left.name},y:${right.name}}`,
@@ -635,12 +644,12 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
         }
         const x = a.codec.def
         const y = b.codec.def
+        // a union over a `ref` that no scope binds is an open fragment, which refuses each use
         let declared = true
         try {
-            unions.push({
-                codec: erase(union([a.codec, b.codec] as never)),
-                keys: [],
-            })
+            const u = erase(union([a.codec, b.codec] as never))
+            declared = openRefusal(u.def) === undefined
+            if (declared) unions.push({ codec: u, keys: [] })
         } catch {
             declared = false
         }
@@ -1183,52 +1192,54 @@ describe('the generated pool, against the model', () => {
         }).toMatchInlineSnapshot(`
           {
             "dropped": {
-              "a constructor refused the draw": 76,
-              "path: a thunk names a codec not yet declared": 194,
-              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1622,
+              "a constructor refused the draw": 51,
+              "assignment: the union reads a \`ref\` that no scope binds, so the host keeps no option under a clause": 14,
+              "separation: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 551,
+              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1652,
+              "slice: the union reads a \`ref\` that no scope binds, so the host keeps no option under a clause": 748,
             },
             "seeds": [
               {
-                "assignments": 32,
-                "clauses": 4470,
-                "codecsPathed": 238,
-                "disjoints": 1310,
-                "fills": 6,
-                "guards": 1,
-                "pairs": 1310,
-                "paths": 2107,
+                "assignments": 31,
+                "clauses": 4335,
+                "codecsPathed": 246,
+                "disjoints": 1346,
+                "fills": 5,
+                "guards": 0,
+                "pairs": 1346,
+                "paths": 1919,
                 "seed": 20261004,
-                "separations": 1304,
-                "slices": 93,
-                "whenPaths": 5339,
-              },
-              {
-                "assignments": 32,
-                "clauses": 4170,
-                "codecsPathed": 198,
-                "disjoints": 1189,
-                "fills": 7,
-                "guards": 4,
-                "pairs": 1189,
-                "paths": 1934,
-                "seed": 1,
-                "separations": 1182,
+                "separations": 1133,
                 "slices": 88,
-                "whenPaths": 3957,
+                "whenPaths": 4512,
               },
               {
-                "assignments": 32,
-                "clauses": 3525,
-                "codecsPathed": 158,
-                "disjoints": 1199,
+                "assignments": 24,
+                "clauses": 3075,
+                "codecsPathed": 178,
+                "disjoints": 1252,
+                "fills": 8,
+                "guards": 0,
+                "pairs": 1252,
+                "paths": 1487,
+                "seed": 1,
+                "separations": 1079,
+                "slices": 63,
+                "whenPaths": 3159,
+              },
+              {
+                "assignments": 44,
+                "clauses": 4980,
+                "codecsPathed": 200,
+                "disjoints": 1333,
                 "fills": 11,
-                "guards": 6,
-                "pairs": 1199,
-                "paths": 1823,
+                "guards": 0,
+                "pairs": 1333,
+                "paths": 2231,
                 "seed": 4,
-                "separations": 1188,
-                "slices": 70,
-                "whenPaths": 4429,
+                "separations": 1144,
+                "slices": 100,
+                "whenPaths": 6251,
               },
             ],
           }
@@ -1237,12 +1248,17 @@ describe('the generated pool, against the model', () => {
 
     /**
      * **A union that the host accepts has a warrant that the model proves.** A pair reaches the
-     * separation emitter only after its terms print, so the emitter refuses a pair for one reason:
-     * the host accepted it where the model's decision refuses it.
+     * separation emitter only after its terms print, so the emitter refuses a pair for two reasons:
+     * the union is an open fragment, which the scope decides, or the host accepted the pair where
+     * the model's decision refuses it. The second must not occur.
      */
     it('accepts no pair on a warrant that the model does not prove', () => {
         expect(
-            [...dropped.keys()].filter((why) => why.startsWith('separation: ')),
+            [...dropped.keys()].filter(
+                (why) =>
+                    why.startsWith('separation: ') &&
+                    !why.includes('the host decides the pair at the scope'),
+            ),
         ).toEqual([])
     })
 

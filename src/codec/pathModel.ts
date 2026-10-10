@@ -30,30 +30,62 @@ type SetMember<M> = M extends 'S'
       : M extends 'B'
         ? 'BS'
         : 'none'
-type MuSyn<T> = T extends ['prim', ['base', infer K]]
-    ? KindMember<K>
-    : T extends ['prim', ['literal', infer K, unknown]]
-      ? KindMember<K>
-      : T extends ['set', infer E]
-        ? MuSyn<E> extends 'none'
-            ? 'none'
-            : SetMember<MuSyn<E>>
-        : T extends ['list', unknown, unknown, unknown]
-          ? 'L'
-          : T extends ['held', unknown, infer I, unknown, unknown, unknown]
-            ? MuSyn<I>
-            : T extends ['refine', infer I]
-              ? MuSyn<I>
-              : T extends ['legacy', infer I]
-                ? MuSyn<I>
-                : T extends ['object', unknown]
-                  ? 'M'
-                  : T extends ['union', infer Os]
-                    ? Unanimous<MuSynList<Os>>
-                    : 'none'
-type MuSynList<Os> = Os extends [infer H, ...infer R]
-    ? [MuSyn<H>, ...MuSynList<R>]
+/**
+ * An entry of a scope is the model's \`mu\` where the entry reaches its own name, and its definition
+ * elsewhere: the emitter prints an entry that closes no cycle as its body. So the member of an
+ * entry is \`none\` on a cycle, and the member of the definition otherwise.
+ */
+type MuSyn<T, Env = []> = T extends ['scope', infer D, infer K]
+    ? MuSynEntry<D, K>
+    : T extends ['var', infer N]
+      ? Lookup<Env, N> extends ['some', unknown, [['scope', infer D]]]
+          ? MuSynEntry<D, N>
+          : 'none'
+      : T extends ['prim', ['base', infer K]]
+        ? KindMember<K>
+        : T extends ['prim', ['literal', infer K, unknown]]
+          ? KindMember<K>
+          : T extends ['set', infer E]
+            ? MuSyn<E, Env> extends 'none'
+                ? 'none'
+                : SetMember<MuSyn<E, Env>>
+            : T extends ['list', unknown, unknown, unknown]
+              ? 'L'
+              : T extends ['held', unknown, infer I, unknown, unknown, unknown]
+                ? MuSyn<I, Env>
+                : T extends ['refine', infer I]
+                  ? MuSyn<I, Env>
+                  : T extends ['legacy', infer I]
+                    ? MuSyn<I, Env>
+                    : T extends ['object', unknown]
+                      ? 'M'
+                      : T extends ['union', infer Os]
+                        ? Unanimous<MuSynList<Os, Env>>
+                        : 'none'
+type MuSynList<Os, Env> = Os extends [infer H, ...infer R]
+    ? [MuSyn<H, Env>, ...MuSynList<R, Env>]
     : []
+type MuSynEntry<D, K> = K extends Reached<D, VarsOf<D[K & keyof D]>, never>
+    ? 'none'
+    : MuSyn<D[K & keyof D], [['scope', D]]>
+/** The names that a term reads and that no scope inside the term binds. */
+type VarsOf<T> = T extends ['var', infer N]
+    ? N
+    : T extends ['scope', unknown, unknown]
+      ? never
+      : T extends readonly unknown[]
+        ? VarsOf<T[number]>
+        : T extends object
+          ? VarsOf<T[keyof T]>
+          : never
+/** The names of \`D\` that the names \`New\` reach, through the definitions of \`D\`. */
+type Reached<D, New, Seen> = [Exclude<New, Seen>] extends [never]
+    ? Seen
+    : Reached<
+          D,
+          VarsOf<D[Exclude<New, Seen> & keyof D]>,
+          Seen | (New & keyof D)
+      >
 /** `unanimous`: the first member when every member equals it (`none` included), else `none`. */
 type Unanimous<L> = L extends [infer H, ...infer R]
     ? AllEq<R, H> extends true
@@ -70,12 +102,12 @@ type AllEq<R, H> = R extends [infer X, ...infer Rs]
 
 // ── the segment, and the store's refusal (`Seg.member`, `apartAt`) ──
 type SegMember<S> = S extends ['name', unknown] ? 'M' : 'L'
-type ApartAt<S, T> = MuSyn<T> extends 'none'
+type ApartAt<S, T, Env> = MuSyn<T, Env> extends 'none'
     ? false
-    : [MuSyn<T>] extends [SegMember<S>]
+    : [MuSyn<T, Env>] extends [SegMember<S>]
       ? false
       : true
-type ApartOr<S, T> = ApartAt<S, T> extends true ? Some<[]> : None
+type ApartOr<S, T, Env> = ApartAt<S, T, Env> extends true ? Some<[]> : None
 
 // ── the body (`Body.block`, `Body.slotAt`, `ObjectSlot.term`) ──
 type Block<W> = W extends ['some', infer T] ? T : ['never']
@@ -166,14 +198,14 @@ type ChildD<S, Env extends unknown[], T, Fuel extends unknown[]> = T extends [
             : T extends ['object', ['mk', infer F, infer W]]
               ? S extends ['name', infer N]
                   ? Some<[Norm<SlotTerm<SlotAt<F, W, N>>, Env>]>
-                  : ApartOr<S, T>
+                  : ApartOr<S, T, Env>
               : T extends ['list', infer Pre, infer Sp, infer Suf]
                 ? S extends ['pos', infer I]
                     ? ListChild<Pre, Sp, Suf, I> extends ['some', infer C]
                         ? Some<[Norm<C, Env>]>
                         : None
-                    : ApartOr<S, T>
-                : ApartOr<S, T>
+                    : ApartOr<S, T, Env>
+                : ApartOr<S, T, Env>
 type ChildDL<
     S,
     Env extends unknown[],
@@ -515,7 +547,7 @@ type WritesT<T, Env extends unknown[], Seen = never> = Resolved<
     ? U extends ['prim', ['base' | 'literal', infer K, ...unknown[]]]
         ? KindMember<K>
         : U extends ['set', infer El]
-          ? SetMember<MuSyn<El>>
+          ? SetMember<MuSyn<El, E>>
           : U extends ['list', unknown, unknown, unknown]
             ? 'L'
             : U extends ['object', unknown]

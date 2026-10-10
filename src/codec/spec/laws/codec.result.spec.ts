@@ -11,19 +11,19 @@
  */
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
-import type { Attribute } from '../../attribute'
-import type { AttributeCodec } from '../../codec'
+
 import {
     array,
     CodecError,
     discriminatedUnion,
-    lazy,
     list,
     nullable,
     object,
     opaque,
     optional,
+    ref,
     refine,
+    scope,
     string,
     union,
     withLegacyRead,
@@ -34,10 +34,9 @@ type Pet = { TAG: 'PET'; id: string; name: string }
 const Pet = object({ TAG: string('PET'), id: string, name: string }).item
 const pet: Pet = { TAG: 'PET', id: 'p1', name: 'Rex' }
 
-type Tree = { name: string; children?: readonly Tree[] }
-const Tree: AttributeCodec<Tree, Attribute<'M'>> = lazy(() =>
-    object({ name: string, children: optional(array(Tree)) }),
-)
+const { Tree } = scope({
+    Tree: object({ name: string, children: optional(array(ref('Tree'))) }),
+})
 
 const Visits = discriminatedUnion('type', [
     object({ type: string('CHECKUP'), petId: string }),
@@ -207,9 +206,9 @@ describe('the safe pair never throws, whatever is thrown at it', () => {
                     BOOL: true,
                 }),
         ],
-        ['lazy', () => Tree.decode({ M: { name: { N: '1' } } })],
+        ['scope', () => Tree.decode({ M: { name: { N: '1' } } })],
         [
-            'lazy nested',
+            'scope nested',
             () =>
                 Tree.decode({
                     M: {

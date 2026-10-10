@@ -405,10 +405,8 @@ const printerOf = (
         if (now === 'progress')
             return refuse(at, 'a constant that reads itself')
         state.set(t, 'progress')
-        const body =
-            scc === undefined
-                ? print(t, ref)
-                : `lazy(() => ${entryOf(scc, chase(t))})`
+        // a thunk of a cycle names the entry that it returns: the scope is declared first
+        const body = scc === undefined ? print(t, ref) : entryOf(scc, chase(t))
         declare('constant', lean(t), `export const ${n} = ${body}`)
         state.set(t, 'done')
         return n
@@ -634,13 +632,14 @@ const printerOf = (
             }
             case 'legacy':
                 return `withLegacyRead({ current: ${sub(t.inner)}, older: { decode: (): never => { throw new Error('older') } } })`
+            // a thunk that closes no cycle prints as its body, as the emitter prints it, and a
+            // thunk that throws is a `ref` that no scope binds
             case 'lazy': {
                 const target = force(t)
-                if (target === undefined)
-                    return "lazy((): never => { throw new ReferenceError('undeclared') })"
+                if (target === undefined) return "ref('Undeclared')"
                 if (sub === inline && isBinder(t))
                     return refuse(at, 'a binder in a clause')
-                return `lazy(() => ${sub(target)})`
+                return sub(target)
             }
             case 'object': {
                 const fields = Object.entries(t.body.fields).map(([k, f]) => {
@@ -928,7 +927,7 @@ const library = '../../src/codec'
 
 const codecsHeader = [
     `import type { AttributeCodec, Decoded } from '${library}/codec'`,
-    `import { array, binary, boolean, decimal, discriminatedUnion, dynamoNumber, held, lazy, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, spread, string, undefinable, union, withLegacyRead } from '${library}/codec'`,
+    `import { array, binary, boolean, decimal, discriminatedUnion, dynamoNumber, held, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, spread, string, undefinable, union, withLegacyRead } from '${library}/codec'`,
     `import { DynamoNumber, isNumeral, isStoredNumeral } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     `import type { Result } from '${library}/result'`,

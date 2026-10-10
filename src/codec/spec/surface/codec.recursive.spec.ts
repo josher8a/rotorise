@@ -1,28 +1,27 @@
 /**
  * An entity that contains itself.
  *
- * `object()` evaluates its spec eagerly, so before `lazy` a recursive entity could not be declared at
- * all — the constant is not initialised when the spec that names it is built. This is the shape a
- * category tree, a comment thread and a nested menu all have.
+ * `object()` evaluates its spec eagerly, so a recursive entity names itself with a `ref` in a
+ * `scope`, and the scope binds the name. This is the shape a category tree, a comment thread and a
+ * nested menu all have.
  */
 import { describe, expect, it } from 'vitest'
-import type { Attribute } from '../../attribute'
 import {
-    type AnyCodec,
-    type AttributeCodec,
     array,
     CodecError,
-    decimal,
-    lazy,
+    discriminatedUnion,
+    held,
+    mdunion,
     nullable,
     object,
     optional,
     ref,
+    refine,
     scope,
     string,
     union,
+    withLegacyRead,
 } from '../../codec'
-import { leanTermOf } from '../../lean'
 import { arbitraryOf, checkRoundTrip, rngFrom, shrinkOf } from '../../testing'
 
 type Category = {
@@ -30,12 +29,12 @@ type Category = {
     children?: readonly Category[]
 }
 
-const Category: AttributeCodec<Category, Attribute<'M'>> = lazy(() =>
-    object({
+const { Category } = scope({
+    Category: object({
         name: string,
-        children: optional(array(Category)),
+        children: optional(array(ref('Category'))),
     }),
-)
+})
 
 const tree: Category = {
     name: 'pets',
@@ -51,10 +50,16 @@ describe('a recursive entity', () => {
     })
 
     it('nests as M all the way down', () => {
-        const encoded = Category.unsafeEncode(tree) as {
-            M: { children: { L: { M: { name: { S: string } } }[] } }
-        }
-        expect(encoded.M.children.L[0]?.M.name).toEqual({ S: 'dogs' })
+        expect(Category.unsafeEncode(tree)).toMatchObject({
+            M: {
+                children: {
+                    L: [
+                        { M: { name: { S: 'dogs' } } },
+                        { M: { name: { S: 'cats' } } },
+                    ],
+                },
+            },
+        })
     })
 
     it('reports where in the tree a bad row went wrong', () => {
@@ -99,46 +104,24 @@ describe('a recursive entity', () => {
             size: 3,
         })
     })
-
-    it('resolves once, not once per call', () => {
-        let built = 0
-        const Counted: AttributeCodec<{ n: string }> = lazy(() => {
-            built++
-            return object({ n: string })
-        })
-        Counted.unsafeEncode({ n: 'a' })
-        Counted.unsafeEncode({ n: 'b' })
-        Counted.unsafeDecode(Counted.unsafeEncode({ n: 'c' }))
-        expect(built).toBe(1)
-    })
 })
 
 type Tree = string | readonly Tree[]
 
-/** The verdict of a union of `codec` beside `other`: whether the declaration accepts. */
-const accepts = (codec: AnyCodec, other: AnyCodec): boolean => {
-    try {
-        union([codec, other])
-        return true
-    } catch {
-        return false
-    }
-}
-
 describe('a union that names itself', () => {
     /**
-     * The union checks its options at the declaration, and the check forces the thunk that is
-     * being resolved. The forced thunk names the codec being declared, and the declaration ends.
+     * The union waits for the scope, and the scope binds the name before the union checks its
+     * options. The list on the path guards the recursion, and the declaration ends.
      */
     it(
-        'declares when the thunk encloses the whole union, and round-trips a value',
+        'declares a union that names itself through a ref, and round-trips a value',
         {
             timeout: 5000,
         },
         () => {
-            const Self: AttributeCodec<Tree> = lazy(() =>
-                union([string, array(Self)]),
-            )
+            const { Self } = scope({
+                Self: union([string, array(ref('Self'))]),
+            })
             const value: Tree = ['x', ['y']]
             expect(Self.unsafeEncode(value)).toEqual({
                 L: [{ S: 'x' }, { L: [{ S: 'y' }] }],
@@ -147,130 +130,79 @@ describe('a union that names itself', () => {
         },
     )
 
-    /** Where the thunk sits is a spelling. The term and each verdict are the same. */
-    it(
-        'gives one term and one verdict wherever the thunk sits',
-        {
-            timeout: 5000,
-        },
-        () => {
-            const Self: AttributeCodec<Tree> = lazy(() =>
-                union([string, array(Self)]),
-            )
-            const Json: AttributeCodec<Tree> = union([
-                string,
-                array(lazy(() => Json)),
-            ])
-            expect(leanTermOf(Self)).toBe(leanTermOf(Json))
-            for (const other of [string, decimal])
-                expect(accepts(Self, other)).toBe(accepts(Json, other))
-        },
-    )
-
     /**
-     * A thunk forced before its constant exists names a codec not yet declared. The thunk
-     * resolves once the constant exists.
+     * **A use needs a closed codec.** A `ref` that no scope binds yet is an open fragment: the type
+     * refuses a use, and the run time refuses a use with the free name. The scope that binds the
+     * name closes the fragment, and the entry is the codec to use.
      */
-    it('resolves a thunk that was forced before its constant existed', () => {
-        const Early: AttributeCodec<string> = lazy(() => Late)
-        expect(() => Early.unsafeEncode('x')).toThrow(ReferenceError)
-        const Late = string
-        expect(Early.unsafeEncode('x')).toEqual({ S: 'x' })
-    })
-
-    /** A throw that names no undeclared codec is a defect of the caller, and reaches the caller. */
-    it('surfaces a thunk that fails for any other reason', () => {
-        const Broken: AttributeCodec<string> = lazy(() => {
-            throw new TypeError('the caller code is wrong')
-        })
-        expect(() => union([decimal, array(Broken)])).toThrow(TypeError)
-    })
-
-    /**
-     * **A thunk that names a codec not yet declared is a free variable, and the term of a free
-     * variable does not say whether the variable reaches null.** So `nullable` refuses at
-     * construction, as for any inner term that decides the null point by a function.
-     */
-    it('refuses a nullable of a codec not yet declared, because the null point is unknown', () => {
-        const declare = () => {
-            const Self: AttributeCodec<string | null> = nullable(
-                lazy(() => Self),
-            )
-            return Self
-        }
-        expect(declare).toThrow(CodecError)
-    })
-
-    /**
-     * The same refusal holds for a thunk that its own resolution forces again. The refusal reaches
-     * the caller at each use, as a `CodecError` that names `nullable`.
-     */
-    it('refuses a nullable of the thunk under resolution at each use', () => {
-        type Node = { v: string; next: Node | null }
-        const List: AttributeCodec<Node> = lazy(() =>
-            object({ v: string, next: nullable(List) }),
+    it('refuses a use of a ref that no scope binds, by name, and resolves the entry once a scope binds it', () => {
+        const Early = ref('Late')
+        // @ts-expect-error a use needs a closed codec, and the ref reads 'Late'
+        expect(() => Early.unsafeEncode('x')).toThrow(
+            /this codec reads 'Late' through a `ref` that no scope binds/,
         )
-        for (let use = 0; use < 2; use++)
-            expect(() => List.unsafeEncode({ v: 'a', next: null })).toThrow(
-                /^nullable:/,
-            )
+        const bound = scope({ Early, Late: string })
+        expect(bound.Early.unsafeEncode('x')).toEqual({ S: 'x' })
     })
 
     /**
-     * **A refusal is a value inside the boundary.** The thunk runs at the first use, so a builder
-     * that refuses inside the thunk refuses at a decode or an encode. The safe pair returns that
-     * refusal, and only the unsafe pair throws.
+     * **A refusal is a value inside the boundary.** A use of an open fragment refuses, so the safe
+     * pair returns the refusal, and only the unsafe pair throws.
      */
-    it('returns the refusal of a thunk that a decode forces, and does not throw', () => {
-        type Node = { v: string; next: Node | null }
-        const List: AttributeCodec<Node> = lazy(() =>
-            object({ v: string, next: nullable(List) }),
-        )
+    it('returns the refusal of an open fragment that a decode reads, and does not throw', () => {
+        const List = object({ v: string, next: nullable(ref('List')) })
+        // @ts-expect-error a use needs a closed codec
         const read = List.decode({ M: { v: { S: 'a' }, next: { NULL: true } } })
         expect(read).toBeInstanceOf(CodecError)
-        expect(String(read)).toMatch(/nullable:/)
+        expect(String(read)).toMatch(/reads 'List' through a `ref`/)
+        // @ts-expect-error a use needs a closed codec
         expect(List.encode({ v: 'a', next: null })).toBeInstanceOf(CodecError)
+        // @ts-expect-error a use needs a closed codec
+        expect(() => List.unsafeEncode({ v: 'a', next: null })).toThrow(
+            /reads 'List' through a `ref`/,
+        )
     })
 
     /**
-     * **A refusal is a value on the path that `at` returns.** The walk of `at` forces the thunk
-     * that the path crosses. The located codec returns that refusal from encode and decode, and
-     * keeps the path, because the path needs no codec.
+     * **A refusal is a value on the path that `at` returns.** The walk of `at` over an open
+     * fragment returns a codec that refuses, and keeps the path, because the path needs no codec.
      */
-    it('returns the refusal of a thunk that the walk of at forces, and does not throw', () => {
-        const { List } = scope({
-            List: object({
-                v: string,
-                next: lazy(() => nullable(ref('List'))),
-            }),
-        })
+    it('returns the refusal of an open fragment that the walk of at reads, and does not throw', () => {
+        const List = object({ v: string, next: nullable(ref('List')) })
         const Doc = object({ head: List }).item
-        const located = Doc.at((p) => p.head.next.v)
-        expect(located.path()).toBe('head.next.v')
+        // @ts-expect-error a use needs a closed codec
+        const located = Doc.at((p) => p.head.v)
+        expect(located.path()).toBe('head.v')
         const written = located.encode('a')
         expect(written).toBeInstanceOf(CodecError)
-        expect(String(written)).toMatch(/nullable:/)
+        expect(String(written)).toMatch(/reads 'List' through a `ref`/)
         expect(located.decode({ S: 'a' })).toBeInstanceOf(CodecError)
-        expect(() => located.unsafeEncode('a')).toThrow(/nullable:/)
+        expect(() => located.unsafeEncode('a')).toThrow(/reads 'List'/)
     })
 
     /**
-     * **A nullable recursive field defers the `nullable` call to a thunk of its own.** When that
-     * thunk runs, the outer thunk is resolved, so the null point is known. The refusal names this
-     * spelling, because `held(nullable(inner), …)` does not apply to a thunk.
+     * **A `nullable` over a `ref` that names its own entry, with no container between, reads its own
+     * input.** The `nullable` waits for the scope, and the scope refuses the recursion.
      */
-    it('declares a nullable recursive field as lazy(() => nullable(Self))', () => {
-        type Node = { v: string; next: Node | null }
-        const Refused: AttributeCodec<Node> = lazy(() =>
-            object({ v: string, next: nullable(Refused) }),
+    it('refuses a nullable that names its own entry with no container between, at the scope', () => {
+        const unguarded =
+            /\[scope\] 'Self' reaches a recursion with no list or object on its path/
+        expect(() => scope({ Self: nullable(ref('Self')) })).toThrow(unguarded)
+        expect(() => scope({ Self: nullable(nullable(ref('Self'))) })).toThrow(
+            unguarded,
         )
-        expect(() => Refused.unsafeEncode({ v: 'a', next: null })).toThrow(
-            'lazy(() => nullable(',
-        )
+    })
 
-        const List: AttributeCodec<Node> = lazy(() =>
-            object({ v: string, next: lazy(() => nullable(List)) }),
-        )
+    /**
+     * **The null point of a `ref` is known once the scope binds the name.** A `nullable` over a
+     * `ref` waits for the scope, and asks the question there, so a nullable recursive field needs
+     * no other spelling.
+     */
+    it('declares a nullable recursive field, because nullable waits for the scope', () => {
+        type Node = { v: string; next: Node | null }
+        const { List } = scope({
+            List: object({ v: string, next: nullable(ref('List')) }),
+        })
         const chain: Node = { v: 'a', next: { v: 'b', next: null } }
         expect(List.unsafeEncode(chain)).toEqual({
             M: {
@@ -283,46 +215,156 @@ describe('a union that names itself', () => {
             List.decode({ M: { v: { S: 'a' }, next: { S: 'b' } } }),
         ).toBeInstanceOf(CodecError)
     })
+
+    /**
+     * **A `nullable` over a `ref` refuses at the scope where the term does not decide the null
+     * point.** The adapter decides the null point by running a function that the term cannot read.
+     * The scope runs the check of the `nullable`, so the refusal lands at the declaration and not at
+     * a later use.
+     */
+    it('refuses at the scope a nullable whose ref names an adapter, because the null point is unknown', () => {
+        const declare = () =>
+            scope({
+                Node: object({ v: string, next: nullable(ref('Held')) }),
+                Held: held(nullable(string), string, {
+                    encode: (v: string) => v,
+                    decode: (v: string | null) => v ?? '',
+                }),
+            })
+        expect(declare).toThrow(/^ref and null are not shown compatible/)
+    })
+
+    /**
+     * **The walk of `at` crosses a `nullable` over a `ref`.** The walk forces the thunk that the
+     * path crosses, and the scope already resolved it, so the located codec writes the leaf.
+     */
+    it('walks at through a nullable ref, because nullable waits for the scope', () => {
+        const { List } = scope({
+            List: object({ v: string, next: nullable(ref('List')) }),
+        })
+        const Doc = object({ head: List }).item
+        const located = Doc.at((p) => p.head.next.v)
+        expect(located.path()).toBe('head.next.v')
+        expect(located.encode('a')).toEqual({ S: 'a' })
+        expect(located.decode({ S: 'a' })).toBe('a')
+    })
 })
 
 /**
  * **The model's guard refuses a recursion that reads the input of its own binder.** With no list or
- * object on the path, each stage reads the same input, and encode overflows the stack. Each former
- * refuses such a term at its declaration, as `union` refuses such an option.
+ * object on the path, each stage reads the same input, and encode overflows the stack. The scope
+ * refuses such a cycle where it binds the names, as `union` refuses such an option.
  */
 describe('a recursion is refused or accepted where it is declared, as the model guards each binder', () => {
     it('a recursion that reads its own input with no list or object between is refused where it is declared', () => {
-        const X: AnyCodec = lazy(() => X as never) as never
-        const P: AnyCodec = lazy(() => Q as never) as never
-        const Q: AnyCodec = lazy(() => P as never) as never
-        const between = /with no list or object between/
-        expect(() => object({ a: X as never })).toThrow(between)
-        expect(() => array(X as never)).toThrow(between)
-        expect(() => object({ a: P as never })).toThrow(between)
+        const between = /reaches a recursion with no list or object on its path/
+        expect(() => scope({ X: ref('X') })).toThrow(between)
+        expect(() => scope({ P: ref('Q'), Q: ref('P') })).toThrow(between)
     })
 
-    it('a union accepts a guarded recursion that it reaches through options and thunks with no container', () => {
-        const Tree: AnyCodec = lazy(() =>
-            object({ kids: array(Tree as never) }),
-        ) as never
-        const Twice = lazy(() => lazy(() => Tree as never))
-        const Self: AttributeCodec<Tree> = lazy(() =>
-            union([string, array(Self)]),
-        )
-        const options = union([string, Tree as never])
-        expect(options.unsafeEncode({ kids: [{ kids: [] }] } as never)).toEqual(
-            { M: { kids: { L: [{ M: { kids: { L: [] } } }] } } },
-        )
-        expect(() => union([string, Twice as never])).not.toThrow()
+    it('a union accepts a guarded recursion that it reaches through options and refs with no container', () => {
+        const { Tree, Twice, Self } = scope({
+            Tree: object({ kids: array(ref('Tree')) }),
+            Twice: ref('Once'),
+            Once: ref('Tree'),
+            Self: union([string, array(ref('Self'))]),
+        })
+        const options = union([string, Tree])
+        expect(options.unsafeEncode({ kids: [{ kids: [] }] })).toEqual({
+            M: { kids: { L: [{ M: { kids: { L: [] } } }] } },
+        })
+        expect(() => union([string, Twice])).not.toThrow()
         expect(Self.unsafeEncode(['x'])).toEqual({ L: [{ S: 'x' }] })
     })
 
-    it('a thunk that two positions share without a cycle is no recursion', () => {
-        const shared = lazy(() => string)
+    it('a ref that two positions share without a cycle is no recursion', () => {
+        const shared = scope({ At: ref('S'), S: string }).At
         const Pair = object({ a: shared, b: optional(shared) })
         expect(Pair.unsafeEncode({ a: 'x', b: 'y' })).toEqual({
             M: { a: { S: 'x' }, b: { S: 'y' } },
         })
         expect(() => array(object({ a: shared, b: shared }))).not.toThrow()
+    })
+})
+
+/**
+ * **A `ref` that closes no cycle is the codec of its entry.** Each former reads the `ref` as a free
+ * variable, so the former builds an open fragment, and the scope runs the guard and each waiting
+ * check with the name bound. So a former directly over a `ref` gives the verdict that the codec of
+ * the entry gives in its place, where the model's guard accepts the term.
+ */
+describe('a former directly over a ref', () => {
+    it('accepts a held directly over a ref, and converts through the entry', () => {
+        const { When } = scope({
+            When: held(ref('Text'), string, {
+                encode: (v: string) => v.toLowerCase(),
+                decode: (v: unknown) => String(v).toUpperCase(),
+            }),
+            Text: string,
+        })
+        expect(When.unsafeEncode('AB')).toEqual({ S: 'ab' })
+        expect(When.unsafeDecode({ S: 'ab' })).toBe('AB')
+    })
+
+    it('accepts a refine directly over a ref, and refuses what the predicate refuses', () => {
+        const { Named } = scope({
+            Named: refine(ref('Text'), (v: unknown): v is string => v !== '', {
+                describe: 'a name that is not empty',
+            }),
+            Text: string,
+        })
+        expect(Named.unsafeEncode('a')).toEqual({ S: 'a' })
+        expect(Named.encode('')).toBeInstanceOf(CodecError)
+    })
+
+    it('accepts an older reader directly over a ref, and reads the older encoding', () => {
+        const { Rate } = scope({
+            Rate: withLegacyRead({
+                current: ref('Text'),
+                older: {
+                    decode: (attribute) =>
+                        attribute.N === undefined
+                            ? new CodecError('no older rate')
+                            : attribute.N,
+                },
+            }),
+            Text: string,
+        })
+        expect(Rate.unsafeDecode({ S: '1.5' })).toBe('1.5')
+        expect(Rate.unsafeDecode({ N: '1.5' })).toBe('1.5')
+    })
+
+    /**
+     * **A tag that a `ref` names is read when the scope binds the name.** The index of the
+     * dissection reads the literal of each tag through the `ref`, so the index waits for the scope.
+     * The type of a `ref` is its name alone, and carries no literal, so the type refuses the tag.
+     */
+    it('keys a variant by a tag that a ref names, once the scope binds the name', () => {
+        const { Visit } = scope({
+            Checkup: string('CHECKUP'),
+            // @ts-expect-error the type of a ref carries no literal for the tag
+            Visit: discriminatedUnion('type', [
+                object({ type: ref('Checkup'), petId: string }),
+                object({ type: string('SHOT'), vaccine: string }),
+            ]),
+        })
+        const read = Visit.decode({
+            M: { type: { S: 'CHECKUP' }, petId: { S: 'p' } },
+        })
+        expect(read).toEqual({ type: 'CHECKUP', petId: 'p' })
+        const { Byway } = scope({
+            Pet: string('pet'),
+            Byway: mdunion(
+                ['kind'],
+                // @ts-expect-error the type of a ref carries no literal for the tag
+                [
+                    object({ kind: ref('Pet'), toy: string }),
+                    object({ kind: string('food'), gram: string }),
+                ],
+            ),
+        })
+        expect(
+            Byway.decode({ M: { kind: { S: 'pet' }, toy: { S: 't' } } }),
+        ).toEqual({ kind: 'pet', toy: 't' })
     })
 })

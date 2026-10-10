@@ -7,6 +7,7 @@ import type {
 import { carrying } from './codec/attribute'
 import type {
     AnyCodec,
+    Closed,
     Encoded,
     IsUnion,
     ItemCodec,
@@ -1420,7 +1421,12 @@ export const tableEntry =
                                 ? TaggedCodec<Entity, CodecSpec>
                                 :
                                       | CodecSpec
-                                      | ItemCodec<Entity, CodecSpec, CodecRest>
+                                      | (ItemCodec<
+                                            Entity,
+                                            CodecSpec,
+                                            CodecRest
+                                        > &
+                                            Closed)
                             readonly separator?: Separator
                         } & WritesRow<
                             Pinned,
@@ -1782,7 +1788,6 @@ export {
     everyEntry,
     failed,
     held,
-    lazy,
     list,
     mdunion,
     never,

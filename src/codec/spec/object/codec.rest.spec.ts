@@ -11,13 +11,14 @@ import type { AnyCodec } from '../../codec'
 import {
     CodecError,
     codecOfTerm,
-    lazy,
     list,
     number,
     object,
     opaque,
     optional,
+    ref,
     refine,
+    scope,
     string,
     termOf,
     undefinable,
@@ -205,7 +206,9 @@ describe('an open object with an absent field nests in another codec', () => {
             L: [{ M: {} }],
         })
         expect(refine(withOptional, keep).unsafeEncode({})).toEqual({ M: {} })
-        expect(lazy(() => withOptional).unsafeEncode({})).toEqual({ M: {} })
+        expect(
+            scope({ At: ref('X'), X: withOptional }).At.unsafeEncode({}),
+        ).toEqual({ M: {} })
     })
 
     it('nests an undefinable field beside an open entry in each former, and writes no entry for the absent field', () => {
@@ -222,9 +225,9 @@ describe('an open object with an absent field nests in another codec', () => {
         expect(refine(withUndefinable, keep).unsafeEncode(absent)).toEqual({
             M: {},
         })
-        expect(lazy(() => withUndefinable).unsafeEncode(absent)).toEqual({
-            M: {},
-        })
+        expect(
+            scope({ At: ref('X'), X: withUndefinable }).At.unsafeEncode(absent),
+        ).toEqual({ M: {} })
     })
 
     it('refuses an undefined entry at the type, because the run time never writes one', () => {

@@ -19,7 +19,6 @@ import {
     discriminatedUnion,
     dynamoNumber,
     held,
-    lazy,
     list,
     mdunion,
     nullable,
@@ -27,7 +26,9 @@ import {
     object,
     optional,
     product,
+    ref,
     refine,
+    scope,
     spread,
     string,
     union,
@@ -165,8 +166,8 @@ describe('a union of compatible options gives one answer whatever the option ord
         })
     })
 
-    // a thunk of a held-free term is held-free: the model reads the term that the thunk returns
-    it('writes and reads a held-free option beside a thunk of a held-free option the same way in each order', () => {
+    // a ref to a held-free term is held-free: the model reads the term that the ref names
+    it('writes and reads a held-free option beside a ref to a held-free option the same way in each order', () => {
         const values = ['A', 'B']
         const attributes: AttributeValue[] = [
             { S: 'A' },
@@ -174,7 +175,7 @@ describe('a union of compatible options gives one answer whatever the option ord
             { N: '1' },
         ]
         const answers = sameUnderEveryOrder(
-            [string('A'), lazy(() => string)],
+            [string('A'), scope({ At: ref('S'), S: string }).At],
             (codec) => [
                 ...values.map((v) => codec.encode(v)),
                 ...attributes.map((a) => codec.decode(a)),
@@ -405,34 +406,23 @@ describe('a union of two restrictions of one adapter is the adapter, whatever th
 })
 
 describe('a union refuses a thunk it must read at its own input, because the model guards each binder', () => {
-    it('refuses a union whose thunk names the union itself, and ends', () => {
-        const declare = () => {
-            const self: AnyCodec = union([
-                string,
-                lazy(() => self as never),
-            ] as unknown as readonly AnyCodec[])
-            return self
-        }
+    it('refuses a union whose ref names the union itself, and ends', () => {
+        const declare = () => scope({ Self: union([string, ref('Self')]) })
         expect(declare).toThrow(CodecError)
     })
 
     /**
-     * **A thunk that names a codec not yet declared is read as the union itself.** The thunk
-     * throws in the same way for the union and for a later constant, so the declaration cannot
-     * tell the two apart. The model reads an unbound variable as guarded, and the host refuses
-     * here on purpose: read as the union, the option recurses at its own input. The emitter states
-     * this reading as a guard vector, on the term with the thunk as the variable of a root `Term.mu`.
+     * **A `ref` that names a later entry is read with the entry bound.** The union waits for the
+     * scope, and the scope binds every name before the union reads its options. So the option reads
+     * the later entry, a list, and the union is accepted.
      */
-    it('refuses a thunk that names a later codec, because it throws as a thunk that names the union does', () => {
-        const declare = () => {
-            const early = union([
-                string,
-                lazy(() => later as never),
-            ] as unknown as readonly AnyCodec[])
-            const later = array(boolean)
-            return [early, later]
-        }
-        expect(declare).toThrow(CodecError)
+    it('accepts a ref that names a later entry, because the scope binds the entry before the union reads it', () => {
+        const declare = () =>
+            scope({
+                Early: union([string, ref('Later')]),
+                Later: array(boolean),
+            })
+        expect(declare).not.toThrow()
     })
 
     /**
@@ -443,23 +433,22 @@ describe('a union refuses a thunk it must read at its own input, because the mod
      */
     it('accepts a recursive option beside decimal, where the part that reads no variable is closed', () => {
         const declare = () => {
-            const self: AnyCodec = union([
-                decimal('1', '2.5'),
-                object({ m: optional(lazy(() => self as never)) }),
-            ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
-            return union([self, decimal] as unknown as readonly AnyCodec[])
+            const { Self } = scope({
+                Self: union([
+                    decimal('1', '2.5'),
+                    object({ m: optional(ref('Self')) }),
+                ]),
+            })
+            return union([Self, decimal])
         }
         expect(declare).not.toThrow()
     })
 
-    // a thunk below a list names the union being declared, so the walk meets the thunk again. Two
+    // a ref below a list names the union being declared, so the walk meets the ref again. Two
     // held-free options sit below `opaque` wherever they overlap, and an adapter that writes a text
     // to another attribute does not
     it('ends beside a union that recurses below a list, and refuses where an adapter overlaps it', () => {
-        const json: AnyCodec = union([
-            string,
-            array(lazy(() => json as never)),
-        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+        const { json } = scope({ json: union([string, array(ref('json'))]) })
         expect(() =>
             union([dynamoNumber, json] as unknown as readonly AnyCodec[]),
         ).not.toThrow()
@@ -472,72 +461,62 @@ describe('a union refuses a thunk it must read at its own input, because the mod
     })
 
     /**
-     * **An adapter on the path of a recursion is refused where the adapter is declared.** The
+     * **An adapter on the path of a recursion is refused at the scope that closes the cycle.** The
      * model's guard refuses a `held` between a binder and its variable, because the conversion can
      * make the input deeper, so the stages need not agree. A list on the path bounds nothing then.
-     * At the declaration of the `held`, the thunk below the `held` names a constant not yet
-     * declared, so the `held` refuses before any union or object above it reads it.
+     * At the declaration of the `held`, the `ref` below the `held` is a free variable, so the
+     * `held` builds an open fragment, and the scope runs the guard with the name bound.
      */
-    it('refuses a held between a recursive thunk and the codec it returns where the held is declared, before a union reads it', () => {
+    it('refuses a held between a recursive ref and the codec it names at the scope that binds the ref', () => {
         const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
-        const inUnion = () => {
-            const self: AnyCodec = union([
-                string,
-                array(
-                    held(
-                        lazy(() => self as never),
-                        lazy(() => self as never),
-                        same,
-                    ),
-                ),
-            ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
-            return self
-        }
-        expect(inUnion).toThrow(/this `held` term holds an adapter/)
-        const inObject = () => {
-            const kids: AnyCodec = object({
-                kids: array(
-                    held(
-                        lazy(() => kids as never),
-                        lazy(() => kids as never),
-                        same,
-                    ),
-                ),
-            }) as unknown as AnyCodec
-            return kids
-        }
-        expect(inObject).toThrow(/this `held` term holds an adapter/)
+        const inUnion = () =>
+            scope({
+                Self: union([
+                    string,
+                    array(held(ref('Self'), ref('Self'), same)),
+                ]),
+            })
+        expect(inUnion).toThrow(
+            /\[scope\] 'Self' reaches a recursion with an adapter/,
+        )
+        const inObject = () =>
+            scope({
+                Kids: object({
+                    kids: array(held(ref('Kids'), ref('Kids'), same)),
+                }),
+            })
+        expect(inObject).toThrow(
+            /\[scope\] 'Kids' reaches a recursion with an adapter/,
+        )
     })
 
     /**
-     * **An older reader on the path of a recursion is refused as an adapter is, where the reader is
-     * declared.** The read writes the older reader's answer through the inner term, and the answer
-     * has any depth, so a container on the path bounds nothing.
+     * **An older reader on the path of a recursion is refused as an adapter is, at the scope that
+     * binds the ref.** The read writes the older reader's answer through the inner term, and the
+     * answer has any depth, so a container on the path bounds nothing.
      */
-    it('refuses a withLegacyRead between a recursive thunk and the codec it returns where the withLegacyRead is declared', () => {
-        const declare = () => {
-            const kids: AnyCodec = object({
-                kids: array(
-                    withLegacyRead({
-                        current: lazy(() => kids as never),
-                        older: { decode: () => ({ kids: [] }) as never },
-                    }),
-                ),
-            }) as unknown as AnyCodec
-            return kids
-        }
-        expect(declare).toThrow(/this `legacy` term holds an adapter/)
+    it('refuses a withLegacyRead between a recursive ref and the codec it names at the scope that binds the ref', () => {
+        const declare = () =>
+            scope({
+                Kids: object({
+                    kids: array(
+                        withLegacyRead({
+                            current: ref('Kids'),
+                            older: { decode: () => ({ kids: [] }) as never },
+                        }),
+                    ),
+                }),
+            })
+        expect(declare).toThrow(
+            /\[scope\] 'Kids' reaches a recursion with an adapter/,
+        )
     })
 
     it('accepts a recursion below a list or an object with no adapter on its path', () => {
-        const json: AnyCodec = union([
-            string,
-            array(lazy(() => json as never)),
-        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
-        const tree: AnyCodec = object({
-            v: string,
-            kids: array(lazy(() => tree as never)),
-        }) as unknown as AnyCodec
+        const { json, tree } = scope({
+            json: union([string, array(ref('json'))]),
+            tree: object({ v: string, kids: array(ref('tree')) }),
+        })
         expect(() =>
             union([number, json] as unknown as readonly AnyCodec[]),
         ).not.toThrow()
@@ -547,51 +526,48 @@ describe('a union refuses a thunk it must read at its own input, because the mod
     })
 
     it('accepts recursion below an object, where the union reads no thunk', () => {
-        const tree: AnyCodec = object({
-            v: string,
-            kids: array(lazy(() => tree as never)),
-        }) as unknown as AnyCodec
+        const { tree } = scope({
+            tree: object({ v: string, kids: array(ref('tree')) }),
+        })
         expect(() =>
             union([string, tree] as unknown as readonly AnyCodec[]),
         ).not.toThrow()
     })
 
     /**
-     * **A union names the cause of a refusal that a thunk option forced.** The `held` refuses
-     * inside the thunk, because the thunk names itself through an object and the adapter. The union
-     * forces the thunk and reads the refusal of the `held`, so the union names the adapter and not a
-     * recursion with no container.
+     * **A scope names the cause of a refusal that a union option reaches.** The `held` sits on the
+     * cycle through an object, so the scope names the adapter and not a recursion with no
+     * container.
      */
-    it('a union names the adapter when a thunk option reaches an adapter that refused', () => {
+    it('a scope names the adapter when a union option reaches an adapter on the cycle', () => {
         const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
-        const declare = () => {
-            const self: AnyCodec = lazy(
-                () =>
+        const declare = () =>
+            scope({
+                Self: union([
                     held(
-                        object({ a: self as never }),
+                        object({ a: ref('Self') }) as never,
                         string as never,
                         same as never,
-                    ) as never,
-            ) as unknown as AnyCodec
-            return union([self, string] as unknown as readonly AnyCodec[])
-        }
+                    ) as unknown as AnyCodec,
+                    string,
+                ]),
+            })
         expect(declare).toThrow(
-            /^option 1 of this union reaches a thunk whose codec holds an adapter/,
+            /^\[scope\] 'Self' reaches a recursion with an adapter/,
         )
     })
 
     /**
-     * **An adapter on a recursive path is refused at its former, and reaches a union only through a
-     * thunk that refused.** Each former refuses with the term, and each `held` and each
-     * `withLegacyRead` passes its former before a union reads it. So the union meets an adapter on
-     * a recursive path only where the union forces a thunk whose former refused.
+     * **An adapter over a free `ref` builds an open fragment, and an adapter on a recursive path is
+     * refused at the scope.** A cycle passes through a `ref`, and the former of each `held` and each
+     * `withLegacyRead` runs before the scope binds the name. So the former reads the `ref` as a
+     * free variable, which holds no recursion yet. The scope binds the name, and the guard refuses
+     * the cycle there with the term of the entry.
      */
-    it('refuses an adapter on a recursive path at its former, or at a union through a thunk that refused', () => {
+    it('builds an adapter over a free ref as an open fragment, and refuses an adapter on a recursive path at the scope', () => {
         const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
         const older = { decode: () => 'o' as never }
-        const undeclared = lazy((): never => {
-            throw new ReferenceError('a codec not yet declared')
-        })
+        const unbound = ref('Unbound')
         const h = (c: unknown) =>
             held(
                 c as never,
@@ -605,151 +581,72 @@ describe('a union refuses a thunk it must read at its own input, because the mod
             }) as unknown as AnyCodec
         const u = (xs: readonly unknown[]) =>
             union(xs as readonly AnyCodec[]) as unknown as AnyCodec
-        const routes: readonly (readonly [
-            string,
-            'former' | 'thunk',
-            () => unknown,
-        ])[] = [
+        const routes: readonly (readonly [string, () => unknown])[] = [
+            ['a held over a free ref', () => u([h(unbound), string])],
             [
-                'a held over a free thunk',
-                'former',
-                () => u([h(undeclared), string]),
-            ],
-            [
-                'a withLegacyRead over a free thunk',
-                'former',
-                () => u([leg(undeclared), string]),
+                'a withLegacyRead over a free ref',
+                () => u([leg(unbound), string]),
             ],
             [
                 'a held under an object',
-                'former',
-                () => u([object({ a: h(undeclared) }), string]),
+                () => u([object({ a: h(unbound) }), string]),
             ],
             [
                 'a held over an object',
-                'former',
-                () => u([h(object({ a: undeclared })), string]),
+                () => u([h(object({ a: unbound })), string]),
+            ],
+            ['a held over an array', () => u([h(array(unbound)), string])],
+            [
+                'a ref to a held over an object of the ref',
+                () => scope({ L: h(object({ a: ref('L') })) }),
             ],
             [
-                'a held over an array',
-                'former',
-                () => u([h(array(undeclared as never)), string]),
+                'a ref to a withLegacyRead over an array of the ref',
+                () => scope({ L: leg(array(ref('L'))) }),
             ],
             [
-                'a thunk to a held over an object of the thunk',
-                'thunk',
-                () => {
-                    const L: AnyCodec = lazy(
-                        () => h(object({ a: L as never })) as never,
-                    ) as never
-                    return u([L, string])
-                },
+                'an object above a ref to a held that closes the cycle',
+                () =>
+                    scope({
+                        H: h(array(ref('X'))),
+                        X: object({ h: ref('H') }),
+                    }),
             ],
             [
-                'a thunk to a withLegacyRead over an array of the thunk',
-                'thunk',
-                () => {
-                    const L: AnyCodec = lazy(
-                        () => leg(array(L as never)) as never,
-                    ) as never
-                    return u([L, string])
-                },
+                'two refs, the second to a held over the first',
+                () => scope({ A: ref('B'), B: h(object({ a: ref('A') })) }),
+            ],
+            ['a nested union', () => u([u([h(unbound), string]), string])],
+            [
+                'a ref to a nested union',
+                () => scope({ L: u([h(object({ a: ref('L') })), string]) }),
             ],
             [
-                'an object above a thunk to a held that closes the cycle',
-                'former',
-                () => {
-                    const H: AnyCodec = lazy(
-                        () => h(array(X as never)) as never,
-                    ) as never
-                    const X = object({ h: H as never })
-                    return u([X, string])
-                },
+                'a union inside its own entry',
+                () => scope({ L: u([h(ref('L')), string]) }),
             ],
-            [
-                'two thunks, the second to a held over the first',
-                'thunk',
-                () => {
-                    const A: AnyCodec = lazy(() => B as never) as never
-                    const B: AnyCodec = lazy(
-                        () => h(object({ a: A as never })) as never,
-                    ) as never
-                    return u([A, string])
-                },
-            ],
-            [
-                'a thunk forced once before the union',
-                'thunk',
-                () => {
-                    const L: AnyCodec = lazy(
-                        () => h(object({ a: L as never })) as never,
-                    ) as never
-                    expect(() =>
-                        (L.def as { get: () => unknown }).get(),
-                    ).toThrow(RecursionRefused)
-                    return u([L, string])
-                },
-            ],
-            [
-                'a nested union',
-                'former',
-                () => u([u([h(undeclared), string]), string]),
-            ],
-            [
-                'a thunk to a nested union',
-                'thunk',
-                () => {
-                    const L: AnyCodec = lazy(
-                        () =>
-                            u([h(object({ a: L as never })), string]) as never,
-                    ) as never
-                    return u([L, string])
-                },
-            ],
-            [
-                'a union inside its own thunk',
-                'former',
-                () => {
-                    const L: AnyCodec = lazy(
-                        () => u([h(L), string]) as never,
-                    ) as never
-                    return u([object({ x: L as never }), string])
-                },
-            ],
-            [
-                'a nullable over a thunk to a held',
-                'former',
-                () => {
-                    const L: AnyCodec = lazy(
-                        () => h(object({ a: L as never })) as never,
-                    ) as never
-                    return u([nullable(L as never), string])
-                },
-            ],
+
             [
                 'a list spread over a held',
-                'former',
-                () => u([list(spread(h(undeclared) as never)), string]),
+                () => u([list(spread(h(unbound) as never)), string]),
             ],
             [
                 'an object rest over a held',
-                'former',
                 () =>
                     u([
                         (object as (...x: unknown[]) => unknown)({}, [
                             string,
-                            optional(h(undeclared) as never),
+                            optional(h(unbound) as never),
                         ]),
                         string,
                     ]),
             ],
             [
                 'a product with a held field',
-                'former',
                 () =>
                     u([
                         (product as (...x: unknown[]) => unknown)(
-                            object({ a: h(undeclared) }),
+                            object({ a: h(unbound) }),
                             object({ b: string }),
                         ),
                         string,
@@ -757,13 +654,12 @@ describe('a union refuses a thunk it must read at its own input, because the mod
             ],
             [
                 'a discriminatedUnion member with a held',
-                'former',
                 () =>
                     u([
                         (discriminatedUnion as (...x: unknown[]) => unknown)(
                             'k',
                             [
-                                object({ k: string('a'), x: h(undeclared) }),
+                                object({ k: string('a'), x: h(unbound) }),
                                 object({ k: string('b') }),
                             ],
                         ),
@@ -772,13 +668,12 @@ describe('a union refuses a thunk it must read at its own input, because the mod
             ],
             [
                 'an mdunion member with a withLegacyRead',
-                'former',
                 () =>
                     u([
                         (mdunion as (...x: unknown[]) => unknown)(
                             ['k'],
                             [
-                                object({ k: string('a'), x: leg(undeclared) }),
+                                object({ k: string('a'), x: leg(unbound) }),
                                 object({ k: string('b') }),
                             ],
                         ),
@@ -786,49 +681,61 @@ describe('a union refuses a thunk it must read at its own input, because the mod
                     ]),
             ],
             [
-                'a held whose outer is a free thunk',
-                'former',
+                'a held whose outer is a free ref',
                 () =>
                     u([
-                        held(
-                            string as never,
-                            undeclared as never,
-                            same as never,
-                        ),
+                        held(string as never, unbound as never, same as never),
                         string,
                     ]),
             ],
             [
-                'a held in a thunk resolved after its object',
-                'former',
+                'a held in an entry that its object names',
+                () => scope({ T: h(ref('Y')), Y: object({ t: ref('T') }) }),
+            ],
+            [
+                'a ref used once before the scope',
                 () => {
-                    const T: AnyCodec = lazy(
-                        () => h(Y as never) as never,
-                    ) as never
-                    const Y = object({ t: T as never })
-                    return u([Y, string])
+                    const L = h(object({ a: ref('L') }))
+                    L.encode('x' as never)
+                    return scope({ L })
                 },
+            ],
+            [
+                'a nullable over a ref to a held',
+                () =>
+                    scope({
+                        L: nullable(ref('H')),
+                        H: h(object({ a: ref('L') })),
+                    }),
             ],
         ]
         const refusedAt = (make: () => unknown): string => {
             try {
                 make()
-                return 'accepted'
+                return 'open fragment'
             } catch (thrown) {
                 if (thrown instanceof RecursionRefused)
-                    return thrown.use === 3 ? 'former' : 'former, no container'
-                if (
-                    thrown instanceof CodecError &&
-                    /^option \d+ of this union reaches a thunk whose codec holds an adapter/.test(
-                        thrown.message,
-                    )
-                )
-                    return 'thunk'
+                    return thrown.use === 3 ? 'scope' : 'scope, no container'
                 return String(thrown)
             }
         }
-        expect(routes.map(([name, , make]) => [name, refusedAt(make)])).toEqual(
-            routes.map(([name, at]) => [name, at]),
+        // each route that a scope closes is a cycle, and each other route reads a free ref
+        const closedByScope = new Set([
+            'a ref to a held over an object of the ref',
+            'a ref to a withLegacyRead over an array of the ref',
+            'an object above a ref to a held that closes the cycle',
+            'two refs, the second to a held over the first',
+            'a ref to a nested union',
+            'a union inside its own entry',
+            'a held in an entry that its object names',
+            'a ref used once before the scope',
+            'a nullable over a ref to a held',
+        ])
+        expect(routes.map(([name, make]) => [name, refusedAt(make)])).toEqual(
+            routes.map(([name]) => [
+                name,
+                closedByScope.has(name) ? 'scope' : 'open fragment',
+            ]),
         )
     })
 })
@@ -842,10 +749,9 @@ describe('a union refuses a thunk it must read at its own input, because the mod
  */
 describe('a union reads the views of a recursive option through its thunk', () => {
     it('accepts a recursive option with an adapter below the recursion, where the views of the two options part', () => {
-        const json: AnyCodec = union([
-            decimal('1', '2.5'),
-            array(lazy(() => json as never)),
-        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+        const { json } = scope({
+            json: union([decimal('1', '2.5'), array(ref('json'))]),
+        })
         const values = ['A', '1', ['2.5', ['1']]]
         const attributes: AttributeValue[] = [
             { S: 'A' },
@@ -864,10 +770,9 @@ describe('a union reads the views of a recursive option through its thunk', () =
     })
 
     it('refuses the same recursive option beside an option whose caller view meets its caller view', () => {
-        const json: AnyCodec = union([
-            decimal('1', '2.5'),
-            array(lazy(() => json as never)),
-        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+        const { json } = scope({
+            json: union([decimal('1', '2.5'), array(ref('json'))]),
+        })
         // the text '1' is a value of both options, written as `S` by one and as `N` by the other
         expect(() =>
             union([string('1', 'B'), json] as unknown as readonly AnyCodec[]),

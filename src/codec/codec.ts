@@ -68,13 +68,18 @@ import {
     force,
     literalAlternatives,
     member as memberOf,
+    openRefusal,
     ownsNullOf,
+    RecursionRefused,
+    type RefSlot,
     recursionUse,
+    refSlots,
+    refuseSlots,
     sameAdapter,
     sameTerm,
     storedView,
-    ThunkReentered,
     unanimous,
+    unboundRefs,
     widensRead,
 } from './term'
 
@@ -162,6 +167,33 @@ type TermOf<C> = C extends { readonly [termMarker]?: infer T }
         : T
     : FreeTerm
 type TermsOf<Cs> = { -readonly [I in keyof Cs]: TermOf<Cs[I]> }
+
+/*
+ * **The free names of a codec, in its type**: the names that its term reads through a `ref` and
+ * that no scope binds. Optional, so no value carries it. Wrapped in a tuple, because a reader
+ * infers an optional `never` as `string`. A field carries the names of the codec that it marks.
+ */
+declare const freeMarker: unique symbol
+type Free<F extends string> = { readonly [freeMarker]?: [F] }
+export type FreeOf<C> = C extends {
+    readonly [freeMarker]?: [infer F extends string]
+}
+    ? F
+    : C extends { readonly codec: infer Marked }
+      ? FreeOf<Marked>
+      : never
+/** The free names of an object: the names of its spec and its rest. An entry of a scope has none. */
+type ObjectFree<Spec, Rest, Tm> = [Tm] extends [OfParts]
+    ? FreeOf<Spec[keyof Spec]> | FreeOf<Rest>
+    : never
+/**
+ * The `this` of each use: **a use needs a closed codec**, with no free name. `encode` is a
+ * member of each codec, and keeps the type from being weak, so a codec with no mark is closed.
+ */
+export type Closed = {
+    readonly encode: unknown
+    readonly [freeMarker]?: [never]
+}
 type BaseT<K extends string> = ['prim', ['base', K]]
 type LitT<K extends string, V> = ['prim', ['literal', K, V]]
 type LitsT<
@@ -265,9 +297,9 @@ type CodecShape<In, Out, A extends AttributeValue> = {
      * wrote and failing to read one is an ordinary outcome rather than an exception. `CodecError`
      * extends `Error`, so a bare union is enough to tell the two apart and `isError` narrows it.
      */
-    readonly encode: (value: In) => Result<A>
+    readonly encode: (this: Closed, value: In) => Result<A>
     /** The value this attribute holds, or why it cannot be read. */
-    readonly decode: (attribute: AttributeValue) => Result<Out>
+    readonly decode: (this: Closed, attribute: AttributeValue) => Result<Out>
     /**
      * The same, throwing.
      *
@@ -276,9 +308,9 @@ type CodecShape<In, Out, A extends AttributeValue> = {
      * unwrapping is the part that gets forgotten. So composition throws and the boundary converts,
      * which is why these are the ones the composites are built from.
      */
-    readonly unsafeEncode: (value: In) => A
+    readonly unsafeEncode: (this: Closed, value: In) => A
     /** The same, throwing. */
-    readonly unsafeDecode: (attribute: AttributeValue) => Out
+    readonly unsafeDecode: (this: Closed, attribute: AttributeValue) => Out
     /**
      * What this codec is — see {@link Term}.
      *
@@ -1612,7 +1644,8 @@ const set = <const C extends AnyCodec>(
 export const array = <const C extends AnyCodec>(
     element: C,
 ): AttributeCodec<readonly Decoded<C>[], L<AttributeOf<C>>> &
-    TermMark<['list', [], ['some', TermOf<C>], []]> => {
+    TermMark<['list', [], ['some', TermOf<C>], []]> &
+    Free<FreeOf<C>> => {
     type T = Decoded<C>
     return codecOfTerm<readonly T[], L<AttributeOf<C>>>({
         kind: 'list',
@@ -1701,7 +1734,9 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
     // of one per position, and the diagnostic lands on the call either way. Mapping cost +10%
     // across this repo, measured
     ...elements: Cs & SpreadOnce<Cs> & NoNeverSlot<Cs>
-): AttributeCodec<ListOf<Cs>, L<ListWrites<Cs>>> & TermMark<ListTermOf<Cs>> => {
+): AttributeCodec<ListOf<Cs>, L<ListWrites<Cs>>> &
+    TermMark<ListTermOf<Cs>> &
+    Free<FreeOf<Cs[number]>> => {
     const all = elements as readonly unknown[]
 
     /**
@@ -1885,7 +1920,8 @@ export type SpreadOnce<Cs extends readonly unknown[]> = Split<Cs> extends {
 export const spread = <const C extends AnyCodec>(
     element: C,
 ): SpreadCodec<Decoded<C>, AttributeOf<C> & AttributeValue> &
-    TermMark<TermOf<C>> =>
+    TermMark<TermOf<C>> &
+    Free<FreeOf<C>> =>
     ({ spread: element as unknown as AnyCodec }) as unknown as SpreadCodec<
         Decoded<C>,
         AttributeOf<C> & AttributeValue
@@ -2056,21 +2092,26 @@ export function refine<
     Narrow extends Wide,
     A extends AttributeValue,
     Tm = FreeTerm,
+    F extends string = never,
 >(
-    inner: AttributeCodec<Wide, A> & LiteralMark & TermMark<Tm>,
+    inner: AttributeCodec<Wide, A> & LiteralMark & TermMark<Tm> & Free<F>,
     is: (value: Wide) => value is Narrow,
     options?: RefineOptions<Narrow>,
-): Refined<Narrow, A, ['refine', Tm]> & LiteralMark & TermMark<['refine', Tm]>
+): Refined<Narrow, A, ['refine', Tm]> &
+    LiteralMark &
+    TermMark<['refine', Tm]> &
+    Free<F>
 export function refine<
     Wide,
     Narrow extends Wide,
     A extends AttributeValue,
     Tm = FreeTerm,
+    F extends string = never,
 >(
-    inner: AttributeCodec<Wide, A> & TermMark<Tm>,
+    inner: AttributeCodec<Wide, A> & TermMark<Tm> & Free<F>,
     is: (value: Wide) => value is Narrow,
     options?: RefineOptions<Narrow>,
-): Refined<Narrow, A, ['refine', Tm]> & TermMark<['refine', Tm]>
+): Refined<Narrow, A, ['refine', Tm]> & TermMark<['refine', Tm]> & Free<F>
 export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
     inner: AttributeCodec<Wide, A>,
     is: (value: Wide) => value is Narrow,
@@ -2137,29 +2178,6 @@ type MissingCodec<
 }
 
 /**
- * Each thunk under resolution, the innermost thunk last. `owed` holds the checks that wait on the
- * thunk. A check made while a thunk resolves cannot decide yet, so the check waits on the innermost
- * thunk, the thunk of the declaration that made the check. So a declaration that throws discards
- * its own checks and no others. A thunk that resolves under another thunk passes its checks on.
- *
- * `held` drops the mark of each thunk that resolved under the thunk. A thunk resolved under another
- * keeps its result only when the outermost resolution completes with every check passing, the
- * thunks that its checks resolve included. So a refusal leaves no mark under the outermost thunk,
- * in any order of first use.
- */
-type Resolution = {
-    readonly owed: (() => void)[]
-    readonly held: (() => void)[]
-}
-const underResolution: Resolution[] = []
-
-/**
- * The marks that each outermost thunk holds while the thunk runs its checks, the innermost last.
- * A check forces a thunk that reads the codecs under decision, so the decision holds that mark too.
- */
-const underDecision: (() => void)[][] = []
-
-/**
  * Reads a missing attribute as a value, and writes the attribute always.
  *
  * Not {@link optional}: the entity always has it, the *data* may not — a row written before the
@@ -2173,8 +2191,8 @@ const underDecision: (() => void)[][] = []
  * declaration responsible for it. `withLegacyRead({ current: string('A'), whenMissing: 'B' })` is the whole of it.
  *
  * The stand-in is a **value and not a thunk**, which is what makes the check possible here rather
- * than on whichever read happens to need it first. While a thunk resolves, the codec of the
- * stand-in may have no term yet, so that check runs when the outermost thunk resolves. It does not become shared state for that: the
+ * than on whichever read happens to need it first. A stand-in that the codec writes through a
+ * {@link ref} that no scope binds is checked by the {@link scope} that binds the name. It does not become shared state for that: the
  * declaration holds one value and each read that needs one gets a copy of it, so a mutable stand-in
  * still cannot leak between entities. The copy keeps the class of each value, because a decode must
  * be writable: a `DynamoNumber` is shared, being immutable. Primitives are handed over as they are,
@@ -2193,18 +2211,9 @@ const withMissing = <const C extends AnyCodec>(
     // The rule `(withLegacyRead)`: the stand-in must be *writable*, or a row missing the name decodes to a
     // value the item cannot be written back as — (C) broken at the read, with the refusal arriving
     // on the next write instead of at the declaration that caused it. Decidable from the
-    // declaration alone, which is why the stand-in is a value and not a thunk. One case waits: a
-    // check made while a thunk resolves runs when the outermost thunk resolves, and an unwritable
-    // stand-in refuses that resolution
+    // declaration alone, which is why the stand-in is a value and not a thunk
     const standsFor = inner as unknown as AnyCodec
     const check = (): void => {
-        // a check forces no thunk while a thunk resolves: a union declared under that force reads
-        // the thunk under resolution as a free variable at its root, and refuses a guarded term
-        const waiting = underResolution.at(-1)
-        if (waiting !== undefined) {
-            waiting.owed.push(check)
-            return
-        }
         let refusal: CodecError | undefined
         try {
             const written = standsFor.encode(value as never)
@@ -2217,11 +2226,16 @@ const withMissing = <const C extends AnyCodec>(
         }
         if (refusal) {
             throw new CodecError(
-                `\`withLegacyRead\`'s stand-in must be a value the codec it stands in for can write, and this \`${standsFor.def.kind}\` refuses the stand-in: ${refusal.message}. A row missing the attribute would read back as it and then refuse on the way out`,
+                `\`withLegacyRead\`'s stand-in must be a value the codec it stands in for can write, and this \`${standsFor.def.kind === 'lazy' ? 'ref' : standsFor.def.kind}\` refuses the stand-in: ${refusal.message}. A row missing the attribute would read back as it and then refuse on the way out`,
             )
         }
     }
-    check()
+    // **A stand-in that the codec writes through an unbound `ref` waits for the scope** that binds
+    // the ref, because the write reads through the ref. The scope runs the check with every name
+    // bound
+    const waitsOn = unboundRefs([termOf(standsFor)])
+    if (waitsOn.size === 0) check()
+    for (const slot of waitsOn) slot.waiting.push(check)
     const attribute = inner as unknown as AttributeCodec<Decoded<C>>
     return {
         codec: attribute,
@@ -2343,7 +2357,8 @@ export const held = <
             O extends StandardSchemaV1 ? ['opaq'] : TermOf<O>,
             ['caller']
         >
-    > => {
+    > &
+    Free<FreeOf<C> | FreeOf<O>> => {
     const side = heldSide(outer)
     /**
      * **A half that cannot convert returns a `CodecError`**, and the signature says so. A refusal
@@ -2565,13 +2580,15 @@ export function withLegacyRead<const C extends AnyCodec>(options: {
     readonly older: Reader<Decoded<C>>
     readonly whenMissing?: never
 }): AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue> &
-    TermMark<['legacy', TermOf<C>]>
+    TermMark<['legacy', TermOf<C>]> &
+    Free<FreeOf<C>>
 export function withLegacyRead<const C extends AnyCodec>(options: {
     readonly current: C
     readonly older?: Reader<Decoded<C>>
     readonly whenMissing: NoInfer<Decoded<C>>
 }): MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> &
-    TermMark<['fill', TermOf<C>]>
+    TermMark<['fill', TermOf<C>]> &
+    Free<FreeOf<C>>
 export function withLegacyRead<const C extends AnyCodec>(
     options: WithLegacyReadOptions<C>,
 ):
@@ -2598,106 +2615,6 @@ export function withLegacyRead<const C extends AnyCodec>(
         | MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C>
 }
 
-/**
- * A codec resolved on first use, so an entity can contain itself.
- *
- * `item()` evaluates its spec eagerly, so a category whose children are categories cannot name
- * itself — the constant is not initialised yet. A thunk defers the read of the name while the name
- * is in progress, and no longer.
- *
- * **A former above the thunk runs the thunk at the declaration of that former**, because each
- * former refuses a recursion that the model's guard refuses, and the guard reads the codec that the
- * thunk returns. The call of `lazy` runs nothing. A thunk that names a constant not yet declared,
- * or the thunk under resolution, or a thunk whose former refuses while that name is in progress,
- * leaves no mark. That thunk runs again at the next former, encode, decode or path walk.
- *
- * Resolved once and kept. Declares no {@link AttributeCodec.member}: the call of `lazy` runs
- * nothing, so a lazy codec cannot be a set's element — no loss, since a set holds strings, numbers
- * or binary and none of those recurse.
- *
- * **Two forms.** A thunk with no type arguments takes its type from the codec that it returns, and
- * keeps the mark of a literal constructor ({@link literalMarker}), so a key pinned through the thunk
- * stays pinned at the type. A recursive declaration writes its type arguments, because its codec is
- * not declared yet. The arguments state the decoded type alone, so that form carries no mark, and a
- * clause cannot name a key pinned through it.
- *
- * @example
- * ```ts
- * type Category = { name: string; children?: readonly Category[] }
- *
- * const Category: AttributeCodec<Category, Attribute<'M'>> = lazy(() =>
- *     object({ name: string, children: optional(array(Category)) }),
- * )
- * ```
- */
-export function lazy<const C extends AnyCodec>(
-    get: () => C,
-    // a thunk that returns `never` takes the form below, which reads its type from the context
-    ...returnsNever: [C] extends [never] ? [never] : []
-): AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue> &
-    LiteralMarkOf<C> &
-    TermMark<TermOf<C>>
-export function lazy<T, A extends AttributeValue = AttributeValue>(
-    get: () => Nestable<T>,
-): AttributeCodec<T, A>
-export function lazy<T, A extends AttributeValue = AttributeValue>(
-    get: () => Nestable<T>,
-): AttributeCodec<T, A> {
-    // **A black hole.** The resolution of a recursive union forces the thunk again, because the
-    // union checks its options. Without the mark, each force runs `get()` again, and the recursion
-    // overflows the stack. The re-entrant force throws at once, and `force` reads the throw as the
-    // free variable that a thunk in the temporal dead zone is. A `get()` that throws leaves no mark,
-    // so a later force retries
-    let resolved: AttributeCodec<T> | undefined
-    let resolving = false
-    const inner = (): AttributeCodec<T> => {
-        if (resolved !== undefined) return resolved
-        if (resolving) throw new ThunkReentered()
-        resolving = true
-        const frame: Resolution = { owed: [], held: [] }
-        underResolution.push(frame)
-        let got: AttributeCodec<T>
-        try {
-            got = get()
-        } catch (thrown) {
-            for (const drop of frame.held) drop()
-            throw thrown
-        } finally {
-            underResolution.pop()
-            resolving = false
-        }
-        resolved = got
-        const drop = (): void => {
-            resolved = undefined
-        }
-        // an outer thunk under resolution takes the checks and the marks: the outermost thunk decides
-        const outer = underResolution.at(-1)
-        if (outer !== undefined) {
-            outer.owed.push(...frame.owed)
-            outer.held.push(...frame.held, drop)
-            return got
-        }
-        // each check reads the resolved codecs. A check that refuses leaves no mark under this thunk,
-        // as a former that refuses inside the thunk leaves none
-        underDecision.push(frame.held)
-        try {
-            for (const check of frame.owed) check()
-        } catch (thrown) {
-            for (const under of frame.held) under()
-            drop()
-            throw thrown
-        } finally {
-            underDecision.pop()
-        }
-        underDecision.at(-1)?.push(...frame.held, drop)
-        return got
-    }
-    return codecOfTerm<T, A>({
-        kind: 'lazy',
-        get: () => termOf(inner()),
-    })
-}
-
 /*
  * **A cycle is a name in one declaration.** `ref(name)` is the variable, and its term is the
  * name. `scope(defs)` binds each name of `defs`. The term of an entry is `['scope', D, K]`: the
@@ -2705,11 +2622,12 @@ export function lazy<T, A extends AttributeValue = AttributeValue>(
  * in `D`, so the type substitutes nothing and copies nothing. The decoded type of an entry is a
  * function of that term, so no caller states the decoded type of a cycle.
  *
- * At run time, a `ref` is a thunk of `lazy` over a slot that `scope` fills. Each former that runs
- * before `scope` reads the thunk as the free variable of a name not yet declared, as it reads
- * `lazy(() => B)` before `B` is declared. So the term graph of a scope is the graph of `lazy`.
+ * At run time, a `ref` is a thunk over a slot that `scope` fills. Each former that runs before
+ * `scope` reads the `ref` as a free variable. So a cycle of the term graph passes through a `ref`.
  */
-type Ref<N extends string> = AttributeCodec<unknown> & TermMark<['var', N]>
+type Ref<N extends string> = AttributeCodec<unknown> &
+    TermMark<['var', N]> &
+    Free<N>
 type ScopeTerms<Defs> = { -readonly [K in keyof Defs]: TermOf<Defs[K]> }
 type ScopeTerm<Defs, K> = ['scope', ScopeTerms<Defs>, K]
 type ScopeOf<Defs> = {
@@ -2729,87 +2647,13 @@ type EntryOf<C, Tm> = C extends ObjectCodec<
       : AttributeCodec<DecodeTerm<Tm>, AttributeOf<C> & AttributeValue> &
             LiteralMarkOf<C> &
             TermMark<Tm>
-/** The names that a term reads and that no scope inside the term binds. */
-type FreeNames<T> = T extends ['var', infer N]
-    ? Exclude<N, FreeTerm[1]>
-    : T extends ['scope', unknown, unknown]
-      ? never
-      : T extends readonly unknown[]
-        ? FreeNames<T[number]>
-        : T extends object
-          ? FreeNames<T[keyof T]>
-          : never
 /** A refusal on each definition that reads a name the scope does not declare. */
 type ScopeNamed<Defs> = {
-    readonly [K in keyof Defs]: [
-        Exclude<FreeNames<TermOf<Defs[K]>>, keyof Defs>,
-    ] extends [never]
+    readonly [K in keyof Defs]: [Exclude<FreeOf<Defs[K]>, keyof Defs>] extends [
+        never,
+    ]
         ? unknown
-        : ErrorMessage<`[scope] a ref names '${Exclude<FreeNames<TermOf<Defs[K]>>, keyof Defs> & string}', which this scope does not declare`>
-}
-
-/** The slot of a `ref`: the definitions of the scope that binds the name, and waiting checks. */
-type RefSlot = {
-    readonly name: string
-    bound?: Readonly<Record<string, AnyCodec>>
-    readonly waiting: (() => void)[]
-}
-
-/** The slot of each `ref`, by the term of its thunk. `scope` fills the slot one time. */
-const refSlots = new WeakMap<Term, RefSlot>()
-
-/**
- * The slots of the `ref`s that the terms reach and that no scope binds yet. A bound `ref` belongs
- * to the closed scope that bound it, so the walk stops there.
- */
-const unboundRefs = (roots: readonly Term[]): ReadonlySet<RefSlot> => {
-    const slots = new Set<RefSlot>()
-    const seen = new Set<Term>()
-    const walk = (t: Term): void => {
-        if (seen.has(t)) return
-        seen.add(t)
-        const slot = refSlots.get(t)
-        if (slot !== undefined) {
-            if (slot.bound === undefined) slots.add(slot)
-            return
-        }
-        switch (t.kind) {
-            case 'lazy': {
-                // a thunk whose former refuses reads as a free variable, as `recursionUse` reads it
-                let target: Term | undefined
-                try {
-                    target = force(t)
-                } catch (thrown) {
-                    if (thrown instanceof CodecError) return
-                    throw thrown
-                }
-                if (target !== undefined) walk(target)
-                return
-            }
-            case 'list':
-                for (const one of [...t.pre, ...t.suf]) walk(one)
-                if (t.spread !== undefined) walk(t.spread)
-                return
-            case 'object':
-                for (const field of Object.values(t.body.fields)) walk(field.t)
-                if (t.body.rest !== undefined) walk(t.body.rest)
-                return
-            case 'union':
-                return t.options.forEach(walk)
-            case 'set':
-                return walk(t.elem)
-            case 'held':
-                walk(t.inner)
-                return walk(t.outer)
-            case 'refine':
-            case 'legacy':
-                return walk(t.inner)
-            default:
-                return
-        }
-    }
-    for (const root of roots) walk(root)
-    return slots
+        : ErrorMessage<`[scope] a ref names '${Exclude<FreeOf<Defs[K]>, keyof Defs> & string}', which this scope does not declare`>
 }
 
 /**
@@ -2819,13 +2663,17 @@ const unboundRefs = (roots: readonly Term[]): ReadonlySet<RefSlot> => {
 export function ref<const N extends string>(name: N): Ref<N>
 export function ref(name: string): unknown {
     const slot: RefSlot = { name, waiting: [] }
-    const made = lazy((): AnyCodec => {
-        const target = slot.bound?.[name]
-        // the free variable of a name that no scope binds yet, as a constant in the temporal dead
-        // zone is
-        if (target === undefined)
-            throw new ReferenceError(`ref('${name}') is bound by no scope yet`)
-        return target
+    const made = codecOfTerm({
+        kind: 'lazy',
+        get: () => {
+            const target = slot.bound?.[name]
+            // the free variable of a name that no scope binds yet
+            if (target === undefined)
+                throw new ReferenceError(
+                    `ref('${name}') is bound by no scope yet`,
+                )
+            return termOf(target)
+        },
     })
     refSlots.set(termOf(made), slot)
     return made
@@ -2837,9 +2685,14 @@ export function ref(name: string): unknown {
  * cycle is a scope of one entry.
  *
  * Each former ran before the names were bound, so the guard runs here: a recursion with no
- * container on its path, or with an adapter on its path, is refused, as a former refuses the same
- * recursion through `lazy`. A `ref` to a name that `defs` does not declare is refused. Then each
- * check that waits on a bound name runs, as the check of a `union` with a `ref` option.
+ * container on its path, or with an adapter on its path, is refused. A `ref` to a name that `defs`
+ * does not declare is refused. Then each check that waits on a bound name runs: the check of a
+ * `union` with a `ref` option, which a `nullable` over a `ref` builds, the index of a dissection
+ * whose tag reads a `ref`, and the stand-in of a `withLegacyRead` that writes through a `ref`.
+ *
+ * **A scope binds and closes.** Each entry has no free name, in the type and at run time, so each
+ * entry is a codec to use. A scope that refuses binds no name, so each fragment that it held stays
+ * open and refuses each use.
  *
  * @example
  * ```ts
@@ -2859,18 +2712,32 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
             throw new CodecError(
                 `[scope] a ref names '${slot.name}', which this scope does not declare`,
             )
-    for (const slot of slots) slot.bound = defs
-    for (const [name, def] of Object.entries(defs)) {
-        const use = recursionUse(termOf(def))
-        if (use >= 2)
-            throw new CodecError(
-                use === 3
-                    ? `[scope] '${name}' reaches a recursion with an adapter (\`held\` or \`withLegacyRead\`) on its path. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion`
-                    : `[scope] '${name}' reaches a recursion with no list or object on its path. The model's guard refuses a recursion that reads the input of its own binder. Put the recursion below a list or an object`,
-            )
+    for (const slot of slots) {
+        slot.bound = defs
+        slot.refused = false
     }
-    for (const check of new Set([...slots].flatMap((slot) => slot.waiting)))
-        check()
+    // **A refused scope binds no name**, so each fragment it held stays open and refuses each use.
+    // The refusal of the guard carries the term of the entry, so a checker states the model's
+    // guard on that term
+    try {
+        for (const [name, def] of Object.entries(defs)) {
+            const t = termOf(def)
+            const use = recursionUse(t)
+            if (use === 2 || use === 3)
+                throw new RecursionRefused(
+                    t,
+                    use,
+                    use === 3
+                        ? `[scope] '${name}' reaches a recursion with an adapter (\`held\` or \`withLegacyRead\`) on its path. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion`
+                        : `[scope] '${name}' reaches a recursion with no list or object on its path. The model's guard refuses a recursion that reads the input of its own binder. Put the recursion below a list or an object`,
+                )
+        }
+        for (const check of new Set([...slots].flatMap((slot) => slot.waiting)))
+            check()
+    } catch (thrown) {
+        refuseSlots(slots)
+        throw thrown
+    }
     return defs
 }
 
@@ -2950,28 +2817,33 @@ export const undefinable = <const C extends AnyCodec>(
  * again. Both hypotheses are refuted by the guard rather than required of the caller.
  *
  * **The question is asked once, at construction.** The term answers the question, and an answer
- * that the term does not determine is a refusal. A thunk that cannot be forced yet is such an
- * answer: the thunk of a recursive declaration under its own resolution, or a thunk that names a
- * binding not yet declared. A nullable recursive field therefore defers the call to a thunk of its
- * own, as in `lazy(() => nullable(Self))`. That thunk runs after `Self` resolves, so the term
- * answers the question.
+ * that the term does not determine is a refusal. **A {@link ref} that no scope binds yet leaves the
+ * question open**: the codec is then the {@link union} with `NULL`, and the {@link scope} that binds
+ * the name runs the check of the union. A `ref` to an entry that owns the null point fails the
+ * check there, because two options then write `NULL`.
  */
-export const nullable = <T, A extends AttributeValue, Tm = FreeTerm>(
-    inner: AttributeCodec<T, A> & TermMark<Tm>,
+export const nullable = <
+    T,
+    A extends AttributeValue,
+    Tm = FreeTerm,
+    F extends string = never,
+>(
+    inner: AttributeCodec<T, A> & TermMark<Tm> & Free<F>,
 ): AttributeCodec<T | null, A | Attribute<'NULL'>> &
-    TermMark<['union', [Tm, BaseT<'null'>]]> => {
+    TermMark<['union', [Tm, BaseT<'null'>]]> &
+    Free<F> => {
     const t = termOf(inner as unknown as AnyCodec)
     const owns = ownsNullOf(t)
-    if (owns === undefined && t.kind === 'lazy' && force(t) === undefined) {
-        throw new CodecError(
-            'nullable: the thunk cannot be forced yet, because its codec is under resolution or not yet declared, ' +
-                'so whether the union would be certified is unknown. ' +
-                'Defer the call to a thunk of its own, as in lazy(() => nullable(Self)).',
+    // **An unbound `ref` leaves the answer open**: the codec is the union with `NULL`, an open
+    // fragment, and the union's check waits for the scope that binds the names. A `ref` whose
+    // entry owns the null point fails that check, as a second option that writes `NULL`
+    if (owns === undefined && unboundRefs([t]).size > 0)
+        return codecOfTerm<T | null, A | Attribute<'NULL'>>(
+            union([inner, nullValue]).def,
         )
-    }
     if (owns === undefined) {
         throw new CodecError(
-            `nullable: ${t.kind} decides the null point by running a function this cannot read, ` +
+            `nullable: ${t.kind === 'lazy' ? 'ref' : t.kind} decides the null point by running a function this cannot read, ` +
                 'so whether the union would be certified is unknown. ' +
                 'Write the wrapper inside instead, as in held(nullable(inner), outer, adapter).',
         )
@@ -3693,15 +3565,21 @@ export type ObjectCodec<
     // {@link ItemCodec}: as an intersection the same type costs more to instantiate and stops being
     // *comparable* to a hand-written shape. Measured at +14k instantiations across this repo
     readonly encode: (
+        this: Closed,
         value: ItemOf<T, Spec, Rest>,
     ) => Result<M<EncodedBy<Spec, Rest>>>
     readonly decode: (
+        this: Closed,
         attribute: AttributeValue,
     ) => Result<ItemOf<T, Spec, Rest>>
     readonly unsafeEncode: (
+        this: Closed,
         value: ItemOf<T, Spec, Rest>,
     ) => M<EncodedBy<Spec, Rest>>
-    readonly unsafeDecode: (attribute: AttributeValue) => ItemOf<T, Spec, Rest>
+    readonly unsafeDecode: (
+        this: Closed,
+        attribute: AttributeValue,
+    ) => ItemOf<T, Spec, Rest>
     readonly def: Term
     /**
      * The same declaration, read as a whole item: the same two directions without the top-level map,
@@ -3713,13 +3591,16 @@ export type ObjectCodec<
      * rather than a second constructor. The marshaller draws the same line, under
      * `convertTopLevelContainer`.
      */
-    readonly item: ItemCodec<ItemOf<T, Spec, Rest>, Spec, Rest, Tm>
+    readonly item: ItemCodec<ItemOf<T, Spec, Rest>, Spec, Rest, Tm> &
+        Free<ObjectFree<Spec, Rest, Tm>>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesPin<Spec, Rest>
     /** The model's term of this codec. Type-level only. */
     readonly [termMarker]?: [Tm] extends [OfParts]
         ? ObjectTermOf<Spec, Rest>
         : Tm
+    /** The free names of this codec. Type-level only. */
+    readonly [freeMarker]?: [ObjectFree<Spec, Rest, Tm>]
 }
 
 /**
@@ -3729,13 +3610,18 @@ export type ObjectCodec<
  * `S` or an `L` is an attribute and nothing else. Which is why this is what the two union
  * constructors return, rather than what `union` is constrained to accept.
  */
-export type DiscriminatedCodec<T, D extends string, Spec> = {
-    readonly encode: (value: T) => Result<Attribute<'M'>>
-    readonly decode: (attribute: AttributeValue) => Result<T>
-    readonly unsafeEncode: (value: T) => Attribute<'M'>
-    readonly unsafeDecode: (attribute: AttributeValue) => T
+export type DiscriminatedCodec<
+    T,
+    D extends string,
+    Spec,
+    F extends string = never,
+> = {
+    readonly encode: (this: Closed, value: T) => Result<Attribute<'M'>>
+    readonly decode: (this: Closed, attribute: AttributeValue) => Result<T>
+    readonly unsafeEncode: (this: Closed, value: T) => Attribute<'M'>
+    readonly unsafeDecode: (this: Closed, attribute: AttributeValue) => T
     readonly def: Term
-    readonly item: Tagged<T, D, Spec>
+    readonly item: Tagged<T, D, Spec> & Free<F>
     /**
      * **The members a clause keeps**, over the same keys — or `never` where it keeps none.
      *
@@ -3746,6 +3632,7 @@ export type DiscriminatedCodec<T, D extends string, Spec> = {
      * than positionally.
      */
     readonly extract: <const C extends ClauseOf<Spec[keyof Spec]>>(
+        this: Closed,
         clause: C & ValidateClause<Spec[keyof Spec], C>,
     ) => DiscriminatedCodec<
         VariantsOf<KeptByTag<Spec, C>>,
@@ -3754,6 +3641,7 @@ export type DiscriminatedCodec<T, D extends string, Spec> = {
     >
     /** …and the members it rejects, the complement of the same clause. */
     readonly exclude: <const C extends ClauseOf<Spec[keyof Spec]>>(
+        this: Closed,
         clause: C & ValidateClause<Spec[keyof Spec], C>,
     ) => DiscriminatedCodec<
         VariantsOf<KeptByTag<Spec, C, false>>,
@@ -3762,6 +3650,8 @@ export type DiscriminatedCodec<T, D extends string, Spec> = {
     >
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
+    /** The free names of this codec. Type-level only. */
+    readonly [freeMarker]?: [F]
 }
 
 /**
@@ -3779,18 +3669,20 @@ export type Dissected<
     Specs extends readonly unknown[],
 > = {
     /** Every attribute, or why one could not be written. */
-    readonly encode: (item: T) => Result<AttributeMap>
-    readonly unsafeEncode: (item: T) => AttributeMap
+    readonly encode: (this: Closed, item: T) => Result<AttributeMap>
+    readonly unsafeEncode: (this: Closed, item: T) => AttributeMap
     /** The attributes a patch names. Every discriminator is required: they choose the codec. */
     readonly encodePartial: (
+        this: Closed,
         patch: Partial<T> & Pick<T, Ks[number] & keyof T>,
     ) => Result<AttributeMap>
     readonly unsafeEncodePartial: (
+        this: Closed,
         patch: Partial<T> & Pick<T, Ks[number] & keyof T>,
     ) => AttributeMap
     /** The entity, or why the item could not be read. */
-    readonly decode: (item: StoredItem) => Result<T>
-    readonly unsafeDecode: (item: StoredItem) => T
+    readonly decode: (this: Closed, item: StoredItem) => Result<T>
+    readonly unsafeDecode: (this: Closed, item: StoredItem) => T
     readonly keys: Ks
     readonly spec: Specs
     /** What this codec is — see {@link Term}. */
@@ -3802,15 +3694,19 @@ export type DissectedCodec<
     T,
     Ks extends readonly string[],
     Specs extends readonly unknown[],
+    F extends string = never,
 > = {
-    readonly encode: (value: T) => Result<Attribute<'M'>>
-    readonly decode: (attribute: AttributeValue) => Result<T>
-    readonly unsafeEncode: (value: T) => Attribute<'M'>
-    readonly unsafeDecode: (attribute: AttributeValue) => T
+    readonly encode: (this: Closed, value: T) => Result<Attribute<'M'>>
+    readonly decode: (this: Closed, attribute: AttributeValue) => Result<T>
+    readonly unsafeEncode: (this: Closed, value: T) => Attribute<'M'>
+    readonly unsafeDecode: (this: Closed, attribute: AttributeValue) => T
     readonly def: Term
-    readonly item: Dissected<T, Ks, Specs>
+    readonly item: Dissected<T, Ks, Specs> & Free<F>
+    /** The free names of this codec. Type-level only. */
+    readonly [freeMarker]?: [F]
     /** **The members a clause keeps**, over the same keys — or `never` where it keeps none. */
     readonly extract: <const C extends ClauseOf<Specs[number]>>(
+        this: Closed,
         clause: C & ValidateClause<Specs[number], C>,
     ) => DissectedCodec<
         DerivedVariants<Extracted<Specs, C>>,
@@ -3819,6 +3715,7 @@ export type DissectedCodec<
     >
     /** …and the members it rejects, the complement of the same clause. */
     readonly exclude: <const C extends ClauseOf<Specs[number]>>(
+        this: Closed,
         clause: C & ValidateClause<Specs[number], C>,
     ) => DissectedCodec<
         DerivedVariants<Excluded<Specs, C>>,
@@ -3842,9 +3739,15 @@ export type Dissection<
     ? DiscriminatedCodec<
           DerivedVariants<SpecsOf<Options>>,
           D,
-          ByTag<SpecsOf<Options>, D>
+          ByTag<SpecsOf<Options>, D>,
+          FreeOf<Options[number]>
       >
-    : DissectedCodec<DerivedVariants<SpecsOf<Options>>, Ks, SpecsOf<Options>>
+    : DissectedCodec<
+          DerivedVariants<SpecsOf<Options>>,
+          Ks,
+          SpecsOf<Options>,
+          FreeOf<Options[number]>
+      >
 
 export type UnionCodec<
     T,
@@ -3852,10 +3755,10 @@ export type UnionCodec<
     // the term: an entry of a `scope` reads it, and its slices, from the term of the entry
     Tm = OfParts,
 > = {
-    readonly encode: (value: T) => Result<WrittenBy<Options>>
-    readonly decode: (attribute: AttributeValue) => Result<T>
-    readonly unsafeEncode: (value: T) => WrittenBy<Options>
-    readonly unsafeDecode: (attribute: AttributeValue) => T
+    readonly encode: (this: Closed, value: T) => Result<WrittenBy<Options>>
+    readonly decode: (this: Closed, attribute: AttributeValue) => Result<T>
+    readonly unsafeEncode: (this: Closed, value: T) => WrittenBy<Options>
+    readonly unsafeDecode: (this: Closed, attribute: AttributeValue) => T
     readonly def: Term
     /**
      * The same union read as a whole item — only where every option is an object.
@@ -3865,7 +3768,7 @@ export type UnionCodec<
      * of "property does not exist".
      */
     readonly item: AllObjects<Options> extends true
-        ? Untagged<T, SpecsOf<Options>>
+        ? Untagged<T, SpecsOf<Options>> & Free<UnionFree<Options, Tm>>
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so it has no whole-item reading — an item is always a map'>
     /**
      * **The options a clause keeps** — only where every option is an object, for the reason `item`
@@ -3877,12 +3780,14 @@ export type UnionCodec<
      */
     readonly extract: AllObjects<Options> extends true
         ? <const C extends ClauseOf<SpecsOf<Options>[number]>>(
+              this: Closed,
               clause: C & ValidateClause<SpecsOf<Options>[number], C>,
           ) => UnionSlice<Tm, KeptOptions<Options, C>>
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
     /** …and the options it rejects, the complement of the same clause. */
     readonly exclude: AllObjects<Options> extends true
         ? <const C extends ClauseOf<SpecsOf<Options>[number]>>(
+              this: Closed,
               clause: C & ValidateClause<SpecsOf<Options>[number], C>,
           ) => UnionSlice<Tm, KeptOptions<Options, C, false>>
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
@@ -3892,7 +3797,14 @@ export type UnionCodec<
     readonly [termMarker]?: [Tm] extends [OfParts]
         ? ['union', TermsOf<Options>]
         : Tm
+    /** The free names of this codec. Type-level only. */
+    readonly [freeMarker]?: [UnionFree<Options, Tm>]
 }
+
+/** The free names of a union: the names of its options. An entry of a scope has none. */
+type UnionFree<Options extends readonly unknown[], Tm> = [Tm] extends [OfParts]
+    ? FreeOf<Options[number]>
+    : never
 
 /**
  * The options that a clause keeps. A slice of an entry of a `scope` holds the `ref`s of the entry,
@@ -3914,22 +3826,24 @@ type SliceTerm<D, Kept extends readonly unknown[]> = [
 
 export type ItemCodec<T, Spec = unknown, Rest = undefined, Tm = OfParts> = {
     /** Every attribute, or why one could not be written. For `PutItem`. */
-    readonly encode: (item: T) => Result<EncodedBy<Spec, Rest>>
-    readonly unsafeEncode: (item: T) => EncodedBy<Spec, Rest>
+    readonly encode: (this: Closed, item: T) => Result<EncodedBy<Spec, Rest>>
+    readonly unsafeEncode: (this: Closed, item: T) => EncodedBy<Spec, Rest>
     /**
      * The attributes a patch names, or why one could not be written. For `UpdateItem`, which
      * addresses attributes individually — the reason a whole-value codec does not fit DynamoDB and
      * this is a record of per-attribute ones.
      */
     readonly encodePartial: <const Patch extends Partial<T>>(
+        this: Closed,
         patch: Patch,
     ) => Result<EncodedPatch<Spec, Patch>>
     readonly unsafeEncodePartial: <const Patch extends Partial<T>>(
+        this: Closed,
         patch: Patch,
     ) => EncodedPatch<Spec, Patch>
     /** The entity, or why the item could not be read. */
-    readonly decode: (item: StoredItem) => Result<T>
-    readonly unsafeDecode: (item: StoredItem) => T
+    readonly decode: (this: Closed, item: StoredItem) => Result<T>
+    readonly unsafeDecode: (this: Closed, item: StoredItem) => T
     /** One attribute's codec, for building `ExpressionAttributeValues` by hand. */
     readonly field: <K extends keyof Spec>(name: K) => Marks<Spec[K]>
     /**
@@ -3948,6 +3862,7 @@ export type ItemCodec<T, Spec = unknown, Rest = undefined, Tm = OfParts> = {
      * ```
      */
     readonly at: <X>(
+        this: Closed,
         select: (
             path: TermPath<
                 [[[Tm] extends [OfParts] ? ObjectTermOf<Spec, Rest> : Tm, []]],
@@ -4105,13 +4020,17 @@ const objectFromMap = <
     const body = itemSem(itemDef)
 
     type T = DerivedItem<Spec, Rest>
+    // a term that reads a name that no scope binds refuses each use
     const self: ItemCodec<T, Spec, Rest> = {
         encode: (item) =>
-            body.encode(item as Record<string, unknown>) as Result<
+            openRefusal(itemDef) ??
+            (body.encode(item as Record<string, unknown>) as Result<
                 EncodedBy<Spec, Rest>
-            >,
+            >),
 
         encodePartial: (patch) => {
+            const open = openRefusal(itemDef)
+            if (open) return open
             const held = patch as Record<string, unknown>
             const out: Record<string, AttributeValue> = {}
             for (const name in held) {
@@ -4131,6 +4050,7 @@ const objectFromMap = <
         },
 
         decode: (item) =>
+            openRefusal(itemDef) ??
             membersTooDeeply(item, 0) ??
             (body.decode(
                 item as Readonly<Record<string, AttributeValue>>,
@@ -4174,6 +4094,8 @@ const objectFromMap = <
              * encoding with a codec nobody declared.
              */
             const walk = (): AnyCodec => {
+                const open = openRefusal(itemDef)
+                if (open) return refusedAt(open)
                 let frontier: readonly AnyCodec[] = [
                     self as unknown as AnyCodec,
                 ]
@@ -5007,6 +4929,8 @@ export type TaggedCodec<T, Spec = unknown> = {
     readonly unsafeDecode: (item: StoredItem) => T
     readonly discriminator: keyof T & string
     readonly spec: Spec
+    /** A use needs a closed codec, so a signature that asks for one admits no free name. */
+    readonly [freeMarker]?: [never]
 }
 
 /**
@@ -5021,8 +4945,8 @@ export type TaggedSpec<T, D extends keyof T> = {
 
 export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
     /** Every attribute, or why one could not be written. */
-    readonly encode: (item: T) => Result<AttributeMap>
-    readonly unsafeEncode: (item: T) => AttributeMap
+    readonly encode: (this: Closed, item: T) => Result<AttributeMap>
+    readonly unsafeEncode: (this: Closed, item: T) => AttributeMap
     /**
      * The attributes a patch names, or why one could not be written.
      *
@@ -5030,14 +4954,16 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
      * error, not a runtime one: `Partial<T> & Pick<T, D>`.
      */
     readonly encodePartial: (
+        this: Closed,
         patch: Partial<T> & Pick<T, D & keyof T>,
     ) => Result<AttributeMap>
     readonly unsafeEncodePartial: (
+        this: Closed,
         patch: Partial<T> & Pick<T, D & keyof T>,
     ) => AttributeMap
     /** The entity, or why the item could not be read. */
-    readonly decode: (item: StoredItem) => Result<T>
-    readonly unsafeDecode: (item: StoredItem) => T
+    readonly decode: (this: Closed, item: StoredItem) => Result<T>
+    readonly unsafeDecode: (this: Closed, item: StoredItem) => T
     readonly discriminator: D
     readonly spec: Spec
     /** What this codec is — see {@link Term}. */
@@ -5112,28 +5038,47 @@ const dissect = <T extends Record<string, unknown>>(
     // inline are these two at one key. The union's own gate does not replace them, because a
     // duplicated index key is a different fact from two members that are not disjoint, and the index is
     // what needs it.
-    const members = membersOf(
-        ks,
-        memberTerms.map((term, at) => {
-            if (term.kind !== 'object') {
-                throw new CodecError(
-                    `every option must be an object codec, and option ${at} is a \`${term.kind}\` — a bare spec has no variant to select, so pass \`object(...)\` around it`,
-                )
-            }
-            return [
-                term.body,
-                options[at]?.item as unknown as ItemCodec<T, unknown>,
-            ] as const
-        }),
-    )
-    if (failed(members)) throw members
-
-    const { pick, tagOf } = byTagSem(ks, members) as unknown as {
-        pick: (
-            assignment: Readonly<Record<string, string>>,
-        ) => Result<ItemCodec<T, unknown>>
-        tagOf: (item: Partial<T>) => Result<Readonly<Record<string, string>>>
+    //
+    // **A tag that a member reads through an unbound `ref` waits for the scope**, because the
+    // index reads the literal of each tag through the `ref`. The scope builds the index with every
+    // name bound, and each use builds it where no scope has
+    const index = () => {
+        const members = membersOf(
+            ks,
+            memberTerms.map((term, at) => {
+                if (term.kind !== 'object') {
+                    throw new CodecError(
+                        `every option must be an object codec, and option ${at} is a \`${term.kind}\` — a bare spec has no variant to select, so pass \`object(...)\` around it`,
+                    )
+                }
+                return [
+                    term.body,
+                    options[at]?.item as unknown as ItemCodec<T, unknown>,
+                ] as const
+            }),
+        )
+        if (failed(members)) throw members
+        const { pick, tagOf } = byTagSem(ks, members) as unknown as {
+            pick: (
+                assignment: Readonly<Record<string, string>>,
+            ) => Result<ItemCodec<T, unknown>>
+            tagOf: (
+                item: Partial<T>,
+            ) => Result<Readonly<Record<string, string>>>
+        }
+        return { members, pick, tagOf }
     }
+    let indexed: ReturnType<typeof index> | undefined
+    const resolution = (): ReturnType<typeof index> => {
+        indexed ??= index()
+        return indexed
+    }
+    const waitsOn = unboundRefs(memberTerms)
+    if (waitsOn.size === 0) resolution()
+    for (const slot of waitsOn) slot.waiting.push(resolution)
+    const pick = (assignment: Readonly<Record<string, string>>) =>
+        resolution().pick(assignment)
+    const tagOf = (item: Partial<T>) => resolution().tagOf(item)
 
     // **the published one-key surface carries `discriminator`, and this is that name.** Where the
     // key set has one element, that element *is* the discriminator: it is the whole set, not the
@@ -5142,19 +5087,23 @@ const dissect = <T extends Record<string, unknown>>(
     const [only, ...rest] = ks
     const oneKey = rest.length === 0 ? (only as string) : undefined
 
+    // a term that reads a name that no scope binds refuses each use
     const self = {
         encode: (item: T) =>
+            openRefusal(unionDef) ??
             andThen(andThen(tagOf(item), pick), (variant) =>
                 variant.encode(item as never),
             ),
         encodePartial: (patch: Partial<T>) =>
+            openRefusal(unionDef) ??
             andThen(andThen(tagOf(patch), pick), (variant) =>
                 variant.encodePartial(patch as never),
             ),
         decode: (item: StoredItem) =>
-            andThen(andThen(readTags(item, ks), pick), (variant) =>
+            openRefusal(unionDef) ??
+            (andThen(andThen(readTags(item, ks), pick), (variant) =>
                 variant.decode(item),
-            ) as Result<T>,
+            ) as Result<T>),
         unsafeEncode: (item: T) => orThrow(self.encode(item)),
         unsafeEncodePartial: (patch: Partial<T>) =>
             orThrow(self.encodePartial(patch)),
@@ -5164,15 +5113,17 @@ const dissect = <T extends Record<string, unknown>>(
         // at one key the spec is keyed by the tag, which is what a caller walking the variants
         // reads today; at several there is no one string to key it by, so it is the members' specs
         // in the order the caller declared them
-        spec:
-            oneKey === undefined
+        get spec() {
+            const { members } = resolution()
+            return oneKey === undefined
                 ? members.map(([, variant]) => variant.spec)
                 : Object.fromEntries(
                       members.map(([assignment, variant]) => [
                           assignment[oneKey],
                           variant.spec,
                       ]),
-                  ),
+                  )
+        },
         def: unionDef,
     }
 
@@ -5189,10 +5140,16 @@ const dissect = <T extends Record<string, unknown>>(
         // codec writes the tag out of the member's own field, so every item carries it whatever
         // the key set says. So a one-member result is a one-member dissection that still reads its
         // key, and `dissect` is handed the same `ks` it was built with.
-        extract: (clause: Readonly<Record<string, unknown>>) =>
-            slicedDissection(ks, options, clause, true),
-        exclude: (clause: Readonly<Record<string, unknown>>) =>
-            slicedDissection(ks, options, clause, false),
+        extract: (clause: Readonly<Record<string, unknown>>) => {
+            const open = openRefusal(unionDef)
+            if (open) throw open
+            return slicedDissection(ks, options, clause, true)
+        },
+        exclude: (clause: Readonly<Record<string, unknown>>) => {
+            const open = openRefusal(unionDef)
+            if (open) throw open
+            return slicedDissection(ks, options, clause, false)
+        },
     } as DiscriminatedCodec<T, string, Record<string, unknown>>
 }
 
@@ -5358,11 +5315,11 @@ export type DerivedVariants<Specs extends readonly unknown[]> = {
 
 export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
     /** Every attribute, or why one could not be written. */
-    readonly encode: (item: T) => Result<AttributeMap>
-    readonly unsafeEncode: (item: T) => AttributeMap
+    readonly encode: (this: Closed, item: T) => Result<AttributeMap>
+    readonly unsafeEncode: (this: Closed, item: T) => AttributeMap
     /** The entity, or why the item could not be read. */
-    readonly decode: (item: StoredItem) => Result<T>
-    readonly unsafeDecode: (item: StoredItem) => T
+    readonly decode: (this: Closed, item: StoredItem) => Result<T>
+    readonly unsafeDecode: (this: Closed, item: StoredItem) => T
     readonly spec: Specs
     /** What this codec is — see {@link Term}. */
     readonly def: Term
@@ -6000,7 +5957,8 @@ export const discriminatedUnion = <
 ): DiscriminatedCodec<
     DerivedVariants<SpecsOf<Options>>,
     D,
-    ByTag<SpecsOf<Options>, D>
+    ByTag<SpecsOf<Options>, D>,
+    FreeOf<Options[number]>
 > &
     TermMark<['union', TermsOf<Options>]> =>
     // **the type arguments are given, not inferred, and that is what makes the alias cast-free.**
@@ -6064,8 +6022,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
     LiteralMarkOf<Options[number]> => {
     // **A union with a `ref` that no scope binds yet waits for that scope.** The checks and the
     // resolution read each option through its thunks, and a `ref` resolves only where its scope
-    // binds it. So the scope runs them with every name bound, as `lazy` runs them where each name
-    // that the union reads is declared first
+    // binds it. So the scope runs them with every name bound
     const settle = () => {
         // **A recursive spine is refused before any occupancy runs.** An option's occupancies force
         // each thunk on its spine, and a recursive one would not end, or would throw on the codec
@@ -6080,8 +6037,8 @@ export const union = <const Options extends readonly AnyCodec[]>(
             if (use >= 2) {
                 throw new CodecError(
                     use === 3
-                        ? `option ${at + 1} of this union reaches a thunk whose codec holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive thunk and the codec that the thunk returns, or above a thunk that names a codec not yet declared, and the declaration of that codec refused. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion, and this option is not shown compatible with the others. Put no adapter on the path of a recursion`
-                        : `option ${at + 1} of this union reaches a thunk that is recursive, or that names a codec not yet declared, where the union must read it. The model's guard refuses a recursion that reads the input of its own binder, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
+                        ? `option ${at + 1} of this union reaches a \`ref\` whose entry holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive \`ref\` and the entry that the \`ref\` names. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion, and this option is not shown compatible with the others. Put no adapter on the path of a recursion`
+                        : `option ${at + 1} of this union reaches a recursive \`ref\` where the union must read it. The model's guard refuses a recursion that reads the input of its own binder, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
                 )
             }
         }
@@ -6101,7 +6058,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
             for (const { option: second, term: y } of pairs.slice(at + 1)) {
                 if (agrees(x, y)) continue
                 throw new CodecError(
-                    `${first.describe} and ${second.describe} are not shown compatible: an adapter or a thunk is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
+                    `${first.describe} and ${second.describe} are not shown compatible: an adapter or a \`ref\` is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
                 )
             }
         }
@@ -6116,6 +6073,12 @@ export const union = <const Options extends readonly AnyCodec[]>(
     const waitsOn = unboundRefs(optionTerms)
     if (waitsOn.size === 0) resolution()
     for (const slot of waitsOn) slot.waiting.push(resolution)
+    // **A use needs every name bound.** Each use refuses while a `ref` of an option is unbound
+    const declared: Term = { kind: 'union', options: optionTerms }
+    const closed = (): void => {
+        const open = openRefusal(declared)
+        if (open) throw open
+    }
 
     type T = DerivedUnion<Options>
 
@@ -6125,6 +6088,8 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * `AdmA` reads no name.
      */
     const readItem = (item: StoredItem): Result<T> => {
+        const open = openRefusal(declared)
+        if (open) return open
         const deep = membersTooDeeply(item, 0)
         if (deep) return deep
         const names = namesOf(item)
@@ -6140,6 +6105,8 @@ export const union = <const Options extends readonly AnyCodec[]>(
     }
 
     const writeItem = (item: T): Result<AttributeMap> => {
+        const open = openRefusal(declared)
+        if (open) return open
         const names = namesOf(item as Record<string, unknown>)
         const { onlyAdmitting, naming } = resolution()
         return onlyAdmitting(
@@ -6187,11 +6154,12 @@ export const union = <const Options extends readonly AnyCodec[]>(
     // the resolution is erased — a sum's rule is about options, not about the type they carry —
     // so the two halves get their types back here, once, the way `codecOfTerm` does for a term
     const encode = ((value: T) =>
+        openRefusal(declared) ??
         resolution().pair.encode(value as never, 0)) as (
         value: T,
     ) => Result<WrittenBy<Options>>
     const decode = ((attribute: AttributeValue) =>
-        resolution().pair.decode(attribute)) as (
+        openRefusal(declared) ?? resolution().pair.decode(attribute)) as (
         attribute: AttributeValue,
     ) => Result<T>
     const codec: UnionCodec<DerivedUnion<Options>, Options> = {
@@ -6207,14 +6175,14 @@ export const union = <const Options extends readonly AnyCodec[]>(
         // built either way rather than branched, exactly as `item` is: an option that writes no map
         // declares no name, so it survives no clause, and the type is what says the capability does
         // not apply to such a union
-        extract: ((clause: Readonly<Record<string, unknown>>) =>
-            slicedUnion(options as readonly AnyCodec[], clause, true)) as never,
-        exclude: ((clause: Readonly<Record<string, unknown>>) =>
-            slicedUnion(
-                options as readonly AnyCodec[],
-                clause,
-                false,
-            )) as never,
+        extract: ((clause: Readonly<Record<string, unknown>>) => {
+            closed()
+            return slicedUnion(options as readonly AnyCodec[], clause, true)
+        }) as never,
+        exclude: ((clause: Readonly<Record<string, unknown>>) => {
+            closed()
+            return slicedUnion(options as readonly AnyCodec[], clause, false)
+        }) as never,
     }
     // the mark is phantom, so no value carries it and no check can produce it. A union of literal
     // codecs pins their literals at run time (`literalAlternatives`), so the type states the mark
