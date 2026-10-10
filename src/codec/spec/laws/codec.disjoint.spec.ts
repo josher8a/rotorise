@@ -13,14 +13,15 @@ import {
     boolean,
     decimal,
     held,
-    lazy,
     never,
     nullValue,
     number,
     object,
     opaque,
     optional,
+    ref,
     refine,
+    scope,
     string,
     undefinable,
     union,
@@ -380,14 +381,10 @@ describe('two list shapes are disjoint where one position of each common length 
 })
 
 describe('two recursive terms are disjoint where their bodies are', () => {
-    const json: AnyCodec = union([
-        string,
-        array(lazy(() => json as never)),
-    ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
-    const other: AnyCodec = union([
-        string,
-        array(lazy(() => other as never)),
-    ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
+    const { json, other } = scope({
+        json: union([string, array(ref('json'))]),
+        other: union([string, array(ref('other'))]),
+    })
 
     it('keeps two recursive terms together where the bodies share a value, and ends', () => {
         expect(apart(json.def as Term, other.def as Term)).toBe(false)
@@ -413,13 +410,8 @@ describe('the verdict does not read the order of the operands', () => {
             literal: { kind: 'alternatives', base: 'string', ls: [member] },
         },
     })
-    const listOf = (head: AnyCodec): AnyCodec => {
-        const self: AnyCodec = union([
-            head,
-            object({ k: lazy(() => self as never) }),
-        ] as unknown as readonly AnyCodec[]) as unknown as AnyCodec
-        return self
-    }
+    const listOf = (head: AnyCodec): AnyCodec =>
+        scope({ self: union([head, object({ k: ref('self') })]) }).self
     const booleans = listOf(boolean)
     const strings = refine(
         listOf(string) as never,

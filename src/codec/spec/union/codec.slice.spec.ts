@@ -9,7 +9,7 @@
  * field whatever the key set says.
  */
 import { describe, expect, it } from 'vitest'
-import { type Attribute, DynamoNumber } from '../../attribute'
+import { DynamoNumber } from '../../attribute'
 import {
     binary,
     boolean,
@@ -18,11 +18,12 @@ import {
     discriminatedUnion,
     dynamoNumber,
     held,
-    lazy,
     mdunion,
     number,
     object,
     optional,
+    ref,
+    scope,
     string,
     union,
 } from '../../codec'
@@ -436,78 +437,24 @@ describe('a clause key no member pins is refused', () => {
         )
     })
 
-    it('reads a key pinned through a thunk, because the thunk resolves to the literal', () => {
-        const colour = string('red', 'blue')
-        const viaThunk = mdunion(
-            ['kind', 'size'],
-            [
-                pet,
-                object({
-                    kind: string('pet'),
-                    size: string('large'),
-                    colour: lazy(() => colour),
-                }),
-            ],
-        )
-        const kept = viaThunk.extract({ colour: string('red', 'blue') })
-        expect(
-            kept.encode({ kind: 'pet', size: 'large', colour: 'red' }),
-        ).toEqual({
-            M: {
-                kind: { S: 'pet' },
-                size: { S: 'large' },
-                colour: { S: 'red' },
-            },
-        })
-    })
-
-    it('reads a key whose union option is a thunk, because the union then pins its literals', () => {
-        const red = string('red')
-        const viaOption = mdunion(
-            ['kind', 'size'],
-            [
-                pet,
-                object({
-                    kind: string('pet'),
-                    size: string('large'),
-                    colour: union([lazy(() => red), string('blue')]),
-                }),
-            ],
-        )
-        const kept = viaOption.extract({ colour: string('red', 'blue') })
-        expect(
-            kept.encode({ kind: 'pet', size: 'large', colour: 'blue' }),
-        ).toEqual({
-            M: {
-                kind: { S: 'pet' },
-                size: { S: 'large' },
-                colour: { S: 'blue' },
-            },
-        })
-    })
-
     /**
-     * **A thunk with explicit type arguments pins no key at the type.** A recursive declaration
-     * writes its type arguments, because the codec of the thunk is not declared yet. The arguments
-     * state the decoded type alone, and the decoded type cannot say whether a literal constructor
-     * built the codec: a caller's adapter decodes to a literal type over a term that pins nothing.
-     * So the type refuses the key, and the runtime, which resolves the thunk, still pins it.
+     * **A `ref` pins no key at the type.** A `ref` carries the term of a name and no literal mark,
+     * and the decoded type cannot say whether a literal constructor built the codec: a caller's
+     * adapter decodes to a literal type over a term that pins nothing. So the type refuses the key,
+     * and the runtime, which resolves the `ref`, still pins it.
      */
-    it('refuses at the type a key pinned through a thunk with explicit type arguments', () => {
-        const colour = string('red', 'blue')
-        const explicit = mdunion(
-            ['kind', 'size'],
-            [
-                pet,
-                object({
-                    kind: string('pet'),
-                    size: string('large'),
-                    colour: lazy<'red' | 'blue', Attribute<'S'>>(() => colour),
-                }),
-            ],
-        )
-        const kept = explicit.extract(
-            // @ts-expect-error the type reads no literal constructor through the explicit form
+    it('refuses at the type a key pinned through a ref, and the runtime pins the key', () => {
+        const { Large } = scope({
+            Large: object({
+                kind: string('pet'),
+                size: string('large'),
+                colour: ref('Colour'),
+            }),
+            Colour: string('red', 'blue'),
+        })
+        const viaRef = mdunion(['kind', 'size'], [pet, Large])
+        const kept = viaRef.extract(
+            // @ts-expect-error the type reads no literal mark through a ref
             { colour: string('red', 'blue') },
         )
         // the runtime answers for a caller who reaches past the type
@@ -522,6 +469,40 @@ describe('a clause key no member pins is refused', () => {
                 kind: { S: 'pet' },
                 size: { S: 'large' },
                 colour: { S: 'red' },
+            },
+        })
+    })
+
+    /**
+     * **A union option that a `ref` names pins its literal once the scope binds the name.** The
+     * union reads the literals of each option through the `ref`, so the clause keeps the member.
+     * The type reads no literal mark through a `ref`, so the type refuses the key.
+     */
+    it('reads a key whose union option is a ref, because the union then pins its literals', () => {
+        const { Large } = scope({
+            Large: object({
+                kind: string('pet'),
+                size: string('large'),
+                colour: union([ref('Red'), string('blue')]),
+            }),
+            Red: string('red'),
+        })
+        const viaOption = mdunion(['kind', 'size'], [pet, Large])
+        const kept = viaOption.extract(
+            // @ts-expect-error the type reads no literal mark through a ref
+            { colour: string('red', 'blue') },
+        )
+        expect(
+            kept.unsafeEncode({
+                kind: 'pet',
+                size: 'large',
+                colour: 'blue',
+            } as never),
+        ).toEqual({
+            M: {
+                kind: { S: 'pet' },
+                size: { S: 'large' },
+                colour: { S: 'blue' },
             },
         })
     })

@@ -17,13 +17,14 @@ import {
     decimal,
     failed,
     held,
-    lazy,
     list,
     never,
     number,
     object,
     optional,
+    ref,
     refine,
+    scope,
     spread,
     string,
     union,
@@ -636,14 +637,10 @@ describe('the held side is the write occupancy of a union option', () => {
             encode: (value: string) => value,
             decode: (value: string) => value,
         })
-        const texts: AnyCodec = union([
-            text,
-            object({ m: optional(lazy(() => texts as never)) }),
-        ] as readonly AnyCodec[])
-        const flags: AnyCodec = union([
-            boolean,
-            object({ m: optional(lazy(() => flags as never)) }),
-        ] as readonly AnyCodec[])
+        const { texts, flags } = scope({
+            texts: union([text, object({ m: optional(ref('texts')) })]),
+            flags: union([boolean, object({ m: optional(ref('flags')) })]),
+        })
         expect(() => declare([texts, flags])).not.toThrow()
     })
 

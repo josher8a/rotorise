@@ -58,6 +58,7 @@ import {
     literalAlternatives,
     literalForm,
     occV,
+    openRefusal,
     RecursionRefused,
     recursionUse,
     storedAlternatives,
@@ -1436,14 +1437,14 @@ export const codecOfTerm = <T, A extends AttributeValue>(
             throw new RecursionRefused(
                 def,
                 use,
-                `this \`${def.kind}\` term reaches a thunk that is recursive, or that names a codec not yet declared, with no list or object between. A recursion there reads its own input and does not end. The model's guard refuses a recursion that reads the input of its own binder. Put the recursion below a list or an object`,
+                `this \`${def.kind}\` term reaches a recursive \`ref\` with no list or object between. A recursion there reads its own input and does not end. The model's guard refuses a recursion that reads the input of its own binder. Put the recursion below a list or an object`,
             )
         }
         if (use === 3) {
             throw new RecursionRefused(
                 def,
                 use,
-                `this \`${def.kind}\` term holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive thunk and the codec that the thunk returns, or above a thunk that names a codec not yet declared. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion. Put no adapter on the path of a recursion`,
+                `this \`${def.kind}\` term holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive \`ref\` and the entry that the \`ref\` names. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion. Put no adapter on the path of a recursion`,
             )
         }
     }
@@ -1524,12 +1525,15 @@ export const codecAtLevel = <T, A extends AttributeValue>(
     // term, `arbitraryOf` and `shrinkOf` read them there, and a caller that wants to share a
     // arbitrary names it rather than reading it back off a pair.
     const pair = pairOf(def)
+    // a term that reads a name that no scope binds refuses each use
     const atTop: Pick<Pair, 'decode'> & {
         readonly encode: (value: never) => Result<AttributeValue>
     } = {
-        encode: (value) => pair.encode(value, enclosing),
+        encode: (value) => openRefusal(def) ?? pair.encode(value, enclosing),
         decode: (attribute) =>
-            storedTooDeeply(attribute, enclosing) ?? pair.decode(attribute),
+            openRefusal(def) ??
+            storedTooDeeply(attribute, enclosing) ??
+            pair.decode(attribute),
     }
     return codec<T, A>({
         def,
@@ -1999,7 +2003,10 @@ const namedKind = (t: Term): string => {
         : pinned !== undefined
           ? namedLiterals(literalForm(pinned.base, undefined), pinned)
           : t.kind !== 'held' || t.outer.kind === 'opaq'
-            ? t.kind
+            ? // a \`lazy\` term is the term of a \`ref\`, the one surface that builds one
+              t.kind === 'lazy'
+                ? 'ref'
+                : t.kind
             : namedAdapter(t.inner, t.outer)
 }
 

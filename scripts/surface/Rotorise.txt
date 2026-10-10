@@ -111,7 +111,6 @@ held
 isNumeral
 isStoredNumeral
 keyComponents
-lazy
 list
 mdunion
 memberOf

@@ -8,20 +8,20 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-    type AttributeCodec,
     array,
     CodecError,
     decimal,
     discriminatedUnion,
     dynamoNumber,
-    lazy,
     list,
     never,
     number,
     object,
     opaque,
     optional,
+    ref,
     refine,
+    scope,
     string,
     union,
     withLegacyRead,
@@ -208,14 +208,13 @@ describe('a path that crosses a whole-value adapter', () => {
 /**
  * **A path passes an option whose stored member is not the container of the segment.** The store
  * refuses the segment on every attribute of that option, so the option has no codec at the path.
- * A thunk that closes no cycle is the codec that the thunk returns, so a thunk changes nothing.
  */
 describe('an option that the store keeps apart from the segment', () => {
-    it('a path passes a refined number behind a thunk, because the store holds no map at a number', () => {
+    it('a path passes a refined number behind a scope entry, because the store holds no map at a number', () => {
         const Reading = union([
             object({ x: string }),
             refine(
-                lazy(() => dynamoNumber),
+                scope({ At: ref('N'), N: dynamoNumber }).At,
                 (v): v is typeof v => !v.digits.startsWith('-'),
                 { describe: 'a reading that is not negative' },
             ),
@@ -228,7 +227,7 @@ describe('an option that the store keeps apart from the segment', () => {
 
     it('a path does not pass a refinement of a recursive list, because the member of a recursion is not read off the term', () => {
         type Nest = readonly Nest[]
-        const Nest: AttributeCodec<Nest> = array(lazy(() => Nest))
+        const { Nest } = scope({ Nest: array(ref('Nest')) })
         const Shape = union([
             object({ x: string }),
             refine(Nest, (v): v is Nest => v.length > 0, {

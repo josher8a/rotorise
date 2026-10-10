@@ -17,9 +17,15 @@
  */
 import { describe, expect, it } from 'vitest'
 import { CodecError } from '../../../Rotorise'
-import type { Attribute } from '../../attribute'
 import type { AnyObjectCodec } from '../../codec'
-import { discriminatedUnion, lazy, mdunion, object, string } from '../../codec'
+import {
+    discriminatedUnion,
+    mdunion,
+    object,
+    ref,
+    scope,
+    string,
+} from '../../codec'
 
 /** The constructor with its declaration-time constraint forgotten, so the runtime can be asked. */
 const declare = discriminatedUnion as unknown as (
@@ -156,19 +162,19 @@ describe('a stored tag that names a member of Object.prototype', () => {
     })
 })
 
-describe('a tag declared through a thunk', () => {
-    // a thunk that resolves denotes its term, so the tag behind it is the tag: the model reads the
-    // printed body, and the table reads the same literal
+describe('a tag declared through a ref', () => {
+    // a ref that a scope binds denotes the term of its entry, so the tag behind it is the tag: the
+    // model reads the printed body, and the table reads the same literal
     const checkup = string('CHECKUP')
     const viaThunk = discriminatedUnion('type', [
         object({
-            type: lazy<'CHECKUP', Attribute<'S'>>(() => checkup),
+            type: scope({ At: ref('Tag'), Tag: checkup }).At,
             petId: string,
         }),
         object({ type: string('SHOT'), vaccine: string }),
     ])
 
-    it('keys the variant by the literal that the thunk resolves to', () => {
+    it('keys the variant by the literal that the ref resolves to', () => {
         expect(
             viaThunk.decode({
                 M: { type: { S: 'CHECKUP' }, petId: { S: 'p' } },
@@ -185,7 +191,7 @@ describe('a tag declared through a thunk', () => {
             ['kind'],
             [
                 object({
-                    kind: lazy<'pet', Attribute<'S'>>(() => pet),
+                    kind: scope({ At: ref('Kind'), Kind: pet }).At,
                     toy: string,
                 }),
                 object({ kind: string('food'), gram: string }),

@@ -14,16 +14,14 @@
  * item is assembled and nowhere inside one attribute's codec.
  */
 import { describe, expect, it } from 'vitest'
-import type { Attribute, AttributeValue } from '../../attribute'
+import type { AttributeValue } from '../../attribute'
 import { MAX_DOCUMENT_NESTING } from '../../attribute'
 import {
     type AnyCodec,
-    type AttributeCodec,
     array,
     CodecError,
     discriminatedUnion,
     held,
-    lazy,
     list,
     nullable,
     object,
@@ -144,7 +142,7 @@ describe('the nesting bound around a typed container', () => {
             (v) => ({ a: v }),
         ],
         ['a union', union([array(opaque), string]), 1, one],
-        ['a lazy', lazy(() => array(opaque)), 1, one],
+        ['a ref', scope({ At: ref('Arr'), Arr: array(opaque) }).At, 1, one],
         [
             'a refine',
             refine(
@@ -229,7 +227,7 @@ describe('the nesting bound around a typed container', () => {
  */
 describe('the nesting bound in a recursive entity', () => {
     type Tree = readonly Tree[]
-    const Tree: AttributeCodec<Tree, Attribute<'L'>> = lazy(() => array(Tree))
+    const { Tree } = scope({ Tree: array(ref('Tree')) })
 
     /** `n` levels of list, the innermost one empty. */
     const nestTree = (n: number): Tree => {
@@ -258,9 +256,12 @@ describe('the nesting bound in a recursive entity', () => {
     /** A self-nesting object costs two levels a turn, and the bound counts both. */
     it('refuses a self-nesting object at the 33rd level', () => {
         type Category = { name: string; children?: readonly Category[] }
-        const Category: AttributeCodec<Category, Attribute<'M'>> = lazy(() =>
-            object({ name: string, children: optional(array(Category)) }),
-        )
+        const { Category } = scope({
+            Category: object({
+                name: string,
+                children: optional(array(ref('Category'))),
+            }),
+        })
         // the leaf is one map, and each turn adds a list and a map
         const nest = (turns: number): Category => {
             let v: Category = { name: 'leaf' }
@@ -338,7 +339,7 @@ describe('the nesting bound at a path', () => {
             (v) => ({ xs: [[v]] }),
         ],
         [
-            'a recursive lazy path',
+            'a recursive path',
             aRecursive.at((p) => p.root.next.next.next),
             aRecursive,
             3,
@@ -467,9 +468,7 @@ describe('the nesting bound on a read', () => {
         refusesPastTheStore(native.decode(storedL(MAX_DOCUMENT_NESTING + 1)))
 
         type Tree = readonly Tree[]
-        const Tree: AttributeCodec<Tree, Attribute<'L'>> = lazy(() =>
-            array(Tree),
-        )
+        const { Tree } = scope({ Tree: array(ref('Tree')) })
         refusesPastTheStore(Tree.decode(storedTree(MAX_DOCUMENT_NESTING + 1)))
 
         const item = object({ a: opaque }).item

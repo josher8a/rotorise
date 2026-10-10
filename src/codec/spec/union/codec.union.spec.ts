@@ -2,9 +2,9 @@
  * Untagged unions: the shape `tagged` cannot express, because it has nothing to switch on.
  */
 import { describe, expect, it } from 'vitest'
-import type { Attribute, AttributeMap } from '../../attribute'
+import type { AttributeMap } from '../../attribute'
 import { DynamoNumber, MAX_DOCUMENT_NESTING } from '../../attribute'
-import type { AnyCodec, AttributeCodec, UnionCodec } from '../../codec'
+import type { AnyCodec, UnionCodec } from '../../codec'
 import {
     array,
     boolean,
@@ -13,14 +13,15 @@ import {
     discriminatedUnion,
     dynamoNumber,
     held,
-    lazy,
     never,
     nullValue,
     number,
     object,
     opaque,
     optional,
+    ref,
     refine,
+    scope,
     string,
     union,
     withLegacyRead,
@@ -711,7 +712,7 @@ describe('never', () => {
 
 describe('the refusal of a union', () => {
     type Tree = readonly Tree[]
-    const Tree: AttributeCodec<Tree, Attribute<'L'>> = lazy(() => array(Tree))
+    const { Tree } = scope({ Tree: array(ref('Tree')) })
 
     /** `n` levels of list, the innermost one empty. */
     const nestTree = (n: number): Tree => {

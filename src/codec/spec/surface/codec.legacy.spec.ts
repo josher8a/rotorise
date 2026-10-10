@@ -10,7 +10,6 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AttributeMap, AttributeValue } from '../../attribute'
 import { DynamoNumber } from '../../attribute'
 import {
-    type AttributeCodec,
     andThen,
     array,
     binary,
@@ -18,10 +17,11 @@ import {
     decimal,
     dynamoNumber,
     held,
-    lazy,
     object,
     optional,
+    ref,
     refine,
+    scope,
     string,
     union,
     withLegacyRead,
@@ -277,26 +277,25 @@ describe('an attribute the row does not have', () => {
 })
 
 /**
- * **A stand-in over the codec under declaration.** The check of the stand-in runs while the thunk
- * still resolves, so the check waits until the thunk resolves. The check still runs, so an
- * unwritable stand-in still refuses.
+ * **A stand-in that the codec writes through a `ref`.** The check of the stand-in waits for the
+ * scope that binds the `ref`, and runs there. So an unwritable stand-in still refuses, at the scope.
  */
 describe('a stand-in for a recursive codec', () => {
     type Leaf = { end: string } | { name: string; next: Leaf }
 
     it('a recursion with a stand-in encodes and decodes, and a read that lacks the attribute fills it', () => {
-        const Leaf: AttributeCodec<Leaf> = lazy(() =>
-            union([
+        const { Leaf } = scope({
+            Leaf: union([
                 object({ end: string }),
                 object({
                     name: string,
                     next: withLegacyRead({
-                        current: Leaf,
+                        current: ref('Leaf'),
                         whenMissing: { end: 'x' },
                     }),
                 }),
             ]),
-        )
+        })
         const value: Leaf = { name: 'a', next: { end: 'b' } }
         const written = Leaf.encode(value)
         expect(written).not.toBeInstanceOf(CodecError)
@@ -307,54 +306,51 @@ describe('a stand-in for a recursive codec', () => {
         })
     })
 
-    it('an unwritable stand-in for a recursive codec still refuses, and names the reason', () => {
-        const Ended: AttributeCodec<Leaf> = lazy(() =>
-            refine(
-                union([
-                    object({ end: string }),
-                    object({
-                        name: string,
-                        next: withLegacyRead({
-                            current: Ended,
-                            whenMissing: { end: '' },
+    it('an unwritable stand-in for a recursive codec refuses at the scope, and names the reason', () => {
+        const declare = () =>
+            scope({
+                Ended: refine(
+                    union([
+                        object({ end: string }),
+                        object({
+                            name: string,
+                            next: withLegacyRead({
+                                current: ref('Ended'),
+                                whenMissing: { end: '' },
+                            }),
                         }),
-                    }),
-                ]),
-                (leaf): leaf is Leaf => !('end' in leaf) || leaf.end !== '',
-                { describe: 'an end that is not empty' },
-            ),
+                    ]),
+                    (leaf): leaf is Leaf => !('end' in leaf) || leaf.end !== '',
+                    { describe: 'an end that is not empty' },
+                ),
+            })
+        expect(declare).toThrow(
+            /stand-in must be a value the codec it stands in for can write, and this `ref` refuses the stand-in: .*an end that is not empty/,
         )
-        const read = Ended.decode({ M: { end: { S: 'b' } } })
-        expect(read).toBeInstanceOf(CodecError)
-        expect((read as CodecError).reason).toMatch(
-            /stand-in must be a value the codec it stands in for can write, and this `lazy` refuses the stand-in: .*an end that is not empty/,
-        )
-        expect((read as CodecError).reason).not.toMatch(/\[object Object\]/)
+        expect(declare).not.toThrow(/\[object Object\]/)
     })
 })
 
 /**
- * **Two thunks under resolution.** The first use forces `Tree`, and `Tree`'s union forces `Branch`.
- * The stand-in check runs while `Branch` resolves, so the check waits on `Branch`. When `Branch`
- * resolves, `Tree` still resolves, so the check waits again on `Tree`.
+ * **A stand-in across two entries.** `Branch` writes its stand-in through a `ref` to `Tree`, and
+ * `Tree` reads `Branch` through a `ref`. The check waits for the scope, which binds both names
+ * before the check runs.
  */
-describe('a stand-in check waits for every thunk under resolution, the outer ones too', () => {
+describe('a stand-in check waits for the scope that binds every name it writes through', () => {
     type Tree = { end: string } | Branch
     type Branch = { name: string; next: Tree }
 
     it('a writable stand-in encodes, decodes, and fills a missing attribute', () => {
-        const Tree: AttributeCodec<Tree> = lazy(() =>
-            union([object({ end: string }), Branch]),
-        )
-        const Branch: AttributeCodec<Branch> = lazy(() =>
-            object({
+        const { Tree } = scope({
+            Tree: union([object({ end: string }), ref('Branch')]),
+            Branch: object({
                 name: string,
                 next: withLegacyRead({
-                    current: Tree,
+                    current: ref('Tree'),
                     whenMissing: { end: 'x' },
                 }),
             }),
-        )
+        })
         const value: Tree = { name: 'a', next: { end: 'b' } }
         const written = Tree.encode(value)
         expect(written).not.toBeInstanceOf(CodecError)
@@ -365,57 +361,61 @@ describe('a stand-in check waits for every thunk under resolution, the outer one
         })
     })
 
-    it('an unwritable stand-in refuses at first use, and names the reason', () => {
-        const Tree: AttributeCodec<Tree> = lazy(() =>
-            refine(
-                union([object({ end: string }), Branch]),
-                (tree): tree is Tree => !('end' in tree) || tree.end !== '',
-                { describe: 'an end that is not empty' },
-            ),
-        )
-        const Branch: AttributeCodec<Branch> = lazy(() =>
-            object({
-                name: string,
-                next: withLegacyRead({
-                    current: Tree,
-                    whenMissing: { end: '' },
+    it('an unwritable stand-in refuses at the scope, and names the reason', () => {
+        const declare = () =>
+            scope({
+                Tree: union([
+                    refine(
+                        object({ end: string }),
+                        (end): end is { end: string } => end.end !== '',
+                        { describe: 'an end that is not empty' },
+                    ),
+                    ref('Branch'),
+                ]),
+                Branch: object({
+                    name: string,
+                    next: withLegacyRead({
+                        current: ref('Tree'),
+                        whenMissing: { end: '' },
+                    }),
                 }),
-            }),
-        )
-        const written = Tree.encode({ end: 'b' })
-        expect(written).toBeInstanceOf(CodecError)
-        expect((written as CodecError).reason).toMatch(
-            /stand-in must be a value the codec it stands in for can write, and this `lazy` refuses the stand-in: .*an end that is not empty/,
+            })
+        expect(declare).toThrow(
+            /stand-in must be a value the codec it stands in for can write, and this `ref` refuses the stand-in: .*no option admits this value/,
         )
     })
 })
 
 /**
- * **The first use through either thunk.** A first use through `Branch` resolves `Branch` first. A
- * check that forced `Tree` then would declare `Tree`'s union over `Branch` under resolution, which
- * reads `Branch` as a free variable at the root and refuses a guarded term. Each order runs in a
- * fresh module instance, so no state that an earlier use left in the module decides the verdict.
+ * **The first use through either entry.** The scope runs the check of the stand-in before any use,
+ * so the entry used first decides nothing. Each order runs in a fresh module instance, so no state
+ * that an earlier use left in the module decides the verdict.
  */
-describe('a stand-in verdict does not depend on which recursive thunk is used first', () => {
+describe('a stand-in verdict does not depend on which recursive entry is used first', () => {
     type Tree = { end: string } | Branch
     type Branch = { name: string; next: Tree }
 
     const declare = async () => {
         vi.resetModules()
-        const { CodecError, lazy, object, string, union, withLegacyRead } =
-            await import('../../codec')
-        const Tree: AttributeCodec<Tree> = lazy(() =>
-            union([object({ end: string }), Branch]),
-        )
-        const Branch: AttributeCodec<Branch> = lazy(() =>
-            object({
+        const {
+            CodecError,
+            object,
+            ref,
+            scope,
+            string,
+            union,
+            withLegacyRead,
+        } = await import('../../codec')
+        const { Tree, Branch } = scope({
+            Tree: union([object({ end: string }), ref('Branch')]),
+            Branch: object({
                 name: string,
                 next: withLegacyRead({
-                    current: Tree,
+                    current: ref('Tree'),
                     whenMissing: { end: 'x' },
                 }),
             }),
-        )
+        })
         return { CodecError, Tree, Branch }
     }
     const value: Branch = { name: 'a', next: { end: 'b' } }
@@ -435,96 +435,36 @@ describe('a stand-in verdict does not depend on which recursive thunk is used fi
 })
 
 /**
- * **A declaration that fails, and is retried.** `Branch`'s declaration makes a stand-in check, then
- * throws on `Later`, which is still in its temporal dead zone. The check waits on `Branch`, the
- * innermost thunk, and goes with the failed declaration. A check that waited on `Tree` instead would
- * run when `Tree` resolves, force `Branch` again, and refuse `Tree` for a declaration that no longer
- * exists.
+ * **Every order of first use.** The scope runs the check before any use, so the order of first use
+ * decides nothing. A scope that refuses binds no name, so each fragment that it held refuses each
+ * use, and no read returns the stand-in. Each order runs in a fresh module instance, so no state
+ * that an earlier use left in the module decides the verdict.
  */
-describe('a stand-in check is discarded with the declaration that made it, so a declaration that fails and is retried is not refused by a stale check', () => {
-    type Tree = { end?: string; kids?: readonly Branch[] }
-    type Branch = { name: string; next: Tree; tag: string }
-
-    it('the first use accepts, and the retried declaration reads and fills a missing attribute', () => {
-        const Tree: AttributeCodec<Tree> = lazy(() =>
-            object({ end: optional(string), kids: optional(array(Branch)) }),
-        )
-        const Branch: AttributeCodec<Branch> = lazy(() =>
-            object({
-                name: string,
-                next: withLegacyRead({
-                    current: Tree,
-                    whenMissing: { kids: [{ name: 'z', next: {}, tag: 'q' }] },
-                }),
-                tag: Later,
-            }),
-        )
-        expect(Tree.encode({ end: 'b' })).toEqual({ M: { end: { S: 'b' } } })
-        const Later = string
-        const value: Tree = {
-            kids: [{ name: 'a', next: { end: 'b' }, tag: 't' }],
-        }
-        const written = Tree.encode(value)
-        expect(written).not.toBeInstanceOf(CodecError)
-        expect(Tree.decode(written as AttributeValue)).toEqual(value)
-        expect(
-            Tree.decode({
-                M: {
-                    kids: { L: [{ M: { name: { S: 'a' }, tag: { S: 't' } } }] },
-                },
-            }),
-        ).toEqual({
-            kids: [
-                {
-                    name: 'a',
-                    next: { kids: [{ name: 'z', next: {}, tag: 'q' }] },
-                    tag: 't',
-                },
-            ],
-        })
-    })
-})
-
-/**
- * **Every order of first use.** A thunk that resolves under another keeps its result only when the
- * outermost resolution passes every check. An unwritable stand-in then refuses each use, and no
- * read returns the stand-in. Each order runs in a fresh module instance, so no state that an
- * earlier use left in the module decides the verdict.
- */
-describe('an unwritable stand-in is refused on every use, in every order of first use, and a writable one is accepted and fills', () => {
+describe('a writable stand-in is accepted and fills, and an unwritable one refuses each use, in every order of first use', () => {
     type Tree = { end: string } | Branch
     type Branch = { name: string; next: Tree }
 
-    const declare = async (writable: boolean) => {
+    const declare = async () => {
         vi.resetModules()
         const {
             CodecError,
-            lazy,
             object,
-            refine,
+            ref,
+            scope,
             string,
             union,
             withLegacyRead,
         } = await import('../../codec')
-        const Tree: AttributeCodec<Tree> = lazy(() =>
-            writable
-                ? union([object({ end: string }), Branch])
-                : refine(
-                      union([object({ end: string }), Branch]),
-                      (tree): tree is Tree =>
-                          !('end' in tree) || tree.end !== '',
-                      { describe: 'an end that is not empty' },
-                  ),
-        )
-        const Branch: AttributeCodec<Branch> = lazy(() =>
-            object({
+        const { Tree, Branch } = scope({
+            Tree: union([object({ end: string }), ref('Branch')]),
+            Branch: object({
                 name: string,
                 next: withLegacyRead({
-                    current: Tree,
-                    whenMissing: { end: writable ? 'x' : '' },
+                    current: ref('Tree'),
+                    whenMissing: { end: 'x' },
                 }),
             }),
-        )
+        })
         const missing = { M: { name: { S: 'a' } } }
         const uses = {
             tree: () => Tree.encode({ end: 'b' }),
@@ -542,9 +482,64 @@ describe('an unwritable stand-in is refused on every use, in every order of firs
         ['treeDecode', 'branch', 'tree', 'branchDecode'],
     ] as const
 
+    const declareUnwritable = async () => {
+        vi.resetModules()
+        const {
+            CodecError,
+            object,
+            ref,
+            refine,
+            scope,
+            string,
+            union,
+            withLegacyRead,
+        } = await import('../../codec')
+        const Tree = refine(
+            union([object({ end: string }), ref('Branch')]),
+            (tree: unknown): tree is Tree =>
+                typeof tree !== 'object' ||
+                tree === null ||
+                !('end' in tree) ||
+                tree.end !== '',
+            { describe: 'an end that is not empty' },
+        )
+        const Branch = object({
+            name: string,
+            next: withLegacyRead({
+                current: ref('Tree'),
+                whenMissing: { end: '' },
+            }),
+        })
+        expect(() => scope({ Tree, Branch })).toThrow(
+            /stand-in must be a value the codec it stands in for can write/,
+        )
+        const missing = { M: { name: { S: 'a' } } }
+        const uses = {
+            // @ts-expect-error a use needs a closed codec
+            tree: () => Tree.encode({ end: 'b' }),
+            // @ts-expect-error a use needs a closed codec
+            branch: () => Branch.encode({ name: 'a', next: { end: 'b' } }),
+            // @ts-expect-error a use needs a closed codec
+            treeDecode: () => Tree.decode(missing),
+            // @ts-expect-error a use needs a closed codec
+            branchDecode: () => Branch.decode(missing),
+        }
+        return { CodecError, uses }
+    }
+
     for (const order of orders) {
+        it(`an unwritable stand-in refuses each use, and no read returns the stand-in, in the order ${order.join(' > ')}`, async () => {
+            const { CodecError, uses } = await declareUnwritable()
+            for (const use of order) {
+                const got = uses[use]()
+                expect(got, use).toBeInstanceOf(CodecError)
+                expect(String(got), use).toMatch(
+                    /reads '(Tree|Branch)'(, '(Tree|Branch)')? through a `ref` that no scope binds/,
+                )
+            }
+        })
         it(`a writable stand-in is accepted and fills a missing attribute, in the order ${order.join(' > ')}`, async () => {
-            const { CodecError, uses } = await declare(true)
+            const { CodecError, uses } = await declare()
             for (const use of order) {
                 const got = uses[use]()
                 // the row of `treeDecode` has a name and no `end`: a Branch without `next`, filled
@@ -552,19 +547,6 @@ describe('an unwritable stand-in is refused on every use, in every order of firs
                 if (use === 'branchDecode' || use === 'treeDecode') {
                     expect(got, use).toEqual({ name: 'a', next: { end: 'x' } })
                 }
-            }
-        })
-        it(`an unwritable stand-in is refused on every use, and no read returns the stand-in, in the order ${order.join(' > ')}`, async () => {
-            const { CodecError, uses } = await declare(false)
-            for (const use of order) {
-                const got = uses[use]()
-                expect(got, use).toBeInstanceOf(CodecError)
-                expect(
-                    (got as InstanceType<typeof CodecError>).reason,
-                    use,
-                ).toMatch(
-                    /stand-in must be a value the codec it stands in for can write, and this `lazy` refuses the stand-in: .*an end that is not empty/,
-                )
             }
         })
     }

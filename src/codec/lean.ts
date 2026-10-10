@@ -79,7 +79,7 @@ import {
     disjoint,
     force,
     mapChildren,
-    readsFreeVariable,
+    openRefusal,
     recursionUse,
     type Scope,
     storedAlternatives,
@@ -625,10 +625,9 @@ const leanBinders = (bound: Bound): string => {
  *   three internally. A declaration verdict passes a {@link Bound}, and there a caller's closure
  *   prints as a variable that the theorem binds, and a caller's adapter prints as a generator
  *   `caller n` whose pair the theorem quantifies through the caller table.
- * - **A thunk that throws is not here.** It names a codec not yet declared, and it prints as a
- *   variable that no binder of the term binds, as the host's disjointness test reads it. The
- *   host's guard reads the same thunk as the root of the term, and {@link leanRooted} spells that
- *   second reading.
+ * - **A `ref` that no scope binds is not here.** It is a free variable, and it prints as a
+ *   variable that no binder of the term binds, as the host's disjointness test and the host's
+ *   guard read it.
  *
  * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
  * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
@@ -776,19 +775,6 @@ const leanBodyOf = (body: Body, at: string, scope: At): string => {
             : `(some (${leanTermOfTerm(rest, `${at}.rest`, scope)}))`
     return `(Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
 }
-
-/**
- * **The guard's reading of a term**: a thunk that throws is the variable of a root `Term.mu`.
- *
- * A thunk that throws is an unknown term, and each host check takes its worst case. The
- * disjointness and compatibility tests read the open term, where the thunk is a variable that no
- * binder binds. The guard reads the thunk as a path to the root of the option, because at a
- * declaration such a thunk throws as a thunk that names the codec under declaration does.
- * {@link leanTermOf} prints that variable one binder beyond each enclosing binder, so one `Term.mu`
- * around the whole term binds it to the root. A term with no such thunk has no root binder.
- */
-const leanRooted = (printed: string, declared: AnyCodec): string =>
-    readsFreeVariable(declared.def) ? `Term.mu (${printed})` : printed
 
 const leanTermOfTerm = (t: Term, at: string, scope: At): string => {
     const frames = scope.frames
@@ -1163,8 +1149,7 @@ const refusedBoth = (name: string, codec: AnyCodec, value: unknown): void => {
  * **The bridge runs both ways, because the two host defects of the certificate lived in the
  * direction that the one-way bridge did not check.**
  *
- * - `src/` **accepts** the pair: the model's guard accepts both options, on the terms that
- *   {@link leanRooted} spells, and the model proves `PairwiseCompat` for the pair, given lawful
+ * - `src/` **accepts** the pair: the model's guard accepts both options, and the model proves `PairwiseCompat` for the pair, given lawful
  *   options. Where {@link agrees} holds, the host decided the model's `compatPair`, and the proof
  *   is `pairwiseCompat_of_compatPair` over that decision. A host warrant that the model does not
  *   prove stops the file.
@@ -1172,11 +1157,12 @@ const refusedBoth = (name: string, codec: AnyCodec, value: unknown): void => {
  *   and the model's decision refuses the pair, `compatPair dynOracle x y = false`. A decision that
  *   starts to accept a pair `src/` turns down stops the file.
  * - `src/` **refuses** the pair **at the guard**: an option reads the input of its own binder, or
- *   holds an adapter on a recursive path. The model's guard must refuse an option too, on the
- *   terms that {@link leanRooted} spells.
+ *   holds an adapter on a recursive path. The model's guard must refuse an option too.
  *
- * A pair that reads a thunk that throws takes the same forms: the model's decision gives agreement
- * at every environment (`compatPair_sound`), so its warrant holds whatever codec the thunk names.
+ * A union over a `ref` that no scope binds is an open fragment: the scope that binds the name
+ * decides it, so such a pair holds no decision of the host, and the emitter refuses the pair. A
+ * pair whose union is closed and reads a free `ref` in an option takes the same forms: the model's
+ * decision gives agreement at every environment (`compatPair_sound`).
  *
  * Compatibility is not decidable, so a refused pair carries no theorem that it is incompatible:
  * `not_compat_flip` and `not_compat_shout` are the model's witnesses of that class.
@@ -1206,9 +1192,21 @@ const separationForm = ({ name, left, right }: Separation): SeparationForm => {
     const guarded = [left, right].every(
         (option) => recursionUse(option.def) < 2,
     )
+    let declared: AnyCodec | undefined
     try {
-        union([left, right] as never)
+        declared = union([left, right] as never)
     } catch {
+        declared = undefined
+    }
+    // the union of an open fragment decides at the scope that binds each name, so the pair holds
+    // no decision of the host
+    if (declared !== undefined && openRefusal(declared.def) !== undefined) {
+        return refuse(
+            name,
+            'the union reads a `ref` that no scope binds, so the host decides the pair at the scope',
+        )
+    }
+    if (declared === undefined) {
         if (!guarded) return 'guardRefused'
         return agrees(left.def, right.def)
             ? refuse(
@@ -1257,8 +1255,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
             ? 'of_decide_eq_true kernel_rfl%'
             : [
                   `(congrArg₂ (· && ·)`,
-                  `      (Alg.guarded_of_sameShape _ (${leanRooted(leanTermOf(left, name, standIn), left)}) kernel_rfl%)`,
-                  `      (Alg.guarded_of_sameShape _ (${leanRooted(leanTermOf(right, name, standIn), right)}) kernel_rfl%)).trans`,
+                  `      (Alg.guarded_of_sameShape _ (${leanTermOf(left, name, standIn)}) kernel_rfl%)`,
+                  `      (Alg.guarded_of_sameShape _ (${leanTermOf(right, name, standIn)}) kernel_rfl%)).trans`,
                   `    (of_decide_eq_true kernel_rfl%)`,
               ].join('\n')
     const form = separationForm({ name, left, right })
@@ -1266,8 +1264,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
         return [
             `/-- \`${name}\` — \`src/\` refuses this pair at the guard; the model's guard refuses it too -/`,
             head,
-            `    (Alg.Term.guarded (${leanRooted(l, left)}) &&`,
-            `      Alg.Term.guarded (${leanRooted(r, right)})) = false :=`,
+            `    (Alg.Term.guarded (${l}) &&`,
+            `      Alg.Term.guarded (${r})) = false :=`,
             `  ${guard}`,
         ].join('\n')
     }
@@ -1276,8 +1274,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
         return [
             `/-- \`${name}\` — \`src/\` refuses this pair; the model's guard accepts it, and the model's decision refuses it -/`,
             head,
-            `    (Alg.Term.guarded (${leanRooted(l, left)}) &&`,
-            `      Alg.Term.guarded (${leanRooted(r, right)})) = true ∧`,
+            `    (Alg.Term.guarded (${l}) &&`,
+            `      Alg.Term.guarded (${r})) = true ∧`,
             `    Alg.compatPair dynOracle (${l})`,
             `      (${r}) = false :=`,
             `  ⟨${guard}, ${reduce}⟩`,
@@ -1287,8 +1285,8 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     return [
         `/-- \`${name}\` — \`src/\` accepts this pair; the model's guard accepts it, and the model proves it compatible -/`,
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} (κ : Callers) :`,
-        `    (Alg.Term.guarded (${leanRooted(l, left)}) &&`,
-        `      Alg.Term.guarded (${leanRooted(r, right)})) = true ∧`,
+        `    (Alg.Term.guarded (${l}) &&`,
+        `      Alg.Term.guarded (${r})) = true ∧`,
         `    ((∀ t ∈ [${l}, ${r}], Lawful (denote (libTable κ) t)) →`,
         `      PairwiseCompat (libTable κ) [${l}, ${r}]) :=`,
         `  ⟨${guard}, fun hl => pairwiseCompat_of_compatPair (${reduce}) hl⟩`,
@@ -1300,7 +1298,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
  * guard reads a recursion at its own input or an adapter on a recursive path, and the refusal
  * carries the term. No union reads such a term, so no {@link Separation} states the model's guard
  * on the term. This vector states the guard half of a separation on the term alone: the model's
- * guard refuses the term too, on the term that {@link leanRooted} spells.
+ * guard refuses the term too.
  */
 export type FormerGuard = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
@@ -1319,10 +1317,8 @@ export const leanFormerGuard = ({ name, term }: FormerGuard): string => {
             "the host's guard accepts this term now, so a vector that the model's guard refuses it states no host refusal",
         )
     }
-    const rooted = (bound: Bound): string => {
-        const printed = leanTermOfTerm(term, name, { ...topScope(term), bound })
-        return readsFreeVariable(term) ? `Term.mu (${printed})` : printed
-    }
+    const rooted = (bound: Bound): string =>
+        leanTermOfTerm(term, name, { ...topScope(term), bound })
     // a caller's function is a variable of the theorem, and the guard reads the shape alone, so a
     // quantified verdict closes the guard on a twin of one shape that holds no free function
     const bound: Bound = {
@@ -1459,12 +1455,10 @@ export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
 
 /* ── the row form ──────────────────────────────────────────────────────────────────────────── */
 
-/** The two terms that the tests read, and the two terms that the guard reads, as a row prints them. */
+/** The two terms that the tests and the guard read, as a row prints them. */
 export type RowTerms = {
     readonly l: string
     readonly r: string
-    readonly gl: string
-    readonly gr: string
 }
 
 /**
@@ -1531,7 +1525,7 @@ export const leanShapes = (
         const one = row()
         const l = one(left, at)
         const r = one(right, at)
-        return { l, r, gl: leanRooted(l, left), gr: leanRooted(r, right) }
+        return { l, r }
     }
     return {
         pair,
@@ -1784,15 +1778,15 @@ export const separationRows = (
     forms: separationLists,
     rows: (shapes) =>
         separations.map((one) => {
-            const { l, r, gl, gr } = shapes.pair(one.left, one.right, one.name)
+            const { l, r } = shapes.pair(one.left, one.right, one.name)
             const form = separationForm(one)
             return {
                 name: leanIdent(one.name),
                 form,
                 row:
                     form === 'guardRefused'
-                        ? `(${gl}, ${gr})`
-                        : `(${gl}, ${gr}, ${l}, ${r})`,
+                        ? `(${l}, ${r})`
+                        : `(${l}, ${r}, ${l}, ${r})`,
             }
         }),
 })
@@ -1808,14 +1802,14 @@ export const pairGuardRows = (
     forms: { pairGuards: { type: '(Term × Term × Bool)', ok: 'pairGuardOk' } },
     rows: (shapes) =>
         pairs.map((one) => {
-            const { gl, gr } = shapes.pair(one.left, one.right, one.name)
+            const { l, r } = shapes.pair(one.left, one.right, one.name)
             const guarded = [one.left, one.right].every(
                 (option) => recursionUse(option.def) < 2,
             )
             return {
                 name: leanIdent(one.name),
                 form: 'pairGuards',
-                row: `(${gl}, ${gr}, ${guarded})`,
+                row: `(${l}, ${r}, ${guarded})`,
             }
         }),
 })
@@ -2238,6 +2232,13 @@ export const leanSlice = (
         return refuse(
             name,
             'no union: a slice selects among the options of a union',
+        )
+    }
+    // the slice of an open fragment refuses each clause, until a scope binds each name
+    if (openRefusal(def) !== undefined) {
+        return refuse(
+            name,
+            'the union reads a `ref` that no scope binds, so the host keeps no option under a clause',
         )
     }
     const options = def.options

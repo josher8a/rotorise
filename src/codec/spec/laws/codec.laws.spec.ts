@@ -25,7 +25,6 @@ import {
     discriminatedUnion,
     failed,
     held,
-    lazy,
     list,
     nullable,
     nullValue,
@@ -33,7 +32,9 @@ import {
     object,
     opaque,
     optional,
+    ref,
     refine,
+    scope,
     spread,
     string,
     union,
@@ -889,7 +890,7 @@ describe('`accepts`, and the direction of the law that is true', () => {
                 decode: (tags: ReadonlySet<string>) => [...tags],
             }),
         ],
-        ['lazy', lazy(() => string)],
+        ['ref', scope({ At: ref('Str'), Str: string }).At],
         [
             'tagged',
             discriminatedUnion('type', [
