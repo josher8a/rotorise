@@ -125,7 +125,9 @@ optional
 orThrow
 pathBuilder
 product
+ref
 refine
+scope
 shapeOf
 spread
 string

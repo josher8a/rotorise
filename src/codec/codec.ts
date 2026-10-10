@@ -32,6 +32,16 @@ import {
     optionOfTerm,
     termOf,
 } from './denote'
+import type {
+    DecodeFrame,
+    DecodeTerm,
+    FirstFrame,
+    HoldsFree,
+    KindOfFrames,
+    NarrowFrames,
+    OffersAt,
+    StepFrames,
+} from './pathModel'
 import {
     andThen,
     asPath,
@@ -131,6 +141,79 @@ type LiteralMark = { readonly [literalMarker]: true }
 
 /** The mark where each codec of `C` carries the mark, and nothing otherwise. */
 type LiteralMarkOf<C> = [C] extends [LiteralMark] ? LiteralMark : unknown
+
+/*
+ * **The model's term of a codec, in its type.** Optional, so no value carries it and no
+ * constructor body changes. A codec with no term in its type, as a thunk with an annotation, is a
+ * free variable.
+ */
+declare const termMarker: unique symbol
+type TermMark<T> = { readonly [termMarker]?: T }
+type FreeTerm = ['var', '#free']
+/**
+ * The default of the term and of the decoded type of {@link ObjectCodec}, {@link ItemCodec} and
+ * {@link UnionCodec}: the type that the spec or the options give, computed where a member reads it.
+ */
+declare const ofParts: unique symbol
+type OfParts = typeof ofParts
+type TermOf<C> = C extends { readonly [termMarker]?: infer T }
+    ? unknown extends T
+        ? FreeTerm
+        : T
+    : FreeTerm
+type TermsOf<Cs> = { -readonly [I in keyof Cs]: TermOf<Cs[I]> }
+type BaseT<K extends string> = ['prim', ['base', K]]
+type LitT<K extends string, V> = ['prim', ['literal', K, V]]
+type LitsT<
+    K extends string,
+    L extends readonly unknown[],
+> = L extends readonly [infer One]
+    ? LitT<K, One>
+    : ['union', { -readonly [I in keyof L]: LitT<K, L[I]> }]
+type HeldT<I, O, G> = ['held', false, I, O, [G, false], []]
+type NumText<N> = N extends DynamoNumber<infer S> ? S : string
+type NumTexts<L extends readonly unknown[]> = {
+    -readonly [I in keyof L]: NumText<L[I]>
+}
+type FloatTexts<L extends readonly unknown[]> = {
+    -readonly [I in keyof L]: `${L[I] & number}`
+}
+type DecimalT = HeldT<BaseT<'number'>, BaseT<'string'>, 'decimalText'>
+type FloatT<I> = HeldT<I, BaseT<'number'>, ['caller', 'asFloat']>
+type EveryButNumberT = [
+    'union',
+    [
+        BaseT<'string'>,
+        BaseT<'boolean'>,
+        BaseT<'binary'>,
+        BaseT<'null'>,
+        ['set', BaseT<'string'>],
+        ['set', BaseT<'number'>],
+        ['set', BaseT<'binary'>],
+        ['list', [], ['some', ['opaq']], []],
+        ['object', ['mk', Record<never, never>, ['some', ['opaq']]]],
+    ],
+]
+/** A field carries its slot as its term; a codec is a required slot. */
+type SlotOf<F> = F extends { readonly codec: unknown }
+    ? TermOf<F>
+    : ['req', TermOf<F>]
+type ObjectTermOf<Spec, Rest> = [
+    'object',
+    [
+        'mk',
+        { -readonly [K in keyof Spec]: SlotOf<Spec[K]> },
+        [Rest] extends [undefined] ? ['none'] : ['some', TermOf<Rest>],
+    ],
+]
+type ListTermOf<Items, Pre extends unknown[] = []> = Items extends readonly [
+    infer H,
+    ...infer R,
+]
+    ? H extends AnySpread
+        ? ['list', Pre, ['some', TermOf<H>], TermsOf<R>]
+        : ListTermOf<R, [...Pre, TermOf<H>]>
+    : ['list', Pre, ['none'], []]
 
 /**
  * Marks the codec for a list's repeating positions.
@@ -1034,20 +1117,27 @@ const literalCapability =
  * and `string('A')` are one name for one ground term, rather than a codec and a constructor that
  * have to be kept in step.
  */
-export type StringCodec = AttributeCodec<string, Attribute<'S'>> & {
-    <const T extends string>(
-        only: T,
-    ): ConstantCodec<T, Attribute<'S'>> & LiteralMark
-    <const T extends string>(
-        ...allowed: readonly T[]
-    ): AttributeCodec<T, Attribute<'S'>> & LiteralMark
-    readonly set: {
-        (): AttributeCodec<ReadonlySet<string>, SS>
+export type StringCodec = AttributeCodec<string, Attribute<'S'>> &
+    TermMark<BaseT<'string'>> & {
         <const T extends string>(
-            ...allowed: readonly T[]
-        ): AttributeCodec<ReadonlySet<T>, SS>
+            only: T,
+        ): ConstantCodec<T, Attribute<'S'>> &
+            LiteralMark &
+            TermMark<LitT<'string', T>>
+        <const L extends readonly string[]>(
+            ...allowed: L
+        ): AttributeCodec<L[number], Attribute<'S'>> &
+            LiteralMark &
+            TermMark<LitsT<'string', L>>
+        readonly set: {
+            (): AttributeCodec<ReadonlySet<string>, SS> &
+                TermMark<['set', BaseT<'string'>]>
+            <const L extends readonly string[]>(
+                ...allowed: L
+            ): AttributeCodec<ReadonlySet<L[number]>, SS> &
+                TermMark<['set', LitsT<'string', L>]>
+        }
     }
-}
 
 /* ── the terms, denoted ───────────────────────────────────────────────────────────────── */
 
@@ -1083,22 +1173,29 @@ export const string: StringCodec = Object.assign(
  * | {@link decimal} | `string` | yes, 38 digits | text the caller re-validates, and refuses a denormal spelling |
  * | {@link number} | JS `number` | no, about 15 digits | rounding, by construction |
  */
-export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> & {
-    <const T extends DynamoNumber>(
-        only: T,
-    ): ConstantCodec<T, Attribute<'N'>> & LiteralMark
-    // a tuple, because inference unions no two object candidates: `readonly T[]` reads `T` off
-    // the first numeral, and refuses a second numeral with another text
-    <const T extends readonly DynamoNumber[]>(
-        ...allowed: T
-    ): AttributeCodec<T[number], Attribute<'N'>> & LiteralMark
-    readonly set: {
-        (): AttributeCodec<ReadonlySet<DynamoNumber>, NS>
+export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> &
+    TermMark<BaseT<'number'>> & {
+        <const T extends DynamoNumber>(
+            only: T,
+        ): ConstantCodec<T, Attribute<'N'>> &
+            LiteralMark &
+            TermMark<LitT<'number', NumText<T>>>
+        // a tuple, because inference unions no two object candidates: `readonly T[]` reads `T` off
+        // the first numeral, and refuses a second numeral with another text
         <const T extends readonly DynamoNumber[]>(
             ...allowed: T
-        ): AttributeCodec<ReadonlySet<T[number]>, NS>
-    }
-} = Object.assign(
+        ): AttributeCodec<T[number], Attribute<'N'>> &
+            LiteralMark &
+            TermMark<LitsT<'number', NumTexts<T>>>
+        readonly set: {
+            (): AttributeCodec<ReadonlySet<DynamoNumber>, NS> &
+                TermMark<['set', BaseT<'number'>]>
+            <const T extends readonly DynamoNumber[]>(
+                ...allowed: T
+            ): AttributeCodec<ReadonlySet<T[number]>, NS> &
+                TermMark<['set', LitsT<'number', NumTexts<T>>]>
+        }
+    } = Object.assign(
     literalCapability('number'),
     codecOfTerm({ kind: 'number' }) as AttributeCodec<
         DynamoNumber,
@@ -1183,20 +1280,38 @@ const storedOnly = (value: string): Result<DynamoNumber> =>
  * `'1.50'` is not a price this codec will write. `'1.5'` is. Where exact digits matter more than
  * numeric ordering — trailing zeros that mean something — use {@link string}.
  */
-export const decimal: AttributeCodec<string, Attribute<'N'>> & {
-    <const T extends string>(
-        only: T,
-    ): ConstantCodec<T, Attribute<'N'>> & LiteralMark
-    <const T extends string>(
-        ...allowed: readonly T[]
-    ): AttributeCodec<T, Attribute<'N'>> & LiteralMark
-    readonly set: {
-        (): AttributeCodec<ReadonlySet<string>, NS>
+export const decimal: AttributeCodec<string, Attribute<'N'>> &
+    TermMark<DecimalT> & {
         <const T extends string>(
-            ...allowed: readonly T[]
-        ): AttributeCodec<ReadonlySet<T>, NS>
-    }
-} = Object.assign(
+            only: T,
+        ): ConstantCodec<T, Attribute<'N'>> &
+            LiteralMark &
+            TermMark<HeldT<LitT<'number', T>, LitT<'string', T>, 'decimalText'>>
+        <const L extends readonly string[]>(
+            ...allowed: L
+        ): AttributeCodec<L[number], Attribute<'N'>> &
+            LiteralMark &
+            TermMark<
+                HeldT<LitsT<'number', L>, LitsT<'string', L>, 'decimalText'>
+            >
+        readonly set: {
+            (): AttributeCodec<ReadonlySet<string>, NS> &
+                TermMark<['set', DecimalT]>
+            <const L extends readonly string[]>(
+                ...allowed: L
+            ): AttributeCodec<ReadonlySet<L[number]>, NS> &
+                TermMark<
+                    [
+                        'set',
+                        HeldT<
+                            LitsT<'number', L>,
+                            LitsT<'string', L>,
+                            'decimalText'
+                        >,
+                    ]
+                >
+        }
+    } = Object.assign(
     (...allowed: readonly string[]) => {
         const stored = allowed.map((one) => orThrow(storedOnly(one)))
         return numericAdapter<string>(
@@ -1293,20 +1408,27 @@ const asJsNumber = (held: DynamoNumber): Result<number> => {
  * loss is: the float has already rounded before this codec sees it. `number.set()` and
  * `decimal.set()` are two carriers over one wire set: each is the set of its adapter.
  */
-export const number: AttributeCodec<number, Attribute<'N'>> & {
-    <const T extends number>(
-        only: T,
-    ): ConstantCodec<T, Attribute<'N'>> & LiteralMark
-    <const T extends number>(
-        ...allowed: readonly T[]
-    ): AttributeCodec<T, Attribute<'N'>> & LiteralMark
-    readonly set: {
-        (): AttributeCodec<ReadonlySet<number>, NS>
+export const number: AttributeCodec<number, Attribute<'N'>> &
+    TermMark<FloatT<BaseT<'number'>>> & {
         <const T extends number>(
-            ...allowed: readonly T[]
-        ): AttributeCodec<ReadonlySet<T>, NS>
-    }
-} = Object.assign(
+            only: T,
+        ): ConstantCodec<T, Attribute<'N'>> &
+            LiteralMark &
+            TermMark<FloatT<LitT<'number', `${T}`>>>
+        <const L extends readonly number[]>(
+            ...allowed: L
+        ): AttributeCodec<L[number], Attribute<'N'>> &
+            LiteralMark &
+            TermMark<FloatT<LitsT<'number', FloatTexts<L>>>>
+        readonly set: {
+            (): AttributeCodec<ReadonlySet<number>, NS> &
+                TermMark<['set', FloatT<BaseT<'number'>>]>
+            <const L extends readonly number[]>(
+                ...allowed: L
+            ): AttributeCodec<ReadonlySet<L[number]>, NS> &
+                TermMark<['set', FloatT<LitsT<'number', FloatTexts<L>>>]>
+        }
+    } = Object.assign(
     (...allowed: readonly number[]) =>
         numericAdapter<number>(
             termOf(
@@ -1338,14 +1460,19 @@ export const number: AttributeCodec<number, Attribute<'N'>> & {
  * `literal(...)` took a string or a number and there was no third option. There is deliberately no
  * `boolean.set()`: DynamoDB has `SS`, `NS` and `BS`, and no set of booleans.
  */
-export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> & {
-    <const T extends boolean>(
-        only: T,
-    ): ConstantCodec<T, Attribute<'BOOL'>> & LiteralMark
-    <const T extends boolean>(
-        ...allowed: readonly T[]
-    ): AttributeCodec<T, Attribute<'BOOL'>> & LiteralMark
-}
+export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> &
+    TermMark<BaseT<'boolean'>> & {
+        <const T extends boolean>(
+            only: T,
+        ): ConstantCodec<T, Attribute<'BOOL'>> &
+            LiteralMark &
+            TermMark<LitT<'boolean', T>>
+        <const L extends readonly boolean[]>(
+            ...allowed: L
+        ): AttributeCodec<L[number], Attribute<'BOOL'>> &
+            LiteralMark &
+            TermMark<LitsT<'boolean', L>>
+    }
 
 const booleanCodec: AttributeCodec<boolean, Attribute<'BOOL'>> = codecOfTerm({
     kind: 'boolean',
@@ -1375,7 +1502,8 @@ export const boolean: BooleanCodec = Object.assign(
  * Not callable, and there is nothing for it to be: the model's `GroundKind.null` has carrier `Unit`,
  * so `literal .null` can say nothing this codec does not already say.
  */
-export const nullValue: AttributeCodec<null, Attribute<'NULL'>> = codecOfTerm({
+export const nullValue: AttributeCodec<null, Attribute<'NULL'>> &
+    TermMark<BaseT<'null'>> = codecOfTerm({
     kind: 'null',
 })
 
@@ -1386,18 +1514,28 @@ export const nullValue: AttributeCodec<null, Attribute<'NULL'>> = codecOfTerm({
  * octets are the same alternative, and a decoded value comes back as the member of `ℓ` rather than
  * as the array that was read off the wire.
  */
-export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> & {
-    (only: Uint8Array): ConstantCodec<Uint8Array, Attribute<'B'>> & LiteralMark
-    (
-        ...allowed: readonly Uint8Array[]
-    ): AttributeCodec<Uint8Array, Attribute<'B'>> & LiteralMark
-    readonly set: {
-        (): AttributeCodec<ReadonlySet<Uint8Array>, BS>
+export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> &
+    TermMark<BaseT<'binary'>> & {
+        // a `Uint8Array` has no literal type: the bytes are unknown text at the type level
+        (
+            only: Uint8Array,
+        ): ConstantCodec<Uint8Array, Attribute<'B'>> &
+            LiteralMark &
+            TermMark<LitT<'binary', string>>
         (
             ...allowed: readonly Uint8Array[]
-        ): AttributeCodec<ReadonlySet<Uint8Array>, BS>
+        ): AttributeCodec<Uint8Array, Attribute<'B'>> &
+            LiteralMark &
+            TermMark<['union', LitT<'binary', string>[]]>
+        readonly set: {
+            (): AttributeCodec<ReadonlySet<Uint8Array>, BS> &
+                TermMark<['set', BaseT<'binary'>]>
+            (
+                ...allowed: readonly Uint8Array[]
+            ): AttributeCodec<ReadonlySet<Uint8Array>, BS> &
+                TermMark<['set', ['union', LitT<'binary', string>[]]]>
+        }
     }
-}
 
 const binaryCodec: AttributeCodec<Uint8Array, Attribute<'B'>> = codecOfTerm({
     kind: 'binary',
@@ -1473,7 +1611,8 @@ const set = <const C extends AnyCodec>(
  */
 export const array = <const C extends AnyCodec>(
     element: C,
-): AttributeCodec<readonly Decoded<C>[], L<AttributeOf<C>>> => {
+): AttributeCodec<readonly Decoded<C>[], L<AttributeOf<C>>> &
+    TermMark<['list', [], ['some', TermOf<C>], []]> => {
     type T = Decoded<C>
     return codecOfTerm<readonly T[], L<AttributeOf<C>>>({
         kind: 'list',
@@ -1562,7 +1701,7 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
     // of one per position, and the diagnostic lands on the call either way. Mapping cost +10%
     // across this repo, measured
     ...elements: Cs & SpreadOnce<Cs> & NoNeverSlot<Cs>
-): AttributeCodec<ListOf<Cs>, L<ListWrites<Cs>>> => {
+): AttributeCodec<ListOf<Cs>, L<ListWrites<Cs>>> & TermMark<ListTermOf<Cs>> => {
     const all = elements as readonly unknown[]
 
     /**
@@ -1745,7 +1884,8 @@ export type SpreadOnce<Cs extends readonly unknown[]> = Split<Cs> extends {
  */
 export const spread = <const C extends AnyCodec>(
     element: C,
-): SpreadCodec<Decoded<C>, AttributeOf<C> & AttributeValue> =>
+): SpreadCodec<Decoded<C>, AttributeOf<C> & AttributeValue> &
+    TermMark<TermOf<C>> =>
     ({ spread: element as unknown as AnyCodec }) as unknown as SpreadCodec<
         Decoded<C>,
         AttributeOf<C> & AttributeValue
@@ -1813,8 +1953,11 @@ export type SpreadCodec<T, A extends AttributeValue = AttributeValue> = {
  * a union can widen a field's type, so the guarantee is not available, and its admissible set is
  * data this library owns, which gives the check an authority a caller's predicate cannot have.
  */
-export type Refined<T, A extends AttributeValue> = AttributeCodec<T, A> &
-    SetCapable<T, A>
+export type Refined<
+    T,
+    A extends AttributeValue,
+    Tm = FreeTerm,
+> = AttributeCodec<T, A> & SetCapable<T, A, Tm>
 
 /**
  * `.set()`, where the codec it sits on can be a set's element.
@@ -1846,14 +1989,23 @@ export type Refined<T, A extends AttributeValue> = AttributeCodec<T, A> &
  * unchanged, and `{}` means "anything but null", which would make the intersection accept a `.set`
  * this type is declining to give.
  */
-export type SetCapable<T, A extends AttributeValue> = [A] extends [
-    Attribute<'S'>,
-]
-    ? { readonly set: () => AttributeCodec<ReadonlySet<T>, SS> }
+export type SetCapable<T, A extends AttributeValue, Tm = FreeTerm> = [
+    A,
+] extends [Attribute<'S'>]
+    ? {
+          readonly set: () => AttributeCodec<ReadonlySet<T>, SS> &
+              TermMark<['set', Tm]>
+      }
     : [A] extends [Attribute<'N'>]
-      ? { readonly set: () => AttributeCodec<ReadonlySet<T>, NS> }
+      ? {
+            readonly set: () => AttributeCodec<ReadonlySet<T>, NS> &
+                TermMark<['set', Tm]>
+        }
       : [A] extends [Attribute<'B'>]
-        ? { readonly set: () => AttributeCodec<ReadonlySet<T>, BS> }
+        ? {
+              readonly set: () => AttributeCodec<ReadonlySet<T>, BS> &
+                  TermMark<['set', Tm]>
+          }
         : Record<never, never>
 
 /**
@@ -1899,21 +2051,31 @@ type RefineOptions<Narrow> = {
  * ({@link literalMarker}), because the term under the predicate pins the literal: the members of a
  * slice and the walk of `at` read through a refinement.
  */
-export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
-    inner: AttributeCodec<Wide, A> & LiteralMark,
+export function refine<
+    Wide,
+    Narrow extends Wide,
+    A extends AttributeValue,
+    Tm = FreeTerm,
+>(
+    inner: AttributeCodec<Wide, A> & LiteralMark & TermMark<Tm>,
     is: (value: Wide) => value is Narrow,
     options?: RefineOptions<Narrow>,
-): Refined<Narrow, A> & LiteralMark
-export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
-    inner: AttributeCodec<Wide, A>,
+): Refined<Narrow, A, ['refine', Tm]> & LiteralMark & TermMark<['refine', Tm]>
+export function refine<
+    Wide,
+    Narrow extends Wide,
+    A extends AttributeValue,
+    Tm = FreeTerm,
+>(
+    inner: AttributeCodec<Wide, A> & TermMark<Tm>,
     is: (value: Wide) => value is Narrow,
     options?: RefineOptions<Narrow>,
-): Refined<Narrow, A>
+): Refined<Narrow, A, ['refine', Tm]> & TermMark<['refine', Tm]>
 export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
     inner: AttributeCodec<Wide, A>,
     is: (value: Wide) => value is Narrow,
     options: RefineOptions<Narrow> = {},
-): Refined<Narrow, A> {
+): Refined<Narrow, A, unknown> {
     const what = options.describe ?? 'the expected form'
 
     /**
@@ -2174,7 +2336,14 @@ export const held = <
         /** How to shrink one, where the pair is partial. Derived from the inner codec otherwise. */
         readonly shrink?: (value: HeldOf<O>) => readonly HeldOf<O>[]
     },
-): AttributeCodec<HeldOf<O>, AttributeOf<C>> => {
+): AttributeCodec<HeldOf<O>, AttributeOf<C>> &
+    TermMark<
+        HeldT<
+            TermOf<C>,
+            O extends StandardSchemaV1 ? ['opaq'] : TermOf<O>,
+            ['caller']
+        >
+    > => {
     const side = heldSide(outer)
     /**
      * **A half that cannot convert returns a `CodecError`**, and the signature says so. A refusal
@@ -2395,12 +2564,14 @@ export function withLegacyRead<const C extends AnyCodec>(options: {
     readonly current: C
     readonly older: Reader<Decoded<C>>
     readonly whenMissing?: never
-}): AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
+}): AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue> &
+    TermMark<['legacy', TermOf<C>]>
 export function withLegacyRead<const C extends AnyCodec>(options: {
     readonly current: C
     readonly older?: Reader<Decoded<C>>
     readonly whenMissing: NoInfer<Decoded<C>>
-}): MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C>
+}): MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> &
+    TermMark<['fill', TermOf<C>]>
 export function withLegacyRead<const C extends AnyCodec>(
     options: WithLegacyReadOptions<C>,
 ):
@@ -2464,7 +2635,8 @@ export function lazy<const C extends AnyCodec>(
     // a thunk that returns `never` takes the form below, which reads its type from the context
     ...returnsNever: [C] extends [never] ? [never] : []
 ): AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue> &
-    LiteralMarkOf<C>
+    LiteralMarkOf<C> &
+    TermMark<TermOf<C>>
 export function lazy<T, A extends AttributeValue = AttributeValue>(
     get: () => Nestable<T>,
 ): AttributeCodec<T, A>
@@ -2526,6 +2698,182 @@ export function lazy<T, A extends AttributeValue = AttributeValue>(
     })
 }
 
+/*
+ * **A cycle is a name in one declaration.** `ref(name)` is the variable, and its term is the
+ * name. `scope(defs)` binds each name of `defs`. The term of an entry is `['scope', D, K]`: the
+ * record `D` of the terms of the definitions, and the name `K`. A variable resolves by one lookup
+ * in `D`, so the type substitutes nothing and copies nothing. The decoded type of an entry is a
+ * function of that term, so no caller states the decoded type of a cycle.
+ *
+ * At run time, a `ref` is a thunk of `lazy` over a slot that `scope` fills. Each former that runs
+ * before `scope` reads the thunk as the free variable of a name not yet declared, as it reads
+ * `lazy(() => B)` before `B` is declared. So the term graph of a scope is the graph of `lazy`.
+ */
+type Ref<N extends string> = AttributeCodec<unknown> & TermMark<['var', N]>
+type ScopeTerms<Defs> = { -readonly [K in keyof Defs]: TermOf<Defs[K]> }
+type ScopeTerm<Defs, K> = ['scope', ScopeTerms<Defs>, K]
+type ScopeOf<Defs> = {
+    readonly [K in keyof Defs]: EntryOf<Defs[K], ScopeTerm<Defs, K>>
+}
+/**
+ * An entry: the codec of its definition, read at the term `Tm` of the entry. An object keeps its
+ * item, and a union keeps its item and its slices, each typed from the term.
+ */
+type EntryOf<C, Tm> = C extends ObjectCodec<
+    infer Spec extends Record<string, ObjectSlot>,
+    infer Rest extends AnyCodec | undefined
+>
+    ? ObjectCodec<Spec, Rest, DecodeTerm<Tm>, Tm>
+    : C extends UnionCodec<infer _T, infer Options extends readonly unknown[]>
+      ? UnionCodec<DecodeTerm<Tm>, Options, Tm> & LiteralMarkOf<C>
+      : AttributeCodec<DecodeTerm<Tm>, AttributeOf<C> & AttributeValue> &
+            LiteralMarkOf<C> &
+            TermMark<Tm>
+/** The names that a term reads and that no scope inside the term binds. */
+type FreeNames<T> = T extends ['var', infer N]
+    ? Exclude<N, FreeTerm[1]>
+    : T extends ['scope', unknown, unknown]
+      ? never
+      : T extends readonly unknown[]
+        ? FreeNames<T[number]>
+        : T extends object
+          ? FreeNames<T[keyof T]>
+          : never
+/** A refusal on each definition that reads a name the scope does not declare. */
+type ScopeNamed<Defs> = {
+    readonly [K in keyof Defs]: [
+        Exclude<FreeNames<TermOf<Defs[K]>>, keyof Defs>,
+    ] extends [never]
+        ? unknown
+        : ErrorMessage<`[scope] a ref names '${Exclude<FreeNames<TermOf<Defs[K]>>, keyof Defs> & string}', which this scope does not declare`>
+}
+
+/** The slot of a `ref`: the definitions of the scope that binds the name, and waiting checks. */
+type RefSlot = {
+    readonly name: string
+    bound?: Readonly<Record<string, AnyCodec>>
+    readonly waiting: (() => void)[]
+}
+
+/** The slot of each `ref`, by the term of its thunk. `scope` fills the slot one time. */
+const refSlots = new WeakMap<Term, RefSlot>()
+
+/**
+ * The slots of the `ref`s that the terms reach and that no scope binds yet. A bound `ref` belongs
+ * to the closed scope that bound it, so the walk stops there.
+ */
+const unboundRefs = (roots: readonly Term[]): ReadonlySet<RefSlot> => {
+    const slots = new Set<RefSlot>()
+    const seen = new Set<Term>()
+    const walk = (t: Term): void => {
+        if (seen.has(t)) return
+        seen.add(t)
+        const slot = refSlots.get(t)
+        if (slot !== undefined) {
+            if (slot.bound === undefined) slots.add(slot)
+            return
+        }
+        switch (t.kind) {
+            case 'lazy': {
+                // a thunk whose former refuses reads as a free variable, as `recursionUse` reads it
+                let target: Term | undefined
+                try {
+                    target = force(t)
+                } catch (thrown) {
+                    if (thrown instanceof CodecError) return
+                    throw thrown
+                }
+                if (target !== undefined) walk(target)
+                return
+            }
+            case 'list':
+                for (const one of [...t.pre, ...t.suf]) walk(one)
+                if (t.spread !== undefined) walk(t.spread)
+                return
+            case 'object':
+                for (const field of Object.values(t.body.fields)) walk(field.t)
+                if (t.body.rest !== undefined) walk(t.body.rest)
+                return
+            case 'union':
+                return t.options.forEach(walk)
+            case 'set':
+                return walk(t.elem)
+            case 'held':
+                walk(t.inner)
+                return walk(t.outer)
+            case 'refine':
+            case 'legacy':
+                return walk(t.inner)
+            default:
+                return
+        }
+    }
+    for (const root of roots) walk(root)
+    return slots
+}
+
+/**
+ * A variable of a {@link scope}. The `ref` names an entry of the scope that holds it, and reads as
+ * the codec of that entry.
+ */
+export function ref<const N extends string>(name: N): Ref<N>
+export function ref(name: string): unknown {
+    const slot: RefSlot = { name, waiting: [] }
+    const made = lazy((): AnyCodec => {
+        const target = slot.bound?.[name]
+        // the free variable of a name that no scope binds yet, as a constant in the temporal dead
+        // zone is
+        if (target === undefined)
+            throw new ReferenceError(`ref('${name}') is bound by no scope yet`)
+        return target
+    })
+    refSlots.set(termOf(made), slot)
+    return made
+}
+
+/**
+ * **Codecs that name each other**, each one an entry. A {@link ref} in a definition names an entry,
+ * and the decoded type of each entry follows from the definitions, with no annotation. A single
+ * cycle is a scope of one entry.
+ *
+ * Each former ran before the names were bound, so the guard runs here: a recursion with no
+ * container on its path, or with an adapter on its path, is refused, as a former refuses the same
+ * recursion through `lazy`. A `ref` to a name that `defs` does not declare is refused. Then each
+ * check that waits on a bound name runs, as the check of a `union` with a `ref` option.
+ *
+ * @example
+ * ```ts
+ * const { Folder } = scope({
+ *     Folder: object({ name: string, children: array(ref('Node')) }),
+ *     Node: union([object({ file: string }), ref('Folder')]),
+ * })
+ * ```
+ */
+export function scope<const Defs extends Readonly<Record<string, AnyCodec>>>(
+    defs: Defs & ScopeNamed<Defs>,
+): ScopeOf<Defs>
+export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
+    const slots = unboundRefs(Object.values(defs).map(termOf))
+    for (const slot of slots)
+        if (!Object.hasOwn(defs, slot.name))
+            throw new CodecError(
+                `[scope] a ref names '${slot.name}', which this scope does not declare`,
+            )
+    for (const slot of slots) slot.bound = defs
+    for (const [name, def] of Object.entries(defs)) {
+        const use = recursionUse(termOf(def))
+        if (use >= 2)
+            throw new CodecError(
+                use === 3
+                    ? `[scope] '${name}' reaches a recursion with an adapter (\`held\` or \`withLegacyRead\`) on its path. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion`
+                    : `[scope] '${name}' reaches a recursion with no list or object on its path. The model's guard refuses a recursion that reads the input of its own binder. Put the recursion below a list or an object`,
+            )
+    }
+    for (const check of new Set([...slots].flatMap((slot) => slot.waiting)))
+        check()
+    return defs
+}
+
 // ── presence ────────────────────────────────────────────────────────
 
 /**
@@ -2543,7 +2891,8 @@ export function lazy<T, A extends AttributeValue = AttributeValue>(
  */
 export const optional = <const C extends AnyCodec>(
     inner: C,
-): OptionalCodec<Decoded<C>, AttributeOf<C>, C> => {
+): OptionalCodec<Decoded<C>, AttributeOf<C>, C> &
+    TermMark<['optional', TermOf<C>]> => {
     // the marked codec beside the definition, not a copy of the codec with a definition stamped on
     // it: a field has no pair of its own, and spreading one gave it the pair of the codec it marks.
     // `inner` itself, so the mark carries the codec the caller passed and not its erasure
@@ -2578,7 +2927,8 @@ export const optional = <const C extends AnyCodec>(
  */
 export const undefinable = <const C extends AnyCodec>(
     inner: C,
-): UndefinableCodec<Decoded<C>, AttributeOf<C>, C> =>
+): UndefinableCodec<Decoded<C>, AttributeOf<C>, C> &
+    TermMark<['optional', TermOf<C>]> =>
     ({
         codec: inner,
         def: { mark: 'undefinable', t: termOf(inner) },
@@ -2606,9 +2956,10 @@ export const undefinable = <const C extends AnyCodec>(
  * own, as in `lazy(() => nullable(Self))`. That thunk runs after `Self` resolves, so the term
  * answers the question.
  */
-export const nullable = <T, A extends AttributeValue>(
-    inner: AttributeCodec<T, A>,
-): AttributeCodec<T | null, A | Attribute<'NULL'>> => {
+export const nullable = <T, A extends AttributeValue, Tm = FreeTerm>(
+    inner: AttributeCodec<T, A> & TermMark<Tm>,
+): AttributeCodec<T | null, A | Attribute<'NULL'>> &
+    TermMark<['union', [Tm, BaseT<'null'>]]> => {
     const t = termOf(inner as unknown as AnyCodec)
     const owns = ownsNullOf(t)
     if (owns === undefined && t.kind === 'lazy' && force(t) === undefined) {
@@ -2647,6 +2998,16 @@ const opaquePolicies: {
     refuse: codecOfTerm<unknown, AttributeValue>(opaqueTerms.refuse),
 }
 
+function opaqueOf(): AttributeCodec<unknown> & TermMark<['opaq']>
+function opaqueOf(
+    numbers: 'lossy',
+): AttributeCodec<unknown> &
+    TermMark<HeldT<['opaq'], ['opaq'], ['caller', 'opaqueLossy']>>
+function opaqueOf(
+    numbers: 'refuse',
+): AttributeCodec<unknown> &
+    TermMark<HeldT<['opaq'], EveryButNumberT, ['caller', 'opaqueRefuse']>>
+function opaqueOf(numbers?: opaque.Numbers): AttributeCodec<unknown>
 function opaqueOf(numbers?: opaque.Numbers): AttributeCodec<unknown> {
     return numbers === undefined ? canonicalOpaque : opaquePolicies[numbers]
 }
@@ -2672,10 +3033,9 @@ function opaqueOf(numbers?: opaque.Numbers): AttributeCodec<unknown> {
  * Callable *and* a codec, which is what lets `opaque.encode` and {@link opaque.Encode} keep the same
  * name.
  */
-export const opaque: AttributeCodec<unknown> & typeof opaqueOf = Object.assign(
-    opaqueOf,
-    canonicalOpaque,
-)
+export const opaque: AttributeCodec<unknown> &
+    TermMark<['opaq']> &
+    typeof opaqueOf = Object.assign(opaqueOf, canonicalOpaque)
 
 /**
  * The shapes, named as the runtime names them.
@@ -3191,7 +3551,90 @@ export type PathTerminal<T> = {
 
 declare const pathValue: unique symbol
 
+/*
+ * **The selector of `at`, read from the term.** A node holds the frames of `Term.at` at its path.
+ * The node offers each name that a head declares, each name where a head is open, and each
+ * position where a head is a list. The decision of the node is `pathKind` of its frames, and the
+ * selector admits a node where the decision is one codec. The decoded type at the node is a
+ * function of its first frame. `T` and `F` follow the path as the decoded type and the frontier,
+ * so a key or an index that is no literal keeps the typing of {@link PathOf}, and so does a
+ * `narrow` over a codec whose type carries no term.
+ */
+declare const pathKindMarker: unique symbol
+type PathResolved = { readonly [pathKindMarker]?: 'resolved' }
+type TermPath<Fs, T, F> = PathTerminal<TermPathValue<Fs>> & {
+    readonly [pathKindMarker]?: KindOfFrames<Fs>
+} & TermPathBody<Fs, NonNullable<T>, F, OffersAt<Fs>>
+type TermPathValue<Fs> = KindOfFrames<Fs> extends 'resolved'
+    ? DecodeFrame<FirstFrame<Fs>>
+    : never
+type TermPathBody<Fs, T, F, O> = {
+    readonly [K in Extract<O, ['name', unknown]>[1] & string]: TermPath<
+        StepFrames<['name', K], Fs>,
+        ValueAt<T, K>,
+        ChildAt<F, K>
+    >
+} & ([Extract<O, ['open']>] extends [never]
+    ? unknown
+    : { readonly [name: string]: PathOf<ValueAt<T, string>> } & {
+          at<const K extends string>(
+              key: K,
+          ): string extends K
+              ? PathOf<ValueAt<T, string>>
+              : TermPath<
+                    StepFrames<['name', K], Fs>,
+                    ValueAt<T, K>,
+                    ChildAt<F, K>
+                >
+          /** An open name, selected by a method, so the step adds no `| undefined`. */
+          entry<const K extends string>(
+              key: K,
+          ): TermPath<StepFrames<['name', K], Fs>, ValueAt<T, K>, ChildAt<F, K>>
+      }) &
+    ([Extract<O, ['pos']>] extends [never]
+        ? unknown
+        : { readonly [index: number]: PathOf<ElementOf<T>> } & {
+              at<const I extends number>(
+                  index: I,
+              ): number extends I
+                  ? PathOf<ElementOf<T>>
+                  : TermPath<StepFrames<['pos', I], Fs>, ElementOf<T>, unknown>
+          }) &
+    TodayNarrowing<T, F, Fs>
+type ElementOf<T> = T extends readonly unknown[] ? T[number] : never
+/** `narrow` where {@link PathOf} offers it: on an object type that is no list. */
+type TodayNarrowing<T, F, Fs> = [T] extends [readonly unknown[]]
+    ? unknown
+    : [T] extends [object]
+      ? HoldsFree<Fs> extends true
+          ? PathNarrowing<T, F>
+          : TermNarrowing<Fs, T, F>
+      : unknown
+/**
+ * {@link PathNarrowing}, where the node holds frames: the narrowed node holds the options that the
+ * clause keeps ({@link NarrowFrames}), so its decision is the decision of the walk of `at`.
+ */
+type TermNarrowing<Fs, T, F> = IsUnion<T> extends true
+    ? {
+          narrow<const C extends Readonly<Record<string, AnyCodec>>>(
+              clause: C & ClauseOn<T, F, C> & ClauseOnFrames<Fs, C>,
+          ): TermPath<
+              NarrowFrames<Fs, ClauseTerms<C>>,
+              unknown extends F ? Narrowed<T, C> : Kept<F, C>['t'],
+              unknown extends F ? unknown : Kept<F, C>
+          >
+      }
+    : unknown
+type ClauseTerms<C> = { [K in keyof C]: TermOf<C[K]> }
+/** Nothing, or why the clause keeps no option of the frames `Fs`. */
+type ClauseOnFrames<Fs, C> = NarrowFrames<Fs, ClauseTerms<C>> extends []
+    ? ErrorMessage<'[narrow] the clause separates every member of this union'>
+    : unknown
+
 // ── items ───────────────────────────────────────────────────────────
+
+/** The decoded type `T` of an object codec, or the entity that its spec describes. */
+type ItemOf<T, Spec, Rest> = [T] extends [OfParts] ? DerivedItem<Spec, Rest> : T
 
 /**
  * The entity a spec describes.
@@ -3242,22 +3685,23 @@ export type ItemSpec<T> = T extends unknown
 export type ObjectCodec<
     Spec extends Record<string, ObjectSlot>,
     Rest extends AnyCodec | undefined = undefined,
+    // the decoded type and the term: an entry of a `scope` reads both from the term of the entry
+    T = OfParts,
+    Tm = OfParts,
 > = {
     // spelled out rather than intersected with `AttributeCodec`, for the reason recorded on
     // {@link ItemCodec}: as an intersection the same type costs more to instantiate and stops being
     // *comparable* to a hand-written shape. Measured at +14k instantiations across this repo
     readonly encode: (
-        value: DerivedItem<Spec, Rest>,
+        value: ItemOf<T, Spec, Rest>,
     ) => Result<M<EncodedBy<Spec, Rest>>>
     readonly decode: (
         attribute: AttributeValue,
-    ) => Result<DerivedItem<Spec, Rest>>
+    ) => Result<ItemOf<T, Spec, Rest>>
     readonly unsafeEncode: (
-        value: DerivedItem<Spec, Rest>,
+        value: ItemOf<T, Spec, Rest>,
     ) => M<EncodedBy<Spec, Rest>>
-    readonly unsafeDecode: (
-        attribute: AttributeValue,
-    ) => DerivedItem<Spec, Rest>
+    readonly unsafeDecode: (attribute: AttributeValue) => ItemOf<T, Spec, Rest>
     readonly def: Term
     /**
      * The same declaration, read as a whole item: the same two directions without the top-level map,
@@ -3269,9 +3713,13 @@ export type ObjectCodec<
      * rather than a second constructor. The marshaller draws the same line, under
      * `convertTopLevelContainer`.
      */
-    readonly item: ItemCodec<DerivedItem<Spec, Rest>, Spec, Rest>
+    readonly item: ItemCodec<ItemOf<T, Spec, Rest>, Spec, Rest, Tm>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesPin<Spec, Rest>
+    /** The model's term of this codec. Type-level only. */
+    readonly [termMarker]?: [Tm] extends [OfParts]
+        ? ObjectTermOf<Spec, Rest>
+        : Tm
 }
 
 /**
@@ -3398,7 +3846,12 @@ export type Dissection<
       >
     : DissectedCodec<DerivedVariants<SpecsOf<Options>>, Ks, SpecsOf<Options>>
 
-export type UnionCodec<T, Options extends readonly unknown[]> = {
+export type UnionCodec<
+    T,
+    Options extends readonly unknown[],
+    // the term: an entry of a `scope` reads it, and its slices, from the term of the entry
+    Tm = OfParts,
+> = {
     readonly encode: (value: T) => Result<WrittenBy<Options>>
     readonly decode: (attribute: AttributeValue) => Result<T>
     readonly unsafeEncode: (value: T) => WrittenBy<Options>
@@ -3425,25 +3878,41 @@ export type UnionCodec<T, Options extends readonly unknown[]> = {
     readonly extract: AllObjects<Options> extends true
         ? <const C extends ClauseOf<SpecsOf<Options>[number]>>(
               clause: C & ValidateClause<SpecsOf<Options>[number], C>,
-          ) => UnionCodec<
-              DerivedUnion<KeptOptions<Options, C>>,
-              KeptOptions<Options, C>
-          >
+          ) => UnionSlice<Tm, KeptOptions<Options, C>>
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
     /** …and the options it rejects, the complement of the same clause. */
     readonly exclude: AllObjects<Options> extends true
         ? <const C extends ClauseOf<SpecsOf<Options>[number]>>(
               clause: C & ValidateClause<SpecsOf<Options>[number], C>,
-          ) => UnionCodec<
-              DerivedUnion<KeptOptions<Options, C, false>>,
-              KeptOptions<Options, C, false>
-          >
+          ) => UnionSlice<Tm, KeptOptions<Options, C, false>>
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<SpecsOf<Options>>
+    /** The model's term of this codec. Type-level only. */
+    readonly [termMarker]?: [Tm] extends [OfParts]
+        ? ['union', TermsOf<Options>]
+        : Tm
 }
 
-export type ItemCodec<T, Spec = unknown, Rest = undefined> = {
+/**
+ * The options that a clause keeps. A slice of an entry of a `scope` holds the `ref`s of the entry,
+ * so the slice is one more entry of that scope, at a key that no `ref` can name.
+ */
+type UnionSlice<Tm, Kept extends readonly unknown[]> = [Tm] extends [
+    ['scope', infer D, unknown],
+]
+    ? UnionCodec<DecodeTerm<SliceTerm<D, Kept>>, Kept, SliceTerm<D, Kept>>
+    : UnionCodec<DerivedUnion<Kept>, Kept>
+declare const sliceKey: unique symbol
+type SliceTerm<D, Kept extends readonly unknown[]> = [
+    'scope',
+    {
+        [K in keyof D as K extends typeof sliceKey ? never : K]: D[K]
+    } & { [sliceKey]: ['union', TermsOf<Kept>] },
+    typeof sliceKey,
+]
+
+export type ItemCodec<T, Spec = unknown, Rest = undefined, Tm = OfParts> = {
     /** Every attribute, or why one could not be written. For `PutItem`. */
     readonly encode: (item: T) => Result<EncodedBy<Spec, Rest>>
     readonly unsafeEncode: (item: T) => EncodedBy<Spec, Rest>
@@ -3480,8 +3949,12 @@ export type ItemCodec<T, Spec = unknown, Rest = undefined> = {
      */
     readonly at: <X>(
         select: (
-            path: PathOf<T, ItemFrontier<T, Spec, Rest>>,
-        ) => PathTerminal<X>,
+            path: TermPath<
+                [[[Tm] extends [OfParts] ? ObjectTermOf<Spec, Rest> : Tm, []]],
+                T,
+                ItemFrontier<T, Spec, Rest>
+            >,
+        ) => PathTerminal<X> & PathResolved,
     ) => LocatedCodec<X>
     /**
      * A builder for document paths into this item.
@@ -3670,11 +4143,23 @@ const objectFromMap = <
         path: () => pathBuilder<T, ItemFrontier<T, Spec, Rest>>(),
         at: <X>(
             select: (
-                path: PathOf<T, ItemFrontier<T, Spec, Rest>>,
-            ) => PathTerminal<X>,
+                path: TermPath<
+                    [[ObjectTermOf<Spec, Rest>, []]],
+                    T,
+                    ItemFrontier<T, Spec, Rest>
+                >,
+            ) => PathTerminal<X> & PathResolved,
         ) => {
             const steps = stepsOf(
-                select(pathBuilder<T, ItemFrontier<T, Spec, Rest>>()),
+                select(
+                    rootPath<
+                        TermPath<
+                            [[ObjectTermOf<Spec, Rest>, []]],
+                            T,
+                            ItemFrontier<T, Spec, Rest>
+                        >
+                    >(),
+                ),
             )
             const segments = segmentsIn(steps)
             const path = asPath(segments)
@@ -3870,7 +4355,7 @@ export function object<
 export function object(
     first?: Record<string, ObjectSlot> | AnyObjectEntry,
     ...tail: AnyObjectEntry[]
-): ObjectCodec<Record<string, ObjectSlot>, AnyCodec | undefined> {
+): unknown {
     const isEntry = Array.isArray(first)
     const spec: Record<string, ObjectSlot> =
         !isEntry && first !== undefined
@@ -4170,8 +4655,14 @@ export const product = <const Fs extends readonly unknown[]>(
  * agree about what a path means — `at` resolves a codec by walking the same segments this records —
  * and the surest way for two implementations to agree is for there to be one.
  */
-export const pathBuilder = <T, F = unknown>(): PathOf<T, F> =>
-    recordPath([]) as PathOf<T, F>
+export const pathBuilder = <T, F = unknown>(): PathOf<T, F> => rootPath()
+
+/**
+ * The recorder at the root, read as the path type `P` of its caller: {@link PathOf}, or the
+ * selector of `at` that reads the term. One cast, at the one place where the recorder, which takes
+ * any segment, meets a type that offers only the segments of a codec.
+ */
+const rootPath = <P>(): P => recordPath([]) as P
 
 /** A segment addressing a list position, as opposed to an attribute named in digits. */
 const asIndex = /^\d+$/
@@ -4224,6 +4715,10 @@ const recordPath = (steps: readonly Step[]): unknown => {
             if (prop === 'toString') return () => asPath(segmentsIn(steps))
             if (prop === 'at') {
                 return (index: number) => recordPath([...steps, index])
+            }
+            // an open name, selected by a method, as `at` selects a position
+            if (prop === 'entry') {
+                return (key: string) => recordPath([...steps, key])
             }
             // a clause narrows the frontier of `at`; the document path is unchanged
             if (prop === 'narrow') {
@@ -5465,7 +5960,7 @@ export const mdunion = <
 >(
     ks: Ks,
     options: Options & MembersTagged<SpecsOf<Options>, Ks>,
-): Dissection<Ks, Options> =>
+): Dissection<Ks, Options> & TermMark<['union', TermsOf<Options>]> =>
     // one cast, at the one place where a runtime table meets a type computed from the specs: the
     // builder is written once over `readonly string[]`, and {@link Dissection} is what that builder
     // produces read at the arity the caller wrote
@@ -5506,7 +6001,8 @@ export const discriminatedUnion = <
     DerivedVariants<SpecsOf<Options>>,
     D,
     ByTag<SpecsOf<Options>, D>
-> =>
+> &
+    TermMark<['union', TermsOf<Options>]> =>
     // **the type arguments are given, not inferred, and that is what makes the alias cast-free.**
     // Inferring them from `options` would take `Options` to be the *intersection* the parameter
     // declares — `Options & MembersTagged<…>` — and the return type computed from that intersection
@@ -5533,7 +6029,10 @@ export const discriminatedUnion = <
  */
 export const never: AttributeCodec<never, never> & {
     readonly def: { readonly kind: 'never' }
-} = codecOfTerm({ kind: 'never' }) as AttributeCodec<never, never> & {
+} & TermMark<['never']> = codecOfTerm({ kind: 'never' }) as AttributeCodec<
+    never,
+    never
+> & {
     readonly def: { readonly kind: 'never' }
 }
 
@@ -5563,53 +6062,62 @@ export const union = <const Options extends readonly AnyCodec[]>(
     options: Options,
 ): UnionCodec<DerivedUnion<Options>, Options> &
     LiteralMarkOf<Options[number]> => {
-    // **A recursive spine is refused before any occupancy runs.** An option's occupancies force
-    // each thunk on its spine, and a recursive one would not end, or would throw on the codec
-    // being declared
-    for (const [at, declared] of (options as readonly AnyCodec[]).entries()) {
-        const use = recursionUse(termOf(declared))
-        // each former refuses an adapter on a recursive path where the adapter is declared, so an
-        // adapter reaches the union only as the refusal of a thunk that the union forces, and the
-        // level `3` names that cause
-        if (use >= 2) {
-            throw new CodecError(
-                use === 3
-                    ? `option ${at + 1} of this union reaches a thunk whose codec holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive thunk and the codec that the thunk returns, or above a thunk that names a codec not yet declared, and the declaration of that codec refused. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion, and this option is not shown compatible with the others. Put no adapter on the path of a recursion`
-                    : `option ${at + 1} of this union reaches a thunk that is recursive, or that names a codec not yet declared, where the union must read it. The model's guard refuses a recursion that reads the input of its own binder, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
-            )
+    // **A union with a `ref` that no scope binds yet waits for that scope.** The checks and the
+    // resolution read each option through its thunks, and a `ref` resolves only where its scope
+    // binds it. So the scope runs them with every name bound, as `lazy` runs them where each name
+    // that the union reads is declared first
+    const settle = () => {
+        // **A recursive spine is refused before any occupancy runs.** An option's occupancies force
+        // each thunk on its spine, and a recursive one would not end, or would throw on the codec
+        // being declared
+        for (const [at, declared] of (
+            options as readonly AnyCodec[]
+        ).entries()) {
+            const use = recursionUse(termOf(declared))
+            // each former refuses an adapter on a recursive path where the adapter is declared, so
+            // an adapter reaches the union only as the refusal of a thunk that the union forces,
+            // and the level `3` names that cause
+            if (use >= 2) {
+                throw new CodecError(
+                    use === 3
+                        ? `option ${at + 1} of this union reaches a thunk whose codec holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive thunk and the codec that the thunk returns, or above a thunk that names a codec not yet declared, and the declaration of that codec refused. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion, and this option is not shown compatible with the others. Put no adapter on the path of a recursion`
+                        : `option ${at + 1} of this union reaches a thunk that is recursive, or that names a codec not yet declared, where the union must read it. The model's guard refuses a recursion that reads the input of its own binder, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
+                )
+            }
         }
-    }
-    const all: readonly Option[] = (options as readonly AnyCodec[]).map(
-        optionOf,
-    )
+        const all: readonly Option[] = (options as readonly AnyCodec[]).map(
+            optionOf,
+        )
 
-    // **Every option has a term.** A `set` over a restricted element is spelled as a restriction
-    // of the set, and a `set` whose element reduces to no base is refused by `.set()` at
-    // construction — so the conversion is total here
-    const pairs = all.map((option) => ({
-        option,
-        term: option.codec.def,
-    }))
+        // **Every option has a term.** A `set` over a restricted element is spelled as a
+        // restriction of the set, and a `set` whose element reduces to no base is refused by
+        // `.set()` at construction — so the conversion is total here
+        const pairs = all.map((option) => ({
+            option,
+            term: option.codec.def,
+        }))
 
-    for (const [at, { option: first, term: x }] of pairs.entries()) {
-        for (const { option: second, term: y } of pairs.slice(at + 1)) {
-            if (agrees(x, y)) continue
-            throw new CodecError(
-                `${first.describe} and ${second.describe} are not shown compatible: an adapter or a thunk is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
-            )
+        for (const [at, { option: first, term: x }] of pairs.entries()) {
+            for (const { option: second, term: y } of pairs.slice(at + 1)) {
+                if (agrees(x, y)) continue
+                throw new CodecError(
+                    `${first.describe} and ${second.describe} are not shown compatible: an adapter or a thunk is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
+                )
+            }
         }
+        return { all, ...altSem(all) }
     }
+    let settled: ReturnType<typeof settle> | undefined
+    const resolution = (): ReturnType<typeof settle> => {
+        settled ??= settle()
+        return settled
+    }
+    const optionTerms = options.map(termOf)
+    const waitsOn = unboundRefs(optionTerms)
+    if (waitsOn.size === 0) resolution()
+    for (const slot of waitsOn) slot.waiting.push(resolution)
 
     type T = DerivedUnion<Options>
-
-    const {
-        pair: { encode: write, decode: read },
-        only,
-        onlyAdmitting,
-        naming,
-    } = altSem(all)
-
-    const optionTerms = all.map((option) => termOf(option.codec))
 
     /**
      * The item reading's own matcher: the value is always a record, so the shape filter has nothing
@@ -5620,6 +6128,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         const deep = membersTooDeeply(item, 0)
         if (deep) return deep
         const names = namesOf(item)
+        const { only, naming } = resolution()
         return only(
             () => true,
             naming('this item', names),
@@ -5632,6 +6141,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
 
     const writeItem = (item: T): Result<AttributeMap> => {
         const names = namesOf(item as Record<string, unknown>)
+        const { onlyAdmitting, naming } = resolution()
         return onlyAdmitting(
             () => true,
             naming('this entity', names),
@@ -5659,7 +6169,9 @@ export const union = <const Options extends readonly AnyCodec[]>(
         decode: readItem,
         unsafeEncode: (item) => orThrow(self.encode(item)),
         unsafeDecode: (item) => orThrow(self.decode(item)),
-        [optionItems]: all.map((option) => option.item),
+        get [optionItems]() {
+            return resolution().all.map((option) => option.item)
+        },
         spec: (options as readonly AnyCodec[]).map(
             (option) =>
                 (option as unknown as Partial<AnyObjectCodec>).item?.spec,
@@ -5674,10 +6186,14 @@ export const union = <const Options extends readonly AnyCodec[]>(
     // call can be narrowed to from inside
     // the resolution is erased — a sum's rule is about options, not about the type they carry —
     // so the two halves get their types back here, once, the way `codecOfTerm` does for a term
-    const encode = ((value: T) => write(value as never, 0)) as (
+    const encode = ((value: T) =>
+        resolution().pair.encode(value as never, 0)) as (
         value: T,
     ) => Result<WrittenBy<Options>>
-    const decode = read as (attribute: AttributeValue) => Result<T>
+    const decode = ((attribute: AttributeValue) =>
+        resolution().pair.decode(attribute)) as (
+        attribute: AttributeValue,
+    ) => Result<T>
     const codec: UnionCodec<DerivedUnion<Options>, Options> = {
         encode,
         decode,

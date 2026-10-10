@@ -181,7 +181,9 @@ describe('a path that crosses a whole-value adapter', () => {
                 { describe: 'a balance that is not negative' },
             ),
         }).item
+        // @ts-expect-error a path cannot go into `refine`, at the type as at run time
         expect(() => Account.at((p) => p.a.x)).toThrow(CodecError)
+        // @ts-expect-error a path cannot go into `refine`, at the type as at run time
         expect(() => Account.at((p) => p.a.x)).toThrow(
             /a path cannot go into `refine` at 'x'/,
         )
@@ -196,6 +198,7 @@ describe('a path that crosses a whole-value adapter', () => {
                 older: { decode: () => ({ x: '0' }) },
             }),
         }).item
+        // @ts-expect-error a path cannot go into `withLegacyRead`, at the type as at run time
         expect(() => Migrated.at((p) => p.a.x)).toThrow(
             /a path cannot go into `withLegacyRead` at 'x'/,
         )
@@ -233,6 +236,7 @@ describe('an option that the store keeps apart from the segment', () => {
             }),
         ])
         const Drawing = object({ shape: Shape }).item
+        // @ts-expect-error a path cannot go into `refine`, at the type as at run time
         expect(() => Drawing.at((p) => p.shape.x)).toThrow(
             /a path cannot go into `refine` at 'x'/,
         )
@@ -263,6 +267,7 @@ describe('a path to a codec that admits no value', () => {
 
     it('a path to a declared `never` is vacant, because the model reads it as a frame of `never`', () => {
         const item = object({ a: string, b: optional(never) }).item
+        // @ts-expect-error a path to a declared `never` is vacant, at the type as at run time
         expect(() => item.at((p) => p.b)).toThrow(vacant)
     })
 
@@ -286,6 +291,7 @@ describe('a path to a codec that admits no value', () => {
             [empty, full],
             [full, empty],
         ] as const) {
+            // @ts-expect-error a variant does not declare `x`, so the path refuses at the type as on use
             const at = object({ r: union(options) }).item.at((p) => p.r.x)
             expect(at.decode({ S: 'v' })).toMatchObject({
                 message: expect.stringMatching(

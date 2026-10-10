@@ -29,7 +29,9 @@ import {
     object,
     opaque,
     optional,
+    ref,
     refine,
+    scope,
     spread,
     string,
     union,
@@ -285,9 +287,7 @@ describe('the nesting bound in a recursive entity', () => {
  */
 describe('the nesting bound at a path', () => {
     type Node = { next?: Node }
-    const Node: AttributeCodec<Node, Attribute<'M'>> = lazy(() =>
-        object({ next: optional(Node) }),
-    )
+    const { Node } = scope({ Node: object({ next: optional(ref('Node')) }) })
 
     const anObject = object({ a: object({ b: opaque }) }).item
     const aList = object({ xs: array(array(opaque)) }).item

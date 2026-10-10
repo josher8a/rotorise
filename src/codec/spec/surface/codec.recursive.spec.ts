@@ -17,6 +17,8 @@ import {
     nullable,
     object,
     optional,
+    ref,
+    scope,
     string,
     union,
 } from '../../codec'
@@ -236,10 +238,12 @@ describe('a union that names itself', () => {
      * keeps the path, because the path needs no codec.
      */
     it('returns the refusal of a thunk that the walk of at forces, and does not throw', () => {
-        type Node = { v: string; next: Node | null }
-        const List: AttributeCodec<Node> = lazy(() =>
-            object({ v: string, next: nullable(List) }),
-        )
+        const { List } = scope({
+            List: object({
+                v: string,
+                next: lazy(() => nullable(ref('List'))),
+            }),
+        })
         const Doc = object({ head: List }).item
         const located = Doc.at((p) => p.head.next.v)
         expect(located.path()).toBe('head.next.v')

@@ -33,11 +33,13 @@ const Entity = object({ op: OpCodec }).item
 
 describe('where the variants disagree', () => {
     it('is reported rather than guessed', () => {
+        // @ts-expect-error the variants declare `amount` differently, so the path refuses at the type as on use
         const ambiguous = Entity.at((p) => p.op.amount)
         expect(() => ambiguous.unsafeEncode('1.5')).toThrow(CodecError)
     })
 
     it('is a refusal that the safe halves return, not a throw', () => {
+        // @ts-expect-error the variants declare `amount` differently, so the path refuses at the type as on use
         const ambiguous = Entity.at((p) => p.op.amount)
         const written = ambiguous.encode('1.5')
         const read = ambiguous.decode({ S: '1.5' })
@@ -52,6 +54,7 @@ describe('where the variants disagree', () => {
     })
 
     it('says where to go instead', () => {
+        // @ts-expect-error the variants declare `amount` differently, so the path refuses at the type as on use
         expect(() => Entity.at((p) => p.op.amount).unsafeEncode('1.5')).toThrow(
             /Call `narrow\(\{\.\.\.\}\)` to keep the variants that agree, for example `narrow\(\{ type: string\('A'\) \}\)`/,
         )
@@ -71,6 +74,7 @@ describe('where the variants disagree', () => {
      * now reports. `member` still answers nothing, which is the half `at` cares about.
      */
     it('describes nothing readable, because there is no one codec to describe', () => {
+        // @ts-expect-error the variants declare `amount` differently, so the path refuses at the type as on use
         const ambiguous = Entity.at((p) => p.op.amount)
         expect(valueKinds(ambiguous.def)).toEqual([])
         expect(ambiguous.def.kind).toBe('never')
@@ -253,6 +257,7 @@ describe('the type and the walk of `at` agree on the stored side', () => {
                 object({ k: string('B'), b: string }),
             ]),
         }).item
+        // @ts-expect-error a kept member does not declare `a`, so the path refuses at the type as on use
         const a = AdapterOrB.at((p) => p.u.narrow({ k: string('B') }).a)
         expect(() => a.unsafeEncode('x')).toThrow(
             /declared by some variants only/,
@@ -386,6 +391,7 @@ describe('a path keeps every item that the codec reads readable', () => {
     const isA = { tag: string('A') }
 
     it('refuses on use a name that a closed option lacks, and names `narrow`', () => {
+        // @ts-expect-error a closed option lacks `only`, so the path refuses at the type as on use
         const only = M.at((p) => p.m.only)
         expect(only.path()).toBe('m.only')
         const written = only.encode(7)
@@ -399,6 +405,7 @@ describe('a path keeps every item that the codec reads readable', () => {
         const itemA = M.unsafeEncode({ m: { tag: 'A', only: 1 } })
         const itemB = M.unsafeEncode({ m: { tag: 'B', shared: 's' } })
         const cases = [
+            // @ts-expect-error a closed option lacks `only`, so the path refuses at the type as on use
             [M.at((p) => p.m.only), [itemA, itemB]],
             [M.at((p) => p.m.narrow(isA).only), [itemA]],
         ] as const
@@ -422,7 +429,6 @@ describe('a path keeps every item that the codec reads readable', () => {
 
     it('drops an option whose stored member the segment cannot enter', () => {
         const U = object({ u: union([string, object({ x: number })]) }).item
-        // @ts-expect-error the path type offers no key on a union with a primitive member
         const x = U.at((p) => p.u.x)
         expect(x.unsafeEncode(7)).toEqual({ N: '7' })
     })

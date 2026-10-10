@@ -210,41 +210,6 @@ const isBinder = (t: Term): t is Lazy => {
     return hit
 }
 
-const containsBinder = (t: Term): boolean => [...reachable(t)].some(isBinder)
-
-/** The terms that a term reaches without a thunk: the references that a declaration reads at once. */
-const directly = (root: Term): Term[] => {
-    const seen = new Set<Term>()
-    const walk = (t: Term): void => {
-        if (seen.has(t)) return
-        seen.add(t)
-        switch (t.kind) {
-            case 'list':
-                for (const one of [...t.pre, ...t.suf]) walk(one)
-                if (t.spread !== undefined) walk(t.spread)
-                return
-            case 'object':
-                for (const field of Object.values(t.body.fields)) walk(field.t)
-                if (t.body.rest !== undefined) walk(t.body.rest)
-                return
-            case 'union':
-                return t.options.forEach(walk)
-            case 'set':
-                return walk(t.elem)
-            case 'held':
-                walk(t.inner)
-                return walk(t.outer)
-            case 'refine':
-            case 'legacy':
-                return walk(t.inner)
-            default:
-                return
-        }
-    }
-    walk(root)
-    return [...seen]
-}
-
 /** A term that prints as a name of the library, and is declared by no constant. */
 const leafKinds: ReadonlySet<Term['kind']> = new Set([
     'string',
@@ -276,32 +241,142 @@ type Declaration = {
 type Shared = {
     readonly names: Map<Term, string>
     readonly state: Map<Term, 'progress' | 'done'>
-    readonly binders: Map<Term, string>
     readonly adapters: Map<unknown, string>
     readonly predicates: Map<unknown, string>
+    readonly sccs: ReadonlyMap<Term, Scc>
 }
 
-const shared = (): Shared => ({
+/**
+ * **One strongly connected component of the pool**, printed as one `scope`. A term of the
+ * component is an entry where a thunk names the term, a term outside the component names the term,
+ * a root names the term, or the term has more than one parent. Each other term has one parent in
+ * the component, and prints in place inside that parent. So the print copies no term.
+ */
+type Scc = {
+    readonly members: ReadonlySet<Term>
+    readonly keys: ReadonlyMap<Term, string>
+    name?: string
+    state?: 'progress' | 'done'
+}
+
+/** The terms that a term reads one step down, through a thunk that resolves. */
+const childrenOf = (t: Term): readonly Term[] => {
+    switch (t.kind) {
+        case 'lazy': {
+            const target = force(t)
+            return target === undefined ? [] : [target]
+        }
+        case 'list':
+            return [
+                ...t.pre,
+                ...t.suf,
+                ...(t.spread === undefined ? [] : [t.spread]),
+            ]
+        case 'object':
+            return [
+                ...Object.values(t.body.fields).map((field) => field.t),
+                ...(t.body.rest === undefined ? [] : [t.body.rest]),
+            ]
+        case 'union':
+            return t.options
+        case 'set':
+            return [t.elem]
+        case 'held':
+            return [t.inner, t.outer]
+        case 'refine':
+        case 'legacy':
+            return [t.inner]
+        default:
+            return []
+    }
+}
+
+/**
+ * **The cycles of the pool**, as the strongly connected components of the term graph
+ * (Tarjan). `roots` holds each term that a root constant names.
+ */
+const sccsOf = (roots: readonly Term[]): ReadonlyMap<Term, Scc> => {
+    const index = new Map<Term, number>()
+    const low = new Map<Term, number>()
+    const stack: Term[] = []
+    const on = new Set<Term>()
+    const comps: Term[][] = []
+    const parents = new Map<Term, Term[]>()
+    const visit = (t: Term): void => {
+        index.set(t, index.size)
+        low.set(t, index.get(t) ?? 0)
+        stack.push(t)
+        on.add(t)
+        for (const c of childrenOf(t)) {
+            if (leafKinds.has(c.kind)) continue
+            parents.set(c, [...(parents.get(c) ?? []), t])
+            if (!index.has(c)) {
+                visit(c)
+                low.set(t, Math.min(low.get(t) ?? 0, low.get(c) ?? 0))
+            } else if (on.has(c))
+                low.set(t, Math.min(low.get(t) ?? 0, index.get(c) ?? 0))
+        }
+        if (low.get(t) === index.get(t)) {
+            const comp: Term[] = []
+            for (let u = stack.pop(); u !== undefined; u = stack.pop()) {
+                on.delete(u)
+                comp.push(u)
+                if (u === t) break
+            }
+            comps.push(comp)
+        }
+    }
+    for (const r of roots) if (!leafKinds.has(r.kind) && !index.has(r)) visit(r)
+    const external = new Set(roots)
+    const out = new Map<Term, Scc>()
+    for (const comp of comps) {
+        const members = new Set(comp)
+        const [only] = comp
+        if (
+            comp.length === 1 &&
+            only !== undefined &&
+            !childrenOf(only).includes(only)
+        )
+            continue
+        const keys = new Map<Term, string>()
+        for (const m of comp) {
+            if (m.kind === 'lazy') continue
+            const ps = parents.get(m) ?? []
+            if (
+                external.has(m) ||
+                ps.length !== 1 ||
+                ps.some((q) => q.kind === 'lazy' || !members.has(q))
+            )
+                keys.set(m, `k${keys.size}`)
+        }
+        const scc: Scc = { members, keys }
+        for (const m of comp) out.set(m, scc)
+    }
+    return out
+}
+
+const shared = (roots: readonly Term[]): Shared => ({
     names: new Map(),
     state: new Map(),
-    binders: new Map(),
     adapters: new Map(),
     predicates: new Map(),
+    sccs: sccsOf(roots),
 })
 
 /**
- * **The declarations of one root.** Each term object declares one constant, so a term that two
- * places share stays one object in the print. Every cycle passes a thunk, so the direct references
- * form no cycle. A thunk names its target and leaves the target pending, so the thunk is declared
- * before each term that refers to the thunk directly.
+ * **The declarations of one root.** Each term object that the print can share declares one
+ * constant, so a term that two places share stays one object in the print.
+ *
+ * **A cycle prints as one `scope`**: one entry for each term that the component names, and
+ * `ref('key')` at each thunk of the component. A term outside the component names an entry as a
+ * member of the constant of the scope.
  */
 const printerOf = (
-    { names, state, binders, adapters, predicates }: Shared,
+    { names, state, adapters, predicates, sccs }: Shared,
     prefix: string,
     at: string,
 ) => {
     const declarations: Declaration[] = []
-    const pending: Term[] = []
     let fresh = 0
 
     const full = (local: string): string => `${prefix}_${local}`
@@ -319,41 +394,87 @@ const printerOf = (
         }
         return n
     }
+    /** The constant of a term, declared once, as the print of the term as a root. */
     const ref = (t: Term): string => {
-        if (leafKinds.has(t.kind)) return print(t, ref)
+        if (leafKinds.has(t.kind)) return print(t, inline)
+        const scc = sccs.get(t)
+        if (scc !== undefined && t.kind !== 'lazy') return entryOf(scc, t)
         const n = nameOf(t)
-        if (state.has(t)) return n
+        const now = state.get(t)
+        if (now === 'done') return n
+        if (now === 'progress')
+            return refuse(at, 'a constant that reads itself')
         state.set(t, 'progress')
-        const body = print(t, ref)
+        const body =
+            scc === undefined
+                ? print(t, ref)
+                : `lazy(() => ${entryOf(scc, chase(t))})`
         declare('constant', lean(t), `export const ${n} = ${body}`)
         state.set(t, 'done')
-        // a former forces a thunk at its declaration, so the target follows the thunk at once
-        if (t.kind === 'lazy') {
-            const target = force(t)
-            if (target === undefined) return n
-            if (directly(target).some((u) => state.get(u) === 'progress'))
-                pending.push(target)
-            else ref(target)
-        }
         return n
     }
 
-    const drain = (): void => {
-        for (let t = pending.pop(); t !== undefined; t = pending.pop())
-            if (!state.has(t)) ref(t)
+    /** The term that a chain of thunks returns. */
+    const chase = (t: Term): Term => {
+        let u: Term | undefined = t
+        for (let i = 0; u?.kind === 'lazy' && i < 64; i++) u = force(u)
+        return u === undefined || u.kind === 'lazy'
+            ? refuse(at, 'a chain of thunks that returns no term')
+            : u
     }
+
+    /** An entry of a scope, as a member of the constant of the scope. */
+    const entryOf = (scc: Scc, t: Term): string => {
+        const key = scc.keys.get(t)
+        if (key === undefined)
+            return refuse(at, 'a term of a cycle that no entry names')
+        return `${scopeOf(scc)}.${key}`
+    }
+
+    /** The constant of a scope, declared once, after each constant that its entries read. */
+    const scopeOf = (scc: Scc): string => {
+        if (scc.state === 'done' && scc.name !== undefined) return scc.name
+        if (scc.state === 'progress')
+            return refuse(at, 'a scope that reads itself')
+        scc.state = 'progress'
+        const entries = [...scc.keys].map(
+            ([t, key]) => `${key}: ${member(scc, t)}`,
+        )
+        const name = full(`sc${fresh++}`)
+        declare(
+            'scope',
+            [...scc.keys.keys()].map(lean).join(' | '),
+            `export const ${name} = scope({ ${entries.join(', ')} })`,
+        )
+        scc.name = name
+        scc.state = 'done'
+        return name
+    }
+
+    /** A term of a scope: a thunk of the scope is `ref`, and a term with one parent is in place. */
+    const member = (scc: Scc, t: Term): string =>
+        print(t, (c) => {
+            if (leafKinds.has(c.kind)) return print(c, inline)
+            if (sccs.get(c) !== scc) return ref(c)
+            const target = chase(c)
+            const key = scc.keys.get(target)
+            if (key !== undefined && (c.kind === 'lazy' || target === c))
+                return `ref('${key}')`
+            if (c.kind === 'lazy')
+                return refuse(
+                    at,
+                    'a thunk of a cycle whose target no entry names',
+                )
+            return member(scc, c)
+        })
 
     /** The decoded type of a term, as a type expression. */
     const typeText = (t: Term): string => {
-        if (!containsBinder(t)) return `Decoded<typeof ${ref(t)}>`
+        const scc = sccs.get(t)
+        if (scc === undefined) return `Decoded<typeof ${ref(t)}>`
+        if (t.kind === 'lazy') return typeText(chase(t))
+        if (scc.keys.has(t)) return `Decoded<typeof ${entryOf(scc, t)}>`
         switch (t.kind) {
-            case 'lazy': {
-                if (isBinder(t)) return binder(t)
-                const target = force(t)
-                return target === undefined
-                    ? refuse(at, 'a thunk that throws, in a type')
-                    : typeText(target)
-            }
             case 'object': {
                 const fields = Object.entries(t.body.fields).map(([k, f]) => {
                     const x = typeText(f.t)
@@ -394,23 +515,6 @@ const printerOf = (
             default:
                 return refuse(at, `the type of a ${t.kind} over a binder`)
         }
-    }
-
-    /** A thunk that closes a cycle: its decoded type, declared once, before its body is read. */
-    const binder = (t: Lazy): string => {
-        const seen = binders.get(t)
-        if (seen !== undefined) return seen
-        const local = `R${fresh++}`
-        binders.set(t, full(local))
-        const target = force(t)
-        if (target === undefined)
-            return refuse(at, 'a binder whose thunk throws')
-        declare(
-            'type',
-            lean(t),
-            `export type ${full(local)} = ${typeText(target)}`,
-        )
-        return full(local)
     }
 
     const adapterOf = (t: Extract<Term, { readonly kind: 'held' }>) => {
@@ -534,17 +638,9 @@ const printerOf = (
                 const target = force(t)
                 if (target === undefined)
                     return "lazy((): never => { throw new ReferenceError('undeclared') })"
-                if (sub !== ref) {
-                    if (isBinder(t)) return refuse(at, 'a binder in a clause')
-                    return `lazy(() => ${sub(target)})`
-                }
-                const name = leafKinds.has(target.kind)
-                    ? print(target, sub)
-                    : nameOf(target)
-                if (!leafKinds.has(target.kind)) pending.push(target)
-                if (isBinder(t))
-                    return `lazy((): AttributeCodec<${binder(t)}> => ${name})`
-                return `lazy(() => ${name})`
+                if (sub === inline && isBinder(t))
+                    return refuse(at, 'a binder in a clause')
+                return `lazy(() => ${sub(target)})`
             }
             case 'object': {
                 const fields = Object.entries(t.body.fields).map(([k, f]) => {
@@ -579,7 +675,6 @@ const printerOf = (
         /** A constant of the root at a fixed name, of one kind. */
         constant: (local: string, kind: string, t: Term): void => {
             declare(kind, lean(t), `export const ${full(local)} = ${ref(t)}`)
-            drain()
         },
         /** A line of one kind, whose content is the term that the line reads. */
         line: (kind: string, t: Term, line: string): void =>
@@ -762,13 +857,61 @@ const pathRoot = (
               : `.narrow({ ${Object.entries(s.narrow)
                     .map(([k, c]) => `${keyText(k)}: ${p.clause(c)}`)
                     .join(', ')} })`
+    /*
+     * A name that no head declares, where a head is open, is spelled `.entry('k')`. The
+     * heads are the terms at the path, through thunks and the options of a union.
+     */
+    const headsOf = (t: Term): readonly Term[] => {
+        if (t.kind === 'lazy') {
+            const target = force(t)
+            return target === undefined ? [] : headsOf(target)
+        }
+        if (t.kind === 'union') return t.options.flatMap(headsOf)
+        return [t]
+    }
+    const childOf = (t: Term, s: string | number): readonly Term[] => {
+        if (t.kind === 'opaq') return [t]
+        if (t.kind === 'object' && typeof s === 'string') {
+            const f = t.body.fields[s]
+            if (f !== undefined) return [f.t]
+            return t.body.rest === undefined ? [] : [t.body.rest]
+        }
+        if (t.kind === 'list' && typeof s === 'number') {
+            const at = s < t.pre.length ? t.pre[s] : t.spread
+            return at === undefined ? [] : [at]
+        }
+        return []
+    }
+    const spelled = (path: readonly PathStep[]): string => {
+        if (path.some((s) => typeof s === 'object'))
+            return path.map(stepText).join('')
+        let heads: readonly Term[] = headsOf(vectors.codec.def)
+        let out = ''
+        for (const s of path) {
+            if (typeof s === 'string') {
+                const declared = heads.some(
+                    (h) =>
+                        h.kind === 'object' && Object.hasOwn(h.body.fields, s),
+                )
+                const open = heads.some(
+                    (h) =>
+                        h.kind === 'opaq' ||
+                        (h.kind === 'object' && h.body.rest !== undefined),
+                )
+                out += !declared && open ? `.entry(${quoted(s)})` : stepText(s)
+            } else out += stepText(s)
+            if (typeof s !== 'object')
+                heads = heads.flatMap((h) => childOf(h, s)).flatMap(headsOf)
+        }
+        return out
+    }
     const b = block()
     for (const path of vectors.paths) {
         const expect =
             hostAt(vectors.codec, path).kind === 'resolved'
                 ? 'accept'
                 : 'refuse'
-        const text = `r${path.map(stepText).join('')}`
+        const text = `r${spelled(path)}`
         assert(
             b,
             { id: rowId('path', expect, root, text), expect },
@@ -785,7 +928,7 @@ const library = '../../src/codec'
 
 const codecsHeader = [
     `import type { AttributeCodec, Decoded } from '${library}/codec'`,
-    `import { array, binary, boolean, decimal, discriminatedUnion, dynamoNumber, held, lazy, list, mdunion, never, nullValue, number, object, opaque, optional, refine, spread, string, undefinable, union, withLegacyRead } from '${library}/codec'`,
+    `import { array, binary, boolean, decimal, discriminatedUnion, dynamoNumber, held, lazy, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, spread, string, undefinable, union, withLegacyRead } from '${library}/codec'`,
     `import { DynamoNumber, isNumeral, isStoredNumeral } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     `import type { Result } from '${library}/result'`,
@@ -904,7 +1047,13 @@ export const typeVectorFiles = ({
     readonly paths: readonly PathVectors[]
     readonly clauses: readonly (() => AnyCodec)[]
 }): readonly (readonly [string, string])[] => {
-    const constants = shared()
+    const constants = shared([
+        ...slices.flatMap((s) => [
+            s.codec.def,
+            ...(s.codec.def.kind === 'union' ? s.codec.def.options : []),
+        ]),
+        ...paths.map((v) => v.codec.def),
+    ])
     const sliceRoots = byHash(
         slices,
         (s) =>
