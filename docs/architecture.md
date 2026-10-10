@@ -564,10 +564,12 @@ one codec, the row states each frame of the frontier as the recorded frame of th
 the row is an equation per frame. A caller's function is a variable of the theorem, so two frames
 are equal only where the two hold one function, and equal frames have one meaning
 (`pathRead_resolved_sem`). `leanPath(...)` refuses a resolved row where the model reaches a frame
-at no position of the resolved node. Each other decision names a class of frontiers (`pathReads`).
-The decision of two declarations reads shape alone: `frameSim` reads no predicate of a `refine` and
-no older reader of a `legacy`, so two frames similar at every depth can have two meanings
-(`frameSim_reads_no_predicate`).
+at no position of the resolved node. `pathKind` names the decision of each frontier, and each row
+reads it. One codec is a frontier of one frame, by `frameSame`, which compares each datum and
+unfolds no binder, and two declarations hold two frames (`two_frames_of_ambiguous`). `frameSame`
+reads no function and no fill value, so two refinements by two closures are one codec to
+`pathKind` (`pathKind_reads_no_closure`). There the host decides by the identity of the closure,
+and a row of two declarations has no certificate.
 
 No vector puts the host's preconditions to `preconditionOf`: the host's tests pin each
 precondition form and each refusal.
@@ -900,9 +902,8 @@ row.** `Vectors.lean` holds `check` and `vcheck`, which compare an attribute by 
 by `veq` under fuel: `aeq_same` makes `.same` equality, and `aeq_differ` makes `.differ`
 disequality, with `veq_sound` as the twin at `Value`. `Rows.lean` holds `failing`, `ok_of_failing`, the comparator of
 each evaluation form with its law (`writesOk_iff` and the others), and the lifts of the separation
-forms. `Paths.lean` holds `pathReads` and `pathRead`, with `pathRead_resolved_sem`, and `frameSim`
-with its proved limit `frameSim_reads_no_predicate`. `frameSim` is the one comparator that
-certifies shape alone, and only the decision of two declarations reads `frameSim`.
+forms. `Paths.lean` holds `pathKind` and `pathRead`, with `pathRead_resolved_sem` and
+`two_frames_of_ambiguous`, and `frameSame` with its proved limit `pathKind_reads_no_closure`.
 
 **A read row asserts a decoded value.** A read vector states that the model's `p`, at the
 attribute that the library wrote, gives the value that `decode(...)` read back, by `vcheck`. The

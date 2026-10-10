@@ -9,16 +9,17 @@ A path row states the decision of `at` on the host, and the frontier of the mode
 generated path module states each row through `PathRows` and `NarrowRows`, and the kernel decides
 the rows.
 
-**What a row says.** Each `HostAt` form names a frontier, and the theorems below state the
-frontier that each form accepts. A refusal is no frontier. No codec is a frontier whose frames
-each have the head `never`. Some options is a frontier with a `never` head and with another head.
-Two declarations is a frontier with no `never` head, whose first frame `frameSim` separates from
-another frame. One codec is a frontier equal to the frames that the host names.
+**What a row says.** `pathKind` names the decision of a frontier, and each row reads it. A refusal
+is no frontier. No codec is a frontier whose frames each have the head `never`. Some options is a
+frontier with a `never` head and with another head. One codec is a frontier with no `never` head,
+whose frames are one frame. Two declarations is a frontier with no `never` head and two frames.
+`kindOf` states the frontier that each decision names, and two declarations hold two frames
+(`two_frames_of_ambiguous`).
 
-**Why one codec is an equation.** The host resolves a node of the term graph of the root, and the
-model's frames are subterms of the same printed root. The emitter records each position of each
-node in the print, with the binders above the position, and states each frame of the frontier as
-the recorded frame of the resolved node at that position. The kernel decides the equation by
+**Why one codec is also an equation.** The host resolves a node of the term graph of the root,
+and the model's frames are subterms of the same printed root. The emitter records each position of
+each node in the print, with the binders above the position, and states each frame of the frontier
+as the recorded frame of the resolved node at that position. The kernel decides the equation by
 definitional equality. A caller's function is a variable of the theorem, so two frames are equal
 only where they hold one function. Equal frames have one meaning (`pathRead_resolved_sem`), so a
 resolved row certifies the meaning of the host's decision.
@@ -29,14 +30,15 @@ cycle lands on a position of the print, with the stack of that position. So the 
 the recorded frame on every row, and the law is congruence. The head through `pathHead` would
 equate a variable with its binder, and its law would need the unfolding of a binder.
 
-**What similarity says.** `frameSim n f g` reads the heads of the two frames: `pathHead` enters
-each binder and reads each variable through its binder, at most the length of the stack and two
-more steps. The heads have one constructor, two primitives are equal by `groundEq`, two variables
-past the stack name one outer binder, and the children are similar to one depth less. Similarity
-to depth `n` is the law that the definition gives, and it is no law of meaning: `frameSim` reads
-no predicate of a `refine` and no older reader of a `legacy`, so two frames similar at every
-depth can have two meanings (`frameSim_reads_no_predicate`). Only the comparator of two
-declarations reads similarity.
+**What `frameSame` reads.** Two frames are one frame where each position holds one datum: one
+constructor, variable, field name and slot, primitive, data predicate and adapter word, and one
+binder stack. `frameSame` unfolds no binder, so a recursive term and its unfolding are two frames
+(`pathKind_unfolding`); the emitter refuses a row where the host resolves two such frames.
+`frameSame` reads no function, because a function has no decision, and no fill value, because a
+value has no decidable equality. So two refinements by two closures are one frame to `pathKind`
+(`pathKind_reads_no_closure`). There the host decides by the identity of the closure, the
+equation of a resolved row holds only for one closure, and a row of two declarations has no
+certificate.
 -/
 
 namespace Calculus
@@ -46,6 +48,60 @@ def groundEq : Ground → Ground → Bool
   | .base k, .base k' => decide (k = k')
   | .literal k v, .literal k' v' => if h : k = k' then decide (h ▸ v = v') else false
   | _, _ => false
+
+/-- **Two predicates of one datum**: the same alternatives at one kind. A closure is not read. -/
+def predSame : Pred → Pred → Bool
+  | .members k ls, .members k' ls' | .except k ls, .except k' ls' =>
+      if h : k = k' then
+        decide (∀ x ∈ (h ▸ ls).1, x ∈ ls'.1) && decide ((h ▸ ls).1.card = ls'.1.card)
+      else false
+  | .closure _, .closure _ => true
+  | _, _ => false
+
+mutual
+/-- **Two terms with one datum at each position**, with no binder unfolded. A function and a fill
+    value are not read. -/
+def sameData : Term → Term → Bool
+  | .prim a, .prim b => groundEq a b
+  | .opaq, .opaq | .never, .never => true
+  | .var i, .var j => decide (i = j)
+  | .mu s, .mu t | .set s, .set t | .legacy s _, .legacy t _ => sameData s t
+  | .refine s p _, .refine t q _ => sameData s t && predSame p q
+  | .held false s P k ks, .held false t Q l ls =>
+      sameData s t && sameData P Q && decide (k :: ks = l :: ls)
+  | .list p sp sf, .list q tp tf => sameDataL p q && sameDataO sp tp && sameDataL sf tf
+  | .union os, .union ps => sameDataL os ps
+  | .object b, .object b' => sameDataB b b'
+  | _, _ => false
+termination_by structural a => a
+/-- …of two bodies: one set of names, with slots of one datum. -/
+def sameDataB : Body → Body → Bool
+  | .mk fs f w, .mk gs g v =>
+      decide (∀ k : {k // k ∈ fs}, ∃ h : k.1 ∈ gs, sameDataS (f k) (g ⟨k.1, h⟩) = true) &&
+        decide (∀ k : {k // k ∈ gs}, k.1 ∈ fs) && sameDataO w v
+termination_by structural b => b
+/-- …of two slots: one presence, and terms of one datum. -/
+def sameDataS : ObjectSlot → ObjectSlot → Bool
+  | .req s, .req t | .optional s, .optional t | .fill s _, .fill t _ => sameData s t
+  | _, _ => false
+termination_by structural s => s
+/-- …of two lists, position by position. -/
+def sameDataL : List Term → List Term → Bool
+  | [], [] => true
+  | s :: ss, t :: ts => sameData s t && sameDataL ss ts
+  | _, _ => false
+termination_by structural ss => ss
+/-- …of two optional terms. -/
+def sameDataO : Option Term → Option Term → Bool
+  | none, none => true
+  | some s, some t => sameData s t
+  | _, _ => false
+termination_by structural o => o
+end
+
+/-- **Two frames that are one frame** to the decision of `at`: terms and binder stacks of one
+    datum at each position. -/
+def frameSame (f g : Alg.Frame dynSyn) : Bool := sameData f.1 g.1 && sameDataL f.2 g.2
 
 /-- **The head of a frame**: a binder enters its body, and a variable reads the binder that it
     names. A variable that no binder binds is the head. -/
@@ -58,45 +114,16 @@ def pathHead : Nat → Alg.Frame dynSyn → Alg.Frame dynSyn
       | none => (.var i, env)
   | _ + 1, f => f
 
-/-- **Two frames of one shape to depth `n`**, each binder entered and each variable read through
-    its binder. A variable that no binder binds is compared past the stack. A predicate and an
-    older reader are not read. -/
-def frameSim (n : Nat) (f g : Alg.Frame dynSyn) : Bool :=
-  match n with
-  | 0 => true
-  | n + 1 =>
-    let x := pathHead (f.2.length + 2) f
-    let y := pathHead (g.2.length + 2) g
-    let sim := fun (s t : Term) => frameSim n (s, x.2) (t, y.2)
-    let simL := fun (ss ts : List Term) =>
-      ss.length == ts.length && (ss.zip ts).all fun p => sim p.1 p.2
-    let simO := fun (s t : Option Term) => match s, t with
-      | none, none => true
-      | some s, some t => sim s t
-      | _, _ => false
-    let simS := fun (s t : ObjectSlot) => match s, t with
-      | .req s, .req t | .optional s, .optional t | .fill s _, .fill t _ => sim s t
-      | _, _ => false
-    match x.1, y.1 with
-    | .prim a, .prim b => groundEq a b
-    | .opaq, .opaq | .never, .never => true
-    | .var i, .var j => i - x.2.length == j - y.2.length
-    | .set s, .set t => sim s t
-    | .refine s _ _, .refine t _ _ | .legacy s _, .legacy t _ => sim s t
-    | .held false s P k ks, .held false t Q l ls => sim s t && sim P Q && decide (k :: ks = l :: ls)
-    | .list p sp sf, .list q tp tf => simL p q && simO sp tp && simL sf tf
-    | .union os, .union ps => simL os ps
-    | .object (.mk fs f w), .object (.mk gs g v) =>
-        decide (∀ k : {k // k ∈ fs}, ∃ h : k.1 ∈ gs, simS (f k) (g ⟨k.1, h⟩) = true) &&
-          fs.card == gs.card && simO w v
-    | _, _ => false
-termination_by structural n
-
 /-- **A frame whose head is `never`**: an option that admits no value at the path. -/
 def frameNever (f : Alg.Frame dynSyn) : Bool :=
   match (pathHead (f.2.length + 2) f).1 with
   | .never => true
   | _ => false
+
+/-- **The decision of `at` at a path**, without the frames. -/
+inductive PathKind where
+  | refused | vacant | someVariants | ambiguous | resolved
+  deriving DecidableEq
 
 /-- **The decision of `at` at a path**, as the host states it. -/
 inductive HostAt where
@@ -112,33 +139,47 @@ inductive HostAt where
       printed root, with the binders above the position. -/
   | resolved (f : Alg.Frame dynSyn) (fs : List (Alg.Frame dynSyn))
 
-/-- **The frontier that a decision of no codec names.** A refusal is `none`. No codec is a frontier
-    of `never` alone, the empty frontier included. Some options is a frontier with `never` and with
-    another frame. Two declarations are a frontier with no `never` and two frames of two shapes.
-    One codec names its frontier, which `pathRead` compares. -/
-def pathReads (n : Nat) : Option (List (Alg.Frame dynSyn)) → HostAt → Bool
-  | none, .refused => true
-  | some fs, .vacant => fs.all frameNever
-  | some fs, .someVariants => fs.any frameNever && fs.any (!frameNever ·)
-  | some (f :: fs), .ambiguous => !(f :: fs).any frameNever && fs.any (!frameSim n f ·)
-  | _, _ => false
+/-- The decision that the host states. -/
+def HostAt.kind : HostAt → PathKind
+  | .refused => .refused
+  | .vacant => .vacant
+  | .someVariants => .someVariants
+  | .ambiguous => .ambiguous
+  | .resolved _ _ => .resolved
 
-/-- **What a row reads**: the frontier where one codec stands, and the decision of `pathReads`
-    elsewhere. -/
-def pathRead (n : Nat) (r : Option (List (Alg.Frame dynSyn))) :
+/-- **The decision of a frontier with a first frame**, from three tests: some frame has the head
+    `never`, each frame has it, and each frame is the first frame. No `never` and one frame is one
+    codec, and no `never` and two frames is two declarations. Each frame `never` is no codec, and
+    some frames `never` is some options. -/
+def kindOf : Bool → Bool → Bool → PathKind
+  | false, _, true => .resolved
+  | false, _, false => .ambiguous
+  | true, true, _ => .vacant
+  | true, false, _ => .someVariants
+
+/-- **The decision that a frontier names.** A refusal is `none`, and the empty frontier is no
+    codec. -/
+def pathKind : Option (List (Alg.Frame dynSyn)) → PathKind
+  | none => .refused
+  | some [] => .vacant
+  | some (f :: gs) =>
+      kindOf ((f :: gs).any frameNever) ((f :: gs).all frameNever) (gs.all (frameSame f))
+
+/-- **What a row reads**: the decision of the frontier, and the frontier where one codec stands. -/
+def pathRead (r : Option (List (Alg.Frame dynSyn))) :
     HostAt → Bool × Option (List (Alg.Frame dynSyn))
-  | .resolved _ _ => (true, r)
-  | h => (pathReads n r h, none)
+  | .resolved _ _ => (decide (pathKind r = .resolved), r)
+  | h => (decide (pathKind r = h.kind), none)
 
-/-- **What the host states that a row reads**: the frames of the codec where one codec stands,
-    and an accepting decision elsewhere. -/
+/-- **What the host states that a row reads**: its decision, and the frames of the codec where one
+    codec stands. -/
 def HostAt.claim : HostAt → Bool × Option (List (Alg.Frame dynSyn))
   | .resolved f fs => (true, some (f :: fs))
   | _ => (true, none)
 
 /-- **The rows of the paths into a root**: `Alg.Term.at` at each path reads what the host states. -/
-abbrev PathRows (n : Nat) (root : Term) (rows : List (List Alg.Seg × HostAt)) : Prop :=
-  rows.map (fun r => pathRead n (Alg.Term.at root r.1) r.2) = rows.map (·.2.claim)
+abbrev PathRows (root : Term) (rows : List (List Alg.Seg × HostAt)) : Prop :=
+  rows.map (fun r => pathRead (Alg.Term.at root r.1) r.2) = rows.map (·.2.claim)
 
 /-- **The frames after a clause**: the options of the union that `narrow` keeps, each under the
     binder of a recursive union. -/
@@ -149,13 +190,69 @@ def narrowFrames (φ : Term) : Term → List (Alg.Frame dynSyn)
 
 /-- **The rows of the clauses at a union**: for each clause, `narrow`, then the frontier of the
     rest of each path reads what the host states. -/
-abbrev NarrowRows (n : Nat) (u : Term) (rows : List (Term × List (List Alg.Seg × HostAt))) :
-    Prop :=
+abbrev NarrowRows (u : Term) (rows : List (Term × List (List Alg.Seg × HostAt))) : Prop :=
   rows.map (fun c => c.2.map fun r =>
-      pathRead n (Alg.atG Alg.Frame.child r.1 (narrowFrames c.1 u)) r.2) =
+      pathRead (Alg.atG Alg.Frame.child r.1 (narrowFrames c.1 u)) r.2) =
     rows.map (·.2.map (·.2.claim))
 
-/-! ## The frontier that each decision names -/
+/-! ## One frame is one frame -/
+
+/-- **A primitive is one primitive with itself.** -/
+theorem groundEq_refl : ∀ g : Ground, groundEq g g = true
+  | .base _ => decide_eq_true rfl
+  | .literal _ _ => by rw [groundEq, dif_pos rfl]; exact decide_eq_true rfl
+
+/-- **A predicate is one datum with itself.** -/
+theorem predSame_refl : ∀ p : Pred, predSame p p = true
+  | .members _ _ | .except _ _ => by
+      rw [predSame, dif_pos rfl, Bool.and_eq_true]
+      exact ⟨decide_eq_true fun _ hx => hx, decide_eq_true rfl⟩
+  | .closure _ => rfl
+
+mutual
+/-- **A term is one datum with itself.** -/
+theorem sameData_refl : ∀ t : Term, sameData t t = true
+  | .prim g => groundEq_refl g
+  | .opaq | .never => rfl
+  | .var _ => decide_eq_true rfl
+  | .mu t | .set t | .legacy t _ => by simp only [sameData]; exact sameData_refl t
+  | .refine t p _ => by simp only [sameData, sameData_refl t, predSame_refl p, Bool.and_self]
+  | .held false t P _ _ => by
+      simp only [sameData, sameData_refl t, sameData_refl P, Bool.true_and]
+      exact decide_eq_true trivial
+  | .held true _ _ k₀ _ => nomatch k₀.1
+  | .list p sp sf => by
+      simp only [sameData, sameDataL_refl p, sameDataO_refl sp, sameDataL_refl sf, Bool.and_self]
+  | .union os => by simp only [sameData]; exact sameDataL_refl os
+  | .object b => by simp only [sameData]; exact sameDataB_refl b
+termination_by structural t => t
+/-- …a body. -/
+theorem sameDataB_refl : ∀ b : Body, sameDataB b b = true
+  | .mk _ f w => by
+      simp only [sameDataB, Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨⟨fun k => ⟨k.2, sameDataS_refl (f k)⟩, fun k => k.2⟩, sameDataO_refl w⟩
+termination_by structural b => b
+/-- …a slot. -/
+theorem sameDataS_refl : ∀ s : ObjectSlot, sameDataS s s = true
+  | .req t | .optional t | .fill t _ => by simp only [sameDataS]; exact sameData_refl t
+termination_by structural s => s
+/-- …a list. -/
+theorem sameDataL_refl : ∀ ts : List Term, sameDataL ts ts = true
+  | [] => rfl
+  | t :: ts => by simp only [sameDataL, sameData_refl t, sameDataL_refl ts, Bool.and_self]
+termination_by structural ts => ts
+/-- …an optional term. -/
+theorem sameDataO_refl : ∀ o : Option Term, sameDataO o o = true
+  | none => rfl
+  | some t => by simp only [sameDataO]; exact sameData_refl t
+termination_by structural o => o
+end
+
+/-- **Two frames that `frameSame` separates are two frames.** -/
+theorem ne_of_frameSame {f g : Alg.Frame dynSyn} (h : frameSame f g = false) : f ≠ g := by
+  rintro rfl
+  rw [frameSame, sameData_refl, sameDataL_refl] at h
+  exact Bool.noConfusion h
 
 /-- **A frame reads `never` exactly where its head is `never`.** -/
 theorem frameNever_iff (f : Alg.Frame dynSyn) :
@@ -163,71 +260,74 @@ theorem frameNever_iff (f : Alg.Frame dynSyn) :
   unfold frameNever
   split <;> simp_all
 
-/-- **A refusal is no frontier.** -/
-theorem pathReads_refused (n : Nat) (r : Option (List (Alg.Frame dynSyn))) :
-    pathReads n r .refused = true ↔ r = none := by
-  rcases r with _ | fs <;> simp [pathReads]
+/-- **A frame that is not the first frame**, where some frame is not one frame with the first. -/
+theorem exists_ne_of_all_frameSame {f : Alg.Frame dynSyn} :
+    ∀ {gs : List (Alg.Frame dynSyn)}, gs.all (frameSame f) = false → ∃ g ∈ gs, g ≠ f
+  | [], h => Bool.noConfusion h
+  | g :: gs, h => by
+      cases hg : frameSame f g
+      · exact ⟨g, List.mem_cons_self .., fun he => ne_of_frameSame hg he.symm⟩
+      · rw [List.all_cons, hg, Bool.true_and] at h
+        obtain ⟨g', hm, hne⟩ := exists_ne_of_all_frameSame h
+        exact ⟨g', List.mem_cons_of_mem _ hm, hne⟩
 
-/-- **No codec is a frontier of `never` heads**, the empty frontier included. -/
-theorem pathReads_vacant (n : Nat) (r : Option (List (Alg.Frame dynSyn))) :
-    pathReads n r .vacant = true ↔ ∃ fs, r = some fs ∧ ∀ f ∈ fs, frameNever f = true := by
-  rcases r with _ | fs <;> simp [pathReads]
+/-- **Two declarations hold two frames.** -/
+theorem two_frames_of_ambiguous {r : Option (List (Alg.Frame dynSyn))}
+    (h : pathKind r = .ambiguous) : ∃ f gs, r = some (f :: gs) ∧ ∃ g ∈ gs, g ≠ f := by
+  rcases r with _ | _ | ⟨f, gs⟩
+  · exact PathKind.noConfusion h
+  · exact PathKind.noConfusion h
+  · refine ⟨f, gs, rfl, exists_ne_of_all_frameSame ?_⟩
+    revert h
+    simp only [pathKind]
+    generalize (f :: gs).any frameNever = a
+    generalize (f :: gs).all frameNever = b
+    generalize gs.all (frameSame f) = c
+    intro h
+    rcases a <;> rcases b <;> rcases c <;> first | rfl | exact PathKind.noConfusion h
 
-/-- **Some options is a frontier with a `never` head and with another head.** -/
-theorem pathReads_someVariants (n : Nat) (r : Option (List (Alg.Frame dynSyn))) :
-    pathReads n r .someVariants = true ↔ ∃ fs, r = some fs ∧
-      (∃ f ∈ fs, frameNever f = true) ∧ ∃ f ∈ fs, frameNever f = false := by
-  rcases r with _ | fs <;> simp [pathReads]
-
-/-- **Two declarations are a frontier with no `never` head**, whose first frame is not similar
-    to another frame. -/
-theorem pathReads_ambiguous (n : Nat) (r : Option (List (Alg.Frame dynSyn))) :
-    pathReads n r .ambiguous = true ↔ ∃ f fs, r = some (f :: fs) ∧
-      (∀ g ∈ f :: fs, frameNever g = false) ∧ ∃ g ∈ fs, frameSim n f g = false := by
-  rcases r with _ | _ | ⟨f, fs⟩ <;> simp [pathReads]
-
-/-- **A decision of no codec reads its comparator.** -/
-theorem pathRead_decided (n : Nat) (r : Option (List (Alg.Frame dynSyn))) (h : HostAt)
-    (hr : ∀ f fs, h ≠ .resolved f fs) : pathRead n r h = h.claim ↔ pathReads n r h = true := by
+/-- **A decision of no codec reads `pathKind` alone.** -/
+theorem pathRead_decided (r : Option (List (Alg.Frame dynSyn))) (h : HostAt)
+    (hr : h.kind ≠ .resolved) : pathRead r h = h.claim ↔ pathKind r = h.kind := by
   rcases h with _ | _ | _ | _ | ⟨f, fs⟩
-  all_goals first | exact absurd rfl (hr f fs) | simp [pathRead, HostAt.claim]
+  all_goals first
+    | exact absurd rfl hr
+    | exact ⟨fun he => of_decide_eq_true (congrArg Prod.fst he),
+        fun hk => congrArg (·, none) (decide_eq_true hk)⟩
 
-/-- **One codec is its frontier**: the frames of the model are the recorded frames, one for one. -/
-theorem pathRead_resolved (n : Nat) (r : Option (List (Alg.Frame dynSyn))) (f : Alg.Frame dynSyn)
+/-- **One codec is its frontier**: the frames of the model are one frame, and they are the recorded
+    frames, one for one. -/
+theorem pathRead_resolved (r : Option (List (Alg.Frame dynSyn))) (f : Alg.Frame dynSyn)
     (fs : List (Alg.Frame dynSyn)) :
-    pathRead n r (.resolved f fs) = (HostAt.resolved f fs).claim ↔ r = some (f :: fs) := by
-  simp [pathRead, HostAt.claim]
+    pathRead r (.resolved f fs) = (HostAt.resolved f fs).claim ↔
+      pathKind r = .resolved ∧ r = some (f :: fs) :=
+  ⟨fun he => ⟨of_decide_eq_true (congrArg Prod.fst he), congrArg Prod.snd he⟩,
+    fun ⟨hk, hr⟩ => by rw [pathRead, decide_eq_true hk, hr]; rfl⟩
 
 /-- **A resolved row certifies meaning**: each frame of the frontier denotes what the recorded
     frame of the codec denotes, at every table. -/
-theorem pathRead_resolved_sem (n : Nat) {r : Option (List (Alg.Frame dynSyn))}
+theorem pathRead_resolved_sem {r : Option (List (Alg.Frame dynSyn))}
     {f : Alg.Frame dynSyn} {fs : List (Alg.Frame dynSyn)}
-    (h : pathRead n r (.resolved f fs) = (HostAt.resolved f fs).claim) (α : Table)
+    (h : pathRead r (.resolved f fs) = (HostAt.resolved f fs).claim) (α : Table)
     (β : Alg.Table dynSyn.op) :
     (r.getD []).map (Alg.Frame.sem α β) = (f :: fs).map (Alg.Frame.sem α β) := by
-  rw [(pathRead_resolved n r f fs).mp h]; rfl
+  rw [((pathRead_resolved r f fs).mp h).2]; rfl
 
-/-! ## Similarity is no law of meaning -/
+/-! ## What the decision does not read -/
 
-/-- **Two refinements are similar where their inner terms are**, whatever their predicates. -/
-theorem frameSim_refine (n : Nat) (s t : Term) (p q : Pred) (pA qA : dynSyn.PredA)
-    (env env' : List Term) :
-    frameSim (n + 1) (.refine s p pA, env) (.refine t q qA, env') =
-      frameSim n (s, env) (t, env') := by
+/-- **No binder is unfolded**: a recursive list and its unfolding are two declarations. -/
+theorem pathKind_unfolding :
+    pathKind (some [(.mu (.list [] (some (.var 0)) []), []),
+      (.list [] (some (.mu (.list [] (some (.var 0)) []))) [], [])]) = .ambiguous :=
   rfl
 
-/-- **Similarity at every depth does not give one meaning.** Two refinements of `string` by two
-    predicates are similar at every depth, and the one admits a string that the other refuses. -/
-theorem frameSim_reads_no_predicate (α : Table) (β : Alg.Table dynSyn.op) :
-    ∃ f g : Alg.Frame dynSyn, (∀ n, frameSim n f g = true) ∧
+/-- **No closure is read**: two refinements of `string` by two closures are one codec to the
+    decision, and the one admits a string that the other refuses. -/
+theorem pathKind_reads_no_closure (α : Table) (β : Alg.Table dynSyn.op) :
+    ∃ f g : Alg.Frame dynSyn, pathKind (some [f, g]) = .resolved ∧
       (Alg.Frame.sem α β f).T (.str "") ∧ ¬ (Alg.Frame.sem α β g).T (.str "") := by
   refine ⟨(.refine Term.string (.closure fun _ => true) (), []),
-    (.refine Term.string (.closure fun _ => false) (), []), ?_, ?_, ?_⟩
-  · intro n
-    rcases n with _ | n
-    · rfl
-    · rw [frameSim_refine]
-      rcases n with _ | n <;> rfl
+    (.refine Term.string (.closure fun _ => false) (), []), rfl, ?_, ?_⟩
   · exact ⟨rfl, rfl⟩
   · exact fun h => Bool.false_ne_true h.2
 
