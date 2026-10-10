@@ -2406,53 +2406,6 @@ export type PathVectors = {
 const leanSeg = (step: string | number): string =>
     typeof step === 'number' ? `.pos ${step}` : `.name ${leanString(step)}`
 
-/**
- * **The depth of a term as it prints**: a thunk that closes a cycle prints a variable, and any
- * other thunk prints its target. The comparator of two declarations reads two frames as similar
- * (`frameSim`) to the depth of the deepest term that the theorem resolves, and two more steps.
- * Similarity is one shape, not one meaning: `frameSim` reads no predicate. A deeper
- * step reads one more unfolding of a binder that the print already holds. A bound of the
- * constructor count reads a recursive term with two recursive children to an exponential size.
- */
-const depthOf = (root: Term): number => {
-    const walk = (t: Term, stack: readonly Term[]): number => {
-        const on = [...stack, t]
-        const max = (ts: readonly Term[]) =>
-            1 + Math.max(0, ...ts.map((one) => walk(one, on)))
-        switch (t.kind) {
-            case 'lazy': {
-                const target = force(t)
-                return target === undefined || on.includes(target)
-                    ? 1
-                    : walk(target, on)
-            }
-            case 'list':
-                return max([
-                    ...t.pre,
-                    ...t.suf,
-                    ...(t.spread ? [t.spread] : []),
-                ])
-            case 'object':
-                return max([
-                    ...Object.values(t.body.fields).map((field) => field.t),
-                    ...(t.body.rest ? [t.body.rest] : []),
-                ])
-            case 'union':
-                return max(t.options)
-            case 'set':
-                return max([t.elem])
-            case 'held':
-                return max([t.inner, t.outer])
-            case 'refine':
-            case 'legacy':
-                return max([t.inner])
-            default:
-                return 1
-        }
-    }
-    return walk(root, [])
-}
-
 /** The term of a codec with each thunk resolved, as the walk of `narrow` reads it. */
 const resolved = (t: Term): Term | undefined =>
     t.kind === 'lazy'
@@ -2637,7 +2590,6 @@ export const leanPath = (
         scope: { ...topScope(item.def as Term), bound },
         above: [],
     }
-    let fuel = 1
     // a long term of a frame prints one time per theorem, as a `let` that the rows name: the term
     // can hold a variable of the theorem, so it is no declaration
     const terms = new Map<string, string>()
@@ -2661,7 +2613,6 @@ export const leanPath = (
     ): string => {
         const decided = decide(codec, steps)
         if (decided.kind !== 'resolved') return `.${decided.kind}`
-        fuel = Math.max(fuel, depthOf(decided.codec.def as Term))
         const own = new Set(
             (recorded.get(decided.codec.def as Term) ?? []).map(
                 (p) =>
@@ -2745,10 +2696,10 @@ export const leanPath = (
         unions.set(u, byClause)
     })
     const conjuncts = [
-        `PathRows ${fuel + 2} (${root})\n      [${plain.join(',\n       ')}]`,
+        `PathRows (${root})\n      [${plain.join(',\n       ')}]`,
         ...[...unions].map(
             ([u, byClause]) =>
-                `NarrowRows ${fuel + 2} (${u})\n      [${[...byClause]
+                `NarrowRows (${u})\n      [${[...byClause]
                     .map(
                         ([phi, rows]) =>
                             `(${phi},\n        [${rows.join(',\n         ')}])`,
