@@ -1,4 +1,5 @@
 import Calculus.Alg.Recursion
+import Mathlib.Data.PFunctor.Univariate.Basic
 import Mathlib.Data.Finset.Card
 import Mathlib.Data.Finset.Lattice.Fold
 
@@ -179,46 +180,58 @@ end Concrete
 /-- How an operation reads the depth: at the input's depth, one layer down, or at any depth. -/
 inductive Kind | keep | down | wall
 
-/-- One constructor step: the operations, the positions of each, and the codec of each. -/
-structure Step (V M : Type) where
-  Op : Type
-  arity : Op → Nat
-  kind : Op → Kind
-  run : (o : Op) → (Fin (arity o) → Codec V M) → Codec V M
+/-- **The signature of a step**: a polynomial functor (the operations `A` and the positions `B` of
+    each), a structural enumeration of the positions, and the kind of each operation. It holds no
+    meaning. -/
+structure Container extends PFunctor.{0, 0} where
+  /-- The positions of each operation, enumerated by a structural list. -/
+  pos : (o : A) → List (B o)
+  pos_complete : ∀ o (p : B o), p ∈ pos o
+  kind : A → Kind
+
+/-- The operations of a signature. -/
+abbrev Container.Op (S : Container) : Type := S.A
+
+/-- The positions of an operation. -/
+abbrev Container.Pos (S : Container) : S.Op → Type := S.B
+
+/-- **An algebra over a signature**: the codec of each operation from the codecs of its positions. -/
+structure Step (S : Container) (V M : Type) where
+  run : (o : S.Op) → (S.Pos o → Codec V M) → Codec V M
 
 /-- What the step owes: `keep` keeps agreement, `down` adds one layer. `wall` owes nothing. -/
-structure Step.Lawful (depth : V → Nat) (S : Step V M) : Prop where
-  keep : ∀ o, S.kind o = .keep → ∀ d (a₁ a₂ : Fin (S.arity o) → Codec V M),
-    (∀ p, AgreeLe depth d (a₁ p) (a₂ p)) → AgreeLe depth d (S.run o a₁) (S.run o a₂)
-  down : ∀ o, S.kind o = .down → ∀ d (a₁ a₂ : Fin (S.arity o) → Codec V M),
-    (∀ p, AgreeLe depth d (a₁ p) (a₂ p)) → AgreeLe depth (d + 1) (S.run o a₁) (S.run o a₂)
+structure Step.Lawful {S : Container} (depth : V → Nat) (R : Step S V M) : Prop where
+  keep : ∀ o, S.kind o = .keep → ∀ d (a₁ a₂ : S.Pos o → Codec V M),
+    (∀ p, AgreeLe depth d (a₁ p) (a₂ p)) → AgreeLe depth d (R.run o a₁) (R.run o a₂)
+  down : ∀ o, S.kind o = .down → ∀ d (a₁ a₂ : S.Pos o → Codec V M),
+    (∀ p, AgreeLe depth d (a₁ p) (a₂ p)) → AgreeLe depth (d + 1) (R.run o a₁) (R.run o a₂)
 
 /-- The free monad over the step, with a leaf for each entry. -/
-inductive Flat (Op : Type) (arity : Op → Nat) (n : Nat) where
+inductive Flat (Op : Type) (Pos : Op → Type) (n : Nat) where
   | leaf (i : Fin n)
-  | node (o : Op) (args : Fin (arity o) → Flat Op arity n)
+  | node (o : Op) (args : Pos o → Flat Op Pos n)
 
-variable {S : Step V M}
+variable {S : Container} {R : Step S V M}
 
 /-- The codec of a flat term over an environment of entries. -/
-def Flat.interp (S : Step V M) (e : Fin n → Codec V M) : Flat S.Op S.arity n → Codec V M
+def Flat.interp (R : Step S V M) (e : Fin n → Codec V M) : Flat S.Op S.Pos n → Codec V M
   | .leaf i => e i
-  | .node o args => S.run o fun p => Flat.interp S e (args p)
+  | .node o args => R.run o fun p => Flat.interp R e (args p)
 
 /-- No leaf. -/
-def Flat.Closed (S : Step V M) : Flat S.Op S.arity n → Prop
+def Flat.Closed (S : Container) : Flat S.Op S.Pos n → Prop
   | .leaf _ => False
   | .node _ args => ∀ p, Flat.Closed S (args p)
 
 /-- No leaf under a `wall`. -/
-def Flat.Ok (S : Step V M) : Flat S.Op S.arity n → Prop
+def Flat.Ok (S : Container) : Flat S.Op S.Pos n → Prop
   | .leaf _ => True
   | .node o args => match S.kind o with
     | .wall => ∀ p, Flat.Closed S (args p)
     | _ => ∀ p, Flat.Ok S (args p)
 
 /-- The guard: each leaf under a `down`, and no leaf under a `wall`. -/
-def Flat.Guarded (S : Step V M) : Flat S.Op S.arity n → Prop
+def Flat.Guarded (S : Container) : Flat S.Op S.Pos n → Prop
   | .leaf _ => False
   | .node o args => match S.kind o with
     | .keep => ∀ p, Flat.Guarded S (args p)
@@ -227,16 +240,16 @@ def Flat.Guarded (S : Step V M) : Flat S.Op S.arity n → Prop
 
 /-- A flat term with no leaf has one codec over every environment. -/
 theorem Flat.interp_closed (e₁ e₂ : Fin n → Codec V M) :
-    ∀ t : Flat S.Op S.arity n, t.Closed S → t.interp S e₁ = t.interp S e₂
+    ∀ t : Flat S.Op S.Pos n, t.Closed S → t.interp R e₁ = t.interp R e₂
   | .leaf _, h => h.elim
   | .node o args, h => by
       simp only [Flat.interp]
-      exact congrArg (S.run o) (funext fun p => Flat.interp_closed e₁ e₂ (args p) (h p))
+      exact congrArg (R.run o) (funext fun p => Flat.interp_closed e₁ e₂ (args p) (h p))
 
 /-- A flat term with no leaf under a wall keeps agreement below `d` of its environments. -/
-theorem Flat.ok_agree (hS : S.Lawful depth) {d : Nat} {e₁ e₂ : Fin n → Codec V M}
+theorem Flat.ok_agree (hS : R.Lawful depth) {d : Nat} {e₁ e₂ : Fin n → Codec V M}
     (he : AgreeLeV depth d e₁ e₂) :
-    ∀ t : Flat S.Op S.arity n, t.Ok S → AgreeLe depth d (t.interp S e₁) (t.interp S e₂)
+    ∀ t : Flat S.Op S.Pos n, t.Ok S → AgreeLe depth d (t.interp R e₁) (t.interp R e₂)
   | .leaf i, _ => he i
   | .node o args, h => by
       simp only [Flat.Ok] at h
@@ -250,14 +263,14 @@ theorem Flat.ok_agree (hS : S.Lawful depth) {d : Nat} {e₁ e₂ : Fin n → Cod
         exact (hS.down o hk d _ _ fun p => Flat.ok_agree hS he (args p) (h p)).mono (by omega)
       | wall =>
         rw [hk] at h
-        rw [congrArg (S.run o) (funext fun p => Flat.interp_closed e₁ e₂ (args p) (h p))]
+        rw [congrArg (R.run o) (funext fun p => Flat.interp_closed e₁ e₂ (args p) (h p))]
         exact AgreeLe.refl _ _
 
 /-- A guarded flat term turns agreement below `d` of its environments into agreement below
     `d + 1`. -/
-theorem Flat.guarded_agree (hS : S.Lawful depth) {d : Nat} {e₁ e₂ : Fin n → Codec V M}
+theorem Flat.guarded_agree (hS : R.Lawful depth) {d : Nat} {e₁ e₂ : Fin n → Codec V M}
     (he : AgreeLeV depth d e₁ e₂) :
-    ∀ t : Flat S.Op S.arity n, t.Guarded S → AgreeLe depth (d + 1) (t.interp S e₁) (t.interp S e₂)
+    ∀ t : Flat S.Op S.Pos n, t.Guarded S → AgreeLe depth (d + 1) (t.interp R e₁) (t.interp R e₂)
   | .leaf _, h => h.elim
   | .node o args, h => by
       simp only [Flat.Guarded] at h
@@ -271,17 +284,17 @@ theorem Flat.guarded_agree (hS : S.Lawful depth) {d : Nat} {e₁ e₂ : Fin n �
         exact hS.down o hk d _ _ fun p => Flat.ok_agree hS he (args p) (h p)
       | wall =>
         rw [hk] at h
-        rw [congrArg (S.run o) (funext fun p => Flat.interp_closed e₁ e₂ (args p) (h p))]
+        rw [congrArg (R.run o) (funext fun p => Flat.interp_closed e₁ e₂ (args p) (h p))]
         exact AgreeLe.refl _ _
 
 /-- **A guarded system's interpretation is contractive.** -/
-theorem contractive_of_guarded (hS : S.Lawful depth) (sys : Fin n → Flat S.Op S.arity n)
-    (hg : ∀ i, (sys i).Guarded S) : ContractiveV depth fun e i => (sys i).interp S e :=
+theorem contractive_of_guarded (hS : R.Lawful depth) (sys : Fin n → Flat S.Op S.Pos n)
+    (hg : ∀ i, (sys i).Guarded S) : ContractiveV depth fun e i => (sys i).interp R e :=
   fun _ _ _ he i => Flat.guarded_agree hS he (sys i) (hg i)
 
 /-- The guard refuses the system where each entry is the other entry. -/
-theorem swap_refused (S : Step V M) :
-    ¬ ∀ i, ((fun i => .leaf (Fin.rev i)) : Fin 2 → Flat S.Op S.arity 2) i |>.Guarded S :=
+theorem swap_refused (S : Container) :
+    ¬ ∀ i, ((fun i => .leaf (Fin.rev i)) : Fin 2 → Flat S.Op S.Pos 2) i |>.Guarded S :=
   fun h => h 0
 
 /-! ## A binder is a system of one entry -/
@@ -566,60 +579,69 @@ theorem any_finRange {k : Nat} {f : Fin k → Bool} :
     (List.finRange k).any f = true ↔ ∃ p, f p = true := by
   simp [List.any_eq_true, List.mem_finRange]
 
+/-- `all` over the positions of an operation holds exactly where the predicate holds at each. -/
+theorem all_pos {o : S.Op} {f : S.Pos o → Bool} : (S.pos o).all f = true ↔ ∀ p, f p = true := by
+  simp only [List.all_eq_true]; exact ⟨fun h p => h p (S.pos_complete o p), fun h p _ => h p⟩
+
+/-- `any` over the positions of an operation holds exactly where the predicate holds at one. -/
+theorem any_pos {o : S.Op} {f : S.Pos o → Bool} : (S.pos o).any f = true ↔ ∃ p, f p = true := by
+  simp only [List.any_eq_true]
+  exact ⟨fun ⟨p, _, h⟩ => ⟨p, h⟩, fun ⟨p, h⟩ => ⟨p, S.pos_complete o p, h⟩⟩
+
 /-- Substitution of a term for each leaf. -/
-def Flat.bind {Op : Type} {ar : Op → Nat} {n m : Nat} (σ : Fin n → Flat Op ar m) :
+def Flat.bind {Op : Type} {ar : Op → Type} {n m : Nat} (σ : Fin n → Flat Op ar m) :
     Flat Op ar n → Flat Op ar m
   | .leaf i => σ i
   | .node o args => .node o fun p => Flat.bind σ (args p)
 
 /-- **The substitution lemma.** -/
-theorem Flat.interp_bind {m : Nat} (e : Fin m → Codec V M) (σ : Fin n → Flat S.Op S.arity m) :
-    ∀ t : Flat S.Op S.arity n, (t.bind σ).interp S e = t.interp S fun j => (σ j).interp S e
+theorem Flat.interp_bind {m : Nat} (e : Fin m → Codec V M) (σ : Fin n → Flat S.Op S.Pos m) :
+    ∀ t : Flat S.Op S.Pos n, (t.bind σ).interp R e = t.interp R fun j => (σ j).interp R e
   | .leaf _ => rfl
   | .node o args => by
       simp only [Flat.bind, Flat.interp]
-      exact congrArg (S.run o) (funext fun p => Flat.interp_bind e σ (args p))
+      exact congrArg (R.run o) (funext fun p => Flat.interp_bind e σ (args p))
 
 /-- No leaf, as a decision. -/
-def Flat.closedB (S : Step V M) : Flat S.Op S.arity n → Bool
+def Flat.closedB (S : Container) : Flat S.Op S.Pos n → Bool
   | .leaf _ => false
-  | .node o args => (List.finRange (S.arity o)).all fun p => Flat.closedB S (args p)
+  | .node o args => (S.pos o).all fun p => Flat.closedB S (args p)
 
 /-- No leaf under a `wall`, as a decision. -/
-def Flat.okB (S : Step V M) : Flat S.Op S.arity n → Bool
+def Flat.okB (S : Container) : Flat S.Op S.Pos n → Bool
   | .leaf _ => true
   | .node o args => match S.kind o with
-    | .wall => (List.finRange (S.arity o)).all fun p => Flat.closedB S (args p)
-    | _ => (List.finRange (S.arity o)).all fun p => Flat.okB S (args p)
+    | .wall => (S.pos o).all fun p => Flat.closedB S (args p)
+    | _ => (S.pos o).all fun p => Flat.okB S (args p)
 
 /-- The leaf `j` sits at an unguarded position: below `keep` nodes only. -/
-def Flat.ulv (S : Step V M) (j : Fin n) : Flat S.Op S.arity n → Bool
+def Flat.ulv (S : Container) (j : Fin n) : Flat S.Op S.Pos n → Bool
   | .leaf i => decide (i = j)
   | .node o args => match S.kind o with
-    | .keep => (List.finRange (S.arity o)).any fun p => Flat.ulv S j (args p)
+    | .keep => (S.pos o).any fun p => Flat.ulv S j (args p)
     | _ => false
 
 /-- The decision of no leaf is sound. -/
-theorem Flat.closed_of_closedB : ∀ t : Flat S.Op S.arity n, t.closedB S = true → t.Closed S
+theorem Flat.closed_of_closedB : ∀ t : Flat S.Op S.Pos n, t.closedB S = true → t.Closed S
   | .leaf _, h => by simp [Flat.closedB] at h
   | .node o args, h => by
       simp only [Flat.closedB] at h
-      exact fun p => Flat.closed_of_closedB (args p) (all_finRange.mp h p)
+      exact fun p => Flat.closed_of_closedB (args p) (all_pos.mp h p)
 
 /-- The decision of no leaf under a wall is sound. -/
-theorem Flat.ok_of_okB : ∀ t : Flat S.Op S.arity n, t.okB S = true → t.Ok S
+theorem Flat.ok_of_okB : ∀ t : Flat S.Op S.Pos n, t.okB S = true → t.Ok S
   | .leaf _, _ => trivial
   | .node o args, h => by
       simp only [Flat.okB] at h
       simp only [Flat.Ok]
       generalize hk : S.kind o = k at h ⊢
       cases k with
-      | wall => exact fun p => Flat.closed_of_closedB _ (all_finRange.mp h p)
-      | keep => exact fun p => Flat.ok_of_okB _ (all_finRange.mp h p)
-      | down => exact fun p => Flat.ok_of_okB _ (all_finRange.mp h p)
+      | wall => exact fun p => Flat.closed_of_closedB _ (all_pos.mp h p)
+      | keep => exact fun p => Flat.ok_of_okB _ (all_pos.mp h p)
+      | down => exact fun p => Flat.ok_of_okB _ (all_pos.mp h p)
 
 /-- No leaf under a wall and no unguarded leaf give the guard `Flat.Guarded`. -/
-theorem Flat.guarded_of : ∀ t : Flat S.Op S.arity n,
+theorem Flat.guarded_of : ∀ t : Flat S.Op S.Pos n,
     t.okB S = true → (∀ j, t.ulv S j = false) → t.Guarded S
   | .leaf i, _, hu => by have := hu i; simp [Flat.ulv] at this
   | .node o args, h, hu => by
@@ -628,21 +650,21 @@ theorem Flat.guarded_of : ∀ t : Flat S.Op S.arity n,
       generalize hk : S.kind o = k at h ⊢
       cases k with
       | keep =>
-        refine fun p => Flat.guarded_of _ (all_finRange.mp h p) fun j => ?_
+        refine fun p => Flat.guarded_of _ (all_pos.mp h p) fun j => ?_
         have hj := hu j
         simp only [Flat.ulv, hk] at hj
         cases hp : (args p).ulv S j
         · rfl
-        · have := (any_finRange (f := fun p => (args p).ulv S j)).mpr ⟨p, hp⟩
+        · have := (any_pos (f := fun p => (args p).ulv S j)).mpr ⟨p, hp⟩
           rw [hj] at this
           exact nomatch this
-      | down => exact fun p => Flat.ok_of_okB _ (all_finRange.mp h p)
-      | wall => exact fun p => Flat.closed_of_closedB _ (all_finRange.mp h p)
+      | down => exact fun p => Flat.ok_of_okB _ (all_pos.mp h p)
+      | wall => exact fun p => Flat.closed_of_closedB _ (all_pos.mp h p)
 
 /-- An unguarded leaf of a substitution is an unguarded leaf of a substituted term, at an unguarded
     leaf of the outer term. -/
-theorem Flat.ulv_bind {σ : Fin n → Flat S.Op S.arity n} {j : Fin n} :
-    ∀ t : Flat S.Op S.arity n, (t.bind σ).ulv S j = true →
+theorem Flat.ulv_bind {σ : Fin n → Flat S.Op S.Pos n} {j : Fin n} :
+    ∀ t : Flat S.Op S.Pos n, (t.bind σ).ulv S j = true →
       ∃ m, t.ulv S m = true ∧ (σ m).ulv S j = true
   | .leaf i, h => ⟨i, by simp [Flat.ulv], h⟩
   | .node o args, h => by
@@ -650,26 +672,26 @@ theorem Flat.ulv_bind {σ : Fin n → Flat S.Op S.arity n} {j : Fin n} :
       generalize hk : S.kind o = k at h
       cases k with
       | keep =>
-        obtain ⟨p, hp⟩ := any_finRange.mp h
+        obtain ⟨p, hp⟩ := any_pos.mp h
         obtain ⟨m, hm, hσ⟩ := Flat.ulv_bind (args p) hp
         refine ⟨m, ?_, hσ⟩
         simp only [Flat.ulv, hk]
-        exact any_finRange.mpr ⟨p, hm⟩
+        exact any_pos.mpr ⟨p, hm⟩
       | down => simp at h
       | wall => simp at h
 
 /-- A substitution keeps a term with no leaf. -/
-theorem Flat.closedB_bind {σ : Fin n → Flat S.Op S.arity n} :
-    ∀ t : Flat S.Op S.arity n, t.closedB S = true → (t.bind σ).closedB S = true
+theorem Flat.closedB_bind {σ : Fin n → Flat S.Op S.Pos n} :
+    ∀ t : Flat S.Op S.Pos n, t.closedB S = true → (t.bind σ).closedB S = true
   | .leaf _, h => by simp [Flat.closedB] at h
   | .node o args, h => by
       simp only [Flat.closedB] at h
       simp only [Flat.bind, Flat.closedB]
-      exact all_finRange.mpr fun p => Flat.closedB_bind (args p) (all_finRange.mp h p)
+      exact all_pos.mpr fun p => Flat.closedB_bind (args p) (all_pos.mp h p)
 
 /-- A substitution of terms with no leaf under a wall keeps a term with no leaf under a wall. -/
-theorem Flat.okB_bind {σ : Fin n → Flat S.Op S.arity n} (hσ : ∀ m, (σ m).okB S = true) :
-    ∀ t : Flat S.Op S.arity n, t.okB S = true → (t.bind σ).okB S = true
+theorem Flat.okB_bind {σ : Fin n → Flat S.Op S.Pos n} (hσ : ∀ m, (σ m).okB S = true) :
+    ∀ t : Flat S.Op S.Pos n, t.okB S = true → (t.bind σ).okB S = true
   | .leaf i, _ => hσ i
   | .node o args, h => by
       simp only [Flat.okB] at h
@@ -677,26 +699,26 @@ theorem Flat.okB_bind {σ : Fin n → Flat S.Op S.arity n} (hσ : ∀ m, (σ m).
       generalize hk : S.kind o = k at h ⊢
       cases k with
       | wall =>
-        exact all_finRange.mpr fun p => Flat.closedB_bind (args p) (all_finRange.mp h p)
+        exact all_pos.mpr fun p => Flat.closedB_bind (args p) (all_pos.mp h p)
       | keep =>
-        exact all_finRange.mpr fun p => Flat.okB_bind hσ (args p) (all_finRange.mp h p)
+        exact all_pos.mpr fun p => Flat.okB_bind hσ (args p) (all_pos.mp h p)
       | down =>
-        exact all_finRange.mpr fun p => Flat.okB_bind hσ (args p) (all_finRange.mp h p)
+        exact all_pos.mpr fun p => Flat.okB_bind hσ (args p) (all_pos.mp h p)
 
 /-- A term with no leaf under a wall reads its environment through the maps only. -/
-theorem Flat.interp_f_congr (hS : S.Lawful depth) {e₁ e₂ : Fin n → Codec V M}
-    (he : ∀ j, (e₁ j).f = (e₂ j).f) (t : Flat S.Op S.arity n) (ht : t.Ok S) :
-    (t.interp S e₁).f = (t.interp S e₂).f :=
+theorem Flat.interp_f_congr (hS : R.Lawful depth) {e₁ e₂ : Fin n → Codec V M}
+    (he : ∀ j, (e₁ j).f = (e₂ j).f) (t : Flat S.Op S.Pos n) (ht : t.Ok S) :
+    (t.interp R e₁).f = (t.interp R e₂).f :=
   AgreeLe.eq_of_forall fun _ => Flat.ok_agree hS (fun j => AgreeLe.of_eq (he j)) t ht
 
 /-- The body of a system: entry `i` interprets the term `sys i`. -/
-def sysB (S : Step V M) (sys : Fin n → Flat S.Op S.arity n) (e : Fin n → Codec V M) :
+def sysB (R : Step S V M) (sys : Fin n → Flat S.Op S.Pos n) (e : Fin n → Codec V M) :
     Fin n → Codec V M :=
-  fun i => (sys i).interp S e
+  fun i => (sys i).interp R e
 
 /-- **ε-elimination**, `k` rounds: substitute the system into the leaves of its own terms. Round
     `k` is the body `B^(k+1)`. Structural recursion on `k`. -/
-def elim (S : Step V M) (sys : Fin n → Flat S.Op S.arity n) : Nat → Fin n → Flat S.Op S.arity n
+def elim (S : Container) (sys : Fin n → Flat S.Op S.Pos n) : Nat → Fin n → Flat S.Op S.Pos n
   | 0 => sys
   | k + 1 => fun i => (sys i).bind (elim S sys k)
 
@@ -705,18 +727,18 @@ def IsFix (B : (Fin n → Codec V M) → Fin n → Codec V M) (e : Fin n → Cod
   ∀ i, (e i).f = (B e i).f
 
 /-- Round `k + 1` of the ε-elimination is the system at round `k`. -/
-theorem sysB_elim_succ (sys : Fin n → Flat S.Op S.arity n) (k : Nat) (e : Fin n → Codec V M) :
-    sysB S (elim S sys (k + 1)) e = sysB S sys (sysB S (elim S sys k) e) :=
+theorem sysB_elim_succ (sys : Fin n → Flat S.Op S.Pos n) (k : Nat) (e : Fin n → Codec V M) :
+    sysB R (elim S sys (k + 1)) e = sysB R sys (sysB R (elim S sys k) e) :=
   funext fun i => Flat.interp_bind e (elim S sys k) (sys i)
 
 /-- Each round of the ε-elimination commutes with the system. -/
-theorem sysB_elim_comm (sys : Fin n → Flat S.Op S.arity n) : ∀ k e,
-    sysB S (elim S sys k) (sysB S sys e) = sysB S sys (sysB S (elim S sys k) e)
+theorem sysB_elim_comm (sys : Fin n → Flat S.Op S.Pos n) : ∀ k e,
+    sysB R (elim S sys k) (sysB R sys e) = sysB R sys (sysB R (elim S sys k) e)
   | 0, _ => rfl
   | k + 1, e => by rw [sysB_elim_succ, sysB_elim_comm sys k e, sysB_elim_succ]
 
 /-- Each round of the ε-elimination keeps no leaf under a wall. -/
-theorem okB_elim (sys : Fin n → Flat S.Op S.arity n) (hok : ∀ i, (sys i).okB S = true) :
+theorem okB_elim (sys : Fin n → Flat S.Op S.Pos n) (hok : ∀ i, (sys i).okB S = true) :
     ∀ k i, (elim S sys k i).okB S = true
   | 0 => hok
   | k + 1 => fun i => Flat.okB_bind (okB_elim sys hok k) (sys i) (hok i)
@@ -724,18 +746,18 @@ theorem okB_elim (sys : Fin n → Flat S.Op S.arity n) (hok : ∀ i, (sys i).okB
 /-! ### The graph of unguarded edges -/
 
 /-- An unguarded edge: the leaf `j` sits at an unguarded position of `sys i`. -/
-def UEdge (S : Step V M) (sys : Fin n → Flat S.Op S.arity n) (i j : Fin n) : Prop :=
+def UEdge (S : Container) (sys : Fin n → Flat S.Op S.Pos n) (i j : Fin n) : Prop :=
   (sys i).ulv S j = true
 
 /-- A walk of `k` unguarded edges from `i`. -/
-def WalkFrom (S : Step V M) (sys : Fin n → Flat S.Op S.arity n) (k : Nat) (i : Fin n) : Prop :=
+def WalkFrom (S : Container) (sys : Fin n → Flat S.Op S.Pos n) (k : Nat) (i : Fin n) : Prop :=
   ∃ w : Nat → Fin n, w 0 = i ∧ ∀ t < k, UEdge S sys (w t) (w (t + 1))
 
 /-- A cycle of unguarded edges. -/
-def Cycle (S : Step V M) (sys : Fin n → Flat S.Op S.arity n) : Prop :=
+def Cycle (S : Container) (sys : Fin n → Flat S.Op S.Pos n) : Prop :=
   ∃ (w : Nat → Fin n) (m : Nat), 0 < m ∧ w m = w 0 ∧ ∀ t < m, UEdge S sys (w t) (w (t + 1))
 
-variable {sys : Fin n → Flat S.Op S.arity n}
+variable {sys : Fin n → Flat S.Op S.Pos n}
 
 /-- An unguarded edge before a walk of `k` edges is a walk of `k + 1` edges. -/
 theorem walk_cons {i j : Fin n} {k : Nat} (h : UEdge S sys i j) :
@@ -755,7 +777,7 @@ theorem walk_mono {i : Fin n} {k : Nat} : WalkFrom S sys (k + 1) i → WalkFrom 
   | ⟨w, h0, hw⟩ => ⟨w, h0, fun t ht => hw t (by omega)⟩
 
 /-- An unguarded leaf after `k` rounds is the end of a walk of `k + 1` unguarded edges. -/
-theorem ulv_elim_walk (sys : Fin n → Flat S.Op S.arity n) :
+theorem ulv_elim_walk (sys : Fin n → Flat S.Op S.Pos n) :
     ∀ k i j, (elim S sys k i).ulv S j = true → WalkFrom S sys (k + 1) i
   | 0, _, j, h => walk_cons h ⟨fun _ => j, rfl, fun _ ht => absurd ht (Nat.not_lt_zero _)⟩
   | k + 1, i, j, h => by
@@ -819,12 +841,12 @@ theorem walks_of_cycle : Cycle S sys → ∃ i, ∀ k, WalkFrom S sys k i := by
 /-! ### The graph guard -/
 
 /-- A walk of `k` unguarded edges from `i`, as a decision. Structural recursion on `k`. -/
-def walkB (S : Step V M) (sys : Fin n → Flat S.Op S.arity n) : Nat → Fin n → Bool
+def walkB (S : Container) (sys : Fin n → Flat S.Op S.Pos n) : Nat → Fin n → Bool
   | 0 => fun _ => true
   | k + 1 => fun i => (List.finRange n).any fun j => (sys i).ulv S j && walkB S sys k j
 
 /-- The decision of a walk is sound and complete. -/
-theorem walkB_iff (sys : Fin n → Flat S.Op S.arity n) :
+theorem walkB_iff (sys : Fin n → Flat S.Op S.Pos n) :
     ∀ k i, walkB S sys k i = true ↔ WalkFrom S sys k i
   | 0, i => ⟨fun _ => ⟨fun _ => i, rfl, fun _ ht => absurd ht (Nat.not_lt_zero _)⟩, fun _ => rfl⟩
   | k + 1, i => by
@@ -836,12 +858,12 @@ theorem walkB_iff (sys : Fin n → Flat S.Op S.arity n) :
         exact ⟨j, hj, (walkB_iff sys k j).mpr hw⟩
 
 /-- **The graph guard**: no leaf under a wall, and no walk of `n` unguarded edges. -/
-def graphGuard (S : Step V M) (sys : Fin n → Flat S.Op S.arity n) : Bool :=
+def graphGuard (S : Container) (sys : Fin n → Flat S.Op S.Pos n) : Bool :=
   (List.finRange n).all (fun i => (sys i).okB S) && (List.finRange n).all (fun i => !walkB S sys n i)
 
 /-- **The law of the graph guard**: the guard holds exactly where no leaf sits under a wall and no
     cycle of unguarded edges exists. -/
-theorem graphGuard_iff (sys : Fin n → Flat S.Op S.arity n) :
+theorem graphGuard_iff (sys : Fin n → Flat S.Op S.Pos n) :
     graphGuard S sys = true ↔ (∀ i, (sys i).okB S = true) ∧ ¬ Cycle S sys := by
   simp only [graphGuard, Bool.and_eq_true, all_finRange]
   refine and_congr Iff.rfl ⟨fun h hc => ?_, fun h i => ?_⟩
@@ -864,18 +886,18 @@ theorem elim_guarded (hok : ∀ i, (sys i).okB S = true) (hnc : ¬ Cycle S sys) 
     · exact absurd (cycle_of_walk (walk_mono (ulv_elim_walk sys n i j h))) hnc
 
 /-- After `n` rounds, the system is contractive. -/
-theorem elim_contractive (hS : S.Lawful depth) (hok : ∀ i, (sys i).okB S = true)
-    (hnc : ¬ Cycle S sys) : ContractiveV depth (sysB S (elim S sys n)) :=
+theorem elim_contractive (hS : R.Lawful depth) (hok : ∀ i, (sys i).okB S = true)
+    (hnc : ¬ Cycle S sys) : ContractiveV depth (sysB R (elim S sys n)) :=
   contractive_of_guarded hS _ (elim_guarded hok hnc)
 
 /-- With no leaf under a wall, environments with the same maps give entries with the same maps. -/
-theorem sysB_congr (hS : S.Lawful depth) (hok : ∀ i, (sys i).Ok S) {e₁ e₂ : Fin n → Codec V M}
-    (he : ∀ j, (e₁ j).f = (e₂ j).f) : ∀ i, (sysB S sys e₁ i).f = (sysB S sys e₂ i).f :=
+theorem sysB_congr (hS : R.Lawful depth) (hok : ∀ i, (sys i).Ok S) {e₁ e₂ : Fin n → Codec V M}
+    (he : ∀ j, (e₁ j).f = (e₂ j).f) : ∀ i, (sysB R sys e₁ i).f = (sysB R sys e₂ i).f :=
   fun i => Flat.interp_f_congr hS he (sys i) (hok i)
 
 /-- A fixed point of the system is a fixed point of each round. -/
-theorem fix_elim_of_fix (hS : S.Lawful depth) (hok : ∀ i, (sys i).Ok S) {e : Fin n → Codec V M}
-    (he : IsFix (sysB S sys) e) : ∀ k, IsFix (sysB S (elim S sys k)) e
+theorem fix_elim_of_fix (hS : R.Lawful depth) (hok : ∀ i, (sys i).Ok S) {e : Fin n → Codec V M}
+    (he : IsFix (sysB R sys) e) : ∀ k, IsFix (sysB R (elim S sys k)) e
   | 0 => he
   | k + 1 => fun i => by
       rw [sysB_elim_succ]
@@ -883,31 +905,31 @@ theorem fix_elim_of_fix (hS : S.Lawful depth) (hok : ∀ i, (sys i).Ok S) {e : F
 
 /-- **The ε-elimination keeps the solution**: where round `k` is guarded, the solution of round
     `k` is a fixed point of the system, and every fixed point of the system has its maps. -/
-theorem elim_solution (hd : ∀ v, 0 < depth v) (hS : S.Lawful depth) (hok : ∀ i, (sys i).Ok S)
+theorem elim_solution (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (hok : ∀ i, (sys i).Ok S)
     {k : Nat} (hg : ∀ i, (elim S sys k i).Guarded S) :
-    IsFix (sysB S sys) (solve depth (sysB S (elim S sys k))) ∧
-      ∀ e, IsFix (sysB S sys) e → ∀ i, (e i).f = (solve depth (sysB S (elim S sys k)) i).f := by
-  have hC : ContractiveV depth (sysB S (elim S sys k)) := contractive_of_guarded hS _ hg
-  have hfix : IsFix (sysB S (elim S sys k)) (solve depth (sysB S (elim S sys k))) :=
+    IsFix (sysB R sys) (solve depth (sysB R (elim S sys k))) ∧
+      ∀ e, IsFix (sysB R sys) e → ∀ i, (e i).f = (solve depth (sysB R (elim S sys k)) i).f := by
+  have hC : ContractiveV depth (sysB R (elim S sys k)) := contractive_of_guarded hS _ hg
+  have hfix : IsFix (sysB R (elim S sys k)) (solve depth (sysB R (elim S sys k))) :=
     fun i => funext fun o => funext fun x => solve_fix hd hC i o x
-  have huniq : ∀ e, IsFix (sysB S (elim S sys k)) e →
-      ∀ i, (e i).f = (solve depth (sysB S (elim S sys k)) i).f := fun e he i =>
+  have huniq : ∀ e, IsFix (sysB R (elim S sys k)) e →
+      ∀ i, (e i).f = (solve depth (sysB R (elim S sys k)) i).f := fun e he i =>
     AgreeLe.eq_of_forall fun d =>
       solve_unique hd hC (fun i o x => congrFun (congrFun (he i) o) x) d i
   refine ⟨fun i => ?_, fun e he => huniq e (fix_elim_of_fix hS hok he k)⟩
-  have hBs : IsFix (sysB S (elim S sys k)) (sysB S sys (solve depth (sysB S (elim S sys k)))) :=
+  have hBs : IsFix (sysB R (elim S sys k)) (sysB R sys (solve depth (sysB R (elim S sys k)))) :=
     fun j => by
       rw [sysB_elim_comm]
       exact sysB_congr hS hok hfix j
   exact (huniq _ hBs i).symm
 
 /-- Where round `k` is guarded, the system and its round `k` have the same fixed points. -/
-theorem fix_iff_elim (hd : ∀ v, 0 < depth v) (hS : S.Lawful depth) (hok : ∀ i, (sys i).Ok S)
+theorem fix_iff_elim (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (hok : ∀ i, (sys i).Ok S)
     {k : Nat} (hg : ∀ i, (elim S sys k i).Guarded S) (e : Fin n → Codec V M) :
-    IsFix (sysB S sys) e ↔ IsFix (sysB S (elim S sys k)) e := by
+    IsFix (sysB R sys) e ↔ IsFix (sysB R (elim S sys k)) e := by
   refine ⟨fun he => fix_elim_of_fix hS hok he k, fun he i => ?_⟩
-  have hC : ContractiveV depth (sysB S (elim S sys k)) := contractive_of_guarded hS _ hg
-  have hes : ∀ j, (e j).f = (solve depth (sysB S (elim S sys k)) j).f := fun j =>
+  have hC : ContractiveV depth (sysB R (elim S sys k)) := contractive_of_guarded hS _ hg
+  have hes : ∀ j, (e j).f = (solve depth (sysB R (elim S sys k)) j).f := fun j =>
     AgreeLe.eq_of_forall fun d =>
       solve_unique hd hC (fun i o x => congrFun (congrFun (he i) o) x) d j
   rw [hes i, (elim_solution hd hS hok hg).1 i]
@@ -915,15 +937,15 @@ theorem fix_iff_elim (hd : ∀ v, 0 < depth v) (hS : S.Lawful depth) (hok : ∀ 
 
 /-- **The theorem**: a system with no leaf under a wall and no cycle of unguarded edges has a
     solution, and only one. -/
-theorem graph_solution (hd : ∀ v, 0 < depth v) (hS : S.Lawful depth)
+theorem graph_solution (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth)
     (hok : ∀ i, (sys i).okB S = true) (hnc : ¬ Cycle S sys) :
-    ∃ s, IsFix (sysB S sys) s ∧ ∀ e, IsFix (sysB S sys) e → ∀ i, (e i).f = (s i).f :=
+    ∃ s, IsFix (sysB R sys) s ∧ ∀ e, IsFix (sysB R sys) e → ∀ i, (e i).f = (s i).f :=
   ⟨_, elim_solution hd hS (fun i => Flat.ok_of_okB _ (hok i)) (elim_guarded hok hnc)⟩
 
 /-- A system that passes `graphGuard` has a solution, and only one, at the maps. -/
-theorem graphGuard_solution (hd : ∀ v, 0 < depth v) (hS : S.Lawful depth)
+theorem graphGuard_solution (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth)
     (h : graphGuard S sys = true) :
-    ∃ s, IsFix (sysB S sys) s ∧ ∀ e, IsFix (sysB S sys) e → ∀ i, (e i).f = (s i).f :=
+    ∃ s, IsFix (sysB R sys) s ∧ ∀ e, IsFix (sysB R sys) e → ∀ i, (e i).f = (s i).f :=
   let ⟨hok, hnc⟩ := (graphGuard_iff sys).mp h
   graph_solution hd hS hok hnc
 
@@ -940,26 +962,43 @@ theorem forall₂_map_of {α β : Type} {R : β → β → Prop} {f g : α → �
   | a :: l => .cons (h a) (forall₂_map_of h l)
 
 /-- The arity of the extended step. -/
-def joinArity (S : Step V M) : S.Op ⊕ (Nat × Option M) ⊕ (V → Bool) → Nat
-  | .inl o => S.arity o
-  | .inr (.inl (k, _)) => k
-  | .inr (.inr _) => 1
+def joinArity (S : Container) (V M : Type) : S.Op ⊕ (Nat × Option M) ⊕ (V → Bool) → Type
+  | .inl o => S.Pos o
+  | .inr (.inl (k, _)) => Fin k
+  | .inr (.inr _) => Unit
+
+/-- The positions of the extended step, enumerated. -/
+def joinPos (S : Container) (V M : Type) : (o : S.Op ⊕ (Nat × Option M) ⊕ (V → Bool)) → List (joinArity S V M o)
+  | .inl o => S.pos o
+  | .inr (.inl (k, _)) => List.finRange k
+  | .inr (.inr _) => [()]
+
+/-- The enumeration of the extended step holds every position. -/
+theorem joinPos_complete (S : Container) (V M : Type) : ∀ o (p : joinArity S V M o), p ∈ joinPos S V M o
+  | .inl o, p => S.pos_complete o p
+  | .inr (.inl (_, _)), p => List.mem_finRange p
+  | .inr (.inr _), () => List.mem_singleton_self ()
 
 /-- The step with the join (`altCodec` of `k` options, member `μ`) and the restriction
     (`Codec.restrict q`). Both are `keep`. -/
-def Step.withJoin (S : Step V M) : Step V M where
-  Op := S.Op ⊕ (Nat × Option M) ⊕ (V → Bool)
-  arity := joinArity S
+def Container.withJoin (S : Container) (V M : Type) : Container where
+  A := S.Op ⊕ (Nat × Option M) ⊕ (V → Bool)
+  B := joinArity S V M
+  pos := joinPos S V M
+  pos_complete := joinPos_complete S V M
   kind
     | .inl o => S.kind o
     | .inr _ => .keep
+
+/-- The algebra with the join and the restriction. -/
+def Step.withJoin (R : Step S V M) : Step (S.withJoin V M) V M where
   run
-    | .inl o, a => S.run o a
+    | .inl o, a => R.run o a
     | .inr (.inl (k, μ)), a => altCodec ((List.finRange k).map a) μ
-    | .inr (.inr _q), a => (a ⟨0, Nat.one_pos⟩).restrict _q
+    | .inr (.inr _q), a => (a ()).restrict _q
 
 /-- The extension with the join and the restriction keeps the laws of the step. -/
-theorem Step.Lawful.withJoin (hS : S.Lawful depth) : (S.withJoin).Lawful depth where
+theorem Step.Lawful.withJoin (hS : R.Lawful depth) : (R.withJoin).Lawful depth where
   keep := by
     intro o hk d a₁ a₂ h
     cases o with
@@ -981,10 +1020,15 @@ end WithJoin
 section Shapes
 
 /-- One `down` operation: `shift`. -/
-def triStep : Step Nat Unit where
-  Op := Unit
-  arity _ := 1
+abbrev triSig : Container where
+  A := Unit
+  B _ := Fin 1
+  pos _ := List.finRange 1
+  pos_complete _ := List.mem_finRange
   kind _ := .down
+
+/-- One `down` operation: `shift`, as an algebra. -/
+def triStep : Step triSig Nat Unit where
   run _ a := shift (a 0)
 
 /-- `shift` reads its argument one layer down. -/
@@ -995,7 +1039,7 @@ theorem triStep_lawful : triStep.Lawful dN where
     | x + 1 => (h ⟨0, Nat.one_pos⟩).f ori x (by show x + 1 ≤ d; simp only [dN] at hx; omega)⟩
 
 /-- `X = shift Y`, `Y = X`: `triB` as a flat system. -/
-def triSys : Fin 2 → Flat triStep.Op triStep.arity 2 := fun i => match i with
+def triSys : Fin 2 → Flat triSig.Op triSig.Pos 2 := fun i => match i with
   | ⟨0, _⟩ => .node () fun _ => .leaf 1
   | ⟨_ + 1, _⟩ => .leaf 0
 
@@ -1007,7 +1051,7 @@ theorem triSys_eq : sysB triStep triSys = triB := by
   | ⟨1, _⟩ => rfl
 
 /-- `triSys` passes the graph guard. -/
-theorem tri_guard : graphGuard triStep triSys = true := by decide
+theorem tri_guard : graphGuard triSig triSys = true := by decide
 
 /-- **`triB` has one solution**, where `solve` of `triB` breaks the fixpoint law
     (`tri_solve_not_fix`). -/
@@ -1015,14 +1059,14 @@ theorem tri_solution : ∃ s, IsFix triB s ∧ ∀ e, IsFix triB e → ∀ i, (e
   triSys_eq ▸ graphGuard_solution (fun v => Nat.succ_pos v) triStep_lawful tri_guard
 
 /-- The same shape with the join: `X = shift Y`, `Y = join [X, shift Y]`. -/
-def triJ : Fin 2 → Flat triStep.withJoin.Op triStep.withJoin.arity 2 := fun i => match i with
+def triJ : Fin 2 → Flat (triSig.withJoin Nat Unit).Op (triSig.withJoin Nat Unit).Pos 2 := fun i => match i with
   | ⟨0, _⟩ => .node (.inl ()) fun _ => .leaf 1
   | ⟨_ + 1, _⟩ => .node (.inr (.inl (2, none))) fun p => match p with
     | ⟨0, _⟩ => .leaf 0
     | ⟨_ + 1, _⟩ => .node (.inl ()) fun _ => .leaf 1
 
 /-- `triJ` passes the graph guard. -/
-theorem triJ_guard : graphGuard triStep.withJoin triJ = true := by decide
+theorem triJ_guard : graphGuard (triSig.withJoin Nat Unit) triJ = true := by decide
 
 /-- `triJ` has one solution, at the maps. -/
 theorem triJ_solution : ∃ s, IsFix (sysB triStep.withJoin triJ) s ∧
@@ -1030,16 +1074,16 @@ theorem triJ_solution : ∃ s, IsFix (sysB triStep.withJoin triJ) s ∧
   graphGuard_solution (fun v => Nat.succ_pos v) triStep_lawful.withJoin triJ_guard
 
 /-- An unguarded cycle: `Y = join [Y, ⊥]`. -/
-def ctlSys : Fin 1 → Flat triStep.withJoin.Op triStep.withJoin.arity 1 := fun _ =>
+def ctlSys : Fin 1 → Flat (triSig.withJoin Nat Unit).Op (triSig.withJoin Nat Unit).Pos 1 := fun _ =>
   .node (.inr (.inl (2, none))) fun p => match p with
     | ⟨0, _⟩ => .leaf 0
     | ⟨_ + 1, _⟩ => .node (.inr (.inl (0, none))) Fin.elim0
 
 /-- The graph guard refuses `ctlSys`. -/
-theorem ctl_refused : graphGuard triStep.withJoin ctlSys = false := by decide
+theorem ctl_refused : graphGuard (triSig.withJoin Nat Unit) ctlSys = false := by decide
 
 /-- `ctlSys` has a cycle of unguarded edges. -/
-theorem ctl_cycle : Cycle triStep.withJoin ctlSys :=
+theorem ctl_cycle : Cycle (triSig.withJoin Nat Unit) ctlSys :=
   ⟨fun _ => 0, 1, Nat.one_pos, rfl, fun _ _ => rfl⟩
 
 /-- `idc` is a fixed point of `ctlSys`. -/
@@ -1082,14 +1126,14 @@ def Kind.k : Kind → Nat → Nat → Nat
   | .wall, _, _ => 0
 
 /-- The stratified flat term. -/
-inductive SFlat (Op : Type) (ar : Op → Nat) (kd : Op → Kind) : Nat → Nat → Type where
+inductive SFlat (Op : Type) (ar : Op → Type) (kd : Op → Kind) : Nat → Nat → Type where
   | leaf {w k : Nat} (j : Fin k) : SFlat Op ar kd w k
   | node {w k : Nat} (o : Op)
-      (args : Fin (ar o) → SFlat Op ar kd ((kd o).w w) ((kd o).k w k)) : SFlat Op ar kd w k
+      (args : ar o → SFlat Op ar kd ((kd o).w w) ((kd o).k w k)) : SFlat Op ar kd w k
 
 /-- **A stratified system**: entry `i` names an entry below `i` above every guard, and any entry
     below a guard. -/
-abbrev SSys (S : Step V M) (n : Nat) : Type := (i : Fin n) → SFlat S.Op S.arity S.kind n i
+abbrev SSys (S : Container) (n : Nat) : Type := (i : Fin n) → SFlat S.Op S.Pos S.kind n i
 
 /-- The environment of the width below a node. -/
 def Kind.envW {X : Type} {w : Nat} : (κ : Kind) → (Fin w → X) → Fin (κ.w w) → X
@@ -1156,24 +1200,24 @@ theorem Kind.envK_wall {X : Type} {w k : Nat} (ρw ρw' : Fin w → X) (ρk ρk'
   | .wall, _ => funext fun j => j.elim0
 
 /-- The codec of a stratified term, over the environment of each index. -/
-def SFlat.interp (S : Step V M) : {w k : Nat} → SFlat S.Op S.arity S.kind w k →
+def SFlat.interp (R : Step S V M) : {w k : Nat} → SFlat S.Op S.Pos S.kind w k →
     (Fin w → Codec V M) → (Fin k → Codec V M) → Codec V M
   | _, _, .leaf j, _, ρk => ρk j
   | _, _, .node o args, ρw, ρk =>
-      S.run o fun p => SFlat.interp S (args p) ((S.kind o).envW ρw) ((S.kind o).envK ρw ρk)
+      R.run o fun p => SFlat.interp R (args p) ((S.kind o).envW ρw) ((S.kind o).envK ρw ρk)
 
 /-- Inlining: each leaf becomes a flat term. -/
-def SFlat.inl {S : Step V M} {n : Nat} : {w k : Nat} → SFlat S.Op S.arity S.kind w k →
-    (Fin w → Flat S.Op S.arity n) → (Fin k → Flat S.Op S.arity n) → Flat S.Op S.arity n
+def SFlat.inl {S : Container} {n : Nat} : {w k : Nat} → SFlat S.Op S.Pos S.kind w k →
+    (Fin w → Flat S.Op S.Pos n) → (Fin k → Flat S.Op S.Pos n) → Flat S.Op S.Pos n
   | _, _, .leaf j, _, σk => σk j
   | _, _, .node o args, σw, σk =>
       .node o fun p => SFlat.inl (args p) ((S.kind o).envW σw) ((S.kind o).envK σw σk)
 
 /-- **The substitution lemma** of the inlining. -/
 theorem SFlat.interp_inl {n : Nat} (e : Fin n → Codec V M) : ∀ {w k : Nat}
-    (t : SFlat S.Op S.arity S.kind w k) (σw : Fin w → Flat S.Op S.arity n)
-    (σk : Fin k → Flat S.Op S.arity n),
-    (t.inl σw σk).interp S e = t.interp S (fun j => (σw j).interp S e) (fun j => (σk j).interp S e)
+    (t : SFlat S.Op S.Pos S.kind w k) (σw : Fin w → Flat S.Op S.Pos n)
+    (σk : Fin k → Flat S.Op S.Pos n),
+    (t.inl σw σk).interp R e = t.interp R (fun j => (σw j).interp R e) (fun j => (σk j).interp R e)
   | _, _, .leaf _, _, _ => rfl
   | _, _, .node o args, σw, σk => by
       simp only [SFlat.inl, SFlat.interp, Flat.interp]
@@ -1182,7 +1226,7 @@ theorem SFlat.interp_inl {n : Nat} (e : Fin n → Codec V M) : ∀ {w k : Nat}
       rw [SFlat.interp_inl e (args p), Kind.envW_comp, Kind.envK_comp]
 
 /-- The graph form: the stratified system as a flat system. -/
-def SSys.graph (sys : SSys S n) : Fin n → Flat S.Op S.arity n := fun i =>
+def SSys.graph (sys : SSys S n) : Fin n → Flat S.Op S.Pos n := fun i =>
   (sys i).inl Flat.leaf fun j => Flat.leaf (Fin.castLE (Nat.le_of_lt i.isLt) j)
 
 /-! ## The normal form, one structural fold over the entries -/
@@ -1190,14 +1234,14 @@ def SSys.graph (sys : SSys S n) : Fin n → Flat S.Op S.arity n := fun i =>
 /-- The table of normal forms of the entries below `m`. Entry `m` inlines, at each unguarded leaf,
     the normal form of the entry that the leaf names. Each entry is normalized once: the vector
     of step `m` is the vector of step `m - 1` with one entry pushed. -/
-def nfVec (S : Step V M) (sys : SSys S n) : (m : Nat) → m ≤ n → Vector (Flat S.Op S.arity n) m
+def nfVec (S : Container) (sys : SSys S n) : (m : Nat) → m ≤ n → Vector (Flat S.Op S.Pos n) m
   | 0, _ => #v[]
   | m + 1, h =>
       let v := nfVec S sys m (Nat.le_of_succ_le h)
       v.push ((sys ⟨m, h⟩).inl Flat.leaf fun j => v[j])
 
 /-- The normal form of the system. -/
-def nf (S : Step V M) (sys : SSys S n) : Fin n → Flat S.Op S.arity n := fun i =>
+def nf (S : Container) (sys : SSys S n) : Fin n → Flat S.Op S.Pos n := fun i =>
   (nfVec S sys n le_rfl)[i]
 
 /-- Entry `j` of the table at step `m` is entry `j` with the table at step `j` inlined. -/
@@ -1226,8 +1270,8 @@ theorem nf_eq (sys : SSys S n) (i : Fin n) :
   rw [nfVec_get sys i _ l l.isLt, nfVec_get sys n le_rfl l (by have := l.isLt; omega)]
 
 /-- A stratified term with both indices zero has no leaf. -/
-theorem SFlat.inl_closed {n : Nat} : ∀ {w k : Nat} (t : SFlat S.Op S.arity S.kind w k),
-    w = 0 → k = 0 → ∀ (σw : Fin w → Flat S.Op S.arity n) (σk : Fin k → Flat S.Op S.arity n),
+theorem SFlat.inl_closed {n : Nat} : ∀ {w k : Nat} (t : SFlat S.Op S.Pos S.kind w k),
+    w = 0 → k = 0 → ∀ (σw : Fin w → Flat S.Op S.Pos n) (σk : Fin k → Flat S.Op S.Pos n),
     (t.inl σw σk).Closed S
   | _, _, .leaf j, _, hk, _, _ => by subst hk; exact j.elim0
   | _, _, .node o args, hw, hk, σw, σk => by
@@ -1238,7 +1282,7 @@ theorem SFlat.inl_closed {n : Nat} : ∀ {w k : Nat} (t : SFlat S.Op S.arity S.k
       · cases S.kind o <;> simp [Kind.k, hw, hk]
 
 /-- A node is guarded where each argument meets the guard of the kind of the node. -/
-theorem Flat.guarded_node {o : S.Op} {g : Fin (S.arity o) → Flat S.Op S.arity n}
+theorem Flat.guarded_node {o : S.Op} {g : S.Pos o → Flat S.Op S.Pos n}
     (hk : S.kind o = .keep → ∀ p, (g p).Guarded S) (hd : S.kind o = .down → ∀ p, (g p).Ok S)
     (hw : S.kind o = .wall → ∀ p, (g p).Closed S) : (Flat.node o g).Guarded S := by
   simp only [Flat.Guarded]
@@ -1248,7 +1292,7 @@ theorem Flat.guarded_node {o : S.Op} {g : Fin (S.arity o) → Flat S.Op S.arity 
   | wall => exact hw h
 
 /-- A node has no leaf under a wall where each argument meets the condition of the kind. -/
-theorem Flat.ok_node {o : S.Op} {g : Fin (S.arity o) → Flat S.Op S.arity n}
+theorem Flat.ok_node {o : S.Op} {g : S.Pos o → Flat S.Op S.Pos n}
     (hk : S.kind o ≠ .wall → ∀ p, (g p).Ok S)
     (hw : S.kind o = .wall → ∀ p, (g p).Closed S) : (Flat.node o g).Ok S := by
   simp only [Flat.Ok]
@@ -1258,8 +1302,8 @@ theorem Flat.ok_node {o : S.Op} {g : Fin (S.arity o) → Flat S.Op S.arity n}
   | wall => exact hw h
 
 /-- Inlining terms with no leaf under a wall keeps no leaf under a wall. -/
-theorem SFlat.inl_ok {n : Nat} : ∀ {w k : Nat} (t : SFlat S.Op S.arity S.kind w k)
-    (σw : Fin w → Flat S.Op S.arity n) (σk : Fin k → Flat S.Op S.arity n),
+theorem SFlat.inl_ok {n : Nat} : ∀ {w k : Nat} (t : SFlat S.Op S.Pos S.kind w k)
+    (σw : Fin w → Flat S.Op S.Pos n) (σk : Fin k → Flat S.Op S.Pos n),
     (∀ j, (σw j).Ok S) → (∀ j, (σk j).Ok S) → (t.inl σw σk).Ok S
   | _, _, .leaf j, _, _, _, hk => hk j
   | _, _, .node o args, σw, σk, hw, hk => by
@@ -1269,8 +1313,8 @@ theorem SFlat.inl_ok {n : Nat} : ∀ {w k : Nat} (t : SFlat S.Op S.arity S.kind 
         (Kind.k_wall _ h) _ _)
 
 /-- **Inlining guarded terms at the unguarded leaves gives a guarded term.** -/
-theorem SFlat.inl_guarded {n : Nat} : ∀ {w k : Nat} (t : SFlat S.Op S.arity S.kind w k)
-    (σw : Fin w → Flat S.Op S.arity n) (σk : Fin k → Flat S.Op S.arity n),
+theorem SFlat.inl_guarded {n : Nat} : ∀ {w k : Nat} (t : SFlat S.Op S.Pos S.kind w k)
+    (σw : Fin w → Flat S.Op S.Pos n) (σk : Fin k → Flat S.Op S.Pos n),
     (∀ j, (σw j).Ok S) → (∀ j, (σk j).Guarded S) → (t.inl σw σk).Guarded S
   | _, _, .leaf j, _, _, _, hk => hk j
   | _, _, .node o args, σw, σk, hw, hk => by
@@ -1296,8 +1340,8 @@ theorem nf_guarded (sys : SSys S n) : ∀ i, (nf S sys i).Guarded S := by
     exact SFlat.inl_guarded _ _ _ (fun _ => trivial) fun j => ih j.val j.isLt _
 
 /-- The interpretation of the normal form is contractive, so `solve` applies. -/
-theorem nf_contractive (hS : S.Lawful depth) (sys : SSys S n) :
-    ContractiveV depth (sysB S (nf S sys)) :=
+theorem nf_contractive (hS : R.Lawful depth) (sys : SSys S n) :
+    ContractiveV depth (sysB R (nf S sys)) :=
   contractive_of_guarded hS _ (nf_guarded sys)
 
 end Strat
@@ -1330,10 +1374,10 @@ theorem Kind.envK_all2 {X : Type} {w k : Nat} {R : X → X → Prop} {ρw ρw' :
   | .wall, j => j.elim0
 
 /-- The interpretation keeps agreement below `d`. -/
-theorem SFlat.agree (hS : S.Lawful depth) {d : Nat} : ∀ {w k : Nat}
-    (t : SFlat S.Op S.arity S.kind w k) (ρw ρw' : Fin w → Codec V M) (ρk ρk' : Fin k → Codec V M),
+theorem SFlat.agree (hS : R.Lawful depth) {d : Nat} : ∀ {w k : Nat}
+    (t : SFlat S.Op S.Pos S.kind w k) (ρw ρw' : Fin w → Codec V M) (ρk ρk' : Fin k → Codec V M),
     (∀ j, AgreeLe depth d (ρw j) (ρw' j)) → (∀ j, AgreeLe depth d (ρk j) (ρk' j)) →
-    AgreeLe depth d (t.interp S ρw ρk) (t.interp S ρw' ρk')
+    AgreeLe depth d (t.interp R ρw ρk) (t.interp R ρw' ρk')
   | _, _, .leaf j, _, _, _, _, _, hk => hk j
   | _, _, .node o args, ρw, ρw', ρk, ρk', hw, hk => by
       simp only [SFlat.interp]
@@ -1346,36 +1390,36 @@ theorem SFlat.agree (hS : S.Lawful depth) {d : Nat} : ∀ {w k : Nat}
         exact AgreeLe.refl _ _
 
 /-- Environments with the same maps give one map. -/
-theorem SFlat.interp_f_congr (hS : S.Lawful depth) {w k : Nat}
-    (t : SFlat S.Op S.arity S.kind w k) {ρw ρw' : Fin w → Codec V M} {ρk ρk' : Fin k → Codec V M}
+theorem SFlat.interp_f_congr (hS : R.Lawful depth) {w k : Nat}
+    (t : SFlat S.Op S.Pos S.kind w k) {ρw ρw' : Fin w → Codec V M} {ρk ρk' : Fin k → Codec V M}
     (hw : ∀ j, (ρw j).f = (ρw' j).f) (hk : ∀ j, (ρk j).f = (ρk' j).f) :
-    (t.interp S ρw ρk).f = (t.interp S ρw' ρk').f :=
+    (t.interp R ρw ρk).f = (t.interp R ρw' ρk').f :=
   AgreeLe.eq_of_forall (depth := depth) fun _ =>
     SFlat.agree hS t _ _ _ _ (fun j => AgreeLe.of_eq (hw j)) (fun j => AgreeLe.of_eq (hk j))
 
 /-- A fixed point of the stratified system, at the maps. -/
-def SIsFix (sys : SSys S n) (e : Fin n → Codec V M) : Prop :=
-  ∀ i, (e i).f = ((sys i).interp S e fun j => e (Fin.castLE (Nat.le_of_lt i.isLt) j)).f
+def SIsFix (R : Step S V M) (sys : SSys S n) (e : Fin n → Codec V M) : Prop :=
+  ∀ i, (e i).f = ((sys i).interp R e fun j => e (Fin.castLE (Nat.le_of_lt i.isLt) j)).f
 
 /-- The stratified system and its graph form have the same fixed points. -/
 theorem sisFix_iff_graph (sys : SSys S n) (e : Fin n → Codec V M) :
-    SIsFix sys e ↔ IsFix (sysB S sys.graph) e := by
+    SIsFix R sys e ↔ IsFix (sysB R sys.graph) e := by
   refine forall_congr' fun i => ?_
   simp only [sysB, SSys.graph, SFlat.interp_inl, Flat.interp]
 
 /-- The interpretation of an entry of the normal form is the entry over the earlier normal forms. -/
 theorem interp_nf (sys : SSys S n) (e : Fin n → Codec V M) (i : Fin n) :
-    (nf S sys i).interp S e =
-      (sys i).interp S e fun j => (nf S sys (Fin.castLE (Nat.le_of_lt i.isLt) j)).interp S e := by
+    (nf S sys i).interp R e =
+      (sys i).interp R e fun j => (nf S sys (Fin.castLE (Nat.le_of_lt i.isLt) j)).interp R e := by
   rw [nf_eq, SFlat.interp_inl]
   rfl
 
 /-- **The stratified system and its normal form have the same fixed points.** -/
-theorem sisFix_iff_nf (hS : S.Lawful depth) (sys : SSys S n) (e : Fin n → Codec V M) :
-    SIsFix sys e ↔ IsFix (sysB S (nf S sys)) e := by
+theorem sisFix_iff_nf (hS : R.Lawful depth) (sys : SSys S n) (e : Fin n → Codec V M) :
+    SIsFix R sys e ↔ IsFix (sysB R (nf S sys)) e := by
   constructor
   · intro he
-    have key : ∀ i : Fin n, ((nf S sys i).interp S e).f = (e i).f := by
+    have key : ∀ i : Fin n, ((nf S sys i).interp R e).f = (e i).f := by
       intro ⟨i, hi⟩
       induction i using Nat.strong_induction_on with
       | _ i ih =>
@@ -1384,15 +1428,15 @@ theorem sisFix_iff_nf (hS : S.Lawful depth) (sys : SSys S n) (e : Fin n → Code
     exact fun i => (key i).symm
   · intro he i
     rw [he i]
-    show ((nf S sys i).interp S e).f = _
+    show ((nf S sys i).interp R e).f = _
     rw [interp_nf]
     exact SFlat.interp_f_congr hS _ (fun _ => rfl) fun j => (he _).symm
 
 /-- **A stratified system has one solution**, at the maps. The solution is `solve` of the normal
     form. -/
-theorem strat_solution (hd : ∀ v, 0 < depth v) (hS : S.Lawful depth) (sys : SSys S n) :
-    SIsFix sys (solve depth (sysB S (nf S sys))) ∧
-      ∀ e, SIsFix sys e → ∀ i, (e i).f = (solve depth (sysB S (nf S sys)) i).f := by
+theorem strat_solution (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (sys : SSys S n) :
+    SIsFix R sys (solve depth (sysB R (nf S sys))) ∧
+      ∀ e, SIsFix R sys e → ∀ i, (e i).f = (solve depth (sysB R (nf S sys)) i).f := by
   have hC := nf_contractive hS sys
   refine ⟨(sisFix_iff_nf hS sys _).mpr fun i => funext fun o => funext fun x =>
     solve_fix hd hC i o x, fun e he i => ?_⟩
@@ -1408,7 +1452,7 @@ section StratShapes
 
 /-- The shape of `triJ` as a stratified system, X before Y: `X = shift Y` names `Y` below the guard,
     and `Y = join [X, shift Y]` names `X` above it. -/
-def triS : SSys triStep.withJoin 2 := fun i => match i with
+def triS : SSys (triSig.withJoin Nat Unit) 2 := fun i => match i with
   | ⟨0, _⟩ => .node (.inl ()) fun _ => .leaf (1 : Fin 2)
   | ⟨1, _⟩ => .node (.inr (.inl (2, none))) fun p => match p with
     | ⟨0, _⟩ => .leaf (0 : Fin 1)
@@ -1416,8 +1460,9 @@ def triS : SSys triStep.withJoin 2 := fun i => match i with
 
 /-- `triS` has one solution, at the maps. -/
 theorem triS_solution :
-    SIsFix triS (solve dN (sysB _ (nf _ triS))) ∧
-      ∀ e, SIsFix triS e → ∀ i, (e i).f = (solve dN (sysB _ (nf _ triS)) i).f :=
+    SIsFix triStep.withJoin triS (solve dN (sysB triStep.withJoin (nf _ triS))) ∧
+      ∀ e, SIsFix triStep.withJoin triS e →
+        ∀ i, (e i).f = (solve dN (sysB triStep.withJoin (nf _ triS)) i).f :=
   strat_solution (fun v => Nat.succ_pos v) triStep_lawful.withJoin triS
 
 /-- The graph form of `triS` is `triJ`. -/
@@ -1440,39 +1485,39 @@ end StratShapes
 /-! ## The stratified form and the graph guard -/
 
 section Bridge
-variable {sys : Fin n → Flat S.Op S.arity n}
+variable {sys : Fin n → Flat S.Op S.Pos n}
 
 /-- A node has an unguarded leaf `j` exactly where the node is `keep` and an argument has one. -/
-theorem Flat.ulv_node_iff {o : S.Op} {g : Fin (S.arity o) → Flat S.Op S.arity n} {j : Fin n} :
+theorem Flat.ulv_node_iff {o : S.Op} {g : S.Pos o → Flat S.Op S.Pos n} {j : Fin n} :
     (Flat.node o g).ulv S j = true ↔ S.kind o = .keep ∧ ∃ p, (g p).ulv S j = true := by
   simp only [Flat.ulv]
   cases h : S.kind o with
-  | keep => simp
+  | keep => simp [S.pos_complete]
   | down => simp
   | wall => simp
 
 /-- A node has no leaf exactly where no argument has a leaf. -/
-theorem Flat.closedB_node_iff {o : S.Op} {g : Fin (S.arity o) → Flat S.Op S.arity n} :
+theorem Flat.closedB_node_iff {o : S.Op} {g : S.Pos o → Flat S.Op S.Pos n} :
     (Flat.node o g).closedB S = true ↔ ∀ p, (g p).closedB S = true := by
-  simp only [Flat.closedB, all_finRange]
+  simp only [Flat.closedB, all_pos]
 
 /-- The decision of no leaf under a wall, at a node. -/
-theorem Flat.okB_node_iff {o : S.Op} {g : Fin (S.arity o) → Flat S.Op S.arity n} :
+theorem Flat.okB_node_iff {o : S.Op} {g : S.Pos o → Flat S.Op S.Pos n} :
     (Flat.node o g).okB S = true ↔
       (S.kind o = .wall → ∀ p, (g p).closedB S = true) ∧ (S.kind o ≠ .wall → ∀ p, (g p).okB S = true) := by
   simp only [Flat.okB]
   cases h : S.kind o with
-  | keep => simp
-  | down => simp
-  | wall => simp
+  | keep => simp [S.pos_complete]
+  | down => simp [S.pos_complete]
+  | wall => simp [S.pos_complete]
 
 /-- The decision of no leaf is complete. -/
-theorem Flat.closedB_of_closed : ∀ t : Flat S.Op S.arity n, t.Closed S → t.closedB S = true
+theorem Flat.closedB_of_closed : ∀ t : Flat S.Op S.Pos n, t.Closed S → t.closedB S = true
   | .leaf _, h => h.elim
   | .node _ args, h => Flat.closedB_node_iff.mpr fun p => Flat.closedB_of_closed (args p) (h p)
 
 /-- The decision of no leaf under a wall is complete. -/
-theorem Flat.okB_of_ok : ∀ t : Flat S.Op S.arity n, t.Ok S → t.okB S = true
+theorem Flat.okB_of_ok : ∀ t : Flat S.Op S.Pos n, t.Ok S → t.okB S = true
   | .leaf _, _ => rfl
   | .node o args, h => by
       simp only [Flat.Ok] at h
@@ -1489,8 +1534,8 @@ theorem Kind.envK_keep_pt {X : Type} {w k : Nat} {ρw : Fin w → X} {ρk : Fin 
   | .keep, _, l => ⟨l, rfl⟩
 
 /-- An unguarded leaf of an inlined term is an unguarded leaf of a nameable entry's term. -/
-theorem SFlat.ulv_inl {n : Nat} {j : Fin n} : ∀ {w k : Nat} (t : SFlat S.Op S.arity S.kind w k)
-    (σw : Fin w → Flat S.Op S.arity n) (σk : Fin k → Flat S.Op S.arity n),
+theorem SFlat.ulv_inl {n : Nat} {j : Fin n} : ∀ {w k : Nat} (t : SFlat S.Op S.Pos S.kind w k)
+    (σw : Fin w → Flat S.Op S.Pos n) (σk : Fin k → Flat S.Op S.Pos n),
     (t.inl σw σk).ulv S j = true → ∃ l, (σk l).ulv S j = true
   | _, _, .leaf l, _, _, h => ⟨l, h⟩
   | _, _, .node o args, σw, σk, h => by
@@ -1677,24 +1722,50 @@ theorem Fin.optAll_some {X : Type} : ∀ {m : Nat} {f : Fin m → Option X} {g :
       | zero => simpa using h0
       | succ p => simpa using Fin.optAll_some hs p
 
+/-- All the options at the positions of an operation, or none. The check reads the enumeration, and
+    completeness gives the value at each position. -/
+def Container.optAll (S : Container) {X : Type} (o : S.Op) (f : S.Pos o → Option X) :
+    Option (S.Pos o → X) :=
+  if h : (S.pos o).all (fun p => (f p).isSome) = true then
+    some fun p => (f p).get (all_pos.mp h p)
+  else none
+
+/-- Where every option holds a value, the options give a function. -/
+theorem Container.optAll_isSome {X : Type} {o : S.Op} (f : S.Pos o → Option X)
+    (h : ∀ p, (f p).isSome = true) : (S.optAll o f).isSome = true := by
+  simp only [Container.optAll]
+  rw [dif_pos (all_pos.mpr h)]
+  rfl
+
+/-- The function of the options gives the value of each option. -/
+theorem Container.optAll_some {X : Type} {o : S.Op} {f : S.Pos o → Option X} {g : S.Pos o → X}
+    (h : S.optAll o f = some g) : ∀ p, f p = some (g p) := by
+  intro p
+  simp only [Container.optAll] at h
+  split at h
+  · simp only [Option.some.injEq] at h
+    subst h
+    simp
+  · exact nomatch h
+
 /-- The stratified term of a flat term under an order `π`, where each leaf fits. -/
-def Flat.toS (π : Fin n → Fin n) : {w k : Nat} → Flat S.Op S.arity n →
-    Option (SFlat S.Op S.arity S.kind w k)
+def Flat.toS (π : Fin n → Fin n) : {w k : Nat} → Flat S.Op S.Pos n →
+    Option (SFlat S.Op S.Pos S.kind w k)
   | _, k, .leaf j => if h : (π j).val < k then some (.leaf ⟨_, h⟩) else none
   | w, k, .node o args =>
-      (Fin.optAll fun p => Flat.toS π (w := (S.kind o).w w) (k := (S.kind o).k w k) (args p)).map
+      (S.optAll o fun p => Flat.toS π (w := (S.kind o).w w) (k := (S.kind o).k w k) (args p)).map
         (.node o)
 
 /-- A term with no leaf has a stratified term at every index. -/
-theorem Flat.toS_closed (π : Fin n → Fin n) : ∀ (t : Flat S.Op S.arity n) {w k : Nat},
+theorem Flat.toS_closed (π : Fin n → Fin n) : ∀ (t : Flat S.Op S.Pos n) {w k : Nat},
     t.closedB S = true → (t.toS π (w := w) (k := k)).isSome = true
   | .leaf _, _, _, h => by simp [Flat.closedB] at h
   | .node o args, _, _, h => by
       simp only [Flat.toS, Option.isSome_map]
-      exact Fin.optAll_isSome _ fun p => Flat.toS_closed π (args p) (Flat.closedB_node_iff.mp h p)
+      exact Container.optAll_isSome _ fun p => Flat.toS_closed π (args p) (Flat.closedB_node_iff.mp h p)
 
 /-- A term with no leaf under a wall has a stratified term where each unguarded leaf fits. -/
-theorem Flat.toS_fits (π : Fin n → Fin n) : ∀ (t : Flat S.Op S.arity n) {w k : Nat}, w = n →
+theorem Flat.toS_fits (π : Fin n → Fin n) : ∀ (t : Flat S.Op S.Pos n) {w k : Nat}, w = n →
     t.okB S = true → (∀ j, t.ulv S j = true → (π j).val < k) →
     (t.toS π (w := w) (k := k)).isSome = true
   | .leaf j, _, _, _, _, hu => by
@@ -1702,7 +1773,7 @@ theorem Flat.toS_fits (π : Fin n → Fin n) : ∀ (t : Flat S.Op S.arity n) {w 
       simp [Flat.toS, this]
   | .node o args, w, k, hw, h, hu => by
       simp only [Flat.toS, Option.isSome_map]
-      refine Fin.optAll_isSome _ fun p => ?_
+      refine Container.optAll_isSome _ fun p => ?_
       have hok := Flat.okB_node_iff.mp h
       rcases Kind.cases3 (S.kind o) with hκ | hκ | hκ
       · refine Flat.toS_fits π (args p) (by rw [hκ]; exact hw) (hok.2 (by simp [hκ]) p) ?_
@@ -1733,9 +1804,9 @@ theorem Kind.envK_pt {X : Type} {n w k : Nat} {π : Fin n → Fin n} {τ : Fin n
   | .wall, _, h => absurd h (Nat.not_lt_zero _)
 
 /-- The stratified term inlines back to the flat term, renamed by the order. -/
-theorem Flat.inl_toS (π : Fin n → Fin n) : ∀ (t : Flat S.Op S.arity n) {w k : Nat}
-    {s : SFlat S.Op S.arity S.kind w k}, t.toS π = some s →
-    ∀ (σw : Fin w → Flat S.Op S.arity n) (σk : Fin k → Flat S.Op S.arity n),
+theorem Flat.inl_toS (π : Fin n → Fin n) : ∀ (t : Flat S.Op S.Pos n) {w k : Nat}
+    {s : SFlat S.Op S.Pos S.kind w k}, t.toS π = some s →
+    ∀ (σw : Fin w → Flat S.Op S.Pos n) (σk : Fin k → Flat S.Op S.Pos n),
     (∀ j (h : (π j).val < w), σw ⟨_, h⟩ = .leaf (π j)) →
     (∀ j (h : (π j).val < k), σk ⟨_, h⟩ = .leaf (π j)) →
     s.inl σw σk = t.bind fun j => .leaf (π j)
@@ -1748,7 +1819,7 @@ theorem Flat.inl_toS (π : Fin n → Fin n) : ∀ (t : Flat S.Op S.arity n) {w k
       · simp [h] at hs
   | .node o args, w, k, s, hs, σw, σk, hw, hk => by
       simp only [Flat.toS] at hs
-      cases hg : Fin.optAll fun p => Flat.toS π (w := (S.kind o).w w) (k := (S.kind o).k w k) (args p) with
+      cases hg : S.optAll o fun p => Flat.toS π (w := (S.kind o).w w) (k := (S.kind o).k w k) (args p) with
       | none => rw [hg] at hs; exact nomatch hs
       | some g =>
         rw [hg] at hs
@@ -1757,7 +1828,7 @@ theorem Flat.inl_toS (π : Fin n → Fin n) : ∀ (t : Flat S.Op S.arity n) {w k
         simp only [SFlat.inl, Flat.bind]
         congr 1
         funext p
-        exact Flat.inl_toS π (args p) (Fin.optAll_some hg p) _ _
+        exact Flat.inl_toS π (args p) (Container.optAll_some hg p) _ _
           (Kind.envW_pt hw _) (Kind.envK_pt hw hk _)
 
 /-- **A system that passes the graph guard has a stratified form**: an order `π`, and a
@@ -1787,36 +1858,51 @@ at any position, a wall included. A system is a sequence of scopes. -/
 section Scopes
 
 /-- The arity of the step with `c` constants: a constant takes no argument. -/
-def cAr (S : Step V M) (c : Nat) : S.Op ⊕ Fin c → Nat
-  | .inl o => S.arity o
-  | .inr _ => 0
+def cAr (S : Container) (c : Nat) : S.Op ⊕ Fin c → Type
+  | .inl o => S.Pos o
+  | .inr _ => Empty
+
+/-- The positions of the step with `c` constants, enumerated. -/
+def cPos (S : Container) (c : Nat) : (o : S.Op ⊕ Fin c) → List (cAr S c o)
+  | .inl o => S.pos o
+  | .inr _ => []
+
+/-- The enumeration of the step with constants holds every position. -/
+theorem cPos_complete (S : Container) (c : Nat) : ∀ o (p : cAr S c o), p ∈ cPos S c o
+  | .inl o, p => S.pos_complete o p
+  | .inr _, p => nomatch p
 
 /-- The kind of the step with `c` constants: a constant is `keep`. -/
-def cKd (S : Step V M) (c : Nat) : S.Op ⊕ Fin c → Kind
+def cKd (S : Container) (c : Nat) : S.Op ⊕ Fin c → Kind
   | .inl o => S.kind o
   | .inr _ => .keep
 
 /-- **The step with constants**: constant `j` denotes `κ j`. The syntax does not read `κ`. -/
-def CStep (S : Step V M) (c : Nat) (κ : Fin c → Codec V M) : Step V M where
-  Op := S.Op ⊕ Fin c
-  arity := cAr S c
+def cSig (S : Container) (c : Nat) : Container where
+  A := S.Op ⊕ Fin c
+  B := cAr S c
+  pos := cPos S c
+  pos_complete := cPos_complete S c
   kind := cKd S c
+
+/-- **The algebra with constants**: constant `j` denotes `κ j`. -/
+def CStep (R : Step S V M) (c : Nat) (κ : Fin c → Codec V M) : Step (cSig S c) V M where
   run
-    | .inl o, a => S.run o a
+    | .inl o, a => R.run o a
     | .inr j, _ => κ j
 
 /-- **A scope**: a stratified system of `n` entries over the step with `c` constants. -/
-abbrev Scope (S : Step V M) (c n : Nat) : Type :=
+abbrev Scope (S : Container) (c n : Nat) : Type :=
   (i : Fin n) → SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) n i
 
 /-- **A DAG of scopes**: each scope reads the entries of the scopes before it as constants. -/
-inductive DSys (S : Step V M) : Nat → Type where
+inductive DSys (S : Container) : Nat → Type where
   | nil : DSys S 0
   | snoc {c n : Nat} (d : DSys S c) (sc : Scope S c n) : DSys S (c + n)
 
 /-- The step with constants keeps the laws of the step: a constant reads no argument. -/
-theorem CStep.lawful (hS : S.Lawful depth) (c : Nat) (κ : Fin c → Codec V M) :
-    (CStep S c κ).Lawful depth where
+theorem CStep.lawful (hS : R.Lawful depth) (c : Nat) (κ : Fin c → Codec V M) :
+    (CStep R c κ).Lawful depth where
   keep o hk d a₁ a₂ h := by
     cases o with
     | inl o => exact hS.keep o hk d a₁ a₂ h
@@ -1830,24 +1916,24 @@ theorem CStep.lawful (hS : S.Lawful depth) (c : Nat) (κ : Fin c → Codec V M) 
 
 /-- **The solution**: the solution of each scope is `solve` of its normal form, with the solution of
     the scopes before it as the constants. Structural on the sequence. -/
-def DSys.sol (depth : V → Nat) : {N : Nat} → DSys S N → Fin N → Codec V M
+def DSys.sol (R : Step S V M) (depth : V → Nat) : {N : Nat} → DSys S N → Fin N → Codec V M
   | _, .nil => Fin.elim0
   | _, .snoc (c := c) d sc =>
-      Fin.append (DSys.sol depth d)
-        (solve depth (sysB (CStep S c (DSys.sol depth d)) (nf (CStep S c (DSys.sol depth d)) sc)))
+      Fin.append (DSys.sol R depth d)
+        (solve depth (sysB (CStep R c (DSys.sol R depth d)) (nf (cSig S c) sc)))
 
 /-- Inlining a scope term: an entry leaf and a constant each become a flat term of the whole. -/
-def SFlat.inlC {S : Step V M} {c N : Nat} : {w k : Nat} →
+def SFlat.inlC {S : Container} {c N : Nat} : {w k : Nat} →
     SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k →
-    (Fin w → Flat S.Op S.arity N) → (Fin k → Flat S.Op S.arity N) →
-    (Fin c → Flat S.Op S.arity N) → Flat S.Op S.arity N
+    (Fin w → Flat S.Op S.Pos N) → (Fin k → Flat S.Op S.Pos N) →
+    (Fin c → Flat S.Op S.Pos N) → Flat S.Op S.Pos N
   | _, _, .leaf j, _, σk, _ => σk j
   | _, _, .node (.inl o) args, σw, σk, σc =>
       .node o fun p => SFlat.inlC (args p) ((S.kind o).envW σw) ((S.kind o).envK σw σk) σc
   | _, _, .node (.inr j) _, _, _, σc => σc j
 
 /-- **The graph form**: the DAG of scopes as one flat system, where a constant is a leaf. -/
-def DSys.graph : {N : Nat} → DSys S N → Fin N → Flat S.Op S.arity N
+def DSys.graph : {N : Nat} → DSys S N → Fin N → Flat S.Op S.Pos N
   | _, .nil => Fin.elim0
   | _, .snoc (c := c) (n := n) d sc => Fin.append
       (fun m => (DSys.graph d m).bind fun j => .leaf (Fin.castAdd n j))
@@ -1857,31 +1943,31 @@ def DSys.graph : {N : Nat} → DSys S N → Fin N → Flat S.Op S.arity N
 
 /-- The substitution lemma of the inlining. -/
 theorem SFlat.interp_inlC {c N : Nat} (e : Fin N → Codec V M) : ∀ {w k : Nat}
-    (t : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k) (σw : Fin w → Flat S.Op S.arity N)
-    (σk : Fin k → Flat S.Op S.arity N) (σc : Fin c → Flat S.Op S.arity N),
-    (t.inlC σw σk σc).interp S e =
-      SFlat.interp (CStep S c fun j => (σc j).interp S e) t (fun j => (σw j).interp S e)
-        (fun j => (σk j).interp S e)
+    (t : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k) (σw : Fin w → Flat S.Op S.Pos N)
+    (σk : Fin k → Flat S.Op S.Pos N) (σc : Fin c → Flat S.Op S.Pos N),
+    (t.inlC σw σk σc).interp R e =
+      SFlat.interp (CStep R c fun j => (σc j).interp R e) t (fun j => (σw j).interp R e)
+        (fun j => (σk j).interp R e)
   | _, _, .leaf _, _, _, _ => rfl
   | _, _, .node (.inl o) args, σw, σk, σc => by
-      show S.run o (fun p => ((args p).inlC _ _ σc).interp S e) = S.run o _
+      show R.run o (fun p => ((args p).inlC _ _ σc).interp R e) = R.run o _
       congr 1
       funext p
       exact (SFlat.interp_inlC e (args p) _ _ σc).trans
-        (congrArg₂ (SFlat.interp (CStep S c fun j => (σc j).interp S e) (args p))
+        (congrArg₂ (SFlat.interp (CStep R c fun j => (σc j).interp R e) (args p))
           (Kind.envW_comp _ _ _) (Kind.envK_comp _ _ _ _))
   | _, _, .node (.inr _) _, _, _, _ => rfl
 
 /-- **What a wall owes, at the maps**: a wall reads its arguments through their maps. The walls
     of the term layer, `held` and `legacy`, do. -/
-def WallF (S : Step V M) : Prop :=
-  ∀ o, S.kind o = .wall → ∀ a₁ a₂ : Fin (S.arity o) → Codec V M,
-    (∀ p, (a₁ p).f = (a₂ p).f) → (S.run o a₁).f = (S.run o a₂).f
+def WallF (R : Step S V M) : Prop :=
+  ∀ o, S.kind o = .wall → ∀ a₁ a₂ : S.Pos o → Codec V M,
+    (∀ p, (a₁ p).f = (a₂ p).f) → (R.run o a₁).f = (R.run o a₂).f
 
 /-- Each operation reads its arguments through their maps. -/
-theorem Step.run_f (hS : S.Lawful depth) (hW : WallF S) (o : S.Op)
-    {a₁ a₂ : Fin (S.arity o) → Codec V M} (h : ∀ p, (a₁ p).f = (a₂ p).f) :
-    (S.run o a₁).f = (S.run o a₂).f := by
+theorem Step.run_f (hS : R.Lawful depth) (hW : WallF R) (o : S.Op)
+    {a₁ a₂ : S.Pos o → Codec V M} (h : ∀ p, (a₁ p).f = (a₂ p).f) :
+    (R.run o a₁).f = (R.run o a₂).f := by
   rcases Kind.cases3 (S.kind o) with hκ | hκ | hκ
   · exact AgreeLe.eq_of_forall (depth := depth) fun d =>
       hS.keep o hκ d _ _ fun p => AgreeLe.of_eq (h p)
@@ -1890,57 +1976,57 @@ theorem Step.run_f (hS : S.Lawful depth) (hW : WallF S) (o : S.Op)
   · exact hW o hκ _ _ h
 
 /-- A flat term, a leaf below a wall included, reads its environment through the maps. -/
-theorem Flat.interp_f_congrW (hS : S.Lawful depth) (hW : WallF S) {e₁ e₂ : Fin n → Codec V M}
-    (he : ∀ j, (e₁ j).f = (e₂ j).f) : ∀ t : Flat S.Op S.arity n,
-    (t.interp S e₁).f = (t.interp S e₂).f
+theorem Flat.interp_f_congrW (hS : R.Lawful depth) (hW : WallF R) {e₁ e₂ : Fin n → Codec V M}
+    (he : ∀ j, (e₁ j).f = (e₂ j).f) : ∀ t : Flat S.Op S.Pos n,
+    (t.interp R e₁).f = (t.interp R e₂).f
   | .leaf j => he j
   | .node o args => Step.run_f hS hW o fun p => Flat.interp_f_congrW hS hW he (args p)
 
 /-- An entry of an earlier scope reads the graph form of the earlier scopes. -/
 theorem DSys.graph_castAdd {c n : Nat} (d : DSys S c) (sc : Scope S c n) (e : Fin (c + n) → Codec V M)
-    (m : Fin c) : sysB S (DSys.snoc d sc).graph e (Fin.castAdd n m) =
-      sysB S d.graph (fun j => e (Fin.castAdd n j)) m := by
+    (m : Fin c) : sysB R (DSys.snoc d sc).graph e (Fin.castAdd n m) =
+      sysB R d.graph (fun j => e (Fin.castAdd n j)) m := by
   simp only [sysB, DSys.graph, Fin.append_left, Flat.interp_bind, Flat.interp]
 
 /-- An entry of the last scope reads its scope term, with the earlier entries as constants. -/
 theorem DSys.graph_natAdd {c n : Nat} (d : DSys S c) (sc : Scope S c n) (e : Fin (c + n) → Codec V M)
     (i : Fin n) (κ : Fin c → Codec V M) (hκ : ∀ j, e (Fin.castAdd n j) = κ j) :
-    sysB S (DSys.snoc d sc).graph e (Fin.natAdd c i) =
-      SFlat.interp (CStep S c κ) (sc i) (fun j => e (Fin.natAdd c j))
+    sysB R (DSys.snoc d sc).graph e (Fin.natAdd c i) =
+      SFlat.interp (CStep R c κ) (sc i) (fun j => e (Fin.natAdd c j))
         (fun j => e (Fin.natAdd c (Fin.castLE (Nat.le_of_lt i.isLt) j))) := by
   obtain rfl : (fun j => e (Fin.castAdd n j)) = κ := funext hκ
   simp only [sysB, DSys.graph, Fin.append_right, SFlat.interp_inlC, Flat.interp]
 
 /-- **A DAG of scopes has one solution**, at the maps. The solution is the fold of
     `strat_solution`, scope by scope. -/
-theorem dsys_solution (hd : ∀ v, 0 < depth v) (hS : S.Lawful depth) (hW : WallF S) :
-    ∀ {N : Nat} (d : DSys S N), IsFix (sysB S d.graph) (d.sol depth) ∧
-      ∀ e, IsFix (sysB S d.graph) e → ∀ i, (e i).f = (d.sol depth i).f
+theorem dsys_solution (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (hW : WallF R) :
+    ∀ {N : Nat} (d : DSys S N), IsFix (sysB R d.graph) (d.sol R depth) ∧
+      ∀ e, IsFix (sysB R d.graph) e → ∀ i, (e i).f = (d.sol R depth i).f
   | _, .nil => ⟨fun i => i.elim0, fun _ _ i => i.elim0⟩
   | _, .snoc (c := c) (n := n) d sc => by
       obtain ⟨ih1, ih2⟩ := dsys_solution hd hS hW d
-      have hsc := strat_solution hd (CStep.lawful hS c (d.sol depth)) sc
+      have hsc := strat_solution hd (CStep.lawful hS c (d.sol R depth)) sc
       refine ⟨fun i => ?_, fun e he i => ?_⟩
       · refine Fin.addCases (fun m => ?_) (fun i => ?_) i
         · rw [DSys.graph_castAdd]
           simp only [DSys.sol, Fin.append_left]
           exact ih1 m
-        · rw [DSys.graph_natAdd d sc _ i (d.sol depth) fun j => by
+        · rw [DSys.graph_natAdd d sc _ i (d.sol R depth) fun j => by
             simp only [DSys.sol, Fin.append_left]]
           simp only [DSys.sol, Fin.append_right]
           exact hsc.1 i
-      · have he1 : IsFix (sysB S d.graph) fun j => e (Fin.castAdd n j) := fun m => by
+      · have he1 : IsFix (sysB R d.graph) fun j => e (Fin.castAdd n j) := fun m => by
           rw [he (Fin.castAdd n m), DSys.graph_castAdd]
         have hl := ih2 _ he1
-        let e' : Fin (c + n) → Codec V M := Fin.append (d.sol depth) fun i => e (Fin.natAdd c i)
+        let e' : Fin (c + n) → Codec V M := Fin.append (d.sol R depth) fun i => e (Fin.natAdd c i)
         have hee' : ∀ j, (e j).f = (e' j).f := fun j =>
           Fin.addCases (fun m => by simp only [e', Fin.append_left]; exact hl m)
             (fun i => by simp only [e', Fin.append_right]) j
-        have hfix : SIsFix (S := CStep S c (d.sol depth)) sc fun i => e (Fin.natAdd c i) := by
+        have hfix : SIsFix (CStep R c (d.sol R depth)) sc fun i => e (Fin.natAdd c i) := by
           intro i
           rw [he (Fin.natAdd c i)]
           refine (Flat.interp_f_congrW hS hW hee' ((DSys.snoc d sc).graph (Fin.natAdd c i))).trans ?_
-          have h2 := DSys.graph_natAdd d sc e' i (d.sol depth) fun j => by
+          have h2 := DSys.graph_natAdd (R := R) d sc e' i (d.sol R depth) fun j => by
             simp only [e', Fin.append_left]
           simp only [sysB] at h2
           rw [h2]
@@ -1953,8 +2039,8 @@ theorem dsys_solution (hd : ∀ v, 0 < depth v) (hS : S.Lawful depth) (hW : Wall
 /-- Every entry of the solution is a `solve` entry: its held set is its write domain, and its
     member is `⊤`. So the maps fix the codec. -/
 theorem DSys.sol_eq : ∀ {N : Nat} (d : DSys S N) (i : Fin N) {c : Codec V M},
-    (∀ v, c.T v = ((c.e v).isSome = true)) → c.μ = none → (d.sol depth i).f = c.f →
-    d.sol depth i = c
+    (∀ v, c.T v = ((c.e v).isSome = true)) → c.μ = none → (d.sol R depth i).f = c.f →
+    d.sol R depth i = c
   | _, .nil, i, _, _, _, _ => i.elim0
   | _, .snoc (n := n) d sc, i, c, hT, hμ, hf => by
       revert hf
@@ -1970,33 +2056,33 @@ end Scopes
 section DagBridge
 
 /-- The leaf `j` occurs at any position. -/
-def Flat.lv {Op : Type} {ar : Op → Nat} {n : Nat} (j : Fin n) : Flat Op ar n → Bool
+def Flat.lv (S : Container) (j : Fin n) : Flat S.Op S.Pos n → Bool
   | .leaf i => decide (i = j)
-  | .node o args => (List.finRange (ar o)).any fun p => Flat.lv j (args p)
+  | .node o args => (S.pos o).any fun p => Flat.lv S j (args p)
 
 /-- The leaf `j` occurs below a wall. -/
-def Flat.wlv (S : Step V M) (j : Fin n) : Flat S.Op S.arity n → Bool
+def Flat.wlv (S : Container) (j : Fin n) : Flat S.Op S.Pos n → Bool
   | .leaf _ => false
   | .node o args => match S.kind o with
-    | .wall => (List.finRange (S.arity o)).any fun p => Flat.lv j (args p)
-    | _ => (List.finRange (S.arity o)).any fun p => Flat.wlv S j (args p)
+    | .wall => (S.pos o).any fun p => Flat.lv S j (args p)
+    | _ => (S.pos o).any fun p => Flat.wlv S j (args p)
 
 /-- A reference edge: entry `i` names entry `j` at any position. -/
-def REdge (sys : Fin n → Flat S.Op S.arity n) (i j : Fin n) : Prop := (sys i).lv j = true
+def REdge (sys : Fin n → Flat S.Op S.Pos n) (i j : Fin n) : Prop := (sys i).lv S j = true
 
 /-- **The guard of a DAG of scopes**: no cycle of unguarded edges, and a wall names only an entry
     that does not reach back, so an entry outside the component of the wall. -/
-structure DagGuard (S : Step V M) (sys : Fin n → Flat S.Op S.arity n) : Prop where
+structure DagGuard (S : Container) (sys : Fin n → Flat S.Op S.Pos n) : Prop where
   noCycle : ¬ Cycle S sys
   wall : ∀ i j, (sys i).wlv S j = true → ¬ Relation.ReflTransGen (REdge sys) j i
 
 /-- A node has the leaf `j` exactly where an argument has the leaf `j`. -/
-theorem Flat.lv_node {o : S.Op} {g : Fin (S.arity o) → Flat S.Op S.arity n} {j : Fin n} :
-    (Flat.node o g).lv j = true ↔ ∃ p, (g p).lv j = true := by
-  simp only [Flat.lv]; exact any_finRange
+theorem Flat.lv_node {o : S.Op} {g : S.Pos o → Flat S.Op S.Pos n} {j : Fin n} :
+    (Flat.node o g).lv S j = true ↔ ∃ p, (g p).lv S j = true := by
+  simp only [Flat.lv]; exact any_pos
 
 /-- An unguarded leaf is a leaf. -/
-theorem Flat.lv_of_ulv {j : Fin n} : ∀ t : Flat S.Op S.arity n, t.ulv S j = true → t.lv j = true
+theorem Flat.lv_of_ulv {j : Fin n} : ∀ t : Flat S.Op S.Pos n, t.ulv S j = true → t.lv S j = true
   | .leaf _, h => by simpa [Flat.ulv, Flat.lv] using h
   | .node o args, h => by
       obtain ⟨_, p, hp⟩ := Flat.ulv_node_iff.mp h
@@ -2004,14 +2090,14 @@ theorem Flat.lv_of_ulv {j : Fin n} : ∀ t : Flat S.Op S.arity n, t.ulv S j = tr
 
 /-- A node has the leaf `j` below a wall exactly where the node is a wall over the leaf, or an
     argument has the leaf below a wall. -/
-theorem Flat.wlv_node {o : S.Op} {g : Fin (S.arity o) → Flat S.Op S.arity n} {j : Fin n} :
+theorem Flat.wlv_node {o : S.Op} {g : S.Pos o → Flat S.Op S.Pos n} {j : Fin n} :
     (Flat.node o g).wlv S j = true ↔
-      (S.kind o = .wall ∧ ∃ p, (g p).lv j = true) ∨ (S.kind o ≠ .wall ∧ ∃ p, (g p).wlv S j = true) := by
+      (S.kind o = .wall ∧ ∃ p, (g p).lv S j = true) ∨ (S.kind o ≠ .wall ∧ ∃ p, (g p).wlv S j = true) := by
   simp only [Flat.wlv]
-  cases S.kind o <;> simp
+  cases S.kind o <;> simp [S.pos_complete]
 
 /-- A leaf below a wall is a leaf. -/
-theorem Flat.lv_of_wlv {j : Fin n} : ∀ t : Flat S.Op S.arity n, t.wlv S j = true → t.lv j = true
+theorem Flat.lv_of_wlv {j : Fin n} : ∀ t : Flat S.Op S.Pos n, t.wlv S j = true → t.lv S j = true
   | .leaf _, h => by simp [Flat.wlv] at h
   | .node o args, h => by
       rcases Flat.wlv_node.mp h with ⟨_, p, hp⟩ | ⟨_, p, hp⟩
@@ -2027,19 +2113,19 @@ theorem isSome_map_of {α β : Type} {f : α → β} {x : Option α} (h : x.isSo
 
 /-- The scope term of a flat term: a leaf before the offset `c` becomes a constant, a leaf at the
     offset or after it becomes an entry of the scope, where it fits. -/
-def Flat.toD (π : Fin n → Fin n) (c : Nat) : {w k : Nat} → Flat S.Op S.arity n →
+def Flat.toD (π : Fin n → Fin n) (c : Nat) : {w k : Nat} → Flat S.Op S.Pos n →
     Option (SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k)
   | _, k, .leaf j =>
-      if h : (π j).val < c then some (.node (.inr ⟨_, h⟩) Fin.elim0)
+      if h : (π j).val < c then some (.node (.inr ⟨_, h⟩) Empty.elim)
       else if h' : (π j).val - c < k then some (.leaf ⟨_, h'⟩) else none
   | w, k, .node o args =>
-      (Fin.optAll fun p => Flat.toD π c (w := (S.kind o).w w) (k := (S.kind o).k w k) (args p)).map
+      (S.optAll o fun p => Flat.toD π c (w := (S.kind o).w w) (k := (S.kind o).k w k) (args p)).map
         fun g => SFlat.node (Sum.inl o) g
 
 /-- A term has a scope term where each leaf, each unguarded leaf, and each leaf below a wall
     fits its bound. -/
-theorem Flat.toD_fits (π : Fin n → Fin n) (c : Nat) : ∀ (t : Flat S.Op S.arity n) {w k : Nat},
-    (∀ j, t.lv j = true → (π j).val < c + w) → (∀ j, t.ulv S j = true → (π j).val < c + k) →
+theorem Flat.toD_fits (π : Fin n → Fin n) (c : Nat) : ∀ (t : Flat S.Op S.Pos n) {w k : Nat},
+    (∀ j, t.lv S j = true → (π j).val < c + w) → (∀ j, t.ulv S j = true → (π j).val < c + k) →
     (∀ j, t.wlv S j = true → (π j).val < c) → (t.toD π c (w := w) (k := k)).isSome = true
   | .leaf j, w, k, _, hb, _ => by
       have := hb j (by simp [Flat.ulv])
@@ -2049,7 +2135,7 @@ theorem Flat.toD_fits (π : Fin n → Fin n) (c : Nat) : ∀ (t : Flat S.Op S.ar
       · simp [h, show (π j).val - c < k by omega]
   | .node o args, w, k, ha, hb, hc => by
       simp only [Flat.toD]
-      refine isSome_map_of (Fin.optAll_isSome _ fun p => ?_)
+      refine isSome_map_of (Container.optAll_isSome _ fun p => ?_)
       rcases Kind.cases3 (S.kind o) with hκ | hκ | hκ
       · refine Flat.toD_fits π c (args p) (fun j hj => ?_) (fun j hj => ?_) (fun j hj => ?_)
         · rw [hκ]; exact ha j (Flat.lv_node.mpr ⟨p, hj⟩)
@@ -2085,10 +2171,10 @@ theorem Kind.envK_ptD {X : Type} {n w k c : Nat} {π : Fin n → Fin n} {τ : Fi
   | .wall, _, h, _ => absurd h (Nat.not_lt_zero _)
 
 /-- The scope term inlines back to the flat term, renamed by the order. -/
-theorem Flat.inl_toD (π : Fin n → Fin n) (c : Nat) : ∀ (t : Flat S.Op S.arity n) {w k : Nat}
+theorem Flat.inl_toD (π : Fin n → Fin n) (c : Nat) : ∀ (t : Flat S.Op S.Pos n) {w k : Nat}
     {s : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k}, t.toD π c = some s →
-    ∀ (σw : Fin w → Flat S.Op S.arity n) (σk : Fin k → Flat S.Op S.arity n)
-      (σc : Fin c → Flat S.Op S.arity n),
+    ∀ (σw : Fin w → Flat S.Op S.Pos n) (σk : Fin k → Flat S.Op S.Pos n)
+      (σc : Fin c → Flat S.Op S.Pos n),
     (∀ j (h : (π j).val - c < w), c ≤ (π j).val → σw ⟨_, h⟩ = .leaf (π j)) →
     (∀ j (h : (π j).val - c < k), c ≤ (π j).val → σk ⟨_, h⟩ = .leaf (π j)) →
     (∀ j (h : (π j).val < c), σc ⟨_, h⟩ = .leaf (π j)) →
@@ -2106,7 +2192,7 @@ theorem Flat.inl_toD (π : Fin n → Fin n) (c : Nat) : ∀ (t : Flat S.Op S.ari
         · simp [h, h'] at hs
   | .node o args, w, k, s, hs, σw, σk, σc, hw, hk, hc => by
       simp only [Flat.toD] at hs
-      cases hg : Fin.optAll fun p => Flat.toD π c (w := (S.kind o).w w) (k := (S.kind o).k w k)
+      cases hg : S.optAll o fun p => Flat.toD π c (w := (S.kind o).w w) (k := (S.kind o).k w k)
           (args p) with
       | none => rw [hg] at hs; exact nomatch hs
       | some g =>
@@ -2116,11 +2202,11 @@ theorem Flat.inl_toD (π : Fin n → Fin n) (c : Nat) : ∀ (t : Flat S.Op S.ari
         show Flat.node o _ = Flat.node o _
         congr 1
         funext p
-        exact Flat.inl_toD π c (args p) (Fin.optAll_some hg p) _ _ σc
+        exact Flat.inl_toD π c (args p) (Container.optAll_some hg p) _ _ σc
           (Kind.envW_ptD hw _) (Kind.envK_ptD hw hk _) hc
 
 /-- Two substitutions are one substitution. -/
-theorem Flat.bind_bind {Op : Type} {ar : Op → Nat} {a b m : Nat} (σ : Fin a → Flat Op ar b)
+theorem Flat.bind_bind {Op : Type} {ar : Op → Type} {a b m : Nat} (σ : Fin a → Flat Op ar b)
     (τ : Fin b → Flat Op ar m) : ∀ t : Flat Op ar a,
     (t.bind σ).bind τ = t.bind fun j => (σ j).bind τ
   | .leaf _ => rfl
@@ -2131,7 +2217,7 @@ theorem Flat.bind_bind {Op : Type} {ar : Op → Nat} {a b m : Nat} (σ : Fin a �
       exact Flat.bind_bind σ τ (args p)
 
 /-- The substitution of each leaf by itself is the identity. -/
-theorem Flat.bind_leaf {Op : Type} {ar : Op → Nat} {a : Nat} : ∀ t : Flat Op ar a,
+theorem Flat.bind_leaf {Op : Type} {ar : Op → Type} {a : Nat} : ∀ t : Flat Op ar a,
     t.bind Flat.leaf = t
   | .leaf _ => rfl
   | .node o args => by
@@ -2141,9 +2227,9 @@ theorem Flat.bind_leaf {Op : Type} {ar : Op → Nat} {a : Nat} : ∀ t : Flat Op
       exact Flat.bind_leaf (args p)
 
 /-- A substitution commutes with the inlining of a scope term. -/
-theorem SFlat.inlC_bind {c N N' : Nat} (τ : Fin N → Flat S.Op S.arity N') : ∀ {w k : Nat}
-    (t : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k) (σw : Fin w → Flat S.Op S.arity N)
-    (σk : Fin k → Flat S.Op S.arity N) (σc : Fin c → Flat S.Op S.arity N),
+theorem SFlat.inlC_bind {c N N' : Nat} (τ : Fin N → Flat S.Op S.Pos N') : ∀ {w k : Nat}
+    (t : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k) (σw : Fin w → Flat S.Op S.Pos N)
+    (σk : Fin k → Flat S.Op S.Pos N) (σc : Fin c → Flat S.Op S.Pos N),
     (t.inlC σw σk σc).bind τ =
       t.inlC (fun j => (σw j).bind τ) (fun j => (σk j).bind τ) (fun j => (σc j).bind τ)
   | _, _, .leaf _, _, _, _ => rfl
@@ -2157,18 +2243,18 @@ theorem SFlat.inlC_bind {c N N' : Nat} (τ : Fin N → Flat S.Op S.arity N') : �
   | _, _, .node (.inr _) _, _, _, _ => rfl
 
 /-- A walk of `m` reference edges from `i` to `j`. -/
-def RWalk (sys : Fin n → Flat S.Op S.arity n) (m : Nat) (i j : Fin n) : Prop :=
+def RWalk (sys : Fin n → Flat S.Op S.Pos n) (m : Nat) (i j : Fin n) : Prop :=
   ∃ w : Nat → Fin n, w 0 = i ∧ w m = j ∧ ∀ t < m, REdge sys (w t) (w (t + 1))
 
 /-- A reference edge before a walk of `m` edges is a walk of `m + 1` edges. -/
-theorem rwalk_cons {sys : Fin n → Flat S.Op S.arity n} {i l j : Fin n} {m : Nat}
+theorem rwalk_cons {sys : Fin n → Flat S.Op S.Pos n} {i l j : Fin n} {m : Nat}
     (h : REdge sys i l) : RWalk sys m l j → RWalk sys (m + 1) i j
   | ⟨w, h0, hm, hw⟩ => ⟨fun t => match t with | 0 => i | t + 1 => w t, rfl, hm, fun t ht => match t with
       | 0 => by show REdge sys i (w 0); rw [h0]; exact h
       | t + 1 => hw t (by omega)⟩
 
 /-- A walk of reference edges is a reach. -/
-theorem rtg_of_rwalk {sys : Fin n → Flat S.Op S.arity n} {j : Fin n} : ∀ (m : Nat) (i : Fin n),
+theorem rtg_of_rwalk {sys : Fin n → Flat S.Op S.Pos n} {j : Fin n} : ∀ (m : Nat) (i : Fin n),
     RWalk sys m i j → Relation.ReflTransGen (REdge sys) i j
   | 0, _, ⟨w, h0, hm, _⟩ => by subst h0; subst hm; exact .refl
   | m + 1, i, ⟨w, h0, hm, hw⟩ => by
@@ -2176,7 +2262,7 @@ theorem rtg_of_rwalk {sys : Fin n → Flat S.Op S.arity n} {j : Fin n} : ∀ (m 
       exact .head h1 (rtg_of_rwalk m (w 1) ⟨fun t => w (t + 1), rfl, hm, fun t ht => hw (t + 1) (by omega)⟩)
 
 /-- A reach is a walk of reference edges. -/
-theorem rwalk_of_rtg {sys : Fin n → Flat S.Op S.arity n} {i j : Fin n}
+theorem rwalk_of_rtg {sys : Fin n → Flat S.Op S.Pos n} {i j : Fin n}
     (h : Relation.ReflTransGen (REdge sys) i j) : ∃ m, RWalk sys m i j := by
   induction h using Relation.ReflTransGen.head_induction_on with
   | refl => exact ⟨0, fun _ => j, rfl, rfl, fun _ ht => absurd ht (Nat.not_lt_zero _)⟩
@@ -2185,7 +2271,7 @@ theorem rwalk_of_rtg {sys : Fin n → Flat S.Op S.arity n} {i j : Fin n}
     exact ⟨m + 1, rwalk_cons hab hw⟩
 
 /-- A walk over `n` entries has a walk of at most `n` edges between its ends: cut each repeat. -/
-theorem rwalk_short {sys : Fin n → Flat S.Op S.arity n} {i j : Fin n} :
+theorem rwalk_short {sys : Fin n → Flat S.Op S.Pos n} {i j : Fin n} :
     ∀ m, RWalk sys m i j → ∃ m', m' ≤ n ∧ RWalk sys m' i j := by
   intro m
   induction m using Nat.strong_induction_on with
@@ -2216,13 +2302,13 @@ theorem rwalk_short {sys : Fin n → Flat S.Op S.arity n} {i j : Fin n} :
   · exact ⟨m, hnm, w, h0, hm, hw⟩
 
 /-- Reach in at most `k` reference edges, as a decision. Structural on `k`. -/
-def reachB (sys : Fin n → Flat S.Op S.arity n) : Nat → Fin n → Fin n → Bool
+def reachB (sys : Fin n → Flat S.Op S.Pos n) : Nat → Fin n → Fin n → Bool
   | 0 => fun i j => decide (i = j)
   | k + 1 => fun i j =>
-      decide (i = j) || (List.finRange n).any fun l => (sys i).lv l && reachB sys k l j
+      decide (i = j) || (List.finRange n).any fun l => (sys i).lv S l && reachB sys k l j
 
 /-- The decision of reach in at most `k` edges is sound and complete. -/
-theorem reachB_iff (sys : Fin n → Flat S.Op S.arity n) : ∀ (k : Nat) (i j : Fin n),
+theorem reachB_iff (sys : Fin n → Flat S.Op S.Pos n) : ∀ (k : Nat) (i j : Fin n),
     reachB sys k i j = true ↔ ∃ m, m ≤ k ∧ RWalk sys m i j
   | 0, i, j => by
       simp only [reachB, decide_eq_true_eq]
@@ -2250,7 +2336,7 @@ theorem reachB_iff (sys : Fin n → Flat S.Op S.arity n) : ∀ (k : Nat) (i j : 
           exact hw 0 (Nat.succ_pos m)
 
 /-- **Reach is decided structurally**: reach equals reach in at most `n` reference edges. -/
-theorem reach_iff (sys : Fin n → Flat S.Op S.arity n) (i j : Fin n) :
+theorem reach_iff (sys : Fin n → Flat S.Op S.Pos n) (i j : Fin n) :
     Relation.ReflTransGen (REdge sys) i j ↔ reachB sys n i j = true := by
   constructor
   · intro h
@@ -2329,7 +2415,7 @@ theorem le_maxOver {α : Type} (u : α → Nat) : ∀ (l : List α) (x : α), x 
     the number of entries that the entry reaches, then the least entry of its component. An edge
     keeps or lowers the class, and lowers it when it leaves the component. A wall leaves the
     component. Each scope is one run of equal classes, so one component. -/
-theorem dsys_of_guard {sys : Fin n → Flat S.Op S.arity n} (hG : DagGuard S sys) :
+theorem dsys_of_guard {sys : Fin n → Flat S.Op S.Pos n} (hG : DagGuard S sys) :
     ∃ (π : Equiv.Perm (Fin n)) (d : DSys S n),
       ∀ m, d.graph m = (sys (π.symm m)).bind fun j => .leaf (π j) := by
   let R := Relation.ReflTransGen (REdge sys)
@@ -2495,13 +2581,13 @@ end DagBridge
 /-! ## A renaming and a rank -/
 
 section Rename
-variable {S : Step V M}
+variable {S : Container} {R : Step S V M}
 
 /-- The fixed points of a renamed system are the renamed fixed points. -/
-theorem isFix_rename {sys g : Fin n → Flat S.Op S.arity n} (π : Equiv.Perm (Fin n))
+theorem isFix_rename {sys g : Fin n → Flat S.Op S.Pos n} (π : Equiv.Perm (Fin n))
     (hg : ∀ m, g m = (sys (π.symm m)).bind fun j => .leaf (π j)) (e : Fin n → Codec V M) :
-    IsFix (sysB S g) e ↔ IsFix (sysB S sys) fun i => e (π i) := by
-  have hi : ∀ m, (sysB S g e m) = sysB S sys (fun i => e (π i)) (π.symm m) := fun m => by
+    IsFix (sysB R g) e ↔ IsFix (sysB R sys) fun i => e (π i) := by
+  have hi : ∀ m, (sysB R g e m) = sysB R sys (fun i => e (π i)) (π.symm m) := fun m => by
     simp only [sysB, hg, Flat.interp_bind, Flat.interp]
   constructor
   · intro h i
@@ -2515,7 +2601,7 @@ theorem isFix_rename {sys g : Fin n → Flat S.Op S.arity n} (π : Equiv.Perm (F
     exact this
 
 /-- A rank that every unguarded edge lowers rules out a cycle. -/
-theorem noCycle_of_rank {V M : Type} {n : Nat} {S : Step V M} {sys : Fin n → Flat S.Op S.arity n}
+theorem noCycle_of_rank {n : Nat} {S : Container} {sys : Fin n → Flat S.Op S.Pos n}
     (r : Fin n → Nat) (hr : ∀ i j, UEdge S sys i j → r j < r i) : ¬ Cycle S sys := by
   rintro ⟨w, m, hm, hwm, hw⟩
   have key : ∀ t, t ≤ m → r (w t) + t ≤ r (w 0) := by
@@ -2536,7 +2622,7 @@ end Rename
 /-! ## `Compat` and lawfulness at the solution -/
 
 section AtSolution
-variable {S : Step V M}
+variable {S : Container} {R : Step S V M}
 
 /-- `Compat` reads two inputs, so codecs that approximate at every depth carry it to the limit. -/
 theorem compat_of_approx {V M : Type} {depth : V → Nat} {c d : Codec V M}
@@ -2553,20 +2639,20 @@ theorem compat_of_approx {V M : Type} {depth : V → Nat} {c d : Codec V M}
 
 /-- **`Compat` reaches the solution**: options with no leaf under a wall that are pairwise
     compatible at every stage of the normal form are pairwise compatible at the solution. -/
-theorem compat_strat (hd : ∀ v, 0 < depth v) (hS : S.Lawful depth) (sys : SSys S n)
-    {os : List (Flat S.Op S.arity n)} (hok : ∀ t ∈ os, t.Ok S)
-    (hst : ∀ k, ∀ t ∈ os, ∀ t' ∈ os, Compat (t.interp S (sysStage (sysB S (nf S sys)) k))
-      (t'.interp S (sysStage (sysB S (nf S sys)) k))) :
-    ∀ t ∈ os, ∀ t' ∈ os, Compat (t.interp S (solve depth (sysB S (nf S sys))))
-      (t'.interp S (solve depth (sysB S (nf S sys)))) := fun t ht t' ht' =>
+theorem compat_strat (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (sys : SSys S n)
+    {os : List (Flat S.Op S.Pos n)} (hok : ∀ t ∈ os, t.Ok S)
+    (hst : ∀ k, ∀ t ∈ os, ∀ t' ∈ os, Compat (t.interp R (sysStage (sysB R (nf S sys)) k))
+      (t'.interp R (sysStage (sysB R (nf S sys)) k))) :
+    ∀ t ∈ os, ∀ t' ∈ os, Compat (t.interp R (solve depth (sysB R (nf S sys))))
+      (t'.interp R (solve depth (sysB R (nf S sys)))) := fun t ht t' ht' =>
   compat_of_approx (depth := depth) fun k =>
     ⟨_, _, Flat.ok_agree hS (solve_agree hd (nf_contractive hS sys) k) t (hok t ht),
       Flat.ok_agree hS (solve_agree hd (nf_contractive hS sys) k) t' (hok t' ht'), hst k t ht t' ht'⟩
 
 /-- **Lawfulness reaches the solution**: lawful stages of the normal form give a lawful solution. -/
-theorem lawful_strat (hd : ∀ v, 0 < depth v) (hS : S.Lawful depth) (sys : SSys S n) {member : V → M}
-    (hs : ∀ k i, Lawful member (sysStage (sysB S (nf S sys)) k i)) (i : Fin n) :
-    Lawful member (solve depth (sysB S (nf S sys)) i) :=
+theorem lawful_strat (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (sys : SSys S n) {member : V → M}
+    (hs : ∀ k i, Lawful member (sysStage (sysB R (nf S sys)) k i)) (i : Fin n) :
+    Lawful member (solve depth (sysB R (nf S sys)) i) :=
   lawful_solve hd (nf_contractive hS sys) hs i
 
 end AtSolution
@@ -2574,10 +2660,10 @@ end AtSolution
 /-! ## A leaf below a wall has no stratified form -/
 
 section WallLeaf
-variable {S : Step V M}
+variable {S : Container} {R : Step S V M}
 
 /-- A renaming keeps a term with no leaf. -/
-theorem Flat.closedB_rename (π : Fin n → Fin n) : ∀ t : Flat S.Op S.arity n,
+theorem Flat.closedB_rename (π : Fin n → Fin n) : ∀ t : Flat S.Op S.Pos n,
     (t.bind fun j => .leaf (π j)).closedB S = t.closedB S
   | .leaf _ => rfl
   | .node o args => by
@@ -2587,7 +2673,7 @@ theorem Flat.closedB_rename (π : Fin n → Fin n) : ∀ t : Flat S.Op S.arity n
       exact Flat.closedB_rename π (args p)
 
 /-- A renaming keeps a term with no leaf under a wall. -/
-theorem Flat.okB_rename (π : Fin n → Fin n) : ∀ t : Flat S.Op S.arity n,
+theorem Flat.okB_rename (π : Fin n → Fin n) : ∀ t : Flat S.Op S.Pos n,
     (t.bind fun j => .leaf (π j)).okB S = t.okB S
   | .leaf _ => rfl
   | .node o args => by
@@ -2596,7 +2682,7 @@ theorem Flat.okB_rename (π : Fin n → Fin n) : ∀ t : Flat S.Op S.arity n,
 
 /-- **A leaf below a wall has no stratified form**: no renaming of a term with a leaf below a wall
     is an entry of the graph form of a stratified system. -/
-theorem wall_leaf_no_strat (ssys : SSys S n) (π : Fin n → Fin n) (t : Flat S.Op S.arity n)
+theorem wall_leaf_no_strat (ssys : SSys S n) (π : Fin n → Fin n) (t : Flat S.Op S.Pos n)
     (ht : t.okB S = false) (m : Fin n) : ssys.graph m ≠ t.bind fun j => .leaf (π j) := by
   intro h
   have hok := ((graphGuard_iff _).mp ssys.graphGuard).1 m
@@ -2610,16 +2696,17 @@ end WallLeaf
 section WallConst
 
 /-- A step with one wall of one argument, and one nullary operation. -/
-def wStep : Step Nat Unit where
-  Op := Bool
-  arity | true => 1 | false => 0
+abbrev wStep : Container where
+  A := Bool
+  B | true => Fin 1 | false => Fin 0
+  pos | true => List.finRange 1 | false => List.finRange 0
+  pos_complete | true => List.mem_finRange | false => List.mem_finRange
   kind | true => .wall | false => .keep
-  run := fun _ _ => .empty
 
 /-- A wall may name a constant: the second scope's wall names the first scope's entry. -/
 def wallConst : DSys wStep 2 :=
   .snoc (c := 1) (n := 1) (.snoc (c := 0) (n := 1) .nil fun _ => .node (.inl false) Fin.elim0)
-    fun _ => .node (.inl true) fun _ => .node (.inr ⟨0, by decide⟩) Fin.elim0
+    fun _ => .node (.inl true) fun _ => .node (.inr ⟨0, by decide⟩) Empty.elim
 
 end WallConst
 

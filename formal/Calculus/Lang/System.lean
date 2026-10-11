@@ -1,4 +1,4 @@
-import Calculus.Alg.System
+import Calculus.Lang.Scope
 import Calculus.Lang.Path
 
 /-!
@@ -6,9 +6,9 @@ import Calculus.Lang.Path
 
 Each binder of a term becomes one entry, and each variable becomes a leaf at the entry of its
 binder. `hsys` is the system of a closed term: the entry of each binder is the hoist of its body.
-The step of the term layer has one operation for each constructor but `union`, `mu` and `var`.
-The union is the join of the step. `set`, `list` and `object` are `down`. `held` and `legacy` are
-walls.
+The hoist targets the term container `Scoped.TSig`, which has one operation for each constructor
+but `mu` and `var`. `set`, `list` and `object` are `down`. `held` and `legacy` are walls. The
+hoist reads no table: the algebra `Scoped.TStep` reads the tables.
 
 Below a wall the hoist starts an empty environment, so a binder below a wall is an entry of a
 later scope, and the wall names that entry as a constant. The guard of the term justifies the
@@ -19,8 +19,7 @@ scopes. The solution of that DAG gives each binder its denotation, the whole cod
 over the solution is the denotation of the term. The obligations of a union below a binder carry
 `PairwiseCompat` to the solution.
 
-The keys of an object are a `Finset String`. `keysOf` sorts them by a structural insertion sort,
-lifted through the quotient, so the hoist stays structural.
+The binders of an object are numbered in the order of `keysOf`, so the hoist stays structural.
 -/
 
 namespace Calculus.Alg
@@ -161,98 +160,7 @@ theorem le_sumF : ∀ {n : Nat} (c : Fin n → Nat) (p : Fin n), c p ≤ sumF n 
 
 end SumF
 
-/-! ## The keys of an object, in a computable order -/
-
-/-- One name before another in the order of `compare`, as a decision. -/
-def nameLE (a b : String) : Bool := (compare a b).isLE
-
-/-- Two names are in order one way or the other. -/
-theorem nameLE_total {a b : String} (h : nameLE a b = false) : nameLE b a = true := by
-  unfold nameLE at h ⊢
-  rw [@Std.OrientedCmp.eq_swap _ compare String.instTransOrd.toOrientedCmp a b] at h
-  cases hc : compare b a <;> simp only [hc, Ordering.swap, Ordering.isLE] at h ⊢
-  all_goals exact nomatch h
-
-/-- Two names in order both ways are one name. -/
-theorem nameLE_antisymm {a b : String} (h₁ : nameLE a b = true) (h₂ : nameLE b a = true) :
-    a = b := by
-  unfold nameLE at h₁ h₂
-  rw [@Std.OrientedCmp.eq_swap _ compare String.instTransOrd.toOrientedCmp a b] at h₁
-  cases hc : compare b a with
-  | eq => exact (@Std.LawfulEqCmp.eq_of_compare _ compare String.instLawfulEqOrd b a hc).symm
-  | lt => simp only [hc, Ordering.swap, Ordering.isLE] at h₁; exact nomatch h₁
-  | gt => simp only [hc, Ordering.isLE] at h₂; exact nomatch h₂
-
-/-- The order of names is transitive. -/
-theorem nameLE_trans {a b c : String} (h₁ : nameLE a b = true) (h₂ : nameLE b c = true) :
-    nameLE a c = true :=
-  @Std.TransCmp.isLE_trans _ compare String.instTransOrd a b c h₁ h₂
-
-/-- Insert a name before the first name that does not come before it. Structural on the list. -/
-def insName (a : String) : List String → List String
-  | [] => [a]
-  | x :: xs => cond (nameLE a x) (a :: x :: xs) (x :: insName a xs)
-
-/-- Two insertions commute. -/
-theorem insName_comm (a b : String) : ∀ l : List String, insName a (insName b l) = insName b (insName a l)
-  | [] => by
-      cases hab : nameLE a b <;> cases hba : nameLE b a <;>
-        simp only [insName, hab, hba, cond_true, cond_false]
-      · rw [nameLE_total hab] at hba; exact nomatch hba
-      · rw [nameLE_antisymm hab hba]
-  | x :: xs => by
-      cases hbx : nameLE b x <;> cases hax : nameLE a x
-      · simp only [insName, hbx, hax, cond_false]
-        rw [insName_comm a b xs]
-      · cases hba : nameLE b a
-        · simp only [insName, hbx, hax, hba, cond_true, cond_false]
-        · rw [nameLE_trans hba hax] at hbx; exact nomatch hbx
-      · cases hab : nameLE a b
-        · simp only [insName, hbx, hax, hab, cond_true, cond_false]
-        · rw [nameLE_trans hab hbx] at hax; exact nomatch hax
-      · cases hab : nameLE a b <;> cases hba : nameLE b a <;>
-          simp only [insName, hbx, hax, hab, hba, cond_true, cond_false]
-        · rw [nameLE_total hab] at hba; exact nomatch hba
-        · rw [nameLE_antisymm hab hba]
-
-/-- A name is in an insertion exactly where it is the inserted name or in the list. -/
-theorem mem_insName {a k : String} : ∀ l : List String, k ∈ insName a l ↔ k = a ∨ k ∈ l
-  | [] => by simp only [insName, List.mem_cons, List.not_mem_nil, or_false]
-  | x :: xs => by
-      cases h : nameLE a x
-      · simp only [insName, h, cond_false, List.mem_cons, mem_insName xs]
-        exact ⟨fun h' => h'.elim (fun e => .inr (.inl e)) (fun h'' => h''.elim .inl (.inr ∘ .inr)),
-          fun h' => h'.elim (.inr ∘ .inl) (fun h'' => h''.elim .inl (.inr ∘ .inr))⟩
-      · simp only [insName, h, cond_true, List.mem_cons]
-
-/-- The insertion sort of names. -/
-def sortNames (l : List String) : List String := l.foldr insName []
-
-/-- **Sorting forgets the order of the list**: a permutation sorts to one list. -/
-theorem sortNames_perm {l₁ l₂ : List String} (h : l₁.Perm l₂) : sortNames l₁ = sortNames l₂ := by
-  induction h with
-  | nil => rfl
-  | cons x _ ih => exact congrArg (insName x) ih
-  | swap x y l => exact insName_comm y x _
-  | trans _ _ ih₁ ih₂ => exact ih₁.trans ih₂
-
-/-- The sorted names are the names of the list. -/
-theorem mem_sortNames {k : String} : ∀ l : List String, k ∈ sortNames l ↔ k ∈ l
-  | [] => Iff.rfl
-  | x :: xs => by
-      show k ∈ insName x (sortNames xs) ↔ _
-      rw [mem_insName, mem_sortNames xs, List.mem_cons]
-
-/-- The declared names, sorted. The insertion sort is structural, and sorting forgets the order
-    of the underlying list, so the sort lifts through the quotient. -/
-def keysOf (fs : Finset String) : List String :=
-  Quot.liftOn fs.val sortNames fun _ _ h => sortNames_perm h
-
-/-- The sorted names are the declared names. -/
-theorem mem_keysOf {fs : Finset String} {k : String} : k ∈ keysOf fs ↔ k ∈ fs := by
-  obtain ⟨v, hv⟩ := fs
-  induction v using Quot.ind with
-  | mk l => exact mem_sortNames l
+/-! ## The positions of the keys of an object -/
 
 /-- The name at a position. -/
 def kAt (fs : Finset String) (p : Fin (keysOf fs).length) : {k // k ∈ fs} :=
@@ -266,199 +174,10 @@ def idx (fs : Finset String) (k : {k // k ∈ fs}) : Fin (keysOf fs).length :=
 theorem kAt_idx (fs : Finset String) (k : {k // k ∈ fs}) : kAt fs (idx fs k) = k :=
   Subtype.ext (getElem_posOf _ _ _)
 
-/-! ## The step of the term layer, and the hoist -/
+/-! ## The hoist -/
 
 section THoist
 variable {S : Syn} [Sem S]
-
-/-- The presence of a slot, and the constant of a `fill`. -/
-inductive SlotKind (S : Syn) where
-  | req
-  | opt
-  | fill (v : S.sig.K)
-
-/-- A slot's field from its presence and its codec. -/
-def mkField : SlotKind S → S.C → FieldSem (Mean.V (B := S.sig)) (Mean.Mem (B := S.sig))
-  | .req, c => .req c
-  | .opt, c => .opt c
-  | .fill v, c => .fill c (Mean.const v)
-
-/-- The open block's policy from its codec, where there is one. -/
-def restOf : Option S.C → RestSem (Mean.V (B := S.sig)) (Mean.Mem (B := S.sig))
-  | some c => .codec c
-  | none => .refuse
-
-/-- The constructors of the term, other than the union, as one step. -/
-inductive TOp (S : Syn) [Sem S] where
-  | prim (g : S.Ground)
-  | opaq
-  | never
-  | set
-  | list (a s c : Nat)
-  | refine (p : S.sig.P false) (pA : S.sig.P true)
-  | held (s : Bool) (w : PairAt (Mean.V (B := S.sig)))
-  | legacy (r : S.sig.R)
-  | obj (fs : Finset String) (kd : Fin (keysOf fs).length → SlotKind S) (wl : Nat)
-
-/-- The number of arguments of each operation. -/
-def TOp.arity : TOp S → Nat
-  | .obj fs _ wl => (keysOf fs).length + wl
-  | .list a s c => a + (s + c)
-  | .set => 1
-  | .refine _ _ => 1
-  | .legacy _ => 1
-  | .held _ _ => 2
-  | .prim _ => 0
-  | .opaq => 0
-  | .never => 0
-
-/-- The kind of each operation: a container is `down`, `held` and `legacy` are walls. -/
-def TOp.kind : TOp S → Kind
-  | .obj _ _ _ => .down
-  | .set => .down
-  | .list _ _ _ => .down
-  | .held _ _ => .wall
-  | .legacy _ => .wall
-  | .prim _ => .keep
-  | .opaq => .keep
-  | .never => .keep
-  | .refine _ _ => .keep
-
-/-- The codec of each operation, the codec that `denote` gives the constructor. -/
-def TOp.run : (o : TOp S) → (Fin o.arity → Mean.C S.sig) → Mean.C S.sig
-  | .prim g, _ => Mean.ground g
-  | .opaq, _ => idCodec
-  | .never, _ => .empty
-  | .set, a => match Mean.set (B := S.sig) with
-    | some L => L.lift (a ⟨0, Nat.one_pos⟩)
-    | none => .empty
-  | .list n s c, a => match Mean.list (B := S.sig) with
-    | some L => listCodec L.toSummand (List.ofFn fun p : Fin n => a (Fin.castAdd _ p))
-        (if h : 0 < s then some (a (Fin.natAdd n (Fin.castAdd c ⟨0, h⟩))) else none)
-        (List.ofFn fun p : Fin c => a (Fin.natAdd n (Fin.natAdd s p)))
-    | none => .empty
-  | .refine p pA, a => refine2 (a ⟨0, Nat.one_pos⟩) (Mean.eval false p) (Mean.eval true pA)
-  | .held s w, a => held1 s (a ⟨0, Nat.zero_lt_two⟩) (a ⟨1, Nat.one_lt_two⟩) w
-  | .legacy r, a => (a ⟨0, Nat.one_pos⟩).extendRead (Mean.read r)
-  | .obj fs kd wl, a => match Mean.map (B := S.sig) with
-    | some F => objectCodec F.toSummand
-        ⟨fs, fun k => mkField (kd (idx fs k)) (a (Fin.castAdd wl (idx fs k)))⟩
-        (restOf (if h : 0 < wl then some (a (Fin.natAdd _ ⟨0, h⟩)) else none))
-    | none => .empty
-
-/-- The base step of the term layer. -/
-def TStep (S : Syn) [Sem S] : Step (Mean.V (B := S.sig)) (Mean.Mem (B := S.sig)) where
-  Op := TOp S
-  arity := TOp.arity
-  kind := TOp.kind
-  run := TOp.run
-
-/-- A relation at each position relates the two lists of the positions pointwise. -/
-theorem forall₂_ofFn {X Y : Type} {R : X → Y → Prop} :
-    ∀ {n : Nat} {f : Fin n → X} {g : Fin n → Y}, (∀ p, R (f p) (g p)) →
-      List.Forall₂ R (List.ofFn f) (List.ofFn g)
-  | 0, _, _, _ => by simp
-  | _ + 1, _, _, h => by
-      rw [List.ofFn_succ, List.ofFn_succ]
-      exact .cons (h 0) (forall₂_ofFn fun p => h p.succ)
-
-/-- A relation of two codecs relates the two fields of one slot kind. -/
-theorem mkField_rel {R : S.C → S.C → Prop} (s : SlotKind S) {c₁ c₂ : S.C} (h : R c₁ c₂) :
-    FieldSem.Rel R (mkField s c₁) (mkField s c₂) := by
-  cases s with
-  | req => exact h
-  | opt => exact h
-  | fill v => exact ⟨h, rfl⟩
-
-/-- The step of the term layer keeps agreement at `keep`, and adds one layer at `down`. -/
-theorem TStep_lawful : (TStep S).Lawful (Mean.d (B := S.sig)) where
-  keep o hk d a₁ a₂ h := by
-    cases o with
-    | prim g => exact AgreeLe.refl _ _
-    | opaq => exact AgreeLe.refl _ _
-    | never => exact AgreeLe.refl _ _
-    | refine p pA => exact agreeLe_refine2 (h _) _ _
-    | set => exact nomatch hk
-    | list _ _ _ => exact nomatch hk
-    | held _ _ => exact nomatch hk
-    | legacy _ => exact nomatch hk
-    | obj _ _ _ => exact nomatch hk
-  down o hk d a₁ a₂ h := by
-    cases o with
-    | set =>
-      show AgreeLe _ _ (TOp.run .set a₁) (TOp.run .set a₂)
-      simp only [TOp.run]
-      cases Mean.set (B := S.sig) with
-      | none => exact AgreeLe.refl _ _
-      | some L => exact L.agree (h _)
-    | list n s c =>
-      show AgreeLe _ _ (TOp.run (.list n s c) a₁) (TOp.run (.list n s c) a₂)
-      simp only [TOp.run]
-      cases Mean.list (B := S.sig) with
-      | none => exact AgreeLe.refl _ _
-      | some L =>
-        refine agreeLe_listCodec L.d_lt (forall₂_ofFn fun p => h _) ?_ (forall₂_ofFn fun p => h _)
-        rcases Decidable.em (0 < s) with hs | hs
-        · simp only [hs, dite_true]; exact .some (h _)
-        · simp only [hs, dite_false]; exact .none
-    | prim g => exact nomatch hk
-    | opaq => exact nomatch hk
-    | never => exact nomatch hk
-    | refine p pA => exact nomatch hk
-    | held _ _ => exact nomatch hk
-    | legacy _ => exact nomatch hk
-    | obj fs kd wl =>
-      show AgreeLe _ _ (TOp.run (.obj fs kd wl) a₁) (TOp.run (.obj fs kd wl) a₂)
-      simp only [TOp.run]
-      cases Mean.map (B := S.sig) with
-      | none => exact AgreeLe.refl _ _
-      | some F =>
-        refine agreeLe_objectCodec F.d_lt (fun k => mkField_rel _ (h _)) ?_
-        rcases Decidable.em (0 < wl) with hw | hw
-        · simp only [hw, dite_true, restOf]; exact h _
-        · simp only [hw, dite_false, restOf]; trivial
-
-/-- `held1` reads its two codecs through their maps. -/
-theorem held1_f_congr {V M : Type} {s : Bool} {w : PairAt V} {c c' P P' : Codec V M}
-    (hc : c.f = c'.f) (hP : P.f = P'.f) : (held1 s c P w).f = (held1 s c' P' w).f := by
-  simp only [held1, refine2, adapt2, Codec.e, Codec.p, hc, hP]
-
-/-- `Codec.extendRead` reads its codec through its map. -/
-theorem extendRead_f_congr {V M : Type} {r : V → Option V} {c c' : Codec V M} (hc : c.f = c'.f) :
-    (c.extendRead r).f = (c'.extendRead r).f := by
-  simp only [Codec.extendRead, Codec.ofEP, Codec.e, Codec.p, hc]
-
-/-- The walls of the term layer read their arguments through the maps. -/
-theorem TStep_wallF : WallF (TStep S) := by
-  intro o hk a₁ a₂ h
-  cases o with
-  | held s w =>
-    show (TOp.run (.held s w) a₁).f = (TOp.run (.held s w) a₂).f
-    exact held1_f_congr (h _) (h _)
-  | legacy r =>
-    show (TOp.run (.legacy r) a₁).f = (TOp.run (.legacy r) a₂).f
-    exact extendRead_f_congr (h _)
-  | prim g => exact nomatch hk
-  | opaq => exact nomatch hk
-  | never => exact nomatch hk
-  | set => exact nomatch hk
-  | list _ _ _ => exact nomatch hk
-  | refine p pA => exact nomatch hk
-  | obj _ _ _ => exact nomatch hk
-
-/-- The hoist step: the step of the term layer with the join and the restriction. -/
-abbrev HS (S : Syn) [Sem S] := (TStep S).withJoin
-
-/-- A flat term of the hoist, with `N` entries. -/
-abbrev HFlat (S : Syn) [Sem S] (N : Nat) := Flat (HS S).Op (HS S).arity N
-
-/-- The hoist step keeps the laws of a step. -/
-theorem HS_lawful : (HS S).Lawful (Mean.d (B := S.sig)) := TStep_lawful.withJoin
-
-/-- The walls of the hoist step read their arguments through the maps. -/
-theorem HS_wallF : WallF (HS S)
-  | .inl o, hk, a₁, a₂, h => TStep_wallF o hk a₁ a₂ h
-  | .inr _, hk, _, _, _ => nomatch hk
 
 /-! The terms that the hoist covers. `Term.frag_all` proves that the hoist covers every term. -/
 mutual
@@ -539,13 +258,13 @@ def muCO : Option (Term S.sig) → Nat
 end
 
 /-- The presence of a slot. -/
-def slotKind : ObjectSlot S.sig → SlotKind S
+def slotKind : ObjectSlot S.sig → Scoped.SlotMode S.sig
   | .req _ => .req
   | .optional _ => .opt
   | .fill _ v => .fill v
 
 /-- The number of spread positions: one where there is a spread. -/
-def optLen : Option (Term S.sig) → Nat
+def optLen : Option (Term S.sig) → Fin 2
   | none => 0
   | some _ => 1
 
@@ -558,50 +277,50 @@ def consEnv {N : Nat} (j : Fin N) (env : Nat → Option (Fin N)) : Nat → Optio
 def noEnv {N : Nat} : Nat → Option (Fin N) := fun _ => none
 
 /-- The bottom as a flat term. -/
-def neverF {N : Nat} : HFlat S N := .node (.inl .never) Fin.elim0
+def neverF {N : Nat} : Scoped.Graph S.sig N := .node .never Empty.elim
 
 variable (α : Table S) (β : Table S.op)
 
 /-! **The hoist of a term**: each binder becomes a leaf at its entry, and each variable a leaf at
     the entry of its binder. Below a wall, the environment is empty. -/
 mutual
-def hoist {N : Nat} : (t : Term S.sig) → (Fin (muC t) → Fin N) → (Nat → Option (Fin N)) → HFlat S N
-  | .prim g, _, _ => .node (.inl (.prim g)) Fin.elim0
-  | .opaq, _, _ => .node (.inl .opaq) Fin.elim0
+def hoist {N : Nat} : (t : Term S.sig) → (Fin (muC t) → Fin N) → (Nat → Option (Fin N)) →
+    Scoped.Graph S.sig N
+  | .prim g, _, _ => .node (.prim g) Empty.elim
+  | .opaq, _, _ => .node .opaq Empty.elim
   | .never, _, _ => neverF
   | .var i, _, env => match env i with
     | some j => .leaf j
     | none => neverF
   | .mu _, emb, _ => .leaf (emb ⟨0, Nat.succ_pos _⟩)
-  | .set t, emb, env => .node (.inl .set) fun _ => hoist t emb env
-  | .refine t p pA, emb, env => .node (.inl (.refine p pA)) fun _ => hoist t emb env
-  | .legacy t r, emb, _ => .node (.inl (.legacy r)) fun _ => hoist t emb noEnv
-  | .held s t P k₀ k, emb, _ => .node (.inl (.held s ((tables S.o α β s).word (k₀ :: k))))
-      (Fin.cons (hoist t (fun m => emb (Fin.castAdd _ m)) noEnv)
-        (Fin.cons (hoist P (fun m => emb (Fin.natAdd _ m)) noEnv) Fin.elim0))
-  | .union os, emb, env =>
-      .node (.inr (.inl (os.length, unanimous (μSynList (S := S) os)))) (hoistL os emb env)
-  | .list pre sp suf, emb, env => .node (.inl (.list pre.length (optLen sp) suf.length))
-      (Fin.append (hoistL pre (fun m => emb (Fin.castAdd _ m)) env)
-        (Fin.append (hoistO sp (fun m => emb (Fin.natAdd _ (Fin.castAdd _ m))) env)
-          (hoistL suf (fun m => emb (Fin.natAdd _ (Fin.natAdd _ m))) env)))
+  | .set t, emb, env => .node .set fun _ => hoist t emb env
+  | .refine t p pA, emb, env => .node (.refine p pA) fun _ => hoist t emb env
+  | .legacy t r, emb, _ => .node (.legacy r) fun _ => hoist t emb noEnv
+  | .held s t P k₀ k, emb, _ => .node (.held s k₀ k) fun
+    | true => hoist t (fun m => emb (Fin.castAdd _ m)) noEnv
+    | false => hoist P (fun m => emb (Fin.natAdd _ m)) noEnv
+  | .union os, emb, env => .node (.union os.length) (hoistL os emb env)
+  | .list pre sp suf, emb, env => .node (.list pre.length (optLen sp) suf.length) fun
+    | .inl p => hoistL pre (fun m => emb (Fin.castAdd _ m)) env p
+    | .inr (.inl p) => hoistO sp (fun m => emb (Fin.natAdd _ (Fin.castAdd _ m))) env p
+    | .inr (.inr p) => hoistL suf (fun m => emb (Fin.natAdd _ (Fin.natAdd _ m))) env p
   | .object (.mk fs f w), emb, env =>
-      .node (.inl (.obj fs (fun p => slotKind (f (kAt fs p))) (optLen w)))
-        (Fin.append (fun p => hoistS (f (kAt fs p))
-            (fun m => emb (Fin.castAdd _ (injF (fun p => muCS (f (kAt fs p))) p m))) env)
-          (hoistO w (fun m => emb (Fin.natAdd _ m)) env))
+      .node (.obj fs (fun x => slotKind (f (kAt fs (idx fs x)))) (optLen w)) fun
+        | .inl x => hoistS (f (kAt fs (idx fs x)))
+            (fun m => emb (Fin.castAdd _ (injF (fun p => muCS (f (kAt fs p))) (idx fs x) m))) env
+        | .inr p => hoistO w (fun m => emb (Fin.natAdd _ m)) env p
 def hoistS {N : Nat} : (s : ObjectSlot S.sig) → (Fin (muCS s) → Fin N) → (Nat → Option (Fin N)) →
-    HFlat S N
+    Scoped.Graph S.sig N
   | .req t, emb, env => hoist t emb env
   | .optional t, emb, env => hoist t emb env
   | .fill t _, emb, env => hoist t emb env
 def hoistL {N : Nat} : (ts : List (Term S.sig)) → (Fin (muCL ts) → Fin N) →
-    (Nat → Option (Fin N)) → Fin ts.length → HFlat S N
+    (Nat → Option (Fin N)) → Fin ts.length → Scoped.Graph S.sig N
   | [], _, _ => Fin.elim0
   | t :: ts, emb, env => Fin.cons (hoist t (fun m => emb (Fin.castAdd _ m)) env)
       (hoistL ts (fun m => emb (Fin.natAdd _ m)) env)
 def hoistO {N : Nat} : (sp : Option (Term S.sig)) → (Fin (muCO sp) → Fin N) →
-    (Nat → Option (Fin N)) → Fin (optLen sp) → HFlat S N
+    (Nat → Option (Fin N)) → Fin (optLen sp) → Scoped.Graph S.sig N
   | none, _, _ => Fin.elim0
   | some t, emb, env => fun _ => hoist t emb env
 end
@@ -609,9 +328,9 @@ end
 /-! **The system of a term**: the entry of each binder is the hoist of its body. -/
 mutual
 def sysOf {N : Nat} : (t : Term S.sig) → (Fin (muC t) → Fin N) → (Nat → Option (Fin N)) →
-    Fin (muC t) → HFlat S N
+    Fin (muC t) → Scoped.Graph S.sig N
   | .mu b, emb, env =>
-      Fin.cons (hoist α β b (fun m => emb m.succ) (consEnv (emb ⟨0, Nat.succ_pos _⟩) env))
+      Fin.cons (hoist b (fun m => emb m.succ) (consEnv (emb ⟨0, Nat.succ_pos _⟩) env))
         (sysOf b (fun m => emb m.succ) (consEnv (emb ⟨0, Nat.succ_pos _⟩) env))
   | .set t, emb, env => sysOf t emb env
   | .refine t _ _, emb, env => sysOf t emb env
@@ -630,17 +349,17 @@ def sysOf {N : Nat} : (t : Term S.sig) → (Fin (muC t) → Fin N) → (Nat → 
         (sysOfO w (fun m => emb (Fin.natAdd _ m)) env)
   | .prim _, _, _ | .opaq, _, _ | .never, _, _ | .var _, _, _ => Fin.elim0
 def sysOfS {N : Nat} : (s : ObjectSlot S.sig) → (Fin (muCS s) → Fin N) →
-    (Nat → Option (Fin N)) → Fin (muCS s) → HFlat S N
+    (Nat → Option (Fin N)) → Fin (muCS s) → Scoped.Graph S.sig N
   | .req t, emb, env => sysOf t emb env
   | .optional t, emb, env => sysOf t emb env
   | .fill t _, emb, env => sysOf t emb env
 def sysOfL {N : Nat} : (ts : List (Term S.sig)) → (Fin (muCL ts) → Fin N) →
-    (Nat → Option (Fin N)) → Fin (muCL ts) → HFlat S N
+    (Nat → Option (Fin N)) → Fin (muCL ts) → Scoped.Graph S.sig N
   | [], _, _ => Fin.elim0
   | t :: ts, emb, env => Fin.append (sysOf t (fun m => emb (Fin.castAdd _ m)) env)
       (sysOfL ts (fun m => emb (Fin.natAdd _ m)) env)
 def sysOfO {N : Nat} : (sp : Option (Term S.sig)) → (Fin (muCO sp) → Fin N) →
-    (Nat → Option (Fin N)) → Fin (muCO sp) → HFlat S N
+    (Nat → Option (Fin N)) → Fin (muCO sp) → Scoped.Graph S.sig N
   | none, _, _ => Fin.elim0
   | some t, emb, env => sysOf t emb env
 end
@@ -831,13 +550,11 @@ theorem envAt_ge {V M : Type} : ∀ (ρ : List (Codec V M)) (i : Nat), ρ.length
   | _ :: ρ, i + 1, h => envAt_ge ρ i (Nat.le_of_succ_le_succ h)
   | _ :: _, 0, h => absurd h (Nat.not_succ_le_zero _)
 
-/-- Where no variable carries a member, the members of the options are the syntactic members. -/
-theorem denoteμs_syn {ρ : List S.C} (hμ : ∀ i, (envAt ρ i).μ = none) :
-    ∀ os : List (Term S.sig), denoteμs α β os ρ = μSynList (S := S) os
+/-- The members of the options are the members of their codecs. -/
+theorem denoteList_map_μ (ρ : List S.C) :
+    ∀ os : List (Term S.sig), (denoteList α β os ρ).map Codec.μ = denoteμs α β os ρ
   | [] => rfl
-  | t :: ts => by
-      show (denote α β t ρ).μ :: denoteμs α β ts ρ = μSyn (S := S) t :: μSynList (S := S) ts
-      rw [denote_μ_eq t ρ hμ, denoteμs_syn hμ ts]
+  | _ :: ts => congrArg (_ :: ·) (denoteList_map_μ ρ ts)
 
 /-- A container body that the guard admits reads each variable at most at level 2. -/
 theorem useUnder_le {u : Nat} (h : useUnder u ≤ 2) : u ≤ 2 := by
@@ -867,9 +584,15 @@ theorem wild_use_le {fs : Finset String} {f : {k // k ∈ fs} → ObjectSlot S.s
   simp only [Body.use]; exact le_max_right _ _
 
 /-- The policy of the open block is the policy of its denotation. -/
-theorem restOf_denoteOpt (w : Option (Term S.sig)) (ρ : List S.C) :
-    restOf (denoteOpt α β w ρ) = wildSemAbs (tables S.o α β) w ρ := by
-  cases w <;> rfl
+theorem restOf_optOf {ρ : List S.C} (w : Option (Term S.sig)) (g : Fin (optLen w) → S.C)
+    (h : Scoped.optOf (optLen w) g = denoteOpt α β w ρ) :
+    Scoped.restOf (optLen w) g = wildSemAbs (tables S.o α β) w ρ := by
+  cases w with
+  | none => rfl
+  | some t =>
+    have hg : g ⟨0, Nat.one_pos⟩ = denote α β t ρ := Option.some.inj h
+    show RestSem.codec (g ⟨0, Nat.one_pos⟩) = RestSem.codec (denote α β t ρ)
+    rw [hg]
 
 mutual
 
@@ -878,7 +601,7 @@ theorem interp_hoist {N : Nat} (e : Fin N → S.C) : ∀ (t : Term S.sig), Term.
     t.guarded = true → ∀ (ρ : List S.C) (emb : Fin (muC t) → Fin N) (env : Nat → Option (Fin N)),
     (∀ i, i < ρ.length → t.use i ≤ 2) →
     (∀ i, envAt ρ i = envOf e env i) → (∀ i, (envAt ρ i).μ = none) →
-    (∀ m, e (emb m) = vals α β t ρ m) → (hoist α β t emb env).interp (HS S) e = denote α β t ρ
+    (∀ m, e (emb m) = vals α β t ρ m) → (hoist t emb env).interp (Scoped.TStep (tables S.o α β)) e = denote α β t ρ
   | .prim _, _, _, _, _, _, _, _, _, _ => rfl
   | .opaq, _, _, _, _, _, _, _, _, _ => rfl
   | .never, _, _, _, _, _, _, _, _, _ => rfl
@@ -890,21 +613,21 @@ theorem interp_hoist {N : Nat} (e : Fin N → S.C) : ∀ (t : Term S.sig), Term.
   | .mu _, _, _, _, _, _, _, _, _, hv => hv ⟨0, Nat.succ_pos _⟩
   | .set t, hf, hg, ρ, emb, env, hU, hρ, hμ, hv => by
       have ih := interp_hoist e t hf hg ρ emb env (fun i hi => useUnder_le (hU i hi)) hρ hμ hv
-      show TOp.run .set (fun _ => (hoist α β t emb env).interp (HS S) e) = _
+      show Scoped.TOp.run (tables S.o α β) .set (fun _ => (hoist t emb env).interp (Scoped.TStep (tables S.o α β)) e) = _
       rw [ih]
-      simp only [TOp.run, denote, denoteAbs]
+      simp only [Scoped.TOp.run, denote, denoteAbs]
       cases Mean.set (B := S.sig) <;> rfl
   | .refine t p pA, hf, hg, ρ, emb, env, hU, hρ, hμ, hv => by
       have ih := interp_hoist e t hf hg ρ emb env hU hρ hμ hv
-      show TOp.run (.refine p pA) (fun _ => (hoist α β t emb env).interp (HS S) e) = _
+      show Scoped.TOp.run (tables S.o α β) (.refine p pA) (fun _ => (hoist t emb env).interp (Scoped.TStep (tables S.o α β)) e) = _
       rw [ih]
-      simp only [TOp.run, denote, denoteAbs]
+      simp only [Scoped.TOp.run, denote, denoteAbs]
   | .legacy t r, hf, hg, ρ, emb, _, hU, _, _, hv => by
       have ih := interp_hoist e t hf hg [] emb noEnv (fun _ h => absurd h (Nat.not_lt_zero _))
         (fun _ => rfl) (fun _ => rfl) hv
-      show TOp.run (.legacy r) (fun _ => (hoist α β t emb noEnv).interp (HS S) e) = _
+      show Scoped.TOp.run (tables S.o α β) (.legacy r) (fun _ => (hoist t emb noEnv).interp (Scoped.TStep (tables S.o α β)) e) = _
       rw [ih, denote_wall α β fun i hi => useHeld_zero (hU i hi)]
-      simp only [TOp.run, denote, denoteAbs]
+      simp only [Scoped.TOp.run, denote, denoteAbs]
   | .held s t P k₀ k, hf, hg, ρ, emb, _, hU, _, _, hv => by
       simp only [Term.frag, Bool.and_eq_true] at hf
       simp only [Term.guarded, Bool.and_eq_true] at hg
@@ -915,15 +638,18 @@ theorem interp_hoist {N : Nat} (e : Fin N → S.C) : ∀ (t : Term S.sig), Term.
       have ihP := interp_hoist e P hf.2 hg.2 [] _ noEnv (fun _ h => absurd h (Nat.not_lt_zero _))
         (fun _ => rfl) (fun _ => rfl) fun m => by
           have := hv (Fin.natAdd _ m); simpa [vals] using this
-      show held1 s ((hoist α β t _ noEnv).interp (HS S) e) ((hoist α β P _ noEnv).interp (HS S) e) _ = _
+      show held1 s ((hoist t _ noEnv).interp (Scoped.TStep (tables S.o α β)) e) ((hoist P _ noEnv).interp (Scoped.TStep (tables S.o α β)) e) _ = _
       rw [iht, ihP, denote_wall α β fun i hi => zero_of_le (le_max_left _ _) (h0 i hi),
         denote_wall α β fun i hi => zero_of_le (le_max_right _ _) (h0 i hi)]
       rfl
   | .union os, hf, hg, ρ, emb, env, hU, hρ, hμ, hv => by
       have ih := interp_hoistL e os hf hg ρ emb env hU hρ hμ hv
-      show altCodec ((List.finRange os.length).map fun p => (hoistL α β os emb env p).interp (HS S) e) _ =
+      show altCodec (List.ofFn fun p => (hoistL os emb env p).interp (Scoped.TStep (tables S.o α β)) e)
+          (unanimous (List.ofFn fun p => ((hoistL os emb env p).interp (Scoped.TStep (tables S.o α β)) e).μ)) =
         altCodec (denoteList α β os ρ) (unanimous (denoteμs α β os ρ))
-      rw [← List.ofFn_eq_map, ih, denoteμs_syn α β hμ os]
+      rw [show (List.ofFn fun p => ((hoistL os emb env p).interp (Scoped.TStep (tables S.o α β)) e).μ) =
+          (List.ofFn fun p => (hoistL os emb env p).interp (Scoped.TStep (tables S.o α β)) e).map Codec.μ from
+          List.map_ofFn.symm, ih, denoteList_map_μ]
   | .list pre sp suf, hf, hg, ρ, emb, env, hU, hρ, hμ, hv => by
       simp only [Term.frag, Bool.and_eq_true] at hf
       simp only [Term.guarded, Bool.and_eq_true] at hg
@@ -939,37 +665,28 @@ theorem interp_hoist {N : Nat} (e : Fin N → S.C) : ∀ (t : Term S.sig), Term.
       have ihf := interp_hoistL e suf hf.2 hg.2 ρ _ env
         (fun i hi => le_trans (le_trans (le_max_right _ _) (le_max_right _ _)) (hU' i hi)) hρ hμ
         fun m => by have := hv (Fin.natAdd _ (Fin.natAdd _ m)); simpa [vals] using this
-      show TOp.run (.list pre.length (optLen sp) suf.length) (fun p => Flat.interp (HS S) e
-          (Fin.append (hoistL α β pre (fun m => emb (Fin.castAdd _ m)) env)
-            (Fin.append (hoistO α β sp (fun m => emb (Fin.natAdd _ (Fin.castAdd _ m))) env)
-              (hoistL α β suf (fun m => emb (Fin.natAdd _ (Fin.natAdd _ m))) env)) p)) =
-        denote α β (.list pre sp suf) ρ
-      simp only [TOp.run, Fin.append_left, Fin.append_right, denote, denoteAbs]
+      simp only [hoist, Flat.interp, Scoped.TStep_run, Scoped.TOp.run, denote, denoteAbs]
       rw [ihp, ihs, ihf]
       cases Mean.list (B := S.sig) <;> rfl
   | .object (.mk fs f w), hf, hg, ρ, emb, env, hU, hρ, hμ, hv => by
       simp only [Term.frag, Bool.and_eq_true, decide_eq_true_eq] at hf
       simp only [Term.guarded, Body.guarded, Bool.and_eq_true, decide_eq_true_eq] at hg
       have hUb : ∀ i, i < ρ.length → Body.use i (.mk fs f w) ≤ 2 := fun i hi => useUnder_le (hU i hi)
-      have ihs : ∀ p, mkField (slotKind (f (kAt fs p))) ((hoistS α β (f (kAt fs p))
-          (fun m => emb (Fin.castAdd _ (injF (fun p => muCS (f (kAt fs p))) p m))) env).interp (HS S) e) =
+      have ihs : ∀ p, Scoped.mkField (slotKind (f (kAt fs p))) ((hoistS (f (kAt fs p))
+          (fun m => emb (Fin.castAdd _ (injF (fun p => muCS (f (kAt fs p))) p m))) env).interp (Scoped.TStep (tables S.o α β)) e) =
           fieldSem α β (f (kAt fs p)) ρ := fun p =>
         interp_hoistS e (f (kAt fs p)) (hf.1 _) (hg.1 _) ρ _ env
           (fun i hi => le_trans (slot_use_le i _) (hUb i hi)) hρ hμ fun m => by
             have := hv (Fin.castAdd _ (injF _ p m)); simpa [vals, appF_injF] using this
-      have ihs2 : ∀ k, mkField (slotKind (f (kAt fs (idx fs k)))) ((hoistS α β (f (kAt fs (idx fs k)))
+      have ihs2 : ∀ k, Scoped.mkField (slotKind (f (kAt fs (idx fs k)))) ((hoistS (f (kAt fs (idx fs k)))
           (fun m => emb (Fin.castAdd _ (injF (fun p => muCS (f (kAt fs p))) (idx fs k) m))) env).interp
-            (HS S) e) = fieldSemAbs (tables S.o α β) (f k) ρ := fun k =>
+            (Scoped.TStep (tables S.o α β)) e) = fieldSemAbs (tables S.o α β) (f k) ρ := fun k =>
         (ihs (idx fs k)).trans (congrArg (fun x => fieldSem α β (f x) ρ) (kAt_idx fs k))
       have ihw := interp_hoistO e w hf.2 hg.2 ρ _ env
         (fun i hi => le_trans (wild_use_le i) (hUb i hi)) hρ hμ fun m => by
           have := hv (Fin.natAdd _ m); simpa [vals] using this
-      show TOp.run (.obj fs (fun p => slotKind (f (kAt fs p))) (optLen w)) (fun q => Flat.interp (HS S) e
-          (Fin.append (fun p => hoistS α β (f (kAt fs p))
-              (fun m => emb (Fin.castAdd _ (injF (fun p => muCS (f (kAt fs p))) p m))) env)
-            (hoistO α β w (fun m => emb (Fin.natAdd _ m)) env) q)) = denote α β (.object (.mk fs f w)) ρ
-      simp only [TOp.run, Fin.append_left, Fin.append_right, denote, denoteAbs, bodySemAbs]
-      rw [ihw, restOf_denoteOpt]
+      simp only [hoist, Flat.interp, Scoped.TStep_run, Scoped.TOp.run, denote, denoteAbs, bodySemAbs]
+      rw [restOf_optOf α β w _ ihw]
       simp only [ihs2]
       cases Mean.map (B := S.sig) <;> rfl
 
@@ -979,15 +696,15 @@ theorem interp_hoistS {N : Nat} (e : Fin N → S.C) : ∀ (s : ObjectSlot S.sig)
     (∀ i, i < ρ.length → s.use i ≤ 2) →
     (∀ i, envAt ρ i = envOf e env i) → (∀ i, (envAt ρ i).μ = none) →
     (∀ m, e (emb m) = valsS α β s ρ m) →
-    mkField (slotKind s) ((hoistS α β s emb env).interp (HS S) e) = fieldSem α β s ρ
+    Scoped.mkField (slotKind s) ((hoistS s emb env).interp (Scoped.TStep (tables S.o α β)) e) = fieldSem α β s ρ
   | .req t, hf, hg, ρ, emb, env, hU, hρ, hμ, hv => by
-      show FieldSem.req ((hoist α β t emb env).interp (HS S) e) = FieldSem.req _
+      show FieldSem.req ((hoist t emb env).interp (Scoped.TStep (tables S.o α β)) e) = FieldSem.req _
       rw [interp_hoist e t hf hg ρ emb env hU hρ hμ hv]
   | .optional t, hf, hg, ρ, emb, env, hU, hρ, hμ, hv => by
-      show FieldSem.opt ((hoist α β t emb env).interp (HS S) e) = FieldSem.opt _
+      show FieldSem.opt ((hoist t emb env).interp (Scoped.TStep (tables S.o α β)) e) = FieldSem.opt _
       rw [interp_hoist e t hf hg ρ emb env hU hρ hμ hv]
   | .fill t _, hf, hg, ρ, emb, env, hU, hρ, hμ, hv => by
-      show FieldSem.fill ((hoist α β t emb env).interp (HS S) e) _ = FieldSem.fill _ _
+      show FieldSem.fill ((hoist t emb env).interp (Scoped.TStep (tables S.o α β)) e) _ = FieldSem.fill _ _
       rw [interp_hoist e t hf hg ρ emb env hU hρ hμ hv]
 
 /-- The list form of `interp_hoist`. -/
@@ -997,7 +714,7 @@ theorem interp_hoistL {N : Nat} (e : Fin N → S.C) : ∀ (ts : List (Term S.sig
     (∀ i, i < ρ.length → Term.useL i ts ≤ 2) →
     (∀ i, envAt ρ i = envOf e env i) → (∀ i, (envAt ρ i).μ = none) →
     (∀ m, e (emb m) = valsL α β ts ρ m) →
-    (List.ofFn fun p => (hoistL α β ts emb env p).interp (HS S) e) = denoteList α β ts ρ
+    (List.ofFn fun p => (hoistL ts emb env p).interp (Scoped.TStep (tables S.o α β)) e) = denoteList α β ts ρ
   | [], _, _, _, _, _, _, _, _, _ => rfl
   | t :: ts, hf, hg, ρ, emb, env, hU, hρ, hμ, hv => by
       simp only [Term.fragL, Bool.and_eq_true] at hf
@@ -1017,11 +734,11 @@ theorem interp_hoistO {N : Nat} (e : Fin N → S.C) : ∀ (sp : Option (Term S.s
     (∀ i, i < ρ.length → Term.useO i sp ≤ 2) →
     (∀ i, envAt ρ i = envOf e env i) → (∀ i, (envAt ρ i).μ = none) →
     (∀ m, e (emb m) = valsO α β sp ρ m) →
-    (if h : 0 < optLen sp then some ((hoistO α β sp emb env ⟨0, h⟩).interp (HS S) e) else none) =
+    Scoped.optOf (optLen sp) (fun p => (hoistO sp emb env p).interp (Scoped.TStep (tables S.o α β)) e) =
       denoteOpt α β sp ρ
   | none, _, _, _, _, _, _, _, _, _ => rfl
   | some t, hf, hg, ρ, emb, env, hU, hρ, hμ, hv => by
-      show some ((hoist α β t emb env).interp (HS S) e) = some (denote α β t ρ)
+      show some ((hoist t emb env).interp (Scoped.TStep (tables S.o α β)) e) = some (denote α β t ρ)
       rw [interp_hoist e t hf hg ρ emb env hU hρ hμ hv]
 
 end
@@ -1043,7 +760,7 @@ theorem fix_sysOf {N : Nat} (e : Fin N → S.C) : ∀ (t : Term S.sig), Term.fra
     (∀ i, i < ρ.length → t.use i ≤ 2) →
     (∀ i, envAt ρ i = envOf e env i) → (∀ i, (envAt ρ i).μ = none) →
     (∀ m, e (emb m) = vals α β t ρ m) →
-    ∀ m, (e (emb m)).f = ((sysOf α β t emb env m).interp (HS S) e).f
+    ∀ m, (e (emb m)).f = ((sysOf t emb env m).interp (Scoped.TStep (tables S.o α β)) e).f
   | .mu b, hf, hg, ρ, emb, env, hU, hρ, hμ, hv, m => by
       have hg' := hg
       simp only [Term.guarded, Bool.and_eq_true, decide_eq_true_eq] at hg'
@@ -1061,7 +778,7 @@ theorem fix_sysOf {N : Nat} (e : Fin N → S.C) : ∀ (t : Term S.sig), Term.fra
       change Fin (muC b + 1) at m
       cases m using Fin.cases with
       | zero =>
-        show (e (emb ⟨0, Nat.succ_pos _⟩)).f = ((hoist α β b _ _).interp (HS S) e).f
+        show (e (emb ⟨0, Nat.succ_pos _⟩)).f = ((hoist b _ _).interp (Scoped.TStep (tables S.o α β)) e).f
         rw [interp_hoist α β e b hf hg'.2 _ _ _ hU' hρ' hμ' hv', hX]
         funext o x
         exact muCodec_fix Mean.d_pos (contractive_body hg ρ) o x
@@ -1132,7 +849,7 @@ theorem fix_sysOfS {N : Nat} (e : Fin N → S.C) : ∀ (s : ObjectSlot S.sig), T
     (∀ i, i < ρ.length → s.use i ≤ 2) →
     (∀ i, envAt ρ i = envOf e env i) → (∀ i, (envAt ρ i).μ = none) →
     (∀ m, e (emb m) = valsS α β s ρ m) →
-    ∀ m, (e (emb m)).f = ((sysOfS α β s emb env m).interp (HS S) e).f
+    ∀ m, (e (emb m)).f = ((sysOfS s emb env m).interp (Scoped.TStep (tables S.o α β)) e).f
   | .req t, hf, hg, ρ, emb, env, hU, hρ, hμ, hv, m => fix_sysOf e t hf hg ρ emb env hU hρ hμ hv m
   | .optional t, hf, hg, ρ, emb, env, hU, hρ, hμ, hv, m => fix_sysOf e t hf hg ρ emb env hU hρ hμ hv m
   | .fill t _, hf, hg, ρ, emb, env, hU, hρ, hμ, hv, m => fix_sysOf e t hf hg ρ emb env hU hρ hμ hv m
@@ -1144,7 +861,7 @@ theorem fix_sysOfL {N : Nat} (e : Fin N → S.C) : ∀ (ts : List (Term S.sig)),
     (∀ i, i < ρ.length → Term.useL i ts ≤ 2) →
     (∀ i, envAt ρ i = envOf e env i) → (∀ i, (envAt ρ i).μ = none) →
     (∀ m, e (emb m) = valsL α β ts ρ m) →
-    ∀ m, (e (emb m)).f = ((sysOfL α β ts emb env m).interp (HS S) e).f
+    ∀ m, (e (emb m)).f = ((sysOfL ts emb env m).interp (Scoped.TStep (tables S.o α β)) e).f
   | [], _, _, _, _, _, _, _, _, _, m => m.elim0
   | t :: ts, hf, hg, ρ, emb, env, hU, hρ, hμ, hv, m => by
       simp only [Term.fragL, Bool.and_eq_true] at hf
@@ -1166,18 +883,18 @@ theorem fix_sysOfO {N : Nat} (e : Fin N → S.C) : ∀ (sp : Option (Term S.sig)
     (∀ i, i < ρ.length → Term.useO i sp ≤ 2) →
     (∀ i, envAt ρ i = envOf e env i) → (∀ i, (envAt ρ i).μ = none) →
     (∀ m, e (emb m) = valsO α β sp ρ m) →
-    ∀ m, (e (emb m)).f = ((sysOfO α β sp emb env m).interp (HS S) e).f
+    ∀ m, (e (emb m)).f = ((sysOfO sp emb env m).interp (Scoped.TStep (tables S.o α β)) e).f
   | none, _, _, _, _, _, _, _, _, _, m => m.elim0
   | some t, hf, hg, ρ, emb, env, hU, hρ, hμ, hv, m => fix_sysOf e t hf hg ρ emb env hU hρ hμ hv m
 
 end
 
 /-- The hoisted system of a closed term: one entry per binder. -/
-abbrev hsys (t : Term S.sig) : Fin (muC t) → HFlat S (muC t) := sysOf α β t id noEnv
+abbrev hsys (t : Term S.sig) : Fin (muC t) → Scoped.Graph S.sig (muC t) := sysOf t id noEnv
 
 /-- **The closed term's binder codecs are a fixed point of its hoisted system.** -/
 theorem hoist_isFix (t : Term S.sig) (hf : Term.frag t = true) (hg : t.guarded = true) :
-    IsFix (sysB (HS S) (hsys α β t)) (vals α β t []) :=
+    IsFix (sysB (Scoped.TStep (tables S.o α β)) (hsys t)) (vals α β t []) :=
   fun m => fix_sysOf α β _ t hf hg [] id noEnv (fun _ h => absurd h (Nat.not_lt_zero _))
     (fun _ => rfl) (fun _ => rfl) (fun _ => rfl) m
 
@@ -1254,7 +971,7 @@ An unguarded edge lowers the rank `rkOf`. Every edge keeps or raises the wall de
 edge below a wall raises it. So no wall edge reaches back. -/
 
 section THoistOrder
-variable {S : Syn} [Sem S] (α : Table S) (β : Table S.op)
+variable {S : Syn}
 
 /-! The rank of each binder, at depth `d` with `c` binders since the last guard. Below a wall,
     the count starts again. -/
@@ -1284,10 +1001,10 @@ def rkOfO (N : Nat) : (sp : Option (Term S.sig)) → Nat → Nat → Fin (muCO s
 end
 
 /-- The bottom has no unguarded leaf. -/
-theorem ulv_neverF {N : Nat} {j : Fin N} : (neverF (S := S)).ulv (HS S) j = false := by
-  cases h : (neverF (S := S)).ulv (HS S) j
+theorem ulv_neverF {N : Nat} {j : Fin N} : (neverF (S := S)).ulv (Scoped.TSig S.sig) j = false := by
+  cases h : (neverF (S := S)).ulv (Scoped.TSig S.sig) j
   · rfl
-  · obtain ⟨_, p, _⟩ := Flat.ulv_node_iff.mp h; exact p.elim0
+  · obtain ⟨_, p, _⟩ := Flat.ulv_node_iff.mp h; exact Empty.elim p
 
 /-- A larger subtrahend gives a smaller product. -/
 theorem sub_mul_le {d i c N : Nat} (h : c ≤ i) : (d - i) * (N + 1) ≤ (d - c) * (N + 1) :=
@@ -1300,13 +1017,13 @@ theorem ulv_hoist {N : Nat} (R : Fin N → Nat) : ∀ (t : Term S.sig), Term.fra
     ∀ (d c : Nat) (emb : Fin (muC t) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, R (emb m) = rkOf N t d c m) → (∀ i j, env i = some j → R j < (d - i) * (N + 1)) →
     (∀ i, i < c → t.use i ≤ 1) →
-    ∀ j, (hoist α β t emb env).ulv (HS S) j = true → R j ≤ (d - c) * (N + 1) + (N - d)
+    ∀ j, (hoist t emb env).ulv (Scoped.TSig S.sig) j = true → R j ≤ (d - c) * (N + 1) + (N - d)
   | .prim _, _, _, _, _, _, _, _, _, _, h => by
-      obtain ⟨_, p, _⟩ := Flat.ulv_node_iff.mp h; exact p.elim0
+      obtain ⟨_, p, _⟩ := Flat.ulv_node_iff.mp h; exact Empty.elim p
   | .opaq, _, _, _, _, _, _, _, _, _, h => by
-      obtain ⟨_, p, _⟩ := Flat.ulv_node_iff.mp h; exact p.elim0
+      obtain ⟨_, p, _⟩ := Flat.ulv_node_iff.mp h; exact Empty.elim p
   | .never, _, _, _, _, _, _, _, _, _, h => by
-      obtain ⟨_, p, _⟩ := Flat.ulv_node_iff.mp h; exact p.elim0
+      obtain ⟨_, p, _⟩ := Flat.ulv_node_iff.mp h; exact Empty.elim p
   | .var i, _, d, c, _, env, _, h2, h3, j, h => by
       simp only [hoist] at h
       cases hi : env i with
@@ -1347,7 +1064,7 @@ theorem ulv_hoistL {N : Nat} (R : Fin N → Nat) : ∀ (ts : List (Term S.sig)),
     ∀ (d c : Nat) (emb : Fin (muCL ts) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, R (emb m) = rkOfL N ts d c m) → (∀ i j, env i = some j → R j < (d - i) * (N + 1)) →
     (∀ i, i < c → Term.useL i ts ≤ 1) →
-    ∀ p j, (hoistL α β ts emb env p).ulv (HS S) j = true → R j ≤ (d - c) * (N + 1) + (N - d)
+    ∀ p j, (hoistL ts emb env p).ulv (Scoped.TSig S.sig) j = true → R j ≤ (d - c) * (N + 1) + (N - d)
   | [], _, _, _, _, _, _, _, _, p, _, _ => p.elim0
   | t :: ts, hf, d, c, emb, env, h1, h2, h3, p, j, h => by
       simp only [Term.fragL, Bool.and_eq_true] at hf
@@ -1371,7 +1088,7 @@ theorem rank_sysOf {N : Nat} (R : Fin N → Nat) : ∀ (t : Term S.sig), Term.fr
     t.guarded = true → ∀ (d c : Nat) (emb : Fin (muC t) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, R (emb m) = rkOf N t d c m) → (∀ i j, env i = some j → R j < (d - i) * (N + 1)) →
     (∀ i, i < c → t.use i ≤ 1) → d + muC t ≤ N →
-    ∀ m j, (sysOf α β t emb env m).ulv (HS S) j = true → R j < R (emb m)
+    ∀ m j, (sysOf t emb env m).ulv (Scoped.TSig S.sig) j = true → R j < R (emb m)
   | .mu b, hf, hg, d, c, emb, env, h1, h2, h3, h4, m, j, h => by
       simp only [Term.guarded, Bool.and_eq_true, decide_eq_true_eq] at hg
       have h0 : R (emb ⟨0, Nat.succ_pos _⟩) = (d - c) * (N + 1) + (N - d) := h1 _
@@ -1397,7 +1114,7 @@ theorem rank_sysOf {N : Nat} (R : Fin N → Nat) : ∀ (t : Term S.sig), Term.fr
         omega
       cases m using Fin.cases with
       | zero =>
-        have := ulv_hoist α β R b hf (d + 1) (c + 1) _ _ h1' h2' h3' j h
+        have := ulv_hoist R b hf (d + 1) (c + 1) _ _ h1' h2' h3' j h
         rw [Nat.add_sub_add_right] at this
         show R j < R (emb ⟨0, Nat.succ_pos _⟩)
         rw [h0]
@@ -1475,7 +1192,7 @@ theorem rank_sysOfS {N : Nat} (R : Fin N → Nat) : ∀ (s : ObjectSlot S.sig), 
     s.guarded = true → ∀ (d c : Nat) (emb : Fin (muCS s) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, R (emb m) = rkOfS N s d c m) → (∀ i j, env i = some j → R j < (d - i) * (N + 1)) →
     (∀ i, i < c → s.use i ≤ 1) → d + muCS s ≤ N →
-    ∀ m j, (sysOfS α β s emb env m).ulv (HS S) j = true → R j < R (emb m)
+    ∀ m j, (sysOfS s emb env m).ulv (Scoped.TSig S.sig) j = true → R j < R (emb m)
   | .req t, hf, hg, d, c, emb, env, h1, h2, h3, h4, m, j, h => rank_sysOf R t hf hg d c emb env h1 h2 h3 h4 m j h
   | .optional t, hf, hg, d, c, emb, env, h1, h2, h3, h4, m, j, h =>
       rank_sysOf R t hf hg d c emb env h1 h2 h3 h4 m j h
@@ -1487,7 +1204,7 @@ theorem rank_sysOfL {N : Nat} (R : Fin N → Nat) : ∀ (ts : List (Term S.sig))
     Term.guardedL ts = true → ∀ (d c : Nat) (emb : Fin (muCL ts) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, R (emb m) = rkOfL N ts d c m) → (∀ i j, env i = some j → R j < (d - i) * (N + 1)) →
     (∀ i, i < c → Term.useL i ts ≤ 1) → d + muCL ts ≤ N →
-    ∀ m j, (sysOfL α β ts emb env m).ulv (HS S) j = true → R j < R (emb m)
+    ∀ m j, (sysOfL ts emb env m).ulv (Scoped.TSig S.sig) j = true → R j < R (emb m)
   | [], _, _, _, _, _, _, _, _, _, _, m, _, _ => m.elim0
   | t :: ts, hf, hg, d, c, emb, env, h1, h2, h3, h4, m, j, h => by
       simp only [Term.fragL, Bool.and_eq_true] at hf
@@ -1511,7 +1228,7 @@ theorem rank_sysOfO {N : Nat} (R : Fin N → Nat) : ∀ (sp : Option (Term S.sig
     Term.guardedO sp = true → ∀ (d c : Nat) (emb : Fin (muCO sp) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, R (emb m) = rkOfO N sp d c m) → (∀ i j, env i = some j → R j < (d - i) * (N + 1)) →
     (∀ i, i < c → Term.useO i sp ≤ 1) → d + muCO sp ≤ N →
-    ∀ m j, (sysOfO α β sp emb env m).ulv (HS S) j = true → R j < R (emb m)
+    ∀ m j, (sysOfO sp emb env m).ulv (Scoped.TSig S.sig) j = true → R j < R (emb m)
   | none, _, _, _, _, _, _, _, _, _, _, m, _, _ => m.elim0
   | some t, hf, hg, d, c, emb, env, h1, h2, h3, h4, m, j, h =>
       rank_sysOf R t hf hg d c emb env h1 h2 h3 h4 m j h
@@ -1546,15 +1263,15 @@ def wdOfO : (sp : Option (Term S.sig)) → Nat → Fin (muCO sp) → Nat
 end
 
 /-- A leaf has the leaf `j` exactly where the leaf is `j`. -/
-theorem Flat.lv_leaf {Op : Type} {ar : Op → Nat} {N : Nat} {i j : Fin N} :
-    (Flat.leaf (Op := Op) (arity := ar) i).lv j = true ↔ i = j := by
+theorem Flat.lv_leaf {C : Container} {N : Nat} {i j : Fin N} :
+    (Flat.leaf (Op := C.Op) (Pos := C.Pos) i).lv C j = true ↔ i = j := by
   simp [Flat.lv]
 
 /-- The bottom has no leaf. -/
-theorem lv_neverF {N : Nat} {j : Fin N} : (neverF (S := S)).lv j = false := by
-  cases h : (neverF (S := S)).lv j
+theorem lv_neverF {N : Nat} {j : Fin N} : (neverF (S := S)).lv (Scoped.TSig S.sig) j = false := by
+  cases h : (neverF (S := S)).lv (Scoped.TSig S.sig) j
   · rfl
-  · obtain ⟨p, _⟩ := Flat.lv_node.mp h; exact p.elim0
+  · obtain ⟨p, _⟩ := Flat.lv_node.mp h; exact Empty.elim p
 
 mutual
 
@@ -1562,10 +1279,10 @@ mutual
 theorem lv_hoist {N : Nat} (W : Fin N → Nat) : ∀ (t : Term S.sig), Term.frag t = true →
     ∀ (w : Nat) (emb : Fin (muC t) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOf t w m) → (∀ i j, env i = some j → w ≤ W j) →
-    ∀ j, (hoist α β t emb env).lv j = true → w ≤ W j
-  | .prim _, _, _, _, _, _, _, _, h => by obtain ⟨p, _⟩ := Flat.lv_node.mp h; exact p.elim0
-  | .opaq, _, _, _, _, _, _, _, h => by obtain ⟨p, _⟩ := Flat.lv_node.mp h; exact p.elim0
-  | .never, _, _, _, _, _, _, _, h => by obtain ⟨p, _⟩ := Flat.lv_node.mp h; exact p.elim0
+    ∀ j, (hoist t emb env).lv (Scoped.TSig S.sig) j = true → w ≤ W j
+  | .prim _, _, _, _, _, _, _, _, h => by obtain ⟨p, _⟩ := Flat.lv_node.mp h; exact Empty.elim p
+  | .opaq, _, _, _, _, _, _, _, h => by obtain ⟨p, _⟩ := Flat.lv_node.mp h; exact Empty.elim p
+  | .never, _, _, _, _, _, _, _, h => by obtain ⟨p, _⟩ := Flat.lv_node.mp h; exact Empty.elim p
   | .var i, _, w, _, env, _, h2, j, h => by
       simp only [hoist] at h
       cases hi : env i with
@@ -1589,50 +1306,42 @@ theorem lv_hoist {N : Nat} (W : Fin N → Nat) : ∀ (t : Term S.sig), Term.frag
       exact Nat.le_of_succ_le (lv_hoist W t hf (w + 1) emb noEnv h1 (fun _ _ h => absurd h noEnv_none) j hp)
   | .held _ t P _ _, hf, w, emb, _, h1, _, j, h => by
       simp only [Term.frag, Bool.and_eq_true] at hf
-      obtain ⟨⟨p, hpl⟩, hp⟩ := Flat.lv_node.mp h
-      match p, hpl, hp with
-      | 0, _, hp =>
+      obtain ⟨p, hp⟩ := Flat.lv_node.mp h
+      cases p with
+      | true =>
         exact Nat.le_of_succ_le (lv_hoist W t hf.1 (w + 1) (fun m => emb (Fin.castAdd _ m))
           noEnv (fun m => (h1 _).trans (by simp [wdOf])) (fun _ _ h => absurd h noEnv_none) j hp)
-      | 1, _, hp =>
+      | false =>
         exact Nat.le_of_succ_le (lv_hoist W P hf.2 (w + 1) (fun m => emb (Fin.natAdd _ m))
           noEnv (fun m => (h1 _).trans (by simp [wdOf])) (fun _ _ h => absurd h noEnv_none) j hp)
-      | k + 2, hpl, _ => exact absurd hpl (by change ¬ (k + 2 < 2); omega)
   | .union os, hf, w, emb, env, h1, h2, j, h => by
       obtain ⟨p, hp⟩ := Flat.lv_node.mp h
       exact lv_hoistL W os hf w emb env h1 h2 p j hp
   | .list pre sp suf, hf, w, emb, env, h1, h2, j, h => by
       simp only [Term.frag, Bool.and_eq_true] at hf
       obtain ⟨p, hp⟩ := Flat.lv_node.mp h
-      revert hp
-      refine Fin.addCases (fun p => ?_) (fun p => Fin.addCases (fun p => ?_) (fun p => ?_) p) p
-      · intro hp
-        exact lv_hoistL W pre hf.1.1 w (fun m => emb (Fin.castAdd _ m)) env (fun m => (h1 _).trans (by simp [wdOf])) h2 p j
-          (by simpa using hp)
-      · intro hp
-        exact lv_hoistO W sp hf.1.2 w (fun m => emb (Fin.natAdd _ (Fin.castAdd _ m))) env (fun m => (h1 _).trans (by simp [wdOf])) h2 p j
-          (by simpa using hp)
-      · intro hp
-        exact lv_hoistL W suf hf.2 w (fun m => emb (Fin.natAdd _ (Fin.natAdd _ m))) env (fun m => (h1 _).trans (by simp [wdOf])) h2 p j
-          (by simpa using hp)
+      rcases p with p | p | p
+      · exact lv_hoistL W pre hf.1.1 w (fun m => emb (Fin.castAdd _ m)) env (fun m => (h1 _).trans (by simp [wdOf])) h2 p j
+          hp
+      · exact lv_hoistO W sp hf.1.2 w (fun m => emb (Fin.natAdd _ (Fin.castAdd _ m))) env (fun m => (h1 _).trans (by simp [wdOf])) h2 p j
+          hp
+      · exact lv_hoistL W suf hf.2 w (fun m => emb (Fin.natAdd _ (Fin.natAdd _ m))) env (fun m => (h1 _).trans (by simp [wdOf])) h2 p j
+          hp
   | .object (.mk fs f wd), hf, w, emb, env, h1, h2, j, h => by
       simp only [Term.frag, Bool.and_eq_true, decide_eq_true_eq] at hf
       obtain ⟨p, hp⟩ := Flat.lv_node.mp h
-      revert hp
-      refine Fin.addCases (fun p => ?_) (fun p => ?_) p
-      · intro hp
-        exact lv_hoistS W (f (kAt fs p)) (hf.1 _) w
-          (fun m => emb (Fin.castAdd _ (injF (fun p => muCS (f (kAt fs p))) p m))) env
-          (fun m => (h1 _).trans (by simp [wdOf, appF_injF])) h2 j (by simpa using hp)
-      · intro hp
-        exact lv_hoistO W wd hf.2 w (fun m => emb (Fin.natAdd _ m)) env
-          (fun m => (h1 _).trans (by simp [wdOf])) h2 p j (by simpa using hp)
+      rcases p with x | p
+      · exact lv_hoistS W (f (kAt fs (idx fs x))) (hf.1 _) w
+          (fun m => emb (Fin.castAdd _ (injF (fun p => muCS (f (kAt fs p))) (idx fs x) m))) env
+          (fun m => (h1 _).trans (by simp [wdOf, appF_injF])) h2 j hp
+      · exact lv_hoistO W wd hf.2 w (fun m => emb (Fin.natAdd _ m)) env
+          (fun m => (h1 _).trans (by simp [wdOf])) h2 p j hp
 
 /-- The slot form of `lv_hoist`. -/
 theorem lv_hoistS {N : Nat} (W : Fin N → Nat) : ∀ (s : ObjectSlot S.sig), Term.fragS s = true →
     ∀ (w : Nat) (emb : Fin (muCS s) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOfS s w m) → (∀ i j, env i = some j → w ≤ W j) →
-    ∀ j, (hoistS α β s emb env).lv j = true → w ≤ W j
+    ∀ j, (hoistS s emb env).lv (Scoped.TSig S.sig) j = true → w ≤ W j
   | .req t, hf, w, emb, env, h1, h2, j, h => lv_hoist W t hf w emb env h1 h2 j h
   | .optional t, hf, w, emb, env, h1, h2, j, h => lv_hoist W t hf w emb env h1 h2 j h
   | .fill t _, hf, w, emb, env, h1, h2, j, h => lv_hoist W t hf w emb env h1 h2 j h
@@ -1641,7 +1350,7 @@ theorem lv_hoistS {N : Nat} (W : Fin N → Nat) : ∀ (s : ObjectSlot S.sig), Te
 theorem lv_hoistL {N : Nat} (W : Fin N → Nat) : ∀ (ts : List (Term S.sig)), Term.fragL ts = true →
     ∀ (w : Nat) (emb : Fin (muCL ts) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOfL ts w m) → (∀ i j, env i = some j → w ≤ W j) →
-    ∀ p j, (hoistL α β ts emb env p).lv j = true → w ≤ W j
+    ∀ p j, (hoistL ts emb env p).lv (Scoped.TSig S.sig) j = true → w ≤ W j
   | [], _, _, _, _, _, _, p, _, _ => p.elim0
   | t :: ts, hf, w, emb, env, h1, h2, p, j, h => by
       simp only [Term.fragL, Bool.and_eq_true] at hf
@@ -1655,7 +1364,7 @@ theorem lv_hoistL {N : Nat} (W : Fin N → Nat) : ∀ (ts : List (Term S.sig)), 
 theorem lv_hoistO {N : Nat} (W : Fin N → Nat) : ∀ (sp : Option (Term S.sig)), Term.fragO sp = true →
     ∀ (w : Nat) (emb : Fin (muCO sp) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOfO sp w m) → (∀ i j, env i = some j → w ≤ W j) →
-    ∀ p j, (hoistO α β sp emb env p).lv j = true → w ≤ W j
+    ∀ p j, (hoistO sp emb env p).lv (Scoped.TSig S.sig) j = true → w ≤ W j
   | none, _, _, _, _, _, _, p, _, _ => p.elim0
   | some t, hf, w, emb, env, h1, h2, _, j, h => lv_hoist W t hf w emb env h1 h2 j h
 
@@ -1667,19 +1376,19 @@ mutual
 theorem wlv_hoist {N : Nat} (W : Fin N → Nat) : ∀ (t : Term S.sig), Term.frag t = true →
     ∀ (w : Nat) (emb : Fin (muC t) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOf t w m) →
-    ∀ j, (hoist α β t emb env).wlv (HS S) j = true → w < W j
+    ∀ j, (hoist t emb env).wlv (Scoped.TSig S.sig) j = true → w < W j
   | .prim _, _, _, _, _, _, _, h => by
-      rcases Flat.wlv_node.mp h with ⟨_, p, _⟩ | ⟨_, p, _⟩ <;> exact p.elim0
+      rcases Flat.wlv_node.mp h with ⟨_, p, _⟩ | ⟨_, p, _⟩ <;> exact Empty.elim p
   | .opaq, _, _, _, _, _, _, h => by
-      rcases Flat.wlv_node.mp h with ⟨_, p, _⟩ | ⟨_, p, _⟩ <;> exact p.elim0
+      rcases Flat.wlv_node.mp h with ⟨_, p, _⟩ | ⟨_, p, _⟩ <;> exact Empty.elim p
   | .never, _, _, _, _, _, _, h => by
-      rcases Flat.wlv_node.mp h with ⟨_, p, _⟩ | ⟨_, p, _⟩ <;> exact p.elim0
+      rcases Flat.wlv_node.mp h with ⟨_, p, _⟩ | ⟨_, p, _⟩ <;> exact Empty.elim p
   | .var i, _, _, _, env, _, j, h => by
       simp only [hoist] at h
       cases hi : env i with
       | none =>
         rw [hi] at h
-        rcases Flat.wlv_node.mp h with ⟨_, p, _⟩ | ⟨_, p, _⟩ <;> exact p.elim0
+        rcases Flat.wlv_node.mp h with ⟨_, p, _⟩ | ⟨_, p, _⟩ <;> exact Empty.elim p
       | some j' => rw [hi] at h; simp [Flat.wlv] at h
   | .mu b, _, _, _, _, _, _, h => by simp [hoist, Flat.wlv] at h
   | .set t, hf, w, emb, env, h1, j, h => by
@@ -1692,19 +1401,18 @@ theorem wlv_hoist {N : Nat} (W : Fin N → Nat) : ∀ (t : Term S.sig), Term.fra
       · exact wlv_hoist W t hf w emb env h1 j hp
   | .legacy t _, hf, w, emb, _, h1, j, h => by
       rcases Flat.wlv_node.mp h with ⟨_, _, hp⟩ | ⟨hk, _⟩
-      · exact lv_hoist α β W t hf (w + 1) emb noEnv h1 (fun _ _ h => absurd h noEnv_none) j hp
+      · exact lv_hoist W t hf (w + 1) emb noEnv h1 (fun _ _ h => absurd h noEnv_none) j hp
       · exact absurd rfl hk
   | .held _ t P _ _, hf, w, emb, _, h1, j, h => by
       simp only [Term.frag, Bool.and_eq_true] at hf
-      rcases Flat.wlv_node.mp h with ⟨_, ⟨p, hpl⟩, hp⟩ | ⟨hk, _⟩
-      · match p, hpl, hp with
-        | 0, _, hp =>
-          exact lv_hoist α β W t hf.1 (w + 1) (fun m => emb (Fin.castAdd _ m)) noEnv
+      rcases Flat.wlv_node.mp h with ⟨_, p, hp⟩ | ⟨hk, _⟩
+      · cases p with
+        | true =>
+          exact lv_hoist W t hf.1 (w + 1) (fun m => emb (Fin.castAdd _ m)) noEnv
             (fun m => (h1 _).trans (by simp [wdOf])) (fun _ _ h => absurd h noEnv_none) j hp
-        | 1, _, hp =>
-          exact lv_hoist α β W P hf.2 (w + 1) (fun m => emb (Fin.natAdd _ m)) noEnv
+        | false =>
+          exact lv_hoist W P hf.2 (w + 1) (fun m => emb (Fin.natAdd _ m)) noEnv
             (fun m => (h1 _).trans (by simp [wdOf])) (fun _ _ h => absurd h noEnv_none) j hp
-        | k + 2, hpl, _ => exact absurd hpl (by change ¬ (k + 2 < 2); omega)
       · exact absurd rfl hk
   | .union os, hf, w, emb, env, h1, j, h => by
       rcases Flat.wlv_node.mp h with ⟨hk, _⟩ | ⟨_, p, hp⟩
@@ -1714,36 +1422,29 @@ theorem wlv_hoist {N : Nat} (W : Fin N → Nat) : ∀ (t : Term S.sig), Term.fra
       simp only [Term.frag, Bool.and_eq_true] at hf
       rcases Flat.wlv_node.mp h with ⟨hk, _⟩ | ⟨_, p, hp⟩
       · exact nomatch hk
-      revert hp
-      refine Fin.addCases (fun p => ?_) (fun p => Fin.addCases (fun p => ?_) (fun p => ?_) p) p
-      · intro hp
-        exact wlv_hoistL W pre hf.1.1 w (fun m => emb (Fin.castAdd _ m)) env (fun m => (h1 _).trans (by simp [wdOf])) p j
-          (by simpa using hp)
-      · intro hp
-        exact wlv_hoistO W sp hf.1.2 w (fun m => emb (Fin.natAdd _ (Fin.castAdd _ m))) env (fun m => (h1 _).trans (by simp [wdOf])) p j
-          (by simpa using hp)
-      · intro hp
-        exact wlv_hoistL W suf hf.2 w (fun m => emb (Fin.natAdd _ (Fin.natAdd _ m))) env (fun m => (h1 _).trans (by simp [wdOf])) p j
-          (by simpa using hp)
+      rcases p with p | p | p
+      · exact wlv_hoistL W pre hf.1.1 w (fun m => emb (Fin.castAdd _ m)) env (fun m => (h1 _).trans (by simp [wdOf])) p j
+          hp
+      · exact wlv_hoistO W sp hf.1.2 w (fun m => emb (Fin.natAdd _ (Fin.castAdd _ m))) env (fun m => (h1 _).trans (by simp [wdOf])) p j
+          hp
+      · exact wlv_hoistL W suf hf.2 w (fun m => emb (Fin.natAdd _ (Fin.natAdd _ m))) env (fun m => (h1 _).trans (by simp [wdOf])) p j
+          hp
   | .object (.mk fs f wd), hf, w, emb, env, h1, j, h => by
       simp only [Term.frag, Bool.and_eq_true, decide_eq_true_eq] at hf
       rcases Flat.wlv_node.mp h with ⟨hk, _⟩ | ⟨_, p, hp⟩
       · exact nomatch hk
-      revert hp
-      refine Fin.addCases (fun p => ?_) (fun p => ?_) p
-      · intro hp
-        exact wlv_hoistS W (f (kAt fs p)) (hf.1 _) w
-          (fun m => emb (Fin.castAdd _ (injF (fun p => muCS (f (kAt fs p))) p m))) env
-          (fun m => (h1 _).trans (by simp [wdOf, appF_injF])) j (by simpa using hp)
-      · intro hp
-        exact wlv_hoistO W wd hf.2 w (fun m => emb (Fin.natAdd _ m)) env
-          (fun m => (h1 _).trans (by simp [wdOf])) p j (by simpa using hp)
+      rcases p with x | p
+      · exact wlv_hoistS W (f (kAt fs (idx fs x))) (hf.1 _) w
+          (fun m => emb (Fin.castAdd _ (injF (fun p => muCS (f (kAt fs p))) (idx fs x) m))) env
+          (fun m => (h1 _).trans (by simp [wdOf, appF_injF])) j hp
+      · exact wlv_hoistO W wd hf.2 w (fun m => emb (Fin.natAdd _ m)) env
+          (fun m => (h1 _).trans (by simp [wdOf])) p j hp
 
 /-- The slot form of `wlv_hoist`. -/
 theorem wlv_hoistS {N : Nat} (W : Fin N → Nat) : ∀ (s : ObjectSlot S.sig), Term.fragS s = true →
     ∀ (w : Nat) (emb : Fin (muCS s) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOfS s w m) →
-    ∀ j, (hoistS α β s emb env).wlv (HS S) j = true → w < W j
+    ∀ j, (hoistS s emb env).wlv (Scoped.TSig S.sig) j = true → w < W j
   | .req t, hf, w, emb, env, h1, j, h => wlv_hoist W t hf w emb env h1 j h
   | .optional t, hf, w, emb, env, h1, j, h => wlv_hoist W t hf w emb env h1 j h
   | .fill t _, hf, w, emb, env, h1, j, h => wlv_hoist W t hf w emb env h1 j h
@@ -1752,7 +1453,7 @@ theorem wlv_hoistS {N : Nat} (W : Fin N → Nat) : ∀ (s : ObjectSlot S.sig), T
 theorem wlv_hoistL {N : Nat} (W : Fin N → Nat) : ∀ (ts : List (Term S.sig)), Term.fragL ts = true →
     ∀ (w : Nat) (emb : Fin (muCL ts) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOfL ts w m) →
-    ∀ p j, (hoistL α β ts emb env p).wlv (HS S) j = true → w < W j
+    ∀ p j, (hoistL ts emb env p).wlv (Scoped.TSig S.sig) j = true → w < W j
   | [], _, _, _, _, _, p, _, _ => p.elim0
   | t :: ts, hf, w, emb, env, h1, p, j, h => by
       simp only [Term.fragL, Bool.and_eq_true] at hf
@@ -1766,15 +1467,15 @@ theorem wlv_hoistL {N : Nat} (W : Fin N → Nat) : ∀ (ts : List (Term S.sig)),
 theorem wlv_hoistO {N : Nat} (W : Fin N → Nat) : ∀ (sp : Option (Term S.sig)), Term.fragO sp = true →
     ∀ (w : Nat) (emb : Fin (muCO sp) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOfO sp w m) →
-    ∀ p j, (hoistO α β sp emb env p).wlv (HS S) j = true → w < W j
+    ∀ p j, (hoistO sp emb env p).wlv (Scoped.TSig S.sig) j = true → w < W j
   | none, _, _, _, _, _, p, _, _ => p.elim0
   | some t, hf, w, emb, env, h1, _, j, h => wlv_hoist W t hf w emb env h1 j h
 
 end
 
 /-- What the wall depth owes on the edges of an entry. -/
-def WdEdges {N : Nat} (W : Fin N → Nat) (x : Fin N) (g : HFlat S N) : Prop :=
-  (∀ j, g.lv j = true → W x ≤ W j) ∧ (∀ j, g.wlv (HS S) j = true → W x < W j)
+def WdEdges {N : Nat} (W : Fin N → Nat) (x : Fin N) (g : Scoped.Graph S.sig N) : Prop :=
+  (∀ j, g.lv (Scoped.TSig S.sig) j = true → W x ≤ W j) ∧ (∀ j, g.wlv (Scoped.TSig S.sig) j = true → W x < W j)
 
 mutual
 
@@ -1783,7 +1484,7 @@ mutual
 theorem wd_sysOf {N : Nat} (W : Fin N → Nat) : ∀ (t : Term S.sig), Term.frag t = true →
     ∀ (w : Nat) (emb : Fin (muC t) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOf t w m) → (∀ i j, env i = some j → w ≤ W j) →
-    ∀ m, WdEdges W (emb m) (sysOf α β t emb env m)
+    ∀ m, WdEdges W (emb m) (sysOf t emb env m)
   | .mu b, hf, w, emb, env, h1, h2, m => by
       have h0 : W (emb ⟨0, Nat.succ_pos _⟩) = w := h1 _
       have h1' : ∀ m, W (emb m.succ) = wdOf b w m := fun m => (h1 m.succ).trans (Fin.cons_succ _ _ _)
@@ -1796,9 +1497,9 @@ theorem wd_sysOf {N : Nat} (W : Fin N → Nat) : ∀ (t : Term S.sig), Term.frag
       | zero =>
         refine ⟨fun j hj => ?_, fun j hj => ?_⟩
         · show W (emb ⟨0, Nat.succ_pos _⟩) ≤ W j
-          rw [h0]; exact lv_hoist α β W b hf w _ _ h1' h2' j hj
+          rw [h0]; exact lv_hoist W b hf w _ _ h1' h2' j hj
         · show W (emb ⟨0, Nat.succ_pos _⟩) < W j
-          rw [h0]; exact wlv_hoist α β W b hf w _ _ h1' j hj
+          rw [h0]; exact wlv_hoist W b hf w _ _ h1' j hj
       | succ m => exact wd_sysOf W b hf w _ _ h1' h2' m
   | .set t, hf, w, emb, env, h1, h2, m => wd_sysOf W t hf w emb env h1 h2 m
   | .refine t _ _, hf, w, emb, env, h1, h2, m => wd_sysOf W t hf w emb env h1 h2 m
@@ -1847,7 +1548,7 @@ theorem wd_sysOf {N : Nat} (W : Fin N → Nat) : ∀ (t : Term S.sig), Term.frag
 theorem wd_sysOfS {N : Nat} (W : Fin N → Nat) : ∀ (s : ObjectSlot S.sig), Term.fragS s = true →
     ∀ (w : Nat) (emb : Fin (muCS s) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOfS s w m) → (∀ i j, env i = some j → w ≤ W j) →
-    ∀ m, WdEdges W (emb m) (sysOfS α β s emb env m)
+    ∀ m, WdEdges W (emb m) (sysOfS s emb env m)
   | .req t, hf, w, emb, env, h1, h2, m => wd_sysOf W t hf w emb env h1 h2 m
   | .optional t, hf, w, emb, env, h1, h2, m => wd_sysOf W t hf w emb env h1 h2 m
   | .fill t _, hf, w, emb, env, h1, h2, m => wd_sysOf W t hf w emb env h1 h2 m
@@ -1856,7 +1557,7 @@ theorem wd_sysOfS {N : Nat} (W : Fin N → Nat) : ∀ (s : ObjectSlot S.sig), Te
 theorem wd_sysOfL {N : Nat} (W : Fin N → Nat) : ∀ (ts : List (Term S.sig)), Term.fragL ts = true →
     ∀ (w : Nat) (emb : Fin (muCL ts) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOfL ts w m) → (∀ i j, env i = some j → w ≤ W j) →
-    ∀ m, WdEdges W (emb m) (sysOfL α β ts emb env m)
+    ∀ m, WdEdges W (emb m) (sysOfL ts emb env m)
   | [], _, _, _, _, _, _, m => m.elim0
   | t :: ts, hf, w, emb, env, h1, h2, m => by
       simp only [Term.fragL, Bool.and_eq_true] at hf
@@ -1872,7 +1573,7 @@ theorem wd_sysOfL {N : Nat} (W : Fin N → Nat) : ∀ (ts : List (Term S.sig)), 
 theorem wd_sysOfO {N : Nat} (W : Fin N → Nat) : ∀ (sp : Option (Term S.sig)), Term.fragO sp = true →
     ∀ (w : Nat) (emb : Fin (muCO sp) → Fin N) (env : Nat → Option (Fin N)),
     (∀ m, W (emb m) = wdOfO sp w m) → (∀ i j, env i = some j → w ≤ W j) →
-    ∀ m, WdEdges W (emb m) (sysOfO α β sp emb env m)
+    ∀ m, WdEdges W (emb m) (sysOfO sp emb env m)
   | none, _, _, _, _, _, _, m => m.elim0
   | some t, hf, w, emb, env, h1, h2, m => wd_sysOf W t hf w emb env h1 h2 m
 
@@ -1880,14 +1581,14 @@ end
 
 /-- **The hoisted system of a guarded closed term passes the guard of a DAG of scopes.** -/
 theorem hoist_dagGuard (t : Term S.sig) (hg : t.guarded = true) :
-    DagGuard (HS S) (hsys α β t) := by
+    DagGuard (Scoped.TSig S.sig) (hsys t) := by
   have hf := Term.frag_all t
   refine ⟨noCycle_of_rank (rkOf (muC t) t 0 0) fun i j hij => ?_, fun i j hw hr => ?_⟩
-  · exact rank_sysOf α β _ t hf hg 0 0 id noEnv (fun _ => rfl) (fun _ _ h => absurd h noEnv_none)
+  · exact rank_sysOf _ t hf hg 0 0 id noEnv (fun _ => rfl) (fun _ _ h => absurd h noEnv_none)
       (fun _ hi => absurd hi (Nat.not_lt_zero _)) (by omega) i j hij
-  · have hwd := wd_sysOf α β (wdOf t 0) t hf 0 id noEnv (fun _ => rfl)
+  · have hwd := wd_sysOf (wdOf t 0) t hf 0 id noEnv (fun _ => rfl)
       (fun _ _ h => absurd h noEnv_none)
-    have hup : ∀ a b, Relation.ReflTransGen (REdge (hsys α β t)) a b → wdOf t 0 a ≤ wdOf t 0 b := by
+    have hup : ∀ a b, Relation.ReflTransGen (REdge (hsys t)) a b → wdOf t 0 a ≤ wdOf t 0 b := by
       intro a b hab
       induction hab with
       | refl => exact le_rfl
@@ -1896,21 +1597,23 @@ theorem hoist_dagGuard (t : Term S.sig) (hg : t.guarded = true) :
     have h6 := hup j i hr
     omega
 
+variable [Sem S] (α : Table S) (β : Table S.op)
+
 /-- **The hoist solves a guarded closed term**: the term has an order and a DAG of scopes whose
     graph form is its hoisted system. Each binder's entry of the solution is the binder's codec, the whole codec, and
     the term over the solution is the term's denotation. -/
 theorem hoist_solution (t : Term S.sig) (hg : t.guarded = true) :
-    ∃ (π : Equiv.Perm (Fin (muC t))) (d : DSys (HS S) (muC t)),
-      (∀ m, d.graph m = (hsys α β t (π.symm m)).bind fun j => .leaf (π j)) ∧
-      (∀ m, d.sol Mean.d (π m) = vals α β t [] m) ∧
-      (hoist α β t (fun m => π m) noEnv).interp (HS S) (d.sol Mean.d) = denote α β t [] := by
+    ∃ (π : Equiv.Perm (Fin (muC t))) (d : DSys (Scoped.TSig S.sig) (muC t)),
+      (∀ m, d.graph m = (hsys t (π.symm m)).bind fun j => .leaf (π j)) ∧
+      (∀ m, d.sol (Scoped.TStep (tables S.o α β)) Mean.d (π m) = vals α β t [] m) ∧
+      (hoist t (fun m => π m) noEnv).interp (Scoped.TStep (tables S.o α β)) (d.sol (Scoped.TStep (tables S.o α β)) Mean.d) = denote α β t [] := by
   have hf := Term.frag_all t
-  obtain ⟨π, d, hrel⟩ := dsys_of_guard (hoist_dagGuard α β t hg)
-  have h1 : IsFix (sysB (HS S) (hsys α β t)) fun i => vals α β t [] (π.symm (π i)) := by
+  obtain ⟨π, d, hrel⟩ := dsys_of_guard (hoist_dagGuard t hg)
+  have h1 : IsFix (sysB (Scoped.TStep (tables S.o α β)) (hsys t)) fun i => vals α β t [] (π.symm (π i)) := by
     simpa using hoist_isFix α β t hf hg
   have h2 := (isFix_rename π hrel fun m => vals α β t [] (π.symm m)).mpr h1
-  have h3 : ∀ m, d.sol Mean.d (π m) = vals α β t [] m := fun m => by
-    have := (dsys_solution Mean.d_pos HS_lawful HS_wallF d).2 _ h2 (π m)
+  have h3 : ∀ m, d.sol (Scoped.TStep (tables S.o α β)) Mean.d (π m) = vals α β t [] m := fun m => by
+    have := (dsys_solution Mean.d_pos (Scoped.TStep_lawful (tables S.o α β)) (Scoped.TStep_wallF (tables S.o α β)) d).2 _ h2 (π m)
     simp only [Equiv.symm_apply_apply] at this
     exact DSys.sol_eq d (π m) (vals_muForm α β t [] m).1 (vals_muForm α β t [] m).2 this.symm
   exact ⟨π, d, hrel, h3, interp_hoist α β _ t hf hg [] _ noEnv
@@ -1918,9 +1621,9 @@ theorem hoist_solution (t : Term S.sig) (hg : t.guarded = true) :
 
 /-- At a closed binder, the entry of the binder in the solution is its denotation. -/
 theorem hoist_mu (b : Term S.sig) (hg : (Term.mu b).guarded = true) :
-    ∃ (π : Equiv.Perm (Fin (muC (Term.mu b)))) (d : DSys (HS S) (muC (Term.mu b))),
-      (∀ m, d.graph m = (hsys α β (.mu b) (π.symm m)).bind fun j => .leaf (π j)) ∧
-      d.sol Mean.d (π ⟨0, Nat.succ_pos _⟩) = denote α β (.mu b) [] := by
+    ∃ (π : Equiv.Perm (Fin (muC (Term.mu b)))) (d : DSys (Scoped.TSig S.sig) (muC (Term.mu b))),
+      (∀ m, d.graph m = (hsys (.mu b) (π.symm m)).bind fun j => .leaf (π j)) ∧
+      d.sol (Scoped.TStep (tables S.o α β)) Mean.d (π ⟨0, Nat.succ_pos _⟩) = denote α β (.mu b) [] := by
   obtain ⟨π, d, hrel, h3, _⟩ := hoist_solution α β (.mu b) hg
   exact ⟨π, d, hrel, h3 _⟩
 
@@ -1946,17 +1649,17 @@ example (k₀ : S.sig.G true × Bool) : (wallHeld k₀).guarded = true := rfl
 
 /-- Below `legacy`: the entry of the outer binder in the solution is its denotation. -/
 theorem wallLegacy_hoist (r : S.sig.R) :
-    ∃ (π : Equiv.Perm (Fin (muC (wallLegacy r)))) (d : DSys (HS S) (muC (wallLegacy r))),
-      (∀ m, d.graph m = (hsys α β (wallLegacy r) (π.symm m)).bind fun j => .leaf (π j)) ∧
-      d.sol Mean.d (π ⟨0, Nat.succ_pos _⟩) = denote α β (wallLegacy r) [] :=
+    ∃ (π : Equiv.Perm (Fin (muC (wallLegacy r)))) (d : DSys (Scoped.TSig S.sig) (muC (wallLegacy r))),
+      (∀ m, d.graph m = (hsys (wallLegacy r) (π.symm m)).bind fun j => .leaf (π j)) ∧
+      d.sol (Scoped.TStep (tables S.o α β)) Mean.d (π ⟨0, Nat.succ_pos _⟩) = denote α β (wallLegacy r) [] :=
   hoist_mu α β (.list [.legacy (.mu (.list [.var 0] none [])) r] none []) rfl
 
 /-- Below `held`: the term over the solution is its denotation, and the entry of the inner
     binder is the denotation of the inner binder. -/
 theorem wallHeld_hoist (k₀ : S.sig.G true × Bool) :
-    ∃ (π : Equiv.Perm (Fin (muC (wallHeld k₀)))) (d : DSys (HS S) (muC (wallHeld k₀))),
-      d.sol Mean.d (π ⟨0, by simp [muC, muCL, muCO]⟩) = denote α β (.mu (.list [.var 0] none [])) [] ∧
-      (hoist α β (wallHeld k₀) (fun m => π m) noEnv).interp (HS S) (d.sol Mean.d) =
+    ∃ (π : Equiv.Perm (Fin (muC (wallHeld k₀)))) (d : DSys (Scoped.TSig S.sig) (muC (wallHeld k₀))),
+      d.sol (Scoped.TStep (tables S.o α β)) Mean.d (π ⟨0, by simp [muC, muCL, muCO]⟩) = denote α β (.mu (.list [.var 0] none [])) [] ∧
+      (hoist (wallHeld k₀) (fun m => π m) noEnv).interp (Scoped.TStep (tables S.o α β)) (d.sol (Scoped.TStep (tables S.o α β)) Mean.d) =
         denote α β (wallHeld k₀) [] := by
   obtain ⟨π, d, _, h3, h4⟩ := hoist_solution α β (wallHeld k₀) rfl
   refine ⟨π, d, (h3 ⟨0, by simp [muC, muCL, muCO]⟩).trans ?_, h4⟩
@@ -1965,7 +1668,7 @@ theorem wallHeld_hoist (k₀ : S.sig.G true × Bool) :
 
 /-- The legacy term's hoisted system: two entries, and a wall edge from the outer binder to the
     inner one. The inner binder sits in a later scope than the outer binder reads it from. -/
-example (r : S.sig.R) : (hsys α β (wallLegacy r) ⟨0, by simp [muC, muCL, muCO]⟩).wlv (HS S) ⟨1, by simp [muC, muCL, muCO]⟩ = true := rfl
+example (r : S.sig.R) : (hsys (wallLegacy r) ⟨0, by simp [muC, muCL, muCO]⟩).wlv (Scoped.TSig S.sig) ⟨1, by simp [muC, muCL, muCO]⟩ = true := rfl
 
 /-- An object with a binder below it, and a binder below a slot: the hoist covers `object`. -/
 abbrev objTerm : Term S.sig :=
@@ -1976,9 +1679,9 @@ example : (objTerm (S := S)).guarded = true := rfl
 
 /-- At an object: the entry of the binder in the solution is its denotation. -/
 theorem objTerm_hoist :
-    ∃ (π : Equiv.Perm (Fin (muC (objTerm (S := S))))) (d : DSys (HS S) (muC (objTerm (S := S)))),
-      (∀ m, d.graph m = (hsys α β objTerm (π.symm m)).bind fun j => .leaf (π j)) ∧
-      d.sol Mean.d (π ⟨0, Nat.succ_pos _⟩) = denote α β objTerm [] :=
+    ∃ (π : Equiv.Perm (Fin (muC (objTerm (S := S))))) (d : DSys (Scoped.TSig S.sig) (muC (objTerm (S := S)))),
+      (∀ m, d.graph m = (hsys objTerm (π.symm m)).bind fun j => .leaf (π j)) ∧
+      d.sol (Scoped.TStep (tables S.o α β)) Mean.d (π ⟨0, Nat.succ_pos _⟩) = denote α β objTerm [] :=
   hoist_mu α β _ rfl
 
 example : muC (objTerm (S := S)) = 2 := rfl
@@ -2054,9 +1757,9 @@ theorem compat_nested_sol (opts : List (Term S.sig))
     (hs₂ : ∀ n m, Lawful Mean.mem (muStage (fun c => denote α β (.union opts)
       [c, muStage (fun c => denote α β (.mu (.union opts)) [c]) n]) m)) :
     ∃ (π : Equiv.Perm (Fin (muC (Term.mu (.mu (.union opts))))))
-      (d : DSys (HS S) (muC (Term.mu (.mu (.union opts))))),
-      (∀ m, d.graph m = (hsys α β (.mu (.mu (.union opts))) (π.symm m)).bind fun j => .leaf (π j)) ∧
-      PairwiseCompat α β opts [d.sol Mean.d (π ⟨1, Nat.succ_lt_succ (Nat.succ_pos _)⟩), d.sol Mean.d (π ⟨0, Nat.succ_pos _⟩)] := by
+      (d : DSys (Scoped.TSig S.sig) (muC (Term.mu (.mu (.union opts))))),
+      (∀ m, d.graph m = (hsys (.mu (.mu (.union opts))) (π.symm m)).bind fun j => .leaf (π j)) ∧
+      PairwiseCompat α β opts [d.sol (Scoped.TStep (tables S.o α β)) Mean.d (π ⟨1, Nat.succ_lt_succ (Nat.succ_pos _)⟩), d.sol (Scoped.TStep (tables S.o α β)) Mean.d (π ⟨0, Nat.succ_pos _⟩)] := by
   obtain ⟨π, d, hrel, h3, _⟩ := hoist_solution α β (.mu (.mu (.union opts))) hg
   refine ⟨π, d, hrel, ?_⟩
   rw [h3, h3]
@@ -2097,9 +1800,9 @@ variable {S : Syn} [Sem S] (α : Table S) (β : Table S.op)
     binder in the solution is lawful. -/
 theorem hoist_lawful (b : Term S.sig) (hg : (Term.mu b).guarded = true)
     (hs : ∀ n, Lawful Mean.mem (muStage (fun c => denote α β b [c]) n)) :
-    ∃ (π : Equiv.Perm (Fin (muC (Term.mu b)))) (d : DSys (HS S) (muC (Term.mu b))),
-      (∀ m, d.graph m = (hsys α β (.mu b) (π.symm m)).bind fun j => .leaf (π j)) ∧
-      Lawful Mean.mem (d.sol Mean.d (π ⟨0, Nat.succ_pos _⟩)) := by
+    ∃ (π : Equiv.Perm (Fin (muC (Term.mu b)))) (d : DSys (Scoped.TSig S.sig) (muC (Term.mu b))),
+      (∀ m, d.graph m = (hsys (.mu b) (π.symm m)).bind fun j => .leaf (π j)) ∧
+      Lawful Mean.mem (d.sol (Scoped.TStep (tables S.o α β)) Mean.d (π ⟨0, Nat.succ_pos _⟩)) := by
   obtain ⟨π, d, hrel, h0⟩ := hoist_mu α β b hg
   exact ⟨π, d, hrel, h0 ▸ lawful_muCodec Mean.d_pos (contractive_body hg []) hs⟩
 

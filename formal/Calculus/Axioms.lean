@@ -41,6 +41,7 @@ import Calculus.Lang.Disjoint
 import Calculus.Lang.DisjointV
 import Calculus.Lang.DisjointA
 import Calculus.Lang.Path
+import Calculus.Lang.Scope
 import Calculus.Lang.System
 import Calculus.Dynamo.Analysis.Path
 import Calculus.Dynamo.Analysis.Precondition
