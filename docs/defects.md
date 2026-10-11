@@ -275,3 +275,24 @@ walk that narrows such a union wrongly passes the gate.
 
 **Pin.** The docstring of `unionAt(...)` states the refusal. No test asserts that a recursive
 union has no clause row, and no test of the host narrows a recursive union.
+
+---
+
+## Known: a fragment that a refused scope bound overflows the stack in a second scope
+
+**Observation.** A scope that refuses keeps its definitions in the slot of each `ref`. A second
+scope that reads a fragment of the refused scope, and does not declare the name of the `ref`,
+overflows the stack. Measured 2026-10-11 at c2d6330 and at c2218a2 with a throwaway spec:
+
+    const fragment = union([string, ref('A')])
+    scope({ A: fragment })                 // refuses: 'A' reaches a recursion with no list or object on its path
+    scope({ O: object({ x: fragment }) })  // RangeError: Maximum call stack size exceeded
+
+A fresh fragment, which no refused scope bound, refuses in the second scope with "a ref names
+'A', which this scope does not declare".
+
+**Effect.** The second scope throws a RangeError and not a CodecError. A caller that catches
+CodecError does not catch the throw, and the refusal names no cause.
+
+**Pin.** No test pins the overflow. The nested-refusal tests of
+`src/codec/spec/surface/codec.scope.spec.ts` leave this case out.
