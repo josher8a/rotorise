@@ -3,6 +3,7 @@ import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Analysis.ExactA
 import Calculus.Dynamo.Lang.Store
+import Calculus.Dynamo.Lang.Scope
 
 /-!
 # Verdicts, from a checked row list
@@ -36,39 +37,39 @@ theorem ok_of_failing {α : Type} {ok : α → Bool} {rows : List (String × α)
 /-! ## The evaluation forms -/
 
 /-- A row of a write: the model writes the attribute that `src/` wrote. -/
-def writesOk (p : Nat × Term × Value × Attr) : Bool :=
-  check p.1 ((denote (libTable noCallers) p.2.1).e p.2.2.1) (some p.2.2.2) == Verdict.same
+def writesOk (p : Nat × Closed × Value × Attr) : Bool :=
+  check p.1 ((p.2.1.meaning (libTable noCallers)).e p.2.2.1) (some p.2.2.2) == Verdict.same
 
 /-- The law of `writesOk`: the `check` of the written attribute answers `.same`. -/
-theorem writesOk_iff (p : Nat × Term × Value × Attr) : writesOk p = true ↔
-    check p.1 ((denote (libTable noCallers) p.2.1).e p.2.2.1) (some p.2.2.2) = .same :=
+theorem writesOk_iff (p : Nat × Closed × Value × Attr) : writesOk p = true ↔
+    check p.1 ((p.2.1.meaning (libTable noCallers)).e p.2.2.1) (some p.2.2.2) = .same :=
   beq_iff_eq
 
 /-- A row of a refused value: the model writes nothing, as `src/` refused the value. -/
-def writesNothingOk (p : Term × Value) : Bool :=
-  ((denote (libTable noCallers) p.1).e p.2).isNone
+def writesNothingOk (p : Closed × Value) : Bool :=
+  ((p.1.meaning (libTable noCallers)).e p.2).isNone
 
 /-- The law of `writesNothingOk`: the model's write is `none`. -/
-theorem writesNothingOk_iff (p : Term × Value) :
-    writesNothingOk p = true ↔ (denote (libTable noCallers) p.1).e p.2 = none :=
+theorem writesNothingOk_iff (p : Closed × Value) :
+    writesNothingOk p = true ↔ (p.1.meaning (libTable noCallers)).e p.2 = none :=
   Option.isNone_iff_eq_none
 
 /-- A row of a read: the model reads the value that `src/` read. -/
-def readsOk (p : Nat × Term × Attr × Value) : Bool :=
-  vcheck p.1 ((denote (libTable noCallers) p.2.1).p p.2.2.1) (some p.2.2.2) == Verdict.same
+def readsOk (p : Nat × Closed × Attr × Value) : Bool :=
+  vcheck p.1 ((p.2.1.meaning (libTable noCallers)).p p.2.2.1) (some p.2.2.2) == Verdict.same
 
 /-- The law of `readsOk`: the `vcheck` of the read value answers `.same`. -/
-theorem readsOk_iff (p : Nat × Term × Attr × Value) : readsOk p = true ↔
-    vcheck p.1 ((denote (libTable noCallers) p.2.1).p p.2.2.1) (some p.2.2.2) = .same :=
+theorem readsOk_iff (p : Nat × Closed × Attr × Value) : readsOk p = true ↔
+    vcheck p.1 ((p.2.1.meaning (libTable noCallers)).p p.2.2.1) (some p.2.2.2) = .same :=
   beq_iff_eq
 
 /-- A row of a refused attribute: the model reads nothing, as `src/` refused the attribute. -/
-def readsNothingOk (p : Term × Attr) : Bool :=
-  ((denote (libTable noCallers) p.1).p p.2).isNone
+def readsNothingOk (p : Closed × Attr) : Bool :=
+  ((p.1.meaning (libTable noCallers)).p p.2).isNone
 
 /-- The law of `readsNothingOk`: the model's read is `none`. -/
-theorem readsNothingOk_iff (p : Term × Attr) :
-    readsNothingOk p = true ↔ (denote (libTable noCallers) p.1).p p.2 = none :=
+theorem readsNothingOk_iff (p : Closed × Attr) :
+    readsNothingOk p = true ↔ (p.1.meaning (libTable noCallers)).p p.2 = none :=
   Option.isNone_iff_eq_none
 
 /-- A row of a guard: the model's guard on the term gives the answer of `src/`. -/

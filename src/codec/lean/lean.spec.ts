@@ -78,6 +78,7 @@ import {
     hostAt,
     LeanUnemittable,
     leanAttrOf,
+    leanClosedOf,
     leanDisjoint,
     leanDisjointRowModule,
     leanFormerGuard,
@@ -788,16 +789,17 @@ describe('a whole vector', () => {
         })
         expect(emitted).toContain('theorem scalar_string :')
         expect(emitted).toContain(
-            '(denote (libTable noCallers) (Term.string)).e',
+            '(Closed.meaning (libTable noCallers) (⟨1, .snoc (c := 0) (n := 1) (.nil) (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.string : Scoped.Term 0 1 0)), 0⟩ : Closed)).e',
         )
         expect(emitted).toContain('(Value.str "hello")')
         expect(emitted).toContain('(some (Attr.s "hello")) = .same')
     })
 
     /**
-     * The same claim in the older protocol, kept because it depends on nothing but `denote` and
-     * is what a tree without `Calculus/Bridge/Vectors.lean` can still check. It cannot state a refusal,
-     * and on a map `rfl` does not fail but diverges — which is why it is no longer the default.
+     * The same claim in the older protocol, an equation that a tactic proves. A family that reads
+     * only the meaning states the equation on `Closed.meaning`, and the generated file carries the
+     * tactic. The protocol cannot state a refusal. On a map `rfl` does not fail but diverges, so
+     * the protocol is not the default.
      */
     it('still emits the bare equation when asked for it', () => {
         const emitted = leanVector(
@@ -861,6 +863,22 @@ const json: AnyCodec = erase(recursive.json)
 const tree: AnyCodec = erase(recursive.tree)
 const { Category, Tree, decimalJson } = recursive
 const underObject: AnyCodec = erase(recursive.underObject)
+
+/**
+ * **Two entries of one scope that read each other**: `A` reads `B` below a list, and `B` reads `A`
+ * above every guard. So the closed codec holds one scope of two entries, and `A` comes first.
+ */
+const mutual = scope({
+    A: object({ b: array(ref('B')) }),
+    B: union([nullValue, ref('A')]),
+})
+
+/** The vector of the two entries, which the committed samples carry for the write and the read. */
+const mutualSample: Vector = {
+    name: 'mutual_scope',
+    codec: erase(mutual.A),
+    value: { b: [null, { b: [] }] },
+}
 /**
  * **A thunk that returns its own term**: no container sits between the binder and its variable.
  * The scope refuses the cycle at construction, so the term is built by hand, and the guard vector
@@ -2210,7 +2228,7 @@ describe('the legacy read gate, against the model', () => {
         )
         // the current read answers first, and the host asks the older reader nothing
         expect(stated('lr_literal_A__raw_S_A')).toContain(
-            '(Term.legacy (Term.literal GroundKind.string "A") r0)',
+            '(Scoped.Term.legacy (Scoped.Term.literal GroundKind.string "A") r0)',
         )
     })
 
@@ -2621,18 +2639,21 @@ describe('the committed sample', () => {
             const at = join(process.cwd(), 'formal', file)
             const emitted = leanVectorModule(
                 // the test above pins that every codec here is emittable
-                sampleVectors.filter(
-                    (one) =>
-                        emittable(one) &&
-                        (protocol === 'check' ||
-                            !EQUATION_DEFERRED.includes(one.name)),
-                ),
+                [
+                    ...sampleVectors.filter(
+                        (one) =>
+                            emittable(one) &&
+                            (protocol === 'check' ||
+                                !EQUATION_DEFERRED.includes(one.name)),
+                    ),
+                    mutualSample,
+                ],
                 protocol,
                 sampleRefusals,
                 allRefusals().length,
                 // the read subset is the `check` sample's alone: a read vector needs `vcheck`, and
                 // the `equation` sample states each vector as an equation on `denote` by design
-                protocol === 'check' ? readSample : [],
+                protocol === 'check' ? [...readSample, mutualSample] : [],
             )
             // `UPDATE_LEAN_SAMPLE=1 vitest run src/codec/lean/lean.spec.ts` rewrites them — and then they have
             // to go through Lean again, because nothing here can say the new theorems are true
@@ -2874,5 +2895,51 @@ describe('the names of the corpus rows', () => {
             file.rows(leanShapes(() => 'f')).map((one) => one.name),
         )
         expect(new Set(names).size).toBe(names.length)
+    })
+})
+
+describe('a closed codec', () => {
+    const refused = (codec: AnyCodec): string => {
+        try {
+            leanClosedOf(codec)
+        } catch (thrown) {
+            if (thrown instanceof LeanUnemittable) return thrown.message
+            throw thrown
+        }
+        throw new Error('expected the printer to refuse, and it did not')
+    }
+
+    it('refuses an unguarded cycle, which has no scoped form', () => {
+        expect(refused(selfThunk)).toContain('an unguarded cycle')
+    })
+
+    it('refuses a cycle through a wall, which has no scoped form', () => {
+        const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
+        let term: Term | undefined
+        try {
+            scope({
+                L: held(ref('L') as never, string as never, same as never),
+            })
+        } catch (thrown) {
+            if (thrown instanceof RecursionRefused) term = thrown.term
+        }
+        if (term === undefined) throw new Error('expected the scope to refuse')
+        expect(refused(erase(codecOfTerm(term)))).toContain(
+            'a cycle through a wall',
+        )
+    })
+
+    /**
+     * Above every guard an entry names only an earlier entry of its scope, so the entry that the
+     * other reads above every guard comes first.
+     */
+    it('puts an entry after each entry that it names above every guard', () => {
+        const pair = scope({
+            X: union([string, ref('Y')]),
+            Y: array(ref('X')),
+        })
+        expect(leanClosedOf(erase(pair.X))).toBe(
+            '(⟨2, .snoc (c := 0) (n := 2) (.nil) (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.array (Scoped.Term.ref 1) : Scoped.Term 0 2 0) | ⟨1, _⟩ => (Scoped.Term.union [Scoped.Term.string, Scoped.Term.ref 0] : Scoped.Term 0 2 1)), 1⟩ : Closed)',
+        )
     })
 })

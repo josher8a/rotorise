@@ -11,6 +11,7 @@ import Batteries.Tactic.Lint
 import Calculus.Dynamo.Witness.LiteralArity1
 import Calculus.Dynamo.Witness.Nesting
 import Calculus.Dynamo.Lang.Store
+import Calculus.Dynamo.Lang.Scope
 import Calculus.Dynamo.Witness.Malleability
 import Calculus.Dynamo.Analysis.Orthogonality
 import Calculus.Bridge.Vectors
