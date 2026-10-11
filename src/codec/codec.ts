@@ -50,6 +50,7 @@ import {
     orThrow,
     type Result,
 } from './result'
+import { agrees } from './scoped'
 import type {
     Alternatives,
     Body,
@@ -59,7 +60,6 @@ import type {
     Term,
 } from './term'
 import {
-    agrees,
     alwaysWritten,
     bindersOf,
     clauseForm,

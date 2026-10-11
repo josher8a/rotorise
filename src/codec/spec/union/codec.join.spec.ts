@@ -1025,3 +1025,46 @@ describe("extract and exclude partition a union's values and keep its answers", 
         expect(disagreements).toEqual([])
     })
 })
+
+/**
+ * **A union over an open fragment defers its decision to the scope.** A `ref` that no scope binds
+ * names a codec with no meaning yet, so the union holds no compatibility verdict and no guard
+ * verdict. The construction accepts, each use refuses by name, and the scope that binds the name
+ * decides. The pair has the shape of the pool's open fragments: a stand-in over a slot that reads
+ * the free `ref`.
+ */
+describe('a union over an open fragment defers its decision to the scope, so no caller observes a compatibility or guard verdict on an open term', () => {
+    const build = object as unknown as (spec: unknown) => AnyCodec
+    const fragment = (inner: AnyCodec, standIn: unknown) =>
+        build({
+            a: number,
+            b: withLegacyRead({
+                current: build({
+                    a: optional(build({ a: inner, b: number }) as never),
+                }) as never,
+                whenMissing: standIn as never,
+            }),
+        })
+    const free = /reads 'undeclared' through a `ref` that no scope binds/
+    const open = () => ref('undeclared') as unknown as AnyCodec
+
+    it('refuses the closed pair at compatibility, so the open pair has a verdict to defer', () => {
+        expect(() =>
+            union([fragment(string, {}), fragment(string, {})]),
+        ).toThrow(/are not shown compatible/)
+    })
+
+    it('accepts the open pair at construction, and refuses each use by the free name', () => {
+        const u = union([fragment(open(), {}), fragment(open(), {})])
+        expect(String(u.encode({ a: 1, b: {} } as never))).toMatch(free)
+        expect(String(u.decode({ M: {} } as never))).toMatch(free)
+    })
+
+    it('accepts an option that reads the free ref at its own input, and the scope that binds the name refuses it at the guard', () => {
+        const u = union([open(), string])
+        expect(String(u.encode('x' as never))).toMatch(free)
+        expect(() =>
+            scope({ undeclared: union([ref('undeclared'), string]) }),
+        ).toThrow(CodecError)
+    })
+})

@@ -1,5 +1,6 @@
 import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Analysis.Compat
+import Calculus.Dynamo.Analysis.ScopeCompat
 import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Analysis.ExactA
 import Calculus.Dynamo.Lang.Store
@@ -16,8 +17,9 @@ failing row by the comparator that the kernel reads.
 
 The law of each comparator makes `true` the statement of the row. The lemmas of the separation
 forms lift a checked list to the verdict of each row. The verdict of a separation row is the full
-separation verdict of one pair. The guard reads the rooted terms, and compatibility reads the open
-terms.
+separation verdict of one pair. A row of a pair that the guard accepts holds two closed codecs: a
+closed codec exists only for a guarded codec, so the type of the row states the guard, and the row
+states the compatibility decision. A row of a pair that the guard refuses holds two graphs.
 -/
 
 namespace Calculus
@@ -101,54 +103,44 @@ theorem disjointOk_iff (p : Term × Term × Bool × Bool) : disjointOk p = true 
 
 /-! ## Separations -/
 
-/-- An accepted pair: the guard accepts both rooted terms, and the decision accepts the open pair. -/
-def acceptedOk (p : Term × Term × Term × Term) : Bool :=
-  Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1 && Alg.compatPair dynOracle p.2.2.1 p.2.2.2
+/-- An accepted pair: the decision accepts the two closed codecs. -/
+def acceptedOk (p : Closed × Closed) : Bool := p.1.compatPair p.2
 
-/-- A pair refused at compatibility: the guard accepts both rooted terms, and the decision refuses
-    the open pair. -/
-def refusedOk (p : Term × Term × Term × Term) : Bool :=
-  Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1 && !Alg.compatPair dynOracle p.2.2.1 p.2.2.2
+/-- A pair refused at compatibility: the decision refuses the two closed codecs. -/
+def refusedOk (p : Closed × Closed) : Bool := !p.1.compatPair p.2
 
-/-- A pair refused at the guard: the guard refuses a rooted term. -/
-def guardRefusedOk (p : Term × Term) : Bool := !(Alg.Term.guarded p.1 && Alg.Term.guarded p.2)
+/-- A pair refused at the guard: the guard of a DAG of scopes refuses a graph. -/
+def guardRefusedOk (p : Graph × Graph) : Bool := !(p.1.guarded && p.2.guarded)
 
-/-- The guard column of a pair: the guard on the two rooted terms gives the answer of `src/`. -/
-def pairGuardOk (p : Term × Term × Bool) : Bool :=
-  (Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1) == p.2.2
+/-- The guard column of a pair: the guard on the two graphs gives the answer of `src/`. -/
+def pairGuardOk (p : Graph × Graph × Bool) : Bool :=
+  (p.1.guarded && p.2.1.guarded) == p.2.2
 
 /-- The law of `pairGuardOk`: the guard on the pair equals the answer. -/
-theorem pairGuardOk_iff (p : Term × Term × Bool) :
-    pairGuardOk p = true ↔ (Alg.Term.guarded p.1 && Alg.Term.guarded p.2.1) = p.2.2 :=
+theorem pairGuardOk_iff (p : Graph × Graph × Bool) :
+    pairGuardOk p = true ↔ (p.1.guarded && p.2.1.guarded) = p.2.2 :=
   beq_iff_eq
 
-/-- **An accepted pair, at each row.** The guard accepts both options, and the decision
-    discharges the union's obligation at every caller table. -/
-theorem accepted_of_rows {rows : List (String × Term × Term × Term × Term)}
+/-- **An accepted pair, at each row.** At every caller table, the two meanings of two lawful
+    options are `Compat` in each order, which is the obligation of the union. -/
+theorem accepted_of_rows {rows : List (String × Closed × Closed)}
     (h : failing acceptedOk rows = []) (κ : Callers) : ∀ p ∈ rows,
-    (Alg.Term.guarded p.2.1 && Alg.Term.guarded p.2.2.1) = true ∧
-    ((∀ t ∈ [p.2.2.2.1, p.2.2.2.2], Lawful (denote (libTable κ) t)) →
-      PairwiseCompat (libTable κ) [p.2.2.2.1, p.2.2.2.2]) := by
+    Lawful (p.2.1.meaning (libTable κ)) → Lawful (p.2.2.meaning (libTable κ)) →
+      Alg.Compat (p.2.1.meaning (libTable κ)) (p.2.2.meaning (libTable κ)) ∧
+        Alg.Compat (p.2.2.meaning (libTable κ)) (p.2.1.meaning (libTable κ)) :=
+  fun p hp => Closed.compat_of_compatPair (ok_of_failing h p hp) (libTable κ)
+
+/-- **A pair refused at compatibility, at each row.** The decision refuses the pair. -/
+theorem refused_of_rows {rows : List (String × Closed × Closed)}
+    (h : failing refusedOk rows = []) : ∀ p ∈ rows, p.2.1.compatPair p.2.2 = false := by
   intro p hp
   have h := ok_of_failing h p hp
-  rw [acceptedOk, Bool.and_eq_true] at h
-  exact ⟨h.1, fun hl => pairwiseCompat_of_compatPair h.2 hl⟩
+  rwa [refusedOk, Bool.not_eq_true'] at h
 
-/-- **A pair refused at compatibility, at each row.** The guard accepts both options, and the
-    decision refuses the pair. -/
-theorem refused_of_rows {rows : List (String × Term × Term × Term × Term)}
-    (h : failing refusedOk rows = []) : ∀ p ∈ rows,
-    (Alg.Term.guarded p.2.1 && Alg.Term.guarded p.2.2.1) = true ∧
-    Alg.compatPair dynOracle p.2.2.2.1 p.2.2.2.2 = false := by
-  intro p hp
-  have h := ok_of_failing h p hp
-  rw [refusedOk, Bool.and_eq_true, Bool.not_eq_true'] at h
-  exact h
-
-/-- **A pair refused at the guard, at each row.** The guard refuses an option. -/
-theorem guardRefused_of_rows {rows : List (String × Term × Term)}
+/-- **A pair refused at the guard, at each row.** The guard refuses a graph. -/
+theorem guardRefused_of_rows {rows : List (String × Graph × Graph)}
     (h : failing guardRefusedOk rows = []) :
-    ∀ p ∈ rows, (Alg.Term.guarded p.2.1 && Alg.Term.guarded p.2.2) = false := by
+    ∀ p ∈ rows, (p.2.1.guarded && p.2.2.guarded) = false := by
   intro p hp
   have h := ok_of_failing h p hp
   rwa [guardRefusedOk, Bool.not_eq_true'] at h

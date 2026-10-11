@@ -76,15 +76,17 @@ import {
     leanSlice,
     leanSliceModule,
     leanTermOf,
+    pairGuardRefusal,
     reachable,
     unionAt,
 } from '../lean'
 import { orThrow } from '../result'
+import { agrees } from '../scoped'
 import type { Term } from '../term'
 import {
-    agrees,
     disjoint,
     force,
+    freeNamesOf,
     openRefusal,
     RecursionRefused,
     recursionUse,
@@ -702,7 +704,9 @@ const kernelPairs = (pairs: readonly PoolPair[]) => {
             drop(`disjoint: ${error.reason}`)
         }
         if (p.fills) {
-            fillGuards.push(one)
+            const refusal = pairGuardRefusal(one)
+            if (refusal === undefined) fillGuards.push(one)
+            else drop(`pairGuard: ${refusal}`)
             continue
         }
         try {
@@ -1192,40 +1196,41 @@ describe('the generated pool, against the model', () => {
         }).toMatchInlineSnapshot(`
           {
             "dropped": {
-              "a constructor refused the draw": 51,
+              "a constructor refused the draw": 52,
               "assignment: the union reads a \`ref\` that no scope binds, so the host keeps no option under a clause": 14,
-              "separation: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 551,
-              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1652,
-              "slice: the union reads a \`ref\` that no scope binds, so the host keeps no option under a clause": 748,
+              "pairGuard: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 1,
+              "separation: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 531,
+              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1634,
+              "slice: the union reads a \`ref\` that no scope binds, so the host keeps no option under a clause": 731,
             },
             "seeds": [
               {
-                "assignments": 31,
-                "clauses": 4335,
-                "codecsPathed": 246,
-                "disjoints": 1346,
-                "fills": 5,
+                "assignments": 32,
+                "clauses": 4320,
+                "codecsPathed": 251,
+                "disjoints": 1357,
+                "fills": 4,
                 "guards": 0,
-                "pairs": 1346,
-                "paths": 1919,
+                "pairs": 1357,
+                "paths": 2077,
                 "seed": 20261004,
-                "separations": 1133,
+                "separations": 1141,
                 "slices": 88,
-                "whenPaths": 4512,
+                "whenPaths": 4689,
               },
               {
                 "assignments": 24,
-                "clauses": 3075,
-                "codecsPathed": 178,
-                "disjoints": 1252,
-                "fills": 8,
+                "clauses": 2955,
+                "codecsPathed": 187,
+                "disjoints": 1236,
+                "fills": 7,
                 "guards": 0,
-                "pairs": 1252,
-                "paths": 1487,
+                "pairs": 1236,
+                "paths": 1625,
                 "seed": 1,
-                "separations": 1079,
-                "slices": 63,
-                "whenPaths": 3159,
+                "separations": 1088,
+                "slices": 61,
+                "whenPaths": 3312,
               },
               {
                 "assignments": 44,
@@ -1336,15 +1341,28 @@ describe('the generated pool, against the model', () => {
 
     /**
      * **No column of a pair is checked by `#eval` alone.** A pair with a fill on each side has no
-     * separation vector, so the kernel states its guard column in a row of its own.
+     * separation vector, so the kernel states its guard column in a row of its own. **A pair over
+     * an open fragment states no row**: the union waits for the scope that binds the free `ref`, so
+     * the host decides nothing on the pair. Each such pair of the pool reads `ref('undeclared')`.
      */
-    it('states the guard column of each pair of two fills in the kernel', () => {
-        const fills = pairs.filter((p) => p.fills).map((p) => p.name)
-        expect(fills).toHaveLength(24)
+    it('states the guard column of each pair of two fills in the kernel, and no row over an open fragment', () => {
+        const fills = pairs.filter((p) => p.fills)
+        const open = fills.filter((p) => pairGuardRefusal(p) !== undefined)
+        expect(fills).toHaveLength(22)
+        expect(open.map((p) => p.name)).toHaveLength(1)
+        for (const p of open) {
+            expect(
+                new Set(
+                    [p.left, p.right].flatMap((one) => freeNamesOf(one.def)),
+                ),
+            ).toEqual(new Set(['undeclared']))
+        }
         const module = new Map(poolModules(perSeed)).get(
             '.pool.separations.lean',
         )
-        for (const name of fills) {
+        for (const { name } of open)
+            expect(module).not.toContain(`("${name}", `)
+        for (const { name } of fills.filter((p) => !open.includes(p))) {
             expect(module).toMatch(
                 new RegExp(`\\("${name}", \\([^\\n]*, (true|false)\\)\\)`),
             )

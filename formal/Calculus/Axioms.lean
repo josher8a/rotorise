@@ -8,7 +8,9 @@ import Calculus.Dynamo.Lang.HeldSet
 import Calculus.Dynamo.Analysis.Separation
 import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Analysis.ScopeDisjoint
+import Calculus.Dynamo.Analysis.ScopeCompat
 import Calculus.Lang.ScopeDisjoint
+import Calculus.Lang.ScopeCompat
 import Batteries.Tactic.Lint
 import Calculus.Dynamo.Witness.LiteralArity1
 import Calculus.Dynamo.Witness.Nesting
