@@ -742,6 +742,11 @@ export const leanClosedOf = (
             'a *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
         )
     }
+    return leanClosedOfTerm(def, at, bound)
+}
+
+/** The closed codec of a term, as {@link leanClosedOf} prints it. */
+const leanClosedOfTerm = (def: Term, at: string, bound?: Bound): string => {
     const scopes: (readonly Term[])[] = []
     for (const component of componentsOf([def])) {
         const order = entryOrder(component)
@@ -3071,7 +3076,8 @@ end Calculus
  * reads the attribute with the inner term, then applies `q0` to the value read. Where the inner
  * term refuses, the verdict is `false` at every `q0`. Where the inner term reads `v`, the theorem
  * assumes `q0 v` equals the answer of the caller's closure at the value that the host read. The
- * kernel then checks that the model applies `q0` at that value, and that `decode` answers the same.
+ * proof rewrites `q0` to its pin at that value (`veq_pin`), and the kernel checks that `decode`
+ * answers as the meaning reads under the pin.
  * A caller's predicate below the top is refused, because the emitter computes the value that the
  * predicate reads at the top only. A caller's adapter and an older reader are refused, because the
  * row reads under `libTable noCallers`.
@@ -3081,7 +3087,7 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
     const { decodes, term, quantified, pin } = readVerdictOf(one)
     const head = [
         `/-- \`${name}\` — \`src/\` ${decodes ? 'decodes' : 'refuses'} this attribute -/`,
-        `    AdmA (libTable noCallers) (${term})`,
+        `    Closed.AdmA (libTable noCallers) ${term}`,
         `      (${leanAttrOf(attribute, name)}) = ${decodes}`,
     ] as const
     if (!quantified) {
@@ -3105,7 +3111,8 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
         head[0],
         `theorem ${leanIdent(name)} (q0 : Value → Bool) (h0 : q0 (${v}) = ${answer}) :`,
         head[1],
-        `${head[2]} := show q0 (${v}) = ${answer} from h0`,
+        `${head[2]} := by`,
+        `  rw [← veq_pin (n := ${pin.fuel}) h0]; exact kernel_rfl%`,
     ].join('\n')
 }
 
@@ -3134,7 +3141,7 @@ const readVerdictOf = (
         adapters: new Map(),
         readers: new Map(),
     }
-    const term = leanTermOf(codec, name, bound)
+    const term = leanClosedOf(codec, name, bound)
     if (bound.adapters.size > 0 || bound.readers.size > 0) {
         return refuse(
             name,
@@ -3154,10 +3161,7 @@ const readVerdictOf = (
         readers: new Map(),
     }
     if (inner !== undefined) {
-        leanTermOfTerm(inner.term, name, {
-            ...topScope(inner.term),
-            bound: below,
-        })
+        leanClosedOfTerm(inner.term, name, below)
     }
     if (inner === undefined || below.closures.size > 0) {
         return refuse(
@@ -3668,7 +3672,7 @@ const evaluationForms = {
         ok: 'guardsOk',
     },
     admits: {
-        type: '(Term × Attr × Bool)',
+        type: '(Closed × Attr × Bool)',
         ok: 'admitsOk',
     },
 } as const satisfies Record<string, RowForm>
@@ -3879,10 +3883,12 @@ export const readVerdictRows = (
     rows: (shapes) =>
         verdicts.map((one) => {
             const { decodes, pin } = readVerdictOf(one)
-            const t = shapes.row((fn, made) =>
-                pin !== undefined && fn === pin.is
-                    ? `(fun x => if veq ${pin.fuel} x (${pin.v}) = .same then ${pin.answer} else ${made} x)`
-                    : made,
+            const t = shapes.row(
+                (fn, made) =>
+                    pin !== undefined && fn === pin.is
+                        ? `(fun x => if veq ${pin.fuel} x (${pin.v}) = .same then ${pin.answer} else ${made} x)`
+                        : made,
+                'closed',
             )(one.codec, one.name)
             return {
                 name: leanIdent(one.name),

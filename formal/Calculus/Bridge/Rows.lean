@@ -79,12 +79,13 @@ def guardsOk (p : Graph × Bool) : Bool := p.1.guarded == p.2
 theorem guardsOk_iff (p : Graph × Bool) : guardsOk p = true ↔ p.1.guarded = p.2 :=
   beq_iff_eq
 
-/-- A row of an admission: `AdmA` gives the answer of the decoder of `src/`. -/
-def admitsOk (p : Term × Attr × Bool) : Bool := AdmA (libTable noCallers) p.1 p.2.1 == p.2.2
+/-- A row of an admission: the read row of the closed codec gives the answer of the decoder of
+    `src/`. -/
+def admitsOk (p : Closed × Attr × Bool) : Bool := p.1.AdmA (libTable noCallers) p.2.1 == p.2.2
 
-/-- The law of `admitsOk`: `AdmA` equals the answer. -/
-theorem admitsOk_iff (p : Term × Attr × Bool) :
-    admitsOk p = true ↔ AdmA (libTable noCallers) p.1 p.2.1 = p.2.2 :=
+/-- The law of `admitsOk`: the read row equals the answer. -/
+theorem admitsOk_iff (p : Closed × Attr × Bool) :
+    admitsOk p = true ↔ p.1.AdmA (libTable noCallers) p.2.1 = p.2.2 :=
   beq_iff_eq
 
 /-! ## Disjointness -/
