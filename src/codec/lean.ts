@@ -579,6 +579,8 @@ type Entry = {
  * below a wall.
  */
 type Placed = {
+    /** A closed codec: a DAG of scopes. A graph: one flat system, with no order on its entries. */
+    readonly form: 'closed' | 'graph'
     readonly entries: ReadonlyMap<Term, Entry>
     readonly scope: number
     readonly index: number
@@ -587,8 +589,16 @@ type Placed = {
     readonly wall: boolean
 }
 
-/** The namespace of the builders: the scoped builders where the printer prints a closed codec. */
-const pre = (scope: At): string => (scope.placed ? 'Scoped.' : '')
+/**
+ * The namespace of the builders: the scoped builders where the printer prints a closed codec, and
+ * the flat builders where it prints a graph.
+ */
+const pre = (scope: At): string =>
+    scope.placed === undefined
+        ? ''
+        : scope.placed.form === 'graph'
+          ? 'Scoped.Graph.'
+          : 'Scoped.'
 
 /** The position below a container, which is a guard, or below a wall. */
 const below = (scope: At, kind: 'guard' | 'wall'): At =>
@@ -756,6 +766,7 @@ export const leanClosedOf = (
                     inside: [],
                     bound,
                     placed: {
+                        form: 'closed',
                         entries,
                         scope,
                         index,
@@ -771,6 +782,61 @@ export const leanClosedOf = (
         constants += members.length
     })
     return `(⟨${constants}, ${printed}, ${entries.get(def)?.global ?? 0}⟩ : Closed)`
+}
+
+/**
+ * **The graph of a codec** — one flat system over the term container, for the guard rows. Each cycle
+ * point of the term graph is an entry: each entry of each cycle, a thunk of a cycle of thunks, and
+ * the root. The graph has no order on its entries, so it prints a codec that has no scoped form as
+ * well, and the guard of a DAG of scopes decides it.
+ */
+export const leanGraphOf = (
+    declared: ObjectSlot,
+    at = 'codec',
+    bound?: Bound,
+): string => {
+    const def = declared.def
+    if ('mark' in def) {
+        return refuse(
+            at,
+            'a *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
+        )
+    }
+    return leanGraphOfTerm(def, at, bound)
+}
+
+/** The graph of a term, as {@link leanGraphOf} prints it. */
+const leanGraphOfTerm = (def: Term, at: string, bound?: Bound): string => {
+    const points: Term[] = []
+    for (const { members, keys } of componentsOf([def])) {
+        const [first] = members
+        if (keys.size > 0) points.push(...keys.keys())
+        else if (first !== undefined) points.push(first)
+    }
+    if (!points.includes(def)) points.push(def)
+    const entries = new Map<Term, Entry>(
+        points.map((t, index) => [t, { scope: 0, index, global: index }]),
+    )
+    const arms = points
+        .map((t, index) => {
+            const body = leanTermOfTerm(t, at, {
+                binds: new Set(),
+                inside: [],
+                bound,
+                placed: {
+                    form: 'graph',
+                    entries,
+                    scope: 0,
+                    index,
+                    top: true,
+                    guarded: false,
+                    wall: false,
+                },
+            })
+            return `| ⟨${index}, _⟩ => (${body} : Scoped.Graph.Term ${points.length})`
+        })
+        .join(' ')
+    return `(⟨${points.length}, fun i => match i with ${arms}⟩ : Graph)`
 }
 
 /** The meaning of a closed codec at the library table, as a vector reads it. */
@@ -929,6 +995,8 @@ const leanTermOfTerm = (t: Term, at: string, scope: At): string => {
  */
 const leanPlaced = (t: Term, at: string, scope: At, placed: Placed): string => {
     const entry = placed.entries.get(t)
+    if (entry !== undefined && !placed.top && placed.form === 'graph')
+        return `Scoped.Graph.Term.ref ${entry.global}`
     if (entry !== undefined && !placed.top) {
         if (entry.scope < placed.scope)
             return `Scoped.Term.const ${entry.global}`
@@ -1194,11 +1262,10 @@ export const leanVector = (
     { name, codec, value }: Vector,
     protocol: Protocol = 'check',
 ): string => {
-    const term = leanTermOf(codec, name)
     const meaning = leanMeaningOf(codec, name)
     const attribute = codec.unsafeEncode(value as never)
     const head = [`/-- \`${name}\` -/`, `theorem ${leanIdent(name)} :`]
-    const guard = guardedToo(term)
+    const guard = recursive(codec)
         ? `\n\n${leanGuard({ name: `${name}__guarded`, codec, guarded: true })}`
         : ''
     const vector =
@@ -1220,13 +1287,15 @@ export const leanVector = (
     return `${vector}${guard}`
 }
 
-/** A recursive term that the library wrote through is a term that the guard accepts. */
-const guardedToo = (term: string): boolean => term.includes('Term.mu')
+/** A recursive codec that the library wrote through is a codec that the guard accepts. */
+const recursive = (codec: AnyCodec): boolean =>
+    !('mark' in codec.def) && componentsOf([codec.def]).length > 0
 
 /**
- * **A guard verdict**: whether the model's `Alg.Term.guarded` accepts the term of a codec. A recursive
- * schema below a list or an object is guarded. A thunk that returns its own term reads the
- * binder's input itself, and the guard refuses it: the stages of such a term never grow.
+ * **A guard verdict**: whether the guard of a DAG of scopes accepts the graph of a codec
+ * (`Graph.guarded`). A recursive schema below a list or an object is guarded. A thunk that returns
+ * its own term reads its own input, and the guard refuses it: the graph has no form as a DAG of
+ * scopes.
  */
 export type Guard = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
@@ -1240,7 +1309,7 @@ export const leanGuard = ({ name, codec, guarded }: Guard): string =>
     [
         `/-- \`${name}\` — the model's guard ${guarded ? 'accepts' : 'refuses'} this term -/`,
         `theorem ${leanIdent(name)} :`,
-        `    Alg.Term.guarded (${leanTermOf(codec, name)}) = ${guarded} := kernel_rfl%`,
+        `    (${leanGraphOf(codec, name)}).guarded = ${guarded} := kernel_rfl%`,
     ].join('\n')
 
 /**
@@ -1472,26 +1541,19 @@ export const leanFormerGuard = ({ name, term }: FormerGuard): string => {
             "the host's guard accepts this term now, so a vector that the model's guard refuses it states no host refusal",
         )
     }
-    const rooted = (bound: Bound): string =>
-        leanTermOfTerm(term, name, { ...topScope(term), bound })
-    // a caller's function is a variable of the theorem, and the guard reads the shape alone, so a
-    // quantified verdict closes the guard on a twin of one shape that holds no free function
+    // a caller's function is a variable of the theorem; the guard reads the graph and no function
     const bound: Bound = {
         closures: new Map(),
         adapters: new Map(),
         readers: new Map(),
     }
-    const printed = rooted(bound)
+    const printed = leanGraphOfTerm(term, name, bound)
     const binders = leanBinders(bound)
-    const guard =
-        binders === ''
-            ? 'of_decide_eq_true kernel_rfl%'
-            : `(Alg.guarded_of_sameShape _ (${rooted({ closures: new Map(), adapters: new Map(), readers: new Map(), standIn: true })}) kernel_rfl%).trans (of_decide_eq_true kernel_rfl%)`
     return [
-        `/-- \`${name}\` — a former refuses this term; the model's guard refuses it too -/`,
+        `/-- \`${name}\` — a former refuses this term; the guard of a DAG of scopes refuses its graph too -/`,
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
-        `    Alg.Term.guarded (${printed}) = false :=`,
-        `  ${guard}`,
+        `    ${printed}.guarded = false :=`,
+        `  ${closing(binders)}`,
     ].join('\n')
 }
 
@@ -1705,6 +1767,7 @@ export const leanShapes = (
 const printers = {
     term: { type: 'Term', print: leanTermOf },
     closed: { type: 'Closed', print: leanClosedOf },
+    graph: { type: 'Graph', print: leanGraphOf },
 } as const
 
 /** A printer of a codec. */
@@ -3601,7 +3664,7 @@ const evaluationForms = {
         ok: 'readsNothingOk',
     },
     guards: {
-        type: '(Term × Bool)',
+        type: '(Graph × Bool)',
         ok: 'guardsOk',
     },
     admits: {
@@ -3670,7 +3733,6 @@ export const vectorRows = (
     },
     rows: (shapes) => [
         ...admissions.flatMap(({ name, codec, value }) => {
-            const term = leanTermOf(codec, name)
             const attribute = codec.unsafeEncode(value as never)
             const t = shapes.closed(leanClosedOf(codec, name), 'closed')
             const row = {
@@ -3678,13 +3740,13 @@ export const vectorRows = (
                 form: 'writes' as const,
                 row: `(${fuelFor(attribute)}, ${t}, ${leanValueOf(value, name)}, ${leanAttrOf(attribute, name)})`,
             }
-            return guardedToo(term)
+            return recursive(codec)
                 ? [
                       row,
                       {
                           name: leanIdent(`${name}__guarded`),
                           form: 'guards' as const,
-                          row: `(${shapes.closed(term)}, true)`,
+                          row: `(${shapes.closed(leanGraphOf(codec, name), 'graph')}, true)`,
                       },
                   ]
                 : [row]
@@ -3692,7 +3754,7 @@ export const vectorRows = (
         ...guards.map(({ name, codec, guarded }) => ({
             name: leanIdent(name),
             form: 'guards' as const,
-            row: `(${shapes.closed(leanTermOf(codec, name))}, ${guarded})`,
+            row: `(${shapes.closed(leanGraphOf(codec, name), 'graph')}, ${guarded})`,
         })),
         ...refusals.map(({ name, codec, value }) => {
             refusedBoth(name, codec, value)
@@ -3716,7 +3778,7 @@ export const leanVectorRowModule = (
         `Emitted by \`src/codec/lean.ts\` from the shipped TypeScript codecs. A \`writes\`
 row is one \`encode\` that this library performed, \`check n ((t.meaning (libTable noCallers)).e v) (some a) = .same\`. A
 \`writesNothing\` row is a value that this library refuses, \`(t.meaning (libTable noCallers)).e v = none\`. A \`guards\` row
-is the model's guard on a term, \`Alg.Term.guarded t = b\`. ${admissions.length} admissions,
+is the guard of a DAG of scopes on the graph of a codec, \`g.guarded = b\`. ${admissions.length} admissions,
 ${refusals.length} refusals.`,
         vectorRows(admissions, refusals, guards),
     )

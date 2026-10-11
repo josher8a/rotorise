@@ -1127,69 +1127,28 @@ export const openRefusal = (t: Term): CodecError | undefined => {
 }
 
 /**
- * **How a recursion in the term reads its own input**, the model's `Term.use` at the variable of
- * each binder, joined over the binders. The walk forces each thunk and keeps the terms it is
- * inside. A thunk that returns a term on that stack closes a cycle, and the terms between the two
- * are the path of the recursion. The level of a path is the model's:
+ * **How a recursion in the term reads its own input**, read from the order of the entries of each
+ * cycle ({@link entryOrder}). The level is the model's:
  *
  * - `0`: the term has no recursion;
- * - `1`: each path has a container and no adapter, so each stage reads a shallower input;
- * - `2`: a path has no container, so the recursion reads the input of its own binder;
- * - `3`: a path has an adapter. Caller code makes the input of the inner term, at any depth. A
- *   `held` converts the value, and a `withLegacyRead` writes the older reader's answer.
+ * - `1`: each cycle has an order, so each stage reads a shallower input;
+ * - `2`: a cycle has no container on its path, so the recursion reads the input of its own binder;
+ * - `3`: a cycle has an adapter on its path. Caller code makes the input of the inner term, at any
+ *   depth. A `held` converts the value, and a `withLegacyRead` writes the older reader's answer.
  *
  * The model's guard refuses `2` and `3`. **A `ref` that no scope binds is a free variable**, and
- * reads at `0`: an open fragment holds no recursion yet, and the {@link scope} that binds the name
- * runs the walk with every name bound. The walk ends at each cycle, because every edge of a term
- * other than a `ref` is built before the term.
+ * closes no cycle: an open fragment holds no recursion yet, and the {@link scope} that binds the
+ * name runs the walk with every name bound.
  */
 export const recursionUse = (root: Term): number => {
-    const walk = (t: Term, stack: readonly Term[]): number => {
-        const on = [...stack, t]
-        const next = (one: Term) => walk(one, on)
-        const most = (ones: readonly Term[]) => Math.max(0, ...ones.map(next))
-        switch (t.kind) {
-            case 'lazy': {
-                const target = forceDeclared(t)
-                // a free variable: no binder of this term binds it, so it reads no input of this
-                // term, as the model's `Term.use` reads an unbound variable. The scope that binds
-                // the name runs the walk again with the name bound
-                if (target === undefined) return 0
-                // the free variable refuses at `2` or above, and an adapter in the term of the
-                // thunk is the cause of the refusal, which the level `3` names. The level changes
-                // no verdict: a free variable that reads `1` keeps `1`
-                if (target instanceof RecursionRefused) {
-                    const use = pathUse(on)
-                    return use < 2 ? use : Math.max(use, target.use)
-                }
-                const at = on.indexOf(target)
-                return at === -1 ? next(target) : pathUse(on.slice(at))
-            }
-            case 'list':
-                return most([
-                    ...t.pre,
-                    ...t.suf,
-                    ...(t.spread === undefined ? [] : [t.spread]),
-                ])
-            case 'object':
-                return most([
-                    ...Object.values(t.body.fields).map((field) => field.t),
-                    ...(t.body.rest === undefined ? [] : [t.body.rest]),
-                ])
-            case 'union':
-                return most(t.options)
-            case 'set':
-                return next(t.elem)
-            case 'held':
-                return most([t.inner, t.outer])
-            case 'refine':
-            case 'legacy':
-                return next(t.inner)
-            default:
-                return 0
-        }
+    const components = componentsOf([root])
+    let use = components.length === 0 ? 0 : 1
+    for (const component of components) {
+        const order = entryOrder(component)
+        if (order.kind === 'refused')
+            use = Math.max(use, order.cause === 'wall' ? 3 : 2)
     }
-    return walk(root, [])
+    return use
 }
 
 /**
@@ -1209,41 +1168,22 @@ export class RecursionRefused extends CodecError {
 }
 
 /**
- * The term of a thunk that the walk of {@link recursionUse} forces, or nothing where {@link force}
- * answers nothing or the thunk throws a {@link CodecError}. **A former refuses inside a thunk where
- * the name it reads is in progress**: the thunk of a `nullable` over a `ref` to its own entry
- * refuses while the entry resolves. The throw leaves no mark, so a later force retries. So the
- * walk reads the refusal as the free variable that a `ref` that no scope binds is. A
- * {@link RecursionRefused} returns itself, so the walk reads its level.
+ * The term of a thunk, or nothing where {@link force} answers nothing or the thunk throws a
+ * {@link CodecError}. **A former refuses inside a thunk where the name it reads is in progress**:
+ * the thunk of a `nullable` over a `ref` to its own entry refuses while the entry resolves. The
+ * throw leaves no mark, so a later force retries. So the walk reads the refusal as the free
+ * variable that a `ref` that no scope binds is.
  */
 const forceDeclared = (
     t: Term & { readonly kind: 'lazy' },
-): Term | RecursionRefused | undefined => {
+): Term | undefined => {
     try {
         return force(t)
     } catch (thrown) {
-        if (thrown instanceof RecursionRefused) return thrown
         if (thrown instanceof CodecError) return undefined
         throw thrown
     }
 }
-
-/** The level of one path, folded from the occurrence outward: the model's `useUnder` at a
- * container, `useHeld` at an adapter, and the same level elsewhere. */
-const pathUse = (path: readonly Term[]): number =>
-    path.reduceRight((use, one) => {
-        switch (one.kind) {
-            case 'list':
-            case 'object':
-            case 'set':
-                return use === 2 ? 1 : use
-            case 'held':
-            case 'legacy':
-                return use === 0 ? 0 : 3
-            default:
-                return use
-        }
-    }, 2)
 
 /** A list, an object or a union with each position, field and option replaced by its view. */
 export const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
@@ -2043,11 +1983,18 @@ export const leafKinds: ReadonlySet<Term['kind']> = new Set([
     'never',
 ])
 
-/** The terms that a term reads one step down, through a thunk that resolves. */
+/**
+ * The terms that a term reads one step down, through a thunk that resolves to a declared term.
+ *
+ * A thunk is the term of a `ref`, or a view of one, and a thunk runs no former and no scope. So a
+ * force throws a `CodecError` only where the entry that the `ref` names is a field, and never a
+ * refusal of the guard. A thunk that throws holds no cycle. The refusal of a nested scope reaches
+ * the guard through the definitions that the refused scope keeps in the slot of each `ref`.
+ */
 export const childrenOf = (t: Term): readonly Term[] => {
     switch (t.kind) {
         case 'lazy': {
-            const target = force(t)
+            const target = forceDeclared(t)
             return target === undefined ? [] : [target]
         }
         case 'list':
@@ -2159,11 +2106,22 @@ export const componentsOf = (roots: readonly Term[]): readonly Component[] => {
  */
 export type EntryOrder =
     | { readonly kind: 'order'; readonly entries: readonly Term[] }
-    | { readonly kind: 'refused'; readonly reason: string }
+    | {
+          readonly kind: 'refused'
+          readonly cause: 'unguarded' | 'wall'
+          readonly reason: string
+      }
 
 /** The order of the entries of a component, or the reason that it has none. */
 export const entryOrder = (component: Component): EntryOrder => {
     const { members, keys } = component
+    // a cycle of thunks alone names no term, so it reads its own input with no guard
+    if (keys.size === 0)
+        return {
+            kind: 'refused',
+            cause: 'unguarded',
+            reason: 'an unguarded cycle: an entry reads its own input above every guard',
+        }
     const above = new Map<Term, Term[]>()
     let reason: string | undefined
     for (const entry of keys.keys()) {
@@ -2196,7 +2154,7 @@ export const entryOrder = (component: Component): EntryOrder => {
         walk(entry, false, false, true)
         above.set(entry, names)
     }
-    if (reason !== undefined) return { kind: 'refused', reason }
+    if (reason !== undefined) return { kind: 'refused', cause: 'wall', reason }
     const entries: Term[] = []
     const state = new Map<Term, 'progress' | 'done'>()
     const place = (t: Term): boolean => {
@@ -2213,6 +2171,7 @@ export const entryOrder = (component: Component): EntryOrder => {
         if (!place(entry))
             return {
                 kind: 'refused',
+                cause: 'unguarded',
                 reason: 'an unguarded cycle: an entry reads its own input above every guard',
             }
     return { kind: 'order', entries }

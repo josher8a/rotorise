@@ -313,7 +313,7 @@ theorem recursive_json :
 
 /-- `recursive_json__guarded` — the model's guard accepts this term -/
 theorem recursive_json__guarded :
-    Alg.Term.guarded (Term.mu (Term.union [Term.string, Term.array (Term.var 0)])) = true := kernel_rfl%
+    ((⟨1, fun i => match i with | ⟨0, _⟩ => (Scoped.Graph.Term.union [Scoped.Graph.Term.string, Scoped.Graph.Term.array (Scoped.Graph.Term.ref 0)] : Scoped.Graph.Term 1)⟩ : Graph)).guarded = true := kernel_rfl%
 
 /-- `recursive_tree` -/
 theorem recursive_tree :
@@ -324,7 +324,7 @@ theorem recursive_tree :
 
 /-- `recursive_tree__guarded` — the model's guard accepts this term -/
 theorem recursive_tree__guarded :
-    Alg.Term.guarded (Term.mu (Term.object (Body.mk {"v", "kids"} (fun k => if k.1 = "v" then ObjectSlot.req (Term.string) else ObjectSlot.req (Term.array (Term.var 0))) none))) = true := kernel_rfl%
+    ((⟨1, fun i => match i with | ⟨0, _⟩ => (Scoped.Graph.Term.object (Scoped.Graph.Body.mk {"v", "kids"} (fun k => if k.1 = "v" then Scoped.Graph.ObjectSlot.req (Scoped.Graph.Term.string) else Scoped.Graph.ObjectSlot.req (Scoped.Graph.Term.array (Scoped.Graph.Term.ref 0))) none) : Scoped.Graph.Term 1)⟩ : Graph)).guarded = true := kernel_rfl%
 
 /-- `recursive_category` -/
 theorem recursive_category :
@@ -335,7 +335,7 @@ theorem recursive_category :
 
 /-- `recursive_category__guarded` — the model's guard accepts this term -/
 theorem recursive_category__guarded :
-    Alg.Term.guarded (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none))) = true := kernel_rfl%
+    ((⟨1, fun i => match i with | ⟨0, _⟩ => (Scoped.Graph.Term.object (Scoped.Graph.Body.mk {"name", "children"} (fun k => if k.1 = "name" then Scoped.Graph.ObjectSlot.req (Scoped.Graph.Term.string) else Scoped.Graph.ObjectSlot.optional (Scoped.Graph.Term.array (Scoped.Graph.Term.ref 0))) none) : Scoped.Graph.Term 1)⟩ : Graph)).guarded = true := kernel_rfl%
 
 /-- `recursive_tree_optional` -/
 theorem recursive_tree_optional :
@@ -346,7 +346,7 @@ theorem recursive_tree_optional :
 
 /-- `recursive_tree_optional__guarded` — the model's guard accepts this term -/
 theorem recursive_tree_optional__guarded :
-    Alg.Term.guarded (Term.mu (Term.object (Body.mk {"name", "children"} (fun k => if k.1 = "name" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.array (Term.var 0))) none))) = true := kernel_rfl%
+    ((⟨1, fun i => match i with | ⟨0, _⟩ => (Scoped.Graph.Term.object (Scoped.Graph.Body.mk {"name", "children"} (fun k => if k.1 = "name" then Scoped.Graph.ObjectSlot.req (Scoped.Graph.Term.string) else Scoped.Graph.ObjectSlot.optional (Scoped.Graph.Term.array (Scoped.Graph.Term.ref 0))) none) : Scoped.Graph.Term 1)⟩ : Graph)).guarded = true := kernel_rfl%
 
 /-- `mutual_scope` -/
 theorem mutual_scope :
@@ -357,7 +357,7 @@ theorem mutual_scope :
 
 /-- `mutual_scope__guarded` — the model's guard accepts this term -/
 theorem mutual_scope__guarded :
-    Alg.Term.guarded (Term.mu (Term.object (Body.mk {"b"} (fun k => ObjectSlot.req (Term.array (Term.union [Term.null, Term.var 0]))) none))) = true := kernel_rfl%
+    ((⟨2, fun i => match i with | ⟨0, _⟩ => (Scoped.Graph.Term.union [Scoped.Graph.Term.null, Scoped.Graph.Term.ref 1] : Scoped.Graph.Term 2) | ⟨1, _⟩ => (Scoped.Graph.Term.object (Scoped.Graph.Body.mk {"b"} (fun k => Scoped.Graph.ObjectSlot.req (Scoped.Graph.Term.array (Scoped.Graph.Term.ref 0))) none) : Scoped.Graph.Term 2)⟩ : Graph)).guarded = true := kernel_rfl%
 
 /-! ### Read back, through the same term
 
