@@ -183,4 +183,12 @@ structure Closed where
 def Closed.meaning (α : Table) (t : Closed) : Codec :=
   Alg.Scoped.Closed.meaning (Alg.tables dynSyn.o α dynTableA) t.scopes t.root
 
+/-- **The read row of a closed codec**: whether the meaning reads the attribute. The row reads
+    the meaning, and no second description of it. -/
+def Closed.AdmA (α : Table) (t : Closed) (a : Attr) : Bool := ((t.meaning α).p a).isSome
+
+/-- **The read row is the domain of the read of the meaning.** -/
+theorem Closed.AdmA_eq_isSome (α : Table) (t : Closed) (a : Attr) :
+    t.AdmA α a = ((t.meaning α).p a).isSome := rfl
+
 end Calculus
