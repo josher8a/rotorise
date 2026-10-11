@@ -2617,6 +2617,260 @@ theorem noCycle_of_rank {n : Nat} {S : Container} {sys : Fin n → Flat S.Op S.P
   rw [hwm] at this
   omega
 
+
+/-! ## The guard of a DAG of scopes, as a decision, and its converse -/
+
+/-- **The guard of a DAG of scopes, as a decision**: no walk of `n` unguarded edges, and no wall
+    names an entry that reaches back. Structural. -/
+def dagGuardB (S : Container) (sys : Fin n → Flat S.Op S.Pos n) : Bool :=
+  (List.finRange n).all (fun i => !walkB S sys n i) &&
+    (List.finRange n).all fun i => (List.finRange n).all fun j =>
+      !((sys i).wlv S j && reachB sys n j i)
+
+/-- **The decision states the guard of a DAG of scopes.** -/
+theorem dagGuardB_iff {sys : Fin n → Flat S.Op S.Pos n} : dagGuardB S sys = true ↔ DagGuard S sys := by
+  simp only [dagGuardB, Bool.and_eq_true, all_finRange, Bool.not_eq_true']
+  constructor
+  · intro h
+    refine ⟨fun hc => ?_, fun i j hw hr => ?_⟩
+    · obtain ⟨i, hi⟩ := walks_of_cycle hc
+      have := h.1 i
+      rw [(walkB_iff sys n i).mpr (hi n)] at this
+      exact nomatch this
+    · have := h.2 i j
+      rw [hw, (reach_iff sys j i).mp hr] at this
+      exact nomatch this
+  · intro hG
+    refine ⟨fun i => ?_, fun i j => ?_⟩
+    · cases hw : walkB S sys n i
+      · rfl
+      · exact absurd (cycle_of_walk ((walkB_iff sys n i).mp hw)) hG.noCycle
+    · cases hw : (sys i).wlv S j
+      · rfl
+      · cases hr : reachB sys n j i
+        · rfl
+        · exact absurd ((reach_iff sys j i).mpr hr) (hG.wall i j hw)
+
+/-- A wall closes the width: below a wall, no entry of the width remains. -/
+theorem Kind.w_empty {w : Nat} : ∀ κ : Kind, κ = .wall → Fin (κ.w w) → False
+  | .wall, _, l => l.elim0
+
+/-- A wall closes the nameable entries. -/
+theorem Kind.k_empty {w k : Nat} : ∀ κ : Kind, κ = .wall → Fin (κ.k w k) → False
+  | .wall, _, l => l.elim0
+
+/-- Each entry of the width below a node is an entry of the width above it. -/
+theorem Kind.envW_some {X : Type} {w : Nat} (ρ : Fin w → X) :
+    ∀ (κ : Kind) (l : Fin (κ.w w)), ∃ l', κ.envW ρ l = ρ l'
+  | .keep, l => ⟨l, rfl⟩
+  | .down, l => ⟨l, rfl⟩
+  | .wall, l => l.elim0
+
+/-- Each nameable entry below a node is an entry of the width or a nameable entry above it. -/
+theorem Kind.envK_some {X : Type} {w k : Nat} (ρw : Fin w → X) (ρk : Fin k → X) :
+    ∀ (κ : Kind) (l : Fin (κ.k w k)), (∃ l', κ.envK ρw ρk l = ρw l') ∨ ∃ l', κ.envK ρw ρk l = ρk l'
+  | .keep, l => .inr ⟨l, rfl⟩
+  | .down, l => .inl ⟨l, rfl⟩
+  | .wall, l => l.elim0
+
+section Leaves
+variable {c N : Nat}
+
+/-- A leaf of an inlined scope term is an entry of the width, a nameable entry, or a constant. -/
+theorem SFlat.lv_inlC {j : Fin N} : ∀ {w k : Nat}
+    (t : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k) (ρw : Fin w → Fin N) (ρk : Fin k → Fin N)
+    (ρc : Fin c → Fin N),
+    (t.inlC (fun l => .leaf (ρw l)) (fun l => .leaf (ρk l)) (fun l => .leaf (ρc l))).lv S j = true →
+      (∃ l, ρw l = j) ∨ (∃ l, ρk l = j) ∨ ∃ l, ρc l = j
+  | _, _, .leaf l, _, _, _, h => .inr (.inl ⟨l, by simpa [SFlat.inlC, Flat.lv] using h⟩)
+  | _, _, .node (.inr l) _, _, _, _, h => .inr (.inr ⟨l, by simpa [SFlat.inlC, Flat.lv] using h⟩)
+  | _, _, .node (.inl o) args, ρw, ρk, ρc, h => by
+      obtain ⟨p, hp⟩ := Flat.lv_node.mp h
+      rw [← Kind.envW_comp, ← Kind.envK_comp] at hp
+      rcases SFlat.lv_inlC (args p) _ _ ρc hp with ⟨l, hl⟩ | ⟨l, hl⟩ | hc
+      · obtain ⟨l', hl'⟩ := Kind.envW_some ρw (S.kind o) l
+        exact .inl ⟨l', hl' ▸ hl⟩
+      · rcases Kind.envK_some ρw ρk (S.kind o) l with ⟨l', hl'⟩ | ⟨l', hl'⟩
+        · exact .inl ⟨l', hl' ▸ hl⟩
+        · exact .inr (.inl ⟨l', hl' ▸ hl⟩)
+      · exact .inr (.inr hc)
+
+/-- An unguarded leaf of an inlined scope term is a nameable entry or a constant. -/
+theorem SFlat.ulv_inlC {j : Fin N} : ∀ {w k : Nat}
+    (t : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k) (ρw : Fin w → Fin N) (ρk : Fin k → Fin N)
+    (ρc : Fin c → Fin N),
+    (t.inlC (fun l => .leaf (ρw l)) (fun l => .leaf (ρk l)) (fun l => .leaf (ρc l))).ulv S j = true →
+      (∃ l, ρk l = j) ∨ ∃ l, ρc l = j
+  | _, _, .leaf l, _, _, _, h => .inl ⟨l, by simpa [SFlat.inlC, Flat.ulv] using h⟩
+  | _, _, .node (.inr l) _, _, _, _, h => .inr ⟨l, by simpa [SFlat.inlC, Flat.ulv] using h⟩
+  | _, _, .node (.inl o) args, ρw, ρk, ρc, h => by
+      obtain ⟨hκ, p, hp⟩ := Flat.ulv_node_iff.mp h
+      rw [← Kind.envW_comp, ← Kind.envK_comp] at hp
+      rcases SFlat.ulv_inlC (args p) _ _ ρc hp with ⟨l, hl⟩ | hc
+      · obtain ⟨l', hl'⟩ := Kind.envK_keep_pt (ρw := ρw) (ρk := ρk) (S.kind o) hκ l
+        exact .inl ⟨l', hl' ▸ hl⟩
+      · exact .inr hc
+
+/-- A leaf below a wall of an inlined scope term is a constant. -/
+theorem SFlat.wlv_inlC {j : Fin N} : ∀ {w k : Nat}
+    (t : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k) (ρw : Fin w → Fin N) (ρk : Fin k → Fin N)
+    (ρc : Fin c → Fin N),
+    (t.inlC (fun l => .leaf (ρw l)) (fun l => .leaf (ρk l)) (fun l => .leaf (ρc l))).wlv S j = true →
+      ∃ l, ρc l = j
+  | _, _, .leaf _, _, _, _, h => by simp [SFlat.inlC, Flat.wlv] at h
+  | _, _, .node (.inr _) _, _, _, _, h => by simp [SFlat.inlC, Flat.wlv] at h
+  | _, _, .node (.inl o) args, ρw, ρk, ρc, h => by
+      rcases Flat.wlv_node.mp h with ⟨hκ, p, hp⟩ | ⟨_, p, hp⟩
+      · rw [← Kind.envW_comp, ← Kind.envK_comp] at hp
+        rcases SFlat.lv_inlC (args p) _ _ ρc hp with ⟨l, _⟩ | ⟨l, _⟩ | hc
+        · exact (Kind.w_empty (S.kind o) hκ l).elim
+        · exact (Kind.k_empty (S.kind o) hκ l).elim
+        · exact hc
+      · rw [← Kind.envW_comp, ← Kind.envK_comp] at hp
+        exact SFlat.wlv_inlC (args p) _ _ ρc hp
+
+end Leaves
+
+section Rename2
+variable {m : Nat}
+
+/-- A leaf of a renamed term is the renamed leaf of the term. -/
+theorem Flat.lv_rename (ρ : Fin n → Fin m) {j : Fin m} : ∀ t : Flat S.Op S.Pos n,
+    (t.bind fun i => .leaf (ρ i)).lv S j = true → ∃ i, t.lv S i = true ∧ ρ i = j
+  | .leaf i, h => ⟨i, by simp [Flat.lv], by simpa [Flat.bind, Flat.lv] using h⟩
+  | .node o args, h => by
+      obtain ⟨p, hp⟩ := Flat.lv_node.mp h
+      obtain ⟨i, hi, hρ⟩ := Flat.lv_rename ρ (args p) hp
+      exact ⟨i, Flat.lv_node.mpr ⟨p, hi⟩, hρ⟩
+
+/-- An unguarded leaf of a renamed term is the renamed unguarded leaf of the term. -/
+theorem Flat.ulv_rename (ρ : Fin n → Fin m) {j : Fin m} : ∀ t : Flat S.Op S.Pos n,
+    (t.bind fun i => .leaf (ρ i)).ulv S j = true → ∃ i, t.ulv S i = true ∧ ρ i = j
+  | .leaf i, h => ⟨i, by simp [Flat.ulv], by simpa [Flat.bind, Flat.ulv] using h⟩
+  | .node o args, h => by
+      obtain ⟨hκ, p, hp⟩ := Flat.ulv_node_iff.mp h
+      obtain ⟨i, hi, hρ⟩ := Flat.ulv_rename ρ (args p) hp
+      exact ⟨i, Flat.ulv_node_iff.mpr ⟨hκ, p, hi⟩, hρ⟩
+
+/-- A leaf below a wall of a renamed term is the renamed leaf below a wall of the term. -/
+theorem Flat.wlv_rename (ρ : Fin n → Fin m) {j : Fin m} : ∀ t : Flat S.Op S.Pos n,
+    (t.bind fun i => .leaf (ρ i)).wlv S j = true → ∃ i, t.wlv S i = true ∧ ρ i = j
+  | .leaf _, h => by simp [Flat.bind, Flat.wlv] at h
+  | .node o args, h => by
+      rcases Flat.wlv_node.mp h with ⟨hκ, p, hp⟩ | ⟨hκ, p, hp⟩
+      · obtain ⟨i, hi, hρ⟩ := Flat.lv_rename ρ (args p) hp
+        exact ⟨i, Flat.wlv_node.mpr (.inl ⟨hκ, p, hi⟩), hρ⟩
+      · obtain ⟨i, hi, hρ⟩ := Flat.wlv_rename ρ (args p) hp
+        exact ⟨i, Flat.wlv_node.mpr (.inr ⟨hκ, p, hi⟩), hρ⟩
+
+/-- A renaming keeps a leaf. -/
+theorem Flat.lv_of_rename (ρ : Fin n → Fin m) {i : Fin n} : ∀ t : Flat S.Op S.Pos n,
+    t.lv S i = true → (t.bind fun i => .leaf (ρ i)).lv S (ρ i) = true
+  | .leaf i', h => by
+      simp only [Flat.lv, decide_eq_true_eq] at h
+      subst h; simp [Flat.bind, Flat.lv]
+  | .node o args, h => by
+      obtain ⟨p, hp⟩ := Flat.lv_node.mp h
+      exact Flat.lv_node.mpr ⟨p, Flat.lv_of_rename ρ (args p) hp⟩
+
+/-- A renaming keeps an unguarded leaf. -/
+theorem Flat.ulv_of_rename (ρ : Fin n → Fin m) {i : Fin n} : ∀ t : Flat S.Op S.Pos n,
+    t.ulv S i = true → (t.bind fun i => .leaf (ρ i)).ulv S (ρ i) = true
+  | .leaf i', h => by
+      simp only [Flat.ulv, decide_eq_true_eq] at h
+      subst h; simp [Flat.bind, Flat.ulv]
+  | .node o args, h => by
+      obtain ⟨hκ, p, hp⟩ := Flat.ulv_node_iff.mp h
+      exact Flat.ulv_node_iff.mpr ⟨hκ, p, Flat.ulv_of_rename ρ (args p) hp⟩
+
+/-- A renaming keeps a leaf below a wall. -/
+theorem Flat.wlv_of_rename (ρ : Fin n → Fin m) {i : Fin n} : ∀ t : Flat S.Op S.Pos n,
+    t.wlv S i = true → (t.bind fun i => .leaf (ρ i)).wlv S (ρ i) = true
+  | .leaf _, h => by simp [Flat.wlv] at h
+  | .node o args, h => by
+      rcases Flat.wlv_node.mp h with ⟨hκ, p, hp⟩ | ⟨hκ, p, hp⟩
+      · exact Flat.wlv_node.mpr (.inl ⟨hκ, p, Flat.lv_of_rename ρ (args p) hp⟩)
+      · exact Flat.wlv_node.mpr (.inr ⟨hκ, p, Flat.wlv_of_rename ρ (args p) hp⟩)
+
+end Rename2
+
+/-- An edge from an earlier entry of a DAG of scopes stays among the earlier entries. -/
+theorem DSys.reach_castAdd {c n : Nat} (d : DSys S c) (sc : Scope S c n) {j : Fin c}
+    {k : Fin (c + n)} (h : Relation.ReflTransGen (REdge (DSys.snoc d sc).graph) (Fin.castAdd n j) k) :
+    ∃ k₀, k = Fin.castAdd n k₀ ∧ Relation.ReflTransGen (REdge d.graph) j k₀ := by
+  induction h with
+  | refl => exact ⟨j, rfl, .refl⟩
+  | tail _ he ih =>
+    obtain ⟨k₀, rfl, hr⟩ := ih
+    simp only [REdge, DSys.graph, Fin.append_left] at he
+    obtain ⟨i, hi, hρ⟩ := Flat.lv_rename _ _ he
+    exact ⟨i, hρ.symm, hr.tail hi⟩
+
+/-- **The invariant of a DAG of scopes**: an unguarded edge lowers the entry, and everything that a
+    leaf below a wall reaches is below the entry. -/
+theorem DSys.order : ∀ {N : Nat} (d : DSys S N),
+    (∀ i j, (d.graph i).ulv S j = true → j.val < i.val) ∧
+    ∀ i j, (d.graph i).wlv S j = true → ∀ k, Relation.ReflTransGen (REdge d.graph) j k → k.val < i.val
+  | _, .nil => ⟨fun i => i.elim0, fun i => i.elim0⟩
+  | _, .snoc (c := c) (n := n) d sc => by
+      obtain ⟨ihu, ihw⟩ := DSys.order d
+      refine ⟨fun i j h => ?_, fun i j h k hk => ?_⟩
+      · refine Fin.addCases (fun m h => ?_) (fun m h => ?_) i h
+        · simp only [DSys.graph, Fin.append_left] at h
+          obtain ⟨j₀, hj, rfl⟩ := Flat.ulv_rename _ _ h
+          have := ihu m j₀ hj
+          simp only [Fin.val_castAdd]; exact this
+        · simp only [DSys.graph, Fin.append_right] at h
+          rcases SFlat.ulv_inlC (sc m) _ _ _ h with ⟨l, rfl⟩ | ⟨l, rfl⟩
+          · simp only [Fin.val_natAdd, Fin.val_castLE]; have := l.isLt; omega
+          · simp only [Fin.val_castAdd, Fin.val_natAdd]; have := l.isLt; omega
+      · refine Fin.addCases (fun m h hk => ?_) (fun m h hk => ?_) i h hk
+        · simp only [DSys.graph, Fin.append_left] at h
+          obtain ⟨j₀, hj, rfl⟩ := Flat.wlv_rename _ _ h
+          obtain ⟨k₀, rfl, hr⟩ := DSys.reach_castAdd d sc hk
+          have := ihw m j₀ hj k₀ hr
+          simp only [Fin.val_castAdd]; exact this
+        · simp only [DSys.graph, Fin.append_right] at h
+          obtain ⟨l, rfl⟩ := SFlat.wlv_inlC (sc m) _ _ _ h
+          obtain ⟨k₀, rfl, _⟩ := DSys.reach_castAdd d sc hk
+          simp only [Fin.val_castAdd, Fin.val_natAdd]; have := k₀.isLt; omega
+
+/-- **The graph form of a DAG of scopes passes the guard of a DAG of scopes.** -/
+theorem DSys.dagGuard {N : Nat} (d : DSys S N) : DagGuard S d.graph := by
+  obtain ⟨hu, hw⟩ := DSys.order d
+  exact ⟨noCycle_of_rank (fun i => i.val) fun i j h => hu i j h,
+    fun i j h hr => absurd (hw i j h i hr) (Nat.lt_irrefl _)⟩
+
+/-- **A renaming keeps the guard of a DAG of scopes**, from the renamed system back to the system. -/
+theorem dagGuard_of_rename {sys g : Fin n → Flat S.Op S.Pos n} (π : Equiv.Perm (Fin n))
+    (hg : ∀ m, g m = (sys (π.symm m)).bind fun j => .leaf (π j)) (h : DagGuard S g) :
+    DagGuard S sys := by
+  have hπ : ∀ i, g (π i) = (sys i).bind fun j => .leaf (π j) := fun i => by
+    rw [hg, Equiv.symm_apply_apply]
+  refine ⟨fun ⟨w, m, hm, hwm, hw⟩ => h.noCycle ⟨fun t => π (w t), m, hm, by simp only [hwm],
+    fun t ht => ?_⟩, fun i j hwl hr => h.wall (π i) (π j) ?_ ?_⟩
+  · show (g (π (w t))).ulv S (π (w (t + 1))) = true
+    rw [hπ]; exact Flat.ulv_of_rename π _ (hw t ht)
+  · rw [hπ]; exact Flat.wlv_of_rename π _ hwl
+  · have key : ∀ a b, Relation.ReflTransGen (REdge sys) a b →
+        Relation.ReflTransGen (REdge g) (π a) (π b) := by
+      intro a b hab
+      induction hab with
+      | refl => exact .refl
+      | tail _ he ih =>
+        refine ih.tail ?_
+        show (g (π _)).lv S (π _) = true
+        rw [hπ]; exact Flat.lv_of_rename π _ he
+    exact key _ _ hr
+
+/-- **The guard decides the DAG of scopes**: a system passes the decision exactly where a renaming
+    of it is the graph form of a DAG of scopes. -/
+theorem dagGuardB_iff_dsys {sys : Fin n → Flat S.Op S.Pos n} :
+    dagGuardB S sys = true ↔ ∃ (π : Equiv.Perm (Fin n)) (d : DSys S n),
+      ∀ m, d.graph m = (sys (π.symm m)).bind fun j => .leaf (π j) := by
+  rw [dagGuardB_iff]
+  exact ⟨dsys_of_guard, fun ⟨π, d, hd⟩ => dagGuard_of_rename π hd d.dagGuard⟩
+
 end Rename
 
 /-! ## `Compat` and lawfulness at the solution -/

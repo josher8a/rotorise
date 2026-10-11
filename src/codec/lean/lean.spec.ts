@@ -654,7 +654,7 @@ describe('what cannot be emitted', () => {
         expect(
             leanGuard({ name: 'self_thunk', codec: selfThunk, guarded: false }),
         ).toContain(
-            'Term.guarded (Term.mu (Term.var 0)) = false := kernel_rfl%',
+            '((⟨1, fun i => match i with | ⟨0, _⟩ => (Scoped.Graph.Term.ref 0 : Scoped.Graph.Term 1)⟩ : Graph)).guarded = false := kernel_rfl%',
         )
     })
 
@@ -2409,8 +2409,8 @@ describe("the declaration guard, against the model's classifier", () => {
 
     /**
      * **A term that a scope refuses reaches no union, so its guard verdict is a vector alone.** The
-     * refusal carries the term of the entry, and the vector states that the model's guard refuses
-     * the term too. A term that the host's guard accepts gets no vector, because the vector would
+     * refusal carries the term of the entry, and the vector states that the guard of a DAG of
+     * scopes refuses the graph of the term too. A term that the host's guard accepts gets no vector, because the vector would
      * state a refusal that the host does not make.
      */
     it('the guard that a scope refuses with is stated in the kernel', () => {
@@ -2433,7 +2433,7 @@ describe("the declaration guard, against the model's classifier", () => {
             ),
         })
         expect(closed).toContain(
-            'Alg.Term.guarded (Term.mu ((Term.held false (Term.var 0) (Term.string) (.caller 0, false) []))) = false :=\n  of_decide_eq_true kernel_rfl%',
+            '(⟨1, fun i => match i with | ⟨0, _⟩ => ((Scoped.Graph.Term.held false (Scoped.Graph.Term.ref 0) (Scoped.Graph.Term.string) (.caller 0, false) []) : Scoped.Graph.Term 1)⟩ : Graph).guarded = false :=\n  of_decide_eq_true kernel_rfl%',
         )
         const quantified = leanFormerGuard({
             name: 'quantified',
@@ -2449,8 +2449,8 @@ describe("the declaration guard, against the model's classifier", () => {
         expect(quantified).toContain(
             [
                 'theorem quantified (r0 : Attr → Option Value) :',
-                '    Alg.Term.guarded (Term.mu ((Term.legacy (Term.var 0) r0))) = false :=',
-                '  (Alg.guarded_of_sameShape _ (Term.mu ((Term.legacy (Term.var 0) (fun _ => none)))) kernel_rfl%).trans (of_decide_eq_true kernel_rfl%)',
+                '    (⟨1, fun i => match i with | ⟨0, _⟩ => ((Scoped.Graph.Term.legacy (Scoped.Graph.Term.ref 0) r0) : Scoped.Graph.Term 1)⟩ : Graph).guarded = false :=',
+                '  kernel_rfl%',
             ].join('\n'),
         )
         const { tree } = scope({

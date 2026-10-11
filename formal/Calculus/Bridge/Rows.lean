@@ -72,11 +72,11 @@ theorem readsNothingOk_iff (p : Closed × Attr) :
     readsNothingOk p = true ↔ (p.1.meaning (libTable noCallers)).p p.2 = none :=
   Option.isNone_iff_eq_none
 
-/-- A row of a guard: the model's guard on the term gives the answer of `src/`. -/
-def guardsOk (p : Term × Bool) : Bool := Alg.Term.guarded p.1 == p.2
+/-- A row of a guard: the guard of a DAG of scopes on the graph gives the answer of `src/`. -/
+def guardsOk (p : Graph × Bool) : Bool := p.1.guarded == p.2
 
 /-- The law of `guardsOk`: the guard equals the answer. -/
-theorem guardsOk_iff (p : Term × Bool) : guardsOk p = true ↔ Alg.Term.guarded p.1 = p.2 :=
+theorem guardsOk_iff (p : Graph × Bool) : guardsOk p = true ↔ p.1.guarded = p.2 :=
   beq_iff_eq
 
 /-- A row of an admission: `AdmA` gives the answer of the decoder of `src/`. -/

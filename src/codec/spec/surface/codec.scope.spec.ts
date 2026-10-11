@@ -362,3 +362,45 @@ describe('the free names of a codec', () => {
         tableEntry<Row>()({ PK: ['id'] }, { codec: open.item })
     })
 })
+
+describe('a refusal inside a nested scope', () => {
+    const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
+
+    /**
+     * A scope that refuses keeps its definitions in the slot of each `ref`, so a later scope that
+     * reads the fragment sees the cycle that the inner scope refused. The guard of the later scope
+     * reads that cycle, and refuses the whole codec.
+     */
+    it('is the refusal of the whole codec, for an unguarded cycle', () => {
+        const fragment = union([string, ref('A')])
+        expect(() => scope({ A: fragment as never })).toThrow(
+            /'A' reaches a recursion with no list or object on its path/,
+        )
+        // @ts-expect-error a use needs a closed codec, and the ref reads 'A'
+        expect(() => fragment.unsafeEncode('x')).toThrow(
+            /through a `ref` that no scope binds/,
+        )
+        expect(() =>
+            scope({
+                O: object({ x: ref('A') }) as never,
+                A: fragment as never,
+            }),
+        ).toThrow(/'O' reaches a recursion with no list or object on its path/)
+    })
+
+    it('is the refusal of the whole codec, for a cycle through a wall', () => {
+        const fragment = held(ref('W') as never, string as never, same as never)
+        expect(() => scope({ W: fragment as never })).toThrow(
+            /'W' reaches a recursion with an adapter/,
+        )
+        expect(() =>
+            scope({
+                O: object({ x: ref('W') }) as never,
+                W: fragment as never,
+            }),
+        ).toThrow(/'O' reaches a recursion with an adapter/)
+        expect(() =>
+            scope({ O: object({ x: array(fragment as never) }) as never }),
+        ).toThrow(/holds an adapter/)
+    })
+})
