@@ -10,6 +10,7 @@ import Calculus.Alg.Containers
 import Calculus.Alg.Recursion
 import Calculus.Alg.Agree
 import Calculus.Alg.Converse
+import Calculus.Alg.System
 import Calculus.Lang.Term
 import Calculus.Lang.Converse
 import Calculus.Lang.Typing
@@ -25,6 +26,7 @@ import Calculus.Lang.DisjointA
 import Calculus.Lang.Compat
 import Calculus.Lang.View
 import Calculus.Lang.Path
+import Calculus.Lang.System
 import Calculus.JSON.Basic
 import Calculus.JSON.Disjoint
 import Calculus.JSON.Compat

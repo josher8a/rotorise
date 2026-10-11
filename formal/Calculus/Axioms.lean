@@ -27,6 +27,7 @@ import Calculus.Alg.Lists
 import Calculus.Alg.Positions
 import Calculus.Alg.Containers
 import Calculus.Alg.Recursion
+import Calculus.Alg.System
 import Calculus.Lang.Term
 import Calculus.Lang.Converse
 import Calculus.Lang.Typing
@@ -40,6 +41,7 @@ import Calculus.Lang.Disjoint
 import Calculus.Lang.DisjointV
 import Calculus.Lang.DisjointA
 import Calculus.Lang.Path
+import Calculus.Lang.System
 import Calculus.Dynamo.Analysis.Path
 import Calculus.Dynamo.Analysis.Precondition
 import Lean
