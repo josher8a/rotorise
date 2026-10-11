@@ -7,6 +7,8 @@ import Calculus.Dynamo.Witness.Refutations
 import Calculus.Dynamo.Lang.HeldSet
 import Calculus.Dynamo.Analysis.Separation
 import Calculus.Dynamo.Analysis.Disjoint
+import Calculus.Dynamo.Analysis.ScopeDisjoint
+import Calculus.Lang.ScopeDisjoint
 import Batteries.Tactic.Lint
 import Calculus.Dynamo.Witness.LiteralArity1
 import Calculus.Dynamo.Witness.Nesting

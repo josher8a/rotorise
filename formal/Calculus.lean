@@ -28,6 +28,7 @@ import Calculus.Lang.View
 import Calculus.Lang.Path
 import Calculus.Lang.Scope
 import Calculus.Lang.System
+import Calculus.Lang.ScopeDisjoint
 import Calculus.JSON.Basic
 import Calculus.JSON.Disjoint
 import Calculus.JSON.Compat
@@ -61,6 +62,7 @@ import Calculus.Dynamo.Analysis.ExactA
 import Calculus.Dynamo.Analysis.Separation
 import Calculus.Dynamo.Analysis.Laminar
 import Calculus.Dynamo.Analysis.Disjoint
+import Calculus.Dynamo.Analysis.ScopeDisjoint
 import Calculus.Dynamo.Witness.LiteralArity1
 import Calculus.Dynamo.Analysis.Orthogonality
 import Calculus.Bridge.Vectors
