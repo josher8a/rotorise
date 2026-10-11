@@ -76,7 +76,9 @@ import {
     agrees,
     bindersOf,
     clauseForm,
+    componentsOf,
     disjoint,
+    entryOrder,
     force,
     mapChildren,
     openRefusal,
@@ -555,7 +557,51 @@ type Position = {
 }
 
 /** A scope, and the functions that the theorem binds where the vector is quantified. */
-type At = Scope & { readonly bound?: Bound; readonly frames?: Frames }
+type At = Scope & {
+    readonly bound?: Bound
+    readonly frames?: Frames
+    readonly placed?: Placed
+}
+
+/**
+ * **One entry of a closed codec**: its scope, its index in the scope, and its index among the
+ * entries of every scope, the constant that a later scope reads.
+ */
+type Entry = {
+    readonly scope: number
+    readonly index: number
+    readonly global: number
+}
+
+/**
+ * **Where the scoped printer is**: the entries of the closed codec, the scope and the entry that it
+ * prints, whether it prints the top of the entry, and whether the position is below a guard or
+ * below a wall.
+ */
+type Placed = {
+    readonly entries: ReadonlyMap<Term, Entry>
+    readonly scope: number
+    readonly index: number
+    readonly top: boolean
+    readonly guarded: boolean
+    readonly wall: boolean
+}
+
+/** The namespace of the builders: the scoped builders where the printer prints a closed codec. */
+const pre = (scope: At): string => (scope.placed ? 'Scoped.' : '')
+
+/** The position below a container, which is a guard, or below a wall. */
+const below = (scope: At, kind: 'guard' | 'wall'): At =>
+    scope.placed === undefined
+        ? scope
+        : {
+              ...scope,
+              placed: {
+                  ...scope.placed,
+                  guarded: scope.placed.guarded || kind === 'guard',
+                  wall: scope.placed.wall || kind === 'wall',
+              },
+          }
 
 /**
  * **The name of one caller function, made on the first use.** A prefix names a variable of the
@@ -659,6 +705,81 @@ export const leanTermOf = (
         frames: frames && { at: frames, above: [] },
     })
 }
+
+/**
+ * **A closed codec** — the codec as a DAG of scopes, for the families whose analysis reads only the
+ * meaning.
+ *
+ * Each cycle of the term graph is one scope, in the order of {@link componentsOf}: a scope comes
+ * after each scope that it reaches. The entries of a scope are in the order of {@link entryOrder}.
+ * The root is an entry: an entry of its own cycle, or the one entry of a last scope. The top of
+ * each entry states its indices, because the elaborator needs them before it reads a list of
+ * options. A term with no scoped form, an unguarded cycle, a cycle through a wall, or an open
+ * fragment, is refused, with the reason.
+ *
+ * The binder printer {@link leanTermOf} serves only the families whose analysis still reads the
+ * binder term.
+ */
+export const leanClosedOf = (
+    declared: ObjectSlot,
+    at = 'codec',
+    bound?: Bound,
+): string => {
+    const def = declared.def
+    if ('mark' in def) {
+        return refuse(
+            at,
+            'a *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
+        )
+    }
+    const scopes: (readonly Term[])[] = []
+    for (const component of componentsOf([def])) {
+        const order = entryOrder(component)
+        if (order.kind === 'refused') return refuse(at, order.reason)
+        scopes.push(order.entries)
+    }
+    if (!scopes.some((entries) => entries.includes(def))) scopes.push([def])
+    const entries = new Map<Term, Entry>()
+    let global = 0
+    scopes.forEach((members, scope) =>
+        members.forEach((t, index) => {
+            entries.set(t, { scope, index, global: global++ })
+        }),
+    )
+    let printed = '.nil'
+    let constants = 0
+    scopes.forEach((members, scope) => {
+        const arms = members
+            .map((t, index) => {
+                const body = leanTermOfTerm(t, at, {
+                    binds: new Set(),
+                    inside: [],
+                    bound,
+                    placed: {
+                        entries,
+                        scope,
+                        index,
+                        top: true,
+                        guarded: false,
+                        wall: false,
+                    },
+                })
+                return `| ⟨${index}, _⟩ => (${body} : Scoped.Term ${constants} ${members.length} ${index})`
+            })
+            .join(' ')
+        printed = `.snoc (c := ${constants}) (n := ${members.length}) (${printed}) (fun i => match i with ${arms})`
+        constants += members.length
+    })
+    return `(⟨${constants}, ${printed}, ${entries.get(def)?.global ?? 0}⟩ : Closed)`
+}
+
+/** The meaning of a closed codec at the library table, as a vector reads it. */
+const leanMeaningOf = (
+    declared: ObjectSlot,
+    at: string,
+    bound?: Bound,
+): string =>
+    `(Closed.meaning (libTable noCallers) ${leanClosedOf(declared, at, bound)})`
 
 /**
  * A literal's base and alternatives, as the two arguments `Term.literal` and `inL` both take.
@@ -773,10 +894,12 @@ const leanBodyOf = (body: Body, at: string, scope: At): string => {
         rest === undefined
             ? 'none'
             : `(some (${leanTermOfTerm(rest, `${at}.rest`, scope)}))`
-    return `(Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
+    return `(${pre(scope)}Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
 }
 
 const leanTermOfTerm = (t: Term, at: string, scope: At): string => {
+    if (scope.placed !== undefined)
+        return leanPlaced(t, at, scope, scope.placed)
     const frames = scope.frames
     const binder = { text: '' }
     const printed =
@@ -799,16 +922,41 @@ const leanTermOfTerm = (t: Term, at: string, scope: At): string => {
     return printed
 }
 
+/**
+ * **A term of a closed codec.** An entry of an earlier scope prints as its constant, and an entry of
+ * the scope prints as `ref`: below a guard any entry, above every guard an earlier entry. Below a
+ * wall the term names no entry of its own scope. Each other term prints in place.
+ */
+const leanPlaced = (t: Term, at: string, scope: At, placed: Placed): string => {
+    const entry = placed.entries.get(t)
+    if (entry !== undefined && !placed.top) {
+        if (entry.scope < placed.scope)
+            return `Scoped.Term.const ${entry.global}`
+        if (placed.wall)
+            return refuse(
+                at,
+                'a cycle through a wall: a wall reads its term at any depth, so the term has no scoped form',
+            )
+        if (!placed.guarded && entry.index >= placed.index)
+            return refuse(
+                at,
+                'an unguarded cycle: an entry reads its own input above every guard, so the term has no scoped form',
+            )
+        return `Scoped.Term.ref ${entry.index}`
+    }
+    return leanTermCore(t, at, { ...scope, placed: { ...placed, top: false } })
+}
+
 const leanTermCore = (t: Term, at: string, scope: At): string => {
     switch (t.kind) {
         case 'string':
-            return 'Term.string'
+            return `${pre(scope)}Term.string`
         case 'boolean':
-            return 'Term.boolean'
+            return `${pre(scope)}Term.boolean`
         case 'binary':
-            return 'Term.binary'
+            return `${pre(scope)}Term.binary`
         case 'null':
-            return 'Term.null'
+            return `${pre(scope)}Term.null`
         /**
          * **Emittable, and it took refusal vectors to see that.** `Term.number` is a closed term.
          * A `Value.num` is a closed term too, over a `WFNumeral`. What {@link leanValueOf} refuses
@@ -816,12 +964,12 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
          * too early.
          */
         case 'number':
-            return 'Term.number'
+            return `${pre(scope)}Term.number`
         case 'literal':
-            return `Term.literal ${leanLiteral(t)}`
+            return `${pre(scope)}Term.literal ${leanLiteral(t)}`
         /** `Term.set` takes its element term, as the host term does. */
         case 'set':
-            return `Term.set (${leanTermOfTerm(t.elem, `${at}.elem`, scope)})`
+            return `${pre(scope)}Term.set (${leanTermOfTerm(t.elem, `${at}.elem`, below(scope, 'guard'))})`
         /**
          * **The builder where the shape is one, the constructor where it is not.**
          *
@@ -832,28 +980,29 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
          * spell, prints the constructor.
          */
         case 'list': {
+            const inner = below(scope, 'guard')
             const positions = (
                 ts: readonly Term[],
                 part: (index: number) => string,
             ) =>
                 ts
                     .map((element, index) =>
-                        leanTermOfTerm(element, part(index), scope),
+                        leanTermOfTerm(element, part(index), inner),
                     )
                     .join(', ')
             const spread = t.spread
             if (t.suf.length === 0) {
                 if (t.pre.length === 0 && spread)
-                    return `Term.array (${leanTermOfTerm(spread, `${at}.element`, scope)})`
+                    return `${pre(scope)}Term.array (${leanTermOfTerm(spread, `${at}.element`, inner)})`
                 const tail = spread
-                    ? `(some (${leanTermOfTerm(spread, `${at}.tail`, scope)}))`
+                    ? `(some (${leanTermOfTerm(spread, `${at}.tail`, inner)}))`
                     : 'none'
-                return `Term.tuple [${positions(t.pre, (index) => `${at}[${index}]`)}] ${tail}`
+                return `${pre(scope)}Term.tuple [${positions(t.pre, (index) => `${at}[${index}]`)}] ${tail}`
             }
             const middle = spread
-                ? `(some (${leanTermOfTerm(spread, `${at}.spread`, scope)}))`
+                ? `(some (${leanTermOfTerm(spread, `${at}.spread`, inner)}))`
                 : 'none'
-            return `Term.list [${positions(t.pre, (index) => `${at}[${index}]`)}] ${middle} [${positions(t.suf, (index) => `${at}.suffix[${index}]`)}]`
+            return `${pre(scope)}Term.list [${positions(t.pre, (index) => `${at}[${index}]`)}] ${middle} [${positions(t.suf, (index) => `${at}.suffix[${index}]`)}]`
         }
         case 'object': {
             // **One argument, a `Body`.** `db444e3` made the object payload a stratum, so
@@ -866,12 +1015,12 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
             //
             // A `dunion`'s variants are `Body`s too, so the payload is emitted by
             // {@link leanBodyOf} and both rows print the same thing.
-            return `Term.object ${leanBodyOf(t.body, at, scope)}`
+            return `${pre(scope)}Term.object ${leanBodyOf(t.body, at, below(scope, 'guard'))}`
         }
         case 'never':
-            return 'Term.never'
+            return `${pre(scope)}Term.never`
         case 'union':
-            return `Term.union [${t.options
+            return `${pre(scope)}Term.union [${t.options
                 .map((variant, index) =>
                     leanTermOfTerm(variant, `${at}[${index}]`, scope),
                 )
@@ -879,12 +1028,17 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
         // The model's `opaq` is the exact codec: its number option is `numberCodec`, so it is this
         // total term. The two policies are `held` over this term, and the `held` row refuses them
         case 'opaq':
-            return 'Term.opaq'
+            return `${pre(scope)}Term.opaq`
         // a thunk that returns a term being printed closes a cycle, and prints the variable of
         // that term's binder; any other thunk prints the term it returns. A thunk that throws
         // names a codec not yet declared, and prints a variable that no binder of the term binds
         case 'lazy': {
             const target = force(t)
+            if (target === undefined && scope.placed !== undefined)
+                return refuse(
+                    at,
+                    'an open fragment: a thunk names a codec not yet declared, so the term has no scoped form',
+                )
             if (target === undefined) return `Term.var ${scope.inside.length}`
             const k = scope.inside.lastIndexOf(target)
             return k === -1
@@ -916,7 +1070,7 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
                 )
             }
             // the stored predicate is the top of the store universe: the truth, which is `()`
-            return `Term.refine (${leanTermOfTerm(t.inner, `${at}.inner`, scope)}) ${q} ()`
+            return `${pre(scope)}Term.refine (${leanTermOfTerm(t.inner, `${at}.inner`, scope)}) ${q} ()`
         }
         /**
          * **An adapter this library ships is printed by name**, the way a recognised predicate
@@ -938,9 +1092,9 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
          */
         case 'held':
             if (t.via !== 'decimalText' && scope.bound)
-                return `(Term.held false (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) (.caller ${boundName(scope.bound.adapters, t.via ?? t.f, '')}, false) [])`
+                return `(${pre(scope)}Term.held false (${leanTermOfTerm(t.inner, at, below(scope, 'wall'))}) (${leanTermOfTerm(t.outer, at, below(scope, 'wall'))}) (.caller ${boundName(scope.bound.adapters, t.via ?? t.f, '')}, false) [])`
             return t.via === 'decimalText'
-                ? `(Term.held false (${leanTermOfTerm(t.inner, at, scope)}) (${leanTermOfTerm(t.outer, at, scope)}) (.decimalText, false) [])`
+                ? `(${pre(scope)}Term.held false (${leanTermOfTerm(t.inner, at, below(scope, 'wall'))}) (${leanTermOfTerm(t.outer, at, below(scope, 'wall'))}) (.decimalText, false) [])`
                 : refuse(
                       at,
                       "`Term.held` carries a word of adapter generators, and a table gives each generator two `Value → Value` functions: a quantified verdict binds an adapter that the model does not name as a generator `caller n`, and no evaluation vector prints one. An evaluation vector would have to run the adapter: a caller's closure has no name in the model, and a float adapter's content is binary64 rounding, the host axiom this development deleted. The model names one generator that this library ships, `decimalText`, whose pair is `numeralOfStoredText`/`textOfNumeral`",
@@ -949,7 +1103,7 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
         // evaluation vector would have to run it
         case 'legacy':
             return scope.bound
-                ? `(Term.legacy (${leanTermOfTerm(t.inner, at, scope)}) ${scope.bound.standIn ? '(fun _ => none)' : pinned(scope.bound, t.r)})`
+                ? `(${pre(scope)}Term.legacy (${leanTermOfTerm(t.inner, at, below(scope, 'wall'))}) ${scope.bound.standIn ? '(fun _ => none)' : pinned(scope.bound, t.r)})`
                 : refuse(
                       at,
                       '`Term.legacy` carries `r : Attr → Option Value`, a JS closure: a quantified verdict binds it as a variable, and no evaluation vector prints one',
@@ -966,15 +1120,15 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
 const leanSlotOf = (field: TermField, at: string, scope: At): string => {
     switch (field.mark) {
         case 'optional':
-            return `ObjectSlot.optional (${leanTermOfTerm(field.t, at, scope)})`
+            return `${pre(scope)}ObjectSlot.optional (${leanTermOfTerm(field.t, at, scope)})`
         /**
          * `ObjectSlot.fill`: the stand-in is data, so it prints as a `Value`. An older reader of a
          * present value stays in the term, as `Term.legacy`.
          */
         case 'fallback':
-            return `ObjectSlot.fill (${leanTermOfTerm(field.t, at, scope)}) (${leanValueOf(field.v, at)})`
+            return `${pre(scope)}ObjectSlot.fill (${leanTermOfTerm(field.t, at, scope)}) (${leanValueOf(field.v, at)})`
         case 'req':
-            return `ObjectSlot.req (${leanTermOfTerm(field.t, at, scope)})`
+            return `${pre(scope)}ObjectSlot.req (${leanTermOfTerm(field.t, at, scope)})`
         /**
          * `ObjectSlot.optional`, because that is what it denotes rather than an approximation of
          * it.
@@ -984,7 +1138,7 @@ const leanSlotOf = (field: TermField, at: string, scope: At): string => {
          * quotient that rests on is {@link leanValueOf}'s, which was already there for `optional`.
          */
         case 'undefinable':
-            return `ObjectSlot.optional (${leanTermOfTerm(field.t, at, scope)})`
+            return `${pre(scope)}ObjectSlot.optional (${leanTermOfTerm(field.t, at, scope)})`
     }
 }
 
@@ -993,16 +1147,16 @@ const leanSlotOf = (field: TermField, at: string, scope: At): string => {
 /**
  * How a vector states its claim to the kernel.
  *
- * `'check'` writes `check n ((denote t).e v) (some a) = .same := kernel_rfl%` and is the default. It
+ * `'check'` writes `check n ((Closed.meaning α t).e v) (some a) = .same := kernel_rfl%` and is the default. It
  * depends on `Calculus/Bridge/Vectors.lean` — a fuelled three-valued comparator with `check_same` and
- * `check_differ` proved about it, so a passing line cashes to `(denote t).e v = some a` as a
+ * `check_differ` proved about it, so a passing line cashes to `(Closed.meaning α t).e v = some a` as a
  * theorem. No tactic, no `funext` gymnastics, an order of magnitude faster on maps, and it can
  * state a **negative** vector (`= .differ`), which an equation cannot. The `n` is fuel, because
  * only structural recursion reduces in the kernel; {@link leanVector} computes it from the
  * attribute, and under-fuelling reduces to `.exhausted`, which matches neither side and fails the
  * build rather than passing quietly.
  *
- * `'equation'` writes `(denote t).e v = some a` and proves it with a tactic the generated file
+ * `'equation'` writes `(Closed.meaning α t).e v = some a` and proves it with a tactic the generated file
  * carries. The proof reads no comparator, and the file imports `Vectors.lean` for `kernel_rfl%`
  * alone. It cannot express a refusal, and on maps `rfl` does not merely
  * fail, it **diverges**: `Attr.m` holds a function, so the model's answer is stuck under a binder,
@@ -1041,6 +1195,7 @@ export const leanVector = (
     protocol: Protocol = 'check',
 ): string => {
     const term = leanTermOf(codec, name)
+    const meaning = leanMeaningOf(codec, name)
     const attribute = codec.unsafeEncode(value as never)
     const head = [`/-- \`${name}\` -/`, `theorem ${leanIdent(name)} :`]
     const guard = guardedToo(term)
@@ -1050,7 +1205,7 @@ export const leanVector = (
         protocol === 'equation'
             ? [
                   ...head,
-                  `    (denote (libTable noCallers) (${term})).e`,
+                  `    ${meaning}.e`,
                   `      (${leanValueOf(value, name)})`,
                   `    = some (${leanAttrOf(attribute, name)}) := by`,
                   '  vector',
@@ -1058,7 +1213,7 @@ export const leanVector = (
             : [
                   ...head,
                   `    check ${fuelFor(attribute)}`,
-                  `      ((denote (libTable noCallers) (${term})).e`,
+                  `      (${meaning}.e`,
                   `        (${leanValueOf(value, name)}))`,
                   `      (some (${leanAttrOf(attribute, name)})) = .same := kernel_rfl%`,
               ].join('\n')
@@ -1128,7 +1283,7 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
     return [
         `/-- \`${name}\` — refused on both sides -/`,
         `theorem ${leanIdent(name)} :`,
-        `    (denote (libTable noCallers) (${leanTermOf(codec, name)})).e`,
+        `    ${leanMeaningOf(codec, name)}.e`,
         `      (${leanValueOf(value, name)}) = none := kernel_rfl%`,
     ].join('\n')
 }
@@ -1473,23 +1628,30 @@ export const leanShapes = (
     argument: (kind: 'closure' | 'reader') => string,
 ): {
     readonly pair: (left: AnyCodec, right: AnyCodec, at: string) => RowTerms
-    readonly row: (pin?: Pin) => (codec: AnyCodec, at: string) => string
-    readonly closed: (printed: string) => string
+    readonly row: (
+        pin?: Pin,
+        printer?: Printer,
+    ) => (codec: AnyCodec, at: string) => string
+    readonly closed: (printed: string, printer?: Printer) => string
     readonly defs: () => string
 } => {
     const names = new Map<string, string>()
     const defs: string[] = []
-    const nameOf = (printed: string, binders: string): string => {
+    const nameOf = (
+        printed: string,
+        binders: string,
+        printer: Printer,
+    ): string => {
         const known = names.get(printed)
         if (known !== undefined) return known
         const name = `t${names.size}`
         names.set(printed, name)
         defs.push(
-            `def ${name}${binders === '' ? '' : ` ${binders}`} : Term := ${printed}`,
+            `def ${name}${binders === '' ? '' : ` ${binders}`} : ${printers[printer].type} := ${printed}`,
         )
         return name
     }
-    const row = (pin: Pin = (_, made) => made) => {
+    const row = (pin: Pin = (_, made) => made, printer: Printer = 'term') => {
         const adapters = new Map<unknown, string>()
         const given = new Map<unknown, string>()
         const argumentOf = (fn: unknown, kind: 'closure' | 'reader') => {
@@ -1505,8 +1667,8 @@ export const leanShapes = (
                 adapters,
                 readers: new Map(),
             }
-            const printed = leanTermOf(codec, at, bound)
-            const name = nameOf(printed, leanBinders(bound))
+            const printed = printers[printer].print(codec, at, bound)
+            const name = nameOf(printed, leanBinders(bound), printer)
             // the order of `leanBinders`: the closures, then the readers
             const applied = [
                 ...[...bound.closures.keys()].map((fn) =>
@@ -1530,10 +1692,23 @@ export const leanShapes = (
     return {
         pair,
         row,
-        closed: (printed) => nameOf(printed, ''),
+        closed: (printed, printer = 'term') => nameOf(printed, '', printer),
         defs: () => defs.join('\n'),
     }
 }
+
+/**
+ * **The two printers of a codec**: the binder term, and the closed codec. The binder term serves
+ * only the families whose analysis still reads the binder term. A family that reads only the
+ * meaning reads the closed codec.
+ */
+const printers = {
+    term: { type: 'Term', print: leanTermOf },
+    closed: { type: 'Closed', print: leanClosedOf },
+} as const
+
+/** A printer of a codec. */
+type Printer = keyof typeof printers
 
 /**
  * **The argument of a row for one caller function, given the argument that the shapes made.** A
@@ -1960,13 +2135,13 @@ export const leanLegacyRead = (one: LegacyRead): string => {
     return failed(read)
         ? [
               ...head,
-              `    (denote (libTable noCallers) (${term})).p`,
+              `    (Closed.meaning (libTable noCallers) ${term}).p`,
               `      (${leanAttrOf(attribute, name)}) = none := kernel_rfl%`,
           ].join('\n')
         : [
               ...head,
               `    vcheck ${fuelForValue(read)}`,
-              `      ((denote (libTable noCallers) (${term})).p`,
+              `      ((Closed.meaning (libTable noCallers) ${term}).p`,
               `        (${leanAttrOf(attribute, name)}))`,
               `      (some (${leanValueOf(read, name)})) = .same := kernel_rfl%`,
           ].join('\n')
@@ -2020,7 +2195,7 @@ const legacyReadOf = (
         readers: new Map(),
         pins,
     }
-    const term = leanTermOf(codec, name, bound)
+    const term = leanClosedOf(codec, name, bound)
     if (bound.closures.size > 0 || bound.adapters.size > 0) {
         return refuse(
             name,
@@ -2979,7 +3154,7 @@ export const leanReadVector = ({ name, codec, value }: Vector): string => {
         `/-- \`${name}\` — read back through the term that wrote it -/`,
         `theorem ${leanIdent(name)}__reads :`,
         `    vcheck ${fuelForValue(read)}`,
-        `      ((denote (libTable noCallers) (${leanTermOf(codec, name)})).p`,
+        `      (${leanMeaningOf(codec, name)}.p`,
         `        (${leanAttrOf(attribute, name)}))`,
         `      (some (${leanValueOf(read, name)})) = .same := kernel_rfl%`,
     ].join('\n')
@@ -3163,13 +3338,13 @@ const statedRead = (
         ? [
               ...head,
               `    vcheck ${fuelForValue(read)}`,
-              `      ((denote (libTable noCallers) (${leanTermOf(u, name)})).p`,
+              `      (${leanMeaningOf(u, name)}.p`,
               `        (${leanAttrOf(attribute, name)}))`,
               `      (some (${leanValueOf(read, name)})) = .same := kernel_rfl%`,
           ].join('\n')
         : [
               ...head,
-              `    (denote (libTable noCallers) (${leanTermOf(u, name)})).p`,
+              `    ${leanMeaningOf(u, name)}.p`,
               `      (${leanAttrOf(attribute, name)}) = none := kernel_rfl%`,
           ].join('\n')
 }
@@ -3410,19 +3585,19 @@ export const leanVectorModule = (
  */
 const evaluationForms = {
     writes: {
-        type: '(Nat × Term × Value × Attr)',
+        type: '(Nat × Closed × Value × Attr)',
         ok: 'writesOk',
     },
     writesNothing: {
-        type: '(Term × Value)',
+        type: '(Closed × Value)',
         ok: 'writesNothingOk',
     },
     reads: {
-        type: '(Nat × Term × Attr × Value)',
+        type: '(Nat × Closed × Attr × Value)',
         ok: 'readsOk',
     },
     readsNothing: {
-        type: '(Term × Attr)',
+        type: '(Closed × Attr)',
         ok: 'readsNothingOk',
     },
     guards: {
@@ -3497,7 +3672,7 @@ export const vectorRows = (
         ...admissions.flatMap(({ name, codec, value }) => {
             const term = leanTermOf(codec, name)
             const attribute = codec.unsafeEncode(value as never)
-            const t = shapes.closed(term)
+            const t = shapes.closed(leanClosedOf(codec, name), 'closed')
             const row = {
                 name: leanIdent(name),
                 form: 'writes' as const,
@@ -3509,7 +3684,7 @@ export const vectorRows = (
                       {
                           name: leanIdent(`${name}__guarded`),
                           form: 'guards' as const,
-                          row: `(${t}, true)`,
+                          row: `(${shapes.closed(term)}, true)`,
                       },
                   ]
                 : [row]
@@ -3524,7 +3699,7 @@ export const vectorRows = (
             return {
                 name: leanIdent(name),
                 form: 'writesNothing' as const,
-                row: `(${shapes.closed(leanTermOf(codec, name))}, ${leanValueOf(value, name)})`,
+                row: `(${shapes.closed(leanClosedOf(codec, name), 'closed')}, ${leanValueOf(value, name)})`,
             }
         }),
     ],
@@ -3539,8 +3714,8 @@ export const leanVectorRowModule = (
     leanCorpusRowModule(
         'Differential-testing vectors, the full cross product',
         `Emitted by \`src/codec/lean.ts\` from the shipped TypeScript codecs. A \`writes\`
-row is one \`encode\` that this library performed, \`check n ((denote t).e v) (some a) = .same\`. A
-\`writesNothing\` row is a value that this library refuses, \`(denote t).e v = none\`. A \`guards\` row
+row is one \`encode\` that this library performed, \`check n ((t.meaning (libTable noCallers)).e v) (some a) = .same\`. A
+\`writesNothing\` row is a value that this library refuses, \`(t.meaning (libTable noCallers)).e v = none\`. A \`guards\` row
 is the model's guard on a term, \`Alg.Term.guarded t = b\`. ${admissions.length} admissions,
 ${refusals.length} refusals.`,
         vectorRows(admissions, refusals, guards),
@@ -3568,7 +3743,7 @@ export const resolutionRows = (
             attribute: AttributeValue,
             decode: () => unknown,
         ) => {
-            const t = shapes.closed(leanTermOf(u, name))
+            const t = shapes.closed(leanClosedOf(u, name), 'closed')
             const a = leanAttrOf(attribute, name)
             const { did, read } = readOf(decode)
             return did
@@ -3585,7 +3760,7 @@ export const resolutionRows = (
         }
         return [
             ...writes.map(({ name, union: u, value }) => {
-                const t = shapes.closed(leanTermOf(u, name))
+                const t = shapes.closed(leanClosedOf(u, name), 'closed')
                 const v = leanValueOf(value, name)
                 const { wrote, written } = writeOf(u, value)
                 return wrote
@@ -3682,10 +3857,10 @@ export const legacyReadRows = (
     rows: (shapes) =>
         reads.map((one) => {
             const { read, pins } = legacyReadOf(one)
-            const t = shapes.row((fn, made) => pinText(pins.get(fn), made))(
-                one.codec,
-                one.name,
-            )
+            const t = shapes.row(
+                (fn, made) => pinText(pins.get(fn), made),
+                'closed',
+            )(one.codec, one.name)
             const a = leanAttrOf(one.attribute, one.name)
             return failed(read)
                 ? {

@@ -53,6 +53,7 @@ import Calculus.Dynamo.Alg.Opaque
 import Calculus.Dynamo.Lang.HeldSet
 import Calculus.Dynamo.Witness.Nesting
 import Calculus.Dynamo.Lang.Store
+import Calculus.Dynamo.Lang.Scope
 import Calculus.Dynamo.Witness.Malleability
 import Calculus.Dynamo.Witness.Refutations
 import Calculus.Dynamo.Analysis.ExactV

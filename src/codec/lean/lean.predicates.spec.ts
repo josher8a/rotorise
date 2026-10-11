@@ -108,7 +108,7 @@ describe('the predicates this library ships', () => {
             value: '1.5',
         })
         expect(emitted).toContain(
-            'Term.refine ((Term.held false (Term.number) (Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) ()',
+            'Scoped.Term.refine ((Scoped.Term.held false (Scoped.Term.number) (Scoped.Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) ()',
         )
         expect(emitted).toContain('Attr.n (WFNumeral.of "1.5")')
     })

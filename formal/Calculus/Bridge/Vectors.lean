@@ -1,4 +1,5 @@
 import Calculus.Dynamo.Lang.Denote
+import Calculus.Dynamo.Lang.Scope
 
 /-!
 # The vector checker — how a generated test vector becomes a kernel-checked theorem

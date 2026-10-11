@@ -40,7 +40,7 @@ import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, leanTermOf, reachable } from './lean'
 import { CodecError } from './result'
 import type { Literal, Term } from './term'
-import { force, sameTerm } from './term'
+import { componentsOf, force, leafKinds, sameTerm } from './term'
 
 /** A term that this module cannot print as library calls. */
 export class TypeUnemittable extends Error {
@@ -210,17 +210,6 @@ const isBinder = (t: Term): t is Lazy => {
     return hit
 }
 
-/** A term that prints as a name of the library, and is declared by no constant. */
-const leafKinds: ReadonlySet<Term['kind']> = new Set([
-    'string',
-    'number',
-    'boolean',
-    'binary',
-    'null',
-    'opaq',
-    'never',
-])
-
 /* ── the printer ─────────────────────────────────────────────────────────────────────────── */
 
 /**
@@ -259,98 +248,12 @@ type Scc = {
     state?: 'progress' | 'done'
 }
 
-/** The terms that a term reads one step down, through a thunk that resolves. */
-const childrenOf = (t: Term): readonly Term[] => {
-    switch (t.kind) {
-        case 'lazy': {
-            const target = force(t)
-            return target === undefined ? [] : [target]
-        }
-        case 'list':
-            return [
-                ...t.pre,
-                ...t.suf,
-                ...(t.spread === undefined ? [] : [t.spread]),
-            ]
-        case 'object':
-            return [
-                ...Object.values(t.body.fields).map((field) => field.t),
-                ...(t.body.rest === undefined ? [] : [t.body.rest]),
-            ]
-        case 'union':
-            return t.options
-        case 'set':
-            return [t.elem]
-        case 'held':
-            return [t.inner, t.outer]
-        case 'refine':
-        case 'legacy':
-            return [t.inner]
-        default:
-            return []
-    }
-}
-
-/**
- * **The cycles of the pool**, as the strongly connected components of the term graph
- * (Tarjan). `roots` holds each term that a root constant names.
- */
+/** **The cycles of the pool**: each term of a component, at the component. */
 const sccsOf = (roots: readonly Term[]): ReadonlyMap<Term, Scc> => {
-    const index = new Map<Term, number>()
-    const low = new Map<Term, number>()
-    const stack: Term[] = []
-    const on = new Set<Term>()
-    const comps: Term[][] = []
-    const parents = new Map<Term, Term[]>()
-    const visit = (t: Term): void => {
-        index.set(t, index.size)
-        low.set(t, index.get(t) ?? 0)
-        stack.push(t)
-        on.add(t)
-        for (const c of childrenOf(t)) {
-            if (leafKinds.has(c.kind)) continue
-            parents.set(c, [...(parents.get(c) ?? []), t])
-            if (!index.has(c)) {
-                visit(c)
-                low.set(t, Math.min(low.get(t) ?? 0, low.get(c) ?? 0))
-            } else if (on.has(c))
-                low.set(t, Math.min(low.get(t) ?? 0, index.get(c) ?? 0))
-        }
-        if (low.get(t) === index.get(t)) {
-            const comp: Term[] = []
-            for (let u = stack.pop(); u !== undefined; u = stack.pop()) {
-                on.delete(u)
-                comp.push(u)
-                if (u === t) break
-            }
-            comps.push(comp)
-        }
-    }
-    for (const r of roots) if (!leafKinds.has(r.kind) && !index.has(r)) visit(r)
-    const external = new Set(roots)
     const out = new Map<Term, Scc>()
-    for (const comp of comps) {
-        const members = new Set(comp)
-        const [only] = comp
-        if (
-            comp.length === 1 &&
-            only !== undefined &&
-            !childrenOf(only).includes(only)
-        )
-            continue
-        const keys = new Map<Term, string>()
-        for (const m of comp) {
-            if (m.kind === 'lazy') continue
-            const ps = parents.get(m) ?? []
-            if (
-                external.has(m) ||
-                ps.length !== 1 ||
-                ps.some((q) => q.kind === 'lazy' || !members.has(q))
-            )
-                keys.set(m, `k${keys.size}`)
-        }
+    for (const { members, keys } of componentsOf(roots)) {
         const scc: Scc = { members, keys }
-        for (const m of comp) out.set(m, scc)
+        for (const m of members) out.set(m, scc)
     }
     return out
 }

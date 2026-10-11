@@ -2032,6 +2032,192 @@ export const bindersOf = (root: Term): ReadonlySet<Term> => {
     return binds
 }
 
+/** A term that holds no other term. A component of the term graph never holds one. */
+export const leafKinds: ReadonlySet<Term['kind']> = new Set([
+    'string',
+    'number',
+    'boolean',
+    'binary',
+    'null',
+    'opaq',
+    'never',
+])
+
+/** The terms that a term reads one step down, through a thunk that resolves. */
+export const childrenOf = (t: Term): readonly Term[] => {
+    switch (t.kind) {
+        case 'lazy': {
+            const target = force(t)
+            return target === undefined ? [] : [target]
+        }
+        case 'list':
+            return [
+                ...t.pre,
+                ...t.suf,
+                ...(t.spread === undefined ? [] : [t.spread]),
+            ]
+        case 'object':
+            return [
+                ...Object.values(t.body.fields).map((field) => field.t),
+                ...(t.body.rest === undefined ? [] : [t.body.rest]),
+            ]
+        case 'union':
+            return t.options
+        case 'set':
+            return [t.elem]
+        case 'held':
+            return [t.inner, t.outer]
+        case 'refine':
+        case 'legacy':
+            return [t.inner]
+        default:
+            return []
+    }
+}
+
+/**
+ * **One cycle of a term graph**: its members, and the entries. An entry is a member that a thunk
+ * names, that a term outside the component names, that a root names, or that has more than one
+ * parent. Each other member has one parent in the component, and prints in place inside that
+ * parent. The key of an entry is its name in the print.
+ */
+export type Component = {
+    readonly members: ReadonlySet<Term>
+    readonly keys: ReadonlyMap<Term, string>
+}
+
+/**
+ * **The cycles of a term graph**, as its strongly connected components (Tarjan), in the order that
+ * Tarjan closes them: a component comes after each component that it reaches. So an earlier
+ * component is an earlier scope. `roots` holds each term that a root names. A term on no cycle is
+ * in no component.
+ */
+export const componentsOf = (roots: readonly Term[]): readonly Component[] => {
+    const index = new Map<Term, number>()
+    const low = new Map<Term, number>()
+    const stack: Term[] = []
+    const on = new Set<Term>()
+    const comps: Term[][] = []
+    const parents = new Map<Term, Term[]>()
+    const visit = (t: Term): void => {
+        index.set(t, index.size)
+        low.set(t, index.get(t) ?? 0)
+        stack.push(t)
+        on.add(t)
+        for (const c of childrenOf(t)) {
+            if (leafKinds.has(c.kind)) continue
+            parents.set(c, [...(parents.get(c) ?? []), t])
+            if (!index.has(c)) {
+                visit(c)
+                low.set(t, Math.min(low.get(t) ?? 0, low.get(c) ?? 0))
+            } else if (on.has(c))
+                low.set(t, Math.min(low.get(t) ?? 0, index.get(c) ?? 0))
+        }
+        if (low.get(t) === index.get(t)) {
+            const comp: Term[] = []
+            for (let u = stack.pop(); u !== undefined; u = stack.pop()) {
+                on.delete(u)
+                comp.push(u)
+                if (u === t) break
+            }
+            comps.push(comp)
+        }
+    }
+    for (const r of roots) if (!leafKinds.has(r.kind) && !index.has(r)) visit(r)
+    const external = new Set(roots)
+    const out: Component[] = []
+    for (const comp of comps) {
+        const members = new Set(comp)
+        const [only] = comp
+        if (
+            comp.length === 1 &&
+            only !== undefined &&
+            !childrenOf(only).includes(only)
+        )
+            continue
+        const keys = new Map<Term, string>()
+        for (const m of comp) {
+            if (m.kind === 'lazy') continue
+            const ps = parents.get(m) ?? []
+            if (
+                external.has(m) ||
+                ps.length !== 1 ||
+                ps.some((q) => q.kind === 'lazy' || !members.has(q))
+            )
+                keys.set(m, `k${keys.size}`)
+        }
+        out.push({ members, keys })
+    }
+    return out
+}
+
+/**
+ * **The order of the entries of one component**: an entry names an earlier entry above every
+ * guard, and any entry below a guard. A container is a guard. A wall reads its terms at any depth,
+ * so an entry below a wall names no entry of its own component. The order is the reason of a
+ * refusal where an unguarded cycle or a cycle through a wall has no order.
+ */
+export type EntryOrder =
+    | { readonly kind: 'order'; readonly entries: readonly Term[] }
+    | { readonly kind: 'refused'; readonly reason: string }
+
+/** The order of the entries of a component, or the reason that it has none. */
+export const entryOrder = (component: Component): EntryOrder => {
+    const { members, keys } = component
+    const above = new Map<Term, Term[]>()
+    let reason: string | undefined
+    for (const entry of keys.keys()) {
+        const names: Term[] = []
+        const walk = (
+            t: Term,
+            guarded: boolean,
+            wall: boolean,
+            top: boolean,
+        ): void => {
+            if (t.kind === 'lazy') {
+                const target = force(t)
+                if (target !== undefined) walk(target, guarded, wall, false)
+                return
+            }
+            if (!members.has(t)) return
+            if (!top && keys.has(t)) {
+                if (wall)
+                    reason ??=
+                        'a cycle through a wall: a wall reads its term at any depth'
+                else if (!guarded) names.push(t)
+                return
+            }
+            const down =
+                t.kind === 'list' || t.kind === 'set' || t.kind === 'object'
+            const walled = t.kind === 'held' || t.kind === 'legacy'
+            for (const c of childrenOf(t))
+                walk(c, guarded || down, wall || walled, false)
+        }
+        walk(entry, false, false, true)
+        above.set(entry, names)
+    }
+    if (reason !== undefined) return { kind: 'refused', reason }
+    const entries: Term[] = []
+    const state = new Map<Term, 'progress' | 'done'>()
+    const place = (t: Term): boolean => {
+        const now = state.get(t)
+        if (now === 'done') return true
+        if (now === 'progress') return false
+        state.set(t, 'progress')
+        for (const u of above.get(t) ?? []) if (!place(u)) return false
+        state.set(t, 'done')
+        entries.push(t)
+        return true
+    }
+    for (const entry of keys.keys())
+        if (!place(entry))
+            return {
+                kind: 'refused',
+                reason: 'an unguarded cycle: an entry reads its own input above every guard',
+            }
+    return { kind: 'order', entries }
+}
+
 /**
  * **A term as the model spells it at a scope**: a binder, a variable, a free variable, or a
  * constructor. A free variable is a thunk that throws, and it pairs with no binder.
