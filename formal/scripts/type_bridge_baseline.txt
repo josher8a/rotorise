@@ -23,7 +23,6 @@ exclude|refuse|364c824884|exclude({ y: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|5f73ac1837|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|656c632bae|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|6dc2de71f0|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|6ebe823f83|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|831d99ce5a|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|8fb53ff91f|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|91add610f4|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
@@ -34,7 +33,6 @@ exclude|refuse|a451fb1b6d|exclude({ y: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|a839799bcc|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|b0734ea9d8|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|b32b9073d9|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|b32b915882|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|b93194fc99|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|bdbcffe0fb|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|c1a16e9a92|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
@@ -725,6 +723,14 @@ path|accept|8eba2db9dd|r.narrow({ s: string("y") })
 path|accept|8eba2db9dd|r.narrow({ s: string("y") }).k
 path|accept|8eba2db9dd|r.narrow({ s: string("y") }).s
 path|accept|8eba2db9dd|r.narrow({ s: string("y") }).y
+path|accept|a3bb574ec9|r.y.narrow({ k: string("p") })
+path|accept|a3bb574ec9|r.y.narrow({ k: string("p") }).k
+path|accept|a3bb574ec9|r.y.narrow({ k: string("p") }).s
+path|accept|a3bb574ec9|r.y.narrow({ k: string("p") }).x
+path|accept|a3bb574ec9|r.y.narrow({ s: string("x") })
+path|accept|a3bb574ec9|r.y.narrow({ s: string("x") }).k
+path|accept|a3bb574ec9|r.y.narrow({ s: string("x") }).s
+path|accept|a3bb574ec9|r.y.narrow({ s: string("x") }).x
 path|accept|abc97e7597|r.x.v.narrow({ k: string("p") })
 path|accept|abc97e7597|r.x.v.narrow({ k: string("p") }).k
 path|accept|abc97e7597|r.x.v.narrow({ k: string("p") }).s
@@ -1046,3 +1052,8 @@ path|refuse|4347b31094|r.x.narrow({ v: string("p") })
 path|refuse|4347b31094|r.x.narrow({ v: string("q") })
 path|refuse|4347b31094|r.x.narrow({ v: string("x") })
 path|refuse|4347b31094|r.x.narrow({ v: string("y") })
+path|refuse|7fd9a43543|r.narrow({ x: string("A") })
+path|refuse|7fd9a43543|r.narrow({ x: string("p") })
+path|refuse|7fd9a43543|r.narrow({ x: string("q") })
+path|refuse|7fd9a43543|r.narrow({ x: string("x") })
+path|refuse|7fd9a43543|r.narrow({ x: string("y") })

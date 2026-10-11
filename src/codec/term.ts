@@ -935,8 +935,8 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  *
  * A term denotes a partial isomorphism, the caller view states its domain, and the stored view
  * states its range. Two options whose domains are disjoint and whose ranges are disjoint are
- * orthogonal: no value has two writers, and no attribute has two readers. {@link agrees} asks each
- * half of it apart, where no binder is unfolded, as the model's oracle `dynOracle` does.
+ * orthogonal: no value has two writers, and no attribute has two readers. `agrees` of `scoped.ts`
+ * asks each half of it apart on the graph, as the model's `cbaseG` does.
  */
 export const viewsDisjoint = (x: Term, y: Term): boolean =>
     disjoint(callerView(x), callerView(y)) &&
@@ -1174,7 +1174,7 @@ export class RecursionRefused extends CodecError {
  * throw leaves no mark, so a later force retries. So the walk reads the refusal as the free
  * variable that a `ref` that no scope binds is.
  */
-const forceDeclared = (
+export const forceDeclared = (
     t: Term & { readonly kind: 'lazy' },
 ): Term | undefined => {
     try {
@@ -1434,24 +1434,7 @@ const samePredicate = (p: Predicate, q: Predicate): boolean => {
     )
 }
 
-/* ── the compatibility decision ───────────────────────────────────────────────────────── */
-
-/** One half of agreement. `write`: two writers of one value write one attribute. `read`: two
- * readers of one attribute read one value. */
-type Half = 'write' | 'read'
-
-/**
- * **Where the decision is in the two operands**: the scope of each operand, the binders unfolded
- * together, and the context of each operand, the model's. A context holds the binders whose
- * variable is below `opaque`, and a free variable is in none.
- */
-type Agreement = {
-    readonly left: Scope
-    readonly right: Scope
-    readonly pairs: Walk['pairs']
-    readonly safeL: ReadonlySet<Term>
-    readonly safeR: ReadonlySet<Term>
-}
+/* ── a term below the top ─────────────────────────────────────────────────────────────── */
 
 /**
  * **Whether each variable that the spelling reads is safe in the context**, the model's
@@ -1513,39 +1496,6 @@ const belowTop = (t: Term, scope: Scope): boolean =>
     !holdsAdapter(t, scope) && closedAt(t, scope)
 
 /**
- * **The context with the binder of `y` pushed**, the model's `pushMu`: the binder is below `opaque`
- * where its body holds no adapter and each variable of the recursive term is safe.
- */
-const pushBinder = (
-    safe: ReadonlySet<Term>,
-    binder: Term,
-    y: Term,
-    scope: Scope,
-): ReadonlySet<Term> =>
-    !holdsAdapter(y, scope) && safeAt(y, scope, safe)
-        ? new Set([...safe, binder])
-        : safe
-
-/**
- * **Whether two options agree on both halves**, the model's `compatPair` at `dynOracle`, which
- * holds at every codec that a thunk that throws later names. A union is the join of its options,
- * and the join of two lawful options exists exactly when the two are compatible (Lawson: `s ∨ t`
- * exists iff `s ∼ t`). Compatibility of two partial bijections is two halves of agreement: two
- * writers of one value write one attribute, and two readers of one attribute read one value.
- * The decision reads each operand as the model spells it, as {@link disjoint} does.
- */
-export const agrees = (x: Term, y: Term): boolean => {
-    const at: Agreement = {
-        left: { binds: bindersOf(x), inside: [] },
-        right: { binds: bindersOf(y), inside: [] },
-        pairs: [],
-        safeL: new Set(),
-        safeR: new Set(),
-    }
-    return agreeWalk('write', x, y, at) && agreeWalk('read', x, y, at)
-}
-
-/**
  * **Whether the spelling of a term at a scope holds an adapter**, the model's `hasHeld`. A
  * variable is not an adapter. The host reads three more terms as an adapter, because no bound
  * below `opaque` covers each one. A free variable is a thunk that names a codec not yet declared,
@@ -1594,287 +1544,6 @@ const holdsAdapter = (t: Term, scope: Scope): boolean => {
     }
 }
 
-/** The bottom, as the model spells it at the scope. */
-const isNeverAt = (t: Term, scope: Scope): boolean => {
-    const one = see(t, scope)
-    return one.kind === 'term' && one.t.kind === 'never'
-}
-
-/**
- * **The term inside which a `held` acts on one half**, the model's `heldSide`: a `held` writes
- * inside its held side and reads inside its stored side. Where that side is a `held` too, the
- * half acts inside its side in turn, and a binder or a variable stops the walk.
- */
-const heldSide = (half: Half, t: Term, scope: Scope): Term | undefined => {
-    const one = see(t, scope)
-    if (one.kind !== 'term' || one.t.kind !== 'held') return undefined
-    const side = half === 'write' ? one.t.outer : one.t.inner
-    return heldSide(half, side, scope) ?? side
-}
-
-/**
- * **The rows that read no structure**, the model's `cbase`. The bottom agrees with every term.
- * Two terms with no adapter whose variables are safe are bounded by the top. Two disjoint terms
- * share nothing. Two closed terms with disjoint views share nothing on their half. A `held`
- * whose half is disjoint from the partner shares nothing there.
- */
-const baseRows = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
-    if (isNeverAt(x, at.left) || isNeverAt(y, at.right)) return true
-    if (
-        !holdsAdapter(x, at.left) &&
-        !holdsAdapter(y, at.right) &&
-        safeAt(x, at.left, at.safeL) &&
-        safeAt(y, at.right, at.safeR)
-    )
-        return true
-    const apart = (a: Term, b: Term) =>
-        disjointWalk(a, b, { left: at.left, right: at.right, pairs: [] })
-    if (apart(x, y)) return true
-    // the caller view states the domain, and the stored view states the range
-    const view = half === 'write' ? callerView : storedView
-    // two closed terms denote alike at every binder, so their views speak for them
-    if (
-        closedAt(x, at.left) &&
-        closedAt(y, at.right) &&
-        disjoint(view(x), view(y))
-    )
-        return true
-    const hx = heldSide(half, x, at.left)
-    if (hx !== undefined && apart(hx, y)) return true
-    const hy = heldSide(half, y, at.right)
-    return hy !== undefined && apart(x, hy)
-}
-
-/**
- * **The rows of the right operand**, the model's `cmpR`. The bottom agrees with every term. A
- * union agrees where each option does. A refinement is below its inner term. A recursive term
- * unfolds, and its binder pairs with nothing. `fam` answers every other spelling, and each
- * spelling that it declines.
- */
-const agreeRight = (
-    half: Half,
-    fam: (y: Term, at: Agreement) => boolean,
-    y: Term,
-    at: Agreement,
-): boolean => {
-    if (fam(y, at)) return true
-    const other = see(y, at.right)
-    if (other.kind === 'mu')
-        return agreeRight(half, fam, other.body, {
-            ...at,
-            right: other.scope,
-            safeR: pushBinder(at.safeR, other.body, y, at.right),
-        })
-    if (other.kind !== 'term') return false
-    switch (other.t.kind) {
-        case 'never':
-            return true
-        case 'union':
-            return other.t.options.every((option) =>
-                agreeRight(half, fam, option, at),
-            )
-        case 'refine':
-            return agreeRight(half, fam, other.t.inner, at)
-        default:
-            return false
-    }
-}
-
-/** The right operand as the model spells it, where it is a constructor. */
-const termAt = (y: Term, at: Agreement): Term | undefined => {
-    const other = see(y, at.right)
-    return other.kind === 'term' ? other.t : undefined
-}
-
-/**
- * **The compatibility decision, one half**, the model's `Term.compat`: one row per constructor of
- * the left operand, as the operands spell at the pairing. The rows are the model's, in the
- * model's order, and the host reads its own terms soundly. A `withLegacyRead` writes what its
- * inner term writes, and its older reading is caller code, so its read half agrees by the rows
- * that read no structure alone.
- *
- * **The walk ends**, for the reason {@link disjointWalk} ends: each call reads a strict subterm
- * of one spelling, or of both, with the other spelling unchanged.
- */
-const agreeWalk = (half: Half, x: Term, y: Term, at: Agreement): boolean => {
-    const one = see(x, at.left)
-    const base = (y1: Term, at1: Agreement) => baseRows(half, x, y1, at1)
-    switch (one.kind) {
-        case 'mu': {
-            if (baseRows(half, x, y, at)) return true
-            const other = see(y, at.right)
-            const safeL = pushBinder(at.safeL, one.body, x, at.left)
-            // two recursive terms: the bodies agree on both halves, with the two binders paired
-            if (other.kind === 'mu') {
-                const inner: Agreement = {
-                    left: one.scope,
-                    right: other.scope,
-                    pairs: [...at.pairs, { left: one.body, right: other.body }],
-                    safeL,
-                    safeR: pushBinder(at.safeR, other.body, y, at.right),
-                }
-                return (
-                    agreeWalk('write', one.body, other.body, inner) &&
-                    agreeWalk('read', one.body, other.body, inner)
-                )
-            }
-            // a recursive term beside another term unfolds, and its binder pairs with nothing
-            return agreeWalk(half, one.body, y, {
-                ...at,
-                left: one.scope,
-                safeL,
-            })
-        }
-        // a variable agrees with the variable of the binder that its own binder was unfolded with
-        case 'var':
-            return agreeRight(
-                half,
-                (y1, at1) => {
-                    if (base(y1, at1)) return true
-                    const other = see(y1, at1.right)
-                    return (
-                        other.kind === 'var' &&
-                        at1.pairs.some(
-                            (pair) =>
-                                pair.left === one.binder &&
-                                pair.right === other.binder,
-                        )
-                    )
-                },
-                y,
-                at,
-            )
-        case 'free':
-            return agreeRight(half, base, y, at)
-        case 'term':
-            break
-    }
-    const t = one.t
-    switch (t.kind) {
-        case 'never':
-            return true
-        case 'refine':
-            return base(y, at) || agreeWalk(half, t.inner, y, at)
-        case 'union':
-            return (
-                base(y, at) ||
-                t.options.every((option) => agreeWalk(half, option, y, at))
-            )
-        case 'legacy':
-            return agreeRight(half, base, y, at)
-        case 'set':
-            return agreeRight(
-                half,
-                (y1, at1) => {
-                    if (base(y1, at1)) return true
-                    const other = termAt(y1, at1)
-                    return (
-                        other?.kind === 'set' &&
-                        agreeWalk(half, t.elem, other.elem, at1)
-                    )
-                },
-                y,
-                at,
-            )
-        case 'list':
-            return agreeRight(
-                half,
-                (y1, at1) => {
-                    if (base(y1, at1)) return true
-                    const other = termAt(y1, at1)
-                    if (other?.kind !== 'list') return false
-                    const rights = positionsOf(other)
-                    return positionsOf(t).every((left) =>
-                        rights.every((right) =>
-                            agreeWalk(half, left, right, at1),
-                        ),
-                    )
-                },
-                y,
-                at,
-            )
-        case 'object':
-            return agreeRight(
-                half,
-                (y1, at1) => {
-                    if (base(y1, at1)) return true
-                    const other = termAt(y1, at1)
-                    return (
-                        other?.kind === 'object' &&
-                        bodiesAgree(half, t.body, other.body, at1)
-                    )
-                },
-                y,
-                at,
-            )
-        // two `held`s of one adapter agree where their stored sides agree
-        case 'held':
-            return agreeRight(
-                half,
-                (y1, at1) => {
-                    if (base(y1, at1)) return true
-                    const other = termAt(y1, at1)
-                    return (
-                        other?.kind === 'held' &&
-                        sameAdapter(t, other) &&
-                        agreeWalk(half, t.inner, other.inner, at1)
-                    )
-                },
-                y,
-                at,
-            )
-        default:
-            return agreeRight(half, base, y, at)
-    }
-}
-
-/** Every position of a list shape: the prefix, the spread, and the suffix. */
-const positionsOf = (t: Extract<Term, { kind: 'list' }>): readonly Term[] => [
-    ...t.pre,
-    ...(t.spread === undefined ? [] : [t.spread]),
-    ...t.suf,
-]
-
-/**
- * **Two fields at one name agree on one half**, the model's `ObjectSlot.compat`: the two terms
- * agree, whatever the presence. A field with a fallback reads a map without the name to its
- * stand-in, where every other field reads the map to a value without the name. So on the read
- * half a field with a fallback agrees beside a `req` field, which reads no map without the name,
- * and beside a field with the same stand-in.
- */
-const fieldsAgree = (half: Half, a: Field, b: Field, at: Agreement): boolean =>
-    (half === 'write' || standInsAgree(a, b)) && agreeWalk(half, a.t, b.t, at)
-
-/** Two fields read a map without the name to one value, or one of the two reads no such map. */
-const standInsAgree = (a: Field, b: Field): boolean =>
-    a.mark === 'fallback'
-        ? b.mark === 'req' || (b.mark === 'fallback' && Object.is(a.v, b.v))
-        : b.mark !== 'fallback' || a.mark === 'req'
-
-/**
- * **Two bodies agree on one half**, the model's object row: at each name that either body
- * declares, the two fields agree, and the two open blocks agree. An undeclared name holds
- * `optional` of the open block, which is `never` where the body is closed.
- */
-const bodiesAgree = (half: Half, a: Body, b: Body, at: Agreement): boolean => {
-    const blockOf = (body: Body): Field => ({
-        mark: 'optional',
-        t: body.rest ?? never,
-    })
-    const names = new Set([...Object.keys(a.fields), ...Object.keys(b.fields)])
-    return (
-        [...names].every((name) =>
-            fieldsAgree(
-                half,
-                a.fields[name] ?? blockOf(a),
-                b.fields[name] ?? blockOf(b),
-                at,
-            ),
-        ) &&
-        (a.rest === undefined || agreeWalk(half, a.rest, b.rest ?? never, at))
-    )
-}
-
 /* ── disjointness ─────────────────────────────────────────────────────────────────────── */
 
 /**
@@ -1903,6 +1572,11 @@ const bodiesAgree = (half: Half, a: Body, b: Body, at: Agreement): boolean => {
  * such variable holds whatever the thunk returns later. Beside the bottom a free variable is
  * disjoint, and beside any other term it is not. A container of the variable beside a
  * constructor of another shape class is disjoint, and reads no variable.
+ *
+ * **Two disjointness decisions live in the host until pass 8 ends.** This binder decision serves
+ * path narrowing and the disjointness rows, whose Lean twins read `Term.disjoint`. `agrees`
+ * reads the graph decision of `scoped.ts`, whose Lean twin is `Scoped.disjoint`. Each consumer
+ * moves with its twin, so no row compares the two decisions.
  */
 export const disjoint = (x: Term, y: Term): boolean =>
     disjointWalk(x, y, {
@@ -2434,7 +2108,7 @@ const predicateApart = (q: Predicate, y: Term, w: Walk): boolean => {
  * Two `members` sets at two bases share no value, and at one base they share a value where they
  * share an alternative. A `closure` is not data.
  */
-const predicatesApart = (q: Predicate, p: Predicate): boolean =>
+export const predicatesApart = (q: Predicate, p: Predicate): boolean =>
     q.kind === 'members' &&
     p.kind === 'members' &&
     (q.literal.base !== p.literal.base ||
@@ -2443,7 +2117,7 @@ const predicatesApart = (q: Predicate, p: Predicate): boolean =>
         ))
 
 /** The primitives: the ground bases and the literals. */
-const isPrim = (t: Term): boolean =>
+export const isPrim = (t: Term): boolean =>
     t.kind === 'string' ||
     t.kind === 'number' ||
     t.kind === 'boolean' ||
@@ -2455,7 +2129,7 @@ const isPrim = (t: Term): boolean =>
  * **A constructor of another shape class**, which shares no value with the left former: the
  * classes of two formers are disjoint, because the carrier is a coproduct (`Shapes`).
  */
-const otherShape = (
+export const otherShape = (
     t: Term,
     classes: readonly ('prim' | 'set' | 'list' | 'object')[],
 ): boolean =>
@@ -2467,7 +2141,7 @@ const otherShape = (
  * **Two primitives apart**, the model's `Ground.apart`: two bases of different kinds,
  * a literal beside another base, and two literals of different values.
  */
-const primsApart = (x: Term, y: Term): boolean => {
+export const primsApart = (x: Term, y: Term): boolean => {
     const base = (t: Term) => (t.kind === 'literal' ? t.base : t.kind)
     if (base(x) !== base(y)) return true
     return (
@@ -2500,8 +2174,12 @@ const rowOf = (
  * `dominates`. Where both shapes spread and one dominates, every common length re-spreads the row
  * at `max p1 p2 + max s1 s2` (`dominates_max`).
  */
-const dominates = (p1: number, s1: number, p2: number, s2: number): boolean =>
-    (p2 <= p1 && s2 <= s1) || (p1 <= p2 && s1 <= s2)
+export const dominates = (
+    p1: number,
+    s1: number,
+    p2: number,
+    s2: number,
+): boolean => (p2 <= p1 && s2 <= s1) || (p1 <= p2 && s1 <= s2)
 
 /** Some position of two aligned rows is disjoint, the left row's term on the left. */
 const rowsApart = (a: readonly Term[], b: readonly Term[], w: Walk): boolean =>

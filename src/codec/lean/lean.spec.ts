@@ -460,12 +460,9 @@ describe('terms', () => {
             right: numberFlags,
         })
         expect(verdict).toContain('theorem flags (q0 : Value → Bool) :')
-        // the guard closes on a twin of one shape that holds no free function
-        expect(verdict).toContain('Alg.guarded_of_sameShape')
-        expect(verdict).toContain('(Pred.closure (fun _ => true))')
-        expect(
-            verdict.endsWith('(of_decide_eq_true kernel_rfl%), kernel_rfl%⟩'),
-        ).toBe(true)
+        expect(verdict).toContain('(Pred.closure q0)')
+        // a quantified goal closes by `kernel_rfl%` on the equation itself
+        expect(verdict.endsWith('= false :=\n  kernel_rfl%')).toBe(true)
         expect(refusal(() => leanTermOf(textFlags)).reason).toContain(
             'Value → Bool',
         )
@@ -487,7 +484,9 @@ describe('terms', () => {
             right: number,
         })
         expect(verdict).toContain('(r0 : Attr → Option Value)')
-        expect(verdict).toContain('(Term.legacy (Term.string) r0)')
+        expect(verdict).toContain(
+            '(Scoped.Term.legacy (Scoped.Term.string) r0)',
+        )
         expect(refusal(() => leanTermOf(migrated)).reason).toContain(
             'no evaluation vector',
         )
@@ -2330,7 +2329,7 @@ describe("the declaration guard, against the model's classifier", () => {
     /**
      * **Each pair carries the warrant of the host's verdict**, and the gate elaborates each one.
      * An accepted pair carries the model's proof that the pair is compatible, through the warrant
-     * the host used. A refused pair carries `compatPair dynOracle x y = false`: the host decides
+     * the host used. A refused pair carries `Closed.compatPair x y = false`: the host decides
      * the model's decision, so the model refuses what the host refuses.
      *
      * **The counts pin a fact no law has, deliberately.** They are a property of this corpus, so
@@ -2339,10 +2338,10 @@ describe("the declaration guard, against the model's classifier", () => {
     it("accepts only pairs the model proves compatible, and refuses only pairs the model's decision refuses", () => {
         const emitted = separationPairs().map(leanSeparation)
         const accepted = emitted.filter((one) =>
-            one.includes('PairwiseCompat (libTable κ) ['),
+            one.includes('Closed.compat_of_compatPair ('),
         )
         const refused = emitted.filter((one) =>
-            /= false :=\n {2}(⟨of_decide_eq_true kernel_rfl%, of_decide_eq_true kernel_rfl%⟩|of_decide_eq_true kernel_rfl%|⟨?\(congrArg₂[\s\S]*)$/.test(
+            /^ {4}Closed\.compatPair \([\s\S]*= false :=\n {2}(of_decide_eq_true kernel_rfl%|kernel_rfl%)$/m.test(
                 one,
             ),
         )
@@ -2363,32 +2362,30 @@ describe("the declaration guard, against the model's classifier", () => {
         )
         const emitted = recursive.map(leanSeparation)
         const byDecision = emitted.filter((one) =>
-            one.includes('pairwiseCompat_of_compatPair'),
+            one.includes('Closed.compat_of_compatPair'),
         )
         const refused = emitted.filter((one) =>
-            one.endsWith(
-                '= false :=\n  ⟨of_decide_eq_true kernel_rfl%, of_decide_eq_true kernel_rfl%⟩',
-            ),
+            one.endsWith('= false :=\n  of_decide_eq_true kernel_rfl%'),
         )
         expect([byDecision.length, refused.length]).toEqual([170, 3])
         expect(byDecision.length + refused.length).toBe(recursive.length)
         const verdict = (left: AnyCodec, right: AnyCodec) =>
             leanSeparation({ name: 'probe', left, right })
         expect(verdict(erase(dynamoNumber), json)).toContain(
-            'pairwiseCompat_of_compatPair',
+            'Closed.compat_of_compatPair',
         )
         expect(verdict(erase(array(string)), json)).toContain(
-            'pairwiseCompat_of_compatPair',
+            'Closed.compat_of_compatPair',
         )
         expect(verdict(erase(decimal), json)).toContain(
-            '= false :=\n  ⟨of_decide_eq_true kernel_rfl%, of_decide_eq_true kernel_rfl%⟩',
+            '= false :=\n  of_decide_eq_true kernel_rfl%',
         )
         expect(verdict(erase(string), tree)).toContain(
-            'pairwiseCompat_of_compatPair',
+            'Closed.compat_of_compatPair',
         )
         // `tree` requires `v` and `Category` holds no `v`, and both are held-free
         expect(verdict(tree, erase(Category))).toContain(
-            'pairwiseCompat_of_compatPair',
+            'Closed.compat_of_compatPair',
         )
     })
 
@@ -2488,24 +2485,18 @@ describe("the declaration guard, against the model's classifier", () => {
             left: erase(string),
             right: erase(boolean),
         })
+        expect(accepted).toContain('Alg.Compat (((⟨1, ')
         expect(accepted).toContain(
-            'PairwiseCompat (libTable κ) [Term.string, Term.boolean]',
-        )
-        expect(accepted).toContain(
-            'pairwiseCompat_of_compatPair (of_decide_eq_true kernel_rfl%)',
+            'Closed.compat_of_compatPair (of_decide_eq_true kernel_rfl%) (libTable κ)',
         )
         const refused = leanSeparation({
             name: 'refused',
             left: erase(string),
             right: erase(decimal),
         })
-        expect(refused).toMatch(
-            /^ {4}Alg\.compatPair dynOracle \(Term\.string\)$/m,
-        )
+        expect(refused).toMatch(/^ {4}Closed\.compatPair \(\(⟨1, /m)
         expect(
-            refused.endsWith(
-                '= false :=\n  ⟨of_decide_eq_true kernel_rfl%, of_decide_eq_true kernel_rfl%⟩',
-            ),
+            refused.endsWith('= false :=\n  of_decide_eq_true kernel_rfl%'),
         ).toBe(true)
     })
 })

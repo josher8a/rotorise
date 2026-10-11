@@ -64,6 +64,7 @@ import type { AnyCodec, LiteralValue, ObjectSlot } from './codec'
 import { object, optional, union } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
 import { CodecError, failed } from './result'
+import { agrees } from './scoped'
 import type {
     Alternatives,
     Body,
@@ -73,7 +74,6 @@ import type {
     Field as TermField,
 } from './term'
 import {
-    agrees,
     bindersOf,
     clauseForm,
     componentsOf,
@@ -1378,20 +1378,19 @@ const refusedBoth = (name: string, codec: AnyCodec, value: unknown): void => {
  * **The bridge runs both ways, because the two host defects of the certificate lived in the
  * direction that the one-way bridge did not check.**
  *
- * - `src/` **accepts** the pair: the model's guard accepts both options, and the model proves `PairwiseCompat` for the pair, given lawful
- *   options. Where {@link agrees} holds, the host decided the model's `compatPair`, and the proof
- *   is `pairwiseCompat_of_compatPair` over that decision. A host warrant that the model does not
- *   prove stops the file.
- * - `src/` **refuses** the pair at its compatibility test: the model's guard accepts both options,
- *   and the model's decision refuses the pair, `compatPair dynOracle x y = false`. A decision that
+ * - `src/` **accepts** the pair: the pair prints as two closed codecs, and a closed codec exists
+ *   only for a codec that the model's guard accepts. Where {@link agrees} holds, the host decided
+ *   the model's `Closed.compatPair`, and `Closed.compat_of_compatPair` gives `Compat` in each
+ *   order over two lawful meanings. A host warrant that the model does not prove stops the file.
+ * - `src/` **refuses** the pair at its compatibility test: the pair prints as two closed codecs,
+ *   and the model's decision refuses the pair, `Closed.compatPair x y = false`. A decision that
  *   starts to accept a pair `src/` turns down stops the file.
  * - `src/` **refuses** the pair **at the guard**: an option reads the input of its own binder, or
- *   holds an adapter on a recursive path. The model's guard must refuse an option too.
+ *   holds an adapter on a recursive path. The pair prints as two graphs, and the guard of a DAG of
+ *   scopes must refuse a graph too.
  *
  * A union over a `ref` that no scope binds is an open fragment: the scope that binds the name
- * decides it, so such a pair holds no decision of the host, and the emitter refuses the pair. A
- * pair whose union is closed and reads a free `ref` in an option takes the same forms: the model's
- * decision gives agreement at every environment (`compatPair_sound`).
+ * decides it, so such a pair holds no decision of the host, and the emitter refuses the pair.
  *
  * Compatibility is not decidable, so a refused pair carries no theorem that it is incompatible:
  * `not_compat_flip` and `not_compat_shout` are the model's witnesses of that class.
@@ -1466,59 +1465,41 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
         adapters: new Map(),
         readers: new Map(),
     }
-    const l = leanTermOf(left, name, bound)
-    const r = leanTermOf(right, name, bound)
-    const binders = leanBinders(bound)
-    const head = `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`
-    const reduce = closing(binders)
-    // the guard reads the shape alone, so a quantified verdict closes the guard on a twin of one
-    // shape that holds no free function, where \`decide\` runs on a closed goal
-    const standIn: Bound = {
-        closures: new Map(),
-        adapters: new Map(),
-        readers: new Map(),
-        standIn: true,
-    }
-    const guard =
-        binders === ''
-            ? 'of_decide_eq_true kernel_rfl%'
-            : [
-                  `(congrArg₂ (· && ·)`,
-                  `      (Alg.guarded_of_sameShape _ (${leanTermOf(left, name, standIn)}) kernel_rfl%)`,
-                  `      (Alg.guarded_of_sameShape _ (${leanTermOf(right, name, standIn)}) kernel_rfl%)).trans`,
-                  `    (of_decide_eq_true kernel_rfl%)`,
-              ].join('\n')
     const form = separationForm({ name, left, right })
+    // a pair that the guard refuses has no closed codec, so it prints as two graphs
+    const print = form === 'guardRefused' ? leanGraphOf : leanClosedOf
+    const l = print(left, name, bound)
+    const r = print(right, name, bound)
+    const binders = leanBinders(bound)
+    const head = `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`}`
+    const reduce = closing(binders)
     if (form === 'guardRefused') {
         return [
-            `/-- \`${name}\` — \`src/\` refuses this pair at the guard; the model's guard refuses it too -/`,
-            head,
-            `    (Alg.Term.guarded (${l}) &&`,
-            `      Alg.Term.guarded (${r})) = false :=`,
-            `  ${guard}`,
+            `/-- \`${name}\` — \`src/\` refuses this pair at the guard; the guard of a DAG of scopes refuses a graph too -/`,
+            `${head} :`,
+            `    ((${l}).guarded &&`,
+            `      (${r}).guarded) = false :=`,
+            `  ${reduce}`,
         ].join('\n')
     }
-    // the host's guard accepted before its compatibility test refused, so the vector states both
+    // the host's guard accepted before its compatibility test refused, and a closed codec states the guard
     if (form === 'refused') {
         return [
-            `/-- \`${name}\` — \`src/\` refuses this pair; the model's guard accepts it, and the model's decision refuses it -/`,
-            head,
-            `    (Alg.Term.guarded (${l}) &&`,
-            `      Alg.Term.guarded (${r})) = true ∧`,
-            `    Alg.compatPair dynOracle (${l})`,
+            `/-- \`${name}\` — \`src/\` refuses this pair; the model's decision refuses it -/`,
+            `${head} :`,
+            `    Closed.compatPair (${l})`,
             `      (${r}) = false :=`,
-            `  ⟨${guard}, ${reduce}⟩`,
+            `  ${reduce}`,
         ].join('\n')
     }
-    // the host's union verdict is the guard and the compatibility test, so the vector states both
+    // the host's union verdict is the guard and the compatibility test, and a closed codec states the guard
     return [
-        `/-- \`${name}\` — \`src/\` accepts this pair; the model's guard accepts it, and the model proves it compatible -/`,
-        `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} (κ : Callers) :`,
-        `    (Alg.Term.guarded (${l}) &&`,
-        `      Alg.Term.guarded (${r})) = true ∧`,
-        `    ((∀ t ∈ [${l}, ${r}], Lawful (denote (libTable κ) t)) →`,
-        `      PairwiseCompat (libTable κ) [${l}, ${r}]) :=`,
-        `  ⟨${guard}, fun hl => pairwiseCompat_of_compatPair (${reduce}) hl⟩`,
+        `/-- \`${name}\` — \`src/\` accepts this pair; the model proves it compatible -/`,
+        `${head} (κ : Callers) :`,
+        `    Lawful ((${l}).meaning (libTable κ)) → Lawful ((${r}).meaning (libTable κ)) →`,
+        `      Alg.Compat ((${l}).meaning (libTable κ)) ((${r}).meaning (libTable κ)) ∧`,
+        `        Alg.Compat ((${r}).meaning (libTable κ)) ((${l}).meaning (libTable κ)) :=`,
+        `  Closed.compat_of_compatPair (${reduce}) (libTable κ)`,
     ].join('\n')
 }
 
@@ -1694,7 +1675,12 @@ export type RowTerms = {
 export const leanShapes = (
     argument: (kind: 'closure' | 'reader') => string,
 ): {
-    readonly pair: (left: AnyCodec, right: AnyCodec, at: string) => RowTerms
+    readonly pair: (
+        left: AnyCodec,
+        right: AnyCodec,
+        at: string,
+        printer?: Printer,
+    ) => RowTerms
     readonly row: (
         pin?: Pin,
         printer?: Printer,
@@ -1750,8 +1736,13 @@ export const leanShapes = (
                 : `(${name} ${applied.join(' ')})`
         }
     }
-    const pair = (left: AnyCodec, right: AnyCodec, at: string): RowTerms => {
-        const one = row()
+    const pair = (
+        left: AnyCodec,
+        right: AnyCodec,
+        at: string,
+        printer: Printer = 'term',
+    ): RowTerms => {
+        const one = row(undefined, printer)
         const l = one(left, at)
         const r = one(right, at)
         return { l, r }
@@ -1985,35 +1976,35 @@ end Calculus
 /** The kernel's check of a row list of each form, and the lemma of `Calculus.Bridge.Rows` that lifts it. */
 const separationLists = {
     accepted: {
-        type: '(Term × Term × Term × Term)',
+        type: '(Closed × Closed)',
         ok: 'acceptedOk',
         caller: ' (κ : Callers)',
-        verdict: `(Alg.Term.guarded p.2.1 && Alg.Term.guarded p.2.2.1) = true ∧
-    ((∀ t ∈ [p.2.2.2.1, p.2.2.2.2], Lawful (denote (libTable κ) t)) →
-      PairwiseCompat (libTable κ) [p.2.2.2.1, p.2.2.2.2])`,
+        verdict: `Lawful (p.2.1.meaning (libTable κ)) → Lawful (p.2.2.meaning (libTable κ)) →
+      Alg.Compat (p.2.1.meaning (libTable κ)) (p.2.2.meaning (libTable κ)) ∧
+        Alg.Compat (p.2.2.meaning (libTable κ)) (p.2.1.meaning (libTable κ))`,
         lift: (list: string) => `accepted_of_rows (${list}_check ρ π) κ`,
     },
     refused: {
-        type: '(Term × Term × Term × Term)',
+        type: '(Closed × Closed)',
         ok: 'refusedOk',
         caller: '',
-        verdict: `(Alg.Term.guarded p.2.1 && Alg.Term.guarded p.2.2.1) = true ∧
-    Alg.compatPair dynOracle p.2.2.2.1 p.2.2.2.2 = false`,
+        verdict: 'p.2.1.compatPair p.2.2 = false',
         lift: (list: string) => `refused_of_rows (${list}_check ρ π)`,
     },
     guardRefused: {
-        type: '(Term × Term)',
+        type: '(Graph × Graph)',
         ok: 'guardRefusedOk',
         caller: '',
-        verdict: '(Alg.Term.guarded p.2.1 && Alg.Term.guarded p.2.2) = false',
+        verdict: '(p.2.1.guarded && p.2.2.guarded) = false',
         lift: (list: string) => `guardRefused_of_rows (${list}_check ρ π)`,
     },
 } as const satisfies Record<SeparationForm, unknown>
 
 /**
  * The declaration verdicts as rows, one form per {@link SeparationForm}. A row of an accepted pair
- * or of a pair refused at compatibility is the two rooted terms that the guard reads, then the two
- * open terms that compatibility reads. A row of a pair refused at the guard is the two rooted terms.
+ * or of a pair refused at compatibility is the two closed codecs: a closed codec exists only for a
+ * guarded codec, so the row states the guard by its type. A row of a pair refused at the guard is
+ * the two graphs, because such a pair has no closed codec.
  */
 export const separationRows = (
     separations: readonly Separation[],
@@ -2021,39 +2012,57 @@ export const separationRows = (
     forms: separationLists,
     rows: (shapes) =>
         separations.map((one) => {
-            const { l, r } = shapes.pair(one.left, one.right, one.name)
             const form = separationForm(one)
-            return {
-                name: leanIdent(one.name),
-                form,
-                row:
-                    form === 'guardRefused'
-                        ? `(${l}, ${r})`
-                        : `(${l}, ${r}, ${l}, ${r})`,
-            }
+            const { l, r } = shapes.pair(
+                one.left,
+                one.right,
+                one.name,
+                form === 'guardRefused' ? 'graph' : 'closed',
+            )
+            return { name: leanIdent(one.name), form, row: `(${l}, ${r})` }
         }),
 })
 
 /**
- * **The guard column of a pair, alone**: the two rooted terms, and whether `src/`'s guard accepts
- * both options. A pair with a fill on each side has no separation verdict, and this row states the
- * column of the pair that the model decides.
+ * **A pair over an open fragment states no guard row.** A union over a `ref` that no scope binds
+ * waits for the scope that binds the name, so the host decides no guard and no compatibility on
+ * the pair, and no caller observes a verdict on the open term. The term has no graph to print
+ * either. The rule is the rule of {@link separationForm}. The answer is the reason, or nothing.
+ */
+export const pairGuardRefusal = ({
+    left,
+    right,
+}: Separation): string | undefined =>
+    [left, right].some((option) => openRefusal(option.def) !== undefined)
+        ? 'the union reads a `ref` that no scope binds, so the host decides the pair at the scope'
+        : undefined
+
+/**
+ * **The guard column of a pair, alone**: the two graphs, and whether `src/`'s guard accepts both
+ * options. A pair with a fill on each side has no separation verdict, and this row states the
+ * column of the pair that the model decides. A pair over an open fragment states no row
+ * ({@link pairGuardRefusal}).
  */
 export const pairGuardRows = (
     pairs: readonly Separation[],
 ): RowFile<'pairGuards'> => ({
-    forms: { pairGuards: { type: '(Term × Term × Bool)', ok: 'pairGuardOk' } },
+    forms: {
+        pairGuards: { type: '(Graph × Graph × Bool)', ok: 'pairGuardOk' },
+    },
     rows: (shapes) =>
-        pairs.map((one) => {
-            const { l, r } = shapes.pair(one.left, one.right, one.name)
+        pairs.flatMap((one) => {
+            if (pairGuardRefusal(one) !== undefined) return []
+            const { l, r } = shapes.pair(one.left, one.right, one.name, 'graph')
             const guarded = [one.left, one.right].every(
                 (option) => recursionUse(option.def) < 2,
             )
-            return {
-                name: leanIdent(one.name),
-                form: 'pairGuards',
-                row: `(${l}, ${r}, ${guarded})`,
-            }
+            return [
+                {
+                    name: leanIdent(one.name),
+                    form: 'pairGuards' as const,
+                    row: `(${l}, ${r}, ${guarded})`,
+                },
+            ]
         }),
 })
 
@@ -2098,10 +2107,10 @@ constants, and \`src/\` accepts two fills with equal constants, so the pair has 
 # Declaration verdicts of the ${subject}, both ways
 
 **Generated — do not edit.** One row per option pair of the ${subject}, in one list per form. A pair
-that \`src/\`'s \`union\` accepts carries the model's guard on both options and the model's proof
-that the pair is compatible. A pair that \`src/\` refuses at compatibility carries the model's
-guard and \`compatPair dynOracle x y = false\`. A pair that \`src/\` refuses at the guard carries
-the model's guard refusal. The lemmas of \`Calculus.Bridge.Rows\` lift each checker to the verdict
+that \`src/\`'s \`union\` accepts holds two closed codecs, which exist only for guarded codecs, and
+carries the model's proof that the pair is compatible. A pair that \`src/\` refuses at
+compatibility holds two closed codecs and carries \`Closed.compatPair x y = false\`. A pair that
+\`src/\` refuses at the guard holds two graphs and carries the guard's refusal. The lemmas of \`Calculus.Bridge.Rows\` lift each checker to the verdict
 of each row.${guardText}
 
 ${rowForm(subject)}
