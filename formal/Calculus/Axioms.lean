@@ -9,9 +9,11 @@ import Calculus.Dynamo.Analysis.Separation
 import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Analysis.ScopeDisjoint
 import Calculus.Dynamo.Analysis.ScopeCompat
+import Calculus.Dynamo.Analysis.ScopePath
 import Calculus.Lang.ScopeDisjoint
 import Calculus.Lang.ScopeCompat
 import Calculus.Lang.ScopeSound
+import Calculus.Lang.ScopePath
 import Batteries.Tactic.Lint
 import Calculus.Dynamo.Witness.LiteralArity1
 import Calculus.Dynamo.Witness.Nesting
@@ -22,6 +24,7 @@ import Calculus.Dynamo.Analysis.Orthogonality
 import Calculus.Bridge.Vectors
 import Calculus.Bridge.Rows
 import Calculus.Bridge.Paths
+import Calculus.Bridge.ScopePaths
 import Calculus.Dynamo.Analysis.Universal
 import Calculus.Dynamo.Analysis.Confluence
 import Calculus.Dynamo.Analysis.Kernel
