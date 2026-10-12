@@ -2634,7 +2634,7 @@ describe('the committed sample', () => {
     })
 })
 
-describe("the slice, against the model's `AltClause.admits`", () => {
+describe("the slice, against the model's `AltClause.admitsC`", () => {
     /** A union of objects carries `extract`, which the erased codec does not show. */
     const sliceable = (options: readonly unknown[]): Sliceable =>
         union(options as never) as unknown as Sliceable
@@ -2842,7 +2842,7 @@ describe("the slice, against the model's `AltClause.admits`", () => {
 
     it('emits a module that imports the slice', () => {
         expect(leanSliceModule([])).toContain(
-            'import Calculus.Dynamo.Analysis.Slice',
+            'import Calculus.Dynamo.Analysis.ScopeSlice',
         )
     })
 })

@@ -10,6 +10,7 @@ import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Analysis.ScopeDisjoint
 import Calculus.Dynamo.Analysis.ScopeCompat
 import Calculus.Dynamo.Analysis.ScopePath
+import Calculus.Dynamo.Analysis.ScopeSlice
 import Calculus.Lang.ScopeDisjoint
 import Calculus.Lang.ScopeCompat
 import Calculus.Lang.ScopeSound
