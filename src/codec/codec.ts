@@ -3474,29 +3474,37 @@ type TermPathBody<Fs, T, F, O> = {
           }) &
     TodayNarrowing<T, F, Fs>
 type ElementOf<T> = T extends readonly unknown[] ? T[number] : never
-/** `narrow` where {@link PathOf} offers it: on an object type that is no list. */
-type TodayNarrowing<T, F, Fs> = [T] extends [readonly unknown[]]
-    ? unknown
-    : [T] extends [object]
-      ? HoldsFree<Fs> extends true
+/**
+ * `narrow` at a node. A node that holds frames offers {@link TermNarrowing}, whatever its decoded
+ * type, because the frames decide the clause. A node whose type carries no term offers
+ * {@link PathNarrowing} where {@link PathOf} offers it: on an object type that is no list.
+ */
+type TodayNarrowing<T, F, Fs> = HoldsFree<Fs> extends true
+    ? [T] extends [readonly unknown[]]
+        ? unknown
+        : [T] extends [object]
           ? PathNarrowing<T, F>
-          : TermNarrowing<Fs, T, F>
-      : unknown
+          : unknown
+    : TermNarrowing<Fs>
 /**
  * {@link PathNarrowing}, where the node holds frames, and read on the terms alone: the narrowed node
  * holds the options that the clause keeps ({@link NarrowFrames}), so its decision is the decision of
  * the walk of `at`. The clause is refused where it keeps no option of the frames, as the walk refuses
- * it. The decoded type states no second decision.
+ * it. The decoded type of the narrowed node is the decoded type of the kept frames.
  */
-type TermNarrowing<Fs, T, F> = {
+type TermNarrowing<Fs> = {
     narrow<const C extends Readonly<Record<string, AnyCodec>>>(
         clause: C & ClauseOnFrames<Fs, C>,
     ): TermPath<
         NarrowFrames<Fs, ClauseTerms<C>>,
-        unknown extends F ? Narrowed<T, C> : Kept<F, C>['t'],
-        unknown extends F ? unknown : Kept<F, C>
+        DecodeFrames<NarrowFrames<Fs, ClauseTerms<C>>>,
+        unknown
     >
 }
+/** The decoded type of the codecs at the frames of a node. */
+type DecodeFrames<Fs> = Fs extends unknown[]
+    ? { [I in keyof Fs]: DecodeFrame<Fs[I]> }[number]
+    : never
 type ClauseTerms<C> = { [K in keyof C]: TermOf<C[K]> }
 /** Nothing, or why the clause keeps no option of the frames `Fs`. */
 type ClauseOnFrames<Fs, C> = NarrowFrames<Fs, ClauseTerms<C>> extends []
