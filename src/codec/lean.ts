@@ -64,7 +64,7 @@ import type { AnyCodec, LiteralValue, ObjectSlot } from './codec'
 import { object, optional, union } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
 import { CodecError, failed } from './result'
-import { agrees, storedApart } from './scoped'
+import { agrees, disjoint, storedApart, viewsDisjoint } from './scoped'
 import type {
     Alternatives,
     Body,
@@ -77,7 +77,6 @@ import {
     bindersOf,
     clauseForm,
     componentsOf,
-    disjoint,
     entryOrder,
     force,
     mapChildren,
@@ -86,7 +85,6 @@ import {
     type Scope,
     storedAlternatives,
     throughThunks,
-    viewsDisjoint,
 } from './term'
 import { shapeOf } from './value'
 
@@ -681,8 +679,7 @@ const leanBinders = (bound: Bound): string => {
  *   prints as a variable that the theorem binds, and a caller's adapter prints as a generator
  *   `caller n` whose pair the theorem quantifies through the caller table.
  * - **A `ref` that no scope binds is not here.** It is a free variable, and it prints as a
- *   variable that no binder of the term binds, as the host's disjointness test and the host's
- *   guard read it.
+ *   variable that no binder of the term binds, as the host's guard reads it.
  *
  * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
  * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
@@ -1617,9 +1614,10 @@ export type ReadVerdict = {
  * A pair of corpus terms, put to the model's disjointness test with the answers `src/` computes.
  *
  * The separations bridge checks the host's verdict on a union. This one checks the test itself,
- * both ways, at every pair: `Calculus.Alg.Term.disjoint` and {@link disjoint} are the *same
- * function* stated twice, so a disagreement in either direction is a defect on one side. The test
- * of the raw terms and the test of the two pairs of views are asserted apart, because the
+ * both ways, at every pair: `Calculus.Closed.disjoint` and {@link disjoint} are the *same
+ * function* stated twice over one graph, so a disagreement in either direction is a defect on one
+ * side. Each side prints as a closed codec, so a term with no scoped form has no pair to state. The
+ * test of the raw terms and the test of the two pairs of views are asserted apart, because the
  * certificate reads the views and a raw `held` is disjoint from the bottom alone.
  */
 export type DisjointPair = {
@@ -1661,15 +1659,15 @@ export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
         adapters: new Map(),
         readers: new Map(),
     }
-    const l = leanTermOf(left, name, bound)
-    const r = leanTermOf(right, name, bound)
+    const l = leanClosedOf(left, name, bound)
+    const r = leanClosedOf(right, name, bound)
     const binders = leanBinders(bound)
     return [
         `/-- \`${name}\` — the answers \`src/\` computes, put to the model -/`,
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
-        `    Alg.Term.disjoint pair0 (${l})`,
+        `    Closed.disjoint (${l})`,
         `        (${r}) = ${disjointly} ∧`,
-        `      viewsDisjoint (${l})`,
+        `      Closed.viewsDisjoint (${l})`,
         `        (${r}) = ${views} := ⟨${closing(binders)}, ${closing(binders)}⟩`,
     ].join('\n')
 }
@@ -1927,20 +1925,25 @@ const kernelLists = <F extends string>(
         return { form, name, ok, text: leanRowList(name, type, rows, ok) }
     })
 
-/** The disjointness pairs as rows: the two terms and the two answers of {@link leanDisjoint}. */
+/** The disjointness pairs as rows: the two closed codecs and the two answers of {@link leanDisjoint}. */
 export const disjointRows = (
     pairs: readonly DisjointPair[],
 ): RowFile<'rows'> => ({
     forms: {
         rows: {
-            type: '(Term × Term × Bool × Bool)',
+            type: '(Closed × Closed × Bool × Bool)',
             ok: 'disjointOk',
         },
     },
     rows: (shapes) =>
         pairs.map((pair) => {
             const [disjointly, views] = disjointAnswers(pair)
-            const { l, r } = shapes.pair(pair.left, pair.right, pair.name)
+            const { l, r } = shapes.pair(
+                pair.left,
+                pair.right,
+                pair.name,
+                'closed',
+            )
             return {
                 name: leanIdent(pair.name),
                 form: 'rows',
@@ -1950,7 +1953,7 @@ export const disjointRows = (
 })
 
 /**
- * The disjointness pairs in the row form: each row is the two terms and the two answers of
+ * The disjointness pairs in the row form: each row is the two closed codecs and the two answers of
  * {@link leanDisjoint}, and the checker of a list states both answers at each row.
  *
  * Generated at gate time and elaborated, never committed.
@@ -1966,11 +1969,11 @@ export const leanDisjointRowModule = (
 /-!
 # Disjointness of the ${subject}, proposed to the model
 
-**Generated — do not edit.** One row per pair of ${subject} terms: the two terms, the answer of
-\`src/\`'s \`disjoint\` on the two terms, and the answer of \`src/\`'s \`viewsDisjoint\` on the two pairs
-of views. The checker of a list states that \`Calculus.Alg.Term.disjoint\` and
-\`Calculus.viewsDisjoint\` give the same answers at each row: \`disjointOk_iff\` makes \`disjointOk\`
-the two equations.
+**Generated — do not edit.** One row per pair of ${subject} terms: the two closed codecs, the answer
+of \`src/\`'s \`disjoint\` on the two terms, and the answer of \`src/\`'s \`viewsDisjoint\` on the two
+pairs of views. The checker of a list states that \`Calculus.Closed.disjoint\` and
+\`Calculus.Closed.viewsDisjoint\` give the same answers at each row: \`disjointOk_iff\` makes
+\`disjointOk\` the two equations.
 
 ${rowForm(subject)}
 -/

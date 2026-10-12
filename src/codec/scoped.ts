@@ -7,12 +7,8 @@
  * while it compares the two bodies. At an unguarded position a walk unfolds an entry. A fuel bounds
  * each walk as the model's fuel does, so the host and the model compute one function.
  *
- * **Two disjointness decisions live in the host until pass 8 ends.** {@link agrees} reads the walk
- * of this file, because its Lean twin `Scoped.compat` reads `Scoped.disjoint`. Path narrowing and
- * the disjointness rows still read `disjoint` of `term.ts`, because their Lean twins still read the
- * binder decision `Term.disjoint`. A row compares a host decision with its own twin only, so each
- * consumer moves with its twin. Pass 8 moves path narrowing, and the last consumer of the binder
- * decision then goes.
+ * **The host has one disjointness decision**, the walk of this file. {@link agrees}, path narrowing
+ * and the disjointness rows each read the walk, and each Lean twin reads `Scoped.disjoint`.
  */
 import type { Body, Field, Predicate, Term } from './term'
 import {
@@ -633,22 +629,45 @@ const viewOf = (side: Side, at: At): At => {
 }
 
 /**
- * **Whether the stored views of two terms share no attribute**, the model's `narrowC` at one
- * option: the walk of {@link apartAt} with no assumed pair, each term rooted as its own graph, at
- * the fuel of the two graphs, at the stored view of each. `false` states nothing, and so does a
- * term with no graph.
+ * **Whether two terms share no datum in one mode**: the walk of {@link apartAt} with no assumed
+ * pair, each term rooted as its own graph at its root entry, at the fuel of the two graphs. A view
+ * keeps an entry an entry, so the root of a view is the root entry. `false` states nothing, and so
+ * does a term with no graph.
  */
-export const storedApart = (x: Term, y: Term): boolean => {
-    const left = sideOf(x, 'stored')
-    const right = sideOf(y, 'stored')
+const apartIn = (mode: Mode, x: Term, y: Term): boolean => {
+    const left = sideOf(x, mode)
+    const right = sideOf(y, mode)
     if (left === undefined || right === undefined) return false
     return apartAt(
         left,
         right,
-        viewOf(left, { kind: 'entry', j: left.root }),
-        viewOf(right, { kind: 'entry', j: right.root }),
+        { kind: 'entry', j: left.root },
+        { kind: 'entry', j: right.root },
     )
 }
+
+/**
+ * **Whether two terms share no value and no attribute**, the model's `Closed.disjoint`: the walk of
+ * {@link apartAt} over the raw graphs. `true` says that no datum is accepted by both terms at either
+ * orientation (`Closed.disjoint_sound`). `false` states nothing, and so does a term with no graph.
+ */
+export const disjoint = (x: Term, y: Term): boolean => apartIn('raw', x, y)
+
+/**
+ * **Whether the two pairs of views are disjoint**, the model's `Closed.viewsDisjoint`: the caller
+ * views share no value, and the stored views share no attribute. Two options whose views are
+ * disjoint are orthogonal: no value has two writers, and no attribute has two readers
+ * (`Closed.viewsDisjoint_sound`). `false` states nothing, and so does a term with no graph.
+ */
+export const viewsDisjoint = (x: Term, y: Term): boolean =>
+    apartIn('caller', x, y) && apartIn('stored', x, y)
+
+/**
+ * **Whether the stored views of two terms share no attribute**, the model's `narrowC` at one
+ * option: {@link apartIn} at the stored view of each term.
+ */
+export const storedApart = (x: Term, y: Term): boolean =>
+    apartIn('stored', x, y)
 
 /* ── compatibility ────────────────────────────────────────────────────────────────────── */
 

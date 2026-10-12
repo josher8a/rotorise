@@ -92,13 +92,16 @@ theorem admitsOk_iff (p : Closed × Attr × Bool) :
 
 /-! ## Disjointness -/
 
-/-- A disjointness row: the two terms, then the answers of `src/`'s `disjoint` and `viewsDisjoint`. -/
-def disjointOk (p : Term × Term × Bool × Bool) : Bool :=
-  (Alg.Term.disjoint pair0 p.1 p.2.1 == p.2.2.1) && (viewsDisjoint p.1 p.2.1 == p.2.2.2)
+/-- A disjointness row: the two closed codecs, then the answers of `src/`'s `disjoint` and
+    `viewsDisjoint`. The model reads the decision over the graphs, `Closed.disjoint` and
+    `Closed.viewsDisjoint`, so a row that states `true` states a pair that shares no datum
+    (`Closed.disjoint_sound`, `Closed.viewsDisjoint_sound`). -/
+def disjointOk (p : Closed × Closed × Bool × Bool) : Bool :=
+  (p.1.disjoint p.2.1 == p.2.2.1) && (p.1.viewsDisjoint p.2.1 == p.2.2.2)
 
 /-- The law of `disjointOk`: both answers of the model equal the answers of `src/`. -/
-theorem disjointOk_iff (p : Term × Term × Bool × Bool) : disjointOk p = true ↔
-    Alg.Term.disjoint pair0 p.1 p.2.1 = p.2.2.1 ∧ viewsDisjoint p.1 p.2.1 = p.2.2.2 := by
+theorem disjointOk_iff (p : Closed × Closed × Bool × Bool) : disjointOk p = true ↔
+    p.1.disjoint p.2.1 = p.2.2.1 ∧ p.1.viewsDisjoint p.2.1 = p.2.2.2 := by
   rw [disjointOk, Bool.and_eq_true, beq_iff_eq, beq_iff_eq]
 
 /-! ## Separations -/

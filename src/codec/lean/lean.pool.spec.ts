@@ -81,16 +81,14 @@ import {
     unionAt,
 } from '../lean'
 import { orThrow } from '../result'
-import { agrees } from '../scoped'
+import { agrees, disjoint, viewsDisjoint } from '../scoped'
 import type { Term } from '../term'
 import {
-    disjoint,
     force,
     freeNamesOf,
     openRefusal,
     RecursionRefused,
     recursionUse,
-    viewsDisjoint,
 } from '../term'
 import { arbitraryOf, rngFrom, structuralEquals } from '../testing'
 import { typeVectorFiles } from '../typeVectors'
@@ -1198,6 +1196,7 @@ describe('the generated pool, against the model', () => {
             "dropped": {
               "a constructor refused the draw": 52,
               "assignment: the union reads a \`ref\` that no scope binds, so the host keeps no option under a clause": 14,
+              "disjoint: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 529,
               "pairGuard: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 1,
               "path: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 68,
               "separation: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 531,
@@ -1209,7 +1208,7 @@ describe('the generated pool, against the model', () => {
                 "assignments": 32,
                 "clauses": 4320,
                 "codecsPathed": 229,
-                "disjoints": 1357,
+                "disjoints": 1146,
                 "fills": 4,
                 "guards": 0,
                 "pairs": 1357,
@@ -1223,7 +1222,7 @@ describe('the generated pool, against the model', () => {
                 "assignments": 24,
                 "clauses": 2955,
                 "codecsPathed": 170,
-                "disjoints": 1236,
+                "disjoints": 1094,
                 "fills": 7,
                 "guards": 0,
                 "pairs": 1236,
@@ -1237,7 +1236,7 @@ describe('the generated pool, against the model', () => {
                 "assignments": 44,
                 "clauses": 4980,
                 "codecsPathed": 185,
-                "disjoints": 1333,
+                "disjoints": 1157,
                 "fills": 11,
                 "guards": 0,
                 "pairs": 1333,
