@@ -249,7 +249,7 @@ export type Term =
      * This library supports a recursive entity through a thunk, and `codec.recursive.spec.ts`
      * declares one, so the thunk stays. **Everything else here reads through it.**
      * {@link occV}, {@link occA} and {@link ownsNullOf} answer what the term underneath answers,
-     * and {@link disjoint} and the emitter read the binder at the term that closes the cycle. Only
+     * and the emitter reads the binder at the term that closes the cycle. Only
      * {@link member} answers `undefined`, because the host cannot force a thunk safely at
      * declaration: forcing a recursive thunk can loop.
      *
@@ -931,18 +931,6 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
 /* ── the declaration guard ────────────────────────────────────────────────────────────── */
 
 /**
- * **Whether the two pairs of views are disjoint**, the model's `viewsDisjoint`.
- *
- * A term denotes a partial isomorphism, the caller view states its domain, and the stored view
- * states its range. Two options whose domains are disjoint and whose ranges are disjoint are
- * orthogonal: no value has two writers, and no attribute has two readers. `agrees` of `scoped.ts`
- * asks each half of it apart on the graph, as the model's `cbaseG` does.
- */
-export const viewsDisjoint = (x: Term, y: Term): boolean =>
-    disjoint(callerView(x), callerView(y)) &&
-    disjoint(storedView(x), storedView(y))
-
-/**
  * **Whether a term reaches a subterm of one of these kinds**, at any depth, or reaches a thunk
  * that the walk cannot read.
  *
@@ -1224,15 +1212,14 @@ export const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
  * **A view that reads through a thunk**, as the model's views read through `mu`: the view of a
  * thunk is a thunk that returns the view of the term that the first thunk returns. Each term
  * object has one view object, so a cycle of the term is a cycle of the view, closed at the view
- * of the same binder. {@link disjoint} then reads the view as `mu` of the view of the body, and
+ * of the same binder. The emitter then prints the view as `mu` of the view of the body, and
  * a variable of the view at the thunk.
  *
  * The build forces no thunk, so it ends: it recurses only through the edges that are not a
  * thunk, and every such edge of a term is built before the term. A thunk of the view forces its
- * thunk when {@link disjoint} reads it. A thunk that throws throws there, and {@link disjoint}
+ * thunk when a reader of the view reads it. A thunk that throws throws there, and the reader
  * reads it as a free variable. So the thunk of the view forces its thunk directly and not through
- * {@link force}: the throw must reach the {@link force} of {@link disjoint} at the thunk of the
- * view.
+ * {@link force}: the throw must reach the {@link force} of the reader at the thunk of the view.
  */
 export const throughThunks =
     (row: (t: Term, view: (t: Term) => Term) => Term) =>
@@ -1252,28 +1239,9 @@ export const throughThunks =
     }
 
 /**
- * **The caller view**: each `held` becomes its held side. The view admits each value that the
- * term admits. A `refine` above a `held` keeps its predicate, because the caller states the
- * predicate on the held value.
- */
-const callerView = throughThunks((t, view) => {
-    switch (t.kind) {
-        case 'held':
-            return view(t.outer)
-        case 'refine':
-            return { kind: 'refine', inner: view(t.inner), q: t.q }
-        // a `withLegacyRead` writes what its inner term writes, and the older reader only reads
-        case 'legacy':
-            return view(t.inner)
-        default:
-            return mapChildren(t, view)
-    }
-})
-
-/**
  * **The stored view**: each `held` becomes its inner term. The view reads each attribute that
- * the term reads. A `withLegacyRead` stays as it is, and {@link disjoint} reads it as `opaque`,
- * which is the model's stored view of it: the older reader reads every attribute.
+ * the term reads. A `withLegacyRead` stays as it is. The model's stored view of it is `opaque`,
+ * because the older reader reads every attribute.
  *
  * **The view keeps a predicate only where the inner term decodes the same in the view as in the
  * term**: where the inner term lies below the top ({@link belowTop}), read at its own scope. An
@@ -1544,47 +1512,6 @@ const holdsAdapter = (t: Term, scope: Scope): boolean => {
     }
 }
 
-/* ── disjointness ─────────────────────────────────────────────────────────────────────── */
-
-/**
- * **Whether two terms share no value and no attribute** — `Calculus.Alg.Term.disjoint` at the
- * closed pairing, one row per constructor of the left operand.
- *
- * `true` says that no value is admitted by both terms and no attribute is read by both.
- * `false` states nothing: the test is sound, not complete. The admission of a term is its domain
- * idempotent, so the test decides that the product of two idempotents is zero.
- *
- * **A `held`, a `withLegacyRead` and `opaque` are disjoint only from the bottom.** The admission
- * of the first two is a function that no reader can read without running it, and `opaque`
- * admits every value. The views read a `held` ({@link viewsDisjoint}).
- *
- * **A recursive term is read as the model spells it**: `mu` at the term object that a cycle
- * returns to, and a variable at the thunk that closes the cycle ({@link Scope}). Two variables are
- * disjoint where the two binders were unfolded together, because the model's environments keep
- * each such pair apart. Two recursive terms are disjoint where their bodies are, with the two
- * binders paired. A recursive term also unfolds, and its binder pairs with nothing. The rows of a
- * left recursive term and a left refinement split the right operand at every depth, so a right
- * refinement or a right recursive term hides no option from the left row.
- *
- * **A thunk that throws is a free variable that pairs with nothing.** The thunk names a codec that
- * is not yet declared, so the host cannot read the term that the thunk returns. The soundness of
- * the model's test holds under every environment of its variables, so a verdict that reads no
- * such variable holds whatever the thunk returns later. Beside the bottom a free variable is
- * disjoint, and beside any other term it is not. A container of the variable beside a
- * constructor of another shape class is disjoint, and reads no variable.
- *
- * **Two disjointness decisions live in the host until pass 8 ends.** This binder decision serves
- * path narrowing and the disjointness rows, whose Lean twins read `Term.disjoint`. `agrees`
- * reads the graph decision of `scoped.ts`, whose Lean twin is `Scoped.disjoint`. Each consumer
- * moves with its twin, so no row compares the two decisions.
- */
-export const disjoint = (x: Term, y: Term): boolean =>
-    disjointWalk(x, y, {
-        left: { binds: bindersOf(x), inside: [] },
-        right: { binds: bindersOf(y), inside: [] },
-        pairs: [],
-    })
-
 /**
  * **Where a walk is in one operand**: the term objects that bind a variable, and the binders the
  * walk is inside, nearest last.
@@ -1592,8 +1519,8 @@ export const disjoint = (x: Term, y: Term): boolean =>
  * A recursive host schema is a cycle of term objects closed by a thunk. The model names the cycle
  * with a binder: `Term.mu` at the object that a thunk returns while that object is on the walk,
  * and `Term.var k` at the thunk, where `k` counts the binders between the two. Any other thunk is
- * the term it returns. The test and the emitter read one spelling, so both read it through this
- * scope.
+ * the term it returns. The emitter and the stored view read one spelling, so both read it
+ * through this scope.
  */
 export type Scope = {
     readonly binds: ReadonlySet<Term>
@@ -1882,228 +1809,6 @@ const see = (t: Term, scope: Scope): Seen => {
 }
 
 /**
- * **The pairing of binders**, the model's `Pairing`: the scope of each operand, and each pair of
- * binders unfolded together.
- */
-type Walk = {
-    readonly left: Scope
-    readonly right: Scope
-    readonly pairs: readonly { readonly left: Term; readonly right: Term }[]
-}
-
-/**
- * One row per constructor of the left operand, as the operands spell at the pairing. The rows
- * are the model's, in the model's order.
- *
- * **The walk ends.** The spelling of each operand is a finite term, because {@link bindersOf}
- * binds the target of every thunk that closes a cycle, and the spelling stops at each variable.
- * Each call reads a strict subterm of one spelling, or of both, with the other spelling no
- * larger. The split of the right operand hands a left row an option under the refinements that
- * the split keeps, which is no larger than the right spelling, and the left row then reads a
- * strict subterm of the left spelling. So the sum of the two sizes falls at each call.
- */
-const disjointWalk = (x: Term, y: Term, w: Walk): boolean => {
-    const one = see(x, w.left)
-    switch (one.kind) {
-        // a free variable pairs with no binder, so it is disjoint from the bottom alone
-        case 'free':
-            return rightRows(() => false, y, w)
-        // a variable admits what its binder admits, so it is disjoint from the variable of the
-        // binder that its own binder was unfolded with
-        case 'var':
-            return rightRows(
-                (other, v) =>
-                    other.kind === 'var' &&
-                    v.pairs.some(
-                        (pair) =>
-                            pair.left === one.binder &&
-                            pair.right === other.binder,
-                    ),
-                y,
-                w,
-            )
-        // the right operand splits at every depth. Two recursive terms: the bodies, with the two
-        // binders paired. A recursive term also unfolds, and its binder pairs with nothing
-        case 'mu':
-            return splitRight(
-                (y1, v) => {
-                    const other = see(y1, v.right)
-                    return (
-                        (other.kind === 'mu' &&
-                            disjointWalk(one.body, other.body, {
-                                left: one.scope,
-                                right: other.scope,
-                                pairs: [
-                                    ...v.pairs,
-                                    { left: one.body, right: other.body },
-                                ],
-                            })) ||
-                        disjointWalk(one.body, y1, { ...v, left: one.scope })
-                    )
-                },
-                y,
-                w,
-            )
-        case 'term':
-            return termRow(one.t, y, w)
-    }
-}
-
-/** The rows of a left operand that is a constructor. */
-const termRow = (x: Term, y: Term, w: Walk): boolean => {
-    switch (x.kind) {
-        case 'never':
-            return true
-        // the admission is a function, or every value: disjoint from the bottom alone
-        case 'held':
-        case 'legacy':
-        case 'opaq':
-        case 'lazy':
-            return rightRows(() => false, y, w)
-        // **A refinement is disjoint where its inner term is**, or where its data predicate and a
-        // data predicate of the partner hold together nowhere. The second reading needs a closed
-        // held-free inner term on each side, which reads each attribute as the top reads it
-        case 'refine':
-            return splitRight(
-                (other, v) =>
-                    disjointWalk(x.inner, other, v) ||
-                    (x.q.kind === 'members' &&
-                        belowTop(x.inner, v.left) &&
-                        predicateApart(x.q, other, v)),
-                y,
-                w,
-            )
-        case 'union':
-            return x.options.every((option) => disjointWalk(option, y, w))
-        case 'set':
-            return rightRows(
-                (other, v) =>
-                    other.kind === 'term' &&
-                    (other.t.kind === 'set'
-                        ? closedAt(x.elem, v.left) &&
-                          closedAt(other.t.elem, v.right) &&
-                          disjointWalk(x.elem, other.t.elem, v)
-                        : otherShape(other.t, ['prim', 'list', 'object'])),
-                y,
-                w,
-            )
-        case 'list':
-            return rightRows(
-                (other, v) =>
-                    other.kind === 'term' &&
-                    (other.t.kind === 'list'
-                        ? listsApart(x, other.t, v)
-                        : otherShape(other.t, ['prim', 'set', 'object'])),
-                y,
-                w,
-            )
-        case 'object':
-            return rightRows(
-                (other, v) =>
-                    other.kind === 'term' &&
-                    (other.t.kind === 'object'
-                        ? bodiesApart(x.body, other.t.body, v)
-                        : otherShape(other.t, ['prim', 'set', 'list'])),
-                y,
-                w,
-            )
-        default:
-            return rightRows(
-                (other) =>
-                    other.kind === 'term' &&
-                    (isPrim(other.t)
-                        ? primsApart(x, other.t)
-                        : otherShape(other.t, ['set', 'list', 'object'])),
-                y,
-                w,
-            )
-    }
-}
-
-/**
- * **Every row that reads the right operand alone**, the model's `disjSRight`. The bottom admits
- * nothing. A union is disjoint from the left operand where each option is. A recursive term
- * unfolds, and its binder pairs with nothing. A refinement admits a part of what its inner term
- * admits, so the inner term bounds it. `fam` answers every other spelling.
- */
-const rightRows = (
-    fam: (other: Exclude<Seen, { kind: 'mu' }>, w: Walk) => boolean,
-    y: Term,
-    w: Walk,
-): boolean => {
-    const other = see(y, w.right)
-    if (other.kind === 'mu')
-        return rightRows(fam, other.body, { ...w, right: other.scope })
-    if (other.kind === 'term')
-        switch (other.t.kind) {
-            case 'never':
-                return true
-            case 'refine':
-                return rightRows(fam, other.t.inner, w)
-            case 'union':
-                return other.t.options.every((option) =>
-                    rightRows(fam, option, w),
-                )
-        }
-    return fam(other, w)
-}
-
-/**
- * **The right operand, split at every depth**, the model's `splitR`. The rows of a left
- * refinement and a left recursive term read the right operand through this split. A union splits
- * into its options. A refinement keeps its predicate on each option below it, through the wrapper
- * `wrap`, where the predicate is data and the inner term lies below the top ({@link belowTop}).
- * Elsewhere the split drops the predicate, and the inner term bounds the refinement: a refined
- * term admits less than its inner term, and a predicate that is not data is read by no row. A recursive term is handed whole to `fam`,
- * and is also unfolded with its binder paired with nothing. So a right refinement or a right
- * recursive term hides no option from the left row.
- */
-const splitRight = (
-    fam: (other: Term, w: Walk) => boolean,
-    y: Term,
-    w: Walk,
-    wrap: (t: Term) => Term = (t) => t,
-): boolean => {
-    const other = see(y, w.right)
-    if (other.kind === 'mu')
-        return (
-            fam(wrap(y), w) ||
-            splitRight(fam, other.body, { ...w, right: other.scope }, wrap)
-        )
-    if (other.kind === 'term')
-        switch (other.t.kind) {
-            case 'never':
-                return true
-            case 'union':
-                return other.t.options.every((option) =>
-                    splitRight(fam, option, w, wrap),
-                )
-            case 'refine': {
-                const { inner, q } = other.t
-                return q.kind === 'members' && belowTop(inner, w.right)
-                    ? splitRight(fam, inner, w, (t) =>
-                          wrap({ kind: 'refine', inner: t, q }),
-                      )
-                    : splitRight(fam, inner, w, wrap)
-            }
-        }
-    return fam(wrap(y), w)
-}
-
-/**
- * **A data predicate that no value of the right refinement chain satisfies with `q`**, the
- * model's `predApart`. A refinement of the chain counts only over a closed held-free inner term.
- */
-const predicateApart = (q: Predicate, y: Term, w: Walk): boolean => {
-    const other = see(y, w.right)
-    if (other.kind !== 'term' || other.t.kind !== 'refine') return false
-    return (
-        (belowTop(other.t.inner, w.right) && predicatesApart(q, other.t.q)) ||
-        predicateApart(q, other.t.inner, w)
-    )
-}
-
-/**
  * **Two predicates that hold together nowhere**, the model's `Pred.apart`.
  * Two `members` sets at two bases share no value, and at one base they share a value where they
  * share an alternative. A `closure` is not data.
@@ -2150,26 +1855,6 @@ export const primsApart = (x: Term, y: Term): boolean => {
 }
 
 /**
- * **The row a list shape assigns to `n` positions**: the prefix, the spread as often as the middle
- * needs, then the suffix. `undefined` is a length the shape refuses.
- */
-const rowOf = (
-    t: Extract<Term, { kind: 'list' }>,
-    n: number,
-): readonly Term[] | undefined => {
-    const declared = t.pre.length + t.suf.length
-    if (t.spread === undefined)
-        return n === declared ? [...t.pre, ...t.suf] : undefined
-    if (n < declared) return undefined
-    const spread = t.spread
-    return [
-        ...t.pre,
-        ...Array.from({ length: n - declared }, () => spread),
-        ...t.suf,
-    ]
-}
-
-/**
  * **One side dominates the other**, in the prefix and in the suffix at once: the model's
  * `dominates`. Where both shapes spread and one dominates, every common length re-spreads the row
  * at `max p1 p2 + max s1 s2` (`dominates_max`).
@@ -2180,74 +1865,3 @@ export const dominates = (
     p2: number,
     s2: number,
 ): boolean => (p2 <= p1 && s2 <= s1) || (p1 <= p2 && s1 <= s2)
-
-/** Some position of two aligned rows is disjoint, the left row's term on the left. */
-const rowsApart = (a: readonly Term[], b: readonly Term[], w: Walk): boolean =>
-    a.some((one, at) => disjointWalk(one, b[at] as Term, w))
-
-/**
- * **Two list shapes apart**, the model's `listDisjRow`. Two values of different lengths differ,
- * so the shapes are disjoint where one position of each common length is. **Either side without
- * a spread** fixes the one length, and a length the other side refuses is disjoint outright.
- * **Both spreading**: where one side dominates, one disjoint position of the row at
- * `max p1 p2 + max s1 s2` decides. Where no side dominates, the test answers `false`.
- */
-const listsApart = (
-    x: Extract<Term, { kind: 'list' }>,
-    y: Extract<Term, { kind: 'list' }>,
-    w: Walk,
-): boolean => {
-    if (x.spread !== undefined && y.spread !== undefined) {
-        if (!dominates(x.pre.length, x.suf.length, y.pre.length, y.suf.length))
-            return false
-        const n =
-            Math.max(x.pre.length, y.pre.length) +
-            Math.max(x.suf.length, y.suf.length)
-        const rows = rowOf(x, n)
-        const other = rowOf(y, n)
-        return (
-            rows !== undefined &&
-            other !== undefined &&
-            rowsApart(rows, other, w)
-        )
-    }
-    const fixed = x.spread === undefined ? x : y
-    const n = fixed.pre.length + fixed.suf.length
-    const rows = rowOf(x, n)
-    const other = rowOf(y, n)
-    return (
-        rows === undefined || other === undefined || rowsApart(rows, other, w)
-    )
-}
-
-/**
- * **Two fields at one name apart**, the model's `ObjectSlot.disjoint`: one field requires the
- * name, and the terms are disjoint. Two fields that both admit a map without the name share it.
- * A `withLegacyRead` field reads a map without the name, so only `req` requires the name.
- * An `undefinable` field is the model's `optional`: the row stores `undefined` as an absent name.
- */
-const fieldsApart = (a: Field, b: Field, w: Walk): boolean =>
-    (a.mark === 'req' || b.mark === 'req') && disjointWalk(a.t, b.t, w)
-
-/**
- * **Two bodies apart at one name**, the model's `famObjD`. A body is a total function from the
- * key space to a field: a declared name holds its field, and an undeclared name holds `optional`
- * of the open block, which is `never` where the body is closed. So two bodies share no map where
- * one name of either body holds two fields apart.
- */
-const bodiesApart = (a: Body, b: Body, w: Walk): boolean =>
-    Object.entries(a.fields).some(([name, field]) =>
-        fieldsApart(
-            field,
-            b.fields[name] ?? { mark: 'optional', t: b.rest ?? never },
-            w,
-        ),
-    ) ||
-    Object.entries(b.fields).some(
-        ([name, field]) =>
-            !(name in a.fields) &&
-            field.mark === 'req' &&
-            (a.rest === undefined || disjointWalk(a.rest, field.t, w)),
-    )
-
-const never: Term = { kind: 'never' }

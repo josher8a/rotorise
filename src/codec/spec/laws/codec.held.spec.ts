@@ -31,8 +31,8 @@ import {
     valueKinds,
     withLegacyRead,
 } from '../../codec'
+import { viewsDisjoint } from '../../scoped'
 import type { StandardSchemaV1 } from '../../standard'
-import { viewsDisjoint } from '../../term'
 import { checkEncodePaths, checkRoundTrip } from '../../testing'
 
 /** A Standard Schema v1 written by hand: a foreign held side that admits a `Date`. */

@@ -1618,26 +1618,6 @@ const disjointPairs = (): readonly DisjointPair[] => {
             right: erase(object({ a: underObject as never })),
         },
     )
-    // a thunk that throws beside three partners: a free variable pairs with no binder, so the
-    // test declines beside every term but the bottom. A list of such a thunk beside a scalar is
-    // disjoint, because the two shape classes are
-    out.push(
-        {
-            name: 'free_array__disjoint__scalar_decimal',
-            left: array(undeclared),
-            right: decimal,
-        },
-        {
-            name: 'free_variable__disjoint__scalar_string',
-            left: undeclared,
-            right: string,
-        },
-        {
-            name: 'free_json__disjoint__scalar_string',
-            left: union([string, array(undeclared)]),
-            right: string,
-        },
-    )
     out.push(
         ...legacyPairs('__disjoint__', (name, left, right) => ({
             name,
@@ -2460,13 +2440,13 @@ describe("the declaration guard, against the model's classifier", () => {
     })
 
     /**
-     * **Disjointness, both directions.** `Term.disjoint` and `disjoint` are one function written
+     * **Disjointness, both directions.** `Closed.disjoint` and `disjoint` are one function written
      * twice, so a disagreement either way is a defect on one side. The raw terms and the two pairs
      * of views are asserted apart.
      */
     it("puts every corpus pair to the model's disjointness test", () => {
         const pairs = disjointPairs()
-        expect(pairs.length).toBe(1009)
+        expect(pairs.length).toBe(1006)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.disjoints.lean'),

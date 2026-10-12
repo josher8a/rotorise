@@ -1,5 +1,5 @@
 /**
- * Disjointness over terms: `Calculus.Alg.Term.disjoint` on this side of the bridge.
+ * Disjointness over terms: `Calculus.Closed.disjoint` on this side of the bridge.
  *
  * The rule each test names is the one the model proves. `true` says that no value and no
  * attribute is shared. `false` states nothing: the test is sound, not complete. So a pair that
@@ -27,8 +27,8 @@ import {
     union,
     withLegacyRead,
 } from '../../codec'
+import { disjoint, viewsDisjoint } from '../../scoped'
 import type { Field, Term } from '../../term'
-import { disjoint, viewsDisjoint } from '../../term'
 
 const termOf = (codec: { readonly def: Term }): Term => codec.def
 

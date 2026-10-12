@@ -64,7 +64,6 @@ import {
     bindersOf,
     clauseForm,
     clauseLiteralsOf,
-    disjoint,
     force,
     literalAlternatives,
     member as memberOf,
@@ -731,7 +730,7 @@ const acrossVariants = (
 
 /**
  * **The frontier after a clause**, the model's `narrow`. A union gives each option whose stored
- * view {@link disjoint} does not separate from the stored view of the clause. Any other member
+ * view {@link storedApart} does not separate from the stored view of the clause. Any other member
  * stays where the clause does not separate the member. A clause that separates every member is a
  * refusal that names the keys of the clause. A thunk resolves as {@link childrenOf} resolves it.
  *
