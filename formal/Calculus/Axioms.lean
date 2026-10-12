@@ -11,6 +11,7 @@ import Calculus.Dynamo.Analysis.ScopeDisjoint
 import Calculus.Dynamo.Analysis.ScopeCompat
 import Calculus.Lang.ScopeDisjoint
 import Calculus.Lang.ScopeCompat
+import Calculus.Lang.ScopeSound
 import Batteries.Tactic.Lint
 import Calculus.Dynamo.Witness.LiteralArity1
 import Calculus.Dynamo.Witness.Nesting

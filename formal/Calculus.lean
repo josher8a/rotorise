@@ -30,6 +30,7 @@ import Calculus.Lang.Scope
 import Calculus.Lang.System
 import Calculus.Lang.ScopeDisjoint
 import Calculus.Lang.ScopeCompat
+import Calculus.Lang.ScopeSound
 import Calculus.JSON.Basic
 import Calculus.JSON.Disjoint
 import Calculus.JSON.Compat
