@@ -537,26 +537,9 @@ type Bound = {
     readonly standIn?: boolean
 }
 
-/**
- * **The frames of a printed term.** Each term object that the printer prints, at each position, with
- * the binders above the position, nearest first. A binder is a cell, and the printer writes the
- * text of the cell when the print of the binder ends.
- */
-type Frames = {
-    readonly at: Map<Term, Position[]>
-    readonly above: readonly { text: string }[]
-}
-
-/** One position of a printed term: the print, and the binders above it, nearest first. */
-type Position = {
-    readonly term: string
-    readonly above: readonly { text: string }[]
-}
-
 /** A scope, and the functions that the theorem binds where the vector is quantified. */
 type At = Scope & {
     readonly bound?: Bound
-    readonly frames?: Frames
     readonly placed?: Placed
 }
 
@@ -693,7 +676,6 @@ export const leanTermOf = (
     declared: ObjectSlot,
     at = 'codec',
     bound?: Bound,
-    frames?: Map<Term, Position[]>,
 ): string => {
     // the entry takes a declaration and the printer below takes a term, so the refusal has a place
     // to live and stays reachable. A codec's definition is a term in the type, and the caller this
@@ -705,11 +687,7 @@ export const leanTermOf = (
             'a *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
         )
     }
-    return leanTermOfTerm(def, at, {
-        ...topScope(def),
-        bound,
-        frames: frames && { at: frames, above: [] },
-    })
+    return leanTermOfTerm(def, at, { ...topScope(def), bound })
 }
 
 /**
@@ -986,26 +964,9 @@ const leanBodyOf = (body: Body, at: string, scope: At): string => {
 const leanTermOfTerm = (t: Term, at: string, scope: At): string => {
     if (scope.placed !== undefined)
         return leanPlaced(t, at, scope, scope.placed)
-    const frames = scope.frames
-    const binder = { text: '' }
-    const printed =
-        scope.binds.has(t) && !scope.inside.includes(t)
-            ? `Term.mu (${leanTermCore(t, at, {
-                  ...scope,
-                  inside: [...scope.inside, t],
-                  frames: frames && {
-                      ...frames,
-                      above: [binder, ...frames.above],
-                  },
-              })})`
-            : leanTermCore(t, at, scope)
-    binder.text = printed
-    if (frames) {
-        const known = frames.at.get(t) ?? []
-        known.push({ term: printed, above: frames.above })
-        frames.at.set(t, known)
-    }
-    return printed
+    return scope.binds.has(t) && !scope.inside.includes(t)
+        ? `Term.mu (${leanTermCore(t, at, { ...scope, inside: [...scope.inside, t] })})`
+        : leanTermCore(t, at, scope)
 }
 
 /**
@@ -2689,17 +2650,16 @@ const resolved = (t: Term): Term | undefined =>
         : t
 
 /**
- * **A decision where a row can narrow**: one codec, and a union under its thunks that is no
- * binder. The walk of `narrow` narrows the options of such a union, and a row states that narrowing.
+ * **A decision where a row can narrow**: one codec, and a union under its thunks. The walk of
+ * `narrow` narrows the options of the union, and a row states that narrowing.
  *
- * A recursive union has no row. Its options read the union through a variable, and `narrow` reads
- * the variable open, where the host reads the thunk closed. The model has no substitution that
- * closes the options, so no row states the narrowing that the host does.
+ * A recursive union narrows as any union does. Each option prints as a closed codec of its own,
+ * where a thunk that returns to the union is an entry of the option, so the row reads `narrowC`
+ * over the options and needs no binder.
  */
 export const unionAt = (host: HostAt): boolean => {
     if (host.kind !== 'resolved' || 'mark' in host.codec.def) return false
-    const u = resolved(host.codec.def)
-    return u?.kind === 'union' && !bindersOf(host.codec.def).has(u)
+    return resolved(host.codec.def)?.kind === 'union'
 }
 
 /** The term `never`, the frame of a name that an object neither declares nor leaves open. */

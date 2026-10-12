@@ -84,6 +84,7 @@ import { orThrow } from '../result'
 import { agrees, disjoint, viewsDisjoint } from '../scoped'
 import type { Term } from '../term'
 import {
+    bindersOf,
     force,
     freeNamesOf,
     openRefusal,
@@ -830,7 +831,7 @@ const NARROW_DEPTH = 1
  * position of a reachable prefix with the first position past the prefix. A path grows only where
  * the host lets a codec stand, to {@link PATH_DEPTH} segments. Past a resolved codec, a path tries
  * the steps that the codec declares at its top, one name and one position. A path under a `narrow` starts at each
- * path where the host resolves a union, with each clause of {@link clauseVocabulary} at each name
+ * path where the host resolves a union that {@link drawsNarrowing} accepts, with each clause of {@link clauseVocabulary} at each name
  * of an option, and grows under the clause to {@link NARROW_DEPTH} segments.
  */
 const pathsOf = (codec: AnyCodec): (readonly PathStep[])[] => {
@@ -881,7 +882,7 @@ const pathsOf = (codec: AnyCodec): (readonly PathStep[])[] => {
     const narrowing = (path: readonly PathStep[], left: number) => {
         const decided = decide(path)
         if (decided === undefined) return
-        if (decided.kind === 'resolved' && unionAt(decided)) {
+        if (decided.kind === 'resolved' && drawsNarrowing(decided)) {
             const keys = new Set(
                 [...reachable(decided.codec.def)].flatMap((t) =>
                     t.kind === 'object' ? Object.keys(t.body.fields) : [],
@@ -904,6 +905,21 @@ const pathsOf = (codec: AnyCodec): (readonly PathStep[])[] => {
     // the wrapper holds the codec at its name, so the path of no step under the name states the
     // codec against itself
     return paths.filter((path) => path.length > 0)
+}
+
+/**
+ * **A union that the draw narrows**: a union under its thunks that is no binder. The type of
+ * `narrow` at a recursive union does not yet follow the run time: put to the type checker, the
+ * narrowing paths at recursive unions measured 3925 new disagreements of the type bridge. The Lean
+ * form decides a recursive union, and {@link recursiveNarrowing} puts the shape to the kernel
+ * outside the type vectors.
+ */
+const drawsNarrowing = (decided: HostAt): boolean => {
+    if (!unionAt(decided) || decided.kind !== 'resolved') return false
+    const def = decided.codec.def
+    if ('mark' in def) return false
+    const u = throughLazy(def)
+    return u !== undefined && !bindersOf(def).has(u)
 }
 
 /** The term under a chain of thunks, or nothing where a thunk throws. */
@@ -1130,6 +1146,30 @@ const buildPool = () => {
     }))
 }
 
+/**
+ * **A narrowing at a recursive union**, beside the pool: the option `node` of `Node` returns to
+ * `Node`. The draw narrows no recursive union ({@link drawsNarrowing}), so this vector puts the
+ * shape to the kernel in every run. The vector goes to the path modules only, and not to the type
+ * vectors. The clause `leaf` keeps the option that declares `v`, and the clause `node` keeps the
+ * option whose elements return to the union.
+ */
+const recursiveNarrowing = (): PathVectors => {
+    const { Node } = scope({
+        Node: union([
+            object({ k: string('leaf'), v: string }),
+            object({ k: string('node'), c: array(ref('Node')) }),
+        ]),
+    })
+    return {
+        name: 'path_recursive_union',
+        codec: erase(object({ n: Node })),
+        paths: [
+            ['n', { narrow: { k: erase(string('leaf')) } }, 'v'],
+            ['n', { narrow: { k: erase(string('node')) } }, 'c', 0, 'k'],
+        ],
+    }
+}
+
 /** The files that the gate elaborates, by name, from one build of the pool. */
 const poolModules = (
     perSeed: ReturnType<typeof buildPool>,
@@ -1151,7 +1191,7 @@ const poolModules = (
         leanSliceModule(perSeed.flatMap((one) => one.slices)),
     ],
     ...leanPathModules(
-        perSeed.flatMap((one) => one.paths),
+        [...perSeed.flatMap((one) => one.paths), recursiveNarrowing()],
         4,
     ).map((text, i) => [`.pool.paths${i}.lean`, text] as const),
     [
@@ -1337,6 +1377,28 @@ describe('the generated pool, against the model', () => {
             changed.set(move, (changed.get(move) ?? 0) + 1)
         }
         expect(Object.fromEntries([...changed].sort())).toEqual({})
+    })
+
+    /**
+     * **Narrowing at a recursive union decides each option as at any union.** Each option prints as
+     * a closed codec of its own, so the row reads `narrowC` over the options. The run time keeps the
+     * option of `leaf` and resolves `v` to `string`, and the row states that frontier, which the
+     * kernel checks in the path module.
+     */
+    it('narrows at a recursive union as at any union, and the row states the decision of the run time', () => {
+        const one = recursiveNarrowing()
+        expect(unionAt(hostAt(one.codec, ['n']))).toBe(true)
+        const [leaf] = one.paths
+        const decided = leaf && hostAt(one.codec, leaf)
+        expect(
+            decided?.kind === 'resolved' && !('mark' in decided.codec.def)
+                ? decided.codec.def.kind
+                : decided?.kind,
+        ).toBe('string')
+        const printed = leanPath(one)
+        expect(printed).toContain('NarrowRowsC')
+        expect(printed).toContain('([.name "v"], .resolved')
+        expect(printed).not.toContain('Term.mu')
     })
 
     /**
