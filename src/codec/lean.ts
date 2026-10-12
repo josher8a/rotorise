@@ -2317,7 +2317,7 @@ export type Sliceable = AnyCodec & {
 }
 
 /**
- * A union and the clauses put to it: `src/`'s `extract`, against the model's `AltClause.admits`.
+ * A union and the clauses put to it: `src/`'s `extract`, against the model's `AltClause.admitsC`.
  *
  * `keys` names the discriminators of a dissection. Each option then adds one row per key: the
  * one-key clause at the tag that `assignmentOf` reads off the option. The row keeps each option
@@ -2491,6 +2491,8 @@ const assignmentRows = (
 
 /**
  * One union, as a Lean `theorem`: the verdict of each clause at each option, as `src/` gives it.
+ * Each option prints as a closed codec of its own, rooted at its entry, as narrowing roots the
+ * options, so an option with no scoped form refuses the union.
  *
  * One theorem per union and not per row, so the file prints each option one time. A caller's
  * function is a variable of the theorem, and the goal closes as {@link closing} says.
@@ -2527,8 +2529,8 @@ export const leanSlice = (
         ),
         ...assignmentRows(options, keys, bound, name),
     ]
-    const printed = options.map((t, i) =>
-        leanTermOfTerm(t, `${name}.option${i}`, { ...topScope(t), bound }),
+    const printed = options.map(
+        (t, i) => closedPrint(t, `${name}.option${i}`, bound).text,
     )
     const binders = leanBinders(bound)
     const list = `[${rows.map((row) => row.clause).join(',\n      ')}]`
@@ -2537,7 +2539,7 @@ export const leanSlice = (
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
         `    ${named === undefined ? list : named(list)}.map`,
         `      (fun c => let os := [${printed.map((t) => `(${t})`).join(',\n        ')}]`,
-        '        (c.keyed os, os.map c.admits)) =',
+        '        (c.keyedC os, os.map c.admitsC)) =',
         `    [${rows.map((row) => `(${row.keyed}, [${row.keeps.join(', ')}])`).join(',\n      ')}] := ${closing(binders)}`,
     ].join('\n')
 }
@@ -3018,7 +3020,7 @@ export const leanPath = (
 
 /** The imports of a slice module. A path module imports `Calculus.Bridge.Paths` too. */
 const sliceImports = `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Analysis.Slice
+import Calculus.Dynamo.Analysis.ScopeSlice
 import Calculus.Dynamo.Lang.Store
 import Calculus.Lang.Path`
 
@@ -3049,9 +3051,9 @@ export const leanSliceModule = (slices: readonly Slice[]): string => {
 **Generated — do not edit.** One theorem per union. Each row is a clause: whether \`src/\` answers
 the clause, and the options that \`src/\` keeps under it. \`extract\` gives the verdict of a clause of
 the caller, and \`assignmentOf\` gives the verdict of a clause at the tag of a dissection's option.
-The theorem states that \`Calculus.AltClause.keyed\` refuses where \`src/\` refuses, and that
-\`Calculus.AltClause.admits\` gives the same verdict at each option. Each distinct
-clause list is one \`def\`, which each theorem with that list reads.
+Each option is a closed codec of its own. The theorem states that \`Calculus.AltClause.keyedC\`
+refuses where \`src/\` refuses, and that \`Calculus.AltClause.admitsC\` gives the same verdict at
+each option. Each distinct clause list is one \`def\`, which each theorem with that list reads.
 -/
 
 /-! The emitted key function is total on a membership subtype, so a one-name clause binds a \`k\`
