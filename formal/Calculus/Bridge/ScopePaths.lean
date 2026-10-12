@@ -15,9 +15,10 @@ codec is a frontier whose frames each have the head `never`. Some options is a f
 `never` head and another head. One codec is a frontier with no `never` head whose frames are one
 frame, and two declarations hold two frames.
 
-**What `frameSameC` reads.** Two frames are one frame where their closed codecs have one count of
-entries and one datum at each position of each entry, and their terms have one datum at each
-position. An entry is one datum with itself, so two paths to one entry give one frame. A function
+**What `frameSameC` reads.** Two frames are one frame where their terms have one datum at each
+position, and each pair of entries that the two terms reach together has bodies of one datum, with
+the pair assumed while the bodies are compared. So a frame is one frame with its copy in an option
+rooted apart. An entry is one datum with itself, so two paths to one entry give one frame. A function
 and a fill value are not read, as in `frameSame`: two refinements by two closures are one frame
 (`pathKindC_reads_no_closure`). Equal frames have one meaning (`pathReadC_resolved_sem`), so a
 resolved row certifies the meaning of the host's decision.
@@ -49,21 +50,33 @@ where
     | .req, .req | .opt, .opt | .fill _, .fill _ => true
     | _, _ => false
 
-/-- **Two graph terms of one datum**: one entry, or one operation with children of one datum,
-    position by position. -/
-def sameDataC {N N' : Nat} : Alg.Scoped.Graph dynSig N → Alg.Scoped.Graph dynSig N' → Bool
-  | .leaf i, .leaf j => decide (i.val = j.val)
+/-- **Two graph terms of one datum**: one operation with children of one datum, position by
+    position, where `k` answers two entries. -/
+def sameDataC (k : Nat → Nat → Bool) {N N' : Nat} :
+    Alg.Scoped.Graph dynSig N → Alg.Scoped.Graph dynSig N' → Bool
+  | .leaf i, .leaf j => k i.val j.val
   | .node o a, .node o' a' =>
       opSame o o' && decide ((Alg.Scoped.TOp.pos o).length = (Alg.Scoped.TOp.pos o').length) &&
         ((Alg.Scoped.TOp.pos o).zip ((Alg.Scoped.TOp.pos o').map a')).all fun q =>
-          sameDataC (a q.1) q.2
+          sameDataC k (a q.1) q.2
   | _, _ => false
 
-/-- **Two frames that are one frame**: closed codecs of one datum at each entry, and terms of one
-    datum. -/
+/-- **Two graph terms of one datum at each depth**, over two systems: two entries are one where
+    the pair is assumed, or where their bodies are of one datum with the pair assumed. The bound
+    counts the pairs of entries. -/
+def sameUpTo {N N' : Nat} (sL : Fin N → Alg.Scoped.Graph dynSig N)
+    (sR : Fin N' → Alg.Scoped.Graph dynSig N') :
+    Nat → List (Nat × Nat) → Alg.Scoped.Graph dynSig N → Alg.Scoped.Graph dynSig N' → Bool
+  | 0, _, _, _ => false
+  | n + 1, A, t, u => sameDataC (fun i j => A.contains (i, j) ||
+      if hi : i < N then if hj : j < N' then sameUpTo sL sR n ((i, j) :: A) (sL ⟨i, hi⟩) (sR ⟨j, hj⟩)
+        else false else false) t u
+
+/-- **Two frames that are one frame**: their terms are of one datum, and so is each pair of
+    entries that the two terms reach together. Two options rooted apart hold one frame where the
+    frame reads one datum at each depth. -/
 def frameSameC (f g : GFrame dynSig) : Bool :=
-  decide (f.N = g.N) && ((List.ofFn f.d.graph).zip (List.ofFn g.d.graph)).all
-    (fun q => sameDataC q.1 q.2) && sameDataC f.t g.t
+  sameUpTo f.d.graph g.d.graph (f.N * g.N + 1) [] f.t g.t
 
 /-- **The head of a frame**: an entry reads its body. -/
 def pathHeadC (f : GFrame dynSig) : Nat → Alg.Scoped.Graph dynSig f.N → Alg.Scoped.Graph dynSig f.N
@@ -115,6 +128,37 @@ def pathReadC (r : Option (List (GFrame dynSig))) :
 def HostAtC.claim : HostAtC → Bool × Option (List (GFrame dynSig))
   | .resolved f fs => (true, some (f :: fs))
   | _ => (true, none)
+
+/-- **A step to a child of a graph term**, as the walk of a path takes it: the slot of a name, the
+    term of a position, or an option of a union. -/
+inductive Sel where
+  /-- The slot of a name: the declared slot, the open block, or the bottom. -/
+  | name (k : String)
+  /-- The term of a position of a list shape. -/
+  | pos (i : Nat)
+  /-- An option of a union. -/
+  | opt (i : Nat)
+
+/-- **The child that a step selects**, by the functions that the walk reads: `slotAtG` at a name,
+    `listChildG` at a position. A step that the term does not offer gives the term. -/
+def selG {N : Nat} : Alg.Scoped.Graph dynSig N → Sel → Alg.Scoped.Graph dynSig N
+  | .node (.obj _ md _) a, .name k => (Alg.Scoped.slotAtG (md := md) a k).2
+  | t@(.node (.list _ _ _) a), .pos i =>
+      (Alg.Scoped.listChildG Alg.Scoped.Graph.never (Alg.Scoped.listParts a).1
+        (Alg.Scoped.listParts a).2.1 (Alg.Scoped.listParts a).2.2 i).getD t
+  | t@(.node (.union m) a), .opt i => if h : i < m then a ⟨i, h⟩ else t
+  | t, _ => t
+
+/-- The child at each step of a list of steps. -/
+def selPath {N : Nat} (t : Alg.Scoped.Graph dynSig N) : List Sel → Alg.Scoped.Graph dynSig N
+  | [] => t
+  | s :: ss => selPath (selG t s) ss
+
+/-- **A frame of a closed codec, at a position of its print**: the body of the entry `j`, then the
+    steps. An entry past the count gives the bottom. -/
+def Closed.frameAt (c : Closed) (j : Nat) (path : List Sel) : GFrame dynSig :=
+  if h : j < c.N then ⟨c.N, c.scopes, selPath (c.scopes.graph ⟨j, h⟩) path⟩
+  else ⟨c.N, c.scopes, Alg.Scoped.Graph.never⟩
 
 /-- **The rows of the paths into a closed codec**: `Rooted.at` at each path reads what the host
     states. -/

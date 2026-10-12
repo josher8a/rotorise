@@ -16,7 +16,7 @@
     "Calculus/Axioms.lean": 1,
     "Calculus/Bridge/Paths.lean": 98,
     "Calculus/Bridge/Rows.lean": 0,
-    "Calculus/Bridge/ScopePaths.lean": 42,
+    "Calculus/Bridge/ScopePaths.lean": 57,
     "Calculus/Bridge/Vectors.lean": 207,
     "Calculus/Dynamo/Alg/Carriers.lean": 5,
     "Calculus/Dynamo/Alg/Codec.lean": 0,

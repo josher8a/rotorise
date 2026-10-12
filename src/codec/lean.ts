@@ -64,7 +64,7 @@ import type { AnyCodec, LiteralValue, ObjectSlot } from './codec'
 import { object, optional, union } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
 import { CodecError, failed } from './result'
-import { agrees } from './scoped'
+import { agrees, storedApart } from './scoped'
 import type {
     Alternatives,
     Body,
@@ -85,7 +85,6 @@ import {
     recursionUse,
     type Scope,
     storedAlternatives,
-    storedView,
     throughThunks,
     viewsDisjoint,
 } from './term'
@@ -746,7 +745,21 @@ export const leanClosedOf = (
 }
 
 /** The closed codec of a term, as {@link leanClosedOf} prints it. */
-const leanClosedOfTerm = (def: Term, at: string, bound?: Bound): string => {
+const leanClosedOfTerm = (def: Term, at: string, bound?: Bound): string =>
+    closedPrint(def, at, bound).text
+
+/**
+ * A printed closed codec, with the entry of each term that prints as an entry: an entry of the
+ * graph is its global index, and the root is the entry of the term.
+ */
+type ClosedPrint = {
+    readonly text: string
+    readonly entries: ReadonlyMap<Term, Entry>
+    readonly root: number
+}
+
+/** The print of {@link leanClosedOfTerm}, with its entries. */
+const closedPrint = (def: Term, at: string, bound?: Bound): ClosedPrint => {
     const scopes: (readonly Term[])[] = []
     for (const component of componentsOf([def])) {
         const order = entryOrder(component)
@@ -786,7 +799,12 @@ const leanClosedOfTerm = (def: Term, at: string, bound?: Bound): string => {
         printed = `.snoc (c := ${constants}) (n := ${members.length}) (${printed}) (fun i => match i with ${arms})`
         constants += members.length
     })
-    return `(⟨${constants}, ${printed}, ${entries.get(def)?.global ?? 0}⟩ : Closed)`
+    const root = entries.get(def)?.global ?? 0
+    return {
+        text: `(⟨${constants}, ${printed}, ${root}⟩ : Closed)`,
+        entries,
+        root,
+    }
 }
 
 /**
@@ -2785,28 +2803,123 @@ const walkOf = (
     return ws
 }
 
-/** The options of a union that a clause keeps: the host's narrowing, on the stored views. */
-const narrowedBy = (
-    clause: Readonly<Record<string, AnyCodec>>,
-    options: readonly Term[],
-): Term[] => {
+/** The term of a clause: each key required at its codec, and an open block of `opaque`. */
+const clauseOf = (clause: Readonly<Record<string, AnyCodec>>): Term => {
     const fields: Record<string, TermField> = {}
     for (const [key, one] of Object.entries(clause)) {
         if ('mark' in one.def) continue
         fields[key] = { mark: 'req', t: one.def }
     }
-    const phi = storedView({
-        kind: 'object',
-        body: { fields, rest: { kind: 'opaq' } },
+    return { kind: 'object', body: { fields, rest: { kind: 'opaq' } } }
+}
+
+/** The options of a union that a clause keeps: the host's narrowing, on the graph. */
+const narrowedBy = (phi: Term, options: readonly Term[]): Term[] =>
+    options.filter((o) => !storedApart(phi, o))
+
+/**
+ * **A frame of the graph walk of a narrowing row**: the option whose closed codec holds the frame,
+ * and the term at the frame. A frame at a position of the print is the body of the entry `j` and
+ * the steps `path`, as `Closed.frameAt` reads them. The frame of a root is the root entry.
+ */
+type GraphWalked = {
+    readonly option: number
+    readonly t: Term
+    readonly at:
+        | { readonly kind: 'root' }
+        | {
+              readonly kind: 'position'
+              readonly j: number
+              readonly path: readonly string[]
+          }
+}
+
+/** A term under its thunks, or nothing where a thunk throws. */
+const underThunks = (t: Term): Term | undefined =>
+    t.kind === 'lazy'
+        ? ((u) => (u === undefined ? undefined : underThunks(u)))(force(t))
+        : t
+
+/**
+ * **The model's frontier at one segment, over the graph of a printed option**: `childG`. A term
+ * that prints as an entry is a leaf, and a step past it enters the body of the entry. A union gives
+ * the children of each option. `undefined` is a refusal, and a segment that a term does not read
+ * gives no frame. The kernel checks each frame against `Rooted.at`, so a step that reads otherwise
+ * fails the row.
+ */
+const graphChildOf = (
+    w: GraphWalked,
+    s: string | number,
+    entries: ReadonlyMap<Term, Entry>,
+): GraphWalked[] | undefined => {
+    const u = underThunks(w.t)
+    if (u === undefined) return []
+    const entry = entries.get(u)
+    const top = w.at.kind === 'position' && w.at.path.length === 0
+    if (
+        entry !== undefined &&
+        !(top && w.at.kind === 'position' && w.at.j === entry.global)
+    )
+        return graphChildOf(
+            {
+                option: w.option,
+                t: u,
+                at: { kind: 'position', j: entry.global, path: [] },
+            },
+            s,
+            entries,
+        )
+    if (w.at.kind !== 'position') return []
+    const { j, path } = w.at
+    const step = (t: Term, sel: string): GraphWalked => ({
+        option: w.option,
+        t,
+        at: { kind: 'position', j, path: [...path, sel] },
     })
-    return options.filter((o) => !disjoint(phi, storedView(o)))
+    switch (u.kind) {
+        case 'never':
+            return []
+        case 'opaq':
+            return [w]
+        case 'union': {
+            const all: GraphWalked[] = []
+            for (const [p, option] of u.options.entries()) {
+                const some = graphChildOf(step(option, `.opt ${p}`), s, entries)
+                if (some === undefined) return undefined
+                all.push(...some)
+            }
+            return all
+        }
+        case 'object': {
+            if (typeof s !== 'string') return []
+            const field = u.body.fields[s]
+            return [
+                step(
+                    field ? field.t : (u.body.rest ?? nothingAt),
+                    `.name ${leanString(s)}`,
+                ),
+            ]
+        }
+        case 'list': {
+            if (typeof s !== 'number') return []
+            const one = u.pre[s]
+            if (one !== undefined) return [step(one, `.pos ${s}`)]
+            if (u.suf.length > 0) return undefined
+            return [step(u.spread ?? nothingAt, `.pos ${s}`)]
+        }
+        default:
+            return []
+    }
 }
 
 /**
  * **The paths of one codec, as one Lean `theorem`.** Each path without a clause is a row of
  * `PathRows`: the model's `Term.at` at the path, read against the decision of the host. A path
- * with a clause is a row of `NarrowRows` at the union that the host resolves before the clause:
- * the model's `narrow` over the options of the union, then the frontier of the rest of the path.
+ * with a clause is a row of `NarrowRowsC` at the union that the host resolves before the clause:
+ * each option and the clause print as a closed codec of their own, and the row reads the model's
+ * `narrowC` over the options, then the frontier of the rest of the path over the graph of each
+ * kept option. A frame of the graph is the body of an entry and the steps from it
+ * (`Closed.frameAt`), so the kernel reduces the recorded frame to the frame that the walk reaches.
  *
  * One bound for every term of the theorem, so one adapter is one generator in each.
  *
@@ -2887,6 +3000,47 @@ export const leanPath = (
         )
         return `.resolved ${first} [${others.join(', ')}]`
     }
+    // a closed codec prints one time per theorem, as a `let` that the rows name
+    const closedLets = new Map<string, string>()
+    const closedNamed = (printed: string): string => {
+        const known = closedLets.get(printed)
+        if (known !== undefined) return known
+        const made = `c${closedLets.size}`
+        closedLets.set(printed, made)
+        return made
+    }
+    /**
+     * The decision of the host at a path with a clause. A resolved row states the frontier of the
+     * graph walk, each frame at a position of an option that holds the resolved node.
+     */
+    const hostC = (
+        steps: readonly PathStep[],
+        at: string,
+        frontier: () => GraphWalked[] | undefined,
+        frameText: (w: GraphWalked) => string,
+    ): string => {
+        const decided = decide(codec, steps)
+        if (decided.kind !== 'resolved') return `.${decided.kind}`
+        const node = underThunks(decided.codec.def as Term)
+        const walked = frontier() ?? []
+        // a frame holds the resolved node where it prints as the node prints
+        const same = (t: Term): boolean => {
+            const u = underThunks(t)
+            if (u === undefined || node === undefined) return false
+            return (
+                u === node ||
+                closedPrint(u, at, bound).text ===
+                    closedPrint(node, at, bound).text
+            )
+        }
+        if (walked.length === 0 || walked.some((w) => !same(w.t)))
+            return refuse(
+                at,
+                'the model reaches a frame that is no position of the resolved node',
+            )
+        const [first, ...others] = walked.map(frameText)
+        return `.resolved ${first} [${others.join(', ')}]`
+    }
     const plain: string[] = []
     const unions = new Map<string, Map<string, string[]>>()
     paths.forEach((steps, i) => {
@@ -2913,46 +3067,63 @@ export const leanPath = (
                 'no union stands before the clause: a row narrows the options of one union',
             )
         }
-        const uFrames = new Map<Term, Position[]>()
-        const u = leanTermOf(before.codec, `${at}.union`, bound, uFrames)
         const clause = (steps[k] as Exclude<PathStep, string | number>).narrow
-        const entries = Object.entries(clause).map(
-            ([key, one]) =>
-                [
-                    leanString(key),
-                    `(${leanTermOf(one, `${at}.narrow.${key}`, bound)})`,
-                ] as const,
-        )
-        const phi = `(Alg.clauseTerm ${leanFinset(Object.keys(clause))} (${leanKeyFunction(entries)}))`
         const rest = steps.slice(k + 1) as readonly (string | number)[]
-        const uDef = before.codec.def as Term
-        const scope = { ...topScope(uDef), bound }
-        const options = resolved(uDef)
-        const frontier = () =>
-            options?.kind === 'union'
-                ? walkOf(
-                      narrowedBy(clause, options.options).map((t) => ({
-                          t,
-                          scope,
-                          above: [],
-                      })),
-                      rest,
-                      at,
-                  )
-                : undefined
-        const byClause = unions.get(u) ?? new Map<string, string[]>()
+        const options = resolved(before.codec.def as Term)
+        if (options?.kind !== 'union')
+            return refuse(
+                at,
+                'no union stands before the clause: a row narrows the options of one union',
+            )
+        // each option and the clause print as a closed codec of their own, as `narrowC` roots them
+        const printed = options.options.map((o, i) =>
+            closedPrint(o, `${at}.option${i}`, bound),
+        )
+        const names = printed.map((one) => closedNamed(one.text))
+        const os = `[${names.join(', ')}]`
+        const phiTerm = clauseOf(clause)
+        const phi = closedNamed(
+            closedPrint(phiTerm, `${at}.clause`, bound).text,
+        )
+        const frontier = () => {
+            const kept = new Set(narrowedBy(phiTerm, options.options))
+            let ws: GraphWalked[] = options.options.flatMap((t, option) =>
+                kept.has(t)
+                    ? [{ option, t, at: { kind: 'root' } as const }]
+                    : [],
+            )
+            for (const s of rest) {
+                const next: GraphWalked[] = []
+                for (const w of ws) {
+                    const some = graphChildOf(
+                        w,
+                        s,
+                        printed[w.option]?.entries ?? new Map(),
+                    )
+                    if (some === undefined) return undefined
+                    next.push(...some)
+                }
+                ws = next
+            }
+            return ws
+        }
+        const frameText = (w: GraphWalked): string =>
+            w.at.kind === 'root'
+                ? `(Alg.Scoped.Rooted.frame (Closed.rooted ${names[w.option]}))`
+                : `(Closed.frameAt ${names[w.option]} ${w.at.j} [${w.at.path.join(', ')}])`
+        const byClause = unions.get(os) ?? new Map<string, string[]>()
         const rows = byClause.get(phi) ?? []
         rows.push(
-            `([${rest.map(leanSeg).join(', ')}], ${host(steps, at, frontier, uFrames)})`,
+            `([${rest.map(leanSeg).join(', ')}], ${hostC(steps, at, frontier, frameText)})`,
         )
         byClause.set(phi, rows)
-        unions.set(u, byClause)
+        unions.set(os, byClause)
     })
     const conjuncts = [
         `PathRows (${root})\n      [${plain.join(',\n       ')}]`,
         ...[...unions].map(
             ([u, byClause]) =>
-                `NarrowRows (${u})\n      [${[...byClause]
+                `NarrowRowsC ${u}\n      [${[...byClause]
                     .map(
                         ([phi, rows]) =>
                             `(${phi},\n        [${rows.join(',\n         ')}])`,
@@ -2971,6 +3142,9 @@ export const leanPath = (
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
         ...[...terms].map(
             ([printed, ident]) => `    let ${ident} : Term := ${printed}`,
+        ),
+        ...[...closedLets].map(
+            ([printed, ident]) => `    let ${ident} : Closed := ${printed}`,
         ),
         `    ${conjuncts.join(' ∧\n    ')} := ${proof}`,
     ].join('\n')
@@ -3053,6 +3227,7 @@ export const leanPathModules = (
     return size.map((_, file) =>
         leanModule(`${sliceImports}
 import Calculus.Bridge.Paths
+import Calculus.Bridge.ScopePaths
 
 /-!
 # Paths, proposed to the model

@@ -56,13 +56,3 @@ path|accept|2728814b4e|r.narrow({ a: string("p") }).m
 path|accept|2728814b4e|r.narrow({ a: string("q") }).m
 path|accept|2728814b4e|r.narrow({ a: string("x") }).m
 path|accept|2728814b4e|r.narrow({ a: string("y") }).m
-path|refuse|4347b31094|r.x.narrow({ v: string("A") })
-path|refuse|4347b31094|r.x.narrow({ v: string("p") })
-path|refuse|4347b31094|r.x.narrow({ v: string("q") })
-path|refuse|4347b31094|r.x.narrow({ v: string("x") })
-path|refuse|4347b31094|r.x.narrow({ v: string("y") })
-path|refuse|7fd9a43543|r.narrow({ x: string("A") })
-path|refuse|7fd9a43543|r.narrow({ x: string("p") })
-path|refuse|7fd9a43543|r.narrow({ x: string("q") })
-path|refuse|7fd9a43543|r.narrow({ x: string("x") })
-path|refuse|7fd9a43543|r.narrow({ x: string("y") })

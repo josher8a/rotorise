@@ -1216,7 +1216,7 @@ describe('the generated pool, against the model', () => {
                 "seed": 20261004,
                 "separations": 1141,
                 "slices": 88,
-                "whenPaths": 4689,
+                "whenPaths": 4675,
               },
               {
                 "assignments": 24,
@@ -1244,7 +1244,7 @@ describe('the generated pool, against the model', () => {
                 "seed": 4,
                 "separations": 1144,
                 "slices": 100,
-                "whenPaths": 6251,
+                "whenPaths": 6212,
               },
             ],
           }

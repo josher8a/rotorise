@@ -484,175 +484,219 @@ type DecodeObject<Fd, W, Env extends unknown[]> = ([ReqNames<Fd>] extends [
 
 /*
  * **The clause of `narrow`, read on the terms**, as the walk of `at` reads it. A frame gives the
- * options of its union, or itself, through names. The clause separates an option where the stored
- * views of the two are disjoint: the option stores no map, a required slot of the option stores
- * nothing, or at one key of the clause the slot and the codec of the clause store no common
- * attribute. A union is separated where each of its options is, and an adapter where its inner
- * term is. The frames of the narrowed node are the options that the clause keeps.
- *
- * `Seen` holds each entry that the walk resolved from the option down. An entry that the walk
- * reaches again is the variable of a recursion, which the model's disjointness separates from the
- * bottom alone, so the walk reads it as `['again']`: any stored attribute.
+ * options of its union, or itself, through names. The frames of the narrowed node are the options
+ * that the clause keeps ({@link Separates}).
  */
 type Resolved<
     T,
     Env extends unknown[],
-    Seen,
     Fuel extends unknown[] = ScopeFuel,
 > = Fuel extends [unknown, ...infer F2 extends unknown[]]
     ? T extends ['scope', infer D, infer K]
-        ? [['entry', D, K]] extends [Seen]
-            ? [['again'], Env, Seen]
-            : Resolved<
-                  D[K & keyof D],
-                  [['scope', D]],
-                  Seen | ['entry', D, K],
-                  F2
-              >
+        ? Resolved<D[K & keyof D], [['scope', D]], F2>
         : T extends ['var', infer N]
           ? Lookup<Env, N> extends ['some', infer M, [['scope', infer D]]]
-              ? [['entry', D, N]] extends [Seen]
-                  ? [['again'], Env, Seen]
-                  : Resolved<M, [['scope', D]], Seen | ['entry', D, N], F2>
-              : [T, Env, Seen]
-          : [T, Env, Seen]
-    : [T, Env, Seen]
-type OptionsOf<F> = F extends [
-    ['union', infer Os extends unknown[]],
-    infer Env,
-    infer Seen,
-]
-    ? { [I in keyof Os]: [Os[I], Env, Seen] }
+              ? Resolved<M, [['scope', D]], F2>
+              : [T, Env]
+          : [T, Env]
+    : [T, Env]
+type OptionsOf<F> = F extends [['union', infer Os extends unknown[]], infer Env]
+    ? { [I in keyof Os]: [Os[I], Env] }
     : [F]
 
-/** Every member of DynamoDB: what an opaque term, a free term or an older reader can store. */
-type AnyMember =
-    | 'S'
-    | 'N'
-    | 'B'
-    | 'BOOL'
-    | 'NULL'
-    | 'M'
-    | 'L'
-    | 'SS'
-    | 'NS'
-    | 'BS'
-
-/** The members of DynamoDB that a term can store. An older reader reads any stored attribute. */
-type WritesT<T, Env extends unknown[], Seen = never> = Resolved<
-    T,
-    Env,
-    Seen
-> extends [infer U, infer E extends unknown[], infer S]
-    ? U extends ['prim', ['base' | 'literal', infer K, ...unknown[]]]
-        ? KindMember<K>
-        : U extends ['set', infer El]
-          ? SetMember<MuSyn<El, E>>
-          : U extends ['list', unknown, unknown, unknown]
-            ? 'L'
-            : U extends ['object', unknown]
-              ? 'M'
-              : U extends ['never']
-                ? never
-                : U extends
-                        | ['held', unknown, infer I, ...unknown[]]
-                        | ['refine', infer I]
-                  ? WritesT<I, E, S>
-                  : U extends ['union', infer Os extends unknown[]]
-                    ? { [I in keyof Os]: WritesT<Os[I], E, S> }[number]
-                    : AnyMember
-    : AnyMember
-
-/**
- * The stored texts that a term pins, as `['pin', texts]`, or `['unpinned']` where the term
- * stores a value that no literal pins.
+/*
+ * **The graph decision of `narrow`, read on the terms**: the model's `Scoped.disjoint` at the
+ * stored views of the clause and of an option, as `narrowAcross` reads it. The left operand is the
+ * clause, and the right operand is the option. A `held` reads its inner term, an older reader reads
+ * any attribute, and a `fallback` slot is optional. Below a guard a pair of entries is assumed apart
+ * while the walk compares the two bodies: `A` holds the assumed pairs. `false` states nothing.
+ * Two list shapes and the predicates of a refinement are not ported, and read as not apart.
  */
-type PinsT<T, Env extends unknown[], Seen = never> = Resolved<
-    T,
-    Env,
-    Seen
-> extends [infer U, infer E extends unknown[], infer S]
-    ? U extends ['prim', ['literal', infer K, infer V]]
-        ? K extends 'binary'
-            ? ['unpinned']
-            : ['pin', `${V & (string | number | boolean)}`]
-        : U extends
+type GraphFuel = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+/** An entry of a scope, as `['entry', D, K]` with its body and binder stack, or `None`. */
+type EntryOf<T, Env> = T extends ['scope', infer D, infer K]
+    ? ['some', ['entry', D, K], D[K & keyof D], [['scope', D]]]
+    : T extends ['var', infer N]
+      ? Lookup<Env, N> extends ['some', infer M, [['scope', infer D]]]
+          ? ['some', ['entry', D, N], M, [['scope', D]]]
+          : None
+      : None
+type Assumed<P, A> = A extends [infer Q, ...infer R]
+    ? FrameSame<P, Q> extends true
+        ? true
+        : Assumed<P, R>
+    : false
+type ApartG<L, LE, R, RE, A extends unknown[], Fuel> = Fuel extends [
+    unknown,
+    ...infer F,
+]
+    ? RowG<L, LE, R, RE, A, F>
+    : false
+type RowG<L, LE, R, RE, A extends unknown[], F> = EntryOf<L, LE> extends [
+    'some',
+    unknown,
+    infer M,
+    infer ME,
+]
+    ? ApartG<M, ME, R, RE, A, F>
+    : L extends ['var', unknown]
+      ? RightG<L, LE, R, RE, A, F, ['none']>
+      : L extends ['never']
+        ? true
+        : L extends
                 | ['held', unknown, infer I, ...unknown[]]
                 | ['refine', infer I]
-          ? PinsT<I, E, S>
-          : U extends ['union', infer Os extends unknown[]]
-            ? PinsOfAll<{ [I in keyof Os]: PinsT<Os[I], E, S> }>
-            : ['unpinned']
-    : ['unpinned']
-type PinsOfAll<Ps extends unknown[]> = ['unpinned'] extends Ps[number]
-    ? ['unpinned']
-    : ['pin', Extract<Ps[number], ['pin', unknown]>[1]]
-
-/** Two terms that store no common attribute: no common member, or two pins with no common text. */
-type ApartT<X, Env extends unknown[], Seen, Y> = [
-    WritesT<X, Env, Seen> & WritesT<Y, []>,
-] extends [never]
-    ? true
-    : PinsT<X, Env, Seen> extends ['pin', infer A]
-      ? PinsT<Y, []> extends ['pin', infer B]
-          ? [A & B] extends [never]
-              ? true
-              : false
-          : false
-      : false
-
-/** Whether the clause separates an option. `CT` holds the term of the codec at each key. */
-type Separates<H, CT> = H extends [
-    infer T0,
-    infer E0 extends unknown[],
-    infer S0,
-]
-    ? Resolved<T0, E0, S0> extends [
-          infer T,
-          infer Env extends unknown[],
-          infer Seen,
-      ]
-        ? T extends ['object', ['mk', infer F, infer W]]
-            ? true extends
-                  | {
-                        [K in keyof CT]: ApartT<
-                            SlotTerm<SlotAt<F, W, K>>,
-                            Env,
-                            Seen,
-                            CT[K]
-                        >
-                    }[keyof CT]
-                  | {
-                        [K in keyof F]: F[K] extends ['req', infer S]
-                            ? [WritesT<S, Env, Seen>] extends [never]
-                                ? true
-                                : false
-                            : false
-                    }[keyof F]
-                ? true
-                : false
-            : T extends ['union', infer Os extends unknown[]]
+          ? RowG<I, LE, R, RE, A, F>
+          : L extends ['legacy', unknown] | ['opaq']
+            ? RightG<L, LE, R, RE, A, F, ['none']>
+            : L extends ['union', infer Os extends unknown[]]
               ? false extends {
-                    [I in keyof Os]: Separates<[Os[I], Env, Seen], CT>
+                    [I in keyof Os]: RowG<Os[I], LE, R, RE, A, F>
                 }[number]
                   ? false
                   : true
-              : T extends
-                      | ['held', unknown, infer I, ...unknown[]]
-                      | ['refine', infer I]
-                ? Separates<[I, Env, Seen], CT>
-                : 'M' extends WritesT<T, Env, Seen>
-                  ? false
-                  : true
+              : L extends ['prim', infer G]
+                ? RightG<L, LE, R, RE, A, F, ['prim', G]>
+                : L extends ['set', infer E]
+                  ? RightG<L, LE, R, RE, A, F, ['set', E, LE]>
+                  : L extends ['list', unknown, unknown, unknown]
+                    ? RightG<L, LE, R, RE, A, F, ['list']>
+                    : L extends ['object', ['mk', infer CF, infer CW]]
+                      ? RightG<L, LE, R, RE, A, F, ['obj', CF, CW, LE]>
+                      : false
+/** The rows of the right operand alone (`rightRows`), then the family `Fam` of the left row. */
+type RightG<L, LE, R, RE, A extends unknown[], F, Fam> = EntryOf<
+    R,
+    RE
+> extends ['some', unknown, infer M, infer ME]
+    ? ApartG<L, LE, M, ME, A, F>
+    : R extends ['var', unknown]
+      ? false
+      : R extends ['never']
+        ? true
+        : R extends
+                | ['held', unknown, infer I, ...unknown[]]
+                | ['refine', infer I]
+          ? RightG<L, LE, I, RE, A, F, Fam>
+          : R extends ['union', infer Os extends unknown[]]
+            ? false extends {
+                  [I in keyof Os]: RightG<L, LE, Os[I], RE, A, F, Fam>
+              }[number]
+                ? false
+                : true
+            : FamG<Fam, R, RE, A, F>
+type FamG<Fam, R, RE, A extends unknown[], F> = Fam extends ['prim', infer G]
+    ? R extends ['prim', infer G2]
+        ? PrimsApartT<G, G2>
+        : R extends
+                | ['set', unknown]
+                | ['list', unknown, unknown, unknown]
+                | ['object', unknown]
+          ? true
+          : false
+    : Fam extends ['set', infer E, infer LE]
+      ? R extends ['set', infer E2]
+          ? ApartG<E, LE, E2, RE, [], F>
+          : R extends
+                  | ['prim', unknown]
+                  | ['list', unknown, unknown, unknown]
+                  | ['object', unknown]
+            ? true
+            : false
+      : Fam extends ['list']
+        ? R extends ['prim', unknown] | ['set', unknown] | ['object', unknown]
+            ? true
+            : false
+        : Fam extends ['obj', infer CF, infer CW, infer LE]
+          ? R extends ['object', ['mk', infer F2, infer W2]]
+              ? true extends
+                    | {
+                          [K in keyof CF]: IsReqT<CF[K]> extends true
+                              ? PairG<
+                                    SlotTerm<CF[K]>,
+                                    LE,
+                                    SlotTerm<SlotAt<F2, W2, K>>,
+                                    RE,
+                                    A,
+                                    F
+                                >
+                              : IsReqT<SlotAt<F2, W2, K>> extends true
+                                ? PairG<
+                                      SlotTerm<CF[K]>,
+                                      LE,
+                                      SlotTerm<SlotAt<F2, W2, K>>,
+                                      RE,
+                                      A,
+                                      F
+                                  >
+                                : false
+                      }[keyof CF]
+                    | {
+                          [K in keyof F2]: K extends keyof CF
+                              ? false
+                              : IsReqT<F2[K]> extends true
+                                ? CW extends ['some', infer B]
+                                    ? PairG<B, LE, SlotTerm<F2[K]>, RE, A, F>
+                                    : true
+                                : false
+                      }[keyof F2]
+                  ? true
+                  : false
+              : R extends
+                      | ['prim', unknown]
+                      | ['set', unknown]
+                      | ['list', unknown, unknown, unknown]
+                ? true
+                : false
+          : false
+/** Whether a slot holds its name in the stored view: `req` only, as a `fallback` may lack it. */
+type IsReqT<S> = S extends ['req', unknown] ? true : false
+/** `pairAt`: a pair of entries already assumed is apart, and a new pair is assumed. */
+type PairG<X, XE, Y, YE, A extends unknown[], F> = EntryOf<X, XE> extends [
+    'some',
+    infer I,
+    infer XM,
+    infer XME,
+]
+    ? EntryOf<Y, YE> extends ['some', infer J, infer YM, infer YME]
+        ? Assumed<[I, J], A> extends true
+            ? true
+            : ApartG<XM, XME, YM, YME, [[I, J], ...A], F>
+        : ApartG<X, XE, Y, YE, A, F>
+    : ApartG<X, XE, Y, YE, A, F>
+/** `primsApart`: two kinds, or two literals of one kind with two texts. Bytes are not compared. */
+type PrimsApartT<G, G2> = G extends ['base' | 'literal', infer K, ...unknown[]]
+    ? G2 extends ['base' | 'literal', infer K2, ...unknown[]]
+        ? [K] extends [K2]
+            ? [K2] extends [K]
+                ? G extends ['literal', unknown, infer V]
+                    ? G2 extends ['literal', unknown, infer V2]
+                        ? K extends 'binary'
+                            ? false
+                            : FrameSame<V, V2> extends true
+                              ? false
+                              : true
+                        : false
+                    : false
+                : true
+            : true
         : false
+    : false
+/** The clause as a term: each key required at the term of its codec, and an opaque block. */
+type ClauseT<CT> = [
+    'object',
+    ['mk', { [K in keyof CT]: ['req', CT[K]] }, ['some', ['opaq']]],
+]
+
+/** Whether the clause separates an option. `CT` holds the term of the codec at each key. */
+type Separates<H, CT> = H extends [infer T0, infer E0 extends unknown[]]
+    ? ApartG<ClauseT<CT>, [], T0, E0, [], GraphFuel>
     : false
 type KeptOptions<Hs, CT> = Hs extends [infer H, ...infer R]
     ? Separates<H, CT> extends true
         ? KeptOptions<R, CT>
-        : [Frame<H>, ...KeptOptions<R, CT>]
+        : [H, ...KeptOptions<R, CT>]
     : []
-/** The frame of an option: its term and its binder stack. */
-type Frame<H> = H extends [infer T, infer Env, unknown] ? [T, Env] : never
 
 /**
  * The frames of a node after `narrow`, or `'refused'`: the options that the clause keeps, each one
@@ -665,10 +709,7 @@ type NarrowEach<Fs, CT> = Fs extends [
     [infer T, infer Env extends unknown[]],
     ...infer R,
 ]
-    ? [
-          ...KeptOptions<OptionsOf<Resolved<T, Env, never>>, CT>,
-          ...NarrowEach<R, CT>,
-      ]
+    ? [...KeptOptions<OptionsOf<Resolved<T, Env>>, CT>, ...NarrowEach<R, CT>]
     : []
 
 /**
@@ -683,10 +724,10 @@ export type HoldsFree<Fs> = Fs extends unknown[]
                       infer T,
                       infer Env extends unknown[],
                   ]
-                      ? OptionsOf<Resolved<T, Env, never>>[number]
+                      ? OptionsOf<Resolved<T, Env>>[number]
                       : never
               }[number],
-              [['var', unknown], unknown, unknown]
+              [['var', unknown], unknown]
           >,
       ] extends [never]
         ? false
