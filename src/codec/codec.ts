@@ -50,7 +50,7 @@ import {
     orThrow,
     type Result,
 } from './result'
-import { agrees } from './scoped'
+import { agrees, storedApart } from './scoped'
 import type {
     Alternatives,
     Body,
@@ -743,8 +743,7 @@ const narrowAcross = (
     frontier: readonly AnyCodec[],
     clause: Clause,
 ): readonly AnyCodec[] | CodecError => {
-    const stored = storedView(clause)
-    const apart = (t: Term) => disjoint(stored, storedView(t))
+    const apart = (t: Term) => storedApart(clause, t)
     let kept: readonly AnyCodec[] = []
     for (const one of frontier) {
         let t = one.def
@@ -3493,21 +3492,18 @@ type TodayNarrowing<T, F, Fs> = HoldsFree<Fs> extends true
  * it. The decoded type of the narrowed node is the decoded type of the kept frames.
  */
 type TermNarrowing<Fs> = {
-    narrow<const C extends Readonly<Record<string, AnyCodec>>>(
-        clause: C & ClauseOnFrames<Fs, C>,
-    ): TermPath<
-        NarrowFrames<Fs, ClauseTerms<C>>,
-        DecodeFrames<NarrowFrames<Fs, ClauseTerms<C>>>,
-        unknown
-    >
+    narrow<
+        const C extends Readonly<Record<string, AnyCodec>>,
+        K = NarrowFrames<Fs, ClauseTerms<C>>,
+    >(clause: C & ClauseOnFrames<K>): TermPath<K, DecodeFrames<K>, unknown>
 }
 /** The decoded type of the codecs at the frames of a node. */
 type DecodeFrames<Fs> = Fs extends unknown[]
     ? { [I in keyof Fs]: DecodeFrame<Fs[I]> }[number]
     : never
 type ClauseTerms<C> = { [K in keyof C]: TermOf<C[K]> }
-/** Nothing, or why the clause keeps no option of the frames `Fs`. */
-type ClauseOnFrames<Fs, C> = NarrowFrames<Fs, ClauseTerms<C>> extends []
+/** Nothing, or why the clause keeps no option: `K` holds the frames that the clause keeps. */
+type ClauseOnFrames<K> = K extends []
     ? ErrorMessage<'[narrow] the clause separates every member of this union'>
     : unknown
 

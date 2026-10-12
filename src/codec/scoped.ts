@@ -632,6 +632,24 @@ const viewOf = (side: Side, at: At): At => {
     }
 }
 
+/**
+ * **Whether the stored views of two terms share no attribute**, the model's `narrowC` at one
+ * option: the walk of {@link apartAt} with no assumed pair, each term rooted as its own graph, at
+ * the fuel of the two graphs, at the stored view of each. `false` states nothing, and so does a
+ * term with no graph.
+ */
+export const storedApart = (x: Term, y: Term): boolean => {
+    const left = sideOf(x, 'stored')
+    const right = sideOf(y, 'stored')
+    if (left === undefined || right === undefined) return false
+    return apartAt(
+        left,
+        right,
+        viewOf(left, { kind: 'entry', j: left.root }),
+        viewOf(right, { kind: 'entry', j: right.root }),
+    )
+}
+
 /* ── compatibility ────────────────────────────────────────────────────────────────────── */
 
 /**
