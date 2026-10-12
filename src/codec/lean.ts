@@ -2697,111 +2697,8 @@ export const unionAt = (host: HostAt): boolean => {
     return u?.kind === 'union' && !bindersOf(host.codec.def).has(u)
 }
 
-/** A frame of the model's walk: a term object at one position, and the binders above it. */
-type Walked = {
-    readonly t: Term
-    readonly scope: At
-    readonly above: readonly string[]
-}
-
-/** The frame of a walk, as the model's `Frame` prints. */
-const leanFrame = (w: Walked, at: string): string =>
-    `(${leanTermOfTerm(w.t, at, w.scope)}, [${w.above.join(', ')}])`
-
 /** The term `never`, the frame of a name that an object neither declares nor leaves open. */
 const nothingAt: Term = { kind: 'never' }
-
-/**
- * **The model's frontier at one segment, over the printed term**: `Alg.Frame.child`. A binder
- * enters its body under its own print, a thunk that closes a cycle enters its binder again over the
- * binders outside the binder, and any other thunk is its target. A union gives the children of each
- * option. `undefined` is a refusal, and a segment that a term does not read gives no frame. The
- * kernel checks each frame against `Term.at`, so a step that reads otherwise fails the row.
- */
-const childOf = (
-    w: Walked,
-    s: string | number,
-    at: string,
-): Walked[] | undefined => {
-    const { t, scope, above } = w
-    if (scope.binds.has(t) && !scope.inside.includes(t)) {
-        const self = leanTermOfTerm(t, at, scope)
-        const inside = { ...scope, inside: [...scope.inside, t] }
-        return childIn({ t, scope: inside, above: [self, ...above] }, s, at)
-    }
-    return childIn(w, s, at)
-}
-
-/** {@link childOf} past the binder of the term. */
-const childIn = (
-    w: Walked,
-    s: string | number,
-    at: string,
-): Walked[] | undefined => {
-    const { t, scope, above } = w
-    const here = (u: Term): Walked[] => [{ t: u, scope, above }]
-    switch (t.kind) {
-        case 'never':
-            return []
-        case 'opaq':
-            return here(t)
-        case 'lazy': {
-            const target = force(t)
-            if (target === undefined) return []
-            const k = scope.inside.lastIndexOf(target)
-            if (k === -1) return childOf({ t: target, scope, above }, s, at)
-            const outer = { ...scope, inside: scope.inside.slice(0, k) }
-            const i = scope.inside.length - 1 - k
-            return childOf(
-                { t: target, scope: outer, above: above.slice(i + 1) },
-                s,
-                at,
-            )
-        }
-        case 'union': {
-            const all: Walked[] = []
-            for (const option of t.options) {
-                const some = childOf({ t: option, scope, above }, s, at)
-                if (some === undefined) return undefined
-                all.push(...some)
-            }
-            return all
-        }
-        case 'object': {
-            if (typeof s !== 'string') return []
-            const field = t.body.fields[s]
-            return here(field ? field.t : (t.body.rest ?? nothingAt))
-        }
-        case 'list': {
-            if (typeof s !== 'number') return []
-            const one = t.pre[s]
-            if (one !== undefined) return here(one)
-            if (t.suf.length > 0) return undefined
-            return here(t.spread ?? nothingAt)
-        }
-        default:
-            return []
-    }
-}
-
-/** The frontier of a walk at each segment of a path. */
-const walkOf = (
-    start: readonly Walked[],
-    segs: readonly (string | number)[],
-    at: string,
-): Walked[] | undefined => {
-    let ws: Walked[] = [...start]
-    for (const s of segs) {
-        const next: Walked[] = []
-        for (const w of ws) {
-            const some = childOf(w, s, at)
-            if (some === undefined) return undefined
-            next.push(...some)
-        }
-        ws = next
-    }
-    return ws
-}
 
 /** The term of a clause: each key required at its codec, and an open block of `opaque`. */
 const clauseOf = (clause: Readonly<Record<string, AnyCodec>>): Term => {
@@ -2912,23 +2809,42 @@ const graphChildOf = (
     }
 }
 
+/** The frontier of a graph walk at each segment of a path, each frame over the entries of its option. */
+const graphWalkOf = (
+    start: readonly GraphWalked[],
+    segs: readonly (string | number)[],
+    entriesOf: (option: number) => ReadonlyMap<Term, Entry>,
+): GraphWalked[] | undefined => {
+    let ws: GraphWalked[] = [...start]
+    for (const s of segs) {
+        const next: GraphWalked[] = []
+        for (const w of ws) {
+            const some = graphChildOf(w, s, entriesOf(w.option))
+            if (some === undefined) return undefined
+            next.push(...some)
+        }
+        ws = next
+    }
+    return ws
+}
+
 /**
- * **The paths of one codec, as one Lean `theorem`.** Each path without a clause is a row of
- * `PathRows`: the model's `Term.at` at the path, read against the decision of the host. A path
- * with a clause is a row of `NarrowRowsC` at the union that the host resolves before the clause:
- * each option and the clause print as a closed codec of their own, and the row reads the model's
- * `narrowC` over the options, then the frontier of the rest of the path over the graph of each
- * kept option. A frame of the graph is the body of an entry and the steps from it
- * (`Closed.frameAt`), so the kernel reduces the recorded frame to the frame that the walk reaches.
+ * **The paths of one codec, as one Lean `theorem`.** The root prints as a closed codec. Each path
+ * without a clause is a row of `PathRowsC`: the model's `Rooted.at` at the path, read against the
+ * decision of the host. A path with a clause is a row of `NarrowRowsC` at the union that the host
+ * resolves before the clause: each option and the clause print as a closed codec of their own, and
+ * the row reads the model's `narrowC` over the options, then the frontier of the rest of the path
+ * over the graph of each kept option. A frame of the graph is the body of an entry and the steps
+ * from it (`Closed.frameAt`), so the kernel reduces the recorded frame to the frame that the walk
+ * reaches.
  *
  * One bound for every term of the theorem, so one adapter is one generator in each.
  *
  * **A resolved row states the frontier.** The host resolves a node of the term graph of the root.
- * The printer records each position of each node, with the binders above the position. The walk
- * of the model's frontier, over the same print, names the position of each frame, and the row
- * states each frame as the recorded frame of the resolved node at that position. Equal frames have
- * one meaning, so the row certifies the meaning of the host's decision. A frame at a position of
- * another node, or at a position that the resolved node does not hold, refuses the path.
+ * The walk of the model's frontier, over the graph of the print, names the position of each frame,
+ * and the row states each frame at that position. A frame holds the resolved node where the frame
+ * prints as the node prints, so the row certifies the meaning of the host's decision. A frame that
+ * prints otherwise refuses the path.
  *
  * **A caller's function is a variable of the theorem**, so a frame equals the resolved frame only
  * where the two hold the same function. The theorem binds each closure and each older reader.
@@ -2949,57 +2865,7 @@ export const leanPath = (
         readers: new Map(),
     }
     const item = wrapperOf(codec)
-    const rootFrames = new Map<Term, Position[]>()
-    const root = leanTermOf(item, `${name}.root`, bound, rootFrames)
-    const rootWalk: Walked = {
-        t: item.def as Term,
-        scope: { ...topScope(item.def as Term), bound },
-        above: [],
-    }
-    // a long term of a frame prints one time per theorem, as a `let` that the rows name: the term
-    // can hold a variable of the theorem, so it is no declaration
-    const terms = new Map<string, string>()
-    const named = (printed: string): string => {
-        if (printed.length <= 80) return printed
-        const known = terms.get(printed)
-        if (known !== undefined) return known
-        const made = `t${terms.size}`
-        terms.set(printed, made)
-        return made
-    }
-    /**
-     * The decision of the host at a path. A resolved row states the frontier of the walk, each
-     * frame at a recorded position of the resolved node.
-     */
-    const host = (
-        steps: readonly PathStep[],
-        at: string,
-        frontier: () => Walked[] | undefined,
-        recorded: Map<Term, Position[]>,
-    ): string => {
-        const decided = decide(codec, steps)
-        if (decided.kind !== 'resolved') return `.${decided.kind}`
-        const own = new Set(
-            (recorded.get(decided.codec.def as Term) ?? []).map(
-                (p) =>
-                    `(${p.term}, [${p.above.map((c) => c.text).join(', ')}])`,
-            ),
-        )
-        const walked = frontier() ?? []
-        if (
-            walked.length === 0 ||
-            walked.some((w) => !own.has(leanFrame(w, at)))
-        )
-            return refuse(
-                at,
-                'the model reaches a frame that is no position of the resolved node',
-            )
-        const [first, ...others] = walked.map(
-            (w) =>
-                `(${named(leanTermOfTerm(w.t, at, w.scope))}, [${w.above.map(named).join(', ')}])`,
-        )
-        return `.resolved ${first} [${others.join(', ')}]`
-    }
+    const def = item.def as Term
     // a closed codec prints one time per theorem, as a `let` that the rows name
     const closedLets = new Map<string, string>()
     const closedNamed = (printed: string): string => {
@@ -3009,9 +2875,18 @@ export const leanPath = (
         closedLets.set(printed, made)
         return made
     }
+    const rootPrint = closedPrint(def, `${name}.root`, bound)
+    const root = closedNamed(rootPrint.text)
+    /** A frame of the graph walk, over the closed codec `c`. */
+    const frameText =
+        (c: string | undefined) =>
+        (w: GraphWalked): string =>
+            w.at.kind === 'root'
+                ? `(Alg.Scoped.Rooted.frame (Closed.rooted ${c}))`
+                : `(Closed.frameAt ${c} ${w.at.j} [${w.at.path.join(', ')}])`
     /**
-     * The decision of the host at a path with a clause. A resolved row states the frontier of the
-     * graph walk, each frame at a position of an option that holds the resolved node.
+     * The decision of the host at a path. A resolved row states the frontier of the graph walk,
+     * each frame at a position that holds the resolved node.
      */
     const hostC = (
         steps: readonly PathStep[],
@@ -3050,9 +2925,14 @@ export const leanPath = (
         )
         if (clauses.length === 0) {
             const segs = [wrapped, ...(steps as readonly (string | number)[])]
-            const frontier = () => walkOf([rootWalk], segs, at)
+            const frontier = () =>
+                graphWalkOf(
+                    [{ option: 0, t: def, at: { kind: 'root' } }],
+                    segs,
+                    () => rootPrint.entries,
+                )
             plain.push(
-                `([${segs.map(leanSeg).join(', ')}], ${host(steps, at, frontier, rootFrames)})`,
+                `([${segs.map(leanSeg).join(', ')}], ${hostC(steps, at, frontier, frameText(root))})`,
             )
             return
         }
@@ -3087,40 +2967,26 @@ export const leanPath = (
         )
         const frontier = () => {
             const kept = new Set(narrowedBy(phiTerm, options.options))
-            let ws: GraphWalked[] = options.options.flatMap((t, option) =>
-                kept.has(t)
-                    ? [{ option, t, at: { kind: 'root' } as const }]
-                    : [],
+            return graphWalkOf(
+                options.options.flatMap((t, option) =>
+                    kept.has(t)
+                        ? [{ option, t, at: { kind: 'root' } as const }]
+                        : [],
+                ),
+                rest,
+                (option) => printed[option]?.entries ?? new Map(),
             )
-            for (const s of rest) {
-                const next: GraphWalked[] = []
-                for (const w of ws) {
-                    const some = graphChildOf(
-                        w,
-                        s,
-                        printed[w.option]?.entries ?? new Map(),
-                    )
-                    if (some === undefined) return undefined
-                    next.push(...some)
-                }
-                ws = next
-            }
-            return ws
         }
-        const frameText = (w: GraphWalked): string =>
-            w.at.kind === 'root'
-                ? `(Alg.Scoped.Rooted.frame (Closed.rooted ${names[w.option]}))`
-                : `(Closed.frameAt ${names[w.option]} ${w.at.j} [${w.at.path.join(', ')}])`
         const byClause = unions.get(os) ?? new Map<string, string[]>()
         const rows = byClause.get(phi) ?? []
         rows.push(
-            `([${rest.map(leanSeg).join(', ')}], ${hostC(steps, at, frontier, frameText)})`,
+            `([${rest.map(leanSeg).join(', ')}], ${hostC(steps, at, frontier, (w) => frameText(names[w.option])(w))})`,
         )
         byClause.set(phi, rows)
         unions.set(os, byClause)
     })
     const conjuncts = [
-        `PathRows (${root})\n      [${plain.join(',\n       ')}]`,
+        `PathRowsC ${root}\n      [${plain.join(',\n       ')}]`,
         ...[...unions].map(
             ([u, byClause]) =>
                 `NarrowRowsC ${u}\n      [${[...byClause]
@@ -3140,9 +3006,6 @@ export const leanPath = (
     return [
         `/-- \`${name}\` — the decision of \`at\` at each path, and under each \`narrow\` -/`,
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
-        ...[...terms].map(
-            ([printed, ident]) => `    let ${ident} : Term := ${printed}`,
-        ),
         ...[...closedLets].map(
             ([printed, ident]) => `    let ${ident} : Closed := ${printed}`,
         ),
@@ -3205,7 +3068,7 @@ end Calculus
  * one file in sequence, so the gate checks the files in parallel. The emitter measures a theorem
  * by its printed length, and gives each theorem, longest first, to the file with the least length.
  * A file keeps the theorems in the order of the pool. The readings that the rows read are
- * `Calculus/Bridge/Paths.lean`, which states the frontier that each decision of the host names.
+ * `Calculus/Bridge/ScopePaths.lean`, which states the frontier that each decision of the host names.
  *
  * Generated at gate time and elaborated, never committed.
  */
@@ -3234,8 +3097,8 @@ import Calculus.Bridge.ScopePaths
 
 **Generated — do not edit.** File ${file} of ${files}. A path theorem states the decision of
 \`at\` at each path into one codec, and under each \`narrow\` at a union on the path. The model
-gives the frontier by \`Alg.Term.at\`, and after a clause by \`Alg.narrow\` and the frontier of
-the rest of the path.
+gives the frontier of a closed codec by \`Rooted.at\`, and after a clause by \`narrowC\` and the
+frontier of the rest of the path.
 -/
 
 /-! The emitted key function is total on a membership subtype, so a one-name clause binds a \`k\`

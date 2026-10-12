@@ -709,7 +709,7 @@ describe('what cannot be emitted', () => {
 
     /**
      * **A path vector certifies the meaning of the host's decision.** The row states each frame of
-     * the model's frontier as a recorded frame of the node that the host resolves. A host that
+     * the model's frontier as a frame that prints as the node that the host resolves. A host that
      * resolves `a` to the node of `b` holds a decision that the model does not reach, and the
      * emitter refuses the path rather than print a row that states another meaning.
      */
