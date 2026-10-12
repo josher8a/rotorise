@@ -77,6 +77,8 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # A file prints the name of each failing row and exits 0 after a print, so a job passes only
   # when the file prints nothing. A job writes its output to a file, and the step reads every file
   # after the set ends, so one failure does not hide another. GATE_JOBS bounds the memory of the set.
+  # The default is three jobs. The type bridge runs two tsc programs beside the kernel jobs, and six
+  # jobs beside those programs ran the container out of memory.
   # No module imports a generated file, so `#assert_axioms_all` reads no vector: each file ends with
   # `#assert_axioms_module`, which checks the axioms of the theorems of that file, and a job fails
   # a file whose last line is not that command.
@@ -84,7 +86,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # type checker. The bridge prints a summary when it passes, so its job keeps the output of a
   # failure only, and reports as one more job.
   run 'vector bridge' bash -c '
-    jobs=${GATE_JOBS:-6}; out=$(mktemp -d); trap "rm -rf $out" EXIT
+    jobs=${GATE_JOBS:-3}; out=$(mktemp -d); trap "rm -rf $out" EXIT
     ( python3 scripts/type_bridge.py > $out/types.log 2>&1; rc=$?
       [ $rc -eq 0 ] || cp $out/types.log $out/xtype_bridge.out; echo $rc > $out/xtype_bridge.rc ) &
     printf "%s\n" .pool.separations.lean .pool.slices.lean .pool.disjoints.lean \
