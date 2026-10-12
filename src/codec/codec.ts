@@ -3483,20 +3483,20 @@ type TodayNarrowing<T, F, Fs> = [T] extends [readonly unknown[]]
           : TermNarrowing<Fs, T, F>
       : unknown
 /**
- * {@link PathNarrowing}, where the node holds frames: the narrowed node holds the options that the
- * clause keeps ({@link NarrowFrames}), so its decision is the decision of the walk of `at`.
+ * {@link PathNarrowing}, where the node holds frames, and read on the terms alone: the narrowed node
+ * holds the options that the clause keeps ({@link NarrowFrames}), so its decision is the decision of
+ * the walk of `at`. The clause is refused where it keeps no option of the frames, as the walk refuses
+ * it. The decoded type states no second decision.
  */
-type TermNarrowing<Fs, T, F> = IsUnion<T> extends true
-    ? {
-          narrow<const C extends Readonly<Record<string, AnyCodec>>>(
-              clause: C & ClauseOn<T, F, C> & ClauseOnFrames<Fs, C>,
-          ): TermPath<
-              NarrowFrames<Fs, ClauseTerms<C>>,
-              unknown extends F ? Narrowed<T, C> : Kept<F, C>['t'],
-              unknown extends F ? unknown : Kept<F, C>
-          >
-      }
-    : unknown
+type TermNarrowing<Fs, T, F> = {
+    narrow<const C extends Readonly<Record<string, AnyCodec>>>(
+        clause: C & ClauseOnFrames<Fs, C>,
+    ): TermPath<
+        NarrowFrames<Fs, ClauseTerms<C>>,
+        unknown extends F ? Narrowed<T, C> : Kept<F, C>['t'],
+        unknown extends F ? unknown : Kept<F, C>
+    >
+}
 type ClauseTerms<C> = { [K in keyof C]: TermOf<C[K]> }
 /** Nothing, or why the clause keeps no option of the frames `Fs`. */
 type ClauseOnFrames<Fs, C> = NarrowFrames<Fs, ClauseTerms<C>> extends []
