@@ -253,28 +253,37 @@ no test of the refusal of an empty clause.
 
 ---
 
-## Known: `narrow` at a recursive union has no row in the path vectors
+## Known: the type of narrow at a recursive union does not follow the run time
 
-**Observation.** The pool states a clause path only where `unionAt(...)` in `src/codec/lean.ts`
-accepts the decision of the host. `unionAt(...)` refuses a union that is a binder: the options
-read the union through a variable, `narrow` reads the variable open, and the host reads the thunk
-closed. The host narrows at such a union. Measured 2026-10-10 with a throwaway script:
+**Observation.** The Lean form decides a narrowing at a recursive union: each option prints as a
+closed codec of its own, and the row reads `narrowC` over the options. The path modules state the
+shape of a recursive union beside the pool, and the row closes in the kernel with the decision of
+the run time:
 
     const { Node } = scope({ Node: union([object({ k: string('leaf'), v: string }),
                                           object({ k: string('node'), c: array(ref('Node')) })]) })
     object({ n: Node }).item.at((p) => p.n.narrow({ k: string('leaf') }).v)
-      runtime: path n.v, term {"kind":"string"}
-    unionAt(hostAt(object({ n: Node }), ['n']))
-      false
+      runtime: resolved, string
+      row: NarrowRowsC, clause leaf, path v, resolved
 
-Each `NarrowRows` of the generated path files narrows a `Term.union`, and none narrows a
-`Term.mu`. The model's `narrowFrames` has a case for a recursive union, and no row reads the case.
+The type of narrow does not follow the run time at such a union. Measured 2026-10-12: where the
+pool put the narrowing paths at recursive unions to the type checker, the type bridge reported 3925
+new disagreements, path accept 472 and path refuse 3453. An accept row is a narrow that the run
+time accepts and the type refuses:
 
-**Effect.** The decision of the host at a clause on a recursive union reaches no kernel. A host
-walk that narrows such a union wrongly passes the gate.
+    r.at(0).at(0).at(0).narrow({ b: boolean(false) })
 
-**Pin.** The docstring of `unionAt(...)` states the refusal. No test asserts that a recursive
-union has no clause row, and no test of the host narrows a recursive union.
+A refuse row is a narrow that the run time refuses and the type accepts:
+
+    r.narrow({ y: string("x") })
+
+**Effect.** A caller who narrows at a recursive union gets a type that disagrees with the value
+that the run time returns. The pool draws no narrowing at a recursive union, so the type bridge
+does not see the gap.
+
+**Pin.** The docstring of the draw of the pool states the refusal and the measurement. The fixed
+vector of the shape above, and its test in the pool spec, pin the Lean half. No test pins the type
+of narrow at a recursive union.
 
 ---
 
