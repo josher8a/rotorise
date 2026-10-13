@@ -73,6 +73,9 @@ import Calculus.Dynamo.Analysis.Laminar
 import Calculus.Dynamo.Analysis.Disjoint
 import Calculus.Dynamo.Analysis.ScopeDisjoint
 import Calculus.Dynamo.Analysis.ScopeCompat
+import Calculus.Dynamo.Analysis.ScopeCompatWitness
+import Calculus.Dynamo.Analysis.ScopeOrthogonality
+import Calculus.Dynamo.Analysis.ScopeSeparation
 import Calculus.Dynamo.Analysis.ScopePath
 import Calculus.Dynamo.Analysis.ScopeSlice
 import Calculus.Dynamo.Witness.LiteralArity1
