@@ -32,14 +32,6 @@ end Calculus
 
 namespace Calculus.Alg
 
-/-- **The value-side row of each primitive**, and its exactness. A universe supplies this class;
-    the rest of `Adm` and of its exactness is the term language's. -/
-class PrimAdm (S : Syn) [Sem S] where
-  /-- The values that a primitive writes. -/
-  admV : S.Ground → S.V → Bool
-  /-- The row is the domain of the primitive's codec at the orientation of the universe. -/
-  admV_exact : ∀ g v, admV g v = true ↔ ((Syn.ground g).f S.o v).isSome = true
-
 variable {S : Syn}
 
 /-- The presence row at an orientation, read off the *term*'s field table: a declared name that
@@ -47,38 +39,6 @@ variable {S : Syn}
 def valPresentT {S : Sig} (o : Orient) (fields : Finset String)
     (fld : {k // k ∈ fields} → ObjectSlot S) (keys : Finset String) : Bool :=
   decide (∀ k : {k // k ∈ fields}, (fld k).isReqAt o = true → k.1 ∈ keys)
-
-/-- A traversal succeeds at a cons exactly when the head and the tail do. -/
-theorem traverse_cons_isSome {α β : Type} (f : α → Option β) (x : α) (xs : List α) :
-    (traverse f (x :: xs)).isSome = ((f x).isSome && (traverse f xs).isSome) := by
-  simp only [traverse]
-  cases hx : f x <;> cases hxs : traverse f xs <;> simp
-
-/-- **A sum acts exactly where one of its options acts.** -/
-theorem select_isSome_attempt {V M X Y : Type} (os : List (Codec V M))
-    (run : Codec V M → X → Option Y) (x : X) :
-    (select os run x).isSome = true ↔ ∃ o ∈ os, (run o x).isSome = true := by
-  constructor
-  · intro h
-    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
-    obtain ⟨o, ho, -, he⟩ := select_admits ha
-    exact ⟨o, ho, by rw [he]; rfl⟩
-  · rintro ⟨o, ho, he⟩
-    obtain ⟨o', hf⟩ := Option.isSome_iff_exists.mp
-      (List.find?_isSome.mpr ⟨o, ho, he⟩ : (os.find? fun c => (run c x).isSome).isSome = true)
-    unfold select; rw [hf]; exact List.find?_some (p := fun c => (run c x).isSome) hf
-
-/-- **The list codec at an orientation**: read the prism, align, run each position at the
-    orientation, and build with the prism. -/
-theorem listCodec_f {V M : Type} {member : V → M} (sL : Summand (List V) V M member)
-    (pre : List (Codec V M)) (sp : Option (Codec V M)) (suf : List (Codec V M)) :
-    ∀ (o : Orient) (x : V), (listCodec sL pre sp suf).f o x =
-      ((sL.p.out x).bind fun xs =>
-        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map sL.p.into :=
-  Orient.both (P := fun o => ∀ x, (listCodec sL pre sp suf).f o x =
-      ((sL.p.out x).bind fun xs =>
-        (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map sL.p.into)
-    (fun _ => rfl) (fun _ => rfl)
 
 variable [Sem S] [PrimAdm S] {α : Table S} {β : Table S.op}
 

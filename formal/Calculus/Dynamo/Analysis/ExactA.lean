@@ -59,15 +59,6 @@ The structure of `AdmA` and its exactness are the term language's (`Alg.AdmA`,
 (`ground_selfdual`). So the read-side rows of the primitives are the write-side rows, `inBase`
 and `inL`, and their exactness is the write-side exactness. -/
 
-/-- **Each DynamoDB primitive is one map at both orientations.** A primitive accepts a datum and
-    changes nothing, so its read is its write. -/
-theorem ground_selfdual : ∀ g, (groundCodec g).e = (groundCodec g).p := by
-  intro g
-  funext v
-  cases g with
-  | base k => cases k <;> cases v <;> rfl
-  | literal k x => cases k <;> cases v <;> rfl
-
 /-- The DynamoDB primitive rows on the read side: the write-side rows, because each primitive is
     self-dual. -/
 instance dynPrimAdmA : Alg.PrimAdmA dynSyn :=

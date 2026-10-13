@@ -1,8 +1,6 @@
 import Calculus.Lang.ScopeDisjoint
-import Calculus.Dynamo.Analysis.Disjoint
-import Calculus.Dynamo.Analysis.ExactA
+import Calculus.Dynamo.Lang.Universe
 import Calculus.Dynamo.Lang.Scope
-import Calculus.Dynamo.Lang.HeldFree
 
 /-!
 # Disjointness of closed codecs at DynamoDB
@@ -19,8 +17,9 @@ open Alg in
 /-- **The laws that the decision reads hold at DynamoDB**, at each orientation. -/
 theorem dynLaws (o : Orient) : Alg.Scoped.Laws dynSyn o where
   prim g g' hp v := by
-    have h := Adm_prim_apart (α := fun _ => (id, id)) g g' hp v
-    have e : ∀ g'' : Ground, Adm (fun _ => (id, id)) (.prim g'') v =
+    have h : (PrimAdm.admV (S := dynSyn) g v && PrimAdm.admV (S := dynSyn) g' v) = false :=
+      admV_prim_apart g g' hp v
+    have e : ∀ g'' : Ground, PrimAdm.admV (S := dynSyn) g'' v =
         ((Mean.ground (B := dynSig) g'').f .host v).isSome := fun g'' =>
       Bool.eq_iff_iff.mpr (PrimAdm.admV_exact (S := dynSyn) g'' v)
     rw [e, e] at h

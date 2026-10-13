@@ -56,6 +56,13 @@ import Calculus.Lang.System
 import Calculus.Dynamo.Analysis.Path
 import Calculus.Dynamo.Analysis.Precondition
 import Calculus.Dynamo.Analysis.ScopePrecondition
+import Calculus.Lang.Universe
+import Calculus.Lang.CodecPath
+import Calculus.Dynamo.Lang.Universe
+import Calculus.Dynamo.Lang.Clause
+import Calculus.Dynamo.Lang.Adapters
+import Calculus.Bridge.Kinds
+import Calculus.Bridge.Verdicts
 import Lean
 
 /-!

@@ -27,44 +27,6 @@ they sit here by the same rule.
 
 namespace Calculus
 
-/-- A declared name's pin lies inside the clause's: the same adapter word, the same base, and
-    alternatives that are a subset of the clause's.
-
-    **Containment, not membership.** A name pinned to `a | b` admits values at both, so a clause
-    at `a` alone does not describe it.
-
-    Four rows, one per base whose carrier has more than one value. `null` has no row because its
-    carrier has one inhabitant, so a clause there would keep every member rather than select
-    among them. A name pinned at one base against a clause at another is no match, which is the
-    `_` row. -/
-def altsSub : Option Pin → Pin → Bool
-  | some (w, ⟨.string, x⟩),  (w', ⟨.string, c⟩)  => decide (w = w') && decide (∀ a ∈ x.1.val, a ∈ c.1.val)
-  | some (w, ⟨.number, x⟩),  (w', ⟨.number, c⟩)  => decide (w = w') && decide (∀ a ∈ x.1.val, a ∈ c.1.val)
-  | some (w, ⟨.boolean, x⟩), (w', ⟨.boolean, c⟩) => decide (w = w') && decide (∀ a ∈ x.1.val, a ∈ c.1.val)
-  | some (w, ⟨.binary, x⟩),  (w', ⟨.binary, c⟩)  => decide (w = w') && decide (∀ a ∈ x.1.val, a ∈ c.1.val)
-  | _, _ => false
-
-/-- **A clause at union level**: the names it speaks about, and the pin it admits at each.
-
-    No index: a union declares no key set, so the clause carries no proof that the options pin its
-    names. `AltClause.keyed` decides that against the options, and a clause that it refuses keeps
-    nothing (`AltClause.extract_eq_nil_of_keyed_false`). -/
-structure AltClause where
-  keys : Finset Name
-  pin : {k // k ∈ keys} → Pin
-
-/-- One clause key, answered against one option's spec: the name is declared, the caller must
-    write it, and its pin lies inside the clause's.
-
-    Required presence is read because an optional literal name admits the map that omits the
-    name, so the option holds values outside every fibre the clause describes, and
-    the clause does not describe the option. A fill is required at the caller side, so a fill is
-    kept. -/
-def litSubAt (s : MapOf NameSpec) (c : AltClause) (k : {k // k ∈ c.keys}) : Bool :=
-  match s.at k.1 with
-  | some ns => ns.required && altsSub ns.pin (c.pin k)
-  | none => false
-
 /-- **Whether a clause describes an option**: the option is an object, and it answers at every key
     the clause names. A non-object option has no spec and is never kept. -/
 def AltClause.admits (c : AltClause) (t : Term) : Bool :=
@@ -90,10 +52,6 @@ def AltClause.extract (c : AltClause) (opts : List Term) : List Term :=
     no option is both kept and dropped. -/
 def AltClause.exclude (c : AltClause) (opts : List Term) : List Term :=
   opts.filter (fun t => ! c.admits t)
-
-/-- **The form of a pin**: the adapter word and the base. A pin nests inside a pin of its own form
-    only (`altsSub_form`). -/
-def pinForm (p : Pin) : Word × GroundKind := (p.1, p.2.1)
 
 /-- The form that an option pins at a name: the option is an object, and the field at the name has
     a pin. -/
@@ -352,21 +310,6 @@ theorem inLs_of_pinOf {R : Term → Value → Bool} {E : Word → Value → Valu
         obtain ⟨rfl, hin⟩ := inLs_of_altsOf_map hlit hun h hv
         rw [hE]; exact hin
 
-/-- A pin inside a clause's pin carries the clause's word, and its alternatives lie in the
-    clause's. -/
-theorem altsSub_inLs {p : Option Pin} {q : Pin} (h : altsSub p q = true) :
-    ∃ w al, p = some (w, al) ∧ w = q.1 ∧
-      ∀ v, inLs al.1 al.2 v = true → inLs q.2.1 q.2.2 v = true := by
-  obtain _ | ⟨w, ⟨k, x⟩⟩ := p
-  · simp [altsSub] at h
-  obtain ⟨w', ⟨k', c⟩⟩ := q
-  refine ⟨w, ⟨k, x⟩, rfl, ?_⟩
-  cases k <;> cases k' <;>
-    simp only [altsSub, Bool.and_eq_true, decide_eq_true_eq, Bool.false_eq_true] at h <;>
-    exact ⟨h.1, fun v hv => by
-      obtain ⟨y, hy, hyv⟩ := inLs_eq_true.mp hv
-      exact inLs_eq_true.mpr ⟨y, h.2 y hy, hyv⟩⟩
-
 /-- A clause that describes an option reads the option's object at each clause key: the name is
     declared, the caller must write it, and its pin lies inside the clause's. -/
 theorem AltClause.admits_at {c : AltClause} {t : Term} (h : c.admits t = true)
@@ -387,15 +330,6 @@ theorem AltClause.admits_at {c : AltClause} {t : Term} (h : c.admits t = true)
       exact ⟨hf, hk⟩
     · cases hk
   | _ => cases h
-
-/-- A pin inside a clause's pin has the clause's form: `altsSub` compares the word and the base. -/
-theorem altsSub_form {p : Option Pin} {q : Pin} (h : altsSub p q = true) :
-    ∃ r, p = some r ∧ pinForm r = pinForm q := by
-  obtain _ | ⟨w, ⟨k, x⟩⟩ := p
-  · simp [altsSub] at h
-  obtain ⟨w', ⟨k', c⟩⟩ := q
-  refine ⟨(w, ⟨k, x⟩), rfl, ?_⟩
-  cases k <;> cases k' <;> simp_all [altsSub, pinForm]
 
 /-- **A clause that describes an option is a clause that the options can answer.** -/
 theorem AltClause.keyed_of_admits {c : AltClause} {opts : List Term} {t : Term} (ht : t ∈ opts)

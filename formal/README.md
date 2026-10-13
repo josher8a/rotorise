@@ -17,19 +17,21 @@ definition it touches.
 | `Calculus/Alg/Containers.lean` | `listCodec` and `objectCodec` over the list and keyed-map prisms of a universe, with their laws and carriers |
 | `Calculus/Alg/Recursion.lean` | `AgreeLe`, `Contractive`, `muCodec` and `lawful_muCodec` over one depth function of the carrier, and the agreement lemmas of the combinators |
 | `Calculus/Lang/Term.lean` | The universe signature: `Syn` (the syntax) and the class `Sem` (the meaning), with the formers `ListA`, `MapA` and `SetF`. The term family `Term S`/`Body S`/`ObjectSlot S`, the guard `Term.guarded`, `Term.depth`, `denote`, and the tactic `term_depth_wf` |
-| `Calculus/Lang/Typing.lean` | The held sets, the judgement `Typed` over a signature, `μSyn` with `typed_μSyn`, and `Obligations` with `PairwiseCompat` and the set obligation `SetObl` |
+| `Calculus/Lang/Typing.lean` | The judgement `Typed` over a signature, `μSyn` with `typed_μSyn`, and `Obligations` with `PairwiseCompat` and the set obligation `SetObl` |
 | `Calculus/Lang/Guarded.lean` | `denote_agree` and `contractive_body`: the guard of a binder makes its body contractive, at every signature |
 | `Calculus/Lang/Sound.lean` | `soundnessIn`, `soundness`, `typed_TSub` and `carrier_denote`, at every signature |
-| `Calculus/Lang/HeldFree.lean` | The held-free terms `HF`, where the Bool test `hasHeld` answers `false`, the laws of the top that they read (`TopLaws`), `sub_denote`, and `compat_of_HF`, at every signature |
-| `Calculus/Lang/ExactV.lean` | The admission row `Adm` over a signature, with the primitive rows `PrimAdm` that a universe supplies, and `Adm_exact`: each row is the domain of `denote` at the orientation, from the exactness of the primitive rows alone |
+| `Calculus/Lang/HeldFree.lean` | The held-free terms `HF`, where the Bool test `hasHeld` answers `false`, `sub_denote` from the laws of the top (`TopLaws`), and `compat_of_HF`, at every signature |
+| `Calculus/Lang/ExactV.lean` | The admission row `Adm` over a signature, and `Adm_exact`: each row is the domain of `denote` at the orientation, from the exactness of the primitive rows alone |
 | `Calculus/Lang/ExactA.lean` | The attribute side: `AdmA`, the primitive rows `PrimAdmA`, and `AdmA_exact`: each row is `dom(p)` |
-| `Calculus/Lang/Disjoint.lean` | The leaves `Leaf` that a universe supplies, and the structural disjointness test `Term.disjoint` over a signature, at a pairing of the binders, with its families |
-| `Calculus/Lang/Shapes.lean` | The shape classes `Shapes` that a universe supplies: the former class of each value and attribute, and where each former lands. The six disjointness laws per side are theorems of them, at every signature |
+| `Calculus/Lang/Disjoint.lean` | The structural disjointness test `Term.disjoint` over a signature, at a pairing of the binders, with its families |
+| `Calculus/Lang/Shapes.lean` | The six disjointness laws per side, as theorems of the shape classes `Shapes`, at every signature |
 | `Calculus/Lang/DisjointV.lean` | `disjoint_sound` at every signature: two terms the test keeps apart share no value, from the write-side laws `FormerAdm`, `LeafAdm` and `LeafMeet`, the shape classes and the top bound `TopBound` |
 | `Calculus/Lang/DisjointA.lean` | `disjoint_soundA` at every signature, as `disjoint_sound` at the dual: two terms the test keeps apart read no attribute in common, from `FormerAdmA`, `LeafAdmA` and `TopLaws`, and `disjoint_orthogonal`, which joins the two sides |
 | `Calculus/Lang/Compat.lean` | The compatibility decision `Term.compat` over a signature, per half and per component, with the closed-context oracle `CompatOracle`; `compat_sound`, and `pairwiseCompat_of_compatPair`, which discharges the union's obligation of two lawful options |
 | `Calculus/Lang/View.lean` | The view `view` at an orientation: each `held` becomes its term at the caller side, so the view holds no `held` (`HF_view`). The view admits what the term admits (`viewLe_of`), and two views that the test separates give two terms that share no value (`views_apart`) |
-| `Calculus/Lang/Path.lean` | A path into a term: `Seg`, `Frame`, `Term.at`, the write of the store at a path `putPath`, the strong law `strong_law` composed from one law per segment (`path_law`), and `narrow`, which keeps each option whose stored view the test does not separate from the clause, with `narrow_law` |
+| `Calculus/Lang/Path.lean` | A path into a term: `Frame`, `Term.at`, the strong law `strong_law` composed from one law per segment (`path_law`), and `narrow`, which keeps each option whose stored view the test does not separate from the clause, with `narrow_law` |
+| `Calculus/Lang/Universe.lean` | The facts of a universe that read no term: the primitive rows `PrimAdm`, the leaves `Leaf` and `LeafMeet`, the shape classes `Shapes`, the laws of the top `TopLaws`, and the held sets of the rules |
+| `Calculus/Lang/CodecPath.lean` | A path into a store: `Seg`, the write at a path `putPath`, and `path_law`, which composes the law of a write from one law per segment, for any frames |
 | `Calculus/Dynamo/Alg/Lists.lean` | The list plumbing at the DynamoDB carriers: the aliases of the generic traversal and `filter` facts, and the keyed clause `traverse_fst`, which reads `Name` |
 | `Calculus/Dynamo/Domain.lean` | `Member`, `Attr`, the value language, `Kind` with `Attr.kind` (the ten members collapsing onto eight), and `Numeral.WF` — the numeral grammar of the store, 38 significant digits and magnitude range, as a decidable predicate |
 | `Calculus/Dynamo/Alg/Codec.lean` | `Codec`, `Lawful` (a canonical partial bijection) and `LawfulCore` as abbreviations of the generic record and laws at `Value`, `Attr` and `Member`, and the aliases of the generic combinators |
@@ -50,7 +52,10 @@ definition it touches.
 | `Calculus/Dynamo/Lang/HeldSet.lean` | `T` as an identity: `typed_T_identity` ((A) at every rule); `typed_T_adm` in `Laminar.lean` proves (B) at every derivable term whose obligations hold |
 | `Calculus/Dynamo/Alg/Continuity.lean` | `Sub` as the information order that any ccpo must extend, and first-match resolution monotone (`selectF_mono_list`) and continuous (`selectF_continuous_list`) under the obligation that every admitter agrees |
 | `Calculus/Dynamo/Witness/Nesting.lean` | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is the nesting bound of the store, a parameter, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from the rules of the judgement rather than a premise someone failed to discharge |
-| `Calculus/Dynamo/Lang/Store.lean` | The DynamoDB port: `DynamoDB.maxNesting` instantiates the nesting bound at the store's 32 levels; `Numeral.Normal`/`Numeral.Stored`, `decimalCodec` and its `SurvivesStore` instance, `not_survivesStore_numberCodec`, the numeral-domain report (`decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases), and the text adapter `numeralOfStoredText`/`textOfNumeral` |
+| `Calculus/Dynamo/Lang/Store.lean` | The DynamoDB port: `DynamoDB.maxNesting` instantiates the nesting bound at the store's 32 levels; `decimalCodec` over `Numeral.Stored` and its `SurvivesStore` instance, `not_survivesStore_numberCodec`, the numeral-domain report (`decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases) |
+| `Calculus/Dynamo/Lang/Adapters.lean` | `Numeral.Normal`/`Numeral.Stored`, the text adapter `numeralOfStoredText`/`textOfNumeral`, and the table of the library `libTable` |
+| `Calculus/Dynamo/Lang/Universe.lean` | DynamoDB as a universe: `dynPrimAdm`, `ground_selfdual`, `dynLeaf`, `dynLeafMeet`, `dynShapes` and `Ω_topLaws`, with the lemmas on literals and sets that they read |
+| `Calculus/Dynamo/Lang/Clause.lean` | The data of a clause: `Pin`, `NameSpec`, `AltClause` with `altsSub` and `litSubAt`, and the conditions of a precondition `Cond` with `readPath` |
 | `Calculus/Dynamo/Witness/Refutations.lean` | The six "Do not hold" nodes of the specification's equations, all settled, over seven declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id`, plus `optional` nesting, which the syntax rules out, and `set(union(…))`, which the DynamoDB set obligation refuses (`setElem_union_refused`) |
 | `Calculus/Axioms.lean` | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
 | `Calculus/Dynamo/Witness/Discharge.lean` | The host's recursive schema for JSON (`jsonTerm`) carried through `soundness`, with the refusals of the guard pinned |
@@ -62,7 +67,7 @@ definition it touches.
 `Alg/Agree.lean`, `Alg/Converse.lean`, `Alg/Rows.lean`, `Lang/Converse.lean`, `JSON/Compat.lean`,
 `Dynamo/Analysis/Compat.lean`, `Confluence.lean`, `ExactA.lean`, `ExactV.lean`, `HeldFree.lean`, `Kernel.lean`,
 `Laminar.lean`, `LiteralArity1.lean`, `Malleability.lean`, `Dynamo/Analysis/Disjoint.lean`, `Merge.lean`,
-`Orthogonality.lean`, `Separation.lean`, `Slice.lean`, `Universal.lean`, `Bridge/Vectors.lean`,
+`Orthogonality.lean`, `Separation.lean`, `Slice.lean`, `Universal.lean`, `Bridge/Vectors.lean`, `Bridge/Verdicts.lean`, `Bridge/Kinds.lean`,
 `Bridge/Rows.lean` and `Bridge/Paths.lean` have none, and each opens with a module docstring that says
 what it is for.
 Read those.

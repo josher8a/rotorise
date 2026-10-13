@@ -1,5 +1,6 @@
 import Calculus.Lang.Term
 import Calculus.Alg.Rows
+import Calculus.Lang.Universe
 
 /-!
 # Disjointness over a universe signature
@@ -25,18 +26,6 @@ kernel.
 -/
 
 namespace Calculus.Alg
-
-/-- **The leaves that a universe supplies.** The primitives and the predicates are the only part
-    of a term that the test cannot read structurally. The leaves are facts of the signature at
-    each absolute side, so the dual universe has the leaves of the universe. -/
-class Leaf (B : Sig) where
-  /-- Whether two primitives share no value. -/
-  primsApart : B.Ground → B.Ground → Bool
-  /-- Whether a predicate is data that the test can compare with another. -/
-  isData : (s : Bool) → B.P s → Bool
-  /-- Whether two predicates hold together nowhere. `false` says nothing: the test reads no more
-      of a predicate than this answer. -/
-  predicatesApart : (s : Bool) → B.P s → B.P s → Bool
 
 variable {S : Sig}
 

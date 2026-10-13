@@ -33,42 +33,6 @@ namespace Calculus
 
 open Alg (Seg)
 
-/-! ## The precondition as data -/
-
-/-- A test that the store evaluates on one stored attribute. -/
-inductive Test where
-  /-- The attribute is one of the literals, at one base. The list holds at least one literal. -/
-  | «in» (k : GroundKind) (x : k.Carrier) (xs : List k.Carrier)
-  /-- The attribute has the member. -/
-  | type (m : Member)
-  /-- The attribute exists. -/
-  | «exists»
-
-/-- A condition: a test at a path into the item. A precondition is a list of conditions, and the
-    precondition holds where each condition holds. -/
-structure Cond where
-  path : List Seg
-  test : Test
-
-/-- **The attribute at a path into an item**, read with the segment read of the store
-    (`Alg.getSeg`), which the write at a path (`Alg.putPath`) also reads. -/
-def readPath : List Seg → Attr → Option Attr
-  | [], a => some a
-  | s :: π, a => (Alg.getSeg (S := dynSyn) s a).bind (readPath π)
-
-/-- The test on an attribute. -/
-def Test.eval : Test → Attr → Bool
-  | .in k x xs, a => (x :: xs).any fun y => inL k y a
-  | .type m, a => decide (a.member = m)
-  | .exists, _ => true
-
-/-- **A condition on an item**: the attribute at the path exists, and the test holds on the
-    attribute. -/
-def Cond.eval (c : Cond) (R : Attr) : Bool :=
-  match readPath c.path R with
-  | some a => c.test.eval a
-  | none => false
-
 /-! ## The order of the names
 
 A precondition lists the condition of each name of an object, so the names of a `Finset` need one
@@ -219,22 +183,6 @@ def preconditionOf : Term → List Seg → Option (List Cond)
       | _, _ => keysPrecondition (.mk fields fld w) π
   | _, _ => none
 
-/-- The segment read of a name at DynamoDB: the entry of a map, and nothing on any other attribute. -/
-theorem getSeg_name (k : String) (a : Attr) :
-    Alg.getSeg (S := dynSyn) (.name k) a =
-      match a with
-      | .m keys g => (⟨keys, g⟩ : MapOf Attr).at k
-      | _ => none := by
-  cases a <;> rfl
-
-/-- A path read with one more segment reads that segment after the path. -/
-theorem readPath_append : ∀ (π : List Seg) (s : Seg) (R : Attr),
-    readPath (π ++ [s]) R = (readPath π R).bind (Alg.getSeg (S := dynSyn) s)
-  | [], s, R => by cases h : Alg.getSeg (S := dynSyn) s R <;> simp [readPath, h]
-  | s' :: π, s, R => by
-      simp only [List.cons_append, readPath]
-      cases Alg.getSeg (S := dynSyn) s' R <;> simp [readPath_append]
-
 /-- The stored view of a `held` is the stored view of its stored side. -/
 theorem view_held (s : Bool) (t P : Term) k₀ k :
     Alg.view .dual (Term.held s t P k₀ k) = bif s then Alg.view .dual P else Alg.view .dual t := by
@@ -350,37 +298,6 @@ theorem admAt_name (t : Term) (π : List Seg) (n : String) (R : Attr) :
             cases h
             rw [dif_pos hn]; exact ha
       | _ => simp [getSeg_name]
-
-/-- A conjunction over the flattened lists of a traversal holds where each list holds. -/
-theorem all_flatten_mapM {X Y : Type} {f : X → Option (List Y)} {p : Y → Bool} :
-    ∀ {l : List X} {gss : List (List Y)}, l.mapM f = some gss →
-      (gss.flatten.all p = true ↔ ∀ x ∈ l, ∀ ys, f x = some ys → ys.all p = true)
-  | [], gss, h => by
-      simp only [List.mapM_nil, pure, Option.some.injEq] at h
-      subst h; simp
-  | x :: l, gss, h => by
-      simp only [List.mapM_cons, bind, pure, Option.bind_eq_some_iff, Option.some.injEq] at h
-      obtain ⟨ys, hx, gss', h', rfl⟩ := h
-      rw [List.flatten_cons, List.all_append, Bool.and_eq_true, all_flatten_mapM h']
-      constructor
-      · rintro ⟨h₁, h₂⟩ y hy zs hz
-        rcases List.mem_cons.mp hy with rfl | hy
-        · rw [hx] at hz; cases hz; exact h₁
-        · exact h₂ y hy zs hz
-      · intro h
-        exact ⟨h x List.mem_cons_self ys hx, fun y hy => h y (List.mem_cons_of_mem _ hy)⟩
-
-/-- A traversal that succeeds gives a value at each element. -/
-theorem isSome_of_mapM {X Y : Type} {f : X → Option Y} :
-    ∀ {l : List X} {ys : List Y}, l.mapM f = some ys → ∀ x ∈ l, ∃ y, f x = some y
-  | [], _, _, x, hx => nomatch hx
-  | x :: l, ys, h, z, hz => by
-      simp only [List.mapM_cons, bind, pure, Option.bind_eq_some_iff, Option.some.injEq] at h
-      obtain ⟨y, hx, ys', h', rfl⟩ := h
-      rcases List.mem_cons.mp hz with rfl | hz
-      · exact ⟨y, hx⟩
-      · exact isSome_of_mapM h' z hz
-
 
 /-- `storedLits` names the literals that the stored views of the options are. -/
 theorem viewL_storedLits {k : GroundKind} : ∀ {ts : List Term} {xs : List k.Carrier},

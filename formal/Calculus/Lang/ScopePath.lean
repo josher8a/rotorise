@@ -1,5 +1,5 @@
 import Calculus.Lang.ScopeSound
-import Calculus.Lang.Path
+import Calculus.Lang.CodecPath
 
 /-!
 # A path into a closed codec, and narrowing on the graph
