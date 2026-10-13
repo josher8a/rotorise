@@ -143,7 +143,7 @@ theorem Codec.ext {c d : Codec V M} (hT : c.T = d.T) (hμ : c.μ = d.μ) (he : c
   exact Orient.both (P := fun o => _ = _) he hp o
 
 /-- The degenerate codec: empty domains everywhere. Laws hold vacuously. It is the first stage of
-    a recursive term, and a variable that no binder gives. -/
+    a recursive codec, and the codec of a former that a universe lacks. -/
 def Codec.empty : Codec V M :=
   { T := fun _ => False, μ := none, f := fun _ _ => none }
 

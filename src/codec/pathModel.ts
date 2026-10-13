@@ -5,7 +5,7 @@
  * depth: the term in a type carries no closure and no fill value, so equal data is equal types.
  *
  * A term is a tuple. `['scope', D, K]` is the entry `K` of the record `D` of the terms of a scope,
- * and `['var', N]` is a name of the scope that holds it. A frame is `[Term, Env]`: the type keeps
+ * and `['ref', N]` is a name of the scope that holds it. A frame is `[Term, Env]`: the type keeps
  * its own stack of scopes, head first, and `Lookup` resolves a name against the stack. A segment
  * is `['name', K]` or `['pos', I]`.
  */
@@ -32,45 +32,49 @@ type SetMember<M> = M extends 'S'
         ? 'BS'
         : 'none'
 /**
- * An entry of a scope is the model's \`mu\` where the entry reaches its own name, and its definition
+ * An entry of a scope is the model's \`ref\` where the entry reaches its own name, and its definition
  * elsewhere: the emitter prints an entry that closes no cycle as its body. So the member of an
  * entry is \`none\` on a cycle, and the member of the definition otherwise.
  */
-type MuSyn<T, Env = []> = T extends ['scope', infer D, infer K]
-    ? MuSynEntry<D, K>
-    : T extends ['var', infer N]
+type StoredMember<T, Env = []> = T extends ['scope', infer D, infer K]
+    ? StoredMemberEntry<D, K>
+    : T extends ['ref', infer N]
       ? Lookup<Env, N> extends ['some', unknown, [['scope', infer D]]]
-          ? MuSynEntry<D, N>
+          ? StoredMemberEntry<D, N>
           : 'none'
       : T extends ['prim', ['base', infer K]]
         ? KindMember<K>
         : T extends ['prim', ['literal', infer K, unknown]]
           ? KindMember<K>
           : T extends ['set', infer E]
-            ? MuSyn<E, Env> extends 'none'
+            ? StoredMember<E, Env> extends 'none'
                 ? 'none'
-                : SetMember<MuSyn<E, Env>>
+                : SetMember<StoredMember<E, Env>>
             : T extends ['list', unknown, unknown, unknown]
               ? 'L'
               : T extends ['held', unknown, infer I, unknown, unknown, unknown]
-                ? MuSyn<I, Env>
+                ? StoredMember<I, Env>
                 : T extends ['refine', infer I]
-                  ? MuSyn<I, Env>
+                  ? StoredMember<I, Env>
                   : T extends ['legacy', infer I]
-                    ? MuSyn<I, Env>
+                    ? StoredMember<I, Env>
                     : T extends ['object', unknown]
                       ? 'M'
                       : T extends ['union', infer Os]
-                        ? Unanimous<MuSynList<Os, Env>>
+                        ? Unanimous<StoredMemberList<Os, Env>>
                         : 'none'
-type MuSynList<Os, Env> = Os extends [infer H, ...infer R]
-    ? [MuSyn<H, Env>, ...MuSynList<R, Env>]
+type StoredMemberList<Os, Env> = Os extends [infer H, ...infer R]
+    ? [StoredMember<H, Env>, ...StoredMemberList<R, Env>]
     : []
-type MuSynEntry<D, K> = K extends Reached<D, VarsOf<D[K & keyof D]>, never>
+type StoredMemberEntry<D, K> = K extends Reached<
+    D,
+    VarsOf<D[K & keyof D]>,
+    never
+>
     ? 'none'
-    : MuSyn<D[K & keyof D], [['scope', D]]>
+    : StoredMember<D[K & keyof D], [['scope', D]]>
 /** The names that a term reads and that no scope inside the term binds. */
-type VarsOf<T> = T extends ['var', infer N]
+type VarsOf<T> = T extends ['ref', infer N]
     ? N
     : T extends ['scope', unknown, unknown]
       ? never
@@ -103,9 +107,9 @@ type AllEq<R, H> = R extends [infer X, ...infer Rs]
 
 // ── the segment, and the store's refusal (`Seg.member`, `apartAt`) ──
 type SegMember<S> = S extends ['name', unknown] ? 'M' : 'L'
-type ApartAt<S, T, Env> = MuSyn<T, Env> extends 'none'
+type ApartAt<S, T, Env> = StoredMember<T, Env> extends 'none'
     ? false
-    : [MuSyn<T, Env>] extends [SegMember<S>]
+    : [StoredMember<T, Env>] extends [SegMember<S>]
       ? false
       : true
 type ApartOr<S, T, Env> = ApartAt<S, T, Env> extends true ? Some<[]> : None
@@ -135,7 +139,7 @@ type ListChild<Pre, Sp, Suf, I> = At<Pre, I> extends ['some', infer T]
       : None
 
 /**
- * The binder of the name `N` in the stack, and the stack under it (`env[i]?`, `env.drop (i + 1)`).
+ * The scope of the name `N` in the stack, and the stack under it (`env[i]?`, `env.drop (i + 1)`).
  * A scope `['scope', D]` binds each name of the record `D`. The name `N` reads the definition
  * `D[N]`, by one lookup in `D`, under the scope alone: a scope is closed.
  */
@@ -160,7 +164,7 @@ type FuelOf<Env extends unknown[]> = Env extends [['scope', unknown]]
     : [...Env, 0]
 
 /**
- * **One frame for one entry.** An entry of a scope, or a variable that a scope binds, is the frame
+ * **One frame for one entry.** An entry of a scope, or a `ref` that a scope binds, is the frame
  * of the definition of the entry, under the scope alone. So two paths to one entry give one frame,
  * as two paths to one term object give one term.
  */
@@ -170,7 +174,7 @@ type Norm<T, Env, Fuel extends unknown[] = ScopeFuel> = Fuel extends [
 ]
     ? T extends ['scope', infer D, infer K]
         ? Norm<D[K & keyof D], [['scope', D]], F2>
-        : T extends ['var', infer N]
+        : T extends ['ref', infer N]
           ? Lookup<Env, N> extends ['some', infer M, [['scope', infer D]]]
               ? Norm<M, [['scope', D]], F2>
               : [T, Env]
@@ -186,7 +190,7 @@ type ChildD<S, Env extends unknown[], T, Fuel extends unknown[]> = T extends [
       ? Some<[[T, Env]]>
       : T extends ['scope', infer D, infer K]
         ? ChildD<S, [['scope', D]], D[K & keyof D], ScopeFuel>
-        : T extends ['var', infer N]
+        : T extends ['ref', infer N]
           ? Lookup<Env, N> extends [
                 'some',
                 infer M,
@@ -241,7 +245,7 @@ type MapChild<S, Fs> = Fs extends [infer F, ...infer R]
 type PathHead<Fuel extends unknown[], F> = Fuel extends [unknown, ...infer F2]
     ? F extends [['scope', infer D, infer K], unknown]
         ? PathHead<F2, [D[K & keyof D], [['scope', D]]]>
-        : F extends [['var', infer N], infer Env]
+        : F extends [['ref', infer N], infer Env]
           ? Lookup<Env, N> extends ['some', infer M, infer Rest]
               ? PathHead<F2, [M, Rest]>
               : F
@@ -312,7 +316,7 @@ type OffersD<Env extends unknown[], T, Fuel extends unknown[]> = T extends [
     ? ['open'] | ['pos']
     : T extends ['scope', infer D, infer K]
       ? OffersD<[['scope', D]], D[K & keyof D], ScopeFuel>
-      : T extends ['var', infer N]
+      : T extends ['ref', infer N]
         ? Lookup<Env, N> extends ['some', infer M, infer Rest extends unknown[]]
             ? Fuel extends [unknown, ...infer F2]
                 ? OffersD<Rest, M, F2>
@@ -395,7 +399,7 @@ type DecodeT<
           ? unknown
           : T extends ['scope', infer D, infer K]
             ? DecodeT<D[K & keyof D], [['scope', D]], Fuel>
-            : T extends ['var', infer N]
+            : T extends ['ref', infer N]
               ? Lookup<Env, N> extends [
                     'some',
                     infer M,
@@ -495,7 +499,7 @@ type Resolved<
 > = Fuel extends [unknown, ...infer F2 extends unknown[]]
     ? T extends ['scope', infer D, infer K]
         ? Resolved<D[K & keyof D], [['scope', D]], F2>
-        : T extends ['var', infer N]
+        : T extends ['ref', infer N]
           ? Lookup<Env, N> extends ['some', infer M, [['scope', infer D]]]
               ? Resolved<M, [['scope', D]], F2>
               : [T, Env]
@@ -514,10 +518,10 @@ type OptionsOf<F> = F extends [['union', infer Os extends unknown[]], infer Env]
  * Two list shapes and the predicates of a refinement are not ported, and read as not apart.
  */
 type GraphFuel = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-/** An entry of a scope, as `['entry', D, K]` with its body and binder stack, or `None`. */
+/** An entry of a scope, as `['entry', D, K]` with its body and scope stack, or `None`. */
 type EntryOf<T, Env> = T extends ['scope', infer D, infer K]
     ? ['some', ['entry', D, K], D[K & keyof D], [['scope', D]]]
-    : T extends ['var', infer N]
+    : T extends ['ref', infer N]
       ? Lookup<Env, N> extends ['some', infer M, [['scope', infer D]]]
           ? ['some', ['entry', D, N], M, [['scope', D]]]
           : None
@@ -540,7 +544,7 @@ type RowG<L, LE, R, RE, A extends unknown[], F> = EntryOf<L, LE> extends [
     infer ME,
 ]
     ? ApartG<M, ME, R, RE, A, F>
-    : L extends ['var', unknown]
+    : L extends ['ref', unknown]
       ? RightG<L, LE, R, RE, A, F, ['none']>
       : L extends ['never']
         ? true
@@ -571,7 +575,7 @@ type RightG<L, LE, R, RE, A extends unknown[], F, Fam> = EntryOf<
     RE
 > extends ['some', unknown, infer M, infer ME]
     ? ApartG<L, LE, M, ME, A, F>
-    : R extends ['var', unknown]
+    : R extends ['ref', unknown]
       ? false
       : R extends ['never']
         ? true
@@ -714,7 +718,7 @@ type NarrowEach<Fs, CT> = Fs extends [
     : []
 
 /**
- * Whether an option of the frames is a free variable: a codec whose type carries no term, which a
+ * Whether an option of the frames is an unbound `ref`: a codec whose type carries no term, which a
  * clause cannot read.
  */
 export type HoldsFree<Fs> = Fs extends unknown[]
@@ -728,15 +732,15 @@ export type HoldsFree<Fs> = Fs extends unknown[]
                       ? Unbound<OptionsOf<Resolved<T, Env>>[number]>
                       : never
               }[number],
-              [['var', unknown], unknown]
+              [['ref', unknown], unknown]
           >,
       ] extends [never]
         ? false
         : true
     : true
 
-/** An option that is a variable that no binder of its stack binds. */
-type Unbound<O> = O extends [['var', infer N], infer Env]
+/** An option that is a `ref` that no scope of its stack binds. */
+type Unbound<O> = O extends [['ref', infer N], infer Env]
     ? Lookup<Env, N> extends ['some', unknown, unknown]
         ? never
         : O

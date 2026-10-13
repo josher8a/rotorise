@@ -240,16 +240,14 @@ export type Term =
     /**
      * A thunk, which is how this language spells a recursive schema.
      *
-     * The model has no thunk. It states a recursive schema with a binder: `Term.mu` at the term a
-     * thunk returns while that term is being read, and `Term.var` at the thunk. Any other thunk is
-     * the term it returns. The model's guard accepts the binder
-     * when the variable sits under a list or an object, and `opaque` is the same construct at a
-     * fixed body.
+     * The model has no thunk. It states a recursive schema as a scope graph: a scope, its entries,
+     * and `ref i` at the thunk that names entry `i`. Any other thunk is the term it returns. The
+     * model's guard accepts a cycle when a list or an object sits on the cycle.
      *
      * This library supports a recursive entity through a thunk, and `codec.recursive.spec.ts`
      * declares one, so the thunk stays. **Everything else here reads through it.**
      * {@link occV}, {@link occA} and {@link ownsNullOf} answer what the term underneath answers,
-     * and the emitter reads the binder at the term that closes the cycle. Only
+     * and the emitter prints an entry of a cycle as a `ref`. Only
      * {@link member} answers `undefined`, because the host cannot force a thunk safely at
      * declaration: forcing a recursive thunk can loop.
      *
@@ -1120,7 +1118,7 @@ export const openRefusal = (t: Term): CodecError | undefined => {
  *
  * - `0`: the term has no recursion;
  * - `1`: each cycle has an order, so each stage reads a shallower input;
- * - `2`: a cycle has no container on its path, so the recursion reads the input of its own binder;
+ * - `2`: a cycle has no container on its path, so the recursion reads the input of its own entry;
  * - `3`: a cycle has an adapter on its path. Caller code makes the input of the inner term, at any
  *   depth. A `held` converts the value, and a `withLegacyRead` writes the older reader's answer.
  *
@@ -1209,16 +1207,16 @@ export const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
 }
 
 /**
- * **A view that reads through a thunk**, as the model's views read through `mu`: the view of a
+ * **A view that reads through a thunk**, as the model's views read through `ref`: the view of a
  * thunk is a thunk that returns the view of the term that the first thunk returns. Each term
  * object has one view object, so a cycle of the term is a cycle of the view, closed at the view
- * of the same binder. The emitter then prints the view as `mu` of the view of the body, and
- * a variable of the view at the thunk.
+ * of the same term. The emitter then prints the view as a scope whose entries are the views of
+ * the entries, and a `ref` of the view at the thunk.
  *
  * The build forces no thunk, so it ends: it recurses only through the edges that are not a
  * thunk, and every such edge of a term is built before the term. A thunk of the view forces its
  * thunk when a reader of the view reads it. A thunk that throws throws there, and the reader
- * reads it as a free variable. So the thunk of the view forces its thunk directly and not through
+ * reads it as an unbound `ref`. So the thunk of the view forces its thunk directly and not through
  * {@link force}: the throw must reach the {@link force} of the reader at the thunk of the view.
  */
 export const throughThunks =
@@ -1244,9 +1242,8 @@ export const throughThunks =
  * because the older reader reads every attribute.
  *
  * **The view keeps a predicate only where the inner term decodes the same in the view as in the
- * term**: where the inner term lies below the top ({@link belowTop}), read at its own scope. An
- * adapter (`held`, `withLegacyRead`, a field with a stand-in) or a free variable can run caller
- * code there. Elsewhere the view drops the predicate, because data exists only on the side where
+ * term**: where the inner term lies below the top ({@link belowTop}). An adapter (`held`,
+ * `withLegacyRead`, a field with a stand-in) or an unbound `ref` can run caller code there. Elsewhere the view drops the predicate, because data exists only on the side where
  * it was stated: the stored side reads the predicate only through `g`, and the view keeps no
  * closure.
  */
@@ -1255,9 +1252,7 @@ export const storedView = throughThunks((t, view) => {
         case 'held':
             return view(t.inner)
         case 'refine':
-            return belowTop(t.inner, { binds: bindersOf(t.inner), inside: [] })
-                ? t
-                : view(t.inner)
+            return belowTop(t.inner) ? t : view(t.inner)
         default:
             return mapChildren(t, view)
     }
@@ -1405,136 +1400,70 @@ const samePredicate = (p: Predicate, q: Predicate): boolean => {
 /* ── a term below the top ─────────────────────────────────────────────────────────────── */
 
 /**
- * **Whether each variable that the spelling reads is safe in the context**, the model's
- * `Term.safe`: its binder is in the context, or is a binder of the term itself. A free variable is
- * not safe. With no binder in the context, the term is closed, the model's `Term.closed`.
- */
-const safeAt = (t: Term, scope: Scope, safe: ReadonlySet<Term>): boolean => {
-    const one = see(t, scope)
-    switch (one.kind) {
-        case 'mu':
-            return safeAt(one.body, one.scope, new Set([...safe, one.body]))
-        case 'var':
-            return safe.has(one.binder)
-        case 'free':
-            return false
-        case 'term':
-            break
-    }
-    const on = (inner: Term) => safeAt(inner, scope, safe)
-    const u = one.t
-    switch (u.kind) {
-        case 'held':
-            return on(u.inner) && on(u.outer)
-        case 'legacy':
-        case 'refine':
-            return on(u.inner)
-        case 'set':
-            return on(u.elem)
-        case 'list':
-            return (
-                u.pre.every(on) &&
-                (u.spread === undefined || on(u.spread)) &&
-                u.suf.every(on)
-            )
-        case 'object':
-            return (
-                Object.values(u.body.fields).every((field) => on(field.t)) &&
-                (u.body.rest === undefined || on(u.body.rest))
-            )
-        case 'union':
-            return u.options.every(on)
-        default:
-            return true
-    }
-}
-
-/**
- * **Whether a term is closed at the scope**, the model's `Term.closed`: it reads no variable of a
- * binder outside it. A binder of the term itself is inside it.
- */
-const closedAt = (t: Term, scope: Scope): boolean => safeAt(t, scope, new Set())
-
-/**
- * **Whether a term lies below the top at the scope**, the model's `!hasHeld t && t.closed`: it
- * holds no adapter and it is closed. Such a term writes one value to one attribute and reads one
- * attribute to one value, as the top does, so a predicate over it reads the value itself.
- */
-const belowTop = (t: Term, scope: Scope): boolean =>
-    !holdsAdapter(t, scope) && closedAt(t, scope)
-
-/**
- * **Whether the spelling of a term at a scope holds an adapter**, the model's `hasHeld`. A
- * variable is not an adapter. The host reads three more terms as an adapter, because no bound
- * below `opaque` covers each one. A free variable is a thunk that names a codec not yet declared,
- * and that codec can hold a `held`. A `withLegacyRead` reads an attribute through caller code. A
- * field with a fallback reads a map without the name to a value with the name.
- */
-const holdsAdapter = (t: Term, scope: Scope): boolean => {
-    const one = see(t, scope)
-    switch (one.kind) {
-        case 'mu':
-            return holdsAdapter(one.body, one.scope)
-        case 'var':
-            return false
-        case 'free':
-            return true
-        case 'term':
-            break
-    }
-    const on = (inner: Term) => holdsAdapter(inner, scope)
-    const u = one.t
-    switch (u.kind) {
-        case 'held':
-        case 'legacy':
-            return true
-        case 'refine':
-            return on(u.inner)
-        case 'set':
-            return on(u.elem)
-        case 'list':
-            return (
-                u.pre.some(on) ||
-                (u.spread !== undefined && on(u.spread)) ||
-                u.suf.some(on)
-            )
-        case 'object':
-            return (
-                Object.values(u.body.fields).some(
-                    (field) => field.mark === 'fallback' || on(field.t),
-                ) ||
-                (u.body.rest !== undefined && on(u.body.rest))
-            )
-        case 'union':
-            return u.options.some(on)
-        default:
-            return false
-    }
-}
-
-/**
- * **Where a walk is in one operand**: the term objects that bind a variable, and the binders the
- * walk is inside, nearest last.
+ * **Whether a term lies below the top**, the model's `belowTop`: the term reaches no adapter.
+ * Such a term writes one value to one attribute and reads one attribute to one value, as the top
+ * does, so a predicate over it reads the value itself.
  *
- * A recursive host schema is a cycle of term objects closed by a thunk. The model names the cycle
- * with a binder: `Term.mu` at the object that a thunk returns while that object is on the walk,
- * and `Term.var k` at the thunk, where `k` counts the binders between the two. Any other thunk is
- * the term it returns. The emitter and the stored view read one spelling, so both read it
- * through this scope.
+ * The host reads three more terms as an adapter, because no bound below `opaque` covers each one.
+ * A thunk that throws is an unbound `ref`, and the codec that the `ref` names can hold a `held`. A
+ * `withLegacyRead` reads an attribute through caller code. A field with a fallback reads a map
+ * without the name to a value with the name.
+ *
+ * The walk reads each term once. A term that the walk meets again closes a cycle, and a cycle adds
+ * no adapter that the first reading of the term did not find. So the walk ends, and a recursive
+ * term below the top keeps its predicate.
  */
-export type Scope = {
-    readonly binds: ReadonlySet<Term>
-    readonly inside: readonly Term[]
+const belowTop = (root: Term): boolean => {
+    const seen = new Set<Term>()
+    const adapts = (t: Term): boolean => {
+        if (seen.has(t)) return false
+        seen.add(t)
+        switch (t.kind) {
+            case 'lazy': {
+                const target = force(t)
+                return target === undefined || adapts(target)
+            }
+            case 'held':
+            case 'legacy':
+                return true
+            case 'refine':
+                return adapts(t.inner)
+            case 'set':
+                return adapts(t.elem)
+            case 'list':
+                return (
+                    t.pre.some(adapts) ||
+                    (t.spread !== undefined && adapts(t.spread)) ||
+                    t.suf.some(adapts)
+                )
+            case 'object':
+                return (
+                    Object.values(t.body.fields).some(
+                        (field) => field.mark === 'fallback' || adapts(field.t),
+                    ) ||
+                    (t.body.rest !== undefined && adapts(t.body.rest))
+                )
+            case 'union':
+                return t.options.some(adapts)
+            default:
+                return false
+        }
+    }
+    return !adapts(root)
 }
 
 /**
- * **The binders of a term**: each term object that a thunk returns while that object is on the
- * stack of the walk. A thunk that throws binds nothing, because {@link see} reads the thunk as a
- * free variable. The walk forces each thunk and stops at a cycle, so it ends: a thunk memoizes
- * its codec, and every other edge of a term is built before the term.
+ * **The re-entered terms of a root**: each term that a thunk returns while that term is on the
+ * stack of a walk from the root. A re-entered term is an entry of a cycle that reaches its own
+ * `ref`. A thunk that throws returns no term. The walk forces each thunk and stops at a cycle, so
+ * it ends: a thunk memoizes its codec, and every other edge of a term is built before the term.
+ *
+ * **The walk reads every path, and keeps no visited set.** A term re-enters on one path and not on
+ * another, so a visited set loses a re-entered term, and the path walk of `at` then reads a member
+ * at a term where it read none.
  */
-export const bindersOf = (root: Term): ReadonlySet<Term> => {
-    const binds = new Set<Term>()
+export const reenteredOf = (root: Term): ReadonlySet<Term> => {
+    const reentered = new Set<Term>()
     const walk = (t: Term, stack: readonly Term[]): void => {
         const on = [...stack, t]
         const next = (one: Term) => walk(one, on)
@@ -1542,7 +1471,7 @@ export const bindersOf = (root: Term): ReadonlySet<Term> => {
             case 'lazy': {
                 const target = force(t)
                 if (target === undefined) return
-                if (on.includes(target)) binds.add(target)
+                if (on.includes(target)) reentered.add(target)
                 else next(target)
                 return
             }
@@ -1570,7 +1499,7 @@ export const bindersOf = (root: Term): ReadonlySet<Term> => {
         }
     }
     walk(root, [])
-    return binds
+    return reentered
 }
 
 /** A term that holds no other term. A component of the term graph never holds one. */
@@ -1776,36 +1705,6 @@ export const entryOrder = (component: Component): EntryOrder => {
                 reason: 'an unguarded cycle: an entry reads its own input above every guard',
             }
     return { kind: 'order', entries }
-}
-
-/**
- * **A term as the model spells it at a scope**: a binder, a variable, a free variable, or a
- * constructor. A free variable is a thunk that throws, and it pairs with no binder.
- */
-type Seen =
-    | { readonly kind: 'mu'; readonly body: Term; readonly scope: Scope }
-    | { readonly kind: 'var'; readonly binder: Term }
-    | { readonly kind: 'free' }
-    | { readonly kind: 'term'; readonly t: Term }
-
-/**
- * A binder of the scope that the walk is not inside is `mu` of its body, and the walk is then
- * inside the binder. A thunk that returns a binder the walk is inside is a variable. A thunk that
- * throws is a free variable. Any other thunk is the term it returns.
- */
-const see = (t: Term, scope: Scope): Seen => {
-    if (scope.binds.has(t) && !scope.inside.includes(t))
-        return {
-            kind: 'mu',
-            body: t,
-            scope: { binds: scope.binds, inside: [...scope.inside, t] },
-        }
-    if (t.kind !== 'lazy') return { kind: 'term', t }
-    const target = force(t)
-    if (target === undefined) return { kind: 'free' }
-    return scope.inside.includes(target)
-        ? { kind: 'var', binder: target }
-        : see(target, scope)
 }
 
 /**

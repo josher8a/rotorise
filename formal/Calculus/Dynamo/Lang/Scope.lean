@@ -78,6 +78,11 @@ structure Body (c w : Nat) where
 /-- The rule `(object)`. -/
 abbrev Term.object (b : Body c w) : Term c w k := Alg.Scoped.Term.object b.fields b.slot b.wild
 
+/-- The rule `(record)`: the object that declares no name and takes every key at one codec. It is
+    not a constructor, because the open block is a block like any other. -/
+abbrev Term.record (val : Term c w w) : Term c w k :=
+  Term.object (.mk ∅ (fun x => absurd x.2 (Finset.notMem_empty x.1)) (some val))
+
 end Builders
 
 end Scoped

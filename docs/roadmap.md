@@ -17,8 +17,8 @@ moves and a declaration name does not.
 
 ## The term language is founded on a pre-term, so an undischargeable union has no inhabitant
 
-**The future state.** `Term` becomes a subtype of a pre-term, carrying its own well-formedness:
-`{t : PreTerm // wf t = true}`, where `wf` recurses after the inductive rather than inside it. A
+**The future state.** `Scoped.Term` becomes a subtype of a pre-term, carrying its own well-formedness:
+`{t : PreTerm // wf t = true}`, where `wf` recurses after the `SFlat` rather than inside it. A
 union whose options are not shown compatible then has no inhabitant, so such a union is a type
 error rather than a runtime refusal.
 
@@ -37,9 +37,9 @@ elaborates and is axiom-free, so the obstruction is not expressibility but cost.
 **The obligation is a `Prop` today.** The compatibility of a union sits in `TOp.obl`, beside the
 judgement, and a term that does not meet it is still a term.
 
-**The cost is structural.** Every constructor of `Term` becomes a smart constructor carrying a proof
-obligation, and every match on a term goes through the subtype's first projection. `Term` is the
-vocabulary of most of `Calculus/`, so the re-founding reaches every signature that names it. The
+**The cost is structural.** Every operation of `Scoped.Term` becomes a smart constructor carrying a
+proof obligation, and every match on a term goes through the subtype's first projection.
+`Scoped.Term` is the vocabulary of most of `Calculus/`, so the re-founding reaches every signature that names it. The
 commit that probed this holds the site count; the count moves with the tree and the shape of the
 cost does not.
 

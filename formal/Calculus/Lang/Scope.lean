@@ -7,7 +7,7 @@ import Calculus.Alg.System
 `TOp B` holds one operation per constructor of the term, with the data of the constructor. Its
 positions are typed: `TOp.Pos o` is the type of the children of `o`, and `TOp.pos o` enumerates
 them. `TSig B` is the term container, and it holds no table. The algebra `TStep τ` runs each
-operation as `denoteAbs` reads the constructor, at the tables `τ`.
+operation at the former of the meaning, at the tables `τ`.
 
 A term of a scope is an `SFlat` over the term container with constants, and a closed codec is a
 `DSys`. Its meaning is the solution of the DAG of scopes at a root entry.
@@ -213,7 +213,7 @@ def restOf : (s : Fin 2) → (Fin s → Mean.C B) → RestSem (Mean.V (B := B)) 
   | ⟨0, _⟩, _ => .refuse
   | ⟨1, _⟩, f => .codec (f ⟨0, Nat.one_pos⟩)
 
-/-- **The codec of each operation**, the clause of `denoteAbs` for the constructor. -/
+/-- **The codec of each operation**: the former of the meaning at the constructor. -/
 def TOp.run : (o : TOp B) → (o.Pos → Mean.C B) → Mean.C B
   | .prim g, _ => Mean.ground g
   | .opaq, _ => idCodec

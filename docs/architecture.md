@@ -63,7 +63,7 @@ instance, and JSON is a second instance.
 | `Alg/Lists.lean`, `Alg/Positions.lean`, `Alg/Maps.lean` | the traversal and `entrywise`, the positional theory, the image of a function over a key set, and `MapOf`, which keeps the namespace `Calculus` |
 | `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
 | `Alg/Agree.lean` | agreement `Agree` at an orientation, whose two halves are the host and the dual, one lemma per combinator, and `compat_iff_agree` |
-| `Lang/Term.lean` | the term family over a signature, `denote`, and the guard |
+| `Lang/Term.lean` | the signature `Sig`, the syntax `Syn`, the meaning `Mean`, and the tables of adapters |
 | `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, and the DAG of scopes with `dagGuardB_iff_dsys` |
 | `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, and `Scoped.Closed.compat_of_HF` |
 | `Lang/Universe.lean`, `Lang/ScopeDisjoint.lean` | the class `Leaf`, the structural disjointness decision `Scoped.disjoint` over two closed codecs with its soundness `Scoped.disjoint_sound`, the view `viewG` at an orientation, and `views_apart` |
@@ -189,11 +189,10 @@ primitives and of its formers, and the generic combinators supply the rest.
 second is lawful: the top is the identity, which is canonical.
 
 **The instance names the generic declarations.** At DynamoDB, `Codec` and `Lawful` are
-abbreviations at the DynamoDB carriers, and `Term` is an abbreviation at `dynSyn`.
+abbreviations at the DynamoDB carriers, and `Scoped.Term` is an abbreviation at `dynSig`.
 `Closed.Typed` and `Closed.Obligations` state the generic judgement and the generic obligations of
 a closed codec at the DynamoDB tables. A `match_pattern` abbreviation keeps each constructor
-spelling, such as `Term.string` and `Term.literal`. `Term.casesD` keeps the case tags `base` and
-`literal`. A cited DynamoDB theorem, such as `Closed.sound`, states the generic theorem at the
+spelling, such as `Term.string` and `Term.literal`. A cited DynamoDB theorem, such as `Closed.sound`, states the generic theorem at the
 DynamoDB names.
 
 **The DynamoDB meaning is the generic meaning of a closed codec.** `Closed.meaning` reads the
@@ -266,53 +265,48 @@ about the graph is enforced.
 
 ## The term family, and what a stratum owes
 
-`Term S`, `Body S` and `ObjectSlot S` are inductives in one `mutual` block over a signature `S`,
-in `Lang/Term.lean`. At DynamoDB, `Term`, `Body` and `ObjectSlot` are their abbreviations at
-`dynSyn`. **The point of the split is negative: no `Term` position accepts an `ObjectSlot`.** A
-slot is not a term, so a nonsensical term is a type error rather than a rule somebody must
-remember to refuse.
+A term of a scope is an `SFlat` over the term container `TSig B`, in `Lang/Scope.lean`. `TOp B`
+holds one operation per constructor, with the data of the constructor, and `TOp.Pos` types the
+children of each operation. At DynamoDB, `Term`, `Body` and `ObjectSlot` in the namespace
+`Scoped` are their abbreviations at `dynSig`. **The point of the typed positions is negative: no
+term position accepts a slot.** A slot is a `SlotMode` and a term, and only a key of an object
+holds one, so a nonsensical term is a type error rather than a rule somebody must remember to
+refuse.
 
-`Body` bundles the object payload — the declared key set, the slot at each key, and the one open
-block — into one thing. Two consequences are the reason to do it again:
+`TOp.obj` holds the object payload — the declared key set, the presence of the slot at each key,
+and the count of the open block — in one operation. Two consequences are the reason to do it
+again:
 
-- Every table over terms gets a one-argument object row that delegates to a `Body` companion.
-  Threading the payload's parts by hand is what made them agree by convention rather than by type.
+- Every table over terms gets one object row. Threading the payload's parts by hand is what made
+  them agree by convention rather than by type.
 - A `Finset Name` together with a function off the membership subtype makes the no-duplicate-keys
   premise disappear. Both a repeated name and two orderings of one object stop being
-  representable. `ObjectSlot` sits in the function's codomain, which is strictly positive.
+  representable.
 
-A primitive is one constructor, `prim`, over the primitives of the universe. At DynamoDB the
+A primitive is one operation, `prim`, over the primitives of the universe. At DynamoDB the
 primitives are `Ground`, with the constructors `base` over a `GroundKind` and `literal`, so a
 table over terms states every ground base in one row. `opaq` denotes the top of the universe.
 
-`ObjectSlot` carries the current-schema rule and one older reading. A required slot remains
-required on both current-schema sides. A `fill` slot is required on the write, and its read gives
-an absent name the slot's constant. `req` and `optional` are self-dual and the fill is not, so a
-slot states its requirement at an orientation (`ObjectSlot.isReqAt`). An alternate reader of a
-present value is `Codec.extendRead`, over the codec of one current `Term`.
-Structural operations, including disjointness and union certification, operate on `Term`. They
-cannot observe an alternate reader. They read a fill through its presence only: on the read, union
-certification accepts a fill beside a `req` slot and beside no other slot.
-
-`Body`'s projections `Body.fields`, `Body.at` and `Body.wild` are written by hand, because `Body`
-is an `inductive` with one constructor. The `mutual` block of `Term`, `Body` and `ObjectSlot` also
-elaborates with `Body` as a `structure`, and with a `MapOf ObjectSlot` argument in place of the key
-set and the slot function. `Body` takes neither form. Rows needing all three match on the
-constructor, which keeps the equation compiler's reductions available.
+`SlotMode` carries the current-schema rule. A required slot remains required on both
+current-schema sides. A `fill` slot is required on the write, and its read gives an absent name
+the slot's constant. `req` and `opt` are self-dual and the fill is not. An alternate reader of a
+present value is `Codec.extendRead`, over the codec of one current term.
+Structural operations, including disjointness and union certification, operate on closed codecs.
+They cannot observe an alternate reader. They read a fill through its presence only: on the read,
+union certification accepts a fill beside a `req` slot and beside no other slot.
 
 **A stratum owes a companion in each of these places.** Miss one and the failure is not a build
 error but a silent "everything": the analysis stays sound and stops saying anything.
 
-| Companion | For `Body` | Why it is owed |
+| Companion | For the object | Why it is owed |
 | --- | --- | --- |
-| a depth clause | `Body.depth` | the termination measure must see through it |
-| a denotation clause | `bodySem`, generic | `denote` must dispatch with no case split at the use site |
+| a denotation clause | the `obj` row of `TOp.run`, generic | the meaning must dispatch with no case split at the use site |
 | a spec projection | `Closed.spec` | a slice reads an object option's names and literals off the spec |
 | a premise carrier | `Scoped.Obligations`, at the object node | semantic side conditions are structural, not global |
 | an emitter clause | the object row of `src/codec/lean.ts` | the bridge writes terms in this language, and a constructor it cannot spell breaks it |
 
-The depth clause, the denotation clause and the premise carrier are generic, and each universe
-inherits them. The spec projection is a DynamoDB table.
+The denotation clause and the premise carrier are generic, and each universe inherits them. The
+spec projection is a DynamoDB table.
 
 The spec projection is owed only by a stratum that holds names. A policy answers to no name.
 Every other row is owed unconditionally.
@@ -358,15 +352,9 @@ undecidable; a syntactic premise in `Scoped.Obligations` becomes a burden every 
 
 ## Termination
 
-`Term.depth` is the measure of a proof by recursion on a term. The built-in size measure cannot serve: the object
-payload's field table is a function, and that measure is blind to functions. `Term.depth` takes a
-supremum over the key set where a list would fold.
-
-What matters is that the measure is **derived from the term**, so it appears in no statement, no
-`Obligations` and no rule. That is the whole difference between it and a fuel parameter.
-
-`term_depth_wf` is the shared tactic for a term recursion. Anything new recursing on a term takes
-it, and an inequality the block does not offer goes beside `Term.depth` rather than inline.
+A proof by recursion on a term of a scope is a structural recursion on `SFlat`: each child of a
+node is a value of the argument function of the node. So no measure appears in a statement, in
+`Obligations` or in a rule. That is the whole difference between it and a fuel parameter.
 
 A recursive codec recurses on its input, not on the term. The solution of a closed codec reads each
 input at the stage that the input's own depth names, by the depth of the universe: `Syn.d`, which
@@ -390,8 +378,8 @@ below a container and below no `held` and no older reader. A system that passes 
 scopes (`dagGuardB_iff_dsys`), and `Graph.guarded` decides the condition at DynamoDB. The guard
 refuses two shapes, and each is a graph with no form as a DAG of scopes:
 
-- an entry that reads its own input, as the specification's `mu (var 0)`
-  (`Graph.unguarded_no_dag`) and `mu (union [var 0, string])` (`Graph.option_at_input_no_dag`).
+- an entry that reads its own input, as an entry whose body is `ref 0`
+  (`Graph.unguarded_no_dag`) or `union [ref 0, string]` (`Graph.option_at_input_no_dag`).
   The stages of such a term never grow;
 - a `held` between an entry and its reference (`Graph.held_on_path_no_dag`). The caller-side
   function of a `held` can make the input deeper, so a container on the path does not bound the
@@ -1147,7 +1135,7 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
   its `Leaf` where the decision must compute, and its `Shapes`, `LeafMeet` and `Scoped.Laws` where
   the soundness of the decision must hold. Make the module reachable from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.
-- New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
+- New term recursion → a structural recursion on `SFlat`, with no measure.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness
   clause, because a missing row is silent and silence is sound.
 - Sharpening a row that answers "everything" at a container → find what relied on the slack

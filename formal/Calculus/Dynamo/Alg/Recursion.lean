@@ -16,7 +16,8 @@ From it alone the stages agree past the depth of the input (`muStage_agree`), th
 fixed point of the body (`muCodec_fix`), and lawful stages give a lawful limit
 (`lawful_muCodec`). No option of the body has to be disjoint from another for these three.
 
-`Term.mu` denotes `muCodec` of its body.
+`muCodec` is entry 0 of the system of one entry (`Alg.solve_one`), so a closed codec of one
+entry that reads itself denotes `muCodec` of its body.
 -/
 
 namespace Calculus

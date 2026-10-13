@@ -9,8 +9,8 @@ The host's recursive schema for JSON as a closed codec (`jsonClosed`), carried t
 A closed codec names an entry above every guard only below its own position, and below a wall
 it names no entry of its own scope: the type of a scope term holds no other leaf. The flat graph
 of a codec has a form as a DAG of scopes exactly where `dagGuardB` accepts it
-(`dagGuardB_iff_dsys`). So a shape that the guard of a binder refuses is a graph that `dagGuardB`
-refuses, and no closed codec has that graph as its graph form.
+(`dagGuardB_iff_dsys`). So a shape that `dagGuardB` refuses has no closed codec with that graph
+as its graph form.
 -/
 
 namespace Calculus
@@ -115,14 +115,16 @@ def Graph.DagForm (g : Graph) : Prop :=
 theorem Graph.dagForm_iff (g : Graph) : g.DagForm ↔ g.guarded = true :=
   Alg.dagGuardB_iff_dsys.symm
 
-/-- The graph of `mu (var 0)`: one entry that names itself at its own input. -/
+/-- The graph of one entry whose body is `ref 0`: the entry names itself at its own input. -/
 def unguardedGraph : Graph := ⟨1, fun _ => Scoped.Graph.Term.ref 0⟩
 
-/-- The graph of `mu (union [var 0, string])`: an option names its own entry at its input. -/
+/-- The graph of one entry whose body is `union [ref 0, string]`: an option names its own entry at
+    its input. -/
 def optionAtInputGraph : Graph :=
   ⟨1, fun _ => Scoped.Graph.Term.union [Scoped.Graph.Term.ref 0, Scoped.Graph.Term.string]⟩
 
-/-- The graph of `mu (array (held false (var 0) opaque …))`: a `held` names its own entry. -/
+/-- The graph of one entry whose body is `array (held false (ref 0) opaque …)`: a `held` names its
+    own entry. -/
 def heldOnPathGraph : Graph :=
   ⟨1, fun _ => Scoped.Graph.Term.array
     (Scoped.Graph.Term.held false (Scoped.Graph.Term.ref 0) Scoped.Graph.Term.opaq (.caller 0, false) [])⟩
@@ -145,7 +147,8 @@ def jsonGraph : Graph :=
   ⟨1, fun _ => Scoped.Graph.Term.union
     [Scoped.Graph.Term.string, Scoped.Graph.Term.array (Scoped.Graph.Term.ref 0)]⟩
 
-/-- The graph of `mu (array (mu (array (var 1))))`: two entries, each an array of the other. -/
+/-- The graph of two entries whose bodies are `array (ref 1)` and `array (ref 0)`: each entry is an
+    array of the other. -/
 def nestGraph : Graph := ⟨2, fun i => Scoped.Graph.Term.array (Scoped.Graph.Term.ref i.rev)⟩
 
 /-- **An entry under a container has a closed codec**, and so do two entries that name each other

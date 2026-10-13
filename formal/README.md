@@ -16,7 +16,7 @@ definition it touches.
 | `Calculus/Alg/Maps.lean` | `funImage` and `setImage` over any key type, `FieldSem` and `RestSem`, and the keyed map `MapOf`, which keeps the namespace `Calculus` so that field notation reaches its extensions |
 | `Calculus/Alg/Containers.lean` | `listCodec` and `objectCodec` over the list and keyed-map prisms of a universe, with their laws and carriers |
 | `Calculus/Alg/Recursion.lean` | `AgreeLe`, `Contractive`, `muCodec` and `lawful_muCodec` over one depth function of the carrier, and the agreement lemmas of the combinators |
-| `Calculus/Lang/Term.lean` | The universe signature: `Syn` (the syntax) and the class `Sem` (the meaning), with the formers `ListA`, `MapA` and `SetF`. The term family `Term S`/`Body S`/`ObjectSlot S`, the guard `Term.guarded`, `Term.depth`, `denote`, and the tactic `term_depth_wf` |
+| `Calculus/Lang/Term.lean` | The universe signature: `Syn` (the syntax) and the class `Sem` (the meaning), with the formers `ListA`, `MapA` and `SetF`, the adapter words `Word`, and the tables `TableAt` and `Table` |
 | `Calculus/Lang/Scope.lean` | The closed codec over a signature: the term container `TSig`, a scope term `Scoped.Term`, its graph form `Scoped.Graph`, and `Scoped.Closed`, a DAG of scopes. Its meaning `Scoped.Closed.meaning` at a root entry is the solution of the scopes at the root |
 | `Calculus/Lang/ScopeSound.lean` | The judgement `Scoped.Typed` of a scope term through the rule `TOp.rule` of each operation, the obligation `TOp.obl` of each operation (the cancellation of a `held`, the compatibility of a union), `Scoped.Closed.Typed` and `Scoped.Closed.Obligations`, and `Scoped.Closed.sound` with `Scoped.Closed.meaning_lawful`, at every signature |
 | `Calculus/Lang/ScopeHeldFree.lean` | The held-free closed codecs `Scoped.Closed.HF`, `Scoped.Closed.sub` from the laws of the top (`TopLaws`), and `Scoped.Closed.compat_of_HF`, at every signature |
@@ -35,7 +35,7 @@ definition it touches.
 | `Calculus/Dynamo/Alg/Carriers.lean` | One `Carrier` lemma per combinator, so the judgement's held-set index is the domain of the pair |
 | `Calculus/Dynamo/Alg/Lawful.lean` | The lawfulness lemmas this development discharges, one per construction |
 | `Calculus/Dynamo/Alg/Frontier.lean` | The lawfulness lemmas that are stated and not yet discharged, and the ones whose discharge is partial |
-| `Calculus/Dynamo/Lang/Term.lean` | The DynamoDB signature: `Pred`, `SetElem`, the primitives `Ground` with `groundCodec`, the formers `dList`, `dMap` and `dSet`, `dynSyn` and `dynSem`. `Term`, `Body` and `ObjectSlot` are abbreviations at `dynSyn`, with one `match_pattern` abbreviation per constructor spelling and the eliminator `Term.casesD` |
+| `Calculus/Dynamo/Lang/Term.lean` | The DynamoDB signature: `Pred`, `SetElem`, the primitives `Ground` with `groundCodec`, the formers `dList`, `dMap` and `dSet`, `dynSyn` and `dynSem`, the stored table `dynTableA`, and the abbreviations `Table` and `Word` at `dynSyn` |
 | `Calculus/Dynamo/Alg/Recursion.lean` | Guarded recursion: `muCodec` budgets each input by its own depth (`Value.depth`/`Attr.depth`); from `Contractive` alone the stages agree past the depth (`muStage_agree`), the limit is a fixed point (`muCodec_fix`), and lawful stages give a lawful limit (`lawful_muCodec`); each container keeps agreement one layer down |
 | `Calculus/Dynamo/Lang/Scope.lean` | The closed codec of DynamoDB `Closed`: a DAG of scopes over the term container, and a root entry. Its meaning `Closed.meaning` at a caller table is the solution of the scopes at the root, and the read row `Closed.AdmA` is the domain of the read of the meaning |
 | `Calculus/Dynamo/Lang/ScopeSound.lean` | The judgement `Closed.Typed` and the obligations `Closed.Obligations` of a closed codec at the DynamoDB tables, the theorem `Closed.sound`, the carrier bridge `Closed.carrier` (a typed closed codec writes and reads only values of its held set), and `Closed.extendRead_lawfulCore` |
@@ -138,9 +138,7 @@ meaning to it).
   `(held)` side condition lives in `Obligations`. The alternate-reader
   condition is `ReadsCoherently`, which `extendRead_p_union` proves equivalent to order-freedom. Each definition has
   its denotation in scope.
-  `Obligations` is **structural, not fuel-indexed** —
-  this bullet said `Obligations fuel t` and "same premises, fueled form" long after `denote`
-  became structural. The null point is not in the list either: the point is a union option,
+  `Obligations` is **structural, not fuel-indexed**. The null point is not in the list either: the point is a union option,
   so what was the wrapper's honesty premise is now the sum's compatibility.
 
 ## Is the model the specification?

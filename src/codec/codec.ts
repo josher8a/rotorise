@@ -61,7 +61,6 @@ import type {
 } from './term'
 import {
     alwaysWritten,
-    bindersOf,
     clauseForm,
     clauseLiteralsOf,
     force,
@@ -72,6 +71,7 @@ import {
     RecursionRefused,
     type RefSlot,
     recursionUse,
+    reenteredOf,
     refSlots,
     refuseSlots,
     sameAdapter,
@@ -148,12 +148,12 @@ type LiteralMarkOf<C> = [C] extends [LiteralMark] ? LiteralMark : unknown
 
 /*
  * **The model's term of a codec, in its type.** Optional, so no value carries it and no
- * constructor body changes. A codec with no term in its type, as a thunk with an annotation, is a
- * free variable.
+ * constructor body changes. A codec with no term in its type, as a thunk with an annotation, is an
+ * unbound `ref`.
  */
 declare const termMarker: unique symbol
 type TermMark<T> = { readonly [termMarker]?: T }
-type FreeTerm = ['var', '#free']
+type FreeTerm = ['ref', '#free']
 /**
  * The default of the term and of the decoded type of {@link ObjectCodec}, {@link ItemCodec} and
  * {@link UnionCodec}: the type that the spec or the options give, computed where a member reads it.
@@ -535,21 +535,21 @@ export const constantOf = (declared: ObjectSlot): unknown => {
  * the name, or a list with no spread past its prefix. A write there leaves an item that the codec
  * does not read, so `absent` stays on the frontier and the frontier refuses on use.
  *
- * `binds` gives the binders of the root of the walk, which {@link printedMember} reads.
+ * `reentered` gives the re-entered terms of the root of the walk, which {@link printedMember} reads.
  */
 const childrenOf = (
     codec: AnyCodec,
     segment: string | number,
-    binds: Binders,
+    reentered: Reentered,
 ): readonly AnyCodec[] | CodecError => {
     const def = codec.def
     // a position enters a list, and a name enters a map
     const container = typeof segment === 'number' ? 'L' : 'M'
     let stored = memberOf(def)
     if (def.kind === 'held' || def.kind === 'refine' || def.kind === 'legacy') {
-        const binders = binds()
-        if (binders instanceof CodecError) return binders
-        stored = printedMember(def.inner, binders)
+        const known = reentered()
+        if (known instanceof CodecError) return known
+        stored = printedMember(def.inner, known)
     }
     const apart = stored !== undefined && stored !== container
     switch (def.kind) {
@@ -587,7 +587,7 @@ const childrenOf = (
             return acrossVariants(
                 def.options.map((option) => codecOfTerm(option)),
                 segment,
-                binds,
+                reentered,
             )
         // **A path stops at an adapter that reads the whole value.** A write at a path writes one
         // part of the attribute, and the attribute is checked as a whole nowhere on that write
@@ -614,7 +614,7 @@ const childrenOf = (
                 if (thrown instanceof CodecError) return thrown
                 throw thrown
             }
-            return childrenOf(codecOfTerm(resolved), segment, binds)
+            return childrenOf(codecOfTerm(resolved), segment, reentered)
         }
         // `opaque` admits every value, so the codec at each segment is `opaque` again
         case 'opaq':
@@ -626,18 +626,19 @@ const childrenOf = (
 }
 
 /**
- * **The binders of the root of a walk**, forced at the first wrapper that the walk meets. A thunk
- * whose builder refuses makes the answer that refusal, because the binders are then unknown.
+ * **The re-entered terms of the root of a walk**, forced at the first wrapper that the walk meets. A
+ * thunk whose builder refuses makes the answer that refusal, because the re-entered terms are then
+ * unknown.
  */
-type Binders = () => ReadonlySet<Term> | CodecError
+type Reentered = () => ReadonlySet<Term> | CodecError
 
-/** The {@link Binders} of a root, which force the thunks of the root once. */
-const bindersAt = (root: Term): Binders => {
+/** The {@link Reentered} of a root, which force the thunks of the root once. */
+const reenteredAt = (root: Term): Reentered => {
     let known: ReadonlySet<Term> | CodecError | undefined
     return () => {
         if (known === undefined) {
             try {
-                known = bindersOf(root)
+                known = reenteredOf(root)
             } catch (thrown) {
                 if (!(thrown instanceof CodecError)) throw thrown
                 known = thrown
@@ -651,7 +652,7 @@ const bindersAt = (root: Term): Binders => {
  * **The member that a wrapper's inner term stores, as the model reads the printed term.** The
  * emitter prints a thunk that closes no cycle as its target, so the walk reads the target. The
  * emitter prints an entry of a cycle as a reference, `Scoped.Term.ref`, inside a closed codec. The
- * model's `μG` answers no member at a reference, so this answers `undefined` at a term of `binds`.
+ * model's `μG` answers no member at a reference, so this answers `undefined` at a re-entered term.
  * The emitter refuses a thunk that throws, and this answers `undefined` there too.
  *
  * {@link memberOf} answers `undefined` at every thunk, and the set constructor relies on that
@@ -660,22 +661,24 @@ const bindersAt = (root: Term): Binders => {
  */
 const printedMember = (
     t: Term,
-    binds: ReadonlySet<Term>,
+    reentered: ReadonlySet<Term>,
 ): AttributeName | undefined => {
-    if (binds.has(t)) return undefined
+    if (reentered.has(t)) return undefined
     switch (t.kind) {
         case 'lazy': {
             const target = force(t)
             return target === undefined
                 ? undefined
-                : printedMember(target, binds)
+                : printedMember(target, reentered)
         }
         case 'held':
         case 'refine':
         case 'legacy':
-            return printedMember(t.inner, binds)
+            return printedMember(t.inner, reentered)
         case 'union':
-            return unanimous(t.options.map((one) => printedMember(one, binds)))
+            return unanimous(
+                t.options.map((one) => printedMember(one, reentered)),
+            )
         default:
             return memberOf(t)
     }
@@ -718,11 +721,11 @@ const admitsNothing = (codec: AnyCodec): boolean => codec.def.kind === 'never'
 const acrossVariants = (
     variants: readonly AnyCodec[],
     segment: string | number,
-    binds: Binders,
+    reentered: Reentered,
 ): readonly AnyCodec[] | CodecError => {
     let reached: readonly AnyCodec[] = []
     for (const variant of variants) {
-        const children = childrenOf(variant, segment, binds)
+        const children = childrenOf(variant, segment, reentered)
         if (children instanceof CodecError) return children
         for (const child of children) reached = including(reached, child)
     }
@@ -2615,17 +2618,17 @@ export function withLegacyRead<const C extends AnyCodec>(
 }
 
 /*
- * **A cycle is a name in one declaration.** `ref(name)` is the variable, and its term is the
+ * **A cycle is a name in one declaration.** `ref(name)` is the reference, and its term is the
  * name. `scope(defs)` binds each name of `defs`. The term of an entry is `['scope', D, K]`: the
- * record `D` of the terms of the definitions, and the name `K`. A variable resolves by one lookup
+ * record `D` of the terms of the definitions, and the name `K`. A `ref` resolves by one lookup
  * in `D`, so the type substitutes nothing and copies nothing. The decoded type of an entry is a
  * function of that term, so no caller states the decoded type of a cycle.
  *
  * At run time, a `ref` is a thunk over a slot that `scope` fills. Each former that runs before
- * `scope` reads the `ref` as a free variable. So a cycle of the term graph passes through a `ref`.
+ * `scope` reads the `ref` as unbound. So a cycle of the term graph passes through a `ref`.
  */
 type Ref<N extends string> = AttributeCodec<unknown> &
-    TermMark<['var', N]> &
+    TermMark<['ref', N]> &
     Free<N>
 type ScopeTerms<Defs> = { -readonly [K in keyof Defs]: TermOf<Defs[K]> }
 type ScopeTerm<Defs, K> = ['scope', ScopeTerms<Defs>, K]
@@ -2656,7 +2659,7 @@ type ScopeNamed<Defs> = {
 }
 
 /**
- * A variable of a {@link scope}. The `ref` names an entry of the scope that holds it, and reads as
+ * A reference of a {@link scope}. The `ref` names an entry of the scope that holds it, and reads as
  * the codec of that entry.
  */
 export function ref<const N extends string>(name: N): Ref<N>
@@ -2666,7 +2669,7 @@ export function ref(name: string): unknown {
         kind: 'lazy',
         get: () => {
             const target = slot.bound?.[name]
-            // the free variable of a name that no scope binds yet
+            // the unbound `ref` of a name that no scope binds yet
             if (target === undefined)
                 throw new ReferenceError(
                     `ref('${name}') is bound by no scope yet`,
@@ -2728,7 +2731,7 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
                     use,
                     use === 3
                         ? `[scope] '${name}' reaches a recursion with an adapter (\`held\` or \`withLegacyRead\`) on its path. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion`
-                        : `[scope] '${name}' reaches a recursion with no list or object on its path. The model's guard refuses a recursion that reads the input of its own binder. Put the recursion below a list or an object`,
+                        : `[scope] '${name}' reaches a recursion with no list or object on its path. The model's guard refuses a recursion that reads the input of its own entry. Put the recursion below a list or an object`,
                 )
         }
         for (const check of new Set([...slots].flatMap((slot) => slot.waiting)))
@@ -4103,12 +4106,12 @@ const objectFromMap = <
                 let frontier: readonly AnyCodec[] = [
                     self as unknown as AnyCodec,
                 ]
-                const binds = bindersAt(itemDef)
+                const reentered = reenteredAt(itemDef)
                 for (const step of steps) {
                     const next =
                         typeof step === 'object'
                             ? narrowAcross(frontier, step)
-                            : acrossVariants(frontier, step, binds)
+                            : acrossVariants(frontier, step, reentered)
                     if (next instanceof CodecError) return refusedAt(next)
                     // a frontier where no codec admits a value is a name that no codec declares
                     if (next.every(admitsNothing)) {
@@ -6035,7 +6038,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
                 throw new CodecError(
                     use === 3
                         ? `option ${at + 1} of this union reaches a \`ref\` whose entry holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive \`ref\` and the entry that the \`ref\` names. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion, and this option is not shown compatible with the others. Put no adapter on the path of a recursion`
-                        : `option ${at + 1} of this union reaches a recursive \`ref\` where the union must read it. The model's guard refuses a recursion that reads the input of its own binder, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
+                        : `option ${at + 1} of this union reaches a recursive \`ref\` where the union must read it. The model's guard refuses a recursion that reads the input of its own entry, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
                 )
             }
         }
