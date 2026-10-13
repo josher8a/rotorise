@@ -1,11 +1,13 @@
 import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Lang.ScopeSound
 import Calculus.Dynamo.Lang.ScopeHeldSet
+import Calculus.Dynamo.Lang.ScopeEquations
 import Calculus.Dynamo.Analysis.Merge
 import Calculus.Dynamo.Witness.Discharge
 import Calculus.Dynamo.Witness.ScopeDischarge
 import Calculus.Dynamo.Alg.Continuity
 import Calculus.Dynamo.Witness.Refutations
+import Calculus.Dynamo.Witness.ScopeRefutations
 import Calculus.Dynamo.Lang.HeldSet
 import Calculus.Dynamo.Analysis.Separation
 import Calculus.Dynamo.Analysis.Disjoint

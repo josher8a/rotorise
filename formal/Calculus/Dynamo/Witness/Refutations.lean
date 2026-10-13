@@ -1,6 +1,7 @@
 import Calculus.Dynamo.Lang.Equations
 import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Witness.Discharge
+import Calculus.Dynamo.Witness.ScopeRefutations
 
 variable {α : Calculus.Table}
 
@@ -204,18 +205,6 @@ theorem not_equiv_tupleTail_array :
 The specification states: "the refinement applies on opposite sides of the iso, so `q` is a subset of different
 sets." The model makes that literal — one held set says `q v`, the other says `q (f v)`, where
 `f` is the caller-side function that the table gives the word `k`. -/
-
-/-- A constant-on-strings iso half, and a predicate that tells `"A"` from `"B"`. -/
-def isoF : Value → Value
-  | .str _ => .str "A"
-  | v => v
-
-def predA : Value → Bool
-  | .str s => s == "A"
-  | _ => false
-
-/-- The table that gives each generator the pair `isoF`, `id`. -/
-def isoTable : Table := fun _ => (isoF, id)
 
 /-- At `"B"`: the outer refinement rejects it, the inner one never sees it — `f` has
     already replaced it with `"A"`. -/

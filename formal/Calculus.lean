@@ -52,6 +52,7 @@ import Calculus.Dynamo.Lang.ScopeHeldSet
 import Calculus.Dynamo.Witness.Discharge
 import Calculus.Dynamo.Witness.ScopeDischarge
 import Calculus.Dynamo.Lang.Equations
+import Calculus.Dynamo.Lang.ScopeEquations
 import Calculus.Dynamo.Alg.Continuity
 import Calculus.Dynamo.Alg.Opaque
 import Calculus.Dynamo.Lang.HeldSet
@@ -61,6 +62,7 @@ import Calculus.Dynamo.Lang.Store
 import Calculus.Dynamo.Lang.Scope
 import Calculus.Dynamo.Witness.Malleability
 import Calculus.Dynamo.Witness.Refutations
+import Calculus.Dynamo.Witness.ScopeRefutations
 import Calculus.Dynamo.Analysis.ExactV
 import Calculus.Dynamo.Analysis.ExactA
 import Calculus.Dynamo.Analysis.Separation
