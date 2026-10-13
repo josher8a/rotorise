@@ -82,9 +82,10 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # No module imports a generated file, so `#assert_axioms_all` reads no vector: each file ends with
   # `#assert_axioms_module`, which checks the axioms of the theorems of that file, and a job fails
   # a file whose last line is not that command.
-  # The type bridge runs beside the kernel jobs: two tsc programs, which put the run time to the
-  # type checker. The bridge prints a summary when it passes, so its job keeps the output of a
-  # failure only, and reports as one more job.
+  # The type bridge runs beside the kernel jobs: the tsc programs that put the run time to the
+  # type checker, the slice program beside the path programs, and the path programs in sequence.
+  # The bridge prints a summary when it passes, so its job keeps the output of a failure only, and
+  # reports as one more job.
   run 'vector bridge' bash -c '
     jobs=${GATE_JOBS:-3}; out=$(mktemp -d); trap "rm -rf $out" EXIT
     ( python3 scripts/type_bridge.py > $out/types.log 2>&1; rc=$?

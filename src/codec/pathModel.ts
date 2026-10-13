@@ -724,7 +724,7 @@ export type HoldsFree<Fs> = Fs extends unknown[]
                       infer T,
                       infer Env extends unknown[],
                   ]
-                      ? OptionsOf<Resolved<T, Env>>[number]
+                      ? Unbound<OptionsOf<Resolved<T, Env>>[number]>
                       : never
               }[number],
               [['var', unknown], unknown]
@@ -733,3 +733,10 @@ export type HoldsFree<Fs> = Fs extends unknown[]
         ? false
         : true
     : true
+
+/** An option that is a variable that no binder of its stack binds. */
+type Unbound<O> = O extends [['var', infer N], infer Env]
+    ? Lookup<Env, N> extends ['some', unknown, unknown]
+        ? never
+        : O
+    : never

@@ -39,20 +39,3 @@ exclude|refuse|c1a16e9a92|exclude({ y: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|cc777de378|exclude({ a: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|d1c6d17caf|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|f7e259c1db|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-path|accept|2728814b4e|r.narrow({ a: binary(new Uint8Array([1, 2])) }).m
-path|accept|2728814b4e|r.narrow({ a: boolean(false) }).m
-path|accept|2728814b4e|r.narrow({ a: boolean(true) }).m
-path|accept|2728814b4e|r.narrow({ a: decimal("1") }).m
-path|accept|2728814b4e|r.narrow({ a: decimal("2.5") }).m
-path|accept|2728814b4e|r.narrow({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) }).m
-path|accept|2728814b4e|r.narrow({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }).m
-path|accept|2728814b4e|r.narrow({ a: number(1) }).m
-path|accept|2728814b4e|r.narrow({ a: number(2.5) }).m
-path|accept|2728814b4e|r.narrow({ a: string("A") }).m
-path|accept|2728814b4e|r.narrow({ a: string("a") }).m
-path|accept|2728814b4e|r.narrow({ a: string("a", "b") }).m
-path|accept|2728814b4e|r.narrow({ a: string("b") }).m
-path|accept|2728814b4e|r.narrow({ a: string("p") }).m
-path|accept|2728814b4e|r.narrow({ a: string("q") }).m
-path|accept|2728814b4e|r.narrow({ a: string("x") }).m
-path|accept|2728814b4e|r.narrow({ a: string("y") }).m
