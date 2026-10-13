@@ -1,6 +1,5 @@
 import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Analysis.Merge
-import Calculus.Dynamo.Analysis.Slice
 import Calculus.Dynamo.Witness.Discharge
 import Calculus.Dynamo.Alg.Continuity
 import Calculus.Dynamo.Witness.Refutations
@@ -24,7 +23,6 @@ import Calculus.Dynamo.Witness.Malleability
 import Calculus.Dynamo.Analysis.Orthogonality
 import Calculus.Bridge.Vectors
 import Calculus.Bridge.Rows
-import Calculus.Bridge.Paths
 import Calculus.Bridge.ScopePaths
 import Calculus.Dynamo.Analysis.Universal
 import Calculus.Dynamo.Analysis.Confluence
@@ -50,11 +48,7 @@ import Calculus.Lang.Shapes
 import Calculus.Lang.Disjoint
 import Calculus.Lang.DisjointV
 import Calculus.Lang.DisjointA
-import Calculus.Lang.Path
 import Calculus.Lang.Scope
-import Calculus.Lang.System
-import Calculus.Dynamo.Analysis.Path
-import Calculus.Dynamo.Analysis.Precondition
 import Calculus.Dynamo.Analysis.ScopePrecondition
 import Calculus.Lang.Universe
 import Calculus.Lang.CodecPath

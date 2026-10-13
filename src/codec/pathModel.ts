@@ -1,12 +1,13 @@
 /*
- * **The selector of `at`, read from the term of a codec.** The closure of `Alg.Term.at`
- * (`formal/Calculus/Lang/Path.lean`) and of `pathKind` (`formal/Calculus/Bridge/Paths.lean`),
- * translated to types. The comparator is `frameSame` as an exact type equality, with no depth: the
- * term in a type carries no closure and no fill value, so equal data is equal types.
+ * **The selector of `at`, read from the term of a codec.** The walk of a path at the type level:
+ * each segment steps each frame to its children (`StepFrames`), and the frontier names a decision
+ * (`KindOfFrames`). Two frames are one frame where their types are equal (`FrameSame`), with no
+ * depth: the term in a type carries no closure and no fill value, so equal data is equal types.
  *
  * A term is a tuple. `['scope', D, K]` is the entry `K` of the record `D` of the terms of a scope,
- * and `['var', N]` is a name of the scope that holds it. A frame is `[Term, Env]`, the binder
- * stack head first. A segment is `['name', K]` or `['pos', I]`.
+ * and `['var', N]` is a name of the scope that holds it. A frame is `[Term, Env]`: the type keeps
+ * its own stack of scopes, head first, and `Lookup` resolves a name against the stack. A segment
+ * is `['name', K]` or `['pos', I]`.
  */
 import type { DynamoNumber as DynamoNumberOf } from './attribute'
 

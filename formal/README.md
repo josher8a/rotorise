@@ -29,7 +29,7 @@ definition it touches.
 | `Calculus/Lang/DisjointA.lean` | `disjoint_soundA` at every signature, as `disjoint_sound` at the dual: two terms the test keeps apart read no attribute in common, from `FormerAdmA`, `LeafAdmA` and `TopLaws`, and `disjoint_orthogonal`, which joins the two sides |
 | `Calculus/Lang/Compat.lean` | The compatibility decision `Term.compat` over a signature, per half and per component, with the closed-context oracle `CompatOracle`; `compat_sound`, and `pairwiseCompat_of_compatPair`, which discharges the union's obligation of two lawful options |
 | `Calculus/Lang/View.lean` | The view `view` at an orientation: each `held` becomes its term at the caller side, so the view holds no `held` (`HF_view`). The view admits what the term admits (`viewLe_of`), and two views that the test separates give two terms that share no value (`views_apart`) |
-| `Calculus/Lang/Path.lean` | A path into a term: `Frame`, `Term.at`, the strong law `strong_law` composed from one law per segment (`path_law`), and `narrow`, which keeps each option whose stored view the test does not separate from the clause, with `narrow_law` |
+| `Calculus/Lang/ScopePath.lean` | A path into a closed codec: the frame `GFrame`, the frontier `Rooted.at`, the strong law `Closed.strong_law` composed from one law per segment (`GFrame.path_law`), and `narrowC`, which keeps each option whose view the graph decision does not separate from the view of the clause, with `narrowC_law` |
 | `Calculus/Lang/Universe.lean` | The facts of a universe that read no term: the primitive rows `PrimAdm`, the leaves `Leaf` and `LeafMeet`, the shape classes `Shapes`, the laws of the top `TopLaws`, and the held sets of the rules |
 | `Calculus/Lang/CodecPath.lean` | A path into a store: `Seg`, the write at a path `putPath`, and `path_law`, which composes the law of a write from one law per segment, for any frames |
 | `Calculus/Dynamo/Alg/Lists.lean` | The list plumbing at the DynamoDB carriers: the aliases of the generic traversal and `filter` facts, and the keyed clause `traverse_fst`, which reads `Name` |
@@ -59,16 +59,16 @@ definition it touches.
 | `Calculus/Dynamo/Witness/Refutations.lean` | The six "Do not hold" nodes of the specification's equations, all settled, over seven declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id`, plus `optional` nesting, which the syntax rules out, and `set(union(…))`, which the DynamoDB set obligation refuses (`setElem_union_refused`) |
 | `Calculus/Axioms.lean` | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
 | `Calculus/Dynamo/Witness/Discharge.lean` | The host's recursive schema for JSON (`jsonTerm`) carried through `soundness`, with the refusals of the guard pinned |
-| `Calculus/Dynamo/Analysis/Path.lean` | The frontier of a path and narrowing at DynamoDB, as vectors that reduce in the kernel: the store refuses a segment, a refinement refuses a path, and narrowing by the stored view agrees with the slice on a union whose options pin one tag each |
-| `Calculus/Dynamo/Analysis/Precondition.lean` | The precondition of a clause as data for the store: a conjunction of `in`, `type` and `exists` tests at paths into the item. `preconditionOf` reads the stored view of the clause and states the precondition exactly or refuses (`preconditionOf_exact`), and `narrow_law_precondition` is the narrowing law with the precondition in place of the admission |
+| `Calculus/Dynamo/Analysis/ScopePath.lean` | The frontier of a path into a closed codec and narrowing at DynamoDB, as vectors that reduce in the kernel: the store refuses a segment, and an entry that a cycle returns to is one entry. `Closed.narrowC_law` is the narrowing law at DynamoDB |
+| `Calculus/Dynamo/Analysis/ScopePrecondition.lean` | The precondition of a closed clause as data for the store: a conjunction of `in`, `type` and `exists` tests at paths into the item. `Closed.preconditionOfC` reads the stored view of the clause and states the precondition exactly or refuses (`Closed.preconditionOfC_exact`), and `Closed.narrow_law_precondition` is the narrowing law with the precondition in place of the admission |
 | `Calculus/JSON/Basic.lean` | A second universe on the generic layer, with no DynamoDB import: the carrier `Json`, the ground codecs, the array prism, the signature `jsonSyn`/`jsonSem` with `id_topLaws`, a union lawful by `Alg.soundness` and `Alg.compat_of_HF` (`lawful_strOrNum`), and the kind test as the primitive admission rows, exact by `Alg.Adm_exact` and `Alg.AdmA_exact` (`exact_strOrNum`) |
 | `Calculus/JSON/Disjoint.lean` | Disjointness at JSON: the leaves `jsonLeaf` (two kinds are apart where they are two kinds), the laws of the leaves and of the formers as instances, and `Alg.disjoint_orthogonal` at `jsonSyn` (`orthogonal`) |
 
 `Alg/Agree.lean`, `Alg/Converse.lean`, `Alg/Rows.lean`, `Lang/Converse.lean`, `JSON/Compat.lean`,
 `Dynamo/Analysis/Compat.lean`, `Confluence.lean`, `ExactA.lean`, `ExactV.lean`, `HeldFree.lean`, `Kernel.lean`,
 `Laminar.lean`, `LiteralArity1.lean`, `Malleability.lean`, `Dynamo/Analysis/Disjoint.lean`, `Merge.lean`,
-`Orthogonality.lean`, `Separation.lean`, `Slice.lean`, `Universal.lean`, `Bridge/Vectors.lean`, `Bridge/Verdicts.lean`, `Bridge/Kinds.lean`,
-`Bridge/Rows.lean` and `Bridge/Paths.lean` have none, and each opens with a module docstring that says
+`Orthogonality.lean`, `Separation.lean`, `ScopeSlice.lean`, `Universal.lean`, `Bridge/Vectors.lean`, `Bridge/Verdicts.lean`, `Bridge/Kinds.lean`,
+`Bridge/Rows.lean` and `Bridge/ScopePaths.lean` have none, and each opens with a module docstring that says
 what it is for.
 Read those.
 

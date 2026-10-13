@@ -1754,7 +1754,7 @@ const resolutionUnions = (): readonly (readonly [string, AnyCodec])[] => [
     ],
     ['u_literal_pair', erase(union([string('A'), string('B')]))],
     // **the slice, as a term the model can read.** An extraction is a `union` over the members it
-    // kept, so what the bridge elaborates here is `Calculus.AltClause.extract`'s result spelled as
+    // kept, so what the bridge elaborates here is `Calculus.AltClause.extractC`'s result spelled as
     // an ordinary union — which is the whole claim: the slice builds no new kind of term
     [
         'u_extracted',
@@ -2687,7 +2687,7 @@ describe("the slice, against the model's `AltClause.admitsC`", () => {
     /**
      * **A host refusal is the model's refusal.** The host refuses a clause key that no member pins,
      * because the clause keeps no member whatever the values. The model refuses the same clause
-     * (`AltClause.keyed`), and the row states the refusal and an empty extraction.
+     * (`AltClause.keyedC`), and the row states the refusal and an empty extraction.
      */
     it('states a clause that the host refuses as a clause that the model refuses', () => {
         const text = leanSlice({

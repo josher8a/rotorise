@@ -8,18 +8,18 @@ import Calculus.Dynamo.Analysis.ScopePath
 A path row over a closed codec states the decision of `at` on the host, and the frontier of the
 graph at the path. `pathReadC` compares the two: the host gives a `HostAtC`, and the graph gives
 the frontier by `Rooted.at`, or after a clause by `narrowC` and the frontier of the rest of the
-path. `PathRowsC` and `NarrowRowsC` state the rows, beside today's `PathRows` and `NarrowRows`.
+path. `PathRowsC` and `NarrowRowsC` state the rows.
 
-**What a row says** is what today's row says, over graph frames. A refusal is no frontier. No
+**What a row says.** A refusal is no frontier. No
 codec is a frontier whose frames each have the head `never`. Some options is a frontier with a
 `never` head and another head. One codec is a frontier with no `never` head whose frames are one
-frame, and two declarations hold two frames.
+frame, and two declarations hold two frames (`two_frames_of_ambiguousC`).
 
 **What `frameSameC` reads.** Two frames are one frame where their terms have one datum at each
 position, and each pair of entries that the two terms reach together has bodies of one datum, with
 the pair assumed while the bodies are compared. So a frame is one frame with its copy in an option
 rooted apart. An entry is one datum with itself, so two paths to one entry give one frame. A function
-and a fill value are not read, as in `frameSame`: two refinements by two closures are one frame
+and a fill value are not read: two refinements by two closures are one frame
 (`pathKindC_reads_no_closure`). Equal frames have one meaning (`pathReadC_resolved_sem`), so a
 resolved row certifies the meaning of the host's decision.
 -/
@@ -190,6 +190,151 @@ theorem pathReadC_resolved_sem {r : Option (List (GFrame dynSig))} {f : GFrame d
     (τ : (s : Bool) → Alg.TableAt dynSig s) :
     (r.getD []).map (GFrame.sem (S := dynSyn) τ) = (f :: fs).map (GFrame.sem (S := dynSyn) τ) := by
   rw [((pathReadC_resolved r f fs).mp h).2]; rfl
+
+/-! ## One frame is one frame -/
+
+/-- **A primitive is one primitive with itself.** -/
+theorem groundEq_refl : ∀ g : Ground, groundEq g g = true
+  | .base _ => decide_eq_true rfl
+  | .literal _ _ => by rw [groundEq, dif_pos rfl]; exact decide_eq_true rfl
+
+/-- **A predicate is one datum with itself.** -/
+theorem predSame_refl : ∀ p : Pred, predSame p p = true
+  | .members _ _ | .except _ _ => by
+      rw [predSame, dif_pos rfl, Bool.and_eq_true]
+      exact ⟨decide_eq_true fun _ hx => hx, decide_eq_true rfl⟩
+  | .closure _ => rfl
+
+/-- **A slot presence is one presence with itself.** -/
+theorem slotSame_refl : ∀ m : Alg.Scoped.SlotMode dynSig, opSame.slotSame m m = true
+  | .req | .opt | .fill _ => rfl
+
+/-- **An operation is one datum with itself.** -/
+theorem opSame_refl : ∀ o : Alg.Scoped.TOp dynSig, opSame o o = true
+  | .prim g => groundEq_refl g
+  | .opaq | .never | .set | .legacy _ => rfl
+  | .list _ _ _ => by simp [opSame]
+  | .refine p _ => predSame_refl p
+  | .held false _ _ => decide_eq_true rfl
+  | .held true k₀ _ => nomatch k₀.1
+  | .obj fs md w => by
+      simp only [opSame, Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨⟨fun k => ⟨k.2, slotSame_refl (md k)⟩, fun k => k.2⟩, trivial⟩
+  | .union _ => decide_eq_true rfl
+
+/-- **Each pair of a list with its image holds**, where each element holds with its image. -/
+theorem all_zip_map_self {α β : Type} (P : α → β → Bool) (a : α → β) :
+    ∀ l : List α, (∀ q ∈ l, P q (a q) = true) → (l.zip (l.map a)).all (fun q => P q.1 q.2) = true
+  | [], _ => rfl
+  | q :: l, h => by
+      simp only [List.map_cons, List.zip_cons_cons, List.all_cons, Bool.and_eq_true]
+      exact ⟨h q List.mem_cons_self, all_zip_map_self P a l fun x hx => h x (List.mem_cons_of_mem _ hx)⟩
+
+/-- **A graph term is one datum with itself**, where the answer at two entries holds at each entry
+    and itself. -/
+theorem sameDataC_refl {k : Nat → Nat → Bool} {N : Nat} (hk : ∀ i : Fin N, k i.val i.val = true) :
+    ∀ t : Alg.Scoped.Graph dynSig N, sameDataC k t t = true
+  | .leaf i => hk i
+  | .node o a => by
+      simp only [sameDataC, decide_true, Bool.and_eq_true]
+      exact ⟨⟨opSame_refl o, trivial⟩,
+        all_zip_map_self (fun q u => sameDataC k (a q) u) a _ fun q _ => sameDataC_refl hk (a q)⟩
+
+/-- The entries of a count that a list of pairs does not hold on the diagonal. -/
+def openDiag (N : Nat) (A : List (Nat × Nat)) : Nat :=
+  (List.range N).countP fun i => !A.contains (i, i)
+
+/-- **A count under a stronger test is smaller**, where the list holds an element that the weaker
+    test keeps and the stronger test drops. -/
+theorem countP_lt {p p' : Nat → Bool} (hle : ∀ x, p' x = true → p x = true) {i : Nat}
+    (hi : p i = true) (hi' : p' i = false) :
+    ∀ l : List Nat, i ∈ l → l.countP p' < l.countP p
+  | [], h => nomatch h
+  | x :: l, h => by
+      simp only [List.countP_cons]
+      rcases List.mem_cons.mp h with rfl | hm
+      · rw [hi, hi']
+        have := List.countP_mono_left (l := l) fun y _ hy => hle y hy
+        simp only [Bool.false_eq_true, ↓reduceIte]
+        omega
+      · have ih := countP_lt hle hi hi' l hm
+        cases hx' : p' x
+        · cases hx : p x <;> simp <;> omega
+        · rw [hle x hx']; simp; omega
+
+/-- **One more pair on the diagonal leaves fewer entries open.** -/
+theorem openDiag_cons {N i : Nat} {A : List (Nat × Nat)} (hi : i < N)
+    (hA : A.contains (i, i) = false) : openDiag N ((i, i) :: A) < openDiag N A := by
+  unfold openDiag
+  refine countP_lt (i := i) (fun x hx => ?_) (by rw [hA]; rfl) (by simp) _ (List.mem_range.mpr hi)
+  simp only [Bool.not_eq_true', List.contains_cons, Bool.or_eq_false_iff] at hx ⊢
+  exact hx.2
+
+/-- **Each entry is one entry with itself at each depth**, where the fuel exceeds the entries that
+    the assumed pairs leave open. -/
+theorem sameUpTo_refl {N : Nat} (s : Fin N → Alg.Scoped.Graph dynSig N) :
+    ∀ (n : Nat) (A : List (Nat × Nat)), openDiag N A < n →
+      ∀ t : Alg.Scoped.Graph dynSig N, sameUpTo s s n A t t = true
+  | 0, _, h, _ => absurd h (Nat.not_lt_zero _)
+  | n + 1, A, h, t => by
+      unfold sameUpTo
+      refine sameDataC_refl (fun i => ?_) t
+      cases hA : A.contains (i.val, i.val)
+      · simp only [Bool.false_or, dif_pos i.isLt]
+        exact sameUpTo_refl s n _ (Nat.lt_of_lt_of_le (openDiag_cons i.isLt hA) (Nat.lt_succ_iff.mp h)) _
+      · rfl
+
+/-- **A frame is one frame with itself.** -/
+theorem frameSameC_refl (f : GFrame dynSig) : frameSameC f f = true :=
+  sameUpTo_refl _ _ _ (Nat.lt_succ_of_le (Nat.le_trans (List.countP_le_length ..)
+    (by rw [List.length_range]; exact Nat.le_mul_self _))) _
+
+/-- **Two frames that `frameSameC` separates are two frames.** -/
+theorem ne_of_frameSameC {f g : GFrame dynSig} (h : frameSameC f g = false) : f ≠ g := by
+  rintro rfl
+  rw [frameSameC_refl] at h
+  exact Bool.noConfusion h
+
+/-- **A frame reads `never` exactly where its head is `never`.** -/
+theorem frameNeverC_iff (f : GFrame dynSig) :
+    frameNeverC f = true ↔ ∃ a, pathHeadC f (f.N + 2) f.t = .node .never a := by
+  unfold frameNeverC
+  split <;> simp_all
+
+/-- **A frame that is not the first frame**, where some frame is not one frame with the first. -/
+theorem exists_ne_of_all_frameSameC {f : GFrame dynSig} :
+    ∀ {gs : List (GFrame dynSig)}, gs.all (frameSameC f) = false → ∃ g ∈ gs, g ≠ f
+  | [], h => Bool.noConfusion h
+  | g :: gs, h => by
+      cases hg : frameSameC f g
+      · exact ⟨g, List.mem_cons_self, fun he => ne_of_frameSameC hg he.symm⟩
+      · rw [List.all_cons, hg, Bool.true_and] at h
+        obtain ⟨g', hm, hne⟩ := exists_ne_of_all_frameSameC h
+        exact ⟨g', List.mem_cons_of_mem _ hm, hne⟩
+
+/-- **Two declarations hold two frames.** -/
+theorem two_frames_of_ambiguousC {r : Option (List (GFrame dynSig))}
+    (h : pathKindC r = .ambiguous) : ∃ f gs, r = some (f :: gs) ∧ ∃ g ∈ gs, g ≠ f := by
+  rcases r with _ | _ | ⟨f, gs⟩
+  · exact PathKind.noConfusion h
+  · exact PathKind.noConfusion h
+  · refine ⟨f, gs, rfl, exists_ne_of_all_frameSameC ?_⟩
+    revert h
+    simp only [pathKindC]
+    generalize (f :: gs).any frameNeverC = a
+    generalize (f :: gs).all frameNeverC = b
+    generalize gs.all (frameSameC f) = c
+    intro h
+    rcases a <;> rcases b <;> rcases c <;> first | rfl | exact PathKind.noConfusion h
+
+/-- **A decision of no codec reads `pathKindC` alone.** -/
+theorem pathReadC_decided (r : Option (List (GFrame dynSig))) (h : HostAtC)
+    (hr : h.kind ≠ .resolved) : pathReadC r h = h.claim ↔ pathKindC r = h.kind := by
+  rcases h with _ | _ | _ | _ | ⟨f, fs⟩
+  all_goals first
+    | exact absurd rfl hr
+    | exact ⟨fun he => of_decide_eq_true (congrArg Prod.fst he),
+        fun hk => congrArg (·, none) (decide_eq_true hk)⟩
 
 /-- A refinement of `string` by a closure, as a frame of no entry. -/
 private def refineFrame (q : Attr → Bool) : GFrame dynSig :=

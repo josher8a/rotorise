@@ -69,7 +69,7 @@ instance, and JSON is a second instance.
 | `Lang/DisjointV.lean`, `Lang/DisjointA.lean` | the soundness of the test: `disjoint_sound`, `disjoint_soundA`, and `disjoint_orthogonal` |
 | `Lang/Compat.lean` | the compatibility decision `Term.compat` over a signature, `compat_sound`, and `pairwiseCompat_of_compatPair` |
 | `Lang/View.lean` | the view `view` at an orientation, `viewLe_of`, and `views_apart` |
-| `Lang/Path.lean` | the path into a term `Term.at`, the write of the store at a path `putPath`, the strong law `strong_law`, and narrowing `narrow` with `narrow_law` |
+| `Lang/CodecPath.lean`, `Lang/ScopePath.lean` | the write of the store at a path `putPath` with `path_law`, the frontier of a closed codec `Rooted.at`, the strong law `Closed.strong_law`, and narrowing `narrowC` with `narrowC_law` |
 
 `Rows.lean` is generic too, in the namespace `Calculus`. It states the row combinators of the
 analyses over one carrier type, and each side of the pair instantiates it. It states the row
@@ -242,7 +242,7 @@ exactness of the primitive rows alone. A universe states the primitive rows, so 
 primitive reduces without the codec. The DynamoDB `Adm` and `AdmA` are the generic rows, and
 read their DynamoDB rows from a simp set, as `denote` does.
 
-**The other analyses are DynamoDB tables.** `Separation`, `Slice` and the certificate read
+**The other analyses are DynamoDB tables.** `Separation`, `ScopeSlice` and the certificate read
 the constructors of the DynamoDB carriers. No generic form of them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
 `Codec`, then the combinator algebra at the DynamoDB carriers as `Prisms`, `Products`, `Objects`,
 `Sums`, `Carriers`, `Lawful` and `Frontier`, and `Term`, then `Denote`, `Typing`, `Soundness`,
@@ -450,10 +450,13 @@ the stage below (`stage_apart`). A recursive term beside another constructor rea
 the stage below the depth of the input (`Adm_mu_unfold`, `AdmA_mu_unfold`). A refinement above a
 right recursive term reads the same stage (`denote_mu_unfold`). No row needs the guard.
 
-**The host spells recursion as a thunk, and the bridge prints the binder.** The emitter marks each
-term object that a thunk returns during the printing of that object. It prints `Term.mu` at the
-object and `Term.var k` at the thunk, where `k` counts the binders between the two. Any other thunk
-prints the term it returns, because the model has no thunk. Each recursive vector asserts that the
+**The host spells recursion as a thunk, and the bridge prints a closed codec.** The emitter cuts
+the term graph into scopes: each cycle of the term graph is one scope, and a scope comes after each
+scope that it reaches. Each term of a cycle is an entry of its scope, and a thunk that returns an
+entry prints as the reference to that entry. Any other thunk prints the term it returns, because
+the model has no thunk. The emitter refuses a term with no scoped form: an unguarded cycle, a cycle
+through a wall, or an open fragment. A guard row prints the graph of the term instead: one flat
+system with no order on its entries, which the guard of a DAG of scopes decides. Each recursive vector asserts that the
 guard accepts its term. The host's `union` refuses the two shapes the guard refuses. One is an
 option whose spine reaches a recursive thunk. The other is an option where a `held` sits between the
 term that a recursive thunk returns and the thunk. The host's `union` also refuses a thunk that
@@ -462,18 +465,17 @@ host's `heldFree(t)` reads through a recursive thunk, as the model's `HF` reads 
 
 ---
 
-## A path into a term, and the strong law
+## A path into a closed codec, and the strong law
 
 **A path is a list of segments.** A segment (`Seg`) is a name into a map, or a position into a
-list. `Term.at` gives the frontier of a term at a path: each term that can stand at the path, or a
-refusal. An entry of a frontier is a `Frame`: a term and its binder stack. Entry `j` of the stack is
-the binder that the variable `j` names. One segment reads the slot of a name (`Body.slotAt`), the
-term of a position (`listChild`), the options of a union, and the body of a binder. A variable
-resolves to its binder, one level up. The resolutions have a bound, so an unguarded binder gives a
-refusal and not a loop.
+list. `Rooted.at` gives the frontier of a closed codec at a path: each frame that can stand at the
+path, or a refusal. A frame (`GFrame`) is a graph term of the DAG of scopes of the codec. One
+segment reads the slot of a name, the term of a position (`listChildG`), the options of a union,
+and the body of an entry. An entry unfolds through the graph of its scope. The unfoldings have a
+bound, the count of the entries plus the first step, so the walk ends.
 
-**The store refuses a segment apart from the term.** A term that stores one member (`μSyn`) apart
-from the member of the container of the segment gives no frame (`apartAt`). So a name on a list,
+**The store refuses a segment apart from the term.** A term that stores one member (`μG`) apart
+from the member of the container of the segment gives no frame (`apartG`). So a name on a list,
 a position on a map, and a primitive of another member give no frame. A closed object at a name
 that the object does not declare gives `never`, and so does a list shape with no spread at a
 position past its prefix: no readable value holds the segment. `opaque` gives `opaque` at every
@@ -485,93 +487,92 @@ list shape with a suffix is a refusal, because the term of the position depends 
 position inside a list takes the value, and a position past the end appends the value. Each
 segment before the last must hold an entry. The store refuses every other attribute.
 
-**The strong law: an attribute that a term reads stays readable after a write at a path.**
-`strong_law` takes a typed and guarded term whose obligations hold, and a writer that agrees with
-each frame of the frontier: each frame reads what the writer writes. An attribute that the term
-reads stays readable after the store puts, at the path, what the writer wrote. `path_law` composes
-the law from one law per segment, `StepLaw`. Where a frame reads an attribute, the store refuses
+**The strong law: an attribute that a closed codec reads stays readable after a write at a path.**
+`Closed.strong_law` takes a typed closed codec whose obligations hold, and a writer that agrees
+with each frame of the frontier: each frame reads what the writer writes. An attribute that the
+codec reads stays readable after the store puts, at the path, what the writer wrote.
+`GFrame.path_law` composes the law from one law per segment, `StepLaw`. Where a frame reads an attribute, the store refuses
 the segment there, or one child reads the entry and keeps the attribute readable under a write of
-a value that the child reads. Each row of the term language proves its law one time: the object at
-a name, the list at a position, the union through its options, the binder through its fixed point
-(`muCodec_fix`), the variable one resolution down, the bottom, the top, and each term that is
-apart from the segment.
+a value that the child reads. Each operation of the graph proves its law one time: the object at
+a name, the list at a position, the union through its options, an entry through its body at the
+solution, the bottom, the top, and each term that is apart from the segment.
 
 **The law reads lawful frames, and a typed term gives them.** A primitive, a set, a `held`, a
 `refine` and an alternate reader that are apart from the segment read no attribute that the store
-accepts there, where the codec is lawful. So the step laws read `LawfulReach`: each frame that the
-path reaches holds a lawful codec and a guarded term. A frame under a binder reads the limit of
-the binder, and `Obligations` holds the premises of the body at the stages. `lawfulReach_of_typed`
-closes that gap: lawful approximants, with each binder at one stage, agree with the frame at every
-depth (`lawful_of_approx`).
+accepts there, where the codec is lawful. So the step laws read a lawful node at each frame that
+the path reaches. `Closed.lawfulNodes` gives that premise from `Closed.sound`: a typed closed codec
+whose obligations hold is lawful at each node of its graph, at the solution.
 
 **Narrowing is the restriction by a range idempotent, and the stored views decide it.** A clause
-(`clauseTerm`) is an object term: each named key is required at a term, and every other name is
-open. `narrow` keeps each option of a union whose stored view `Term.disjoint` does not separate from
-the stored view of the clause. The precondition of a read is the stored admission, and the stored
-view admits each attribute that its term admits (`views_apart` at the dual). `Term.disjoint` reads a
-raw `held` as disjoint from the bottom alone, so a tag behind an adapter separates only under the
-stored view. On an attribute that the stored view of the clause admits, the narrowed union reads
-what the union reads (`narrow_reads`), and a dropped option reads nothing under every environment
-(`narrow_drops`). The slice of a
-certified union (`AltClause.extract`) keeps fewer options: the options that the clause describes.
-On a union whose options pin one tag each, the two agree.
+is a closed codec whose root entry is an open object: each named key is required at a term, and
+every other name is open. Each option of a union is a closed codec with its own root. `narrowC`
+keeps each option whose stored view the graph decision does not separate from the stored view of
+the clause. The precondition of a read is the stored admission, and the stored view admits each
+attribute that its term admits (`views_apart` at the dual). The decision reads a raw `held` as
+disjoint from the bottom alone, so a tag behind an adapter separates only under the stored view. On
+an attribute that the stored view of the clause admits, the narrowed options read what the options
+read (`narrowC_reads`), and a dropped option reads nothing that the stored view of the clause reads
+(`narrowC_drops`). The slice of a certified union (`AltClause.extractC`) keeps fewer options: the
+options that the clause describes.
 
 **The strong law after narrowing needs a condition on the update, and the port states the condition
-as data.** `narrow_law` holds for an item that the stored view of the clause admits, and a write to
+as data.** `narrowC_law` holds for an item that the stored view of the clause admits, and a write to
 another item can reach a dropped option. The DynamoDB port states the condition as a precondition
-(`preconditionOf`): a conjunction of conditions, each a path into the item and one test that the
+(`Closed.preconditionOfC`): a conjunction of conditions, each a path into the item and one test that the
 store evaluates, `in`, `type` or `exists`. The precondition reads the stored view of the clause, so
 a tag behind an adapter gives the test of its stored literal. The port states the precondition
 exactly or refuses: on an item, the precondition holds exactly where the stored view of the clause
-admits the attribute at the path of the union (`preconditionOf_exact`). A literal, a union of
-literals at one base, a base, `opaque` and an open object whose slots are each required give a
-precondition. Every other stored view refuses, and so does a clause with no key below the root.
-`narrow_law_precondition` is the narrowing law with the precondition in place of the admission.
+admits the attribute at the path of the union (`Closed.preconditionOfC_exact`). A literal, a union
+of literals at one base, a base, `opaque` and an open object whose slots are each required give a
+precondition. Every other stored view refuses, and so does an entry, and so does a clause with no
+key below the root. `Closed.narrow_law_precondition` is the narrowing law with the precondition in
+place of the admission.
 Rotorise states the precondition as data and builds no expression string. An expression library
 renders the condition expression.
 
 **The host's path API follows the model.** `at((p) => ...)` on an item codec gives the codec at a
 path, with the path as `path()` and as a list of segments. The walk of `at` gives the three answers of
-`Term.at` at each segment: the frames, no frame where the store refuses the segment, and `never`.
-The walk reads a thunk as the model reads a binder. The walk compares two terms by structure, so two
+`Rooted.at` at each segment: the frames, no frame where the store refuses the segment, and `never`.
+The walk reads a thunk as the model reads an entry. The walk compares two terms by structure, so two
 declarations of one term are one frame. A path resolves where the frontier holds one term, so the
-codec at the path agrees with each frame, which is the premise of `strong_law`. A frontier of two
+codec at the path agrees with each frame, which is the premise of `Closed.strong_law`. A frontier of two
 terms, or of one term beside `never`, gives a codec that returns a refusal value on use, and the
 message names `narrow(...)`. A frontier of `never` alone throws at the call: no codec declares the path.
 
-`p.u.narrow(spec)` is `narrow`. The spec is the clause: an object of codecs, each key required at
+`p.u.narrow(spec)` is `narrowC`. The spec is the clause: an object of codecs, each key required at
 the term of its codec, every other name open. The host keeps each option whose stored view the
 host's disjointness test does not separate from the stored view of the clause. The call adds no
 segment to the path. The path type narrows too, and the path type is coarser where the path type
 knows only the decoded types. `at(...).preconditions` is the conjunction of the preconditions of
-each `narrow(...)` on the path, by the rules that `preconditionOf` states, or a refusal value that
+each `narrow(...)` on the path, by the rules that `Closed.preconditionOfC` states, or a refusal value that
 names the path where no exact precondition exists. A path with no `narrow(...)` has the empty
 conjunction. The caller puts the preconditions in the condition expression of the write.
 
 **Two checks put the host's path decisions to the model.** The path vectors walk the grounded pool:
 each pool codec under an object, each path of declared names and positions below the codec to a
 fixed depth, and each clause of the pool's vocabulary at each option name of a union. Each path
-records the decision of the host. One theorem per codec states that `Term.at`, after `narrow` for a
-clause, gives the frontier that each decision names, and the kernel decides the theorem. A recursive
-union has no clause row: `narrow` reads the options of the binder open, and the host reads the thunk
-closed. The two-spelling check builds the pool again with each leaf and each tag behind a thunk that
+records the decision of the host. One theorem per codec states that `Rooted.at`, after `narrowC` for
+a clause, gives the frontier that each decision names, and the kernel decides the theorem. A
+recursive union has clause rows as any union has: each option is a closed codec with its own root.
+The two-spelling check builds the pool again with each leaf and each tag behind a thunk that
 closes no cycle. The model reads one term in both spellings, so each decision of `at` must be the
 same, and a difference is a host reader that stops at a thunk.
 
-**A path row certifies the meaning of a resolved decision.** The emitter records each position of
-each node in the print of the root, with the binders above the position. Where the host resolves
-one codec, the row states each frame of the frontier as the recorded frame of the resolved node, so
-the row is an equation per frame. A caller's function is a variable of the theorem, so two frames
-are equal only where the two hold one function, and equal frames have one meaning
-(`pathRead_resolved_sem`). `leanPath(...)` refuses a resolved row where the model reaches a frame
-at no position of the resolved node. `pathKind` names the decision of each frontier, and each row
-reads it. One codec is a frontier of one frame, by `frameSame`, which compares each datum and
-unfolds no binder, and two declarations hold two frames (`two_frames_of_ambiguous`). `frameSame`
-reads no function and no fill value, so two refinements by two closures are one codec to
-`pathKind` (`pathKind_reads_no_closure`). There the host decides by the identity of the closure,
+**A path row certifies the meaning of a resolved decision.** The walk of the model's frontier, over
+the graph of the print of the root, names the position of each frame (`Closed.frameAt`). Where the
+host resolves one codec, the row states each frame of the frontier at the position of the resolved
+node, so the row is an equation per frame. A caller's function is a variable of the theorem, so two
+frames are equal only where the two hold one function, and equal frames have one meaning
+(`pathReadC_resolved_sem`). `leanPath(...)` refuses a resolved row where the model reaches a frame
+at no position of the resolved node. `pathKindC` names the decision of each frontier, and each row
+reads it. One codec is a frontier of one frame, by `frameSameC`, which compares each datum and
+assumes each pair of entries that the two terms reach together while it compares the bodies, and
+two declarations hold two frames (`two_frames_of_ambiguousC`).
+`frameSameC` reads no function and no fill value, so two refinements by two closures are one codec
+to `pathKindC` (`pathKindC_reads_no_closure`). There the host decides by the identity of the closure,
 and a row of two declarations has no certificate.
 
-No vector puts the host's preconditions to `preconditionOf`: the host's tests pin each
+No vector puts the host's preconditions to `Closed.preconditionOfC`: the host's tests pin each
 precondition form and each refusal.
 
 ---
@@ -603,7 +604,7 @@ A dissection is a `union` of object members that are pairwise disjoint: two memb
 differ at a required literal name with disjoint alternatives, or the name intervals they declare
 cannot be satisfied at once. `select` admits an object option by attempt, as it admits every other
 option. The test certifies both cases: the two bodies are disjoint. A sub-selection of a
-certified union stays certified, because the certificate is `Pairwise` and `pairwiseCompat_sublist` carries the obligation under it. A
+certified union stays certified, because the certificate is `Pairwise` and `certAllC_sublist` keeps the certificate on a sublist. A
 tag table keyed by the discriminating literals is an index the host builds over such a union, and
 no term carries it.
 
@@ -902,8 +903,8 @@ row.** `Vectors.lean` holds `check` and `vcheck`, which compare an attribute by 
 by `veq` under fuel: `aeq_same` makes `.same` equality, and `aeq_differ` makes `.differ`
 disequality, with `veq_sound` as the twin at `Value`. `Rows.lean` holds `failing`, `ok_of_failing`, the comparator of
 each evaluation form with its law (`writesOk_iff` and the others), and the lifts of the separation
-forms. `Paths.lean` holds `pathKind` and `pathRead`, with `pathRead_resolved_sem` and
-`two_frames_of_ambiguous`, and `frameSame` with its proved limit `pathKind_reads_no_closure`.
+forms. `ScopePaths.lean` holds `pathKindC` and `pathReadC`, with `pathReadC_resolved_sem` and
+`two_frames_of_ambiguousC`, and `frameSameC` with its proved limit `pathKindC_reads_no_closure`.
 
 **A read row asserts a decoded value.** A read vector states that the model's `p`, at the
 attribute that the library wrote, gives the value that `decode(...)` read back, by `vcheck`. The

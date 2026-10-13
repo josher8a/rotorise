@@ -952,7 +952,7 @@ separation & two options that no input reaches both of & the certificate below (
 an empty option & a pair with \texttt{never} on a side & \texttt{pairwiseCompat\_never\_left}, \texttt{pairwiseCompat\_never\_right} \\
 orthogonality & a recursive union whose options the disjoint test keeps apart whatever the variable denotes, as \texttt{jsonTerm} & \texttt{disjoint\_orthogonal}, in \texttt{pairwiseCompat\_json} \\
 tag disjointness & \rulelink{rule:dunion}{\texttt{(dunion)}}, outright & the discriminator literals \\
-a slice & a sublist of a compatible union & \texttt{pairwiseCompat\_sublist}, \texttt{pairwiseCompat\_extract}, \texttt{pairwiseCompat\_exclude} \\
+a slice & a sublist of a compatible union & \texttt{AltClause.pairs\_extractC}, \texttt{AltClause.pairs\_excludeC}, and \texttt{certAllC\_sublist} for the certificate \\
 \bottomrule
 \end{tabular}
 

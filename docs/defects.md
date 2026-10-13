@@ -198,8 +198,8 @@ repair is to route the remaining site through the same seam, not to write a rend
 The type reads that fact from the phantom mark literalMarker in `src/codec/codec.ts`: the literal
 overloads of `string`, `decimal`, `number` and `boolean` set the mark, `refine` over a marked codec
 keeps the mark, and `union` sets the mark where each option carries the mark. A caller's adapter
-and a `ref(...)` carry no mark. So `extract`, `exclude` and their result types read the same members
-as the runtime for a key pinned by a caller's adapter, and the result type of `exclude` no longer
+and a `ref(...)` carry no mark. So `extract(...)`, `exclude(...)` and their result types read the same members
+as the runtime for a key pinned by a caller's adapter, and the result type of `exclude(...)` no longer
 omits a member that the runtime keeps. Three cases remain. The second and the third were measured
 2026-10-09 with throwaway scripts, `npx tsc --noEmit` and `vite-node`. The first was measured
 2026-10-10 with `npx tsc --noEmit` and the pin below:
@@ -226,19 +226,20 @@ the slice that keeps a member pinned through an adapter. No test declares a refi
 
 ---
 
-## Known: no vector puts the preconditions of the host to `preconditionOf`
+## Known: no vector puts the preconditions of the host to `Closed.preconditionOfC`
 
-**Observation.** The model states the precondition of a clause as data (`preconditionOf`), and
-`preconditionOf_exact` proves the precondition exact or refuses it. The host states the same
+**Observation.** The model states the precondition of a closed clause as data
+(`Closed.preconditionOfC`), and `Closed.preconditionOfC_exact` proves the precondition exact or
+refuses it. The host states the same
 data as `at(...).preconditions`, computed by `preconditionsOf(...)` in `src/codec/codec.ts`. The
 emitter has no form for a precondition. Measured 2026-10-09:
 
     grep -c -i precondition src/codec/lean.ts
     0
 
-The path vectors state the decision of `at` and of `narrow`, and no precondition.
+The path vectors state the decision of `at` and of `narrow(...)`, and no precondition.
 
-**Effect.** A host precondition that drifts from `preconditionOf` passes the gate. The tests of
+**Effect.** A host precondition that drifts from `Closed.preconditionOfC` passes the gate. The tests of
 the host pin each precondition form and the refusal of a clause key with no exact precondition.
 The refusal of an empty clause below the root has no test. Measured 2026-10-09: a mutant of
 `preconditionsOf(...)` that never refuses an empty clause passes `npx vitest --run src`, with 62

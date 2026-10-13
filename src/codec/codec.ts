@@ -5736,7 +5736,7 @@ type TagsAtSpecs<S, K, A> = S extends unknown
 
 /**
  * A clause key no member could ever answer, whatever the values turn out to be: the model's clause
- * that is not keyed (`Calculus.AltClause.keyed`). A literal whose alternatives meet no member's is
+ * that is not keyed (`Calculus.AltClause.keyedC`). A literal whose alternatives meet no member's is
  * keyed, and keeps nothing: that is a fact about the values, and the run time answers it.
  */
 type BadClauseKey<S, C> = {
@@ -5855,8 +5855,8 @@ const clauseKeeps = (
  * the alternatives simply do not meet, because that is a fact about values. That line is where the
  * foreign-key refusal already sits, and the base refusal sits beside it for the same reason.
  *
- * The model states the same refusal (`AltClause.keyed`): some option pins each clause key at the
- * form of the clause, or the clause describes no option (`AltClause.extract_eq_nil_of_keyed_false`).
+ * The model states the same refusal (`AltClause.keyedC`): some option pins each clause key at the
+ * form of the clause, or the clause describes no option (`AltClause.extractC_eq_nil_of_keyedC_false`).
  */
 const sliced = <O>(
     options: readonly O[],
@@ -6199,7 +6199,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
  * Rebuilt through {@link union} and not assembled here, so the declaration guard runs over the
  * result. It has to: a sub-selection of a certified union is certified, and a sub-selection of one
  * that was never certified is not. The model needs no such step: a slice keeps pairwise
- * compatibility (`Calculus.pairwiseCompat_extract`).
+ * compatibility (`Calculus.AltClause.pairs_extractC`).
  */
 const slicedUnion = (
     options: readonly AnyCodec[],

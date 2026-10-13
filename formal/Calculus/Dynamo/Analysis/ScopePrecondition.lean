@@ -6,8 +6,7 @@ import Calculus.Dynamo.Analysis.ScopePath
 
 A closed clause is a `Closed`: a DAG of scopes and a root entry. Its precondition reads the graph
 term of the root entry, as `Closed.spec` does, and each function below takes the row that the
-stored view of the graph term (`viewG` at the dual) takes. The rows are the rows of the binder
-form: a literal and a union of literals at one base give `in`, a base gives `type`, `opaque` and an
+stored view of the graph term (`viewG` at the dual) takes. The rows: a literal and a union of literals at one base give `in`, a base gives `type`, `opaque` and an
 older reader give `exists`, a `held` gives the precondition of its stored side, a refinement over a
 term with an adapter gives the precondition of its inner term, and an open object whose slots are
 each required gives `type M` and the precondition of each name. Every other graph term refuses.

@@ -7,9 +7,9 @@ import Calculus.Dynamo.Analysis.ScopePath
 Each option of a union is a closed codec of its own, rooted at its entry, as narrowing roots the
 options. A clause reads the body of the root entry of an option: the option is an object, and it
 answers at every key that the clause names. The clause and its reading at one name (`AltClause`,
-`litSubAt`, `altsSub`) are the ones of `Slice.lean`, because they read a spec and no term.
+`litSubAt`, `altsSub`) live in `Dynamo/Lang/Clause.lean`, because they read a spec and no term.
 
-The laws restate the laws of `Slice.lean` over closed codecs. A sub-selection keeps each property
+A sub-selection keeps each property
 of each option and each property of each pair of options. A clause that the options cannot answer
 keeps nothing. The extraction and the exclusion partition the options, and the decision over the
 graphs (`Closed.viewsDisjoint`) keeps the two halves apart. A kept option holds, at each clause
