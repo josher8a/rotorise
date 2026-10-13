@@ -207,7 +207,7 @@ describe('a clause is a literal at a base', () => {
     /**
      * The adapter is part of the form, as the base is: a plain literal and a literal under an
      * adapter never match. So a key that the members pin under an adapter alone refuses a plain
-     * clause, as the model refuses a clause that is not keyed (`Calculus.AltClause.keyed`).
+     * clause, as the model refuses a clause that is not keyed (`Calculus.AltClause.keyedC`).
      */
     it('refuses a plain clause at a key that the members pin under an adapter alone', () => {
         const toX = held(string('a'), string, {
@@ -591,8 +591,8 @@ describe('a union of objects has the same slice', () => {
     /**
      * **A tag no option carries is answered at the type as at run time.** The base matches and the
      * alternatives do not meet: that is a fact about the values, and its answer is the empty
-     * extraction (`Calculus.AltClause.extract`). The model refuses only a clause that it cannot
-     * answer (`Calculus.AltClause.keyed`).
+     * extraction (`Calculus.AltClause.extractC`). The model refuses only a clause that it cannot
+     * answer (`Calculus.AltClause.keyedC`).
      */
     it('answers a tag no option carries with no member, at the type as at run time', () => {
         const none = plain.extract({ kind: string('z') })
@@ -602,7 +602,7 @@ describe('a union of objects has the same slice', () => {
     /**
      * **The slice runs the declaration guard again, and it has to.** A sub-selection of a certified
      * union is certified and a sub-selection of an uncertified one is not. The model's slice keeps
-     * pairwise compatibility with no certificate (`Calculus.pairwiseCompat_extract`), and the host
+     * pairwise compatibility with no certificate (`Calculus.AltClause.pairs_extractC`), and the host
      * certifies, so rebuilding through `union` is how the host keeps it.
      */
     it('rebuilds through the declaration guard rather than assembling the term', () => {
@@ -644,7 +644,7 @@ describe('discriminatedUnion slices like the dissection it is', () => {
 
 /**
  * **A clause at a carrier literal is answered.** The model answers such a clause
- * (`Calculus.AltClause.keyed` holds), so the type answers it too. A `dynamoNumber` literal decodes
+ * (`Calculus.AltClause.keyedC` holds), so the type answers it too. A `dynamoNumber` literal decodes
  * a `DynamoNumber` whose type holds the stored text, so the type compares the numerals as the run
  * time does. A `binary` literal decodes a `Uint8Array`, which has no literal type, and a numeral
  * from text that is no literal holds `string`. Where only such values decide a member, the

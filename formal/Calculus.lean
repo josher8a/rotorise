@@ -25,9 +25,7 @@ import Calculus.Lang.DisjointV
 import Calculus.Lang.DisjointA
 import Calculus.Lang.Compat
 import Calculus.Lang.View
-import Calculus.Lang.Path
 import Calculus.Lang.Scope
-import Calculus.Lang.System
 import Calculus.Lang.ScopeDisjoint
 import Calculus.Lang.ScopeCompat
 import Calculus.Lang.ScopeSound
@@ -48,7 +46,6 @@ import Calculus.Dynamo.Alg.Recursion
 import Calculus.Dynamo.Lang.Denote
 import Calculus.Dynamo.Lang.Typing
 import Calculus.Dynamo.Analysis.Merge
-import Calculus.Dynamo.Analysis.Slice
 import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Witness.Discharge
 import Calculus.Dynamo.Lang.Equations
@@ -76,8 +73,6 @@ import Calculus.Dynamo.Analysis.Universal
 import Calculus.Dynamo.Analysis.Confluence
 import Calculus.Dynamo.Analysis.Kernel
 import Calculus.Dynamo.Analysis.Compat
-import Calculus.Dynamo.Analysis.Path
-import Calculus.Dynamo.Analysis.Precondition
 import Calculus.Dynamo.Analysis.ScopePrecondition
 import Calculus.Axioms
 import Calculus.Lang.Universe

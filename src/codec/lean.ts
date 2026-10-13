@@ -2245,7 +2245,7 @@ const numberForm =
     'the clause is a `number` literal: the host reads the literal under the float adapter of `number`, and the model names no float adapter'
 
 /**
- * One clause: whether `src/` answers the clause (`AltClause.keyed`), and the options that `src/`
+ * One clause: whether `src/` answers the clause (`AltClause.keyedC`), and the options that `src/`
  * keeps under the clause, in the order of the union.
  */
 type SliceRow = {
@@ -2297,7 +2297,7 @@ const keptBy = (
     } catch (error) {
         // the host refuses a clause key that no member pins, and a clause at a base that no
         // member carries, as the model refuses a clause that is not keyed. The refusal keeps
-        // nothing (`AltClause.extract_eq_nil_of_keyed_false`)
+        // nothing (`AltClause.extractC_eq_nil_of_keyedC_false`)
         if (error instanceof CodecError)
             return { keyed: false, keeps: options.map(() => false) }
         throw error
