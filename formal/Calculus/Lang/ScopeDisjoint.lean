@@ -1,6 +1,6 @@
 import Calculus.Lang.Scope
-import Calculus.Lang.HeldFree
-import Calculus.Lang.DisjointV
+import Calculus.Lang.Universe
+import Calculus.Alg.Rows
 
 /-!
 # Disjointness over the graph of a closed codec

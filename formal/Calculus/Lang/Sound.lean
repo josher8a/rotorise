@@ -39,24 +39,6 @@ variable {S : Syn} [Sem S] {α : Table S} {β : Table S.op}
   | [] => rfl
   | t :: ts => congrArg ((denote α β t ρ).μ :: ·) (denoteμs_eq_map ts)
 
-/-- A unanimous member is the member of every option. -/
-theorem unanimous_spec {M : Type} [DecidableEq M] : ∀ {l : List (Option M)} {m},
-    unanimous l = some m → ∀ x ∈ l, x = some m
-  | [], _, h => nomatch h
-  | μ :: μs, m, h => by
-      replace h : (if μs.all (· == μ) then μ else none) = some m := h
-      cases hall : μs.all (· == μ) with
-      | false => rw [hall] at h; exact nomatch h
-      | true =>
-        rw [hall] at h
-        replace h : μ = some m := h
-        intro x hx
-        rcases List.mem_cons.mp hx with rfl | hx'
-        · exact h
-        · have hbe := List.all_eq_true.mp hall x hx'
-          have hxeq : x = μ := eq_of_beq hbe
-          rw [hxeq, h]
-
 /-! ## The theorem
 
 One induction. A primitive case is lawful by the universe's law, and a case with one subterm

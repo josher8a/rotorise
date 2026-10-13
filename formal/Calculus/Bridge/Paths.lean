@@ -1,4 +1,5 @@
 import Calculus.Dynamo.Analysis.Path
+import Calculus.Bridge.Kinds
 
 /-!
 # The readings of a path row
@@ -42,21 +43,6 @@ certificate.
 -/
 
 namespace Calculus
-
-/-- **Two primitives are one primitive**: the same base, or the same literal of one kind. -/
-def groundEq : Ground → Ground → Bool
-  | .base k, .base k' => decide (k = k')
-  | .literal k v, .literal k' v' => if h : k = k' then decide (h ▸ v = v') else false
-  | _, _ => false
-
-/-- **Two predicates of one datum**: the same alternatives at one kind. A closure is not read. -/
-def predSame : Pred → Pred → Bool
-  | .members k ls, .members k' ls' | .except k ls, .except k' ls' =>
-      if h : k = k' then
-        decide (∀ x ∈ (h ▸ ls).1, x ∈ ls'.1) && decide ((h ▸ ls).1.card = ls'.1.card)
-      else false
-  | .closure _, .closure _ => true
-  | _, _ => false
 
 mutual
 /-- **Two terms with one datum at each position**, with no binder unfolded. A function and a fill
@@ -120,11 +106,6 @@ def frameNever (f : Alg.Frame dynSyn) : Bool :=
   | .never => true
   | _ => false
 
-/-- **The decision of `at` at a path**, without the frames. -/
-inductive PathKind where
-  | refused | vacant | someVariants | ambiguous | resolved
-  deriving DecidableEq
-
 /-- **The decision of `at` at a path**, as the host states it. -/
 inductive HostAt where
   /-- The walk refuses the path. -/
@@ -146,16 +127,6 @@ def HostAt.kind : HostAt → PathKind
   | .someVariants => .someVariants
   | .ambiguous => .ambiguous
   | .resolved _ _ => .resolved
-
-/-- **The decision of a frontier with a first frame**, from three tests: some frame has the head
-    `never`, each frame has it, and each frame is the first frame. No `never` and one frame is one
-    codec, and no `never` and two frames is two declarations. Each frame `never` is no codec, and
-    some frames `never` is some options. -/
-def kindOf : Bool → Bool → Bool → PathKind
-  | false, _, true => .resolved
-  | false, _, false => .ambiguous
-  | true, true, _ => .vacant
-  | true, false, _ => .someVariants
 
 /-- **The decision that a frontier names.** A refusal is `none`, and the empty frontier is no
     codec. -/

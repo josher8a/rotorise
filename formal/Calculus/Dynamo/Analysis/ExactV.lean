@@ -1,5 +1,6 @@
 import Calculus.Lang.ExactV
 import Calculus.Dynamo.Lang.Soundness
+import Calculus.Dynamo.Lang.Universe
 
 variable {α : Calculus.Table}
 
@@ -86,25 +87,6 @@ export Alg (valPresentT)
 
 The structure of `Adm` and its exactness are the term language's (`Alg.Adm`, `Alg.Adm_exact`).
 DynamoDB supplies the primitive rows, `inBase` and `inL`, and their exactness. -/
-
-/-- The DynamoDB primitive rows: `inBase` at a base and `inL` at a literal.
-
-    The literal row is `inL`, with no `Numeral.WF` conjunct. `GroundKind.number.Carrier` is
-    `WFNumeral`, so an alternative outside `D` has no representation. So membership is exact
-    at every base, and `Adm_exact` covers the literal with nothing added. -/
-instance dynPrimAdm : Alg.PrimAdm dynSyn where
-  admV
-    | .base k => inBase k
-    | .literal k x => inL k x
-  admV_exact
-    | .base k, v => by
-        show decide (v.member = k.member) = true ↔
-          ((Alg.fiberCodec Attr.member k.member).f .host v).isSome = true
-        rw [Alg.fiberCodec_isSome]
-    | .literal k x, v => by
-        show inL k x v = true ↔ ((denote (fun _ => (id, id)) (.literal k x)).e v).isSome = true
-        cases k <;> cases v <;>
-          simp [denote_rows, literalCodec, inL, prism_rows, orient_rows]
 
 variable (α) in
 /-- **The joint admission predicate**: the generic row at DynamoDB, at the closed environment.

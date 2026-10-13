@@ -16,53 +16,6 @@ disjointness test reads it, and the compatibility decision reads it through that
 
 namespace Calculus.Alg
 
-/-! ## Apartness is antitone
-
-Two domains are apart where no datum lies in both. A domain inside an apart domain is apart too,
-so each soundness proof reads this fact where it would otherwise split the Booleans. -/
-
-/-- **Apartness moves to a domain that lies inside.** -/
-theorem apart_of_imp {x x' y : Bool} (h : x = true → x' = true) (h' : (x' && y) = false) :
-    (x && y) = false := by
-  cases x <;> cases y <;> simp_all
-
-/-- …on the right. -/
-theorem apart_of_imp' {x y y' : Bool} (h : y = true → y' = true) (h' : (x && y') = false) :
-    (x && y) = false := by
-  cases x <;> cases y <;> simp_all
-
-/-- Two conjunctions are apart where their left conjuncts are, because each conjunction lies inside
-    its conjunct. -/
-theorem apart_and_left {a b c d : Bool} (h : (a && b) = false) : ((a && c) && (b && d)) = false :=
-  apart_of_imp (fun hx => (Bool.and_eq_true_iff.mp hx).1)
-    (apart_of_imp' (fun hy => (Bool.and_eq_true_iff.mp hy).1) h)
-
-/-- …and where their right conjuncts are. -/
-theorem apart_and_right {a b c d : Bool} (h : (c && d) = false) : ((a && c) && (b && d)) = false :=
-  apart_of_imp (fun hx => (Bool.and_eq_true_iff.mp hx).2)
-    (apart_of_imp' (fun hy => (Bool.and_eq_true_iff.mp hy).2) h)
-
-/-- The four formers of the term language, as classes of root shapes. -/
-inductive Former where
-  | prim | set | list | object
-deriving DecidableEq
-
-/-- **The shape classes of a universe**: the former class of each datum, and the landing fact of
-    each former of the signature. The carrier is one, so one class serves values and attributes,
-    and each landing fact holds at each orientation. -/
-class Shapes (S : Syn) [Sem S] where
-  /-- The former class of a datum. -/
-  former : S.V → Former
-  /-- A primitive moves only primitive data. -/
-  prim : ∀ o g v, ((Syn.ground g).f o v).isSome = true → former v = .prim
-  /-- A set lift moves only set data. -/
-  set : ∀ L, Mean.set (B := S.sig) = some L → ∀ c o v, ((L.lift c).f o v).isSome = true →
-    former v = .set
-  /-- The list prism builds list data. -/
-  list : ∀ L, Mean.list (B := S.sig) = some L → ∀ vs, former (L.p.into vs) = .list
-  /-- The map prism builds object data. -/
-  map : ∀ F, Mean.map (B := S.sig) = some F → ∀ m, former (F.p.into m) = .object
-
 namespace Shapes
 
 variable {S : Syn} [Sem S] [Shapes S] {α : Table S} {β : Table S.op}

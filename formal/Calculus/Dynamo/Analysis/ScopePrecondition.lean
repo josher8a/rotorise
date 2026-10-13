@@ -1,4 +1,4 @@
-import Calculus.Dynamo.Analysis.Precondition
+import Calculus.Dynamo.Lang.Clause
 import Calculus.Dynamo.Analysis.ScopePath
 
 /-!
@@ -176,6 +176,12 @@ theorem object_reads {fs : Finset String} (cs : {x // x ∈ fs} → Codec) (rc :
   | _ => simp [mS, mA]
 
 
+/-- **A primitive reads where its row writes**, because each DynamoDB primitive is self-dual. -/
+theorem ground_reads (g : Ground) (A : Attr) :
+    ((groundCodec g).p A).isSome = Alg.PrimAdm.admV (S := dynSyn) g A := by
+  rw [← ground_selfdual]
+  exact (Bool.eq_iff_iff.mpr (Alg.PrimAdm.admV_exact (S := dynSyn) g A)).symm
+
 section Exact
 variable (α : Table) {N : Nat} (sys : Fin N → Alg.Scoped.Graph dynSig N) (e : Fin N → Codec)
 
@@ -188,7 +194,7 @@ theorem storedLitG_reads : ∀ {t : Alg.Scoped.Graph dynSig N} {k : GroundKind} 
     storedLitG t = some ⟨k, x⟩ → ∀ A, ((storedAt α sys e t).p A).isSome = inL k x A
   | .node (.prim (.literal k' x')) _, k, x, h, A => by
       simp only [storedLitG, Option.some.injEq] at h; cases h
-      exact Bool.eq_iff_iff.mpr (AdmA_exact (α := α) (Term.literal k' x') A).symm
+      exact ground_reads (.literal k' x') A
   | .node (.held false _ _) a, _, _, h, A => storedLitG_reads (t := a true) h A
   | .node (.held true _ _) a, _, _, h, A => storedLitG_reads (t := a false) h A
   | .leaf _, _, _, h, _ | .node (.prim (.base _)) _, _, _, h, _ | .node .opaq _, _, _, h, _
@@ -306,7 +312,7 @@ theorem termPreG_exact : ∀ (t : Alg.Scoped.Graph dynSig N) (π : List Seg) (gs
       | none => rfl
       | some A =>
           simp only [Test.eval]
-          exact Bool.eq_iff_iff.mpr (AdmA_exact (α := α) (Term.base k) A)
+          exact (ground_reads (.base k) A).symm
   | .node (.prim (.literal k x)) _, π, gs, h, R => by
       simp only [termPreG, Option.some.injEq] at h; subst h
       unfold rowAt Cond.eval
@@ -316,7 +322,7 @@ theorem termPreG_exact : ∀ (t : Alg.Scoped.Graph dynSig N) (π : List Seg) (gs
       | some A =>
           simp only [Test.eval]
           simp only [List.any_cons, List.any_nil, Bool.or_false]
-          exact Bool.eq_iff_iff.mpr (AdmA_exact (α := α) (Term.literal k x) A)
+          exact (ground_reads (.literal k x) A).symm
   | .node (.union m) a, π, gs, h, R => by
       unfold termPreG at h
       split at h

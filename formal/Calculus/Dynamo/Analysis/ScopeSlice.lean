@@ -1,4 +1,4 @@
-import Calculus.Dynamo.Analysis.Slice
+import Calculus.Dynamo.Lang.Clause
 import Calculus.Dynamo.Analysis.ScopePath
 
 /-!

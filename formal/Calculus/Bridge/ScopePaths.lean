@@ -1,5 +1,5 @@
-import Calculus.Bridge.Paths
-import Calculus.Bridge.Vectors
+import Calculus.Bridge.Kinds
+import Calculus.Bridge.Verdicts
 import Calculus.Dynamo.Analysis.ScopePath
 
 /-!

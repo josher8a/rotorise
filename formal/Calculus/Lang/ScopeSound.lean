@@ -1,5 +1,4 @@
 import Calculus.Lang.ScopeDisjoint
-import Calculus.Lang.Sound
 
 /-!
 # Soundness of a closed codec

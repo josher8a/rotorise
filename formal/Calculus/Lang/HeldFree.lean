@@ -16,92 +16,6 @@ which is canonical, so two held-free terms are compatible (`compat_of_HF`).
 
 namespace Calculus.Alg
 
-/-! ## Inclusion lemmas, one per combinator -/
-
-section Combinators
-variable {V M : Type}
-
-/-- Inclusion of graphs is transitive. -/
-theorem sub_trans {c d u : Codec V M} (h : Sub c d) (h' : Sub d u) : Sub c u :=
-  fun o x y hxy => h' o x y (h o x y hxy)
-
-/-- A union of codecs below `u` is below `u`, because the selector returns the answer of one
-    option. -/
-theorem sub_altCodec {os : List (Codec V M)} {u : Codec V M} (h : ∀ o ∈ os, Sub o u)
-    (μ : Option M) : Sub (altCodec os μ) u := fun o x y hxy =>
-  let ⟨c, hc, _, hcy⟩ := altCodec_admits hxy
-  h c hc o x y hcy
-
-/-- A zipped traversal at the orientation `o` whose every row codec is below `u` is a traversal
-    of `u` at `o`. -/
-theorem forall₂_zip (o : Orient) {u : Codec V M} :
-    ∀ (ds : List (Codec V M)) (xs : List (V)) (ys : List (V)),
-    ds.length = xs.length → (∀ c ∈ ds, Sub c u) →
-    List.Forall₂ (fun (cx : Codec V M × V) y => cx.1.f o cx.2 = some y) (ds.zip xs) ys →
-    List.Forall₂ (fun x y => u.f o x = some y) xs ys
-  | [], [], _, _, _, h => by cases h; exact .nil
-  | d :: ds, x :: xs, y :: ys, hl, hd, .cons h1 h2 =>
-      .cons ((hd d (by simp)) o _ _ h1)
-        (forall₂_zip o ds xs ys (by simpa using hl) (fun c hc => hd c (by simp [hc])) h2)
-  | [], _ :: _, _, hl, _, _ => nomatch hl
-  | _ :: _, [], _, hl, _, _ => nomatch hl
-  | _ :: _, _ :: _, [], _, _, h => nomatch h
-
-/-- A list whose every slot is below a top that acts as the list former is below the top. -/
-theorem sub_listCodec {member : V → M} {sL : Summand (List V) V M member} {u : Codec V M}
-    (hu : ∀ o vs, u.f o (sL.p.into vs) = (traverse (u.f o) vs).map sL.p.into)
-    {pre suf : List (Codec V M)} {sp : Option (Codec V M)}
-    (hpre : ∀ c ∈ pre, Sub c u) (hsp : ∀ c ∈ sp, Sub c u) (hsuf : ∀ c ∈ suf, Sub c u) :
-    Sub (listCodec sL pre sp suf) u := by
-  have hrow : ∀ n ds, slotsL pre sp suf n = some ds → ∀ c ∈ ds, Sub c u := fun n ds h c hc => by
-    rcases slotsL_mem pre sp suf n ds h c hc with h1 | h1 | h1
-    · exact hpre c h1
-    · exact hsp c h1
-    · exact hsuf c h1
-  intro o v a he
-  obtain ⟨vs, as, hv, hE, rfl⟩ := carried_f.mp he
-  simp only [alignL, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hE
-  obtain ⟨ps, ⟨ds, hds, rfl⟩, ht⟩ := hE
-  rw [sL.p.into_out hv, hu, traverse_eq_some.mpr (forall₂_zip o ds vs as
-    (slotsL_length _ _ _ _ _ hds) (hrow _ _ hds) (traverse_eq_some.mp ht))]
-  rfl
-
-/-- An object with no fill whose every entry codec is below a top that acts as the map former
-    is below the top. -/
-theorem sub_objectCodec {member : V → M} {sM : Summand (MapOf V) V M member} {u : Codec V M}
-    (hu : ∀ o (m : MapOf V), u.f o (sM.p.into m) =
-      (funImage fun k => u.f o (m.get k)).map fun g => sM.p.into ⟨m.keys, g⟩)
-    {sems : MapOf (FieldSem V M)} {rest : RestSem V M} (hnf : noFill sems = true)
-    (hf : ∀ k, Sub (sems.2 k).codec u) (hw : ∀ c ∈ rcOf rest, Sub c u) :
-    Sub (objectCodec sM sems rest) u := by
-  intro o v a he
-  obtain ⟨x, y, hv, hE, rfl⟩ := carried_f.mp he
-  -- a present name: its entry goes through the top
-  have hk : ∀ k : {k // k ∈ x.keys}, ∃ w, u.f o (x.get k) = some w ∧ y.at k.1 = some w := by
-    intro k
-    have h := objAt_at hE k.1
-    rw [MapOf.at_of_mem k] at h
-    simp only [liftTable, Option.map_eq_some_iff] at h
-    obtain ⟨w, hcw, hyw⟩ := h
-    obtain ⟨c, hc, hce⟩ := Option.bind_eq_some_iff.mp hcw
-    exact ⟨w, (entryCodec_of (Q := fun c => Sub c u) hf hw hc) o _ _ hce, hyw.symm⟩
-  have hs : ∀ k : {k // k ∈ x.keys}, (u.f o (x.get k)).isSome := fun k => by
-    obtain ⟨w, hw', -⟩ := hk k; rw [hw']; rfl
-  rw [sM.p.into_out hv, hu, funImage_eq (f := fun k => (u.f o (x.get k)).get (hs k))
-    (fun k => (Option.some_get _).symm)]
-  -- every other name is absent on both sides
-  refine congrArg (fun m => some (sM.p.into m)) (MapOf.ext_at fun k => ?_)
-  rcases Decidable.em (k ∈ x.keys) with hkx | hkx
-  · obtain ⟨w, hw', hyw⟩ := hk ⟨k, hkx⟩
-    rw [hyw]
-    simp only [MapOf.at, dif_pos hkx, hw', Option.get_some]
-  · have h := objAt_at hE k
-    rw [MapOf.at_none hkx] at h
-    rw [liftTable_none (noFill_at hnf k) h]
-    simp only [MapOf.at, dif_neg hkx]
-
-end Combinators
-
 /-! ## Held-free terms -/
 
 section HeldFree
@@ -122,36 +36,7 @@ abbrev HFO (o : Option (Term S)) : Prop := hasHeldO o = false
 
 variable [Sem S] {α : Table S}
 
-/-- The laws of the top that the held-free theory reads: each primitive is below the top, and
-    the set lift keeps a codec below the top. The top is the identity, so it acts as the list
-    and map formers with no law of the universe (`top_list`, `top_map`). -/
-class TopLaws (S : Syn) [Sem S] : Prop where
-  ground : ∀ g, Sub (Syn.ground g) (Syn.top (S := S))
-  set : ∀ L ∈ Mean.set (B := S.sig), ∀ c : S.C, Sub c (Syn.top (S := S)) →
-    Sub (L.lift c) (Syn.top (S := S))
-  /-- A set over a restriction of the top acts, at each orientation, where a set over an element
-      that acts less acts. The view of a set reads this law. -/
-  set_mono : ∀ L ∈ Mean.set (B := S.sig), ∀ (o : Orient) (c d : S.C), Sub d (Syn.top (S := S)) →
-    (∀ w, (c.f o w).isSome = true → (d.f o w).isSome = true) →
-    ∀ x, ((L.lift c).f o x).isSome = true → ((L.lift d).f o x).isSome = true
-
-/-- **The laws of the top read no orientation**, so the dual universe has the laws of the
-    universe. -/
-instance TopLaws.op [h : TopLaws S] : TopLaws S.op := ⟨h.ground, h.set, h.set_mono⟩
-
 variable {β : Table S.op}
-
-/-- The top acts as a list former: element by element. -/
-theorem top_list {o : Orient} (into : List S.V → S.V) (vs : List S.V) :
-    (Syn.top (S := S)).f o (into vs) = (traverse ((Syn.top (S := S)).f o) vs).map into :=
-  (congrArg (Option.map into) (traverse_some vs)).symm
-
-/-- The top acts as a map former: entry by entry. -/
-theorem top_map {o : Orient} (into : MapOf S.V → S.V) (m : MapOf S.V) :
-    (Syn.top (S := S)).f o (into m) =
-      (funImage fun k => (Syn.top (S := S)).f o (m.get k)).map fun g => into ⟨m.keys, g⟩ :=
-  (congrArg (Option.map fun g => into ⟨m.keys, g⟩) (funImage_eq (g := fun k => (Syn.top (S := S)).f o (m.get k))
-    (fun _ => rfl))).symm
 
 mutual
 /-- **Confluence at a context.** A held-free term whose free variables are safe in `ctx` denotes a

@@ -189,13 +189,6 @@ class LeafAdm (S : Syn) [Sem S] [PrimAdm S] [Leaf S] : Prop where
   prims_apart : ∀ {α : Table S} {β : Table S.op} (g g' : S.Ground), Leaf.primsApart g g' = true →
     ∀ v, (Adm α β (.prim g : Term S) [] v && Adm α β (.prim g') [] v) = false
 
-/-- **The law of the predicate leaves**, at each absolute side: two predicates apart hold
-    together nowhere. The law is a fact of the signature and its meaning, so the dual universe has
-    the law of the universe. -/
-class LeafMeet (B : Sig) [Mean B] [Leaf B] : Prop where
-  predicates_apart : ∀ (s : Bool) (q p : B.P s), Leaf.predicatesApart s q p = true →
-    ∀ x, (Mean.eval s q x && Mean.eval s p x) = false
-
 /-- **A held-free closed term lies below the top**: its graph is inside the graph of the top.
     Two such terms therefore write one value to one attribute and read one attribute to one
     value, and a predicate at either side reads that one element. -/

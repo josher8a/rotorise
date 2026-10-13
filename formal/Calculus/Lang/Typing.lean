@@ -1,4 +1,5 @@
 import Calculus.Lang.Term
+import Calculus.Lang.Universe
 
 /-!
 # The judgement over a universe signature
@@ -18,54 +19,6 @@ of a binder's body at each stage.
 -/
 
 namespace Calculus.Alg
-
-/-! ## Held sets -/
-
-section Held
-variable {V : Type}
-
-/-- The positional part of `T₁ × … × Tₙ`, and of `… × T*` when a tail is present:
-    the fixed head matched position by position, the tail uniformly. -/
-def HTuple : List (V → Prop) → Option (V → Prop) → List V → Prop
-  | [], none, vs => vs = []
-  | [], some T, vs => ∀ x ∈ vs, T x
-  | _ :: _, _, [] => False
-  | T :: Ts, tl, v :: vs => T v ∧ HTuple Ts tl vs
-
-/-- The positional part of a `list`'s held set: the suffix splits off the right end, and
-    what is left is `HTuple`'s prefix-and-spread. `Forall₂` carries both the length of the
-    suffix and the holding at each of its positions, so no length premise is owed. -/
-def HTupleL (pre : List (V → Prop)) (sp : Option (V → Prop)) (suf : List (V → Prop)) (vs : List V) :
-    Prop :=
-  ∃ front back : List V,
-    vs = front ++ back ∧ List.Forall₂ (fun T v => T v) suf back ∧ HTuple pre sp front
-
-/-- `T₁ × … × Tₚ × T* × U₁ × … × U_s` (the rule `(list)`): the one positional held set, through the
-    list prism of the universe. -/
-def HList (pV : Ctor (List V) V) (pre : List (V → Prop)) (sp : Option (V → Prop))
-    (suf : List (V → Prop)) : V → Prop :=
-  fun v => ∃ vs, v = pV.into vs ∧ HTupleL pre sp suf vs
-
-/-- `⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ)` (the rule `(object)`), through the map prism of the universe. A
-    binding is `(required?, held set)`, and `R` is the held set of the open block. Every `req` name
-    is present, and every present name is either declared, and holds its own set, or falls to the
-    open block. -/
-def HObject (mV : Ctor (MapOf V) V) (names : Finset String)
-    (b : {k // k ∈ names} → Bool × (V → Prop)) (R : Option (V → Prop)) : V → Prop :=
-  fun v => ∃ keys f, v = mV.into ⟨keys, f⟩ ∧
-    (∀ k : {k // k ∈ names}, (b k).1 = true → k.1 ∈ keys) ∧
-    (∀ k : {k // k ∈ keys},
-      if h : k.1 ∈ names then (b ⟨k.1, h⟩).2 (f k)
-      else ∃ T, R = some T ∧ T (f k))
-
-/-- `⋃ Tᵢ` (the rule `(union)`). -/
-def HUnion (Ts : List (V → Prop)) : V → Prop :=
-  fun v => ∃ T ∈ Ts, T v
-
-/-- The bottom's held set: nothing. It is disjoint from every held set. -/
-def HNever : V → Prop := fun _ => False
-
-end Held
 
 /-! ## The judgement -/
 

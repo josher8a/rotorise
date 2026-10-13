@@ -2,6 +2,7 @@ import Calculus.Dynamo.Lang.Term
 import Calculus.Lang.Typing
 import Calculus.Dynamo.Alg.Frontier
 import Calculus.Dynamo.Alg.Opaque
+import Calculus.Dynamo.Lang.Clause
 
 variable {α : Calculus.Table}
 
@@ -27,13 +28,6 @@ section
 /-- The payload's field table as a `MapOf`, the shape `MapOf.at` reads. `Body.mk` takes the key
     set and the slot function as two arguments, so this is the coercion. -/
 def Body.map (b : Body) : MapOf ObjectSlot := ⟨b.fields, b.at⟩
-
-/-- **What a name is pinned to**: the adapter word, and the alternatives under the word. The word
-    is the generators of a `held` in order. The empty word is the native form, so `decimal` pins
-    under `[(.decimalText, false)]` and a literal under `[]`. The word is part of the pin because a
-    `held` admits the caller's value and not the literal beneath it: a clause at the same literal
-    under another word describes other values. -/
-abbrev Pin := Word × Alts
 
 /-- The literals of a list of options, where each option is a literal at base `k`. -/
 def litsAt (k : GroundKind) : List Term → Option (Finset k.Carrier)
@@ -63,15 +57,6 @@ def pinOf : Term → Option Pin
     (`litSubAt`), so an `optional` literal is told apart by its presence and not by its pin. -/
 def altsOfField : ObjectSlot → Option Pin
   | .req t | .optional t | .fill t _ => pinOf t
-
-/-- One declared name, as a slice reads it: whether the caller must write the name, and the pin
-    of its field.
-
-    `required` is the presence at the caller side, `isReqAt .host`. A fill is required there,
-    because a fill is optional on the read alone. -/
-structure NameSpec where
-  required : Bool
-  pin : Option Pin
 
 /-- A body's spec: the caller-side presence and the pin of each declared name, which a slice
     reads. A slice asks each name that a clause names, so an undeclared name and the open block
