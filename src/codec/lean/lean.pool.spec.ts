@@ -84,7 +84,6 @@ import { orThrow } from '../result'
 import { agrees, disjoint, viewsDisjoint } from '../scoped'
 import type { Term } from '../term'
 import {
-    bindersOf,
     force,
     freeNamesOf,
     openRefusal,
@@ -907,19 +906,12 @@ const pathsOf = (codec: AnyCodec): (readonly PathStep[])[] => {
     return paths.filter((path) => path.length > 0)
 }
 
-/**
- * **A union that the draw narrows**: a union under its thunks that is no binder. The type of
- * `narrow` at a recursive union does not yet follow the run time: put to the type checker, the
- * narrowing paths at recursive unions measured 3925 new disagreements of the type bridge. The Lean
- * form decides a recursive union, and {@link recursiveNarrowing} puts the shape to the kernel
- * outside the type vectors.
- */
+/** **A union that the draw narrows**: a union under its thunks, recursive or not. */
 const drawsNarrowing = (decided: HostAt): boolean => {
     if (!unionAt(decided) || decided.kind !== 'resolved') return false
     const def = decided.codec.def
     if ('mark' in def) return false
-    const u = throughLazy(def)
-    return u !== undefined && !bindersOf(def).has(u)
+    return throughLazy(def) !== undefined
 }
 
 /** The term under a chain of thunks, or nothing where a thunk throws. */
@@ -1148,9 +1140,8 @@ const buildPool = () => {
 
 /**
  * **A narrowing at a recursive union**, beside the pool: the option `node` of `Node` returns to
- * `Node`. The draw narrows no recursive union ({@link drawsNarrowing}), so this vector puts the
- * shape to the kernel in every run. The vector goes to the path modules only, and not to the type
- * vectors. The clause `leaf` keeps the option that declares `v`, and the clause `node` keeps the
+ * `Node`. The draw depends on the seed, so this vector puts the shape to the kernel in every run.
+ * The vector goes to the path modules only, and not to the type vectors. The clause `leaf` keeps the option that declares `v`, and the clause `node` keeps the
  * option whose elements return to the union.
  */
 const recursiveNarrowing = (): PathVectors => {
@@ -1256,7 +1247,7 @@ describe('the generated pool, against the model', () => {
                 "seed": 20261004,
                 "separations": 1141,
                 "slices": 88,
-                "whenPaths": 4675,
+                "whenPaths": 6368,
               },
               {
                 "assignments": 24,
@@ -1270,7 +1261,7 @@ describe('the generated pool, against the model', () => {
                 "seed": 1,
                 "separations": 1088,
                 "slices": 61,
-                "whenPaths": 3312,
+                "whenPaths": 5330,
               },
               {
                 "assignments": 44,
@@ -1284,7 +1275,7 @@ describe('the generated pool, against the model', () => {
                 "seed": 4,
                 "separations": 1144,
                 "slices": 100,
-                "whenPaths": 6212,
+                "whenPaths": 10578,
               },
             ],
           }
@@ -1481,10 +1472,14 @@ describe('the generated pool, against the model', () => {
             'slices7.ts',
             'slices8.ts',
             'slices9.ts',
-            'paths.ts',
+            'paths0.ts',
+            'paths1.ts',
+            'paths2.ts',
             'rows.json',
             'tsconfig.slices.json',
-            'tsconfig.paths.json',
+            'tsconfig.paths0.json',
+            'tsconfig.paths1.json',
+            'tsconfig.paths2.json',
         ])
     })
 })

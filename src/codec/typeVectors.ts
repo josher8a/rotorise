@@ -39,6 +39,7 @@ import { codecOfTerm } from './denote'
 import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, leanTermOf, reachable } from './lean'
 import { CodecError } from './result'
+import { storedApart } from './scoped'
 import type { Literal, Term } from './term'
 import { componentsOf, force, leafKinds, sameTerm } from './term'
 
@@ -761,7 +762,8 @@ const pathRoot = (
                     .join(', ')} })`
     /*
      * A name that no head declares, where a head is open, is spelled `.entry('k')`. The
-     * heads are the terms at the path, through thunks and the options of a union.
+     * heads are the terms at the path, through thunks and the options of a union. A clause
+     * keeps each head that the stored view of the clause does not separate, as `narrow` does.
      */
     const headsOf = (t: Term): readonly Term[] => {
         if (t.kind === 'lazy') {
@@ -784,9 +786,19 @@ const pathRoot = (
         }
         return []
     }
+    const clauseOf = (clause: Readonly<Record<string, AnyCodec>>): Term => ({
+        kind: 'object',
+        body: {
+            fields: Object.fromEntries(
+                Object.entries(clause).map(([k, c]) => [
+                    k,
+                    { mark: 'req', t: c.def },
+                ]),
+            ),
+            rest: { kind: 'opaq' },
+        },
+    })
     const spelled = (path: readonly PathStep[]): string => {
-        if (path.some((s) => typeof s === 'object'))
-            return path.map(stepText).join('')
         let heads: readonly Term[] = headsOf(vectors.codec.def)
         let out = ''
         for (const s of path) {
@@ -804,6 +816,10 @@ const pathRoot = (
             } else out += stepText(s)
             if (typeof s !== 'object')
                 heads = heads.flatMap((h) => childOf(h, s)).flatMap(headsOf)
+            else {
+                const clause = clauseOf(s.narrow)
+                heads = heads.filter((h) => !storedApart(clause, h))
+            }
         }
         return out
     }
@@ -859,6 +875,17 @@ const SLICE_FILES = [
     'slices7.ts',
     'slices8.ts',
     'slices9.ts',
+] as const
+
+/**
+ * **The path checks go to three programs**, cut at the boundary of a root. The bridge compiles
+ * the programs one after another, so its peak memory is the memory of one part. A narrowing at
+ * a recursive union costs the checker more than any other check.
+ */
+const PATH_FILES = [
+    ['paths0.ts', 'tsconfig.paths0.json'],
+    ['paths1.ts', 'tsconfig.paths1.json'],
+    ['paths2.ts', 'tsconfig.paths2.json'],
 ] as const
 
 /** Each block in a file of its own lines, with its rows placed in that file. */
@@ -933,8 +960,9 @@ const byHash = <T>(
 }
 
 /**
- * **The type vectors of the pool**: the codecs, the slice checks in ten files, the path checks,
- * the rows, and one compiler configuration for each of the two programs.
+ * **The type vectors of the pool**: the codecs, the slice checks in ten files, the path checks in
+ * three files, the rows, and one compiler configuration for the slice program and for each path
+ * program.
  *
  * **The roots go in the order of their hash**, so the files depend on the set of roots and not
  * on the order of the pool. A root that the printer refuses throws: the roots share constants,
@@ -991,15 +1019,18 @@ export const typeVectorFiles = ({
         file,
         ...placed(file, checksHeader, parts[i] ?? []),
     }))
-    const pathFile = placed(
-        'paths.ts',
-        checksHeader,
+    const pathParts = split(
         pathRoots.map((r) => r.checks),
+        PATH_FILES.length,
     )
+    const pathFiles = PATH_FILES.map(([file], i) => ({
+        file,
+        ...placed(file, checksHeader, pathParts[i] ?? []),
+    }))
     const rows = [
         ...codecs.rows,
         ...sliceFiles.flatMap((f) => f.rows),
-        ...pathFile.rows,
+        ...pathFiles.flatMap((f) => f.rows),
     ]
     // two declarations of one content share one id; each check has an id of its own
     const checks = rows.filter((r) => !r.id.startsWith('declaration|'))
@@ -1010,12 +1041,15 @@ export const typeVectorFiles = ({
     return [
         ['codecs.ts', codecs.text],
         ...sliceFiles.map((f) => [f.file, f.text] as const),
-        ['paths.ts', pathFile.text],
+        ...pathFiles.map((f) => [f.file, f.text] as const),
         [
             'rows.json',
             `[\n${rows.map((r) => JSON.stringify(r)).join(',\n')}\n]\n`,
         ],
         ['tsconfig.slices.json', tsconfig(['codecs.ts', ...SLICE_FILES])],
-        ['tsconfig.paths.json', tsconfig(['codecs.ts', 'paths.ts'])],
+        ...PATH_FILES.map(
+            ([file, config]) =>
+                [config, tsconfig(['codecs.ts', file])] as const,
+        ),
     ]
 }

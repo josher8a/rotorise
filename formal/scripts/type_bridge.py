@@ -4,8 +4,9 @@
 The pool spec emits `formal/.pool.types/`: the codecs of the pool as library calls, one check per
 decision of the run time, and a rows file, which names the row of each check. A check where the
 run time accepts is a plain line. A check where the run time refuses is a line under
-`@ts-expect-error`. This script compiles two programs in parallel, the slice checks and the path
-checks, each with the codecs file, and maps each error to its row:
+`@ts-expect-error`. This script compiles the slice program beside the path programs, and the path
+programs one after another, so the peak memory holds one path program. Each program holds the
+codecs file. The script maps each error to its row:
 
   an `accept` row with an error         the type refuses what the run time accepts
   a `refuse` row whose directive is     the type accepts what the run time refuses
@@ -24,28 +25,37 @@ fall: the script counts it, and the check passes.
 Usage:  python3 scripts/type_bridge.py            (exit 1 on a new id or a hard failure)
         python3 scripts/type_bridge.py --accept   (rewrite the baseline to the current set)
 """
-import json, os, re, subprocess, sys
+import glob, json, os, re, subprocess, sys
 from collections import Counter
 
 FORMAL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = os.path.dirname(FORMAL)
 TYPES = os.path.join(FORMAL, ".pool.types")
 BASELINE = os.path.join(FORMAL, "scripts", "type_bridge_baseline.txt")
-PROGRAMS = ("tsconfig.slices.json", "tsconfig.paths.json")
+SLICES = "tsconfig.slices.json"
 
 ERROR = re.compile(r"^(.*?)\((\d+),(\d+)\): error (TS\d+): (.*)$")
 
 
+def tsc(program):
+    return subprocess.Popen(
+        ["npx", "--no-install", "tsc", "-p", os.path.join(TYPES, program), "--pretty", "false"],
+        cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+
+
 def compile_all():
-    """Run the two programs at one time, and return the output and the exit code of each."""
-    procs = [
-        subprocess.Popen(
-            ["npx", "--no-install", "tsc", "-p", os.path.join(TYPES, p), "--pretty", "false"],
-            cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-        )
-        for p in PROGRAMS
-    ]
-    return [(p, *proc.communicate()[:1], proc.returncode) for p, proc in zip(PROGRAMS, procs)]
+    """Run the slice program beside the path programs, and the path programs one after another.
+    Return the output and the exit code of each program."""
+    paths = sorted(
+        os.path.basename(p) for p in glob.glob(os.path.join(TYPES, "tsconfig.paths[0-9]*.json"))
+    )
+    slices = tsc(SLICES)
+    results = []
+    for p in paths:
+        proc = tsc(p)
+        results.append((p, proc.communicate()[0], proc.returncode))
+    return [(SLICES, slices.communicate()[0], slices.returncode), *results]
 
 
 def parse(program, output, hard):
@@ -110,6 +120,9 @@ def main():
         print(f"no {rows_path}: run the vector emit first (EMIT_LEAN_REFUSALS=1 vitest)")
         return 1
     rows = json.load(open(rows_path, encoding="utf-8"))
+    if not glob.glob(os.path.join(TYPES, "tsconfig.paths[0-9]*.json")):
+        print(f"no path program in {TYPES}: run the vector emit first (EMIT_LEAN_REFUSALS=1 vitest)")
+        return 1
     hard = []
     errors = set()
     for program, output, code in compile_all():
