@@ -104,9 +104,10 @@ const valueText = (v: unknown, at: string): string => {
             : refuse(at, 'a fill that is no finite number')
     if (v instanceof DynamoNumber) return numeralText(v)
     if (v instanceof Uint8Array) return bytesText(v)
+    // a const assertion keeps each literal member, as the type of a literal set reads it
     if (v instanceof Set) {
         const members: readonly unknown[] = [...v]
-        return `new Set([${members.map((x) => valueText(x, at)).join(', ')}])`
+        return `new Set([${members.map((x) => valueText(x, at)).join(', ')}] as const)`
     }
     if (Array.isArray(v)) {
         const items: readonly unknown[] = v
