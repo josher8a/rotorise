@@ -1,42 +1,22 @@
-import Calculus.Dynamo.Lang.Soundness
-import Calculus.Dynamo.Lang.Store
-import Calculus.Dynamo.Analysis.ExactV
 import Calculus.Dynamo.Witness.ScopeNesting
 
-variable {α : Calculus.Table}
-
 /-!
-# The nesting bound, and the claim the calculus cannot make
+# The nesting bound: the ground fragment and the containers
 
 `Domain.lean` states the bound: `Attr.Storable n a` is `Attr.nesting a ≤ n`, counting `L` and
 `M` and nothing else. The bound `n` is a parameter, because the ideal algebra has no depth
-limit. A port instantiates it (`Dynamo/Lang/Store.lean`). This file says what the calculus does and does not guarantee about it,
-and the answer is worth stating precisely because **it is the one place `𝔸` is larger in the
-model than in the store**.
+limit. A port instantiates it (`Dynamo/Lang/Store.lean`). The nesting bound is the one place
+where `𝔸` is larger in the model than in the store.
 
-Everywhere else the attribute domain is exact, and (W) plus `Carrier` give `ran(e) ⊆ 𝔸` outright. Here they do
-not: `Attr.l` and `Attr.m` nest without limit by construction, so a derivable term can write
-an attribute the store refuses. That is not a defect the model *has* — it is a defect the
-model must be able to **state**, because a target certified against a spec that cannot say
-this would be certified against a claim weaker than the one its users read.
+Two facts are proved here:
 
-Three things are proved:
+* **the ground fragment is safe**: every ground codec writes nesting `0`, so the bound is
+  never a question for the codecs that do not nest;
+* **the containers are exact**: `array` adds exactly one level, so the bound is
+  compositional and not a global search.
 
-* **the ground fragment is safe** — every ground term writes nesting `0`, so the bound is
-  never a question for the terms that do not nest;
-* **the containers are exact** — `array` adds exactly one level, which is what makes the
-  bound compositional rather than a global search;
-* **and the calculus admits a term that breaks it** (`not_storable_of_typed`) — a *derivable*
-  term, a value on its held set, and an encoding outside `Storable`. So `ran(e) ⊆ 𝔸` holds
-  against the model's `𝔸` and fails against the store's, and there is a witness rather than a
-  remark.
-
-The third is why `src/` gates on depth at every codec that writes a list or a map: each
-container passes its level to its children, and the write past the bound is refused. The port
-states that gate as `storeCodec` (`Dynamo/Lang/Store.lean`), and `storeCodec_refuses_deep` refuses
-the witness. The third is also why the honest repair is
-*not* a carrier refinement: the witness is well-typed, so no premise of the typing rules is
-being violated — the rules simply do not mention depth.
+A typed closed codec can still write an attribute that the store refuses
+(`Closed.not_storable_of_typed`), and the port refuses that write (`Closed.storeCodec_refuses_deep`).
 -/
 
 namespace Calculus
@@ -71,94 +51,5 @@ theorem nestingL_of_mem {as : List Attr} {a : Attr} (h : a ∈ as) :
     rcases List.mem_cons.mp h with rfl | h'
     · exact Nat.le_max_left _ _
     · exact le_trans (ih h') (Nat.le_max_right _ _)
-
-/-! ## The witness: a derivable term outside the store's `𝔸`
-
-Stated over a family rather than a literal term, so the proof is an induction and not one
-unfolding per level — and so the witness holds at every bound. -/
-
-/-- `n` nested `array`s over `string`. -/
-def deepT : Nat → Term
-  | 0 => .string
-  | n + 1 => .array (deepT n)
-
-/-- Every one of them is derivable. -/
-theorem typed_deepT : ∀ n, ∃ T μ, Typed α (deepT n) T μ
-  | 0 => ⟨_, _, Typed.base .string⟩
-  | n + 1 => by
-    obtain ⟨T, μ, h⟩ := typed_deepT n
-    exact ⟨_, _, Typed.array h⟩
-
-/-- And every one of them writes what the index says. -/
-theorem deepT_e : ∀ n, (denote α (deepT n)).e (deepV n) = some (deepA n)
-  | 0 => rfl
-  | n + 1 => by
-    show (arrayCodec (denote α (deepT n))).e (.arr [deepV n]) = some (.l [deepA n])
-    refine (arrayCodec_f _ _ [deepV n]).trans ?_
-    have h := deepT_e n
-    simp only [traverse, orient_rows] at h ⊢; rw [h]; rfl
-
-/-- **The claim the calculus cannot make.** At every bound, a derivable term, a value it
-    writes, and an attribute the store refuses — so `ran(e) ⊆ 𝔸` is exact against the model's
-    `𝔸` and false against a bounded store's.
-
-    The term is `array^(bound+1)(string)`, which carries no premise about depth because no typing rule
-    states one. That is the finding: the bound is not a side condition anyone forgot to
-    discharge, it is absent from the rules, and no derivation can be blamed. -/
-theorem not_storable_of_typed (bound : Nat) :
-    ∃ (t : Term) (T : Held) (μ : Option Member) (v : Value) (a : Attr),
-      Typed α t T μ ∧ (denote α t).e v = some a ∧ ¬ Attr.Storable bound a := by
-  obtain ⟨T, μ, hty⟩ := typed_deepT (α := α) (bound + 1)
-  refine ⟨_, T, μ, deepV (bound + 1), deepA (bound + 1), hty, deepT_e (bound + 1), ?_⟩
-  show ¬ Attr.nesting (deepA (bound + 1)) ≤ bound
-  rw [nesting_deepA]
-  omega
-
-end Calculus
-
-namespace Calculus.DynamoDB
-
-/-- At the store's bound, a derivable term writes an attribute that DynamoDB refuses. -/
-theorem not_storable_of_typed :
-    ∃ (t : Term) (T : Held) (μ : Option Member) (v : Value) (a : Attr),
-      Typed α t T μ ∧ (denote α t).e v = some a ∧ ¬ Attr.Storable maxNesting a :=
-  Calculus.not_storable_of_typed maxNesting
-
-/-- The port gates every derivable term: `storeCodec` keeps the laws of `soundness`. -/
-theorem lawful_storeCodec_denote {t T μ} (h : Typed α t T μ) (hob : Obligations α t) :
-    Lawful (storeCodec (denote α t)) :=
-  Calculus.lawful_storeCodec (soundness h hob)
-
-/-- …and keeps the carrier of every derivable term. -/
-theorem carrier_storeCodec_denote {t T μ} (h : Typed α t T μ) (hob : Obligations α t) :
-    Carrier (storeCodec (denote α t)) :=
-  Calculus.carrier_storeCodec (Alg.carrier_denote h hob)
-
-/-- **The port refuses the witness**: the write at `maxNesting + 1` levels is refused. -/
-theorem storeCodec_refuses_deep :
-    (storeCodec (denote α (deepT (maxNesting + 1)))).e (deepV (maxNesting + 1)) = none := by
-  rw [storeCodec, Alg.refine2_e_def]
-  simp only [if_true]
-  rw [deepT_e]
-  simp [isStorable, nesting_deepA]
-
-/-- …and writes the witness at `maxNesting` levels unchanged. -/
-theorem storeCodec_writes_deep :
-    (storeCodec (denote α (deepT maxNesting))).e (deepV maxNesting) = some (deepA maxNesting) := by
-  rw [storeCodec, Alg.refine2_e_def]
-  simp only [if_true]
-  rw [deepT_e]
-  simp [isStorable, nesting_deepA, numeralsStored_deepA]
-
-end Calculus.DynamoDB
-
-namespace Calculus
-
-/-- `decimalHeld` admits the stored spellings and nothing else, which is what `decimal`
-    promises. -/
-example : Adm (libTable noCallers) decimalHeld (Value.str "1.5") = true := by decide
-example : Adm (libTable noCallers) decimalHeld (Value.str "1.50") = false := by decide
-example : Adm (libTable noCallers) decimalHeld (Value.str "abc") = false := by decide
-example : Adm (libTable noCallers) decimalHeld (Value.num (WFNumeral.of "1.5")) = false := by decide
 
 end Calculus

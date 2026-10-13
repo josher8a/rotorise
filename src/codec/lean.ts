@@ -1316,7 +1316,7 @@ const refusedBoth = (name: string, codec: AnyCodec, value: unknown): void => {
  * decides it, so such a pair holds no decision of the host, and the emitter refuses the pair.
  *
  * Compatibility is not decidable, so a refused pair carries no theorem that it is incompatible:
- * `not_compat_flip` and `not_compat_shout` are the model's witnesses of that class.
+ * `Closed.not_compat_flip` and `Closed.not_compat_shout` are the model's witnesses of that class.
  */
 export type Separation = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
@@ -1497,7 +1497,7 @@ end Calculus
  * model's read row admits it.
  *
  * **The differential that replaced a port.** HANDOFF's fourth item was to give the resolver's
- * read side a decision through a port of `AdmA`, in the style the deleted reader ported `Adm`.
+ * read side a decision through a port of `Closed.AdmA`.
  * Measured
  * first: over 864 (codec, attribute) pairs the two agree at **861 of 861 checkable** ones and
  * disagree at none. `decode` validates — it parses data somebody else wrote, which is its job —
@@ -1506,7 +1506,7 @@ end Calculus
  * def-reading port would be a second description of what `decode` already computes exactly, and
  * two descriptions of one thing need a guard between them. **The guard is what landed.**
  *
- * `#eval` runs `AdmA`, but a printed verdict proves nothing. The kernel unfolds it, which is the
+ * `#eval` runs `Closed.AdmA`, but a printed verdict proves nothing. The kernel unfolds it, which is the
  * fact `Vectors.lean` opens with, so the verdict is asserted and elaboration is the test.
  */
 export type ReadVerdict = {

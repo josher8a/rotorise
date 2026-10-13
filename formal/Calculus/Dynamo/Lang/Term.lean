@@ -137,8 +137,7 @@ inductive Ground where
       say nothing but what it means.
 
       **One value, and several values are a `union`.** A set of alternatives is a certified
-      union of singletons: the members are pairwise separated because the values differ.
-      `Calculus/Dynamo/Witness/LiteralArity1.lean` derives that rule. -/
+      union of singletons: the members are pairwise separated because the values differ. -/
   | literal (k : GroundKind) (v : k.Carrier)
 
 /-- The codec of each primitive. -/

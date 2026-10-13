@@ -47,9 +47,9 @@ cost does not.
 statement exists, the re-founding pays the whole term language for a guarantee two other layers
 already give.
 
-**What names the guarantee instead today.** `PairwiseCompat`, one `Prop` over the option list.
-`pairwiseCompat_of_compatPair` discharges it through the decision, and `pairwiseCompat_of_separated`
-with `separated_of_certAll` through the certificate.
+**What names the guarantee instead today.** `Closed.PairwiseCompat`, one `Prop` over the option
+list. `Closed.pairwiseCompat_of_compatPair` discharges it through the decision, and
+`Closed.pairwiseCompat_of_separated` with `Closed.separated_of_certAllC` through the certificate.
 
 ---
 
@@ -114,9 +114,9 @@ Every other position answers the test:
 **What the tree carries today.** `Term.disjoint` reads a raw `held`, a `legacy` and `opaq` as
 disjoint from the bottom alone. A `refine` whose predicate is no data, such as a `closure`, reads
 through its inner term. So a closure over `boolean` that refuses every value is not disjoint
-from the literal `false`. The certificate reaches a `held` through its views (`viewsDisjoint`),
-and not through the test. `opaq_total` and `opaqA_total` state that `opaque` admits every value
-and every attribute. No theorem states when a `held` admits some value.
+from the literal `false`. The certificate reaches a `held` through its views (`Closed.viewsDisjoint`),
+and not through the test. `Closed.opaq_total` and `Closed.opaqA_total` state that `opaque` admits
+every value and every attribute. No theorem states when a `held` admits some value.
 
 **What decides it.** A union that the library refuses where one option is a raw `held`, `opaque`,
 or a closure over a finite carrier, and where a caller needs the union.
@@ -135,8 +135,8 @@ product of two domain idempotents, the value projections are disjoint exactly wh
 projections are. The premises are the retraction and the definedness of reads, which are fields
 of `LawfulCore`, so a term with an alternate reader still meets them.
 
-**What the tree carries today.** `Adm` is a computable `Bool` at one value, exact at every
-constructor (`Adm_exact`), and `#eval` runs it at DynamoDB. No declaration decides whether a term
+**What the tree carries today.** `Closed.AdmA` is a computable `Bool` at one attribute, the domain
+of the read of the meaning, and `#eval` runs it at DynamoDB. No declaration decides whether a term
 admits any value. The tree tests each side with `Term.disjoint` on the view of that side, and
 `disjoint_sound` and `disjoint_soundA` prove the test sound on each side.
 
@@ -200,8 +200,8 @@ attribute. A pair that admission tells apart and the certificate does not is was
 union is refused where the codec works. Two functions kept in agreement by hand drift, and
 nothing reports the drift.
 
-**What the tree carries today.** `Adm` and `AdmA` are exact at every constructor. The certificate
-is a separate function, `Term.disjoint`, sound for admission (`disjoint_sound`,
+**What the tree carries today.** The meaning of a closed codec holds its own domains, and
+`Closed.AdmA` is the domain of its read. The certificate is a separate function, `Term.disjoint`, sound for admission (`disjoint_sound`,
 `disjoint_soundA`) and not complete for admission.
 
 **What decides it.** A pass that adds a constructor, and so owes a row in both functions.
@@ -216,8 +216,8 @@ DynamoDB.
 
 **What the tree carries today.** `Term.disjoint`, its soundness, and `Term.compat` are generic. A
 universe supplies its leaves, its shape classes and the laws of its leaves and formers, and JSON
-supplies each. `viewsDisjoint`, `certAll`, `Separates` and `pairwiseCompat_of_separated` read the
-constructors of the DynamoDB carriers, and JSON has none of them. The oracle of JSON,
+supplies each. `Closed.viewsDisjoint`, `certAllC`, `Closed.Separates` and
+`Closed.pairwiseCompat_of_separated` read the closed codecs of DynamoDB, and JSON has none of them. The oracle of JSON,
 `jsonOracle`, certifies nothing.
 
 **What decides it.** A second universe that needs a union of separated options.

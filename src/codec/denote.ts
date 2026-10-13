@@ -661,7 +661,8 @@ export const altSem = (
      * options are compatible by kind, and a slice keeps restrictions of compatible options.
      *
      * **This is the read side.** The write side decides instead, {@link onlyAdmitting}, and this
-     * one attempts because there is no `AdmA` in `src/` to decide a stored attribute with.
+     * one attempts because `src/` has no port of the model's read row `Closed.AdmA` to decide a stored
+     * attribute with.
      */
     const only = <A>(
         survives: (option: Option) => boolean,
@@ -679,8 +680,8 @@ export const altSem = (
     }
 
     /**
-     * The model's option row, `Adm`: every option is admitted by {@link accepts}, an object option
-     * included. The names present select nothing, because a name set that fits two options can
+     * The model's option row, the write domain of the option's meaning: every option is admitted by
+     * {@link accepts}, an object option included. The names present select nothing, because a name set that fits two options can
      * hold a value that only one of them encodes. Asking the option's own admission terminates:
      * it is one level down, and the direction that would not is an `encode` consulting admission.
      */
@@ -692,15 +693,15 @@ export const altSem = (
      * admits the value writes it, and compatibility makes every admitting option write it to one
      * attribute.
      *
-     * {@link accepts} is the decision for every option, and {@link admitOption} is that one row. The model's `Adm`,
-     * proved exact at all 21 constructors, and `codec.laws.spec.ts` holds
+     * {@link accepts} is the decision for every option, and {@link admitOption} is that one row. The model's option row
+     * is the write domain of the meaning, and `codec.laws.spec.ts` holds
      * `accepts(c, v) ⟺ !failed(c.encode(v))` over its whole table — so on the values in play this
      * selects the same option `only` would have found by attempting, and says *why* rather than
      * discovering it. A `held` option whose adapter **throws** on a value it does not own is
      * filtered out here instead of propagating.
      *
-     * **The read side attempts**, because there is nothing to decide with: the model has `AdmA` on
-     * the attribute side and `src/` has no port of it. The model's `AdmA` of an option is that attempt, an
+     * **The read side attempts**, because there is nothing to decide with: the model has `Closed.AdmA` on
+     * the attribute side and `src/` has no port of it. The model's `Closed.AdmA` of an option is that attempt, an
      * object option included. That asymmetry is the reason this is a second function rather than a
      * flag on the first.
      */
@@ -727,7 +728,7 @@ export const altSem = (
 
     /**
      * Which options a value could be for, by kind. The names present select nothing: an object
-     * option is admitted by attempt, as the model's `Adm` admits every option.
+     * option is admitted by attempt, as the model's meaning admits every option.
      */
     const forValue = (shape: Shape | undefined) => (option: Option) =>
         option.declares
@@ -780,7 +781,7 @@ export const altSem = (
  * The assignment chooses the member, and the choice is a **lookup** rather than an attempt.
  *
  * **The index is the host's, and the model has no such term.** A dissection is a `Term.union` of
- * members whose structures are disjoint, certified by `Calculus.viewsDisjoint`; this table is an index
+ * members whose structures are disjoint, certified by `Calculus.Closed.viewsDisjoint`; this table is an index
  * built over that union, so nothing in the model states it and nothing in the model needs it. What
  * makes the lookup answer the same question the union answers is the refusal at construction: two
  * members carrying one assignment are refused, so at most one member is reached either way.
@@ -1236,8 +1237,8 @@ export const denote = (def: Term): Pair => {
          * pair an all-object union also offers.
          *
          * **The write side decides and the read side attempts**, and that asymmetry is the model's.
-         * Admission is `Adm`, proved exact at every constructor, so the writable side selects by
-         * asking rather than by trying; the readable side has no `AdmA` in this library to ask, so
+         * Admission is the write domain of the meaning, so the writable side selects by
+         * asking rather than by trying; the readable side has no port of `Closed.AdmA` in this library to ask, so
          * it tries. The same holds from the other end: the two families are independent,
          * and a pair separated on one side only is not separated.
          */

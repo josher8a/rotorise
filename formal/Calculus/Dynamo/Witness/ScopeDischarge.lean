@@ -140,7 +140,7 @@ theorem Graph.option_at_input_no_dag : ¬ optionAtInputGraph.DagForm :=
 theorem Graph.held_on_path_no_dag : ¬ heldOnPathGraph.DagForm :=
   fun h => absurd ((Graph.dagForm_iff _).mp h) (by decide)
 
-/-- The graph of `jsonTerm`. -/
+/-- The graph of `jsonClosed`. -/
 def jsonGraph : Graph :=
   ⟨1, fun _ => Scoped.Graph.Term.union
     [Scoped.Graph.Term.string, Scoped.Graph.Term.array (Scoped.Graph.Term.ref 0)]⟩

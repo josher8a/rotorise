@@ -248,10 +248,10 @@ term algebra, \texttt{extendRead} keeps a quotient, and \texttt{e\_comp\_p\_ne\_
 
 \begin{theorem}[a lawful codec has \texttt{ker\ p} equality]
 \label{thm:ker-heldfree}
-\lean{Calculus.Lawful.ker_eq, Calculus.ker_eq_of_HF}
+\lean{Calculus.Lawful.ker_eq, Calculus.Closed.ker_eq_of_HF}
 \leanok
-At a lawful codec, two attributes that read to one value are equal. At a held-free term the same
-holds with no law as a premise.
+At a lawful codec, two attributes that read to one value are equal. At a held-free closed codec the
+same holds with no law as a premise.
 \end{theorem}
 
 \textbf{The store is not a quotient of the codec.} \texttt{η}, the store's own normalisation of a stored
@@ -616,9 +616,10 @@ A variable is a de Bruijn index: \texttt{var\ 0} in \texttt{b} stands for \textt
 that no binder gives as the bottom, which is why \rulelink{rule:var}{\texttt{(var)}} holds nothing. The held set of
 \texttt{mu\ b} is its write domain. The guard is decidable from the term. At each binder the body reads its
 variable under a list or an object. It never reads the variable at the binder's own input or under a \texttt{held}.
-The guard refuses \texttt{mu(var\ 0)} (\texttt{not\_typed\_unguarded\_binder}) and \texttt{mu(union(var\ 0,\ string))}
-(\texttt{guard\_refuses\_option\_at\_binder\_input}). It also refuses a \texttt{held} between the binder and its variable
-(\texttt{guard\_refuses\_held\_on\_path}), because the conversion of a \texttt{held} can make the input deeper.
+The guard refuses \texttt{mu(var\ 0)} and \texttt{mu(union(var\ 0,\ string))}. It also refuses a \texttt{held}
+between the binder and its variable, because the conversion of a \texttt{held} can make the input deeper.
+Over closed codecs each refused shape is a graph with no form as a DAG of scopes
+(\texttt{Graph.unguarded\_no\_dag}, \texttt{Graph.option\_at\_input\_no\_dag}, \texttt{Graph.held\_on\_path\_no\_dag}).
 
 \begin{theorem}[guarded recursion]
 \label{thm:guarded-recursion}
@@ -654,8 +655,8 @@ closed under the containers}, of shape
 \texttt{union(string,\ boolean,\ binary,\ ⟨NULL⟩,\ number,\ set(opaque),\ array(opaque),\ record(opaque))}.
 With one carrier, each datum identifies itself, so that union sends each datum to itself at each
 orientation. The model denotes \texttt{opaque} by the identity codec (\texttt{lawful\_opaq}), and the
-union is a theorem (\texttt{Adm\_opaqUnfold}, \texttt{AdmA\_opaqUnfold}). The held set is every
-\texttt{Value} (\texttt{opaq\_total}): a numeral is such a value, and \texttt{number\ ⇄\ N} keeps the member
+union is a theorem (\texttt{Closed.Adm\_opaqUnfold}, \texttt{Closed.AdmA\_opaqUnfold}). The held set is every
+\texttt{Value} (\texttt{Closed.opaq\_total}): a numeral is such a value, and \texttt{number\ ⇄\ N} keeps the member
 and the digits on both halves.
 
 \textbf{\texttt{opaque} has no numeric policy.} A host whose numeric type is not exact, a binary64 float for
@@ -875,7 +876,7 @@ the nose.
 
 \begin{theorem}[without compatibility the order is observable]
 \label{thm:join-order}
-\lean{Calculus.flip_order_observable, Calculus.not_compat_flip}
+\lean{Calculus.Closed.flip_order_observable, Calculus.Closed.not_compat_flip}
 \leanok
 \texttt{boolean} beside its negation under \texttt{held} is two lawful options that are not compatible,
 and the two orders write \texttt{true} at two different attributes.
@@ -885,11 +886,9 @@ So declaration order enters the definition of the union and leaves again as a th
 compatibility is the condition under which it leaves. A value that two compatible options admit has
 no owner, because no operation can observe one.
 
-\textbf{The index is exact under the obligations.} A union writes wherever one of its options writes, so
-a derivable term whose obligations hold holds exactly the values it admits (\texttt{typed\_T\_adm}), a union
-included. A set is the rule that reads the obligations: its element writes injectively and at one member. An empty
-option is the unit of the sum: it is compatible with every option (\texttt{pairwiseCompat\_never\_left},
-\texttt{pairwiseCompat\_never\_right}).
+A set is the rule that reads the obligations: its element writes injectively and at one member. An empty
+option is the unit of the sum: it is compatible with every option (\texttt{Closed.pairwiseCompat\_never\_left},
+\texttt{Closed.pairwiseCompat\_never\_right}).
 
 \begin{definition}[(union)]
 \label{rule:union}
@@ -948,9 +947,9 @@ Discharger & Covers & From \\
 the decision & each half of agreement at each component: the two terms are disjoint there, or one codec bounds both there & \texttt{pairwiseCompat\_of\_compatPair}, over \texttt{Term.compat} and \texttt{compat\_sound} \\
 held-free options & every pair of terms with no \texttt{held} & both sit below \texttt{opaque}, which reads each value from one attribute (\texttt{compat\_of\_HF}) \\
 a common canonical bound & two restrictions of one adapter & \texttt{compat\_of\_common\_bound} \\
-separation & two options that no input reaches both of & the certificate below (\texttt{pairwiseCompat\_of\_separated}) \\
-an empty option & a pair with \texttt{never} on a side & \texttt{pairwiseCompat\_never\_left}, \texttt{pairwiseCompat\_never\_right} \\
-orthogonality & a recursive union whose options the disjoint test keeps apart whatever the variable denotes, as \texttt{jsonTerm} & \texttt{disjoint\_orthogonal}, in \texttt{pairwiseCompat\_json} \\
+separation & two options that no input reaches both of & the certificate below (\texttt{Closed.pairwiseCompat\_of\_separated}) \\
+an empty option & a pair with \texttt{never} on a side & \texttt{Closed.pairwiseCompat\_never\_left}, \texttt{Closed.pairwiseCompat\_never\_right} \\
+orthogonality & a recursive union whose options share no datum whatever the element, as \texttt{jsonClosed} & \texttt{compat\_string\_array}, in \texttt{obligations\_jsonBody} \\
 tag disjointness & \rulelink{rule:dunion}{\texttt{(dunion)}}, outright & the discriminator literals \\
 a slice & a sublist of a compatible union & \texttt{AltClause.pairs\_extractC}, \texttt{AltClause.pairs\_excludeC}, and \texttt{certAllC\_sublist} for the certificate \\
 \bottomrule
@@ -993,7 +992,7 @@ shown compatible.
 \begin{definition}[the certificate]
 \label{def:certificate}
 \uses{cond:compat,def:family}
-\lean{Calculus.viewsDisjoint, Calculus.Alg.Term.disjoint, Calculus.view, Calculus.Alg.hasHeld}
+\lean{Calculus.Closed.viewsDisjoint, Calculus.Alg.Term.disjoint, Calculus.view, Calculus.Alg.hasHeld}
 \leanok
 Two options are certified where they are orthogonal. A term denotes a partial isomorphism, and its caller view and its stored
 view are its domain and its range. Two terms are orthogonal where the product of their domain
@@ -1007,7 +1006,7 @@ reaches the certificate too. The stored view keeps a predicate only where the in
 \texttt{held}. The test compares two data predicates only over closed held-free inner terms, so the
 two views give one verdict. The
 test reads a closure through its inner term. A certified pair is separated
-(\texttt{separates\_of\_viewsDisjoint}), so it is compatible. The certificate is sufficient and not
+(\texttt{Closed.viewsDisjoint\_sound}), so it is compatible. The certificate is sufficient and not
 necessary: two restrictions of one adapter that overlap are compatible, and no certificate reaches
 them.
 \end{definition}
@@ -1049,11 +1048,11 @@ both total.
 
 \begin{theorem}[a term's admissible sets are exact]
 \label{thm:admissible-exact}
-\lean{Calculus.Adm_exact, Calculus.ExactV, Calculus.AdmA_exact, Calculus.ExactA}
+\lean{Calculus.Closed.AdmA, Calculus.Closed.AdmA_eq_isSome}
 \leanok
 A codec is a pair, and an admissible set is a claim about one half of it at a time, so there are two
 and not one: the values \texttt{e} accepts, and the attributes \texttt{p} accepts. Each is a \textbf{domain
-rather than a description of one} — \texttt{dom(e)} and \texttt{dom(p)} — at every term of the calculus, with
+rather than a description of one} — \texttt{dom(e)} and \texttt{dom(p)} — at every closed codec, with
 no hypothesis and no term excepted. Nothing is over-approximated, and no term's answer is \texttt{⊤}.
 \end{theorem}
 
@@ -1109,7 +1108,7 @@ pairwise kind-exclusive.
 \begin{definition}[separation]
 \label{def:family}
 \uses{cond:compat}
-\lean{Calculus.Separates}
+\lean{Calculus.Closed.Separates}
 \leanok
 Two options separate when no value is admitted by both and no attribute is read by both.
 \end{definition}
@@ -1502,7 +1501,7 @@ So wrapping a term never changes the member a key stores.
 \begin{theorem}[a union of arrays is not an array of unions]
 \label{eq:union-array}
 \uses{rule:union,rule:array}
-\lean{Calculus.not_equiv_union_array}
+\lean{Calculus.Closed.not_equiv_union_array}
 \leanok
 \texttt{union(array(c₁),\ array(c₂))\ ≢\ array(union(c₁,\ c₂))}. Left: a sequence homogeneous in one
 option. Right: a sequence of either, elementwise. Different held sets.
@@ -1511,7 +1510,7 @@ option. Right: a sequence of either, elementwise. Different held sets.
 \begin{theorem}[a tuple with a tail is neither a tuple nor an array]
 \label{eq:tuple-tail-neither}
 \uses{rule:tuple-tail,rule:tuple,rule:array}
-\lean{Calculus.not_equiv_tupleTail_tuple, Calculus.not_equiv_tupleTail_array}
+\lean{Calculus.Closed.not_equiv_tupleTail_tuple, Calculus.Closed.not_equiv_tupleTail_array}
 \leanok
 \texttt{tuple(c₁\ …\ cₙ,\ tail(c))\ ≢\ tuple(c₁\ …\ cₙ)\ } and \texttt{≢\ array(union(…))}. A fixed head
 with a repeating tail is neither: a tuple has no tail and an array has no head.
@@ -1520,7 +1519,7 @@ with a repeating tail is neither: a tuple has no tail and an array has no head.
 \begin{theorem}[a refinement does not commute with an iso]
 \label{eq:refine-held}
 \uses{rule:refine,rule:held}
-\lean{Calculus.not_equiv_refine_held}
+\lean{Calculus.Closed.not_equiv_refine_held}
 \leanok
 \texttt{refine(held(c,\ f,\ g),\ q)\ ≢\ held(refine(c,\ q),\ f,\ g)}. The refinement applies on opposite
 sides of the iso, so \texttt{q} is a subset of different sets. Two different terms, both meaningful.
@@ -1529,7 +1528,7 @@ sides of the iso, so \texttt{q} is a subset of different sets. Two different ter
 \begin{theorem}[a union is not closed under extension]
 \label{eq:union-extend}
 \uses{rule:union,cond:compat}
-\lean{Calculus.not_equiv_union_extend}
+\lean{Calculus.Closed.not_equiv_union_extend}
 \leanok
 \texttt{union(c₁\ …\ cₙ)\ ≢\ union(c₁\ …\ cₙ,\ c)}. Not closed under extension: a further option grows the
 held set, and it can also break the compatibility of the options.

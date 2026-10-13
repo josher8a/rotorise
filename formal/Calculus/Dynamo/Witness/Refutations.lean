@@ -1,18 +1,11 @@
-import Calculus.Dynamo.Lang.Equations
-import Calculus.Dynamo.Lang.Soundness
-import Calculus.Dynamo.Witness.Discharge
 import Calculus.Dynamo.Witness.ScopeRefutations
-
-variable {α : Calculus.Table}
 
 /-!
 # The "Do not hold" table of `≡`, refuted
 
-Nine rows of the equations assert that a rewrite *fails*.
-
-They are stated here against `denote`, which is what makes them readable: a claim about
-`≡` is a claim about `T`, `μ`, `e` and `p` together. `denote` takes no fuel, so no such
-statement carries a budget that has nothing to do with the equation.
+Nine rows of the equations assert that a rewrite *fails*. The rows over closed codecs live in
+`Dynamo/Witness/ScopeRefutations.lean` (`Closed.not_equiv_union_extend` and the rows after it).
+This file holds the witnesses at `Codec`, which read no term.
 
 A note on what refuting one of these means. `Codec.Equiv` is `≡` — same held set,
 same member, `e` and `p` agreeing *where both are defined*. So the cheapest honest
@@ -145,77 +138,6 @@ theorem cM_core : LawfulCore cM := ⟨cM_R, cM_C, cM_W⟩
 theorem cM_notCanon : ¬ (∀ {a t}, cM.p a = some t → cM.e t = some a) := by
   intro h; have := @h (.bool true) (.str "z") rfl; simp [cM] at this
 
-/-! ## `union(c₁ … cₙ) ≢ union(c₁ … cₙ, c)`
-
-Not closed under extension. The held set grows, so `≡` fails before any obligation is consulted. -/
-
-theorem not_equiv_union_extend :
-    ¬ Codec.Equiv (denote α (.union [.string])) (denote α (.union [.string, .boolean])) := by
-  intro h
-  have hb := (h.heldSet (.bool true)).mpr
-  simp [denote_rows, altCodec, prism_rows] at hb
-
-/-! ## `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`
-
-The specification states: "Left: a sequence homogeneous in one option. Right: a sequence of either,
-elementwise." The witness is the shortest heterogeneous sequence. -/
-
-/-- `["A", "B"]` is an array of either literal, but homogeneous in neither. -/
-theorem not_equiv_union_array :
-    ¬ Codec.Equiv
-        (denote α (.union [.array (.literal .string "A"), .array (.literal .string "B")]))
-        (denote α (.array (.union [.literal .string "A", .literal .string "B"]))) := by
-  intro h
-  have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
-  simp [Term.array, denote_rows, altCodec, arrayCodec_T, literalCodec, HLit, prism_rows, orient_rows] at hv
-
-/-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
-
-The specification states: "a fixed head with a repeating tail is neither: a tuple has no tail and an array has
-no head." Both halves separate on held sets, and each witness is the shortest one that
-isolates the missing feature. -/
-
-/-- Against the plain tuple: a second element the tail accepts and the tuple has no
-    position for. -/
-theorem not_equiv_tupleTail_tuple :
-    ¬ Codec.Equiv (denote α (.tuple [.string] (some .string)))
-                  (denote α (.tuple [.string] none)) := by
-  intro h
-  have hv := (h.heldSet (.arr [.str "a", .str "b"])).mp
-  -- `simp`'s classical push-neg turned this into an existential and pulled
-  -- `Classical.choice` in with it; the implication is the constructive shape.
-  obtain ⟨_, hxs, ps, hps, -⟩ := hv ⟨_, rfl, _, rfl, fun p hp => by
-    simp [Alg.denoteListAbs] at hp
-    rcases hp with rfl | rfl <;> rfl⟩
-  simp only at hxs; cases hxs
-  exact nomatch hps
-
-/-- Against the array: the empty sequence, which an array holds and a fixed head cannot. -/
-theorem not_equiv_tupleTail_array :
-    ¬ Codec.Equiv (denote α (.tuple [.string] (some .string)))
-                  (denote α (.array (.union [.string]))) := by
-  intro h
-  have hv := (h.heldSet (.arr [])).mpr
-  obtain ⟨_, hxs, ps, hps, -⟩ := hv ((arrayCodec_T _ []).mpr fun _ h => nomatch h)
-  simp only at hxs; cases hxs
-  exact nomatch hps
-
-/-! ## `refine(held(c, P, k), q) ≢ held(refine(c, q), P, k)`
-
-The specification states: "the refinement applies on opposite sides of the iso, so `q` is a subset of different
-sets." The model makes that literal — one held set says `q v`, the other says `q (f v)`, where
-`f` is the caller-side function that the table gives the word `k`. -/
-
-/-- At `"B"`: the outer refinement rejects it, the inner one never sees it — `f` has
-    already replaced it with `"A"`. -/
-theorem not_equiv_refine_held :
-    ¬ Codec.Equiv
-        (denote isoTable (.refine (.held false .string .string (.caller 0, false) []) (.closure predA) ()))
-        (denote isoTable (.held false (.refine .string (.closure predA) ()) .string (.caller 0, false) [])) := by
-  intro h
-  have hv := (h.heldSet (.str "B")).mpr
-  simp [denote_rows, Alg.TableAt.word, Alg.TableAt.letter, isoTable, Alg.Codec.through, Alg.Codec.restrict, Alg.refine2, Pred.eval, isoF, predA, prism_rows, orient_rows] at hv
-
 /-! ## `legacy(c, r)` breaks canonical reads, and `e ∘ p ≢ id`
 
 Two rows, one witness. A migration reads an attribute that the codec does not write, so the
@@ -261,36 +183,6 @@ also `C3`'s sharpest test for a port: a library that lets `optional(c)` appear w
 codec is expected has no corresponding `Term`, and the mapping fails there rather than
 quietly succeeding.
 -/
-
-/-! ## `set(union(c₁, c₂))`: derivable, and refused by the store
-
-The specification states: "the premise on `set` demands a member, and a union of options writing different
-members has none." `μSyn` of a heterogeneous union is `none`, and the judgement types the
-union at the same `none` (`typed_union_string_boolean`).
-
-`Term.set` takes any element term, so `set(union(string, boolean))` is a term, and the judgement
-types it at the member `none` (`setMember` of the union's `none`). The DynamoDB set obligation
-`SetElem` refuses it (`setElem_union_refused`). The lift of a lawful union is lawful.
--/
-
-/-- **A heterogeneous union fails the DynamoDB set obligation**, because the union names no single
-    member. -/
-theorem setElem_union_refused : ¬ SetElem (denote α (.union [.string, .boolean])) := by
-  intro h
-  rw [SetElem, Alg.denote_μ] at h
-  exact absurd h (by decide)
-
-/-- The union on its own is typed, and so is the `set` above it: the store refuses the set. -/
-theorem typed_union_string_boolean :
-    Typed α (.union [.string, .boolean])
-      (HUnion [fun v => v.member = .S, fun v => v.member = .BOOL]) none :=
-  .union (.cons (Typed.base _) (.cons (Typed.base _) .nil))
-
-/-- **An empty option is the unit of the sum.** The bottom holds nothing, so it changes no
-    union's `HUnion`. The meet builds such a union whenever a surviving option's predicate
-    holds of nothing. -/
-example : ∃ T μ, Typed α (.union [.string, .never]) T μ :=
-  ⟨_, _, .union (.cons (Typed.base _) (.cons .never .nil))⟩
 
 /-! ## `≡` is not transitive
 
@@ -421,14 +313,13 @@ cannot be written" are one claim, and a refutation needs a representable counter
 
 /-! ## `union(opaque, c)` is never separable
 
-Not one of the nine rows of `≡`, and not a row of the admission. `κ .opaq` is `⊤`, and `Adm .opaq` and
-`admA .opaq` ask `opaque`'s codec, which admits everything. The separation of `(union)` offers two routes
-on the value side, a disjoint kind or a disjoint admissible set, and two on the attribute side,
-a distinct named member or a disjoint admissible set. A `⊤` on every one of the four is not a
-weak option; it is an **absorbing** one, in the sense `unknown | T` is
-absorbing in TypeScript.
+Not one of the nine rows of `≡`, and not a row of the admission. The meaning of `opaque` writes
+every value (`Closed.opaq_total`) and reads every attribute (`Closed.opaqA_total`). The separation of
+`(union)` offers two routes on the value side, a disjoint kind or a disjoint write domain, and two on
+the attribute side, a distinct named member or a disjoint read row. A `⊤` on every one of the four
+is not a weak option; it is an **absorbing** one, in the sense `unknown | T` is absorbing in
+TypeScript.
 
-The absorption survives the semantic row. `opaque` writes every value (`opaq_total`), so
-**an `opaque` never separates from an option that admits anything.** The kind and member
+So **an `opaque` never separates from an option that admits anything.** The kind and member
 disjuncts are structurally unavailable, so a single shared value or attribute is enough.
-The fact holds in both argument orders, because `κ` and `μSyn` are `⊤` at an `opaque`. -/
+The fact holds in both argument orders, because the kind and the member of an `opaque` are `⊤`. -/

@@ -146,8 +146,7 @@ theorem Typed.base (k : GroundKind) : Typed α (.base k) (baseCodec k).T (some k
     **The gated carrier makes admission exact.** `inL` is the whole of admission, which makes
     `Adm (.literal .number x)` exact.
 
-    **One value.** Several alternatives are a certified `union` of singletons, and
-    `Calculus/Dynamo/Witness/LiteralArity1.lean` derives that rule from this one and `Typed.union`. -/
+    **One value.** Several alternatives are a certified `union` of singletons. -/
 theorem Typed.literal (k : GroundKind) (x : k.Carrier) :
     Typed α (.literal k x) (HLit k x) (some k.member) :=
   Alg.Typed.prim (S := dynSyn) (Ground.literal k x)

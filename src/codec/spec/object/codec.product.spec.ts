@@ -1,9 +1,8 @@
 /**
  * The product of two objects: the founding operation of the Cartesian product over codecs.
  *
- * `Body.merge` is the model's, and `typed_merge` is the corollary that makes the result derivable
- * from the two factors' own judgements. Every distribution law above this one reduces to this
- * merge, so what this file pins is the merge alone: no distribution, no variadic form, no slice.
+ * Every distribution law above this one reduces to this merge, so what this file pins is the merge
+ * alone: no distribution, no variadic form, no slice.
  */
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec } from '../../codec'
@@ -110,7 +109,7 @@ describe('the declarations a product refuses', () => {
 
     /**
      * An open factor holds an undeclared name through a codec of its own, so the product would
-     * have to hold it through both. `Rest.merge` answers `none` there and this is that refusal.
+     * have to hold it through both. This is that refusal.
      */
     it('refuses a factor left open by a rest codec', () => {
         expect(() =>
@@ -228,8 +227,7 @@ describe('the product distributes over a union', () => {
 
 describe('the variadic product', () => {
     /**
-     * The fold is left. The model proves the name set associative (`Body.merge_fields_assoc`) and
-     * the rest empty (`Body.merge_wild`). No declaration proves the term of the other nesting equal.
+     * The fold is left. No declaration of the model proves the term of the other nesting equal.
      */
     it('folds left, and both nestings give the same term', () => {
         const a = object({ a: string })
@@ -325,7 +323,7 @@ describe('the factors a product refuses until the owner rules', () => {
     /**
      * **(D) fails at a product against a factor that holds nothing.** Every merge would hold
      * nothing too, and two empty held sets are comparable in both directions, so no value could
-     * select between the results. `not_subset_prodOn` carries that hypothesis.
+     * select between the results.
      */
     it('refuses never as a factor', () => {
         // the type refuses it by a clause of its own: without one the open-factor clause fired

@@ -1143,8 +1143,7 @@ export const sampleVectors: readonly Vector[] = [
         ),
         value: { kind: 'a', x: 'v' },
     },
-    // a product, so the bridge sees one: the merged body is an ordinary `object` term, which is
-    // the whole content of `Body.merge` on the host side
+    // a product, so the bridge sees one: the merged body is an ordinary `object` term
     {
         name: 'product_two_objects',
         codec: erase(product(object({ a: string }), object({ n: boolean }))),
@@ -1161,8 +1160,7 @@ export const sampleVectors: readonly Vector[] = [
         ),
         value: { a: 'x', n: '1' },
     },
-    // and the fold: the model proves the name set associative (`Body.merge_fields_assoc`)
-    // and the rest empty (`Body.merge_wild`)
+    // and the fold, left
     {
         name: 'product_three',
         codec: erase(
@@ -2239,7 +2237,7 @@ describe('the legacy read gate, against the model', () => {
 describe("the read side, against the model's read row", () => {
     /**
      * **The measurement that rejected a port.** HANDOFF's fourth item wanted the resolver's read
-     * side decided through a port of `AdmA`. `decode` already agrees with `AdmA` at every pair
+     * side decided through a port of `Closed.AdmA`. `decode` already agrees with `Closed.AdmA` at every pair
      * the kernel can check, because `decode` validates — it parses data somebody else wrote —
      * where `encode` trusted its argument's type. So the port would have been a second
      * description of one thing, and this differential is the guard that a second description
@@ -2248,8 +2246,8 @@ describe("the read side, against the model's read row", () => {
      * **All 1591 are asserted, and it was 1588.** Three pairs were excluded as stuck on the
      * `Double` axiom: `scalar_number__reads__scalar_decimal`,
      * `scalar_number__reads__literal_decimal` and `scalar_number__reads__raw_N`, each a `number`
-     * codec against an `N` attribute. The model has no axiom, and `AdmA .number`'s `.n` row decides
-     * a concrete numeral by `rfl`, so the filter excluded pairs the row answers. The filter is
+     * codec against an `N` attribute. The model has no axiom, and `Closed.AdmA` at `number` decides
+     * a concrete numeral `.n` by `rfl`, so the filter excluded pairs the row answers. The filter is
      * deleted, and the three are theorems in `.readverdicts.lean` like every other pair.
      */
     it('offers 2650 pairs, and asserts every one', () => {

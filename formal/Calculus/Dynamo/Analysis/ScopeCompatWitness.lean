@@ -138,20 +138,20 @@ def shoutClosed : Closed :=
 /-- The literal `"X"`, as a closed codec. -/
 def litXClosed : Closed := Closed.one (.literal .string "X")
 
-/-- **`shout` reads `"X"` as `"x"`.** -/
+/-- **`shoutClosed` reads `"X"` as `"x"`.** -/
 theorem Closed.shout_p : (shoutClosed.meaning swTable).p (.s "X") = some (.str "x") := rfl
-/-- **`litX` reads `"X"` as `"X"`.** -/
+/-- **`litXClosed` reads `"X"` as `"X"`.** -/
 theorem Closed.litX_p : (litXClosed.meaning swTable).p (.s "X") = some (.str "X") := rfl
-/-- **`shout` writes `"x"` as `"X"`.** -/
+/-- **`shoutClosed` writes `"x"` as `"X"`.** -/
 theorem Closed.shout_e : (shoutClosed.meaning swTable).e (.str "x") = some (.s "X") := rfl
-/-- **`litX` declines `"x"`.** -/
+/-- **`litXClosed` declines `"x"`.** -/
 theorem Closed.litX_e : (litXClosed.meaning swTable).e (.str "x") = none := rfl
 
-/-- **The `shout` adapter cancels over the literal**, at the codec of the literal. -/
+/-- **The `shoutClosed` adapter cancels over the literal**, at the codec of the literal. -/
 theorem Closed.iso_shout : IsoCancels (groundCodec (.literal .string "X")) swX swX :=
   ⟨fun v _ => swX_invol v, fun v _ => swX_invol v⟩
 
-/-- **`shout` is lawful.** -/
+/-- **`shoutClosed` is lawful.** -/
 theorem Closed.lawful_shout : Lawful (shoutClosed.meaning swTable) :=
   Closed.sound (Closed.typed_heldPrim _ _ _ _) (Closed.obligations_heldPrim _ _ _ _ Closed.iso_shout)
 
@@ -173,15 +173,15 @@ def flipTable : Table := fun _ => (notV, notV)
 /-- The held that stores the negation of a boolean, as a closed codec. -/
 def flipBoolClosed : Closed := Closed.one (.held false .boolean .boolean (.caller 0, false) [])
 
-/-- **The `flipBool` adapter cancels over `boolean`**, at the codec of `boolean`. -/
+/-- **The `flipBoolClosed` adapter cancels over `boolean`**, at the codec of `boolean`. -/
 theorem Closed.iso_flip : IsoCancels (groundCodec (.base .boolean)) notV notV := by
   refine ⟨fun v _ => ?_, fun v _ => ?_⟩ <;> cases v <;> simp [notV]
 
-/-- **`flipBool` is lawful.** -/
+/-- **`flipBoolClosed` is lawful.** -/
 theorem Closed.lawful_flip : Lawful (flipBoolClosed.meaning flipTable) :=
   Closed.sound (Closed.typed_heldPrim _ _ _ _) (Closed.obligations_heldPrim _ _ _ _ Closed.iso_flip)
 
-/-- **`boolean` and `flipBool` are not `Compat`**: the two read `true` to two values. -/
+/-- **`boolean` and `flipBoolClosed` are not `Compat`**: the two read `true` to two values. -/
 theorem Closed.not_compat_flip :
     ¬ Compat ((Closed.one .boolean).meaning flipTable) (flipBoolClosed.meaning flipTable) := by
   intro h
@@ -212,20 +212,20 @@ def q2 : Pred := .members .string (NEFinset.of "x" {"z"})
 
 /-- The adapter, as a closed codec. -/
 def swapClosed : Closed := Closed.one swapBody
-/-- `swap` refined to `q1`, as a closed codec. -/
+/-- `swapClosed` refined to `q1`, as a closed codec. -/
 def sw1Closed : Closed := Closed.one (.refine swapBody q1 ())
-/-- `swap` refined to `q2`, as a closed codec. -/
+/-- `swapClosed` refined to `q2`, as a closed codec. -/
 def sw2Closed : Closed := Closed.one (.refine swapBody q2 ())
 
-/-- **The `swap` adapter cancels over `string`**, at the codec of `string`. -/
+/-- **The `swapClosed` adapter cancels over `string`**, at the codec of `string`. -/
 theorem Closed.iso_swap : IsoCancels (groundCodec (.base .string)) swX swX :=
   ⟨fun v _ => swX_invol v, fun v _ => swX_invol v⟩
 
-/-- **`swap` is lawful.** -/
+/-- **`swapClosed` is lawful.** -/
 theorem Closed.lawful_swap : Lawful (swapClosed.meaning swTable) :=
   Closed.sound (Closed.typed_heldPrim _ _ _ _) (Closed.obligations_heldPrim _ _ _ _ Closed.iso_swap)
 
-/-- **`swap` is a canonical bound.** -/
+/-- **`swapClosed` is a canonical bound.** -/
 theorem Closed.canon_swap : Canon (swapClosed.meaning swTable) :=
   fun _ _ hp => Closed.lawful_swap.canon hp
 
@@ -240,7 +240,7 @@ theorem Scoped.typed_refineHeldPrim {w k : Nat} (τ : (s : Bool) → Alg.TableAt
   exact ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .refine q ()) (T := fun _ => T1)
     (μ := fun _ => μ1) (fun _ => h1) rfl⟩
 
-/-- **A restriction of `swap` is lawful**: the refinement keeps the laws of the `held`. -/
+/-- **A restriction of `swapClosed` is lawful**: the refinement keeps the laws of the `held`. -/
 theorem Closed.lawful_swRefine (q : Pred) :
     Lawful ((Closed.one (.refine swapBody q ())).meaning swTable) :=
   Closed.sound ⟨trivial, fun i => match i with
@@ -254,7 +254,7 @@ theorem Closed.lawful_swRefine (q : Pred) :
 theorem Closed.sw_overlap : (sw1Closed.meaning swTable).p (.s "X") = some (.str "x") ∧
     (sw2Closed.meaning swTable).p (.s "X") = some (.str "x") := ⟨rfl, rfl⟩
 
-/-- **A restriction of `swap` is below `swap`.** -/
+/-- **A restriction of `swapClosed` is below `swapClosed`.** -/
 theorem Closed.sub_swRefine (q : Pred) :
     Sub ((Closed.one (.refine swapBody q ())).meaning swTable) (swapClosed.meaning swTable) :=
   fun o x y h => by
@@ -263,7 +263,7 @@ theorem Closed.sub_swRefine (q : Pred) :
     exact Scoped.sub_interp_refine _ _ swapBody q
       (fun _ => (Closed.one (.refine swapBody q ())).meaning swTable) Fin.elim0 o x y h
 
-/-- **`sw1` and `sw2` are pairwise `Compat`**, through the common bound `swap`. -/
+/-- **`sw1Closed` and `sw2Closed` are pairwise `Compat`**, through the common bound `swapClosed`. -/
 theorem Closed.compat_sw (x y : Closed) (hx : x = sw1Closed ∨ x = sw2Closed)
     (hy : y = sw1Closed ∨ y = sw2Closed) : Compat (x.meaning swTable) (y.meaning swTable) := by
   have hsub : ∀ z, z = sw1Closed ∨ z = sw2Closed → Sub (z.meaning swTable) (swapClosed.meaning swTable) := by
