@@ -2271,8 +2271,8 @@ const withMissing = <const C extends AnyCodec>(
  * **The held side is checked on both halves.** `encode` runs only on a value that `outer` admits,
  * and the value that `decode` returns must pass `outer` too. A value outside `outer` is refused by
  * name, as a base codec refuses a value past its type, and the caller's `encode` never runs on it.
- * The model states the same codec: `through` the conversion, then restricted by `Adm outer` on
- * both halves, so the codec is lawful for every `outer`.
+ * The model states the same codec: `through` the conversion, then restricted by the write domain of
+ * `outer` on both halves, so the codec is lawful for every `outer`.
  *
  * **`outer` has two forms.** A codec of this library admits a value where its `encode` succeeds,
  * which is the admission `accepts` asks, and the term records the codec's term as the held side.
@@ -4339,8 +4339,8 @@ type AnyOpen<F> = FactorOptions<F>[number] extends infer O
     : never
 
 /**
- * One merge: `Body.merge` at the type level. The merge is closed, because a name neither factor
- * declares is one the product refuses.
+ * One merge at the type level. The merge is closed, because a name neither factor declares is one
+ * the product refuses.
  */
 type MergeTwo<X, Y> = X extends ObjectCodec<infer A, infer _RA>
     ? Y extends ObjectCodec<infer B, infer _RB>
@@ -4352,7 +4352,7 @@ type DistributeOne<X, Ys extends readonly unknown[]> = {
     [I in keyof Ys]: MergeTwo<X, Ys[I]>
 }
 
-/** The `flatMap` order the model's distribution law states: outer first, inner second. */
+/** The `flatMap` order: outer first, inner second. */
 type Distribute<
     Xs extends readonly unknown[],
     Ys extends readonly unknown[],
@@ -4370,10 +4370,7 @@ type ProductOfTwo<X, Y> = Distribute<
         : UnionCodec<DerivedUnion<Ms>, Ms>
     : never
 
-/**
- * More than two factors fold left. The model proves the name set of a merge associative
- * (`Body.merge_fields_assoc`) and the rest of a merge empty (`Body.merge_wild`).
- */
+/** More than two factors fold left. */
 type FoldProduct<Fs extends readonly unknown[]> = Fs extends readonly [
     infer A,
     infer B,
@@ -4416,7 +4413,7 @@ type HasNeverFactor<Fs extends readonly unknown[]> = Fs extends readonly [
  *
  * The shared name is next, because its message names the name. The open factor is last: a `rest`
  * codec holds an undeclared name through a codec of its own, and the product would have to hold it
- * through both. The model says the same by making `Rest.merge` answer `none` there.
+ * through both.
  *
  * `never` is the only term a factor can be that holds no value: `tuple` and `object` refuse a slot
  * declared at it, so no other declaration reaches here empty.
@@ -4467,7 +4464,7 @@ const optionsOfFactor = (factor: unknown): readonly Factor[] => {
     const def = codec?.def
     // a product against a factor that holds nothing passes no check: every merge would hold
     // nothing too, and two empty held sets are comparable both ways, so no value tells the options
-    // apart. `not_subset_prodOn` is the theorem, and this is the hypothesis it carries. `never` is
+    // apart. `never` is
     // the only way in, because every other term that holds nothing is refused at its constructor
     if (def?.kind === 'never') {
         throw new CodecError(
@@ -4539,18 +4536,14 @@ const productOfTwo = (first: unknown, second: unknown): unknown => {
 /**
  * **The product of two objects, or of unions of objects: the object of their merged spec.**
  *
- * The founding operation of the Cartesian product over codecs. `Body.merge` is the model's, and
- * `typed_merge` is the corollary that makes the result derivable from the two factors' own
- * judgements.
+ * The founding operation of the Cartesian product over codecs.
  *
  * **A union factor distributes.** The result is one flat `union` of the `n·m` merges, outer over
- * the first factor's options and inner over the second — the `flatMap` order the model's
- * distribution law states. It is built through {@link union}, so `agrees` runs
+ * the first factor's options and inner over the second: the `flatMap` order. It is built through {@link union}, so `agrees` runs
  * over the products and a pair of merges it cannot show compatible is refused there rather than here.
  *
- * **More than two factors fold left.** `product(a, b, c)` is `product(product(a, b), c)`. The
- * model proves the name set of a merge associative (`Body.merge_fields_assoc`) and the rest of a
- * merge empty (`Body.merge_wild`). No declaration proves that the other nesting gives the same term.
+ * **More than two factors fold left.** `product(a, b, c)` is `product(product(a, b), c)`. No
+ * declaration of the model proves that the other nesting gives the same term.
  *
  * @example
  * ```ts
@@ -5027,7 +5020,7 @@ const dissect = <T extends Record<string, unknown>>(
      *
      * A dissection is a certified union: its members are objects that differ at a required literal
      * key with disjoint alternatives, which is exactly what structural admission resolves and what
-     * `Calculus.viewsDisjoint` certifies. So there is one sum in the term language, and the key set below
+     * `Calculus.Closed.viewsDisjoint` certifies. So there is one sum in the term language, and the key set below
      * is a lookup this builder keeps for `encodePartial` and the item path — a host
      * index, carried by no term.
      */
@@ -5986,7 +5979,7 @@ export const discriminatedUnion = <
  * typo or a `map` over an empty array — and this is the one name that reaches the bottom.
  *
  * It is the zero of `union`: an empty option is compatible with every option
- * (`pairwiseCompat_never_left`, `pairwiseCompat_never_right`), so `union([X, never])` is `X`.
+ * (`Closed.pairwiseCompat_never_left`, `Closed.pairwiseCompat_never_right`), so `union([X, never])` is `X`.
  */
 export const never: AttributeCodec<never, never> & {
     readonly def: { readonly kind: 'never' }
@@ -6088,7 +6081,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
     /**
      * The item reading's own matcher: the value is always a record, so the shape filter has nothing
      * to do, and each option is attempted. The names present select nothing, as the model's
-     * `AdmA` reads no name.
+     * `Closed.AdmA` reads no name.
      */
     const readItem = (item: StoredItem): Result<T> => {
         const open = openRefusal(declared)

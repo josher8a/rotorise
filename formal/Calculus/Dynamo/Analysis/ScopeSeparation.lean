@@ -72,6 +72,12 @@ def rNum : Attr → Option Value := fun a => match a with | .n _ => some (.str "
 theorem Closed.extendRead_reads_n :
     (((Closed.one .string).meaning α).extendRead rNum).p (.n (.of "1")) = some (.str "x") := rfl
 
+/-- An adapter never widens the read domain. -/
+theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
+    ((c.adapt f g).p a).isSome = true → (c.p a).isSome = true := by
+  simp only [Alg.Codec.adapt, Alg.Codec.ofEP_p]
+  exact Option.isSome_of_isSome_bind
+
 /-! ## `Decides`, on the meaning -/
 
 variable (α) in

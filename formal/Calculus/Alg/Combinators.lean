@@ -379,7 +379,7 @@ theorem length_le_one_of_pairwise_false {α : Type} {l : List α}
     | cons y ys => exact absurd ((List.pairwise_cons.mp h).1 y (by simp)) id
 
 /-- **No value and no attribute is admitted by two options.** The certificate implies it
-    (`admitsAtMostOne_of_separated`). -/
+    (`Closed.admitsAtMostOne_of_separated`). -/
 def AdmitsAtMostOne (os : List (Codec V M)) : Prop :=
   (∀ t, (os.filter (fun c => (c.e t).isSome)).length ≤ 1) ∧
   (∀ a, (os.filter (fun c => (c.p a).isSome)).length ≤ 1)

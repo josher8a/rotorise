@@ -20,8 +20,7 @@ Mechanization of the specification, `docs/blueprint/src/content.tex`. Modelling 
   (`M`) are a `Finset Name` with a function on it. Unordered, unique and non-empty are
   properties of the type, so set-ness lives in the carrier and not in the kernel `ker p`. The
   kernel's restriction is narrower than it looks: it rejects a `Finset` whose element type
-  is the datatype being declared, which is why `union`'s payload is a list (see
-  `Calculus/Dynamo/Witness/LiteralArity1.lean`), and accepts one over a concrete type in the same constructor.
+  is the datatype being declared, which is why `union`'s payload is a list, and accepts one over a concrete type in the same constructor.
 * **`N` is carried exactly and this calculus assumes nothing about any numeric type.** The
   value side of `N` is `WFNumeral`, the subtype `Numeral.WF` cuts out, so there is no host
   axiom here at all. A port that hands its own numeric type to a caller adapts that type to
@@ -343,7 +342,7 @@ Every part of that premise line is a fact of the type, not a gate. `GroundKind` 
 line as a type. The base is an index, so `member` is a function of
 it and `g ground` is unsayable-otherwise; the alternative is one inhabitant of *that base's*
 carrier, so `ℓ ⊆ T` is the type. A literal carries one value; several values are a certified
-`union` of singletons, and `Calculus/Dynamo/Witness/LiteralArity1.lean` derives that rule. -/
+`union` of singletons. -/
 
 /-- The five bases a literal can sit at: `Kind` minus the three container kinds. -/
 inductive GroundKind where

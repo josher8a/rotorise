@@ -32,7 +32,7 @@ theorem Closed.read_agree {α : Table} {s t : Closed} (hs : s.HF) (ht : t.HF) {a
 
 /-! ## The false control: a `held` adapter is not a restriction of `opaque` -/
 
-/-- The table that gives each generator the constant adapter of `oneHeld`. -/
+/-- The table that gives each generator the constant adapter of `oneHeldClosed`. -/
 def oneTable : Table := fun _ => (fun _ => Value.num (WFNumeral.of "1"), fun _ => Value.str "1")
 
 /-- The numeric base under a constant adapter, with the caller side restricted to text, as a

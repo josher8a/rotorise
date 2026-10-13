@@ -48,26 +48,24 @@ definition it touches.
 | `Calculus/Dynamo/Lang/Typing.lean` | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HObject`, `HUnion`); `opaque` holds every value; syntactic premises only |
 | `Calculus/Dynamo/Lang/Soundness.lean` | `Obligations` and `PairwiseCompat` at `dynSyn`, the theorem statements, and the held-set bridge `typed_e_mem`/`typed_p_mem`, from `Alg.carrier_denote` and `Alg.typed_TSub` |
 | `Calculus/Dynamo/Lang/Equations.lean` | `Codec.Equiv` (the specification's `≡`), `Can`, and all ten "Hold" nodes of the specification's equations this development still states — `held`'s composition (its identity is `equiv_through_id` at the codecs, because a `held` of the empty word has no term), `refine`'s meet and full case, `Codec.extendRead` with its own reader as the alternate reader and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of the conditions that the specification states), wrapper member preservation. The null-point node went with the wrapper: the point is a union option, so idempotence is the union's |
-| `Calculus/Dynamo/Alg/Opaque.lean` | `opaque` as the identity codec `Alg.idCodec`, with `lawful_opaq` and `carrier_opaq`; the union of everything self-identifying (`opaqUnfold`) is a theorem in `Universal.lean` |
-| `Calculus/Dynamo/Lang/ScopeHeldSet.lean` | `T` as an identity: `Closed.typed_T_identity` ((A) at every entry of a typed closed codec, from `TOp.rule_T` at every operation); `typed_T_adm` in `Laminar.lean` proves (B) at every derivable term whose obligations hold |
+| `Calculus/Dynamo/Alg/Opaque.lean` | `opaque` as the identity codec `Alg.idCodec`, with `lawful_opaq` and `carrier_opaq`; the union of everything self-identifying (`opaqUnfoldClosed`) is a theorem in `ScopeUniversal.lean` |
+| `Calculus/Dynamo/Lang/ScopeHeldSet.lean` | `T` as an identity: `Closed.typed_T_identity` ((A) at every entry of a typed closed codec, from `TOp.rule_T` at every operation) |
 | `Calculus/Dynamo/Alg/Continuity.lean` | `Sub` as the information order that any ccpo must extend, and first-match resolution monotone (`selectF_mono_list`) and continuous (`selectF_continuous_list`) under the obligation that every admitter agrees |
-| `Calculus/Dynamo/Witness/Nesting.lean` | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is the nesting bound of the store, a parameter, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from the rules of the judgement rather than a premise someone failed to discharge |
+| `Calculus/Dynamo/Witness/Nesting.lean` | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is the nesting bound of the store, a parameter, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `Closed.not_storable_of_typed` (`ScopeNesting.lean`) exhibits a **typed** closed codec whose encoding the store refuses: the bound is absent from the rules of the judgement rather than a premise someone failed to discharge |
 | `Calculus/Dynamo/Lang/Store.lean` | The DynamoDB port: `DynamoDB.maxNesting` instantiates the nesting bound at the store's 32 levels; `decimalCodec` over `Numeral.Stored` and its `SurvivesStore` instance, `not_survivesStore_numberCodec`, the numeral-domain report (`decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases) |
 | `Calculus/Dynamo/Lang/Adapters.lean` | `Numeral.Normal`/`Numeral.Stored`, the text adapter `numeralOfStoredText`/`textOfNumeral`, and the table of the library `libTable` |
 | `Calculus/Dynamo/Lang/Universe.lean` | DynamoDB as a universe: `dynPrimAdm`, `ground_selfdual`, `dynLeaf`, `dynLeafMeet`, `dynShapes` and `Ω_topLaws`, with the lemmas on literals and sets that they read |
 | `Calculus/Dynamo/Lang/Clause.lean` | The data of a clause: `Pin`, `NameSpec`, `AltClause` with `altsSub` and `litSubAt`, and the conditions of a precondition `Cond` with `readPath` |
-| `Calculus/Dynamo/Witness/Refutations.lean` | The six "Do not hold" nodes of the specification's equations, all settled, over seven declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id`, plus `optional` nesting, which the syntax rules out, and `set(union(…))`, which the DynamoDB set obligation refuses (`setElem_union_refused`) |
+| `Calculus/Dynamo/Witness/Refutations.lean` | The six "Do not hold" nodes of the specification's equations, all settled: `Closed.not_equiv_union_array`, `Closed.not_equiv_tupleTail_tuple` and `Closed.not_equiv_tupleTail_array`, `Closed.not_equiv_refine_held` and `Closed.not_equiv_union_extend` in `ScopeRefutations.lean`, `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id`, plus `optional` nesting, which the syntax rules out, and `set(union(…))`, which the DynamoDB set obligation refuses (`Scoped.setElem_union_refused`) |
 | `Calculus/Axioms.lean` | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
-| `Calculus/Dynamo/Witness/Discharge.lean` | The host's recursive schema for JSON (`jsonTerm`) carried through `soundness`, with the refusals of the guard pinned |
+| `Calculus/Dynamo/Witness/ScopeDischarge.lean` | The host's recursive schema for JSON as a closed codec (`jsonClosed`), lawful through `Closed.sound` (`Closed.lawful_json`), and each shape that the guard refuses as a graph with no form as a DAG of scopes |
 | `Calculus/Dynamo/Analysis/ScopePath.lean` | The frontier of a path into a closed codec and narrowing at DynamoDB, as vectors that reduce in the kernel: the store refuses a segment, and an entry that a cycle returns to is one entry. `Closed.narrowC_law` is the narrowing law at DynamoDB |
 | `Calculus/Dynamo/Analysis/ScopePrecondition.lean` | The precondition of a closed clause as data for the store: a conjunction of `in`, `type` and `exists` tests at paths into the item. `Closed.preconditionOfC` reads the stored view of the clause and states the precondition exactly or refuses (`Closed.preconditionOfC_exact`), and `Closed.narrow_law_precondition` is the narrowing law with the precondition in place of the admission |
 | `Calculus/JSON/Basic.lean` | A second universe on the generic layer, with no DynamoDB import: the carrier `Json`, the ground codecs, the array prism, the signature `jsonSyn`/`jsonSem` with `id_topLaws`, a union lawful by `Alg.soundness` and `Alg.compat_of_HF` (`lawful_strOrNum`), and the kind test as the primitive admission rows, exact by `Alg.Adm_exact` and `Alg.AdmA_exact` (`exact_strOrNum`) |
 | `Calculus/JSON/Disjoint.lean` | Disjointness at JSON: the leaves `jsonLeaf` (two kinds are apart where they are two kinds), the laws of the leaves and of the formers as instances, and `Alg.disjoint_orthogonal` at `jsonSyn` (`orthogonal`) |
 
 `Alg/Agree.lean`, `Alg/Converse.lean`, `Alg/Rows.lean`, `Lang/Converse.lean`, `JSON/Compat.lean`,
-`Dynamo/Analysis/Compat.lean`, `Confluence.lean`, `ExactA.lean`, `ExactV.lean`, `HeldFree.lean`, `Kernel.lean`,
-`Laminar.lean`, `LiteralArity1.lean`, `Malleability.lean`, `Dynamo/Analysis/Disjoint.lean`, `Merge.lean`,
-`Orthogonality.lean`, `Separation.lean`, `ScopeSlice.lean`, `Universal.lean`, `Bridge/Vectors.lean`, `Bridge/Verdicts.lean`, `Bridge/Kinds.lean`,
+`HeldFree.lean`, `Malleability.lean`, `Separation.lean`, `ScopeSlice.lean`, `Bridge/Vectors.lean`, `Bridge/Verdicts.lean`, `Bridge/Kinds.lean`,
 `Bridge/Rows.lean` and `Bridge/ScopePaths.lean` have none, and each opens with a module docstring that says
 what it is for.
 Read those.
@@ -135,9 +133,10 @@ and the judgement to it).
   `set` is the one product that is not, and the reason is stated where it is argued:
   its attribute side is a choice among three wire sets, not one constructor.
 - **A recursive union's compatibility is decided by orthogonality, not argued per option.**
-  `Term.disjoint` keeps `jsonTerm`'s options apart whatever the variable denotes, and orthogonal
-  lawful codecs are compatible (`pairwiseCompat_json`). So the compatibility needs nothing from
-  the recursive call.
+  A string and an array share no value and no attribute whatever the element, and orthogonal
+  lawful codecs are compatible (`compat_string_array`). So the two options of `jsonClosed` meet
+  their obligation at every lawful element (`obligations_jsonBody`), and the compatibility needs
+  nothing from the recursive call.
 - **`N` is carried exactly, and no numeric type is axiomatized.** A target language that hands
   its own numeric type to a caller adapts that type to `WFNumeral` in the port. IEEE-754 facts
   are not this calculus's theorems, and nothing here assumes them.

@@ -826,9 +826,8 @@ describe('(C): what a codec reads, it can write', () => {
 /**
  * **Admission against `encode`, in the one direction that is true.**
  *
- * `accepts` is the model's `Adm : Term → Value → Bool` asked of the pair, and the model proved `Adm` exact
- * at all 21
- * constructors. The obvious law here is therefore `accepts(c, v) ⟺ !failed(c.encode(v))`, and half
+ * `accepts` asks of the pair the model's write domain: whether the meaning's `e` is defined at the
+ * value. The obvious law here is therefore `accepts(c, v) ⟺ !failed(c.encode(v))`, and half
  * of it used to be false — not because the port was wrong, but because **encoding did not
  * validate**. A codec's input is typed, so `string.encode(5)` wrote `{ S: 5 }` and
  * `array(string).encode([5])` wrote `{ L: [{ S: 5 }] }`. `carries`'s own docstring said this for

@@ -32,8 +32,7 @@ set_option linter.unreachableTactic false in
     value, and `set` recurses into its element. Only four rules need anything new, and each needs the
     converse of a helper of the other direction.
 
-    **What this does *not* say is `T = dom(e)`**, which is a different claim, proved by
-    `typed_T_adm` (`Laminar.lean`). Reading (A) as (B) is the mistake the specification's row made. -/
+    **What this does *not* say is `T = dom(e)`**, which is a different claim. Reading (A) as (B) is the mistake the specification's row made. -/
 theorem typed_T_eq : ∀ {t T μ}, Typed α t T μ → ∀ v, T v → (denote α t).T v
   | t, T, μ, h, v, hv => by
     cases h with
@@ -126,9 +125,7 @@ theorem typed_T_identity {t T μ} (h : Typed α t T μ) (v : Value) : (denote α
   `Carrier.domE` is its other half.
 
 The specification's row asserts (A) and then justifies it with a sentence about (B). (A) is not false at
-`union`; it is definitional — and it is proved everywhere else too. **(B) holds at every
-derivable term whose obligations hold** by `typed_T_adm` (`Laminar.lean`): a union writes wherever
-one of its options writes, and a set reads its obligations. Reading a proof of (A) as a claim about (B) is the mistake the row made, and the reason
+`union`; it is definitional — and it is proved everywhere else too. Reading a proof of (A) as a claim about (B) is the mistake the row made, and the reason
 both are named here. -/
 
 /-- **(A) at a union is definitional.** `altCodec`'s held set *is* the union of its options'

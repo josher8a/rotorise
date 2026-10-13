@@ -280,7 +280,7 @@ describe('the declaration guard, where a term is what the guard reads', () => {
     /**
      * Two literal sets with disjoint alphabets are separable, and the declaration must stand.
      *
-     * The model's warrant is `Separation.lean`'s `sepJV_set_literals`: two sets of disjoint
+     * The model's warrant is `ScopeSeparation.lean`'s `Closed.sepJV_set_literals`: two sets of disjoint
      * literals share no set, because no stored set is empty. The meet states it: the two element
      * unions meet at the bottom, so the two sets do.
      */
@@ -635,7 +635,7 @@ describe('an object option is admitted by attempt', () => {
      * **A union reads an object option as closed, and the option's term is what has to say so.**
      *
      * An undeclared name fails the `decode` of each closed option.
-     * The certificate `Calculus.certAll` asks no option for a closed body, so the term states the
+     * The certificate `Calculus.certAllC` asks no option for a closed body, so the term states the
      * closure that the union reads.
      */
     it('states the closure a union reads its object options with', () => {

@@ -333,8 +333,8 @@ The keys are strings. The store reads a name as a string, and so does the term l
 field table is a `MapOf` of slots. Nothing about it is codec-shaped: a `Finset`, a function, and
 a lookup.
 
-**The structure keeps its name `Calculus.MapOf`, outside `Alg`.** Callers extend it
-(`MapOf.restrict`, `MapOf.disjUnion`) and reach each extension by field notation. An abbreviation
+**The structure keeps its name `Calculus.MapOf`, outside `Alg`.** Code extends it
+(`MapOf.at`, `MapOf.ofFun`) and reaches each extension by field notation. An abbreviation
 over a generic structure sends field notation to the generic namespace, where no extension is. -/
 
 /-- A map's payload: the key set, and the values on it. A dependent pair rather than a

@@ -92,7 +92,7 @@ term. `denote` reads the table of each absolute side, so the dual, with the two 
 denotes each term by the same codec (`denote_op`). The compiled code of a function over `Term S`
 takes `S` as a real argument, because `casesOn` takes the parameter of the family as a real
 argument. The meaning is computable: no definition carries `noncomputable`, and `#eval` runs
-`denote` and `AdmA` at DynamoDB.
+`denote` and `Closed.AdmA` at DynamoDB.
 The split keeps a term as data that code can compute with.
 
 **Each stored-side law of the generic layer is the caller-side law at the dual universe.** `AdmA`
@@ -117,12 +117,12 @@ top reads every datum and sends each datum to itself.
 | the list and map formers | `Mean.list` as a `ListA`, `Mean.map` as a `MapA`: one prism of the carrier | `dList`, `dMap` | none |
 | the set former | `Mean.set` as a `SetF` over the carrier of the meaning: a lift, its laws, and the member of a set from the member of its element (`SetF.member`, with `SetF.lift_μ`) | `dSet`, over `setCodec` | none |
 | the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
-| the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | `dynOracle`, over the two views | `jsonOracle`, which certifies nothing |
+| the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | none: the decision over closed codecs, `Closed.compatPair`, takes no oracle | `jsonOracle`, which certifies nothing |
 | the top laws: each primitive, and the set lift, below the top, and the set lift over a restriction of the top acts where its element acts | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
 | the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `inL`, at both orientations, because each primitive is self-dual (`ground_selfdual`) | the kind test |
 | the leaves: two primitives apart, two predicates apart | `Leaf` | `dynLeaf`: `Ground.apart`, `Pred.isData`, `Pred.apart` | `jsonLeaf`: one kind |
-| the laws of the leaves | `LeafAdm`, `LeafAdmA`, `LeafMeet` | `dynLeafAdm`, `dynLeafAdmA`, `dynLeafMeet` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafMeet` |
-| the set laws that the test reads | `FormerAdm`, `FormerAdmA` | `dynFormerAdm`, `dynFormerAdmA` | `jsonFormerAdm`, `jsonFormerAdmA` |
+| the laws of the leaves | `LeafAdm`, `LeafAdmA`, `LeafMeet` | `dynLaws`, at each orientation, and `dynLeafMeet` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafMeet` |
+| the set laws that the test reads | `FormerAdm`, `FormerAdmA` | `dynLaws`, at each orientation | `jsonFormerAdm`, `jsonFormerAdmA` |
 | the former class of each value and attribute, and where each former lands | `Shapes` | `dynShapes`: the root constructor | `jsonShapes`: every value is a primitive |
 
 **The judgement's member is the denotation's member, at every universe (`denote_μ`).** The
@@ -198,16 +198,15 @@ lawful: the top is the identity, which is canonical.
 abbreviations at the DynamoDB carriers, and `Term`, `Typed` and `Obligations` are abbreviations
 at `dynSyn`. A `match_pattern` abbreviation keeps each constructor spelling, such as
 `Term.string` and `Term.literal`. `Term.casesD` keeps the case tags `base` and `literal`. A
-cited DynamoDB theorem, such as `soundness` or `Adm_exact`, states the generic theorem at the
-DynamoDB names.
+cited DynamoDB theorem, such as `soundness`, states the generic theorem at the DynamoDB names.
 
 **The DynamoDB `denote` is the generic `denote`, and a simp set gives its rows.** `denote`,
-`μSyn`, `Adm`, `AdmA` and their companions are abbreviations of the generic functions, typed at
+`μSyn` and their companions are abbreviations of the generic functions, typed at
 `Term`. So a constructor argument such as `.base k` resolves in the DynamoDB namespace. A proof at
 DynamoDB reads `baseCodec`, `setCodec` and `listCodec` by name. A generic equation states a row
 through the signature, and `simp only [g]` unfolds an abbreviation `g` and reads no other
 equation. So each row at the DynamoDB constructors is a `rfl` lemma in a registered simp set:
-`denote_rows`, `μSyn_rows`, `Adm_rows` or `AdmA_rows`. A proof names the set where it named the
+`denote_rows` or `μSyn_rows`. A proof names the set where it named the
 function. `rw` matches the head symbol, so a lemma stated at an abbreviation does not rewrite the
 generic head. `exact` compares up to unfolding, and accepts both.
 
@@ -239,14 +238,14 @@ a verdict.
 **Exactness holds at every signature.** `Alg.Adm` and `Alg.AdmA` give a row per constructor, and
 `Alg.Adm_exact` and `Alg.AdmA_exact` prove each row equal to the domain of `denote t`, from the
 exactness of the primitive rows alone. A universe states the primitive rows, so a verdict at a
-primitive reduces without the codec. The DynamoDB `Adm` and `AdmA` are the generic rows, and
-read their DynamoDB rows from a simp set, as `denote` does.
+primitive reduces without the codec. At DynamoDB no row stands beside the meaning: the read row
+of a closed codec, `Closed.AdmA`, is the domain of the read of its meaning.
 
 **The other analyses are DynamoDB tables.** `Separation`, `ScopeSlice` and the certificate read
 the constructors of the DynamoDB carriers. No generic form of them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
 `Codec`, then the combinator algebra at the DynamoDB carriers as `Prisms`, `Products`, `Objects`,
 `Sums`, `Carriers`, `Lawful` and `Frontier`, and `Term`, then `Denote`, `Typing`, `Soundness`,
-then `ExactV`, `ExactA` and `Separation`, then `Orthogonality`, with `Axioms` as the sink. Each instance module imports the
+then `Separation`, with `Axioms` as the sink. Each instance module imports the
 generic module that it instantiates. Several analyses sit off the spine: no module but
 `Axioms.lean` imports them. `Malleability` is one of them: a lawful codec has one attribute per
 value (`Lawful.fmt_subsingleton`).
@@ -403,12 +402,13 @@ one before. Each input reads the stage its own depth names.
 **The guard is a checked condition on the syntax.** `Term.use i t` is the level at which `t` reads
 the variable `i`. The four levels are absent, under a container, at the input, and under a `held`.
 `Term.guarded` asks, at each binder, that the body reads its variable under a container at most.
-It refuses two shapes, and `Discharge.lean` pins each refusal:
+It refuses two shapes. Over closed codecs, each refused shape is a graph with no form as a DAG of
+scopes, which `Graph.guarded` decides:
 
-- a variable that reads the binder's own input, as in `mu (var 0)` (`not_typed_unguarded_binder`)
-  and `mu (union [var 0, string])` (`guard_refuses_option_at_binder_input`). The stages of such a
+- a variable that reads the binder's own input, as in `mu (var 0)` (`Graph.unguarded_no_dag`)
+  and `mu (union [var 0, string])` (`Graph.option_at_input_no_dag`). The stages of such a
   term never grow;
-- a `held` between the binder and its variable (`guard_refuses_held_on_path`). The caller-side
+- a `held` between the binder and its variable (`Graph.held_on_path_no_dag`). The caller-side
   function of a `held` can make the input deeper, so a container on the path does not bound the
   depth.
 
@@ -431,18 +431,18 @@ the closed case. A recursive codec's held set is its write domain, so the held-s
 closed: at `mu` they are definitional.
 
 **`opaque` is the identity.** With one carrier, each datum identifies itself, so the union of
-everything self-identifying (`opaqUnfold`) sends each datum to itself. `opaque` denotes the identity
+everything self-identifying (`opaqUnfoldClosed`) sends each datum to itself. `opaque` denotes the identity
 codec `Alg.idCodec`, and it owes no compatibility and no contraction. The union is a theorem:
-`Adm_opaqUnfold` and `AdmA_opaqUnfold` state that the union term admits what `opaque` admits.
+`Closed.Adm_opaqUnfold` and `Closed.AdmA_opaqUnfold` state that the union admits what `opaque` admits.
 
 **A held-free term is a restriction of `opaque`.** A held-free term (`HF`) holds no `held`, no
 older reader and no fill slot. Such a term writes only what `opaque` writes (`confluence_W`), and
 reads only what `opaque` reads (`confluence_R`). A `held` re-indexes the values of the caller, so
 the inclusion does not reach a `held`.
 
-**The analyses read a recursive term through its body.** `Adm` and `AdmA` take the environment
-that `denote` takes. A variable asks the codec that the environment gives the variable, and a
-`mu` asks its own codec, as the rows of `opaque` do.
+**The analyses read a recursive codec through its meaning.** The read row `Closed.AdmA` reads the
+meaning of the closed codec. An entry reads the codec that its scope solves, as the rows of
+`opaque` do.
 
 **The test reads a recursive term stage by stage.** Two recursive terms are disjoint where their
 bodies are disjoint under every two stages that are disjoint, because each stage is the body over
@@ -670,22 +670,21 @@ None was added speculatively.
 
 ## The analyses, and the one test that decides both sides
 
-Every separation is one appeal to `Separates`, which takes two families of allowed values, one
-per side, and asks only that each be pairwise disjoint. Kinds, members, tags
+Every separation is one appeal to `Closed.Separates`, which takes the write domain and the read
+row of each meaning, and asks only that each pair be disjoint. Kinds, members, tags
 and admissible sets are ways of building those families rather than four separate conditions.
 
-`ExactV.lean` holds `Adm` and `ExactA.lean` holds `AdmA`, exact at every constructor, with no
-hypothesis and no escape hatch. Its value-side separation predicate is one clause, because the
-joint predicate absorbs what a kind table used to carry. The attribute-side predicate is also one
-clause. An alternate reader cannot add a structural exception, because each row reads `Term.legacy`
-from its own codec.
+The meaning of a closed codec holds its own domains: the write domain is where `e` is defined, and
+the read row `Closed.AdmA` is where `p` is defined. No Boolean row stands beside the meaning. The
+value-side separation predicate `Closed.SepJV` is one clause, and the attribute-side predicate
+`Closed.SepJA` is one clause. An alternate reader cannot add a structural exception, because the
+read row asks the meaning of the alternate reader's own codec.
 
-**One test decides both.** `select` attempts every option, so option admission *is* the row at
-every constructor: `admitV_le_Adm` and `admitA_le_AdmA` hold from exactness alone, with no premise
-on the term and no exception for an object. For the same reason, the row of a `union` is the
-disjunction of its options' rows (`Adm_union`). So the joint predicate and the admission a
-discharger consumes are one test, and `pairwiseCompat_of_separated` proves that a separated
-union of lawful options meets its obligation.
+**One test decides both.** `select` attempts every option, so option admission *is* the domain of
+the meaning of the option, with no premise on the codec and no exception for an object. So the
+joint predicate and the admission a discharger consumes are one test, and
+`Closed.pairwiseCompat_of_separated` proves that a separated union of lawful options meets its
+obligation.
 
 **The direction has a standard name.** It is the abstract interpretation of Cousot and Cousot,
 1977: a coarse test that over-approximates a precise one transfers disjointness downward, and a
@@ -694,29 +693,29 @@ all. This development spends it once. The view at an orientation admits each val
 term admits at that orientation (`viewLe_of`), so two views that are disjoint separate the terms.
 
 **The outer carrier has a separate read-side fact.** An alternate reader can read an attribute
-outside the current term's member. `extendRead_reads_n` records a string core that reads a numeric
+outside the current term's member. `Closed.extendRead_reads_n` records a string core that reads a numeric
 attribute through its alternate reader. The structural classifier has no row for the outer
 carrier.
 
-`Orthogonality.lean` states the discharge on what the resolver consults rather than on what the
-row says. `Separates` reads the row of each option, `isSome_e_eq_Adm`
-identifies that row with what the option writes, and `pairwiseCompat_of_separated`
+`ScopeOrthogonality.lean` states the discharge on what the resolver consults. `Closed.Separates`
+reads the write domain and the read row of each meaning, and `Closed.pairwiseCompat_of_separated`
 is the discharger stated on what `select` actually decides by.
 
 ### The classifier, and what it is the specification of
 
-The union obligation is compatibility, and the certificate is sufficient for it. `viewsDisjoint`
-certifies a pair where the two terms are orthogonal.
+The union obligation is compatibility, and the certificate is sufficient for it.
+`Closed.viewsDisjoint` certifies a pair where the two closed codecs are orthogonal.
 
 **The certificate is orthogonality.** A term denotes a partial isomorphism. The caller view,
 `view` at the host, states its domain. The stored view, `view` at the dual, states its range. In an inverse semigroup, two elements are
 orthogonal where the product of their domain idempotents is zero and the product of their range
-idempotents is zero (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). `viewsDisjoint` asks
-`Term.disjoint` of the two caller views and of the two stored views. `Term.disjoint` reads a raw
-`held` as disjoint from the bottom alone, and a view holds no `held`, so a `held` reaches the
+idempotents is zero (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). `Closed.viewsDisjoint` asks
+the decision `Closed.disjoint` of the two caller views and of the two stored views. The decision
+reads a raw `held` as disjoint from the bottom alone, and a view holds no `held`, so a `held` reaches the
 certificate through its views. On a term with no `held`, the caller view is the term itself. The
-view of a `union` is the union of the views of its options. The view of `mu b` is `mu` of the view
-of `b`, and a variable stays a variable, so a `held` below a recursion reaches the certificate too.
+view of a `union` is the union of the views of its options. A reference to an entry stays a
+reference, so a `held` below a recursion reaches the certificate too
+(`Closed.viewsDisjoint_heldBelowMu`).
 
 **The stored view drops a predicate over a variable.** A view keeps a refinement as it is only
 where the inner term holds no `held` and no variable. Elsewhere the view keeps the predicate of its
@@ -748,12 +747,12 @@ one value write one attribute (`Agree` at the host), and two readers of one attr
 value (`Agree` at the dual). `Term.compat` decides each half per component: the two terms are
 disjoint there, or one codec bounds both there. The bottom agrees with every term. Two held-free
 terms whose variables are below the top are bounded by the top: a context gives each variable that
-fact, a binder of a held-free body pushes it, and a free variable does not have it. Two closed
-terms take the oracle `dynOracle`, which asks the test of the two views of the half. A `held` whose
+fact, a binder of a held-free body pushes it, and a free variable does not have it. The decision over
+closed codecs, `Closed.compatPair`, takes no oracle. A `held` whose
 half, or the half of the `held` inside it, is disjoint from the partner agrees there.
 `compat_sound` proves each row, `compatPair_sound` holds at every environment of the free
-variables, and `pairwiseCompat_of_compatPair` discharges the union's obligation of two lawful
-options.
+variables, and `Closed.pairwiseCompat_of_compatPair` discharges the union's obligation of two
+lawful closed codecs.
 
 **Over lawful, pairwise compatible options, the order of the options is unobservable.** A
 permutation of the options denotes the same codec (`altCodec_perm`), so a value that two options
@@ -761,7 +760,7 @@ admit has no owner.
 
 **The decision is the specification of the library's declaration-time guard, and a checked one.**
 The `union` combinator in `src/` accepts a pair where `agrees(x, y)` holds, which is the model's
-`compatPair` at `dynOracle`, per half and per component. `pairwiseCompat_of_compatPair` proves each
+`Closed.compatPair`, per half and per component. `Closed.pairwiseCompat_of_compatPair` proves each
 accepted pair compatible. The combinator refuses every other pair, because the pair is not shown
 compatible.
 
@@ -792,9 +791,9 @@ string literal it does not write. A caller-built `held` keeps the held side that
 
 **The bridge checks both directions.** The emitter states each emittable option pair of the corpus
 and of the pool as a separation row, in one list per form, and `formal/scripts/gate.sh` elaborates
-the lists. For a pair the library accepts, the row states that `compatPair dynOracle` accepts the
+the lists. For a pair the library accepts, the row states that `Closed.compatPair` accepts the
 pair, and `accepted_of_rows` lifts the row to `PairwiseCompat` where both terms denote lawful
-codecs. For a pair the library refuses at compatibility, the row states that `compatPair dynOracle`
+codecs. For a pair the library refuses at compatibility, the row states that `Closed.compatPair`
 refuses the pair (`refused_of_rows`). For a pair the library refuses at the guard, the row states
 that the guard refuses an option (`guardRefused_of_rows`). A pair that reads a thunk that throws
 takes the same forms, because the decision holds whatever codec the thunk names. Each row also
@@ -807,15 +806,15 @@ with the compatibility test, `separationForm(...)` refuses the pair. So a host g
 compatibility test that drifts from the union decision fails the suite that emits the rows, and
 passes no row.
 
-**`viewsDisjoint` is sufficient and not necessary.** A decline by `viewsDisjoint` is not a refutation of
+**`Closed.viewsDisjoint` is sufficient and not necessary.** A decline by `Closed.viewsDisjoint` is not a refutation of
 compatibility. Two restrictions of one adapter are compatible in the model
 (`compat_of_common_bound`), and no certificate reaches such a pair where the two overlap. The
 decision reaches such a pair through the held row: `decimal('1', '2.5')` beside
 `decimal('2.5', '3')` is accepted, because the two `held`s carry one adapter and their inner
 terms agree.
 
-`Separated` is what names the separation guarantee over the option list, with
-`separated_of_certAll` as the certificate's bridge into it.
+`Closed.Separated` is what names the separation guarantee over the option list, with
+`Closed.separated_of_certAllC` as the certificate's bridge into it.
 
 ---
 
@@ -909,7 +908,7 @@ forms. `ScopePaths.lean` holds `pathKindC` and `pathReadC`, with `pathReadC_reso
 **A read row asserts a decoded value.** A read vector states that the model's `p`, at the
 attribute that the library wrote, gives the value that `decode(...)` read back, by `vcheck`. The
 read rows of the resolutions and of the legacy read gate state the same by `readsOk`. The read
-verdicts compare a decision: `AdmA` against whether `decode(...)` accepted the attribute. Each
+verdicts compare a decision: `Closed.AdmA` against whether `decode(...)` accepted the attribute. Each
 row states one value. A law over every value, such as the retract, is a theorem of the model, and
 no row states a law.
 
@@ -964,11 +963,11 @@ into an answer.
 
 Each of these is a decision with a price, not a gap, and each has a witness.
 
-**The nesting bound.** `Nesting.lean` is the one place the attribute algebra is larger in the
-model than in the store, deliberately. The list and map constructors nest without limit by
-construction, so a derivable term can write an attribute the store refuses, and
-`not_storable_of_typed` is the witness: a well-typed term, a value on its held set, an encoding
-outside `Attr.Storable`. The model must be able to **state** this, because a target certified
+**The nesting bound.** `Nesting.lean` and `ScopeNesting.lean` state the one place the attribute
+algebra is larger in the model than in the store, deliberately. The list and map constructors nest
+without limit by construction, so a typed closed codec can write an attribute the store refuses,
+and `Closed.not_storable_of_typed` is the witness: a typed closed codec, a value that it writes, an
+encoding outside `Attr.Storable`. The model must be able to **state** this, because a target certified
 against a specification that cannot say it is certified against a weaker claim than its users
 read. The honest repair is not a carrier refinement, because the witness violates no premise: the
 rules do not mention depth. The indexed-family alternative is accepted by the kernel only in
@@ -987,8 +986,7 @@ nested `Finset`, `Multiset` or `Quot` of the datatype being declared. A list car
 canonical spelling that every set codec enforces by refusal.
 
 **The n-ary literal is a union of singletons.** A literal carries one value, and several
-alternatives are a `union` of singleton literals whose members are separated because the values
-differ. `LiteralArity1.lean` is the derivation. The route was refused while a literal held a set: the
+alternatives are a `union` of singleton literals. The route was refused while a literal held a set: the
 bridge from a `Finset` of alternatives to the list `Term.union` takes is `Finset.toList`, which
 reaches `Classical.choice`. One value leaves no such set, so there is no bridge to cross. The host
 keeps the n-ary call as a builder that writes the union, because the hand-written union costs the
