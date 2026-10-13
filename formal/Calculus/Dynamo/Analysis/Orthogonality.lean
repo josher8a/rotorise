@@ -1,4 +1,5 @@
 import Calculus.Dynamo.Analysis.ExactA
+import Calculus.Dynamo.Analysis.ScopeOrthogonality
 
 variable {α : Calculus.Table}
 
@@ -86,19 +87,6 @@ theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated α opts) 
     have hay : AdmA α y a = true := (List.mem_filter.mp hy).2
     exact hxy hax hay
 
-/-- Two members that both meet `P`, in a list where no related pair both meets `P`, are one. -/
-theorem eq_of_pairwise_excl {α : Type} {P : α → Prop} {R : α → α → Prop}
-    (hR : ∀ x y, R x y → P x → P y → False) :
-    ∀ {l : List α}, l.Pairwise R → ∀ x ∈ l, ∀ y ∈ l, P x → P y → x = y
-  | [], _, _, hx, _, _, _, _ => nomatch hx
-  | h :: tl, hp, x, hx, y, hy, px, py => by
-    have hp' := List.pairwise_cons.mp hp
-    rcases List.mem_cons.mp hx with rfl | hx' <;> rcases List.mem_cons.mp hy with rfl | hy'
-    · rfl
-    · exact (hR _ _ (hp'.1 y hy') px py).elim
-    · exact (hR _ _ (hp'.1 x hx') py px).elim
-    · exact eq_of_pairwise_excl hR hp'.2 x hx' y hy' px py
-
 /-- **Pairwise separation gives the union's obligation.** No input reaches two separated
     options, so an option never acts where another reads. -/
 theorem pairwiseCompat_of_separated {opts : List Term}
@@ -115,9 +103,6 @@ theorem pairwiseCompat_of_separated {opts : List Term}
       exact eq_of_pairwise_excl (P := fun u => Adm α u v = true)
         (fun x y hxy px py => hxy.1 v px py) h t ht s hs htV hsV
   subst hst; exact hp
-
-/-- Each codec is compatible with itself. -/
-theorem compat_self (c : Codec) : Compat c c := fun _ _ hp _ => hp
 
 /-- **An empty option is compatible with every option**: `never` reads nothing and writes
     nothing, so neither side of `Compat` has a case. -/

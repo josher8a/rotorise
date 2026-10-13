@@ -1,5 +1,6 @@
 import Calculus.Dynamo.Analysis.Confluence
 import Calculus.Lang.Compat
+import Calculus.Dynamo.Analysis.ScopeCompatWitness
 
 variable {α : Calculus.Table}
 
@@ -64,23 +65,6 @@ theorem sub_denote_refine (x : Term) (Q : Pred) : Sub (denote α (.refine x Q ()
 The held holds `"x"` and stores `"X"`, beside the literal `"X"`. The adapter swaps `"x"` and
 `"X"`, so the adapter is an involution. -/
 
-/-- The adapter that swaps `"x"` and `"X"`, and fixes every other value. -/
-def swX : Value → Value := fun v =>
-  match v with
-  | .str s => if s = "x" then .str "X" else if s = "X" then .str "x" else v
-  | _ => v
-
-/-- **`swX` is an involution.** -/
-theorem swX_invol (v : Value) : swX (swX v) = v := by
-  cases v with
-  | s s =>
-      simp only [swX]
-      split_ifs <;> simp_all
-  | _ => rfl
-
-/-- The table that gives each generator the pair `swX`, `swX`. -/
-def swTable : Table := fun _ => (swX, swX)
-
 /-- The held that holds `"x"` and stores `"X"`. -/
 def shout : Term := .held false (.literal .string "X") (.literal .string "x") (.caller 0, false) []
 
@@ -112,15 +96,6 @@ theorem not_compat_shout : ¬ Compat (denote swTable shout) (denote swTable litX
   exact absurd this (by decide)
 
 /-! ## An incompatible pair: `boolean | flipBool` -/
-
-/-- Boolean negation, and the identity on every other value. -/
-def notV : Value → Value := fun v =>
-  match v with
-  | .bool b => .bool (!b)
-  | _ => v
-
-/-- The table that gives each generator the pair `notV`, `notV`. -/
-def flipTable : Table := fun _ => (notV, notV)
 
 /-- The held that stores the negation of a boolean. -/
 def flipBool : Term := .held false .boolean .boolean (.caller 0, false) []
@@ -154,11 +129,6 @@ Two overlapping `refine`s of one `held` swap sit below one canonical bound. -/
 
 /-- The adapter: `string` stored, `string` held, `"x"` and `"X"` swapped. -/
 def swap : Term := .held false .string .string (.caller 0, false) []
-
-/-- The members `"x"` and `"y"`. -/
-def q1 : Pred := .members .string (NEFinset.of "x" {"y"})
-/-- The members `"x"` and `"z"`. -/
-def q2 : Pred := .members .string (NEFinset.of "x" {"z"})
 
 /-- `swap` refined to `q1`. -/
 def sw1 : Term := .refine swap q1 ()

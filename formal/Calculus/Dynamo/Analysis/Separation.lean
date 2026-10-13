@@ -1,4 +1,5 @@
 import Calculus.Dynamo.Analysis.ExactA
+import Calculus.Dynamo.Analysis.ScopeSeparation
 
 variable {α : Calculus.Table}
 
@@ -41,16 +42,9 @@ the value carries exactly the declared names and the slot pins no literal, so su
 answers `true`, and the row answers `false`. So admission reads the row and not the
 structure. -/
 
-/-- A refinement by the trivially-true predicate: the same pair as the bare base. -/
-def qTop : Value → Bool := fun _ => true
-
 /-- One name, declared `req string` and pinned to no literal, so a test of the names and the
     literals asks only that the name is present. -/
 def tReqStr : Term := .object (.mk {"A"} (fun _ => .req .string) none)
-
-/-- …and a map carrying that name at a boolean, which the structure admits and the row
-    refuses. -/
-def vBoolAtA : Value := .map {"A"} (fun _ => .bool true)
 
 /-- `array` **is** the degenerate `tuple`: both builders write the same `list`, so the two
     rows are one term and the equation is `rfl`. -/
@@ -95,9 +89,6 @@ variable (α) in
 /-- **…and attribute side, also one clause.** The former member disjunct described an
     alternate reader inside `Term`. The carrier split made that state unrepresentable. -/
 def SepJA (x y : Term) : Prop := ∀ a, AdmA α x a = true → AdmA α y a = false
-
-/-- A read channel that fires at `N` and nowhere else. -/
-def rNum : Attr → Option Value := fun a => match a with | .n _ => some (.str "x") | _ => none
 
 /-- An alternate reader may read outside the member of its current term. -/
 theorem extendRead_reads_n :
@@ -233,14 +224,6 @@ witnesses are duals:
 `Adm` has no such split. `Adm_refine_adapt` and `Adm_held_adapt` show it doing the one
 thing `adapt` describes on both rows, apply the adapter and then ask the subterm, which is
 why it carries `q` and `f`. The `held` row also asks the outer at the value itself. -/
-
-/-- An adapter that sends one string to itself and everything else off `string`'s carrier.
-    Total, so this is a `held` and not a `refine` — and it narrows exactly as a refinement
-    would. -/
-def fSplit : Value → Value := fun v => match v with | .str "A" => .str "A" | _ => .bool true
-
-/-- The table that gives each generator the pair `fSplit`, `id`. -/
-def splitTable : Table := fun _ => (fSplit, id)
 
 /-- **The dual gap.** `held(string, string, fSplit, _)` writes `"A"` and refuses `"B"`: two values
     of one kind, differing in admission, so it decides. -/
