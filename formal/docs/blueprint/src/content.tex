@@ -624,7 +624,7 @@ Over closed codecs each refused shape is a graph with no form as a DAG of scopes
 \begin{theorem}[guarded recursion]
 \label{thm:guarded-recursion}
 \uses{rule:mu,cond:R,cond:C,cond:W}
-\lean{Calculus.muCodec, Calculus.Alg.contractive_body, Calculus.muStage_agree, Calculus.muCodec_e_fix, Calculus.muCodec_p_fix, Calculus.lawful_muCodec}
+\lean{Calculus.muCodec, Calculus.Alg.contractive_of_guarded, Calculus.muStage_agree, Calculus.muCodec_e_fix, Calculus.muCodec_p_fix, Calculus.lawful_muCodec}
 \leanok
 \texttt{mu\ b} denotes the limit of the stages of its body: the stages start at the bottom, and each input reads
 the stage its own depth names, on the write side by the depth of the value and on the read side by the
@@ -770,7 +770,7 @@ something whose judgement has a \texttt{⊗}.
 
 \begin{definition}[(field)]
 \label{rule:field}
-\lean{Calculus.Alg.TypedField.req}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ⊢ c : T ⇝ μ
@@ -781,7 +781,7 @@ something whose judgement has a \texttt{⊗}.
 
 \begin{definition}[(optional)]
 \label{rule:optional}
-\lean{Calculus.Alg.TypedField.optional}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ⊢ c : T ⇝ μ
@@ -944,7 +944,7 @@ unions it covers:
 \toprule
 Discharger & Covers & From \\
 \midrule
-the decision & each half of agreement at each component: the two terms are disjoint there, or one codec bounds both there & \texttt{pairwiseCompat\_of\_compatPair}, over \texttt{Term.compat} and \texttt{compat\_sound} \\
+the decision & each half of agreement at each component: the two terms are disjoint there, or one codec bounds both there & \texttt{Closed.pairwiseCompat\_of\_compatPair}, over \texttt{Scoped.compatPair} and \texttt{Scoped.compatPair\_sound} \\
 held-free options & every pair of terms with no \texttt{held} & both sit below \texttt{opaque}, which reads each value from one attribute (\texttt{compat\_of\_HF}) \\
 a common canonical bound & two restrictions of one adapter & \texttt{compat\_of\_common\_bound} \\
 separation & two options that no input reaches both of & the certificate below (\texttt{Closed.pairwiseCompat\_of\_separated}) \\
@@ -992,19 +992,17 @@ shown compatible.
 \begin{definition}[the certificate]
 \label{def:certificate}
 \uses{cond:compat,def:family}
-\lean{Calculus.Closed.viewsDisjoint, Calculus.Alg.Term.disjoint, Calculus.view, Calculus.Alg.hasHeld}
+\lean{Calculus.Closed.viewsDisjoint, Calculus.Alg.Scoped.disjoint, Calculus.Alg.Scoped.viewG, Calculus.Alg.hasHeld}
 \leanok
 Two options are certified where they are orthogonal. A term denotes a partial isomorphism, and its caller view and its stored
 view are its domain and its range. Two terms are orthogonal where the product of their domain
 idempotents is zero and the product of their range idempotents is zero (Lawson, \emph{Primer on
 inverse semigroups I}, Lemma 2.16). So the certificate asks the structural disjointness test of the
 two pairs of views, and a \texttt{held} reaches the certificate through its views. On a held-free term the caller view is the term itself. The view of a union is
-the union of its options' views, because a union admits where one of its options admits. The view
-of a recursive term is the recursion of the view of its body, so a \texttt{held} below a recursion
-reaches the certificate too. The stored view keeps a predicate only where the inner term holds no
-\texttt{held} and no variable. A finer view keeps a predicate over a variable whose binder holds no
-\texttt{held}. The test compares two data predicates only over closed held-free inner terms, so the
-two views give one verdict. The
+the union of its options' views, because a union admits where one of its options admits. A reference
+to an entry stays a reference in the view, so a \texttt{held} below a recursion reaches the certificate
+too. The stored view keeps a predicate only where the inner term reaches no adapter. The test
+compares two data predicates only over inner terms below the top, so the two views give one verdict. The
 test reads a closure through its inner term. A certified pair is separated
 (\texttt{Closed.viewsDisjoint\_sound}), so it is compatible. The certificate is sufficient and not
 necessary: two restrictions of one adapter that overlap are compatible, and no certificate reaches
@@ -1188,7 +1186,7 @@ side. The member projection cannot distinguish either pair: both options are \te
 One note on what has no set of its own. \texttt{optional} is a \textbf{field} (§4), not a term,
 so nothing passes through it: admission is a function on terms and has no case to give it. And a
 union's own admission is the join of its options': the set where one option admits
-(\texttt{Adm\_union}).
+(\texttt{select\_isSome\_attempt}).
 
 Two open object options \texttt{⟨a\ :\ String⟩} and \texttt{⟨b\ :\ String⟩} share the inhabitant
 \texttt{⟨a\ ↦\ "1",\ b\ ↦\ "2"⟩}, so they are not separated. They are compatible, because both are
@@ -1213,18 +1211,16 @@ decide a question about attributes.
 \begin{theorem}[soundness]
 \label{thm:soundness}
 \uses{cond:R,cond:C,cond:W,cond:compat,rule:union,rule:dunion,rule:opaque,rule:mu,thm:guarded-recursion}
-\lean{Calculus.Closed.sound, Calculus.Alg.soundnessIn, Calculus.Alg.carrier_denote}
+\lean{Calculus.Closed.sound, Calculus.Alg.Scoped.Closed.sound, Calculus.Closed.carrier}
 \leanok
 Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, whose obligations hold, denotes a pair
 satisfying \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and \rulelink{cond:W}{\textbf{(W)}}. The obligations are each
-\rulelink{rule:held}{\texttt{(held)}}'s iso premise, each \rulelink{rule:union}{\texttt{(union)}}'s \rulelink{cond:compat}{\textbf{(Compat)}}, and each
-\rulelink{rule:set}{\texttt{(set)}}'s set obligation (\texttt{SetObl}): the rule of the universe on a set element, which is
-\texttt{SetElem} at DynamoDB. Soundness takes the set obligation as a premise and does not read it. The
+\rulelink{rule:held}{\texttt{(held)}}'s iso premise and each \rulelink{rule:union}{\texttt{(union)}}'s \rulelink{cond:compat}{\textbf{(Compat)}}. Each
+\rulelink{rule:set}{\texttt{(set)}} also carries the universe's own obligation on a set element (\texttt{SetF.elem}), which is
+\texttt{SetElem} at DynamoDB, and soundness does not read it. The
 dischargers of this section settle \rulelink{cond:compat}{\textbf{(Compat)}} at the declaration wherever they decide
-a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and \texttt{opaque} outright. A \rulelink{rule:mu}{\texttt{(mu)}} owes the obligations of its
-body at each stage, given that the stage before is lawful. The induction runs over open terms, with
-an environment of lawful codecs for the variables. The closed theorem is its case at the empty
-environment. The host's recursive schema for JSON is derived and lawful through it (\texttt{lawful\_json}).
+a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and \texttt{opaque} outright. A \rulelink{rule:mu}{\texttt{(mu)}} is a closed codec, and each
+entry owes the obligations of its scope at each stage, given that the stage before is lawful. The host's recursive schema for JSON is derived and lawful through it (\texttt{lawful\_json}).
 The theorem holds at every universe signature. A universe supplies the laws of its primitives, of its
 formers and of its top, and the generic combinators supply the rest.
 \end{theorem}
@@ -1272,8 +1268,9 @@ below is an instantiation.
 
 \begin{proof}
 \leanok
-By induction on the derivation, with one refinement at \rulelink{rule:mu}{\texttt{(mu)}}. The induction runs over open
-terms, with an environment of lawful codecs for the variables (\texttt{soundnessIn}). Each case
+By induction on the derivation of each scope term (\texttt{sound\_term}), with one refinement at
+\rulelink{rule:mu}{\texttt{(mu)}}: each stage of a scope is lawful by the soundness of its terms, and the laws carry
+to the solution (\texttt{lawful\_strat}). Each case
 first says what the pair \emph{is} — the denotation is part of the rule — then discharges the laws. The
 grouping is the algebra of §7: points, wrappers, products, sums.
 
@@ -1329,8 +1326,8 @@ variable at the thunk, and any other thunk is the term it returns. What the re-e
 case.
 
 \textbf{Through a container.} The guard accepts the binder, and \rulelink{thm:guarded-recursion}{guarded recursion} gives the
-case. The stages are lawful by the induction over open terms, at an environment that holds the stage
-before. The limit is lawful. Containers strictly shrink the input, which is what makes the stages
+case. Each stage of the scope is lawful by the soundness of its terms, given that the stage before is
+lawful. The limit is lawful. Containers strictly shrink the input, which is what makes the stages
 agree past the depth of the input.
 
 \textbf{Through wrappers, or a union, alone.} The variable reads the binder's own input, the stages never

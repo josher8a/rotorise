@@ -1,5 +1,4 @@
-import Calculus.Lang.HeldFree
-import Calculus.Lang.ExactA
+import Calculus.Lang.Universe
 
 /-!
 # A second universe: JSON
@@ -13,9 +12,9 @@ The carrier is `Json`, and the member of a value is its JSON kind. A number is a
 
 The module instantiates these parts of the generic layer: the record `Alg.Codec`, the laws
 `Alg.Lawful`, the refinement by `Alg.Lawful.restrict`, the adapter by `Alg.Lawful.through`, the
-array by `Alg.lawful_entrywise`, and the term language with its soundness at the signature
-`jsonSyn`. A union term is lawful by `Alg.soundness`, and its options are compatible by
-`Alg.compat_of_HF`: the identity codec bounds each ground codec.
+array by `Alg.lawful_entrywise`, and the signature `jsonSyn` with its meaning and its tables. A
+closed codec over `jsonSig` is lawful by `Alg.Scoped.Closed.meaning_lawful`, and two kinds are
+compatible because the identity codec bounds each ground codec.
 
 The module writes only four things itself: the carrier, the ground codecs with their laws, the
 prism of an array, and the signature. Each of the four reads the carrier.
@@ -100,9 +99,9 @@ theorem lawful_negNum : Alg.Lawful Json.member negNum :=
 
 /-! ## The JSON signature
 
-The term language and its soundness are the generic ones at `jsonSyn`. JSON's primitives are its
-kinds, and a predicate is a function. The term language has no list, map or set former here, and
-the top is the identity codec. -/
+A closed codec over the signature reads the generic meaning. JSON's primitives are its kinds, and a
+predicate is a function. The meaning has no list, map or set former here, and the top is the
+identity codec. -/
 
 /-- **The JSON signature**: the kinds, a predicate at each side, and no generator. -/
 abbrev jsonSig : Alg.Sig where
@@ -157,51 +156,14 @@ instance id_topLaws : Alg.TopLaws jsonSyn where
   set _ h := nomatch h
   set_mono _ h := nomatch h
 
-/-- A string or a number, as a term. -/
-def strOrNumTerm : Alg.Term jsonSyn := .union [.prim .str, .prim .num]
+/-! ## The row of a kind
 
-/-- A string or a number. -/
-def strOrNum : Alg.Codec Json JMember := Alg.denote jsonTable jsonTableA strOrNumTerm
-
-/-- **The union of the string codec and the number codec is lawful**, by the generic soundness:
-    the two options are held-free, so the identity codec bounds both, and they are compatible. -/
-theorem lawful_strOrNum : Alg.Lawful Json.member strOrNum := by
-  have hty : ∀ m, Alg.Typed jsonTable jsonTableA (Alg.Term.prim (S := jsonSyn) m) (ground m).T (some m) :=
-    fun m => .prim m
-  refine Alg.soundness (.union (.cons (hty _) (.cons (hty _) .nil))) ⟨⟨trivial, trivial, trivial⟩,
-    fun s hs t ht => ?_⟩
-  have hl : ∀ x ∈ [Alg.Term.prim (S := jsonSyn) .str, .prim .num],
-      Alg.Lawful Json.member (Alg.denote jsonTable jsonTableA x) := fun x hx => by
-    rcases List.mem_cons.mp hx with rfl | hx
-    · exact lawful_ground _
-    · rcases List.mem_cons.mp hx with rfl | hx
-      · exact lawful_ground _
-      · exact nomatch hx
-  have hf : ∀ x ∈ [Alg.Term.prim (S := jsonSyn) .str, .prim .num], Alg.HF x := fun x hx => by
-    rcases List.mem_cons.mp hx with rfl | hx
-    · trivial
-    · rcases List.mem_cons.mp hx with rfl | hx
-      · trivial
-      · exact nomatch hx
-  exact Alg.compat_of_HF (S := jsonSyn) (hf s hs) (hf t ht) (hl t ht)
-
-/-! ## Exactness
-
-The row of a kind is the kind test. So the exactness of every admission row of the term language
-holds at `jsonSyn`, by `Alg.Adm_exact` and `Alg.AdmA_exact`. -/
+The value-side row of a kind is the kind test. -/
 
 /-- The value-side row of a kind. -/
 instance jsonPrimAdm : Alg.PrimAdm jsonSyn where
   admV m v := decide (v.member = m)
   admV_exact m v := by rw [← Alg.fiberCodec_isSome Json.member m .host v]; rfl
-
-/-- The attribute-side row of a kind: each kind's gate is self-dual. -/
-instance jsonPrimAdmA : Alg.PrimAdmA jsonSyn := Alg.PrimAdm.dual fun _ => rfl
-
-/-- The string-or-number term admits exactly what its codec writes, and reads exactly what its
-    codec reads. -/
-theorem exact_strOrNum : Alg.ExactV α β strOrNumTerm [] ∧ Alg.ExactA α β strOrNumTerm [] :=
-  ⟨Alg.Adm_exact _ _, Alg.AdmA_exact _ _⟩
 
 /-! ## Arrays -/
 

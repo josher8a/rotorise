@@ -20,7 +20,7 @@ open Alg (Orient)
 
     The literal row is `inL`, with no `Numeral.WF` conjunct. `GroundKind.number.Carrier` is
     `WFNumeral`, so an alternative outside `D` has no representation. So membership is exact
-    at every base, and `Adm_exact` covers the literal with nothing added. -/
+    at every base, and at every literal with nothing added. -/
 instance dynPrimAdm : Alg.PrimAdm dynSyn where
   admV
     | .base k => inBase k
@@ -233,7 +233,7 @@ theorem Pred.apart_sound : ∀ q p : Pred, Pred.apart q p = true →
 
 /-! ## The leaves of DynamoDB
 
-The test is `Alg.Term.disjoint`, the structural test over a universe signature. DynamoDB supplies
+The test is `Alg.Scoped.disjoint`, the structural decision over a universe signature. DynamoDB supplies
 the leaves `dynLeaf`: two primitives, and two predicates. -/
 
 /-- **Two primitives apart.** A base shares its values with its own base and its own literals, and

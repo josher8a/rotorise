@@ -114,7 +114,7 @@ The scalar half has no pin, and closing it means putting a scalar `dynamoNumber`
 ## Known: the model refuses two stand-ins at one name where the host accepts two equal ones
 
 **Observation.** The host's stand-in test accepts two fields that read a map without the name to
-values that `Object.is` equates. The model decides the same test with `ObjectSlot.absentAgree`, and
+values that `Object.is` equates. The model decides the same test with `absentAgreeG`, and
 the constants of a fill (`Sig.K`) have no decidable equality, because neither `Value` nor `Json`
 derives one. So the model refuses two fills at one name whatever their constants.
 

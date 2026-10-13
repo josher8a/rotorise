@@ -6,8 +6,7 @@ import Calculus.Alg.Rows
 # Disjointness over the graph of a closed codec
 
 `Scoped.disjoint` decides that two closed codecs share no datum. The decision reads the flat graph
-of each DAG of scopes, with one row per operation of the left operand. The rows are the rows of
-`Term.disjoint`. Below a guard, the decision assumes a pair of entries while it compares the two
+of each DAG of scopes, with one row per operation of the left operand. Below a guard, the decision assumes a pair of entries while it compares the two
 bodies. At an unguarded position, the decision unfolds an entry. A fuel bounds the walk, so the
 recursion is structural, and an empty fuel answers `false`.
 

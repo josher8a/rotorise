@@ -7,7 +7,6 @@ import Calculus.Dynamo.Alg.Continuity
 import Calculus.Dynamo.Witness.Refutations
 import Calculus.Dynamo.Witness.ScopeRefutations
 import Calculus.Dynamo.Lang.Equations
-import Calculus.Lang.View
 import Calculus.Dynamo.Analysis.Separation
 import Calculus.Dynamo.Analysis.ScopeDisjoint
 import Calculus.Dynamo.Analysis.ScopeCompat
@@ -46,17 +45,6 @@ import Calculus.Alg.Containers
 import Calculus.Alg.Recursion
 import Calculus.Alg.System
 import Calculus.Lang.Term
-import Calculus.Lang.Converse
-import Calculus.Lang.Typing
-import Calculus.Lang.Guarded
-import Calculus.Lang.Sound
-import Calculus.Lang.HeldFree
-import Calculus.Lang.ExactV
-import Calculus.Lang.ExactA
-import Calculus.Lang.Shapes
-import Calculus.Lang.Disjoint
-import Calculus.Lang.DisjointV
-import Calculus.Lang.DisjointA
 import Calculus.Lang.Scope
 import Calculus.Dynamo.Analysis.ScopePrecondition
 import Calculus.Lang.Universe
@@ -126,22 +114,15 @@ def elabAssertAxiomsAll : CommandElab := fun _ => do
 
 /-! ## The theorems the documentation makes claims about
 
-The soundness of the admission, both halves, fueled and fuel-free. If any of these acquires an axiom, the
-build stops here rather than in a reader's `#print axioms`. -/
+If any of these acquires an axiom, the build stops here rather than in a reader's `#print axioms`. -/
 
 /-! Both indices of the judgement are claims about the denotation. -/
 
 /-! The refutations of the specification — a counterexample proved classically would still be a counterexample, but these are
 constructive and the guard records that. -/
 
-/-! The admission `Adm` cannot pass through `alternate reader` on the read side — the
-specification defect, and this is its witness. -/
-
 /-! `≡` is not transitive — the one refutation that is about the equational theory
 rather than about a row of it. -/
-
-/-! `ident` has no denotational content to pin. What it has is its relation to `Adm`, which is
-what the admission uses it for. -/
 
 /-! The ideal codec: `e` and `p` are mutually inverse between `dom(e)` and `Can(c)`. `retract`
 is one half and this is the other, so the bijection is a theorem rather than a reading. -/
@@ -155,15 +136,6 @@ halves by construction, and an ad-hoc gate can forget one half. -/
 /-! `through_p` is the fact the `held` row rests on — `g` post-processes a read and is
 total, so `dom(p)` is the subterm's exactly. It is cited as a result, so it is guarded
 like one. -/
-
-/-! `AdmA`'s `held` row, both directions. A `held`
-restricts its side. The read row asks the outer of the attribute where the side of the `held` is
-the stored side, the inner term of the entry image, and the outer of the value that the read
-gives where the side is the caller side (`AdmA_held_eq`). -/
-
-/-! The lemmas that pin the declaration-time devices of the admission to the denotation. Without them a row
-is a transcription of a table rather than a claim about the model, so their axiom base is
-part of what the soundness statements rest on. -/
 
 /-! The term-level twins of the rows of `≡`. They meet the table of `≡` through `Codec.Equiv`, with no shared
 transport constant, so each is guarded on its own footing. -/

@@ -1,20 +1,15 @@
 import Calculus.JSON.Basic
-import Calculus.Lang.DisjointA
 
 /-!
-# Disjointness at JSON
+# The leaves and the shape classes of JSON
 
-The structural test `Alg.Term.disjoint` and its soundness hold at every signature, and JSON
-supplies only its leaves and the laws of the leaves and of the formers. Two kinds are apart where
-they are two kinds. A JSON predicate is a function, so the
-test compares no predicate. JSON has no set former, no list former and no map former in its
-signature, so a term of those formers admits nothing, and each former law holds because both
-sides are empty.
+The scoped disjointness reads the leaves of a universe, the laws of the leaves, and the shape
+classes. JSON supplies its leaves and its shape classes here. Two kinds are apart where they are
+two kinds. A JSON predicate is a function, so the leaves compare no predicate. JSON has no set
+former, no list former and no map former in its signature, so every value is a primitive.
 -/
 
 namespace Calculus.JSON
-
-variable {α : Alg.Table jsonSyn} {β : Alg.Table jsonSyn.op}
 
 /-- **The leaves of JSON.** Two kinds are apart where they are two kinds. A JSON predicate is a
     function, so no two predicates are apart. -/
@@ -22,29 +17,6 @@ instance jsonLeaf : Alg.Leaf jsonSig where
   primsApart m m' := !decide (m = m')
   isData _ _ := false
   predicatesApart _ _ _ := false
-
-/-- A kind admits a value of that kind, on the write side. -/
-theorem adm_prim (m : JMember) (v : Json) :
-    Alg.Adm α β (.prim m : Alg.Term jsonSyn) [] v = decide (v.member = m) := by
-  simp [Alg.Adm, Alg.PrimAdm.admV]
-
-/-- …and on the read side. -/
-theorem admA_prim (m : JMember) (a : Json) :
-    Alg.AdmA α β (.prim m : Alg.Term jsonSyn) [] a = decide (a.member = m) := rfl
-
-/-- A term of a former that JSON lacks admits nothing: no set, no list, no object. -/
-theorem adm_former_empty (v : Json) :
-    (∀ t : Alg.Term jsonSyn, Alg.Adm α β (.set t) [] v = false) ∧
-    (∀ pre sp suf, Alg.Adm α β (.list pre sp suf : Alg.Term jsonSyn) [] v = false) ∧
-    (∀ b : Alg.Body jsonSyn, Alg.Adm α β (.object b) [] v = false) :=
-  ⟨fun _ => rfl, fun _ _ _ => rfl, fun b => by cases b; rfl⟩
-
-/-- …and reads nothing. -/
-theorem admA_former_empty (a : Json) :
-    (∀ t : Alg.Term jsonSyn, Alg.AdmA α β (.set t) [] a = false) ∧
-    (∀ pre sp suf, Alg.AdmA α β (.list pre sp suf : Alg.Term jsonSyn) [] a = false) ∧
-    (∀ b : Alg.Body jsonSyn, Alg.AdmA α β (.object b) [] a = false) :=
-  ⟨fun _ => rfl, fun _ _ _ => rfl, fun b => by cases b; rfl⟩
 
 /-- **The shape classes of JSON.** Every value and every attribute is a primitive, and JSON has
     no set, list or map former to land elsewhere. -/
@@ -55,54 +27,7 @@ instance jsonShapes : Alg.Shapes jsonSyn where
   list _ h := nomatch h
   map _ h := nomatch h
 
-/-- The formers of JSON, on the write side: every former term admits nothing. -/
-instance jsonFormerAdm : Alg.FormerAdm jsonSyn where
-  set_never _ _ _ v := by simp [(adm_former_empty v).1]
-
-/-- Two kinds that the leaf keeps apart share no value. -/
-instance jsonLeafAdm : Alg.LeafAdm jsonSyn where
-  prims_apart m m' hp v := by
-    simp only [Alg.Leaf.primsApart, Bool.not_eq_true', decide_eq_false_iff_not] at hp
-    have hne := hp
-    rw [adm_prim, adm_prim]
-    cases hv : decide (v.member = m) with
-    | false => rfl
-    | true =>
-        have h1 : v.member = m := of_decide_eq_true hv
-        exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
-
 /-- A JSON predicate is a function, so the leaves keep no two predicates apart. -/
 instance jsonLeafMeet : Alg.LeafMeet jsonSig := ⟨fun _ _ _ h => nomatch h⟩
-
-/-- The formers of JSON, on the read side: every former term reads nothing. -/
-instance jsonFormerAdmA : Alg.FormerAdmA jsonSyn where
-  set_never _ _ _ _ := rfl
-
-/-- …and read no attribute in common. -/
-instance jsonLeafAdmA : Alg.LeafAdmA jsonSyn where
-  prims_apart {β α} m m' hp a := by
-    change (Alg.AdmA α β (.prim m : Alg.Term jsonSyn) [] a && Alg.AdmA α β (.prim m') [] a) = false
-    simp only [Alg.Leaf.primsApart, Bool.not_eq_true', decide_eq_false_iff_not] at hp
-    have hne := hp
-    rw [admA_prim, admA_prim]
-    cases ha : decide (a.member = m) with
-    | false => rfl
-    | true =>
-        have h1 : a.member = m := of_decide_eq_true ha
-        exact decide_eq_false (fun h2 => hne (h1.symm.trans h2))
-
-/-- The test computes at JSON: two kinds are disjoint. -/
-example : Alg.Term.disjoint (S := jsonSyn) Alg.pair0 (.prim .str) (.prim .num) = true := by rfl
-
-/-- …and a union that holds a kind is not disjoint from the kind. -/
-example : Alg.Term.disjoint (S := jsonSyn) Alg.pair0 strOrNumTerm (.prim .str) = false := by rfl
-
-/-- **Two terms that the test keeps apart at JSON are orthogonal.** `Alg.disjoint_orthogonal` at
-    `jsonSyn`: no value has two writers, and no attribute has two readers. -/
-theorem orthogonal (p : Alg.Pairing) (x y : Alg.Term jsonSyn)
-    (h : Alg.Term.disjoint p x y = true) :
-    (∀ ρ ρ', Alg.ApartV p ρ ρ' → ∀ v, (Alg.Adm α β x ρ v && Alg.Adm α β y ρ' v) = false) ∧
-    (∀ ρ ρ', Alg.ApartA p ρ ρ' → ∀ a, (Alg.AdmA α β x ρ a && Alg.AdmA α β y ρ' a) = false) :=
-  Alg.disjoint_orthogonal h
 
 end Calculus.JSON

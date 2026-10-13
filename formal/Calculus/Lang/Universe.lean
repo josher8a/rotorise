@@ -43,8 +43,7 @@ theorem listCodec_f {V M : Type} {member : V → M} (sL : Summand (List V) V M m
         (alignL pre sp suf xs).bind (traverse fun cx => cx.1.f o cx.2)).map sL.p.into)
     (fun _ => rfl) (fun _ => rfl)
 
-/-- **The value-side row of each primitive**, and its exactness. A universe supplies this class;
-    the rest of `Adm` and of its exactness is the term language's. -/
+/-- **The value-side row of each primitive**, and its exactness. A universe supplies this class. -/
 class PrimAdm (S : Syn) [Sem S] where
   /-- The values that a primitive writes. -/
   admV : S.Ground → S.V → Bool
