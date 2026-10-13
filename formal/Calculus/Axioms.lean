@@ -55,6 +55,7 @@ import Calculus.Lang.Scope
 import Calculus.Lang.System
 import Calculus.Dynamo.Analysis.Path
 import Calculus.Dynamo.Analysis.Precondition
+import Calculus.Dynamo.Analysis.ScopePrecondition
 import Lean
 
 /-!

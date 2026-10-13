@@ -78,4 +78,5 @@ import Calculus.Dynamo.Analysis.Kernel
 import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Analysis.Path
 import Calculus.Dynamo.Analysis.Precondition
+import Calculus.Dynamo.Analysis.ScopePrecondition
 import Calculus.Axioms
