@@ -30,6 +30,7 @@ import Calculus.Lang.ScopeDisjoint
 import Calculus.Lang.ScopeCompat
 import Calculus.Lang.ScopeSound
 import Calculus.Lang.ScopePath
+import Calculus.Lang.ScopeHeldFree
 import Calculus.JSON.Basic
 import Calculus.JSON.Disjoint
 import Calculus.JSON.Compat
@@ -52,6 +53,7 @@ import Calculus.Dynamo.Analysis.Merge
 import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Lang.ScopeSound
 import Calculus.Dynamo.Lang.ScopeHeldSet
+import Calculus.Dynamo.Lang.ScopeHeldFree
 import Calculus.Dynamo.Witness.Discharge
 import Calculus.Dynamo.Witness.ScopeDischarge
 import Calculus.Dynamo.Lang.Equations
@@ -78,6 +80,9 @@ import Calculus.Dynamo.Analysis.ScopeOrthogonality
 import Calculus.Dynamo.Analysis.ScopeSeparation
 import Calculus.Dynamo.Analysis.ScopePath
 import Calculus.Dynamo.Analysis.ScopeSlice
+import Calculus.Dynamo.Analysis.ScopeUniversal
+import Calculus.Dynamo.Analysis.ScopeConfluence
+import Calculus.Dynamo.Analysis.ScopeKernel
 import Calculus.Dynamo.Witness.LiteralArity1
 import Calculus.Dynamo.Analysis.Orthogonality
 import Calculus.Bridge.Vectors

@@ -1,4 +1,5 @@
 import Calculus.Dynamo.Analysis.Universal
+import Calculus.Dynamo.Analysis.ScopeConfluence
 
 variable {α : Calculus.Table}
 
@@ -47,9 +48,6 @@ theorem HFL_mem : ∀ {ts : List Term}, HFL ts → ∀ t ∈ ts, HF t
 /-- The numeric base under a constant adapter, with the caller side restricted to text. The
     adapter writes each text as the number `1`, and reads each number as the text `"1"`. -/
 def oneHeld : Term := Term.held false Term.number Term.string (.caller 0, false) []
-
-/-- The table that gives each generator the constant adapter of `oneHeld`. -/
-def oneTable : Table := fun _ => (fun _ => Value.num (WFNumeral.of "1"), fun _ => Value.str "1")
 
 /-- `oneHeld` writes the string `"1"` as the number `1`. -/
 theorem oneHeld_writes : (denote oneTable oneHeld).e (.str "1") = some (.n (WFNumeral.of "1")) := by

@@ -1,6 +1,7 @@
 import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Lang.ScopeSound
 import Calculus.Dynamo.Lang.ScopeHeldSet
+import Calculus.Dynamo.Lang.ScopeHeldFree
 import Calculus.Dynamo.Lang.ScopeEquations
 import Calculus.Dynamo.Analysis.Merge
 import Calculus.Dynamo.Witness.Discharge
@@ -18,10 +19,14 @@ import Calculus.Dynamo.Analysis.ScopeOrthogonality
 import Calculus.Dynamo.Analysis.ScopeSeparation
 import Calculus.Dynamo.Analysis.ScopePath
 import Calculus.Dynamo.Analysis.ScopeSlice
+import Calculus.Dynamo.Analysis.ScopeUniversal
+import Calculus.Dynamo.Analysis.ScopeConfluence
+import Calculus.Dynamo.Analysis.ScopeKernel
 import Calculus.Lang.ScopeDisjoint
 import Calculus.Lang.ScopeCompat
 import Calculus.Lang.ScopeSound
 import Calculus.Lang.ScopePath
+import Calculus.Lang.ScopeHeldFree
 import Batteries.Tactic.Lint
 import Calculus.Dynamo.Witness.LiteralArity1
 import Calculus.Dynamo.Witness.Nesting
