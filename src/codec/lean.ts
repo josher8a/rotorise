@@ -48,7 +48,7 @@
  * ── what cannot be emitted ─────────────────────────────────────────────────────────────────────
  *
  * {@link LeanUnemittable} is thrown, never guessed around, and its cases are the honest boundary of
- * the bridge. See {@link leanTermOf}. A JS number is one of them: it is a binary64 float, and
+ * the bridge. See {@link leanTermCore}. A JS number is one of them: it is a binary64 float, and
  * `Value.num` carries a `WFNumeral`, which is exact, so writing one down is a rounding the model
  * does not state. A `DynamoNumber` is a numeral, and it emits as `Value.num`.
  */
@@ -74,7 +74,6 @@ import type {
     Field as TermField,
 } from './term'
 import {
-    bindersOf,
     clauseForm,
     componentsOf,
     entryOrder,
@@ -82,7 +81,6 @@ import {
     mapChildren,
     openRefusal,
     recursionUse,
-    type Scope,
     storedAlternatives,
     throughThunks,
 } from './term'
@@ -505,15 +503,6 @@ const writesOnlyStrings = (t: Term | undefined): boolean => {
 /* ── terms ───────────────────────────────────────────────────────────────────────────────── */
 
 /**
- * The scope of a term printed at the top: its own binders, and no enclosing binder. A thunk that
- * throws names a codec not yet declared, and the printer reports the throw.
- */
-const topScope = (t: Term): Scope => ({
-    binds: bindersOf(t),
-    inside: [],
-})
-
-/**
  * **The caller's functions that a quantified vector binds.** A caller closure has no expression in
  * the model, so the theorem binds one variable for each, and the claim holds at every function.
  * An adapter that the model does not name is a generator `caller n`, and the theorem quantifies
@@ -537,10 +526,10 @@ type Bound = {
     readonly standIn?: boolean
 }
 
-/** A scope, and the functions that the theorem binds where the vector is quantified. */
-type At = Scope & {
+/** The position of the printer, and the functions that the theorem binds where the vector is quantified. */
+type At = {
     readonly bound?: Bound
-    readonly placed?: Placed
+    readonly placed: Placed
 }
 
 /**
@@ -574,24 +563,17 @@ type Placed = {
  * the flat builders where it prints a graph.
  */
 const pre = (scope: At): string =>
-    scope.placed === undefined
-        ? ''
-        : scope.placed.form === 'graph'
-          ? 'Scoped.Graph.'
-          : 'Scoped.'
+    scope.placed.form === 'graph' ? 'Scoped.Graph.' : 'Scoped.'
 
 /** The position below a container, which is a guard, or below a wall. */
-const below = (scope: At, kind: 'guard' | 'wall'): At =>
-    scope.placed === undefined
-        ? scope
-        : {
-              ...scope,
-              placed: {
-                  ...scope.placed,
-                  guarded: scope.placed.guarded || kind === 'guard',
-                  wall: scope.placed.wall || kind === 'wall',
-              },
-          }
+const below = (scope: At, kind: 'guard' | 'wall'): At => ({
+    ...scope,
+    placed: {
+        ...scope.placed,
+        guarded: scope.placed.guarded || kind === 'guard',
+        wall: scope.placed.wall || kind === 'wall',
+    },
+})
 
 /**
  * **The name of one caller function, made on the first use.** A prefix names a variable of the
@@ -631,66 +613,6 @@ const leanBinders = (bound: Bound): string => {
 }
 
 /**
- * A `Term` — the term syntax, from what the codec says it is.
- *
- * Read off `codec.def`, which is this library's own abstract syntax and is documented as such. The
- * mapping is one-to-one where it exists at all; where it does not, this throws
- * {@link LeanUnemittable}, and the throwing cases are the interesting half of the bridge:
- *
- * **Two kinds of inexpressible, and they were one bullet until refusal vectors split them.**
- * A term is unemittable when *the term* has no Lean expression; a positive vector is impossible
- * when the term is fine and no *value* at it can be written. Only the first belongs here.
- *
- * - **`number` and a numeric `literal` are *not* here.** `Term.number` is a closed term, and a
- *   numeric alternative is `WFNumeral.of`, so both emit. A JS number *value* is what has no
- *   exact image, and `leanValueOf` refuses it, so the refusal is reported where it lives.
- * - **`held`, `legacy`.** This library carries JavaScript closures in both. The model's `held`
- *   carries an adapter word, and a table gives the word its pair `f g : Value → Value`. So a
- *   caller's adapter prints as a generator `caller n` inside a quantified verdict, and the
- *   emitter refuses a caller's adapter elsewhere. The model's `legacy` carries
- *   `r : Attr → Option Value`, and there is no expression in Lean for an arbitrary closure.
- *   `legacy` used to be the worse of the two for a second reason, and is not any more:
- *   the definition dropped the older readers entirely, so there was nothing to be refused about.
- *   It carries `older` now, and the refusal below names it.
- * - **`refine`, unless the predicate is one this library shipped.** The third
- *   function-carrying constructor, and the one where the line has moved. See
- *   {@link ShippedPredicate}: `isNumeral` and `isStoredNumeral` are recognised by reference and
- *   emitted as the model's own predicates, and everything else is still refused, by name. The
- *   boundary is no longer "all refinements" but "refinements this library did not build", which is
- *   the honest line — and it is only two predicates wide, because `src/` constructs none of these
- *   three internally. A declaration verdict passes a {@link Bound}, and there a caller's closure
- *   prints as a variable that the theorem binds, and a caller's adapter prints as a generator
- *   `caller n` whose pair the theorem quantifies through the caller table.
- * - **A `ref` that no scope binds is not here.** It is a free variable, and it prints as a
- *   variable that no binder of the term binds, as the host's guard reads it.
- *
- * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
- * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
- * the vectors this module writes and only for them — `objectCodec`'s `e` is `objWrite`, which takes
- * `rc?` and not the `kn` filter, and `rcOf` is `none` for both policies, so the two denote the
- * same `e` and differ only under `p`. A decode-direction
- * vector would have needed them apart and would have been silently wrong. The `attributes` term
- * carries the policy now rather than only its codec, and this emits all three.
- */
-export const leanTermOf = (
-    declared: ObjectSlot,
-    at = 'codec',
-    bound?: Bound,
-): string => {
-    // the entry takes a declaration and the printer below takes a term, so the refusal has a place
-    // to live and stays reachable. A codec's definition is a term in the type, and the caller this
-    // is for is the one that arrived past a cast — `termOf` draws the same line for the same reason
-    const def = declared.def
-    if ('mark' in def) {
-        return refuse(
-            at,
-            'a *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
-        )
-    }
-    return leanTermOfTerm(def, at, { ...topScope(def), bound })
-}
-
-/**
  * **A closed codec** — the codec as a DAG of scopes, for the families whose analysis reads only the
  * meaning.
  *
@@ -700,9 +622,6 @@ export const leanTermOf = (
  * each entry states its indices, because the elaborator needs them before it reads a list of
  * options. A term with no scoped form, an unguarded cycle, a cycle through a wall, or an open
  * fragment, is refused, with the reason.
- *
- * The binder printer {@link leanTermOf} serves only the families whose analysis still reads the
- * binder term.
  */
 export const leanClosedOf = (
     declared: ObjectSlot,
@@ -755,8 +674,6 @@ const closedPrint = (def: Term, at: string, bound?: Bound): ClosedPrint => {
         const arms = members
             .map((t, index) => {
                 const body = leanTermOfTerm(t, at, {
-                    binds: new Set(),
-                    inside: [],
                     bound,
                     placed: {
                         form: 'closed',
@@ -818,8 +735,6 @@ const leanGraphOfTerm = (def: Term, at: string, bound?: Bound): string => {
     const arms = points
         .map((t, index) => {
             const body = leanTermOfTerm(t, at, {
-                binds: new Set(),
-                inside: [],
                 bound,
                 placed: {
                     form: 'graph',
@@ -961,13 +876,8 @@ const leanBodyOf = (body: Body, at: string, scope: At): string => {
     return `(${pre(scope)}Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
 }
 
-const leanTermOfTerm = (t: Term, at: string, scope: At): string => {
-    if (scope.placed !== undefined)
-        return leanPlaced(t, at, scope, scope.placed)
-    return scope.binds.has(t) && !scope.inside.includes(t)
-        ? `Term.mu (${leanTermCore(t, at, { ...scope, inside: [...scope.inside, t] })})`
-        : leanTermCore(t, at, scope)
-}
+const leanTermOfTerm = (t: Term, at: string, scope: At): string =>
+    leanPlaced(t, at, scope, scope.placed)
 
 /**
  * **A term of a closed codec.** An entry of an earlier scope prints as its constant, and an entry of
@@ -996,6 +906,48 @@ const leanPlaced = (t: Term, at: string, scope: At, placed: Placed): string => {
     return leanTermCore(t, at, { ...scope, placed: { ...placed, top: false } })
 }
 
+/**
+ * A term of a closed codec or of a graph, from what the codec says it is.
+ *
+ * Read off `codec.def`, which is this library's own abstract syntax and is documented as such. The
+ * mapping is one-to-one where it exists at all; where it does not, this throws
+ * {@link LeanUnemittable}, and the throwing cases are the interesting half of the bridge:
+ *
+ * **Two kinds of inexpressible, and they were one bullet until refusal vectors split them.**
+ * A term is unemittable when *the term* has no Lean expression; a positive vector is impossible
+ * when the term is fine and no *value* at it can be written. Only the first belongs here.
+ *
+ * - **`number` and a numeric `literal` are *not* here.** `Term.number` is a closed term, and a
+ *   numeric alternative is `WFNumeral.of`, so both emit. A JS number *value* is what has no
+ *   exact image, and `leanValueOf` refuses it, so the refusal is reported where it lives.
+ * - **`held`, `legacy`.** This library carries JavaScript closures in both. The model's `held`
+ *   carries an adapter word, and a table gives the word its pair `f g : Value → Value`. So a
+ *   caller's adapter prints as a generator `caller n` inside a quantified verdict, and the
+ *   emitter refuses a caller's adapter elsewhere. The model's `legacy` carries
+ *   `r : Attr → Option Value`, and there is no expression in Lean for an arbitrary closure.
+ *   `legacy` used to be the worse of the two for a second reason, and is not any more:
+ *   the definition dropped the older readers entirely, so there was nothing to be refused about.
+ *   It carries `older` now, and the refusal below names it.
+ * - **`refine`, unless the predicate is one this library shipped.** The third
+ *   function-carrying constructor, and the one where the line has moved. See
+ *   {@link ShippedPredicate}: `isNumeral` and `isStoredNumeral` are recognised by reference and
+ *   emitted as the model's own predicates, and everything else is still refused, by name. The
+ *   boundary is no longer "all refinements" but "refinements this library did not build", which is
+ *   the honest line — and it is only two predicates wide, because `src/` constructs none of these
+ *   three internally. A declaration verdict passes a {@link Bound}, and there a caller's closure
+ *   prints as a variable that the theorem binds, and a caller's adapter prints as a generator
+ *   `caller n` whose pair the theorem quantifies through the caller table.
+ * - **A `ref` that no scope binds.** The thunk names a codec not yet declared, so the term is an
+ *   open fragment and has no scoped form.
+ *
+ * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
+ * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
+ * the vectors this module writes and only for them — `objectCodec`'s `e` is `objWrite`, which takes
+ * `rc?` and not the `kn` filter, and `rcOf` is `none` for both policies, so the two denote the
+ * same `e` and differ only under `p`. A decode-direction
+ * vector would have needed them apart and would have been silently wrong. The `attributes` term
+ * carries the policy now rather than only its codec, and this emits all three.
+ */
 const leanTermCore = (t: Term, at: string, scope: At): string => {
     switch (t.kind) {
         case 'string':
@@ -1078,21 +1030,16 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
         // total term. The two policies are `held` over this term, and the `held` row refuses them
         case 'opaq':
             return `${pre(scope)}Term.opaq`
-        // a thunk that returns a term being printed closes a cycle, and prints the variable of
-        // that term's binder; any other thunk prints the term it returns. A thunk that throws
-        // names a codec not yet declared, and prints a variable that no binder of the term binds
+        // a thunk prints the term it returns, and an entry prints as its reference. A thunk that
+        // throws names a codec not yet declared, so the term is an open fragment
         case 'lazy': {
             const target = force(t)
-            if (target === undefined && scope.placed !== undefined)
+            if (target === undefined)
                 return refuse(
                     at,
                     'an open fragment: a thunk names a codec not yet declared, so the term has no scoped form',
                 )
-            if (target === undefined) return `Term.var ${scope.inside.length}`
-            const k = scope.inside.lastIndexOf(target)
-            return k === -1
-                ? leanTermOfTerm(target, `${at}.inner`, scope)
-                : `Term.var ${scope.inside.length - 1 - k}`
+            return leanTermOfTerm(target, `${at}.inner`, scope)
         }
         /**
          * The rule `(refine)`. The predicate is printed by {@link leanPredicate}, and the side condition
@@ -1520,15 +1467,13 @@ export const leanFormerGuard = ({ name, term }: FormerGuard): string => {
 }
 
 /**
- * The guard verdicts on refused terms as a module of their own. A verdict spells the terms and the
- * lemma of a separation verdict, so the header imports `Compat`, and `Store`, which declares
- * `libTable` and which `Compat` does not reach.
+ * The guard verdicts on refused terms as a module of their own. A verdict spells the graph of a
+ * term and its guard, which `Bridge.Vectors` reaches. The header imports `Store` as well.
  *
  * Generated at gate time and elaborated, never committed.
  */
 export const leanFormerGuardModule = (guards: readonly FormerGuard[]): string =>
     leanModule(`import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Lang.Store
 
 /-!
@@ -1656,13 +1601,13 @@ export const leanShapes = (
         left: AnyCodec,
         right: AnyCodec,
         at: string,
-        printer?: Printer,
+        printer: Printer,
     ) => RowTerms
     readonly row: (
-        pin?: Pin,
-        printer?: Printer,
+        pin: Pin | undefined,
+        printer: Printer,
     ) => (codec: AnyCodec, at: string) => string
-    readonly closed: (printed: string, printer?: Printer) => string
+    readonly closed: (printed: string, printer: Printer) => string
     readonly defs: () => string
 } => {
     const names = new Map<string, string>()
@@ -1681,7 +1626,7 @@ export const leanShapes = (
         )
         return name
     }
-    const row = (pin: Pin = (_, made) => made, printer: Printer = 'term') => {
+    const row = (pin: Pin = (_, made) => made, printer: Printer) => {
         const adapters = new Map<unknown, string>()
         const given = new Map<unknown, string>()
         const argumentOf = (fn: unknown, kind: 'closure' | 'reader') => {
@@ -1717,7 +1662,7 @@ export const leanShapes = (
         left: AnyCodec,
         right: AnyCodec,
         at: string,
-        printer: Printer = 'term',
+        printer: Printer,
     ): RowTerms => {
         const one = row(undefined, printer)
         const l = one(left, at)
@@ -1727,18 +1672,16 @@ export const leanShapes = (
     return {
         pair,
         row,
-        closed: (printed, printer = 'term') => nameOf(printed, '', printer),
+        closed: (printed, printer) => nameOf(printed, '', printer),
         defs: () => defs.join('\n'),
     }
 }
 
 /**
- * **The two printers of a codec**: the binder term, and the closed codec. The binder term serves
- * only the families whose analysis still reads the binder term. A family that reads only the
- * meaning reads the closed codec.
+ * **The two printers of a codec**: the closed codec, and the graph. A family that reads the meaning
+ * reads the closed codec. The guard rows read the graph.
  */
 const printers = {
-    term: { type: 'Term', print: leanTermOf },
     closed: { type: 'Closed', print: leanClosedOf },
     graph: { type: 'Graph', print: leanGraphOf },
 } as const
@@ -2978,11 +2921,10 @@ export const leanPath = (
     ].join('\n')
 }
 
-/** The imports of a slice module. A path module imports `Calculus.Bridge.Paths` too. */
+/** The imports of a slice module. A path module imports `Calculus.Bridge.ScopePaths` too. */
 const sliceImports = `import Calculus.Bridge.Vectors
 import Calculus.Dynamo.Analysis.ScopeSlice
-import Calculus.Dynamo.Lang.Store
-import Calculus.Lang.Path`
+import Calculus.Dynamo.Lang.Store`
 
 /**
  * The slices as a module of their own.
@@ -3054,7 +2996,6 @@ export const leanPathModules = (
     }
     return size.map((_, file) =>
         leanModule(`${sliceImports}
-import Calculus.Bridge.Paths
 import Calculus.Bridge.ScopePaths
 
 /-!
@@ -3497,7 +3438,6 @@ const fuelFor = (attribute: AttributeValue): number => {
  * file.
  */
 const preamble = `import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Lang.Denote
 import Calculus.Dynamo.Alg.Frontier
 import Calculus.Dynamo.Lang.Store
 import Mathlib.Tactic.FinCases

@@ -82,6 +82,7 @@ import {
     leanDisjoint,
     leanDisjointRowModule,
     leanFormerGuard,
+    leanGraphOf,
     leanGuard,
     leanItemReadResolution,
     leanLegacyRead,
@@ -98,7 +99,6 @@ import {
     leanShapes,
     leanSlice,
     leanSliceModule,
-    leanTermOf,
     leanValueOf,
     leanVector,
     leanVectorModule,
@@ -121,11 +121,23 @@ const erase = (codec: unknown): AnyCodec => codec as AnyCodec
  * whether its value has a Lean form. */
 const statesTerm = (codec: AnyCodec, name: string): boolean => {
     try {
-        leanTermOf(codec, name)
+        leanGraphOf(codec, name)
         return true
     } catch {
         return false
     }
+}
+
+/** The root entry of a closed codec of one entry, as the scoped printer prints the entry. */
+const rootOf = (codec: AnyCodec): string => {
+    const printed = leanClosedOf(codec)
+    const entry =
+        /^\(⟨1, \.snoc \(c := 0\) \(n := 1\) \(\.nil\) \(fun i => match i with \| ⟨0, _⟩ => \((.*) : Scoped\.Term 0 1 0\)\), 0⟩ : Closed\)$/.exec(
+            printed,
+        )
+    if (entry?.[1] === undefined)
+        throw new Error(`not a closed codec of one entry: ${printed}`)
+    return entry[1]
 }
 
 /** What the emitter refused, and why — the part of a failure worth asserting on. */
@@ -143,15 +155,15 @@ const refusal = (emit: () => unknown): { at: string; reason: string } => {
 
 describe('terms', () => {
     it('emits the ground terms by name', () => {
-        expect(leanTermOf(erase(string))).toBe('Term.string')
-        expect(leanTermOf(erase(dynamoNumber))).toBe('Term.number')
+        expect(rootOf(erase(string))).toBe('Scoped.Term.string')
+        expect(rootOf(erase(dynamoNumber))).toBe('Scoped.Term.number')
         // `decimal` is an adapter over that native, and the model names its pair
-        expect(leanTermOf(erase(decimal))).toBe(
-            '(Term.held false (Term.number) (Term.string) (.decimalText, false) [])',
+        expect(rootOf(erase(decimal))).toBe(
+            '(Scoped.Term.held false (Scoped.Term.number) (Scoped.Term.string) (.decimalText, false) [])',
         )
-        expect(leanTermOf(erase(boolean))).toBe('Term.boolean')
-        expect(leanTermOf(erase(binary))).toBe('Term.binary')
-        expect(leanTermOf(erase(nullValue))).toBe('Term.null')
+        expect(rootOf(erase(boolean))).toBe('Scoped.Term.boolean')
+        expect(rootOf(erase(binary))).toBe('Scoped.Term.binary')
+        expect(rootOf(erase(nullValue))).toBe('Scoped.Term.null')
     })
 
     /**
@@ -163,11 +175,11 @@ describe('terms', () => {
      * alternatives is. `string('A', 'B', 'C')` builds that union, so the emitter writes it.
      */
     it('emits a string literal as its base and its one value', () => {
-        expect(leanTermOf(erase(string('only')))).toBe(
-            'Term.literal GroundKind.string "only"',
+        expect(rootOf(erase(string('only')))).toBe(
+            'Scoped.Term.literal GroundKind.string "only"',
         )
-        expect(leanTermOf(erase(string('A', 'B', 'C')))).toBe(
-            'Term.union [Term.literal GroundKind.string "A", Term.literal GroundKind.string "B", Term.literal GroundKind.string "C"]',
+        expect(rootOf(erase(string('A', 'B', 'C')))).toBe(
+            'Scoped.Term.union [Scoped.Term.literal GroundKind.string "A", Scoped.Term.literal GroundKind.string "B", Scoped.Term.literal GroundKind.string "C"]',
         )
     })
 
@@ -184,18 +196,18 @@ describe('terms', () => {
      */
     it('emits a character outside ASCII as one Lean accepts, at every code point', () => {
         // the BMP, where a four-digit escape would also have worked
-        expect(leanTermOf(erase(string('⊥')))).toBe(
-            'Term.literal GroundKind.string "⊥"',
+        expect(rootOf(erase(string('⊥')))).toBe(
+            'Scoped.Term.literal GroundKind.string "⊥"',
         )
         // above `U+FFFF`, where no escape is correct and the raw character is the only spelling
-        expect(leanTermOf(erase(string('𝔸')))).toBe(
-            'Term.literal GroundKind.string "𝔸"',
+        expect(rootOf(erase(string('𝔸')))).toBe(
+            'Scoped.Term.literal GroundKind.string "𝔸"',
         )
         // an object's names and a tag go through the same writer
-        expect(leanTermOf(erase(object({ π: string }).item))).toContain('"π"')
+        expect(rootOf(erase(object({ π: string }).item))).toContain('"π"')
         // and the control range keeps an escape, zero-padded to the four digits Lean wants
-        expect(leanTermOf(erase(string('\u0001')))).toBe(
-            'Term.literal GroundKind.string "\\u0001"',
+        expect(rootOf(erase(string('\u0001')))).toBe(
+            'Scoped.Term.literal GroundKind.string "\\u0001"',
         )
     })
 
@@ -210,11 +222,11 @@ describe('terms', () => {
      * cancel: `numeralOfStoredText` carries the caller's text to the numeral the literal names.
      */
     it('emits a decimal literal at the native base, under the named pair', () => {
-        expect(leanTermOf(erase(decimal('-1.5')))).toBe(
-            '(Term.held false (Term.literal GroundKind.number (WFNumeral.of "-1.5")) (Term.literal GroundKind.string "-1.5") (.decimalText, false) [])',
+        expect(rootOf(erase(decimal('-1.5')))).toBe(
+            '(Scoped.Term.held false (Scoped.Term.literal GroundKind.number (WFNumeral.of "-1.5")) (Scoped.Term.literal GroundKind.string "-1.5") (.decimalText, false) [])',
         )
-        expect(leanTermOf(erase(decimal('1', '2.5')))).toBe(
-            '(Term.held false (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Term.union [Term.literal GroundKind.string "1", Term.literal GroundKind.string "2.5"]) (.decimalText, false) [])',
+        expect(rootOf(erase(decimal('1', '2.5')))).toBe(
+            '(Scoped.Term.held false (Scoped.Term.union [Scoped.Term.literal GroundKind.number (WFNumeral.of "1"), Scoped.Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Scoped.Term.union [Scoped.Term.literal GroundKind.string "1", Scoped.Term.literal GroundKind.string "2.5"]) (.decimalText, false) [])',
         )
     })
 
@@ -224,8 +236,8 @@ describe('terms', () => {
      * both halves. Kernel-checked the same way.
      */
     it('emits a binary literal as its octets', () => {
-        expect(leanTermOf(erase(binary(new Uint8Array([0, 127, 255]))))).toBe(
-            'Term.literal GroundKind.binary [0, 127, 255]',
+        expect(rootOf(erase(binary(new Uint8Array([0, 127, 255]))))).toBe(
+            'Scoped.Term.literal GroundKind.binary [0, 127, 255]',
         )
     })
 
@@ -238,20 +250,20 @@ describe('terms', () => {
      * is the axiom this development removed. The model names one pair and this is not it.
      */
     it('refuses a numeric literal, permanently', () => {
-        const why = refusal(() => leanTermOf(erase(number(1)))).reason
+        const why = refusal(() => leanClosedOf(erase(number(1)))).reason
         expect(why).toContain('numeralOfStoredText')
         expect(why).toContain('binary64 rounding')
     })
 
     it('emits the containers structurally', () => {
-        expect(leanTermOf(erase(array(string)))).toBe(
-            'Term.array (Term.string)',
+        expect(rootOf(erase(array(string)))).toBe(
+            'Scoped.Term.array (Scoped.Term.string)',
         )
-        expect(leanTermOf(erase(object([string, optional(boolean)])))).toBe(
-            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Term.boolean)))',
+        expect(rootOf(erase(object([string, optional(boolean)])))).toBe(
+            'Scoped.Term.object (Scoped.Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Scoped.Term.boolean)))',
         )
-        expect(leanTermOf(erase(list(string, boolean)))).toBe(
-            'Term.tuple [Term.string, Term.boolean] none',
+        expect(rootOf(erase(list(string, boolean)))).toBe(
+            'Scoped.Term.tuple [Scoped.Term.string, Scoped.Term.boolean] none',
         )
     })
 
@@ -260,11 +272,15 @@ describe('terms', () => {
      * the set is the finite-powerset lift of its element.
      */
     it('emits a set as the set of its element term', () => {
-        expect(leanTermOf(erase(string.set()))).toBe('Term.set (Term.string)')
-        expect(leanTermOf(erase(dynamoNumber.set()))).toBe(
-            'Term.set (Term.number)',
+        expect(rootOf(erase(string.set()))).toBe(
+            'Scoped.Term.set (Scoped.Term.string)',
         )
-        expect(leanTermOf(erase(binary.set()))).toBe('Term.set (Term.binary)')
+        expect(rootOf(erase(dynamoNumber.set()))).toBe(
+            'Scoped.Term.set (Scoped.Term.number)',
+        )
+        expect(rootOf(erase(binary.set()))).toBe(
+            'Scoped.Term.set (Scoped.Term.binary)',
+        )
     })
 
     /**
@@ -273,10 +289,10 @@ describe('terms', () => {
      * name in the model, so its set is refused for the reason its scalar is.
      */
     it('emits the set of a named adapter, and refuses the set of an unnamed one', () => {
-        expect(leanTermOf(erase(decimal.set()))).toBe(
-            'Term.set ((Term.held false (Term.number) (Term.string) (.decimalText, false) []))',
+        expect(rootOf(erase(decimal.set()))).toBe(
+            'Scoped.Term.set ((Scoped.Term.held false (Scoped.Term.number) (Scoped.Term.string) (.decimalText, false) []))',
         )
-        const why = refusal(() => leanTermOf(erase(number.set()))).reason
+        const why = refusal(() => leanClosedOf(erase(number.set()))).reason
         expect(why).toContain('numeralOfStoredText')
     })
 
@@ -289,15 +305,15 @@ describe('terms', () => {
      * any other. That refusal is not waiting on a pass.
      */
     it('prints a set of a literal element, and refuses one over a closure', () => {
-        expect(leanTermOf(erase(string.set('a', 'b')))).toBe(
-            'Term.set (Term.union [Term.literal GroundKind.string "a", Term.literal GroundKind.string "b"])',
+        expect(rootOf(erase(string.set('a', 'b')))).toBe(
+            'Scoped.Term.set (Scoped.Term.union [Scoped.Term.literal GroundKind.string "a", Scoped.Term.literal GroundKind.string "b"])',
         )
         const positive = refine(
             decimal,
             (value: string): value is string => !value.startsWith('-'),
             { describe: 'non-negative' },
         )
-        expect(() => leanTermOf(erase(positive.set()))).toThrow(
+        expect(() => leanClosedOf(erase(positive.set()))).toThrow(
             /not one this library ships/,
         )
     })
@@ -312,16 +328,16 @@ describe('terms', () => {
      * and the two spellings are what the field stratum means.
      */
     it('refuses a field where a term belongs, reached past a cast', () => {
-        expect(() => leanTermOf(erase(optional(string)))).toThrow(
+        expect(() => leanClosedOf(erase(optional(string)))).toThrow(
             /a \*field\*, not a term/,
         )
         expect(() =>
-            leanTermOf(
+            leanClosedOf(
                 erase(withLegacyRead({ current: string, whenMissing: 'x' })),
             ),
         ).toThrow(/`optional`\/`fallback` denote `Field`/)
-        expect(leanTermOf(erase(object({ a: optional(string) })))).toContain(
-            'ObjectSlot.optional',
+        expect(rootOf(erase(object({ a: optional(string) })))).toContain(
+            'Scoped.ObjectSlot.optional',
         )
     })
 
@@ -331,17 +347,15 @@ describe('terms', () => {
      * because the subtype's inhabitants are exactly the declared keys.
      */
     it('emits an object as a key set and a function on it', () => {
-        expect(
-            leanTermOf(erase(object({ a: string, b: optional(boolean) }))),
-        ).toBe(
-            'Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.boolean)) none)',
+        expect(rootOf(erase(object({ a: string, b: optional(boolean) })))).toBe(
+            'Scoped.Term.object (Scoped.Body.mk {"a", "b"} (fun k => if k.1 = "a" then Scoped.ObjectSlot.req (Scoped.Term.string) else Scoped.ObjectSlot.optional (Scoped.Term.boolean)) none)',
         )
     })
 
     /** The empty key set has no `else` to fall through to, so the function is the absurd one. */
     it('emits an object with no fields as the absurd function', () => {
-        expect(leanTermOf(erase(object({})))).toBe(
-            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) none)',
+        expect(rootOf(erase(object({})))).toBe(
+            'Scoped.Term.object (Scoped.Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) none)',
         )
     })
 
@@ -351,7 +365,7 @@ describe('terms', () => {
      */
     it('emits a missing-value field as a fill slot that carries its stand-in', () => {
         expect(
-            leanTermOf(
+            rootOf(
                 erase(
                     object({
                         a: withLegacyRead({
@@ -361,16 +375,16 @@ describe('terms', () => {
                     }),
                 ),
             ),
-        ).toContain('ObjectSlot.fill (Term.string) (Value.str "d")')
+        ).toContain(
+            'Scoped.ObjectSlot.fill (Scoped.Term.string) (Value.str "d")',
+        )
     })
 
     it('emits an open object as the one open block', () => {
         expect(
-            leanTermOf(
-                erase(object({ a: string }, [string, optional(boolean)])),
-            ),
+            rootOf(erase(object({ a: string }, [string, optional(boolean)]))),
         ).toBe(
-            'Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) (some (Term.boolean)))',
+            'Scoped.Term.object (Scoped.Body.mk {"a"} (fun k => Scoped.ObjectSlot.req (Scoped.Term.string)) (some (Scoped.Term.boolean)))',
         )
     })
 
@@ -386,18 +400,18 @@ describe('terms', () => {
      * the policy, and the emitter reads it rather than guessing.
      */
     it('emits the strict object policy', () => {
-        expect(leanTermOf(erase(object({ a: string })))).toBe(
-            'Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) none)',
+        expect(rootOf(erase(object({ a: string })))).toBe(
+            'Scoped.Term.object (Scoped.Body.mk {"a"} (fun k => Scoped.ObjectSlot.req (Scoped.Term.string)) none)',
         )
     })
 
     it('emits a union as its option list', () => {
-        expect(leanTermOf(erase(union([string, boolean])))).toBe(
-            'Term.union [Term.string, Term.boolean]',
+        expect(rootOf(erase(union([string, boolean])))).toBe(
+            'Scoped.Term.union [Scoped.Term.string, Scoped.Term.boolean]',
         )
         // `nullable` is a builder, so the null point emits as the union it is
-        expect(leanTermOf(erase(nullable(string)))).toBe(
-            'Term.union [Term.string, Term.null]',
+        expect(rootOf(erase(nullable(string)))).toBe(
+            'Scoped.Term.union [Scoped.Term.string, Scoped.Term.null]',
         )
     })
 
@@ -409,7 +423,7 @@ describe('terms', () => {
      * own index that no term carries.
      */
     it('emits a discriminated union as the union of objects it is', () => {
-        const emitted = leanTermOf(
+        const emitted = rootOf(
             erase(
                 discriminatedUnion('kind', [
                     object({ kind: string('a'), x: string }),
@@ -421,30 +435,31 @@ describe('terms', () => {
         // table is the builder's own index, carried by no term — so what reaches the model is the
         // union the declaration always was, and the discriminators are the required literals in
         // each member's body
-        expect(emitted).toContain('Term.union [Term.object')
+        expect(emitted).toContain('Scoped.Term.union [Scoped.Term.object')
         expect(emitted).toContain(
-            'ObjectSlot.req (Term.literal GroundKind.string "a")',
+            'Scoped.ObjectSlot.req (Scoped.Term.literal GroundKind.string "a")',
         )
         expect(emitted).toContain(
-            'ObjectSlot.req (Term.literal GroundKind.string "b")',
+            'Scoped.ObjectSlot.req (Scoped.Term.literal GroundKind.string "b")',
         )
-        expect(emitted).not.toContain('Term.dunion')
-        expect(emitted.split('Body.mk')).toHaveLength(3)
+        expect(emitted).not.toContain('Scoped.Term.dunion')
+        expect(emitted.split('Scoped.Body.mk')).toHaveLength(3)
     })
 
     it('prints a ref that closes no cycle as the term it names', () => {
-        expect(leanTermOf(erase(scope({ At: ref('S'), S: string }).At))).toBe(
-            'Term.string',
+        expect(rootOf(erase(scope({ At: ref('S'), S: string }).At))).toBe(
+            'Scoped.Term.string',
         )
     })
 
     /**
-     * **A `ref` that no scope binds is a free variable, and the emitter returns a term for it.**
-     * The host reads the `ref` as a variable that pairs with no binder, so the emitter prints the
-     * first index past the binders that enclose the `ref`.
+     * **A `ref` that no scope binds is an open fragment, and the emitter refuses it.** The thunk
+     * names a codec not yet declared, so no scope holds an entry for it.
      */
-    it('prints a ref that no scope binds as a variable that no binder binds', () => {
-        expect(leanTermOf(array(undeclared))).toBe('Term.array (Term.var 0)')
+    it('refuses a ref that no scope binds, which has no scoped form', () => {
+        expect(refusal(() => leanClosedOf(array(undeclared))).reason).toContain(
+            'an open fragment',
+        )
     })
 
     /**
@@ -463,7 +478,7 @@ describe('terms', () => {
         expect(verdict).toContain('(Pred.closure q0)')
         // a quantified goal closes by `kernel_rfl%` on the equation itself
         expect(verdict.endsWith('= false :=\n  kernel_rfl%')).toBe(true)
-        expect(refusal(() => leanTermOf(textFlags)).reason).toContain(
+        expect(refusal(() => leanClosedOf(textFlags)).reason).toContain(
             'Value → Bool',
         )
     })
@@ -487,7 +502,7 @@ describe('terms', () => {
         expect(verdict).toContain(
             '(Scoped.Term.legacy (Scoped.Term.string) r0)',
         )
-        expect(refusal(() => leanTermOf(migrated)).reason).toContain(
+        expect(refusal(() => leanClosedOf(migrated)).reason).toContain(
             'no evaluation vector',
         )
     })
@@ -498,11 +513,11 @@ describe('terms', () => {
      * and the model names no such pair, so the emitter refuses it as it refuses a caller's closure.
      */
     it('emits the total opaque as the exact opaq, and refuses each numeric policy', () => {
-        expect(leanTermOf(erase(opaque))).toBe('Term.opaq')
-        expect(leanTermOf(erase(opaque()))).toBe('Term.opaq')
+        expect(rootOf(erase(opaque))).toBe('Scoped.Term.opaq')
+        expect(rootOf(erase(opaque()))).toBe('Scoped.Term.opaq')
         for (const numbers of ['lossy', 'refuse'] as const) {
             expect(
-                refusal(() => leanTermOf(erase(opaque(numbers)))).reason,
+                refusal(() => leanClosedOf(erase(opaque(numbers)))).reason,
             ).toContain('Value → Value')
         }
     })
@@ -543,7 +558,7 @@ describe('what cannot be emitted', () => {
      * development deleted rather than a gap to be filled later.
      */
     it('refuses a JS float, and emits the numeral the carrier holds', () => {
-        expect(leanTermOf(erase(dynamoNumber))).toBe('Term.number')
+        expect(rootOf(erase(dynamoNumber))).toBe('Scoped.Term.number')
         expect(leanValueOf(orThrow(DynamoNumber.from('1.5')))).toBe(
             'Value.num (WFNumeral.of "1.5")',
         )
@@ -559,11 +574,11 @@ describe('what cannot be emitted', () => {
      * 2)` is that literal under a pair the model does not name.
      */
     it('refuses a numeric literal, which is the adapter and not the base', () => {
-        const why = refusal(() => leanTermOf(erase(number(1, 2)))).reason
+        const why = refusal(() => leanClosedOf(erase(number(1, 2)))).reason
         expect(why).toContain('binary64 rounding')
         expect(
-            leanTermOf(erase(dynamoNumber(orThrow(DynamoNumber.from('1.5'))))),
-        ).toBe('Term.literal GroundKind.number (WFNumeral.of "1.5")')
+            rootOf(erase(dynamoNumber(orThrow(DynamoNumber.from('1.5'))))),
+        ).toBe('Scoped.Term.literal GroundKind.number (WFNumeral.of "1.5")')
     })
 
     /**
@@ -578,21 +593,21 @@ describe('what cannot be emitted', () => {
             (value: string): value is string => value.length > 0,
             { describe: 'non-empty' },
         )
-        expect(refusal(() => leanTermOf(erase(notEmpty))).reason).toContain(
+        expect(refusal(() => leanClosedOf(erase(notEmpty))).reason).toContain(
             'Value → Bool',
         )
         const adapted = held(string.set(), array(string), {
             encode: (value: readonly string[]) => new Set(value),
             decode: (holding: ReadonlySet<string>) => [...holding],
         })
-        expect(refusal(() => leanTermOf(erase(adapted))).reason).toContain(
+        expect(refusal(() => leanClosedOf(erase(adapted))).reason).toContain(
             'Value → Value',
         )
         const older = withLegacyRead({
             current: string,
             older: { decode: () => 'older' as string },
         })
-        expect(refusal(() => leanTermOf(erase(older))).reason).toContain(
+        expect(refusal(() => leanClosedOf(erase(older))).reason).toContain(
             'Attr → Option Value',
         )
     })
@@ -606,11 +621,11 @@ describe('what cannot be emitted', () => {
      */
     it('refuses a field where a term is asked for', () => {
         expect(
-            refusal(() => leanTermOf(erase(optional(string)))).reason,
+            refusal(() => leanClosedOf(erase(optional(string)))).reason,
         ).toContain('a *field*, not a term')
         expect(
             refusal(() =>
-                leanTermOf(
+                leanClosedOf(
                     erase(
                         withLegacyRead({ current: string, whenMissing: 'd' }),
                     ),
@@ -629,27 +644,25 @@ describe('what cannot be emitted', () => {
     })
 
     /**
-     * **A recursive schema is a binder and its variable.** A thunk that returns a term being
-     * printed closes a cycle, so the emitter prints `Term.mu` at that term and `Term.var k` at the
-     * thunk, where `k` counts the binders between the two. The emitter ends on every cycle.
+     * **A recursive schema is an entry of a scope.** A thunk that returns a term of the cycle prints
+     * as the `ref` of that entry. The emitter ends on every cycle.
      */
-    it('prints a schema that recurses below a list as a binder whose variable sits in the list', () => {
-        expect(leanTermOf(json)).toBe(
-            'Term.mu (Term.union [Term.string, Term.array (Term.var 0)])',
+    it('prints a schema that recurses below a list as an entry whose reference sits in the list', () => {
+        expect(rootOf(json)).toBe(
+            'Scoped.Term.union [Scoped.Term.string, Scoped.Term.array (Scoped.Term.ref 0)]',
         )
         // the top thunk of `Category` returns the object, and the object holds the same thunk
-        expect(leanTermOf(erase(Category))).toMatch(
-            /^Term\.mu \(Term\.object .*Term\.array \(Term\.var 0\).*\)$/,
+        expect(rootOf(erase(Category))).toMatch(
+            /^Scoped\.Term\.object .*Scoped\.Term\.array \(Scoped\.Term\.ref 0\).*$/,
         )
     })
 
     /**
-     * **A thunk that returns its own term is printed, and the guard refuses it.** Its stages never
-     * grow, so the model has no limit for it, and `Term.guarded` answers `false`.
+     * **A thunk that returns its own term is a graph, and the guard refuses it.** Its stages never
+     * grow, so the model has no limit for it, and `Graph.guarded` answers `false`.
      * `.vectors.full.lean` carries the verdict.
      */
-    it('prints a thunk that returns itself as a binder the guard refuses', () => {
-        expect(leanTermOf(selfThunk)).toBe('Term.mu (Term.var 0)')
+    it('prints a thunk that returns itself as a graph the guard refuses', () => {
         expect(
             leanGuard({ name: 'self_thunk', codec: selfThunk, guarded: false }),
         ).toContain(
@@ -680,7 +693,7 @@ describe('what cannot be emitted', () => {
         // the refusal is the adapter's, not a row about tags: a numeric discriminator is a
         // `number` literal field, and `number` is `held` over the native wherever it appears.
         // Deleting the tagged row lost no refusal, only a second statement of this one
-        const why = refusal(() => leanTermOf(numeric)).reason
+        const why = refusal(() => leanClosedOf(numeric)).reason
         expect(why).toContain('binary64 rounding')
 
         // **a decimal tag emits now**, which is the half of the disagreement that closed: it is
@@ -691,12 +704,12 @@ describe('what cannot be emitted', () => {
                 object({ v: decimal('2'), b: string }),
             ]),
         )
-        expect(leanTermOf(decimals)).toContain('Term.union')
-        expect(leanTermOf(decimals)).toContain('.decimalText')
+        expect(rootOf(decimals)).toContain('Scoped.Term.union')
+        expect(rootOf(decimals)).toContain('.decimalText')
 
         // and a string tag emits, which it always did
         expect(
-            leanTermOf(
+            rootOf(
                 erase(
                     discriminatedUnion('kind', [
                         object({ kind: string('A'), a: string }),
@@ -704,7 +717,7 @@ describe('what cannot be emitted', () => {
                     ]),
                 ),
             ),
-        ).toContain('Term.union')
+        ).toContain('Scoped.Term.union')
     })
 
     /**
@@ -832,7 +845,7 @@ describe('a whole vector', () => {
     /** The equation protocol carries its own proof, so its preamble is the one with the tactic. */
     it('carries the tactic and the imports the equation protocol needs', () => {
         const module = leanVectorModule([], 'equation')
-        expect(module).toContain('import Calculus.Dynamo.Lang.Denote')
+        expect(module).toContain('import Calculus.Dynamo.Alg.Frontier')
         expect(module).toContain('import Mathlib.Tactic.FinCases')
         expect(module).toContain('macro "vector" : tactic')
         expect(
@@ -843,7 +856,7 @@ describe('a whole vector', () => {
 
 /**
  * **The recursive schemas the host accepts**, each a cycle of term objects closed by a thunk below a
- * list or an object. The model states each as `Term.mu`, with `Term.var` at the thunk.
+ * list or an object. The model states each as an entry of a scope, with a `ref` at the thunk.
  */
 const recursive = scope({
     json: union([string, array(ref('json'))]),
@@ -1453,7 +1466,7 @@ const legacyPairs = <P>(
 ]
 
 /**
- * Every option pair the corpus offers. `leanTermOf` is what bounds it: a pair either side of which
+ * Every option pair the corpus offers. `leanGraphOf` is what bounds it: a pair either side of which
  * is term-inexpressible cannot be put to the model at all.
  */
 const separationPairs = (): readonly Separation[] => {
@@ -1468,8 +1481,8 @@ const separationPairs = (): readonly Separation[] => {
             const [an, left] = codecs[x] as readonly [string, AnyCodec]
             const [bn, right] = codecs[y] as readonly [string, AnyCodec]
             try {
-                leanTermOf(left, an)
-                leanTermOf(right, bn)
+                leanGraphOf(left, an)
+                leanGraphOf(right, bn)
             } catch {
                 continue
             }
@@ -1674,7 +1687,7 @@ const readDecisions: readonly (readonly [string, AnyCodec])[] = [
  *
  * The attributes are what the corpus actually *writes*, plus six raw shapes for the members no
  * corpus vector produces alone. Bounded by `leanAttrOf` the way the pairs are bounded by
- * `leanTermOf`: an attribute the model has no closed expression for cannot be put to it.
+ * `leanGraphOf`: an attribute the model has no closed expression for cannot be put to it.
  */
 const readVerdicts = (): readonly ReadVerdict[] => {
     const codecs: readonly (readonly [string, AnyCodec])[] = [

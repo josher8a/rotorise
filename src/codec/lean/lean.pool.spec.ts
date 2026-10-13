@@ -69,13 +69,13 @@ import {
     leanDisjointRowModule,
     leanFormerGuard,
     leanFormerGuardModule,
+    leanGraphOf,
     leanPath,
     leanPathModules,
     leanSeparation,
     leanSeparationRowModule,
     leanSlice,
     leanSliceModule,
-    leanTermOf,
     pairGuardRefusal,
     reachable,
     unionAt,
@@ -83,13 +83,7 @@ import {
 import { orThrow } from '../result'
 import { agrees, disjoint, viewsDisjoint } from '../scoped'
 import type { Term } from '../term'
-import {
-    force,
-    freeNamesOf,
-    openRefusal,
-    RecursionRefused,
-    recursionUse,
-} from '../term'
+import { force, openRefusal, RecursionRefused, recursionUse } from '../term'
 import { arbitraryOf, rngFrom, structuralEquals } from '../testing'
 import { typeVectorFiles } from '../typeVectors'
 
@@ -176,6 +170,13 @@ let declared: [Entry, Entry][] = []
  * term, so the pool puts each term to the model's guard alone.
  */
 let refused: Term[] = []
+
+/**
+ * **Each codec that the seed under draw offers to a pair**, in the order of the offer, before the
+ * print decides the pair. The path vectors read this list, so a partner that the print refuses
+ * removes no codec from the path coverage.
+ */
+let offered: AnyCodec[] = []
 const declare = (
     a: Entry,
     b: Entry,
@@ -500,10 +501,8 @@ const draw = (depth: number): Entry => {
                 }
             return { name, codec: whole }
         }
-        // **A mutual recursion entered at two members.** Each member is a binder, and inside one
-        // member the other prints as a binder whose body reads only the outer variable: the
-        // emitter's one route to a vacuous `Term.mu`. A recursion entered at one member, or a self
-        // recursion, never prints one
+        // **A mutual recursion entered at two members.** Each member is an entry of one scope, and
+        // each root of the draw reaches the other member through the cycle
         case 19: {
             const c = draw(depth - 1)
             // the scope runs the guard, so a refusal of a body is a refusal of the draw. Each
@@ -615,6 +614,7 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
     declared = []
     unions = []
     refused = []
+    offered = []
     const built: Entry[] = []
     for (let i = 0; i < DRAWS; i++) {
         try {
@@ -626,6 +626,7 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
     }
     const pairs: PoolPair[] = []
     const add = (a: Entry, b: Entry) => {
+        offered.push(a.codec, b.codec)
         const name = `pool_${first + pairs.length}`
         const bound = {
             closures: new Map<unknown, string>(),
@@ -635,8 +636,8 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
         let l: string
         let r: string
         try {
-            l = leanTermOf(a.codec, name, bound)
-            r = leanTermOf(b.codec, name, bound)
+            l = leanGraphOf(a.codec, name, bound)
+            r = leanGraphOf(b.codec, name, bound)
         } catch (error) {
             if (!(error instanceof LeanUnemittable)) throw error
             drop(`term: ${error.reason}`)
@@ -768,7 +769,7 @@ const slicesOf = (declared: readonly Declared[], first: number): Slice[] => {
         if (fields.length !== def.options.length) continue
         let printed: string
         try {
-            printed = leanTermOf(codec, 'slice', {
+            printed = leanGraphOf(codec, 'slice', {
                 closures: new Map(),
                 adapters: new Map(),
                 readers: new Map(),
@@ -929,17 +930,17 @@ const topTerms = (t: Term): Term[] => {
 }
 
 /**
- * The path vectors of one seed: each codec of the pairs, once, with the paths into it. The names
- * continue after `first`, so the seeds share one name space. A codec whose theorem prints as the
- * theorem of a codec before it adds nothing, and goes.
+ * The path vectors of one seed: each codec that the seed offered to a pair, once, with the paths
+ * into it. The names continue after `first`, so the seeds share one name space. A codec whose
+ * theorem prints as the theorem of a codec before it adds nothing, and goes.
  */
 const pathVectorsOf = (
-    pairs: readonly PoolPair[],
+    codecs: readonly AnyCodec[],
     first: number,
     seen: Set<string>,
 ): PathVectors[] => {
     const vectors: PathVectors[] = []
-    for (const codec of new Set(pairs.flatMap((p) => [p.left, p.right]))) {
+    for (const codec of new Set(codecs)) {
         const one = { name: 'path', codec, paths: pathsOf(codec) }
         let printed: string
         try {
@@ -970,7 +971,7 @@ const decisionsOf = (
         standIn: true,
     })
     const print = (codec: AnyCodec): string =>
-        leanTermOf(codec, 'decision', bound())
+        leanGraphOf(codec, 'decision', bound())
     const stepKey = (step: PathStep): string =>
         typeof step === 'object'
             ? `narrow{${Object.entries(step.narrow)
@@ -1014,7 +1015,7 @@ const printedAlone = (codec: AnyCodec): string | undefined => {
     }
     let printed: string
     try {
-        printed = leanTermOf(codec, 'alone', bound)
+        printed = leanGraphOf(codec, 'alone', bound)
     } catch (error) {
         if (!(error instanceof LeanUnemittable)) throw error
         return undefined
@@ -1125,7 +1126,7 @@ const buildPool = () => {
             pairs,
             slices: slicesOf(unions, sliced),
             guards: formerGuards(refused, guarded),
-            paths: pathVectorsOf(pairs, pathed, printedPaths),
+            paths: pathVectorsOf(offered, pathed, printedPaths),
         })
     }
     return seeds.map(({ seed, pairs, slices, guards, paths }) => ({
@@ -1226,13 +1227,11 @@ describe('the generated pool, against the model', () => {
           {
             "dropped": {
               "a constructor refused the draw": 52,
-              "assignment: the union reads a \`ref\` that no scope binds, so the host keeps no option under a clause": 14,
-              "disjoint: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 529,
-              "pairGuard: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 1,
               "path: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 68,
-              "separation: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 531,
+              "separation: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 3,
+              "slice term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 14,
               "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1634,
-              "slice: the union reads a \`ref\` that no scope binds, so the host keeps no option under a clause": 731,
+              "term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 529,
             },
             "seeds": [
               {
@@ -1242,7 +1241,7 @@ describe('the generated pool, against the model', () => {
                 "disjoints": 1146,
                 "fills": 4,
                 "guards": 0,
-                "pairs": 1357,
+                "pairs": 1146,
                 "paths": 2080,
                 "seed": 20261004,
                 "separations": 1141,
@@ -1254,9 +1253,9 @@ describe('the generated pool, against the model', () => {
                 "clauses": 2955,
                 "codecsPathed": 170,
                 "disjoints": 1094,
-                "fills": 7,
+                "fills": 6,
                 "guards": 0,
-                "pairs": 1236,
+                "pairs": 1094,
                 "paths": 1625,
                 "seed": 1,
                 "separations": 1088,
@@ -1270,7 +1269,7 @@ describe('the generated pool, against the model', () => {
                 "disjoints": 1157,
                 "fills": 11,
                 "guards": 0,
-                "pairs": 1333,
+                "pairs": 1157,
                 "paths": 2231,
                 "seed": 4,
                 "separations": 1144,
@@ -1389,33 +1388,32 @@ describe('the generated pool, against the model', () => {
         const printed = leanPath(one)
         expect(printed).toContain('NarrowRowsC')
         expect(printed).toContain('([.name "v"], .resolved')
-        expect(printed).not.toContain('Term.mu')
     })
 
     /**
      * **No column of a pair is checked by `#eval` alone.** A pair with a fill on each side has no
      * separation vector, so the kernel states its guard column in a row of its own. **A pair over
      * an open fragment states no row**: the union waits for the scope that binds the free `ref`, so
-     * the host decides nothing on the pair. Each such pair of the pool reads `ref('undeclared')`.
+     * the host decides nothing on the pair. The scoped print refuses an open fragment, so no such
+     * pair enters the pool, and the refusal is asserted on a pair that reads `ref('undeclared')`.
      */
-    it('states the guard column of each pair of two fills in the kernel, and no row over an open fragment', () => {
+    it('states the guard column of each pair of two fills in the kernel, and refuses a pair over an open fragment', () => {
         const fills = pairs.filter((p) => p.fills)
-        const open = fills.filter((p) => pairGuardRefusal(p) !== undefined)
-        expect(fills).toHaveLength(22)
-        expect(open.map((p) => p.name)).toHaveLength(1)
-        for (const p of open) {
-            expect(
-                new Set(
-                    [p.left, p.right].flatMap((one) => freeNamesOf(one.def)),
-                ),
-            ).toEqual(new Set(['undeclared']))
-        }
+        expect(fills).toHaveLength(21)
+        expect(fills.filter((p) => pairGuardRefusal(p) !== undefined)).toEqual(
+            [],
+        )
+        expect(
+            pairGuardRefusal({
+                name: 'open',
+                left: erase(array(undeclared)),
+                right: erase(string),
+            }),
+        ).toContain('no scope binds')
         const module = new Map(poolModules(perSeed)).get(
             '.pool.separations.lean',
         )
-        for (const { name } of open)
-            expect(module).not.toContain(`("${name}", `)
-        for (const { name } of fills.filter((p) => !open.includes(p))) {
+        for (const { name } of fills) {
             expect(module).toMatch(
                 new RegExp(`\\("${name}", \\([^\\n]*, (true|false)\\)\\)`),
             )

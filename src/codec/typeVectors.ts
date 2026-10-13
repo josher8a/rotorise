@@ -37,7 +37,7 @@ import type { AnyCodec } from './codec'
 import { number } from './codec'
 import { codecOfTerm } from './denote'
 import type { PathStep, PathVectors, Slice } from './lean'
-import { hostAt, leanTermOf, reachable } from './lean'
+import { hostAt, leanClosedOf, reachable } from './lean'
 import { CodecError } from './result'
 import { storedApart } from './scoped'
 import type { Literal, Term } from './term'
@@ -290,7 +290,7 @@ const printerOf = (
     }
     /** The Lean print of a term: the content of a declaration, whichever root declares it. */
     const lean = (t: Term): string =>
-        leanTermOf(codecOfTerm(t), at, freshBound())
+        leanClosedOf(codecOfTerm(t), at, freshBound())
     const nameOf = (t: Term): string => {
         let n = names.get(t)
         if (n === undefined) {
@@ -992,7 +992,7 @@ export const typeVectorFiles = ({
     const sliceRoots = byHash(
         slices,
         (s) =>
-            `slice|${(s.keys ?? []).join(',')}|${leanTermOf(s.codec, 'slice', freshBound())}`,
+            `slice|${(s.keys ?? []).join(',')}|${leanClosedOf(s.codec, 'slice', freshBound())}`,
     ).map(([root, s], i) =>
         sliceRoot(s, printerOf(constants, `s${i}`, s.name), root, clauses),
     )
@@ -1000,7 +1000,7 @@ export const typeVectorFiles = ({
         paths,
         // the term and not `leanPath`'s print, which holds the rows: a root keeps its id when the
         // pool draws another set of paths at it
-        (v) => `path|${leanTermOf(v.codec, 'path', freshBound())}`,
+        (v) => `path|${leanClosedOf(v.codec, 'path', freshBound())}`,
     ).map(([root, v], i) =>
         pathRoot(v, printerOf(constants, `p${i}`, v.name), root),
     )
