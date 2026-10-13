@@ -1,6 +1,7 @@
 import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Lang.Store
 import Calculus.Dynamo.Analysis.ExactV
+import Calculus.Dynamo.Witness.ScopeNesting
 
 variable {α : Calculus.Table}
 
@@ -81,30 +82,6 @@ def deepT : Nat → Term
   | 0 => .string
   | n + 1 => .array (deepT n)
 
-/-- A value on its held set: `n` nested one-element arrays over a string. -/
-def deepV : Nat → Value
-  | 0 => .str ""
-  | n + 1 => .arr [deepV n]
-
-/-- What the pair writes: `n` nested `L`s over an `S`. -/
-def deepA : Nat → Attr
-  | 0 => .s ""
-  | n + 1 => .l [deepA n]
-
-/-- The nesting is the index, on the nose — `S` is not a document type and each `L` is one. -/
-theorem nesting_deepA : ∀ n, Attr.nesting (deepA n) = n
-  | 0 => rfl
-  | n + 1 => by
-    show Attr.nestingL [deepA n] + 1 = n + 1
-    show max (Attr.nesting (deepA n)) 0 + 1 = n + 1
-    rw [nesting_deepA n]; simp
-
-/-- The witness holds no numeral, so the numeral half of the store gate admits it at every
-    index. -/
-theorem numeralsStored_deepA : ∀ n, Attr.numeralsStored (deepA n) = true
-  | 0 => rfl
-  | n + 1 => (Bool.and_true _).trans (numeralsStored_deepA n)
-
 /-- Every one of them is derivable. -/
 theorem typed_deepT : ∀ n, ∃ T μ, Typed α (deepT n) T μ
   | 0 => ⟨_, _, Typed.base .string⟩
@@ -136,11 +113,6 @@ theorem not_storable_of_typed (bound : Nat) :
   show ¬ Attr.nesting (deepA (bound + 1)) ≤ bound
   rw [nesting_deepA]
   omega
-
-/-- The other side of the boundary: the witness one level shallower is storable. -/
-theorem storable_deepA (bound : Nat) : Attr.Storable bound (deepA bound) := by
-  show Attr.nesting (deepA bound) ≤ bound
-  rw [nesting_deepA]
 
 end Calculus
 

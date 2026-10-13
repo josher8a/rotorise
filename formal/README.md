@@ -49,7 +49,7 @@ definition it touches.
 | `Calculus/Dynamo/Lang/Soundness.lean` | `Obligations` and `PairwiseCompat` at `dynSyn`, the theorem statements, and the held-set bridge `typed_e_mem`/`typed_p_mem`, from `Alg.carrier_denote` and `Alg.typed_TSub` |
 | `Calculus/Dynamo/Lang/Equations.lean` | `Codec.Equiv` (the specification's `≡`), `Can`, and all ten "Hold" nodes of the specification's equations this development still states — `held`'s composition (its identity is `equiv_through_id` at the codecs, because a `held` of the empty word has no term), `refine`'s meet and full case, `Codec.extendRead` with its own reader as the alternate reader and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of the conditions that the specification states), wrapper member preservation. The null-point node went with the wrapper: the point is a union option, so idempotence is the union's |
 | `Calculus/Dynamo/Alg/Opaque.lean` | `opaque` as the identity codec `Alg.idCodec`, with `lawful_opaq` and `carrier_opaq`; the union of everything self-identifying (`opaqUnfold`) is a theorem in `Universal.lean` |
-| `Calculus/Dynamo/Lang/HeldSet.lean` | `T` as an identity: `typed_T_identity` ((A) at every rule); `typed_T_adm` in `Laminar.lean` proves (B) at every derivable term whose obligations hold |
+| `Calculus/Dynamo/Lang/ScopeHeldSet.lean` | `T` as an identity: `Closed.typed_T_identity` ((A) at every entry of a typed closed codec, from `TOp.rule_T` at every operation); `typed_T_adm` in `Laminar.lean` proves (B) at every derivable term whose obligations hold |
 | `Calculus/Dynamo/Alg/Continuity.lean` | `Sub` as the information order that any ccpo must extend, and first-match resolution monotone (`selectF_mono_list`) and continuous (`selectF_continuous_list`) under the obligation that every admitter agrees |
 | `Calculus/Dynamo/Witness/Nesting.lean` | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is the nesting bound of the store, a parameter, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from the rules of the judgement rather than a premise someone failed to discharge |
 | `Calculus/Dynamo/Lang/Store.lean` | The DynamoDB port: `DynamoDB.maxNesting` instantiates the nesting bound at the store's 32 levels; `decimalCodec` over `Numeral.Stored` and its `SurvivesStore` instance, `not_survivesStore_numberCodec`, the numeral-domain report (`decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases) |
@@ -81,7 +81,7 @@ denotation. `typed_e_mem` and `typed_p_mem` are the specification's `e : T ⇀ �
 judgement's own index — a derivable term writes and reads only values of the held set it
 names — factored through `Carrier` (per combinator) and `typed_TSub` (the denotation's
 held set is inside the judgement's) — and the containment is an **identity** in both
-directions, `typed_T_identity`, so the index describes the denotation exactly rather than
+directions, `Closed.typed_T_identity`, so the index describes the denotation exactly rather than
 bounding it. The
 member index is fuel-free (`μSyn`, with `denote_μ` and `typed_μSyn` tying the denotation
 and the judgement to it).

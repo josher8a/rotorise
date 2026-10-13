@@ -1,6 +1,9 @@
 import Calculus.Dynamo.Lang.Soundness
+import Calculus.Dynamo.Lang.ScopeSound
+import Calculus.Dynamo.Lang.ScopeHeldSet
 import Calculus.Dynamo.Analysis.Merge
 import Calculus.Dynamo.Witness.Discharge
+import Calculus.Dynamo.Witness.ScopeDischarge
 import Calculus.Dynamo.Alg.Continuity
 import Calculus.Dynamo.Witness.Refutations
 import Calculus.Dynamo.Lang.HeldSet
@@ -17,6 +20,7 @@ import Calculus.Lang.ScopePath
 import Batteries.Tactic.Lint
 import Calculus.Dynamo.Witness.LiteralArity1
 import Calculus.Dynamo.Witness.Nesting
+import Calculus.Dynamo.Witness.ScopeNesting
 import Calculus.Dynamo.Lang.Store
 import Calculus.Dynamo.Lang.Scope
 import Calculus.Dynamo.Witness.Malleability
