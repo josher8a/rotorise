@@ -47,12 +47,16 @@ import Calculus.Dynamo.Lang.Denote
 import Calculus.Dynamo.Lang.Typing
 import Calculus.Dynamo.Analysis.Merge
 import Calculus.Dynamo.Lang.Soundness
+import Calculus.Dynamo.Lang.ScopeSound
+import Calculus.Dynamo.Lang.ScopeHeldSet
 import Calculus.Dynamo.Witness.Discharge
+import Calculus.Dynamo.Witness.ScopeDischarge
 import Calculus.Dynamo.Lang.Equations
 import Calculus.Dynamo.Alg.Continuity
 import Calculus.Dynamo.Alg.Opaque
 import Calculus.Dynamo.Lang.HeldSet
 import Calculus.Dynamo.Witness.Nesting
+import Calculus.Dynamo.Witness.ScopeNesting
 import Calculus.Dynamo.Lang.Store
 import Calculus.Dynamo.Lang.Scope
 import Calculus.Dynamo.Witness.Malleability
