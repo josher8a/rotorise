@@ -660,7 +660,7 @@ describe('an object option is admitted by attempt', () => {
 /**
  * **`never`: the term that admits no value.**
  *
- * `Term.never` on both sides. The model types it — `Typed.never` gives it `HNever`, which is
+ * `Term.never` on both sides. The model types it — `TOp.rule` gives it `HNever`, which is
  * `False` — and denotes it as `Codec.empty`. A constructor rather than a `discriminatedUnion` over
  * no options: an empty option list is a term a caller can build by accident, and a rule reading it
  * as the bottom reads that accident as intent.

@@ -163,7 +163,7 @@ and `Term.disjoint` does not find the pair disjoint from a string.
 
 **What the tree carries today.** The equations of a run hold up to `Codec.Equiv`:
 `equiv_restrict_meet` meets two restrictions, `equiv_through_comp` composes two adapters, and
-`equiv_denote_held_comp` composes two nested `held`s under a closure restriction outside them. No
+`Scoped.equiv_held_comp` composes two nested `held`s under a closure restriction outside them. No
 function reduces a run. `not_equiv_trans` shows that `Codec.Equiv` does not chain, so the
 equations do not compose into a normal form one step at a time.
 

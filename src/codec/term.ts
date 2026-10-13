@@ -1,8 +1,8 @@
 /**
  * The term language, and the five functions of a term that the model computes.
  *
- * Derived from `formal/Calculus/Dynamo/Lang/Term.lean`, with `member` from `Denote.lean`'s `μSyn`, `specOf`
- * from `Denote.lean`. {@link occV}, {@link occA} and {@link tagsOf} have no counterpart there: the
+ * Derived from `formal/Calculus/Dynamo/Lang/Term.lean`, with `member` from `ScopePath.lean`'s `μG`, `specOf`
+ * from `ScopeSlice.lean`'s `Closed.spec`. {@link occV}, {@link occA} and {@link tagsOf} have no counterpart there: the
  * two occupancies serve the host's union dispatch, and the tag table is a host index that no term
  * carries. One
  * variant per model constructor, under the model's own names, so a reader holding the two files
@@ -359,7 +359,7 @@ export const unanimous = (
 }
 
 /**
- * `μSyn`: the member a term stores, read off the term.
+ * `μG`: the member a term stores, read off the term.
  *
  * `undefined` is the model's `⊤`: *not determined by the term*. A thunk answers it for a reason of
  * the host: the host cannot force a thunk safely here, because forcing a recursive thunk can loop,
@@ -607,7 +607,7 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
  * in, and the read occupancy is the subterm's. `withLegacyRead`'s `r` is arbitrary data the term carries and
  * widens exactly the reading, so it is `⊤` here where it was the subterm's on the write side.
  *
- * A lawful `r` does respect the member, and the model records that this is the one place `μSyn` is
+ * A lawful `r` does respect the member, and the model records that this is the one place `μG` is
  * sharper than `occA` — sharper only under an obligation no declaration-time certificate takes as a
  * premise.
  *
@@ -698,7 +698,7 @@ export type NameLiteral = {
  * to be written, so `tagsOf` reads `req` and refuses the other three. A literal *field* constrains
  * exactly the values that carry the name whatever its mark, and admission is present-only, so an
  * `optional` literal is read here and its `required` says `false`. That is the model's
- * `altsOfField`, which has a row for `req`, `optional` and `withLegacyRead` alike.
+ * `Closed.spec`, which reads `pinOfG` at every slot, `req`, `optional` and `withLegacyRead` alike.
  */
 export const literalsOf = (
     t: Term,
@@ -1265,7 +1265,7 @@ export const storedView = throughThunks((t, view) => {
 
 /**
  * **Whether a `withLegacyRead` occurs in the term.** The model states the read widening as
- * `Term.legacy`, and the judgement `Typed` has no rule for it, because the pair is not a partial
+ * `Term.legacy`, and the rule `TOp.rule` of the judgement answers `none` at it, because the pair is not a partial
  * bijection. The law of `set`, `lawful_setCodec`, needs a lawful element, so no law covers a set
  * of a widened element, and `set` refuses one.
  */

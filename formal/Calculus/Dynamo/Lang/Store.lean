@@ -95,7 +95,7 @@ theorem survivesStore_decimalCodec {η : Attr → Attr}
 /-! ## The numeral domain `Numerals`, checked
 
 `Domain.lean` carries the predicate `Numeral.WF`, with the grammar, the 38 significant digits and the
-magnitude range, and `decimalCodec` gates on it. `typed_e_mem` reports whether the codec
+magnitude range, and `decimalCodec` gates on it. `Closed.carrier` reports whether a codec
 respects the predicate, so here is that report.
 
 The carrier is not unrestricted either: `Attr.n` carries `WFNumeral`, so `⟨N, "abc"⟩` is not
@@ -281,9 +281,5 @@ theorem storeCodec_refuses_denormal :
 /-- …and writes the stored form unchanged. -/
 theorem storeCodec_writes_stored :
     (storeCodec (baseCodec .number)).e (.num (.of "1.5")) = some (.n (.of "1.5")) := rfl
-
-/-- `decimal`, as the surface ships it: the numeric base under the text adapter, with the
-    caller side restricted to text. -/
-def decimalHeld : Term := Term.held false Term.number Term.string (.decimalText, false) []
 
 end Calculus

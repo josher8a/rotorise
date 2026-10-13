@@ -56,7 +56,7 @@ IMPORT = re.compile(r"^import\s+(Calculus(?:\.[^\s]+)?)\s*$")
 
 
 def module_of(path):
-    """`Calculus/Dynamo/Lang/HeldSet.lean` -> `Calculus.Dynamo.Lang.HeldSet`; `Calculus.lean` -> `Calculus`."""
+    """`Calculus/Dynamo/Lang/ScopeHeldSet.lean` -> `Calculus.Dynamo.Lang.ScopeHeldSet`; `Calculus.lean` -> `Calculus`."""
     return os.path.splitext(path)[0].replace(os.sep, ".")
 
 

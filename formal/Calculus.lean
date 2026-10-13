@@ -47,9 +47,6 @@ import Calculus.Dynamo.Alg.Lawful
 import Calculus.Dynamo.Alg.Frontier
 import Calculus.Dynamo.Lang.Term
 import Calculus.Dynamo.Alg.Recursion
-import Calculus.Dynamo.Lang.Denote
-import Calculus.Dynamo.Lang.Typing
-import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Lang.ScopeSound
 import Calculus.Dynamo.Lang.ScopeHeldSet
 import Calculus.Dynamo.Lang.ScopeHeldFree
@@ -58,8 +55,6 @@ import Calculus.Dynamo.Lang.Equations
 import Calculus.Dynamo.Lang.ScopeEquations
 import Calculus.Dynamo.Alg.Continuity
 import Calculus.Dynamo.Alg.Opaque
-import Calculus.Dynamo.Lang.HeldSet
-import Calculus.Dynamo.Lang.HeldFree
 import Calculus.Dynamo.Witness.Nesting
 import Calculus.Dynamo.Witness.ScopeNesting
 import Calculus.Dynamo.Lang.Store

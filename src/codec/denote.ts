@@ -246,15 +246,15 @@ const setWire = { S: 'SS', N: 'NS', B: 'BS' } as const
  * **A member's assignment: one tag per key, read off the member's own body.**
  *
  * The tag table is a host index over a `Term.union`, and no term carries it. The model carries the
- * member's own body, as `Calculus.Body.spec`, and this reads the same field data one question
+ * member's own body, as `Calculus.Closed.spec`, and this reads the same field data one question
  * further — the field is `req`, its term is a `literal`, and it pins exactly one alternative. The
  * slice vectors check each tag: the one-key clause of a tag must admit its own member.
  *
  * **`req` only.** A discriminator that fills an absent tag with a default would key a member on a
- * value no item carries, so the index refuses it. The model's slice is wider here: `Calculus.Body.spec`
+ * value no item carries, so the index refuses it. The model's slice is wider here: `Calculus.Closed.spec`
  * reads a field with a stand-in as required at the caller side.
  *
- * The model reads a tag through `Calculus.altsOfField`, through a `refine` and through a `held` under
+ * The model reads a tag through `Calculus.pinOfG`, through a `refine` and through a `held` under
  * its adapter word, so a `decimal` tag is a model tag. A `number` tag is a literal at the native base
  * under a pair whose content is binary64 rounding, and the model names no such pair, so
  * `src/codec/lean.ts` refuses to emit one and says why.
@@ -962,7 +962,7 @@ export const denote = (def: Term): Pair => {
          * The rule `(list)`: the one positional container, with the arity test before any position.
          *
          * The model's two builder shapes, `arrayCodec` and `tupleCodec`, are abbreviations of
-         * `listCodec`. The row is `denote_list`, and `Alg.lawful_listCodec` is the lemma.
+         * `listCodec`. The row is the `list` case of `Alg.Scoped.TOp.run`, and `Alg.lawful_listCodec` is the lemma.
          * `Alg.alignL_eq_some` settles the spread: the arity test comes **before** the
          * positions, because a list of the wrong length has no entrywise reading at all. `alignL`
          * is the model's name for that step; here it is the two length tests, and they are the
@@ -1264,7 +1264,7 @@ export const denote = (def: Term): Pair => {
         /**
          * The rule `(opaque)`: the recursive union of everything self-identifying, and total: a number
          * is a `DynamoNumber`. The two numeric policies are `held` over this row. `lawful_opaq` is the lemma, and it is a *theorem* rather
-         * than an obligation — the model's `Obligations .opaq` is `True`, which is what makes
+         * than an obligation — the model's `TOp.obl .opaq` is `True`, which is what makes
          * `opaque` a well-behaved `custom`: the same analysis with the opposite warranty. A
          * `custom` carries a premise its author owes; this carries none, because the calculus
          * proves the laws for it.

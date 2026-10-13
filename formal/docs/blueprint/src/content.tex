@@ -242,7 +242,7 @@ once.
 \textbf{The quotient collapses} when \texttt{ker\ p} (\texttt{Codec.Ker}) is equality — when no two distinct attributes
 read to one value. \textbf{Every lawful codec collapses it.} By \rulelink{cond:C}{\textbf{(C)}} an attribute that reads to
 \texttt{t} is \texttt{e(t)}, so two attributes that read to one value are one attribute. So every term
-whose obligations hold collapses it. A held-free term collapses it with no law as a premise: \texttt{confluence\_R} puts its
+whose obligations hold collapses it. A held-free closed codec collapses it with no law as a premise: \texttt{Closed.confluence\_R} puts its
 reading inside \texttt{opaque}'s, and \texttt{opaque}'s reading is the identity, which is injective. Outside the
 term algebra, \texttt{extendRead} keeps a quotient, and \texttt{e\_comp\_p\_ne\_id} is its witness.
 
@@ -307,7 +307,7 @@ Both are needed, and neither determines the other.
 
 \begin{definition}[(string)]
 \label{rule:string}
-\lean{Calculus.Typed.base}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ──────────────────────────────
@@ -317,7 +317,7 @@ Both are needed, and neither determines the other.
 
 \begin{definition}[(decimal)]
 \label{rule:decimal}
-\lean{Calculus.decimalHeld, Calculus.Typed.held}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ──────────────────────────────
@@ -327,7 +327,7 @@ Both are needed, and neither determines the other.
 
 \begin{definition}[(number)]
 \label{rule:number}
-\lean{Calculus.Typed.base}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ──────────────────────────────
@@ -337,7 +337,7 @@ Both are needed, and neither determines the other.
 
 \begin{definition}[(boolean)]
 \label{rule:boolean}
-\lean{Calculus.Typed.base}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ──────────────────────────────
@@ -347,7 +347,7 @@ Both are needed, and neither determines the other.
 
 \begin{definition}[(binary)]
 \label{rule:binary}
-\lean{Calculus.Typed.base}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ──────────────────────────────
@@ -357,7 +357,7 @@ Both are needed, and neither determines the other.
 
 \begin{definition}[(null)]
 \label{rule:null}
-\lean{Calculus.Typed.base}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ──────────────────────────────
@@ -367,7 +367,7 @@ Both are needed, and neither determines the other.
 
 \begin{definition}[(literal)]
 \label{rule:literal}
-\lean{Calculus.Typed.literal}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ⊢ g : T ⇝ μ,  g ground    ℓ₁ … ℓₙ ∈ T,  n ≥ 1,  pairwise distinct
@@ -477,7 +477,7 @@ that the held set holds, so \rulelink{cond:R}{\texttt{(R)}} is the identity on t
 
 \begin{definition}[(set)]
 \label{rule:set}
-\lean{Calculus.Typed.set}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ⊢ c : T ⇝ μ
@@ -498,7 +498,7 @@ literal element and an adapter element are each spelled at the element.
 
 \begin{definition}[(array)]
 \label{rule:array}
-\lean{Calculus.Typed.array}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ⊢ c : T ⇝ μ
@@ -509,7 +509,7 @@ literal element and an adapter element are each spelled at the element.
 
 \begin{definition}[(tuple)]
 \label{rule:tuple}
-\lean{Calculus.Typed.tuple}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ⊢ cᵢ : Tᵢ ⇝ μᵢ    i ∈ 1…n
@@ -520,7 +520,7 @@ literal element and an adapter element are each spelled at the element.
 
 \begin{definition}[(tuple-tail)]
 \label{rule:tuple-tail}
-\lean{Calculus.Typed.tuple}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)    ⊢ c : T ⇝ μ
@@ -531,7 +531,7 @@ literal element and an adapter element are each spelled at the element.
 
 \begin{definition}[(record)]
 \label{rule:record}
-\lean{Calculus.Typed.record}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ⊢ c : T ⇝ μ
@@ -555,7 +555,7 @@ subterm's member this way.
 
 \begin{definition}[(held)]
 \label{rule:held}
-\lean{Calculus.Typed.held, Calculus.Alg.IsoCancels}
+\lean{Calculus.Alg.Scoped.TOp.rule, Calculus.Alg.IsoCancels}
 \begin{verbatim}
 ⊢ c : I ⇝ μ    f : T → I    g : I → T    g ∘ f = id_T    f ∘ g = id_I
 ─────────────────────────────────────────────────────────────────────── (held)
@@ -570,7 +570,7 @@ then \texttt{IsoCancels} on the pair of the caller word. In the rest of this doc
 
 \begin{definition}[(refine)]
 \label{rule:refine}
-\lean{Calculus.Typed.refine}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ⊢ c : T ⇝ μ    q ⊆ T
@@ -592,7 +592,7 @@ extendRead(c, r) : adapted(T, μ)
 
 \begin{definition}[(var)]
 \label{rule:var}
-\lean{Calculus.Typed.var}
+\lean{Calculus.Alg.Scoped.Typed.ref}
 \leanok
 \begin{verbatim}
 ─────────────────── (var)
@@ -603,7 +603,7 @@ extendRead(c, r) : adapted(T, μ)
 \begin{definition}[(mu)]
 \label{rule:mu}
 \uses{rule:var}
-\lean{Calculus.Typed.mu, Calculus.Alg.Term.guarded}
+\lean{Calculus.Closed.Typed, Calculus.Alg.Term.guarded}
 \leanok
 \begin{verbatim}
 ⊢ b : T ⇝ μ    guarded(mu b)
@@ -635,7 +635,7 @@ the body on both sides, and lawful stages give a lawful limit. No two options of
 
 \begin{definition}[(opaque)]
 \label{rule:opaque}
-\lean{Calculus.Typed.opaq}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ─────────────────────────── (opaque)
@@ -792,7 +792,7 @@ something whose judgement has a \texttt{⊗}.
 
 \begin{definition}[(object)]
 \label{rule:object}
-\lean{Calculus.Typed.object}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ⊢ fᵢ : Tᵢ ⊗ πᵢ  (i ∈ 1…n)    n₁ … nₙ distinct    ⊢ ρ : rest
@@ -803,7 +803,7 @@ something whose judgement has a \texttt{⊗}.
 
 \begin{definition}[(rest)]
 \label{rule:rest}
-\lean{Calculus.TypedWild}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ────────────────────────────────────────────────────────── (rest)
@@ -842,7 +842,7 @@ asked to write and \texttt{A(c)\ ⊆\ 𝔸} for the attributes it may be asked t
 
 \begin{definition}[(Compat) compatibility]
 \label{cond:compat}
-\lean{Calculus.Alg.Compat, Calculus.PairwiseCompat}
+\lean{Calculus.Alg.Compat, Calculus.Closed.PairwiseCompat}
 \leanok
 \begin{verbatim}
 Compat(c, d)     ∀ a t.  p_c(a) = t  ∧  (a ∈ dom(p_d)  ∨  t ∈ dom(e_d))
@@ -893,7 +893,7 @@ option is the unit of the sum: it is compatible with every option (\texttt{Close
 \begin{definition}[(union)]
 \label{rule:union}
 \uses{cond:compat}
-\lean{Calculus.Typed.union}
+\lean{Calculus.Alg.Scoped.TOp.rule}
 \leanok
 \begin{verbatim}
 ⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)
@@ -901,7 +901,7 @@ option is the unit of the sum: it is compatible with every option (\texttt{Close
 ⊢ union(c₁ … cₙ) : ⋃ Tᵢ ⇝ (μ if ∀i. μᵢ = μ;  else ⊤)
 \end{verbatim}
 The rule carries no side condition. \rulelink{cond:compat}{\textbf{(Compat)}} is an obligation of the derivation
-(\texttt{Obligations}), and soundness takes it as a premise.
+(\texttt{Closed.Obligations}), and soundness takes it as a premise.
 \end{definition}
 
 \begin{definition}[(dunion)]
@@ -1213,7 +1213,7 @@ decide a question about attributes.
 \begin{theorem}[soundness]
 \label{thm:soundness}
 \uses{cond:R,cond:C,cond:W,cond:compat,rule:union,rule:dunion,rule:opaque,rule:mu,thm:guarded-recursion}
-\lean{Calculus.soundness, Calculus.Alg.soundnessIn, Calculus.Alg.carrier_denote}
+\lean{Calculus.Closed.sound, Calculus.Alg.soundnessIn, Calculus.Alg.carrier_denote}
 \leanok
 Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, whose obligations hold, denotes a pair
 satisfying \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and \rulelink{cond:W}{\textbf{(W)}}. The obligations are each
@@ -1413,7 +1413,7 @@ everywhere both are defined.
 \begin{theorem}[held(c, id, id) ≡ c]
 \label{eq:held-id}
 \uses{rule:held}
-\lean{Calculus.Alg.equiv_through_id, Calculus.equiv_denote_held_id}
+\lean{Calculus.Alg.equiv_through_id}
 \leanok
 \texttt{held(c,\ id,\ id)\ ≡\ c}. Identity.
 \end{theorem}
@@ -1421,7 +1421,7 @@ everywhere both are defined.
 \begin{theorem}[isos compose]
 \label{eq:held-comp}
 \uses{rule:held}
-\lean{Calculus.Alg.equiv_through_comp, Calculus.equiv_denote_held_comp}
+\lean{Calculus.Alg.equiv_through_comp, Calculus.Scoped.equiv_held_comp}
 \leanok
 \texttt{held(held(c,\ f,\ g),\ f′,\ g′)\ ≡\ held(c,\ f\ ∘\ f′,\ g′\ ∘\ g)}. Isos compose; note the
 reversal on the reading half.
@@ -1430,7 +1430,7 @@ reversal on the reading half.
 \begin{theorem}[prisms meet]
 \label{eq:refine-meet}
 \uses{rule:refine}
-\lean{Calculus.Alg.equiv_restrict_meet, Calculus.equiv_denote_refine_meet}
+\lean{Calculus.Alg.equiv_restrict_meet, Calculus.Scoped.equiv_refine_meet}
 \leanok
 \texttt{refine(refine(c,\ q),\ q′)\ ≡\ refine(c,\ q\ ∩\ q′)}. Prisms meet.
 \end{theorem}
@@ -1438,7 +1438,7 @@ reversal on the reading half.
 \begin{theorem}[a full refinement is none]
 \label{eq:refine-full}
 \uses{rule:refine}
-\lean{Calculus.Alg.equiv_restrict_full, Calculus.equiv_denote_refine_full}
+\lean{Calculus.Alg.equiv_restrict_full, Calculus.Scoped.equiv_refine_full}
 \leanok
 \texttt{refine(c,\ T)\ ≡\ c} for \texttt{⊢\ c\ :\ T\ ⇝\ μ}. A refinement admitting everything is no
 refinement.

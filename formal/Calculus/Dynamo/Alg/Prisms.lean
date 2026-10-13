@@ -204,9 +204,7 @@ theorem inL_iff {k : GroundKind} {x : k.Carrier} {v : Value} :
   rw [← Alg.Ctor.out_eq_some, inL]
   split <;> simp_all
 
-/-- The held set `{ℓ}`: the datum that the base's prism builds from the alternative.
-    Spelled `Value → Prop` rather than `Held`, which is `Typing`'s abbreviation and one module
-    down. -/
+/-- The held set `{ℓ}`: the datum that the base's prism builds from the alternative. -/
 def HLit (k : GroundKind) (x : k.Carrier) : Value → Prop :=
   fun v => v = k.prism.into x
 

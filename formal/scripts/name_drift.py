@@ -107,7 +107,7 @@ CURRENT = ["README.md", "docs/blueprint/src/content.tex", "docs/blueprint/src/ab
 # **The docstrings, which this guard never read.** Every module here is dense with backticked
 # names and none of them was checked — 763 distinct citations, invisible. Demonstrated rather
 # than assumed: writing `nullHonest_of_ownsNull_false` for `nullHonest_of_not_ownsNull` in a
-# `Soundness.lean` docstring passed this guard clean. They are `CURRENT`, not a reported-only
+# module docstring passed this guard clean. They are `CURRENT`, not a reported-only
 # list, because at the time of adding them none dangled — so the bar is "keep it at zero",
 # which is only meaningful if breaking it fails the build.
 CURRENT += sorted(glob.glob("Calculus/**/*.lean", recursive=True))
@@ -222,7 +222,7 @@ HOST = {
     "sampleVectors": "`src/codec/lean/lean.spec.ts`'s differential corpus. The vectors it "
                      "generates are elaborated here; the list itself is the host's",
     "literalsOf": "`src/codec/term.ts`'s reader for the literals an object pins, at the caller's "
-                  "level. The model reads `altsOfField`, which is not the same question",
+                  "level. The model reads `pinOfG`, which is not the same question",
     "opaque": "`src/`'s codec, analysed here as the language's one escape hatch, and warranted "
               "by the calculus rather than by its user (§7). `opaqCodec` is the model's, and is "
               "not the same name",
@@ -451,7 +451,7 @@ def dangling_paths(paths, full, base):
 # citation without backticks, in a comment and in an emitted string alike. A TypeScript `'` closes a
 # string, so the tokenizer here is narrower than `IDENT`.
 MODEL_CITATION = re.compile(r"\bCalculus(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
-# `src/` also cites a model name without the prefix, in backticks: `Term.list`, `Body.spec`. A
+# `src/` also cites a model name without the prefix, in backticks: `Term.list`, `Closed.spec`. A
 # backticked dotted name is a model citation when its head is a namespace that the code uses, as
 # `Term` is in `Term.list`. The head set comes from the code, so a new namespace needs no entry.
 # The rule reads only a dotted name: a single word such as `encode` names a host function as often
