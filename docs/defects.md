@@ -271,3 +271,23 @@ CodecError does not catch the throw, and the refusal names no cause.
 
 **Pin.** No test pins the overflow. The nested-refusal tests of
 `src/codec/spec/surface/codec.scope.spec.ts` leave this case out.
+
+---
+
+## Known: the type of exclude keeps a member that a binary literal clause drops at run time
+
+**Observation.** The run time compares the bytes of a binary literal clause with the bytes of each
+member, and exclude drops a member whose bytes the clause names. The type carries no bytes: the
+owner rules that a binary literal stays coarse at the type level. So the type keeps that member.
+Measured 2026-10-13 at 3838e2f: the type bridge holds 25 exclude refuse ids, and the clause of each
+one is a binary literal. One example:
+
+    const r = union([object({ a: binary(new Uint8Array([1, 2])) }), object({ c: string })])
+      .exclude({ a: binary(new Uint8Array([1, 2])) })
+      runtime: member 0 dropped
+      type: the decoded type of r still admits member 0
+
+**Effect.** The result type of exclude is wider than the value. Every value fits the type, and a
+member that the run time dropped stays in the type.
+
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds the 25 ids.
