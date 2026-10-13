@@ -31,7 +31,7 @@ import { describe, expect, it } from 'vitest'
 import { isNumeral, isStoredNumeral } from '../attribute'
 import type { AnyCodec, AttributeCodec } from '../codec'
 import { array, decimal, held, refine, string, withLegacyRead } from '../codec'
-import { LeanUnemittable, leanTermOf, leanVector } from '../lean'
+import { LeanUnemittable, leanClosedOf, leanVector } from '../lean'
 
 /** The emitter takes the erased codec; the library's types are richer than it needs. */
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
@@ -43,6 +43,18 @@ const erase = (codec: unknown): AnyCodec => codec as AnyCodec
  */
 const narrowing = <T>(is: (value: string) => boolean) =>
     is as unknown as (value: string) => value is T & string
+
+/** The root entry of a closed codec of one entry, as the scoped printer prints the entry. */
+const rootOf = (codec: AnyCodec): string => {
+    const printed = leanClosedOf(codec)
+    const entry =
+        /^\(⟨1, \.snoc \(c := 0\) \(n := 1\) \(\.nil\) \(fun i => match i with \| ⟨0, _⟩ => \((.*) : Scoped\.Term 0 1 0\)\), 0⟩ : Closed\)$/.exec(
+            printed,
+        )
+    if (entry?.[1] === undefined)
+        throw new Error(`not a closed codec of one entry: ${printed}`)
+    return entry[1]
+}
 
 const refusal = (emit: () => unknown): LeanUnemittable => {
     try {
@@ -64,8 +76,8 @@ describe('the predicates this library ships', () => {
      */
     it('emits `Numeral.Stored` at the text carrier for `isStoredNumeral`', () => {
         const stored = refine(decimal, narrowing(isStoredNumeral))
-        expect(leanTermOf(erase(stored))).toBe(
-            'Term.refine ((Term.held false (Term.number) (Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) ()',
+        expect(rootOf(erase(stored))).toBe(
+            'Scoped.Term.refine ((Scoped.Term.held false (Scoped.Term.number) (Scoped.Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) ()',
         )
     })
 
@@ -77,8 +89,8 @@ describe('the predicates this library ships', () => {
      */
     it('emits `Numeral.WF` at the text carrier for `isNumeral`', () => {
         const wf = refine(string, narrowing(isNumeral))
-        expect(leanTermOf(erase(wf))).toBe(
-            'Term.refine (Term.string) (Pred.closure (fun v => match v with | .str s => Numeral.WF s | _ => false)) ()',
+        expect(rootOf(erase(wf))).toBe(
+            'Scoped.Term.refine (Scoped.Term.string) (Pred.closure (fun v => match v with | .str s => Numeral.WF s | _ => false)) ()',
         )
     })
 
@@ -88,7 +100,9 @@ describe('the predicates this library ships', () => {
             refine(string, narrowing(isNumeral)),
             narrowing(isStoredNumeral),
         )
-        expect(leanTermOf(erase(both))).toContain('Term.refine (Term.refine (')
+        expect(rootOf(erase(both))).toContain(
+            'Scoped.Term.refine (Scoped.Term.refine (',
+        )
     })
 
     /** A string literal writes only strings, so the side condition is met there too. */
@@ -97,7 +111,7 @@ describe('the predicates this library ships', () => {
             string('1', '2') as AttributeCodec<string>,
             narrowing(isStoredNumeral),
         )
-        expect(leanTermOf(erase(one))).toContain('Numeral.Stored s')
+        expect(rootOf(erase(one))).toContain('Numeral.Stored s')
     })
 
     /** The whole point: it has to survive the vector writer, not just the term writer. */
@@ -127,7 +141,7 @@ describe('what is still refused', () => {
             (value: string): value is string => isStoredNumeral(value),
             { describe: 'a stored numeral' },
         )
-        const why = refusal(() => leanTermOf(erase(mine))).reason
+        const why = refusal(() => leanClosedOf(erase(mine))).reason
         expect(why).toContain('Value → Bool')
         expect(why).toContain('not one this library ships')
         expect(why).toContain('a stored numeral')
@@ -144,7 +158,7 @@ describe('what is still refused', () => {
             array(string) as unknown as AttributeCodec<string>,
             narrowing(isStoredNumeral),
         )
-        expect(refusal(() => leanTermOf(erase(coerced))).reason).toContain(
+        expect(refusal(() => leanClosedOf(erase(coerced))).reason).toContain(
             'not strings',
         )
     })
@@ -166,7 +180,7 @@ describe('what is still refused', () => {
             encode: (value: string) => value,
             decode: (holding: string) => holding,
         })
-        const why = refusal(() => leanTermOf(erase(adapted))).reason
+        const why = refusal(() => leanClosedOf(erase(adapted))).reason
         expect(why).toContain('numeralOfStoredText')
         expect(why).toContain("a caller's closure has no name in the model")
     })
@@ -186,7 +200,7 @@ describe('what is still refused', () => {
             current: string,
             older: { decode: () => 'older' as string },
         })
-        expect(refusal(() => leanTermOf(erase(older))).reason).toContain(
+        expect(refusal(() => leanClosedOf(erase(older))).reason).toContain(
             'no evaluation vector prints one',
         )
     })

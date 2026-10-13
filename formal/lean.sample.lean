@@ -1,5 +1,4 @@
 import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Lang.Denote
 import Calculus.Dynamo.Alg.Frontier
 import Calculus.Dynamo.Lang.Store
 import Mathlib.Tactic.FinCases
