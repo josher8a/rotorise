@@ -37,6 +37,9 @@ import Calculus.Dynamo.Analysis.Compat
 import Calculus.JSON.Basic
 import Calculus.JSON.Disjoint
 import Calculus.JSON.Compat
+import Calculus.JSON.ScopeBasic
+import Calculus.JSON.ScopeDisjoint
+import Calculus.JSON.ScopeCompat
 import Calculus.Alg.Lists
 import Calculus.Alg.Positions
 import Calculus.Alg.Containers
