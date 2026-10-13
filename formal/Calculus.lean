@@ -33,6 +33,9 @@ import Calculus.Lang.ScopePath
 import Calculus.JSON.Basic
 import Calculus.JSON.Disjoint
 import Calculus.JSON.Compat
+import Calculus.JSON.ScopeBasic
+import Calculus.JSON.ScopeDisjoint
+import Calculus.JSON.ScopeCompat
 import Calculus.Dynamo.Alg.Codec
 import Calculus.Dynamo.Alg.Prisms
 import Calculus.Dynamo.Alg.Products
