@@ -7,7 +7,7 @@ import Mathlib.Data.Finset.Lattice.Fold
 # Systems of recursive codecs, over any carriers
 
 A system has `n` entries. Each entry is a body that reads every entry. The solution reads each
-input at the stage that the depth of the input names, as a single binder does. The guard is
+input at the stage that the depth of the input names, as `muCodec` does. The guard is
 `ContractiveV`: agreement below `d` at every entry gives agreement below `d + 1`. Under the guard
 the solution is the one fixed point at the maps, and lawful stages give a lawful solution.
 
@@ -297,7 +297,7 @@ theorem swap_refused (S : Container) :
     ¬ ∀ i, ((fun i => .leaf (Fin.rev i)) : Fin 2 → Flat S.Op S.Pos 2) i |>.Guarded S :=
   fun h => h 0
 
-/-! ## A binder is a system of one entry -/
+/-! ## `muCodec` is a system of one entry -/
 
 section OneEntry
 variable {V M : Type} {depth : V → Nat}
@@ -328,7 +328,7 @@ theorem solve_one (F : Codec V M → Codec V M) :
     show (sysStage _ (depth x) 0).f o x = (muStage F (depth x)).f o x
     rw [sysStage_one])
 
-/-! ## Bekić for a pair: a binder inside a binder is a two-entry system. -/
+/-! ## Bekić for a pair: a `muCodec` inside a `muCodec` is a two-entry system. -/
 
 /-- The two-entry system `X = F X Y`, `Y = G X Y`. -/
 def pairB (F G : Codec V M → Codec V M → Codec V M) :
@@ -349,8 +349,8 @@ theorem pairB_contractive {F G : Codec V M → Codec V M → Codec V M}
     | ⟨0, _⟩ => hF d _ _ _ _ (he 0) (he 1)
     | ⟨1, _⟩ => hG d _ _ _ _ (he 0) (he 1)
 
-/-- **Bekić.** Entry 0 of the pair system is the nested binder, and entry 1 is the inner binder
-    at entry 0. -/
+/-- **Bekić.** Entry 0 of the pair system is the nested `muCodec`, and entry 1 is the inner
+    `muCodec` at entry 0. -/
 theorem bekic (hd : ∀ v, 0 < depth v) {F G : Codec V M → Codec V M → Codec V M}
     (hF : Contractive2 depth F) (hG : Contractive2 depth G) :
     solve depth (pairB F G) 0 = muCodec depth (fun x => F x (muCodec depth (G x))) ∧

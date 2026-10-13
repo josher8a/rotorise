@@ -62,10 +62,10 @@ pair of ground terms is a witness. -/
 obligations a least-fixpoint construction discharges.
 
 **Does not:** construct a fixpoint. This file defines no ccpo. The model constructs its
-recursive terms another way: `mu` and `opaque` denote `muCodec` (`Recursion.lean`), which reads
-each input at the stage its own depth names. That construction needs no monotone chain, and so
-none of the obligations here: the guard of the binder alone makes the stages agree past the
-depth of the input.
+recursive codecs another way: a closed codec denotes the solution of its system of entries
+(`Alg.solve`), which reads each input at the stage its own depth names. That construction needs
+no monotone chain, and so none of the obligations here: the guard of the system alone makes the
+stages agree past the depth of the input.
 
 Under a least-fixpoint construction the obligation would have to be an invariant of the
 unrolling, and `optBad_not_confluent` is the witness that it is not free. -/

@@ -405,8 +405,8 @@ export const carriedCodec = <Payload, Written, Read>(
  * `object` writes the members of `object` like any other, offering `.item` for the one place that
  * writes no map. So `denote`'s row wraps this in the member and `.item` takes it as it is.
  *
- * **A field's mark is read here and nowhere else.** `fieldSem` in the model is the function that
- * turns `Field` into a presence rule; here it is the three-way `mark`, read once per field per
+ * **A field's mark is read here and nowhere else.** `mkField` in the model is the function that
+ * turns `SlotMode` into a presence rule; here it is the three-way `mark`, read once per field per
  * direction, and there is no second place that asks what `optional` means.
  *
  * Whether a stand-in must be *copied* per read is settled once, at the declaration, rather than
@@ -1200,8 +1200,8 @@ export const denote = (def: Term): Pair => {
          *
          * The row recurses on the **value**, never on the term, which is what makes it terminate:
          * `def.get()` is forced once per level of the value, and a value is finite. The model has no
-         * thunk: a thunk that closes a cycle is the variable of a binder there (`Term.mu`), and any
-         * other thunk is the term it returns.
+         * thunk: a thunk that closes a cycle is a `ref` to an entry of a scope there, and any other
+         * thunk is the term it returns.
          *
          * **A refusal inside the thunk is a value.** The thunk is caller code, and a builder in the
          * thunk refuses with a `CodecError` at the first use. The row returns that refusal. Every
@@ -1427,7 +1427,7 @@ export const codecOfTerm = <T, A extends AttributeValue>(
     if (built) return built as unknown as AttributeCodec<T, A>
     // **A recursion that the model's guard refuses is refused where its term is declared.** Each
     // former builds its codec here, so this is the one place that sees each declared term. A path
-    // with no container reads the input of its own binder, and encode then overflows the stack. A
+    // with no container reads the input of its own entry, and encode then overflows the stack. A
     // path with an adapter lets caller code make the input at any depth. A `lazy` term is not
     // walked, because the walk forces the thunk, and a thunk runs at the first former above it. A
     // `union` refuses each option with a message that names the option. The refusal carries the
@@ -1438,7 +1438,7 @@ export const codecOfTerm = <T, A extends AttributeValue>(
             throw new RecursionRefused(
                 def,
                 use,
-                `this \`${def.kind}\` term reaches a recursive \`ref\` with no list or object between. A recursion there reads its own input and does not end. The model's guard refuses a recursion that reads the input of its own binder. Put the recursion below a list or an object`,
+                `this \`${def.kind}\` term reaches a recursive \`ref\` with no list or object between. A recursion there reads its own input and does not end. The model's guard refuses a recursion that reads the input of its own entry. Put the recursion below a list or an object`,
             )
         }
         if (use === 3) {

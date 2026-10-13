@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
 import {
+    array,
     CodecError,
     decimal,
     discriminatedUnion,
@@ -17,6 +18,9 @@ import {
     object,
     opaque,
     type Precondition,
+    ref,
+    refine,
+    scope,
     string,
     union,
 } from '../../codec'
@@ -151,6 +155,30 @@ describe('the preconditions of a path are the stored admission of each clause', 
         expect(preconditions).toBeInstanceOf(CodecError)
         expect(String(preconditions)).toMatch(
             /'u\.data' gives no exact precondition: the clause stores a closed object/,
+        )
+    })
+
+    /**
+     * **A recursion holds no adapter, so a refinement of a recursion keeps its predicate in the
+     * stored view.** The walk of the stored view reads each term of the cycle once. A refinement
+     * that the view drops would leave the list below it, and the refusal would name a list.
+     */
+    it('a refinement of a recursion below the top keeps its predicate, so the clause stores a refinement', () => {
+        type Nest = readonly Nest[]
+        const { Nest } = scope({ Nest: array(ref('Nest')) })
+        const Filled = refine(Nest, (v): v is Nest => v.length > 0)
+        const Drawing = object({
+            u: union([
+                object({ shape: Nest, tag: string }),
+                object({ shape: string, tag: string }),
+            ]),
+        }).item
+        const preconditions = Drawing.at(
+            (p) => p.u.narrow({ shape: Filled }).tag,
+        ).preconditions
+        expect(preconditions).toBeInstanceOf(CodecError)
+        expect(String(preconditions)).toMatch(
+            /'u\.shape' gives no exact precondition: the clause stores a refinement/,
         )
     })
 })

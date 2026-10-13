@@ -590,47 +590,49 @@ extendRead(c, r) : adapted(T, μ)
 \end{verbatim}
 \end{definition}
 
-\begin{definition}[(var)]
-\label{rule:var}
+\begin{definition}[(ref)]
+\label{rule:ref}
 \lean{Calculus.Alg.Scoped.Typed.ref}
 \leanok
 \begin{verbatim}
-─────────────────── (var)
-⊢ var i : ∅ ⇝ ⊤
+ρ(i) = c
+─────────────────── (ref)
+⊢ ref i : T_c ⇝ μ_c
 \end{verbatim}
 \end{definition}
 
-\begin{definition}[(mu)]
-\label{rule:mu}
-\uses{rule:var}
-\lean{Calculus.Closed.Typed, Calculus.Alg.Term.guarded}
+\begin{definition}[(scope)]
+\label{rule:scope}
+\uses{rule:ref}
+\lean{Calculus.Closed.Typed, Calculus.Alg.Scoped.Closed.Typed}
 \leanok
 \begin{verbatim}
-⊢ b : T ⇝ μ    guarded(mu b)
-─────────────────────────────── (mu)
-⊢ mu b : dom(e) ⇝ ⊤
+ρ = the solution of the scope    ⊢ bᵢ : Tᵢ ⇝ μᵢ at ρ, for each entry i
+──────────────────────────────────────────────────────────────── (scope)
+⊢ scope(b₀, …, bₙ₋₁) typed
 \end{verbatim}
 \end{definition}
 
-A variable is a de Bruijn index: \texttt{var\ 0} in \texttt{b} stands for \texttt{mu\ b} itself. A closed term reads a variable
-that no binder gives as the bottom, which is why \rulelink{rule:var}{\texttt{(var)}} holds nothing. The held set of
-\texttt{mu\ b} is its write domain. The guard is decidable from the term. At each binder the body reads its
-variable under a list or an object. It never reads the variable at the binder's own input or under a \texttt{held}.
-The guard refuses \texttt{mu(var\ 0)} and \texttt{mu(union(var\ 0,\ string))}. It also refuses a \texttt{held}
-between the binder and its variable, because the conversion of a \texttt{held} can make the input deeper.
+A reference \texttt{ref\ i} names the entry \texttt{i} of its scope, and reads the held set and the member of the codec of
+that entry. A scope is a system of entries, and its meaning is the solution of the system. The guard is a
+condition on the graph of the scope. Each entry occurs below a list or an object, and below no \texttt{held} and no
+older reader. The guard refuses an entry whose body is \texttt{ref\ 0}, and an entry whose body is
+\texttt{union(ref\ 0,\ string)}. It also refuses a \texttt{held} between an entry and its reference, because the
+conversion of a \texttt{held} can make the input deeper.
 Over closed codecs each refused shape is a graph with no form as a DAG of scopes
 (\texttt{Graph.unguarded\_no\_dag}, \texttt{Graph.option\_at\_input\_no\_dag}, \texttt{Graph.held\_on\_path\_no\_dag}).
 
 \begin{theorem}[guarded recursion]
 \label{thm:guarded-recursion}
-\uses{rule:mu,cond:R,cond:C,cond:W}
-\lean{Calculus.muCodec, Calculus.Alg.contractive_of_guarded, Calculus.muStage_agree, Calculus.muCodec_e_fix, Calculus.muCodec_p_fix, Calculus.lawful_muCodec}
+\uses{rule:scope,cond:R,cond:C,cond:W}
+\lean{Calculus.Alg.solve, Calculus.Alg.contractive_of_guarded, Calculus.Alg.sysStage_agree, Calculus.Alg.solve_fix, Calculus.Alg.lawful_solve, Calculus.Alg.solve_one, Calculus.muCodec_fix}
 \leanok
-\texttt{mu\ b} denotes the limit of the stages of its body: the stages start at the bottom, and each input reads
+A scope denotes the solution of its system: the stages start at the bottom, and each input reads
 the stage its own depth names, on the write side by the depth of the value and on the read side by the
-depth of the attribute. The guard makes the body contractive: it reads its argument only at inputs strictly
-shallower than its own input, at least one layer down. From that alone the stages agree past the depth of the input. The limit is a fixed point of
-the body on both sides, and lawful stages give a lawful limit. No two options of a body need be disjoint.
+depth of the attribute. The guard makes the system contractive: an entry reads the entries only at inputs strictly
+shallower than its own input, at least one layer down. From that alone the stages agree past the depth of the input. The solution is a fixed point of
+the system on both sides, and lawful stages give a lawful solution. No two options of a body need be disjoint. A
+scope of one entry denotes \texttt{muCodec} of its body.
 \end{theorem}
 
 \begin{definition}[(opaque)]
@@ -643,8 +645,7 @@ the body on both sides, and lawful stages give a lawful limit. No two options of
 \end{verbatim}
 \end{definition}
 
-These \texttt{⊤}s are forced for different reasons, and the distinction matters. \texttt{mu} concludes \texttt{⊤}, because its
-stages need not agree on one member. The table gives \texttt{held} a pair of opaque maps and there is nothing to ask, which is also why its
+These \texttt{⊤}s are forced for different reasons, and the distinction matters. The table gives \texttt{held} a pair of opaque maps and there is nothing to ask, which is also why its
 premise is the cancellation law itself: nothing structural guarantees it, so the rule demands it.
 Demanding \rulelink{cond:R}{\textbf{(R)}} alone would under-demand, deriving a \texttt{⊤} term free to change stored members — the
 exact term §2's argument for \texttt{opaque} says cannot exist. (\rulelink{cond:W}{\textbf{(W)}} is vacuous at \texttt{⊤}, so the three
@@ -859,7 +860,7 @@ semigroups: two partial bijections are compatible exactly when their union is a 
 \begin{theorem}[a compatible union is lawful]
 \label{thm:join-lawful}
 \uses{cond:compat}
-\lean{Calculus.Alg.lawful_altCodec, Calculus.Alg.altCodec_e_of_mem}
+\lean{Calculus.Alg.lawful_altCodec, Calculus.Alg.altCodec_of_mem}
 \leanok
 Over lawful, pairwise compatible options, the union is lawful, and it writes each value that any
 option writes, at the attribute that option writes.
@@ -1210,7 +1211,7 @@ decide a question about attributes.
 
 \begin{theorem}[soundness]
 \label{thm:soundness}
-\uses{cond:R,cond:C,cond:W,cond:compat,rule:union,rule:dunion,rule:opaque,rule:mu,thm:guarded-recursion}
+\uses{cond:R,cond:C,cond:W,cond:compat,rule:union,rule:dunion,rule:opaque,rule:scope,thm:guarded-recursion}
 \lean{Calculus.Closed.sound, Calculus.Alg.Scoped.Closed.sound, Calculus.Closed.carrier}
 \leanok
 Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, whose obligations hold, denotes a pair
@@ -1219,7 +1220,7 @@ satisfying \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and 
 \rulelink{rule:set}{\texttt{(set)}} also carries the universe's own obligation on a set element (\texttt{SetF.elem}), which is
 \texttt{SetElem} at DynamoDB, and soundness does not read it. The
 dischargers of this section settle \rulelink{cond:compat}{\textbf{(Compat)}} at the declaration wherever they decide
-a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and \texttt{opaque} outright. A \rulelink{rule:mu}{\texttt{(mu)}} is a closed codec, and each
+a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and \texttt{opaque} outright. A \rulelink{rule:scope}{\texttt{(scope)}} is a closed codec, and each
 entry owes the obligations of its scope at each stage, given that the stage before is lawful. The host's recursive schema for JSON is derived and lawful through it (\texttt{lawful\_json}).
 The theorem holds at every universe signature. A universe supplies the laws of its primitives, of its
 formers and of its top, and the generic combinators supply the rest.
@@ -1269,7 +1270,7 @@ below is an instantiation.
 \begin{proof}
 \leanok
 By induction on the derivation of each scope term (\texttt{sound\_term}), with one refinement at
-\rulelink{rule:mu}{\texttt{(mu)}}: each stage of a scope is lawful by the soundness of its terms, and the laws carry
+\rulelink{rule:scope}{\texttt{(scope)}}: each stage of a scope is lawful by the soundness of its terms, and the laws carry
 to the solution (\texttt{lawful\_strat}). Each case
 first says what the pair \emph{is} — the denotation is part of the rule — then discharges the laws. The
 grouping is the algebra of §7: points, wrappers, products, sums.
@@ -1321,18 +1322,18 @@ hold, so the \texttt{e\_c} branch answers, and it writes the attribute back by t
 \texttt{owns(nullable(c))} always, so the second case never nests: §6's idempotence is the construction,
 not an equation the proof has to earn.
 
-\emph{mu.} The model has no thunk. A thunk that re-enters its own schema is a \rulelink{rule:mu}{\texttt{(mu)}} with a
-variable at the thunk, and any other thunk is the term it returns. What the re-entry passes through decides the
-case.
+\emph{scope.} The model has no thunk. A thunk that re-enters its own schema is a \rulelink{rule:ref}{\texttt{(ref)}} to an entry
+of a \rulelink{rule:scope}{\texttt{(scope)}}, and any other thunk is the term it returns. What the re-entry passes through
+decides the case.
 
-\textbf{Through a container.} The guard accepts the binder, and \rulelink{thm:guarded-recursion}{guarded recursion} gives the
+\textbf{Through a container.} The guard accepts the scope, and \rulelink{thm:guarded-recursion}{guarded recursion} gives the
 case. Each stage of the scope is lawful by the soundness of its terms, given that the stage before is
 lawful. The limit is lawful. Containers strictly shrink the input, which is what makes the stages
 agree past the depth of the input.
 
-\textbf{Through wrappers, or a union, alone.} The variable reads the binder's own input, the stages never
-grow, and the guard refuses the binder, so no judgement derives the term. \textbf{Through a \texttt{held}.} The
-conversion can make the input deeper, and the guard refuses the binder too.
+\textbf{Through wrappers, or a union, alone.} The reference reads the entry's own input, the stages never
+grow, and the guard refuses the scope, so no closed codec holds the term. \textbf{Through a \texttt{held}.} The
+conversion can make the input deeper, and the guard refuses the scope too.
 
 \textbf{Fields.} A field denotes a pair over presence-extended domains — \texttt{e♭\ :\ T\ ⇀\ 𝔸\ ∪\ \{ε\}},
 \texttt{p♭\ :\ (𝔸\ ∪\ \{ε\})\ ⇀\ T}, \texttt{ε} the absent binding — with \texttt{member(ε)} undefined and the laws read over
@@ -1579,7 +1580,7 @@ its prism); three \textbf{products} — positional (\texttt{array},
 \texttt{tuple}) and keyed (\texttt{record}, \texttt{object}), instances of one traversal argument, and unordered (\texttt{set}),
 which is the image argument, with injectivity from \rulelink{cond:R}{\textbf{(R)}};
 one \textbf{sum} (\texttt{union}), the join of compatible options, with \rulelink{rule:dunion}{\texttt{(dunion)}} the one separated
-by construction and \texttt{opaque} the one whose compatibility is a theorem; and a \textbf{fixpoint} (\texttt{mu},
+by construction and \texttt{opaque} the one whose compatibility is a theorem; and a \textbf{fixpoint} (a scope,
 and \texttt{opaque} as its instance). Fields are the keyed product's
 presence decoration, and \texttt{nullable} is that sum's guarded insertion (§3) rather than a term of its own.
 The outer read extension \texttt{extendRead} adds one agreeing read-extension to a complete current term.
