@@ -1,8 +1,5 @@
 import Calculus.Bridge.Vectors
-import Calculus.Dynamo.Analysis.Compat
 import Calculus.Dynamo.Analysis.ScopeCompat
-import Calculus.Dynamo.Analysis.Disjoint
-import Calculus.Dynamo.Analysis.ExactA
 import Calculus.Dynamo.Lang.Store
 import Calculus.Dynamo.Lang.Scope
 
