@@ -84,8 +84,6 @@ open Lean Elab Command
 
 namespace Calculus
 
-open Alg (Term.depthL)
-
 /-- `#assert_axioms c` errors unless every axiom `c` depends on is in
     `Calculus.sanctionedAxioms`. -/
 syntax (name := assertAxioms) "#assert_axioms " ident : command

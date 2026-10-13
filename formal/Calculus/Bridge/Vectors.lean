@@ -1,5 +1,4 @@
 import Calculus.Bridge.Verdicts
-import Calculus.Dynamo.Lang.Denote
 import Calculus.Dynamo.Lang.Scope
 
 /-!
