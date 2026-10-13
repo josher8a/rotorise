@@ -12,7 +12,6 @@
 #   exclude      time keeps the member (`accept`) or drops it (`refuse`).
 #   path         one path under `at`: `accept` where the run time resolves one codec.
 #   declaration  one constant of the generated codecs file: the run time built each one.
-declaration|accept|52eab92f82|constant
 exclude|refuse|134680b461|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|1503a463bb|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|213752f822|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0

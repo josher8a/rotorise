@@ -544,6 +544,10 @@ const printerOf = (
                 if (target === undefined) return "ref('Undeclared')"
                 if (sub === inline && isBinder(t))
                     return refuse(at, 'a binder in a clause')
+                // the host refuses a declared `never` by the term it reads, and a thunk hides the
+                // term: the print keeps the thunk where its body would be that `never`
+                if (sub !== inline && target.kind === 'never')
+                    return "scope({ At: ref('It'), It: never }).At"
                 return sub(target)
             }
             case 'object': {
