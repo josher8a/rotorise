@@ -22,8 +22,8 @@ moves and a declaration name does not.
 union whose options are not shown compatible then has no inhabitant, so such a union is a type
 error rather than a runtime refusal.
 
-**The ruling today is no, and it is JH's.** The model's `Obligations` already carries the
-compatibility of a union, and `soundness` takes it as a premise. The library refuses such a union
+**The ruling today is no, and it is JH's.** The model's `Scoped.Closed.Obligations` already carries the
+compatibility of a union, and `Scoped.Closed.sound` takes it as a premise. The library refuses such a union
 at construction. The re-founding buys the model a stronger statement about itself and buys the
 library nothing it lacks.
 
@@ -34,7 +34,7 @@ induction-recursion, and the elaborator answers `invalid mutual block: either al
 block must be inductive/structure declarations, or they must all be definitions`. The subtype shape
 elaborates and is axiom-free, so the obstruction is not expressibility but cost.
 
-**The obligation is a `Prop` today.** `PairwiseCompat` sits in `Obligations`, beside the
+**The obligation is a `Prop` today.** The compatibility of a union sits in `TOp.obl`, beside the
 judgement, and a term that does not meet it is still a term.
 
 **The cost is structural.** Every constructor of `Term` becomes a smart constructor carrying a proof
@@ -81,7 +81,7 @@ predicate refuses the literal.
 **What the tree carries today.** A literal is a primitive, `Term.literal`, and a refinement is a
 second constructor, `refine`. The predicate `members` already holds a finite set over the
 carrier of one ground kind. The test compares two data predicates through
-`Leaf.predicatesApart`, and evaluates no predicate at a literal. So `Term.disjoint` answers
+`Leaf.predicatesApart`, and evaluates no predicate at a literal. So `Scoped.disjoint` answers
 `false` for the string literal `"b"` beside a string refined to the members `{"a"}`.
 
 **Why the state is wanted.** The merge of the two representations adds one element that neither
@@ -111,7 +111,7 @@ Every other position answers the test:
 - A closure beside a finite admissible set applies its function to each alternative of the set.
   The answer is exact.
 
-**What the tree carries today.** `Term.disjoint` reads a raw `held`, a `legacy` and `opaq` as
+**What the tree carries today.** `Scoped.disjoint` reads a raw `held`, a `legacy` and `opaq` as
 disjoint from the bottom alone. A `refine` whose predicate is no data, such as a `closure`, reads
 through its inner term. So a closure over `boolean` that refuses every value is not disjoint
 from the literal `false`. The certificate reaches a `held` through its views (`Closed.viewsDisjoint`),
@@ -137,8 +137,8 @@ of `LawfulCore`, so a term with an alternate reader still meets them.
 
 **What the tree carries today.** `Closed.AdmA` is a computable `Bool` at one attribute, the domain
 of the read of the meaning, and `#eval` runs it at DynamoDB. No declaration decides whether a term
-admits any value. The tree tests each side with `Term.disjoint` on the view of that side, and
-`disjoint_sound` and `disjoint_soundA` prove the test sound on each side.
+admits any value. The tree tests each side with `Scoped.disjoint` on the view of that side, and
+`Scoped.disjoint_sound` proves the test sound at each orientation.
 
 **The exception is an adapter.** The certificate reads an adapter through its two views, and
 the future state keeps the views there.
@@ -159,7 +159,7 @@ adapter tests the value of the caller, and the same refinement inside tests the 
 of them has one normal form, and the order inside the run carries no information. The adapters
 form a monoid, so the order inside a run carries everything. A run carried as written costs the
 certificate. A string refined to the members `{"a"}`, then to the members `{"b"}`, admits no value,
-and `Term.disjoint` does not find the pair disjoint from a string.
+and `Scoped.disjoint` does not find the pair disjoint from a string.
 
 **What the tree carries today.** The equations of a run hold up to `Codec.Equiv`:
 `equiv_restrict_meet` meets two restrictions, `equiv_through_comp` composes two adapters, and
@@ -201,8 +201,8 @@ union is refused where the codec works. Two functions kept in agreement by hand 
 nothing reports the drift.
 
 **What the tree carries today.** The meaning of a closed codec holds its own domains, and
-`Closed.AdmA` is the domain of its read. The certificate is a separate function, `Term.disjoint`, sound for admission (`disjoint_sound`,
-`disjoint_soundA`) and not complete for admission.
+`Closed.AdmA` is the domain of its read. The certificate is a separate function, `Scoped.disjoint`, sound for the domains of the meaning
+(`Scoped.disjoint_sound`) and not complete for them.
 
 **What decides it.** A pass that adds a constructor, and so owes a row in both functions.
 
@@ -214,11 +214,10 @@ nothing reports the drift.
 parameter, as the disjointness test does. JSON then separates a union by the same certificate as
 DynamoDB.
 
-**What the tree carries today.** `Term.disjoint`, its soundness, and `Term.compat` are generic. A
-universe supplies its leaves, its shape classes and the laws of its leaves and formers, and JSON
-supplies each. `Closed.viewsDisjoint`, `certAllC`, `Closed.Separates` and
-`Closed.pairwiseCompat_of_separated` read the closed codecs of DynamoDB, and JSON has none of them. The oracle of JSON,
-`jsonOracle`, certifies nothing.
+**What the tree carries today.** `Scoped.disjoint`, its soundness, and `Scoped.compatPair` are
+generic. A universe supplies its leaves, its shape classes and the laws `Scoped.Laws` that the
+decision reads, and JSON supplies each. `Closed.viewsDisjoint`, `certAllC`, `Closed.Separates` and
+`Closed.pairwiseCompat_of_separated` read the closed codecs of DynamoDB, and JSON has none of them.
 
 **What decides it.** A second universe that needs a union of separated options.
 
@@ -229,8 +228,8 @@ supplies each. `Closed.viewsDisjoint`, `certAllC`, `Closed.Separates` and
 **The future state.** The decision accepts an adapter beside a term where one canonical codec
 other than the top bounds both at a component that shares an input.
 
-**What the tree carries today.** `Term.compat` knows two bounds: the top, which bounds two
-held-free terms whose variables are below the top, and one adapter word, which bounds two `held`s
+**What the tree carries today.** `Scoped.compatPair` knows two bounds: the top, which bounds two
+terms below the top, and one adapter word, which bounds two `held`s
 of one side and one word. A canonical codec below the top that bounds an adapter and a term is
 neither bound. So the decision refuses such a pair at each component that shares an input on one
 half. `compat_of_common_bound` proves in the model that two restrictions of one canonical codec

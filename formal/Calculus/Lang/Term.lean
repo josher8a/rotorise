@@ -369,9 +369,9 @@ inductive Term (S : Sig) where
 
       **The guard is a checked condition, and not a type.** `Term.guarded` refuses a variable that
       reads the input of its binder itself, as in `mu (var 0)` and `mu (union [var 0, string])`,
-      and a variable under a `held`, whose `f` can make the input deeper. `Typed.mu` carries the
-      guard, and the test file pins each refusal. A type would need a second term family for the
-      body of a binder, and every table over terms would then have one more family. -/
+      and a variable under a `held`, whose `f` can make the input deeper. The test file pins each
+      refusal. A type would need a second term family for the body of a binder, and every table
+      over terms would then have one more family. -/
   | mu (body : Term S)
 
 /-- The object payload: the declared names, the slot at each, and the one open block.
@@ -797,15 +797,14 @@ def Term.closed (t : Term S) : Bool := !t.readsFree 0
 
 /-- **A context with one entry pushed**: the entry of the binder at index `0`, and the context
     shifted by one beyond it. A context is a function and not a list, because a list cannot mark
-    every variable safe, which the confluence of a held-free term needs (`sub_denoteIn`). -/
+    every variable safe. -/
 def ctxPush (b : Bool) (ctx : Nat → Bool) : Nat → Bool
   | 0 => b
   | i + 1 => ctx i
 
 mutual
 /-- **Whether each free variable that the term reads is safe in the context.** The context says
-    for each variable whether it is below the top. A binder of the term itself pushes a safe entry:
-    where the term is held-free, each stage of the binder is below the top (`sub_denoteSafe`). -/
+    for each variable whether it is below the top. A binder of the term itself pushes a safe entry. -/
 def Term.safe (ctx : Nat → Bool) : Term S → Bool
   | .var j => ctx j
   | .refine t _ _ | .legacy t _ | .set t => Term.safe ctx t
@@ -870,10 +869,9 @@ end
 
 /-! ## A structural measure on terms
 
-`denote` recurses structurally and needs no measure. The **proofs** do: `soundness` recurses
-on the derivation, and `Typed` is a `Prop`-valued mutual family with no `.brecOn`, so it has to
-recurse on the term instead — and `sizeOf` cannot serve, because `Term.object`'s field table is a
-*function* and `sizeOf` is blind to functions (`sizeOf f = 0`).
+`denote` recurses structurally and needs no measure. A proof by recursion on a term needs a
+measure, and `sizeOf` cannot serve, because `Term.object`'s field table is a *function* and
+`sizeOf` is blind to functions (`sizeOf f = 0`).
 
 This is the measure that sees through it, and it is not a new idea: it is exactly the shape
 `Attr.depth` in `Recursion.lean` uses — `attach.sup` over the key set where a list would

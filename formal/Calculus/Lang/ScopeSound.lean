@@ -9,10 +9,10 @@ former. `Obligations` holds the semantic premises: the cancellation of a `held`,
 compatibility of the options of a union.
 
 A closed codec owes the obligations of each scope at each stage of the normal form of the scope,
-given that the stage before is lawful. A recursive term owes the same premises at each stage of
-its binder. `Closed.sound` proves that a typed closed codec that meets its obligations is lawful
-at each entry. Each stage is lawful by the soundness of the terms, and `lawful_strat` carries the
-laws to the solution. The proof is structural on the derivation and on the sequence of scopes.
+given that the stage before is lawful. `Closed.sound` proves that a typed closed codec that meets
+its obligations is lawful at each entry. Each stage is lawful by the soundness of the terms, and
+`lawful_strat` carries the laws to the solution. The proof is structural on the derivation and on
+the sequence of scopes.
 -/
 
 namespace Calculus.Alg.Scoped

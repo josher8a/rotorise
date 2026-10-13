@@ -12,7 +12,7 @@ one attribute read one value. Over two lawful codecs, `Compat` is exactly the tw
 
 Each combinator keeps each half: a restriction on either side, a union option by option, a
 recursive codec stage by stage, one adapter over two agreeing stored sides, and a list or an
-object position by position. The decision `Term.compat` reads these lemmas, one per row.
+object position by position. The soundness of the decision `Scoped.compatPair` reads these lemmas, one per row.
 -/
 
 namespace Calculus.Alg

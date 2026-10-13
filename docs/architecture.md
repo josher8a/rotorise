@@ -63,12 +63,11 @@ instance, and JSON is a second instance.
 | `Alg/Lists.lean`, `Alg/Positions.lean`, `Alg/Maps.lean` | the traversal and `entrywise`, the positional theory, the image of a function over a key set, and `MapOf`, which keeps the namespace `Calculus` |
 | `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
 | `Alg/Agree.lean` | agreement `Agree` at an orientation, whose two halves are the host and the dual, one lemma per combinator, and `compat_iff_agree` |
-| `Lang/Term.lean`, `Lang/Typing.lean` | the term family over a signature, `denote`, the guard, `Typed` and `Obligations` |
-| `Lang/Guarded.lean`, `Lang/Sound.lean`, `Lang/HeldFree.lean` | `contractive_body`, `soundness`, and `compat_of_HF` |
-| `Lang/Disjoint.lean` | the class `Leaf`, and the structural disjointness test `Term.disjoint` over a signature |
-| `Lang/DisjointV.lean`, `Lang/DisjointA.lean` | the soundness of the test: `disjoint_sound`, `disjoint_soundA`, and `disjoint_orthogonal` |
-| `Lang/Compat.lean` | the compatibility decision `Term.compat` over a signature, `compat_sound`, and `pairwiseCompat_of_compatPair` |
-| `Lang/View.lean` | the view `view` at an orientation, `viewLe_of`, and `views_apart` |
+| `Lang/Term.lean` | the term family over a signature, `denote`, and the guard |
+| `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, and the DAG of scopes with `dagGuardB_iff_dsys` |
+| `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, and `Scoped.Closed.compat_of_HF` |
+| `Lang/Universe.lean`, `Lang/ScopeDisjoint.lean` | the class `Leaf`, the structural disjointness decision `Scoped.disjoint` over two closed codecs with its soundness `Scoped.disjoint_sound`, the view `viewG` at an orientation, and `views_apart` |
+| `Lang/ScopeCompat.lean` | the compatibility decision `Scoped.compatPair` over two closed codecs, and `Scoped.compatPair_sound` |
 | `Lang/CodecPath.lean`, `Lang/ScopePath.lean` | the write of the store at a path `putPath` with `path_law`, the frontier of a closed codec `Rooted.at`, the strong law `Closed.strong_law`, and narrowing `narrowC` with `narrowC_law` |
 
 `Rows.lean` is generic too, in the namespace `Calculus`. It states the row combinators of the
@@ -88,15 +87,15 @@ signature and an orientation `Orient`, a pair of two different sides. The readin
 sides: a codec is a partial bijection of that carrier, and the dual orientation is its inverse. The codecs and the member are the meaning itself at every orientation,
 and an analysis reads a codec at its orientation. The dual universe `Syn.op` keeps the signature and
 swaps the orientation, so the dual term type is the term type, and the converse of a term is the
-term. `denote` reads the table of each absolute side, so the dual, with the two tables swapped,
-denotes each term by the same codec (`denote_op`). The compiled code of a function over `Term S`
+term. The compiled code of a function over `Term S`
 takes `S` as a real argument, because `casesOn` takes the parameter of the family as a real
 argument. The meaning is computable: no definition carries `noncomputable`, and `#eval` runs
 `Closed.meaning` and `Closed.AdmA` at DynamoDB.
 The split keeps a term as data that code can compute with.
 
-**Each stored-side law of the generic layer is the caller-side law at the dual universe.** `AdmA`
-is `Adm` at `S.op`, and so is each stored-side law that the generic layer states. At DynamoDB the
+**Each stored-side law of the generic layer is the caller-side law at the dual orientation.** A law
+of the scoped decisions takes the orientation as a parameter (`Scoped.Laws`, `Scoped.disjoint_sound`),
+and the stored-side law is the law at the dual. At DynamoDB the
 two sides hold one carrier. The wire format fixes `Attr`, and `Value` names the same type at the
 caller side, because no law reads a difference between the two sides.
 
@@ -116,27 +115,26 @@ top reads every datum and sends each datum to itself.
 | the depth | `Mean.d`, one function of the carrier | `Attr.depth` | a constant |
 | the list and map formers | `Mean.list` as a `ListA`, `Mean.map` as a `MapA`: one prism of the carrier | `dList`, `dMap` | none |
 | the set former | `Mean.set` as a `SetF` over the carrier of the meaning: a lift, its laws, and the member of a set from the member of its element (`SetF.member`, with `SetF.lift_μ`) | `dSet`, over `setCodec` | none |
-| the obligation on a set element | `SetF.elem`, which `SetObl` reads | `SetElem` | none |
-| the closed-context orthogonality of each half | `CompatOracle`, `OracleSound` | none: the decision over closed codecs, `Closed.compatPair`, takes no oracle | `jsonOracle`, which certifies nothing |
+| the obligation on a set element | `SetF.elem`, which soundness does not read | `SetElem` | none |
 | the top laws: each primitive, and the set lift, below the top, and the set lift over a restriction of the top acts where its element acts | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
-| the admission row of a primitive, and its exactness | `PrimAdm`, `PrimAdmA` | `inBase` and `inL`, at both orientations, because each primitive is self-dual (`ground_selfdual`) | the kind test |
+| the admission row of a primitive, and its exactness | `PrimAdm` | `inBase` and `inL` (`dynPrimAdm`), and each primitive is self-dual (`ground_selfdual`) | the kind test (`jsonPrimAdm`) |
 | the leaves: two primitives apart, two predicates apart | `Leaf` | `dynLeaf`: `Ground.apart`, `Pred.isData`, `Pred.apart` | `jsonLeaf`: one kind |
-| the laws of the leaves | `LeafAdm`, `LeafAdmA`, `LeafMeet` | `dynLaws`, at each orientation, and `dynLeafMeet` | `jsonLeafAdm`, `jsonLeafAdmA`, `jsonLeafMeet` |
-| the set laws that the test reads | `FormerAdm`, `FormerAdmA` | `dynLaws`, at each orientation | `jsonFormerAdm`, `jsonFormerAdmA` |
+| the laws of the leaves | the primitive law of `Scoped.Laws`, and `LeafMeet` | `dynLaws`, at each orientation, and `dynLeafMeet` | `jsonLaws`, at each orientation, and `jsonLeafMeet` |
+| the set law that the decision reads | the set law of `Scoped.Laws` | `dynLaws`, at each orientation | `jsonLaws`, at each orientation |
 | the former class of each value and attribute, and where each former lands | `Shapes` | `dynShapes`: the root constructor | `jsonShapes`: every value is a primitive |
 
-**The judgement's member is the denotation's member, at every universe (`denote_μ`).** The
-judgement reads a primitive's member and the top's member off their codecs, and a set's member
-through `SetF.member`. `SetF.lift_μ` requires the lift to stamp that same member. Without the
+**The member of a node is the meaning's member, at every universe (`μG_sound`).** `μG` reads
+a primitive's member off its codec, and a set's member through `SetF.member`. `SetF.lift_μ` requires the lift to stamp that same member. Without the
 law, the `⇝` index of the judgement states nothing about the codec.
 
 A former is an `Option`. A universe without a former denotes the term of that former as the
 bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only
-the held-free theory, the views, and the soundness of the disjointness test read them. `PrimAdm` and
-`PrimAdmA` are outside `Sem` for the same reason: only exactness reads them.
+the held-free theory, the views, and the soundness of the disjointness decision read them. `PrimAdm`
+is outside `Sem` for the same reason: soundness and the judgement read none of its rows.
 
-**The disjointness test is structural, and a universe supplies its leaves.** `Alg.Term.disjoint`
-has one row per constructor of the left operand, and decides that two terms share no value. Only
+**The disjointness decision is structural, and a universe supplies its leaves.** `Scoped.disjoint`
+reads the flat graph of two closed codecs, has one row per operation of the left operand, and
+decides that the two closed codecs share no datum. Only
 two rows read a fact of a universe: a primitive beside a primitive, and a predicate beside a
 predicate. `Leaf` holds the two apart tests of the leaves and the test for a predicate that the
 test can compare.
@@ -144,42 +142,38 @@ test can compare.
 universe. `Leaf` is outside `Sem` and holds computable fields only, so the test stays computable,
 and the kernel evaluates a closed pair.
 
-**The test reads two open terms at a pairing of their binders.** `p i j = true` says that the
-left variable `i` and the right variable `j` are one pair of binders. Two variables are disjoint
-where the pairing names them one pair, because the environments keep each pair apart. Two
-recursive terms are disjoint where their bodies are disjoint with the two new binders paired. A
-recursive term also unfolds, and its binder pairs with nothing. The rows of a left recursive term
-and a left refinement split the right operand at every depth: a union into its options, a
-refinement with its predicate kept on each option below it, and a recursive term both whole and
-unfolded. So a right refinement or a right recursive term hides no option from the left row. The set row
-asks closed elements, because the set laws are stated over closed terms. A `held` and the top are
-disjoint only from the bottom, because their admission is a function that the test does not read.
+**The decision assumes a pair of entries below a guard.** Below a guard, the decision assumes a
+pair of entries while it compares the two bodies, and a pair already assumed is apart (`pairAt`).
+At an unguarded position, the decision unfolds an entry. A fuel bounds the walk, and an empty fuel
+answers `false`. The row of a left refinement splits the right operand at every depth: a union
+into its options, and a refinement with its predicate kept on each option below it (`splitG`). So
+a right refinement hides no option from the left row. The set row compares the two elements with
+no assumed pair. A `held`, a `legacy` and the top are disjoint only from the bottom, because their
+admission is a function that the decision does not read.
 
-**The soundness of the test holds at every signature, from the laws of the leaves and the
-formers.** `Alg.disjoint_sound` says that two terms the test keeps apart share no value, under
-every two environments that keep each paired binder pair apart (`ApartV`). `Alg.disjoint_soundA`
-says the same of attributes (`ApartA`), and `Alg.disjoint_orthogonal` joins the two. Each proof
-recurses on the left operand, as the test does. The laws are classes outside `Sem`, because only
-the soundness theorems read them. `LeafAdm` says that two primitives met at the bottom share
-nothing. `LeafMeet` says, at each absolute side, that two predicates met at the empty predicate
-hold together nowhere. `FormerAdm` says that two sets whose elements share nothing share no set.
-`LeafAdmA` and `FormerAdmA` are `LeafAdm` and `FormerAdm` of the dual. The test reads no
-orientation, because orthogonality is self-dual, so `Alg.disjoint_soundA` is `Alg.disjoint_sound`
-at the dual. The `refine` row reads a data predicate at each absolute side. Two data predicates
-keep two refinements apart only where both inner terms are closed and held-free: the graph of each
-then lies inside the graph of the top (`TopBound`), so a predicate at either side reads one
-element. At DynamoDB, a leaf law is a fact about `inBase` and `inL`,
-and a set law is a fact about `setCodec`. At JSON, two kinds meet where they are one kind, and each
-set law holds because the signature has no former and both sides admit nothing.
+**The soundness of the decision holds at every signature, from the laws of the universe.**
+`Scoped.disjoint_sound` says that where the decision answers `true`, no datum of any depth is
+accepted by both meanings at the orientation. The proof is an induction on the fuel, and at each
+pair below a guard an induction on the depth of the datum: the decision assumes a pair only at a
+smaller depth. The laws are outside `Sem`, because only the soundness theorems read them.
+`Scoped.Laws` holds two laws at one orientation: two primitives that the leaf keeps apart share no
+datum, and two sets whose elements share no datum share no set. `LeafMeet` says, at each absolute
+side, that two predicates met at the empty predicate hold together nowhere. The decision reads no
+orientation, because orthogonality is self-dual, so one decision serves the value side at the host
+and the attribute side at the dual. The `refine` row reads a data predicate at each absolute side.
+Two data predicates keep two refinements apart only where both inner terms lie below the top
+(`belowTop`): each inner term then denotes a restriction of the top (`sub_of_belowTop`), so a
+predicate at either side reads one element. At DynamoDB, a leaf law is a fact about `inBase` and
+`inL`, and a set law is a fact about `setCodec`. At JSON, two kinds meet where they are one kind,
+and the set law holds because the signature has no set former.
 
 **A universe is a container, and the disjointness of two formers is a theorem.** The carrier of a
 universe is the W-type of a container, and the member of a value is its root shape. Each former
 lands in one class of root shapes: a primitive, a set, a list or an object. The classes of distinct
 formers are disjoint, because the carrier is a coproduct. `Shapes` gives the class of each datum,
 and the landing fact of each former at each orientation: a primitive codec, the set lift, the list
-prism and the map prism. So two formers in different classes share no value (`Shapes.prim_set`
-and its companions), and no attribute, because the same laws hold at the dual (`Shapes.op`). The
-catch-all rows of the test read those theorems. A set and a keyed map are quotient containers, so the set laws stay a class
+prism and the map prism. So two operations of different classes share no datum at either orientation
+(`former_of_run`, `AB.of_cls`). The catch-all rows of the decision read those theorems. A set and a keyed map are quotient containers, so the set laws stay a class
 of each universe. At DynamoDB, the class of a value or an attribute is its root constructor.
 
 **The set former is a lift, and not a prism.** The list and map formers are prisms from `List`
@@ -188,11 +182,11 @@ refuses a `Finset` of the datatype that it declares, as a nested occurrence. So 
 codec transformer `lift` with its law, its agreement one layer down, and its held set. At
 DynamoDB the lift is `setCodec`, over the three wire-set constructors of `Value`.
 
-**The theorems of the algebra hold at every signature.** `Alg.soundness` proves `Lawful` for each
-closed typed term whose obligations hold, in any universe. The universe supplies the laws of its
+**The theorems of the algebra hold at every signature.** `Scoped.Closed.sound` proves `Lawful` for
+each entry of a typed closed codec whose obligations hold, in any universe. The universe supplies the laws of its
 primitives and of its formers, and the generic combinators supply the rest.
-`Alg.compat_of_HF` proves two held-free terms compatible from `TopLaws`, when the second term is
-lawful: the top is the identity, which is canonical.
+`Scoped.Closed.compat_of_HF` proves two held-free closed codecs compatible from `TopLaws`, when the
+second is lawful: the top is the identity, which is canonical.
 
 **The instance names the generic declarations.** At DynamoDB, `Codec` and `Lawful` are
 abbreviations at the DynamoDB carriers, and `Term` is an abbreviation at `dynSyn`.
@@ -208,10 +202,10 @@ graph term. A proof at DynamoDB reads `baseCodec`, `setCodec` and `listCodec` by
 `Scoped.interp_held` and `Scoped.interp_refine` state the rows of `held` and `refine` over a
 scope term.
 
-**A `held` carries an adapter word, and `denote` reads a table.** A word is a list of signed
+**A `held` carries an adapter word, and the meaning reads a table.** A word is a list of signed
 generators. The sign `true` names the converse of a generator: the pair of the generator with its
 two functions swapped. A table `α` gives each generator its caller-side function and its
-stored-side function, and `denote` reads the table as it reads the environment of the variables.
+stored-side function, and the meaning of a closed codec reads the tables of the two absolute sides.
 `TableAt.word` interprets a word by composition, with the first letter outermost on the caller
 side.
 The empty word is the identity at every table. The pair of two words in sequence is the composite
@@ -233,11 +227,9 @@ theorem of an accepted pair quantifies `κ`, so the verdict holds at every pair 
 evaluation vector reads `libTable noCallers`, because the emitter refuses a caller adapter outside
 a verdict.
 
-**Exactness holds at every signature.** `Alg.Adm` and `Alg.AdmA` give a row per constructor, and
-`Alg.Adm_exact` and `Alg.AdmA_exact` prove each row equal to the domain of `denote t`, from the
-exactness of the primitive rows alone. A universe states the primitive rows, so a verdict at a
-primitive reduces without the codec. At DynamoDB no row stands beside the meaning: the read row
-of a closed codec, `Closed.AdmA`, is the domain of the read of its meaning.
+**No admission row stands beside the meaning.** A universe states the primitive rows (`PrimAdm`),
+so a verdict at a primitive reduces without the codec. The read row of a closed codec,
+`Closed.AdmA`, is the domain of the read of its meaning.
 
 **The other analyses are DynamoDB tables.** `Separation`, `ScopeSlice` and the certificate read
 the constructors of the DynamoDB carriers. No generic form of them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
@@ -316,12 +308,11 @@ error but a silent "everything": the analysis stays sound and stops saying anyth
 | a depth clause | `Body.depth` | the termination measure must see through it |
 | a denotation clause | `bodySem`, generic | `denote` must dispatch with no case split at the use site |
 | a spec projection | `Closed.spec` | a slice reads an object option's names and literals off the spec |
-| an admission row, per side | `AdmBody` and `AdmABody` | exactness is per row; a stratum with no row cannot be exact |
-| a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
+| a premise carrier | `Scoped.Obligations`, at the object node | semantic side conditions are structural, not global |
 | an emitter clause | the object row of `src/codec/lean.ts` | the bridge writes terms in this language, and a constructor it cannot spell breaks it |
 
 The depth clause, the denotation clause and the premise carrier are generic, and each universe
-inherits them. The admission rows are generic too. The spec projection is a DynamoDB table.
+inherits them. The spec projection is a DynamoDB table.
 
 The spec projection is owed only by a stratum that holds names. A policy answers to no name.
 Every other row is owed unconditionally.
@@ -340,19 +331,19 @@ output that typechecks against nothing.
 
 ## Where a side condition goes
 
-The first thing to settle when adding a rule. `Typed` keeps the syntactic, fuel-free premises
-only.
+The first thing to settle when adding a rule. `Scoped.Typed` keeps the syntactic, fuel-free
+premises only.
 
 | A premise that is | goes in | consumed by |
 | --- | --- | --- |
-| decidable from the term | `Typed` | the judgement itself |
-| about what a codec does: its write half, its read half, an iso, a resolution | `Obligations`, as `PairwiseCompat` and `IsoCancels` are | `soundness`, and `Closed.extendRead_lawfulCore` through `Closed.sound` |
-| a rule of one universe on a set element | the `elem` field of the universe's `SetF`, which `SetObl` puts in `Obligations` | no law: `soundness` takes it as a premise and does not read it |
+| decidable from the term | `Scoped.Typed` | the judgement itself |
+| about what a codec does: its write half, its read half, an iso, a resolution | `Scoped.Obligations`, as the compatibility of a union and `IsoCancels` are (`TOp.obl`) | `Scoped.Closed.sound`, and `Closed.extendRead_lawfulCore` through `Closed.sound` |
+| a rule of one universe on a set element | the `elem` field of the universe's `SetF`, which `Scoped.Obligations` does not carry | no law: soundness does not read it |
 
-`Typed` has no rule for the alternate reader (`Term.legacy`), so a typed term holds none. Therefore
-`soundness` proves `Lawful`, which is one inverse law over
-the orientation (retract at the host, canon at the dual) and writes, for every typed term whose
-obligations hold. The induction proves `Lawful` alone.
+`TOp.rule` answers `none` for the alternate reader (`legacy`), so a typed closed codec holds none.
+Therefore `Scoped.Closed.sound` proves `Lawful`, which is one inverse law over
+the orientation (retract at the host, canon at the dual) and writes, for every typed closed codec
+whose obligations hold. The induction proves `Lawful` alone.
 `Lawful.core` gives `LawfulCore` from it. An alternate reader is `Codec.extendRead` at the codec layer. Its read passes only what the current
 codec writes, so `Closed.extendRead_lawfulCore` proves `LawfulCore` for it over a typed closed
 codec that meets its obligations, with no premise. `ReadsCoherently` is the coherence of the alternate reader:
@@ -360,15 +351,14 @@ where both readers read an attribute, and the current codec can write the older 
 answers agree. `extendRead_p_union` proves the premise equivalent to order-freedom: the first-match
 presentation equals the order-free union of `p` and the gated `r`.
 
-Choosing wrong is not a build error. A semantic premise in `Typed` makes the judgement
-undecidable; a syntactic premise in `Obligations` becomes a burden every caller carries.
+Choosing wrong is not a build error. A semantic premise in `Scoped.Typed` makes the judgement
+undecidable; a syntactic premise in `Scoped.Obligations` becomes a burden every caller carries.
 
 ---
 
 ## Termination
 
-`Term.depth` exists because `Typed` is a `Prop`-valued mutual family with no recursor over
-derivations, so proofs recurse on the term. The built-in size measure cannot serve: the object
+`Term.depth` is the measure of a proof by recursion on a term. The built-in size measure cannot serve: the object
 payload's field table is a function, and that measure is blind to functions. `Term.depth` takes a
 supremum over the key set where a list would fold.
 
@@ -378,53 +368,50 @@ What matters is that the measure is **derived from the term**, so it appears in 
 `term_depth_wf` is the shared tactic for a term recursion. Anything new recursing on a term takes
 it, and an inequality the block does not offer goes beside `Term.depth` rather than inline.
 
-A recursive term recurses on its input, not on the term. `muCodec` reads each input at the stage
-that the input's own depth names, by the depth of the universe: `Syn.d`, which is `Attr.depth`
-at DynamoDB. The depth reads no orientation, so a stage is one stage at both orientations.
-That budget is a structural recursion on the input, so a closed recursive term still reduces by
-`rfl`, and the bridge states its vectors. A well-founded budget evaluates and does not reduce in
+A recursive codec recurses on its input, not on the term. The solution of a closed codec reads each
+input at the stage that the input's own depth names, by the depth of the universe: `Syn.d`, which
+is `Attr.depth` at DynamoDB. The depth reads no orientation, so a stage is one stage at both
+orientations. That budget is a structural recursion on the input, so the meaning of a closed codec
+still reduces in the kernel, and the bridge states its vectors. A well-founded budget evaluates and does not reduce in
 the kernel.
 
 ---
 
 ## Recursion
 
-**A recursive term is a guarded binder.** `Term.mu b` binds `Term.var 0` in `b`, with de Bruijn
-indices. `denote` takes an environment of codecs for the variables, and a closed term is denoted in
-the empty one, where a variable is the bottom. `denote (.mu b) ρ` is `muCodec` of the body
-`fun c => denote b (c :: ρ)`. The stages start at the bottom, and each applies the body to the
-one before. Each input reads the stage its own depth names.
+**A recursive codec is a closed codec.** A closed codec is a DAG of scopes (`Scoped.Closed`). Each
+scope is a system of entries. Each entry is a term that names the entries of its scope, and reads
+each earlier scope as a constant. The meaning of a closed codec at a root entry is the solution of
+the scopes at the root (`Scoped.Closed.meaning`). The stages of a scope start at the bottom, and
+each applies the entries to the one before. Each input reads the stage its own depth names.
 
-**The guard is a checked condition on the syntax.** `Term.use i t` is the level at which `t` reads
-the variable `i`. The four levels are absent, under a container, at the input, and under a `held`.
-`Term.guarded` asks, at each binder, that the body reads its variable under a container at most.
-It refuses two shapes. Over closed codecs, each refused shape is a graph with no form as a DAG of
-scopes, which `Graph.guarded` decides:
+**The guard is a checked condition on the graph.** `Flat.Guarded` asks that each entry occurs
+below a container and below no `held` and no older reader. A system that passes `dagGuardB` has a form as a DAG of
+scopes (`dagGuardB_iff_dsys`), and `Graph.guarded` decides the condition at DynamoDB. The guard
+refuses two shapes, and each is a graph with no form as a DAG of scopes:
 
-- a variable that reads the binder's own input, as in `mu (var 0)` (`Graph.unguarded_no_dag`)
-  and `mu (union [var 0, string])` (`Graph.option_at_input_no_dag`). The stages of such a
-  term never grow;
-- a `held` between the binder and its variable (`Graph.held_on_path_no_dag`). The caller-side
+- an entry that reads its own input, as the specification's `mu (var 0)`
+  (`Graph.unguarded_no_dag`) and `mu (union [var 0, string])` (`Graph.option_at_input_no_dag`).
+  The stages of such a term never grow;
+- a `held` between an entry and its reference (`Graph.held_on_path_no_dag`). The caller-side
   function of a `held` can make the input deeper, so a container on the path does not bound the
   depth.
 
-`Typed.mu` carries the guard as a premise, because the guard is decidable from the term. A type
-would need a second term family for the body of a binder, and every table over terms would gain a
-family.
+A term of a scope names an entry above every guard only below its own entry, so a closed codec
+carries the guard by construction.
 
-**Stability needs the guard alone.** `Contractive` says that a body reads its argument only at
-inputs strictly shallower than its own input, on both sides. `contractive_body` derives it from the
-guard, through one congruence over the term family (`denote_agree`). From it the stages agree past
-the depth of the input (`muStage_agree`). The limit is a fixed point of its body at each
-orientation (`muCodec_fix`), and lawful stages give a lawful limit (`lawful_muCodec`). The lawful
-limit reads both sides at the stage of the larger depth, so no lemma about depth preservation is
-owed. No option of a body has to be disjoint from another for any of these.
+**Stability needs the guard alone.** `ContractiveV` says that agreement below a depth at every
+entry gives agreement one layer deeper. `contractive_of_guarded` derives it from the guard. From it
+each stage and each later stage agree below the depth of the stage (`sysStage_agree`). The
+solution is a fixed point of its system at each orientation (`solve_fix`), and lawful stages give
+a lawful solution (`lawful_solve`). No option of a body has to be disjoint from another for any of
+these.
 
-**Soundness runs over the environment.** `Obligations` takes the environment. A `mu` owes the
-premises of its body at each stage, given that the stage before is lawful. `soundnessIn` proves
-`Lawful` for an open term whose variables the environment gives lawful codecs, and `soundness` is
-the closed case. A recursive codec's held set is its write domain, so the held-set theorems stay
-closed: at `mu` they are definitional.
+**Soundness runs over the scopes.** `Scoped.Closed.Obligations` asks the obligations of each scope
+at each stage of the normal form of the scope, given that the stage before is lawful. `sound_term`
+proves `Lawful` for a term of a scope whose constants and entries are lawful, and `lawful_strat`
+carries the laws to the solution (`Scoped.Closed.sound`). An entry of a solution has its write
+domain as its held set (`DSys.sol_eq`), so the held-set theorems stay closed.
 
 **`opaque` is the identity.** With one carrier, each datum identifies itself, so the union of
 everything self-identifying (`opaqUnfoldClosed`) sends each datum to itself. `opaque` denotes the identity
@@ -441,12 +428,6 @@ the inclusion does not reach a `held`.
 meaning of the closed codec. An entry reads the codec that its scope solves, as the rows of
 `opaque` do.
 
-**The test reads a recursive term stage by stage.** Two recursive terms are disjoint where their
-bodies are disjoint under every two stages that are disjoint, because each stage is the body over
-the stage below (`stage_apart`). A recursive term beside another constructor reads
-the stage below the depth of the input (`Adm_mu_unfold`, `AdmA_mu_unfold`). A refinement above a
-right recursive term reads the same stage (`denote_mu_unfold`). No row needs the guard.
-
 **The host spells recursion as a thunk, and the bridge prints a closed codec.** The emitter cuts
 the term graph into scopes: each cycle of the term graph is one scope, and a scope comes after each
 scope that it reaches. Each term of a cycle is an entry of its scope, and a thunk that returns an
@@ -458,7 +439,8 @@ guard accepts its term. The host's `union` refuses the two shapes the guard refu
 option whose spine reaches a recursive thunk. The other is an option where a `held` sits between the
 term that a recursive thunk returns and the thunk. The host's `union` also refuses a thunk that
 throws. Recursion below a list or an object stays declared, and the decision decides it. The
-host's `heldFree(t)` reads through a recursive thunk, as the model's `HF` reads through a binder.
+host's `heldFree(t)` reads through a recursive thunk, as the model's `Scoped.Closed.HF` reads every
+node of every scope.
 
 ---
 
@@ -686,8 +668,9 @@ obligation.
 **The direction has a standard name.** It is the abstract interpretation of Cousot and Cousot,
 1977: a coarse test that over-approximates a precise one transfers disjointness downward, and a
 tighter test does not. The principle is why a certificate may be proved over an approximation at
-all. This development spends it once. The view at an orientation admits each value that the
-term admits at that orientation (`viewLe_of`), so two views that are disjoint separate the terms.
+all. This development spends it once. Each entry of the view at an orientation accepts what the
+entry accepts (`view_entries`), so two closed codecs whose views are disjoint accept no common datum
+(`views_apart`).
 
 **The outer carrier has a separate read-side fact.** An alternate reader can read an attribute
 outside the current term's member. `Closed.extendRead_reads_n` records a string core that reads a numeric
@@ -704,7 +687,7 @@ The union obligation is compatibility, and the certificate is sufficient for it.
 `Closed.viewsDisjoint` certifies a pair where the two closed codecs are orthogonal.
 
 **The certificate is orthogonality.** A term denotes a partial isomorphism. The caller view,
-`view` at the host, states its domain. The stored view, `view` at the dual, states its range. In an inverse semigroup, two elements are
+`viewG` at the host, states its domain. The stored view, `viewG` at the dual, states its range. In an inverse semigroup, two elements are
 orthogonal where the product of their domain idempotents is zero and the product of their range
 idempotents is zero (Lawson, *Primer on inverse semigroups I*, Lemma 2.16). `Closed.viewsDisjoint` asks
 the decision `Closed.disjoint` of the two caller views and of the two stored views. The decision
@@ -714,16 +697,13 @@ view of a `union` is the union of the views of its options. A reference to an en
 reference, so a `held` below a recursion reaches the certificate too
 (`Closed.viewsDisjoint_heldBelowMu`).
 
-**The stored view drops a predicate over a variable.** A view keeps a refinement as it is only
-where the inner term holds no `held` and no variable. Elsewhere the view keeps the predicate of its
+**The stored view drops a predicate over an adapter.** A view keeps a refinement as it is only
+where the inner term reaches no adapter. Elsewhere the view keeps the predicate of its
 caller side and puts the truth of the meaning, `Mean.truth`, at its stored side, because the
 stored side tests its predicate through the adapter that the view drops. DynamoDB names the truth
 alone at the stored side, so the caller view keeps the refinement, and the stored view keeps no
-data predicate there. A variable denotes a stage of its binder,
-and the view reads each variable as a possible `held`. A finer view reads a variable as a `held`
-only where the binder's body holds one. `Term.disjoint` compares two data predicates only over
-closed held-free inner terms, so the two views give one verdict. A Lean example pins the separated
-pair that the certificate refuses at a data predicate over a variable.
+data predicate there. An entry stays an entry in the view. `Scoped.disjoint` compares two data
+predicates only over inner terms below the top (`belowTop`), so the two views give one verdict.
 
 **The rows of the test are the laws of a product and a sum.** A product admits no value where
 one factor admits none. A sum admits no value only where each summand admits none. A required
@@ -741,14 +721,13 @@ option that writes and reads other slots is disjoint from the option.
 **The certificate is one row of the union's decision.** The union's one law is compatibility
 (Lawson: `s ∨ t` exists iff `s ∼ t`), and compatibility is two halves of agreement: two writers of
 one value write one attribute (`Agree` at the host), and two readers of one attribute read one
-value (`Agree` at the dual). `Term.compat` decides each half per component: the two terms are
-disjoint there, or one codec bounds both there. The bottom agrees with every term. Two held-free
-terms whose variables are below the top are bounded by the top: a context gives each variable that
-fact, a binder of a held-free body pushes it, and a free variable does not have it. The decision over
+value (`Agree` at the dual). `Scoped.compat` decides each half per component: the two terms are
+disjoint there, or one codec bounds both there. The bottom agrees with every term. Two terms below
+the top are bounded by the top (`belowTop`). The decision over
 closed codecs, `Closed.compatPair`, takes no oracle. A `held` whose
 half, or the half of the `held` inside it, is disjoint from the partner agrees there.
-`compat_sound` proves each row, `compatPair_sound` holds at every environment of the free
-variables, and `Closed.pairwiseCompat_of_compatPair` discharges the union's obligation of two
+`Scoped.compat_sound` proves each half, `Scoped.compatPair_sound` proves both halves at every
+table, and `Closed.pairwiseCompat_of_compatPair` discharges the union's obligation of two
 lawful closed codecs.
 
 **Over lawful, pairwise compatible options, the order of the options is unobservable.** A
@@ -775,11 +754,11 @@ alternate reader, and a decline certifies nothing. A container of an alternate r
 term of another shape class is disjoint from it, and reads no reader. An unknown read as
 "disjoint" is the permissive direction, and so the unsound one.
 
-**The host reads a thunk that throws as a free variable.** At a declaration, a thunk that names
-the union under declaration throws. The model spells the thunk as a variable, and the soundness of
-`Term.disjoint` holds under every environment of a variable that pairs with no binder. So the
-host's test reads the thunk as a variable that pairs with no binder. Beside the bottom the
-variable is disjoint, and beside any other term the test declines. A list of such a thunk beside a
+**The host reads a thunk that throws as an unknown term.** At a declaration, a thunk that names
+the union under declaration throws. The model has no free variable, and the emitter refuses such a
+term as an open fragment. The decision keeps the bottom apart from every term, and two operations
+of different classes apart whatever their positions (`AB.of_cls`). So beside the bottom the thunk
+is disjoint, and beside any other term the host's test declines. A list of such a thunk beside a
 string is disjoint from it.
 
 **The caller view of a `held` is its held side.** The host's `decimal` over literals records the
@@ -794,8 +773,7 @@ codecs. For a pair the library refuses at compatibility, the row states that `Cl
 refuses the pair (`refused_of_rows`). For a pair the library refuses at the guard, the row states
 that the guard refuses an option (`guardRefused_of_rows`). A pair that reads a thunk that throws
 takes the same forms, because the decision holds whatever codec the thunk names. Each row also
-states the guard, `Term.guarded`, and the guard reads a thunk that throws as the variable of a
-binder at the root of its option.
+states the guard on the graphs of the two options (`Graph.guarded`).
 
 **The emitter refuses a pair that no form states.** A form states the union decision of the host,
 its guard and its compatibility test together. Where the union decision disagrees with the guard or
@@ -976,9 +954,9 @@ the price. `Attr.Storable` counts the two nesting constructors and is a differen
 element term, and a lawful element gives a lawful set (`lawful_setCodec`). Three rules of a stored
 set are DynamoDB facts and not rules of the algebra. The element types `S`, `N` and `B` and the
 absent empty set live in the carrier: `Value.strSet`, `numSet` and `binSet` over `NEFinset`. That
-the element writes one member of `S`, `N` or `B` is an obligation, `SetElem`, beside `(union)`'s
-compatibility. `SetElem` is the `elem` field of the DynamoDB set former `dSet`, and the generic
-`SetObl` reads it. The carrier holds no set of `Value`, for two reasons. The kernel rejects a
+the element writes one member of `S`, `N` or `B` is a rule of DynamoDB, `SetElem`, which the
+obligations of a closed codec do not carry. `SetElem` is the `elem` field of the DynamoDB set
+former `dSet`, and soundness does not read it. The carrier holds no set of `Value`, for two reasons. The kernel rejects a
 nested `Finset`, `Multiset` or `Quot` of the datatype being declared. A list carrier needs a
 canonical spelling that every set codec enforces by refusal.
 
@@ -1164,10 +1142,10 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New law of the algebra → state it in an `Alg` module, which imports no instance module. A
   statement that needs a fact of a carrier belongs to that universe.
 - New universe → a `Sig`, a `Mean` instance over it, a `Syn` at the host orientation, its
-  `TopLaws` where the held-free theory or the soundness of the disjointness test must hold, its
-  `PrimAdm` and `PrimAdmA` where exactness must hold,
-  its `Leaf` where the test must compute, and its `Shapes` and the laws of the leaves and the
-  formers where the soundness of the test must hold. Make the module reachable from `Axioms.lean`.
+  `TopLaws` where the held-free theory or the soundness of the disjointness decision must hold, its
+  `PrimAdm` where a verdict at a primitive must reduce without the codec,
+  its `Leaf` where the decision must compute, and its `Shapes`, `LeafMeet` and `Scoped.Laws` where
+  the soundness of the decision must hold. Make the module reachable from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.
 - New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness

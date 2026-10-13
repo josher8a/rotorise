@@ -17,18 +17,11 @@ definition it touches.
 | `Calculus/Alg/Containers.lean` | `listCodec` and `objectCodec` over the list and keyed-map prisms of a universe, with their laws and carriers |
 | `Calculus/Alg/Recursion.lean` | `AgreeLe`, `Contractive`, `muCodec` and `lawful_muCodec` over one depth function of the carrier, and the agreement lemmas of the combinators |
 | `Calculus/Lang/Term.lean` | The universe signature: `Syn` (the syntax) and the class `Sem` (the meaning), with the formers `ListA`, `MapA` and `SetF`. The term family `Term S`/`Body S`/`ObjectSlot S`, the guard `Term.guarded`, `Term.depth`, `denote`, and the tactic `term_depth_wf` |
-| `Calculus/Lang/Typing.lean` | The judgement `Typed` over a signature, `μSyn` with `typed_μSyn`, and `Obligations` with `PairwiseCompat` and the set obligation `SetObl` |
-| `Calculus/Lang/Guarded.lean` | `denote_agree` and `contractive_body`: the guard of a binder makes its body contractive, at every signature |
-| `Calculus/Lang/Sound.lean` | `soundnessIn`, `soundness`, `typed_TSub` and `carrier_denote`, at every signature |
-| `Calculus/Lang/HeldFree.lean` | The held-free terms `HF`, where the Bool test `hasHeld` answers `false`, `sub_denote` from the laws of the top (`TopLaws`), and `compat_of_HF`, at every signature |
-| `Calculus/Lang/ExactV.lean` | The admission row `Adm` over a signature, and `Adm_exact`: each row is the domain of `denote` at the orientation, from the exactness of the primitive rows alone |
-| `Calculus/Lang/ExactA.lean` | The attribute side: `AdmA`, the primitive rows `PrimAdmA`, and `AdmA_exact`: each row is `dom(p)` |
-| `Calculus/Lang/Disjoint.lean` | The structural disjointness test `Term.disjoint` over a signature, at a pairing of the binders, with its families |
-| `Calculus/Lang/Shapes.lean` | The six disjointness laws per side, as theorems of the shape classes `Shapes`, at every signature |
-| `Calculus/Lang/DisjointV.lean` | `disjoint_sound` at every signature: two terms the test keeps apart share no value, from the write-side laws `FormerAdm`, `LeafAdm` and `LeafMeet`, the shape classes and the top bound `TopBound` |
-| `Calculus/Lang/DisjointA.lean` | `disjoint_soundA` at every signature, as `disjoint_sound` at the dual: two terms the test keeps apart read no attribute in common, from `FormerAdmA`, `LeafAdmA` and `TopLaws`, and `disjoint_orthogonal`, which joins the two sides |
-| `Calculus/Lang/Compat.lean` | The compatibility decision `Term.compat` over a signature, per half and per component, with the closed-context oracle `CompatOracle`; `compat_sound`, and `pairwiseCompat_of_compatPair`, which discharges the union's obligation of two lawful options |
-| `Calculus/Lang/View.lean` | The view `view` at an orientation: each `held` becomes its term at the caller side, so the view holds no `held` (`HF_view`). The view admits what the term admits (`viewLe_of`), and two views that the test separates give two terms that share no value (`views_apart`) |
+| `Calculus/Lang/Scope.lean` | The closed codec over a signature: the term container `TSig`, a scope term `Scoped.Term`, its graph form `Scoped.Graph`, and `Scoped.Closed`, a DAG of scopes. Its meaning `Scoped.Closed.meaning` at a root entry is the solution of the scopes at the root |
+| `Calculus/Lang/ScopeSound.lean` | The judgement `Scoped.Typed` of a scope term through the rule `TOp.rule` of each operation, the obligation `TOp.obl` of each operation (the cancellation of a `held`, the compatibility of a union), `Scoped.Closed.Typed` and `Scoped.Closed.Obligations`, and `Scoped.Closed.sound` with `Scoped.Closed.meaning_lawful`, at every signature |
+| `Calculus/Lang/ScopeHeldFree.lean` | The held-free closed codecs `Scoped.Closed.HF`, `Scoped.Closed.sub` from the laws of the top (`TopLaws`), and `Scoped.Closed.compat_of_HF`, at every signature |
+| `Calculus/Lang/ScopeDisjoint.lean` | The structural decision `Scoped.disjoint` over two closed codecs, and `Scoped.disjoint_sound`: two closed codecs that the decision keeps apart share no datum at the orientation, from the laws `Scoped.Laws` of the universe, the leaves, the shape classes and the laws of the top. The view `viewG` at an orientation replaces each `held` by its term at the caller side, and two closed codecs whose views are disjoint accept no common datum (`views_apart`) |
+| `Calculus/Lang/ScopeCompat.lean` | The compatibility decision `Scoped.compatPair` over two closed codecs, with no oracle, and `Scoped.compatPair_sound`: an accepted pair agrees at the host and at the dual, at every signature |
 | `Calculus/Lang/ScopePath.lean` | A path into a closed codec: the frame `GFrame`, the frontier `Rooted.at`, the strong law `Closed.strong_law` composed from one law per segment (`GFrame.path_law`), and `narrowC`, which keeps each option whose view the graph decision does not separate from the view of the clause, with `narrowC_law` |
 | `Calculus/Lang/Universe.lean` | The facts of a universe that read no term: the primitive rows `PrimAdm`, the leaves `Leaf` and `LeafMeet`, the shape classes `Shapes`, the laws of the top `TopLaws`, and the held sets of the rules |
 | `Calculus/Lang/CodecPath.lean` | A path into a store: `Seg`, the write at a path `putPath`, and `path_law`, which composes the law of a write from one law per segment, for any frames |
@@ -42,7 +35,7 @@ definition it touches.
 | `Calculus/Dynamo/Alg/Carriers.lean` | One `Carrier` lemma per combinator, so the judgement's held-set index is the domain of the pair |
 | `Calculus/Dynamo/Alg/Lawful.lean` | The lawfulness lemmas this development discharges, one per construction |
 | `Calculus/Dynamo/Alg/Frontier.lean` | The lawfulness lemmas that are stated and not yet discharged, and the ones whose discharge is partial |
-| `Calculus/Dynamo/Lang/Term.lean` | The DynamoDB signature: `Pred`, `SetElem`, the primitives `Ground` with `groundCodec`, the formers `dList`, `dMap` and `dSet`, `dynSyn` and `dynSem`. `Term`, `Body` and `ObjectSlot` are abbreviations at `dynSyn`, with one `match_pattern` abbreviation per constructor spelling and the eliminator `Term.casesD`. The registrations of the simp sets `denote_rows`, `μSyn_rows`, `Adm_rows` and `AdmA_rows` |
+| `Calculus/Dynamo/Lang/Term.lean` | The DynamoDB signature: `Pred`, `SetElem`, the primitives `Ground` with `groundCodec`, the formers `dList`, `dMap` and `dSet`, `dynSyn` and `dynSem`. `Term`, `Body` and `ObjectSlot` are abbreviations at `dynSyn`, with one `match_pattern` abbreviation per constructor spelling and the eliminator `Term.casesD` |
 | `Calculus/Dynamo/Alg/Recursion.lean` | Guarded recursion: `muCodec` budgets each input by its own depth (`Value.depth`/`Attr.depth`); from `Contractive` alone the stages agree past the depth (`muStage_agree`), the limit is a fixed point (`muCodec_fix`), and lawful stages give a lawful limit (`lawful_muCodec`); each container keeps agreement one layer down |
 | `Calculus/Dynamo/Lang/Scope.lean` | The closed codec of DynamoDB `Closed`: a DAG of scopes over the term container, and a root entry. Its meaning `Closed.meaning` at a caller table is the solution of the scopes at the root, and the read row `Closed.AdmA` is the domain of the read of the meaning |
 | `Calculus/Dynamo/Lang/ScopeSound.lean` | The judgement `Closed.Typed` and the obligations `Closed.Obligations` of a closed codec at the DynamoDB tables, the theorem `Closed.sound`, the carrier bridge `Closed.carrier` (a typed closed codec writes and reads only values of its held set), and `Closed.extendRead_lawfulCore` |
@@ -61,26 +54,28 @@ definition it touches.
 | `Calculus/Dynamo/Witness/ScopeDischarge.lean` | The host's recursive schema for JSON as a closed codec (`jsonClosed`), lawful through `Closed.sound` (`Closed.lawful_json`), and each shape that the guard refuses as a graph with no form as a DAG of scopes |
 | `Calculus/Dynamo/Analysis/ScopePath.lean` | The frontier of a path into a closed codec and narrowing at DynamoDB, as vectors that reduce in the kernel: the store refuses a segment, and an entry that a cycle returns to is one entry. `Closed.narrowC_law` is the narrowing law at DynamoDB |
 | `Calculus/Dynamo/Analysis/ScopePrecondition.lean` | The precondition of a closed clause as data for the store: a conjunction of `in`, `type` and `exists` tests at paths into the item. `Closed.preconditionOfC` reads the stored view of the clause and states the precondition exactly or refuses (`Closed.preconditionOfC_exact`), and `Closed.narrow_law_precondition` is the narrowing law with the precondition in place of the admission |
-| `Calculus/JSON/Basic.lean` | A second universe on the generic layer, with no DynamoDB import: the carrier `Json`, the ground codecs, the array prism, the signature `jsonSyn`/`jsonSem` with `id_topLaws`, a union lawful by `Alg.soundness` and `Alg.compat_of_HF` (`lawful_strOrNum`), and the kind test as the primitive admission rows, exact by `Alg.Adm_exact` and `Alg.AdmA_exact` (`exact_strOrNum`) |
-| `Calculus/JSON/Disjoint.lean` | Disjointness at JSON: the leaves `jsonLeaf` (two kinds are apart where they are two kinds), the laws of the leaves and of the formers as instances, and `Alg.disjoint_orthogonal` at `jsonSyn` (`orthogonal`) |
+| `Calculus/JSON/Basic.lean` | A second universe on the generic layer, with no DynamoDB import: the carrier `Json`, the ground codecs, the array prism, the signature `jsonSyn`/`jsonSem` with `id_topLaws`, and the kind test as the primitive admission row `jsonPrimAdm` |
+| `Calculus/JSON/ScopeBasic.lean` | The union of the string codec and the number codec as a closed codec (`strOrNumClosed`), lawful by `Scoped.Closed.meaning_lawful` (`lawful_strOrNumC`), and exact against the kind rows at every orientation (`exact_strOrNumC`) |
+| `Calculus/JSON/Disjoint.lean` | The leaves `jsonLeaf` (two kinds are apart where they are two kinds), `jsonLeafMeet`, and the shape classes `jsonShapes` |
+| `Calculus/JSON/ScopeDisjoint.lean` | Disjointness of closed codecs at JSON: the laws `jsonLaws` that the decision reads, and `Scoped.disjoint_sound` at `jsonSyn` (`closed_orthogonal`) |
 
-`Alg/Agree.lean`, `Alg/Converse.lean`, `Alg/Rows.lean`, `Lang/Converse.lean`, `JSON/Compat.lean`,
-`ScopeHeldFree.lean`, `Malleability.lean`, `Separation.lean`, `ScopeSlice.lean`, `Bridge/Vectors.lean`, `Bridge/Verdicts.lean`, `Bridge/Kinds.lean`,
+`Alg/Agree.lean`, `Alg/Converse.lean`, `Alg/Rows.lean`, `JSON/Compat.lean`, `JSON/ScopeCompat.lean`,
+`Malleability.lean`, `Separation.lean`, `ScopeSlice.lean`, `Bridge/Vectors.lean`, `Bridge/Verdicts.lean`, `Bridge/Kinds.lean`,
 `Bridge/Rows.lean` and `Bridge/ScopePaths.lean` have none, and each opens with a module docstring that says
 what it is for.
 Read those.
 
 **The mechanization is complete: the project builds with zero `sorry`.** The
-soundness theorem of the judgement is machine-checked — `soundness` (retract, canon and writes) — by induction on the judgement, dispatching
-each case to its certified combinator lemma. `opaque` is the identity codec, so it owes no
+soundness theorem of the judgement is machine-checked — `Scoped.Closed.sound` (retract, canon and writes) — by `sound_term` at each
+scope, which dispatches each operation to its certified combinator lemma. `opaque` is the identity codec, so it owes no
 compatibility.
 The judgement carries both of its indices, and both are checked against the
 denotation. `Closed.carrier` states the specification's `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`: a typed
 closed codec writes and reads only values of its held set. The held set is an **identity** with
 the judgement's own index in both directions, `Closed.typed_T_identity`, so the index describes
 the denotation exactly rather than bounding it. The
-member index is fuel-free (`μSyn`, with `denote_μ` and `typed_μSyn` tying the denotation
-and the judgement to it).
+member index is fuel-free (`μG`, read from the operation of a node, with `μG_sound` tying the
+meaning to it).
 
 ## Modelling decisions
 
@@ -108,15 +103,16 @@ and the judgement to it).
   is configured correctly. `Axioms.lean` cannot simply `import Calculus` instead — the
   aggregator imports the guard, so that is a cycle, and inverting it would let
   `defaultTargets = ["Calculus"]` build the tree with no guard running at all.
-- **There is no fuel.** `denote` is structural on the term. What the proofs recurse on
-  instead is `Term.depth`, a measure derived from the term, so it appears in no statement.
-  Neither of the two things that forced fuel still does: the model has no thunk, and `opaq`
-  and `mu` denote `muCodec`, which budgets each input by the input's own depth.
-- **Recursion is guarded, and constructed.** `mu b` denotes `muCodec` of its body, and each
-  input reads the stage of the body that its own depth names. `Term.guarded` refuses a variable
-  that reads its binder's input itself, and a variable under a `held`. From the guard alone the
-  stages agree past the depth of the input, the limit is a fixed point, and lawful stages give a
-  lawful limit (`Recursion.lean`, `Guarded.lean`). `Continuity.lean` proves that first-match
+- **There is no fuel.** The meaning of a closed codec is the solution of its scopes
+  (`DSys.sol`), and the solution reads each input at the stage that the depth of the input
+  names, so no fuel appears in a statement. Neither of the two things that forced fuel still
+  does: the model has no thunk, and the solution budgets each input by the input's own depth.
+- **Recursion is guarded, and constructed.** A closed codec is a DAG of scopes, and each entry
+  of a scope is a body that reads the entries. The guard `Flat.Guarded` puts each entry under a
+  `down` and no entry under a `wall`, and a guarded system is contractive
+  (`contractive_of_guarded`); `dagGuardB_iff_dsys` decides the form as a DAG of scopes. From
+  the guard alone the solution is a fixed point (`solve_fix`), and lawful stages give a lawful
+  solution (`lawful_solve`, `System.lean`). `Continuity.lean` proves that first-match
   resolution is monotone (`selectF_mono_list`, the `mono` obligation of a ccpo construction)
   and continuous (`selectF_continuous_list`) under
   the obligation that every admitter agrees, and `optBad_not_confluent` shows the obligation is

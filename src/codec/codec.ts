@@ -5328,7 +5328,7 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
  * One option of a union, reduced to what matching it actually asks.
  *
  * **Every option is admitted by attempt**, an object option included, as in the model, where a
- * union's row is the disjunction of its options' rows (`Adm_union`, `AdmA_union`). The kind of the value is a cheap filter in front of the attempt, and the
+ * union acts exactly where one of its options acts (`select_isSome_attempt`). The kind of the value is a cheap filter in front of the attempt, and the
  * names present select nothing. The declaration guard makes the attempt decide: two options that
  * both admit one value are refused where the union is declared, so at most one attempt succeeds.
  */

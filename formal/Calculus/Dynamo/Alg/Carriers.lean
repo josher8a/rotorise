@@ -12,9 +12,10 @@ namespace Calculus
 section
 /-! ## Carriers — the pair is on `T` (`e : T ⇀ 𝔸`, `p : 𝔸 ⇀ T`)
 
-    One `Carrier` lemma per combinator, mirroring the lawfulness lemmas below. Together
-    with `typed_TSub` (Lang/Sound.lean) these make the judgement's held-set index a
-    checked claim: what a derivable term writes and reads lies in the `T` it names. -/
+    One `Carrier` lemma per combinator, mirroring the lawfulness lemmas below. The
+    DynamoDB meaning reads them as the carrier of each ground codec and of the set lift.
+    `Closed.carrier` states the claim for a typed closed codec: what the codec writes and
+    reads lies in its held set. -/
 
 
 /-- **Every base is on its carrier**: the identity on a fiber holds exactly its fiber. -/

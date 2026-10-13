@@ -14,7 +14,7 @@ import type { DynamoNumber as DynamoNumberOf } from './attribute'
 type Some<X> = ['some', X]
 type None = ['none']
 
-// ── μSyn (Lang/Typing.lean) at DynamoDB ──
+// ── μG (Lang/ScopePath.lean) at DynamoDB ──
 type KindMember<K> = K extends 'string'
     ? 'S'
     : K extends 'number'
@@ -110,7 +110,7 @@ type ApartAt<S, T, Env> = MuSyn<T, Env> extends 'none'
       : true
 type ApartOr<S, T, Env> = ApartAt<S, T, Env> extends true ? Some<[]> : None
 
-// ── the body (`Body.block`, `Body.slotAt`, `ObjectSlot.term`) ──
+// ── the body (`slotAtG`) ──
 type Block<W> = W extends ['some', infer T] ? T : ['never']
 type SlotAt<F, W, N> = N extends keyof F ? F[N] : ['optional', Block<W>]
 type SlotTerm<S> = S extends
