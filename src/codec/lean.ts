@@ -2,7 +2,7 @@
  * Test vectors for the Lean model, emitted as Lean source.
  *
  * `formal/` is a mechanization of the codec calculus; this library is what it is supposed to
- * certify. The correspondence between the two is a *paper* obligation — somebody reads `denote`
+ * certify. The correspondence between the two is a *paper* obligation — somebody reads `Closed.meaning`
  * and reads `src/codec/codec.ts` and believes they agree — and no instrument closes it, which is
  * the third of the three warranties `docs/architecture.md` keeps apart. This module is the
  * machine-checkable half of that belief.
@@ -10,11 +10,11 @@
  * ── why the traffic goes this way ───────────────────────────────────────────────────────────────
  *
  * The obvious design is the other one: let Lean produce the expected attribute and compare it here.
- * `#eval` runs `denote`, so Lean can produce it, but a printed value certifies nothing, and
+ * `#eval` runs `Closed.meaning`, so Lean can produce it, but a printed value certifies nothing, and
  * `native_decide` adds an axiom of its own for each proof, outside the model's axiom base. The model declares no
  * axiom: `N` is carried exactly, as `WFNumeral`.
  *
- * What Lean *can* do is check. `(denote t).e v = some a` is a closed proposition, and for every
+ * What Lean *can* do is check. `(Closed.meaning α t).e v = some a` is a closed proposition, and for every
  * term form this library can express it is provable by kernel reduction — see the `vector` tactic
  * this module emits, and `src/codec/lean/lean.spec.ts` for the boundary. So TypeScript proposes and Lean
  * disposes: {@link leanVectorModule} writes a file of `theorem`s, and `lake build` on it either
@@ -202,7 +202,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /**
- * A `Value` — the value language, as `denote`'s `e` consumes it.
+ * A `Value` — the value language, as the `e` of `Closed.meaning` consumes it.
  *
  * Directed by the *value*, not by the codec, which is sound because a value and the
  * attribute it writes have the same kind, and every codec in this library takes the kind its
@@ -1256,8 +1256,8 @@ export const leanGuard = ({ name, codec, guarded }: Guard): string =>
  * refusal's answer is `none`, which carries no payload, so the kernel closes it by reduction at
  * every codec including the map-shaped ones.
  *
- * **And it reaches `number`**: `Term.number` is a closed term, so
- * `(denote Term.number).e (Value.str "x") = none` is `rfl`. A numeric `literal` is closed too, its
+ * **And it reaches `number`**: `Term.number` is a closed term, so at its closed codec `t`,
+ * `(Closed.meaning α t).e (Value.str "x") = none` is `rfl`. A numeric `literal` is closed too, its
  * alternatives being `WFNumeral`s.
  */
 export type Refusal = {
@@ -2258,7 +2258,7 @@ type SliceRow = {
 type ClauseEntry = readonly [string, string, Alternatives]
 
 /**
- * **The adapter word a pin goes through**, as `Calculus.pinOf` reads it: `[]` for a literal, and the
+ * **The adapter word a pin goes through**, as `Calculus.pinOfG` reads it: `[]` for a literal, and the
  * generator of the `held` that `leanTermOfTerm` prints, under the same bound, for an adapter.
  */
 const leanWord = (t: Term, bound: Bound): string =>
@@ -3140,10 +3140,10 @@ const readVerdictOf = (
 /**
  * One **read vector**: this codec, given the attribute it wrote, reads that value back.
  *
- * The write vectors assert `(denote t).e v = some a` and the refusal vectors assert `= none`, so
+ * The write vectors assert `(Closed.meaning α t).e v = some a` and the refusal vectors assert `= none`, so
  * one half of every pair was proposed to the model and the other half was not — for the corpus at
  * large. The read side *was* asserted, but only where a union had to choose:
- * {@link leanReadResolution} states `(denote t).p a = some v` for each read resolution. This is
+ * {@link leanReadResolution} states `(Closed.meaning α t).p a = some v` for each read resolution. This is
  * that assertion over every corpus codec rather than over the unions alone.
  *
  * **The attribute comes from the library and so does the value.** `a` is what this codec's
@@ -3205,7 +3205,7 @@ export const readVectorIsUnstatable = (
  * The header imports `Calculus.Dynamo.Lang.Store` as well, because a vector spells
  * `libTable` and `noCallers`, which the DynamoDB port defines, and `Vectors`
  * does not reach them. Lean auto-binds
- * an unknown lower-case name, so the missing import leaves `denote` stuck on a free variable and
+ * an unknown lower-case name, so the missing import leaves `Closed.meaning` stuck on a free variable and
  * each vector reports a failed definitional equality rather than an unknown identifier.
  */
 export const leanReadVectorModule = (vectors: readonly Vector[]): string => {
@@ -3447,7 +3447,7 @@ import Mathlib.Tactic.FinCases
 
 **Generated — do not edit.** Emitted by \`src/codec/lean.ts\` from the shipped TypeScript codecs: each
 theorem below is one \`encode\` this library actually performed, proposed to the model as an
-equation. A failure here is a disagreement between \`src/codec/codec.ts\` and \`Calculus.denote\`, and the
+equation. A failure here is a disagreement between \`src/codec/codec.ts\` and \`Calculus.Closed.meaning\`, and the
 theorem's name says which vector.
 -/
 
@@ -3506,7 +3506,7 @@ import Calculus.Dynamo.Lang.Store
 
 **Generated — do not edit.** Emitted by \`src/codec/lean.ts\` from the shipped TypeScript codecs: each
 theorem below is one \`encode\` this library actually performed, proposed to the model. A failure
-here is a disagreement between \`src/codec/codec.ts\` and \`Calculus.denote\`, and the theorem's name says
+here is a disagreement between \`src/codec/codec.ts\` and \`Calculus.Closed.meaning\`, and the theorem's name says
 which vector.
 
 The verdict is \`Calculus.check\`'s, and \`check_same\` is what makes it worth having: \`.same\`
@@ -3548,7 +3548,7 @@ export const leanVectorModule = (
      * A read vector has one form and it is `vcheck`: its answer is a `Value`, `Value.map` carries
      * a function, and `rfl` on the assembled closure diverges rather than failing. So it cannot be
      * written in the `equation` protocol at all, and the `equation` sample states each vector as an
-     * equation on `denote` — putting a `vcheck` in it would cost that.
+     * equation on `Closed.meaning` — putting a `vcheck` in it would cost that.
      *
      * The two samples are otherwise the same vectors in two protocols, and this is the one place
      * they part. The gate elaborates all of `.readvectors.lean` either way; what the sample
@@ -3564,7 +3564,7 @@ export const leanVectorModule = (
     const readBack =
         reads.length === 0
             ? ''
-            : `\n\n/-! ### Read back, through the same term\n\nThe model's \`p\`, given the attribute the library wrote, against the value the library read. Only\nthe \`check\` sample carries these: a read vector's answer is a \`Value\`, so it needs \`vcheck\`, and\nthe \`equation\` sample states each vector as an equation on \`denote\` by design. -/\n\n${reads
+            : `\n\n/-! ### Read back, through the same term\n\nThe model's \`p\`, given the attribute the library wrote, against the value the library read. Only\nthe \`check\` sample carries these: a read vector's answer is a \`Value\`, so it needs \`vcheck\`, and\nthe \`equation\` sample states each vector as an equation on \`Closed.meaning\` by design. -/\n\n${reads
                   .filter((one) => readVectorIsUnstatable(one) === undefined)
                   .map(leanReadVector)
                   .join('\n\n')}`

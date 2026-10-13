@@ -44,10 +44,10 @@ definition it touches.
 | `Calculus/Dynamo/Alg/Frontier.lean` | The lawfulness lemmas that are stated and not yet discharged, and the ones whose discharge is partial |
 | `Calculus/Dynamo/Lang/Term.lean` | The DynamoDB signature: `Pred`, `SetElem`, the primitives `Ground` with `groundCodec`, the formers `dList`, `dMap` and `dSet`, `dynSyn` and `dynSem`. `Term`, `Body` and `ObjectSlot` are abbreviations at `dynSyn`, with one `match_pattern` abbreviation per constructor spelling and the eliminator `Term.casesD`. The registrations of the simp sets `denote_rows`, `μSyn_rows`, `Adm_rows` and `AdmA_rows` |
 | `Calculus/Dynamo/Alg/Recursion.lean` | Guarded recursion: `muCodec` budgets each input by its own depth (`Value.depth`/`Attr.depth`); from `Contractive` alone the stages agree past the depth (`muStage_agree`), the limit is a fixed point (`muCodec_fix`), and lawful stages give a lawful limit (`lawful_muCodec`); each container keeps agreement one layer down |
-| `Calculus/Dynamo/Lang/Denote.lean` | `denote` at DynamoDB, structural, pure dispatch into the combinators, over an environment for the bound variables; `mu` is `muCodec` of its body. `denote` is the generic `Alg.denote`, and the simp set `denote_rows` holds its rows at the DynamoDB constructors |
-| `Calculus/Dynamo/Lang/Typing.lean` | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HObject`, `HUnion`); `opaque` holds every value; syntactic premises only |
-| `Calculus/Dynamo/Lang/Soundness.lean` | `Obligations` and `PairwiseCompat` at `dynSyn`, the theorem statements, and the held-set bridge `typed_e_mem`/`typed_p_mem`, from `Alg.carrier_denote` and `Alg.typed_TSub` |
-| `Calculus/Dynamo/Lang/Equations.lean` | `Codec.Equiv` (the specification's `≡`), `Can`, and all ten "Hold" nodes of the specification's equations this development still states — `held`'s composition (its identity is `equiv_through_id` at the codecs, because a `held` of the empty word has no term), `refine`'s meet and full case, `Codec.extendRead` with its own reader as the alternate reader and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of the conditions that the specification states), wrapper member preservation. The null-point node went with the wrapper: the point is a union option, so idempotence is the union's |
+| `Calculus/Dynamo/Lang/Scope.lean` | The closed codec of DynamoDB `Closed`: a DAG of scopes over the term container, and a root entry. Its meaning `Closed.meaning` at a caller table is the solution of the scopes at the root, and the read row `Closed.AdmA` is the domain of the read of the meaning |
+| `Calculus/Dynamo/Lang/ScopeSound.lean` | The judgement `Closed.Typed` and the obligations `Closed.Obligations` of a closed codec at the DynamoDB tables, the theorem `Closed.sound`, the carrier bridge `Closed.carrier` (a typed closed codec writes and reads only values of its held set), and `Closed.extendRead_lawfulCore` |
+| `Calculus/Dynamo/Lang/Equations.lean` | `union` associativity, which needs none of the conditions that the specification states (`equiv_altCodec_assoc`). The other "Hold" nodes of the specification's equations are the combinator rows of `Codec.Equiv` (the specification's `≡`) in `Alg/Relations.lean` (`held`'s identity `equiv_through_id`, `Codec.extendRead` with its own reader as the alternate reader and `≈` on `Can(c)`, `union` of one and its commutativity) and the term rows of `ScopeEquations.lean`. The null-point node went with the wrapper: the point is a union option, so idempotence is the union's |
+| `Calculus/Dynamo/Lang/ScopeEquations.lean` | The rows of `≡` that read a term, over the codec of a scope term: `held`'s composition (`Scoped.equiv_held_comp`; its identity is `equiv_through_id` at the codecs, because a `held` of the empty word has no term), `refine`'s meet and full case (`Scoped.equiv_refine_meet`, `Scoped.equiv_refine_full`), and wrapper member preservation (`Scoped.optional_μ`, `Scoped.held_μ`, `Scoped.refine_μ`) |
 | `Calculus/Dynamo/Alg/Opaque.lean` | `opaque` as the identity codec `Alg.idCodec`, with `lawful_opaq` and `carrier_opaq`; the union of everything self-identifying (`opaqUnfoldClosed`) is a theorem in `ScopeUniversal.lean` |
 | `Calculus/Dynamo/Lang/ScopeHeldSet.lean` | `T` as an identity: `Closed.typed_T_identity` ((A) at every entry of a typed closed codec, from `TOp.rule_T` at every operation) |
 | `Calculus/Dynamo/Alg/Continuity.lean` | `Sub` as the information order that any ccpo must extend, and first-match resolution monotone (`selectF_mono_list`) and continuous (`selectF_continuous_list`) under the obligation that every admitter agrees |
@@ -65,7 +65,7 @@ definition it touches.
 | `Calculus/JSON/Disjoint.lean` | Disjointness at JSON: the leaves `jsonLeaf` (two kinds are apart where they are two kinds), the laws of the leaves and of the formers as instances, and `Alg.disjoint_orthogonal` at `jsonSyn` (`orthogonal`) |
 
 `Alg/Agree.lean`, `Alg/Converse.lean`, `Alg/Rows.lean`, `Lang/Converse.lean`, `JSON/Compat.lean`,
-`HeldFree.lean`, `Malleability.lean`, `Separation.lean`, `ScopeSlice.lean`, `Bridge/Vectors.lean`, `Bridge/Verdicts.lean`, `Bridge/Kinds.lean`,
+`ScopeHeldFree.lean`, `Malleability.lean`, `Separation.lean`, `ScopeSlice.lean`, `Bridge/Vectors.lean`, `Bridge/Verdicts.lean`, `Bridge/Kinds.lean`,
 `Bridge/Rows.lean` and `Bridge/ScopePaths.lean` have none, and each opens with a module docstring that says
 what it is for.
 Read those.
@@ -75,12 +75,10 @@ soundness theorem of the judgement is machine-checked — `soundness` (retract, 
 each case to its certified combinator lemma. `opaque` is the identity codec, so it owes no
 compatibility.
 The judgement carries both of its indices, and both are checked against the
-denotation. `typed_e_mem` and `typed_p_mem` are the specification's `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T` at the
-judgement's own index — a derivable term writes and reads only values of the held set it
-names — factored through `Carrier` (per combinator) and `typed_TSub` (the denotation's
-held set is inside the judgement's) — and the containment is an **identity** in both
-directions, `Closed.typed_T_identity`, so the index describes the denotation exactly rather than
-bounding it. The
+denotation. `Closed.carrier` states the specification's `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`: a typed
+closed codec writes and reads only values of its held set. The held set is an **identity** with
+the judgement's own index in both directions, `Closed.typed_T_identity`, so the index describes
+the denotation exactly rather than bounding it. The
 member index is fuel-free (`μSyn`, with `denote_μ` and `typed_μSyn` tying the denotation
 and the judgement to it).
 

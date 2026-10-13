@@ -92,7 +92,7 @@ term. `denote` reads the table of each absolute side, so the dual, with the two 
 denotes each term by the same codec (`denote_op`). The compiled code of a function over `Term S`
 takes `S` as a real argument, because `casesOn` takes the parameter of the family as a real
 argument. The meaning is computable: no definition carries `noncomputable`, and `#eval` runs
-`denote` and `Closed.AdmA` at DynamoDB.
+`Closed.meaning` and `Closed.AdmA` at DynamoDB.
 The split keeps a term as data that code can compute with.
 
 **Each stored-side law of the generic layer is the caller-side law at the dual universe.** `AdmA`
@@ -195,20 +195,18 @@ primitives and of its formers, and the generic combinators supply the rest.
 lawful: the top is the identity, which is canonical.
 
 **The instance names the generic declarations.** At DynamoDB, `Codec` and `Lawful` are
-abbreviations at the DynamoDB carriers, and `Term`, `Typed` and `Obligations` are abbreviations
-at `dynSyn`. A `match_pattern` abbreviation keeps each constructor spelling, such as
-`Term.string` and `Term.literal`. `Term.casesD` keeps the case tags `base` and `literal`. A
-cited DynamoDB theorem, such as `soundness`, states the generic theorem at the DynamoDB names.
+abbreviations at the DynamoDB carriers, and `Term` is an abbreviation at `dynSyn`.
+`Closed.Typed` and `Closed.Obligations` state the generic judgement and the generic obligations of
+a closed codec at the DynamoDB tables. A `match_pattern` abbreviation keeps each constructor
+spelling, such as `Term.string` and `Term.literal`. `Term.casesD` keeps the case tags `base` and
+`literal`. A cited DynamoDB theorem, such as `Closed.sound`, states the generic theorem at the
+DynamoDB names.
 
-**The DynamoDB `denote` is the generic `denote`, and a simp set gives its rows.** `denote`,
-`μSyn` and their companions are abbreviations of the generic functions, typed at
-`Term`. So a constructor argument such as `.base k` resolves in the DynamoDB namespace. A proof at
-DynamoDB reads `baseCodec`, `setCodec` and `listCodec` by name. A generic equation states a row
-through the signature, and `simp only [g]` unfolds an abbreviation `g` and reads no other
-equation. So each row at the DynamoDB constructors is a `rfl` lemma in a registered simp set:
-`denote_rows` or `μSyn_rows`. A proof names the set where it named the
-function. `rw` matches the head symbol, so a lemma stated at an abbreviation does not rewrite the
-generic head. `exact` compares up to unfolding, and accepts both.
+**The DynamoDB meaning is the generic meaning of a closed codec.** `Closed.meaning` reads the
+solution of the scopes of a closed codec at the DynamoDB tables, and `μG` reads the member of a
+graph term. A proof at DynamoDB reads `baseCodec`, `setCodec` and `listCodec` by name.
+`Scoped.interp_held` and `Scoped.interp_refine` state the rows of `held` and `refine` over a
+scope term.
 
 **A `held` carries an adapter word, and `denote` reads a table.** A word is a list of signed
 generators. The sign `true` names the converse of a generator: the pair of the generator with its
@@ -218,7 +216,7 @@ stored-side function, and `denote` reads the table as it reads the environment o
 side.
 The empty word is the identity at every table. The pair of two words in sequence is the composite
 of the two pairs (`TableAt.word_append`). So two nested `held`s are one `held` of the concatenated
-word, under a `refine` by the inner caller-side restriction (`equiv_denote_held_comp`). The dagger
+word, under a `refine` by the inner caller-side restriction (`Scoped.equiv_held_comp`). The dagger
 of a word (`Word.dagger`) reverses the letters and flips each sign. The dagger law states that the
 pair of the dagger is the pair of the word, swapped (`Table.word_dagger`). A `held` carries one
 absolute side `s` and a non-empty word at `s`. The other side has no adapter and no restriction.
@@ -244,8 +242,8 @@ of a closed codec, `Closed.AdmA`, is the domain of the read of its meaning.
 **The other analyses are DynamoDB tables.** `Separation`, `ScopeSlice` and the certificate read
 the constructors of the DynamoDB carriers. No generic form of them exists. Inside the DynamoDB layer the import graph is an almost-linear spine: `Domain`, then
 `Codec`, then the combinator algebra at the DynamoDB carriers as `Prisms`, `Products`, `Objects`,
-`Sums`, `Carriers`, `Lawful` and `Frontier`, and `Term`, then `Denote`, `Typing`, `Soundness`,
-then `Separation`, with `Axioms` as the sink. Each instance module imports the
+`Sums`, `Carriers`, `Lawful` and `Frontier`, and `Term`, then `Scope` and `ScopeSound`,
+then `ScopeSeparation` and `Separation`, with `Axioms` as the sink. Each instance module imports the
 generic module that it instantiates. Several analyses sit off the spine: no module but
 `Axioms.lean` imports them. `Malleability` is one of them: a lawful codec has one attribute per
 value (`Lawful.fmt_subsingleton`).
@@ -316,16 +314,14 @@ error but a silent "everything": the analysis stays sound and stops saying anyth
 | Companion | For `Body` | Why it is owed |
 | --- | --- | --- |
 | a depth clause | `Body.depth` | the termination measure must see through it |
-| a denotation clause | `bodySem`, generic, with its DynamoDB row in `denote_rows` | `denote` must dispatch with no case split at the use site |
-| a spec projection | `Body.spec` | a slice reads an object option's names and literals off the spec |
+| a denotation clause | `bodySem`, generic | `denote` must dispatch with no case split at the use site |
+| a spec projection | `Closed.spec` | a slice reads an object option's names and literals off the spec |
 | an admission row, per side | `AdmBody` and `AdmABody` | exactness is per row; a stratum with no row cannot be exact |
 | a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
 | an emitter clause | the object row of `src/codec/lean.ts` | the bridge writes terms in this language, and a constructor it cannot spell breaks it |
 
 The depth clause, the denotation clause and the premise carrier are generic, and each universe
-inherits them. The admission rows are generic too. The spec projection is a DynamoDB table. The DynamoDB rows
-of `denote` in `denote_rows` are owed too. A missing row fails only a proof that reads the
-row.
+inherits them. The admission rows are generic too. The spec projection is a DynamoDB table.
 
 The spec projection is owed only by a stratum that holds names. A policy answers to no name.
 Every other row is owed unconditionally.
@@ -350,7 +346,7 @@ only.
 | A premise that is | goes in | consumed by |
 | --- | --- | --- |
 | decidable from the term | `Typed` | the judgement itself |
-| about what a codec does: its write half, its read half, an iso, a resolution | `Obligations`, as `PairwiseCompat` and `IsoCancels` are | `soundness`, and `extendRead_lawfulCore` through it |
+| about what a codec does: its write half, its read half, an iso, a resolution | `Obligations`, as `PairwiseCompat` and `IsoCancels` are | `soundness`, and `Closed.extendRead_lawfulCore` through `Closed.sound` |
 | a rule of one universe on a set element | the `elem` field of the universe's `SetF`, which `SetObl` puts in `Obligations` | no law: `soundness` takes it as a premise and does not read it |
 
 `Typed` has no rule for the alternate reader (`Term.legacy`), so a typed term holds none. Therefore
@@ -358,8 +354,8 @@ only.
 the orientation (retract at the host, canon at the dual) and writes, for every typed term whose
 obligations hold. The induction proves `Lawful` alone.
 `Lawful.core` gives `LawfulCore` from it. An alternate reader is `Codec.extendRead` at the codec layer. Its read passes only what the current
-codec writes, so `extendRead_lawfulCore` proves `LawfulCore` for it over a typed term whose
-obligations hold, with no premise. `ReadsCoherently` is the coherence of the alternate reader:
+codec writes, so `Closed.extendRead_lawfulCore` proves `LawfulCore` for it over a typed closed
+codec that meets its obligations, with no premise. `ReadsCoherently` is the coherence of the alternate reader:
 where both readers read an attribute, and the current codec can write the older answer, the two
 answers agree. `extendRead_p_union` proves the premise equivalent to order-freedom: the first-match
 presentation equals the order-free union of `p` and the gated `r`.
@@ -435,9 +431,10 @@ everything self-identifying (`opaqUnfoldClosed`) sends each datum to itself. `op
 codec `Alg.idCodec`, and it owes no compatibility and no contraction. The union is a theorem:
 `Closed.Adm_opaqUnfold` and `Closed.AdmA_opaqUnfold` state that the union admits what `opaque` admits.
 
-**A held-free term is a restriction of `opaque`.** A held-free term (`HF`) holds no `held`, no
-older reader and no fill slot. Such a term writes only what `opaque` writes (`confluence_W`), and
-reads only what `opaque` reads (`confluence_R`). A `held` re-indexes the values of the caller, so
+**A held-free closed codec is a restriction of `opaque`.** A held-free closed codec
+(`Closed.HF`) holds no `held`, no older reader and no fill slot in any term of any scope. Such a
+codec writes only what `opaque` writes (`Closed.confluence_W`), and reads only what `opaque`
+reads (`Closed.confluence_R`). A `held` re-indexes the values of the caller, so
 the inclusion does not reach a `held`.
 
 **The analyses read a recursive codec through its meaning.** The read row `Closed.AdmA` reads the
@@ -1073,7 +1070,7 @@ refusal is the record, and it is the shape every gap of this kind takes.
 required discriminator. A caller that accepts an old input extends the whole union's codec with
 one alternate reader (`Codec.extendRead`). The alternate reader owns that migration after core
 selection refuses.
-`Body.spec` contains no migration field.
+`Closed.spec` contains no migration field.
 
 **A host obligation that no host code reads is found by whatever has to serialise the host's own
 definition, or it is not found.** A term the host builds must determine the codec the host runs.

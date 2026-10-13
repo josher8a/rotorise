@@ -1,4 +1,3 @@
-import Calculus.Dynamo.Lang.Soundness
 import Calculus.Dynamo.Lang.ScopeSound
 import Calculus.Dynamo.Lang.ScopeHeldSet
 import Calculus.Dynamo.Lang.ScopeHeldFree
@@ -7,8 +6,6 @@ import Calculus.Dynamo.Witness.ScopeDischarge
 import Calculus.Dynamo.Alg.Continuity
 import Calculus.Dynamo.Witness.Refutations
 import Calculus.Dynamo.Witness.ScopeRefutations
-import Calculus.Dynamo.Lang.HeldSet
-import Calculus.Dynamo.Lang.HeldFree
 import Calculus.Dynamo.Lang.Equations
 import Calculus.Lang.View
 import Calculus.Dynamo.Analysis.Separation
@@ -185,9 +182,9 @@ narrowing and fails before it. -/
 cannot read. The `opaque`/`NS` defect is its counterexample, and canonical reads are the only
 law that sees it — which is why it needs stating rather than following from the rest. -/
 
-/-! The Hold rows of `≡` at term level. The ten `denote_*` bridges are `rfl` and carry no axiom
-risk worth a line each; what is guarded is the twins, which go through `Codec.Equiv` and are
-what a reviewer checks the table of `≡` against. -/
+/-! The Hold rows of `≡` at term level, over the codec of a scope term. The member rows are `rfl`
+and carry no axiom risk worth a line each; what is guarded is the twins, which go through
+`Codec.Equiv` and are what a reviewer checks the table of `≡` against. -/
 
 /-! The continuity results — why fuel is not removable by a fixpoint. -/
 

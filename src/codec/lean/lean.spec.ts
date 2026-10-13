@@ -675,7 +675,7 @@ describe('what cannot be emitted', () => {
      *
      * The host carries a tag as `S` or `N`, so `discriminatedUnion` admits a discriminator at
      * `string`, `number` or `decimal` and refuses `boolean` and `binary`. The model reads a
-     * discriminator as the literal it is, through `Calculus.altsOfField`, at `string` and at
+     * discriminator as the literal it is, through `Calculus.pinOfG`, at `string` and at
      * `decimal` alike — a decimal literal holds its numeral as text — so a decimal discriminator
      * emits on both halves.
      *
@@ -2530,9 +2530,9 @@ describe('the full cross product, for the gate', () => {
 /**
  * **The read side of every corpus codec, which the write vectors could not reach.**
  *
- * A write vector asserts `(denote t).e v = some a` and a refusal vector asserts `= none`. Both are
+ * A write vector asserts `(Closed.meaning α t).e v = some a` and a refusal vector asserts `= none`. Both are
  * about `e`. The model's `p` was asserted only where a union had to choose — `.resolutions.lean`
- * states `(denote t).p a = some v` per read resolution — so for the corpus at large one half of
+ * states `(Closed.meaning α t).p a = some v` per read resolution — so for the corpus at large one half of
  * every pair was proposed to the model and the other half was not.
  *
  * These close that. Both halves come from running the library: `a` is what `encode` wrote for the
@@ -2578,7 +2578,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
         const module = leanReadVectorModule(sampleVectors.filter(emittable))
         expect(module).toContain('import Calculus.Bridge.Vectors')
         // a vector spells `libTable noCallers`, which only `Store` declares, and without the import
-        // `denote` sticks on a free variable and no vector elaborates
+        // `Closed.meaning` sticks on a free variable and no vector elaborates
         expect(module).toContain('import Calculus.Dynamo.Lang.Store')
         // the header states what it could not state, which for this corpus is nothing
         expect(module).toContain('every corpus codec round trips')
@@ -2634,7 +2634,7 @@ describe('the committed sample', () => {
                 sampleRefusals,
                 allRefusals().length,
                 // the read subset is the `check` sample's alone: a read vector needs `vcheck`, and
-                // the `equation` sample states each vector as an equation on `denote` by design
+                // the `equation` sample states each vector as an equation on `Closed.meaning` by design
                 protocol === 'check' ? [...readSample, mutualSample] : [],
             )
             // `UPDATE_LEAN_SAMPLE=1 vitest run src/codec/lean/lean.spec.ts` rewrites them — and then they have

@@ -197,15 +197,15 @@ The mechanism is the tolerance the header above describes: `≡` compares `e` an
 Put one in the middle and it relates two codecs that disagree outright.
 
 The witness is at `Codec` level, which is the level the relation `≡` lives at: the rows of `≡` are
-stated over any carriers, about combinators and not about `denote`. What keeps it
+stated over any carriers, about combinators and not about `Closed.meaning`. What keeps it
 from being a degenerate artifact is that **all three codecs are `Lawful` and on their
 `Carrier`**, and the held set is not empty: the failure survives every hypothesis the codec laws
 impose on a pair. It uses only the licence the codec laws grant explicitly — a term's `e` does
 whatever it likes off `T` — and the fact that `Carrier` bounds `dom(e)` by `T` without
 requiring the converse.
 
-What is *not* settled here: whether `≡` chains when both ends are `denote` of derivable
-terms. The middle codec below holds `null` and writes nothing, and no derivable term does
+What is *not* settled here: whether `≡` chains when both ends are the meanings of typed closed
+codecs. The middle codec below holds `null` and writes nothing, and no typed closed codec does
 that, so this refutation does not decide the restricted question. -/
 
 /-- Writes `null` as `S "A"`, and reads only that attribute — lawful, and on its carrier. -/

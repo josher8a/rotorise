@@ -650,8 +650,9 @@ const bindersAt = (root: Term): Binders => {
 /**
  * **The member that a wrapper's inner term stores, as the model reads the printed term.** The
  * emitter prints a thunk that closes no cycle as its target, so the walk reads the target. The
- * emitter prints a binder of the root as `mu`, and a thunk that throws as a free variable. The
- * model's `μSyn` answers no member at either, so this answers `undefined` there.
+ * emitter prints an entry of a cycle as a reference, `Scoped.Term.ref`, inside a closed codec. The
+ * model's `μG` answers no member at a reference, so this answers `undefined` at a term of `binds`.
+ * The emitter refuses a thunk that throws, and this answers `undefined` there too.
  *
  * {@link memberOf} answers `undefined` at every thunk, and the set constructor relies on that
  * answer. A set holds no thunk on the path that `member` reads, so the last row reads a set
@@ -1618,7 +1619,7 @@ const set = <const C extends AnyCodec>(
         )
     }
     // **No law covers a set of a read widening.** `withLegacyRead` is the model's `Term.legacy`,
-    // and `Typed` has no rule for it, because the pair is not a partial bijection. The set law
+    // and the rule `TOp.rule` answers `none` at it, because the pair is not a partial bijection. The set law
     // `lawful_setCodec` needs a lawful element, so the host refuses the set rather than ship a
     // pair that no law covers
     if (widensRead(inner.def)) {
@@ -5968,7 +5969,7 @@ export const discriminatedUnion = <
 /**
  * **The term that admits no value**, and the unit the product and the slice need.
  *
- * `Term.never` on both sides. The model types it — `Typed.never` gives it the held set `HNever`,
+ * `Term.never` on both sides. The model types it — `TOp.rule` gives it the held set `HNever`,
  * which is `False` — and denotes it as `Codec.empty`, whose laws hold vacuously because both
  * domains are empty.
  *

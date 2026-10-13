@@ -13,7 +13,7 @@ section
 /-! ## Carriers — the pair is on `T` (`e : T ⇀ 𝔸`, `p : 𝔸 ⇀ T`)
 
     One `Carrier` lemma per combinator, mirroring the lawfulness lemmas below. Together
-    with `typed_TSub` (Soundness.lean) these make the judgement's held-set index a
+    with `typed_TSub` (Lang/Sound.lean) these make the judgement's held-set index a
     checked claim: what a derivable term writes and reads lies in the `T` it names. -/
 
 

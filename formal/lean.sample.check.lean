@@ -6,7 +6,7 @@ import Calculus.Dynamo.Lang.Store
 
 **Generated — do not edit.** Emitted by `src/codec/lean.ts` from the shipped TypeScript codecs: each
 theorem below is one `encode` this library actually performed, proposed to the model. A failure
-here is a disagreement between `src/codec/codec.ts` and `Calculus.denote`, and the theorem's name says
+here is a disagreement between `src/codec/codec.ts` and `Calculus.Closed.meaning`, and the theorem's name says
 which vector.
 
 The verdict is `Calculus.check`'s, and `check_same` is what makes it worth having: `.same`
@@ -363,7 +363,7 @@ theorem mutual_scope__guarded :
 
 The model's `p`, given the attribute the library wrote, against the value the library read. Only
 the `check` sample carries these: a read vector's answer is a `Value`, so it needs `vcheck`, and
-the `equation` sample states each vector as an equation on `denote` by design. -/
+the `equation` sample states each vector as an equation on `Closed.meaning` by design. -/
 
 /-- `scalar_string` — read back through the term that wrote it -/
 theorem scalar_string__reads :

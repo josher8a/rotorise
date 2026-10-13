@@ -8,7 +8,7 @@ import Mathlib.Tactic.FinCases
 
 **Generated — do not edit.** Emitted by `src/codec/lean.ts` from the shipped TypeScript codecs: each
 theorem below is one `encode` this library actually performed, proposed to the model as an
-equation. A failure here is a disagreement between `src/codec/codec.ts` and `Calculus.denote`, and the
+equation. A failure here is a disagreement between `src/codec/codec.ts` and `Calculus.Closed.meaning`, and the
 theorem's name says which vector.
 -/
 

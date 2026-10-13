@@ -3,16 +3,16 @@ import Calculus.Dynamo.Domain
 /-!
 # The vector checker — how a generated test vector becomes a kernel-checked theorem
 
-The TypeScript codec is claimed to compute what `denote` denotes.
+The TypeScript codec is claimed to compute what `Closed.meaning` denotes.
 This file is the Lean half of the bridge that checks the claim: the emitter states each vector,
 and the *kernel* — not a tactic, not `#eval` — decides whether the model agrees.
 
 Three facts about this development force the shape of what follows, and each of them rules
 out an easier design.
 
-**The kernel evaluates `denote`, and the kernel is the check.** `#eval` runs `denote` too, but a
-printed value proves nothing, and `native_decide` adds an axiom of its own for each proof, which is
-outside the advertised axiom base. Definitional unfolding is the check: `(denote t).e v = some a` is `rfl` for every
+**The kernel evaluates `Closed.meaning`, and the kernel is the check.** `#eval` runs
+`Closed.meaning` too, but a printed value proves nothing, and `native_decide` adds an axiom of its own for each proof, which is
+outside the advertised axiom base. Definitional unfolding is the check: `(Closed.meaning α t).e v = some a` is `rfl` for every
 term form, including deeply nested ones. So a vector is checked by
 being *typechecked*, and the certificate is a theorem rather than a program's output.
 
@@ -642,12 +642,12 @@ run_cmd withoutModifyingEnv do
 A committed sample states one theorem per vector, and reads:
 
 ```
-theorem v0 : check 8 ((denote t).e v) (some a) = .same := kernel_rfl%
+theorem v0 : check 8 ((Closed.meaning α t).e v) (some a) = .same := kernel_rfl%
 ```
 
-The kernel does the work: the kernel unfolds `denote`, runs the codec on the value, and settles
+The kernel does the work: the kernel unfolds `Closed.meaning`, runs the codec on the value, and settles
 the comparison — no tactic, no `decide` on an undecidable equality, no compiled code. The
-line's content is then recovered with `check_same v0 : (denote t).e v = some a`.
+line's content is then recovered with `check_same v0 : (Closed.meaning α t).e v = some a`.
 
 A rejection vector is the same line with `.differ`, and by `check_differ` it is a proof that
 the codec does *not* write that attribute. Under-fuelling either one produces `.exhausted`,
@@ -667,7 +667,7 @@ same layers. The emitter computes the fuel from the attribute: one layer per `L`
 for the scalar at the bottom. **Fuel is not a cost driver**: the comparator's work is bounded by
 the attribute, not by the budget. Over-fuelling is free, and under-fuelling fails loudly.
 
-What a vector costs is what the *codec* costs, and that is a fact about `denote`, not about
+What a vector costs is what the *codec* costs, and that is a fact about `Closed.meaning`, not about
 this file.
 
 `number` can carry **positive** vectors. `Value.num` carries a `WFNumeral`, which is a
@@ -677,8 +677,9 @@ paragraph does not answer it. `Attr.n`'s row
 compares the underlying text, which is the carrier's own equality.
 
 **It has refusal vectors.** A refusal names the term and a value the term *rejects*, so it needs
-no inhabitant of the codec's own carrier: `(denote Term.number).e (Value.str "x") = none` is
-`rfl`. `Term.number` is a closed term, so the emitter needs no term-level refusal at it.
+no inhabitant of the codec's own carrier: at the closed codec `t` of `number`,
+`(Closed.meaning α t).e (Value.str "x") = none` is `rfl`. `Term.number` is a closed term, so the
+emitter needs no term-level refusal at it.
 Term-inexpressible and value-inexpressible are two boundaries.
 -/
 
