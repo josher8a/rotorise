@@ -291,3 +291,22 @@ one is a binary literal. One example:
 member that the run time dropped stays in the type.
 
 **Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds the 25 ids.
+
+---
+
+## Known: the refusal of a declared never position depends on the spelling of the codec
+
+**Observation.** The type and the run time each refuse a list whose declared position is never.
+The same list builds on both sides when a ref names the never position. Measured 2026-10-13 at
+357d814 with a throwaway probe, tsc for the type and vite-node for the run time:
+
+    list(object({ a: opaque, b: boolean }), never)
+      type: refused, the list refuses a declared position at never
+      runtime: CodecError, position 1 of the declared positions is never
+    list(object({ a: opaque, b: boolean }), scope({ At: ref('It'), It: never }).At)
+      type: accepted
+      runtime: built
+
+**Effect.** A list that holds no value builds when a ref names its never position.
+
+**Pin.** The list spec pins the direct refusal. No test pins the spelling through a ref.
