@@ -71,7 +71,7 @@ theorem readsNothingOk_iff (p : Closed × Attr) :
     readsNothingOk p = true ↔ (p.1.meaning (libTable noCallers)).p p.2 = none :=
   Option.isNone_iff_eq_none
 
-/-- A row of a guard: the guard of a DAG of scopes on the graph gives the answer of `src/`. -/
+/-- A row of a guard: the graph guard on the graph gives the answer of `src/`. -/
 def guardsOk (p : Graph × Bool) : Bool := p.1.guarded == p.2
 
 /-- The law of `guardsOk`: the guard equals the answer. -/
@@ -109,7 +109,7 @@ def acceptedOk (p : Closed × Closed) : Bool := p.1.compatPair p.2
 /-- A pair refused at compatibility: the decision refuses the two closed codecs. -/
 def refusedOk (p : Closed × Closed) : Bool := !p.1.compatPair p.2
 
-/-- A pair refused at the guard: the guard of a DAG of scopes refuses a graph. -/
+/-- A pair refused at the guard: the graph guard refuses a graph. -/
 def guardRefusedOk (p : Graph × Graph) : Bool := !(p.1.guarded && p.2.guarded)
 
 /-- The guard column of a pair: the guard on the two graphs gives the answer of `src/`. -/

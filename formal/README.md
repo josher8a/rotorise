@@ -51,7 +51,7 @@ definition it touches.
 | `Calculus/Dynamo/Lang/Clause.lean` | The data of a clause: `Pin`, `NameSpec`, `AltClause` with `altsSub` and `litSubAt`, and the conditions of a precondition `Cond` with `readPath` |
 | `Calculus/Dynamo/Witness/Refutations.lean` | The six "Do not hold" nodes of the specification's equations, all settled: `Closed.not_equiv_union_array`, `Closed.not_equiv_tupleTail_tuple` and `Closed.not_equiv_tupleTail_array`, `Closed.not_equiv_refine_held` and `Closed.not_equiv_union_extend` in `ScopeRefutations.lean`, `legacy_breaks_MP` for an alternate reader, `e_comp_p_ne_id`, plus `optional` nesting, which the syntax rules out, and `set(union(…))`, which the DynamoDB set obligation refuses (`Scoped.setElem_union_refused`) |
 | `Calculus/Axioms.lean` | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
-| `Calculus/Dynamo/Witness/ScopeDischarge.lean` | The host's recursive schema for JSON as a closed codec (`jsonClosed`), lawful through `Closed.sound` (`Closed.lawful_json`), and each shape that the guard refuses as a graph with no form as a DAG of scopes |
+| `Calculus/Dynamo/Witness/ScopeDischarge.lean` | The host's recursive schema for JSON as a closed codec (`jsonClosed`), lawful through `Closed.sound` (`Closed.lawful_json`), and each shape that the guard refuses as a graph with no stratified form |
 | `Calculus/Dynamo/Analysis/ScopePath.lean` | The frontier of a path into a closed codec and narrowing at DynamoDB, as vectors that reduce in the kernel: the store refuses a segment, and an entry that a cycle returns to is one entry. `Closed.narrowC_law` is the narrowing law at DynamoDB |
 | `Calculus/Dynamo/Analysis/ScopePrecondition.lean` | The precondition of a closed clause as data for the store: a conjunction of `in`, `type` and `exists` tests at paths into the item. `Closed.preconditionOfC` reads the stored view of the clause and states the precondition exactly or refuses (`Closed.preconditionOfC_exact`), and `Closed.narrow_law_precondition` is the narrowing law with the precondition in place of the admission |
 | `Calculus/JSON/Basic.lean` | A second universe on the generic layer, with no DynamoDB import: the carrier `Json`, the ground codecs, the array prism, the signature `jsonSyn`/`jsonSem` with `id_topLaws`, and the kind test as the primitive admission row `jsonPrimAdm` |
@@ -110,8 +110,9 @@ meaning to it).
 - **Recursion is guarded, and constructed.** A closed codec is a DAG of scopes, and each entry
   of a scope is a body that reads the entries. The guard `Flat.Guarded` puts each entry under a
   `down` and no entry under a `wall`, and a guarded system is contractive
-  (`contractive_of_guarded`); a graph that `dagGuardB` refuses has no form as a DAG of scopes
-  (`dagGuard_of_rename`, `DSys.dagGuard`). From
+  (`contractive_of_guarded`). The graph that the host prints for a closed codec has no leaf
+  under a wall, and the guard of the graph is `graphGuard`. A graph that `graphGuard` refuses has
+  no stratified form (`graphGuard_of_rename`, `SSys.graphGuard`). From
   the guard alone the solution is a fixed point (`solve_fix`), and lawful stages give a lawful
   solution (`lawful_solve`, `System.lean`). `Continuity.lean` proves that first-match
   resolution is monotone (`selectF_mono_list`, the `mono` obligation of a ccpo construction)

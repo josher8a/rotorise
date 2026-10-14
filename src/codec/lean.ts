@@ -702,7 +702,7 @@ const closedPrint = (def: Term, at: string, bound?: Bound): ClosedPrint => {
  * **The graph of a codec** — one flat system over the term container, for the guard rows. Each cycle
  * point of the term graph is an entry: each entry of each cycle, a `ref` of a cycle of `ref`s, and
  * the root. The graph has no order on its entries, so it prints a codec that has no scoped form as
- * well, and the guard of a DAG of scopes decides it.
+ * well, and the graph guard decides it.
  */
 export const leanGraphOf = (
     declared: ObjectSlot,
@@ -1182,10 +1182,9 @@ const recursive = (codec: AnyCodec): boolean =>
     !('mark' in codec.def) && componentsOf([codec.def]).length > 0
 
 /**
- * **A guard verdict**: whether the guard of a DAG of scopes accepts the graph of a codec
- * (`Graph.guarded`). A recursive schema below a list or an object is guarded. A `ref` that names
- * its own term reads its own input, and the guard refuses it: the graph has no form as a DAG of
- * scopes.
+ * **A guard verdict**: whether the graph guard accepts the graph of a codec (`Graph.guarded`).
+ * A recursive schema below a list or an object is guarded. A `ref` that names its own term reads
+ * its own input, and the guard refuses it: the graph has no stratified form.
  */
 export type Guard = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
@@ -1271,8 +1270,8 @@ const refusedBoth = (name: string, codec: AnyCodec, value: unknown): void => {
  *   and the model's decision refuses the pair, `Closed.compatPair x y = false`. A decision that
  *   starts to accept a pair `src/` turns down stops the file.
  * - `src/` **refuses** the pair **at the guard**: an option reads the input of its own binder, or
- *   holds an adapter on a recursive path. The pair prints as two graphs, and the guard of a DAG of
- *   scopes must refuse a graph too.
+ *   holds an adapter on a recursive path. The pair prints as two graphs, and the graph guard must
+ *   refuse a graph too.
  *
  * A union over a `ref` that no scope binds is an open fragment: the scope that binds the name
  * decides it, so such a pair holds no decision of the host, and the emitter refuses the pair.
@@ -1360,7 +1359,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     const reduce = closing(binders)
     if (form === 'guardRefused') {
         return [
-            `/-- \`${name}\` — \`src/\` refuses this pair at the guard; the guard of a DAG of scopes refuses a graph too -/`,
+            `/-- \`${name}\` — \`src/\` refuses this pair at the guard; the graph guard refuses a graph too -/`,
             `${head} :`,
             `    ((${l}).guarded &&`,
             `      (${r}).guarded) = false :=`,
@@ -1421,7 +1420,7 @@ export const leanFormerGuard = ({ name, term }: FormerGuard): string => {
     const printed = leanGraphOfTerm(term, name, bound)
     const binders = leanBinders(bound)
     return [
-        `/-- \`${name}\` — a former refuses this term; the guard of a DAG of scopes refuses its graph too -/`,
+        `/-- \`${name}\` — a former refuses this term; the graph guard refuses its graph too -/`,
         `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
         `    ${printed}.guarded = false :=`,
         `  ${closing(binders)}`,
@@ -3690,7 +3689,7 @@ export const leanVectorRowModule = (
         `Emitted by \`src/codec/lean.ts\` from the shipped TypeScript codecs. A \`writes\`
 row is one \`encode\` that this library performed, \`check n ((t.meaning (libTable noCallers)).e v) (some a) = .same\`. A
 \`writesNothing\` row is a value that this library refuses, \`(t.meaning (libTable noCallers)).e v = none\`. A \`guards\` row
-is the guard of a DAG of scopes on the graph of a codec, \`g.guarded = b\`. ${admissions.length} admissions,
+is the graph guard on the graph of a codec, \`g.guarded = b\`. ${admissions.length} admissions,
 ${refusals.length} refusals.`,
         vectorRows(admissions, refusals, guards),
     )
