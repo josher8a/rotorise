@@ -10,7 +10,7 @@
  * **The host has one disjointness decision**, the walk of this file. {@link agrees}, path narrowing
  * and the disjointness rows each read the walk, and each Lean twin reads `Scoped.disjoint`.
  */
-import type { Body, Field, Predicate, Term } from './term'
+import type { Body, Field, Term } from './term'
 import {
     childrenOf,
     componentsOf,
@@ -19,7 +19,6 @@ import {
     forceDeclared,
     isPrim,
     otherShape,
-    predicatesApart,
     primsApart,
     sameAdapter,
 } from './term'
@@ -48,16 +47,12 @@ const graphOf = (
 
 /**
  * **A position of the graph**: an entry, a term in place, a refinement over a position, or a thunk
- * that throws. `q` is the predicate of a refinement where it is data, and nothing elsewhere.
+ * that throws.
  */
 type At =
     | { readonly kind: 'entry'; readonly j: number }
     | { readonly kind: 'term'; readonly t: Term; readonly side: Side }
-    | {
-          readonly kind: 'refine'
-          readonly q: Predicate | undefined
-          readonly inner: At
-      }
+    | { readonly kind: 'refine'; readonly inner: At }
     | { readonly kind: 'free' }
 
 /** One operand: its entries, its view, and the entries that reach an adapter. */
@@ -66,9 +61,6 @@ type Side = {
     readonly index: ReadonlyMap<Term, number>
     readonly root: number
     readonly mode: Mode
-    /** The entries that reach an adapter in the term, which the view reads. */
-    readonly raw: readonly boolean[]
-    readonly rawStable: boolean
     /** The entries that reach an adapter in the operand that the test reads. */
     readonly adapts: readonly boolean[]
     readonly stable: boolean
@@ -92,19 +84,11 @@ const sideOf = (t: Term, mode: Mode): Side | undefined => {
         index,
         root: graph.root,
         mode: 'raw' as Mode,
-        raw: [],
-        rawStable: true,
         adapts: [],
         stable: true,
     }
     const [raw, rawStable] = adaptersOf(base)
-    const rawSide: Side = {
-        ...base,
-        raw,
-        rawStable,
-        adapts: raw,
-        stable: rawStable,
-    }
+    const rawSide: Side = { ...base, adapts: raw, stable: rawStable }
     if (mode === 'raw') return rawSide
     const viewed: Side = { ...rawSide, mode }
     const [adapts, stable] = adaptersOf(viewed)
@@ -158,10 +142,6 @@ const reachesAdapter = (table: readonly boolean[], at: At): boolean => {
 const belowTopAt = (side: Side, at: At): boolean =>
     side.stable && !reachesAdapter(side.adapts, at)
 
-/** …in the term that the view reads. */
-const belowTopRaw = (side: Side, at: At): boolean =>
-    side.rawStable && !reachesAdapter(side.raw, at)
-
 /** The body of an entry, in the operand that the test reads. */
 const body = (side: Side, j: number): At => {
     const t = side.bodies[j] as Term
@@ -182,30 +162,15 @@ const place = (side: Side, t: Term): At => {
     return target === undefined ? { kind: 'free' } : place(side, target)
 }
 
-/** The position of a term in place at the raw graph of an operand. */
-const placeRaw = (side: Side, t: Term): At =>
-    place(side.mode === 'raw' ? side : { ...side, mode: 'raw' }, t)
-
 /**
  * **The view of a term in place**, the model's `viewG`. A `held` reads its caller side, and a
  * `withLegacyRead` reads its inner term where it writes and `opaque` where it reads. A refinement
- * over a term below the top keeps its predicate, and elsewhere only the caller view keeps it.
+ * is a position over its inner term.
  */
 const viewAt = (side: Side, t: Term): At => {
     switch (t.kind) {
-        case 'refine': {
-            const q = t.q.kind === 'members' ? t.q : undefined
-            if (side.mode === 'raw')
-                return { kind: 'refine', q, inner: place(side, t.inner) }
-            const keep =
-                side.mode === 'caller' ||
-                belowTopRaw(side, placeRaw(side, t.inner))
-            return {
-                kind: 'refine',
-                q: keep ? q : undefined,
-                inner: place(side, t.inner),
-            }
-        }
+        case 'refine':
+            return { kind: 'refine', inner: place(side, t.inner) }
         case 'held':
             if (side.mode === 'raw') break
             return place(side, side.mode === 'caller' ? t.outer : t.inner)
@@ -246,17 +211,7 @@ const row = (c: Ctx, table: Table, l: At, r: At): boolean => {
         case 'free':
             return rightRows(c, restart, () => false, r)
         case 'refine':
-            return splitRows(
-                c,
-                restart,
-                (r1) =>
-                    row(c, table, l.inner, r1) ||
-                    (l.q !== undefined &&
-                        belowTopAt(c.left, l.inner) &&
-                        predicateApart(c, l.q, r1)),
-                (one) => one,
-                r,
-            )
+            return row(c, table, l.inner, r)
         case 'term':
             break
     }
@@ -445,73 +400,6 @@ const rightRows = (
 }
 
 /**
- * **The right operand, split at every depth**, the model's `splitG`. A refinement keeps its
- * predicate on each option below it, through the wrapper `wrap`, where the predicate is data and
- * the inner term lies below the top.
- */
-const splitRows = (
-    c: Ctx,
-    restart: (r: At) => boolean,
-    fam: (r: At) => boolean,
-    wrap: (r: At) => At,
-    r: At,
-): boolean => {
-    switch (r.kind) {
-        case 'entry':
-            return restart(wrap(body(c.right, r.j)))
-        case 'free':
-            return fam(wrap(r))
-        case 'refine': {
-            const q = r.q
-            return q !== undefined && belowTopAt(c.right, r.inner)
-                ? splitRows(
-                      c,
-                      restart,
-                      fam,
-                      (one) => wrap({ kind: 'refine', q, inner: one }),
-                      r.inner,
-                  )
-                : splitRows(c, restart, fam, wrap, r.inner)
-        }
-        case 'term':
-            switch (r.t.kind) {
-                case 'never':
-                    return true
-                case 'refine':
-                    return splitRows(
-                        c,
-                        restart,
-                        fam,
-                        wrap,
-                        viewAt(c.right, r.t),
-                    )
-                case 'union':
-                    return r.t.options.every((option) =>
-                        splitRows(
-                            c,
-                            restart,
-                            fam,
-                            wrap,
-                            place(c.right, option),
-                        ),
-                    )
-            }
-            return fam(wrap(r))
-    }
-}
-
-/**
- * **A data predicate that no predicate of the right refinement chain meets**, the model's
- * `predApartG`. A refinement of the chain counts only over a term below the top.
- */
-const predicateApart = (c: Ctx, q: Predicate, r: At): boolean =>
-    r.kind === 'refine' &&
-    ((r.q !== undefined &&
-        belowTopAt(c.right, r.inner) &&
-        predicatesApart(q, r.q)) ||
-        predicateApart(c, q, r.inner))
-
-/**
  * **Two list shapes apart**, the model's `listRowG`. Two values of different lengths differ, so
  * the shapes are disjoint where one position of each common length is. **Either side without a
  * spread** fixes the one length, and a length the other side refuses is disjoint outright. **Both
@@ -606,8 +494,7 @@ const apartAt = (left: Side, right: Side, l: At, r: At): boolean => {
 
 /**
  * **The view of a position**, the model's `viewG` on a graph term: an entry stays an entry, and a
- * term reads its view at the operand of the view. A refinement over a term below the top keeps its
- * predicate, and elsewhere only the caller view keeps it.
+ * term reads its view at the operand of the view.
  */
 const viewOf = (side: Side, at: At): At => {
     switch (at.kind) {
@@ -615,14 +502,7 @@ const viewOf = (side: Side, at: At): At => {
         case 'free':
             return at
         case 'refine':
-            return {
-                kind: 'refine',
-                q:
-                    side.mode === 'caller' || belowTopRaw(side, at.inner)
-                        ? at.q
-                        : undefined,
-                inner: viewOf(side, at.inner),
-            }
+            return { kind: 'refine', inner: viewOf(side, at.inner) }
         case 'term':
             return viewAt(side, at.t)
     }

@@ -48,13 +48,7 @@
  */
 import type { AttributeMap, AttributeValue } from './attribute'
 import { DynamoNumber, memberOf } from './attribute'
-import type {
-    AnyCodec,
-    AttributeCodec,
-    ItemCodec,
-    LiteralValue,
-    Rng,
-} from './codec'
+import type { AnyCodec, AttributeCodec, ItemCodec, Rng } from './codec'
 import { CodecError, codecOfTerm, failed, opaque, orThrow } from './codec'
 import { accepts, holds } from './denote'
 import type { Term } from './term'
@@ -1098,19 +1092,15 @@ export const arbitraryOf = (
             )
         case 'refine': {
             const q = def.q
-            if (q.kind === 'members') {
-                const ls: readonly LiteralValue[] = q.literal.ls
-                return pickFrom(rng, ls)
-            }
-            if (q.q.arbitrary) return q.q.arbitrary(rng, size)
+            if (q.arbitrary) return q.arbitrary(rng, size)
             let sample = samplers.get(def)
             if (!sample) {
                 sample = bySampling(
                     (r: Rng, sz: number) =>
                         arbitraryOf(codecOfTerm(def.inner), r, sz),
-                    q.q.is as (value: unknown) => value is unknown,
-                    q.q.what,
-                    q.q.onThinSearch,
+                    q.is as (value: unknown) => value is unknown,
+                    q.what,
+                    q.onThinSearch,
                 )
                 samplers.set(def, sample)
             }

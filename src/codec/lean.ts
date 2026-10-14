@@ -60,7 +60,7 @@ import {
     isStoredNumeral,
     memberOf,
 } from './attribute'
-import type { AnyCodec, LiteralValue, ObjectSlot } from './codec'
+import type { AnyCodec, LiteralValue, ObjectSlot, Refinement } from './codec'
 import { object, optional, union } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
 import { CodecError, failed } from './result'
@@ -69,7 +69,6 @@ import type {
     Alternatives,
     Body,
     Literal,
-    Predicate,
     Term,
     Field as TermField,
 } from './term'
@@ -787,60 +786,30 @@ const leanLiteral = (literal: Literal): string =>
     `GroundKind.${literal.base} ${leanAlternative(literal.base, literal.v)}`
 
 /**
- * …and a set of alternatives, which `Pred.members` still carries.
+ * The rule `(refine)`'s predicate, as the model's `Pred.closure`.
  *
- * `Pred.members` is a refinement predicate over a `NEFinset`, so this keeps the wire-set spelling
- * a literal gave up. `string.set('a', 'b')` is where it is reached.
+ * The predicate comes back parenthesised, because it is an application and `Term.refine` takes its
+ * second argument juxtaposed.
+ *
+ * A closure is a caller's JavaScript function; the registry below recognises two of them **by
+ * reference**, and everything else is refused. `refine` still carries an arbitrary predicate.
  */
-const leanGround = (alts: Alternatives, at: string): string => {
-    const base = alts.base
-    // an annotation rather than a cast: widening to the union's supertype is something
-    // the checker can do on its own, and `as` here would only hide it doing so
-    const alternatives: readonly LiteralValue[] = alts.ls
-    return `GroundKind.${base} (${leanNonEmptySet(
-        [...new Set(alternatives)].map((one) => leanAlternative(base, one)),
-        at,
-    )})`
-}
-
-/**
- * The rule `(refine)`'s predicate, as the model's `Pred`.
- *
- * **The two sides are one shape now.** {@link Predicate} is `members | closure`, and
- * `Calculus.Pred` has those two constructors and `except`, which the host does not spell. So this
- * is a rename and not a translation: `members` to `Pred.members`, a recognised closure to
- * `Pred.closure`. `Pred.eval` is where the meaning lives in the model, and this prints the data.
- *
- * Every case comes back parenthesised, because each is an application and `Term.refine` takes its
- * second argument juxtaposed. That includes the recognised closures, which used to come back bare
- * because they were identifiers and are now wrapped.
- *
- * The third case has no data and never will. A `closure` is a caller's JavaScript function; the
- * registry below recognises two of them **by reference**, and everything else is refused. That is
- * the case `Pred` keeps rather than removes: `refine` still carries an arbitrary predicate.
- */
-const leanPredicate = (q: Predicate, at: string, bound?: Bound): string => {
-    switch (q.kind) {
-        case 'members':
-            return `(Pred.members ${leanGround(q.literal, at)})`
-        case 'closure': {
-            // recognised by reference against the function this package exported, so a rename or a
-            // reimplementation of the predicate is a type error here rather than a silent misemission
-            const known = shippedPredicates.get(q.q.is)
-            // a caller's closure in a quantified vector is a variable of the theorem
-            if (!known && bound)
-                return bound.standIn
-                    ? '(Pred.closure (fun _ => true))'
-                    : `(Pred.closure ${boundName(bound.closures, q.q.is, 'q')})`
-            if (!known) {
-                return refuse(
-                    at,
-                    `\`Pred.closure\` carries \`q : Value → Bool\`, and this predicate is not one this library ships: it is the caller's closure for ${JSON.stringify(q.q.what)}, a JS closure. A quantified verdict binds it as a variable, and no evaluation vector prints one. The model names two predicates that this library ships, \`isNumeral\` and \`isStoredNumeral\` from \`src/codec/attribute.ts\`, passed by reference`,
-                )
-            }
-            return `(Pred.closure ${known.lean})`
-        }
+const leanPredicate = (q: Refinement, at: string, bound?: Bound): string => {
+    // recognised by reference against the function this package exported, so a rename or a
+    // reimplementation of the predicate is a type error here rather than a silent misemission
+    const known = shippedPredicates.get(q.is)
+    // a caller's closure in a quantified vector is a variable of the theorem
+    if (!known && bound)
+        return bound.standIn
+            ? '(Pred.closure (fun _ => true))'
+            : `(Pred.closure ${boundName(bound.closures, q.is, 'q')})`
+    if (!known) {
+        return refuse(
+            at,
+            `\`Pred.closure\` carries \`q : Value → Bool\`, and this predicate is not one this library ships: it is the caller's closure for ${JSON.stringify(q.what)}, a JS closure. A quantified verdict binds it as a variable, and no evaluation vector prints one. The model names two predicates that this library ships, \`isNumeral\` and \`isStoredNumeral\` from \`src/codec/attribute.ts\`, passed by reference`,
+        )
     }
+    return `(Pred.closure ${known.lean})`
 }
 
 /**
@@ -1048,21 +1017,14 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
          *
          * `writesOnlyStrings` exists because the two shipped predicates take a `string` and a
          * `Value → Bool` takes anything: they disagree where JavaScript coerces, so the emission is
-         * confined to inner terms that write nowhere else. `members` is a `Pred`
-         * constructor over data the term carries, and `Pred.eval` sends it to the model's own
-         * `inL`, so the two agree at every value by construction and the gate has nothing
-         * to say about them.
+         * confined to inner terms that write nowhere else.
          */
         case 'refine': {
             const q = leanPredicate(t.q, at, scope.bound)
-            if (
-                t.q.kind === 'closure' &&
-                shippedPredicates.has(t.q.q.is) &&
-                !writesOnlyStrings(t.inner)
-            ) {
+            if (shippedPredicates.has(t.q.is) && !writesOnlyStrings(t.inner)) {
                 return refuse(
                     at,
-                    `${shippedPredicates.get(t.q.q.is)?.what ?? 'this predicate'} decides a *string*, and this refinement's inner term writes values that are not strings — where JavaScript would coerce and the model would not, so the two predicates would part company`,
+                    `${shippedPredicates.get(t.q.is)?.what ?? 'this predicate'} decides a *string*, and this refinement's inner term writes values that are not strings — where JavaScript would coerce and the model would not, so the two predicates would part company`,
                 )
             }
             // the stored predicate is the top of the store universe: the truth, which is `()`
@@ -3104,8 +3066,8 @@ const readVerdictOf = (
     if (bound.closures.size === 0) return { decodes, term, quantified: false }
     const def = codec.def
     const inner =
-        !('mark' in def) && def.kind === 'refine' && def.q.kind === 'closure'
-            ? { term: def.inner, holds: def.q.q.is }
+        !('mark' in def) && def.kind === 'refine'
+            ? { term: def.inner, holds: def.q.is }
             : undefined
     // the inner term must print no closure, so the theorem binds the top predicate alone
     const below: Bound = {

@@ -168,7 +168,7 @@ theorem decG_of_dropped {φ x : Rooted S.sig} {os : List (Rooted S.sig)} (hx : x
   · exact absurd ⟨hx, by rw [h]; rfl⟩ hd
   · rfl
 
-variable [Shapes S] [LeafMeet S.sig] [TopLaws S] {τ : (s : Bool) → TableAt S.sig s}
+variable [Shapes S] [TopLaws S] {τ : (s : Bool) → TableAt S.sig s}
 
 /-- **Narrowing drops only what the clause excludes**: an option that narrowing drops reads no
     datum that the view of the clause reads. -/
@@ -187,7 +187,7 @@ theorem narrowC_drops (laws : Laws S o) {φ x : Rooted S.sig} {os : List (Rooted
   rw [hφ, e2] at h3
   exact nomatch h3
 
-omit [Sem S] [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S] in
+omit [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S] in
 /-- A first match over the options that a filter keeps is the first match over all options, where
     each dropped option reads nothing at the input. -/
 theorem select_filterR {V M X Y : Type} {run : Codec V M → X → Option Y} {x : X}
@@ -903,7 +903,7 @@ theorem Closed.strong_law (r : Rooted S.sig) (hty : Closed.Typed τ r.d)
     (fun f hf => by rw [List.mem_singleton.mp hf]; exact ⟨hty, hob, trivial⟩)
     r.frame (List.mem_singleton_self _) A a A' hA (fun g hg => hw g hg x a hx) hput
 
-variable [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S]
+variable [Leaf S.sig] [Shapes S] [TopLaws S]
 
 /-- **The narrowing law over closed codecs.** Take an item that the view of the clause reads. No
     option that narrowing drops reads the item. Where each kept option is typed and meets its

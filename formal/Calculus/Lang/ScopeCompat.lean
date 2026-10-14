@@ -292,8 +292,9 @@ theorem none_of_isNeverG {N : Nat} (d : GSys τ N) :
     | prim _ | opaq | set | list _ _ _ | refine _ _ | held _ _ _ | legacy _ | obj _ _ _ | union _ =>
       exact nomatch h
 
-variable [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S]
+variable [Leaf S.sig] [Shapes S] [TopLaws S]
 
+omit [TopLaws S] in
 /-- **Two terms whose walk of `disjoint` answers `true` share no datum**, at any two positions. -/
 theorem apart_of_decG (laws : Laws S o) {NL NR : Nat} (dL : GSys τ NL) (dR : GSys τ NR) {n : Nat}
     {x : Graph S.sig NL} {y : Graph S.sig NR} (h : decG dL.sys dR.sys n [] x y = true) :
@@ -340,7 +341,7 @@ theorem cbaseG_sound (laws : Laws S o) {NL NR : Nat} (cL : Closed S.sig NL) (cR 
 
 /-! ### The walk -/
 
-omit [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S] in
+omit [Leaf S.sig] [Shapes S] [TopLaws S] in
 /-- **The rows of the right operand are sound**, for a left codec that `restart` and `fam` are
     sound for. -/
 theorem rightC_sound {N : Nat} (d : GSys τ N) {X : Mean.C S.sig} {k : Nat}
@@ -391,12 +392,12 @@ def PrevC (dL : GSys τ NL) (dR : GSys τ NR) (prev : Tbl NL NR → Graph S.sig 
     Prop :=
   ∀ A x y, prev A x y = true → ∀ k, HypC τ o dL dR k A → AgB o (k + 1) (mng τ dL x) (mng τ dR y)
 
-omit [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S] in
+omit [Leaf S.sig] [Shapes S] [TopLaws S] in
 /-- Assumed pairs that agree below a depth agree below each smaller depth. -/
 theorem HypC.mono {dL : GSys τ NL} {dR : GSys τ NR} {k k' : Nat} {A : Tbl NL NR} (hk : k' ≤ k)
     (h : HypC τ o dL dR k A) : HypC τ o dL dR k' A := fun p hp => (h p hp).mono hk
 
-omit [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S] in
+omit [Leaf S.sig] [Shapes S] [TopLaws S] in
 /-- **A pair below a guard agrees below the depth.** A new pair agrees at each smaller depth, by
     induction on the depth, because the walk assumes the pair only at a smaller depth. -/
 theorem pairAtC_sound {dL : GSys τ NL} {dR : GSys τ NR}
@@ -437,7 +438,7 @@ theorem pairAtC_sound {dL : GSys τ NL} {dR : GSys τ NR}
 
 /-! ### The object row -/
 
-omit [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S] in
+omit [Leaf S.sig] [Shapes S] [TopLaws S] in
 /-- **The entry of an object node at a name is the term of its slot**, and an undeclared name with
     an entry reads the open block. -/
 theorem entry_of_slot {N : Nat} (φ : Graph S.sig N → Mean.C S.sig) {fs : Finset String}
@@ -460,7 +461,7 @@ theorem entry_of_slot {N : Nat} (φ : Graph S.sig N → Mean.C S.sig) {fs : Fins
     | ⟨0, _⟩, _, h => exact nomatch h
     | ⟨1, _⟩, _, h => exact ⟨(Option.some.inj h).symm, fun _ => ⟨rfl, Nat.one_ne_zero⟩⟩
 
-omit [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S] in
+omit [Leaf S.sig] [Shapes S] [TopLaws S] in
 /-- **A name acts at absence as its slot does**: a declared name as its declared slot, and an
     undeclared name as an `optional` slot. -/
 theorem absentOf_slot {N : Nat} {fs : Finset String} {md : {x // x ∈ fs} → SlotMode S.sig}
@@ -477,7 +478,7 @@ theorem absentOf_slot {N : Nat} {fs : Finset String} {md : {x // x ∈ fs} → S
   · rw [MapOf.at_none (m := ⟨fs, _⟩) hn, dif_neg hn]
     rfl
 
-omit [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S] in
+omit [Leaf S.sig] [Shapes S] [TopLaws S] in
 /-- **Two slots that `absentAgreeG` admits answer alike at absence.** -/
 theorem absentAgree_sound {m m' : SlotMode S.sig} {c c' : Mean.C S.sig} {y₁ y₂ : Option (Mean.V (B := S.sig))}
     (h : (!o.c || absentAgreeG m m') = true) (e1 : absentOf o (some (mkField m c)) = some y₁)
@@ -659,7 +660,7 @@ end Sound
 
 /-- **Soundness of one half**: where `compat` answers `true`, the two meanings agree at the
     orientation. -/
-theorem compat_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S]
+theorem compat_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S]
     {τ : (s : Bool) → TableAt S.sig s} {o : Orient} (laws : Laws S o) {NL NR : Nat}
     {dL : Closed S.sig NL} {dR : Closed S.sig NR} {rL : Fin NL} {rR : Fin NR}
     (h : compat o dL rL dR rR = true) :
@@ -669,7 +670,7 @@ theorem compat_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [LeafMeet S.sig] 
 
 /-- **Soundness of the pair**: where `compatPair` answers `true`, the two meanings agree at the
     host and at the dual. -/
-theorem compatPair_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S]
+theorem compatPair_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S]
     {τ : (s : Bool) → TableAt S.sig s} (laws : ∀ o, Laws S o) {NL NR : Nat}
     {dL : Closed S.sig NL} {dR : Closed S.sig NR} {rL : Fin NL} {rR : Fin NR}
     (h : compatPair dL rL dR rR = true) :

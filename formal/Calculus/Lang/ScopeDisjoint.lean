@@ -14,8 +14,9 @@ recursion is structural, and an empty fuel answers `false`.
 depth is accepted by both meanings at the orientation. The proof is an induction on the fuel, and
 at each pair below a guard an induction on the depth of the datum: the decision assumes a pair only
 at a smaller depth. An unfolding reads the fixed point of the system. The laws of a universe enter
-at the codecs: the primitive law and the set law (`Laws`), the shape classes (`Shapes`), the
-predicate law (`LeafMeet`) and the laws of the top (`TopLaws`).
+at the codecs: the primitive law and the set law (`Laws`), and the shape classes (`Shapes`). A
+refinement accepts a part of what its inner term accepts, so the decision reads through a
+refinement and reads no predicate.
 
 `viewG` is the view of a graph term at an orientation, one clause per operation, and an entry stays
 an entry. `Scoped.views_apart` states that two closed codecs whose views the decision separates
@@ -83,27 +84,6 @@ def rightRows (restart : Graph B NR → Bool) (fam : Graph B NR → Bool) : Grap
   | .node (.refine _ _) a => rightRows restart fam (a ())
   | .node (.union m) a => (List.finRange m).all fun p => rightRows restart fam (a p)
   | y => fam y
-
-/-- **The right operand, split at every depth.** A refinement keeps its predicate on each option
-    below it, through the wrapper `w`, where the predicate is data and the inner term lies below
-    the top. -/
-def splitG (restart : Graph B NR → Bool) (fam : Graph B NR → Bool)
-    (w : Graph B NR → Graph B NR) : Graph B NR → Bool
-  | .leaf j => restart (w (sR j))
-  | .node .never _ => true
-  | .node (.union m) a => (List.finRange m).all fun p => splitG restart fam w (a p)
-  | .node (.refine q qA) a =>
-      if (Leaf.isData false q || Leaf.isData true qA) && belowTop sR (a ()) then
-        splitG restart fam (fun t => w (.node (.refine q qA) fun _ => t)) (a ())
-      else splitG restart fam w (a ())
-  | y => fam (w y)
-
-/-- A data predicate at the side `s` that no predicate of the right refinement chain meets. -/
-def predApartG (s : Bool) (q : B.P s) : Graph B NR → Bool
-  | .node (.refine q' qA') a =>
-      (Leaf.isData s (half s q' qA') && belowTop sR (a ()) &&
-        Leaf.predicatesApart s q (half s q' qA')) || predApartG s q (a ())
-  | _ => false
 
 /-- A primitive beside a primitive the leaf keeps apart, or beside a former. -/
 def famPrimG (g : B.Ground) : Graph B NR → Bool
@@ -206,10 +186,7 @@ def rowG (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL N
   | x@(.node (.held _ _ _) _), y => rightRows sR (prev A x) (fun _ => false) y
   | x@(.node (.legacy _) _), y => rightRows sR (prev A x) (fun _ => false) y
   | x@(.node .opaq _), y => rightRows sR (prev A x) (fun _ => false) y
-  | x@(.node (.refine q qA) a), y =>
-      splitG sR (prev A x) (fun y' => rowG prev A (a ()) y' ||
-        (Leaf.isData false q && belowTop sL (a ()) && predApartG sR false q y') ||
-        (Leaf.isData true qA && belowTop sL (a ()) && predApartG sR true qA y')) id y
+  | .node (.refine _ _) a, y => rowG prev A (a ()) y
   | .node (.union m) a, y => (List.finRange m).all fun p => rowG prev A (a p) y
   | x@(.node (.prim g) _), y => rightRows sR (prev A x) (famPrimG g) y
   | x@(.node .set a), y => rightRows sR (prev A x) (famSetG (prev [] (a ()))) y
@@ -1351,167 +1328,8 @@ theorem sub_of_belowTop [TopLaws S] {N : Nat} (dd : GSys τ N) {t : Graph S.sig 
   intro o x y hxy
   exact SubLe.term dd t _ h.2 (fun j hj => sub_entries dd h.1 _ j hj) o x y (Nat.le_refl _) hxy
 
-/-! ### The refinement row -/
-
-variable (τ o dR) in
-/-- **A wrapper reads a term only through the datum that the term sends.** A chain of
-    refinements is a wrapper. -/
-def WrapsG (w : Graph S.sig NR → Graph S.sig NR) : Prop :=
-  ∀ t v a, (mng τ dR (w t)).f o v = some a → ∃ b, (mng τ dR t).f o v = some b ∧
-    ∀ t', (mng τ dR t').f o v = some b → (mng τ dR (w t')).f o v = some a
-
-omit [Leaf S.sig] [Shapes S] in
-/-- The identity is a wrapper. -/
-theorem WrapsG.id : WrapsG τ o dR id := fun _ _ a h => ⟨a, h, fun _ h' => h'⟩
-
-omit [Leaf S.sig] [Shapes S] in
-/-- A refinement under a wrapper is a wrapper. -/
-theorem WrapsG.refine {w : Graph S.sig NR → Graph S.sig NR} (hw : WrapsG τ o dR w)
-    (q : S.sig.P false) (qA : S.sig.P true) :
-    WrapsG τ o dR (fun t => w (.node (.refine q qA) fun _ => t)) := by
-  intro t v a h
-  obtain ⟨b, hb, ht⟩ := hw _ v a h
-  obtain ⟨hc, hf, hs⟩ := refine2_f.mp hb
-  exact ⟨b, hf, fun t' h' => ht _ (refine2_f.mpr ⟨hc, h', hs⟩)⟩
-
-omit [Leaf S.sig] [Shapes S] in
-/-- A wrapped term is apart from a codec where a wrapped term that sends more is apart from the codec. -/
-theorem WrapsG.below {w : Graph S.sig NR → Graph S.sig NR} (hw : WrapsG τ o dR w)
-    {X : Mean.C S.sig} {t t' : Graph S.sig NR} {v : Mean.V (B := S.sig)}
-    (ht : ∀ b, (mng τ dR t).f o v = some b → (mng τ dR t').f o v = some b)
-    (h : ((X.f o v).isSome && ((mng τ dR (w t')).f o v).isSome) = false) :
-    ((X.f o v).isSome && ((mng τ dR (w t)).f o v).isSome) = false := by
-  cases hX : (X.f o v).isSome
-  · rfl
-  cases hW : ((mng τ dR (w t)).f o v).isSome
-  · rfl
-  obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hW
-  obtain ⟨b, hb, hT⟩ := hw _ v a ha
-  rw [hX, hT t' (ht b hb)] at h
-  exact nomatch h
-
-omit [Leaf S.sig] [Shapes S] in
-/-- A wrapped union accepts a datum only where one wrapped option accepts the datum. -/
-theorem WrapsG.union {w : Graph S.sig NR → Graph S.sig NR} (hw : WrapsG τ o dR w) {m : Nat}
-    {a : (TOp.union (B := S.sig) m).Pos → Graph S.sig NR} {v : Mean.V (B := S.sig)}
-    (h : ((mng τ dR (w (.node (.union m) a))).f o v).isSome = true) :
-    ∃ p, ((mng τ dR (w (a p))).f o v).isSome = true := by
-  obtain ⟨c, hc⟩ := Option.isSome_iff_exists.mp h
-  obtain ⟨b, hb, ht⟩ := hw _ v c hc
-  obtain ⟨c', hc', -, hcb⟩ := altCodec_admits hb
-  obtain ⟨p, rfl⟩ := List.mem_ofFn.mp hc'
-  exact ⟨p, by rw [ht (a p) hcb]; rfl⟩
-
-omit [Shapes S] in
-/-- **The split of the right operand is sound.** -/
-theorem splitG_sound {X : Mean.C S.sig} {k : Nat} {restart fam : Graph S.sig NR → Bool}
-    (hr : ∀ y, restart y = true → AB o k X (mng τ dR y))
-    (hf : ∀ y, fam y = true → AB o k X (mng τ dR y)) :
-    ∀ y w, WrapsG τ o dR w → splitG dR.sys restart fam w y = true → AB o k X (mng τ dR (w y)) := by
-  intro y
-  induction y with
-  | leaf j =>
-    intro w hw h v hv
-    rw [splitG] at h
-    exact hw.below (fun b hb => by rw [mng_leaf dR j] at hb; exact hb) (hr _ h v hv)
-  | node op a ih =>
-    intro w hw h v hv
-    cases op with
-    | never =>
-      cases hX : (X.f o v).isSome
-      · rfl
-      cases hW : ((mng τ dR (w (.node .never a))).f o v).isSome
-      · rfl
-      obtain ⟨c, hc⟩ := Option.isSome_iff_exists.mp hW
-      obtain ⟨b, hb, -⟩ := hw _ v c hc
-      exact nomatch hb
-    | union m =>
-      simp only [splitG, List.all_eq_true, List.mem_finRange, true_implies] at h
-      cases hX : (X.f o v).isSome
-      · rfl
-      cases hW : ((mng τ dR (w (.node (.union m) a))).f o v).isSome
-      · rfl
-      obtain ⟨p, hp⟩ := hw.union hW
-      have := ih p w hw (h p) v hv
-      rw [hX, hp] at this
-      exact nomatch this
-    | refine q qA =>
-      rw [splitG] at h
-      split at h
-      · exact ih () _ (hw.refine q qA) h v hv
-      · exact hw.below (fun b hb => (refine2_f.mp hb).2.1) (ih () w hw h v hv)
-    | prim _ => exact hf _ h v hv
-    | opaq => exact hf _ h v hv
-    | set => exact hf _ h v hv
-    | list _ _ _ => exact hf _ h v hv
-    | held _ _ _ => exact hf _ h v hv
-    | legacy _ => exact hf _ h v hv
-    | obj _ _ _ => exact hf _ h v hv
-
-omit [Shapes S] in
-/-- **A data predicate apart from the right refinement chain**: the chain sends no datum whose
-    absolute point the predicate holds on. -/
-theorem predApartG_sound [LeafMeet S.sig] [TopLaws S] (s : Bool) {q : S.sig.P s} :
-    ∀ y : Graph S.sig NR, predApartG dR.sys s q y = true → ∀ v a,
-      (Syn.top (S := S)).f o v = some a →
-      Mean.eval s q (Orient.place (X := fun _ => Mean.V (B := S.sig)) o v a s) = true →
-        ((mng τ dR y).f o v).isSome = false := by
-  intro y
-  induction y with
-  | leaf _ => exact fun h => nomatch h
-  | node op b ih =>
-    intro h v a htop hq
-    cases op with
-    | refine q₁ q₂ =>
-      simp only [predApartG, Bool.or_eq_true, Bool.and_eq_true] at h
-      rcases h with ⟨⟨_, hb⟩, hn⟩ | h
-      · cases hA : ((mng τ dR (.node (.refine q₁ q₂) b)).f o v).isSome
-        · rfl
-        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp hA
-        have hsub : Sub (mng τ dR (.node (.refine q₁ q₂) b)) (Syn.top (S := S)) :=
-          sub_trans (sub_refine2_self _ _ _) (sub_of_belowTop dR hb)
-        have htop' := hsub o v a' ha'
-        rw [htop] at htop'; cases htop'
-        have hr := refine2_rect (c := mng τ dR (b ())) ha' s
-        rw [Mean.eval_half] at hr
-        have := LeafMeet.predicates_apart s q _ hn (Orient.place (X := fun _ => Mean.V (B := S.sig)) o v a s)
-        rw [hq, hr] at this; exact nomatch this
-      · have := ih () h v a htop hq
-        cases hA : ((mng τ dR (.node (.refine q₁ q₂) b)).f o v).isSome
-        · rfl
-        have h2 : ((mng τ dR (b ())).f o v).isSome = true := refine2_acc hA
-        rw [h2] at this; exact nomatch this
-    | prim _ => exact nomatch h
-    | opaq => exact nomatch h
-    | never => exact nomatch h
-    | set => exact nomatch h
-    | list _ _ _ => exact nomatch h
-    | held _ _ _ => exact nomatch h
-    | legacy _ => exact nomatch h
-    | obj _ _ _ => exact nomatch h
-    | union _ => exact nomatch h
-
-omit [Shapes S] in
-/-- **A refinement apart from the partner at a side shares no datum with it.** -/
-theorem dataApartG_sound [LeafMeet S.sig] [TopLaws S] {q : S.sig.P false} {qA : S.sig.P true}
-    {a : (TOp.refine (B := S.sig) q qA).Pos → Graph S.sig NL} {y : Graph S.sig NR} (s : Bool)
-    (h : (Leaf.isData s (half s q qA) && belowTop dL.sys (a ()) &&
-      predApartG dR.sys s (half s q qA) y) = true) (v : Mean.V (B := S.sig)) :
-    (((mng τ dL (.node (.refine q qA) a)).f o v).isSome && ((mng τ dR y).f o v).isSome) = false := by
-  simp only [Bool.and_eq_true] at h
-  obtain ⟨⟨-, hb⟩, hy⟩ := h
-  cases hA : ((mng τ dL (.node (.refine q qA) a)).f o v).isSome
-  · rfl
-  obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp hA
-  have hsub : Sub (mng τ dL (.node (.refine q qA) a)) (Syn.top (S := S)) :=
-    sub_trans (sub_refine2_self _ _ _) (sub_of_belowTop dL hb)
-  have htop := hsub o v a' ha'
-  have hr := refine2_rect (c := mng τ dL (a ())) ha' s
-  rw [Mean.eval_half] at hr
-  rw [predApartG_sound s y hy v a' htop hr]; rfl
-
 /-- **The rows are sound**, by induction on the left operand. -/
-theorem rowG_sound [LeafMeet S.sig] [TopLaws S] (laws : Laws S o) {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
+theorem rowG_sound (laws : Laws S o) {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
     (hp : PrevSound τ o dL dR prev) :
     ∀ x y A k, rowG dL.sys dR.sys prev A x y = true → HypA τ o dL dR k A →
       AB o (k + 1) (mng τ dL x) (mng τ dR y) := by
@@ -1556,15 +1374,10 @@ theorem rowG_sound [LeafMeet S.sig] [TopLaws S] (laws : Laws S o) {prev : Tbl NL
       exact rightRows_sound dR hr (fun y' h' => objRow_sound hp a hA y' h') y h
     | refine q qA =>
       rw [rowG] at h
-      refine splitG_sound hr (fun y' h' => ?_) y id WrapsG.id h
-      simp only [Bool.or_eq_true] at h'
-      rcases h' with (h' | h') | h'
-      · exact AB.refine_left (ih () y' A k h' hA)
-      · exact fun v _ => dataApartG_sound false h' v
-      · exact fun v _ => dataApartG_sound true h' v
+      exact AB.refine_left (ih () y A k h hA)
 
 /-- **The walk is sound at every fuel.** -/
-theorem decG_sound [LeafMeet S.sig] [TopLaws S] (laws : Laws S o) : ∀ n, PrevSound τ o dL dR (decG dL.sys dR.sys n)
+theorem decG_sound (laws : Laws S o) : ∀ n, PrevSound τ o dL dR (decG dL.sys dR.sys n)
   | 0 => fun _ _ _ h => nomatch h
   | n + 1 => fun A x y h k hA => rowG_sound laws (decG_sound laws n) x y A k h hA
 
@@ -1572,7 +1385,7 @@ end Sound
 
 /-- **Soundness of the decision**: where `disjoint` answers `true`, no datum is accepted by both
     meanings at the orientation. -/
-theorem disjoint_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S]
+theorem disjoint_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S]
     {τ : (s : Bool) → TableAt S.sig s} {o : Orient} (laws : Laws S o) {NL NR : Nat}
     {dL : Closed S.sig NL} {dR : Closed S.sig NR} {rL : Fin NL} {rR : Fin NR}
     (h : disjoint dL rL dR rR = true) (v : Mean.V (B := S.sig)) :
@@ -2155,7 +1968,7 @@ theorem view_entries : ∀ k (i : Fin N),
 end Entries
 
 /-- **Two closed codecs whose views at an orientation are disjoint accept no common datum there.** -/
-theorem views_apart {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [LeafMeet S.sig] [TopLaws S]
+theorem views_apart {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S]
     {τ : (s : Bool) → TableAt S.sig s} {o : Orient} (laws : Laws S o) {NL NR : Nat}
     {dL : Closed S.sig NL} {dR : Closed S.sig NR} {rL : Fin NL} {rR : Fin NR}
     (h : decG (viewSys dL.graph o) (viewSys dR.graph o) ((NL * NR + 1) * (NL + NR + 2)) []

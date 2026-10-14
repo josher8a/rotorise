@@ -31,16 +31,16 @@ def recStrBody : Scoped.Term 0 1 0 :=
 
 /-! ## Refinements and recursion -/
 
-/-- **A refinement is apart from a refined union in both orders.** The right union refines
-    `literal "a" ∪ number` to `literal "b"`, and the decision reads the predicate of the right
-    refinement on each option below the refinement. -/
+/-- **A literal is apart from a refined union in both orders.** The right union refines
+    `literal "a" ∪ number`, and the decision reads through the refinement to each option below
+    it. -/
 theorem Closed.disjoint_refinedUnion_bothOrders :
-    (Closed.one (.refine .string (.members .string (NEFinset.of "b" ∅)) ())).disjoint
-      (Closed.one (.union [.refine (.union [.refine .string (.members .string (NEFinset.of "a" ∅)) (),
-          .number]) (.members .string (NEFinset.of "b" ∅)) (), .number])) = true ∧
-    (Closed.one (.union [.refine (.union [.refine .string (.members .string (NEFinset.of "a" ∅)) (),
-          .number]) (.members .string (NEFinset.of "b" ∅)) (), .number])).disjoint
-      (Closed.one (.refine .string (.members .string (NEFinset.of "b" ∅)) ())) = true := by
+    (Closed.one (.literal .string "b")).disjoint
+      (Closed.one (.union [.refine (.union [.literal .string "a", .number])
+          (.closure fun _ => true) (), .number])) = true ∧
+    (Closed.one (.union [.refine (.union [.literal .string "a", .number])
+          (.closure fun _ => true) (), .number])).disjoint
+      (Closed.one (.literal .string "b")) = true := by
   decide
 
 /-- **Two recursive codecs are apart in both orders where a refinement covers one.** A tree of
@@ -85,16 +85,17 @@ theorem Closed.not_certAllC_literalArrays :
 
 /-! ## Two restricted sets, apart at their elements -/
 
-/-- **Two string sets with disjoint members are disjoint.** No set is empty. -/
+/-- **Two string sets with disjoint members are disjoint.** No set is empty. Each element is a
+    union of literals. -/
 theorem Closed.disjoint_disjointStringSets :
-    (Closed.one (.set (.refine .string (.members .string (NEFinset.of "a" {"b"})) ()))).disjoint
-      (Closed.one (.set (.refine .string (.members .string (NEFinset.of "c" ∅)) ()))) = true := by
+    (Closed.one (.set (.union [.literal .string "a", .literal .string "b"]))).disjoint
+      (Closed.one (.set (.literal .string "c"))) = true := by
   decide
 
 /-- **Two string sets that share a member are not disjoint.** -/
 theorem Closed.not_disjoint_stringSets_shared :
-    (Closed.one (.set (.refine .string (.members .string (NEFinset.of "a" {"b"})) ()))).disjoint
-      (Closed.one (.set (.refine .string (.members .string (NEFinset.of "b" {"c"})) ()))) = false := by
+    (Closed.one (.set (.union [.literal .string "a", .literal .string "b"]))).disjoint
+      (Closed.one (.set (.union [.literal .string "b", .literal .string "c"]))) = false := by
   decide
 
 /-! ## The views certify a `held` whose caller side is precise

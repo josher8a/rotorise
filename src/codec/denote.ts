@@ -44,14 +44,7 @@ import type {
 } from './codec'
 import type { Result } from './result'
 import { andThen, CodecError, every, everyEntry, failed } from './result'
-import type {
-    Alternatives,
-    Body,
-    Field,
-    Literal,
-    Predicate,
-    Term,
-} from './term'
+import type { Alternatives, Body, Field, Literal, Term } from './term'
 import {
     alwaysWritten,
     isOpaqueSugar,
@@ -198,45 +191,23 @@ const literalTerm = (base: LiteralBase, value: LiteralValue): Literal => {
 const satisfies = (q: Refinement, value: unknown): boolean =>
     q.is(value as never)
 
-/**
- * The rule `(refine)`'s `q`, run: whether a value satisfies a {@link Predicate}.
- *
- * `members` is `inL`, compared the way the base compares. `closure` is the caller's function.
- */
-export const holds = (q: Predicate): ((value: unknown) => boolean) => {
-    switch (q.kind) {
-        case 'members': {
-            const ls: readonly LiteralValue[] = q.literal.ls
-            return (value) => ls.some((one) => sameLiteral(one, value))
-        }
-        case 'closure':
-            return (value) => satisfies(q.q, value)
-    }
-}
+/** The rule `(refine)`'s `q`, run: whether a value satisfies the caller's function. */
+export const holds =
+    (q: Refinement): ((value: unknown) => boolean) =>
+    (value) =>
+        satisfies(q, value)
 
 /** …and why a value does not. */
-const refusedBy = (q: Predicate, value: unknown): CodecError => {
-    switch (q.kind) {
-        case 'members': {
-            const ls: readonly LiteralValue[] = q.literal.ls
-            return new CodecError(
-                `${namedLiteral(value)} is not one of ${ls
-                    .map(namedLiteral)
-                    .join(', ')}`,
-            )
-        }
-        case 'closure': {
-            // `JSON.stringify` throws on a `bigint` and on a cycle, and a refusal is a value, so the
-            // message falls back to the value's shape rather than throwing past the caller
-            let named: string
-            try {
-                named = JSON.stringify(value)
-            } catch {
-                named = describeShape(value)
-            }
-            return new CodecError(`${named} is not ${q.q.what}`)
-        }
+const refusedBy = (q: Refinement, value: unknown): CodecError => {
+    // `JSON.stringify` throws on a `bigint` and on a cycle, and a refusal is a value, so the
+    // message falls back to the value's shape rather than throwing past the caller
+    let named: string
+    try {
+        named = JSON.stringify(value)
+    } catch {
+        named = describeShape(value)
     }
+    return new CodecError(`${named} is not ${q.what}`)
 }
 
 /** The wire set that holds an element of each scalar member: `setMember`. */

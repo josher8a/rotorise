@@ -141,63 +141,9 @@ describe('a refinement by a closure is disjoint where its inner term is', () => 
         expect(apart(termOf(string('A')), termOf(nonEmpty))).toBe(false)
     })
 
-    it('declines a data refinement beside an adapter, which the raw test does not read', () => {
-        const one: Term = {
-            kind: 'refine',
-            inner: termOf(string),
-            q: {
-                kind: 'members',
-                literal: { kind: 'alternatives', base: 'string', ls: ['1'] },
-            },
-        }
-        expect(apart(one, termOf(decimal))).toBe(false)
-    })
-})
-
-/**
- * A field with a fallback reads a map without the name to a value with the name, so the model
- * counts the field as held. A refinement over a term that holds such a field reads no data
- * predicate, on either side, and its inner term bounds it. No public constructor builds a
- * `members` refinement, so each test builds the raw term.
- */
-describe('a refinement over a term that holds a fallback field reads no predicate below it, as the model does', () => {
-    const among = (inner: Term, member: string): Term => ({
-        kind: 'refine',
-        inner,
-        q: {
-            kind: 'members',
-            literal: { kind: 'alternatives', base: 'string', ls: [member] },
-        },
-    })
-    const withFallback: Term = {
-        kind: 'object',
-        body: {
-            fields: { a: { mark: 'fallback', t: termOf(string), v: 'd' } },
-        },
-    }
-    const required: Term = {
-        kind: 'object',
-        body: { fields: { a: { mark: 'req', t: termOf(string) } } },
-    }
-
-    it('reads no predicate of a left refinement over a fallback field', () => {
-        expect(disjoint(among(withFallback, 'a'), among(required, 'b'))).toBe(
-            false,
-        )
-    })
-
-    it('drops the predicate of a right refinement over a fallback field at the split', () => {
-        const right = among(
-            { kind: 'union', options: [withFallback, termOf(string)] },
-            'b',
-        )
-        expect(disjoint(among(termOf(string), 'a'), right)).toBe(false)
-    })
-
-    it('reads no predicate of a right refinement chain over a fallback field', () => {
-        expect(disjoint(among(required, 'b'), among(withFallback, 'a'))).toBe(
-            false,
-        )
+    it('declines a refinement beside an adapter, which the raw test does not read', () => {
+        const one = refine(string, (s: string): s is string => s === '1')
+        expect(apart(termOf(one), termOf(decimal))).toBe(false)
     })
 })
 
@@ -396,20 +342,11 @@ describe('two recursive terms are disjoint where their bodies are', () => {
 })
 
 /**
- * The test splits the right operand at every depth, as it reads the left operand. A right
- * refinement keeps its predicate on each option below it, and a right recursive term is read
- * whole and unfolded. So no right `refine` and no right recursive term hides an option, and the
- * verdict does not read the order of the operands.
+ * The test reads through a refinement on each side, and a right recursive term is read whole and
+ * unfolded. So no right `refine` and no right recursive term hides an option, and the verdict does
+ * not read the order of the operands.
  */
 describe('the verdict does not read the order of the operands', () => {
-    const among = (inner: Term, member: string): Term => ({
-        kind: 'refine',
-        inner,
-        q: {
-            kind: 'members',
-            literal: { kind: 'alternatives', base: 'string', ls: [member] },
-        },
-    })
     const listOf = (head: AnyCodec): AnyCodec =>
         scope({ self: union([head, object({ k: ref('self') })]) }).self
     const booleans = listOf(boolean)
@@ -418,32 +355,29 @@ describe('the verdict does not read the order of the operands', () => {
         (_v: unknown): _v is unknown => true,
     ) as unknown as AnyCodec
 
-    it('keeps a refinement apart from a right union that a refinement restricts to another member', () => {
-        const xb = among(termOf(string), 'b')
+    it('keeps a literal apart from a right union whose refined options it shares no member with', () => {
         const yb: Term = {
             kind: 'union',
             options: [
-                among(
-                    {
+                {
+                    kind: 'refine',
+                    inner: {
                         kind: 'union',
-                        options: [
-                            among(termOf(string), 'a'),
-                            { kind: 'number' },
-                        ],
+                        options: [termOf(string('a')), { kind: 'number' }],
                     },
-                    'b',
-                ),
+                    q: { is: () => true, what: 'any' },
+                },
                 { kind: 'number' },
             ],
         }
-        expect(apart(xb, yb)).toBe(true)
+        expect(apart(termOf(string('b')), yb)).toBe(true)
     })
 
-    it('keeps a refinement apart from a right recursive term whose stages it shares no member with', () => {
+    it('keeps a literal apart from a right recursive term whose stages it shares no member with', () => {
         const stages: Term = {
             kind: 'union',
             options: [
-                among(termOf(string), 'a'),
+                termOf(string('a')),
                 {
                     kind: 'object',
                     body: {
@@ -457,7 +391,7 @@ describe('the verdict does not read the order of the operands', () => {
                 },
             ],
         }
-        expect(apart(among(termOf(string), 'b'), stages)).toBe(true)
+        expect(apart(termOf(string('b')), stages)).toBe(true)
     })
 
     it('keeps two recursive terms apart where a refinement covers the right one', () => {

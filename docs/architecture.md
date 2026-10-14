@@ -118,8 +118,8 @@ top reads every datum and sends each datum to itself.
 | the obligation on a set element | `SetF.elem`, which soundness does not read | `SetElem` | none |
 | the top laws: each primitive, and the set lift, below the top, and the set lift over a restriction of the top acts where its element acts | `TopLaws`, a class with one instance for each universe | `Ω_topLaws` | `id_topLaws` |
 | the admission row of a primitive, and its exactness | `PrimAdm` | `inBase` and `inL` (`dynPrimAdm`), and each primitive is self-dual (`ground_selfdual`) | the kind test (`jsonPrimAdm`) |
-| the leaves: two primitives apart, two predicates apart | `Leaf` | `dynLeaf`: `Ground.apart`, `Pred.isData`, `Pred.apart` | `jsonLeaf`: one kind |
-| the laws of the leaves | the primitive law of `Scoped.Laws`, and `LeafMeet` | `dynLaws`, at each orientation, and `dynLeafMeet` | `jsonLaws`, at each orientation, and `jsonLeafMeet` |
+| the leaf: two primitives apart | `Leaf` | `dynLeaf`: `Ground.apart` | `jsonLeaf`: one kind |
+| the law of the leaf | the primitive law of `Scoped.Laws` | `dynLaws`, at each orientation | `jsonLaws`, at each orientation |
 | the set law that the decision reads | the set law of `Scoped.Laws` | `dynLaws`, at each orientation | `jsonLaws`, at each orientation |
 | the former class of each value and attribute, and where each former lands | `Shapes` | `dynShapes`: the root constructor | `jsonShapes`: every value is a primitive |
 
@@ -129,25 +129,24 @@ law, the `⇝` index of the judgement states nothing about the codec.
 
 A former is an `Option`. A universe without a former denotes the term of that former as the
 bottom. `TopLaws` is outside `Sem`, because soundness and the judgement read none of its laws. Only
-the held-free theory, the views, and the soundness of the disjointness decision read them. `PrimAdm`
+the held-free theory, the views, and the bound by the top in the compatibility decision read them. `PrimAdm`
 is outside `Sem` for the same reason: soundness and the judgement read none of its rows.
 
-**The disjointness decision is structural, and a universe supplies its leaves.** `Scoped.disjoint`
+**The disjointness decision is structural, and a universe supplies its leaf.** `Scoped.disjoint`
 reads the flat graph of two closed codecs, has one row per operation of the left operand, and
 decides that the two closed codecs share no datum. Only
-two rows read a fact of a universe: a primitive beside a primitive, and a predicate beside a
-predicate. `Leaf` holds the two apart tests of the leaves and the test for a predicate that the
-test can compare.
-`Leaf` is a fact of the signature at each absolute side, so the dual universe has the leaves of the
-universe. `Leaf` is outside `Sem` and holds computable fields only, so the test stays computable,
+one row reads a fact of a universe: a primitive beside a primitive. `Leaf` holds the apart test of
+two primitives. The row of a refinement reads through the refinement, because a refinement accepts
+a part of what its inner term accepts.
+`Leaf` is a fact of the signature, so the dual universe has the leaf of the universe. `Leaf` is outside `Sem` and holds computable fields only, so the test stays computable,
 and the kernel evaluates a closed pair.
 
 **The decision assumes a pair of entries below a guard.** Below a guard, the decision assumes a
 pair of entries while it compares the two bodies, and a pair already assumed is apart (`pairAt`).
 At an unguarded position, the decision unfolds an entry. A fuel bounds the walk, and an empty fuel
-answers `false`. The row of a left refinement splits the right operand at every depth: a union
-into its options, and a refinement with its predicate kept on each option below it (`splitG`). So
-a right refinement hides no option from the left row. The set row compares the two elements with
+answers `false`. The row of a left refinement reads its inner term. On the right, a union reads its
+options and a refinement reads its inner term (`rightRows`). So a right refinement hides no option
+from the left row. The set row compares the two elements with
 no assumed pair. A `held`, a `legacy` and the top are disjoint only from the bottom, because their
 admission is a function that the decision does not read.
 
@@ -157,13 +156,10 @@ accepted by both meanings at the orientation. The proof is an induction on the f
 pair below a guard an induction on the depth of the datum: the decision assumes a pair only at a
 smaller depth. The laws are outside `Sem`, because only the soundness theorems read them.
 `Scoped.Laws` holds two laws at one orientation: two primitives that the leaf keeps apart share no
-datum, and two sets whose elements share no datum share no set. `LeafMeet` says, at each absolute
-side, that two predicates met at the empty predicate hold together nowhere. The decision reads no
+datum, and two sets whose elements share no datum share no set. The decision reads no
 orientation, because orthogonality is self-dual, so one decision serves the value side at the host
-and the attribute side at the dual. The `refine` row reads a data predicate at each absolute side.
-Two data predicates keep two refinements apart only where both inner terms lie below the top
-(`belowTop`): each inner term then denotes a restriction of the top (`sub_of_belowTop`), so a
-predicate at either side reads one element. At DynamoDB, a leaf law is a fact about `inBase` and
+and the attribute side at the dual. The `refine` row needs no law: a refinement accepts a part of
+what its inner term accepts (`AB.refine_left`). At DynamoDB, a leaf law is a fact about `inBase` and
 `inL`, and a set law is a fact about `setCodec`. At JSON, two kinds meet where they are one kind,
 and the set law holds because the signature has no set former.
 
@@ -689,9 +685,9 @@ reference, so a `held` below a recursion reaches the certificate too
 where the inner term reaches no adapter. Elsewhere the view keeps the predicate of its
 caller side and puts the truth of the meaning, `Mean.truth`, at its stored side, because the
 stored side tests its predicate through the adapter that the view drops. DynamoDB names the truth
-alone at the stored side, so the caller view keeps the refinement, and the stored view keeps no
-data predicate there. An entry stays an entry in the view. `Scoped.disjoint` compares two data
-predicates only over inner terms below the top (`belowTop`), so the two views give one verdict.
+alone at the stored side, so the caller view keeps the refinement, and the stored view keeps the
+truth there. An entry stays an entry in the view. `Scoped.disjoint` reads through a refinement, so
+the predicate that a view keeps changes no verdict.
 
 **The rows of the test are the laws of a product and a sum.** A product admits no value where
 one factor admits none. A sum admits no value only where each summand admits none. A required
@@ -1130,9 +1126,9 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New law of the algebra → state it in an `Alg` module, which imports no instance module. A
   statement that needs a fact of a carrier belongs to that universe.
 - New universe → a `Sig`, a `Mean` instance over it, a `Syn` at the host orientation, its
-  `TopLaws` where the held-free theory or the soundness of the disjointness decision must hold, its
+  `TopLaws` where the held-free theory or the soundness of a view must hold, its
   `PrimAdm` where a verdict at a primitive must reduce without the codec,
-  its `Leaf` where the decision must compute, and its `Shapes`, `LeafMeet` and `Scoped.Laws` where
+  its `Leaf` where the decision must compute, and its `Shapes` and `Scoped.Laws` where
   the soundness of the decision must hold. Make the module reachable from `Axioms.lean`.
 - New rule → put each term premise in exactly one of `Typed` and `Obligations`.
 - New term recursion → a structural recursion on `SFlat`, with no measure.

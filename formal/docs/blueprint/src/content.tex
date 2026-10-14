@@ -1003,8 +1003,7 @@ two pairs of views, and a \texttt{held} reaches the certificate through its view
 the union of its options' views, because a union admits where one of its options admits. A reference
 to an entry stays a reference in the view, so a \texttt{held} below a recursion reaches the certificate
 too. The stored view keeps a predicate only where the inner term reaches no adapter. The test
-compares two data predicates only over inner terms below the top, so the two views give one verdict. The
-test reads a closure through its inner term. A certified pair is separated
+reads a refinement through its inner term, so the predicate that a view keeps changes no verdict. A certified pair is separated
 (\texttt{Closed.viewsDisjoint\_sound}), so it is compatible. The certificate is sufficient and not
 necessary: two restrictions of one adapter that overlap are compatible, and no certificate reaches
 them.

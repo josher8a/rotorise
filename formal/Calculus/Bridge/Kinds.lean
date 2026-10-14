@@ -16,14 +16,9 @@ def groundEq : Ground → Ground → Bool
   | .literal k v, .literal k' v' => if h : k = k' then decide (h ▸ v = v') else false
   | _, _ => false
 
-/-- **Two predicates of one datum**: the same alternatives at one kind. A closure is not read. -/
+/-- **Two predicates of one datum.** A closure is not read, so two closures are one datum. -/
 def predSame : Pred → Pred → Bool
-  | .members k ls, .members k' ls' | .except k ls, .except k' ls' =>
-      if h : k = k' then
-        decide (∀ x ∈ (h ▸ ls).1, x ∈ ls'.1) && decide ((h ▸ ls).1.card = ls'.1.card)
-      else false
   | .closure _, .closure _ => true
-  | _, _ => false
 
 /-- **The decision of `at` at a path**, without the frames. -/
 inductive PathKind where

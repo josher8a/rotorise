@@ -3,8 +3,8 @@ import Calculus.Lang.Term
 /-!
 # The facts of a universe that read no term
 
-A universe supplies its primitive rows (`PrimAdm`), its leaves (`Leaf`, `LeafMeet`), its shape
-classes (`Shapes`) and the laws of its top (`TopLaws`). Each class reads the signature and its
+A universe supplies its primitive rows (`PrimAdm`), its leaf (`Leaf`), its shape classes
+(`Shapes`) and the laws of its top (`TopLaws`). Each class reads the signature and its
 meaning, and no term. The lemmas here read codecs only: the domain of a sum, of a list codec and of
 the inclusion in the top, the held sets of the rules, and the unanimous member of a union.
 -/
@@ -50,24 +50,13 @@ class PrimAdm (S : Syn) [Sem S] where
   /-- The row is the domain of the primitive's codec at the orientation of the universe. -/
   admV_exact : ∀ g v, admV g v = true ↔ ((Syn.ground g).f S.o v).isSome = true
 
-/-- **The leaves that a universe supplies.** The primitives and the predicates are the only part
-    of a term that the test cannot read structurally. The leaves are facts of the signature at
-    each absolute side, so the dual universe has the leaves of the universe. -/
+/-- **The leaf that a universe supplies.** A primitive is the only part of a term that the test
+    cannot read structurally. The test reads through a refinement, so the leaf compares no
+    predicate. The leaf is a fact of the signature, so the dual universe has the leaf of the
+    universe. -/
 class Leaf (B : Sig) where
   /-- Whether two primitives share no value. -/
   primsApart : B.Ground → B.Ground → Bool
-  /-- Whether a predicate is data that the test can compare with another. -/
-  isData : (s : Bool) → B.P s → Bool
-  /-- Whether two predicates hold together nowhere. `false` says nothing: the test reads no more
-      of a predicate than this answer. -/
-  predicatesApart : (s : Bool) → B.P s → B.P s → Bool
-
-/-- **The law of the predicate leaves**, at each absolute side: two predicates apart hold
-    together nowhere. The law is a fact of the signature and its meaning, so the dual universe has
-    the law of the universe. -/
-class LeafMeet (B : Sig) [Mean B] [Leaf B] : Prop where
-  predicates_apart : ∀ (s : Bool) (q p : B.P s), Leaf.predicatesApart s q p = true →
-    ∀ x, (Mean.eval s q x && Mean.eval s p x) = false
 
 /-! ## Apartness is antitone
 
