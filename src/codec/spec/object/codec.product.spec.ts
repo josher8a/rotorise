@@ -11,7 +11,6 @@ import {
     boolean,
     CodecError,
     decimal,
-    discriminatedUnion,
     list,
     never,
     nullable,
@@ -336,38 +335,6 @@ describe('the factors a product refuses until the owner rules', () => {
         expect(() => product(object({ n: decimal }), never)).toThrow(
             /holds no value/,
         )
-    })
-
-    /**
-     * **The refusal moved, and what it says moved with it.**
-     *
-     * It used to say that a tagged union chooses a variant by a tag where a union chooses by names,
-     * so one product would need a term carrying both selection rules, and that the owner had not
-     * ruled on such a constructor. The ruling has been made — the second sum is deleted, and a
-     * dissection is a certified union — so the term-level obstacle is gone. What is left is
-     * smaller and is not a ruling: this loop reads a union's options by position, and a
-     * dissection's members are reached by the assignment they carry.
-     */
-    it('refuses a discriminatedUnion factor, naming the wiring rather than a ruling', () => {
-        const Tagged = discriminatedUnion('kind', [
-            object({ kind: string('a'), x: string }),
-            object({ kind: string('b'), y: boolean }),
-        ]) as never
-        expect(() => product(Tagged, object({ n: decimal }))).toThrow(
-            CodecError,
-        )
-        expect(() => product(Tagged, object({ n: decimal }))).toThrow(
-            /reached by the assignment they carry/,
-        )
-        // and the term it refuses is a union, which is the half that did change
-        expect(
-            (
-                discriminatedUnion('kind', [
-                    object({ kind: string('a'), x: string }),
-                    object({ kind: string('b'), y: boolean }),
-                ]).def as { readonly kind: string }
-            ).kind,
-        ).toBe('union')
     })
 })
 

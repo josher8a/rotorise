@@ -47,6 +47,8 @@ import { andThen, CodecError, every, everyEntry, failed } from './result'
 import type { Alternatives, Body, Field, Literal, Term } from './term'
 import {
     alwaysWritten,
+    cycleEntryOf,
+    elementMember,
     isOpaqueSugar,
     literalAlternatives,
     literalForm,
@@ -54,9 +56,13 @@ import {
     openRefusal,
     RecursionRefused,
     recursionUse,
+    resolvedTerm,
     storedAlternatives,
     member as termMember,
+    unboundRefs,
     usedTargetOf,
+    whenBound,
+    widensRead,
 } from './term'
 import {
     asRecord,
@@ -1032,7 +1038,7 @@ export const denote = (def: Term): Pair => {
          */
         case 'set': {
             const inner = codecOfTerm(def.elem)
-            const one = termMember(def.elem)
+            const one = elementMember(def.elem)
             if (one !== 'S' && one !== 'N' && one !== 'B') {
                 throw new CodecError(
                     `a set holds strings, numbers or binary, and this element writes ${one ? `'${one}'` : 'no single member'}`,
@@ -1368,11 +1374,107 @@ export const termOf = (declared: ObjectSlot): Term => {
     return def
 }
 
+/**
+ * **The judgment of one node**: the refusal of the first host rule that the node breaks, or
+ * nothing. Each rule reads the node that a child names (`resolvedTerm`), so a `ref` and its
+ * target get one verdict. A child that names a `ref` that no scope binds yet goes to `waits`, and
+ * {@link judged} runs the judgment again where the scope binds the name.
+ *
+ * Each former builds its codec through {@link codecOfTerm}, so the judgment runs at each
+ * declaration, and a scope runs each waiting judgment after its guard. Each case states its reason.
+ */
+const judge = (t: Term, waits: Term[]): CodecError | undefined => {
+    const node = (child: Term): Term | undefined => {
+        const at = resolvedTerm(child)
+        if (at?.kind === 'ref') waits.push(at)
+        return at
+    }
+    switch (t.kind) {
+        // **A declared position that nothing fills makes the whole list unconstructible.** The
+        // model types such a list and gives it an empty held set, which is correct as a model. The
+        // host refuses the list, because the declaration is a second spelling of `never`, and the
+        // trap is that the declaration looks like a schema. The spread is not a slot: a value of
+        // exactly the declared length omits every spread position, as in the model's `Term.list`
+        case 'list': {
+            const at = [...t.pre, ...t.suf].findIndex(
+                (one) => node(one)?.kind === 'never',
+            )
+            return at === -1
+                ? undefined
+                : new CodecError(
+                      `position ${at} of the declared positions is \`never\`, so nothing fills it and the list holds no value at all — use \`never\` itself if that is what you meant`,
+                  )
+        }
+        // **A name that the row always writes, at a node that holds no value.** The model gives
+        // such an object an empty held set. The host refuses the object for the reason of the
+        // list. `optional` is the mark that makes the name a non-slot
+        case 'object': {
+            for (const [name, field] of Object.entries(t.body.fields))
+                if (alwaysWritten(field) && node(field.t)?.kind === 'never')
+                    return new CodecError(
+                        `'${name}' is declared at \`never\` and the row always writes it, so the object holds no value at all — mark it \`optional\`, or use \`never\` itself`,
+                    )
+            return undefined
+        }
+        // **The DynamoDB set obligation, and a law.** A stored set holds elements of one member of
+        // `S`, `N` or `B`, the model's `SetElem`. `TOp.rule` answers `none` at `legacy`, because a
+        // read widening is not a partial bijection, and `lawful_setCodec` needs a lawful element
+        case 'set': {
+            const member = elementMember(t.elem)
+            if (member !== 'S' && member !== 'N' && member !== 'B')
+                return new CodecError(
+                    `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
+                )
+            return widensRead(t.elem)
+                ? new CodecError(
+                      `a set's element cannot carry \`withLegacyRead\`: a read widening is not a lawful element, so no law covers the set of it; declare the set of the current codec, and read the older form with \`withLegacyRead\` around the whole set`,
+                  )
+                : undefined
+        }
+        // **A wall reaches no cycle.** A wall is a `held` or a `withLegacyRead` with an older
+        // reader, and reads its argument through caller code at any depth. A wall that reads an
+        // entry on a cycle makes the flat system non-contractive. With no such wall, the meaning of
+        // a closed codec is one flat guarded system with a unique solution. A wall over an acyclic
+        // entry stays legal, because the emitter prints an acyclic `ref` in place. A cycle anywhere
+        // below the wall counts, so the rule waits for every name below the wall. The scope runs its
+        // guard first, so a wall on a cycle that the guard refuses keeps the refusal of the guard
+        case 'held':
+        case 'legacy': {
+            const args = t.kind === 'held' ? [t.inner, t.outer] : [t.inner]
+            const open = unboundRefs(args).size > 0
+            if (open) waits.push(...args)
+            const entry = open ? undefined : cycleEntryOf(args)
+            return entry === undefined
+                ? undefined
+                : new CodecError(
+                      `\`${t.kind === 'held' ? 'held' : 'withLegacyRead'}\` reads '${entry}', an entry on a cycle. A wall reads its argument through caller code at any depth, so a wall that reads an entry on a cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes with constants. Put the wall over a codec that reaches no cycle`,
+                  )
+        }
+        default:
+            return undefined
+    }
+}
+
+/**
+ * **The judgment, where each name that it reads is bound.** A refusal throws now. A judgment that
+ * read a `ref` that no scope binds yet runs again at each scope that binds such a name.
+ */
+const judged = (t: Term): void => {
+    const check = (): void => {
+        const waits: Term[] = []
+        const refusal = judge(t, waits)
+        if (refusal) throw refusal
+        if (waits.length > 0) whenBound(waits, check)
+    }
+    check()
+}
+
 export const codecOfTerm = <T, A extends AttributeValue>(
     def: Term,
 ): AttributeCodec<T, A> => {
     const built = codecs.get(def)
     if (built) return built as unknown as AttributeCodec<T, A>
+    judged(def)
     // **A recursion that the model's guard refuses is refused where its term is declared.** Each
     // former builds its codec here, so this is the one place that sees each declared term. A path
     // with no container reads the input of its own entry, and encode then overflows the stack. A

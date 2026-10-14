@@ -40,6 +40,7 @@ import type {
     HoldsFree,
     KindOfFrames,
     NarrowFrames,
+    NodeOf,
     OffersAt,
     ScopeWallCycle,
     StepFrames,
@@ -62,10 +63,8 @@ import type {
     Term,
 } from './term'
 import {
-    alwaysWritten,
     clauseForm,
     clauseLiteralsOf,
-    cycleEntryOf,
     literalAlternatives,
     member as memberOf,
     openRefusal,
@@ -74,6 +73,7 @@ import {
     recursionUse,
     reenteredOf,
     refuseSlots,
+    resolvedTerm,
     sameAdapter,
     sameTerm,
     storedView,
@@ -81,7 +81,7 @@ import {
     unanimous,
     unboundRefs,
     usedTargetOf,
-    widensRead,
+    whenBound,
 } from './term'
 
 /**
@@ -154,6 +154,12 @@ type LiteralMarkOf<C> = [C] extends [LiteralMark] ? LiteralMark : unknown
  * unbound `ref`.
  */
 declare const termMarker: unique symbol
+/**
+ * **The options of a dissection, in declared order**, which a product distributes over. The tag
+ * table of a dissection keys its members by tag and keeps no order. Optional and type-level only.
+ */
+declare const optionsMarker: unique symbol
+type OptionsMark<Os> = { readonly [optionsMarker]?: Os }
 type TermMark<T> = { readonly [termMarker]?: T }
 type FreeTerm = ['ref', '#free']
 /**
@@ -1577,27 +1583,6 @@ const set = <const C extends AnyCodec>(
 ): AttributeCodec<ReadonlySet<Decoded<C>>, SetOf<C>> => {
     type T = Decoded<C>
     const inner = element as unknown as AttributeCodec<T>
-    // **The DynamoDB set obligation, and nothing of the algebra.** A stored set, `SS`, `NS` or `BS`,
-    // holds elements of one scalar member, which is the model's `SetElem`; the lift of any lawful
-    // element is lawful (`lawful_setCodec`), so this refusal belongs to the store universe. A `ref`
-    // element answers no member here, because `memberOf` does not read through a `ref`. So a set
-    // of a `ref` is refused. A stored set holds strings, numbers or binary, and none of those
-    // recurse, so the refusal loses no set
-    const member = memberOf(inner.def)
-    if (member !== 'S' && member !== 'N' && member !== 'B') {
-        throw new CodecError(
-            `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
-        )
-    }
-    // **No law covers a set of a read widening.** `withLegacyRead` is the model's `Term.legacy`,
-    // and the rule `TOp.rule` answers `none` at it, because the pair is not a partial bijection. The set law
-    // `lawful_setCodec` needs a lawful element, so the host refuses the set rather than ship a
-    // pair that no law covers
-    if (widensRead(inner.def)) {
-        throw new CodecError(
-            `a set's element cannot carry \`withLegacyRead\`: a read widening is not a lawful element, so no law covers the set of it; declare the set of the current codec, and read the older form with \`withLegacyRead\` around the whole set`,
-        )
-    }
     // the element is the element's own term, so a restriction, a literal and an adapter each ride
     // at the element, and the set is its finite-powerset lift
     const term: Term = { kind: 'set', elem: inner.def }
@@ -1640,7 +1625,12 @@ type IsNeverSlot<D> = [D] extends [{ readonly [optionalMarker]: true }]
       ? true
       : [D] extends [{ readonly def: { readonly kind: 'never' } }]
         ? true
-        : false
+        : // the node that a `ref` names, where the term of the slot names a scope entry
+          NodeOf<
+                TermOf<D extends { readonly codec: infer C } ? C : D>
+            > extends ['never']
+          ? true
+          : false
 
 /**
  * Whether any **declared** position of a list is `never`.
@@ -1725,28 +1715,6 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
 
     const at = all.findIndex(isSpread)
     const marked = at === -1 ? undefined : (all[at] as AnySpread)
-    const declared = (
-        at === -1 ? all : [...all.slice(0, at), ...all.slice(at + 1)]
-    ) as readonly AnyCodec[]
-
-    /**
-     * **A declared position nothing fills makes the whole list unconstructible.**
-     *
-     * The model types a list with a `never` position and gives it an empty held set, which is
-     * correct as a model. Here it is a declaration with a second spelling for `never`, and one of
-     * the two is a trap. `NoNeverSlot` refuses it in the *type*, and a cast defeats the type.
-     *
-     * The **spread** is not asked, and that is the rule rather than an omission: a value of
-     * exactly the declared length omits every spread position, so `list(spread(never))` is the
-     * empty list and the empty list is a value. The model's `Term.list` draws the same line: a
-     * spread position exists only past the declared length.
-     */
-    const deadAt = declared.findIndex((item) => termOf(item).kind === 'never')
-    if (deadAt !== -1) {
-        throw new CodecError(
-            `position ${deadAt} of the declared positions is \`never\`, so nothing fills it and the list holds no value at all — use \`never\` itself if that is what you meant`,
-        )
-    }
 
     // as with `map`, the cast keeps the shape each position writes, which
     // `Attribute<'L'>` would flatten to "some list"
@@ -2198,41 +2166,13 @@ const withMissing = <const C extends AnyCodec>(
         }
     }
     // **A stand-in that the codec writes through an unbound `ref` waits for the scope** that binds
-    // the ref, because the write reads through the ref. The scope runs the check with every name
-    // bound
-    const waitsOn = unboundRefs([termOf(standsFor)])
-    if (waitsOn.size === 0) check()
-    for (const slot of waitsOn) slot.waiting.push(check)
+    // the ref, because the write reads through the ref
+    whenBound([termOf(standsFor)], check)
     const attribute = inner as unknown as AttributeCodec<Decoded<C>>
     return {
         codec: attribute,
         def: { mark: 'fallback', t: termOf(inner), v: value },
     } as unknown as MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C>
-}
-
-/**
- * **A wall reaches no cycle.** A wall is a `held` or a `withLegacyRead` with an older reader. A
- * wall reads its argument through caller code at any depth. So a wall that reads an entry on a
- * cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes
- * with constants. With no such wall, the meaning of a closed codec is one flat guarded system with
- * a unique solution. A wall over an acyclic entry stays legal: the emitter prints an acyclic `ref`
- * in place.
- *
- * The refusal runs where the refs of the argument are bound, and waits for the {@link scope} that
- * binds a ref of the argument otherwise. The scope runs its own guard first, so a wall on a cycle
- * keeps the refusal of the guard.
- */
-const refuseWallOverCycle = (wall: string, args: readonly Term[]): void => {
-    const check = (): void => {
-        const entry = cycleEntryOf(args)
-        if (entry !== undefined)
-            throw new CodecError(
-                `\`${wall}\` reads '${entry}', an entry on a cycle. A wall reads its argument through caller code at any depth, so a wall that reads an entry on a cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes with constants. Put the wall over a codec that reaches no cycle`,
-            )
-    }
-    const waitsOn = unboundRefs(args)
-    if (waitsOn.size === 0) check()
-    for (const slot of waitsOn) slot.waiting.push(check)
 }
 
 /**
@@ -2362,7 +2302,6 @@ export const held = <
     Free<FreeOf<C> | FreeOf<O>> => {
     const side = heldSide(outer)
     const innerTerm = termOf(inner as unknown as AnyCodec)
-    refuseWallOverCycle('held', [innerTerm, side.term])
     /**
      * **A half that cannot convert returns a `CodecError`**, and the signature says so. A refusal
      * is a value here, as it is everywhere else on this surface, so nothing about declining a
@@ -2598,7 +2537,6 @@ export function withLegacyRead<const C extends AnyCodec>(
     | AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
     | MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> {
     const { current, older } = options
-    if (older) refuseWallOverCycle('withLegacyRead', [termOf(current)])
     const currentCodec = current as unknown as AttributeCodec<
         Decoded<C>,
         AttributeOf<C> & AttributeValue
@@ -2635,19 +2573,43 @@ type Ref<N extends string> = AttributeCodec<unknown> &
 type ScopeTerms<Defs> = { -readonly [K in keyof Defs]: TermOf<Defs[K]> }
 type ScopeTerm<Defs, K> = ['scope', ScopeTerms<Defs>, K]
 type ScopeOf<Defs> = {
-    readonly [K in keyof Defs]: EntryOf<Defs[K], ScopeTerm<Defs, K>>
+    readonly [K in keyof Defs]: EntryOf<
+        DefOf<Defs, Defs[K]>,
+        ScopeTerm<Defs, K>,
+        Defs
+    >
 }
 /**
- * An entry: the codec of its definition, read at the term `Tm` of the entry. An object keeps its
- * item, and a union keeps its item and its slices, each typed from the term.
+ * **The definition that a codec names in a scope**: the codec, or the definition at the end of its
+ * chain of `ref`s. A chain that returns to a name it passed keeps the codec, and the guard refuses
+ * the scope.
  */
-type EntryOf<C, Tm> = C extends ObjectCodec<
+type DefOf<Defs, C, Seen = never> = TermOf<C> extends [
+    'ref',
+    infer N extends keyof Defs,
+]
+    ? [N] extends [Seen]
+        ? C
+        : DefOf<Defs, Defs[N], Seen | N>
+    : C
+/**
+ * An entry: the codec of the definition that the entry names, read at the term `Tm` of the entry.
+ * An object keeps its item, and a union keeps its item and its slices, each typed from the term.
+ * Each option of a union is the definition that the option names, so a slice reads a `ref` option
+ * as the definition.
+ */
+type EntryOf<C, Tm, Defs> = C extends ObjectCodec<
     infer Spec extends Record<string, ObjectSlot>,
     infer Rest extends AnyCodec | undefined
 >
     ? ObjectCodec<Spec, Rest, DecodeTerm<Tm>, Tm>
     : C extends UnionCodec<infer _T, infer Options extends readonly unknown[]>
-      ? UnionCodec<DecodeTerm<Tm>, Options, Tm> & LiteralMarkOf<C>
+      ? UnionCodec<
+            DecodeTerm<Tm>,
+            { [I in keyof Options]: DefOf<Defs, Options[I]> },
+            Tm
+        > &
+            LiteralMarkOf<C>
       : AttributeCodec<DecodeTerm<Tm>, AttributeOf<C> & AttributeValue> &
             LiteralMarkOf<C> &
             TermMark<Tm>
@@ -3992,25 +3954,14 @@ const objectFromMap = <
         fields[name] = fieldOf(declaredSpec[name] as ObjectSlot)
     }
 
-    /**
-     * **A name the row always writes, declared at a term that holds no value.**
-     *
-     * The model types such an object and gives it an empty held set, which is correct as a model.
-     * Here it is a second spelling for `never`, and the trap is that it looks like a schema: the
-     * row would refuse every entity and say so one field at a time. `optional` is the mark that
-     * makes the name a non-slot, and `never` itself is the term for "holds nothing".
-     */
-    for (const name in fields) {
-        const field = fields[name] as Field
-        if (alwaysWritten(field) && field.t.kind === 'never') {
-            throw new CodecError(
-                `'${name}' is declared at \`never\` and the row always writes it, so the object holds no value at all — mark it \`optional\`, or use \`never\` itself`,
-            )
-        }
-    }
     const declaredBody: Body =
         rest === undefined ? { fields } : { fields, rest: termOf(rest) }
     const itemDef = { kind: 'object', body: declaredBody } as const
+    // the judgment of the node runs before the item pair is built
+    const nested = codecOfTerm(itemDef) as unknown as AttributeCodec<
+        DerivedItem<Spec, Rest>,
+        M<EncodedBy<Spec, Rest>>
+    >
     // the term's item pair, not a second one built beside it — `denote`'s row asks `itemSem` for
     // the same object, so `.item` and the codec run one body rather than two that agree
     /**
@@ -4159,11 +4110,7 @@ const objectFromMap = <
     // off. Named member by member rather than spread so the cast keeps the *shape* the map carries —
     // `Attribute<'M'>` would flatten it to "some map" — and so that a call to `object` stays a plain
     // object literal, which is what lets a bundler drop an unused one
-    const nested = codecOfTerm(itemDef) as unknown as AttributeCodec<
-        DerivedItem<Spec, Rest>,
-        M<EncodedBy<Spec, Rest>>
-    >
-    return {
+    const made = {
         encode: nested.encode,
         decode: nested.decode,
         unsafeEncode: nested.unsafeEncode,
@@ -4171,6 +4118,25 @@ const objectFromMap = <
         def: nested.def,
         item: self as ItemCodec<DerivedItem<Spec, Rest>, Spec, Rest>,
     }
+    objectItems.set(nested.def, self)
+    return made
+}
+
+/** The whole-item reading of an object node: the declared spec, the open block, and the pair. */
+type ObjectItem = AnyObjectCodec['item'] & {
+    readonly rest: AnyCodec | undefined
+}
+
+/**
+ * **The whole-item reading of each object node**, so a former that reads the node a `ref` names
+ * reaches the declared spec of the node. Each object node comes from {@link objectFromMap}.
+ */
+const objectItems = new WeakMap<Term, ObjectItem>()
+
+/** The whole-item reading of the node that a term names, or nothing where the node is no object. */
+const objectNamed = (t: Term): ObjectItem | undefined => {
+    const node = resolvedTerm(t)
+    return node === undefined ? undefined : objectItems.get(node)
 }
 
 export type ObjectEntry<
@@ -4243,18 +4209,24 @@ type EntryRest<Entries extends readonly AnyObjectEntry[]> = [
     ? undefined
     : Extract<WildcardEntry<Entries>, AnyCodec>
 
+/**
+ * The names an entry key declares, read from the node that the key names, through its `ref`s. The
+ * names fix the body at the declaration, so a key that names a `ref` that no scope binds yet is
+ * refused rather than waiting.
+ */
 const entryNames = (key: AnyCodec): string[] => {
-    const term = termOf(key)
-    if (term.kind === 'literal' && term.base === 'string') return [term.v]
-    if (
-        term.kind === 'union' &&
-        term.options.every(
-            (option) => option.kind === 'literal' && option.base === 'string',
-        )
-    ) {
-        return term.options.map((option) => (option as { v: string }).v)
+    const term = resolvedTerm(termOf(key))
+    if (term?.kind === 'literal' && term.base === 'string') return [term.v]
+    if (term?.kind === 'union') {
+        const names = term.options.flatMap((option) => {
+            const one = resolvedTerm(option)
+            return one?.kind === 'literal' && one.base === 'string'
+                ? [one.v]
+                : []
+        })
+        if (names.length === term.options.length) return names
     }
-    if (term.kind === 'string') return []
+    if (term?.kind === 'string') return []
     throw new CodecError(
         'an object entry key must be `string` or a string literal key set',
     )
@@ -4324,18 +4296,22 @@ export function object(
 /** The options a factor offers, at the type level: a union's, or the factor itself. */
 type FactorOptions<F> = F extends UnionCodec<infer _T, infer Os>
     ? Os
-    : readonly [F]
+    : F extends {
+            readonly [optionsMarker]?: infer Os extends readonly unknown[]
+        }
+      ? Os
+      : readonly [F]
 
 /** Every name a factor can declare, across all of its options. */
 type DeclaredNames<F> = FactorOptions<F>[number] extends infer O
-    ? O extends ObjectCodec<infer S, infer _R>
+    ? O extends ObjectCodec<infer S, infer _R, infer _T, infer _Tm>
         ? keyof S & string
         : never
     : never
 
 /** Whether any option of a factor is left open by a rest codec. */
 type AnyOpen<F> = FactorOptions<F>[number] extends infer O
-    ? O extends ObjectCodec<infer _S, infer R>
+    ? O extends ObjectCodec<infer _S, infer R, infer _T, infer _Tm>
         ? [R] extends [undefined]
             ? never
             : true
@@ -4346,8 +4322,13 @@ type AnyOpen<F> = FactorOptions<F>[number] extends infer O
  * One merge at the type level. The merge is closed, because a name neither factor declares is one
  * the product refuses.
  */
-type MergeTwo<X, Y> = X extends ObjectCodec<infer A, infer _RA>
-    ? Y extends ObjectCodec<infer B, infer _RB>
+type MergeTwo<X, Y> = X extends ObjectCodec<
+    infer A,
+    infer _RA,
+    infer _TA,
+    infer _TmA
+>
+    ? Y extends ObjectCodec<infer B, infer _RB, infer _TB, infer _TmB>
         ? ObjectCodec<show<A & B>>
         : never
     : never
@@ -4404,7 +4385,9 @@ type HasNeverFactor<Fs extends readonly unknown[]> = Fs extends readonly [
         ? HasNeverFactor<T>
         : [H] extends [{ readonly def: { readonly kind: 'never' } }]
           ? true
-          : HasNeverFactor<T>
+          : NodeOf<TermOf<H>> extends ['never']
+            ? true
+            : HasNeverFactor<T>
     : false
 
 /**
@@ -4419,8 +4402,9 @@ type HasNeverFactor<Fs extends readonly unknown[]> = Fs extends readonly [
  * codec holds an undeclared name through a codec of its own, and the product would have to hold it
  * through both.
  *
- * `never` is the only term a factor can be that holds no value: `tuple` and `object` refuse a slot
- * declared at it, so no other declaration reaches here empty.
+ * The never clause reads the node that a factor names, so a scope entry that names `never` gets
+ * the never reason. A factor can still hold no value through a predicate or through `union([])`,
+ * and no clause reads that.
  */
 export type ValidateProduct<Fs extends readonly unknown[]> =
     HasNeverFactor<Fs> extends true
@@ -4431,72 +4415,44 @@ export type ValidateProduct<Fs extends readonly unknown[]> =
               : ErrorMessage<'[product] a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close every factor: give it no open key entry'>
           : ErrorMessage<`[product] two factors both declare '${SharedAcross<Fs>}', and a product needs disjoint names. Rename it, or drop it from one factor`>
 
-/** One option of a factor: what the merge reads off it. */
-type Factor = {
-    readonly spec: Record<string, ObjectSlot>
-    readonly rest: AnyCodec | undefined
-    readonly def: Term
-}
-
 /**
- * **The whole-item readings of a union's options, in declared order**: what a product distributes
- * over. The module does not export the symbol, so no caller reaches one option of a union through
- * this member.
+ * **The options a factor offers**: the object node that the factor names, or each option of the
+ * union node that the factor names. Each read goes through the `ref`s, so a factor and a `ref` to
+ * the factor give one product. The merge is built at the declaration, so a factor that names a
+ * `ref` that no scope binds yet is refused rather than waiting.
  */
-const optionItems = Symbol('optionItems')
-
-/**
- * The options a factor offers: a union's, or the factor itself.
- *
- * **A tagged builder is a union here, and that is why it is no longer refused.** It used to be a
- * term of its own, chosen by a tag where a union is chosen by names, so one product would have
- * needed two selection rules and the refusal named the ruling that was missing. The ruling was to
- * delete the second sum: a dissection is a certified union, so a product of two of them is the
- * distribution over one selection rule, and the merges are what comes out.
- */
-const optionsOfFactor = (factor: unknown): readonly Factor[] => {
-    const codec = factor as
-        | {
-              readonly def?: Term
-              readonly item?: {
-                  readonly spec?: Record<string, ObjectSlot>
-                  readonly rest?: AnyCodec
-                  readonly [optionItems]?: readonly Factor[]
-              }
-          }
-        | undefined
-    const def = codec?.def
+const optionsOfFactor = (factor: AnyCodec): readonly ObjectItem[] => {
+    const node = resolvedTerm(termOf(factor))
     // a product against a factor that holds nothing passes no check: every merge would hold
     // nothing too, and two empty held sets are comparable both ways, so no value tells the options
-    // apart. `never` is
-    // the only way in, because every other term that holds nothing is refused at its constructor
-    if (def?.kind === 'never') {
+    // apart. The rule reads `never` alone. A slot at `never` is refused by the judgment, but a
+    // factor can still hold nothing through a predicate that admits no value, or through
+    // `union([])`, and the product of such a factor builds
+    if (node?.kind === 'never') {
         throw new CodecError(
             '`never` holds no value, so every product with it holds none either and no value could select between the results — remove the factor',
         )
     }
-    if (def?.kind === 'union') {
-        // **A dissection is a union now and its members are not reached positionally.** Its
-        // members are keyed by the assignment they carry, where a plain union's are keyed by
-        // position, and a dissection keeps no list of option items. The term-level refusal this
-        // replaces named a ruling the owner had not made; that ruling has been made and what is
-        // left is the wiring, which is its own pass.
-        if ((codec?.item as { readonly keys?: unknown })?.keys !== undefined) {
-            throw new CodecError(
-                'a `discriminatedUnion` is a union of objects and a product distributes over it, but its members are reached by the assignment they carry rather than by position, and this loop reads a union positionally — take the product inside each member, or use an untagged `union` of objects',
-            )
-        }
-        const items = codec?.item?.[optionItems]
-        if (!items) {
-            throw new CodecError(
-                'a union factor must read as a whole item, and this one cannot — every option of it has to be an object for the product to merge names',
-            )
-        }
-        return items
+    if (node?.kind === 'ref') {
+        throw new CodecError(
+            `a factor of a product names ref('${node.slot.name}'), which no scope binds yet — a product merges the declared names at its declaration, so take the product where the scope binds the name`,
+        )
     }
-    if (def?.kind === 'object' && codec?.item?.spec) {
-        return [codec.item as Factor]
+    if (node?.kind === 'union') {
+        // a dissection is a union of objects in the term, so its members distribute in declared
+        // order like the options of any union
+        return node.options.map((option) => {
+            const one = objectNamed(option)
+            if (!one) {
+                throw new CodecError(
+                    'an option of a union factor is not an object codec — a product merges declared names, and only an object declares any',
+                )
+            }
+            return one
+        })
     }
+    const one = node && objectNamed(node)
+    if (one) return [one]
     throw new CodecError(
         'a factor of a product is an object codec or a `union` of object codecs, and this is neither — a product merges declared names, and only an object declares any',
     )
@@ -4504,14 +4460,9 @@ const optionsOfFactor = (factor: unknown): readonly Factor[] => {
 
 /** The binary product, over the options each factor offers. */
 const productOfTwo = (first: unknown, second: unknown): unknown => {
-    const lefts = optionsOfFactor(first)
-    const rights = optionsOfFactor(second)
+    const lefts = optionsOfFactor(first as AnyCodec)
+    const rights = optionsOfFactor(second as AnyCodec)
     for (const option of [...lefts, ...rights]) {
-        if (!option?.spec) {
-            throw new CodecError(
-                'an option of a union factor is not an object codec — a product merges declared names, and only an object declares any',
-            )
-        }
         if (option.rest !== undefined) {
             throw new CodecError(
                 'a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close every factor: give it no open key entry',
@@ -5012,8 +4963,11 @@ const dissect = <T extends Record<string, unknown>>(
             `a discriminated union needs at least one option, and this one has none — no tag reaches a variant, so nothing can be written or read. If a codec that admits no value is what you meant, that is \`never\``,
         )
     }
+    // **Each option names an object node, read through its `ref`s.** An option that names a `ref`
+    // that no scope binds yet waits for the scope, where the index reads the node
     for (const option of options) {
-        if (!option?.item?.spec) {
+        const node = resolvedTerm(termOf(option as unknown as AnyCodec))
+        if (node?.kind !== 'ref' && !(node && objectNamed(node))) {
             throw new CodecError(
                 `every option must be an object codec, and one of them is not — a bare spec has no variant to select, so pass \`object(...)\` around it`,
             )
@@ -5029,7 +4983,7 @@ const dissect = <T extends Record<string, unknown>>(
      * index, carried by no term.
      */
     const memberTerms = options.map((option) =>
-        termOf(option.item as unknown as AnyCodec),
+        termOf(option as unknown as AnyCodec),
     )
     const unionDef = { kind: 'union', options: memberTerms } as const
 
@@ -5046,14 +5000,16 @@ const dissect = <T extends Record<string, unknown>>(
         const members = membersOf(
             ks,
             memberTerms.map((term, at) => {
-                if (term.kind !== 'object') {
+                const node = resolvedTerm(term)
+                const item = node && objectNamed(node)
+                if (node?.kind !== 'object' || !item) {
                     throw new CodecError(
-                        `every option must be an object codec, and option ${at} is a \`${term.kind}\` — a bare spec has no variant to select, so pass \`object(...)\` around it`,
+                        `every option must be an object codec, and option ${at} is a \`${node?.kind}\` — a bare spec has no variant to select, so pass \`object(...)\` around it`,
                     )
                 }
                 return [
-                    term.body,
-                    options[at]?.item as unknown as ItemCodec<T, unknown>,
+                    node.body,
+                    item as unknown as ItemCodec<T, unknown>,
                 ] as const
             }),
         )
@@ -5073,9 +5029,7 @@ const dissect = <T extends Record<string, unknown>>(
         indexed ??= index()
         return indexed
     }
-    const waitsOn = unboundRefs(memberTerms)
-    if (waitsOn.size === 0) resolution()
-    for (const slot of waitsOn) slot.waiting.push(resolution)
+    whenBound(memberTerms, resolution)
     const pick = (assignment: Readonly<Record<string, string>>) =>
         resolution().pick(assignment)
     const tagOf = (item: Partial<T>) => resolution().tagOf(item)
@@ -5917,7 +5871,9 @@ export const mdunion = <
 >(
     ks: Ks,
     options: Options & MembersTagged<SpecsOf<Options>, Ks>,
-): Dissection<Ks, Options> & TermMark<['union', TermsOf<Options>]> =>
+): Dissection<Ks, Options> &
+    TermMark<['union', TermsOf<Options>]> &
+    OptionsMark<Options> =>
     // one cast, at the one place where a runtime table meets a type computed from the specs: the
     // builder is written once over `readonly string[]`, and {@link Dissection} is what that builder
     // produces read at the arity the caller wrote
@@ -5960,7 +5916,8 @@ export const discriminatedUnion = <
     ByTag<SpecsOf<Options>, D>,
     FreeOf<Options[number]>
 > &
-    TermMark<['union', TermsOf<Options>]> =>
+    TermMark<['union', TermsOf<Options>]> &
+    OptionsMark<Options> =>
     // **the type arguments are given, not inferred, and that is what makes the alias cast-free.**
     // Inferring them from `options` would take `Options` to be the *intersection* the parameter
     // declares — `Options & MembersTagged<…>` — and the return type computed from that intersection
@@ -6069,9 +6026,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         return settled
     }
     const optionTerms = options.map(termOf)
-    const waitsOn = unboundRefs(optionTerms)
-    if (waitsOn.size === 0) resolution()
-    for (const slot of waitsOn) slot.waiting.push(resolution)
+    whenBound(optionTerms, resolution)
     // **A use needs every name bound.** Each use refuses while a `ref` of an option is unbound
     const declared: Term = { kind: 'union', options: optionTerms }
     const closed = (): void => {
@@ -6128,16 +6083,11 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * not be reached here also cannot be selected here: `declares` is what selects, and only an
      * object option has it.
      */
-    const self: Untagged<T, SpecsOf<Options>> & {
-        readonly [optionItems]: readonly Option['item'][]
-    } = {
+    const self: Untagged<T, SpecsOf<Options>> = {
         encode: writeItem,
         decode: readItem,
         unsafeEncode: (item) => orThrow(self.encode(item)),
         unsafeDecode: (item) => orThrow(self.decode(item)),
-        get [optionItems]() {
-            return resolution().all.map((option) => option.item)
-        },
         spec: (options as readonly AnyCodec[]).map(
             (option) =>
                 (option as unknown as Partial<AnyObjectCodec>).item?.spec,

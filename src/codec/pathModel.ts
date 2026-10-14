@@ -231,6 +231,12 @@ type Norm<T, Env, Fuel extends unknown[] = ScopeFuel> = Fuel extends [
           : [T, Env]
     : [T, Env]
 
+/**
+ * **The node that a term names**: the term, or the definition at the end of its chain of entries
+ * and names, under the scope that binds each name. A former that inspects an argument reads this.
+ */
+export type NodeOf<T> = Norm<T, []>[0]
+
 // ── `childD`, `childDL`, `childN`, `Frame.child` ──
 type ChildD<S, Env extends unknown[], T, Fuel extends unknown[]> = T extends [
     'never',

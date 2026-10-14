@@ -1064,6 +1064,21 @@ one alternate reader (`Codec.extendRead`). The alternate reader owns that migrat
 selection refuses.
 `Closed.spec` contains no migration field.
 
+**A former reads the node that a reference names.** A reference and its target are one node of
+the term graph, so each host rule that inspects an argument reads the node at the end of the chain
+of references, at run time and in the type. A reference that no scope binds yet waits for the
+scope that binds the name. A rule that read the spelling of its argument gave a reference and its
+target two verdicts: a refusal escaped through a reference, and a valid codec was refused through
+one. A product and an entry key need the node at the declaration, so each of these refuses a
+reference that no scope binds yet.
+
+**One judgment types the built graph.** The judgment holds one case per host rule of a node: a
+declared list position or an always-written field at `never`, the element of a set, and a wall
+over a cycle. Each former builds its codec through one function, which runs the judgment at the
+declaration, and a scope runs each waiting judgment after its guard. The type of a list reads a
+free name where the scope binds the name later, so the run time alone refuses a list position that
+the scope binds to `never`.
+
 **A host obligation that no host code reads is found by whatever has to serialise the host's own
 definition, or it is not found.** A term the host builds must determine the codec the host runs.
 Where a definition record kept only what each reader needed, a channel the model carries was

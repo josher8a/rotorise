@@ -12,10 +12,6 @@
 #   exclude      time keeps the member (`accept`) or drops it (`refuse`).
 #   path         one path under `at`: `accept` where the run time resolves one codec.
 #   declaration  one constant of the generated codecs file: the run time built each one.
-call|accept|0ad2e0f472|exclude({ b: decimal("1") })
-call|accept|0ad2e0f472|exclude({ b: decimal("2.5") })
-call|accept|0ad2e0f472|extract({ b: decimal("1") })
-call|accept|0ad2e0f472|extract({ b: decimal("2.5") })
 exclude|refuse|321d315d6a|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|364bb76bd3|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|3936b620c9|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
