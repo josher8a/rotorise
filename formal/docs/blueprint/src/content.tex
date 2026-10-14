@@ -1321,8 +1321,8 @@ hold, so the \texttt{e\_c} branch answers, and it writes the attribute back by t
 \texttt{owns(nullable(c))} always, so the second case never nests: §6's idempotence is the construction,
 not an equation the proof has to earn.
 
-\emph{scope.} The model has no thunk. A thunk that re-enters its own schema is a \rulelink{rule:ref}{\texttt{(ref)}} to an entry
-of a \rulelink{rule:scope}{\texttt{(scope)}}, and any other thunk is the term it returns. What the re-entry passes through
+\emph{scope.} The host holds a \texttt{ref} node that names an entry. A \texttt{ref} that re-enters its own schema is a \rulelink{rule:ref}{\texttt{(ref)}} to an entry
+of a \rulelink{rule:scope}{\texttt{(scope)}}, and any other \texttt{ref} is the term it names. What the re-entry passes through
 decides the case.
 
 \textbf{Through a container.} The guard accepts the scope, and \rulelink{thm:guarded-recursion}{guarded recursion} gives the

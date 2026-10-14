@@ -413,18 +413,19 @@ the inclusion does not reach a `held`.
 meaning of the closed codec. An entry reads the codec that its scope solves, as the rows of
 `opaque` do.
 
-**The host spells recursion as a thunk, and the bridge prints a closed codec.** The emitter cuts
-the term graph into scopes: each cycle of the term graph is one scope, and a scope comes after each
-scope that it reaches. Each term of a cycle is an entry of its scope, and a thunk that returns an
-entry prints as the reference to that entry. Any other thunk prints the term it returns, because
-the model has no thunk. The emitter refuses a term with no scoped form: an unguarded cycle, a cycle
+**The host spells recursion as a `ref` node, and the bridge prints a closed codec.** A `ref` node
+names an entry of the scope that binds it, and an unbound name is a node with no target. The
+emitter cuts the term graph into scopes: each cycle of the term graph is one scope, and a scope
+comes after each scope that it reaches. Each term of a cycle is an entry of its scope, and a `ref`
+node whose target is an entry prints as the reference to that entry. Any other `ref` node prints
+the term it names. The emitter refuses a term with no scoped form: an unguarded cycle, a cycle
 through a wall, or an open fragment. A guard row prints the graph of the term instead: one flat
 system with no order on its entries, which the guard of a DAG of scopes decides. Each recursive vector asserts that the
 guard accepts its term. The host's `union` refuses the two shapes the guard refuses. One is an
-option whose spine reaches a recursive thunk. The other is an option where a `held` sits between the
-term that a recursive thunk returns and the thunk. The host's `union` also refuses a thunk that
-throws. Recursion below a list or an object stays declared, and the decision decides it. The
-host's `heldFree(t)` reads through a recursive thunk, as the model's `Scoped.Closed.HF` reads every
+option whose spine reaches a recursive `ref`. The other is an option where a `held` sits between the
+entry that a recursive `ref` names and the `ref`. The host's `union` also refuses a `ref` that no
+scope binds. Recursion below a list or an object stays declared, and the decision decides it. The
+host's `heldFree(t)` reads through a recursive `ref`, as the model's `Scoped.Closed.HF` reads every
 node of every scope.
 
 ---
@@ -497,7 +498,7 @@ renders the condition expression.
 **The host's path API follows the model.** `at((p) => ...)` on an item codec gives the codec at a
 path, with the path as `path()` and as a list of segments. The walk of `at` gives the three answers of
 `Rooted.at` at each segment: the frames, no frame where the store refuses the segment, and `never`.
-The walk reads a thunk as the model reads an entry. The walk compares two terms by structure, so two
+The walk reads a `ref` node as the model reads an entry. The walk compares two terms by structure, so two
 declarations of one term are one frame. A path resolves where the frontier holds one term, so the
 codec at the path agrees with each frame, which is the premise of `Closed.strong_law`. A frontier of two
 terms, or of one term beside `never`, gives a codec that returns a refusal value on use, and the
@@ -518,9 +519,9 @@ fixed depth, and each clause of the pool's vocabulary at each option name of a u
 records the decision of the host. One theorem per codec states that `Rooted.at`, after `narrowC` for
 a clause, gives the frontier that each decision names, and the kernel decides the theorem. A
 recursive union has clause rows as any union has: each option is a closed codec with its own root.
-The two-spelling check builds the pool again with each leaf and each tag behind a thunk that
+The two-spelling check builds the pool again with each leaf and each tag behind a `ref` that
 closes no cycle. The model reads one term in both spellings, so each decision of `at` must be the
-same, and a difference is a host reader that stops at a thunk.
+same, and a difference is a host reader that stops at a `ref`.
 
 **A path row certifies the meaning of a resolved decision.** The walk of the model's frontier, over
 the graph of the print of the root, names the position of each frame (`Closed.frameAt`). Where the
@@ -739,12 +740,12 @@ alternate reader, and a decline certifies nothing. A container of an alternate r
 term of another shape class is disjoint from it, and reads no reader. An unknown read as
 "disjoint" is the permissive direction, and so the unsound one.
 
-**The host reads a thunk that throws as an unknown term.** At a declaration, a thunk that names
-the union under declaration throws. The model has no free variable, and the emitter refuses such a
-term as an open fragment. The decision keeps the bottom apart from every term, and two operations
-of different classes apart whatever their positions (`AB.of_cls`). So beside the bottom the thunk
-is disjoint, and beside any other term the host's test declines. A list of such a thunk beside a
-string is disjoint from it.
+**The host reads an unbound `ref` as an unknown term.** At a declaration, a `ref` that names the
+union under declaration has no target yet. The model has no free variable, and the emitter refuses
+such a term as an open fragment. The decision keeps the bottom apart from every term, and two
+operations of different classes apart whatever their positions (`AB.of_cls`). So beside the bottom
+the unbound `ref` is disjoint, and beside any other term the host's test declines. A list of such a
+`ref` beside a string is disjoint from it.
 
 **The caller view of a `held` is its held side.** The host's `decimal` over literals records the
 string literals of its texts there, so its caller view is exact, and the views certify it beside a
@@ -756,8 +757,8 @@ the lists. For a pair the library accepts, the row states that `Closed.compatPai
 pair, and `accepted_of_rows` lifts the row to `PairwiseCompat` where both terms denote lawful
 codecs. For a pair the library refuses at compatibility, the row states that `Closed.compatPair`
 refuses the pair (`refused_of_rows`). For a pair the library refuses at the guard, the row states
-that the guard refuses an option (`guardRefused_of_rows`). A pair that reads a thunk that throws
-takes the same forms, because the decision holds whatever codec the thunk names. Each row also
+that the guard refuses an option (`guardRefused_of_rows`). A pair that reads an unbound `ref`
+takes the same forms, because the decision holds whatever codec the scope later binds to the name. Each row also
 states the guard on the graphs of the two options (`Graph.guarded`).
 
 **The emitter refuses a pair that no form states.** A form states the union decision of the host,

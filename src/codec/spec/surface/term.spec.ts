@@ -18,6 +18,11 @@ import { member, occA, occV, specOf, tagsOf } from '../../term'
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
 
 const str: Term = { kind: 'string' }
+/** A `ref` whose scope binds its name to the term. */
+const refTo = (target: Term): Term => ({
+    kind: 'ref',
+    slot: { name: 'T', bound: { T: target }, waiting: [] },
+})
 const bool: Term = { kind: 'boolean' }
 
 describe('the member a term stores', () => {
@@ -45,13 +50,13 @@ describe('the member a term stores', () => {
     })
 
     /**
-     * The judgement gives two terms a `⊤` index and gives each a different reason: `lazy` could be asked but
-     * answering forces the thunk, and `opaque` writes whatever the value turns out to be. A term
+     * The judgement gives two terms a `⊤` index and gives each a different reason: a `ref` could be asked but
+     * answering walks through the `ref`, and `opaque` writes whatever the value turns out to be. A term
      * with no member is one only (MP) constrains. A union of several members answers nothing for a
      * third reason, which is `unanimous` and is asked in its own test.
      */
     it('the two terms whose member the term does not determine answer nothing', () => {
-        expect(member({ kind: 'lazy', get: () => str })).toBe(undefined)
+        expect(member(refTo(str))).toBe(undefined)
         expect(member({ kind: 'opaq' })).toBe(undefined)
     })
 
@@ -115,8 +120,8 @@ describe('the occupancies of a term', () => {
      * the thunk exists to allow. It does not: forcing at the declaration is what `object()`
      * already does, and `codec.recursive.spec.ts` declares such an entity and still passes.
      */
-    it('a lazy answers what its term answers, and the member is what it loses', () => {
-        const recursive: Term = { kind: 'lazy', get: () => str }
+    it('a ref answers what its target answers, and the member is what it loses', () => {
+        const recursive = refTo(str)
         expect(occV(recursive)).toEqual(occV(str))
         expect(occA(recursive)).toEqual(occA(str))
         expect(member(recursive)).toBe(undefined)

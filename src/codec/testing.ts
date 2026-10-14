@@ -52,7 +52,7 @@ import type { AnyCodec, AttributeCodec, ItemCodec, Rng } from './codec'
 import { CodecError, codecOfTerm, failed, opaque, orThrow } from './codec'
 import { accepts, holds } from './denote'
 import type { Term } from './term'
-import { isOpaqueSugar, member as termMember } from './term'
+import { isOpaqueSugar, member as termMember, usedTargetOf } from './term'
 
 /** mulberry32 — small, fast, and good enough to search a value space. */
 export const rngFrom = (seed: number): Rng => {
@@ -1108,10 +1108,10 @@ export const arbitraryOf = (
         }
         case 'legacy':
             return arbitraryOf(codecOfTerm(def.inner), rng, size)
-        case 'lazy':
+        case 'ref':
             // one level shallower each time, which is what stops a recursive entity generating
             // forever: the optional attribute that recurses is dropped once the budget runs out
-            return arbitraryOf(codecOfTerm(def.get()), rng, size - 1)
+            return arbitraryOf(codecOfTerm(usedTargetOf(def)), rng, size - 1)
         // the one term with no inhabitant, so a property quantified over it has no input. A throw
         // and not a value: the switch's return type admits `undefined`, and falling through would
         // hand `undefined` to a round trip as though it were a value of this codec
@@ -1310,8 +1310,8 @@ export const shrinkOf = (
             return shrinkOf(codecOfTerm(def.inner), value).filter(holds(def.q))
         case 'legacy':
             return shrinkOf(codecOfTerm(def.inner), value)
-        case 'lazy':
-            return shrinkOf(codecOfTerm(def.get()), value)
+        case 'ref':
+            return shrinkOf(codecOfTerm(usedTargetOf(def)), value)
         default:
             return []
     }

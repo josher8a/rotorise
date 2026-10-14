@@ -111,7 +111,7 @@ import {
     vectorRows,
 } from '../lean'
 import { CodecError, orThrow } from '../result'
-import type { Term } from '../term'
+import type { RefSlot, Term } from '../term'
 import { RecursionRefused } from '../term'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
@@ -892,11 +892,13 @@ const mutualSample: Vector = {
     value: { b: [null, { b: [] }] },
 }
 /**
- * **A thunk that returns its own term**: no container sits between the binder and its variable.
+ * **A `ref` that names its own term**: no container sits between the binder and its variable.
  * The scope refuses the cycle at construction, so the term is built by hand, and the guard vector
  * states that the model refuses it too.
  */
-const selfTerm: Term = { kind: 'lazy', get: () => selfTerm }
+const selfSlot: RefSlot = { name: 'Self', waiting: [] }
+const selfTerm: Term = { kind: 'ref', slot: selfSlot }
+selfSlot.bound = { Self: selfTerm }
 const selfThunk: AnyCodec = erase(codecOfTerm(selfTerm))
 
 /** The guard verdicts of the full cross product, beside the guard of each recursive admission. */
@@ -905,7 +907,7 @@ const fullGuards = [
 ] as const
 
 /**
- * **A `ref` that no scope binds**: a free variable. A force throws, so the host's tests read it as
+ * **A `ref` that no scope binds**: a free variable. The `ref` has no target, so the host's tests read it as
  * a free variable, and the emitter prints a variable that no binder of the term binds. The host's
  * guard reads it as the root of the option, and the emitter states that reading for the guard.
  */

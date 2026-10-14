@@ -56,6 +56,7 @@ import {
     recursionUse,
     storedAlternatives,
     member as termMember,
+    usedTargetOf,
 } from './term'
 import {
     asRecord,
@@ -1167,41 +1168,17 @@ export const denote = (def: Term): Pair => {
             }
         }
         /**
-         * A thunk: the pair of the term the thunk resolves to, forced on use.
-         *
-         * The row recurses on the **value**, never on the term, which is what makes it terminate:
-         * `def.get()` is forced once per level of the value, and a value is finite. The model has no
-         * thunk: a thunk that closes a cycle is a `ref` to an entry of a scope there, and any other
-         * thunk is the term it returns.
-         *
-         * **A refusal inside the thunk is a value.** The thunk is caller code, and a builder in the
-         * thunk refuses with a `CodecError` at the first use. The row returns that refusal. Every
-         * other throw propagates, because an overflow or a defect of the caller is not a refusal.
+         * A `ref`: the pair of its target, read on use, because `ref` builds the pair before a
+         * scope binds the name. The row recurses on the **value**, never on the term, which is
+         * what makes it terminate: a value is finite.
          */
-        case 'lazy': {
-            const resolved = (): Term | CodecError => {
-                try {
-                    return def.get()
-                } catch (thrown) {
-                    if (thrown instanceof CodecError) return thrown
-                    throw thrown
-                }
-            }
+        case 'ref':
             return {
-                encode: (value, enclosing) => {
-                    const t = resolved()
-                    return t instanceof CodecError
-                        ? t
-                        : pairOf(t).encode(value, enclosing)
-                },
-                decode: (attribute) => {
-                    const t = resolved()
-                    return t instanceof CodecError
-                        ? t
-                        : codecOfTerm(t).decode(attribute)
-                },
+                encode: (value, enclosing) =>
+                    pairOf(usedTargetOf(def)).encode(value, enclosing),
+                decode: (attribute) =>
+                    codecOfTerm(usedTargetOf(def)).decode(attribute),
             }
-        }
         /**
          * The rule `(union)`: the join, resolved by the first option that admits. `lawful_altCodec` is the lemma and
          * `altSem` is the resolution — one rule, serving both the attribute pair here and the item
@@ -1365,7 +1342,7 @@ export const denote = (def: Term): Pair => {
  * A term is immutable by design and frozen at construction, so a codec built from one is a function
  * of it and can be built once. The tree already assumes identity per term in at least one place —
  * `testing.ts`'s `unionsIn` is "keyed on the *definition* rather than the codec, which is what stops
- * a `lazy` cycle: a recursive entity hands back the codec it already walked, and its def is the same
+ * a `ref` cycle: a recursive entity hands back the codec it already walked, and its def is the same
  * object" — and this makes that true rather than probable. The freeze is what the cache rests on: a
  * mutation fails loudly instead of poisoning it.
  */
@@ -1399,11 +1376,11 @@ export const codecOfTerm = <T, A extends AttributeValue>(
     // **A recursion that the model's guard refuses is refused where its term is declared.** Each
     // former builds its codec here, so this is the one place that sees each declared term. A path
     // with no container reads the input of its own entry, and encode then overflows the stack. A
-    // path with an adapter lets caller code make the input at any depth. A `lazy` term is not
-    // walked, because the walk forces the thunk, and a thunk runs at the first former above it. A
+    // path with an adapter lets caller code make the input at any depth. A `ref` is not
+    // walked, because `ref` builds its codec before the scope that binds it runs the guard. A
     // `union` refuses each option with a message that names the option. The refusal carries the
     // term, so a checker states the model's guard on the term
-    if (def.kind !== 'lazy' && def.kind !== 'union') {
+    if (def.kind !== 'ref' && def.kind !== 'union') {
         const use = recursionUse(def)
         if (use === 2) {
             throw new RecursionRefused(
@@ -1975,10 +1952,7 @@ const namedKind = (t: Term): string => {
         : pinned !== undefined
           ? namedLiterals(literalForm(pinned.base, undefined), pinned)
           : t.kind !== 'held' || t.outer.kind === 'opaq'
-            ? // a \`lazy\` term is the term of a \`ref\`, the one surface that builds one
-              t.kind === 'lazy'
-                ? 'ref'
-                : t.kind
+            ? t.kind
             : namedAdapter(t.inner, t.outer)
 }
 

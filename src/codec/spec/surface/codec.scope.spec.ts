@@ -31,7 +31,7 @@ import {
     union,
     withLegacyRead,
 } from '../../codec'
-import type { Term } from '../../term'
+import type { RefSlot, Term } from '../../term'
 import { freeNamesOf, recursionUse, sameTerm } from '../../term'
 
 type TA = { readonly v: string; readonly b?: TB }
@@ -59,13 +59,15 @@ describe('a scope', () => {
         expect(W.at((p) => p.r.b.a.b.a.v).path()).toBe('r.b.a.b.a.v')
     })
 
-    it('builds a term graph whose cycle passes through a thunk at each ref', () => {
+    it('builds a term graph whose cycle passes through a ref node at each ref', () => {
+        const toA: RefSlot = { name: 'A', waiting: [] }
+        const toB: RefSlot = { name: 'B', waiting: [] }
         const A: Term = {
             kind: 'object',
             body: {
                 fields: {
                     v: { mark: 'req', t: { kind: 'string' } },
-                    b: { mark: 'optional', t: { kind: 'lazy', get: () => B } },
+                    b: { mark: 'optional', t: { kind: 'ref', slot: toB } },
                 },
             },
         }
@@ -73,11 +75,12 @@ describe('a scope', () => {
             kind: 'object',
             body: {
                 fields: {
-                    a: { mark: 'optional', t: { kind: 'lazy', get: () => A } },
+                    a: { mark: 'optional', t: { kind: 'ref', slot: toA } },
                     n: { mark: 'req', t: { kind: 'null' } },
                 },
             },
         }
+        toA.bound = toB.bound = { A, B }
         expect(sameTerm(S.A.def, A)).toBe(true)
         expect(sameTerm(S.B.def, B)).toBe(true)
         // the control: another shape is another graph

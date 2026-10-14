@@ -41,7 +41,7 @@ import { hostAt, leanClosedOf, reachable } from './lean'
 import { CodecError } from './result'
 import { storedApart } from './scoped'
 import type { Literal, Term } from './term'
-import { componentsOf, force, leafKinds, sameTerm } from './term'
+import { componentsOf, leafKinds, sameTerm, targetOf } from './term'
 
 /** A term that this module cannot print as library calls. */
 export class TypeUnemittable extends Error {
@@ -196,16 +196,16 @@ const numberAdapter = number.def.kind === 'held' ? number.def.f : undefined
 
 /* ── the binders ─────────────────────────────────────────────────────────────────────────── */
 
-type Lazy = Extract<Term, { readonly kind: 'lazy' }>
+type Ref = Extract<Term, { readonly kind: 'ref' }>
 
 const binderCache = new Map<Term, boolean>()
 
-/** A thunk that closes a cycle: its target reaches the thunk again. */
-const isBinder = (t: Term): t is Lazy => {
-    if (t.kind !== 'lazy') return false
+/** A `ref` that closes a cycle: its target reaches the `ref` again. */
+const isBinder = (t: Term): t is Ref => {
+    if (t.kind !== 'ref') return false
     let hit = binderCache.get(t)
     if (hit === undefined) {
-        const target = force(t)
+        const target = targetOf(t)
         hit = target !== undefined && reachable(target).has(t)
         binderCache.set(t, hit)
     }
@@ -239,7 +239,7 @@ type Shared = {
 
 /**
  * **One strongly connected component of the pool**, printed as one `scope`. A term of the
- * component is an entry where a thunk names the term, a term outside the component names the term,
+ * component is an entry where a `ref` names the term, a term outside the component names the term,
  * a root names the term, or the term has more than one parent. Each other term has one parent in
  * the component, and prints in place inside that parent. So the print copies no term.
  */
@@ -273,7 +273,7 @@ const shared = (roots: readonly Term[]): Shared => ({
  * constant, so a term that two places share stays one object in the print.
  *
  * **A cycle prints as one `scope`**: one entry for each term that the component names, and
- * `ref('key')` at each thunk of the component. A term outside the component names an entry as a
+ * `ref('key')` at each `ref` of the component. A term outside the component names an entry as a
  * member of the constant of the scope.
  */
 const printerOf = (
@@ -303,25 +303,25 @@ const printerOf = (
     const ref = (t: Term): string => {
         if (leafKinds.has(t.kind)) return print(t, inline)
         const scc = sccs.get(t)
-        if (scc !== undefined && t.kind !== 'lazy') return entryOf(scc, t)
+        if (scc !== undefined && t.kind !== 'ref') return entryOf(scc, t)
         const n = nameOf(t)
         const now = state.get(t)
         if (now === 'done') return n
         if (now === 'progress')
             return refuse(at, 'a constant that reads itself')
         state.set(t, 'progress')
-        // a thunk of a cycle names the entry that it returns: the scope is declared first
+        // a `ref` of a cycle names the entry that is its target: the scope is declared first
         const body = scc === undefined ? print(t, ref) : entryOf(scc, chase(t))
         declare('constant', lean(t), `export const ${n} = ${body}`)
         state.set(t, 'done')
         return n
     }
 
-    /** The term that a chain of thunks returns. */
+    /** The term that a chain of `ref`s reaches. */
     const chase = (t: Term): Term => {
         let u: Term | undefined = t
-        for (let i = 0; u?.kind === 'lazy' && i < 64; i++) u = force(u)
-        return u === undefined || u.kind === 'lazy'
+        for (let i = 0; u?.kind === 'ref' && i < 64; i++) u = targetOf(u)
+        return u === undefined || u.kind === 'ref'
             ? refuse(at, 'a chain of thunks that returns no term')
             : u
     }
@@ -354,16 +354,16 @@ const printerOf = (
         return name
     }
 
-    /** A term of a scope: a thunk of the scope is `ref`, and a term with one parent is in place. */
+    /** A term of a scope: a `ref` of the scope prints as `ref`, and a term with one parent is in place. */
     const member = (scc: Scc, t: Term): string =>
         print(t, (c) => {
             if (leafKinds.has(c.kind)) return print(c, inline)
             if (sccs.get(c) !== scc) return ref(c)
             const target = chase(c)
             const key = scc.keys.get(target)
-            if (key !== undefined && (c.kind === 'lazy' || target === c))
+            if (key !== undefined && (c.kind === 'ref' || target === c))
                 return `ref('${key}')`
-            if (c.kind === 'lazy')
+            if (c.kind === 'ref')
                 return refuse(
                     at,
                     'a thunk of a cycle whose target no entry names',
@@ -375,7 +375,7 @@ const printerOf = (
     const typeText = (t: Term): string => {
         const scc = sccs.get(t)
         if (scc === undefined) return `Decoded<typeof ${ref(t)}>`
-        if (t.kind === 'lazy') return typeText(chase(t))
+        if (t.kind === 'ref') return typeText(chase(t))
         if (scc.keys.has(t)) return `Decoded<typeof ${entryOf(scc, t)}>`
         switch (t.kind) {
             case 'object': {
@@ -535,15 +535,15 @@ const printerOf = (
             }
             case 'legacy':
                 return `withLegacyRead({ current: ${sub(t.inner)}, older: { decode: (): never => { throw new Error('older') } } })`
-            // a thunk that closes no cycle prints as its body, as the emitter prints it, and a
-            // thunk that throws is a `ref` that no scope binds
-            case 'lazy': {
-                const target = force(t)
+            // a `ref` that closes no cycle prints as its target, as the emitter prints it, and a
+            // `ref` with no target is a `ref` that no scope binds
+            case 'ref': {
+                const target = targetOf(t)
                 if (target === undefined) return "ref('Undeclared')"
                 if (sub === inline && isBinder(t))
                     return refuse(at, 'a binder in a clause')
-                // the host refuses a declared `never` by the term it reads, and a thunk hides the
-                // term: the print keeps the thunk where its body would be that `never`
+                // the host refuses a declared `never` by the term it reads, and a `ref` hides the
+                // term: the print keeps a `ref` where its target would be that `never`
                 if (sub !== inline && target.kind === 'never')
                     return "scope({ At: ref('It'), It: never }).At"
                 return sub(target)
@@ -671,7 +671,7 @@ const sliceRoot = (
         return refuse(slice.name, `a slice root that is a ${def.kind}`)
     const options = def.options
     const keys = slice.keys ?? []
-    // a union names the drawn union itself, so a thunk that returns the union returns this one
+    // a union names the drawn union itself, so a `ref` whose target is the union reaches this one
     if (keys.length === 0) p.constant('root', 'root', def)
     options.forEach((o, i) => {
         p.constant(`o${i}`, 'option', o)
@@ -765,12 +765,12 @@ const pathRoot = (
                     .join(', ')} })`
     /*
      * A name that no head declares, where a head is open, is spelled `.entry('k')`. The
-     * heads are the terms at the path, through thunks and the options of a union. A clause
+     * heads are the terms at the path, through `ref`s and the options of a union. A clause
      * keeps each head that the stored view of the clause does not separate, as `narrow` does.
      */
     const headsOf = (t: Term): readonly Term[] => {
-        if (t.kind === 'lazy') {
-            const target = force(t)
+        if (t.kind === 'ref') {
+            const target = targetOf(t)
             return target === undefined ? [] : headsOf(target)
         }
         if (t.kind === 'union') return t.options.flatMap(headsOf)
