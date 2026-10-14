@@ -546,11 +546,8 @@ const childrenOf = (
     // a position enters a list, and a name enters a map
     const container = typeof segment === 'number' ? 'L' : 'M'
     let stored = memberOf(def)
-    if (def.kind === 'held' || def.kind === 'refine' || def.kind === 'legacy') {
-        const known = reentered()
-        if (known instanceof CodecError) return known
-        stored = printedMember(def.inner, known)
-    }
+    if (def.kind === 'held' || def.kind === 'refine' || def.kind === 'legacy')
+        stored = printedMember(def.inner, reentered())
     const apart = stored !== undefined && stored !== container
     switch (def.kind) {
         // a name the body does not declare falls in the open block, where there is one
@@ -626,24 +623,16 @@ const childrenOf = (
 }
 
 /**
- * **The re-entered terms of the root of a walk**, forced at the first wrapper that the walk meets. A
- * thunk whose builder refuses makes the answer that refusal, because the re-entered terms are then
- * unknown.
+ * **The re-entered terms of the root of a walk**, read at the first wrapper that the walk meets. A
+ * walk that meets no wrapper reads the cycles of the root at no step.
  */
-type Reentered = () => ReadonlySet<Term> | CodecError
+type Reentered = () => ReadonlySet<Term>
 
-/** The {@link Reentered} of a root, which force the thunks of the root once. */
+/** The {@link Reentered} of a root, which reads the cycles of the root once. */
 const reenteredAt = (root: Term): Reentered => {
-    let known: ReadonlySet<Term> | CodecError | undefined
+    let known: ReadonlySet<Term> | undefined
     return () => {
-        if (known === undefined) {
-            try {
-                known = reenteredOf(root)
-            } catch (thrown) {
-                if (!(thrown instanceof CodecError)) throw thrown
-                known = thrown
-            }
-        }
+        known ??= reenteredOf(root)
         return known
     }
 }

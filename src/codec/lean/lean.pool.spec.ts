@@ -1162,6 +1162,24 @@ const recursiveNarrowing = (): PathVectors => {
     }
 }
 
+/**
+ * **A member read across an entry on a cycle**, beside the pool: `B` returns to `A`, so the print
+ * reads `B` as a reference under `refine`, and the model's `μG` reads no member at a reference. The
+ * walk cannot pass the `refine`, and the row states the refusal of the run time.
+ */
+const cycleMember = (): PathVectors => {
+    const { A } = scope({
+        A: object({
+            s: union([
+                object({ x: string }),
+                refine(ref('B'), (v: unknown): v is unknown => v !== null),
+            ]),
+        }),
+        B: array(ref('A')),
+    })
+    return { name: 'path_cycle_member', codec: erase(A), paths: [['s', 'x']] }
+}
+
 /** The files that the gate elaborates, by name, from one build of the pool. */
 const poolModules = (
     perSeed: ReturnType<typeof buildPool>,
@@ -1183,7 +1201,11 @@ const poolModules = (
         leanSliceModule(perSeed.flatMap((one) => one.slices)),
     ],
     ...leanPathModules(
-        [...perSeed.flatMap((one) => one.paths), recursiveNarrowing()],
+        [
+            ...perSeed.flatMap((one) => one.paths),
+            recursiveNarrowing(),
+            cycleMember(),
+        ],
         4,
     ).map((text, i) => [`.pool.paths${i}.lean`, text] as const),
     [

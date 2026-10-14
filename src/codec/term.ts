@@ -1423,54 +1423,17 @@ const belowTop = (root: Term): boolean => {
 }
 
 /**
- * **The re-entered terms of a root**: each term that a thunk returns while that term is on the
- * stack of a walk from the root. A re-entered term is an entry of a cycle that reaches its own
- * `ref`. A thunk that throws returns no term. The walk forces each thunk and stops at a cycle, so
- * it ends: a thunk memoizes its codec, and every other edge of a term is built before the term.
+ * **The re-entered terms of a root**: each entry of each cycle of the term graph of the root
+ * ({@link componentsOf}). The emitter prints an entry as a reference, so a path walk reads no
+ * member at a re-entered term, as the model's `μG` reads none at a reference. A thunk that throws
+ * names no term, as {@link childrenOf} reads it.
  *
- * **The walk reads every path, and keeps no visited set.** A term re-enters on one path and not on
- * another, so a visited set loses a re-entered term, and the path walk of `at` then reads a member
- * at a term where it read none.
+ * **The set holds every entry, not only the term that a walk meets on its own stack.** An entry
+ * that the walk forces before its cycle closes is a reference in the print as well, and a set of
+ * the stack alone read a member there, which the type and the model refuse.
  */
-export const reenteredOf = (root: Term): ReadonlySet<Term> => {
-    const reentered = new Set<Term>()
-    const walk = (t: Term, stack: readonly Term[]): void => {
-        const on = [...stack, t]
-        const next = (one: Term) => walk(one, on)
-        switch (t.kind) {
-            case 'lazy': {
-                const target = force(t)
-                if (target === undefined) return
-                if (on.includes(target)) reentered.add(target)
-                else next(target)
-                return
-            }
-            case 'list':
-                for (const one of [...t.pre, ...t.suf]) next(one)
-                if (t.spread !== undefined) next(t.spread)
-                return
-            case 'object':
-                for (const field of Object.values(t.body.fields)) next(field.t)
-                if (t.body.rest !== undefined) next(t.body.rest)
-                return
-            case 'union':
-                for (const one of t.options) next(one)
-                return
-            case 'set':
-                return next(t.elem)
-            case 'held':
-                next(t.inner)
-                return next(t.outer)
-            case 'refine':
-            case 'legacy':
-                return next(t.inner)
-            default:
-                return
-        }
-    }
-    walk(root, [])
-    return reentered
-}
+export const reenteredOf = (root: Term): ReadonlySet<Term> =>
+    new Set(componentsOf([root]).flatMap(({ keys }) => [...keys.keys()]))
 
 /** A term that holds no other term. A component of the term graph never holds one. */
 export const leafKinds: ReadonlySet<Term['kind']> = new Set([
