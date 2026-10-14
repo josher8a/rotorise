@@ -48,7 +48,7 @@ const narrowing = <T>(is: (value: string) => boolean) =>
 const rootOf = (codec: AnyCodec): string => {
     const printed = leanClosedOf(codec)
     const entry =
-        /^\(⟨1, \.snoc \(c := 0\) \(n := 1\) \(\.nil\) \(fun i => match i with \| ⟨0, _⟩ => \((.*) : Scoped\.Term 0 1 0\)\), 0⟩ : Closed\)$/.exec(
+        /^\(⟨1, \(fun i => match i with \| ⟨0, _⟩ => \((.*) : Scoped\.Term 0 1 0\)\), 0⟩ : Closed\)$/.exec(
             printed,
         )
     if (entry?.[1] === undefined)

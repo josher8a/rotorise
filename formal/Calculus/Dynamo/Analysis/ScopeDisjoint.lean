@@ -41,11 +41,11 @@ theorem dynLaws (o : Orient) : Alg.Scoped.Laws dynSyn o where
       exact setCodec_apart (o := o) (fun w h1 h2 => by have := h w; rw [h1, h2] at this; exact nomatch this) v hv.1 hv.2
 
 /-- **Whether two closed codecs share no value and no attribute**: the decision over the graphs. -/
-def Closed.disjoint (x y : Closed) : Bool := Alg.Scoped.disjoint x.scopes x.root y.scopes y.root
+def Closed.disjoint (x y : Closed) : Bool := Alg.Scoped.disjoint x.scope x.root y.scope y.root
 
 /-- **Whether the two pairs of views of two closed codecs are disjoint.** -/
 def Closed.viewsDisjoint (x y : Closed) : Bool :=
-  Alg.Scoped.viewsDisjoint x.scopes x.root y.scopes y.root
+  Alg.Scoped.viewsDisjoint x.scope x.root y.scope y.root
 
 /-- **The decision is sound**: two closed codecs that it separates share no datum at either
     orientation. -/

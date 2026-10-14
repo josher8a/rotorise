@@ -531,26 +531,20 @@ type At = {
     readonly placed: Placed
 }
 
-/**
- * **One entry of a closed codec**: its scope, its index in the scope, and its index among the
- * entries of every scope, the constant that a later scope reads.
- */
+/** **One entry of a closed codec**: its index in the one scope of the codec. */
 type Entry = {
-    readonly scope: number
     readonly index: number
-    readonly global: number
 }
 
 /**
- * **Where the scoped printer is**: the entries of the closed codec, the scope and the entry that it
- * prints, whether it prints the top of the entry, and whether the position is below a guard or
- * below a wall.
+ * **Where the scoped printer is**: the entries of the closed codec, the entry that it prints,
+ * whether it prints the top of the entry, and whether the position is below a guard or below a
+ * wall.
  */
 type Placed = {
-    /** A closed codec: a DAG of scopes. A graph: one flat system, with no order on its entries. */
+    /** A closed codec: one ordered scope. A graph: one flat system, with no order on its entries. */
     readonly form: 'closed' | 'graph'
     readonly entries: ReadonlyMap<Term, Entry>
-    readonly scope: number
     readonly index: number
     readonly top: boolean
     readonly guarded: boolean
@@ -612,15 +606,16 @@ const leanBinders = (bound: Bound): string => {
 }
 
 /**
- * **A closed codec** — the codec as a DAG of scopes, for the families whose analysis reads only the
+ * **A closed codec** — the codec as one flat scope, for the families whose analysis reads only the
  * meaning.
  *
- * Each cycle of the term graph is one scope, in the order of {@link componentsOf}: a scope comes
- * after each scope that it reaches. The entries of a scope are in the order of {@link entryOrder}.
- * The root is an entry: an entry of its own cycle, or the one entry of a last scope. The top of
- * each entry states its indices, because the elaborator needs them before it reads a list of
- * options. A term with no scoped form, an unguarded cycle, a cycle through a wall, or an open
- * fragment, is refused, with the reason.
+ * The entries of the scope are the entries of each cycle of the term graph, cycle by cycle in the
+ * order of {@link componentsOf}: a cycle comes after each cycle that it reaches. The entries of a
+ * cycle are in the order of {@link entryOrder}. The root is an entry: an entry of its own cycle, or
+ * the last entry. So an entry reads an entry of an earlier cycle above every guard, and the scope
+ * needs no constant. The top of each entry states its indices, because the elaborator needs them
+ * before it reads a list of options. A term with no scoped form, an unguarded cycle, a wall that
+ * reaches a cycle, or an open fragment, is refused, with the reason.
  */
 export const leanClosedOf = (
     declared: ObjectSlot,
@@ -642,8 +637,8 @@ const leanClosedOfTerm = (def: Term, at: string, bound?: Bound): string =>
     closedPrint(def, at, bound).text
 
 /**
- * A printed closed codec, with the entry of each term that prints as an entry: an entry of the
- * graph is its global index, and the root is the entry of the term.
+ * A printed closed codec, with the entry of each term that prints as an entry: an entry is its index
+ * in the scope, and the root is the entry of the term.
  */
 type ClosedPrint = {
     readonly text: string
@@ -653,46 +648,35 @@ type ClosedPrint = {
 
 /** The print of {@link leanClosedOfTerm}, with its entries. */
 const closedPrint = (def: Term, at: string, bound?: Bound): ClosedPrint => {
-    const scopes: (readonly Term[])[] = []
+    const members: Term[] = []
     for (const component of componentsOf([def])) {
         const order = entryOrder(component)
         if (order.kind === 'refused') return refuse(at, order.reason)
-        scopes.push(order.entries)
+        members.push(...order.entries)
     }
-    if (!scopes.some((entries) => entries.includes(def))) scopes.push([def])
-    const entries = new Map<Term, Entry>()
-    let global = 0
-    scopes.forEach((members, scope) =>
-        members.forEach((t, index) => {
-            entries.set(t, { scope, index, global: global++ })
-        }),
+    if (!members.includes(def)) members.push(def)
+    const entries = new Map<Term, Entry>(
+        members.map((t, index) => [t, { index }]),
     )
-    let printed = '.nil'
-    let constants = 0
-    scopes.forEach((members, scope) => {
-        const arms = members
-            .map((t, index) => {
-                const body = leanTermOfTerm(t, at, {
-                    bound,
-                    placed: {
-                        form: 'closed',
-                        entries,
-                        scope,
-                        index,
-                        top: true,
-                        guarded: false,
-                        wall: false,
-                    },
-                })
-                return `| ⟨${index}, _⟩ => (${body} : Scoped.Term ${constants} ${members.length} ${index})`
+    const arms = members
+        .map((t, index) => {
+            const body = leanTermOfTerm(t, at, {
+                bound,
+                placed: {
+                    form: 'closed',
+                    entries,
+                    index,
+                    top: true,
+                    guarded: false,
+                    wall: false,
+                },
             })
-            .join(' ')
-        printed = `.snoc (c := ${constants}) (n := ${members.length}) (${printed}) (fun i => match i with ${arms})`
-        constants += members.length
-    })
-    const root = entries.get(def)?.global ?? 0
+            return `| ⟨${index}, _⟩ => (${body} : Scoped.Term 0 ${members.length} ${index})`
+        })
+        .join(' ')
+    const root = entries.get(def)?.index ?? 0
     return {
-        text: `(⟨${constants}, ${printed}, ${root}⟩ : Closed)`,
+        text: `(⟨${members.length}, (fun i => match i with ${arms}), ${root}⟩ : Closed)`,
         entries,
         root,
     }
@@ -729,7 +713,7 @@ const leanGraphOfTerm = (def: Term, at: string, bound?: Bound): string => {
     }
     if (!points.includes(def)) points.push(def)
     const entries = new Map<Term, Entry>(
-        points.map((t, index) => [t, { scope: 0, index, global: index }]),
+        points.map((t, index) => [t, { index }]),
     )
     const arms = points
         .map((t, index) => {
@@ -738,7 +722,6 @@ const leanGraphOfTerm = (def: Term, at: string, bound?: Bound): string => {
                 placed: {
                     form: 'graph',
                     entries,
-                    scope: 0,
                     index,
                     top: true,
                     guarded: false,
@@ -849,21 +832,18 @@ const leanTermOfTerm = (t: Term, at: string, scope: At): string =>
     leanPlaced(t, at, scope, scope.placed)
 
 /**
- * **A term of a closed codec.** An entry of an earlier scope prints as its constant, and an entry of
- * the scope prints as `ref`: below a guard any entry, above every guard an earlier entry. Below a
- * wall the term names no entry of its own scope. Each other term prints in place.
+ * **A term of a closed codec.** An entry prints as `ref`: below a guard any entry, above every guard
+ * an earlier entry. Below a wall the term names no entry. Each other term prints in place.
  */
 const leanPlaced = (t: Term, at: string, scope: At, placed: Placed): string => {
     const entry = placed.entries.get(t)
     if (entry !== undefined && !placed.top && placed.form === 'graph')
-        return `Scoped.Graph.Term.ref ${entry.global}`
+        return `Scoped.Graph.Term.ref ${entry.index}`
     if (entry !== undefined && !placed.top) {
-        if (entry.scope < placed.scope)
-            return `Scoped.Term.const ${entry.global}`
         if (placed.wall)
             return refuse(
                 at,
-                'a cycle through a wall: a wall reads its term at any depth, so the term has no scoped form',
+                'a wall reaches a cycle: a wall reads its term at any depth, so the term has no scoped form',
             )
         if (!placed.guarded && entry.index >= placed.index)
             return refuse(
@@ -2618,13 +2598,13 @@ const graphChildOf = (
     const top = w.at.kind === 'position' && w.at.path.length === 0
     if (
         entry !== undefined &&
-        !(top && w.at.kind === 'position' && w.at.j === entry.global)
+        !(top && w.at.kind === 'position' && w.at.j === entry.index)
     )
         return graphChildOf(
             {
                 option: w.option,
                 t: u,
-                at: { kind: 'position', j: entry.global, path: [] },
+                at: { kind: 'position', j: entry.index, path: [] },
             },
             s,
             entries,

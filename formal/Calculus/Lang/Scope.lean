@@ -9,8 +9,8 @@ positions are typed: `TOp.Pos o` is the type of the children of `o`, and `TOp.po
 them. `TSig B` is the term container, and it holds no table. The algebra `TStep τ` runs each
 operation at the former of the meaning, at the tables `τ`.
 
-A term of a scope is an `SFlat` over the term container with constants, and a closed codec is a
-`DSys`. Its meaning is the solution of the DAG of scopes at a root entry.
+A term of a scope is an `SFlat` over the term container with constants, and a closed codec is
+one scope with no constant. Its meaning is the solution of that scope at a root entry.
 -/
 
 namespace Calculus.Alg
@@ -363,10 +363,11 @@ abbrev Term (B : Sig) (c w k : Nat) : Type :=
     a closed codec. -/
 abbrev Graph (B : Sig) (N : Nat) : Type := Flat (TSig B).Op (TSig B).Pos N
 
-/-- **A closed codec**: a DAG of scopes over the term container. -/
-abbrev Closed (B : Sig) (N : Nat) : Type := DSys (TSig B) N
+/-- **A closed codec**: one scope over the term container, with no constant. -/
+abbrev Closed (B : Sig) (N : Nat) : Type := Scope (TSig B) 0 N
 
-/-- **The meaning of a closed codec** at a root entry, at the tables `τ`. -/
+/-- **The meaning of a closed codec** at a root entry, at the tables `τ`: the solution of its
+    scope. -/
 def Closed.meaning [Mean B] (τ : (s : Bool) → TableAt B s) {N : Nat} (d : Closed B N)
     (root : Fin N) : Mean.C B :=
   d.sol (TStep τ) Mean.d root

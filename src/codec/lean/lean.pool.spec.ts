@@ -1249,7 +1249,8 @@ describe('the generated pool, against the model', () => {
           {
             "dropped": {
               "a constructor refused the draw": 68,
-              "path: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 71,
+              "path: a wall reaches a cycle: a wall reads its term at any depth, so the term has no scoped form": 1,
+              "path: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 70,
               "separation: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 3,
               "slice term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 17,
               "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1590,

@@ -15,9 +15,9 @@ closed codec of one entry denotes the identity (`Closed.opaq_f`), so the meaning
 
 namespace Calculus
 
-/-- **A closed codec is held-free** when each term of each scope is held-free. The test is the
-    definition, so a closed codec of literal scopes is shown held-free by `rfl`. -/
-abbrev Closed.HF (t : Closed) : Prop := Alg.Scoped.Closed.HF t.scopes
+/-- **A closed codec is held-free** when each term of its scope is held-free. The test is the
+    definition, so a closed codec of a literal scope is shown held-free by `rfl`. -/
+abbrev Closed.HF (t : Closed) : Prop := Alg.Scoped.Closed.HF t.scope
 
 /-- **`opaque` is the identity** as a closed codec of one entry, at each orientation. -/
 theorem Closed.opaq_f (α : Table) (o : Alg.Orient) (v : Value) :
@@ -26,7 +26,7 @@ theorem Closed.opaq_f (α : Table) (o : Alg.Orient) (v : Value) :
 
 /-- **Confluence**: the meaning of a held-free closed codec is a restriction of the identity. -/
 theorem Closed.sub_meaning {α : Table} {t : Closed} (h : t.HF) : Alg.Sub (t.meaning α) Alg.idCodec :=
-  Alg.Scoped.Closed.sub _ t.scopes h t.root
+  Alg.Scoped.Closed.sub _ t.scope h t.root
 
 /-- **(W)**: a held-free closed codec writes only what `opaque` writes. -/
 theorem Closed.confluence_W {α : Table} {t : Closed} (h : t.HF) {v a}

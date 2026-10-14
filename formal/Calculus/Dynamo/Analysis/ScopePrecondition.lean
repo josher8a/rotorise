@@ -4,7 +4,7 @@ import Calculus.Dynamo.Analysis.ScopePath
 /-!
 # The precondition of a closed clause
 
-A closed clause is a `Closed`: a DAG of scopes and a root entry. Its precondition reads the graph
+A closed clause is a `Closed`: one scope and a root entry. Its precondition reads the graph
 term of the root entry, as `Closed.spec` does, and each function below takes the row that the
 stored view of the graph term (`viewG` at the dual) takes. The rows: a literal and a union of literals at one base give `in`, a base gives `type`, `opaque` and an
 older reader give `exists`, a `held` gives the precondition of its stored side, a refinement over a
@@ -99,12 +99,12 @@ end Pre
     refuses below the root: the clause admits each map there, and the empty conjunction admits each
     attribute. At the root the item is a map, so the empty conjunction is the precondition. -/
 def Closed.preconditionOfC (φ : Closed) (π : List Seg) : Option (List Cond) :=
-  match φ.scopes.graph φ.root with
+  match φ.scope.graph φ.root with
   | .node (.obj fs md s) a =>
       match keyPos fs, π with
       | [], _ :: _ => none
       | _, _ => keysPreG md (restOpaqG s fun p => a (.inr p))
-          (fun x => termPreG φ.scopes.graph (a (.inl x))) π
+          (fun x => termPreG φ.scope.graph (a (.inl x))) π
   | _ => none
 
 /-! ## The exactness law -/
@@ -414,18 +414,18 @@ variable (α : Table)
     exists, and the stored view of the clause admits the attribute. -/
 def Closed.admAt (φ : Closed) : List Seg → Attr → Bool :=
   rowAt fun A => (((Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual
-    φ.scopes).e φ.root).p A).isSome
+    φ.scope).e φ.root).p A).isSome
 
 /-- The stored view of a closed codec at its root reads as the stored view of the graph term of
     its root entry, at the solution of the view. -/
 theorem Closed.view_root (φ : Closed) {t : Alg.Scoped.Graph dynSig φ.N}
-    (hg : φ.scopes.graph φ.root = t) (A : Attr) :
-    ((Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scopes).e φ.root).p A =
-      (storedAt α φ.scopes.graph
-        (Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scopes).e t).p A := by
+    (hg : φ.scope.graph φ.root = t) (A : Attr) :
+    ((Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scope).e φ.root).p A =
+      (storedAt α φ.scope.graph
+        (Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scope).e t).p A := by
   subst hg
   exact congrFun (congrFun
-    ((Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scopes).fix φ.root)
+    ((Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scope).fix φ.root)
     .dual) A
 
 /-- **The precondition of a closed clause is exact on an item**: the precondition holds where the
@@ -437,7 +437,7 @@ theorem Closed.preconditionOfC_exact {φ : Closed} {π : List Seg} {gs : List Co
   split at h
   · next fs md s a hg =>
     have hroot : (π = [] ∨ ∃ k, k ∈ fs) ∧ keysPreG md (restOpaqG s fun p => a (.inr p))
-        (fun x => termPreG φ.scopes.graph (a (.inl x))) π = some gs := by
+        (fun x => termPreG φ.scope.graph (a (.inl x))) π = some gs := by
       cases hs : keyPos fs with
       | nil =>
           cases π with
@@ -446,14 +446,14 @@ theorem Closed.preconditionOfC_exact {φ : Closed} {π : List Seg} {gs : List Co
       | cons k ks =>
           exact ⟨.inr ⟨k.1, k.2⟩, by simpa [hs] using h⟩
     obtain ⟨hπ, hkg⟩ := hroot
-    let e := (Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scopes).e
+    let e := (Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scope).e
     obtain ⟨hrest, hmd, hall⟩ := keysPreG_exact
-      (P := fun x A => ((storedAt α φ.scopes.graph e (a (.inl x))).p A).isSome)
-      (fun x π ys hy R => termPreG_exact α φ.scopes.graph e (a (.inl x)) π ys hy R) hkg
+      (P := fun x A => ((storedAt α φ.scope.graph e (a (.inl x))).p A).isSome)
+      (fun x π ys hy R => termPreG_exact α φ.scope.graph e (a (.inl x)) π ys hy R) hkg
     refine Bool.eq_iff_iff.mpr ?_
     rw [hall R]
     unfold Closed.admAt rowAt
-    have hmap : (∀ x : {x // x ∈ fs}, rowAt (fun A => ((storedAt α φ.scopes.graph e
+    have hmap : (∀ x : {x // x ∈ fs}, rowAt (fun A => ((storedAt α φ.scope.graph e
         (a (.inl x))).p A).isSome) (π ++ [Seg.name x.1]) R = true) →
         ∃ keys g, readPath π R = some (.m keys g) := fun hk => by
       rcases hπ with rfl | ⟨k, hk'⟩
@@ -550,7 +550,7 @@ private def shows (r : Option (List Cond)) (cs : List (Cond → Bool)) : Bool :=
 
 /-- A closed codec of one entry. -/
 private abbrev one (t : Scoped.Term 0 1 0) : Closed :=
-  ⟨1, .snoc (c := 0) (n := 1) .nil (fun i => match i with | ⟨0, _⟩ => t), 0⟩
+  ⟨1, (fun i => match i with | ⟨0, _⟩ => t), 0⟩
 
 /-- A clause: an open object whose names are each required. -/
 private abbrev clauseOf (fs : Finset String) (f : {x // x ∈ fs} → Scoped.Term 0 1 1) : Closed :=

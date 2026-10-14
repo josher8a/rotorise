@@ -157,8 +157,8 @@ def selPath {N : Nat} (t : Alg.Scoped.Graph dynSig N) : List Sel → Alg.Scoped.
 /-- **A frame of a closed codec, at a position of its print**: the body of the entry `j`, then the
     steps. An entry past the count gives the bottom. -/
 def Closed.frameAt (c : Closed) (j : Nat) (path : List Sel) : GFrame dynSig :=
-  if h : j < c.N then ⟨c.N, c.scopes, selPath (c.scopes.graph ⟨j, h⟩) path⟩
-  else ⟨c.N, c.scopes, Alg.Scoped.Graph.never⟩
+  if h : j < c.N then ⟨c.N, c.scope, selPath (c.scope.graph ⟨j, h⟩) path⟩
+  else ⟨c.N, c.scope, Alg.Scoped.Graph.never⟩
 
 /-- **The rows of the paths into a closed codec**: `Rooted.at` at each path reads what the host
     states. -/
@@ -335,7 +335,7 @@ theorem pathReadC_decided (r : Option (List (GFrame dynSig))) (h : HostAtC)
 
 /-- A refinement of `string` by a closure, as a frame of no entry. -/
 private def refineFrame (q : Attr → Bool) : GFrame dynSig :=
-  ⟨0, .nil, .node (.refine (.closure q) ()) fun _ => .node (.prim (.base .string)) Empty.elim⟩
+  ⟨0, fun i => i.elim0, .node (.refine (.closure q) ()) fun _ => .node (.prim (.base .string)) Empty.elim⟩
 
 /-- **No closure is read**: two refinements of `string` by two closures are one codec to the
     decision, and the one admits a string that the other refuses. -/
@@ -350,7 +350,7 @@ theorem pathKindC_reads_no_closure (α : Table) :
 /-! ## Vectors -/
 
 private abbrev one (t : Scoped.Term 0 1 0) : Closed :=
-  ⟨1, .snoc (c := 0) (n := 1) .nil (fun i => match i with | ⟨0, _⟩ => t), 0⟩
+  ⟨1, (fun i => match i with | ⟨0, _⟩ => t), 0⟩
 
 private abbrev itemM : Closed := one (Scoped.Term.object (Scoped.Body.mk {"m"} (fun _ =>
   Scoped.ObjectSlot.req (Scoped.Term.union [

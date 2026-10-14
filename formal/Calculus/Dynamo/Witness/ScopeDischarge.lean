@@ -43,7 +43,7 @@ theorem typed_jsonBody (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fin 0 �
 
 /-- `jsonClosed` is typed. -/
 theorem Closed.typed_json : jsonClosed.Typed α :=
-  ⟨trivial, fun i => match i with | ⟨0, _⟩ => typed_jsonBody _ _ _ _⟩
+  fun i => match i with | ⟨0, _⟩ => typed_jsonBody _ _ _ _
 
 /-- **A string and an array are compatible**, whatever the element: no attribute and no value is
     on both. -/
@@ -79,7 +79,7 @@ theorem obligations_jsonBody (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fi
 /-- `jsonClosed` meets its obligations: each stage after a lawful stage keeps its options
     compatible. -/
 theorem Closed.obligations_json : jsonClosed.Obligations α :=
-  ⟨trivial, fun _ hk i => match i with | ⟨0, _⟩ => obligations_jsonBody _ _ _ _ (hk 0)⟩
+  fun _ hk i => match i with | ⟨0, _⟩ => obligations_jsonBody _ _ _ _ (hk ⟨0, Nat.one_pos⟩)
 
 /-- **The host's recursive schema, as a closed codec, is lawful.** -/
 theorem Closed.lawful_json : Lawful (jsonClosed.meaning α) :=

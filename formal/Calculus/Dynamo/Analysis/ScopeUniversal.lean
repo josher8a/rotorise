@@ -65,7 +65,7 @@ theorem Closed.opaqUnfold_ok : certAllC (opaqOptions.map Closed.one) = true := b
   decide
 
 /-- **The unfolding is held-free.** -/
-theorem Closed.opaqUnfold_HF : opaqUnfoldClosed.HF := ⟨trivial, fun i => match i with | ⟨0, _⟩ => rfl⟩
+theorem Closed.opaqUnfold_HF : opaqUnfoldClosed.HF := fun i => match i with | ⟨0, _⟩ => rfl
 
 /-- **`opaque` is total, write side.** `opaque` writes every value. -/
 theorem Closed.opaq_total (α : Table) (v : Value) :

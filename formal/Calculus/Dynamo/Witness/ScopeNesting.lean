@@ -73,7 +73,7 @@ theorem typed_deepS (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fin 0 → C
 
 /-- Each closed codec of the family is typed. -/
 theorem Closed.typed_deep (n : Nat) : (deepClosed n).Typed α :=
-  ⟨trivial, fun i => match i with | ⟨0, _⟩ => typed_deepS _ _ n _ _⟩
+  fun i => match i with | ⟨0, _⟩ => typed_deepS _ _ n _ _
 
 /-- Each term of the family writes what the index says, at every environment: it names no entry. -/
 theorem deepS_e (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fin 0 → Codec) :

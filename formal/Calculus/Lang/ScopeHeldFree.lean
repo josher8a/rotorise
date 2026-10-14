@@ -9,7 +9,7 @@ restricts its positions or composes them through the structure that the top itse
 operation over restrictions of the top is a restriction of the top (`TOp.sub_run`).
 
 `sub_term` lifts the fact to a scope term over restrictions of the top. `Closed.sub` states it at
-each entry of a held-free closed codec: each stage of each scope is a restriction of the top, and
+each entry of a held-free closed codec: each stage of the scope is a restriction of the top, and
 the solution reads each input at one stage. The top is the identity, which is canonical, so two
 held-free closed codecs are compatible (`Closed.compat_of_HF`).
 -/
@@ -36,10 +36,8 @@ def hasHeld {c : Nat} : {w k : Nat} → Term B c w k → Bool
     definition, so a closed term is shown held-free by `rfl`. -/
 abbrev HF {c w k : Nat} (t : Term B c w k) : Prop := hasHeld t = false
 
-/-- **A closed codec is held-free** when each term of each scope is held-free. -/
-def Closed.HF : {N : Nat} → Closed B N → Prop
-  | _, .nil => True
-  | _, .snoc d sc => Closed.HF d ∧ ∀ i, Scoped.HF (sc i)
+/-- **A closed codec is held-free** when each term of its scope is held-free. -/
+def Closed.HF {N : Nat} (d : Closed B N) : Prop := ∀ i, Scoped.HF (d i)
 
 /-! ## Confluence -/
 
@@ -109,27 +107,20 @@ theorem sub_term [TopLaws ⟨B, .host⟩] {c : Nat} {κ : Fin c → Mean.C B}
 
 /-- **Confluence of a closed codec**: each entry of a held-free closed codec is a restriction of
     the top. -/
-theorem Closed.sub [TopLaws ⟨B, .host⟩] : ∀ {N : Nat} (d : Closed B N), Closed.HF d →
-    ∀ i, Sub (d.sol (TStep τ) Mean.d i) idCodec
-  | _, .nil, _, i => i.elim0
-  | _, .snoc (c := c) (n := n) d sc, hh, i => by
-    have hκ := Closed.sub d hh.1
-    have hst : ∀ k i, Sub (Closed.stage τ d sc k i) idCodec := by
-      intro k
-      induction k with
-      | zero => exact fun _ => sub_empty
-      | succ k ih =>
-        intro ⟨i, hi⟩
-        induction i using Nat.strong_induction_on with
-        | _ i ihi =>
-          have e := interp_nf (R := CStep (TStep τ) c (d.sol (TStep τ) Mean.d)) sc
-            (Closed.stage τ d sc k) ⟨i, hi⟩
-          exact (congrArg (Sub · idCodec) e).mpr <|
-            sub_term τ hκ (sc ⟨i, hi⟩) (hh.2 ⟨i, hi⟩) ih (fun j => ihi j.val j.isLt _)
-    refine Fin.addCases (fun m => ?_) (fun i => ?_) i
-    · simp only [DSys.sol, Fin.append_left]; exact hκ m
-    · simp only [DSys.sol, Fin.append_right]
-      exact fun o x y h => hst _ i o x y h
+theorem Closed.sub [TopLaws ⟨B, .host⟩] {N : Nat} (d : Closed B N) (hh : Closed.HF d) :
+    ∀ i, Sub (d.sol (TStep τ) Mean.d i) idCodec := by
+  have hst : ∀ k i, Sub (Closed.stage τ d k i) idCodec := by
+    intro k
+    induction k with
+    | zero => exact fun _ => sub_empty
+    | succ k ih =>
+      intro ⟨i, hi⟩
+      induction i using Nat.strong_induction_on with
+      | _ i ihi =>
+        have e := interp_nf (R := CStep (TStep τ) 0 Fin.elim0) d (Closed.stage τ d k) ⟨i, hi⟩
+        exact (congrArg (Sub · idCodec) e).mpr <|
+          sub_term τ (fun j => j.elim0) (d ⟨i, hi⟩) (hh ⟨i, hi⟩) ih (fun j => ihi j.val j.isLt _)
+  exact fun i o x y h => hst _ i o x y h
 
 /-- **Confluence of a closed codec**, at a root: the meaning is a restriction of the top. -/
 theorem Closed.meaning_sub [TopLaws ⟨B, .host⟩] {N : Nat} (d : Closed B N) (h : Closed.HF d)

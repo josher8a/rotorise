@@ -250,29 +250,27 @@ theorem Scoped.typed_T_eq {c : Nat} (κ : Fin c → Alg.Mean.C dynSig) {w k : Na
 
 /-- **The index of each entry of a typed closed codec is the held set of its term** over the
     solution, and that term moves what the entry moves. -/
-theorem Closed.typed_T_identity {c n : Nat} (d : Alg.Scoped.Closed dynSig c)
-    (sc : Alg.Scope (Alg.Scoped.TSig dynSig) c n) (hty : Alg.Scoped.Closed.Typed τ (.snoc d sc))
-    (i : Fin n) :
-    ∃ T μ, Alg.Scoped.Typed τ (d.sol (Alg.Scoped.TStep τ) Alg.Mean.d) (Alg.Scoped.Closed.top τ d sc)
-        (fun j => Alg.Scoped.Closed.top τ d sc (Fin.castLE (Nat.le_of_lt i.isLt) j)) (sc i) T μ ∧
-      (∀ v, T v ↔ (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) c (d.sol (Alg.Scoped.TStep τ) Alg.Mean.d))
-        (sc i) (Alg.Scoped.Closed.top τ d sc)
-        (fun j => Alg.Scoped.Closed.top τ d sc (Fin.castLE (Nat.le_of_lt i.isLt) j))).T v) ∧
-      (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) c (d.sol (Alg.Scoped.TStep τ) Alg.Mean.d))
-        (sc i) (Alg.Scoped.Closed.top τ d sc)
-        (fun j => Alg.Scoped.Closed.top τ d sc (Fin.castLE (Nat.le_of_lt i.isLt) j))).f =
-        (Alg.Scoped.Closed.top τ d sc i).f := by
-  obtain ⟨T, μ, ht⟩ := hty.2 i
-  have hS := Alg.CStep.lawful (Alg.Scoped.TStep_lawful τ) c (d.sol (Alg.Scoped.TStep τ) Alg.Mean.d)
-  have hfix : ∀ j, (Alg.Scoped.Closed.top τ d sc j).f =
-      ((Alg.nf (Alg.cSig (Alg.Scoped.TSig dynSig) c) sc j).interp
-        (Alg.CStep (Alg.Scoped.TStep τ) c (d.sol (Alg.Scoped.TStep τ) Alg.Mean.d))
-        (Alg.Scoped.Closed.top τ d sc)).f := fun j =>
-    funext fun o => funext fun v => Alg.solve_fix Alg.Mean.d_pos (Alg.nf_contractive hS sc) j o v
+theorem Closed.typed_T_identity {n : Nat} (d : Alg.Scoped.Closed dynSig n)
+    (hty : Alg.Scoped.Closed.Typed τ d) (i : Fin n) :
+    ∃ T μ, Alg.Scoped.Typed τ Fin.elim0 (Alg.Scoped.Closed.top τ d)
+        (fun j => Alg.Scoped.Closed.top τ d (Fin.castLE (Nat.le_of_lt i.isLt) j)) (d i) T μ ∧
+      (∀ v, T v ↔ (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) 0 Fin.elim0)
+        (d i) (Alg.Scoped.Closed.top τ d)
+        (fun j => Alg.Scoped.Closed.top τ d (Fin.castLE (Nat.le_of_lt i.isLt) j))).T v) ∧
+      (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) 0 Fin.elim0)
+        (d i) (Alg.Scoped.Closed.top τ d)
+        (fun j => Alg.Scoped.Closed.top τ d (Fin.castLE (Nat.le_of_lt i.isLt) j))).f =
+        (Alg.Scoped.Closed.top τ d i).f := by
+  obtain ⟨T, μ, ht⟩ := hty i
+  have hS := Alg.CStep.lawful (Alg.Scoped.TStep_lawful τ) 0 (Fin.elim0 : Fin 0 → Alg.Mean.C dynSig)
+  have hfix : ∀ j, (Alg.Scoped.Closed.top τ d j).f =
+      ((Alg.nf (Alg.cSig (Alg.Scoped.TSig dynSig) 0) d j).interp
+        (Alg.CStep (Alg.Scoped.TStep τ) 0 Fin.elim0) (Alg.Scoped.Closed.top τ d)).f := fun j =>
+    funext fun o => funext fun v => Alg.solve_fix Alg.Mean.d_pos (Alg.nf_contractive hS d) j o v
   refine ⟨T, μ, ht, Scoped.typed_T_eq τ _ ht, ?_⟩
-  have e := Alg.interp_nf (R := Alg.CStep (Alg.Scoped.TStep τ) c (d.sol (Alg.Scoped.TStep τ) Alg.Mean.d))
-    sc (Alg.Scoped.Closed.top τ d sc) i
+  have e := Alg.interp_nf (R := Alg.CStep (Alg.Scoped.TStep τ) 0 Fin.elim0) d
+    (Alg.Scoped.Closed.top τ d) i
   rw [hfix i, e]
-  exact Alg.SFlat.interp_f_congr hS (sc i) (fun _ => rfl) fun _ => hfix _
+  exact Alg.SFlat.interp_f_congr hS (d i) (fun _ => rfl) fun _ => hfix _
 
 end Calculus
