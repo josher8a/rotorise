@@ -400,10 +400,17 @@ describe('the verdict does not read the order of the operands', () => {
         expect(apart(termOf(booleans), termOf(strings))).toBe(true)
     })
 
-    it('certifies a recursive term beside an adapter over a refined recursive term in both orders', () => {
+    /**
+     * A wall reaches no cycle, so the adapter holds a refined union that reaches none. The right
+     * refinement still hides an option from a split that stops at the top.
+     */
+    it('certifies a recursive term beside an adapter over a refined union in both orders', () => {
         const adapted = held(
             string as never,
-            strings as never,
+            refine(
+                union([string, object({ k: string })]) as never,
+                (_v: unknown): _v is unknown => true,
+            ) as never,
             {
                 encode: (v: never) => v,
                 decode: (v: never) => v,

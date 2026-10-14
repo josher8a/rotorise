@@ -385,6 +385,13 @@ refuses two shapes, and each is a graph with no form as a DAG of scopes:
 A term of a scope names an entry above every guard only below its own entry, so a closed codec
 carries the guard by construction.
 
+**A wall reaches no cycle.** A wall is an operation of kind `wall`: a `held`, including the
+library adapters `number`, `decimal` and `opaque`, or an older reader. A wall reads its argument
+through caller code at any depth. A wall that reads an entry on a cycle makes the flat system
+non-contractive, so the meaning of the codec needs a DAG of scopes with constants. The host refuses
+a wall whose argument reaches an entry on a cycle. With no such wall, the meaning of a closed codec
+is one flat guarded system with a unique solution.
+
 **Stability needs the guard alone.** `ContractiveV` says that agreement below a depth at every
 entry gives agreement one layer deeper. `contractive_of_guarded` derives it from the guard. From it
 each stage and each later stage agree below the depth of the stage (`sysStage_agree`). The
@@ -419,7 +426,10 @@ emitter cuts the term graph into scopes: each cycle of the term graph is one sco
 comes after each scope that it reaches. Each term of a cycle is an entry of its scope, and a `ref`
 node whose target is an entry prints as the reference to that entry. Any other `ref` node prints
 the term it names. The emitter refuses a term with no scoped form: an unguarded cycle, a cycle
-through a wall, or an open fragment. A guard row prints the graph of the term instead: one flat
+through a wall, or an open fragment. The host refuses a wall whose argument reaches an entry on a
+cycle, at the wall where each `ref` of the argument has a target, and at the scope that binds a
+`ref` of the argument otherwise. A wall over an acyclic entry stays legal: the emitter prints the
+acyclic `ref` in place, so that entry is no leaf of the model. A guard row prints the graph of the term instead: one flat
 system with no order on its entries, which the guard of a DAG of scopes decides. Each recursive vector asserts that the
 guard accepts its term. The host's `union` refuses the two shapes the guard refuses. One is an
 option whose spine reaches a recursive `ref`. The other is an option where a `held` sits between the
@@ -681,7 +691,8 @@ reads a raw `held` as disjoint from the bottom alone, and a view holds no `held`
 certificate through its views. On a term with no `held`, the caller view is the term itself. The
 view of a `union` is the union of the views of its options. A reference to an entry stays a
 reference, so a `held` below a recursion reaches the certificate too
-(`Closed.viewsDisjoint_heldBelowMu`).
+(`Closed.viewsDisjoint_heldBelowMu`). The argument of that `held` reaches no cycle, because a wall
+reaches no cycle.
 
 **The stored view drops a predicate over an adapter.** A view keeps a refinement as it is only
 where the inner term reaches no adapter. Elsewhere the view keeps the predicate of its

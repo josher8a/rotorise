@@ -91,6 +91,56 @@ type Reached<D, New, Seen> = [Exclude<New, Seen>] extends [never]
           VarsOf<D[Exclude<New, Seen> & keyof D]>,
           Seen | (New & keyof D)
       >
+
+// ── a wall reaches no cycle ──
+/** The scope terms that a term holds, at any depth. */
+type ScopesOf<T> = T extends ['scope', unknown, unknown]
+    ? T
+    : T extends readonly unknown[]
+      ? ScopesOf<T[number]>
+      : T extends object
+        ? ScopesOf<T[keyof T]>
+        : never
+/**
+ * The entries on a cycle that the names \`New\` of \`D\` reach, and the entries on a cycle of each
+ * earlier scope that a reached definition holds. An entry is on a cycle where it reaches its own
+ * name. A record with an index signature is the erased scope, and holds no cycle that the type reads.
+ */
+type CyclesFrom<D, New> = string extends keyof D
+    ? never
+    : CyclesAmong<D, Reached<D, New, never> & keyof D>
+type CyclesAmong<D, R extends keyof D> = R extends unknown
+    ? R extends Reached<D, VarsOf<D[R]>, never>
+        ? R
+        : CycleEntryOf<D[R]>
+    : never
+/** **The entries on a cycle that a term reaches**, through each scope term that the term holds. */
+export type CycleEntryOf<T> = ScopesOf<T> extends infer S
+    ? S extends ['scope', infer D, infer K]
+        ? CyclesFrom<D, K>
+        : never
+    : never
+/** The argument of each wall that a term holds, at any depth, above each scope term. */
+type WallArgsOf<T> = T extends [
+    'held',
+    unknown,
+    infer I,
+    infer O,
+    unknown,
+    unknown,
+]
+    ? I | O
+    : T extends ['legacy', infer I]
+      ? I
+      : T extends ['scope', unknown, unknown]
+        ? never
+        : T extends readonly unknown[]
+          ? WallArgsOf<T[number]>
+          : T extends object
+            ? WallArgsOf<T[keyof T]>
+            : never
+/** The entries on a cycle of the scope \`D\` that a wall of the definition \`T\` reads through a \`ref\`. */
+export type ScopeWallCycle<D, T> = CyclesFrom<D, VarsOf<WallArgsOf<T>>>
 /** `unanimous`: the first member when every member equals it (`none` included), else `none`. */
 type Unanimous<L> = L extends [infer H, ...infer R]
     ? AllEq<R, H> extends true

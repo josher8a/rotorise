@@ -8,12 +8,15 @@
 import { describe, expect, it } from 'vitest'
 import {
     array,
+    boolean,
     CodecError,
     discriminatedUnion,
     held,
+    list,
     mdunion,
     nullable,
     object,
+    opaque,
     optional,
     ref,
     refine,
@@ -366,5 +369,36 @@ describe('a former directly over a ref', () => {
         expect(
             Byway.decode({ M: { kind: { S: 'pet' }, toy: { S: 't' } } }),
         ).toEqual({ kind: 'pet', toy: 't' })
+    })
+})
+
+/**
+ * **A spelling through a ref draws the same values.** A `ref` that closes no cycle spells its
+ * target in place, so the arbitrary reads the target with no draw of its own and no step of the
+ * budget. A pool that spells a leaf behind a `ref` then draws the same codecs as the plain pool.
+ */
+describe('a spelling through a ref draws the same values', () => {
+    it('draws one value sequence for a term and for the same term behind a ref', () => {
+        const behind = <C>(codec: C): C =>
+            scope({ At: ref('It'), It: codec as never }).At as never
+        const plain = list(boolean, opaque)
+        const spelled = list(behind(boolean), behind(opaque))
+        for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+            const counted = () => {
+                const base = rngFrom(seed)
+                const rng = { draws: 0, next: () => 0 }
+                rng.next = () => {
+                    rng.draws++
+                    return base()
+                }
+                return rng
+            }
+            const a = counted()
+            const b = counted()
+            expect(arbitraryOf(spelled, b.next, 2)).toEqual(
+                arbitraryOf(plain, a.next, 2),
+            )
+            expect(b.draws).toBe(a.draws)
+        }
     })
 })

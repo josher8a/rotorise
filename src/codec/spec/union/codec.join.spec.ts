@@ -471,6 +471,7 @@ describe('a union refuses a thunk it must read at its own input, because the mod
         const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
         const inUnion = () =>
             scope({
+                // @ts-expect-error a wall reaches no cycle, and this wall reads its own entry
                 Self: union([
                     string,
                     array(held(ref('Self'), ref('Self'), same)),
@@ -481,6 +482,7 @@ describe('a union refuses a thunk it must read at its own input, because the mod
         )
         const inObject = () =>
             scope({
+                // @ts-expect-error a wall reaches no cycle, and this wall reads its own entry
                 Kids: object({
                     kids: array(held(ref('Kids'), ref('Kids'), same)),
                 }),
@@ -498,6 +500,7 @@ describe('a union refuses a thunk it must read at its own input, because the mod
     it('refuses a withLegacyRead between a recursive ref and the codec it names at the scope that binds the ref', () => {
         const declare = () =>
             scope({
+                // @ts-expect-error a wall reaches no cycle, and this wall reads its own entry
                 Kids: object({
                     kids: array(
                         withLegacyRead({
