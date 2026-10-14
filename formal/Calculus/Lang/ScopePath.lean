@@ -151,7 +151,7 @@ variable {S : Syn} [Sem S] [Leaf S.sig] (o : Orient)
     with its own root, and the fuel is the fuel of the two closed codecs. -/
 def narrowC (φ : Rooted S.sig) (os : List (Rooted S.sig)) : List (Rooted S.sig) :=
   os.filter fun x => !decG (viewSys φ.d.graph o) (viewSys x.d.graph o)
-    ((φ.N * x.N + 1) * (φ.N + x.N + 2)) [] (.leaf φ.root) (.leaf x.root)
+    (fuel φ.N x.N) [] (.leaf φ.root) (.leaf x.root)
 
 variable {o}
 
@@ -159,11 +159,11 @@ variable {o}
     clause. -/
 theorem decG_of_dropped {φ x : Rooted S.sig} {os : List (Rooted S.sig)} (hx : x ∈ os)
     (hd : x ∉ narrowC o φ os) :
-    decG (viewSys φ.d.graph o) (viewSys x.d.graph o) ((φ.N * x.N + 1) * (φ.N + x.N + 2)) []
+    decG (viewSys φ.d.graph o) (viewSys x.d.graph o) (fuel φ.N x.N) []
       (.leaf φ.root) (.leaf x.root) = true := by
   unfold narrowC at hd
   rw [List.mem_filter] at hd
-  cases h : decG (viewSys φ.d.graph o) (viewSys x.d.graph o) ((φ.N * x.N + 1) * (φ.N + x.N + 2))
+  cases h : decG (viewSys φ.d.graph o) (viewSys x.d.graph o) (fuel φ.N x.N)
     [] (.leaf φ.root) (.leaf x.root)
   · exact absurd ⟨hx, by rw [h]; rfl⟩ hd
   · rfl
@@ -175,17 +175,8 @@ variable [Shapes S] [TopLaws S] {τ : (s : Bool) → TableAt S.sig s}
 theorem narrowC_drops (laws : Laws S o) {φ x : Rooted S.sig} {os : List (Rooted S.sig)}
     (hx : x ∈ os) (hd : x ∉ narrowC o φ os) {v : Mean.V (B := S.sig)}
     (hφ : (((Closed.viewToG τ o φ.d).e φ.root).f o v).isSome = true) :
-    ((x.meaning τ).f o v).isSome = false := by
-  have hap := apart_of_AB (fun k => decG_sound (dL := Closed.viewToG τ o φ.d)
-    (dR := Closed.viewToG τ o x.d) laws _ [] (.leaf φ.root) (.leaf x.root)
-    (decG_of_dropped hx hd) k fun _ hq => nomatch hq) v
-  cases h2 : ((x.meaning τ).f o v).isSome
-  · rfl
-  have e2 := view_entries x.d _ x.root v (Nat.le_refl _) h2
-  have h3 : ((((Closed.viewToG τ o φ.d).e φ.root).f o v).isSome &&
-      (((Closed.viewToG τ o x.d).e x.root).f o v).isSome) = false := hap
-  rw [hφ, e2] at h3
-  exact nomatch h3
+    ((x.meaning τ).f o v).isSome = false :=
+  view_apart laws (decG_of_dropped hx hd) hφ
 
 omit [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S] in
 /-- A first match over the options that a filter keeps is the first match over all options, where

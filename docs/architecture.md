@@ -65,7 +65,7 @@ instance, and JSON is a second instance.
 | `Alg/Agree.lean` | agreement `Agree` at an orientation, whose two halves are the host and the dual, one lemma per combinator, and `compat_iff_agree` |
 | `Lang/Term.lean` | the signature `Sig`, the syntax `Syn`, the meaning `Mean`, and the tables of adapters |
 | `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, and the flat scope with `scope_solution` |
-| `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, and `Scoped.Closed.compat_of_HF` |
+| `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, and `Scoped.Closed.meaning_sub` |
 | `Lang/Universe.lean`, `Lang/ScopeDisjoint.lean` | the class `Leaf`, the structural disjointness decision `Scoped.disjoint` over two closed codecs with its soundness `Scoped.disjoint_sound`, the view `viewG` at an orientation, and `views_apart` |
 | `Lang/ScopeCompat.lean` | the compatibility decision `Scoped.compatPair` over two closed codecs, and `Scoped.compatPair_sound` |
 | `Lang/CodecPath.lean`, `Lang/ScopePath.lean` | the write of the store at a path `putPath` with `path_law`, the frontier of a closed codec `Rooted.at`, the strong law `Closed.strong_law`, and narrowing `narrowC` with `narrowC_law` |
@@ -145,7 +145,7 @@ and the kernel evaluates a closed pair.
 pair of entries while it compares the two bodies, and a pair already assumed is apart (`pairAt`).
 At an unguarded position, the decision unfolds an entry. A fuel bounds the walk, and an empty fuel
 answers `false`. The row of a left refinement reads its inner term. On the right, a union reads its
-options and a refinement reads its inner term (`rightRows`). So a right refinement hides no option
+options and a refinement reads its inner term (`rightC`). So a right refinement hides no option
 from the left row. The set row compares the two elements with
 no assumed pair. A `held`, a `legacy` and the top are disjoint only from the bottom, because their
 admission is a function that the decision does not read.
@@ -181,8 +181,8 @@ DynamoDB the lift is `setCodec`, over the three wire-set constructors of `Value`
 **The theorems of the algebra hold at every signature.** `Scoped.Closed.sound` proves `Lawful` for
 each entry of a typed closed codec whose obligations hold, in any universe. The universe supplies the laws of its
 primitives and of its formers, and the generic combinators supply the rest.
-`Scoped.Closed.compat_of_HF` proves two held-free closed codecs compatible from `TopLaws`, when the
-second is lawful: the top is the identity, which is canonical.
+`Scoped.Closed.meaning_sub` proves from `TopLaws` that the meaning of a held-free closed codec is a
+restriction of the top.
 
 **The instance names the generic declarations.** At DynamoDB, `Codec` and `Lawful` are
 abbreviations at the DynamoDB carriers, and `Scoped.Term` is an abbreviation at `dynSig`.
@@ -413,9 +413,9 @@ everything self-identifying (`opaqUnfoldClosed`) sends each datum to itself. `op
 codec `Alg.idCodec`, and it owes no compatibility and no contraction. The union is a theorem:
 `Closed.Adm_opaqUnfold` and `Closed.AdmA_opaqUnfold` state that the union admits what `opaque` admits.
 
-**A held-free closed codec is a restriction of `opaque`.** A held-free closed codec
-(`Closed.HF`) holds no `held`, no older reader and no fill slot in any term of its scope. Such a
-codec writes only what `opaque` writes (`Closed.confluence_W`), and reads only what `opaque`
+**A held-free closed codec is a restriction of `opaque`.** An adapter reads its argument through
+caller code: a `held`, an older reader, or an object with a fill slot. A closed codec is held-free
+(`Closed.HF`) where its root reaches no adapter on its graph (`belowTop`). Such a codec writes only what `opaque` writes (`Closed.confluence_W`), and reads only what `opaque`
 reads (`Closed.confluence_R`). A `held` re-indexes the values of the caller, so
 the inclusion does not reach a `held`.
 
@@ -438,8 +438,8 @@ guard accepts its term. The host's `union` refuses the two shapes the guard refu
 option whose spine reaches a recursive `ref`. The other is an option where a `held` sits between the
 entry that a recursive `ref` names and the `ref`. The host's `union` also refuses a `ref` that no
 scope binds. Recursion below a list or an object stays declared, and the decision decides it. The
-host's `heldFree(t)` reads through a recursive `ref`, as the model's `Scoped.Closed.HF` reads every
-node of the scope.
+host's `heldFree(t)` reads through a recursive `ref`, as the model's `Scoped.Closed.HF` reads each
+entry that the root reaches.
 
 ---
 

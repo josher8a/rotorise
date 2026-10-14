@@ -75,14 +75,15 @@ abbrev Tbl (NL NR : Nat) := List (Fin NL × Fin NR)
 /-- The bottom as a graph term. -/
 def Graph.never {N : Nat} : Graph B N := .node .never fun p => nomatch p
 
-/-- **The rows that read the right operand alone.** The bottom admits nothing. A union is
-    disjoint where each option is. A refinement is bounded by its inner term. An entry unfolds
-    through `restart`. `fam` answers every other operation. -/
-def rightRows (restart : Graph B NR → Bool) (fam : Graph B NR → Bool) : Graph B NR → Bool
-  | .leaf j => restart (sR j)
+/-- **The rows of the right operand.** `fam` answers each term first. The bottom admits nothing,
+    and agrees with every term. A union is read where each option is, and a refinement where its
+    inner term is. An entry unfolds through `restart`. -/
+def rightC (restart fam : Graph B NR → Bool) : Graph B NR → Bool
+  | .leaf j => fam (.leaf j) || restart (sR j)
   | .node .never _ => true
-  | .node (.refine _ _) a => rightRows restart fam (a ())
-  | .node (.union m) a => (List.finRange m).all fun p => rightRows restart fam (a p)
+  | .node (.refine q qA) a => fam (.node (.refine q qA) a) || rightC restart fam (a ())
+  | .node (.union m) a => fam (.node (.union m) a) ||
+      (List.finRange m).all fun p => rightC restart fam (a p)
   | y => fam y
 
 /-- A primitive beside a primitive the leaf keeps apart, or beside a former. -/
@@ -183,21 +184,24 @@ def rowG (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL N
     Graph B NL → Graph B NR → Bool
   | .leaf j, y => prev A (sL j) y
   | .node .never _, _ => true
-  | x@(.node (.held _ _ _) _), y => rightRows sR (prev A x) (fun _ => false) y
-  | x@(.node (.legacy _) _), y => rightRows sR (prev A x) (fun _ => false) y
-  | x@(.node .opaq _), y => rightRows sR (prev A x) (fun _ => false) y
+  | x@(.node (.held _ _ _) _), y => rightC sR (prev A x) (fun _ => false) y
+  | x@(.node (.legacy _) _), y => rightC sR (prev A x) (fun _ => false) y
+  | x@(.node .opaq _), y => rightC sR (prev A x) (fun _ => false) y
   | .node (.refine _ _) a, y => rowG prev A (a ()) y
   | .node (.union m) a, y => (List.finRange m).all fun p => rowG prev A (a p) y
-  | x@(.node (.prim g) _), y => rightRows sR (prev A x) (famPrimG g) y
-  | x@(.node .set a), y => rightRows sR (prev A x) (famSetG (prev [] (a ()))) y
+  | x@(.node (.prim g) _), y => rightC sR (prev A x) (famPrimG g) y
+  | x@(.node .set a), y => rightC sR (prev A x) (famSetG (prev [] (a ()))) y
   | x@(.node (.list _ _ _) a), y =>
-      rightRows sR (prev A x) (famListG ((listParts a).1.map (pairAt (sL := sL) (sR := sR) prev A))
+      rightC sR (prev A x) (famListG ((listParts a).1.map (pairAt (sL := sL) (sR := sR) prev A))
         ((listParts a).2.1.map (pairAt (sL := sL) (sR := sR) prev A))
         ((listParts a).2.2.map (pairAt (sL := sL) (sR := sR) prev A))) y
   | x@(.node (.obj _ md s) a), y =>
-      rightRows sR (prev A x) (famObjG (md := md)
+      rightC sR (prev A x) (famObjG (md := md)
         (fun k => pairAt (sL := sL) (sR := sR) prev A (a (.inl k)))
         (blockTest (sL := sL) (sR := sR) (md := md) prev A s a)) y
+
+/-- **The fuel of a walk over two closed codecs** of `NL` and `NR` entries. -/
+def fuel (NL NR : Nat) : Nat := (NL * NR + 1) * (NL + NR + 2)
 
 /-- **The walk at a fuel.** Each unfolding of an entry and each pair below a guard spends one. -/
 def decG : Nat → Tbl NL NR → Graph B NL → Graph B NR → Bool
@@ -240,15 +244,15 @@ end View
     entries below a guard, and each unguarded unfolding between two guards. -/
 def disjoint [Leaf B] {NL NR : Nat} (dL : Closed B NL) (rL : Fin NL) (dR : Closed B NR)
     (rR : Fin NR) : Bool :=
-  decG dL.graph dR.graph ((NL * NR + 1) * (NL + NR + 2)) [] (.leaf rL) (.leaf rR)
+  decG dL.graph dR.graph (fuel NL NR) [] (.leaf rL) (.leaf rR)
 
 /-- **Whether the two pairs of views are disjoint**: the views at the host share no value, and the
     views at the dual share no attribute. -/
 def viewsDisjoint [Mean B] [Leaf B] {NL NR : Nat} (dL : Closed B NL) (rL : Fin NL) (dR : Closed B NR)
     (rR : Fin NR) : Bool :=
-  decG (viewSys dL.graph .host) (viewSys dR.graph .host) ((NL * NR + 1) * (NL + NR + 2)) []
+  decG (viewSys dL.graph .host) (viewSys dR.graph .host) (fuel NL NR) []
       (.leaf rL) (.leaf rR) &&
-    decG (viewSys dL.graph .dual) (viewSys dR.graph .dual) ((NL * NR + 1) * (NL + NR + 2)) []
+    decG (viewSys dL.graph .dual) (viewSys dR.graph .dual) (fuel NL NR) []
       (.leaf rL) (.leaf rR)
 
 end Calculus.Alg.Scoped
@@ -538,30 +542,43 @@ theorem AB.union_left {k m : Nat} {X : Mean.C S.sig} {a : Fin m → Mean.C S.sig
 
 variable {N NR : Nat}
 
-/-- **The rows of the right operand alone are sound.** -/
-theorem rightRows_sound (d : GSys τ N) {X : Mean.C S.sig} {k : Nat}
+/-- **The rows of the right operand are sound** for a step-indexed relation that the bottom, a
+    refinement and a union keep on the right, for a left codec that \`restart\` and \`fam\` are sound
+    for. -/
+theorem StepRel.of_rightC (Q : StepRel S) (d : GSys τ N) {X : Mean.C S.sig} {k : Nat}
     {restart fam : Graph S.sig N → Bool}
-    (hr : ∀ y, restart y = true → AB o k X (mng τ d y))
-    (hf : ∀ y, fam y = true → AB o k X (mng τ d y)) :
-    ∀ y, rightRows d.sys restart fam y = true → AB o k X (mng τ d y) := by
+    (hn : ∀ a, Q.R k X (mng τ d (.node .never a)))
+    (hq : ∀ q qA a, Q.R k X (mng τ d (a ())) → Q.R k X (mng τ d (.node (.refine q qA) a)))
+    (hu : ∀ m a, (∀ p, Q.R k X (mng τ d (a p))) → Q.R k X (mng τ d (.node (.union m) a)))
+    (hr : ∀ y, restart y = true → Q.R k X (mng τ d y))
+    (hf : ∀ y, fam y = true → Q.R k X (mng τ d y)) :
+    ∀ y, rightC d.sys restart fam y = true → Q.R k X (mng τ d y) := by
   intro y
   induction y with
-  | leaf j => intro h; exact AB.congr rfl (mng_leaf d j).symm (hr _ h)
+  | leaf j =>
+    intro h
+    simp only [rightC, Bool.or_eq_true] at h
+    exact h.elim (hf _) fun h => Q.congr rfl (mng_leaf d j).symm (hr _ h)
   | node op a ih =>
     intro h
     cases op with
-    | never => exact AB.of_right fun _ => rfl
-    | refine q qA => exact AB.refine_right (ih () h)
+    | never => exact hn a
+    | refine q qA =>
+      simp only [rightC, Bool.or_eq_true] at h
+      exact h.elim (hf _) fun h => hq q qA a (ih () h)
     | union m =>
-      simp only [rightRows, List.all_eq_true, List.mem_finRange, true_implies] at h
-      exact AB.union_right fun p => ih p (h p)
-    | prim g => exact hf _ h
-    | opaq => exact hf _ h
-    | set => exact hf _ h
-    | list _ _ _ => exact hf _ h
-    | held _ _ _ => exact hf _ h
-    | legacy _ => exact hf _ h
-    | obj _ _ _ => exact hf _ h
+      simp only [rightC, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies] at h
+      exact h.elim (hf _) fun h => hu m a fun p => ih p (h p)
+    | prim _ | opaq | set | list _ _ _ | held _ _ _ | legacy _ | obj _ _ _ => exact hf _ h
+
+/-- **The rows of the right operand are sound** for apartness. -/
+theorem AB.of_rightC (d : GSys τ N) {X : Mean.C S.sig} {k : Nat}
+    {restart fam : Graph S.sig N → Bool}
+    (hr : ∀ y, restart y = true → AB o k X (mng τ d y))
+    (hf : ∀ y, fam y = true → AB o k X (mng τ d y)) :
+    ∀ y, rightC d.sys restart fam y = true → AB o k X (mng τ d y) :=
+  StepRel.of_rightC (AB.rel o) d (fun _ => AB.of_right fun _ => rfl)
+    (fun _ _ _ h => AB.refine_right h) (fun _ _ h => AB.union_right h) hr hf
 
 /-! ### The shape classes -/
 
@@ -1357,29 +1374,29 @@ theorem rowG_sound (laws : Laws S o) {prev : Tbl NL NR → Graph S.sig NL → Gr
       exact AB.of_left fun _ => rfl
     | held _ _ _ =>
       rw [rowG] at h
-      exact rightRows_sound dR (fam := fun _ => false) hr (fun _ h' => absurd h' Bool.false_ne_true) y h
+      exact AB.of_rightC dR (fam := fun _ => false) hr (fun _ h' => absurd h' Bool.false_ne_true) y h
     | legacy _ =>
       rw [rowG] at h
-      exact rightRows_sound dR (fam := fun _ => false) hr (fun _ h' => absurd h' Bool.false_ne_true) y h
+      exact AB.of_rightC dR (fam := fun _ => false) hr (fun _ h' => absurd h' Bool.false_ne_true) y h
     | opaq =>
       rw [rowG] at h
-      exact rightRows_sound dR (fam := fun _ => false) hr (fun _ h' => absurd h' Bool.false_ne_true) y h
+      exact AB.of_rightC dR (fam := fun _ => false) hr (fun _ h' => absurd h' Bool.false_ne_true) y h
     | union m =>
       simp only [rowG, List.all_eq_true, List.mem_finRange, true_implies] at h
       exact AB.union_left fun p => ih p y A k (h p) hA
     | prim g =>
       rw [rowG] at h
-      exact rightRows_sound dR hr (famPrimG_sound laws dR (fun p => mng τ dL (a p))) y h
+      exact AB.of_rightC dR hr (famPrimG_sound laws dR (fun p => mng τ dL (a p))) y h
     | set =>
       rw [rowG] at h
-      exact rightRows_sound dR hr (famSetG_sound laws dR (fun p => mng τ dL (a p)) fun e he =>
+      exact AB.of_rightC dR hr (famSetG_sound laws dR (fun p => mng τ dL (a p)) fun e he =>
         apart_of_AB fun k' => hp [] (a ()) e he k' fun _ hq => nomatch hq) y h
     | list _ _ _ =>
       rw [rowG] at h
-      exact rightRows_sound dR hr (fun y' h' => listRow_sound hp a hA y' h') y h
+      exact AB.of_rightC dR hr (fun y' h' => listRow_sound hp a hA y' h') y h
     | obj _ _ _ =>
       rw [rowG] at h
-      exact rightRows_sound dR hr (fun y' h' => objRow_sound hp a hA y' h') y h
+      exact AB.of_rightC dR hr (fun y' h' => objRow_sound hp a hA y' h') y h
     | refine q qA =>
       rw [rowG] at h
       exact AB.refine_left (ih () y A k h hA)
@@ -1975,25 +1992,34 @@ theorem view_entries : ∀ k (i : Fin N),
 
 end Entries
 
+/-- **A closed codec accepts no datum that a view apart from its view accepts**, where the
+    decision separates the two views at the orientation. -/
+theorem view_apart {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S]
+    {τ : (s : Bool) → TableAt S.sig s} {o : Orient} (laws : Laws S o) {NL NR : Nat}
+    {dL : Closed S.sig NL} {dR : Closed S.sig NR} {rL : Fin NL} {rR : Fin NR}
+    (h : decG (viewSys dL.graph o) (viewSys dR.graph o) (fuel NL NR) []
+      (.leaf rL) (.leaf rR) = true) {v : Mean.V (B := S.sig)}
+    (hL : (((Closed.viewToG τ o dL).e rL).f o v).isSome = true) :
+    ((Closed.meaning τ dR rR).f o v).isSome = false := by
+  have hap := apart_of_AB (fun k => decG_sound (dL := Closed.viewToG τ o dL) (dR := Closed.viewToG τ o dR)
+    laws _ [] (.leaf rL) (.leaf rR) h k fun _ hq => nomatch hq) v
+  cases h2 : ((Closed.meaning τ dR rR).f o v).isSome
+  · rfl
+  have h3 : ((((Closed.viewToG τ o dL).e rL).f o v).isSome &&
+      (((Closed.viewToG τ o dR).e rR).f o v).isSome) = false := hap
+  rw [hL, view_entries dR _ rR v (Nat.le_refl _) h2] at h3
+  exact nomatch h3
+
 /-- **Two closed codecs whose views at an orientation are disjoint accept no common datum there.** -/
 theorem views_apart {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S]
     {τ : (s : Bool) → TableAt S.sig s} {o : Orient} (laws : Laws S o) {NL NR : Nat}
     {dL : Closed S.sig NL} {dR : Closed S.sig NR} {rL : Fin NL} {rR : Fin NR}
-    (h : decG (viewSys dL.graph o) (viewSys dR.graph o) ((NL * NR + 1) * (NL + NR + 2)) []
+    (h : decG (viewSys dL.graph o) (viewSys dR.graph o) (fuel NL NR) []
       (.leaf rL) (.leaf rR) = true) (v : Mean.V (B := S.sig)) :
     (((Closed.meaning τ dL rL).f o v).isSome && ((Closed.meaning τ dR rR).f o v).isSome) = false := by
-  have hap := apart_of_AB (fun k => decG_sound (dL := Closed.viewToG τ o dL) (dR := Closed.viewToG τ o dR)
-    laws _ [] (.leaf rL) (.leaf rR) h k fun _ hq => nomatch hq) v
   cases h1 : ((Closed.meaning τ dL rL).f o v).isSome
   · rfl
-  cases h2 : ((Closed.meaning τ dR rR).f o v).isSome
-  · rfl
-  have e1 := view_entries dL _ rL v (Nat.le_refl _) h1
-  have e2 := view_entries dR _ rR v (Nat.le_refl _) h2
-  have h3 : ((((Closed.viewToG τ o dL).e rL).f o v).isSome &&
-      (((Closed.viewToG τ o dR).e rR).f o v).isSome) = false := hap
-  rw [e1, e2] at h3
-  exact nomatch h3
+  exact (Bool.true_and _).trans (view_apart laws h (view_entries dL _ rL v (Nat.le_refl _) h1))
 
 
 end ViewLe

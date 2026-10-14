@@ -367,7 +367,8 @@ const slotAt = (
 }
 
 /**
- * **Every row that reads the right operand alone**, the model's `rightRows`. The bottom admits
+ * **Every row that reads the right operand alone**, the model's `rightC` at a family that answers no
+ * entry, refinement or union. The bottom admits
  * nothing. A union is disjoint where each option is. A refinement is bounded by its inner term.
  * An entry unfolds through `restart`. `fam` answers every other position.
  */

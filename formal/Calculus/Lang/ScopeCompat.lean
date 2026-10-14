@@ -45,21 +45,10 @@ def isNeverG {N : Nat} : Graph B N → Bool
     at the orientation. -/
 def cbaseG (x : Graph B NL) (y : Graph B NR) : Bool :=
   isNeverG x || isNeverG y || (belowTop sL x && belowTop sR y) ||
-    decG sL sR ((NL * NR + 1) * (NL + NR + 2)) [] x y ||
-    decG sL sR ((NL * NR + 1) * (NL + NR + 2)) [] (heldIn o x) (heldIn o y) ||
-    decG (viewSys sL o) (viewSys sR o) ((NL * NR + 1) * (NL + NR + 2)) [] (viewG sL o x)
+    decG sL sR (fuel NL NR) [] x y ||
+    decG sL sR (fuel NL NR) [] (heldIn o x) (heldIn o y) ||
+    decG (viewSys sL o) (viewSys sR o) (fuel NL NR) [] (viewG sL o x)
       (viewG sR o y)
-
-/-- **The rows of the right operand.** `fam` answers each term first. The bottom agrees with every
-    term. A union agrees where each option does, and a refinement where its inner term does. An
-    entry unfolds through `restart`. -/
-def rightC (restart fam : Graph B NR → Bool) : Graph B NR → Bool
-  | .leaf j => fam (.leaf j) || restart (sR j)
-  | .node .never _ => true
-  | .node (.refine q qA) a => fam (.node (.refine q qA) a) || rightC restart fam (a ())
-  | .node (.union m) a => fam (.node (.union m) a) ||
-      (List.finRange m).all fun p => rightC restart fam (a p)
-  | y => fam y
 
 /-- **Two slots answer alike at absence** where the orientation fills: a fill beside a required
     slot, and no other slot beside a fill. Two fills are refused, because the constants have no
@@ -134,7 +123,7 @@ end Rows
     The fuel is the fuel of `disjoint`. -/
 def compat [Mean B] [Leaf B] {NL NR : Nat} (o : Orient) (dL : Closed B NL) (rL : Fin NL)
     (dR : Closed B NR) (rR : Fin NR) : Bool :=
-  compG dL.graph dR.graph o ((NL * NR + 1) * (NL + NR + 2)) [] (.leaf rL) (.leaf rR)
+  compG dL.graph dR.graph o (fuel NL NR) [] (.leaf rL) (.leaf rR)
 
 /-- **The compatibility of two closed codecs**: both halves, at the host and at the dual. -/
 def compatPair [Mean B] [Leaf B] {NL NR : Nat} (dL : Closed B NL) (rL : Fin NL) (dR : Closed B NR)
@@ -352,36 +341,9 @@ theorem rightC_sound {N : Nat} (d : GSys τ N) {X : Mean.C S.sig} {k : Nat}
     {restart fam : Graph S.sig N → Bool}
     (hr : ∀ y, restart y = true → AgB o k X (mng τ d y))
     (hf : ∀ y, fam y = true → AgB o k X (mng τ d y)) :
-    ∀ y, rightC d.sys restart fam y = true → AgB o k X (mng τ d y) := by
-  intro y
-  induction y with
-  | leaf j =>
-    intro h
-    simp only [rightC, Bool.or_eq_true] at h
-    rcases h with h | h
-    · exact hf _ h
-    · exact AgB.congr rfl (mng_leaf d j).symm (hr _ h)
-  | node op a ih =>
-    intro h
-    cases op with
-    | never => exact AgB.of_agree (agree_empty_right _ _)
-    | refine q qA =>
-      simp only [rightC, Bool.or_eq_true] at h
-      rcases h with h | h
-      · exact hf _ h
-      · exact AgB.sub_right (sub_refine2_self _ _ _) (ih () h)
-    | union m =>
-      simp only [rightC, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies] at h
-      rcases h with h | h
-      · exact hf _ h
-      · exact AgB.alt_right fun p => ih p (h p)
-    | prim _ => exact hf _ h
-    | opaq => exact hf _ h
-    | set => exact hf _ h
-    | list _ _ _ => exact hf _ h
-    | held _ _ _ => exact hf _ h
-    | legacy _ => exact hf _ h
-    | obj _ _ _ => exact hf _ h
+    ∀ y, rightC d.sys restart fam y = true → AgB o k X (mng τ d y) :=
+  StepRel.of_rightC (AgB.rel o) d (fun _ => AgB.of_agree (agree_empty_right _ _))
+    (fun _ _ _ h => AgB.sub_right (sub_refine2_self _ _ _) h) (fun _ _ h => AgB.alt_right h) hr hf
 
 variable {NL NR : Nat}
 

@@ -53,6 +53,18 @@ def solve (B : (Fin n → Codec V M) → Fin n → Codec V M) (i : Fin n) : Code
 
 variable {depth}
 
+/-- A fixed point at the maps. -/
+def IsFix (B : (Fin n → Codec V M) → Fin n → Codec V M) (e : Fin n → Codec V M) : Prop :=
+  ∀ i, (e i).f = (B e i).f
+
+/-- **Fusion**, at the fixed points: a map `h` that reads its input through the maps, and that
+    commutes the two bodies at the maps, carries each fixed point of `B'` to a fixed point of `B`. -/
+theorem isFix_fusion {m : Nat} {B : (Fin n → Codec V M) → Fin n → Codec V M}
+    {B' : (Fin m → Codec V M) → Fin m → Codec V M} (h : (Fin m → Codec V M) → Fin n → Codec V M)
+    (hh : ∀ e₁ e₂, (∀ j, (e₁ j).f = (e₂ j).f) → ∀ i, (h e₁ i).f = (h e₂ i).f)
+    (sq : ∀ e i, (B (h e) i).f = (h (B' e) i).f) {e : Fin m → Codec V M} (he : IsFix B' e) :
+    IsFix B (h e) := fun i => (hh _ _ he i).trans (sq e i).symm
+
 section Laws
 variable (hd : ∀ v, 0 < depth v) {B : (Fin n → Codec V M) → Fin n → Codec V M}
 include hd
@@ -101,6 +113,16 @@ theorem solve_unique (hB : ContractiveV depth B) {e : Fin n → Codec V M}
     refine ⟨fun o x hx => ?_⟩
     rw [he i o x, solve_fix hd hB i o x]
     exact (hB d _ _ ih i).f o x hx
+
+/-- **Fusion**, at the solution: under the guard of `B`, the map `h` sends each fixed point of `B'`
+    to the solution of `B`, at the maps. At `h = id`, a fixed point of `B` is its solution. -/
+theorem solve_fusion (hB : ContractiveV depth B) {m : Nat}
+    {B' : (Fin m → Codec V M) → Fin m → Codec V M} (h : (Fin m → Codec V M) → Fin n → Codec V M)
+    (hh : ∀ e₁ e₂, (∀ j, (e₁ j).f = (e₂ j).f) → ∀ i, (h e₁ i).f = (h e₂ i).f)
+    (sq : ∀ e i, (B (h e) i).f = (h (B' e) i).f) {e : Fin m → Codec V M} (he : IsFix B' e) :
+    ∀ i, (h e i).f = (solve depth B i).f := fun i =>
+  AgreeLe.eq_of_forall fun d =>
+    solve_unique hd hB (fun i o x => congrFun (congrFun (isFix_fusion h hh sq he i) o) x) d i
 
 /-- **Lawfulness**: lawful stages give a lawful solution, at each entry. -/
 theorem lawful_solve (hB : ContractiveV depth B)
@@ -366,9 +388,9 @@ theorem bekic (hd : ∀ v, 0 < depth v) {F G : Codec V M → Codec V M → Codec
   have he : ∀ i o x, (e i).f o x = (pairB F G e i).f o x := fun i o x => match i with
     | ⟨0, _⟩ => muCodec_fix hd hA o x
     | ⟨1, _⟩ => muCodec_fix hd (hGA A) o x
-  have hu := solve_unique hd (pairB_contractive hF hG) he
   have hf : ∀ i, (solve depth (pairB F G) i).f = (e i).f := fun i =>
-    AgreeLe.eq_of_forall fun d => (hu d i).symm
+    (solve_fusion hd (pairB_contractive hF hG) id (fun _ _ h => h) (fun _ _ => rfl)
+      (fun i => funext fun o => funext fun x => he i o x) i).symm
   exact ⟨solve_eq (fun _ => rfl) rfl (hf 0), solve_eq (fun _ => rfl) rfl (hf 1)⟩
 
 end OneEntry
@@ -721,10 +743,6 @@ def elim (S : Container) (sys : Fin n → Flat S.Op S.Pos n) : Nat → Fin n →
   | 0 => sys
   | k + 1 => fun i => (sys i).bind (elim S sys k)
 
-/-- A fixed point at the maps. -/
-def IsFix (B : (Fin n → Codec V M) → Fin n → Codec V M) (e : Fin n → Codec V M) : Prop :=
-  ∀ i, (e i).f = (B e i).f
-
 /-- Round `k + 1` of the ε-elimination is the system at round `k`. -/
 theorem sysB_elim_succ (sys : Fin n → Flat S.Op S.Pos n) (k : Nat) (e : Fin n → Codec V M) :
     sysB R (elim S sys (k + 1)) e = sysB R sys (sysB R (elim S sys k) e) :=
@@ -911,16 +929,9 @@ theorem elim_solution (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (hok : ∀
   have hC : ContractiveV depth (sysB R (elim S sys k)) := contractive_of_guarded hS _ hg
   have hfix : IsFix (sysB R (elim S sys k)) (solve depth (sysB R (elim S sys k))) :=
     fun i => funext fun o => funext fun x => solve_fix hd hC i o x
-  have huniq : ∀ e, IsFix (sysB R (elim S sys k)) e →
-      ∀ i, (e i).f = (solve depth (sysB R (elim S sys k)) i).f := fun e he i =>
-    AgreeLe.eq_of_forall fun d =>
-      solve_unique hd hC (fun i o x => congrFun (congrFun (he i) o) x) d i
-  refine ⟨fun i => ?_, fun e he => huniq e (fix_elim_of_fix hS hok he k)⟩
-  have hBs : IsFix (sysB R (elim S sys k)) (sysB R sys (solve depth (sysB R (elim S sys k)))) :=
-    fun j => by
-      rw [sysB_elim_comm]
-      exact sysB_congr hS hok hfix j
-  exact (huniq _ hBs i).symm
+  exact ⟨fun i => (solve_fusion hd hC (sysB R sys) (fun _ _ => sysB_congr hS hok)
+      (fun e j => by rw [sysB_elim_comm]) hfix i).symm,
+    fun e he => solve_fusion hd hC id (fun _ _ h => h) (fun _ _ => rfl) (fix_elim_of_fix hS hok he k)⟩
 
 /-- Where round `k` is guarded, the system and its round `k` have the same fixed points. -/
 theorem fix_iff_elim (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (hok : ∀ i, (sys i).Ok S)
@@ -928,9 +939,8 @@ theorem fix_iff_elim (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (hok : ∀ 
     IsFix (sysB R sys) e ↔ IsFix (sysB R (elim S sys k)) e := by
   refine ⟨fun he => fix_elim_of_fix hS hok he k, fun he i => ?_⟩
   have hC : ContractiveV depth (sysB R (elim S sys k)) := contractive_of_guarded hS _ hg
-  have hes : ∀ j, (e j).f = (solve depth (sysB R (elim S sys k)) j).f := fun j =>
-    AgreeLe.eq_of_forall fun d =>
-      solve_unique hd hC (fun i o x => congrFun (congrFun (he i) o) x) d j
+  have hes : ∀ j, (e j).f = (solve depth (sysB R (elim S sys k)) j).f :=
+    solve_fusion hd hC id (fun _ _ h => h) (fun _ _ => rfl) he
   rw [hes i, (elim_solution hd hS hok hg).1 i]
   exact sysB_congr hS hok (fun j => (hes j).symm) i
 
@@ -1439,9 +1449,7 @@ theorem strat_solution (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (sys : SS
   have hC := nf_contractive hS sys
   refine ⟨(sisFix_iff_nf hS sys _).mpr fun i => funext fun o => funext fun x =>
     solve_fix hd hC i o x, fun e he i => ?_⟩
-  have he' := (sisFix_iff_nf hS sys e).mp he
-  exact AgreeLe.eq_of_forall fun d =>
-    solve_unique hd hC (fun i o x => congrFun (congrFun (he' i) o) x) d i
+  exact solve_fusion hd hC id (fun _ _ h => h) (fun _ _ => rfl) ((sisFix_iff_nf hS sys e).mp he) i
 
 end StratFix
 
