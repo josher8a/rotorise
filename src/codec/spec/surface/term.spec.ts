@@ -66,7 +66,7 @@ describe('the member a term stores', () => {
             member({
                 kind: 'refine',
                 inner: dec,
-                q: { kind: 'closure', q: { is: () => true, what: 'any' } },
+                q: { is: () => true, what: 'any' },
             }),
         ).toBe('N')
         expect(member({ kind: 'legacy', inner: dec, r: () => undefined })).toBe(

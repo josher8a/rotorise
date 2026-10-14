@@ -9,43 +9,25 @@ The predicate of `refine`, the primitives, the adapter generators, the signature
 meaning, and the adapter tables. The term language over the signature is `Scoped.Term`.
 
 * Predicates carried by terms (`refine`) are `Bool`-valued so the meaning
-  needs no classical choice; the doc's subsets are their coercions. `Pred` below is that
-  predicate **as data** where the data exists, and a function only where it does not.
+  needs no classical choice; the doc's subsets are their coercions.
 -/
 
 namespace Calculus
 
-/-- The predicate of the rule `(refine)`, as far as it can be read.
+/-- The predicate of the rule `(refine)`: a caller's function.
 
-    A bare `Value → Bool` decides nothing a table can see, and two things wanted to see it.
-    A certificate cannot compare `set(literal k ls)` with another one while the predicate is a
-    function, because the disjointness test reads a predicate only as data. And
-    `src/codec/term.ts` makes the same move for the same reason: its predicate type is
-    `members | closure`, and its docstring says the declaration guard has to read the
-    predicate as data. The model has `members` and `closure` and one more, `except`, which the
-    host does not spell yet.
-
-    * `members` is membership of a literal's alternatives, `inL k ls`. The base indexes the
-      carrier, exactly as `Term.literal` does.
-    * `closure` is a caller's function. It is the case that stays opaque, and it is why this
-      is a wider type and not a narrower one: `refine` still carries an arbitrary predicate,
-      and every theorem that quantifies over one still runs.
-    * `except` is the complement of `members` at one base: a value of the base that is none of
-      the alternatives. With it, the data cases are closed under the meet and under the
-      complement at a base. A name is a string, so the same case excludes a finite set of names.
+    A refinement accepts a part of what its inner term accepts, so the disjointness test reads
+    through a refinement, and no declaration compares two predicates. A finite set at a ground
+    kind is a union of literals, and a literal is the singleton. The emitted vectors print a
+    refinement predicate as `Pred.closure q`, so the constructor stays.
 
     `Pred` mentions no `Term`, so it is the universe's predicate type (`Alg.Syn.Pred`), and
     `Pred.eval` below is its meaning (`Alg.Syn.eval`). -/
 inductive Pred where
-  | members (k : GroundKind) (ls : NEFinset k.Carrier)
   | closure (q : Value → Bool)
-  | except  (k : GroundKind) (ls : NEFinset k.Carrier)
 
-
-/-- **A set of alternatives, as the predicate `Pred.members` carries.** Some alternative is the
-    value, which is `inL` at each.
-
-    It exists because a refinement predicate is data over a `Finset` and a literal is not. -/
+/-- **A set of alternatives**: some alternative is the value, which is `inL` at each. The pin of a
+    clause reads a set of alternatives. -/
 def inLs (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
   decide (∃ x ∈ ls.1, inL k x v = true)
 
@@ -57,25 +39,9 @@ theorem inLs_eq_true {k : GroundKind} {ls : NEFinset k.Carrier} {v : Value} :
 /-- Whether a value is of one ground base. -/
 def inBase (k : GroundKind) (v : Value) : Bool := decide (v.member = k.member)
 
-/-- **What a `Pred` means.** The universe's `Alg.Syn.eval`, beside the type.
-
-    The apart test never calls this: `Pred.apart` reads a `Pred`'s constructors, which are data.
-
-    **`members` carries a `Finset`, and a literal does not.** A refinement predicate is
-    data over a set of alternatives; a literal is one value. `inLs` is the set form, built from
-    `inL` at each alternative rather than as a membership row of its own. -/
+/-- **What a `Pred` means.** The universe's `Alg.Syn.eval`, beside the type. -/
 def Pred.eval : Pred → Value → Bool
-  | .members k ls => inLs k ls
-  | .closure q    => q
-  | .except k ls  => fun v => inBase k v && !inLs k ls v
-
-/-- `members` holds where one of its alternatives does. -/
-theorem Pred.eval_members (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
-    Pred.eval (.members k ls) v = inLs k ls v := rfl
-
-/-- `except` holds at a value of its base that none of its alternatives names. -/
-theorem Pred.eval_except (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
-    Pred.eval (.except k ls) v = (inBase k v && !inLs k ls v) := rfl
+  | .closure q => q
 
 /-- **The DynamoDB set obligation**: the element writes one member of `S`, `N` or `B`.
 

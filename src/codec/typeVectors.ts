@@ -525,9 +525,7 @@ const printerOf = (
                 return `held(${sub(t.inner)}, ${sub(t.outer)}, ${adapterOf(t)})`
             }
             case 'refine': {
-                if (t.q.kind !== 'closure')
-                    return refuse(at, 'a refinement by members')
-                const is = t.q.q.is
+                const is = t.q.is
                 // the shipped predicates return a boolean, and `refine` takes a type predicate
                 if (is === isNumeral)
                     return `refine(${sub(t.inner)}, (s: string): s is string => isNumeral(s))`

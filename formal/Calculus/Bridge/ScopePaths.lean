@@ -200,9 +200,6 @@ theorem groundEq_refl : ∀ g : Ground, groundEq g g = true
 
 /-- **A predicate is one datum with itself.** -/
 theorem predSame_refl : ∀ p : Pred, predSame p p = true
-  | .members _ _ | .except _ _ => by
-      rw [predSame, dif_pos rfl, Bool.and_eq_true]
-      exact ⟨decide_eq_true fun _ hx => hx, decide_eq_true rfl⟩
   | .closure _ => rfl
 
 /-- **A slot presence is one presence with itself.** -/

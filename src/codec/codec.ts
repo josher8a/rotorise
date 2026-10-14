@@ -2143,15 +2143,12 @@ export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
             kind: 'refine',
             inner: termOf(inner as unknown as AnyCodec),
             q: {
-                kind: 'closure',
-                q: {
-                    is: is as (value: never) => boolean,
-                    what,
-                    arbitrary: options.arbitrary as
-                        | ((rng: Rng, size: number) => unknown)
-                        | undefined,
-                    onThinSearch: options.onThinSearch,
-                },
+                is: is as (value: never) => boolean,
+                what,
+                arbitrary: options.arbitrary as
+                    | ((rng: Rng, size: number) => unknown)
+                    | undefined,
+                onThinSearch: options.onThinSearch,
             },
         }),
     )

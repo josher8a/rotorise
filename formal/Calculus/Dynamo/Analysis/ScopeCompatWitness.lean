@@ -205,10 +205,10 @@ Two overlapping `refine`s of one `held` swap sit below one canonical bound. -/
 /-- The adapter: `string` stored, `string` held, `"x"` and `"X"` swapped. -/
 def swapBody {w k : Nat} : Scoped.Term 0 w k := .held false .string .string (.caller 0, false) []
 
-/-- The members `"x"` and `"y"`. -/
-def q1 : Pred := .members .string (NEFinset.of "x" {"y"})
-/-- The members `"x"` and `"z"`. -/
-def q2 : Pred := .members .string (NEFinset.of "x" {"z"})
+/-- The predicate that holds at `"x"` and at `"y"`. -/
+def q1 : Pred := .closure fun v => inL .string "x" v || inL .string "y" v
+/-- The predicate that holds at `"x"` and at `"z"`. -/
+def q2 : Pred := .closure fun v => inL .string "x" v || inL .string "z" v
 
 /-- The adapter, as a closed codec. -/
 def swapClosed : Closed := Closed.one swapBody

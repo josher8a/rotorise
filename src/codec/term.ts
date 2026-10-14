@@ -81,10 +81,9 @@ export type Literal =
  * A base and a nonempty set of that base's values — what a reader gets back from a literal or from
  * a union of literals at one base.
  *
- * This is what {@link Literal} was before a literal carried one value, and it survives for the two
- * places the model keeps a set of alternatives too: `Pred.members`, which is a refinement
- * predicate over a `NEFinset`, and the answer {@link literalsOf} gives for a declared name. The
- * model's split is the same one, `inL` against `inLs`.
+ * This is what {@link Literal} was before a literal carried one value, and it survives for the
+ * place the model keeps a set of alternatives too: the answer {@link literalsOf} gives for a
+ * declared name. The model's split is the same one, `inL` against `inLs`.
  */
 export type Alternatives =
     | {
@@ -107,23 +106,6 @@ export type Alternatives =
           readonly base: 'binary'
           readonly ls: NonEmpty<Uint8Array>
       }
-
-/**
- * The rule `(refine)`'s `q`, as the term carries it.
- *
- * The model's `q` is a bare `Value → Bool` and the host's used to be the caller's closure. Neither
- * is enough, because **the certificate has to read the predicate as data**: a closure decides nothing a
- * declaration can see. `Pred.members` is the case that forced this: its `ls` is a `NEFinset`
- * and not a function.
- *
- * So two cases. `members` is membership of a {@link Literal}'s alternatives: the whole literal
- * and not a base beside a list, so a `decimal` membership over numeric alternatives is
- * unrepresentable here for the same reason it is unrepresentable as a term. `closure` is the
- * caller's function, which no declaration reads and no `Term` prints.
- */
-export type Predicate =
-    | { readonly kind: 'members'; readonly literal: Alternatives }
-    | { readonly kind: 'closure'; readonly q: Refinement }
 
 /**
  * **The two numeric policies of `opaque`**, as the `via` of the `held` that builds each one.
@@ -226,11 +208,12 @@ export type Term =
           readonly shrink?: (value: never) => readonly unknown[]
       }
     /**
-     * The rule `(refine)`. The model carries `q : Value → Bool`; this carries a {@link Predicate}, so a
-     * declaration can read the ones that are data. The caller's closure rides in `closure`, with
-     * `what` as the refusal text and `arbitrary` as what an arbitrary derived from the term reads.
+     * The rule `(refine)`. The model carries `q : Value → Bool`; this carries the caller's closure,
+     * with `what` as the refusal text and `arbitrary` as what an arbitrary derived from the term
+     * reads. A refinement accepts a part of what its inner term accepts, so a declaration reads
+     * through it and reads no predicate. A finite set at a ground kind is a union of literals.
      */
-    | { readonly kind: 'refine'; readonly inner: Term; readonly q: Predicate }
+    | { readonly kind: 'refine'; readonly inner: Term; readonly q: Refinement }
     /** The rule `(withLegacyRead)`: `r : Attr ⇀ Value`, the older reading, which widens `p` and never `e`. */
     | {
           readonly kind: 'legacy'
@@ -1377,25 +1360,12 @@ export const sameTerm = (x: Term, y: Term): boolean => {
     return same(x, y)
 }
 
-/** Two predicates: the same alternatives, or the same closure, field by field. */
-const samePredicate = (p: Predicate, q: Predicate): boolean => {
-    if (p.kind === 'members')
-        return (
-            q.kind === 'members' &&
-            p.literal.base === q.literal.base &&
-            p.literal.ls.length === q.literal.ls.length &&
-            p.literal.ls.every((one) =>
-                q.literal.ls.some((other) => sameLiteral(one, other)),
-            )
-        )
-    return (
-        q.kind === 'closure' &&
-        p.q.is === q.q.is &&
-        p.q.what === q.q.what &&
-        p.q.arbitrary === q.q.arbitrary &&
-        p.q.onThinSearch === q.q.onThinSearch
-    )
-}
+/** Two predicates: the same closure, field by field. */
+const samePredicate = (p: Refinement, q: Refinement): boolean =>
+    p.is === q.is &&
+    p.what === q.what &&
+    p.arbitrary === q.arbitrary &&
+    p.onThinSearch === q.onThinSearch
 
 /* ── a term below the top ─────────────────────────────────────────────────────────────── */
 
@@ -1706,19 +1676,6 @@ export const entryOrder = (component: Component): EntryOrder => {
             }
     return { kind: 'order', entries }
 }
-
-/**
- * **Two predicates that hold together nowhere**, the model's `Pred.apart`.
- * Two `members` sets at two bases share no value, and at one base they share a value where they
- * share an alternative. A `closure` is not data.
- */
-export const predicatesApart = (q: Predicate, p: Predicate): boolean =>
-    q.kind === 'members' &&
-    p.kind === 'members' &&
-    (q.literal.base !== p.literal.base ||
-        !q.literal.ls.some((one: LiteralValue) =>
-            p.literal.ls.some((other: LiteralValue) => sameLiteral(one, other)),
-        ))
 
 /** The primitives: the ground bases and the literals. */
 export const isPrim = (t: Term): boolean =>

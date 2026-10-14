@@ -71,30 +71,28 @@ the gate's output, not this file's.
 
 ---
 
-## A literal is a refinement at a singleton, and the test evaluates a data predicate at a literal
+## A cofinite set at a ground kind is a ground constructor
 
-**The future state.** A set of admissible values is one concept. A literal is its singleton, and a
-bare carrier is the whole set. One relation over admissible sets decides a type and a
-discriminant at every depth. The test then keeps a literal apart from a refinement whose
-predicate refuses the literal.
+**The future state.** A ground kind carries a cofinite set of its values: each value of the kind
+but a finite set. The test keeps a cofinite set apart from a literal that the set
+excludes, and from a value of another kind.
 
-**What the tree carries today.** A literal is a primitive, `Term.literal`, and a refinement is a
-second constructor, `refine`. The predicate `members` already holds a finite set over the
-carrier of one ground kind. The test compares two data predicates through
-`Leaf.predicatesApart`, and evaluates no predicate at a literal. So `Scoped.disjoint` answers
-`false` for the string literal `"b"` beside a string refined to the members `{"a"}`.
+**What the tree carries today.** A finite set at a ground kind is a union of literal ground
+symbols, and a literal is the singleton. `refine` carries a closure, `Pred.closure`, and the
+decision reads through a refinement, because a refinement accepts a part of what its inner term
+accepts. So no declaration compares two predicates, and a cofinite set has no representation.
 
-**Why the state is wanted.** The merge of the two representations adds one element that neither
-side carries: the empty set, which is the bottom at a ground position. A set held in a
-description keeps the discipline of the kernel: quantify by membership, decide equality by mutual
-inclusion, and reach no classical instance.
+**Why the state is wanted.** A name is a string, so a cofinite set at the string kind excludes a
+finite set of names. A closure states the same set, and the test reads through the closure. So
+`Scoped.disjoint` answers `false` for the string literal `"a"` beside a string that excludes `"a"`.
 
-**What a change costs.** The generated artifacts are stated over the term language, and the gate
+**What a change costs.** The cofinite set is a new ground constructor, so `Ground.apart` and each
+primitive row gain a case. The generated artifacts are stated over the term language, and the gate
 elaborates each artifact. So a change to the constructor set lands checked wherever the change
 reaches an artifact.
 
 **What decides it.** A pair that the library writes, which the test refuses only because a
-literal sits beside a refinement.
+cofinite set sits in a closure.
 
 ---
 
@@ -112,8 +110,7 @@ Every other position answers the test:
   The answer is exact.
 
 **What the tree carries today.** `Scoped.disjoint` reads a raw `held`, a `legacy` and `opaq` as
-disjoint from the bottom alone. A `refine` whose predicate is no data, such as a `closure`, reads
-through its inner term. So a closure over `boolean` that refuses every value is not disjoint
+disjoint from the bottom alone. A `refine` reads through its inner term. So a closure over `boolean` that refuses every value is not disjoint
 from the literal `false`. The certificate reaches a `held` through its views (`Closed.viewsDisjoint`),
 and not through the test. `Closed.opaq_total` and `Closed.opaqA_total` state that `opaque` admits
 every value and every attribute. No theorem states when a `held` admits some value.
@@ -158,8 +155,8 @@ adapter tests the value of the caller, and the same refinement inside tests the 
 **Why the state is wanted.** The restrictions around one carrier form a meet-semilattice, so a run
 of them has one normal form, and the order inside the run carries no information. The adapters
 form a monoid, so the order inside a run carries everything. A run carried as written costs the
-certificate. A string refined to the members `{"a"}`, then to the members `{"b"}`, admits no value,
-and `Scoped.disjoint` does not find the pair disjoint from a string.
+certificate. A string refined by two closures that hold together nowhere admits no value, and
+`Scoped.disjoint` does not find the pair disjoint from a string.
 
 **What the tree carries today.** The equations of a run hold up to `Codec.Equiv`:
 `equiv_restrict_meet` meets two restrictions, `equiv_through_comp` composes two adapters, and

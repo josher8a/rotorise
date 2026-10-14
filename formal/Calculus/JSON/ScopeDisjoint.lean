@@ -5,7 +5,7 @@ import Calculus.Lang.ScopeDisjoint
 # Disjointness of closed codecs at JSON
 
 The scoped decision `Alg.Scoped.disjoint` and its soundness hold at every universe. JSON supplies
-its leaves (`jsonLeaf`, `jsonLeafMeet`), its shape classes (`jsonShapes`), the laws of its top
+its leaf (`jsonLeaf`), its shape classes (`jsonShapes`), the laws of its top
 (`id_topLaws`), and the laws that the decision reads (`jsonLaws`). Two kinds that the leaf keeps
 apart share no datum. JSON has no set former, so the law of the set lift holds with no case.
 

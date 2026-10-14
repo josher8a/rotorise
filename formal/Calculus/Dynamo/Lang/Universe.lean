@@ -7,7 +7,7 @@ import Calculus.Dynamo.Alg.Opaque
 # DynamoDB is a universe
 
 DynamoDB supplies the facts of a universe that read no term: its primitive rows (`dynPrimAdm`),
-its leaves (`dynLeaf`, `dynLeafMeet`), its shape classes (`dynShapes`) and the laws of `Ω`
+its leaf (`dynLeaf`), its shape classes (`dynShapes`) and the laws of `Ω`
 (`Ω_topLaws`). Each primitive is one map at both orientations (`ground_selfdual`). The lemmas
 here read the codecs and the literals of DynamoDB, and no term.
 -/
@@ -46,78 +46,10 @@ theorem ground_selfdual : ∀ g, (groundCodec g).e = (groundCodec g).p := by
 
 /-! ## Reading a field and a term -/
 
-/-- Whether a predicate is data that the test can compare with another. `closure` is the
-    caller's own function and is the one case `Pred` keeps open. -/
-def Pred.isData : Pred → Bool
-  | .closure _ => false
-  | _ => true
-
-/-- One base's guard names one inhabitant. -/
-theorem inL_inj {k : GroundKind} {x y : k.Carrier} {v : Value}
-    (hx : inL k x v = true) (hy : inL k y v = true) : x = y :=
-  Option.some_injective _ <| (k.prism.out_eq_some.mpr (inL_iff.mp hx)).symm.trans
-    (k.prism.out_eq_some.mpr (inL_iff.mp hy))
-
-/-- **Two predicates apart**: no value satisfies both. Two alternative sets over one base are apart
-    where they share no alternative; an alternative set and an exclusion over one base are apart
-    where every alternative is excluded; two predicates over two different bases are apart, except
-    two exclusions, which share every value of a third base. A `closure` is apart from nothing,
-    because nothing reads a caller's function. -/
-def Pred.apart : Pred → Pred → Bool
-  | .members k A, .members k' B =>
-      if h : k' = k then (A.1.filter (fun x => x ∈ (h ▸ B).1)).card == 0 else true
-  | .members k A, .except k' B =>
-      if h : k' = k then (A.1.filter (fun x => x ∉ (h ▸ B).1)).card == 0 else true
-  | .except k B, .members k' A =>
-      if h : k = k' then (A.1.filter (fun x => x ∉ (h ▸ B).1)).card == 0 else true
-  | .except k _, .except k' _ => !decide (k' = k)
-  | _, _ => false
-
-/-- **An alternative shared by two sets is the only way both hold.** `inL` names one inhabitant
-    per base, so a value that satisfies an alternative of each set satisfies one alternative
-    lying in both. -/
-theorem exists_filter_iff {k : GroundKind} [DecidableEq k.Carrier]
-    (A B : Finset k.Carrier) (v : Value) :
-    (∃ x ∈ A.filter (fun x => x ∈ B), inL k x v = true)
-      ↔ ((∃ x ∈ A, inL k x v = true) ∧ (∃ y ∈ B, inL k y v = true)) := by
-  constructor
-  · rintro ⟨x, hx, hv⟩
-    obtain ⟨hxA, hxB⟩ := Finset.mem_filter.mp hx
-    exact ⟨⟨x, hxA, hv⟩, ⟨x, hxB, hv⟩⟩
-  · rintro ⟨⟨x, hxA, hxv⟩, ⟨y, hyB, hyv⟩⟩
-    cases inL_inj hxv hyv
-    exact ⟨x, Finset.mem_filter.mpr ⟨hxA, hyB⟩, hxv⟩
-
-/-- **Two alternative sets over one base that share no alternative share no value.** -/
-theorem memMem_empty {k : GroundKind} [DecidableEq k.Carrier] {A B : NEFinset k.Carrier}
-    (hne : (A.1.filter (fun x => x ∈ B.1)).card = 0) (v : Value) :
-    (inLs k A v && inLs k B v) = false := by
-  have hne : A.1.filter (fun x => x ∈ B.1) = ∅ := Finset.card_eq_zero.mp hne
-  have hiff := exists_filter_iff A.1 B.1 v
-  rw [hne] at hiff
-  simp only [Finset.notMem_empty, false_and, exists_false, false_iff, not_and] at hiff
-  cases hA : inLs k A v with
-  | false => simp
-  | true =>
-      cases hB : inLs k B v with
-      | false => simp
-      | true =>
-          exact absurd (inLs_eq_true.mp hB) (hiff (inLs_eq_true.mp hA))
-
 /-- An alternative that `inL` holds at a value names the value's base. -/
 theorem inBase_of_inL {k : GroundKind} {x : k.Carrier} {v : Value} (h : inL k x v = true) :
     inBase k v = true := by
   rw [inL_iff.mp h]; exact decide_eq_true (k.summand.hμ x)
-
-/-- A value outside a base satisfies no alternative at that base. -/
-theorem inLs_false_of_base {k : GroundKind} {A : NEFinset k.Carrier} {v : Value}
-    (h : inBase k v = false) : inLs k A v = false := by
-  cases hA : inLs k A v with
-  | false => rfl
-  | true =>
-    obtain ⟨x, _, hx⟩ := inLs_eq_true.mp hA
-    rw [inBase_of_inL hx] at h
-    exact nomatch h
 
 /-- Two different bases hold no common value. -/
 theorem inBase_disj {k k' : GroundKind} (h : k ≠ k') (v : Value) :
@@ -136,105 +68,10 @@ theorem inL_and_inBase {k k' : GroundKind} (x : k.Carrier) (v : Value) :
     cases hl : inL k x v; rfl
     have := inBase_disj hk v; rw [inBase_of_inL hl] at this; exact this
 
-/-- `members` at two different bases share no value. -/
-theorem memMem_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
-    (B : NEFinset k'.Carrier) (v : Value) :
-    (Pred.eval (.members k A) v && Pred.eval (.members k' B) v) = false := by
-  rw [Pred.eval_members, Pred.eval_members]
-  have hd := inBase_disj h v
-  cases hk : inBase k v with
-  | false => rw [inLs_false_of_base hk]; rfl
-  | true =>
-    rw [hk, Bool.true_and] at hd
-    rw [inLs_false_of_base hd, Bool.and_false]
-
-/-- `members` and `except` at two different bases share no value. -/
-theorem memExc_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
-    (B : NEFinset k'.Carrier) (v : Value) :
-    (Pred.eval (.members k A) v && Pred.eval (.except k' B) v) = false := by
-  rw [Pred.eval_members, Pred.eval_except]
-  have hd := inBase_disj h v
-  cases hk : inBase k v with
-  | false => rw [inLs_false_of_base hk]; rfl
-  | true =>
-    rw [hk, Bool.true_and] at hd
-    rw [hd, Bool.false_and, Bool.and_false]
-
-/-- `except` at two different bases share no value. -/
-theorem excExc_none {k k' : GroundKind} (h : k ≠ k') (A : NEFinset k.Carrier)
-    (B : NEFinset k'.Carrier) (v : Value) :
-    (Pred.eval (.except k A) v && Pred.eval (.except k' B) v) = false := by
-  rw [Pred.eval_except, Pred.eval_except]
-  have hd := inBase_disj h v
-  cases hk : inBase k v with
-  | false => rfl
-  | true =>
-    rw [hk, Bool.true_and] at hd
-    rw [hd, Bool.false_and, Bool.and_false]
-
-/-- **An alternative outside the second set is the only way the first holds and the second
-    does not.** `inL` names one inhabitant per base, as in `exists_filter_iff`. -/
-theorem exists_filter_not_iff {k : GroundKind} [DecidableEq k.Carrier]
-    (A B : Finset k.Carrier) (v : Value) :
-    (∃ x ∈ A.filter (fun x => x ∉ B), inL k x v = true)
-      ↔ ((∃ x ∈ A, inL k x v = true) ∧ ¬ ∃ y ∈ B, inL k y v = true) := by
-  constructor
-  · rintro ⟨x, hx, hv⟩
-    obtain ⟨hxA, hxB⟩ := Finset.mem_filter.mp hx
-    refine ⟨⟨x, hxA, hv⟩, ?_⟩
-    rintro ⟨y, hyB, hyv⟩
-    cases inL_inj hv hyv
-    exact hxB hyB
-  · rintro ⟨⟨x, hxA, hxv⟩, hn⟩
-    exact ⟨x, Finset.mem_filter.mpr ⟨hxA, fun hxB => hn ⟨x, hxB, hxv⟩⟩, hxv⟩
-
-/-- **An alternative set whose every alternative is excluded shares no value with the
-    exclusion.** -/
-theorem memExc_empty {k : GroundKind} [DecidableEq k.Carrier] {A B : NEFinset k.Carrier}
-    (hne : (A.1.filter (fun x => x ∉ B.1)).card = 0) (v : Value) :
-    (inLs k A v && (inBase k v && !inLs k B v)) = false := by
-  have hne : A.1.filter (fun x => x ∉ B.1) = ∅ := Finset.card_eq_zero.mp hne
-  have hiff := exists_filter_not_iff A.1 B.1 v
-  cases hA : inLs k A v with
-  | false => rfl
-  | true =>
-    cases hB : inLs k B v with
-    | true => simp
-    | false =>
-      obtain ⟨x, hx, _⟩ :=
-        hiff.mpr ⟨inLs_eq_true.mp hA, fun h => nomatch hB.symm.trans (inLs_eq_true.mpr h)⟩
-      rw [hne] at hx
-      exact absurd hx (Finset.notMem_empty x)
-
-/-- **Two predicates apart hold together nowhere.** -/
-theorem Pred.apart_sound : ∀ q p : Pred, Pred.apart q p = true →
-    ∀ v, (Pred.eval q v && Pred.eval p v) = false
-  | .members k A, .members k' B, h, v => by
-      simp only [Pred.apart] at h
-      split at h
-      · next hk => subst hk; exact memMem_empty (beq_iff_eq.mp h) v
-      · next hk => exact memMem_none (Ne.symm hk) A B v
-  | .members k A, .except k' B, h, v => by
-      simp only [Pred.apart] at h
-      split at h
-      · next hk => subst hk; exact memExc_empty (beq_iff_eq.mp h) v
-      · next hk => exact memExc_none (Ne.symm hk) A B v
-  | .except k B, .members k' A, h, v => by
-      simp only [Pred.apart] at h
-      rw [Bool.and_comm]
-      split at h
-      · next hk => subst hk; exact memExc_empty (beq_iff_eq.mp h) v
-      · next hk => exact memExc_none (Ne.symm hk) A B v
-  | .except k A, .except k' B, h, v => by
-      simp only [Pred.apart, Bool.not_eq_true', decide_eq_false_iff_not] at h
-      exact excExc_none (Ne.symm h) A B v
-  | .members _ _, .closure _, h, _ | .except _ _, .closure _, h, _ | .closure _, _, h, _ => by
-      simp [Pred.apart] at h
-
-/-! ## The leaves of DynamoDB
+/-! ## The leaf of DynamoDB
 
 The test is `Alg.Scoped.disjoint`, the structural decision over a universe signature. DynamoDB supplies
-the leaves `dynLeaf`: two primitives, and two predicates. -/
+the leaf `dynLeaf`: two primitives apart. -/
 
 /-- **Two primitives apart.** A base shares its values with its own base and its own literals, and
     two literals share a value where they are one value. Every other pair is apart. -/
@@ -244,12 +81,9 @@ def Ground.apart : Ground → Ground → Bool
   | .literal k _, .base k' => !decide (k' = k)
   | .literal k v, .literal k' v' => if h : k' = k then !decide (v = h ▸ v') else true
 
-/-- **The leaves of DynamoDB.** -/
+/-- **The leaf of DynamoDB.** -/
 instance dynLeaf : Alg.Leaf dynSig where
   primsApart := Ground.apart
-  isData s := Alg.half (X := fun s => dynP s → Bool) s Pred.isData fun _ => false
-  predicatesApart s := Alg.half (X := fun s => dynP s → dynP s → Bool) s Pred.apart
-    fun _ _ => false
 
 /-- **Two primitives apart share no value**, at the primitive rows. -/
 theorem admV_prim_apart : ∀ g g' : Ground, Ground.apart g g' = true →
@@ -318,13 +152,6 @@ instance dynShapes : Alg.Shapes dynSyn where
     cases k <;> rfl
   list L hL _ := by cases hL; rfl
   map F hF _ := by cases hF; rfl
-
-/-- The predicate leaves of DynamoDB hold together nowhere where they are apart. The store names
-    no predicate but the truth, so no two stored predicates are apart. -/
-instance dynLeafMeet : Alg.LeafMeet dynSig where
-  predicates_apart
-    | false, q, p, h, v => Pred.apart_sound q p h v
-    | true, _, _, h, _ => nomatch h
 
 /-! ## Inclusion lemmas, one per combinator -/
 
