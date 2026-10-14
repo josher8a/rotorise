@@ -220,6 +220,24 @@ describe('an entry of a scope', () => {
             M: { k: { S: 'b' } },
         })
     })
+
+    it('refuses a member read across an entry on a cycle, in the type and at run time', () => {
+        // `B` returns to `A`, so `B` is an entry of the cycle, and an entry stores no member that
+        // a path can read: the path cannot pass the `refine` over `B`
+        const C = scope({
+            A: object({
+                s: union([
+                    object({ x: string }),
+                    refine(ref('B'), (v: unknown): v is unknown => v !== null),
+                ]),
+            }),
+            B: array(ref('A')),
+        })
+        expect(() =>
+            // @ts-expect-error the path reads a member across the entry `B` of a cycle
+            C.A.item.at((p) => p.s.x),
+        ).toThrow(/a path cannot go into `refine` at 'x'/)
+    })
 })
 
 describe('an open name of a path', () => {
