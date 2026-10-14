@@ -401,6 +401,80 @@ def Term.object (fs : Finset String) (f : {x // x ∈ fs} → ObjectSlot B w) :
 
 end Carrier
 
+/-! ## The product of closed objects
+
+A factor of a product is a sum of closed objects, held as the list of their slot tables. The
+product of two factors is `MapOf.prod` of the two lists: each merge of a table of the first factor
+with a table of the second, outer over the first. The merge is the union of the two tables, so
+the product is associative by construction, and the distribution over a sum is the construction
+itself. The meaning reads two facts: a merge of two tables with disjoint names reads each name
+through its own factor, and a union of agreeing merges is their join. -/
+
+section Product
+variable {B : Sig} {w k : Nat}
+
+/-- The closed object of a slot table: the rule `(object)` with no open block. -/
+def Term.closed (m : MapOf (ObjectSlot B w)) : Term B w k := Term.object m.keys m.get none
+
+/-- **The term of a factor**: the union of its closed objects. -/
+def Term.product (A : List (MapOf (ObjectSlot B w))) : Term B w k := Term.union (A.map Term.closed)
+
+/-- **The product is associative on terms**: the two nestings of three factors give one term. -/
+theorem Term.product_assoc (A₁ A₂ A₃ : List (MapOf (ObjectSlot B w))) :
+    (Term.product (MapOf.prod (MapOf.prod A₁ A₂) A₃) : Term B w k) =
+      Term.product (MapOf.prod A₁ (MapOf.prod A₂ A₃)) := by
+  rw [MapOf.prod_assoc]
+
+variable [Mean B] (τ : (s : Bool) → TableAt B s)
+
+/-- The field table of a slot table, at the environment `ρ` of the width. -/
+def slotSems (ρ : Fin w → Mean.C B) (m : MapOf (ObjectSlot B w)) :
+    MapOf (FieldSem (Mean.V (B := B)) (Mean.Mem (B := B))) :=
+  m.map fun s => mkField s.1 (s.2.interp (TStep τ) ρ ρ)
+
+/-- **The meaning of a merge of two closed objects with disjoint names** reads the payload map of
+    the first object at its names and the payload map of the second at the other names. -/
+theorem Term.closed_union_f {F : MapA (Mean.V (B := B)) (Mean.Mem (B := B)) Mean.mem Mean.d}
+    (hF : Mean.map (B := B) = some F) {m m' : MapOf (ObjectSlot B w)} (h : Disjoint m.keys m'.keys)
+    (ρw : Fin w → Mean.C B) (ρk : Fin k → Mean.C B) (o : Orient) (x : Mean.V (B := B)) :
+    ((Term.closed (m.union m') : Term B w k).interp (TStep τ) ρw ρk).f o x =
+      ((F.toSummand.p.out x).bind (objPair (objAt (slotSems τ ρw m) none o)
+        (objAt (slotSems τ ρw m') none o) m.keys)).map F.toSummand.p.into := by
+  have e : objAt (slotSems τ ρw (m.union m')) none o =
+      objPair (objAt (slotSems τ ρw m) none o) (objAt (slotSems τ ρw m') none o) m.keys :=
+    (congrArg (objAt · none o) (MapOf.map_union _ m m')).trans (objAt_union h o)
+  simp only [Term.closed, Term.object, SFlat.interp, TStep_run, TOp.run, hF]
+  exact congrArg (fun g => ((F.toSummand.p.out x).bind g).map F.toSummand.p.into) e
+
+/-- **The product distributes over a sum**: the product of two factors sends `x` to `y` exactly
+    where the merge of an option of the first factor with an option of the second does, when the
+    merges agree. -/
+theorem Term.product_join (A₁ A₂ : List (MapOf (ObjectSlot B w))) (ρw : Fin w → Mean.C B)
+    (ρk : Fin k → Mean.C B)
+    (hh : PAgree .host ((MapOf.prod A₁ A₂).map fun m =>
+      (Term.closed m : Term B w k).interp (TStep τ) ρw ρk))
+    (hd : PAgree .dual ((MapOf.prod A₁ A₂).map fun m =>
+      (Term.closed m : Term B w k).interp (TStep τ) ρw ρk))
+    (o : Orient) (x y : Mean.V (B := B)) :
+    ((Term.product (MapOf.prod A₁ A₂) : Term B w k).interp (TStep τ) ρw ρk).f o x = some y ↔
+      ∃ a ∈ A₁, ∃ a' ∈ A₂,
+        ((Term.closed (a.union a') : Term B w k).interp (TStep τ) ρw ρk).f o x = some y := by
+  have mem : ∀ (L : List (MapOf (ObjectSlot B w))) c,
+      c ∈ List.ofFn (fun p => ((L.map Term.closed).get p : Term B w k).interp (TStep τ) ρw ρk) ↔
+        c ∈ L.map fun m => (Term.closed m : Term B w k).interp (TStep τ) ρw ρk := fun L c => by
+    have hl : List.ofFn (fun p => ((L.map Term.closed).get p : Term B w k).interp (TStep τ) ρw ρk) =
+        L.map fun m => (Term.closed m : Term B w k).interp (TStep τ) ρw ρk :=
+      List.ext_getElem (by simp) fun i _ _ => by simp
+    rw [hl]
+  simp only [Term.product, Term.union, SFlat.interp, TStep_run, TOp.run]
+  refine (altCodec_eq_join _ (fun c hc d hd' => hh c ((mem _ c).mp hc) d ((mem _ d).mp hd'))
+    (fun c hc d hd' => hd c ((mem _ c).mp hc) d ((mem _ d).mp hd')) o x y).trans ?_
+  simp only [mem, List.mem_map, MapOf.prod, List.mem_flatMap]
+  exact ⟨fun ⟨_, ⟨_, ⟨a, ha, a', ha', e⟩, ec⟩, hy⟩ => ⟨a, ha, a', ha', e ▸ ec ▸ hy⟩,
+    fun ⟨a, ha, a', ha', hy⟩ => ⟨_, ⟨_, ⟨a, ha, a', ha', rfl⟩, rfl⟩, hy⟩⟩
+
+end Product
+
 end Scoped
 
 end Calculus.Alg

@@ -293,6 +293,77 @@ theorem objAt_at {o : Orient} {p q : MapOf V} (h : objAt sems rc? o p = some q) 
       MapOf.at_none fun h' => hk (Finset.mem_union.mpr (Or.inr h'))]
     exact liftTable_absent (fun h' => hk (Finset.mem_union.mpr (Or.inl h'))) o
 
+/-- **The payload map is the product of the slots over every name**: it sends `p` to `q` exactly
+    where the slot of each name sends its lookup. -/
+theorem objAt_iff {o : Orient} {p q : MapOf V} :
+    objAt sems rc? o p = some q ↔ ∀ k, liftTable sems rc? k o (p.at k) = some (q.at k) :=
+  ⟨objAt_at, fun h => objAt_eq.mpr ⟨fun k _ => h k, fun k hk =>
+    Finset.mem_union.mpr (Decidable.byContradiction fun hn => by
+      have e := h k
+      rw [MapOf.at_none fun h' => hn (Or.inr h'), liftTable_absent (fun h' => hn (Or.inl h')) o,
+        MapOf.at_of_mem ⟨k, hk⟩] at e
+      exact nomatch Option.some.inj e)⟩⟩
+
+/-- A slot reads its table at its own name only. -/
+theorem liftTable_at {sems' : MapOf (FieldSem V M)} {k : String} (h : sems.at k = sems'.at k) :
+    liftTable sems rc? k = liftTable sems' rc? k := by
+  funext o x
+  cases x <;> simp only [liftTable, entryCodec, h]
+
+/-! ### The product of two closed objects
+
+A closed object refuses a name that it does not declare. So the product of two closed objects
+that declare disjoint names reads each name through the one factor that declares it: the payload
+map of the merged table is the pairing of the two payload maps. -/
+
+/-- **Two payload maps side by side**: the first reads the names of `A`, the second reads the
+    other names, and the two results join. -/
+def objPair (fA fB : MapOf V → Option (MapOf V)) (A : Finset String) (p : MapOf V) :
+    Option (MapOf V) :=
+  (fA (p.keep fun k => decide (k ∈ A))).bind fun qa =>
+    (fB (p.keep fun k => !decide (k ∈ A))).map qa.union
+
+/-- **The payload map of the merged table is the pairing of the two payload maps**, where two
+    closed objects declare disjoint names. -/
+theorem objAt_union {sa sb : MapOf (FieldSem V M)} (h : Disjoint sa.keys sb.keys) (o : Orient) :
+    objAt (sa.union sb) none o = objPair (objAt sa none o) (objAt sb none o) sa.keys := by
+  funext p
+  have hl : ∀ k, k ∈ sa.keys → liftTable (sa.union sb) none k = liftTable sa none k := fun k hk =>
+    liftTable_at (by rw [MapOf.at_union, MapOf.at_of_mem ⟨k, hk⟩]; rfl)
+  have hr : ∀ k, k ∉ sa.keys → liftTable (sa.union sb) none k = liftTable sb none k := fun k hk =>
+    liftTable_at (by rw [MapOf.at_union, MapOf.at_none hk]; rfl)
+  have hb : ∀ k, k ∈ sa.keys → liftTable sb none k o none = some none := fun k hk =>
+    liftTable_absent (Finset.disjoint_left.mp h hk) o
+  have pos : ∀ k, k ∈ sa.keys → decide (k ∈ sa.keys) = true := fun _ => decide_eq_true
+  have neg : ∀ k, k ∉ sa.keys → (!decide (k ∈ sa.keys)) = true := fun _ hk => by simp [hk]
+  refine Option.ext fun q => ?_
+  simp only [objPair, Option.bind_eq_some_iff, Option.map_eq_some_iff, objAt_iff]
+  constructor
+  · intro hq
+    refine ⟨q.keep fun k => decide (k ∈ sa.keys), fun k => ?_,
+      q.keep fun k => !decide (k ∈ sa.keys), fun k => ?_, MapOf.ext_at fun k => ?_⟩
+    all_goals rcases Decidable.em (k ∈ sa.keys) with hk | hk
+    · rw [MapOf.at_keep_pos _ (pos k hk), MapOf.at_keep_pos _ (pos k hk), ← hl k hk, hq k]
+    · rw [MapOf.at_keep_neg _ (decide_eq_false hk), MapOf.at_keep_neg _ (decide_eq_false hk),
+        liftTable_absent hk]
+    · rw [MapOf.at_keep_neg _ (by simp [hk]), MapOf.at_keep_neg _ (by simp [hk]), hb k hk]
+    · rw [MapOf.at_keep_pos _ (neg k hk), MapOf.at_keep_pos _ (neg k hk), ← hr k hk, hq k]
+    · rw [MapOf.at_union, MapOf.at_keep_pos _ (pos k hk), MapOf.at_keep_neg _ (by simp [hk]),
+        Option.or_none]
+    · rw [MapOf.at_union, MapOf.at_keep_neg _ (decide_eq_false hk),
+        MapOf.at_keep_pos _ (neg k hk), Option.none_or]
+  · rintro ⟨qa, ha, qb, hq, rfl⟩ k
+    rw [MapOf.at_union]
+    rcases Decidable.em (k ∈ sa.keys) with hk | hk
+    · have hq' := hq k
+      rw [MapOf.at_keep_neg _ (by simp [hk]), hb k hk] at hq'
+      rw [hl k hk, ← MapOf.at_keep_pos p (P := fun k => decide (k ∈ sa.keys)) (pos k hk), ha k,
+        ← Option.some.inj hq', Option.or_none]
+    · have ha' := ha k
+      rw [MapOf.at_keep_neg _ (decide_eq_false hk), liftTable_absent hk] at ha'
+      rw [hr k hk, ← MapOf.at_keep_pos p (P := fun k => !decide (k ∈ sa.keys)) (neg k hk), hq k,
+        ← Option.some.inj ha', Option.none_or]
+
 variable (sM : Summand (MapOf V) V M member)
 
 /-- The object is `carriedCodec` at the keyed-map prism, with the payload map `objAt`. -/

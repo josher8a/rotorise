@@ -412,4 +412,73 @@ theorem MapOf.at_ofFun {α : Type} {ks : Finset String} {g : String → Option �
       | some x => rw [hgk] at h; exact absurd rfl (h hk)
     · exact (hg k hk).symm
 
+
+/-! ### The monoid of records
+
+Two maps join by the union of their names. At a shared name the left value stands, so the union
+is associative with no premise. A product of two closed objects reads this union of their slot
+tables, and the product needs disjoint names only for its meaning. -/
+
+/-- The union of two maps: the names of both, the left value first at a shared name. -/
+def MapOf.union {α : Type} (m m' : MapOf α) : MapOf α :=
+  MapOf.ofFun (m.keys ∪ m'.keys) fun k => (m.at k).or (m'.at k)
+
+/-- The lookup of a union is the left lookup, else the right one. -/
+theorem MapOf.at_union {α : Type} (m m' : MapOf α) (k : String) :
+    (m.union m').at k = (m.at k).or (m'.at k) :=
+  MapOf.at_ofFun (fun k hk => by
+    rw [MapOf.at_none fun h => hk (Finset.mem_union.mpr (Or.inl h)),
+      MapOf.at_none fun h => hk (Finset.mem_union.mpr (Or.inr h))]; rfl) k
+
+/-- **The union is associative**, on the nose. -/
+theorem MapOf.union_assoc {α : Type} (m₁ m₂ m₃ : MapOf α) :
+    (m₁.union m₂).union m₃ = m₁.union (m₂.union m₃) :=
+  MapOf.ext_at fun k => by simp only [MapOf.at_union, Option.or_assoc]
+
+/-- The entries of a map at the names where `P` holds. -/
+def MapOf.keep {α : Type} (m : MapOf α) (P : String → Bool) : MapOf α :=
+  MapOf.ofFun m.keys fun k => (m.at k).filter fun _ => P k
+
+/-- The lookup of a restriction is the lookup, kept where `P` holds. -/
+theorem MapOf.at_keep {α : Type} (m : MapOf α) (P : String → Bool) (k : String) :
+    (m.keep P).at k = (m.at k).filter fun _ => P k :=
+  MapOf.at_ofFun (fun k hk => by rw [MapOf.at_none hk]; rfl) k
+
+/-- A restriction keeps the lookup at a name where `P` holds… -/
+theorem MapOf.at_keep_pos {α : Type} (m : MapOf α) {P : String → Bool} {k : String}
+    (h : P k = true) : (m.keep P).at k = m.at k := by
+  rw [MapOf.at_keep]
+  exact Option.ext fun _ => by simp [h]
+
+/-- …and drops it at a name where `P` fails. -/
+theorem MapOf.at_keep_neg {α : Type} (m : MapOf α) {P : String → Bool} {k : String}
+    (h : P k = false) : (m.keep P).at k = none := by
+  rw [MapOf.at_keep]
+  exact Option.filter_eq_none_iff.mpr fun _ _ => by simp [h]
+
+/-- A map with each value sent through `g`, on the same names. -/
+def MapOf.map {α β : Type} (g : α → β) (m : MapOf α) : MapOf β := ⟨m.keys, fun k => g (m.get k)⟩
+
+/-- The lookup of a mapped map is the mapped lookup. -/
+theorem MapOf.at_map {α β : Type} (g : α → β) (m : MapOf α) (k : String) :
+    (m.map g).at k = (m.at k).map g :=
+  (apply_dite (Option.map g) (k ∈ m.keys) (fun h => some (m.get ⟨k, h⟩)) fun _ => none).symm
+
+/-- A map commutes with the union. -/
+theorem MapOf.map_union {α β : Type} (g : α → β) (m m' : MapOf α) :
+    (m.union m').map g = (m.map g).union (m'.map g) :=
+  MapOf.ext_at fun k => by simp only [MapOf.at_map, MapOf.at_union, Option.map_or]
+
+/-- **The product of two sums of records**: every record of the first beside every record of the
+    second, outer over the first. It distributes over each sum by construction. -/
+def MapOf.prod {α : Type} (A B : List (MapOf α)) : List (MapOf α) :=
+  A.flatMap fun a => B.map a.union
+
+/-- **The product is associative**, on the nose and in order. -/
+theorem MapOf.prod_assoc {α : Type} (A B C : List (MapOf α)) :
+    MapOf.prod (MapOf.prod A B) C = MapOf.prod A (MapOf.prod B C) := by
+  simp only [MapOf.prod, List.flatMap_assoc, List.flatMap_map, List.map_flatMap, List.map_map]
+  congr 1; funext a; congr 1; funext b; congr 1; funext c
+  exact MapOf.union_assoc a b c
+
 end Calculus

@@ -390,8 +390,8 @@ def select {X Y : Type} (os : List (Codec V M)) (run : Codec V M → X → Optio
     Option Y :=
   (os.find? (fun c => (run c x).isSome)).bind (run · x)
 
-/-- `union`: the sum, resolved by the first admitter. Over lawful, pairwise compatible options
-    the order is unobservable (`altCodec_perm`). -/
+/-- `union`: the sum, computed by the first admitter. Over pairwise agreeing options the first
+    admitter computes the join of the options (`altCodec_eq_join`). -/
 def altCodec (os : List (Codec V M)) (μA : Option M) : Codec V M where
   T v := ∃ o ∈ os, o.T v
   μ := μA

@@ -386,14 +386,6 @@ theorem Codec.Equiv.symm {c d : Codec V M} (h : Codec.Equiv c d) : Codec.Equiv d
   ⟨fun v => (h.heldSet v).symm, h.member.symm,
     fun hd hc => (h.writes hc hd).symm, fun hd hc => (h.reads hc hd).symm⟩
 
-/-! ### `union` is commutative, at every permutation
-
-    Resolution takes the first admitter. Where the options are lawful and pairwise
-    compatible, every admitter writes and reads alike, so reordering the options changes
-    nothing. The general case is proved directly, and the adjacent one falls out of it at
-    `List.Perm.swap`: `≡` does not compose (`Refutations.not_equiv_trans`), and an equality
-    does. The two codecs are **equal**, not only equivalent. -/
-
 /-- Two options that are defined at the same answers are equal. -/
 theorem option_eq_of_some_iff {β : Type} {x y : Option β} (h : ∀ b, x = some b ↔ y = some b) :
     x = y := by
@@ -403,41 +395,6 @@ theorem option_eq_of_some_iff {β : Type} {x y : Option β} (h : ∀ b, x = some
     | none => rfl
     | some b => rw [hx] at h; exact nomatch (h b).mpr hy
   | some b => exact ((h b).mp hx).symm
-
-/-- `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))`, **on the nose**, over options that are
-    lawful and pairwise compatible. -/
-theorem altCodec_perm {os os' : List (Codec V M)} (h : os.Perm os') (μA : Option M)
-    (hl : ∀ o ∈ os, Lawful member o)
-    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o') :
-    altCodec os μA = altCodec os' μA := by
-  have m := fun o => h.mem_iff (a := o)
-  have hl' : ∀ o ∈ os', Lawful member o := fun o ho => hl o ((m o).mpr ho)
-  have hC' : ∀ o ∈ os', ∀ o' ∈ os', Compat o o' :=
-    fun o ho o' ho' => hC o ((m o).mpr ho) o' ((m o').mpr ho')
-  have hf : ∀ (o : Orient) x, (altCodec os μA).f o x = (altCodec os' μA).f o x := fun o x =>
-    option_eq_of_some_iff fun b => ⟨fun h => ?_, fun h => ?_⟩
-  refine Codec.ext ?_ rfl (funext (hf .host)) (funext (hf .dual))
-  · funext v
-    exact propext ⟨fun ⟨o, ho, hT⟩ => ⟨o, (m o).mp ho, hT⟩,
-      fun ⟨o, ho, hT⟩ => ⟨o, (m o).mpr ho, hT⟩⟩
-  · obtain ⟨c, hc, -, hcb⟩ := altCodec_admits h
-    exact altCodec_of_mem hl' hC' ((m c).mp hc) o hcb
-  · obtain ⟨c, hc, -, hcb⟩ := altCodec_admits h
-    exact altCodec_of_mem hl hC ((m c).mpr hc) o hcb
-
-/-- The row as the table states it, in `≡`: `Codec.Equiv.refl` transported along the equality. -/
-theorem equiv_altCodec_perm {os os' : List (Codec V M)} (h : os.Perm os') (μA : Option M)
-    (hl : ∀ o ∈ os, Lawful member o)
-    (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o') :
-    Codec.Equiv (altCodec os μA) (altCodec os' μA) :=
-  altCodec_perm h μA hl hC ▸ Codec.Equiv.refl _
-
-/-- `union(c₁, c₂, …) ≡ union(c₂, c₁, …)`, the general theorem at `List.Perm.swap`. -/
-theorem equiv_altCodec_swap (o₁ o₂ : Codec V M) (os : List (Codec V M)) (μA : Option M)
-    (hl : ∀ o ∈ o₁ :: o₂ :: os, Lawful member o)
-    (hC : ∀ o ∈ o₁ :: o₂ :: os, ∀ o' ∈ o₁ :: o₂ :: os, Compat o o') :
-    Codec.Equiv (altCodec (o₁ :: o₂ :: os) μA) (altCodec (o₂ :: o₁ :: os) μA) :=
-  equiv_altCodec_perm (List.Perm.swap o₂ o₁ os) μA hl hC
 
 /-! ### `held` is an identity, and composes
 

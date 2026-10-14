@@ -870,10 +870,11 @@ option writes, at the attribute that option writes.
 \begin{theorem}[the order of the options is unobservable]
 \label{thm:join-perm}
 \uses{cond:compat}
-\lean{Calculus.Alg.altCodec_perm}
+\lean{Calculus.Alg.altCodec_perm, Calculus.Alg.altCodec_eq_join}
 \leanok
-Over lawful, pairwise compatible options, a permutation of the options gives the same codec, on
-the nose.
+The meaning of a union is the join of its options, defined where the options agree at each
+orientation. Over pairwise agreeing options, a permutation of the options gives the same codec,
+on the nose.
 \end{theorem}
 
 \begin{theorem}[without compatibility the order is observable]
@@ -1481,9 +1482,9 @@ admitter of the nested union is the first admitter of the flat one, so nesting i
 \uses{rule:union,cond:compat}
 \lean{Calculus.Alg.equiv_altCodec_perm, Calculus.Alg.altCodec_perm, Calculus.Alg.equiv_altCodec_swap}
 \leanok
-\texttt{union(c₁\ …\ cₙ)\ ≡\ union(c\_σ(1)\ …\ c\_σ(n))} for any permutation \texttt{σ}, over lawful, pairwise
-compatible options. Commutative: the first-admitter rule reads declaration order, and
-\rulelink{cond:compat}{\textbf{(Compat)}} makes the order unobservable.
+\texttt{union(c₁\ …\ cₙ)\ ≡\ union(c\_σ(1)\ …\ c\_σ(n))} for any permutation \texttt{σ}, over pairwise
+agreeing options. Commutative: the first-admitter rule reads declaration order, and agreement of
+the options at each orientation makes the order unobservable.
 \end{theorem}
 
 \begin{theorem}[wrappers preserve the member]

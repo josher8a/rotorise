@@ -154,7 +154,7 @@ audit's findings belong: an audit is not load bearing.
 demands a total iso where the proof consumes only the domain-restricted one. Two others closed
 in the tree rather than on paper. The set carrier's nonemptiness and uniqueness are properties
 of its own type, so the omission the reading found is not there to state. And the commutativity
-node holds at any permutation of compatible, canonical options, by `altCodec_perm`, which is a stronger claim
+node holds at any permutation of pairwise agreeing options, by `altCodec_perm`, which is a stronger claim
 than the node asked for: reordering the options yields the same codec rather than an equivalent
 one.
 
