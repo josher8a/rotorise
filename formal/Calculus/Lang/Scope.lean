@@ -9,8 +9,8 @@ positions are typed: `TOp.Pos o` is the type of the children of `o`, and `TOp.po
 them. `TSig B` is the term container, and it holds no table. The algebra `TStep τ` runs each
 operation at the former of the meaning, at the tables `τ`.
 
-A term of a scope is an `SFlat` over the term container with constants, and a closed codec is
-one scope with no constant. Its meaning is the solution of that scope at a root entry.
+A term of a scope is an `SFlat` over the term container, and a closed codec is one scope. Its
+meaning is the solution of that scope at a root entry.
 -/
 
 namespace Calculus.Alg
@@ -317,35 +317,6 @@ theorem TStep_lawful : (TStep τ).Lawful (Mean.d (B := B)) where
         | ⟨0, _⟩ => trivial
         | ⟨1, _⟩ => exact h _
 
-/-- `held1` reads its two codecs through their maps. -/
-theorem held1_f_congr {V M : Type} {s : Bool} {w : PairAt V} {c c' P P' : Codec V M}
-    (hc : c.f = c'.f) (hP : P.f = P'.f) : (held1 s c P w).f = (held1 s c' P' w).f := by
-  simp only [held1, refine2, adapt2, Codec.e, Codec.p, hc, hP]
-
-/-- `Codec.extendRead` reads its codec through its map. -/
-theorem extendRead_f_congr {V M : Type} {r : V → Option V} {c c' : Codec V M} (hc : c.f = c'.f) :
-    (c.extendRead r).f = (c'.extendRead r).f := by
-  simp only [Codec.extendRead, Codec.ofEP, Codec.e, Codec.p, hc]
-
-/-- **The walls of the algebra read their arguments through the maps.** -/
-theorem TStep_wallF : WallF (TStep τ) := by
-  intro o hk a₁ a₂ h
-  cases o with
-  | held s k₀ ks =>
-    show (TOp.run τ (.held s k₀ ks) a₁).f = (TOp.run τ (.held s k₀ ks) a₂).f
-    exact held1_f_congr (h _) (h _)
-  | legacy r =>
-    show (TOp.run τ (.legacy r) a₁).f = (TOp.run τ (.legacy r) a₂).f
-    exact extendRead_f_congr (h _)
-  | prim g => exact nomatch hk
-  | opaq => exact nomatch hk
-  | never => exact nomatch hk
-  | set => exact nomatch hk
-  | list _ _ _ => exact nomatch hk
-  | refine p pA => exact nomatch hk
-  | obj _ _ _ => exact nomatch hk
-  | union _ => exact nomatch hk
-
 end Laws
 
 /-! ## The carrier -/
@@ -353,18 +324,16 @@ end Laws
 section Carrier
 variable {B : Sig}
 
-/-- **A term of a scope**: an `SFlat` over the term container with `c` constants. Below a container
-    the term names any of the `w` entries; above every guard it names the `k` entries before its
-    own. -/
-abbrev Term (B : Sig) (c w k : Nat) : Type :=
-  SFlat (TOp B ⊕ Fin c) (cAr (TSig B) c) (cKd (TSig B) c) w k
+/-- **A term of a scope**: an `SFlat` over the term container. Below a container the term names
+    any of the `w` entries; above every guard it names the `k` entries before its own. -/
+abbrev Term (B : Sig) (w k : Nat) : Type := SFlat (TSig B).Op (TSig B).Pos (TSig B).kind w k
 
 /-- **A flat term over the term container**, with a leaf for each of `N` entries: the graph form of
     a closed codec. -/
 abbrev Graph (B : Sig) (N : Nat) : Type := Flat (TSig B).Op (TSig B).Pos N
 
-/-- **A closed codec**: one scope over the term container, with no constant. -/
-abbrev Closed (B : Sig) (N : Nat) : Type := Scope (TSig B) 0 N
+/-- **A closed codec**: one scope over the term container. -/
+abbrev Closed (B : Sig) (N : Nat) : Type := SSys (TSig B) N
 
 /-- **The meaning of a closed codec** at a root entry, at the tables `τ`: the solution of its
     scope. -/
@@ -372,62 +341,61 @@ def Closed.meaning [Mean B] (τ : (s : Bool) → TableAt B s) {N : Nat} (d : Clo
     (root : Fin N) : Mean.C B :=
   d.sol (TStep τ) Mean.d root
 
-variable {c w k : Nat}
+variable {w k : Nat}
 
-@[match_pattern] abbrev Term.prim (g : B.Ground) : Term B c w k := .node (.inl (.prim g)) Empty.elim
-@[match_pattern] abbrev Term.opaq : Term B c w k := .node (.inl .opaq) Empty.elim
-@[match_pattern] abbrev Term.never : Term B c w k := .node (.inl .never) Empty.elim
-@[match_pattern] abbrev Term.set (e : Term B c w w) : Term B c w k := .node (.inl .set) fun _ => e
-@[match_pattern] abbrev Term.refine (t : Term B c w k) (p : B.P false) (pA : B.P true) :
-    Term B c w k := .node (.inl (.refine p pA)) fun _ => t
-@[match_pattern] abbrev Term.legacy (t : Term B c 0 0) (r : B.R) : Term B c w k :=
-  .node (.inl (.legacy r)) fun _ => t
-@[match_pattern] abbrev Term.const (i : Fin c) : Term B c w k := .node (.inr i) Empty.elim
-@[match_pattern] abbrev Term.ref (i : Fin k) : Term B c w k := .leaf i
+@[match_pattern] abbrev Term.prim (g : B.Ground) : Term B w k := .node (.prim g) Empty.elim
+@[match_pattern] abbrev Term.opaq : Term B w k := .node .opaq Empty.elim
+@[match_pattern] abbrev Term.never : Term B w k := .node .never Empty.elim
+@[match_pattern] abbrev Term.set (e : Term B w w) : Term B w k := .node .set fun _ => e
+@[match_pattern] abbrev Term.refine (t : Term B w k) (p : B.P false) (pA : B.P true) :
+    Term B w k := .node (.refine p pA) fun _ => t
+@[match_pattern] abbrev Term.legacy (t : Term B 0 0) (r : B.R) : Term B w k :=
+  .node (.legacy r) fun _ => t
+@[match_pattern] abbrev Term.ref (i : Fin k) : Term B w k := .leaf i
 
 /-- The rule `(held)`: the inner term and the outer term, below the wall. -/
-def Term.held (s : Bool) (inner outer : Term B c 0 0) (k₀ : B.G s × Bool)
-    (ks : List (B.G s × Bool)) : Term B c w k :=
-  .node (.inl (.held s k₀ ks)) fun
+def Term.held (s : Bool) (inner outer : Term B 0 0) (k₀ : B.G s × Bool)
+    (ks : List (B.G s × Bool)) : Term B w k :=
+  .node (.held s k₀ ks) fun
     | true => inner
     | false => outer
 
 /-- The rule `(union)`, from a list of options. -/
-def Term.union (os : List (Term B c w k)) : Term B c w k := .node (.inl (.union os.length)) os.get
+def Term.union (os : List (Term B w k)) : Term B w k := .node (.union os.length) os.get
 
 /-- The rule `(list)`, from a prefix, at most one spread, and a suffix. -/
-def Term.list (pre : List (Term B c w w)) (sp : Option (Term B c w w)) (suf : List (Term B c w w)) :
-    Term B c w k :=
+def Term.list (pre : List (Term B w w)) (sp : Option (Term B w w)) (suf : List (Term B w w)) :
+    Term B w k :=
   match sp with
-  | none => .node (.inl (.list pre.length 0 suf.length)) fun
+  | none => .node (.list pre.length 0 suf.length) fun
     | .inl p => pre.get p
     | .inr (.inl p) => p.elim0
     | .inr (.inr p) => suf.get p
-  | some t => .node (.inl (.list pre.length 1 suf.length)) fun
+  | some t => .node (.list pre.length 1 suf.length) fun
     | .inl p => pre.get p
     | .inr (.inl _) => t
     | .inr (.inr p) => suf.get p
 
 /-- The rule `(array)`. -/
-def Term.array (e : Term B c w w) : Term B c w k := Term.list [] (some e) []
+def Term.array (e : Term B w w) : Term B w k := Term.list [] (some e) []
 
 /-- The rules `(tuple)` and `(tuple-tail)`. -/
-def Term.tuple (es : List (Term B c w w)) (tail : Option (Term B c w w)) : Term B c w k :=
+def Term.tuple (es : List (Term B w w)) (tail : Option (Term B w w)) : Term B w k :=
   Term.list es tail []
 
 /-- A slot: its presence and its term. -/
-abbrev ObjectSlot (B : Sig) (c w : Nat) := SlotMode B × Term B c w w
+abbrev ObjectSlot (B : Sig) (w : Nat) := SlotMode B × Term B w w
 
-@[match_pattern] abbrev ObjectSlot.req (t : Term B c w w) : ObjectSlot B c w := (.req, t)
-@[match_pattern] abbrev ObjectSlot.optional (t : Term B c w w) : ObjectSlot B c w := (.opt, t)
+@[match_pattern] abbrev ObjectSlot.req (t : Term B w w) : ObjectSlot B w := (.req, t)
+@[match_pattern] abbrev ObjectSlot.optional (t : Term B w w) : ObjectSlot B w := (.opt, t)
 
 /-- The rule `(object)`: the declared names, the slot of each, and the open block. -/
-def Term.object (fs : Finset String) (f : {x // x ∈ fs} → ObjectSlot B c w) :
-    Option (Term B c w w) → Term B c w k
-  | none => .node (.inl (.obj fs (fun x => (f x).1) 0)) fun
+def Term.object (fs : Finset String) (f : {x // x ∈ fs} → ObjectSlot B w) :
+    Option (Term B w w) → Term B w k
+  | none => .node (.obj fs (fun x => (f x).1) 0) fun
     | .inl x => (f x).2
     | .inr p => p.elim0
-  | some t => .node (.inl (.obj fs (fun x => (f x).1) 1)) fun
+  | some t => .node (.obj fs (fun x => (f x).1) 1) fun
     | .inl x => (f x).2
     | .inr _ => t
 

@@ -17,7 +17,7 @@ accepts the datum.
 namespace Calculus.JSON
 
 /-- The term of the one entry: a string or a number. The term names no entry. -/
-def strOrNumBody {k : Nat} : Alg.Scoped.Term jsonSig 0 1 k :=
+def strOrNumBody {k : Nat} : Alg.Scoped.Term jsonSig 1 k :=
   Alg.Scoped.Term.union [.prim .str, .prim .num]
 
 /-- A string or a number, as a closed codec of one entry. -/
@@ -37,11 +37,11 @@ theorem compat_ground (m m' : JMember) : Alg.Compat (ground m) (ground m') :=
 
 /-- The entry of `strOrNumClosed` is typed at every environment. -/
 theorem typed_strOrNumBody (τ : (s : Bool) → Alg.TableAt jsonSig s)
-    (κ : Fin 0 → Alg.Codec Json JMember) (ρw : Fin 1 → Alg.Codec Json JMember)
+    (ρw : Fin 1 → Alg.Codec Json JMember)
     (ρk : Fin 0 → Alg.Codec Json JMember) :
-    ∃ T μ, Alg.Scoped.Typed τ κ ρw ρk (strOrNumBody (k := 0)) T μ := by
+    ∃ T μ, Alg.Scoped.Typed τ ρw ρk (strOrNumBody (k := 0)) T μ := by
   have hp : ∀ m : JMember, ∃ T μ,
-      Alg.Scoped.Typed τ κ ρw ρk (Alg.Scoped.Term.prim (B := jsonSig) m) T μ := fun m =>
+      Alg.Scoped.Typed τ ρw ρk (Alg.Scoped.Term.prim (B := jsonSig) m) T μ := fun m =>
     ⟨_, _, Alg.Scoped.Typed.node (B := jsonSig) (o := .prim m) (T := Empty.elim)
       (μ := Empty.elim) (fun p => p.elim) rfl⟩
   obtain ⟨T1, μ1, h1⟩ := hp .str
@@ -54,7 +54,7 @@ theorem typed_strOrNumBody (τ : (s : Bool) → Alg.TableAt jsonSig s)
 /-- `strOrNumClosed` is typed at all tables. -/
 theorem typed_strOrNumClosed (τ : (s : Bool) → Alg.TableAt jsonSig s) :
     Alg.Scoped.Closed.Typed τ strOrNumClosed :=
-  fun i => match i with | ⟨0, _⟩ => typed_strOrNumBody _ _ _ _
+  fun i => match i with | ⟨0, _⟩ => typed_strOrNumBody _ _ _
 
 /-- `strOrNumClosed` meets its obligations at all tables: its two options are compatible. -/
 theorem obligations_strOrNumClosed (τ : (s : Bool) → Alg.TableAt jsonSig s) :

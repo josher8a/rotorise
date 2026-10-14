@@ -671,7 +671,7 @@ const closedPrint = (def: Term, at: string, bound?: Bound): ClosedPrint => {
                     wall: false,
                 },
             })
-            return `| ⟨${index}, _⟩ => (${body} : Scoped.Term 0 ${members.length} ${index})`
+            return `| ⟨${index}, _⟩ => (${body} : Scoped.Term ${members.length} ${index})`
         })
         .join(' ')
     const root = entries.get(def)?.index ?? 0

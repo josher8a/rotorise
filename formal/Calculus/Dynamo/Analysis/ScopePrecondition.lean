@@ -549,25 +549,25 @@ private def shows (r : Option (List Cond)) (cs : List (Cond → Bool)) : Bool :=
   | none => false
 
 /-- A closed codec of one entry. -/
-private abbrev one (t : Scoped.Term 0 1 0) : Closed :=
+private abbrev one (t : Scoped.Term 1 0) : Closed :=
   ⟨1, (fun i => match i with | ⟨0, _⟩ => t), 0⟩
 
 /-- A clause: an open object whose names are each required. -/
-private abbrev clauseOf (fs : Finset String) (f : {x // x ∈ fs} → Scoped.Term 0 1 1) : Closed :=
+private abbrev clauseOf (fs : Finset String) (f : {x // x ∈ fs} → Scoped.Term 1 1) : Closed :=
   one (Scoped.Term.object (Scoped.Body.mk fs (fun x => Scoped.ObjectSlot.req (f x))
     (some Scoped.Term.opaq)))
 
 /-- A clause of one key. -/
-private abbrev cl1 (t : Scoped.Term 0 1 1) : Closed := clauseOf {"k"} fun _ => t
+private abbrev cl1 (t : Scoped.Term 1 1) : Closed := clauseOf {"k"} fun _ => t
 
-private abbrev litS (s : String) : Scoped.Term 0 1 1 := Scoped.Term.literal .string s
-private abbrev n1 : Scoped.Term 0 0 0 := Scoped.Term.literal .number (WFNumeral.of "1")
-private abbrev n2 : Scoped.Term 0 0 0 := Scoped.Term.literal .number (WFNumeral.of "2")
+private abbrev litS (s : String) : Scoped.Term 1 1 := Scoped.Term.literal .string s
+private abbrev n1 : Scoped.Term 0 0 := Scoped.Term.literal .number (WFNumeral.of "1")
+private abbrev n2 : Scoped.Term 0 0 := Scoped.Term.literal .number (WFNumeral.of "2")
 /-- `number(1)`: a caller adapter over the literal `N 1`. -/
-private abbrev num {w k : Nat} (l : Scoped.Term 0 0 0) : Scoped.Term 0 w k :=
+private abbrev num {w k : Nat} (l : Scoped.Term 0 0) : Scoped.Term w k :=
   Scoped.Term.held false l Scoped.Term.number (.caller 0, false) []
 /-- `decimal('1')`: the library text adapter over the literal `N 1`. -/
-private abbrev dec {w k : Nat} (l : Scoped.Term 0 0 0) (s : String) : Scoped.Term 0 w k :=
+private abbrev dec {w k : Nat} (l : Scoped.Term 0 0) (s : String) : Scoped.Term w k :=
   Scoped.Term.held false l (Scoped.Term.literal .string s) (.decimalText, false) []
 private abbrev m : List Seg := [.name "m"]
 

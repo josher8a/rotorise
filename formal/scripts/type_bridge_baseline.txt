@@ -12,30 +12,30 @@
 #   exclude      time keeps the member (`accept`) or drops it (`refuse`).
 #   path         one path under `at`: `accept` where the run time resolves one codec.
 #   declaration  one constant of the generated codecs file: the run time built each one.
-call|accept|73416a8cd6|exclude({ b: decimal("1") })
-call|accept|73416a8cd6|exclude({ b: decimal("2.5") })
-call|accept|73416a8cd6|extract({ b: decimal("1") })
-call|accept|73416a8cd6|extract({ b: decimal("2.5") })
-exclude|refuse|0bb778bbf5|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|1560ab8622|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|1b71450826|exclude({ a: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|2b84ad513b|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|2d32c9bdd7|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|31120ca602|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|435c5e6ae6|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|43b779d6b6|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|4506b49cad|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|4edcf13ae4|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|519a3936b7|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|52fb896120|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|90c84fc6a5|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|97010c4849|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|98e69e7739|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|9b64df0fdc|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|b946e7118f|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|b9aeb1c013|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|befdcfa830|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|cecc0b512b|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|f65ffeab99|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|fb93d29fa4|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
-exclude|refuse|fddfa49553|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+call|accept|0ad2e0f472|exclude({ b: decimal("1") })
+call|accept|0ad2e0f472|exclude({ b: decimal("2.5") })
+call|accept|0ad2e0f472|extract({ b: decimal("1") })
+call|accept|0ad2e0f472|extract({ b: decimal("2.5") })
+exclude|refuse|321d315d6a|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|364bb76bd3|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|3936b620c9|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|3b61ee1b6b|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|4f8f8f0c74|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|565ef395ff|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|5a2d3d7156|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|644ea13371|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|6d3e1b84ca|exclude({ a: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|74c420fb44|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|783112693d|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|8c87c88e57|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|a01d85ed82|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|a862683995|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|ae4bce20c9|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|b51f26499b|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|bd9b656084|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|cc29604f94|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|d2a3db7348|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|dfdb39b996|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|e08f76307c|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|ebe422ba61|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|fe7c985e59|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1

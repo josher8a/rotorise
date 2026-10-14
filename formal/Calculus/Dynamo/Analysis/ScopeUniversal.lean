@@ -32,15 +32,15 @@ theorem select_isSome_of_mem {V M X Y : Type} {os : List (Alg.Codec V M)}
   | some _ => rfl
 
 /-- **A union term acts where the option at one position acts**, at each orientation. -/
-theorem Scoped.interp_union_isSome {τ : (s : Bool) → Alg.TableAt dynSig s} {c w k : Nat}
-    {κ : Fin c → Codec} (os : List (Scoped.Term c w k)) (ρw : Fin w → Codec) (ρk : Fin k → Codec)
+theorem Scoped.interp_union_isSome {τ : (s : Bool) → Alg.TableAt dynSig s} {w k : Nat}
+    (os : List (Scoped.Term w k)) (ρw : Fin w → Codec) (ρk : Fin k → Codec)
     (o : Alg.Orient) (x : Value) (p : Fin os.length)
-    (h : ((Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) c κ) (os.get p) ρw ρk).f o x).isSome
+    (h : ((Alg.SFlat.interp (Alg.Scoped.TStep τ) (os.get p) ρw ρk).f o x).isSome
       = true) :
-    ((Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) c κ) (Scoped.Term.union os) ρw ρk).f o
+    ((Alg.SFlat.interp (Alg.Scoped.TStep τ) (Scoped.Term.union os) ρw ρk).f o
       x).isSome = true := by
   show (Alg.select (List.ofFn fun p =>
-    Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) c κ) (os.get p) ρw ρk) (·.f o) x).isSome = true
+    Alg.SFlat.interp (Alg.Scoped.TStep τ) (os.get p) ρw ρk) (·.f o) x).isSome = true
   exact select_isSome_of_mem (List.mem_ofFn.mpr ⟨p, rfl⟩) h
 
 /-- **An object that declares no name and has an open block is a record**, whatever the map of
@@ -53,7 +53,7 @@ theorem objectCodec_empty (F : {k // k ∈ (∅ : Finset Name)} → FieldSem) (c
   rfl
 
 /-- The options of `opaque` unfolded one time: each base, and each container over `opaque`. -/
-def opaqOptions : List (Scoped.Term 0 1 0) :=
+def opaqOptions : List (Scoped.Term 1 0) :=
   [.string, .boolean, .binary, .null, .number, Scoped.Term.array .opaq,
     Scoped.Term.object ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1), some .opaq⟩, .set .opaq]
 

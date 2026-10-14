@@ -31,7 +31,7 @@ theorem Closed.sound {α : Table} {t : Closed} (hty : t.Typed α) (hob : t.Oblig
 /-- **A typed closed codec is on its carrier**: it writes and reads only values of its held set. -/
 theorem Closed.carrier {α : Table} {t : Closed} (hty : t.Typed α) (hob : t.Obligations α) :
     Carrier (t.meaning α) := by
-  have e := congrArg Alg.Codec.T (Alg.Scope.sol_eq (R := Alg.Scoped.TStep (Alg.tables dynSyn.o α dynTableA))
+  have e := congrArg Alg.Codec.T (Alg.SSys.sol_eq (R := Alg.Scoped.TStep (Alg.tables dynSyn.o α dynTableA))
     (depth := Alg.Mean.d) t.scope t.root
     (c := ⟨fun v => ((t.meaning α).e v).isSome = true, none, (t.meaning α).f⟩) (fun _ => rfl) rfl rfl)
   refine ⟨fun {v a} he => ?_, fun {a v} hp => ?_⟩
@@ -44,17 +44,17 @@ theorem Closed.extendRead_lawfulCore {α : Table} {t : Closed} (hty : t.Typed α
   Alg.LawfulCore.extendRead (Closed.sound hty hob).core
 
 /-- **A closed codec of one entry**: one scope of one entry. -/
-def Closed.one (t : Scoped.Term 0 1 0) : Closed :=
+def Closed.one (t : Scoped.Term 1 0) : Closed :=
   ⟨1, fun i => match i with | ⟨0, _⟩ => t, 0⟩
 
 /-- **The fixpoint law of a closed codec of one entry**: the meaning moves what its term moves over
     the meaning. -/
-theorem Closed.one_fix (α : Table) (t : Scoped.Term 0 1 0) (o : Alg.Orient) (v : Value) :
+theorem Closed.one_fix (α : Table) (t : Scoped.Term 1 0) (o : Alg.Orient) (v : Value) :
     ((Closed.one t).meaning α).f o v =
-      (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep (Alg.tables dynSyn.o α dynTableA)) 0 Fin.elim0)
+      (Alg.SFlat.interp (Alg.Scoped.TStep (Alg.tables dynSyn.o α dynTableA))
         t (fun _ => (Closed.one t).meaning α) Fin.elim0).f o v := by
   have hfix := Alg.solve_fix Alg.Mean.d_pos (Alg.nf_contractive
-    (Alg.CStep.lawful (Alg.Scoped.TStep_lawful (Alg.tables dynSyn.o α dynTableA)) 0 Fin.elim0)
+    (Alg.Scoped.TStep_lawful (Alg.tables dynSyn.o α dynTableA))
     (fun i => match i with | ⟨0, _⟩ => t)) 0 o v
   refine hfix.trans ?_
   rw [Alg.sysB, Alg.interp_nf]

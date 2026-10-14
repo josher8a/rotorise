@@ -73,10 +73,10 @@ private def tagOf {N : Nat} : Alg.Scoped.Graph dynSig N → Nat
 private def tags (r : Option (List (GFrame dynSig))) : Option (List Nat) :=
   r.map (·.map fun f => tagOf f.t)
 
-private abbrev one (t : Scoped.Term 0 1 0) : Closed :=
+private abbrev one (t : Scoped.Term 1 0) : Closed :=
   ⟨1, (fun i => match i with | ⟨0, _⟩ => t), 0⟩
 
-private abbrev litS (s : String) : Scoped.Term 0 1 0 := Scoped.Term.literal .string s
+private abbrev litS (s : String) : Scoped.Term 1 0 := Scoped.Term.literal .string s
 
 /-- A union under `m`, whose option `B` declares no `only`. -/
 private abbrev itemM : Closed := one (Scoped.Term.object (Scoped.Body.mk {"m"} (fun _ =>
@@ -123,10 +123,10 @@ example : tags (Alg.Scoped.Rooted.at (S := dynSyn) itemO.rooted [.name "o", .nam
 
 /-! Narrowing on the graph -/
 
-private abbrev clause (k : String) (t : Scoped.Term 0 1 1) : Closed :=
+private abbrev clause (k : String) (t : Scoped.Term 1 1) : Closed :=
   one (Scoped.Term.object (Scoped.Body.mk {k} (fun _ => Scoped.ObjectSlot.req t)
     (some Scoped.Term.opaq)))
-private abbrev two (k v : String) (tk tv : Scoped.Term 0 1 1) : Closed :=
+private abbrev two (k v : String) (tk tv : Scoped.Term 1 1) : Closed :=
   one (Scoped.Term.object (Scoped.Body.mk {k, v} (fun x => if x.1 = k then
     Scoped.ObjectSlot.req tk else Scoped.ObjectSlot.req tv) none))
 

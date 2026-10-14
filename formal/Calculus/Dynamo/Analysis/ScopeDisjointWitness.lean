@@ -17,15 +17,15 @@ namespace Calculus
 
 /-- **A closed codec of two entries**: entry `0` is `base`, and the root entry `top` reads entry
     `0` above every guard. -/
-def Closed.over (base : Scoped.Term 0 2 0) (top : Scoped.Term 0 2 1) : Closed :=
+def Closed.over (base : Scoped.Term 2 0) (top : Scoped.Term 2 1) : Closed :=
   ⟨2, (fun i => match i with | ⟨0, _⟩ => base | ⟨1, _⟩ => top), 1⟩
 
 /-- A recursive codec: a boolean, or an object whose key `"k"` holds the codec again. -/
-def recBoolBody : Scoped.Term 0 1 0 :=
+def recBoolBody : Scoped.Term 1 0 :=
   .union [.boolean, .object (Scoped.Body.mk {"k"} (fun _ => .req (.ref 0)) none)]
 
 /-- A recursive codec: a string, or an object whose key `"k"` holds the codec again. -/
-def recStrBody {w : Nat} : Scoped.Term 0 (w + 1) 0 :=
+def recStrBody {w : Nat} : Scoped.Term (w + 1) 0 :=
   .union [.string, .object (Scoped.Body.mk {"k"} (fun _ => .req (.ref 0)) none)]
 
 /-! ## Refinements and recursion -/

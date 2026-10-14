@@ -18,19 +18,19 @@ namespace Calculus
 variable {α : Table}
 
 /-- The term of the one entry of the host's schema for JSON: a string, or an array of the entry. -/
-def jsonBody : Scoped.Term 0 1 0 :=
+def jsonBody : Scoped.Term 1 0 :=
   Scoped.Term.union [Scoped.Term.string, Scoped.Term.array (Scoped.Term.ref 0)]
 
 /-- The host's schema for JSON, as a closed codec of one entry. -/
 def jsonClosed : Closed := Closed.one jsonBody
 
 /-- The entry of `jsonClosed` is typed at every environment: each operation has a rule. -/
-theorem typed_jsonBody (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fin 0 → Codec)
-    (ρw : Fin 1 → Codec) (ρk : Fin 0 → Codec) : ∃ T μ, Alg.Scoped.Typed τ κ ρw ρk jsonBody T μ := by
-  obtain ⟨T1, μ1, h1⟩ : ∃ T μ, Alg.Scoped.Typed τ κ ρw ρk Scoped.Term.string T μ :=
+theorem typed_jsonBody (τ : (s : Bool) → Alg.TableAt dynSig s)
+    (ρw : Fin 1 → Codec) (ρk : Fin 0 → Codec) : ∃ T μ, Alg.Scoped.Typed τ ρw ρk jsonBody T μ := by
+  obtain ⟨T1, μ1, h1⟩ : ∃ T μ, Alg.Scoped.Typed τ ρw ρk Scoped.Term.string T μ :=
     ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .prim (Ground.base .string)) (T := Empty.elim) (μ := Empty.elim) (fun p => p.elim) rfl⟩
   obtain ⟨T2, μ2, h2⟩ : ∃ T μ,
-      Alg.Scoped.Typed τ κ ρw ρk (Scoped.Term.array (Scoped.Term.ref 0)) T μ :=
+      Alg.Scoped.Typed τ ρw ρk (Scoped.Term.array (Scoped.Term.ref 0)) T μ :=
     ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .list 0 1 0) (T := fun _ => (ρw 0).T) (μ := fun _ => (ρw 0).μ)
       (fun p => match p with
         | .inl p => p.elim0
@@ -43,7 +43,7 @@ theorem typed_jsonBody (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fin 0 �
 
 /-- `jsonClosed` is typed. -/
 theorem Closed.typed_json : jsonClosed.Typed α :=
-  fun i => match i with | ⟨0, _⟩ => typed_jsonBody _ _ _ _
+  fun i => match i with | ⟨0, _⟩ => typed_jsonBody _ _ _
 
 /-- **A string and an array are compatible**, whatever the element: no attribute and no value is
     on both. -/
@@ -56,9 +56,9 @@ theorem compat_string_array {x : Codec} (hx : Lawful x) :
 
 /-- The entry of `jsonClosed` meets its obligations at every environment whose entry is lawful:
     its two options are compatible. -/
-theorem obligations_jsonBody (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fin 0 → Codec)
+theorem obligations_jsonBody (τ : (s : Bool) → Alg.TableAt dynSig s)
     (ρw : Fin 1 → Codec) (ρk : Fin 0 → Codec) (hw : Lawful (ρw 0)) :
-    Alg.Scoped.Obligations τ κ ρw ρk jsonBody := by
+    Alg.Scoped.Obligations τ ρw ρk jsonBody := by
   have hs := compat_string_array hw
   have hl : Lawful (arrayCodec (ρw 0)) := lawful_arrayCodec hw
   refine ⟨fun p => ?_, fun p q => ?_⟩
@@ -79,7 +79,7 @@ theorem obligations_jsonBody (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fi
 /-- `jsonClosed` meets its obligations: each stage after a lawful stage keeps its options
     compatible. -/
 theorem Closed.obligations_json : jsonClosed.Obligations α :=
-  fun _ hk i => match i with | ⟨0, _⟩ => obligations_jsonBody _ _ _ _ (hk ⟨0, Nat.one_pos⟩)
+  fun _ hk i => match i with | ⟨0, _⟩ => obligations_jsonBody _ _ _ (hk ⟨0, Nat.one_pos⟩)
 
 /-- **The host's recursive schema, as a closed codec, is lawful.** -/
 theorem Closed.lawful_json : Lawful (jsonClosed.meaning α) :=
@@ -88,7 +88,7 @@ theorem Closed.lawful_json : Lawful (jsonClosed.meaning α) :=
 /-- **`jsonClosed` is a fixed point**: it writes what its entry writes over `jsonClosed`. -/
 theorem Closed.json_e_fix (v : Value) :
     (jsonClosed.meaning α).e v =
-      (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep (Alg.tables dynSyn.o α dynTableA)) 0 Fin.elim0)
+      (Alg.SFlat.interp (Alg.Scoped.TStep (Alg.tables dynSyn.o α dynTableA))
         jsonBody (fun _ => jsonClosed.meaning α) Fin.elim0).e v :=
   Closed.one_fix α jsonBody .host v
 

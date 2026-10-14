@@ -64,7 +64,7 @@ instance, and JSON is a second instance.
 | `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
 | `Alg/Agree.lean` | agreement `Agree` at an orientation, whose two halves are the host and the dual, one lemma per combinator, and `compat_iff_agree` |
 | `Lang/Term.lean` | the signature `Sig`, the syntax `Syn`, the meaning `Mean`, and the tables of adapters |
-| `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, the flat scope with `scope_solution`, and the DAG of scopes with `DSys.dagGuard` and `dagGuard_of_rename` |
+| `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, and the flat scope with `scope_solution` |
 | `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, and `Scoped.Closed.compat_of_HF` |
 | `Lang/Universe.lean`, `Lang/ScopeDisjoint.lean` | the class `Leaf`, the structural disjointness decision `Scoped.disjoint` over two closed codecs with its soundness `Scoped.disjoint_sound`, the view `viewG` at an orientation, and `views_apart` |
 | `Lang/ScopeCompat.lean` | the compatibility decision `Scoped.compatPair` over two closed codecs, and `Scoped.compatPair_sound` |
@@ -364,7 +364,7 @@ the kernel.
 ## Recursion
 
 **A recursive codec is a closed codec.** A closed codec is one flat guarded scope
-(`Scoped.Closed`): a system of entries with no constant. Each entry is a term that names the
+(`Scoped.Closed`): a system of entries. Each entry is a term that names the
 entries of the scope. Above every guard an entry names an earlier entry, below a container any
 entry, and below a wall no entry. The meaning of a closed codec at a root entry is the solution of
 that scope at the root (`Scoped.Closed.meaning`), `solve` of its normal form. The stages of the
@@ -387,7 +387,7 @@ has no stratified form. The guard refuses two shapes, and each is a graph with n
 
 A stratified term names an entry above every guard only below its own entry, and names no entry below
 a wall, so a stratified system carries the guard by construction. The graph form of a closed codec
-(`Scope.graph`) has no leaf under a wall, and each unguarded edge lowers the entry (`Scope.order`).
+(`SSys.graph`) has no leaf under a wall, and each unguarded edge lowers the entry (`SSys.order`).
 
 **A wall reaches no cycle.** A wall is an operation of kind `wall`: a `held`, including the
 library adapters `number`, `decimal` and `opaque`, or an older reader. A wall reads its argument
@@ -406,7 +406,7 @@ these.
 each stage of its normal form, given that the stage before is lawful. `sound_term` proves
 `Lawful` for a term of a scope whose entries are lawful, and `lawful_strat` carries the laws to
 the solution (`Scoped.Closed.sound`). An entry of the solution has its write domain as its held set
-(`Scope.sol_eq`), so the held-set theorems stay closed.
+(`SSys.sol_eq`), so the held-set theorems stay closed.
 
 **`opaque` is the identity.** With one carrier, each datum identifies itself, so the union of
 everything self-identifying (`opaqUnfoldClosed`) sends each datum to itself. `opaque` denotes the identity

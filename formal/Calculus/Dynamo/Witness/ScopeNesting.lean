@@ -49,7 +49,7 @@ theorem storable_deepA (bound : Nat) : Attr.Storable bound (deepA bound) := by
 /-! ## The witness as a closed codec -/
 
 /-- `n` nested arrays over a string, as the term of an entry. -/
-def deepS : Nat → {w k : Nat} → Scoped.Term 0 w k
+def deepS : Nat → {w k : Nat} → Scoped.Term w k
   | 0 => Scoped.Term.string
   | n + 1 => Scoped.Term.array (deepS n)
 
@@ -57,14 +57,14 @@ def deepS : Nat → {w k : Nat} → Scoped.Term 0 w k
 def deepClosed (n : Nat) : Closed := Closed.one (deepS n)
 
 /-- Each term of the family is typed at every environment. -/
-theorem typed_deepS (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fin 0 → Codec) :
+theorem typed_deepS (τ : (s : Bool) → Alg.TableAt dynSig s) :
     ∀ (n : Nat) {w k : Nat} (ρw : Fin w → Codec) (ρk : Fin k → Codec),
-      ∃ T μ, Alg.Scoped.Typed τ κ ρw ρk (deepS n) T μ
+      ∃ T μ, Alg.Scoped.Typed τ ρw ρk (deepS n) T μ
   | 0, _, _, _, _ =>
     ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .prim (Ground.base .string)) (T := Empty.elim)
       (μ := Empty.elim) (fun p => p.elim) rfl⟩
   | n + 1, w, _, ρw, _ => by
-    obtain ⟨T, μ, h⟩ := typed_deepS τ κ n ρw ρw
+    obtain ⟨T, μ, h⟩ := typed_deepS τ n ρw ρw
     exact ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .list 0 1 0) (T := fun _ => T)
       (μ := fun _ => μ) (fun p => match p with
         | .inl p => p.elim0
@@ -73,24 +73,24 @@ theorem typed_deepS (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fin 0 → C
 
 /-- Each closed codec of the family is typed. -/
 theorem Closed.typed_deep (n : Nat) : (deepClosed n).Typed α :=
-  fun i => match i with | ⟨0, _⟩ => typed_deepS _ _ n _ _
+  fun i => match i with | ⟨0, _⟩ => typed_deepS _ n _ _
 
 /-- Each term of the family writes what the index says, at every environment: it names no entry. -/
-theorem deepS_e (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fin 0 → Codec) :
+theorem deepS_e (τ : (s : Bool) → Alg.TableAt dynSig s) :
     ∀ (n : Nat) {w k : Nat} (ρw : Fin w → Codec) (ρk : Fin k → Codec),
-      (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) 0 κ) (deepS n) ρw ρk).e (deepV n) =
+      (Alg.SFlat.interp (Alg.Scoped.TStep τ) (deepS n) ρw ρk).e (deepV n) =
         some (deepA n)
   | 0, _, _, _, _ => rfl
   | n + 1, _, _, ρw, _ => by
-    show (arrayCodec (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) 0 κ) (deepS n) ρw ρw)).e
+    show (arrayCodec (Alg.SFlat.interp (Alg.Scoped.TStep τ) (deepS n) ρw ρw)).e
       (.arr [deepV n]) = some (.l [deepA n])
     refine (arrayCodec_f _ _ [deepV n]).trans ?_
-    have h := deepS_e τ κ n ρw ρw
+    have h := deepS_e τ n ρw ρw
     simp only [traverse, orient_rows] at h ⊢; rw [h]; rfl
 
 /-- Each closed codec of the family writes what the index says. -/
 theorem Closed.deep_e (n : Nat) : ((deepClosed n).meaning α).e (deepV n) = some (deepA n) :=
-  (Closed.one_fix α (deepS n) .host (deepV n)).trans (deepS_e _ _ n _ _)
+  (Closed.one_fix α (deepS n) .host (deepV n)).trans (deepS_e _ n _ _)
 
 /-- **The claim the calculus cannot make, over a closed codec.** At every bound, a typed closed
     codec, a value it writes, and an attribute the store refuses. -/

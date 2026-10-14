@@ -48,22 +48,19 @@ def TOp.rule : (o : TOp B) → (o.Pos → Mean.C B) → (o.Pos → Mean.V (B := 
   | .union _, _, T, μ => some (HUnion (List.ofFn T), unanimous (List.ofFn μ))
 
 section Term
-variable {c : Nat} (κ : Fin c → Mean.C B)
 
 /-- **The judgement** over a term of a scope: an entry reads its held set from its codec. -/
-inductive Typed : {w k : Nat} → (Fin w → Mean.C B) → (Fin k → Mean.C B) → Term B c w k →
+inductive Typed : {w k : Nat} → (Fin w → Mean.C B) → (Fin k → Mean.C B) → Term B w k →
     (Mean.V (B := B) → Prop) → Option (Mean.Mem (B := B)) → Prop where
   | ref {w k : Nat} {ρw : Fin w → Mean.C B} {ρk : Fin k → Mean.C B} (i : Fin k) :
       Typed ρw ρk (.leaf i) (ρk i).T (ρk i).μ
-  | const {w k : Nat} {ρw : Fin w → Mean.C B} {ρk : Fin k → Mean.C B} (j : Fin c) :
-      Typed ρw ρk (.node (.inr j) Empty.elim) (κ j).T (κ j).μ
   | node {w k : Nat} {ρw : Fin w → Mean.C B} {ρk : Fin k → Mean.C B} {o : TOp B}
-      {args : (p : o.Pos) → Term B c ((TOp.kind o).w w) ((TOp.kind o).k w k)}
+      {args : (p : o.Pos) → Term B ((TOp.kind o).w w) ((TOp.kind o).k w k)}
       {T : o.Pos → Mean.V (B := B) → Prop} {μ : o.Pos → Option (Mean.Mem (B := B))} {r}
       (h : ∀ p, Typed ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk) (args p) (T p) (μ p))
-      (hr : TOp.rule τ o (fun p => SFlat.interp (CStep (TStep τ) c κ) (args p)
+      (hr : TOp.rule τ o (fun p => SFlat.interp (TStep τ) (args p)
         ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk)) T μ = some r) :
-      Typed ρw ρk (.node (.inl o) args) r.1 r.2
+      Typed ρw ρk (.node o args) r.1 r.2
 
 /-! ## Obligations -/
 
@@ -74,12 +71,11 @@ def TOp.obl : (o : TOp B) → (o.Pos → Mean.C B) → Prop
   | _, _ => True
 
 /-- **The obligations of a scope term**: the obligation of each operation, at its positions. -/
-def Obligations : {w k : Nat} → (Fin w → Mean.C B) → (Fin k → Mean.C B) → Term B c w k → Prop
+def Obligations : {w k : Nat} → (Fin w → Mean.C B) → (Fin k → Mean.C B) → Term B w k → Prop
   | _, _, _, _, .leaf _ => True
-  | _, _, _, _, .node (.inr _) _ => True
-  | _, _, ρw, ρk, .node (.inl o) args =>
+  | _, _, ρw, ρk, .node o args =>
       (∀ p, Obligations ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk) (args p)) ∧
-        TOp.obl τ o fun p => SFlat.interp (CStep (TStep τ) c κ) (args p)
+        TOp.obl τ o fun p => SFlat.interp (TStep τ) (args p)
           ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk)
 
 /-! ## The law of each operation -/
@@ -144,14 +140,13 @@ theorem TOp.lawful {o : TOp B} {a : o.Pos → Mean.C B} {a' : o.Pos → Mean.C B
 /-! ## Soundness -/
 
 /-- **Soundness of a scope term**: a typed term that meets its obligations at lawful codecs is lawful. -/
-theorem sound_term (hκ : ∀ j, Lawful Mean.mem (κ j)) {w k : Nat} {ρw' : Fin w → Mean.C B}
-    {ρk' : Fin k → Mean.C B} {t : Term B c w k} {T μ} (h : Typed τ κ ρw' ρk' t T μ) :
+theorem sound_term {w k : Nat} {ρw' : Fin w → Mean.C B}
+    {ρk' : Fin k → Mean.C B} {t : Term B w k} {T μ} (h : Typed τ ρw' ρk' t T μ) :
     ∀ {ρw : Fin w → Mean.C B} {ρk : Fin k → Mean.C B}, (∀ j, Lawful Mean.mem (ρw j)) →
-      (∀ j, Lawful Mean.mem (ρk j)) → Obligations τ κ ρw ρk t →
-      Lawful Mean.mem (SFlat.interp (CStep (TStep τ) c κ) t ρw ρk) := by
+      (∀ j, Lawful Mean.mem (ρk j)) → Obligations τ ρw ρk t →
+      Lawful Mean.mem (SFlat.interp (TStep τ) t ρw ρk) := by
   induction h with
   | ref i => exact fun _ hk _ => hk i
-  | const j => exact fun _ _ _ => hκ j
   | node _ hr ih =>
     intro ρw ρk hw hk hob
     exact TOp.lawful τ hr (fun p => ih p (Kind.envW_all hw _) (Kind.envK_all hw hk _) (hob.1 p))
@@ -163,7 +158,7 @@ end Term
 
 /-- The stages of the normal form of the scope of a closed codec. -/
 abbrev Closed.stage {N : Nat} (d : Closed B N) : Nat → Fin N → Mean.C B :=
-  sysStage (sysB (CStep (TStep τ) 0 Fin.elim0) (nf (cSig (TSig B) 0) d))
+  sysStage (sysB (TStep τ) (nf (TSig B) d))
 
 /-- The solution of the scope of a closed codec. -/
 abbrev Closed.top {N : Nat} (d : Closed B N) : Fin N → Mean.C B :=
@@ -171,13 +166,13 @@ abbrev Closed.top {N : Nat} (d : Closed B N) : Fin N → Mean.C B :=
 
 /-- **A typed closed codec**: each entry is typed at the solution of the scope. -/
 def Closed.Typed {N : Nat} (d : Closed B N) : Prop :=
-  ∀ i, ∃ T μ, Scoped.Typed τ Fin.elim0 (Closed.top τ d)
+  ∀ i, ∃ T μ, Scoped.Typed τ (Closed.top τ d)
     (fun j => Closed.top τ d (Fin.castLE (Nat.le_of_lt i.isLt) j)) (d i) T μ
 
 /-- **The obligations of a closed codec**: each entry meets them at each stage after a lawful stage. -/
 def Closed.Obligations {N : Nat} (d : Closed B N) : Prop :=
   ∀ k, (∀ j, Lawful Mean.mem (Closed.stage τ d k j)) →
-    ∀ i, Scoped.Obligations τ Fin.elim0 (Closed.stage τ d k)
+    ∀ i, Scoped.Obligations τ (Closed.stage τ d k)
       (fun j => Closed.stage τ d (k + 1) (Fin.castLE (Nat.le_of_lt i.isLt) j)) (d i)
 
 /-- **The stages of a typed closed codec are lawful**, where its obligations hold: each stage is
@@ -192,14 +187,14 @@ theorem Closed.stage_lawful {N : Nat} (d : Closed B N) (hty : Closed.Typed τ d)
     induction i using Nat.strong_induction_on with
     | _ i ihi =>
       obtain ⟨T, μ, ht⟩ := hty ⟨i, hi⟩
-      have e := interp_nf (R := CStep (TStep τ) 0 Fin.elim0) d (Closed.stage τ d k) ⟨i, hi⟩
+      have e := interp_nf (R := TStep τ) d (Closed.stage τ d k) ⟨i, hi⟩
       exact (congrArg (Lawful Mean.mem) e).mpr <|
-        sound_term τ _ (fun j => j.elim0) ht ih (fun j => ihi j.val j.isLt _) (hob k ih ⟨i, hi⟩)
+        sound_term τ ht ih (fun j => ihi j.val j.isLt _) (hob k ih ⟨i, hi⟩)
 
 /-- **Soundness of a closed codec**: a typed closed codec that meets its obligations is lawful. -/
 theorem Closed.sound {N : Nat} (d : Closed B N) (hty : Closed.Typed τ d)
     (hob : Closed.Obligations τ d) : ∀ i, Lawful Mean.mem (d.sol (TStep τ) Mean.d i) :=
-  lawful_strat Mean.d_pos (CStep.lawful (TStep_lawful τ) 0 Fin.elim0) d
+  lawful_strat Mean.d_pos (TStep_lawful τ) d
     (Closed.stage_lawful τ d hty hob)
 
 /-- **The meaning of a typed closed codec that meets its obligations is lawful.** -/

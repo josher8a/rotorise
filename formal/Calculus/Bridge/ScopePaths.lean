@@ -349,7 +349,7 @@ theorem pathKindC_reads_no_closure (α : Table) :
 
 /-! ## Vectors -/
 
-private abbrev one (t : Scoped.Term 0 1 0) : Closed :=
+private abbrev one (t : Scoped.Term 1 0) : Closed :=
   ⟨1, (fun i => match i with | ⟨0, _⟩ => t), 0⟩
 
 private abbrev itemM : Closed := one (Scoped.Term.object (Scoped.Body.mk {"m"} (fun _ =>
@@ -365,7 +365,7 @@ private abbrev itemM : Closed := one (Scoped.Term.object (Scoped.Body.mk {"m"} (
 example : PathRowsC itemM [([.name "m", .name "only"], .someVariants),
     ([.name "m", .name "zz"], .vacant), ([.name "m", .name "tag", .name "x"], .vacant)] := kernel_rfl%
 
-private abbrev two (k v : String) (tk tv : Scoped.Term 0 1 1) : Closed :=
+private abbrev two (k v : String) (tk tv : Scoped.Term 1 1) : Closed :=
   one (Scoped.Term.object (Scoped.Body.mk {k, v} (fun x => if x.1 = k then
     Scoped.ObjectSlot.req tk else Scoped.ObjectSlot.req tv) none))
 private abbrev φA : Closed := one (Scoped.Term.object (Scoped.Body.mk {"tag"} (fun _ =>
