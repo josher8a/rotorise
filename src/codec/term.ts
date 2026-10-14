@@ -375,6 +375,33 @@ export const member = (t: Term): AttributeName | undefined => {
     }
 }
 
+/**
+ * **The member that a set element stores**, read at the node that each `ref` names. The type gates
+ * `.set()` on the attribute of the element, and the attribute of a scope entry is the attribute of
+ * the definition that the entry names, so the run time reads the same node. A stored set holds no
+ * recursion, so a node that the read already passed answers nothing.
+ */
+export const elementMember = (
+    t: Term,
+    passed: ReadonlySet<Term> = new Set(),
+): AttributeName | undefined => {
+    const at = resolvedTerm(t)
+    if (at === undefined || passed.has(at)) return undefined
+    const inside = new Set([...passed, at])
+    switch (at.kind) {
+        case 'held':
+        case 'refine':
+        case 'legacy':
+            return elementMember(at.inner, inside)
+        case 'union':
+            return unanimous(
+                at.options.map((one) => elementMember(one, inside)),
+            )
+        default:
+            return member(at)
+    }
+}
+
 /* ── occupancy ────────────────────────────────────────────────────────────────────────── */
 
 /** A ground base's value slot. `decimal` is held as text, which is why it lands on `string`. */
@@ -811,19 +838,23 @@ export const literalAlternatives = (t: Term): Alternatives | undefined => {
 }
 
 /**
- * **The term that a chain of `ref`s resolves to**, or nothing where a `ref` has no target.
+ * **The node that a term names**: the term itself, or the end of its chain of `ref`s.
  *
- * The emitter prints a `ref` that closes no cycle as its target, so the model reads a literal behind
- * a `ref` as the literal. Each reader of a literal or a tag reads through the chain here, and a chain
- * that returns to a `ref` it already passed resolves to nothing.
+ * The emitter prints a `ref` that closes no cycle as its target, so the model reads the node behind
+ * a `ref` as the node. Each former that inspects an argument, and each reader of a literal or a tag,
+ * reads the node here. A `ref` that no scope binds yet is its own node, so a caller reads a node of
+ * kind `ref` as a name that waits for its scope. A chain that returns to a `ref` it already passed
+ * names no node.
  */
-const resolvedTerm = (t: Term): Term | undefined => {
+export const resolvedTerm = (t: Term): Term | undefined => {
     const passed = new Set<Term>()
-    let at: Term | undefined = t
-    while (at?.kind === 'ref') {
+    let at: Term = t
+    while (at.kind === 'ref') {
         if (passed.has(at)) return undefined
         passed.add(at)
-        at = targetOf(at)
+        const target = targetOf(at)
+        if (target === undefined) return at
+        at = target
     }
     return at
 }
@@ -966,6 +997,17 @@ export const usedTargetOf = (t: Term & { readonly kind: 'ref' }): Term => {
             `ref('${t.slot.name}') is bound by no scope yet`,
         )
     return target
+}
+
+/**
+ * **A check that reads through each `ref` of the terms runs where each name is bound.** The check
+ * runs now where the terms reach no unbound `ref`, and otherwise waits for each scope that binds
+ * a `ref` of the terms. The scope runs the check after its guard.
+ */
+export const whenBound = (terms: readonly Term[], check: () => void): void => {
+    const waitsOn = unboundRefs(terms)
+    if (waitsOn.size === 0) check()
+    for (const slot of waitsOn) slot.waiting.push(check)
 }
 
 /**

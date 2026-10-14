@@ -201,10 +201,9 @@ type Slices = {
  * emitter prints the entry as its body and the wrap draws no number, so a seed builds the same pool
  * in both spellings, and every emitted file must come out the same.
  *
- * `never` keeps its plain spelling. The host refuses a `never` that a row always writes, at a list
- * position, as a product factor, and under `nullable`, by the declared term. Those refusals are the
- * host's own rules, and the model types each such term. `undeclared` keeps its plain spelling,
- * because a scope refuses a `ref` to a name that the scope does not declare.
+ * `never` keeps its plain spelling, because `nullable` reads the declared term: `nullable(never)`
+ * is `NULL`, and `nullable` of a `ref` to `never` is a union with `NULL`. `undeclared` keeps its
+ * plain spelling, because a scope refuses a `ref` to a name that the scope does not declare.
  */
 let thunked = false
 const spelled = (codec: unknown): AnyCodec =>
@@ -1248,13 +1247,13 @@ describe('the generated pool, against the model', () => {
         }).toMatchInlineSnapshot(`
           {
             "dropped": {
-              "a constructor refused the draw": 68,
+              "a constructor refused the draw": 69,
               "path: a wall reaches a cycle: a wall reads its term at any depth, so the term has no scoped form": 1,
               "path: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 70,
               "separation: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 3,
               "slice term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 17,
-              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1590,
-              "term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 604,
+              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1566,
+              "term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 584,
             },
             "seeds": [
               {
@@ -1273,16 +1272,16 @@ describe('the generated pool, against the model', () => {
               },
               {
                 "assignments": 26,
-                "clauses": 3465,
-                "codecsPathed": 172,
-                "disjoints": 1037,
-                "fills": 7,
+                "clauses": 3285,
+                "codecsPathed": 171,
+                "disjoints": 1048,
+                "fills": 6,
                 "guards": 0,
-                "pairs": 1037,
-                "paths": 1742,
+                "pairs": 1048,
+                "paths": 1740,
                 "seed": 1,
-                "separations": 1030,
-                "slices": 71,
+                "separations": 1042,
+                "slices": 68,
                 "whenPaths": 5357,
               },
               {
@@ -1422,7 +1421,7 @@ describe('the generated pool, against the model', () => {
      */
     it('states the guard column of each pair of two fills in the kernel, and refuses a pair over an open fragment', () => {
         const fills = pairs.filter((p) => p.fills)
-        expect(fills).toHaveLength(23)
+        expect(fills).toHaveLength(22)
         expect(fills.filter((p) => pairGuardRefusal(p) !== undefined)).toEqual(
             [],
         )
