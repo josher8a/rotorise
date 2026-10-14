@@ -291,7 +291,8 @@ one is a binary literal. One example:
 **Effect.** The result type of exclude is wider than the value. Every value fits the type, and a
 member that the run time dropped stays in the type.
 
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds the 25 ids.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 23 such
+ids, measured 2026-10-14.
 
 ---
 
@@ -311,3 +312,33 @@ The same list builds on both sides when a ref names the never position. Measured
 **Effect.** A list that holds no value builds when a ref names its never position.
 
 **Pin.** The list spec pins the direct refusal. No test pins the spelling through a ref.
+
+---
+
+## Known: the type refuses a slice of a union that holds a ref option
+
+**Observation.** The type of a `ref(...)` carries no map attribute. So the type of a union with a
+`ref(...)` option can hold an attribute that is not a map, and the type refuses each extract and
+exclude on that union. The run time reads the option through the `ref`, and accepts the call.
+Measured 2026-10-14 on the working tree over e77cbb9, with the type bridge and a throwaway probe,
+tsc for the type and vite-node for the run time:
+
+    const h1 = object({ a: union([string.set('a', 'b'), nullValue]), b: decimal('1', '2.5') })
+    const sc = scope({ k0: object({ m: optional(ref('k1')) }), k1: union([h1, ref('k0')]) })
+    sc.k1.extract({ b: decimal('1') })     sc.k1.exclude({ b: decimal('1') })
+    sc.k1.extract({ b: decimal('2.5') })   sc.k1.exclude({ b: decimal('2.5') })
+      type: TS2349, [union] this union can hold an attribute that is not a map
+      runtime: each call builds
+
+The decimal literal is not the cause. The probe also refuses `U.extract({ b: decimal('1') })` and
+`U.extract({ a: nullValue })` over an acyclic `ref` option, with
+`scope({ O: object({ m: string }), U: union([h1, ref('O')]) })`.
+
+**Effect.** A caller cannot slice a union that holds a `ref(...)` option where the run time can.
+Each case refuses: none gives a green typecheck and a wrong member set.
+
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds the four
+ids of the pool: `call|accept|e5e2627de7|extract({ b: decimal("1") })`,
+`call|accept|e5e2627de7|exclude({ b: decimal("1") })`,
+`call|accept|e5e2627de7|extract({ b: decimal("2.5") })` and
+`call|accept|e5e2627de7|exclude({ b: decimal("2.5") })`.

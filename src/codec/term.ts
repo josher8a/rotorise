@@ -1511,6 +1511,17 @@ export const componentsOf = (roots: readonly Term[]): readonly Component[] => {
 }
 
 /**
+ * **The entry on a cycle that the terms reach**, read through each `ref` that has a target, or
+ * nothing where the terms reach no cycle. A cycle of the term graph passes through a `ref`, and
+ * the name of that `ref` names the entry.
+ */
+export const cycleEntryOf = (roots: readonly Term[]): string | undefined =>
+    componentsOf(roots)
+        .flatMap(({ members }) => [...members])
+        .find((m): m is Term & { readonly kind: 'ref' } => m.kind === 'ref')
+        ?.slot.name
+
+/**
  * **The order of the entries of one component**: an entry names an earlier entry above every
  * guard, and any entry below a guard. A container is a guard. A wall reads its terms at any depth,
  * so an entry below a wall names no entry of its own component. The order is the reason of a

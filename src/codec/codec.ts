@@ -33,6 +33,7 @@ import {
     termOf,
 } from './denote'
 import type {
+    CycleEntryOf,
     DecodeFrame,
     DecodeTerm,
     FirstFrame,
@@ -40,6 +41,7 @@ import type {
     KindOfFrames,
     NarrowFrames,
     OffersAt,
+    ScopeWallCycle,
     StepFrames,
 } from './pathModel'
 import {
@@ -63,6 +65,7 @@ import {
     alwaysWritten,
     clauseForm,
     clauseLiteralsOf,
+    cycleEntryOf,
     literalAlternatives,
     member as memberOf,
     openRefusal,
@@ -2208,6 +2211,40 @@ const withMissing = <const C extends AnyCodec>(
 }
 
 /**
+ * **A wall reaches no cycle.** A wall is a `held` or a `withLegacyRead` with an older reader. A
+ * wall reads its argument through caller code at any depth. So a wall that reads an entry on a
+ * cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes
+ * with constants. With no such wall, the meaning of a closed codec is one flat guarded system with
+ * a unique solution. A wall over an acyclic entry stays legal: the emitter prints an acyclic `ref`
+ * in place.
+ *
+ * The refusal runs where the refs of the argument are bound, and waits for the {@link scope} that
+ * binds a ref of the argument otherwise. The scope runs its own guard first, so a wall on a cycle
+ * keeps the refusal of the guard.
+ */
+const refuseWallOverCycle = (wall: string, args: readonly Term[]): void => {
+    const check = (): void => {
+        const entry = cycleEntryOf(args)
+        if (entry !== undefined)
+            throw new CodecError(
+                `\`${wall}\` reads '${entry}', an entry on a cycle. A wall reads its argument through caller code at any depth, so a wall that reads an entry on a cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes with constants. Put the wall over a codec that reaches no cycle`,
+            )
+    }
+    const waitsOn = unboundRefs(args)
+    if (waitsOn.size === 0) check()
+    for (const slot of waitsOn) slot.waiting.push(check)
+}
+
+/**
+ * The refusal in the type of a wall argument whose term reaches an entry on a cycle. The overload
+ * of `withLegacyRead` with a stand-in carries no refusal, because a stand-in alone builds no wall.
+ * So an older reader beside a stand-in refuses at run time alone.
+ */
+type WallOver<W extends string, C> = [CycleEntryOf<TermOf<C>>] extends [never]
+    ? unknown
+    : ErrorMessage<`\`${W}\` reads '${CycleEntryOf<TermOf<C>> & string}', an entry on a cycle. A wall reaches no cycle`>
+
+/**
  * The same stored attribute, held as something else.
  *
  * Two words this library keeps apart: an attribute is **stored** as `S`, `N`, `SS` — and it is
@@ -2285,8 +2322,8 @@ export const held = <
     const C extends AnyCodec,
     const O extends AnyCodec | StandardSchemaV1,
 >(
-    inner: C,
-    outer: O,
+    inner: C & WallOver<'held', C>,
+    outer: O & WallOver<'held', O>,
     adapt: {
         /**
          * The value, as the inner codec holds it. Runs on the way to the table, on a value that
@@ -2324,6 +2361,8 @@ export const held = <
     > &
     Free<FreeOf<C> | FreeOf<O>> => {
     const side = heldSide(outer)
+    const innerTerm = termOf(inner as unknown as AnyCodec)
+    refuseWallOverCycle('held', [innerTerm, side.term])
     /**
      * **A half that cannot convert returns a `CodecError`**, and the signature says so. A refusal
      * is a value here, as it is everywhere else on this surface, so nothing about declining a
@@ -2344,7 +2383,7 @@ export const held = <
      */
     return codecOfTerm<HeldOf<O>, AttributeOf<C>>({
         kind: 'held',
-        inner: termOf(inner as unknown as AnyCodec),
+        inner: innerTerm,
         outer: side.term,
         f: (value: HeldOf<O>) =>
             side.admit(value, 'encode') ?? adapt.encode(value),
@@ -2540,7 +2579,7 @@ export type WithLegacyReadOptions<C extends AnyCodec> = {
  * absence belongs to an object map and no attribute codec can read an absent attribute.
  */
 export function withLegacyRead<const C extends AnyCodec>(options: {
-    readonly current: C
+    readonly current: C & WallOver<'withLegacyRead', C>
     readonly older: Reader<Decoded<C>>
     readonly whenMissing?: never
 }): AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue> &
@@ -2559,6 +2598,7 @@ export function withLegacyRead<const C extends AnyCodec>(
     | AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
     | MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> {
     const { current, older } = options
+    if (older) refuseWallOverCycle('withLegacyRead', [termOf(current)])
     const currentCodec = current as unknown as AttributeCodec<
         Decoded<C>,
         AttributeOf<C> & AttributeValue
@@ -2620,6 +2660,15 @@ type ScopeNamed<Defs> = {
         : ErrorMessage<`[scope] a ref names '${Exclude<FreeOf<Defs[K]>, keyof Defs> & string}', which this scope does not declare`>
 }
 
+/** A refusal on each definition that holds a wall over an entry on a cycle of this scope. */
+type ScopeWalls<Defs> = {
+    readonly [K in keyof Defs]: [
+        ScopeWallCycle<ScopeTerms<Defs>, TermOf<Defs[K]>>,
+    ] extends [never]
+        ? unknown
+        : ErrorMessage<`[scope] a wall in '${K & string}' reads '${ScopeWallCycle<ScopeTerms<Defs>, TermOf<Defs[K]>> & string}', an entry on a cycle. A wall reaches no cycle`>
+}
+
 /**
  * A reference of a {@link scope}. The `ref` names an entry of the scope that holds it, and reads as
  * the codec of that entry.
@@ -2653,7 +2702,7 @@ export function ref(name: string): unknown {
  * ```
  */
 export function scope<const Defs extends Readonly<Record<string, AnyCodec>>>(
-    defs: Defs & ScopeNamed<Defs>,
+    defs: Defs & ScopeNamed<Defs> & ScopeWalls<Defs>,
 ): ScopeOf<Defs>
 export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
     const terms = Object.fromEntries(

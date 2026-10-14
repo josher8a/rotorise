@@ -112,7 +112,7 @@ import {
 } from '../lean'
 import { CodecError, orThrow } from '../result'
 import type { RefSlot, Term } from '../term'
-import { RecursionRefused } from '../term'
+import { cycleEntryOf, RecursionRefused } from '../term'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
@@ -2086,7 +2086,8 @@ describe('union resolution, model against library', () => {
  * writes `A` alone: the gate reads the first answer and refuses the second. `nested_A` puts the
  * gate under an object. `throws` and `undefined_reader` give no answer. The corpus adds its three
  * codecs with an older reader. `older_o` is the generated pool's older reader, which answers `'o'`
- * at every attribute, put over each codec of the corpus.
+ * at every attribute, put over each codec of the corpus that reaches no cycle. A wall reaches no
+ * cycle, so the host refuses an older reader over a codec on a cycle.
  */
 const legacyCodecs = (): readonly (readonly [string, AnyCodec])[] => {
     const literalA = erase(
@@ -2130,18 +2131,20 @@ const legacyCodecs = (): readonly (readonly [string, AnyCodec])[] => {
         ['migrated_string', migratedString],
         ['shared_legacy', sharedLegacy],
         ['legacy_decimal_rest_number', legacyDecimalRestNumber],
-        ...sampleVectors.map(
-            (v) =>
-                [
-                    `older_o_${v.name}`,
-                    erase(
-                        withLegacyRead({
-                            current: v.codec as never,
-                            older: { decode: () => 'o' as never },
-                        }),
-                    ),
-                ] as const,
-        ),
+        ...sampleVectors
+            .filter((v) => cycleEntryOf([v.codec.def]) === undefined)
+            .map(
+                (v) =>
+                    [
+                        `older_o_${v.name}`,
+                        erase(
+                            withLegacyRead({
+                                current: v.codec as never,
+                                older: { decode: () => 'o' as never },
+                            }),
+                        ),
+                    ] as const,
+            ),
     ]
 }
 
@@ -2226,7 +2229,7 @@ describe('the legacy read gate, against the model', () => {
 
     it('emits them for the gate to elaborate', () => {
         const reads = legacyReads()
-        expect(reads.length).toBe(2400)
+        expect(reads.length).toBe(2200)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.legacyreads.lean'),

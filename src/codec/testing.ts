@@ -52,7 +52,12 @@ import type { AnyCodec, AttributeCodec, ItemCodec, Rng } from './codec'
 import { CodecError, codecOfTerm, failed, opaque, orThrow } from './codec'
 import { accepts, holds } from './denote'
 import type { Term } from './term'
-import { isOpaqueSugar, member as termMember, usedTargetOf } from './term'
+import {
+    componentsOf,
+    isOpaqueSugar,
+    member as termMember,
+    usedTargetOf,
+} from './term'
 
 /** mulberry32 — small, fast, and good enough to search a value space. */
 export const rngFrom = (seed: number): Rng => {
@@ -964,6 +969,17 @@ const samplers = new WeakMap<object, (rng: Rng, size: number) => unknown>()
  */
 let readsGenerated = 0
 
+/** Whether each `ref` lies on a cycle. A closed codec binds each `ref` one time. */
+const onCycle = new WeakMap<Term, boolean>()
+const closesCycle = (t: Term): boolean => {
+    let known = onCycle.get(t)
+    if (known === undefined) {
+        known = componentsOf([t]).some(({ members }) => members.has(t))
+        onCycle.set(t, known)
+    }
+    return known
+}
+
 /**
  * A value the codec can carry.
  *
@@ -1109,9 +1125,15 @@ export const arbitraryOf = (
         case 'legacy':
             return arbitraryOf(codecOfTerm(def.inner), rng, size)
         case 'ref':
-            // one level shallower each time, which is what stops a recursive entity generating
-            // forever: the optional attribute that recurses is dropped once the budget runs out
-            return arbitraryOf(codecOfTerm(usedTargetOf(def)), rng, size - 1)
+            // a `ref` that closes a cycle goes one level shallower each time, which is what stops a
+            // recursive entity generating forever: the optional attribute that recurses is dropped
+            // once the budget runs out. Any other `ref` spells its target in place, so it draws as
+            // its target draws
+            return arbitraryOf(
+                codecOfTerm(usedTargetOf(def)),
+                rng,
+                closesCycle(def) ? size - 1 : size,
+            )
         // the one term with no inhabitant, so a property quantified over it has no input. A throw
         // and not a value: the switch's return type admits `undefined`, and falling through would
         // hand `undefined` to a round trip as though it were a value of this codec

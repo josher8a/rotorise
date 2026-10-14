@@ -425,3 +425,49 @@ describe('a refusal inside a nested scope', () => {
         ).toThrow(/holds an adapter/)
     })
 })
+
+/**
+ * **A wall reaches no cycle.** A `held` or a `withLegacyRead` with an older reader reads its
+ * argument through caller code at any depth. A wall over an entry on a cycle makes the flat system
+ * non-contractive, so the host refuses the wall. A wall over an acyclic entry stays legal. The type
+ * reads the cycle from the term of the entry, so each spelling below refuses in the type and at
+ * run time.
+ */
+describe('a wall reaches no cycle', () => {
+    const same = { encode: (v: string) => v, decode: (v: unknown) => String(v) }
+    const older = { decode: () => 'o' as never }
+    const { Json } = scope({ Json: union([string, array(ref('Json'))]) })
+
+    it('refuses a wall over an entry on a cycle, in the type and at construction', () => {
+        // @ts-expect-error a wall reaches no cycle, and 'Json' is on a cycle
+        expect(() => held(Json, string, same)).toThrow(
+            /`held` reads 'Json', an entry on a cycle/,
+        )
+        // @ts-expect-error a wall reaches no cycle, and 'Json' is on a cycle
+        expect(() => withLegacyRead({ current: Json, older })).toThrow(
+            /`withLegacyRead` reads 'Json', an entry on a cycle/,
+        )
+    })
+
+    it('refuses a wall over an entry on a cycle of its own scope, in the type and where the scope closes', () => {
+        expect(() =>
+            scope({
+                T: object({ kids: array(ref('T')) }),
+                // @ts-expect-error a wall reaches no cycle, and 'T' is on a cycle
+                W: held(ref('T'), string, same),
+            }),
+        ).toThrow(/`held` reads 'T', an entry on a cycle/)
+    })
+
+    it('keeps a wall over an acyclic entry', () => {
+        const { Text, When } = scope({
+            Text: string,
+            When: held(ref('Text'), string, same),
+        })
+        expect(When.unsafeEncode('x')).toEqual({ S: 'x' })
+        expect(held(Text, string, same).unsafeEncode('x')).toEqual({ S: 'x' })
+        expect(
+            withLegacyRead({ current: Text, older }).unsafeEncode('x'),
+        ).toEqual({ S: 'x' })
+    })
+})
