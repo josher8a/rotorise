@@ -614,7 +614,8 @@ extendRead(c, r) : adapted(T, μ)
 \end{definition}
 
 A reference \texttt{ref\ i} names the entry \texttt{i} of its scope, and reads the held set and the member of the codec of
-that entry. A scope is a system of entries, and its meaning is the solution of the system. The guard is a
+that entry. A scope is a system of entries, and its meaning is the solution of the system. A closed codec is one
+flat guarded scope, and its meaning is the solution of that scope. The guard is a
 condition on the graph of the scope. Each entry occurs below a list or an object, and below no \texttt{held} and no
 older reader. The guard refuses an entry whose body is \texttt{ref\ 0}, and an entry whose body is
 \texttt{union(ref\ 0,\ string)}. It also refuses a \texttt{held} between an entry and its reference, because the

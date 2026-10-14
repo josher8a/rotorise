@@ -15,11 +15,11 @@ namespace Calculus
 
 /-- **One half of the compatibility of two closed codecs**, at the orientation. -/
 def Closed.compat (o : Alg.Orient) (x y : Closed) : Bool :=
-  Alg.Scoped.compat o x.scopes x.root y.scopes y.root
+  Alg.Scoped.compat o x.scope x.root y.scope y.root
 
 /-- **The compatibility of two closed codecs**: both halves. -/
 def Closed.compatPair (x y : Closed) : Bool :=
-  Alg.Scoped.compatPair x.scopes x.root y.scopes y.root
+  Alg.Scoped.compatPair x.scope x.root y.scope y.root
 
 /-- **The decision is sound**: the two meanings of an accepted pair agree at the host and at the
     dual, at each caller table. -/

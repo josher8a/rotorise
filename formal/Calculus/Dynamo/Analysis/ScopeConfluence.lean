@@ -69,7 +69,7 @@ theorem Closed.held_violates_R :
 
 /-- The control of the control: `oneHeldClosed` is not held-free, so `Closed.confluence_W` does
     not apply to it. -/
-theorem Closed.not_HF_oneHeld : ¬ oneHeldClosed.HF := fun h => nomatch h.2 0
+theorem Closed.not_HF_oneHeld : ¬ oneHeldClosed.HF := fun h => nomatch h ⟨0, Nat.one_pos⟩
 
 /-- **The views do not certify the constant adapter beside `string`.** Its caller side is
     `string`, so the caller-side views overlap. -/

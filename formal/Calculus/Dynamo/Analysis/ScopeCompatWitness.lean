@@ -70,26 +70,26 @@ theorem Scoped.typed_arrayPrim {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynS
 /-- **A closed `held` of two primitives is typed.** -/
 theorem Closed.typed_heldPrim (g g' : Ground) (k₀ : DynGen × Bool) (ks : List (DynGen × Bool)) :
     (Closed.one (.held false (.prim g) (.prim g') k₀ ks)).Typed α :=
-  ⟨trivial, fun i => match i with | ⟨0, _⟩ => Scoped.typed_heldPrim _ _ _ _ g g' k₀ ks⟩
+  fun i => match i with | ⟨0, _⟩ => Scoped.typed_heldPrim _ _ _ _ g g' k₀ ks
 
 /-- **A closed `held` of two primitives meets its obligations** where its adapter cancels over the
     codec of the inner primitive. -/
 theorem Closed.obligations_heldPrim (g g' : Ground) (k₀ : DynGen × Bool) (ks : List (DynGen × Bool))
     (h : IsoCancels (groundCodec g) (α.word (k₀ :: ks)).1 (α.word (k₀ :: ks)).2) :
     (Closed.one (.held false (.prim g) (.prim g') k₀ ks)).Obligations α :=
-  ⟨trivial, fun _ _ i => match i with
+  fun _ _ i => match i with
     | ⟨0, _⟩ => ⟨fun p => match p with
         | true => ⟨fun p => p.elim, trivial⟩
-        | false => ⟨fun p => p.elim, trivial⟩, h, trivial⟩⟩
+        | false => ⟨fun p => p.elim, trivial⟩, h, trivial⟩
 
 /-- **A closed array of a primitive is lawful.** -/
 theorem Closed.lawful_arrayPrim (g : Ground) : Lawful ((Closed.one (.array (.prim g))).meaning α) :=
-  Closed.sound ⟨trivial, fun i => match i with | ⟨0, _⟩ => Scoped.typed_arrayPrim _ _ _ _ g⟩
-    ⟨trivial, fun _ _ i => match i with
+  Closed.sound (fun i => match i with | ⟨0, _⟩ => Scoped.typed_arrayPrim _ _ _ _ g)
+    fun _ _ i => match i with
       | ⟨0, _⟩ => ⟨fun p => match p with
           | .inl p => p.elim0
           | .inr (.inl _) => ⟨fun p => p.elim, trivial⟩
-          | .inr (.inr p) => p.elim0, trivial⟩⟩
+          | .inr (.inr p) => p.elim0, trivial⟩
 
 /-- **A schema people write, discharged with no certificate**: both options write `[]` as one
     attribute, so the decision accepts the pair. -/
@@ -243,12 +243,12 @@ theorem Scoped.typed_refineHeldPrim {w k : Nat} (τ : (s : Bool) → Alg.TableAt
 /-- **A restriction of `swapClosed` is lawful**: the refinement keeps the laws of the `held`. -/
 theorem Closed.lawful_swRefine (q : Pred) :
     Lawful ((Closed.one (.refine swapBody q ())).meaning swTable) :=
-  Closed.sound ⟨trivial, fun i => match i with
-      | ⟨0, _⟩ => Scoped.typed_refineHeldPrim _ _ _ _ _ _ _ _ q⟩
-    ⟨trivial, fun _ _ i => match i with
+  Closed.sound (fun i => match i with
+      | ⟨0, _⟩ => Scoped.typed_refineHeldPrim _ _ _ _ _ _ _ _ q)
+    fun _ _ i => match i with
       | ⟨0, _⟩ => ⟨fun _ => ⟨fun p => match p with
           | true => ⟨fun p => p.elim, trivial⟩
-          | false => ⟨fun p => p.elim, trivial⟩, Closed.iso_swap, trivial⟩, trivial⟩⟩
+          | false => ⟨fun p => p.elim, trivial⟩, Closed.iso_swap, trivial⟩, trivial⟩
 
 /-- **The two restrictions overlap at `"x"`**: both read the stored `"X"` to `"x"`. -/
 theorem Closed.sw_overlap : (sw1Closed.meaning swTable).p (.s "X") = some (.str "x") ∧

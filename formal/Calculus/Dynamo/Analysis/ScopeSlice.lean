@@ -56,7 +56,7 @@ def slotReq : SlotMode dynSig → Bool
 /-- **The spec of a closed codec**: the body of its root entry is an object, and each declared
     name gives its presence at the caller side and the pin of its term. -/
 def Closed.spec (x : Closed) : Option (MapOf NameSpec) :=
-  match x.scopes.graph x.root with
+  match x.scope.graph x.root with
   | .node (.obj fs md _) a => some ⟨fs, fun k => ⟨slotReq (md k), pinOfG (a (.inl k))⟩⟩
   | _ => none
 
@@ -411,7 +411,7 @@ theorem objAt_of_root {M : Nat} {d : Alg.Scoped.GSys (Alg.tables dynSyn.o α dyn
 
 /-- The spec of a closed codec reads the body of its root entry, an object. -/
 theorem Closed.spec_eq_some {x : Closed} {s : MapOf NameSpec} (h : x.spec = some s) :
-    ∃ fs md w a, x.scopes.graph x.root = .node (.obj fs md w) a ∧
+    ∃ fs md w a, x.scope.graph x.root = .node (.obj fs md w) a ∧
       s = ⟨fs, fun k => ⟨slotReq (md k), pinOfG (a (.inl k))⟩⟩ := by
   unfold Closed.spec at h
   split at h
@@ -423,9 +423,9 @@ theorem Closed.spec_eq_some {x : Closed} {s : MapOf NameSpec} (h : x.spec = some
 /-- **The meaning of a closed codec is the meaning of the body of its root entry.** -/
 theorem Closed.meaning_f_root (x : Closed) (o : Alg.Orient) (v : Value) :
     (x.meaning α).f o v = (Alg.Scoped.mng _ (Alg.Scoped.Closed.toG (Alg.tables dynSyn.o α dynTableA)
-      x.scopes) (x.scopes.graph x.root)).f o v :=
+      x.scope) (x.scope.graph x.root)).f o v :=
   congrFun (congrFun (Alg.Scoped.mng_leaf (S := dynSyn)
-    (Alg.Scoped.Closed.toG (Alg.tables dynSyn.o α dynTableA) x.scopes) x.root) o) v
+    (Alg.Scoped.Closed.toG (Alg.tables dynSyn.o α dynTableA) x.scope) x.root) o) v
 
 /-- **The stored side of the slice.** A kept option reads, at a clause key, only an attribute in
     the alternatives of the clause. -/
@@ -438,7 +438,7 @@ theorem AltClause.admitsC_AdmA {c : AltClause} {x : Closed} (h : c.admitsC x = t
   obtain ⟨hf, rfl⟩ := MapOf.at_eq_some.mp hns
   obtain ⟨w', al, hp, -, hin⟩ := altsSub_inLs hsub
   refine hin _ (inLs_of_pinOfG_dual (α := α)
-    (G := Alg.Scoped.Closed.toG (Alg.tables dynSyn.o α dynTableA) x.scopes) hp ?_)
+    (G := Alg.Scoped.Closed.toG (Alg.tables dynSyn.o α dynTableA) x.scope) hp ?_)
   have h1 : ((x.meaning α).f .dual (.m keys g)).isSome = true := ha
   rw [Closed.meaning_f_root, hg] at h1
   have h2 := (Alg.objAt_isSome.mp (objAt_of_root h1)).2 ⟨k.1, hk⟩
@@ -473,7 +473,7 @@ theorem AltClause.admitsC_Adm {c : AltClause} {x : Closed} (h : c.admitsC x = tr
     · exact Bool.noConfusion hreq
     · exact Bool.noConfusion h3
   refine ⟨hk, hin _ (inLs_of_pinOfG_host
-    (G := Alg.Scoped.Closed.toG (Alg.tables dynSyn.o α dynTableA) x.scopes) hp ?_)⟩
+    (G := Alg.Scoped.Closed.toG (Alg.tables dynSyn.o α dynTableA) x.scope) hp ?_)⟩
   have h2 := hobj.2 ⟨k.1, hk⟩
   have hf' : k.1 ∈ fs := hf
   simp only [Alg.entryCodec, MapOf.at, dif_pos hf', Option.bind_some] at h2
@@ -484,7 +484,7 @@ end Keeps
 /-! ## Vectors -/
 
 private abbrev one (t : Scoped.Term 0 1 0) : Closed :=
-  ⟨1, .snoc (c := 0) (n := 1) .nil (fun i => match i with | ⟨0, _⟩ => t), 0⟩
+  ⟨1, (fun i => match i with | ⟨0, _⟩ => t), 0⟩
 
 /-- **A clause at a numeral keeps the closed option that pins that numeral**, and not an option
     that pins another one. -/

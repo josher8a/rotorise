@@ -6,7 +6,7 @@ import Calculus.Alg.Rows
 # Disjointness over the graph of a closed codec
 
 `Scoped.disjoint` decides that two closed codecs share no datum. The decision reads the flat graph
-of each DAG of scopes, with one row per operation of the left operand. Below a guard, the decision assumes a pair of entries while it compares the two
+of each closed codec, with one row per operation of the left operand. Below a guard, the decision assumes a pair of entries while it compares the two
 bodies. At an unguarded position, the decision unfolds an entry. A fuel bounds the walk, so the
 recursion is structural, and an empty fuel answers `false`.
 
@@ -426,12 +426,13 @@ structure GSys (N : Nat) where
 def mng {N : Nat} (d : GSys τ N) (t : Graph S.sig N) : Mean.C S.sig :=
   t.interp (TStep τ) d.e
 
-/-- **The graph system of a closed codec**: its graph, its solution, and the order of its scopes. -/
+/-- **The graph system of a closed codec**: its graph, the solution of its scope, and the order of
+    its entries. -/
 def Closed.toG {N : Nat} (d : Closed S.sig N) : GSys τ N where
   sys := d.graph
   e := d.sol (TStep τ) Mean.d
-  fix := (dsys_solution Mean.d_pos (TStep_lawful τ) (TStep_wallF τ) d).1
-  noCycle := (DSys.dagGuard d).noCycle
+  fix := (scope_solution Mean.d_pos (TStep_lawful τ) d).1
+  noCycle := noCycle_of_rank (fun i => i.val) (Scope.order d).1
 
 /-- **A step-indexed relation** between two codecs: true at the depth zero, closed downward, and
     read through the maps only. -/
@@ -1299,7 +1300,7 @@ theorem SubLe.termU [TopLaws S] {N : Nat} (dd : GSys τ N) {ad : Fin N → Bool}
 
 omit [Leaf S.sig] [Shapes S] in
 /-- **The entries with no adapter are below the top**, by induction on the depth, and at one depth
-    by induction on the longest walk of unguarded edges, which the DAG of scopes bounds. -/
+    by induction on the longest walk of unguarded edges, which the absence of a cycle bounds. -/
 theorem sub_entries [TopLaws S] {N : Nat} (dd : GSys τ N) (hst : adStable dd.sys = true) :
     ∀ d j, adOf dd.sys j = false → SubLe d (mng τ dd (.leaf j)) := by
   have hstab : ∀ i, adOf dd.sys i = false → Graph.adapts (adOf dd.sys) (dd.sys i) = false := by
@@ -1596,8 +1597,8 @@ variable {S : Syn} [Sem S] (τ : (s : Bool) → TableAt S.sig s) (o : Orient)
 theorem viewSys_noCycle {N : Nat} (d : Closed S.sig N) : ¬ Cycle (TSig S.sig) (viewSys d.graph o) :=
   noCycle_of_rank (fun i => i.val) fun i j h => by
     rcases ulv_viewG d.graph o (d.graph i) h with h | h
-    · exact (DSys.order d).1 i j h
-    · exact (DSys.order d).2 i j h j Relation.ReflTransGen.refl
+    · exact (Scope.order d).1 i j h
+    · exact absurd h (by rw [(Scope.order d).2 i j]; decide)
 
 /-- **The graph system of the view of a closed codec**: its view, and the solution of the view. -/
 def Closed.viewToG {N : Nat} (d : Closed S.sig N) : GSys τ N where
@@ -1967,8 +1968,8 @@ theorem view_entries : ∀ k (i : Fin N),
         intro i hi
         have hT := lem_u d ih (d.graph i) fun j hj => ihm j (by
           rcases hj with hj | hj
-          · have := (DSys.order d).1 i j hj; omega
-          · have := (DSys.order d).2 i j hj j Relation.ReflTransGen.refl; omega)
+          · have := (Scope.order d).1 i j hj; omega
+          · exact absurd hj (by rw [(Scope.order d).2 i j]; decide))
         exact LeK.congr ((Closed.toG τ d).fix i).symm ((Closed.viewToG τ o d).fix i).symm hT
     exact fun i => key (i.val + 1) i (Nat.lt_succ_self _)
 

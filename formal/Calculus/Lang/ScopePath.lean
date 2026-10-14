@@ -4,7 +4,7 @@ import Calculus.Lang.CodecPath
 /-!
 # A path into a closed codec, and narrowing on the graph
 
-A frame of a closed codec is a graph term of its DAG of scopes. One segment reads the slot of a
+A frame of a closed codec is a graph term of its scope. One segment reads the slot of a
 name, the term of a position, the options of a union, and the body of an entry. An entry unfolds
 through the graph of its scope, and the bound of the unfoldings is the count of the entries plus
 the first step. A term that stores one member apart from the container of the segment gives no
@@ -98,7 +98,7 @@ end Frontier
 structure Rooted (B : Sig) where
   /-- The count of the entries. -/
   N : Nat
-  /-- The DAG of scopes. -/
+  /-- The scope. -/
   d : Closed B N
   /-- The root entry. -/
   root : Fin N
@@ -107,7 +107,7 @@ structure Rooted (B : Sig) where
 structure GFrame (B : Sig) where
   /-- The count of the entries. -/
   N : Nat
-  /-- The DAG of scopes. -/
+  /-- The scope. -/
   d : Closed B N
   /-- The term. -/
   t : Graph B N
@@ -307,61 +307,24 @@ theorem HL.inlC {c N : Nat} {κ : Fin c → Mean.C S.sig} (hκ : ∀ j, Lawful M
         rw [e1, funext hσw, funext hσk]
     exact (congrArg (fun a => Lawful Mean.mem (TOp.run τ o a)) (funext e2)).mpr hL
 
-/-- **The stages of the last scope of a typed closed codec are lawful**, where its obligations
-    hold: each stage is lawful by the soundness of the terms at the stage before. -/
-theorem Closed.stage_lawful {c n : Nat} (d : Closed S.sig c) (sc : Scope (TSig S.sig) c n)
-    (hκ : ∀ j, Lawful Mean.mem (d.sol (TStep τ) Mean.d j))
-    (hty : ∀ i, ∃ T μ, Scoped.Typed τ (d.sol (TStep τ) Mean.d) (Closed.top τ d sc)
-      (fun j => Closed.top τ d sc (Fin.castLE (Nat.le_of_lt i.isLt) j)) (sc i) T μ)
-    (hob : ∀ k, (∀ j, Lawful Mean.mem (Closed.stage τ d sc k j)) →
-      ∀ i, Scoped.Obligations τ (d.sol (TStep τ) Mean.d) (Closed.stage τ d sc k)
-        (fun j => Closed.stage τ d sc (k + 1) (Fin.castLE (Nat.le_of_lt i.isLt) j)) (sc i)) :
-    ∀ k i, Lawful Mean.mem (Closed.stage τ d sc k i) := by
-  intro k
-  induction k with
-  | zero => exact fun _ => Lawful.empty
-  | succ k ih =>
-    intro ⟨i, hi⟩
-    induction i using Nat.strong_induction_on with
-    | _ i ihi =>
-      obtain ⟨T, μ, ht⟩ := hty ⟨i, hi⟩
-      have e := interp_nf (R := CStep (TStep τ) c (d.sol (TStep τ) Mean.d)) sc
-        (Closed.stage τ d sc k) ⟨i, hi⟩
-      exact (congrArg (Lawful Mean.mem) e).mpr <|
-        sound_term τ _ hκ ht ih (fun j => ihi j.val j.isLt _) (hob k ih ⟨i, hi⟩)
-
 /-- **Each node of a typed closed codec that meets its obligations is lawful**, at the solution. -/
-theorem Closed.lawfulNodes : ∀ {N : Nat} (d : Closed S.sig N), Closed.Typed τ d →
-    Closed.Obligations τ d → ∀ i, HL τ (d.sol (TStep τ) Mean.d) (d.graph i)
-  | _, .nil, _, _, i => i.elim0
-  | _, .snoc (c := c) (n := n) d sc, hty, hob, i => by
-    have hκ := Closed.sound τ d hty.1 hob.1
-    have ih := Closed.lawfulNodes d hty.1 hob.1
-    have hR := CStep.lawful (TStep_lawful τ) c (d.sol (TStep τ) Mean.d)
-    have hst := Closed.stage_lawful d sc hκ hty.2 hob.2
-    have hB := nf_contractive hR sc
-    have htop : ∀ i, Lawful Mean.mem (Closed.top τ d sc i) :=
-      lawful_strat Mean.d_pos hR sc fun k i => hst k i
-    refine Fin.addCases (fun m => ?_) (fun i => ?_) i
-    · have e1 : (fun j => (DSys.snoc d sc).sol (TStep τ) Mean.d (Fin.castAdd n j)) =
-          d.sol (TStep τ) Mean.d := funext fun j => by simp only [DSys.sol, Fin.append_left]
-      simp only [DSys.graph, Fin.append_left]
-      exact HL.bind _ _ _ (e1 ▸ ih m)
-    · simp only [DSys.graph, Fin.append_right]
-      obtain ⟨T, μ, ht⟩ := hty.2 i
-      exact (HL.inlC hκ (σc := fun j => .leaf (Fin.castAdd n j))
-        (fun j => by simp only [Flat.interp, DSys.sol, Fin.append_left]) (fun _ => trivial) ht
-        (fun j => .leaf (Fin.natAdd c j))
-        (fun j => .leaf (Fin.natAdd c (Fin.castLE (Nat.le_of_lt i.isLt) j)))
-        (Closed.top τ d sc) (fun j => Closed.top τ d sc (Fin.castLE (Nat.le_of_lt i.isLt) j))
-        (Closed.stage τ d sc)
-        (fun k j => Closed.stage τ d sc (k + 1) (Fin.castLE (Nat.le_of_lt i.isLt) j))
-        (fun j => by simp only [Flat.interp, DSys.sol, Fin.append_right])
-        (fun j => by simp only [Flat.interp, DSys.sol, Fin.append_right])
-        (fun _ => trivial) (fun _ => trivial) htop (fun _ => htop _)
-        (fun k j => solve_agree Mean.d_pos hB k j)
-        (fun k j => (solve_agree Mean.d_pos hB (k + 1) _).mono (Nat.le_succ k))
-        (fun k => hob.2 k (hst k) i)).1
+theorem Closed.lawfulNodes {N : Nat} (d : Closed S.sig N) (hty : Closed.Typed τ d)
+    (hob : Closed.Obligations τ d) (i : Fin N) : HL τ (d.sol (TStep τ) Mean.d) (d.graph i) := by
+  have hR := CStep.lawful (TStep_lawful τ) 0 (Fin.elim0 : Fin 0 → Mean.C S.sig)
+  have hst := Closed.stage_lawful τ d hty hob
+  have hB := nf_contractive hR d
+  have htop := Closed.sound τ d hty hob
+  obtain ⟨T, μ, ht⟩ := hty i
+  exact (HL.inlC (fun j => j.elim0) (σc := fun j => .leaf j.elim0) (fun j => j.elim0)
+    (fun j => j.elim0) ht (fun j => .leaf j)
+    (fun j => .leaf (Fin.castLE (Nat.le_of_lt i.isLt) j))
+    (Closed.top τ d) (fun j => Closed.top τ d (Fin.castLE (Nat.le_of_lt i.isLt) j))
+    (Closed.stage τ d)
+    (fun k j => Closed.stage τ d (k + 1) (Fin.castLE (Nat.le_of_lt i.isLt) j))
+    (fun _ => rfl) (fun _ => rfl) (fun _ => trivial) (fun _ => trivial) htop (fun _ => htop _)
+    (fun k j => solve_agree Mean.d_pos hB k j)
+    (fun k j => (solve_agree Mean.d_pos hB (k + 1) _).mono (Nat.le_succ k))
+    (fun k => hob k (hst k) i)).1
 
 end Lawful
 

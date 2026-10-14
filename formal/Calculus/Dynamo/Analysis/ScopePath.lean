@@ -19,7 +19,7 @@ open Alg (Seg)
 open Alg.Scoped (Rooted GFrame narrowC)
 
 /-- **A closed codec at DynamoDB, at its root.** -/
-def Closed.rooted (t : Closed) : Rooted dynSig := ⟨t.N, t.scopes, t.root⟩
+def Closed.rooted (t : Closed) : Rooted dynSig := ⟨t.N, t.scope, t.root⟩
 
 /-- The rooted form keeps the meaning. -/
 theorem Closed.rooted_meaning (α : Table) (t : Closed) :
@@ -39,7 +39,7 @@ theorem Closed.narrowC_law (α : Table) {φ : Closed} {os : List Closed}
     (hw : ∀ g ∈ res, ∀ x a, w.e x = some a →
       ((Alg.Scoped.GFrame.sem (S := dynSyn) (Alg.tables dynSyn.o α dynTableA) g).p a).isSome)
     {A A' x a : Attr}
-    (hφ : (((Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scopes).e
+    (hφ : (((Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scope).e
       φ.root).p A).isSome = true)
     (hA : (select (os.map (·.meaning α)) (·.p) A).isSome)
     (hx : w.e x = some a) (hput : Alg.putPath (S := dynSyn) π a A = some A') :
@@ -74,7 +74,7 @@ private def tags (r : Option (List (GFrame dynSig))) : Option (List Nat) :=
   r.map (·.map fun f => tagOf f.t)
 
 private abbrev one (t : Scoped.Term 0 1 0) : Closed :=
-  ⟨1, .snoc (c := 0) (n := 1) .nil (fun i => match i with | ⟨0, _⟩ => t), 0⟩
+  ⟨1, (fun i => match i with | ⟨0, _⟩ => t), 0⟩
 
 private abbrev litS (s : String) : Scoped.Term 0 1 0 := Scoped.Term.literal .string s
 

@@ -5,9 +5,9 @@ import Calculus.Dynamo.Analysis.ScopeOrthogonality
 # Worked pairs of the disjointness decision over closed codecs
 
 Each pair below is a pair of closed codecs, and the kernel checks the verdict of `Closed.disjoint`,
-of `Closed.viewsDisjoint` or of `certAllC`. A refinement or a `held` over a recursive codec reads
-the recursion as a constant of an earlier scope (`Closed.over`), so the recursion keeps its own
-entry below the refinement.
+of `Closed.viewsDisjoint` or of `certAllC`. A refinement over a recursive codec reads the
+recursion as an earlier entry of the scope (`Closed.over`), so the recursion keeps its own entry
+below the refinement. A wall reaches no cycle, so a `held` reads no recursion.
 
 A certified union is separated (`Closed.separated_of_certAllC`): no value has two writers, and no
 attribute has two readers.
@@ -15,18 +15,17 @@ attribute has two readers.
 
 namespace Calculus
 
-/-- **A closed codec of two scopes**: the first scope holds `base` as its one entry, and the root
-    entry `top` reads that entry as the constant `0`. -/
-def Closed.over (base : Scoped.Term 0 1 0) (top : Scoped.Term 1 1 0) : Closed :=
-  ⟨2, .snoc (c := 1) (n := 1) (.snoc (c := 0) (n := 1) .nil
-    (fun i => match i with | ⟨0, _⟩ => base)) (fun i => match i with | ⟨0, _⟩ => top), 1⟩
+/-- **A closed codec of two entries**: entry `0` is `base`, and the root entry `top` reads entry
+    `0` above every guard. -/
+def Closed.over (base : Scoped.Term 0 2 0) (top : Scoped.Term 0 2 1) : Closed :=
+  ⟨2, (fun i => match i with | ⟨0, _⟩ => base | ⟨1, _⟩ => top), 1⟩
 
 /-- A recursive codec: a boolean, or an object whose key `"k"` holds the codec again. -/
 def recBoolBody : Scoped.Term 0 1 0 :=
   .union [.boolean, .object (Scoped.Body.mk {"k"} (fun _ => .req (.ref 0)) none)]
 
 /-- A recursive codec: a string, or an object whose key `"k"` holds the codec again. -/
-def recStrBody : Scoped.Term 0 1 0 :=
+def recStrBody {w : Nat} : Scoped.Term 0 (w + 1) 0 :=
   .union [.string, .object (Scoped.Body.mk {"k"} (fun _ => .req (.ref 0)) none)]
 
 /-! ## Refinements and recursion -/
@@ -47,19 +46,19 @@ theorem Closed.disjoint_refinedUnion_bothOrders :
     booleans and a refined tree of strings share no value. -/
 theorem Closed.disjoint_refinedRecursion_bothOrders :
     (Closed.one recBoolBody).disjoint
-      (Closed.over recStrBody (.refine (.const 0) (.closure fun _ => true) ())) = true ∧
-    (Closed.over recStrBody (.refine (.const 0) (.closure fun _ => true) ())).disjoint
+      (Closed.over recStrBody (.refine (.ref 0) (.closure fun _ => true) ())) = true ∧
+    (Closed.over recStrBody (.refine (.ref 0) (.closure fun _ => true) ())).disjoint
       (Closed.one recBoolBody) = true := by
   decide
 
 /-- **The certificate of a union does not read the order of the options.** A recursive codec
-    beside a `held` over a refined recursive codec is certified in both orders. -/
-theorem Closed.viewsDisjoint_heldRecursion_bothOrders :
+    beside a `held` over a refined string is certified in both orders. -/
+theorem Closed.viewsDisjoint_held_bothOrders :
     (Closed.one recBoolBody).viewsDisjoint
-      (Closed.over recStrBody
-        (.held false .string (.refine (.const 0) (.closure fun _ => true) ()) (.caller 0, false) [])) = true ∧
-    (Closed.over recStrBody
-        (.held false .string (.refine (.const 0) (.closure fun _ => true) ()) (.caller 0, false) [])).viewsDisjoint
+      (Closed.one
+        (.held false .string (.refine .string (.closure fun _ => true) ()) (.caller 0, false) [])) = true ∧
+    (Closed.one
+        (.held false .string (.refine .string (.closure fun _ => true) ()) (.caller 0, false) [])).viewsDisjoint
       (Closed.one recBoolBody) = true := by
   decide
 

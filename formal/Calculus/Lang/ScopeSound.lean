@@ -8,11 +8,10 @@ rule answers `none` for a `legacy`, for an object with a `fill`, and for a conta
 former. `Obligations` holds the semantic premises: the cancellation of a `held`, and the pairwise
 compatibility of the options of a union.
 
-A closed codec owes the obligations of each scope at each stage of the normal form of the scope,
+A closed codec owes the obligations of its scope at each stage of the normal form of the scope,
 given that the stage before is lawful. `Closed.sound` proves that a typed closed codec that meets
 its obligations is lawful at each entry. Each stage is lawful by the soundness of the terms, and
-`lawful_strat` carries the laws to the solution. The proof is structural on the derivation and on
-the sequence of scopes.
+`lawful_strat` carries the laws to the solution. The proof is structural on the derivation.
 -/
 
 namespace Calculus.Alg.Scoped
@@ -162,51 +161,46 @@ end Term
 
 /-! ## A closed codec -/
 
-/-- The stages of the normal form of the last scope, with the earlier scopes as constants. -/
-abbrev Closed.stage {c n : Nat} (d : Closed B c) (sc : Scope (TSig B) c n) : Nat → Fin n → Mean.C B :=
-  sysStage (sysB (CStep (TStep τ) c (d.sol (TStep τ) Mean.d)) (nf (cSig (TSig B) c) sc))
+/-- The stages of the normal form of the scope of a closed codec. -/
+abbrev Closed.stage {N : Nat} (d : Closed B N) : Nat → Fin N → Mean.C B :=
+  sysStage (sysB (CStep (TStep τ) 0 Fin.elim0) (nf (cSig (TSig B) 0) d))
 
-/-- The solution of the last scope. -/
-abbrev Closed.top {c n : Nat} (d : Closed B c) (sc : Scope (TSig B) c n) : Fin n → Mean.C B :=
-  solve Mean.d (sysB (CStep (TStep τ) c (d.sol (TStep τ) Mean.d)) (nf (cSig (TSig B) c) sc))
+/-- The solution of the scope of a closed codec. -/
+abbrev Closed.top {N : Nat} (d : Closed B N) : Fin N → Mean.C B :=
+  d.sol (TStep τ) Mean.d
 
-/-- **A typed closed codec**: each entry is typed at the solution of its scope. -/
-def Closed.Typed : {N : Nat} → Closed B N → Prop
-  | _, .nil => True
-  | _, .snoc d sc => Closed.Typed d ∧ ∀ i, ∃ T μ, Scoped.Typed τ (d.sol (TStep τ) Mean.d)
-      (Closed.top τ d sc) (fun j => Closed.top τ d sc (Fin.castLE (Nat.le_of_lt i.isLt) j)) (sc i) T μ
+/-- **A typed closed codec**: each entry is typed at the solution of the scope. -/
+def Closed.Typed {N : Nat} (d : Closed B N) : Prop :=
+  ∀ i, ∃ T μ, Scoped.Typed τ Fin.elim0 (Closed.top τ d)
+    (fun j => Closed.top τ d (Fin.castLE (Nat.le_of_lt i.isLt) j)) (d i) T μ
 
 /-- **The obligations of a closed codec**: each entry meets them at each stage after a lawful stage. -/
-def Closed.Obligations : {N : Nat} → Closed B N → Prop
-  | _, .nil => True
-  | _, .snoc d sc => Closed.Obligations d ∧ ∀ k, (∀ j, Lawful Mean.mem (Closed.stage τ d sc k j)) →
-      ∀ i, Scoped.Obligations τ (d.sol (TStep τ) Mean.d) (Closed.stage τ d sc k)
-        (fun j => Closed.stage τ d sc (k + 1) (Fin.castLE (Nat.le_of_lt i.isLt) j)) (sc i)
+def Closed.Obligations {N : Nat} (d : Closed B N) : Prop :=
+  ∀ k, (∀ j, Lawful Mean.mem (Closed.stage τ d k j)) →
+    ∀ i, Scoped.Obligations τ Fin.elim0 (Closed.stage τ d k)
+      (fun j => Closed.stage τ d (k + 1) (Fin.castLE (Nat.le_of_lt i.isLt) j)) (d i)
+
+/-- **The stages of a typed closed codec are lawful**, where its obligations hold: each stage is
+    lawful by the soundness of the terms at the stage before. -/
+theorem Closed.stage_lawful {N : Nat} (d : Closed B N) (hty : Closed.Typed τ d)
+    (hob : Closed.Obligations τ d) : ∀ k i, Lawful Mean.mem (Closed.stage τ d k i) := by
+  intro k
+  induction k with
+  | zero => exact fun _ => Lawful.empty
+  | succ k ih =>
+    intro ⟨i, hi⟩
+    induction i using Nat.strong_induction_on with
+    | _ i ihi =>
+      obtain ⟨T, μ, ht⟩ := hty ⟨i, hi⟩
+      have e := interp_nf (R := CStep (TStep τ) 0 Fin.elim0) d (Closed.stage τ d k) ⟨i, hi⟩
+      exact (congrArg (Lawful Mean.mem) e).mpr <|
+        sound_term τ _ (fun j => j.elim0) ht ih (fun j => ihi j.val j.isLt _) (hob k ih ⟨i, hi⟩)
 
 /-- **Soundness of a closed codec**: a typed closed codec that meets its obligations is lawful. -/
-theorem Closed.sound : ∀ {N : Nat} (d : Closed B N), Closed.Typed τ d → Closed.Obligations τ d →
-    ∀ i, Lawful Mean.mem (d.sol (TStep τ) Mean.d i)
-  | _, .nil, _, _, i => i.elim0
-  | _, .snoc (c := c) (n := n) d sc, hty, hob, i => by
-    have hκ := Closed.sound d hty.1 hob.1
-    have hst : ∀ k i, Lawful Mean.mem (Closed.stage τ d sc k i) := by
-      intro k
-      induction k with
-      | zero => exact fun _ => Lawful.empty
-      | succ k ih =>
-        intro ⟨i, hi⟩
-        induction i using Nat.strong_induction_on with
-        | _ i ihi =>
-          obtain ⟨T, μ, ht⟩ := hty.2 ⟨i, hi⟩
-          have e := interp_nf (R := CStep (TStep τ) c (d.sol (TStep τ) Mean.d)) sc
-            (Closed.stage τ d sc k) ⟨i, hi⟩
-          exact (congrArg (Lawful Mean.mem) e).mpr <|
-            sound_term τ _ hκ ht ih (fun j => ihi j.val j.isLt _) (hob.2 k ih ⟨i, hi⟩)
-    have hsol := lawful_strat Mean.d_pos (CStep.lawful (TStep_lawful τ) c (d.sol (TStep τ) Mean.d))
-      sc (fun k i => hst k i)
-    refine Fin.addCases (fun m => ?_) (fun i => ?_) i
-    · simp only [DSys.sol, Fin.append_left]; exact hκ m
-    · simp only [DSys.sol, Fin.append_right]; exact hsol i
+theorem Closed.sound {N : Nat} (d : Closed B N) (hty : Closed.Typed τ d)
+    (hob : Closed.Obligations τ d) : ∀ i, Lawful Mean.mem (d.sol (TStep τ) Mean.d i) :=
+  lawful_strat Mean.d_pos (CStep.lawful (TStep_lawful τ) 0 Fin.elim0) d
+    (Closed.stage_lawful τ d hty hob)
 
 /-- **The meaning of a typed closed codec that meets its obligations is lawful.** -/
 theorem Closed.meaning_lawful {N : Nat} (d : Closed B N) (hty : Closed.Typed τ d)
@@ -217,24 +211,24 @@ theorem Closed.meaning_lawful {N : Nat} (d : Closed B N) (hty : Closed.Typed τ 
 
 /-- A closed codec of one entry: a `legacy` reader over the identity. -/
 def legacyClosed (r : B.R) : Closed B 1 :=
-  DSys.snoc (c := 0) (n := 1) .nil fun i => Term.legacy (w := 1) (k := i) .opaq r
+  fun i => Term.legacy (w := 1) (k := i) .opaq r
 
 /-- **A closed codec with a `legacy` is not typed**: the rule of `legacy` answers `none`. -/
 theorem legacyClosed_untyped (r : B.R) : ¬ Closed.Typed τ (legacyClosed r) := fun h => by
   unfold legacyClosed Closed.Typed at h
-  obtain ⟨T, μ, ht⟩ := h.2 0
+  obtain ⟨T, μ, ht⟩ := h 0
   cases ht with
   | node _ hr => exact nomatch hr
 
 /-- A closed codec of one entry: an object with one `fill` slot. -/
 def fillClosed (v : B.K) : Closed B 1 :=
-  DSys.snoc (c := 0) (n := 1) .nil fun i =>
+  fun i =>
     Term.object (w := 1) (k := i) {"a"} (fun _ => (.fill v, .opaq)) none
 
 /-- **A closed codec with a `fill` is not typed**: the rule of the object answers `none`. -/
 theorem fillClosed_untyped (v : B.K) : ¬ Closed.Typed τ (fillClosed v) := fun h => by
   unfold fillClosed Closed.Typed at h
-  obtain ⟨T, μ, ht⟩ := h.2 0
+  obtain ⟨T, μ, ht⟩ := h 0
   cases ht with
   | node _ hr =>
     simp only [TOp.rule] at hr

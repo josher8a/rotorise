@@ -64,7 +64,7 @@ instance, and JSON is a second instance.
 | `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
 | `Alg/Agree.lean` | agreement `Agree` at an orientation, whose two halves are the host and the dual, one lemma per combinator, and `compat_iff_agree` |
 | `Lang/Term.lean` | the signature `Sig`, the syntax `Syn`, the meaning `Mean`, and the tables of adapters |
-| `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, and the DAG of scopes with `DSys.dagGuard` and `dagGuard_of_rename` |
+| `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, the flat scope with `scope_solution`, and the DAG of scopes with `DSys.dagGuard` and `dagGuard_of_rename` |
 | `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, and `Scoped.Closed.compat_of_HF` |
 | `Lang/Universe.lean`, `Lang/ScopeDisjoint.lean` | the class `Leaf`, the structural disjointness decision `Scoped.disjoint` over two closed codecs with its soundness `Scoped.disjoint_sound`, the view `viewG` at an orientation, and `views_apart` |
 | `Lang/ScopeCompat.lean` | the compatibility decision `Scoped.compatPair` over two closed codecs, and `Scoped.compatPair_sound` |
@@ -192,7 +192,7 @@ spelling, such as `Term.string` and `Term.literal`. A cited DynamoDB theorem, su
 DynamoDB names.
 
 **The DynamoDB meaning is the generic meaning of a closed codec.** `Closed.meaning` reads the
-solution of the scopes of a closed codec at the DynamoDB tables, and `μG` reads the member of a
+solution of the scope of a closed codec at the DynamoDB tables, and `μG` reads the member of a
 graph term. A proof at DynamoDB reads `baseCodec`, `setCodec` and `listCodec` by name.
 `Scoped.interp_held` and `Scoped.interp_refine` state the rows of `held` and `refine` over a
 scope term.
@@ -363,11 +363,13 @@ the kernel.
 
 ## Recursion
 
-**A recursive codec is a closed codec.** A closed codec is a DAG of scopes (`Scoped.Closed`). Each
-scope is a system of entries. Each entry is a term that names the entries of its scope, and reads
-each earlier scope as a constant. The meaning of a closed codec at a root entry is the solution of
-the scopes at the root (`Scoped.Closed.meaning`). The stages of a scope start at the bottom, and
-each applies the entries to the one before. Each input reads the stage its own depth names.
+**A recursive codec is a closed codec.** A closed codec is one flat guarded scope
+(`Scoped.Closed`): a system of entries with no constant. Each entry is a term that names the
+entries of the scope. Above every guard an entry names an earlier entry, below a container any
+entry, and below a wall no entry. The meaning of a closed codec at a root entry is the solution of
+that scope at the root (`Scoped.Closed.meaning`), `solve` of its normal form. The stages of the
+scope start at the bottom, and each applies the entries to the one before. Each input reads the
+stage its own depth names.
 
 **The guard is a checked condition on the graph.** `Flat.Guarded` asks that each entry occurs
 below a container and below no `held` and no older reader. The guard of a graph, `Graph.guarded`, is
@@ -384,14 +386,14 @@ has no stratified form. The guard refuses two shapes, and each is a graph with n
   depth.
 
 A stratified term names an entry above every guard only below its own entry, and names no entry below
-a wall, so a stratified system carries the guard by construction.
+a wall, so a stratified system carries the guard by construction. The graph form of a closed codec
+(`Scope.graph`) has no leaf under a wall, and each unguarded edge lowers the entry (`Scope.order`).
 
 **A wall reaches no cycle.** A wall is an operation of kind `wall`: a `held`, including the
 library adapters `number`, `decimal` and `opaque`, or an older reader. A wall reads its argument
 through caller code at any depth. A wall that reads an entry on a cycle makes the flat system
-non-contractive, so the meaning of the codec needs a DAG of scopes with constants. The host refuses
-a wall whose argument reaches an entry on a cycle. With no such wall, the meaning of a closed codec
-is one flat guarded system with a unique solution.
+non-contractive. The host refuses a wall whose argument reaches an entry on a cycle. So a closed
+codec is one flat guarded scope, and the scope has one solution at the maps (`scope_solution`).
 
 **Stability needs the guard alone.** `ContractiveV` says that agreement below a depth at every
 entry gives agreement one layer deeper. `contractive_of_guarded` derives it from the guard. From it
@@ -400,11 +402,11 @@ solution is a fixed point of its system at each orientation (`solve_fix`), and l
 a lawful solution (`lawful_solve`). No option of a body has to be disjoint from another for any of
 these.
 
-**Soundness runs over the scopes.** `Scoped.Closed.Obligations` asks the obligations of each scope
-at each stage of the normal form of the scope, given that the stage before is lawful. `sound_term`
-proves `Lawful` for a term of a scope whose constants and entries are lawful, and `lawful_strat`
-carries the laws to the solution (`Scoped.Closed.sound`). An entry of a solution has its write
-domain as its held set (`DSys.sol_eq`), so the held-set theorems stay closed.
+**Soundness runs over the scope.** `Scoped.Closed.Obligations` asks the obligations of the scope at
+each stage of its normal form, given that the stage before is lawful. `sound_term` proves
+`Lawful` for a term of a scope whose entries are lawful, and `lawful_strat` carries the laws to
+the solution (`Scoped.Closed.sound`). An entry of the solution has its write domain as its held set
+(`Scope.sol_eq`), so the held-set theorems stay closed.
 
 **`opaque` is the identity.** With one carrier, each datum identifies itself, so the union of
 everything self-identifying (`opaqUnfoldClosed`) sends each datum to itself. `opaque` denotes the identity
@@ -412,7 +414,7 @@ codec `Alg.idCodec`, and it owes no compatibility and no contraction. The union 
 `Closed.Adm_opaqUnfold` and `Closed.AdmA_opaqUnfold` state that the union admits what `opaque` admits.
 
 **A held-free closed codec is a restriction of `opaque`.** A held-free closed codec
-(`Closed.HF`) holds no `held`, no older reader and no fill slot in any term of any scope. Such a
+(`Closed.HF`) holds no `held`, no older reader and no fill slot in any term of its scope. Such a
 codec writes only what `opaque` writes (`Closed.confluence_W`), and reads only what `opaque`
 reads (`Closed.confluence_R`). A `held` re-indexes the values of the caller, so
 the inclusion does not reach a `held`.
@@ -423,21 +425,21 @@ meaning of the closed codec. An entry reads the codec that its scope solves, as 
 
 **The host spells recursion as a `ref` node, and the bridge prints a closed codec.** A `ref` node
 names an entry of the scope that binds it, and an unbound name is a node with no target. The
-emitter cuts the term graph into scopes: each cycle of the term graph is one scope, and a scope
-comes after each scope that it reaches. Each term of a cycle is an entry of its scope, and a `ref`
-node whose target is an entry prints as the reference to that entry. Any other `ref` node prints
-the term it names. The emitter refuses a term with no scoped form: an unguarded cycle, a cycle
-through a wall, or an open fragment. The host refuses a wall whose argument reaches an entry on a
+emitter prints one flat scope: the entries of each cycle of the term graph, cycle by cycle, and a
+cycle comes after each cycle that it reaches. The root is an entry of its cycle, or the last entry.
+Each term of a cycle is an entry, and a `ref` node whose target is an entry prints as the reference
+to that entry. Any other `ref` node prints the term it names. The emitter refuses a term with no
+scoped form: an unguarded cycle, a wall that reaches a cycle, or an open fragment. The host refuses a wall whose argument reaches an entry on a
 cycle, at the wall where each `ref` of the argument has a target, and at the scope that binds a
 `ref` of the argument otherwise. A wall over an acyclic entry stays legal: the emitter prints the
 acyclic `ref` in place, so that entry is no leaf of the model. A guard row prints the graph of the term instead: one flat
-system with no order on its entries, which the guard of a DAG of scopes decides. Each recursive vector asserts that the
+system with no order on its entries, which the flat guard `graphGuard` decides. Each recursive vector asserts that the
 guard accepts its term. The host's `union` refuses the two shapes the guard refuses. One is an
 option whose spine reaches a recursive `ref`. The other is an option where a `held` sits between the
 entry that a recursive `ref` names and the `ref`. The host's `union` also refuses a `ref` that no
 scope binds. Recursion below a list or an object stays declared, and the decision decides it. The
 host's `heldFree(t)` reads through a recursive `ref`, as the model's `Scoped.Closed.HF` reads every
-node of every scope.
+node of the scope.
 
 ---
 
@@ -445,7 +447,7 @@ node of every scope.
 
 **A path is a list of segments.** A segment (`Seg`) is a name into a map, or a position into a
 list. `Rooted.at` gives the frontier of a closed codec at a path: each frame that can stand at the
-path, or a refusal. A frame (`GFrame`) is a graph term of the DAG of scopes of the codec. One
+path, or a refusal. A frame (`GFrame`) is a graph term of the scope of the codec. One
 segment reads the slot of a name, the term of a position (`listChildG`), the options of a union,
 and the body of an entry. An entry unfolds through the graph of its scope. The unfoldings have a
 bound, the count of the entries plus the first step, so the walk ends.

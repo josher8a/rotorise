@@ -17,7 +17,7 @@ definition it touches.
 | `Calculus/Alg/Containers.lean` | `listCodec` and `objectCodec` over the list and keyed-map prisms of a universe, with their laws and carriers |
 | `Calculus/Alg/Recursion.lean` | `AgreeLe`, `Contractive`, `muCodec` and `lawful_muCodec` over one depth function of the carrier, and the agreement lemmas of the combinators |
 | `Calculus/Lang/Term.lean` | The universe signature: `Syn` (the syntax) and the class `Sem` (the meaning), with the formers `ListA`, `MapA` and `SetF`, the adapter words `Word`, and the tables `TableAt` and `Table` |
-| `Calculus/Lang/Scope.lean` | The closed codec over a signature: the term container `TSig`, a scope term `Scoped.Term`, its graph form `Scoped.Graph`, and `Scoped.Closed`, a DAG of scopes. Its meaning `Scoped.Closed.meaning` at a root entry is the solution of the scopes at the root |
+| `Calculus/Lang/Scope.lean` | The closed codec over a signature: the term container `TSig`, a scope term `Scoped.Term`, its graph form `Scoped.Graph`, and `Scoped.Closed`, one flat scope with no constant. Its meaning `Scoped.Closed.meaning` at a root entry is the solution of that scope at the root |
 | `Calculus/Lang/ScopeSound.lean` | The judgement `Scoped.Typed` of a scope term through the rule `TOp.rule` of each operation, the obligation `TOp.obl` of each operation (the cancellation of a `held`, the compatibility of a union), `Scoped.Closed.Typed` and `Scoped.Closed.Obligations`, and `Scoped.Closed.sound` with `Scoped.Closed.meaning_lawful`, at every signature |
 | `Calculus/Lang/ScopeHeldFree.lean` | The held-free closed codecs `Scoped.Closed.HF`, `Scoped.Closed.sub` from the laws of the top (`TopLaws`), and `Scoped.Closed.compat_of_HF`, at every signature |
 | `Calculus/Lang/ScopeDisjoint.lean` | The structural decision `Scoped.disjoint` over two closed codecs, and `Scoped.disjoint_sound`: two closed codecs that the decision keeps apart share no datum at the orientation, from the laws `Scoped.Laws` of the universe, the leaves, the shape classes and the laws of the top. The view `viewG` at an orientation replaces each `held` by its term at the caller side, and two closed codecs whose views are disjoint accept no common datum (`views_apart`) |
@@ -37,7 +37,7 @@ definition it touches.
 | `Calculus/Dynamo/Alg/Frontier.lean` | The lawfulness lemmas that are stated and not yet discharged, and the ones whose discharge is partial |
 | `Calculus/Dynamo/Lang/Term.lean` | The DynamoDB signature: `Pred`, `SetElem`, the primitives `Ground` with `groundCodec`, the formers `dList`, `dMap` and `dSet`, `dynSyn` and `dynSem`, the stored table `dynTableA`, and the abbreviations `Table` and `Word` at `dynSyn` |
 | `Calculus/Dynamo/Alg/Recursion.lean` | Guarded recursion: `muCodec` budgets each input by its own depth (`Value.depth`/`Attr.depth`); from `Contractive` alone the stages agree past the depth (`muStage_agree`), the limit is a fixed point (`muCodec_fix`), and lawful stages give a lawful limit (`lawful_muCodec`); each container keeps agreement one layer down |
-| `Calculus/Dynamo/Lang/Scope.lean` | The closed codec of DynamoDB `Closed`: a DAG of scopes over the term container, and a root entry. Its meaning `Closed.meaning` at a caller table is the solution of the scopes at the root, and the read row `Closed.AdmA` is the domain of the read of the meaning |
+| `Calculus/Dynamo/Lang/Scope.lean` | The closed codec of DynamoDB `Closed`: one flat scope over the term container, and a root entry. Its meaning `Closed.meaning` at a caller table is the solution of that scope at the root, and the read row `Closed.AdmA` is the domain of the read of the meaning |
 | `Calculus/Dynamo/Lang/ScopeSound.lean` | The judgement `Closed.Typed` and the obligations `Closed.Obligations` of a closed codec at the DynamoDB tables, the theorem `Closed.sound`, the carrier bridge `Closed.carrier` (a typed closed codec writes and reads only values of its held set), and `Closed.extendRead_lawfulCore` |
 | `Calculus/Dynamo/Lang/Equations.lean` | `union` associativity, which needs none of the conditions that the specification states (`equiv_altCodec_assoc`). The other "Hold" nodes of the specification's equations are the combinator rows of `Codec.Equiv` (the specification's `≡`) in `Alg/Relations.lean` (`held`'s identity `equiv_through_id`, `Codec.extendRead` with its own reader as the alternate reader and `≈` on `Can(c)`, `union` of one and its commutativity) and the term rows of `ScopeEquations.lean`. The null-point node went with the wrapper: the point is a union option, so idempotence is the union's |
 | `Calculus/Dynamo/Lang/ScopeEquations.lean` | The rows of `≡` that read a term, over the codec of a scope term: `held`'s composition (`Scoped.equiv_held_comp`; its identity is `equiv_through_id` at the codecs, because a `held` of the empty word has no term), `refine`'s meet and full case (`Scoped.equiv_refine_meet`, `Scoped.equiv_refine_full`), and wrapper member preservation (`Scoped.optional_μ`, `Scoped.held_μ`, `Scoped.refine_μ`) |
@@ -103,12 +103,12 @@ meaning to it).
   is configured correctly. `Axioms.lean` cannot simply `import Calculus` instead — the
   aggregator imports the guard, so that is a cycle, and inverting it would let
   `defaultTargets = ["Calculus"]` build the tree with no guard running at all.
-- **There is no fuel.** The meaning of a closed codec is the solution of its scopes
-  (`DSys.sol`), and the solution reads each input at the stage that the depth of the input
+- **There is no fuel.** The meaning of a closed codec is the solution of its scope
+  (`Scope.sol`), and the solution reads each input at the stage that the depth of the input
   names, so no fuel appears in a statement. Neither of the two things that forced fuel still
   does: the model has no thunk, and the solution budgets each input by the input's own depth.
-- **Recursion is guarded, and constructed.** A closed codec is a DAG of scopes, and each entry
-  of a scope is a body that reads the entries. The guard `Flat.Guarded` puts each entry under a
+- **Recursion is guarded, and constructed.** A closed codec is one flat guarded scope, and each
+  entry of the scope is a body that reads the entries. The meaning is the solution of that scope. The guard `Flat.Guarded` puts each entry under a
   `down` and no entry under a `wall`, and a guarded system is contractive
   (`contractive_of_guarded`). The graph that the host prints for a closed codec has no leaf
   under a wall, and the guard of the graph is `graphGuard`. A graph that `graphGuard` refuses has

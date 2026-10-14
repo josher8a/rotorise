@@ -4,10 +4,10 @@ import Calculus.Lang.Scope
 /-!
 # The scoped term at DynamoDB
 
-A closed codec of DynamoDB is a DAG of scopes over the term container at the DynamoDB signature,
-and a root entry. Each builder keeps the spelling of the constructor of today's term: an entry
-names an entry of its own scope by `ref`, and an entry of an earlier scope by `const`. The meaning
-of a closed codec reads the caller table at the side `false` and the store table at the side
+A closed codec of DynamoDB is one scope over the term container at the DynamoDB signature, with
+no constant, and a root entry. Each builder keeps the spelling of the constructor of today's term:
+an entry names an entry of the scope by `ref`. The meaning of a closed codec is the solution of
+the scope. The meaning reads the caller table at the side `false` and the store table at the side
 `true`.
 -/
 
@@ -176,16 +176,17 @@ structure Graph where
 /-- **The guard of the graph**: no leaf under a wall, and no cycle of unguarded edges. -/
 def Graph.guarded (g : Graph) : Bool := Alg.graphGuard (Alg.Scoped.TSig dynSig) g.sys
 
-/-- **A closed codec of DynamoDB**: a DAG of scopes over the term container, and a root entry. -/
+/-- **A closed codec of DynamoDB**: one scope over the term container, with no constant, and a root
+    entry. -/
 structure Closed where
   N : Nat
-  scopes : Alg.Scoped.Closed dynSig N
+  scope : Alg.Scoped.Closed dynSig N
   root : Fin N
 
-/-- **The meaning of a closed codec** at the caller table `α`: the solution of its DAG of scopes at
-    the root. -/
+/-- **The meaning of a closed codec** at the caller table `α`: the solution of its scope at the
+    root. -/
 def Closed.meaning (α : Table) (t : Closed) : Codec :=
-  Alg.Scoped.Closed.meaning (Alg.tables dynSyn.o α dynTableA) t.scopes t.root
+  Alg.Scoped.Closed.meaning (Alg.tables dynSyn.o α dynTableA) t.scope t.root
 
 /-- **The read row of a closed codec**: whether the meaning reads the attribute. The row reads
     the meaning, and no second description of it. -/

@@ -4,8 +4,8 @@ import Calculus.Lang.ScopeDisjoint
 # Compatibility over the graph of a closed codec
 
 `Scoped.compat` decides one half of the compatibility of two closed codecs: at the orientation, two
-maps that answer at one input give one output. The decision reads the flat graph of each DAG of
-scopes, with one row per operation of the left operand. Each row is one of two warrants: the two
+maps that answer at one input give one output. The decision reads the flat graph of each closed
+codec, with one row per operation of the left operand. Each row is one of two warrants: the two
 terms share no datum there, or both lie below the top. Below a guard, the decision assumes a pair
 of entries while it compares the two bodies. A fuel bounds the walk, and an empty fuel answers
 `false`.

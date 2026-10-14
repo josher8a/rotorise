@@ -22,7 +22,7 @@ def strOrNumBody {k : Nat} : Alg.Scoped.Term jsonSig 0 1 k :=
 
 /-- A string or a number, as a closed codec of one entry. -/
 def strOrNumClosed : Alg.Scoped.Closed jsonSig 1 :=
-  .snoc (c := 0) (n := 1) .nil fun _ => strOrNumBody
+  fun _ => strOrNumBody
 
 /-- A string or a number: the meaning of the closed codec at the JSON tables. -/
 def strOrNumC : Alg.Codec Json JMember :=
@@ -54,12 +54,12 @@ theorem typed_strOrNumBody (τ : (s : Bool) → Alg.TableAt jsonSig s)
 /-- `strOrNumClosed` is typed at all tables. -/
 theorem typed_strOrNumClosed (τ : (s : Bool) → Alg.TableAt jsonSig s) :
     Alg.Scoped.Closed.Typed τ strOrNumClosed :=
-  ⟨trivial, fun i => match i with | ⟨0, _⟩ => typed_strOrNumBody _ _ _ _⟩
+  fun i => match i with | ⟨0, _⟩ => typed_strOrNumBody _ _ _ _
 
 /-- `strOrNumClosed` meets its obligations at all tables: its two options are compatible. -/
 theorem obligations_strOrNumClosed (τ : (s : Bool) → Alg.TableAt jsonSig s) :
     Alg.Scoped.Closed.Obligations τ strOrNumClosed := by
-  refine ⟨trivial, fun _ _ i => match i with | ⟨0, _⟩ => ⟨fun p => ?_, fun p q => ?_⟩⟩
+  refine fun _ _ i => match i with | ⟨0, _⟩ => ⟨fun p => ?_, fun p q => ?_⟩
   · match p with
     | ⟨0, _⟩ => exact ⟨fun q => q.elim, trivial⟩
     | ⟨1, _⟩ => exact ⟨fun q => q.elim, trivial⟩

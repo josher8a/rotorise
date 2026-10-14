@@ -23,6 +23,10 @@ guarded. `graphGuard` decides the condition. The stratified form `SSys` names a 
 guard only below its own entry, so the condition holds by construction, and `nf` folds the
 system into a guarded one. The graph form of a stratified system passes `graphGuard`.
 
+A flat scope is a stratified scope with no constant. Its graph form has no leaf below a wall and
+no cycle of unguarded edges, and it has one solution at the maps (`scope_solution`), `solve` of
+its normal form.
+
 A wall can read an entry that the wall cannot reach back. The DAG of scopes `DSys` is a sequence
 of stratified scopes, and a scope reads each earlier entry as a constant. `DagGuard` admits a
 wall edge that leaves its component. The graph form of a DAG of scopes passes `DagGuard` under
@@ -2268,6 +2272,65 @@ theorem dagGuard_of_rename {sys g : Fin n → Flat S.Op S.Pos n} (π : Equiv.Per
     exact key _ _ hr
 
 end Rename
+
+/-! ## A flat scope
+
+A closed codec is one scope with no constants. Above every guard a leaf names an earlier entry,
+and no leaf sits below a wall. The graph form is a flat system, and the solution is `solve` of
+the normal form. -/
+
+section FlatScope
+variable {S : Container} {R : Step S V M} {N : Nat}
+
+/-- **The graph form of a flat scope**: each entry inlined, each leaf an entry of the system. -/
+def Scope.graph (sc : Scope S 0 N) : Fin N → Flat S.Op S.Pos N := fun i =>
+  (sc i).inlC (fun j => .leaf j) (fun j => .leaf (Fin.castLE (Nat.le_of_lt i.isLt) j))
+    (fun j => .leaf j.elim0)
+
+/-- **The solution of a flat scope**: `solve` of its normal form. -/
+def Scope.sol (R : Step S V M) (depth : V → Nat) (sc : Scope S 0 N) : Fin N → Codec V M :=
+  solve depth (sysB (CStep R 0 Fin.elim0) (nf (cSig S 0) sc))
+
+/-- An entry of the graph form reads its scope term over the step with no constant. -/
+theorem Scope.sysB_graph (sc : Scope S 0 N) (e : Fin N → Codec V M) (i : Fin N) :
+    sysB R sc.graph e i =
+      SFlat.interp (CStep R 0 Fin.elim0) (sc i) e (fun j => e (Fin.castLE (Nat.le_of_lt i.isLt) j)) := by
+  have hκ : (fun j : Fin 0 => e j.elim0) = Fin.elim0 := funext fun j => j.elim0
+  simp only [sysB, Scope.graph, SFlat.interp_inlC, Flat.interp, hκ]
+
+/-- **A flat scope and its graph form have the same fixed points.** -/
+theorem Scope.isFix_iff (sc : Scope S 0 N) (e : Fin N → Codec V M) :
+    IsFix (sysB R sc.graph) e ↔ SIsFix (CStep R 0 Fin.elim0) sc e :=
+  forall_congr' fun i => by rw [Scope.sysB_graph]
+
+/-- **A flat scope has one solution**, at the maps: `strat_solution` over the step with no
+    constant. -/
+theorem scope_solution (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (sc : Scope S 0 N) :
+    IsFix (sysB R sc.graph) (sc.sol R depth) ∧
+      ∀ e, IsFix (sysB R sc.graph) e → ∀ i, (e i).f = (sc.sol R depth i).f := by
+  have h := strat_solution hd (CStep.lawful hS 0 Fin.elim0) sc
+  exact ⟨(Scope.isFix_iff sc _).mpr h.1, fun e he => h.2 e ((Scope.isFix_iff sc e).mp he)⟩
+
+/-- **The order of a flat scope**: an unguarded edge lowers the entry, and no leaf sits below a
+    wall. -/
+theorem Scope.order (sc : Scope S 0 N) :
+    (∀ i j, (sc.graph i).ulv S j = true → j.val < i.val) ∧
+      ∀ i j, (sc.graph i).wlv S j = false :=
+  ⟨fun i j h =>
+    let ⟨l, hl⟩ := (SFlat.ulv_inlC (sc i) _ _ _ h).resolve_right fun ⟨l, _⟩ => l.elim0
+    by rw [← hl]; exact l.isLt,
+   fun i j => Bool.eq_false_iff.mpr fun h =>
+    let ⟨l, _⟩ := SFlat.wlv_inlC (sc i) _ _ _ h
+    l.elim0⟩
+
+/-- Every entry of the solution is a `solve` entry: its held set is its write domain, and its
+    member is `⊤`. So the maps fix the codec. -/
+theorem Scope.sol_eq (sc : Scope S 0 N) (i : Fin N) {c : Codec V M}
+    (hT : ∀ v, c.T v = ((c.e v).isSome = true)) (hμ : c.μ = none) (hf : (sc.sol R depth i).f = c.f) :
+    sc.sol R depth i = c :=
+  solve_eq hT hμ hf
+
+end FlatScope
 
 /-! ## `Compat` and lawfulness at the solution -/
 
