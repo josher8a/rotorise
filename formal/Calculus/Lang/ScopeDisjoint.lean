@@ -433,6 +433,14 @@ def Closed.toG {N : Nat} (d : Closed S.sig N) : GSys τ N where
   fix := (dsys_solution Mean.d_pos (TStep_lawful τ) (TStep_wallF τ) d).1
   noCycle := (DSys.dagGuard d).noCycle
 
+/-- **A step-indexed relation** between two codecs: true at the depth zero, closed downward, and
+    read through the maps only. -/
+structure StepRel (S : Syn) [Sem S] where
+  R : Nat → Mean.C S.sig → Mean.C S.sig → Prop
+  zero : ∀ c c', R 0 c c'
+  mono : ∀ {k k' c c'}, k' ≤ k → R k c c' → R k' c c'
+  congr : ∀ {k c c' c₁ c₁'}, c.f = c₁.f → c'.f = c₁'.f → R k c c' → R k c₁ c₁'
+
 /-- **Apart below a depth**: no datum of a smaller depth is accepted by both codecs at the
     orientation. -/
 def AB (k : Nat) (c c' : Mean.C S.sig) : Prop :=
@@ -450,6 +458,10 @@ theorem AB.mono {k k' : Nat} {c c' : Mean.C S.sig} (hk : k' ≤ k) (h : AB o k c
 
 /-- Any two codecs are apart below the depth zero. -/
 theorem AB.zero (c c' : Mean.C S.sig) : AB o 0 c c' := fun _ hv => absurd hv (Nat.not_lt_zero _)
+
+variable (o) in
+/-- Apartness below a depth is a step-indexed relation. -/
+def AB.rel : StepRel S := ⟨AB o, AB.zero, AB.mono, AB.congr⟩
 
 /-- A codec that accepts no datum is apart from each codec. -/
 theorem AB.of_left {k : Nat} {c c' : Mean.C S.sig} (h : ∀ v, (c.f o v).isSome = false) :
@@ -682,63 +694,58 @@ theorem famSetG_sound (laws : Laws S o) (d : GSys τ N) {k : Nat}
 
 /-! ### The walk -/
 
-variable {NL : Nat} (dL : GSys τ NL) (dR : GSys τ NR)
+variable {NL : Nat} {dL : GSys τ NL} {dR : GSys τ NR}
 
-variable (τ o) in
-/-- The assumed pairs are apart below the depth. -/
-def HypA (k : Nat) (A : Tbl NL NR) : Prop :=
-  ∀ p ∈ A, AB o k (mng τ dL (.leaf p.1)) (mng τ dR (.leaf p.2))
+variable (τ) in
+/-- The assumed pairs hold the relation below the depth. -/
+def Hyp (Q : StepRel S) (dL : GSys τ NL) (dR : GSys τ NR) (k : Nat) (A : Tbl NL NR) : Prop :=
+  ∀ p ∈ A, Q.R k (mng τ dL (.leaf p.1)) (mng τ dR (.leaf p.2))
 
-variable (τ o) in
-/-- A walk at the next fuel is sound. -/
-def PrevSound (prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool) : Prop :=
-  ∀ A x y, prev A x y = true → ∀ k, HypA τ o dL dR k A → AB o (k + 1) (mng τ dL x) (mng τ dR y)
-
-variable {dL dR}
-
-omit [Leaf S.sig] [Shapes S] in
-/-- Assumed pairs apart below a depth are apart below each smaller depth. -/
-theorem HypA.mono {k k' : Nat} {A : Tbl NL NR} (hk : k' ≤ k) (h : HypA τ o dL dR k A) :
-    HypA τ o dL dR k' A := fun p hp => (h p hp).mono hk
+variable (τ) in
+/-- A walk at the next fuel is sound for the relation. -/
+def Prev (Q : StepRel S) (dL : GSys τ NL) (dR : GSys τ NR)
+    (prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool) : Prop :=
+  ∀ A x y, prev A x y = true → ∀ k, Hyp τ Q dL dR k A → Q.R (k + 1) (mng τ dL x) (mng τ dR y)
 
 omit [Leaf S.sig] [Shapes S] in
-/-- **A pair below a guard is apart below the depth.** A new pair is apart at each smaller depth,
-    by induction on the depth, because the walk assumes the pair only at a smaller depth. -/
-theorem pairAt_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
-    (hp : PrevSound τ o dL dR prev) :
-    ∀ a b A k, pairAt (sL := dL.sys) (sR := dR.sys) prev A a b = true → HypA τ o dL dR k A →
-      AB o k (mng τ dL a) (mng τ dR b)
+/-- Assumed pairs that hold the relation below a depth hold the relation below each smaller depth. -/
+theorem Hyp.mono {Q : StepRel S} {k k' : Nat} {A : Tbl NL NR} (hk : k' ≤ k)
+    (h : Hyp τ Q dL dR k A) : Hyp τ Q dL dR k' A := fun p hp => Q.mono hk (h p hp)
+
+omit [Leaf S.sig] [Shapes S] in
+/-- **A pair below a guard holds the relation below the depth**, by the Löb step. An assumption at
+    the index k gives a result at the index k + 1. A new pair holds at each smaller depth, by
+    induction on the depth, because the walk assumes the new pair only at a smaller depth. The
+    depth falls only at a row that goes one level down into the datum. -/
+theorem pairAt_soundR {Q : StepRel S} {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
+    (hp : Prev τ Q dL dR prev) :
+    ∀ a b A k, pairAt (sL := dL.sys) (sR := dR.sys) prev A a b = true → Hyp τ Q dL dR k A →
+      Q.R k (mng τ dL a) (mng τ dR b)
   | .leaf i, .leaf j, A, k, h, hA => by
     simp only [pairAt, Bool.or_eq_true] at h
     rcases h with h | h
-    · obtain ⟨⟨i', j'⟩, hp, hpe⟩ := List.any_eq_true.mp h
+    · obtain ⟨⟨i', j'⟩, hp', hpe⟩ := List.any_eq_true.mp h
       simp only [Bool.and_eq_true, decide_eq_true_eq] at hpe
       obtain ⟨rfl, rfl⟩ := hpe
-      exact hA _ hp
-    · have key : ∀ m, m ≤ k → AB o m (mng τ dL (.leaf i)) (mng τ dR (.leaf j)) := by
+      exact hA _ hp'
+    · have key : ∀ m, m ≤ k → Q.R m (mng τ dL (.leaf i)) (mng τ dR (.leaf j)) := by
         intro m
         induction m with
-        | zero => exact fun _ => AB.zero _ _
+        | zero => exact fun _ => Q.zero _ _
         | succ m ih =>
           intro hm
-          have hA' : HypA τ o dL dR m ((i, j) :: A) := by
+          have hA' : Hyp τ Q dL dR m ((i, j) :: A) := by
             intro p hp'
             rcases List.mem_cons.mp hp' with rfl | hp'
             · exact ih (by omega)
-            · exact (hA p hp').mono (by omega)
-          exact AB.congr (mng_leaf dL i).symm (mng_leaf dR j).symm (hp _ _ _ h m hA')
+            · exact Q.mono (by omega) (hA p hp')
+          exact Q.congr (mng_leaf dL i).symm (mng_leaf dR j).symm (hp _ _ _ h m hA')
       exact key k (Nat.le_refl k)
-  | .leaf i, .node op b, A, k, h, hA => by
+  | .leaf _, .node _ _, A, k, h, hA | .node _ _, .leaf _, A, k, h, hA
+  | .node _ _, .node _ _, A, k, h, hA => by
     cases k with
-    | zero => exact AB.zero _ _
+    | zero => exact Q.zero _ _
     | succ k => exact hp A _ _ h k (hA.mono (by omega))
-  | .node op a, b, A, k, h, hA => by
-    cases k with
-    | zero => exact AB.zero _ _
-    | succ k =>
-      cases b with
-      | leaf j => exact hp A _ _ h k (hA.mono (by omega))
-      | node op' b => exact hp A _ _ h k (hA.mono (by omega))
 
 /-! ### The list row -/
 
@@ -895,9 +902,9 @@ theorem rowOfG_listParts {N : Nat} (d : GSys τ N) {n m : Nat} {s' : Fin 2}
 omit [Leaf S.sig] in
 /-- **The list row is sound.** -/
 theorem listRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
-    (hp : PrevSound τ o dL dR prev) {n₁ m₁ : Nat} {s₁' : Fin 2}
+    (hp : Prev τ (AB.rel o) dL dR prev) {n₁ m₁ : Nat} {s₁' : Fin 2}
     (a : (TOp.list n₁ s₁' m₁ (B := S.sig)).Pos → Graph S.sig NL) {A : Tbl NL NR} {k : Nat}
-    (hA : HypA τ o dL dR k A) (y : Graph S.sig NR)
+    (hA : Hyp τ (AB.rel o) dL dR k A) (y : Graph S.sig NR)
     (h : famListG ((listParts a).1.map (pairAt (sL := dL.sys) (sR := dR.sys) prev A))
         ((listParts a).2.1.map (pairAt (sL := dL.sys) (sR := dR.sys) prev A))
         ((listParts a).2.2.map (pairAt (sL := dL.sys) (sR := dR.sys) prev A)) y = true) :
@@ -922,7 +929,7 @@ theorem listRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR �
         decide (Mean.d (B := S.sig) u < k) && ((mng τ dR t).f o u).isSome
       have hsnd : ∀ t, SoundG P Q t (pairAt (sL := dL.sys) (sR := dR.sys) prev A t) := by
         intro t y' hy u
-        have hab := pairAt_sound hp t y' A k hy hA
+        have hab := pairAt_soundR hp t y' A k hy hA
         simp only [P, Q]
         cases hd : decide (Mean.d (B := S.sig) u < k)
         · rfl
@@ -1065,9 +1072,9 @@ theorem slotAtG_mem {N : Nat} {fs : Finset String} {md : {x // x ∈ fs} → Slo
 omit [Leaf S.sig] in
 /-- **The object row is sound.** -/
 theorem objRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
-    (hp : PrevSound τ o dL dR prev) {fs : Finset String} {md : {x // x ∈ fs} → SlotMode S.sig}
+    (hp : Prev τ (AB.rel o) dL dR prev) {fs : Finset String} {md : {x // x ∈ fs} → SlotMode S.sig}
     {w : Fin 2} (a : (TOp.obj fs md w).Pos → Graph S.sig NL) {A : Tbl NL NR} {k : Nat}
-    (hA : HypA τ o dL dR k A) (y : Graph S.sig NR)
+    (hA : Hyp τ (AB.rel o) dL dR k A) (y : Graph S.sig NR)
     (h : famObjG (md := md) (fun k => pairAt (sL := dL.sys) (sR := dR.sys) prev A (a (.inl k)))
         (blockTest (sL := dL.sys) (sR := dR.sys) (md := md) prev A w a) y = true) :
     AB o (k + 1) (mng τ dL (.node (.obj fs md w) a)) (mng τ dR y) := by
@@ -1093,7 +1100,7 @@ theorem objRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR →
       split
       · next F hF =>
         rcases h with ⟨x, _, hr, hg⟩ | ⟨x, _, ⟨hx, hr⟩, hmw⟩
-        · have hab := pairAt_sound hp _ _ A k hg hA
+        · have hab := pairAt_soundR hp _ _ A k hg hA
           refine obj_apart_at F (n := x.1) ?_ (fun u hu => ?_) v hv
           · rcases hr with hr | hr
             · refine Or.inl (absent_of_req a _ ?_)
@@ -1110,7 +1117,7 @@ theorem objRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR →
             match w, a, hmw with
             | ⟨0, _⟩, _, _ => simp only [Graph.never]; rfl
             | ⟨1, _⟩, a, hmw =>
-              exact pairAt_sound hp _ _ A k hmw hA u hu
+              exact pairAt_soundR hp _ _ A k hmw hA u hu
       · rfl
 
 /-! ### A graph term below the top -/
@@ -1330,8 +1337,8 @@ theorem sub_of_belowTop [TopLaws S] {N : Nat} (dd : GSys τ N) {t : Graph S.sig 
 
 /-- **The rows are sound**, by induction on the left operand. -/
 theorem rowG_sound (laws : Laws S o) {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
-    (hp : PrevSound τ o dL dR prev) :
-    ∀ x y A k, rowG dL.sys dR.sys prev A x y = true → HypA τ o dL dR k A →
+    (hp : Prev τ (AB.rel o) dL dR prev) :
+    ∀ x y A k, rowG dL.sys dR.sys prev A x y = true → Hyp τ (AB.rel o) dL dR k A →
       AB o (k + 1) (mng τ dL x) (mng τ dR y) := by
   intro x
   induction x with
@@ -1377,7 +1384,7 @@ theorem rowG_sound (laws : Laws S o) {prev : Tbl NL NR → Graph S.sig NL → Gr
       exact AB.refine_left (ih () y A k h hA)
 
 /-- **The walk is sound at every fuel.** -/
-theorem decG_sound (laws : Laws S o) : ∀ n, PrevSound τ o dL dR (decG dL.sys dR.sys n)
+theorem decG_sound (laws : Laws S o) : ∀ n, Prev τ (AB.rel o) dL dR (decG dL.sys dR.sys n)
   | 0 => fun _ _ _ h => nomatch h
   | n + 1 => fun A x y h k hA => rowG_sound laws (decG_sound laws n) x y A k h hA
 

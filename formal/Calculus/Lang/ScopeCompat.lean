@@ -173,6 +173,10 @@ theorem AgB.congr {k : Nat} {c c' c₁ c₁' : Mean.C S.sig} (h₁ : c.f = c₁.
     (h : AgB o k c c') : AgB o k c₁ c₁' := fun x hx y z hy hz => by
   rw [← h₁] at hy; rw [← h₂] at hz; exact h x hx y z hy hz
 
+variable (o) in
+/-- Agreement below a depth is a step-indexed relation. -/
+def AgB.rel : StepRel S := ⟨AgB o, fun _ _ _ hx => absurd hx (Nat.not_lt_zero _), AgB.mono, AgB.congr⟩
+
 /-- Agreement below a depth is antitone on the left. -/
 theorem AgB.sub_left {k : Nat} {c c₁ X : Mean.C S.sig} (hs : Sub c c₁) (h : AgB o k c₁ X) :
     AgB o k c X := fun x hx y z hy hz => h x hx y z (hs o x y hy) hz
@@ -381,61 +385,6 @@ theorem rightC_sound {N : Nat} (d : GSys τ N) {X : Mean.C S.sig} {k : Nat}
 
 variable {NL NR : Nat}
 
-variable (τ o) in
-/-- The assumed pairs agree below the depth. -/
-def HypC (dL : GSys τ NL) (dR : GSys τ NR) (k : Nat) (A : Tbl NL NR) : Prop :=
-  ∀ p ∈ A, AgB o k (mng τ dL (.leaf p.1)) (mng τ dR (.leaf p.2))
-
-variable (τ o) in
-/-- A walk at the next fuel is sound. -/
-def PrevC (dL : GSys τ NL) (dR : GSys τ NR) (prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool) :
-    Prop :=
-  ∀ A x y, prev A x y = true → ∀ k, HypC τ o dL dR k A → AgB o (k + 1) (mng τ dL x) (mng τ dR y)
-
-omit [Leaf S.sig] [Shapes S] [TopLaws S] in
-/-- Assumed pairs that agree below a depth agree below each smaller depth. -/
-theorem HypC.mono {dL : GSys τ NL} {dR : GSys τ NR} {k k' : Nat} {A : Tbl NL NR} (hk : k' ≤ k)
-    (h : HypC τ o dL dR k A) : HypC τ o dL dR k' A := fun p hp => (h p hp).mono hk
-
-omit [Leaf S.sig] [Shapes S] [TopLaws S] in
-/-- **A pair below a guard agrees below the depth.** A new pair agrees at each smaller depth, by
-    induction on the depth, because the walk assumes the pair only at a smaller depth. -/
-theorem pairAtC_sound {dL : GSys τ NL} {dR : GSys τ NR}
-    {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool} (hp : PrevC τ o dL dR prev) :
-    ∀ a b A k, pairAt (sL := dL.sys) (sR := dR.sys) prev A a b = true → HypC τ o dL dR k A →
-      AgB o k (mng τ dL a) (mng τ dR b)
-  | .leaf i, .leaf j, A, k, h, hA => by
-    simp only [pairAt, Bool.or_eq_true] at h
-    rcases h with h | h
-    · obtain ⟨⟨i', j'⟩, hp', hpe⟩ := List.any_eq_true.mp h
-      simp only [Bool.and_eq_true, decide_eq_true_eq] at hpe
-      obtain ⟨rfl, rfl⟩ := hpe
-      exact hA _ hp'
-    · have key : ∀ m, m ≤ k → AgB o m (mng τ dL (.leaf i)) (mng τ dR (.leaf j)) := by
-        intro m
-        induction m with
-        | zero => exact fun _ x hx => absurd hx (Nat.not_lt_zero _)
-        | succ m ih =>
-          intro hm
-          have hA' : HypC τ o dL dR m ((i, j) :: A) := by
-            intro p hp'
-            rcases List.mem_cons.mp hp' with rfl | hp'
-            · exact ih (by omega)
-            · exact (hA p hp').mono (by omega)
-          exact AgB.congr (mng_leaf dL i).symm (mng_leaf dR j).symm (hp _ _ _ h m hA')
-      exact key k (Nat.le_refl k)
-  | .leaf i, .node op b, A, k, h, hA => by
-    cases k with
-    | zero => exact fun x hx => absurd hx (Nat.not_lt_zero _)
-    | succ k => exact hp A _ _ h k (hA.mono (by omega))
-  | .node op a, b, A, k, h, hA => by
-    cases k with
-    | zero => exact fun x hx => absurd hx (Nat.not_lt_zero _)
-    | succ k =>
-      cases b with
-      | leaf j => exact hp A _ _ h k (hA.mono (by omega))
-      | node op' b => exact hp A _ _ h k (hA.mono (by omega))
-
 /-! ### The object row -/
 
 omit [Leaf S.sig] [Shapes S] [TopLaws S] in
@@ -495,9 +444,9 @@ variable {cL : Closed S.sig NL} {cR : Closed S.sig NR}
 /-- **One row per operation is sound**, for a walk at the next fuel that is sound. -/
 theorem rowC_sound (laws : Laws S o)
     {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
-    (hp : PrevC τ o (Closed.toG τ cL) (Closed.toG τ cR) prev) (x : Graph S.sig NL) :
+    (hp : Prev τ (AgB.rel o) (Closed.toG τ cL) (Closed.toG τ cR) prev) (x : Graph S.sig NL) :
     ∀ y A k, rowC cL.graph cR.graph o prev A x y = true →
-      HypC τ o (Closed.toG τ cL) (Closed.toG τ cR) k A →
+      Hyp τ (AgB.rel o) (Closed.toG τ cL) (Closed.toG τ cR) k A →
       AgB o (k + 1) (mng τ (Closed.toG τ cL) x) (mng τ (Closed.toG τ cR) y) := by
   induction x with
   | leaf j =>
@@ -582,7 +531,7 @@ theorem rowC_sound (laws : Laws S o)
         | list n' s' m' =>
           simp only [List.all_eq_true] at hy'
           have hpq : ∀ p q, AgB o k (mng τ (Closed.toG τ cL) (a p)) (mng τ (Closed.toG τ cR) (b q)) :=
-            fun p q => pairAtC_sound hp _ _ A k (hy' p (TOp.pos_complete (B := S.sig) (.list n s m) p) q
+            fun p q => pairAt_soundR hp _ _ A k (hy' p (TOp.pos_complete (B := S.sig) (.list n s m) p) q
               (TOp.pos_complete (B := S.sig) (.list n' s' m') q)) hA
           cases k with
           | zero => exact AgB.one _ _
@@ -620,17 +569,17 @@ theorem rowC_sound (laws : Laws S o)
                 rcases Decidable.em (n ∈ fs) with hn | hn
                 · have := (H1 ⟨n, hn⟩ (keyPos_complete fs _)).2
                   rw [slotAtG_mem a ⟨n, hn⟩]
-                  exact pairAtC_sound hp _ _ A _ this hA
+                  exact pairAt_soundR hp _ _ A _ this hA
                 rcases Decidable.em (n ∈ fs') with hn' | hn'
                 · have := (H2 ⟨n, hn'⟩ (keyPos_complete fs' _)).2
                   rw [slotAtG_mem b ⟨n, hn'⟩]
-                  exact pairAtC_sound hp _ _ A _ this hA
+                  exact pairAt_soundR hp _ _ A _ this hA
                 · obtain ⟨e1, hs⟩ := hb1 hn
                   obtain ⟨e2, _⟩ := hb2 hn'
                   rw [e1, e2]
                   have : (s.val == 0) = false := by simpa using hs
                   rw [this, Bool.false_or] at H3
-                  exact pairAtC_sound hp _ _ A _ H3 hA
+                  exact pairAt_soundR hp _ _ A _ H3 hA
               · rw [absentOf_slot a _ .empty n] at e1
                 rw [absentOf_slot b _ .empty n] at e2
                 rcases Decidable.em (n ∈ fs) with hn | hn
@@ -652,7 +601,7 @@ theorem rowC_sound (laws : Laws S o)
 
 /-- **The walk is sound at each fuel.** -/
 theorem compG_sound (laws : Laws S o) :
-    ∀ n, PrevC τ o (Closed.toG τ cL) (Closed.toG τ cR) (compG cL.graph cR.graph o n)
+    ∀ n, Prev τ (AgB.rel o) (Closed.toG τ cL) (Closed.toG τ cR) (compG cL.graph cR.graph o n)
   | 0 => fun _ _ _ h => nomatch h
   | n + 1 => fun A x y h k hA => rowC_sound laws (compG_sound laws n) x y A k h hA
 
