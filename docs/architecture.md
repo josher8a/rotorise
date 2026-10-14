@@ -64,7 +64,7 @@ instance, and JSON is a second instance.
 | `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
 | `Alg/Agree.lean` | agreement `Agree` at an orientation, whose two halves are the host and the dual, one lemma per combinator, and `compat_iff_agree` |
 | `Lang/Term.lean` | the signature `Sig`, the syntax `Syn`, the meaning `Mean`, and the tables of adapters |
-| `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, and the DAG of scopes with `dagGuardB_iff_dsys` |
+| `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, and the DAG of scopes with `DSys.dagGuard` and `dagGuard_of_rename` |
 | `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, and `Scoped.Closed.compat_of_HF` |
 | `Lang/Universe.lean`, `Lang/ScopeDisjoint.lean` | the class `Leaf`, the structural disjointness decision `Scoped.disjoint` over two closed codecs with its soundness `Scoped.disjoint_sound`, the view `viewG` at an orientation, and `views_apart` |
 | `Lang/ScopeCompat.lean` | the compatibility decision `Scoped.compatPair` over two closed codecs, and `Scoped.compatPair_sound` |
@@ -370,8 +370,9 @@ the scopes at the root (`Scoped.Closed.meaning`). The stages of a scope start at
 each applies the entries to the one before. Each input reads the stage its own depth names.
 
 **The guard is a checked condition on the graph.** `Flat.Guarded` asks that each entry occurs
-below a container and below no `held` and no older reader. A system that passes `dagGuardB` has a form as a DAG of
-scopes (`dagGuardB_iff_dsys`), and `Graph.guarded` decides the condition at DynamoDB. The guard
+below a container and below no `held` and no older reader. The graph form of a DAG of scopes passes `dagGuardB`
+under each renaming of its entries (`dagGuard_of_rename`, `DSys.dagGuard`). So a graph that `Graph.guarded`
+refuses has no form as a DAG of scopes. The guard
 refuses two shapes, and each is a graph with no form as a DAG of scopes:
 
 - an entry that reads its own input, as an entry whose body is `ref 0`
