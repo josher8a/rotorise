@@ -245,13 +245,11 @@ theorem HL.bind {n m : Nat} (π : Fin n → Fin m) (e : Fin m → Mean.C S.sig) 
 
 /-- **Each node of an inlined scope term is lawful.** The term is typed, its obligations hold at
     each stage of lawful approximants, and the approximants agree with the solution below their
-    index. The constants are lawful. The node reads the laws of its operation (`TOp.lawful`), and
+    index. The node reads the laws of its operation (`TOp.lawful`), and
     a union reads the compatibility of its options through the approximants. -/
-theorem HL.inlC {c N : Nat} {κ : Fin c → Mean.C S.sig} (hκ : ∀ j, Lawful Mean.mem (κ j))
-    {e : Fin N → Mean.C S.sig} {σc : Fin c → Graph S.sig N}
-    (hσc : ∀ j, (σc j).interp (TStep τ) e = κ j) (hσcL : ∀ j, HL τ e (σc j)) {w k : Nat}
-    {ρw' : Fin w → Mean.C S.sig} {ρk' : Fin k → Mean.C S.sig} {u : Term S.sig c w k} {T μ}
-    (h : Scoped.Typed τ κ ρw' ρk' u T μ) :
+theorem HL.inl {N : Nat} {e : Fin N → Mean.C S.sig} {w k : Nat}
+    {ρw' : Fin w → Mean.C S.sig} {ρk' : Fin k → Mean.C S.sig} {u : Term S.sig w k} {T μ}
+    (h : Scoped.Typed τ ρw' ρk' u T μ) :
     ∀ (σw : Fin w → Graph S.sig N) (σk : Fin k → Graph S.sig N) (ρw : Fin w → Mean.C S.sig)
       (ρk : Fin k → Mean.C S.sig) (stw : Nat → Fin w → Mean.C S.sig)
       (stk : Nat → Fin k → Mean.C S.sig),
@@ -259,14 +257,13 @@ theorem HL.inlC {c N : Nat} {κ : Fin c → Mean.C S.sig} (hκ : ∀ j, Lawful M
       (∀ j, HL τ e (σw j)) → (∀ j, HL τ e (σk j)) →
       (∀ j, Lawful Mean.mem (ρw j)) → (∀ j, Lawful Mean.mem (ρk j)) →
       (∀ n j, AgreeLe Mean.d n (ρw j) (stw n j)) → (∀ n j, AgreeLe Mean.d n (ρk j) (stk n j)) →
-      (∀ n, Scoped.Obligations τ κ (stw n) (stk n) u) →
-      HL τ e (u.inlC σw σk σc) ∧ Lawful Mean.mem (SFlat.interp (CStep (TStep τ) c κ) u ρw ρk) := by
+      (∀ n, Scoped.Obligations τ (stw n) (stk n) u) →
+      HL τ e (u.inl σw σk) ∧ Lawful Mean.mem (SFlat.interp (TStep τ) u ρw ρk) := by
   induction h with
   | ref i => exact fun _ _ _ _ _ _ _ _ _ hσkL _ hρk _ _ _ => ⟨hσkL i, hρk i⟩
-  | const j => exact fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => ⟨hσcL j, hκ j⟩
   | @node w k ρw' ρk' o args T μ r hargs hr ih =>
     intro σw σk ρw ρk stw stk hσw hσk hσwL hσkL hρw hρk hagW hagK hob
-    have hS := CStep.lawful (TStep_lawful τ) c κ
+    have hS := TStep_lawful τ
     have ihp := fun p => ih p ((TOp.kind o).envW σw) ((TOp.kind o).envK σw σk)
       ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk) (fun n => (TOp.kind o).envW (stw n))
       (fun n => (TOp.kind o).envK (stw n) (stk n))
@@ -279,7 +276,7 @@ theorem HL.inlC {c N : Nat} {κ : Fin c → Mean.C S.sig} (hκ : ∀ j, Lawful M
       (Kind.envW_all hσwL _) (Kind.envK_all hσwL hσkL _) (Kind.envW_all hρw _)
       (Kind.envK_all hρw hρk _) (fun n => Kind.envW_all2 (hagW n) _)
       (fun n => Kind.envK_all2 (hagW n) (hagK n) _) (fun n => (hob n).1 p)
-    have hobl : TOp.obl τ o (fun p => SFlat.interp (CStep (TStep τ) c κ) (args p)
+    have hobl : TOp.obl τ o (fun p => SFlat.interp (TStep τ) (args p)
         ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk)) := by
       cases o with
       | held s k₀ ks => exact (hob 0).2
@@ -289,15 +286,14 @@ theorem HL.inlC {c N : Nat} {κ : Fin c → Mean.C S.sig} (hκ : ∀ j, Lawful M
           ⟨_, _, SFlat.agree hS (args p) _ _ _ _ (hagW n) (hagK n),
             SFlat.agree hS (args q) _ _ _ _ (hagW n) (hagK n), (hob n).2 p q⟩
       | _ => trivial
-    have hL : Lawful Mean.mem (TOp.run τ o fun p => SFlat.interp (CStep (TStep τ) c κ) (args p)
+    have hL : Lawful Mean.mem (TOp.run τ o fun p => SFlat.interp (TStep τ) (args p)
         ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk)) :=
       TOp.lawful τ hr (fun p => (ihp p).2) hobl
     refine ⟨⟨?_, fun p => (ihp p).1⟩, hL⟩
-    have e2 : ∀ p, ((args p).inlC ((TOp.kind o).envW σw) ((TOp.kind o).envK σw σk) σc).interp
-        (TStep τ) e = SFlat.interp (CStep (TStep τ) c κ) (args p) ((TOp.kind o).envW ρw)
+    have e2 : ∀ p, ((args p).inl ((TOp.kind o).envW σw) ((TOp.kind o).envK σw σk)).interp
+        (TStep τ) e = SFlat.interp (TStep τ) (args p) ((TOp.kind o).envW ρw)
           ((TOp.kind o).envK ρw ρk) := fun p => by
-      refine (SFlat.interp_inlC (R := TStep τ) e (args p) _ _ σc).trans ?_
-      rw [funext hσc]
+      refine (SFlat.interp_inl (R := TStep τ) e (args p) _ _).trans ?_
       congr 1
       · funext j
         have e1 := congrFun (Kind.envW_comp (fun t => t.interp (TStep τ) e) (TOp.kind o) σw) j
@@ -310,13 +306,12 @@ theorem HL.inlC {c N : Nat} {κ : Fin c → Mean.C S.sig} (hκ : ∀ j, Lawful M
 /-- **Each node of a typed closed codec that meets its obligations is lawful**, at the solution. -/
 theorem Closed.lawfulNodes {N : Nat} (d : Closed S.sig N) (hty : Closed.Typed τ d)
     (hob : Closed.Obligations τ d) (i : Fin N) : HL τ (d.sol (TStep τ) Mean.d) (d.graph i) := by
-  have hR := CStep.lawful (TStep_lawful τ) 0 (Fin.elim0 : Fin 0 → Mean.C S.sig)
+  have hR := TStep_lawful τ
   have hst := Closed.stage_lawful τ d hty hob
   have hB := nf_contractive hR d
   have htop := Closed.sound τ d hty hob
   obtain ⟨T, μ, ht⟩ := hty i
-  exact (HL.inlC (fun j => j.elim0) (σc := fun j => .leaf j.elim0) (fun j => j.elim0)
-    (fun j => j.elim0) ht (fun j => .leaf j)
+  exact (HL.inl ht (fun j => .leaf j)
     (fun j => .leaf (Fin.castLE (Nat.le_of_lt i.isLt) j))
     (Closed.top τ d) (fun j => Closed.top τ d (Fin.castLE (Nat.le_of_lt i.isLt) j))
     (Closed.stage τ d)

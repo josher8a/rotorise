@@ -23,14 +23,9 @@ guarded. `graphGuard` decides the condition. The stratified form `SSys` names a 
 guard only below its own entry, so the condition holds by construction, and `nf` folds the
 system into a guarded one. The graph form of a stratified system passes `graphGuard`.
 
-A flat scope is a stratified scope with no constant. Its graph form has no leaf below a wall and
-no cycle of unguarded edges, and it has one solution at the maps (`scope_solution`), `solve` of
-its normal form.
-
-A wall can read an entry that the wall cannot reach back. The DAG of scopes `DSys` is a sequence
-of stratified scopes, and a scope reads each earlier entry as a constant. `DagGuard` admits a
-wall edge that leaves its component. The graph form of a DAG of scopes passes `DagGuard` under
-each renaming of its entries, and each DAG of scopes has one solution at the maps.
+A flat scope is a stratified system. Its graph form has no leaf below a wall and no cycle of
+unguarded edges, and it has one solution at the maps (`scope_solution`), `solve` of its normal
+form.
 -/
 
 namespace Calculus.Alg
@@ -1577,266 +1572,11 @@ theorem SSys.graphGuard (sys : SSys S n) : graphGuard S sys.graph = true :=
   (graphGuard_iff _).mpr ⟨fun _ => Flat.okB_of_ok _
     (SFlat.inl_ok _ _ _ (fun _ => trivial) fun _ => trivial), sys.no_cycle⟩
 
-/-! ### No cycle gives a rank -/
-
-/-- The greatest `k ≤ m` where `P` holds, else `0`. Structural on `m`. -/
-def greatest (P : Nat → Bool) : Nat → Nat
-  | 0 => 0
-  | m + 1 => cond (P (m + 1)) (m + 1) (greatest P m)
-
-/-- `greatest P m` is at most `m`. -/
-theorem greatest_le (P : Nat → Bool) : ∀ m, greatest P m ≤ m
-  | 0 => Nat.le_refl 0
-  | m + 1 => by
-      cases h : P (m + 1) with
-      | true => simp only [greatest, h, cond_true]; exact Nat.le_refl _
-      | false => simp only [greatest, h, cond_false]; exact Nat.le_succ_of_le (greatest_le P m)
-
-/-- Where `P 0` holds, `P` holds at `greatest P m`. -/
-theorem greatest_spec (P : Nat → Bool) (h0 : P 0 = true) : ∀ m, P (greatest P m) = true
-  | 0 => h0
-  | m + 1 => by
-      cases h : P (m + 1) with
-      | true => simp only [greatest, h, cond_true]
-      | false => simp only [greatest, h, cond_false]; exact greatest_spec P h0 m
-
-/-- Each `k ≤ m` where `P` holds is at most `greatest P m`. -/
-theorem le_greatest (P : Nat → Bool) : ∀ m k, k ≤ m → P k = true → k ≤ greatest P m
-  | 0, _, hk, _ => hk
-  | m + 1, k, hk, hP => by
-      cases h : P (m + 1) with
-      | true => simp only [greatest, h, cond_true]; exact hk
-      | false =>
-        simp only [greatest, h, cond_false]
-        rcases Nat.lt_or_ge k (m + 1) with hl | hl
-        · exact le_greatest P m k (Nat.le_of_lt_succ hl) hP
-        · have hkm : k = m + 1 := Nat.le_antisymm hk hl
-          rw [hkm, h] at hP
-          exact nomatch hP
-
-/-- No cycle gives a rank that every unguarded edge lowers: the length of the longest walk. -/
-theorem rank_of_noCycle (hnc : ¬ Cycle S sys) :
-    ∃ r : Fin n → Nat, ∀ i j, UEdge S sys i j → r j < r i := by
-  refine ⟨fun i => greatest (fun k => walkB S sys k i) n, fun i j hij => ?_⟩
-  have hj : walkB S sys (greatest (fun k => walkB S sys k j) n) j = true :=
-    greatest_spec (fun k => walkB S sys k j) rfl n
-  have hwi : walkB S sys (greatest (fun k => walkB S sys k j) n + 1) i = true :=
-    (walkB_iff sys _ i).mpr (walk_cons hij ((walkB_iff sys _ j).mp hj))
-  have hkn : greatest (fun k => walkB S sys k j) n + 1 ≤ n := by
-    rcases Nat.lt_or_ge (greatest (fun k => walkB S sys k j) n) n with h | h
-    · omega
-    · have he := Nat.le_antisymm (greatest_le _ n) h
-      rw [he] at hj
-      exact absurd (cycle_of_walk ((walkB_iff sys n j).mp hj)) hnc
-  exact le_greatest _ n _ hkn hwi
-
 end Bridge
 
-/-! ## A DAG of scopes
+/-! ## A leaf at any position, and a leaf below a wall -/
 
-A scope of `n` entries after `c` earlier entries is a stratified system over the step with one
-nullary `keep` operation per earlier entry: a **constant**. A constant has no leaf, so it may sit
-at any position, a wall included. A system is a sequence of scopes. -/
-
-section Scopes
-
-/-- The arity of the step with `c` constants: a constant takes no argument. -/
-def cAr (S : Container) (c : Nat) : S.Op ⊕ Fin c → Type
-  | .inl o => S.Pos o
-  | .inr _ => Empty
-
-/-- The positions of the step with `c` constants, enumerated. -/
-def cPos (S : Container) (c : Nat) : (o : S.Op ⊕ Fin c) → List (cAr S c o)
-  | .inl o => S.pos o
-  | .inr _ => []
-
-/-- The enumeration of the step with constants holds every position. -/
-theorem cPos_complete (S : Container) (c : Nat) : ∀ o (p : cAr S c o), p ∈ cPos S c o
-  | .inl o, p => S.pos_complete o p
-  | .inr _, p => nomatch p
-
-/-- The kind of the step with `c` constants: a constant is `keep`. -/
-def cKd (S : Container) (c : Nat) : S.Op ⊕ Fin c → Kind
-  | .inl o => S.kind o
-  | .inr _ => .keep
-
-/-- **The step with constants**: constant `j` denotes `κ j`. The syntax does not read `κ`. -/
-def cSig (S : Container) (c : Nat) : Container where
-  A := S.Op ⊕ Fin c
-  B := cAr S c
-  pos := cPos S c
-  pos_complete := cPos_complete S c
-  kind := cKd S c
-
-/-- **The algebra with constants**: constant `j` denotes `κ j`. -/
-def CStep (R : Step S V M) (c : Nat) (κ : Fin c → Codec V M) : Step (cSig S c) V M where
-  run
-    | .inl o, a => R.run o a
-    | .inr j, _ => κ j
-
-/-- **A scope**: a stratified system of `n` entries over the step with `c` constants. -/
-abbrev Scope (S : Container) (c n : Nat) : Type :=
-  (i : Fin n) → SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) n i
-
-/-- **A DAG of scopes**: each scope reads the entries of the scopes before it as constants. -/
-inductive DSys (S : Container) : Nat → Type where
-  | nil : DSys S 0
-  | snoc {c n : Nat} (d : DSys S c) (sc : Scope S c n) : DSys S (c + n)
-
-/-- The step with constants keeps the laws of the step: a constant reads no argument. -/
-theorem CStep.lawful (hS : R.Lawful depth) (c : Nat) (κ : Fin c → Codec V M) :
-    (CStep R c κ).Lawful depth where
-  keep o hk d a₁ a₂ h := by
-    cases o with
-    | inl o => exact hS.keep o hk d a₁ a₂ h
-    | inr j => exact AgreeLe.refl _ _
-  down o hk d a₁ a₂ h := by
-    cases o with
-    | inl o => exact hS.down o hk d a₁ a₂ h
-    | inr j => exact nomatch hk
-
-/-! ## The solution, scope by scope -/
-
-/-- **The solution**: the solution of each scope is `solve` of its normal form, with the solution of
-    the scopes before it as the constants. Structural on the sequence. -/
-def DSys.sol (R : Step S V M) (depth : V → Nat) : {N : Nat} → DSys S N → Fin N → Codec V M
-  | _, .nil => Fin.elim0
-  | _, .snoc (c := c) d sc =>
-      Fin.append (DSys.sol R depth d)
-        (solve depth (sysB (CStep R c (DSys.sol R depth d)) (nf (cSig S c) sc)))
-
-/-- Inlining a scope term: an entry leaf and a constant each become a flat term of the whole. -/
-def SFlat.inlC {S : Container} {c N : Nat} : {w k : Nat} →
-    SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k →
-    (Fin w → Flat S.Op S.Pos N) → (Fin k → Flat S.Op S.Pos N) →
-    (Fin c → Flat S.Op S.Pos N) → Flat S.Op S.Pos N
-  | _, _, .leaf j, _, σk, _ => σk j
-  | _, _, .node (.inl o) args, σw, σk, σc =>
-      .node o fun p => SFlat.inlC (args p) ((S.kind o).envW σw) ((S.kind o).envK σw σk) σc
-  | _, _, .node (.inr j) _, _, _, σc => σc j
-
-/-- **The graph form**: the DAG of scopes as one flat system, where a constant is a leaf. -/
-def DSys.graph : {N : Nat} → DSys S N → Fin N → Flat S.Op S.Pos N
-  | _, .nil => Fin.elim0
-  | _, .snoc (c := c) (n := n) d sc => Fin.append
-      (fun m => (DSys.graph d m).bind fun j => .leaf (Fin.castAdd n j))
-      (fun i => (sc i).inlC (fun j => .leaf (Fin.natAdd c j))
-        (fun j => .leaf (Fin.natAdd c (Fin.castLE (Nat.le_of_lt i.isLt) j)))
-        (fun j => .leaf (Fin.castAdd n j)))
-
-/-- The substitution lemma of the inlining. -/
-theorem SFlat.interp_inlC {c N : Nat} (e : Fin N → Codec V M) : ∀ {w k : Nat}
-    (t : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k) (σw : Fin w → Flat S.Op S.Pos N)
-    (σk : Fin k → Flat S.Op S.Pos N) (σc : Fin c → Flat S.Op S.Pos N),
-    (t.inlC σw σk σc).interp R e =
-      SFlat.interp (CStep R c fun j => (σc j).interp R e) t (fun j => (σw j).interp R e)
-        (fun j => (σk j).interp R e)
-  | _, _, .leaf _, _, _, _ => rfl
-  | _, _, .node (.inl o) args, σw, σk, σc => by
-      show R.run o (fun p => ((args p).inlC _ _ σc).interp R e) = R.run o _
-      congr 1
-      funext p
-      exact (SFlat.interp_inlC e (args p) _ _ σc).trans
-        (congrArg₂ (SFlat.interp (CStep R c fun j => (σc j).interp R e) (args p))
-          (Kind.envW_comp _ _ _) (Kind.envK_comp _ _ _ _))
-  | _, _, .node (.inr _) _, _, _, _ => rfl
-
-/-- **What a wall owes, at the maps**: a wall reads its arguments through their maps. The walls
-    of the term layer, `held` and `legacy`, do. -/
-def WallF (R : Step S V M) : Prop :=
-  ∀ o, S.kind o = .wall → ∀ a₁ a₂ : S.Pos o → Codec V M,
-    (∀ p, (a₁ p).f = (a₂ p).f) → (R.run o a₁).f = (R.run o a₂).f
-
-/-- Each operation reads its arguments through their maps. -/
-theorem Step.run_f (hS : R.Lawful depth) (hW : WallF R) (o : S.Op)
-    {a₁ a₂ : S.Pos o → Codec V M} (h : ∀ p, (a₁ p).f = (a₂ p).f) :
-    (R.run o a₁).f = (R.run o a₂).f := by
-  rcases Kind.cases3 (S.kind o) with hκ | hκ | hκ
-  · exact AgreeLe.eq_of_forall (depth := depth) fun d =>
-      hS.keep o hκ d _ _ fun p => AgreeLe.of_eq (h p)
-  · exact AgreeLe.eq_of_forall (depth := depth) fun d =>
-      (hS.down o hκ d _ _ fun p => AgreeLe.of_eq (h p)).mono (by omega)
-  · exact hW o hκ _ _ h
-
-/-- A flat term, a leaf below a wall included, reads its environment through the maps. -/
-theorem Flat.interp_f_congrW (hS : R.Lawful depth) (hW : WallF R) {e₁ e₂ : Fin n → Codec V M}
-    (he : ∀ j, (e₁ j).f = (e₂ j).f) : ∀ t : Flat S.Op S.Pos n,
-    (t.interp R e₁).f = (t.interp R e₂).f
-  | .leaf j => he j
-  | .node o args => Step.run_f hS hW o fun p => Flat.interp_f_congrW hS hW he (args p)
-
-/-- An entry of an earlier scope reads the graph form of the earlier scopes. -/
-theorem DSys.graph_castAdd {c n : Nat} (d : DSys S c) (sc : Scope S c n) (e : Fin (c + n) → Codec V M)
-    (m : Fin c) : sysB R (DSys.snoc d sc).graph e (Fin.castAdd n m) =
-      sysB R d.graph (fun j => e (Fin.castAdd n j)) m := by
-  simp only [sysB, DSys.graph, Fin.append_left, Flat.interp_bind, Flat.interp]
-
-/-- An entry of the last scope reads its scope term, with the earlier entries as constants. -/
-theorem DSys.graph_natAdd {c n : Nat} (d : DSys S c) (sc : Scope S c n) (e : Fin (c + n) → Codec V M)
-    (i : Fin n) (κ : Fin c → Codec V M) (hκ : ∀ j, e (Fin.castAdd n j) = κ j) :
-    sysB R (DSys.snoc d sc).graph e (Fin.natAdd c i) =
-      SFlat.interp (CStep R c κ) (sc i) (fun j => e (Fin.natAdd c j))
-        (fun j => e (Fin.natAdd c (Fin.castLE (Nat.le_of_lt i.isLt) j))) := by
-  obtain rfl : (fun j => e (Fin.castAdd n j)) = κ := funext hκ
-  simp only [sysB, DSys.graph, Fin.append_right, SFlat.interp_inlC, Flat.interp]
-
-/-- **A DAG of scopes has one solution**, at the maps. The solution is the fold of
-    `strat_solution`, scope by scope. -/
-theorem dsys_solution (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (hW : WallF R) :
-    ∀ {N : Nat} (d : DSys S N), IsFix (sysB R d.graph) (d.sol R depth) ∧
-      ∀ e, IsFix (sysB R d.graph) e → ∀ i, (e i).f = (d.sol R depth i).f
-  | _, .nil => ⟨fun i => i.elim0, fun _ _ i => i.elim0⟩
-  | _, .snoc (c := c) (n := n) d sc => by
-      obtain ⟨ih1, ih2⟩ := dsys_solution hd hS hW d
-      have hsc := strat_solution hd (CStep.lawful hS c (d.sol R depth)) sc
-      refine ⟨fun i => ?_, fun e he i => ?_⟩
-      · refine Fin.addCases (fun m => ?_) (fun i => ?_) i
-        · rw [DSys.graph_castAdd]
-          simp only [DSys.sol, Fin.append_left]
-          exact ih1 m
-        · rw [DSys.graph_natAdd d sc _ i (d.sol R depth) fun j => by
-            simp only [DSys.sol, Fin.append_left]]
-          simp only [DSys.sol, Fin.append_right]
-          exact hsc.1 i
-      · have he1 : IsFix (sysB R d.graph) fun j => e (Fin.castAdd n j) := fun m => by
-          rw [he (Fin.castAdd n m), DSys.graph_castAdd]
-        have hl := ih2 _ he1
-        let e' : Fin (c + n) → Codec V M := Fin.append (d.sol R depth) fun i => e (Fin.natAdd c i)
-        have hee' : ∀ j, (e j).f = (e' j).f := fun j =>
-          Fin.addCases (fun m => by simp only [e', Fin.append_left]; exact hl m)
-            (fun i => by simp only [e', Fin.append_right]) j
-        have hfix : SIsFix (CStep R c (d.sol R depth)) sc fun i => e (Fin.natAdd c i) := by
-          intro i
-          rw [he (Fin.natAdd c i)]
-          refine (Flat.interp_f_congrW hS hW hee' ((DSys.snoc d sc).graph (Fin.natAdd c i))).trans ?_
-          have h2 := DSys.graph_natAdd (R := R) d sc e' i (d.sol R depth) fun j => by
-            simp only [e', Fin.append_left]
-          simp only [sysB] at h2
-          rw [h2]
-          simp only [e', Fin.append_right]
-        refine Fin.addCases (fun m => ?_) (fun i => ?_) i
-        · simp only [DSys.sol, Fin.append_left]; exact hl m
-        · simp only [DSys.sol, Fin.append_right]
-          exact hsc.2 _ hfix i
-
-/-- Every entry of the solution is a `solve` entry: its held set is its write domain, and its
-    member is `⊤`. So the maps fix the codec. -/
-theorem DSys.sol_eq : ∀ {N : Nat} (d : DSys S N) (i : Fin N) {c : Codec V M},
-    (∀ v, c.T v = ((c.e v).isSome = true)) → c.μ = none → (d.sol R depth i).f = c.f →
-    d.sol R depth i = c
-  | _, .nil, i, _, _, _, _ => i.elim0
-  | _, .snoc (n := n) d sc, i, c, hT, hμ, hf => by
-      revert hf
-      refine Fin.addCases (fun m => ?_) (fun i => ?_) i
-      · simp only [DSys.sol, Fin.append_left]; exact DSys.sol_eq d m hT hμ
-      · simp only [DSys.sol, Fin.append_right]; exact solve_eq hT hμ
-
-end Scopes
-
-
-/-! ## The guard of a DAG of scopes: a wall names an entry outside its own component -/
-
-section DagBridge
+section LeafSets
 
 /-- The leaf `j` occurs at any position. -/
 def Flat.lv (S : Container) (j : Fin n) : Flat S.Op S.Pos n → Bool
@@ -1849,15 +1589,6 @@ def Flat.wlv (S : Container) (j : Fin n) : Flat S.Op S.Pos n → Bool
   | .node o args => match S.kind o with
     | .wall => (S.pos o).any fun p => Flat.lv S j (args p)
     | _ => (S.pos o).any fun p => Flat.wlv S j (args p)
-
-/-- A reference edge: entry `i` names entry `j` at any position. -/
-def REdge (sys : Fin n → Flat S.Op S.Pos n) (i j : Fin n) : Prop := (sys i).lv S j = true
-
-/-- **The guard of a DAG of scopes**: no cycle of unguarded edges, and a wall names only an entry
-    that does not reach back, so an entry outside the component of the wall. -/
-structure DagGuard (S : Container) (sys : Fin n → Flat S.Op S.Pos n) : Prop where
-  noCycle : ¬ Cycle S sys
-  wall : ∀ i j, (sys i).wlv S j = true → ¬ Relation.ReflTransGen (REdge sys) j i
 
 /-- A node has the leaf `j` exactly where an argument has the leaf `j`. -/
 theorem Flat.lv_node {o : S.Op} {g : S.Pos o → Flat S.Op S.Pos n} {j : Fin n} :
@@ -1879,134 +1610,12 @@ theorem Flat.wlv_node {o : S.Op} {g : S.Pos o → Flat S.Op S.Pos n} {j : Fin n}
   simp only [Flat.wlv]
   cases S.kind o <;> simp [S.pos_complete]
 
-/-- A walk of `m` reference edges from `i` to `j`. -/
-def RWalk (sys : Fin n → Flat S.Op S.Pos n) (m : Nat) (i j : Fin n) : Prop :=
-  ∃ w : Nat → Fin n, w 0 = i ∧ w m = j ∧ ∀ t < m, REdge sys (w t) (w (t + 1))
-
-/-- A reference edge before a walk of `m` edges is a walk of `m + 1` edges. -/
-theorem rwalk_cons {sys : Fin n → Flat S.Op S.Pos n} {i l j : Fin n} {m : Nat}
-    (h : REdge sys i l) : RWalk sys m l j → RWalk sys (m + 1) i j
-  | ⟨w, h0, hm, hw⟩ => ⟨fun t => match t with | 0 => i | t + 1 => w t, rfl, hm, fun t ht => match t with
-      | 0 => by show REdge sys i (w 0); rw [h0]; exact h
-      | t + 1 => hw t (by omega)⟩
-
-/-- A walk of reference edges is a reach. -/
-theorem rtg_of_rwalk {sys : Fin n → Flat S.Op S.Pos n} {j : Fin n} : ∀ (m : Nat) (i : Fin n),
-    RWalk sys m i j → Relation.ReflTransGen (REdge sys) i j
-  | 0, _, ⟨w, h0, hm, _⟩ => by subst h0; subst hm; exact .refl
-  | m + 1, i, ⟨w, h0, hm, hw⟩ => by
-      have h1 : REdge sys i (w 1) := by rw [← h0]; exact hw 0 (Nat.succ_pos m)
-      exact .head h1 (rtg_of_rwalk m (w 1) ⟨fun t => w (t + 1), rfl, hm, fun t ht => hw (t + 1) (by omega)⟩)
-
-/-- A reach is a walk of reference edges. -/
-theorem rwalk_of_rtg {sys : Fin n → Flat S.Op S.Pos n} {i j : Fin n}
-    (h : Relation.ReflTransGen (REdge sys) i j) : ∃ m, RWalk sys m i j := by
-  induction h using Relation.ReflTransGen.head_induction_on with
-  | refl => exact ⟨0, fun _ => j, rfl, rfl, fun _ ht => absurd ht (Nat.not_lt_zero _)⟩
-  | head hab _ ih =>
-    obtain ⟨m, hw⟩ := ih
-    exact ⟨m + 1, rwalk_cons hab hw⟩
-
-/-- A walk over `n` entries has a walk of at most `n` edges between its ends: cut each repeat. -/
-theorem rwalk_short {sys : Fin n → Flat S.Op S.Pos n} {i j : Fin n} :
-    ∀ m, RWalk sys m i j → ∃ m', m' ≤ n ∧ RWalk sys m' i j := by
-  intro m
-  induction m using Nat.strong_induction_on with
-  | _ m ih =>
-  intro ⟨w, h0, hm, hw⟩
-  rcases Nat.lt_or_ge n m with hnm | hnm
-  · obtain ⟨a, b, hab, hb, he⟩ := pigeon n w
-    refine ih (m - (b - a)) (by omega) ⟨fun t => if t ≤ a then w t else w (t + (b - a)), ?_, ?_, ?_⟩
-    · show (if 0 ≤ a then w 0 else w (0 + (b - a))) = i
-      rw [if_pos (Nat.zero_le a)]
-      exact h0
-    · show (if m - (b - a) ≤ a then w (m - (b - a)) else w (m - (b - a) + (b - a))) = j
-      rw [if_neg (show ¬ m - (b - a) ≤ a by omega), show m - (b - a) + (b - a) = m by omega]
-      exact hm
-    · intro t ht
-      show REdge sys (if t ≤ a then w t else w (t + (b - a)))
-        (if t + 1 ≤ a then w (t + 1) else w (t + 1 + (b - a)))
-      rcases Nat.lt_or_ge t a with h1 | h1
-      · rw [if_pos (Nat.le_of_lt h1), if_pos (show t + 1 ≤ a from h1)]
-        exact hw t (by omega)
-      · rcases Nat.eq_or_lt_of_le h1 with h2 | h2
-        · rw [if_pos (show t ≤ a by omega), if_neg (show ¬ t + 1 ≤ a by omega), ← h2, he,
-            show a + 1 + (b - a) = b + 1 by omega]
-          exact hw b (by omega)
-        · rw [if_neg (show ¬ t ≤ a by omega), if_neg (show ¬ t + 1 ≤ a by omega),
-            show t + 1 + (b - a) = t + (b - a) + 1 by omega]
-          exact hw _ (by omega)
-  · exact ⟨m, hnm, w, h0, hm, hw⟩
-
-/-- Reach in at most `k` reference edges, as a decision. Structural on `k`. -/
-def reachB (sys : Fin n → Flat S.Op S.Pos n) : Nat → Fin n → Fin n → Bool
-  | 0 => fun i j => decide (i = j)
-  | k + 1 => fun i j =>
-      decide (i = j) || (List.finRange n).any fun l => (sys i).lv S l && reachB sys k l j
-
-/-- The decision of reach in at most `k` edges is sound and complete. -/
-theorem reachB_iff (sys : Fin n → Flat S.Op S.Pos n) : ∀ (k : Nat) (i j : Fin n),
-    reachB sys k i j = true ↔ ∃ m, m ≤ k ∧ RWalk sys m i j
-  | 0, i, j => by
-      simp only [reachB, decide_eq_true_eq]
-      constructor
-      · intro h
-        exact ⟨0, Nat.le_refl 0, fun _ => i, rfl, h, fun _ ht => absurd ht (Nat.not_lt_zero _)⟩
-      · rintro ⟨m, hm, w, h0, hmj, _⟩
-        have hm0 : m = 0 := Nat.eq_zero_of_le_zero hm
-        subst hm0
-        exact h0.symm.trans hmj
-  | k + 1, i, j => by
-      simp only [reachB, Bool.or_eq_true, decide_eq_true_eq, any_finRange, Bool.and_eq_true]
-      constructor
-      · rintro (h | ⟨l, hl, hr⟩)
-        · exact ⟨0, Nat.zero_le _, fun _ => i, rfl, h, fun _ ht => absurd ht (Nat.not_lt_zero _)⟩
-        · obtain ⟨m, hm, hw⟩ := (reachB_iff sys k l j).mp hr
-          exact ⟨m + 1, Nat.succ_le_succ hm, rwalk_cons hl hw⟩
-      · rintro ⟨m, hm, w, h0, hmj, hw⟩
-        cases m with
-        | zero => exact .inl (h0.symm.trans hmj)
-        | succ m =>
-          refine .inr ⟨w 1, ?_, (reachB_iff sys k (w 1) j).mpr ⟨m, Nat.le_of_succ_le_succ hm,
-            fun t => w (t + 1), rfl, hmj, fun t ht => hw (t + 1) (by omega)⟩⟩
-          rw [← h0]
-          exact hw 0 (Nat.succ_pos m)
-
-/-- **Reach is decided structurally**: reach equals reach in at most `n` reference edges. -/
-theorem reach_iff (sys : Fin n → Flat S.Op S.Pos n) (i j : Fin n) :
-    Relation.ReflTransGen (REdge sys) i j ↔ reachB sys n i j = true := by
-  constructor
-  · intro h
-    obtain ⟨m, hw⟩ := rwalk_of_rtg h
-    obtain ⟨m', hm', hw'⟩ := rwalk_short m hw
-    exact (reachB_iff sys n i j).mpr ⟨m', hm', hw'⟩
-  · intro h
-    obtain ⟨m, _, hw⟩ := (reachB_iff sys n i j).mp h
-    exact rtg_of_rwalk m i hw
-
-end DagBridge
+end LeafSets
 
 /-! ## A renaming and a rank -/
 
 section Rename
 variable {S : Container} {R : Step S V M}
-
-/-- The fixed points of a renamed system are the renamed fixed points. -/
-theorem isFix_rename {sys g : Fin n → Flat S.Op S.Pos n} (π : Equiv.Perm (Fin n))
-    (hg : ∀ m, g m = (sys (π.symm m)).bind fun j => .leaf (π j)) (e : Fin n → Codec V M) :
-    IsFix (sysB R g) e ↔ IsFix (sysB R sys) fun i => e (π i) := by
-  have hi : ∀ m, (sysB R g e m) = sysB R sys (fun i => e (π i)) (π.symm m) := fun m => by
-    simp only [sysB, hg, Flat.interp_bind, Flat.interp]
-  constructor
-  · intro h i
-    have := h (π i)
-    rw [hi, Equiv.symm_apply_apply] at this
-    exact this
-  · intro h m
-    rw [hi]
-    have := h (π.symm m)
-    simp only [Equiv.apply_symm_apply] at this
-    exact this
 
 /-- A rank that every unguarded edge lowers rules out a cycle. -/
 theorem noCycle_of_rank {n : Nat} {S : Container} {sys : Fin n → Flat S.Op S.Pos n}
@@ -2026,38 +1635,7 @@ theorem noCycle_of_rank {n : Nat} {S : Container} {sys : Fin n → Flat S.Op S.P
   omega
 
 
-/-! ## The guard of a DAG of scopes, as a decision, and its converse -/
-
-/-- **The guard of a DAG of scopes, as a decision**: no walk of `n` unguarded edges, and no wall
-    names an entry that reaches back. Structural. -/
-def dagGuardB (S : Container) (sys : Fin n → Flat S.Op S.Pos n) : Bool :=
-  (List.finRange n).all (fun i => !walkB S sys n i) &&
-    (List.finRange n).all fun i => (List.finRange n).all fun j =>
-      !((sys i).wlv S j && reachB sys n j i)
-
-/-- **The decision states the guard of a DAG of scopes.** -/
-theorem dagGuardB_iff {sys : Fin n → Flat S.Op S.Pos n} : dagGuardB S sys = true ↔ DagGuard S sys := by
-  simp only [dagGuardB, Bool.and_eq_true, all_finRange, Bool.not_eq_true']
-  constructor
-  · intro h
-    refine ⟨fun hc => ?_, fun i j hw hr => ?_⟩
-    · obtain ⟨i, hi⟩ := walks_of_cycle hc
-      have := h.1 i
-      rw [(walkB_iff sys n i).mpr (hi n)] at this
-      exact nomatch this
-    · have := h.2 i j
-      rw [hw, (reach_iff sys j i).mp hr] at this
-      exact nomatch this
-  · intro hG
-    refine ⟨fun i => ?_, fun i j => ?_⟩
-    · cases hw : walkB S sys n i
-      · rfl
-      · exact absurd (cycle_of_walk ((walkB_iff sys n i).mp hw)) hG.noCycle
-    · cases hw : (sys i).wlv S j
-      · rfl
-      · cases hr : reachB sys n j i
-        · rfl
-        · exact absurd ((reach_iff sys j i).mpr hr) (hG.wall i j hw)
+/-! ## The entries below a node -/
 
 /-- A wall closes the width: below a wall, no entry of the width remains. -/
 theorem Kind.w_empty {w : Nat} : ∀ κ : Kind, κ = .wall → Fin (κ.w w) → False
@@ -2082,104 +1660,42 @@ theorem Kind.envK_some {X : Type} {w k : Nat} (ρw : Fin w → X) (ρk : Fin k �
   | .wall, l => l.elim0
 
 section Leaves
-variable {c N : Nat}
+variable {N : Nat}
 
-/-- A leaf of an inlined scope term is an entry of the width, a nameable entry, or a constant. -/
-theorem SFlat.lv_inlC {j : Fin N} : ∀ {w k : Nat}
-    (t : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k) (ρw : Fin w → Fin N) (ρk : Fin k → Fin N)
-    (ρc : Fin c → Fin N),
-    (t.inlC (fun l => .leaf (ρw l)) (fun l => .leaf (ρk l)) (fun l => .leaf (ρc l))).lv S j = true →
-      (∃ l, ρw l = j) ∨ (∃ l, ρk l = j) ∨ ∃ l, ρc l = j
-  | _, _, .leaf l, _, _, _, h => .inr (.inl ⟨l, by simpa [SFlat.inlC, Flat.lv] using h⟩)
-  | _, _, .node (.inr l) _, _, _, _, h => .inr (.inr ⟨l, by simpa [SFlat.inlC, Flat.lv] using h⟩)
-  | _, _, .node (.inl o) args, ρw, ρk, ρc, h => by
+/-- A leaf of an inlined scope term is an entry of the width or a nameable entry. -/
+theorem SFlat.lv_inl {j : Fin N} : ∀ {w k : Nat}
+    (t : SFlat S.Op S.Pos S.kind w k) (ρw : Fin w → Fin N) (ρk : Fin k → Fin N),
+    (t.inl (fun l => .leaf (ρw l)) (fun l => .leaf (ρk l))).lv S j = true →
+      (∃ l, ρw l = j) ∨ ∃ l, ρk l = j
+  | _, _, .leaf l, _, _, h => .inr ⟨l, by simpa [SFlat.inl, Flat.lv] using h⟩
+  | _, _, .node o args, ρw, ρk, h => by
       obtain ⟨p, hp⟩ := Flat.lv_node.mp h
       rw [← Kind.envW_comp, ← Kind.envK_comp] at hp
-      rcases SFlat.lv_inlC (args p) _ _ ρc hp with ⟨l, hl⟩ | ⟨l, hl⟩ | hc
+      rcases SFlat.lv_inl (args p) _ _ hp with ⟨l, hl⟩ | ⟨l, hl⟩
       · obtain ⟨l', hl'⟩ := Kind.envW_some ρw (S.kind o) l
         exact .inl ⟨l', hl' ▸ hl⟩
       · rcases Kind.envK_some ρw ρk (S.kind o) l with ⟨l', hl'⟩ | ⟨l', hl'⟩
         · exact .inl ⟨l', hl' ▸ hl⟩
-        · exact .inr (.inl ⟨l', hl' ▸ hl⟩)
-      · exact .inr (.inr hc)
+        · exact .inr ⟨l', hl' ▸ hl⟩
 
-/-- An unguarded leaf of an inlined scope term is a nameable entry or a constant. -/
-theorem SFlat.ulv_inlC {j : Fin N} : ∀ {w k : Nat}
-    (t : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k) (ρw : Fin w → Fin N) (ρk : Fin k → Fin N)
-    (ρc : Fin c → Fin N),
-    (t.inlC (fun l => .leaf (ρw l)) (fun l => .leaf (ρk l)) (fun l => .leaf (ρc l))).ulv S j = true →
-      (∃ l, ρk l = j) ∨ ∃ l, ρc l = j
-  | _, _, .leaf l, _, _, _, h => .inl ⟨l, by simpa [SFlat.inlC, Flat.ulv] using h⟩
-  | _, _, .node (.inr l) _, _, _, _, h => .inr ⟨l, by simpa [SFlat.inlC, Flat.ulv] using h⟩
-  | _, _, .node (.inl o) args, ρw, ρk, ρc, h => by
-      obtain ⟨hκ, p, hp⟩ := Flat.ulv_node_iff.mp h
-      rw [← Kind.envW_comp, ← Kind.envK_comp] at hp
-      rcases SFlat.ulv_inlC (args p) _ _ ρc hp with ⟨l, hl⟩ | hc
-      · obtain ⟨l', hl'⟩ := Kind.envK_keep_pt (ρw := ρw) (ρk := ρk) (S.kind o) hκ l
-        exact .inl ⟨l', hl' ▸ hl⟩
-      · exact .inr hc
-
-/-- A leaf below a wall of an inlined scope term is a constant. -/
-theorem SFlat.wlv_inlC {j : Fin N} : ∀ {w k : Nat}
-    (t : SFlat (S.Op ⊕ Fin c) (cAr S c) (cKd S c) w k) (ρw : Fin w → Fin N) (ρk : Fin k → Fin N)
-    (ρc : Fin c → Fin N),
-    (t.inlC (fun l => .leaf (ρw l)) (fun l => .leaf (ρk l)) (fun l => .leaf (ρc l))).wlv S j = true →
-      ∃ l, ρc l = j
-  | _, _, .leaf _, _, _, _, h => by simp [SFlat.inlC, Flat.wlv] at h
-  | _, _, .node (.inr _) _, _, _, _, h => by simp [SFlat.inlC, Flat.wlv] at h
-  | _, _, .node (.inl o) args, ρw, ρk, ρc, h => by
+/-- An inlined scope term has no leaf below a wall. -/
+theorem SFlat.wlv_inl {j : Fin N} : ∀ {w k : Nat}
+    (t : SFlat S.Op S.Pos S.kind w k) (ρw : Fin w → Fin N) (ρk : Fin k → Fin N),
+    (t.inl (fun l => .leaf (ρw l)) (fun l => .leaf (ρk l))).wlv S j = true → False
+  | _, _, .leaf _, _, _, h => by simp [SFlat.inl, Flat.wlv] at h
+  | _, _, .node o args, ρw, ρk, h => by
       rcases Flat.wlv_node.mp h with ⟨hκ, p, hp⟩ | ⟨_, p, hp⟩
       · rw [← Kind.envW_comp, ← Kind.envK_comp] at hp
-        rcases SFlat.lv_inlC (args p) _ _ ρc hp with ⟨l, _⟩ | ⟨l, _⟩ | hc
-        · exact (Kind.w_empty (S.kind o) hκ l).elim
-        · exact (Kind.k_empty (S.kind o) hκ l).elim
-        · exact hc
+        rcases SFlat.lv_inl (args p) _ _ hp with ⟨l, _⟩ | ⟨l, _⟩
+        · exact Kind.w_empty (S.kind o) hκ l
+        · exact Kind.k_empty (S.kind o) hκ l
       · rw [← Kind.envW_comp, ← Kind.envK_comp] at hp
-        exact SFlat.wlv_inlC (args p) _ _ ρc hp
+        exact SFlat.wlv_inl (args p) _ _ hp
 
 end Leaves
 
 section Rename2
 variable {m : Nat}
-
-/-- A leaf of a renamed term is the renamed leaf of the term. -/
-theorem Flat.lv_rename (ρ : Fin n → Fin m) {j : Fin m} : ∀ t : Flat S.Op S.Pos n,
-    (t.bind fun i => .leaf (ρ i)).lv S j = true → ∃ i, t.lv S i = true ∧ ρ i = j
-  | .leaf i, h => ⟨i, by simp [Flat.lv], by simpa [Flat.bind, Flat.lv] using h⟩
-  | .node o args, h => by
-      obtain ⟨p, hp⟩ := Flat.lv_node.mp h
-      obtain ⟨i, hi, hρ⟩ := Flat.lv_rename ρ (args p) hp
-      exact ⟨i, Flat.lv_node.mpr ⟨p, hi⟩, hρ⟩
-
-/-- An unguarded leaf of a renamed term is the renamed unguarded leaf of the term. -/
-theorem Flat.ulv_rename (ρ : Fin n → Fin m) {j : Fin m} : ∀ t : Flat S.Op S.Pos n,
-    (t.bind fun i => .leaf (ρ i)).ulv S j = true → ∃ i, t.ulv S i = true ∧ ρ i = j
-  | .leaf i, h => ⟨i, by simp [Flat.ulv], by simpa [Flat.bind, Flat.ulv] using h⟩
-  | .node o args, h => by
-      obtain ⟨hκ, p, hp⟩ := Flat.ulv_node_iff.mp h
-      obtain ⟨i, hi, hρ⟩ := Flat.ulv_rename ρ (args p) hp
-      exact ⟨i, Flat.ulv_node_iff.mpr ⟨hκ, p, hi⟩, hρ⟩
-
-/-- A leaf below a wall of a renamed term is the renamed leaf below a wall of the term. -/
-theorem Flat.wlv_rename (ρ : Fin n → Fin m) {j : Fin m} : ∀ t : Flat S.Op S.Pos n,
-    (t.bind fun i => .leaf (ρ i)).wlv S j = true → ∃ i, t.wlv S i = true ∧ ρ i = j
-  | .leaf _, h => by simp [Flat.bind, Flat.wlv] at h
-  | .node o args, h => by
-      rcases Flat.wlv_node.mp h with ⟨hκ, p, hp⟩ | ⟨hκ, p, hp⟩
-      · obtain ⟨i, hi, hρ⟩ := Flat.lv_rename ρ (args p) hp
-        exact ⟨i, Flat.wlv_node.mpr (.inl ⟨hκ, p, hi⟩), hρ⟩
-      · obtain ⟨i, hi, hρ⟩ := Flat.wlv_rename ρ (args p) hp
-        exact ⟨i, Flat.wlv_node.mpr (.inr ⟨hκ, p, hi⟩), hρ⟩
-
-/-- A renaming keeps a leaf. -/
-theorem Flat.lv_of_rename (ρ : Fin n → Fin m) {i : Fin n} : ∀ t : Flat S.Op S.Pos n,
-    t.lv S i = true → (t.bind fun i => .leaf (ρ i)).lv S (ρ i) = true
-  | .leaf i', h => by
-      simp only [Flat.lv, decide_eq_true_eq] at h
-      subst h; simp [Flat.bind, Flat.lv]
-  | .node o args, h => by
-      obtain ⟨p, hp⟩ := Flat.lv_node.mp h
-      exact Flat.lv_node.mpr ⟨p, Flat.lv_of_rename ρ (args p) hp⟩
 
 /-- A renaming keeps an unguarded leaf. -/
 theorem Flat.ulv_of_rename (ρ : Fin n → Fin m) {i : Fin n} : ∀ t : Flat S.Op S.Pos n,
@@ -2191,141 +1707,42 @@ theorem Flat.ulv_of_rename (ρ : Fin n → Fin m) {i : Fin n} : ∀ t : Flat S.O
       obtain ⟨hκ, p, hp⟩ := Flat.ulv_node_iff.mp h
       exact Flat.ulv_node_iff.mpr ⟨hκ, p, Flat.ulv_of_rename ρ (args p) hp⟩
 
-/-- A renaming keeps a leaf below a wall. -/
-theorem Flat.wlv_of_rename (ρ : Fin n → Fin m) {i : Fin n} : ∀ t : Flat S.Op S.Pos n,
-    t.wlv S i = true → (t.bind fun i => .leaf (ρ i)).wlv S (ρ i) = true
-  | .leaf _, h => by simp [Flat.wlv] at h
-  | .node o args, h => by
-      rcases Flat.wlv_node.mp h with ⟨hκ, p, hp⟩ | ⟨hκ, p, hp⟩
-      · exact Flat.wlv_node.mpr (.inl ⟨hκ, p, Flat.lv_of_rename ρ (args p) hp⟩)
-      · exact Flat.wlv_node.mpr (.inr ⟨hκ, p, Flat.wlv_of_rename ρ (args p) hp⟩)
-
 end Rename2
-
-/-- An edge from an earlier entry of a DAG of scopes stays among the earlier entries. -/
-theorem DSys.reach_castAdd {c n : Nat} (d : DSys S c) (sc : Scope S c n) {j : Fin c}
-    {k : Fin (c + n)} (h : Relation.ReflTransGen (REdge (DSys.snoc d sc).graph) (Fin.castAdd n j) k) :
-    ∃ k₀, k = Fin.castAdd n k₀ ∧ Relation.ReflTransGen (REdge d.graph) j k₀ := by
-  induction h with
-  | refl => exact ⟨j, rfl, .refl⟩
-  | tail _ he ih =>
-    obtain ⟨k₀, rfl, hr⟩ := ih
-    simp only [REdge, DSys.graph, Fin.append_left] at he
-    obtain ⟨i, hi, hρ⟩ := Flat.lv_rename _ _ he
-    exact ⟨i, hρ.symm, hr.tail hi⟩
-
-/-- **The invariant of a DAG of scopes**: an unguarded edge lowers the entry, and everything that a
-    leaf below a wall reaches is below the entry. -/
-theorem DSys.order : ∀ {N : Nat} (d : DSys S N),
-    (∀ i j, (d.graph i).ulv S j = true → j.val < i.val) ∧
-    ∀ i j, (d.graph i).wlv S j = true → ∀ k, Relation.ReflTransGen (REdge d.graph) j k → k.val < i.val
-  | _, .nil => ⟨fun i => i.elim0, fun i => i.elim0⟩
-  | _, .snoc (c := c) (n := n) d sc => by
-      obtain ⟨ihu, ihw⟩ := DSys.order d
-      refine ⟨fun i j h => ?_, fun i j h k hk => ?_⟩
-      · refine Fin.addCases (fun m h => ?_) (fun m h => ?_) i h
-        · simp only [DSys.graph, Fin.append_left] at h
-          obtain ⟨j₀, hj, rfl⟩ := Flat.ulv_rename _ _ h
-          have := ihu m j₀ hj
-          simp only [Fin.val_castAdd]; exact this
-        · simp only [DSys.graph, Fin.append_right] at h
-          rcases SFlat.ulv_inlC (sc m) _ _ _ h with ⟨l, rfl⟩ | ⟨l, rfl⟩
-          · simp only [Fin.val_natAdd, Fin.val_castLE]; have := l.isLt; omega
-          · simp only [Fin.val_castAdd, Fin.val_natAdd]; have := l.isLt; omega
-      · refine Fin.addCases (fun m h hk => ?_) (fun m h hk => ?_) i h hk
-        · simp only [DSys.graph, Fin.append_left] at h
-          obtain ⟨j₀, hj, rfl⟩ := Flat.wlv_rename _ _ h
-          obtain ⟨k₀, rfl, hr⟩ := DSys.reach_castAdd d sc hk
-          have := ihw m j₀ hj k₀ hr
-          simp only [Fin.val_castAdd]; exact this
-        · simp only [DSys.graph, Fin.append_right] at h
-          obtain ⟨l, rfl⟩ := SFlat.wlv_inlC (sc m) _ _ _ h
-          obtain ⟨k₀, rfl, _⟩ := DSys.reach_castAdd d sc hk
-          simp only [Fin.val_castAdd, Fin.val_natAdd]; have := k₀.isLt; omega
-
-/-- **The graph form of a DAG of scopes passes the guard of a DAG of scopes.** -/
-theorem DSys.dagGuard {N : Nat} (d : DSys S N) : DagGuard S d.graph := by
-  obtain ⟨hu, hw⟩ := DSys.order d
-  exact ⟨noCycle_of_rank (fun i => i.val) fun i j h => hu i j h,
-    fun i j h hr => absurd (hw i j h i hr) (Nat.lt_irrefl _)⟩
-
-/-- **A renaming keeps the guard of a DAG of scopes**, from the renamed system back to the system. -/
-theorem dagGuard_of_rename {sys g : Fin n → Flat S.Op S.Pos n} (π : Equiv.Perm (Fin n))
-    (hg : ∀ m, g m = (sys (π.symm m)).bind fun j => .leaf (π j)) (h : DagGuard S g) :
-    DagGuard S sys := by
-  have hπ : ∀ i, g (π i) = (sys i).bind fun j => .leaf (π j) := fun i => by
-    rw [hg, Equiv.symm_apply_apply]
-  refine ⟨fun ⟨w, m, hm, hwm, hw⟩ => h.noCycle ⟨fun t => π (w t), m, hm, by simp only [hwm],
-    fun t ht => ?_⟩, fun i j hwl hr => h.wall (π i) (π j) ?_ ?_⟩
-  · show (g (π (w t))).ulv S (π (w (t + 1))) = true
-    rw [hπ]; exact Flat.ulv_of_rename π _ (hw t ht)
-  · rw [hπ]; exact Flat.wlv_of_rename π _ hwl
-  · have key : ∀ a b, Relation.ReflTransGen (REdge sys) a b →
-        Relation.ReflTransGen (REdge g) (π a) (π b) := by
-      intro a b hab
-      induction hab with
-      | refl => exact .refl
-      | tail _ he ih =>
-        refine ih.tail ?_
-        show (g (π _)).lv S (π _) = true
-        rw [hπ]; exact Flat.lv_of_rename π _ he
-    exact key _ _ hr
 
 end Rename
 
 /-! ## A flat scope
 
-A closed codec is one scope with no constants. Above every guard a leaf names an earlier entry,
-and no leaf sits below a wall. The graph form is a flat system, and the solution is `solve` of
-the normal form. -/
+A closed codec is one stratified system. Above every guard a leaf names an earlier entry, and no
+leaf sits below a wall. The graph form is a flat system, and the solution is `solve` of the normal
+form. -/
 
 section FlatScope
 variable {S : Container} {R : Step S V M} {N : Nat}
 
-/-- **The graph form of a flat scope**: each entry inlined, each leaf an entry of the system. -/
-def Scope.graph (sc : Scope S 0 N) : Fin N → Flat S.Op S.Pos N := fun i =>
-  (sc i).inlC (fun j => .leaf j) (fun j => .leaf (Fin.castLE (Nat.le_of_lt i.isLt) j))
-    (fun j => .leaf j.elim0)
-
 /-- **The solution of a flat scope**: `solve` of its normal form. -/
-def Scope.sol (R : Step S V M) (depth : V → Nat) (sc : Scope S 0 N) : Fin N → Codec V M :=
-  solve depth (sysB (CStep R 0 Fin.elim0) (nf (cSig S 0) sc))
+def SSys.sol (R : Step S V M) (depth : V → Nat) (sc : SSys S N) : Fin N → Codec V M :=
+  solve depth (sysB R (nf S sc))
 
-/-- An entry of the graph form reads its scope term over the step with no constant. -/
-theorem Scope.sysB_graph (sc : Scope S 0 N) (e : Fin N → Codec V M) (i : Fin N) :
-    sysB R sc.graph e i =
-      SFlat.interp (CStep R 0 Fin.elim0) (sc i) e (fun j => e (Fin.castLE (Nat.le_of_lt i.isLt) j)) := by
-  have hκ : (fun j : Fin 0 => e j.elim0) = Fin.elim0 := funext fun j => j.elim0
-  simp only [sysB, Scope.graph, SFlat.interp_inlC, Flat.interp, hκ]
-
-/-- **A flat scope and its graph form have the same fixed points.** -/
-theorem Scope.isFix_iff (sc : Scope S 0 N) (e : Fin N → Codec V M) :
-    IsFix (sysB R sc.graph) e ↔ SIsFix (CStep R 0 Fin.elim0) sc e :=
-  forall_congr' fun i => by rw [Scope.sysB_graph]
-
-/-- **A flat scope has one solution**, at the maps: `strat_solution` over the step with no
-    constant. -/
-theorem scope_solution (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (sc : Scope S 0 N) :
+/-- **A flat scope has one solution**, at the maps: `strat_solution` at the graph form. -/
+theorem scope_solution (hd : ∀ v, 0 < depth v) (hS : R.Lawful depth) (sc : SSys S N) :
     IsFix (sysB R sc.graph) (sc.sol R depth) ∧
       ∀ e, IsFix (sysB R sc.graph) e → ∀ i, (e i).f = (sc.sol R depth i).f := by
-  have h := strat_solution hd (CStep.lawful hS 0 Fin.elim0) sc
-  exact ⟨(Scope.isFix_iff sc _).mpr h.1, fun e he => h.2 e ((Scope.isFix_iff sc e).mp he)⟩
+  have h := strat_solution hd hS sc
+  exact ⟨(sisFix_iff_graph sc _).mp h.1, fun e he => h.2 e ((sisFix_iff_graph sc e).mpr he)⟩
 
 /-- **The order of a flat scope**: an unguarded edge lowers the entry, and no leaf sits below a
     wall. -/
-theorem Scope.order (sc : Scope S 0 N) :
+theorem SSys.order (sc : SSys S N) :
     (∀ i j, (sc.graph i).ulv S j = true → j.val < i.val) ∧
       ∀ i j, (sc.graph i).wlv S j = false :=
-  ⟨fun i j h =>
-    let ⟨l, hl⟩ := (SFlat.ulv_inlC (sc i) _ _ _ h).resolve_right fun ⟨l, _⟩ => l.elim0
-    by rw [← hl]; exact l.isLt,
-   fun i j => Bool.eq_false_iff.mpr fun h =>
-    let ⟨l, _⟩ := SFlat.wlv_inlC (sc i) _ _ _ h
-    l.elim0⟩
+  ⟨fun _ _ h => SSys.ulv_graph sc h,
+   fun i _ => Bool.eq_false_iff.mpr
+    (SFlat.wlv_inl (sc i) (fun j => j) (fun j => Fin.castLE (Nat.le_of_lt i.isLt) j))⟩
 
 /-- Every entry of the solution is a `solve` entry: its held set is its write domain, and its
     member is `⊤`. So the maps fix the codec. -/
-theorem Scope.sol_eq (sc : Scope S 0 N) (i : Fin N) {c : Codec V M}
+theorem SSys.sol_eq (sc : SSys S N) (i : Fin N) {c : Codec V M}
     (hT : ∀ v, c.T v = ((c.e v).isSome = true)) (hμ : c.μ = none) (hf : (sc.sol R depth i).f = c.f) :
     sc.sol R depth i = c :=
   solve_eq hT hμ hf
@@ -2417,24 +1834,5 @@ theorem graphGuard_of_rename {sys g : Fin n → Flat S.Op S.Pos n} (π : Equiv.P
     rw [hπ]; exact Flat.ulv_of_rename π _ (hw t ht)
 
 end WallLeaf
-
-/-! ## A wall names a constant -/
-
-section WallConst
-
-/-- A step with one wall of one argument, and one nullary operation. -/
-abbrev wStep : Container where
-  A := Bool
-  B | true => Fin 1 | false => Fin 0
-  pos | true => List.finRange 1 | false => List.finRange 0
-  pos_complete | true => List.mem_finRange | false => List.mem_finRange
-  kind | true => .wall | false => .keep
-
-/-- A wall may name a constant: the second scope's wall names the first scope's entry. -/
-def wallConst : DSys wStep 2 :=
-  .snoc (c := 1) (n := 1) (.snoc (c := 0) (n := 1) .nil fun _ => .node (.inl false) Fin.elim0)
-    fun _ => .node (.inl true) fun _ => .node (.inr ⟨0, by decide⟩) Empty.elim
-
-end WallConst
 
 end Calculus.Alg

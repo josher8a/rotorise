@@ -132,7 +132,7 @@ const statesTerm = (codec: AnyCodec, name: string): boolean => {
 const rootOf = (codec: AnyCodec): string => {
     const printed = leanClosedOf(codec)
     const entry =
-        /^\(⟨1, \(fun i => match i with \| ⟨0, _⟩ => \((.*) : Scoped\.Term 0 1 0\)\), 0⟩ : Closed\)$/.exec(
+        /^\(⟨1, \(fun i => match i with \| ⟨0, _⟩ => \((.*) : Scoped\.Term 1 0\)\), 0⟩ : Closed\)$/.exec(
             printed,
         )
     if (entry?.[1] === undefined)
@@ -801,7 +801,7 @@ describe('a whole vector', () => {
         })
         expect(emitted).toContain('theorem scalar_string :')
         expect(emitted).toContain(
-            '(Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.string : Scoped.Term 0 1 0)), 0⟩ : Closed)).e',
+            '(Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.string : Scoped.Term 1 0)), 0⟩ : Closed)).e',
         )
         expect(emitted).toContain('(Value.str "hello")')
         expect(emitted).toContain('(some (Attr.s "hello")) = .same')
@@ -2926,7 +2926,7 @@ describe('a closed codec', () => {
             Y: array(ref('X')),
         })
         expect(leanClosedOf(erase(pair.X))).toBe(
-            '(⟨2, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.array (Scoped.Term.ref 1) : Scoped.Term 0 2 0) | ⟨1, _⟩ => (Scoped.Term.union [Scoped.Term.string, Scoped.Term.ref 0] : Scoped.Term 0 2 1)), 1⟩ : Closed)',
+            '(⟨2, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.array (Scoped.Term.ref 1) : Scoped.Term 2 0) | ⟨1, _⟩ => (Scoped.Term.union [Scoped.Term.string, Scoped.Term.ref 0] : Scoped.Term 2 1)), 1⟩ : Closed)',
         )
     })
 })

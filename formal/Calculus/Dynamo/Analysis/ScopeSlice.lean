@@ -483,7 +483,7 @@ end Keeps
 
 /-! ## Vectors -/
 
-private abbrev one (t : Scoped.Term 0 1 0) : Closed :=
+private abbrev one (t : Scoped.Term 1 0) : Closed :=
   ⟨1, (fun i => match i with | ⟨0, _⟩ => t), 0⟩
 
 /-- **A clause at a numeral keeps the closed option that pins that numeral**, and not an option

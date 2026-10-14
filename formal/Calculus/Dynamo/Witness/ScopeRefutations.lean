@@ -8,7 +8,7 @@ holds exactly its write domain, so each refutation is a held-set separation: one
 value that the other side does not write.
 
 The member of the meaning of a closed codec is `⊤`. So the set obligation reads the member of the
-term of the entry, at every table, constant and environment: that term is the element that `set`
+term of the entry, at every table and environment: that term is the element that `set`
 lifts.
 -/
 
@@ -76,17 +76,17 @@ theorem Closed.not_equiv_refine_held :
 /-! ## `set(union(c₁, c₂))`: typed, and refused by the store -/
 
 section Set
-variable {c w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fin c → Codec)
+variable {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
 
 /-- **A heterogeneous union fails the DynamoDB set obligation**, over a scope term. -/
 theorem Scoped.setElem_union_refused (ρw : Fin w → Codec) (ρk : Fin k → Codec) :
-    ¬ SetElem (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) c κ)
-      (Scoped.Term.union [.string, .boolean] : Scoped.Term c w k) ρw ρk) :=
+    ¬ SetElem (Alg.SFlat.interp (Alg.Scoped.TStep τ)
+      (Scoped.Term.union [.string, .boolean] : Scoped.Term w k) ρw ρk) :=
   Bool.false_ne_true
 
 /-- The union on its own is typed at a scope, at the member `none`. -/
 theorem Scoped.typed_union_string_boolean (ρw : Fin w → Codec) (ρk : Fin k → Codec) :
-    Alg.Scoped.Typed τ κ ρw ρk (Scoped.Term.union [.string, .boolean] : Scoped.Term c w k)
+    Alg.Scoped.Typed τ ρw ρk (Scoped.Term.union [.string, .boolean] : Scoped.Term w k)
       (Alg.HUnion [fun v : Value => v.member = Member.S, fun v : Value => v.member = Member.BOOL])
       none :=
   Alg.Scoped.Typed.node (B := dynSig) (o := .union 2)
@@ -103,7 +103,7 @@ theorem Scoped.typed_union_string_boolean (ρw : Fin w → Codec) (ρk : Fin k �
 /-- **An empty option is the unit of the sum**, over a scope term. -/
 example (ρw : Fin w → Codec) (ρk : Fin k → Codec) :
     ∃ T μ,
-      Alg.Scoped.Typed τ κ ρw ρk (Scoped.Term.union [.string, .never] : Scoped.Term c w k) T μ :=
+      Alg.Scoped.Typed τ ρw ρk (Scoped.Term.union [.string, .never] : Scoped.Term w k) T μ :=
   ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .union 2)
     (T := [fun v : Value => v.member = Member.S, Alg.HNever].get) (μ := [some Member.S, none].get)
     (fun p => match p with

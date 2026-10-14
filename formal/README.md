@@ -104,7 +104,7 @@ meaning to it).
   aggregator imports the guard, so that is a cycle, and inverting it would let
   `defaultTargets = ["Calculus"]` build the tree with no guard running at all.
 - **There is no fuel.** The meaning of a closed codec is the solution of its scope
-  (`Scope.sol`), and the solution reads each input at the stage that the depth of the input
+  (`SSys.sol`), and the solution reads each input at the stage that the depth of the input
   names, so no fuel appears in a statement. Neither of the two things that forced fuel still
   does: the model has no thunk, and the solution budgets each input by the input's own depth.
 - **Recursion is guarded, and constructed.** A closed codec is one flat guarded scope, and each

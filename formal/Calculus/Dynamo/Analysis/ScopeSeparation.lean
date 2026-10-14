@@ -22,11 +22,11 @@ variable {α : Table}
 
 /-- `array` **is** the degenerate `tuple`: both builders write the same `list`, so the two closed
     codecs have one meaning. -/
-theorem Closed.arrayRow (e : Scoped.Term 0 1 1) :
+theorem Closed.arrayRow (e : Scoped.Term 1 1) :
     (Closed.one (.array e)).meaning α = (Closed.one (.tuple [] (some e))).meaning α := rfl
 
 /-- The same on the read row, and for the same reason. -/
-theorem Closed.arrayRowA (e : Scoped.Term 0 1 1) (a : Attr) :
+theorem Closed.arrayRowA (e : Scoped.Term 1 1) (a : Attr) :
     (Closed.one (.array e)).AdmA α a = (Closed.one (.tuple [] (some e))).AdmA α a := rfl
 
 /-! ## `refine t ⊤` and `t` move the same data -/
@@ -35,11 +35,11 @@ theorem Closed.arrayRowA (e : Scoped.Term 0 1 1) (a : Attr) :
 def qTop : Value → Bool := fun _ => true
 
 /-- **`refine t ⊤` and `t` move the same data**, over a scope term, at every environment. -/
-theorem Scoped.refine_top_row {c w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
-    (κ : Fin c → Codec) (t : Scoped.Term c w k) (ρw : Fin w → Codec) (ρk : Fin k → Codec) :
-    (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) c κ)
+theorem Scoped.refine_top_row {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
+    (t : Scoped.Term w k) (ρw : Fin w → Codec) (ρk : Fin k → Codec) :
+    (Alg.SFlat.interp (Alg.Scoped.TStep τ)
         (Scoped.Term.refine t (.closure qTop) ()) ρw ρk).f =
-      (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) c κ) t ρw ρk).f := by
+      (Alg.SFlat.interp (Alg.Scoped.TStep τ) t ρw ρk).f := by
   funext o x
   refine Option.ext fun y => ?_
   rw [Scoped.interp_refine, Alg.Codec.restrict, Alg.refine2_f]

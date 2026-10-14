@@ -34,20 +34,20 @@ theorem Closed.pairwiseCompat_of_compatPair {x y : Closed} (h : x.compatPair y =
   · exact compat_self _
 
 /-- **A primitive is typed** at every environment. -/
-theorem Scoped.typed_prim {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s) (κ : Fin 0 → Codec)
+theorem Scoped.typed_prim {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
     (ρw : Fin w → Codec) (ρk : Fin k → Codec) (g : Ground) :
-    ∃ T μ, Alg.Scoped.Typed τ κ ρw ρk (Alg.Scoped.Term.prim g : Scoped.Term 0 w k) T μ :=
+    ∃ T μ, Alg.Scoped.Typed τ ρw ρk (Alg.Scoped.Term.prim g : Scoped.Term w k) T μ :=
   ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .prim g) (T := Empty.elim) (μ := Empty.elim)
     (fun p => p.elim) rfl⟩
 
 /-- **A `held` of two primitives is typed** at every environment. -/
 theorem Scoped.typed_heldPrim {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
-    (κ : Fin 0 → Codec) (ρw : Fin w → Codec) (ρk : Fin k → Codec) (g g' : Ground)
+    (ρw : Fin w → Codec) (ρk : Fin k → Codec) (g g' : Ground)
     (k₀ : DynGen × Bool) (ks : List (DynGen × Bool)) :
-    ∃ T μ, Alg.Scoped.Typed τ κ ρw ρk
-      (Scoped.Term.held false (.prim g) (.prim g') k₀ ks : Scoped.Term 0 w k) T μ := by
-  obtain ⟨T1, μ1, h1⟩ := Scoped.typed_prim τ κ Fin.elim0 Fin.elim0 g
-  obtain ⟨T2, μ2, h2⟩ := Scoped.typed_prim τ κ Fin.elim0 Fin.elim0 g'
+    ∃ T μ, Alg.Scoped.Typed τ ρw ρk
+      (Scoped.Term.held false (.prim g) (.prim g') k₀ ks : Scoped.Term w k) T μ := by
+  obtain ⟨T1, μ1, h1⟩ := Scoped.typed_prim τ Fin.elim0 Fin.elim0 g
+  obtain ⟨T2, μ2, h2⟩ := Scoped.typed_prim τ Fin.elim0 Fin.elim0 g'
   exact ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .held false k₀ ks)
     (T := fun p => match p with | true => T1 | false => T2)
     (μ := fun p => match p with | true => μ1 | false => μ2)
@@ -57,9 +57,9 @@ theorem Scoped.typed_heldPrim {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSi
 
 /-- **An array of a primitive is typed** at every environment. -/
 theorem Scoped.typed_arrayPrim {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
-    (κ : Fin 0 → Codec) (ρw : Fin w → Codec) (ρk : Fin k → Codec) (g : Ground) :
-    ∃ T μ, Alg.Scoped.Typed τ κ ρw ρk (Scoped.Term.array (.prim g) : Scoped.Term 0 w k) T μ := by
-  obtain ⟨T1, μ1, h1⟩ := Scoped.typed_prim τ κ ρw ρw g
+    (ρw : Fin w → Codec) (ρk : Fin k → Codec) (g : Ground) :
+    ∃ T μ, Alg.Scoped.Typed τ ρw ρk (Scoped.Term.array (.prim g) : Scoped.Term w k) T μ := by
+  obtain ⟨T1, μ1, h1⟩ := Scoped.typed_prim τ ρw ρw g
   exact ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .list 0 1 0) (T := fun _ => T1)
     (μ := fun _ => μ1)
     (fun p => match p with
@@ -70,7 +70,7 @@ theorem Scoped.typed_arrayPrim {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynS
 /-- **A closed `held` of two primitives is typed.** -/
 theorem Closed.typed_heldPrim (g g' : Ground) (k₀ : DynGen × Bool) (ks : List (DynGen × Bool)) :
     (Closed.one (.held false (.prim g) (.prim g') k₀ ks)).Typed α :=
-  fun i => match i with | ⟨0, _⟩ => Scoped.typed_heldPrim _ _ _ _ g g' k₀ ks
+  fun i => match i with | ⟨0, _⟩ => Scoped.typed_heldPrim _ _ _ g g' k₀ ks
 
 /-- **A closed `held` of two primitives meets its obligations** where its adapter cancels over the
     codec of the inner primitive. -/
@@ -84,7 +84,7 @@ theorem Closed.obligations_heldPrim (g g' : Ground) (k₀ : DynGen × Bool) (ks 
 
 /-- **A closed array of a primitive is lawful.** -/
 theorem Closed.lawful_arrayPrim (g : Ground) : Lawful ((Closed.one (.array (.prim g))).meaning α) :=
-  Closed.sound (fun i => match i with | ⟨0, _⟩ => Scoped.typed_arrayPrim _ _ _ _ g)
+  Closed.sound (fun i => match i with | ⟨0, _⟩ => Scoped.typed_arrayPrim _ _ _ g)
     fun _ _ i => match i with
       | ⟨0, _⟩ => ⟨fun p => match p with
           | .inl p => p.elim0
@@ -101,11 +101,11 @@ theorem Closed.pairwiseCompat_array_literals :
   rcases ht with rfl | rfl <;> exact Closed.lawful_arrayPrim _
 
 /-- **`refine t Q` is below `t`**, over a scope term, at every environment. -/
-theorem Scoped.sub_interp_refine {c w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
-    (κ : Fin c → Codec) (t : Scoped.Term c w k) (Q : Pred) (ρw : Fin w → Codec)
+theorem Scoped.sub_interp_refine {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
+    (t : Scoped.Term w k) (Q : Pred) (ρw : Fin w → Codec)
     (ρk : Fin k → Codec) :
-    Sub (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) c κ) (Scoped.Term.refine t Q ()) ρw ρk)
-      (Alg.SFlat.interp (Alg.CStep (Alg.Scoped.TStep τ) c κ) t ρw ρk) := by
+    Sub (Alg.SFlat.interp (Alg.Scoped.TStep τ) (Scoped.Term.refine t Q ()) ρw ρk)
+      (Alg.SFlat.interp (Alg.Scoped.TStep τ) t ρw ρk) := by
   rw [Scoped.interp_refine]
   exact sub_restrict_self _ _
 
@@ -203,7 +203,7 @@ theorem Closed.flip_order_observable :
 Two overlapping `refine`s of one `held` swap sit below one canonical bound. -/
 
 /-- The adapter: `string` stored, `string` held, `"x"` and `"X"` swapped. -/
-def swapBody {w k : Nat} : Scoped.Term 0 w k := .held false .string .string (.caller 0, false) []
+def swapBody {w k : Nat} : Scoped.Term w k := .held false .string .string (.caller 0, false) []
 
 /-- The predicate that holds at `"x"` and at `"y"`. -/
 def q1 : Pred := .closure fun v => inL .string "x" v || inL .string "y" v
@@ -231,12 +231,12 @@ theorem Closed.canon_swap : Canon (swapClosed.meaning swTable) :=
 
 /-- **A restriction of a `held` of two primitives is typed** at every environment. -/
 theorem Scoped.typed_refineHeldPrim {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
-    (κ : Fin 0 → Codec) (ρw : Fin w → Codec) (ρk : Fin k → Codec) (g g' : Ground)
+    (ρw : Fin w → Codec) (ρk : Fin k → Codec) (g g' : Ground)
     (k₀ : DynGen × Bool) (ks : List (DynGen × Bool)) (q : Pred) :
-    ∃ T μ, Alg.Scoped.Typed τ κ ρw ρk
+    ∃ T μ, Alg.Scoped.Typed τ ρw ρk
       (Scoped.Term.refine (Scoped.Term.held false (.prim g) (.prim g') k₀ ks) q () :
-        Scoped.Term 0 w k) T μ := by
-  obtain ⟨T1, μ1, h1⟩ := Scoped.typed_heldPrim τ κ ρw ρk g g' k₀ ks
+        Scoped.Term w k) T μ := by
+  obtain ⟨T1, μ1, h1⟩ := Scoped.typed_heldPrim τ ρw ρk g g' k₀ ks
   exact ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .refine q ()) (T := fun _ => T1)
     (μ := fun _ => μ1) (fun _ => h1) rfl⟩
 
@@ -244,7 +244,7 @@ theorem Scoped.typed_refineHeldPrim {w k : Nat} (τ : (s : Bool) → Alg.TableAt
 theorem Closed.lawful_swRefine (q : Pred) :
     Lawful ((Closed.one (.refine swapBody q ())).meaning swTable) :=
   Closed.sound (fun i => match i with
-      | ⟨0, _⟩ => Scoped.typed_refineHeldPrim _ _ _ _ _ _ _ _ q)
+      | ⟨0, _⟩ => Scoped.typed_refineHeldPrim _ _ _ _ _ _ _ q)
     fun _ _ i => match i with
       | ⟨0, _⟩ => ⟨fun _ => ⟨fun p => match p with
           | true => ⟨fun p => p.elim, trivial⟩
@@ -260,7 +260,7 @@ theorem Closed.sub_swRefine (q : Pred) :
   fun o x y h => by
     rw [Closed.one_fix] at h
     rw [swapClosed, Closed.one_fix]
-    exact Scoped.sub_interp_refine _ _ swapBody q
+    exact Scoped.sub_interp_refine _ swapBody q
       (fun _ => (Closed.one (.refine swapBody q ())).meaning swTable) Fin.elim0 o x y h
 
 /-- **`sw1Closed` and `sw2Closed` are pairwise `Compat`**, through the common bound `swapClosed`. -/

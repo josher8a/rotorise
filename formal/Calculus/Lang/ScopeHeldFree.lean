@@ -27,14 +27,13 @@ def TOp.hasHeld : TOp B → Bool
   | _ => false
 
 /-- Some operation of the scope term is a `held`, a `legacy`, or an object with a `fill` slot. -/
-def hasHeld {c : Nat} : {w k : Nat} → Term B c w k → Bool
+def hasHeld : {w k : Nat} → Term B w k → Bool
   | _, _, .leaf _ => false
-  | _, _, .node (.inl o) args => o.hasHeld || (TOp.pos o).any fun p => hasHeld (args p)
-  | _, _, .node (.inr _) _ => false
+  | _, _, .node o args => o.hasHeld || (TOp.pos o).any fun p => hasHeld (args p)
 
 /-- A scope term is **held-free** when the test `hasHeld` answers `false`. The test is the
     definition, so a closed term is shown held-free by `rfl`. -/
-abbrev HF {c w k : Nat} (t : Term B c w k) : Prop := hasHeld t = false
+abbrev HF {w k : Nat} (t : Term B w k) : Prop := hasHeld t = false
 
 /-- **A closed codec is held-free** when each term of its scope is held-free. -/
 def Closed.HF {N : Nat} (d : Closed B N) : Prop := ∀ i, Scoped.HF (d i)
@@ -92,17 +91,15 @@ theorem TOp.sub_run [TopLaws ⟨B, .host⟩] {o : TOp B} (ho : o.hasHeld = false
     exact sub_altCodec (fun c hc => by obtain ⟨p, rfl⟩ := List.mem_ofFn.mp hc; exact ha p) _
 
 /-- **A held-free scope term over restrictions of the top is a restriction of the top.** -/
-theorem sub_term [TopLaws ⟨B, .host⟩] {c : Nat} {κ : Fin c → Mean.C B}
-    (hκ : ∀ j, Sub (κ j) idCodec) :
-    ∀ {w k : Nat} (t : Term B c w k), HF t → ∀ {ρw : Fin w → Mean.C B} {ρk : Fin k → Mean.C B},
+theorem sub_term [TopLaws ⟨B, .host⟩] :
+    ∀ {w k : Nat} (t : Term B w k), HF t → ∀ {ρw : Fin w → Mean.C B} {ρk : Fin k → Mean.C B},
       (∀ j, Sub (ρw j) idCodec) → (∀ j, Sub (ρk j) idCodec) →
-      Sub (SFlat.interp (CStep (TStep τ) c κ) t ρw ρk) idCodec
+      Sub (SFlat.interp (TStep τ) t ρw ρk) idCodec
   | _, _, .leaf j, _, _, _, _, hk => hk j
-  | _, _, .node (.inr j) _, _, _, _, _, _ => hκ j
-  | _, _, .node (.inl o) args, h, ρw, ρk, hw, hk => by
+  | _, _, .node o args, h, ρw, ρk, hw, hk => by
     simp only [HF, hasHeld, Bool.or_eq_false_iff, List.any_eq_false, Bool.not_eq_true] at h
     exact TOp.sub_run τ h.1 fun p =>
-      sub_term hκ (args p) (h.2 p (TOp.pos_complete o p)) (Kind.envW_all (P := (Sub · idCodec)) hw _)
+      sub_term (args p) (h.2 p (TOp.pos_complete o p)) (Kind.envW_all (P := (Sub · idCodec)) hw _)
         (Kind.envK_all (P := (Sub · idCodec)) hw hk _)
 
 /-- **Confluence of a closed codec**: each entry of a held-free closed codec is a restriction of
@@ -117,9 +114,9 @@ theorem Closed.sub [TopLaws ⟨B, .host⟩] {N : Nat} (d : Closed B N) (hh : Clo
       intro ⟨i, hi⟩
       induction i using Nat.strong_induction_on with
       | _ i ihi =>
-        have e := interp_nf (R := CStep (TStep τ) 0 Fin.elim0) d (Closed.stage τ d k) ⟨i, hi⟩
+        have e := interp_nf (R := TStep τ) d (Closed.stage τ d k) ⟨i, hi⟩
         exact (congrArg (Sub · idCodec) e).mpr <|
-          sub_term τ (fun j => j.elim0) (d ⟨i, hi⟩) (hh ⟨i, hi⟩) ih (fun j => ihi j.val j.isLt _)
+          sub_term τ (d ⟨i, hi⟩) (hh ⟨i, hi⟩) ih (fun j => ihi j.val j.isLt _)
   exact fun i o x y h => hst _ i o x y h
 
 /-- **Confluence of a closed codec**, at a root: the meaning is a restriction of the top. -/
