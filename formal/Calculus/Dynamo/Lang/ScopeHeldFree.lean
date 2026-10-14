@@ -5,9 +5,9 @@ import Calculus.Lang.ScopeHeldFree
 /-!
 # Held-free closed codecs are restrictions of `opaque`
 
-A closed codec of DynamoDB is held-free when each term of each scope holds no `held`, no `legacy`
-and no `fill` slot (`Closed.HF`). Its meaning is a restriction of the identity
-(`Closed.sub_meaning`), from `Alg.Scoped.Closed.sub` and the laws `Ω_topLaws`. `opaque` as a
+A closed codec of DynamoDB is held-free when its root reaches no `held`, no `legacy` and no
+`fill` slot on its graph (`Closed.HF`). Its meaning is a restriction of the identity
+(`Closed.sub_meaning`), from `Alg.Scoped.Closed.meaning_sub` and the laws `Ω_topLaws`. `opaque` as a
 closed codec of one entry denotes the identity (`Closed.opaq_f`), so the meaning writes only what
 `opaque` writes (`Closed.confluence_W`), and reads only what `opaque` reads
 (`Closed.confluence_R`).
@@ -15,9 +15,9 @@ closed codec of one entry denotes the identity (`Closed.opaq_f`), so the meaning
 
 namespace Calculus
 
-/-- **A closed codec is held-free** when each term of its scope is held-free. The test is the
+/-- **A closed codec is held-free** when its root reaches no adapter on its graph. The test is the
     definition, so a closed codec of a literal scope is shown held-free by `rfl`. -/
-abbrev Closed.HF (t : Closed) : Prop := Alg.Scoped.Closed.HF t.scope
+abbrev Closed.HF (t : Closed) : Prop := Alg.Scoped.Closed.HF t.scope t.root
 
 /-- **`opaque` is the identity** as a closed codec of one entry, at each orientation. -/
 theorem Closed.opaq_f (α : Table) (o : Alg.Orient) (v : Value) :
@@ -26,7 +26,7 @@ theorem Closed.opaq_f (α : Table) (o : Alg.Orient) (v : Value) :
 
 /-- **Confluence**: the meaning of a held-free closed codec is a restriction of the identity. -/
 theorem Closed.sub_meaning {α : Table} {t : Closed} (h : t.HF) : Alg.Sub (t.meaning α) Alg.idCodec :=
-  Alg.Scoped.Closed.sub _ t.scope h t.root
+  Alg.Scoped.Closed.meaning_sub _ t.scope h
 
 /-- **(W)**: a held-free closed codec writes only what `opaque` writes. -/
 theorem Closed.confluence_W {α : Table} {t : Closed} (h : t.HF) {v a}

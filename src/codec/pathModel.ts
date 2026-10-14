@@ -619,7 +619,7 @@ type RowG<L, LE, R, RE, A extends unknown[], F> = EntryOf<L, LE> extends [
                     : L extends ['object', ['mk', infer CF, infer CW]]
                       ? RightG<L, LE, R, RE, A, F, ['obj', CF, CW, LE]>
                       : false
-/** The rows of the right operand alone (`rightRows`), then the family `Fam` of the left row. */
+/** The rows of the right operand alone (`rightC`), then the family `Fam` of the left row. */
 type RightG<L, LE, R, RE, A extends unknown[], F, Fam> = EntryOf<
     R,
     RE

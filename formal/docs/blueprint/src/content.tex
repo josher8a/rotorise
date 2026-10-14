@@ -947,7 +947,7 @@ unions it covers:
 Discharger & Covers & From \\
 \midrule
 the decision & each half of agreement at each component: the two terms are disjoint there, or one codec bounds both there & \texttt{Closed.pairwiseCompat\_of\_compatPair}, over \texttt{Scoped.compatPair} and \texttt{Scoped.compatPair\_sound} \\
-held-free options & every pair of terms with no \texttt{held} & both sit below \texttt{opaque}, which reads each value from one attribute (\texttt{compat\_of\_HF}) \\
+held-free options & every pair of terms that reach no adapter & both sit below \texttt{opaque}, which reads each value from one attribute (\texttt{sub\_of\_belowTop}) \\
 a common canonical bound & two restrictions of one adapter & \texttt{compat\_of\_common\_bound} \\
 separation & two options that no input reaches both of & the certificate below (\texttt{Closed.pairwiseCompat\_of\_separated}) \\
 an empty option & a pair with \texttt{never} on a side & \texttt{Closed.pairwiseCompat\_never\_left}, \texttt{Closed.pairwiseCompat\_never\_right} \\
@@ -994,7 +994,7 @@ shown compatible.
 \begin{definition}[the certificate]
 \label{def:certificate}
 \uses{cond:compat,def:family}
-\lean{Calculus.Closed.viewsDisjoint, Calculus.Alg.Scoped.disjoint, Calculus.Alg.Scoped.viewG, Calculus.Alg.hasHeld}
+\lean{Calculus.Closed.viewsDisjoint, Calculus.Alg.Scoped.disjoint, Calculus.Alg.Scoped.viewG, Calculus.Alg.Scoped.TOp.adapts}
 \leanok
 Two options are certified where they are orthogonal. A term denotes a partial isomorphism, and its caller view and its stored
 view are its domain and its range. Two terms are orthogonal where the product of their domain
