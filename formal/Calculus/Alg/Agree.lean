@@ -196,6 +196,76 @@ theorem compat_symm {member : V → M} {c d : Codec V M}
   exact (compat_iff_agree hd hc).mpr
     ⟨fun v a b ha hb => (hE v b a hb ha).symm, fun a t w ht hw => (hP a w t hw ht).symm⟩
 
+/-! ### The union is the join
+
+The meaning of a union is the join of its options: the union sends `x` to `y` exactly where some
+option does. The join is defined where the options agree, and the first admitter is how the
+host computes it. So under agreement no order of the options is observable, and no lawfulness
+is needed. -/
+
+/-- Pairwise agreement of a family at one orientation. -/
+def PAgree (o : Orient) (os : List (Codec V M)) : Prop := ∀ c ∈ os, ∀ d ∈ os, Agree o c d
+
+/-- **The join** of a family: `j` sends `x` to `y` exactly where some option does. -/
+def IsJoin (os : List (Codec V M)) (j : Codec V M) : Prop :=
+  ∀ o x y, j.f o x = some y ↔ ∃ c ∈ os, c.f o x = some y
+
+/-- Under agreement at `o`, the first admitter answers what any admitter answers. -/
+theorem select_eq_join {o : Orient} {os : List (Codec V M)} (h : PAgree o os) (x y : V) :
+    select os (·.f o) x = some y ↔ ∃ c ∈ os, c.f o x = some y :=
+  ⟨fun hs => let ⟨c, hc, _, hy⟩ := select_admits hs; ⟨c, hc, hy⟩, fun ⟨c, hc, hy⟩ =>
+    let ⟨c', hf⟩ := find?_attempt o hc hy
+    let ⟨y', hy'⟩ := Option.isSome_iff_exists.mp (acts_of_find? o hf)
+    (h c hc c' (List.mem_of_find?_eq_some hf) x y y' hy hy') ▸ select_eq_some.mpr ⟨c', hf, hy'⟩⟩
+
+/-- **Order is unobservable** at `o` under agreement at `o`. -/
+theorem select_perm {o : Orient} {os os' : List (Codec V M)} (hp : os.Perm os')
+    (h : PAgree o os) (x : V) : select os (·.f o) x = select os' (·.f o) x := by
+  have h' : PAgree o os' := fun c hc d hd => h c (hp.mem_iff.mpr hc) d (hp.mem_iff.mpr hd)
+  refine option_eq_of_some_iff fun y => ?_
+  rw [select_eq_join h x y, select_eq_join h' x y]
+  exact ⟨fun ⟨c, hc, hy⟩ => ⟨c, hp.mem_iff.mp hc, hy⟩,
+    fun ⟨c, hc, hy⟩ => ⟨c, hp.mem_iff.mpr hc, hy⟩⟩
+
+/-- **The union is the join**, at both orientations that `altCodec` reads. -/
+theorem altCodec_eq_join {os : List (Codec V M)} (μ : Option M)
+    (hh : PAgree .host os) (hd : PAgree .dual os) : IsJoin os (altCodec os μ) :=
+  Orient.both (P := fun o => ∀ x y, (altCodec os μ).f o x = some y ↔ ∃ c ∈ os, c.f o x = some y)
+    (select_eq_join hh) (select_eq_join hd)
+
+/-- A join is unique at the maps. -/
+theorem join_unique {os : List (Codec V M)} {j j' : Codec V M} (h : IsJoin os j)
+    (h' : IsJoin os j') : j.f = j'.f :=
+  funext fun o => funext fun x => option_eq_of_some_iff fun y => (h o x y).trans (h' o x y).symm
+
+/-- **The join is monotone**: grow each option inside an agreeing family, and the union grows. -/
+theorem altCodec_mono {o : Orient} {os os' : List (Codec V M)} {μ μ' : Option M}
+    (hs : ∀ c ∈ os, ∃ c' ∈ os', ∀ x y, c.f o x = some y → c'.f o x = some y)
+    (h' : PAgree o os') {x y : V} (hy : (altCodec os μ).f o x = some y) :
+    (altCodec os' μ').f o x = some y :=
+  let ⟨c, hc, _, hcy⟩ := altCodec_admits hy
+  let ⟨c', hc', hsub⟩ := hs c hc
+  (select_eq_join h' x y).mpr ⟨c', hc', hsub x y hcy⟩
+
+/-- `union(c₁ … cₙ) = union(c_σ(1) … c_σ(n))`, **on the nose**, over pairwise agreeing options. -/
+theorem altCodec_perm {os os' : List (Codec V M)} (h : os.Perm os') (μA : Option M)
+    (hh : PAgree .host os) (hd : PAgree .dual os) : altCodec os μA = altCodec os' μA :=
+  Codec.ext (funext fun _ => propext ⟨fun ⟨o, ho, hT⟩ => ⟨o, h.mem_iff.mp ho, hT⟩,
+      fun ⟨o, ho, hT⟩ => ⟨o, h.mem_iff.mpr ho, hT⟩⟩) rfl
+    (funext (select_perm h hh)) (funext (select_perm h hd))
+
+/-- The row as the table states it, in `≡`: `Codec.Equiv.refl` transported along the equality. -/
+theorem equiv_altCodec_perm {os os' : List (Codec V M)} (h : os.Perm os') (μA : Option M)
+    (hh : PAgree .host os) (hd : PAgree .dual os) :
+    Codec.Equiv (altCodec os μA) (altCodec os' μA) :=
+  altCodec_perm h μA hh hd ▸ Codec.Equiv.refl _
+
+/-- `union(c₁, c₂, …) ≡ union(c₂, c₁, …)`, the general theorem at `List.Perm.swap`. -/
+theorem equiv_altCodec_swap (o₁ o₂ : Codec V M) (os : List (Codec V M)) (μA : Option M)
+    (hh : PAgree .host (o₁ :: o₂ :: os)) (hd : PAgree .dual (o₁ :: o₂ :: os)) :
+    Codec.Equiv (altCodec (o₁ :: o₂ :: os) μA) (altCodec (o₂ :: o₁ :: os) μA) :=
+  equiv_altCodec_perm (List.Perm.swap o₂ o₁ os) μA hh hd
+
 end Agree
 
 end Calculus.Alg

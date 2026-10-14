@@ -59,13 +59,13 @@ instance, and JSON is a second instance.
 | module | states, for every universe |
 | --- | --- |
 | `Alg/Codec.lean` | the record `Codec` and its laws `Lawful` and `LawfulCore`, over the carrier `V` and the members `M` |
-| `Alg/Combinators.lean`, `Alg/Relations.lean` | the combinators, the join by the first admitter, the order, the equivalence, `Compat`, `Canon` and `Sub` |
-| `Alg/Lists.lean`, `Alg/Positions.lean`, `Alg/Maps.lean` | the traversal and `entrywise`, the positional theory, the image of a function over a key set, and `MapOf`, which keeps the namespace `Calculus` |
-| `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, and `muCodec` over two depth functions |
-| `Alg/Agree.lean` | agreement `Agree` at an orientation, whose two halves are the host and the dual, one lemma per combinator, and `compat_iff_agree` |
+| `Alg/Combinators.lean`, `Alg/Relations.lean` | the combinators, the union computed by the first admitter, the order, the equivalence, `Compat`, `Canon` and `Sub` |
+| `Alg/Lists.lean`, `Alg/Positions.lean`, `Alg/Maps.lean` | the traversal and `entrywise`, the positional theory, the image of a function over a key set, and `MapOf`, which keeps the namespace `Calculus`, with the union of two records `MapOf.union` and the product of two sums of records `MapOf.prod` |
+| `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, the pairing `objAt_union` of two closed objects, and `muCodec` over two depth functions |
+| `Alg/Agree.lean` | agreement `Agree` at an orientation, whose two halves are the host and the dual, one lemma per combinator, `compat_iff_agree`, and the join law of a union `altCodec_eq_join` |
 | `Lang/Term.lean` | the signature `Sig`, the syntax `Syn`, the meaning `Mean`, and the tables of adapters |
 | `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, and the flat scope with `scope_solution` |
-| `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, and `Scoped.Closed.meaning_sub` |
+| `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, `Scoped.Closed.meaning_sub`, and the product of closed objects `Scoped.Term.product` |
 | `Lang/Universe.lean`, `Lang/ScopeDisjoint.lean` | the class `Leaf`, the structural disjointness decision `Scoped.disjoint` over two closed codecs with its soundness `Scoped.disjoint_sound`, the view `viewG` at an orientation, and `views_apart` |
 | `Lang/ScopeCompat.lean` | the compatibility decision `Scoped.compatPair` over two closed codecs, and `Scoped.compatPair_sound` |
 | `Lang/CodecPath.lean`, `Lang/ScopePath.lean` | the write of the store at a path `putPath` with `path_law`, the frontier of a closed codec `Rooted.at`, the strong law `Closed.strong_law`, and narrowing `narrowC` with `narrowC_law` |
@@ -626,6 +626,17 @@ The payload map `objAt` is that product, for every table. A fill reads an absent
 constant and the write sends the constant to a present name, so a fill is not an inverse: the
 inverse law holds for a table with no fill (`noFill`).
 
+**A product of two closed objects reads each name through the factor that declares the name.** A
+closed object refuses a name that it does not declare. So where two closed objects declare
+disjoint names, the payload map of the merged table is the pairing of the two payload maps
+(`objAt_union`). The merge is the union of two records (`MapOf.union`), the left value first at a
+shared name, so the merge is associative with no premise. A factor is a sum of closed objects,
+and the product of two factors (`MapOf.prod`) holds each merge of an option of the first factor
+with an option of the second, outer over the first. The product is associative on terms
+(`Scoped.Term.product_assoc`), so the two nestings of three factors give one term. The term of a
+product is the union of the merges, so the meaning of a product is the join of the meanings of
+the merges where the merges agree (`Scoped.Term.product_join`).
+
 The prism inventory is partial on both sides on purpose. The gaps are the constructions that are
 not one payload between one pair: the numeric constructor, where the numeral gate stops the
 projection being onto its image, and the wire sets. `setCodec` is the one deliberate non-instance,
@@ -730,9 +741,12 @@ half, or the half of the `held` inside it, is disjoint from the partner agrees t
 table, and `Closed.pairwiseCompat_of_compatPair` discharges the union's obligation of two
 lawful closed codecs.
 
-**Over lawful, pairwise compatible options, the order of the options is unobservable.** A
-permutation of the options denotes the same codec (`altCodec_perm`), so a value that two options
-admit has no owner.
+**The meaning of a union is the join of its options.** The union sends a value to a result
+exactly where some option does (`IsJoin`). The join is defined where the options agree at each
+orientation, and the first admitter is how the host computes the join (`altCodec_eq_join`). So
+over pairwise agreeing options a permutation of the options denotes the same codec
+(`altCodec_perm`), and a value that two options admit has no owner. The law reads no
+lawfulness.
 
 **The decision is the specification of the library's declaration-time guard, and a checked one.**
 The `union` combinator in `src/` accepts a pair where `agrees(x, y)` holds, which is the model's

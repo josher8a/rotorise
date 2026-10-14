@@ -399,12 +399,6 @@ end OneEntry
 
 section Join
 
-/-- The join is commutative over lawful, pairwise compatible options. -/
-theorem join_comm {os os' : List (Codec V M)} (h : os.Perm os') (μ : Option M)
-    (hl : ∀ o ∈ os, Lawful member o) (hC : ∀ o ∈ os, ∀ o' ∈ os, Compat o o') :
-    altCodec os μ = altCodec os' μ :=
-  altCodec_perm h μ hl hC
-
 /-- The first answer of an appended list is the first answer of the head, else of the tail. -/
 theorem select_append {X Y : Type} (run : Codec V M → X → Option Y) (x : X) :
     ∀ os rest : List (Codec V M),

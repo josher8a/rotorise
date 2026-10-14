@@ -4546,8 +4546,8 @@ const productOfTwo = (first: unknown, second: unknown): unknown => {
  * the first factor's options and inner over the second: the `flatMap` order. It is built through {@link union}, so `agrees` runs
  * over the products and a pair of merges it cannot show compatible is refused there rather than here.
  *
- * **More than two factors fold left.** `product(a, b, c)` is `product(product(a, b), c)`. No
- * declaration of the model proves that the other nesting gives the same term.
+ * **More than two factors fold left.** `product(a, b, c)` is `product(product(a, b), c)`. The other
+ * nesting gives the same term: the model's merge of records is associative (`Term.product_assoc`).
  *
  * @example
  * ```ts
