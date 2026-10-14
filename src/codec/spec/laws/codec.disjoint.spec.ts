@@ -28,7 +28,7 @@ import {
     withLegacyRead,
 } from '../../codec'
 import { disjoint, viewsDisjoint } from '../../scoped'
-import type { Field, Term } from '../../term'
+import type { Field, RefSlot, Term } from '../../term'
 
 const termOf = (codec: { readonly def: Term }): Term => codec.def
 
@@ -374,6 +374,7 @@ describe('the verdict does not read the order of the operands', () => {
     })
 
     it('keeps a literal apart from a right recursive term whose stages it shares no member with', () => {
+        const toStages: RefSlot = { name: 'Stages', waiting: [] }
         const stages: Term = {
             kind: 'union',
             options: [
@@ -384,13 +385,14 @@ describe('the verdict does not read the order of the operands', () => {
                         fields: {
                             k: {
                                 mark: 'req',
-                                t: { kind: 'lazy', get: () => stages },
+                                t: { kind: 'ref', slot: toStages },
                             },
                         },
                     },
                 },
             ],
         }
+        toStages.bound = { Stages: stages }
         expect(apart(termOf(string('b')), stages)).toBe(true)
     })
 

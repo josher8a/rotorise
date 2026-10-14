@@ -76,12 +76,12 @@ import {
     clauseForm,
     componentsOf,
     entryOrder,
-    force,
     mapChildren,
     openRefusal,
     recursionUse,
     storedAlternatives,
-    throughThunks,
+    targetOf,
+    throughRefs,
 } from './term'
 import { shapeOf } from './value'
 
@@ -700,7 +700,7 @@ const closedPrint = (def: Term, at: string, bound?: Bound): ClosedPrint => {
 
 /**
  * **The graph of a codec** — one flat system over the term container, for the guard rows. Each cycle
- * point of the term graph is an entry: each entry of each cycle, a thunk of a cycle of thunks, and
+ * point of the term graph is an entry: each entry of each cycle, a `ref` of a cycle of `ref`s, and
  * the root. The graph has no order on its entries, so it prints a codec that has no scoped form as
  * well, and the guard of a DAG of scopes decides it.
  */
@@ -906,7 +906,7 @@ const leanPlaced = (t: Term, at: string, scope: At, placed: Placed): string => {
  *   three internally. A declaration verdict passes a {@link Bound}, and there a caller's closure
  *   prints as a variable that the theorem binds, and a caller's adapter prints as a generator
  *   `caller n` whose pair the theorem quantifies through the caller table.
- * - **A `ref` that no scope binds.** The thunk names a codec not yet declared, so the term is an
+ * - **A `ref` that no scope binds.** The `ref` names a codec not yet declared, so the term is an
  *   open fragment and has no scoped form.
  *
  * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
@@ -999,10 +999,10 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
         // total term. The two policies are `held` over this term, and the `held` row refuses them
         case 'opaq':
             return `${pre(scope)}Term.opaq`
-        // a thunk prints the term it returns, and an entry prints as its reference. A thunk that
-        // throws names a codec not yet declared, so the term is an open fragment
-        case 'lazy': {
-            const target = force(t)
+        // a `ref` prints its target, and an entry prints as its reference. A `ref` with no target
+        // names a codec not yet declared, so the term is an open fragment
+        case 'ref': {
+            const target = targetOf(t)
             if (target === undefined)
                 return refuse(
                     at,
@@ -1183,7 +1183,7 @@ const recursive = (codec: AnyCodec): boolean =>
 
 /**
  * **A guard verdict**: whether the guard of a DAG of scopes accepts the graph of a codec
- * (`Graph.guarded`). A recursive schema below a list or an object is guarded. A thunk that returns
+ * (`Graph.guarded`). A recursive schema below a list or an object is guarded. A `ref` that names
  * its own term reads its own input, and the guard refuses it: the graph has no form as a DAG of
  * scopes.
  */
@@ -1403,7 +1403,7 @@ export type FormerGuard = {
 
 /** One guard verdict on a refused term, as a Lean `theorem`, with the `src/` side decided here. */
 export const leanFormerGuard = ({ name, term }: FormerGuard): string => {
-    // a thunk in the term can name a codec that is declared now, and the host's guard then reads
+    // a `ref` in the term can name a codec that is declared now, and the host's guard then reads
     // the term again with another answer. A vector about a term that the host accepts asserts a
     // refusal that the host does not make
     if (recursionUse(term) < 2) {
@@ -2040,13 +2040,13 @@ const pinText = (
 
 /**
  * **A copy of the term whose older readers record each answer.** The copy denotes what the term
- * denotes: each reader answers as before. A thunk copies to one thunk, so a cycle stays a cycle.
+ * denotes: each reader answers as before. A `ref` copies to one `ref`, so a cycle stays a cycle.
  */
 const recording = (
     t: Term,
     log: Map<unknown, [AttributeValue, unknown][]>,
 ): Term =>
-    throughThunks((t, copy) => {
+    throughRefs((t, copy) => {
         switch (t.kind) {
             case 'held':
                 return { ...t, inner: copy(t.inner), outer: copy(t.outer) }
@@ -2457,15 +2457,15 @@ const wrapped = 'r'
 const wrapperOf = (codec: AnyCodec): Wrapper =>
     object({ [wrapped]: optional(codec) }).item as unknown as Wrapper
 
-/** Every term that the walk can reach from a root, through each thunk that resolves. */
+/** Every term that the walk can reach from a root, through each `ref` that has a target. */
 export const reachable = (root: Term): ReadonlySet<Term> => {
     const seen = new Set<Term>()
     const walk = (t: Term): void => {
         if (seen.has(t)) return
         seen.add(t)
         switch (t.kind) {
-            case 'lazy': {
-                const target = force(t)
+            case 'ref': {
+                const target = targetOf(t)
                 if (target !== undefined) walk(target)
                 return
             }
@@ -2548,23 +2548,17 @@ export type PathVectors = {
 const leanSeg = (step: string | number): string =>
     typeof step === 'number' ? `.pos ${step}` : `.name ${leanString(step)}`
 
-/** The term of a codec with each thunk resolved, as the walk of `narrow` reads it. */
-const resolved = (t: Term): Term | undefined =>
-    t.kind === 'lazy'
-        ? ((u) => (u === undefined ? undefined : resolved(u)))(force(t))
-        : t
-
 /**
- * **A decision where a row can narrow**: one codec, and a union under its thunks. The walk of
+ * **A decision where a row can narrow**: one codec, and a union under its `ref`s. The walk of
  * `narrow` narrows the options of the union, and a row states that narrowing.
  *
  * A recursive union narrows as any union does. Each option prints as a closed codec of its own,
- * where a thunk that returns to the union is an entry of the option, so the row reads `narrowC`
+ * where a `ref` that returns to the union is an entry of the option, so the row reads `narrowC`
  * over the options and needs no binder.
  */
 export const unionAt = (host: HostAt): boolean => {
     if (host.kind !== 'resolved' || 'mark' in host.codec.def) return false
-    return resolved(host.codec.def)?.kind === 'union'
+    return underRefs(host.codec.def)?.kind === 'union'
 }
 
 /** The term `never`, the frame of a name that an object neither declares nor leaves open. */
@@ -2601,10 +2595,10 @@ type GraphWalked = {
           }
 }
 
-/** A term under its thunks, or nothing where a thunk throws. */
-const underThunks = (t: Term): Term | undefined =>
-    t.kind === 'lazy'
-        ? ((u) => (u === undefined ? undefined : underThunks(u)))(force(t))
+/** A term under its `ref`s, as the walk of `narrow` reads it, or nothing where a `ref` has no target. */
+const underRefs = (t: Term): Term | undefined =>
+    t.kind === 'ref'
+        ? ((u) => (u === undefined ? undefined : underRefs(u)))(targetOf(t))
         : t
 
 /**
@@ -2619,7 +2613,7 @@ const graphChildOf = (
     s: string | number,
     entries: ReadonlyMap<Term, Entry>,
 ): GraphWalked[] | undefined => {
-    const u = underThunks(w.t)
+    const u = underRefs(w.t)
     if (u === undefined) return []
     const entry = entries.get(u)
     const top = w.at.kind === 'position' && w.at.path.length === 0
@@ -2766,11 +2760,11 @@ export const leanPath = (
     ): string => {
         const decided = decide(codec, steps)
         if (decided.kind !== 'resolved') return `.${decided.kind}`
-        const node = underThunks(decided.codec.def as Term)
+        const node = underRefs(decided.codec.def as Term)
         const walked = frontier() ?? []
         // a frame holds the resolved node where it prints as the node prints
         const same = (t: Term): boolean => {
-            const u = underThunks(t)
+            const u = underRefs(t)
             if (u === undefined || node === undefined) return false
             return (
                 u === node ||
@@ -2819,7 +2813,7 @@ export const leanPath = (
         }
         const clause = (steps[k] as Exclude<PathStep, string | number>).narrow
         const rest = steps.slice(k + 1) as readonly (string | number)[]
-        const options = resolved(before.codec.def as Term)
+        const options = underRefs(before.codec.def as Term)
         if (options?.kind !== 'union')
             return refuse(
                 at,

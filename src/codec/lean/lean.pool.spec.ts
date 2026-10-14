@@ -83,7 +83,7 @@ import {
 import { orThrow } from '../result'
 import { agrees, disjoint, viewsDisjoint } from '../scoped'
 import type { Term } from '../term'
-import { force, openRefusal, RecursionRefused, recursionUse } from '../term'
+import { openRefusal, RecursionRefused, recursionUse, targetOf } from '../term'
 import { arbitraryOf, rngFrom, structuralEquals } from '../testing'
 import { typeVectorFiles } from '../typeVectors'
 
@@ -558,8 +558,8 @@ const fillNames = (root: Term): Set<string> => {
             case 'refine':
             case 'legacy':
                 return walk(t.inner)
-            case 'lazy': {
-                const target = force(t)
+            case 'ref': {
+                const target = targetOf(t)
                 if (target !== undefined) walk(target)
                 return
             }
@@ -844,8 +844,8 @@ const pathsOf = (codec: AnyCodec): (readonly PathStep[])[] => {
     }
     const steps = [...names, ...Array.from({ length: positions }, (_, i) => i)]
     const paths: (readonly PathStep[])[] = []
-    // **A thunk that names a codec not yet declared ends the path.** The walk forces the thunk,
-    // and the throw of the caller propagates: the host reads no refusal there. The model reads the
+    // **A `ref` that names a codec not yet declared ends the path.** The walk reads the `ref`,
+    // and the `ReferenceError` of the unbound name propagates: the host reads no refusal there. The model reads the
     // variable that no binder binds as an empty frontier, so the two state no common decision
     const decide = (path: readonly PathStep[]) => {
         try {
@@ -907,24 +907,24 @@ const pathsOf = (codec: AnyCodec): (readonly PathStep[])[] => {
     return paths.filter((path) => path.length > 0)
 }
 
-/** **A union that the draw narrows**: a union under its thunks, recursive or not. */
+/** **A union that the draw narrows**: a union under its `ref`s, recursive or not. */
 const drawsNarrowing = (decided: HostAt): boolean => {
     if (!unionAt(decided) || decided.kind !== 'resolved') return false
     const def = decided.codec.def
     if ('mark' in def) return false
-    return throughLazy(def) !== undefined
+    return throughRefs(def) !== undefined
 }
 
-/** The term under a chain of thunks, or nothing where a thunk throws. */
-const throughLazy = (t: Term): Term | undefined => {
-    if (t.kind !== 'lazy') return t
-    const target = force(t)
-    return target === undefined ? undefined : throughLazy(target)
+/** The term under a chain of `ref`s, or nothing where a `ref` has no target. */
+const throughRefs = (t: Term): Term | undefined => {
+    if (t.kind !== 'ref') return t
+    const target = targetOf(t)
+    return target === undefined ? undefined : throughRefs(target)
 }
 
-/** The terms at the top of a term, under thunks and unions. */
+/** The terms at the top of a term, under `ref`s and unions. */
 const topTerms = (t: Term): Term[] => {
-    const u = throughLazy(t)
+    const u = throughRefs(t)
     if (u === undefined) return []
     return u.kind === 'union' ? u.options.flatMap(topTerms) : [u]
 }

@@ -16,11 +16,11 @@ import {
     componentsOf,
     dominates,
     entryOrder,
-    forceDeclared,
     isPrim,
     otherShape,
     primsApart,
     sameAdapter,
+    targetOf,
 } from './term'
 
 /** The term, or one of its two views. */
@@ -46,8 +46,8 @@ const graphOf = (
 }
 
 /**
- * **A position of the graph**: an entry, a term in place, a refinement over a position, or a thunk
- * that throws.
+ * **A position of the graph**: an entry, a term in place, a refinement over a position, or a `ref`
+ * with no target.
  */
 type At =
     | { readonly kind: 'entry'; readonly j: number }
@@ -145,20 +145,20 @@ const belowTopAt = (side: Side, at: At): boolean =>
 /** The body of an entry, in the operand that the test reads. */
 const body = (side: Side, j: number): At => {
     const t = side.bodies[j] as Term
-    if (t.kind !== 'lazy') return viewAt(side, t)
-    const target = forceDeclared(t)
+    if (t.kind !== 'ref') return viewAt(side, t)
+    const target = targetOf(t)
     return target === undefined ? { kind: 'free' } : place(side, target)
 }
 
 /**
- * **A term in place**: a thunk reads the term that it returns, an entry prints as its entry, and
+ * **A term in place**: a `ref` reads its target, an entry prints as its entry, and
  * any other term prints in place.
  */
 const place = (side: Side, t: Term): At => {
     const j = side.index.get(t)
     if (j !== undefined) return { kind: 'entry', j }
-    if (t.kind !== 'lazy') return viewAt(side, t)
-    const target = forceDeclared(t)
+    if (t.kind !== 'ref') return viewAt(side, t)
+    const target = targetOf(t)
     return target === undefined ? { kind: 'free' } : place(side, target)
 }
 
@@ -223,7 +223,7 @@ const row = (c: Ctx, table: Table, l: At, r: At): boolean => {
         case 'held':
         case 'legacy':
         case 'opaq':
-        case 'lazy':
+        case 'ref':
             return rightRows(c, restart, () => false, r)
         case 'refine':
             return row(c, table, viewAt(c.left, t), r)
@@ -472,7 +472,7 @@ const fuelOf = (left: Side, right: Side): number =>
  * of the first two is a function that no reader can read without running it, and `opaque` admits
  * every value. The views read a `held` ({@link viewOf}).
  *
- * **A thunk that throws is a free variable.** The model has none, because the emitter prints no
+ * **A `ref` with no target is a free variable.** The model has none, because the emitter prints no
  * codec that holds one. A free variable is disjoint from the bottom alone.
  */
 const apartAt = (left: Side, right: Side, l: At, r: At): boolean => {

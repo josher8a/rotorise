@@ -63,22 +63,21 @@ import {
     alwaysWritten,
     clauseForm,
     clauseLiteralsOf,
-    force,
     literalAlternatives,
     member as memberOf,
     openRefusal,
     ownsNullOf,
     RecursionRefused,
-    type RefSlot,
     recursionUse,
     reenteredOf,
-    refSlots,
     refuseSlots,
     sameAdapter,
     sameTerm,
     storedView,
+    targetOf,
     unanimous,
     unboundRefs,
+    usedTargetOf,
     widensRead,
 } from './term'
 
@@ -524,10 +523,6 @@ export const constantOf = (declared: ObjectSlot): unknown => {
  * threw, which meant every reader of a definition had to know about a definition that was not one.
  * The disagreement belongs to the walk, so it is the walk that carries it.
  *
- * **A refusal inside a thunk is a value.** The thunk is caller code, and a builder in the thunk
- * refuses with a `CodecError` when the walk forces the thunk. The walk returns that refusal. Every
- * other throw propagates, because an overflow or a defect of the caller is not a refusal.
- *
  * **A segment has three answers**, as the model's `childD` has. The codecs at the segment. No
  * codec, where the term stores a member that is not the container of the segment: the store
  * refuses the segment on every attribute of the term, so the term leaves the frontier. And
@@ -603,16 +598,12 @@ const childrenOf = (
             return new CodecError(
                 `a path cannot go into an adapter at '${segment}': the adapter converts the whole value, and a write at the path writes one part of the stored value without the conversion. Address the attribute itself`,
             )
-        case 'lazy': {
-            let resolved: Term
-            try {
-                resolved = def.get()
-            } catch (thrown) {
-                if (thrown instanceof CodecError) return thrown
-                throw thrown
-            }
-            return childrenOf(codecOfTerm(resolved), segment, reentered)
-        }
+        case 'ref':
+            return childrenOf(
+                codecOfTerm(usedTargetOf(def)),
+                segment,
+                reentered,
+            )
         // `opaque` admits every value, so the codec at each segment is `opaque` again
         case 'opaq':
             return [codec]
@@ -639,13 +630,13 @@ const reenteredAt = (root: Term): Reentered => {
 
 /**
  * **The member that a wrapper's inner term stores, as the model reads the printed term.** The
- * emitter prints a thunk that closes no cycle as its target, so the walk reads the target. The
+ * emitter prints a `ref` that closes no cycle as its target, so the walk reads the target. The
  * emitter prints an entry of a cycle as a reference, `Scoped.Term.ref`, inside a closed codec. The
  * model's `μG` answers no member at a reference, so this answers `undefined` at a re-entered term.
- * The emitter refuses a thunk that throws, and this answers `undefined` there too.
+ * The emitter refuses a `ref` with no target, and this answers `undefined` there too.
  *
- * {@link memberOf} answers `undefined` at every thunk, and the set constructor relies on that
- * answer. A set holds no thunk on the path that `member` reads, so the last row reads a set
+ * {@link memberOf} answers `undefined` at every `ref`, and the set constructor relies on that
+ * answer. A set holds no `ref` on the path that `member` reads, so the last row reads a set
  * exactly.
  */
 const printedMember = (
@@ -654,8 +645,8 @@ const printedMember = (
 ): AttributeName | undefined => {
     if (reentered.has(t)) return undefined
     switch (t.kind) {
-        case 'lazy': {
-            const target = force(t)
+        case 'ref': {
+            const target = targetOf(t)
             return target === undefined
                 ? undefined
                 : printedMember(target, reentered)
@@ -695,9 +686,9 @@ const absent: AnyCodec = codecOfTerm({ kind: 'never' })
  * term and not the identity of {@link absent}: the frontier keeps the first codec of a term, and an
  * identity test made the verdict depend on the order of the options.
  *
- * **The test forces no thunk.** The walk forces a thunk only to step through it, and a thunk at the
- * end of a path throws where the caller uses the codec. So a thunk whose target is `never` reads as
- * a codec here, where the model, which prints the target, reads `never`.
+ * **The test reads through no `ref`.** The walk reads a `ref` only to step through it. So a `ref`
+ * whose target is `never` reads as a codec here, where the model, which prints the target, reads
+ * `never`.
  */
 const admitsNothing = (codec: AnyCodec): boolean => codec.def.kind === 'never'
 
@@ -725,7 +716,7 @@ const acrossVariants = (
  * **The frontier after a clause**, the model's `narrow`. A union gives each option whose stored
  * view {@link storedApart} does not separate from the stored view of the clause. Any other member
  * stays where the clause does not separate the member. A clause that separates every member is a
- * refusal that names the keys of the clause. A thunk resolves as {@link childrenOf} resolves it.
+ * refusal that names the keys of the clause. A `ref` resolves as {@link childrenOf} resolves it.
  *
  * **The test reads the stored views**, because a path addresses a stored attribute. An adapter is
  * apart only from the bottom, so a test on the terms separates nothing at a `number` tag. The
@@ -739,14 +730,7 @@ const narrowAcross = (
     let kept: readonly AnyCodec[] = []
     for (const one of frontier) {
         let t = one.def
-        while (t.kind === 'lazy') {
-            try {
-                t = t.get()
-            } catch (thrown) {
-                if (thrown instanceof CodecError) return thrown
-                throw thrown
-            }
-        }
+        while (t.kind === 'ref') t = usedTargetOf(t)
         if (t.kind !== 'union') {
             if (!apart(t)) kept = including(kept, one)
             continue
@@ -846,7 +830,7 @@ const groundMember = {
  * of each key for an object whose keys are each required and whose open block is `opaque`. Any
  * other term admits less than any conjunction of these forms states, so the term is a refusal.
  *
- * `inside` holds the thunks that the walk passed on the way down. A thunk met again is a
+ * `inside` holds the `ref`s that the walk passed on the way down. A `ref` met again is a
  * recursion, which no finite conjunction states.
  */
 const preconditionsAt = (
@@ -859,17 +843,9 @@ const preconditionsAt = (
             `'${asPath(segments)}' gives no exact precondition: the clause stores ${what} there, and a condition on the path would admit more than the clause`,
         )
     switch (t.kind) {
-        case 'lazy': {
+        case 'ref':
             if (inside.includes(t)) return refuse('a recursion')
-            let forced: Term
-            try {
-                forced = t.get()
-            } catch (thrown) {
-                if (thrown instanceof CodecError) return thrown
-                throw thrown
-            }
-            return preconditionsAt(forced, segments, [...inside, t])
-        }
+            return preconditionsAt(usedTargetOf(t), segments, [...inside, t])
         case 'literal':
         case 'union': {
             const alts = literalAlternatives(t)
@@ -938,7 +914,7 @@ const eachOf = <V>(
 }
 
 /**
- * The codec at a path whose walk forced a thunk that refused. Both halves return the refusal, so
+ * The codec at a path whose walk refused. Both halves return the refusal, so
  * no value is written and no attribute is read, and the term is **`never`** for the reason that
  * {@link unresolvedAt} gives. Each call returns a new `CodecError`, because `under` changes the
  * error that it receives.
@@ -1600,9 +1576,9 @@ const set = <const C extends AnyCodec>(
     const inner = element as unknown as AttributeCodec<T>
     // **The DynamoDB set obligation, and nothing of the algebra.** A stored set, `SS`, `NS` or `BS`,
     // holds elements of one scalar member, which is the model's `SetElem`; the lift of any lawful
-    // element is lawful (`lawful_setCodec`), so this refusal belongs to the store universe. A thunk
-    // element answers no member here, because `memberOf` does not read through a thunk. So a set
-    // of a thunk is refused. A stored set holds strings, numbers or binary, and none of those
+    // element is lawful (`lawful_setCodec`), so this refusal belongs to the store universe. A `ref`
+    // element answers no member here, because `memberOf` does not read through a `ref`. So a set
+    // of a `ref` is refused. A stored set holds strings, numbers or binary, and none of those
     // recurse, so the refusal loses no set
     const member = memberOf(inner.def)
     if (member !== 'S' && member !== 'N' && member !== 'B') {
@@ -2214,7 +2190,7 @@ const withMissing = <const C extends AnyCodec>(
         }
         if (refusal) {
             throw new CodecError(
-                `\`withLegacyRead\`'s stand-in must be a value the codec it stands in for can write, and this \`${standsFor.def.kind === 'lazy' ? 'ref' : standsFor.def.kind}\` refuses the stand-in: ${refusal.message}. A row missing the attribute would read back as it and then refuse on the way out`,
+                `\`withLegacyRead\`'s stand-in must be a value the codec it stands in for can write, and this \`${standsFor.def.kind}\` refuses the stand-in: ${refusal.message}. A row missing the attribute would read back as it and then refuse on the way out`,
             )
         }
     }
@@ -2610,8 +2586,8 @@ export function withLegacyRead<const C extends AnyCodec>(
  * in `D`, so the type substitutes nothing and copies nothing. The decoded type of an entry is a
  * function of that term, so no caller states the decoded type of a cycle.
  *
- * At run time, a `ref` is a thunk over a slot that `scope` fills. Each former that runs before
- * `scope` reads the `ref` as unbound. So a cycle of the term graph passes through a `ref`.
+ * At run time, a `ref` is a node that carries a slot, and `scope` fills the slot. Each former that
+ * runs before `scope` reads the `ref` as unbound. So a cycle of the term graph passes through a `ref`.
  */
 type Ref<N extends string> = AttributeCodec<unknown> &
     TermMark<['ref', N]> &
@@ -2650,21 +2626,7 @@ type ScopeNamed<Defs> = {
  */
 export function ref<const N extends string>(name: N): Ref<N>
 export function ref(name: string): unknown {
-    const slot: RefSlot = { name, waiting: [] }
-    const made = codecOfTerm({
-        kind: 'lazy',
-        get: () => {
-            const target = slot.bound?.[name]
-            // the unbound `ref` of a name that no scope binds yet
-            if (target === undefined)
-                throw new ReferenceError(
-                    `ref('${name}') is bound by no scope yet`,
-                )
-            return termOf(target)
-        },
-    })
-    refSlots.set(termOf(made), slot)
-    return made
+    return codecOfTerm({ kind: 'ref', slot: { name, waiting: [] } })
 }
 
 /**
@@ -2694,14 +2656,17 @@ export function scope<const Defs extends Readonly<Record<string, AnyCodec>>>(
     defs: Defs & ScopeNamed<Defs>,
 ): ScopeOf<Defs>
 export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
-    const slots = unboundRefs(Object.values(defs).map(termOf))
+    const terms = Object.fromEntries(
+        Object.entries(defs).map(([name, def]) => [name, termOf(def)]),
+    )
+    const slots = unboundRefs(Object.values(terms))
     for (const slot of slots)
         if (!Object.hasOwn(defs, slot.name))
             throw new CodecError(
                 `[scope] a ref names '${slot.name}', which this scope does not declare`,
             )
     for (const slot of slots) {
-        slot.bound = defs
+        slot.bound = terms
         slot.refused = false
     }
     // **A refused scope binds no name**, so each fragment it held stays open and refuses each use.
@@ -2831,7 +2796,7 @@ export const nullable = <
         )
     if (owns === undefined) {
         throw new CodecError(
-            `nullable: ${t.kind === 'lazy' ? 'ref' : t.kind} decides the null point by running a function this cannot read, ` +
+            `nullable: ${t.kind} decides the null point by running a function this cannot read, ` +
                 'so whether the union would be certified is unknown. ' +
                 'Write the wrapper inside instead, as in held(nullable(inner), outer, adapter).',
         )
@@ -3171,7 +3136,7 @@ type PathBody<T, F> = [T] extends [readonly unknown[]]
  * **The frontier of a path, where the path type knows the codecs**: one record per member, with
  * the spec of the member, its open entry, and its decoded type. `unknown` is a frontier that the
  * type does not know, and `unknown` absorbs every union, so one unknown member makes the frontier
- * unknown. A list, an adapter and a thunk carry no codec of a child in their types, so the
+ * unknown. A list, an adapter and a `ref` carry no codec of a child in their types, so the
  * frontier below one is unknown.
  */
 type Member = {
@@ -3269,7 +3234,7 @@ type PathNarrowing<T, F> = IsUnion<T> extends true
            * clause `'A'`, and a member with no pin at the key stays too. The walk of `at` separates
            * on the stored views, so `number(1)` and `decimal('1')` meet, and `decimal` and
            * `string` are apart. Where the path knows the codecs, this type separates on the stored
-           * attributes too ({@link Kept}). Below a list, an adapter or a thunk, and in the path of a
+           * attributes too ({@link Kept}). Below a list, an adapter or a `ref`, and in the path of a
            * `tableEntry`, the type knows only the decoded types and is coarser ({@link Narrowed}).
            */
           narrow<const C extends Readonly<Record<string, AnyCodec>>>(
@@ -6007,18 +5972,17 @@ export const union = <const Options extends readonly AnyCodec[]>(
 ): UnionCodec<DerivedUnion<Options>, Options> &
     LiteralMarkOf<Options[number]> => {
     // **A union with a `ref` that no scope binds yet waits for that scope.** The checks and the
-    // resolution read each option through its thunks, and a `ref` resolves only where its scope
+    // resolution read each option through its `ref`s, and a `ref` resolves only where its scope
     // binds it. So the scope runs them with every name bound
     const settle = () => {
-        // **A recursive spine is refused before any occupancy runs.** An option's occupancies force
-        // each thunk on its spine, and a recursive one would not end, or would throw on the codec
-        // being declared
+        // **A recursive spine is refused before any occupancy runs.** An option's occupancies read
+        // through each `ref` on its spine, and a recursive one would not end
         for (const [at, declared] of (
             options as readonly AnyCodec[]
         ).entries()) {
             const use = recursionUse(termOf(declared))
             // each former refuses an adapter on a recursive path where the adapter is declared, so
-            // an adapter reaches the union only as the refusal of a thunk that the union forces,
+            // an adapter reaches the union only through a `ref` that the union reads through,
             // and the level `3` names that cause
             if (use >= 2) {
                 throw new CodecError(

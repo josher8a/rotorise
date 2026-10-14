@@ -13,12 +13,11 @@
  * cannot represent — a `set` indexed by an element term, a literal whose alternatives are not
  * indexed by their base, a field where a term is wanted — is unreachable rather than checked for.
  *
- * The one place this language is **wider** than the model is `lazy`, and the row says why.
+ * The one place this language is **wider** than the model is `ref`, and the row says why.
  */
 
 import type { AttributeName, AttributeValue, DynamoNumber } from './attribute'
 import type {
-    AnyCodec,
     LiteralBase,
     LiteralValue,
     Refinement,
@@ -221,29 +220,21 @@ export type Term =
           readonly r: (attribute: AttributeValue) => unknown
       }
     /**
-     * A thunk, which is how this language spells a recursive schema.
+     * A `ref`: the name of an entry of the scope that binds the name, which is how this language
+     * spells a recursive schema. The node carries its slot, and the target is one lookup in the
+     * slot ({@link targetOf}). The model states a recursive schema as a scope graph: a scope, its
+     * entries, and `ref i` at the node that names entry `i`. The model's guard accepts a cycle
+     * when a list or an object sits on the cycle. The node is wider than `ref i` in one way: a
+     * name that no scope binds yet has no target, and the model has no free variable.
      *
-     * The model has no thunk. It states a recursive schema as a scope graph: a scope, its entries,
-     * and `ref i` at the thunk that names entry `i`. Any other thunk is the term it returns. The
-     * model's guard accepts a cycle when a list or an object sits on the cycle.
-     *
-     * This library supports a recursive entity through a thunk, and `codec.recursive.spec.ts`
-     * declares one, so the thunk stays. **Everything else here reads through it.**
-     * {@link occV}, {@link occA} and {@link ownsNullOf} answer what the term underneath answers,
-     * and the emitter prints an entry of a cycle as a `ref`. Only
-     * {@link member} answers `undefined`, because the host cannot force a thunk safely at
-     * declaration: forcing a recursive thunk can loop.
-     *
-     * **The two projections answered `undefined` until it was measured, on the ground that
-     * forcing would throw on the entity the thunk exists to allow. Both halves were wrong.**
-     * Forcing does not throw: `object()` already forces at the declaration and the recursive
-     * entity still round-trips. And `undefined` was the unsound direction rather than the safe
-     * one, because the declaration guard then refused a union when two occupancies *met*, so an
-     * unknown occupancy made it decline to refuse. A union of a thunk of `string` and `string` was
-     * accepted, and a write then found two options admitting one value. `lazy` was the only
-     * term answering unknown on both projections, which is why it was the only hole.
+     * **Everything else here reads through the node.** {@link occV}, {@link occA} and
+     * {@link ownsNullOf} answer what the target answers, and the emitter prints an entry of a
+     * cycle as a `ref`. Only {@link member} answers `undefined`. An unknown occupancy is the
+     * unsound direction: the declaration guard refuses a union when two occupancies *meet*, so a
+     * union of a `ref` to `string` and `string` would pass, and a write would then find two
+     * options admitting one value.
      */
-    | { readonly kind: 'lazy'; readonly get: () => Term }
+    | { readonly kind: 'ref'; readonly slot: RefSlot }
     /**
      * The rule `(opaque)`: the universal sum, and **total**. It holds a number as {@link DynamoNumber},
      * which is the model's `WFNumeral`, so it writes every wire value. The two numeric policies
@@ -342,12 +333,12 @@ export const unanimous = (
 /**
  * `μG`: the member a term stores, read off the term.
  *
- * `undefined` is the model's `⊤`: *not determined by the term*. A thunk answers it for a reason of
- * the host: the host cannot force a thunk safely here, because forcing a recursive thunk can loop,
- * which is a limit of the host's carrier. A caller that needs one member, as a DynamoDB set does,
- * refuses the thunk: a set holding one element member is a fact of the store universe. `opaque`
- * writes whatever the value turns out to be, `never` writes nothing, and a `union` answers it
- * where its options do not agree on one member. `nullable` is such a union.
+ * `undefined` is the model's `⊤`: *not determined by the term*. A `ref` answers it for a reason of
+ * the host: the host does not read through a `ref` here, because a walk through a cycle of `ref`s
+ * alone can loop, which is a limit of the host's carrier. A caller that needs one member, as a
+ * DynamoDB set does, refuses the `ref`: a set holding one element member is a fact of the store
+ * universe. `opaque` writes whatever the value turns out to be, `never` writes nothing, and a
+ * `union` answers it where its options do not agree on one member. `nullable` is such a union.
  */
 export const member = (t: Term): AttributeName | undefined => {
     switch (t.kind) {
@@ -374,7 +365,7 @@ export const member = (t: Term): AttributeName | undefined => {
         case 'refine':
         case 'legacy':
             return member(t.inner)
-        case 'lazy':
+        case 'ref':
         case 'opaq':
         // nothing is written, so there is no member stored
         case 'never':
@@ -457,8 +448,8 @@ const joined = <A>(
  * A `held` answers the occupancy of its held side, the term `outer`: the held side restricts
  * every value that `f` receives. A foreign schema records `opaque` there, so the answer is every
  * slot. `opaque` accepts every kind by design, and its row answers that closed form, not `undefined`.
- * A thunk reads through to its subterm, as the model reads the term a thunk returns. A thunk that
- * names a codec not yet declared is a free variable, and a free variable may write every slot.
+ * A `ref` reads through to its target, as the model reads the entry that `ref i` names. A `ref`
+ * that no scope binds yet is a free variable, and a free variable may write every slot.
  */
 export const occV = (t: Term): readonly SetSlot[] => {
     switch (t.kind) {
@@ -496,12 +487,11 @@ export const occV = (t: Term): readonly SetSlot[] => {
         // the held side restricts every value `f` receives, as `occV (held t P k) = occV P`
         case 'held':
             return occV(t.outer)
-        // a thunk carries a term, so it answers what that term answers. The model has no thunk: the
-        // emitter prints the term that a thunk returns, so the model reads through on both
-        // projections, and only the member is lost
-        case 'lazy': {
-            const forced = force(t)
-            return forced === undefined ? everySlot : occV(forced)
+        // a `ref` answers what its target answers. The model reads through on both projections,
+        // and only the member is lost
+        case 'ref': {
+            const target = targetOf(t)
+            return target === undefined ? everySlot : occV(target)
         }
         case 'refine':
         case 'legacy':
@@ -528,8 +518,8 @@ export const occV = (t: Term): readonly SetSlot[] => {
  * `undefined` is *not determined by the term*, and it is what makes {@link nullable} refuse at
  * construction rather than guess. `withLegacyRead` answers it, because its older reader is the
  * caller's function. `refine` and `union` answer it through their subterms, as the next paragraph
- * says. A `held` answers from the slots it declares, and `lazy` reads through the thunk. A thunk
- * that names a codec not yet declared is a free variable, and the term does not determine whether a
+ * says. A `held` answers from the slots it declares, and a `ref` reads through to its target. A
+ * `ref` that no scope binds yet is a free variable, and the term does not determine whether a
  * free variable reaches the point.
  *
  * `refine` answers `false` through its subterm and `undefined` otherwise: a predicate narrows, so
@@ -573,9 +563,9 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
         }
         case 'legacy':
             return undefined
-        case 'lazy': {
-            const forced = force(t)
-            return forced === undefined ? undefined : ownsNullOf(forced)
+        case 'ref': {
+            const target = targetOf(t)
+            return target === undefined ? undefined : ownsNullOf(target)
         }
     }
 }
@@ -592,7 +582,7 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
  * sharper than `occA` — sharper only under an obligation no declaration-time certificate takes as a
  * premise.
  *
- * `lazy` diverges from the model for the reason {@link occV} gives.
+ * `ref` diverges from the model for the reason {@link occV} gives.
  */
 export const occA = (t: Term): readonly AttributeName[] | undefined => {
     switch (t.kind) {
@@ -619,9 +609,9 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
         case 'legacy':
             return undefined
         // transparent, as on the write side. A free variable may read every member
-        case 'lazy': {
-            const forced = force(t)
-            return forced === undefined ? undefined : occA(forced)
+        case 'ref': {
+            const target = targetOf(t)
+            return target === undefined ? undefined : occA(target)
         }
         case 'refine':
         case 'held':
@@ -821,19 +811,19 @@ export const literalAlternatives = (t: Term): Alternatives | undefined => {
 }
 
 /**
- * **The term that a chain of thunks resolves to**, or nothing where a thunk does not resolve.
+ * **The term that a chain of `ref`s resolves to**, or nothing where a `ref` has no target.
  *
- * The emitter prints a thunk that closes no cycle as its body, so the model reads a literal behind a
- * thunk as the literal. Each reader of a literal or a tag reads through the chain here, and a chain
- * that returns to a thunk it already passed resolves to nothing.
+ * The emitter prints a `ref` that closes no cycle as its target, so the model reads a literal behind
+ * a `ref` as the literal. Each reader of a literal or a tag reads through the chain here, and a chain
+ * that returns to a `ref` it already passed resolves to nothing.
  */
 const resolvedTerm = (t: Term): Term | undefined => {
     const passed = new Set<Term>()
     let at: Term | undefined = t
-    while (at?.kind === 'lazy') {
+    while (at?.kind === 'ref') {
         if (passed.has(at)) return undefined
         passed.add(at)
-        at = force(at)
+        at = targetOf(at)
     }
     return at
 }
@@ -912,12 +902,11 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
 /* ── the declaration guard ────────────────────────────────────────────────────────────── */
 
 /**
- * **Whether a term reaches a subterm of one of these kinds**, at any depth, or reaches a thunk
+ * **Whether a term reaches a subterm of one of these kinds**, at any depth, or reaches a `ref`
  * that the walk cannot read.
  *
- * The walk forces each thunk once and reads through it. A thunk that the walk meets again is
- * recursive, and a thunk that throws names a codec that is not yet declared. Each answers
- * "reaches".
+ * The walk reads through each `ref` once. A `ref` that the walk meets again is recursive, and a
+ * `ref` with no target names a codec that is not yet declared. Each answers "reaches".
  */
 const reaches = (
     t: Term,
@@ -927,11 +916,11 @@ const reaches = (
     if (kinds.includes(t.kind)) return true
     const on = (one: Term) => reaches(one, kinds, seen)
     switch (t.kind) {
-        case 'lazy': {
+        case 'ref': {
             if (seen.has(t)) return true
             seen.add(t)
-            const forced = force(t)
-            return forced === undefined || on(forced)
+            const target = targetOf(t)
+            return target === undefined || on(target)
         }
         case 'held':
         case 'legacy':
@@ -958,57 +947,39 @@ const reaches = (
 }
 
 /**
- * **The throw of a thunk that its own resolution forces again**, the black hole of a lazy runtime.
- * `scope({ Self: nullable(ref('Self')) })` forces the thunk of the `nullable` while the thunk
- * resolves. The thunk has no term yet, so the thunk names the codec being declared, as a `ref` that
- * no scope binds does.
+ * **The target of a `ref`**: one lookup in the definitions of the scope that binds the name, or
+ * nothing while no scope binds the name. The caller refuses, declines, or reads the `ref` as a
+ * free variable.
  */
-export class ThunkReentered extends Error {
-    constructor() {
-        super('a thunk was forced again while its own resolution ran')
-        this.name = 'ThunkReentered'
-    }
-}
+export const targetOf = (
+    t: Term & { readonly kind: 'ref' },
+): Term | undefined => t.slot.bound?.[t.slot.name]
 
 /**
- * The term of a thunk, or nothing where the thunk names a codec not yet declared. A thunk is
- * caller code, so its throw crosses the boundary here. Two throws name such a codec: the
- * `ReferenceError` of a `ref` that no scope binds yet, and {@link ThunkReentered}. The
- * caller of this function refuses, declines, or reads the thunk as a free variable.
- *
- * **Every other throw propagates.** A `RangeError` is a stack that overflowed, which is a broken
- * invariant of the host and not a free variable. Read as a free variable, an overflow makes each
- * walk back out one level and force again, and a recursive declaration does not end.
+ * The target of a `ref` that a use reads, where only a closed codec has a meaning. A name that no
+ * scope binds throws a `ReferenceError`, and each reader that needs a term propagates the throw.
  */
-export const force = (
-    t: Term & { readonly kind: 'lazy' },
-): Term | undefined => {
-    try {
-        return t.get()
-    } catch (thrown) {
-        if (
-            thrown instanceof ReferenceError ||
-            thrown instanceof ThunkReentered
+export const usedTargetOf = (t: Term & { readonly kind: 'ref' }): Term => {
+    const target = targetOf(t)
+    if (target === undefined)
+        throw new ReferenceError(
+            `ref('${t.slot.name}') is bound by no scope yet`,
         )
-            return undefined
-        throw thrown
-    }
+    return target
 }
 
 /**
- * The slot of a `ref`: the name, the definitions of the scope that binds the name, and waiting
- * checks. A scope that refuses keeps its definitions in the slot, so a reader of the term sees the
- * cycle that the scope refused, and marks the slot \`refused\`, so the name stays free.
+ * The slot of a `ref`: the name, the terms of the definitions of the scope that binds the name,
+ * and waiting checks. `scope` fills the slot one time. A scope that refuses keeps its definitions
+ * in the slot, so a reader of the term sees the cycle that the scope refused, and marks the slot
+ * \`refused\`, so the name stays free.
  */
 export type RefSlot = {
     readonly name: string
-    bound?: Readonly<Record<string, AnyCodec>>
+    bound?: Readonly<Record<string, Term>>
     refused?: boolean
     readonly waiting: (() => void)[]
 }
-
-/** The slot of each `ref`, by the term of the `ref`. `scope` fills the slot one time. */
-export const refSlots = new WeakMap<Term, RefSlot>()
 
 /**
  * The slots of the `ref`s that the terms reach and that no scope binds yet. A bound `ref` belongs
@@ -1020,16 +991,11 @@ export const unboundRefs = (roots: readonly Term[]): ReadonlySet<RefSlot> => {
     const walk = (t: Term): void => {
         if (seen.has(t)) return
         seen.add(t)
-        const slot = refSlots.get(t)
-        if (slot !== undefined) {
-            if (slot.bound === undefined || slot.refused === true)
-                slots.add(slot)
-            return
-        }
         switch (t.kind) {
-            case 'lazy': {
-                const target = force(t)
-                if (target !== undefined) walk(target)
+            case 'ref': {
+                const { slot } = t
+                if (slot.bound === undefined || slot.refused === true)
+                    slots.add(slot)
                 return
             }
             case 'list':
@@ -1123,7 +1089,7 @@ export const recursionUse = (root: Term): number => {
 /**
  * **The refusal of a former whose term the model's guard refuses.** The refusal carries the term,
  * so a checker states the model's guard on the term that the host refused. The refusal carries the
- * level of {@link recursionUse}, so a walk that forces the thunk reads the cause.
+ * level of {@link recursionUse}, so a walk that reads through the `ref` reads the cause.
  */
 export class RecursionRefused extends CodecError {
     readonly term: Term
@@ -1133,24 +1099,6 @@ export class RecursionRefused extends CodecError {
         super(reason)
         this.term = term
         this.use = use
-    }
-}
-
-/**
- * The term of a thunk, or nothing where {@link force} answers nothing or the thunk throws a
- * {@link CodecError}. **A former refuses inside a thunk where the name it reads is in progress**:
- * the thunk of a `nullable` over a `ref` to its own entry refuses while the entry resolves. The
- * throw leaves no mark, so a later force retries. So the walk reads the refusal as the free
- * variable that a `ref` that no scope binds is.
- */
-export const forceDeclared = (
-    t: Term & { readonly kind: 'lazy' },
-): Term | undefined => {
-    try {
-        return force(t)
-    } catch (thrown) {
-        if (thrown instanceof CodecError) return undefined
-        throw thrown
     }
 }
 
@@ -1190,30 +1138,33 @@ export const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
 }
 
 /**
- * **A view that reads through a thunk**, as the model's views read through `ref`: the view of a
- * thunk is a thunk that returns the view of the term that the first thunk returns. Each term
- * object has one view object, so a cycle of the term is a cycle of the view, closed at the view
- * of the same term. The emitter then prints the view as a scope whose entries are the views of
- * the entries, and a `ref` of the view at the thunk.
+ * **A view that reads through a `ref`**, as the model's views read through `ref`: the view of a
+ * `ref` is a `ref` whose slot binds the name to the view of the target. Each term object has one
+ * view object, so a cycle of the term is a cycle of the view, closed at the view of the same term.
+ * The emitter then prints the view as a scope whose entries are the views of the entries, and a
+ * `ref` of the view at the `ref`.
  *
- * The build forces no thunk, so it ends: it recurses only through the edges that are not a
- * thunk, and every such edge of a term is built before the term. A thunk of the view forces its
- * thunk when a reader of the view reads it. A thunk that throws throws there, and the reader
- * reads it as an unbound `ref`. So the thunk of the view forces its thunk directly and not through
- * {@link force}: the throw must reach the {@link force} of the reader at the thunk of the view.
+ * The build ends: the view of a `ref` is in the table before the build reads the target, so a
+ * cycle meets the view that it started. The view of a `ref` with no target has no target. A slot
+ * changes only in `scope`, and no `scope` runs while a reader holds a view.
  */
-export const throughThunks =
+export const throughRefs =
     (row: (t: Term, view: (t: Term) => Term) => Term) =>
     (root: Term): Term => {
         const views = new Map<Term, Term>()
         const view = (t: Term): Term => {
             const known = views.get(t)
             if (known !== undefined) return known
-            const made: Term =
-                t.kind === 'lazy'
-                    ? { kind: 'lazy', get: () => view(t.get()) }
-                    : row(t, view)
+            if (t.kind !== 'ref') {
+                const made = row(t, view)
+                views.set(t, made)
+                return made
+            }
+            const slot: RefSlot = { name: t.slot.name, waiting: [] }
+            const made: Term = { kind: 'ref', slot }
             views.set(t, made)
+            const target = targetOf(t)
+            if (target !== undefined) slot.bound = { [slot.name]: view(target) }
             return made
         }
         return view(root)
@@ -1230,7 +1181,7 @@ export const throughThunks =
  * it was stated: the stored side reads the predicate only through `g`, and the view keeps no
  * closure.
  */
-export const storedView = throughThunks((t, view) => {
+export const storedView = throughRefs((t, view) => {
     switch (t.kind) {
         case 'held':
             return view(t.inner)
@@ -1262,14 +1213,14 @@ export const sameAdapter = (
     (x.via !== undefined && x.via === y.via) || (x.f === y.f && x.g === y.g)
 
 /**
- * **Whether two terms are one term**: one structure, with each thunk read as its target, and each
+ * **Whether two terms are one term**: one structure, with each `ref` read as its target, and each
  * function that a term holds the same function object. A literal compares by its base, and a
  * stand-in by `Object.is`.
  *
  * Two codecs built by two calls of one constructor are two objects and one term, and the model
- * reads only the term. A thunk that closes a cycle makes the walk meet a pair again, and the walk
+ * reads only the term. A `ref` that closes a cycle makes the walk meet a pair again, and the walk
  * assumes that pair equal: each test is a conjunction, so a pair that differs makes the answer
- * `false` wherever the walk meets it. A thunk that throws is equal to itself only.
+ * `false` wherever the walk meets it. A `ref` with no target is equal to itself only.
  */
 export const sameTerm = (x: Term, y: Term): boolean => {
     const assumed: [Term, Term][] = []
@@ -1350,8 +1301,8 @@ export const sameTerm = (x: Term, y: Term): boolean => {
             }
             case 'union':
                 return r.kind === 'union' && all(l.options, r.options)
-            // a thunk that throws is equal to itself only, which the identity test above answers
-            case 'lazy':
+            // a `ref` with no target is equal to itself only, which the identity test above answers
+            case 'ref':
                 return false
             default:
                 return l.kind === r.kind
@@ -1375,7 +1326,7 @@ const samePredicate = (p: Refinement, q: Refinement): boolean =>
  * does, so a predicate over it reads the value itself.
  *
  * The host reads three more terms as an adapter, because no bound below `opaque` covers each one.
- * A thunk that throws is an unbound `ref`, and the codec that the `ref` names can hold a `held`. A
+ * An unbound `ref` can name a codec that holds a `held`. A
  * `withLegacyRead` reads an attribute through caller code. A field with a fallback reads a map
  * without the name to a value with the name.
  *
@@ -1389,8 +1340,8 @@ const belowTop = (root: Term): boolean => {
         if (seen.has(t)) return false
         seen.add(t)
         switch (t.kind) {
-            case 'lazy': {
-                const target = force(t)
+            case 'ref': {
+                const target = targetOf(t)
                 return target === undefined || adapts(target)
             }
             case 'held':
@@ -1425,11 +1376,11 @@ const belowTop = (root: Term): boolean => {
 /**
  * **The re-entered terms of a root**: each entry of each cycle of the term graph of the root
  * ({@link componentsOf}). The emitter prints an entry as a reference, so a path walk reads no
- * member at a re-entered term, as the model's `μG` reads none at a reference. A thunk that throws
+ * member at a re-entered term, as the model's `μG` reads none at a reference. A `ref` with no target
  * names no term, as {@link childrenOf} reads it.
  *
  * **The set holds every entry, not only the term that a walk meets on its own stack.** An entry
- * that the walk forces before its cycle closes is a reference in the print as well, and a set of
+ * that the walk reads before its cycle closes is a reference in the print as well, and a set of
  * the stack alone read a member there, which the type and the model refuse.
  */
 export const reenteredOf = (root: Term): ReadonlySet<Term> =>
@@ -1447,17 +1398,15 @@ export const leafKinds: ReadonlySet<Term['kind']> = new Set([
 ])
 
 /**
- * The terms that a term reads one step down, through a thunk that resolves to a declared term.
+ * The terms that a term reads one step down, through a `ref` that has a target.
  *
- * A thunk is the term of a `ref`, or a view of one, and a thunk runs no former and no scope. So a
- * force throws a `CodecError` only where the entry that the `ref` names is a field, and never a
- * refusal of the guard. A thunk that throws holds no cycle. The refusal of a nested scope reaches
- * the guard through the definitions that the refused scope keeps in the slot of each `ref`.
+ * A `ref` with no target holds no cycle. The refusal of a nested scope reaches the guard through
+ * the definitions that the refused scope keeps in the slot of each `ref`.
  */
 export const childrenOf = (t: Term): readonly Term[] => {
     switch (t.kind) {
-        case 'lazy': {
-            const target = forceDeclared(t)
+        case 'ref': {
+            const target = targetOf(t)
             return target === undefined ? [] : [target]
         }
         case 'list':
@@ -1486,7 +1435,7 @@ export const childrenOf = (t: Term): readonly Term[] => {
 }
 
 /**
- * **One cycle of a term graph**: its members, and the entries. An entry is a member that a thunk
+ * **One cycle of a term graph**: its members, and the entries. An entry is a member that a `ref`
  * names, that a term outside the component names, that a root names, or that has more than one
  * parent. Each other member has one parent in the component, and prints in place inside that
  * parent. The key of an entry is its name in the print.
@@ -1547,12 +1496,12 @@ export const componentsOf = (roots: readonly Term[]): readonly Component[] => {
             continue
         const keys = new Map<Term, string>()
         for (const m of comp) {
-            if (m.kind === 'lazy') continue
+            if (m.kind === 'ref') continue
             const ps = parents.get(m) ?? []
             if (
                 external.has(m) ||
                 ps.length !== 1 ||
-                ps.some((q) => q.kind === 'lazy' || !members.has(q))
+                ps.some((q) => q.kind === 'ref' || !members.has(q))
             )
                 keys.set(m, `k${keys.size}`)
         }
@@ -1578,7 +1527,7 @@ export type EntryOrder =
 /** The order of the entries of a component, or the reason that it has none. */
 export const entryOrder = (component: Component): EntryOrder => {
     const { members, keys } = component
-    // a cycle of thunks alone names no term, so it reads its own input with no guard
+    // a cycle of `ref`s alone names no term, so it reads its own input with no guard
     if (keys.size === 0)
         return {
             kind: 'refused',
@@ -1595,8 +1544,8 @@ export const entryOrder = (component: Component): EntryOrder => {
             wall: boolean,
             top: boolean,
         ): void => {
-            if (t.kind === 'lazy') {
-                const target = force(t)
+            if (t.kind === 'ref') {
+                const target = targetOf(t)
                 if (target !== undefined) walk(target, guarded, wall, false)
                 return
             }
