@@ -363,7 +363,7 @@ const draw = (depth: number): Entry => {
                 top: ref('tree'),
                 tree: object({ v: c.codec, kids: array(ref('top')) }),
             })
-            return { name: `mu.tree(${c.name})`, codec: erase(top) }
+            return { name: `scope.tree(${c.name})`, codec: erase(top) }
         }
         case 12: {
             const c = draw(depth - 1)
@@ -376,7 +376,7 @@ const draw = (depth: number): Entry => {
                 kids,
                 () => scope({ self: union([c.codec, kids.codec]) }).self,
             )
-            return { name: `mu.json(${c.name})`, codec: self }
+            return { name: `scope.json(${c.name})`, codec: self }
         }
         case 13: {
             const a = draw(depth - 1)
@@ -426,7 +426,7 @@ const draw = (depth: number): Entry => {
                 node,
                 () => scope({ self: union([c.codec, node.codec]) }).self,
             )
-            return { name: `mu.opt(${c.name})`, codec: self }
+            return { name: `scope.opt(${c.name})`, codec: self }
         }
         case 17: {
             const a = draw(depth - 1)
@@ -513,8 +513,8 @@ const draw = (depth: number): Entry => {
                 a: object({ v: c.codec, b: optional(ref('B')) }),
                 b: object({ a: optional(ref('A')) }),
             })
-            const left = { name: `mu.a(${c.name})`, codec: erase(mutual.A) }
-            const right = { name: 'mu.b', codec: erase(mutual.B) }
+            const left = { name: `scope.a(${c.name})`, codec: erase(mutual.A) }
+            const right = { name: 'scope.b', codec: erase(mutual.B) }
             if (rng() < 0.5)
                 return {
                     name: `{x:${left.name},y:${right.name}}`,
