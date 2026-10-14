@@ -619,8 +619,8 @@ condition on the graph of the scope. Each entry occurs below a list or an object
 older reader. The guard refuses an entry whose body is \texttt{ref\ 0}, and an entry whose body is
 \texttt{union(ref\ 0,\ string)}. It also refuses a \texttt{held} between an entry and its reference, because the
 conversion of a \texttt{held} can make the input deeper.
-Over closed codecs each refused shape is a graph with no form as a DAG of scopes
-(\texttt{Graph.unguarded\_no\_dag}, \texttt{Graph.option\_at\_input\_no\_dag}, \texttt{Graph.held\_on\_path\_no\_dag}).
+Each refused shape is a graph with no stratified form
+(\texttt{Graph.unguarded\_no\_strat}, \texttt{Graph.option\_at\_input\_no\_strat}, \texttt{Graph.held\_on\_path\_no\_strat}).
 
 \begin{theorem}[guarded recursion]
 \label{thm:guarded-recursion}

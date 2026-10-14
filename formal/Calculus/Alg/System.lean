@@ -2339,6 +2339,20 @@ theorem wall_leaf_no_strat (ssys : SSys S n) (π : Fin n → Fin n) (t : Flat S.
   rw [h, Flat.okB_rename, ht] at hok
   exact nomatch hok
 
+/-- **A renaming keeps the graph guard**, from the renamed system back to the system. -/
+theorem graphGuard_of_rename {sys g : Fin n → Flat S.Op S.Pos n} (π : Equiv.Perm (Fin n))
+    (hg : ∀ m, g m = (sys (π.symm m)).bind fun j => .leaf (π j)) (h : graphGuard S g = true) :
+    graphGuard S sys = true := by
+  have hπ : ∀ i, g (π i) = (sys i).bind fun j => .leaf (π j) := fun i => by
+    rw [hg, Equiv.symm_apply_apply]
+  have hG := (graphGuard_iff g).mp h
+  refine (graphGuard_iff sys).mpr ⟨fun i => ?_, fun ⟨w, m, hm, hwm, hw⟩ =>
+    hG.2 ⟨fun t => π (w t), m, hm, by simp only [hwm], fun t ht => ?_⟩⟩
+  · have hi := hG.1 (π i)
+    rwa [hπ, Flat.okB_rename] at hi
+  · show (g (π (w t))).ulv S (π (w (t + 1))) = true
+    rw [hπ]; exact Flat.ulv_of_rename π _ (hw t ht)
+
 end WallLeaf
 
 /-! ## A wall names a constant -/

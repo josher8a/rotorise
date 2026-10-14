@@ -173,9 +173,8 @@ structure Graph where
   N : Nat
   sys : Fin N → Scoped.Graph.Term N
 
-/-- **The guard of a DAG of scopes on the graph**: the decision that the graph has a form as a DAG
-    of scopes. -/
-def Graph.guarded (g : Graph) : Bool := Alg.dagGuardB (Alg.Scoped.TSig dynSig) g.sys
+/-- **The guard of the graph**: no leaf under a wall, and no cycle of unguarded edges. -/
+def Graph.guarded (g : Graph) : Bool := Alg.graphGuard (Alg.Scoped.TSig dynSig) g.sys
 
 /-- **A closed codec of DynamoDB**: a DAG of scopes over the term container, and a root entry. -/
 structure Closed where

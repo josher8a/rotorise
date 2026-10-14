@@ -370,20 +370,21 @@ the scopes at the root (`Scoped.Closed.meaning`). The stages of a scope start at
 each applies the entries to the one before. Each input reads the stage its own depth names.
 
 **The guard is a checked condition on the graph.** `Flat.Guarded` asks that each entry occurs
-below a container and below no `held` and no older reader. The graph form of a DAG of scopes passes `dagGuardB`
-under each renaming of its entries (`dagGuard_of_rename`, `DSys.dagGuard`). So a graph that `Graph.guarded`
-refuses has no form as a DAG of scopes. The guard
-refuses two shapes, and each is a graph with no form as a DAG of scopes:
+below a container and below no `held` and no older reader. The guard of a graph, `Graph.guarded`, is
+`graphGuard`: no leaf under a wall, and no cycle of unguarded edges. The graph that the host prints for a
+closed codec has no leaf under a wall. The graph form of a stratified system passes `graphGuard` under each
+renaming of its entries (`graphGuard_of_rename`, `SSys.graphGuard`). So a graph that `Graph.guarded` refuses
+has no stratified form. The guard refuses two shapes, and each is a graph with no stratified form:
 
 - an entry that reads its own input, as an entry whose body is `ref 0`
-  (`Graph.unguarded_no_dag`) or `union [ref 0, string]` (`Graph.option_at_input_no_dag`).
+  (`Graph.unguarded_no_strat`) or `union [ref 0, string]` (`Graph.option_at_input_no_strat`).
   The stages of such a term never grow;
-- a `held` between an entry and its reference (`Graph.held_on_path_no_dag`). The caller-side
+- a `held` between an entry and its reference (`Graph.held_on_path_no_strat`). The caller-side
   function of a `held` can make the input deeper, so a container on the path does not bound the
   depth.
 
-A term of a scope names an entry above every guard only below its own entry, so a closed codec
-carries the guard by construction.
+A stratified term names an entry above every guard only below its own entry, and names no entry below
+a wall, so a stratified system carries the guard by construction.
 
 **A wall reaches no cycle.** A wall is an operation of kind `wall`: a `held`, including the
 library adapters `number`, `decimal` and `opaque`, or an older reader. A wall reads its argument

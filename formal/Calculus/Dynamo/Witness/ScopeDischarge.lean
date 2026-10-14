@@ -6,11 +6,11 @@ import Calculus.Dynamo.Lang.ScopeSound
 The host's recursive schema for JSON as a closed codec (`jsonClosed`), carried through
 `Closed.sound`, and the shapes that have no closed codec.
 
-A closed codec names an entry above every guard only below its own position, and below a wall
-it names no entry of its own scope: the type of a scope term holds no other leaf. The graph form
-of a DAG of scopes passes `dagGuardB` under each renaming of its entries
-(`Graph.guarded_of_dagForm`). So a shape that `dagGuardB` refuses has no closed codec with that
-graph as its graph form.
+A stratified system names an entry above every guard only below its own position, and below a
+wall it names no entry: the type of a stratified term holds no other leaf. The graph form of a
+stratified system passes `graphGuard` under each renaming of its entries
+(`Graph.guarded_of_stratForm`). So a shape that `graphGuard` refuses has no stratified system with
+that graph as its graph form.
 -/
 
 namespace Calculus
@@ -99,23 +99,23 @@ theorem Closed.json_vectors :
     ∧ (jsonClosed.meaning α).p (.l [.s "a", .l []]) = some (.arr [.str "a", .arr []]) :=
   ⟨rfl, rfl, rfl⟩
 
-/-! ## The shapes that have no closed codec
+/-! ## The shapes that have no stratified form
 
-Each shape is a flat graph. A scope term names an entry above every guard only below its own
-position, and the inner term and the outer term of a `held` name no entry of their scope: the
-type of a scope term holds no other leaf. A graph that `dagGuardB` refuses has no closed codec. -/
+Each shape is a flat graph. A stratified term names an entry above every guard only below its own
+position, and below a wall it names no entry: the type of a stratified term holds no other leaf. A
+graph that `graphGuard` refuses has no stratified form. -/
 
-/-- **A graph has a form as a DAG of scopes**: a renaming of its entries is the graph form of a
-    closed codec. -/
-def Graph.DagForm (g : Graph) : Prop :=
-  ∃ (π : Equiv.Perm (Fin g.N)) (d : Alg.Scoped.Closed dynSig g.N),
-    ∀ m, d.graph m = (g.sys (π.symm m)).bind fun j => .leaf (π j)
+/-- **A graph has a stratified form**: a renaming of its entries is the graph form of a stratified
+    system. -/
+def Graph.StratForm (g : Graph) : Prop :=
+  ∃ (π : Equiv.Perm (Fin g.N)) (s : Alg.SSys (Alg.Scoped.TSig dynSig) g.N),
+    ∀ m, s.graph m = (g.sys (π.symm m)).bind fun j => .leaf (π j)
 
-/-- **A graph that has a form as a DAG of scopes passes the guard**: the graph form of the closed
-    codec passes `dagGuardB`, and the renaming keeps the guard back to the graph. -/
-theorem Graph.guarded_of_dagForm (g : Graph) (h : g.DagForm) : g.guarded = true := by
-  obtain ⟨π, d, hd⟩ := h
-  exact Alg.dagGuardB_iff.mpr (Alg.dagGuard_of_rename π hd d.dagGuard)
+/-- **A graph that has a stratified form passes the guard**: the graph form of the stratified system
+    passes `graphGuard`, and the renaming keeps the guard back to the graph. -/
+theorem Graph.guarded_of_stratForm (g : Graph) (h : g.StratForm) : g.guarded = true := by
+  obtain ⟨π, s, hs⟩ := h
+  exact Alg.graphGuard_of_rename π hs (Alg.SSys.graphGuard s)
 
 /-- The graph of one entry whose body is `ref 0`: the entry names itself at its own input. -/
 def unguardedGraph : Graph := ⟨1, fun _ => Scoped.Graph.Term.ref 0⟩
@@ -131,18 +131,19 @@ def heldOnPathGraph : Graph :=
   ⟨1, fun _ => Scoped.Graph.Term.array
     (Scoped.Graph.Term.held false (Scoped.Graph.Term.ref 0) Scoped.Graph.Term.opaq (.caller 0, false) [])⟩
 
-/-- **An entry that names itself at its own input has no closed codec**: its stages never grow. -/
-theorem Graph.unguarded_no_dag : ¬ unguardedGraph.DagForm :=
-  fun h => absurd (Graph.guarded_of_dagForm _ h) (by decide)
+/-- **An entry that names itself at its own input has no stratified form**: its stages never
+    grow. -/
+theorem Graph.unguarded_no_strat : ¬ unguardedGraph.StratForm :=
+  fun h => absurd (Graph.guarded_of_stratForm _ h) (by decide)
 
-/-- **An option that names its own entry at its input has no closed codec.** -/
-theorem Graph.option_at_input_no_dag : ¬ optionAtInputGraph.DagForm :=
-  fun h => absurd (Graph.guarded_of_dagForm _ h) (by decide)
+/-- **An option that names its own entry at its input has no stratified form.** -/
+theorem Graph.option_at_input_no_strat : ¬ optionAtInputGraph.StratForm :=
+  fun h => absurd (Graph.guarded_of_stratForm _ h) (by decide)
 
-/-- **A `held` that names its own entry has no closed codec**, although a container guards the
+/-- **A `held` that names its own entry has no stratified form**, although a container guards the
     entry: the caller side of the `held` can make the input deeper. -/
-theorem Graph.held_on_path_no_dag : ¬ heldOnPathGraph.DagForm :=
-  fun h => absurd (Graph.guarded_of_dagForm _ h) (by decide)
+theorem Graph.held_on_path_no_strat : ¬ heldOnPathGraph.StratForm :=
+  fun h => absurd (Graph.guarded_of_stratForm _ h) (by decide)
 
 /-- The graph of `jsonClosed`. -/
 def jsonGraph : Graph :=
@@ -153,15 +154,21 @@ def jsonGraph : Graph :=
     array of the other. -/
 def nestGraph : Graph := ⟨2, fun i => Scoped.Graph.Term.array (Scoped.Graph.Term.ref i.rev)⟩
 
-/-- **An entry under a container has a closed codec**: the graph form of `jsonClosed` is
+/-- The stratified system of one entry: a string, or an array of the entry. -/
+def jsonStrat : Alg.SSys (Alg.Scoped.TSig dynSig) 1 := fun _ =>
+  .node (Alg.Scoped.TOp.union 2)
+    (Fin.cases (.node (Alg.Scoped.TOp.prim (Ground.base .string)) fun p => nomatch p)
+      fun _ => .node (Alg.Scoped.TOp.list 0 1 0) fun _ => .leaf (0 : Fin 1))
+
+/-- **An entry under a container has a stratified form**: the graph form of `jsonStrat` is
     `jsonGraph`. -/
-theorem Graph.json_dag : jsonGraph.DagForm := by
-  refine ⟨Equiv.refl _, jsonClosed.scopes, fun m => ?_⟩
+theorem Graph.json_strat : jsonGraph.StratForm := by
+  refine ⟨Equiv.refl _, jsonStrat, fun m => ?_⟩
   match m with
   | ⟨0, _⟩ =>
     refine congrArg (Alg.Flat.node _) (funext fun p => ?_)
     match p with
-    | ⟨0, _⟩ => exact congrArg (Alg.Flat.node _) (funext fun p => p.elim)
+    | ⟨0, _⟩ => exact congrArg (Alg.Flat.node _) (funext fun p => nomatch p)
     | ⟨1, _⟩ =>
       refine congrArg (Alg.Flat.node _) (funext fun p => ?_)
       match p with
@@ -169,14 +176,14 @@ theorem Graph.json_dag : jsonGraph.DagForm := by
       | .inr (.inl _) => rfl
       | .inr (.inr p) => exact p.elim0
 
-/-- The closed codec of one scope of two entries, each an array of the other. -/
-def nestScopes : Alg.Scoped.Closed dynSig 2 :=
-  .snoc (c := 0) (n := 2) .nil fun i => Scoped.Term.array (Scoped.Term.ref i.rev)
+/-- The stratified system of two entries, each an array of the other. -/
+def nestStrat : Alg.SSys (Alg.Scoped.TSig dynSig) 2 := fun i =>
+  .node (Alg.Scoped.TOp.list 0 1 0) fun _ => .leaf (i.rev : Fin 2)
 
-/-- **Two entries that name each other under a container have a closed codec**: the graph form
-    of `nestScopes` is `nestGraph`. -/
-theorem Graph.nest_dag : nestGraph.DagForm := by
-  refine ⟨Equiv.refl _, nestScopes, fun m => ?_⟩
+/-- **Two entries that name each other under a container have a stratified form**: the graph form
+    of `nestStrat` is `nestGraph`. -/
+theorem Graph.nest_strat : nestGraph.StratForm := by
+  refine ⟨Equiv.refl _, nestStrat, fun m => ?_⟩
   match m with
   | ⟨0, _⟩ | ⟨1, _⟩ =>
     refine congrArg (Alg.Flat.node _) (funext fun p => ?_)
@@ -185,9 +192,9 @@ theorem Graph.nest_dag : nestGraph.DagForm := by
     | .inr (.inl _) => rfl
     | .inr (.inr p) => exact p.elim0
 
-/-- **An entry under a container has a closed codec**, and so do two entries that name each other
-    under a container. -/
-theorem Graph.container_path_dag : jsonGraph.DagForm ∧ nestGraph.DagForm :=
-  ⟨Graph.json_dag, Graph.nest_dag⟩
+/-- **An entry under a container passes the guard**, and so do two entries that name each other
+    under a container: each has a stratified form. -/
+theorem Graph.container_path_guarded : jsonGraph.guarded = true ∧ nestGraph.guarded = true :=
+  ⟨Graph.guarded_of_stratForm _ Graph.json_strat, Graph.guarded_of_stratForm _ Graph.nest_strat⟩
 
 end Calculus
