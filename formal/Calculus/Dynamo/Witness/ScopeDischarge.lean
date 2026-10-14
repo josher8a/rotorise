@@ -7,10 +7,10 @@ The host's recursive schema for JSON as a closed codec (`jsonClosed`), carried t
 `Closed.sound`, and the shapes that have no closed codec.
 
 A closed codec names an entry above every guard only below its own position, and below a wall
-it names no entry of its own scope: the type of a scope term holds no other leaf. The flat graph
-of a codec has a form as a DAG of scopes exactly where `dagGuardB` accepts it
-(`dagGuardB_iff_dsys`). So a shape that `dagGuardB` refuses has no closed codec with that graph
-as its graph form.
+it names no entry of its own scope: the type of a scope term holds no other leaf. The graph form
+of a DAG of scopes passes `dagGuardB` under each renaming of its entries
+(`Graph.guarded_of_dagForm`). So a shape that `dagGuardB` refuses has no closed codec with that
+graph as its graph form.
 -/
 
 namespace Calculus
@@ -103,7 +103,7 @@ theorem Closed.json_vectors :
 
 Each shape is a flat graph. A scope term names an entry above every guard only below its own
 position, and the inner term and the outer term of a `held` name no entry of their scope: the
-type of a scope term holds no other leaf. `dagGuardB` decides the same refusal on a graph. -/
+type of a scope term holds no other leaf. A graph that `dagGuardB` refuses has no closed codec. -/
 
 /-- **A graph has a form as a DAG of scopes**: a renaming of its entries is the graph form of a
     closed codec. -/
@@ -111,9 +111,11 @@ def Graph.DagForm (g : Graph) : Prop :=
   ∃ (π : Equiv.Perm (Fin g.N)) (d : Alg.Scoped.Closed dynSig g.N),
     ∀ m, d.graph m = (g.sys (π.symm m)).bind fun j => .leaf (π j)
 
-/-- **The guard decides the form as a DAG of scopes** (`dagGuardB_iff_dsys`). -/
-theorem Graph.dagForm_iff (g : Graph) : g.DagForm ↔ g.guarded = true :=
-  Alg.dagGuardB_iff_dsys.symm
+/-- **A graph that has a form as a DAG of scopes passes the guard**: the graph form of the closed
+    codec passes `dagGuardB`, and the renaming keeps the guard back to the graph. -/
+theorem Graph.guarded_of_dagForm (g : Graph) (h : g.DagForm) : g.guarded = true := by
+  obtain ⟨π, d, hd⟩ := h
+  exact Alg.dagGuardB_iff.mpr (Alg.dagGuard_of_rename π hd d.dagGuard)
 
 /-- The graph of one entry whose body is `ref 0`: the entry names itself at its own input. -/
 def unguardedGraph : Graph := ⟨1, fun _ => Scoped.Graph.Term.ref 0⟩
@@ -131,16 +133,16 @@ def heldOnPathGraph : Graph :=
 
 /-- **An entry that names itself at its own input has no closed codec**: its stages never grow. -/
 theorem Graph.unguarded_no_dag : ¬ unguardedGraph.DagForm :=
-  fun h => absurd ((Graph.dagForm_iff _).mp h) (by decide)
+  fun h => absurd (Graph.guarded_of_dagForm _ h) (by decide)
 
 /-- **An option that names its own entry at its input has no closed codec.** -/
 theorem Graph.option_at_input_no_dag : ¬ optionAtInputGraph.DagForm :=
-  fun h => absurd ((Graph.dagForm_iff _).mp h) (by decide)
+  fun h => absurd (Graph.guarded_of_dagForm _ h) (by decide)
 
 /-- **A `held` that names its own entry has no closed codec**, although a container guards the
     entry: the caller side of the `held` can make the input deeper. -/
 theorem Graph.held_on_path_no_dag : ¬ heldOnPathGraph.DagForm :=
-  fun h => absurd ((Graph.dagForm_iff _).mp h) (by decide)
+  fun h => absurd (Graph.guarded_of_dagForm _ h) (by decide)
 
 /-- The graph of `jsonClosed`. -/
 def jsonGraph : Graph :=
@@ -151,9 +153,41 @@ def jsonGraph : Graph :=
     array of the other. -/
 def nestGraph : Graph := ⟨2, fun i => Scoped.Graph.Term.array (Scoped.Graph.Term.ref i.rev)⟩
 
+/-- **An entry under a container has a closed codec**: the graph form of `jsonClosed` is
+    `jsonGraph`. -/
+theorem Graph.json_dag : jsonGraph.DagForm := by
+  refine ⟨Equiv.refl _, jsonClosed.scopes, fun m => ?_⟩
+  match m with
+  | ⟨0, _⟩ =>
+    refine congrArg (Alg.Flat.node _) (funext fun p => ?_)
+    match p with
+    | ⟨0, _⟩ => exact congrArg (Alg.Flat.node _) (funext fun p => p.elim)
+    | ⟨1, _⟩ =>
+      refine congrArg (Alg.Flat.node _) (funext fun p => ?_)
+      match p with
+      | .inl p => exact p.elim0
+      | .inr (.inl _) => rfl
+      | .inr (.inr p) => exact p.elim0
+
+/-- The closed codec of one scope of two entries, each an array of the other. -/
+def nestScopes : Alg.Scoped.Closed dynSig 2 :=
+  .snoc (c := 0) (n := 2) .nil fun i => Scoped.Term.array (Scoped.Term.ref i.rev)
+
+/-- **Two entries that name each other under a container have a closed codec**: the graph form
+    of `nestScopes` is `nestGraph`. -/
+theorem Graph.nest_dag : nestGraph.DagForm := by
+  refine ⟨Equiv.refl _, nestScopes, fun m => ?_⟩
+  match m with
+  | ⟨0, _⟩ | ⟨1, _⟩ =>
+    refine congrArg (Alg.Flat.node _) (funext fun p => ?_)
+    match p with
+    | .inl p => exact p.elim0
+    | .inr (.inl _) => rfl
+    | .inr (.inr p) => exact p.elim0
+
 /-- **An entry under a container has a closed codec**, and so do two entries that name each other
     under a container. -/
 theorem Graph.container_path_dag : jsonGraph.DagForm ∧ nestGraph.DagForm :=
-  ⟨(Graph.dagForm_iff _).mpr (by decide), (Graph.dagForm_iff _).mpr (by decide)⟩
+  ⟨Graph.json_dag, Graph.nest_dag⟩
 
 end Calculus

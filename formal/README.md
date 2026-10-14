@@ -110,7 +110,8 @@ meaning to it).
 - **Recursion is guarded, and constructed.** A closed codec is a DAG of scopes, and each entry
   of a scope is a body that reads the entries. The guard `Flat.Guarded` puts each entry under a
   `down` and no entry under a `wall`, and a guarded system is contractive
-  (`contractive_of_guarded`); `dagGuardB_iff_dsys` decides the form as a DAG of scopes. From
+  (`contractive_of_guarded`); a graph that `dagGuardB` refuses has no form as a DAG of scopes
+  (`dagGuard_of_rename`, `DSys.dagGuard`). From
   the guard alone the solution is a fixed point (`solve_fix`), and lawful stages give a lawful
   solution (`lawful_solve`, `System.lean`). `Continuity.lean` proves that first-match
   resolution is monotone (`selectF_mono_list`, the `mono` obligation of a ccpo construction)
