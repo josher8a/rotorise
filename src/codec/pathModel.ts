@@ -9,7 +9,12 @@
  * its own stack of scopes, head first, and `Lookup` resolves a name against the stack. A segment
  * is `['name', K]` or `['pos', I]`.
  */
-import type { DynamoNumber as DynamoNumberOf } from './attribute'
+import type {
+    AttributeName,
+    AttributeValue,
+    Carrying,
+    DynamoNumber as DynamoNumberOf,
+} from './attribute'
 
 type Some<X> = ['some', X]
 type None = ['none']
@@ -423,6 +428,50 @@ export type OffersAt<Fs> = Fs extends unknown[]
 
 /** The first frame of a node: the frame that a resolved path reads. */
 export type FirstFrame<Fs> = Fs extends [infer F, ...unknown[]] ? F : never
+
+/**
+ * **The attribute that the codec at a frame writes**: the member that `μG` answers, as the one
+ * attribute of that member. Where `μG` answers no member, the attribute is the union of the
+ * attributes of the options, and the wide `AttributeValue` where an option has no member that the
+ * type computes: `opaque`, a cycle with no container, a set whose element has no member.
+ */
+export type EncodedFrame<F> = F extends [infer T, infer Env]
+    ? MembersAt<T, Env, ScopeFuel> extends infer M
+        ? 'wide' extends M
+            ? AttributeValue
+            : Carrying<M & AttributeName>
+        : never
+    : AttributeValue
+/**
+ * The members that a term writes, or `'wide'`: a name, an entry, a wall and a refinement write
+ * what the term under them writes, a union writes what its options write, and `never` writes
+ * nothing.
+ */
+type MembersAt<T, Env, Fuel extends unknown[]> = Fuel extends [
+    unknown,
+    ...infer F2 extends unknown[],
+]
+    ? T extends ['never']
+        ? never
+        : T extends ['scope', infer D, infer K]
+          ? MembersAt<D[K & keyof D], [['scope', D]], F2>
+          : T extends ['ref', infer N]
+            ? Lookup<Env, N> extends ['some', infer M, infer Rest]
+                ? MembersAt<M, Rest, F2>
+                : 'wide'
+            : T extends ['union', infer Os extends unknown[]]
+              ? { [I in keyof Os]: MembersAt<Os[I], Env, F2> }[number]
+              : T extends
+                      | ['held', unknown, infer I, ...unknown[]]
+                      | ['refine', infer I]
+                      | ['legacy', infer I]
+                ? MembersAt<I, Env, F2>
+                : StoredMember<T, Env> extends infer M
+                  ? M extends 'none'
+                      ? 'wide'
+                      : M
+                  : never
+    : 'wide'
 
 type Opt<S> = S extends ['optional', unknown] ? true : false
 type FloatOf<S> = S extends `${infer N extends number}` ? N : number

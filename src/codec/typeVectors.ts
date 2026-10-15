@@ -11,7 +11,9 @@
  * ── the roots ─────────────────────────────────────────────────────────────────────────────────
  *
  * A slice root is a union of objects, with the `extract` and the `exclude` of each clause at each
- * name of an option. A path root is a codec, with each path into the codec under `at`. The roots
+ * name of an option. A path root is a codec, with each path into the codec under `at`. At a path
+ * that the run time resolves, an `encoded` row states each member that the codec at the path writes
+ * for a value that the codec generates: the type of `encode` admits the key. The roots
  * go in the order of the hash of their Lean print, so a reorder of the pool moves no line and no
  * row id.
  *
@@ -32,16 +34,17 @@
  * as library calls would compare a codec that the library did not build.
  */
 import { createHash } from 'node:crypto'
-import { DynamoNumber, isNumeral, isStoredNumeral } from './attribute'
+import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec } from './codec'
 import { number } from './codec'
 import { codecOfTerm } from './denote'
 import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, leanClosedOf, reachable } from './lean'
-import { CodecError } from './result'
+import { CodecError, failed } from './result'
 import { storedApart } from './scoped'
 import type { Literal, Term } from './term'
 import { componentsOf, leafKinds, sameTerm, targetOf } from './term'
+import { arbitraryOf, rngFrom } from './testing'
 
 /** A term that this module cannot print as library calls. */
 export class TypeUnemittable extends Error {
@@ -828,18 +831,53 @@ const pathRoot = (
     }
     const b = block()
     for (const path of vectors.paths) {
-        const expect =
-            hostAt(vectors.codec, path).kind === 'resolved'
-                ? 'accept'
-                : 'refuse'
+        const host = hostAt(vectors.codec, path)
+        const expect = host.kind === 'resolved' ? 'accept' : 'refuse'
         const text = `r${spelled(path)}`
-        assert(
-            b,
-            { id: rowId('path', expect, root, text), expect },
-            `C.${p.full('w')}.at((p) => p.${text})`,
-        )
+        const id = rowId('path', expect, root, text)
+        const call = `C.${p.full('w')}.at((p) => p.${text})`
+        assert(b, { id, expect }, call)
+        if (host.kind !== 'resolved') continue
+        // the type of `encode` at the path admits the key of each attribute that the run time writes
+        for (const key of writtenKeys(host.codec))
+            assert(
+                b,
+                {
+                    id: rowId('encoded', 'accept', root, `${text} ${key}`),
+                    expect: 'accept',
+                    after: id,
+                },
+                `encodes(${call}, ${quoted(key)})`,
+            )
     }
     return { root, declarations: p.declarations, checks: b }
+}
+
+/** The samples of a codec at a path: the seeds of {@link rngFrom}. */
+const SAMPLES = [1, 2, 3, 4, 5, 6] as const
+
+/**
+ * The members that a codec writes for the values it generates, in the order of the member name.
+ * A value that the codec cannot generate or cannot write adds no member. The generator draws a
+ * recursive union with no bound on its depth, and a draw that exhausts the stack adds no member.
+ */
+const writtenKeys = (codec: AnyCodec): readonly string[] => {
+    const keys = new Set<string>()
+    for (const seed of SAMPLES) {
+        let value: unknown
+        try {
+            value = arbitraryOf(codec, rngFrom(seed), 3)
+        } catch (error) {
+            if (!(error instanceof CodecError || error instanceof RangeError))
+                throw error
+            continue
+        }
+        const written = codec.encode(value as never)
+        if (failed(written)) continue
+        const key = memberOf(written)
+        if (key !== undefined) keys.add(key)
+    }
+    return [...keys].sort()
 }
 
 /* ── the files ───────────────────────────────────────────────────────────────────────────── */
@@ -858,9 +896,12 @@ const codecsHeader = [
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
     `import { binary, boolean, decimal, dynamoNumber, number, string } from '${library}/codec'`,
-    `import { DynamoNumber } from '${library}/attribute'`,
+    `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     "import * as C from './codecs'",
+    // the keys that an attribute type admits, and a check that the type of `encode` admits one key
+    'type Category<A> = A extends unknown ? keyof { [K in keyof A as A[K] extends undefined ? never : K]: 0 } : never',
+    'const encodes = <A extends AttributeValue>(_at: { readonly unsafeEncode: (value: never) => A }, _key: Category<A>): void => {}',
 ]
 
 /**
