@@ -11,9 +11,12 @@ bodies. At an unguarded position, the decision unfolds an entry. A fuel bounds t
 recursion is structural, and an empty fuel answers `false`.
 
 `Scoped.disjoint_sound` states the soundness: where the decision answers `true`, no datum of any
-depth is accepted by both meanings at the orientation. The proof is an induction on the fuel, and
-at each pair below a guard an induction on the depth of the datum: the decision assumes a pair only
-at a smaller depth. An unfolding reads the fixed point of the system. The laws of a universe enter
+depth is accepted by both meanings at the orientation. The pairs that the walk visits form one
+relation (`Vis`). Each visited pair passes the rows at tests that the relation holds, or is two
+entries whose bodies the relation holds (`vis_post`). The proof is a rule induction on a big-step
+derivation of the left answer (`Eval`), with no fuel, no table and no step index. A derivation goes
+one level down into the datum only at a container. The fixed point of the system has a derivation
+at each input (`eval_of_mng`), because the system has no cycle of unguarded edges. The laws of a universe enter
 at the codecs: the primitive law and the set law (`Laws`), and the shape classes (`Shapes`). A
 refinement accepts a part of what its inner term accepts, so the decision reads through a
 refinement and reads no predicate.
@@ -199,6 +202,30 @@ def rowG (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL N
       rightC sR (prev A x) (famObjG (md := md)
         (fun k => pairAt (sL := sL) (sR := sR) prev A (a (.inl k)))
         (blockTest (sL := sL) (sR := sR) (md := md) prev A s a)) y
+
+/-- The test of the open block of a left object: `true` where the object has no block. -/
+def blockR (R : Graph B NL → Graph B NR → Bool) {fs : Finset String} {md : {x // x ∈ fs} → SlotMode B} :
+    (w : Fin 2) → ((TOp.obj fs md w).Pos → Graph B NL) → Graph B NR → Bool
+  | ⟨0, _⟩, _ => fun _ => true
+  | ⟨1, _⟩, a => R (a (.inr ⟨0, Nat.one_pos⟩))
+
+/-- **The rows with one test per role**: `Rr` at a restart, `Rs` at the element of a set, and
+    `Rc` at a child below a guard. -/
+def rowR3 (Rr Rs Rc : Graph B NL → Graph B NR → Bool) : Graph B NL → Graph B NR → Bool
+  | .leaf j, y => Rr (sL j) y
+  | .node .never _, _ => true
+  | x@(.node (.held _ _ _) _), y => rightC sR (Rr x) (fun _ => false) y
+  | x@(.node (.legacy _) _), y => rightC sR (Rr x) (fun _ => false) y
+  | x@(.node .opaq _), y => rightC sR (Rr x) (fun _ => false) y
+  | .node (.refine _ _) a, y => rowR3 Rr Rs Rc (a ()) y
+  | .node (.union m) a, y => (List.finRange m).all fun p => rowR3 Rr Rs Rc (a p) y
+  | x@(.node (.prim g) _), y => rightC sR (Rr x) (famPrimG g) y
+  | x@(.node .set a), y => rightC sR (Rr x) (famSetG (Rs (a ()))) y
+  | x@(.node (.list _ _ _) a), y =>
+      rightC sR (Rr x) (famListG ((listParts a).1.map Rc) ((listParts a).2.1.map Rc)
+        ((listParts a).2.2.map Rc)) y
+  | x@(.node (.obj _ md s) a), y =>
+      rightC sR (Rr x) (famObjG (md := md) (fun k => Rc (a (.inl k))) (blockR (md := md) Rc s a)) y
 
 /-- **The fuel of a walk over two closed codecs** of `NL` and `NR` entries. -/
 def fuel (NL NR : Nat) : Nat := (NL * NR + 1) * (NL + NR + 2)
@@ -412,6 +439,134 @@ theorem listRowG_sound {pre suf : List X} {sp : Option X} {fpre fsuf : List (Y �
 
 end RowsGen
 
+/-! ## The pairs that a walk visits -/
+
+section Visited
+variable {B : Sig} {NL NR : Nat} (sL : Fin NL → Graph B NL) (sR : Fin NR → Graph B NR)
+
+/-- A Bool relation whose pairs all hold the Prop relation. -/
+def SubR {X Y : Type} (Rb : X → Y → Bool) (R : X → Y → Prop) : Prop := ∀ a b, Rb a b = true → R a b
+
+section Walk
+variable (W : Nat → Tbl NL NR → Graph B NL → Graph B NR → Bool)
+
+/-- **A pair that a relation justifies**: a walk that answers `true` from a table whose pairs the
+    relation holds, or two entries whose bodies the relation holds. -/
+def Just (S : Graph B NL → Graph B NR → Prop) (x : Graph B NL) (y : Graph B NR) : Prop :=
+  (∃ m A, W m A x y = true ∧ ∀ p ∈ A, S (.leaf p.1) (.leaf p.2)) ∨
+    ∃ i j, x = .leaf i ∧ y = .leaf j ∧ S (sL i) (sR j)
+
+/-- **The visited relation**: the pairs of some relation that justifies each of its pairs. -/
+def Vis (x : Graph B NL) (y : Graph B NR) : Prop :=
+  ∃ S, (∀ a b, S a b → Just sL sR W S a b) ∧ S x y
+
+/-- A larger relation justifies each pair that a relation justifies. -/
+theorem Just.mono {S T : Graph B NL → Graph B NR → Prop} (h : ∀ a b, S a b → T a b)
+    {x : Graph B NL} {y : Graph B NR} : Just sL sR W S x y → Just sL sR W T x y
+  | .inl ⟨m, A, hw, hA⟩ => .inl ⟨m, A, hw, fun p hp => h _ _ (hA p hp)⟩
+  | .inr ⟨i, j, hx, hy, hs⟩ => .inr ⟨i, j, hx, hy, h _ _ hs⟩
+
+/-- **A relation that the visited relation justifies is visited.** -/
+theorem vis_of {T : Graph B NL → Graph B NR → Prop}
+    (hT : ∀ a b, T a b → Just sL sR W (fun a b => Vis sL sR W a b ∨ T a b) a b)
+    {x : Graph B NL} {y : Graph B NR} (h : T x y) : Vis sL sR W x y :=
+  ⟨fun a b => Vis sL sR W a b ∨ T a b, fun a b hab => by
+    rcases hab with ⟨S, hS, hab⟩ | hab
+    · exact Just.mono sL sR W (fun a b h => Or.inl ⟨S, hS, h⟩) (hS a b hab)
+    · exact hT a b hab, Or.inr h⟩
+
+/-- A walk that answers `true` from a visited table visits its root. -/
+theorem vis_walk {m : Nat} {A : Tbl NL NR} {x : Graph B NL} {y : Graph B NR}
+    (h : W m A x y = true) (hA : ∀ p ∈ A, Vis sL sR W (.leaf p.1) (.leaf p.2)) :
+    Vis sL sR W x y :=
+  vis_of sL sR W (T := fun a b => a = x ∧ b = y)
+    (fun _ _ hab => by
+      obtain ⟨rfl, rfl⟩ := hab
+      exact .inl ⟨m, A, h, fun p hp => Or.inl (hA p hp)⟩) ⟨rfl, rfl⟩
+
+/-- A walk from the empty table visits its root. -/
+theorem vis_root {m : Nat} {x : Graph B NL} {y : Graph B NR} (h : W m [] x y = true) :
+    Vis sL sR W x y :=
+  vis_walk sL sR W h fun _ hp => nomatch hp
+
+/-- **A walk of two bodies that assumes their entries visits the two entries.** -/
+theorem vis_pair {m : Nat} {A : Tbl NL NR} {i : Fin NL} {j : Fin NR}
+    (h : W m ((i, j) :: A) (sL i) (sR j) = true)
+    (hA : ∀ p ∈ A, Vis sL sR W (.leaf p.1) (.leaf p.2)) : Vis sL sR W (.leaf i) (.leaf j) :=
+  vis_of sL sR W (T := fun a b => (a = .leaf i ∧ b = .leaf j) ∨ (a = sL i ∧ b = sR j))
+    (fun a b hab => by
+      rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact .inr ⟨i, j, rfl, rfl, Or.inr (Or.inr ⟨rfl, rfl⟩)⟩
+      · refine .inl ⟨m, _, h, fun p hp => ?_⟩
+        rcases List.mem_cons.mp hp with rfl | hp
+        · exact Or.inr (Or.inl ⟨rfl, rfl⟩)
+        · exact Or.inl (hA p hp))
+    (Or.inl ⟨rfl, rfl⟩)
+
+/-- **A pair below a guard that the walk answers is visited.** -/
+theorem vis_pairAt {k : Nat} {A : Tbl NL NR} (hA : ∀ p ∈ A, Vis sL sR W (.leaf p.1) (.leaf p.2)) :
+    ∀ a b, pairAt (sL := sL) (sR := sR) (W k) A a b = true → Vis sL sR W a b
+  | .leaf i, .leaf j, hab => by
+    simp only [pairAt, Bool.or_eq_true, List.any_eq_true, Bool.and_eq_true,
+      decide_eq_true_eq] at hab
+    rcases hab with ⟨p, hp, h1, h2⟩ | hab
+    · subst h1 h2; exact hA p hp
+    · exact vis_pair sL sR W hab hA
+  | .leaf _, .node _ _, hab => vis_walk sL sR W hab hA
+  | .node _ _, _, hab => vis_walk sL sR W hab hA
+
+end Walk
+
+/-- The block test of the walk is the block test at the pair test. -/
+theorem blockTest_eq (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL NR)
+    {fs : Finset String} {md : {x // x ∈ fs} → SlotMode B} :
+    ∀ (s : Fin 2) (a : (TOp.obj fs md s).Pos → Graph B NL),
+      blockTest (sL := sL) (sR := sR) (md := md) prev A s a =
+        blockR (md := md) (pairAt (sL := sL) (sR := sR) prev A) s a
+  | ⟨0, _⟩, _ => rfl
+  | ⟨1, _⟩, _ => rfl
+
+variable [Leaf B]
+
+/-- **The row of the walk is the row with three tests**: the walk at the table, the walk at the
+    empty table, and the pair test. -/
+theorem rowG_eq (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL NR) :
+    ∀ x y, rowG sL sR prev A x y =
+      rowR3 sL sR (prev A) (prev []) (pairAt (sL := sL) (sR := sR) prev A) x y := by
+  intro x
+  induction x with
+  | leaf j => intro y; simp only [rowG, rowR3]
+  | node op a ih =>
+    intro y
+    cases op with
+    | refine _ _ => simp only [rowG, rowR3]; exact ih () y
+    | union m => simp only [rowG, rowR3]; exact congrArg _ (funext fun p => ih p y)
+    | obj fs md s => simp only [rowG, rowR3]; rw [blockTest_eq sL sR prev A s a]
+    | _ => simp only [rowG, rowR3]
+
+/-- **Post-fixed up to the unfolding of two entries**: each pair passes the rows at three tests
+    that the relation holds, or is two entries whose bodies the relation holds. -/
+def PostP (R : Graph B NL → Graph B NR → Prop) : Prop :=
+  ∀ x y, R x y → (∃ Rr Rs Rc : Graph B NL → Graph B NR → Bool,
+    SubR Rr R ∧ SubR Rs R ∧ SubR Rc R ∧ rowR3 sL sR Rr Rs Rc x y = true) ∨
+    ∃ i j, x = .leaf i ∧ y = .leaf j ∧ R (sL i) (sR j)
+
+/-- **The visited relation of `disjoint` is post-fixed up to unfolding.** -/
+theorem vis_post : PostP sL sR (Vis sL sR (decG sL sR)) := by
+  rintro x y ⟨S, hS, hxy⟩
+  rcases hS x y hxy with ⟨m, A, h, hA⟩ | ⟨i, j, rfl, rfl, hs⟩
+  · have hA' : ∀ p ∈ A, Vis sL sR (decG sL sR) (.leaf p.1) (.leaf p.2) := fun p hp => ⟨S, hS, hA p hp⟩
+    cases m with
+    | zero => exact nomatch h
+    | succ k =>
+      refine Or.inl ⟨decG sL sR k A, decG sL sR k [], pairAt (sL := sL) (sR := sR) (decG sL sR k) A,
+        fun a b hab => vis_walk sL sR _ hab hA', fun a b hab => vis_root sL sR _ hab,
+        vis_pairAt sL sR (decG sL sR) hA', ?_⟩
+      rw [← rowG_eq]; exact h
+  · exact Or.inr ⟨i, j, rfl, rfl, S, hS, hs⟩
+
+end Visited
+
 /-! ## Soundness -/
 
 section Sound
@@ -438,14 +593,6 @@ def Closed.toG {N : Nat} (d : Closed S.sig N) : GSys τ N where
   fix := (scope_solution Mean.d_pos (TStep_lawful τ) d).1
   noCycle := noCycle_of_rank (fun i => i.val) (SSys.order d).1
 
-/-- **A step-indexed relation** between two codecs: true at the depth zero, closed downward, and
-    read through the maps only. -/
-structure StepRel (S : Syn) [Sem S] where
-  R : Nat → Mean.C S.sig → Mean.C S.sig → Prop
-  zero : ∀ c c', R 0 c c'
-  mono : ∀ {k k' c c'}, k' ≤ k → R k c c' → R k' c c'
-  congr : ∀ {k c c' c₁ c₁'}, c.f = c₁.f → c'.f = c₁'.f → R k c c' → R k c₁ c₁'
-
 /-- **A pointwise step relation**: the relation `Φ` holds between the two outputs at each datum of
     a smaller depth, at the orientation. Apartness and agreement below a depth are two instances. -/
 def PW (Φ : Option (Mean.V (B := S.sig)) → Option (Mean.V (B := S.sig)) → Prop) (k : Nat)
@@ -455,17 +602,6 @@ def PW (Φ : Option (Mean.V (B := S.sig)) → Option (Mean.V (B := S.sig)) → P
 variable {τ o}
 
 variable {Φ : Option (Mean.V (B := S.sig)) → Option (Mean.V (B := S.sig)) → Prop}
-
-/-- A pointwise relation reads the two codecs through their maps only. -/
-theorem PW.congr {k : Nat} {c c' c₁ c₁' : Mean.C S.sig} (h₁ : c.f = c₁.f) (h₂ : c'.f = c₁'.f)
-    (h : PW o Φ k c c') : PW o Φ k c₁ c₁' := fun v hv => by rw [← h₁, ← h₂]; exact h v hv
-
-/-- A pointwise relation below a depth holds below each smaller depth. -/
-theorem PW.mono {k k' : Nat} {c c' : Mean.C S.sig} (hk : k' ≤ k) (h : PW o Φ k c c') :
-    PW o Φ k' c c' := fun v hv => h v (by omega)
-
-/-- Any two codecs are related below the depth zero. -/
-theorem PW.zero (c c' : Mean.C S.sig) : PW o Φ 0 c c' := fun _ hv => absurd hv (Nat.not_lt_zero _)
 
 /-- Any two codecs are related below the depth one, because every datum has a depth of at least
     one. -/
@@ -477,23 +613,6 @@ variable (o) in
     orientation. -/
 def AB (k : Nat) (c c' : Mean.C S.sig) : Prop :=
   ∀ v, Mean.d (B := S.sig) v < k → ((c.f o v).isSome && (c'.f o v).isSome) = false
-
-variable (o) in
-/-- Apartness below a depth is a step-indexed relation. -/
-def AB.rel : StepRel S := ⟨AB o, PW.zero (Φ := fun a b => (a.isSome && b.isSome) = false), PW.mono (Φ := fun a b => (a.isSome && b.isSome) = false), PW.congr (Φ := fun a b => (a.isSome && b.isSome) = false)⟩
-
-/-- A codec that accepts no datum is apart from each codec. -/
-theorem AB.of_left {k : Nat} {c c' : Mean.C S.sig} (h : ∀ v, (c.f o v).isSome = false) :
-    AB o k c c' := fun v _ => by rw [h v, Bool.false_and]
-
-/-- Each codec is apart from a codec that accepts no datum. -/
-theorem AB.of_right {k : Nat} {c c' : Mean.C S.sig} (h : ∀ v, (c'.f o v).isSome = false) :
-    AB o k c c' := fun v _ => by rw [h v, Bool.and_false]
-
-/-- Apart at every depth is apart. -/
-theorem apart_of_AB {c c' : Mean.C S.sig} (h : ∀ k, AB o (k + 1) c c') :
-    ∀ v, ((c.f o v).isSome && (c'.f o v).isSome) = false :=
-  fun v => h (Mean.d (B := S.sig) v) v (Nat.lt_succ_self _)
 
 /-- A codec cut at a depth. -/
 def trunc (d : Nat) (c : Mean.C S.sig) : Mean.C S.sig where
@@ -574,77 +693,282 @@ theorem union_acc {m : Nat} {a : Fin m → Mean.C S.sig} {μ : Option (Mean.Mem 
   obtain ⟨p, rfl⟩ := List.mem_ofFn.mp hc
   exact ⟨p, hv⟩
 
-/-- A codec apart from an inner codec is apart from each refinement of the inner codec. -/
-theorem AB.refine_right {k : Nat} {X c : Mean.C S.sig} {qV qA : Mean.V (B := S.sig) → Bool}
-    (h : AB o k X c) : AB o k X (refine2 c qV qA) := fun v hv => by
-  cases hy : ((refine2 c qV qA).f o v).isSome
-  · rw [Bool.and_false]
-  · have := h v hv; rw [refine2_acc hy] at this; rw [Bool.and_true]; simpa using this
-
-/-- A refinement of a codec is apart from each codec that the codec is apart from. -/
-theorem AB.refine_left {k : Nat} {X c : Mean.C S.sig} {qV qA : Mean.V (B := S.sig) → Bool}
-    (h : AB o k c X) : AB o k (refine2 c qV qA) X := fun v hv => by
-  cases hy : ((refine2 c qV qA).f o v).isSome
-  · rw [Bool.false_and]
-  · have := h v hv; rw [refine2_acc hy] at this; rw [Bool.true_and]; simpa using this
-
-/-- A codec apart from each option is apart from the union of the options. -/
-theorem AB.union_right {k m : Nat} {X : Mean.C S.sig} {a : Fin m → Mean.C S.sig}
-    {μ : Option (Mean.Mem (B := S.sig))} (h : ∀ p, AB o k X (a p)) :
-    AB o k X (altCodec (List.ofFn a) μ) := fun v hv => by
-  cases hy : ((altCodec (List.ofFn a) μ).f o v).isSome
-  · rw [Bool.and_false]
-  · obtain ⟨p, hp⟩ := union_acc hy
-    have := h p v hv; rw [hp] at this; rw [Bool.and_true]; simpa using this
-
-/-- The union of options is apart from each codec that each option is apart from. -/
-theorem AB.union_left {k m : Nat} {X : Mean.C S.sig} {a : Fin m → Mean.C S.sig}
-    {μ : Option (Mean.Mem (B := S.sig))} (h : ∀ p, AB o k (a p) X) :
-    AB o k (altCodec (List.ofFn a) μ) X := fun v hv => by
-  cases hy : ((altCodec (List.ofFn a) μ).f o v).isSome
-  · rw [Bool.false_and]
-  · obtain ⟨p, hp⟩ := union_acc hy
-    have := h p v hv; rw [hp] at this; rw [Bool.true_and]; simpa using this
-
 variable {N NR : Nat}
 
-/-- **The rows of the right operand are sound** for a step-indexed relation that the bottom, a
-    refinement and a union keep on the right, for a left codec that \`restart\` and \`fam\` are sound
-    for. -/
-theorem StepRel.of_rightC (Q : StepRel S) (d : GSys τ N) {X : Mean.C S.sig} {k : Nat}
-    {restart fam : Graph S.sig N → Bool}
-    (hn : ∀ a, Q.R k X (mng τ d (.node .never a)))
-    (hq : ∀ q qA a, Q.R k X (mng τ d (a ())) → Q.R k X (mng τ d (.node (.refine q qA) a)))
-    (hu : ∀ m a, (∀ p, Q.R k X (mng τ d (a p))) → Q.R k X (mng τ d (.node (.union m) a)))
-    (hr : ∀ y, restart y = true → Q.R k X (mng τ d y))
-    (hf : ∀ y, fam y = true → Q.R k X (mng τ d y)) :
-    ∀ y, rightC d.sys restart fam y = true → Q.R k X (mng τ d y) := by
-  intro y
-  induction y with
-  | leaf j =>
-    intro h
-    simp only [rightC, Bool.or_eq_true] at h
-    exact h.elim (hf _) fun h => Q.congr rfl (mng_leaf d j).symm (hr _ h)
-  | node op a ih =>
-    intro h
-    cases op with
-    | never => exact hn a
-    | refine q qA =>
-      simp only [rightC, Bool.or_eq_true] at h
-      exact h.elim (hf _) fun h => hq q qA a (ih () h)
-    | union m =>
-      simp only [rightC, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies] at h
-      exact h.elim (hf _) fun h => hu m a fun p => ih p (h p)
-    | prim _ | opaq | set | list _ _ _ | held _ _ _ | legacy _ | obj _ _ _ => exact hf _ h
+/-! ### The derivation of an answer -/
 
-/-- **The rows of the right operand are sound** for apartness. -/
-theorem AB.of_rightC (d : GSys τ N) {X : Mean.C S.sig} {k : Nat}
-    {restart fam : Graph S.sig N → Bool}
-    (hr : ∀ y, restart y = true → AB o k X (mng τ d y))
-    (hf : ∀ y, fam y = true → AB o k X (mng τ d y)) :
-    ∀ y, rightC d.sys restart fam y = true → AB o k X (mng τ d y) :=
-  StepRel.of_rightC (AB.rel o) d (fun _ => AB.of_right fun _ => rfl)
-    (fun _ _ _ h => AB.refine_right h) (fun _ _ h => AB.union_right h) hr hf
+/-- A term with no leaf at any position. -/
+def NoLeaf (t : Graph S.sig N) : Prop := ∀ j, t.lv (TSig S.sig) j = false
+
+omit [Sem S] in
+/-- Each child of a term with no leaf has no leaf. -/
+theorem noLeaf_child {op : TOp S.sig} {a : op.Pos → Graph S.sig N} (h : NoLeaf (.node op a))
+    (p : op.Pos) : NoLeaf (a p) :=
+  fun j => Bool.eq_false_iff.mpr fun h' =>
+    Bool.false_ne_true ((h j).symm.trans (Flat.lv_node.mpr ⟨p, h'⟩))
+
+/-- **The big-step derivation of an answer** of a graph term at the fixed point of a system. A
+    container reads its positions at a smaller depth of the datum only. A wall reads the fixed
+    point, and carries a derivation of each child that has no leaf. -/
+inductive Eval (d : GSys τ N) :
+    Graph S.sig N → Orient → Mean.V (B := S.sig) → Option (Mean.V (B := S.sig)) → Prop
+  | leaf {i o v r} : Eval d (d.sys i) o v r → Eval d (.leaf i) o v r
+  | prim {g a o v} : Eval d (.node (TOp.prim g) a) o v ((Mean.ground g).f o v)
+  | opaq {a o v} : Eval d (.node TOp.opaq a) o v (some v)
+  | never {a o v} : Eval d (.node TOp.never a) o v none
+  | refine {p pA a o v r} : Eval d (a ()) o v r →
+      Eval d (.node (TOp.refine p pA) a) o v
+        (if Side.elim (Mean.eval false p) (Mean.eval true pA) o.c v then
+          r.bind fun y => if Side.elim (Mean.eval false p) (Mean.eval true pA) o.s y then some y
+            else none
+        else none)
+  | unionNil {a o v} : Eval d (.node (TOp.union 0) a) o v none
+  | unionHead {m o v w} {a : Fin (m + 1) → Graph S.sig N} : Eval d (a 0) o v (some w) →
+      Eval d (.node (TOp.union (m + 1)) a) o v (some w)
+  | unionTail {m o v r} {a : Fin (m + 1) → Graph S.sig N} : Eval d (a 0) o v none →
+      Eval d (.node (TOp.union m) fun p : Fin m => a p.succ) o v r →
+      Eval d (.node (TOp.union (m + 1)) a) o v r
+  | down {op a o v} (hk : TOp.kind op = .down) (C : op.Pos → Mean.C S.sig)
+      (hC : ∀ p o' x, Mean.d x < Mean.d v → Eval d (a p) o' x ((C p).f o' x)) :
+      Eval d (.node op a) o v ((TOp.run τ op C).f o v)
+  | wall {op a o v} (hk : TOp.kind op = .wall)
+      (hC : ∀ p, NoLeaf (a p) → ∀ o' x, Eval d (a p) o' x ((mng τ d (a p)).f o' x)) :
+      Eval d (.node op a) o v ((TOp.run τ op fun p => mng τ d (a p)).f o v)
+
+/-- A union's map is its first option's answer, else the union of the rest. -/
+theorem mng_union_succ (d : GSys τ N) {m : Nat} (a : Fin (m + 1) → Graph S.sig N) (o : Orient)
+    (v : Mean.V (B := S.sig)) :
+    (mng τ d (.node (TOp.union (m + 1)) a)).f o v =
+      if ((mng τ d (a 0)).f o v).isSome then (mng τ d (a 0)).f o v
+      else (mng τ d (.node (TOp.union m) fun p : Fin m => a p.succ)).f o v := by
+  show select (List.ofFn fun p => mng τ d (a p)) (·.f o) v = _
+  rw [List.ofFn_succ, select_cons]
+  rfl
+
+/-- **A derivation computes the map of the fixed point.** -/
+theorem mng_of_eval (d : GSys τ N) {t o v r} (h : Eval d t o v r) : (mng τ d t).f o v = r := by
+  induction h with
+  | leaf _ ih => rw [mng_leaf]; exact ih
+  | prim => rfl
+  | opaq => rfl
+  | never => rfl
+  | refine _ ih => subst ih; rfl
+  | unionNil => rfl
+  | unionHead _ ih => rw [mng_union_succ, ih]; rfl
+  | unionTail _ _ ih₀ ih => rw [mng_union_succ, ih₀]; exact ih
+  | @down op a o v hk C _ ih =>
+    have hd := Mean.d_pos (B := S.sig) v
+    have hag := (TStep_lawful τ).down op hk (Mean.d (B := S.sig) v - 1) (fun p => mng τ d (a p)) C
+      fun p => ⟨fun o' x hx => ih p o' x (by omega)⟩
+    exact hag.f o v (by omega)
+  | wall _ _ => rfl
+
+/-- The union case of completeness, by induction on the number of options. -/
+theorem eval_union (d : GSys τ N) (o : Orient) (v : Mean.V (B := S.sig)) :
+    ∀ (m : Nat) (a : Fin m → Graph S.sig N), (∀ p, Eval d (a p) o v ((mng τ d (a p)).f o v)) →
+      Eval d (.node (TOp.union m) a) o v ((mng τ d (.node (TOp.union m) a)).f o v)
+  | 0, _, _ => Eval.unionNil
+  | m + 1, a, ih => by
+    rw [mng_union_succ]
+    cases h : (mng τ d (a 0)).f o v with
+    | none =>
+      have h0 := ih 0; rw [h] at h0
+      exact Eval.unionTail h0 (eval_union d o v m _ fun p => ih p.succ)
+    | some w =>
+      have h0 := ih 0; rw [h] at h0
+      exact Eval.unionHead h0
+
+/-- **A term with no leaf has a derivation at each input**, by induction on the term. -/
+theorem eval_noLeaf (d : GSys τ N) : ∀ t : Graph S.sig N, NoLeaf t →
+    ∀ o v, Eval d t o v ((mng τ d t).f o v)
+  | .leaf j, h => absurd (h j) (by simp [Flat.lv])
+  | .node op a, h => fun o v => by
+    have ih : ∀ p o' x, Eval d (a p) o' x ((mng τ d (a p)).f o' x) :=
+      fun p => eval_noLeaf d (a p) (noLeaf_child h p)
+    have hdown : TOp.kind op = .down → Eval d (.node op a) o v ((mng τ d (.node op a)).f o v) :=
+      fun hk => Eval.down hk (fun p => mng τ d (a p)) fun p o' x _ => ih p o' x
+    cases op with
+    | prim g => exact Eval.prim
+    | opaq => exact Eval.opaq
+    | never => exact Eval.never
+    | refine p pA => exact Eval.refine (ih () o v)
+    | union m => exact eval_union d o v m a fun p => ih p o v
+    | set => exact hdown rfl
+    | list _ _ _ => exact hdown rfl
+    | obj _ _ _ => exact hdown rfl
+    | held _ _ _ => exact Eval.wall rfl fun p _ => ih p
+    | legacy _ => exact Eval.wall rfl fun p _ => ih p
+
+/-- **The fixed point has a derivation at each input.** The length of an unguarded walk and the
+    depth of the datum are the measure: the system has no cycle of unguarded edges. -/
+theorem eval_of_mng (d : GSys τ N) : ∀ t o v, Eval d t o v ((mng τ d t).f o v) := by
+  have hK : ∀ j, ¬ WalkFrom (TSig S.sig) d.sys N j := fun j hw => d.noCycle (cycle_of_walk hw)
+  suffices H : ∀ D k (t : Graph S.sig N), (∀ j, t.ulv (TSig S.sig) j = true →
+      ¬ WalkFrom (TSig S.sig) d.sys k j) →
+      ∀ o v, Mean.d (B := S.sig) v ≤ D → Eval d t o v ((mng τ d t).f o v) from
+    fun t o v => H _ _ t (fun j _ => hK j) o v le_rfl
+  intro D
+  induction D using Nat.strong_induction_on with
+  | _ D ihD =>
+  intro k
+  induction k using Nat.strong_induction_on with
+  | _ k ihk =>
+  intro t
+  induction t with
+  | leaf j =>
+    intro hb o v hv
+    have hj := hb j (by simp [Flat.ulv])
+    have e := congrFun (congrFun (mng_leaf d j) o) v
+    rw [e]
+    cases k with
+    | zero => exact absurd ⟨fun _ => j, rfl, fun _ ht => absurd ht (Nat.not_lt_zero _)⟩ hj
+    | succ k' =>
+      exact Eval.leaf (ihk k' (Nat.lt_succ_self _) (d.sys j)
+        (fun j' h' hw => hj (walk_cons h' hw)) o v hv)
+  | node op a iha =>
+    intro hb o v hv
+    have hb' : TOp.kind op = .keep → ∀ p j, (a p).ulv (TSig S.sig) j = true →
+        ¬ WalkFrom (TSig S.sig) d.sys k j :=
+      fun hk p j h => hb j (Flat.ulv_node_iff.mpr ⟨hk, p, h⟩)
+    have hdown : TOp.kind op = .down → Eval d (.node op a) o v ((mng τ d (.node op a)).f o v) :=
+      fun hk => Eval.down hk (fun p => mng τ d (a p)) fun p o' x hx =>
+        ihD _ (Nat.lt_of_lt_of_le hx hv) _ (a p) (fun j _ => hK j) o' x le_rfl
+    have hwall : TOp.kind op = .wall → Eval d (.node op a) o v ((mng τ d (.node op a)).f o v) :=
+      fun hk => Eval.wall hk fun p hp => eval_noLeaf d (a p) hp
+    cases op with
+    | prim g => exact Eval.prim
+    | opaq => exact Eval.opaq
+    | never => exact Eval.never
+    | refine p pA => exact Eval.refine (iha () (hb' rfl ()) o v hv)
+    | union m => exact eval_union d o v m a fun p => iha p (hb' rfl p) o v hv
+    | set => exact hdown rfl
+    | list _ _ _ => exact hdown rfl
+    | obj _ _ _ => exact hdown rfl
+    | held _ _ _ => exact hwall rfl
+    | legacy _ => exact hwall rfl
+
+omit [Sem S] in
+/-- A refinement that answers gives the answer of its inner term. -/
+theorem bind_some_eq {X : Type} {c : Bool} {r : Option X} {q : X → Bool} {b : X}
+    (h : (if c then r.bind (fun y => if q y then some y else none) else none) = some b) :
+    r = some b := by
+  cases c
+  · exact nomatch h
+  · cases r with
+    | none => exact nomatch h
+    | some b' =>
+      have h' : (if q b' then some b' else none) = some b := h
+      cases hq : q b'
+      · rw [hq] at h'; exact nomatch h'
+      · rw [hq] at h'; exact h'
+
+omit [Sem S] in
+/-- Where the left side answers, apart sides leave the right side without an answer. -/
+theorem none_of_apart {X : Type} {a b : Option X} {w : X} (h : (a.isSome && b.isSome) = false)
+    (ha : a = some w) : b = none := by
+  subst ha; cases b
+  · rfl
+  · exact nomatch h
+
+/-! ### The rows of the right operand -/
+
+/-- **The rows of the right operand, by rule induction on the right derivation**: each answer of
+    a term that the rows admit holds `G`, where each answer of a term of the family holds `G`, and
+    each restart lands in `P`. `disjoint` takes `G` false, and `compat` takes `G` the left answer. -/
+theorem rightC_aux (dR : GSys τ NR) {o : Orient} {v : Mean.V (B := S.sig)}
+    {G : Mean.V (B := S.sig) → Prop} {P : Graph S.sig NR → Prop}
+    (hP : ∀ y, P y → ∃ restart fam : Graph S.sig NR → Bool, (∀ y', restart y' = true → P y') ∧
+      (∀ y' b, fam y' = true → (mng τ dR y').f o v = some b → G b) ∧
+      rightC dR.sys restart fam y = true) :
+    ∀ {y o' v' r}, Eval dR y o' v' r → o' = o → v' = v → ∀ b, r = some b →
+      ∀ restart fam : Graph S.sig NR → Bool, (∀ y', restart y' = true → P y') →
+      (∀ y' b, fam y' = true → (mng τ dR y').f o v = some b → G b) →
+      rightC dR.sys restart fam y = true → G b := by
+  have fc : ∀ {fam : Graph S.sig NR → Bool},
+      (∀ y' b, fam y' = true → (mng τ dR y').f o v = some b → G b) →
+      ∀ {y b}, fam y = true → Eval dR y o v (some b) → G b := fun hfam _ _ hy he =>
+    hfam _ _ hy (mng_of_eval dR he)
+  intro y o' v' r h
+  induction h with
+  | @leaf i o' v' r h0 ih =>
+    intro ho hv b hb restart fam hres hfam hy; subst ho hv hb
+    simp only [rightC, Bool.or_eq_true] at hy
+    rcases hy with hy | hy
+    · exact fc hfam hy (Eval.leaf h0)
+    · obtain ⟨r', f', h1, h2, h3⟩ := hP _ (hres _ hy)
+      exact ih rfl rfl b rfl r' f' h1 h2 h3
+  | @prim g a o' v' =>
+    intro ho hv b hb restart fam _ hfam hy; subst ho hv; exact fc hfam hy (hb ▸ Eval.prim)
+  | @opaq a o' v' =>
+    intro ho hv b hb restart fam _ hfam hy; subst ho hv; cases hb; exact fc hfam hy Eval.opaq
+  | never => exact fun _ _ b hb => nomatch hb
+  | unionNil => exact fun _ _ b hb => nomatch hb
+  | @refine p pA a o' v' r h0 ih =>
+    intro ho hv b hb restart fam hres hfam hy; subst ho hv
+    simp only [rightC, Bool.or_eq_true] at hy
+    rcases hy with hy | hy
+    · exact fc hfam hy (hb ▸ Eval.refine h0)
+    · exact ih rfl rfl b (bind_some_eq hb) restart fam hres hfam hy
+  | @unionHead m o' v' w a h0 ih =>
+    intro ho hv b hb restart fam hres hfam hy; subst ho hv
+    simp only [rightC, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies] at hy
+    rcases hy with hy | hy
+    · exact fc hfam hy (hb ▸ Eval.unionHead h0)
+    · exact ih rfl rfl b hb restart fam hres hfam (hy 0)
+  | @unionTail m o' v' r a h0 h1 _ ih =>
+    intro ho hv b hb restart fam hres hfam hy; subst ho hv
+    simp only [rightC, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies] at hy
+    rcases hy with hy | hy
+    · exact fc hfam hy (hb ▸ Eval.unionTail h0 h1)
+    · exact ih rfl rfl b hb restart fam hres hfam (by
+        simp only [rightC, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies]
+        exact Or.inr fun p => hy p.succ)
+  | @down op a o' v' hk C hC _ =>
+    intro ho hv b hb restart fam _ hfam hy; subst ho hv
+    cases op with
+    | set => exact fc hfam hy (hb ▸ Eval.down hk C hC)
+    | list _ _ _ => exact fc hfam hy (hb ▸ Eval.down hk C hC)
+    | obj _ _ _ => exact fc hfam hy (hb ▸ Eval.down hk C hC)
+    | _ => exact nomatch hk
+  | @wall op a o' v' hk hC _ =>
+    intro ho hv b hb restart fam _ hfam hy; subst ho hv
+    cases op with
+    | held _ _ _ => exact fc hfam hy (hb ▸ Eval.wall hk hC)
+    | legacy _ => exact fc hfam hy (hb ▸ Eval.wall hk hC)
+    | _ => exact nomatch hk
+
+/-- Each answer of a term that the rows admit holds `G`. -/
+theorem rightC_mng (dR : GSys τ NR) {o : Orient} {v : Mean.V (B := S.sig)}
+    {G : Mean.V (B := S.sig) → Prop} {P : Graph S.sig NR → Prop}
+    (hP : ∀ y, P y → ∃ restart fam : Graph S.sig NR → Bool, (∀ y', restart y' = true → P y') ∧
+      (∀ y' b, fam y' = true → (mng τ dR y').f o v = some b → G b) ∧
+      rightC dR.sys restart fam y = true)
+    {restart fam : Graph S.sig NR → Bool} (hres : ∀ y', restart y' = true → P y')
+    (hfam : ∀ y' b, fam y' = true → (mng τ dR y').f o v = some b → G b) :
+    ∀ y, rightC dR.sys restart fam y = true → ∀ b, (mng τ dR y).f o v = some b → G b := by
+  intro y hy b hb
+  have he := eval_of_mng dR y o v
+  rw [hb] at he
+  exact rightC_aux dR hP he rfl rfl b rfl restart fam hres hfam hy
+
+/-- The family and the restarts of the rows admit no answer: `G` false. -/
+theorem rightC_noneP (dR : GSys τ NR) {o : Orient} {v : Mean.V (B := S.sig)}
+    {P : Graph S.sig NR → Prop}
+    (hP : ∀ y, P y → ∃ restart fam : Graph S.sig NR → Bool, (∀ y', restart y' = true → P y') ∧
+      (∀ y', fam y' = true → (mng τ dR y').f o v = none) ∧ rightC dR.sys restart fam y = true)
+    {restart fam : Graph S.sig NR → Bool} (hres : ∀ y', restart y' = true → P y')
+    (hfam : ∀ y', fam y' = true → (mng τ dR y').f o v = none) :
+    ∀ y, rightC dR.sys restart fam y = true → (mng τ dR y).f o v = none := by
+  have cv : ∀ {fam : Graph S.sig NR → Bool}, (∀ y', fam y' = true → (mng τ dR y').f o v = none) →
+      ∀ y' b, fam y' = true → (mng τ dR y').f o v = some b → False := fun h y' b hy hb => by
+    rw [h y' hy] at hb; exact nomatch hb
+  intro y hy
+  cases hm : (mng τ dR y).f o v with
+  | none => rfl
+  | some b =>
+    exact absurd (rightC_mng dR (G := fun _ => False) (fun y' h' => by
+      obtain ⟨r, f, h1, h2, h3⟩ := hP y' h'
+      exact ⟨r, f, h1, cv h2, h3⟩) hres (cv hfam) y hy b hm) id
 
 /-! ### The shape classes -/
 
@@ -776,60 +1100,7 @@ theorem famSetG_sound (laws : Laws S o) (d : GSys τ N) {k : Nat}
     | legacy _ => exact nomatch h
     | union _ => exact nomatch h
 
-/-! ### The walk -/
-
 variable {NL : Nat} {dL : GSys τ NL} {dR : GSys τ NR}
-
-variable (τ) in
-/-- The assumed pairs hold the relation below the depth. -/
-def Hyp (Q : StepRel S) (dL : GSys τ NL) (dR : GSys τ NR) (k : Nat) (A : Tbl NL NR) : Prop :=
-  ∀ p ∈ A, Q.R k (mng τ dL (.leaf p.1)) (mng τ dR (.leaf p.2))
-
-variable (τ) in
-/-- A walk at the next fuel is sound for the relation. -/
-def Prev (Q : StepRel S) (dL : GSys τ NL) (dR : GSys τ NR)
-    (prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool) : Prop :=
-  ∀ A x y, prev A x y = true → ∀ k, Hyp τ Q dL dR k A → Q.R (k + 1) (mng τ dL x) (mng τ dR y)
-
-omit [Leaf S.sig] [Shapes S] in
-/-- Assumed pairs that hold the relation below a depth hold the relation below each smaller depth. -/
-theorem Hyp.mono {Q : StepRel S} {k k' : Nat} {A : Tbl NL NR} (hk : k' ≤ k)
-    (h : Hyp τ Q dL dR k A) : Hyp τ Q dL dR k' A := fun p hp => Q.mono hk (h p hp)
-
-omit [Leaf S.sig] [Shapes S] in
-/-- **A pair below a guard holds the relation below the depth**, by the Löb step. An assumption at
-    the index k gives a result at the index k + 1. A new pair holds at each smaller depth, by
-    induction on the depth, because the walk assumes the new pair only at a smaller depth. The
-    depth falls only at a row that goes one level down into the datum. -/
-theorem pairAt_soundR {Q : StepRel S} {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
-    (hp : Prev τ Q dL dR prev) :
-    ∀ a b A k, pairAt (sL := dL.sys) (sR := dR.sys) prev A a b = true → Hyp τ Q dL dR k A →
-      Q.R k (mng τ dL a) (mng τ dR b)
-  | .leaf i, .leaf j, A, k, h, hA => by
-    simp only [pairAt, Bool.or_eq_true] at h
-    rcases h with h | h
-    · obtain ⟨⟨i', j'⟩, hp', hpe⟩ := List.any_eq_true.mp h
-      simp only [Bool.and_eq_true, decide_eq_true_eq] at hpe
-      obtain ⟨rfl, rfl⟩ := hpe
-      exact hA _ hp'
-    · have key : ∀ m, m ≤ k → Q.R m (mng τ dL (.leaf i)) (mng τ dR (.leaf j)) := by
-        intro m
-        induction m with
-        | zero => exact fun _ => Q.zero _ _
-        | succ m ih =>
-          intro hm
-          have hA' : Hyp τ Q dL dR m ((i, j) :: A) := by
-            intro p hp'
-            rcases List.mem_cons.mp hp' with rfl | hp'
-            · exact ih (by omega)
-            · exact Q.mono (by omega) (hA p hp')
-          exact Q.congr (mng_leaf dL i).symm (mng_leaf dR j).symm (hp _ _ _ h m hA')
-      exact key k (Nat.le_refl k)
-  | .leaf _, .node _ _, A, k, h, hA | .node _ _, .leaf _, A, k, h, hA
-  | .node _ _, .node _ _, A, k, h, hA => by
-    cases k with
-    | zero => exact Q.zero _ _
-    | succ k => exact hp A _ _ h k (hA.mono (by omega))
 
 /-! ### The list row -/
 
@@ -941,11 +1212,12 @@ theorem forall₂_map_self {X Y : Type} {R : X → Y → Prop} {f : X → Y} :
 
 omit [Leaf S.sig] [Shapes S] in
 /-- An optional term and its optional test are both absent, or both present and related. -/
-theorem optCases {X Y : Type} {R : X → Y → Prop} {f : X → Y} (sp : Option X) (h : ∀ t, R t (f t)) :
+theorem optCases {X Y : Type} {R : X → Y → Prop} {f : X → Y} (sp : Option X)
+    (h : ∀ t ∈ sp, R t (f t)) :
     (sp = none ∧ sp.map f = none) ∨ ∃ t g, sp = some t ∧ sp.map f = some g ∧ R t g := by
   cases sp with
   | none => exact Or.inl ⟨rfl, rfl⟩
-  | some t => exact Or.inr ⟨t, f t, rfl, rfl, h t⟩
+  | some t => exact Or.inr ⟨t, f t, rfl, rfl, h t rfl⟩
 
 omit [Leaf S.sig] [Shapes S] in
 /-- The list codec of a list node of a graph, over the meanings of its positions. -/
@@ -964,15 +1236,20 @@ theorem rowOfG_listParts {N : Nat} (φ : Graph S.sig N → Mean.C S.sig) {n m : 
   simp only [listParts, List.map_ofFn, ← optOf_map]
   rfl
 
+omit [Leaf S.sig] [Shapes S] in
+/-- A member of a count of zero or one is a value of the function. -/
+theorem optOf_mem {X : Type} : ∀ (s : Fin 2) (f : Fin s → X) (c : X), c ∈ optOf s f → ∃ p, f p = c
+  | ⟨0, _⟩, _, _, h => nomatch h
+  | ⟨1, _⟩, _, _, h => by cases h; exact ⟨_, rfl⟩
+
 omit [Leaf S.sig] in
 /-- **The list row is sound.** -/
-theorem listRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
-    (hp : Prev τ (AB.rel o) dL dR prev) {n₁ m₁ : Nat} {s₁' : Fin 2}
-    (a : (TOp.list n₁ s₁' m₁ (B := S.sig)).Pos → Graph S.sig NL) {A : Tbl NL NR} {k : Nat}
-    (hA : Hyp τ (AB.rel o) dL dR k A) (y : Graph S.sig NR)
-    (h : famListG ((listParts a).1.map (pairAt (sL := dL.sys) (sR := dR.sys) prev A))
-        ((listParts a).2.1.map (pairAt (sL := dL.sys) (sR := dR.sys) prev A))
-        ((listParts a).2.2.map (pairAt (sL := dL.sys) (sR := dR.sys) prev A)) y = true) :
+theorem listRow_sound {test : Graph S.sig NL → Graph S.sig NR → Bool} {k : Nat}
+    {n₁ m₁ : Nat} {s₁' : Fin 2} (a : (TOp.list n₁ s₁' m₁ (B := S.sig)).Pos → Graph S.sig NL)
+    (htest : ∀ p y', test (a p) y' = true → AB o k (mng τ dL (a p)) (mng τ dR y'))
+    (y : Graph S.sig NR)
+    (h : famListG ((listParts a).1.map test) ((listParts a).2.1.map test)
+        ((listParts a).2.2.map test) y = true) :
     AB o (k + 1) (mng τ dL (.node (.list n₁ s₁' m₁) a)) (mng τ dR y) := by
   cases y with
   | leaf _ => exact nomatch h
@@ -995,11 +1272,12 @@ theorem listRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR �
       let φR : Graph S.sig NR → Mean.C S.sig := fun t => trunc j (mng τ dR t)
       let P : Graph S.sig NL → Mean.V (B := S.sig) → Bool := fun t u => ((φL t).f o u).isSome
       let Q : Graph S.sig NR → Mean.V (B := S.sig) → Bool := fun t u => ((φR t).f o u).isSome
-      have hsnd : ∀ t, SoundG P Q t (pairAt (sL := dL.sys) (sR := dR.sys) prev A t) :=
-        fun t y' hy => AB.trunc (pairAt_soundR hp t y' A (j + 1) hy hA)
+      have hsnd : ∀ p, SoundG P Q (a p) (test (a p)) :=
+        fun p y' hy => AB.trunc (htest p y' hy)
       have hrows := listRowG_sound (P := P) (Q := Q)
-        (forall₂_map_self _ fun t _ => hsnd t) (optCases _ hsnd)
-        (forall₂_map_self _ fun t _ => hsnd t) h
+        (forall₂_map_self _ fun t ht => by obtain ⟨p, rfl⟩ := List.mem_ofFn.mp ht; exact hsnd _)
+        (optCases _ fun t ht => by obtain ⟨p, rfl⟩ := optOf_mem _ _ _ ht; exact hsnd _)
+        (forall₂_map_self _ fun t ht => by obtain ⟨p, rfl⟩ := List.mem_ofFn.mp ht; exact hsnd _) h
       refine AB.down (τ := τ) (op := .list n₁ s₁' m₁) (op' := .list n₂ s₂' m₂)
         (a := fun p => mng τ dL (a p)) (b := fun p => mng τ dR (b p)) rfl rfl fun v => ?_
       simp only [TOp.run]
@@ -1130,12 +1408,12 @@ theorem slotAtG_mem {N : Nat} {fs : Finset String} {md : {x // x ∈ fs} → Slo
 
 omit [Leaf S.sig] in
 /-- **The object row is sound.** -/
-theorem objRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
-    (hp : Prev τ (AB.rel o) dL dR prev) {fs : Finset String} {md : {x // x ∈ fs} → SlotMode S.sig}
-    {w : Fin 2} (a : (TOp.obj fs md w).Pos → Graph S.sig NL) {A : Tbl NL NR} {k : Nat}
-    (hA : Hyp τ (AB.rel o) dL dR k A) (y : Graph S.sig NR)
-    (h : famObjG (md := md) (fun k => pairAt (sL := dL.sys) (sR := dR.sys) prev A (a (.inl k)))
-        (blockTest (sL := dL.sys) (sR := dR.sys) (md := md) prev A w a) y = true) :
+theorem objRow_sound {test : Graph S.sig NL → Graph S.sig NR → Bool} {k : Nat}
+    {fs : Finset String} {md : {x // x ∈ fs} → SlotMode S.sig}
+    {w : Fin 2} (a : (TOp.obj fs md w).Pos → Graph S.sig NL)
+    (htest : ∀ p y', test (a p) y' = true → AB o k (mng τ dL (a p)) (mng τ dR y'))
+    (y : Graph S.sig NR)
+    (h : famObjG (md := md) (fun k => test (a (.inl k))) (blockR (md := md) test w a) y = true) :
     AB o (k + 1) (mng τ dL (.node (.obj fs md w) a)) (mng τ dR y) := by
   cases y with
   | leaf _ => exact nomatch h
@@ -1159,7 +1437,7 @@ theorem objRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR →
       split
       · next F hF =>
         rcases h with ⟨x, _, hr, hg⟩ | ⟨x, _, ⟨hx, hr⟩, hmw⟩
-        · have hab := pairAt_soundR hp _ _ A k hg hA
+        · have hab := htest _ _ hg
           refine obj_apart_at F (n := x.1) ?_ (fun u hu => ?_) v hv
           · rcases hr with hr | hr
             · refine Or.inl (absent_of_req a _ ?_)
@@ -1176,16 +1454,10 @@ theorem objRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR →
             match w, a, hmw with
             | ⟨0, _⟩, _, _ => simp only [Graph.never]; rfl
             | ⟨1, _⟩, a, hmw =>
-              exact pairAt_soundR hp _ _ A k hmw hA u hu
+              exact htest _ _ hmw u hu
       · rfl
 
 /-! ### A graph term below the top -/
-
-omit [Leaf S.sig] [Shapes S] in
-/-- A member of a count of zero or one is a value of the function. -/
-theorem optOf_mem {X : Type} : ∀ (s : Fin 2) (f : Fin s → X) (c : X), c ∈ optOf s f → ∃ p, f p = c
-  | ⟨0, _⟩, _, _, h => nomatch h
-  | ⟨1, _⟩, _, _, h => by cases h; exact ⟨_, rfl⟩
 
 omit [Leaf S.sig] [Shapes S] in
 /-- The codec of an open block is a value of the function of the block. -/
@@ -1383,58 +1655,189 @@ theorem sub_of_belowTop [TopLaws S] {N : Nat} (dd : GSys τ N) {t : Graph S.sig 
   intro o x y hxy
   exact SubLe.term dd t _ h.2 (fun j hj => sub_entries dd h.1 _ j hj) o x y (Nat.le_refl _) hxy
 
-/-- **The rows are sound**, by induction on the left operand. -/
-theorem rowG_sound (laws : Laws S o) {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR → Bool}
-    (hp : Prev τ (AB.rel o) dL dR prev) :
-    ∀ x y A k, rowG dL.sys dR.sys prev A x y = true → Hyp τ (AB.rel o) dL dR k A →
-      AB o (k + 1) (mng τ dL x) (mng τ dR y) := by
-  intro x
-  induction x with
-  | leaf j =>
-    intro y A k h hA
-    rw [rowG] at h
-    exact (AB.rel o).congr (mng_leaf dL j).symm rfl (hp A _ y h k hA)
-  | node op a ih =>
-    intro y A k h hA
-    have hr : ∀ y', prev A (.node op a) y' = true → AB o (k + 1) (mng τ dL (.node op a)) (mng τ dR y') :=
-      fun y' h' => hp A _ y' h' k hA
-    cases op with
-    | never =>
-      rw [rowG] at h
-      exact AB.of_left fun _ => rfl
-    | held _ _ _ =>
-      rw [rowG] at h
-      exact AB.of_rightC dR (fam := fun _ => false) hr (fun _ h' => absurd h' Bool.false_ne_true) y h
-    | legacy _ =>
-      rw [rowG] at h
-      exact AB.of_rightC dR (fam := fun _ => false) hr (fun _ h' => absurd h' Bool.false_ne_true) y h
-    | opaq =>
-      rw [rowG] at h
-      exact AB.of_rightC dR (fam := fun _ => false) hr (fun _ h' => absurd h' Bool.false_ne_true) y h
-    | union m =>
-      simp only [rowG, List.all_eq_true, List.mem_finRange, true_implies] at h
-      exact AB.union_left fun p => ih p y A k (h p) hA
-    | prim g =>
-      rw [rowG] at h
-      exact AB.of_rightC dR hr (famPrimG_sound laws dR (fun p => mng τ dL (a p))) y h
-    | set =>
-      rw [rowG] at h
-      exact AB.of_rightC dR hr (famSetG_sound laws dR (fun p => mng τ dL (a p)) fun e he =>
-        apart_of_AB fun k' => hp [] (a ()) e he k' fun _ hq => nomatch hq) y h
-    | list _ _ _ =>
-      rw [rowG] at h
-      exact AB.of_rightC dR hr (fun y' h' => listRow_sound hp a hA y' h') y h
-    | obj _ _ _ =>
-      rw [rowG] at h
-      exact AB.of_rightC dR hr (fun y' h' => objRow_sound hp a hA y' h') y h
-    | refine q qA =>
-      rw [rowG] at h
-      exact AB.refine_left (ih () y A k h hA)
+variable (dL dR) in
+omit [Shapes S] in
+/-- **The relation from the rows**: a pair passes the rows, or is two entries whose bodies the
+    relation holds, and the meaning reads an entry as its body. -/
+theorem rformP {R : Graph S.sig NL → Graph S.sig NR → Prop} (hR : PostP dL.sys dR.sys R)
+    {x : Graph S.sig NL} {v : Mean.V (B := S.sig)}
+    (hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R →
+      ∀ y, rowR3 dL.sys dR.sys Rr Rs Rc x y = true → (mng τ dR y).f o v = none)
+    (hleaf : ∀ i j, x = .leaf i → R (dL.sys i) (dR.sys j) → (mng τ dR (dR.sys j)).f o v = none) :
+    ∀ y, R x y → (mng τ dR y).f o v = none := by
+  intro y hy
+  rcases hR x y hy with ⟨Rr, Rs, Rc, h1, h2, h3, h4⟩ | ⟨i, j, rfl, rfl, h⟩
+  · exact hrows Rr Rs Rc h1 h2 h3 y h4
+  · rw [congrFun (congrFun (mng_leaf dR j) o) v]; exact hleaf i j rfl h
 
-/-- **The walk is sound at every fuel.** -/
-theorem decG_sound (laws : Laws S o) : ∀ n, Prev τ (AB.rel o) dL dR (decG dL.sys dR.sys n)
-  | 0 => fun _ _ _ h => nomatch h
-  | n + 1 => fun A x y h k hA => rowG_sound laws (decG_sound laws n) x y A k h hA
+variable (dL dR) in
+/-- **Soundness by rule induction on the left derivation**, over a relation post-fixed up to
+    unfolding: where the left term answers, each term that the relation pairs with the left term
+    answers nothing. -/
+theorem post_soundP (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR → Prop}
+    (hR : PostP dL.sys dR.sys R) :
+    ∀ {x o' v r}, Eval dL x o' v r → o' = o → ∀ w, r = some w →
+      (∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R →
+        ∀ y, rowR3 dL.sys dR.sys Rr Rs Rc x y = true → (mng τ dR y).f o v = none) ∧
+      ∀ y, R x y → (mng τ dR y).f o v = none := by
+  intro x o' v r h
+  induction h with
+  | @leaf i o' v r _ ih =>
+    intro ho w hw
+    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
+        rowR3 dL.sys dR.sys Rr Rs Rc (.leaf i) y = true → (mng τ dR y).f o v = none :=
+      fun Rr Rs Rc hr _ _ y hy => (ih ho w hw).2 y (hr _ _ hy)
+    exact ⟨hrows, rformP dL dR hR hrows fun i' j hx h => by cases hx; exact (ih ho w hw).2 _ h⟩
+  | @prim g a o' v =>
+    intro ho w hw; subst o'
+    have hf : ∀ y', famPrimG g y' = true → (mng τ dR y').f o v = none := fun y' h' =>
+      none_of_apart (famPrimG_sound laws dR (k := Mean.d (B := S.sig) v + 1)
+        (fun p => mng τ dL (a p)) y' h' v (Nat.lt_succ_self _)) hw
+    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
+        rowR3 dL.sys dR.sys Rr Rs Rc (.node (.prim g) a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rs Rc hr _ _ y hy
+      simp only [rowR3] at hy
+      refine rightC_noneP dR (P := R (.node (.prim g) a)) (fun y' h' => ?_) (hr _) hf y hy
+      rcases hR _ _ h' with ⟨Rr', _, _, h1, _, _, h4⟩ | ⟨_, _, hx, _⟩
+      · exact ⟨Rr' _, _, h1 _, hf, by simpa only [rowR3] using h4⟩
+      · exact nomatch hx
+    exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
+  | @opaq a o' v =>
+    intro ho w hw; subst o'
+    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
+        rowR3 dL.sys dR.sys Rr Rs Rc (.node .opaq a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rs Rc hr _ _ y hy
+      simp only [rowR3] at hy
+      refine rightC_noneP dR (P := R (.node .opaq a)) (fun y' h' => ?_) (hr _)
+        (fun _ h' => absurd h' Bool.false_ne_true) y hy
+      rcases hR _ _ h' with ⟨Rr', _, _, h1, _, _, h4⟩ | ⟨_, _, hx, _⟩
+      · exact ⟨Rr' _, _, h1 _, fun _ h' => absurd h' Bool.false_ne_true, by simpa only [rowR3] using h4⟩
+      · exact nomatch hx
+    exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
+  | never => exact fun _ w hw => nomatch hw
+  | @refine p pA a o' v r h0 ih =>
+    intro ho w hw; subst o'
+    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
+        rowR3 dL.sys dR.sys Rr Rs Rc (.node (.refine p pA) a) y = true → (mng τ dR y).f o v = none :=
+      fun Rr Rs Rc hr hs hc y hy => (ih rfl w (bind_some_eq hw)).1 Rr Rs Rc hr hs hc y hy
+    exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
+  | unionNil => exact fun _ w hw => nomatch hw
+  | @unionHead m o' v w' a _ ih =>
+    intro ho w hw
+    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
+        rowR3 dL.sys dR.sys Rr Rs Rc (.node (.union (m + 1)) a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rs Rc hr hs hc y hy
+      simp only [rowR3, List.all_eq_true, List.mem_finRange, true_implies] at hy
+      exact (ih ho w hw).1 Rr Rs Rc hr hs hc y (hy 0)
+    exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
+  | @unionTail m o' v r a _ _ _ ih =>
+    intro ho w hw
+    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
+        rowR3 dL.sys dR.sys Rr Rs Rc (.node (.union (m + 1)) a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rs Rc hr hs hc y hy
+      simp only [rowR3, List.all_eq_true, List.mem_finRange, true_implies] at hy
+      exact (ih ho w hw).1 Rr Rs Rc hr hs hc y (by
+        simp only [rowR3, List.all_eq_true, List.mem_finRange, true_implies]; exact fun p => hy p.succ)
+    exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
+  | @down op a o' v hk C hC ih =>
+    intro ho w hw; subst o'
+    have hx : (mng τ dL (.node op a)).f o v = some w := (mng_of_eval dL (Eval.down hk C hC)).trans hw
+    have hAB : ∀ p y', R (a p) y' →
+        AB o (Mean.d (B := S.sig) v) (mng τ dL (a p)) (mng τ dR y') := by
+      intro p y' hy' u hu
+      rw [mng_of_eval dL (hC p o u hu)]
+      cases hcu : (C p).f o u with
+      | none => rfl
+      | some w' => rw [(ih p o u hu rfl w' hcu).2 y' hy']; simp
+    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
+        rowR3 dL.sys dR.sys Rr Rs Rc (.node op a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rs Rc hr hs hc y hy
+      cases op with
+      | list n s m =>
+        have hf : ∀ Rc : Graph S.sig NL → Graph S.sig NR → Bool, SubR Rc R → ∀ y',
+            famListG ((listParts a).1.map Rc) ((listParts a).2.1.map Rc) ((listParts a).2.2.map Rc) y' = true →
+            (mng τ dR y').f o v = none := fun Rc hc y' h' =>
+          none_of_apart (listRow_sound a (fun p y'' h'' => hAB p y'' (hc _ _ h'')) y' h' v
+            (Nat.lt_succ_self _)) hx
+        simp only [rowR3] at hy
+        refine rightC_noneP dR (P := R (.node (.list n s m) a)) (fun y' h' => ?_) (hr _) (hf Rc hc) y hy
+        rcases hR _ _ h' with ⟨Rr', _, Rc', h1, _, h3, h4⟩ | ⟨_, _, hx, _⟩
+        · exact ⟨Rr' _, _, h1 _, hf Rc' h3, by simpa only [rowR3] using h4⟩
+        · exact nomatch hx
+      | obj fs md s =>
+        have hf : ∀ Rc : Graph S.sig NL → Graph S.sig NR → Bool, SubR Rc R → ∀ y',
+            famObjG (md := md) (fun k => Rc (a (.inl k))) (blockR (md := md) Rc s a) y' = true →
+            (mng τ dR y').f o v = none := fun Rc hc y' h' =>
+          none_of_apart (objRow_sound a (fun p y'' h'' => hAB p y'' (hc _ _ h'')) y' h' v
+            (Nat.lt_succ_self _)) hx
+        simp only [rowR3] at hy
+        refine rightC_noneP dR (P := R (.node (.obj fs md s) a)) (fun y' h' => ?_) (hr _) (hf Rc hc) y hy
+        rcases hR _ _ h' with ⟨Rr', _, Rc', h1, _, h3, h4⟩ | ⟨_, _, hx, _⟩
+        · exact ⟨Rr' _, _, h1 _, hf Rc' h3, by simpa only [rowR3] using h4⟩
+        · exact nomatch hx
+      | set =>
+        have hf : ∀ Rs : Graph S.sig NL → Graph S.sig NR → Bool, SubR Rs R → ∀ y',
+            famSetG (Rs (a ())) y' = true → (mng τ dR y').f o v = none := by
+          intro Rs hs' y' h'
+          let a' : (TOp.set (B := S.sig)).Pos → Mean.C S.sig :=
+            fun _ => trunc (Mean.d (B := S.sig) v - 1) (mng τ dL (a ()))
+          have hmt : ∀ e, Rs (a ()) e = true → ∀ u,
+              (((a' ()).f o u).isSome && ((mng τ dR e).f o u).isSome) = false := by
+            intro e he u
+            show ((if Mean.d (B := S.sig) u ≤ Mean.d (B := S.sig) v - 1 then (mng τ dL (a ())).f o u
+              else none).isSome && _) = false
+            split
+            · next hu => exact hAB () e (hs' _ _ he) u (by have := Mean.d_pos (B := S.sig) v; omega)
+            · rfl
+          have hag := (TStep_lawful τ).down TOp.set rfl (Mean.d (B := S.sig) v - 1) a'
+            (fun p => mng τ dL (a p)) (fun _ => trunc_agree _ _)
+          have hx' : (TOp.run τ .set a').f o v = some w :=
+            (hag.f o v (by have := Mean.d_pos (B := S.sig) v; omega)).trans hx
+          exact none_of_apart (famSetG_sound laws dR (k := Mean.d (B := S.sig) v + 1) a' hmt y' h' v
+            (Nat.lt_succ_self _)) hx'
+        simp only [rowR3] at hy
+        refine rightC_noneP dR (P := R (.node .set a)) (fun y' h' => ?_) (hr _) (hf Rs hs) y hy
+        rcases hR _ _ h' with ⟨Rr', Rs', _, h1, h2, _, h4⟩ | ⟨_, _, hx, _⟩
+        · exact ⟨Rr' _, _, h1 _, hf Rs' h2, by simpa only [rowR3] using h4⟩
+        · exact nomatch hx
+      | _ => exact nomatch hk
+    exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
+  | @wall op a o' v hk _ _ =>
+    intro ho w hw; subst o'
+    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
+        rowR3 dL.sys dR.sys Rr Rs Rc (.node op a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rs Rc hr _ _ y hy
+      cases op with
+      | held _ _ _ =>
+        simp only [rowR3] at hy
+        refine rightC_noneP dR (P := R (.node _ a)) (fun y' h' => ?_) (hr _)
+          (fun _ h' => absurd h' Bool.false_ne_true) y hy
+        rcases hR _ _ h' with ⟨Rr', _, _, h1, _, _, h4⟩ | ⟨_, _, hx, _⟩
+        · exact ⟨Rr' _, _, h1 _, fun _ h' => absurd h' Bool.false_ne_true, by simpa only [rowR3] using h4⟩
+        · exact nomatch hx
+      | legacy _ =>
+        simp only [rowR3] at hy
+        refine rightC_noneP dR (P := R (.node _ a)) (fun y' h' => ?_) (hr _)
+          (fun _ h' => absurd h' Bool.false_ne_true) y hy
+        rcases hR _ _ h' with ⟨Rr', _, _, h1, _, _, h4⟩ | ⟨_, _, hx, _⟩
+        · exact ⟨Rr' _, _, h1 _, fun _ h' => absurd h' Bool.false_ne_true, by simpa only [rowR3] using h4⟩
+        · exact nomatch hx
+      | _ => exact nomatch hk
+    exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
+
+variable (dL dR) in
+/-- **The walk is sound** at every fuel, from the empty table: two terms that the walk separates
+    share no datum. The visited relation is post-fixed, and the left answer has a derivation. -/
+theorem decG_sound (laws : Laws S o) {n : Nat} {x : Graph S.sig NL} {y : Graph S.sig NR}
+    (h : decG dL.sys dR.sys n [] x y = true) :
+    ∀ v, (((mng τ dL x).f o v).isSome && ((mng τ dR y).f o v).isSome) = false := by
+  intro v
+  cases hm : (mng τ dL x).f o v with
+  | none => rfl
+  | some w =>
+    rw [(post_soundP dL dR laws (vis_post dL.sys dR.sys) (eval_of_mng dL x o v) rfl w hm).2 y
+      (vis_root dL.sys dR.sys _ h)]
+    rfl
 
 end Sound
 
@@ -1445,8 +1848,7 @@ theorem disjoint_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S]
     {dL : Closed S.sig NL} {dR : Closed S.sig NR} {rL : Fin NL} {rR : Fin NR}
     (h : disjoint dL rL dR rR = true) (v : Mean.V (B := S.sig)) :
     (((Closed.meaning τ dL rL).f o v).isSome && ((Closed.meaning τ dR rR).f o v).isSome) = false :=
-  apart_of_AB (fun k => decG_sound (dL := Closed.toG τ dL) (dR := Closed.toG τ dR) laws _ []
-    (.leaf rL) (.leaf rR) h k fun _ hq => nomatch hq) v
+  decG_sound (Closed.toG τ dL) (Closed.toG τ dR) laws h v
 
 
 /-! ## The view of a closed codec -/
@@ -2031,8 +2433,7 @@ theorem view_apart {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S]
       (.leaf rL) (.leaf rR) = true) {v : Mean.V (B := S.sig)}
     (hL : (((Closed.viewToG τ o dL).e rL).f o v).isSome = true) :
     ((Closed.meaning τ dR rR).f o v).isSome = false := by
-  have hap := apart_of_AB (fun k => decG_sound (dL := Closed.viewToG τ o dL) (dR := Closed.viewToG τ o dR)
-    laws _ [] (.leaf rL) (.leaf rR) h k fun _ hq => nomatch hq) v
+  have hap := decG_sound (Closed.viewToG τ o dL) (Closed.viewToG τ o dR) laws h v
   cases h2 : ((Closed.meaning τ dR rR).f o v).isSome
   · rfl
   have h3 : ((((Closed.viewToG τ o dL).e rL).f o v).isSome &&
