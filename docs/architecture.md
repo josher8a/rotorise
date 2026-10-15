@@ -1072,12 +1072,38 @@ target two verdicts: a refusal escaped through a reference, and a valid codec wa
 one. A product and an entry key need the node at the declaration, so each of these refuses a
 reference that no scope binds yet.
 
-**One judgment types the built graph.** The judgment holds one case per host rule of a node: a
-declared list position or an always-written field at `never`, the element of a set, and a wall
-over a cycle. Each former builds its codec through one function, which runs the judgment at the
-declaration, and a scope runs each waiting judgment after its guard. The type of a list reads a
-free name where the scope binds the name later, so the run time alone refuses a list position that
-the scope binds to `never`.
+**One judgment types the built graph.** The judgment reads the node that each child names. It
+holds one case per host rule:
+
+- A declared list position at a term that holds no value refuses the list.
+- A field that the row always writes, at a term that holds no value, refuses the object.
+- A set refuses an element that writes no single member of `S`, `N` and `B`, and an element with a
+  read widening.
+- A wall refuses an argument that reaches an entry on a cycle.
+- A union refuses an option whose spine reaches a recursion that the guard refuses, and a pair of
+  options that the declaration cannot show compatible.
+- The guard refuses a recursion with no container on its path, and a recursion with an adapter on
+  its path.
+
+**A term holds no value where the model gives it an empty held set, and the term decides the
+emptiness.** So `never` holds no value, and so does a union whose every option holds no value. A
+refinement stays out, because no function decides that a closure admits nothing. A `held` over such
+a term holds no value in the model, and the host admits that `held` in a declared position. The
+product reads the same predicate for a factor, and `nullable` reads it for the null point.
+
+**The judgment runs where each name that it reads is bound.** Each former builds its codec through
+one function, which runs the judgment at the declaration. `union` runs the judgment on its own term.
+A judgment that reads a name that no scope binds yet runs again at each scope that binds the name.
+A union decides its pairs at the first scope that binds a name of an option. A scope runs the guard
+on each entry, then each waiting judgment. The type of a list reads a free name where the scope
+binds the name later, so the run time alone refuses a list position that the scope binds to a term
+that holds no value. Agreement reads the meaning of two options, so the run time alone refuses a
+pair of options.
+
+**An entry carries the capabilities of the node that its references name.** An entry whose node
+writes `S`, `N` or `B` offers `.set()`, in the type and at run time. A reference and a literal carry
+no `.set()` of their own, so the scope gives such an entry the set of itself. An entry that names a
+dissection keeps the options of the dissection in declared order, so a product distributes over them.
 
 **A host obligation that no host code reads is found by whatever has to serialise the host's own
 definition, or it is not found.** A term the host builds must determine the codec the host runs.

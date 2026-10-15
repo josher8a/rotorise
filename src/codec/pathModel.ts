@@ -237,6 +237,32 @@ type Norm<T, Env, Fuel extends unknown[] = ScopeFuel> = Fuel extends [
  */
 export type NodeOf<T> = Norm<T, []>[0]
 
+/**
+ * **Whether a term holds no value**, the type of `holdsNoValue`: `never`, and a union whose every
+ * option holds no value, each read at the node that a name names. An array of options with no fixed
+ * length decides nothing. The fuel bounds a cycle with no container, which the guard refuses.
+ */
+export type HoldsNoValue<T> = EmptyAt<Norm<T, []>, ScopeFuel>
+type EmptyAt<N, Fuel extends unknown[]> = Fuel extends [
+    unknown,
+    ...infer F2 extends unknown[],
+]
+    ? N extends [infer T, infer Env]
+        ? T extends ['never']
+            ? true
+            : T extends ['union', infer Os]
+              ? EveryEmpty<Os, Env, F2>
+              : false
+        : false
+    : false
+type EveryEmpty<Os, Env, Fuel extends unknown[]> = Os extends readonly []
+    ? true
+    : Os extends readonly [infer H, ...infer R]
+      ? EmptyAt<Norm<H, Env>, Fuel> extends true
+          ? EveryEmpty<R, Env, Fuel>
+          : false
+      : false
+
 // ── `childD`, `childDL`, `childN`, `Frame.child` ──
 type ChildD<S, Env extends unknown[], T, Fuel extends unknown[]> = T extends [
     'never',

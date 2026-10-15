@@ -44,11 +44,13 @@ import type {
 } from './codec'
 import type { Result } from './result'
 import { andThen, CodecError, every, everyEntry, failed } from './result'
+import { agrees } from './scoped'
 import type { Alternatives, Body, Field, Literal, Term } from './term'
 import {
     alwaysWritten,
     cycleEntryOf,
     elementMember,
+    holdsNoValue,
     isOpaqueSugar,
     literalAlternatives,
     literalForm,
@@ -56,7 +58,6 @@ import {
     openRefusal,
     RecursionRefused,
     recursionUse,
-    resolvedTerm,
     storedAlternatives,
     member as termMember,
     unboundRefs,
@@ -1375,20 +1376,47 @@ export const termOf = (declared: ObjectSlot): Term => {
 }
 
 /**
+ * **The guard of the model, at one term**: a refusal where a recursion of the term reads the input
+ * of its own entry (level `2` of {@link recursionUse}), or where caller code makes that input
+ * through an adapter on its path (level `3`), and nothing otherwise. The refusal carries the term,
+ * so a checker states the model's guard on the term that the host refused. `entry` names the scope
+ * entry that the term defines, and the message names the entry.
+ */
+export const guard = (
+    t: Term,
+    entry?: string,
+): RecursionRefused | undefined => {
+    const use = recursionUse(t)
+    if (use !== 2 && use !== 3) return undefined
+    const reason =
+        entry === undefined
+            ? use === 3
+                ? `this \`${t.kind}\` term holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive \`ref\` and the entry that the \`ref\` names. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion. Put no adapter on the path of a recursion`
+                : `this \`${t.kind}\` term reaches a recursive \`ref\` with no list or object between. A recursion there reads its own input and does not end. The model's guard refuses a recursion that reads the input of its own entry. Put the recursion below a list or an object`
+            : use === 3
+              ? `[scope] '${entry}' reaches a recursion with an adapter (\`held\` or \`withLegacyRead\`) on its path. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion`
+              : `[scope] '${entry}' reaches a recursion with no list or object on its path. The model's guard refuses a recursion that reads the input of its own entry. Put the recursion below a list or an object`
+    return new RecursionRefused(t, use, reason)
+}
+
+/**
  * **The judgment of one node**: the refusal of the first host rule that the node breaks, or
  * nothing. Each rule reads the node that a child names (`resolvedTerm`), so a `ref` and its
  * target get one verdict. A child that names a `ref` that no scope binds yet goes to `waits`, and
- * {@link judged} runs the judgment again where the scope binds the name.
+ * {@link judged} runs the judgment again where the scope binds the name. `declaring` is true at
+ * the declaration of the node, and false where a scope runs the judgment again.
  *
- * Each former builds its codec through {@link codecOfTerm}, so the judgment runs at each
- * declaration, and a scope runs each waiting judgment after its guard. Each case states its reason.
+ * Each former builds its codec through {@link codecOfTerm}, and `union` judges its term itself, so
+ * the judgment runs at each declaration. A scope runs the guard on each entry, then each waiting
+ * judgment. Each case states its reason.
  */
-const judge = (t: Term, waits: Term[]): CodecError | undefined => {
-    const node = (child: Term): Term | undefined => {
-        const at = resolvedTerm(child)
-        if (at?.kind === 'ref') waits.push(at)
-        return at
-    }
+const judge = (
+    t: Term,
+    waits: Term[],
+    declaring: boolean,
+): CodecError | undefined => {
+    const empty = (child: Term): boolean =>
+        holdsNoValue(child, (open) => waits.push(open))
     switch (t.kind) {
         // **A declared position that nothing fills makes the whole list unconstructible.** The
         // model types such a list and gives it an empty held set, which is correct as a model. The
@@ -1396,25 +1424,23 @@ const judge = (t: Term, waits: Term[]): CodecError | undefined => {
         // trap is that the declaration looks like a schema. The spread is not a slot: a value of
         // exactly the declared length omits every spread position, as in the model's `Term.list`
         case 'list': {
-            const at = [...t.pre, ...t.suf].findIndex(
-                (one) => node(one)?.kind === 'never',
-            )
-            return at === -1
-                ? undefined
-                : new CodecError(
-                      `position ${at} of the declared positions is \`never\`, so nothing fills it and the list holds no value at all — use \`never\` itself if that is what you meant`,
-                  )
+            const at = [...t.pre, ...t.suf].findIndex(empty)
+            if (at !== -1)
+                return new CodecError(
+                    `position ${at} of the declared positions is \`never\`, so nothing fills it and the list holds no value at all — use \`never\` itself if that is what you meant`,
+                )
+            break
         }
         // **A name that the row always writes, at a node that holds no value.** The model gives
         // such an object an empty held set. The host refuses the object for the reason of the
         // list. `optional` is the mark that makes the name a non-slot
         case 'object': {
             for (const [name, field] of Object.entries(t.body.fields))
-                if (alwaysWritten(field) && node(field.t)?.kind === 'never')
+                if (alwaysWritten(field) && empty(field.t))
                     return new CodecError(
                         `'${name}' is declared at \`never\` and the row always writes it, so the object holds no value at all — mark it \`optional\`, or use \`never\` itself`,
                     )
-            return undefined
+            break
         }
         // **The DynamoDB set obligation, and a law.** A stored set holds elements of one member of
         // `S`, `N` or `B`, the model's `SetElem`. `TOp.rule` answers `none` at `legacy`, because a
@@ -1425,11 +1451,11 @@ const judge = (t: Term, waits: Term[]): CodecError | undefined => {
                 return new CodecError(
                     `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
                 )
-            return widensRead(t.elem)
-                ? new CodecError(
-                      `a set's element cannot carry \`withLegacyRead\`: a read widening is not a lawful element, so no law covers the set of it; declare the set of the current codec, and read the older form with \`withLegacyRead\` around the whole set`,
-                  )
-                : undefined
+            if (widensRead(t.elem))
+                return new CodecError(
+                    `a set's element cannot carry \`withLegacyRead\`: a read widening is not a lawful element, so no law covers the set of it; declare the set of the current codec, and read the older form with \`withLegacyRead\` around the whole set`,
+                )
+            break
         }
         // **A wall reaches no cycle.** A wall is a `held` or a `withLegacyRead` with an older
         // reader, and reads its argument through caller code at any depth. A wall that reads an
@@ -1444,27 +1470,74 @@ const judge = (t: Term, waits: Term[]): CodecError | undefined => {
             const open = unboundRefs(args).size > 0
             if (open) waits.push(...args)
             const entry = open ? undefined : cycleEntryOf(args)
-            return entry === undefined
-                ? undefined
-                : new CodecError(
-                      `\`${t.kind === 'held' ? 'held' : 'withLegacyRead'}\` reads '${entry}', an entry on a cycle. A wall reads its argument through caller code at any depth, so a wall that reads an entry on a cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes with constants. Put the wall over a codec that reaches no cycle`,
-                  )
+            if (entry !== undefined)
+                return new CodecError(
+                    `\`${t.kind === 'held' ? 'held' : 'withLegacyRead'}\` reads '${entry}', an entry on a cycle. A wall reads its argument through caller code at any depth, so a wall that reads an entry on a cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes with constants. Put the wall over a codec that reaches no cycle`,
+                )
+            break
         }
-        default:
+        // **Each two options of a union are compatible**, the model's obligation `TOp.obl` at
+        // `union`, under which the meaning of the union is the join of its options
+        // (`altCodec_eq_join`). Two compatible options that both admit a value write the value to
+        // one attribute, and two that both read an attribute read it to one value, so no value and
+        // no attribute observes the option order. A pair that the declaration cannot show
+        // compatible is refused, because there the order would choose an owner of the overlap that
+        // nobody named. The test reads through each `ref` on the spine of an option, and a
+        // recursive spine does not end, so the guard of each option runs first. The test runs where
+        // the options reach no unbound `ref`, or at the first scope that binds a name of an option.
+        // A `union` guards its options here, so the guard below skips the union itself
+        case 'union': {
+            if (declaring && unboundRefs(t.options).size > 0) {
+                waits.push(...t.options)
+                return undefined
+            }
+            for (const [at, option] of t.options.entries()) {
+                const use = recursionUse(option)
+                if (use >= 2)
+                    return new CodecError(
+                        use === 3
+                            ? `option ${at + 1} of this union reaches a \`ref\` whose entry holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive \`ref\` and the entry that the \`ref\` names. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion, and this option is not shown compatible with the others. Put no adapter on the path of a recursion`
+                            : `option ${at + 1} of this union reaches a recursive \`ref\` where the union must read it. The model's guard refuses a recursion that reads the input of its own entry, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
+                    )
+            }
+            for (const [at, x] of t.options.entries())
+                for (const y of t.options.slice(at + 1))
+                    if (!agrees(x, y))
+                        return new CodecError(
+                            `${optionOfTerm(x).describe} and ${optionOfTerm(y).describe} are not shown compatible: an adapter or a \`ref\` is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
+                        )
             return undefined
+        }
+        // **A `ref` is guarded where a scope binds it.** A `ref` builds its codec before the scope
+        // that binds it runs the guard, so the guard below would read a free name
+        case 'ref':
+            return undefined
+        default:
+            break
     }
+    // **A recursion that the model's guard refuses is refused where its term is declared.** A path
+    // with no container reads the input of its own entry, and encode then overflows the stack. A
+    // path with an adapter lets caller code make the input at any depth. A scope guards each entry
+    // where it binds the names, so a judgment that the scope runs again skips the guard
+    return declaring ? guard(t) : undefined
 }
 
 /**
  * **The judgment, where each name that it reads is bound.** A refusal throws now. A judgment that
- * read a `ref` that no scope binds yet runs again at each scope that binds such a name.
+ * read a `ref` that no scope binds yet runs again at each scope that binds such a name, until the
+ * judgment reads no such `ref`.
  */
-const judged = (t: Term): void => {
+export const judged = (t: Term): void => {
+    let declaring = true
+    let decided = false
     const check = (): void => {
+        if (decided) return
         const waits: Term[] = []
-        const refusal = judge(t, waits)
+        const refusal = judge(t, waits, declaring)
+        declaring = false
         if (refusal) throw refusal
         if (waits.length > 0) whenBound(waits, check)
+        else decided = true
     }
     check()
 }
@@ -1475,30 +1548,6 @@ export const codecOfTerm = <T, A extends AttributeValue>(
     const built = codecs.get(def)
     if (built) return built as unknown as AttributeCodec<T, A>
     judged(def)
-    // **A recursion that the model's guard refuses is refused where its term is declared.** Each
-    // former builds its codec here, so this is the one place that sees each declared term. A path
-    // with no container reads the input of its own entry, and encode then overflows the stack. A
-    // path with an adapter lets caller code make the input at any depth. A `ref` is not
-    // walked, because `ref` builds its codec before the scope that binds it runs the guard. A
-    // `union` refuses each option with a message that names the option. The refusal carries the
-    // term, so a checker states the model's guard on the term
-    if (def.kind !== 'ref' && def.kind !== 'union') {
-        const use = recursionUse(def)
-        if (use === 2) {
-            throw new RecursionRefused(
-                def,
-                use,
-                `this \`${def.kind}\` term reaches a recursive \`ref\` with no list or object between. A recursion there reads its own input and does not end. The model's guard refuses a recursion that reads the input of its own entry. Put the recursion below a list or an object`,
-            )
-        }
-        if (use === 3) {
-            throw new RecursionRefused(
-                def,
-                use,
-                `this \`${def.kind}\` term holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive \`ref\` and the entry that the \`ref\` names. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion. Put no adapter on the path of a recursion`,
-            )
-        }
-    }
     const made = codecAtLevel<T, A>(Object.freeze(def), 0)
     codecs.set(def, made as unknown as AttributeCodec<never, AttributeValue>)
     return made
