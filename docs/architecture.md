@@ -152,14 +152,16 @@ admission is a function that the decision does not read.
 
 **The soundness of the decision holds at every signature, from the laws of the universe.**
 `Scoped.disjoint_sound` says that where the decision answers `true`, no datum of any depth is
-accepted by both meanings at the orientation. The proof is an induction on the fuel, and at each
-pair below a guard an induction on the depth of the datum: the decision assumes a pair only at a
-smaller depth. The laws are outside `Sem`, because only the soundness theorems read them.
+accepted by both meanings at the orientation. Where the decision answers `true`, the pairs that the
+walk covers form a post-fixed point of the rows, up to the unfolding of two entries. The proof is
+one rule induction on the evaluation of the left meaning, and it reads the rows at each pair. The
+proof holds at every fuel, and `Scoped.compat_sound` has the same proof. The laws are outside
+`Sem`, because only the soundness theorems read them.
 `Scoped.Laws` holds two laws at one orientation: two primitives that the leaf keeps apart share no
 datum, and two sets whose elements share no datum share no set. The decision reads no
 orientation, because orthogonality is self-dual, so one decision serves the value side at the host
 and the attribute side at the dual. The `refine` row needs no law: a refinement accepts a part of
-what its inner term accepts (`AB.refine_left`). At DynamoDB, a leaf law is a fact about `inBase` and
+what its inner term accepts (`refine2_acc`). At DynamoDB, a leaf law is a fact about `inBase` and
 `inL`, and a set law is a fact about `setCodec`. At JSON, two kinds meet where they are one kind,
 and the set law holds because the signature has no set former.
 
