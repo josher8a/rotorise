@@ -293,3 +293,59 @@ member that the run time dropped stays in the type.
 
 **Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 23 such
 ids, measured 2026-10-14.
+
+---
+
+## Partially mitigated: a term that holds no value escapes the never rules where the term does not decide it
+
+**Observation.** The predicate in `src/codec/term.ts` that decides that a term holds no value answers `true` for `never` and for a union
+whose every option holds no value. The list position rule, the field rule, the product factor rule
+and `nullable` read it. Two forms hold no value in the model and answer `false`:
+
+    list(string, refine(string, (_: string): _ is string => false))   // builds
+    list(string, held(never, boolean, adapter))                       // builds
+
+**Effect.** Each such list or object holds no value and builds. A refinement stays out because no
+function decides that a closure admits nothing. The `held` stays out because two pinned vectors
+declare that `held` in a list position.
+
+**What is mitigated.** `union([])`, a union of empty options, and each of these through a `ref`
+are refused where `never` is, in the type and at run time.
+
+**Pin.** `src/codec/spec/surface/codec.resolution.spec.ts` pins the refinement. The `held` is
+declared by the shared legacy read vector of `src/codec/lean/lean.spec.ts` and by the legacy read test of
+`src/codec/spec/laws/codec.held.spec.ts`.
+
+---
+
+## Known: a union whose options read two scopes is refused at the first scope
+
+**Observation.** The judgment of a union decides the pairs at the first scope that binds a name of
+an option. A name of the other scope is free there, and no pair with a free `ref` is shown
+compatible. Measured 2026-10-14 with a throwaway spec:
+
+    const a = ref('A')
+    const b = ref('B')
+    const u = union([a, b])
+    scope({ A: string, Z: list(a) })   // refuses: ref and ref are not shown compatible
+    scope({ B: number, Y: list(b) })   // accepts
+
+**Effect.** The first scope refuses a union that it does not hold, and the refusal frees each name
+that the scope bound. A string and a number are compatible, so a judgment with both names bound
+accepts the union.
+
+**Pin.** None.
+
+---
+
+## Known: the type of an entry that names an object or a union through a ref offers members that the run time lacks
+
+**Observation.** The type of an entry reads the definition at the end of its chain of `ref`s. So
+`scope({ A: ref('O'), O: object({ a: string }) }).A` has the type of an object codec, with an item reading.
+At run time the entry is the `ref` codec, which carries no item reading, no extract and no exclude.
+Measured 2026-10-14 with a throwaway spec: the item reading of A is undefined, and so is the extract
+of an entry U that names a union through a `ref`.
+
+**Effect.** An encode through the item reading of A typechecks and throws a TypeError.
+
+**Pin.** None.

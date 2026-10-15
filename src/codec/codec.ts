@@ -23,7 +23,9 @@ import {
     byTagSem,
     codecAtLevel,
     codecOfTerm,
+    guard,
     itemSem,
+    judged,
     literalCodec,
     literalShape,
     membersOf,
@@ -38,9 +40,9 @@ import type {
     DecodeTerm,
     FirstFrame,
     HoldsFree,
+    HoldsNoValue,
     KindOfFrames,
     NarrowFrames,
-    NodeOf,
     OffersAt,
     ScopeWallCycle,
     StepFrames,
@@ -53,7 +55,7 @@ import {
     orThrow,
     type Result,
 } from './result'
-import { agrees, storedApart } from './scoped'
+import { storedApart } from './scoped'
 import type {
     Alternatives,
     Body,
@@ -65,12 +67,11 @@ import type {
 import {
     clauseForm,
     clauseLiteralsOf,
+    holdsNoValue,
     literalAlternatives,
     member as memberOf,
     openRefusal,
     ownsNullOf,
-    RecursionRefused,
-    recursionUse,
     reenteredOf,
     refuseSlots,
     resolvedTerm,
@@ -1625,10 +1626,10 @@ type IsNeverSlot<D> = [D] extends [{ readonly [optionalMarker]: true }]
       ? true
       : [D] extends [{ readonly def: { readonly kind: 'never' } }]
         ? true
-        : // the node that a `ref` names, where the term of the slot names a scope entry
-          NodeOf<
+        : // the node that a `ref` names, and each other form that holds no value
+          HoldsNoValue<
                 TermOf<D extends { readonly codec: infer C } ? C : D>
-            > extends ['never']
+            > extends true
           ? true
           : false
 
@@ -2596,7 +2597,8 @@ type DefOf<Defs, C, Seen = never> = TermOf<C> extends [
  * An entry: the codec of the definition that the entry names, read at the term `Tm` of the entry.
  * An object keeps its item, and a union keeps its item and its slices, each typed from the term.
  * Each option of a union is the definition that the option names, so a slice reads a `ref` option
- * as the definition.
+ * as the definition. Any other entry keeps the `.set()` of an element that writes `S`, `N` or `B`,
+ * and a dissection keeps its options in declared order, each the definition that the option names.
  */
 type EntryOf<C, Tm, Defs> = C extends ObjectCodec<
     infer Spec extends Record<string, ObjectSlot>,
@@ -2612,7 +2614,11 @@ type EntryOf<C, Tm, Defs> = C extends ObjectCodec<
             LiteralMarkOf<C>
       : AttributeCodec<DecodeTerm<Tm>, AttributeOf<C> & AttributeValue> &
             LiteralMarkOf<C> &
-            TermMark<Tm>
+            TermMark<Tm> &
+            SetCapable<DecodeTerm<Tm>, AttributeOf<C> & AttributeValue, Tm> &
+            (C extends OptionsMark<infer Os extends readonly unknown[]>
+                ? OptionsMark<{ [I in keyof Os]: DefOf<Defs, Os[I]> }>
+                : unknown)
 /** A refusal on each definition that reads a name the scope does not declare. */
 type ScopeNamed<Defs> = {
     readonly [K in keyof Defs]: [Exclude<FreeOf<Defs[K]>, keyof Defs>] extends [
@@ -2684,17 +2690,9 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
     // The refusal of the guard carries the term of the entry, so a checker states the model's
     // guard on that term
     try {
-        for (const [name, def] of Object.entries(defs)) {
-            const t = termOf(def)
-            const use = recursionUse(t)
-            if (use === 2 || use === 3)
-                throw new RecursionRefused(
-                    t,
-                    use,
-                    use === 3
-                        ? `[scope] '${name}' reaches a recursion with an adapter (\`held\` or \`withLegacyRead\`) on its path. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion`
-                        : `[scope] '${name}' reaches a recursion with no list or object on its path. The model's guard refuses a recursion that reads the input of its own entry. Put the recursion below a list or an object`,
-                )
+        for (const [name, t] of Object.entries(terms)) {
+            const refused = guard(t, name)
+            if (refused) throw refused
         }
         for (const check of new Set([...slots].flatMap((slot) => slot.waiting)))
             check()
@@ -2702,7 +2700,21 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
         refuseSlots(slots)
         throw thrown
     }
-    return defs
+    // **An entry carries the `.set()` of the node that its chain of `ref`s names**, as its type
+    // does. A `ref` and a literal carry no `.set()` of their own, so such an entry builds the set
+    // of itself, and the judgment of the set refuses an element that writes no `S`, `N` or `B`. An
+    // object and a union write `M` or no single member, so their entries stay as declared
+    return Object.fromEntries(
+        Object.entries(defs).map(([name, def]) => {
+            const kind = terms[name]?.kind
+            return [
+                name,
+                'set' in def || kind === 'object' || kind === 'union'
+                    ? def
+                    : { ...def, set: () => set(def) },
+            ]
+        }),
+    )
 }
 
 // ── presence ────────────────────────────────────────────────────────
@@ -2813,7 +2825,9 @@ export const nullable = <
         )
     }
     if (owns) return inner as AttributeCodec<T | null, A | Attribute<'NULL'>>
-    if (t.kind === 'never') {
+    // a term that holds no value adds no option to the null point, so the union is `NULL` itself,
+    // read at the node that the term names
+    if (holdsNoValue(t)) {
         return nullValue as AttributeCodec<T | null, A | Attribute<'NULL'>>
     }
     return codecOfTerm<T | null, A | Attribute<'NULL'>>({
@@ -4374,7 +4388,7 @@ type SharedAcross<Fs extends readonly unknown[]> = Fs extends readonly [
     ? (DeclaredNames<H> & DeclaredNames<T[number]>) | SharedAcross<T>
     : never
 
-/** Whether any factor is `never`, matched on the term's kind. */
+/** Whether any factor holds no value, read at the node that the factor names. */
 type HasNeverFactor<Fs extends readonly unknown[]> = Fs extends readonly [
     infer H,
     ...infer T extends readonly unknown[],
@@ -4385,7 +4399,7 @@ type HasNeverFactor<Fs extends readonly unknown[]> = Fs extends readonly [
         ? HasNeverFactor<T>
         : [H] extends [{ readonly def: { readonly kind: 'never' } }]
           ? true
-          : NodeOf<TermOf<H>> extends ['never']
+          : HoldsNoValue<TermOf<H>> extends true
             ? true
             : HasNeverFactor<T>
     : false
@@ -4402,9 +4416,9 @@ type HasNeverFactor<Fs extends readonly unknown[]> = Fs extends readonly [
  * codec holds an undeclared name through a codec of its own, and the product would have to hold it
  * through both.
  *
- * The never clause reads the node that a factor names, so a scope entry that names `never` gets
- * the never reason. A factor can still hold no value through a predicate or through `union([])`,
- * and no clause reads that.
+ * The never clause reads each form that holds no value at the node that a factor names, so a scope
+ * entry that names `never`, and `union([])`, get the never reason. A factor can still hold no value
+ * through a predicate, and no clause reads that.
  */
 export type ValidateProduct<Fs extends readonly unknown[]> =
     HasNeverFactor<Fs> extends true
@@ -4425,10 +4439,9 @@ const optionsOfFactor = (factor: AnyCodec): readonly ObjectItem[] => {
     const node = resolvedTerm(termOf(factor))
     // a product against a factor that holds nothing passes no check: every merge would hold
     // nothing too, and two empty held sets are comparable both ways, so no value tells the options
-    // apart. The rule reads `never` alone. A slot at `never` is refused by the judgment, but a
-    // factor can still hold nothing through a predicate that admits no value, or through
-    // `union([])`, and the product of such a factor builds
-    if (node?.kind === 'never') {
+    // apart. The rule reads each form whose emptiness the term decides. A factor can still hold
+    // nothing through a predicate that admits no value, and the product of such a factor builds
+    if (holdsNoValue(termOf(factor))) {
         throw new CodecError(
             '`never` holds no value, so every product with it holds none either and no value could select between the results — remove the factor',
         )
@@ -5977,47 +5990,13 @@ export const union = <const Options extends readonly AnyCodec[]>(
     options: Options,
 ): UnionCodec<DerivedUnion<Options>, Options> &
     LiteralMarkOf<Options[number]> => {
-    // **A union with a `ref` that no scope binds yet waits for that scope.** The checks and the
-    // resolution read each option through its `ref`s, and a `ref` resolves only where its scope
-    // binds it. So the scope runs them with every name bound
+    // **The judgment decides the union's obligation**: each two options compatible, at the
+    // declaration, or at the first scope that binds a name of an option. The resolution reads each
+    // option through its `ref`s, so it runs at the first use, where every name is bound
     const settle = () => {
-        // **A recursive spine is refused before any occupancy runs.** An option's occupancies read
-        // through each `ref` on its spine, and a recursive one would not end
-        for (const [at, declared] of (
-            options as readonly AnyCodec[]
-        ).entries()) {
-            const use = recursionUse(termOf(declared))
-            // each former refuses an adapter on a recursive path where the adapter is declared, so
-            // an adapter reaches the union only through a `ref` that the union reads through,
-            // and the level `3` names that cause
-            if (use >= 2) {
-                throw new CodecError(
-                    use === 3
-                        ? `option ${at + 1} of this union reaches a \`ref\` whose entry holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive \`ref\` and the entry that the \`ref\` names. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion, and this option is not shown compatible with the others. Put no adapter on the path of a recursion`
-                        : `option ${at + 1} of this union reaches a recursive \`ref\` where the union must read it. The model's guard refuses a recursion that reads the input of its own entry, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
-                )
-            }
-        }
         const all: readonly Option[] = (options as readonly AnyCodec[]).map(
             optionOf,
         )
-
-        // **Every option has a term.** A `set` over a restricted element is spelled as a
-        // restriction of the set, and a `set` whose element reduces to no base is refused by
-        // `.set()` at construction — so the conversion is total here
-        const pairs = all.map((option) => ({
-            option,
-            term: option.codec.def,
-        }))
-
-        for (const [at, { option: first, term: x }] of pairs.entries()) {
-            for (const { option: second, term: y } of pairs.slice(at + 1)) {
-                if (agrees(x, y)) continue
-                throw new CodecError(
-                    `${first.describe} and ${second.describe} are not shown compatible: an adapter or a \`ref\` is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
-                )
-            }
-        }
         return { all, ...altSem(all) }
     }
     let settled: ReturnType<typeof settle> | undefined
@@ -6026,9 +6005,9 @@ export const union = <const Options extends readonly AnyCodec[]>(
         return settled
     }
     const optionTerms = options.map(termOf)
-    whenBound(optionTerms, resolution)
-    // **A use needs every name bound.** Each use refuses while a `ref` of an option is unbound
     const declared: Term = { kind: 'union', options: optionTerms }
+    judged(declared)
+    // **A use needs every name bound.** Each use refuses while a `ref` of an option is unbound
     const closed = (): void => {
         const open = openRefusal(declared)
         if (open) throw open

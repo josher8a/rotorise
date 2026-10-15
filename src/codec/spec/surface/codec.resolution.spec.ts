@@ -14,6 +14,7 @@ import {
     discriminatedUnion,
     list,
     never,
+    nullable,
     nullValue,
     object,
     opaque,
@@ -25,6 +26,7 @@ import {
     string,
     union,
 } from '../../codec'
+import { RecursionRefused } from '../../term'
 
 /** `It`, named through the `ref` of the entry `At`. */
 const NeverAt = scope({ At: ref('It'), It: never }).At
@@ -35,6 +37,14 @@ const OptionAt = scope({
     Y: object({ t: string('a'), x: string }),
 }).X
 const StringAt = scope({ At: ref('It'), It: string }).At
+const EmptyAt = scope({ At: ref('It'), It: union([]) }).At
+const DissectionAt = scope({
+    At: ref('It'),
+    It: discriminatedUnion('kind', [
+        object({ kind: string('a'), x: string }),
+        object({ kind: string('b'), y: boolean }),
+    ]),
+}).At
 
 describe('a slot at never is refused through a ref', () => {
     it('refuses a declared list position at never, direct and through a ref', () => {
@@ -163,5 +173,130 @@ describe('a set element and a slice read the node that a ref names', () => {
         })
         expect(() => U.extract({ b: decimal('1') })).not.toThrow()
         expect(() => U.exclude({ b: decimal('2.5') })).not.toThrow()
+    })
+})
+
+describe('the judgment decides the obligation of a union', () => {
+    /**
+     * Agreement reads the meaning of two options, which no type computes, so the run time alone
+     * refuses the pair. The refusal through a `ref` lands at the scope that binds the name.
+     */
+    it('refuses two options that are not shown compatible, direct and through a ref', () => {
+        expect(() => union([decimal('1', '2'), string('1', '2')])).toThrow(
+            "decimal('1', '2') and string('1', '2') are not shown compatible",
+        )
+        expect(() =>
+            scope({
+                U: union([ref('D'), string('1', '2')]),
+                D: decimal('1', '2'),
+            }),
+        ).toThrow(/are not shown compatible/)
+    })
+
+    it('admits two compatible options, direct and through a ref', () => {
+        expect(() => union([string('A'), string])).not.toThrow()
+        expect(() => union([StringAt, string('A')])).not.toThrow()
+    })
+})
+
+describe('one guard refuses a recursion with no container', () => {
+    /**
+     * The scope guards each entry, and a term declared over the names of a refused scope reads the
+     * cycle that the scope refused. One guard gives both refusals, each with the model's term. The
+     * type reads no cycle of the guard, so the run time alone refuses.
+     */
+    it('refuses the entry at the scope, and a term over the refused names where it is declared', () => {
+        const self = ref('A')
+        expect(() => scope({ A: self })).toThrow(
+            /\[scope\] 'A' reaches a recursion with no list or object on its path/,
+        )
+        expect(() => list(self)).toThrow(RecursionRefused)
+        expect(() => list(self)).toThrow(
+            /this `list` term reaches a recursive `ref` with no list or object between/,
+        )
+    })
+})
+
+describe('a term that holds no value is refused where never is', () => {
+    it('refuses a declared list position at union([]), direct and through a ref', () => {
+        // @ts-expect-error the type reads the empty union
+        expect(() => list(string, union([]))).toThrow(/nothing fills it/)
+        // @ts-expect-error the type reads the node that the entry names
+        expect(() => list(string, EmptyAt)).toThrow(/nothing fills it/)
+    })
+
+    it('refuses a field that the row always writes at a union of empty options, direct and through a ref', () => {
+        // @ts-expect-error the type reads each option
+        expect(() => object({ a: union([never, union([])]) })).toThrow(
+            /declared at `never`/,
+        )
+        // @ts-expect-error the type reads the node that the entry names
+        expect(() => object({ a: EmptyAt })).toThrow(/declared at `never`/)
+        expect(() => object({ a: optional(EmptyAt) })).not.toThrow()
+    })
+
+    it('refuses a product factor at union([]) with the never reason, direct and through a ref', () => {
+        // @ts-expect-error the type gives the never reason
+        expect(() => product(union([]), object({ b: string }))).toThrow(
+            /holds no value/,
+        )
+        // @ts-expect-error the type gives the never reason through a ref
+        expect(() => product(EmptyAt, object({ b: string }))).toThrow(
+            /holds no value/,
+        )
+    })
+
+    /** No function decides that a closure admits nothing, so a refinement is not read as empty. */
+    it('admits a position at a refinement whose predicate admits nothing', () => {
+        const none = refine(string, (_: string): _ is string => false)
+        expect(() => list(string, none)).not.toThrow()
+    })
+
+    /**
+     * A term that holds no value adds no option, so the codec is `NULL` itself. The type keeps the
+     * union with the null point that it states for `never`.
+     */
+    it('reads nullable over a term that holds no value as the null point, direct and through a ref', () => {
+        expect(nullable(union([])).def).toEqual({ kind: 'null' })
+        expect(nullable(EmptyAt).def).toEqual({ kind: 'null' })
+        expect(nullable(NeverAt).def).toEqual({ kind: 'null' })
+        expect(nullable(EmptyAt).encode(null)).toEqual({ NULL: true })
+    })
+})
+
+describe('an entry carries the capabilities of the node that its ref chain names', () => {
+    it('offers the set of an entry whose node writes S, N or B, direct and through a ref', () => {
+        const { S, A, L } = scope({ S: string, A: ref('S'), L: string('a') })
+        expect(S.set().encode(new Set(['x']))).toEqual({ SS: ['x'] })
+        expect(A.set().encode(new Set(['x']))).toEqual({ SS: ['x'] })
+        expect(L.set().encode(new Set(['a'] as const))).toEqual({ SS: ['a'] })
+    })
+
+    it('offers no set where the node writes another member', () => {
+        const { O, B } = scope({
+            O: object({ a: string }),
+            B: ref('T'),
+            T: boolean,
+        })
+        // @ts-expect-error an object writes M
+        expect(() => O.set()).toThrow(TypeError)
+        // @ts-expect-error a boolean writes BOOL, and DynamoDB has no set of it
+        expect(() => B.set()).toThrow(/a set holds strings, numbers or binary/)
+    })
+
+    it('merges each variant of a discriminatedUnion factor that a ref names, in declared order', () => {
+        const direct = scope({
+            D: discriminatedUnion('kind', [
+                object({ kind: string('a'), x: string }),
+                object({ kind: string('b'), y: boolean }),
+            ]),
+        }).D
+        const named = product(DissectionAt, object({ n: decimal }))
+        expect(named.def).toEqual(product(direct, object({ n: decimal })).def)
+        expect(named.item.encode({ kind: 'a', x: 'q', n: '1' })).toEqual({
+            kind: { S: 'a' },
+            x: { S: 'q' },
+            n: { N: '1' },
+        })
     })
 })
