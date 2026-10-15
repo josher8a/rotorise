@@ -6,7 +6,8 @@
  * second from a generic marshaller drops out of the schema for that subtree and lets the two
  * disagree. `at` derives both from one expression, so they cannot.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
+import { type Attribute, type AttributeValue, memberOf } from '../../attribute'
 import {
     array,
     CodecError,
@@ -298,5 +299,96 @@ describe('a path to a codec that admits no value', () => {
                 ),
             })
         }
+    })
+})
+
+/**
+ * **The codec at a path keeps the attribute it writes.** An expression library reads the category
+ * of a value from its key: an `ADD` or a `DELETE` ties the path and the value to one category. So
+ * the type of `encode` at a path is the attribute of the member that the model reads at the frame,
+ * and a frame where the model reads no one member gives the attributes of its options.
+ */
+describe('the attribute that the codec at a path writes', () => {
+    /** The keys that an attribute type admits: the category that an expression library reads. */
+    type Category<A> = A extends unknown
+        ? keyof { [K in keyof A as A[K] extends undefined ? never : K]: 0 }
+        : never
+    const Tree = scope({
+        Node: object({ v: string, next: optional(ref('Node')) }),
+    })
+    const Shelf = object({
+        name: string,
+        count: number,
+        tags: string.set(),
+        notes: array(string),
+        address: object({ city: string }),
+        either: union([string, number]),
+        payload: opaque,
+        tree: Tree.Node,
+    }).item
+
+    it('a string field writes an S, because the category of the value is the member of its term', () => {
+        const written = Shelf.at((p) => p.name).unsafeEncode('a')
+        expect(memberOf(written)).toBe('S')
+        expectTypeOf<Category<typeof written>>().toEqualTypeOf<'S'>()
+    })
+
+    it('a number field writes an N, because the float adapter writes the member of its stored term', () => {
+        const written = Shelf.at((p) => p.count).unsafeEncode(1.5)
+        expect(memberOf(written)).toBe('N')
+        expectTypeOf<Category<typeof written>>().toEqualTypeOf<'N'>()
+    })
+
+    it('a string set writes an SS, because the member of a set follows the member of its element', () => {
+        const written = Shelf.at((p) => p.tags).unsafeEncode(new Set(['a']))
+        expect(memberOf(written)).toBe('SS')
+        expectTypeOf<Category<typeof written>>().toEqualTypeOf<'SS'>()
+    })
+
+    it('an array writes an L, and an object writes an M, because a container has one member', () => {
+        const list = Shelf.at((p) => p.notes).unsafeEncode(['a'])
+        const map = Shelf.at((p) => p.address).unsafeEncode({ city: 'c' })
+        expect([memberOf(list), memberOf(map)]).toEqual(['L', 'M'])
+        expectTypeOf<Category<typeof list>>().toEqualTypeOf<'L'>()
+        expectTypeOf<Category<typeof map>>().toEqualTypeOf<'M'>()
+    })
+
+    it('a union of a string and a number writes an S or an N, because each option writes its own member', () => {
+        const either = Shelf.at((p) => p.either)
+        const written = [either.unsafeEncode('a'), either.unsafeEncode(1)]
+        expect(written.map(memberOf)).toEqual(['S', 'N'])
+        expectTypeOf<Category<(typeof written)[number]>>().toEqualTypeOf<
+            'S' | 'N'
+        >()
+    })
+
+    it('opaque writes any member, because opaque admits every value', () => {
+        const payload = Shelf.at((p) => p.payload)
+        const written = [payload.unsafeEncode('a'), payload.unsafeEncode(true)]
+        expect(written.map(memberOf)).toEqual(['S', 'BOOL'])
+        expectTypeOf<Category<(typeof written)[number]>>().toEqualTypeOf<
+            Category<AttributeValue>
+        >()
+    })
+
+    it('a path through a scope ref writes the member of the entry that the ref names', () => {
+        const value = Shelf.at((p) => p.tree.next.v).unsafeEncode('a')
+        const node = Shelf.at((p) => p.tree.next).unsafeEncode({ v: 'a' })
+        expect([memberOf(value), memberOf(node)]).toEqual(['S', 'M'])
+        expectTypeOf<Category<typeof value>>().toEqualTypeOf<'S'>()
+        expectTypeOf<Category<typeof node>>().toEqualTypeOf<'M'>()
+    })
+
+    it('an attribute of another category does not type-check, because the key states the category', () => {
+        const count = Shelf.at((p) => p.count)
+        // @ts-expect-error a number field writes an N, never an S
+        const wrong: Attribute<'S'> = count.unsafeEncode(1)
+        expect(memberOf(wrong)).toBe('N')
+    })
+
+    it('the root of an item writes a row and no attribute, so the root keeps the wide type', () => {
+        const root = object({ name: string }).item.at((p) => p)
+        expect(root.unsafeEncode({ name: 'a' })).toEqual({ name: { S: 'a' } })
+        expectTypeOf(root.unsafeEncode).returns.toEqualTypeOf<AttributeValue>()
     })
 })

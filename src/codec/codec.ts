@@ -38,6 +38,7 @@ import type {
     CycleEntryOf,
     DecodeFrame,
     DecodeTerm,
+    EncodedFrame,
     FirstFrame,
     HoldsFree,
     HoldsNoValue,
@@ -3412,13 +3413,24 @@ declare const pathValue: unique symbol
  */
 declare const pathKindMarker: unique symbol
 type PathResolved = { readonly [pathKindMarker]?: 'resolved' }
-type TermPath<Fs, T, F> = PathTerminal<TermPathValue<Fs>> & {
-    readonly [pathKindMarker]?: KindOfFrames<Fs>
-} & TermPathBody<Fs, NonNullable<T>, F, OffersAt<Fs>>
+declare const pathEncoded: unique symbol
+/**
+ * The attribute that the codec at a node writes, as a phantom: a function of the first frame,
+ * where the node resolves. The root of an item is the item codec, which writes a row and no
+ * attribute, so the root keeps the wide `AttributeValue`.
+ */
+type PathEncoded<A> = { readonly [pathEncoded]?: A }
+type TermPath<Fs, T, F, Root = false> = PathTerminal<TermPathValue<Fs>> &
+    PathEncoded<Root extends true ? AttributeValue : TermPathEncoded<Fs>> & {
+        readonly [pathKindMarker]?: KindOfFrames<Fs>
+    } & TermPathBody<Fs, NonNullable<T>, F, OffersAt<Fs>, Root>
 type TermPathValue<Fs> = KindOfFrames<Fs> extends 'resolved'
     ? DecodeFrame<FirstFrame<Fs>>
     : never
-type TermPathBody<Fs, T, F, O> = {
+type TermPathEncoded<Fs> = KindOfFrames<Fs> extends 'resolved'
+    ? EncodedFrame<FirstFrame<Fs>>
+    : never
+type TermPathBody<Fs, T, F, O, Root> = {
     readonly [K in Extract<O, ['name', unknown]>[1] & string]: TermPath<
         StepFrames<['name', K], Fs>,
         ValueAt<T, K>,
@@ -3450,31 +3462,33 @@ type TermPathBody<Fs, T, F, O> = {
                   ? PathOf<ElementOf<T>>
                   : TermPath<StepFrames<['pos', I], Fs>, ElementOf<T>, unknown>
           }) &
-    TodayNarrowing<T, F, Fs>
+    TodayNarrowing<T, F, Fs, Root>
 type ElementOf<T> = T extends readonly unknown[] ? T[number] : never
 /**
  * `narrow` at a node. A node that holds frames offers {@link TermNarrowing}, whatever its decoded
  * type, because the frames decide the clause. A node whose type carries no term offers
  * {@link PathNarrowing} where {@link PathOf} offers it: on an object type that is no list.
  */
-type TodayNarrowing<T, F, Fs> = HoldsFree<Fs> extends true
+type TodayNarrowing<T, F, Fs, Root> = HoldsFree<Fs> extends true
     ? [T] extends [readonly unknown[]]
         ? unknown
         : [T] extends [object]
           ? PathNarrowing<T, F>
           : unknown
-    : TermNarrowing<Fs>
+    : TermNarrowing<Fs, Root>
 /**
  * {@link PathNarrowing}, where the node holds frames, and read on the terms alone: the narrowed node
  * holds the options that the clause keeps ({@link NarrowFrames}), so its decision is the decision of
  * the walk of `at`. The clause is refused where it keeps no option of the frames, as the walk refuses
  * it. The decoded type of the narrowed node is the decoded type of the kept frames.
  */
-type TermNarrowing<Fs> = {
+type TermNarrowing<Fs, Root> = {
     narrow<
         const C extends Readonly<Record<string, AnyCodec>>,
         K = NarrowFrames<Fs, ClauseTerms<C>>,
-    >(clause: C & ClauseOnFrames<K>): TermPath<K, DecodeFrames<K>, unknown>
+    >(
+        clause: C & ClauseOnFrames<K>,
+    ): TermPath<K, DecodeFrames<K>, unknown, Root>
 }
 /** The decoded type of the codecs at the frames of a node. */
 type DecodeFrames<Fs> = Fs extends unknown[]
@@ -3843,17 +3857,24 @@ export type ItemCodec<T, Spec = unknown, Rest = undefined, Tm = OfParts> = {
      * delivered.path()            // 'shipment.legs[1].deliveredAt'
      * delivered.encode(stamp)     // through the codec declared for it
      * ```
+     *
+     * The codec keeps the attribute it writes: `A` is the member that the model reads at the
+     * resolved frame, as the one attribute of that member, so `encode` gives `{ S: string }` at a
+     * string. A frame where the model reads no one member gives the union of the attributes of
+     * its options, and the wide `AttributeValue` where an option has no member the type computes
+     * (`opaque`). The root of the item writes a row, and keeps the wide `AttributeValue`.
      */
-    readonly at: <X>(
+    readonly at: <X, A extends AttributeValue = AttributeValue>(
         this: Closed,
         select: (
             path: TermPath<
                 [[[Tm] extends [OfParts] ? ObjectTermOf<Spec, Rest> : Tm, []]],
                 T,
-                ItemFrontier<T, Spec, Rest>
+                ItemFrontier<T, Spec, Rest>,
+                true
             >,
-        ) => PathTerminal<X> & PathResolved,
-    ) => LocatedCodec<X>
+        ) => PathTerminal<X> & PathResolved & PathEncoded<A>,
+    ) => LocatedCodec<X, A>
     /**
      * A builder for document paths into this item.
      *
@@ -3870,8 +3891,11 @@ export type ItemCodec<T, Spec = unknown, Rest = undefined, Tm = OfParts> = {
     readonly [writesMarker]?: WritesPin<Spec, Rest>
 }
 
-/** An {@link AttributeCodec} that also knows where it lives. */
-export type LocatedCodec<T> = AttributeCodec<T> & {
+/** An {@link AttributeCodec} that also knows where it lives, and keeps the attribute it writes. */
+export type LocatedCodec<
+    T,
+    A extends AttributeValue = AttributeValue,
+> = AttributeCodec<T, A> & {
     /** The document path, as DynamoDB expression syntax. */
     readonly path: () => string
     readonly segments: readonly (string | number)[]
@@ -4033,14 +4057,15 @@ const objectFromMap = <
         unsafeEncodePartial: (patch) => orThrow(self.encodePartial(patch)),
 
         path: () => pathBuilder<T, ItemFrontier<T, Spec, Rest>>(),
-        at: <X>(
+        at: <X, A extends AttributeValue = AttributeValue>(
             select: (
                 path: TermPath<
                     [[ObjectTermOf<Spec, Rest>, []]],
                     T,
-                    ItemFrontier<T, Spec, Rest>
+                    ItemFrontier<T, Spec, Rest>,
+                    true
                 >,
-            ) => PathTerminal<X> & PathResolved,
+            ) => PathTerminal<X> & PathResolved & PathEncoded<A>,
         ) => {
             const steps = stepsOf(
                 select(
@@ -4048,7 +4073,8 @@ const objectFromMap = <
                         TermPath<
                             [[ObjectTermOf<Spec, Rest>, []]],
                             T,
-                            ItemFrontier<T, Spec, Rest>
+                            ItemFrontier<T, Spec, Rest>,
+                            true
                         >
                     >(),
                 ),
@@ -4103,7 +4129,7 @@ const objectFromMap = <
             const here = walk()
 
             return {
-                ...(here as AttributeCodec<X>),
+                ...(here as AttributeCodec<X, A>),
                 path: () => path,
                 segments,
                 preconditions: preconditionsOf(steps),
