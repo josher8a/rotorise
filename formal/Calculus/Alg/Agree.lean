@@ -10,9 +10,8 @@ that two writers of one value write one attribute. **Read agreement** says that 
 one attribute read one value. Over two lawful codecs, `Compat` is exactly the two halves
 (`compat_iff_agree`), so `Compat` is symmetric there.
 
-Each combinator keeps each half: a restriction on either side, a union option by option, a
-recursive codec stage by stage, one adapter over two agreeing stored sides, and a list or an
-object position by position. The soundness of the decision `Scoped.compatPair` reads these lemmas, one per row.
+Each combinator keeps each half: a restriction on either side, a union option by option, one
+adapter over two agreeing stored sides, and a list or an object position by position. The soundness of the decision `Scoped.compatPair` reads these lemmas, one per row.
 -/
 
 namespace Calculus.Alg
@@ -84,23 +83,6 @@ theorem agree_alt_right {o : Orient} {os : List (Codec V M)} {μ : Option M} {c 
     (h : ∀ d ∈ os, Agree o c d) : Agree o c (altCodec os μ) := fun x y z hy hz =>
   let ⟨d, hd, _, hdz⟩ := altCodec_admits hz
   h d hd x y z hy hdz
-
-/-- **Two recursive codecs agree where their stages agree**: each input reads the stage of its
-    own depth, at each orientation. -/
-theorem agree_mu {o : Orient} {depth : V → Nat} {B B' : Codec V M → Codec V M}
-    (h : ∀ n, Agree o (muStage B n) (muStage B' n)) :
-    Agree o (muCodec depth B) (muCodec depth B') :=
-  fun x => h (depth x) x
-
-/-- …and a recursive codec agrees with a partner that every stage agrees with. -/
-theorem agree_mu_left {o : Orient} {depth : V → Nat} {B : Codec V M → Codec V M}
-    {d : Codec V M} (h : ∀ n, Agree o (muStage B n) d) : Agree o (muCodec depth B) d :=
-  fun x => h (depth x) x
-
-/-- …on the right. -/
-theorem agree_mu_right {o : Orient} {depth : V → Nat} {B : Codec V M → Codec V M}
-    {c : Codec V M} (h : ∀ n, Agree o c (muStage B n)) : Agree o c (muCodec depth B) :=
-  fun x => h (depth x) x
 
 /-- Two carried codecs over one prism agree at an orientation where their payload maps agree
     there. -/
@@ -213,10 +195,7 @@ def IsJoin (os : List (Codec V M)) (j : Codec V M) : Prop :=
 /-- Under agreement at `o`, the first admitter answers what any admitter answers. -/
 theorem select_eq_join {o : Orient} {os : List (Codec V M)} (h : PAgree o os) (x y : V) :
     select os (·.f o) x = some y ↔ ∃ c ∈ os, c.f o x = some y :=
-  ⟨fun hs => let ⟨c, hc, _, hy⟩ := select_admits hs; ⟨c, hc, hy⟩, fun ⟨c, hc, hy⟩ =>
-    let ⟨c', hf⟩ := find?_attempt o hc hy
-    let ⟨y', hy'⟩ := Option.isSome_iff_exists.mp (acts_of_find? o hf)
-    (h c hc c' (List.mem_of_find?_eq_some hf) x y y' hy hy') ▸ select_eq_some.mpr ⟨c', hf, hy'⟩⟩
+  select_eq_join_at (fun c hc d hd => h c hc d hd x) y
 
 /-- **Order is unobservable** at `o` under agreement at `o`. -/
 theorem select_perm {o : Orient} {os os' : List (Codec V M)} (hp : os.Perm os')
@@ -243,9 +222,8 @@ theorem altCodec_mono {o : Orient} {os os' : List (Codec V M)} {μ μ' : Option 
     (hs : ∀ c ∈ os, ∃ c' ∈ os', ∀ x y, c.f o x = some y → c'.f o x = some y)
     (h' : PAgree o os') {x y : V} (hy : (altCodec os μ).f o x = some y) :
     (altCodec os' μ').f o x = some y :=
-  let ⟨c, hc, _, hcy⟩ := altCodec_admits hy
-  let ⟨c', hc', hsub⟩ := hs c hc
-  (select_eq_join h' x y).mpr ⟨c', hc', hsub x y hcy⟩
+  select_mono_at (fun c hc => let ⟨c', h1, h2⟩ := hs c hc; ⟨c', h1, h2 x⟩)
+    (fun c hc d hd => h' c hc d hd x) hy
 
 /-- `union(c₁ … cₙ) = union(c_σ(1) … c_σ(n))`, **on the nose**, over pairwise agreeing options. -/
 theorem altCodec_perm {os os' : List (Codec V M)} (h : os.Perm os') (μA : Option M)

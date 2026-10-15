@@ -61,7 +61,7 @@ instance, and JSON is a second instance.
 | `Alg/Codec.lean` | the record `Codec` and its laws `Lawful` and `LawfulCore`, over the carrier `V` and the members `M` |
 | `Alg/Combinators.lean`, `Alg/Relations.lean` | the combinators, the union computed by the first admitter, the order, the equivalence, `Compat`, `Canon` and `Sub` |
 | `Alg/Lists.lean`, `Alg/Positions.lean`, `Alg/Maps.lean` | the traversal and `entrywise`, the positional theory, the image of a function over a key set, and `MapOf`, which keeps the namespace `Calculus`, with the union of two records `MapOf.union` and the product of two sums of records `MapOf.prod` |
-| `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, the pairing `objAt_union` of two closed objects, and `muCodec` over two depth functions |
+| `Alg/Containers.lean`, `Alg/Recursion.lean` | `listCodec` and `objectCodec` over prisms, the pairing `objAt_union` of two closed objects, and `AgreeLe` over one depth function |
 | `Alg/Agree.lean` | agreement `Agree` at an orientation, whose two halves are the host and the dual, one lemma per combinator, `compat_iff_agree`, and the join law of a union `altCodec_eq_join` |
 | `Lang/Term.lean` | the signature `Sig`, the syntax `Syn`, the meaning `Mean`, and the tables of adapters |
 | `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, and the flat scope with `scope_solution` |

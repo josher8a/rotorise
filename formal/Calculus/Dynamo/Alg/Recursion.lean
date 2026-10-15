@@ -3,21 +3,14 @@ import Calculus.Alg.Recursion
 import Mathlib.Data.Finset.Lattice.Fold
 
 /-!
-# Guarded recursion
+# Agreement below a depth
 
-A recursive codec is the limit of its stages. A **body** `B : Codec → Codec` builds one stage
-from the one before, and the stages start at `Codec.empty`. The limit reads each input at the
-stage its own depth names, `Attr.depth`, at both orientations.
-The budget is a structural recursion on the input, so a closed term still reduces by `rfl`.
+The solution of a system reads each input at the stage that the depth of the input names,
+`Attr.depth`, at both orientations. The budget is a structural recursion on the input, so a closed
+term still reduces by `rfl`.
 
-The one premise is `Contractive`: the body reads its argument only at inputs strictly shallower
-than its own input. A container gives that, because an element is one layer below its container.
-From it alone the stages agree past the depth of the input (`muStage_agree`), the limit is a
-fixed point of the body (`muCodec_fix`), and lawful stages give a lawful limit
-(`lawful_muCodec`). No option of the body has to be disjoint from another for these three.
-
-`muCodec` is entry 0 of the system of one entry (`Alg.solve_one`), so a closed codec of one
-entry that reads itself denotes `muCodec` of its body.
+A container reads its element codecs one layer down, because an element is one layer below its
+container. So a container turns agreement below `d` into agreement below `d + 1`.
 -/
 
 namespace Calculus
@@ -60,8 +53,8 @@ theorem Attr.depth_map_entry {keys : Finset Name} {f : {k // k ∈ keys} → Att
 
 /-! ## Agreement below a depth
 
-Agreement, the guard, the recursive codec and its laws read the universe only through one depth
-on the carrier, so they are the generic layer's. Here they sit at `Attr.depth`.
+Agreement reads the universe only through one depth on the carrier, so it is the generic
+layer's. Here it sits at `Attr.depth`.
 The aliases give the names that callers write in full; field notation (`h.mono`, `h.trans`)
 reaches the generic lemmas through the abbreviation. -/
 
@@ -75,32 +68,7 @@ theorem zero (c₁ c₂ : Codec) : AgreeLe 0 c₁ c₂ :=
 
 end AgreeLe
 
-/-! ## The construct -/
-
-/-- **The guard, on a body.** The body reads its argument only at inputs strictly shallower than
-    its own input, on both sides. -/
-abbrev Contractive (B : Codec → Codec) : Prop := Alg.Contractive Attr.depth B
-
-export Alg (muStage muStage_induct carrier_muCodec agreeLe_altCodec)
-
-/-- **The recursive codec**: each input read at the stage its own depth names. -/
-abbrev muCodec (B : Codec → Codec) : Codec := Alg.muCodec Attr.depth B
-
-/-- **Stability.** Past the depth of the input, a later stage changes nothing. -/
-theorem muStage_agree {B : Codec → Codec} (hB : Contractive B) {d : Nat} :
-    ∀ k, AgreeLe d (muStage B d) (muStage B (d + k)) :=
-  Alg.muStage_agree Attr.depth_pos hB
-
-/-- **The fixed point.** The limit sends what its body sends over the limit, at each
-    orientation. -/
-theorem muCodec_fix {B : Codec → Codec} (hB : Contractive B) (o : Alg.Orient)
-    (x : Value) : (muCodec B).f o x = (B (muCodec B)).f o x :=
-  Alg.muCodec_fix Attr.depth_pos hB o x
-
-/-- **Lawful stages give a lawful limit.** -/
-theorem lawful_muCodec {B : Codec → Codec} (hB : Contractive B)
-    (hs : ∀ n, Lawful (muStage B n)) : Lawful (muCodec B) :=
-  Alg.lawful_muCodec Attr.depth_pos hB hs
+export Alg (agreeLe_altCodec)
 
 /-! ## The combinators keep agreement
 

@@ -7,7 +7,7 @@ import Mathlib.Data.Finset.Lattice.Fold
 # Systems of recursive codecs, over any carriers
 
 A system has `n` entries. Each entry is a body that reads every entry. The solution reads each
-input at the stage that the depth of the input names, as `muCodec` does. The guard is
+input at the stage that the depth of the input names. The guard is
 `ContractiveV`: agreement below `d` at every entry gives agreement below `d + 1`. Under the guard
 the solution is the one fixed point at the maps, and lawful stages give a lawful solution.
 
@@ -318,18 +318,10 @@ theorem swap_refused (S : Container) :
     ¬ ∀ i, ((fun i => .leaf (Fin.rev i)) : Fin 2 → Flat S.Op S.Pos 2) i |>.Guarded S :=
   fun h => h 0
 
-/-! ## `muCodec` is a system of one entry -/
+/-! ## An entry of the solution is fixed by its map -/
 
 section OneEntry
 variable {V M : Type} {depth : V → Nat}
-
-/-- The stages of a one-entry system are the stages of its body. -/
-theorem sysStage_one (F : Codec V M → Codec V M) :
-    ∀ k, sysStage (fun env (_ : Fin 1) => F (env 0)) k 0 = muStage F k
-  | 0 => rfl
-  | k + 1 => by
-      show F (sysStage _ k 0) = F (muStage F k)
-      rw [sysStage_one F k]
 
 /-- A codec whose held set is its write domain and whose member is `⊤` is fixed by its map. -/
 theorem solve_eq {n : Nat} {B : (Fin n → Codec V M) → Fin n → Codec V M} {i : Fin n}
@@ -341,57 +333,6 @@ theorem solve_eq {n : Nat} {B : (Fin n → Codec V M) → Fin n → Codec V M} {
   have hT' : T = fun v => ((f Orient.host v).isSome = true) := funext hT
   subst hT' hf
   rfl
-
-/-- **`muCodec` is entry 0 of the one-entry system**, with no hypothesis. -/
-theorem solve_one (F : Codec V M → Codec V M) :
-    solve depth (fun env (_ : Fin 1) => F (env 0)) 0 = muCodec depth F :=
-  solve_eq (fun _ => rfl) rfl (funext fun o => funext fun x => by
-    show (sysStage _ (depth x) 0).f o x = (muStage F (depth x)).f o x
-    rw [sysStage_one])
-
-/-! ## Bekić for a pair: a `muCodec` inside a `muCodec` is a two-entry system. -/
-
-/-- The two-entry system `X = F X Y`, `Y = G X Y`. -/
-def pairB (F G : Codec V M → Codec V M → Codec V M) :
-    (Fin 2 → Codec V M) → Fin 2 → Codec V M :=
-  fun e i => match i with
-    | ⟨0, _⟩ => F (e 0) (e 1)
-    | ⟨_ + 1, _⟩ => G (e 0) (e 1)
-
-/-- Contractive in both arguments. -/
-def Contractive2 (depth : V → Nat) (F : Codec V M → Codec V M → Codec V M) : Prop :=
-  ∀ d x₁ x₂ y₁ y₂, AgreeLe depth d x₁ x₂ → AgreeLe depth d y₁ y₂ →
-    AgreeLe depth (d + 1) (F x₁ y₁) (F x₂ y₂)
-
-/-- Two bodies that are contractive in both arguments give a contractive pair system. -/
-theorem pairB_contractive {F G : Codec V M → Codec V M → Codec V M}
-    (hF : Contractive2 depth F) (hG : Contractive2 depth G) : ContractiveV depth (pairB F G) :=
-  fun d _ _ he i => match i with
-    | ⟨0, _⟩ => hF d _ _ _ _ (he 0) (he 1)
-    | ⟨1, _⟩ => hG d _ _ _ _ (he 0) (he 1)
-
-/-- **Bekić.** Entry 0 of the pair system is the nested `muCodec`, and entry 1 is the inner
-    `muCodec` at entry 0. -/
-theorem bekic (hd : ∀ v, 0 < depth v) {F G : Codec V M → Codec V M → Codec V M}
-    (hF : Contractive2 depth F) (hG : Contractive2 depth G) :
-    solve depth (pairB F G) 0 = muCodec depth (fun x => F x (muCodec depth (G x))) ∧
-    solve depth (pairB F G) 1 =
-      muCodec depth (G (muCodec depth (fun x => F x (muCodec depth (G x))))) := by
-  have hA : Contractive depth (fun x => F x (muCodec depth (G x))) := fun d x₁ x₂ hx =>
-    hF d _ _ _ _ hx (agreeLe_muCodec fun c₁ c₂ hc => (hG d _ _ _ _ hx hc).mono (by omega))
-  have hGA : ∀ x, Contractive depth (G x) := fun x d c₁ c₂ hc =>
-    hG d _ _ _ _ (AgreeLe.refl _ _) hc
-  let A := muCodec depth (fun x => F x (muCodec depth (G x)))
-  let e : Fin 2 → Codec V M := fun i => match i with
-    | ⟨0, _⟩ => A
-    | ⟨_ + 1, _⟩ => muCodec depth (G A)
-  have he : ∀ i o x, (e i).f o x = (pairB F G e i).f o x := fun i o x => match i with
-    | ⟨0, _⟩ => muCodec_fix hd hA o x
-    | ⟨1, _⟩ => muCodec_fix hd (hGA A) o x
-  have hf : ∀ i, (solve depth (pairB F G) i).f = (e i).f := fun i =>
-    (solve_fusion hd (pairB_contractive hF hG) id (fun _ _ h => h) (fun _ _ => rfl)
-      (fun i => funext fun o => funext fun x => he i o x) i).symm
-  exact ⟨solve_eq (fun _ => rfl) rfl (hf 0), solve_eq (fun _ => rfl) rfl (hf 1)⟩
 
 end OneEntry
 
@@ -477,6 +418,16 @@ theorem join_flat (os ps qs : List (Codec V M)) (μ μ' : Option M) :
     · exact ⟨c, Or.inl hc, hT⟩
     · exact ⟨_, Or.inr (Or.inl rfl), c, hc, hT⟩
     · exact ⟨c, Or.inr (Or.inr hc), hT⟩
+
+/-- A nested union sends as the flat union, at each orientation. -/
+theorem altCodec_nest (o₁ o₂ o₃ : Codec V M) (μ μ' μf : Option M) {o : Orient} (x : V) :
+    (altCodec [o₁, (altCodec [o₂, o₃] μ')] μ).f o x = (altCodec [o₁, o₂, o₃] μf).f o x := by
+  rw [show [o₁, altCodec [o₂, o₃] μ'] = [o₁] ++ altCodec [o₂, o₃] μ' :: [] from rfl, join_flat]; rfl
+
+/-- The held sets coincide. Nesting a union changes how it resolves, never what it holds. -/
+theorem altCodec_assoc_heldSet (o₁ o₂ o₃ : Codec V M) (μa μb : Option M) (v : V) :
+    (altCodec [o₁, (altCodec [o₂, o₃] μb)] μa).T v ↔ (altCodec [o₁, o₂, o₃] μa).T v := by
+  rw [show [o₁, altCodec [o₂, o₃] μb] = [o₁] ++ altCodec [o₂, o₃] μb :: [] from rfl, join_flat]; rfl
 
 /-! ## The join and the restriction add no depth
 

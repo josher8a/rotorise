@@ -16,42 +16,11 @@ namespace Calculus
 
 variable {α : Type}
 
-/-- A row that admits at least what another row admits. -/
-def RowLe (P Q : α → Bool) : Prop := ∀ x, P x = true → Q x = true
-
-/-- `⋀` over a container's elements. -/
-def allP (P : α → Bool) : List α → Bool
-  | [] => true
-  | x :: xs => P x && allP P xs
-
-/-- `⋁` over a union's options. -/
-def anyP : List (α → Bool) → α → Bool
-  | [], _ => false
-  | P :: Ps, v => P v || anyP Ps v
-
-/-- `align`'s row: the same length discipline — fixed head positionally, tail uniformly, a
-    mismatch refused — asked of the rows rather than of the codecs. -/
-def alignP : List (α → Bool) → Option (α → Bool) → List α → Bool
-  | [], none, [] => true
-  | [], none, _ :: _ => false
-  | [], some _, [] => true
-  | [], some P, v :: vs => P v && alignP [] (some P) vs
-  | _ :: _, _, [] => false
-  | P :: Ps, tail, v :: vs => P v && alignP Ps tail vs
-
 /-- The suffix's row: position for position, and a length mismatch refused. -/
 def zipP : List (α → Bool) → List α → Bool
   | [], [] => true
   | P :: Ps, v :: vs => P v && zipP Ps vs
   | _, _ => false
-
-/-- `alignL`'s row: the suffix splits off the right end, and what is left is `alignP`'s
-    prefix-and-spread. A row shorter than the suffix takes `0` off the end, and `zipP`
-    refuses it on the length, so no guard is owed. -/
-def alignPL (pre : List (α → Bool)) (sp : Option (α → Bool)) (suf : List (α → Bool))
-    (vs : List α) : Bool :=
-  alignP pre sp (vs.take (vs.length - suf.length))
-    && zipP suf (vs.drop (vs.length - suf.length))
 
 /-- A suffix row that holds pins the length. -/
 theorem zipP_length : ∀ (Ps : List (α → Bool)) (vs : List α),
@@ -77,110 +46,6 @@ theorem zipP_append : ∀ (a₁ b₁ : List (α → Bool)) (a₂ b₂ : List α)
   | P :: Ps, b₁, v :: vs, b₂, h => by
       simp only [List.cons_append, zipP, zipP_append Ps b₁ vs b₂ (by simpa using h)]
       exact (Bool.and_assoc _ _ _).symm
-
-/-- With no spread, `alignP` IS the positionwise row: both refuse a length mismatch. -/
-theorem alignP_none_eq_zipP : ∀ (pre : List (α → Bool)) (ws : List α),
-    alignP pre none ws = zipP pre ws
-  | [], [] => rfl
-  | [], _ :: _ => rfl
-  | _ :: _, [] => rfl
-  | _ :: Ps, _ :: vs => by simp only [alignP, zipP, alignP_none_eq_zipP Ps vs]
-
-/-- A spread pads the row out to the value's length. -/
-theorem alignP_some_eq_zipP : ∀ (pre : List (α → Bool)) (c : α → Bool) (ws : List α),
-    pre.length ≤ ws.length →
-    alignP pre (some c) ws = zipP (pre ++ List.replicate (ws.length - pre.length) c) ws
-  | [], _, [], _ => rfl
-  | [], c, _ :: vs, _ => by
-      have ih := alignP_some_eq_zipP [] c vs (Nat.zero_le _)
-      simp only [List.length_nil, Nat.sub_zero, List.nil_append] at ih ⊢
-      simp only [alignP, List.length_cons, List.replicate_succ, zipP, ih]
-  | _ :: _, _, [], h => by simp at h
-  | _ :: Ps, c, _ :: vs, h => by
-      have ih := alignP_some_eq_zipP Ps c vs (by simpa using h)
-      simp only [alignP, List.cons_append, zipP, List.length_cons, Nat.succ_sub_succ_eq_sub, ih]
-
-/-- …and refuses a row shorter than its declared positions. -/
-theorem alignP_short : ∀ (pre : List (α → Bool)) (sp : Option (α → Bool)) (ws : List α),
-    ws.length < pre.length → alignP pre sp ws = false
-  | [], _, _, h => by simp at h
-  | _ :: _, sp, [], _ => by cases sp <;> rfl
-  | _ :: Ps, sp, _ :: vs, h => by
-      simp only [alignP, alignP_short Ps sp vs (by simpa using h), Bool.and_false]
-
-/-- The spread row, split at the suffix. Stated over an explicit split so no rewrite has to
-    reach inside a length. -/
-theorem zipP_row_split (pre suf : List (α → Bool)) (c : α → Bool) (V B : List α)
-    (hB : B.length = suf.length) (hA : pre.length ≤ V.length) :
-    (zipP (pre ++ List.replicate (V.length - pre.length) c) V && zipP suf B)
-      = zipP (pre ++ List.replicate ((V ++ B).length - pre.length - suf.length) c ++ suf)
-          (V ++ B) := by
-  have hcount : (V ++ B).length - pre.length - suf.length = V.length - pre.length := by
-    simp only [List.length_append, hB]; omega
-  rw [hcount, zipP_append _ _ _ _
-      (by simp only [List.length_append, List.length_replicate]; omega)]
-
-/-- The fixed positions and the spread of a list admit more when each row admits more. -/
-theorem alignP_mono {Ps Qs : List (α → Bool)} {sp sq : Option (α → Bool)}
-    (hPQ : List.Forall₂ RowLe Ps Qs) (hs : Option.Rel RowLe sp sq) :
-    ∀ vs, alignP Ps sp vs = true → alignP Qs sq vs = true := by
-  induction hPQ with
-  | nil =>
-    cases hs with
-    | none => exact fun _ h => h
-    | some hr =>
-      intro vs h
-      induction vs with
-      | nil => rfl
-      | cons v vs ih =>
-        simp only [alignP, Bool.and_eq_true] at h ⊢
-        exact ⟨hr _ h.1, ih h.2⟩
-  | cons hr _ ih =>
-    intro vs h
-    cases vs with
-    | nil => simp [alignP] at h
-    | cons v vs =>
-      simp only [alignP, Bool.and_eq_true] at h ⊢
-      exact ⟨hr _ h.1, ih vs h.2⟩
-
-/-- The suffix of a list admits more when each row admits more. -/
-theorem zipP_mono {Ps Qs : List (α → Bool)} (hPQ : List.Forall₂ RowLe Ps Qs) :
-    ∀ vs, zipP Ps vs = true → zipP Qs vs = true := by
-  induction hPQ with
-  | nil => exact fun _ h => h
-  | cons hr _ ih =>
-    intro vs h
-    cases vs with
-    | nil => simp [zipP] at h
-    | cons v vs =>
-      simp only [zipP, Bool.and_eq_true] at h ⊢
-      exact ⟨hr _ h.1, ih vs h.2⟩
-
-/-- A list admits more when each row admits more. -/
-theorem alignPL_mono {Ps Qs Ss Ts : List (α → Bool)} {sp sq : Option (α → Bool)}
-    (hPQ : List.Forall₂ RowLe Ps Qs) (hs : Option.Rel RowLe sp sq)
-    (hST : List.Forall₂ RowLe Ss Ts) (vs : List α) (h : alignPL Ps sp Ss vs = true) :
-    alignPL Qs sq Ts vs = true := by
-  unfold alignPL at h ⊢
-  rw [← hST.length_eq]
-  simp only [Bool.and_eq_true] at h ⊢
-  exact ⟨alignP_mono hPQ hs _ h.1, zipP_mono hST _ h.2⟩
-
-/-- A union of rows over wider rows admits where the narrower union admits. -/
-theorem anyP_mono : ∀ {Ps Qs : List (α → Bool)}, List.Forall₂ RowLe Ps Qs →
-    ∀ x, anyP Ps x = true → anyP Qs x = true
-  | [], [], .nil, _, h => h
-  | _ :: _, _ :: _, .cons hPQ hr, x, h => by
-      simp only [anyP, Bool.or_eq_true] at h ⊢
-      exact h.imp (hPQ x) (anyP_mono hr x)
-
-/-- A list with no prefix and no suffix admits a value when the spread admits each element. -/
-theorem alignPL_spread (P : α → Bool) (vs : List α) :
-    alignPL [] (some P) [] vs = decide (∀ x ∈ vs, P x = true) := by
-  simp only [alignPL, List.length_nil, Nat.sub_zero, List.take_length, List.drop_length, zipP, Bool.and_true]
-  induction vs with
-  | nil => rfl
-  | cons x xs ih => simp [alignP, ih]
 
 /-! ## The row of a `list` shape
 
@@ -210,57 +75,6 @@ def rowOfG {α : Type} (pre : List α) (sp : Option α) (suf : List α) (n : Nat
     the other's (`dominates_max`). There every common length re-spreads that one row. -/
 def dominates (p₁ s₁ p₂ s₂ : Nat) : Bool :=
   (decide (p₂ ≤ p₁) && decide (s₂ ≤ s₁)) || (decide (p₁ ≤ p₂) && decide (s₁ ≤ s₂))
-
-/-- **`alignPL` is its row, applied position for position.** This is `align_eq_zip` one level
-    down, and it is what lets a proof reason about two shapes by reasoning about their rows
-    at one length: the admission of a `list` at a value of length `n` is the admission of the
-    row `rowOfG` assigns to `n`, position by position. -/
-theorem alignPL_eq_rowOfG {α : Type} (pre : List (α → Bool)) (sp : Option (α → Bool))
-    (suf : List (α → Bool)) (ws : List α) :
-    alignPL pre sp suf ws
-      = match rowOfG pre sp suf ws.length with
-        | none => false
-        | some row => zipP row ws := by
-  have htl : (ws.take (ws.length - suf.length)).length = ws.length - suf.length := by
-    simp only [List.length_take]; omega
-  unfold alignPL
-  rcases Nat.lt_or_ge ws.length (pre.length + suf.length) with hlt | hge
-  · have hrow : rowOfG pre sp suf ws.length = none := by
-      cases sp with
-      | none => simp only [rowOfG]; rw [if_neg (by omega)]
-      | some c => simp only [rowOfG]; rw [if_pos (by omega)]
-    rw [hrow]
-    rcases Nat.lt_or_ge ws.length suf.length with hs | hs
-    · rw [zipP_false_of_length_ne _ _ (by simp only [List.length_drop]; omega), Bool.and_false]
-    · rw [alignP_short _ _ _ (by omega), Bool.false_and]
-  · have hdl : (ws.drop (ws.length - suf.length)).length = suf.length := by
-      simp only [List.length_drop]; omega
-    have hAB : ws.take (ws.length - suf.length) ++ ws.drop (ws.length - suf.length) = ws :=
-      List.take_append_drop _ _
-    cases sp with
-    | none =>
-        rw [alignP_none_eq_zipP]
-        simp only [rowOfG]
-        rcases Nat.eq_or_lt_of_le hge with heq | hlt2
-        · rw [if_pos heq.symm]
-          show _ = zipP (pre ++ suf) ws
-          have hz := (zipP_append pre suf (ws.take (ws.length - suf.length))
-            (ws.drop (ws.length - suf.length)) (by omega)).symm
-          rw [hAB] at hz
-          exact hz
-        · rw [if_neg (by omega)]
-          show _ = false
-          rw [zipP_false_of_length_ne _ _ (by omega), Bool.false_and]
-    | some c =>
-        rw [alignP_some_eq_zipP _ _ _ (by omega)]
-        simp only [rowOfG]
-        rw [if_neg (by omega)]
-        show _ = zipP (pre ++ List.replicate (ws.length - pre.length - suf.length) c ++ suf) ws
-        have hz := zipP_row_split pre suf c (ws.take (ws.length - suf.length))
-          (ws.drop (ws.length - suf.length)) hdl (by omega)
-        rw [hAB] at hz
-        exact hz
-
 
 /-- A row the shape accepts has exactly the length asked of it. -/
 theorem rowOfG_length {α : Type} {pre : List α} {sp : Option α} {suf : List α} {n row}

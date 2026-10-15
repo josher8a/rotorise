@@ -61,19 +61,6 @@ theorem sub_empty {u : Codec V M} : Sub Codec.empty u :=
 /-- The growing option, before unfolding: undefined everywhere. -/
 def optBot : Codec V M := Codec.empty
 
-/-- The stage `n` of the body `B`: `n` applications of `B` to `Codec.empty`. A structural
-    recursion on `n`, so a stage at a numeral reduces by `rfl`. -/
-def muStage (B : Codec V M → Codec V M) : Nat → Codec V M
-  | 0 => .empty
-  | n + 1 => B (muStage B n)
-
-/-- A property that `Codec.empty` has and that each application of the body keeps holds at
-    every stage. -/
-theorem muStage_induct {B : Codec V M → Codec V M} {P : Codec V M → Prop} (h0 : P .empty)
-    (hs : ∀ c, P c → P (B c)) : ∀ n, P (muStage B n)
-  | 0 => h0
-  | n + 1 => hs _ (muStage_induct h0 hs n)
-
 /-! ### First-match resolution under the obligation
 
 The definition takes the first admitter and never compares attributes, so no `DecidableEq`
@@ -98,34 +85,57 @@ theorem selectF_skip {o : Codec V M} {os : List (Codec V M)} {v : V}
     (h : (o.e v).isSome = false) : selectF (o :: os) v = selectF os v := by
   simp [selectF, select, List.find?, h]
 
-/-- **Monotonicity.** Stated with the growing option first — the
-    only position where growth can change the answer, since grown second the earlier admitter
-    answers throughout. Confluence is used in exactly one of the three cases: where growth newly
-    admits at a value another option was already answering. -/
+/-- A family has a first option that answers at the orientation `o`, wherever one of its options
+    answers there. -/
+theorem find?_attempt (o : Orient) {os : List (Codec V M)} {c : Codec V M} {x y}
+    (hc : c ∈ os) (h : c.f o x = some y) :
+    ∃ c', os.find? (fun d => (d.f o x).isSome) = some c' :=
+  Option.isSome_iff_exists.mp (List.find?_isSome.mpr ⟨c, hc, by simp [h]⟩)
+
+/-- The first option that answers at the orientation `o` answers. -/
+theorem acts_of_find? (o : Orient) {os : List (Codec V M)} {c : Codec V M} {x}
+    (hf : os.find? (fun d => (d.f o x).isSome) = some c) : (c.f o x).isSome = true :=
+  List.find?_some (p := fun d : Codec V M => (d.f o x).isSome) hf
+
+/-- **Pointwise agreement** of a family at the orientation `o` and the input `x`: two options that
+    answer at `x` give one output. -/
+def PAgreeAt (o : Orient) (os : List (Codec V M)) (x : V) : Prop :=
+  ∀ c ∈ os, ∀ d ∈ os, ∀ y z, c.f o x = some y → d.f o x = some z → y = z
+
+/-- **The first admitter answers what any admitter answers**, under agreement at the input. -/
+theorem select_eq_join_at {o : Orient} {os : List (Codec V M)} {x : V} (h : PAgreeAt o os x)
+    (y : V) : select os (·.f o) x = some y ↔ ∃ c ∈ os, c.f o x = some y :=
+  ⟨fun hs => let ⟨c, hc, _, hy⟩ := select_admits hs; ⟨c, hc, hy⟩, fun ⟨c, hc, hy⟩ =>
+    let ⟨c', hf⟩ := find?_attempt o hc hy
+    let ⟨y', hy'⟩ := Option.isSome_iff_exists.mp (acts_of_find? o hf)
+    (h c hc c' (List.mem_of_find?_eq_some hf) y y' hy hy') ▸ select_eq_some.mpr ⟨c', hf, hy'⟩⟩
+
+/-- **The first match is monotone at one input**: grow each option into an option of an agreeing
+    family, and the answer stays. -/
+theorem select_mono_at {o : Orient} {os os' : List (Codec V M)} {x y : V}
+    (hs : ∀ c ∈ os, ∃ c' ∈ os', ∀ y, c.f o x = some y → c'.f o x = some y)
+    (h' : PAgreeAt o os' x) (hy : select os (·.f o) x = some y) : select os' (·.f o) x = some y :=
+  let ⟨c, hc, _, hcy⟩ := select_admits hy
+  let ⟨c', hc', hsub⟩ := hs c hc
+  (select_eq_join_at h' y).mpr ⟨c', hc', hsub y hcy⟩
+
+/-- **The obligation is pointwise agreement at the host.** -/
+theorem confluentAt_iff {os : List (Codec V M)} {v : V} : ConfluentAt os v ↔ PAgreeAt .host os v :=
+  ⟨fun h c hc d hd y z hy hz => Option.some_inj.mp (hy ▸ hz ▸ h c hc d hd (by simp [hy]) (by simp [hz])),
+   fun h c hc d hd hcs hds => by
+     obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp hcs
+     obtain ⟨z, hz⟩ := Option.isSome_iff_exists.mp hds
+     rw [hy, hz, h c hc d hd y z hy hz]⟩
+
+/-- **Monotonicity**, with the growing option first. -/
 theorem selectF_mono {o₁ o₁' o₂ : Codec V M} {v : V} {a : V}
     (hap : Sub o₁ o₁')
     (hc : ConfluentAt [o₁', o₂] v)
-    (h : selectF [o₁, o₂] v = some a) : selectF [o₁', o₂] v = some a := by
-  have hadm : (o₁.e v).isSome = true → (o₁'.e v).isSome = true := fun h1 =>
-    let ⟨b, hb⟩ := Option.isSome_iff_exists.mp h1
-    Option.isSome_iff_exists.mpr ⟨b, hap .host _ _ hb⟩
-  cases h1' : (o₁'.e v).isSome with
-  | false =>
-    have h1 : (o₁.e v).isSome = false := by
-      cases h1 : (o₁.e v).isSome with
-      | true => rw [hadm h1] at h1'; exact nomatch h1'
-      | false => rfl
-    rw [selectF_skip h1']; rw [selectF_skip h1] at h; exact h
-  | true =>
-    cases h1 : (o₁.e v).isSome with
-    | true => rw [selectF_admit h1']; rw [selectF_admit h1] at h; exact hap .host _ _ h
-    | false =>
-      rw [selectF_admit h1']; rw [selectF_skip h1] at h
-      cases h2 : (o₂.e v).isSome with
-      | false => rw [selectF_skip h2] at h; exact nomatch h
-      | true =>
-        rw [selectF_admit h2] at h
-        rw [hc o₁' (by simp) o₂ (by simp) h1' h2]; exact h
+    (h : selectF [o₁, o₂] v = some a) : selectF [o₁', o₂] v = some a :=
+  select_mono_at (fun c hc => by
+    rcases List.mem_cons.mp hc with rfl | hc
+    · exact ⟨o₁', by simp, fun y => hap .host _ _⟩
+    · exact ⟨c, by simp_all, fun _ h => h⟩) (confluentAt_iff.mp hc) h
 
 /-- Directed continuity, stated **without constructing sups**: this file defines the order `Sub`
     and deliberately no ccpo. `oω` is an upper bound that is *least at `v`*: every answer
@@ -160,54 +170,21 @@ theorem selectF_continuous {f : Nat → Codec V M} {oω o₂ : Codec V M} {v : V
       | false => rfl
     rw [selectF_skip h0]; rw [selectF_skip hω] at h; exact h
 
-/-- Confluence is inherited by a tail. -/
-theorem ConfluentAt.tail {o : Codec V M} {os : List (Codec V M)} {v : V}
-    (h : ConfluentAt (o :: os) v) : ConfluentAt os v :=
-  fun a ha b hb => h a (by simp [ha]) b (by simp [hb])
-
-/-- The answer `selectF` gives comes from a member that admits. -/
-theorem selectF_mem : ∀ {os : List (Codec V M)} {v : V} {a : V},
-    selectF os v = some a → ∃ o ∈ os, (o.e v).isSome = true ∧ o.e v = some a
-  | [], _, _, h => absurd h (by simp [selectF, select])
-  | o :: os, v, a, h => by
-      cases ho : (o.e v).isSome with
-      | true => exact ⟨o, by simp, ho, by rw [selectF_admit ho] at h; exact h⟩
-      | false =>
-        rw [selectF_skip ho] at h
-        obtain ⟨o', ho', hadm, he⟩ := selectF_mem h
-        exact ⟨o', by simp [ho'], hadm, he⟩
-
 /-- **Order-independence as a theorem.** Under the obligation, *any* admitter's answer is the
     answer — so the first-match definition does not depend on the order after all. -/
-theorem selectF_of_mem : ∀ {os : List (Codec V M)} {v : V} {o : Codec V M},
-    ConfluentAt os v → o ∈ os → (o.e v).isSome = true → selectF os v = o.e v
-  | [], _, _, _, ho, _ => absurd ho (by simp)
-  | hd :: tl, v, o, hc, ho, hadm => by
-      cases hhd : (hd.e v).isSome with
-      | true =>
-        rw [selectF_admit hhd]
-        exact hc hd (by simp) o (by simp [ho]) hhd hadm
-      | false =>
-        rw [selectF_skip hhd]
-        have hne : o ≠ hd := fun h => by rw [h, hhd] at hadm; exact nomatch hadm
-        exact selectF_of_mem (ConfluentAt.tail hc) (by
-          rcases List.mem_cons.mp ho with rfl | h'
-          · exact absurd rfl hne
-          · exact h') hadm
+theorem selectF_of_mem {os : List (Codec V M)} {v : V} {o : Codec V M}
+    (hc : ConfluentAt os v) (ho : o ∈ os) (hadm : (o.e v).isSome = true) : selectF os v = o.e v := by
+  obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp hadm
+  rw [hy]; exact (select_eq_join_at (confluentAt_iff.mp hc) y).mpr ⟨o, ho, hy⟩
 
-/-- **Monotonicity over an arbitrary option list**, with the growth as a map. Cleaner than the
-    two-option case, because `selectF_of_mem` does the work: the answer comes from *some*
-    admitting member (`selectF_mem`), that member grows to an admitter with the same answer, and
-    under the obligation any admitter's answer is the answer. -/
+/-- **Monotonicity over an arbitrary option list**, with the growth as a map. -/
 theorem selectF_mono_list {os : List (Codec V M)} {g : Codec V M → Codec V M}
     {v : V} {a : V}
     (hap : ∀ o ∈ os, Sub o (g o))
     (hc : ConfluentAt (os.map g) v)
-    (h : selectF os v = some a) : selectF (os.map g) v = some a := by
-  obtain ⟨o, ho, -, hoe⟩ := selectF_mem h
-  have hmem : g o ∈ os.map g := List.mem_map_of_mem ho
-  rw [selectF_of_mem hc hmem (Option.isSome_iff_exists.mpr ⟨a, hap o ho .host _ _ hoe⟩)]
-  exact hap o ho .host _ _ hoe
+    (h : selectF os v = some a) : selectF (os.map g) v = some a :=
+  select_mono_at (fun c hc => ⟨g c, List.mem_map_of_mem hc, fun _ => hap c hc .host _ _⟩)
+    (confluentAt_iff.mp hc) h
 
 /-- **Continuity, in general — and it does need the obligation at each stage.** See the note
     above: `selectF_continuous` escaped it by putting the growing option first. -/
@@ -215,13 +192,10 @@ theorem selectF_continuous_list {os : List (Codec V M)} {F : Nat → Codec V M �
     {v : V} {a : V}
     (hleast : ∀ o ∈ os, ∀ b, o.e v = some b → ∃ i, (F i o).e v = some b)
     (hc : ∀ i, ConfluentAt (os.map (F i)) v)
-    (h : selectF os v = some a) : ∃ i, selectF (os.map (F i)) v = some a := by
-  obtain ⟨o, ho, hoadm, hoe⟩ := selectF_mem h
-  obtain ⟨i, hi⟩ := hleast o ho a hoe
-  refine ⟨i, ?_⟩
-  have hmem : F i o ∈ os.map (F i) := List.mem_map_of_mem ho
-  rw [selectF_of_mem (hc i) hmem (by rw [hi]; rfl)]
-  exact hi
+    (h : selectF os v = some a) : ∃ i, selectF (os.map (F i)) v = some a :=
+  let ⟨o, ho, _, hoe⟩ := select_admits h
+  let ⟨i, hi⟩ := hleast o ho a hoe
+  ⟨i, (select_eq_join_at (confluentAt_iff.mp (hc i)) a).mpr ⟨F i o, List.mem_map_of_mem ho, hi⟩⟩
 
 /-! ## Compatibility -/
 
@@ -237,18 +211,6 @@ theorem Compat.p_agree {c d : Codec V M} (h : Compat c d) {a t w}
     (hc : c.p a = some t) (hd : d.p a = some w) : w = t := by
   have := h a t hc (Or.inl (by rw [hd]; rfl))
   rw [hd] at this; exact Option.some.inj this
-
-/-- A family has a first option that answers at the orientation `o`, wherever one of its options
-    answers there. -/
-theorem find?_attempt (o : Orient) {os : List (Codec V M)} {c : Codec V M} {x y}
-    (hc : c ∈ os) (h : c.f o x = some y) :
-    ∃ c', os.find? (fun d => (d.f o x).isSome) = some c' :=
-  Option.isSome_iff_exists.mp (List.find?_isSome.mpr ⟨c, hc, by simp [h]⟩)
-
-/-- The first option that answers at the orientation `o` answers. -/
-theorem acts_of_find? (o : Orient) {os : List (Codec V M)} {c : Codec V M} {x}
-    (hf : os.find? (fun d => (d.f o x).isSome) = some c) : (c.f o x).isSome = true :=
-  List.find?_some (p := fun d : Codec V M => (d.f o x).isSome) hf
 
 /-- Canonical reads: the codec writes each value that the codec reads at the attribute that
     the codec read. -/
@@ -513,11 +475,7 @@ theorem restrict_μ (c : Codec V M) (q : V → Bool) : (c.restrict q).μ = c.μ 
 theorem extendRead_μ (c : Codec V M) (r : V → Option V) :
     (c.extendRead r).μ = c.μ := rfl
 
-/-! ### Nesting is flattening
-
-A nested union consults the head, then the inner union's first admitter; the flat union
-consults the same options in the same order. So both halves are equal, with no side
-condition. -/
+/-! ### The first match at a cons -/
 
 /-- `select` over no option answers nothing. -/
 theorem select_nil_eq {X Y : Type} (run : Codec V M → X → Option Y) (x : X) :
@@ -528,33 +486,5 @@ theorem select_cons {X Y : Type} (o : Codec V M) (os : List (Codec V M))
     (run : Codec V M → X → Option Y) (x : X) :
     select (o :: os) run x = if (run o x).isSome then run o x else select os run x := by
   unfold select; cases h : (run o x).isSome <;> simp [List.find?, h]
-
-/-- A nested union sends as the flat union, at each orientation. -/
-theorem altCodec_nest (o₁ o₂ o₃ : Codec V M) (μ μ' μf : Option M) {o : Orient}
-    (x : V) :
-    (altCodec [o₁, (altCodec [o₂, o₃] μ')] μ).f o x = (altCodec [o₁, o₂, o₃] μf).f o x := by
-  show select _ _ x = select _ _ x
-  rw [select_cons, select_cons, select_cons, select_nil_eq]
-  show (if _ then _ else if ((select [o₂, o₃] (·.f o) x).isSome) then
-    select [o₂, o₃] (·.f o) x else none) = _
-  cases select [o₂, o₃] (·.f o) x <;> simp
-
-/-- The held sets coincide. Nesting a union changes how it *resolves*, never what it
-    holds — which is why this half needs no side condition at all. -/
-theorem altCodec_assoc_heldSet (o₁ o₂ o₃ : Codec V M) (μa μb : Option M) (v : V) :
-    (altCodec [o₁, (altCodec [o₂, o₃] μb)] μa).T v
-      ↔ (altCodec [o₁, o₂, o₃] μa).T v := by
-  constructor
-  · rintro ⟨x, hx, hT⟩
-    rcases List.mem_cons.mp hx with rfl | hx'
-    · exact ⟨x, List.mem_cons_self, hT⟩
-    · rcases List.mem_cons.mp hx' with rfl | hx''
-      · obtain ⟨y, hy, hTy⟩ := hT
-        exact ⟨y, List.mem_cons_of_mem _ hy, hTy⟩
-      · exact absurd hx'' (by simp)
-  · rintro ⟨x, hx, hT⟩
-    rcases List.mem_cons.mp hx with rfl | hx'
-    · exact ⟨x, List.mem_cons_self, hT⟩
-    · exact ⟨_, List.mem_cons_of_mem _ (List.mem_cons_self), ⟨x, hx', hT⟩⟩
 
 end Calculus.Alg
