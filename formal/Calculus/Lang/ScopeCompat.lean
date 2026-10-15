@@ -150,21 +150,11 @@ theorem agree_of_AgB {c c' : Mean.C S.sig} (h : ∀ k, AgB o (k + 1) c c') : Agr
   fun x => h (Mean.d (B := S.sig) x) x (Nat.lt_succ_self _)
 
 /-- Any two codecs agree below the depth one, because every input has a depth of at least one. -/
-theorem AgB.one (c c' : Mean.C S.sig) : AgB o 1 c c' :=
-  fun x hx => absurd hx (Nat.not_lt.mpr (Mean.d_pos x))
-
-/-- Agreement below a depth holds below each smaller depth. -/
-theorem AgB.mono {k k' : Nat} {c c' : Mean.C S.sig} (hk : k' ≤ k) (h : AgB o k c c') :
-    AgB o k' c c' := fun x hx => h x (by omega)
-
-/-- Agreement below a depth reads the two codecs through their maps only. -/
-theorem AgB.congr {k : Nat} {c c' c₁ c₁' : Mean.C S.sig} (h₁ : c.f = c₁.f) (h₂ : c'.f = c₁'.f)
-    (h : AgB o k c c') : AgB o k c₁ c₁' := fun x hx y z hy hz => by
-  rw [← h₁] at hy; rw [← h₂] at hz; exact h x hx y z hy hz
+theorem AgB.one (c c' : Mean.C S.sig) : AgB o 1 c c' := PW.one (Φ := fun a b => ∀ y z, a = some y → b = some z → y = z) c c'
 
 variable (o) in
 /-- Agreement below a depth is a step-indexed relation. -/
-def AgB.rel : StepRel S := ⟨AgB o, fun _ _ _ hx => absurd hx (Nat.not_lt_zero _), AgB.mono, AgB.congr⟩
+def AgB.rel : StepRel S := ⟨AgB o, PW.zero (Φ := fun a b => ∀ y z, a = some y → b = some z → y = z), PW.mono (Φ := fun a b => ∀ y z, a = some y → b = some z → y = z), PW.congr (Φ := fun a b => ∀ y z, a = some y → b = some z → y = z)⟩
 
 /-- Agreement below a depth is antitone on the left. -/
 theorem AgB.sub_left {k : Nat} {c c₁ X : Mean.C S.sig} (hs : Sub c c₁) (h : AgB o k c₁ X) :
@@ -192,31 +182,16 @@ theorem AgB.alt_right {k m : Nat} {a : Fin m → Mean.C S.sig} {μ : Option (Mea
 
 /-- Two codecs that agree below one more depth give two cut codecs that agree. -/
 theorem agree_trunc {j : Nat} {c c' : Mean.C S.sig} (h : AgB o (j + 1) c c') :
-    Agree o (trunc j c) (trunc j c') := fun x y z hy hz => by
-  simp only [trunc] at hy hz
-  split at hy
-  · next hx =>
-    rw [if_pos hx] at hz
-    exact h x (by omega) y z hy hz
-  · exact nomatch hy
+    Agree o (trunc j c) (trunc j c') :=
+  PW.trunc (Φ := fun a b => ∀ y z, a = some y → b = some z → y = z) (fun _ _ h => nomatch h) h
 
 /-- **A container agrees below one more depth** where its positions, cut at the depth, give two
     agreeing containers: the step reads the positions of a container one layer down. -/
 theorem AgB.down {op op' : TOp S.sig} (hk : op.kind = .down) (hk' : op'.kind = .down)
     {a : op.Pos → Mean.C S.sig} {b : op'.Pos → Mean.C S.sig} {j : Nat}
     (h : Agree o (TOp.run τ op fun p => trunc j (a p)) (TOp.run τ op' fun q => trunc j (b q))) :
-    AgB o (j + 2) (TOp.run τ op a) (TOp.run τ op' b) := by
-  have ha := (TStep_lawful τ).down op hk j a (fun p => trunc j (a p))
-    fun p => (trunc_agree j (a p)).symm
-  have hb := (TStep_lawful τ).down op' hk' j b (fun q => trunc j (b q))
-    fun q => (trunc_agree j (b q)).symm
-  intro x hx y z hy hz
-  have hx' : Mean.d (B := S.sig) x ≤ j + 1 := by omega
-  have e1 : (TOp.run τ op a).f o x = (TOp.run τ op fun p => trunc j (a p)).f o x := ha.f o x hx'
-  have e2 : (TOp.run τ op' b).f o x = (TOp.run τ op' fun q => trunc j (b q)).f o x := hb.f o x hx'
-  rw [e1] at hy
-  rw [e2] at hz
-  exact h x y z hy hz
+    AgB o (j + 2) (TOp.run τ op a) (TOp.run τ op' b) :=
+  PW.down (Φ := fun a b => ∀ y z, a = some y → b = some z → y = z) hk hk' fun v => h v
 
 omit [Sem S] in
 /-- A codec at a position of a list shape is the codec of one position. -/
@@ -416,7 +391,7 @@ theorem rowC_sound (laws : Laws S o)
     simp only [rowC, Bool.or_eq_true] at h
     rcases h with h | h
     · exact AgB.of_agree (cbaseG_sound laws cL cR h)
-    · exact AgB.congr (mng_leaf _ j).symm rfl (hp A _ _ h k hA)
+    · exact (AgB.rel o).congr (mng_leaf _ j).symm rfl (hp A _ _ h k hA)
   | node op a ih =>
     intro y A k h hA
     have base : ∀ y', cbaseG cL.graph cR.graph o (.node op a) y' = true →

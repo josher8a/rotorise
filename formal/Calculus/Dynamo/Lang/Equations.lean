@@ -1,5 +1,6 @@
 import Calculus.Dynamo.Lang.Term
 import Calculus.Dynamo.Alg.Opaque
+import Calculus.Alg.System
 
 /-!
 # Equations
@@ -22,7 +23,7 @@ namespace Calculus
 /-! ## `union` is associative
 
 The row of `≡`, stated outright. Both forms take the first admitter in the same order, so the
-two maps are equal at each orientation (`altCodec_nest`), and the row carries no condition. -/
+two maps are equal at each orientation (`Alg.altCodec_nest`), and the row carries no condition. -/
 
 /-- The member index nests the same way it flattens. Both sides conclude the head member
     or `⊤`, so the content is entirely in whether the condition agrees. -/
@@ -59,10 +60,10 @@ theorem equiv_altCodec_assoc (o₁ o₂ o₃ : Codec) :
       (altCodec [o₁, (altCodec [o₂, o₃] (unanimous [o₂.μ, o₃.μ]))]
         (unanimous [o₁.μ, unanimous [o₂.μ, o₃.μ]]))
       (altCodec [o₁, o₂, o₃] (unanimous [o₁.μ, o₂.μ, o₃.μ])) := by
-  refine ⟨altCodec_assoc_heldSet o₁ o₂ o₃ _ _, unanimous_pair_assoc _ _ _, ?_, ?_⟩
+  refine ⟨Alg.altCodec_assoc_heldSet o₁ o₂ o₃ _ _, unanimous_pair_assoc _ _ _, ?_, ?_⟩
   · intro v a a' hn hf
-    exact Option.some.inj ((hn.symm.trans (altCodec_nest o₁ o₂ o₃ _ _ _ (o := .host) v)).trans hf)
+    exact Option.some.inj ((hn.symm.trans (Alg.altCodec_nest o₁ o₂ o₃ _ _ _ (o := .host) v)).trans hf)
   · intro a v v' hn hf
-    exact Option.some.inj ((hn.symm.trans (altCodec_nest o₁ o₂ o₃ _ _ _ (o := .dual) a)).trans hf)
+    exact Option.some.inj ((hn.symm.trans (Alg.altCodec_nest o₁ o₂ o₃ _ _ _ (o := .dual) a)).trans hf)
 
 end Calculus

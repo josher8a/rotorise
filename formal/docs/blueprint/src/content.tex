@@ -626,14 +626,13 @@ Each refused shape is a graph with no stratified form
 \begin{theorem}[guarded recursion]
 \label{thm:guarded-recursion}
 \uses{rule:scope,cond:R,cond:C,cond:W}
-\lean{Calculus.Alg.solve, Calculus.Alg.contractive_of_guarded, Calculus.Alg.sysStage_agree, Calculus.Alg.solve_fix, Calculus.Alg.lawful_solve, Calculus.Alg.solve_one, Calculus.muCodec_fix}
+\lean{Calculus.Alg.solve, Calculus.Alg.contractive_of_guarded, Calculus.Alg.sysStage_agree, Calculus.Alg.solve_fix, Calculus.Alg.lawful_solve}
 \leanok
 A scope denotes the solution of its system: the stages start at the bottom, and each input reads
 the stage its own depth names, on the write side by the depth of the value and on the read side by the
 depth of the attribute. The guard makes the system contractive: an entry reads the entries only at inputs strictly
 shallower than its own input, at least one layer down. From that alone the stages agree past the depth of the input. The solution is a fixed point of
-the system on both sides, and lawful stages give a lawful solution. No two options of a body need be disjoint. A
-scope of one entry denotes \texttt{muCodec} of its body.
+the system on both sides, and lawful stages give a lawful solution. No two options of a body need be disjoint.
 \end{theorem}
 
 \begin{definition}[(opaque)]

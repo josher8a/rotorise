@@ -446,27 +446,41 @@ structure StepRel (S : Syn) [Sem S] where
   mono : ∀ {k k' c c'}, k' ≤ k → R k c c' → R k' c c'
   congr : ∀ {k c c' c₁ c₁'}, c.f = c₁.f → c'.f = c₁'.f → R k c c' → R k c₁ c₁'
 
+/-- **A pointwise step relation**: the relation `Φ` holds between the two outputs at each datum of
+    a smaller depth, at the orientation. Apartness and agreement below a depth are two instances. -/
+def PW (Φ : Option (Mean.V (B := S.sig)) → Option (Mean.V (B := S.sig)) → Prop) (k : Nat)
+    (c c' : Mean.C S.sig) : Prop :=
+  ∀ v, Mean.d (B := S.sig) v < k → Φ (c.f o v) (c'.f o v)
+
+variable {τ o}
+
+variable {Φ : Option (Mean.V (B := S.sig)) → Option (Mean.V (B := S.sig)) → Prop}
+
+/-- A pointwise relation reads the two codecs through their maps only. -/
+theorem PW.congr {k : Nat} {c c' c₁ c₁' : Mean.C S.sig} (h₁ : c.f = c₁.f) (h₂ : c'.f = c₁'.f)
+    (h : PW o Φ k c c') : PW o Φ k c₁ c₁' := fun v hv => by rw [← h₁, ← h₂]; exact h v hv
+
+/-- A pointwise relation below a depth holds below each smaller depth. -/
+theorem PW.mono {k k' : Nat} {c c' : Mean.C S.sig} (hk : k' ≤ k) (h : PW o Φ k c c') :
+    PW o Φ k' c c' := fun v hv => h v (by omega)
+
+/-- Any two codecs are related below the depth zero. -/
+theorem PW.zero (c c' : Mean.C S.sig) : PW o Φ 0 c c' := fun _ hv => absurd hv (Nat.not_lt_zero _)
+
+/-- Any two codecs are related below the depth one, because every datum has a depth of at least
+    one. -/
+theorem PW.one (c c' : Mean.C S.sig) : PW o Φ 1 c c' :=
+  fun v hv => absurd hv (Nat.not_lt.mpr (Mean.d_pos v))
+
+variable (o) in
 /-- **Apart below a depth**: no datum of a smaller depth is accepted by both codecs at the
     orientation. -/
 def AB (k : Nat) (c c' : Mean.C S.sig) : Prop :=
   ∀ v, Mean.d (B := S.sig) v < k → ((c.f o v).isSome && (c'.f o v).isSome) = false
 
-variable {τ o}
-
-/-- Apartness below a depth reads the two codecs through their maps only. -/
-theorem AB.congr {k : Nat} {c c' c₁ c₁' : Mean.C S.sig} (h₁ : c.f = c₁.f) (h₂ : c'.f = c₁'.f)
-    (h : AB o k c c') : AB o k c₁ c₁' := fun v hv => by rw [← h₁, ← h₂]; exact h v hv
-
-/-- Apartness below a depth holds below each smaller depth. -/
-theorem AB.mono {k k' : Nat} {c c' : Mean.C S.sig} (hk : k' ≤ k) (h : AB o k c c') :
-    AB o k' c c' := fun v hv => h v (by omega)
-
-/-- Any two codecs are apart below the depth zero. -/
-theorem AB.zero (c c' : Mean.C S.sig) : AB o 0 c c' := fun _ hv => absurd hv (Nat.not_lt_zero _)
-
 variable (o) in
 /-- Apartness below a depth is a step-indexed relation. -/
-def AB.rel : StepRel S := ⟨AB o, AB.zero, AB.mono, AB.congr⟩
+def AB.rel : StepRel S := ⟨AB o, PW.zero (Φ := fun a b => (a.isSome && b.isSome) = false), PW.mono (Φ := fun a b => (a.isSome && b.isSome) = false), PW.congr (Φ := fun a b => (a.isSome && b.isSome) = false)⟩
 
 /-- A codec that accepts no datum is apart from each codec. -/
 theorem AB.of_left {k : Nat} {c c' : Mean.C S.sig} (h : ∀ v, (c.f o v).isSome = false) :
@@ -480,6 +494,58 @@ theorem AB.of_right {k : Nat} {c c' : Mean.C S.sig} (h : ∀ v, (c'.f o v).isSom
 theorem apart_of_AB {c c' : Mean.C S.sig} (h : ∀ k, AB o (k + 1) c c') :
     ∀ v, ((c.f o v).isSome && (c'.f o v).isSome) = false :=
   fun v => h (Mean.d (B := S.sig) v) v (Nat.lt_succ_self _)
+
+/-- A codec cut at a depth. -/
+def trunc (d : Nat) (c : Mean.C S.sig) : Mean.C S.sig where
+  T := c.T
+  μ := c.μ
+  f o x := if Mean.d (B := S.sig) x ≤ d then c.f o x else none
+
+/-- A codec cut at a depth agrees with the codec at that depth. -/
+theorem trunc_agree (d : Nat) (c : Mean.C S.sig) : AgreeLe Mean.d d (trunc d c) c :=
+  ⟨fun o x hx => by simp only [trunc, if_pos hx]⟩
+
+/-- **A container is related below one more depth** where its positions, cut at the depth, give
+    two related containers at each datum: the step reads the positions one layer down. -/
+theorem PW.down {op op' : TOp S.sig} (hk : op.kind = .down) (hk' : op'.kind = .down)
+    {a : op.Pos → Mean.C S.sig} {b : op'.Pos → Mean.C S.sig} {j : Nat}
+    (h : ∀ v, Φ ((TOp.run τ op fun p => trunc j (a p)).f o v)
+      ((TOp.run τ op' fun q => trunc j (b q)).f o v)) :
+    PW o Φ (j + 2) (TOp.run τ op a) (TOp.run τ op' b) := by
+  have ha := (TStep_lawful τ).down op hk j a (fun p => trunc j (a p))
+    fun p => (trunc_agree j (a p)).symm
+  have hb := (TStep_lawful τ).down op' hk' j b (fun q => trunc j (b q))
+    fun q => (trunc_agree j (b q)).symm
+  intro x hx
+  have e1 : (TOp.run τ op a).f o x = (TOp.run τ op fun p => trunc j (a p)).f o x :=
+    ha.f o x (by omega)
+  have e2 : (TOp.run τ op' b).f o x = (TOp.run τ op' fun q => trunc j (b q)).f o x :=
+    hb.f o x (by omega)
+  rw [e1, e2]
+  exact h x
+
+/-- **The cut of two related codecs is related at each datum**, where the relation holds of two
+    absences. -/
+theorem PW.trunc (hnn : Φ none none) {j : Nat} {c c' : Mean.C S.sig} (h : PW o Φ (j + 1) c c') :
+    ∀ v, Φ ((trunc j c).f o v) ((trunc j c').f o v) := fun v => by
+  simp only [Calculus.Alg.Scoped.trunc]
+  split
+  · exact h v (by omega)
+  · exact hnn
+
+/-- A container is apart below one more depth where its positions, cut at the depth, give two
+    apart containers. -/
+theorem AB.down {op op' : TOp S.sig} (hk : op.kind = .down) (hk' : op'.kind = .down)
+    {a : op.Pos → Mean.C S.sig} {b : op'.Pos → Mean.C S.sig} {j : Nat}
+    (h : ∀ v, (((TOp.run τ op fun p => trunc j (a p)).f o v).isSome &&
+      ((TOp.run τ op' fun q => trunc j (b q)).f o v).isSome) = false) :
+    AB o (j + 2) (TOp.run τ op a) (TOp.run τ op' b) :=
+  PW.down (Φ := fun a b => (a.isSome && b.isSome) = false) hk hk' h
+
+/-- Two codecs apart below one more depth give two cut codecs that are apart. -/
+theorem AB.trunc {j : Nat} {c c' : Mean.C S.sig} (h : AB o (j + 1) c c') :
+    ∀ v, (((trunc j c).f o v).isSome && ((trunc j c').f o v).isSome) = false :=
+  PW.trunc (Φ := fun a b => (a.isSome && b.isSome) = false) rfl h
 
 /-- **An entry is its body**, at the maps: the solution is a fixed point of the system. -/
 theorem mng_leaf {N : Nat} (d : GSys τ N) (i : Fin N) :
@@ -837,27 +903,12 @@ theorem zipP_of_traverse {V M : Type} {o : Orient} :
       exact ⟨ht.1, zipP_of_traverse cs xs (by simpa using h) ht.2⟩
 
 omit [Leaf S.sig] [Shapes S] in
-/-- A row of data accepted position for position, each datum of a smaller depth. -/
-theorem zipP_depth {V M : Type} {o : Orient} {D : V → Bool} :
-    ∀ (row : List (Codec V M)) (xs : List V), (∀ u ∈ xs, D u = true) →
-      zipP (row.map fun c u => (c.f o u).isSome) xs = true →
-        zipP (row.map fun c u => D u && (c.f o u).isSome) xs = true
-  | [], [], _, _ => rfl
-  | [], _ :: _, _, h => nomatch h
-  | _ :: _, [], _, h => nomatch h
-  | c :: cs, x :: xs, hD, h => by
-      simp only [List.map_cons, zipP, Bool.and_eq_true] at h ⊢
-      exact ⟨⟨hD x List.mem_cons_self, h.1⟩,
-        zipP_depth cs xs (fun u hu => hD u (List.mem_cons_of_mem _ hu)) h.2⟩
-
-omit [Leaf S.sig] [Shapes S] in
-/-- **A list codec accepts a datum through the row of its shape**, each element of a smaller
-    depth. -/
+/-- **A list codec accepts a datum through the row of its shape.** -/
 theorem list_acc (L : ListA (Mean.V (B := S.sig)) (Mean.Mem (B := S.sig)) Mean.mem Mean.d)
-    {pre suf : List (Mean.C S.sig)} {sp : Option (Mean.C S.sig)} {v : Mean.V (B := S.sig)} {k : Nat}
-    (h : ((listCodec L.toSummand pre sp suf).f o v).isSome = true) (hv : Mean.d (B := S.sig) v < k + 1) :
+    {pre suf : List (Mean.C S.sig)} {sp : Option (Mean.C S.sig)} {v : Mean.V (B := S.sig)}
+    (h : ((listCodec L.toSummand pre sp suf).f o v).isSome = true) :
     ∃ xs, L.p.out v = some xs ∧ ∃ row, rowOfG pre sp suf xs.length = some row ∧
-      zipP (row.map fun c u => decide (Mean.d (B := S.sig) u < k) && (c.f o u).isSome) xs = true := by
+      zipP (row.map fun c u => (c.f o u).isSome) xs = true := by
   rw [listCodec_f] at h
   cases hx : L.p.out v with
   | none => rw [hx] at h; exact nomatch h
@@ -871,12 +922,8 @@ theorem list_acc (L : ListA (Mean.V (B := S.sig)) (Mean.Mem (B := S.sig)) Mean.m
     | some row =>
       rw [hs] at h
       simp only [Option.map_some, Option.bind_some] at h
-      refine ⟨row, by rw [← slotsL_eq_rowOfG]; exact hs, ?_⟩
-      have hvx := L.p.into_out hx
-      refine zipP_depth row xs (fun u hu => ?_) (zipP_of_traverse row xs (slotsL_length _ _ _ _ _ hs) h)
-      have := L.d_lt xs u hu
-      rw [← hvx] at this
-      exact decide_eq_true (by omega)
+      exact ⟨row, by rw [← slotsL_eq_rowOfG]; exact hs,
+        zipP_of_traverse row xs (slotsL_length _ _ _ _ _ hs) h⟩
 
 omit [Leaf S.sig] [Shapes S] in
 /-- A map inside a count of zero or one is the map of the result. -/
@@ -907,12 +954,12 @@ theorem mng_list {N : Nat} (d : GSys τ N) {n m : Nat} {s' : Fin 2}
     mng τ d (.node (.list n s' m) a) = TOp.run τ (.list n s' m) (fun p => mng τ d (a p)) := rfl
 
 omit [Leaf S.sig] [Shapes S] in
-/-- The codec row of a list node is the map of the term row through the meaning. -/
-theorem rowOfG_listParts {N : Nat} (d : GSys τ N) {n m : Nat} {s' : Fin 2}
+/-- The codec row of a list node is the map of the term row through a codec of each term. -/
+theorem rowOfG_listParts {N : Nat} (φ : Graph S.sig N → Mean.C S.sig) {n m : Nat} {s' : Fin 2}
     (a : (TOp.list n s' m (B := S.sig)).Pos → Graph S.sig N) (len : Nat) :
-    rowOfG (List.ofFn fun p => mng τ d (a (.inl p))) (optOf s' fun p => mng τ d (a (.inr (.inl p))))
-        (List.ofFn fun p => mng τ d (a (.inr (.inr p)))) len =
-      (rowOfG (listParts a).1 (listParts a).2.1 (listParts a).2.2 len).map (List.map (mng τ d)) := by
+    rowOfG (List.ofFn fun p => φ (a (.inl p))) (optOf s' fun p => φ (a (.inr (.inl p))))
+        (List.ofFn fun p => φ (a (.inr (.inr p)))) len =
+      (rowOfG (listParts a).1 (listParts a).2.1 (listParts a).2.2 len).map (List.map φ) := by
   rw [← rowOfG_map]
   simp only [listParts, List.map_ofFn, ← optOf_map]
   rfl
@@ -941,42 +988,37 @@ theorem listRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR �
     | legacy _ => exact nomatch h
     | union _ => exact nomatch h
     | list n₂ s₂' m₂ =>
-      let P : Graph S.sig NL → Mean.V (B := S.sig) → Bool := fun t u =>
-        decide (Mean.d (B := S.sig) u < k) && ((mng τ dL t).f o u).isSome
-      let Q : Graph S.sig NR → Mean.V (B := S.sig) → Bool := fun t u =>
-        decide (Mean.d (B := S.sig) u < k) && ((mng τ dR t).f o u).isSome
-      have hsnd : ∀ t, SoundG P Q t (pairAt (sL := dL.sys) (sR := dR.sys) prev A t) := by
-        intro t y' hy u
-        have hab := pairAt_soundR hp t y' A k hy hA
-        simp only [P, Q]
-        cases hd : decide (Mean.d (B := S.sig) u < k)
-        · rfl
-        · simp only [Bool.true_and]
-          exact hab u (of_decide_eq_true hd)
+      cases k with
+      | zero => exact PW.one (Φ := fun a b => (a.isSome && b.isSome) = false) _ _
+      | succ j =>
+      let φL : Graph S.sig NL → Mean.C S.sig := fun t => trunc j (mng τ dL t)
+      let φR : Graph S.sig NR → Mean.C S.sig := fun t => trunc j (mng τ dR t)
+      let P : Graph S.sig NL → Mean.V (B := S.sig) → Bool := fun t u => ((φL t).f o u).isSome
+      let Q : Graph S.sig NR → Mean.V (B := S.sig) → Bool := fun t u => ((φR t).f o u).isSome
+      have hsnd : ∀ t, SoundG P Q t (pairAt (sL := dL.sys) (sR := dR.sys) prev A t) :=
+        fun t y' hy => AB.trunc (pairAt_soundR hp t y' A (j + 1) hy hA)
       have hrows := listRowG_sound (P := P) (Q := Q)
-        (forall₂_map_self _ fun t _ => hsnd t)
-        (optCases _ hsnd)
+        (forall₂_map_self _ fun t _ => hsnd t) (optCases _ hsnd)
         (forall₂_map_self _ fun t _ => hsnd t) h
-      intro v hv
-      show (((TOp.run τ (.list n₁ s₁' m₁) fun p => mng τ dL (a p)).f o v).isSome &&
-        ((TOp.run τ (.list n₂ s₂' m₂) fun p => mng τ dR (b p)).f o v).isSome) = false
+      refine AB.down (τ := τ) (op := .list n₁ s₁' m₁) (op' := .list n₂ s₂' m₂)
+        (a := fun p => mng τ dL (a p)) (b := fun p => mng τ dR (b p)) rfl rfl fun v => ?_
       simp only [TOp.run]
       split
       · next L hL =>
-        cases h1 : ((listCodec L.toSummand (List.ofFn fun p => mng τ dL (a (.inl p)))
-            (optOf s₁' fun p => mng τ dL (a (.inr (.inl p))))
-            (List.ofFn fun p => mng τ dL (a (.inr (.inr p))))).f o v).isSome
+        cases h1 : ((listCodec L.toSummand (List.ofFn fun p => φL (a (.inl p)))
+            (optOf s₁' fun p => φL (a (.inr (.inl p))))
+            (List.ofFn fun p => φL (a (.inr (.inr p))))).f o v).isSome
         · rfl
-        cases h2 : ((listCodec L.toSummand (List.ofFn fun p => mng τ dR (b (.inl p)))
-            (optOf s₂' fun p => mng τ dR (b (.inr (.inl p))))
-            (List.ofFn fun p => mng τ dR (b (.inr (.inr p))))).f o v).isSome
+        cases h2 : ((listCodec L.toSummand (List.ofFn fun p => φR (b (.inl p)))
+            (optOf s₂' fun p => φR (b (.inr (.inl p))))
+            (List.ofFn fun p => φR (b (.inr (.inr p))))).f o v).isSome
         · rfl
-        obtain ⟨xs, hx, r₁, hr₁, hz₁⟩ := list_acc L h1 hv
-        obtain ⟨xs', hx', r₂, hr₂, hz₂⟩ := list_acc L h2 hv
+        obtain ⟨xs, hx, r₁, hr₁, hz₁⟩ := list_acc L h1
+        obtain ⟨xs', hx', r₂, hr₂, hz₂⟩ := list_acc L h2
         rw [hx] at hx'
         cases hx'
-        rw [rowOfG_listParts dL a] at hr₁
-        erw [rowOfG_listParts dR b] at hr₂
+        rw [rowOfG_listParts φL a] at hr₁
+        rw [rowOfG_listParts φR b] at hr₂
         cases hT₁ : rowOfG (listParts a).1 (listParts a).2.1 (listParts a).2.2 xs.length with
         | none => rw [hT₁] at hr₁; exact nomatch hr₁
         | some t₁ =>
@@ -989,9 +1031,8 @@ theorem listRow_sound {prev : Tbl NL NR → Graph S.sig NL → Graph S.sig NR �
             obtain rfl := (Option.some.inj hr₂).symm
             rw [List.map_map] at hz₁ hz₂
             have := hrows _ _ _ hT₁ hT₂ xs
-            simp only [P, Q] at this
-            rw [show (fun c u => decide (Mean.d (B := S.sig) u < k) && (c.f o u).isSome) ∘ mng τ dL = P from rfl,
-              show (fun c u => decide (Mean.d (B := S.sig) u < k) && (c.f o u).isSome) ∘ mng τ dR = Q from rfl] at *
+            rw [show (fun c u => (c.f o u).isSome) ∘ φL = P from rfl,
+              show (fun c u => (c.f o u).isSome) ∘ φR = Q from rfl] at *
             rw [hz₁, hz₂] at this
             exact nomatch this
       · rfl
@@ -1204,17 +1245,6 @@ theorem sub_run [TopLaws S] {op : TOp S.sig} (hop : op.adapts = false) {a : op.P
 def SubLe (d : Nat) (c : Mean.C S.sig) : Prop :=
   ∀ o x y, Mean.d (B := S.sig) x ≤ d → c.f o x = some y → (Syn.top (S := S)).f o x = some y
 
-/-- A codec cut at a depth. -/
-def trunc (d : Nat) (c : Mean.C S.sig) : Mean.C S.sig where
-  T := c.T
-  μ := c.μ
-  f o x := if Mean.d (B := S.sig) x ≤ d then c.f o x else none
-
-omit [Leaf S.sig] [Shapes S] in
-/-- A codec cut at a depth agrees with the codec at that depth. -/
-theorem trunc_agree (d : Nat) (c : Mean.C S.sig) : AgreeLe Mean.d d (trunc d c) c :=
-  ⟨fun o x hx => by simp only [trunc, if_pos hx]⟩
-
 omit [Leaf S.sig] [Shapes S] in
 /-- A codec below the top at a depth gives a cut codec below the top. -/
 theorem sub_trunc {d : Nat} {c : Mean.C S.sig} (h : SubLe d c) : Sub (trunc d c) (Syn.top (S := S)) :=
@@ -1363,7 +1393,7 @@ theorem rowG_sound (laws : Laws S o) {prev : Tbl NL NR → Graph S.sig NL → Gr
   | leaf j =>
     intro y A k h hA
     rw [rowG] at h
-    exact AB.congr (mng_leaf dL j).symm rfl (hp A _ y h k hA)
+    exact (AB.rel o).congr (mng_leaf dL j).symm rfl (hp A _ y h k hA)
   | node op a ih =>
     intro y A k h hA
     have hr : ∀ y', prev A (.node op a) y' = true → AB o (k + 1) (mng τ dL (.node op a)) (mng τ dR y') :=

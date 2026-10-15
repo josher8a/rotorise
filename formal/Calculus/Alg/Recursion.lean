@@ -2,12 +2,11 @@ import Calculus.Alg.Containers
 import Calculus.Alg.Relations
 
 /-!
-# Recursion, over any carriers
+# Agreement below a depth, over any carriers
 
-A recursive codec reads each input at the stage of its body that the input's own depth names. The
-construct reads a universe only through one depth on the carrier, and the depth reads no
-orientation. The guard is `Contractive`: the
-body reads its argument only at inputs strictly shallower than its own input.
+The solution of a system reads each input at the stage that the depth of the input names. Agreement
+below a depth reads a universe only through one depth on the carrier, and the depth reads no
+orientation.
 
 The combinators keep agreement. A container reads its element codecs one layer down, so it turns
 agreement below `d` into agreement below `d + 1`. The universe supplies that fact as the depth of
@@ -63,26 +62,9 @@ theorem eq_of_forall (h : ∀ d, AgreeLe depth d c₁ c₂) : c₁.f = c₂.f :=
 
 end AgreeLe
 
-/-! ## The construct -/
-
-/-- **The guard, on a body.** The body reads its argument only at inputs strictly shallower than
-    its own input, on both sides. -/
-def Contractive (B : Codec V M → Codec V M) : Prop :=
-  ∀ d c₁ c₂, AgreeLe depth d c₁ c₂ → AgreeLe depth (d + 1) (B c₁) (B c₂)
-
-/-- **The recursive codec**: each input read at the stage its own depth names. The member is
-    `⊤`, because the stages need not agree on one. The held set is the write domain, so the held
-    set of a recursive term is its admission with no induction over the stages. -/
-def muCodec (B : Codec V M → Codec V M) : Codec V M where
-  T v := ((muStage B (depth v)).e v).isSome = true
-  μ := none
-  f o x := (muStage B (depth x)).f o x
+/-! ## The limit of lawful approximants -/
 
 variable {depth}
-
-/-- The limit sends an input at the stage that the depth of the input names. -/
-theorem muCodec_f (B : Codec V M → Codec V M) (o : Orient) (x : V) :
-    (muCodec depth B).f o x = (muStage B (depth x)).f o x := rfl
 
 /-- **A codec that lawful codecs approximate at every depth is lawful**, where each approximant
     keeps the member of the codec. -/
@@ -98,70 +80,6 @@ theorem lawful_of_approx {c : Codec V M}
     obtain ⟨c', hl, ha, hμ⟩ := h (depth t)
     have he' : c'.e t = some a := (ha.f Orient.host t le_rfl).symm.trans he
     exact hl.writes (hμ m hm) he'
-
-/-! ### The converse of the construct -/
-
-section Stages
-variable (hd : ∀ v, 0 < depth v) {B : Codec V M → Codec V M}
-include hd
-
-
-/-- Each stage agrees with the next one below its own index. -/
-theorem muStage_stable (hB : Contractive depth B) :
-    ∀ n, AgreeLe depth n (muStage B n) (muStage B (n + 1))
-  | 0 => AgreeLe.zero hd _ _
-  | n + 1 => hB n _ _ (muStage_stable hB n)
-
-/-- **Stability.** Past the depth of the input, a later stage changes nothing. -/
-theorem muStage_agree (hB : Contractive depth B) {d : Nat} :
-    ∀ k, AgreeLe depth d (muStage B d) (muStage B (d + k))
-  | 0 => AgreeLe.refl _ _
-  | k + 1 => (muStage_agree hB k).trans ((muStage_stable hd hB (d + k)).mono (by omega))
-
-/-- Any two stages at or past `d` agree below `d`. -/
-theorem muStage_agree_le (hB : Contractive depth B) {d n : Nat} (h : d ≤ n) :
-    AgreeLe depth d (muStage B d) (muStage B n) := by
-  obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
-  exact muStage_agree hd hB k
-
-/-- The limit agrees with the stage `n` below `n`. -/
-theorem muCodec_agree (hB : Contractive depth B) (n : Nat) :
-    AgreeLe depth n (muCodec depth B) (muStage B n) :=
-  ⟨fun o x hx => (muStage_agree_le hd hB hx).f o x le_rfl⟩
-
-/-- **The fixed point.** The limit sends what its body sends over the limit, at each
-    orientation. -/
-theorem muCodec_fix (hB : Contractive depth B) (o : Orient) (x : V) :
-    (muCodec depth B).f o x = (B (muCodec depth B)).f o x := by
-  obtain ⟨k, hk⟩ : ∃ k, depth x = k + 1 :=
-    ⟨depth x - 1, by have := hd x; omega⟩
-  rw [muCodec_f, hk]
-  exact (hB k _ _ (muCodec_agree hd hB k).symm).f o x (by omega)
-
-/-- **Lawful stages give a lawful limit.** The stage `d` approximates the limit below `d`, and
-    the limit has no member to keep. -/
-theorem lawful_muCodec (hB : Contractive depth B)
-    (hs : ∀ n, Lawful member (muStage B n)) : Lawful member (muCodec depth B) :=
-  lawful_of_approx fun d => ⟨_, hs d, muCodec_agree hd hB d, fun _ h => nomatch h⟩
-
-end Stages
-
-/-- A lawful limit is on its held set. The held set is the write domain, and a lawful codec writes
-    every value it reads. -/
-theorem carrier_muCodec {B : Codec V M → Codec V M} (h : Lawful member (muCodec depth B)) :
-    Carrier (muCodec depth B) :=
-  ⟨fun he => Option.isSome_iff_exists.mpr ⟨_, he⟩,
-   fun hp => Option.isSome_iff_exists.mpr ⟨_, h.canon hp⟩⟩
-
-/-- Two bodies that preserve agreement below `d` give limits that agree below `d`. -/
-theorem agreeLe_muCodec {d : Nat} {B₁ B₂ : Codec V M → Codec V M}
-    (h : ∀ c₁ c₂, AgreeLe depth d c₁ c₂ → AgreeLe depth d (B₁ c₁) (B₂ c₂)) :
-    AgreeLe depth d (muCodec depth B₁) (muCodec depth B₂) := by
-  have hs : ∀ n, AgreeLe depth d (muStage B₁ n) (muStage B₂ n) := fun n => by
-    induction n with
-    | zero => exact AgreeLe.refl _ _
-    | succ n ih => exact h _ _ ih
-  exact ⟨fun o x hx => (hs _).f o x hx⟩
 
 /-! ## The combinators keep agreement -/
 
